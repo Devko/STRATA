@@ -345,12 +345,44 @@ PERFORM and pattern changes, with no edit screens and no underruns."*
 
 **Mutes and fill**
 
-- [ ] F1 + a lower pad mutes in any mode; MUTE mode makes the lower pads mutes.
+- [ ] A lower pad mutes with F1 in any mode, and MUTE mode (upper pad 3) makes the lower pads
+      mutes outright. **With F1 the mute waits for the bar**, which is the deviation to check:
+      the spec says "instantly or at the next bar" without saying which gesture picks.
 - [ ] A mute armed for the next bar lands on the bar, and pressing three pads before it means
-      the third.
-- [ ] The eight stored states recall from the upper row and survive a save.
+      the third, not all three.
+- [ ] **The eight stored states are on STEP 1-8 while MUTE mode is on**, not the upper row.
+      docs/SPEC.md says "recalled from the upper row", but that row is seven FIXED pads and
+      there are eight states, so it cannot be literal. Recall on a tap, F1 for the next bar,
+      VALUE held to store. If the row is what was meant, this is the thing to change.
+- [ ] They survive a save: the states live in PROJECT.BIN.
 - [ ] Auto-fill at 4, 8 and 16 bars fires on the LAST bar of the period, and FILL conditions
-      follow it.
+      follow it. F1 + UP in PERFORM picks the period.
+- [ ] **Stop and start the transport, then check auto-fill.** The bar counter resyncs on a
+      backwards jump; without that it would have been wrong for ten bars after every stop, which
+      is the bug this box exists for.
+- [ ] Holding FILL with the transport STOPPED still reads as held.
+
+**The panel, and what is reachable at all**
+
+Every tool is reachable from the panel, which is worth confirming one by one: a feature with no
+gesture is the mistake this milestone made twice before it was caught.
+
+- [ ] Upper row, left to right: FILL (hold), REPEAT (hold, VALUE picks the length, F1 the
+      pitch-down), MUTE mode (toggle), scene A (hold + STEP picks), scene B, THROW (hold, F1 for
+      reverb), MUTATE.
+- [ ] F1 + F7 opens PERFORM: encoders A-D are the macros, VALUE is the morph.
+- [ ] In PERFORM: OK captures a scene (the selected track only while a scene pad is held),
+      F1 + OK erases one, **STEP 1-16 assigns that parameter of the selected track to the
+      selected macro**, the octave keys pick which macro, CLR clears it, UP and DOWN walk the
+      mutation, the selection keys its amount.
+- [ ] A macro assigned in one press is immediately usable: the range runs from where the
+      parameter is now to whichever end is further away, so the knob always has somewhere to go.
+      That is a guess at intent — check it feels right, since the ranges are stored and a richer
+      editor can refine them later.
+- [ ] A throw released puts the stored send back by itself. Nothing was written to the kit, so
+      there is nothing to undo and nothing to save.
+- [ ] A lock still wins over a morph: lock a cutoff on one step, sweep the morph, and that step
+      should keep its locked value while the others move.
 
 ## M0.5 — budget spike
 

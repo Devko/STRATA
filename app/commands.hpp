@@ -117,9 +117,50 @@ enum class Cmd : uint8_t {
     set_sends,         // f: a packed send setting, a: which
     set_master,        // f: value, a: which
 
-    // --- performance ---
-    set_mute,          // track, a: 0 or 1
+    // --- performance, M5 ---------------------------------------------------
+    //
+    // Every one of these changes how the music sounds without touching a stored pattern, which
+    // is docs/SPEC.md's whole point about the performance layer: "Eight tools change the music
+    // live without touching the stored pattern unless you commit." The exceptions, which DO
+    // commit and say so in the table there, are `mutate` (one undo level) and the scene and
+    // macro setup (saved in PERFORM.BIN).
+    set_mute,          // track, a: 0 or 1, b: 1 = at the next bar instead of now
     set_fill,          // a: 0 or 1
+
+    // One undoable variation of one track's range. `u` is the variant: the same variant over the
+    // same pattern reproduces the same mutation exactly, which is what "seeded" means in
+    // core/mutate.hpp. "OK keeps it, CLR reverts" needs nothing here -- the UI marks an undo
+    // level first and CLR is the undo that already exists.
+    mutate,            // track, step: the first step, a: Mutation, b: amount 0-100, c: how many
+
+    // Scenes. A capture takes the CURRENT kit, which is why it happens on this side: `params_`
+    // is what the machines read and the UI only has a block-old copy of it.
+    scene_capture,     // a: scene, b: 0 = every track, 1 = `track` only
+    scene_erase,       // a: scene
+    scene_select,      // a: 0 = slot A, 1 = slot B, b: scene
+    set_morph,         // u: 0..kMorphScale
+
+    // Macros. `macro_assign` takes the next free target of that macro rather than an index: the
+    // UI assigns by pointing at a parameter, and which of the four slots it lands in is not
+    // something a performer should have to think about.
+    set_macro,         // a: macro, b: position 0-127
+    macro_assign,      // a: macro, track, b: param, c: low, d: high
+    macro_clear,       // a: macro
+
+    // The eight stored mute states (core/perform.hpp). A recall may wait for the bar, like a
+    // mute does.
+    mute_store,        // a: slot 0-7
+    mute_recall,       // a: slot 0-7, b: 1 = at the next bar
+
+    set_auto_fill,     // a: AutoFill
+
+    // A throw holds a track's delay or reverb send at full and puts it back on release. It is
+    // not a parameter edit: `params_` is untouched, so nothing is saved and nothing is undone.
+    set_throw,         // track, a: 0 = off, 1 = delay (send A), 2 = reverb (send B)
+
+    // Beat repeat. The length is in note values and the engine turns it into frames, because
+    // only the audio side knows the tempo in samples (dsp/repeat.hpp).
+    set_repeat,        // a: RepeatLength, b: 1 = held, c: 1 = pitch down
     trigger_note,      // track, a: note, b: velocity -- a pad hit, played live
     release_note,      // track, a: note
 

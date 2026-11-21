@@ -45,6 +45,11 @@ bool Engine::init(float sample_rate) {
     loop_.init(rate_);
     mixer_.init(rate_);
 
+    // Beat repeat's 2-bar ring, 2.93 MiB, here with every other buffer in the signal path.
+    if (!repeat_.init(rate_)) return false;
+
+    perform_init(scenes_, macros_);
+
     // Sample memory is NOT taken here. The region and the SamplePool that carves it up belong
     // to the main context: App::init allocates the region and hands the base over with
     // set_sample_region before the first audio block, which keeps every byte of pool state on
@@ -79,6 +84,7 @@ bool Engine::init(float sample_rate) {
 
     load_default_kit();
     for (int t = 0; t < kTracks; t++) effective_[t] = params_[t];   // no locks active yet
+    apply_performance();
     load_default_pattern();
 
     scheduler_.configure(live());
@@ -638,11 +644,144 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::set_mute:
-            muted_[track] = command.a != 0;
+            if (command.b != 0) {
+                // At the next bar. The latch holds a whole STATE rather than one toggle, so the
+                // state to arm is what the mutes are NOW with this track flipped -- which only
+                // this side can know.
+                uint8_t state = mute_state_capture(muted_);
+                state = uint8_t(state ^ uint8_t(1u << track));
+                mute_latch_arm(mute_latch_, state);
+            } else {
+                muted_[track] = command.a != 0;
+            }
             break;
 
         case Cmd::set_fill:
-            perform_.fill = command.a != 0;
+            // The pad. Auto-fill ORs into this per bar in resolve_tick, so holding FILL during
+            // an auto-fill bar is not a contradiction.
+            fill_held_ = command.a != 0;
+            // Also applied here, because resolve_tick is the only other place that sets it and
+            // it does not run with the clock stopped. Without this, holding FILL while stopped
+            // would do nothing and the pad would look broken.
+            perform_.fill = fill_held_;
+            break;
+
+        // --- performance, M5 ----------------------------------------------
+
+        case Cmd::mutate: {
+            const int count = command.c == 0 ? kStepsPerTrack : int(command.c);
+            if (!mutate_apply(live(), track, step, count, Mutation(command.a), command.u,
+                              int(command.b))) {
+                // Nothing changed, which is worth saying: the UI should not spend an undo level
+                // on an edit that did nothing, and a press that looks like it did nothing had
+                // better say so.
+                status_.bump_refused();
+            }
+            break;
+        }
+
+        case Cmd::scene_capture:
+            if (command.a < kScenes) {
+                // From the KIT, not from `performed_`: a scene is a sound to come back to, and
+                // capturing the morph's own output would fold the performance into the thing
+                // being performed.
+                if (command.b != 0) scene_capture_track(scenes_.scenes[command.a], project_.kit,
+                                                        track);
+                else scene_capture(scenes_.scenes[command.a], project_.kit);
+                perform_dirty_ = true;
+            }
+            break;
+
+        case Cmd::scene_erase:
+            if (command.a < kScenes) {
+                scene_erase(scenes_.scenes[command.a]);
+                perform_dirty_ = true;
+            }
+            break;
+
+        case Cmd::scene_select:
+            if (command.b < kScenes) {
+                if (command.a == 0) scene_a_ = command.b;
+                else scene_b_ = command.b;
+                perform_dirty_ = true;
+            }
+            break;
+
+        case Cmd::set_morph:
+            morph_ = uint16_t(command.u > kMorphScale ? kMorphScale : command.u);
+            perform_dirty_ = true;
+            break;
+
+        case Cmd::set_macro:
+            if (command.a < kMacros) {
+                macro_position_[command.a] = command.b > 127 ? uint8_t(127) : command.b;
+                perform_dirty_ = true;
+            }
+            break;
+
+        case Cmd::macro_assign:
+            if (command.a < kMacros && command.b < kParams) {
+                // The next free target. Which of the four it lands in is not something a
+                // performer should have to think about; a macro that is full refuses, visibly.
+                Macro &macro = macros_.macros[command.a];
+                int slot = -1;
+                for (int i = 0; i < kMacroTargets && slot < 0; i++) {
+                    if (macro.targets[i].enabled == 0) slot = i;
+                }
+                if (slot < 0) {
+                    status_.bump_refused();
+                    break;
+                }
+                macro.targets[slot].enabled = 1;
+                macro.targets[slot].track = uint8_t(track);
+                macro.targets[slot].param = command.b;
+                macro.targets[slot].low = command.c;
+                macro.targets[slot].high = command.d;
+                perform_dirty_ = true;
+            }
+            break;
+
+        case Cmd::macro_clear:
+            if (command.a < kMacros) {
+                for (int i = 0; i < kMacroTargets; i++) {
+                    macros_.macros[command.a].targets[i] = MacroTarget{};
+                }
+                perform_dirty_ = true;
+            }
+            break;
+
+        case Cmd::mute_store:
+            if (command.a < 8) {
+                project_.settings.mute_states[command.a] = mute_state_capture(muted_);
+            }
+            break;
+
+        case Cmd::mute_recall:
+            if (command.a < 8) {
+                const uint8_t state = project_.settings.mute_states[command.a];
+                if (command.b != 0) mute_latch_arm(mute_latch_, state);
+                else mute_state_apply(state, muted_);
+            }
+            break;
+
+        case Cmd::set_auto_fill:
+            auto_fill_ = command.a < uint8_t(AutoFill::count) ? AutoFill(command.a)
+                                                             : AutoFill::off;
+            break;
+
+        case Cmd::set_throw:
+            // Not a parameter edit: `params_` is untouched, so letting go puts the stored send
+            // back by itself with nothing to remember.
+            throw_bus_ = command.a > 2 ? 0 : int(command.a);
+            throw_track_ = track;
+            perform_dirty_ = true;
+            break;
+
+        case Cmd::set_repeat:
+            repeat_length_ = command.a < uint8_t(RepeatLength::count) ? RepeatLength(command.a)
+                                                                     : RepeatLength::sixteenth;
+            repeat_pitch_ = command.c != 0;
+            repeat_held_ = command.b != 0;
             break;
 
         case Cmd::trigger_note: {
@@ -695,6 +834,45 @@ void Engine::params_from_kit() {
     }
 }
 
+// --- the performance layer ------------------------------------------------
+//
+// The kit, then the morph, then the macros, then any throw. In that order on purpose: a scene is
+// a sound, a macro is a hand on top of it, and a throw is a moment on top of that.
+//
+// Nothing here touches `params_`. That is what makes every one of them free to let go of: the
+// stored kit is still there, so releasing a throw or sweeping the morph back needs no memory of
+// what it was.
+
+void Engine::apply_performance() {
+    if (!perform_dirty_) return;
+    perform_dirty_ = false;
+
+    // The kit as stored.
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kParams; p++) performed_[t][p] = params_[t].v[p];
+    }
+
+    // The scenes, if two are assigned. An empty scene behaves as the kit, so an unassigned slot
+    // costs one pass and changes nothing (core/perform.hpp).
+    if (scene_a_ < kScenes && scene_b_ < kScenes) {
+        scene_morph(scenes_.scenes[scene_a_], scenes_.scenes[scene_b_], morph_, project_.kit,
+                    performed_);
+    }
+
+    // The macros, over the morph. Later targets win over earlier ones, which core/perform.hpp
+    // calls a consequence rather than a decision.
+    for (int m = 0; m < kMacros; m++) {
+        macro_apply(macros_.macros[m], macro_position_[m], performed_);
+    }
+
+    // The throw, over everything: it is the most immediate thing on the panel and should not be
+    // argued with by a macro. Send A is the delay and send B the reverb (dsp/chain.hpp).
+    if (throw_bus_ != 0 && throw_track_ >= 0 && throw_track_ < kTracks) {
+        const int param = page_first(Page::fx) + (throw_bus_ == 1 ? 2 : 3);
+        performed_[throw_track_][param] = 127;
+    }
+}
+
 // --- pattern changes ------------------------------------------------------
 
 void Engine::switch_pattern(int bank, int slot) {
@@ -717,6 +895,12 @@ void Engine::switch_pattern(int bank, int slot) {
     // The new pattern's master length makes the old boundary meaningless, and deriving the new
     // one needs a tick, which only resolve_tick has.
     boundary_known_ = false;
+}
+
+// A bar started. The only thing that waits for one is a mute change armed for it.
+void Engine::on_bar() {
+    uint8_t state = 0;
+    if (mute_latch_release(mute_latch_, state)) mute_state_apply(state, muted_);
 }
 
 void Engine::cross_boundary(uint32_t tick) {
@@ -768,6 +952,38 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
         cross_boundary(tick);
     }
 
+    // Bars, for auto-fill and for anything armed to land on one. Counted rather than divided
+    // past the first tick: a bar is kTicksPerBar and this chip has no integer divide.
+    //
+    // A BACKWARDS jump has to resync. A stop and start relocates the clock, and the forward
+    // catch-up below would then leave the bar count wrong for as many bars as the jump was long
+    // -- which is auto-fill firing in the wrong place for ten bars after every stop. The
+    // `tick < next_bar_tick_` guard is what makes the subtraction safe to do unsigned.
+    if (bar_known_ && tick < next_bar_tick_ && next_bar_tick_ - tick > kTicksPerBar) {
+        bar_known_ = false;
+    }
+
+    if (!bar_known_) {
+        bar_ = tick / kTicksPerBar;
+        next_bar_tick_ = (bar_ + 1) * kTicksPerBar;
+        bar_known_ = true;
+        on_bar();
+    } else if (tick >= next_bar_tick_) {
+        bar_++;
+        next_bar_tick_ += kTicksPerBar;
+        // A transport that jumped forward by more than a bar: resync rather than counting up to
+        // it one bar per tick.
+        if (tick >= next_bar_tick_) {
+            bar_ = tick / kTicksPerBar;
+            next_bar_tick_ = (bar_ + 1) * kTicksPerBar;
+        }
+        on_bar();
+    }
+
+    // FILL is the pad OR the auto-fill bar. Resolved here rather than in the command, so that
+    // turning auto-fill on takes effect at the next bar rather than mid-bar.
+    perform_.fill = fill_held_ || auto_fill_active(auto_fill_, bar_);
+
     const int count = scheduler_.tick(tick, frame, live(), perform_, events_, kMaxEventsPerTick);
     for (int i = 0; i < count; i++) fire(events_[i]);
 
@@ -784,15 +1000,22 @@ void Engine::fire(const StepEvent &event) {
     //
     // Locks apply whether or not a note sounds: that is the whole point of a trigless step, and
     // why this happens before the trig check.
-    effective_[track] = params_[track];
+    // From `performed_`, not `params_`: the morph, the macros and any throw are part of the
+    // sound a step starts from, and only the step's own locks go over the top of them.
+    for (int p = 0; p < kParams; p++) effective_[track].v[p] = performed_[track][p];
 
     const LockView locks = pattern_step_locks(live(), track, int(event.step));
     int applied = 0;
+    uint16_t locked = 0;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
         if (lock->param >= kParams || applied >= kMaxLocksApplied) continue;
         effective_[track].v[lock->param] = lock->value;
+        locked = uint16_t(locked | uint16_t(1u << lock->param));
         applied++;
     }
+    // Which parameters this step has locked, so the performance layer leaves them alone until
+    // the next step. A lock always wins over a morph.
+    locked_[track] = locked;
 
     if (!event.trigless && machines_[track] != nullptr && !muted_[track]) {
         // Prepare before triggering so the voice starts from the locked values. The render loop
@@ -826,6 +1049,10 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     apply_commands();
 
+    // The kit with the morph, the macros and any throw over it. Control rate, and only when one
+    // of them has moved.
+    apply_performance();
+
     // The scheduler spaces ratchet hits in samples, so it needs to know how long a tick is.
     // Re-derive only when the tempo actually moves: this is a float divide, which the C674x does
     // in hardware, but there is no reason to do it every block. (Integer division is the one to
@@ -844,6 +1071,17 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     const uint32_t tick_count = enaga::clock::ticks(ticks, 16);
     for (uint32_t i = 0; i < tick_count; i++) {
         resolve_tick(ticks[i].tick, ticks[i].frame);
+    }
+
+    // What the performance layer produced, into the values the machines read -- except where the
+    // current step has a lock, which always wins. Without this a morph would only be heard at
+    // the next trig, and sweeping VALUE between steps would do nothing at all.
+    for (int t = 0; t < kTracks; t++) {
+        const uint16_t locked = locked_[t];
+        for (int p = 0; p < kParams; p++) {
+            if ((locked >> p & 1u) != 0) continue;
+            effective_[t].v[p] = performed_[t][p];
+        }
     }
 
     mixer_.prepare(sends_, master_);
@@ -867,6 +1105,14 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     }
 
     mixer_.finish_block(out, int(frames));
+
+    // Beat repeat is LAST, on the finished master: that is what "the master output" means, and
+    // it is why it captures the limiter and the master filter too (dsp/repeat.hpp). The length
+    // is a note value, so the frames follow the tempo.
+    repeat_.set(uint32_t(float(repeat_length_ticks(repeat_length_)) * samples_per_tick_),
+                repeat_pitch_);
+    repeat_.hold(repeat_held_);
+    repeat_.process(out, int(frames));
 
     // Publish for the UI. Relaxed stores of single words: the UI only ever wants the newest.
     const enaga::clock::State clock = enaga::clock::state();

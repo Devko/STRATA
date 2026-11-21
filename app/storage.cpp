@@ -25,7 +25,11 @@ constexpr const char *kDefaultName = "DEFAULT";
 // bytes cannot cost the banks that follow it.
 constexpr int kFileProject = 0;
 constexpr int kFileKit = 1;
-constexpr int kFileFirstBank = 2;
+// PERFORM.BIN (M5): the scenes and the macros. Last of the fixed-size files and read last, so
+// that a project written before it existed loads everything else and simply has no scenes --
+// which is why a missing PERFORM.BIN is not an error here.
+constexpr int kFilePerform = 2;
+constexpr int kFileFirstBank = 3;
 constexpr int kFileCount = kFileFirstBank + kBanks;
 
 void append_text(char *&out, const char *text, const char *end) {
@@ -57,6 +61,7 @@ bool mutates_pattern(Cmd cmd) {
         case Cmd::range_nudge:
         case Cmd::track_erase:
         case Cmd::record_hit:
+        case Cmd::mutate:
             return true;
         default:
             return false;
@@ -86,6 +91,25 @@ bool mutates_project(Cmd cmd) {
         case Cmd::set_chain:
         case Cmd::queue_pattern:
         case Cmd::set_mute:
+        case Cmd::set_root:
+        case Cmd::set_scale:
+        // The eight stored mute states live in PROJECT.BIN (core/project.hpp).
+        case Cmd::mute_store:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// True when `cmd` changes PERFORM.BIN: the scenes and the macro setup, which docs/SPEC.md says
+// save. The morph POSITION and a macro's position do not -- they are where the performer's hands
+// are, not part of the project.
+bool mutates_perform(Cmd cmd) {
+    switch (cmd) {
+        case Cmd::scene_capture:
+        case Cmd::scene_erase:
+        case Cmd::macro_assign:
+        case Cmd::macro_clear:
             return true;
         default:
             return false;
@@ -221,7 +245,9 @@ void Storage::request_new() {
         // for the reason step_load gives.
         sample_queue_ = 0xFFu;
         wanted_budget_ = uint32_t(kSampleBudgetDefaultMib) << 20;
-        project_dirty_ = kit_dirty_ = true;
+        perform_init(engine_->scenes_for_load(), engine_->macros_for_load());
+        engine_->performance_changed();
+        project_dirty_ = kit_dirty_ = perform_dirty_ = true;
         for (int b = 0; b < kBanks; b++) bank_dirty_[b] = true;
         error_ = nullptr;
     } else {
@@ -264,10 +290,11 @@ void Storage::note_command(Cmd cmd, int live_bank) {
     }
     if (mutates_kit(cmd)) kit_dirty_ = true;
     if (mutates_project(cmd)) project_dirty_ = true;
+    if (mutates_perform(cmd)) perform_dirty_ = true;
 }
 
 bool Storage::dirty() const {
-    if (project_dirty_ || kit_dirty_) return true;
+    if (project_dirty_ || kit_dirty_ || perform_dirty_) return true;
     for (int b = 0; b < kBanks; b++) {
         if (bank_dirty_[b]) return true;
     }
@@ -451,6 +478,10 @@ void Storage::step_save() {
         if (!all && !kit_dirty_) return;
         file = "KIT.BIN";
         res = kit_write(project.kit, file_, kFileBytes, &bytes);
+    } else if (index == kFilePerform) {
+        if (!all && !perform_dirty_) return;
+        file = "PERFORM.BIN";
+        res = perform_write(engine_->scenes(), engine_->macros(), file_, kFileBytes, &bytes);
     } else if (index < kFileCount) {
         const int bank = index - kFileFirstBank;
         if (!all && !bank_dirty_[bank]) return;
@@ -502,6 +533,7 @@ void Storage::step_save() {
     if (!autosave_) {
         if (index == kFileProject) project_dirty_ = false;
         if (index == kFileKit) kit_dirty_ = false;
+        if (index == kFilePerform) perform_dirty_ = false;
     }
 }
 
@@ -546,6 +578,25 @@ void Storage::step_load() {
         return;
     }
 
+    if (index == kFilePerform) {
+        if (!project_path(path, sizeof path, autosave_, "PERFORM.BIN")) return;
+        const int32_t got = enaga::files::read_all(path, file_, kFileBytes);
+        if (got < 0) {
+            // A project saved by an M4 build has no PERFORM.BIN. That is not damage: it means no
+            // scenes and no macros, which is what an empty set is.
+            if (got != ENAGA_FILE_NOT_FOUND) error_ = enaga::files::error_name(got);
+            perform_init(engine_->scenes_for_load(), engine_->macros_for_load());
+            engine_->performance_changed();
+            return;
+        }
+        const SerializeResult res = perform_read(engine_->scenes_for_load(),
+                                                 engine_->macros_for_load(), file_,
+                                                 uint32_t(got));
+        if (res != SerializeResult::ok) error_ = serialize_result_name(res);
+        engine_->performance_changed();
+        return;
+    }
+
     if (index < kFileCount) {
         const int bank = index - kFileFirstBank;
         char name[12];
@@ -578,7 +629,7 @@ void Storage::step_load() {
     post(Cmd::project_loaded);
 
     // What is in RAM is what is on the card.
-    project_dirty_ = kit_dirty_ = false;
+    project_dirty_ = kit_dirty_ = perform_dirty_ = false;
     for (int b = 0; b < kBanks; b++) bank_dirty_[b] = false;
 
     // Every track, not just the ones the new kit names a file for. `pool_.reset()` would be

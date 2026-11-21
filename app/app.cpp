@@ -109,10 +109,22 @@ constexpr Rgb kTrackColour[kTracks] = {
 constexpr int pad_for_track(int track) { return track * 2; }
 constexpr int track_for_pad(int pad) { return pad % 2 == 0 ? pad / 2 : -1; }
 
+// docs/SPEC.md's performance row: the seven UPPER pads, which the panel controller numbers with
+// the odd ids. Fixed, in every mode -- that is what makes it a performance row rather than
+// another page.
+enum class PerformPad : uint8_t { fill = 1, repeat = 3, mute = 5, scene_a = 7, scene_b = 9,
+                                  throw_fx = 11, mutate = 13 };
+
+constexpr bool is_perform_pad(int pad) { return pad % 2 == 1 && pad >= 1 && pad <= 13; }
+
+// The octave the pads play the root in. The pattern's root is a pitch class (core/pattern.hpp),
+// so it needs one to become a note.
+constexpr uint8_t kPadOctaveNote = 60;
+
 // The modes of docs/SPEC.md's function block. F4 = GRID, F7 = MIXER, F8 = EDIT, and the two
 // selection keys under the screen move within whichever mode is showing -- the step page in
 // GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
-enum class Mode : uint8_t { grid, edit, mixer, project };
+enum class Mode : uint8_t { grid, edit, mixer, project, perform };
 
 // The step page shows four of a step's fields at a time, so the selection keys page through
 // them. Derived rather than written down: core/stepedit.hpp owns how many fields there are.
@@ -173,11 +185,59 @@ public:
         if (key == ENAGA_KEY_F1) { shift_ = down; return; }
         if (key == ENAGA_KEY_PUSH_VALUE) { value_pushed_ = down; return; }
 
+        // MUTE mode turns STEP 1-8 into the eight stored mute states: recall on a tap, store
+        // with F1. docs/SPEC.md says they are "recalled from the upper row", but the upper row is
+        // seven FIXED performance pads and there are eight states, so that cannot be taken
+        // literally. The STEP keys are the only run of eight free while MUTE mode is on, and
+        // MUTE mode is a mode, so repurposing them there is the smallest deviation available.
+        // A recall with F1 held lands on the bar, like a mute does.
+        if (mute_mode_ && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 8) {
+            if (!down) return;
+            const int slot = key - ENAGA_KEY_STEP1;
+            char *out = notice_buffer_;
+            if (value_pushed_) {
+                post(Cmd::mute_store, 0, 0, uint8_t(slot));
+                append(out, "STORED ");
+            } else {
+                post(Cmd::mute_recall, 0, 0, uint8_t(slot), shift_ ? 1 : 0);
+                append(out, shift_ ? "NEXT BAR " : "RECALL ");
+            }
+            append_number(out, uint32_t(slot) + 1);
+            *out = 0;
+            notice(notice_buffer_);
+            return;
+        }
+
+        // A scene pad held turns the STEP keys into the sixteen scenes, in whatever mode is on
+        // screen: docs/SPEC.md gives "hold + STEP picks the scene" and the performance row is
+        // deliberately not modal.
+        if (scene_holding_ >= 0 && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
+            if (down) {
+                const int scene = key - ENAGA_KEY_STEP1;
+                post(Cmd::scene_select, 0, 0, uint8_t(scene_holding_), uint8_t(scene));
+                char *out = notice_buffer_;
+                append(out, scene_holding_ == 0 ? "A " : "B ");
+                append_number(out, uint32_t(scene) + 1);
+                *out = 0;
+                notice(notice_buffer_);
+            }
+            return;
+        }
+
         // In PROJECT mode a STEP key queues a pattern change rather than toggling a trig, so it
         // is taken here, before the editing path, and only on the press -- there is no modifier
         // gesture to decide on the release.
         if (mode_ == Mode::project && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
             if (down) queue_shown_pattern(key - ENAGA_KEY_STEP1);
+            return;
+        }
+
+        // And in PERFORM they are the sixteen parameters of the selected track, assigned to the
+        // selected macro. The STEP keys are already a sixteen-wide selector in the step page, so
+        // this is the gesture they have; without it a macro could never be set up at all, and
+        // "4 macros driving up to 4 parameters" would be a feature with no way in.
+        if (mode_ == Mode::perform && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
+            if (down) assign_macro(key - ENAGA_KEY_STEP1);
             return;
         }
 
@@ -192,9 +252,10 @@ public:
 
         if (!down) return;
 
-        // PROJECT mode's own keys. Taken before the switch so the editing meanings of OK, CLR
-        // and UP cannot fire while the card side is what is on screen.
+        // PROJECT and PERFORM mode's own keys. Taken before the switch so the editing meanings
+        // of OK, CLR and the arrows cannot fire while one of them is what is on screen.
         if (mode_ == Mode::project && on_project_key(key)) return;
+        if (mode_ == Mode::perform && on_perform_key(key)) return;
 
         switch (key) {
             case ENAGA_KEY_F5:
@@ -229,8 +290,8 @@ public:
                 mode_ = Mode::grid;
                 step_page_ = false;
                 break;
-            case ENAGA_KEY_F7:                         // MIXER
-                mode_ = Mode::mixer;
+            case ENAGA_KEY_F7:                         // MIXER, or PERFORM with F1
+                mode_ = shift_ ? Mode::perform : Mode::mixer;
                 step_page_ = false;
                 break;
             case ENAGA_KEY_F8:                         // EDIT: the sound pages
@@ -363,6 +424,12 @@ public:
                 // from the shown bank, so browsing must not switch anything by itself.
                 shown_bank_ = (shown_bank_ + delta + kBanks) % kBanks;
                 break;
+            case Mode::perform:
+                // How hard a mutation mutates. The one number in this mode with no encoder of
+                // its own, all four being macros.
+                mutate_amount_ = (mutate_amount_ + delta * 10 + 110) % 110;
+                if (mutate_amount_ > 100) mutate_amount_ = 100;
+                break;
         }
     }
 
@@ -434,6 +501,29 @@ public:
 
     void on_encoder(int encoder, int delta) override {
         if (encoder == 4) {
+            // VALUE picks the beat-repeat length while that pad is held, which is what
+            // docs/SPEC.md gives it, and it has to come before the tempo.
+            if (repeat_held_) {
+                const int next = int(repeat_length_) + delta;
+                repeat_length_ = RepeatLength(
+                    next < 0 ? 0
+                             : (next >= int(RepeatLength::count) ? int(RepeatLength::count) - 1
+                                                                 : next));
+                post(Cmd::set_repeat, 0, 0, uint8_t(repeat_length_), 1, shift_ ? 1 : 0);
+                notice(repeat_length_name(repeat_length_));
+                return;
+            }
+            // In PERFORM, VALUE is the morph: the one continuous control the layer has.
+            if (mode_ == Mode::perform && !value_pushed_ && !shift_) {
+                const int next = int(morph_) + delta * (int(kMorphScale) / 64);
+                morph_ = uint16_t(next < 0 ? 0 : (next > int(kMorphScale) ? int(kMorphScale)
+                                                                         : next));
+                Command command;
+                command.cmd = Cmd::set_morph;
+                command.u = morph_;
+                engine_.commands().post(command);
+                return;
+            }
             if (value_pushed_) {
                 // VALUE pushed and turned is the pattern's swing, as the spec's key table says.
                 const int swing = int(engine_.pattern().swing) + delta;
@@ -464,6 +554,15 @@ public:
         // The ENCODER EVENT id is alphabetical (0-3 = A-D), unlike the PUSH-button key codes,
         // which run B, A, C, D. See docs/ENAGA_API.md -- confusing the two silently swaps A
         // and B, and nothing catches it.
+
+        // A to D are the four macros in PERFORM mode, which is what they are for.
+        if (mode_ == Mode::perform && encoder >= 0 && encoder < kMacros) {
+            const int next = int(macro_position_[encoder]) + delta * 2;
+            macro_position_[encoder] =
+                uint8_t(next < 0 ? 0 : (next > 127 ? 127 : next));
+            post(Cmd::set_macro, 0, 0, uint8_t(encoder), macro_position_[encoder]);
+            return;
+        }
 
         // PROJECT mode's own encoders: A picks when a queued change lands, B the key and C the
         // scale. A is only ever read when a pattern is queued, so it changes nothing by itself;
@@ -567,20 +666,106 @@ public:
     }
 
     void on_pad_press(int pad, int velocity) override {
+        // The performance row first: it is the same seven pads in every mode, which is what
+        // docs/SPEC.md means by a fixed row.
+        if (is_perform_pad(pad)) {
+            on_perform_pad(pad, true);
+            return;
+        }
+
         const int track = track_for_pad(pad);
         if (track < 0 || track >= kTracks) return;
 
-        if (shift_) {                                  // F1 + pad: mute, in any mode
-            muted_[track] = !muted_[track];
-            post(Cmd::set_mute, uint8_t(track), 0, muted_[track] ? 1 : 0);
+        // F1 + pad mutes in any mode, and MUTE mode makes the lower pads mutes outright. With
+        // F1 the mute waits for the bar: a held F1 is the performer asking for it to land in
+        // time rather than under their finger.
+        if (shift_ || mute_mode_) {
+            post(Cmd::set_mute, uint8_t(track), 0, engine_.muted(track) ? 0 : 1,
+                 shift_ ? 1 : 0);
             return;
         }
 
         if (track != selected_) end_gesture();         // a different track is a different edit
         selected_ = track;
-        const uint8_t note = engine_.pattern().root;
+        // The root in a playable octave: the pattern's root is a pitch class (core/pattern.hpp).
+        const uint8_t note = uint8_t(kPadOctaveNote + engine_.pattern().root % 12);
         post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity));
         record_note(track, note, uint8_t(velocity));
+    }
+
+    void on_pad_release(int pad) override {
+        if (is_perform_pad(pad)) on_perform_pad(pad, false);
+    }
+
+    // The seven upper pads. Four of them are HELD rather than toggled -- fill, repeat, throw and
+    // the two scene selectors -- so each one's release matters as much as its press.
+    void on_perform_pad(int pad, bool down) {
+        switch (PerformPad(pad)) {
+            case PerformPad::fill:
+                post(Cmd::set_fill, 0, 0, down ? 1 : 0);
+                break;
+
+            case PerformPad::repeat:
+                // VALUE picks the length while it is held (docs/SPEC.md), which on_encoder
+                // handles; F1 is the pitch-down.
+                repeat_held_ = down;
+                post(Cmd::set_repeat, 0, 0, uint8_t(repeat_length_), down ? 1 : 0,
+                     shift_ ? 1 : 0);
+                break;
+
+            case PerformPad::mute:
+                if (down) {
+                    mute_mode_ = !mute_mode_;
+                    notice(mute_mode_ ? "MUTE MODE" : "PADS PLAY");
+                }
+                break;
+
+            case PerformPad::scene_a:
+            case PerformPad::scene_b:
+                // Held + STEP picks the scene; on its own it just shows which is assigned.
+                // Deliberately does NOT change the mode. The performance row works in every
+                // mode, and a hold that switched the screen and did not switch it back would be
+                // a surprise in the middle of a take.
+                scene_holding_ = down ? (PerformPad(pad) == PerformPad::scene_a ? 0 : 1) : -1;
+                break;
+
+            case PerformPad::throw_fx:
+                // Delay, or reverb with F1. Released, it goes back to the stored send by itself
+                // -- the engine never wrote over `params_`.
+                post(Cmd::set_throw, uint8_t(selected_), 0,
+                     down ? uint8_t(shift_ ? 2 : 1) : uint8_t(0));
+                break;
+
+            case PerformPad::mutate:
+                if (!down) break;
+                // One undo level, then the mutation. CLR reverts it because CLR is the undo that
+                // already exists -- core/mutate.hpp's whole argument for having no commit step.
+                mark(GestureKind::paste, selected_, 0);
+                post_mutate();
+                end_gesture();
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    void post_mutate() {
+        Command command;
+        command.cmd = Cmd::mutate;
+        command.track = uint8_t(selected_);
+        command.step = 0;
+        command.a = uint8_t(mutation_);
+        command.b = uint8_t(mutate_amount_);
+        command.c = 0;                       // the whole track
+        command.u = mutate_variant_++;       // a new result each press
+        engine_.commands().post(command);
+        storage_.note_command(Cmd::mutate,
+                              int(engine_.status().live_bank.load(std::memory_order_relaxed)));
+        char *out = notice_buffer_;
+        append(out, mutation_name(mutation_));
+        *out = 0;
+        notice(notice_buffer_);
     }
 
     // MIDI notes take exactly the same path as pad hits, which is the point: `on_midi` is main
@@ -661,6 +846,11 @@ public:
 
     void update(uint32_t ms) override {
         last_ms_ = ms;
+
+        // The mutes, read back from the engine. The UI keeps a shadow so a press shows at once,
+        // but a recall or a mute that landed on the bar happened on the audio side, and without
+        // this the shadow would drift from what is actually muted.
+        for (int t = 0; t < kTracks; t++) muted_[t] = engine_.muted(t);
 
         // One bounded slice of whatever the card side has in flight. It never blocks and never
         // waits on the audio side: a command ring that has not drained simply means "not this
@@ -815,6 +1005,7 @@ public:
                 case Mode::edit:    draw_edit(canvas); break;
                 case Mode::mixer:   draw_mixer(canvas); break;
                 case Mode::project: draw_project(canvas); break;
+                case Mode::perform: draw_perform(canvas); break;
             }
         }
 
@@ -1123,6 +1314,199 @@ public:
         }
     }
 
+    // --- PERFORM: scenes, the morph, macros and mutation -----------------
+
+    // True when the key belonged to this mode. OK captures a scene, F1 + OK erases one, UP and
+    // DOWN walk which mutation MUTATE will do, CLR clears the selected macro.
+    bool on_perform_key(int key) {
+        switch (key) {
+            case ENAGA_KEY_OK: {
+                // Into whichever slot is held, or slot A's scene. F1 erases instead, because a
+                // scene you cannot empty is one you can only overwrite.
+                const int slot = scene_holding_ >= 0 ? scene_holding_ : 0;
+                const int scene = engine_.scene_slot(slot);
+                if (shift_) {
+                    post(Cmd::scene_erase, 0, 0, uint8_t(scene));
+                    notice("SCENE ERASED");
+                } else {
+                    // The selected track only when a scene pad is held: capturing one track is
+                    // what makes "a scene stores parameter values for any tracks" usable.
+                    post(Cmd::scene_capture, uint8_t(selected_), 0, uint8_t(scene),
+                         scene_holding_ >= 0 ? 1 : 0);
+                    notice(scene_holding_ >= 0 ? "TRACK CAPTURED" : "SCENE CAPTURED");
+                }
+                return true;
+            }
+
+            case ENAGA_KEY_CLR:
+                post(Cmd::macro_clear, 0, 0, uint8_t(macro_selected_));
+                notice("MACRO CLEARED");
+                return true;
+
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN: {
+                const int delta = key == ENAGA_KEY_UP ? -1 : 1;
+                if (shift_) {
+                    // The auto-fill period: off, 4, 8 or 16 bars. It wraps, since "off" is one
+                    // of the four rather than an end stop.
+                    const int next = (int(auto_fill_) + delta + int(AutoFill::count)) %
+                                     int(AutoFill::count);
+                    auto_fill_ = AutoFill(next);
+                    post(Cmd::set_auto_fill, 0, 0, uint8_t(auto_fill_));
+                    char *out = notice_buffer_;
+                    append(out, "AUTOFILL ");
+                    append(out, auto_fill_name(auto_fill_));
+                    *out = 0;
+                    notice(notice_buffer_);
+                    return true;
+                }
+                // Which mutation MUTATE performs. Walked here rather than on an encoder because
+                // all four encoders are macros in this mode.
+                const int next = int(mutation_) + delta;
+                mutation_ = Mutation(next < 0 ? int(Mutation::count) - 1
+                                              : (next >= int(Mutation::count) ? 0 : next));
+                notice(mutation_name(mutation_));
+                return true;
+            }
+
+            case ENAGA_KEY_OCTAVE_LEFT:
+            case ENAGA_KEY_OCTAVE_RIGHT: {
+                // Which macro CLR clears and F1 + a parameter assigns to.
+                const int delta = key == ENAGA_KEY_OCTAVE_LEFT ? -1 : 1;
+                macro_selected_ = (macro_selected_ + delta + kMacros) % kMacros;
+                return true;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    // Assign one parameter of the selected track to the selected macro.
+    //
+    // The range runs from where the parameter is NOW to whichever end is further away, so the
+    // knob always has somewhere to go: a cutoff already wide open gets a macro that closes it
+    // rather than one that does nothing. That is a guess at intent, and the point of guessing is
+    // that a macro assigned in one press is usable in the next -- the ranges are stored, so a
+    // richer editor can refine them later without changing the format.
+    void assign_macro(int param) {
+        if (param < 0 || param >= kParams) return;
+        const uint8_t now = engine_.performed(selected_, param);
+        const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
+        Command command;
+        command.cmd = Cmd::macro_assign;
+        command.track = uint8_t(selected_);
+        command.a = uint8_t(macro_selected_);
+        command.b = uint8_t(param);
+        command.c = now;
+        command.d = far;
+        engine_.commands().post(command);
+        storage_.note_command(Cmd::macro_assign,
+                              int(engine_.status().live_bank.load(std::memory_order_relaxed)));
+
+        char *out = notice_buffer_;
+        *out++ = char('A' + macro_selected_);
+        append(out, " T");
+        append_number(out, uint32_t(selected_) + 1);
+        append(out, " ");
+        append(out, engine_.machine(selected_) != nullptr
+                        ? engine_.machine(selected_)->param_name(param)
+                        : "---");
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    void draw_perform(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+
+        // The two scenes and where the morph sits between them. The bar is the one thing in this
+        // mode that has to be readable at a glance from across a room.
+        out = line;
+        append(out, "A");
+        append_number(out, uint32_t(engine_.scene_slot(0)) + 1);
+        append(out, "  ");
+        append_number(out, uint32_t(scene_count(engine_.scenes().scenes[engine_.scene_slot(0)])));
+        append(out, " PRM");
+        *out = 0;
+        canvas.text(0, 18, line, scene_holding_ == 0 ? 15 : 11);
+
+        out = line;
+        append(out, "B");
+        append_number(out, uint32_t(engine_.scene_slot(1)) + 1);
+        append(out, "  ");
+        append_number(out, uint32_t(scene_count(engine_.scenes().scenes[engine_.scene_slot(1)])));
+        append(out, " PRM");
+        *out = 0;
+        canvas.text(72, 18, line, scene_holding_ == 1 ? 15 : 11);
+
+        const int filled = int(uint32_t(engine_.morph()) * 124u / kMorphScale);
+        canvas.rect(2, 28, 124, 5, 3);
+        canvas.rect(2, 28, filled < 1 ? 1 : filled, 5, 12);
+
+        // The four macros, with how many parameters each drives. An empty macro says so rather
+        // than looking like one set to zero.
+        for (int m = 0; m < kMacros; m++) {
+            const int x = m * 32;
+            out = line;
+            *out++ = char('A' + m);
+            if (m == macro_selected_) *out++ = '*';
+            *out = 0;
+            canvas.text(x + 2, 40, line, m == macro_selected_ ? 15 : 10);
+
+            const int targets = macro_count(engine_.macros().macros[m]);
+            out = line;
+            if (targets == 0) {
+                append(out, "---");
+            } else {
+                append_number(out, uint32_t(targets));
+                append(out, " PRM");
+            }
+            *out = 0;
+            canvas.text(x + 2, 49, line, targets == 0 ? 6 : 11);
+
+            const int height = int(engine_.macro_position(m)) * 40 / 127;
+            canvas.rect(x + 2, 60, 12, 40, 2);
+            canvas.rect(x + 2, 60 + (40 - height), 12, height < 1 ? 1 : height,
+                        targets == 0 ? 5 : 12);
+        }
+
+        // The gesture that is not otherwise discoverable.
+        canvas.text(0, 95, "STEP ASSIGNS TO MACRO", 7);
+        canvas.text(0, 86, "F1+UP AUTOFILL", 7);
+
+        // What MUTATE will do, and to which track.
+        out = line;
+        append(out, "MUT ");
+        append(out, mutation_name(mutation_));
+        append(out, " T");
+        append_number(out, uint32_t(selected_) + 1);
+        append(out, " ");
+        append_number(out, uint32_t(mutate_amount_));
+        *out = 0;
+        canvas.text(0, 104, line, 11);
+
+        // The live performance state: fill, the repeat and its length, a throw, the bar.
+        out = line;
+        if (engine_.fill()) append(out, "FILL ");
+        if (engine_.auto_fill() != AutoFill::off) {
+            append(out, "AF");
+            append(out, auto_fill_name(engine_.auto_fill()));
+            append(out, " ");
+        }
+        if (engine_.repeat().active()) {
+            append(out, repeat_length_name(repeat_length_));
+            append(out, engine_.repeat().pitch_down() ? "- " : " ");
+        }
+        const int throwing = engine_.throwing();
+        if (throwing == 1) append(out, "DLY ");
+        if (throwing == 2) append(out, "REV ");
+        append(out, "BAR ");
+        append_number(out, engine_.bar() % 1000u + 1u);
+        *out = 0;
+        canvas.text(0, 113, line, 9);
+    }
+
     // --- PROJECT: banks, patterns and the card ---------------------------
 
     // True when the key belonged to this mode. OK saves, F1 + OK reads the card again, F1 + CLR
@@ -1305,13 +1689,15 @@ public:
     }
 
 private:
-    void post(Cmd cmd, uint8_t track = 0, uint8_t step = 0, uint8_t a = 0, uint8_t b = 0) {
+    void post(Cmd cmd, uint8_t track = 0, uint8_t step = 0, uint8_t a = 0, uint8_t b = 0,
+              uint8_t c = 0) {
         Command command;
         command.cmd = cmd;
         command.track = track;
         command.step = step;
         command.a = a;
         command.b = b;
+        command.c = c;
         engine_.commands().post(command);
 
         // Which of a project's ten files this edit will have changed. The live bank is read from
@@ -1370,6 +1756,21 @@ private:
     QueueMode queue_mode_ = QueueMode::end_of_pattern;
     char notice_buffer_[24] = {};               // notice() keeps the pointer, so dynamic text
                                                 // needs somewhere of its own to live
+
+    // --- the performance layer's UI state (M5) ---
+    // All of it is which control is selected or held, never what the layer produces: the engine
+    // owns that, and the UI reads it back through the accessors.
+    bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
+    int scene_holding_ = -1;                    // a scene pad held: -1, 0 for A, 1 for B
+    int macro_selected_ = 0;
+    uint8_t macro_position_[kMacros] = {};
+    uint16_t morph_ = 0;
+    bool repeat_held_ = false;
+    RepeatLength repeat_length_ = RepeatLength::sixteenth;
+    AutoFill auto_fill_ = AutoFill::off;
+    Mutation mutation_ = Mutation::velocity;
+    int mutate_amount_ = 50;
+    uint32_t mutate_variant_ = 1;
     int page_ = 0;            // step page 1-4, for 64-step tracks
     int param_page_ = int(Page::src);
     int mixer_bank_ = 0;      // 0 = tracks 1-4, 1 = tracks 5-8

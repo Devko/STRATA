@@ -53,6 +53,7 @@
 
 #include "commands.hpp"
 #include "pcm.hpp"
+#include "perform.hpp"
 #include "project.hpp"
 #include "samplepool.hpp"
 
@@ -208,6 +209,7 @@ private:
     uint32_t save_seq_ = 0;        // monotonic, so a start can tell which of the two is newer
 
     bool project_dirty_ = false;
+    bool perform_dirty_ = false;   // the scenes and macro setup, in PERFORM.BIN
     bool kit_dirty_ = false;
     bool bank_dirty_[kBanks] = {};
 

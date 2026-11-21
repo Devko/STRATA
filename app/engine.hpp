@@ -25,9 +25,12 @@
 #include "editops.hpp"
 #include "hat.hpp"
 #include "kick.hpp"
+#include "mutate.hpp"      // Cmd::mutate
 #include "pattern.hpp"
 #include "perc.hpp"
+#include "perform.hpp"   // scenes, the morph, macros, mute states, auto-fill
 #include "queue.hpp"       // and core/project.hpp through it: the project owns the live pattern
+#include "repeat.hpp"    // beat repeat, on the master output
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
 #include "scheduler.hpp"
@@ -80,6 +83,39 @@ public:
     const SendSettings &sends() const { return sends_; }
     const MasterSettings &master() const { return master_; }
 
+    // --- the performance layer, for the UI to draw -------------------------
+    const SceneSet &scenes() const { return scenes_; }
+    const MacroSet &macros() const { return macros_; }
+    int scene_slot(int which) const { return which == 0 ? scene_a_ : scene_b_; }
+    uint16_t morph() const { return morph_; }
+    uint8_t macro_position(int macro) const {
+        return macro >= 0 && macro < kMacros ? macro_position_[macro] : 0;
+    }
+    AutoFill auto_fill() const { return auto_fill_; }
+    uint32_t bar() const { return bar_; }
+    bool fill() const { return perform_.fill; }
+    int throwing() const { return throw_bus_; }
+    const BeatRepeat &repeat() const { return repeat_; }
+    RepeatLength repeat_length() const { return repeat_length_; }
+
+    // The performance layer writes over the kit without changing it, so the UI has to be able to
+    // draw what is actually being heard as well as what is stored. `params` is the kit; this is
+    // the kit with the morph, the macros and any throw over the top.
+    uint8_t performed(int track, int param) const {
+        return track >= 0 && track < kTracks && param >= 0 && param < kParams
+                   ? performed_[track][param]
+                   : 0;
+    }
+
+    // The scenes and macros, writable, for a LOAD to fill -- the same hole and the same rules as
+    // `project_for_load`: main context, and only before the audio side reads them again. They
+    // are 2.4 KiB, which is more than a 16-byte command carries.
+    SceneSet &scenes_for_load() { return scenes_; }
+    MacroSet &macros_for_load() { return macros_; }
+
+    // A load has replaced them, so what the performance layer produces is stale.
+    void performance_changed() { perform_dirty_ = true; }
+
     // The project, writable, for a LOAD to fill. Main context, and only with the TRANSPORT
     // STOPPED: with the clock stopped `clock::ticks()` yields nothing, so the scheduler never
     // reads the pattern and a load cannot land under it. A load must also post `Cmd::kit_recall`
@@ -107,8 +143,16 @@ private:
 
     // The pass boundary passed: let a chain move on if one is playing.
     void cross_boundary(uint32_t tick);
+
+    // A bar started: release anything armed for one.
+    void on_bar();
     void resolve_tick(uint32_t tick, uint32_t frame);
     void fire(const StepEvent &event);
+
+    // The kit with the performance layer over it: the morph, then the macros, then any throw.
+    // Control rate, and only when something has moved -- which is why `perform_dirty_` exists
+    // rather than recomputing 128 parameters every block for a morph nobody is touching.
+    void apply_performance();
 
     // The kit the machines read (`params_`) and the kit a file holds (`project_.kit`) are
     // different structures in different layers, so they are copied across explicitly rather than
@@ -179,6 +223,20 @@ private:
     // A step without a lock on a parameter reverts that parameter to the kit value, which is the
     // behaviour every box with p-locks has.
     TrackParams effective_[kTracks] = {};
+
+    // `params_` with the performance layer written over it, which is what `fire` builds
+    // `effective_` from. Separate from `params_` because a scene, a macro and a throw must not
+    // change the kit: none of them is saved, none is undone, and letting go of a throw has to
+    // get the stored value back.
+    uint8_t performed_[kTracks][kParams] = {};
+    bool perform_dirty_ = true;
+
+    // Which of a track's parameters the CURRENT step has locked, one bit each. The performance
+    // layer skips them, so a lock always wins over a morph -- which is what docs/REVIEW.md's
+    // "base kit values only" means from the other side. Set by `fire` and therefore lasting
+    // exactly as long as the step does.
+    uint16_t locked_[kTracks] = {};
+
     ChainMix mix_[kTracks] = {};
     bool muted_[kTracks] = {};
 
@@ -196,6 +254,43 @@ private:
     // static, not a stack frame -- but it is the reason nothing here may be passed by value.
     UndoStack undo_;
     RangeClip clip_;
+
+    // --- the performance layer (M5) ---
+    //
+    // All audio-side state. The scenes and macros are the only part that is saved, and they are
+    // saved from the main context through `scenes_for_load` under the same rule as the project:
+    // the transport stopped, or before the first block.
+    SceneSet scenes_;
+    MacroSet macros_;
+    uint8_t scene_a_ = 0;
+    uint8_t scene_b_ = 1;
+    uint16_t morph_ = 0;
+    uint8_t macro_position_[kMacros] = {};
+
+    MuteLatch mute_latch_;
+
+    // The FILL pad, as against the fill the auto-fill bar produces. Kept apart so that holding
+    // the pad during an auto-fill bar is not a contradiction and releasing it does not cancel
+    // the bar's own fill.
+    bool fill_held_ = false;
+    AutoFill auto_fill_ = AutoFill::off;
+
+    // Bars since the transport started, for auto-fill. Counted rather than divided: a bar is 384
+    // ticks at 96 PPQN and this chip has no integer divide (core/scheduler.cpp says the same
+    // about samples-per-tick).
+    uint32_t bar_ = 0;
+    uint32_t next_bar_tick_ = 0;
+    bool bar_known_ = false;
+
+    // A throw: 0 none, 1 delay (send A), 2 reverb (send B), on `throw_track_`. Not a parameter
+    // edit -- `params_` is untouched, so release puts the stored value back by itself.
+    int throw_bus_ = 0;
+    int throw_track_ = 0;
+
+    BeatRepeat repeat_;
+    RepeatLength repeat_length_ = RepeatLength::sixteenth;
+    bool repeat_held_ = false;
+    bool repeat_pitch_ = false;
 
     // The base of the sample region, so `Cmd::set_sample` can turn the loader's byte offset into
     // a pointer. The region and the SamplePool that carves it up both belong to the MAIN context

@@ -27,6 +27,11 @@ namespace strata {
 
 constexpr int kPpqn = 96;                  // ENAGA_CLOCK_PPQN, repeated here so core/ stays
 constexpr int kTicksPerSixteenth = kPpqn / 4;   // 24: the 1x step length
+
+// One bar of 4/4: sixteen 1x steps, 384 ticks. Not a pattern's length -- a pattern may be any
+// number of steps -- but the bar an auto-fill counts and a mute change waits for, which has to
+// mean the same thing whatever the pattern is (core/perform.hpp).
+constexpr uint32_t kTicksPerBar = uint32_t(kTicksPerSixteenth) * 16u;
 constexpr int kMaxSteps = 64;
 constexpr int kMicroRange = 11;            // micro-timing is -11..+11 ticks
 
