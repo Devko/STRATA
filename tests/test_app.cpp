@@ -22,6 +22,7 @@
 // (app/storage.cpp) -- and only `Engine::process()` drains it. A test that calls one without the
 // other therefore waits forever, which is what `pump()` exists to prevent. Driving both by hand
 // is also the point: the emulator runs them in lockstep at real speed and cannot hold one still.
+#include "apprig.hpp"
 #include "check.hpp"
 #include "fakehost.hpp"
 
@@ -30,136 +31,27 @@
 #include <enaga/abi.h>
 #include <enaga/clock.hpp>
 
-#include "engine.hpp"
-#include "storage.hpp"
 
 using namespace strata;
 using strata::test::FakeHost;
 
 namespace {
 
-constexpr int kBlk = int(ENAGA_BLOCK_FRAMES);
-constexpr int kStereo = 2 * kBlk;
+// The rig is tests/apprig.hpp: one Engine, one Storage, and pump() to drive both contexts. The
+// names are brought in rather than qualified at every use, because these tests read better as
+// "post this, pump, check that".
+using strata::test::fresh;
+using strata::test::kit_value;
+using strata::test::last_block;
+using strata::test::peak_of;
+using strata::test::post;
+using strata::test::pump;
+using strata::test::pump_until_idle;
+using strata::test::put_trig;
+using strata::test::storage;
 
-// 85 MiB of it, so these are file-static and `init` runs once (see the header).
-Engine g_engine;
-Storage g_storage;
-float g_out[kStereo];
-bool g_ready = false;
-
-// Run `blocks` audio blocks and service the card between each, which is the order App::audio and
-// App::draw really run in. Returns the loudest sample seen, so a caller that cares whether
-// something sounded does not need its own loop.
-float pump(int blocks = 1) {
-    float peak = 0.0f;
-    for (int b = 0; b < blocks; b++) {
-        for (int i = 0; i < kStereo; i++) g_out[i] = 0.0f;
-        g_engine.process(nullptr, g_out, uint32_t(kBlk));
-        for (int i = 0; i < kStereo; i++) {
-            const float a = g_out[i] < 0.0f ? -g_out[i] : g_out[i];
-            if (a > peak) peak = a;
-        }
-        g_storage.service();
-        FakeHost::the().complete_loads();
-    }
-    return peak;
-}
-
-// Pump until the card is idle, or give up. The bound is generous because a save writes one file
-// per pass and there are ten of them, each deferred behind the ring.
-//
-// It waits for a job to START and then finish, rather than for "not busy": `request_save` only
-// sets a flag, and the job does not begin until `service()` finds the ring drained -- so a check
-// made first sees "idle", returns true, and the test then asserts about a save that never ran.
-//
-// False means no job ever ran, which is a real answer and not only a timeout: with no usable
-// card `service()` returns before it starts anything, and the save stays pending.
-bool pump_until_idle(int limit = 4000) {
-    bool started = false;
-    for (int i = 0; i < limit; i++) {
-        pump();
-        if (g_storage.busy_text() != nullptr) {
-            started = true;
-        } else if (started && FakeHost::the().pending_loads() == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// A known state: a blank card, an internal clock at 130 BPM, a new project in RAM and an empty
-// ring. `Engine::init` runs once, on the first call.
-//
-// The project is BLANK, not the default beat. `init` loads the default beat once and a test that
-// inherited it would also inherit whatever the test before it did to it, so every test that wants
-// a note puts its own trig down. That is more typing and it is the only way the assertions mean
-// what they say.
-Engine &fresh() {
-    FakeHost &host = FakeHost::the();
-    host.reset();
-    if (!g_ready) {
-        g_ready = g_engine.init(float(ENAGA_SAMPLE_RATE)) && g_storage.init(g_engine);
-    }
-    // A card SWAP, not just "a card is there". Storage remembers whether the project is
-    // complete on the card, and the fake's reset() wiped the card without telling it -- which is
-    // exactly what pulling an SD card does on the unit. Doing it as a transition keeps the tests
-    // honest about a state the app really reaches.
-    g_storage.on_card(false);
-    g_storage.on_card(true);
-
-    // The app's own way back to a clean project, rather than a second init(): project_init into
-    // the load buffer and tell the audio side. `request_new` would do the same and also rename.
-    Project &incoming = g_engine.project_for_load();
-    project_init(incoming);
-
-    // And a kit that can make a sound. `project_init` zeroes the kit, so LVL is 0 on every
-    // track and the whole instrument is silent -- which is correct for a blank project and
-    // useless as a starting point for a test about whether anything was heard. Mid values with
-    // the level up is the same patch tests/test_va.cpp and the others start from.
-    for (int t = 0; t < kTracks; t++) {
-        for (int i = 0; i < kKitParams; i++) incoming.kit.tracks[t].params[i] = 64;
-        incoming.kit.tracks[t].params[11] = 127;     // LVL on every machine (dsp/track.hpp)
-    }
-
-    Command command;
-    command.cmd = Cmd::project_loaded;
-    g_engine.commands().post(command);
-
-    // And cut any tails the test before left ringing. A kick decays for well over a block, so
-    // without this a test that measures "silence before frame 40" measures the previous test's
-    // note. `Cmd::stop` with c = 1 is the app's own second STOP press, which is what it is for.
-    Command hush;
-    hush.cmd = Cmd::stop;
-    hush.c = 1;
-    g_engine.commands().post(hush);
-    pump(4);
-    return g_engine;
-}
-
-void post(Cmd cmd, uint8_t track = 0, uint8_t step = 0, uint8_t a = 0, uint8_t b = 0,
-          uint8_t c = 0) {
-    Command command;
-    command.cmd = cmd;
-    command.track = track;
-    command.step = step;
-    command.a = a;
-    command.b = b;
-    command.c = c;
-    g_engine.commands().post(command);
-}
-
-// What the machine on `track` would be prepared with right now: the parameters the engine hands
-// it every block. This is `effective_`, which is private, so it is read the way the machine reads
-// it -- by what the engine last prepared. `Machine::param` is not a thing, so the test instead
-// asks the engine for the value it publishes for the UI and the value it plays, which must agree.
-uint8_t kit_value(int track, int param) { return g_engine.params(track).v[param]; }
-
-// A trig on step 0 of track 0, so a tick can make something happen.
-void put_trig(int track, int step, uint8_t note = 60) {
-    post(Cmd::toggle_trig, uint8_t(track), uint8_t(step));
-    pump();
-    (void)note;
-}
+constexpr int kBlk = strata::test::kRigBlock;
+constexpr int kStereo = strata::test::kRigStereo;
 
 }  // namespace
 
@@ -192,19 +84,10 @@ TEST(app_a_tick_lands_on_the_frame_the_clock_says) {
     FakeHost::the().set_running(true);
     FakeHost::the().deliver_tick(0, 40);
 
-    for (int i = 0; i < kStereo; i++) g_out[i] = 0.0f;
-    g_engine.process(nullptr, g_out, uint32_t(kBlk));
-
-    float before = 0.0f;
-    for (int i = 0; i < 2 * 40; i++) {
-        const float a = g_out[i] < 0.0f ? -g_out[i] : g_out[i];
-        if (a > before) before = a;
-    }
-    float after = 0.0f;
-    for (int i = 2 * 40; i < kStereo; i++) {
-        const float a = g_out[i] < 0.0f ? -g_out[i] : g_out[i];
-        if (a > after) after = a;
-    }
+    pump();
+    const float *block = last_block();
+    const float before = peak_of(block, 2 * 40);
+    const float after = peak_of(block + 2 * 40, kStereo - 2 * 40);
     // Not "silence then sound": the master bus has a reverb, and its tail from whatever ran
     // before outlives anything the rig can reset -- `Cmd::stop` cuts the voices, not the send.
     // So the assertion is that the note's onset is AT the tick's frame: what comes before it is
@@ -262,7 +145,7 @@ TEST(app_a_loaded_project_is_heard_and_not_only_drawn) {
     constexpr int kLvl = 11;
 
     // Put a distinctive kit value in the project that is about to be loaded.
-    Project &incoming = g_engine.project_for_load();
+    Project &incoming = strata::test::engine().project_for_load();
     project_init(incoming);
     incoming.kit.tracks[0].params[kLvl] = 7;
     post(Cmd::project_loaded);
@@ -293,14 +176,14 @@ TEST(app_a_motion_recorded_lock_survives_the_block_copy) {
     // Start the step so the playhead is on it, which is the condition the mirror is guarded by.
     FakeHost::the().deliver_tick(0, 0);
     pump();
-    CHECK_EQ(int(g_engine.status().playhead[0].load(std::memory_order_relaxed)), 0);
+    CHECK_EQ(int(strata::test::engine().status().playhead[0].load(std::memory_order_relaxed)), 0);
 
     // Now record a lock on that step, taking the level right down.
     post(Cmd::lock_delta, 0, 0, uint8_t(kLvl), uint8_t(int8_t(-120)));
     const float after_lock = pump(6);
 
     // The lock is in the pattern...
-    const LockView locks = pattern_step_locks(g_engine.pattern(), 0, 0);
+    const LockView locks = pattern_step_locks(strata::test::engine().pattern(), 0, 0);
     bool found = false;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
         if (lock->param == kLvl) found = true;
@@ -361,9 +244,9 @@ TEST(app_the_first_save_of_a_project_writes_all_ten_files) {
     fresh();
     FakeHost &host = FakeHost::the();
 
-    g_storage.request_save();
+    storage().request_save();
     CHECK(pump_until_idle());
-    CHECK(g_storage.last_error() == nullptr);
+    CHECK(storage().last_error() == nullptr);
     CHECK(host.logged("saved"));
 
     const char *files[] = {"PROJECT.BIN", "KIT.BIN",   "PERFORM.BIN", "BANK_A.BIN", "BANK_B.BIN",
@@ -396,18 +279,18 @@ TEST(app_a_saved_project_reloads) {
     pump(2);
     CHECK_EQ(int(kit_value(3, kLvl)), 42);
 
-    g_storage.request_save();
+    storage().request_save();
     CHECK(pump_until_idle());
-    CHECK(g_storage.last_error() == nullptr);
+    CHECK(storage().last_error() == nullptr);
 
     // Move RAM away from what was saved, then read the card again.
     post(Cmd::set_param, 3, 0, uint8_t(kLvl), 99);
     pump();
     CHECK_EQ(int(kit_value(3, kLvl)), 99);
 
-    g_storage.request_reload();
+    storage().request_reload();
     CHECK(pump_until_idle());
-    CHECK(g_storage.last_error() == nullptr);
+    CHECK(storage().last_error() == nullptr);
     CHECK(FakeHost::the().logged("loaded"));
 
     // The load finishing is not the same as the engine having taken it: the last thing a load
@@ -415,7 +298,7 @@ TEST(app_a_saved_project_reloads) {
     pump(4);
 
     CHECK_EQ(int(kit_value(3, kLvl)), 42);                           // the kit came back
-    CHECK((g_engine.pattern().tracks[2].steps[5].flags & kStepTrig) != 0);   // and the trig
+    CHECK((strata::test::engine().pattern().tracks[2].steps[5].flags & kStepTrig) != 0);   // and the trig
 }
 
 TEST(app_a_save_asked_for_with_no_card_lands_when_one_arrives) {
@@ -434,26 +317,26 @@ TEST(app_a_save_asked_for_with_no_card_lands_when_one_arrives) {
     pump(2);
 
     host.set_card(false);
-    g_storage.on_card(false);
-    g_storage.request_save();
+    storage().on_card(false);
+    storage().request_save();
     CHECK(!pump_until_idle(200));                 // no job ever started
-    CHECK_EQ(g_storage.last_error(), "NO CARD");  // and the screen says why
+    CHECK_EQ(storage().last_error(), "NO CARD");  // and the screen says why
     CHECK_EQ(host.file_count(), 0);
     CHECK(!host.logged("saved"));
 
     // The edit is NOT lost: it is in RAM and the project still reads as dirty, so the screen
     // keeps its unsaved-changes mark.
     CHECK_EQ(int(kit_value(5, kLvl)), 77);
-    CHECK(g_storage.dirty());
+    CHECK(storage().dirty());
 
     // The card arrives and the save completes on its own, carrying the edit made while it was
     // out. `on_card(true)` clears the error first, so the screen stops saying NO CARD.
     host.set_card(true);
-    g_storage.on_card(true);
+    storage().on_card(true);
     CHECK(pump_until_idle());
-    CHECK(g_storage.last_error() == nullptr);
+    CHECK(storage().last_error() == nullptr);
     CHECK(host.logged("saved"));
-    CHECK(!g_storage.dirty());
+    CHECK(!storage().dirty());
 
     char path[ENAGA_FILE_PATH_MAX + 1];
     std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/KIT.BIN");
@@ -481,26 +364,26 @@ TEST(app_a_save_already_asked_for_is_cancelled_by_pulling_the_card) {
 
     post(Cmd::set_param, 6, 0, uint8_t(kLvl), 31);
     pump(2);
-    g_storage.request_save();
+    storage().request_save();
 
     // Out it comes, before any pass of service() could start the job.
     host.set_card(false);
-    g_storage.on_card(false);
-    CHECK_EQ(g_storage.last_error(), "NO CARD");
+    storage().on_card(false);
+    CHECK_EQ(storage().last_error(), "NO CARD");
 
     host.set_card(true);
-    g_storage.on_card(true);
+    storage().on_card(true);
     pump(400);
     CHECK(!host.logged("saved"));
     CHECK_EQ(host.file_count(), 0);
-    CHECK(g_storage.dirty());                 // so the screen still shows the unsaved mark
+    CHECK(storage().dirty());                 // so the screen still shows the unsaved mark
     CHECK_EQ(int(kit_value(6, kLvl)), 31);    // and the edit itself is untouched
 
     // Asking again saves it.
-    g_storage.request_save();
+    storage().request_save();
     CHECK(pump_until_idle());
     CHECK(host.logged("saved"));
-    CHECK(!g_storage.dirty());
+    CHECK(!storage().dirty());
 }
 
 TEST(app_a_project_load_is_refused_under_an_external_clock) {
@@ -510,14 +393,14 @@ TEST(app_a_project_load_is_refused_under_an_external_clock) {
     fresh();
     FakeHost &host = FakeHost::the();
 
-    g_storage.request_save();
+    storage().request_save();
     CHECK(pump_until_idle());
-    CHECK(g_storage.last_error() == nullptr);
+    CHECK(storage().last_error() == nullptr);
 
     host.set_source(ENAGA_CLOCK_MIDI);
     host.set_running(true);
     const int loads_before = host.read_alls();
-    g_storage.request_reload();
+    storage().request_reload();
     pump(40);
     CHECK_EQ(host.read_alls(), loads_before);   // it did not read a byte
     CHECK(host.running());                      // and it did not stop the clock either
