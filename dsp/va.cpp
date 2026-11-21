@@ -1,5 +1,10 @@
 // VA MONO, the bass voice. va.hpp has the topology and why the filter is on the SRC page.
 //
+// It also holds `VaVoice` and `VaSettings`, the voice and its control-rate block, which VA POLY
+// (dsp/vapoly.cpp) holds six of. Everything below the "--- the voice" rule is therefore shared
+// code: the cost accounting in this comment is per VOICE, so VA POLY's figure is six times it,
+// except for `prepare`, which VA POLY pays once a block however many voices sound.
+//
 // --- what is expected to dominate -----------------------------------------------------------
 //
 // One voice, so this is per block of 64 frames, counting multiplies and adds in the hot loops
@@ -39,7 +44,8 @@
 //                        the single costliest thing in the file.
 //   prepare (1/64 rate)  four EnvelopeShape::make (twelve exp() in       ~2.5
 //                        all, since accent has shapes of its own) and
-//                        four exp2 for the knob curves.
+//                        four exp2 for the knob curves. PER BLOCK, not
+//                        per voice: VA POLY's six voices share one.
 //
 // So about 65 flops/sample with LP24. Against Enaga's measured VA voice (1,868 cycles per block
 // = 29 cycles/sample for roughly 70-80 flops/sample, so ~2.5 flops per cycle on this core) that
@@ -54,7 +60,8 @@
 // drumloops.* belongs to another agent's file set. The worthwhile extraction is bigger than
 // that one loop anyway: a single fused pass doing `soft clip -> multiply by the amplitude
 // envelope -> ramped add into the bus` would replace three passes over the slice with one and
-// save two buffer round-trips. That is the candidate to hand the *.ti.c agent.
+// save two buffer round-trips. That is the candidate to hand the *.ti.c agent, and it is worth
+// six times as much now that VA POLY runs the same slice six times a block.
 #include "va.hpp"
 
 namespace strata {
@@ -190,28 +197,177 @@ void mix_ramp(float *out, const float *in, int n, float gain, float step) {
 //           acid squelch. The only knob an accent multiplies rather than replaces.
 //  10  GLD  glide time, 0 to 0.5 s as 0.004 * (2^(7u) - 1), so 0 really is 0 and 64 is a
 //           usable 42 ms. Portamento on every note; a slid step glides too, but never faster
-//           than 55 ms (see start()).
+//           than 55 ms (see start()). MONO's own knob: VA POLY spends this slot on DET.
 //  11  LVL  output level, square law. Square gives usable control over the quiet end.
 
-void VaMono::init(float sample_rate) {
-    rate_ = sample_rate > 1.0f ? sample_rate : 48000.0f;
-    inv_rate_ = reciprocal(rate_);
-    control_rate_ = rate_ * (1.0f / float(kControl));
+VaMode va_mode_from(uint8_t value) {
+    // Three compares, no division: the C674x has no integer divide instruction at all, so even
+    // at control rate a `/` is a libgcc call rather than one cycle.
+    if (value < 64) return VaMode::lp24;
+    if (value < 96) return VaMode::lp12;
+    if (value < 112) return VaMode::bp12;
+    return VaMode::hp12;
+}
 
+VaSettings VaSettings::make(const TrackParams &params, float rate, float inv_rate) {
+    VaSettings s;
+    s.rate = rate;
+    s.inv_rate = inv_rate;
+    const float control_rate = rate * (1.0f / float(VaVoice::kControl));
+
+    s.tune = (float(params.get(0)) - 64.0f) * kTuneStep;
+    s.mode = va_mode_from(params.get(1));
+    s.cutoff_hz = kCutoffLowHz * exp2(kCutoffOctaves * params.unit(2));
+
+    const float resonance = params.unit(3) * (s.mode == VaMode::lp24 ? kResMax24 : kResMax12);
+    s.k_res = 2.0f - 1.98f * resonance;            // the same k SvfCoefficients::make builds
+    const float makeup = 1.0f - 0.4f * resonance;  // keep the filter's input out of the clip
+    s.drive = 1.0f + 0.7f * resonance;             // and let the clip do the dirt instead
+
+    s.decay_s = kDecayLowS * exp2(kDecayOctaves * params.unit(8));
+    s.env_semis = params.unit(9) * kEnvSemitones;
+
+    const float level = params.unit(11);
+    s.out_gain = kHeadroom * level * level;
+
+    // Accent has shapes of its own rather than scaling a shape, because an envelope shape is a
+    // set of one-pole coefficients: there is nothing linear to scale.
+    s.amp_shape = EnvelopeShape::make(kAttackS, s.decay_s, 0.0f, kReleaseS, rate);
+    s.amp_shape_accent = EnvelopeShape::make(kAttackAccentS, s.decay_s * kAccentDecayRatio, 0.0f,
+                                             kReleaseS, rate);
+    s.fenv_shape = EnvelopeShape::make(kFilterAttackS, s.decay_s * kFilterDecayRatio, 0.0f,
+                                       kFilterReleaseS, control_rate);
+    s.fenv_shape_accent =
+        EnvelopeShape::make(kFilterAttackS, s.decay_s * kFilterDecayRatio * kAccentFilterRatio,
+                            0.0f, kFilterReleaseS, control_rate);
+
+    s.level_osc1 = kLevelOsc1 * makeup;
+    s.level_osc2 = kLevelOsc2 * makeup;
+    s.level_sub = kLevelSub * makeup;
+    s.level_noise = kLevelNoise * makeup;
+    s.accent_osc2 = kLevelOsc2Accent * makeup;
+    s.accent_noise = kLevelNoiseAccent * makeup;
+    return s;
+}
+
+// --- the voice ------------------------------------------------------------
+
+void VaVoice::reset_phases() {
     osc1_.reset();
     osc2_.reset();
     sub_.reset();
+    sync_carry_ = 0.0f;
     svf_a_.reset();
     svf_b_.reset();
+}
+
+void VaVoice::kill() {
     amp_.kill();
     fenv_.kill();
+    svf_a_.reset();
+    svf_b_.reset();
     sync_carry_ = 0.0f;
     gain_ = 0.0f;
+}
+
+void VaVoice::reset() {
+    reset_phases();
+    kill();
     pitch_ = 60.0f;
     target_ = 60.0f;
     velocity_ = 1.0f;
     accent_ = false;
     slide_ = false;
+}
+
+void VaVoice::set_note(float velocity, bool accent, bool slide) {
+    velocity_ = velocity;
+    accent_ = accent;
+    slide_ = slide;
+}
+
+void VaVoice::gate_on() {
+    amp_.gate_on();        // from the level it is at: resetting it under a note is a click
+    fenv_.gate_on(true);   // the sweep always starts from closed, however loud the old note was
+}
+
+void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *env) {
+    if (!sounding()) return;
+
+    // --- one control step --------------------------------------------------------------
+    // Everything transcendental in the voice is here, at a sixteenth of the sample rate: the
+    // pitch, the filter envelope and one set of SVF coefficients. Per sample this would be the
+    // costliest thing in the file by a wide margin.
+    const float coef = slide_ && s.slide_coef < s.glide_coef ? s.slide_coef : s.glide_coef;
+    pitch_ += coef * (target_ - pitch_);
+
+    const float fenv = fenv_.step(accent_ ? s.fenv_shape_accent : s.fenv_shape);
+
+    const float hz = 440.0f * semitones(pitch_ - 69.0f);
+    const float dt1 = clamp(hz * s.inv_rate, 1e-5f, 0.45f);
+    const float inv1 = reciprocal(dt1);
+    const float dt2 = clamp(dt1 * kOsc2Ratio, 1e-5f, 0.45f);
+    const float inv2 = reciprocal(dt2);
+
+    // Accent opens the filter two ways: the base cutoff lifts, and the sweep above it reaches
+    // further. No key tracking, deliberately -- the machine this follows has a fixed-frequency
+    // filter, and a bass line wants the same squelch at every note of a pattern.
+    float semis = s.env_semis * fenv;
+    if (accent_) semis = semis * kAccentEnvScale + kAccentCutSemis;
+    const float cutoff = clamp(s.cutoff_hz * semitones(semis), 20.0f, 0.45f * s.rate);
+    const float g = tan_pi(cutoff * s.inv_rate);
+    const float k = accent_ ? clamp(s.k_res - kAccentK, kMinK, s.k_res) : s.k_res;
+    const SvfCoefficients c2 = SvfCoefficients::from_g(g, k);
+
+    // --- the slice ---------------------------------------------------------------------
+    // OSC 2 is rendered first, because sync reads OSC 1's phase without moving it on: it has to
+    // see the phase this slice starts from.
+    const float level2 = accent_ ? s.level_osc2 + s.accent_osc2 : s.level_osc2;
+    const float noise = accent_ ? s.level_noise + s.accent_noise : s.level_noise;
+    enaga_clear(work, n);
+    osc2_.sync_add(work, n, osc1_, dt1, inv1, sync_carry_, Wave::pulse, dt2, inv2, level2);
+    osc1_.render_add(work, n, Wave::saw, dt1, inv1, s.level_osc1);
+    sub_.render_add(work, n, Wave::triangle, 0.5f * dt1, 2.0f * inv1, s.level_sub);
+    rng_.add_noise(work, n, noise);
+
+    switch (s.mode) {
+        case VaMode::lp24: {
+            const SvfCoefficients c1 = SvfCoefficients::from_g(g, kStageOneK);
+            Svf::cascade(svf_a_, c1, svf_b_, c2, work, work, n);
+            break;
+        }
+        case VaMode::lp12:
+            svf_b_.process(work, work, n, c2, Svf::low_pass);
+            break;
+        case VaMode::bp12:
+            svf_b_.process(work, work, n, c2, Svf::band_pass);
+            break;
+        case VaMode::hp12:
+            svf_b_.process(work, work, n, c2, Svf::high_pass);
+            break;
+    }
+
+    // The soft clip sits AFTER the filter, which is what bounds the voice to +-1 however far
+    // resonance pushes the peak, and is the right place for the dirt a driven bass wants.
+    enaga_soft_clip_buffer(work, n, s.drive);
+
+    amp_.render(env, n, accent_ ? s.amp_shape_accent : s.amp_shape);
+    enaga_multiply(work, env, n);
+
+    const float target = s.out_gain * (kVelocityFloor + (1.0f - kVelocityFloor) * velocity_) *
+                         (accent_ ? kAccentGain : 1.0f);
+    mix_ramp(out, work, n, gain_, (target - gain_) * reciprocal(float(n)));
+    gain_ = target;
+}
+
+// --- the machine ----------------------------------------------------------
+
+void VaMono::init(float sample_rate) {
+    rate_ = sample_rate > 1.0f ? sample_rate : 48000.0f;
+    inv_rate_ = reciprocal(rate_);
+    control_rate_ = rate_ * (1.0f / float(VaVoice::kControl));
+
+    voice_.reset();
     first_note_ = true;
     pending_ = false;
     wait_ = 0;
@@ -223,51 +379,14 @@ void VaMono::init(float sample_rate) {
     prepare(defaults);
 }
 
-VaMono::Mode VaMono::mode_from(uint8_t value) {
-    // Three compares, no division: the C674x has no integer divide instruction at all, so even
-    // at control rate a `/` is a libgcc call rather than one cycle.
-    if (value < 64) return Mode::lp24;
-    if (value < 96) return Mode::lp12;
-    if (value < 112) return Mode::bp12;
-    return Mode::hp12;
-}
-
 void VaMono::prepare(const TrackParams &params) {
-    tune_ = (float(params.get(0)) - 64.0f) * kTuneStep;
-    mode_ = mode_from(params.get(1));
-    cutoff_hz_ = kCutoffLowHz * exp2(kCutoffOctaves * params.unit(2));
+    settings_ = VaSettings::make(params, rate_, inv_rate_);
 
-    const float resonance = params.unit(3) * (mode_ == Mode::lp24 ? kResMax24 : kResMax12);
-    k_res_ = 2.0f - 1.98f * resonance;             // the same k SvfCoefficients::make builds
-    const float makeup = 1.0f - 0.4f * resonance;  // keep the filter's input out of the clip
-    drive_ = 1.0f + 0.7f * resonance;              // and let the clip do the dirt instead
-
-    decay_s_ = kDecayLowS * exp2(kDecayOctaves * params.unit(8));
-    env_semis_ = params.unit(9) * kEnvSemitones;
+    // GLD is this machine's own: VaSettings::make leaves slot 10 alone because VA POLY spends
+    // it on DET. A slid note never jumps, so its coefficient has a floor of its own.
     glide_s_ = kGlideScaleS * (exp2(kGlideOctaves * params.unit(10)) - 1.0f);
-    glide_coef_ = to_target(glide_s_, control_rate_);
-    slide_coef_ = to_target(kSlideFloorS, control_rate_);
-
-    const float level = params.unit(11);
-    out_gain_ = kHeadroom * level * level;
-
-    // Accent has shapes of its own rather than scaling a shape, because an envelope shape is a
-    // set of one-pole coefficients: there is nothing linear to scale.
-    amp_shape_ = EnvelopeShape::make(kAttackS, decay_s_, 0.0f, kReleaseS, rate_);
-    amp_shape_accent_ = EnvelopeShape::make(kAttackAccentS, decay_s_ * kAccentDecayRatio, 0.0f,
-                                            kReleaseS, rate_);
-    fenv_shape_ = EnvelopeShape::make(kFilterAttackS, decay_s_ * kFilterDecayRatio, 0.0f,
-                                      kFilterReleaseS, control_rate_);
-    fenv_shape_accent_ =
-        EnvelopeShape::make(kFilterAttackS, decay_s_ * kFilterDecayRatio * kAccentFilterRatio,
-                            0.0f, kFilterReleaseS, control_rate_);
-
-    level_osc1_ = kLevelOsc1 * makeup;
-    level_osc2_ = kLevelOsc2 * makeup;
-    level_sub_ = kLevelSub * makeup;
-    level_noise_ = kLevelNoise * makeup;
-    accent_osc2_ = kLevelOsc2Accent * makeup;
-    accent_noise_ = kLevelNoiseAccent * makeup;
+    settings_.glide_coef = to_target(glide_s_, control_rate_);
+    settings_.slide_coef = to_target(kSlideFloorS, control_rate_);
 }
 
 void VaMono::trigger(const Trig &trig) {
@@ -285,19 +404,13 @@ void VaMono::trigger(const Trig &trig) {
 void VaMono::release_all() {
     // STOP once: let the note go with its release tail. Both envelopes, so the filter closes as
     // the level falls rather than leaving a bright ghost behind.
-    amp_.gate_off();
-    fenv_.gate_off();
+    voice_.gate_off();
 }
 
 void VaMono::kill_all() {
     pending_ = false;
     wait_ = 0;
-    amp_.kill();
-    fenv_.kill();
-    svf_a_.reset();
-    svf_b_.reset();
-    sync_carry_ = 0.0f;
-    gain_ = 0.0f;
+    voice_.kill();
     active_ = false;
 }
 
@@ -310,13 +423,13 @@ void VaMono::render_add(float *out, int frames) {
             continue;
         }
         int n = frames - i;
-        if (n > kControl) n = kControl;
+        if (n > VaVoice::kControl) n = VaVoice::kControl;
         if (pending_ && wait_ < n) n = wait_;    // cut the slice short at the trig's frame
-        run(out + i, n);
+        voice_.run(settings_, out + i, n, work_, env_);
         if (pending_) wait_ -= n;
         i += n;
     }
-    active_ = pending_ || sounding();
+    active_ = pending_ || voice_.sounding();
 }
 
 const char *VaMono::param_name(int index) const {
@@ -328,8 +441,6 @@ const char *VaMono::param_name(int index) const {
     };
     return index >= 0 && index < kParams ? names[index] : "---";
 }
-
-// --- the voice ------------------------------------------------------------
 
 // SLIDE and GLIDE, which are not the same thing.
 //
@@ -347,101 +458,23 @@ void VaMono::start() {
     pending_ = false;
     wait_ = 0;
 
-    const bool was_sounding = sounding();
-    slide_ = t.slide;
-    accent_ = t.accent;
-    velocity_ = float(t.velocity) * (1.0f / 127.0f);
-    target_ = clamp(float(t.note) + tune_, 0.0f, 132.0f);
+    const bool was_sounding = voice_.sounding();
+    const float target = clamp(float(t.note) + settings_.tune, 0.0f, 132.0f);
+    voice_.set_note(float(t.velocity) * (1.0f / 127.0f), t.accent, t.slide);
+    voice_.set_target(target);
 
     // Nothing to glide from on the first note; and with GLD at 0 a plain note arrives at once.
-    // A slid note never jumps: slide_coef_ is below 1 whatever GLD says.
-    if (first_note_ || (!slide_ && glide_coef_ >= 1.0f)) pitch_ = target_;
+    // A slid note never jumps: slide_coef is below 1 whatever GLD says.
+    if (first_note_ || (!t.slide && settings_.glide_coef >= 1.0f)) voice_.set_pitch(target);
     first_note_ = false;
 
-    if (slide_ && was_sounding) return;    // the envelopes and the phases carry on untouched
+    if (t.slide && was_sounding) return;   // the envelopes and the phases carry on untouched
 
     // A voice taken while still sounding keeps its oscillator phases and its filter state, and
     // its amplitude envelope goes on from the level it is at: resetting any of them under a
     // sounding note puts a step in the output, which is a click.
-    if (!was_sounding) {
-        osc1_.reset();
-        osc2_.reset();
-        sub_.reset();
-        sync_carry_ = 0.0f;
-        svf_a_.reset();
-        svf_b_.reset();
-    }
-    amp_.gate_on();
-    fenv_.gate_on(true);   // the sweep always starts from closed, however loud the old note was
-}
-
-void VaMono::run(float *out, int n) {
-    if (!sounding()) return;
-
-    // --- one control step --------------------------------------------------------------
-    // Everything transcendental in the voice is here, at a sixteenth of the sample rate: the
-    // pitch, the filter envelope and one set of SVF coefficients. Per sample this would be the
-    // costliest thing in the file by a wide margin.
-    const float coef = slide_ && slide_coef_ < glide_coef_ ? slide_coef_ : glide_coef_;
-    pitch_ += coef * (target_ - pitch_);
-
-    const float fenv = fenv_.step(accent_ ? fenv_shape_accent_ : fenv_shape_);
-
-    const float hz = 440.0f * semitones(pitch_ - 69.0f);
-    const float dt1 = clamp(hz * inv_rate_, 1e-5f, 0.45f);
-    const float inv1 = reciprocal(dt1);
-    const float dt2 = clamp(dt1 * kOsc2Ratio, 1e-5f, 0.45f);
-    const float inv2 = reciprocal(dt2);
-
-    // Accent opens the filter two ways: the base cutoff lifts, and the sweep above it reaches
-    // further. No key tracking, deliberately -- the machine this follows has a fixed-frequency
-    // filter, and a bass line wants the same squelch at every note of a pattern.
-    float semis = env_semis_ * fenv;
-    if (accent_) semis = semis * kAccentEnvScale + kAccentCutSemis;
-    const float cutoff = clamp(cutoff_hz_ * semitones(semis), 20.0f, 0.45f * rate_);
-    const float g = tan_pi(cutoff * inv_rate_);
-    const float k = accent_ ? clamp(k_res_ - kAccentK, kMinK, k_res_) : k_res_;
-    const SvfCoefficients c2 = SvfCoefficients::from_g(g, k);
-
-    // --- the slice ---------------------------------------------------------------------
-    // OSC 2 is rendered first, because sync reads OSC 1's phase without moving it on: it has to
-    // see the phase this slice starts from.
-    const float level2 = accent_ ? level_osc2_ + accent_osc2_ : level_osc2_;
-    const float noise = accent_ ? level_noise_ + accent_noise_ : level_noise_;
-    enaga_clear(voice_, n);
-    osc2_.sync_add(voice_, n, osc1_, dt1, inv1, sync_carry_, Wave::pulse, dt2, inv2, level2);
-    osc1_.render_add(voice_, n, Wave::saw, dt1, inv1, level_osc1_);
-    sub_.render_add(voice_, n, Wave::triangle, 0.5f * dt1, 2.0f * inv1, level_sub_);
-    rng_.add_noise(voice_, n, noise);
-
-    switch (mode_) {
-        case Mode::lp24: {
-            const SvfCoefficients c1 = SvfCoefficients::from_g(g, kStageOneK);
-            Svf::cascade(svf_a_, c1, svf_b_, c2, voice_, voice_, n);
-            break;
-        }
-        case Mode::lp12:
-            svf_b_.process(voice_, voice_, n, c2, Svf::low_pass);
-            break;
-        case Mode::bp12:
-            svf_b_.process(voice_, voice_, n, c2, Svf::band_pass);
-            break;
-        case Mode::hp12:
-            svf_b_.process(voice_, voice_, n, c2, Svf::high_pass);
-            break;
-    }
-
-    // The soft clip sits AFTER the filter, which is what bounds the voice to +-1 however far
-    // resonance pushes the peak, and is the right place for the dirt a driven bass wants.
-    enaga_soft_clip_buffer(voice_, n, drive_);
-
-    amp_.render(amp_env_, n, accent_ ? amp_shape_accent_ : amp_shape_);
-    enaga_multiply(voice_, amp_env_, n);
-
-    const float target = out_gain_ * (kVelocityFloor + (1.0f - kVelocityFloor) * velocity_) *
-                         (accent_ ? kAccentGain : 1.0f);
-    mix_ramp(out, voice_, n, gain_, (target - gain_) * reciprocal(float(n)));
-    gain_ = target;
+    if (!was_sounding) voice_.reset_phases();
+    voice_.gate_on();
 }
 
 }  // namespace strata

@@ -39,7 +39,23 @@
 // output -- a click.
 //
 // It reads the SRC page (0-3) and the AMP page (8-11); FLTR and FX belong to the insert chain.
+//
+// --- the voice is shared with VA POLY -------------------------------------------------------
+//
+// docs/SPEC.md gives VA POLY "the same voice as VA MONO", six of them, and docs/BUDGET.md
+// budgets it at six times the same measured figure. So the voice itself -- `VaVoice` below,
+// with the control-rate block it reads, `VaSettings` -- is ONE implementation that both
+// machines hold: VA MONO has one and VA POLY has six. dsp/vapoly.hpp's header records why that
+// is shared here rather than duplicated, which is not the call core/project.cpp makes for its
+// container code; the short version is that a spec which pins the two voices to be identical
+// makes a drift between two copies a bug rather than the independence that buys.
+//
+// What stayed in the machines, because it is not voice arithmetic: the parameter mapping of
+// slot 10 (GLD here, DET there), the pending-trig bookkeeping, voice allocation, and glide and
+// slide, which docs/SPEC.md and dsp/track.hpp both make MONO-only.
 #pragma once
+
+#include <cstdint>
 
 #include <enaga/dsp.hpp>
 
@@ -47,11 +63,137 @@
 
 namespace strata {
 
+// The voice filter's four settings. LP24 is a cascade of two poles (Svf::cascade); the other
+// three are one pole each.
+enum class VaMode : uint8_t { lp24 = 0, lp12, bp12, hp12 };
+
+// MOD's zones. Deliberately unequal: see va.cpp.
+VaMode va_mode_from(uint8_t value);
+
+// --- the control-rate block -----------------------------------------------
+
+// Everything the parameters decide, made once per block by `make` and read by every voice that
+// renders. One struct rather than a set of members on the machine because six voices share one
+// copy of it: VA POLY makes these once per block, not once per voice, so the four
+// EnvelopeShape::make calls (twelve exp() between them, since accent has shapes of its own) and
+// the knob curves cost the same at six voices as at one.
+struct VaSettings {
+    // Reads SRC 0-3 (TUN, MOD, CUT, RES) and AMP 8, 9 and 11 (DEC, ENV, LVL). Slot 10 is
+    // deliberately NOT read here -- it is GLD on VA MONO and DET on VA POLY -- so each machine
+    // maps that one itself. Control rate, once per block.
+    static VaSettings make(const TrackParams &params, float rate, float inv_rate);
+
+    enaga::dsp::EnvelopeShape amp_shape{}, amp_shape_accent{};
+    enaga::dsp::EnvelopeShape fenv_shape{}, fenv_shape_accent{};
+    VaMode mode = VaMode::lp12;
+    float rate = 48000.0f;
+    float inv_rate = 1.0f / 48000.0f;
+    float tune = 0.0f;                 // TUN, semitones
+    float cutoff_hz = 650.0f;          // CUT
+    float k_res = 1.0f;                // RES as the SVF's k = 1 / Q
+    float env_semis = 0.0f;            // ENV, semitones of cutoff at envelope 1
+    float decay_s = 0.2f;              // DEC
+    float level_osc1 = 0.0f;           // the oscillator levels, resonance makeup included
+    float level_osc2 = 0.0f;
+    float level_sub = 0.0f;
+    float level_noise = 0.0f;
+    float accent_osc2 = 0.0f;          // what an accent adds to those two
+    float accent_noise = 0.0f;
+    float drive = 1.0f;                // the post-filter soft clip's drive
+    float out_gain = 0.25f;            // LVL
+
+    // The pitch slew per control step, as a one-pole coefficient; 1 means arrive at once. The
+    // MACHINE sets these, because glide is monophonic: VA MONO from GLD and from its slide
+    // floor, VA POLY not at all -- a chord has nothing to glide from, so 1 is what it wants.
+    float glide_coef = 1.0f;
+    float slide_coef = 1.0f;
+};
+
+// --- one voice ------------------------------------------------------------
+
+// Two oscillators, the sub, the noise, the filter and the two envelopes: everything that is per
+// NOTE rather than per block. VA MONO holds one of these and VA POLY six, and neither machine
+// contains any of the voice's arithmetic itself.
+//
+// Starting a note is a few small calls rather than one `start(...)`, because the two machines
+// want different combinations of them and one call would have taken five booleans in an order
+// no compiler would check. Both machines do this:
+//
+//     if (!v.sounding()) v.reset_phases();   // ONLY when silent: resetting under a note clicks
+//     v.set_note(velocity, accent, slide);
+//     v.set_target(note + tune);             // where the pitch is heading ...
+//     v.set_pitch(target);                   // ... and, unless it should glide there, from
+//     v.gate_on();
+class VaVoice {
+public:
+    // Frames per control step. 16 is the reference's figure: modulation at 3 kHz, which is fast
+    // enough that a filter sweep does not step audibly, and slow enough that the tangent and
+    // the reciprocals behind a set of SVF coefficients cost 1/16 of what they would per sample.
+    // A trig landing mid-step shortens one slice so a note still starts on its exact frame.
+    static constexpr int kControl = 16;
+
+    // The level below which the amplitude envelope counts as finished. An Envelope with
+    // sustain 0 parks in the `sustain` stage rather than reaching `idle` on its decay path
+    // (docs/ENAGA_API.md, "Gotchas"), so the level is what says a one-shot note is over.
+    static constexpr float kSilent = 1e-4f;
+
+    void reset();          // everything: phases, filters, envelopes, and the pitch to note 60
+    void reset_phases();   // the oscillators, the filter state and the sync carry
+    void kill();           // silence now: the envelopes and the filter state, no tail
+
+    // Each voice of a polyphonic machine needs its own noise stream. Six voices sharing one
+    // seed would add six copies of the same signal coherently -- six times one voice's noise
+    // instead of the root of six, and correlated rather than noise.
+    void seed(uint32_t value) { rng_ = enaga::dsp::Random(value); }
+
+    void set_note(float velocity, bool accent, bool slide);
+    void set_pitch(float note) { pitch_ = note; }
+    void set_target(float note) { target_ = note; }
+    void gate_on();
+    void gate_off() {
+        amp_.gate_off();
+        fenv_.gate_off();   // so the filter closes as the level falls: no bright ghost
+    }
+
+    // Is this voice making sound? The LEVEL decides, not `Envelope::active()`, which stays true
+    // forever on a sustain-0 decay path (kSilent above).
+    bool sounding() const {
+        const enaga::dsp::Envelope::Stage s = amp_.stage();
+        return s != enaga::dsp::Envelope::idle &&
+               (s == enaga::dsp::Envelope::attack || amp_.level() >= kSilent);
+    }
+
+    float amp_level() const { return amp_.level(); }
+    float pitch() const { return pitch_; }
+    float target_pitch() const { return target_; }
+    bool accent() const { return accent_; }
+
+    // One control step and its n samples (n must be 1..kControl), ADDED into out. `work` and
+    // `env` are kControl-float scratch buffers the CALLER owns and every voice shares, so six
+    // voices of slice never reach the audio stack.
+    void run(const VaSettings &settings, float *out, int n, float *work, float *env);
+
+private:
+    enaga::dsp::Oscillator osc1_, osc2_, sub_;
+    enaga::dsp::Svf svf_a_, svf_b_;     // svf_a_ is LP24's first (non-resonant) stage
+    enaga::dsp::Envelope amp_, fenv_;
+    enaga::dsp::Random rng_{0x1F3B9A7Du};
+
+    float pitch_ = 60.0f;               // the glide's current value, in note numbers
+    float target_ = 60.0f;              // where it is heading
+    float sync_carry_ = 0.0f;           // enaga_oscillator_sync_add's sample in hand
+    float gain_ = 0.0f;                 // the output gain the last slice ended on
+    float velocity_ = 1.0f;             // this note's velocity, 0-1
+    bool accent_ = false;               // this note's accent flag
+    bool slide_ = false;                // this note arrived on a slid step
+};
+
+// --- the machine ----------------------------------------------------------
+
 class VaMono final : public Machine {
 public:
-    // The voice filter's four settings. LP24 is a cascade of two poles (Svf::cascade); the
-    // other three are one pole each.
-    enum class Mode : uint8_t { lp24 = 0, lp12, bp12, hp12 };
+    // The enum moved to namespace scope so VA POLY shares it; VaMono::Mode still names it.
+    using Mode = VaMode;
 
     void init(float sample_rate) override;
     void prepare(const TrackParams &params) override;
@@ -65,60 +207,33 @@ public:
     // --- for the UI, and for tests that need to pin a mapping rather than guess at it -------
 
     // MOD's zones. Deliberately unequal: see va.cpp.
-    static Mode mode_from(uint8_t value);
-    Mode mode() const { return mode_; }
+    static Mode mode_from(uint8_t value) { return va_mode_from(value); }
+    Mode mode() const { return settings_.mode; }
     // CUT in Hz, before the filter envelope and the accent move it.
-    float base_cutoff_hz() const { return cutoff_hz_; }
+    float base_cutoff_hz() const { return settings_.cutoff_hz; }
     // The glide's current value and where it is heading, as note numbers (TUN included).
-    float pitch() const { return pitch_; }
-    float target_pitch() const { return target_; }
+    float pitch() const { return voice_.pitch(); }
+    float target_pitch() const { return voice_.target_pitch(); }
     // The amplitude envelope's level: what a slide must not reset.
-    float amp_level() const { return amp_.level(); }
-    float decay_seconds() const { return decay_s_; }
+    float amp_level() const { return voice_.amp_level(); }
+    float decay_seconds() const { return settings_.decay_s; }
     float glide_seconds() const { return glide_s_; }
 
 private:
-    // Frames per control step. 16 is the reference's figure: modulation at 3 kHz, which is fast
-    // enough that a filter sweep does not step audibly, and slow enough that the tangent and
-    // the reciprocals behind a set of SVF coefficients cost 1/16 of what they would per sample.
-    // A trig landing mid-step shortens one slice so a note still starts on its exact frame.
-    static constexpr int kControl = 16;
-
     // A slide is always audible: below this it would be a jump, not a slide. The 303's own
     // slide time is fixed at about this, and GLD only ever makes a slide longer.
     static constexpr float kSlideFloorS = 0.055f;
 
-    // The level below which the amplitude envelope counts as finished. An Envelope with
-    // sustain 0 parks in the `sustain` stage rather than reaching `idle` on its decay path
-    // (docs/ENAGA_API.md, "Gotchas"), so the level is what says a one-shot note is over.
-    static constexpr float kSilent = 1e-4f;
-
-    bool sounding() const {
-        const enaga::dsp::Envelope::Stage s = amp_.stage();
-        return s != enaga::dsp::Envelope::idle &&
-               (s == enaga::dsp::Envelope::attack || amp_.level() >= kSilent);
-    }
-
     void start();                       // begin the pending trig, on its exact frame
-    void run(float *out, int n);        // one control step and its n samples
 
-    // --- the voice ----------------------------------------------------------------------
-    enaga::dsp::Oscillator osc1_, osc2_, sub_;
-    enaga::dsp::Svf svf_a_, svf_b_;     // svf_a_ is LP24's first (non-resonant) stage
-    enaga::dsp::Envelope amp_, fenv_;
-    enaga::dsp::Random rng_{0x1F3B9A7Du};
+    VaVoice voice_;
+    VaSettings settings_{};
 
     float rate_ = 48000.0f;
     float inv_rate_ = 1.0f / 48000.0f;
     float control_rate_ = 3000.0f;
 
-    float pitch_ = 60.0f;               // glide's current value, in note numbers
-    float target_ = 60.0f;              // where it is heading
-    float sync_carry_ = 0.0f;           // enaga_oscillator_sync_add's sample in hand
-    float gain_ = 0.0f;                 // the output gain the last slice ended on
-    float velocity_ = 1.0f;             // this note's velocity, 0-1
-    bool accent_ = false;               // this note's accent flag
-    bool slide_ = false;                // this note arrived on a slid step
+    float glide_s_ = 0.0f;              // GLD, for the accessor
     bool first_note_ = true;            // nothing to glide from yet
     bool active_ = false;
 
@@ -126,29 +241,8 @@ private:
     int wait_ = 0;
     bool pending_ = false;
 
-    // --- control-rate values, all made in prepare() -------------------------------------
-    enaga::dsp::EnvelopeShape amp_shape_{}, amp_shape_accent_{};
-    enaga::dsp::EnvelopeShape fenv_shape_{}, fenv_shape_accent_{};
-    Mode mode_ = Mode::lp12;
-    float tune_ = 0.0f;                 // TUN, semitones
-    float cutoff_hz_ = 650.0f;          // CUT
-    float k_res_ = 1.0f;                // RES as the SVF's k = 1 / Q
-    float env_semis_ = 0.0f;            // ENV, semitones of cutoff at envelope 1
-    float decay_s_ = 0.2f;              // DEC
-    float glide_s_ = 0.0f;              // GLD
-    float glide_coef_ = 1.0f;           // GLD as a per-control-step one-pole coefficient
-    float slide_coef_ = 1.0f;           // the same for kSlideFloorS
-    float level_osc1_ = 0.0f;           // the oscillator levels, resonance makeup included
-    float level_osc2_ = 0.0f;
-    float level_sub_ = 0.0f;
-    float level_noise_ = 0.0f;
-    float accent_osc2_ = 0.0f;          // what an accent adds to those two
-    float accent_noise_ = 0.0f;
-    float drive_ = 1.0f;                // the post-filter soft clip's drive
-    float out_gain_ = 0.25f;            // LVL
-
-    float voice_[kControl] = {};        // the slice being built
-    float amp_env_[kControl] = {};
+    float work_[VaVoice::kControl] = {};    // the slice being built
+    float env_[VaVoice::kControl] = {};
 };
 
 }  // namespace strata
