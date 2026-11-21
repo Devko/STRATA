@@ -55,9 +55,10 @@
 //      `kMinGrain` samples, does not play. So a 1-frame sample, a 2-frame sample and a POS at the
 //      very last frame of a tiny buffer are all silent rather than special cases inside the loop.
 //
-// The window table is bounded the other way, by a clamp in the loop, because its phase is a float
-// accumulator and float error is not something an integer check can settle. One select each side
-// is cheap; see dsp/grainloops.ti.c.
+// The window table is bounded the other way -- a clamp on its phase in the loop, plus two guard
+// entries, so that every index that clamp can produce is in range whatever the float error did.
+// Its phase is a float accumulator, and float error is not something an integer check can settle;
+// dsp/grainloops.h has the argument for padding over clamping.
 //
 // What this buys: the inner loop has no bounds work at all. A per-sample clamp of both tap indices
 // would be four selects a sample a grain -- over a thousand a block at eight grains -- to re-prove
@@ -174,6 +175,21 @@ public:
         0.44721360f, 0.40824829f, 0.37796447f, 0.35355339f,
     };
 
+    // The i-th grain's per-sample state, whether it is sounding, and how many samples it has left.
+    // For a UI that draws where in the sample each grain is reading, and for tests that check the
+    // read bound as ARITHMETIC on a grain's own state rather than inferring it from the output --
+    // which is the only way to see a read of an out-of-range frame that happens to land with an
+    // interpolation weight of zero, and so contributes nothing to hear.
+    bool grain_live(int index) const {
+        return index >= 0 && index < kGrains && grains_[index].live;
+    }
+    int grain_remaining(int index) const {
+        return index >= 0 && index < kGrains ? int(grains_[index].left) : 0;
+    }
+    const strata_grain &grain_state(int index) const {
+        return grains_[index >= 0 && index < kGrains ? index : 0].s;
+    }
+
     // What the last prepare() resolved the knobs to, for the UI's readouts and for tests that pin
     // the mapping. Position is a frame in the sample; the two lengths are in OUTPUT samples.
     int position_frames() const { return position_; }
@@ -204,9 +220,11 @@ private:
     // allocated and nothing large goes on the stack. ENAGA_BLOCK_FRAMES is 64; a longer call is
     // cut into slices of this size.
     static constexpr int kBlock = 64;
-    // One cycle of Hann plus a guard entry equal to the first, so the loop's read of index and
-    // index+1 never leaves the table.
+    // One cycle of Hann, then two guard entries equal to the first. dsp/grainloops.h says why two:
+    // with both present, every index the loop's clamped phase can produce is in range, so the loop
+    // needs no index clamp of its own.
     static constexpr int kWindowSize = STRATA_GRAIN_WINDOW;
+    static constexpr int kWindowGuard = 2;
     // The scheduler's hop floor. It bounds how many grains can be spawned in one block, which
     // bounds the control-rate work the sub-slicing in render_slice can be asked to do, and it is
     // what guarantees render_slice makes progress: a hop of zero would not terminate.
@@ -286,7 +304,7 @@ private:
     bool active_ = false;
     Trig next_{};
 
-    float window_[kWindowSize + 1] = {};
+    float window_[kWindowSize + kWindowGuard] = {};
     float scratch_[kBlock] = {};
     float env_[kBlock] = {};
 };

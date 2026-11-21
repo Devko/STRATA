@@ -1384,3 +1384,330 @@ TEST(grain_a_sparse_cloud_leaves_gaps_and_a_dense_one_does_not) {
     CHECK(zeros[0] > 400 * kBlk / 4);
     CHECK(zeros[1] < 400 * kBlk / 50);
 }
+
+// --- the interpolator and the window, against exact oracles -----------------
+
+TEST(grain_reads_a_fractional_position_exactly_on_a_ramp) {
+    // Linear interpolation of a RAMP is exact, which makes a ramp an oracle for the whole read
+    // path -- the fixed-point advance, its carry, the fraction, and the blend -- with no need for
+    // this test to know anything about the window.
+    //
+    // One sparse grain from frame 0, rendered twice over the same ramp: once at a step of exactly
+    // 1.0 and once at exactly 1.5. The step comes from the SOURCE RATE rather than from PIT,
+    // because 1.5 is not a whole number of the knob's semitone steps and the point here is an
+    // exact ratio. Sample i of the first is window(i/len) * i; of the second, window(i/len) * 1.5i.
+    // So wherever the first is not zero the second is 1.5 times it -- and that holds only if every
+    // piece of the read path is right.
+    const int frames = 4096;
+    for (int i = 0; i < frames; i++) g_mono[i] = int16_t(i);
+
+    TrackParams p = plain();
+    p.set(0, 0);      // POS: frame 0
+    p.set(1, 0);      // SIZ: the shortest grain, well inside the ramp
+    p.set(2, 0);      // DEN: sparse, so the first grain is alone in the buffer
+    p.set(3, 0);      // SPR: no jitter, so both renders schedule identically
+
+    Granular a;
+    a.init(kRate);
+    a.set_sample(g_mono, uint32_t(frames), 1, kRate);          // step 1.0
+    a.prepare(p);
+    CHECK_NEAR(a.read_step(), 1.0f, 1e-6);
+    const int len = a.grain_length();
+    CHECK(len > 16);
+    a.trigger(hit());
+    clear(g_out, 8 * kBlk);
+    render_blocks(a, p, g_out, 8);
+
+    Granular b;
+    b.init(kRate);
+    b.set_sample(g_mono, uint32_t(frames), 1, 1.5f * kRate);   // step 1.5
+    b.prepare(p);
+    CHECK_NEAR(b.read_step(), 1.5f, 1e-6);
+    CHECK_EQ(b.grain_length(), len);
+    b.trigger(hit());
+    clear(g_other, 8 * kBlk);
+    render_blocks(b, p, g_other, 8);
+
+    int compared = 0;
+    for (int i = 1; i < len && i < 8 * kBlk; i++) {
+        if (g_out[i] == 0.0f) continue;
+        CHECK_NEAR(g_other[i] * enaga::dsp::reciprocal(g_out[i]), 1.5f, 2e-4);
+        compared++;
+    }
+    CHECK(compared > len / 2);     // and it really did compare the grain, not three samples of it
+
+    // The first sample of both is the window's own zero, whatever the step.
+    CHECK_EQ(g_out[0], 0.0f);
+    CHECK_EQ(g_other[0], 0.0f);
+}
+
+TEST(grain_the_window_never_exceeds_unity) {
+    // One sparse grain over a full-scale constant sample is the window, unmixed and uncompensated:
+    // the first grain of a cloud latches kCrowdGain[0] = 1, the envelope is at 1 from its first
+    // sample, and every tap reads the same maximum value. So the peak is LVL's trim times full
+    // scale and not a hair more -- which is what says the window table's clamp is holding and that
+    // the table is being read inside itself. A read past its last entry lands in the scratch
+    // buffer, whose values are a previous block's grains and can be anything.
+    fill_const(g_mono, kSrcFrames, 1, 32767);
+    Granular g;
+    g.init(kRate);
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    p.set(1, 110);     // a long grain
+    p.set(2, 0);       // sparse: one at a time
+    p.set(9, 0);       // the symmetric window, whose peak is exactly 1
+    g.prepare(p);
+    g.trigger(hit());
+    clear(g_out, kCapture);
+    const int n = render_blocks(g, p, g_out, 400);
+
+    // kHeadroom (0.5) times LVL 127 squared (1.0) times 32767/32768.
+    const float expected = 0.5f * (32767.0f / 32768.0f);
+    CHECK(peak(g_out, n) <= expected * 1.00005f);
+    CHECK(peak(g_out, n) >= expected * 0.9999f);
+
+    // The plucked window reaches the same peak: SHP warps where the peak is, not how tall it is.
+    g.kill_all();
+    p.set(9, 127);
+    g.prepare(p);
+    g.trigger(hit());
+    clear(g_out, kCapture);
+    const int m = render_blocks(g, p, g_out, 400);
+    CHECK(peak(g_out, m) <= expected * 1.00005f);
+    CHECK(peak(g_out, m) >= expected * 0.9999f);
+}
+
+// --- the bound as arithmetic rather than as audio ---------------------------
+//
+// The oracle test above can only see a read whose VALUE reaches the output. It cannot see one that
+// lands on an out-of-range frame with an interpolation weight of exactly zero -- which is what
+// happens whenever the read position arrives exactly on a frame boundary, and is exactly the case
+// an off-by-one in the bound produces. On this chip such a read does not fault and returns
+// garbage; the garbage is simply multiplied by zero this time. These two tests close that gap by
+// checking the arithmetic directly instead of the signal.
+
+namespace {
+
+// The frames the read position will still move over a grain's remaining samples, from its CURRENT
+// position and fraction. This is deliberately NOT the expression dsp/grain.cpp bounds a grain with
+// at its onset -- that one starts from a fraction of zero -- so the two agreeing says something
+// rather than nothing. Both products stay inside 32 bits for every length the machine allows.
+int32_t remaining_advance(const strata_grain &s, int left) {
+    const uint32_t j = uint32_t(left - 1);
+    return int32_t(j) * s.istep +
+           int32_t((s.frac + j * s.fstep) >> STRATA_GRAIN_FRAC_BITS);
+}
+
+}  // namespace
+
+TEST(grain_advance_matches_the_loops_own_accumulation) {
+    // strata_grain_advance is the whole of the bounds policy, and it is only right if it is the
+    // SAME arithmetic the hot loop accumulates. So: a reference loop that does exactly what
+    // dsp/grainloops.ti.c does per sample, against the closed form, over the step range the
+    // machine clamps to and up to the longest grain it allows.
+    const uint32_t steps[] = {0, 1, 7, 1024, 16384, 32768, 49152, 65534, 65535};
+    const int32_t wholes[] = {0, 1, 2, 3, 31, 32};
+    const int32_t counts[] = {1, 2, 3, 17, 64, 1000, 18910, STRATA_GRAIN_LEN_MAX - 1};
+
+    for (int32_t istep : wholes) {
+        for (uint32_t fstep : steps) {
+            int32_t pos = 0;
+            uint32_t frac = 0;
+            int32_t next = 0;
+            for (int32_t j = 0; j <= counts[int(sizeof(counts) / sizeof(counts[0])) - 1]; j++) {
+                // Compare before advancing: advance(j) is where sample j reads.
+                if (j == counts[next]) {
+                    CHECK_EQ(strata_grain_advance(j, istep, fstep), pos);
+                    if (next + 1 < int(sizeof(counts) / sizeof(counts[0]))) next++;
+                }
+                const uint32_t sum = frac + fstep;
+                pos += istep + int32_t(sum >> STRATA_GRAIN_FRAC_BITS);
+                frac = sum & STRATA_GRAIN_FRAC_MASK;
+            }
+        }
+    }
+
+    // Zero samples of advance is zero frames, whatever the step, and the whole part alone is
+    // exact when there is no fraction.
+    CHECK_EQ(strata_grain_advance(0, 32, 65535), 0);
+    CHECK_EQ(strata_grain_advance(100, 3, 0), 300);
+    // Half a frame a sample: after an odd count the position has moved by the floor.
+    CHECK_EQ(strata_grain_advance(7, 0, STRATA_GRAIN_FRAC_ONE / 2), 3);
+    CHECK_EQ(strata_grain_advance(8, 0, STRATA_GRAIN_FRAC_ONE / 2), 4);
+    // And the extreme the 32-bit product is sized for does not wrap into a negative.
+    CHECK(strata_grain_advance(STRATA_GRAIN_LEN_MAX - 1, 32, STRATA_GRAIN_FRAC_MASK) > 0);
+    CHECK_EQ(strata_grain_advance(STRATA_GRAIN_LEN_MAX - 1, 0, STRATA_GRAIN_FRAC_MASK),
+             STRATA_GRAIN_LEN_MAX - 2);
+}
+
+TEST(grain_every_live_grain_stays_inside_the_buffer_by_arithmetic) {
+    // Every live grain, after every block, must satisfy: its current position is in the buffer,
+    // its linear partner is in the buffer, and the frames it will still advance over its remaining
+    // samples leave both in the buffer at the last of them. Checked on the small buffers, where the
+    // bound has to cut a grain's length rather than slide its start, and over the parameters that
+    // move a read.
+    fill_sine(g_mono, kTinyMax, 1, 900.0f, kRate, 0.6f);
+    const uint8_t positions[3] = {0, 63, 127};
+    const uint8_t sizes[3] = {0, 64, 127};
+    const uint8_t sprays[2] = {0, 127};
+    const uint8_t pitches[8] = {0, 1, 2, 63, 64, 65, 126, 127};
+
+    int grains_seen = 0;
+    for (int frames : kTinyFrames) {
+        for (uint8_t pos : positions) {
+            for (uint8_t siz : sizes) {
+                for (uint8_t spr : sprays) {
+                    for (uint8_t pit : pitches) {
+                        Granular g;
+                        g.init(kRate);
+                        g.set_sample(g_mono, uint32_t(frames), 1, kRate);
+                        TrackParams p = plain();
+                        p.set(0, pos);
+                        p.set(1, siz);
+                        p.set(3, spr);
+                        p.set(8, pit);
+                        g.prepare(p);
+                        g.trigger(hit());
+                        clear(g_out, 8 * kBlk);
+                        for (int b = 0; b < 8; b++) {
+                            g.prepare(p);
+                            g.render_add(g_out + b * kBlk, kBlk);
+                            for (int i = 0; i < Granular::kGrains; i++) {
+                                if (!g.grain_live(i)) continue;
+                                const strata_grain &s = g.grain_state(i);
+                                const int left = g.grain_remaining(i);
+                                grains_seen++;
+                                CHECK(left > 0);
+                                CHECK(s.pos >= 0);
+                                CHECK(s.pos + 1 <= frames - 1);
+                                const int32_t last = s.pos + remaining_advance(s, left);
+                                CHECK(last >= 0);
+                                CHECK(last + 1 <= frames - 1);
+                            }
+                        }
+                        g.kill_all();
+                    }
+                }
+            }
+        }
+    }
+    // The buffers are small, so a grain is not always possible; plenty must still have been seen.
+    CHECK(grains_seen > 1000);
+}
+
+TEST(grain_the_last_sample_of_a_grain_is_the_windows_zero) {
+    // A grain's final sample reads the END of the window table: at a phase inside the last 1/256
+    // of the window the index is 255 and the read is of entry 255 and the GUARD entry after it. So
+    // this is what says the guard is the window's zero rather than anything else -- and it is a
+    // click on every single grain if it is not.
+    //
+    // Then the same thing at 192 kHz, where the longest grain is long enough that the phase's
+    // accumulated float error outgrows the 1/len it falls short of 1 by: measured, it reaches
+    // 1.000015, which is past the table. At 48 kHz with this compiler it does not quite (0.99943
+    // is the worst), but the machine takes its rate as a parameter and cl6x is not obliged to
+    // round as GCC does, which is why the loop clamps the phase and the table carries two guards.
+    const float rates[2] = {kRate, 192000.0f};
+    for (int which = 0; which < 2; which++) {
+        const float rate = rates[which];
+        fill_const(g_mono, kSrcFrames, 1, 24000);
+        Granular g;
+        g.init(rate);
+        g.set_sample(g_mono, uint32_t(kSrcFrames), 1, rate);
+        TrackParams p = plain();
+        p.set(1, 127);     // the longest grain this rate allows
+        p.set(2, 0);       // sparse, so the grain is alone and what follows it is silence
+        p.set(9, 0);       // the symmetric window
+        g.prepare(p);
+        const int len = g.grain_length();
+        CHECK(len > 1000);
+        g.trigger(hit());
+
+        const int blocks = (len + 4 * kBlk) / kBlk;
+        CHECK(blocks * kBlk <= kCapture);
+        clear(g_out, blocks * kBlk);
+        const int n = render_blocks(g, p, g_out, blocks);
+        CHECK(finite_within(g_out, n, 4.01f));
+        CHECK(peak(g_out, n) > 0.1f);                 // it did play
+
+        // The window's value over the grain's last samples is (pi/len)^2 or smaller -- call it
+        // silence. The sample after the grain is silence too, the next onset being 4 x len away.
+        for (int i = len - 2; i < len + 2; i++) {
+            if (i < 1 || i >= n) continue;
+            CHECK(g_out[i] < 1e-4f);
+            CHECK(g_out[i] > -1e-4f);
+        }
+        // No step anywhere near the end of the grain, either: the biggest jump between
+        // consecutive samples over the grain's last tenth is a fraction of its peak.
+        float jump = 0.0f;
+        for (int i = len - len / 10; i < len && i < n; i++) {
+            if (i < 1) continue;
+            const float d = g_out[i] - g_out[i - 1];
+            const float a = d < 0.0f ? -d : d;
+            if (a > jump) jump = a;
+        }
+        CHECK(jump < 0.01f * peak(g_out, n));
+    }
+}
+
+TEST(grain_the_first_grain_after_a_note_uses_that_notes_step) {
+    // The note is latched in the same call that starts the voice, and the fixed-point step has to
+    // be rebuilt there and not left until the next prepare(): the first grain starts on the trig's
+    // own frame, inside this block, and it is the attack of the note. If the step were a prepare()
+    // behind, that first grain would play at the PREVIOUS note's pitch -- audible on every note
+    // change, and invisible to any test that calls prepare() again before looking.
+    fill_sine(g_mono, kSrcFrames, 1, 400.0f, kRate, 0.7f);
+    Granular g;
+    g.init(kRate);
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    p.set(1, 127);     // the longest grain, so a block moves its phase barely at all
+    p.set(2, 0);       // sparse, so the only grains in the air are the ones the triggers spawned
+    g.prepare(p);
+
+    // Note 60 first, so note_ratio_ holds unity when the octave-up note arrives.
+    g.trigger(hit(Granular::kRootNote));
+    clear(g_out, kBlk);
+    g.render_add(g_out, kBlk);
+    CHECK_NEAR(g.read_step(), 1.0f, 1e-5);
+
+    // An octave up, and NO prepare() between the trigger and the render.
+    g.trigger(hit(uint8_t(Granular::kRootNote + 12)));
+    clear(g_out, kBlk);
+    g.render_add(g_out, kBlk);
+    CHECK_NEAR(g.read_step(), 2.0f, 1e-5);
+
+    // The grain spawned in that block -- the one whose window phase has moved least -- walks the
+    // sample at two frames a sample, not one. The grain from the first note is still in the air
+    // beside it, which is the point: the new note must not be read off the old one's step.
+    int newest = -1;
+    float youngest = 2.0f;
+    for (int i = 0; i < Granular::kGrains; i++) {
+        if (g.grain_live(i) && g.grain_state(i).q < youngest) {
+            youngest = g.grain_state(i).q;
+            newest = i;
+        }
+    }
+    CHECK_EQ(g.live_grains(), 2);
+    CHECK(newest >= 0);
+    if (newest >= 0) {
+        CHECK_EQ(g.grain_state(newest).istep, 2);
+        CHECK_EQ(int(g.grain_state(newest).fstep), 0);
+    }
+
+    // And an octave down, the same way.
+    g.kill_all();
+    g.trigger(hit(uint8_t(Granular::kRootNote - 12)));
+    clear(g_out, kBlk);
+    g.render_add(g_out, kBlk);
+    CHECK_NEAR(g.read_step(), 0.5f, 1e-5);
+    newest = -1;
+    for (int i = 0; i < Granular::kGrains; i++) {
+        if (g.grain_live(i)) newest = i;
+    }
+    CHECK_EQ(g.live_grains(), 1);
+    CHECK(newest >= 0);
+    if (newest >= 0) {
+        CHECK_EQ(g.grain_state(newest).istep, 0);
+        CHECK_EQ(int(g.grain_state(newest).fstep), STRATA_GRAIN_FRAC_ONE / 2);
+    }
+}

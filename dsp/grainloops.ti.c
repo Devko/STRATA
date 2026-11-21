@@ -55,19 +55,32 @@ int32_t strata_grain_advance(int32_t samples, int32_t istep, uint32_t fstep) {
  * because a Hann window's slope at its peak is zero: that is the reason the table is Hann and the
  * reason the warp is in the phase rather than in a second table.
  *
- * The clamp is the table's bound, not defensive padding. q is a float accumulator stepped up to
- * 32,768 times, so its error can reach a few thousandths by the end of a long grain; one select
- * each side turns that into a read of the guard entry instead of a read past the table. Clamping
- * to the table's SIZE rather than to one below it is deliberate: at exactly 256 the index
- * saturates to 255 and the fraction becomes 1, which reads the guard entry and so gives the
- * window's final zero, rather than parking on the second-to-last table value. */
+ * The table read is bounded by TWO things, and it is worth being clear about which one does what,
+ * because they are not interchangeable. q is a float accumulator stepped once a sample, up to
+ * 32,768 times, and it is meant to stop just short of 1 (its step is 1 / length). Whether the
+ * accumulated error outgrows that margin depends on the length and on how the compiler rounds:
+ * measured here, at 48 kHz the worst case reaches 0.99943 and stays inside, and at 192 kHz the
+ * longest grain reaches 1.000015 and does not.
+ *
+ *   - The TABLE'S PADDING is the guarantee. The clamp allows an index of 256 (it clamps to the
+ *     table's size, not to one below it), so the table carries two guard entries and the read of
+ *     index and index+1 is in range by construction. At index 256 the fraction is zero and both
+ *     guards are zero, so the value is the window's final zero rather than a parked
+ *     second-to-last entry -- a grain ends in silence rather than on a step.
+ *   - The CLAMP is what keeps the index inside that padding for any phase at all, not just for a
+ *     phase that overshoots by less than one table entry. Removing it is unobservable today,
+ *     because the overshoot is four orders of magnitude smaller than an entry; it stops being
+ *     unobservable the moment the window size, the phase step or the compiler changes.
+ *
+ * Padding over clamping wherever the choice exists: a clamp has to be right, whereas padding makes
+ * the read in range whatever the index does. That is why the per-sample index clamp this function
+ * used to carry -- 512 selects a block at eight grains -- is a single spare float instead. */
 static inline float strata_grain_window(const float *window, float q, float peak, float rise,
                                         float fall) {
     const float warped = q < peak ? q * rise : 0.5f + (q - peak) * fall;
     const float x = enaga_clamp(warped * STRATA_GRAIN_WINDOW_SCALE, 0.0f,
                                 STRATA_GRAIN_WINDOW_SCALE);
-    int32_t k = (int32_t)x;
-    k = k > STRATA_GRAIN_WINDOW - 1 ? STRATA_GRAIN_WINDOW - 1 : k;
+    const int32_t k = (int32_t)x;
     const float w0 = window[k];
     return w0 + (window[k + 1] - w0) * (x - (float)k);
 }

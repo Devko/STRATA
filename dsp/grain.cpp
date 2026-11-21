@@ -143,18 +143,19 @@ void Granular::init(float sample_rate) {
     inv_rate_ = reciprocal(rate_);
     rate_ratio_ = source_rate_ * inv_rate_;
 
-    // One cycle of Hann plus the guard entry, built once here and never in audio(). 257 floats is
-    // the entire cost of having an arbitrary window shape in the inner loop.
+    // One cycle of Hann plus its two guard entries, built once here and never in audio(). 258
+    // floats is the entire cost of having an arbitrary window shape in the inner loop.
     //
-    // Both ends are then forced to zero rather than left to cos_turns, which is accurate to 4e-6:
-    // a grain's first and last sample are then exactly silent, and the guard entry is exactly
-    // equal to the first, which is what makes the table safe to read at index and index+1.
+    // The ends are then forced to zero rather than left to cos_turns, which is accurate to 4e-6:
+    // a grain's first and last sample are exactly silent, and the guards are exactly equal to the
+    // first entry, which is what makes every index the loop's clamped phase can produce safe to
+    // read -- and lets the loop carry no index clamp at all (dsp/grainloops.h has the argument).
     const float dt = reciprocal(float(kWindowSize));
-    for (int i = 0; i <= kWindowSize; i++) {
+    for (int i = 0; i < kWindowSize; i++) {
         window_[i] = 0.5f - 0.5f * cos_turns(float(i) * dt);
     }
     window_[0] = 0.0f;
-    window_[kWindowSize] = 0.0f;
+    for (int i = 0; i < kWindowGuard; i++) window_[kWindowSize + i] = 0.0f;
 
     for (Grain &g : grains_) g = Grain{};
     amp_.kill();
@@ -431,7 +432,7 @@ void Granular::spawn() {
 
     Grain &g = grains_[pick];
     g.s.pos = start;
-    g.s.frac = 0;          // every grain starts on a whole frame: that is what keeps the bound exact
+    g.s.frac = 0;          // on a whole frame: that is what keeps the onset's bound exact
     g.s.istep = istep_;
     g.s.fstep = fstep_;
     g.s.q = 0.0f;

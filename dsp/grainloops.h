@@ -45,10 +45,16 @@ extern "C" {
  * static_asserts the arithmetic so that a later raise fails the build instead. */
 #define STRATA_GRAIN_LEN_MAX 32768
 
-/* The grain window table's size. The caller passes STRATA_GRAIN_WINDOW + 1 floats: one cycle of
- * the window plus a guard entry equal to the first, so the linear read of index and index+1
- * never leaves the table. It is a macro and not a parameter so that cl6x can fold the clamp's
- * constants and keep the loop pipelined. */
+/* The grain window table's size. The caller passes STRATA_GRAIN_WINDOW + 2 floats: one cycle of
+ * the window, then TWO guard entries equal to the first (which is zero).
+ *
+ * Two, not one, and that is what makes the read safe rather than merely clamped. The window phase
+ * is a float accumulator, so it can overshoot 1 by a few thousandths on a long grain; the loop
+ * clamps the scaled phase to the table's SIZE, which leaves an index of 256 possible, and 256
+ * reads entries 256 and 257. With both of them present the read is in-range by construction and
+ * the per-sample index clamp the loop used to need -- 512 selects a block at eight grains -- is
+ * gone. It is a macro and not a parameter so that cl6x can fold the clamp's constant and keep the
+ * loop pipelined. */
 #define STRATA_GRAIN_WINDOW 256
 
 /* One grain's per-sample state, a plain struct so that this C and dsp/grain.cpp's C++ work on
@@ -91,11 +97,12 @@ int32_t strata_grain_advance(int32_t samples, int32_t istep, uint32_t fstep);
  * accumulate in one scratch buffer and the voice's envelope is applied to the sum afterwards.
  * `g` carries on from the last call, so a grain crosses block boundaries unchanged.
  *
- * The caller guarantees every read is inside the buffer: `n` must not take the position past the
- * length strata_grain_advance sanctioned at the grain's onset. Nothing in here re-checks that,
- * which is the point -- a per-sample clamp on the tap index would cost two selects per tap per
- * grain, 1,024 of them a block at eight grains, to re-prove something the onset already settled
- * exactly.
+ * The caller guarantees every read of `src` is inside the buffer: `n` must not take the position
+ * past the length strata_grain_advance sanctioned at the grain's onset. Nothing in here re-checks
+ * that, which is the point -- a per-sample clamp on the tap index would cost two selects per tap
+ * per grain, 1,024 of them a block at eight grains, to re-prove something the onset already
+ * settled exactly. `window` needs no such guarantee: its two guard entries make every index the
+ * clamped phase can produce an in-range one.
  *
  * `src` is int16 and the 1/32768 (with the stereo halving) is folded into the caller's output
  * gain, so it costs one multiply a block rather than one a sample. */
