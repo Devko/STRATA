@@ -8,7 +8,7 @@ three emulator scenarios pass.**
 
 | | |
 |---|---|
-| `make -C host test` | **766 tests, 466,816 checks, 0 failures** |
+| `make -C host test` | **812 tests, 531,575 checks, 0 failures** |
 | `tools/build.sh` | **links.** APP.ENA, 422,600 bytes; payload 422,536; bss 1,265,512; no BOOT, MCU or SPI sections |
 | `tests/scenario_m3.sh` | **passes**, 33.07% peak, 0 overruns — the undo trail is exactly right after everything M4, M5 and M6 did to `app/engine.cpp` |
 | `tests/scenario_m4.sh` | **passes**, 28.42%: autosave, save, and a queued change switching immediately with the clock stopped |
