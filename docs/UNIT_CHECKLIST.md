@@ -522,9 +522,12 @@ work and it is not written. The code is verified to the extent host tests can ve
 
 - [ ] **Everything about how it sounds.** POS, SIZ, DEN, SPR, PIT, SHP: every one of them is
       unheard. The parameters are documented in `dsp/grain.hpp` and nothing has listened to one.
-- [ ] **Its cost. Nothing has measured it** — the figure in `docs/BUDGET.md` is derived from
-      counting operations, and the per-voice measurement VA POLY just produced says what derived
-      figures are worth here: that one was out by a factor of ten, in the expensive direction.
+- [ ] **Its cost on a REAL sample.** Now measured in the emulator on the placeholder:
+      **+1.6 points at the default density, +9.2 with all eight grains**, against SPEC's 4.3% --
+      so 2.1x over at the extreme, GCC-only. That is a floor and not a worst case: the
+      placeholder is 38 KiB and sits in cache, so eight grains reading it are eight streams over
+      one resident buffer. Load a multi-second sample, turn SPR up, and watch what happens.
+      `docs/BUDGET.md` has the four-point table.
 - [ ] The cache behaviour of eight concurrent read streams, which is the part of the estimate
       that could not even be bounded. Under heavy SPR every grain starts at a fresh random
       offset, so a sprayed cloud may be almost all L1D misses. If the measurement disappoints,

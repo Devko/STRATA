@@ -428,12 +428,44 @@ So GRAIN is 16,968 bytes of code and 2,088 bytes of state, it has no undefined s
 (`build_app.py` refuses them), and it allocates nothing at all -- not even in `init()`, because it
 reads PCM the track already holds.
 
-**Its cost is unmeasured and the estimate should not be trusted.** The derivation in
+#### GRAIN measured: +1.6 points at mid density, +9.2 at maximum overlap
+
+Measured the same way VA POLY was -- GRAIN put in the Sampler's slot on track 8 of the default
+kit, fed the placeholder sample, `scenario_m3.sh` re-run. Same build, same beat, GCC-only:
+
+| Track 8 | `scenario_m3.sh` peak | Over a silent track |
+| --- | --- | --- |
+| silent (`machines_[7] = nullptr`) | 32.33% | — |
+| the Sampler, as shipped | 33.39% | +1.06 |
+| GRAIN, DEN 0 (lowest overlap) | 33.91% | **+1.58** |
+| GRAIN, DEN 64 (the default kit's knob) | 33.91% | **+1.58** |
+| GRAIN, DEN 127 (maximum overlap, the full pool) | 41.56% | **+9.23** |
+
+So GRAIN is about 1.5x the Sampler at the density a kit ships with, and **+9.23 points -- about
+45,800 cycles -- with all eight grains in the air**. docs/SPEC.md budgets 21,520 cycles (4.3%),
+so the worst case is 2.1x over, GCC-only. That is a far better position than VA POLY's 11.3x, and
+`dsp/grain.hpp`'s derived estimate (~9,000-11,000 cycles for eight grains) was 4.2x optimistic --
+wrong in the same direction as VA POLY's, by less.
+
+DEN 0 and DEN 64 reading the same figure is not a mistake: at both, few enough grains overlap
+that the peak block holds the same number of them.
+
+**This figure is a FLOOR, not a worst case, and the reason is the one thing the estimate could
+not bound.** The placeholder sample is 400 ms of mono int16 -- 38 KiB, which sits in cache
+entirely -- so eight grains reading it are eight streams over one resident buffer. The open
+question was always the cache behaviour of eight concurrent reads into a MULTI-SECOND sample with
+heavy SPR, where every grain starts at a fresh random offset and a sprayed cloud may be almost
+all L1D misses. The emulator has no cache model, so the emulator cannot answer that at any
+density, with any sample. Only the unit can.
+
+**The rest of the estimate should still not be trusted.** The derivation in
 `dsp/grain.hpp` counts ~19 flops and 5 integer ops per sample per grain and scales off Enaga's
 two published figures to land at ~1,000-1,300 cycles per grain, so ~9,000-11,000 for eight
-(1.8-2.2% of the block) against SPEC's 21,520. The VA POLY measurement immediately below is the
-reason to treat that as a hypothesis: the same kind of derivation for VA POLY read ~2.0% for six
-voices and the measurement came back at 25.6%. A factor of ten, in the expensive direction.
+(1.8-2.2% of the block) against SPEC's 21,520. The measurement above puts the real figure at
+~5,700 cycles per grain on a cache-resident sample, so the per-grain derivation is out by about
+four. For VA POLY the same kind of derivation was out by ten. **Two machines, two derived
+estimates, both optimistic** -- which is the argument for measuring the next one before
+designing around its cost rather than after.
 
 The part of GRAIN's estimate that could not be bounded at all is the cache behaviour of eight
 concurrent read streams. Under heavy SPR each grain starts at a fresh random offset, so a sprayed
