@@ -19,6 +19,14 @@ uint8_t clamp_u8(int value) {
 
 }  // namespace
 
+// The kit on disk and the kit the machines read have to agree about how many parameters a track
+// has. core/project.hpp cannot say so itself: core/ does not depend on dsp/ (core/pattern.hpp
+// explains why), so the two constants are declared apart and checked here, in the one file that
+// includes both.
+static_assert(kKitParams == kParams,
+              "core/project.hpp's kit record and dsp/track.hpp's TrackParams have diverged; a "
+              "saved project would come back with the wrong number of parameters per track");
+
 bool Engine::init(float sample_rate) {
     rate_ = sample_rate;
 
@@ -32,6 +40,15 @@ bool Engine::init(float sample_rate) {
     stab_.init(rate_);
     loop_.init(rate_);
     mixer_.init(rate_);
+
+    // Sample memory, from the heap, here and nowhere else. The CEILING is reserved rather than
+    // the default budget, because a project may raise its budget long after init() is over and
+    // allocating then would break CLAUDE.md's rule that every buffer is taken here. 64 MiB of
+    // the ~124 MiB app heap, which is what docs/SPEC.md's memory table budgets for samples.
+    const uint32_t region_bytes = kSampleBudgetMaxMib << 20;
+    sample_region_ = new int16_t[region_bytes / sizeof(int16_t)];
+    if (sample_region_ == nullptr) return false;
+    samples_.init(kSampleBudgetDefaultMib << 20);
 
     build_placeholder_sample();
 
@@ -59,7 +76,7 @@ bool Engine::init(float sample_rate) {
     for (int t = 0; t < kTracks; t++) effective_[t] = params_[t];   // no locks active yet
     load_default_pattern();
 
-    scheduler_.configure(pattern_);
+    scheduler_.configure(live());
     scheduler_.reset(true);
 
     ready_ = true;
@@ -176,15 +193,21 @@ void Engine::build_placeholder_sample() {
 }
 
 void Engine::load_default_pattern() {
-    pattern_init(pattern_);
-    pattern_.root = 60;
-    pattern_.seed = 0x5713A7Au;
-    pattern_.master_length = 16;
-    pattern_.swing = kSwingMin;
+    // Every one of the 128 patterns, not just the live one: a project with 127 uninitialised
+    // patterns would play whatever zeroed memory means the first time someone queued one, and
+    // core/timing.hpp's numbering is deliberately chosen so that zeroed memory is at least sane
+    // rather than correct. Cheap, once, at init.
+    project_init(project_);
+
+    pattern_init(live());
+    live().root = 60;
+    live().seed = 0x5713A7Au;
+    live().master_length = 16;
+    live().swing = kSwingMin;
 
     for (int t = 0; t < kTracks; t++) {
-        pattern_.tracks[t].length = 16;
-        pattern_.tracks[t].speed = uint8_t(Speed::x1);
+        live().tracks[t].length = 16;
+        live().tracks[t].speed = uint8_t(Speed::x1);
     }
 
     // Four on the floor, a backbeat clap, offbeat closed hats and one open hat lifting the bar.
@@ -199,9 +222,9 @@ void Engine::load_default_pattern() {
 
     auto put = [&](int track, const uint8_t *steps, int count, uint8_t velocity) {
         for (int i = 0; i < count; i++) {
-            Step &s = pattern_.tracks[track].steps[steps[i]];
+            Step &s = live().tracks[track].steps[steps[i]];
             s.flags = kStepTrig;
-            s.note = pattern_.root;
+            s.note = live().root;
             s.velocity = velocity;
             s.length = 8;            // one step
         }
@@ -219,22 +242,22 @@ void Engine::load_default_pattern() {
     // The bass plays low, and slides into the third note: the movement that makes a line groove
     // rather than pulse. Slide is MONO-only, which is exactly what this track is.
     for (int i = 0; i < 4; i++) {
-        Step &s = pattern_.tracks[5].steps[bass[i]];
+        Step &s = live().tracks[5].steps[bass[i]];
         s.note = 36;                                   // C2
     }
-    pattern_.tracks[5].steps[6].flags |= kStepAccent;
-    pattern_.tracks[5].steps[10].flags |= kStepSlide;
-    pattern_.tracks[5].steps[10].note = 43;            // slides up a fifth
-    pattern_.tracks[5].steps[14].flags |= kStepAccent;
+    live().tracks[5].steps[6].flags |= kStepAccent;
+    live().tracks[5].steps[10].flags |= kStepSlide;
+    live().tracks[5].steps[10].note = 43;            // slides up a fifth
+    live().tracks[5].steps[14].flags |= kStepAccent;
 
     // Successive notes pick successive slices of the placeholder loop.
     for (int i = 0; i < 4; i++) {
-        pattern_.tracks[7].steps[loop[i]].note = uint8_t(60 + i);
+        live().tracks[7].steps[loop[i]].note = uint8_t(60 + i);
     }
 
     // Accent the downbeat kick: techno lives on that one.
-    pattern_.tracks[0].steps[0].flags |= kStepAccent;
-    pattern_.tracks[0].steps[0].velocity = 127;
+    live().tracks[0].steps[0].flags |= kStepAccent;
+    live().tracks[0].steps[0].velocity = 127;
 
     // Two parameter locks, so the default pattern actually uses the feature docs/SPEC.md calls
     // STRATA's edge over the stock firmware -- and so the lock path is exercised every time
@@ -242,8 +265,8 @@ void Engine::load_default_pattern() {
     //
     // The third kick of the bar gets a shorter body, and one closed hat opens up: small
     // per-step moves that are the whole point of locks.
-    pattern_set_lock(pattern_, 0, 8, uint8_t(page_first(Page::amp) + 0), 52);   // KICK DEC
-    pattern_set_lock(pattern_, 2, 10, uint8_t(page_first(Page::amp) + 0), 64);  // HAT DEC
+    pattern_set_lock(live(), 0, 8, uint8_t(page_first(Page::amp) + 0), 52);   // KICK DEC
+    pattern_set_lock(live(), 2, 10, uint8_t(page_first(Page::amp) + 0), 64);  // HAT DEC
 }
 
 // --- commands -------------------------------------------------------------
@@ -292,7 +315,7 @@ void Engine::apply(const Command &command) {
             // a selects which bit: the trig, or the trigless bit that applies a step's locks
             // without sounding a note. They are mutually exclusive -- a step that is both would
             // be a trig, so letting both bits stand would make the trigless flag look broken.
-            Step &s = pattern_.tracks[track].steps[step];
+            Step &s = live().tracks[track].steps[step];
             const uint8_t bit = command.a ? uint8_t(kStepTrigless) : uint8_t(kStepTrig);
             const uint8_t other = command.a ? uint8_t(kStepTrig) : uint8_t(kStepTrigless);
             const int flags = (int(s.flags) ^ int(bit)) & ~int(other);
@@ -303,24 +326,24 @@ void Engine::apply(const Command &command) {
         }
 
         case Cmd::clear_lock:
-            pattern_clear_lock(pattern_, track, step, command.a);
+            pattern_clear_lock(live(), track, step, command.a);
             break;
 
         case Cmd::set_track_length:
-            pattern_.tracks[track].length =
+            live().tracks[track].length =
                 uint8_t(command.a < 1 ? 1 : (command.a > kStepsPerTrack ? kStepsPerTrack : command.a));
             reconfigure();
             break;
 
         case Cmd::set_track_speed:
             if (command.a < uint8_t(Speed::count)) {
-                pattern_.tracks[track].speed = command.a;
+                live().tracks[track].speed = command.a;
                 reconfigure();
             }
             break;
 
         case Cmd::set_pattern_swing:
-            pattern_.swing = uint8_t(command.a < kSwingMin ? kSwingMin
+            live().swing = uint8_t(command.a < kSwingMin ? kSwingMin
                                                            : (command.a > kSwingMax ? kSwingMax : command.a));
             reconfigure();
             break;
@@ -329,7 +352,7 @@ void Engine::apply(const Command &command) {
 
         case Cmd::step_field_delta:
             if (command.a < uint8_t(StepField::count)) {
-                step_field_apply(pattern_.tracks[track].steps[step], StepField(command.a),
+                step_field_apply(live().tracks[track].steps[step], StepField(command.a),
                                  int(int8_t(command.b)));
             }
             break;
@@ -342,17 +365,17 @@ void Engine::apply(const Command &command) {
             // so the first click of an encoder on an unlocked step moves away from what you are
             // currently hearing rather than from zero.
             uint8_t base = params_[track].v[param];
-            pattern_get_lock(pattern_, track, step, param, base);
+            pattern_get_lock(live(), track, step, param, base);
             const uint8_t value = clamp_u8(int(base) + int(int8_t(command.b)));
 
-            if (!pattern_set_lock(pattern_, track, step, param, value)) {
+            if (!pattern_set_lock(live(), track, step, param, value)) {
                 // "Full" usually means slots abandoned by relocation rather than 1,024 real
                 // locks: growing a step's run moves it to the top of the pool and leaves the old
                 // one behind (core/pattern.hpp). Compacting reclaims those, so try once more
                 // before refusing -- otherwise locks start failing long before the pool is
                 // actually full, and an undo level gets burned on an edit that did nothing.
-                pattern_compact_locks(pattern_);
-                if (!pattern_set_lock(pattern_, track, step, param, value)) {
+                pattern_compact_locks(live());
+                if (!pattern_set_lock(live(), track, step, param, value)) {
                     status_.bump_refused();  // genuinely full; saying nothing would be a lie
                     break;
                 }
@@ -372,7 +395,7 @@ void Engine::apply(const Command &command) {
             gesture.track = uint8_t(track);
             gesture.step = uint8_t(step);
             gesture.seq = command.b;
-            undo_.mark(pattern_, gesture);
+            undo_.mark(live(), gesture);
             break;
         }
 
@@ -382,43 +405,43 @@ void Engine::apply(const Command &command) {
             // deliberately NOT reset: an undo is an edit, not a pattern change, and restarting
             // the chain would make a conditional step somewhere else in the pattern fire
             // differently because of an edit that had nothing to do with it.
-            if (undo_.undo(pattern_)) reconfigure();
+            if (undo_.undo(live())) reconfigure();
             break;
 
         case Cmd::redo:
-            if (undo_.redo(pattern_)) reconfigure();
+            if (undo_.redo(live())) reconfigure();
             break;
 
         case Cmd::range_copy:
-            range_copy(pattern_, track, step, int(command.a), clip_);
+            range_copy(live(), track, step, int(command.a), clip_);
             break;
 
         case Cmd::range_paste:
             // A refused paste means the lock pool had no room even after compaction. It leaves
             // the pattern untouched (core/editops.hpp), so the only thing to do is count it.
-            if (!range_paste(pattern_, track, step, clip_)) status_.bump_refused();
+            if (!range_paste(live(), track, step, clip_)) status_.bump_refused();
             break;
 
         case Cmd::range_erase:
-            range_erase(pattern_, track, step, int(command.a));
+            range_erase(live(), track, step, int(command.a));
             break;
 
         case Cmd::track_erase:
-            track_erase(pattern_, track);
+            track_erase(live(), track);
             break;
 
         case Cmd::range_transpose:
-            range_transpose(pattern_, track, step, int(command.a), int(int8_t(command.b)));
+            range_transpose(live(), track, step, int(command.a), int(int8_t(command.b)));
             break;
 
         case Cmd::range_nudge:
-            range_nudge(pattern_, track, step, int(command.a), int(int8_t(command.b)));
+            range_nudge(live(), track, step, int(command.a), int(int8_t(command.b)));
             break;
 
         case Cmd::record_hit: {
             // The step and the micro-timing were resolved in the main context by core/record,
             // from the clock state at the moment the hit arrived. Nothing here re-decides them.
-            Step &s = pattern_.tracks[track].steps[step];
+            Step &s = live().tracks[track].steps[step];
             const int flags = (int(s.flags) | int(kStepTrig)) & ~int(kStepTrigless);
             s.flags = uint8_t(flags);
             s.note = clamp_u8(command.a);
@@ -473,6 +496,70 @@ void Engine::apply(const Command &command) {
     }
 }
 
+// --- the kit, between the project and the machines ------------------------
+//
+// `params_` is what the machines read and what a knob turns; `project_.kit` is what a file
+// holds. They are deliberately separate structures -- one belongs to dsp/, the other to core/ --
+// so these two functions are the only place they meet.
+
+void Engine::kit_from_params() {
+    for (int t = 0; t < kTracks; t++) {
+        KitTrack &track = project_.kit.tracks[t];
+        for (int i = 0; i < kParams; i++) track.params[i] = params_[t].v[i];
+        track.level = mix_[t].level;
+        // `machine` and `sample` are not derived from anything the engine owns yet: a track's
+        // machine is fixed at init until M6 makes it switchable, and sample paths arrive with
+        // project loading. Leaving them alone keeps what a loaded project said.
+    }
+}
+
+void Engine::params_from_kit() {
+    for (int t = 0; t < kTracks; t++) {
+        const KitTrack &track = project_.kit.tracks[t];
+        for (int i = 0; i < kParams; i++) {
+            params_[t].v[i] = track.params[i] > 127 ? uint8_t(127) : track.params[i];
+        }
+        // Rebuilt from the kit so a loaded project is heard immediately rather than at the next
+        // step, which is the same reason Cmd::set_param mirrors into effective_.
+        effective_[t] = params_[t];
+        mix_[t].level = track.level < 0.0f ? 0.0f : (track.level > 2.0f ? 2.0f : track.level);
+    }
+}
+
+// --- pattern changes ------------------------------------------------------
+
+void Engine::switch_pattern(int bank, int slot) {
+    if (!project_index_valid(bank, slot)) return;
+    if (bank == int(project_.bank) && slot == int(project_.slot)) return;
+
+    project_.bank = uint8_t(bank);
+    project_.slot = uint8_t(slot);
+
+    // The undo history belonged to the pattern just left. Restoring it over this one would
+    // overwrite a different pattern with another's steps, which core/undo.hpp's clear() exists
+    // to prevent -- its own header asks for exactly this call.
+    undo_.clear();
+
+    // A pattern change is what the 1ST condition tests for, and the scheduler's PRE/NEI chain
+    // was resolved against a pattern that is no longer playing.
+    scheduler_.reset(true);
+    reconfigure();
+    boundary_known_ = false;
+}
+
+void Engine::cross_boundary(uint32_t tick) {
+    (void)tick;
+    if (!chain_.active) return;
+
+    uint8_t bank = 0, slot = 0;
+    // chain_advance reports a PATTERN change, not an entry change, so a chain that repeats one
+    // pattern returns false here and nothing is switched -- which is what keeps 1ST from firing
+    // on every pass of a one-pattern chain (core/queue.hpp).
+    if (chain_advance(project_, chain_, bank, slot)) switch_pattern(bank, slot);
+}
+
+Project &Engine::project_for_load() { return project_; }
+
 // Rebuild the scheduler's derived timing after anything that changes a track's length, speed or
 // swing -- including an undo, which can change all three at once.
 //
@@ -482,13 +569,34 @@ void Engine::apply(const Command &command) {
 // was real, from M2 -- changing a track's length flattened its ratchets until the next tempo
 // change, which is about as quiet as a bug gets.
 void Engine::reconfigure() {
-    scheduler_.configure(pattern_, samples_per_tick_);
+    scheduler_.configure(live(), samples_per_tick_);
 }
 
 // --- the tick -------------------------------------------------------------
 
 void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
-    const int count = scheduler_.tick(tick, frame, pattern_, perform_, events_, kMaxEventsPerTick);
+    tick_ = tick;
+
+    // A queued change takes effect BEFORE the tick is resolved, so this tick plays the new
+    // pattern's steps rather than one last step of the old one.
+    if (queue_due(queue_, tick)) {
+        switch_pattern(queue_.bank, queue_.slot);
+        queue_clear(queue_);
+    }
+
+    // The end of a pass, for chains. One division per pass of the pattern -- about every two
+    // seconds -- rather than one per tick, which is the only reason `next_boundary_` is kept
+    // rather than derived.
+    const uint32_t loop = uint32_t(master_loop_ticks(live()));
+    if (!boundary_known_) {
+        next_boundary_ = (tick / loop + 1) * loop;
+        boundary_known_ = true;
+    } else if (tick >= next_boundary_) {
+        next_boundary_ = (tick / loop + 1) * loop;
+        cross_boundary(tick);
+    }
+
+    const int count = scheduler_.tick(tick, frame, live(), perform_, events_, kMaxEventsPerTick);
     for (int i = 0; i < count; i++) fire(events_[i]);
 
     for (int t = 0; t < kTracks; t++) status_.publish_playhead(t, scheduler_.playhead(t));
@@ -506,7 +614,7 @@ void Engine::fire(const StepEvent &event) {
     // why this happens before the trig check.
     effective_[track] = params_[track];
 
-    const LockView locks = pattern_step_locks(pattern_, track, int(event.step));
+    const LockView locks = pattern_step_locks(live(), track, int(event.step));
     int applied = 0;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
         if (lock->param >= kParams || applied >= kMaxLocksApplied) continue;

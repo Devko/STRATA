@@ -70,6 +70,34 @@ enum class Cmd : uint8_t {
     // the main context -- where the clock state that stamped it was read.
     record_hit,        // track, step, a: note, b: velocity, c: int8 micro
 
+    // --- projects and banks, M4 --------------------------------------------
+    //
+    // A queued pattern change is armed on the AUDIO side, which is why core/queue.hpp's Queue
+    // needs no atomics: both the arming and the per-tick "is it due yet" happen in the same
+    // context. The UI's part is posting this.
+    queue_pattern,     // a: bank, b: slot, c: QueueMode
+    cancel_queue,
+    set_chain,         // a: 0 off, 1 on (starting one jumps to its first entry)
+
+    // The kit the machines read (`params_`) and the kit a file holds (`project_.kit`) are
+    // different structures in different layers, so they are copied across explicitly: `store`
+    // before a save, `recall` after a load. Both run on the audio side, which owns both.
+    kit_store,
+    kit_recall,
+
+    // Sample swapping, in the order docs/SPEC.md requires. `clear_sample` takes the sample away
+    // from a track and bumps that track's epoch in Status; only once the UI has SEEN the epoch
+    // change is the audio side known to have stopped reading, and only then may the loader
+    // release the pool range and write over it. `set_sample` hands the new one over.
+    //
+    // Doing it the other way round -- release, then load, then hand over -- overwrites memory a
+    // voice is still reading, which sounds like a broken sampler rather than a broken lifetime.
+    clear_sample,      // track
+    // track, a: channels, u: byte offset into the sample region, c|d|e: frames (24 bits, which
+    // is 16.7 M frames -- 349 s of mono at 48 kHz, well past the 30 s above which docs/SPEC.md
+    // streams from the card instead of loading into RAM)
+    set_sample
+
     // --- kit and sound ---
     set_param,         // track, a: param index, b: value
     set_track_level,   // track, f: level
@@ -100,7 +128,12 @@ struct Command {
     uint8_t d = 0;
     uint8_t e = 0;
     float f = 0.0f;
-    uint32_t pad2_ = 0;
+    // A second 32-bit field, which used to be padding like c/d/e. A sample's byte offset into
+    // the 64 MiB region needs 26 bits, so it needs a word of its own: `f` is a float and the
+    // three spare bytes are not enough. Nothing is punned through `f` -- reading a float's bits
+    // as an integer would be undefined behaviour for the sake of saving four bytes that the
+    // struct has to carry anyway.
+    uint32_t u = 0;
 };
 
 static_assert(sizeof(Command) == 16, "the spec fixes commands at 16 bytes");
@@ -194,6 +227,22 @@ struct Status {
     std::atomic<uint8_t> undo_depth{0};
     std::atomic<uint8_t> redo_depth{0};
     std::atomic<uint32_t> refused{0};
+
+    // M4. Per track, bumped by the audio side when it stops reading that track's sample. The
+    // loader watches for the change before it releases the memory and loads over it -- the
+    // generation counter docs/SPEC.md requires for a sample swap. A wrap is harmless: the UI
+    // compares against the value it saw, it does not count.
+    std::atomic<uint8_t> sample_epoch[8] = {};
+
+    // Which pattern is live, so the UI can draw it without reaching into the project.
+    std::atomic<uint8_t> live_bank{0};
+    std::atomic<uint8_t> live_slot{0};
+
+    // Audio context only, so the load and the store cannot interleave with another writer.
+    void bump_sample_epoch(int track) {
+        const uint8_t next = uint8_t(sample_epoch[track].load(std::memory_order_relaxed) + 1);
+        sample_epoch[track].store(next, std::memory_order_relaxed);
+    }
 
     // Audio context only, so load-then-store is safe with one writer (see the note above).
     void bump_refused() {

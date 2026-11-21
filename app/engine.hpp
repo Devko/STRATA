@@ -27,7 +27,9 @@
 #include "kick.hpp"
 #include "pattern.hpp"
 #include "perc.hpp"
+#include "queue.hpp"       // and core/project.hpp through it: the project owns the live pattern
 #include "sample.hpp"
+#include "samplepool.hpp"
 #include "scheduler.hpp"
 #include "snare.hpp"
 #include "stepedit.hpp"
@@ -56,7 +58,19 @@ public:
 
     // Read-only views for the UI to draw from. The UI must not write through these: every edit
     // goes through the command ring, so that a save and the transport cannot race.
-    const Pattern &pattern() const { return pattern_; }
+    const Pattern &pattern() const { return project_.live(); }
+
+    // The project, for the UI to draw the bank and pattern grid from and for a save to serialize.
+    //
+    // A save runs in the MAIN context and reads this while the audio side may be applying an edit
+    // to the live pattern, so the caller must drain the command ring first -- see
+    // `App::save_project` in app/app.cpp, which defers a save by one frame rather than reading a
+    // step halfway through being written. The UI is single-threaded, so once the ring is empty
+    // and the UI is the one saving, nothing is writing pattern memory at all.
+    const Project &project() const { return project_; }
+    const Queue &queue() const { return queue_; }
+    const ChainPlayer &chain() const { return chain_; }
+    const SamplePool &samples() const { return samples_; }
     const TrackParams &params(int track) const { return params_[track]; }
     const Machine *machine(int track) const { return machines_[track]; }
     bool muted(int track) const { return muted_[track]; }
@@ -71,6 +85,13 @@ private:
     void apply_commands();
     void apply(const Command &command);
     void reconfigure();
+
+    // Make `bank`/`slot` the live pattern. Clears the undo history (it belonged to the pattern
+    // being left) and re-derives the scheduler's timing and the pass boundary.
+    void switch_pattern(int bank, int slot);
+
+    // The pass boundary passed: let a chain move on if one is playing.
+    void cross_boundary(uint32_t tick);
     void resolve_tick(uint32_t tick, uint32_t frame);
     void fire(const StepEvent &event);
     void load_default_kit();
@@ -97,7 +118,23 @@ private:
 
     Machine *machines_[kTracks] = {};
 
-    Pattern pattern_;
+    // The whole project, about 1.03 MiB of it, and the sequencer plays a pattern INSIDE it
+    // rather than a copy: `live()` is `project_.live()`. So an edit lands in the pattern that
+    // will be saved, a pattern change is an index change with no 8 KiB copy in the audio path,
+    // and a save reads exactly the memory the audio side plays from (core/project.hpp).
+    //
+    // The consequence to remember is that the undo history belongs to ONE pattern, so a pattern
+    // change clears it. core/undo.hpp says the same from its side.
+    Project project_;
+
+    Pattern &live() { return project_.live(); }
+    const Pattern &live() const { return project_.live(); }
+
+    // The queued pattern change, and where a chain has got to. Both are audio-side state: the UI
+    // arms a change by posting a command, so `queue_arm` and `queue_due` run in the same context
+    // and there is no cross-context struct to tear. core/queue.hpp was written expecting that.
+    Queue queue_;
+    ChainPlayer chain_;
 
     // The kit: a track's parameters as stored, with no locks applied.
     TrackParams params_[kTracks] = {};
@@ -131,6 +168,18 @@ private:
     // static, not a stack frame -- but it is the reason nothing here may be passed by value.
     UndoStack undo_;
     RangeClip clip_;
+
+    // The base of the sample region, so `Cmd::set_sample` can turn the loader's byte offset into
+    // a pointer. The region and the SamplePool that carves it up both belong to the MAIN context
+    // (app/app.cpp): the loader is what reserves, fills and releases ranges, and keeping the
+    // pool there means there is no pool state shared across contexts at all -- the handover is a
+    // command carrying an offset, a frame count and a channel count.
+    const int16_t *sample_region_ = nullptr;
+    uint32_t sample_region_bytes_ = 0;
+
+    // The tick at which the live pattern's current pass ends. Kept rather than derived so that
+    // detecting the boundary is a comparison instead of a division per tick.
+    uint32_t next_boundary_ = 0;
 
     // The per-tick event buffer lives here rather than on the audio stack: at the true worst
     // case it is 4 KiB, and the platform caps a stack frame at 16 KiB.

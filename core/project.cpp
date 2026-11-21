@@ -1,0 +1,649 @@
+// The three project files: PROJECT.BIN, KIT.BIN and BANK_A.BIN .. BANK_H.BIN.
+//
+// core/serialize.cpp owns the container -- magic, version, section table, CRC-32 over the
+// payload -- and the Pattern round trip. This file builds three more containers out of the same
+// primitives (`Writer`, `Reader`, `crc32` and the kHeader/kSection constants) instead of
+// sharing a helper with serialize.cpp. That costs the fifty lines of `write_container` and
+// `find_sections` below; what it buys is that the pattern format and the project format can be
+// read and changed without reading each other. The rules those two helpers enforce are
+// serialize.cpp's, restated and -- this part matters -- checked in the same ORDER, so that all
+// four file types give the same reason for the same damage.
+//
+// ## The bytes
+//
+// PROJECT.BIN, 251 bytes, two sections. Fixed size: nothing in it is variable length.
+//
+//     settings (id 1), 19 bytes
+//         0   2  tempo, centi-BPM
+//         2   1  root note
+//         3   1  scale
+//         4   1  swing, 50..75
+//         5   1  live-record quantize, 0..100
+//         6   8  the 8 stored mute states, one bit per track
+//        14   1  sample budget, MiB
+//        15   1  chain entries in use
+//        16   1  chain enabled, 0 or 1
+//        17   1  the live pattern's bank
+//        18   1  the live pattern's slot
+//     chain (id 2), 192 bytes
+//         64 entries of (bank, slot, repeats); repeats 0 means unused
+//
+// KIT.BIN, 1,076 bytes, one section.
+//
+//     tracks (id 1), 8 x 131 bytes
+//         0  16  the 16 parameters, 0..127
+//        16   1  machine
+//        17   2  mixer fader, thousandths of unity
+//        19 112  sample path, NUL-terminated
+//
+// BANK_x.BIN, one section holding 16 patterns, each one `pattern_write`'s own container back to
+// back. The patterns are the section's bytes, so the bank's CRC covers them as well as its own
+// table -- see "one damaged pattern" below for what that does and does not buy.
+//
+// ## Loading is value-tolerant but structure-strict
+//
+// docs/SPEC.md's rule, and the pattern serializer's. A tempo of 0, a sample budget of 255 or a
+// chain entry naming bank 9 are forced into the range the rest of STRATA is allowed to assume;
+// a bad magic, an unknown version, a bad CRC or a section table that does not add up is
+// refused. A refused load leaves what this file owns at its defaults, never half read.
+//
+// Two of the clamps are worth saying out loud because they are the reason this is not just
+// paranoia: a kit parameter reaches dsp/ as a table index or a x(1/127) scale, and a fader
+// reaches the mixer as a gain. A 255 from a damaged card is an out-of-range read in dsp/ and an
+// infinity is a blown output, so neither can be allowed out of this file.
+//
+// ## One damaged pattern costs one pattern
+//
+// `bank_read` finds each pattern's extent in that pattern's OWN container header and hands
+// `pattern_read` exactly those bytes, so a pattern this build refuses -- a newer pattern
+// version, a lock pool that is not compacted, a CRC that disagrees -- costs that slot and
+// nothing else. The 15 others load and `refused` says 1.
+//
+// What that does NOT cover is a bank whose own CRC fails: the bank's CRC is over its whole
+// payload, patterns included, as serialize.hpp's container says it must be, so a flipped bit
+// anywhere in the file refuses all 16 slots. That is the honest answer for a file whose
+// structure cannot be trusted, and it is also why the per-pattern CRCs still earn their keep
+// only against pattern-level format damage rather than against card rot. Narrowing card rot to
+// one slot would mean a bank CRC that covered the table alone -- a container that does not match
+// the one serialize.hpp documents -- so it is a format decision for the owner of that file and
+// not something to slip in here.
+#include "project.hpp"
+
+namespace strata {
+namespace {
+
+// --- clamps ---------------------------------------------------------------
+
+uint8_t clamp_u8(uint8_t value, uint8_t low, uint8_t high) {
+    if (value < low) return low;
+    if (value > high) return high;
+    return value;
+}
+
+uint16_t clamp_u16(uint16_t value, uint16_t low, uint16_t high) {
+    if (value < low) return low;
+    if (value > high) return high;
+    return value;
+}
+
+// docs/SPEC.md's figures, which core/samplepool.hpp states again as kSampleBudgetMaxMib. Stated
+// here rather than included from there so that this module builds on its own; app/ is where the
+// two are tied together, as it is for kKitParams.
+//
+// The minimum is 1 and not 0 because a budget of zero cannot hold a single sample, and a
+// project that silently refuses every sample load is the least diagnosable failure there is.
+// No UI offers 0, so a 0 in a file is a damaged byte.
+constexpr uint8_t kBudgetMibMin = 1;
+constexpr uint8_t kBudgetMibMax = 64;
+
+// A kit parameter's domain (dsp/track.hpp: "Values are 0-127").
+constexpr uint8_t kParamMax = 127;
+
+// --- the mixer fader on disk ----------------------------------------------
+
+// Thousandths of unity in a uint16_t, not the float's 32 bits. Same reasoning as project.hpp's
+// "stored in MiB rather than bytes": a format that cannot express a NaN or an infinity cannot
+// hand one to the mixer. A thousandth is 0.009 dB at unity, far below the UI's own step.
+//
+// The uint16_t has room to 65.535, so raising the fader's ceiling later moves this clamp and not
+// the format.
+constexpr uint16_t kLevelScale = 1000;
+constexpr uint16_t kLevelMilliMax = kLevelScale;   // dsp/chain.hpp's fader is 0 to 1
+
+uint16_t level_to_milli(float level) {
+    // The value is read, not trusted, even on the way out: `level` comes from RAM, where an
+    // uninitialised kit or a bad write could leave a NaN, and converting a NaN to an integer is
+    // undefined. Comparison order is what catches it -- every comparison against a NaN is
+    // false, so the `>= 0` test is the one that rejects it.
+    if (!(level >= 0.0f)) return 0;
+    if (level >= 1.0f) return kLevelMilliMax;
+    return uint16_t(level * float(kLevelScale) + 0.5f);
+}
+
+float level_from_milli(uint16_t milli) {
+    // A division and not a multiply by 1/1000: the correctly rounded quotient gives back exactly
+    // the float `level_to_milli` saw, where the reciprocal lands an ULP away. This runs on a
+    // load, so CLAUDE.md's "no float division in hot loops" does not bite.
+    const uint16_t clamped = milli > kLevelMilliMax ? kLevelMilliMax : milli;
+    return float(clamped) / float(kLevelScale);
+}
+
+// --- sample paths ---------------------------------------------------------
+
+void write_path(Writer &w, const char *path) {
+    int length = 0;
+    while (length < kSamplePathBytes && path[length] != '\0') length++;
+    // A path filling all 112 bytes has no terminator to write, so the last character goes rather
+    // than the terminator. app/ joins this to the project folder and hands it to enaga::files,
+    // which reads until a NUL: a name one character short fails loudly, an unterminated one
+    // reads whatever sits after it.
+    if (length > kSamplePathBytes - 1) length = kSamplePathBytes - 1;
+    for (int i = 0; i < length; i++) w.u8(uint8_t(path[i]));
+    // Zeros, not the bytes past the terminator. A track that used to play
+    // /SAMPLES/LONG NAME.WAV and now plays /SAMPLES/K.WAV would otherwise leave the tail of the
+    // old name on the card, so the file would record the editing history rather than the kit.
+    w.zeros(uint32_t(kSamplePathBytes - length));
+}
+
+void read_path(Reader &r, char *path) {
+    bool ended = false;
+    for (int i = 0; i < kSamplePathBytes; i++) {
+        const uint8_t byte = r.u8();
+        ended = ended || byte == 0;
+        path[i] = ended ? '\0' : char(byte);
+    }
+    // 112 bytes with no terminator anywhere: the last character pays, because every reader of
+    // `sample` stops at a NUL and there would otherwise be none.
+    path[kSamplePathBytes - 1] = '\0';
+}
+
+// --- the container --------------------------------------------------------
+
+struct Section {
+    uint16_t id;
+    uint32_t offset;   // from the start of the payload, so never inside the table
+    uint32_t size;
+};
+
+// The 16-byte header and the section table, per serialize.hpp's layout. The CRC is left at zero
+// for `finish_container` to patch once the sections are down and their bytes are known.
+void write_container(Writer &w, uint16_t version, const Section *sections, uint32_t count,
+                     uint32_t payload) {
+    w.u8(kMagic0);
+    w.u8(kMagic1);
+    w.u8(kMagic2);
+    w.u8(kMagic3);
+    w.u16(version);
+    w.u16(uint16_t(count));
+    w.u32(payload);
+    w.u32(0);
+    for (uint32_t i = 0; i < count; i++) {
+        w.u16(sections[i].id);
+        w.u16(0);   // reserved
+        w.u32(sections[i].offset);
+        w.u32(sections[i].size);
+    }
+}
+
+// Patches the CRC over the payload and reports the size. `total` is the whole file, which each
+// caller has already checked it wrote -- including `bank_write`, whose patterns do not go
+// through `w` at all.
+SerializeResult finish_container(Writer &w, uint8_t *buffer, uint32_t total, uint32_t *written) {
+    if (!w.ok()) return SerializeResult::buffer_too_small;
+    w.patch_u32(kCrcOffset, crc32(buffer + kHeaderBytes, total - kHeaderBytes));
+    if (!w.ok()) return SerializeResult::buffer_too_small;
+    if (written != nullptr) *written = total;
+    return SerializeResult::ok;
+}
+
+// Checks the header and finds each wanted section by id. `offset` and `length` are filled in the
+// order of `wanted`, and every one of them has to be there.
+//
+// The checks are pattern_read's, in pattern_read's order: the declared payload against the
+// buffer, then the CRC, then the version, then the table. The order is part of the contract --
+// a file that is both truncated and from a newer build must give one answer, and the same answer
+// whichever of the four file types it is.
+//
+// An offset of 0 is never valid, since every section starts past the table, which is what lets
+// `offset[k] == 0` stand for "not found yet" without a second array.
+SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t version,
+                              const uint16_t *wanted, uint32_t count, uint32_t *offset,
+                              uint32_t *length) {
+    for (uint32_t k = 0; k < count; k++) {
+        offset[k] = 0;
+        length[k] = 0;
+    }
+    if (buffer == nullptr || size < kHeaderBytes) return SerializeResult::truncated;
+
+    Reader r(buffer, size);
+    const bool magic =
+        r.u8() == kMagic0 && r.u8() == kMagic1 && r.u8() == kMagic2 && r.u8() == kMagic3;
+    if (!magic) return SerializeResult::bad_magic;
+
+    const uint16_t have = r.u16();
+    const uint32_t sections = r.u16();
+    const uint32_t payload = r.u32();
+    const uint32_t want_crc = r.u32();
+    if (!r.ok()) return SerializeResult::truncated;
+
+    // The declared payload must be inside the buffer before the CRC may read it.
+    if (payload > size - kHeaderBytes) return SerializeResult::truncated;
+    if (crc32(buffer + kHeaderBytes, payload) != want_crc) return SerializeResult::bad_crc;
+    if (have != version) return SerializeResult::bad_version;
+
+    if (sections == 0 || sections > kMaxSections) return SerializeResult::malformed;
+    const uint32_t table = sections * kSectionEntryBytes;
+    if (table > payload) return SerializeResult::malformed;
+
+    for (uint32_t i = 0; i < sections; i++) {
+        if (!r.seek(kHeaderBytes + i * kSectionEntryBytes)) return SerializeResult::malformed;
+        const uint16_t id = r.u16();
+        r.skip(2);   // reserved
+        const uint32_t at = r.u32();
+        const uint32_t len = r.u32();
+        if (!r.ok()) return SerializeResult::truncated;
+        // Inside the payload and clear of the table. `len > payload - at` rather than
+        // `at + len > payload`, which could wrap.
+        if (at < table || at > payload || len > payload - at) {
+            return SerializeResult::malformed;
+        }
+        for (uint32_t k = 0; k < count; k++) {
+            if (id != wanted[k]) continue;
+            if (offset[k] != 0) return SerializeResult::malformed;   // the same id twice
+            offset[k] = at;
+            length[k] = len;
+        }
+    }
+    for (uint32_t k = 0; k < count; k++) {
+        if (offset[k] == 0) return SerializeResult::malformed;
+    }
+    return SerializeResult::ok;
+}
+
+// --- PROJECT.BIN sizes ----------------------------------------------------
+
+constexpr uint32_t kProjectSections = 2;
+constexpr uint32_t kProjectSettingsBytes = 19;
+constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
+constexpr uint32_t kProjectTableBytes = kProjectSections * kSectionEntryBytes;
+constexpr uint32_t kProjectSettingsOffset = kProjectTableBytes;
+constexpr uint32_t kProjectChainOffset = kProjectSettingsOffset + kProjectSettingsBytes;
+constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectChainOffset + kProjectChainBytes;
+
+static_assert(sizeof(ProjectSettings::mute_states) == 8,
+              "the settings section is 19 bytes on the strength of 8 mute states");
+static_assert(kProjectSettingsBytes == 2 + 4 + sizeof(ProjectSettings::mute_states) + 3 + 2,
+              "the settings section and the fields written into it have diverged");
+
+// --- KIT.BIN sizes --------------------------------------------------------
+
+constexpr uint32_t kKitSections = 1;
+constexpr uint32_t kKitTrackBytes = uint32_t(kKitParams) + 1 + 2 + uint32_t(kSamplePathBytes);
+constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
+constexpr uint32_t kKitTableBytes = kKitSections * kSectionEntryBytes;
+constexpr uint32_t kKitTracksOffset = kKitTableBytes;
+constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitTracksOffset + kKitTracksBytes;
+
+// --- BANK_x.BIN sizes -----------------------------------------------------
+
+constexpr uint32_t kBankSections = 1;
+constexpr uint32_t kBankTableBytes = kBankSections * kSectionEntryBytes;
+constexpr uint32_t kBankPatternsOffset = kBankTableBytes;
+
+// project.hpp's kBankMaxBytes allows exactly one section entry, which is this layout. If a bank
+// ever grows a second section, that constant grows with it.
+static_assert(kBankMaxBytes == kHeaderBytes + kBankTableBytes +
+                                   uint32_t(kPatternsPerBank) * kPatternMaxBytes,
+              "kBankMaxBytes and the bank's section table have diverged");
+
+void kit_clear(Kit &kit) {
+    // One track at a time: `kit = Kit{}` would be a kilobyte of temporary, and the same habit
+    // one struct up would be a megabyte (project.hpp).
+    for (int t = 0; t < kTracks; t++) kit.tracks[t] = KitTrack{};
+}
+
+}  // namespace
+
+// --- initialising ---------------------------------------------------------
+
+void project_init(Project &project) {
+    // Field by field, and never `project = Project{}`: a Project is about 1.03 MiB and a stack
+    // frame is capped at 16 KiB (CLAUDE.md).
+    project.settings = ProjectSettings{};
+    kit_clear(project.kit);
+    for (int i = 0; i < kChainEntries; i++) project.chain[i] = ChainEntry{};
+    for (int bank = 0; bank < kBanks; bank++) {
+        for (int slot = 0; slot < kPatternsPerBank; slot++) {
+            pattern_init(project.patterns[bank][slot]);
+        }
+        project.bank_dirty[bank] = false;
+    }
+    project.bank = 0;
+    project.slot = 0;
+}
+
+// --- file names -----------------------------------------------------------
+
+bool bank_file_name(int bank, char *out, int max) {
+    const char letter = bank_letter(bank);
+    if (letter == '?') return false;
+    // There is no snprintf on this platform (CLAUDE.md) and the name has one variable
+    // character, so it is assembled by hand. 11 bytes with the terminator.
+    const char name[] = {'B', 'A', 'N', 'K', '_', letter, '.', 'B', 'I', 'N', '\0'};
+    const int need = int(sizeof(name));
+    if (out == nullptr || max < need) return false;
+    for (int i = 0; i < need; i++) out[i] = name[i];
+    return true;
+}
+
+// --- PROJECT.BIN ----------------------------------------------------------
+
+uint32_t project_bytes() { return kProjectTotalBytes; }
+
+SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t capacity,
+                              uint32_t *written) {
+    if (written != nullptr) *written = 0;
+    // Checked before a byte is stored, so a buffer that is too small comes back untouched.
+    if (buffer == nullptr || capacity < kProjectTotalBytes) {
+        return SerializeResult::buffer_too_small;
+    }
+
+    const Section sections[kProjectSections] = {
+        {kSectionProjectSettings, kProjectSettingsOffset, kProjectSettingsBytes},
+        {kSectionProjectChain, kProjectChainOffset, kProjectChainBytes},
+    };
+
+    Writer w(buffer, capacity);
+    write_container(w, kProjectVersion, sections, kProjectSections,
+                    kProjectTotalBytes - kHeaderBytes);
+
+    // Values go down as they stand. Clamping belongs to the reader, which is the side that
+    // cannot trust its bytes; a writer that clamped would make a save and a load disagree about
+    // what the project currently is.
+    const ProjectSettings &s = project.settings;
+    w.u16(s.tempo_centi_bpm);
+    w.u8(s.root);
+    w.u8(s.scale);
+    w.u8(s.swing);
+    w.u8(s.quantize);
+    for (uint32_t i = 0; i < sizeof(s.mute_states); i++) w.u8(s.mute_states[i]);
+    w.u8(s.sample_budget_mib);
+    w.u8(s.chain_length);
+    w.u8(s.chain_enabled ? 1 : 0);
+    w.u8(project.bank);
+    w.u8(project.slot);
+
+    for (int i = 0; i < kChainEntries; i++) {
+        w.u8(project.chain[i].bank);
+        w.u8(project.chain[i].slot);
+        w.u8(project.chain[i].repeats);
+    }
+
+    if (!w.ok() || w.size() != kProjectTotalBytes) return SerializeResult::buffer_too_small;
+    return finish_container(w, buffer, kProjectTotalBytes, written);
+}
+
+SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t size) {
+    // Every refusal goes through here, so a refused load leaves the defaults rather than half a
+    // file -- but only of what PROJECT.BIN owns. The patterns are deliberately untouched: they
+    // come from the bank files, and app/ reads PROJECT.BIN first, so emptying them here would
+    // let one damaged 251-byte file cost 128 patterns that are about to load perfectly well.
+    const auto refuse = [&project](SerializeResult why) {
+        project.settings = ProjectSettings{};
+        for (int i = 0; i < kChainEntries; i++) project.chain[i] = ChainEntry{};
+        project.bank = 0;
+        project.slot = 0;
+        return why;
+    };
+
+    const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain};
+    uint32_t offset[kProjectSections] = {};
+    uint32_t length[kProjectSections] = {};
+    const SerializeResult found =
+        find_sections(buffer, size, kProjectVersion, wanted, kProjectSections, offset, length);
+    if (found != SerializeResult::ok) return refuse(found);
+    if (length[0] < kProjectSettingsBytes) return refuse(SerializeResult::malformed);
+    if (length[1] < kProjectChainBytes) return refuse(SerializeResult::malformed);
+
+    Reader r(buffer, size);
+    if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
+
+    const uint16_t tempo = r.u16();
+    const uint8_t root = r.u8();
+    const uint8_t scale = r.u8();
+    const uint8_t swing = r.u8();
+    const uint8_t quantize = r.u8();
+    uint8_t mutes[sizeof(ProjectSettings::mute_states)] = {};
+    for (uint32_t i = 0; i < sizeof(mutes); i++) mutes[i] = r.u8();
+    const uint8_t budget = r.u8();
+    const uint8_t chain_length = r.u8();
+    const uint8_t chain_enabled = r.u8();
+    const uint8_t live_bank = r.u8();
+    const uint8_t live_slot = r.u8();
+    if (!r.ok()) return refuse(SerializeResult::truncated);
+
+    ProjectSettings &s = project.settings;
+    s.tempo_centi_bpm = clamp_u16(tempo, kTempoCentiMin, kTempoCentiMax);
+    s.root = clamp_u8(root, 0, 127);
+    // `scale` is not clamped, for core/pattern.hpp's reason about a lock's param: core/ does not
+    // know how many scales there are, and a scale id this build does not have should survive a
+    // round trip rather than be thrown away. The UI draws an unknown id as the chromatic
+    // default.
+    s.scale = scale;
+    s.swing = clamp_u8(swing, uint8_t(kSwingMin), uint8_t(kSwingMax));
+    s.quantize = clamp_u8(quantize, 0, 100);
+    // Every bit pattern is a legal set of mute states for 8 tracks, so these are taken as they
+    // come.
+    for (uint32_t i = 0; i < sizeof(mutes); i++) s.mute_states[i] = mutes[i];
+    s.sample_budget_mib = clamp_u8(budget, kBudgetMibMin, kBudgetMibMax);
+    s.chain_length = clamp_u8(chain_length, 0, uint8_t(kChainEntries));
+    s.chain_enabled = chain_enabled != 0;
+
+    if (!r.seek(kHeaderBytes + offset[1])) return refuse(SerializeResult::malformed);
+    for (int i = 0; i < kChainEntries; i++) {
+        const uint8_t bank = r.u8();
+        const uint8_t slot = r.u8();
+        const uint8_t repeats = r.u8();
+        // An entry naming a pattern that cannot exist is dropped whole rather than clamped to
+        // A01: core/queue.hpp reads entries in order and stops at the first with no repeats, so
+        // a zeroed entry ends the chain where the damage is, while a clamp would quietly play a
+        // pattern nobody put there. An entry with no repeats is unused, so it is canonicalised
+        // to the zeroed entry that project.hpp says means exactly that.
+        const bool usable = repeats != 0 && project_index_valid(bank, slot);
+        project.chain[i].bank = usable ? bank : 0;
+        project.chain[i].slot = usable ? slot : 0;
+        project.chain[i].repeats = usable ? repeats : 0;
+    }
+    if (!r.ok()) return refuse(SerializeResult::truncated);
+
+    // The live pattern. Not a user setting but project state: docs/SPEC.md reopens the last
+    // project on start, and reopening it on A01 rather than where the user left off is a loss
+    // these two bytes avoid.
+    const bool live_ok = project_index_valid(live_bank, live_slot);
+    project.bank = live_ok ? live_bank : 0;
+    project.slot = live_ok ? live_slot : 0;
+
+    // `bank_dirty` is left alone on purpose. It says whether a bank's patterns differ from its
+    // file, and this function has not touched a pattern.
+    return SerializeResult::ok;
+}
+
+// --- KIT.BIN --------------------------------------------------------------
+
+uint32_t kit_bytes() { return kKitTotalBytes; }
+
+SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, uint32_t *written) {
+    if (written != nullptr) *written = 0;
+    if (buffer == nullptr || capacity < kKitTotalBytes) return SerializeResult::buffer_too_small;
+
+    const Section sections[kKitSections] = {
+        {kSectionKitTracks, kKitTracksOffset, kKitTracksBytes},
+    };
+
+    Writer w(buffer, capacity);
+    write_container(w, kKitVersion, sections, kKitSections, kKitTotalBytes - kHeaderBytes);
+
+    for (int t = 0; t < kTracks; t++) {
+        const KitTrack &track = kit.tracks[t];
+        for (int p = 0; p < kKitParams; p++) w.u8(track.params[p]);
+        w.u8(track.machine);
+        w.u16(level_to_milli(track.level));
+        write_path(w, track.sample);
+    }
+
+    if (!w.ok() || w.size() != kKitTotalBytes) return SerializeResult::buffer_too_small;
+    return finish_container(w, buffer, kKitTotalBytes, written);
+}
+
+SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
+    const auto refuse = [&kit](SerializeResult why) {
+        kit_clear(kit);
+        return why;
+    };
+
+    const uint16_t wanted[kKitSections] = {kSectionKitTracks};
+    uint32_t offset[kKitSections] = {};
+    uint32_t length[kKitSections] = {};
+    const SerializeResult found =
+        find_sections(buffer, size, kKitVersion, wanted, kKitSections, offset, length);
+    if (found != SerializeResult::ok) return refuse(found);
+    if (length[0] < kKitTracksBytes) return refuse(SerializeResult::malformed);
+
+    Reader r(buffer, size);
+    if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
+
+    for (int t = 0; t < kTracks; t++) {
+        KitTrack &track = kit.tracks[t];
+        // Clamped, not taken as they come: dsp/track.hpp maps a parameter either by x(1/127) or
+        // as a table index, so a 255 that survived the CRC would be an out-of-range read down
+        // in a machine rather than an odd sound.
+        for (int p = 0; p < kKitParams; p++) track.params[p] = clamp_u8(r.u8(), 0, kParamMax);
+        const uint8_t machine = r.u8();
+        // A machine this build does not have falls back to the FIRST machine, not the last one:
+        // an unknown id should land somewhere known, and clamping to kMachines - 1 would hand a
+        // damaged byte whichever machine happens to sit at the end of the list.
+        track.machine = machine < uint8_t(kMachines) ? machine : 0;
+        track.level = level_from_milli(r.u16());
+        read_path(r, track.sample);
+    }
+    if (!r.ok()) return refuse(SerializeResult::truncated);
+
+    return SerializeResult::ok;
+}
+
+// --- BANK_x.BIN -----------------------------------------------------------
+
+uint32_t bank_bytes(const Project &project, int bank) {
+    if (!project_index_valid(bank, 0)) return 0;
+    uint32_t total = kHeaderBytes + kBankTableBytes;
+    for (int slot = 0; slot < kPatternsPerBank; slot++) {
+        total += pattern_bytes(project.patterns[bank][slot]);
+    }
+    return total;
+}
+
+SerializeResult bank_write(const Project &project, int bank, uint8_t *buffer, uint32_t capacity,
+                           uint32_t *written) {
+    if (written != nullptr) *written = 0;
+    // There is no result for "no such bank", and serialize.hpp is not this module's to extend,
+    // so an index no pattern exists at is reported as `malformed` -- the file that would have
+    // been written does not add up.
+    if (!project_index_valid(bank, 0)) return SerializeResult::malformed;
+
+    const uint32_t total = bank_bytes(project, bank);
+    if (buffer == nullptr || capacity < total) return SerializeResult::buffer_too_small;
+
+    const Section sections[kBankSections] = {
+        {kSectionBankPatterns, kBankPatternsOffset, total - kHeaderBytes - kBankTableBytes},
+    };
+
+    Writer w(buffer, capacity);
+    write_container(w, kBankVersion, sections, kBankSections, total - kHeaderBytes);
+    if (!w.ok() || w.size() != kHeaderBytes + kBankTableBytes) {
+        return SerializeResult::buffer_too_small;
+    }
+
+    // `pattern_write` takes a buffer, not a cursor, so the patterns are written past the end of
+    // what `w` has stored and the position is tracked here. `w` is used once more, for the CRC.
+    uint32_t at = w.size();
+    for (int slot = 0; slot < kPatternsPerBank; slot++) {
+        uint32_t one = 0;
+        const SerializeResult res =
+            pattern_write(project.patterns[bank][slot], buffer + at, capacity - at, &one);
+        // `bank_bytes` sized the buffer from the same patterns, so this cannot happen unless the
+        // two disagree -- in which case the file must not be handed on as valid.
+        if (res != SerializeResult::ok) return res;
+        at += one;
+    }
+    if (at != total) return SerializeResult::buffer_too_small;
+
+    return finish_container(w, buffer, total, written);
+}
+
+SerializeResult bank_read(Project &project, int bank, const uint8_t *buffer, uint32_t size,
+                          int *refused) {
+    // `refused` counts patterns the file held and this build would not take. A container-level
+    // refusal leaves it at 0: the file failed, not a pattern in it, and the result says which.
+    if (refused != nullptr) *refused = 0;
+    if (!project_index_valid(bank, 0)) return SerializeResult::malformed;
+
+    const auto refuse = [&project, bank](SerializeResult why) {
+        // All 16 slots, for pattern_read's reason one level up: a refused load leaves empty
+        // patterns rather than a bank that is half this file and half whatever was there before.
+        for (int slot = 0; slot < kPatternsPerBank; slot++) {
+            pattern_init(project.patterns[bank][slot]);
+        }
+        project.bank_dirty[bank] = false;
+        return why;
+    };
+
+    const uint16_t wanted[kBankSections] = {kSectionBankPatterns};
+    uint32_t offset[kBankSections] = {};
+    uint32_t length[kBankSections] = {};
+    const SerializeResult found =
+        find_sections(buffer, size, kBankVersion, wanted, kBankSections, offset, length);
+    if (found != SerializeResult::ok) return refuse(found);
+
+    int damaged = 0;
+    uint32_t at = kHeaderBytes + offset[0];
+    uint32_t left = length[0];
+
+    for (int slot = 0; slot < kPatternsPerBank; slot++) {
+        // Where this pattern ends, from its own container header. `pattern_read` reports nothing
+        // when it refuses, so the extent has to be known before it is called -- that is what
+        // makes a refused pattern cost one slot instead of every slot after it.
+        uint32_t one = 0;
+        if (left >= kHeaderBytes) {
+            Reader probe(buffer + at, left);
+            probe.skip(8);   // magic, version, section count
+            const uint32_t payload = probe.u32();
+            if (probe.ok() && payload <= left - kHeaderBytes) one = kHeaderBytes + payload;
+        }
+        if (one == 0) {
+            // The section ran out, or this pattern's header does not say where it ends. Either
+            // way the patterns after it cannot be found, so this one and all of them are
+            // refused rather than guessed at.
+            for (int rest = slot; rest < kPatternsPerBank; rest++) {
+                pattern_init(project.patterns[bank][rest]);
+                damaged++;
+            }
+            break;
+        }
+        // Exactly this pattern's bytes, so nothing it reads can come from its neighbour.
+        if (pattern_read(project.patterns[bank][slot], buffer + at, one) !=
+            SerializeResult::ok) {
+            damaged++;   // left empty by pattern_read, which never half fills one
+        }
+        at += one;
+        left -= one;
+    }
+
+    // What is in RAM is now what is in the file, damaged slots included, so nothing here is
+    // waiting to be saved. A refused slot stays clean on purpose: marking the bank dirty would
+    // let the next save overwrite the damaged file and with it any chance of recovering it.
+    project.bank_dirty[bank] = false;
+    if (refused != nullptr) *refused = damaged;
+    return SerializeResult::ok;
+}
+
+}  // namespace strata
