@@ -618,10 +618,18 @@ TEST(engine_a_tick_starts_its_note_on_the_frame_the_clock_gave) {
         CHECK(peak_of(block + onset, kStereo - onset) > 0.0f);
     }
 
-    CHECK(loudest[0] > loudest[1]);
-    CHECK(loudest[1] > loudest[2]);
-    CHECK(loudest[2] > loudest[3]);
-    CHECK(loudest[3] > 0.0f);
+    // "The later in the block a tick falls, the less of the note is in it" was asserted here as
+    // a strict ordering and it is NOT TRUE. Measured: 0.113, 0.184, 0.180, 0.127 for frames
+    // 0/16/32/48 -- the loudest is frame 16. A VA voice at note 60 has a period of about 366
+    // frames, so a 64-frame block holds a fraction of one cycle and the PEAK inside it depends
+    // on where in that cycle the samples land, not only on how many there are.
+    //
+    // The same phenomenon defeated two onset counters in tests/test_app.cpp before it was
+    // understood, which is why it is spelled out rather than worked around. What is true, and is
+    // asserted per iteration above, is the property this test is actually for: nothing before
+    // the tick's frame and something from it. All four blocks hold some of the note, and that is
+    // all the loudness figures can honestly say.
+    for (int i = 0; i < 4; i++) CHECK(loudest[i] > 0.0f);
 }
 
 TEST(engine_swing_moves_the_odd_steps_and_leaves_the_even_ones) {
@@ -761,14 +769,31 @@ TEST(engine_a_ratchet_gives_every_hit_its_own_event_and_its_own_voice) {
     CHECK_EQ(int(ratchet_count(live_step(kPoly, 0).ratchet)), 4);
 
     FakeHost::the().set_running(true);
-    CHECK_EQ(fired_on(kPoly, 0u), 4);              // four events, one per hit
-    // The hits are spread across the step, so three of the four are still waiting for their
-    // frame -- and each had to take a voice of its own at the moment it was handed over, or they
-    // would replace one another and one hit would sound (dsp/vapoly.hpp's rule 1).
-    CHECK_EQ(poly().busy_voices(), 4);
-    CHECK_EQ(poly().sounding_voices(), 1);
-    for (int v = 0; v < 4; v++) CHECK_EQ(poly().voice_note(v), 60);
-    CHECK_EQ(poly().voice_note(4), -1);
+
+    // ONE hit in the tick's own block, not four. The hits sit `step_samples / hits` apart --
+    // 1,385 frames at 130 BPM, twenty-one blocks -- and `app/engine.cpp` holds an event whose
+    // frame is past the block and counts it down until it lands.
+    //
+    // This test asserted four voices busy in the first block, which was the behaviour BEFORE
+    // that deferral existed: all four hits were handed to the machine at once, and because a
+    // machine stores one pending trig per voice, a ratchet needed as many voices as it had hits.
+    // VA POLY has six and survived four; KICK has two and sounded two of four; VA MONO has one
+    // and kept only the last. The deferral is what fixed that, so one hit per block is the
+    // contract now and four would mean it had been removed.
+    CHECK_EQ(fired_on(kPoly, 0u), 1);
+    CHECK_EQ(poly().busy_voices(), 1);
+    CHECK_EQ(poly().voice_note(0), 60);
+    CHECK_EQ(poly().voice_note(1), -1);
+
+    // And all four DO arrive, each in the block its frame falls in. Counted as TRIGGERS, not as
+    // voices: every hit is note 60, and dsp/vapoly.hpp's first allocation rule gives a repeated
+    // note the voice already sounding it -- so `busy_voices()` stays at 1 all the way through a
+    // ratchet of one note and cannot see this at all. `triggers()` is `Status::bump_triggered`,
+    // which `fire` bumps once per hit that reaches a machine.
+    const uint8_t before = triggers(kPoly);
+    for (int b = 0; b < 110; b++) pump();          // 7,040 frames: the whole step and a tail
+    CHECK_EQ(int(uint8_t(triggers(kPoly) - before)), 3);   // the other three hits
+    CHECK_EQ(poly().voice_note(0), 60);                    // all on the one voice, by design
     (void)engine;
 }
 
@@ -807,13 +832,12 @@ TEST(engine_the_playhead_follows_time_and_is_published_for_every_track) {
     tick_at(7u * 24u);
     for (int t = 0; t < kTracks; t++) CHECK_EQ(playhead(t), 7);
 
-    // A STOP resets the scheduler, so its own playhead goes back to step 1 -- but `Status` is
-    // only written from `resolve_tick`, so the value the UI draws stays where the transport
-    // stopped until a tick arrives again. REPORTED as a bug (the grid keeps the old step lit);
-    // pinned here rather than hidden, because fixing it is a change to app/.
+    // FIXED: a STOP resets the scheduler, so its playheads go back to step 1, and `Status` now
+    // follows every block rather than only on a tick -- so the grid no longer keeps the step the
+    // transport stopped on lit until it runs again. Pinned as a bug here; now pinned as the fix.
     post(Cmd::stop, 0, 0, 0);
     pump(2);
-    CHECK_EQ(playhead(kPoly), 7);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(playhead(t), 0);
     tick_at(0);
     for (int t = 0; t < kTracks; t++) CHECK_EQ(playhead(t), 0);
 }
@@ -1597,7 +1621,7 @@ TEST(engine_a_throw_really_routes_the_track_to_the_send) {
     CHECK(wet_tail > 1e-4f);
 }
 
-TEST(engine_a_scene_capture_takes_the_stored_kit_and_not_the_knob) {
+TEST(engine_a_scene_capture_takes_the_knob_and_not_the_stored_kit) {
     // **A BUG, pinned rather than hidden.** app/engine.cpp's own comment on Cmd::scene_capture
     // says "From the KIT, not from `performed_`: a scene is a sound to come back to... A capture
     // takes the CURRENT kit, which is why it happens on this side: `params_` is what the machines
@@ -1609,8 +1633,9 @@ TEST(engine_a_scene_capture_takes_the_stored_kit_and_not_the_knob) {
     // and app/app.cpp's PERFORM-mode OK posts `scene_capture` on its own. So turning a knob and
     // capturing a scene stores the value the kit had at the last save, not the sound in the room.
     //
-    // The one-line fix is `kit_from_params();` before the capture. Not applied here: app/ is
-    // another agent's.
+    // FIXED: `Cmd::scene_capture` now calls `kit_from_params()` first, so the capture is the
+    // sound in the room. This test was written to pin the bug and now pins the fix -- which is
+    // what a tripwire is for.
     Engine &engine = clean();
     post(Cmd::set_param, kPoly, 0, kLvl, 11);      // a knob turn: `params_` moves ...
     pump();
@@ -1620,11 +1645,11 @@ TEST(engine_a_scene_capture_takes_the_stored_kit_and_not_the_knob) {
     post(Cmd::scene_capture, kPoly, 0, 3, 0);
     pump();
     CHECK(scene_has(engine.scenes().scenes[3], kPoly, kLvl));
-    CHECK_EQ(int(engine.scenes().scenes[3].values[kPoly][kLvl]), 127);     // 11 is what was wanted
+    CHECK_EQ(int(engine.scenes().scenes[3].values[kPoly][kLvl]), 11);      // the knob, not the file
 
-    // With a store first -- which is what a save does, and which is why the morph tests above do
-    // it -- the capture is the knob.
-    post(Cmd::kit_store);
+    // And the capture refreshed the stored kit on its way past, which is the mechanism: there is
+    // no longer any difference between capturing with and without a store first.
+    CHECK_EQ(int(engine.project().kit.tracks[kPoly].params[kLvl]), 11);
     post(Cmd::scene_capture, kPoly, 0, 4, 0);
     pump();
     CHECK_EQ(int(engine.scenes().scenes[4].values[kPoly][kLvl]), 11);
@@ -1645,7 +1670,7 @@ TEST(engine_a_scene_capture_takes_the_stored_kit_and_not_the_knob) {
     CHECK_EQ(scene_count(engine.scenes().scenes[0]), 0);
 }
 
-TEST(engine_kit_recall_is_drawn_but_not_heard) {
+TEST(engine_kit_recall_is_drawn_and_heard) {
     // **A SECOND BUG of the same family, pinned rather than hidden.** M5 added the per-block copy
     // of `performed_` into `effective_`, and anything that writes `params_` without setting
     // `perform_dirty_` is reverted inside the same block: `apply_performance` returns early,
@@ -1671,13 +1696,15 @@ TEST(engine_kit_recall_is_drawn_but_not_heard) {
     CHECK_EQ(int(kit_value(2, kLvl)), 99);
     CHECK_EQ(int(engine.performed(2, kLvl)), 99);
 
+    // FIXED: `Cmd::kit_recall` now sets `perform_dirty_`, so the recall is heard as well as
+    // drawn. It was the fourth member of the family tests/test_app.cpp has three tests for, and
+    // the only one that was still latent -- nothing posts this command until F1 + F8 lands.
     post(Cmd::kit_recall);
     pump(2);
     CHECK_EQ(int(kit_value(2, kLvl)), 42);               // the screen followed the recall ...
-    CHECK_EQ(int(engine.performed(2, kLvl)), 99);        // ... and what is played did not
+    CHECK_EQ(int(engine.performed(2, kLvl)), 42);        // ... and so did what is played
 
-    // Anything that DOES set the flag puts it right, which is how the bug stays hidden: the next
-    // knob turn anywhere repairs it.
+    // And it stays right, where before the next knob turn anywhere was what repaired it.
     post(Cmd::set_param, 0, 0, kLvl, 127);
     pump();
     CHECK_EQ(int(engine.performed(2, kLvl)), 42);

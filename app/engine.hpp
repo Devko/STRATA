@@ -149,6 +149,10 @@ private:
     // A bar started: release anything armed for one.
     void on_bar();
     void resolve_tick(uint32_t tick, uint32_t frame);
+
+    // The eight playheads into Status, every block. See the implementation on why not only on a
+    // tick.
+    void publish_playheads();
     void fire(const StepEvent &event);
 
     // `Step::length` as a frame count for `Trig::gate_frames`; 0 for "no gate".

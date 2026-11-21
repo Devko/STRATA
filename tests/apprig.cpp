@@ -41,6 +41,21 @@ float pump(int blocks) {
     return peak;
 }
 
+bool settle(int quiet_blocks, int limit) {
+    int quiet = 0;
+    for (int i = 0; i < limit; i++) {
+        pump();
+        // 1e-6 rather than 0: the reverb's tail decays geometrically and a float never quite
+        // reaches zero, so an exact test would never finish.
+        if (peak_of(g_out, kRigStereo) < 1e-6f) {
+            if (++quiet >= quiet_blocks) return true;
+        } else {
+            quiet = 0;
+        }
+    }
+    return false;
+}
+
 bool pump_until_idle(int limit) {
     bool started = false;
     for (int i = 0; i < limit; i++) {
@@ -113,15 +128,56 @@ Engine &fresh() {
 
     post(Cmd::project_loaded);
 
+    // The PERFORMANCE layer, which `Cmd::project_loaded` does not touch: macros, the morph, the
+    // throws, the mutes and auto-fill all live in the engine rather than in the project, so
+    // without this they survive from one test to the next.
+    //
+    // It is not tidiness. `apply_performance` builds what the machines read as kit -> morph ->
+    // macros, so a macro left ASSIGNED and at full position by an earlier test overrides the
+    // kit -- and a test that then sets a kit parameter and listens finds its knob does nothing.
+    // That cost real time to find: it looked like the per-block-copy bug coming back.
+    for (int m = 0; m < kMacros; m++) post(Cmd::macro_clear, 0, 0, uint8_t(m));
+    post(Cmd::set_morph);
+    post(Cmd::set_auto_fill);
+
+    // The scene SLOTS are deliberately not reset. `Cmd::scene_select` refuses a scene index
+    // outside 0..kScenes-1, so there is no "unassign" to post -- and none is needed: the scenes
+    // themselves come back empty with the re-initialised project, and core/perform.hpp's rule is
+    // that an empty scene behaves as the kit. Posting an out-of-range index would only bump the
+    // refusal counter, which a test may be about to read.
+    for (int t = 0; t < kTracks; t++) {
+        post(Cmd::set_throw, uint8_t(t));                   // a = 0: off
+        post(Cmd::set_mute, uint8_t(t), 0, 0);              // unmuted, immediately
+    }
+    pump(4);
+
     // And cut any tails the test before left ringing. A kick decays for well over a block, so
     // without this a test that measures "silence before frame 40" measures the previous test's
-    // note. `Cmd::stop` with c = 1 is the app's own second STOP press, which is what it is for.
+    // note.
     //
-    // It does NOT silence the master reverb, whose tail outlives anything here: a test that
-    // needs to know where in a block a note started measures the onset against that tail rather
-    // than demanding exact silence.
-    post(Cmd::stop, 0, 0, 0, 0, 1);
+    // The flag is `a`, not `c`. This was written as `c = 1` and so asked for an ordinary STOP:
+    // a RELEASE with a 60 ms tail rather than the kill its own comment described.
+    // app/commands.hpp documents the field ("a: 1 = cut all voices") and app/engine.cpp reads
+    // `command.a`, and the mistake cost real time -- it is most of why two onset tests in
+    // tests/test_app.cpp fought a tail that should not have been there.
+    //
+    // Even with it right, this does NOT silence the master reverb, whose tail outlives anything
+    // here: a test that needs to know where in a block a note started still measures the onset
+    // against that tail rather than demanding exact silence.
+    post(Cmd::stop, 0, 0, 1);
     pump(4);
+
+    // And wait for genuine silence before handing the engine over.
+    //
+    // This is what makes an audio measurement in one test independent of the test before it. The
+    // kill above takes the voices; it cannot take the master delay and reverb, which ring for
+    // seconds on whatever was playing -- and on the click the kill itself makes. Every test that
+    // asked "how loud was this block" without settling was measuring a share of the previous
+    // test's tail, and several of them were tuned around it before the cause was understood.
+    //
+    // It costs a few hundred silent blocks per test, which is microseconds: the whole suite runs
+    // in about a second.
+    settle();
     return g_engine;
 }
 

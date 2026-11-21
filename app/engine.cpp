@@ -579,6 +579,11 @@ void Engine::apply(const Command &command) {
             // M6 and re-adding it would be the same three lines -- but it is dead until then,
             // and the reachability audit in docs/HANDOFF.md will keep saying so.
             params_from_kit();
+            // And the fourth member of the family tests/test_app.cpp has three tests for: the
+            // per-block copy rewrites `effective_` from `performed_`, so without this flag the
+            // recalled kit is drawn on screen and the previous one goes on playing. Latent only
+            // because nothing posts this command yet; it becomes audible the day F1 + F8 lands.
+            perform_dirty_ = true;
             break;
 
         case Cmd::set_root:
@@ -743,6 +748,16 @@ void Engine::apply(const Command &command) {
 
         case Cmd::scene_capture:
             if (command.a < kScenes) {
+                // The kit as it is NOW, which means refreshing it from `params_` first.
+                //
+                // `project_.kit` is only written by `Cmd::kit_store`, and nothing posts that
+                // except a save -- while a knob turn writes `params_`. So a capture read the kit
+                // as of the last SAVE: pressing OK in PERFORM stored the sound the project had
+                // when it was last written, not the sound in the room. Found independently by
+                // two reviews, from opposite directions, and the comment that used to be here
+                // claimed the opposite ("a capture takes the CURRENT kit").
+                kit_from_params();
+
                 // From the KIT, not from `performed_`: a scene is a sound to come back to, and
                 // capturing the morph's own output would fold the performance into the thing
                 // being performed.
@@ -1074,6 +1089,15 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     for (int t = 0; t < kTracks; t++) status_.publish_playhead(t, scheduler_.playhead(t));
 }
 
+void Engine::publish_playheads() {
+    // Every block, not only on a tick. A STOP sends the scheduler's playheads back to 0, and
+    // publishing them only from `resolve_tick` left Status holding the step the transport
+    // stopped on -- so the grid kept that step lit until the transport ran again. Eight relaxed
+    // stores of one byte; the tick path still publishes too, which is harmless and keeps a
+    // step's own frame as the moment the playhead moves.
+    for (int t = 0; t < kTracks; t++) status_.publish_playhead(t, scheduler_.playhead(t));
+}
+
 void Engine::dispatch(const StepEvent &event, uint32_t frames) {
     // In this block: fire it, and `fire` hands the machine a frame it can schedule on.
     if (event.frame < frames) {
@@ -1280,6 +1304,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
                 repeat_pitch_);
     repeat_.hold(repeat_held_);
     repeat_.process(out, int(frames));
+
+    publish_playheads();
 
     // Publish for the UI. Relaxed stores of single words: the UI only ever wants the newest.
     const enaga::clock::State clock = enaga::clock::state();

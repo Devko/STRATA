@@ -23,7 +23,10 @@ struct Registry {
     // ever reached (a skipped registration is a test that never runs and never fails). The
     // overflow in Registry::add also counts a failure now, so the suite goes red rather than
     // quietly getting smaller.
-    static constexpr int kMax = 1024;
+    //
+    // Raised from 1024 at 963 tests, when app/ joined the suite and four test files arrived in
+    // one evening. 61 slots of headroom is not headroom.
+    static constexpr int kMax = 4096;
     struct Entry {
         const char *name;
         void (*fn)();

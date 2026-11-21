@@ -58,6 +58,17 @@ float pump(int blocks = 1);
 // asserts about a save that never ran.
 bool pump_until_idle(int limit = 4000);
 
+// Pump until the output has been quiet for `quiet_blocks` blocks in a row, and return true if it
+// got there. For a test that needs to measure WHERE in a block a sound started, which cannot be
+// done while the block before it is still ringing.
+//
+// Two things make this necessary rather than fussy. `fresh()` cuts the voices with a kill, and a
+// kill at a non-zero amplitude is a step in the output -- a click, which the master reverb then
+// rings on for seconds. And the master DELAY is silent BETWEEN its 0.375 s repeats, so a single
+// silent block proves nothing: an echo left in the line pops out a third of a second later and
+// looks like a bug in whatever is being measured. Hence "quiet for a run of blocks", not "quiet".
+bool settle(int quiet_blocks = 400, int limit = 4000);
+
 // The last block `pump()` rendered, interleaved stereo, `kRigStereo` floats. For the tests that
 // care WHERE in a block something happened rather than whether it happened at all.
 const float *last_block();
