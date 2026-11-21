@@ -1,53 +1,67 @@
-# Handoff: what the cloud sessions built, and what none of it has run on
+# Handoff: M4 and M5, now actually built and run
 
-Written mid-M4 when the development machine had to go off, and rewritten since by the cloud
-session that picked it up. **`main` is now at M5**, not M3: M4 and most of M5 were merged on the
-user's instruction with the host suite green and nothing else verified.
+Written mid-M4 when the development machine had to go off, and rewritten twice since by the
+cloud sessions that picked it up. **The headline has changed: there is now a device build and
+three emulator scenarios pass.**
 
 ## State
 
 | | |
 |---|---|
 | `make -C host test` | **684 tests, 454,581 checks, 0 failures** |
-| `main` was | `d0d2c23` (M3 plus the licence), 408 tests / 221,035 checks |
-| `app/` | compiles clean, all 33 TUs, `-Wall -Wextra -Werror`; every symbol resolves except `enaga::host()` |
-| Device build, emulator, cl6x, load figures, listening | **none of it done** |
+| `tools/build.sh` | **links.** APP.ENA, 395,800 bytes; 396 KiB text, 1.21 MiB bss; no BOOT, MCU or SPI sections |
+| `tests/scenario_m3.sh` | **passes**, 22.66% peak, 0 overruns — the undo trail is exactly right after everything M4 and M5 did to `app/engine.cpp` |
+| `tests/scenario_m4.sh` | **passes** (new): autosave, save, and a queued change switching immediately with the clock stopped |
+| `tests/scenario_m5.sh` | **passes** (new): beat repeat's always-on cost measured at +0.82 points |
+| `tools/render.sh` | 12.2 s rendered; peak +0.00 dBFS (the limiter), rms -17.6 dBFS |
+| **cl6x** | still impossible: TI's installer needs an interactive licence click. Every figure above is GCC-only and the ~2.2x cl6x is worth has NOT been applied |
 
-M4, complete and unverified: `core/project`, `core/pcm`, `core/queue`, `core/samplepool`, the
-`app/` refactor to the project model, and `app/storage` (projects on the card, autosave,
-`on_card`, the background sample loader, F3 PROJECT).
+So M4 and M5 are no longer unverified code. What they are is **verified in an emulator with no
+cache model, on a GCC-only build**. `docs/BUDGET.md` states both caveats next to every number,
+and the unit still decides.
 
-M5, complete and unverified except where noted: `core/scale` (15 scales, folding, degree
-stepping), `core/mutate` (rotate, Euclidean density, four bounded randomizers), `core/perform`
-(16 scenes, the A-to-B morph, 4 macros, PERFORM.BIN, mute states, auto-fill), the key and scale
-settable in F3, and `dsp/repeat` (beat repeat). Every `core/` module is host-tested AND
-mutation-tested. `dsp/repeat` is host-tested for correctness; its LOAD is not measured.
+## How a cloud session gets a device build
 
-**M5 is now code-complete.** Throws and the panel wiring went in last: thirteen commands, the
-per-block performance pass, the bar counter, PERFORM.BIN in the save set, and a gesture for every
-tool. What is left for M5 is entirely verification.
+It took real work to discover; it is now two commands.
 
-The one deviation from `docs/SPEC.md` worth knowing before you touch the panel: the eight stored
-mute states are on STEP 1-8 while MUTE mode is on, not "the upper row". That row is seven FIXED
-performance pads and there are eight states, so the spec cannot be literal; the STEP keys are the
-only run of eight free in a mode that is already a mode. `docs/UNIT_CHECKLIST.md` flags it.
+```sh
+tools/fetch_toolchain_sources.sh   # then
+tools/build_toolchain.sh           # binutils a few minutes, gcc 10-30
+```
 
-**One correction to the record**: commit `a83abf5`'s message says "15 tests" and "681 tests"
-where it should say 19 and 684. The code and the docs are right; that one message is not, and it
-is already pushed so it stays as it is.
+`tools/fetch_toolchain_sources.sh` exists because GCC's own `contrib/download_prerequisites`
+fetches GMP, MPFR, MPC and ISL over **plain HTTP**, which an HTTPS-only proxy does not serve at
+all — so the GCC build fails at that step. It fetches the same four over HTTPS, lays them out
+where `download_prerequisites` would, and retries, which the Enaga scripts' bare `curl -sSL` does
+not.
 
-## Read this before trusting the above
+The cloud environment also needs `ftp.gnu.org` and `gcc.gnu.org` allowed. A personal environment
+named `strata-toolchain` has them, plus a setup script that installs `flex` (only in the apt
+sources after an `apt-get update`) and clones `third_party/smpltrek-re` for the emulator. The
+toolchain build is deliberately NOT in that script: it would make every session start ten minutes
+slower.
 
-**Nothing in M4 or M5 has been verified on the unit, or in the emulator, or measured.** The
-cloud sessions have no toolchain. What "`app/` compiles" means precisely:
+## What is still not verified
+
+The emulator can press **keys and nothing else** — `emulate.py` has one `--key` option and no pad
+or encoder support. docs/SPEC.md puts seven of M5's eight tools on the upper PADS, so FILL,
+REPEAT, MUTE mode, the two scene selectors, THROW and MUTATE **cannot be driven by any emulator
+scenario**. Held beat repeat, a moving morph and a moving macro are unmeasured for the same
+reason, and `docs/UNIT_CHECKLIST.md`'s M5 section is written for the unit because of it.
+
+Nothing has run on hardware, nothing has been measured with cl6x, and the sample loader has never
+seen a real WAV — the emulator's card holds the app and nothing else.
+
+What a compile still means, for the parts no scenario reaches:
 
 - all 30 translation units (`core/`, `dsp/`, `app/`) compile with the device build's own flags;
 - every symbol they reference resolves within STRATA except `enaga::host()`, which Enaga's
   runtime supplies — so no call dangles;
 - `tools/build.sh`'s flat-namespace check passes.
 
-It does **not** mean the app links, boots, or sounds like anything. That is the first job on the
-machine.
+It does **not** mean a path no scenario walks works. The three scenarios between them cover
+booting, the transport, editing, undo, the queue, a save, an autosave and entering PERFORM — not
+the sample loader, not a card being pulled, not the performance row.
 
 **The merge to `main` happened anyway, on the user's instruction**, with the original rule ("do
 not merge until the device build and `scenario_m3.sh` are green") knowingly set aside. `main`
