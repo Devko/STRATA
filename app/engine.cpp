@@ -539,6 +539,12 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::kit_recall:
+            // NOTHING POSTS THIS YET. A project load does the same work through
+            // Cmd::project_loaded, which also has to reset the scheduler and the undo history,
+            // so this arm is waiting for the gesture docs/SPEC.md's key table gives to F1 + F8:
+            // "Kit and machine select". Left in rather than deleted because the UI for that is
+            // M6 and re-adding it would be the same three lines -- but it is dead until then,
+            // and the reachability audit in docs/HANDOFF.md will keep saying so.
             params_from_kit();
             break;
 
@@ -628,6 +634,17 @@ void Engine::apply(const Command &command) {
         }
 
         // --- kit and sound ---
+
+        case Cmd::euclid:
+            // The whole track's rhythm, from hits, a cycle and a rotation. core/mutate clamps
+            // all three, so an encoder cannot ask for anything it has to refuse -- but a
+            // generate that produced what was already there is still worth reporting, so the UI
+            // does not spend an undo level on it.
+            if (!euclid_generate(live(), track, int(command.a), int(command.b),
+                                 int(int8_t(command.c)))) {
+                status_.bump_refused();
+            }
+            break;
 
         case Cmd::set_param:
             if (command.a < kParams) {

@@ -100,6 +100,51 @@ constexpr int euclidean_count(int hits, int steps) {
     return hits >= steps ? steps : hits;
 }
 
+// --- the generator --------------------------------------------------------
+//
+// docs/SPEC.md, "Musical defaults that help creativity": *"Euclidean generator per track (hits,
+// steps, rotation) as a starting point that you then edit by hand."* M6's, and the one part of
+// it with no audio-path cost at all.
+//
+// It is the same arithmetic the density mutation uses, which is why it lives here rather than in
+// a module of its own: `density_up` is this generator with `hits` one higher and `steps` fixed
+// to the range. What the generator adds is the other two numbers.
+//
+// ## `steps` is a CYCLE, not the track's length
+//
+// Three hits in eight over a sixteen-step track is the eight-step figure played twice, which is
+// the point of having both numbers: a 3-in-8 against a 4-in-16 is a polyrhythm, and typing the
+// track length into both boxes would make that unreachable. A cycle longer than the track simply
+// gets cut off at the end, which is what a performer would expect from asking for sixteen steps
+// on an eight-step track.
+//
+// ## Where it runs, and what it costs
+//
+// `app/` applies this through the command ring like any other edit, so it runs in the AUDIO
+// context -- once per press. It is not free: `euclidean_hit` takes a modulo per step and this
+// chip has no integer divide instruction, so a 64-step track costs 64 software divides, on the
+// order of a few thousand cycles. That is under 1% of one block, once, and it is the reason the
+// rotation is normalised outside the loop rather than taking two more modulos per step.
+
+// Write the Euclidean rhythm for `hits` in `steps`, rotated by `rotation`, over `track`'s trigs.
+// Reports whether anything changed.
+//
+// `hits` is clamped into 0..steps and `steps` into 1..kStepsPerTrack; `rotation` may be any
+// value and is reduced into the cycle, positive moving the figure LATER. A step that gains a
+// trig inherits its note, velocity and length from the first trig already on the track, for the
+// same reason the density mutation does: a new hit should sound like the part it joins rather
+// than like a bare middle C.
+//
+// Only the trig bit is written. Locks, conditions, ratchets, micro-timing and probability are
+// all left exactly as they were, so generating over a part you have already shaped replaces the
+// RHYTHM and keeps the sound -- which is what "a starting point that you then edit by hand"
+// means in the other direction too.
+bool euclid_generate(Pattern &pattern, int track, int hits, int steps, int rotation);
+
+// How many trigs `euclid_generate` will leave on a track of `length`, for the screen. A cycle
+// shorter than the track repeats; one longer is cut off.
+int euclid_trigs(int hits, int steps, int length);
+
 // --- applying -------------------------------------------------------------
 
 // Apply `kind` to `track`, steps `[first, first + count)`, and report whether anything changed.

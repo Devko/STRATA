@@ -181,6 +181,277 @@ TEST(mutate_euclidean_answers_degenerate_input_rather_than_refusing) {
     CHECK_EQ(euclidean_count(-1, 8), 0);
 }
 
+// --- the generator --------------------------------------------------------
+
+namespace {
+
+// The trig positions on a track, for comparing a generated figure against a known rhythm.
+int trig_positions(const Pattern &pattern, int track, int length, int *out, int max) {
+    int n = 0;
+    for (int i = 0; i < length && n < max; i++) {
+        if ((pattern.tracks[track].steps[i].flags & kStepTrig) != 0) out[n++] = i;
+    }
+    return n;
+}
+
+bool positions_are(const Pattern &pattern, int track, int length,
+                   std::initializer_list<int> want) {
+    int got[kStepsPerTrack] = {};
+    const int n = trig_positions(pattern, track, length, got, kStepsPerTrack);
+    if (n != int(want.size())) return false;
+    int i = 0;
+    for (int value : want) {
+        if (got[i++] != value) return false;
+    }
+    return true;
+}
+
+}  // namespace
+
+TEST(euclid_generates_the_rhythm_for_hits_in_steps) {
+    // The same sets core/mutate.hpp's closed form produces, now written over a track. E(3,8) is
+    // the one everybody knows.
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 8;
+    CHECK(euclid_generate(g_pattern, 0, 3, 8, 0));
+    CHECK(positions_are(g_pattern, 0, 8, {0, 3, 6}));
+
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 16;
+    CHECK(euclid_generate(g_pattern, 0, 4, 16, 0));
+    CHECK(positions_are(g_pattern, 0, 16, {0, 4, 8, 12}));
+
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 8;
+    CHECK(euclid_generate(g_pattern, 0, 5, 8, 0));
+    CHECK(positions_are(g_pattern, 0, 8, {0, 2, 4, 5, 7}));
+}
+
+TEST(euclid_a_cycle_shorter_than_the_track_repeats) {
+    // The reason hits and steps are two numbers rather than one: 3 in 8 over a 16-step track is
+    // the eight-step figure played twice, and against a 4-in-16 that is a polyrhythm. Typing the
+    // track length into both boxes would make it unreachable.
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 16;
+    CHECK(euclid_generate(g_pattern, 0, 3, 8, 0));
+    CHECK(positions_are(g_pattern, 0, 16, {0, 3, 6, 8, 11, 14}));
+    CHECK_EQ(euclid_trigs(3, 8, 16), 6);
+}
+
+TEST(euclid_a_cycle_longer_than_the_track_is_cut_off) {
+    // What a performer would expect from asking for sixteen steps on an eight-step track.
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 8;
+    CHECK(euclid_generate(g_pattern, 0, 4, 16, 0));
+    CHECK(positions_are(g_pattern, 0, 8, {0, 4}));
+    CHECK_EQ(euclid_trigs(4, 16, 8), 2);
+}
+
+TEST(euclid_rotation_moves_the_figure_later) {
+    // Positive is later, which is the direction the word implies on a timeline.
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 8;
+    CHECK(euclid_generate(g_pattern, 0, 3, 8, 1));
+    CHECK(positions_are(g_pattern, 0, 8, {1, 4, 7}));
+
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 8;
+    CHECK(euclid_generate(g_pattern, 0, 3, 8, -1));
+    CHECK(positions_are(g_pattern, 0, 8, {2, 5, 7}));
+}
+
+TEST(euclid_rotation_wraps_and_takes_any_value) {
+    // A rotation of a whole cycle is no rotation, and the encoder must not need to stop at the
+    // ends. Checked against the unrotated figure rather than a hand-written list.
+    for (int rotation : {0, 8, -8, 16, -16, 800, -800}) {
+        pattern_init(g_pattern);
+        g_pattern.tracks[0].length = 8;
+        CHECK(euclid_generate(g_pattern, 0, 3, 8, rotation));
+        CHECK(positions_are(g_pattern, 0, 8, {0, 3, 6}));
+    }
+    // And one step either side of a full turn.
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 8;
+    CHECK(euclid_generate(g_pattern, 0, 3, 8, 9));
+    CHECK(positions_are(g_pattern, 0, 8, {1, 4, 7}));
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 8;
+    CHECK(euclid_generate(g_pattern, 0, 3, 8, -9));
+    CHECK(positions_are(g_pattern, 0, 8, {2, 5, 7}));
+}
+
+TEST(euclid_rotation_never_changes_how_many_hits_there_are) {
+    // The property the two tests above only sample. A rotation that dropped or duplicated a hit
+    // would be a rhythm that changed density when it should only have moved.
+    int wrong = 0;
+    for (int steps = 1; steps <= 32; steps++) {
+        for (int hits = 0; hits <= steps; hits++) {
+            const int expect = euclid_trigs(hits, steps, steps);
+            for (int rotation = -steps; rotation <= steps; rotation++) {
+                pattern_init(g_pattern);
+                g_pattern.tracks[0].length = uint8_t(steps);
+                euclid_generate(g_pattern, 0, hits, steps, rotation);
+                if (trig_count(g_pattern, 0, 0, steps) != expect) wrong++;
+            }
+        }
+    }
+    CHECK_EQ(wrong, 0);
+}
+
+TEST(euclid_clamps_what_it_is_given_rather_than_refusing) {
+    // Every one of these is reachable from an encoder, so each has to mean something.
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 8;
+
+    CHECK(!euclid_generate(g_pattern, -1, 3, 8, 0));          // not a track
+    CHECK(!euclid_generate(g_pattern, kTracks, 3, 8, 0));
+
+    // More hits than steps is every step.
+    CHECK(euclid_generate(g_pattern, 0, 99, 8, 0));
+    CHECK_EQ(trig_count(g_pattern, 0, 0, 8), 8);
+
+    // No hits is an empty track, and it is a change when the track was not already empty.
+    CHECK(euclid_generate(g_pattern, 0, 0, 8, 0));
+    CHECK_EQ(trig_count(g_pattern, 0, 0, 8), 0);
+
+    // A cycle of zero or less is one step, which means every step is the figure's step 0.
+    CHECK(euclid_generate(g_pattern, 0, 1, 0, 0));
+    CHECK_EQ(trig_count(g_pattern, 0, 0, 8), 8);
+    CHECK_EQ(euclid_trigs(1, 0, 8), 8);
+    CHECK_EQ(euclid_trigs(1, -5, 8), 8);
+}
+
+TEST(euclid_reports_whether_anything_changed) {
+    // `app/` should not spend an undo level on a generate that produced what was already there.
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 16;
+    CHECK(euclid_generate(g_pattern, 0, 4, 16, 0));
+    CHECK(!euclid_generate(g_pattern, 0, 4, 16, 0));      // idempotent
+    CHECK(!euclid_generate(g_pattern, 0, 4, 16, 16));     // and a full turn is the same figure
+    CHECK(euclid_generate(g_pattern, 0, 4, 16, 1));       // but a real rotation is a change
+
+    // Generating nothing over an already empty track changes nothing.
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 8;
+    CHECK(!euclid_generate(g_pattern, 0, 0, 8, 0));
+}
+
+TEST(euclid_keeps_the_sound_and_only_writes_the_rhythm) {
+    // "A starting point that you then edit by hand" has to work in the other direction too:
+    // generating over a part you have already shaped replaces the RHYTHM and keeps everything
+    // that makes it sound like itself.
+    make_track(g_pattern, 0, 16, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15});
+    for (int i = 0; i < 16; i++) {
+        Step &s = g_pattern.tracks[0].steps[i];
+        s.condition = condition_pack_a_b(1, 4);
+        s.ratchet = ratchet_pack(3, RatchetRamp::up);
+        s.micro = int8_t(i % 7 - 3);
+        s.probability = uint8_t(60 + i);
+    }
+    CHECK(pattern_set_lock(g_pattern, 0, 5, 7, 99));
+    snapshot(g_pattern);
+
+    CHECK(euclid_generate(g_pattern, 0, 5, 16, 2));
+
+    for (int i = 0; i < 16; i++) {
+        const Step &now = g_pattern.tracks[0].steps[i];
+        const Step &was = g_before.tracks[0].steps[i];
+        // Only the trig bit may differ.
+        CHECK_EQ(int(now.flags & ~uint8_t(kStepTrig)), int(was.flags & ~uint8_t(kStepTrig)));
+        CHECK_EQ(int(now.note), int(was.note));
+        CHECK_EQ(int(now.velocity), int(was.velocity));
+        CHECK_EQ(int(now.condition), int(was.condition));
+        CHECK_EQ(int(now.ratchet), int(was.ratchet));
+        CHECK_EQ(int(now.micro), int(was.micro));
+        CHECK_EQ(int(now.probability), int(was.probability));
+    }
+    // And the lock is still on step 5, with its value.
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(g_pattern, 0, 5, 7, value));
+    CHECK_EQ(int(value), 99);
+    CHECK_EQ(int(pattern_locks_reachable(g_pattern)), 1);
+}
+
+TEST(euclid_a_gained_trig_sounds_like_the_part_it_joins) {
+    // One hit on step 0 with a note of its own; generating four hits must give the other three
+    // that note rather than a default.
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 16;
+    Step &first = g_pattern.tracks[0].steps[0];
+    first.flags = kStepTrig;
+    first.note = 43;
+    first.velocity = 88;
+    first.length = 5;
+
+    CHECK(euclid_generate(g_pattern, 0, 4, 16, 0));
+    CHECK(positions_are(g_pattern, 0, 16, {0, 4, 8, 12}));
+    for (int i : {0, 4, 8, 12}) {
+        CHECK_EQ(int(g_pattern.tracks[0].steps[i].note), 43);
+        CHECK_EQ(int(g_pattern.tracks[0].steps[i].velocity), 88);
+        CHECK_EQ(int(g_pattern.tracks[0].steps[i].length), 5);
+    }
+}
+
+TEST(euclid_never_reaches_past_the_tracks_length_or_other_tracks) {
+    make_track(g_pattern, 0, 16, {});
+    for (int i = 16; i < kStepsPerTrack; i++) {
+        g_pattern.tracks[0].steps[i].flags = kStepTrig;
+        g_pattern.tracks[0].steps[i].note = 101;
+    }
+    for (int t = 1; t < kTracks; t++) {
+        g_pattern.tracks[t].steps[3].flags = kStepTrig;
+        g_pattern.tracks[t].steps[3].velocity = 77;
+    }
+    snapshot(g_pattern);
+
+    CHECK(euclid_generate(g_pattern, 0, 7, 16, 3));
+
+    for (int i = 16; i < kStepsPerTrack; i++) {
+        CHECK_EQ(int(g_pattern.tracks[0].steps[i].flags), int(kStepTrig));
+        CHECK_EQ(int(g_pattern.tracks[0].steps[i].note), 101);
+    }
+    for (int t = 1; t < kTracks; t++) {
+        CHECK_EQ(int(g_pattern.tracks[t].steps[3].velocity), 77);
+        CHECK_EQ(int(g_pattern.tracks[t].steps[3].flags), int(kStepTrig));
+    }
+}
+
+TEST(euclid_leaves_a_pattern_the_sequencer_can_read) {
+    // Same bar as every mutation: step_sanitize over the result must change nothing.
+    for (int steps = 1; steps <= 16; steps++) {
+        make_track(g_pattern, 0, 32, {0, 5, 9, 17, 25});
+        euclid_generate(g_pattern, 0, steps / 2 + 1, steps, steps - 3);
+        snapshot(g_pattern);
+        for (int t = 0; t < kTracks; t++) {
+            for (int i = 0; i < kStepsPerTrack; i++) step_sanitize(g_pattern.tracks[t].steps[i]);
+        }
+        CHECK_EQ(differences(g_pattern, g_before), 0);
+    }
+}
+
+TEST(euclid_agrees_with_the_density_mutation_it_generalises) {
+    // `density_up` is this generator with one more hit and the cycle fixed to the range, which is
+    // why they share euclidean_hit. If the two ever disagree, one of them has grown a bug.
+    for (int hits = 0; hits < 16; hits++) {
+        make_track(g_pattern, 0, 16, {});
+        for (int i = 0; i < hits; i++) {
+            // Seed the range with exactly `hits` trigs, wherever, so density_up targets hits + 1.
+            g_pattern.tracks[0].steps[i].flags = kStepTrig;
+        }
+        CHECK(mutate_apply(g_pattern, 0, 0, 16, Mutation::density_up, 0, 100));
+        int from_mutation[kStepsPerTrack] = {};
+        const int n = trig_positions(g_pattern, 0, 16, from_mutation, kStepsPerTrack);
+
+        make_track(g_pattern, 0, 16, {});
+        CHECK(euclid_generate(g_pattern, 0, hits + 1, 16, 0));
+        int from_generator[kStepsPerTrack] = {};
+        const int m = trig_positions(g_pattern, 0, 16, from_generator, kStepsPerTrack);
+
+        CHECK_EQ(n, m);
+        for (int i = 0; i < n && i < m; i++) CHECK_EQ(from_mutation[i], from_generator[i]);
+    }
+}
+
 // --- the draw -------------------------------------------------------------
 
 TEST(mutate_the_draw_is_deterministic) {

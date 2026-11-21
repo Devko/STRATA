@@ -384,6 +384,24 @@ gesture is the mistake this milestone made twice before it was caught.
 - [ ] A lock still wins over a morph: lock a cutoff on one step, sweep the morph, and that step
       should keep its locked value while the others move.
 
+## M6 — full concept (started)
+
+Only the Euclidean generator so far. `core/` is host-tested and mutation-tested; the gesture is
+on encoders, which the emulator cannot drive.
+
+- [ ] F1 + A, B, C in GRID walk hits, the cycle and the rotation, and the screen reads
+      "EUC 5/16 R2". **Encoders cannot be driven by the emulator** (`emulate.py` has `--key`
+      only, and the core exposes `key_input` and nothing else), so this binding has never been
+      exercised at all.
+- [ ] A sweep of any of the three is ONE undo level, not forty. They share a gesture so
+      core/undo coalesces them; F1 + CLR once should put the old rhythm back.
+- [ ] 3 hits in 8 on a 16-step track plays the figure twice. That is the point of hits and the
+      cycle being two numbers.
+- [ ] Generating over a part you have shaped by hand replaces the rhythm and keeps the sound:
+      locks, conditions, ratchets, micro-timing and probability all survive. Host-tested, but
+      worth hearing once.
+- [ ] A rotation of a whole cycle is a no-op and reports no change, so it costs no undo level.
+
 ## M0.5 — budget spike
 
 Folded into the M2 worst-case measurement above — see `docs/BUDGET.md` for why. These two lines

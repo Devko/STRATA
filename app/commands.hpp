@@ -55,6 +55,11 @@ enum class Cmd : uint8_t {
     step_field_delta,  // track, step, a: StepField, b: int8 delta
     lock_delta,        // track, step, a: param index, b: int8 delta
 
+    // The Euclidean generator (docs/SPEC.md, "Musical defaults that help creativity"): a whole
+    // track's rhythm from three numbers. One edit, so it carries an undo mark like any other and
+    // a sweep of the knob coalesces into one level.
+    euclid,            // track, a: hits, b: cycle steps, c: int8 rotation
+
     undo_mark,         // track, step, a: GestureKind, b: the UI's gesture counter
     undo,
     redo,

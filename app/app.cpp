@@ -117,6 +117,10 @@ enum class PerformPad : uint8_t { fill = 1, repeat = 3, mute = 5, scene_a = 7, s
 
 constexpr bool is_perform_pad(int pad) { return pad % 2 == 1 && pad >= 1 && pad <= 13; }
 
+int clamp_int(int value, int low, int high) {
+    return value < low ? low : (value > high ? high : value);
+}
+
 // The octave the pads play the root in. The pattern's root is a pitch class (core/pattern.hpp),
 // so it needs one to become a note.
 constexpr uint8_t kPadOctaveNote = 60;
@@ -655,6 +659,44 @@ public:
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::motion, selected_, 0);
             post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta);
+            return;
+        }
+
+        // 4b. F1 + A, B or C in GRID: the Euclidean generator's three numbers, applied live.
+        //     docs/SPEC.md asks for "hits, steps, rotation" and these are them. Case 5 below
+        //     never looked at F1, so this gesture was free.
+        //
+        //     Each click is one edit and they share a gesture, so core/undo coalesces a whole
+        //     sweep into a single level -- the same arrangement the step-field encoders use, and
+        //     the reason a knob turned forty times does not throw away the undo history.
+        if (shift_ && mode_ == Mode::grid && encoder < 3) {
+            if (encoder == 0) {
+                euclid_hits_ = clamp_int(euclid_hits_ + delta, 0, euclid_steps_);
+            } else if (encoder == 1) {
+                euclid_steps_ = clamp_int(euclid_steps_ + delta, 1, kStepsPerTrack);
+                if (euclid_hits_ > euclid_steps_) euclid_hits_ = euclid_steps_;
+            } else {
+                // Rotation wraps: a figure rotated by its whole cycle is the same figure, so
+                // there is nothing to stop at.
+                euclid_rotation_ = (euclid_rotation_ + delta) % euclid_steps_;
+            }
+
+            mark(GestureKind::length, selected_, 0);
+            post(Cmd::euclid, uint8_t(selected_), 0, uint8_t(euclid_hits_),
+                 uint8_t(euclid_steps_), uint8_t(int8_t(euclid_rotation_)));
+
+            char *out = notice_buffer_;
+            append(out, "EUC ");
+            append_number(out, uint32_t(euclid_hits_));
+            *out++ = '/';
+            append_number(out, uint32_t(euclid_steps_));
+            if (euclid_rotation_ != 0) {
+                append(out, " R");
+                append_number(out, uint32_t(euclid_rotation_ < 0 ? -euclid_rotation_
+                                                                 : euclid_rotation_));
+            }
+            *out = 0;
+            notice(notice_buffer_);
             return;
         }
 
@@ -1771,6 +1813,13 @@ private:
     Mutation mutation_ = Mutation::velocity;
     int mutate_amount_ = 50;
     uint32_t mutate_variant_ = 1;
+
+    // The Euclidean generator's three numbers (F1 + A, B, C in GRID). They live here rather than
+    // in the pattern because the pattern stores the RESULT: a generated rhythm is then edited by
+    // hand, and keeping the numbers would make the screen claim a figure the steps no longer are.
+    int euclid_hits_ = 4;
+    int euclid_steps_ = 16;
+    int euclid_rotation_ = 0;
     int page_ = 0;            // step page 1-4, for 64-step tracks
     int param_page_ = int(Page::src);
     int mixer_bank_ = 0;      // 0 = tracks 1-4, 1 = tracks 5-8

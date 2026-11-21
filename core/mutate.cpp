@@ -80,6 +80,73 @@ int mutate_draw(uint32_t seed, int track, int step, Mutation kind, uint32_t vari
     return int(roll) - span;
 }
 
+// --- the generator --------------------------------------------------------
+
+int euclid_trigs(int hits, int steps, int length) {
+    const int cycle = clamp_int(steps, 1, kStepsPerTrack);
+    const int k = clamp_int(hits, 0, cycle);
+    const int span = clamp_int(length, 0, kStepsPerTrack);
+    int n = 0;
+    for (int i = 0; i < span; i++) {
+        if (euclidean_hit(i % cycle, k, cycle)) n++;
+    }
+    return n;
+}
+
+bool euclid_generate(Pattern &pattern, int track, int hits, int steps, int rotation) {
+    if (track < 0 || track >= kTracks) return false;
+
+    TrackPattern &t = pattern.tracks[track];
+    const int length = clamp_int(int(t.length), 1, kStepsPerTrack);
+    const int cycle = clamp_int(steps, 1, kStepsPerTrack);
+    const int k = clamp_int(hits, 0, cycle);
+
+    // A donor for the steps that gain a trig: the first one that already has it. Same reasoning
+    // as the density mutation -- on a melodic track the alternative is a middle C nobody asked
+    // for. Taken before anything is written, so it cannot be a step this call just created.
+    const Step *donor = nullptr;
+    for (int i = 0; i < length && donor == nullptr; i++) {
+        if ((t.steps[i].flags & kStepTrig) != 0) donor = &t.steps[i];
+    }
+    const Step donated = donor != nullptr ? *donor : Step{};
+    const bool inherit = donor != nullptr;
+
+    // The rotation, reduced into the cycle ONCE. Positive moves the figure later, so step 0
+    // plays the figure's position -rotation. Inside the loop the position is carried with a
+    // compare-and-subtract: two modulos per step would be two software divides per step on a
+    // chip with no integer divide.
+    int at = (-rotation) % cycle;
+    at = at < 0 ? at + cycle : at;
+
+    bool changed = false;
+    for (int i = 0; i < length; i++) {
+        Step &step = t.steps[i];
+        const bool want = euclidean_hit(at, k, cycle);
+        const bool have = (step.flags & kStepTrig) != 0;
+
+        if (want != have) {
+            if (want) {
+                if (inherit && (step.flags & (kStepTrig | kStepTrigless)) == 0) {
+                    step.note = donated.note;
+                    step.velocity = donated.velocity;
+                    step.length = donated.length;
+                }
+                step.flags = uint8_t(step.flags | kStepTrig);
+            } else {
+                // The trig bit and nothing else: a step that loses its trig keeps its note, its
+                // locks and its timing, so generating a sparser figure and then a denser one
+                // gets the part back rather than a row of defaults.
+                step.flags = uint8_t(step.flags & ~uint8_t(kStepTrig));
+            }
+            changed = true;
+        }
+
+        at++;
+        at = at >= cycle ? 0 : at;
+    }
+    return changed;
+}
+
 bool mutate_apply(Pattern &pattern, int track, int first, int count, Mutation kind,
                   uint32_t variant, int amount) {
     if (track < 0 || track >= kTracks) return false;
