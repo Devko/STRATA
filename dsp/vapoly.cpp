@@ -59,6 +59,13 @@
 namespace strata {
 namespace {
 
+// The longest gate a slot will count, in frames: ten seconds at 48 kHz. The table's longest
+// entry is 64 steps, which at 20 BPM is over three minutes, and a counter that large is a note
+// nobody is waiting for -- but the clamp exists so the countdown cannot be handed something
+// absurd by a tempo read before the clock has settled.
+constexpr int kGateMax = 480000;
+
+
 using enaga::dsp::clamp;
 
 // --- DET ------------------------------------------------------------------------------------
@@ -132,6 +139,7 @@ void VaPoly::init(float sample_rate) {
         s.voice.seed(kSeeds[i]);
         s.next = Trig{};
         s.wait = 0;
+        s.gate = -1;
         s.pending = false;
         s.note = -1;
     }
@@ -164,6 +172,15 @@ void VaPoly::trigger(const Trig &trig) {
     s.note = int(trig.note);
     s.next = trig;
     s.wait = int(trig.frame > kWaitMax ? kWaitMax : trig.frame);
+    // The gate starts counting when the note STARTS, not when the trig was taken, so a note
+    // scheduled late in the block still sounds for its full length.
+    //
+    // 0 could be stored as 0 -- the countdown asks `gate > 0`, so it would be just as inert --
+    // but the header states the invariant as "-1 means no gate" and init() and the countdown's
+    // own reset both write -1. One spelling for one meaning, so a reader never has to work out
+    // whether a 0 in a debugger is a length or the absence of one.
+    s.gate = trig.gate_frames == 0 ? -1 : int(trig.gate_frames > kGateMax ? kGateMax
+                                                                         : trig.gate_frames);
     s.pending = true;
     active_ = true;
 }
@@ -265,8 +282,30 @@ void VaPoly::render_slot(int slot, float *out, int frames) {
         int n = frames - i;
         if (n > VaVoice::kControl) n = VaVoice::kControl;
         if (s.pending && s.wait < n) n = s.wait;   // cut the slice short at the trig's frame
+        // And short at the gate's end, so a note is released on its exact frame rather than at
+        // the next control step -- the same reason the trig's frame cuts the slice.
+        //
+        // `!s.pending` here is a COST guard, not an audible one, and the difference matters to
+        // anyone tempted to delete it or to write a test for it. A slot whose trig is still
+        // waiting is rendering the note it is about to replace, and the gate belongs to the new
+        // note, so counting it yet would be wrong -- but re-slicing a voice that has already
+        // started is bit-transparent (measured: only the slice that STARTS a note is sensitive
+        // to its length, because that is where gate_on and the envelope's first step land). So
+        // without this guard a one-frame gate on a waiting trig would render the sounding note a
+        // frame at a time -- sixteen times the control-rate work for an identical result.
+        // tests/test_vapoly.cpp's steal test pins the audible half; this comment is the rest.
+        if (!s.pending && s.gate > 0 && s.gate < n) n = s.gate;
         s.voice.run(settings_, out + i, n, work_, env_);
         if (s.pending) s.wait -= n;
+        if (!s.pending && s.gate > 0) {
+            s.gate -= n;
+            if (s.gate <= 0) {
+                // The gate closed: release, and stop counting. The tail is the envelope's
+                // release, so the note fades rather than cutting -- `kill()` would click.
+                s.voice.gate_off();
+                s.gate = -1;
+            }
+        }
         i += n;
     }
 }

@@ -181,12 +181,19 @@ the command ring and the undo stack are known to work before you touch the hardw
 
 **Two things that are deliberately not finished**
 
-- [ ] **Gate length does nothing audible yet, and that is expected.** `Step::length` is stored,
-      edited on the step page, saved and restored, but every machine STRATA currently has is a
-      one-shot: each one builds its amplitude envelope with a sustain of 0, so a note ends when
-      its decay does and there is nothing for a gate to release. The field becomes audible with
-      the first sustaining machine (VA POLY / KEYS, M6). Check it survives a save and reload
-      rather than listening for it.
+- [ ] **Gate length is audible on VA POLY only.** `Step::length` is stored, edited on the step
+      page, saved and restored, and `Engine::fire` now converts it to frames and sends it as
+      `Trig::gate_frames`; VA POLY counts it down per voice and releases on its exact frame
+      (9 host tests, 11 of 14 mutations caught, the three survivors recorded in
+      `tests/test_vapoly.cpp`). Every OTHER machine is a one-shot built on a sustain-0 envelope
+      and ignores the field, so on a drum track there is still nothing to hear: check it survives
+      a save and reload there rather than listening for it. On a VA POLY track, listen: a short
+      length should shorten the note, and a long one should not clip the decay.
+- [ ] The conversion itself (`Engine::gate_frames_for`) is **not host-tested** — nothing in
+      `app/` is, because the host suite builds only `core/` and `dsp/`. It reads
+      `ticks_per_step`, `samples_per_tick_` and `length_sixteenths`, all of which ARE tested, but
+      the multiplication is not. Listen for a plausible length rather than trusting it: at 120
+      BPM a 1/16 step on speed x1 should gate for about 125 ms.
 - [ ] **A full lock pool.** 1,024 locks per pattern. `lock_delta` compacts and retries before
       refusing, so this should take real work to reach; when it is reached the screen says
       `FULL n`. Try to reach it (eight locks on every step of several tracks) and confirm the
@@ -402,30 +409,27 @@ on encoders, which the emulator cannot drive.
       worth hearing once.
 - [ ] A rotation of a whole cycle is a no-op and reports no change, so it costs no undo level.
 
-### M6 blocks on one interface question, not on features
+### The three M6 interface decisions, and what each one settled
 
-Three M6 features and one M5 leftover all want the same two things from `dsp/track.hpp`'s
-`Machine`, which has neither. **This is a decision to make before any of them is wired in**, or
-the audio behaviour changes twice and `app/engine.cpp` gets edited twice:
+Three M6 features and one M5 leftover all wanted something `dsp/track.hpp`'s `Machine` did not
+have. All three were decided before any of them was wired in, so the audio behaviour changes
+once and `app/engine.cpp` was edited once. What was chosen, and what is still open:
 
-| What wants it | What is missing |
-|---|---|
-| VA POLY sustain — `Step::length` audible, which the box below expects at "the first sustaining machine (VA POLY / KEYS, M6)" | a per-note NOTE-OFF. `Machine` has `release_all()` and nothing else, so VA POLY is a one-shot on a sustain-0 envelope like every drum |
-| KEYS mode — letting go of a key | the same note-off. Releasing one key of a held chord would silence the whole machine, so KEYS triggers and never releases |
-| `Cmd::release_note` | the same. It has sat in the enum unimplemented since M2 for this reason |
-| VA POLY and GRAIN stereo | `render_add_stereo`. **`dsp/track.hpp:19` says "Only VA POLY and GRAIN produce stereo, and they write both buffers of a stereo pair instead (see render_add_stereo below)" — and no such function is declared anywhere.** The header promises an interface that does not exist |
+| The question | Decided | Still open |
+|---|---|---|
+| A per-note note-off, so `Step::length` can be heard | **A duration on the `Trig`.** `Trig::gate_frames` is additive — no new virtual, no note-to-voice map in the engine — and the machine releases its own voice when the count runs out. `Step::length` has been stored since M3 and makes a sound for the first time | A held KEYS key and `Cmd::release_note` still have no known duration, so they still cannot be released. A `release(note)` virtual can land later without disturbing the gate; it is not needed for a sequenced part |
+| `render_add_stereo`, promised by a comment and declared nowhere | **The comment was wrong, and was corrected.** Machines are mono and the chain spreads them, which is what the rest of the code implements; VA POLY took pitch detune instead of stereo unison for the same reason | Whether a stereo machine is worth it at all. The cost is not the virtual but `InsertChain` being mono, so a stereo track doubles that track's insert work — on the two most expensive machines. That is a question for after a unit measurement, not before |
+| Whether `Engine::fire` folds a MONO note into the scale | **Left as built, and documented in `app/engine.cpp` at the line.** `chord_expand` folds the step's note even for a type-`none` chord, so the asymmetry is POLY tracks vs MONO tracks, not chords vs notes: identical step data sounds different depending on which machine a track hosts | Folding everywhere is what docs/SPEC.md argues for, but it needs a notion of which machines are melodic that does not exist — and folding naively would retune the drums, since KICK reads `note` as a pitch. Machine switching is the change that gives the engine that notion; this belongs there |
 
-Both changes touch the interface every machine implements, so they are cheapest now, while there
-are nine machines rather than eleven, and most expensive once chords are triggering.
+- [ ] **Listen for the fold asymmetry.** Put the same note value on a MONO track and a POLY one
+      in a scale that does not contain it. They should disagree, the POLY one being in key. If
+      they sound wrong, that asymmetry is the first thing to suspect.
 
-- [ ] Decide on a per-note release, then `Step::length` and KEYS release and `Cmd::release_note`
-      all become reachable together.
-- [ ] Decide on `render_add_stereo`, or correct `dsp/track.hpp`'s comment to say machines are
-      mono and the chain spreads them. One of the two is wrong today.
-
-**VA POLY (`dsp/vapoly`)** — 32 host tests, 16 of 18 mutations caught (both survivors honest),
-and VaMono's voice factored out and proven BIT-EXACT over 4,840 rendered values. Not registered
-on a track yet, so none of it is reachable or measured.
+**VA POLY (`dsp/vapoly`)** — 41 host tests, 16 of 18 mutations caught on the machine and 11 of
+14 on the gate (all five survivors honest, and named in `tests/test_vapoly.cpp`), and VaMono's
+voice factored out and proven BIT-EXACT over 4,840 rendered values — still bit-exact after the
+gate, which is why the countdown lives in VaPoly's `Slot` and not in the shared `VaVoice`. Not
+registered on a track yet, so none of it is reachable or measured.
 
 - [ ] Six notes sound together; a seventh steals the quietest started voice rather than being
       dropped.
@@ -435,8 +439,12 @@ on a track yet, so none of it is reachable or measured.
       `vapoly_a_chord_change_that_steals_keeps_all_of_its_notes`.
 - [ ] A ratchet's repeated note takes a second voice, so both hits sound.
 - [ ] Slot 10 is **DET** (voice detune, up to a quarter semitone) where VA MONO has GLD, since
-      glide and slide are MONO-only. "Spread" is therefore pitch, not stereo, and unison is not
-      implemented — it needs the stereo decision above.
+      glide and slide are MONO-only. "Spread" is therefore pitch, not stereo, and stereo unison
+      is not implemented: machines are mono by decision, not by oversight (see the table above).
+- [ ] **A gated chord.** Give a POLY step a short length: all six notes should end together and
+      FADE rather than cut. Then a chord whose notes carry different lengths via locks — the
+      countdown is per voice, so they should end apart.
+- [ ] A gate shorter than the attack. The note should still speak before it releases, not click.
 - [ ] The six-voice cost, with and without cl6x. Derived at ~9,960 cycles (~2.0% of the block)
       against SPEC's 11,208; unmeasured, and the control-rate term is the part that scales
       linearly. `dsp/vapoly.cpp`'s header names the buffered-maths optimisation to reach for if
@@ -455,12 +463,11 @@ the engine wiring is still to come, so none of this is reachable from the panel.
       note rather than a chord nobody asked for.
 - [ ] Inversions move the voicing without changing the notes. Depth is clamped to one less than
       the note count, because deeper would transpose rather than invert.
-- [ ] **A decision is owed first**: `core/chord` folds the chord's ROOT into the scale, but
-      `Engine::fire` passes a MONO step's note through unfolded. So the same note value would play
-      differently on a POLY track than a MONO one. `docs/SPEC.md` says "melodic tracks fold notes
-      into the scale", which argues for folding both — but that changes how every existing MONO
-      part sounds, and the engine does not currently know which machines are melodic. **Decide
-      before wiring chords in, not after.**
+- [ ] **The fold asymmetry is deliberate, not a bug to report.** `core/chord` folds the chord's
+      root into the scale and `Engine::fire` passes a MONO step's note through unfolded, so the
+      same note value plays differently on a POLY track than on a MONO one. The decision and its
+      reasons are in the table above and in `app/engine.cpp` at the line; it is revisited when
+      machine switching lands.
 
 **KEYS mode** — the one M6 feature that IS scenario-tested (`tests/scenario_m6.sh` plays three
 keys with REC on and watches them land in the pattern), so these are about feel rather than

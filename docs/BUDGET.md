@@ -374,7 +374,7 @@ the 8-track architecture holds. See `docs/PLAN.md` M0.5.
 Candidates, cheapest first: mono send busses, a shared filter across the drum tracks, lo-fi out
 of the fixed chain into an optional stage, or a cheaper reverb.
 
-### M4 and M5 — measured in the emulator, GCC-only (2026-11-21)
+### M4, M5 and M6 — measured in the emulator, GCC-only (2026-11-21)
 
 A cloud session built the tic6x toolchain from source and ran the emulator, so these are real
 numbers rather than estimates. **What is still missing is cl6x**: TI's installer needs an
@@ -383,21 +383,43 @@ records for cl6x has NOT been applied. A GCC-only number near the target is ther
 failure, and one comfortably under it is not yet a pass on the unit.
 
 Emulator caveats that apply to every row: no cache model, and **peak depends on run length** --
-the same build reads 22.66% over 1,257 blocks and 29.2% over 9,362. Compare versions, not
+the same build reads 22.72% over 1,257 blocks and 29.2% over 9,362. Compare versions, not
 targets.
 
 | Scenario | Blocks | Peak (GCC-only) | Overruns |
 | --- | --- | --- | --- |
-| `scenario_m3.sh` — the default beat, M5 build | 1,257 | **22.66%** | 0 |
-| `scenario_m4.sh` — + stop, queue A02, save | 1,661 | **22.66%** | 0 |
-| `scenario_m5.sh` — + PERFORM, scene capture, macro assign | 1,258 | **23.48%** | 0 |
+| `scenario_m3.sh` — the default beat, M6 build | 1,257 | **22.72%** | 0 |
+| `scenario_m4.sh` — + stop, queue A02, save | 1,661 | **22.72%** | 0 |
+| `scenario_m5.sh` — + PERFORM, scene capture, macro assign | 1,258 | **23.51%** | 0 |
+| `scenario_m6.sh` — + KEYS, three keys recorded | 1,661 | **30.64%** | 0 |
 | `tools/render.sh --seconds 12` — 12.2 s continuous | 9,362 | **29.2%** | 0 |
 
-**Beat repeat's always-on cost: +0.82 points** (23.48 against 22.66 on the same build and the
-same beat). That is the one DSP figure M5 owed. It covers `dsp/repeat`'s ring copy of every
-block plus the per-block performance pass, and it is the shape expected of one 64-frame stereo
-copy and a 128-parameter compare. `tests/scenario_m5.sh` carries the 22.66% baseline and fails
-loudly if the gap ever exceeds five points.
+**`Trig::gate_frames` costs +0.06 points** and nothing more. The previous build of the same four
+scenarios read 22.66 / 22.66 / 23.48 / 30.58, so converting `Step::length` to frames in
+`Engine::fire` -- three multiplies and a table read per trig, at control rate -- is a rounding
+error, and VA POLY's per-voice countdown costs nothing at all here because VA POLY is not yet
+registered on a track. The countdown's real cost arrives with that registration: it adds one
+compare per voice per control slice, and a slice cut on the gate's last frame.
+
+The gate is also the first thing in STRATA to make a slice shorter than `VaVoice::kControl` on
+purpose. That matters for the budget rather than the sound: the per-slice control work is paid
+per slice, so a very short gate pays it more often. It is bounded -- one extra slice per note,
+because the countdown stops at the gate -- but `dsp/vapoly.cpp` carries a `!s.pending` guard
+whose only job is to keep a WAITING trig's short gate from re-slicing the note it is replacing,
+which would not be bounded. Measured: re-slicing a started voice is bit-transparent, so that
+guard is a cost guard and nothing else.
+
+**Beat repeat's always-on cost: +0.79 points** (23.51 against 22.72 on the same build and the
+same beat; it read +0.82 before the gate landed, and both halves of the subtraction moved by
+0.06, so this is the same figure measured again rather than a change). That is the one DSP figure
+M5 owed. It covers `dsp/repeat`'s ring copy of every block plus the per-block performance pass,
+and it is the shape expected of one 64-frame stereo copy and a 128-parameter compare.
+`tests/scenario_m5.sh` carries the baseline and fails loudly if the gap ever exceeds five points.
+
+**M6's 30.64% is the figure to watch.** It is 7.1 points above the same build's default beat, and
+the whole of it is KEYS: the scenario plays three keys into the pattern, so eight tracks are
+sounding where `scenario_m3.sh` has four. Nothing in it is a chord yet -- VA POLY and GRAIN are
+not registered -- and the two machines M6 still owes are the two most expensive in the spec.
 
 Still unmeasured, because the emulator can press KEYS and nothing else (`emulate.py` has one
 `--key` option and no pad or encoder support) and seven of M5's eight tools are on the upper
@@ -445,7 +467,7 @@ divide 64-bit, which is the pattern to follow.
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |
 | --- | --- | --- | --- | --- |
-| M1, 4-track beat at 130 BPM | under 15% | | 22.66% emulator, 4 of 8 tracks sounding | 2026-11-21 |
+| M1, 4-track beat at 130 BPM | under 15% | | 22.72% emulator, 4 of 8 tracks sounding | 2026-11-21 |
 | M2, 8 tracks worst case | under 40% | | | |
 | M6, everything worst case | under 60% | | | |
 

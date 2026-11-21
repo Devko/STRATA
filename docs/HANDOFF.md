@@ -8,11 +8,12 @@ three emulator scenarios pass.**
 
 | | |
 |---|---|
-| `make -C host test` | **697 tests, 455,073 checks, 0 failures** |
-| `tools/build.sh` | **links.** APP.ENA, 395,800 bytes; 396 KiB text, 1.21 MiB bss; no BOOT, MCU or SPI sections |
-| `tests/scenario_m3.sh` | **passes**, 22.66% peak, 0 overruns — the undo trail is exactly right after everything M4 and M5 did to `app/engine.cpp` |
-| `tests/scenario_m4.sh` | **passes** (new): autosave, save, and a queued change switching immediately with the clock stopped |
-| `tests/scenario_m5.sh` | **passes** (new): beat repeat's always-on cost measured at +0.82 points |
+| `make -C host test` | **765 tests, 466,298 checks, 0 failures** |
+| `tools/build.sh` | **links.** APP.ENA, 411,552 bytes; payload 411,488; bss 1,264,968; no BOOT, MCU or SPI sections |
+| `tests/scenario_m3.sh` | **passes**, 22.72% peak, 0 overruns — the undo trail is exactly right after everything M4, M5 and M6 did to `app/engine.cpp` |
+| `tests/scenario_m4.sh` | **passes**, 22.72%: autosave, save, and a queued change switching immediately with the clock stopped |
+| `tests/scenario_m5.sh` | **passes**, 23.51%: beat repeat's always-on cost measured at +0.79 points |
+| `tests/scenario_m6.sh` | **passes**, 30.64%: KEYS records three keys, each one undo level |
 | `tools/render.sh` | 12.2 s rendered; peak +0.00 dBFS (the limiter), rms -17.6 dBFS |
 | **cl6x** | still impossible: TI's installer needs an interactive licence click. Every figure above is GCC-only and the ~2.2x cl6x is worth has NOT been applied |
 
@@ -20,10 +21,33 @@ So M4 and M5 are no longer unverified code. What they are is **verified in an em
 cache model, on a GCC-only build**. `docs/BUDGET.md` states both caveats next to every number,
 and the unit still decides.
 
-M6 has started: the Euclidean generator is in, host-tested and mutation-tested, with its
-gesture on F1 + encoders A/B/C in GRID. Still to write: VA POLY with chords, GRAIN, KEYS mode,
-resampling and pad pressure. The two machines are the budget risk -- GRAIN is the costliest voice
-in docs/SPEC.md's table -- and the 60% exit depends on cl6x, which is unresolved.
+M6 is well in: the Euclidean generator (F1 + encoders A/B/C in GRID), KEYS mode (F1 + F4),
+`core/chord`, `dsp/vapoly` and `Step::length` as a real gate. Still to write: GRAIN, the engine
+edit that registers both new machines and expands chords, resampling and pad pressure. The two
+machines are the budget risk -- GRAIN is the costliest voice in docs/SPEC.md's table -- and the
+60% exit depends on cl6x, which is unresolved.
+
+### Three interface decisions were made, and they are recorded in the code
+
+M6 blocked on three questions about `dsp/track.hpp`'s `Machine`. All three are settled; the
+reasons live at the lines, and `docs/UNIT_CHECKLIST.md` has the table with what each left open.
+
+1. **A duration on the `Trig`, not a `release(note)` virtual.** `Trig::gate_frames` is additive
+   and `Engine::gate_frames_for` fills it from `Step::length`, which has been stored, edited and
+   serialised since M3 and had never made a sound. VA POLY counts it down per voice and releases
+   on its exact frame. A held KEYS key still cannot be released -- it has no known duration --
+   so `Cmd::release_note` stays unimplemented, and a `release(note)` virtual can land later
+   without disturbing this.
+2. **`render_add_stereo` was a comment, not a plan.** `dsp/track.hpp` promised a function that
+   was declared nowhere; the comment was corrected to say machines are mono and the chain spreads
+   them, which is what the rest of the code implements. The real cost of a stereo machine is that
+   `InsertChain` is mono, so a stereo track doubles that track's insert work -- a question for
+   after a unit measurement.
+3. **The POLY/MONO fold asymmetry stays, deliberately.** `chord_expand` folds the step's note even
+   for a type-`none` chord, so identical step data sounds different depending on which machine a
+   track hosts. Folding everywhere needs a notion of which machines are melodic that the engine
+   does not have, and folding naively would retune the drums. Revisited when machine switching
+   lands. **Worth listening for on the unit** -- the checklist has the box.
 
 ## How a cloud session gets a device build
 

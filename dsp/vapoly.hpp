@@ -156,6 +156,16 @@ private:
         bool pending = false;
         int note = -1;          // the note this slot is committed to, -1 when it holds none
 
+        // Frames of gate left before this voice is released: `Step::length`, arriving as
+        // `Trig::gate_frames`. -1 means NO gate, which is what a trig carrying 0 asks for and
+        // what every note did before the field existed -- the voice's own envelope decides.
+        //
+        // It lives HERE and not in VaVoice on purpose. VaVoice is shared with VA MONO, and
+        // putting a countdown in it would change how VA MONO sounds -- a machine whose arithmetic
+        // is proven bit-identical across the refactor that produced VaVoice, and whose cost
+        // docs/BUDGET.md already records. A gate is polyphonic bookkeeping, not part of a voice.
+        int gate = -1;
+
         // A slot is busy from the moment it takes a trig, NOT from the frame that trig starts
         // on. That is what stops a chord arriving on one frame from stealing its own voices.
         bool busy() const { return pending || voice.sounding(); }

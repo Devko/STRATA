@@ -71,13 +71,15 @@ TrackParams patch() {
     return p;
 }
 
-Trig hit(uint8_t note = 60, uint8_t velocity = 100, bool accent = false, uint32_t frame = 0) {
+Trig hit(uint8_t note = 60, uint8_t velocity = 100, bool accent = false, uint32_t frame = 0,
+         uint32_t gate_frames = 0) {
     Trig t;
     t.note = note;
     t.velocity = velocity;
     t.accent = accent;
     t.slide = false;      // MONO only (dsp/track.hpp); this machine ignores it
     t.frame = frame;
+    t.gate_frames = gate_frames;   // 0 is "no gate": what every trig carried before the field
     return t;
 }
 
@@ -87,6 +89,21 @@ int render(Machine &m, const TrackParams &p, float *out, int blocks) {
     for (int b = 0; b < blocks; b++) {
         m.prepare(p);
         m.render_add(out + b * kBlk, kBlk);
+    }
+    return blocks * kBlk;
+}
+
+// `render`, but the transport stops part way: `release_at` and `kill_at` are block indices (-1
+// for never) at whose start release_all() or kill_all() is called. A gate still counting when
+// the sequencer stops is a state the engine really reaches, and the two calls mean different
+// things -- release lets the tail ring, kill takes the voice away -- so both are rendered here.
+int render_with_stop(VaPoly &va, const TrackParams &p, float *out, int blocks, int release_at,
+                     int kill_at) {
+    for (int b = 0; b < blocks; b++) {
+        if (b == release_at) va.release_all();
+        if (b == kill_at) va.kill_all();
+        va.prepare(p);
+        va.render_add(out + b * kBlk, kBlk);
     }
     return blocks * kBlk;
 }
@@ -108,6 +125,21 @@ float energy(const float *x, int n) {
     float sum = 0.0f;
     for (int i = 0; i < n; i++) sum += x[i] * x[i];
     return sum;
+}
+
+// The first frame on which two renders disagree, or -1 if they never do.
+//
+// This is how the gate tests measure WHERE a gate acts, and it is exact rather than a
+// threshold: a gate is a frame count, and nothing else in this machine changes a sample's
+// value, so a gated note and an ungated one are bit-identical until the frame the gate closes
+// on and different from it. A test that measured "it got quieter around there" would pass a
+// gate that fired a control step early -- which is the bug worth catching, because the control
+// step is 32 frames and the shortest gate the table can ask for is far smaller.
+int first_difference(const float *x, const float *y, int n) {
+    for (int i = 0; i < n; i++) {
+        if (x[i] != y[i]) return i;
+    }
+    return -1;
 }
 
 // NaN fails x == x and an infinity fails the bounds, so this needs no <cmath>.
@@ -1023,6 +1055,294 @@ TEST(vapoly_decay_knob_spans_its_range_and_lengthens_a_chord) {
     CHECK(energy(g_b, n) > 2.0f * energy(g_a, n));
     CHECK(!a.active());      // the short chord has finished inside the window
     CHECK(b.active());       // the long one has not
+}
+
+// --- Step::length, as a gate ----------------------------------------------------------------
+//
+// `Step::length` has been stored and serialised since M3 and had never made a sound: nothing
+// read it. The engine now converts it to frames (app/engine.cpp, `gate_frames_for`) and hands
+// it over as `Trig::gate_frames`, and this machine counts it down per voice and releases on its
+// exact frame. core/timing.hpp's own comment sets the rule these tests hold it to: "gate length
+// does not have to land on the tick grid: it only decides when the voice is released".
+//
+// The countdown lives in VaPoly's Slot rather than in the shared VaVoice on purpose
+// (dsp/vapoly.hpp says why): VA MONO's arithmetic has to stay bit-identical, and
+// tests/test_va.cpp is what proves it still is.
+//
+// Mutation-tested, and three mutations of the gate path survive because they cannot be heard.
+// They are recorded here so nobody writes a test that cannot fail:
+//
+//   * `s.gate <= n` for `s.gate < n` in the slice cut -- when they are equal the assignment is
+//     the value it already had.
+//   * dropping `!s.pending` from the slice cut -- re-slicing a voice that has already started is
+//     bit-transparent, so this costs control-rate work and changes no sample (dsp/vapoly.cpp
+//     says the same at the line).
+//   * dropping the kGateMax clamp -- it only ever LOWERS a count above ten seconds, and the
+//     longest DEC is 2.4 s, so no note survives to where the two differ. A count so large it
+//     wraps the int lands negative, which this machine reads as no gate: inert either way. The
+//     clamp's magnitude IS tested (`..._is_clamped_rather_than_wrapping` fails if kGateMax
+//     drops into an audible window); its existence cannot be.
+
+TEST(vapoly_a_trig_with_no_gate_is_left_to_its_own_envelope) {
+    // 0 is what every trig carried before the field existed and what a step with no length
+    // asks for. DEC 127 is a 2.4 s decay, so the note is still sounding a second in.
+    VaPoly va;
+    va.init(kRate);
+    const TrackParams p = patch();
+    va.prepare(p);
+    va.trigger(hit(60, 100, false, 0, 0));
+
+    const int blocks = blocks_for(1.5f);
+    clear(g_a, blocks * kBlk);
+    const int n = render(va, p, g_a, blocks);
+    CHECK(va.active());
+    CHECK(peak(g_a + ENAGA_SAMPLE_RATE, n - ENAGA_SAMPLE_RATE) > 0.01f);
+}
+
+TEST(vapoly_a_gate_changes_nothing_before_the_frame_it_closes_on) {
+    // The whole contract in one measurement, at six lengths spanning the table: a gated note is
+    // the ungated note until its gate's last frame, and differs from it on that frame. Not one
+    // control step early, not one late.
+    const TrackParams p = patch();
+    const int blocks = blocks_for(1.2f);
+
+    const uint32_t gates[] = {1u, 64u, 1000u, 4000u, 12000u, 48000u};
+    for (uint32_t gate : gates) {
+        VaPoly open;
+        open.init(kRate);
+        open.prepare(p);
+        open.trigger(hit(60, 100, false, 0, 0));
+        clear(g_a, blocks * kBlk);
+        const int n = render(open, p, g_a, blocks);
+
+        VaPoly gated;
+        gated.init(kRate);
+        gated.prepare(p);
+        gated.trigger(hit(60, 100, false, 0, gate));
+        clear(g_b, blocks * kBlk);
+        render(gated, p, g_b, blocks);
+
+        CHECK_EQ(first_difference(g_a, g_b, n), int(gate));
+    }
+}
+
+TEST(vapoly_the_gate_starts_when_the_note_starts_not_when_the_trig_was_taken) {
+    // A trig is committed to a voice as soon as it arrives but starts on its own frame, which is
+    // what micro-timing and ratchets are built on. The gate is a NOTE length, so it has to be
+    // counted from the frame the note starts on -- otherwise a step nudged late would be
+    // shortened by exactly the nudge, and the last frames tested here are a whole block away.
+    const TrackParams p = patch();
+    const int blocks = blocks_for(1.2f);
+    constexpr uint32_t kGate = 4000u;
+
+    const uint32_t frames[] = {0u, 13u, 63u, 200u};
+    for (uint32_t frame : frames) {
+        VaPoly open;
+        open.init(kRate);
+        open.prepare(p);
+        open.trigger(hit(60, 100, false, frame, 0));
+        clear(g_a, blocks * kBlk);
+        const int n = render(open, p, g_a, blocks);
+
+        VaPoly gated;
+        gated.init(kRate);
+        gated.prepare(p);
+        gated.trigger(hit(60, 100, false, frame, kGate));
+        clear(g_b, blocks * kBlk);
+        render(gated, p, g_b, blocks);
+
+        CHECK_EQ(first_difference(g_a, g_b, n), int(frame + kGate));
+    }
+}
+
+TEST(vapoly_each_voice_counts_its_own_gate) {
+    // Three notes on one frame, each carrying a different length -- a chord whose notes do not
+    // all end together, which is the reason the counter is per slot. Gating one note at a time
+    // and asking where the chord first changes says which voice the count belongs to: a gate
+    // kept per machine instead of per voice would answer with the same frame all three times.
+    const TrackParams p = patch();
+    const int blocks = blocks_for(1.2f);
+    const uint8_t notes[] = {60, 64, 67};
+    const uint32_t gates[] = {1000u, 2000u, 3000u};
+
+    VaPoly open;
+    open.init(kRate);
+    open.prepare(p);
+    for (uint8_t note : notes) open.trigger(hit(note, 100, false, 0, 0));
+    CHECK_EQ(open.voice_note(0), 60);   // in slot order, so the loop below knows which is which
+    CHECK_EQ(open.voice_note(1), 64);
+    CHECK_EQ(open.voice_note(2), 67);
+    clear(g_a, blocks * kBlk);
+    const int n = render(open, p, g_a, blocks);
+
+    for (int which = 0; which < 3; which++) {
+        VaPoly gated;
+        gated.init(kRate);
+        gated.prepare(p);
+        for (int i = 0; i < 3; i++) {
+            gated.trigger(hit(notes[i], 100, false, 0, i == which ? gates[i] : 0u));
+        }
+        clear(g_b, blocks * kBlk);
+        render(gated, p, g_b, blocks);
+        CHECK_EQ(first_difference(g_a, g_b, n), int(gates[which]));
+    }
+
+    // And all three at once: the chord first changes where the shortest note ends.
+    VaPoly all;
+    all.init(kRate);
+    all.prepare(p);
+    for (int i = 0; i < 3; i++) all.trigger(hit(notes[i], 100, false, 0, gates[i]));
+    clear(g_b, blocks * kBlk);
+    render(all, p, g_b, blocks);
+    CHECK_EQ(first_difference(g_a, g_b, n), int(gates[0]));
+}
+
+TEST(vapoly_a_steal_gates_the_new_note_and_not_the_one_it_replaces) {
+    // All six voices sounding, so the next trig has to steal one. The stealing trig commits to
+    // its slot at once but starts on its own frame, and the note already there keeps sounding
+    // until it does -- with the shortest gate the field can carry, one frame, counting all the
+    // while. Nothing may change before the NEW note's own end: a countdown that ran during the
+    // wait would release the note being replaced 40 frames early, and a gate booked against the
+    // wrong slot would shorten a note nobody gated.
+    const TrackParams p = patch();
+    constexpr int kWarm = 8;                       // blocks: long enough that all six sound
+    constexpr int kFrame = 40;
+    const int blocks = blocks_for(0.5f);
+    const int start = kWarm * kBlk + kFrame;       // the stealing note's first frame
+
+    float *buffers[2] = {g_a, g_b};
+    for (int pass = 0; pass < 2; pass++) {
+        VaPoly va;
+        va.init(kRate);
+        va.prepare(p);
+        for (int i = 0; i < VaPoly::kVoices; i++) va.trigger(hit(uint8_t(48 + i), 100, false, 0));
+        clear(buffers[pass], (kWarm + blocks) * kBlk);
+        render(va, p, buffers[pass], kWarm);
+        CHECK_EQ(va.sounding_voices(), VaPoly::kVoices);   // nothing free: the next trig steals
+
+        va.trigger(hit(72, 100, false, kFrame, pass == 0 ? 0u : 1u));
+        CHECK(holds(va, 72));                              // the stolen slot took the new note
+        for (int i = 49; i <= 53; i++) CHECK(holds(va, i)); // and the others kept theirs
+        render(va, p, buffers[pass] + kWarm * kBlk, blocks);
+    }
+    CHECK_EQ(first_difference(g_a, g_b, (kWarm + blocks) * kBlk), start + 1);
+}
+
+TEST(vapoly_a_gate_releases_the_voice_it_does_not_cut_it) {
+    // The release, not a cut: `kill()` on the gate's last frame would put a step in the output,
+    // which is a click. So the note is still audible just after its gate closes, decays, and is
+    // exactly silent well before the ungated note would be -- and the voice is given back.
+    VaPoly va;
+    va.init(kRate);
+    const TrackParams p = patch();
+    va.prepare(p);
+    constexpr int kGate = 4000;
+    va.trigger(hit(60, 100, false, 0, uint32_t(kGate)));
+
+    const int blocks = blocks_for(1.5f);
+    clear(g_a, blocks * kBlk);   // the capture buffers are shared and render_add ADDS into them
+    const int n = render(va, p, g_a, blocks);
+    const float held = peak(g_a, kGate);
+    CHECK(held > 0.1f);
+    CHECK(peak(g_a + kGate, 64) > 0.1f * held);        // still ringing one block later
+    CHECK(peak(g_a + kGate, 2000) < held);             // and on the way down
+    CHECK_EQ(peak(g_a + ENAGA_SAMPLE_RATE, n - ENAGA_SAMPLE_RATE), 0.0f);
+    CHECK(!va.active());                               // the slot is free again
+    CHECK_EQ(va.sounding_voices(), 0);
+    CHECK(finite_within(g_a, n, 4.0f));
+}
+
+TEST(vapoly_an_absurd_gate_is_clamped_rather_than_wrapping) {
+    // `gate_frames` is a uint32_t and the countdown is an int, so a length computed from a tempo
+    // read before the clock has settled must not land in the counter as a negative number or as
+    // an immediate release. These four are "longer than anything this machine can still be heard
+    // through", so each has to behave exactly as no gate at all over the whole capture.
+    //
+    // The clamp's VALUE (kGateMax, ten seconds) is not audible and is not tested: the longest
+    // DEC is 2.4 s, so no note survives to ten. What is tested is that nothing wraps and nothing
+    // fires early -- a kGateMax small enough to land inside this window would fail here.
+    const TrackParams p = patch();
+    const int blocks = blocks_for(1.9f);
+
+    VaPoly open;
+    open.init(kRate);
+    open.prepare(p);
+    open.trigger(hit(60, 100, false, 0, 0));
+    clear(g_a, blocks * kBlk);
+    const int n = render(open, p, g_a, blocks);
+
+    const uint32_t gates[] = {480000u, 600000u, 0x80000001u, 0xFFFFFFFFu};
+    for (uint32_t gate : gates) {
+        VaPoly gated;
+        gated.init(kRate);
+        gated.prepare(p);
+        gated.trigger(hit(60, 100, false, 0, gate));
+        clear(g_b, blocks * kBlk);
+        render(gated, p, g_b, blocks);
+        CHECK_EQ(first_difference(g_a, g_b, n), -1);
+    }
+}
+
+TEST(vapoly_a_gate_that_closes_after_a_stop_changes_nothing) {
+    // STOP releases every voice. A gate still counting then closes on a voice that is already
+    // releasing, and its gate_off() has to be a second one that does nothing: a release that
+    // restarted from the current level would stretch the tail, and one that reset it would
+    // click. Bit-identical to the same stop with no gate at all is the whole statement.
+    const TrackParams p = patch();
+    const int blocks = blocks_for(1.5f);
+    constexpr int kStopBlock = 20;                    // frame 1280, before either gate closes
+
+    VaPoly open;
+    open.init(kRate);
+    open.prepare(p);
+    open.trigger(hit(60, 100, false, 0, 0));
+    clear(g_a, blocks * kBlk);
+    const int n = render_with_stop(open, p, g_a, blocks, kStopBlock, -1);
+
+    VaPoly late;
+    late.init(kRate);
+    late.prepare(p);
+    late.trigger(hit(60, 100, false, 0, 4000));       // closes after the stop: no effect
+    clear(g_b, blocks * kBlk);
+    render_with_stop(late, p, g_b, blocks, kStopBlock, -1);
+    CHECK_EQ(first_difference(g_a, g_b, n), -1);
+
+    // The control: a gate that closes BEFORE the stop does change the output, on its own frame.
+    // Without this the test above would pass just as well on a machine that ignored the field.
+    VaPoly early;
+    early.init(kRate);
+    early.prepare(p);
+    early.trigger(hit(60, 100, false, 0, 1000));
+    clear(g_b, blocks * kBlk);
+    render_with_stop(early, p, g_b, blocks, kStopBlock, -1);
+    CHECK_EQ(first_difference(g_a, g_b, n), 1000);
+}
+
+TEST(vapoly_kill_all_ends_a_gated_note_and_its_countdown) {
+    // A pattern change takes the voices away outright. The countdown has to go with them: a
+    // slot left counting would release a voice that another note had since been given.
+    VaPoly va;
+    va.init(kRate);
+    const TrackParams p = patch();
+    va.prepare(p);
+    va.trigger(hit(60, 100, false, 0, 4000));         // 4000 frames = block 62
+
+    constexpr int kKillBlock = 20;                    // frame 1280, while the gate still counts
+    const int blocks = blocks_for(1.0f);
+    clear(g_a, blocks * kBlk);
+    const int n = render_with_stop(va, p, g_a, blocks, -1, kKillBlock);
+
+    CHECK(peak(g_a, kKillBlock * kBlk) > 0.1f);                                 // it sounded
+    CHECK_EQ(peak(g_a + kKillBlock * kBlk, n - kKillBlock * kBlk), 0.0f);       // then stopped
+    CHECK(!va.active());
+    CHECK_EQ(va.voice_note(0), -1);
+
+    // And the slot is clean enough to take a new note, which the stale gate must not shorten.
+    va.trigger(hit(72, 100, false, 0, 0));
+    clear(g_b, blocks * kBlk);
+    render(va, p, g_b, blocks);
+    CHECK(va.active());
+    CHECK(peak(g_b + ENAGA_SAMPLE_RATE / 2, n - ENAGA_SAMPLE_RATE / 2) > 0.01f);
 }
 
 // --- the parameter surface ------------------------------------------------------------------

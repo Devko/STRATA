@@ -15,9 +15,20 @@
 // So a machine reads SRC and AMP, the chain reads FLTR and FX, and neither needs the other's
 // parameters. That is what lets machines and the chain be developed independently.
 //
-// Machines are MONO. Pan and the stereo spread happen in the insert chain, which halves the
-// filter work and keeps every machine simpler. Only VA POLY and GRAIN produce stereo, and they
-// write both buffers of a stereo pair instead (see render_add_stereo below).
+// Machines are MONO, all of them. Pan and the stereo spread happen in the insert chain, which
+// halves the filter work and keeps every machine simpler.
+//
+// This comment used to go on to say that VA POLY and GRAIN "write both buffers of a stereo pair
+// instead (see render_add_stereo below)". **There was no such function, here or anywhere.** The
+// header promised an interface that did not exist, and the two machines it named have now been
+// written mono: VA POLY spreads by voice DETUNE rather than stereo width, and GRAIN spreads
+// position and pitch.
+//
+// Adding it is a real option, not a closed door -- but the cost is not the virtual. `InsertChain`
+// is mono, so a stereo track doubles that track's insert-chain work, and it would do so on the
+// two most expensive machines in the project while the CPU budget is still unmeasured on
+// hardware. docs/UNIT_CHECKLIST.md carries it as a decision to take after a measurement rather
+// than before one.
 #pragma once
 
 #include <cstdint>
@@ -58,6 +69,27 @@ struct Trig {
     uint8_t velocity = 100;   // 1-127
     bool accent = false;
     bool slide = false;       // MONO machines only
+
+    // How long the note should sound for, in frames from `frame`. **0 means no gate**: the
+    // machine's own envelope decides when the note ends, which is what every drum wants and what
+    // every machine did before this field existed.
+    //
+    // This is `Step::length` finally arriving. core/timing.hpp's note-length table is in
+    // SIXTEENTHS OF A STEP and deliberately offers no ticks conversion, because -- as its own
+    // comment says -- "gate length does not have to land on the tick grid: it only decides when
+    // a voice is released, so the caller converts to SAMPLES at control rate, where the tempo is
+    // known". `Engine::fire` is that caller.
+    //
+    // A DURATION rather than a note-off is what lets this exist without a per-note release on
+    // the interface below. The machine owns the voice, so it owns when the voice stops, and
+    // nothing has to keep a note-to-voice map or schedule anything. The cost is that a HELD key
+    // has no duration to give, which is why KEYS mode still cannot release a key and
+    // `Cmd::release_note` is still unimplemented -- those want a `release(note)` virtual, which
+    // is a separate decision and can be added later without disturbing this.
+    //
+    // A machine may ignore it entirely. The one-shot drums do.
+    uint32_t gate_frames = 0;
+
     uint32_t frame = 0;       // which frame of the block it starts on: sample accuracy
 };
 

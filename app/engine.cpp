@@ -851,6 +851,29 @@ void Engine::params_from_kit() {
     }
 }
 
+// `Step::length` in frames, which is the only form a machine can use.
+//
+// core/timing.hpp's table is in SIXTEENTHS OF A STEP and deliberately offers no ticks
+// conversion: a sixteenth of a 24-tick step is 1.5 ticks, which the 96 PPQN grid cannot express,
+// and a gate does not have to land on the grid because it only decides when a voice is released.
+// So the conversion happens here, at control rate, where the tempo is known -- exactly where
+// that header says it should.
+//
+// A length index the pattern should not hold, or a tempo not yet read from the clock, both give
+// 0, which means "no gate" and leaves the machine's own envelope in charge. That is what every
+// machine did before this field existed, so a bad value degrades to the old behaviour rather
+// than to silence.
+uint32_t Engine::gate_frames_for(int track, uint8_t length_index) const {
+    if (!length_valid(length_index) || samples_per_tick_ <= 0.0f) return 0;
+
+    const int ticks = ticks_per_step(Speed(live().tracks[track].speed));
+    const float sixteenths = float(length_sixteenths(length_index));
+    // sixteenths/16 of a step, a step being `ticks` ticks. One multiply by 1/16 rather than a
+    // divide: this runs per trig, but there is no reason to divide where a constant will do.
+    const float frames = sixteenths * float(ticks) * samples_per_tick_ * (1.0f / 16.0f);
+    return frames > 0.0f ? uint32_t(frames) : 0u;
+}
+
 // --- the performance layer ------------------------------------------------
 //
 // The kit, then the morph, then the macros, then any throw. In that order on purpose: a scene is
@@ -1040,12 +1063,26 @@ void Engine::fire(const StepEvent &event) {
         // just the instant of the trigger.
         machines_[track]->prepare(effective_[track]);
 
+        // The note goes to the machine UNFOLDED -- it is not put through `scale_fold` here, and
+        // that is a decision rather than an omission.
+        //
+        // `core/chord`'s `chord_expand` folds the step's note before stacking on it, and it does
+        // so even for a type-`none` chord, which is a single note. So identical step data sounds
+        // different depending on which machine a track hosts: folded on a chord track, as
+        // written on a MONO one. docs/SPEC.md's "melodic tracks fold notes into the scale" argues
+        // for folding both, but there is no notion here of WHICH machines are melodic, and
+        // folding every track would retune the drums -- dsp/kick.cpp reads `note` as a pitch.
+        // Inventing that notion now means inventing it twice: machine switching is the change
+        // that gives the engine a real idea of what a track hosts, and that is where this
+        // belongs. Recorded in docs/UNIT_CHECKLIST.md as well, so the unit can be listened to
+        // with the asymmetry in mind rather than discovered by surprise.
         Trig trig;
         trig.note = event.note;
         trig.velocity = event.velocity;
         trig.accent = event.accent;
         trig.slide = event.slide;
         trig.frame = event.frame;
+        trig.gate_frames = gate_frames_for(track, event.length_index);
         machines_[track]->trigger(trig);
 
         status_.bump_triggered(track);

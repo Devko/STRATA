@@ -149,6 +149,9 @@ private:
     void resolve_tick(uint32_t tick, uint32_t frame);
     void fire(const StepEvent &event);
 
+    // `Step::length` as a frame count for `Trig::gate_frames`; 0 for "no gate".
+    uint32_t gate_frames_for(int track, uint8_t length_index) const;
+
     // The kit with the performance layer over it: the morph, then the macros, then any throw.
     // Control rate, and only when something has moved -- which is why `perform_dirty_` exists
     // rather than recomputing 128 parameters every block for a morph nobody is touching.
