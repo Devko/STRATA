@@ -105,6 +105,11 @@ public:
     // Seed or inspect the card directly, without going through the app.
     bool write_file(const char *path, const void *data, uint32_t bytes);
     int32_t read_file(const char *path, void *out, uint32_t max) const;
+
+    // The first `max` bytes, however big the file is. `read_file` mirrors the ABI and refuses a
+    // buffer smaller than the file (ENAGA_FILE_TOO_BIG), which is right for the app and useless
+    // for a test that wants to look at a 44-byte header on a 5 MiB take.
+    int32_t read_prefix(const char *path, void *out, uint32_t max) const;
     bool has_file(const char *path) const;
     int32_t file_bytes(const char *path) const;   // -1 when there is no such file
     bool remove_file(const char *path);

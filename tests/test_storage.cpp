@@ -516,6 +516,14 @@ const Expect kTable[] = {
     // A pad hit sounds and is not recorded (core/record posts `record_hit` for that).
     {Cmd::trigger_note, 0u, "trigger_note"},
     {Cmd::release_note, 0u, "release_note"},
+
+    // Resampling dirties no project file. The take goes to /RECORD as its own WAV -- which is
+    // not one of a project's eleven files -- and the arm, the cancel and the release only move
+    // the capture buffer's state, which is audio-side and in no file at all. Loading the result
+    // back into a track is `Cmd::set_sample`, which dirties the KIT and has its own row above.
+    {Cmd::resample_arm, 0u, "resample_arm"},
+    {Cmd::resample_cancel, 0u, "resample_cancel"},
+    {Cmd::resample_release, 0u, "resample_release"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:

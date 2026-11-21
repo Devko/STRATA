@@ -169,6 +169,18 @@ enum class Cmd : uint8_t {
     trigger_note,      // track, a: note, b: velocity -- a pad hit, played live
     release_note,      // track, a: note
 
+    // Resampling, docs/SPEC.md's eighth performance tool. Three commands, because a take spans
+    // both contexts: the audio side records it, the main context writes the file.
+    //
+    // `resample_arm` asks for `a` BARS (1, 2, 4 or 8). The engine turns bars into frames -- only
+    // it knows the tempo in samples -- and begins on the next bar line, because a take that is
+    // not bar-aligned does not loop, which is the whole point of recording a round number of
+    // bars. `resample_release` is the main context saying it has finished with the buffer, which
+    // is what lets the next take be armed (dsp/capture.hpp).
+    resample_arm,      // a: bars 1-8
+    resample_cancel,
+    resample_release,
+
     count
 };
 
@@ -292,6 +304,15 @@ struct Status {
     // generation counter docs/SPEC.md requires for a sample swap. A wrap is harmless: the UI
     // compares against the value it saw, it does not count.
     std::atomic<uint8_t> sample_epoch[8] = {};
+
+    // M6. Resampling. `resample_state` is 0 idle, 1 armed (waiting for the bar line), 2
+    // recording, 3 a finished take the card has not had yet; `resample_frames` is how much is in
+    // it. The screen draws a progress bar from the two, and the card side watches for state 3 --
+    // the same single-writer-word discipline as everything else here, because the take's buffer
+    // belongs to the audio side until then (dsp/capture.hpp).
+    std::atomic<uint8_t> resample_state{0};
+    std::atomic<uint32_t> resample_frames{0};
+    std::atomic<uint8_t> resample_clamped{0};   // the take was longer than the buffer holds
 
     // Which pattern is live, so the UI can draw it without reaching into the project.
     std::atomic<uint8_t> live_bank{0};

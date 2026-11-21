@@ -16,6 +16,9 @@ constexpr const char *kKeyProject = "PROJECT";
 constexpr const char *kKeyProjectSeq = "PROJSEQ";
 constexpr const char *kKeyAutoSeq = "AUTOSEQ";
 constexpr const char *kKeyNewSeq = "NEWSEQ";
+// Resampled takes are numbered across restarts, like NEW projects are, so a take never
+// overwrites an earlier one: docs/SPEC.md's /RECORD/STRATA_<n>.WAV.
+constexpr const char *kKeyTakeSeq = "TAKESEQ";
 
 constexpr const char *kDefaultName = "DEFAULT";
 
@@ -426,6 +429,7 @@ const char *Storage::busy_text() const {
         case Job::sample_read: return "READING";
         case Job::sample_convert: return "CONVERTING";
         case Job::sample_resample: return "RESAMPLING";
+        case Job::take_write: return "WRITING";
         default: return nullptr;
     }
 }
@@ -480,6 +484,7 @@ void Storage::service() {
             return;
         case Job::sample_convert: step_sample_convert(); return;
         case Job::sample_resample: step_sample_resample(); return;
+        case Job::take_write: step_take_write(); return;
         case Job::idle: break;
     }
 
@@ -506,6 +511,15 @@ void Storage::service() {
         begin_job(Job::save);
         return;
     }
+    // A finished take, before the sample queue: the whole point is that it is written and then
+    // loaded back, and the load-back goes through that same queue.
+    if (take_pending_ &&
+        engine_->status().resample_state.load(std::memory_order_relaxed) == 3u) {
+        take_pending_ = false;
+        begin_job(Job::take_write);
+        return;
+    }
+
     if (sample_queue_ != 0 && !read_in_flight_) {
         start_next_sample();
         return;
@@ -743,6 +757,13 @@ void Storage::step_load() {
 // post `clear_sample`, WAIT for the epoch, release, load, hand over. Every other order writes
 // over memory a voice may still be reading.
 
+bool Storage::request_resample_write(int into_track) {
+    if (into_track < -1 || into_track >= kTracks) return false;
+    take_track_ = into_track;
+    take_pending_ = true;
+    return true;
+}
+
 bool Storage::request_sample(int track) {
     if (track < 0 || track >= kTracks) return false;
     if (engine_->project().kit.tracks[track].sample[0] == '\0') return false;
@@ -967,6 +988,89 @@ void Storage::step_sample_convert() {
         out_done_ = src_done_;
         hand_sample_over();
     }
+}
+
+void Storage::step_take_write() {
+    // One pass, because `files::save` is the whole-small-file call and a take is at most 5.76
+    // MiB -- the same call a project file uses, and the card writes about 2 MB/s, so this is the
+    // one job that is allowed to be slow. It is the user asking for it and the screen says
+    // WRITING; splitting it would mean a stream and a second ring, for a job done once a take.
+    const Capture &take = engine_->capture();
+    const uint32_t frames = take.frames();
+    if (frames == 0u || take.data() == nullptr) {
+        finish_job("NO TAKE");
+        return;
+    }
+
+    // /RECORD/STRATA_<n>.WAV, numbered from the settings so a take never overwrites an earlier
+    // one across restarts -- the same counter discipline `request_new` uses for project names.
+    const int32_t next = settings_.get(kKeyTakeSeq, 0) + 1;
+    settings_.set(kKeyTakeSeq, next);
+    {
+        char *out = take_name_;
+        const char *end = take_name_ + kTakeNameBytes - 1;
+        append_text(out, "STRATA_", end);
+        append_number(out, uint32_t(next), end);
+        append_text(out, ".WAV", end);
+        *out = '\0';
+    }
+    {
+        char *out = take_path_;
+        const char *end = take_path_ + sizeof take_path_ - 1;
+        append_text(out, "/RECORD/", end);
+        append_text(out, take_name_, end);
+        *out = '\0';
+    }
+
+    const int32_t made = enaga::files::make_folder("/RECORD");
+    if (made < 0) {
+        post(Cmd::resample_release);
+        finish_job(enaga::files::error_name(made));
+        return;
+    }
+
+    // One call, no copy. dsp/capture.hpp reserves the 44 header bytes IN FRONT of the audio for
+    // exactly this: the header goes into them and the whole thing is one `files::save`, rather
+    // than a second 5.76 MiB buffer or two asynchronous writes and a state machine to sequence
+    // them. The take is already interleaved stereo int16, which is the other half of that
+    // choice -- there is no conversion pass over it in the UI thread at all.
+    enaga::wav::Format format{};
+    format.encoding = enaga::wav::pcm;
+    format.channels = 2;
+    format.rate = uint32_t(ENAGA_SAMPLE_RATE);
+    format.bits = 16;
+
+    Capture &writable = engine_->capture_for_write();
+    enaga::wav::header(writable.file_base(), format, writable.data_bytes());
+    const int32_t result =
+        enaga::files::save(take_path_, writable.file_base(), writable.file_bytes());
+
+    // The buffer goes back to the audio side either way: a failed write must not leave a take
+    // wedged in it, because nothing else can arm the next one (dsp/capture.hpp).
+    post(Cmd::resample_release);
+
+    if (result < 0) {
+        finish_job(enaga::files::error_name(result));
+        return;
+    }
+
+    // And into a track, if that is what was asked for. docs/SPEC.md wants the whole round trip
+    // "in one action", so the kit's path is set and the ordinary sample loader does the rest --
+    // the same swap any other sample goes through, epoch handshake included.
+    if (take_track_ >= 0 && take_track_ < kTracks) {
+        char *out = engine_->project_for_load().kit.tracks[take_track_].sample;
+        const char *end = out + kSamplePathBytes - 1;
+        append_text(out, take_path_, end);
+        *out = '\0';
+        kit_dirty_ = true;
+        const int track = take_track_;
+        take_track_ = -1;
+        finish_job(nullptr);
+        request_sample(track);
+        return;
+    }
+    take_track_ = -1;
+    finish_job(nullptr);
 }
 
 void Storage::step_sample_resample() {

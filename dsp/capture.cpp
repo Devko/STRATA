@@ -26,10 +26,21 @@ bool Capture::init(float sample_rate) {
     capacity_ = uint32_t(rate * kCaptureSeconds);
     if (capacity_ < 2u) capacity_ = 2u;
 
-    // Interleaved stereo int16: 5.76 MiB at 48 kHz. Allocated once, here, as CLAUDE.md requires.
-    buffer_ = new int16_t[2u * std::size_t(capacity_)];
-    if (buffer_ == nullptr) return false;
-    for (uint32_t i = 0; i < 2u * capacity_; i++) buffer_[i] = 0;
+    // Interleaved stereo int16, with kHeaderBytes reserved in front for a WAV header: 5.76 MiB
+    // at 48 kHz. Allocated once, here, as CLAUDE.md requires.
+    //
+    // `new uint8_t[]` and then a cast would not be enough -- int16 needs two-byte alignment and
+    // kHeaderBytes is 44, which is even, so the audio starts aligned. Allocating as int16 and
+    // offsetting by 22 of them says that in the type system instead of relying on the arithmetic.
+    static_assert(kHeaderBytes % sizeof(int16_t) == 0,
+                  "the reserved header must be a whole number of samples, or the audio after it "
+                  "would be misaligned");
+    const std::size_t reserved = kHeaderBytes / sizeof(int16_t);
+    int16_t *allocation = new int16_t[reserved + 2u * std::size_t(capacity_)];
+    if (allocation == nullptr) return false;
+    base_ = reinterpret_cast<uint8_t *>(allocation);
+    buffer_ = allocation + reserved;
+    for (std::size_t i = 0; i < reserved + 2u * std::size_t(capacity_); i++) allocation[i] = 0;
 
     wanted_ = 0;
     written_ = 0;

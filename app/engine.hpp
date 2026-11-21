@@ -21,6 +21,7 @@
 #pragma once
 
 #include "buses.hpp"
+#include "capture.hpp"    // resampling's take buffer
 #include "commands.hpp"
 #include "editops.hpp"
 #include "hat.hpp"
@@ -77,6 +78,15 @@ public:
     const ChainPlayer &chain() const { return chain_; }
     const TrackParams &params(int track) const { return params_[track]; }
     const Machine *machine(int track) const { return machines_[track]; }
+
+    // The finished take, for the card to write. Valid from the main context only while
+    // `status().resample_state` reads 3, which is the same discipline a project save uses.
+    const Capture &capture() const { return capture_; }
+
+    // The same buffer, writable, so the card can put a WAV header in the bytes reserved for one.
+    // Main context, and only while `status().resample_state` reads 3 -- see dsp/capture.hpp on
+    // why the reserved bytes exist and why the audio side never touches them.
+    Capture &capture_for_write() { return capture_; }
     bool muted(int track) const { return muted_[track]; }
     float level(int track) const { return mix_[track].level; }
     const InsertChain &chain(int track) const { return mixer_.chain(track); }
@@ -382,6 +392,14 @@ private:
     SendSettings sends_;
     MasterSettings master_;
     PerformState perform_;
+
+    // Resampling's take buffer, 5.76 MiB, taken in init() like everything else.
+    //
+    // `resample_bars_` is what was asked for; the take BEGINS on the next bar line, because a
+    // take that is not bar-aligned does not loop and a round number of bars is what makes it a
+    // loop. dsp/capture.hpp holds the rest of the reasoning.
+    Capture capture_;
+    uint8_t resample_bars_ = 0;      // 0 = nothing armed
 
     // Which track's trigs fire the sidechain duck. docs/SPEC.md: track 1 by default.
     int duck_source_ = 0;

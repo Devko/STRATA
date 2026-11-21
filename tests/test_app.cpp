@@ -30,6 +30,7 @@
 
 #include <enaga/abi.h>
 #include <enaga/clock.hpp>
+#include <enaga/wav.hpp>
 
 
 using namespace strata;
@@ -528,4 +529,155 @@ TEST(app_a_second_stop_drops_ratchet_hits_still_waiting) {
     const float plain = step_energy(100);
 
     CHECK(stopped < 2.0f * plain + 1e-6f);
+}
+
+// --- resampling, end to end ------------------------------------------------------------------
+//
+// docs/SPEC.md's eighth performance tool: "Record the master or one track for 1, 2, 4 or 8 bars
+// to /RECORD as WAV, then load it into a SAMPLE or GRAIN track in one action."
+//
+// Three pieces in three places, which is why this test exists: dsp/capture records the finished
+// master, app/engine arms it and begins it on a BAR LINE, and app/storage writes the WAV and
+// loads it back. The bar alignment is the part that cannot be left out -- a take that starts
+// under the user's finger does not loop, and a round number of bars is the whole point.
+
+TEST(app_a_resample_waits_for_the_bar_before_it_records) {
+    Engine &engine = fresh();
+    put_trig(0, 0);
+    FakeHost::the().set_running(true);
+
+    post(Cmd::resample_arm, 0, 0, 1);              // one bar
+    pump();
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 1);  // armed
+    CHECK_EQ(int(engine.status().resample_frames.load(std::memory_order_relaxed)), 0);
+
+    // Blocks with no tick: still armed, still nothing recorded. An arm that began immediately
+    // would already be filling the buffer here.
+    pump(20);
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 1);
+    CHECK_EQ(int(engine.status().resample_frames.load(std::memory_order_relaxed)), 0);
+
+    // A tick on a bar line starts it. kTicksPerBar is 384 at 96 PPQN, so tick 384 is bar 1.
+    FakeHost::the().deliver_tick(384, 0);
+    pump();
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 2);  // recording
+    CHECK(engine.status().resample_frames.load(std::memory_order_relaxed) > 0);
+}
+
+TEST(app_a_resample_records_a_bar_and_writes_it_to_the_card) {
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+
+    // Something to record.
+    put_trig(0, 0);
+    put_trig(0, 4);
+    post(Cmd::set_param, 0, 0, 11, 127);
+    pump();
+    host.set_running(true);
+
+    post(Cmd::resample_arm, 0, 0, 1);
+    storage().request_resample_write();            // asked for before the take even starts
+    pump();
+
+    // Run a bar and a bit. A bar is 384 ticks; at 130 BPM that is 88,615 frames, so the take is
+    // longer than the test can pump block by block with a tick each -- the ticks only have to
+    // arrive often enough to cross the bar line and let the sequencer play.
+    FakeHost::the().deliver_tick(384, 0);
+    for (int i = 0; i < 1500; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+        if (engine.status().resample_state.load(std::memory_order_relaxed) == 0u) break;
+    }
+
+    // The take finished, the card has it, and the buffer went back to the audio side.
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 0);
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.has_file("/RECORD/STRATA_1.WAV"));
+
+    // A real WAV: 44 bytes of header plus stereo 16-bit frames, and <enaga/wav.hpp> parses it.
+    const int32_t bytes = host.file_bytes("/RECORD/STRATA_1.WAV");
+    CHECK(bytes > 44);
+    CHECK_EQ((bytes - 44) % 4, 0);                 // whole stereo 16-bit frames
+
+    static uint8_t head[64];
+    CHECK(host.read_prefix("/RECORD/STRATA_1.WAV", head, sizeof head) > 0);
+    enaga::wav::Format format{};
+    CHECK(enaga::wav::parse(head, sizeof head, format));
+    CHECK_EQ(int(format.channels), 2);
+    CHECK_EQ(int(format.bits), 16);
+    CHECK_EQ(int(format.rate), int(ENAGA_SAMPLE_RATE));
+    CHECK_EQ(int(format.encoding), int(enaga::wav::pcm));
+    CHECK_EQ(int(format.data_offset), 44);
+    CHECK_EQ(int(format.data_bytes), bytes - 44);
+
+    // And the next take does not overwrite it: the counter lives in the settings.
+    post(Cmd::resample_arm, 0, 0, 1);
+    storage().request_resample_write();
+    host.deliver_tick(768, 0);                     // bar 2
+    for (int i = 0; i < 1500; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(768 + i), 0);
+        pump();
+        if (host.has_file("/RECORD/STRATA_2.WAV")) break;
+    }
+    CHECK(host.has_file("/RECORD/STRATA_1.WAV"));
+    CHECK(host.has_file("/RECORD/STRATA_2.WAV"));
+}
+
+TEST(app_a_resample_can_land_in_a_track_in_one_action) {
+    // docs/SPEC.md asks for the round trip "in one action", which is why the load-back is a
+    // parameter of the request rather than a second gesture.
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+    put_trig(0, 0);
+    post(Cmd::set_param, 0, 0, 11, 127);
+    pump();
+    host.set_running(true);
+
+    constexpr int kLoop = 7;                       // the default kit's SAMPLE track
+    post(Cmd::resample_arm, 0, 0, 1);
+    storage().request_resample_write(kLoop);
+    host.deliver_tick(384, 0);
+
+    // Run until the kit names a take and the card is idle again. No `pump_until_idle()` here:
+    // that waits for a job to START and then finish, and by the time the loop below has carried
+    // the take through the write and the swap there is nothing left to start.
+    bool landed = false;
+    for (int i = 0; i < 4000 && !landed; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+        landed = engine.project().kit.tracks[kLoop].sample[0] != '\0' &&
+                 storage().busy_text() == nullptr &&
+                 engine.status().resample_state.load(std::memory_order_relaxed) == 0u;
+    }
+    CHECK(landed);
+
+    // The kit names the take, and the sample loader took it through the ordinary swap.
+    const char *path = engine.project().kit.tracks[kLoop].sample;
+    CHECK(path[0] != '\0');
+    CHECK(host.has_file(path));
+    CHECK(storage().last_error() == nullptr);
+}
+
+TEST(app_a_second_resample_is_refused_while_one_is_running) {
+    // There is no undo for a lost take: the audio is gone. dsp/capture refuses, and the engine
+    // counts the refusal so the screen can say so.
+    Engine &engine = fresh();
+    FakeHost::the().set_running(true);
+    post(Cmd::resample_arm, 0, 0, 2);
+    pump();
+    FakeHost::the().deliver_tick(384, 0);
+    pump(4);
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 2);
+
+    const uint32_t refused = engine.status().refused.load(std::memory_order_relaxed);
+    post(Cmd::resample_arm, 0, 0, 8);
+    pump();
+    CHECK(engine.status().refused.load(std::memory_order_relaxed) > refused);
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 2);
+
+    // A cancel does stop it, and leaves nothing behind.
+    post(Cmd::resample_cancel);
+    pump();
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 0);
+    CHECK_EQ(int(engine.status().resample_frames.load(std::memory_order_relaxed)), 0);
 }

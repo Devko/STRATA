@@ -47,6 +47,7 @@ bool Engine::init(float sample_rate) {
 
     // Beat repeat's 2-bar ring, 2.93 MiB, here with every other buffer in the signal path.
     if (!repeat_.init(rate_)) return false;
+    if (!capture_.init(rate_)) return false;
 
     perform_init(scenes_, macros_);
 
@@ -874,6 +875,35 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::resample_arm: {
+            // Bars into FRAMES, here, because only this side knows the tempo in samples. A bar
+            // is kTicksPerBar ticks whatever the pattern's length is -- a resample is a length of
+            // TIME, not a number of passes, so a 7-step pattern still gives bars you can loop.
+            const int bars = command.a < 1 ? 1 : (command.a > 8 ? 8 : int(command.a));
+            const float frames = float(bars) * float(kTicksPerBar) * samples_per_tick_;
+            if (frames < 1.0f) {
+                status_.bump_refused();          // the tempo has not settled yet
+                break;
+            }
+            if (!capture_.arm(uint32_t(frames))) {
+                status_.bump_refused();          // a take is running, or one is waiting for the card
+                break;
+            }
+            resample_bars_ = uint8_t(bars);
+            break;
+        }
+
+        case Cmd::resample_cancel:
+            capture_.cancel();
+            resample_bars_ = 0;
+            break;
+
+        case Cmd::resample_release:
+            // The card has the take. This is the only thing that frees the buffer, which is why
+            // it is a command and not a method: the buffer belongs to the audio side.
+            capture_.release();
+            break;
+
         case Cmd::none:
         default:
             break;
@@ -1000,6 +1030,13 @@ void Engine::switch_pattern(int bank, int slot) {
 void Engine::on_bar() {
     uint8_t state = 0;
     if (mute_latch_release(mute_latch_, state)) mute_state_apply(state, muted_);
+
+    // And an armed take starts HERE, on the bar line, which is the whole reason resampling has
+    // an armed state at all: a take that begins under the user's finger does not loop, and a
+    // round number of bars is what makes it a loop. dsp/capture.hpp keeps the bar out of the
+    // buffer deliberately -- it only knows how to be armed and then to run for exactly as long
+    // as it was told -- so this is the one place that decides when.
+    capture_.begin();
 }
 
 void Engine::cross_boundary(uint32_t tick) {
@@ -1304,6 +1341,18 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
                 repeat_pitch_);
     repeat_.hold(repeat_held_);
     repeat_.process(out, int(frames));
+
+    // The take, from the FINISHED master: after the mixer, the limiter and beat repeat, which is
+    // what comes out of the box (dsp/capture.hpp). A tap, so `out` is not modified.
+    capture_.process(out, int(frames));
+
+    status_.resample_state.store(capture_.done()        ? 3u
+                                 : capture_.recording() ? 2u
+                                 : capture_.armed()     ? 1u
+                                                        : 0u,
+                                 std::memory_order_relaxed);
+    status_.resample_frames.store(capture_.frames(), std::memory_order_relaxed);
+    status_.resample_clamped.store(capture_.clamped() ? 1u : 0u, std::memory_order_relaxed);
 
     publish_playheads();
 

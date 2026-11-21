@@ -126,6 +126,23 @@ public:
     // False for a track with no path, or an index that is not a track.
     bool request_sample(int track);
 
+    // --- resampling -------------------------------------------------------
+
+    // Write the finished take to /RECORD/STRATA_<n>.WAV, and -- when `into_track` is a track --
+    // put it in that track's kit and load it straight back.
+    //
+    // Queued, like everything else: `service()` does the work when the take is ready, which is
+    // when `Status::resample_state` reads 3. False only for an index that is not a track and is
+    // not -1, because the take's own readiness is the audio side's to report and may not have
+    // happened yet when the key is pressed.
+    //
+    // docs/SPEC.md asks for the whole thing "in one action", which is why the load-back is a
+    // parameter here rather than a second gesture.
+    bool request_resample_write(int into_track = -1);
+
+    // The name the last take was written under, for the screen; empty before the first.
+    const char *last_take_name() const { return take_name_; }
+
     // Queue every track whose kit names a file. What a project open does.
     void request_all_samples();
 
@@ -179,6 +196,7 @@ private:
         sample_read,       // files::load in flight
         sample_convert,    // pcm_to_s16, in slices
         sample_resample,   // pcm_resample, in slices
+        take_write,        // a resample's WAV, header then payload
     };
 
     // --- paths ---
@@ -192,6 +210,7 @@ private:
     void finish_job(const char *error);
     void step_save();
     void step_load();
+    void step_take_write();
 
     // --- samples ---
     void step_sample_epoch();
@@ -211,6 +230,14 @@ private:
 
     char name_[kNameBytes] = {};
     bool card_usable_ = true;
+    // Resampling. `take_pending_` is a request waiting for the audio side to finish the take;
+    // `take_track_` is the track to load it into afterwards, or -1 for "just the file".
+    bool take_pending_ = false;
+    int take_track_ = -1;
+    static constexpr uint32_t kTakeNameBytes = 24;
+    char take_name_[kTakeNameBytes] = {};
+    char take_path_[ENAGA_FILE_PATH_MAX + 1] = {};
+
     const char *error_ = nullptr;
     const char *project_error_ = nullptr;   // a save's or a load's reason; see last_error()
 

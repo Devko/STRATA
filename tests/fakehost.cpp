@@ -250,6 +250,15 @@ int32_t FakeHost::read_file(const char *path, void *out, uint32_t max) const {
     return int32_t(e.bytes);
 }
 
+int32_t FakeHost::read_prefix(const char *path, void *out, uint32_t max) const {
+    const int index = find(path);
+    if (index < 0) return ENAGA_FILE_NOT_FOUND;
+    const Entry &e = files_[index];
+    const uint32_t take = e.bytes < max ? e.bytes : max;
+    if (take > 0u) std::memcpy(out, arena_ + e.offset, take);
+    return int32_t(take);
+}
+
 bool FakeHost::has_file(const char *path) const { return find(path) >= 0; }
 
 int32_t FakeHost::file_bytes(const char *path) const {

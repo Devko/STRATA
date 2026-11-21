@@ -104,13 +104,30 @@ public:
     // finished with it by then and nothing else writes it.
     const int16_t *data() const { return buffer_; }
 
+    // --- writing it as a WAV, without copying it ---------------------------
+    //
+    // The buffer reserves `kHeaderBytes` in FRONT of the audio, so the main context can write a
+    // 44-byte WAV header there and hand the whole thing to `files::save` in one call. Without the
+    // headroom a 5.76 MiB take would need either a second buffer of the same size or two
+    // asynchronous writes and a state machine to sequence them -- for a file written once a take.
+    // <enaga/wav.hpp> describes the same trick for its own streams ("Stream::create reserves
+    // them"), so this is the house pattern rather than a new idea.
+    static constexpr uint32_t kHeaderBytes = 44;
+
+    // Where to write the header, and how many bytes the finished file is. Main context, once
+    // `done()`; the audio side never touches the reserved bytes.
+    uint8_t *file_base() { return base_; }
+    uint32_t file_bytes() const { return kHeaderBytes + written_ * 2u * 2u; }
+    uint32_t data_bytes() const { return written_ * 2u * 2u; }
+
     // The main context has finished with the take; the buffer is free to be armed again.
     void release();
 
 private:
     enum class State : uint8_t { idle, armed, recording, done };
 
-    int16_t *buffer_ = nullptr;
+    uint8_t *base_ = nullptr;     // the allocation: kHeaderBytes, then the audio
+    int16_t *buffer_ = nullptr;   // base_ + kHeaderBytes, as int16
     uint32_t capacity_ = 0;       // frames
     uint32_t wanted_ = 0;         // frames this take should be
     uint32_t written_ = 0;        // frames written so far
