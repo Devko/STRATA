@@ -23,6 +23,32 @@ deferred concern (external sync) pulled forward into M1.
 
 ---
 
+## Where it actually stands (2026-11-21)
+
+Every figure here is from a cloud session: the host suite, the tic6x device build and the
+emulator. **Nothing in this project has ever run on the unit**, so no exit criterion involving
+load or feel is met, whatever the numbers below say.
+
+| | State | What is actually true |
+| --- | --- | --- |
+| M0 | code complete | `tools/build.sh` links: APP.ENA, no BOOT, MCU or SPI sections. **Never booted.** Its nine checklist boxes need the hardware |
+| M0.5 | folded into M2 | See docs/BUDGET.md; the spike's four configurations were never measured on the unit |
+| M1 | code complete | 4-track beat plays in the emulator. Exit wanted "under 15%"; it reads 33.07% GCC-only with a chord on the stab, which is not comparable — different kit, no cl6x, no cache model |
+| M2 | code complete | Full kit, mixer, insert chain, sends, master. The sidechain duck was **dead code until this session** (both arms of its depth ternary were 0) |
+| M3 | code complete | Sequencer depth, 16 undo levels. `Step::length` became audible only this session, on VA POLY |
+| M4 | code complete | Ten files per project, autosave, background sample loading. **Two data-loss bugs found this session** once app/ became host-testable |
+| M5 | code complete | Scenes, morph, macros, mutes, beat repeat, throws, mutation. Seven of its eight tools are on the upper PADS and **the emulator cannot press a pad**, so most of it has never executed |
+| M6 | nearly | Euclidean generator, KEYS, core/chord, VA POLY (registered, chords expanded in `fire`), GRAIN (written, **unreachable** — the default kit fills all eight tracks). Left: resampling, pad pressure. **Its budget exit is in doubt**: VA POLY costs 4.25 points per voice, 11.3x what SPEC budgets for the whole machine |
+| M7 | not started | Sync settings UI unwritten. Everything else in it is unit verification by definition |
+
+The two things that gate everything and cannot be done here: **boot `build/APP.ENA` on a unit**,
+and **answer the cl6x licence question**. docs/BUDGET.md records cl6x as worth ~2.2x and the 60%
+target depends on it, so a GCC-only figure over 60% means nothing either way.
+
+docs/UNIT_CHECKLIST.md holds the gestures to try, and **none of its boxes is ticked.**
+
+---
+
 ## M0 — Toolchain and skeleton
 
 Everything here is setup; none of it is STRATA's design. Do it once, in WSL.
@@ -199,15 +225,34 @@ gear as master, both on the unit.
 
 ## Testing
 
-The spec's three tiers stand unchanged: host tests for `core/` and `dsp/`, scripted emulator
-runs, and a unit checklist, with only the unit's numbers counting for load and timing. Two
-adjustments:
+The spec's three tiers stand, with one of them **widened this session**: host tests now cover
+`app/` as well as `core/` and `dsp/`, then scripted emulator runs, then a unit checklist, with
+only the unit's numbers counting for load and timing.
+
+**`app/` in the host tests is a change to this plan, made because the plan's own reasoning no
+longer held.** The tiers put `app/` outside host testing because it needs Enaga, and Enaga needs
+hardware. That turned out to be false: Enaga's C++ API is header-only over one struct of function
+pointers that the app runtime defines, and the host Makefile does not link that runtime -- so
+`tests/fakehost.cpp` defines it instead and `app/` compiles for the tests exactly as it does for
+the device, with no `#ifdef` in it. The cost of leaving it untested was five bugs in two sessions,
+two of which lost a user's project. `app/app.cpp` is still outside, because `ENAGA_APP(Strata)`
+defines the package's entry points.
+
+Three adjustments beyond that:
 
 - The "no drift over a simulated hour" test moves to Enaga. STRATA's scheduler tests cover
   swing, speed, length, micro-timing, conditions and seeded mutation against a *synthetic*
   tick stream, which also makes them fast and deterministic.
 - Every load figure is recorded twice, with and without cl6x, so the GCC-only cost stays
   visible instead of being discovered at release.
+- **Mutation testing is the house standard** for every module in `core/` and `dsp/`, and now for
+  `app/`: a surviving mutation is either a missing test or a line that changes no behaviour, and
+  which one it is gets written down. Two independent passes over the same module have twice found
+  behaviours the first pass missed, so a module written by one party is mutation-tested by
+  another where that is possible.
+- **AddressSanitizer over the whole suite** after a DSP change. It is a dozen lines of script and
+  it has found what reading did not: an out-of-range read that a value test cannot see, and a
+  `CHECK_EQ` on `const char *` that compared addresses and so passed five tests for no reason.
 
 ---
 
