@@ -289,59 +289,147 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::toggle_trig: {
+            // a selects which bit: the trig, or the trigless bit that applies a step's locks
+            // without sounding a note. They are mutually exclusive -- a step that is both would
+            // be a trig, so letting both bits stand would make the trigless flag look broken.
             Step &s = pattern_.tracks[track].steps[step];
-            s.flags = uint8_t(s.flags ^ kStepTrig);
+            const uint8_t bit = command.a ? uint8_t(kStepTrigless) : uint8_t(kStepTrig);
+            const uint8_t other = command.a ? uint8_t(kStepTrig) : uint8_t(kStepTrigless);
+            const int flags = (int(s.flags) ^ int(bit)) & ~int(other);
+            s.flags = uint8_t(flags);
             if ((s.flags & kStepTrig) && s.velocity == 0) s.velocity = 100;
             if ((s.flags & kStepTrig) && !length_valid(s.length)) s.length = 8;
             break;
         }
 
-        case Cmd::set_step_note:
-            pattern_.tracks[track].steps[step].note = clamp_u8(command.a);
-            break;
-
-        case Cmd::set_step_velocity:
-            pattern_.tracks[track].steps[step].velocity =
-                uint8_t(command.a < 1 ? 1 : (command.a > 127 ? 127 : command.a));
-            break;
-
-        case Cmd::set_lock:
-            pattern_set_lock(pattern_, track, step, command.a, clamp_u8(command.b));
-            break;
-
         case Cmd::clear_lock:
             pattern_clear_lock(pattern_, track, step, command.a);
-            break;
-
-        case Cmd::clear_step:
-            step_clear(pattern_.tracks[track].steps[step]);
-            pattern_clear_step_locks(pattern_, track, step);
-            break;
-
-        case Cmd::clear_track:
-            track_init(pattern_.tracks[track]);
-            for (int s = 0; s < kStepsPerTrack; s++) pattern_clear_step_locks(pattern_, track, s);
-            scheduler_.configure(pattern_);
             break;
 
         case Cmd::set_track_length:
             pattern_.tracks[track].length =
                 uint8_t(command.a < 1 ? 1 : (command.a > kStepsPerTrack ? kStepsPerTrack : command.a));
-            scheduler_.configure(pattern_);
+            reconfigure();
             break;
 
         case Cmd::set_track_speed:
             if (command.a < uint8_t(Speed::count)) {
                 pattern_.tracks[track].speed = command.a;
-                scheduler_.configure(pattern_);
+                reconfigure();
             }
             break;
 
         case Cmd::set_pattern_swing:
             pattern_.swing = uint8_t(command.a < kSwingMin ? kSwingMin
                                                            : (command.a > kSwingMax ? kSwingMax : command.a));
-            scheduler_.configure(pattern_);
+            reconfigure();
             break;
+
+        // --- M3: deltas, undo, ranges and recording ---------------------------
+
+        case Cmd::step_field_delta:
+            if (command.a < uint8_t(StepField::count)) {
+                step_field_apply(pattern_.tracks[track].steps[step], StepField(command.a),
+                                 int(int8_t(command.b)));
+            }
+            break;
+
+        case Cmd::lock_delta: {
+            if (command.a >= kParams) break;
+            const uint8_t param = command.a;
+
+            // The base is the step's own lock if it has one, and the kit value if it does not --
+            // so the first click of an encoder on an unlocked step moves away from what you are
+            // currently hearing rather than from zero.
+            uint8_t base = params_[track].v[param];
+            pattern_get_lock(pattern_, track, step, param, base);
+            const uint8_t value = clamp_u8(int(base) + int(int8_t(command.b)));
+
+            if (!pattern_set_lock(pattern_, track, step, param, value)) {
+                // "Full" usually means slots abandoned by relocation rather than 1,024 real
+                // locks: growing a step's run moves it to the top of the pool and leaves the old
+                // one behind (core/pattern.hpp). Compacting reclaims those, so try once more
+                // before refusing -- otherwise locks start failing long before the pool is
+                // actually full, and an undo level gets burned on an edit that did nothing.
+                pattern_compact_locks(pattern_);
+                if (!pattern_set_lock(pattern_, track, step, param, value)) {
+                    status_.bump_refused();  // genuinely full; saying nothing would be a lie
+                    break;
+                }
+            }
+
+            // Heard immediately if this is the step that is playing. Without this a
+            // motion-recorded knob is silent until the next pass of the loop, because fire()
+            // built this track's effective parameters for the current step before the lock
+            // existed -- which would read as "motion recording does nothing".
+            if (scheduler_.playhead(track) == uint8_t(step)) effective_[track].v[param] = value;
+            break;
+        }
+
+        case Cmd::undo_mark: {
+            Gesture gesture;
+            gesture.kind = command.a;
+            gesture.track = uint8_t(track);
+            gesture.step = uint8_t(step);
+            gesture.seq = command.b;
+            undo_.mark(pattern_, gesture);
+            break;
+        }
+
+        case Cmd::undo:
+            // A restored pattern may carry different track lengths, speeds or swing, so the
+            // scheduler's derived timing has to be rebuilt. The PRE/NEI chain state is
+            // deliberately NOT reset: an undo is an edit, not a pattern change, and restarting
+            // the chain would make a conditional step somewhere else in the pattern fire
+            // differently because of an edit that had nothing to do with it.
+            if (undo_.undo(pattern_)) reconfigure();
+            break;
+
+        case Cmd::redo:
+            if (undo_.redo(pattern_)) reconfigure();
+            break;
+
+        case Cmd::range_copy:
+            range_copy(pattern_, track, step, int(command.a), clip_);
+            break;
+
+        case Cmd::range_paste:
+            // A refused paste means the lock pool had no room even after compaction. It leaves
+            // the pattern untouched (core/editops.hpp), so the only thing to do is count it.
+            if (!range_paste(pattern_, track, step, clip_)) status_.bump_refused();
+            break;
+
+        case Cmd::range_erase:
+            range_erase(pattern_, track, step, int(command.a));
+            break;
+
+        case Cmd::track_erase:
+            track_erase(pattern_, track);
+            break;
+
+        case Cmd::range_transpose:
+            range_transpose(pattern_, track, step, int(command.a), int(int8_t(command.b)));
+            break;
+
+        case Cmd::range_nudge:
+            range_nudge(pattern_, track, step, int(command.a), int(int8_t(command.b)));
+            break;
+
+        case Cmd::record_hit: {
+            // The step and the micro-timing were resolved in the main context by core/record,
+            // from the clock state at the moment the hit arrived. Nothing here re-decides them.
+            Step &s = pattern_.tracks[track].steps[step];
+            const int flags = (int(s.flags) | int(kStepTrig)) & ~int(kStepTrigless);
+            s.flags = uint8_t(flags);
+            s.note = clamp_u8(command.a);
+            s.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
+            s.micro = int8_t(command.c);
+            if (!length_valid(s.length)) s.length = 8;
+            // The step's locks are deliberately left alone. Overdubbing onto a programmed part
+            // should keep the sound it was programmed with; a hit replaces the note, not the
+            // step's whole character.
+            break;
+        }
 
         case Cmd::set_param:
             if (command.a < kParams) {
@@ -383,6 +471,18 @@ void Engine::apply(const Command &command) {
         default:
             break;
     }
+}
+
+// Rebuild the scheduler's derived timing after anything that changes a track's length, speed or
+// swing -- including an undo, which can change all three at once.
+//
+// It exists so that `samples_per_tick_` cannot be forgotten. Calling configure() with its
+// default leaves the scheduler with no idea how long a step is, and the only visible effect is
+// that ratchets stop being spread across the step: every hit lands on the step's own frame. That
+// was real, from M2 -- changing a track's length flattened its ratchets until the next tempo
+// change, which is about as quiet as a bug gets.
+void Engine::reconfigure() {
+    scheduler_.configure(pattern_, samples_per_tick_);
 }
 
 // --- the tick -------------------------------------------------------------
@@ -454,8 +554,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     if (clock_now.tempo != tempo_) {
         tempo_ = clock_now.tempo;
         const float bpm = tempo_ > 1.0f ? tempo_ : 1.0f;
-        const float samples_per_tick = rate_ * 60.0f / (bpm * float(enaga::clock::ppqn));
-        scheduler_.configure(pattern_, samples_per_tick);
+        samples_per_tick_ = rate_ * 60.0f / (bpm * float(enaga::clock::ppqn));
+        reconfigure();
     }
 
     // Enaga's clock reports the ticks falling in this block, each with the frame it lands on.
@@ -494,6 +594,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     status_.running.store(clock.running ? 1u : 0u, std::memory_order_relaxed);
     status_.bump_blocks();
     status_.voices.store(voices, std::memory_order_relaxed);
+    status_.undo_depth.store(uint8_t(undo_.depth()), std::memory_order_relaxed);
+    status_.redo_depth.store(uint8_t(undo_.redo_depth()), std::memory_order_relaxed);
 
     const float peak = mixer_.peak();
     const float scaled = peak * 1000.0f;

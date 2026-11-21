@@ -101,6 +101,97 @@ standing in for CHORD, and the LOOP sampler. The default pattern plays all of th
       parameter. The knob should be heard at once, and the lock should win again from the next
       step.
 
+## M3 — sequencer depth
+
+Everything here is a gesture, and gestures are the part of this project with the least test
+cover: `app/` is the only code that includes Enaga headers, so none of it is reachable from
+`make -C host test`. The logic behind each one is host-tested in `core/` (undo, recording's
+arithmetic, the step fields, copy and paste); what needs the unit is whether the gesture itself
+is findable and whether it feels like an instrument.
+
+`tests/scenario_m3.sh` covers one path end to end in the emulator — toggle a step, undo, redo,
+each verified by its effect rather than by the absence of a crash — so if that scenario passes,
+the command ring and the undo stack are known to work before you touch the hardware.
+
+**Step editing**
+
+- [ ] Tap STEP: the trig toggles. Hold STEP and turn A-D: that parameter is **locked on that
+      step only**, and the trig does *not* toggle when the key comes up. The second half is the
+      one to watch: if a held step toggles its trig on release, every lock edit also flips a trig.
+- [ ] F1 + STEP makes a step **trigless**: its locks apply and no note sounds. The LED is red
+      alone, where a trig is green. An empty step and a trigless step must be distinguishable.
+- [ ] Hold STEP + OK opens the step page. All eleven fields reachable on three pages with the
+      selection keys, and each one does what its name says. **Check the condition field
+      specifically**: NONE, then the eight named conditions, then the 35 A:B pairs, clamping at
+      both ends rather than wrapping.
+- [ ] Hold two STEP keys: the pair is a selection (the screen says `SEL n-m`). CLR erases it; UP
+      copies it, DOWN pastes it; A transposes it and B nudges its micro-timing.
+- [ ] CLR with nothing held erases the **whole track**. Confirm F1 + CLR brings it straight back:
+      that is the only thing that makes the bare gesture acceptable.
+
+**Undo**
+
+- [ ] F1 + CLR undoes, F1 + OK redoes, 16 levels deep. The CLR and OK keys light when there is
+      somewhere to go, so the panel says whether undo will do anything.
+- [ ] **One sweep is one level.** Hold a step and turn an encoder through forty clicks, then
+      undo once: the whole sweep goes, not one click of it. If each click took a level, the
+      fortieth would have thrown away everything else in the history.
+- [ ] A live-recording pass is one level, and a motion pass is one level, however many steps
+      they touched.
+- [ ] Undo after changing a track's length or speed restores those too, and the sequencer keeps
+      playing without a glitch at the moment it happens.
+
+**Recording**
+
+- [ ] F2 arms REC (the key lights red). With the transport running, pad hits land on the nearest
+      step with velocity. F1 + VALUE sets the quantize amount, shown as `Q nnn`.
+- [ ] **Quantize 100 vs 0.** At 100 every hit snaps dead to the step. At 0 it keeps where you
+      played it, as micro-timing. Play deliberately late and listen for it.
+- [ ] **Swing and recording must agree.** Set the pattern swing to 66 and play dead on the swung
+      offbeat: it must record as micro 0, not as an offset. This is the one piece of recording
+      arithmetic that is wrong in a way you can only hear — `core/record.cpp` tests it against
+      `core/timing`, but the two agreeing on the unit is what counts.
+- [ ] **Pad latency.** `kPadLatencyMs` in `core/record.hpp` is **6 ms, a placeholder** — the
+      spec says "about 4-8 ms" and nobody has measured it. To measure: set quantize to 0, play
+      along to the kick as precisely as you can for a bar, then read the recorded `micro` values
+      on the step page. A consistent bias one way is the latency figure; put it in that constant
+      and record it here. Everything else about recording is correct before this is done; hits
+      just sit slightly late.
+- [ ] **Quantize 0 on a slow track.** `Step::micro` is ±11 ticks, but a 1/4x step is 96 ticks and
+      1/8x is 192, so on those tracks an off-grid hit mostly *cannot* be stored where it was
+      played: it clamps, and the screen says `OFF GRID`. Confirm that message appears rather than
+      the hit silently moving. (This is `Step::micro`'s range from `docs/SPEC.md`, not a bug in
+      the quantizer. If it proves annoying in practice, the fix is a design decision about what
+      grid a slow track records on.)
+- [ ] **Motion recording.** With REC on and the transport running, turn an encoder: locks are
+      written on the steps the playhead passes over, and **the knob is audible as you turn it**.
+      If the sound only changes on the next pass of the loop, the effective-parameter mirror in
+      `Engine::apply` has been lost and motion recording will read as doing nothing.
+- [ ] MIDI notes at MIDI IN record exactly as pad hits do, channels 1-8 addressing tracks 1-8.
+      This shares one stamping mechanism with the pads deliberately; if pads record correctly and
+      MIDI does not, suspect Enaga's MIDI DIN rather than STRATA (see the note at the end).
+
+**Polymeter**
+
+- [ ] F1 + octave keys set the selected track's length, F1 + selection keys its speed; both show
+      on the grid line as `L nn` and `X n`. Set track 2 to 15 steps against track 1's 16 and
+      listen for the phase walking — that is the feature working.
+- [ ] A track at 2x with micro-timing at the extremes still fires every step exactly once per
+      pass (the case `core/timing.cpp`'s scan window was written for).
+
+**Two things that are deliberately not finished**
+
+- [ ] **Gate length does nothing audible yet, and that is expected.** `Step::length` is stored,
+      edited on the step page, saved and restored, but every machine STRATA currently has is a
+      one-shot: each one builds its amplitude envelope with a sustain of 0, so a note ends when
+      its decay does and there is nothing for a gate to release. The field becomes audible with
+      the first sustaining machine (VA POLY / KEYS, M6). Check it survives a save and reload
+      rather than listening for it.
+- [ ] **A full lock pool.** 1,024 locks per pattern. `lock_delta` compacts and retries before
+      refusing, so this should take real work to reach; when it is reached the screen says
+      `FULL n`. Try to reach it (eight locks on every step of several tracks) and confirm the
+      message appears and nothing else misbehaves.
+
 ## M0.5 — budget spike
 
 Folded into the M2 worst-case measurement above — see `docs/BUDGET.md` for why. These two lines

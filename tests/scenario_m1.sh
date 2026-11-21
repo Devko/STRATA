@@ -76,7 +76,7 @@ log = report.get("log", [])
 check(report.get("app_status") == "APP RUNNING", "app is running",
       f'status={report.get("app_status")!r}')
 check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_reason")!r}')
-check("strata m1 ready" in log, "init() ran to completion")
+check("strata ready" in log, "init() ran to completion")
 
 # The transport logs this the first time the clock reports itself running on the internal
 # source. Without it the key press never arrived and every load figure below is meaningless --

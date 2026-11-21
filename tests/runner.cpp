@@ -13,7 +13,11 @@ const char *Registry::current = "";
 
 void Registry::add(const char *name, void (*fn)()) {
     if (count >= kMax) {
-        std::printf("test registry full (%d), raise Registry::kMax\n", kMax);
+        // A failure, not just a message. Dropping a registration means a test that never runs
+        // and therefore never fails, and a suite that is quietly getting smaller while reporting
+        // success is worse than no suite at all.
+        std::printf("test registry full (%d), raise Registry::kMax: dropped %s\n", kMax, name);
+        failures++;
         return;
     }
     entries[count].name = name;

@@ -38,17 +38,37 @@ enum class Cmd : uint8_t {
     set_tempo,         // f: BPM
 
     // --- pattern editing ---
-    toggle_trig,       // track, step
-    set_step_note,     // track, step, a: note
-    set_step_velocity, // track, step, a: velocity
-    set_step_field,    // track, step, a: field id, b: value
-    set_lock,          // track, step, a: param, b: value
+    toggle_trig,       // track, step, a: 1 = the trigless bit instead of the trig
     clear_lock,        // track, step, a: param
-    clear_step,        // track, step
-    clear_track,       // track
     set_track_length,  // track, a: length
     set_track_speed,   // track, a: speed
     set_pattern_swing, // a: swing
+
+    // --- pattern editing, M3 -----------------------------------------------
+    //
+    // These carry a DELTA rather than a value, which is the opposite of the M2 commands above
+    // and deliberate. An encoder sends several clicks per audio block, and the UI can only read
+    // the pattern as it was a block ago, so computing "current + delta" on the UI side loses
+    // every click after the first. Applying the delta on the audio side, to the authoritative
+    // step, cannot lose one. The cost is that the screen shows the result one block late, which
+    // at 1.33 ms is not a thing a person can see.
+    step_field_delta,  // track, step, a: StepField, b: int8 delta
+    lock_delta,        // track, step, a: param index, b: int8 delta
+
+    undo_mark,         // track, step, a: GestureKind, b: the UI's gesture counter
+    undo,
+    redo,
+
+    range_copy,        // track, step: the first step, a: how many
+    range_paste,       // track, step: the first step
+    range_erase,       // track, step: the first step, a: how many
+    track_erase,       // track
+    range_transpose,   // track, step: the first step, a: how many, b: int8 semitones
+    range_nudge,       // track, step: the first step, a: how many, b: int8 ticks
+
+    // A live-recorded hit, already resolved to a step and a micro-timing value by core/record in
+    // the main context -- where the clock state that stamped it was read.
+    record_hit,        // track, step, a: note, b: velocity, c: int8 micro
 
     // --- kit and sound ---
     set_param,         // track, a: param index, b: value
@@ -73,7 +93,12 @@ struct Command {
     uint8_t step = 0;
     uint8_t a = 0;
     uint8_t b = 0;
-    uint8_t pad_[3] = {};   // keeps `f` aligned and the struct exactly 16 bytes
+    // Three more bytes, which used to be padding. They cost nothing -- the struct has to be 16
+    // bytes and `f` has to stay 4-byte aligned either way -- and they are what lets a recorded
+    // hit carry its note, velocity and micro-timing in one command instead of three.
+    uint8_t c = 0;
+    uint8_t d = 0;
+    uint8_t e = 0;
     float f = 0.0f;
     uint32_t pad2_ = 0;
 };
@@ -160,6 +185,20 @@ struct Status {
     std::atomic<uint16_t> peak_milli{0};       // master peak x 1000
     std::atomic<uint8_t> voices{0};
     std::atomic<uint8_t> running{0};
+
+    // M3. How deep the undo history is, so the screen can say whether F1+CLR will do anything,
+    // and a count of edits the audio side had to refuse -- a paste that did not fit in the lock
+    // pool, almost always. A refused edit has to be visible: the same reasoning as the dropped
+    // command count above, and the same failure if it is not (the user repeats the edit and
+    // concludes the box is broken).
+    std::atomic<uint8_t> undo_depth{0};
+    std::atomic<uint8_t> redo_depth{0};
+    std::atomic<uint32_t> refused{0};
+
+    // Audio context only, so load-then-store is safe with one writer (see the note above).
+    void bump_refused() {
+        refused.store(refused.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+    }
 
     void publish_playhead(int track, uint8_t step) {
         playhead[track].store(step, std::memory_order_relaxed);

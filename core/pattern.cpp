@@ -115,7 +115,11 @@ void step_sanitize(Step &step) {
     step.flags = uint8_t(step.flags & kStepFlagMask);
     step.note = uint8_t(step.note & 0x7Fu);
     step.velocity = clamp_u8(step.velocity, 1, 127);
-    if (step.length == 0) step.length = 1;
+    // Both ends, like every other field here. The low end was always clamped; the high end was
+    // not, so a corrupt length of 21..255 survived a load, and length_sixteenths() then returned
+    // 0 -- a silently SILENT note, which is exactly what index 0 being reserved as invalid was
+    // meant to make impossible. Found by reading, not by a failure: nothing crashes either way.
+    step.length = clamp_u8(step.length, 1, uint8_t(kLengthMax));
     if (step.micro > kMicroRange) step.micro = int8_t(kMicroRange);
     if (step.micro < -kMicroRange) step.micro = int8_t(-kMicroRange);
     if (step.probability > 100) step.probability = 100;
@@ -251,11 +255,17 @@ uint16_t pattern_locks_free(const Pattern &pattern) {
 }
 
 uint16_t pattern_compact_locks(Pattern &pattern) {
-    // 2 KiB of stack, well inside the 16 KiB frame limit, and this runs at save time in the
-    // main context -- never in audio(). Copying through scratch rather than in place keeps the
-    // move trivially correct: runs are bump-allocated and so appear in the pool in no
-    // particular order, and an in-place pack walking steps in order would overwrite a run it
-    // had not moved yet.
+    // 2 KiB of stack, well inside the 16 KiB frame limit the device build enforces.
+    //
+    // This used to say "save time, main context, never in audio()". That stopped being true at
+    // M3: core/editops.cpp compacts inside a paste, and app/engine.cpp compacts before refusing
+    // a lock, both in audio context. It is safe there -- no allocation, a bounded loop over
+    // 1,024 slots, once per edit rather than per block -- but it is now on the audio path, so
+    // anything added here has to hold the audio contract.
+    //
+    // Copying through scratch rather than in place keeps the move trivially correct: runs are
+    // bump-allocated and so appear in the pool in no particular order, and an in-place pack
+    // walking steps in order would overwrite a run it had not moved yet.
     Lock packed[kLockPool];
     uint16_t write = 0;
 

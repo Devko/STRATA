@@ -593,3 +593,23 @@ TEST(sanitize_leaves_a_legal_step_alone) {
     CHECK_EQ(int(step.ratchet), int(copy.ratchet));
     CHECK_EQ(int(step.chord), int(copy.chord));
 }
+
+// The length index has a reserved invalid 0 AND a top of kLengthMax, and a corrupt byte can be
+// either side. Only the low end used to be clamped, which let a length of 21..255 through a
+// load; length_sixteenths() then returns 0 and the step plays a note of no duration. The whole
+// point of reserving index 0 was that an unusable length should be refusable rather than silent,
+// so the high end has to be clamped too.
+TEST(sanitize_clamps_a_length_at_both_ends) {
+    for (int raw = 0; raw <= 255; raw++) {
+        Step step;
+        step_clear(step);
+        step.length = uint8_t(raw);
+        step_sanitize(step);
+
+        CHECK(length_valid(step.length));
+        CHECK(length_sixteenths(step.length) > 0);
+
+        // A legal value must survive untouched: clamping must not quietly rewrite good data.
+        if (raw >= 1 && raw <= kLengthMax) CHECK_EQ(int(step.length), raw);
+    }
+}

@@ -9,6 +9,7 @@
 // block, so an edit can never land halfway through a step and a save can never race the
 // transport. docs/SPEC.md, "Software architecture".
 #include "engine.hpp"
+#include "record.hpp"       // live recording's stamping and quantizing, used from here only
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
@@ -36,6 +37,13 @@ void append_tenths(char *&out, uint32_t tenths) {
     append_number(out, tenths / 10);
     *out++ = '.';
     *out++ = char('0' + tenths % 10);
+}
+
+void append_hex4(char *&out, uint32_t value) {
+    for (int shift = 12; shift >= 0; shift -= 4) {
+        const uint32_t nibble = (value >> shift) & 0xFu;
+        *out++ = char(nibble < 10 ? '0' + nibble : 'A' + (nibble - 10));
+    }
 }
 
 void append_padded(char *&out, uint32_t value, int width) {
@@ -105,6 +113,10 @@ constexpr int track_for_pad(int pad) { return pad % 2 == 0 ? pad / 2 : -1; }
 // GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
 enum class Mode : uint8_t { grid, edit, mixer };
 
+// The step page shows four of a step's fields at a time, so the selection keys page through
+// them. Derived rather than written down: core/stepedit.hpp owns how many fields there are.
+constexpr int kFieldPages = (kStepFields + 3) / 4;
+
 const char *page_name(Page page) {
     switch (page) {
         case Page::src:  return "SRC";
@@ -120,7 +132,7 @@ public:
     bool init() override {
         if (!engine_.init(float(ENAGA_SAMPLE_RATE))) return false;
         enaga::clock::set_tempo(130.0f);     // the spec's reference tempo
-        enaga::log("strata m1 ready");
+        enaga::log("strata ready");
         return true;
     }
 
@@ -132,13 +144,18 @@ public:
 
     void on_key(int key, bool down) override {
         if (key == ENAGA_KEY_F1) { shift_ = down; return; }
-        if (!down) return;
+        if (key == ENAGA_KEY_PUSH_VALUE) { value_pushed_ = down; return; }
 
+        // A STEP key needs its release as well as its press. Holding one is a modifier -- it
+        // locks a parameter, opens the step page or starts a range -- and a step held as a
+        // modifier must NOT toggle its trig when it comes up. That can only be decided on the
+        // release: at the moment of the press there is no way to know which it was yet.
         if (key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
-            const int step = key - ENAGA_KEY_STEP1 + page_ * 16;
-            post(Cmd::toggle_trig, uint8_t(selected_), uint8_t(step));
+            on_step_key(key - ENAGA_KEY_STEP1 + page_ * 16, down);
             return;
         }
+
+        if (!down) return;
 
         switch (key) {
             case ENAGA_KEY_F5:
@@ -156,42 +173,138 @@ public:
                 post(Cmd::stop, 0, 0, stop_armed_ ? 1 : 0);
                 stop_armed_ = !stop_armed_;
                 break;
+
+            case ENAGA_KEY_F2:                         // REC: live and motion recording
+                rec_ = !rec_;
+                // A whole recording pass is one undo level, so the gesture ends when recording
+                // does -- and the next pass must not coalesce into the last one.
+                end_gesture();
+                notice(rec_ ? "REC ON" : "REC OFF");
+                break;
+
             case ENAGA_KEY_F4:                         // HOME: the grid
                 mode_ = Mode::grid;
+                step_page_ = false;
                 break;
             case ENAGA_KEY_F7:                         // MIXER
                 mode_ = Mode::mixer;
+                step_page_ = false;
                 break;
             case ENAGA_KEY_F8:                         // EDIT: the sound pages
                 mode_ = Mode::edit;
+                step_page_ = false;
                 break;
 
-            // The octave keys are the step page in GRID, as the spec's table says.
+            case ENAGA_KEY_OK:
+                if (held_step_ >= 0) {
+                    // Hold STEP + OK: the step page, on that step (docs/SPEC.md, "Step editing").
+                    step_page_ = true;
+                    page_step_ = held_step_;
+                    field_page_ = 0;
+                    held_used_ = true;                 // so the release does not toggle the trig
+                    mode_ = Mode::grid;
+                } else if (shift_) {
+                    post(Cmd::redo);                   // F1 + OK = redo
+                    end_gesture();
+                    notice("REDO");
+                } else if (step_page_) {
+                    step_page_ = false;                // OK again closes it
+                }
+                break;
+
+            case ENAGA_KEY_CLR:
+                if (shift_) {
+                    post(Cmd::undo);                   // F1 + CLR = undo
+                    end_gesture();
+                    notice("UNDO");
+                } else {
+                    erase_selection();
+                }
+                break;
+
+            // Copy and paste. docs/SPEC.md asks for them for steps, tracks and patterns but
+            // maps no keys, and the arrow keys are the only unused pair on the panel. UP takes
+            // the selection, DOWN puts it down again.
+            case ENAGA_KEY_UP:
+                copy_selection();
+                break;
+            case ENAGA_KEY_DOWN:
+                paste_selection();
+                break;
+
+            // The octave keys are the step page in GRID; with F1 they are the track's length,
+            // which is what makes polymeter reachable without a menu. The spec's key table.
             case ENAGA_KEY_OCTAVE_LEFT:
-                if (page_ > 0) page_--;
+            case ENAGA_KEY_OCTAVE_RIGHT: {
+                const int delta = key == ENAGA_KEY_OCTAVE_LEFT ? -1 : +1;
+                if (shift_) {
+                    const int length = int(engine_.pattern().tracks[selected_].length) + delta;
+                    mark(GestureKind::length, selected_, 0);
+                    post(Cmd::set_track_length, uint8_t(selected_), 0,
+                         uint8_t(length < 1 ? 1
+                                            : (length > kStepsPerTrack ? kStepsPerTrack : length)));
+                    end_gesture();
+                } else {
+                    const int next = page_ + delta;
+                    page_ = next < 0 ? 0 : (next > 3 ? 3 : next);
+                }
                 break;
-            case ENAGA_KEY_OCTAVE_RIGHT:
-                if (page_ < 3) page_++;
-                break;
+            }
 
-            // The selection keys move within the current mode.
+            // The selection keys move within the current mode; with F1 they walk the selected
+            // track's speed, the other half of polymeter.
             case ENAGA_KEY_SELECT_LEFT:
-                select(-1);
+                if (shift_) walk_speed(-1); else select(-1);
                 break;
             case ENAGA_KEY_SELECT_RIGHT:
-                select(+1);
-                break;
-            case ENAGA_KEY_CLR:
-                post(shift_ ? Cmd::clear_track : Cmd::clear_step,
-                     uint8_t(selected_), uint8_t(cursor_step_));
+                if (shift_) walk_speed(+1); else select(+1);
                 break;
             default:
                 break;
         }
     }
 
-    // What the two selection keys under the screen do depends on the mode.
+    // --- STEP keys: tap, hold, and a pair for a range --------------------
+
+    void on_step_key(int step, bool down) {
+        if (down) {
+            if (held_step_ >= 0 && held_step_ != step) {
+                // A second STEP held makes the pair a selection, for CLR, copy, paste and the
+                // range edits on A and B (docs/SPEC.md, "Step editing").
+                range_first_ = held_step_ < step ? held_step_ : step;
+                range_last_ = held_step_ < step ? step : held_step_;
+                held_used_ = true;      // the first key made a selection; it was not a tap
+                notice("RANGE");
+                return;
+            }
+            // A fresh single press drops any previous selection. Without this, a range made
+            // minutes ago would still be what the next CLR erases, which is the sort of thing
+            // that loses someone's pattern.
+            range_first_ = range_last_ = -1;
+            held_step_ = step;
+            held_used_ = false;
+            return;
+        }
+
+        if (step != held_step_) return;        // the second key of a range coming back up
+
+        if (!held_used_) {
+            // A tap. With F1 it toggles the trigless bit instead: a step that applies its locks
+            // without sounding a note.
+            mark(GestureKind::trig, selected_, step);
+            post(Cmd::toggle_trig, uint8_t(selected_), uint8_t(step), shift_ ? 1 : 0);
+        }
+        held_step_ = -1;
+        end_gesture();
+    }
+
+    // --- what the selection keys do depends on where you are -------------
+
     void select(int delta) {
+        if (step_page_) {
+            field_page_ = (field_page_ + delta + kFieldPages) % kFieldPages;
+            return;
+        }
         switch (mode_) {
             case Mode::grid:
                 page_ = (page_ + delta + 4) % 4;                       // step page 1-4
@@ -205,8 +318,93 @@ public:
         }
     }
 
+    // The speed encoder walks kSpeedDisplayOrder (fastest to slowest), not the enum's own
+    // numbering -- core/timing.hpp numbers 1x as 0 so that zeroed memory means normal speed,
+    // which is deliberately not the order anyone wants to scroll through.
+    void walk_speed(int delta) {
+        const uint8_t current = engine_.pattern().tracks[selected_].speed;
+        int index = 0;
+        for (int i = 0; i < int(Speed::count); i++) {
+            if (uint8_t(kSpeedDisplayOrder[i]) == current) index = i;
+        }
+        index += delta;
+        if (index < 0) index = 0;
+        if (index >= int(Speed::count)) index = int(Speed::count) - 1;
+        mark(GestureKind::length, selected_, 0);
+        post(Cmd::set_track_speed, uint8_t(selected_), 0, uint8_t(kSpeedDisplayOrder[index]));
+        end_gesture();
+    }
+
+    // --- CLR, copy and paste ---------------------------------------------
+
+    // What CLR erases is the narrowest thing selected: a held step, then a range, then the whole
+    // track. A bare CLR wiping a track is a large gesture to leave unguarded, and it would be
+    // reckless without undo -- it is acceptable here because F1 + CLR brings it straight back,
+    // which is exactly what this milestone adds.
+    void erase_selection() {
+        if (held_step_ >= 0) {
+            mark(GestureKind::erase, selected_, held_step_);
+            post(Cmd::range_erase, uint8_t(selected_), uint8_t(held_step_), 1);
+            held_used_ = true;
+            notice("STEP CLEARED");
+        } else if (range_first_ >= 0) {
+            mark(GestureKind::erase, selected_, range_first_);
+            post(Cmd::range_erase, uint8_t(selected_), uint8_t(range_first_),
+                 uint8_t(range_last_ - range_first_ + 1));
+            notice("RANGE CLEARED");
+        } else {
+            mark(GestureKind::erase, selected_, 0);
+            post(Cmd::track_erase, uint8_t(selected_));
+            notice("TRACK CLEARED  F1+CLR UNDO");
+        }
+        end_gesture();
+    }
+
+    void copy_selection() {
+        int first = 0;
+        int count = kStepsPerTrack;
+        if (held_step_ >= 0) {
+            first = held_step_;
+            count = 1;
+            held_used_ = true;
+        } else if (range_first_ >= 0) {
+            first = range_first_;
+            count = range_last_ - range_first_ + 1;
+        }
+        post(Cmd::range_copy, uint8_t(selected_), uint8_t(first), uint8_t(count));
+        notice(count == 1 ? "STEP COPIED" : "COPIED");
+    }
+
+    void paste_selection() {
+        const int first = held_step_ >= 0 ? held_step_ : (range_first_ >= 0 ? range_first_ : 0);
+        if (held_step_ >= 0) held_used_ = true;
+        mark(GestureKind::paste, selected_, first);
+        post(Cmd::range_paste, uint8_t(selected_), uint8_t(first));
+        end_gesture();
+        notice("PASTED");
+    }
+
     void on_encoder(int encoder, int delta) override {
         if (encoder == 4) {
+            if (value_pushed_) {
+                // VALUE pushed and turned is the pattern's swing, as the spec's key table says.
+                const int swing = int(engine_.pattern().swing) + delta;
+                mark(GestureKind::length, 0, 0);
+                post(Cmd::set_pattern_swing, 0, 0,
+                     uint8_t(swing < kSwingMin ? kSwingMin
+                                               : (swing > kSwingMax ? kSwingMax : swing)));
+                return;
+            }
+            if (shift_) {
+                // The record quantize amount. The spec gives F1 + VALUE to the master DJ filter,
+                // which is M5's performance layer and does not exist yet; quantize has nowhere
+                // else to live and is useless once recording starts if it cannot be reached
+                // while recording. Whichever of the two moves, it moves then, not now.
+                const int next = quantize_ + delta * 5;
+                quantize_ = next < 0 ? 0 : (next > 100 ? 100 : next);
+                notice("QUANTIZE");
+                return;
+            }
             tempo_tenths_ = uint32_t(int(tempo_tenths_) + delta);
             if (tempo_tenths_ < 200) tempo_tenths_ = 200;      // Enaga's clock allows 20-300
             if (tempo_tenths_ > 3000) tempo_tenths_ = 3000;
@@ -219,6 +417,26 @@ public:
         // which run B, A, C, D. See docs/ENAGA_API.md -- confusing the two silently swaps A
         // and B, and nothing catches it.
         if (encoder < 0 || encoder > 3) return;
+
+        // 1. A held STEP key: lock this page's parameter on that step. The single most
+        //    important gesture in the whole app (docs/SPEC.md, "Step editing") -- and the
+        //    reason the step's release has to know the key was used as a modifier.
+        if (held_step_ >= 0) {
+            held_used_ = true;
+            const int index = page_first(Page(param_page_)) + encoder;
+            mark(GestureKind::lock, selected_, held_step_);
+            post_delta(Cmd::lock_delta, selected_, held_step_, uint8_t(index), delta);
+            return;
+        }
+
+        // 2. The step page: A-D are four of the step's own fields.
+        if (step_page_) {
+            const int field = field_page_ * 4 + encoder;
+            if (field >= kStepFields) return;
+            mark(GestureKind::field, selected_, page_step_);
+            post_delta(Cmd::step_field_delta, selected_, page_step_, uint8_t(field), delta);
+            return;
+        }
 
         if (mode_ == Mode::mixer) {
             // A-D are the levels of the four tracks in the current bank.
@@ -235,7 +453,29 @@ public:
             return;
         }
 
-        // Otherwise A-D edit the four parameters of the current page on the selected track.
+        // 3. A selection with no step held: A transposes it, B nudges its micro-timing. The
+        //    only two edits that are genuinely about a span rather than a step.
+        if (range_first_ >= 0 && encoder < 2) {
+            const int count = range_last_ - range_first_ + 1;
+            mark(GestureKind::field, selected_, range_first_);
+            post_delta(encoder == 0 ? Cmd::range_transpose : Cmd::range_nudge,
+                       selected_, range_first_, uint8_t(count), delta);
+            return;
+        }
+
+        // 4. Recording, with the transport running: motion recording. The knob writes a lock on
+        //    the step the track is playing right now, so a sweep lands across the steps it
+        //    passes over (docs/SPEC.md, "Recording"). The gesture carries step 0 rather than the
+        //    playhead so that the whole pass is ONE undo level instead of one per step.
+        if (rec_ && engine_.status().running.load(std::memory_order_relaxed)) {
+            const int step = int(engine_.status().playhead[selected_].load(std::memory_order_relaxed));
+            const int index = page_first(Page(param_page_)) + encoder;
+            mark(GestureKind::motion, selected_, 0);
+            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta);
+            return;
+        }
+
+        // 5. Otherwise A-D edit the four parameters of the current page on the selected track.
         const int index = page_first(Page(param_page_)) + encoder;
         const int value = int(engine_.params(selected_).v[index]) + delta;
         post(Cmd::set_param, uint8_t(selected_), 0,
@@ -252,9 +492,72 @@ public:
             return;
         }
 
+        if (track != selected_) end_gesture();         // a different track is a different edit
         selected_ = track;
-        post(Cmd::trigger_note, uint8_t(track), 0,
-             engine_.pattern().root, uint8_t(velocity));
+        const uint8_t note = engine_.pattern().root;
+        post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity));
+        record_note(track, note, uint8_t(velocity));
+    }
+
+    // MIDI notes take exactly the same path as pad hits, which is the point: `on_midi` is main
+    // context and carries no timestamp of its own, so it has nothing better to be stamped with
+    // than the clock state read the moment it arrives -- the same thing a pad hit gets
+    // (docs/REVIEW.md). One mechanism, one set of bugs.
+    //
+    // The channel picks the track, 1-8 for tracks 1-8, anything else playing the selected one.
+    // docs/SPEC.md does not map this; MIDI channel is the obvious choice and a note-for-note
+    // omni mapping would make an 8-track box unplayable from a keyboard.
+    void on_midi(const enaga::MidiMessage &message) override {
+        if (message.type() != enaga::MidiMessage::note_on) return;
+        const int channel = message.channel();
+        const int track = channel < kTracks ? channel : selected_;
+        const uint8_t note = uint8_t(message.note());
+        const uint8_t velocity = uint8_t(message.velocity() < 1 ? 1 : message.velocity());
+        post(Cmd::trigger_note, uint8_t(track), 0, note, velocity);
+        record_note(track, note, velocity);
+    }
+
+    // --- live recording ---------------------------------------------------
+
+    // Stamp a hit, undo the pad latency, quantize it, and post the step it belongs on.
+    //
+    // The stamp is `clock::state()` read here, in the main context, at the moment the event
+    // arrived: whole ticks plus the fraction into the next. core/record.hpp explains why that is
+    // a better timestamp than a sample counter would be. Everything after that is arithmetic in
+    // core/, where it is host-tested -- this function only gathers the inputs.
+    void record_note(int track, uint8_t note, uint8_t velocity) {
+        if (!rec_) return;
+        const enaga::clock::State clock = enaga::clock::state();
+        if (!clock.running) return;          // nothing to record onto
+
+        Stamp now;
+        now.tick = clock.position;
+        now.fraction = clock.fraction;
+        const Stamp hit = stamp_back(now, kPadLatencyMs, clock.tempo);
+
+        // The track's timing has to be resolved exactly as core/scheduler does it, including
+        // swing inheritance -- if the two disagree about where a step sits, a hit played dead on
+        // the beat records off it.
+        const Pattern &pattern = engine_.pattern();
+        const TrackPattern &source = pattern.tracks[track];
+        TrackTiming timing;
+        timing.length = source.length;
+        timing.speed = Speed(source.speed);
+        timing.swing = source.swing == kSwingInherit ? pattern.swing : source.swing;
+
+        const Landing landing = quantize_hit(hit, timing, quantize_);
+
+        mark(GestureKind::record, track, 0);     // step 0: one undo level for the whole pass
+        Command command;
+        command.cmd = Cmd::record_hit;
+        command.track = uint8_t(track);
+        command.step = landing.step;
+        command.a = note;
+        command.b = velocity;
+        command.c = uint8_t(landing.micro);
+        engine_.commands().post(command);
+
+        if (landing.clamped) notice("OFF GRID");   // it could not be stored where it was played
     }
 
     void on_transport(int what, uint32_t position) override {
@@ -267,7 +570,7 @@ public:
     // --- LEDs -------------------------------------------------------------
 
     void update(uint32_t ms) override {
-        (void)ms;
+        last_ms_ = ms;
 
         // Log transport and clock-source changes. Cheap (a handful of comparisons), only fires on
         // a change, and it is the one thing worth seeing in an emulator run or a unit log: it
@@ -290,10 +593,43 @@ public:
         const Pattern &pattern = engine_.pattern();
         const uint8_t playhead = status.playhead[selected_].load(std::memory_order_relaxed);
 
+        // A compact signature of what is being edited, logged only when it changes.
+        //
+        // This is the only way a scripted emulator run can see that an edit actually landed.
+        // There is no way to read pattern memory from outside the app, and the screen comes back
+        // as a bitmap; without this, a scenario can prove the app did not crash and nothing
+        // more. With it, "toggle a step, undo, and check the grid came back" is testable without
+        // a unit -- which matters because app/ is the one part of this project that has no host
+        // tests at all.
+        //
+        // Enaga's log ring holds sixteen lines, so this has to stay sparse: one line per edit,
+        // never one per block. Logging only on a change is what makes that true.
+        {
+            uint32_t mask = 0;
+            for (int i = 0; i < 16; i++) {
+                const Step &s = pattern.tracks[selected_].steps[i + page_ * 16];
+                if (s.flags & (kStepTrig | kStepTrigless)) mask |= 1u << i;
+            }
+            const uint8_t depth = status.undo_depth.load(std::memory_order_relaxed);
+            if (mask != logged_mask_ || depth != logged_undo_) {
+                logged_mask_ = mask;
+                logged_undo_ = depth;
+                char line[24];
+                char *out = line;
+                append(out, "g");
+                append_hex4(out, mask);
+                append(out, " u");
+                append_number(out, depth);
+                *out = 0;
+                enaga::log(line);
+            }
+        }
+
         for (int i = 0; i < 16; i++) {
             const int step = i + page_ * 16;
             const Step &s = pattern.tracks[selected_].steps[step];
             const bool trig = (s.flags & kStepTrig) != 0;
+            const bool trigless = (s.flags & kStepTrigless) != 0;
             const bool has_locks = s.lock_count > 0;
             const bool conditional = s.probability < 100 || condition_kind(s.condition) != Condition::NONE;
 
@@ -301,7 +637,16 @@ public:
             if (trig) {
                 green = conditional ? 2 : 6;          // the spec's LED language
                 if (has_locks) red = 3;               // amber: a trig with locks
+            } else if (trigless) {
+                // Locks with no note: red alone, so it reads as "something happens here but it
+                // does not hit". The spec's LED table has no entry for this; a trigless step has
+                // to be distinguishable from an empty one or the feature is invisible.
+                red = 4;
             }
+            // A step in the selection, or the one the step page is editing, is always visible
+            // even if it is empty: these are modes you can forget you are in.
+            if (range_first_ >= 0 && step >= range_first_ && step <= range_last_ && !trig) green = 1;
+            if (step_page_ && step == page_step_) { green = 8; red = 8; }
             if (step == playhead && status.running.load(std::memory_order_relaxed)) red = 10;
             leds_.step(i, red, green);
         }
@@ -322,6 +667,12 @@ public:
         leds_.key(ENAGA_KEY_F4, 0, mode_ == Mode::grid ? 8 : 0);
         leds_.key(ENAGA_KEY_F7, 0, mode_ == Mode::mixer ? 8 : 0);
         leds_.key(ENAGA_KEY_F8, 0, mode_ == Mode::edit ? 8 : 0);
+        leds_.key(ENAGA_KEY_F2, rec_ ? 8 : 0, 0);        // REC is red while recording
+
+        // CLR and OK light when undo and redo have somewhere to go, which is the only way to
+        // know from the panel that F1 + CLR will do anything at all.
+        leds_.key(ENAGA_KEY_CLR, status.undo_depth.load(std::memory_order_relaxed) ? 4 : 0, 0);
+        leds_.key(ENAGA_KEY_OK, 0, status.redo_depth.load(std::memory_order_relaxed) ? 4 : 0);
 
         leds_.primed = true;
     }
@@ -357,10 +708,14 @@ public:
             canvas.text(0, 9, "CLOCK REFUSED", 10);
         }
 
-        switch (mode_) {
-            case Mode::grid:  draw_grid(canvas, running); break;
-            case Mode::edit:  draw_edit(canvas); break;
-            case Mode::mixer: draw_mixer(canvas); break;
+        if (step_page_) {
+            draw_step_page(canvas);
+        } else {
+            switch (mode_) {
+                case Mode::grid:  draw_grid(canvas, running); break;
+                case Mode::edit:  draw_edit(canvas); break;
+                case Mode::mixer: draw_mixer(canvas); break;
+            }
         }
 
         // The bottom line on every mode: voices, the device, and any dropped edits. A dropped
@@ -407,16 +762,128 @@ public:
             if (muted_[t]) canvas.rect(0, y + 3, 128, 1, 4);     // a muted track is struck out
         }
 
+        // The track's own layout: length and speed are per track (polymeter), so they belong on
+        // screen next to the track number rather than behind a menu.
+        const TrackPattern &track = engine_.pattern().tracks[selected_];
         out = line;
         append(out, "TRK ");
         append_number(out, uint32_t(selected_ + 1));
         append(out, muted_[selected_] ? " MUTE" : "     ");
-        append(out, " PG ");
+        append(out, " PG");
         append_number(out, uint32_t(page_ + 1));
+        append(out, " L");
+        append_number(out, track.length);
+        append(out, " X");
+        append(out, speed_name(Speed(track.speed)));
         *out = 0;
-        canvas.text(0, 88, line, 10);
+        canvas.text(0, 84, line, 10);
 
-        draw_param_slots(canvas);
+        draw_edit_state(canvas, 92);
+        draw_param_slots(canvas, 102);
+    }
+
+    // The line that says what editing mode you are in: recording, the quantize amount, the
+    // selection, and how much undo there is. Without it, REC and a held selection are invisible
+    // states that change what every other key does.
+    void draw_edit_state(enaga::Canvas &canvas, int y) {
+        char line[40];
+        char *out = line;
+        const Status &status = engine_.status();
+
+        if (notice_showing()) {
+            canvas.text(0, y, notice_, 15);
+            return;
+        }
+
+        out = line;
+        if (rec_) {
+            append(out, "REC Q");
+            append_number(out, uint32_t(quantize_));
+            append(out, " ");
+        }
+        if (range_first_ >= 0) {
+            append(out, "SEL ");
+            append_number(out, uint32_t(range_first_ + 1));
+            *out++ = '-';
+            append_number(out, uint32_t(range_last_ + 1));
+            append(out, " ");
+        }
+        append(out, "U");
+        append_number(out, status.undo_depth.load(std::memory_order_relaxed));
+        const uint8_t redo = status.redo_depth.load(std::memory_order_relaxed);
+        if (redo) {
+            append(out, "/R");
+            append_number(out, redo);
+        }
+        const uint32_t refused = status.refused.load(std::memory_order_relaxed);
+        if (refused) {
+            // A refused edit is almost always a full lock pool. Saying nothing would leave
+            // someone repeating an edit that cannot work.
+            append(out, " FULL ");
+            append_number(out, refused);
+        }
+        *out = 0;
+        canvas.text(0, y, line, rec_ ? 15 : 9);
+    }
+
+    // --- the step page: one step's own fields ------------------------------
+
+    void draw_step_page(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const Step &step = engine_.pattern().tracks[selected_].steps[page_step_];
+
+        out = line;
+        append(out, "STEP ");
+        append_number(out, uint32_t(page_step_ + 1));
+        append(out, "  TRK ");
+        append_number(out, uint32_t(selected_ + 1));
+        *out = 0;
+        canvas.text(0, 20, line, 14);
+
+        // Which of the field pages is showing. Same language as EDIT's parameter pages.
+        for (int p = 0; p < kFieldPages; p++) {
+            canvas.rect(p * 32 + 2, 32, 28, 3, p == field_page_ ? 14 : 4);
+        }
+
+        // Four fields, each a name and a value. No bars here: a condition or a note name is not
+        // a quantity, and a bar under "NOT PRE" would only suggest it was one.
+        for (int slot = 0; slot < 4; slot++) {
+            const int field = field_page_ * 4 + slot;
+            const int y = 42 + slot * 14;
+            if (field >= kStepFields) {
+                canvas.text(0, y, "---", 4);
+                continue;
+            }
+
+            canvas.text(0, y, step_field_name(StepField(field)), 13);
+
+            // Sized from core/stepedit.hpp rather than guessed: the longest label is 8
+            // characters and this is the one place a wrong guess would be a stack smash the
+            // host build never sees.
+            char text[kStepFieldTextMax];
+            step_field_text(step, StepField(field), text, int(sizeof text));
+            canvas.text(44, y, text, 15);
+        }
+
+        // What the step actually is, under the fields: a step that is off says so, because
+        // every field above it is then inert.
+        out = line;
+        if (step.flags & kStepTrig) {
+            append(out, "TRIG");
+        } else if (step.flags & kStepTrigless) {
+            append(out, "TRIGLESS");
+        } else {
+            append(out, "OFF");
+        }
+        if (step.lock_count) {
+            append(out, "  LOCKS ");
+            append_number(out, step.lock_count);
+        }
+        *out = 0;
+        canvas.text(0, 100, line, 11);
+
+        canvas.text(0, 112, "A    B    C    D", 7);
     }
 
     // --- EDIT: the selected track's sound, four parameters at a time -----
@@ -567,6 +1034,42 @@ private:
         engine_.commands().post(command);
     }
 
+    // An encoder delta, as a signed byte. The audio side applies it to the authoritative step,
+    // which is why these carry a delta and not a value (app/commands.hpp explains the choice).
+    void post_delta(Cmd cmd, int track, int step, uint8_t a, int delta) {
+        const int clamped = delta < -120 ? -120 : (delta > 120 ? 120 : delta);
+        post(cmd, uint8_t(track), uint8_t(step), a, uint8_t(int8_t(clamped)));
+    }
+
+    // --- undo gestures ----------------------------------------------------
+    //
+    // Every edit is preceded by a mark, and the mark says which gesture it belongs to. The audio
+    // side coalesces marks that carry the same gesture (core/undo.hpp), so a knob swept through
+    // forty clicks is one undo level rather than forty -- which matters, because there are only
+    // sixteen and the fortieth click would otherwise have thrown away everything else.
+    //
+    // `gesture_seq_` is what ends a gesture. Bumping it is this side's whole say in where one
+    // undoable edit stops and the next starts: a step key coming up, recording stopping, the
+    // selected track changing. Nothing else distinguishes "the same sweep" from "the same knob,
+    // a minute later".
+    void mark(GestureKind kind, int track, int step) {
+        post(Cmd::undo_mark, uint8_t(track), uint8_t(step), uint8_t(kind), gesture_seq_);
+    }
+
+    void end_gesture() { gesture_seq_ = uint8_t(gesture_seq_ + 1); }
+
+    // A short message on the top of the grid: what just happened, for about a second and a half.
+    // Edits that are invisible on screen (a copy, a clear, an undo) need to say so or they look
+    // like nothing happened.
+    void notice(const char *text) {
+        notice_ = text;
+        notice_at_ms_ = last_ms_;
+    }
+
+    bool notice_showing() const {
+        return notice_ != nullptr && uint32_t(last_ms_ - notice_at_ms_) < 1500u;
+    }
+
     Engine engine_;
 
     Mode mode_ = Mode::grid;
@@ -574,11 +1077,27 @@ private:
     int page_ = 0;            // step page 1-4, for 64-step tracks
     int param_page_ = int(Page::src);
     int mixer_bank_ = 0;      // 0 = tracks 1-4, 1 = tracks 5-8
-    int cursor_step_ = 0;
     bool shift_ = false;
     bool stop_armed_ = false;
     bool clock_refused_ = false;   // the last transport call was refused: an external source
     bool muted_[kTracks] = {};
+
+    // --- M3 edit state ----------------------------------------------------
+    bool rec_ = false;             // F2: live and motion recording
+    int quantize_ = 100;           // 0-100%, how hard a recorded hit snaps to its step
+    int held_step_ = -1;           // the STEP key being held, absolute 0-63; -1 for none
+    bool held_used_ = false;       // it was used as a modifier, so its release is not a tap
+    int range_first_ = -1;         // two STEP keys held: the selection, inclusive
+    int range_last_ = -1;
+    bool step_page_ = false;       // the step page is open
+    int page_step_ = 0;            // and on this step
+    int field_page_ = 0;           // four of the step's fields at a time
+    uint8_t gesture_seq_ = 0;
+    bool value_pushed_ = false;    // VALUE held down: swing rather than tempo
+
+    const char *notice_ = nullptr;
+    uint32_t notice_at_ms_ = 0;
+    uint32_t last_ms_ = 0;
 
     LedShadow leds_;
     uint32_t tempo_tenths_ = 1300;
@@ -586,6 +1105,8 @@ private:
     bool logged_running_ = false;
     int logged_source_ = -1;
     uint32_t logged_position_ = 0xFFFFFFFFu;
+    uint32_t logged_mask_ = 0xFFFFFFFFu;   // deliberately impossible, so the first one logs
+    uint8_t logged_undo_ = 0xFFu;
 };
 
 }  // namespace

@@ -22,6 +22,7 @@
 
 #include "buses.hpp"
 #include "commands.hpp"
+#include "editops.hpp"
 #include "hat.hpp"
 #include "kick.hpp"
 #include "pattern.hpp"
@@ -29,7 +30,9 @@
 #include "sample.hpp"
 #include "scheduler.hpp"
 #include "snare.hpp"
+#include "stepedit.hpp"
 #include "track.hpp"
+#include "undo.hpp"
 #include "va.hpp"
 
 #include <cstdint>
@@ -67,6 +70,7 @@ public:
 private:
     void apply_commands();
     void apply(const Command &command);
+    void reconfigure();
     void resolve_tick(uint32_t tick, uint32_t frame);
     void fire(const StepEvent &event);
     void load_default_kit();
@@ -116,6 +120,18 @@ private:
     Scheduler scheduler_;
     Mixer mixer_;
 
+    // M3. Both live on the audio side because the pattern does: a snapshot taken from the main
+    // context while the sequencer walks the pattern would tear, and a clipboard full of locks
+    // has to be read and written under the same single-owner rule as the pool it comes from.
+    // Every undo, copy and paste therefore arrives as a command and happens at a block boundary,
+    // which is also the only moment the pattern is in a consistent state.
+    //
+    // The undo stack is about 140 KiB of whole-pattern snapshots (core/undo.hpp explains why
+    // snapshots rather than deltas). It makes Engine large, which is fine -- the app object is a
+    // static, not a stack frame -- but it is the reason nothing here may be passed by value.
+    UndoStack undo_;
+    RangeClip clip_;
+
     // The per-tick event buffer lives here rather than on the audio stack: at the true worst
     // case it is 4 KiB, and the platform caps a stack frame at 16 KiB.
     StepEvent events_[kMaxEventsPerTick];
@@ -123,6 +139,7 @@ private:
     // Cached so a tempo change can re-derive the scheduler's ratchet spacing without dividing
     // every block. Enaga's clock reports the tempo; core/ cannot ask it.
     float tempo_ = 0.0f;
+    float samples_per_tick_ = 0.0f;   // derived from it; see reconfigure()
 
     SendSettings sends_;
     MasterSettings master_;

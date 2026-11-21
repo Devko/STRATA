@@ -129,10 +129,12 @@ lo-fi, the duck, both sends, voice stealing and the limiter).
 Same scenario as M1 in every other respect: `tests/scenario_m1.sh`, emulator, 130 BPM, the
 default four-track kit, 3,072 blocks, **0 overruns in every run**. cl6x is **8.5.0.LTS**, now
 installed at `~/ti/ti-cgt-c6000_8.5.0.LTS`; `tools/build.sh` reports `building with cl6x` and
-names the three files. (The "Toolchain status" table above predates that install and still reads
-"not installed" — it needs correcting by whoever owns it. The *second* open question there,
-whether TI's licence permits redistributing cl6x output in a released `APP.ENA`, is untouched by
-this work and still needs the owner's reading.)
+names the three files. (This paragraph used to say the "Toolchain status" table above still read
+"not installed"; it was corrected at the end of M2 and now records the install. The *second*
+open question there, whether TI's licence permits redistributing cl6x output in a released
+`APP.ENA`, is untouched by this work and still needs a human's reading. Note for anyone checking
+the version: the flag is `cl6x --compiler_revision`, which prints `8.5.0`. `--version` is not a
+cl6x flag — it exits non-zero and prints nothing, which reads exactly like a missing compiler.)
 
 Read the workload before the figures: every number below is the **four-track** kit, with
 `app/engine.cpp` rendering `machines_[0..3]` and M1's default pattern, which is what M1 measured.
@@ -259,6 +261,67 @@ Two things to read carefully before treating this as settled:
 So: comfortably inside the bar today, with two known increases still to come and 16 points of
 headroom to absorb them.
 
+### M3 — sequencer depth (no per-block cost, and that is the finding)
+
+M3 adds undo, live and motion recording, the step page, copy and paste and polymeter. None of it
+is DSP, so the expected per-block cost is **zero**, and measuring it is how you find out whether
+some of it accidentally landed in the audio callback anyway.
+
+Same scenario, same kit, same tempo as M2's first row: `tests/scenario_m1.sh`, 3,072 blocks.
+
+| | Peak | Cycles | Overruns |
+| --- | --- | --- | --- |
+| M2, default kit, cl6x | 17.00% | 84,320 | 0 |
+| **M3, default kit, cl6x** | **17.01%** | 84,381 | 0 |
+
+61 cycles, which is noise in a peak-of-3,072-blocks measurement. The sequencer's new work is all
+control-rate: it happens when a command arrives, not every block.
+
+`tests/scenario_m3.sh` reports **13.68%** for the same kit, which is *not* a different result —
+it runs 700 M cycles against the other's 1,600 M, so its peak window never catches the block
+where the open hat, the stab and the sampler overlap. A peak figure is only comparable against
+the same run length, which is why the load tracking stays on the longer scenario.
+
+#### What M3 costs instead: memory, and a spike per edit
+
+| | M2 | M3 |
+| --- | --- | --- |
+| `APP.ENA` | 202,168 bytes | **246,720 bytes** |
+| bss (zeroed at load) | ~69 KiB | **208,952 bytes** |
+
+The bss growth is almost entirely `core/undo.hpp`'s 17 whole-pattern snapshots — 16 levels plus
+the slot the live state is parked in on the way past — at about 8.2 KiB each. That is a
+deliberate trade: `docs/SPEC.md` budgets 2 MiB for "patterns, kit, scenes, 16 undo levels" and
+snapshots use a fourteenth of it, in exchange for an undo that cannot be wrong about what it
+restores. A delta scheme would have had to describe every kind of edit correctly, lock-pool
+relocation included.
+
+Per-edit costs, all of them in audio context and all of them once per edit rather than per block:
+
+| Operation | Cost | When |
+| --- | --- | --- |
+| `undo_mark` | one ~8.2 KiB struct copy, about 8,000 cycles — 1.6% of one block | once per edit *gesture*, not per encoder click (`Gesture` coalescing) |
+| `undo` / `redo` | two of the same | a key press |
+| `range_paste` | 2 KiB stack frame, up to 1,024 `Lock` copies | a paste |
+| `lock_delta` on a full pool | one pool compaction, then a retry | only when the pool is full |
+
+The gesture coalescing is what keeps the first row honest: a 40-click encoder sweep is **one**
+snapshot, not forty, which is also what keeps the history 16 *edits* deep rather than 16 clicks.
+
+#### Audio measured off the render, not just the load counter
+
+`tools/render.py` (new, and what `docs/SPEC.md`'s testing table has always asked for) renders the
+output offline to a WAV, draining the emulator's capture ring as it fills rather than reading it
+once at the end — Enaga's own `emulate.py` keeps only the last 32,767 frames, 0.68 s.
+
+On the default kit: **peak 0.00 dBFS, RMS −17.8 dBFS**, with 4 samples of 65,534 sitting at
+exactly −2^31. Those four are the master's soft limiter **holding its ceiling**, not the output
+clipping: the limiter is written so it "cannot be driven past full scale"
+(`dsp/masterloops.ti.c`), and a float of exactly −1.0 converts to exactly −2^31. An 18 dB crest
+factor on a drum mix that is touching the limiter a handful of times a second is what a techno
+master is supposed to look like. Worth re-measuring if the kit's levels ever change, because the
+same figure would mean something quite different if the count went from 4 to 400.
+
 ### M0.5 — budget spike (the fixed per-block tax)
 
 **Folded into the M2 worst case above, deliberately.** The spike was planned as a throwaway
@@ -309,6 +372,6 @@ skeleton allocates nothing.
 | Samples, int16 (32 MiB default, 64 MiB ceiling) | 32-64 MiB | |
 | Beat repeat ring (2 bars at 60 BPM, stereo float) | 2.93 MiB | |
 | Delay and reverb buffers | 2 MiB | |
-| Patterns, kit, scenes, 16 undo levels | 2 MiB | |
+| Patterns, kit, scenes, 16 undo levels | 2 MiB | **~148 KiB** so far: 17 whole-pattern undo snapshots (~140 KiB) plus the live pattern and the clipboard. In bss, not the heap |
 | Recording ring and stream buffers | 1 MiB | |
 | App image, voice pools, UI | 4 MiB | |

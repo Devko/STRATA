@@ -107,7 +107,12 @@ uint16_t make_busy_pattern(Pattern &pattern) {
             step.flags = uint8_t((t * 5 + i) & kStepFlagMask);
             step.note = uint8_t((24 + t * 11 + i * 3) & 0x7F);
             step.velocity = uint8_t(1 + (t * 17 + i * 5) % 127);
-            step.length = uint8_t(1 + (t + i) % 32);
+            // In range on purpose. A round-trip test asks "does every field come back as it went
+            // in", and the loader is documented to sanitize a field it cannot use -- so a value
+            // outside 1..kLengthMax was never a fair question to ask of it. This line used to
+            // reach 32 and passed only because step_sanitize was missing its upper clamp: the
+            // bug was holding the test up.
+            step.length = uint8_t(1 + (t + i) % kLengthMax);
             step.micro = int8_t((i % 23) - 11);
             step.probability = uint8_t((t * 13 + i * 7) % 101);
             step.condition = ((t + i) & 1) == 0

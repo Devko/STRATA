@@ -19,7 +19,11 @@
 namespace strata::test {
 
 struct Registry {
-    static constexpr int kMax = 512;
+    // Headroom, not a budget: the suite passed 400 at M3 and the cap is a silent cliff if it is
+    // ever reached (a skipped registration is a test that never runs and never fails). The
+    // overflow in Registry::add also counts a failure now, so the suite goes red rather than
+    // quietly getting smaller.
+    static constexpr int kMax = 1024;
     struct Entry {
         const char *name;
         void (*fn)();
