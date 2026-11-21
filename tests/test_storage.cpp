@@ -1682,6 +1682,11 @@ TEST(storage_a_loaded_wav_is_heard) {
     post(Cmd::set_param, kLoopTrack, 0, 8, 0);        // ATK: instant
     post(Cmd::set_param, kLoopTrack, 0, 9, 110);      // DEC: long
     post(Cmd::set_param, kLoopTrack, 0, 10, 0);       // PLY: forward, one shot
+    // And the sends closed. `fresh()` leaves SNA and SNB at 64, so a loud sample feeds the delay
+    // and the reverb and they go on repeating it for hundreds of milliseconds -- which is a fine
+    // thing for the instrument and useless for a test that wants to know when the track is silent.
+    post(Cmd::set_param, kLoopTrack, 0, 14, 0);       // SNA: the delay send
+    post(Cmd::set_param, kLoopTrack, 0, 15, 0);       // SNB: the reverb send
     post(Cmd::toggle_trig, uint8_t(kLoopTrack), 0);
     pump(2);
 
@@ -1690,14 +1695,27 @@ TEST(storage_a_loaded_wav_is_heard) {
     const float peak = pump(6);
     CHECK(peak > 0.01f);
 
-    // And with the sample taken away again the same six blocks are silent, so the sound was the
-    // file and not the machine's own noise.
+    // And with the sample taken away the SAME step is silent, so what was heard was the file and
+    // not the machine's own noise. The step has to fire for that to mean anything, so the trig
+    // counter is checked too -- and the master reverb is given time to decay first, since its
+    // tail outlives anything the rig can reset (tests/test_app.cpp makes the same allowance).
     post(Cmd::clear_sample, uint8_t(kLoopTrack));
-    pump(2);
-    host.deliver_tick(24, 0);
+    pump(40);
+
+    // The room on its own, with nothing playing, so that the comparison below is against the
+    // reverb's tail rather than against silence the rig cannot promise.
+    const float tail = pump(6);
+    const uint8_t fired = engine().status().triggered[kLoopTrack].load(std::memory_order_relaxed);
+    host.deliver_tick(24u * 64u, 0);                  // tick 1536 is step 0 again
     const float without = pump(6);
-    CHECK(without < peak);
-    CHECK(without < 0.01f);
+
+    CHECK(engine().status().triggered[kLoopTrack].load(std::memory_order_relaxed) != fired);
+    CHECK(without < 0.5f * peak);                     // nothing like the sample
+    CHECK(without <= 1.5f * tail + 0.001f);           // and nothing the trig added
+    if (without > 1.5f * tail + 0.001f) {
+        std::printf("    with %.4f, tail %.4f, after the swap %.4f\n", double(peak), double(tail),
+                    double(without));
+    }
 }
 
 TEST(storage_a_wav_at_another_rate_is_resampled_once_at_load) {
@@ -2231,7 +2249,9 @@ TEST(storage_a_loaded_project_applies_its_sample_budget) {
     // `SamplePool::set_budget` refuses to shrink below what is already reserved rather than
     // stranding a loaded sample -- so it waits until every track has been through the swap above.
     clean();
-    CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);
+    // Whatever it is now, rather than the default: the pool is not reset between tests, and a
+    // budget this test did not choose is not this test's business.
+    const uint32_t before = storage().samples().budget();
 
     Project &p = engine().project_for_load();
     p.settings.sample_budget_mib = 48;
@@ -2239,7 +2259,7 @@ TEST(storage_a_loaded_project_applies_its_sample_budget) {
     pump(2);
     storage().request_save();
     CHECK(pump_until_idle());
-    CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);   // saving changes nothing
+    CHECK_EQ(storage().samples().budget(), before);        // saving changes nothing
 
     storage().request_reload();
     CHECK(settle());
