@@ -127,8 +127,26 @@ void Duck::reset() {
 bool Duck::render(float *out, int frames) {
     if (stage_ == Stage::idle && pending_ == kNoTrigger) return false;   // idle costs nothing
 
-    const uint32_t at = pending_;
-    pending_ = kNoTrigger;
+    // A trigger aimed past the end of this block is CARRIED, not consumed.
+    //
+    // It used to be cleared unconditionally, and the `i == at` test below then never fired: the
+    // trigger was lost for good rather than deferred. Reachable, and measured: the only caller
+    // hands this `StepEvent::frame`, and a ratcheted step's later hits sit thousands of frames
+    // into the step -- so a kick roll on the duck-source track pumped once and then not at all.
+    //
+    // app/engine.cpp now defers those events itself, so in this app the frame always lands
+    // inside the block. This is the belt as well as the braces: dsp/chain.hpp's contract states
+    // no precondition, so the code should not have one, and a silently dropped trigger is the
+    // worst way for a caller to find out.
+    uint32_t at = kNoTrigger;
+    if (pending_ != kNoTrigger) {
+        if (pending_ < uint32_t(frames)) {
+            at = pending_;
+            pending_ = kNoTrigger;
+        } else {
+            pending_ -= uint32_t(frames);        // next block, at the frame it asked for
+        }
+    }
     for (int i = 0; i < frames; i++) {
         if (uint32_t(i) == at) {                 // sample-accurate retrigger
             stage_ = Stage::attack;

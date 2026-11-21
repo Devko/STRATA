@@ -912,3 +912,56 @@ TEST(chain_parameter_names_cover_its_eight_slots) {
         CHECK_EQ(InsertChain::param_name(page_first(Page::amp) + i)[0], '-');
     }
 }
+
+// --- the duck's trigger is deferred, not dropped --------------------------------------------
+
+TEST(duck_carries_a_trigger_aimed_past_the_end_of_the_block) {
+    // `Duck::render` used to clear `pending_` unconditionally and then look for the frame inside
+    // the block. For a frame past the block's end the equality never fired, so the trigger was
+    // LOST rather than deferred -- and the only caller hands it `StepEvent::frame`, whose later
+    // ratchet hits sit thousands of frames into the step. A kick roll on the duck-source track
+    // pumped once and then not at all.
+    //
+    // dsp/chain.hpp's contract states no precondition on the frame, so the code must not have
+    // one. app/engine.cpp defers those events itself now; this is the other half of it.
+    Duck duck;
+    duck.init(kRate);
+    duck.set(0.003f, 0.040f, 0.120f);
+
+    // Frame 2769: where a 2-hit ratchet's second hit lands at 130 BPM, and 43 blocks away.
+    duck.trigger(2769);
+
+    float curve[kFrames];
+    float reached = 0.0f;
+    int fired_block = -1;
+    for (int b = 0; b < 80; b++) {
+        for (int i = 0; i < kFrames; i++) curve[i] = 0.0f;
+        const bool active = duck.render(curve, kFrames);
+        float peak = 0.0f;
+        for (int i = 0; i < kFrames; i++) {
+            if (curve[i] > peak) peak = curve[i];
+        }
+        if (peak > 0.01f && fired_block < 0) fired_block = b;
+        if (peak > reached) reached = peak;
+        (void)active;
+    }
+    CHECK(fired_block >= 0);                 // it fired at all, which it did not before
+    CHECK_EQ(fired_block, 2769 / kFrames);      // in the block its frame falls in
+    CHECK(reached > 0.9f);                   // and ducked fully
+
+    // And one frame past the block end is the boundary that used to swallow it silently.
+    Duck edge;
+    edge.init(kRate);
+    edge.set(0.003f, 0.040f, 0.120f);
+    edge.trigger(uint32_t(kFrames));
+    for (int i = 0; i < kFrames; i++) curve[i] = 0.0f;
+    edge.render(curve, kFrames);
+    float first = 0.0f;
+    for (int i = 0; i < kFrames; i++) {
+        if (curve[i] > first) first = curve[i];
+    }
+    CHECK_EQ(first, 0.0f);                   // nothing in the block before it
+    for (int i = 0; i < kFrames; i++) curve[i] = 0.0f;
+    CHECK(edge.render(curve, kFrames));
+    CHECK(curve[0] > 0.0f);                  // and it fires on frame 0 of the next
+}

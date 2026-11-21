@@ -651,6 +651,24 @@ onto a step nobody was touching.
       unsigned subtraction and clamp to 300 BPM instead of 20. Not reachable from the panel (an
       encoder event carries a click or two), so this is a glance rather than a test.
 
+### Three more from a review of `core/` and `dsp/`
+
+That review read 14,423 lines with 531,652 checks already behind them and found two real bugs,
+one rule violation and one stale comment. The two bugs are fixed and have tests (the ratchet, and
+the duck's dropped trigger); the other two are here.
+
+- [ ] **Two note spellings in one app, and nobody has decided which.** `core/scale.cpp` names
+      notes with FLATS -- "EB" -- and the step page's NOTE field uses SHARPS -- "D#3" -- so the
+      same pitch has two names on two screens. '#' is in the device font, so the comment claiming
+      a sharp was "unproven" was wrong and has been removed rather than repaired. Look at both
+      screens and pick one. There are also two overloads named `note_name` with opposite
+      conventions, which is a pair a future caller can pick the wrong one of.
+- [ ] A 64-bit divide was sitting in the audio path (`dsp/hat.cpp`, each voice's start phase).
+      On this toolchain that does not merely cost cycles, it does not LINK -- it drags in
+      libgcc's ARM unwinder. GCC happened to fold it to six constants, so the rule was being kept
+      by the compiler's goodwill; it is now a literal table, and the hat's own tests passing is
+      what proves the table matches the fold. Nothing to check by ear.
+
 ## M0.5 — budget spike
 
 Folded into the M2 worst-case measurement above — see `docs/BUDGET.md` for why. These two lines

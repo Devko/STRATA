@@ -90,7 +90,20 @@ struct Trig {
     // A machine may ignore it entirely. The one-shot drums do.
     uint32_t gate_frames = 0;
 
-    uint32_t frame = 0;       // which frame of the block it starts on: sample accuracy
+    // Which frame of the block this starts on: sample accuracy, and the field micro-timing and
+    // ratchets are built on.
+    //
+    // **It is always INSIDE the block.** `core/scheduler` can produce a frame far past the end of
+    // one -- a ratchet's later hits sit thousands of frames into the step, and its header says
+    // "spreading them is the caller's to defer, not the scheduler's to withhold" -- and
+    // `app/engine.cpp` is the caller that defers them. A machine therefore never has to think
+    // about a frame it cannot reach, and `trigger` may schedule on this value directly.
+    //
+    // Three machines clamp it to 65,535 anyway (dsp/sample.cpp, dsp/grain.cpp, dsp/vapoly.cpp)
+    // and five take it raw. That inconsistency is harmless now the engine bounds it, and it is
+    // recorded here rather than tidied in eight files: if the deferral is ever removed, the
+    // clamping three would place a late hit 1.37 s early and the other five would not.
+    uint32_t frame = 0;
 };
 
 // --- the machine interface ------------------------------------------------

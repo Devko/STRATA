@@ -62,6 +62,21 @@ inline uint32_t increment(float normalised) {
 
 // The square bank, the VCA and the declick ramp are strata_hat_squares, strata_hat_vca and
 // strata_mix_ramp in drumloops.ti.c, where cl6x compiles them.
+// Where each oscillator starts in its cycle: i / 6 of a turn, as a Q32 phase.
+//
+// Written out rather than computed, and that is a CLAUDE.md requirement rather than taste. This
+// used to be `uint32_t((uint64_t(i) << 32) / uint64_t(kOscillators))` inside `start`, which runs
+// in AUDIO context -- and a 64-bit divide on this toolchain does not merely cost cycles, it does
+// not LINK: it drags in libgcc's ARM unwinder and the whole app fails to build. core/pcm.cpp
+// writes twenty lines of shift-and-subtract for exactly that reason.
+//
+// GCC 13 at -O2 happened to peel the six-iteration loop and fold the whole thing to these six
+// constants, so the rule was being kept by the compiler's goodwill and not by the code. The
+// values are the fold, checked against it: i * 2^32 / 6.
+constexpr uint32_t kStartPhase[Hat::kOscillators] = {
+    0u, 715827882u, 1431655765u, 2147483648u, 2863311530u, 3579139413u,
+};
+
 static_assert(Hat::kOscillators == STRATA_HAT_OSCILLATORS,
               "drumloops.ti.c unrolls exactly this many accumulators");
 
@@ -221,9 +236,7 @@ void Hat::start(Voice &v) {
     v.trigger_level = (1.5f + 0.5f * (1.0f - decay_)) * (0.3f + 0.7f * accent);
     // Spread around the cycle rather than all starting together, so the attack is the filter's
     // step response and not six squares flipping on the same sample.
-    for (int i = 0; i < kOscillators; i++) {
-        v.phase[i] = uint32_t((uint64_t(i) << 32) / uint64_t(kOscillators));
-    }
+    for (int i = 0; i < kOscillators; i++) v.phase[i] = kStartPhase[i];
     v.sample_hold_phase = 0;
     v.sample_hold = 0.0f;
     v.band.reset();
