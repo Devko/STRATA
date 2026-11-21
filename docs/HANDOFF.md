@@ -15,7 +15,8 @@ exist. That is fixed. As of `5611588`:
 | `core/queue` | 42 tests, 7 of 7 new mutants caught |
 | `core/samplepool` | 33 tests, 24 of 24 mutants caught |
 | `core/pcm` | 37 tests, green with the full suite |
-| `app/` | compiles clean, every TU, `-Wall -Wextra -Werror` |
+| `app/` | compiles clean, all 31 TUs, `-Wall -Wextra -Werror` |
+| `app/storage` | projects, autosave, the sample loader, F3 PROJECT — written, **nothing run** |
 | `make -C host test` | **571 tests, 425,261 checks, 0 failures** |
 
 `main` was 408 tests / 221,035 checks; the four M4 modules add 163 tests.
@@ -53,21 +54,42 @@ machine, and it is why (a), (b) and (c) below come before any merge.
 
 ## Next steps, in order
 
-Steps 1 to 3 of the original handoff are done. What is left:
+All of M4's code is written. None of it past `core/` has run. What is left is verification, and
+it all needs the machine:
 
-1. **`tools/build.sh` must link for the device.** Everything compiles, so what remains is the
-   link and whatever the tic6x toolchain says that a host compiler does not.
+1. **`tools/build.sh` must link for the device.** Everything compiles and every symbol resolves,
+   so what remains is the link and whatever the tic6x toolchain says that a host compiler does
+   not.
 2. **`tests/scenario_m3.sh` must still pass** — it proves undo end to end, and `app/engine.cpp`
    changed underneath it.
-3. **Then the parts that need files**, none of it started: project save and load through
-   `enaga::files`, autosave, `on_card(bool)`, background sample loading, and F3 PROJECT mode.
-   `docs/PLAN.md` M4 and the "Saving" part of `docs/SPEC.md` are the spec. The two protocols
-   below are not to be re-derived.
+3. **Work `docs/UNIT_CHECKLIST.md`'s new M4 section.** Every box is open. The ones that matter
+   most, in order: does it start with no card; does a power cycle restore the project; does
+   swapping a sample on a sounding track stay clean; does pulling the card during a save, a load
+   and a resample leave the project intact. That last one is `docs/PLAN.md`'s exit criterion.
 4. **The M4 emulator scenario**, then the load measured with and without cl6x, then
-   `docs/BUDGET.md` and the new M4 section of `docs/UNIT_CHECKLIST.md`.
+   `docs/BUDGET.md`. The new figure to record is memory, not just CPU: `Storage::init` takes
+   64 MiB for the region plus 18 MiB of staging.
 5. `tools/render.sh` for a listen — nothing has been heard since M3.
 
 Do not merge `m4-wip` to `main` until 1 and 2 are green.
+
+### Read the M4 app code before trusting it
+
+It was written in one pass with no way to run it. Three bugs were found by re-reading it that a
+compiler could not have caught, and the odds that it was the last three are poor:
+
+- `pool_.reset()` after a project load forgets every reservation while the samplers still hold
+  pointers into those ranges. Its own contract says the caller must have silenced every track
+  first, and nothing had. Each track now goes through clear → epoch → release in turn.
+- the first convert slice ran while the job was still `sample_read`, so the next pass found
+  `read_done_` false and the conversion stalled after one slice.
+- a new project inherited the old one's name, so saving it would have overwritten a project the
+  user never asked to touch.
+
+The places to look hardest, because they are where a mistake is silent rather than loud: the
+epoch wait in `Storage::step_sample_epoch`, the slice arithmetic in `step_sample_convert` and
+`step_sample_resample` (every pointer there is an offset into the 64 MiB region), and the
+deferred-save condition in `Storage::service`.
 
 ## What the refactor to the project model ended up as
 
@@ -96,6 +118,19 @@ Finished since the snapshot:
 - `Status::live_bank` / `live_slot` are published with the rest of the status every block, not in
   `switch_pattern`, because a project load will move the live pattern without going through it.
 
+## What M4 deliberately does not have
+
+- **No file browser.** A project's name comes from `SETTINGS.TXT` and a track's sample path from
+  its kit, which is all that "reopens the last project" and "loaded whole into RAM at project
+  open" need. Choosing a different project or sample from the card is a browser, and a browser
+  was not in M4's list.
+- **No streaming.** `docs/SPEC.md` puts streams at recording and loops over 30 s. The loader
+  refuses a file over 30 s that also needs resampling (`TOO LONG`) rather than pretending.
+- **Project::bank_dirty is unused by `app/`.** Why is under "Why the dirty flags are here" in
+  `app/storage.hpp`: an edit happens on the audio side and a save in the main context, so that
+  bool would be cross-context state of exactly the kind CLAUDE.md forbids. The app tracks
+  dirtiness in one context instead, and `core/project.cpp` keeps the field for its own use.
+
 ## Two decisions worth not re-litigating
 
 - **The sample swap protocol.** `SamplePool::release` makes memory reusable immediately and
@@ -103,8 +138,8 @@ Finished since the snapshot:
   `clear_sample` → **wait for `Status::sample_epoch[track]` to change** → release the range →
   load → `set_sample`. Releasing before the epoch confirms means overwriting memory a voice is
   reading, which sounds like a broken sampler rather than a broken lifetime. `docs/SPEC.md`
-  specifies this as a generation counter. The audio side's half is implemented; the loader's half
-  is not written yet.
+  specifies this as a generation counter. **Both halves are now implemented** — the audio side in
+  `Engine::apply`, the loader in `Storage::step_sample_epoch` — and neither has run.
 - **Saving must not read a torn step.** A save runs in the main context while the audio side may
   be applying an edit to the live pattern. The rule is: drain the command ring first, and defer
   the save by a frame if it is not empty. The UI is single-threaded, so once the ring is empty
