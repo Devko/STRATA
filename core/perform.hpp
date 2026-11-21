@@ -169,6 +169,73 @@ void macro_apply(const Macro &macro, uint8_t position, uint8_t out[kTracks][kKit
 // How many targets are enabled and usable, for the screen.
 int macro_count(const Macro &macro);
 
+// --- mutes ----------------------------------------------------------------
+//
+// docs/SPEC.md: "Lower pads toggle track mutes, instantly or at the next bar. 8 stored mute
+// states per project, recalled from the upper row." The 8 states live in
+// `ProjectSettings::mute_states` and go on disk with the project; this is the arithmetic over
+// them, which is here rather than in app/engine.cpp so it can be tested.
+//
+// A state is one bit per track, bit 0 being track 1. Zeroed memory means nothing muted, which is
+// what an unused slot should be.
+
+// Read a stored state into the eight flags the mixer uses.
+void mute_state_apply(uint8_t state, bool muted[kTracks]);
+
+// And back, for storing the current mutes into a slot.
+uint8_t mute_state_capture(const bool muted[kTracks]);
+
+// "Instantly or at the next bar". The UI posts a change; whether it lands now or at the boundary
+// is the user's setting, and the latch is what holds it in between.
+//
+// Audio-side state: the arming and the "is it time yet" both happen there, for the same reason
+// core/queue.hpp's Queue needs no atomics.
+struct MuteLatch {
+    bool pending = false;
+    uint8_t state = 0;      // the mute set to take effect
+};
+
+// Arm a change for the next boundary. Replaces any change already armed -- a performer pressing
+// three pads before the bar means the third one, not a queue of three.
+void mute_latch_arm(MuteLatch &latch, uint8_t state);
+
+// The boundary came: take the armed state if there is one. False when nothing was armed, leaving
+// `state` untouched.
+bool mute_latch_release(MuteLatch &latch, uint8_t &state);
+
+void mute_latch_clear(MuteLatch &latch);
+
+// --- auto-fill ------------------------------------------------------------
+//
+// docs/SPEC.md: "Hold to activate FILL conditions; optional auto-fill every 4, 8 or 16 bars."
+
+// The periods the UI offers. 0 is off, and it is first so that zeroed memory means off.
+enum class AutoFill : uint8_t { off = 0, every_4, every_8, every_16, count };
+
+const char *auto_fill_name(AutoFill period);   // "OFF", "4", "8", "16"
+
+// How many bars the period is; 0 for off.
+constexpr int auto_fill_bars(AutoFill period) {
+    switch (period) {
+        case AutoFill::every_4:  return 4;
+        case AutoFill::every_8:  return 8;
+        case AutoFill::every_16: return 16;
+        default:                 return 0;
+    }
+}
+
+// Is auto-fill active during `bar`? True on the LAST bar of each period, which is what a fill
+// is: the bar that leads back into the loop. So at every 4, bars 3, 7, 11 ... fill, counting
+// from 0.
+//
+// `bar` is a count from the start of the transport, not a position inside the pattern: a fill
+// every 8 bars has to mean the same thing whether the pattern is 16 steps or 64.
+constexpr bool auto_fill_active(AutoFill period, uint32_t bar) {
+    const int bars = auto_fill_bars(period);
+    if (bars <= 0) return false;
+    return int(bar % uint32_t(bars)) == bars - 1;
+}
+
 // --- PERFORM.BIN ----------------------------------------------------------
 //
 // The container is core/serialize.hpp's, and the section ids are per file type as

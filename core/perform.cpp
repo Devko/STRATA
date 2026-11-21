@@ -260,6 +260,51 @@ int macro_count(const Macro &macro) {
     return n;
 }
 
+// --- mutes ----------------------------------------------------------------
+
+void mute_state_apply(uint8_t state, bool muted[kTracks]) {
+    for (int t = 0; t < kTracks; t++) muted[t] = (state >> t & 1u) != 0;
+}
+
+uint8_t mute_state_capture(const bool muted[kTracks]) {
+    uint8_t state = 0;
+    for (int t = 0; t < kTracks; t++) {
+        if (muted[t]) state = uint8_t(state | uint8_t(1u << t));
+    }
+    return state;
+}
+
+void mute_latch_arm(MuteLatch &latch, uint8_t state) {
+    // Replaces rather than queues: a performer pressing three pads before the bar means the
+    // third one. A queue would play back their hesitation.
+    latch.pending = true;
+    latch.state = state;
+}
+
+bool mute_latch_release(MuteLatch &latch, uint8_t &state) {
+    if (!latch.pending) return false;
+    state = latch.state;
+    latch.pending = false;
+    return true;
+}
+
+void mute_latch_clear(MuteLatch &latch) {
+    latch.pending = false;
+    latch.state = 0;
+}
+
+// --- auto-fill ------------------------------------------------------------
+
+const char *auto_fill_name(AutoFill period) {
+    switch (period) {
+        case AutoFill::off:      return "OFF";
+        case AutoFill::every_4:  return "4";
+        case AutoFill::every_8:  return "8";
+        case AutoFill::every_16: return "16";
+        default:                 return "?";
+    }
+}
+
 void perform_init(SceneSet &scenes, MacroSet &macros) {
     // Scene by scene rather than `scenes = SceneSet{}`: the set is over 2 KiB and the habit one
     // structure up would be a megabyte (core/project.cpp says the same about Project).

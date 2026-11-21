@@ -544,6 +544,124 @@ TEST(perform_a_macro_target_naming_nothing_is_skipped) {
     }
 }
 
+// --- mutes ----------------------------------------------------------------
+
+TEST(perform_a_mute_state_is_one_bit_per_track) {
+    bool muted[kTracks] = {};
+
+    mute_state_apply(0, muted);
+    for (int t = 0; t < kTracks; t++) CHECK(!muted[t]);
+    CHECK_EQ(int(mute_state_capture(muted)), 0);
+
+    mute_state_apply(0xFF, muted);
+    for (int t = 0; t < kTracks; t++) CHECK(muted[t]);
+    CHECK_EQ(int(mute_state_capture(muted)), 0xFF);
+
+    // Bit 0 is track 1, which is the bit order the file and the UI both assume.
+    mute_state_apply(0b00000101, muted);
+    CHECK(muted[0]);
+    CHECK(!muted[1]);
+    CHECK(muted[2]);
+    for (int t = 3; t < kTracks; t++) CHECK(!muted[t]);
+}
+
+TEST(perform_a_mute_state_round_trips_through_every_combination) {
+    // All 256 of them, since a state is a byte and a project stores eight: an aliased bit would
+    // recall the wrong track and look like a broken pad.
+    bool muted[kTracks] = {};
+    for (int state = 0; state <= 255; state++) {
+        mute_state_apply(uint8_t(state), muted);
+        CHECK_EQ(int(mute_state_capture(muted)), state);
+    }
+}
+
+TEST(perform_the_mute_latch_holds_one_change_not_a_queue) {
+    MuteLatch latch;
+    uint8_t state = 0xAA;
+
+    // Nothing armed: nothing to release, and the caller's value is untouched.
+    CHECK(!mute_latch_release(latch, state));
+    CHECK_EQ(int(state), 0xAA);
+
+    mute_latch_arm(latch, 0x01);
+    mute_latch_arm(latch, 0x02);
+    mute_latch_arm(latch, 0x04);
+    CHECK(latch.pending);
+    // The third press, not all three: a queue would play back the performer's hesitation.
+    CHECK(mute_latch_release(latch, state));
+    CHECK_EQ(int(state), 0x04);
+    CHECK(!latch.pending);
+
+    // And it fires exactly once.
+    CHECK(!mute_latch_release(latch, state));
+    CHECK_EQ(int(state), 0x04);
+
+    mute_latch_arm(latch, 0x10);
+    mute_latch_clear(latch);
+    CHECK(!mute_latch_release(latch, state));
+    CHECK_EQ(int(state), 0x04);
+}
+
+TEST(perform_arming_an_unmuted_state_still_counts_as_a_change) {
+    // 0 is a legitimate state -- "unmute everything" -- so the latch must not treat it as empty.
+    MuteLatch latch;
+    uint8_t state = 0xFF;
+    mute_latch_arm(latch, 0);
+    CHECK(mute_latch_release(latch, state));
+    CHECK_EQ(int(state), 0);
+}
+
+// --- auto-fill ------------------------------------------------------------
+
+TEST(perform_auto_fill_fires_on_the_last_bar_of_its_period) {
+    // A fill is the bar that leads back into the loop, so at every 4 it is bars 3, 7, 11...
+    CHECK(!auto_fill_active(AutoFill::every_4, 0));
+    CHECK(!auto_fill_active(AutoFill::every_4, 1));
+    CHECK(!auto_fill_active(AutoFill::every_4, 2));
+    CHECK(auto_fill_active(AutoFill::every_4, 3));
+    CHECK(!auto_fill_active(AutoFill::every_4, 4));
+    CHECK(auto_fill_active(AutoFill::every_4, 7));
+    CHECK(auto_fill_active(AutoFill::every_4, 11));
+
+    CHECK(auto_fill_active(AutoFill::every_8, 7));
+    CHECK(!auto_fill_active(AutoFill::every_8, 3));
+    CHECK(auto_fill_active(AutoFill::every_16, 15));
+    CHECK(!auto_fill_active(AutoFill::every_16, 7));
+}
+
+TEST(perform_auto_fill_off_never_fires) {
+    // And zeroed memory is off, which is why `off` is 0.
+    static_assert(int(AutoFill::off) == 0, "zeroed memory must mean auto-fill off");
+    for (uint32_t bar = 0; bar < 64; bar++) CHECK(!auto_fill_active(AutoFill::off, bar));
+    for (uint32_t bar = 0; bar < 64; bar++) {
+        CHECK(!auto_fill_active(AutoFill(int(AutoFill::count) + 3), bar));
+    }
+    CHECK_EQ(auto_fill_bars(AutoFill::off), 0);
+}
+
+TEST(perform_auto_fill_fires_once_per_period_for_ever) {
+    // Counted over many periods, because the bar number is a count from the start of the
+    // transport and a modulo that drifted would make fills wander.
+    for (AutoFill period : {AutoFill::every_4, AutoFill::every_8, AutoFill::every_16}) {
+        const int bars = auto_fill_bars(period);
+        int fills = 0;
+        for (uint32_t bar = 0; bar < uint32_t(bars) * 50; bar++) {
+            if (auto_fill_active(period, bar)) fills++;
+        }
+        CHECK_EQ(fills, 50);
+    }
+    // Including across a wrap of the bar counter, which at 130 BPM is years away but costs
+    // nothing to be right about.
+    CHECK(auto_fill_active(AutoFill::every_4, 0xFFFFFFFFu));
+}
+
+TEST(perform_auto_fill_names_fit_the_screen) {
+    CHECK_EQ(auto_fill_name(AutoFill::off), "OFF");
+    CHECK_EQ(auto_fill_name(AutoFill::every_4), "4");
+    CHECK_EQ(auto_fill_name(AutoFill::every_16), "16");
+    CHECK_EQ(auto_fill_name(AutoFill(99)), "?");
+}
+
 // --- PERFORM.BIN ----------------------------------------------------------
 
 namespace {
