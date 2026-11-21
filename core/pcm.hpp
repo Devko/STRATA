@@ -20,8 +20,10 @@
 //
 // ## Fixed point, not float, for the resampler's position
 //
-// The read position is 32.32 fixed point, as dsp/sample.cpp already uses for playback: a float
-// position loses a sample's precision somewhere past 16.7 million frames, which is only six
+// The read position is fixed point, as dsp/sample.cpp's playback position is -- 32.24 there, an
+// int32 frame index beside a Q24 fraction, and 32.32 in one 64-bit word here, where the spare
+// bits cost nothing because this cursor is not in an audio loop. A float position loses a
+// sample's precision somewhere past 16.7 million frames, which is only six
 // minutes at 48 kHz, and a sample that long is exactly the case where someone would notice the
 // end drifting. The step is computed once per call, so the C674x's lack of an integer divide
 // does not matter here.
