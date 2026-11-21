@@ -55,16 +55,35 @@ collision rather than letting one file silently overwrite another.
 
 ## Status
 
-**M0 complete**: toolchain, repo skeleton, staged build, host test harness, and an app that
-reports the device, the audio load and Enaga's clock state.
+**M3 complete.** Eight tracks play — KICK, SNARE, two HATs, PERC, BASS, a mono stab standing in
+for CHORD until VA POLY arrives, and the LOOP sampler — through per-track insert chains, a delay
+and a reverb send, and a master chain with a sidechain duck. The sequencer has parameter locks,
+trig conditions, probability, ratchets, micro-timing, polymeter, live and motion recording, and
+16 levels of undo. GRID, EDIT, MIXER and the step page are on the panel.
 
-Next is **M0.5**, a budget spike that measures the fixed per-block cost of 8 insert chains and
-both send effects before any engine is written — the largest unmeasured term in the design.
+408 host tests / 221,035 checks, and three scripted emulator scenarios. **Worst case measured so
+far: 23.61% of the audio block with cl6x** against M2's bar of 40% (44.26% without cl6x, which
+does not pass) — see [docs/BUDGET.md](docs/BUDGET.md).
 
-Two things need a human:
+Next is **M4**: projects, banks, queued pattern changes and background sample loading.
 
-- **TI's cl6x is not installed.** It is worth about 2.2× on DSP code and the under-60% target
-  depends on it, but installing it means accepting TI's licence, and shipping its output raises
-  a redistribution question. See [docs/BUDGET.md](docs/BUDGET.md).
-- **Nothing has run on a unit.** Enaga's MIDI, SYNC, USB MIDI, input routing and pad pressure
-  have never run on real hardware either, so expect platform bugs as well as app bugs.
+To hear it without a unit, `tools/render.sh` renders the output to a WAV offline; the live web
+panel (`tools/panel.sh`) runs at about 0.4× real time, so its sound breaks up.
+
+Two things still need a human:
+
+- **Shipping cl6x's output.** TI's cl6x 8.5.0.LTS is installed and the under-60% target depends
+  on it — the measurements say a GCC-only release does not pass at all — but whether TI's licence
+  permits redistributing its output inside a released `APP.ENA` has not been read by anyone.
+- **Nothing has run on a unit.** Every load and timing figure here is from the emulator, which
+  models no caches. Enaga's MIDI, SYNC, USB MIDI, input routing and pad pressure have never run
+  on real hardware either, so expect platform bugs as well as app bugs.
+  [docs/UNIT_CHECKLIST.md](docs/UNIT_CHECKLIST.md) accumulates everything that needs the
+  hardware, safety steps first.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). STRATA is built on **Enaga** (MIT) and its drum synthesis follows
+**Mutable Instruments Plaits** (MIT, © 2016 Émilie Gillet), reimplemented rather than ported;
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) carries both notices and says exactly what was
+taken from each.
