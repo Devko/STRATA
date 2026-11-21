@@ -74,6 +74,11 @@ struct UiProbe {
     static const char *notice(const Strata &app) { return app.notice_; }
     static bool notice_showing(const Strata &app) { return app.notice_showing(); }
 
+    static int pressure_pad(const Strata &app) { return app.pressure_pad_; }
+    static uint8_t macro_knob(const Strata &app, int macro) {
+        return app.macro_position_[macro];
+    }
+
     static uint32_t tempo_tenths(const Strata &app) { return app.tempo_tenths_; }
     static bool clock_refused(const Strata &app) { return app.clock_refused_; }
 };
@@ -1045,4 +1050,192 @@ TEST(ui_the_grid_draws_a_trig_where_the_trig_is) {
     // Track 2's row is eight pixels lower and has no trig, so the mapping is per track as well.
     CHECK_EQ(at(1, top + 8 + 3), 2);
     CHECK_EQ(at(1, top + 8 + 1), 0);
+}
+
+// --- pad pressure ---------------------------------------------------------------------------
+//
+// docs/SPEC.md: "Pad pressure modulates the selected track's macro 1 while a pad is held", using
+// Enaga's `on_pad_pressure` event, which is already 0-127 through its own cube curve. The spec's
+// `[rev]` note is explicit that the app-side smoothing this document originally planned over raw
+// readings is no longer needed, so there is none -- adding any would be undoing Enaga's shaping
+// with a second guess at it.
+//
+// None of this can be FELT here. Whether a cube curve under a finger reads as expressive is a
+// question for the unit, and docs/UNIT_CHECKLIST.md carries it. What these pin is the part that
+// can be wrong without anyone noticing on hardware: which pad owns the macro, that letting go
+// puts the knob's value back rather than leaving it where the finger lifted, and that a pad held
+// steady does not flood the command ring.
+
+// Wind macro 1's knob to the bottom, then up to `value`, and come back to GRID.
+//
+// `fresh()` resets the fake host and the project; it does NOT reset the App, which is one shared
+// static whose UI state -- the selected mode, the knob positions, the page -- survives from test
+// to test. That is deliberate (there is no App::reset and inventing one for tests would be a
+// behaviour-free function in production code), and it means a test about pressure cannot assume
+// macro 1's knob is at zero: the test before it may have left it at 127, and pressure only ever
+// pushes the macro UP from the knob.
+void set_macro_knob(Strata &app, int value) {
+    const int mode_before = UiProbe::mode(app);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_F7, true);
+    app.on_key(ENAGA_KEY_F7, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    // Pumped as it winds, not once at the end. Each click posts a command and the audio side
+    // takes a bounded number per block (Commands::kMaxPerBlock), so 135 clicks into one block
+    // overruns the ring and the last value never arrives -- which is a real property of the two
+    // contexts and not a quirk of the test: a fast knob sweep is paced by the audio side.
+    for (int i = 0; i < 80; i++) {
+        app.on_encoder(0, -1);                             // the encoder moves by 2 a click
+        if (i % 8 == 7) pump();
+    }
+    for (int i = 0; i < value / 2; i++) {
+        app.on_encoder(0, +1);
+        if (i % 8 == 7) pump();
+    }
+    pump(2);
+    if (mode_before != int(Mode::perform)) {
+        app.on_key(ENAGA_KEY_F4, true);
+        app.on_key(ENAGA_KEY_F4, false);
+    }
+}
+
+TEST(ui_pad_pressure_bends_macro_one_and_lets_it_go) {
+    Strata &app = fresh();
+    set_macro_knob(app, 0);
+
+    // A macro has to be ASSIGNED to do anything audible, but what is tested here is the value
+    // the UI sends, which is observable whether or not a target exists.
+    app.on_pad_press(0, 100);
+    pump();
+    const int track = UiProbe::selected(app);
+    CHECK_EQ(track, 0);
+    CHECK_EQ(UiProbe::pressure_pad(app), -1);          // a press alone is not a bend
+
+    app.on_pad_pressure(0, 90);
+    pump();
+    CHECK_EQ(UiProbe::pressure_pad(app), 0);
+    CHECK_EQ(int(app_engine().macro_position(0)), 90);
+
+    app.on_pad_pressure(0, 120);
+    pump();
+    CHECK_EQ(int(app_engine().macro_position(0)), 120);
+
+    // Let go: back to where the ENCODER left it, not to zero and not to where the finger lifted.
+    app.on_pad_release(0);
+    pump();
+    CHECK_EQ(UiProbe::pressure_pad(app), -1);
+    CHECK_EQ(int(app_engine().macro_position(0)), int(UiProbe::macro_knob(app, 0)));
+}
+
+TEST(ui_pad_pressure_only_pushes_the_macro_up_from_the_knob) {
+    // A pad that bent the macro DOWN would mean resting a finger on a pad changed the sound away
+    // from what the knob said. A performer leaning on a pad expects more of something.
+    Strata &app = fresh();
+
+    // Put the knob at 110 through PERFORM's encoder A, which is what owns macro 1.
+    set_macro_knob(app, 110);
+    const uint8_t knob = UiProbe::macro_knob(app, 0);
+    CHECK(knob > 100);
+    CHECK_EQ(int(app_engine().macro_position(0)), int(knob));
+
+    // The pads play in GRID, so lean on one gently.
+    app.on_pad_press(0, 100);
+    app.on_pad_pressure(0, 10);
+    pump();
+    CHECK_EQ(int(app_engine().macro_position(0)), int(knob));    // not pulled down to 10
+
+    app.on_pad_pressure(0, 127);
+    pump();
+    CHECK_EQ(int(app_engine().macro_position(0)), 127);          // and pushed up when it exceeds the knob
+    app.on_pad_release(0);
+}
+
+TEST(ui_only_one_pad_owns_the_macro_and_only_the_selected_track) {
+    Strata &app = fresh();
+    set_macro_knob(app, 0);
+
+    app.on_pad_press(0, 100);
+    app.on_pad_pressure(0, 80);
+    pump();
+    CHECK_EQ(UiProbe::pressure_pad(app), 0);
+    CHECK_EQ(int(app_engine().macro_position(0)), 80);
+
+    // A second pad held does not take the macro from the first: two streams of 262 events a
+    // second fighting over one value is not a feature.
+    app.on_pad_pressure(1, 127);
+    pump();
+    CHECK_EQ(UiProbe::pressure_pad(app), 0);
+    CHECK_EQ(int(app_engine().macro_position(0)), 80);
+
+    // Releasing the second changes nothing; releasing the owner hands it back.
+    app.on_pad_release(1);
+    pump();
+    CHECK_EQ(UiProbe::pressure_pad(app), 0);
+    app.on_pad_release(0);
+    pump();
+    CHECK_EQ(UiProbe::pressure_pad(app), -1);
+
+    // And a pad on a track that is not selected does nothing: "the SELECTED track's macro 1".
+    app.on_pad_press(0, 100);                            // selects track 0
+    pump();
+    app.on_pad_pressure(4, 127);                         // a different track's pad
+    pump();
+    CHECK_EQ(UiProbe::pressure_pad(app), -1);
+    app.on_pad_release(0);
+}
+
+TEST(ui_a_pad_held_steady_does_not_flood_the_command_ring) {
+    // The event arrives about 262 times a second per pad (docs/SPEC.md). A pad held still sends
+    // the same number over and over, and the audio side drains a bounded number of commands per
+    // block -- so repeating it would push every other edit back behind a stream of identical
+    // macro writes.
+    Strata &app = fresh();
+    set_macro_knob(app, 0);
+    app.on_pad_press(0, 100);
+    app.on_pad_pressure(0, 70);
+    pump();
+    CHECK_EQ(int(app_engine().macro_position(0)), 70);
+
+    // Fifty identical events, then one that differs.
+    for (int i = 0; i < 50; i++) app.on_pad_pressure(0, 70);
+    CHECK(app_engine().commands().empty());              // nothing was posted
+    app.on_pad_pressure(0, 71);
+    CHECK(!app_engine().commands().empty());             // a change is
+    pump();
+    CHECK_EQ(int(app_engine().macro_position(0)), 71);
+    app.on_pad_release(0);
+}
+
+TEST(ui_the_performance_row_is_not_pressure_sensitive) {
+    // The seven upper pads are tools, not keys: fill, repeat, throw, the scene selectors. A
+    // pressure event on one must not bend a macro, or leaning on FILL would change the sound.
+    Strata &app = fresh();
+    app.on_pad_press(5, 100);                            // MUTE, a performance pad
+    app.on_pad_pressure(5, 127);
+    pump();
+    CHECK_EQ(UiProbe::pressure_pad(app), -1);
+    app.on_pad_release(5);
+}
+
+TEST(ui_pad_pressure_clamps_a_value_outside_the_events_range) {
+    // <enaga/app.hpp> documents the event as 0-127 and Enaga shapes it with its own cube curve,
+    // so a value outside that should not arrive. The clamp is defensive, and `Cmd::set_macro`
+    // carries the value in a uint8_t -- so without it a pressure of 200 would reach the macro as
+    // 200 and 300 would arrive as 44, which is the wrong end of the knob.
+    Strata &app = fresh();
+    set_macro_knob(app, 0);
+    app.on_pad_press(0, 100);
+
+    app.on_pad_pressure(0, 200);
+    pump();
+    CHECK_EQ(int(app_engine().macro_position(0)), 127);
+
+    app.on_pad_pressure(0, 300);
+    pump();
+    CHECK_EQ(int(app_engine().macro_position(0)), 127);   // not 44
+
+    app.on_pad_pressure(0, -5);
+    pump();
+    CHECK_EQ(int(app_engine().macro_position(0)), 0);     // the knob's position, not a wrap
+    app.on_pad_release(0);
 }

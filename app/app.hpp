@@ -846,7 +846,61 @@ public:
     }
 
     void on_pad_release(int pad) override {
-        if (is_perform_pad(pad)) on_perform_pad(pad, false);
+        if (is_perform_pad(pad)) {
+            on_perform_pad(pad, false);
+            return;
+        }
+
+        // A pad that was bending macro 1 lets it go. The macro returns to where the ENCODER
+        // left it, not to zero: the knob's position is the setting and the pressure is a bend on
+        // top of it, so letting go must not throw the setting away. Without this, pressing a pad
+        // once would leave macro 1 wherever the finger happened to lift.
+        if (pressure_pad_ == pad) {
+            pressure_pad_ = -1;
+            post(Cmd::set_macro, 0, 0, 0, macro_position_[0]);
+        }
+    }
+
+    // docs/SPEC.md: "Pad pressure modulates the selected track's macro 1 while a pad is held."
+    //
+    // Enaga's event is already 0-127 through its own cube curve, and the spec's `[rev]` note is
+    // explicit that the app-side smoothing and change-filtering this document originally planned
+    // over raw readings is no longer needed -- so this does no filtering, and adding any would be
+    // undoing Enaga's shaping with a second guess at it.
+    //
+    // The pressure takes the macro only UPWARD from where the encoder left it. A pad that bent
+    // the macro DOWN would mean resting a finger quietly on a pad changed the sound away from
+    // what the knob said, and a performer leaning on a pad expects more of something rather than
+    // less. So the macro goes to the larger of the knob's position and the pressure, and
+    // `on_pad_release` puts the knob's position back.
+    //
+    // Only the pad the press came from, and only one at a time: with two pads held, the first
+    // owns the macro until it is released. Pressure events arrive about 262 times a second per
+    // pad (docs/SPEC.md), which would otherwise be two streams fighting over one value.
+    void on_pad_pressure(int pad, int pressure) override {
+        // `track_for_pad` is `pad % 2 == 0 ? pad / 2 : -1`, so this one test does three jobs:
+        // it rejects the performance row (the odd pads, which are tools and not keys -- leaning
+        // on FILL must not change the sound), it rejects anything out of range, and because each
+        // track has exactly ONE pad there can never be a second pad competing for this macro.
+        //
+        // Guards for the second and third of those were written here and then removed: both
+        // survived mutation testing, because this line already covers them. A guard that cannot
+        // fire is a claim about a situation that cannot arise.
+        const int track = track_for_pad(pad);
+        if (track < 0 || track >= kTracks) return;
+        if (track != selected_) return;                   // "the SELECTED track's macro 1"
+
+        const uint8_t clamped = uint8_t(pressure < 0 ? 0 : (pressure > 127 ? 127 : pressure));
+        const uint8_t floor = macro_position_[0];
+        const uint8_t value = clamped > floor ? clamped : floor;
+
+        // One command per CHANGE, not per event. 262 events a second per pad against a ring the
+        // audio side drains at a bounded rate per block is a waste of both; a pad held steady
+        // produces the same number repeatedly and the first of them is enough.
+        if (pressure_pad_ == pad && value == pressure_sent_) return;
+        pressure_pad_ = pad;
+        pressure_sent_ = value;
+        post(Cmd::set_macro, 0, 0, 0, value);
     }
 
     // The seven upper pads. Four of them are HELD rather than toggled -- fill, repeat, throw and
@@ -2007,6 +2061,11 @@ private:
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
     int scene_holding_ = -1;                    // a scene pad held: -1, 0 for A, 1 for B
     int macro_selected_ = 0;
+
+    // The pad currently bending macro 1, and the last value sent for it. -1 for none; see
+    // on_pad_pressure on why one pad at a time and why only changes are posted.
+    int pressure_pad_ = -1;
+    uint8_t pressure_sent_ = 0;
     uint8_t macro_position_[kMacros] = {};
     uint16_t morph_ = 0;
     bool repeat_held_ = false;
