@@ -125,10 +125,14 @@ int clamp_int(int value, int low, int high) {
 // so it needs one to become a note.
 constexpr uint8_t kPadOctaveNote = 60;
 
+// The velocity a STEP key plays at. Keys have none of their own, and 100 is what the default
+// kit's trigs use, so a part played in sounds like a part programmed in.
+constexpr uint8_t kKeyVelocity = 100;
+
 // The modes of docs/SPEC.md's function block. F4 = GRID, F7 = MIXER, F8 = EDIT, and the two
 // selection keys under the screen move within whichever mode is showing -- the step page in
 // GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
-enum class Mode : uint8_t { grid, edit, mixer, project, perform };
+enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys };
 
 // The step page shows four of a step's fields at a time, so the selection keys page through
 // them. Derived rather than written down: core/stepedit.hpp owns how many fields there are.
@@ -236,6 +240,14 @@ public:
             return;
         }
 
+        // In KEYS the STEP keys are an instrument: sixteen degrees of the project's scale from
+        // the root up, which is what docs/SPEC.md means by "STEP keys play notes in scale".
+        // Taken on the press only -- see keys_note below on why there is no release.
+        if (mode_ == Mode::keys && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
+            if (down) play_key(key - ENAGA_KEY_STEP1);
+            return;
+        }
+
         // And in PERFORM they are the sixteen parameters of the selected track, assigned to the
         // selected macro. The STEP keys are already a sixteen-wide selector in the step page, so
         // this is the gesture they have; without it a macro could never be set up at all, and
@@ -290,8 +302,8 @@ public:
                 mode_ = Mode::project;
                 step_page_ = false;
                 break;
-            case ENAGA_KEY_F4:                         // HOME: the grid
-                mode_ = Mode::grid;
+            case ENAGA_KEY_F4:                         // HOME: the grid, or KEYS with F1
+                mode_ = shift_ ? Mode::keys : Mode::grid;
                 step_page_ = false;
                 break;
             case ENAGA_KEY_F7:                         // MIXER, or PERFORM with F1
@@ -345,6 +357,16 @@ public:
             case ENAGA_KEY_OCTAVE_LEFT:
             case ENAGA_KEY_OCTAVE_RIGHT: {
                 const int delta = key == ENAGA_KEY_OCTAVE_LEFT ? -1 : +1;
+                if (mode_ == Mode::keys) {
+                    // "Step page 1-4 in GRID; octave in KEYS" (docs/SPEC.md's key table).
+                    keys_octave_ = clamp_int(keys_octave_ + delta, -3, 4);
+                    char *out = notice_buffer_;
+                    append(out, "OCT ");
+                    append_number(out, uint32_t(keys_octave_ + 3));
+                    *out = 0;
+                    notice(notice_buffer_);
+                    break;
+                }
                 if (shift_) {
                     const int length = int(engine_.pattern().tracks[selected_].length) + delta;
                     mark(GestureKind::length, selected_, 0);
@@ -427,6 +449,12 @@ public:
                 // The bank being SHOWN, which is not the bank playing: a queued change is armed
                 // from the shown bank, so browsing must not switch anything by itself.
                 shown_bank_ = (shown_bank_ + delta + kBanks) % kBanks;
+                break;
+            case Mode::keys:
+                // The selected track, so a part can be played in on one track and then another
+                // without leaving the mode.
+                selected_ = (selected_ + delta + kTracks) % kTracks;
+                end_gesture();
                 break;
             case Mode::perform:
                 // How hard a mutation mutates. The one number in this mode with no encoder of
@@ -1048,6 +1076,7 @@ public:
                 case Mode::mixer:   draw_mixer(canvas); break;
                 case Mode::project: draw_project(canvas); break;
                 case Mode::perform: draw_perform(canvas); break;
+                case Mode::keys:    draw_keys(canvas); break;
             }
         }
 
@@ -1353,6 +1382,76 @@ public:
 
             const int bar = int(engine_.params(selected_).v[index]) * 28 / 127;
             canvas.rect(slot * 32, y + 12, bar < 1 ? 1 : bar, 3, 8);
+        }
+    }
+
+    // --- KEYS: the STEP keys as an instrument ----------------------------
+
+    // The note STEP `step` plays: `step` degrees of the project's scale above the root, in the
+    // current octave. By DEGREES rather than semitones, which is the whole reason core/scale
+    // exists -- sixteen keys then span two octaves of a seven-note scale and stay in the key.
+    uint8_t keys_note(int step) const {
+        const uint8_t root = uint8_t(engine_.pattern().root % 12);
+        const int scale = int(engine_.pattern().scale);
+        const int base = clamp_int(kPadOctaveNote + keys_octave_ * 12 + int(root), 0, 127);
+        return scale_step(scale_fold(uint8_t(base), root, scale), root, scale, step);
+    }
+
+    // A STEP key played. One trigger, no release.
+    //
+    // There is no release because the `Machine` interface has none: `dsp/track.hpp` offers
+    // `release_all()` and nothing per-note, so releasing one key of a held chord would silence
+    // the whole machine. A pad hit has the same shape (`on_pad_press` triggers and
+    // `on_pad_release` does nothing for the lower pads), so this is consistent rather than a
+    // gap peculiar to KEYS -- but it IS why `Cmd::release_note` is still unimplemented, and
+    // giving it meaning needs a per-note release on the machine interface first.
+    void play_key(int step) {
+        const uint8_t note = keys_note(step);
+        // A key has no velocity. 100 is what the default kit's own trigs use, so a part played
+        // in and a part programmed in sound the same.
+        post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity);
+        record_note(selected_, note, kKeyVelocity);
+    }
+
+    void draw_keys(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const uint8_t root = uint8_t(engine_.pattern().root % 12);
+        const int scale = int(engine_.pattern().scale);
+
+        out = line;
+        append(out, "KEYS T");
+        append_number(out, uint32_t(selected_) + 1);
+        append(out, "  ");
+        append(out, note_name(root));
+        *out++ = ' ';
+        append(out, scale_name(scale));
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        out = line;
+        append(out, "OCT ");
+        append_number(out, uint32_t(keys_octave_ + 3));
+        append(out, "   ");
+        append_number(out, uint32_t(scale_size(scale)));
+        append(out, " PER OCTAVE");
+        *out = 0;
+        canvas.text(0, 27, line, 11);
+
+        // What each of the sixteen keys will play. The point of the screen in this mode: a
+        // performer needs to see the notes under their fingers, not work them out.
+        for (int i = 0; i < 16; i++) {
+            const int x = (i % 4) * 32;
+            const int y = (i / 4) * 16 + 44;
+            const uint8_t note = keys_note(i);
+            out = line;
+            append(out, note_name(note));
+            append_number(out, uint32_t(note_octave(note) < 0 ? 0 : note_octave(note)));
+            *out = 0;
+            // The root of each octave brighter, so the shape of the scale is readable.
+            const bool at_root = (note % 12) == root;
+            canvas.rect(x + 1, y, 29, 13, at_root ? 6 : 3);
+            canvas.text(x + 3, y + 3, line, at_root ? 15 : 11);
         }
     }
 
@@ -1817,6 +1916,9 @@ private:
     // The Euclidean generator's three numbers (F1 + A, B, C in GRID). They live here rather than
     // in the pattern because the pattern stores the RESULT: a generated rhythm is then edited by
     // hand, and keeping the numbers would make the screen claim a figure the steps no longer are.
+    // KEYS mode's octave, 0 being the one the pads play in.
+    int keys_octave_ = 0;
+
     int euclid_hits_ = 4;
     int euclid_steps_ = 16;
     int euclid_rotation_ = 0;

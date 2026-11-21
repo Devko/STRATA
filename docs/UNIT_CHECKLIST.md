@@ -386,7 +386,7 @@ gesture is the mistake this milestone made twice before it was caught.
 
 ## M6 — full concept (started)
 
-Only the Euclidean generator so far. `core/` is host-tested and mutation-tested; the gesture is
+The Euclidean generator and KEYS mode so far. `core/` is host-tested and mutation-tested; the gesture is
 on encoders, which the emulator cannot drive.
 
 - [ ] F1 + A, B, C in GRID walk hits, the cycle and the rotation, and the screen reads
@@ -401,6 +401,21 @@ on encoders, which the emulator cannot drive.
       locks, conditions, ratchets, micro-timing and probability all survive. Host-tested, but
       worth hearing once.
 - [ ] A rotation of a whole cycle is a no-op and reports no change, so it costs no undo level.
+
+**KEYS mode** — the one M6 feature that IS scenario-tested (`tests/scenario_m6.sh` plays three
+keys with REC on and watches them land in the pattern), so these are about feel rather than
+whether it works.
+
+- [ ] F1 + F4 opens KEYS; the screen shows all sixteen notes under the keys, roots brighter.
+- [ ] The sixteen keys are sixteen DEGREES of the project's scale, not sixteen semitones: in a
+      seven-note scale they should span just over two octaves and every one should be in key.
+- [ ] The octave keys move the octave; the selection keys change track without leaving the mode.
+- [ ] Change the key or scale in F3 and the KEYS layout follows it.
+- [ ] **A key has no release.** `dsp/track.hpp`'s Machine interface has `release_all()` and
+      nothing per-note, so releasing one key of a held chord would silence the whole machine. A
+      long VA note therefore plays its own decay rather than stopping when you let go. If that
+      feels wrong on the unit, the fix is a per-note release on the machine interface, and
+      `Cmd::release_note` is sitting in the enum unimplemented waiting for it.
 
 ## M0.5 — budget spike
 

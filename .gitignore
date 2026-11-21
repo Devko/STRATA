@@ -15,3 +15,6 @@
 *.swp
 Thumbs.db
 desktop.ini
+
+# Agent worktrees: a subagent's own checkout, never project content.
+.claude/worktrees/
