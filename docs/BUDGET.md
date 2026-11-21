@@ -467,11 +467,33 @@ to be wrong for the melodic machines, and by a wide margin. It holds for the dru
 short one-shots that go idle within a step; it does not hold for a sustaining voice. **A six-voice
 chord is not a corner case** -- MIN11 is in the table precisely so all six can be used.
 
-What to reach for, in order, and none of it is worth doing before the unit is measured:
-`dsp/vapoly.cpp`'s header names the **buffered-maths** optimisation (one oscillator pass over a
-whole slice for all six voices rather than six passes over one), the voice count could drop from
-six to four, and `VaVoice::kControl` could rise from 16, which would cut the control-rate term
-four ways at a cost in envelope resolution. The first of those is the one with headroom in it.
+**Where the cycles are: 18% control-rate, 82% per-sample.** Measured, not argued, by sweeping
+`VaVoice::kControl` on the MIN7 beat -- 64 frames a block, so 16/32/64 is 4/2/1 control steps:
+
+| `kControl` | control steps per block | `scenario_m3.sh` peak | saved |
+| --- | --- | --- | --- |
+| 16 (shipped) | 4 | 33.07% | — |
+| 32 | 2 | 31.12% | 1.95 |
+| 64 | 1 | 30.17% | 2.90 |
+
+Halving the step count saves 1.95 and halving it again saves 0.95, which is a **fixed ~0.98
+points per control step** across the five VaVoices sounding (the bass plus four chord voices), so
+~0.78 of each voice's 4.25 points. The rest is the per-sample loop.
+
+That settles which lever is worth pulling, and it does NOT depend on cl6x or on the unit:
+
+- **Raising `kControl` is not it.** Going to 64 is a 4x coarser envelope and filter update -- an
+  audible cost -- for 2.9 points of 33. Reverted; the shipped value stays 16.
+- **The per-sample loop is where the money is**, so the real option is the **buffered maths**
+  `dsp/vapoly.cpp`'s header names: one oscillator pass over a whole slice for all six voices
+  instead of six passes over one. That is a rewrite of the voice's inner loop, which is why it
+  should wait for a figure from the unit rather than from an emulator with no cache model.
+- **Dropping six voices to four** is the blunt option and is worth 8.5 points by this table.
+
+One caveat on the split: it is GCC-only. cl6x pipelines a branch-free per-sample loop far better
+than it does the branchy control-rate code, so on the unit the per-sample share should be SMALLER
+than 82% -- which would make the control-rate term relatively more important, not less. That is
+reasoning, not measurement, and it is one more thing the unit decides.
 
 **`Trig::gate_frames` costs +0.06 points** and nothing more. The previous build of the same four
 scenarios read 22.66 / 22.66 / 23.48 / 30.58, so converting `Step::length` to frames in
