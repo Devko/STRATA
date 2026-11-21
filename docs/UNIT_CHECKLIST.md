@@ -402,6 +402,26 @@ on encoders, which the emulator cannot drive.
       worth hearing once.
 - [ ] A rotation of a whole cycle is a no-op and reports no change, so it costs no undo level.
 
+**Chords (`core/chord`)** — 27 host tests, 15 of 15 mutations caught, and nothing calls it yet:
+the engine wiring is still to come, so none of this is reachable from the panel.
+
+- [ ] A POLY step with each chord type sounds like its name. The table is semitone stacks folded
+      into the key, which gives the diatonic triad on every degree of a mode — so MAJ on the root
+      of a minor key correctly comes out MINOR. Verify that reads as a feature and not a bug.
+- [ ] Walking the chord field in the step page reaches every chord: the packing is 6 bits because
+      `core/stepedit.cpp` already publishes the field as 0..63, and 58 is the highest byte it
+      produces.
+- [ ] A cleared pattern plays single notes. Type 0 with inversion 0 is 0, so zeroed memory is one
+      note rather than a chord nobody asked for.
+- [ ] Inversions move the voicing without changing the notes. Depth is clamped to one less than
+      the note count, because deeper would transpose rather than invert.
+- [ ] **A decision is owed first**: `core/chord` folds the chord's ROOT into the scale, but
+      `Engine::fire` passes a MONO step's note through unfolded. So the same note value would play
+      differently on a POLY track than a MONO one. `docs/SPEC.md` says "melodic tracks fold notes
+      into the scale", which argues for folding both — but that changes how every existing MONO
+      part sounds, and the engine does not currently know which machines are melodic. **Decide
+      before wiring chords in, not after.**
+
 **KEYS mode** — the one M6 feature that IS scenario-tested (`tests/scenario_m6.sh` plays three
 keys with REC on and watches them land in the pattern), so these are about feel rather than
 whether it works.
