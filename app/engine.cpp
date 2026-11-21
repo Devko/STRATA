@@ -348,6 +348,9 @@ void Engine::apply(const Command &command) {
                 for (int t = 0; t < kTracks; t++) {
                     if (machines_[t]) machines_[t]->kill_all();
                 }
+                // And the ratchet hits still waiting for their block. A second STOP means
+                // silence now, so a hit landing four blocks later would be a note after it.
+                deferred_count_ = 0;
             } else {
                 for (int t = 0; t < kTracks; t++) {
                     if (machines_[t]) machines_[t]->release_all();
@@ -1066,9 +1069,43 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     perform_.fill = fill_held_ || auto_fill_active(auto_fill_, bar_);
 
     const int count = scheduler_.tick(tick, frame, live(), perform_, events_, kMaxEventsPerTick);
-    for (int i = 0; i < count; i++) fire(events_[i]);
+    for (int i = 0; i < count; i++) dispatch(events_[i], block_frames_);
 
     for (int t = 0; t < kTracks; t++) status_.publish_playhead(t, scheduler_.playhead(t));
+}
+
+void Engine::dispatch(const StepEvent &event, uint32_t frames) {
+    // In this block: fire it, and `fire` hands the machine a frame it can schedule on.
+    if (event.frame < frames) {
+        fire(event);
+        return;
+    }
+
+    // Past it: hold it, with its frame measured from the START of the next block. See
+    // app/engine.hpp on why this is here and what it cost not to be.
+    if (deferred_count_ >= kMaxDeferredEvents) {
+        status_.bump_refused();   // the newest goes; the oldest is nearest to sounding
+        return;
+    }
+    StepEvent &held = deferred_[deferred_count_++];
+    held = event;
+    held.frame -= frames;
+}
+
+void Engine::deliver_deferred(uint32_t frames) {
+    // Oldest first, and compacted in one pass: an event that fires is removed and the rest keep
+    // their order, so a ratchet's hits stay in the order the scheduler produced them.
+    int keep = 0;
+    for (int i = 0; i < deferred_count_; i++) {
+        StepEvent &event = deferred_[i];
+        if (event.frame < frames) {
+            fire(event);
+            continue;
+        }
+        event.frame -= frames;
+        deferred_[keep++] = event;
+    }
+    deferred_count_ = keep;
 }
 
 void Engine::fire(const StepEvent &event) {
@@ -1187,6 +1224,13 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         samples_per_tick_ = rate_ * 60.0f / (bpm * float(enaga::clock::ppqn));
         reconfigure();
     }
+
+    // What `resolve_tick` compares a ratchet hit's frame against.
+    block_frames_ = frames;
+
+    // Ratchet hits deferred from earlier blocks, before this block's own ticks: they are older,
+    // and a machine's voice allocation sees triggers in the order they arrive.
+    deliver_deferred(frames);
 
     // Enaga's clock reports the ticks falling in this block, each with the frame it lands on.
     // That frame is what makes a step start on an exact sample.

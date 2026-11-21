@@ -330,6 +330,46 @@ private:
     // case it is 4 KiB, and the platform caps a stack frame at 16 KiB.
     StepEvent events_[kMaxEventsPerTick];
 
+    // --- ratchet hits waiting for the block they belong to ---
+    //
+    // A ratchet arrives as EVERY hit at once. `core/scheduler` resolves a step into one event per
+    // hit, each at `frame` plus an offset inside the step, and its header is explicit about whose
+    // problem that is: "which can be past the end of the block: spreading them is the caller's to
+    // defer, not the scheduler's to withhold." The caller is this file, and it did not defer.
+    //
+    // What that cost: a machine stores ONE pending trig per voice and `trigger` overwrites a
+    // pending one without looking, so a ratchet needs as many voices as it has hits and the
+    // machines have 1, 2, 4 or 6. Measured on KICK at 130 BPM, where a step is 5,538 frames: a
+    // 3-hit ratchet sounded 2 hits and the one it dropped was the hit ON THE STEP; a 4-hit
+    // ratchet sounded 2; an 8-hit ratchet sounded 2. VA MONO, with one voice, kept only the LAST
+    // hit, so a ratcheted bass note arrived most of a step late and did not ratchet at all.
+    //
+    // So an event whose frame is past this block is held here and its frame counted down a block
+    // at a time until it lands. One hit per machine per block is then all that can arrive, which
+    // is what the one-pending-trig contract can take -- and that is guaranteed rather than hoped
+    // for: hits are `step_samples / hits` apart, and at the ABI's fastest tempo (300 BPM) on the
+    // fastest speed (2x) that is 150 frames, well over a 64-frame block.
+    //
+    // 128 slots: 8 tracks x the 8-hit maximum is 64 outstanding, doubled because micro-timing can
+    // pull the next step up to 11 ticks earlier and start a second ratchet before the first has
+    // finished spreading. 2 KiB, and a member rather than a local because CLAUDE.md caps a frame
+    // at 16 KiB. An overflow drops the NEWEST event and counts a refusal: the oldest is the one
+    // nearest to sounding and, in a ratchet, the one on the step.
+    static constexpr int kMaxDeferredEvents = 128;
+    StepEvent deferred_[kMaxDeferredEvents];
+    int deferred_count_ = 0;
+
+    // This block's length, so `resolve_tick` can tell a frame inside it from one past it. Set at
+    // the top of `process` rather than threaded through, because `resolve_tick` is called from
+    // the tick loop and already reads half the engine's state.
+    uint32_t block_frames_ = 0;
+
+    // Fire `event` now if it falls in this block, else defer it. `frames` is the block's length.
+    void dispatch(const StepEvent &event, uint32_t frames);
+
+    // Count every deferred event down by a block and fire the ones that have arrived.
+    void deliver_deferred(uint32_t frames);
+
     // Cached so a tempo change can re-derive the scheduler's ratchet spacing without dividing
     // every block. Enaga's clock reports the tempo; core/ cannot ask it.
     float tempo_ = 0.0f;

@@ -405,3 +405,139 @@ TEST(app_a_project_load_is_refused_under_an_external_clock) {
     CHECK_EQ(host.read_alls(), loads_before);   // it did not read a byte
     CHECK(host.running());                      // and it did not stop the clock either
 }
+
+// --- ratchets: every hit sounds, which it did not ------------------------------------------
+//
+// `core/scheduler` resolves a ratcheted step into one event per hit, each at the tick's frame
+// plus an offset inside the STEP -- thousands of frames, deliberately. Its header says whose
+// problem that is: "which can be past the end of the block: spreading them is the caller's to
+// defer, not the scheduler's to withhold." `Engine::fire` was the caller and did not defer, so
+// all of a ratchet's hits were handed to the machine inside one block; a machine stores one
+// pending trig per voice and `trigger` overwrites a pending one without looking.
+//
+// Measured on KICK at 130 BPM before the fix, where a step is 5,538 frames: a 3-hit ratchet
+// sounded 2 and the one it dropped was the hit ON THE STEP. A 4-hit sounded 2. An 8-hit sounded
+// 2. VA MONO, with one voice, kept only the LAST hit.
+//
+// The engine now holds an event whose frame is past the block and counts it down a block at a
+// time. These tests measure ONSETS IN THE AUDIO, because the trigger count cannot tell the
+// difference -- all the hits were always "fired", they just overwrote each other on the way in.
+
+namespace {
+
+// Render `blocks` blocks and return the total energy, plus the peak of the first block.
+//
+// ENERGY is what these tests measure, after two sharper-looking approaches failed. Counting
+// onsets by threshold does not work because a kick's block peak oscillates with the waveform's
+// phase as it decays (one hit reads 0.589, 0.099, 0.478, 0.252, 0.061, 0.322 ...), and comparing
+// a hit's peak against the tail a few blocks earlier fails for the same reason: at a 50 Hz
+// fundamental one cycle is fifteen blocks, so "the tail" can be read at the top of a swing.
+//
+// Energy over a whole step has none of that. Every hit that sounds adds its own decay to the
+// total, so the energy of a ratcheted step is STRICTLY INCREASING in the number of hits that
+// actually sounded -- which is exactly the property the bug broke, and exactly what a listener
+// hears. Before the fix a 3-, 4- or 8-hit ratchet all sounded two hits, so all three measured
+// the same.
+float step_energy(int blocks, float *first_peak = nullptr) {
+    float energy = 0.0f;
+    for (int b = 0; b < blocks; b++) {
+        pump();
+        const float *block = last_block();
+        for (int i = 0; i < kStereo; i++) energy += block[i] * block[i];
+        if (b == 0 && first_peak != nullptr) *first_peak = peak_of(block, kStereo);
+    }
+    return energy;
+}
+
+// A short, loud KICK so each hit is a separate blip rather than one long tail.
+void kick_blip() {
+    post(Cmd::set_param, 0, 0, 8, 0);     // DEC at its shortest
+    post(Cmd::set_param, 0, 0, 11, 127);  // LVL up
+    pump();
+}
+
+}  // namespace
+
+TEST(app_every_hit_of_a_ratchet_sounds) {
+    // A step at 130 BPM is 5,538 frames, so an N-hit ratchet puts hits at h * 5538 / N -- all of
+    // them handed to the machine in one block by the scheduler, and all but two of them lost
+    // before the engine learned to defer.
+    //
+    // Each hit that sounds adds its decay to the step's energy, so more hits is more energy, and
+    // the figures below have to rise all the way to eight. Before the fix they stopped rising
+    // after two, because that is how many a KICK's two voices could hold.
+    const int counts[] = {1, 2, 3, 4, 8};
+    float energy[5] = {};
+    for (int i = 0; i < 5; i++) {
+        const int hits = counts[i];
+        fresh();
+        kick_blip();
+        put_trig(0, 0);
+        post(Cmd::step_field_delta, 0, 0, uint8_t(StepField::ratchet_count), uint8_t(hits - 1));
+        pump();
+        CHECK_EQ(int(ratchet_count(strata::test::engine().pattern().tracks[0].steps[0].ratchet)),
+                 hits);
+
+        FakeHost::the().set_running(true);
+        FakeHost::the().deliver_tick(0, 0);
+
+        float first = 0.0f;
+        energy[i] = step_energy(110, &first);     // 7,040 frames: the whole step and a tail
+        CHECK(first > 0.1f);                      // the hit ON the step, every time
+    }
+
+    for (int i = 1; i < 5; i++) {
+        CHECK(energy[i] > energy[i - 1]);
+    }
+    CHECK(energy[4] > 2.0f * energy[0]);          // eight hits is not two hits' worth
+}
+
+// A third ratchet test is deliberately ABSENT: "the first hit lands on the tick's own frame".
+//
+// It was written and then removed rather than tuned until it passed. The measurement needs to
+// know which frame stops being silent, and in this rig nothing is silent -- the master reverb's
+// tail outlives anything `fresh()` can reset, and the obvious fix (a dry kit) turned out to zero
+// the insert chain's FX page rather than a send level and broke two passing tests. Chasing it
+// further would have meant a threshold chosen because it made the test green, which is worth
+// less than no test at all.
+//
+// What covers the property instead, between them: `app_a_tick_lands_on_the_frame_the_clock_says`
+// pins that a step starts on the tick's frame, and `app_every_hit_of_a_ratchet_sounds` pins that
+// the hit on the step sounds for every ratchet count (`first > 0.1f` in the tick's own block).
+// What is left unproven is only the two together, and docs/UNIT_CHECKLIST.md carries it.
+
+TEST(app_a_second_stop_drops_ratchet_hits_still_waiting) {
+    // A second STOP press cuts the tails, and a hit scheduled four blocks out would otherwise
+    // arrive as a note after the silence.
+    fresh();
+    kick_blip();
+    put_trig(0, 0);
+    post(Cmd::step_field_delta, 0, 0, uint8_t(StepField::ratchet_count), 7);   // 8 hits
+    pump();
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump(4);                                   // the first hit has sounded; seven are waiting
+
+    post(Cmd::stop, 0, 0, 0, 0, 1);            // c = 1: cut the tails
+    pump();
+    FakeHost::the().set_running(false);
+
+    // Nothing more, for the rest of the step. Measured as energy against the same stop with no
+    // ratchet at all: if the seven waiting hits still landed, the step would carry their decays.
+    const float stopped = step_energy(100);
+
+    fresh();
+    kick_blip();
+    put_trig(0, 0);
+    pump();
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump(4);
+    post(Cmd::stop, 0, 0, 0, 0, 1);
+    pump();
+    FakeHost::the().set_running(false);
+    const float plain = step_energy(100);
+
+    CHECK(stopped < 2.0f * plain + 1e-6f);
+}

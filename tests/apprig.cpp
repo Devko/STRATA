@@ -105,6 +105,12 @@ Engine &fresh() {
         incoming.kit.tracks[t].params[11] = 127;     // LVL on every machine (dsp/track.hpp)
     }
 
+    // Zeroing parameters 12-15 to get a DRY kit was tried and reverted: that page is the insert
+    // chain's, not a pair of send levels, so zeroing it changes the signal path and it broke two
+    // passing tests. The master reverb's tail therefore outlives `fresh()`, and a test that wants
+    // to know WHERE in a block a note started has to measure it relative to that tail rather
+    // than against silence.
+
     post(Cmd::project_loaded);
 
     // And cut any tails the test before left ringing. A kick decays for well over a block, so
