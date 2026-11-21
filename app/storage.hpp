@@ -149,7 +149,13 @@ public:
 
     // The last failure, or nullptr. Sticky until the next job starts, because a load that failed
     // silently is the least diagnosable thing a sampler can do.
-    const char *last_error() const { return error_; }
+    //
+    // Two slots behind one accessor. A load ends by queueing eight sample swaps, so a reason
+    // kept only in `error_` was wiped by the first of them within a millisecond -- invisible on
+    // a screen that draws at 20 fps. A save's or a load's reason therefore also goes in
+    // `project_error_`, which only another save or load clears, and this prefers whichever is
+    // newer: a sample failure while one is in flight, the project's reason otherwise.
+    const char *last_error() const { return error_ != nullptr ? error_ : project_error_; }
 
     const SamplePool &samples() const { return pool_; }
 
@@ -206,6 +212,7 @@ private:
     char name_[kNameBytes] = {};
     bool card_usable_ = true;
     const char *error_ = nullptr;
+    const char *project_error_ = nullptr;   // a save's or a load's reason; see last_error()
 
     Job job_ = Job::idle;
     int step_ = 0;                 // which file, or which slice

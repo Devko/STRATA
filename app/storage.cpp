@@ -206,7 +206,12 @@ bool Storage::project_path(char *out, uint32_t max, bool autosave, const char *f
 // --- requests -------------------------------------------------------------
 
 void Storage::request_save() {
-    if (job_ != Job::idle) return;                 // one job at a time
+    // QUEUED, not dropped. This used to return when a job was in flight -- and a background
+    // sample load is the normal state for a second or two after every project open, while
+    // app/app.cpp says "SAVING" on the screen regardless. So pressing SAVE just after opening a
+    // project did nothing at all and said it had worked. app/storage.hpp claimed requests queue;
+    // now they do, and `service()` is what serialises them because it starts a job only when it
+    // is idle.
     // The kit the machines read and the kit a file holds are different structures, so the audio
     // side is asked to copy one into the other. Posting it is also what defers the save: the ring
     // is now non-empty, so `service()` waits, and by the time it drains the audio side has
@@ -218,13 +223,12 @@ void Storage::request_save() {
 }
 
 void Storage::request_autosave() {
-    if (job_ != Job::idle || save_pending_) return;
+    if (save_pending_) return;      // a deliberate save is pending: it supersedes an autosave
     post(Cmd::kit_store);
     autosave_pending_ = true;
 }
 
 void Storage::request_reload() {
-    if (job_ != Job::idle) return;
     // The project, not the autosave, even if this session opened the autosave: "read the card
     // again" means the last deliberate save. The UI says RELOADING first, because this throws
     // away everything unsaved.
@@ -233,7 +237,6 @@ void Storage::request_reload() {
 }
 
 void Storage::request_new() {
-    if (job_ != Job::idle) return;
     // RAM only: nothing is written until a save, so a new project cannot lose the one on the
     // card by itself.
     if (!enaga::clock::running() || enaga::clock::stop()) {
@@ -358,7 +361,20 @@ void Storage::on_card(bool usable) {
 void Storage::begin_job(Job job) {
     job_ = job;
     step_ = 0;
+
     error_ = nullptr;
+
+    // A SAVE or a LOAD also clears the PROJECT error, which the sample jobs do not.
+    //
+    // Why there are two. `step_load` ends by queueing the sample swaps, so the very next
+    // `service()` pass used to start one and wipe the reason the load had just refused a file --
+    // and `update()` runs over 750 times a second against a screen that draws at 20 fps, so a
+    // damaged file was SILENT, against docs/SPEC.md's "refused with a message on screen".
+    //
+    // Making `error_` survive a sample job instead would have broken its own documented
+    // contract, "sticky until the next job starts", which three tests rightly hold it to. So the
+    // project's reason gets a slot of its own, and `last_error()` prefers the newer of the two.
+    if (job == Job::save || job == Job::load) project_error_ = nullptr;
 }
 
 void Storage::finish_job(const char *error) {
@@ -392,9 +408,14 @@ void Storage::finish_job(const char *error) {
         }
     }
 
+    const bool project_job = job_ == Job::save || job_ == Job::load;
     job_ = Job::idle;
     step_ = 0;
-    if (error != nullptr) error_ = error;
+    if (error != nullptr) {
+        error_ = error;
+        // And kept where the sample swaps that follow a load cannot reach it.
+        if (project_job) project_error_ = error;
+    }
 }
 
 const char *Storage::busy_text() const {

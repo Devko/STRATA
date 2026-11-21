@@ -1994,16 +1994,18 @@ TEST(storage_the_transport_runs_through_a_held_sample_load) {
     CHECK_EQ(slot_of(kLoopTrack).frames, 4800u);
 }
 
-TEST(storage_what_a_job_in_flight_refuses_and_what_it_queues) {
-    // One job at a time (app/storage.hpp). The two requests behave DIFFERENTLY while one is
-    // running, and the difference matters to the user:
+TEST(storage_a_request_made_while_a_job_runs_is_queued_and_not_dropped) {
+    // One job at a time (app/storage.hpp), and EVERY request now queues rather than vanishing.
     //
-    //   * `request_sample` queues -- it only sets a bit, so nothing is lost.
-    //   * `request_save`, `request_autosave`, `request_reload` and `request_new` all return early
-    //     and silently. app/storage.hpp says "requests queue instead", and these four do not.
-    //     app/app.cpp's `on_project_key` announces SAVING, RELOADING or NEW PROJECT whatever this
-    //     returns, so the screen reports work that is never done. Pinned as it stands, and
-    //     reported rather than fixed here.
+    // This test pinned the opposite, and it was a real bug: `request_save`, `request_autosave`,
+    // `request_reload` and `request_new` each returned early and silently while a job was in
+    // flight -- and a background sample load is the normal state for a second or two after every
+    // project open, while app/app.cpp announces SAVING, RELOADING or NEW PROJECT whatever the
+    // call does. So pressing SAVE just after opening a project did nothing and said it had
+    // worked. app/storage.hpp claimed requests queue; now they do, and `service()` serialises
+    // them because it starts a job only when it is idle.
+    //
+    // A deliberate SAVE still supersedes an autosave, which is the one ordering rule left.
     clean();
     FakeHost &host = FakeHost::the();
 
@@ -2019,29 +2021,25 @@ TEST(storage_what_a_job_in_flight_refuses_and_what_it_queues) {
     std::strcpy(name_bytes, storage().project_name());
     const char *name_before = name_bytes;    // a pointer, so CHECK_EQ compares the CONTENT
 
+    // A save asked for NOW, while the read is in flight.
     storage().request_save();
-    storage().request_autosave();
-    storage().request_reload();
-    storage().request_new();
-    CHECK_EQ(storage().busy_text(), "READING");    // none of them displaced the job
+    CHECK_EQ(storage().busy_text(), "READING");    // it did not displace the job
+    CHECK_EQ(host.saves(), saves_before);          // and nothing is written yet
 
+    // The read finishes, and the save that was waiting runs by itself.
     host.complete_loads();
-    CHECK(settle());
-
-    // Nothing was saved, nothing was read, and the project was not renamed: all four requests
-    // were dropped rather than deferred.
-    CHECK_EQ(host.saves(), saves_before);
-    CHECK_EQ(host.read_alls(), reads_before);
-    CHECK_EQ(storage().project_name(), name_before);
-    CHECK(!host.logged("saved"));
-    CHECK(!host.logged("autosaved"));
-    CHECK(!host.logged("loaded"));
-
-    // The sample itself arrived, and a save asked for now works.
-    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
-    storage().request_save();
     CHECK(pump_until_idle());
+    CHECK(host.saves() > saves_before);
     CHECK(host.logged("saved"));
+    CHECK(storage().last_error() == nullptr);
+
+    // The sample arrived too: queueing the save did not cost the read.
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+
+    // And the project was not renamed by anything above -- `request_new` was not asked for here,
+    // because it is destructive and this test is about a save surviving a wait.
+    CHECK_EQ(storage().project_name(), name_before);
+    CHECK(host.read_alls() >= reads_before);
 }
 
 TEST(storage_the_handover_carries_the_frame_count_and_the_channels_intact) {
