@@ -1711,3 +1711,158 @@ TEST(grain_the_first_grain_after_a_note_uses_that_notes_step) {
         CHECK_EQ(int(g.grain_state(newest).fstep), STRATA_GRAIN_FRAC_ONE / 2);
     }
 }
+
+// --- two oracles found by mutation testing this file -----------------------------------------
+//
+// Both of these close a gap a mutation walked through. The window's INTERPOLATION was untested
+// (replacing it with the lower table entry survived, which turns a smooth window into a
+// 256-step staircase), as was the upper end of its index CLAMP (clamping an entry lower survived,
+// which parks the last 1/256 of every grain on the second-to-last entry instead of running down
+// to the guard zero), and so was the stereo read's SECOND TAP (taking the next sample rather than
+// the next frame survived, which reads one channel of one frame and one of the next).
+//
+// Neither oracle measures a tolerance. Both assert something exact, which is what makes them
+// able to see a mutation this small.
+
+TEST(grain_one_whole_grain_over_a_constant_source_traces_the_window) {
+    // Over a CONSTANT sample every read returns the same value, so the output is the window
+    // itself, scaled: the PCM read, the pitch and the position all cancel out of the shape. DEN 0
+    // is the lowest overlap, so grains run one after another rather than on top of each other,
+    // and the first silence after frame 0 is therefore the end of grain one -- a whole grain,
+    // tail included, with nothing else in it.
+    //
+    // A window is a Hann curve: it rises STRICTLY to its peak and falls STRICTLY to its end.
+    // Not "approximately" and not "mostly" -- every adjacent pair, so a single plateau of two
+    // equal samples fails. That is the assertion a staircase cannot satisfy, because a 256-entry
+    // table over a grain of 18,910 samples would hold each value for about 74 samples.
+    fill_const(g_mono, kSrcFrames, 1, 8000);
+
+    const uint8_t sizes[] = {0, 32, 64, 100, 127};
+    const uint8_t shapes[] = {0, 32, 64, 96, 127};
+    for (uint8_t siz : sizes) {
+        for (uint8_t shp : shapes) {
+            Granular g;
+            g.init(kRate);
+            TrackParams p = plain();
+            p.set(1, siz);
+            p.set(2, 0);      // DEN: the lowest overlap, so one grain at a time
+            p.set(9, shp);
+            g.set_sample(g_mono, kSrcFrames, 1, kRate);
+            g.prepare(p);
+            g.trigger(hit());
+
+            const int blocks = kSrcFrames / kBlk;
+            clear(g_out, blocks * kBlk);
+            for (int b = 0; b < blocks; b++) {
+                g.prepare(p);
+                g.render_add(g_out + b * kBlk, kBlk);
+            }
+
+            int end = 1;
+            while (end < blocks * kBlk && g_out[end] != 0.0f) end++;
+            CHECK(end > 200);                       // the shortest grain is 5 ms = 240 frames
+            CHECK(end < blocks * kBlk);             // and it ended inside the window measured
+
+            int peak = 0;
+            for (int i = 0; i < end; i++) {
+                if (g_out[i] > g_out[peak]) peak = i;
+            }
+            CHECK(peak > 0);
+            CHECK(peak < end - 1);                  // a peak, not an edge
+
+            int plateaus = 0, wrong_way = 0;
+            for (int i = 1; i <= peak; i++) {
+                if (g_out[i] == g_out[i - 1]) plateaus++;
+                else if (g_out[i] < g_out[i - 1]) wrong_way++;
+            }
+            for (int i = peak + 1; i < end; i++) {
+                if (g_out[i] == g_out[i - 1]) plateaus++;
+                else if (g_out[i] > g_out[i - 1]) wrong_way++;
+            }
+            CHECK_EQ(plateaus, 0);
+            CHECK_EQ(wrong_way, 0);
+
+            // The tail runs down to the guard zero rather than stopping on a table entry: the
+            // last sample is four orders of magnitude below the peak, and the next is exactly 0.
+            CHECK(g_out[end - 1] < g_out[peak] * 1e-3f);
+            CHECK_EQ(g_out[end], 0.0f);
+
+            // SHP moves where the peak sits; it does not change how loud the window gets. Every
+            // (SIZ, SHP) pair peaks at the same value, which is what "a phase warp, not a second
+            // table" means -- the table is always read over its whole span.
+            CHECK_NEAR(g_out[peak], 0.122071f, 1e-4);
+        }
+    }
+}
+
+TEST(grain_a_stereo_source_whose_channels_cancel_is_exactly_silent) {
+    // GRAIN sums a stereo pair to mono (dsp/grainloops.ti.c: `src[o] + src[o + 1]`), so a source
+    // whose right channel is the negation of its left must come out as exact silence -- for any
+    // position, any pitch, any grain size. Nothing else about the machine has to be known.
+    //
+    // It is an oracle for the TAP ALIGNMENT, which a value test cannot reach: the second tap must
+    // be the next FRAME, `src[o + 2] + src[o + 3]`. Reading `src[o + 1] + src[o + 2]` instead --
+    // the right channel of this frame and the left of the next -- is one index out, sounds almost
+    // identical on any real stereo source, and here produces a signal where there must be none.
+    for (int i = 0; i < kSrcFrames; i++) {
+        const int16_t v = int16_t((i * 7) % 20000 - 10000);
+        g_stereo[i * 2] = v;
+        g_stereo[i * 2 + 1] = int16_t(-v);
+    }
+
+    Granular g;
+    g.init(kRate);
+    g.set_sample(g_stereo, kSrcFrames, 2, kRate);
+    CHECK_EQ(g.sample_channels(), 2);
+
+    const uint8_t positions[] = {0, 40, 127};
+    const uint8_t pitches[] = {0, 40, 64, 100, 127};
+    const uint8_t sizes[] = {0, 64, 127};
+    for (uint8_t pos : positions) {
+        for (uint8_t pit : pitches) {
+            for (uint8_t siz : sizes) {
+                TrackParams p = plain();
+                p.set(0, pos);
+                p.set(1, siz);
+                p.set(2, 100);    // a dense cloud: several grains reading at once
+                p.set(8, pit);
+                g.kill_all();
+                g.prepare(p);
+                g.trigger(hit());
+
+                const int blocks = 200;
+                clear(g_out, blocks * kBlk);
+                for (int b = 0; b < blocks; b++) {
+                    g.prepare(p);
+                    g.render_add(g_out + b * kBlk, kBlk);
+                }
+                for (int i = 0; i < blocks * kBlk; i++) {
+                    if (g_out[i] != 0.0f) {
+                        CHECK_EQ(g_out[i], 0.0f);   // reports the first offending sample
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // And the sweep is not vacuous: the same machine on a source that does NOT cancel sounds.
+    fill_const(g_stereo, kSrcFrames, 2, 8000);
+    TrackParams p = plain();
+    p.set(2, 100);
+    g.kill_all();
+    g.set_sample(g_stereo, kSrcFrames, 2, kRate);
+    g.prepare(p);
+    g.trigger(hit());
+    clear(g_out, 64 * kBlk);
+    for (int b = 0; b < 64; b++) {
+        g.prepare(p);
+        g.render_add(g_out + b * kBlk, kBlk);
+    }
+    float loudest = 0.0f;
+    for (int i = 0; i < 64 * kBlk; i++) {
+        const float a = g_out[i] < 0.0f ? -g_out[i] : g_out[i];
+        if (a > loudest) loudest = a;
+    }
+    CHECK(loudest > 0.05f);
+}

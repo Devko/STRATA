@@ -30,6 +30,16 @@ void fail_header(const char *file, int line) {
     std::printf("  FAIL %s\n    %s:%d\n", Registry::current, file, line);
 }
 
+void check_eq(const char *a, const char *b, const char *ea, const char *eb, const char *file,
+              int line) {
+    Registry::checks++;
+    const bool same = (a == nullptr || b == nullptr) ? a == b : std::strcmp(a, b) == 0;
+    if (same) return;
+    fail_header(file, line);
+    std::printf("    %s == %s\n      left:  %s\n      right: %s\n", ea, eb,
+                a ? a : "(null)", b ? b : "(null)");
+}
+
 void check_true(bool ok, const char *expression, const char *file, int line) {
     Registry::checks++;
     if (ok) return;

@@ -68,6 +68,20 @@ void check_eq(const A &a, const B &b, const char *ea, const char *eb, const char
     std::printf("\n");
 }
 
+// C strings compare by CONTENT. The template above would compare ADDRESSES -- array-to-pointer
+// decay, then `==` on two pointers -- so `CHECK_EQ(chord_name(t), "MIN7")` passes only when the
+// compiler happens to pool the two literals into one object. At -O2 it usually does, which is
+// how five tests in this suite (chord, scale, perform and repeat names) came to pass for a reason
+// that had nothing to do with their strings: an AddressSanitizer build at -O1 stopped pooling
+// them and all five failed at once, printing two identical strings as "left" and "right".
+//
+// A non-template overload wins over the template when both arguments are C strings -- the
+// array-to-pointer conversion is an lvalue transformation, so the two candidates rank equal and
+// the non-template is preferred. So this repairs every CHECK_EQ on a name without editing a test.
+// A null on either side falls back to a pointer compare, because strcmp on null is undefined.
+void check_eq(const char *a, const char *b, const char *ea, const char *eb, const char *file,
+              int line);
+
 template <class A, class B>
 void check_near(const A &a, const B &b, double tolerance, const char *ea, const char *eb,
                 const char *file, int line) {

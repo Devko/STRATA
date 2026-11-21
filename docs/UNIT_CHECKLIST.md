@@ -498,6 +498,46 @@ whether it works.
       feels wrong on the unit, the fix is a per-note release on the machine interface, and
       `Cmd::release_note` is sitting in the enum unimplemented waiting for it.
 
+**GRAIN (`dsp/grain`)** — 46 host tests, 64,759 checks, and **not one of these boxes can be
+ticked, because GRAIN cannot be reached.** docs/SPEC.md's default kit fills all eight tracks with
+other machines, so there is no slot for it until a track's machine is switchable. That is M6/M7
+work and it is not written. The code is verified to the extent host tests can verify anything:
+
+- Compiles and LINKS for the C674x. Verified by forcing every entry point into the link
+  (`machines_` leaves it unreferenced and `--gc-sections` drops the code, so a plain build proves
+  only that it compiles): with the references in, APP.ENA goes from 422,600 to 439,568 bytes and
+  `build_app.py`'s own "no undefined symbols" check passes — so no 64-bit divide, which on this
+  toolchain drags in the ARM unwinder and stops the whole app linking (seawaffle/enaga#1).
+- **No out-of-range read**, under AddressSanitizer rather than by argument: the whole suite built
+  with ASan at -O1 reports zero buffer overflows over all 812 tests. That is the one check the
+  machine's own oracle test cannot make, because a read that lands out of range with an
+  interpolation weight of zero contributes nothing to hear.
+- Allocates nothing — not even in `init()`. It reads PCM the track already holds.
+- Mutation-tested twice, independently: 24 of 26 by the agent that wrote it, then 13 of 14 by a
+  set chosen from reading `grainloops.ti.c` fresh. The second pass found three untested
+  behaviours the first had not — the window's interpolation, the upper end of its index clamp and
+  the stereo read's second tap — and two oracles were added that kill all three. One survivor
+  remains in each set and both are the same honest one: removing the window phase clamp changes
+  no sample today, because the table's padding and not the clamp is what bounds the read.
+
+- [ ] **Everything about how it sounds.** POS, SIZ, DEN, SPR, PIT, SHP: every one of them is
+      unheard. The parameters are documented in `dsp/grain.hpp` and nothing has listened to one.
+- [ ] **Its cost. Nothing has measured it** — the figure in `docs/BUDGET.md` is derived from
+      counting operations, and the per-voice measurement VA POLY just produced says what derived
+      figures are worth here: that one was out by a factor of ten, in the expensive direction.
+- [ ] The cache behaviour of eight concurrent read streams, which is the part of the estimate
+      that could not even be bounded. Under heavy SPR every grain starts at a fresh random
+      offset, so a sprayed cloud may be almost all L1D misses. If the measurement disappoints,
+      this is the first thing to look at, and the lever is grain count rather than the
+      interpolator.
+- [ ] **SPEC's "tempo-locked stretch" is served by POS under a step lock or a tempo-synced LFO**,
+      not by the machine knowing the tempo — no `dsp/` file includes `<enaga/clock.hpp>` and
+      `Machine::prepare` carries only `TrackParams`. That is an interpretation of a SPEC line
+      rather than something SPEC spells out, and it is worth confirming against SPEC before the
+      machine is reachable.
+- [ ] No reverse grains. Not in SPEC's GRAIN row, and they would double every case in the bounds
+      argument.
+
 ## M0.5 — budget spike
 
 Folded into the M2 worst-case measurement above — see `docs/BUDGET.md` for why. These two lines

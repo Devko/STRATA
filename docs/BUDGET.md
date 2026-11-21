@@ -399,6 +399,39 @@ versions, not targets.
 scenarios read 22.72 / 22.72 / 23.51 / 30.64. `Step::length` becoming audible took 2.4 points
 OFF, and registering VA POLY on the CHORD track with a four-note chord put 12.7 ON.
 
+#### GRAIN: written, verified, unmeasured, and unreachable
+
+`dsp/grain` is in the tree and host-tested, and it has **no track**. docs/SPEC.md's default kit
+fills all eight with other machines, so GRAIN cannot sound until a track's machine is switchable,
+which is not written. `machines_` therefore never points at it, `--gc-sections` drops its code,
+and APP.ENA is the same size with it in the tree as without.
+
+That means a plain build proves only that it COMPILES for the C674x. To prove it LINKS -- the
+hazard that matters on this toolchain, where a 64-bit divide pulls in libgcc's ARM unwinder and
+the whole app stops linking -- every entry point was forced into the link by taking a `Machine *`
+to it, which keeps the vtable and so keeps every virtual:
+
+| | APP.ENA | bss |
+| --- | --- | --- |
+| GRAIN in the tree, unreferenced | 422,600 | 1,265,512 |
+| GRAIN forced into the link | **439,568** | 1,267,600 |
+
+So GRAIN is 16,968 bytes of code and 2,088 bytes of state, it has no undefined symbols
+(`build_app.py` refuses them), and it allocates nothing at all -- not even in `init()`, because it
+reads PCM the track already holds.
+
+**Its cost is unmeasured and the estimate should not be trusted.** The derivation in
+`dsp/grain.hpp` counts ~19 flops and 5 integer ops per sample per grain and scales off Enaga's
+two published figures to land at ~1,000-1,300 cycles per grain, so ~9,000-11,000 for eight
+(1.8-2.2% of the block) against SPEC's 21,520. The VA POLY measurement immediately below is the
+reason to treat that as a hypothesis: the same kind of derivation for VA POLY read ~2.0% for six
+voices and the measurement came back at 25.6%. A factor of ten, in the expensive direction.
+
+The part of GRAIN's estimate that could not be bounded at all is the cache behaviour of eight
+concurrent read streams. Under heavy SPR each grain starts at a fresh random offset, so a sprayed
+cloud may be almost entirely L1D misses -- and the emulator has no cache model, so the emulator
+cannot answer it either. Only the unit can.
+
 #### VA POLY costs 4.25 points per voice, and that is the figure to worry about
 
 The default kit's CHORD track plays a MIN7 -- four notes -- so this is measurable by changing one

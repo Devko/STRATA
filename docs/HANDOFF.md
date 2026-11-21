@@ -15,12 +15,31 @@ three emulator scenarios pass.**
 | `tests/scenario_m5.sh` | **passes**, 28.42%: beat repeat's tax is now below the noise of the peak block; see docs/BUDGET.md |
 | `tests/scenario_m6.sh` | **passes**, 37.61%: KEYS records three keys, each one undo level |
 | `tools/render.sh` | 12.2 s rendered; peak +0.00 dBFS (the limiter), rms -17.6 dBFS, 28.0% over 9,362 blocks |
+| `tests/test_grain.cpp` | **46 tests, 64,759 checks.** GRAIN compiles AND links for the device (proved by forcing its vtable into the link: 422,600 -> 439,568 bytes, no undefined symbols), allocates nothing, and is clean under AddressSanitizer. It is also **unreachable**: the default kit fills all eight tracks, so GRAIN has no slot until machine switching exists |
+| **AddressSanitizer** | the whole suite at -O1 under ASan: **812 tests, 0 failures, zero buffer overflows.** Worth re-running after any DSP change; it found a real harness defect this session |
 | **the number that matters** | **VA POLY costs 4.25 points per voice.** Six voices is 25.6% of the block on its own, against docs/SPEC.md's 11,208 cycles for the whole machine — 11.3x, GCC-only. docs/BUDGET.md has the four-point measurement and the three explanations |
 | **cl6x** | still impossible: TI's installer needs an interactive licence click. Every figure above is GCC-only and the ~2.2x cl6x is worth has NOT been applied |
 
 So M4 and M5 are no longer unverified code. What they are is **verified in an emulator with no
 cache model, on a GCC-only build**. `docs/BUDGET.md` states both caveats next to every number,
 and the unit still decides.
+
+### A defect in the test harness itself, found and fixed
+
+`CHECK_EQ` compared `const char *` with `==`, so every test on a NAME was comparing addresses.
+Five of them -- chord, scale, perform and repeat names -- passed only because `-O2` pools
+identical string literals into one object. An AddressSanitizer build at `-O1` stopped pooling
+them and all five failed at once, printing two identical strings as "left" and "right".
+
+Fixed in `tests/check.hpp` and `tests/runner.cpp` with a non-template `check_eq` overload for C
+strings that uses `strcmp`, so it is repaired for every test without editing one. The lesson is
+the method, not the bug: **build the suite under ASan after a DSP change**. The recipe is a dozen
+lines and it caught something no amount of reading would have.
+
+One known, deliberate artefact: `BeatRepeat::init` allocates its 3 MiB ring with `new[]` and
+nothing frees it, so LeakSanitizer reports four leaks from the repeat tests. On the unit `init()`
+runs once and the app never frees; in the tests each call leaks a ring. Run ASan with
+`detect_leaks=0`, or expect those four.
 
 M6 is well in: the Euclidean generator (F1 + encoders A/B/C in GRID), KEYS mode (F1 + F4),
 `core/chord`, `dsp/vapoly` and `Step::length` as a real gate -- and VA POLY is now REGISTERED on
