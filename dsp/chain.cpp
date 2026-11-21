@@ -35,9 +35,16 @@
 // third, and everything after the filter close to free. A track at its neutral settings (no
 // drive, MOD = OFF, no lo-fi, no duck, sends at 0) costs one pass over the block; a muted track
 // costs one compare. The buffer and filter work is all in Enaga's C block functions, which cl6x
-// compiles and pipelines - CLAUDE.md's *.ti.c rule bites only for the three hand-written loops
-// here (drive, lo-fi, duck), which are the obvious candidates if the measurement disappoints.
+// compiles and pipelines - CLAUDE.md's *.ti.c rule bit only on the three hand-written loops
+// here (drive, lo-fi, duck), and all three now live in dsp/chainloops.ti.c, which build_app.py
+// sends to cl6x while this file goes through GCC (docs/BUDGET.md, M2, has the figures). The
+// arithmetic moved unchanged, so a bypassed stage is still bit-identical.
+//
+// Duck::render below is deliberately NOT in that file: it is a sequential state machine run
+// once per block for all eight tracks, not per track, and its per-sample work is one add.
 #include "chain.hpp"
+
+#include "chainloops.h"
 
 namespace strata {
 namespace ed = enaga::dsp;
@@ -259,13 +266,7 @@ void InsertChain::process(float *mono, int frames, const ChainOut &out) {
     if (silent()) return;      // a muted track costs one compare, not a block
 
     // --- drive: an asymmetric soft clip ------------------------------------------------------
-    if (drive_on_) {
-        const float positive = drive_pos_, negative = drive_neg_;
-        for (int i = 0; i < frames; i++) {
-            const float x = mono[i];
-            mono[i] = ed::soft_clip(x * (x < 0.0f ? negative : positive));
-        }
-    }
+    if (drive_on_) strata_chain_drive(mono, frames, drive_pos_, drive_neg_);
 
     // --- filter: 24 dB is a cascade, two poles for about the price of one --------------------
     if (mode_ != FilterMode::off) {
@@ -279,26 +280,15 @@ void InsertChain::process(float *mono, int frames, const ChainOut &out) {
 
     // --- lo-fi: sample-and-hold, then the bit crush, in one pass -----------------------------
     if (lofi_on_) {
-        const float levels = lofi_levels_, step = lofi_step_;
-        const uint32_t increment = lofi_increment_;
-        uint32_t phase = lofi_phase_;
-        float hold = lofi_hold_;
-        for (int i = 0; i < frames; i++) {
-            const uint32_t previous = phase;
-            phase += increment;
-            // The wrap is the clock edge: that is the whole sample-and-hold.
-            hold = (phase < previous) ? ed::clamp(mono[i], -kLofiCeiling, kLofiCeiling) : hold;
-            mono[i] = float(ed::floor_int(hold * levels + 0.5f)) * step;
-        }
-        lofi_phase_ = phase;
-        lofi_hold_ = hold;
+        // The phase wrap is the sample-and-hold's clock edge; lofi_step_ is 1 / lofi_levels_,
+        // taken at control rate so the loop does not divide.
+        strata_chain_lofi(mono, frames, lofi_increment_, lofi_levels_, lofi_step_, kLofiCeiling,
+                          &lofi_phase_, &lofi_hold_);
     }
 
     // --- duck: the mixer's one curve, this track's depth -------------------------------------
     if (duck_depth_ > 0.0f && out.duck != nullptr) {
-        const float depth = duck_depth_;
-        const float *duck = out.duck;
-        for (int i = 0; i < frames; i++) mono[i] *= 1.0f - depth * duck[i];
+        strata_chain_duck(mono, out.duck, frames, duck_depth_);
     }
 
     // --- pan, level and the add into the bus, in one block function --------------------------

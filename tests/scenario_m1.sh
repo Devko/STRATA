@@ -8,6 +8,11 @@
 # Load figures from here only ever compare versions: the emulator models no caches or bus
 # latency, and Enaga measured pure computation running about 25% faster on the unit. The real
 # figure is a line in docs/UNIT_CHECKLIST.md.
+#
+# NOTE: this scenario measures whatever the default kit currently is, which has grown from M1's
+# four tracks to M2's eight. So its number is not comparable across milestones -- a figure from
+# this script is only meaningful against another figure from the same kit. docs/BUDGET.md records
+# each milestone's own baseline, and the guard below is deliberately loose for that reason.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

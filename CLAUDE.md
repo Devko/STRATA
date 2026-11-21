@@ -27,6 +27,16 @@ MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- \
 - `ls`, `cat`, `grep` and the editing tools work directly on `D:\DEV\STRATA` — only builds and
   tests need WSL.
 - There is no cmake and no sudo. Do not add a dependency needing either.
+- To build a subset by hand (when the full suite is red from someone else's work in progress),
+  **compile Enaga's `runtime/dsp/*.c` with `gcc -std=c11`, not `g++`** — they use `restrict`,
+  which is not C++. Two commands, then link:
+
+```sh
+gcc -std=c11 -O2 -Ithird_party/enaga/include -c third_party/enaga/runtime/dsp/*.c
+g++ -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -O2 \
+    -Icore -Idsp -Itests -Ithird_party/enaga/include \
+    tests/runner.cpp tests/test_X.cpp dsp/X.cpp *.o -o /tmp/t && /tmp/t
+```
 - Do not write a master clock. Enaga owns it: <enaga/clock.hpp>, 96 PPQN, and
   clock::ticks() in audio() gives each tick's frame in the block. STRATA schedules steps on
   those ticks and owns swing, speed, length and micro-timing only.

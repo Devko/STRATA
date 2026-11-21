@@ -27,13 +27,25 @@ bool Engine::init(float sample_rate) {
     snare_.init(rate_);
     hat_closed_.init(rate_);
     hat_open_.init(rate_);
+    perc_.init(rate_);
+    bass_.init(rate_);
+    stab_.init(rate_);
+    loop_.init(rate_);
     mixer_.init(rate_);
 
-    // The default techno kit of docs/SPEC.md, as far as M1's machines reach.
+    build_placeholder_sample();
+
+    // The default techno kit of docs/SPEC.md, as far as the implemented machines reach.
+    // Tracks 7 and 8 wait for VA POLY and GRAIN; track 6 for VA MONO and track 8's loop for
+    // SAMPLE. An empty slot is silent, not a crash.
     machines_[0] = &kick_;
     machines_[1] = &snare_;
     machines_[2] = &hat_closed_;
     machines_[3] = &hat_open_;
+    machines_[4] = &perc_;
+    machines_[5] = &bass_;
+    machines_[6] = &stab_;     // CHORD's slot; a mono stab until VA POLY lands in M6
+    machines_[7] = &loop_;
 
     // Track 3 chokes track 4: a closed hat cuts an open one. The spec's choke group, wired here
     // because the machines deliberately do not know about tracks.
@@ -44,6 +56,7 @@ bool Engine::init(float sample_rate) {
     for (int t = 0; t < kTracks; t++) mix_[t].duck = t == duck_source_ ? 0.0f : 0.0f;
 
     load_default_kit();
+    for (int t = 0; t < kTracks; t++) effective_[t] = params_[t];   // no locks active yet
     load_default_pattern();
 
     scheduler_.configure(pattern_);
@@ -84,6 +97,82 @@ void Engine::load_default_kit() {
     // Pan the hats apart a little so the stereo image is not a single point.
     params_[2].v[page_first(Page::fx) + 1] = 52;
     params_[3].v[page_first(Page::fx) + 1] = 76;
+
+    // PERC as a rimshot, using the settings dsp/perc.cpp documents for one: a short, high,
+    // inharmonic hit (ratio pi) that cuts through without competing with the snare.
+    // SRC is TUN, RAT, IDX, IDD; AMP is DEC, SWP, SWT, LVL.
+    const uint8_t perc_src[4] = {85, 48, 75, 20};
+    const uint8_t perc_amp[4] = {12, 30, 10, 100};
+    for (int i = 0; i < 4; i++) {
+        params_[4].v[page_first(Page::src) + i] = perc_src[i];
+        params_[4].v[page_first(Page::amp) + i] = perc_amp[i];
+    }
+    params_[4].v[page_first(Page::fx) + 1] = 44;    // a touch left of the hats
+
+    // BASS (VA MONO). SRC is TUN, MOD, CUT, RES; AMP is DEC, ENV, GLD, LVL. A techno bass wants
+    // a low-ish cutoff with real resonance and a short filter envelope, so the note moves.
+    const uint8_t bass_src[4] = {64, 40, 46, 84};
+    const uint8_t bass_amp[4] = {38, 72, 18, 104};
+    for (int i = 0; i < 4; i++) {
+        params_[5].v[page_first(Page::src) + i] = bass_src[i];
+        params_[5].v[page_first(Page::amp) + i] = bass_amp[i];
+    }
+
+    // The CHORD slot's stand-in: the same machine, tuned up and opened out so it reads as a
+    // stab rather than a second bass. Replaced by VA POLY in M6, which will cost more (six
+    // voices against this one), so do not read the 8-track figure as final.
+    const uint8_t stab_src[4] = {64, 70, 92, 40};
+    const uint8_t stab_amp[4] = {70, 40, 0, 76};
+    for (int i = 0; i < 4; i++) {
+        params_[6].v[page_first(Page::src) + i] = stab_src[i];
+        params_[6].v[page_first(Page::amp) + i] = stab_amp[i];
+    }
+    params_[6].v[page_first(Page::fx) + 1] = 84;    // off to the right
+
+    // LOOP (SAMPLE). SRC is PIT, STA, LEN, SLC; AMP is ATK, DEC, PLY, LVL. Eight slices, so a
+    // note picks one; the placeholder sample below is built with eight.
+    // SLC must be 60, not 64: the slice count is 1 + knob * 16 / 128 in zones eight knob values
+    // wide, so 64 asks for NINE slices while the placeholder below builds eight. The boundaries
+    // would then fall mid-blip instead of on them. ATK 0 is a true zero attack, which is what a
+    // sliced one-shot wants -- its transient IS the sound.
+    const uint8_t loop_src[4] = {64, 0, 127, 60};   // PIT unity, STA 0, LEN to the end, SLC 8
+    const uint8_t loop_amp[4] = {0, 110, 0, 96};    // ATK instant, DEC long, PLY fwd one-shot
+    for (int i = 0; i < 4; i++) {
+        params_[7].v[page_first(Page::src) + i] = loop_src[i];
+        params_[7].v[page_first(Page::amp) + i] = loop_amp[i];
+    }
+}
+
+// A sliced test loop, so track 8 has something to play before M4 can load a WAV from the card.
+//
+// Eight slices of a short decaying blip, each a fourth apart, which makes the slice feature
+// audible and gives the 8-track load measurement real work to do. A static buffer, not an
+// allocation: the platform's rule is that large buffers go in statics or on the heap, and the
+// Sampler never copies what it is handed.
+void Engine::build_placeholder_sample() {
+    static constexpr int kSlices = 8;
+    static constexpr int kSliceFrames = 2400;                  // 50 ms at 48 kHz
+    static constexpr int kTotalFrames = kSlices * kSliceFrames;
+    static int16_t pcm[kTotalFrames];
+
+    for (int slice = 0; slice < kSlices; slice++) {
+        // A fourth per slice, from 220 Hz up: distinguishable without being musical clutter.
+        const float hz = 220.0f * enaga::dsp::semitones(float(slice) * 5.0f);
+        const float dt = hz / rate_;
+        float phase = 0.0f;
+
+        for (int i = 0; i < kSliceFrames; i++) {
+            // An exponential decay over the slice, computed without libm.
+            const float t = float(i) * (1.0f / float(kSliceFrames));
+            const float gain = enaga::dsp::exp2(-7.0f * t);
+            const float s = enaga::dsp::sin_turns(phase) * gain * 0.7f;
+            phase += dt;
+            if (phase >= 1.0f) phase -= 1.0f;
+            pcm[slice * kSliceFrames + i] = int16_t(s * 32000.0f);
+        }
+    }
+
+    loop_.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
 }
 
 void Engine::load_default_pattern() {
@@ -103,6 +192,10 @@ void Engine::load_default_pattern() {
     const uint8_t snare[] = {4, 12};
     const uint8_t closed[] = {2, 6, 10, 14};
     const uint8_t open[] = {14};
+    const uint8_t perc[] = {7, 15};        // a rim on the last 8th of each half-bar
+    const uint8_t bass[] = {2, 6, 10, 14}; // offbeat under the four-on-the-floor
+    const uint8_t stab[] = {0, 8};
+    const uint8_t loop[] = {1, 5, 9, 13};  // a different slice each time, via the note
 
     auto put = [&](int track, const uint8_t *steps, int count, uint8_t velocity) {
         for (int i = 0; i < count; i++) {
@@ -118,10 +211,39 @@ void Engine::load_default_pattern() {
     put(1, snare, 2, 100);
     put(2, closed, 4, 80);
     put(3, open, 1, 90);
+    put(4, perc, 2, 85);
+    put(5, bass, 4, 100);
+    put(6, stab, 2, 78);
+    put(7, loop, 4, 88);
+
+    // The bass plays low, and slides into the third note: the movement that makes a line groove
+    // rather than pulse. Slide is MONO-only, which is exactly what this track is.
+    for (int i = 0; i < 4; i++) {
+        Step &s = pattern_.tracks[5].steps[bass[i]];
+        s.note = 36;                                   // C2
+    }
+    pattern_.tracks[5].steps[6].flags |= kStepAccent;
+    pattern_.tracks[5].steps[10].flags |= kStepSlide;
+    pattern_.tracks[5].steps[10].note = 43;            // slides up a fifth
+    pattern_.tracks[5].steps[14].flags |= kStepAccent;
+
+    // Successive notes pick successive slices of the placeholder loop.
+    for (int i = 0; i < 4; i++) {
+        pattern_.tracks[7].steps[loop[i]].note = uint8_t(60 + i);
+    }
 
     // Accent the downbeat kick: techno lives on that one.
     pattern_.tracks[0].steps[0].flags |= kStepAccent;
     pattern_.tracks[0].steps[0].velocity = 127;
+
+    // Two parameter locks, so the default pattern actually uses the feature docs/SPEC.md calls
+    // STRATA's edge over the stock firmware -- and so the lock path is exercised every time
+    // anyone plays the default kit or runs the emulator scenario.
+    //
+    // The third kick of the bar gets a shorter body, and one closed hat opens up: small
+    // per-step moves that are the whole point of locks.
+    pattern_set_lock(pattern_, 0, 8, uint8_t(page_first(Page::amp) + 0), 52);   // KICK DEC
+    pattern_set_lock(pattern_, 2, 10, uint8_t(page_first(Page::amp) + 0), 64);  // HAT DEC
 }
 
 // --- commands -------------------------------------------------------------
@@ -222,7 +344,13 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::set_param:
-            if (command.a < kParams) params_[track].v[command.a] = clamp_u8(command.b);
+            if (command.a < kParams) {
+                params_[track].v[command.a] = clamp_u8(command.b);
+                // Mirror into the effective set so a knob turn is heard at once instead of at
+                // the next step. The next step rebuilds effective_ from the kit anyway, so a
+                // lock on this parameter still wins from then on.
+                effective_[track].v[command.a] = clamp_u8(command.b);
+            }
             break;
 
         case Cmd::set_track_level:
@@ -270,23 +398,27 @@ void Engine::fire(const StepEvent &event) {
     const int track = int(event.track);
     if (track < 0 || track >= kTracks) return;
 
-    // Locks apply whether or not a note sounds: that is the whole point of a trigless step.
-    const LockView locks = pattern_step_locks(pattern_, track, int(event.step));
-    uint8_t saved[kMaxLocksApplied];
-    uint8_t saved_param[kMaxLocksApplied];
-    int saved_count = 0;
+    // Rebuild this track's effective parameters: the kit, then this step's locks over the top.
+    // Starting from the kit each time is what makes a lock last exactly one step -- a step with
+    // no lock on a parameter gets the kit value back, with no bookkeeping to go wrong.
+    //
+    // Locks apply whether or not a note sounds: that is the whole point of a trigless step, and
+    // why this happens before the trig check.
+    effective_[track] = params_[track];
 
+    const LockView locks = pattern_step_locks(pattern_, track, int(event.step));
+    int applied = 0;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
-        if (lock->param >= kParams || saved_count >= kMaxLocksApplied) continue;
-        saved_param[saved_count] = lock->param;
-        saved[saved_count] = params_[track].v[lock->param];
-        params_[track].v[lock->param] = lock->value;
-        saved_count++;
+        if (lock->param >= kParams || applied >= kMaxLocksApplied) continue;
+        effective_[track].v[lock->param] = lock->value;
+        applied++;
     }
 
     if (!event.trigless && machines_[track] != nullptr && !muted_[track]) {
-        // The machine reads the locked parameters, so prepare must happen inside the lock window.
-        machines_[track]->prepare(params_[track]);
+        // Prepare before triggering so the voice starts from the locked values. The render loop
+        // then keeps preparing from effective_, so the lock holds for the whole step rather than
+        // just the instant of the trigger.
+        machines_[track]->prepare(effective_[track]);
 
         Trig trig;
         trig.note = event.note;
@@ -300,9 +432,6 @@ void Engine::fire(const StepEvent &event) {
 
         if (track == duck_source_) mixer_.trigger_duck(event.frame);
     }
-
-    // A lock lasts for its own step only; the kit value comes back immediately.
-    for (int i = 0; i < saved_count; i++) params_[track].v[saved_param[i]] = saved[i];
 }
 
 // --- the block ------------------------------------------------------------
@@ -345,8 +474,10 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         Machine *machine = machines_[t];
         if (machine == nullptr || muted_[t] || !machine->active()) continue;
 
-        machine->prepare(params_[t]);
-        mixer_.chain(t).prepare(params_[t], mix_[t]);
+        // From effective_, not params_: this is where a parameter lock has to be honoured, for
+        // every block of the step rather than only the one that triggered it.
+        machine->prepare(effective_[t]);
+        mixer_.chain(t).prepare(effective_[t], mix_[t]);
 
         float *mono = mixer_.scratch();
         enaga_clear(mono, int(frames));

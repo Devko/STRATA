@@ -39,11 +39,15 @@ The default kit plays a four-track beat at 130 BPM as soon as PLAY is pressed; n
 setting up first.
 
 - [ ] PLAY (F5) starts the beat; the screen's top line shows `>` and the tempo.
-- [ ] **The load criterion.** The emulator gives 20.14% peak with cl6x against M1's bar of 15%.
-      Measure it on the unit: pure computation runs about 25% faster there, and this is the peak
-      block rather than the average, so the real figure should be lower. Record it in
-      `docs/BUDGET.md` either way, and if it is still over 15%, the `*.ti.c` work is the lever
-      (see that file's M1 note) rather than cutting a feature.
+- [ ] **The load criterion.** The emulator gives **12.02% peak with cl6x** for the four-track
+      beat, against M1's bar of 15% — it passes there, after the `*.ti.c` extraction took it
+      down from 20.14%. Measure it on the unit anyway: pure computation runs about 25% faster
+      there, and this is the peak block rather than the average, so the real figure should be
+      lower still. Record it in `docs/BUDGET.md`.
+- [ ] **The same beat built GCC-only** (`ENAGA_TI_CGT=none`) for comparison: the emulator says
+      21.64%. The gap is the thing to confirm on hardware, because the eight-track worst case
+      is 23.61% with cl6x and 44.26% without — i.e. **GCC-only misses M2's 40% bar**, and that
+      is what makes the cl6x redistribution question matter.
 - [ ] STOP (F6) stops with tails; STOP twice cuts them.
 - [ ] VALUE changes the tempo and the beat follows it smoothly.
 - [ ] STEP 1-16 toggles trigs on the selected track and the change is heard on the next pass.
@@ -57,10 +61,53 @@ setting up first.
 - [ ] The hats choke: the closed hat on track 3 cuts the open one on track 4.
 - [ ] 10 minutes of playing: no underruns, no watchdog reset, load stable.
 
+## M2 — the full kit
+
+All eight track slots are filled: KICK, SNARE, HAT closed, HAT open, PERC, BASS, a mono stab
+standing in for CHORD, and the LOOP sampler. The default pattern plays all of them.
+
+- [ ] **The load criterion.** The emulator gives **17.00%** for the default kit and **23.61%**
+      worst case (drive, LP24, lo-fi and both sends on all eight tracks) against M2's bar of 40%.
+      Measure both on the unit and record them in `docs/BUDGET.md`.
+- [ ] **The GCC-only comparison matters here.** The emulator says 44.26% worst case without
+      cl6x, which misses the bar. Confirm the gap on hardware — it is the evidence behind the
+      redistribution question in `docs/BUDGET.md`.
+- [ ] PERC on track 5: the default is a rimshot. Check the ratio knob's lower half steps between
+      *characters* (hollow at integer ratios, metallic at irrational ones) rather than just
+      getting brighter.
+- [ ] BASS on track 6: the filter should squelch with resonance up without self-destructing.
+      **Accent should be audibly more than volume**, and the slide on step 11 should glide into
+      its note rather than retrigger.
+- [ ] LOOP on track 8 plays a **synthesised placeholder**, not a file — eight slices built in
+      `Engine::init`. Check successive notes pick successive slices, and that the boundaries land
+      on the blips (a slice-count mismatch puts them mid-blip).
+- [ ] EDIT (F8) and MIXER (F7): the selection keys move the parameter page and the track bank.
+      Check the MIXER's faders and the master peak behave, and that EDIT's four values match
+      what the encoders do.
+- [ ] Listen for aliasing on PERC and BASS at the top of their ranges, and for a click when a
+      voice is stolen on any machine.
+- [ ] **Parameter locks, and listen properly.** The default pattern ships with two: the third
+      kick of the bar has a shorter body (KICK DEC locked on step 9) and one closed hat opens up
+      (HAT DEC on step 11). Both must be *audible*, and the step after each must revert to the
+      kit value.
+
+      This needs an ear rather than a test. `app/` cannot be host-tested — it is the only part
+      of the project that includes Enaga headers, so there is no unit test standing behind this
+      path. It was also broken once: locks were applied around `trigger()` but the render loop
+      then prepared from the unlocked kit every block, so a lock on a cutoff or a decay did
+      nothing at all while a locked *note* worked fine. If locks ever look right on screen and
+      sound wrong, that asymmetry is the first thing to suspect.
+- [ ] While there: turn a knob on a track whose current step carries a lock on that same
+      parameter. The knob should be heard at once, and the lock should win again from the next
+      step.
+
 ## M0.5 — budget spike
 
-- [ ] All four configurations from `docs/BUDGET.md` measured **on the unit**, not the emulator.
-- [ ] Go/no-go recorded on 8 full insert chains plus both sends.
+Folded into the M2 worst-case measurement above — see `docs/BUDGET.md` for why. These two lines
+stand only if that measurement is ever disputed.
+
+- [ ] (If needed) the four original configurations measured **on the unit**, not the emulator.
+- [ ] (If needed) go/no-go recorded on 8 full insert chains plus both sends.
 
 ## Standing checks for every milestone
 

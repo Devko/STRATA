@@ -27,10 +27,15 @@
 // Worth saying plainly, because it corrects the brief these were written to: a drum machine
 // following a reference topology is NOT far simpler than a VA voice. The cost is in the shaper,
 // which needs a reciprocal and a sine every sample. If the measurement disappoints, the cheap
-// win is a polynomial fit for 1/(1+|t|) over [1, 2] in place of enaga_reciprocal; the loops
-// here are also the obvious candidates for a *.ti.c file, which CLAUDE.md asks for and which
-// this agent's file list did not allow.
+// win is a polynomial fit for 1/(1+|t|) over [1, 2] in place of enaga_reciprocal.
+//
+// The two loops that dominate -- the body shaper and the click's gate and slew -- now live in
+// dsp/drumloops.ti.c, which build_app.py sends to cl6x while this file goes through GCC
+// (CLAUDE.md's *.ti.c rule; docs/BUDGET.md, M2, has what that bought). The arithmetic moved
+// unchanged; what is left here is control rate, the Enaga block functions and the voice logic.
 #include "kick.hpp"
+
+#include "drumloops.h"
 
 namespace strata {
 namespace {
@@ -43,7 +48,6 @@ using enaga::dsp::exp;
 using enaga::dsp::exp2;
 using enaga::dsp::reciprocal;
 using enaga::dsp::semitones;
-using enaga::dsp::sin_turns;
 
 // The reference's transient filter: 5 kHz at Q 2, so k = 1/Q = 0.5.
 constexpr float kClickHz = 5000.0f;
@@ -67,22 +71,9 @@ constexpr float kToOnePercent = 4.60517019f;
 // sine in phase with the fold: both are zero and rising at phase 0.25, which is where a hit
 // starts. The fold costs a reciprocal, which on the C674x is a short run of multiplies and not
 // a division.
-inline float distorted_sine(float phase, float dirtiness) {
-    const float triangle = (phase < 0.5f ? phase : 1.0f - phase) * 4.0f - 1.0f;
-    const float magnitude = triangle < 0.0f ? -triangle : triangle;
-    const float fold = 2.0f * triangle * reciprocal(1.0f + magnitude);
-    const float clean = sin_turns(phase + 0.75f);
-    return clean + (fold - clean) * dirtiness;
-}
-
-// out += gain * in, with gain walking by step each sample: the ramp a stolen voice fades out
-// with. Two flops a sample and only on the steal path, so it never costs anything usually.
-void mix_ramp(float *out, const float *in, int n, float gain, float step) {
-    for (int i = 0; i < n; i++) {
-        out[i] += gain * in[i];
-        gain += step;
-    }
-}
+//
+// It is the hot loop, so it lives in drumloops.ti.c as strata_kick_body, where cl6x compiles it;
+// the declick ramp a stolen voice fades out with is strata_mix_ramp in the same file.
 
 }  // namespace
 
@@ -286,20 +277,11 @@ void Kick::run(Voice &v, float *out, int n) {
     // silence -- handled by clearing the buffer and starting the oscillator after the hold.
     enaga_clear(body_, n);
     const int held = v.hold < n ? v.hold : n;
-    for (int i = 0; i < held; i++) v.fm_env *= fm_decay_;   // the FM envelope runs through it
     v.hold -= held;
-    float phase = v.phase;
-    float fm_env = v.fm_env;
-    for (int i = held; i < n; i++) {
-        float dp = f0_norm * (1.0f + 3.5f * fm_amount_ * fm_env);
-        dp = dp > 0.5f ? 0.5f : dp;
-        phase += dp;
-        phase -= phase >= 1.0f ? 1.0f : 0.0f;
-        body_[i] = distorted_sine(phase, dirtiness);
-        fm_env *= fm_decay_;
-    }
-    v.phase = phase;
-    v.fm_env = fm_env;
+    // The phase accumulator, the FM envelope (which runs through the pinned samples too) and the
+    // shaper, in one cl6x-built pass over the block.
+    strata_kick_body(body_, held, n, f0_norm, fm_amount_, fm_decay_, dirtiness, &v.phase,
+                     &v.fm_env);
 
     v.amp.render(env_, n, amp_shape_);
     enaga_scale(env_, n, v.trigger_level);
@@ -313,16 +295,7 @@ void Kick::run(Voice &v, float *out, int n) {
     if (click_level_ > 0.0f) {
         const int gate = v.gate < n ? v.gate : n;
         v.gate -= gate;
-        float slew = v.slew;
-        float high_pass = v.click_hp;
-        for (int i = 0; i < n; i++) {
-            const float level = i < gate ? 1.0f : 0.0f;
-            slew += (level > slew ? 0.5f : 0.1f) * (level - slew);
-            high_pass += 0.04f * (slew - high_pass);
-            click_[i] = slew - high_pass;
-        }
-        v.slew = slew;
-        v.click_hp = high_pass;
+        strata_kick_click(click_, n, gate, &v.slew, &v.click_hp);
         v.click_band.process(click_, click_, n, click_coefficients_, Svf::low_pass);
 
         enaga_clear(noise_, n);
@@ -337,7 +310,7 @@ void Kick::run(Voice &v, float *out, int n) {
     }
 
     if (v.fade > 0) {
-        mix_ramp(out, body_, n, out_gain_ * v.gain, -out_gain_ * kFadeStep);
+        strata_mix_ramp(out, body_, n, out_gain_ * v.gain, -out_gain_ * kFadeStep);
         v.gain -= kFadeStep * float(n);
         if (v.gain < 0.0f) v.gain = 0.0f;
     } else {

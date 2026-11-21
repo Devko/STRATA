@@ -272,6 +272,25 @@ machine needs a shape or a phase behaviour the class does not offer.
 `exp2(0.5f * log2(x))`; an absolute value is a select, not `fabsf`. Enaga's `soft_clip` is a cubic
 and stands in acceptably for the rational soft clips that reference designs tend to use.
 
+**An instant attack works but is not documented.** An `EnvelopeShape` whose attack time is under
+one step gets coefficient 1.0, so `EnvelopeShape::make(0.0f, ...)` is a genuine zero-length
+attack. That is what a sliced one-shot wants — its transient *is* the sound, and any attack ramp
+softens it.
+
+**There is no interpolated read anywhere in the library.** No resampler, no fractional delay tap,
+no arbitrary-phase table read. `Oscillator::table_add` takes a `dt` over a power-of-two table and
+is no use for arbitrary PCM. Anything that plays a sample at a non-unity rate writes its own tap
+gather and interpolator — and must do its own bounds work, because an out-of-range read on this
+chip does not fault, it silently returns garbage.
+
+**There is no int16-to-float buffer conversion either**, so a sampler's convert sits in its hot
+loop. Fold the `1/32768` (and any channel halving) into the output gain so it costs one multiply
+per block rather than one per sample.
+
+**`enaga_reciprocal` is an estimate, good to about 2e-7.** Fine for audio, not fine for deciding
+how many samples it is safe to read: anything that computes a loop bound from it needs an exact
+integer check afterwards. "Never read outside the buffer" is not a 2e-7 kind of rule.
+
 ## Files (`<enaga/files.hpp>`) — main context only
 
 ```cpp

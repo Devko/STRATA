@@ -27,9 +27,15 @@
 // voice per block, ~0.9x a full VA voice** -- not the "far simpler" the brief expected, for the
 // same reason as KICK: the reference's shaper costs a reciprocal per oscillator per sample, and
 // there are two oscillators. The cheap win, if the measurement disappoints, is a polynomial fit
-// for 1/(1+|t|) over [1, 2]; the hand-written loop here is also the obvious candidate for a
-// *.ti.c file, which CLAUDE.md asks for and which this agent's file list did not allow.
+// for 1/(1+|t|) over [1, 2].
+//
+// That loop -- the tuned pair through the shaper -- now lives in dsp/drumloops.ti.c, which
+// build_app.py sends to cl6x while this file goes through GCC (CLAUDE.md's *.ti.c rule;
+// docs/BUDGET.md, M2, has what that bought). The arithmetic moved unchanged; what is left here
+// is control rate, the Enaga block functions and the voice logic.
 #include "snare.hpp"
+
+#include "drumloops.h"
 
 namespace strata {
 namespace {
@@ -49,23 +55,13 @@ using enaga::dsp::tan_pi;
 // gives time constants, and one is ln(100) of the other.
 constexpr float kToOnePercent = 4.60517019f;
 
-// The rational soft sine both oscillators run through: a triangle folded by 2x/(1+|x|). The
-// reciprocal is a short run of multiplies on the C674x, not a division.
-inline float soft_sine(float phase) {
-    const float triangle = (phase < 0.5f ? phase : 1.0f - phase) * 4.0f - 1.0f;
-    const float magnitude = triangle < 0.0f ? -triangle : triangle;
-    return 2.0f * triangle * reciprocal(1.0f + magnitude);
-}
+// The rational soft sine both oscillators run through -- a triangle folded by 2x/(1+|x|), whose
+// reciprocal is a short run of multiplies on the C674x, not a division -- is the hot loop, so it
+// lives in drumloops.ti.c as strata_snare_pair, where cl6x compiles it. The declick ramp a
+// stolen voice fades out with is strata_mix_ramp in the same file.
 
 // sqrt without libm, as exp2(log2(x)/2). Control rate only, so its cost does not matter.
 inline float root(float x) { return x <= 0.0f ? 0.0f : exp2(0.5f * log2(x)); }
-
-void mix_ramp(float *out, const float *in, int n, float gain, float step) {
-    for (int i = 0; i < n; i++) {
-        out[i] += gain * in[i];
-        gain += step;
-    }
-}
 
 }  // namespace
 
@@ -282,18 +278,8 @@ void Snare::run(Voice &v, float *out, int n) {
     const float hp_coefficient = OnePole::coefficient(hp, rate_);
 
     // The drum: the tuned pair through the soft sine, with the reference's -0.1 offset and its
-    // 0.60 / 0.25 weights.
-    float phase_a = v.phase_a;
-    float phase_b = v.phase_b;
-    for (int i = 0; i < n; i++) {
-        phase_a += dp_a;
-        phase_a -= phase_a >= 1.0f ? 1.0f : 0.0f;
-        phase_b += dp_b;
-        phase_b -= phase_b >= 1.0f ? 1.0f : 0.0f;
-        drum_[i] = -0.1f + 0.60f * soft_sine(phase_a) + 0.25f * soft_sine(phase_b);
-    }
-    v.phase_a = phase_a;
-    v.phase_b = phase_b;
+    // 0.60 / 0.25 weights, in one cl6x-built pass over the block.
+    strata_snare_pair(drum_, n, dp_a, dp_b, &v.phase_a, &v.phase_b);
 
     v.drum.render(env_, n, drum_shape_);
     enaga_scale(env_, n, v.trigger_level * drum_gain_);
@@ -317,7 +303,7 @@ void Snare::run(Voice &v, float *out, int n) {
     enaga_mix_product(mix_, noise_, env_, n, noise_gain_ * v.trigger_level);
 
     if (v.fade > 0) {
-        mix_ramp(out, mix_, n, out_gain_ * v.gain, -out_gain_ * kFadeStep);
+        strata_mix_ramp(out, mix_, n, out_gain_ * v.gain, -out_gain_ * kFadeStep);
         v.gain -= kFadeStep * float(n);
         if (v.gain < 0.0f) v.gain = 0.0f;
     } else {

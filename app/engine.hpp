@@ -25,9 +25,12 @@
 #include "hat.hpp"
 #include "kick.hpp"
 #include "pattern.hpp"
+#include "perc.hpp"
+#include "sample.hpp"
 #include "scheduler.hpp"
 #include "snare.hpp"
 #include "track.hpp"
+#include "va.hpp"
 
 #include <cstdint>
 
@@ -54,6 +57,12 @@ public:
     const TrackParams &params(int track) const { return params_[track]; }
     const Machine *machine(int track) const { return machines_[track]; }
     bool muted(int track) const { return muted_[track]; }
+    float level(int track) const { return mix_[track].level; }
+    const InsertChain &chain(int track) const { return mixer_.chain(track); }
+
+    // The master and send settings, for the UI to draw. Edits still go through the ring.
+    const SendSettings &sends() const { return sends_; }
+    const MasterSettings &master() const { return master_; }
 
 private:
     void apply_commands();
@@ -62,20 +71,45 @@ private:
     void fire(const StepEvent &event);
     void load_default_kit();
     void load_default_pattern();
+    void build_placeholder_sample();
 
     // --- the machine pool ---
     // Allocated once, here, and pointed at by the track slots. docs/SPEC.md wants any track to
     // host any machine; M1 wires the default techno kit's first four tracks and leaves the rest
     // silent until M2 brings PERC, SAMPLE and VA MONO.
+    // One instance per track of the default kit, constructed here so every allocation happens
+    // in init(). docs/SPEC.md wants any track to host any machine; doing that at runtime needs
+    // the voice-pool question answered (a track switching to VA POLY would want six voices it
+    // does not currently own), so for now the assignment is fixed at init and a machine change
+    // is a later milestone. Tracks with no machine are silent and cost one compare.
     Kick kick_;
     Snare snare_;
     Hat hat_closed_;
     Hat hat_open_;
+    Perc perc_;
+    VaMono bass_;
+    VaMono stab_;      // standing in for CHORD until VA POLY arrives in M6
+    Sampler loop_;
 
     Machine *machines_[kTracks] = {};
 
     Pattern pattern_;
+
+    // The kit: a track's parameters as stored, with no locks applied.
     TrackParams params_[kTracks] = {};
+
+    // What the machines and chains are actually prepared from: the kit with the CURRENT step's
+    // parameter locks written over it.
+    //
+    // These have to be separate. A lock lasts for its step, which spans many blocks, so applying
+    // it only around trigger() is not enough -- the render loop prepares every block and would
+    // overwrite it. That was a real bug: locks on a filter cutoff or a decay were inaudible
+    // because only the values trigger() happened to latch survived. docs/SPEC.md makes per-step
+    // sound changes one of STRATA's reasons to exist, so this is the path that matters.
+    //
+    // A step without a lock on a parameter reverts that parameter to the kit value, which is the
+    // behaviour every box with p-locks has.
+    TrackParams effective_[kTracks] = {};
     ChainMix mix_[kTracks] = {};
     bool muted_[kTracks] = {};
 

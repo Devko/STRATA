@@ -100,6 +100,21 @@ constexpr Rgb kTrackColour[kTracks] = {
 constexpr int pad_for_track(int track) { return track * 2; }
 constexpr int track_for_pad(int pad) { return pad % 2 == 0 ? pad / 2 : -1; }
 
+// The modes of docs/SPEC.md's function block. F4 = GRID, F7 = MIXER, F8 = EDIT, and the two
+// selection keys under the screen move within whichever mode is showing -- the step page in
+// GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
+enum class Mode : uint8_t { grid, edit, mixer };
+
+const char *page_name(Page page) {
+    switch (page) {
+        case Page::src:  return "SRC";
+        case Page::fltr: return "FLTR";
+        case Page::amp:  return "AMP";
+        case Page::fx:   return "FX";
+        default:         return "?";
+    }
+}
+
 class Strata : public enaga::App {
 public:
     bool init() override {
@@ -141,11 +156,30 @@ public:
                 post(Cmd::stop, 0, 0, stop_armed_ ? 1 : 0);
                 stop_armed_ = !stop_armed_;
                 break;
+            case ENAGA_KEY_F4:                         // HOME: the grid
+                mode_ = Mode::grid;
+                break;
+            case ENAGA_KEY_F7:                         // MIXER
+                mode_ = Mode::mixer;
+                break;
+            case ENAGA_KEY_F8:                         // EDIT: the sound pages
+                mode_ = Mode::edit;
+                break;
+
+            // The octave keys are the step page in GRID, as the spec's table says.
             case ENAGA_KEY_OCTAVE_LEFT:
                 if (page_ > 0) page_--;
                 break;
             case ENAGA_KEY_OCTAVE_RIGHT:
                 if (page_ < 3) page_++;
+                break;
+
+            // The selection keys move within the current mode.
+            case ENAGA_KEY_SELECT_LEFT:
+                select(-1);
+                break;
+            case ENAGA_KEY_SELECT_RIGHT:
+                select(+1);
                 break;
             case ENAGA_KEY_CLR:
                 post(shift_ ? Cmd::clear_track : Cmd::clear_step,
@@ -156,8 +190,22 @@ public:
         }
     }
 
+    // What the two selection keys under the screen do depends on the mode.
+    void select(int delta) {
+        switch (mode_) {
+            case Mode::grid:
+                page_ = (page_ + delta + 4) % 4;                       // step page 1-4
+                break;
+            case Mode::edit:
+                param_page_ = (param_page_ + delta + kPages) % kPages; // SRC/FLTR/AMP/FX
+                break;
+            case Mode::mixer:
+                mixer_bank_ = (mixer_bank_ + delta + 2) % 2;           // tracks 1-4 or 5-8
+                break;
+        }
+    }
+
     void on_encoder(int encoder, int delta) override {
-        // Encoder indices are not alphabetical: B=0, A=1, C=2, D=3, VALUE=4.
         if (encoder == 4) {
             tempo_tenths_ = uint32_t(int(tempo_tenths_) + delta);
             if (tempo_tenths_ < 200) tempo_tenths_ = 200;      // Enaga's clock allows 20-300
@@ -167,10 +215,27 @@ public:
             return;
         }
 
-        // A-D edit the four parameters of the current page on the selected track. The ENCODER
-        // EVENT id is alphabetical (0-3 = A-D), unlike the PUSH-button key codes, which run
-        // B, A, C, D. See docs/ENAGA_API.md -- confusing the two silently swaps A and B.
+        // The ENCODER EVENT id is alphabetical (0-3 = A-D), unlike the PUSH-button key codes,
+        // which run B, A, C, D. See docs/ENAGA_API.md -- confusing the two silently swaps A
+        // and B, and nothing catches it.
         if (encoder < 0 || encoder > 3) return;
+
+        if (mode_ == Mode::mixer) {
+            // A-D are the levels of the four tracks in the current bank.
+            const int track = mixer_bank_ * 4 + encoder;
+            if (track >= kTracks) return;
+            float level = engine_.level(track) + float(delta) * 0.02f;
+            if (level < 0.0f) level = 0.0f;
+            if (level > 1.5f) level = 1.5f;
+            Command command;
+            command.cmd = Cmd::set_track_level;
+            command.track = uint8_t(track);
+            command.f = level;
+            engine_.commands().post(command);
+            return;
+        }
+
+        // Otherwise A-D edit the four parameters of the current page on the selected track.
         const int index = page_first(Page(param_page_)) + encoder;
         const int value = int(engine_.params(selected_).v[index]) + delta;
         post(Cmd::set_param, uint8_t(selected_), 0,
@@ -252,6 +317,12 @@ public:
         const bool running = status.running.load(std::memory_order_relaxed) != 0;
         leds_.key(ENAGA_KEY_F5, 0, running ? 8 : 0);
         leds_.key(ENAGA_KEY_F6, running ? 0 : 6, 0);
+
+        // The mode keys light the mode you are in, as the spec's LED language asks.
+        leds_.key(ENAGA_KEY_F4, 0, mode_ == Mode::grid ? 8 : 0);
+        leds_.key(ENAGA_KEY_F7, 0, mode_ == Mode::mixer ? 8 : 0);
+        leds_.key(ENAGA_KEY_F8, 0, mode_ == Mode::edit ? 8 : 0);
+
         leds_.primed = true;
     }
 
@@ -286,7 +357,32 @@ public:
             canvas.text(0, 9, "CLOCK REFUSED", 10);
         }
 
-        // The grid: 8 tracks of 16 steps, 8 px a step.
+        switch (mode_) {
+            case Mode::grid:  draw_grid(canvas, running); break;
+            case Mode::edit:  draw_edit(canvas); break;
+            case Mode::mixer: draw_mixer(canvas); break;
+        }
+
+        // The bottom line on every mode: voices, the device, and any dropped edits. A dropped
+        // command should be visible rather than mysterious (app/commands.hpp).
+        out = line;
+        append(out, "V");
+        append_number(out, status.voices.load(std::memory_order_relaxed));
+        append(out, " ");
+        append(out, device_name(enaga::system::device()));
+        const uint32_t dropped = engine_.commands().dropped();
+        if (dropped) { append(out, " DROP "); append_number(out, dropped); }
+        *out = 0;
+        canvas.text(0, 120, line, 7);
+    }
+
+    // --- GRID: all eight tracks at a glance ------------------------------
+
+    void draw_grid(enaga::Canvas &canvas, bool running) {
+        char line[40];
+        char *out = line;
+        const Status &status = engine_.status();
+
         const int grid_top = 20;
         for (int t = 0; t < kTracks; t++) {
             const int y = grid_top + t * 8;
@@ -308,9 +404,9 @@ public:
                 }
             }
             if (t == selected_) canvas.rect(0, y, 1, 8, 12);     // the selected track's marker
+            if (muted_[t]) canvas.rect(0, y + 3, 128, 1, 4);     // a muted track is struck out
         }
 
-        // Which track and page the encoders are editing.
         out = line;
         append(out, "TRK ");
         append_number(out, uint32_t(selected_ + 1));
@@ -320,37 +416,144 @@ public:
         *out = 0;
         canvas.text(0, 88, line, 10);
 
-        // The four encoder slots: a three-letter name and a value each.
-        const Machine *machine = engine_.machine(selected_);
+        draw_param_slots(canvas);
+    }
+
+    // --- EDIT: the selected track's sound, four parameters at a time -----
+
+    void draw_edit(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+
+        out = line;
+        append(out, "EDIT TRK ");
+        append_number(out, uint32_t(selected_ + 1));
+        append(out, "  ");
+        append(out, page_name(Page(param_page_)));
+        *out = 0;
+        canvas.text(0, 20, line, 14);
+
+        // Which of the four pages is showing, as a row of boxes: the spec's selection keys
+        // flip between them, so showing where you are matters more than labels.
+        for (int p = 0; p < kPages; p++) {
+            const uint8_t grey = p == param_page_ ? 14 : 4;
+            canvas.rect(p * 32 + 2, 32, 28, 3, grey);
+        }
+
+        // The four parameters in large type: name, value and a bar each, stacked so they are
+        // readable at a glance rather than squeezed onto one line.
         const int base = page_first(Page(param_page_));
         for (int slot = 0; slot < 4; slot++) {
             const int index = base + slot;
+            const int y = 42 + slot * 12;
+            const uint8_t value = engine_.params(selected_).v[index];
+
             out = line;
-            const char *name = machine ? machine->param_name(index) : "---";
-            // The chain owns the FLTR and FX pages; the machine only names SRC and AMP.
-            if (param_page_ == int(Page::fltr) || param_page_ == int(Page::fx)) {
-                name = InsertChain::param_name(index);
+            append(out, param_name_for(index));
+            *out = 0;
+            canvas.text(0, y, line, 13);
+
+            out = line;
+            append_padded(out, value, 3);
+            *out = 0;
+            canvas.text(34, y, line, 15);
+
+            const int bar = int(value) * 70 / 127;
+            canvas.rect(56, y + 2, bar < 1 ? 1 : bar, 4, 9);
+        }
+
+        // Which encoder is which, since EDIT is where that matters most.
+        canvas.text(0, 96, "A    B    C    D", 7);
+        draw_param_slots(canvas, 106);
+    }
+
+    // --- MIXER: four levels at a time, with meters -----------------------
+
+    void draw_mixer(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+
+        out = line;
+        append(out, "MIXER TRK ");
+        append_number(out, uint32_t(mixer_bank_ * 4 + 1));
+        *out++ = '-';
+        append_number(out, uint32_t(mixer_bank_ * 4 + 4));
+        *out = 0;
+        canvas.text(0, 20, line, 14);
+
+        const Status &status = engine_.status();
+        const int peak_milli = int(status.peak_milli.load(std::memory_order_relaxed));
+
+        for (int slot = 0; slot < 4; slot++) {
+            const int track = mixer_bank_ * 4 + slot;
+            if (track >= kTracks) break;
+
+            const int x = slot * 32;
+            const float level = engine_.level(track);
+            const int bar = int(level * 40.0f);
+
+            out = line;
+            append(out, "T");
+            append_number(out, uint32_t(track + 1));
+            if (muted_[track]) append(out, " M");
+            *out = 0;
+            canvas.text(x, 34, line, muted_[track] ? 6 : 13);
+
+            // A vertical fader per track, filled to its level.
+            canvas.rect(x + 2, 46, 10, 48, 3);
+            const int filled = bar > 48 ? 48 : (bar < 0 ? 0 : bar);
+            if (filled > 0) {
+                canvas.rect(x + 2, 46 + (48 - filled), 10, filled, muted_[track] ? 5 : 12);
             }
-            append(out, name);
+
+            // The machine driving it, so the mixer says what it is mixing.
+            const Machine *machine = engine_.machine(track);
+            canvas.text(x + 14, 46, machine ? "ON" : "--", machine ? 10 : 4);
+
+            out = line;
+            append_padded(out, uint32_t(level * 100.0f + 0.5f), 3);
+            *out = 0;
+            canvas.text(x, 98, line, 11);
+        }
+
+        // The master peak, as one bar: the only number that says whether it is clipping.
+        out = line;
+        append(out, "PEAK ");
+        append_tenths(out, uint32_t(peak_milli));
+        *out = 0;
+        canvas.text(0, 110, line, 11);
+        const int peak_bar = peak_milli * 60 / 1000;
+        canvas.rect(60, 112, peak_bar > 60 ? 60 : (peak_bar < 1 ? 1 : peak_bar), 4,
+                    peak_milli >= 1000 ? 15 : 8);
+    }
+
+    // --- shared pieces ----------------------------------------------------
+
+    // The machine names SRC and AMP; the insert chain names FLTR and FX.
+    const char *param_name_for(int index) const {
+        if (param_page_ == int(Page::fltr) || param_page_ == int(Page::fx)) {
+            return InsertChain::param_name(index);
+        }
+        const Machine *machine = engine_.machine(selected_);
+        return machine ? machine->param_name(index) : "---";
+    }
+
+    // The four encoder slots along the bottom: a three-letter name, a value and a small bar.
+    void draw_param_slots(enaga::Canvas &canvas, int y = 100) {
+        char line[40];
+        const int base = page_first(Page(param_page_));
+        for (int slot = 0; slot < 4; slot++) {
+            const int index = base + slot;
+            char *out = line;
+            append(out, param_name_for(index));
             *out++ = ' ';
             append_padded(out, engine_.params(selected_).v[index], 3);
             *out = 0;
-            canvas.text(slot * 32, 100, line, 12);
+            canvas.text(slot * 32, y, line, 12);
 
             const int bar = int(engine_.params(selected_).v[index]) * 28 / 127;
-            canvas.rect(slot * 32, 112, bar < 1 ? 1 : bar, 3, 8);
+            canvas.rect(slot * 32, y + 12, bar < 1 ? 1 : bar, 3, 8);
         }
-
-        // Voices and the device, so a wrong build is obvious at a glance.
-        out = line;
-        append(out, "V");
-        append_number(out, status.voices.load(std::memory_order_relaxed));
-        append(out, " ");
-        append(out, device_name(enaga::system::device()));
-        const uint32_t dropped = engine_.commands().dropped();
-        if (dropped) { append(out, " DROP "); append_number(out, dropped); }
-        *out = 0;
-        canvas.text(0, 120, line, 7);
     }
 
 private:
@@ -366,9 +569,11 @@ private:
 
     Engine engine_;
 
+    Mode mode_ = Mode::grid;
     int selected_ = 0;
     int page_ = 0;            // step page 1-4, for 64-step tracks
     int param_page_ = int(Page::src);
+    int mixer_bank_ = 0;      // 0 = tracks 1-4, 1 = tracks 5-8
     int cursor_step_ = 0;
     bool shift_ = false;
     bool stop_armed_ = false;

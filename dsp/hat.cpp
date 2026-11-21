@@ -30,10 +30,14 @@
 // Reading six squares off the top bit of a 32-bit accumulator is what buys that: six
 // `Wave::pulse` oscillators would have been roughly 3x this whole machine, and the band-pass
 // that follows makes their PolyBLEP correction pointless anyway. The two SVFs are Enaga's own
-// C block functions, which cl6x pipelines, so CLAUDE.md's *.ti.c rule bites only on the square
-// and VCA loops here -- the candidates if the measurement disappoints, and not something this
-// agent's file list allowed.
+// C block functions, which cl6x pipelines, so CLAUDE.md's *.ti.c rule bit only on the square
+// and VCA loops here -- and both now live in dsp/drumloops.ti.c, which build_app.py sends to
+// cl6x while this file goes through GCC (docs/BUDGET.md, M2, has what that bought). The
+// arithmetic moved unchanged, the clocked noise included: the RNG still advances only on a
+// sample-and-hold clock edge, so the noise stream is the one this machine always had.
 #include "hat.hpp"
+
+#include "drumloops.h"
 
 namespace strata {
 namespace {
@@ -45,23 +49,21 @@ using enaga::dsp::clamp;
 using enaga::dsp::exp2;
 using enaga::dsp::reciprocal;
 using enaga::dsp::semitones;
-using enaga::dsp::soft_clip;
 using enaga::dsp::tan_pi;
 
 constexpr float kToOnePercent = 4.60517019f;   // ln(100), see kick.cpp
 constexpr float kTurn = 4294967296.0f;         // 2^32, as enaga's own oscillators use
 
 // A 32-bit phase increment from a normalised frequency, the way enaga_oscillator_add does it.
+// Control rate, once per oscillator per block, so it stays here.
 inline uint32_t increment(float normalised) {
     return uint32_t(int32_t(clamp(normalised, 0.0f, 0.499f) * kTurn));
 }
 
-void mix_ramp(float *out, const float *in, int n, float gain, float step) {
-    for (int i = 0; i < n; i++) {
-        out[i] += gain * in[i];
-        gain += step;
-    }
-}
+// The square bank, the VCA and the declick ramp are strata_hat_squares, strata_hat_vca and
+// strata_mix_ramp in drumloops.ti.c, where cl6x compiles them.
+static_assert(Hat::kOscillators == STRATA_HAT_OSCILLATORS,
+              "drumloops.ti.c unrolls exactly this many accumulators");
 
 }  // namespace
 
@@ -266,49 +268,22 @@ void Hat::run(Voice &v, float *out, int n) {
     const uint32_t sample_hold_step = increment(f0 * sample_hold_ratio_ * inv_rate_);
 
     // The metallic source: six squares read off the top bit of a 32-bit accumulator, mixed as
-    // 0.33 * (how many are high) - 1, then crossfaded towards clocked noise.
-    uint32_t p0 = v.phase[0], p1 = v.phase[1], p2 = v.phase[2];
-    uint32_t p3 = v.phase[3], p4 = v.phase[4], p5 = v.phase[5];
-    uint32_t hold_phase = v.sample_hold_phase;
-    float hold = v.sample_hold;
-    for (int i = 0; i < n; i++) {
-        p0 += step[0];
-        p1 += step[1];
-        p2 += step[2];
-        p3 += step[3];
-        p4 += step[4];
-        p5 += step[5];
-        const uint32_t high = (p0 >> 31) + (p1 >> 31) + (p2 >> 31) + (p3 >> 31) + (p4 >> 31) +
-                              (p5 >> 31);
-        const float squares = 0.33f * float(high) - 1.0f;
-        const uint32_t before = hold_phase;
-        hold_phase += sample_hold_step;
-        if (hold_phase < before) hold = rng_.bipolar();
-        mix_[i] = squares + (hold - squares) * noisiness_;
-    }
-    v.phase[0] = p0;
-    v.phase[1] = p1;
-    v.phase[2] = p2;
-    v.phase[3] = p3;
-    v.phase[4] = p4;
-    v.phase[5] = p5;
-    v.sample_hold_phase = hold_phase;
-    v.sample_hold = hold;
+    // 0.33 * (how many are high) - 1, then crossfaded towards clocked noise -- one cl6x-built
+    // pass over the block, and the RNG stream is this machine's own (drumloops.ti.c).
+    strata_hat_squares(mix_, n, v.phase, step, sample_hold_step, &v.sample_hold_phase,
+                       &v.sample_hold, rng_.state(), noisiness_);
 
     v.band.process(mix_, mix_, n, band_, Svf::band_pass);
 
     // The VCA: the envelope times the trigger level, then asymmetric and soft clipped, which is
     // where the trigger level turns into brightness rather than only level.
     v.amp.render(env_, n, v.choked ? choke_shape_ : amp_shape_);
-    for (int i = 0; i < n; i++) {
-        const float x = mix_[i] * env_[i] * v.trigger_level;
-        mix_[i] = soft_clip(x > 0.0f ? 4.0f * x : 0.1f * x);
-    }
+    strata_hat_vca(mix_, env_, n, v.trigger_level);
 
     v.high.process(mix_, mix_, n, high_, Svf::high_pass);
 
     if (v.fade > 0) {
-        mix_ramp(out, mix_, n, out_gain_ * v.gain, -out_gain_ * kFadeStep);
+        strata_mix_ramp(out, mix_, n, out_gain_ * v.gain, -out_gain_ * kFadeStep);
         v.gain -= kFadeStep * float(n);
         if (v.gain < 0.0f) v.gain = 0.0f;
     } else {

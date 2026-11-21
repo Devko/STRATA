@@ -18,7 +18,15 @@
 // the block's peak and its gain is one value a block, ramped across the block with the output
 // level in a single pass, which is 1.33 ms of attack quantisation and perhaps a twentieth of
 // the cost of a per-sample detector.
+//
+// The master's four hand-written loops -- the peak detector, the gain ramp, the limiter and the
+// interleave -- are the fixed tax that runs on every block however few tracks sound, so they
+// live in dsp/masterloops.ti.c, which build_app.py sends to cl6x while this file goes through
+// GCC (CLAUDE.md's *.ti.c rule; docs/BUDGET.md, M2, has the figures). The arithmetic moved
+// unchanged.
 #include "buses.hpp"
+
+#include "masterloops.h"
 
 namespace strata {
 namespace ed = enaga::dsp;
@@ -218,14 +226,7 @@ void Mixer::finish_block(float *out, int frames) {
     // --- interleave, once, at the end --------------------------------------------------------
     // audio()'s buffer is L R L R (CLAUDE.md); everything above worked in planes because that
     // is the layout every Enaga block function wants.
-    for (int i = 0; i < n; i++) {
-        out[2 * i] = mix_l_[i];
-        out[2 * i + 1] = mix_r_[i];
-    }
-    for (int i = n; i < frames; i++) {   // only if something ever hands us more than a block
-        out[2 * i] = 0.0f;
-        out[2 * i + 1] = 0.0f;
-    }
+    strata_interleave(out, mix_l_, mix_r_, n, frames);
 }
 
 void Mixer::master(int n) {
@@ -238,13 +239,7 @@ void Mixer::master(int n) {
     }
 
     // --- the block's peak: the compressor's detector and the limiter's skip test --------------
-    float peak = 0.0f;
-    for (int i = 0; i < n; i++) {
-        const float l = mix_l_[i] < 0.0f ? -mix_l_[i] : mix_l_[i];
-        const float r = mix_r_[i] < 0.0f ? -mix_r_[i] : mix_r_[i];
-        const float m = l > r ? l : r;
-        peak = m > peak ? m : peak;
-    }
+    const float peak = strata_master_peak(mix_l_, mix_r_, n);
     peak_ = peak;
 
     // --- the glue compressor: one gain a block, smoothed ---------------------------------------
@@ -266,12 +261,7 @@ void Mixer::master(int n) {
             inv_frames_ = ed::reciprocal(float(n));
         }
         const float step = (to - from) * inv_frames_;
-        float gain = from;
-        for (int i = 0; i < n; i++) {
-            gain += step;
-            mix_l_[i] *= gain;
-            mix_r_[i] *= gain;
-        }
+        strata_master_ramp(mix_l_, mix_r_, n, from, step);
     }
     master_gain_ = to;
 
@@ -279,21 +269,8 @@ void Mixer::master(int n) {
     // Unity below the threshold, so a quiet master is bit-exact and the stage is skipped
     // outright when the block cannot reach the threshold even at the louder end of the ramp.
     if (peak * largest(from, to) > limit_threshold_) {
-        const float threshold = limit_threshold_, headroom = limit_headroom_;
-        const float inv_headroom = limit_inv_headroom_;
-        for (int i = 0; i < n; i++) {
-            const float l = mix_l_[i];
-            const float la = l < 0.0f ? -l : l;
-            const float lb = la < threshold ? la : threshold;
-            const float lm = lb + headroom * ed::soft_clip((la - lb) * inv_headroom);
-            mix_l_[i] = l < 0.0f ? -lm : lm;
-
-            const float r = mix_r_[i];
-            const float ra = r < 0.0f ? -r : r;
-            const float rb = ra < threshold ? ra : threshold;
-            const float rm = rb + headroom * ed::soft_clip((ra - rb) * inv_headroom);
-            mix_r_[i] = r < 0.0f ? -rm : rm;
-        }
+        strata_master_limit(mix_l_, mix_r_, n, limit_threshold_, limit_headroom_,
+                            limit_inv_headroom_);
     }
 }
 
