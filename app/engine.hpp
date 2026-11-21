@@ -1,0 +1,107 @@
+// The audio-side engine: everything that happens inside audio().
+//
+// It owns the live pattern, the kit, the eight machine slots, the scheduler and the mixer, and it
+// is the only thing that touches them. The main context reaches it exclusively through the
+// command ring and reads nothing but the published Status. docs/SPEC.md, "Software architecture".
+//
+// Everything here must hold the audio contract: no allocation, no files, no blocking, no drawing,
+// no LEDs. All storage is taken in init(), which runs in App::init().
+//
+// ## One block, in order
+//
+//   1. apply at most Commands::kMaxPerBlock commands
+//   2. ask Enaga's clock which ticks fall in this block, each with its frame
+//   3. for each tick, let the scheduler resolve it into events and trigger the machines
+//   4. prepare machines and insert chains at control rate
+//   5. render each sounding track into the mixer, then the buses and the master
+//   6. publish the playhead, the peak and the voice count for the UI
+//
+// Steps 2 and 3 are why timing is sample accurate: the tick carries the frame it falls on, the
+// scheduler passes that into the event, and the machine starts the voice on that exact frame.
+#pragma once
+
+#include "buses.hpp"
+#include "commands.hpp"
+#include "hat.hpp"
+#include "kick.hpp"
+#include "pattern.hpp"
+#include "scheduler.hpp"
+#include "snare.hpp"
+#include "track.hpp"
+
+#include <cstdint>
+
+namespace strata {
+
+class Engine {
+public:
+    // App::init() only: this is where every buffer in the signal path is taken.
+    bool init(float sample_rate);
+
+    // The audio callback's whole body. `out` is interleaved stereo, 2 * frames floats, and is
+    // written in full.
+    void process(const float *in, float *out, uint32_t frames);
+
+    // --- the main context's side ------------------------------------------
+    // Both are safe to touch from the main context: the ring is lock-free and Status is
+    // single-writer words.
+    Commands &commands() { return commands_; }
+    const Status &status() const { return status_; }
+
+    // Read-only views for the UI to draw from. The UI must not write through these: every edit
+    // goes through the command ring, so that a save and the transport cannot race.
+    const Pattern &pattern() const { return pattern_; }
+    const TrackParams &params(int track) const { return params_[track]; }
+    const Machine *machine(int track) const { return machines_[track]; }
+    bool muted(int track) const { return muted_[track]; }
+
+private:
+    void apply_commands();
+    void apply(const Command &command);
+    void resolve_tick(uint32_t tick, uint32_t frame);
+    void fire(const StepEvent &event);
+    void load_default_kit();
+    void load_default_pattern();
+
+    // --- the machine pool ---
+    // Allocated once, here, and pointed at by the track slots. docs/SPEC.md wants any track to
+    // host any machine; M1 wires the default techno kit's first four tracks and leaves the rest
+    // silent until M2 brings PERC, SAMPLE and VA MONO.
+    Kick kick_;
+    Snare snare_;
+    Hat hat_closed_;
+    Hat hat_open_;
+
+    Machine *machines_[kTracks] = {};
+
+    Pattern pattern_;
+    TrackParams params_[kTracks] = {};
+    ChainMix mix_[kTracks] = {};
+    bool muted_[kTracks] = {};
+
+    Scheduler scheduler_;
+    Mixer mixer_;
+
+    // The per-tick event buffer lives here rather than on the audio stack: at the true worst
+    // case it is 4 KiB, and the platform caps a stack frame at 16 KiB.
+    StepEvent events_[kMaxEventsPerTick];
+
+    // Cached so a tempo change can re-derive the scheduler's ratchet spacing without dividing
+    // every block. Enaga's clock reports the tempo; core/ cannot ask it.
+    float tempo_ = 0.0f;
+
+    SendSettings sends_;
+    MasterSettings master_;
+    PerformState perform_;
+
+    // Which track's trigs fire the sidechain duck. docs/SPEC.md: track 1 by default.
+    int duck_source_ = 0;
+
+    Commands commands_;
+    Status status_;
+
+    float rate_ = 48000.0f;
+    bool ready_ = false;
+};
+
+}  // namespace strata

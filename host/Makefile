@@ -25,10 +25,19 @@ DSP_SRC   := $(wildcard $(ROOT)/dsp/*.cpp)
 TEST_SRC  := $(wildcard $(ROOT)/tests/*.cpp)
 SRC       := $(CORE_SRC) $(DSP_SRC) $(TEST_SRC)
 
+# <enaga/dsp.hpp> is a C++ wrapper over block functions implemented in C under
+# third_party/enaga/runtime/dsp. Nothing in dsp/ links on the host without them, so they are
+# built here too -- the same recipe Enaga's own tests/test_dsp.py uses (C11, warnings as errors).
+ENAGA_DSP_SRC := $(wildcard $(ROOT)/third_party/enaga/runtime/dsp/*.c)
+ENAGA_DSP_OBJ := $(patsubst $(ROOT)/%.c,$(OUT)/%.o,$(ENAGA_DSP_SRC))
+
+CC       ?= gcc
+CFLAGS   := -std=c11 -Wall -Wextra -Werror -O2 -g -I$(ENAGA_INC)
+
 # Mirror each source to an object under OUT, keeping its directory so that identically named
 # files in core/ and dsp/ do not collide here. The device build forbids that collision anyway
 # (tools/build.sh refuses it), but the host build should not be the thing that discovers it.
-OBJ := $(patsubst $(ROOT)/%.cpp,$(OUT)/%.o,$(SRC))
+OBJ := $(patsubst $(ROOT)/%.cpp,$(OUT)/%.o,$(SRC)) $(ENAGA_DSP_OBJ)
 DEP := $(OBJ:.o=.d)
 
 BIN := $(OUT)/strata-tests
@@ -47,6 +56,10 @@ $(BIN): $(OBJ)
 $(OUT)/%.o: $(ROOT)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+
+$(OUT)/%.o: $(ROOT)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 clean:
 	rm -rf $(OUT)

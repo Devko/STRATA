@@ -1,13 +1,15 @@
-// STRATA: the M0 skeleton. Draws its name, the device it is running on, the audio load, and
-// the state of Enaga's clock. It makes no sound and reads no files.
+// STRATA: the Enaga app. M1 — a playable four-track beat.
 //
-// The clock readout is here on purpose. docs/REVIEW.md 1.3 and 1.4 found that Enaga owns the
-// tempo clock and that the user's CLOCK SRC setting governs it, so STRATA neither implements a
-// clock nor owns the tempo -- the single most consequential correction to the original spec.
-// Showing SRC and BPM at M0 proves that finding against real hardware before M1 is built on it.
+// This file is the only place that talks to Enaga, which keeps the rest of the project portable
+// and host-testable (CLAUDE.md). It owns the main context: keys, pads, encoders, the screen and
+// the LEDs. Everything that makes sound lives in app/engine.cpp and runs in the audio callback.
 //
-// Text is assembled by hand: there is no printf and no libm on this platform, and the built-in
-// 5 x 7 font has upper case, digits and a few symbols only (docs/SPEC.md, "Platform facts").
+// The split is strict, and it is the whole architecture: this side never writes pattern memory.
+// Every edit is posted as a command and applied by the audio side at the start of its next
+// block, so an edit can never land halfway through a step and a save can never race the
+// transport. docs/SPEC.md, "Software architecture".
+#include "engine.hpp"
+
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
 
@@ -15,7 +17,9 @@
 
 namespace {
 
-// --- text helpers ---------------------------------------------------------
+using namespace strata;
+
+// --- text helpers (no printf, no libm, and the font is upper case and digits) ---
 
 void append(char *&out, const char *text) {
     while (*text) *out++ = *text++;
@@ -28,11 +32,17 @@ void append_number(char *&out, uint32_t value) {
     while (n) *out++ = digits[--n];
 }
 
-// value is tenths: 1234 prints as "123.4".
 void append_tenths(char *&out, uint32_t tenths) {
     append_number(out, tenths / 10);
     *out++ = '.';
     *out++ = char('0' + tenths % 10);
+}
+
+void append_padded(char *&out, uint32_t value, int width) {
+    uint32_t scale = 1;
+    for (int i = 1; i < width; i++) scale *= 10;
+    while (scale > 1 && value < scale) { *out++ = '0'; scale /= 10; }
+    append_number(out, value);
 }
 
 const char *device_name(int device) {
@@ -44,80 +54,333 @@ const char *device_name(int device) {
     }
 }
 
-const char *clock_source_name(int source) {
-    switch (source) {
-        case ENAGA_CLOCK_INTERNAL: return "INT";
-        case ENAGA_CLOCK_MIDI:     return "MIDI";
-        case ENAGA_CLOCK_SYNC:     return "SYNC";
-        default:                   return "?";
-    }
-}
+// --- the LED shadow -------------------------------------------------------
+//
+// The spec requires it: LEDs update from the main context only, and a command goes out only when
+// a value actually changes. Without the shadow the panel MCU would be flooded every frame.
 
-// --- app ------------------------------------------------------------------
+struct LedShadow {
+    uint8_t step_red[16] = {};
+    uint8_t step_green[16] = {};
+    uint8_t pad_r[15] = {}, pad_g[15] = {}, pad_b[15] = {};
+    uint8_t key_red[ENAGA_KEY_COUNT] = {};
+    uint8_t key_green[ENAGA_KEY_COUNT] = {};
+    bool primed = false;
+
+    void step(int index, uint8_t red, uint8_t green) {
+        if (primed && step_red[index] == red && step_green[index] == green) return;
+        step_red[index] = red;
+        step_green[index] = green;
+        enaga::step_led(index + 1, red, green);
+    }
+
+    void pad(int index, uint8_t r, uint8_t g, uint8_t b) {
+        if (primed && pad_r[index] == r && pad_g[index] == g && pad_b[index] == b) return;
+        pad_r[index] = r; pad_g[index] = g; pad_b[index] = b;
+        enaga::pad_led(index, r, g, b);
+    }
+
+    void key(int code, uint8_t red, uint8_t green) {
+        if (code < 0 || code >= ENAGA_KEY_COUNT) return;
+        if (primed && key_red[code] == red && key_green[code] == green) return;
+        key_red[code] = red;
+        key_green[code] = green;
+        enaga::button_led(code, red, green);
+    }
+};
+
+// Track colours for the pads, roughly following the kit: kick red, snare amber, hats cyan.
+struct Rgb { uint8_t r, g, b; };
+constexpr Rgb kTrackColour[kTracks] = {
+    {10, 0, 0}, {10, 6, 0}, {0, 8, 10}, {0, 4, 10},
+    {8, 0, 10}, {0, 10, 4}, {10, 10, 0}, {4, 4, 10},
+};
+
+// The 8 lower pads are the tracks: even ids 0, 2, 4 ... 14 (docs/SPEC.md, "Pads").
+constexpr int pad_for_track(int track) { return track * 2; }
+constexpr int track_for_pad(int pad) { return pad % 2 == 0 ? pad / 2 : -1; }
 
 class Strata : public enaga::App {
 public:
     bool init() override {
-        enaga::log("strata m0 ready");
+        if (!engine_.init(float(ENAGA_SAMPLE_RATE))) return false;
+        enaga::clock::set_tempo(130.0f);     // the spec's reference tempo
+        enaga::log("strata m1 ready");
         return true;
     }
 
-    // Silence, but the whole buffer is written: Enaga requires it, and the buffer is
-    // interleaved stereo (L R L R), not two planes.
-    void audio(const float *, float *out, uint32_t frames) override {
-        for (uint32_t i = 0; i < 2 * frames; i++) out[i] = 0.0f;
+    void audio(const float *in, float *out, uint32_t frames) override {
+        engine_.process(in, out, frames);
     }
 
+    // --- input ------------------------------------------------------------
+
+    void on_key(int key, bool down) override {
+        if (key == ENAGA_KEY_F1) { shift_ = down; return; }
+        if (!down) return;
+
+        if (key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
+            const int step = key - ENAGA_KEY_STEP1 + page_ * 16;
+            post(Cmd::toggle_trig, uint8_t(selected_), uint8_t(step));
+            return;
+        }
+
+        switch (key) {
+            case ENAGA_KEY_F5:
+                // The transport is Enaga's and its calls are MAIN CONTEXT, so they happen here
+                // rather than through the command ring. start() returns false under an external
+                // clock source, where STRATA can only follow -- the screen shows EXT and the
+                // refusal is simply recorded.
+                clock_refused_ = !enaga::clock::start();
+                stop_armed_ = false;
+                post(Cmd::play);                       // for the audio side's trace only
+                break;
+            case ENAGA_KEY_F6:
+                clock_refused_ = !enaga::clock::stop();
+                // The second press cuts the tails. Only that part is the audio side's job.
+                post(Cmd::stop, 0, 0, stop_armed_ ? 1 : 0);
+                stop_armed_ = !stop_armed_;
+                break;
+            case ENAGA_KEY_OCTAVE_LEFT:
+                if (page_ > 0) page_--;
+                break;
+            case ENAGA_KEY_OCTAVE_RIGHT:
+                if (page_ < 3) page_++;
+                break;
+            case ENAGA_KEY_CLR:
+                post(shift_ ? Cmd::clear_track : Cmd::clear_step,
+                     uint8_t(selected_), uint8_t(cursor_step_));
+                break;
+            default:
+                break;
+        }
+    }
+
+    void on_encoder(int encoder, int delta) override {
+        // Encoder indices are not alphabetical: B=0, A=1, C=2, D=3, VALUE=4.
+        if (encoder == 4) {
+            tempo_tenths_ = uint32_t(int(tempo_tenths_) + delta);
+            if (tempo_tenths_ < 200) tempo_tenths_ = 200;      // Enaga's clock allows 20-300
+            if (tempo_tenths_ > 3000) tempo_tenths_ = 3000;
+            // Main context again, and refused under an external clock.
+            clock_refused_ = !enaga::clock::set_tempo(float(tempo_tenths_) * 0.1f);
+            return;
+        }
+
+        // A-D edit the four parameters of the current page on the selected track. The ENCODER
+        // EVENT id is alphabetical (0-3 = A-D), unlike the PUSH-button key codes, which run
+        // B, A, C, D. See docs/ENAGA_API.md -- confusing the two silently swaps A and B.
+        if (encoder < 0 || encoder > 3) return;
+        const int index = page_first(Page(param_page_)) + encoder;
+        const int value = int(engine_.params(selected_).v[index]) + delta;
+        post(Cmd::set_param, uint8_t(selected_), 0,
+             uint8_t(index), uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value)));
+    }
+
+    void on_pad_press(int pad, int velocity) override {
+        const int track = track_for_pad(pad);
+        if (track < 0 || track >= kTracks) return;
+
+        if (shift_) {                                  // F1 + pad: mute, in any mode
+            muted_[track] = !muted_[track];
+            post(Cmd::set_mute, uint8_t(track), 0, muted_[track] ? 1 : 0);
+            return;
+        }
+
+        selected_ = track;
+        post(Cmd::trigger_note, uint8_t(track), 0,
+             engine_.pattern().root, uint8_t(velocity));
+    }
+
+    void on_transport(int what, uint32_t position) override {
+        // Under an external clock STRATA cannot start or stop anything; it follows. Resetting
+        // the chain state here is what keeps conditions in step with an outside transport.
+        (void)position;
+        if (what == ENAGA_TRANSPORT_START || what == ENAGA_TRANSPORT_LOCATE) stop_armed_ = false;
+    }
+
+    // --- LEDs -------------------------------------------------------------
+
+    void update(uint32_t ms) override {
+        (void)ms;
+
+        // Log transport and clock-source changes. Cheap (a handful of comparisons), only fires on
+        // a change, and it is the one thing worth seeing in an emulator run or a unit log: it
+        // says whether the clock is actually moving and who is driving it.
+        {
+            const enaga::clock::State clock = enaga::clock::state();
+            const bool running = clock.running != 0;
+            const int source = int(clock.source);
+            if (running != logged_running_ || source != logged_source_) {
+                logged_running_ = running;
+                logged_source_ = source;
+                enaga::log(running ? (source == ENAGA_CLOCK_INTERNAL ? "run int"
+                                                                     : "run ext")
+                                   : "stopped");
+            }
+            (void)logged_position_;
+        }
+
+        const Status &status = engine_.status();
+        const Pattern &pattern = engine_.pattern();
+        const uint8_t playhead = status.playhead[selected_].load(std::memory_order_relaxed);
+
+        for (int i = 0; i < 16; i++) {
+            const int step = i + page_ * 16;
+            const Step &s = pattern.tracks[selected_].steps[step];
+            const bool trig = (s.flags & kStepTrig) != 0;
+            const bool has_locks = s.lock_count > 0;
+            const bool conditional = s.probability < 100 || condition_kind(s.condition) != Condition::NONE;
+
+            uint8_t green = 0, red = 0;
+            if (trig) {
+                green = conditional ? 2 : 6;          // the spec's LED language
+                if (has_locks) red = 3;               // amber: a trig with locks
+            }
+            if (step == playhead && status.running.load(std::memory_order_relaxed)) red = 10;
+            leds_.step(i, red, green);
+        }
+
+        for (int t = 0; t < kTracks; t++) {
+            const Rgb colour = kTrackColour[t];
+            const uint8_t level = muted_[t] ? 0 : (t == selected_ ? 10 : 2);
+            const uint8_t scale = level == 0 ? 0 : level;
+            leds_.pad(pad_for_track(t), uint8_t(colour.r * scale / 10),
+                      uint8_t(colour.g * scale / 10), uint8_t(colour.b * scale / 10));
+        }
+
+        const bool running = status.running.load(std::memory_order_relaxed) != 0;
+        leds_.key(ENAGA_KEY_F5, 0, running ? 8 : 0);
+        leds_.key(ENAGA_KEY_F6, running ? 0 : 6, 0);
+        leds_.primed = true;
+    }
+
+    // --- screen -----------------------------------------------------------
+
     void draw(enaga::Canvas &canvas) override {
-        char line[32];
+        char line[40];
         char *out = line;
 
         canvas.clear();
-        canvas.text(0, 0, "STRATA");
-        canvas.text(0, 10, device_name(enaga::system::device()), 9);
 
-        // audio_load() is per mille of the block budget, so 1000 = the whole block.
+        const Status &status = engine_.status();
+        const enaga::clock::State clock = enaga::clock::state();
+        const bool running = clock.running != 0;
+
+        // Top line on every screen: pattern, tempo, play state, audio load.
         out = line;
-        append(out, "LOAD ");
+        append(out, "A01 ");
+        append_tenths(out, uint32_t(clock.tempo * 10.0f + 0.5f));
+        append(out, running ? " > " : " . ");
         append_tenths(out, enaga::audio_load());
         *out++ = '%';
         *out = 0;
-        canvas.text(0, 28, line, 12);
+        canvas.text(0, 0, line, 14);
 
+        if (int(clock.source) != ENAGA_CLOCK_INTERNAL) {
+            // The tempo is not ours to set under an external source, so say so rather than
+            // showing a number the user cannot change.
+            canvas.text(0, 9, int(clock.source) == ENAGA_CLOCK_MIDI ? "EXT MIDI" : "EXT SYNC", 10);
+        } else if (clock_refused_) {
+            // Internal source and still refused: worth seeing rather than silently ignoring.
+            canvas.text(0, 9, "CLOCK REFUSED", 10);
+        }
+
+        // The grid: 8 tracks of 16 steps, 8 px a step.
+        const int grid_top = 20;
+        for (int t = 0; t < kTracks; t++) {
+            const int y = grid_top + t * 8;
+            const uint8_t head = status.playhead[t].load(std::memory_order_relaxed);
+            for (int i = 0; i < 16; i++) {
+                const int step = i + page_ * 16;
+                const Step &s = engine_.pattern().tracks[t].steps[step];
+                const bool trig = (s.flags & kStepTrig) != 0;
+                const bool on_head = running && step == head;
+
+                uint8_t grey = 2;
+                if (trig) grey = (s.flags & kStepAccent) ? 15 : 11;
+                if (on_head) grey = uint8_t(grey < 8 ? 7 : 15);
+
+                if (trig || on_head) {
+                    canvas.rect(i * 8 + 1, y + 1, 6, 6, grey);
+                } else {
+                    canvas.rect(i * 8 + 1, y + 3, 6, 2, grey);   // an empty step: a thin dash
+                }
+            }
+            if (t == selected_) canvas.rect(0, y, 1, 8, 12);     // the selected track's marker
+        }
+
+        // Which track and page the encoders are editing.
         out = line;
-        append(out, "PEAK ");
-        append_tenths(out, enaga::audio_load_peak());
-        *out++ = '%';
+        append(out, "TRK ");
+        append_number(out, uint32_t(selected_ + 1));
+        append(out, muted_[selected_] ? " MUTE" : "     ");
+        append(out, " PG ");
+        append_number(out, uint32_t(page_ + 1));
         *out = 0;
-        canvas.text(0, 38, line, 12);
+        canvas.text(0, 88, line, 10);
 
-        // The clock is Enaga's and unit-wide. Under an external source STRATA cannot set the
-        // tempo at all, which is why M1 has to show EXT rather than a value it owns.
-        const enaga::clock::State clock = enaga::clock::state();
+        // The four encoder slots: a three-letter name and a value each.
+        const Machine *machine = engine_.machine(selected_);
+        const int base = page_first(Page(param_page_));
+        for (int slot = 0; slot < 4; slot++) {
+            const int index = base + slot;
+            out = line;
+            const char *name = machine ? machine->param_name(index) : "---";
+            // The chain owns the FLTR and FX pages; the machine only names SRC and AMP.
+            if (param_page_ == int(Page::fltr) || param_page_ == int(Page::fx)) {
+                name = InsertChain::param_name(index);
+            }
+            append(out, name);
+            *out++ = ' ';
+            append_padded(out, engine_.params(selected_).v[index], 3);
+            *out = 0;
+            canvas.text(slot * 32, 100, line, 12);
 
+            const int bar = int(engine_.params(selected_).v[index]) * 28 / 127;
+            canvas.rect(slot * 32, 112, bar < 1 ? 1 : bar, 3, 8);
+        }
+
+        // Voices and the device, so a wrong build is obvious at a glance.
         out = line;
-        append(out, "CLK ");
-        append(out, clock_source_name(int(clock.source)));
-        *out++ = ' ';
-        append(out, clock.running ? "RUN" : "STOP");
+        append(out, "V");
+        append_number(out, status.voices.load(std::memory_order_relaxed));
+        append(out, " ");
+        append(out, device_name(enaga::system::device()));
+        const uint32_t dropped = engine_.commands().dropped();
+        if (dropped) { append(out, " DROP "); append_number(out, dropped); }
         *out = 0;
-        canvas.text(0, 56, line, 10);
-
-        out = line;
-        append(out, "BPM ");
-        append_tenths(out, uint32_t(clock.tempo * 10.0f + 0.5f));
-        if (int(clock.source) != ENAGA_CLOCK_INTERNAL) append(out, " EXT");
-        *out = 0;
-        canvas.text(0, 66, line, 10);
-
-        out = line;
-        append(out, "PPQN ");
-        append_number(out, enaga::clock::ppqn);
-        *out = 0;
-        canvas.text(0, 76, line, 7);
-
-        canvas.text(0, 94, "M0 SKELETON", 6);
+        canvas.text(0, 120, line, 7);
     }
+
+private:
+    void post(Cmd cmd, uint8_t track = 0, uint8_t step = 0, uint8_t a = 0, uint8_t b = 0) {
+        Command command;
+        command.cmd = cmd;
+        command.track = track;
+        command.step = step;
+        command.a = a;
+        command.b = b;
+        engine_.commands().post(command);
+    }
+
+    Engine engine_;
+
+    int selected_ = 0;
+    int page_ = 0;            // step page 1-4, for 64-step tracks
+    int param_page_ = int(Page::src);
+    int cursor_step_ = 0;
+    bool shift_ = false;
+    bool stop_armed_ = false;
+    bool clock_refused_ = false;   // the last transport call was refused: an external source
+    bool muted_[kTracks] = {};
+
+    LedShadow leds_;
+    uint32_t tempo_tenths_ = 1300;
+
+    bool logged_running_ = false;
+    int logged_source_ = -1;
+    uint32_t logged_position_ = 0xFFFFFFFFu;
 };
 
 }  // namespace

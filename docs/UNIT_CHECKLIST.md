@@ -33,6 +33,30 @@ key dead.
 - [ ] With CLOCK SRC = SYNC and pulses at SYNC IN, confirm the line shows `SYNC` and `EXT`.
 - [ ] Leave it running for 10 minutes: no underruns, no watchdog reset, load stable.
 
+## M1 — scheduler and drums
+
+The default kit plays a four-track beat at 130 BPM as soon as PLAY is pressed; nothing needs
+setting up first.
+
+- [ ] PLAY (F5) starts the beat; the screen's top line shows `>` and the tempo.
+- [ ] **The load criterion.** The emulator gives 20.14% peak with cl6x against M1's bar of 15%.
+      Measure it on the unit: pure computation runs about 25% faster there, and this is the peak
+      block rather than the average, so the real figure should be lower. Record it in
+      `docs/BUDGET.md` either way, and if it is still over 15%, the `*.ti.c` work is the lever
+      (see that file's M1 note) rather than cutting a feature.
+- [ ] STOP (F6) stops with tails; STOP twice cuts them.
+- [ ] VALUE changes the tempo and the beat follows it smoothly.
+- [ ] STEP 1-16 toggles trigs on the selected track and the change is heard on the next pass.
+- [ ] The lower pads 1-8 select a track and play it with velocity; F1 + pad mutes.
+- [ ] Encoders A-D edit the selected track's four parameters. **Check A and B are not swapped** —
+      the encoder event ids are alphabetical while the push-button codes are not, and getting
+      that wrong is silent (`docs/ENAGA_API.md`).
+- [ ] Pad velocity feels right across all 15 pads; note any crosstalk.
+- [ ] **Timing.** Record line out at 48 kHz and measure the spacing of the kick's onsets over
+      5 minutes. M1's bar is jitter under 0.1 ms.
+- [ ] The hats choke: the closed hat on track 3 cuts the open one on track 4.
+- [ ] 10 minutes of playing: no underruns, no watchdog reset, load stable.
+
 ## M0.5 — budget spike
 
 - [ ] All four configurations from `docs/BUDGET.md` measured **on the unit**, not the emulator.

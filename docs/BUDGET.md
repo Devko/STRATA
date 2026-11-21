@@ -70,6 +70,38 @@ so an accidental per-block cost shows up as a test failure rather than as drift.
 
 Package size: 7,200 bytes (payload 7,136, bss 24).
 
+### M1 — scheduler and drums
+
+Emulator, 130 BPM, the default four-track techno kit (KICK, SNARE, HAT closed, HAT open), filter
+off, lo-fi off, sends closed. 3,072 blocks, **0 overruns** in every run.
+
+| Configuration | Peak | Cycles |
+| --- | --- | --- |
+| Idle, transport stopped | **2.14%** | 10,629 |
+| Playing, cl6x | **20.14%** | 99,878 |
+| Playing, GCC only | **22.32%** | 110,727 |
+
+**The important finding: cl6x is only buying 1.11× here, not the 2.2× Enaga measured.** That is
+not a disappointment in cl6x — it is because almost none of STRATA's DSP is going through it.
+`build_app.py` sends only `*.ti.c` files and Enaga's own DSP library to cl6x, and every
+per-sample loop in the machines and the insert chain is currently plain C++ in a `.cpp`. **The
+2.2× is available and unclaimed.** Moving the hot loops into `*.ti.c` is the single biggest
+lever left, and `CLAUDE.md` already requires it; it has simply not been done yet.
+
+**Against M1's exit criterion of under 15%, this does not pass — but the criterion is about the
+unit, and these are emulator figures.** Three reasons the unit number should be lower:
+
+- the emulator models no caches or bus latency, and Enaga measured pure computation running
+  about **25% faster** on real hardware
+- this is the **peak** block, which is the one where several drums trigger together; the average
+  is well below it
+- none of the `*.ti.c` work above has been done
+
+So the honest position is that M1's load criterion is **not closed** and cannot be closed without
+hardware. It is a line in `docs/UNIT_CHECKLIST.md`, not a tick here.
+
+Package: 133,888 bytes (payload 133,824, bss 26,096).
+
 ### M0.5 — budget spike (the fixed per-block tax)
 
 The point of the spike: voices are about 11% of the block in total, while delay and reverb

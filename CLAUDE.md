@@ -3,10 +3,30 @@
 - Read docs/SPEC.md, docs/REVIEW.md and docs/PLAN.md before any change, and follow the
   milestone order in PLAN.md. Ask before changing a decision they record.
 - Target: an Enaga app on the Sonicware SmplTrek (TI C6748, 372 MHz). Enaga is pinned at
-  1b41111. Read third_party/enaga/docs/api.md for every API you use. Never invent an Enaga
-  API name: check the header.
-- Build in WSL, not Windows. `source tools/env.sh` first. There is no cmake, and no sudo
-  either, so do not add a dependency that needs either one.
+  1b41111. **docs/ENAGA_API.md has the verified signatures STRATA uses — read it first.**
+  For anything not in it, read the header in third_party/enaga/include/enaga/. Never invent
+  an Enaga API name: the plausible guesses are mostly wrong.
+- Settings structs are built by a static `make(...)` at control rate, not by setters.
+  Oscillators take `dt` AND `inv_dt` because hot loops must not divide. Prefer the block
+  functions (`Svf::process`, `Envelope::render`) to the per-sample ones.
+
+## Running commands (Windows host, WSL build)
+
+The repo is on `D:` but every build runs in WSL. Commands therefore go through `wsl.exe`, and
+Git Bash mangles them unless path conversion is off. This form works:
+
+```sh
+MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- \
+    bash -c 'cd /mnt/d/DEV/STRATA && make -C host test'
+```
+
+- Use `bash -c` with single quotes. `bash -lc` with `VAR=...` assignments loses the variables.
+- For anything longer than one command, **write a script to the scratchpad and run
+  `bash /mnt/c/.../script.sh`**. Inline heredocs and `$VAR` get mangled, and `$?`/`PIPESTATUS`
+  read back wrong through the wsl.exe layer, so verify exit codes inside a script file.
+- `ls`, `cat`, `grep` and the editing tools work directly on `D:\DEV\STRATA` — only builds and
+  tests need WSL.
+- There is no cmake and no sudo. Do not add a dependency needing either.
 - Do not write a master clock. Enaga owns it: <enaga/clock.hpp>, 96 PPQN, and
   clock::ticks() in audio() gives each tick's frame in the block. STRATA schedules steps on
   those ticks and owns swing, speed, length and micro-timing only.

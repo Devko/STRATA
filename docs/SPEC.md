@@ -146,10 +146,10 @@ STRATA does not implement a clock and does not own the tempo. Enaga's `<enaga/cl
 | Trig | on, off, trigless | Trigless = locks without a new note |
 | Note | 0-127 | POLY tracks add chord type and inversion |
 | Velocity | 1-127 |  |
-| Length | 1/16 step to 64 steps |  |
+| Length | 1/16 step to 64 steps | **[rev]** The table this indexes was never published; it is now `kLengthSixteenthsOfStep` in `core/timing.hpp`: 20 entries from 1/16 step to 64 steps, held in sixteenths of a step so every entry is exact and independent of the track's speed. **Index 0 is reserved as invalid**, so a zeroed or corrupt byte is refusable rather than meaning the shortest note. A sixteenth of a 24-tick step is 1.5 ticks, which 96 PPQN cannot express — gate length is therefore converted to *samples* at control rate, not to ticks |
 | Micro-timing | ±11 ticks | 24 ticks per 16th at 96 PPQN. Finer placement is available in samples through the tick's `.frame` offset if live-recorded hits need it **[rev]** |
 | Probability | 0-100% |  |
-| Condition | see below |  |
+| Condition | see below | **[rev]** `A:B` has nowhere to live: this table gives `condition` one byte, but `A:B` with B = 2-8 is 35 combinations on top of 10 condition kinds, and 4 bits of kind plus 6 bits of pair do not fit in 8. The byte is therefore **partitioned**, not enumerated: 0-9 are the condition kinds, 16-50 are the 35 `(A,B)` pairs, everything else is invalid and reads back as `NONE`. The alternative was growing `Step` past 12 bytes |
 | Ratchet | 1-8 hits | With a velocity ramp up or down |
 | Accent, slide | flags | Slide on MONO tracks only |
 | Parameter locks | up to 8 per step | From a shared pool of 1,024 per pattern |
@@ -310,6 +310,34 @@ struct Pattern {
 ```
 
 About 6 KiB of steps plus 2 KiB of locks per pattern, so 128 patterns fit in about 1.1 MiB.
+**[rev]** Confirmed by the implementation: `sizeof(Step) == 12` and `sizeof(Pattern) == 8236`, so
+128 patterns are 1.006 MiB and `lock_first` at offset 8 is naturally aligned.
+
+**[rev] Three gaps found while implementing this, all now decided:**
+
+- **Mute states have nowhere to live.** The performance table says mute states are "saved with the
+  pattern", but `Pattern` has no field for them. The serializer uses a section table and skips
+  unknown sections, so this is cheap to add later as a new section; making it *required* needs a
+  format version bump.
+- **The lock pool's only reclaim is compaction.** Growing a step's lock run that is not at the top
+  of the pool relocates it and abandons the old slots, so a long editing session can exhaust all
+  1,024 slots while far fewer locks are actually reachable. "Compacted on save" is not frequent
+  enough: the UI must compact when the pool reports no free slots and retry, before telling the
+  user it is full.
+- **Saving must not mutate the pattern.** The spec says the pool is "compacted on save". Writing
+  renumbers lock runs into compacted order *as it writes*, from a `const Pattern &`, so a save
+  running in the main context never writes pattern memory the audio side owns. Compaction in RAM
+  is a separate, explicit operation.
+
+**[rev]** Loading is **value-tolerant but structure-strict**: out-of-range field values are clamped
+rather than refusing the file, while structural damage (bad magic, unknown version, bad CRC, a
+malformed section table or a non-compacted lock pool) is refused. One bad byte that survives the
+CRC then costs one odd-sounding step instead of a lost pattern.
+
+**[rev] `Speed::x1` is 0, so zeroed memory means normal speed.** "Clear pattern" is a user-facing
+feature and the obvious implementation is a `memset`; with 2x at zero that would silently double
+every track's tempo. The same reasoning makes a per-track swing of 0 mean "follow the pattern".
+The enum numbering is therefore not the order the UI shows the speeds in.
 
 **Samples**
 
