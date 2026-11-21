@@ -32,9 +32,11 @@ TEST_SRC  := $(wildcard $(ROOT)/tests/*.cpp)
 # runtime.cpp, so tests/fakehost.cpp defines it instead and nothing clashes -- app/ is compiled
 # for the tests exactly as it is compiled for the device, with no #ifdef anywhere in it.
 #
-# app/app.cpp is NOT here: ENAGA_APP(Strata) at the end of it defines the package's entry points,
-# which belong to a device build. Its logic is reached by moving a piece into a header or by a
-# second entry point, and the modes are still unreachable until then (docs/UNIT_CHECKLIST.md).
+# app/app.cpp is NOT here, and now has nothing in it to compile: it is `#include "app.hpp"` plus
+# ENAGA_APP(Strata), which defines the package's entry points and belongs to a device build. The
+# App class itself moved to app/app.hpp, so the modes and the gestures ARE in this suite --
+# tests/test_ui.cpp includes that header and drives the same class the unit runs. There is
+# nothing left to add to APP_SRC: a header needs no translation unit of its own.
 APP_SRC   := $(ROOT)/app/engine.cpp $(ROOT)/app/storage.cpp
 
 SRC       := $(CORE_SRC) $(DSP_SRC) $(APP_SRC) $(TEST_SRC)
