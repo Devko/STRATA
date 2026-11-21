@@ -383,6 +383,26 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     return finish_container(w, buffer, kProjectTotalBytes, written);
 }
 
+// `-fno-unroll-loops` for THIS FUNCTION ONLY, and it is a compiler bug rather than anything
+// about the code.
+//
+// GCC 13.3.0 for tic6x-elf crashes compiling this function with `-O2 -funroll-loops`, which is
+// what Enaga's build_app.py passes: an internal compiler error in the instruction scheduler,
+// "in priority, at haifa-sched.cc:1597", reached through undo_replacements_for_backtrack. It is
+// not the optimisation level and not the scheduler on its own -- `-O2`, `-O2
+// -fno-schedule-insns` and `-O2 -fno-schedule-insns2` all compile this file -- it needs
+// `-funroll-loops` as well. Nothing in `app/` or on the host ever sees it, because the host
+// build does not unroll.
+//
+// The flags belong to build_app.py and CLAUDE.md forbids modifying third_party/enaga, so the
+// narrowest place to turn it off is here. It is scoped to one function with push_options, and
+// the cost is that the chain and track loops in a project LOAD are not unrolled -- a load, in
+// the main context, once per project.
+//
+// To be reported upstream with this file as the failing case. If a later toolchain fixes it,
+// delete the pragma and this comment together.
+#pragma GCC push_options
+#pragma GCC optimize("no-unroll-loops")
 SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t size) {
     // Every refusal goes through here, so a refused load leaves the defaults rather than half a
     // file -- but only of what PROJECT.BIN owns. The patterns are deliberately untouched: they
@@ -467,6 +487,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // file, and this function has not touched a pattern.
     return SerializeResult::ok;
 }
+#pragma GCC pop_options
 
 // --- KIT.BIN --------------------------------------------------------------
 

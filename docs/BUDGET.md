@@ -374,44 +374,94 @@ the 8-track architecture holds. See `docs/PLAN.md` M0.5.
 Candidates, cheapest first: mono send busses, a shared filter across the drum tracks, lo-fi out
 of the fixed chain into an optional stage, or a cheaper reverb.
 
-### M4 and M5 — written in the cloud, so NOT MEASURED
+### M4 and M5 — measured in the emulator, GCC-only (2026-11-21)
 
-Both milestones' code was written in a cloud session with no toolchain: no device build, no
-emulator, no `cl6x`, no load scenario. Every figure below is open, and this section exists so
-that the gap is on the record rather than inferred from its absence.
+A cloud session built the tic6x toolchain from source and ran the emulator, so these are real
+numbers rather than estimates. **What is still missing is cl6x**: TI's installer needs an
+interactive licence click, so every figure here is the GCC-only build and the ~2.2x this document
+records for cl6x has NOT been applied. A GCC-only number near the target is therefore not a
+failure, and one comfortably under it is not yet a pass on the unit.
 
-CLAUDE.md requires a load figure with and without cl6x after any DSP change. **M5 made one** --
-`dsp/repeat` -- and that figure does not exist. It is the first thing to measure on the machine,
-because beat repeat is a per-block tax on the master output and whether it fits is the entire
-question about it.
+Emulator caveats that apply to every row: no cache model, and **peak depends on run length** --
+the same build reads 22.66% over 1,257 blocks and 29.2% over 9,362. Compare versions, not
+targets.
 
-| Change | Expected shape | Measured (cl6x) | Measured (GCC) |
+| Scenario | Blocks | Peak (GCC-only) | Overruns |
 | --- | --- | --- | --- |
-| M4, projects and samples | no audio-path cost: the loader is main-context, and `Cmd::set_sample` is one pointer swap a block | | |
-| M5, `dsp/repeat` idle | one copy of the block into the ring, every block | | |
-| M5, `dsp/repeat` held | one interpolated stereo read a frame, replacing the output | | |
-| M5, scene morph | 128 interpolations when the position moves, control rate, shift not divide | | |
-| M5, macros | at most 16 values when a knob moves, control rate | | |
-| M5, mutation | one-off per press, main context via the command ring | | |
+| `scenario_m3.sh` — the default beat, M5 build | 1,257 | **22.66%** | 0 |
+| `scenario_m4.sh` — + stop, queue A02, save | 1,661 | **22.66%** | 0 |
+| `scenario_m5.sh` — + PERFORM, scene capture, macro assign | 1,258 | **23.48%** | 0 |
+| `tools/render.sh --seconds 12` — 12.2 s continuous | 9,362 | **29.2%** | 0 |
 
-`dsp/repeat`'s two loops are in `repeatloops.ti.c` and so go to cl6x, which is the 2.2x that the
-60% target depends on. The idle path is the one that is always on, and it is a straight copy --
-if that does not come out near free, something is wrong with the measurement rather than the
-code.
+**Beat repeat's always-on cost: +0.82 points** (23.48 against 22.66 on the same build and the
+same beat). That is the one DSP figure M5 owed. It covers `dsp/repeat`'s ring copy of every
+block plus the per-block performance pass, and it is the shape expected of one 64-frame stereo
+copy and a 128-parameter compare. `tests/scenario_m5.sh` carries the 22.66% baseline and fails
+loudly if the gap ever exceeds five points.
+
+Still unmeasured, because the emulator can press KEYS and nothing else (`emulate.py` has one
+`--key` option and no pad or encoder support) and seven of M5's eight tools are on the upper
+PADS:
+
+| Change | Expected shape | Measured |
+| --- | --- | --- |
+| `dsp/repeat` HELD | one interpolated stereo read a frame, replacing the output | needs pads: the unit |
+| Scene morph moving | 128 interpolations per move, control rate, shift not divide | needs an encoder |
+| A macro moving | at most 16 values per move, control rate | needs an encoder |
+| A throw | one parameter forced per block while held | needs pads |
+| Mutation | one-off per press, main context | needs pads |
+
+### What the first device build found
+
+Three failures that no host compiler and no host test could have produced, all fixed:
+
+1. **`core/pcm.cpp` included `<cstring>`.** The app is built `-ffreestanding -nostdlib` against a
+   libstdc++ configured `--disable-hosted-libstdcxx`, which does not ship it. Now
+   `__builtin_memcpy`, which needs no header.
+2. **A GCC internal compiler error** compiling `core/project.cpp`'s `project_read`: "in priority,
+   at haifa-sched.cc:1597". It needs `-O2` *and* `-funroll-loops` together -- `-O2` alone, and
+   `-O2` with either scheduler pass off, all compile the file. `-funroll-loops` is one of
+   build_app.py's flags and third_party/enaga is not ours to change, so the narrowest fix is a
+   `push_options` / `no-unroll-loops` pragma around that one function. **To be reported upstream
+   with that file as the failing case.**
+3. **`dsp/repeatloops.h` used `unsigned int` where it meant `uint32_t`.** On tic6x `uint32_t` is
+   `long unsigned int` -- a different type, same width -- so every call site was a compile error
+   on the device and silently fine on x86. `dsp/chainloops.h` and `dsp/drumloops.h` take
+   `<stdint.h>` for exactly this reason; now so does this one.
+
+And one that stopped the LINK rather than a compile: a 64-bit divide in `Storage::progress`
+pulled libgcc's `__c6xabi_divull` in, and on this toolchain that object also drags in the
+ARM-style unwinder, whose `__exidx_start` / `__exidx_end` the app's linker script does not define.
+The whole app failed to link for the sake of a percentage on the screen. Now 32-bit arithmetic,
+which both products fit in.
+
+**That last one is the same failure `seawaffle/enaga#1` fixes from the other side**, and it means
+`docs/HANDOFF.md` was wrong to say "nothing in STRATA depends on it being merged". Nothing does
+*now*, because the divide is gone -- but the next 64-bit division anywhere in `core/` or `app/`
+will not link until that PR lands. `core/pcm.cpp` already hand-writes `div_u64` rather than
+divide 64-bit, which is the pattern to follow.
 
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |
 | --- | --- | --- | --- | --- |
-| M1, 4-track beat at 130 BPM | under 15% | | | |
+| M1, 4-track beat at 130 BPM | under 15% | | 22.66% emulator, 4 of 8 tracks sounding | 2026-11-21 |
 | M2, 8 tracks worst case | under 40% | | | |
 | M6, everything worst case | under 60% | | | |
 
+The M1 row is above its 15% target in the emulator, which does not settle it: there is no cache
+model here and the unit's figures in the table above this one were measured with caches on. It is
+the first thing a unit session should re-measure.
+
 ## Memory
 
-Budgeted in `docs/SPEC.md` at about 76 MiB of the ~124 MiB app heap. The figures below are what
-the code now ASKS FOR at init, read off the source rather than measured on a unit -- no build has
-run. M4 and M5 together take 64 MiB for the sample region, 18 MiB of loader staging and 2.93 MiB
+Budgeted in `docs/SPEC.md` at about 76 MiB of the ~124 MiB app heap. The heap figures below are
+what the code asks for in `init()`; the image figures are read off the linked ELF.
+
+**The 85 MiB does fit.** The emulator boots the app to `APP RUNNING` rather than `APP INIT
+FAILED`, and `App::init` returns false if any of those allocations fails -- so all three
+scenarios passing is also the memory check. It is still worth re-checking on the unit, where the
+heap is the real one. M4 and M5 together take 64 MiB for the sample region, 18 MiB of loader staging and 2.93 MiB
 for the beat-repeat ring, which is 85 MiB before anything else, against a spec table that did not
 count the staging at all.
 
@@ -423,4 +473,4 @@ count the staging at all.
 | Delay and reverb buffers | 2 MiB | |
 | Patterns, kit, scenes, 16 undo levels | 2 MiB | **~148 KiB** so far: 17 whole-pattern undo snapshots (~140 KiB) plus the live pattern and the clipboard. In bss, not the heap |
 | Recording ring and stream buffers | 1 MiB | |
-| App image, voice pools, UI | 4 MiB | |
+| App image, voice pools, UI | 4 MiB | **396 KiB** of text, 52 bytes of data and **1.21 MiB of bss** in the linked ELF (`tic6x-elf-size`). The bss is mostly the live Project at 1.03 MiB plus the undo stack; the 85 MiB above is heap, taken in init() and not in the image |

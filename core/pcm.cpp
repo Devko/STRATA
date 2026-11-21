@@ -34,7 +34,6 @@
 #include "pcm.hpp"
 
 #include <cstddef>
-#include <cstring>      // memcpy, the one safe way to read a float out of its bits (see f32_to_s16)
 
 namespace strata {
 namespace {
@@ -96,7 +95,13 @@ inline int16_t f32_to_s16(uint32_t bits) {
         return (bits >> 31) != 0u ? int16_t(kS16Min) : int16_t(kS16Max);
     }
     float value;
-    std::memcpy(&value, &bits, sizeof value);     // both locals, so this is a register move
+    // `__builtin_memcpy`, not `std::memcpy`, and this is a device-build constraint rather than a
+    // style choice: the app is compiled `-ffreestanding -nostdlib` against a libstdc++ built
+    // with --disable-hosted-libstdcxx, which does not ship <cstring>. The host build has the
+    // whole library and so never noticed. The builtin needs no header, is the same register move
+    // at -O2, and is still the one defined way to read a float out of its bits -- a cast through
+    // a pointer would be strict-aliasing undefined behaviour.
+    __builtin_memcpy(&value, &bits, sizeof value);
 
     const float scaled = value * 32768.0f;
     // Rounding to nearest by hand: `int(x + 0.5f)` rounds the wrong way for the negative half of

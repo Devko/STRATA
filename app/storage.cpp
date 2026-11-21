@@ -338,6 +338,30 @@ void Storage::begin_job(Job job) {
 }
 
 void Storage::finish_job(const char *error) {
+    // One log line per finished SAVE or LOAD, and only those. It is the only way an emulator
+    // scenario can see whether a save worked: pattern memory cannot be read from outside the
+    // app and the screen comes back as a bitmap, which is the same reason app/app.cpp logs its
+    // `g.... u..` edit signature (tests/scenario_m3.sh explains it at length).
+    //
+    // Deliberately NOT logged for the sample jobs. Enaga's log ring holds sixteen lines, and a
+    // project open queues eight sample jobs -- which would push every other line out of the ring
+    // and break the scenarios that read it.
+    if (job_ == Job::save || job_ == Job::load) {
+        const bool saving = job_ == Job::save;
+        if (error != nullptr) {
+            char line[40];
+            char *out = line;
+            const char *what = saving ? "save failed " : "load failed ";
+            while (*what != '\0') *out++ = *what++;
+            const char *why = error;
+            while (*why != '\0' && out < line + 36) *out++ = *why++;
+            *out = '\0';
+            enaga::log(line);
+        } else {
+            enaga::log(saving ? (autosave_ ? "autosaved" : "saved") : "loaded");
+        }
+    }
+
     job_ = Job::idle;
     step_ = 0;
     if (error != nullptr) error_ = error;
@@ -360,10 +384,19 @@ int Storage::progress() const {
         case Job::save:
         case Job::load:
             return step_ * 100 / kFileCount;
+        // 32-bit arithmetic, deliberately. A 64-bit divide here pulled libgcc's
+        // __c6xabi_divull into the link, and on this toolchain that object also drags in the
+        // ARM-style unwinder, whose __exidx_start / __exidx_end the app's linker script does not
+        // define -- so the whole app failed to LINK for the sake of a percentage on the screen.
+        // (That is the same failure seawaffle/enaga#1 fixes from the other side, and
+        // core/pcm.cpp hand-writes div_u64 rather than divide 64-bit for the same reason.)
+        //
+        // Both products fit: frames are capped at kSrcFrames (1,440,000) and at the 24 bits
+        // Cmd::set_sample carries (16,777,215), so times 100 they stay inside a uint32_t.
         case Job::sample_convert:
-            return src_frames_ == 0 ? 0 : int(uint64_t(src_done_) * 100u / src_frames_);
+            return src_frames_ == 0 ? 0 : int(src_done_ * 100u / src_frames_);
         case Job::sample_resample:
-            return out_frames_ == 0 ? 0 : int(uint64_t(out_done_) * 100u / out_frames_);
+            return out_frames_ == 0 ? 0 : int(out_done_ * 100u / out_frames_);
         default:
             return 0;
     }

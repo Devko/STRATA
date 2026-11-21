@@ -12,6 +12,8 @@
 #ifndef STRATA_REPEATLOOPS_H
 #define STRATA_REPEATLOOPS_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -24,6 +26,12 @@ int strata_repeat_capture(float *ring, int ring_frames, int write, const float *
 /* Read `n` interleaved stereo frames out of the loop that starts at frame `start` and is
  * `length` frames long, interpolating linearly, and advance the position.
  *
+ * The types are uint32_t rather than `unsigned int` for a reason the host build cannot show:
+ * on tic6x uint32_t is `long unsigned int`, a DIFFERENT type from `unsigned int` even though both
+ * are 32 bits, so a bare `unsigned int` here is a compile error at every call site on the device
+ * and silently fine on x86. dsp/chainloops.h and dsp/drumloops.h take <stdint.h> for the same
+ * reason.
+ *
  * `offset` is the read position inside the loop, in frames, and `frac` its Q32 fraction; both
  * are updated. The step is `step_int` frames plus `step_frac` in Q32 -- so 1.0 is (1, 0) and a
  * half-rate octave down is (0, 0x80000000).
@@ -32,8 +40,7 @@ int strata_repeat_capture(float *ring, int ring_frames, int write, const float *
  * thirty-second note and the fastest step is one frame. That is what lets the wrap be a single
  * compare-and-subtract instead of a modulo. */
 void strata_repeat_play(const float *ring, int ring_frames, int start, int length, int *offset,
-                        unsigned int *frac, int step_int, unsigned int step_frac, float *out,
-                        int n);
+                        uint32_t *frac, int step_int, uint32_t step_frac, float *out, int n);
 
 #ifdef __cplusplus
 }

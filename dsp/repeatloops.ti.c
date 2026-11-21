@@ -18,12 +18,12 @@ int strata_repeat_capture(float *restrict ring, int ring_frames, int write,
 }
 
 void strata_repeat_play(const float *restrict ring, int ring_frames, int start, int length,
-                        int *restrict offset, unsigned int *restrict frac, int step_int,
-                        unsigned int step_frac, float *restrict out, int n) {
+                        int *restrict offset, uint32_t *restrict frac, int step_int,
+                        uint32_t step_frac, float *restrict out, int n) {
     /* 1 / 2^32, so the Q32 fraction becomes a float by one multiply. */
     const float kFracScale = 2.3283064365386963e-10f;
     int o = *offset;
-    unsigned int f = *frac;
+    uint32_t f = *frac;
     int i;
 
     for (i = 0; i < n; i++) {
@@ -45,7 +45,7 @@ void strata_repeat_play(const float *restrict ring, int ring_frames, int start, 
 
         /* Advance. The carry out of the fraction is one more frame; the step is under `length`,
          * so one subtract is enough to wrap. */
-        const unsigned int sum = f + step_frac;
+        const uint32_t sum = f + step_frac;
         o += step_int + (sum < f ? 1 : 0);
         f = sum;
         o = o >= length ? o - length : o;
