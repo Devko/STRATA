@@ -3,7 +3,7 @@
 // `tests/test_app.cpp` covers the harness and the four bugs a review of `app/` found. This file
 // is the thorough pass over the engine itself -- the gate conversion, chord expansion, the tick
 // resolution that swing, speed, polymeter, ratchets and probability all go through, the bar
-// counter, undo, the pattern queue and chains, and the mutes.
+// counter, undo, the pattern queue and chains, the mutes and the performance layer.
 //
 // ## What is asserted
 //
@@ -11,8 +11,8 @@
 // matters more here than anywhere, because the engine's output goes through eight machines, eight
 // insert chains, two send buses and a master limiter. So where an assertion has to be about
 // sound it is about a RATIO or an exact zero, and where it can be about a number it is about one
-// the engine publishes -- `Status::playhead`, `Status::triggered`, `VaPoly::voice_note` --
-// which is also what the UI draws from.
+// the engine publishes -- `Status::playhead`, `Status::triggered`, `Engine::performed`,
+// `VaPoly::voice_note` -- which is also what the UI draws from.
 //
 // Two measurements deserve their own note.
 //
@@ -117,6 +117,10 @@ int redo_depth() {
     return int(strata::test::engine().status().redo_depth.load(std::memory_order_relaxed));
 }
 
+int running() {
+    return int(strata::test::engine().status().running.load(std::memory_order_relaxed));
+}
+
 bool trig_at(int track, int step) {
     return (strata::test::engine().pattern().tracks[track].steps[step].flags & kStepTrig) != 0;
 }
@@ -136,6 +140,26 @@ void post_u(Cmd cmd, uint32_t u, uint8_t a = 0, uint8_t track = 0) {
     command.track = track;
     command.a = a;
     command.u = u;
+    strata::test::engine().commands().post(command);
+}
+
+void post_f(Cmd cmd, float f, uint8_t a = 0, uint8_t track = 0) {
+    Command command;
+    command.cmd = cmd;
+    command.track = track;
+    command.a = a;
+    command.f = f;
+    strata::test::engine().commands().post(command);
+}
+
+void post_macro_assign(uint8_t macro, uint8_t track, uint8_t param, uint8_t low, uint8_t high) {
+    Command command;
+    command.cmd = Cmd::macro_assign;
+    command.track = track;
+    command.a = macro;
+    command.b = param;
+    command.c = low;
+    command.d = high;
     strata::test::engine().commands().post(command);
 }
 
@@ -291,6 +315,26 @@ void arm_a_gated_chord_note(int length_index, Speed speed, float bpm) {
     post(Cmd::set_track_speed, kPoly, 0, uint8_t(speed));
     put_trig(kPoly, 0);
     set_length_index(kPoly, 0, length_index);
+}
+
+// --- scenes ----------------------------------------------------------------------------------
+
+// Scene 0 and scene 1, differing in one parameter of one track and in nothing else, assigned to
+// slots A and B. A capture reads `project_.kit` and a knob turn writes `params_` -- two separate
+// structures that only `Cmd::kit_store` copies between -- so the store is what makes the capture
+// mean the value just set. See `engine_a_scene_capture_takes_the_stored_kit_and_not_the_knob`.
+void two_scenes_differing_in(uint8_t track, uint8_t param, uint8_t low, uint8_t high) {
+    post(Cmd::scene_erase, 0, 0, 0);
+    post(Cmd::scene_erase, 0, 0, 1);
+    post(Cmd::set_param, track, 0, param, low);
+    post(Cmd::kit_store);
+    post(Cmd::scene_capture, track, 0, 0, 0);
+    post(Cmd::set_param, track, 0, param, high);
+    post(Cmd::kit_store);
+    post(Cmd::scene_capture, track, 0, 1, 0);
+    post(Cmd::scene_select, 0, 0, 0, 0);
+    post(Cmd::scene_select, 0, 0, 1, 1);
+    pump();
 }
 
 }  // namespace
@@ -1337,3 +1381,541 @@ TEST(engine_the_eight_stored_mute_states_round_trip) {
     for (int t = 0; t < kTracks; t++) CHECK_EQ(engine.muted(t), t == 1 || t == 3 || t == 6);
 }
 
+// --- the performance layer -------------------------------------------------------------------
+
+TEST(engine_a_morph_between_two_scenes_moves_the_parameters) {
+    Engine &engine = clean();
+    two_scenes_differing_in(kPoly, kLvl, 0, 127);
+    CHECK_EQ(int(kit_value(kPoly, kLvl)), 127);
+
+    post_u(Cmd::set_morph, 0);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 0);
+    CHECK_EQ(int(kit_value(kPoly, kLvl)), 127);    // the kit is untouched by the morph
+
+    post_u(Cmd::set_morph, kMorphScale);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 127);
+
+    // A shift and a rounding add, not a divide: core/perform.cpp's own arithmetic, reached
+    // through the ring.
+    const uint32_t positions[3] = {256u, 512u, 768u};
+    const int expected[3] = {32, 64, 95};
+    for (int i = 0; i < 3; i++) {
+        post_u(Cmd::set_morph, positions[i]);
+        pump();
+        CHECK_EQ(int(engine.morph()), int(positions[i]));
+        CHECK_EQ(int(engine.performed(kPoly, kLvl)), expected[i]);
+    }
+
+    // Past the end it clamps rather than wrapping.
+    post_u(Cmd::set_morph, kMorphScale + 1000u);
+    pump();
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 127);
+
+    // A track neither scene mentions is left exactly as the kit has it.
+    CHECK_EQ(int(engine.performed(kMono, kDec)), int(kit_value(kMono, kDec)));
+}
+
+TEST(engine_a_morph_is_heard_between_steps_and_not_only_at_the_next_trig) {
+    // What the per-block copy of `performed_` into `effective_` exists for: without it a morph
+    // would only be heard at the next trig and sweeping VALUE between steps would do nothing.
+    Engine &engine = clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 127);     // a note that rings for seconds
+    pump();
+    two_scenes_differing_in(kPoly, kLvl, 0, 127);
+    post_u(Cmd::set_morph, 0);
+    put_trig(kPoly, 0);
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 0);
+    CHECK_EQ(pump(), 0.0f);
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    CHECK_EQ(pump(8), 0.0f);                       // scene A has the level all the way down
+    CHECK_EQ(poly().sounding_voices(), 1);         // but the note is there, and ringing
+
+    post_u(Cmd::set_morph, kMorphScale);
+    CHECK(pump(8) > 0.01f);                        // the same note, no new trig
+}
+
+TEST(engine_a_macro_drives_its_assigned_targets) {
+    Engine &engine = clean();
+    // Two targets on one macro, one of them inverted: one knob opening a filter while it closes
+    // a send is most of what makes a macro worth having (core/perform.hpp).
+    post_macro_assign(0, kPoly, kLvl, 0, 127);
+    post_macro_assign(0, kMono, kLvl, 127, 0);
+    pump();
+    CHECK_EQ(macro_count(engine.macros().macros[0]), 2);
+
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    pump();
+    CHECK_EQ(int(engine.macro_position(0)), 0);
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 0);
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), 127);
+
+    post(Cmd::set_macro, 0, 0, 0, 127);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 127);
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), 0);
+
+    // Rounded to nearest and not truncated, so a knob swept up does not lag by a value for most
+    // of its travel and two macros over one parameter agree (core/perform.cpp).
+    post(Cmd::set_macro, 0, 0, 0, 64);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 64);
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), 63);
+
+    // A position past the end of the knob clamps, and the kit is untouched throughout.
+    post(Cmd::set_macro, 0, 0, 0, 200);
+    pump();
+    CHECK_EQ(int(engine.macro_position(0)), 127);
+    CHECK_EQ(int(kit_value(kPoly, kLvl)), 127);
+
+    post(Cmd::macro_clear, 0, 0, 0);
+    pump();
+    CHECK_EQ(macro_count(engine.macros().macros[0]), 0);
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), int(kit_value(kPoly, kLvl)));
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), int(kit_value(kMono, kLvl)));
+}
+
+TEST(engine_a_macro_with_four_targets_refuses_a_fifth) {
+    Engine &engine = clean();
+    for (uint8_t i = 0; i < kMacroTargets; i++) post_macro_assign(1, i, kLvl, 0, 127);
+    pump();
+    CHECK_EQ(macro_count(engine.macros().macros[1]), kMacroTargets);
+
+    // Which of the four a target lands in is not something a performer should have to think
+    // about, so the command takes the next free one -- and a macro that is full says so.
+    const uint32_t before = refused();
+    post_macro_assign(1, 7, kLvl, 0, 127);
+    pump();
+    CHECK_EQ(int(refused() - before), 1);
+    CHECK_EQ(macro_count(engine.macros().macros[1]), kMacroTargets);
+
+    // A parameter index no track has is not a target either.
+    post_macro_assign(2, 0, uint8_t(kParams), 0, 127);
+    pump();
+    CHECK_EQ(macro_count(engine.macros().macros[2]), 0);
+}
+
+TEST(engine_a_lock_always_wins_over_the_performance_layer) {
+    // docs/REVIEW.md settled "base kit values only" for scenes. From this side that means a
+    // step's lock beats whatever the morph, the macros and a throw produced -- and for the WHOLE
+    // step rather than only the block that triggered it, which is what `locked_` is for.
+    Engine &engine = clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 127);
+    pump();
+    two_scenes_differing_in(kPoly, kLvl, 0, 127);
+    post_u(Cmd::set_morph, kMorphScale);           // the morph asks for full level
+    put_trig(kPoly, 0);
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 127);
+
+    post(Cmd::lock_delta, kPoly, 0, kLvl, uint8_t(int8_t(-120)));
+    post(Cmd::lock_delta, kPoly, 0, kLvl, uint8_t(int8_t(-120)));
+    pump();
+    uint8_t locked = 1;
+    CHECK(pattern_get_lock(engine.pattern(), kPoly, 0, kLvl, locked));
+    CHECK_EQ(int(locked), 0);
+    CHECK_EQ(pump(), 0.0f);
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();                                        // the block the step started in ...
+    CHECK_EQ(pump(40), 0.0f);                      // ... and forty more of the same step
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 127);   // the morph still asks for full level
+
+    // Without the lock the same morph and the same step are loud, so the silence above is the
+    // lock winning and not a silent patch.
+    post(Cmd::clear_lock, kPoly, 0, kLvl);
+    pump();
+    CHECK(!pattern_get_lock(engine.pattern(), kPoly, 0, kLvl, locked));
+    FakeHost::the().deliver_tick(1536, 0);
+    pump();
+    CHECK(pump(40) > 0.01f);
+}
+
+TEST(engine_a_throw_opens_a_send_without_touching_the_kit) {
+    Engine &engine = clean();
+    CHECK_EQ(int(kit_value(kPoly, kSendA)), 0);    // clean() closed both sends
+    CHECK_EQ(int(engine.performed(kPoly, kSendA)), 0);
+
+    post(Cmd::set_throw, kPoly, 0, 1);             // 1 = the delay, send A
+    pump();
+    CHECK_EQ(engine.throwing(), 1);
+    CHECK_EQ(int(engine.performed(kPoly, kSendA)), 127);
+    CHECK_EQ(int(engine.performed(kPoly, kSendB)), 0);
+    CHECK_EQ(int(kit_value(kPoly, kSendA)), 0);    // not a parameter edit
+    CHECK_EQ(int(engine.performed(kMono, kSendA)), 0);   // and only the thrown track moves
+
+    post(Cmd::set_throw, kPoly, 0, 2);             // 2 = the reverb, send B
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kSendA)), 0);
+    CHECK_EQ(int(engine.performed(kPoly, kSendB)), 127);
+
+    // Release, and the stored value comes back by itself: there is nothing to remember.
+    post(Cmd::set_throw, kPoly, 0, 0);
+    pump();
+    CHECK_EQ(engine.throwing(), 0);
+    CHECK_EQ(int(engine.performed(kPoly, kSendB)), 0);
+
+    // A bus the panel cannot ask for is off, not a third send.
+    post(Cmd::set_throw, kPoly, 0, 3);
+    pump();
+    CHECK_EQ(engine.throwing(), 0);
+    CHECK_EQ(int(engine.performed(kPoly, kSendA)), 0);
+}
+
+TEST(engine_a_throw_really_routes_the_track_to_the_send) {
+    // The audible half: with send B open the master keeps ringing long after the note itself has
+    // stopped, where a closed send leaves exact silence.
+    Engine &engine = clean();
+    (void)engine;
+    post(Cmd::set_param, kPoly, 0, kDec, 0);       // the shortest note the machine has
+    put_trig(kPoly, 0);
+    pump();
+    CHECK_EQ(pump(), 0.0f);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    CHECK(pump(10) > 0.01f);
+    pump(40);
+    const float dry_tail = pump(300);
+
+    clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 0);
+    put_trig(kPoly, 0);
+    post(Cmd::set_throw, kPoly, 0, 2);
+    pump();
+    CHECK_EQ(pump(), 0.0f);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    CHECK(pump(10) > 0.01f);
+    pump(40);
+    const float wet_tail = pump(300);
+
+    CHECK_EQ(dry_tail, 0.0f);
+    CHECK(wet_tail > 1e-4f);
+}
+
+TEST(engine_a_scene_capture_takes_the_stored_kit_and_not_the_knob) {
+    // **A BUG, pinned rather than hidden.** app/engine.cpp's own comment on Cmd::scene_capture
+    // says "From the KIT, not from `performed_`: a scene is a sound to come back to... A capture
+    // takes the CURRENT kit, which is why it happens on this side: `params_` is what the machines
+    // read and the UI only has a block-old copy of it."
+    //
+    // It then captures `project_.kit`, which is NOT `params_`. The two are separate structures in
+    // separate layers and `Cmd::kit_store` is the only thing that copies one into the other --
+    // app/engine.cpp says so itself. Nothing posts `kit_store` except a SAVE (app/storage.cpp),
+    // and app/app.cpp's PERFORM-mode OK posts `scene_capture` on its own. So turning a knob and
+    // capturing a scene stores the value the kit had at the last save, not the sound in the room.
+    //
+    // The one-line fix is `kit_from_params();` before the capture. Not applied here: app/ is
+    // another agent's.
+    Engine &engine = clean();
+    post(Cmd::set_param, kPoly, 0, kLvl, 11);      // a knob turn: `params_` moves ...
+    pump();
+    CHECK_EQ(int(kit_value(kPoly, kLvl)), 11);
+    CHECK_EQ(int(engine.project().kit.tracks[kPoly].params[kLvl]), 127);   // ... `project_.kit` does not
+
+    post(Cmd::scene_capture, kPoly, 0, 3, 0);
+    pump();
+    CHECK(scene_has(engine.scenes().scenes[3], kPoly, kLvl));
+    CHECK_EQ(int(engine.scenes().scenes[3].values[kPoly][kLvl]), 127);     // 11 is what was wanted
+
+    // With a store first -- which is what a save does, and which is why the morph tests above do
+    // it -- the capture is the knob.
+    post(Cmd::kit_store);
+    post(Cmd::scene_capture, kPoly, 0, 4, 0);
+    pump();
+    CHECK_EQ(int(engine.scenes().scenes[4].values[kPoly][kLvl]), 11);
+
+    // One track only, which is what capturing with a track selected does.
+    post(Cmd::set_param, kMono, 0, kLvl, 22);
+    post(Cmd::kit_store);
+    post(Cmd::scene_erase, 0, 0, 5);
+    post(Cmd::scene_capture, kMono, 0, 5, 1);
+    pump();
+    CHECK_EQ(scene_count(engine.scenes().scenes[5]), kKitParams);
+    CHECK(scene_has(engine.scenes().scenes[5], kMono, kLvl));
+    CHECK(!scene_has(engine.scenes().scenes[5], kPoly, kLvl));
+
+    // A scene slot that does not exist is ignored rather than clamped onto scene 0.
+    post(Cmd::scene_capture, kMono, 0, uint8_t(kScenes), 0);
+    pump();
+    CHECK_EQ(scene_count(engine.scenes().scenes[0]), 0);
+}
+
+TEST(engine_kit_recall_is_drawn_but_not_heard) {
+    // **A SECOND BUG of the same family, pinned rather than hidden.** M5 added the per-block copy
+    // of `performed_` into `effective_`, and anything that writes `params_` without setting
+    // `perform_dirty_` is reverted inside the same block: `apply_performance` returns early,
+    // `performed_` still holds the old values, and the copy puts them back before a sample is
+    // rendered. tests/test_app.cpp has three tests for exactly this, found by a review --
+    // `Cmd::set_param`, `Cmd::project_loaded` and `Cmd::lock_delta` were each missing it.
+    //
+    // `Cmd::kit_recall` is the fourth and it was missed: it calls `params_from_kit()` and sets no
+    // flag. So a recalled kit is DRAWN (the UI reads `params_`) and not HEARD (the machines read
+    // `effective_`). The fix is the same one line, `perform_dirty_ = true;`.
+    //
+    // It is latent rather than live today: nothing posts `kit_recall` -- app/engine.cpp says so
+    // in as many words, and the gesture it waits for is F1 + F8. The day that key lands, this is
+    // what will be wrong with it.
+    Engine &engine = clean();
+    post(Cmd::set_param, 2, 0, kLvl, 42);
+    post(Cmd::kit_store);
+    pump();
+    CHECK_EQ(int(engine.project().kit.tracks[2].params[kLvl]), 42);
+
+    post(Cmd::set_param, 2, 0, kLvl, 99);
+    pump();
+    CHECK_EQ(int(kit_value(2, kLvl)), 99);
+    CHECK_EQ(int(engine.performed(2, kLvl)), 99);
+
+    post(Cmd::kit_recall);
+    pump(2);
+    CHECK_EQ(int(kit_value(2, kLvl)), 42);               // the screen followed the recall ...
+    CHECK_EQ(int(engine.performed(2, kLvl)), 99);        // ... and what is played did not
+
+    // Anything that DOES set the flag puts it right, which is how the bug stays hidden: the next
+    // knob turn anywhere repairs it.
+    post(Cmd::set_param, 0, 0, kLvl, 127);
+    pump();
+    CHECK_EQ(int(engine.performed(2, kLvl)), 42);
+}
+
+// --- the clock, and what the engine may not do to it -----------------------------------------
+
+TEST(engine_never_touches_the_transport_itself) {
+    // enaga::clock's transport calls are MAIN CONTEXT (<enaga/clock.hpp>), so routing them
+    // through the ring would call them from audio(), where they silently do nothing. `Cmd::play`
+    // and `Cmd::set_tempo` exist so the UI's intent shows up in a trace, and for nothing else.
+    clean();
+    FakeHost &host = FakeHost::the();
+    const int starts = host.control_calls(ENAGA_CLOCK_START);
+    const int stops = host.control_calls(ENAGA_CLOCK_STOP);
+    const int tempos = host.control_calls(ENAGA_CLOCK_TEMPO);
+    const int locates = host.control_calls(ENAGA_CLOCK_LOCATE);
+
+    post(Cmd::play);
+    post_f(Cmd::set_tempo, 150.0f);
+    post(Cmd::stop, 0, 0, 1);
+    pump(4);
+
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_START), starts);
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_STOP), stops);
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_TEMPO), tempos);
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_LOCATE), locates);
+    CHECK(!host.running());
+    CHECK_NEAR(host.tempo(), 130.0f, 0.01);
+}
+
+TEST(engine_follows_the_clock_rather_than_a_play_command) {
+    Engine &engine = clean();
+    (void)engine;
+    FakeHost &host = FakeHost::the();
+    put_trig(kPoly, 0);
+    post(Cmd::play);
+    pump(2);
+    CHECK_EQ(running(), 0);
+    CHECK_EQ(poly().busy_voices(), 0);
+
+    // An OUTSIDE clock, which is the half of CLAUDE.md's rule the emulator cannot reach: the
+    // transport calls are refused and the engine plays what the clock delivers anyway.
+    host.set_source(ENAGA_CLOCK_MIDI);
+    CHECK(!enaga::clock::start());
+    CHECK(!host.running());
+    host.set_running(true);                        // MIDI said so, not STRATA
+    pump();
+    CHECK_EQ(running(), 1);
+    CHECK_EQ(fired_on(kPoly, 0u), 1);
+
+    host.set_running(false);
+    pump();
+    CHECK_EQ(running(), 0);
+}
+
+TEST(engine_a_queued_change_under_an_external_clock_follows_the_clocks_run_state) {
+    Engine &engine = clean();
+    FakeHost &host = FakeHost::the();
+    host.set_source(ENAGA_CLOCK_SYNC);
+    CHECK(!enaga::clock::stop());
+    CHECK(!host.running());
+
+    // Stopped, whatever the source: there is no end of a pass to wait for, so it lands now.
+    post(Cmd::queue_pattern, 0, 0, 0, 3, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK_EQ(live_slot(), 3);
+    CHECK(!engine.queue().pending);
+
+    // Running under the outside clock it waits, exactly as it does on the internal one -- the
+    // engine asks the CLOCK, not a flag of its own.
+    host.set_running(true);
+    tick_at(600);
+    post(Cmd::queue_pattern, 0, 0, 0, 9, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK(engine.queue().pending);
+    CHECK_EQ(live_slot(), 3);
+}
+
+TEST(engine_stop_releases_the_voices_and_stop_twice_cuts_them) {
+    Engine &engine = clean();
+    (void)engine;
+    put_trig(kPoly, 0);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    CHECK_EQ(poly().sounding_voices(), 1);
+
+    // STOP once: a release, with the tail. The voice is still sounding a block later.
+    post(Cmd::stop, 0, 0, 0);
+    pump();
+    CHECK_EQ(poly().sounding_voices(), 1);
+    CHECK(poly().busy_voices() > 0);
+
+    // STOP twice: `a = 1` -- `a`, which is what app/app.cpp sends and what app/commands.hpp
+    // documents -- and the voices go at once, with no tail.
+    post(Cmd::stop, 0, 0, 1);
+    pump();
+    CHECK_EQ(poly().sounding_voices(), 0);
+    CHECK_EQ(poly().busy_voices(), 0);
+    CHECK_EQ(poly().voice_note(0), -1);
+}
+
+// --- the ring, and the guards on a damaged command -------------------------------------------
+
+TEST(engine_applies_at_most_sixty_four_commands_in_one_block) {
+    Engine &engine = clean();
+    (void)engine;
+    // docs/SPEC.md's figure, so that a burst of edits cannot break the deadline. Sixty-four
+    // trigs on one track and six on another: the first block takes the sixty-four, and the
+    // second takes the rest -- nothing is dropped, it waits.
+    for (uint8_t s = 0; s < 64; s++) post(Cmd::toggle_trig, 1, s);
+    for (uint8_t s = 0; s < 6; s++) post(Cmd::toggle_trig, 2, s);
+    CHECK_EQ(int(Commands::kMaxPerBlock), 64);
+
+    pump();
+    for (int s = 0; s < 64; s++) CHECK(trig_at(1, s));
+    for (int s = 0; s < 6; s++) CHECK(!trig_at(2, s));
+    pump();
+    for (int s = 0; s < 6; s++) CHECK(trig_at(2, s));
+}
+
+TEST(engine_a_parameter_a_track_does_not_have_is_ignored) {
+    Engine &engine = clean();
+    CHECK_EQ(int(kit_value(0, kLvl)), 127);
+    post(Cmd::set_param, 0, 0, kLvl, 200);         // a byte is wider than a parameter
+    pump();
+    CHECK_EQ(int(kit_value(0, kLvl)), 127);        // clamped to the top of the range
+
+    post(Cmd::set_param, 0, 0, uint8_t(kParams), 5);
+    post(Cmd::set_param, 0, 0, 200, 5);
+    pump();
+    for (int p = 0; p < kParams; p++) CHECK(int(kit_value(0, p)) != 5);
+
+    // And a lock on a parameter no track has is not stored either.
+    post(Cmd::lock_delta, 0, 0, uint8_t(kParams), uint8_t(int8_t(-1)));
+    pump();
+    CHECK_EQ(int(pattern_locks_reachable(engine.pattern())), 0);
+}
+
+TEST(engine_a_command_it_does_not_handle_changes_nothing) {
+    Engine &engine = clean();
+    // `Cmd::set_sends` and `Cmd::set_master` are in the enum and NOTHING handles them: they fall
+    // through `apply`'s default. Nothing posts them either, so today they are symmetric dead
+    // code rather than a live bug -- but it does mean the master DJ filter and every send
+    // setting are fixed at their defaults for the life of the app, and the day a gesture posts
+    // one of these, this test is what says it still does nothing. REPORTED.
+    CHECK(engine.sends() == SendSettings{});
+    CHECK(engine.master() == MasterSettings{});
+
+    const uint32_t before = refused();
+    post_f(Cmd::set_sends, 0.5f, 0);
+    post_f(Cmd::set_master, 1.0f, 0);
+    post(Cmd::none);
+    post(Cmd::release_note, kPoly, 0, 60);
+    post(Cmd(200));                                // a command number this build does not have
+    pump(2);
+
+    CHECK(engine.sends() == SendSettings{});
+    CHECK(engine.master() == MasterSettings{});
+    CHECK_EQ(int(refused() - before), 0);          // and not even counted as a refusal
+}
+
+TEST(engine_a_command_naming_a_track_that_does_not_exist_lands_on_track_zero) {
+    // `apply` CLAMPS the track and the step out of a command rather than refusing it: an index
+    // past the end reads as 0. This test only PINS that -- it is not an endorsement. Every other
+    // out-of-range field in `apply` is refused and counted (`queue_pattern`, `set_sample`,
+    // `macro_assign`), and a UI bug here would silently edit track 1 instead of showing up in
+    // `Status::refused`. REPORTED as a judgement call; changing it belongs to app/.
+    Engine &engine = clean();
+    (void)engine;
+    CHECK(!trig_at(0, 0));
+    post(Cmd::toggle_trig, uint8_t(kTracks), 0);
+    pump();
+    CHECK(trig_at(0, 0));
+    CHECK(!trig_at(0, 1));
+
+    post(Cmd::toggle_trig, 0, uint8_t(kStepsPerTrack));
+    pump();
+    CHECK(!trig_at(0, 0));                         // step 64 folded onto step 0 and toggled it off
+}
+
+TEST(engine_the_key_and_the_scale_land_in_both_places) {
+    Engine &engine = clean();
+    post(Cmd::set_root, 0, 0, 7);
+    post(Cmd::set_scale, 0, 0, uint8_t(Scale::phrygian));
+    pump();
+    CHECK_EQ(int(engine.pattern().root), 7);                   // a pitch class in the pattern ...
+    CHECK_EQ(int(engine.project().settings.root), 67);         // ... and a MIDI note in the project
+    CHECK_EQ(int(engine.pattern().scale), int(Scale::phrygian));
+    CHECK_EQ(int(engine.project().settings.scale), int(Scale::phrygian));
+
+    post(Cmd::set_root, 0, 0, 12);                 // not a pitch class
+    pump();
+    CHECK_EQ(int(engine.pattern().root), 7);
+
+    // The scale is deliberately NOT range-checked: core/project.cpp leaves the byte unclamped so
+    // an id from a later build survives a round trip, and core/scale plays one it does not know
+    // chromatically. Clamping here would be the one place that threw it away.
+    post(Cmd::set_scale, 0, 0, 200);
+    pump();
+    CHECK_EQ(int(engine.pattern().scale), 200);
+    CHECK_EQ(int(engine.project().settings.scale), 200);
+}
+
+TEST(engine_clearing_a_sample_bumps_the_epoch_even_for_a_track_that_has_none) {
+    Engine &engine = clean();
+    // Tracks 1 to 7 host no Sampler in the default kit, which is the case this is about. Track 8
+    // is left alone on purpose: clearing ITS sample would drop the placeholder loop for every
+    // test that runs after this one, because `build_placeholder_sample` runs once in `init()` and
+    // the rig's engine is shared (tests/apprig.hpp). What clearing does to a real Sampler --
+    // kill the voices, then drop the pointer -- is dsp/sample.cpp's, and tests/test_sample.cpp
+    // has it.
+    for (uint8_t t = 0; t + 1 < kTracks; t++) {
+        const uint8_t before = engine.status().sample_epoch[t].load(std::memory_order_relaxed);
+        post(Cmd::clear_sample, t);
+        pump();
+        const uint8_t after = engine.status().sample_epoch[t].load(std::memory_order_relaxed);
+        // The loader WAITS for this change before it releases the range and writes over it, so a
+        // track that was never reading anything must still report that it has stopped, or the
+        // wait never ends.
+        CHECK_EQ(int(uint8_t(after - before)), 1);
+    }
+
+    // A sample for a track that hosts no Sampler is refused rather than reinterpreting a
+    // pointer: the build has no RTTI to ask a Machine* with, so `samplers_` records it.
+    uint32_t before = refused();
+    post(Cmd::set_sample, kPoly, 0, 1);
+    pump();
+    CHECK_EQ(int(refused() - before), 1);
+
+    // Track 8 does host one -- and is still refused here, because app/app.cpp is what hands the
+    // engine its sample region and host/Makefile does not build app/app.cpp. So
+    // `sample_region_ == nullptr` and the offset, frame-count and alignment checks cannot be
+    // reached from the host at all; what they guard is the pool arithmetic on the other side of
+    // the ring, which tests/test_samplepool.cpp covers.
+    before = refused();
+    post(Cmd::set_sample, 7, 0, 1);
+    pump();
+    CHECK_EQ(int(refused() - before), 1);
+}
