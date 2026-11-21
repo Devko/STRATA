@@ -1,0 +1,1782 @@
+// The three project files: PROJECT.BIN, KIT.BIN and BANK_A.BIN .. BANK_H.BIN.
+//
+// core/project.cpp builds three more containers on core/serialize.cpp's primitives rather than
+// sharing a helper with it, so the four file types can be changed without reading each other.
+// The price of that choice is that the four can drift apart, and the thing most worth testing
+// here is that they have not: `the_four_file_types_agree_about_damage` applies the same six kinds
+// of damage to a pattern, a project, a kit and a bank and requires one answer from all four.
+//
+// The rest follows docs/SPEC.md's rule for patterns, now owed by three more files: loading is
+// value-tolerant but structure-strict. So each round trip is checked field by field, each clamp
+// is driven by poking the bytes directly and repairing the CRC (never by writing an out-of-range
+// value, which the writer is documented not to clamp), and each structural refusal is checked to
+// leave defaults rather than half a file.
+//
+// `one_damaged_pattern_costs_one_pattern` is the invariant project.hpp sells the bank format on,
+// and `a_bank_is_sixteen_patterns_back_to_back` is the layout that makes it possible: the bank is
+// re-parsed here with `pattern_read`'s `consumed` alone, so a bank that only read correctly
+// because `bank_read` and `bank_write` agreed on something undocumented would be caught.
+//
+// The buffers and projects are file-scope statics. A Project is about 1.03 MiB and a bank file
+// about 129 KiB, where CLAUDE.md caps a stack frame at 16 KiB.
+#include "check.hpp"
+
+#include "pattern.hpp"
+#include "project.hpp"
+#include "serialize.hpp"
+
+#include <cstring>
+#include <initializer_list>
+
+namespace {
+
+using namespace strata;
+
+// The sizes project.cpp documents, stated here as constants because the buffers need them at
+// compile time. `the_file_sizes_are_what_the_format_says` holds the functions to them.
+constexpr uint32_t kProjectFileBytes = 251;
+constexpr uint32_t kKitFileBytes = 1076;
+
+// Room past the end of every file, filled with a sentinel, so that a writer going one byte long
+// is caught by value rather than by luck.
+constexpr uint32_t kSlack = 64;
+constexpr uint8_t kSentinel = 0xAB;
+
+uint8_t g_project[kProjectFileBytes + kSlack];
+uint8_t g_project_alt[kProjectFileBytes + kSlack];
+uint8_t g_kit_file[kKitFileBytes + kSlack];
+uint8_t g_kit_alt[kKitFileBytes + kSlack];
+uint8_t g_bank[kBankMaxBytes + kSlack];
+uint8_t g_bank_alt[kBankMaxBytes + kSlack];
+uint8_t g_pattern_file[kPatternMaxBytes + kSlack];
+
+Project g_source;
+Project g_loaded;
+Kit g_kit_source;
+Kit g_kit_loaded;
+Pattern g_scratch;
+
+// --- little helpers over the raw bytes ------------------------------------
+// Deliberately not the Writer and Reader: the layout is read back here the way serialize.hpp
+// documents it, so a cursor that quietly changed the layout would be caught rather than followed.
+
+uint32_t peek_u32(const uint8_t *buffer, uint32_t at) {
+    return uint32_t(buffer[at]) | uint32_t(buffer[at + 1]) << 8 |
+           uint32_t(buffer[at + 2]) << 16 | uint32_t(buffer[at + 3]) << 24;
+}
+
+uint16_t peek_u16(const uint8_t *buffer, uint32_t at) {
+    return uint16_t(uint16_t(buffer[at]) | uint16_t(uint16_t(buffer[at + 1]) << 8));
+}
+
+void poke_u32(uint8_t *buffer, uint32_t at, uint32_t value) {
+    buffer[at + 0] = uint8_t(value & 0xFFu);
+    buffer[at + 1] = uint8_t((value >> 8) & 0xFFu);
+    buffer[at + 2] = uint8_t((value >> 16) & 0xFFu);
+    buffer[at + 3] = uint8_t((value >> 24) & 0xFFu);
+}
+
+void poke_u16(uint8_t *buffer, uint32_t at, uint16_t value) {
+    buffer[at + 0] = uint8_t(value & 0xFFu);
+    buffer[at + 1] = uint8_t(value >> 8);
+}
+
+// Makes a deliberately damaged file consistent again, so that a test about a clamp or about
+// structure is not answered by the CRC instead.
+void refresh_crc(uint8_t *buffer) {
+    const uint32_t payload = peek_u32(buffer, 8);
+    poke_u32(buffer, kCrcOffset, crc32(buffer + kHeaderBytes, payload));
+}
+
+// Where a section's bytes start, as an absolute index into the file.
+uint32_t section_at(const uint8_t *buffer, uint16_t id) {
+    const uint32_t sections = peek_u16(buffer, 6);
+    for (uint32_t i = 0; i < sections; i++) {
+        const uint32_t entry = kHeaderBytes + i * kSectionEntryBytes;
+        if (peek_u16(buffer, entry) == id) return kHeaderBytes + peek_u32(buffer, entry + 4);
+    }
+    return 0;
+}
+
+// The section table entry for an id, as an absolute index, so a test can shrink a section.
+uint32_t section_entry_at(const uint8_t *buffer, uint16_t id) {
+    const uint32_t sections = peek_u16(buffer, 6);
+    for (uint32_t i = 0; i < sections; i++) {
+        const uint32_t entry = kHeaderBytes + i * kSectionEntryBytes;
+        if (peek_u16(buffer, entry) == id) return entry;
+    }
+    return 0;
+}
+
+void fill_sentinel(uint8_t *buffer, uint32_t size) {
+    for (uint32_t i = 0; i < size; i++) buffer[i] = kSentinel;
+}
+
+// A float from its bits, for the two values a float can hold and a file cannot.
+float float_from_bits(uint32_t bits) {
+    float value = 0.0f;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+// --- test material --------------------------------------------------------
+
+// Settings with every field different from its default and from its neighbours, so that a round
+// trip that crossed two fields over shows up.
+ProjectSettings busy_settings() {
+    ProjectSettings s;
+    s.tempo_centi_bpm = 14537;
+    s.root = 65;
+    s.scale = 4;
+    s.swing = 63;
+    s.quantize = 72;
+    for (uint32_t i = 0; i < sizeof(s.mute_states); i++) s.mute_states[i] = uint8_t(0x11 * (i + 1));
+    s.sample_budget_mib = 48;
+    s.chain_length = 9;
+    s.chain_enabled = true;
+    return s;
+}
+
+// A chain whose entries are all usable and all different.
+void fill_chain(Project &project) {
+    for (int i = 0; i < kChainEntries; i++) {
+        project.chain[i].bank = uint8_t(i % kBanks);
+        project.chain[i].slot = uint8_t((i * 5) % kPatternsPerBank);
+        project.chain[i].repeats = uint8_t(1 + i % 64);
+    }
+}
+
+// A kit with every track different: parameters, machine, fader and a sample path of its own.
+void fill_kit(Kit &kit) {
+    for (int t = 0; t < kTracks; t++) {
+        KitTrack &track = kit.tracks[t];
+        for (int p = 0; p < kKitParams; p++) {
+            track.params[p] = uint8_t((t * 16 + p * 7) % 128);
+        }
+        track.machine = uint8_t(t % kMachines);
+        // Thousandths, so the fader survives the format exactly: project.cpp stores it as
+        // milli-units and `the_fader_is_stored_in_thousandths` pins what happens in between.
+        track.level = float(125 * t) / 1000.0f;
+        const char *names[kTracks] = {
+            "/SAMPLES/Kick 01.wav", "/SAMPLES/SNARE.WAV",  "/SAMPLES/hat.wav",
+            "",                     "/SAMPLES/a/b/c/d.wav", "/SAMPLES/Perc 09.wav",
+            "/x.wav",               "/SAMPLES/VERY LONG DIRECTORY NAME/take 12 - final.wav",
+        };
+        std::memset(track.sample, 0, sizeof(track.sample));
+        const char *name = names[t];
+        for (int i = 0; name[i] != '\0' && i < kSamplePathBytes - 1; i++) track.sample[i] = name[i];
+    }
+}
+
+// Every field of every step set to something different from its neighbours, and a lock pool
+// fragmented on purpose so the save has to compact it. `salt` makes each of a bank's 16 patterns
+// different from the other 15.
+void make_busy_pattern(Pattern &pattern, int salt) {
+    pattern_init(pattern);
+
+    pattern.master_length = uint8_t(1 + (salt * 3) % kStepsPerTrack);
+    pattern.swing = uint8_t(kSwingMin + salt % (kSwingMax - kSwingMin + 1));
+    pattern.root = uint8_t(salt % 12);
+    pattern.scale = uint8_t(salt % 7);
+    pattern.seed = 0xDEADBEEFu + uint32_t(salt);
+
+    const Speed speeds[] = {Speed::x2,   Speed::x1,   Speed::x3_4,
+                            Speed::x1_2, Speed::x1_4, Speed::x1_8};
+
+    for (int t = 0; t < kTracks; t++) {
+        TrackPattern &track = pattern.tracks[t];
+        track.length = uint8_t(1 + (t * 9 + salt) % kStepsPerTrack);
+        track.speed = uint8_t(speeds[(t + salt) % 6]);
+        track.swing = t == 0 ? kSwingInherit : uint8_t(kSwingMin + (t * 3 + salt) % 26);
+
+        for (int i = 0; i < kStepsPerTrack; i++) {
+            Step &step = track.steps[i];
+            step.flags = uint8_t((t * 5 + i + salt) & kStepFlagMask);
+            step.note = uint8_t((24 + t * 11 + i * 3 + salt) & 0x7F);
+            step.velocity = uint8_t(1 + (t * 17 + i * 5 + salt) % 127);
+            step.length = uint8_t(1 + (t + i + salt) % kLengthMax);
+            step.micro = int8_t(((i + salt) % 23) - 11);
+            step.probability = uint8_t((t * 13 + i * 7 + salt) % 101);
+            step.condition = ((t + i + salt) & 1) == 0
+                                 ? condition_pack(Condition((t + i + salt) % kConditionKinds))
+                                 : condition_pack_a_b(uint8_t(1 + i % 8), uint8_t(2 + t % 7));
+            step.ratchet = ratchet_pack(uint8_t(1 + (t + i + salt) % 8), RatchetRamp((t + i) % 3));
+            step.chord = uint8_t((t * 3 + i + salt) & 0x3F);
+        }
+    }
+
+    for (uint8_t round = 0; round < 4; round++) {
+        for (int t = 0; t < kTracks; t++) {
+            for (int i = 0; i < 8; i++) {
+                pattern_set_lock(pattern, t, i * 7, uint8_t(round * 2),
+                                 uint8_t(t * 16 + i * 2 + round + salt));
+            }
+        }
+    }
+    for (int t = 0; t < kTracks; t++) pattern_clear_lock(pattern, t, 14, 2);
+}
+
+// Counts differing fields rather than reporting each one: 512 steps of a systematically broken
+// field would otherwise bury the line that says which field it was.
+struct Diff {
+    int header = 0, track_header = 0;
+    int flags = 0, note = 0, velocity = 0, length = 0, micro = 0, probability = 0;
+    int condition = 0, ratchet = 0, chord = 0, lock_count = 0, lock_values = 0;
+};
+
+Diff diff_patterns(const Pattern &a, const Pattern &b) {
+    Diff diff;
+    if (a.master_length != b.master_length) diff.header++;
+    if (a.swing != b.swing) diff.header++;
+    if (a.root != b.root) diff.header++;
+    if (a.scale != b.scale) diff.header++;
+    if (a.seed != b.seed) diff.header++;
+
+    for (int t = 0; t < kTracks; t++) {
+        if (a.tracks[t].length != b.tracks[t].length) diff.track_header++;
+        if (a.tracks[t].speed != b.tracks[t].speed) diff.track_header++;
+        if (a.tracks[t].swing != b.tracks[t].swing) diff.track_header++;
+
+        for (int i = 0; i < kStepsPerTrack; i++) {
+            const Step &x = a.tracks[t].steps[i];
+            const Step &y = b.tracks[t].steps[i];
+            if (x.flags != y.flags) diff.flags++;
+            if (x.note != y.note) diff.note++;
+            if (x.velocity != y.velocity) diff.velocity++;
+            if (x.length != y.length) diff.length++;
+            if (x.micro != y.micro) diff.micro++;
+            if (x.probability != y.probability) diff.probability++;
+            if (x.condition != y.condition) diff.condition++;
+            if (x.ratchet != y.ratchet) diff.ratchet++;
+            if (x.chord != y.chord) diff.chord++;
+
+            const LockView va = pattern_step_locks(a, t, i);
+            const LockView vb = pattern_step_locks(b, t, i);
+            if (va.count != vb.count) {
+                diff.lock_count++;
+                continue;
+            }
+            for (uint8_t k = 0; k < va.count; k++) {
+                if (va.locks[k].param != vb.locks[k].param ||
+                    va.locks[k].value != vb.locks[k].value) {
+                    diff.lock_values++;
+                }
+            }
+        }
+    }
+    return diff;
+}
+
+void check_no_diff(const Diff &diff) {
+    CHECK_EQ(diff.header, 0);
+    CHECK_EQ(diff.track_header, 0);
+    CHECK_EQ(diff.flags, 0);
+    CHECK_EQ(diff.note, 0);
+    CHECK_EQ(diff.velocity, 0);
+    CHECK_EQ(diff.length, 0);
+    CHECK_EQ(diff.micro, 0);
+    CHECK_EQ(diff.probability, 0);
+    CHECK_EQ(diff.condition, 0);
+    CHECK_EQ(diff.ratchet, 0);
+    CHECK_EQ(diff.chord, 0);
+    CHECK_EQ(diff.lock_count, 0);
+    CHECK_EQ(diff.lock_values, 0);
+}
+
+// True when a pattern is the empty one `pattern_init` makes, which is what a refused slot holds.
+bool is_empty_pattern(const Pattern &pattern) {
+    pattern_init(g_scratch);
+    const Diff diff = diff_patterns(pattern, g_scratch);
+    return diff.header == 0 && diff.track_header == 0 && diff.flags == 0 && diff.note == 0 &&
+           diff.velocity == 0 && diff.length == 0 && diff.micro == 0 && diff.probability == 0 &&
+           diff.condition == 0 && diff.ratchet == 0 && diff.chord == 0 && diff.lock_count == 0 &&
+           diff.lock_values == 0;
+}
+
+// A whole project worth writing: busy settings, a full chain, a kit, and 16 distinct patterns in
+// bank `bank`.
+void fill_project(Project &project, int bank) {
+    project_init(project);
+    project.settings = busy_settings();
+    fill_chain(project);
+    fill_kit(project.kit);
+    for (int slot = 0; slot < kPatternsPerBank; slot++) {
+        make_busy_pattern(project.patterns[bank][slot], slot + 1);
+    }
+    project.bank = uint8_t(bank);
+    project.slot = 11;
+}
+
+}  // namespace
+
+// --- sizes, names and indices ---------------------------------------------
+
+TEST(project_the_file_sizes_are_what_the_format_says) {
+    // project.cpp's header comment states both figures, and a change to either breaks every file
+    // an older build wrote. They are pinned here rather than recomputed from the parts.
+    CHECK_EQ(project_bytes(), kProjectFileBytes);
+    CHECK_EQ(kit_bytes(), kKitFileBytes);
+
+    // 16 patterns at their largest, plus the header and a one-entry table.
+    CHECK_EQ(kBankMaxBytes, kHeaderBytes + kSectionEntryBytes +
+                                uint32_t(kPatternsPerBank) * kPatternMaxBytes);
+}
+
+TEST(project_index_validity_covers_exactly_the_eight_banks_of_sixteen) {
+    static_assert(project_index_valid(0, 0), "A01 exists");
+    static_assert(project_index_valid(kBanks - 1, kPatternsPerBank - 1), "H16 exists");
+    static_assert(!project_index_valid(-1, 0), "there is no bank before A");
+    static_assert(!project_index_valid(0, -1), "there is no slot before 1");
+    static_assert(!project_index_valid(kBanks, 0), "there is no bank after H");
+    static_assert(!project_index_valid(0, kPatternsPerBank), "there is no 17th slot");
+
+    CHECK_EQ(kProjectPatterns, kBanks * kPatternsPerBank);
+    CHECK_EQ(kProjectPatterns, 128);
+
+    int valid = 0;
+    for (int bank = -2; bank < kBanks + 2; bank++) {
+        for (int slot = -2; slot < kPatternsPerBank + 2; slot++) {
+            if (project_index_valid(bank, slot)) valid++;
+        }
+    }
+    CHECK_EQ(valid, kProjectPatterns);
+}
+
+TEST(project_bank_letters_run_a_to_h) {
+    CHECK_EQ(int(bank_letter(0)), int('A'));
+    CHECK_EQ(int(bank_letter(7)), int('H'));
+    CHECK_EQ(int(bank_letter(-1)), int('?'));
+    CHECK_EQ(int(bank_letter(kBanks)), int('?'));
+    static_assert(bank_letter(3) == 'D', "bank_letter is usable at compile time");
+}
+
+TEST(project_bank_file_names_are_bank_x_dot_bin) {
+    char name[16] = {};
+    const char *expect[kBanks] = {"BANK_A.BIN", "BANK_B.BIN", "BANK_C.BIN", "BANK_D.BIN",
+                                  "BANK_E.BIN", "BANK_F.BIN", "BANK_G.BIN", "BANK_H.BIN"};
+    for (int bank = 0; bank < kBanks; bank++) {
+        std::memset(name, kSentinel, sizeof(name));
+        CHECK(bank_file_name(bank, name, int(sizeof(name))));
+        CHECK_EQ(std::strcmp(name, expect[bank]), 0);
+        // Terminated, and nothing written past the terminator.
+        CHECK_EQ(int(name[10]), 0);
+        CHECK_EQ(int(uint8_t(name[11])), int(kSentinel));
+    }
+}
+
+TEST(project_bank_file_names_refuse_what_they_cannot_write) {
+    char name[16] = {};
+    CHECK(!bank_file_name(-1, name, int(sizeof(name))));
+    CHECK(!bank_file_name(kBanks, name, int(sizeof(name))));
+    CHECK(!bank_file_name(0, nullptr, 16));
+
+    // 11 bytes is exactly enough: ten characters and the terminator.
+    CHECK(bank_file_name(0, name, 11));
+    CHECK_EQ(std::strcmp(name, "BANK_A.BIN"), 0);
+
+    // One short, and the buffer is left alone rather than half filled.
+    std::memset(name, kSentinel, sizeof(name));
+    CHECK(!bank_file_name(0, name, 10));
+    for (uint32_t i = 0; i < sizeof(name); i++) CHECK_EQ(int(uint8_t(name[i])), int(kSentinel));
+}
+
+// --- project_init ---------------------------------------------------------
+
+TEST(project_init_empties_everything_and_lives_on_a01) {
+    fill_project(g_source, 3);
+    for (int bank = 0; bank < kBanks; bank++) g_source.bank_dirty[bank] = true;
+
+    project_init(g_source);
+
+    const ProjectSettings fresh;
+    CHECK_EQ(int(g_source.settings.tempo_centi_bpm), int(fresh.tempo_centi_bpm));
+    CHECK_EQ(int(g_source.settings.root), int(fresh.root));
+    CHECK_EQ(int(g_source.settings.swing), int(fresh.swing));
+    CHECK_EQ(int(g_source.settings.quantize), int(fresh.quantize));
+    CHECK_EQ(int(g_source.settings.sample_budget_mib), int(fresh.sample_budget_mib));
+    CHECK_EQ(int(g_source.settings.chain_length), 0);
+    CHECK(!g_source.settings.chain_enabled);
+
+    CHECK_EQ(int(g_source.bank), 0);
+    CHECK_EQ(int(g_source.slot), 0);
+
+    int chain_used = 0;
+    for (int i = 0; i < kChainEntries; i++) {
+        if (g_source.chain[i].repeats != 0) chain_used++;
+    }
+    CHECK_EQ(chain_used, 0);
+
+    int kit_set = 0;
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitParams; p++) {
+            if (g_source.kit.tracks[t].params[p] != 0) kit_set++;
+        }
+        if (g_source.kit.tracks[t].machine != 0) kit_set++;
+        if (g_source.kit.tracks[t].sample[0] != '\0') kit_set++;
+        // The fader's default is unity, not zero: a project that opened silent would look broken.
+        CHECK_NEAR(g_source.kit.tracks[t].level, 1.0f, 0.0f);
+    }
+    CHECK_EQ(kit_set, 0);
+
+    int non_empty = 0, dirty = 0;
+    for (int bank = 0; bank < kBanks; bank++) {
+        if (g_source.bank_dirty[bank]) dirty++;
+        for (int slot = 0; slot < kPatternsPerBank; slot++) {
+            if (!is_empty_pattern(g_source.patterns[bank][slot])) non_empty++;
+        }
+    }
+    CHECK_EQ(non_empty, 0);
+    CHECK_EQ(dirty, 0);
+
+    // `live()` is the pattern inside the project, not a copy of it -- the decision project.hpp
+    // records. Writing through it must be visible in the array.
+    g_source.live().master_length = 17;
+    CHECK_EQ(int(g_source.patterns[0][0].master_length), 17);
+    g_source.bank = 2;
+    g_source.slot = 5;
+    g_source.live().master_length = 19;
+    CHECK_EQ(int(g_source.patterns[2][5].master_length), 19);
+    CHECK_EQ(int(g_source.patterns[0][0].master_length), 17);
+}
+
+// --- PROJECT.BIN ----------------------------------------------------------
+
+TEST(project_round_trips_every_settings_field) {
+    fill_project(g_source, 2);
+
+    fill_sentinel(g_project, uint32_t(sizeof(g_project)));
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, kProjectFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(written, kProjectFileBytes);
+    // Nothing past the file.
+    for (uint32_t i = kProjectFileBytes; i < sizeof(g_project); i++) {
+        CHECK_EQ(int(g_project[i]), int(kSentinel));
+    }
+
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+
+    const ProjectSettings &a = g_source.settings;
+    const ProjectSettings &b = g_loaded.settings;
+    CHECK_EQ(int(b.tempo_centi_bpm), int(a.tempo_centi_bpm));
+    CHECK_EQ(int(b.root), int(a.root));
+    CHECK_EQ(int(b.scale), int(a.scale));
+    CHECK_EQ(int(b.swing), int(a.swing));
+    CHECK_EQ(int(b.quantize), int(a.quantize));
+    for (uint32_t i = 0; i < sizeof(a.mute_states); i++) {
+        CHECK_EQ(int(b.mute_states[i]), int(a.mute_states[i]));
+    }
+    CHECK_EQ(int(b.sample_budget_mib), int(a.sample_budget_mib));
+    CHECK_EQ(int(b.chain_length), int(a.chain_length));
+    CHECK_EQ(b.chain_enabled, a.chain_enabled);
+
+    // `scale` is the one field the reader does not clamp, so a project naming a scale this build
+    // does not have still round trips. Checked by value here and by range below.
+    CHECK_EQ(int(b.scale), 4);
+}
+
+TEST(project_round_trips_the_live_pattern_and_the_whole_chain) {
+    fill_project(g_source, 5);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+
+    CHECK_EQ(int(g_loaded.bank), int(g_source.bank));
+    CHECK_EQ(int(g_loaded.slot), int(g_source.slot));
+
+    int wrong = 0;
+    for (int i = 0; i < kChainEntries; i++) {
+        if (g_loaded.chain[i].bank != g_source.chain[i].bank) wrong++;
+        if (g_loaded.chain[i].slot != g_source.chain[i].slot) wrong++;
+        if (g_loaded.chain[i].repeats != g_source.chain[i].repeats) wrong++;
+    }
+    CHECK_EQ(wrong, 0);
+}
+
+TEST(project_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
+    fill_project(g_source, 0);
+    fill_sentinel(g_project, uint32_t(sizeof(g_project)));
+
+    uint32_t written = 123;
+    CHECK_EQ(int(project_write(g_source, g_project, kProjectFileBytes - 1, &written)),
+             int(SerializeResult::buffer_too_small));
+    CHECK_EQ(written, 0u);
+    for (uint32_t i = 0; i < sizeof(g_project); i++) CHECK_EQ(int(g_project[i]), int(kSentinel));
+
+    CHECK_EQ(int(project_write(g_source, nullptr, kProjectFileBytes, &written)),
+             int(SerializeResult::buffer_too_small));
+    CHECK_EQ(written, 0u);
+
+    // Exactly enough is enough.
+    CHECK_EQ(int(project_write(g_source, g_project, kProjectFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(written, kProjectFileBytes);
+}
+
+TEST(project_the_header_says_strata_and_the_version) {
+    fill_project(g_source, 0);
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), nullptr)),
+             int(SerializeResult::ok));
+
+    CHECK_EQ(int(g_project[0]), int(kMagic0));
+    CHECK_EQ(int(g_project[1]), int(kMagic1));
+    CHECK_EQ(int(g_project[2]), int(kMagic2));
+    CHECK_EQ(int(g_project[3]), int(kMagic3));
+    CHECK_EQ(int(peek_u16(g_project, kVersionOffset)), int(kProjectVersion));
+    CHECK_EQ(int(peek_u16(g_project, 6)), 2);                       // two sections
+    CHECK_EQ(peek_u32(g_project, 8), kProjectFileBytes - kHeaderBytes);
+    CHECK_EQ(peek_u32(g_project, kCrcOffset),
+             crc32(g_project + kHeaderBytes, kProjectFileBytes - kHeaderBytes));
+
+    // Both sections are there and clear of the table.
+    const uint32_t settings = section_at(g_project, kSectionProjectSettings);
+    const uint32_t chain = section_at(g_project, kSectionProjectChain);
+    CHECK_EQ(settings, kHeaderBytes + 2 * kSectionEntryBytes);
+    CHECK_EQ(chain, settings + 19);
+}
+
+// --- PROJECT.BIN: value-tolerant ------------------------------------------
+// Every clamp is driven by poking the bytes and repairing the CRC. Writing an out-of-range value
+// into a Project and saving it would prove nothing: project_write is documented NOT to clamp,
+// because a writer that clamped would make a save and a load disagree about what the project is.
+
+namespace {
+
+// Writes g_source to g_project, then hands back the absolute offset of the settings section.
+uint32_t fresh_project_file() {
+    fill_project(g_source, 0);
+    const SerializeResult res =
+        project_write(g_source, g_project, uint32_t(sizeof(g_project)), nullptr);
+    CHECK_EQ(int(res), int(SerializeResult::ok));
+    return section_at(g_project, kSectionProjectSettings);
+}
+
+}  // namespace
+
+TEST(project_an_impossible_tempo_is_clamped_into_enagas_range) {
+    const uint32_t at = fresh_project_file();
+
+    poke_u16(g_project, at + 0, 0);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(kTempoCentiMin));
+
+    poke_u16(g_project, at + 0, 65535);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(kTempoCentiMax));
+
+    // The two ends of the range survive untouched, so the clamp is not off by one.
+    poke_u16(g_project, at + 0, kTempoCentiMin);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(kTempoCentiMin));
+
+    poke_u16(g_project, at + 0, kTempoCentiMax);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(kTempoCentiMax));
+}
+
+TEST(project_the_root_note_and_the_quantize_amount_are_clamped) {
+    const uint32_t at = fresh_project_file();
+
+    g_project[at + 2] = 255;     // root
+    g_project[at + 5] = 255;     // quantize
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.root), 127);
+    CHECK_EQ(int(g_loaded.settings.quantize), 100);
+
+    g_project[at + 2] = 127;
+    g_project[at + 5] = 100;
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.root), 127);
+    CHECK_EQ(int(g_loaded.settings.quantize), 100);
+}
+
+TEST(project_swing_is_clamped_to_the_fifty_to_seventyfive_range) {
+    const uint32_t at = fresh_project_file();
+
+    for (int value = 0; value < 256; value++) {
+        g_project[at + 4] = uint8_t(value);
+        refresh_crc(g_project);
+        CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+                 int(SerializeResult::ok));
+        const int got = int(g_loaded.settings.swing);
+        const int want = value < kSwingMin ? kSwingMin : (value > kSwingMax ? kSwingMax : value);
+        if (got != want) CHECK_EQ(got, want);
+    }
+}
+
+TEST(project_the_sample_budget_is_clamped_to_one_through_sixtyfour_mib) {
+    const uint32_t at = fresh_project_file();
+
+    // Zero is a damaged byte, not a setting: no UI offers it, and a project that silently
+    // refused every sample load is the least diagnosable failure there is.
+    g_project[at + 14] = 0;
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.sample_budget_mib), 1);
+
+    g_project[at + 14] = 255;
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.sample_budget_mib), 64);
+
+    // docs/SPEC.md's default and ceiling both survive.
+    for (int value : {1, 32, 64}) {
+        g_project[at + 14] = uint8_t(value);
+        refresh_crc(g_project);
+        CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+                 int(SerializeResult::ok));
+        CHECK_EQ(int(g_loaded.settings.sample_budget_mib), value);
+    }
+}
+
+TEST(project_an_unknown_scale_survives_the_round_trip) {
+    const uint32_t at = fresh_project_file();
+
+    // Not clamped, for core/pattern.hpp's reason about a lock's param: core/ does not know how
+    // many scales there are, and the UI draws an unknown id as the chromatic default rather than
+    // the file losing it.
+    for (int value : {0, 1, 42, 200, 255}) {
+        g_project[at + 3] = uint8_t(value);
+        refresh_crc(g_project);
+        CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+                 int(SerializeResult::ok));
+        CHECK_EQ(int(g_loaded.settings.scale), value);
+    }
+}
+
+TEST(project_every_bit_pattern_is_a_legal_set_of_mute_states) {
+    const uint32_t at = fresh_project_file();
+
+    for (uint32_t i = 0; i < 8; i++) g_project[at + 6 + i] = 0xFF;
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    for (uint32_t i = 0; i < 8; i++) CHECK_EQ(int(g_loaded.settings.mute_states[i]), 0xFF);
+
+    for (uint32_t i = 0; i < 8; i++) g_project[at + 6 + i] = uint8_t(i * 37);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    for (uint32_t i = 0; i < 8; i++) {
+        CHECK_EQ(int(g_loaded.settings.mute_states[i]), int(uint8_t(i * 37)));
+    }
+}
+
+TEST(project_the_chain_length_is_clamped_and_any_nonzero_enables_it) {
+    const uint32_t at = fresh_project_file();
+
+    g_project[at + 15] = 255;
+    g_project[at + 16] = 7;      // not 1, and still "on"
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.chain_length), kChainEntries);
+    CHECK(g_loaded.settings.chain_enabled);
+
+    g_project[at + 15] = 0;
+    g_project[at + 16] = 0;
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.chain_length), 0);
+    CHECK(!g_loaded.settings.chain_enabled);
+}
+
+TEST(project_a_live_pattern_that_cannot_exist_falls_back_to_a01) {
+    const uint32_t at = fresh_project_file();
+
+    g_project[at + 17] = uint8_t(kBanks);          // one past H
+    g_project[at + 18] = 3;
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.bank), 0);
+    CHECK_EQ(int(g_loaded.slot), 0);
+
+    g_project[at + 17] = 2;
+    g_project[at + 18] = uint8_t(kPatternsPerBank);   // one past 16
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.bank), 0);
+    CHECK_EQ(int(g_loaded.slot), 0);
+
+    // H16 is the last one that does exist, and it survives.
+    g_project[at + 17] = uint8_t(kBanks - 1);
+    g_project[at + 18] = uint8_t(kPatternsPerBank - 1);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.bank), kBanks - 1);
+    CHECK_EQ(int(g_loaded.slot), kPatternsPerBank - 1);
+}
+
+TEST(project_a_chain_entry_naming_no_pattern_is_dropped_whole) {
+    fresh_project_file();
+    const uint32_t chain = section_at(g_project, kSectionProjectChain);
+
+    // Entry 4 names bank 9: dropped to the zeroed entry, not clamped to A01. core/queue.hpp
+    // stops at the first entry with no repeats, so a zeroed entry ends the chain where the
+    // damage is, while a clamp would quietly play a pattern nobody put there.
+    g_project[chain + 4 * 3 + 0] = 9;
+    g_project[chain + 4 * 3 + 1] = 3;
+    g_project[chain + 4 * 3 + 2] = 5;
+
+    // Entry 6 names slot 16.
+    g_project[chain + 6 * 3 + 0] = 1;
+    g_project[chain + 6 * 3 + 1] = uint8_t(kPatternsPerBank);
+    g_project[chain + 6 * 3 + 2] = 2;
+
+    // Entry 8 is a real pattern with no repeats, which means unused: canonicalised to zeroes
+    // rather than left naming C04.
+    g_project[chain + 8 * 3 + 0] = 2;
+    g_project[chain + 8 * 3 + 1] = 3;
+    g_project[chain + 8 * 3 + 2] = 0;
+
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+
+    for (int i : {4, 6, 8}) {
+        CHECK_EQ(int(g_loaded.chain[i].bank), 0);
+        CHECK_EQ(int(g_loaded.chain[i].slot), 0);
+        CHECK_EQ(int(g_loaded.chain[i].repeats), 0);
+    }
+    // Its neighbours are untouched: one damaged entry costs one entry.
+    CHECK_EQ(int(g_loaded.chain[3].repeats), int(g_source.chain[3].repeats));
+    CHECK_EQ(int(g_loaded.chain[5].repeats), int(g_source.chain[5].repeats));
+    CHECK_EQ(int(g_loaded.chain[7].repeats), int(g_source.chain[7].repeats));
+    CHECK_EQ(int(g_loaded.chain[9].repeats), int(g_source.chain[9].repeats));
+}
+
+// --- PROJECT.BIN: structure-strict ----------------------------------------
+
+TEST(project_read_refuses_a_damaged_container) {
+    fresh_project_file();
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)), int(SerializeResult::ok));
+
+    // Not a STRATA file.
+    fresh_project_file();
+    g_project[0] = 'X';
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::bad_magic));
+
+    // A version this build does not know, in both directions.
+    fresh_project_file();
+    poke_u16(g_project, kVersionOffset, uint16_t(kProjectVersion + 1));
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::bad_version));
+    fresh_project_file();
+    poke_u16(g_project, kVersionOffset, 0);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::bad_version));
+
+    // A payload byte that no longer matches its CRC.
+    fresh_project_file();
+    g_project[kHeaderBytes + 30] = uint8_t(g_project[kHeaderBytes + 30] ^ 0x01);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::bad_crc));
+
+    // A header claiming more payload than the file holds.
+    fresh_project_file();
+    poke_u32(g_project, 8, 0x00FFFFFFu);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::truncated));
+
+    // A nonsensical section count, and an impossible one.
+    fresh_project_file();
+    poke_u16(g_project, 6, 0);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::malformed));
+    fresh_project_file();
+    poke_u16(g_project, 6, uint16_t(kMaxSections + 1));
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::malformed));
+
+    // Nothing at all, and less than a header.
+    CHECK_EQ(int(project_read(g_loaded, nullptr, 0)), int(SerializeResult::truncated));
+    fresh_project_file();
+    CHECK_EQ(int(project_read(g_loaded, g_project, kHeaderBytes - 1)),
+             int(SerializeResult::truncated));
+}
+
+TEST(project_read_refuses_a_section_table_that_does_not_add_up) {
+    // A section whose bytes would start inside the table.
+    fresh_project_file();
+    uint32_t entry = section_entry_at(g_project, kSectionProjectChain);
+    poke_u32(g_project, entry + 4, 4);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::malformed));
+
+    // A section running past the payload.
+    fresh_project_file();
+    entry = section_entry_at(g_project, kSectionProjectChain);
+    poke_u32(g_project, entry + 8, 0x00FFFFFFu);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::malformed));
+
+    // The same id twice, and therefore a section missing.
+    fresh_project_file();
+    entry = section_entry_at(g_project, kSectionProjectChain);
+    poke_u16(g_project, entry, kSectionProjectSettings);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::malformed));
+
+    // A section this file type does not use, in place of one it needs.
+    fresh_project_file();
+    entry = section_entry_at(g_project, kSectionProjectSettings);
+    poke_u16(g_project, entry, 99);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::malformed));
+
+    // A settings section too short to hold the 19 bytes the format says it has.
+    fresh_project_file();
+    entry = section_entry_at(g_project, kSectionProjectSettings);
+    poke_u32(g_project, entry + 8, 18);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::malformed));
+
+    // And a chain section one entry short.
+    fresh_project_file();
+    entry = section_entry_at(g_project, kSectionProjectChain);
+    poke_u32(g_project, entry + 8, uint32_t(kChainEntries) * 3 - 1);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::malformed));
+}
+
+TEST(project_a_refused_load_leaves_defaults_but_never_touches_a_pattern) {
+    // The reason project_read is narrow: app/ reads PROJECT.BIN first, so a damaged 251 bytes
+    // must not cost 128 patterns that are about to load perfectly well.
+    fill_project(g_loaded, 4);
+    for (int bank = 0; bank < kBanks; bank++) g_loaded.bank_dirty[bank] = true;
+    const uint8_t keep_length = g_loaded.patterns[4][7].master_length;
+
+    fresh_project_file();
+    g_project[0] = 'X';
+    CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
+             int(SerializeResult::bad_magic));
+
+    // What PROJECT.BIN owns is back at its defaults, not half read.
+    const ProjectSettings fresh;
+    CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(fresh.tempo_centi_bpm));
+    CHECK_EQ(int(g_loaded.settings.sample_budget_mib), int(fresh.sample_budget_mib));
+    CHECK_EQ(int(g_loaded.settings.chain_length), 0);
+    CHECK(!g_loaded.settings.chain_enabled);
+    CHECK_EQ(int(g_loaded.bank), 0);
+    CHECK_EQ(int(g_loaded.slot), 0);
+    int chain_used = 0;
+    for (int i = 0; i < kChainEntries; i++) {
+        if (g_loaded.chain[i].repeats != 0) chain_used++;
+    }
+    CHECK_EQ(chain_used, 0);
+
+    // The patterns are untouched, and so is the kit, which KIT.BIN owns.
+    CHECK_EQ(int(g_loaded.patterns[4][7].master_length), int(keep_length));
+    CHECK(!is_empty_pattern(g_loaded.patterns[4][7]));
+    CHECK(g_loaded.kit.tracks[1].sample[0] != '\0');
+
+    // `bank_dirty` says whether a bank differs from its file, and this function has not touched
+    // a pattern, so it is left alone.
+    int dirty = 0;
+    for (int bank = 0; bank < kBanks; bank++) {
+        if (g_loaded.bank_dirty[bank]) dirty++;
+    }
+    CHECK_EQ(dirty, kBanks);
+}
+
+TEST(project_read_never_looks_past_the_bytes_it_was_given) {
+    // The property that "never cast file bytes to structs" buys, and the only way to check it
+    // from outside: every truncation is read twice over different trailing bytes and must give
+    // the same answer both times.
+    fill_project(g_source, 1);
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), nullptr)),
+             int(SerializeResult::ok));
+    std::memcpy(g_project_alt, g_project, kProjectFileBytes);
+    for (uint32_t i = kProjectFileBytes; i < sizeof(g_project); i++) {
+        g_project[i] = 0x00;
+        g_project_alt[i] = 0xFF;
+    }
+
+    for (uint32_t size = 0; size <= kProjectFileBytes; size++) {
+        const int a = int(project_read(g_loaded, g_project, size));
+        const int b = int(project_read(g_loaded, g_project_alt, size));
+        if (a != b) CHECK_EQ(a, b);
+        // And only the whole file is accepted.
+        const bool ok = a == int(SerializeResult::ok);
+        if (ok != (size == kProjectFileBytes)) CHECK_EQ(ok, size == kProjectFileBytes);
+    }
+}
+
+// --- KIT.BIN --------------------------------------------------------------
+
+namespace {
+
+// One track's record inside the tracks section: 16 parameters, the machine, the fader, the path.
+constexpr uint32_t kTrackRecordBytes = uint32_t(kKitParams) + 1 + 2 + uint32_t(kSamplePathBytes);
+
+uint32_t kit_track_at(const uint8_t *file, int track) {
+    return section_at(file, kSectionKitTracks) + uint32_t(track) * kTrackRecordBytes;
+}
+
+uint32_t fresh_kit_file() {
+    fill_kit(g_kit_source);
+    const SerializeResult res =
+        kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), nullptr);
+    CHECK_EQ(int(res), int(SerializeResult::ok));
+    return section_at(g_kit_file, kSectionKitTracks);
+}
+
+// The fader as it went down on disk, in thousandths of unity.
+uint16_t stored_level(const uint8_t *file, int track) {
+    return peek_u16(file, kit_track_at(file, track) + kKitParams + 1);
+}
+
+}  // namespace
+
+TEST(kit_round_trips_every_track_field) {
+    fill_kit(g_kit_source);
+
+    fill_sentinel(g_kit_file, uint32_t(sizeof(g_kit_file)));
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(written, kKitFileBytes);
+    for (uint32_t i = kKitFileBytes; i < sizeof(g_kit_file); i++) {
+        CHECK_EQ(int(g_kit_file[i]), int(kSentinel));
+    }
+
+    kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), &written);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, written)), int(SerializeResult::ok));
+
+    int params_wrong = 0, machines_wrong = 0, levels_wrong = 0, paths_wrong = 0;
+    for (int t = 0; t < kTracks; t++) {
+        const KitTrack &a = g_kit_source.tracks[t];
+        const KitTrack &b = g_kit_loaded.tracks[t];
+        for (int p = 0; p < kKitParams; p++) {
+            if (a.params[p] != b.params[p]) params_wrong++;
+        }
+        if (a.machine != b.machine) machines_wrong++;
+        // Thousandths on disk, so a fader set in thousandths comes back exactly.
+        if (!(a.level == b.level)) levels_wrong++;
+        if (std::strcmp(a.sample, b.sample) != 0) paths_wrong++;
+    }
+    CHECK_EQ(params_wrong, 0);
+    CHECK_EQ(machines_wrong, 0);
+    CHECK_EQ(levels_wrong, 0);
+    CHECK_EQ(paths_wrong, 0);
+
+    // The empty path is a track that plays no file, and it stays empty rather than becoming
+    // a one-character name.
+    CHECK_EQ(int(g_kit_loaded.tracks[3].sample[0]), 0);
+}
+
+TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
+    fill_kit(g_kit_source);
+    fill_sentinel(g_kit_file, uint32_t(sizeof(g_kit_file)));
+
+    uint32_t written = 99;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes - 1, &written)),
+             int(SerializeResult::buffer_too_small));
+    CHECK_EQ(written, 0u);
+    for (uint32_t i = 0; i < sizeof(g_kit_file); i++) {
+        CHECK_EQ(int(g_kit_file[i]), int(kSentinel));
+    }
+
+    CHECK_EQ(int(kit_write(g_kit_source, nullptr, kKitFileBytes, &written)),
+             int(SerializeResult::buffer_too_small));
+    CHECK_EQ(written, 0u);
+
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(written, kKitFileBytes);
+    CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 1);     // one section
+}
+
+TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
+    const uint32_t at = fresh_kit_file();
+
+    // dsp/track.hpp maps a parameter either by x(1/127) or as a table index, so a 255 that
+    // survived the CRC would be an out-of-range read down in a machine rather than an odd sound.
+    for (int p = 0; p < kKitParams; p++) g_kit_file[at + uint32_t(p)] = uint8_t(128 + p);
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
+
+    // 127 itself is not clamped away.
+    for (int p = 0; p < kKitParams; p++) g_kit_file[at + uint32_t(p)] = 127;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
+}
+
+TEST(kit_an_unknown_machine_falls_back_to_the_first_one) {
+    fresh_kit_file();
+
+    // Not the last one: an unknown id should land somewhere known, and clamping to kMachines - 1
+    // would hand a damaged byte whichever machine happens to sit at the end of the list.
+    for (int t = 0; t < kTracks; t++) {
+        g_kit_file[kit_track_at(g_kit_file, t) + kKitParams] = uint8_t(kMachines + t);
+    }
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(g_kit_loaded.tracks[t].machine), 0);
+
+    // Every machine this build does have survives.
+    for (int t = 0; t < kTracks; t++) {
+        g_kit_file[kit_track_at(g_kit_file, t) + kKitParams] = uint8_t(t % kMachines);
+    }
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(g_kit_loaded.tracks[t].machine), t % kMachines);
+}
+
+TEST(kit_the_fader_is_stored_in_thousandths_and_cannot_carry_a_nan) {
+    // A format that cannot express a NaN or an infinity cannot hand one to the mixer, which is
+    // why the fader goes down as a uint16_t of thousandths rather than as a float's 32 bits.
+    fill_kit(g_kit_source);
+    g_kit_source.tracks[0].level = 0.0f;
+    g_kit_source.tracks[1].level = 1.0f;
+    g_kit_source.tracks[2].level = 0.5f;
+    g_kit_source.tracks[3].level = 2.0f;                            // above unity
+    g_kit_source.tracks[4].level = -1.0f;                           // below zero
+    g_kit_source.tracks[5].level = float_from_bits(0x7FC00000u);    // a quiet NaN
+    g_kit_source.tracks[6].level = float_from_bits(0x7F800000u);    // +infinity
+    g_kit_source.tracks[7].level = float_from_bits(0xFF800000u);    // -infinity
+
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), &written)),
+             int(SerializeResult::ok));
+
+    CHECK_EQ(int(stored_level(g_kit_file, 0)), 0);
+    CHECK_EQ(int(stored_level(g_kit_file, 1)), 1000);
+    CHECK_EQ(int(stored_level(g_kit_file, 2)), 500);
+    CHECK_EQ(int(stored_level(g_kit_file, 3)), 1000);
+    CHECK_EQ(int(stored_level(g_kit_file, 4)), 0);
+    // Every comparison against a NaN is false, so the `>= 0` test is the one that rejects it.
+    CHECK_EQ(int(stored_level(g_kit_file, 5)), 0);
+    CHECK_EQ(int(stored_level(g_kit_file, 6)), 1000);
+    CHECK_EQ(int(stored_level(g_kit_file, 7)), 0);
+
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, written)), int(SerializeResult::ok));
+    CHECK_NEAR(g_kit_loaded.tracks[0].level, 0.0f, 0.0f);
+    CHECK_NEAR(g_kit_loaded.tracks[1].level, 1.0f, 0.0f);
+    CHECK_NEAR(g_kit_loaded.tracks[2].level, 0.5f, 0.0f);
+    CHECK_NEAR(g_kit_loaded.tracks[3].level, 1.0f, 0.0f);
+    CHECK_NEAR(g_kit_loaded.tracks[4].level, 0.0f, 0.0f);
+    CHECK_NEAR(g_kit_loaded.tracks[5].level, 0.0f, 0.0f);
+    CHECK_NEAR(g_kit_loaded.tracks[6].level, 1.0f, 0.0f);
+    CHECK_NEAR(g_kit_loaded.tracks[7].level, 0.0f, 0.0f);
+}
+
+TEST(kit_a_fader_above_unity_in_a_file_is_clamped_on_the_way_in) {
+    fresh_kit_file();
+    poke_u16(g_kit_file, kit_track_at(g_kit_file, 2) + kKitParams + 1, 65535);
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    // An infinity is a blown output, so a gain above unity cannot be allowed out of this file.
+    CHECK_NEAR(g_kit_loaded.tracks[2].level, 1.0f, 0.0f);
+}
+
+TEST(kit_every_thousandth_of_the_fader_survives_a_round_trip) {
+    fill_kit(g_kit_source);
+    for (uint16_t milli = 0; milli <= 1000; milli++) {
+        for (int t = 0; t < kTracks; t++) {
+            g_kit_source.tracks[t].level = float(milli) / 1000.0f;
+        }
+        uint32_t written = 0;
+        const SerializeResult wrote =
+            kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), &written);
+        if (wrote != SerializeResult::ok) CHECK_EQ(int(wrote), int(SerializeResult::ok));
+        if (stored_level(g_kit_file, 0) != milli) CHECK_EQ(int(stored_level(g_kit_file, 0)),
+                                                           int(milli));
+        const SerializeResult read = kit_read(g_kit_loaded, g_kit_file, written);
+        if (read != SerializeResult::ok) CHECK_EQ(int(read), int(SerializeResult::ok));
+        const float want = float(milli) / 1000.0f;
+        if (!(g_kit_loaded.tracks[0].level == want)) {
+            CHECK_NEAR(g_kit_loaded.tracks[0].level, want, 0.0f);
+        }
+    }
+}
+
+TEST(kit_a_path_filling_every_byte_loses_its_last_character_not_its_terminator) {
+    fill_kit(g_kit_source);
+    // 112 bytes with no room for a terminator. app/ hands this to enaga::files, which reads
+    // until a NUL: a name one character short fails loudly, an unterminated one reads whatever
+    // sits after it.
+    for (int i = 0; i < kSamplePathBytes; i++) {
+        g_kit_source.tracks[0].sample[i] = char('a' + i % 26);
+    }
+
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), &written)),
+             int(SerializeResult::ok));
+    const uint32_t path = kit_track_at(g_kit_file, 0) + kKitParams + 3;
+    CHECK_EQ(int(g_kit_file[path + kSamplePathBytes - 1]), 0);
+
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(std::strlen(g_kit_loaded.tracks[0].sample)), kSamplePathBytes - 1);
+    for (int i = 0; i < kSamplePathBytes - 1; i++) {
+        CHECK_EQ(int(g_kit_loaded.tracks[0].sample[i]), int(char('a' + i % 26)));
+    }
+}
+
+TEST(kit_a_shortened_path_leaves_no_trace_of_the_old_one) {
+    fill_kit(g_kit_source);
+    const char *was = "/SAMPLES/A VERY LONG SAMPLE NAME INDEED.WAV";
+    std::memset(g_kit_source.tracks[0].sample, 0, sizeof(g_kit_source.tracks[0].sample));
+    for (int i = 0; was[i] != '\0'; i++) g_kit_source.tracks[0].sample[i] = was[i];
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), nullptr)),
+             int(SerializeResult::ok));
+
+    // Now the same track plays something shorter. The file must record the kit, not the editing
+    // history: the tail of the old name must not stay on the card.
+    const char *now = "/K.WAV";
+    std::memset(g_kit_source.tracks[0].sample, 0, sizeof(g_kit_source.tracks[0].sample));
+    for (int i = 0; now[i] != '\0'; i++) g_kit_source.tracks[0].sample[i] = now[i];
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), &written)),
+             int(SerializeResult::ok));
+
+    const uint32_t path = kit_track_at(g_kit_file, 0) + kKitParams + 3;
+    CHECK_EQ(std::strcmp(reinterpret_cast<const char *>(g_kit_file + path), now), 0);
+    int nonzero_tail = 0;
+    for (int i = int(std::strlen(now)); i < kSamplePathBytes; i++) {
+        if (g_kit_file[path + uint32_t(i)] != 0) nonzero_tail++;
+    }
+    CHECK_EQ(nonzero_tail, 0);
+}
+
+TEST(kit_nothing_past_a_paths_terminator_is_read_back) {
+    fresh_kit_file();
+    const uint32_t path = kit_track_at(g_kit_file, 1) + kKitParams + 3;
+
+    g_kit_file[path + 0] = 'A';
+    g_kit_file[path + 1] = 'B';
+    g_kit_file[path + 2] = '\0';
+    for (int i = 3; i < kSamplePathBytes; i++) g_kit_file[path + uint32_t(i)] = 'Z';
+    refresh_crc(g_kit_file);
+
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(std::strcmp(g_kit_loaded.tracks[1].sample, "AB"), 0);
+    for (int i = 2; i < kSamplePathBytes; i++) {
+        CHECK_EQ(int(g_kit_loaded.tracks[1].sample[i]), 0);
+    }
+
+    // And 112 bytes with no terminator anywhere: the last character pays, because every reader
+    // of `sample` stops at a NUL and there would otherwise be none.
+    for (int i = 0; i < kSamplePathBytes; i++) g_kit_file[path + uint32_t(i)] = 'Q';
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(std::strlen(g_kit_loaded.tracks[1].sample)), kSamplePathBytes - 1);
+}
+
+TEST(kit_read_refuses_a_damaged_container_and_clears_the_kit) {
+    fresh_kit_file();
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    CHECK(g_kit_loaded.tracks[0].sample[0] != '\0');
+
+    fresh_kit_file();
+    g_kit_file[1] = 'X';
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
+             int(SerializeResult::bad_magic));
+
+    // A refused load leaves the kit cleared, never half read.
+    const KitTrack fresh;
+    int set = 0;
+    for (int t = 0; t < kTracks; t++) {
+        const KitTrack &track = g_kit_loaded.tracks[t];
+        for (int p = 0; p < kKitParams; p++) {
+            if (track.params[p] != 0) set++;
+        }
+        if (track.machine != 0) set++;
+        if (track.sample[0] != '\0') set++;
+        if (!(track.level == fresh.level)) set++;
+    }
+    CHECK_EQ(set, 0);
+
+    fresh_kit_file();
+    poke_u16(g_kit_file, kVersionOffset, uint16_t(kKitVersion + 1));
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
+             int(SerializeResult::bad_version));
+
+    fresh_kit_file();
+    g_kit_file[kHeaderBytes + 40] = uint8_t(g_kit_file[kHeaderBytes + 40] ^ 0x80);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
+             int(SerializeResult::bad_crc));
+
+    // A tracks section too short to hold eight tracks.
+    fresh_kit_file();
+    poke_u32(g_kit_file, section_entry_at(g_kit_file, kSectionKitTracks) + 8,
+             kTrackRecordBytes * uint32_t(kTracks) - 1);
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
+             int(SerializeResult::malformed));
+
+    CHECK_EQ(int(kit_read(g_kit_loaded, nullptr, 0)), int(SerializeResult::truncated));
+}
+
+TEST(kit_read_never_looks_past_the_bytes_it_was_given) {
+    fill_kit(g_kit_source);
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), nullptr)),
+             int(SerializeResult::ok));
+    std::memcpy(g_kit_alt, g_kit_file, kKitFileBytes);
+    for (uint32_t i = kKitFileBytes; i < sizeof(g_kit_file); i++) {
+        g_kit_file[i] = 0x00;
+        g_kit_alt[i] = 0xFF;
+    }
+
+    for (uint32_t size = 0; size <= kKitFileBytes; size++) {
+        const int a = int(kit_read(g_kit_loaded, g_kit_file, size));
+        const int b = int(kit_read(g_kit_loaded, g_kit_alt, size));
+        if (a != b) CHECK_EQ(a, b);
+        const bool ok = a == int(SerializeResult::ok);
+        if (ok != (size == kKitFileBytes)) CHECK_EQ(ok, size == kKitFileBytes);
+    }
+}
+
+// --- BANK_x.BIN -----------------------------------------------------------
+
+namespace {
+
+Pattern g_probe;
+
+uint32_t bank_section_length(const uint8_t *file) {
+    return peek_u32(file, section_entry_at(file, kSectionBankPatterns) + 8);
+}
+
+// The absolute offset of one pattern inside a bank file, found the way bank_read finds it: from
+// each pattern's OWN container header, never from a size this test assumed.
+uint32_t pattern_at_in_bank(const uint8_t *file, int slot) {
+    uint32_t at = section_at(file, kSectionBankPatterns);
+    for (int i = 0; i < slot; i++) at += kHeaderBytes + peek_u32(file, at + 8);
+    return at;
+}
+
+// Writes bank `bank` of a freshly filled project into g_bank. Returns the file's size.
+uint32_t fresh_bank_file(int bank) {
+    fill_project(g_source, bank);
+    uint32_t written = 0;
+    const SerializeResult res =
+        bank_write(g_source, bank, g_bank, uint32_t(sizeof(g_bank)), &written);
+    CHECK_EQ(int(res), int(SerializeResult::ok));
+    return written;
+}
+
+// How many of a bank's 16 slots differ from the project they were written from.
+int slots_wrong(const Project &loaded, const Project &source, int bank) {
+    int wrong = 0;
+    for (int slot = 0; slot < kPatternsPerBank; slot++) {
+        const Diff diff = diff_patterns(loaded.patterns[bank][slot], source.patterns[bank][slot]);
+        if (diff.header != 0 || diff.track_header != 0 || diff.flags != 0 || diff.note != 0 ||
+            diff.velocity != 0 || diff.length != 0 || diff.micro != 0 || diff.probability != 0 ||
+            diff.condition != 0 || diff.ratchet != 0 || diff.chord != 0 ||
+            diff.lock_count != 0 || diff.lock_values != 0) {
+            wrong++;
+        }
+    }
+    return wrong;
+}
+
+}  // namespace
+
+TEST(bank_bytes_is_the_header_the_table_and_the_sixteen_patterns) {
+    fill_project(g_source, 6);
+
+    uint32_t sum = 0;
+    for (int slot = 0; slot < kPatternsPerBank; slot++) {
+        sum += pattern_bytes(g_source.patterns[6][slot]);
+    }
+    CHECK_EQ(bank_bytes(g_source, 6), kHeaderBytes + kSectionEntryBytes + sum);
+    CHECK(bank_bytes(g_source, 6) <= kBankMaxBytes);
+
+    // An empty bank is smaller than a busy one, because the lock pool is written compacted.
+    CHECK(bank_bytes(g_source, 0) < bank_bytes(g_source, 6));
+
+    // There is no such bank, so there is no size either.
+    CHECK_EQ(bank_bytes(g_source, -1), 0u);
+    CHECK_EQ(bank_bytes(g_source, kBanks), 0u);
+}
+
+TEST(bank_is_sixteen_patterns_back_to_back) {
+    // The layout project.hpp sells the per-slot refusal on, re-parsed here with nothing but
+    // `pattern_read`'s `consumed`. A bank that only read correctly because bank_read and
+    // bank_write agreed on something undocumented would be caught.
+    const uint32_t written = fresh_bank_file(1);
+    CHECK_EQ(written, bank_bytes(g_source, 1));
+
+    const uint32_t first = section_at(g_bank, kSectionBankPatterns);
+    CHECK_EQ(first, kHeaderBytes + kSectionEntryBytes);
+    CHECK_EQ(bank_section_length(g_bank), written - first);
+    CHECK_EQ(int(peek_u16(g_bank, kVersionOffset)), int(kBankVersion));
+    CHECK_EQ(int(peek_u16(g_bank, 6)), 1);
+
+    uint32_t at = first;
+    for (int slot = 0; slot < kPatternsPerBank; slot++) {
+        uint32_t consumed = 0;
+        CHECK_EQ(int(pattern_read(g_probe, g_bank + at, written - at, &consumed)),
+                 int(SerializeResult::ok));
+        // Each pattern's container reports its own extent, and it is exactly what
+        // `pattern_bytes` said it would take.
+        CHECK_EQ(consumed, pattern_bytes(g_source.patterns[1][slot]));
+        check_no_diff(diff_patterns(g_probe, g_source.patterns[1][slot]));
+        at += consumed;
+    }
+    // The patterns are the section, with nothing between them and nothing after them.
+    CHECK_EQ(at, written);
+}
+
+TEST(bank_round_trips_sixteen_distinct_patterns) {
+    const uint32_t written = fresh_bank_file(2);
+
+    project_init(g_loaded);
+    g_loaded.bank_dirty[2] = true;
+    int refused = -1;
+    CHECK_EQ(int(bank_read(g_loaded, 2, g_bank, written, &refused)), int(SerializeResult::ok));
+    CHECK_EQ(refused, 0);
+    CHECK_EQ(slots_wrong(g_loaded, g_source, 2), 0);
+
+    // A successful read means what is in RAM is what is in the file, so nothing is waiting to
+    // be saved.
+    CHECK(!g_loaded.bank_dirty[2]);
+
+    // The 16 patterns really were distinct, so the round trip was not comparing a pattern with
+    // itself 16 times.
+    int distinct = 0;
+    for (int slot = 1; slot < kPatternsPerBank; slot++) {
+        const Diff diff = diff_patterns(g_loaded.patterns[2][slot], g_loaded.patterns[2][0]);
+        if (diff.note != 0 || diff.header != 0) distinct++;
+    }
+    CHECK_EQ(distinct, kPatternsPerBank - 1);
+}
+
+TEST(bank_read_leaves_the_other_seven_banks_alone) {
+    // The file holds bank 3 and nothing else, so bank 5 is set up AFTER it is written --
+    // fresh_bank_file starts from project_init, which would otherwise empty it again.
+    const uint32_t written = fresh_bank_file(3);
+    // Bank 5 holds something of its own that no bank 3 load may disturb.
+    make_busy_pattern(g_source.patterns[5][9], 77);
+
+    project_init(g_loaded);
+    make_busy_pattern(g_loaded.patterns[5][9], 77);
+    for (int bank = 0; bank < kBanks; bank++) g_loaded.bank_dirty[bank] = true;
+
+    CHECK_EQ(int(bank_read(g_loaded, 3, g_bank, written, nullptr)), int(SerializeResult::ok));
+    check_no_diff(diff_patterns(g_loaded.patterns[5][9], g_source.patterns[5][9]));
+
+    // Only bank 3's dirty flag is cleared: the others still differ from their files.
+    int dirty = 0;
+    for (int bank = 0; bank < kBanks; bank++) {
+        if (g_loaded.bank_dirty[bank]) dirty++;
+    }
+    CHECK_EQ(dirty, kBanks - 1);
+    CHECK(!g_loaded.bank_dirty[3]);
+}
+
+TEST(bank_one_damaged_pattern_costs_one_pattern) {
+    // project.hpp's invariant. A pattern this build refuses costs that slot and nothing else:
+    // the 15 others load and `refused` says 1.
+    const uint32_t written = fresh_bank_file(4);
+    const uint32_t seven = pattern_at_in_bank(g_bank, 7);
+
+    // A byte inside pattern 7's payload, well clear of the four that say how long it is, so the
+    // patterns after it are still found. Its own CRC now disagrees; the bank's is repaired, so
+    // the file itself is sound and only the pattern in it is not.
+    g_bank[seven + kHeaderBytes + 40] = uint8_t(g_bank[seven + kHeaderBytes + 40] ^ 0x5A);
+    refresh_crc(g_bank);
+
+    project_init(g_loaded);
+    g_loaded.bank_dirty[4] = true;
+    int refused = -1;
+    CHECK_EQ(int(bank_read(g_loaded, 4, g_bank, written, &refused)), int(SerializeResult::ok));
+    CHECK_EQ(refused, 1);
+
+    CHECK(is_empty_pattern(g_loaded.patterns[4][7]));
+    int wrong = 0;
+    for (int slot = 0; slot < kPatternsPerBank; slot++) {
+        if (slot == 7) continue;
+        const Diff diff = diff_patterns(g_loaded.patterns[4][slot], g_source.patterns[4][slot]);
+        if (diff.note != 0 || diff.header != 0 || diff.lock_values != 0) wrong++;
+    }
+    CHECK_EQ(wrong, 0);
+
+    // A refused slot stays clean on purpose: marking the bank dirty would let the next save
+    // overwrite the damaged file and with it any chance of recovering it.
+    CHECK(!g_loaded.bank_dirty[4]);
+}
+
+TEST(bank_a_pattern_from_a_newer_build_costs_one_pattern_too) {
+    const uint32_t written = fresh_bank_file(0);
+    const uint32_t three = pattern_at_in_bank(g_bank, 3);
+
+    // The version sits in the header, which no CRC covers, so only the bank's needs repairing.
+    poke_u16(g_bank, three + kVersionOffset, uint16_t(kPatternVersion + 1));
+    refresh_crc(g_bank);
+
+    project_init(g_loaded);
+    int refused = -1;
+    CHECK_EQ(int(bank_read(g_loaded, 0, g_bank, written, &refused)), int(SerializeResult::ok));
+    CHECK_EQ(refused, 1);
+    CHECK(is_empty_pattern(g_loaded.patterns[0][3]));
+    CHECK(!is_empty_pattern(g_loaded.patterns[0][2]));
+    CHECK(!is_empty_pattern(g_loaded.patterns[0][4]));
+}
+
+TEST(bank_two_damaged_patterns_cost_two) {
+    const uint32_t written = fresh_bank_file(0);
+    const uint32_t first = pattern_at_in_bank(g_bank, 0);
+    const uint32_t last = pattern_at_in_bank(g_bank, kPatternsPerBank - 1);
+
+    g_bank[first + kHeaderBytes + 24] = uint8_t(g_bank[first + kHeaderBytes + 24] ^ 0x01);
+    g_bank[last + kHeaderBytes + 24] = uint8_t(g_bank[last + kHeaderBytes + 24] ^ 0x01);
+    refresh_crc(g_bank);
+
+    project_init(g_loaded);
+    int refused = -1;
+    CHECK_EQ(int(bank_read(g_loaded, 0, g_bank, written, &refused)), int(SerializeResult::ok));
+    CHECK_EQ(refused, 2);
+    CHECK(is_empty_pattern(g_loaded.patterns[0][0]));
+    CHECK(is_empty_pattern(g_loaded.patterns[0][kPatternsPerBank - 1]));
+    // The 14 in between are fine, so the damage did not spread along the file.
+    int empty = 0;
+    for (int slot = 1; slot < kPatternsPerBank - 1; slot++) {
+        if (is_empty_pattern(g_loaded.patterns[0][slot])) empty++;
+    }
+    CHECK_EQ(empty, 0);
+}
+
+TEST(bank_a_banks_own_bad_crc_refuses_all_sixteen) {
+    // What the per-pattern CRCs do NOT cover. The bank's CRC is over its whole payload, patterns
+    // included, as serialize.hpp's container says it must be, so a flipped bit anywhere refuses
+    // all 16 slots -- the honest answer for a file whose structure cannot be trusted.
+    const uint32_t written = fresh_bank_file(0);
+    const uint32_t three = pattern_at_in_bank(g_bank, 3);
+    g_bank[three + kHeaderBytes + 40] = uint8_t(g_bank[three + kHeaderBytes + 40] ^ 0x5A);
+    // and this time the bank's CRC is NOT repaired.
+
+    fill_project(g_loaded, 0);
+    g_loaded.bank_dirty[0] = true;
+    int refused = -1;
+    CHECK_EQ(int(bank_read(g_loaded, 0, g_bank, written, &refused)),
+             int(SerializeResult::bad_crc));
+    // The file failed, not a pattern in it, and the result says which: `refused` stays 0.
+    CHECK_EQ(refused, 0);
+
+    int empty = 0;
+    for (int slot = 0; slot < kPatternsPerBank; slot++) {
+        if (is_empty_pattern(g_loaded.patterns[0][slot])) empty++;
+    }
+    CHECK_EQ(empty, kPatternsPerBank);
+    CHECK(!g_loaded.bank_dirty[0]);
+}
+
+TEST(bank_a_pattern_whose_extent_runs_out_refuses_that_slot_onwards) {
+    // The section ran out, or a pattern's header does not say where it ends. Either way the
+    // patterns after it cannot be found, so that slot and all of them are refused rather than
+    // guessed at.
+    const uint32_t written = fresh_bank_file(0);
+    const uint32_t entry = section_entry_at(g_bank, kSectionBankPatterns);
+    const uint32_t full = bank_section_length(g_bank);
+
+    // Ten bytes short of the last pattern.
+    poke_u32(g_bank, entry + 8, full - 10);
+    refresh_crc(g_bank);
+
+    project_init(g_loaded);
+    int refused = -1;
+    CHECK_EQ(int(bank_read(g_loaded, 0, g_bank, written, &refused)), int(SerializeResult::ok));
+    CHECK_EQ(refused, 1);
+    CHECK(is_empty_pattern(g_loaded.patterns[0][kPatternsPerBank - 1]));
+    CHECK(!is_empty_pattern(g_loaded.patterns[0][kPatternsPerBank - 2]));
+
+    // A section with no patterns in it at all: every slot is refused, and the file itself is
+    // still structurally sound, so the result is `ok` with all 16 counted.
+    fresh_bank_file(0);
+    poke_u32(g_bank, section_entry_at(g_bank, kSectionBankPatterns) + 8, 0);
+    refresh_crc(g_bank);
+    project_init(g_loaded);
+    refused = -1;
+    CHECK_EQ(int(bank_read(g_loaded, 0, g_bank, written, &refused)), int(SerializeResult::ok));
+    CHECK_EQ(refused, kPatternsPerBank);
+}
+
+TEST(bank_write_and_read_refuse_a_bank_that_does_not_exist) {
+    fill_project(g_source, 0);
+    uint32_t written = 7;
+
+    // There is no SerializeResult for "no such bank", and serialize.hpp is not project.cpp's to
+    // extend, so the file that would have been written does not add up: `malformed`.
+    for (int bank : {-1, kBanks, 99}) {
+        CHECK_EQ(int(bank_write(g_source, bank, g_bank, uint32_t(sizeof(g_bank)), &written)),
+                 int(SerializeResult::malformed));
+        CHECK_EQ(written, 0u);
+
+        int refused = -1;
+        CHECK_EQ(int(bank_read(g_loaded, bank, g_bank, uint32_t(sizeof(g_bank)), &refused)),
+                 int(SerializeResult::malformed));
+        CHECK_EQ(refused, 0);
+    }
+}
+
+TEST(bank_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
+    fill_project(g_source, 0);
+    const uint32_t need = bank_bytes(g_source, 0);
+    CHECK(need > kHeaderBytes);
+
+    fill_sentinel(g_bank, uint32_t(sizeof(g_bank)));
+    uint32_t written = 5;
+    CHECK_EQ(int(bank_write(g_source, 0, g_bank, need - 1, &written)),
+             int(SerializeResult::buffer_too_small));
+    CHECK_EQ(written, 0u);
+    for (uint32_t i = 0; i < sizeof(g_bank); i++) CHECK_EQ(int(g_bank[i]), int(kSentinel));
+
+    CHECK_EQ(int(bank_write(g_source, 0, nullptr, need, &written)),
+             int(SerializeResult::buffer_too_small));
+    CHECK_EQ(written, 0u);
+
+    CHECK_EQ(int(bank_write(g_source, 0, g_bank, need, &written)), int(SerializeResult::ok));
+    CHECK_EQ(written, need);
+}
+
+TEST(bank_an_empty_bank_round_trips_as_sixteen_empty_patterns) {
+    project_init(g_source);
+    uint32_t written = 0;
+    CHECK_EQ(int(bank_write(g_source, 7, g_bank, uint32_t(sizeof(g_bank)), &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(written, bank_bytes(g_source, 7));
+
+    fill_project(g_loaded, 7);
+    int refused = -1;
+    CHECK_EQ(int(bank_read(g_loaded, 7, g_bank, written, &refused)), int(SerializeResult::ok));
+    CHECK_EQ(refused, 0);
+
+    int empty = 0;
+    for (int slot = 0; slot < kPatternsPerBank; slot++) {
+        if (is_empty_pattern(g_loaded.patterns[7][slot])) empty++;
+    }
+    CHECK_EQ(empty, kPatternsPerBank);
+}
+
+TEST(bank_read_refuses_a_damaged_container_and_empties_the_bank) {
+    uint32_t written = fresh_bank_file(0);
+    int refused = -1;
+
+    g_bank[2] = 'X';
+    CHECK_EQ(int(bank_read(g_loaded, 0, g_bank, written, &refused)),
+             int(SerializeResult::bad_magic));
+    CHECK_EQ(refused, 0);
+
+    written = fresh_bank_file(0);
+    poke_u16(g_bank, kVersionOffset, uint16_t(kBankVersion + 1));
+    CHECK_EQ(int(bank_read(g_loaded, 0, g_bank, written, &refused)),
+             int(SerializeResult::bad_version));
+    CHECK_EQ(refused, 0);
+
+    written = fresh_bank_file(0);
+    poke_u32(g_bank, 8, 0x0FFFFFFFu);
+    CHECK_EQ(int(bank_read(g_loaded, 0, g_bank, written, &refused)),
+             int(SerializeResult::truncated));
+
+    written = fresh_bank_file(0);
+    poke_u16(g_bank, 6, 0);
+    CHECK_EQ(int(bank_read(g_loaded, 0, g_bank, written, &refused)),
+             int(SerializeResult::malformed));
+
+    // The patterns section missing, under an id this file type does not use.
+    written = fresh_bank_file(0);
+    poke_u16(g_bank, section_entry_at(g_bank, kSectionBankPatterns), 42);
+    refresh_crc(g_bank);
+    CHECK_EQ(int(bank_read(g_loaded, 0, g_bank, written, &refused)),
+             int(SerializeResult::malformed));
+
+    CHECK_EQ(int(bank_read(g_loaded, 0, nullptr, 0, &refused)), int(SerializeResult::truncated));
+    CHECK_EQ(refused, 0);
+}
+
+TEST(bank_read_never_looks_past_the_bytes_it_was_given) {
+    // Sampled rather than exhaustive: a bank file is about 129 KiB and each refusal rewrites 16
+    // patterns, so every truncation would be a few gigabytes of memset for one bit of news. The
+    // sizes that matter are the boundaries -- the header, the table, and each pattern's end.
+    const uint32_t written = fresh_bank_file(1);
+    std::memcpy(g_bank_alt, g_bank, written);
+    for (uint32_t i = written; i < sizeof(g_bank); i++) {
+        g_bank[i] = 0x00;
+        g_bank_alt[i] = 0xFF;
+    }
+
+    uint32_t sizes[2 + 2 * kPatternsPerBank + 6] = {};
+    uint32_t count = 0;
+    sizes[count++] = 0;
+    sizes[count++] = kHeaderBytes - 1;
+    sizes[count++] = kHeaderBytes;
+    sizes[count++] = kHeaderBytes + kSectionEntryBytes - 1;
+    sizes[count++] = kHeaderBytes + kSectionEntryBytes;
+    for (int slot = 0; slot < kPatternsPerBank; slot++) {
+        const uint32_t at = pattern_at_in_bank(g_bank, slot);
+        sizes[count++] = at;
+        sizes[count++] = at + 1;
+    }
+    sizes[count++] = written - 1;
+    sizes[count++] = written;
+
+    for (uint32_t i = 0; i < count; i++) {
+        int refused_a = -1, refused_b = -1;
+        const int a = int(bank_read(g_loaded, 1, g_bank, sizes[i], &refused_a));
+        const int b = int(bank_read(g_loaded, 1, g_bank_alt, sizes[i], &refused_b));
+        if (a != b) CHECK_EQ(a, b);
+        if (refused_a != refused_b) CHECK_EQ(refused_a, refused_b);
+    }
+}
+
+// --- the four file types together -----------------------------------------
+//
+// project.cpp restates serialize.cpp's container rules rather than sharing them, and says it
+// checks them in the same ORDER so that all four file types give the same reason for the same
+// damage. These two tests are where that claim is held.
+
+namespace {
+
+enum class FileKind { pattern = 0, project = 1, kit = 2, bank = 3 };
+
+const char *file_kind_name(FileKind kind) {
+    switch (kind) {
+        case FileKind::pattern: return "PATTERN";
+        case FileKind::project: return "PROJECT.BIN";
+        case FileKind::kit: return "KIT.BIN";
+        default: return "BANK_A.BIN";
+    }
+}
+
+// A freshly written file of each kind, in its own buffer.
+uint8_t *make_file(FileKind kind, uint32_t &size) {
+    switch (kind) {
+        case FileKind::pattern: {
+            make_busy_pattern(g_scratch, 3);
+            const SerializeResult res = pattern_write(g_scratch, g_pattern_file,
+                                                      uint32_t(sizeof(g_pattern_file)), &size);
+            CHECK_EQ(int(res), int(SerializeResult::ok));
+            return g_pattern_file;
+        }
+        case FileKind::project:
+            fresh_project_file();
+            size = kProjectFileBytes;
+            return g_project;
+        case FileKind::kit:
+            fresh_kit_file();
+            size = kKitFileBytes;
+            return g_kit_file;
+        default:
+            size = fresh_bank_file(0);
+            return g_bank;
+    }
+}
+
+SerializeResult read_file(FileKind kind, const uint8_t *file, uint32_t size) {
+    switch (kind) {
+        case FileKind::pattern: return pattern_read(g_probe, file, size);
+        case FileKind::project: return project_read(g_loaded, file, size);
+        case FileKind::kit: return kit_read(g_kit_loaded, file, size);
+        default: return bank_read(g_loaded, 0, file, size, nullptr);
+    }
+}
+
+// The six kinds of damage every container can carry, applied by hand to the header or the
+// payload. `refresh` says whether the CRC is repaired afterwards, so that a test about structure
+// is not answered by the checksum instead.
+enum class Damage { magic, version, payload_byte, declared_payload, no_sections, too_many };
+
+void apply(uint8_t *file, Damage damage) {
+    switch (damage) {
+        case Damage::magic: file[3] = 'Z'; break;
+        case Damage::version: poke_u16(file, kVersionOffset, 0xBEEF); break;
+        case Damage::payload_byte:
+            file[kHeaderBytes + 20] = uint8_t(file[kHeaderBytes + 20] ^ 0x11);
+            break;
+        case Damage::declared_payload: poke_u32(file, 8, 0x0FFFFFFFu); break;
+        case Damage::no_sections: poke_u16(file, 6, 0); break;
+        default: poke_u16(file, 6, uint16_t(kMaxSections + 1)); break;
+    }
+}
+
+// Reports a mismatch in a way that names the file type: `serialize_result_name` is what the UI
+// shows on a refused load, so the message reads the way the screen would.
+void check_same_reason(FileKind kind, SerializeResult got, SerializeResult want) {
+    if (got == want) {
+        CHECK(got == want);
+        return;
+    }
+    CHECK_EQ(file_kind_name(kind), serialize_result_name(want));
+    CHECK_EQ(serialize_result_name(got), serialize_result_name(want));
+}
+
+}  // namespace
+
+TEST(the_four_file_types_agree_about_damage) {
+    const Damage damages[] = {Damage::magic,            Damage::version,
+                              Damage::payload_byte,     Damage::declared_payload,
+                              Damage::no_sections,      Damage::too_many};
+    const SerializeResult want[] = {
+        SerializeResult::bad_magic, SerializeResult::bad_version, SerializeResult::bad_crc,
+        SerializeResult::truncated, SerializeResult::malformed,   SerializeResult::malformed,
+    };
+
+    for (uint32_t d = 0; d < 6; d++) {
+        for (int k = 0; k < 4; k++) {
+            const FileKind kind = FileKind(k);
+            uint32_t size = 0;
+            uint8_t *file = make_file(kind, size);
+            apply(file, damages[d]);
+            check_same_reason(kind, read_file(kind, file, size), want[d]);
+        }
+    }
+}
+
+TEST(the_four_file_types_agree_about_which_damage_wins) {
+    // A file that is damaged twice over must give ONE answer, and the same answer whichever of
+    // the four file types it is -- the order project.cpp's find_sections documents: the declared
+    // payload against the buffer, then the CRC, then the version, then the table, with the magic
+    // ahead of all of them.
+    struct Case {
+        Damage first;
+        Damage second;
+        SerializeResult want;
+    };
+    const Case cases[] = {
+        // The magic is checked before anything else, so it wins over a broken checksum.
+        {Damage::magic, Damage::payload_byte, SerializeResult::bad_magic},
+        // A payload the buffer cannot hold is refused before the CRC may read it.
+        {Damage::declared_payload, Damage::version, SerializeResult::truncated},
+        // A build that read the version first would call this file "UNKNOWN VERSION" and send
+        // the user looking for a newer firmware, when what they have is a damaged card.
+        {Damage::payload_byte, Damage::version, SerializeResult::bad_crc},
+        // And the version is checked before the section table, so a newer file is not reported
+        // as damaged.
+        {Damage::version, Damage::no_sections, SerializeResult::bad_version},
+    };
+
+    for (const Case &one : cases) {
+        for (int k = 0; k < 4; k++) {
+            const FileKind kind = FileKind(k);
+            uint32_t size = 0;
+            uint8_t *file = make_file(kind, size);
+            apply(file, one.first);
+            apply(file, one.second);
+            check_same_reason(kind, read_file(kind, file, size), one.want);
+
+            // And in the other order, because the answer is the reader's and not the damage's.
+            file = make_file(kind, size);
+            apply(file, one.second);
+            apply(file, one.first);
+            check_same_reason(kind, read_file(kind, file, size), one.want);
+        }
+    }
+}
