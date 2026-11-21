@@ -1,0 +1,2218 @@
+// app/storage.cpp: the card side -- the ten files a project is, the save and load protocols,
+// autosave, the WAV loader, the background sample swap, and the dirty flags.
+//
+// ## What this file is for
+//
+// `app/storage.cpp` is 1,037 lines and until two commits ago nothing tested it. tests/test_app.cpp
+// has a handful of card tests (a first save, a reload, two card-removal orders, the external-clock
+// refusal); this is the thorough pass over everything else.
+//
+// The highest-value test here is the first one: a mechanical walk over EVERY value of `Cmd`
+// asserting which of a project's files that command dirties. Two commands were missing from those
+// lists until a review caught them -- `Cmd::euclid` (a generated rhythm left its bank clean, so an
+// explicit save skipped the bank file and the rhythm was gone on reopen) and `set_root`/`set_scale`
+// (which write BOTH the project's key and the live pattern's copy of it, and marking only the
+// project saved half the change). A review found those. A table does not need a reviewer.
+//
+// ## Both contexts, by hand, and one of them deliberately held
+//
+// The rig is tests/apprig.hpp: one Engine, one Storage, `pump()` to run a block of audio and then
+// a pass of the card. Two things here go underneath it:
+//
+//   * `pump_held()` runs both contexts WITHOUT firing the fake's queued `files::load`
+//     completions, which is how a load is held in flight and how the sample-swap protocol can be
+//     inspected one state at a time. `pump()` completes loads every pass, which is right for
+//     everything else and fatal to a test about what the app refuses mid-load.
+//   * `settle()` waits for the card side to go quiet and STAY quiet. `pump_until_idle()` returns
+//     at the first idle pass, and a project load is followed by eight queued sample swaps with
+//     one idle pass between each, so it comes back in the middle of the sequence.
+//
+// ## What cannot be checked on the host, and is therefore not pretended
+//
+//   * The converted int16 in the sample region. `Storage::region_` is private and the engine only
+//     takes a base pointer, so the frames, the channel count and the rate are checked through
+//     `SamplePool`, the sample is checked to be AUDIBLE through the sampler, and the arithmetic
+//     itself belongs to tests/test_pcm.cpp.
+//   * `files::save`'s crash safety ("NAME.TMP then replace"). The fake writes in one step, so a
+//     card pulled between the two cannot be produced here. What is checked is the consequence the
+//     app is responsible for: a failed or interrupted save leaves the project on the card readable
+//     and does not mark it complete.
+//   * `save_for_shutdown`'s ring drain. It spins on `enaga::ms()` while the audio side drains the
+//     ring, and on the host nothing advances `ms()` but the spin itself and nothing drains the
+//     ring but `pump()`. So it is called with an already-empty ring, which is the state
+//     `App::stop` reaches in practice, and the 100 ms deadline is left to the unit.
+#include "apprig.hpp"
+#include "check.hpp"
+#include "fakehost.hpp"
+
+#include "pcm.hpp"
+#include "perform.hpp"
+#include "project.hpp"
+#include "serialize.hpp"
+
+#include <cstdio>
+#include <cstring>
+
+#include <enaga/abi.h>
+#include <enaga/clock.hpp>
+#include <enaga/wav.hpp>
+
+using namespace strata;
+using strata::test::FakeHost;
+
+namespace {
+
+using strata::test::engine;
+using strata::test::fresh;
+using strata::test::kit_value;
+using strata::test::peak_of;
+using strata::test::post;
+using strata::test::pump;
+using strata::test::pump_until_idle;
+using strata::test::storage;
+
+constexpr int kBlk = strata::test::kRigBlock;
+constexpr int kStereo = strata::test::kRigStereo;
+
+// The eleven files a project folder holds. app/storage.cpp calls them "the ten files" throughout;
+// there are three fixed ones and eight banks, so eleven is the count the code actually uses
+// (`kFileCount` is `kFileFirstBank + kBanks`). The order is the order they are written and read in.
+constexpr const char *kFiles[] = {
+    "PROJECT.BIN", "KIT.BIN",    "PERFORM.BIN", "BANK_A.BIN", "BANK_B.BIN", "BANK_C.BIN",
+    "BANK_D.BIN",  "BANK_E.BIN", "BANK_F.BIN",  "BANK_G.BIN", "BANK_H.BIN",
+};
+constexpr int kFileN = int(sizeof kFiles / sizeof kFiles[0]);
+static_assert(kFileN == 3 + kBanks, "the file list and the bank count have diverged");
+
+constexpr int kIndexProject = 0;
+constexpr int kIndexKit = 1;
+constexpr int kIndexPerform = 2;
+constexpr int kIndexFirstBank = 3;
+
+// LVL on every machine (dsp/track.hpp), which is what `fresh()` turns up and what most of these
+// tests move around as a value they can recognise again after a round trip.
+constexpr int kLvl = 11;
+
+// Big enough for the largest project file (a bank, about 129 KiB) and for the longest test WAV
+// (70,000 mono frames, which is the one that needs all 24 bits of the handover's frame count).
+// File scope rather than locals: CLAUDE.md caps a stack frame at 16 KiB.
+constexpr uint32_t kScratchBytes = kBankMaxBytes > 160000u ? kBankMaxBytes : 160000u;
+uint8_t g_scratch[kScratchBytes];
+uint8_t g_pristine[kScratchBytes];
+uint32_t g_pristine_bytes = 0;
+
+float g_block[kStereo];
+
+// --- driving the two contexts ---------------------------------------------
+
+// One pass of each context, WITHOUT completing a held `files::load`. tests/apprig.hpp's `pump()`
+// calls `complete_loads()` every pass, which is what almost every test wants and exactly what a
+// test about a load in flight must not do. Returns the loudest sample seen, so a caller can also
+// ask whether the transport is still producing audio while the card side waits.
+float pump_held(int blocks = 1) {
+    float peak = 0.0f;
+    for (int b = 0; b < blocks; b++) {
+        for (int i = 0; i < kStereo; i++) g_block[i] = 0.0f;
+        engine().process(nullptr, g_block, uint32_t(kBlk));
+        const float block_peak = peak_of(g_block, kStereo);
+        if (block_peak > peak) peak = block_peak;
+        storage().service();
+    }
+    return peak;
+}
+
+// Pump until the card side has been idle, with nothing in flight and an empty ring, for `quiet`
+// passes in a row.
+//
+// `pump_until_idle()` returns at the FIRST idle pass, which is not the end of the work: a project
+// load finishes by queueing eight sample swaps, and between one swap and the next there is a pass
+// with no job at all. A test that stopped there would assert about half a sequence.
+bool settle(int quiet = 24, int limit = 8000) {
+    int still = 0;
+    for (int i = 0; i < limit; i++) {
+        pump();
+        const bool idle = storage().busy_text() == nullptr &&
+                          FakeHost::the().pending_loads() == 0 && engine().commands().empty();
+        still = idle ? still + 1 : 0;
+        if (still >= quiet) return true;
+    }
+    return false;
+}
+
+// Read the card again and stop at the pass the load finished on.
+//
+// `last_error()` is sticky only "until the next job starts" (app/storage.hpp), and `begin_job`
+// clears it -- so the reason a load refused a file has to be read before anything else begins. A
+// project load ENDS by queueing a sample swap for all eight tracks, which is exactly such a job,
+// so `settle()` wipes the message this is here to read. tests/apprig.hpp's `pump_until_idle`
+// returns at the first idle pass, which is the one the load finished on.
+//
+// That clearing is a bug, not a quirk of the test: docs/SPEC.md requires a refused load to put a
+// message on screen, and the UI draws at 20 fps while `update()` runs 750 times a second. It is
+// pinned by `storage_the_reason_a_load_refused_a_file_does_not_survive_the_sample_swaps` below.
+bool reload_now() {
+    storage().request_reload();
+    return pump_until_idle();
+}
+
+// What the screen would say, with a diagnostic that names the case. Null-safe, which matters:
+// `last_error()` being null IS one of the failures this file is looking for.
+void check_error(const char *what, const char *want) {
+    const char *got = storage().last_error();
+    if (got == nullptr || std::strcmp(got, want) != 0) {
+        std::printf("    %s reported %s, wanted %s\n", what, got == nullptr ? "nothing" : got,
+                    want);
+    }
+    CHECK_EQ(got, want);
+}
+
+// `fresh()` and then quiet. The rig's `fresh()` restores the card with an `on_card` transition,
+// which re-offers every sample the PREVIOUS test's kit named, so a test can inherit a swap job
+// that is still running. Starting from quiet means a `pump_until_idle()` below is waiting for this
+// test's job and not the last one's.
+Engine &clean() {
+    Engine &e = fresh();
+    settle(4);
+    return e;
+}
+
+// --- paths ----------------------------------------------------------------
+
+constexpr const char *kDataFolder = "/ENAGA/DATA/STRATA";
+
+// A file in the project folder, or in AUTOSAVE/. The project NAME is read from Storage rather
+// than hard-coded, because `request_new()` renames the project for the rest of the process and
+// there is no way to name it back (nothing but `init()` reads the setting).
+const char *card_path(const char *file, bool autosave = false) {
+    static char path[ENAGA_FILE_PATH_MAX + 1];
+    std::strcpy(path, kDataFolder);
+    if (autosave) {
+        std::strcat(path, "/AUTOSAVE/");
+    } else {
+        std::strcat(path, "/PROJECTS/");
+        std::strcat(path, storage().project_name());
+        std::strcat(path, "/");
+    }
+    std::strcat(path, file);
+    return path;
+}
+
+// --- reading and damaging what is on the card -----------------------------
+
+uint32_t fetch(const char *path) {
+    const int32_t got = FakeHost::the().read_file(path, g_scratch, uint32_t(sizeof g_scratch));
+    CHECK(got > 0);
+    return got > 0 ? uint32_t(got) : 0u;
+}
+
+void store(const char *path, uint32_t bytes) {
+    CHECK(FakeHost::the().write_file(path, g_scratch, bytes));
+}
+
+void keep_pristine(const char *path) { g_pristine_bytes = fetch(path);
+    std::memcpy(g_pristine, g_scratch, g_pristine_bytes);
+}
+
+void restore_pristine(const char *path) {
+    std::memcpy(g_scratch, g_pristine, g_pristine_bytes);
+    store(path, g_pristine_bytes);
+}
+
+uint32_t u16_at(uint32_t at) {
+    return uint32_t(g_scratch[at]) | uint32_t(g_scratch[at + 1]) << 8;
+}
+
+void put_u16_at(uint32_t at, uint32_t value) {
+    g_scratch[at] = uint8_t(value);
+    g_scratch[at + 1] = uint8_t(value >> 8);
+}
+
+uint32_t u32_at(uint32_t at) { return u16_at(at) | u16_at(at + 2) << 16; }
+
+// Make the CRC-32 agree with the payload again, so that a test can damage the STRUCTURE of a file
+// and reach the checks that come after the checksum. core/serialize.hpp puts the CRC over the
+// payload only, which is why damaging the header's own fields needs no help from this.
+void refresh_crc() {
+    const uint32_t payload = u32_at(8);
+    const uint32_t crc = crc32(g_scratch + kHeaderBytes, payload);
+    g_scratch[kCrcOffset + 0] = uint8_t(crc);
+    g_scratch[kCrcOffset + 1] = uint8_t(crc >> 8);
+    g_scratch[kCrcOffset + 2] = uint8_t(crc >> 16);
+    g_scratch[kCrcOffset + 3] = uint8_t(crc >> 24);
+}
+
+// --- the file-set probe ---------------------------------------------------
+//
+// "Which files did that save write?" The dirty flags are private and the right observable is the
+// card, so every file is first overwritten with ONE byte and a file that comes back a different
+// size was written. Marking rather than removing keeps the fake's arena from growing: its entry
+// capacity is a high-water mark, so a 129 KiB bank rewritten over its own 1-byte marker lands in
+// the space it already had.
+
+void mark_files(bool autosave = false) {
+    for (int i = 0; i < kFileN; i++) FakeHost::the().write_file(card_path(kFiles[i], autosave), "x", 1);
+}
+
+bool was_written(int index, bool autosave = false) {
+    return FakeHost::the().file_bytes(card_path(kFiles[index], autosave)) != 1;
+}
+
+// --- building a WAV on the card -------------------------------------------
+
+void put_sample(uint8_t *out, int bits, bool floating, int32_t value) {
+    if (floating) {
+        const float f = float(value) / 32768.0f;
+        std::memcpy(out, &f, sizeof f);
+        return;
+    }
+    switch (bits) {
+        case 16:
+            out[0] = uint8_t(value);
+            out[1] = uint8_t(value >> 8);
+            break;
+        case 24: {
+            const int32_t wide = value << 8;      // the same level, three bytes of it
+            out[0] = uint8_t(wide);
+            out[1] = uint8_t(wide >> 8);
+            out[2] = uint8_t(wide >> 16);
+            break;
+        }
+        default:
+            out[0] = uint8_t(value >> 8) ^ 0x80u;  // 8-bit PCM is unsigned, offset by 128
+            break;
+    }
+}
+
+// A WAV on the fake card: `enaga::wav::header` for the 44 bytes (the same function a recording
+// uses), then `frames` frames of a loud square wave, then an optional chunk AFTER the data, which
+// is what a LIST, a cue or an id3 looks like in a real file.
+//
+// `declare_data` false writes a data chunk whose size field is 0, which <enaga/wav.hpp> says a
+// header still being written may report.
+uint32_t make_wav(const char *path, uint32_t rate, int channels, int bits, uint32_t frames,
+                  const char *extra_tag = nullptr, uint32_t extra_bytes = 0,
+                  bool floating = false, bool declare_data = true, uint32_t stray_bytes = 0) {
+    enaga::wav::Format format;
+    format.encoding = floating ? uint16_t(enaga::wav::floating) : uint16_t(enaga::wav::pcm);
+    format.channels = uint16_t(channels);
+    format.rate = rate;
+    format.bits = uint16_t(bits);
+
+    const uint32_t sample_bytes = uint32_t(bits) / 8u;
+    const uint32_t frame_bytes = format.frame_bytes();
+    const uint32_t data_bytes = frames * frame_bytes;
+    enaga::wav::header(g_scratch, format, declare_data ? data_bytes : 0u);
+
+    uint32_t at = 44;
+    for (uint32_t f = 0; f < frames; f++) {
+        // A square wave 32 frames long: loud, and obviously not silence.
+        const int32_t value = (f / 32u) % 2u == 0u ? 12000 : -12000;
+        for (int c = 0; c < channels; c++) {
+            put_sample(g_scratch + at, bits, floating, value);
+            at += sample_bytes;
+        }
+    }
+    for (uint32_t i = 0; i < stray_bytes; i++) g_scratch[at++] = 0x11u;
+
+    if (extra_tag != nullptr) {
+        for (int i = 0; i < 4; i++) g_scratch[at + uint32_t(i)] = uint8_t(extra_tag[i]);
+        g_scratch[at + 4] = uint8_t(extra_bytes);
+        g_scratch[at + 5] = uint8_t(extra_bytes >> 8);
+        g_scratch[at + 6] = uint8_t(extra_bytes >> 16);
+        g_scratch[at + 7] = uint8_t(extra_bytes >> 24);
+        at += 8;
+        for (uint32_t i = 0; i < extra_bytes; i++) g_scratch[at++] = 0x55u;
+    }
+
+    store(path, at);
+    return at;
+}
+
+void kit_sample(int track, const char *path) {
+    KitTrack &t = engine().project_for_load().kit.tracks[track];
+    std::memset(t.sample, 0, sizeof t.sample);
+    std::strcpy(t.sample, path);
+}
+
+// Track 7 is the only SAMPLE machine in the default kit (app/engine.cpp), so it is the only track
+// whose `Cmd::set_sample` the audio side accepts. Everything about the loader is checked there.
+constexpr int kLoopTrack = 7;
+
+const SampleSlot &slot_of(int track) { return storage().samples().slot(track); }
+
+// Load whatever the kit names for a track and wait for the whole sequence.
+bool load_sample(int track) {
+    if (!storage().request_sample(track)) return false;
+    return settle();
+}
+
+}  // namespace
+
+// =============================================================================================
+// 1. The dirty-flag table
+// =============================================================================================
+//
+// `mutates_pattern`, `mutates_kit`, `mutates_project` and `mutates_perform` in app/storage.cpp
+// decide which of a project's files each command dirties, and a dirty flag that is missing is
+// data loss: an explicit save skips the file, and the edit is gone on the next open.
+//
+// The expectation for each command is what app/engine.cpp's `apply` actually writes, checked
+// against what each file holds (core/project.cpp's `project_write` and `kit_write`,
+// core/perform.cpp's `perform_write`, core/serialize.cpp's `pattern_write`). Where the flag is
+// CONSERVATIVE -- set for a command that does not in fact change the file -- the comment says so
+// and why the extra write is the cheaper mistake; app/storage.hpp makes that trade explicitly.
+
+namespace {
+
+enum : unsigned {
+    kDirtyProject = 1u << 0,   // PROJECT.BIN
+    kDirtyKit = 1u << 1,       // KIT.BIN
+    kDirtyPerform = 1u << 2,   // PERFORM.BIN
+    kDirtyBank = 1u << 3,      // BANK_<live>.BIN
+};
+
+struct Expect {
+    Cmd cmd;
+    unsigned files;
+    const char *name;
+};
+
+const Expect kTable[] = {
+    // --- nothing at all ---------------------------------------------------
+    {Cmd::none, 0u, "none"},
+    // The transport is MAIN context (<enaga/clock.hpp>), so these two carry intent for a trace
+    // and the audio side only cuts or releases voices. Nothing a file holds moves.
+    {Cmd::play, 0u, "play"},
+    {Cmd::stop, 0u, "stop"},
+
+    // PROJECT.BIN holds `tempo_centi_bpm`, so a tempo change belongs to it. Nothing writes that
+    // field today (app/app.cpp sets the CLOCK and never posts this command), so the flag is
+    // currently unreachable rather than wrong -- see the report at the end of this file.
+    {Cmd::set_tempo, kDirtyProject, "set_tempo"},
+
+    // --- the live pattern, and therefore its bank's file -------------------
+    {Cmd::toggle_trig, kDirtyBank, "toggle_trig"},
+    {Cmd::clear_lock, kDirtyBank, "clear_lock"},
+    // Length, speed and swing are all TrackPattern/Pattern fields, written by `pattern_write`.
+    {Cmd::set_track_length, kDirtyBank, "set_track_length"},
+    {Cmd::set_track_speed, kDirtyBank, "set_track_speed"},
+    {Cmd::set_pattern_swing, kDirtyBank, "set_pattern_swing"},
+    {Cmd::step_field_delta, kDirtyBank, "step_field_delta"},
+    // A lock lands in the pattern's shared pool, which the bank file carries.
+    {Cmd::lock_delta, kDirtyBank, "lock_delta"},
+    // The Euclidean generator writes trig bits. It was MISSING from the pattern list, so a
+    // generated rhythm left its bank clean and an explicit save skipped the bank file entirely.
+    {Cmd::euclid, kDirtyBank, "euclid"},
+
+    // An undo MARK copies the pattern into the undo history and changes nothing in it. The
+    // history is not serialized, so there is nothing to save.
+    {Cmd::undo_mark, 0u, "undo_mark"},
+    {Cmd::undo, kDirtyBank, "undo"},
+    {Cmd::redo, kDirtyBank, "redo"},
+
+    // A copy fills the clipboard, which is engine state and is not serialized.
+    {Cmd::range_copy, 0u, "range_copy"},
+    {Cmd::range_paste, kDirtyBank, "range_paste"},
+    {Cmd::range_erase, kDirtyBank, "range_erase"},
+    {Cmd::track_erase, kDirtyBank, "track_erase"},
+    {Cmd::range_transpose, kDirtyBank, "range_transpose"},
+    {Cmd::range_nudge, kDirtyBank, "range_nudge"},
+    {Cmd::record_hit, kDirtyBank, "record_hit"},
+
+    // --- PROJECT.BIN ------------------------------------------------------
+    //
+    // A pattern change moves `project_.bank` and `project_.slot`, which `project_write` stores --
+    // so reopening the project comes back to the pattern that was playing. The pattern itself is
+    // untouched, so no bank is dirtied.
+    {Cmd::queue_pattern, kDirtyProject, "queue_pattern"},
+    // Cancelling only clears the armed change, which lives in core/queue.hpp's Queue and is not
+    // serialized at all.
+    {Cmd::cancel_queue, 0u, "cancel_queue"},
+    // Starting a chain jumps to its first entry, which is the same `bank`/`slot` move as above.
+    // (`ProjectSettings::chain_enabled` is serialized but nothing writes it -- see the report.)
+    {Cmd::set_chain, kDirtyProject, "set_chain"},
+
+    // --- KIT.BIN ----------------------------------------------------------
+    //
+    // `kit_store` copies `params_` and the mixer levels into `project_.kit`, which is exactly
+    // what KIT.BIN holds. It is also what `request_save` posts, so an explicit save always
+    // stores the kit whatever else is dirty.
+    {Cmd::kit_store, kDirtyKit, "kit_store"},
+    // The other direction: the kit the FILE holds is copied into the machines. Nothing a file
+    // holds changes, so nothing is dirtied.
+    {Cmd::kit_recall, 0u, "kit_recall"},
+
+    // Both stores: `project_.settings.root`/`scale` for PROJECT.BIN and `live().root`/`scale`,
+    // which core/serialize puts in the BANK file and which core/scale actually reads. Marking
+    // only the project saved half the change, and the bank's untouched copy won the next load --
+    // so the key appeared to revert.
+    {Cmd::set_root, kDirtyProject | kDirtyBank, "set_root"},
+    {Cmd::set_scale, kDirtyProject | kDirtyBank, "set_scale"},
+
+    // A load is the opposite of an edit: 1.03 MiB arrived through `project_for_load` and whoever
+    // put it there owns the flags (`step_load` clears them all, `request_new` sets them all).
+    {Cmd::project_loaded, 0u, "project_loaded"},
+
+    // The two halves of the sample swap. Neither writes `KitTrack::sample` today -- M4 has no
+    // file browser, so a path only ever arrives with a project -- but the path a track plays is
+    // what KIT.BIN holds for it, so the pair that changes a track's sample dirties the kit. The
+    // cost of being wrong the other way is a lost sample assignment; the cost of this is one
+    // 1,076-byte write.
+    {Cmd::clear_sample, kDirtyKit, "clear_sample"},
+    {Cmd::set_sample, kDirtyKit, "set_sample"},
+
+    {Cmd::set_param, kDirtyKit, "set_param"},
+    // The mixer fader, which `kit_from_params` copies into `KitTrack::level`.
+    {Cmd::set_track_level, kDirtyKit, "set_track_level"},
+
+    // The send and master settings are in no file: `SendSettings` and `MasterSettings` have no
+    // section in PROJECT.BIN. So there is nothing to dirty -- and nothing to save, which is a
+    // gap rather than a decision (see the report).
+    {Cmd::set_sends, 0u, "set_sends"},
+    {Cmd::set_master, 0u, "set_master"},
+
+    // --- the performance layer --------------------------------------------
+    //
+    // A live mute is engine state; PROJECT.BIN holds the eight STORED mute states and not the
+    // current one. So this flag is conservative: one 251-byte write for an edit the file does
+    // not record. (Whether the live mutes should be saved is docs/REVIEW.md's open question.)
+    {Cmd::set_mute, kDirtyProject, "set_mute"},
+    // The fill pad is where a hand is, not part of the project.
+    {Cmd::set_fill, 0u, "set_fill"},
+    // One undoable variation of a track's range: a pattern edit like any other.
+    {Cmd::mutate, kDirtyBank, "mutate"},
+
+    // PERFORM.BIN holds the scenes and the macro setup, and nothing else.
+    {Cmd::scene_capture, kDirtyPerform, "scene_capture"},
+    {Cmd::scene_erase, kDirtyPerform, "scene_erase"},
+    // WHICH scenes are in slots A and B is engine state (`scene_a_`, `scene_b_`) and has no
+    // section in PERFORM.BIN, so there is nothing to dirty. It is also not restored on open.
+    {Cmd::scene_select, 0u, "scene_select"},
+    // The morph position and a macro's position are where the performer's hands are. docs/SPEC.md
+    // is explicit that those do not save.
+    {Cmd::set_morph, 0u, "set_morph"},
+    {Cmd::set_macro, 0u, "set_macro"},
+    // The macro SETUP does save.
+    {Cmd::macro_assign, kDirtyPerform, "macro_assign"},
+    {Cmd::macro_clear, kDirtyPerform, "macro_clear"},
+
+    // `mute_store` writes `project_.settings.mute_states[slot]`, which PROJECT.BIN holds.
+    {Cmd::mute_store, kDirtyProject, "mute_store"},
+    // A recall applies a stored state to the live mutes and changes no stored byte.
+    {Cmd::mute_recall, 0u, "mute_recall"},
+
+    // Auto-fill, a throw and beat repeat are all live-only: no file has a field for any of them.
+    {Cmd::set_auto_fill, 0u, "set_auto_fill"},
+    {Cmd::set_throw, 0u, "set_throw"},
+    {Cmd::set_repeat, 0u, "set_repeat"},
+
+    // A pad hit sounds and is not recorded (core/record posts `record_hit` for that).
+    {Cmd::trigger_note, 0u, "trigger_note"},
+    {Cmd::release_note, 0u, "release_note"},
+};
+
+// A command added without an entry here does not compile, which is the whole point of the table:
+// the two commands a review had to find were both "added later and not added to the list".
+static_assert(sizeof kTable / sizeof kTable[0] == size_t(Cmd::count),
+              "a Cmd was added or removed: give it a row in kTable saying which of a project's "
+              "files it dirties, and check mutates_* in app/storage.cpp agrees");
+
+unsigned bit_for_file(int index, int live_bank) {
+    if (index == kIndexProject) return kDirtyProject;
+    if (index == kIndexKit) return kDirtyKit;
+    if (index == kIndexPerform) return kDirtyPerform;
+    return index - kIndexFirstBank == live_bank ? kDirtyBank : 0u;
+}
+
+// Which files a save wrote, against which it should have.
+void check_file_set(const char *what, unsigned want, int live_bank) {
+    for (int i = 0; i < kFileN; i++) {
+        const bool written = was_written(i);
+        const bool expected = (want & bit_for_file(i, live_bank)) != 0u;
+        if (written != expected) {
+            std::printf("    %s: %s was %s\n", what, kFiles[i],
+                        written ? "written" : "left alone");
+        }
+        CHECK_EQ(written, expected);
+    }
+}
+
+}  // namespace
+
+TEST(storage_every_command_dirties_exactly_the_files_it_changes) {
+    // Mechanically, over every value of Cmd. `note_command` is what app/app.cpp's `post_command`
+    // calls for every edit the UI posts, so this drives it directly and does not post the command
+    // to the engine: the subject is the flag table, not what the audio side does with it.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    // The baseline: one FULL save, which clears every flag and sets `project_complete_`. From here
+    // a save writes only what is dirty, which is what makes the set of files observable.
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(!storage().dirty());
+
+    for (const Expect &e : kTable) {
+        mark_files();
+        CHECK(!storage().dirty());                      // every round starts from a saved project
+
+        storage().note_command(e.cmd, 0);               // bank A is live
+        CHECK_EQ(storage().dirty(), e.files != 0u);
+
+        storage().request_save();
+        CHECK(pump_until_idle());
+        CHECK(storage().last_error() == nullptr);
+
+        // `request_save` marks the kit itself -- the machines' parameters have to be copied into
+        // the kit a file holds before it is written -- so KIT.BIN is written whatever the command
+        // dirtied. Everything else is the command's own doing.
+        check_file_set(e.name, e.files | kDirtyKit, 0);
+
+        // And the save cleared what it wrote, so the next round's precondition means something.
+        CHECK(!storage().dirty());
+    }
+
+    CHECK_EQ(host.file_count(), kFileN + 2);   // the eleven, the folder, and SETTINGS.TXT
+}
+
+TEST(storage_the_bank_a_command_dirties_is_the_live_one) {
+    // `note_command` takes the live bank from Status rather than assuming bank A, because a chain
+    // can move the live pattern without the UI asking. A trig edited while bank D plays belongs in
+    // BANK_D.BIN, and an out-of-range bank must dirty no bank at all rather than index past the
+    // array (`project_index_valid` guards it).
+    clean();
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(!storage().dirty());
+
+    mark_files();
+    storage().note_command(Cmd::toggle_trig, 3);        // bank D
+    CHECK(storage().dirty());
+    storage().request_save();
+    CHECK(pump_until_idle());
+    check_file_set("toggle_trig in bank D", kDirtyKit | kDirtyBank, 3);
+
+    mark_files();
+    CHECK(!storage().dirty());
+    storage().note_command(Cmd::toggle_trig, kBanks);   // one past the last bank
+    storage().note_command(Cmd::toggle_trig, -1);
+    CHECK(!storage().dirty());                          // refused, not folded onto bank A
+    storage().request_save();
+    CHECK(pump_until_idle());
+    check_file_set("toggle_trig in no bank", kDirtyKit, 0);
+}
+
+// =============================================================================================
+// 2. The round trip of every file
+// =============================================================================================
+
+TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    // --- what the project is going to be ---------------------------------
+    //
+    // The patterns of all eight banks and the project's own settings are written through
+    // `project_for_load()`, the one hole app/engine.hpp allows in "the main context never writes
+    // pattern memory": only the live pattern is reachable through the command ring, and the point
+    // here is that all 128 patterns and every field survive.
+    Project &p = engine().project_for_load();
+    for (int b = 0; b < kBanks; b++) {
+        for (int s = 0; s < kPatternsPerBank; s++) {
+            Pattern &pattern = p.patterns[b][s];
+            const int step = (b * 7 + s) % kStepsPerTrack;
+            Step &trig = pattern.tracks[b % kTracks].steps[step];
+            trig.flags = uint8_t(trig.flags | kStepTrig);
+            trig.note = uint8_t(36 + b * 2 + s % 3);
+            trig.velocity = uint8_t(40 + s);
+            pattern.tracks[b % kTracks].length = uint8_t(1 + (b * 3 + s) % kStepsPerTrack);
+            pattern.swing = uint8_t(kSwingMin + (s % 5));
+        }
+    }
+    p.settings.root = 64;
+    p.settings.scale = 3;
+    p.settings.quantize = 70;
+    p.settings.swing = uint8_t(kSwingMin + 2);
+    p.settings.chain_enabled = true;
+    p.settings.chain_length = 3;
+    p.chain[0] = ChainEntry{1, 2, 3};
+    p.chain[1] = ChainEntry{7, 15, 1};
+    p.chain[2] = ChainEntry{0, 0, 8};
+    for (int i = 0; i < 8; i++) p.settings.mute_states[i] = uint8_t(0x81u + i);
+    p.bank = 2;
+    p.slot = 11;
+    for (int t = 0; t < kTracks; t++) {
+        p.kit.tracks[t].machine = uint8_t(t % kMachines);
+    }
+    std::strcpy(p.kit.tracks[4].sample, "/SAMPLES/ROUND TRIP.WAV");
+    post(Cmd::project_loaded);
+    pump(2);
+
+    // The kit and the mixer, through the ring, as a knob and a fader really are.
+    post(Cmd::set_param, 3, 0, uint8_t(kLvl), 42);
+    post(Cmd::set_param, 6, 0, 2, 117);
+    Command fader;
+    fader.cmd = Cmd::set_track_level;
+    fader.track = 2;
+    fader.f = 0.5f;
+    engine().commands().post(fader);
+
+    // The scenes and the macro setup, which are PERFORM.BIN.
+    //
+    // `Cmd::kit_store` FIRST, and that is not incidental: `scene_capture` reads `project_.kit` --
+    // the kit a file holds -- and only `kit_store` refreshes that from `params_`, the kit a knob
+    // actually turns. Without the store the scene captures the sound as of the last save. Nothing
+    // in app/app.cpp posts one before a capture; see the report at the end of this file.
+    post(Cmd::kit_store);
+    post(Cmd::scene_capture, 0, 0, 5, 0);                 // scene 5, every track
+    // A macro assignment carries five values, one more than the rig's `post` takes.
+    Command assign;
+    assign.cmd = Cmd::macro_assign;
+    assign.track = 1;
+    assign.a = 2;                                         // macro 2
+    assign.b = 9;                                         // its target parameter
+    assign.c = 20;                                        // low
+    assign.d = 110;                                       // high
+    engine().commands().post(assign);
+    pump(4);
+
+    CHECK_EQ(int(kit_value(3, kLvl)), 42);
+    CHECK(scene_count(engine().scenes().scenes[5]) > 0);
+    CHECK_EQ(int(engine().macros().macros[2].targets[0].enabled), 1);
+
+    // --- save ------------------------------------------------------------
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.logged("saved"));
+    CHECK(!storage().dirty());
+
+    // The sizes tests/test_project.cpp pins from the serializer, reached here through the real
+    // card protocol: a file that came out a different size means the two have drifted apart.
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 251);
+    CHECK_EQ(project_bytes(), 251u);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1076);
+    CHECK_EQ(kit_bytes(), 1076u);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 2424);
+    CHECK_EQ(perform_bytes(), 2424u);
+    for (int b = 0; b < kBanks; b++) {
+        char name[12];
+        CHECK(bank_file_name(b, name, int(sizeof name)));
+        // Through a `const char *`, or CHECK_EQ compares two ADDRESSES: tests/check.hpp's
+        // non-template overload is the one that compares content, and an array argument does not
+        // reach it.
+        const char *made = name;
+        CHECK_EQ(made, kFiles[kIndexFirstBank + b]);      // the names this test assumes
+        CHECK_EQ(uint32_t(host.file_bytes(card_path(name))), bank_bytes(engine().project(), b));
+    }
+
+    // --- move RAM away ---------------------------------------------------
+    Project &wipe = engine().project_for_load();
+    project_init(wipe);
+    perform_init(engine().scenes_for_load(), engine().macros_for_load());
+    engine().performance_changed();
+    post(Cmd::project_loaded);
+    pump(4);
+    CHECK_EQ(int(kit_value(3, kLvl)), 0);                 // a blank project: nothing left to find
+    CHECK_EQ(scene_count(engine().scenes().scenes[5]), 0);
+
+    // --- read it back ----------------------------------------------------
+    storage().request_reload();
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(FakeHost::the().logged("loaded"));
+    pump(4);                                              // the load's Cmd::project_loaded lands
+
+    const Project &back = engine().project();
+
+    // PROJECT.BIN
+    CHECK_EQ(int(back.settings.root), 64);
+    CHECK_EQ(int(back.settings.scale), 3);
+    CHECK_EQ(int(back.settings.quantize), 70);
+    CHECK_EQ(int(back.settings.swing), int(kSwingMin + 2));
+    CHECK(back.settings.chain_enabled);
+    CHECK_EQ(int(back.settings.chain_length), 3);
+    CHECK_EQ(int(back.chain[0].bank), 1);
+    CHECK_EQ(int(back.chain[0].slot), 2);
+    CHECK_EQ(int(back.chain[0].repeats), 3);
+    CHECK_EQ(int(back.chain[1].bank), 7);
+    CHECK_EQ(int(back.chain[1].slot), 15);
+    CHECK_EQ(int(back.chain[2].repeats), 8);
+    for (int i = 0; i < 8; i++) CHECK_EQ(int(back.settings.mute_states[i]), int(0x81u + i));
+    CHECK_EQ(int(back.bank), 2);
+    CHECK_EQ(int(back.slot), 11);
+    CHECK_EQ(int(engine().status().live_bank.load(std::memory_order_relaxed)), 2);
+    CHECK_EQ(int(engine().status().live_slot.load(std::memory_order_relaxed)), 11);
+
+    // KIT.BIN
+    CHECK_EQ(int(kit_value(3, kLvl)), 42);
+    CHECK_EQ(int(kit_value(6, 2)), 117);
+    CHECK_EQ(int(back.kit.tracks[3].params[kLvl]), 42);
+    CHECK_NEAR(back.kit.tracks[2].level, 0.5f, 0.002);
+    CHECK_NEAR(engine().level(2), 0.5f, 0.002);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(back.kit.tracks[t].machine), t % kMachines);
+    CHECK_EQ(back.kit.tracks[4].sample, "/SAMPLES/ROUND TRIP.WAV");
+
+    // PERFORM.BIN
+    CHECK(scene_count(engine().scenes().scenes[5]) > 0);
+    CHECK(scene_has(engine().scenes().scenes[5], 3, kLvl));
+    CHECK_EQ(int(engine().scenes().scenes[5].values[3][kLvl]), 42);
+    const MacroTarget &target = engine().macros().macros[2].targets[0];
+    CHECK_EQ(int(target.enabled), 1);
+    CHECK_EQ(int(target.track), 1);
+    CHECK_EQ(int(target.param), 9);
+    CHECK_EQ(int(target.low), 20);
+    CHECK_EQ(int(target.high), 110);
+
+    // BANK_A.BIN .. BANK_H.BIN: all 128 patterns, not just the live one.
+    for (int b = 0; b < kBanks; b++) {
+        for (int s = 0; s < kPatternsPerBank; s++) {
+            const Pattern &pattern = back.patterns[b][s];
+            const int step = (b * 7 + s) % kStepsPerTrack;
+            const Step &trig = pattern.tracks[b % kTracks].steps[step];
+            CHECK((trig.flags & kStepTrig) != 0);
+            CHECK_EQ(int(trig.note), 36 + b * 2 + s % 3);
+            CHECK_EQ(int(trig.velocity), 40 + s);
+            CHECK_EQ(int(pattern.tracks[b % kTracks].length),
+                     1 + (b * 3 + s) % kStepsPerTrack);
+            CHECK_EQ(int(pattern.swing), int(kSwingMin + (s % 5)));
+        }
+    }
+
+    // And nothing is dirty after a load: what is in RAM is what is on the card.
+    CHECK(!storage().dirty());
+}
+
+TEST(storage_a_save_waits_for_the_command_ring_to_drain) {
+    // The first of app/storage.hpp's two protocols. A save reads pattern memory from the MAIN
+    // context while the audio side may be applying an edit to it, so `request_save` posts
+    // `Cmd::kit_store` and `service()` refuses to start anything while the ring is non-empty. By
+    // the time it is empty the audio side has applied every pending edit and is writing nothing.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    // More edits than the audio side applies in one block (Commands::kMaxPerBlock is 64), so the
+    // ring stays non-empty across two blocks and the wait is a state a test can see.
+    for (int s = 0; s < 60; s++) post(Cmd::toggle_trig, 0, uint8_t(s));
+    for (int s = 0; s < 10; s++) post(Cmd::toggle_trig, 1, uint8_t(s));
+    storage().request_save();
+    CHECK(!engine().commands().empty());
+
+    // The card side alone, as many passes as it likes. Nothing starts, and nothing spins either:
+    // an un-drained ring simply means "not this pass".
+    for (int i = 0; i < 200; i++) storage().service();
+    CHECK(storage().busy_text() == nullptr);
+    CHECK_EQ(host.saves(), 0);
+    CHECK_EQ(host.folders_made(), 0);
+
+    // Now the audio side drains it and the save runs -- including the LAST of those edits, which
+    // is the whole reason for deferring.
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK((engine().pattern().tracks[1].steps[9].flags & kStepTrig) != 0);
+
+    Project &wipe = engine().project_for_load();
+    project_init(wipe);
+    post(Cmd::project_loaded);
+    pump(2);
+
+    storage().request_reload();
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    pump(4);
+    for (int s = 0; s < 60; s++) {
+        CHECK((engine().pattern().tracks[0].steps[s].flags & kStepTrig) != 0);
+    }
+    CHECK((engine().pattern().tracks[1].steps[9].flags & kStepTrig) != 0);
+}
+
+TEST(storage_busy_text_and_progress_follow_the_job) {
+    // What the screen draws while the card is working. Not cosmetic: `busy_text()` is what
+    // tests/apprig.hpp waits on, and `progress()` does its percentage in 32-bit arithmetic on
+    // purpose (a 64-bit divide here once broke the LINK -- app/storage.cpp says why).
+    clean();
+
+    CHECK(storage().busy_text() == nullptr);
+    CHECK_EQ(storage().progress(), 0);
+
+    storage().request_save();
+    pump();
+    CHECK_EQ(storage().busy_text(), "SAVING");
+    CHECK_EQ(storage().progress(), 0);
+    pump(3);
+    CHECK_EQ(storage().busy_text(), "SAVING");
+    CHECK(storage().progress() > 0);
+    CHECK(storage().progress() <= 100);
+    CHECK(pump_until_idle());
+    CHECK(storage().busy_text() == nullptr);
+    CHECK_EQ(storage().progress(), 0);
+
+    storage().request_reload();
+    pump(2);
+    CHECK_EQ(storage().busy_text(), "LOADING");
+    CHECK(storage().loading_project());        // so the UI refuses PLAY under it
+    CHECK(settle());
+    CHECK(!storage().loading_project());
+    CHECK(storage().busy_text() == nullptr);
+}
+
+// =============================================================================================
+// 3. The refusal order
+// =============================================================================================
+//
+// core/serialize.hpp checks a damaged container in a FIXED order -- the buffer, the magic, the
+// payload against the buffer, the CRC, the version, then the section table -- and core/project.cpp
+// repeats it for the project, kit and bank files. The order is what makes the message on screen
+// the same for the same damage whichever file it happened to.
+
+TEST(storage_damage_is_reported_in_one_fixed_order) {
+    clean();
+    const char *kit = card_path("KIT.BIN");
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    keep_pristine(kit);
+    CHECK_EQ(g_pristine_bytes, 1076u);
+
+    // A sanity pass first: the pristine file loads.
+    CHECK(reload_now());
+    CHECK(storage().last_error() == nullptr);
+
+    // The magic beats everything that follows it.
+    restore_pristine(kit);
+    g_scratch[0] = 'X';
+    g_scratch[kHeaderBytes] = uint8_t(g_scratch[kHeaderBytes] ^ 0xFFu);   // and a bad CRC with it
+    put_u16_at(kVersionOffset, 99);                                      // and a bad version
+    store(kit, g_pristine_bytes);
+    CHECK(reload_now());
+    check_error("a bad magic with bad everything else", "NOT A STRATA FILE");
+
+    // A payload longer than the bytes that are there beats the CRC and the version: with the
+    // buffer short the CRC cannot even be computed over what the header claims.
+    restore_pristine(kit);
+    put_u16_at(kVersionOffset, 99);
+    store(kit, 40);
+    CHECK(reload_now());
+    check_error("a truncated file from a newer build", "FILE TRUNCATED");
+
+    // The CRC beats the version. The header is not covered by the checksum (core/serialize.hpp
+    // says so and why), so these two kinds of damage really are independent.
+    restore_pristine(kit);
+    g_scratch[kHeaderBytes + 4] = uint8_t(g_scratch[kHeaderBytes + 4] ^ 0x01u);
+    put_u16_at(kVersionOffset, 99);
+    store(kit, g_pristine_bytes);
+    CHECK(reload_now());
+    check_error("a bad CRC and a bad version", "BAD CHECKSUM");
+
+    // The version beats the section table.
+    restore_pristine(kit);
+    put_u16_at(kVersionOffset, 99);
+    put_u16_at(6, 0);                        // no sections, which is malformed
+    store(kit, g_pristine_bytes);
+    CHECK(reload_now());
+    check_error("a bad version and no sections", "UNKNOWN VERSION");
+
+    // And with everything above it sound, the section table is what is reported. The message
+    // says PATTERN for every file type, which is core/serialize.cpp's one name for `malformed`.
+    restore_pristine(kit);
+    put_u16_at(6, 0);
+    store(kit, g_pristine_bytes);
+    CHECK(reload_now());
+    check_error("no sections", "DAMAGED PATTERN");
+
+    // A damaged section OFFSET, with the checksum made to agree, is refused the same way -- so
+    // the structure checks are not reachable only through a header field.
+    restore_pristine(kit);
+    g_scratch[kHeaderBytes + 4] = 0xFFu;     // the first section's offset, out of the payload
+    refresh_crc();
+    store(kit, g_pristine_bytes);
+    CHECK(reload_now());
+    check_error("a section outside the payload", "DAMAGED PATTERN");
+
+    restore_pristine(kit);
+    CHECK(reload_now());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(settle());
+}
+
+TEST(storage_the_reason_a_load_refused_a_file_does_not_survive_the_sample_swaps) {
+    // A BUG, pinned rather than fixed (app/ belongs to another pass).
+    //
+    // docs/SPEC.md: "An unknown version or a bad CRC is refused with a message on screen."
+    // app/storage.hpp: the last failure is "sticky until the next job starts, because a load that
+    // failed silently is the least diagnosable thing a sampler can do."
+    //
+    // A project load's LAST act is to queue a sample swap for all eight tracks, and the next pass
+    // of `service()` starts one, and `begin_job` clears `error_`. `App::update` runs at least 750
+    // times a second and the screen is drawn at 20 fps, so the message is gone several passes
+    // before anything could draw it: a damaged file reports nothing at all to the user.
+    //
+    // The fix is small -- do not clear a sticky error in `begin_job`, or carry the load's reason
+    // separately -- but it is a decision about what the screen shows, so it is reported.
+    clean();
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+
+    const char *kit = card_path("KIT.BIN");
+    const uint32_t bytes = fetch(kit);
+    g_scratch[kHeaderBytes] = uint8_t(g_scratch[kHeaderBytes] ^ 0xFFu);
+    store(kit, bytes);
+
+    CHECK(reload_now());
+    check_error("at the pass the load finished on", "BAD CHECKSUM");
+
+    // One more pass of both contexts is all it takes.
+    pump(3);
+    CHECK(storage().last_error() == nullptr);          // <- the bug
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+}
+
+TEST(storage_the_same_damage_gives_the_same_reason_in_every_file_type) {
+    // One bit flipped in the payload of each of the four file types. All four must say BAD
+    // CHECKSUM: the container is shared, and a user looking at the screen should not have to know
+    // which file the app happened to be reading.
+    clean();
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+
+    const char *files[] = {"PROJECT.BIN", "KIT.BIN", "PERFORM.BIN", "BANK_C.BIN"};
+    for (const char *file : files) {
+        const char *path = card_path(file);
+        keep_pristine(path);                   // which also leaves the file in the scratch buffer
+        CHECK(g_pristine_bytes > kHeaderBytes);
+        g_scratch[kHeaderBytes] = uint8_t(g_scratch[kHeaderBytes] ^ 0xFFu);
+        store(path, g_pristine_bytes);
+
+        CHECK(reload_now());
+        check_error(file, "BAD CHECKSUM");
+
+        // Put it back from the copy, rather than by saving: a save after a load writes only what
+        // is dirty, and a load leaves nothing dirty -- so the next round would damage a second
+        // file while this one was still broken.
+        restore_pristine(path);
+        CHECK(settle());
+        CHECK(reload_now());
+        CHECK(storage().last_error() == nullptr);
+        CHECK(settle());
+    }
+}
+
+TEST(storage_one_damaged_bank_costs_one_bank_and_not_the_project) {
+    // The reason PROJECT.BIN is written and read first, and the reason a bank file holds one bank:
+    // damage has to be contained. A broken BANK_B.BIN must not cost the other seven banks, the
+    // kit, or the project's settings.
+    clean();
+
+    Project &p = engine().project_for_load();
+    for (int b = 0; b < kBanks; b++) {
+        for (int s = 0; s < kPatternsPerBank; s++) {
+            p.patterns[b][s].tracks[0].steps[b].flags = uint8_t(kStepTrig);
+        }
+    }
+    p.settings.root = 67;
+    post(Cmd::project_loaded);
+    pump(2);
+    post(Cmd::set_param, 5, 0, uint8_t(kLvl), 88);
+    pump(2);
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+
+    const char *bank_b = card_path("BANK_B.BIN");
+    const uint32_t bytes = fetch(bank_b);
+    g_scratch[kHeaderBytes + 32] = uint8_t(g_scratch[kHeaderBytes + 32] ^ 0xFFu);
+    store(bank_b, bytes);
+
+    Project &wipe = engine().project_for_load();
+    project_init(wipe);
+    post(Cmd::project_loaded);
+    pump(2);
+
+    CHECK(reload_now());
+    check_error("a damaged BANK_B.BIN", "BAD CHECKSUM");
+    pump(4);
+
+    const Project &back = engine().project();
+    // Bank B is empty -- core/project.cpp leaves all 16 slots cleared when the FILE fails, rather
+    // than half-reading it.
+    for (int s = 0; s < kPatternsPerBank; s++) {
+        CHECK_EQ(int(back.patterns[1][s].tracks[0].steps[1].flags), 0);
+    }
+    // Everything else arrived.
+    for (int b = 0; b < kBanks; b++) {
+        if (b == 1) continue;
+        for (int s = 0; s < kPatternsPerBank; s++) {
+            CHECK((back.patterns[b][s].tracks[0].steps[b].flags & kStepTrig) != 0);
+        }
+    }
+    CHECK_EQ(int(back.settings.root), 67);
+    CHECK_EQ(int(kit_value(5, kLvl)), 88);
+}
+
+TEST(storage_a_damaged_project_file_does_not_stop_the_banks_loading) {
+    // The other half of the containment rule: 251 damaged bytes must not cost 128 patterns.
+    // `project_read` leaves the settings at their defaults and deliberately does not touch a
+    // pattern, so the load reports the reason and carries on.
+    clean();
+
+    Project &p = engine().project_for_load();
+    p.patterns[0][0].tracks[2].steps[6].flags = uint8_t(kStepTrig);
+    p.settings.root = 70;
+    post(Cmd::project_loaded);
+    pump(2);
+    storage().request_save();
+    CHECK(pump_until_idle());
+
+    const char *project = card_path("PROJECT.BIN");
+    const uint32_t bytes = fetch(project);
+    g_scratch[kHeaderBytes + 8] = uint8_t(g_scratch[kHeaderBytes + 8] ^ 0xFFu);
+    store(project, bytes);
+
+    Project &wipe = engine().project_for_load();
+    project_init(wipe);
+    post(Cmd::project_loaded);
+    pump(2);
+
+    CHECK(reload_now());
+    check_error("a damaged PROJECT.BIN", "BAD CHECKSUM");
+    CHECK(FakeHost::the().logged("loaded"));         // it ran to the end rather than stopping
+    pump(4);
+
+    // The pattern came back from BANK_A.BIN...
+    CHECK((engine().project().patterns[0][0].tracks[2].steps[6].flags & kStepTrig) != 0);
+    // ...and the project's own settings did not, which is what a refused PROJECT.BIN means.
+    CHECK_EQ(int(engine().project().settings.root), 60);
+}
+
+// =============================================================================================
+// 4. Failure injection
+// =============================================================================================
+
+TEST(storage_a_full_card_fails_a_save_and_corrupts_nothing) {
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(kit_value(2, kLvl)), 127);          // what is on the card now
+
+    // An edit, and then no room for it.
+    post(Cmd::set_param, 2, 0, uint8_t(kLvl), 55);
+    post(Cmd::toggle_trig, 1, 9);
+    pump(2);
+    storage().note_command(Cmd::set_param, 0);
+    storage().note_command(Cmd::toggle_trig, 0);
+    CHECK(storage().dirty());
+
+    host.set_full(true);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK_EQ(storage().last_error(), "CARD FULL");
+    CHECK(host.logged("save failed CARD FULL"));
+
+    // The work is still in RAM and still marked unsaved, so the screen keeps the unsaved mark and
+    // the user can try again rather than being told it is safe.
+    CHECK(storage().dirty());
+    CHECK_EQ(int(kit_value(2, kLvl)), 55);
+
+    // And the card is not corrupted: what was there before still reads, with the OLD values.
+    host.set_full(false);
+    storage().request_reload();
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    pump(4);
+    CHECK_EQ(int(kit_value(2, kLvl)), 127);
+    CHECK_EQ(int(engine().pattern().tracks[1].steps[9].flags), 0);
+}
+
+TEST(storage_a_read_error_on_the_first_file_abandons_the_load) {
+    // A card that fails its reads. PROJECT.BIN is read first and a failure there ENDS the job --
+    // which is the right way round: nothing has been written into pattern memory yet, so the
+    // project in RAM is still whole and the user has lost nothing but the attempt.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    post(Cmd::toggle_trig, 0, 3);
+    pump(2);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+
+    const int reads_before = host.read_alls();
+    host.set_read_error(true);
+    CHECK(reload_now());
+    check_error("a card that failed every read", "CARD ERROR");
+    CHECK(host.logged("load failed CARD ERROR"));
+    CHECK(!host.logged("loaded"));
+    CHECK_EQ(host.read_alls(), reads_before + 1);   // it stopped at the first file
+
+    // And RAM is untouched: the edit is still there to be saved again.
+    pump(4);
+    CHECK((engine().pattern().tracks[0].steps[3].flags & kStepTrig) != 0);
+
+    // The card itself is intact: reading again, without the injected error, works.
+    host.set_read_error(false);
+    CHECK(reload_now());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.logged("loaded"));
+    CHECK(settle());
+    pump(4);
+    CHECK((engine().pattern().tracks[0].steps[3].flags & kStepTrig) != 0);
+}
+
+TEST(storage_a_file_missing_from_the_project_folder_is_not_damage) {
+    // Not every file has to be there. A bank that was never touched has no file, and a project
+    // written by an M4 build has no PERFORM.BIN -- both mean "empty", not "damaged", and the load
+    // carries on. KIT.BIN is deliberately NOT in that set: a project with no kit is a project
+    // whose sound is gone, and the screen says so.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    Project &p = engine().project_for_load();
+    p.patterns[2][0].tracks[0].steps[5].flags = uint8_t(kStepTrig);   // bank C
+    p.patterns[0][0].tracks[0].steps[1].flags = uint8_t(kStepTrig);   // bank A
+    post(Cmd::project_loaded);
+    pump(2);
+    post(Cmd::scene_capture, 0, 0, 3, 0);
+    pump(2);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(scene_count(engine().scenes().scenes[3]) > 0);
+
+    CHECK(host.remove_file(card_path("BANK_C.BIN")));
+    CHECK(host.remove_file(card_path("PERFORM.BIN")));
+    CHECK(reload_now());
+    CHECK(storage().last_error() == nullptr);          // neither one is an error
+    CHECK(host.logged("loaded"));
+    CHECK(settle());
+    pump(4);
+
+    CHECK_EQ(int(engine().project().patterns[2][0].tracks[0].steps[5].flags), 0);   // empty bank
+    CHECK((engine().project().patterns[0][0].tracks[0].steps[1].flags & kStepTrig) != 0);
+    CHECK_EQ(scene_count(engine().scenes().scenes[3]), 0);                          // no scenes
+
+    // A missing KIT.BIN is reported.
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(host.remove_file(card_path("KIT.BIN")));
+    CHECK(reload_now());
+    check_error("a missing KIT.BIN", "NOT FOUND");
+    CHECK(settle());
+}
+
+TEST(storage_a_load_asked_for_with_no_card_lands_when_one_arrives) {
+    // The mirror of tests/test_app.cpp's save: `service()` returns before it starts anything while
+    // the card is unusable, so the request STAYS PENDING rather than failing, and it completes by
+    // itself when a card appears.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    post(Cmd::toggle_trig, 0, 7);
+    pump(2);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    post(Cmd::track_erase, 0);
+    pump(2);
+    CHECK_EQ(int(engine().pattern().tracks[0].steps[7].flags), 0);
+
+    host.set_card(false);
+    storage().on_card(false);
+    CHECK(!storage().card_usable());
+    CHECK_EQ(storage().last_error(), "NO CARD");
+
+    const int reads = host.read_alls();
+    storage().request_reload();
+    CHECK(!pump_until_idle(200));                 // no job ever started
+    CHECK_EQ(host.read_alls(), reads);            // and not a byte was read
+    CHECK(!host.logged("loaded"));
+
+    host.set_card(true);
+    storage().on_card(true);
+    CHECK(settle());
+    CHECK(host.logged("loaded"));
+    CHECK(host.read_alls() > reads);
+    pump(4);
+    CHECK((engine().pattern().tracks[0].steps[7].flags & kStepTrig) != 0);
+}
+
+TEST(storage_a_load_already_asked_for_is_cancelled_by_pulling_the_card) {
+    // The other order, and it is not the same -- `on_card(false)` clears `load_pending_` along
+    // with any job in flight. tests/test_app.cpp pins the same asymmetry for a save and carries
+    // the question of whether it ought to resume by itself; this is the load half of it.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+
+    storage().request_reload();                   // asked for FIRST...
+    host.set_card(false);
+    storage().on_card(false);                     // ...and then the card goes
+    CHECK_EQ(storage().last_error(), "NO CARD");
+
+    const int reads = host.read_alls();
+    host.set_card(true);
+    storage().on_card(true);
+    CHECK(settle());
+    CHECK(!host.logged("loaded"));                // it did not resume
+    CHECK_EQ(host.read_alls(), reads);
+
+    // Asking again reads it.
+    CHECK(reload_now());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.logged("loaded"));
+    CHECK(settle());
+}
+
+TEST(storage_a_file_call_from_the_audio_context_is_refused_not_retried) {
+    // Every Enaga file call is main context; from audio() it returns ENAGA_FILE_WRONG_CONTEXT
+    // (<enaga/abi.h>). Nothing in app/storage.cpp should ever reach a file call from the audio
+    // side, so this is a guard rather than a path -- and what matters is that the refusal is
+    // reported and the job ends, rather than being retried for ever.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    host.set_audio_context(true);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK_EQ(storage().last_error(), "WRONG CONTEXT");
+    CHECK(host.logged("save failed WRONG CONTEXT"));
+    CHECK_EQ(host.file_count(), 0);               // not even the folder was made
+    CHECK_EQ(host.folders_made(), 0);
+    CHECK(storage().dirty());
+
+    host.set_audio_context(false);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.logged("saved"));
+    CHECK(!storage().dirty());
+}
+
+TEST(storage_a_save_interrupted_by_a_card_removal_is_not_a_complete_project) {
+    // A save that did not finish must not leave `project_complete_` set: the folder holds some of
+    // the eleven files and the next save has to write them all again. Getting this wrong writes
+    // only the dirty files into a half-written folder, which is the data loss that flag exists to
+    // prevent, arriving by another route.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    storage().request_save();
+    pump(3);                                      // started, and a file or two down
+    CHECK_EQ(storage().busy_text(), "SAVING");
+    const int part = host.file_count();
+    CHECK(part > 1);
+    CHECK(part < kFileN + 2);
+
+    host.set_card(false);
+    storage().on_card(false);
+    CHECK(storage().busy_text() == nullptr);      // abandoned where it stood
+    CHECK_EQ(storage().last_error(), "NO CARD");
+    CHECK_EQ(host.file_count(), part);            // and nothing was written after the removal
+    pump(20);
+    CHECK_EQ(host.file_count(), part);
+
+    host.set_card(true);
+    storage().on_card(true);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    for (int i = 0; i < kFileN; i++) CHECK(host.has_file(card_path(kFiles[i])));
+
+    // And it really is a project: it reads back.
+    storage().request_reload();
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+}
+
+// =============================================================================================
+// 5. Autosave, and which copy is opened
+// =============================================================================================
+
+TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
+    // docs/SPEC.md: "Autosave to AUTOSAVE/ whenever the transport stops". It is a SNAPSHOT, not a
+    // diff: the dirty flags describe how RAM differs from the PROJECT, so they say nothing about
+    // what is in the autosave folder and every file goes down. For the same reason an autosave
+    // does not clear them -- the project on the card is still out of date and the screen must keep
+    // saying so.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(!storage().dirty());
+
+    post(Cmd::toggle_trig, 4, 11);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+    CHECK(storage().dirty());
+
+    const int saves_before = host.saves();
+    storage().request_autosave();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.logged("autosaved"));
+
+    for (int i = 0; i < kFileN; i++) {
+        if (!host.has_file(card_path(kFiles[i], true))) {
+            std::printf("    AUTOSAVE/%s is missing\n", kFiles[i]);
+        }
+        CHECK(host.has_file(card_path(kFiles[i], true)));
+    }
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 251);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1076);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 2424);
+
+    // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.
+    CHECK_EQ(host.saves() - saves_before, kFileN + 1);
+    CHECK(host.has_file("/ENAGA/DATA/STRATA/SETTINGS.TXT"));
+
+    // Still dirty: the project folder has not seen this edit.
+    CHECK(storage().dirty());
+
+    // And a second autosave with nothing dirty writes everything again, because a snapshot has
+    // nothing to compare itself with.
+    mark_files(true);
+    storage().request_autosave();
+    CHECK(pump_until_idle());
+    for (int i = 0; i < kFileN; i++) {
+        if (!was_written(i, true)) std::printf("    AUTOSAVE/%s was left alone\n", kFiles[i]);
+        CHECK(was_written(i, true));
+    }
+}
+
+TEST(storage_an_autosave_does_not_make_the_project_folder_complete) {
+    // The transport stops, which autosaves, and then the user presses SAVE. An autosave says
+    // nothing about what is in the PROJECT folder -- it may hold an older project, or nothing --
+    // so that save has to write all eleven files. This is what `finish_job` means by setting
+    // `project_complete_` only for a save that is not an autosave.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    post(Cmd::toggle_trig, 0, 2);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+
+    storage().request_autosave();
+    CHECK(pump_until_idle());
+    CHECK(host.logged("autosaved"));
+    for (int i = 0; i < kFileN; i++) CHECK(!host.has_file(card_path(kFiles[i])));
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    for (int i = 0; i < kFileN; i++) {
+        if (!host.has_file(card_path(kFiles[i]))) {
+            std::printf("    %s was not written by the save after an autosave\n", kFiles[i]);
+        }
+        CHECK(host.has_file(card_path(kFiles[i])));
+    }
+
+    // And it is a project, not eleven files: it reads back.
+    CHECK(reload_now());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(settle());
+    pump(4);
+    CHECK((engine().pattern().tracks[0].steps[2].flags & kStepTrig) != 0);
+}
+
+TEST(storage_a_save_already_asked_for_beats_an_autosave) {
+    // Both arrive before either can start -- the transport stops at the same moment the user
+    // presses SAVE. `request_autosave` stands down while a save is pending, and `service()` takes
+    // the save, so the deliberate one wins and the project folder is the one that is written.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    storage().request_save();
+    storage().request_autosave();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.logged("saved"));
+    CHECK(!host.logged("autosaved"));
+    CHECK(host.has_file(card_path("KIT.BIN")));
+    CHECK(!host.has_file(card_path("KIT.BIN", true)));
+}
+
+TEST(storage_open_last_prefers_whichever_copy_is_newer) {
+    // There is no timestamp in `files::Info` -- it carries a name, a size and flags -- so "newer"
+    // is a counter STRATA keeps in its own settings and bumps on every save of either kind.
+    clean();
+
+    // The project, with one value...
+    post(Cmd::set_param, 1, 0, uint8_t(kLvl), 21);
+    pump(2);
+    storage().request_save();
+    CHECK(pump_until_idle());
+
+    // ...and then the autosave, with another. The autosave is now the newer of the two.
+    post(Cmd::set_param, 1, 0, uint8_t(kLvl), 99);
+    pump(2);
+    storage().request_autosave();
+    CHECK(pump_until_idle());
+
+    post(Cmd::set_param, 1, 0, uint8_t(kLvl), 7);
+    pump(2);
+    CHECK(storage().open_last());
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    pump(4);
+    CHECK_EQ(int(kit_value(1, kLvl)), 99);        // the autosave was offered and taken
+
+    // The other way round: a deliberate save after the autosave makes the project folder newer.
+    post(Cmd::set_param, 1, 0, uint8_t(kLvl), 33);
+    pump(2);
+    storage().note_command(Cmd::set_param, 0);
+    storage().request_save();
+    CHECK(pump_until_idle());
+
+    post(Cmd::set_param, 1, 0, uint8_t(kLvl), 7);
+    pump(2);
+    CHECK(storage().open_last());
+    CHECK(settle());
+    pump(4);
+    CHECK_EQ(int(kit_value(1, kLvl)), 33);
+}
+
+TEST(storage_open_last_is_false_when_the_card_holds_nothing) {
+    // A first run, which is not an error: the engine's built-in default pattern stays and nothing
+    // is reported on screen.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    CHECK_EQ(host.file_count(), 0);
+    CHECK(!storage().open_last());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(!pump_until_idle(100));                 // and no load was queued by the attempt
+    CHECK_EQ(host.read_alls(), 0);
+}
+
+TEST(storage_save_for_shutdown_writes_the_autosave_in_one_call) {
+    // App::stop has 3 s including saves and destructors never run on this platform, so this is the
+    // last chance to keep the user's work. It is the one blocking path in app/storage.cpp: no
+    // passes, no slices.
+    //
+    // Its ring drain cannot be exercised on the host -- nothing advances `enaga::ms()` but the
+    // spin itself and nothing drains the ring but `pump()` -- so this calls it with an empty ring,
+    // which is the state App::stop reaches once the audio side has applied the last edit.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    post(Cmd::set_param, 0, 0, uint8_t(kLvl), 64);
+    pump(4);
+    CHECK(engine().commands().empty());
+
+    const int saves_before = host.saves();
+    storage().save_for_shutdown();
+
+    CHECK(host.logged("autosaved"));
+    CHECK(storage().busy_text() == nullptr);      // it ran to the end inside the one call
+    for (int i = 0; i < kFileN; i++) CHECK(host.has_file(card_path(kFiles[i], true)));
+    CHECK_EQ(host.saves() - saves_before, kFileN + 1);
+
+    // With no card it does nothing at all, rather than failing eleven times on the way out.
+    host.set_card(false);
+    storage().on_card(false);
+    const int after = host.saves();
+    storage().save_for_shutdown();
+    CHECK_EQ(host.saves(), after);
+}
+
+// =============================================================================================
+// 6. The WAV loader
+// =============================================================================================
+
+TEST(storage_a_wav_at_48k_loads_in_mono_and_in_stereo) {
+    clean();
+
+    make_wav("/SAMPLES/M48.WAV", 48000, 1, 16, 2400);
+    kit_sample(kLoopTrack, "/SAMPLES/M48.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 2400u);
+    CHECK_EQ(int(slot_of(kLoopTrack).channels), 1);
+    CHECK_EQ(slot_of(kLoopTrack).rate, uint32_t(ENAGA_SAMPLE_RATE));
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 2400u * 2u);
+    CHECK_EQ(slot_of(kLoopTrack).offset % 2u, 0u);     // an odd offset is refused by the audio side
+    CHECK_EQ(storage().loading_track(), -1);
+
+    make_wav("/SAMPLES/S48.WAV", 48000, 2, 16, 1800);
+    kit_sample(kLoopTrack, "/SAMPLES/S48.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 1800u);
+    CHECK_EQ(int(slot_of(kLoopTrack).channels), 2);
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 1800u * 2u * 2u);   // interleaved, two bytes a sample
+}
+
+TEST(storage_a_loaded_wav_is_heard) {
+    // The one end-to-end check that the bytes really arrived in the region the audio side reads:
+    // the converted int16 is private to Storage, and the handover is an offset, a frame count and
+    // a channel count that `Cmd::set_sample` checks against the region before forming a pointer.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    make_wav("/SAMPLES/HEARD.WAV", 48000, 1, 16, 9600);     // 200 ms, comfortably longer than a block
+    kit_sample(kLoopTrack, "/SAMPLES/HEARD.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+
+    // The SAMPLE machine's own parameters (dsp/track.hpp: SRC is PIT, STA, LEN, SLC; AMP is ATK,
+    // DEC, PLY, LVL). `fresh()` leaves every knob at 64, which starts playback half way in and
+    // cuts it into nine slices; one slice from the start is what this wants to hear.
+    post(Cmd::set_param, kLoopTrack, 0, 1, 0);        // STA: the beginning
+    post(Cmd::set_param, kLoopTrack, 0, 2, 127);      // LEN: all of it
+    post(Cmd::set_param, kLoopTrack, 0, 3, 0);        // SLC: one slice
+    post(Cmd::set_param, kLoopTrack, 0, 8, 0);        // ATK: instant
+    post(Cmd::set_param, kLoopTrack, 0, 9, 110);      // DEC: long
+    post(Cmd::set_param, kLoopTrack, 0, 10, 0);       // PLY: forward, one shot
+    post(Cmd::toggle_trig, uint8_t(kLoopTrack), 0);
+    pump(2);
+
+    host.set_running(true);
+    host.deliver_tick(0, 0);
+    const float peak = pump(6);
+    CHECK(peak > 0.01f);
+
+    // And with the sample taken away again the same six blocks are silent, so the sound was the
+    // file and not the machine's own noise.
+    post(Cmd::clear_sample, uint8_t(kLoopTrack));
+    pump(2);
+    host.deliver_tick(24, 0);
+    const float without = pump(6);
+    CHECK(without < peak);
+    CHECK(without < 0.01f);
+}
+
+TEST(storage_a_wav_at_another_rate_is_resampled_once_at_load) {
+    // docs/SPEC.md: "Files not at 48 kHz are resampled once at load, in main-loop slices." The
+    // frame count a track ends up with is the resampler's own answer, and 24 kHz to 48 kHz is an
+    // exact doubling, so it can be predicted by hand as well as by core/pcm.
+    clean();
+
+    make_wav("/SAMPLES/UP24.WAV", 24000, 1, 16, 1000);
+    kit_sample(kLoopTrack, "/SAMPLES/UP24.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 2000u);
+    CHECK_EQ(slot_of(kLoopTrack).frames, Resampler::make(24000, 48000).output_frames(1000));
+    // The track is handed the ENGINE's rate, not the file's: the resample already happened.
+    CHECK_EQ(slot_of(kLoopTrack).rate, uint32_t(ENAGA_SAMPLE_RATE));
+    CHECK_EQ(int(slot_of(kLoopTrack).channels), 1);
+
+    // And downwards, in stereo.
+    make_wav("/SAMPLES/DN96.WAV", 96000, 2, 16, 1000);
+    kit_sample(kLoopTrack, "/SAMPLES/DN96.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(slot_of(kLoopTrack).frames, 500u);
+    CHECK_EQ(slot_of(kLoopTrack).frames, Resampler::make(96000, 48000).output_frames(1000));
+    CHECK_EQ(int(slot_of(kLoopTrack).channels), 2);
+    CHECK_EQ(slot_of(kLoopTrack).rate, uint32_t(ENAGA_SAMPLE_RATE));
+
+    // 44.1 kHz, the one that actually turns up, through the same path.
+    make_wav("/SAMPLES/CD441.WAV", 44100, 2, 16, 1000);
+    kit_sample(kLoopTrack, "/SAMPLES/CD441.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(slot_of(kLoopTrack).frames, Resampler::make(44100, 48000).output_frames(1000));
+    CHECK(slot_of(kLoopTrack).frames > 1000u);
+}
+
+TEST(storage_a_chunk_after_the_data_is_not_counted_as_audio) {
+    // A WAV may carry chunks AFTER its data -- LIST, cue and id3 are all common -- and those bytes
+    // are not audio: played, they are a burst of noise on the end of the sample. The frame count
+    // has to come from the data chunk's own length and not from "everything after the header",
+    // which is the bug this pins. The trailing chunk here is 400 bytes, which at two bytes a mono
+    // frame would add 200 frames to a 500-frame file.
+    clean();
+
+    make_wav("/SAMPLES/LIST.WAV", 48000, 1, 16, 500, "LIST", 400);
+    kit_sample(kLoopTrack, "/SAMPLES/LIST.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(slot_of(kLoopTrack).frames, 500u);
+
+    make_wav("/SAMPLES/CUE.WAV", 48000, 2, 16, 300, "cue ", 120);
+    kit_sample(kLoopTrack, "/SAMPLES/CUE.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(slot_of(kLoopTrack).frames, 300u);
+    CHECK_EQ(int(slot_of(kLoopTrack).channels), 2);
+
+    // The fallback, and the reason it is a fallback: <enaga/wav.hpp> notes that a header still
+    // being written may report a data size of 0, and then the rest of the file IS the audio.
+    make_wav("/SAMPLES/OPEN.WAV", 48000, 1, 16, 250, nullptr, 0, false, false);
+    kit_sample(kLoopTrack, "/SAMPLES/OPEN.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(slot_of(kLoopTrack).frames, 250u);
+}
+
+TEST(storage_a_24_bit_and_a_float_wav_load) {
+    // The formats docs/SPEC.md lists for user samples ("WAV 16/24/32-bit"). core/pcm does the
+    // arithmetic and tests/test_pcm.cpp checks it; what is checked here is that the loader picks
+    // the right one from the header and sizes the reservation from the ENGINE's format and not
+    // the file's.
+    clean();
+
+    make_wav("/SAMPLES/B24.WAV", 48000, 2, 24, 700);
+    kit_sample(kLoopTrack, "/SAMPLES/B24.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 700u);
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 700u * 2u * 2u);    // int16 in the region, not 24-bit
+
+    make_wav("/SAMPLES/F32.WAV", 48000, 1, 32, 600, nullptr, 0, true);
+    kit_sample(kLoopTrack, "/SAMPLES/F32.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(slot_of(kLoopTrack).frames, 600u);
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 600u * 2u);
+}
+
+TEST(storage_a_file_that_is_not_a_wav_is_refused) {
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    for (int i = 0; i < 64; i++) g_scratch[i] = uint8_t(0xA5u ^ i);
+    store("/SAMPLES/NOT.WAV", 64);
+    kit_sample(kLoopTrack, "/SAMPLES/NOT.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "NOT A WAV");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    CHECK_EQ(storage().loading_track(), -1);
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 0u);        // nothing of the budget is held by a failure
+
+    // A failed track does not stop the next one: the loader takes one job at a time and a refusal
+    // ends that job, not the queue.
+    make_wav("/SAMPLES/GOOD.WAV", 48000, 1, 16, 400);
+    kit_sample(kLoopTrack, "/SAMPLES/GOOD.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 400u);
+    CHECK(host.loads() >= 2);
+}
+
+TEST(storage_more_than_two_channels_is_refused) {
+    // dsp/sample.cpp plays mono and stereo. More channels are a refusable file rather than a guess
+    // at which two of them the user meant.
+    clean();
+
+    make_wav("/SAMPLES/CH3.WAV", 48000, 3, 16, 300);
+    kit_sample(kLoopTrack, "/SAMPLES/CH3.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "TOO MANY CH");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+
+    make_wav("/SAMPLES/CH6.WAV", 48000, 6, 16, 200);
+    kit_sample(kLoopTrack, "/SAMPLES/CH6.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "TOO MANY CH");
+
+    // Two is still fine, so the refusal is about the count and not about the parser.
+    make_wav("/SAMPLES/CH2.WAV", 48000, 2, 16, 200);
+    kit_sample(kLoopTrack, "/SAMPLES/CH2.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).channels), 2);
+}
+
+TEST(storage_a_wav_with_no_samples_in_it_is_refused) {
+    clean();
+
+    // A header and nothing after it. The data chunk starts where the file ends, which the loader
+    // catches before it can compute a frame count from it.
+    make_wav("/SAMPLES/EMPTY.WAV", 48000, 2, 16, 0);
+    kit_sample(kLoopTrack, "/SAMPLES/EMPTY.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "BAD FORMAT");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+
+    // Less than one whole frame of data, which is a different branch: there are bytes, and they do
+    // not add up to a frame.
+    make_wav("/SAMPLES/SHORT.WAV", 48000, 2, 16, 0, nullptr, 0, false, false, 3);
+    kit_sample(kLoopTrack, "/SAMPLES/SHORT.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "EMPTY");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+}
+
+TEST(storage_request_sample_refuses_what_it_cannot_load) {
+    clean();
+
+    // A track whose kit names no file is not a job: `request_all_samples` leans on this, and so
+    // does the UI, which has nothing to say about a track with no sample.
+    CHECK(!storage().request_sample(0));
+    CHECK(!storage().request_sample(kLoopTrack));
+    // Not a track at all.
+    CHECK(!storage().request_sample(-1));
+    CHECK(!storage().request_sample(kTracks));
+    CHECK(storage().busy_text() == nullptr);
+    CHECK_EQ(FakeHost::the().loads(), 0);
+
+    // A named file that is not there IS a job, and it fails with the host's own reason.
+    kit_sample(kLoopTrack, "/SAMPLES/GONE.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle());
+    CHECK_EQ(storage().last_error(), "NOT FOUND");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+}
+
+// =============================================================================================
+// 7. The sample swap: the epoch handshake
+// =============================================================================================
+
+TEST(storage_a_sample_swap_releases_the_memory_only_after_the_epoch_moves) {
+    // docs/SPEC.md's generation-counter handoff, one state at a time. `SamplePool::release` makes
+    // memory reusable immediately and core/ deliberately cannot tell whether a voice is still
+    // reading it, so the order is: post `clear_sample`, WAIT for Status::sample_epoch to change,
+    // release, load, hand over. Releasing before the epoch confirms means writing over memory a
+    // voice is reading.
+    clean();
+
+    make_wav("/SAMPLES/SWAP1.WAV", 48000, 1, 16, 300);
+    make_wav("/SAMPLES/SWAP2.WAV", 48000, 1, 16, 500);
+    kit_sample(kLoopTrack, "/SAMPLES/SWAP1.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 300u);
+
+    kit_sample(kLoopTrack, "/SAMPLES/SWAP2.WAV");
+    const uint8_t epoch_before =
+        engine().status().sample_epoch[kLoopTrack].load(std::memory_order_relaxed);
+    CHECK(storage().request_sample(kLoopTrack));
+
+    // Pass one, card side only: `clear_sample` is posted and the epoch it is waiting on is
+    // remembered. The audio side has not run since, so nothing has been confirmed...
+    storage().service();
+    CHECK_EQ(storage().busy_text(), "SWAPPING");
+    CHECK_EQ(storage().loading_track(), kLoopTrack);
+    CHECK_EQ(int(engine().status().sample_epoch[kLoopTrack].load(std::memory_order_relaxed)),
+             int(epoch_before));
+    // ...and the memory is still the track's, with the old sample still in it.
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 300u);
+
+    // Any number of card passes change nothing: the wait is for the AUDIO side.
+    for (int i = 0; i < 20; i++) storage().service();
+    CHECK_EQ(storage().busy_text(), "SWAPPING");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(FakeHost::the().loads(), 1);          // and no read has been started
+
+    // One pass of both: the audio side applies `clear_sample` and bumps the epoch, and the card
+    // side sees the change, releases the range and starts the read. The slot is EMPTY in that
+    // window -- released, not yet reserved -- which is the proof that the release waited.
+    pump_held();
+    CHECK(int(engine().status().sample_epoch[kLoopTrack].load(std::memory_order_relaxed)) !=
+          int(epoch_before));
+    CHECK_EQ(storage().busy_text(), "READING");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::empty));
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 0u);
+    CHECK_EQ(FakeHost::the().pending_loads(), 1);
+    CHECK_EQ(FakeHost::the().loads(), 2);
+
+    // The read completes, the conversion runs, and the new sample is handed over.
+    FakeHost::the().complete_loads();
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 500u);
+}
+
+TEST(storage_the_transport_runs_through_a_held_sample_load) {
+    // The whole point of loading in the background: a sample arriving must not stop the music.
+    // `loading_project()` is deliberately false for a sample job -- it is only true for the job
+    // that rewrites pattern memory -- so PLAY stays available, and the epoch handshake is what
+    // makes that safe.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    post(Cmd::toggle_trig, 0, 0);                  // a kick to listen for
+    pump(2);
+
+    make_wav("/SAMPLES/HELD.WAV", 48000, 2, 16, 4800);
+    kit_sample(kLoopTrack, "/SAMPLES/HELD.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+
+    host.set_running(true);
+    pump_held(3);                                  // start the swap, see the epoch, begin the read
+    CHECK_EQ(storage().busy_text(), "READING");
+    CHECK_EQ(host.pending_loads(), 1);
+    CHECK(!storage().loading_project());
+
+    const uint32_t blocks_before = engine().status().blocks.load(std::memory_order_relaxed);
+    host.deliver_tick(0, 0);
+    const float peak = pump_held(4);
+    CHECK(peak > 0.01f);                           // the sequencer played, mid-load
+    CHECK(engine().status().blocks.load(std::memory_order_relaxed) > blocks_before);
+    CHECK_EQ(host.pending_loads(), 1);             // and the load really was still in flight
+
+    host.complete_loads();
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 4800u);
+}
+
+TEST(storage_what_a_job_in_flight_refuses_and_what_it_queues) {
+    // One job at a time (app/storage.hpp). The two requests behave DIFFERENTLY while one is
+    // running, and the difference matters to the user:
+    //
+    //   * `request_sample` queues -- it only sets a bit, so nothing is lost.
+    //   * `request_save`, `request_autosave`, `request_reload` and `request_new` all return early
+    //     and silently. app/storage.hpp says "requests queue instead", and these four do not.
+    //     app/app.cpp's `on_project_key` announces SAVING, RELOADING or NEW PROJECT whatever this
+    //     returns, so the screen reports work that is never done. Pinned as it stands, and
+    //     reported rather than fixed here.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    make_wav("/SAMPLES/BUSY.WAV", 48000, 1, 16, 2400);
+    kit_sample(kLoopTrack, "/SAMPLES/BUSY.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    pump_held(3);
+    CHECK_EQ(storage().busy_text(), "READING");
+
+    const int saves_before = host.saves();
+    const int reads_before = host.read_alls();
+    char name_bytes[Storage::kNameBytes];
+    std::strcpy(name_bytes, storage().project_name());
+    const char *name_before = name_bytes;    // a pointer, so CHECK_EQ compares the CONTENT
+
+    storage().request_save();
+    storage().request_autosave();
+    storage().request_reload();
+    storage().request_new();
+    CHECK_EQ(storage().busy_text(), "READING");    // none of them displaced the job
+
+    host.complete_loads();
+    CHECK(settle());
+
+    // Nothing was saved, nothing was read, and the project was not renamed: all four requests
+    // were dropped rather than deferred.
+    CHECK_EQ(host.saves(), saves_before);
+    CHECK_EQ(host.read_alls(), reads_before);
+    CHECK_EQ(storage().project_name(), name_before);
+    CHECK(!host.logged("saved"));
+    CHECK(!host.logged("autosaved"));
+    CHECK(!host.logged("loaded"));
+
+    // The sample itself arrived, and a save asked for now works.
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(host.logged("saved"));
+}
+
+TEST(storage_the_handover_carries_the_frame_count_and_the_channels_intact) {
+    // The only three things that cross from the loader to the audio side: a byte offset, a frame
+    // count in 24 bits and a channel count (app/commands.hpp). A truncated frame count would play
+    // a fraction of the file and look like a decode bug, and a channel count of 1 for a stereo
+    // file would play it at half speed -- so both are checked against what the Sampler ended up
+    // holding rather than against the pool, which is the loader's own bookkeeping.
+    clean();
+
+    // 70,000 frames is 0x011170: it needs all three of the command's frame bytes, and more than
+    // one conversion slice (`kSliceFrames` is 48,000).
+    make_wav("/SAMPLES/LONG.WAV", 48000, 1, 16, 70000);
+    kit_sample(kLoopTrack, "/SAMPLES/LONG.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(slot_of(kLoopTrack).frames, 70000u);
+    pump(2);                                        // the handover command lands on the audio side
+
+    // `machines_[7]` and `samplers_[7]` are the same object (app/engine.cpp), so the cast is to
+    // the type the engine put there. No dynamic_cast: this build has no RTTI.
+    const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
+    CHECK(loop->has_sample());
+    CHECK_EQ(loop->sample_frames(), 70000);
+    CHECK_EQ(loop->sample_channels(), 1);
+    CHECK(loop->sample_data() != nullptr);
+
+    make_wav("/SAMPLES/ST2.WAV", 48000, 2, 16, 1500);
+    kit_sample(kLoopTrack, "/SAMPLES/ST2.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    pump(2);
+    CHECK_EQ(loop->sample_frames(), 1500);
+    CHECK_EQ(loop->sample_channels(), 2);
+
+    // And a swap away from it leaves the track holding nothing, rather than a pointer into memory
+    // that is about to be reused.
+    post(Cmd::clear_sample, uint8_t(kLoopTrack));
+    pump(2);
+    CHECK(!loop->has_sample());
+}
+
+TEST(storage_a_sample_swap_gives_up_if_the_epoch_never_moves) {
+    // A track whose epoch never changes must not hang the loader for ever. `kEpochPasses` is 512
+    // and `update()` runs at least 750 times a second, so the wait is a fraction of a second --
+    // long enough for any real block, short enough that the queue moves on.
+    //
+    // The audio side is simply never run here, which is the only way to hold the epoch still.
+    clean();
+
+    make_wav("/SAMPLES/STUCK.WAV", 48000, 1, 16, 300);
+    kit_sample(kLoopTrack, "/SAMPLES/STUCK.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+
+    storage().service();                           // the pass that starts the job
+    CHECK_EQ(storage().busy_text(), "SWAPPING");
+    for (int i = 0; i < 511; i++) storage().service();
+    CHECK_EQ(storage().busy_text(), "SWAPPING");   // 511 waits is still waiting
+    storage().service();                           // the 512th gives up
+    CHECK(storage().busy_text() == nullptr);
+    CHECK_EQ(storage().last_error(), "NO SWAP");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    CHECK_EQ(storage().loading_track(), -1);
+    CHECK_EQ(FakeHost::the().loads(), 0);          // the file was never opened
+
+    // And the loader is usable again afterwards.
+    pump(4);
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+}
+
+TEST(storage_a_card_pulled_mid_read_holds_the_buffer_until_the_callback) {
+    // `raw_` belongs to Enaga until the callback, which still arrives after a removal -- with an
+    // error. So the job is abandoned and the track fails, but nothing may start another read until
+    // that callback has come back, or the second read would be writing into a buffer the first one
+    // still owns.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    make_wav("/SAMPLES/PULL.WAV", 48000, 1, 16, 1200);
+    kit_sample(kLoopTrack, "/SAMPLES/PULL.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    pump_held(3);
+    CHECK_EQ(storage().busy_text(), "READING");
+    CHECK_EQ(host.pending_loads(), 1);
+
+    host.set_card(false);
+    storage().on_card(false);
+    CHECK(storage().busy_text() == nullptr);
+    CHECK_EQ(storage().last_error(), "NO CARD");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    CHECK_EQ(storage().loading_track(), -1);
+
+    // The card comes back, which re-offers every sample the kit names...
+    const int loads_before = host.loads();
+    host.set_card(true);
+    storage().on_card(true);
+    for (int i = 0; i < 40; i++) pump_held();
+    // ...and the loader waits, because the old read still owns the staging buffer.
+    CHECK_EQ(host.loads(), loads_before);
+    CHECK_EQ(host.pending_loads(), 1);
+    CHECK(storage().busy_text() == nullptr);
+
+    // The stale callback arrives and the new read can start.
+    host.complete_loads();
+    CHECK(settle());
+    CHECK_EQ(host.loads(), loads_before + 1);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 1200u);
+}
+
+TEST(storage_a_project_load_takes_every_track_through_the_swap) {
+    // A load replaces the kit, so every track's sample has to come off it -- not just the ones the
+    // new kit names a file for. `pool_.reset()` would be wrong: it forgets every reservation while
+    // the samplers are still holding pointers into those ranges. So each track goes through
+    // clear -> epoch -> release in turn, and a track whose new kit names no file stops there.
+    clean();
+
+    make_wav("/SAMPLES/BEFORE.WAV", 48000, 1, 16, 800);
+    kit_sample(kLoopTrack, "/SAMPLES/BEFORE.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+
+    // The project that is about to be saved names NO sample, so the one in RAM has to come off
+    // the track when it is loaded. `Cmd::kit_store` deliberately leaves `KitTrack::sample` alone
+    // (it is not derived from anything the engine owns), so clearing it here is what the kit a
+    // file holds really says.
+    kit_sample(kLoopTrack, "");
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));   // still loaded in RAM
+
+    uint8_t epochs[kTracks];
+    for (int t = 0; t < kTracks; t++) {
+        epochs[t] = engine().status().sample_epoch[t].load(std::memory_order_relaxed);
+    }
+
+    // Every track should end up empty rather than still holding its old range.
+    storage().request_reload();
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t now = engine().status().sample_epoch[t].load(std::memory_order_relaxed);
+        if (now == epochs[t]) std::printf("    track %d never went through the swap\n", t);
+        CHECK(now != epochs[t]);
+    }
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::empty));
+    CHECK_EQ(storage().samples().count_in(SampleState::ready), 0);
+    CHECK_EQ(storage().samples().used(), 0u);
+}
+
+TEST(storage_a_loaded_project_applies_its_sample_budget) {
+    // docs/SPEC.md: 32 MiB by default, "raisable per project to the 64 MiB the memory budget
+    // allows". The new budget cannot be applied while the load is running --
+    // `SamplePool::set_budget` refuses to shrink below what is already reserved rather than
+    // stranding a loaded sample -- so it waits until every track has been through the swap above.
+    clean();
+    CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);
+
+    Project &p = engine().project_for_load();
+    p.settings.sample_budget_mib = 48;
+    post(Cmd::project_loaded);
+    pump(2);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);   // saving changes nothing
+
+    storage().request_reload();
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(engine().project().settings.sample_budget_mib), 48);
+    CHECK_EQ(storage().samples().budget(), 48u << 20);
+
+    // And down again, because the swap released everything before the budget was applied. (Any
+    // PROJECT.BIN command marks the file dirty; the table at the top of this file is what pins
+    // which ones they are.)
+    Project &back = engine().project_for_load();
+    back.settings.sample_budget_mib = uint8_t(kSampleBudgetDefaultMib);
+    storage().note_command(Cmd::mute_store, 0);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    storage().request_reload();
+    CHECK(settle());
+    CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);
+}
+
+// =============================================================================================
+// 8. A new project
+// =============================================================================================
+//
+// These come last on purpose. `request_new` renames the project for the rest of the process --
+// `name_` is written here and read from the settings only in `init()` -- so a test that ran after
+// one of these and expected "DEFAULT" would be looking in the wrong folder. Every test above
+// builds its paths from `Storage::project_name()` for the same reason.
+
+namespace {
+
+// "NEW12" -> 12, and -1 for anything else.
+int new_name_number(const char *name) {
+    if (name[0] != 'N' || name[1] != 'E' || name[2] != 'W' || name[3] == '\0') return -1;
+    int value = 0;
+    for (const char *p = name + 3; *p != '\0'; p++) {
+        if (*p < '0' || *p > '9') return -1;
+        value = value * 10 + (*p - '0');
+    }
+    return value;
+}
+
+}  // namespace
+
+TEST(storage_request_new_is_refused_under_an_external_clock) {
+    // CLAUDE.md: start/stop/set_tempo return false under external sync, and the refusal has to be
+    // handled. A new project replaces everything in RAM, so it needs the transport stopped -- and
+    // under a MIDI clock STRATA cannot stop anything.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    post(Cmd::toggle_trig, 0, 5);
+    pump(2);
+    char before_bytes[Storage::kNameBytes];
+    std::strcpy(before_bytes, storage().project_name());
+    const char *before = before_bytes;       // a pointer, so CHECK_EQ compares the CONTENT
+
+    host.set_source(ENAGA_CLOCK_MIDI);
+    host.set_running(true);
+    storage().request_new();
+
+    CHECK_EQ(storage().last_error(), "EXT CLOCK");
+    CHECK_EQ(storage().project_name(), before);          // not renamed
+    CHECK(host.running());                               // and the clock was left alone
+    pump(2);
+    CHECK((engine().pattern().tracks[0].steps[5].flags & kStepTrig) != 0);   // nothing was wiped
+    CHECK_EQ(host.file_count(), 0);
+}
+
+TEST(storage_request_new_is_ram_only_and_takes_a_fresh_name) {
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    // A project on the card to lose, if this went wrong.
+    post(Cmd::toggle_trig, 0, 1);
+    post(Cmd::set_param, 0, 0, uint8_t(kLvl), 73);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+    storage().note_command(Cmd::set_param, 0);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    const int files_before = host.file_count();
+    const int saves_before = host.saves();
+    char old_name[Storage::kNameBytes];
+    std::strcpy(old_name, storage().project_name());
+
+    storage().request_new();
+    CHECK(settle());
+
+    // RAM only: nothing is written until a save, so a new project cannot lose the one on the card
+    // by itself.
+    CHECK_EQ(host.saves(), saves_before);
+    CHECK_EQ(host.file_count(), files_before);
+    CHECK(storage().last_error() == nullptr);
+
+    // A NEW NAME, from a counter in the settings. Keeping the old one would make the next save
+    // overwrite a project the user never asked to touch.
+    const int number = new_name_number(storage().project_name());
+    if (number < 0) std::printf("    the new project is called %s\n", storage().project_name());
+    CHECK(number > 0);
+    CHECK(std::strcmp(storage().project_name(), old_name) != 0);
+
+    // The project in RAM is empty, every file is dirty, and the first save of it writes all
+    // eleven -- a new name names a folder with nothing in it to be a diff against.
+    pump(4);
+    CHECK_EQ(int(engine().pattern().tracks[0].steps[1].flags), 0);
+    CHECK_EQ(int(kit_value(0, kLvl)), 0);
+    CHECK(storage().dirty());
+    CHECK_EQ(scene_count(engine().scenes().scenes[0]), 0);
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    for (int i = 0; i < kFileN; i++) {
+        if (!host.has_file(card_path(kFiles[i]))) {
+            std::printf("    the new project's %s is missing\n", kFiles[i]);
+        }
+        CHECK(host.has_file(card_path(kFiles[i])));
+    }
+
+    // And the project that was there is untouched, with its own trig still in it.
+    char path[ENAGA_FILE_PATH_MAX + 1];
+    std::strcpy(path, kDataFolder);
+    std::strcat(path, "/PROJECTS/");
+    std::strcat(path, old_name);
+    std::strcat(path, "/BANK_A.BIN");
+    CHECK(host.has_file(path));
+
+    // The counter keeps counting, so two new projects in a row cannot name the same folder.
+    storage().request_new();
+    CHECK(settle());
+    CHECK_EQ(new_name_number(storage().project_name()), number + 1);
+}
