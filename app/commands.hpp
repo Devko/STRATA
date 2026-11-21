@@ -96,7 +96,7 @@ enum class Cmd : uint8_t {
     // track, a: channels, u: byte offset into the sample region, c|d|e: frames (24 bits, which
     // is 16.7 M frames -- 349 s of mono at 48 kHz, well past the 30 s above which docs/SPEC.md
     // streams from the card instead of loading into RAM)
-    set_sample
+    set_sample,
 
     // --- kit and sound ---
     set_param,         // track, a: param index, b: value

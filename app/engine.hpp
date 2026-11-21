@@ -29,7 +29,6 @@
 #include "perc.hpp"
 #include "queue.hpp"       // and core/project.hpp through it: the project owns the live pattern
 #include "sample.hpp"
-#include "samplepool.hpp"
 #include "scheduler.hpp"
 #include "snare.hpp"
 #include "stepedit.hpp"
@@ -70,7 +69,6 @@ public:
     const Project &project() const { return project_; }
     const Queue &queue() const { return queue_; }
     const ChainPlayer &chain() const { return chain_; }
-    const SamplePool &samples() const { return samples_; }
     const TrackParams &params(int track) const { return params_[track]; }
     const Machine *machine(int track) const { return machines_[track]; }
     bool muted(int track) const { return muted_[track]; }
@@ -80,6 +78,22 @@ public:
     // The master and send settings, for the UI to draw. Edits still go through the ring.
     const SendSettings &sends() const { return sends_; }
     const MasterSettings &master() const { return master_; }
+
+    // The project, writable, for a LOAD to fill. Main context, and only with the TRANSPORT
+    // STOPPED: with the clock stopped `clock::ticks()` yields nothing, so the scheduler never
+    // reads the pattern and a load cannot land under it. A load must also post `Cmd::kit_recall`
+    // afterwards, since the machines read `params_` and not `project_.kit`.
+    //
+    // This is the one hole in "the main context never writes pattern memory", and it is a hole
+    // on purpose: a load replaces all 128 patterns, which is 1.03 MiB that cannot travel through
+    // a 16-byte command.
+    Project &project_for_load();
+
+    // App::init() only, before the first audio block. The region and the SamplePool that carves
+    // it up belong to the MAIN context (see `sample_region_` below); the audio side is handed the
+    // base so `Cmd::set_sample` can turn the loader's byte offset into a pointer, and the size so
+    // that an offset from a damaged command cannot be followed out of the region.
+    void set_sample_region(const int16_t *base, uint32_t bytes);
 
 private:
     void apply_commands();
@@ -94,6 +108,13 @@ private:
     void cross_boundary(uint32_t tick);
     void resolve_tick(uint32_t tick, uint32_t frame);
     void fire(const StepEvent &event);
+
+    // The kit the machines read (`params_`) and the kit a file holds (`project_.kit`) are
+    // different structures in different layers, so they are copied across explicitly rather than
+    // shared: `Cmd::kit_store` before a save, `Cmd::kit_recall` after a load.
+    void kit_from_params();
+    void params_from_kit();
+
     void load_default_kit();
     void load_default_pattern();
     void build_placeholder_sample();
@@ -117,6 +138,12 @@ private:
     Sampler loop_;
 
     Machine *machines_[kTracks] = {};
+
+    // Which tracks host a Sampler, for `Cmd::set_sample` and `Cmd::clear_sample`. The build has
+    // no RTTI (CLAUDE.md), so a Machine* cannot be asked whether it is one; the assignment is
+    // fixed at init anyway, so it is simply recorded alongside machines_ there. A track that
+    // hosts no Sampler refuses a sample command rather than reinterpreting a pointer.
+    Sampler *samplers_[kTracks] = {};
 
     // The whole project, about 1.03 MiB of it, and the sequencer plays a pattern INSIDE it
     // rather than a copy: `live()` is `project_.live()`. So an edit lands in the pattern that
@@ -180,6 +207,17 @@ private:
     // The tick at which the live pattern's current pass ends. Kept rather than derived so that
     // detecting the boundary is a comparison instead of a division per tick.
     uint32_t next_boundary_ = 0;
+
+    // False until `next_boundary_` has been derived from a real tick. A pattern change clears it,
+    // because the new pattern's master length makes the old boundary meaningless -- and because
+    // deriving it needs a tick, which only `resolve_tick` has. Without this flag the first pass
+    // after a change would end at the previous pattern's boundary.
+    bool boundary_known_ = false;
+
+    // The last tick the sequencer resolved. A queued change is armed from it: the arming happens
+    // on the audio side precisely so that it can use the tick the sequencer is actually on, which
+    // the main context cannot know (core/queue.hpp).
+    uint32_t tick_ = 0;
 
     // The per-tick event buffer lives here rather than on the audio stack: at the true worst
     // case it is 4 KiB, and the platform caps a stack frame at 16 KiB.

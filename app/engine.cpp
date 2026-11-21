@@ -41,14 +41,11 @@ bool Engine::init(float sample_rate) {
     loop_.init(rate_);
     mixer_.init(rate_);
 
-    // Sample memory, from the heap, here and nowhere else. The CEILING is reserved rather than
-    // the default budget, because a project may raise its budget long after init() is over and
-    // allocating then would break CLAUDE.md's rule that every buffer is taken here. 64 MiB of
-    // the ~124 MiB app heap, which is what docs/SPEC.md's memory table budgets for samples.
-    const uint32_t region_bytes = kSampleBudgetMaxMib << 20;
-    sample_region_ = new int16_t[region_bytes / sizeof(int16_t)];
-    if (sample_region_ == nullptr) return false;
-    samples_.init(kSampleBudgetDefaultMib << 20);
+    // Sample memory is NOT taken here. The region and the SamplePool that carves it up belong
+    // to the main context: App::init allocates the region and hands the base over with
+    // set_sample_region before the first audio block, which keeps every byte of pool state on
+    // one side of the ring (app/engine.hpp's `sample_region_`). It is still allocated once, at
+    // init, as CLAUDE.md requires -- just one level up.
 
     build_placeholder_sample();
 
@@ -63,6 +60,10 @@ bool Engine::init(float sample_rate) {
     machines_[5] = &bass_;
     machines_[6] = &stab_;     // CHORD's slot; a mono stab until VA POLY lands in M6
     machines_[7] = &loop_;
+
+    // The one track hosting a Sampler today. docs/SPEC.md gives SAMPLE to track 8 in the default
+    // kit; M6 makes a track's machine switchable and this gains the rest.
+    samplers_[7] = &loop_;
 
     // Track 3 chokes track 4: a closed hat cuts an open one. The spec's choke group, wired here
     // because the machines deliberately do not know about tracks.
@@ -81,6 +82,14 @@ bool Engine::init(float sample_rate) {
 
     ready_ = true;
     return true;
+}
+
+// Main context, App::init only. Nothing is read through `sample_region_` until a `Cmd::set_sample`
+// arrives, and that command cannot arrive before App::init has returned, so this needs no
+// synchronisation with the audio side.
+void Engine::set_sample_region(const int16_t *base, uint32_t bytes) {
+    sample_region_ = base;
+    sample_region_bytes_ = bytes;
 }
 
 void Engine::load_default_kit() {
@@ -454,6 +463,120 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        // --- projects and banks, M4 ---------------------------------------
+
+        case Cmd::queue_pattern: {
+            const int bank = int(command.a);
+            const int slot = int(command.b);
+            const QueueMode mode = command.c < uint8_t(QueueMode::count)
+                                       ? QueueMode(command.c)
+                                       : QueueMode::end_of_pattern;
+            if (!project_index_valid(bank, slot)) {
+                status_.bump_refused();
+                break;
+            }
+            // With the transport STOPPED there is no end of the current pass to wait for: no
+            // tick will arrive to make the change due, so a queued change would simply never
+            // happen and the UI would show a pending switch for ever. The only honest reading of
+            // any mode with the clock still is "now". `immediate` is the same switch by request.
+            if (mode == QueueMode::immediate || !enaga::clock::running()) {
+                switch_pattern(bank, slot);
+                queue_clear(queue_);
+                break;
+            }
+            // Armed from `tick_`, the tick the sequencer is actually on. That is the whole
+            // reason arming happens on this side (core/queue.hpp): the main context would have
+            // to guess, and a guess one block out lands the switch on the wrong pass.
+            if (!queue_arm(queue_, bank, slot, mode, tick_, master_loop_ticks(live()))) {
+                status_.bump_refused();
+            }
+            break;
+        }
+
+        case Cmd::cancel_queue:
+            // Unconditional: cancelling a queue that is not armed is what the UI does when the
+            // user presses the same pattern twice, and it is not an error.
+            queue_clear(queue_);
+            break;
+
+        case Cmd::set_chain:
+            if (command.a != 0) {
+                // Starting a chain jumps to its first entry (app/commands.hpp). chain_start
+                // leaves the player inactive for an empty chain, which is a refusal the UI
+                // should see rather than a chain that is silently "on" and does nothing.
+                if (chain_start(project_, chain_)) {
+                    switch_pattern(int(project_.chain[chain_.entry].bank),
+                                   int(project_.chain[chain_.entry].slot));
+                } else {
+                    status_.bump_refused();
+                }
+            } else {
+                // Stopping a chain leaves the pattern it reached playing, rather than jumping
+                // back: a performer turning the chain off wants to stay where they are.
+                chain_.active = false;
+            }
+            break;
+
+        case Cmd::kit_store:
+            kit_from_params();
+            break;
+
+        case Cmd::kit_recall:
+            params_from_kit();
+            break;
+
+        case Cmd::clear_sample:
+            // The first half of the sample swap docs/SPEC.md requires. The voices go first,
+            // because they are reading the buffer that is about to be released, and the epoch
+            // goes last, because the loader may act on it the instant it sees the change -- and
+            // what it does is write over that memory. Reversing the two is the bug this protocol
+            // exists to prevent.
+            if (samplers_[track] != nullptr) {
+                samplers_[track]->kill_all();
+                // And drop the pointer itself: a null sample is a legal, expected state and
+                // leaves the track silent rather than glitching (dsp/sample.hpp).
+                samplers_[track]->set_sample(nullptr, 0, 1, rate_);
+            }
+            // Bumped even for a track that hosts no Sampler. The loader waits for this change
+            // before it releases the range, so a track that was never reading anything must
+            // still report that it has stopped, or the wait never ends.
+            status_.bump_sample_epoch(track);
+            break;
+
+        case Cmd::set_sample: {
+            if (samplers_[track] == nullptr) {
+                status_.bump_refused();
+                break;
+            }
+            // 24 bits of frames: 16.7 M frames, which is 349 s of mono at 48 kHz and well past
+            // the 30 s above which docs/SPEC.md streams from the card instead.
+            const uint32_t frames = uint32_t(command.c) | uint32_t(command.d) << 8 |
+                                    uint32_t(command.e) << 16;
+            const int channels = command.a == 2 ? 2 : 1;
+            // At most 2^26 int16, so the product cannot overflow a uint32_t.
+            const uint32_t bytes = frames * uint32_t(channels) * uint32_t(sizeof(int16_t));
+
+            // Every field is checked against the region BEFORE a pointer is formed. The offset
+            // comes from the other side of the ring, and one past the end would be a read into
+            // whatever follows 64 MiB of DDR. The subtraction is written to avoid a wrap, as
+            // core/project.cpp's section bounds are. The even-offset test is not pedantry: a
+            // misaligned 16-bit read on the C674x does not fault, it silently reads the wrong
+            // address (core/pattern.hpp).
+            const bool usable = sample_region_ != nullptr && frames != 0 &&
+                                command.u % sizeof(int16_t) == 0 &&
+                                command.u <= sample_region_bytes_ &&
+                                bytes <= sample_region_bytes_ - command.u;
+            if (!usable) {
+                status_.bump_refused();
+                break;
+            }
+            samplers_[track]->set_sample(sample_region_ + command.u / sizeof(int16_t), frames,
+                                         channels, rate_);
+            break;
+        }
+
+        // --- kit and sound ---
+
         case Cmd::set_param:
             if (command.a < kParams) {
                 params_[track].v[command.a] = clamp_u8(command.b);
@@ -544,6 +667,9 @@ void Engine::switch_pattern(int bank, int slot) {
     // was resolved against a pattern that is no longer playing.
     scheduler_.reset(true);
     reconfigure();
+
+    // The new pattern's master length makes the old boundary meaningless, and deriving the new
+    // one needs a tick, which only resolve_tick has.
     boundary_known_ = false;
 }
 
@@ -704,6 +830,11 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     status_.voices.store(voices, std::memory_order_relaxed);
     status_.undo_depth.store(uint8_t(undo_.depth()), std::memory_order_relaxed);
     status_.redo_depth.store(uint8_t(undo_.redo_depth()), std::memory_order_relaxed);
+
+    // Which pattern is live. Published here rather than in switch_pattern because a project load
+    // moves it without going through that function, and two stores a block cost nothing.
+    status_.live_bank.store(project_.bank, std::memory_order_relaxed);
+    status_.live_slot.store(project_.slot, std::memory_order_relaxed);
 
     const float peak = mixer_.peak();
     const float scaled = peak * 1000.0f;

@@ -10,6 +10,7 @@
 // transport. docs/SPEC.md, "Software architecture".
 #include "engine.hpp"
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
+#include "samplepool.hpp"   // the sample region is carved up on THIS side; see Strata::init
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
@@ -19,6 +20,10 @@
 namespace {
 
 using namespace strata;
+
+// The sample region: the ceiling docs/SPEC.md allows, not a project's default budget. See
+// Strata::init for why it is this side's to take and why it is the ceiling.
+constexpr uint32_t kSampleRegionBytes = kSampleBudgetMaxMib << 20;
 
 // --- text helpers (no printf, no libm, and the font is upper case and digits) ---
 
@@ -131,6 +136,21 @@ class Strata : public enaga::App {
 public:
     bool init() override {
         if (!engine_.init(float(ENAGA_SAMPLE_RATE))) return false;
+
+        // Sample memory, from the heap, here and nowhere else. The CEILING is reserved rather
+        // than the default budget, because a project may raise its budget long after init() is
+        // over and allocating then would break CLAUDE.md's rule that every buffer is taken in
+        // init(). 64 MiB of the ~124 MiB app heap, which is what docs/SPEC.md's memory table
+        // budgets for samples.
+        //
+        // It is taken on THIS side, not in Engine::init, so that no pool state is shared across
+        // the command ring: the loader here reserves, fills and releases ranges, and the audio
+        // side is handed nothing but a base pointer (app/engine.hpp's `sample_region_`).
+        sample_region_ = new int16_t[kSampleRegionBytes / sizeof(int16_t)];
+        if (sample_region_ == nullptr) return false;
+        samples_.init(kSampleBudgetDefaultMib << 20);
+        engine_.set_sample_region(sample_region_, kSampleRegionBytes);
+
         enaga::clock::set_tempo(130.0f);     // the spec's reference tempo
         enaga::log("strata ready");
         return true;
@@ -1071,6 +1091,18 @@ private:
     }
 
     Engine engine_;
+
+    // The sample region and the pool that carves it up. Both belong to the main context: the
+    // loader is what reserves, fills and releases ranges, so keeping the pool here means there is
+    // no pool state shared across the ring at all. The handover to the audio side is a command
+    // carrying a byte offset, a frame count and a channel count.
+    //
+    // Releasing a range is the dangerous half, and docs/SPEC.md fixes the order: post
+    // `Cmd::clear_sample`, WAIT for `Status::sample_epoch[track]` to change, and only then
+    // release and load over the memory. Releasing before the epoch confirms overwrites what a
+    // voice is still reading.
+    int16_t *sample_region_ = nullptr;
+    SamplePool samples_;
 
     Mode mode_ = Mode::grid;
     int selected_ = 0;
