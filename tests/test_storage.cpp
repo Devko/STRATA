@@ -29,10 +29,10 @@
 //
 // ## What cannot be checked on the host, and is therefore not pretended
 //
-//   * The converted int16 in the sample region. `Storage::region_` is private and the engine only
-//     takes a base pointer, so the frames, the channel count and the rate are checked through
-//     `SamplePool`, the sample is checked to be AUDIBLE through the sampler, and the arithmetic
-//     itself belongs to tests/test_pcm.cpp.
+//   * The conversion arithmetic itself, which is tests/test_pcm.cpp's. What IS checked here is
+//     that the loader put the right bytes at the offset it handed over: `Storage::region_` is
+//     private, but the Sampler was given a pointer into it and dsp/sample.hpp exposes that for
+//     tests, so a file of distinguishable frames can be compared where it landed.
 //   * `files::save`'s crash safety ("NAME.TMP then replace"). The fake writes in one step, so a
 //     card pulled between the two cannot be produced here. What is checked is the consequence the
 //     app is responsible for: a failed or interrupted save leaves the project on the card readable
@@ -289,6 +289,11 @@ void put_sample(uint8_t *out, int bits, bool floating, int32_t value) {
 //
 // `declare_data` false writes a data chunk whose size field is 0, which <enaga/wav.hpp> says a
 // header still being written may report.
+// `ramp` makes every frame distinguishable from every other one -- frame f is f + 1 on the left
+// and -(f + 1) on the right -- which is what lets a test check that the loader put the file in the
+// region at the offset it handed over, and not one frame off it.
+bool g_ramp = false;
+
 uint32_t make_wav(const char *path, uint32_t rate, int channels, int bits, uint32_t frames,
                   const char *extra_tag = nullptr, uint32_t extra_bytes = 0,
                   bool floating = false, bool declare_data = true, uint32_t stray_bytes = 0) {
@@ -308,7 +313,8 @@ uint32_t make_wav(const char *path, uint32_t rate, int channels, int bits, uint3
         // A square wave 32 frames long: loud, and obviously not silence.
         const int32_t value = (f / 32u) % 2u == 0u ? 12000 : -12000;
         for (int c = 0; c < channels; c++) {
-            put_sample(g_scratch + at, bits, floating, value);
+            const int32_t sample = g_ramp ? (c == 0 ? int32_t(f + 1) : -int32_t(f + 1)) : value;
+            put_sample(g_scratch + at, bits, floating, sample);
             at += sample_bytes;
         }
     }
@@ -718,6 +724,14 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     CHECK_EQ(int(kit_value(3, kLvl)), 0);                 // a blank project: nothing left to find
     CHECK_EQ(scene_count(engine().scenes().scenes[5]), 0);
 
+    // And some unsaved edits on top, so that the load has flags to clear: reading the card again
+    // throws away what is in RAM, and the screen's unsaved mark has to go with it.
+    storage().note_command(Cmd::toggle_trig, 0);
+    storage().note_command(Cmd::mute_store, 0);
+    storage().note_command(Cmd::scene_erase, 0);
+    storage().note_command(Cmd::set_param, 0);
+    CHECK(storage().dirty());
+
     // --- read it back ----------------------------------------------------
     storage().request_reload();
     CHECK(settle());
@@ -1056,6 +1070,51 @@ TEST(storage_one_damaged_bank_costs_one_bank_and_not_the_project) {
     CHECK_EQ(int(kit_value(5, kLvl)), 88);
 }
 
+TEST(storage_one_damaged_pattern_inside_a_bank_costs_one_pattern) {
+    // A bank file is sixteen pattern containers back to back, each with its own CRC. A bank whose
+    // own container is sound but which holds one damaged pattern loads the other fifteen, leaves
+    // that slot empty, and says PATTERN LOST rather than pretending the bank was clean
+    // (core/project.hpp). The bank's checksum is recomputed here so the damage really is inside
+    // one pattern and not in the file around it.
+    clean();
+
+    Project &p = engine().project_for_load();
+    for (int s = 0; s < kPatternsPerBank; s++) {
+        p.patterns[0][s].tracks[0].steps[s].flags = uint8_t(kStepTrig);
+    }
+    post(Cmd::project_loaded);
+    pump(2);
+    storage().request_save();
+    CHECK(pump_until_idle());
+
+    const char *bank = card_path("BANK_A.BIN");
+    const uint32_t bytes = fetch(bank);
+    g_scratch[bytes / 2u] = uint8_t(g_scratch[bytes / 2u] ^ 0xFFu);   // somewhere in the middle
+    refresh_crc();
+    store(bank, bytes);
+
+    Project &wipe = engine().project_for_load();
+    project_init(wipe);
+    post(Cmd::project_loaded);
+    pump(2);
+
+    CHECK(reload_now());
+    check_error("one damaged pattern in a bank", "PATTERN LOST");
+    pump(4);
+
+    int intact = 0;
+    int lost = 0;
+    for (int s = 0; s < kPatternsPerBank; s++) {
+        const bool trig =
+            (engine().project().patterns[0][s].tracks[0].steps[s].flags & kStepTrig) != 0;
+        intact += trig ? 1 : 0;
+        lost += trig ? 0 : 1;
+    }
+    CHECK_EQ(lost, 1);
+    CHECK_EQ(intact, kPatternsPerBank - 1);
+    CHECK(settle());
+}
+
 TEST(storage_a_damaged_project_file_does_not_stop_the_banks_loading) {
     // The other half of the containment rule: 251 damaged bytes must not cost 128 patterns.
     // `project_read` leaves the settings at their defaults and deliberately does not touch a
@@ -1131,6 +1190,49 @@ TEST(storage_a_full_card_fails_a_save_and_corrupts_nothing) {
     pump(4);
     CHECK_EQ(int(kit_value(2, kLvl)), 127);
     CHECK_EQ(int(engine().pattern().tracks[1].steps[9].flags), 0);
+}
+
+TEST(storage_a_card_that_fills_at_the_banks_stops_there_and_says_so) {
+    // The other end of a save. A save writes one file per pass, so filling the card after the
+    // three fixed files are down puts the failure on BANK_A.BIN -- the branch that writes 129 KiB
+    // and has its own error path, which the failure above (on KIT.BIN) never reaches.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    post(Cmd::toggle_trig, 0, 4);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);      // so bank A has something to lose
+    CHECK(storage().dirty());
+
+    storage().request_save();
+    pump(4);                                      // begin, then PROJECT.BIN, KIT.BIN, PERFORM.BIN
+    CHECK_EQ(storage().busy_text(), "SAVING");
+    CHECK_EQ(storage().progress(), 3 * 100 / (kFileN));   // three files down, the banks next
+    CHECK(host.has_file(card_path("PERFORM.BIN")));
+    CHECK(!host.has_file(card_path("BANK_A.BIN")));
+
+    // The failure lands inside the pass below, so this does not wait for a job to finish: by the
+    // time the pass is over the job has already ended.
+    host.set_full(true);
+    pump(2);
+    CHECK(storage().busy_text() == nullptr);
+    CHECK_EQ(storage().last_error(), "CARD FULL");
+    CHECK(host.logged("save failed CARD FULL"));
+    CHECK(!host.logged("saved"));
+    CHECK(!host.has_file(card_path("BANK_A.BIN")));    // it stopped, rather than skipping on
+    CHECK(!host.has_file(card_path("BANK_B.BIN")));
+    CHECK(storage().dirty());
+
+    // Room again, and the next save writes EVERY file -- the interrupted one never marked the
+    // folder complete.
+    host.set_full(false);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    for (int i = 0; i < kFileN; i++) CHECK(host.has_file(card_path(kFiles[i])));
+    CHECK(reload_now());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(settle());
 }
 
 TEST(storage_a_read_error_on_the_first_file_abandons_the_load) {
@@ -1438,6 +1540,11 @@ TEST(storage_a_save_already_asked_for_beats_an_autosave) {
     CHECK(host.logged("saved"));
     CHECK(!host.logged("autosaved"));
     CHECK(host.has_file(card_path("KIT.BIN")));
+    CHECK(!host.has_file(card_path("KIT.BIN", true)));
+
+    // And it does not happen afterwards either: the autosave was stood down, not deferred.
+    CHECK(settle());
+    CHECK(!host.logged("autosaved"));
     CHECK(!host.has_file(card_path("KIT.BIN", true)));
 }
 
@@ -1942,7 +2049,13 @@ TEST(storage_the_handover_carries_the_frame_count_and_the_channels_intact) {
     CHECK_EQ(loop->sample_channels(), 1);
     CHECK(loop->sample_data() != nullptr);
 
+    // In stereo, where a channel count of 1 would play the file at half speed -- and with every
+    // frame distinguishable, so the bytes themselves can be checked where they landed. This is
+    // the one place the converted PCM is reachable: `Storage::region_` is private, but the
+    // Sampler was handed a pointer into it and dsp/sample.hpp exposes it for tests.
+    g_ramp = true;
     make_wav("/SAMPLES/ST2.WAV", 48000, 2, 16, 1500);
+    g_ramp = false;
     kit_sample(kLoopTrack, "/SAMPLES/ST2.WAV");
     CHECK(load_sample(kLoopTrack));
     CHECK(storage().last_error() == nullptr);
@@ -1950,11 +2063,55 @@ TEST(storage_the_handover_carries_the_frame_count_and_the_channels_intact) {
     CHECK_EQ(loop->sample_frames(), 1500);
     CHECK_EQ(loop->sample_channels(), 2);
 
+    const int16_t *pcm = loop->sample_data();
+    CHECK(pcm != nullptr);
+    if (pcm != nullptr) {
+        // Frame f is f + 1 on the left and -(f + 1) on the right, interleaved. One frame off --
+        // an offset handed over two bytes out, or a conversion that started at the wrong place --
+        // shows here and nowhere else.
+        CHECK_EQ(int(pcm[0]), 1);
+        CHECK_EQ(int(pcm[1]), -1);
+        CHECK_EQ(int(pcm[2]), 2);
+        CHECK_EQ(int(pcm[3]), -2);
+        CHECK_EQ(int(pcm[2 * 999]), 1000);
+        CHECK_EQ(int(pcm[2 * 1499]), 1500);
+        CHECK_EQ(int(pcm[2 * 1499 + 1]), -1500);
+    }
+
     // And a swap away from it leaves the track holding nothing, rather than a pointer into memory
     // that is about to be reused.
     post(Cmd::clear_sample, uint8_t(kLoopTrack));
     pump(2);
     CHECK(!loop->has_sample());
+}
+
+TEST(storage_a_read_that_fails_after_it_was_queued_fails_that_track) {
+    // `files::load` reports its result through the callback, so a card that goes bad after the
+    // read was accepted comes back as an error on the completion rather than from the call. The
+    // loader has to read that result: a sample whose read failed must leave the track `failed` and
+    // say so, not convert whatever happened to be in the staging buffer.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    make_wav("/SAMPLES/BADREAD.WAV", 48000, 1, 16, 900);
+    kit_sample(kLoopTrack, "/SAMPLES/BADREAD.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    pump_held(3);
+    CHECK_EQ(storage().busy_text(), "READING");
+    CHECK_EQ(host.pending_loads(), 1);
+
+    host.fail_pending_loads(ENAGA_FILE_CARD_ERROR);
+    CHECK(settle());
+    check_error("a read that failed after it was queued", "CARD ERROR");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 0u);
+    CHECK_EQ(storage().loading_track(), -1);
+
+    // And the loader is usable again: the next request reads and converts normally.
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 900u);
 }
 
 TEST(storage_a_sample_swap_gives_up_if_the_epoch_never_moves) {
