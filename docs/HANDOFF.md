@@ -8,7 +8,8 @@ three emulator scenarios pass.**
 
 | | |
 |---|---|
-| `make -C host test` | **812 tests, 531,575 checks, 0 failures** |
+| `make -C host test` | **823 tests, 531,652 checks, 0 failures** — and `app/` is in the suite now |
+| `tests/fakehost.cpp` | **a fake Enaga, so app/ is testable.** `enaga::host()` is 38 function pointers the app runtime normally defines and this Makefile does not link it, so the tests define it instead: `app/engine.cpp` and `app/storage.cpp` build for the host with no `#ifdef` in either. The clock is programmable (`deliver_tick(24, 37)`) and a `files::load` is held in flight until a test releases it |
 | `tools/build.sh` | **links.** APP.ENA, 422,600 bytes; payload 422,536; bss 1,265,512; no BOOT, MCU or SPI sections |
 | `tests/scenario_m3.sh` | **passes**, 33.39% peak, 0 overruns — the undo trail is exactly right after everything M4, M5 and M6 did to `app/engine.cpp` |
 | `tests/scenario_m4.sh` | **passes**, 28.64%: autosave, save, and a queued change switching immediately with the clock stopped |

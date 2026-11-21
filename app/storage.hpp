@@ -216,6 +216,20 @@ private:
     uint32_t save_seq_ = 0;        // monotonic, so a start can tell which of the two is newer
 
     bool project_dirty_ = false;
+    // Does the PROJECT folder hold a complete set of the ten files?
+    //
+    // It decides whether an explicit save writes everything or only what is dirty, and it has to
+    // exist because the dirty flags describe how RAM differs from a project ON THE CARD. For a
+    // project that was never written there is nothing to differ from: `request_save` marks the
+    // kit and nothing else, so a first save stored KIT.BIN alone and the reload of it failed
+    // with NOT FOUND -- the user's own work, reported as saved and gone.
+    //
+    // False at init (the default beat lives in RAM and has no files) and after `request_new`,
+    // which deliberately takes a new name and so names a folder that does not exist yet. True
+    // after a save that wrote every file, and after a successful load, which could not have
+    // happened unless the files were there.
+    bool project_complete_ = false;
+
     bool perform_dirty_ = false;   // the scenes and macro setup, in PERFORM.BIN
     bool kit_dirty_ = false;
     bool bank_dirty_[kBanks] = {};

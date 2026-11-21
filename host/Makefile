@@ -18,12 +18,26 @@ OUT       := $(if $(ENAGA_BUILD),$(ENAGA_BUILD)/host,$(ROOT)/build/host)
 
 CXX      ?= g++
 CXXFLAGS := -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -O2 -g \
-            -I$(ROOT)/core -I$(ROOT)/dsp -I$(ROOT)/tests -I$(ENAGA_INC)
+            -I$(ROOT)/core -I$(ROOT)/dsp -I$(ROOT)/app -I$(ROOT)/tests -I$(ENAGA_INC)
 
 CORE_SRC  := $(wildcard $(ROOT)/core/*.cpp)
 DSP_SRC   := $(wildcard $(ROOT)/dsp/*.cpp)
 TEST_SRC  := $(wildcard $(ROOT)/tests/*.cpp)
-SRC       := $(CORE_SRC) $(DSP_SRC) $(TEST_SRC)
+
+# app/ builds here too, against tests/fakehost.cpp.
+#
+# Enaga's C++ API is header-only: every call in <enaga/app.hpp>, <enaga/clock.hpp> and
+# <enaga/files.hpp> is an inline function over `enaga::host()`, which returns one plain C struct
+# of function pointers and is "defined by the app runtime". This Makefile does not link Enaga's
+# runtime.cpp, so tests/fakehost.cpp defines it instead and nothing clashes -- app/ is compiled
+# for the tests exactly as it is compiled for the device, with no #ifdef anywhere in it.
+#
+# app/app.cpp is NOT here: ENAGA_APP(Strata) at the end of it defines the package's entry points,
+# which belong to a device build. Its logic is reached by moving a piece into a header or by a
+# second entry point, and the modes are still unreachable until then (docs/UNIT_CHECKLIST.md).
+APP_SRC   := $(ROOT)/app/engine.cpp $(ROOT)/app/storage.cpp
+
+SRC       := $(CORE_SRC) $(DSP_SRC) $(APP_SRC) $(TEST_SRC)
 
 # dsp/*.ti.c: the hot inner loops CLAUDE.md requires to be plain C (the device build sends them
 # to cl6x, this one builds them with GCC as the fallback does). They are what the C++ in dsp/

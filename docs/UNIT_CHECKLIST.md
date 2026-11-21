@@ -546,6 +546,8 @@ confirm — that is what the boxes are.
 
 **Three shared one root cause**: M5 added a per-block copy of `performed_` into `effective_` so a
 morph could be heard between steps, and it quietly reverted anything else that wrote `effective_`.
+**All three now have host tests** (`tests/test_app.cpp`), so the boxes below are a confirmation
+rather than the only check there will ever be.
 
 - [ ] **Turn a knob in EDIT mode. It should be heard at once.** `Cmd::set_param` mirrored into
       `effective_` but did not set `perform_dirty_`, so `apply_performance` returned early,
@@ -586,6 +588,37 @@ morph could be heard between steps, and it quietly reverted anything else that w
       a macro assignment, a morph move and a mixer level — built their command by hand and so
       skipped `note_command` completely, leaving the screen claiming the project was saved. All
       posts now go through one function; check the `*` appears for each of those six.
+
+### `app/` is host-tested now, and the first thing that found
+
+`tests/fakehost.cpp` is a fake Enaga: `enaga::host()` returns a struct of 38 function pointers
+that the app runtime normally defines, and `host/Makefile` does not link that runtime — so the
+tests can define it instead and `app/engine.cpp` and `app/storage.cpp` compile for the host
+exactly as they compile for the device, with no `#ifdef` in either. The clock is programmable and
+a `files::load` does not complete until a test says so.
+
+It found a data-loss bug before it had a single assertion in it, and a second one an hour later.
+Both are fixed, both have regression tests, and both are listed here because the fix should be
+confirmed by hand once:
+
+- [ ] **Save a brand-new project, then reopen it.** `request_save` marks only the KIT dirty and
+      `step_save` skips every file whose flag is clear — the flags describe how RAM differs from
+      a project ON THE CARD, and for a project never written there is nothing to differ from. So
+      a first save stored `KIT.BIN` alone and reopening it failed with NOT FOUND: the user's own
+      work, reported as saved, and gone. An explicit save now writes all ten files when the
+      project is not known to be complete on the card.
+- [ ] **Swap SD cards, then save.** The "project is complete on the card" flag is now cleared on
+      any card transition, because after a swap it is a claim about a card nobody has looked at.
+      Without that, a save onto a fresh card would write only the dirty files again.
+- [ ] **Press SAVE, pull the card, put it back.** The save is CANCELLED — `on_card(false)` clears
+      the pending request along with any job — so the project stays unsaved with `NO CARD` as the
+      only sign. Nothing is lost and asking again works. Asking the other way round (card out
+      first, then SAVE) does complete by itself when a card arrives. Both are pinned by tests;
+      **whether the cancelled one should resume on its own is a judgement for the unit.**
+
+Still not host-testable: `app/app.cpp`. `ENAGA_APP(Strata)` at the end of it defines the
+package's entry points, which belong to a device build, so every mode, gesture and encoder
+binding is still unreachable by a test and still needs the hardware.
 
 ## M0.5 — budget spike
 

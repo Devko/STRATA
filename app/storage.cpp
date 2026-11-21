@@ -244,6 +244,9 @@ void Storage::request_new() {
         // a project the user never asked to touch, which is the one unrecoverable mistake this
         // screen could make. The counter lives in the settings so the names stay distinct across
         // restarts; there is no file browser in M4 to offer anything better.
+        // A new name names a folder with nothing in it, so the next save has to write all ten.
+        project_complete_ = false;
+
         const int32_t next = settings_.get(kKeyNewSeq, 0) + 1;
         settings_.set(kKeyNewSeq, next);
         char *out = name_;
@@ -316,6 +319,15 @@ bool Storage::dirty() const {
 // --- the card -------------------------------------------------------------
 
 void Storage::on_card(bool usable) {
+    // A card that came or went may hold anything, so forget whether the project is complete on
+    // it. The flag says "all ten files are there", and after a swap that is a claim about a card
+    // nobody has looked at: the one left behind might hold a different project, an older copy of
+    // this one, or nothing. Getting it wrong writes only the dirty files onto a card with none,
+    // which is the data-loss `project_complete_` exists to prevent, arriving by another route.
+    //
+    // On the transition only, so a redundant on_card(true) does not force a full save every time.
+    if (usable != card_usable_) project_complete_ = false;
+
     card_usable_ = usable;
     if (usable) {
         error_ = nullptr;
@@ -371,6 +383,12 @@ void Storage::finish_job(const char *error) {
             enaga::log(line);
         } else {
             enaga::log(saving ? (autosave_ ? "autosaved" : "saved") : "loaded");
+
+            // The PROJECT folder now holds all ten files: a save that got here wrote every one
+            // it was asked for, and a load that got here found every one it needed. Only for the
+            // project folder -- an autosave says nothing about what is in the project's own.
+            // A failed save leaves this alone, so the next one writes everything again.
+            if (!autosave_) project_complete_ = true;
         }
     }
 
@@ -509,7 +527,12 @@ void Storage::step_save() {
 
     // An autosave writes everything: it is a snapshot, and the dirty flags describe how RAM
     // differs from the PROJECT, not from the autosave.
-    const bool all = autosave_;
+    //
+    // And so does the FIRST save of a project, for the same reason turned around: there is no
+    // file on the card for a flag to differ from, so "only what changed" is every file. Without
+    // this, a first save wrote KIT.BIN alone -- `request_save` is what marks the kit -- and the
+    // nine others never existed, so reloading the project failed with NOT FOUND.
+    const bool all = autosave_ || !project_complete_;
     uint32_t bytes = 0;
     const char *file = nullptr;
     SerializeResult res = SerializeResult::ok;
