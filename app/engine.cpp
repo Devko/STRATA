@@ -58,21 +58,24 @@ bool Engine::init(float sample_rate) {
 
     build_placeholder_sample();
 
-    // The default techno kit of docs/SPEC.md, as far as the implemented machines reach.
-    // Tracks 7 and 8 wait for VA POLY and GRAIN; track 6 for VA MONO and track 8's loop for
-    // SAMPLE. An empty slot is silent, not a crash.
+    // The default techno kit of docs/SPEC.md. Every slot is filled now that VA POLY exists;
+    // GRAIN has no track in the default kit and arrives with machine switching. An empty slot
+    // would be silent, not a crash.
     machines_[0] = &kick_;
     machines_[1] = &snare_;
     machines_[2] = &hat_closed_;
     machines_[3] = &hat_open_;
     machines_[4] = &perc_;
     machines_[5] = &bass_;
-    machines_[6] = &stab_;     // CHORD's slot; a mono stab until VA POLY lands in M6
+    machines_[6] = &stab_;     // CHORD, on VA POLY's six voices
     machines_[7] = &loop_;
 
     // The one track hosting a Sampler today. docs/SPEC.md gives SAMPLE to track 8 in the default
     // kit; M6 makes a track's machine switchable and this gains the rest.
     samplers_[7] = &loop_;
+
+    // And the one hosting VA POLY, so `fire` knows which track can be sent a chord.
+    polys_[6] = &stab_;
 
     // Track 3 chokes track 4: a closed hat cuts an open one. The spec's choke group, wired here
     // because the machines deliberately do not know about tracks.
@@ -279,6 +282,16 @@ void Engine::load_default_pattern() {
     // Successive notes pick successive slices of the placeholder loop.
     for (int i = 0; i < 4; i++) {
         live().tracks[7].steps[loop[i]].note = uint8_t(60 + i);
+    }
+
+    // The CHORD track plays a chord, which is what its name says and what makes VA POLY's six
+    // voices reachable without touching the step page. MIN7 is the dub-techno stab, and it is
+    // four notes rather than three, so the chord path is exercised past a triad: `fire` expands
+    // it on one frame and the allocator has to give each note its own voice. Like the two locks
+    // below, this is here so the feature runs every time anyone plays the default kit or an
+    // emulator scenario, rather than only when someone remembers to set it.
+    for (int i = 0; i < 2; i++) {
+        live().tracks[6].steps[stab[i]].chord = chord_pack(ChordType::min7, 0);
     }
 
     // Accent the downbeat kick: techno lives on that one.
@@ -1083,8 +1096,36 @@ void Engine::fire(const StepEvent &event) {
         trig.slide = event.slide;
         trig.frame = event.frame;
         trig.gate_frames = gate_frames_for(track, event.length_index);
-        machines_[track]->trigger(trig);
 
+        if (polys_[track] != nullptr) {
+            // A POLY track plays a CHORD, which is several notes on one frame rather than one
+            // call carrying several notes. That is deliberate and it is why VA POLY's allocator
+            // counts a voice busy from the moment it takes a trig: a machine that waited for the
+            // trig's frame would give every note of the chord the same voice and play one note.
+            //
+            // `chord_expand` folds the step's note into the key and stacks the chord's intervals
+            // on it, each folded too, and returns them ascending. It is capped at the voices
+            // this machine actually has, and the cap applies BEFORE inverting, so a six-voice
+            // eleventh comes out as the bottom six notes of that chord rather than six notes
+            // from its middle (core/chord.hpp says why). A chord type of `none` expands to one
+            // note -- the folded root -- so an ordinary melodic POLY part needs no special case
+            // here, and gets the fold the comment above says a MONO part does not.
+            const Pattern &pattern = live();
+            const uint8_t packed = pattern.tracks[track].steps[event.step].chord;
+            uint8_t notes[kChordMaxNotes];
+            const int voiced = chord_expand(event.note, packed, pattern.root, int(pattern.scale),
+                                            notes, VaPoly::kVoices);
+            for (int i = 0; i < voiced; i++) {
+                trig.note = notes[i];
+                machines_[track]->trigger(trig);
+            }
+        } else {
+            machines_[track]->trigger(trig);
+        }
+
+        // Once per step, not once per note: a chord is one trig as far as the screen is
+        // concerned, and eight LEDs flashing six times would be a worse display, not a better
+        // one.
         status_.bump_triggered(track);
 
         if (track == duck_source_) mixer_.trigger_duck(event.frame);

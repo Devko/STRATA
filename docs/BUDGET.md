@@ -383,16 +383,62 @@ records for cl6x has NOT been applied. A GCC-only number near the target is ther
 failure, and one comfortably under it is not yet a pass on the unit.
 
 Emulator caveats that apply to every row: no cache model, and **peak depends on run length** --
-the same build reads 22.72% over 1,257 blocks and 29.2% over 9,362. Compare versions, not
-targets.
+the same build reads 33.07% over 1,257 blocks and 28.0% over 9,362 -- and this time the LONGER
+run reads lower, because the 1,257-block run's window happens to catch the chord. Compare
+versions, not targets.
 
 | Scenario | Blocks | Peak (GCC-only) | Overruns |
 | --- | --- | --- | --- |
-| `scenario_m3.sh` — the default beat, M6 build | 1,257 | **22.72%** | 0 |
-| `scenario_m4.sh` — + stop, queue A02, save | 1,661 | **22.72%** | 0 |
-| `scenario_m5.sh` — + PERFORM, scene capture, macro assign | 1,258 | **23.51%** | 0 |
-| `scenario_m6.sh` — + KEYS, three keys recorded | 1,661 | **30.64%** | 0 |
-| `tools/render.sh --seconds 12` — 12.2 s continuous | 9,362 | **29.2%** | 0 |
+| `scenario_m3.sh` — the default beat, M6 build | 1,257 | **33.07%** | 0 |
+| `scenario_m4.sh` — + stop, queue A02, save | 1,661 | **28.42%** | 0 |
+| `scenario_m5.sh` — + PERFORM, scene capture, macro assign | 1,258 | **28.42%** | 0 |
+| `scenario_m6.sh` — + KEYS, three keys recorded | 1,661 | **37.61%** | 0 |
+| `tools/render.sh --seconds 12` — 12.2 s continuous | 9,362 | **28.0%** | 0 |
+
+**The baseline moved, twice, and both moves are explained below.** The previous build of the same
+scenarios read 22.72 / 22.72 / 23.51 / 30.64. `Step::length` becoming audible took 2.4 points
+OFF, and registering VA POLY on the CHORD track with a four-note chord put 12.7 ON.
+
+#### VA POLY costs 4.25 points per voice, and that is the figure to worry about
+
+The default kit's CHORD track plays a MIN7 -- four notes -- so this is measurable by changing one
+chord type in `build_default_beat` and re-running `scenario_m3.sh`. Four runs, same build, same
+beat, GCC-only:
+
+| Chord on the stab | Voices sounding | `scenario_m3.sh` peak | Over one voice |
+| --- | --- | --- | --- |
+| none (a single note) | 1 | 20.32% | — |
+| `5TH` | 2 | 24.48% | +4.16 |
+| `MIN7` — **what the default kit now plays** | 4 | **33.07%** | +12.75 |
+| `MIN11` | 6 | 41.67% | +21.35 |
+
+Linear at **4.25 points per voice**, which is about **21,100 cycles per voice per block**. Six
+voices is therefore ~127,000 cycles, or **25.6% of the block on its own**.
+
+docs/SPEC.md budgets **11,208 cycles for VA POLY entire**. The GCC-only measurement is **11.3x
+that**, and even at the 2.2x this document records for cl6x it would be ~5x. One of three things
+is true and the unit decides which:
+
+1. **cl6x is worth much more than 2.2x on this code.** Plausible: `dsp/va.cpp` is C++ rather than
+   a `.ti.c` loop, it is the branchiest hot code in the project, and 2.2x was measured on the
+   drum loops, which are already branch-free. This is the optimistic case and it is untested.
+2. **SPEC's figure was for a cheaper voice than the one that was built.** Each VA POLY voice is a
+   whole `VaVoice`: saw, synced pulse, sub triangle, an SVF and two envelopes, the same voice VA
+   MONO uses. Six of those is six VA MONOs. SPEC's 11,208 is close to **two** of them.
+3. **The emulator is wrong about this code in particular.** It has no cache model, and a VA voice
+   is almost pure arithmetic on registers -- the case an instruction-counting emulator should
+   model BEST, not worst. So this is the least likely of the three.
+
+CLAUDE.md's rule of thumb -- "all 18 voices together are about 11% of the block" -- is now known
+to be wrong for the melodic machines, and by a wide margin. It holds for the drums, which are
+short one-shots that go idle within a step; it does not hold for a sustaining voice. **A six-voice
+chord is not a corner case** -- MIN11 is in the table precisely so all six can be used.
+
+What to reach for, in order, and none of it is worth doing before the unit is measured:
+`dsp/vapoly.cpp`'s header names the **buffered-maths** optimisation (one oscillator pass over a
+whole slice for all six voices rather than six passes over one), the voice count could drop from
+six to four, and `VaVoice::kControl` could rise from 16, which would cut the control-rate term
+four ways at a cost in envelope resolution. The first of those is the one with headroom in it.
 
 **`Trig::gate_frames` costs +0.06 points** and nothing more. The previous build of the same four
 scenarios read 22.66 / 22.66 / 23.48 / 30.58, so converting `Step::length` to frames in
@@ -409,17 +455,20 @@ whose only job is to keep a WAITING trig's short gate from re-slicing the note i
 which would not be bounded. Measured: re-slicing a started voice is bit-transparent, so that
 guard is a cost guard and nothing else.
 
-**Beat repeat's always-on cost: +0.79 points** (23.51 against 22.72 on the same build and the
-same beat; it read +0.82 before the gate landed, and both halves of the subtraction moved by
-0.06, so this is the same figure measured again rather than a change). That is the one DSP figure
-M5 owed. It covers `dsp/repeat`'s ring copy of every block plus the per-block performance pass,
+**Beat repeat's always-on cost: under 0.1 points now, and it was +0.82 when it was measured.**
+Both numbers are right: the tax is a constant per block -- one 64-frame stereo copy and a
+128-parameter compare -- and the peak block is now the chord's rather than an idle one, so the
+same constant is a smaller share of a larger peak. `scenario_m5.sh` carries the m3 baseline and
+fails if the gap ever exceeds five points, which is the check that matters; the original +0.82 is
+the honest figure for the tax itself. That is the one DSP figure M5 owed. It covers `dsp/repeat`'s ring copy of every block plus the per-block performance pass,
 and it is the shape expected of one 64-frame stereo copy and a 128-parameter compare.
 `tests/scenario_m5.sh` carries the baseline and fails loudly if the gap ever exceeds five points.
 
-**M6's 30.64% is the figure to watch.** It is 7.1 points above the same build's default beat, and
-the whole of it is KEYS: the scenario plays three keys into the pattern, so eight tracks are
-sounding where `scenario_m3.sh` has four. Nothing in it is a chord yet -- VA POLY and GRAIN are
-not registered -- and the two machines M6 still owes are the two most expensive in the spec.
+**M6's 37.61% is 4.5 points above the same build's default beat**, and the whole of it is KEYS:
+the scenario plays three keys into the pattern, so more tracks sound than `scenario_m3.sh` has.
+GRAIN is still not registered, and it is the costliest voice in docs/SPEC.md's table -- so the
+figure above is not the worst case, and the per-voice number in the table is the reason to get
+a real measurement before adding it to a track.
 
 Still unmeasured, because the emulator can press KEYS and nothing else (`emulate.py` has one
 `--key` option and no pad or encoder support) and seven of M5's eight tools are on the upper
@@ -467,7 +516,7 @@ divide 64-bit, which is the pattern to follow.
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |
 | --- | --- | --- | --- | --- |
-| M1, 4-track beat at 130 BPM | under 15% | | 22.72% emulator, 4 of 8 tracks sounding | 2026-11-21 |
+| M1, 4-track beat at 130 BPM | under 15% | | 33.07% emulator, all 8 tracks, a 4-note chord on one | 2026-11-21 |
 | M2, 8 tracks worst case | under 40% | | | |
 | M6, everything worst case | under 60% | | | |
 

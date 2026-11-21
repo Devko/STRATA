@@ -415,6 +415,9 @@ Three M6 features and one M5 leftover all wanted something `dsp/track.hpp`'s `Ma
 have. All three were decided before any of them was wired in, so the audio behaviour changes
 once and `app/engine.cpp` was edited once. What was chosen, and what is still open:
 
+Two of them are now also WIRED: VA POLY is on the CHORD track and `Engine::fire` expands a
+step's chord byte onto its voices.
+
 | The question | Decided | Still open |
 |---|---|---|
 | A per-note note-off, so `Step::length` can be heard | **A duration on the `Trig`.** `Trig::gate_frames` is additive — no new virtual, no note-to-voice map in the engine — and the machine releases its own voice when the count runs out. `Step::length` has been stored since M3 and makes a sound for the first time | A held KEYS key and `Cmd::release_note` still have no known duration, so they still cannot be released. A `release(note)` virtual can land later without disturbing the gate; it is not needed for a sequenced part |
@@ -428,8 +431,10 @@ once and `app/engine.cpp` was edited once. What was chosen, and what is still op
 **VA POLY (`dsp/vapoly`)** — 41 host tests, 16 of 18 mutations caught on the machine and 11 of
 14 on the gate (all five survivors honest, and named in `tests/test_vapoly.cpp`), and VaMono's
 voice factored out and proven BIT-EXACT over 4,840 rendered values — still bit-exact after the
-gate, which is why the countdown lives in VaPoly's `Slot` and not in the shared `VaVoice`. Not
-registered on a track yet, so none of it is reachable or measured.
+gate, which is why the countdown lives in VaPoly's `Slot` and not in the shared `VaVoice`.
+**Registered on the CHORD track**, with chord expansion in `Engine::fire` and a MIN7 in the
+default kit, so it sounds the moment the app starts: measured contributing a 0.09 peak to the
+mix (-20.8 dBFS under the limiter) on every stab step, and 4.25 points of load per voice.
 
 - [ ] Six notes sound together; a seventh steals the quietest started voice rather than being
       dropped.
@@ -445,14 +450,23 @@ registered on a track yet, so none of it is reachable or measured.
       FADE rather than cut. Then a chord whose notes carry different lengths via locks — the
       countdown is per voice, so they should end apart.
 - [ ] A gate shorter than the attack. The note should still speak before it releases, not click.
-- [ ] The six-voice cost, with and without cl6x. Derived at ~9,960 cycles (~2.0% of the block)
-      against SPEC's 11,208; unmeasured, and the control-rate term is the part that scales
-      linearly. `dsp/vapoly.cpp`'s header names the buffered-maths optimisation to reach for if
-      it disappoints.
+- [ ] **The six-voice cost, with cl6x. Without it, it is measured and it is bad:** 4.25 points
+      per voice, so 25.6% of the block for six, against SPEC's 11,208 cycles for the whole
+      machine -- 11.3x. The derived estimate in this box used to read ~2.0% for all six; it was
+      wrong by an order of magnitude. docs/BUDGET.md has the four-point measurement, the three
+      possible explanations and what to reach for. **This is the measurement the project most
+      needs from the unit**, because every option for fixing it is work that should not start
+      until someone knows whether cl6x already has.
 
-**Chords (`core/chord`)** — 27 host tests, 15 of 15 mutations caught, and nothing calls it yet:
-the engine wiring is still to come, so none of this is reachable from the panel.
+**Chords (`core/chord`)** — 27 host tests, 15 of 15 mutations caught, and `Engine::fire` now
+calls it: a POLY step's chord byte is expanded onto VA POLY's voices on one frame. The expansion
+itself has no host test, because nothing in `app/` does — so the boxes below are the only check
+on it.
 
+- [ ] **The default kit's stab is a MIN7.** It is in `build_default_beat` so the chord path runs
+      every time anyone plays the default kit, the way the two parameter locks are. Four notes
+      should sound, together, on steps 1 and 9 of track 7. One note means the expansion is not
+      running; a flam means the notes are not landing on the same frame.
 - [ ] A POLY step with each chord type sounds like its name. The table is semitone stacks folded
       into the key, which gives the diatonic triad on every degree of a mode — so MAJ on the root
       of a minor key correctly comes out MINOR. Verify that reads as a feature and not a bug.

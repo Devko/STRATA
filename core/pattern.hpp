@@ -135,7 +135,19 @@ struct Step {
     uint8_t flags = 0;                  // StepFlag bits
     uint8_t note = 60;                  // 0-127
     uint8_t velocity = 100;             // 1-127
-    uint8_t length = 1;                 // index into the note-length table
+    // Index into core/timing.hpp's note-length table. 8 is "1 step", NOT 1.
+    //
+    // 1 is the table's shortest entry -- a SIXTEENTH OF A STEP, about 7 ms at 130 BPM -- and it
+    // was this field's default for as long as nothing read it. `Trig::gate_frames` reads it now,
+    // so the default decides how long an untouched note sounds, and the shortest entry in the
+    // table is a blip rather than a note: measured, it cut 2.4 points off the emulator's load
+    // on the default beat because the stab was released almost as soon as it started.
+    //
+    // There is no "no gate" value to default to instead: docs/SPEC.md reserves index 0 as
+    // invalid on purpose, so that a zeroed or corrupt byte is refusable rather than meaning the
+    // shortest note, and `step_sanitize` clamps to 1. One step is what a sequencer means by an
+    // ungated note, and it matches `StepEvent::length_index`, which has defaulted to 8 since M3.
+    uint8_t length = 8;                 // index into the note-length table: 8 = one step
     int8_t micro = 0;                   // -11..+11 ticks of the 24 in a 16th
     uint8_t probability = 100;          // 0..100 %
     uint8_t condition = 0;              // packed; see condition_pack

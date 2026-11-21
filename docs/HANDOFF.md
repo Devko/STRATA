@@ -8,13 +8,14 @@ three emulator scenarios pass.**
 
 | | |
 |---|---|
-| `make -C host test` | **765 tests, 466,298 checks, 0 failures** |
-| `tools/build.sh` | **links.** APP.ENA, 411,552 bytes; payload 411,488; bss 1,264,968; no BOOT, MCU or SPI sections |
-| `tests/scenario_m3.sh` | **passes**, 22.72% peak, 0 overruns — the undo trail is exactly right after everything M4, M5 and M6 did to `app/engine.cpp` |
-| `tests/scenario_m4.sh` | **passes**, 22.72%: autosave, save, and a queued change switching immediately with the clock stopped |
-| `tests/scenario_m5.sh` | **passes**, 23.51%: beat repeat's always-on cost measured at +0.79 points |
-| `tests/scenario_m6.sh` | **passes**, 30.64%: KEYS records three keys, each one undo level |
-| `tools/render.sh` | 12.2 s rendered; peak +0.00 dBFS (the limiter), rms -17.6 dBFS |
+| `make -C host test` | **766 tests, 466,816 checks, 0 failures** |
+| `tools/build.sh` | **links.** APP.ENA, 422,600 bytes; payload 422,536; bss 1,265,512; no BOOT, MCU or SPI sections |
+| `tests/scenario_m3.sh` | **passes**, 33.07% peak, 0 overruns — the undo trail is exactly right after everything M4, M5 and M6 did to `app/engine.cpp` |
+| `tests/scenario_m4.sh` | **passes**, 28.42%: autosave, save, and a queued change switching immediately with the clock stopped |
+| `tests/scenario_m5.sh` | **passes**, 28.42%: beat repeat's tax is now below the noise of the peak block; see docs/BUDGET.md |
+| `tests/scenario_m6.sh` | **passes**, 37.61%: KEYS records three keys, each one undo level |
+| `tools/render.sh` | 12.2 s rendered; peak +0.00 dBFS (the limiter), rms -17.6 dBFS, 28.0% over 9,362 blocks |
+| **the number that matters** | **VA POLY costs 4.25 points per voice.** Six voices is 25.6% of the block on its own, against docs/SPEC.md's 11,208 cycles for the whole machine — 11.3x, GCC-only. docs/BUDGET.md has the four-point measurement and the three explanations |
 | **cl6x** | still impossible: TI's installer needs an interactive licence click. Every figure above is GCC-only and the ~2.2x cl6x is worth has NOT been applied |
 
 So M4 and M5 are no longer unverified code. What they are is **verified in an emulator with no
@@ -22,8 +23,10 @@ cache model, on a GCC-only build**. `docs/BUDGET.md` states both caveats next to
 and the unit still decides.
 
 M6 is well in: the Euclidean generator (F1 + encoders A/B/C in GRID), KEYS mode (F1 + F4),
-`core/chord`, `dsp/vapoly` and `Step::length` as a real gate. Still to write: GRAIN, the engine
-edit that registers both new machines and expands chords, resampling and pad pressure. The two
+`core/chord`, `dsp/vapoly` and `Step::length` as a real gate -- and VA POLY is now REGISTERED on
+the CHORD track, with chord expansion wired into `Engine::fire` and a MIN7 in the default kit so
+the path runs on every scenario. Still to write: GRAIN's merge and registration, resampling and
+pad pressure. The two
 machines are the budget risk -- GRAIN is the costliest voice in docs/SPEC.md's table -- and the
 60% exit depends on cl6x, which is unresolved.
 

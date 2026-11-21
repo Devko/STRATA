@@ -12,6 +12,8 @@
 #include "check.hpp"
 
 #include "pattern.hpp"
+#include "scheduler.hpp"   // StepEvent, whose length_index default this file pins against Step's
+#include "timing.hpp"      // length_valid and length_sixteenths
 
 #include <cstddef>
 #include <initializer_list>
@@ -90,6 +92,40 @@ TEST(an_initialised_pattern_is_empty_and_plays_straight) {
             CHECK_EQ(int(ratchet_count(step.ratchet)), 1);
         }
     }
+}
+
+TEST(an_untouched_step_asks_for_a_note_one_step_long) {
+    // The defaults a blank pattern plays with, and `length` is the one with teeth.
+    //
+    // Until `Trig::gate_frames` existed nothing read it, and it defaulted to 1 because 1 is the
+    // table's lowest valid index. 1 is a SIXTEENTH OF A STEP -- about 7 ms at 130 BPM -- so the
+    // moment the field became audible that default turned every untouched note into a blip. The
+    // emulator saw it as a 2.4-point drop in load before the sound was even listened to.
+    //
+    // 8 is "1 step". It is pinned here, and against `StepEvent`'s own default, because the two
+    // disagreed for three milestones without anything noticing: core/pattern.hpp is what a
+    // pattern plays with and core/scheduler.hpp is what a step with no pattern behind it plays
+    // with, and an untouched note should not depend on which of them it came through.
+    const Step fresh{};
+    CHECK_EQ(int(fresh.length), 8);
+    CHECK_EQ(int(length_sixteenths(fresh.length)), 16);   // one step, exactly
+    CHECK(length_valid(fresh.length));
+
+    const StepEvent event{};
+    CHECK_EQ(int(event.length_index), int(fresh.length));
+
+    Pattern pattern;
+    pattern_init(pattern);
+    for (int t = 0; t < kTracks; t++) {
+        for (int i = 0; i < kStepsPerTrack; i++) {
+            CHECK_EQ(int(pattern.tracks[t].steps[i].length), 8);
+        }
+    }
+
+    // And the thing that made 1 the old default is still true: index 0 is docs/SPEC.md's
+    // invalid sentinel, so there is no "let the envelope decide" to default to instead.
+    CHECK(!length_valid(0));
+    CHECK_EQ(int(length_sixteenths(0)), 0);
 }
 
 // --- trig conditions ------------------------------------------------------

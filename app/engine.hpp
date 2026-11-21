@@ -37,8 +37,10 @@
 #include "snare.hpp"
 #include "stepedit.hpp"
 #include "track.hpp"
+#include "chord.hpp"     // a POLY step's chord byte, expanded in fire()
 #include "undo.hpp"
 #include "va.hpp"
+#include "vapoly.hpp"    // the CHORD track's six voices
 
 #include <cstdint>
 
@@ -182,7 +184,7 @@ private:
     Hat hat_open_;
     Perc perc_;
     VaMono bass_;
-    VaMono stab_;      // standing in for CHORD until VA POLY arrives in M6
+    VaPoly stab_;      // CHORD: six voices, so a step's chord byte can be heard as a chord
     Sampler loop_;
 
     Machine *machines_[kTracks] = {};
@@ -192,6 +194,12 @@ private:
     // fixed at init anyway, so it is simply recorded alongside machines_ there. A track that
     // hosts no Sampler refuses a sample command rather than reinterpreting a pointer.
     Sampler *samplers_[kTracks] = {};
+
+    // And which tracks host a VaPoly, for the same reason and recorded the same way: a chord is
+    // several notes on one frame, so `fire` has to know that this track can take them. A track
+    // with no VaPoly plays the step's note and ignores its chord byte, which is what every
+    // machine but this one does with it.
+    VaPoly *polys_[kTracks] = {};
 
     // The whole project, about 1.03 MiB of it, and the sequencer plays a pattern INSIDE it
     // rather than a copy: `live()` is `project_.live()`. So an edit lands in the pattern that

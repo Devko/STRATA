@@ -79,7 +79,13 @@ CYCLES_PER_BLOCK = 496_000
 # The difference is beat repeat's idle tax plus the performance pass. Update BOTH this number and
 # docs/BUDGET.md when the baseline legitimately moves, and never update it to make a regression
 # go away.
-M3_BASELINE_PERCENT = 22.66   # measured 2026-11-21, GCC-only, same build; see docs/BUDGET.md
+#
+# It has moved once, legitimately: the default kit's CHORD track now plays a MIN7 on VA POLY's
+# six voices, and three extra voices are worth about 12.7 points on their own. The gap this
+# script watches is unaffected by that -- both runs play the same chord -- but the gap itself is
+# now SMALLER than it was, because the peak block is the chord's rather than an idle one, and
+# beat repeat's tax is a constant per block rather than a share of it.
+M3_BASELINE_PERCENT = 33.07   # measured 2026-11-21, GCC-only, same build; see docs/BUDGET.md
 
 text = open(sys.argv[1]).read()
 match = re.search(r'^\{.*?^\}', text, re.S | re.M)
