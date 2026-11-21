@@ -1,0 +1,1921 @@
+// app/engine.cpp: the audio side, from the command ring to the machines.
+//
+// `tests/test_app.cpp` covers the harness and the four bugs a review of `app/` found. This file
+// is the thorough pass over the engine itself -- the gate conversion, chord expansion, the tick
+// resolution that swing, speed, polymeter, ratchets and probability all go through, the bar
+// counter, undo, the pattern queue and chains, the mutes and the performance layer.
+//
+// ## What is asserted
+//
+// Properties, not sample values: tests/test_va.cpp's header explains the house style, and it
+// matters more here than anywhere, because the engine's output goes through eight machines, eight
+// insert chains, two send buses and a master limiter. So where an assertion has to be about
+// sound it is about a RATIO or an exact zero, and where it can be about a number it is about one
+// the engine publishes -- `Status::playhead`, `Status::triggered`, `Engine::performed`,
+// `VaPoly::voice_note` -- which is also what the UI draws from.
+//
+// Two measurements deserve their own note.
+//
+// **Where a note starts** is read out of `last_block()`, which is only meaningful from exact
+// silence; `clean()` below is what produces it, by closing the sends the rig's patch opens and
+// then draining the buses.
+//
+// **How long a note lasts** is read from `VaPoly::sounding_voices()` rather than from the audio.
+// That accessor follows the amplitude envelope's LEVEL, which neither the voice's noise nor the
+// master bus touches, so the answer is a deterministic function of the gate and DEC alone and
+// the only imprecision is the 64-frame block. Comparing the audio instead would compare two
+// runs whose noise streams have diverged, because `VaVoice`'s RNG carries across notes.
+//
+// ## What cannot be checked here
+//
+// `on_transport` and every other Enaga event live in app/app.cpp, which host/Makefile
+// deliberately does not build (its `ENAGA_APP(Strata)` defines a device package's entry points).
+// What this file can check is the half of CLAUDE.md's transport rule that IS in the engine: that
+// the engine never calls the transport itself, and that what it plays comes from the clock's own
+// state rather than from a command. The same goes for the sample region -- app/app.cpp hands it
+// over in init, so `sample_region_` is null here and every `Cmd::set_sample` is refused before
+// its field checks are reached.
+#include "apprig.hpp"
+#include "check.hpp"
+#include "fakehost.hpp"
+
+#include <enaga/abi.h>
+#include <enaga/clock.hpp>
+
+using namespace strata;
+using strata::test::FakeHost;
+
+namespace {
+
+using strata::test::fresh;
+using strata::test::kit_value;
+using strata::test::last_block;
+using strata::test::peak_of;
+using strata::test::post;
+using strata::test::pump;
+using strata::test::put_trig;
+
+constexpr int kBlk = strata::test::kRigBlock;
+constexpr int kStereo = strata::test::kRigStereo;
+constexpr float kRate = float(ENAGA_SAMPLE_RATE);
+
+// The two tracks whose machines can be asked what they are playing. Track 7 of the default kit
+// (index 6) is CHORD on VA POLY -- the only machine that honours `Trig::gate_frames` and the only
+// one a chord byte reaches -- and track 6 (index 5) is BASS on VA MONO, which is the other half
+// of the fold asymmetry below.
+constexpr uint8_t kPoly = 6;
+constexpr uint8_t kMono = 5;
+
+// Parameter slots, named rather than counted at each use (dsp/track.hpp's four pages of four).
+constexpr uint8_t kDrv = 4, kFilterMod = 7;
+constexpr uint8_t kDec = 8, kLvl = 11;
+constexpr uint8_t kLof = 12, kSendA = 14, kSendB = 15;
+
+static_assert(kDrv == page_first(Page::fltr) + 0, "FLTR slot 0 is DRV");
+static_assert(kFilterMod == page_first(Page::fltr) + 3, "FLTR slot 3 is MOD, the filter switch");
+static_assert(kDec == page_first(Page::amp) + 0, "AMP slot 0 is the decay on every machine");
+static_assert(kLvl == page_first(Page::amp) + 3, "AMP slot 3 is LVL on every machine");
+static_assert(kLof == page_first(Page::fx) + 0, "FX slot 0 is the lo-fi");
+static_assert(kSendA == page_first(Page::fx) + 2, "FX slot 2 is send A, the delay");
+static_assert(kSendB == page_first(Page::fx) + 3, "FX slot 3 is send B, the reverb");
+
+// --- reading the engine ----------------------------------------------------------------------
+
+const VaPoly &poly() {
+    return *static_cast<const VaPoly *>(strata::test::engine().machine(kPoly));
+}
+
+const VaMono &mono() {
+    return *static_cast<const VaMono *>(strata::test::engine().machine(kMono));
+}
+
+uint8_t triggers(int track) {
+    return strata::test::engine().status().triggered[track].load(std::memory_order_relaxed);
+}
+
+int playhead(int track) {
+    return int(strata::test::engine().status().playhead[track].load(std::memory_order_relaxed));
+}
+
+uint32_t refused() {
+    return strata::test::engine().status().refused.load(std::memory_order_relaxed);
+}
+
+int live_bank() {
+    return int(strata::test::engine().status().live_bank.load(std::memory_order_relaxed));
+}
+
+int live_slot() {
+    return int(strata::test::engine().status().live_slot.load(std::memory_order_relaxed));
+}
+
+int undo_depth() {
+    return int(strata::test::engine().status().undo_depth.load(std::memory_order_relaxed));
+}
+
+int redo_depth() {
+    return int(strata::test::engine().status().redo_depth.load(std::memory_order_relaxed));
+}
+
+int running() {
+    return int(strata::test::engine().status().running.load(std::memory_order_relaxed));
+}
+
+bool trig_at(int track, int step) {
+    return (strata::test::engine().pattern().tracks[track].steps[step].flags & kStepTrig) != 0;
+}
+
+const Step &live_step(int track, int step) {
+    return strata::test::engine().pattern().tracks[track].steps[step];
+}
+
+// --- posting ---------------------------------------------------------------------------------
+//
+// The rig's `post` carries the five bytes most commands need. These three are for the commands
+// that need the wide fields as well, built the way app/app.cpp's `post_command` builds them.
+
+void post_u(Cmd cmd, uint32_t u, uint8_t a = 0, uint8_t track = 0) {
+    Command command;
+    command.cmd = cmd;
+    command.track = track;
+    command.a = a;
+    command.u = u;
+    strata::test::engine().commands().post(command);
+}
+
+void post_f(Cmd cmd, float f, uint8_t a = 0, uint8_t track = 0) {
+    Command command;
+    command.cmd = cmd;
+    command.track = track;
+    command.a = a;
+    command.f = f;
+    strata::test::engine().commands().post(command);
+}
+
+void post_macro_assign(uint8_t macro, uint8_t track, uint8_t param, uint8_t low, uint8_t high) {
+    Command command;
+    command.cmd = Cmd::macro_assign;
+    command.track = track;
+    command.a = macro;
+    command.b = param;
+    command.c = low;
+    command.d = high;
+    strata::test::engine().commands().post(command);
+}
+
+// --- a known starting state ------------------------------------------------------------------
+
+// Drain the master buses, so `last_block()` starts from EXACT silence.
+//
+// The rig's patch sets all sixteen parameters of every track to 64, which opens both sends and
+// switches the lo-fi on, so a note from the test before rings in the reverb for seconds --
+// `Cmd::stop` cuts voices, not sends. With every send closed the mixer stops running the delay
+// and the reverb outright once their tails run out, and the output is then exactly zero.
+//
+// It takes a RUN of silent blocks and not one, which was worth learning the hard way: the delay
+// is silent BETWEEN its repeats, so the first zero block means nothing. Its time is 0.375 s
+// (`SendSettings::delay_seconds`, which nothing can change -- see
+// `engine_a_command_it_does_not_handle_changes_nothing`), which is 281 silent blocks, so an echo
+// left in the line pops out a third of a second into a test that thought it had silence. The
+// longest either bus keeps running unfed is `delay_tail_blocks_`, about 3,300 blocks, after which
+// the output is exactly zero for ever.
+constexpr int kSilentRun = 400;
+
+bool settle(int limit = 8000) {
+    int quiet = 0;
+    for (int i = 0; i < limit && quiet < kSilentRun; i++) {
+        quiet = pump() <= 0.0f ? quiet + 1 : 0;
+    }
+    return quiet >= kSilentRun;
+}
+
+// `fresh()`, plus everything `fresh()` cannot reach.
+//
+// A project load replaces the patterns and the kit, and nothing else: the mutes, the morph, the
+// macros, the scenes, the throw, the fill and the beat repeat are all audio-side performance
+// state that lives in no Pattern and no Kit, so a test that did not put them back would inherit
+// whatever the test before it -- in this file or any other -- happened to leave set.
+Engine &clean() {
+    Engine &engine = fresh();
+
+    for (uint8_t t = 0; t < kTracks; t++) {
+        post(Cmd::set_mute, t, 0, 0, 0);
+        post(Cmd::set_param, t, 0, kDrv, 0);
+        post(Cmd::set_param, t, 0, kFilterMod, 0);
+        post(Cmd::set_param, t, 0, kLof, 0);
+        post(Cmd::set_param, t, 0, kSendA, 0);
+        post(Cmd::set_param, t, 0, kSendB, 0);
+    }
+    post(Cmd::set_fill, 0, 0, 0);
+    post(Cmd::set_auto_fill, 0, 0, uint8_t(AutoFill::off));
+    post(Cmd::set_throw, 0, 0, 0);
+    post(Cmd::set_repeat, 0, 0, uint8_t(RepeatLength::sixteenth), 0, 0);
+    post_u(Cmd::set_morph, 0);
+    for (uint8_t m = 0; m < kMacros; m++) {
+        post(Cmd::macro_clear, 0, 0, m);
+        post(Cmd::set_macro, 0, 0, m, 0);
+    }
+    for (uint8_t s = 0; s < kScenes; s++) post(Cmd::scene_erase, 0, 0, s);
+    post(Cmd::scene_select, 0, 0, 0, 0);
+    post(Cmd::scene_select, 0, 0, 1, 1);
+
+    // `a = 1`, not `c = 1`: the engine reads `command.a` for "cut all voices" and so does
+    // app/app.cpp's STOP (app/commands.hpp). tests/apprig.cpp passes `c`, which makes its own
+    // reset a release with a 60 ms tail rather than the kill its comment describes.
+    post(Cmd::stop, 0, 0, 1);
+
+    while (!engine.commands().empty()) pump();
+    settle();
+    return engine;
+}
+
+// --- driving the clock -----------------------------------------------------------------------
+
+void tick_at(uint32_t tick, uint32_t frame = 0) {
+    FakeHost::the().deliver_tick(tick, frame);
+    pump();
+}
+
+// Deliver one tick and say how many events it produced on `track`. `Status::triggered` is bumped
+// once per event the engine fires, which is once per step and once per ratchet hit.
+int fired_on(int track, uint32_t tick, uint32_t frame = 0) {
+    const uint8_t before = triggers(track);
+    FakeHost::the().deliver_tick(tick, frame);
+    pump();
+    return int(uint8_t(triggers(track) - before));
+}
+
+// Drive the bar counter into a known state and return the bar it is on.
+//
+// `bar_`, `next_bar_tick_` and `bar_known_` are in no Pattern and no Kit, and `Cmd::project_loaded`
+// does not reset them, so a test about bars starts wherever the test before it stopped. Tick 0
+// leaves `next_bar_tick_` at most one bar ahead whatever came before; a tick two bars past that
+// is then far enough ahead to force the resync branch, which is a division and not a count.
+uint32_t sync_bars() {
+    tick_at(0);
+    tick_at(2u * kTicksPerBar);
+    return 2;
+}
+
+// --- step fields -----------------------------------------------------------------------------
+//
+// Every one of these is a WALK of the field from its current value, because that is the only
+// thing `Cmd::step_field_delta` can do: an encoder sends several clicks per block and the UI
+// cannot read the pattern as it is, so the delta is applied on this side (app/commands.hpp).
+
+void set_length_index(uint8_t track, uint8_t step, int index) {
+    const int now = int(live_step(track, step).length);
+    post(Cmd::step_field_delta, track, step, uint8_t(StepField::length),
+         uint8_t(int8_t(index - now)));
+    pump();
+}
+
+void set_probability(uint8_t track, uint8_t step, int value) {
+    const int now = int(live_step(track, step).probability);
+    post(Cmd::step_field_delta, track, step, uint8_t(StepField::probability),
+         uint8_t(int8_t(value - now)));
+    pump();
+}
+
+void set_chord(uint8_t track, uint8_t step, ChordType type, uint8_t inversion = 0) {
+    const int now = int(live_step(track, step).chord);
+    const int want = int(chord_pack(type, inversion));
+    post(Cmd::step_field_delta, track, step, uint8_t(StepField::chord),
+         uint8_t(int8_t(want - now)));
+    pump();
+}
+
+void set_condition_position(uint8_t track, uint8_t step, int position) {
+    const int now = condition_position(live_step(track, step).condition);
+    post(Cmd::step_field_delta, track, step, uint8_t(StepField::condition),
+         uint8_t(int8_t(position - now)));
+    pump();
+}
+
+// --- the CHORD track's note length -----------------------------------------------------------
+
+// Fire step 0 of the CHORD track on tick 0, then count the frames until its last voice stops
+// sounding. See the file header on why this is read from the envelope and not from the audio.
+int frames_until_silent(int limit_blocks = 8000) {
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    for (int b = 0; b < limit_blocks; b++) {
+        pump();
+        if (poly().sounding_voices() == 0) return (b + 1) * kBlk;
+    }
+    return -1;
+}
+
+// A CHORD track note whose DEC is long enough that the GATE, and not the envelope, is what ends
+// it, at a chosen table entry, track speed and tempo.
+void arm_a_gated_chord_note(int length_index, Speed speed, float bpm) {
+    clean();
+    FakeHost::the().set_tempo(bpm);
+    post(Cmd::set_param, kPoly, 0, kDec, 127);
+    post(Cmd::set_track_speed, kPoly, 0, uint8_t(speed));
+    put_trig(kPoly, 0);
+    set_length_index(kPoly, 0, length_index);
+}
+
+// --- scenes ----------------------------------------------------------------------------------
+
+// Scene 0 and scene 1, differing in one parameter of one track and in nothing else, assigned to
+// slots A and B. A capture reads `project_.kit` and a knob turn writes `params_` -- two separate
+// structures that only `Cmd::kit_store` copies between -- so the store is what makes the capture
+// mean the value just set. See `engine_a_scene_capture_takes_the_stored_kit_and_not_the_knob`.
+void two_scenes_differing_in(uint8_t track, uint8_t param, uint8_t low, uint8_t high) {
+    post(Cmd::scene_erase, 0, 0, 0);
+    post(Cmd::scene_erase, 0, 0, 1);
+    post(Cmd::set_param, track, 0, param, low);
+    post(Cmd::kit_store);
+    post(Cmd::scene_capture, track, 0, 0, 0);
+    post(Cmd::set_param, track, 0, param, high);
+    post(Cmd::kit_store);
+    post(Cmd::scene_capture, track, 0, 1, 0);
+    post(Cmd::scene_select, 0, 0, 0, 0);
+    post(Cmd::scene_select, 0, 0, 1, 1);
+    pump();
+}
+
+}  // namespace
+
+// --- Engine::gate_frames_for -----------------------------------------------------------------
+//
+// `Step::length` has been stored since M3 and became audible two commits ago. The conversion is
+// sixteenths/16 x step_ticks x samples_per_tick -- the one core/timing.hpp refuses to do itself,
+// because a sixteenth of a 24-tick step is 1.5 ticks and the 96 PPQN grid cannot hold it -- and
+// nothing tested the arithmetic.
+
+TEST(engine_a_gate_is_sixteenths_of_a_step_at_the_tracks_own_speed_and_tempo) {
+    // Three combinations that core/timing's own `length_samples` says are the same number of
+    // frames, each reached by halving a different factor: half the table entry, half the step,
+    // half the tick. If the engine dropped any one of them -- the 1/16, the step's ticks, the
+    // tempo -- the three would stop agreeing.
+    const float spt130 = kRate * 60.0f / (130.0f * float(enaga::clock::ppqn));
+    const float spt260 = kRate * 60.0f / (260.0f * float(enaga::clock::ppqn));
+    const float half_step_1x_130 = length_samples(6, ticks_per_step(Speed::x1), spt130);
+    const float one_step_2x_130 = length_samples(8, ticks_per_step(Speed::x2), spt130);
+    const float one_step_1x_260 = length_samples(8, ticks_per_step(Speed::x1), spt260);
+    CHECK_NEAR(half_step_1x_130, one_step_2x_130, 1e-3);
+    CHECK_NEAR(half_step_1x_130, one_step_1x_260, 1e-3);
+
+    arm_a_gated_chord_note(6, Speed::x1, 130.0f);
+    const int half_step = frames_until_silent();
+    arm_a_gated_chord_note(8, Speed::x2, 130.0f);
+    const int at_double_speed = frames_until_silent();
+    arm_a_gated_chord_note(8, Speed::x1, 260.0f);
+    const int at_double_tempo = frames_until_silent();
+
+    CHECK(half_step > 0);
+    CHECK_EQ(half_step, at_double_speed);
+    CHECK_EQ(half_step, at_double_tempo);
+
+    // And the gate really is what ended those notes rather than DEC: the table entry that asks
+    // for twice as long holds for very nearly twice as long. The slack is one block, plus the
+    // slightly longer release a note that was released later has left to run.
+    arm_a_gated_chord_note(8, Speed::x1, 130.0f);
+    const int one_step = frames_until_silent();
+    const float expected = length_samples(8, ticks_per_step(Speed::x1), spt130) -
+                           length_samples(6, ticks_per_step(Speed::x1), spt130);
+    CHECK(expected > 2000.0f);
+    CHECK(float(one_step - half_step) > expected - 256.0f);
+    CHECK(float(one_step - half_step) < expected + 256.0f);
+
+    // Four steps against two is the same difference again, one table entry further up.
+    arm_a_gated_chord_note(10, Speed::x1, 130.0f);
+    const int two_steps = frames_until_silent();
+    const float expected_two = length_samples(10, ticks_per_step(Speed::x1), spt130) -
+                               length_samples(8, ticks_per_step(Speed::x1), spt130);
+    CHECK(float(two_steps - one_step) > expected_two - 384.0f);
+    CHECK(float(two_steps - one_step) < expected_two + 384.0f);
+}
+
+TEST(engine_a_length_index_of_zero_asks_for_no_gate) {
+    // Index 0 is core/timing.hpp's invalid sentinel, reserved so a zeroed or corrupt byte is
+    // refusable rather than meaning the shortest note in the table. `gate_frames_for` answers 0
+    // for it, which `Trig::gate_frames` defines as NO gate -- what every machine did before the
+    // field existed. So the step has to ring exactly as long as a pad hit, which carries no gate
+    // at all.
+    //
+    // The panel cannot produce the byte: core/stepedit clamps the field to 1..kLengthMax. A
+    // damaged file can, which is the case this is about, so it is written through the load hole
+    // -- main context, transport stopped, which is the contract `project_for_load` states.
+    Engine &engine = clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 64);
+    put_trig(kPoly, 0);
+    engine.project_for_load().live().tracks[kPoly].steps[0].length = 0;
+    pump();
+    CHECK_EQ(int(live_step(kPoly, 0).length), 0);
+    CHECK(!length_valid(live_step(kPoly, 0).length));
+    const int sentinel = frames_until_silent();
+
+    clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 64);
+    int pad = -1;
+    post(Cmd::trigger_note, kPoly, 0, 60, 100);
+    for (int b = 0; b < 8000; b++) {
+        pump();
+        if (poly().sounding_voices() == 0) {
+            pad = (b + 1) * kBlk;
+            break;
+        }
+    }
+
+    CHECK(sentinel > 0);
+    CHECK_EQ(sentinel, pad);
+
+    // ... and a valid index really does cut it short, so the equality above is about the
+    // sentinel and not about a gate that never worked.
+    clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 64);
+    put_trig(kPoly, 0);
+    CHECK_EQ(int(live_step(kPoly, 0).length), 8);   // a trig's own default: one step
+    const int gated = frames_until_silent();
+    CHECK(gated > 0);
+    CHECK(gated < sentinel);
+    CHECK(sentinel - gated > 4000);
+}
+
+TEST(engine_a_gate_shortens_a_chord_note) {
+    // The audible half of it, on the one machine that honours the field (dsp/vapoly.cpp is the
+    // only reader of `Trig::gate_frames`). The window is chosen past the gate AND past its
+    // release, so a gated note is gone there and an ungated one is still on its own envelope.
+    Engine &engine = clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 64);
+    put_trig(kPoly, 0);
+    set_length_index(kPoly, 0, 2);                 // an eighth of a step: about 14 ms at 130 BPM
+    CHECK_EQ(int(live_step(kPoly, 0).length), 2);
+    CHECK_EQ(pump(), 0.0f);
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    CHECK(pump(20) > 0.01f);                       // it sounded
+    pump(140);
+    const float late_gated = pump(140);
+
+    clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 64);
+    put_trig(kPoly, 0);
+    engine.project_for_load().live().tracks[kPoly].steps[0].length = 0;
+    pump();
+    CHECK_EQ(pump(), 0.0f);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    CHECK(pump(20) > 0.01f);
+    pump(140);
+    const float late_ungated = pump(140);
+
+    CHECK(late_gated < 1e-5f);
+    CHECK(late_ungated > 1e-4f);
+    CHECK(late_ungated > 20.0f * late_gated);
+}
+
+// --- chords ----------------------------------------------------------------------------------
+//
+// A POLY step's chord byte is expanded in `fire()` onto VA POLY's voices ON ONE FRAME. That is
+// deliberate: dsp/vapoly.hpp's allocator counts a voice busy from the moment it takes a trig
+// rather than from the frame that trig starts on, precisely so that several notes on one frame
+// take several voices instead of replacing one another.
+
+TEST(engine_a_min7_step_sounds_four_notes_on_one_frame) {
+    Engine &engine = clean();
+    // The blank project's scale is chromatic, under which folding is the identity, so the notes
+    // are the table's own intervals on the step's note: 0, 3, 7, 10 (core/chord.hpp).
+    CHECK_EQ(int(engine.pattern().scale), int(Scale::chromatic));
+    put_trig(kPoly, 0);
+    set_chord(kPoly, 0, ChordType::min7);
+    CHECK(chord_type(live_step(kPoly, 0).chord) == ChordType::min7);
+    CHECK_EQ(int(live_step(kPoly, 0).note), 60);
+
+    const uint8_t before = triggers(kPoly);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+
+    CHECK_EQ(poly().busy_voices(), 4);
+    CHECK_EQ(poly().voice_note(0), 60);
+    CHECK_EQ(poly().voice_note(1), 63);
+    CHECK_EQ(poly().voice_note(2), 67);
+    CHECK_EQ(poly().voice_note(3), 70);
+    CHECK_EQ(poly().voice_note(4), -1);
+    CHECK_EQ(poly().voice_note(5), -1);
+
+    // All four on the same frame, so all four have started by the end of the block.
+    CHECK_EQ(poly().sounding_voices(), 4);
+
+    // One trig as far as the screen is concerned: app/engine.cpp bumps `triggered` once per
+    // step, because eight LEDs flashing four times would be a worse display, not a better one.
+    CHECK_EQ(int(uint8_t(triggers(kPoly) - before)), 1);
+}
+
+TEST(engine_a_chord_type_of_none_is_one_note) {
+    Engine &engine = clean();
+    (void)engine;
+    put_trig(kPoly, 0);
+    CHECK_EQ(int(live_step(kPoly, 0).chord), 0);     // what zeroed memory means
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    CHECK_EQ(poly().busy_voices(), 1);
+    CHECK_EQ(poly().voice_note(0), 60);
+    CHECK_EQ(poly().voice_note(1), -1);
+
+    // Six voices is the cap, and MIN11 is the one chord that fills them.
+    set_chord(kPoly, 0, ChordType::min11);
+    FakeHost::the().deliver_tick(1536, 0);
+    pump();
+    CHECK_EQ(poly().busy_voices(), 6);
+    CHECK_EQ(poly().voice_note(5), 60 + 17);
+}
+
+TEST(engine_a_chords_notes_are_folded_into_the_scale) {
+    Engine &engine = clean();
+    (void)engine;
+    post(Cmd::set_root, 0, 0, 0);                        // C
+    post(Cmd::set_scale, 0, 0, uint8_t(Scale::minor));
+    put_trig(kPoly, 0);
+    set_chord(kPoly, 0, ChordType::major);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+
+    // A MAJOR stack on the root of C minor comes out as the key's own tonic triad, which is
+    // core/chord.hpp's "folding gives the diatonic behaviour anyway". 64 is not in C minor, and
+    // 63 and 65 are both a semitone away, so the tie goes to the lower note (core/scale.hpp).
+    CHECK_EQ(poly().busy_voices(), 3);
+    CHECK_EQ(poly().voice_note(0), 60);
+    CHECK_EQ(poly().voice_note(1), 63);
+    CHECK_EQ(poly().voice_note(2), 67);
+}
+
+TEST(engine_a_poly_steps_note_is_folded_and_a_mono_steps_note_is_not) {
+    // The asymmetry is DELIBERATE and app/engine.cpp documents it: `fire` sends a note to the
+    // machine unfolded, while `chord_expand` folds the step's note before stacking on it -- even
+    // for a chord of `none`, which is a single note. So identical step data sounds different
+    // depending on which machine the track hosts. There is no notion here of WHICH machines are
+    // melodic, and folding every track would retune the drums, so the decision waits for machine
+    // switching. This pins it, so that the day the notion arrives the change is a decision.
+    Engine &engine = clean();
+    post(Cmd::set_root, 0, 0, 0);
+    post(Cmd::set_scale, 0, 0, uint8_t(Scale::minor));
+    const uint8_t both[2] = {kMono, kPoly};
+    for (uint8_t track : both) {
+        put_trig(track, 0);
+        post(Cmd::step_field_delta, track, 0, uint8_t(StepField::note), 4);
+    }
+    pump();
+    CHECK_EQ(int(live_step(kMono, 0).note), 64);
+    CHECK_EQ(int(live_step(kPoly, 0).note), 64);
+    CHECK_EQ(int(live_step(kMono, 0).chord), 0);
+    CHECK_EQ(int(live_step(kPoly, 0).chord), 0);
+    CHECK(!scale_contains(64, engine.pattern().root, int(engine.pattern().scale)));
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    CHECK_EQ(poly().voice_note(0), 63);                  // folded into the key
+    CHECK_NEAR(mono().target_pitch(), 64.0f, 1e-4);      // as written
+}
+
+TEST(engine_a_chord_byte_on_a_track_with_no_poly_machine_is_ignored) {
+    Engine &engine = clean();
+    (void)engine;
+    put_trig(kMono, 0);
+    set_chord(kMono, 0, ChordType::min7);
+    CHECK(chord_type(live_step(kMono, 0).chord) == ChordType::min7);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    // `polys_` records which track can take a chord, because this build has no RTTI to ask a
+    // Machine* with. Every other machine plays the step's note and ignores the byte; expanding
+    // onto a monophonic voice would leave the chord's TOP note sounding and nothing else.
+    CHECK_NEAR(mono().target_pitch(), 60.0f, 1e-4);
+}
+
+// --- resolving a tick ------------------------------------------------------------------------
+
+TEST(engine_a_tick_starts_its_note_on_the_frame_the_clock_gave) {
+    // The tick carries the frame it falls on and the note has to start on that exact sample.
+    // Measured from real silence, which is what `clean()` is for: the assertion is that nothing
+    // at all comes out before the frame, and that the later in the block a tick falls the less
+    // of the note is in it.
+    const uint32_t frames[4] = {0u, 16u, 32u, 48u};
+    float loudest[4] = {};
+
+    for (int i = 0; i < 4; i++) {
+        clean();
+        post(Cmd::set_param, kPoly, 0, kDec, 100);
+        put_trig(kPoly, 0);
+        CHECK_EQ(pump(), 0.0f);
+
+        FakeHost::the().set_running(true);
+        FakeHost::the().deliver_tick(0, frames[i]);
+        loudest[i] = pump();
+
+        const float *block = last_block();
+        const int onset = int(2u * frames[i]);
+        CHECK_EQ(peak_of(block, onset), 0.0f);
+        CHECK(peak_of(block + onset, kStereo - onset) > 0.0f);
+    }
+
+    CHECK(loudest[0] > loudest[1]);
+    CHECK(loudest[1] > loudest[2]);
+    CHECK(loudest[2] > loudest[3]);
+    CHECK(loudest[3] > 0.0f);
+}
+
+TEST(engine_swing_moves_the_odd_steps_and_leaves_the_even_ones) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 0);
+    put_trig(kPoly, 1);
+    put_trig(kPoly, 2);
+
+    // Straight first, so what follows is about swing and not about the grid.
+    post(Cmd::set_pattern_swing, 0, 0, uint8_t(kSwingMin));
+    pump();
+    CHECK_EQ(int(engine.pattern().swing), kSwingMin);
+    CHECK_EQ(fired_on(kPoly, 24u), 1);
+    CHECK_EQ(playhead(kPoly), 1);
+
+    // 75% pushes an odd step half a step late: (75 - 50) * 24 / 50 = 12 ticks.
+    post(Cmd::set_pattern_swing, 0, 0, uint8_t(kSwingMax));
+    pump();
+    CHECK_EQ(swing_offset(1, kSwingMax, ticks_per_step(Speed::x1)), 12);
+    CHECK_EQ(fired_on(kPoly, 1536u + 24u), 0);
+    CHECK_EQ(fired_on(kPoly, 1536u + 36u), 1);
+    CHECK_EQ(playhead(kPoly), 1);
+    CHECK_EQ(fired_on(kPoly, 1536u + 48u), 1);     // and the even ones do not move
+    CHECK_EQ(playhead(kPoly), 2);
+
+    // Out of range in either direction clamps rather than wrapping.
+    post(Cmd::set_pattern_swing, 0, 0, 200);
+    pump();
+    CHECK_EQ(int(engine.pattern().swing), kSwingMax);
+    post(Cmd::set_pattern_swing, 0, 0, 3);
+    pump();
+    CHECK_EQ(int(engine.pattern().swing), kSwingMin);
+}
+
+TEST(engine_micro_timing_moves_a_step_off_the_grid_and_adds_to_swing) {
+    Engine &engine = clean();
+    (void)engine;
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 1);
+    post(Cmd::step_field_delta, kPoly, 1, uint8_t(StepField::micro), uint8_t(int8_t(-11)));
+    pump();
+    CHECK_EQ(int(live_step(kPoly, 1).micro), -kMicroRange);
+    CHECK_EQ(fired_on(kPoly, 24u), 0);             // not on its nominal tick any more
+    CHECK_EQ(fired_on(kPoly, 13u), 1);             // 24 - 11
+
+    // Swing and micro-timing add: 24 + 12 - 11 = 25.
+    post(Cmd::set_pattern_swing, 0, 0, uint8_t(kSwingMax));
+    pump();
+    CHECK_EQ(fired_on(kPoly, 1536u + 13u), 0);
+    CHECK_EQ(fired_on(kPoly, 1536u + 25u), 1);
+
+    // And +11 the other way, which is a step firing EARLIER than its own tick -- the reason
+    // core/timing maps backwards from the tick rather than forwards from the step.
+    post(Cmd::set_pattern_swing, 0, 0, uint8_t(kSwingMin));
+    post(Cmd::step_field_delta, kPoly, 1, uint8_t(StepField::micro), 22);
+    pump();
+    CHECK_EQ(int(live_step(kPoly, 1).micro), kMicroRange);
+    CHECK_EQ(fired_on(kPoly, 2u * 1536u + 35u), 1);
+}
+
+TEST(engine_a_tracks_own_speed_sets_its_step_grid) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 1);
+    CHECK_EQ(fired_on(kPoly, 12u), 0);             // 1x: a step is 24 ticks
+    CHECK_EQ(fired_on(kPoly, 24u), 1);
+
+    post(Cmd::set_track_speed, kPoly, 0, uint8_t(Speed::x2));
+    pump();
+    CHECK_EQ(fired_on(kPoly, 24u), 0);             // 2x: step 1 is at 12, step 2 at 24
+    CHECK_EQ(fired_on(kPoly, 12u), 1);
+
+    post(Cmd::set_track_speed, kPoly, 0, uint8_t(Speed::x1_2));
+    pump();
+    CHECK_EQ(fired_on(kPoly, 24u), 0);             // 1/2x: step 1 is at 48
+    CHECK_EQ(fired_on(kPoly, 48u), 1);
+
+    // One track's speed is its own: track 6 is still at 1x and still fires step 1 at 24.
+    put_trig(kMono, 1);
+    CHECK_EQ(fired_on(kMono, 24u), 1);
+
+    // A speed this build does not have is refused, leaving the track as it was.
+    post(Cmd::set_track_speed, kPoly, 0, uint8_t(Speed::count));
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].speed), int(Speed::x1_2));
+}
+
+TEST(engine_a_shorter_track_wraps_on_its_own_length) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 0);
+    post(Cmd::set_track_length, kPoly, 0, 3);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].length), 3);
+
+    CHECK_EQ(fired_on(kPoly, 0u), 1);
+    CHECK_EQ(playhead(kPoly), 0);
+    CHECK_EQ(fired_on(kPoly, 24u), 0);             // step 1 of three, empty
+    CHECK_EQ(playhead(kPoly), 1);
+    CHECK_EQ(fired_on(kPoly, 48u), 0);
+    CHECK_EQ(playhead(kPoly), 2);
+
+    // Three steps is 72 ticks, so step 0 comes round there -- and NOT at 96, which is where a
+    // scheduler still configured for 64 steps would put step 4. `reconfigure()` is what makes
+    // the difference, and forgetting it is the bug its own comment in app/engine.cpp describes.
+    CHECK_EQ(fired_on(kPoly, 72u), 1);
+    CHECK_EQ(playhead(kPoly), 0);
+    CHECK_EQ(fired_on(kPoly, 96u), 0);
+    CHECK_EQ(playhead(kPoly), 1);
+
+    // A length of 0 is zeroed memory, and one step is the only reading of it that can play.
+    post(Cmd::set_track_length, kPoly, 0, 0);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].length), 1);
+    CHECK_EQ(fired_on(kPoly, 24u), 1);
+    CHECK_EQ(fired_on(kPoly, 48u), 1);
+
+    // Past the end it clamps rather than wrapping round to a tiny track.
+    post(Cmd::set_track_length, kPoly, 0, 200);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].length), kStepsPerTrack);
+}
+
+TEST(engine_a_ratchet_gives_every_hit_its_own_event_and_its_own_voice) {
+    Engine &engine = clean();
+    put_trig(kPoly, 0);
+    CHECK_EQ(int(ratchet_count(live_step(kPoly, 0).ratchet)), 1);
+    FakeHost::the().set_running(true);
+    CHECK_EQ(fired_on(kPoly, 0u), 1);
+    CHECK_EQ(poly().busy_voices(), 1);
+
+    clean();
+    put_trig(kPoly, 0);
+    post(Cmd::step_field_delta, kPoly, 0, uint8_t(StepField::ratchet_count), 3);
+    pump();
+    CHECK_EQ(int(ratchet_count(live_step(kPoly, 0).ratchet)), 4);
+
+    FakeHost::the().set_running(true);
+    CHECK_EQ(fired_on(kPoly, 0u), 4);              // four events, one per hit
+    // The hits are spread across the step, so three of the four are still waiting for their
+    // frame -- and each had to take a voice of its own at the moment it was handed over, or they
+    // would replace one another and one hit would sound (dsp/vapoly.hpp's rule 1).
+    CHECK_EQ(poly().busy_voices(), 4);
+    CHECK_EQ(poly().sounding_voices(), 1);
+    for (int v = 0; v < 4; v++) CHECK_EQ(poly().voice_note(v), 60);
+    CHECK_EQ(poly().voice_note(4), -1);
+    (void)engine;
+}
+
+TEST(engine_probability_decides_whether_a_step_fires_at_all) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 0);
+    CHECK_EQ(int(live_step(kPoly, 0).probability), 100);
+    CHECK_EQ(fired_on(kPoly, 0u), 1);              // 100%: decided without a draw
+
+    set_probability(kPoly, 0, 0);
+    CHECK_EQ(int(live_step(kPoly, 0).probability), 0);
+    CHECK_EQ(fired_on(kPoly, 1536u), 0);           // 0%: decided without a draw either
+
+    // In between, the draw comes from the pattern's seed mixed with the track, step and loop and
+    // never from a running RNG (core/scheduler.hpp), so the boundary can be NAMED rather than
+    // sampled -- and the same tick delivered twice must decide the same way both times.
+    const uint32_t loop = 2u;
+    const uint32_t roll = probability_roll(engine.pattern().seed, kPoly, 0, loop);
+    CHECK(roll < 100u);
+
+    set_probability(kPoly, 0, int(roll));
+    CHECK_EQ(fired_on(kPoly, loop * 1536u), 0);    // the draw is not BELOW the probability
+    set_probability(kPoly, 0, int(roll) + 1);
+    CHECK_EQ(fired_on(kPoly, loop * 1536u), 1);    // one percent more and the same draw passes
+}
+
+TEST(engine_the_playhead_follows_time_and_is_published_for_every_track) {
+    Engine &engine = clean();
+    (void)engine;
+    FakeHost::the().set_running(true);
+    // No trigs anywhere: the playhead follows TIME, not trigs (core/scheduler.cpp), and the
+    // engine publishes all eight of them on every tick it resolves.
+    tick_at(3u * 24u);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(playhead(t), 3);
+    tick_at(7u * 24u);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(playhead(t), 7);
+
+    // A STOP resets the scheduler, so its own playhead goes back to step 1 -- but `Status` is
+    // only written from `resolve_tick`, so the value the UI draws stays where the transport
+    // stopped until a tick arrives again. REPORTED as a bug (the grid keeps the old step lit);
+    // pinned here rather than hidden, because fixing it is a change to app/.
+    post(Cmd::stop, 0, 0, 0);
+    pump(2);
+    CHECK_EQ(playhead(kPoly), 7);
+    tick_at(0);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(playhead(t), 0);
+}
+
+TEST(engine_a_stop_re_arms_the_first_pass_conditions) {
+    // What a stop really does to the scheduler, observed through the one thing that can see it:
+    // `1ST` fires on the first loop pass after a reset and nothing else does.
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 0);
+    set_condition_position(kPoly, 0, 7);           // the walk's position 7 is 1ST
+    CHECK_EQ(int(condition_kind(live_step(kPoly, 0).condition)), int(Condition::FIRST));
+    (void)engine;
+
+    CHECK_EQ(fired_on(kPoly, 0u), 1);              // the first pass
+    CHECK_EQ(fired_on(kPoly, 1536u), 0);           // the second
+    post(Cmd::stop, 0, 0, 0);
+    pump();
+    CHECK_EQ(fired_on(kPoly, 2u * 1536u), 1);      // the first pass after the stop
+}
+
+TEST(engine_a_trigless_step_applies_its_locks_without_starting_a_note) {
+    // The whole point of a trigless step, and the reason `fire` rebuilds `effective_` BEFORE it
+    // looks at the trig bit. Audible as a note that is already ringing changing its sound.
+    Engine &engine = clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 127);     // a note that rings over several steps
+    put_trig(kPoly, 0);
+    post(Cmd::toggle_trig, kPoly, 1, 1);           // a = 1: the trigless bit
+    pump();
+    CHECK(!trig_at(kPoly, 1));
+    CHECK((live_step(kPoly, 1).flags & kStepTrigless) != 0);
+
+    // A lock on step 1 taking the level to nothing.
+    post(Cmd::lock_delta, kPoly, 1, kLvl, uint8_t(int8_t(-120)));
+    post(Cmd::lock_delta, kPoly, 1, kLvl, uint8_t(int8_t(-120)));
+    pump();
+    uint8_t locked = 1;
+    CHECK(pattern_get_lock(engine.pattern(), kPoly, 1, kLvl, locked));
+    CHECK_EQ(int(locked), 0);
+    CHECK_EQ(pump(), 0.0f);
+
+    FakeHost::the().set_running(true);
+    const uint8_t before = triggers(kPoly);
+    FakeHost::the().deliver_tick(0, 0);
+    CHECK(pump(4) > 0.01f);                        // step 0 sounded
+    CHECK_EQ(int(uint8_t(triggers(kPoly) - before)), 1);
+
+    const uint8_t after_note = triggers(kPoly);
+    FakeHost::the().deliver_tick(24, 0);
+    pump();
+    CHECK_EQ(int(uint8_t(triggers(kPoly) - after_note)), 0);   // no second note
+    CHECK_EQ(poly().busy_voices(), 1);                         // and no second voice
+    CHECK_EQ(pump(4), 0.0f);                                   // but the lock took it silent
+    CHECK_EQ(playhead(kPoly), 1);
+}
+
+// --- bars, and what waits for one ------------------------------------------------------------
+
+TEST(engine_the_bar_counter_counts_and_resyncs_forwards) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    CHECK_EQ(int(sync_bars()), 2);
+    CHECK_EQ(int(engine.bar()), 2);
+    CHECK_EQ(int(kTicksPerBar), 384);              // sixteen 1x steps, whatever the pattern is
+
+    tick_at(3u * kTicksPerBar);
+    CHECK_EQ(int(engine.bar()), 3);
+    tick_at(3u * kTicksPerBar + 1u);
+    CHECK_EQ(int(engine.bar()), 3);
+    tick_at(4u * kTicksPerBar - 1u);
+    CHECK_EQ(int(engine.bar()), 3);
+    tick_at(4u * kTicksPerBar);
+    CHECK_EQ(int(engine.bar()), 4);
+
+    // A jump of ten bars resyncs by division instead of counting up one bar per tick.
+    tick_at(14u * kTicksPerBar + 7u);
+    CHECK_EQ(int(engine.bar()), 14);
+}
+
+TEST(engine_the_bar_counter_resyncs_on_a_backwards_jump) {
+    // This was a real bug (docs/HANDOFF.md): the counter resynced on a FORWARD jump only, and a
+    // stop and start relocates the clock -- so auto-fill fired in the wrong place for as many
+    // bars as the jump was long.
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    sync_bars();
+    tick_at(9u * kTicksPerBar);
+    CHECK_EQ(int(engine.bar()), 9);
+
+    tick_at(0);
+    CHECK_EQ(int(engine.bar()), 0);
+    tick_at(kTicksPerBar);
+    CHECK_EQ(int(engine.bar()), 1);
+
+    // A jump backwards of LESS than a bar is not a relocation: it is swing or micro-timing
+    // pulling a step in front of a tick already seen, and the count must not move for it.
+    tick_at(kTicksPerBar + 100u);
+    CHECK_EQ(int(engine.bar()), 1);
+    tick_at(kTicksPerBar + 10u);
+    CHECK_EQ(int(engine.bar()), 1);
+}
+
+TEST(engine_auto_fill_fires_on_the_last_bar_of_its_period) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    post(Cmd::set_auto_fill, 0, 0, uint8_t(AutoFill::every_4));
+    pump();
+    CHECK(engine.auto_fill() == AutoFill::every_4);
+
+    sync_bars();
+    CHECK(!engine.fill());
+    tick_at(3u * kTicksPerBar);                    // the last bar of the first period
+    CHECK_EQ(int(engine.bar()), 3);
+    CHECK(engine.fill());
+    tick_at(4u * kTicksPerBar);
+    CHECK(!engine.fill());
+    tick_at(7u * kTicksPerBar);
+    CHECK_EQ(int(engine.bar()), 7);
+    CHECK(engine.fill());
+
+    // Every 8 puts the fill on bar 7 of each eight, so bar 11 stops filling and bar 15 starts.
+    post(Cmd::set_auto_fill, 0, 0, uint8_t(AutoFill::every_8));
+    pump();
+    tick_at(11u * kTicksPerBar);
+    CHECK_EQ(int(engine.bar()), 11);
+    CHECK(!engine.fill());
+    tick_at(15u * kTicksPerBar);
+    CHECK_EQ(int(engine.bar()), 15);
+    CHECK(engine.fill());
+
+    post(Cmd::set_auto_fill, 0, 0, uint8_t(AutoFill::off));
+    pump();
+    tick_at(19u * kTicksPerBar);
+    CHECK(!engine.fill());
+
+    // A period this build does not have is off, not a period of its own.
+    post(Cmd::set_auto_fill, 0, 0, 99);
+    pump();
+    CHECK(engine.auto_fill() == AutoFill::off);
+}
+
+TEST(engine_fill_works_while_the_transport_is_stopped) {
+    // Also a real bug (docs/HANDOFF.md): `resolve_tick` was the only thing that resolved the
+    // fill state, and no tick arrives with the clock still -- so holding FILL stopped did
+    // nothing and the pad looked broken.
+    Engine &engine = clean();
+    CHECK(!FakeHost::the().running());
+    post(Cmd::set_fill, 0, 0, 1);
+    pump();
+    CHECK(engine.fill());
+    post(Cmd::set_fill, 0, 0, 0);
+    pump();
+    CHECK(!engine.fill());
+
+    // Held through an auto-fill bar the two OR rather than fight: the bar must not cancel the
+    // pad, and releasing the pad must not cancel the bar.
+    FakeHost::the().set_running(true);
+    post(Cmd::set_auto_fill, 0, 0, uint8_t(AutoFill::every_4));
+    post(Cmd::set_fill, 0, 0, 1);
+    pump();
+    sync_bars();
+    CHECK(engine.fill());                          // bar 2 is no auto-fill bar, but the pad is held
+    tick_at(3u * kTicksPerBar);
+    CHECK(engine.fill());
+    post(Cmd::set_fill, 0, 0, 0);
+    pump();
+    tick_at(3u * kTicksPerBar + 1u);
+    CHECK(engine.fill());                          // the bar's own fill survives the release
+}
+
+TEST(engine_a_fill_condition_follows_the_fill_state) {
+    Engine &engine = clean();
+    (void)engine;
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 0);
+    set_condition_position(kPoly, 0, 1);           // the walk's position 1 is FILL
+    CHECK_EQ(int(condition_kind(live_step(kPoly, 0).condition)), int(Condition::FILL));
+
+    CHECK_EQ(fired_on(kPoly, 0u), 0);              // not filling
+    post(Cmd::set_fill, 0, 0, 1);
+    pump();
+    CHECK_EQ(fired_on(kPoly, 1536u), 1);
+    post(Cmd::set_fill, 0, 0, 0);
+    pump();
+    CHECK_EQ(fired_on(kPoly, 2u * 1536u), 0);
+}
+
+// --- undo, through the ring ------------------------------------------------------------------
+
+TEST(engine_sixteen_levels_of_undo_and_no_more) {
+    Engine &engine = clean();
+    (void)engine;
+    // Twenty separate gestures: the UI's counter is what ends one (core/undo.hpp), so a
+    // different `seq` is a different edit.
+    for (int i = 0; i < 20; i++) {
+        post(Cmd::undo_mark, 0, uint8_t(i), uint8_t(GestureKind::trig), uint8_t(i));
+        post(Cmd::toggle_trig, 0, uint8_t(i));
+        pump();
+    }
+    CHECK_EQ(undo_depth(), kUndoLevels);
+    for (int i = 0; i < 20; i++) CHECK(trig_at(0, i));
+
+    // Sixteen undos take back sixteen edits and not one more, so the four oldest survive.
+    for (int i = 0; i < kUndoLevels; i++) {
+        post(Cmd::undo);
+        pump();
+    }
+    CHECK_EQ(undo_depth(), 0);
+    for (int i = 0; i < 4; i++) CHECK(trig_at(0, i));
+    for (int i = 4; i < 20; i++) CHECK(!trig_at(0, i));
+
+    // A seventeenth is refused, and a refusal changes nothing.
+    post(Cmd::undo);
+    pump();
+    CHECK_EQ(undo_depth(), 0);
+    for (int i = 0; i < 4; i++) CHECK(trig_at(0, i));
+    for (int i = 4; i < 20; i++) CHECK(!trig_at(0, i));
+}
+
+TEST(engine_one_gesture_is_one_undo_level) {
+    Engine &engine = clean();
+    post(Cmd::set_param, 0, 0, kLvl, 100);
+    pump();
+
+    // A sweep: the same gesture, mark and all, forty times over. Without coalescing one encoder
+    // would fill all sixteen levels and throw away everything that came before it.
+    for (int i = 0; i < 40; i++) {
+        post(Cmd::undo_mark, 0, 0, uint8_t(GestureKind::lock), 3);
+        post(Cmd::lock_delta, 0, 0, kLvl, uint8_t(int8_t(-1)));
+        pump();
+    }
+    CHECK_EQ(undo_depth(), 1);
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(engine.pattern(), 0, 0, kLvl, value));
+    CHECK_EQ(int(value), 60);                      // 100, forty clicks down
+
+    // One undo takes the whole sweep back, lock and all.
+    post(Cmd::undo);
+    pump();
+    CHECK_EQ(undo_depth(), 0);
+    CHECK(!pattern_get_lock(engine.pattern(), 0, 0, kLvl, value));
+
+    // Ending the gesture -- on the panel, the step key coming up -- starts a new level, so two
+    // sweeps are two undos.
+    post(Cmd::undo_mark, 0, 0, uint8_t(GestureKind::lock), 4);
+    post(Cmd::lock_delta, 0, 0, kLvl, uint8_t(int8_t(-10)));
+    post(Cmd::undo_mark, 0, 0, uint8_t(GestureKind::lock), 5);
+    post(Cmd::lock_delta, 0, 0, kLvl, uint8_t(int8_t(-10)));
+    pump();
+    CHECK_EQ(undo_depth(), 2);
+
+    // A `none` gesture never coalesces, not even with another `none`: it means "no gesture", so
+    // two of them are two edits (core/undo.cpp).
+    post(Cmd::undo_mark, 0, 0, uint8_t(GestureKind::none), 6);
+    post(Cmd::toggle_trig, 0, 7);
+    post(Cmd::undo_mark, 0, 0, uint8_t(GestureKind::none), 6);
+    post(Cmd::toggle_trig, 0, 8);
+    pump();
+    CHECK_EQ(undo_depth(), 4);
+}
+
+TEST(engine_redo_comes_back_and_a_new_edit_drops_the_branch) {
+    Engine &engine = clean();
+    (void)engine;
+    post(Cmd::undo_mark, 0, 1, uint8_t(GestureKind::trig), 1);
+    post(Cmd::toggle_trig, 0, 1);
+    post(Cmd::undo_mark, 0, 2, uint8_t(GestureKind::trig), 2);
+    post(Cmd::toggle_trig, 0, 2);
+    pump();
+    CHECK_EQ(undo_depth(), 2);
+    CHECK_EQ(redo_depth(), 0);
+
+    post(Cmd::undo);
+    pump();
+    CHECK(trig_at(0, 1));
+    CHECK(!trig_at(0, 2));
+    CHECK_EQ(redo_depth(), 1);
+
+    post(Cmd::redo);
+    pump();
+    CHECK(trig_at(0, 2));
+    CHECK_EQ(redo_depth(), 0);
+
+    // Undo, then a NEW edit: the redo branch is dropped, which is what every editor does.
+    post(Cmd::undo);
+    pump();
+    CHECK_EQ(redo_depth(), 1);
+    post(Cmd::undo_mark, 0, 3, uint8_t(GestureKind::trig), 3);
+    post(Cmd::toggle_trig, 0, 3);
+    pump();
+    CHECK_EQ(redo_depth(), 0);
+    post(Cmd::redo);
+    pump();
+    CHECK(!trig_at(0, 2));                         // refused: nothing to come back to
+    CHECK(trig_at(0, 3));
+}
+
+TEST(engine_an_undo_after_a_project_load_is_refused) {
+    Engine &engine = clean();
+    post(Cmd::undo_mark, 0, 5, uint8_t(GestureKind::trig), 1);
+    post(Cmd::toggle_trig, 0, 5);
+    pump();
+    CHECK_EQ(undo_depth(), 1);
+    CHECK(trig_at(0, 5));
+
+    // A load replaces all 128 patterns through `project_for_load`, so the history belongs to a
+    // pattern that no longer exists: restoring it would write one project's steps over another's.
+    Project &incoming = engine.project_for_load();
+    project_init(incoming);
+    incoming.patterns[0][0].tracks[1].steps[40].flags = kStepTrig;
+    post(Cmd::project_loaded);
+    pump();
+    CHECK_EQ(undo_depth(), 0);
+    CHECK_EQ(redo_depth(), 0);
+    CHECK(!trig_at(0, 5));
+    CHECK(trig_at(1, 40));
+
+    post(Cmd::undo);
+    pump();
+    CHECK(!trig_at(0, 5));                         // the edit did not come back ...
+    CHECK(trig_at(1, 40));                         // ... and the loaded pattern was not overwritten
+    CHECK_EQ(undo_depth(), 0);
+}
+
+TEST(engine_a_pattern_change_clears_the_undo_history) {
+    Engine &engine = clean();
+    (void)engine;
+    post(Cmd::undo_mark, 0, 5, uint8_t(GestureKind::trig), 1);
+    post(Cmd::toggle_trig, 0, 5);
+    pump();
+    CHECK_EQ(undo_depth(), 1);
+
+    // Stopped, so the change lands at once whatever the mode says.
+    post(Cmd::queue_pattern, 0, 0, 0, 1, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK_EQ(live_slot(), 1);
+    CHECK_EQ(undo_depth(), 0);
+
+    post(Cmd::undo);
+    pump();
+    CHECK(!trig_at(0, 5));                         // A02 keeps its own history, which is empty
+}
+
+// --- the queue and chains --------------------------------------------------------------------
+
+TEST(engine_a_queued_change_waits_for_the_end_of_the_pass) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    // A blank project's master length is 64 steps, so a pass is 64 x 24 = 1536 ticks.
+    CHECK_EQ(master_loop_ticks(engine.pattern()), 1536);
+
+    tick_at(100);                                  // the sequencer is on tick 100 ...
+    post(Cmd::queue_pattern, 0, 0, 2, 5, uint8_t(QueueMode::end_of_pattern));
+    pump();                                        // ... which is what the change is armed from
+    CHECK(engine.queue().pending);
+    CHECK_EQ(int(engine.queue().switch_tick), 1536);
+    CHECK_EQ(live_bank(), 0);
+    CHECK_EQ(live_slot(), 0);
+
+    tick_at(1535);
+    CHECK_EQ(live_slot(), 0);
+    CHECK(engine.queue().pending);
+    tick_at(1536);
+    CHECK_EQ(live_bank(), 2);
+    CHECK_EQ(live_slot(), 5);
+    CHECK(!engine.queue().pending);
+
+    // And cancelling is unconditional: the UI does it when the same pattern is pressed twice,
+    // and cancelling a queue that is not armed is not an error.
+    post(Cmd::queue_pattern, 0, 0, 2, 6, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK(engine.queue().pending);
+    post(Cmd::cancel_queue);
+    post(Cmd::cancel_queue);
+    pump();
+    CHECK(!engine.queue().pending);
+    CHECK_EQ(live_slot(), 5);
+}
+
+TEST(engine_a_queued_change_lands_at_once_while_the_transport_is_stopped) {
+    Engine &engine = clean();
+    CHECK(!FakeHost::the().running());
+    // With the clock still no tick will arrive to make a queued change due, so the only honest
+    // reading of any mode is "now" -- anything else shows a pending switch for ever.
+    post(Cmd::queue_pattern, 0, 0, 1, 2, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK_EQ(live_bank(), 1);
+    CHECK_EQ(live_slot(), 2);
+    CHECK(!engine.queue().pending);
+
+    // Running, the same mode waits.
+    FakeHost::the().set_running(true);
+    tick_at(600);
+    post(Cmd::queue_pattern, 0, 0, 3, 4, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK(engine.queue().pending);
+    CHECK_EQ(live_bank(), 1);
+    CHECK_EQ(live_slot(), 2);
+}
+
+TEST(engine_an_immediate_change_does_not_wait_for_a_tick) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    tick_at(500);
+    post(Cmd::queue_pattern, 0, 0, 0, 7, uint8_t(QueueMode::immediate));
+    pump();
+    // `immediate` is the same switch by request, so app/engine.cpp takes it in the command
+    // rather than arming it: the position is kept and nothing is reset.
+    CHECK_EQ(live_slot(), 7);
+    CHECK(!engine.queue().pending);
+}
+
+TEST(engine_a_queued_change_to_a_pattern_that_does_not_exist_is_refused) {
+    Engine &engine = clean();
+    const uint32_t before = refused();
+    post(Cmd::queue_pattern, 0, 0, uint8_t(kBanks), 0, uint8_t(QueueMode::immediate));
+    post(Cmd::queue_pattern, 0, 0, 0, uint8_t(kPatternsPerBank), uint8_t(QueueMode::immediate));
+    pump();
+    CHECK_EQ(int(refused() - before), 2);
+    CHECK_EQ(live_bank(), 0);
+    CHECK_EQ(live_slot(), 0);
+    CHECK(!engine.queue().pending);
+}
+
+TEST(engine_a_chain_advances_at_the_pass_boundary) {
+    Engine &engine = clean();
+    // Two entries of one pass each: A01, A02, round and round.
+    Project &incoming = engine.project_for_load();
+    project_init(incoming);
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1};
+    incoming.chain[1] = ChainEntry{0, 1, 1};
+    post(Cmd::project_loaded);
+    pump();
+    CHECK_EQ(chain_length(engine.project()), 2);
+    CHECK(!engine.chain().active);                 // a load does not start one
+
+    FakeHost::the().set_running(true);
+    tick_at(0);                                    // the boundary is derived from a real tick
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK(engine.chain().active);
+    CHECK_EQ(int(engine.chain().entry), 0);
+    CHECK_EQ(live_slot(), 0);
+
+    tick_at(1536);                                 // the end of the pass
+    CHECK_EQ(int(engine.chain().entry), 1);
+    CHECK_EQ(live_slot(), 1);
+
+    // The switch cleared the boundary -- the new pattern's master length makes the old one
+    // meaningless -- so it takes a tick to re-derive before the next pass can end.
+    tick_at(1537);
+    tick_at(2u * 1536u);
+    CHECK_EQ(int(engine.chain().entry), 0);
+    CHECK_EQ(live_slot(), 0);
+
+    // Turning the chain off leaves the pattern it reached playing, rather than jumping back.
+    post(Cmd::set_chain, 0, 0, 0);
+    pump();
+    CHECK(!engine.chain().active);
+    tick_at(2u * 1536u + 1u);
+    tick_at(3u * 1536u);
+    CHECK_EQ(live_slot(), 0);
+}
+
+TEST(engine_starting_an_empty_chain_is_refused) {
+    Engine &engine = clean();
+    CHECK_EQ(chain_length(engine.project()), 0);
+    const uint32_t before = refused();
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    // A chain that is silently "on" and does nothing is worse than a refusal the UI can show.
+    CHECK(!engine.chain().active);
+    CHECK_EQ(int(refused() - before), 1);
+}
+
+// --- mutes -----------------------------------------------------------------------------------
+
+TEST(engine_a_mute_stops_a_tracks_trigs_without_stopping_the_sequencer) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 0);
+    post(Cmd::set_mute, kPoly, 0, 1, 0);
+    pump();
+    CHECK(engine.muted(kPoly));
+
+    CHECK_EQ(fired_on(kPoly, 0u), 0);              // no trig reaches the machine ...
+    CHECK_EQ(poly().busy_voices(), 0);
+    CHECK_EQ(playhead(kPoly), 0);                  // ... and the sequencer walked over it anyway
+    CHECK_EQ(fired_on(kPoly, 24u), 0);
+    CHECK_EQ(playhead(kPoly), 1);
+
+    post(Cmd::set_mute, kPoly, 0, 0, 0);
+    pump();
+    CHECK(!engine.muted(kPoly));
+    CHECK_EQ(fired_on(kPoly, 1536u), 1);
+    CHECK_EQ(poly().busy_voices(), 1);
+}
+
+TEST(engine_a_mute_armed_for_the_bar_waits_for_the_bar) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    sync_bars();                                   // bar 2, with the next bar at tick 1152
+    CHECK(!engine.muted(3));
+
+    // b = 1: at the next bar. The latch holds a whole mute STATE rather than one toggle, which
+    // is why the arming happens on this side -- only it knows what the mutes are now.
+    post(Cmd::set_mute, 3, 0, 1, 1);
+    pump();
+    CHECK(!engine.muted(3));
+    tick_at(1151);
+    CHECK(!engine.muted(3));
+    tick_at(1152);
+    CHECK(engine.muted(3));
+
+    // A performer pressing two pads before the bar means the second one, not a queue of two.
+    post(Cmd::set_mute, 4, 0, 1, 1);
+    post(Cmd::set_mute, 5, 0, 1, 1);
+    pump();
+    CHECK(!engine.muted(4));
+    CHECK(!engine.muted(5));
+    tick_at(4u * kTicksPerBar);
+    CHECK(engine.muted(3));
+    CHECK(!engine.muted(4));
+    CHECK(engine.muted(5));
+}
+
+TEST(engine_the_eight_stored_mute_states_round_trip) {
+    Engine &engine = clean();
+    const uint8_t first_state[3] = {1, 3, 6};
+    for (uint8_t t : first_state) post(Cmd::set_mute, t, 0, 1, 0);
+    post(Cmd::mute_store, 0, 0, 2);
+    pump();
+    CHECK_EQ(int(engine.project().settings.mute_states[2]),
+             int(uint8_t((1u << 1) | (1u << 3) | (1u << 6))));
+
+    for (uint8_t t = 0; t < kTracks; t++) post(Cmd::set_mute, t, 0, t == 0 ? 1 : 0, 0);
+    post(Cmd::mute_store, 0, 0, 7);
+    pump();
+    CHECK_EQ(int(engine.project().settings.mute_states[7]), 1);
+
+    post(Cmd::mute_recall, 0, 0, 2, 0);
+    pump();
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(engine.muted(t), t == 1 || t == 3 || t == 6);
+
+    post(Cmd::mute_recall, 0, 0, 7, 0);
+    pump();
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(engine.muted(t), t == 0);
+
+    // There are eight slots and no ninth, so a store or a recall past the end does nothing --
+    // writing one would be a write past `ProjectSettings::mute_states`.
+    post(Cmd::mute_recall, 0, 0, 8, 0);
+    post(Cmd::mute_store, 0, 0, 8);
+    pump();
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(engine.muted(t), t == 0);
+    CHECK_EQ(int(engine.project().settings.mute_states[7]), 1);
+
+    // And a recall can wait for the bar, exactly as a mute does.
+    FakeHost::the().set_running(true);
+    sync_bars();
+    post(Cmd::mute_recall, 0, 0, 2, 1);
+    pump();
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(engine.muted(t), t == 0);
+    tick_at(3u * kTicksPerBar);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(engine.muted(t), t == 1 || t == 3 || t == 6);
+}
+
+// --- the performance layer -------------------------------------------------------------------
+
+TEST(engine_a_morph_between_two_scenes_moves_the_parameters) {
+    Engine &engine = clean();
+    two_scenes_differing_in(kPoly, kLvl, 0, 127);
+    CHECK_EQ(int(kit_value(kPoly, kLvl)), 127);
+
+    post_u(Cmd::set_morph, 0);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 0);
+    CHECK_EQ(int(kit_value(kPoly, kLvl)), 127);    // the kit is untouched by the morph
+
+    post_u(Cmd::set_morph, kMorphScale);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 127);
+
+    // A shift and a rounding add, not a divide: core/perform.cpp's own arithmetic, reached
+    // through the ring.
+    const uint32_t positions[3] = {256u, 512u, 768u};
+    const int expected[3] = {32, 64, 95};
+    for (int i = 0; i < 3; i++) {
+        post_u(Cmd::set_morph, positions[i]);
+        pump();
+        CHECK_EQ(int(engine.morph()), int(positions[i]));
+        CHECK_EQ(int(engine.performed(kPoly, kLvl)), expected[i]);
+    }
+
+    // Past the end it clamps rather than wrapping.
+    post_u(Cmd::set_morph, kMorphScale + 1000u);
+    pump();
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 127);
+
+    // A track neither scene mentions is left exactly as the kit has it.
+    CHECK_EQ(int(engine.performed(kMono, kDec)), int(kit_value(kMono, kDec)));
+}
+
+TEST(engine_a_morph_is_heard_between_steps_and_not_only_at_the_next_trig) {
+    // What the per-block copy of `performed_` into `effective_` exists for: without it a morph
+    // would only be heard at the next trig and sweeping VALUE between steps would do nothing.
+    Engine &engine = clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 127);     // a note that rings for seconds
+    pump();
+    two_scenes_differing_in(kPoly, kLvl, 0, 127);
+    post_u(Cmd::set_morph, 0);
+    put_trig(kPoly, 0);
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 0);
+    CHECK_EQ(pump(), 0.0f);
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    CHECK_EQ(pump(8), 0.0f);                       // scene A has the level all the way down
+    CHECK_EQ(poly().sounding_voices(), 1);         // but the note is there, and ringing
+
+    post_u(Cmd::set_morph, kMorphScale);
+    CHECK(pump(8) > 0.01f);                        // the same note, no new trig
+}
+
+TEST(engine_a_macro_drives_its_assigned_targets) {
+    Engine &engine = clean();
+    // Two targets on one macro, one of them inverted: one knob opening a filter while it closes
+    // a send is most of what makes a macro worth having (core/perform.hpp).
+    post_macro_assign(0, kPoly, kLvl, 0, 127);
+    post_macro_assign(0, kMono, kLvl, 127, 0);
+    pump();
+    CHECK_EQ(macro_count(engine.macros().macros[0]), 2);
+
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    pump();
+    CHECK_EQ(int(engine.macro_position(0)), 0);
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 0);
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), 127);
+
+    post(Cmd::set_macro, 0, 0, 0, 127);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 127);
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), 0);
+
+    // Rounded to nearest and not truncated, so a knob swept up does not lag by a value for most
+    // of its travel and two macros over one parameter agree (core/perform.cpp).
+    post(Cmd::set_macro, 0, 0, 0, 64);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 64);
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), 63);
+
+    // A position past the end of the knob clamps, and the kit is untouched throughout.
+    post(Cmd::set_macro, 0, 0, 0, 200);
+    pump();
+    CHECK_EQ(int(engine.macro_position(0)), 127);
+    CHECK_EQ(int(kit_value(kPoly, kLvl)), 127);
+
+    post(Cmd::macro_clear, 0, 0, 0);
+    pump();
+    CHECK_EQ(macro_count(engine.macros().macros[0]), 0);
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), int(kit_value(kPoly, kLvl)));
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), int(kit_value(kMono, kLvl)));
+}
+
+TEST(engine_a_macro_with_four_targets_refuses_a_fifth) {
+    Engine &engine = clean();
+    for (uint8_t i = 0; i < kMacroTargets; i++) post_macro_assign(1, i, kLvl, 0, 127);
+    pump();
+    CHECK_EQ(macro_count(engine.macros().macros[1]), kMacroTargets);
+
+    // Which of the four a target lands in is not something a performer should have to think
+    // about, so the command takes the next free one -- and a macro that is full says so.
+    const uint32_t before = refused();
+    post_macro_assign(1, 7, kLvl, 0, 127);
+    pump();
+    CHECK_EQ(int(refused() - before), 1);
+    CHECK_EQ(macro_count(engine.macros().macros[1]), kMacroTargets);
+
+    // A parameter index no track has is not a target either.
+    post_macro_assign(2, 0, uint8_t(kParams), 0, 127);
+    pump();
+    CHECK_EQ(macro_count(engine.macros().macros[2]), 0);
+}
+
+TEST(engine_a_lock_always_wins_over_the_performance_layer) {
+    // docs/REVIEW.md settled "base kit values only" for scenes. From this side that means a
+    // step's lock beats whatever the morph, the macros and a throw produced -- and for the WHOLE
+    // step rather than only the block that triggered it, which is what `locked_` is for.
+    Engine &engine = clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 127);
+    pump();
+    two_scenes_differing_in(kPoly, kLvl, 0, 127);
+    post_u(Cmd::set_morph, kMorphScale);           // the morph asks for full level
+    put_trig(kPoly, 0);
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 127);
+
+    post(Cmd::lock_delta, kPoly, 0, kLvl, uint8_t(int8_t(-120)));
+    post(Cmd::lock_delta, kPoly, 0, kLvl, uint8_t(int8_t(-120)));
+    pump();
+    uint8_t locked = 1;
+    CHECK(pattern_get_lock(engine.pattern(), kPoly, 0, kLvl, locked));
+    CHECK_EQ(int(locked), 0);
+    CHECK_EQ(pump(), 0.0f);
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();                                        // the block the step started in ...
+    CHECK_EQ(pump(40), 0.0f);                      // ... and forty more of the same step
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 127);   // the morph still asks for full level
+
+    // Without the lock the same morph and the same step are loud, so the silence above is the
+    // lock winning and not a silent patch.
+    post(Cmd::clear_lock, kPoly, 0, kLvl);
+    pump();
+    CHECK(!pattern_get_lock(engine.pattern(), kPoly, 0, kLvl, locked));
+    FakeHost::the().deliver_tick(1536, 0);
+    pump();
+    CHECK(pump(40) > 0.01f);
+}
+
+TEST(engine_a_throw_opens_a_send_without_touching_the_kit) {
+    Engine &engine = clean();
+    CHECK_EQ(int(kit_value(kPoly, kSendA)), 0);    // clean() closed both sends
+    CHECK_EQ(int(engine.performed(kPoly, kSendA)), 0);
+
+    post(Cmd::set_throw, kPoly, 0, 1);             // 1 = the delay, send A
+    pump();
+    CHECK_EQ(engine.throwing(), 1);
+    CHECK_EQ(int(engine.performed(kPoly, kSendA)), 127);
+    CHECK_EQ(int(engine.performed(kPoly, kSendB)), 0);
+    CHECK_EQ(int(kit_value(kPoly, kSendA)), 0);    // not a parameter edit
+    CHECK_EQ(int(engine.performed(kMono, kSendA)), 0);   // and only the thrown track moves
+
+    post(Cmd::set_throw, kPoly, 0, 2);             // 2 = the reverb, send B
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kSendA)), 0);
+    CHECK_EQ(int(engine.performed(kPoly, kSendB)), 127);
+
+    // Release, and the stored value comes back by itself: there is nothing to remember.
+    post(Cmd::set_throw, kPoly, 0, 0);
+    pump();
+    CHECK_EQ(engine.throwing(), 0);
+    CHECK_EQ(int(engine.performed(kPoly, kSendB)), 0);
+
+    // A bus the panel cannot ask for is off, not a third send.
+    post(Cmd::set_throw, kPoly, 0, 3);
+    pump();
+    CHECK_EQ(engine.throwing(), 0);
+    CHECK_EQ(int(engine.performed(kPoly, kSendA)), 0);
+}
+
+TEST(engine_a_throw_really_routes_the_track_to_the_send) {
+    // The audible half: with send B open the master keeps ringing long after the note itself has
+    // stopped, where a closed send leaves exact silence.
+    Engine &engine = clean();
+    (void)engine;
+    post(Cmd::set_param, kPoly, 0, kDec, 0);       // the shortest note the machine has
+    put_trig(kPoly, 0);
+    pump();
+    CHECK_EQ(pump(), 0.0f);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    CHECK(pump(10) > 0.01f);
+    pump(40);
+    const float dry_tail = pump(300);
+
+    clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 0);
+    put_trig(kPoly, 0);
+    post(Cmd::set_throw, kPoly, 0, 2);
+    pump();
+    CHECK_EQ(pump(), 0.0f);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    CHECK(pump(10) > 0.01f);
+    pump(40);
+    const float wet_tail = pump(300);
+
+    CHECK_EQ(dry_tail, 0.0f);
+    CHECK(wet_tail > 1e-4f);
+}
+
+TEST(engine_a_scene_capture_takes_the_stored_kit_and_not_the_knob) {
+    // **A BUG, pinned rather than hidden.** app/engine.cpp's own comment on Cmd::scene_capture
+    // says "From the KIT, not from `performed_`: a scene is a sound to come back to... A capture
+    // takes the CURRENT kit, which is why it happens on this side: `params_` is what the machines
+    // read and the UI only has a block-old copy of it."
+    //
+    // It then captures `project_.kit`, which is NOT `params_`. The two are separate structures in
+    // separate layers and `Cmd::kit_store` is the only thing that copies one into the other --
+    // app/engine.cpp says so itself. Nothing posts `kit_store` except a SAVE (app/storage.cpp),
+    // and app/app.cpp's PERFORM-mode OK posts `scene_capture` on its own. So turning a knob and
+    // capturing a scene stores the value the kit had at the last save, not the sound in the room.
+    //
+    // The one-line fix is `kit_from_params();` before the capture. Not applied here: app/ is
+    // another agent's.
+    Engine &engine = clean();
+    post(Cmd::set_param, kPoly, 0, kLvl, 11);      // a knob turn: `params_` moves ...
+    pump();
+    CHECK_EQ(int(kit_value(kPoly, kLvl)), 11);
+    CHECK_EQ(int(engine.project().kit.tracks[kPoly].params[kLvl]), 127);   // ... `project_.kit` does not
+
+    post(Cmd::scene_capture, kPoly, 0, 3, 0);
+    pump();
+    CHECK(scene_has(engine.scenes().scenes[3], kPoly, kLvl));
+    CHECK_EQ(int(engine.scenes().scenes[3].values[kPoly][kLvl]), 127);     // 11 is what was wanted
+
+    // With a store first -- which is what a save does, and which is why the morph tests above do
+    // it -- the capture is the knob.
+    post(Cmd::kit_store);
+    post(Cmd::scene_capture, kPoly, 0, 4, 0);
+    pump();
+    CHECK_EQ(int(engine.scenes().scenes[4].values[kPoly][kLvl]), 11);
+
+    // One track only, which is what capturing with a track selected does.
+    post(Cmd::set_param, kMono, 0, kLvl, 22);
+    post(Cmd::kit_store);
+    post(Cmd::scene_erase, 0, 0, 5);
+    post(Cmd::scene_capture, kMono, 0, 5, 1);
+    pump();
+    CHECK_EQ(scene_count(engine.scenes().scenes[5]), kKitParams);
+    CHECK(scene_has(engine.scenes().scenes[5], kMono, kLvl));
+    CHECK(!scene_has(engine.scenes().scenes[5], kPoly, kLvl));
+
+    // A scene slot that does not exist is ignored rather than clamped onto scene 0.
+    post(Cmd::scene_capture, kMono, 0, uint8_t(kScenes), 0);
+    pump();
+    CHECK_EQ(scene_count(engine.scenes().scenes[0]), 0);
+}
+
+TEST(engine_kit_recall_is_drawn_but_not_heard) {
+    // **A SECOND BUG of the same family, pinned rather than hidden.** M5 added the per-block copy
+    // of `performed_` into `effective_`, and anything that writes `params_` without setting
+    // `perform_dirty_` is reverted inside the same block: `apply_performance` returns early,
+    // `performed_` still holds the old values, and the copy puts them back before a sample is
+    // rendered. tests/test_app.cpp has three tests for exactly this, found by a review --
+    // `Cmd::set_param`, `Cmd::project_loaded` and `Cmd::lock_delta` were each missing it.
+    //
+    // `Cmd::kit_recall` is the fourth and it was missed: it calls `params_from_kit()` and sets no
+    // flag. So a recalled kit is DRAWN (the UI reads `params_`) and not HEARD (the machines read
+    // `effective_`). The fix is the same one line, `perform_dirty_ = true;`.
+    //
+    // It is latent rather than live today: nothing posts `kit_recall` -- app/engine.cpp says so
+    // in as many words, and the gesture it waits for is F1 + F8. The day that key lands, this is
+    // what will be wrong with it.
+    Engine &engine = clean();
+    post(Cmd::set_param, 2, 0, kLvl, 42);
+    post(Cmd::kit_store);
+    pump();
+    CHECK_EQ(int(engine.project().kit.tracks[2].params[kLvl]), 42);
+
+    post(Cmd::set_param, 2, 0, kLvl, 99);
+    pump();
+    CHECK_EQ(int(kit_value(2, kLvl)), 99);
+    CHECK_EQ(int(engine.performed(2, kLvl)), 99);
+
+    post(Cmd::kit_recall);
+    pump(2);
+    CHECK_EQ(int(kit_value(2, kLvl)), 42);               // the screen followed the recall ...
+    CHECK_EQ(int(engine.performed(2, kLvl)), 99);        // ... and what is played did not
+
+    // Anything that DOES set the flag puts it right, which is how the bug stays hidden: the next
+    // knob turn anywhere repairs it.
+    post(Cmd::set_param, 0, 0, kLvl, 127);
+    pump();
+    CHECK_EQ(int(engine.performed(2, kLvl)), 42);
+}
+
+// --- the clock, and what the engine may not do to it -----------------------------------------
+
+TEST(engine_never_touches_the_transport_itself) {
+    // enaga::clock's transport calls are MAIN CONTEXT (<enaga/clock.hpp>), so routing them
+    // through the ring would call them from audio(), where they silently do nothing. `Cmd::play`
+    // and `Cmd::set_tempo` exist so the UI's intent shows up in a trace, and for nothing else.
+    clean();
+    FakeHost &host = FakeHost::the();
+    const int starts = host.control_calls(ENAGA_CLOCK_START);
+    const int stops = host.control_calls(ENAGA_CLOCK_STOP);
+    const int tempos = host.control_calls(ENAGA_CLOCK_TEMPO);
+    const int locates = host.control_calls(ENAGA_CLOCK_LOCATE);
+
+    post(Cmd::play);
+    post_f(Cmd::set_tempo, 150.0f);
+    post(Cmd::stop, 0, 0, 1);
+    pump(4);
+
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_START), starts);
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_STOP), stops);
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_TEMPO), tempos);
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_LOCATE), locates);
+    CHECK(!host.running());
+    CHECK_NEAR(host.tempo(), 130.0f, 0.01);
+}
+
+TEST(engine_follows_the_clock_rather_than_a_play_command) {
+    Engine &engine = clean();
+    (void)engine;
+    FakeHost &host = FakeHost::the();
+    put_trig(kPoly, 0);
+    post(Cmd::play);
+    pump(2);
+    CHECK_EQ(running(), 0);
+    CHECK_EQ(poly().busy_voices(), 0);
+
+    // An OUTSIDE clock, which is the half of CLAUDE.md's rule the emulator cannot reach: the
+    // transport calls are refused and the engine plays what the clock delivers anyway.
+    host.set_source(ENAGA_CLOCK_MIDI);
+    CHECK(!enaga::clock::start());
+    CHECK(!host.running());
+    host.set_running(true);                        // MIDI said so, not STRATA
+    pump();
+    CHECK_EQ(running(), 1);
+    CHECK_EQ(fired_on(kPoly, 0u), 1);
+
+    host.set_running(false);
+    pump();
+    CHECK_EQ(running(), 0);
+}
+
+TEST(engine_a_queued_change_under_an_external_clock_follows_the_clocks_run_state) {
+    Engine &engine = clean();
+    FakeHost &host = FakeHost::the();
+    host.set_source(ENAGA_CLOCK_SYNC);
+    CHECK(!enaga::clock::stop());
+    CHECK(!host.running());
+
+    // Stopped, whatever the source: there is no end of a pass to wait for, so it lands now.
+    post(Cmd::queue_pattern, 0, 0, 0, 3, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK_EQ(live_slot(), 3);
+    CHECK(!engine.queue().pending);
+
+    // Running under the outside clock it waits, exactly as it does on the internal one -- the
+    // engine asks the CLOCK, not a flag of its own.
+    host.set_running(true);
+    tick_at(600);
+    post(Cmd::queue_pattern, 0, 0, 0, 9, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK(engine.queue().pending);
+    CHECK_EQ(live_slot(), 3);
+}
+
+TEST(engine_stop_releases_the_voices_and_stop_twice_cuts_them) {
+    Engine &engine = clean();
+    (void)engine;
+    put_trig(kPoly, 0);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    CHECK_EQ(poly().sounding_voices(), 1);
+
+    // STOP once: a release, with the tail. The voice is still sounding a block later.
+    post(Cmd::stop, 0, 0, 0);
+    pump();
+    CHECK_EQ(poly().sounding_voices(), 1);
+    CHECK(poly().busy_voices() > 0);
+
+    // STOP twice: `a = 1` -- `a`, which is what app/app.cpp sends and what app/commands.hpp
+    // documents -- and the voices go at once, with no tail.
+    post(Cmd::stop, 0, 0, 1);
+    pump();
+    CHECK_EQ(poly().sounding_voices(), 0);
+    CHECK_EQ(poly().busy_voices(), 0);
+    CHECK_EQ(poly().voice_note(0), -1);
+}
+
+// --- the ring, and the guards on a damaged command -------------------------------------------
+
+TEST(engine_applies_at_most_sixty_four_commands_in_one_block) {
+    Engine &engine = clean();
+    (void)engine;
+    // docs/SPEC.md's figure, so that a burst of edits cannot break the deadline. Sixty-four
+    // trigs on one track and six on another: the first block takes the sixty-four, and the
+    // second takes the rest -- nothing is dropped, it waits.
+    for (uint8_t s = 0; s < 64; s++) post(Cmd::toggle_trig, 1, s);
+    for (uint8_t s = 0; s < 6; s++) post(Cmd::toggle_trig, 2, s);
+    CHECK_EQ(int(Commands::kMaxPerBlock), 64);
+
+    pump();
+    for (int s = 0; s < 64; s++) CHECK(trig_at(1, s));
+    for (int s = 0; s < 6; s++) CHECK(!trig_at(2, s));
+    pump();
+    for (int s = 0; s < 6; s++) CHECK(trig_at(2, s));
+}
+
+TEST(engine_a_parameter_a_track_does_not_have_is_ignored) {
+    Engine &engine = clean();
+    CHECK_EQ(int(kit_value(0, kLvl)), 127);
+    post(Cmd::set_param, 0, 0, kLvl, 200);         // a byte is wider than a parameter
+    pump();
+    CHECK_EQ(int(kit_value(0, kLvl)), 127);        // clamped to the top of the range
+
+    post(Cmd::set_param, 0, 0, uint8_t(kParams), 5);
+    post(Cmd::set_param, 0, 0, 200, 5);
+    pump();
+    for (int p = 0; p < kParams; p++) CHECK(int(kit_value(0, p)) != 5);
+
+    // And a lock on a parameter no track has is not stored either.
+    post(Cmd::lock_delta, 0, 0, uint8_t(kParams), uint8_t(int8_t(-1)));
+    pump();
+    CHECK_EQ(int(pattern_locks_reachable(engine.pattern())), 0);
+}
+
+TEST(engine_a_command_it_does_not_handle_changes_nothing) {
+    Engine &engine = clean();
+    // `Cmd::set_sends` and `Cmd::set_master` are in the enum and NOTHING handles them: they fall
+    // through `apply`'s default. Nothing posts them either, so today they are symmetric dead
+    // code rather than a live bug -- but it does mean the master DJ filter and every send
+    // setting are fixed at their defaults for the life of the app, and the day a gesture posts
+    // one of these, this test is what says it still does nothing. REPORTED.
+    CHECK(engine.sends() == SendSettings{});
+    CHECK(engine.master() == MasterSettings{});
+
+    const uint32_t before = refused();
+    post_f(Cmd::set_sends, 0.5f, 0);
+    post_f(Cmd::set_master, 1.0f, 0);
+    post(Cmd::none);
+    post(Cmd::release_note, kPoly, 0, 60);
+    post(Cmd(200));                                // a command number this build does not have
+    pump(2);
+
+    CHECK(engine.sends() == SendSettings{});
+    CHECK(engine.master() == MasterSettings{});
+    CHECK_EQ(int(refused() - before), 0);          // and not even counted as a refusal
+}
+
+TEST(engine_a_command_naming_a_track_that_does_not_exist_lands_on_track_zero) {
+    // `apply` CLAMPS the track and the step out of a command rather than refusing it: an index
+    // past the end reads as 0. This test only PINS that -- it is not an endorsement. Every other
+    // out-of-range field in `apply` is refused and counted (`queue_pattern`, `set_sample`,
+    // `macro_assign`), and a UI bug here would silently edit track 1 instead of showing up in
+    // `Status::refused`. REPORTED as a judgement call; changing it belongs to app/.
+    Engine &engine = clean();
+    (void)engine;
+    CHECK(!trig_at(0, 0));
+    post(Cmd::toggle_trig, uint8_t(kTracks), 0);
+    pump();
+    CHECK(trig_at(0, 0));
+    CHECK(!trig_at(0, 1));
+
+    post(Cmd::toggle_trig, 0, uint8_t(kStepsPerTrack));
+    pump();
+    CHECK(!trig_at(0, 0));                         // step 64 folded onto step 0 and toggled it off
+}
+
+TEST(engine_the_key_and_the_scale_land_in_both_places) {
+    Engine &engine = clean();
+    post(Cmd::set_root, 0, 0, 7);
+    post(Cmd::set_scale, 0, 0, uint8_t(Scale::phrygian));
+    pump();
+    CHECK_EQ(int(engine.pattern().root), 7);                   // a pitch class in the pattern ...
+    CHECK_EQ(int(engine.project().settings.root), 67);         // ... and a MIDI note in the project
+    CHECK_EQ(int(engine.pattern().scale), int(Scale::phrygian));
+    CHECK_EQ(int(engine.project().settings.scale), int(Scale::phrygian));
+
+    post(Cmd::set_root, 0, 0, 12);                 // not a pitch class
+    pump();
+    CHECK_EQ(int(engine.pattern().root), 7);
+
+    // The scale is deliberately NOT range-checked: core/project.cpp leaves the byte unclamped so
+    // an id from a later build survives a round trip, and core/scale plays one it does not know
+    // chromatically. Clamping here would be the one place that threw it away.
+    post(Cmd::set_scale, 0, 0, 200);
+    pump();
+    CHECK_EQ(int(engine.pattern().scale), 200);
+    CHECK_EQ(int(engine.project().settings.scale), 200);
+}
+
+TEST(engine_clearing_a_sample_bumps_the_epoch_even_for_a_track_that_has_none) {
+    Engine &engine = clean();
+    // Tracks 1 to 7 host no Sampler in the default kit, which is the case this is about. Track 8
+    // is left alone on purpose: clearing ITS sample would drop the placeholder loop for every
+    // test that runs after this one, because `build_placeholder_sample` runs once in `init()` and
+    // the rig's engine is shared (tests/apprig.hpp). What clearing does to a real Sampler --
+    // kill the voices, then drop the pointer -- is dsp/sample.cpp's, and tests/test_sample.cpp
+    // has it.
+    for (uint8_t t = 0; t + 1 < kTracks; t++) {
+        const uint8_t before = engine.status().sample_epoch[t].load(std::memory_order_relaxed);
+        post(Cmd::clear_sample, t);
+        pump();
+        const uint8_t after = engine.status().sample_epoch[t].load(std::memory_order_relaxed);
+        // The loader WAITS for this change before it releases the range and writes over it, so a
+        // track that was never reading anything must still report that it has stopped, or the
+        // wait never ends.
+        CHECK_EQ(int(uint8_t(after - before)), 1);
+    }
+
+    // A sample for a track that hosts no Sampler is refused rather than reinterpreting a
+    // pointer: the build has no RTTI to ask a Machine* with, so `samplers_` records it.
+    uint32_t before = refused();
+    post(Cmd::set_sample, kPoly, 0, 1);
+    pump();
+    CHECK_EQ(int(refused() - before), 1);
+
+    // Track 8 does host one -- and is still refused here, because app/app.cpp is what hands the
+    // engine its sample region and host/Makefile does not build app/app.cpp. So
+    // `sample_region_ == nullptr` and the offset, frame-count and alignment checks cannot be
+    // reached from the host at all; what they guard is the pool arithmetic on the other side of
+    // the ring, which tests/test_samplepool.cpp covers.
+    before = refused();
+    post(Cmd::set_sample, 7, 0, 1);
+    pump();
+    CHECK_EQ(int(refused() - before), 1);
+}
