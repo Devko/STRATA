@@ -538,6 +538,55 @@ work and it is not written. The code is verified to the extent host tests can ve
 - [ ] No reverse grains. Not in SPEC's GRAIN row, and they would double every case in the bounds
       argument.
 
+### Ten bugs a review of `app/` found, all fixed, none of them testable here
+
+`app/` is 5,142 lines and the host suite compiles only `core/` and `dsp/`, so a review is the
+only verification it gets. These are the fixes, and each one needs a gesture on the unit to
+confirm — that is what the boxes are.
+
+**Three shared one root cause**: M5 added a per-block copy of `performed_` into `effective_` so a
+morph could be heard between steps, and it quietly reverted anything else that wrote `effective_`.
+
+- [ ] **Turn a knob in EDIT mode. It should be heard at once.** `Cmd::set_param` mirrored into
+      `effective_` but did not set `perform_dirty_`, so `apply_performance` returned early,
+      `performed_` kept the old value and the block copy put it back. Knob edits were inaudible
+      until some unrelated performance control fired.
+- [ ] **Load a project. The kit should SOUND like the one on screen.** Same mechanism via
+      `params_from_kit()`: the previous project's kit went on playing under the new project's
+      patterns.
+- [ ] **Motion-record a knob. It should be heard on the pass it is recorded**, not the next one.
+      `lock_delta` mirrored into `effective_` without setting the `locked_` bit, so the copy —
+      which rewrites everything the mask does not claim — undid it before a sample was rendered.
+      The comment in the code promised exactly what the code then prevented.
+
+**And seven more:**
+
+- [ ] **The sidechain duck works at all.** Both arms of its depth ternary were `0.0f`, so an M2
+      SPEC feature was dead while the curve was still being rendered on every kick. Now 0.35 —
+      **a number to settle by ear**, since SPEC gives attack, hold and release and no depth.
+- [ ] The duck depth is not reachable from the panel: it is mixer state set in `Engine::init`
+      rather than a kit parameter. Making it editable means a kit field.
+- [ ] **Generate a Euclidean rhythm, save, reopen.** It should still be there. `Cmd::euclid` was
+      missing from `mutates_pattern`, so the bank stayed clean and an explicit save skipped the
+      bank file entirely.
+- [ ] **Change the key or scale, save, reload.** It should hold. Both commands write
+      `project_.settings` AND `live().root`/`.scale`, and only the project was marked dirty — so
+      the bank's untouched copy won, which is the copy `core/scale` reads.
+- [ ] **A WAV with a trailing chunk** (LIST, cue, id3 — most editors write one) should play its
+      audio and not its metadata. The frame count came from "everything after the header" rather
+      than from the data chunk's own length.
+- [ ] **Hold a STEP key, change page or mode, let go, then turn an encoder.** No parameter lock
+      should appear. The hold was resolved against the CURRENT page on release and against the
+      press's page on the way in, and KEYS, PERFORM and MUTE swallow the STEP keys entirely — so
+      a hold could be stranded forever, and the next encoder move wrote a lock onto a phantom
+      step.
+- [ ] **Press PLAY while a project is loading.** It should refuse and say `LOADING`, not start
+      the transport over pattern memory that `step_load` is halfway through rewriting.
+- [ ] **The unsaved-changes `*`.** Six gestures — mutate, a live-recorded hit, a queued pattern,
+      a macro assignment, a morph move and a mixer level — built their command by hand and so
+      skipped `note_command` completely, leaving the screen claiming the project was saved. All
+      posts now go through one function; check the `*` appears for each of those six.
+
 ## M0.5 — budget spike
 
 Folded into the M2 worst-case measurement above — see `docs/BUDGET.md` for why. These two lines

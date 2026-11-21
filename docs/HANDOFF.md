@@ -10,10 +10,11 @@ three emulator scenarios pass.**
 |---|---|
 | `make -C host test` | **812 tests, 531,575 checks, 0 failures** |
 | `tools/build.sh` | **links.** APP.ENA, 422,600 bytes; payload 422,536; bss 1,265,512; no BOOT, MCU or SPI sections |
-| `tests/scenario_m3.sh` | **passes**, 33.07% peak, 0 overruns — the undo trail is exactly right after everything M4, M5 and M6 did to `app/engine.cpp` |
-| `tests/scenario_m4.sh` | **passes**, 28.42%: autosave, save, and a queued change switching immediately with the clock stopped |
-| `tests/scenario_m5.sh` | **passes**, 28.42%: beat repeat's tax is now below the noise of the peak block; see docs/BUDGET.md |
-| `tests/scenario_m6.sh` | **passes**, 37.61%: KEYS records three keys, each one undo level |
+| `tests/scenario_m3.sh` | **passes**, 33.39% peak, 0 overruns — the undo trail is exactly right after everything M4, M5 and M6 did to `app/engine.cpp` |
+| `tests/scenario_m4.sh` | **passes**, 28.64%: autosave, save, and a queued change switching immediately with the clock stopped |
+| `tests/scenario_m5.sh` | **passes**, 28.64%: beat repeat's tax is now below the noise of the peak block; see docs/BUDGET.md |
+| `tests/scenario_m6.sh` | **passes**, 38.08%: KEYS records three keys, each one undo level |
+| **a review of `app/`** | **10 bugs, all fixed, none of them reachable by a test.** Three were one root cause in M5's per-block parameter copy and made knob edits, motion recording and a loaded kit inaudible. docs/UNIT_CHECKLIST.md turns each into a gesture to try on the unit |
 | `tools/render.sh` | 12.2 s rendered; peak +0.00 dBFS (the limiter), rms -17.6 dBFS, 28.0% over 9,362 blocks |
 | `tests/test_grain.cpp` | **46 tests, 64,759 checks.** GRAIN compiles AND links for the device (proved by forcing its vtable into the link: 422,600 -> 439,568 bytes, no undefined symbols), allocates nothing, and is clean under AddressSanitizer. It is also **unreachable**: the default kit fills all eight tracks, so GRAIN has no slot until machine switching exists |
 | **AddressSanitizer** | the whole suite at -O1 under ASan: **812 tests, 0 failures, zero buffer overflows.** Worth re-running after any DSP change; it found a real harness defect this session |

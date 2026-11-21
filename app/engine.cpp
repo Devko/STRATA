@@ -82,8 +82,18 @@ bool Engine::init(float sample_rate) {
     hat_closed_.set_choke_target(&hat_open_);
 
     // The duck fires from the kick, and the kick itself must not duck.
+    //
+    // Both arms of this used to be 0.0f, which meant docs/SPEC.md's M2 sidechain duck was dead
+    // while still being paid for: `trigger_duck` fires on every kick and `begin_block` renders
+    // the curve, and not one track used it. dsp/buses.hpp documents the field as "0 bypasses the
+    // duck for this track, 1 ducks it fully".
+    //
+    // kDuckDepth is a DEFAULT and wants tuning by ear -- docs/SPEC.md gives attack, hold and
+    // release but no depth. It is not reachable from the panel either: the depth is mixer state
+    // set here rather than a kit parameter, so making it editable means a kit field, which is a
+    // later change. docs/UNIT_CHECKLIST.md carries both as boxes.
     mixer_.set_duck(0.003f, 0.040f, 0.120f);
-    for (int t = 0; t < kTracks; t++) mix_[t].duck = t == duck_source_ ? 0.0f : 0.0f;
+    for (int t = 0; t < kTracks; t++) mix_[t].duck = t == duck_source_ ? 0.0f : kDuckDepth;
 
     load_default_kit();
     for (int t = 0; t < kTracks; t++) effective_[t] = params_[t];   // no locks active yet
@@ -424,7 +434,14 @@ void Engine::apply(const Command &command) {
             // motion-recorded knob is silent until the next pass of the loop, because fire()
             // built this track's effective parameters for the current step before the lock
             // existed -- which would read as "motion recording does nothing".
-            if (scheduler_.playhead(track) == uint8_t(step)) effective_[track].v[param] = value;
+            if (scheduler_.playhead(track) == uint8_t(step)) {
+                effective_[track].v[param] = value;
+                // And mark it LOCKED, or the per-block copy in process() -- which rewrites every
+                // parameter this mask does not claim -- undoes the line above before a sample is
+                // rendered, leaving exactly the silence the comment says it prevents. fire()
+                // rebuilds the mask for the next step, so this only has to hold until then.
+                locked_[track] = uint16_t(locked_[track] | uint16_t(1u << param));
+            }
             break;
         }
 
@@ -588,6 +605,10 @@ void Engine::apply(const Command &command) {
             // project's steps over this one); then the scheduler, whose track lengths, speeds and
             // swing all came from the old pattern.
             params_from_kit();
+            // For the same reason as Cmd::set_param above: without this, `performed_` still
+            // holds the PREVIOUS project's kit and the per-block copy plays it over the one just
+            // loaded. The screen would show the new kit and the machines would sound the old.
+            perform_dirty_ = true;
             undo_.clear();
             queue_clear(queue_);
             chain_.active = false;
@@ -662,9 +683,16 @@ void Engine::apply(const Command &command) {
         case Cmd::set_param:
             if (command.a < kParams) {
                 params_[track].v[command.a] = clamp_u8(command.b);
-                // Mirror into the effective set so a knob turn is heard at once instead of at
-                // the next step. The next step rebuilds effective_ from the kit anyway, so a
-                // lock on this parameter still wins from then on.
+                // `performed_` is built FROM `params_`, and the per-block copy in process()
+                // writes it over every unlocked parameter of `effective_`. So a kit change that
+                // does not set this flag is reverted within the same block: `apply_performance`
+                // returns early, `performed_` still holds the old value, and the copy puts it
+                // back. Turning a knob in EDIT mode was inaudible until some unrelated
+                // performance control happened to set the flag.
+                perform_dirty_ = true;
+                // Mirror into the effective set as well, so the turn is heard in THIS block even
+                // before the copy runs. The next step rebuilds effective_ from the kit anyway,
+                // so a lock on this parameter still wins from then on.
                 effective_[track].v[command.a] = clamp_u8(command.b);
             }
             break;

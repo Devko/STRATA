@@ -342,6 +342,12 @@ private:
     // Which track's trigs fire the sidechain duck. docs/SPEC.md: track 1 by default.
     int duck_source_ = 0;
 
+    // How far the other tracks duck under it: 0 bypasses, 1 ducks fully (dsp/buses.hpp). SPEC
+    // gives the duck's attack, hold and release and no depth, so this is a judgement -- enough
+    // to hear the kick come through a dense pattern, not enough to pump the whole mix. It is a
+    // number to settle by ear on the unit, and it is not editable from the panel yet.
+    static constexpr float kDuckDepth = 0.35f;
+
     Commands commands_;
     Status status_;
 

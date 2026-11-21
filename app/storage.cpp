@@ -62,6 +62,18 @@ bool mutates_pattern(Cmd cmd) {
         case Cmd::track_erase:
         case Cmd::record_hit:
         case Cmd::mutate:
+        // The Euclidean generator writes trig bits, so it is as much a pattern edit as
+        // `toggle_trig` is. It was missing here, which meant a generated rhythm left its bank
+        // clean: an explicit save then skipped the bank file entirely and the rhythm was gone on
+        // reopen. `Cmd::mutate` was remembered and `Cmd::euclid`, added later, was not.
+        case Cmd::euclid:
+        // And these two write BOTH stores. `project_.settings` holds the key and scale for
+        // PROJECT.BIN, but `Engine` also writes `live().root` and `live().scale`, which
+        // core/serialize puts in the BANK file (serialize.cpp:235) and which is the copy
+        // core/scale actually reads. Marking only the project dirty saved half the change, and
+        // the bank's untouched copy won on the next load -- so the key appeared to revert.
+        case Cmd::set_root:
+        case Cmd::set_scale:
             return true;
         default:
             return false;
@@ -823,7 +835,16 @@ void Storage::step_sample_convert() {
             finish_job("TOO MANY CH");
             return;
         }
-        src_frames_ = (got - format_.data_offset) / frame_bytes;
+        // From the data chunk's OWN length, not from "everything after the header". A WAV may
+        // carry chunks after its data -- LIST, cue and id3 are all common -- and those bytes are
+        // not audio: played, they are a burst of noise on the end of the sample. <enaga/wav.hpp>
+        // notes that a header still being written can report 0, which is the one case where the
+        // rest of the file is the better answer, so that is the fallback and not the rule. A
+        // length longer than what was read means a truncated file, and takes the same fallback.
+        const uint32_t rest = got - format_.data_offset;
+        const uint32_t data_bytes =
+            (format_.data_bytes == 0 || format_.data_bytes > rest) ? rest : format_.data_bytes;
+        src_frames_ = data_bytes / frame_bytes;
         if (src_frames_ == 0) {
             pool_.fail(track);
             sample_track_ = -1;

@@ -389,11 +389,19 @@ versions, not targets.
 
 | Scenario | Blocks | Peak (GCC-only) | Overruns |
 | --- | --- | --- | --- |
-| `scenario_m3.sh` — the default beat, M6 build | 1,257 | **33.07%** | 0 |
-| `scenario_m4.sh` — + stop, queue A02, save | 1,661 | **28.42%** | 0 |
-| `scenario_m5.sh` — + PERFORM, scene capture, macro assign | 1,258 | **28.42%** | 0 |
-| `scenario_m6.sh` — + KEYS, three keys recorded | 1,661 | **37.61%** | 0 |
-| `tools/render.sh --seconds 12` — 12.2 s continuous | 9,362 | **28.0%** | 0 |
+| `scenario_m3.sh` — the default beat, M6 build | 1,257 | **33.39%** | 0 |
+| `scenario_m4.sh` — + stop, queue A02, save | 1,661 | **28.64%** | 0 |
+| `scenario_m5.sh` — + PERFORM, scene capture, macro assign | 1,258 | **28.64%** | 0 |
+| `scenario_m6.sh` — + KEYS, three keys recorded | 1,661 | **38.08%** | 0 |
+| `tools/render.sh --seconds 8` — 8.2 s continuous | 6,338 | **41.1%** | 0 |
+
+**The sidechain duck costs +0.32 points**, and it was free before only because it did nothing.
+`Engine::init` set every track's duck depth with `t == duck_source_ ? 0.0f : 0.0f` -- both arms
+zero -- so docs/SPEC.md's M2 duck was dead code while `trigger_duck` still fired on every kick
+and `begin_block` still rendered the curve. The cost of turning it on is seven per-sample
+multiplies, which is what this figure is, and the rendered mix loses 0.23 dB of RMS: a duck doing
+its job. The DEPTH (0.35) is a judgement and not a measurement -- SPEC gives the duck's attack,
+hold and release and no depth -- so it wants settling by ear.
 
 **The baseline moved, twice, and both moves are explained below.** The previous build of the same
 scenarios read 22.72 / 22.72 / 23.51 / 30.64. `Step::length` becoming audible took 2.4 points

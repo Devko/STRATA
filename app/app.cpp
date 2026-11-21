@@ -262,7 +262,7 @@ public:
         // modifier must NOT toggle its trig when it comes up. That can only be decided on the
         // release: at the moment of the press there is no way to know which it was yet.
         if (key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
-            on_step_key(key - ENAGA_KEY_STEP1 + page_ * 16, down);
+            on_step_key(key - ENAGA_KEY_STEP1, down);
             return;
         }
 
@@ -275,6 +275,16 @@ public:
 
         switch (key) {
             case ENAGA_KEY_F5:
+                // Not while a project is loading. `step_load` rewrites pattern memory a pass at
+                // a time, and the audio side would play a pattern half of which belongs to the
+                // project being replaced. The load itself stops the transport; this is the gap
+                // where someone starts it again before the load has finished. A SAMPLE load is
+                // different and is allowed: playing through one is the point of loading in the
+                // background, and the pool's epoch handshake makes it safe.
+                if (storage_.loading_project()) {
+                    notice("LOADING");
+                    break;
+                }
                 // The transport is Enaga's and its calls are MAIN CONTEXT, so they happen here
                 // rather than through the command ring. start() returns false under an external
                 // clock source, where STRATA can only follow -- the screen shows EXT and the
@@ -298,21 +308,25 @@ public:
                 notice(rec_ ? "REC ON" : "REC OFF");
                 break;
 
+            // Every one of these ends a STEP hold as well. KEYS, PERFORM and the mute pads
+            // swallow the STEP keys ahead of on_step_key, so a key held across a mode change
+            // never delivers its release and the hold would last until the app was restarted --
+            // with the next encoder move writing a lock onto it.
             case ENAGA_KEY_F3:                         // PROJECT: banks, patterns and the card
                 mode_ = Mode::project;
-                step_page_ = false;
+                leave_mode();
                 break;
             case ENAGA_KEY_F4:                         // HOME: the grid, or KEYS with F1
                 mode_ = shift_ ? Mode::keys : Mode::grid;
-                step_page_ = false;
+                leave_mode();
                 break;
             case ENAGA_KEY_F7:                         // MIXER, or PERFORM with F1
                 mode_ = shift_ ? Mode::perform : Mode::mixer;
-                step_page_ = false;
+                leave_mode();
                 break;
             case ENAGA_KEY_F8:                         // EDIT: the sound pages
                 mode_ = Mode::edit;
-                step_page_ = false;
+                leave_mode();
                 break;
 
             case ENAGA_KEY_OK:
@@ -396,7 +410,32 @@ public:
 
     // --- STEP keys: tap, hold, and a pair for a range --------------------
 
-    void on_step_key(int step, bool down) {
+    // `raw` is the physical key, 0-15. The ABSOLUTE step it means depends on the page, and the
+    // page can move while a key is held -- the UP and DOWN keys are not blocked by a hold -- so
+    // the page is resolved on the PRESS and remembered. Matching the release on the raw key
+    // rather than on a recomputed absolute step is the point: the key you let go of is the key
+    // you pressed, whatever the page says by then. Resolving it twice stranded `held_step_` at
+    // the old page's value, and a stranded hold turns the next encoder move into a parameter
+    // lock on a step nobody is touching.
+    // Forget the STEP key being held, and the range it was building. Called on the release and
+    // on anything that makes the hold unanswerable.
+    void release_hold() {
+        held_step_ = -1;
+        held_key_ = -1;
+        held_used_ = false;
+    }
+
+    // What every mode change does: close the step page and drop any hold.
+    void leave_mode() {
+        step_page_ = false;
+        if (held_step_ >= 0) {
+            release_hold();
+            end_gesture();
+        }
+    }
+
+    void on_step_key(int raw, bool down) {
+        const int step = raw + page_ * 16;
         if (down) {
             if (held_step_ >= 0 && held_step_ != step) {
                 // A second STEP held makes the pair a selection, for CLR, copy, paste and the
@@ -412,19 +451,21 @@ public:
             // that loses someone's pattern.
             range_first_ = range_last_ = -1;
             held_step_ = step;
+            held_key_ = raw;
             held_used_ = false;
             return;
         }
 
-        if (step != held_step_) return;        // the second key of a range coming back up
+        if (raw != held_key_) return;          // the second key of a range coming back up
 
         if (!held_used_) {
             // A tap. With F1 it toggles the trigless bit instead: a step that applies its locks
             // without sounding a note.
             mark(GestureKind::trig, selected_, step);
-            post(Cmd::toggle_trig, uint8_t(selected_), uint8_t(step), shift_ ? 1 : 0);
+            // On the step the hold STARTED on, not on what this key would mean now.
+            post(Cmd::toggle_trig, uint8_t(selected_), uint8_t(held_step_), shift_ ? 1 : 0);
         }
-        held_step_ = -1;
+        release_hold();
         end_gesture();
     }
 
@@ -553,7 +594,7 @@ public:
                 Command command;
                 command.cmd = Cmd::set_morph;
                 command.u = morph_;
-                engine_.commands().post(command);
+                post_command(command);
                 return;
             }
             if (value_pushed_) {
@@ -664,7 +705,7 @@ public:
             command.cmd = Cmd::set_track_level;
             command.track = uint8_t(track);
             command.f = level;
-            engine_.commands().post(command);
+            post_command(command);
             return;
         }
 
@@ -829,7 +870,7 @@ public:
         command.b = uint8_t(mutate_amount_);
         command.c = 0;                       // the whole track
         command.u = mutate_variant_++;       // a new result each press
-        engine_.commands().post(command);
+        post_command(command);
         storage_.note_command(Cmd::mutate,
                               int(engine_.status().live_bank.load(std::memory_order_relaxed)));
         char *out = notice_buffer_;
@@ -894,7 +935,7 @@ public:
         command.a = note;
         command.b = velocity;
         command.c = uint8_t(landing.micro);
-        engine_.commands().post(command);
+        post_command(command);
 
         if (landing.clamped) notice("OFF GRID");   // it could not be stored where it was played
     }
@@ -1541,7 +1582,7 @@ public:
         command.b = uint8_t(param);
         command.c = now;
         command.d = far;
-        engine_.commands().post(command);
+        post_command(command);
         storage_.note_command(Cmd::macro_assign,
                               int(engine_.status().live_bank.load(std::memory_order_relaxed)));
 
@@ -1711,7 +1752,7 @@ public:
         command.a = uint8_t(shown_bank_);
         command.b = uint8_t(slot);
         command.c = uint8_t(queue_mode_);
-        engine_.commands().post(command);
+        post_command(command);
         storage_.note_command(Cmd::queue_pattern,
                               int(engine_.status().live_bank.load(std::memory_order_relaxed)));
 
@@ -1839,13 +1880,25 @@ private:
         command.a = a;
         command.b = b;
         command.c = c;
+        post_command(command);
+    }
+
+    // The same, for a command that carries a float or a wide value and so has to be built by
+    // hand rather than from `post`'s byte arguments.
+    //
+    // **Every post goes through here.** Six gestures used to call `engine_.commands().post`
+    // directly and so skipped `note_command` altogether -- a mutate, a live-recorded hit, a
+    // queued pattern, a macro assignment, a morph move and a mixer level each changed a file
+    // while the screen went on claiming the project was saved. The ring and the dirty flags have
+    // to be fed by one function or they drift apart again the next time someone needs a float.
+    void post_command(const Command &command) {
         engine_.commands().post(command);
 
         // Which of a project's ten files this edit will have changed. The live bank is read from
         // the status rather than assumed, because a chain may have moved the live pattern without
         // the UI asking (app/storage.hpp says why the flags live on this side).
         storage_.note_command(
-            cmd, int(engine_.status().live_bank.load(std::memory_order_relaxed)));
+            command.cmd, int(engine_.status().live_bank.load(std::memory_order_relaxed)));
     }
 
     // An encoder delta, as a signed byte. The audio side applies it to the authoritative step,
@@ -1934,6 +1987,8 @@ private:
     bool rec_ = false;             // F2: live and motion recording
     int quantize_ = 100;           // 0-100%, how hard a recorded hit snaps to its step
     int held_step_ = -1;           // the STEP key being held, absolute 0-63; -1 for none
+    int held_key_ = -1;            // and the PHYSICAL key it came from, 0-15, so the release
+                                   // matches even if the page moved under it
     bool held_used_ = false;       // it was used as a modifier, so its release is not a tap
     int range_first_ = -1;         // two STEP keys held: the selection, inclusive
     int range_last_ = -1;

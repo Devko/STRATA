@@ -156,6 +156,13 @@ public:
     // Which track the loader is working on, or -1.
     int loading_track() const;
 
+    // True while a PROJECT load is in flight -- the job that rewrites pattern memory a pass at a
+    // time. The transport must not be started under one: the audio side would play a pattern
+    // half of which belongs to the project being replaced. A SAMPLE load is deliberately NOT
+    // included; running the transport through one is the whole point of loading in the
+    // background, and the pool's epoch handshake is what makes that safe.
+    bool loading_project() const { return job_ == Job::load; }
+
 private:
     // The states a job passes through. One at a time; see the header comment.
     enum class Job : uint8_t {
