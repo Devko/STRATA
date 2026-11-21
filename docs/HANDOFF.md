@@ -23,9 +23,14 @@ stepping), `core/mutate` (rotate, Euclidean density, four bounded randomizers), 
 settable in F3, and `dsp/repeat` (beat repeat). Every `core/` module is host-tested AND
 mutation-tested. `dsp/repeat` is host-tested for correctness; its LOAD is not measured.
 
-Still not written in M5: throws, and the `app/` wiring that makes mutation, scenes, macros,
-mute states and auto-fill reachable from the panel. The core logic for all of them is in and
-tested; what is missing is the commands and the PERFORM screen.
+**M5 is now code-complete.** Throws and the panel wiring went in last: thirteen commands, the
+per-block performance pass, the bar counter, PERFORM.BIN in the save set, and a gesture for every
+tool. What is left for M5 is entirely verification.
+
+The one deviation from `docs/SPEC.md` worth knowing before you touch the panel: the eight stored
+mute states are on STEP 1-8 while MUTE mode is on, not "the upper row". That row is seven FIXED
+performance pads and there are eight states, so the spec cannot be literal; the STEP keys are the
+only run of eight free in a mode that is already a mode. `docs/UNIT_CHECKLIST.md` flags it.
 
 **One correction to the record**: commit `a83abf5`'s message says "15 tests" and "681 tests"
 where it should say 19 and 684. The code and the docs are right; that one message is not, and it
@@ -110,7 +115,17 @@ that a compiler could not have caught, and the odds that those were the last six
   re-arms every block and stutters at the block rate.
 - the scene morph's skip of an untouched parameter looked equivalent to writing the kit value
   back, because every test handed it a fresh copy of the kit. It is not equivalent once a macro
-  has written into that buffer, which is how `app/` will call it.
+  has written into that buffer, which is how `app/` now calls it.
+- the bar counter resynced only on a FORWARD jump, so a stop and start — which relocates the
+  clock — left auto-fill firing in the wrong place for as many bars as the jump was long.
+- holding FILL with the transport stopped did nothing, `resolve_tick` being the only thing that
+  resolved it.
+
+And a whole class of mistake worth naming, because M5 made it three times: **a feature with no
+gesture.** `core/scale` went in with no way to pick a scale; `mute_store`, `mute_recall`,
+`set_auto_fill` and `macro_assign` all went in with no key. Nothing catches this — it compiles,
+it is tested, and it is dead. The check that found them was mechanical: grep `app/app.cpp` for
+each `Cmd::` the engine handles and count the posts. Worth doing again after any milestone.
 
 The places to look hardest, because they are where a mistake is silent rather than loud: the
 epoch wait in `Storage::step_sample_epoch`, the slice arithmetic in `step_sample_convert` and
