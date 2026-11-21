@@ -452,6 +452,15 @@ public:
     }
 
     // What every mode change does: close the step page and drop any hold.
+    // Drop a STEP hold that can no longer be answered, and end its gesture. Separate from
+    // `leave_mode` because the performance pads deliberately do NOT change the mode -- the row
+    // works in every one of them -- so they need the hold dropped without the rest.
+    void drop_hold() {
+        if (held_step_ < 0) return;
+        release_hold();
+        end_gesture();
+    }
+
     void leave_mode() {
         step_page_ = false;
         if (held_step_ >= 0) {
@@ -642,9 +651,15 @@ public:
                 notice("QUANTIZE");
                 return;
             }
-            tempo_tenths_ = uint32_t(int(tempo_tenths_) + delta);
-            if (tempo_tenths_ < 200) tempo_tenths_ = 200;      // Enaga's clock allows 20-300
-            if (tempo_tenths_ > 3000) tempo_tenths_ = 3000;
+            // Clamped as a SIGNED value, before the cast. `tempo_tenths_` is unsigned, so a
+            // delta large enough to take the sum below zero used to wrap to about four billion
+            // and then clamp to 3000 -- 300 BPM -- when the user was turning the knob DOWN. Not
+            // reachable from the panel, where an encoder event carries a click or two, but it is
+            // one line either way and the wrong end of the range is a bad place to arrive.
+            int tenths = int(tempo_tenths_) + delta;
+            if (tenths < 200) tenths = 200;                    // Enaga's clock allows 20-300
+            if (tenths > 3000) tenths = 3000;
+            tempo_tenths_ = uint32_t(tenths);
             // Main context again, and refused under an external clock.
             clock_refused_ = !enaga::clock::set_tempo(float(tempo_tenths_) * 0.1f);
             return;
@@ -854,6 +869,13 @@ public:
                 if (down) {
                     mute_mode_ = !mute_mode_;
                     notice(mute_mode_ ? "MUTE MODE" : "PADS PLAY");
+                    // MUTE mode takes the lower STEP keys, and its branch in `on_key` returns on
+                    // the release as well as the press -- so a STEP key held when this pad is
+                    // tapped never delivers its release, and the hold would outlive its key.
+                    // The next encoder turn would then write a parameter lock onto a step nobody
+                    // was touching. Same reasoning as `leave_mode`, and the third of three ways
+                    // this could happen: the other two were a page change and a mode change.
+                    drop_hold();
                 }
                 break;
 
@@ -864,6 +886,8 @@ public:
                 // mode, and a hold that switched the screen and did not switch it back would be
                 // a surprise in the middle of a take.
                 scene_holding_ = down ? (PerformPad(pad) == PerformPad::scene_a ? 0 : 1) : -1;
+                // And a scene hold takes all sixteen STEP keys, with the same swallowed release.
+                if (down) drop_hold();
                 break;
 
             case PerformPad::throw_fx:

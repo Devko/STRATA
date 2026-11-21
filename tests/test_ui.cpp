@@ -615,42 +615,55 @@ TEST(ui_a_hold_that_crosses_a_mode_change_is_dropped_rather_than_stranded) {
     }
 }
 
-TEST(ui_a_performance_pad_pressed_during_a_hold_still_strands_it) {
-    // The third route the review's wording covers and the fix does not: MUTE mode and the scene
-    // pads swallow the STEP keys too, and neither is a MODE -- they are performance-row pads, and
-    // `on_perform_pad` does not call `leave_mode()`. So "hold STEP 1, tap the MUTE pad, let go"
-    // leaves `held_step_` set with no key down, and the next encoder move writes a lock onto it.
+TEST(ui_a_performance_pad_pressed_during_a_hold_drops_the_hold) {
+    // The third of three ways a STEP hold could outlive its key, and the one a mode change does
+    // not cover: MUTE mode and the scene pads swallow the STEP keys too, and neither is a MODE --
+    // they are performance-row pads, and the row deliberately works in every mode, so
+    // `on_perform_pad` does not and should not call `leave_mode()`. It calls `drop_hold()`.
     //
-    // This test pins what the code does TODAY rather than what it should do, which is the same
-    // choice tests/test_app.cpp makes for the cancelled save: a decision rather than a surprise.
-    // The fix is one line in each of the two swallowing branches (drop the hold before returning)
-    // and it is not made here, because this change is a move plus its tests.
+    // Both branches in `on_key` return on the RELEASE as well as the press, so without this the
+    // release never reached `on_step_key`: "hold STEP 1, tap the MUTE pad, let go" left
+    // `held_step_` set with no key down, and the next encoder turn wrote a parameter lock onto a
+    // step nobody was touching. The other two routes were a page change and a mode change.
     {
         Strata &app = fresh();
         step_down(0);
         app.on_pad_press(5, 100);                  // MUTE mode on, with STEP 1 still down
         CHECK(UiProbe::mute_mode(app));
+        CHECK_EQ(UiProbe::held_step(app), -1);     // the hold went with it
         app.on_pad_release(5);
-        step_up(0);                                // swallowed by the MUTE branch
+        step_up(0);                                // swallowed by the MUTE branch, harmlessly
 
-        CHECK_EQ(UiProbe::held_step(app), 0);      // <-- the strand, with no key held
+        CHECK_EQ(UiProbe::held_step(app), -1);
         app.on_encoder(0, +4);
         pump();
-        CHECK_EQ(locks_on_track(0), 1);            // <-- the phantom lock
-        CHECK_EQ(int(step_of(0, 0).lock_count), 1);
+        CHECK_EQ(locks_on_track(0), 0);            // no phantom lock
+        CHECK_EQ(int(step_of(0, 0).lock_count), 0);
     }
     {
         Strata &app = fresh();
         step_down(2);
         app.on_pad_press(7, 100);                  // scene A held: STEP keys become the scenes
         CHECK_EQ(UiProbe::scene_holding(app), 0);
-        step_up(2);                                // swallowed by the scene branch
+        CHECK_EQ(UiProbe::held_step(app), -1);
+        step_up(2);
         app.on_pad_release(7);
 
-        CHECK_EQ(UiProbe::held_step(app), 2);
+        CHECK_EQ(UiProbe::held_step(app), -1);
         app.on_encoder(0, +4);
         pump();
-        CHECK_EQ(locks_on_track(0), 1);
+        CHECK_EQ(locks_on_track(0), 0);
+    }
+
+    // And the pad still does its job: dropping the hold must not have swallowed the gesture it
+    // was pressed for.
+    {
+        Strata &app = fresh();
+        app.on_pad_press(5, 100);
+        CHECK(UiProbe::mute_mode(app));
+        app.on_pad_release(5);
+        app.on_pad_press(5, 100);
+        CHECK(!UiProbe::mute_mode(app));
     }
 }
 

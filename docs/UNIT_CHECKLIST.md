@@ -590,7 +590,13 @@ rather than the only check there will ever be.
 - [ ] **The unsaved-changes `*`.** Six gestures — mutate, a live-recorded hit, a queued pattern,
       a macro assignment, a morph move and a mixer level — built their command by hand and so
       skipped `note_command` completely, leaving the screen claiming the project was saved. All
-      posts now go through one function; check the `*` appears for each of those six.
+      posts now go through one function; check the `*` appears for **five** of them.
+- [ ] **The morph is the exception, deliberately.** `Cmd::set_morph` is in none of
+      `app/storage.cpp`'s `mutates_*` lists, because the morph position is "where the performer's
+      hands are, not part of the project". So moving VALUE in PERFORM must NOT raise the `*`,
+      and `tests/test_ui.cpp` asserts the pair: the morph moved **and** the project stayed clean.
+      If that feels wrong on the unit — if someone sets a morph, saves, reloads and is surprised
+      it did not keep — the fix is to add it to a list, not to the UI.
 
 ### `app/` is host-tested now, and the first thing that found
 
@@ -619,9 +625,31 @@ confirmed by hand once:
       first, then SAVE) does complete by itself when a card arrives. Both are pinned by tests;
       **whether the cancelled one should resume on its own is a judgement for the unit.**
 
-Still not host-testable: `app/app.cpp`. `ENAGA_APP(Strata)` at the end of it defines the
-package's entry points, which belong to a device build, so every mode, gesture and encoder
-binding is still unreachable by a test and still needs the hardware.
+### And then `app/app.cpp` became testable too
+
+`ENAGA_APP(Strata)` defines the package's entry points and belongs to a device build, so the
+whole `Strata` class moved to `app/app.hpp` and `app/app.cpp` is now that one line. The move was
+pure -- the device image is byte-identical across it -- and `tests/test_ui.cpp` includes the
+header and drives the same class the unit runs, with no `#ifdef` anywhere in `app/`.
+
+19 tests, 26 of 27 mutations caught. They pin the held-STEP state machine, tap against hold
+against range, the mode changes, KEYS as scale DEGREES, the GRID encoder routing, PLAY's refusal
+during a load, and the unsaved-changes mark. What they cannot reach is said in comments rather
+than faked: the LED language and all screen TEXT, because the fake host counts LEDs and ignores
+text. The screen is checked by pixels instead.
+
+**A third way to strand a held STEP key came out of it, and it is fixed.** MUTE mode and the
+scene pads swallow the STEP keys as well, and neither is a mode -- the performance row works in
+every mode on purpose -- so they needed the hold dropped without the rest of a mode change.
+Before: hold STEP 1, tap the MUTE pad, let go, and the next encoder turn wrote a parameter lock
+onto a step nobody was touching.
+
+- [ ] **Hold a STEP key, tap MUTE or a scene pad, let go, turn an encoder.** No lock should
+      appear. Then confirm the pad itself still works: dropping the hold must not have swallowed
+      the gesture it was pressed for.
+- [ ] A tempo clamp sign bug was fixed on the way past: turning VALUE down hard used to wrap an
+      unsigned subtraction and clamp to 300 BPM instead of 20. Not reachable from the panel (an
+      encoder event carries a click or two), so this is a glance rather than a test.
 
 ## M0.5 — budget spike
 
