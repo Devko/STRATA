@@ -269,15 +269,35 @@ some of it accidentally landed in the audio callback anyway.
 
 Same scenario, same kit, same tempo as M2's first row: `tests/scenario_m1.sh`, 3,072 blocks.
 
-| | Peak | Cycles | Overruns |
-| --- | --- | --- | --- |
-| M2, default kit, cl6x | 17.00% | 84,320 | 0 |
-| **M3, default kit, cl6x** | **17.01%** | 84,381 | 0 |
+| | cl6x | GCC only |
+| --- | --- | --- |
+| M2, default kit | 17.00% (84,320 cycles) | 28.38% |
+| **M3, default kit** | **17.01%** (84,381 cycles) | **28.92%** (143,446 cycles) |
 
-61 cycles, which is noise in a peak-of-3,072-blocks measurement. The sequencer's new work is all
-control-rate: it happens when a command arrives, not every block.
+0 overruns in every run. With cl6x the difference is **61 cycles**, which is noise: the
+sequencer's new work is all control-rate, happening when a command arrives rather than every
+block, so a milestone with no DSP in it moves the per-block cost by nothing.
 
-`tests/scenario_m3.sh` reports **13.68%** for the same kit, which is *not* a different result —
+The GCC-only column moved further — 0.54 points, about 2,700 cycles — and that is worth not
+glossing over, because nothing new runs per block in either build. The likely reason, **stated as
+a hypothesis and not measured**: with `ENAGA_TI_CGT=none` the hot path is the C++ in `dsp/` and
+`app/engine.cpp`, and `Engine::apply`'s switch grew by a dozen cases in this milestone, which can
+change GCC's inlining and scheduling decisions for the whole translation unit. With cl6x the hot
+inner loops live in `*.ti.c` and are compiled apart from all of that, which is exactly why they
+were moved there and why that column barely moves. If this matters later, the way to settle it is
+the same trick M2 used for the extraction: build one renderer against both trees and compare.
+
+Either way it changes no conclusion. The cheap kit was never near the bar in either build, and
+GCC-only's *worst case* already failed at M2 (44.26% against 40%).
+
+**A peak figure is only meaningful next to its run length**, and this milestone made that
+concrete in two directions. `tools/render.py`'s 20-second render covers 15,209 blocks and finds
+**17.67%** (87,620 cycles) on the same kit — a longer run catches a worse block, so 17.67% is
+the honest "worst seen so far" and the two 17.0% figures above are a like-for-like comparison at
+3,072 blocks rather than the ceiling.
+
+In the other direction, `tests/scenario_m3.sh` reports **13.68%** for the same kit, which is *not*
+a different result —
 it runs 700 M cycles against the other's 1,600 M, so its peak window never catches the block
 where the open hat, the stab and the sampler overlap. A peak figure is only comparable against
 the same run length, which is why the load tracking stays on the longer scenario.
