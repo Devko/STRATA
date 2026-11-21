@@ -402,6 +402,46 @@ on encoders, which the emulator cannot drive.
       worth hearing once.
 - [ ] A rotation of a whole cycle is a no-op and reports no change, so it costs no undo level.
 
+### M6 blocks on one interface question, not on features
+
+Three M6 features and one M5 leftover all want the same two things from `dsp/track.hpp`'s
+`Machine`, which has neither. **This is a decision to make before any of them is wired in**, or
+the audio behaviour changes twice and `app/engine.cpp` gets edited twice:
+
+| What wants it | What is missing |
+|---|---|
+| VA POLY sustain — `Step::length` audible, which the box below expects at "the first sustaining machine (VA POLY / KEYS, M6)" | a per-note NOTE-OFF. `Machine` has `release_all()` and nothing else, so VA POLY is a one-shot on a sustain-0 envelope like every drum |
+| KEYS mode — letting go of a key | the same note-off. Releasing one key of a held chord would silence the whole machine, so KEYS triggers and never releases |
+| `Cmd::release_note` | the same. It has sat in the enum unimplemented since M2 for this reason |
+| VA POLY and GRAIN stereo | `render_add_stereo`. **`dsp/track.hpp:19` says "Only VA POLY and GRAIN produce stereo, and they write both buffers of a stereo pair instead (see render_add_stereo below)" — and no such function is declared anywhere.** The header promises an interface that does not exist |
+
+Both changes touch the interface every machine implements, so they are cheapest now, while there
+are nine machines rather than eleven, and most expensive once chords are triggering.
+
+- [ ] Decide on a per-note release, then `Step::length` and KEYS release and `Cmd::release_note`
+      all become reachable together.
+- [ ] Decide on `render_add_stereo`, or correct `dsp/track.hpp`'s comment to say machines are
+      mono and the chain spreads them. One of the two is wrong today.
+
+**VA POLY (`dsp/vapoly`)** — 32 host tests, 16 of 18 mutations caught (both survivors honest),
+and VaMono's voice factored out and proven BIT-EXACT over 4,840 rendered values. Not registered
+on a track yet, so none of it is reachable or measured.
+
+- [ ] Six notes sound together; a seventh steals the quietest started voice rather than being
+      dropped.
+- [ ] **A chord's six notes on the same frame all sound.** A voice is busy from the moment it
+      takes a trig, not from the frame that trig starts on — the subagent found the bug this
+      prevents via a surviving mutation, and the test is
+      `vapoly_a_chord_change_that_steals_keeps_all_of_its_notes`.
+- [ ] A ratchet's repeated note takes a second voice, so both hits sound.
+- [ ] Slot 10 is **DET** (voice detune, up to a quarter semitone) where VA MONO has GLD, since
+      glide and slide are MONO-only. "Spread" is therefore pitch, not stereo, and unison is not
+      implemented — it needs the stereo decision above.
+- [ ] The six-voice cost, with and without cl6x. Derived at ~9,960 cycles (~2.0% of the block)
+      against SPEC's 11,208; unmeasured, and the control-rate term is the part that scales
+      linearly. `dsp/vapoly.cpp`'s header names the buffered-maths optimisation to reach for if
+      it disappoints.
+
 **Chords (`core/chord`)** — 27 host tests, 15 of 15 mutations caught, and nothing calls it yet:
 the engine wiring is still to come, so none of this is reachable from the panel.
 
