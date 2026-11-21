@@ -8,7 +8,7 @@ three emulator scenarios pass.**
 
 | | |
 |---|---|
-| `make -C host test` | **684 tests, 454,581 checks, 0 failures** |
+| `make -C host test` | **697 tests, 455,073 checks, 0 failures** |
 | `tools/build.sh` | **links.** APP.ENA, 395,800 bytes; 396 KiB text, 1.21 MiB bss; no BOOT, MCU or SPI sections |
 | `tests/scenario_m3.sh` | **passes**, 22.66% peak, 0 overruns — the undo trail is exactly right after everything M4 and M5 did to `app/engine.cpp` |
 | `tests/scenario_m4.sh` | **passes** (new): autosave, save, and a queued change switching immediately with the clock stopped |
@@ -19,6 +19,11 @@ three emulator scenarios pass.**
 So M4 and M5 are no longer unverified code. What they are is **verified in an emulator with no
 cache model, on a GCC-only build**. `docs/BUDGET.md` states both caveats next to every number,
 and the unit still decides.
+
+M6 has started: the Euclidean generator is in, host-tested and mutation-tested, with its
+gesture on F1 + encoders A/B/C in GRID. Still to write: VA POLY with chords, GRAIN, KEYS mode,
+resampling and pad pressure. The two machines are the budget risk -- GRAIN is the costliest voice
+in docs/SPEC.md's table -- and the 60% exit depends on cl6x, which is unresolved.
 
 ## How a cloud session gets a device build
 
