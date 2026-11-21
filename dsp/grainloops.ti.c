@@ -31,8 +31,10 @@
 #include <enaga/dsp/math.h>
 
 /* Q16 to float, and the window phase to a table index. Both constants, so cl6x keeps them in
- * registers across the loop. */
-#define STRATA_GRAIN_INV_FRAC (1.0f / (float)STRATA_GRAIN_FRAC_ONE)
+ * registers across the loop. The first is written out rather than as 1.0f / 65536.0f, which is
+ * what dsp/repeatloops.ti.c does with its Q32 scale and for the same reason: it is exact either
+ * way, and a literal cannot become a runtime divide on a compiler that declines to fold. */
+#define STRATA_GRAIN_INV_FRAC 1.52587890625e-05f   /* 1 / 2^16 */
 #define STRATA_GRAIN_WINDOW_SCALE ((float)STRATA_GRAIN_WINDOW)
 
 int32_t strata_grain_advance(int32_t samples, int32_t istep, uint32_t fstep) {
