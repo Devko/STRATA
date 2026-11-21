@@ -73,6 +73,9 @@ struct UiProbe {
 
     static const char *notice(const Strata &app) { return app.notice_; }
     static bool notice_showing(const Strata &app) { return app.notice_showing(); }
+
+    static uint32_t tempo_tenths(const Strata &app) { return app.tempo_tenths_; }
+    static bool clock_refused(const Strata &app) { return app.clock_refused_; }
 };
 
 }  // namespace strata::test
@@ -338,6 +341,192 @@ TEST(ui_an_encoder_with_no_step_held_writes_the_kit_and_not_a_lock) {
     CHECK_EQ(int(app_engine().params(0).v[param]), int(before) + 5);
     CHECK_EQ(locks_on_track(0), 0);
     CHECK_EQ(int(undo_depth()), 0);                // a kit edit is not a pattern edit
+}
+
+TEST(ui_the_parameter_page_decides_which_parameter_an_encoder_writes) {
+    // Found by mutation testing: dropping `page_first(Page(param_page_))` from the lock index
+    // survived every test above, because none of them ever left the SRC page -- where the page
+    // base is zero and the bug is invisible. docs/SPEC.md gives EDIT's selection keys "SRC, FLTR,
+    // AMP, FX", and each page is four parameters along (dsp/track.hpp), for the kit and for a
+    // lock alike.
+    Strata &app = fresh();
+
+    key(ENAGA_KEY_F8);                             // EDIT
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    // To a known page from wherever the test before this one left it: the selection keys cycle.
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+
+    app.on_encoder(0, +1);                         // SRC: encoder A is parameter 0
+    pump();
+    CHECK_EQ(int(app_engine().params(0).v[0]), 65);
+    CHECK_EQ(int(app_engine().params(0).v[page_first(Page::fltr)]), 64);
+
+    key(ENAGA_KEY_SELECT_RIGHT);                   // FLTR: four parameters along
+    CHECK_EQ(UiProbe::param_page(app), int(Page::fltr));
+    app.on_encoder(0, +2);
+    pump();
+    CHECK_EQ(int(app_engine().params(0).v[page_first(Page::fltr)]), 66);
+    CHECK_EQ(int(app_engine().params(0).v[0]), 65);               // and not the SRC page again
+
+    // The pages wrap, so the four of them are reachable in either direction.
+    key(ENAGA_KEY_SELECT_LEFT);
+    CHECK_EQ(UiProbe::param_page(app), int(Page::src));
+    for (int i = 0; i < kPages; i++) key(ENAGA_KEY_SELECT_LEFT);
+    CHECK_EQ(UiProbe::param_page(app), int(Page::src));
+
+    // And a lock follows the same page. The step page is not open and the mode is GRID, but
+    // `param_page_` is what the lock index is built from either way.
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(UiProbe::param_page(app), int(Page::amp));
+    key(ENAGA_KEY_F4);
+    step_down(3);
+    app.on_encoder(1, +4);                         // AMP, encoder B
+    step_up(3);
+    pump();
+
+    uint8_t value = 0;
+    const int expected = page_first(Page::amp) + 1;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 3, uint8_t(expected), value));
+    CHECK_EQ(int(value), 68);
+    CHECK_EQ(int(step_of(0, 3).lock_count), 1);     // one lock, on the AMP page's second knob
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 3, 1, value));
+}
+
+TEST(ui_a_lower_pad_selects_its_track_and_everything_else_follows) {
+    // Also found by mutation testing: `selected_ = track` could be deleted and nothing noticed,
+    // because every test above plays pad 1 while track 1 is already selected. docs/SPEC.md:
+    // "Tap: select track and play it with velocity", and the selected track is what the STEP
+    // keys, the encoders and the screen are all about.
+    Strata &app = fresh();
+    CHECK_EQ(UiProbe::selected(app), 0);
+
+    app.on_pad_press(4, 100);                      // the lower row is the even ids: pad 4 = track 3
+    app.on_pad_release(4);
+    CHECK_EQ(UiProbe::selected(app), 2);
+    const float peak = pump(4);
+    CHECK(peak > 0.0f);                            // and it played, which is the other half
+
+    // The STEP keys now edit track 3.
+    key(ENAGA_KEY_STEP1 + 5);
+    pump();
+    CHECK(trig_at(2, 5));
+    CHECK(!trig_at(0, 5));
+
+    // So does an encoder.
+    const int param = encoder_param(0);
+    app.on_encoder(0, +6);
+    pump();
+    CHECK_EQ(int(app_engine().params(2).v[param]), 70);
+    CHECK_EQ(int(app_engine().params(0).v[param]), 64);
+
+    // An upper pad is not a track at all: the performance row is fixed in every mode.
+    app.on_pad_press(5, 100);                      // MUTE mode on
+    CHECK(UiProbe::mute_mode(app));
+    CHECK_EQ(UiProbe::selected(app), 2);
+    app.on_pad_release(5);
+
+    // And in MUTE mode the lower pads mute instead of playing, without changing the selection.
+    app.on_pad_press(4, 100);
+    app.on_pad_release(4);
+    pump(2);
+    CHECK(app_engine().muted(2));
+    CHECK_EQ(UiProbe::selected(app), 2);
+}
+
+TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {
+    // A third mutation-testing gap: dropping `page_ * 16` from `on_step_key` survived everything
+    // above, because every test before this one works on page 1 where the offset is zero -- and
+    // the offset is the whole of how a 64-step track is reached from sixteen keys.
+    Strata &app = fresh();
+    CHECK_EQ(UiProbe::page(app), 0);
+
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::page(app), 2);               // "step page 1-4 in GRID" (docs/SPEC.md)
+
+    key(ENAGA_KEY_STEP1);                          // STEP 1 of page 3 is absolute step 33
+    pump();
+    CHECK(trig_at(0, 32));
+    CHECK(!trig_at(0, 0));
+    CHECK(!trig_at(0, 16));
+
+    // A hold on this page locks the step the page names, not the key's number.
+    step_down(1);
+    app.on_encoder(0, +5);
+    step_up(1);
+    pump();
+    const int param = encoder_param(0);
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 33, uint8_t(param), value));
+    CHECK_EQ(int(value), 69);
+    CHECK_EQ(int(step_of(0, 1).lock_count), 0);
+    CHECK(!trig_at(0, 33));                        // the hold was spent on the lock
+
+    // The octave keys CLAMP at both ends: four pages, and walking off either end stays there.
+    for (int i = 0; i < 4; i++) key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::page(app), 3);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_OCTAVE_LEFT);
+    CHECK_EQ(UiProbe::page(app), 0);
+
+    // The selection keys move the page in GRID as well, and those WRAP -- the spec's key table
+    // gives both, and `select()` is the one that goes round.
+    key(ENAGA_KEY_SELECT_LEFT);
+    CHECK_EQ(UiProbe::page(app), 3);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(UiProbe::page(app), 0);
+}
+
+TEST(ui_the_value_encoder_is_the_tempo_and_a_refused_transport_is_recorded) {
+    // CLAUDE.md: "STRATA does not own the tempo. CLOCK SRC is the user's setting; start/stop/
+    // set_tempo return false under external sync. Always handle the refusal." tests/test_app.cpp
+    // pins that at the clock; this pins what the UI does with it -- it asks, it records the
+    // refusal for the screen, and it does not pretend the transport moved.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+
+    const int tenths = int(UiProbe::tempo_tenths(app));
+    app.on_encoder(4, +10);                        // VALUE, nothing pushed: one BPM
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), tenths + 10);
+    CHECK_NEAR(host.tempo(), float(tenths + 10) * 0.1f, 0.01);
+    CHECK(!UiProbe::clock_refused(app));
+
+    // The ends of the range, walked in real clicks. NOT with one big negative delta: the clamp
+    // is written on the uint32_t, so a delta large enough to take the sum below zero wraps and
+    // clamps to the MAXIMUM instead of the minimum. An encoder event carries a click or two, so
+    // nothing on the panel can produce one -- but it is a latent sign bug rather than a safe
+    // idiom, and a test that fed it -5000 would be pinning a value no hand can reach.
+    for (int i = 0; i < 1200; i++) app.on_encoder(4, -1);
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 200);
+    CHECK_NEAR(host.tempo(), 20.0f, 0.01);
+    for (int i = 0; i < 3000; i++) app.on_encoder(4, +1);
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 3000);
+    CHECK_NEAR(host.tempo(), 300.0f, 0.01);
+
+    // VALUE pushed and turned is the pattern's swing instead, as the spec's key table says, and
+    // the tempo does not move with it.
+    const int swing_before = int(app_engine().pattern().swing);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    app.on_encoder(4, +2);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump(2);
+    CHECK_EQ(int(app_engine().pattern().swing), swing_before + 2);
+    CHECK_NEAR(host.tempo(), 300.0f, 0.01);
+
+    // And the refusal itself.
+    host.set_source(ENAGA_CLOCK_MIDI);
+    const int starts = host.control_calls(ENAGA_CLOCK_START);
+    key(ENAGA_KEY_F5);
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_START), starts + 1);   // it asked...
+    CHECK(!host.running());                                        // ...and was told no
+    CHECK(UiProbe::clock_refused(app));
+
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+    key(ENAGA_KEY_F5);
+    CHECK(host.running());
+    CHECK(!UiProbe::clock_refused(app));
+    key(ENAGA_KEY_F6);
+    CHECK(!host.running());
 }
 
 // --- the two ways a hold used to be stranded ------------------------------------------------
