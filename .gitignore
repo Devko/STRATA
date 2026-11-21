@@ -1,0 +1,17 @@
+# Build output. The real build lives in $ENAGA_BUILD (the WSL filesystem, off /mnt/d);
+# build/ here only receives the finished APP.ENA so it is reachable from Windows for the card.
+/build/
+
+# The emulator is a plain clone, not a submodule: Enaga's tools take it by env var
+# (ENAGA_EMULATOR), and pinning a reverse-engineering repo as a submodule buys nothing.
+/third_party/smpltrek-re/
+
+# Local environment overrides, e.g. ENAGA_TI_CGT or a different toolchain path.
+/tools/env.local.sh
+
+# Editor and OS noise
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini

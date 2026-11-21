@@ -1,0 +1,20 @@
+# The repo is edited on Windows but built in WSL. Shell scripts and Makefiles must keep LF
+# endings or they break with "bad interpreter" / "missing separator" under bash and make.
+* text=auto eol=lf
+
+*.sh      text eol=lf
+Makefile  text eol=lf
+*.mk      text eol=lf
+
+*.cpp     text eol=lf
+*.hpp     text eol=lf
+*.c       text eol=lf
+*.h       text eol=lf
+*.py      text eol=lf
+*.md      text eol=lf
+
+# Binary: never translate.
+*.ena     binary
+*.bin     binary
+*.wav     binary
+*.png     binary

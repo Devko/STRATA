@@ -1,0 +1,3 @@
+[submodule "third_party/enaga"]
+	path = third_party/enaga
+	url = https://github.com/seawaffle/enaga.git

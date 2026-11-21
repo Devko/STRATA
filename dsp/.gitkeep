@@ -1,0 +1,2 @@
+# dsp/: machines and effects. May include <enaga/dsp.h>, which also builds on the host.
+# Hot inner loops go in *.ti.c. Removed once real sources land (M1).
