@@ -392,8 +392,9 @@ const Expect kTable[] = {
     {Cmd::stop, 0u, "stop"},
 
     // PROJECT.BIN holds `tempo_centi_bpm`, so a tempo change belongs to it. Nothing writes that
-    // field today (app/app.cpp sets the CLOCK and never posts this command), so the flag is
-    // currently unreachable rather than wrong -- see the report at the end of this file.
+    // field today (app/app.cpp sets the CLOCK and never posts this command) and nothing applies
+    // it after a load either, so the flag is right for the day the tempo is stored and the tempo
+    // itself does not survive a reopen. Reported with the commit that added this file.
     {Cmd::set_tempo, kDirtyProject, "set_tempo"},
 
     // --- the live pattern, and therefore its bank's file -------------------
@@ -670,7 +671,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     // `Cmd::kit_store` FIRST, and that is not incidental: `scene_capture` reads `project_.kit` --
     // the kit a file holds -- and only `kit_store` refreshes that from `params_`, the kit a knob
     // actually turns. Without the store the scene captures the sound as of the last save. Nothing
-    // in app/app.cpp posts one before a capture; see the report at the end of this file.
+    // in app/app.cpp posts one before a capture, which is a bug in the capture and not in
+    // PERFORM.BIN; reported with the commit that added this file.
     post(Cmd::kit_store);
     post(Cmd::scene_capture, 0, 0, 5, 0);                 // scene 5, every track
     // A macro assignment carries five values, one more than the rig's `post` takes.
