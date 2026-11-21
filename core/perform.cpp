@@ -1,0 +1,384 @@
+// Scenes, the morph and the macros. core/perform.hpp has the design.
+#include "perform.hpp"
+
+namespace strata {
+namespace {
+
+// A kit parameter's domain (dsp/track.hpp: "Values are 0-127"), stated here as core/project.cpp
+// states it, and for the same reason: a parameter reaches dsp/ as a table index or an x(1/127)
+// scale, so a 255 out of a damaged file is an out-of-range read down in a machine.
+constexpr uint8_t kParamMax = 127;
+
+uint8_t clamp_u8(uint8_t value, uint8_t low, uint8_t high) {
+    if (value < low) return low;
+    if (value > high) return high;
+    return value;
+}
+
+int clamp_int(int value, int low, int high) {
+    return value < low ? low : (value > high ? high : value);
+}
+
+// --- the container --------------------------------------------------------
+//
+// The THIRD copy of these fifty lines: core/serialize.cpp has them for the pattern,
+// core/project.cpp for the project, kit and bank files, and this is the fourth file type.
+// core/project.cpp's header records why they are duplicated rather than shared -- so that one
+// format can be read and changed without reading another -- and the rules they enforce are
+// restated and checked in the same ORDER, which is what makes all five file types give the same
+// reason for the same damage.
+//
+// Three copies is where that decision starts to cost more than it pays. It is kept here because
+// it is a decision the project recorded and not one to change in passing (CLAUDE.md), but a
+// FIFTH file type should extract these into core/serialize.cpp first.
+
+struct Section {
+    uint16_t id;
+    uint32_t offset;
+    uint32_t size;
+};
+
+void write_container(Writer &w, uint16_t version, const Section *sections, uint32_t count,
+                     uint32_t payload) {
+    w.u8(kMagic0);
+    w.u8(kMagic1);
+    w.u8(kMagic2);
+    w.u8(kMagic3);
+    w.u16(version);
+    w.u16(uint16_t(count));
+    w.u32(payload);
+    w.u32(0);
+    for (uint32_t i = 0; i < count; i++) {
+        w.u16(sections[i].id);
+        w.u16(0);
+        w.u32(sections[i].offset);
+        w.u32(sections[i].size);
+    }
+}
+
+SerializeResult finish_container(Writer &w, uint8_t *buffer, uint32_t total, uint32_t *written) {
+    if (!w.ok()) return SerializeResult::buffer_too_small;
+    w.patch_u32(kCrcOffset, crc32(buffer + kHeaderBytes, total - kHeaderBytes));
+    if (!w.ok()) return SerializeResult::buffer_too_small;
+    if (written != nullptr) *written = total;
+    return SerializeResult::ok;
+}
+
+// The checks in pattern_read's order: the declared payload against the buffer, then the CRC,
+// then the version, then the table.
+SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t version,
+                              const uint16_t *wanted, uint32_t count, uint32_t *offset,
+                              uint32_t *length) {
+    for (uint32_t k = 0; k < count; k++) {
+        offset[k] = 0;
+        length[k] = 0;
+    }
+    if (buffer == nullptr || size < kHeaderBytes) return SerializeResult::truncated;
+
+    Reader r(buffer, size);
+    const bool magic =
+        r.u8() == kMagic0 && r.u8() == kMagic1 && r.u8() == kMagic2 && r.u8() == kMagic3;
+    if (!magic) return SerializeResult::bad_magic;
+
+    const uint16_t have = r.u16();
+    const uint32_t sections = r.u16();
+    const uint32_t payload = r.u32();
+    const uint32_t want_crc = r.u32();
+    if (!r.ok()) return SerializeResult::truncated;
+
+    if (payload > size - kHeaderBytes) return SerializeResult::truncated;
+    if (crc32(buffer + kHeaderBytes, payload) != want_crc) return SerializeResult::bad_crc;
+    if (have != version) return SerializeResult::bad_version;
+
+    if (sections == 0 || sections > kMaxSections) return SerializeResult::malformed;
+    const uint32_t table = sections * kSectionEntryBytes;
+    if (table > payload) return SerializeResult::malformed;
+
+    for (uint32_t i = 0; i < sections; i++) {
+        if (!r.seek(kHeaderBytes + i * kSectionEntryBytes)) return SerializeResult::malformed;
+        const uint16_t id = r.u16();
+        r.skip(2);
+        const uint32_t at = r.u32();
+        const uint32_t len = r.u32();
+        if (!r.ok()) return SerializeResult::truncated;
+        if (at < table || at > payload || len > payload - at) return SerializeResult::malformed;
+        for (uint32_t k = 0; k < count; k++) {
+            if (id != wanted[k]) continue;
+            if (offset[k] != 0) return SerializeResult::malformed;
+            offset[k] = at;
+            length[k] = len;
+        }
+    }
+    for (uint32_t k = 0; k < count; k++) {
+        if (offset[k] == 0) return SerializeResult::malformed;
+    }
+    return SerializeResult::ok;
+}
+
+// --- PERFORM.BIN sizes ----------------------------------------------------
+
+constexpr uint32_t kPerformSections = 2;
+constexpr uint32_t kSceneTrackBytes = uint32_t(kKitParams) + 2;      // values, then the bitmask
+constexpr uint32_t kSceneBytes = kSceneTrackBytes * uint32_t(kTracks);
+constexpr uint32_t kScenesBytes = kSceneBytes * uint32_t(kScenes);
+constexpr uint32_t kMacroTargetBytes = 5;                            // enabled, track, param, low, high
+constexpr uint32_t kMacrosBytes =
+    kMacroTargetBytes * uint32_t(kMacroTargets) * uint32_t(kMacros);
+constexpr uint32_t kPerformTableBytes = kPerformSections * kSectionEntryBytes;
+constexpr uint32_t kScenesOffset = kPerformTableBytes;
+constexpr uint32_t kMacrosOffset = kScenesOffset + kScenesBytes;
+constexpr uint32_t kPerformTotalBytes = kHeaderBytes + kMacrosOffset + kMacrosBytes;
+
+static_assert(kKitParams == 16, "a scene's stored bitmask is two bytes on the strength of 16 "
+                                "parameters per track");
+
+}  // namespace
+
+// --- scenes ---------------------------------------------------------------
+
+void scene_set(Scene &scene, int track, int param, uint8_t value) {
+    if (track < 0 || track >= kTracks || param < 0 || param >= kKitParams) return;
+    scene.values[track][param] = clamp_u8(value, 0, kParamMax);
+    scene.stored[track][param >> 3] =
+        uint8_t(scene.stored[track][param >> 3] | uint8_t(1u << (param & 7)));
+}
+
+void scene_clear(Scene &scene, int track, int param) {
+    if (track < 0 || track >= kTracks || param < 0 || param >= kKitParams) return;
+    scene.stored[track][param >> 3] =
+        uint8_t(scene.stored[track][param >> 3] & ~uint8_t(1u << (param & 7)));
+    // The value is left alone. It costs nothing, and it means clearing and storing again gets
+    // the value back rather than a zero -- which on a filter cutoff is the difference between
+    // "not in this scene" and "closed".
+}
+
+void scene_capture_track(Scene &scene, const Kit &kit, int track) {
+    if (track < 0 || track >= kTracks) return;
+    for (int p = 0; p < kKitParams; p++) {
+        scene_set(scene, track, p, kit.tracks[track].params[p]);
+    }
+}
+
+void scene_capture(Scene &scene, const Kit &kit) {
+    for (int t = 0; t < kTracks; t++) scene_capture_track(scene, kit, t);
+}
+
+void scene_erase(Scene &scene) {
+    for (int t = 0; t < kTracks; t++) {
+        scene.stored[t][0] = 0;
+        scene.stored[t][1] = 0;
+        for (int p = 0; p < kKitParams; p++) scene.values[t][p] = 0;
+    }
+}
+
+int scene_count(const Scene &scene) {
+    int n = 0;
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitParams; p++) {
+            if (scene_has(scene, t, p)) n++;
+        }
+    }
+    return n;
+}
+
+// --- the morph ------------------------------------------------------------
+
+void scene_morph(const Scene &a, const Scene &b, uint16_t position, const Kit &kit,
+                 uint8_t out[kTracks][kKitParams]) {
+    const int at = clamp_int(int(position), 0, int(kMorphScale));
+
+    for (int t = 0; t < kTracks; t++) {
+        // Both bitmasks for this track, read once. A track neither scene touches is the common
+        // case in a performance -- a scene for the bass line says nothing about the drums -- and
+        // skipping it whole is what keeps this cheap enough for control rate.
+        const uint16_t mask_a = uint16_t(uint16_t(a.stored[t][0]) | uint16_t(a.stored[t][1]) << 8);
+        const uint16_t mask_b = uint16_t(uint16_t(b.stored[t][0]) | uint16_t(b.stored[t][1]) << 8);
+        const uint16_t touched = uint16_t(mask_a | mask_b);
+        if (touched == 0) continue;
+
+        for (int p = 0; p < kKitParams; p++) {
+            if ((touched >> p & 1u) == 0) continue;     // neither scene stores it: leave it
+
+            // The end a scene does not store is the KIT value, not the other scene's held
+            // constant. core/perform.hpp says why: it makes the sweep fade A's changes away
+            // where B says nothing about them, which is what a crossfade between two sounds
+            // means.
+            const int fallback = int(kit.tracks[t].params[p]);
+            const int from = (mask_a >> p & 1u) != 0 ? int(a.values[t][p]) : fallback;
+            const int to = (mask_b >> p & 1u) != 0 ? int(b.values[t][p]) : fallback;
+
+            // A shift, not a divide: kMorphScale is a power of two and this runs 128 times per
+            // move. In C++20 a right shift of a negative value is an arithmetic shift, so
+            // (num + half) >> shift rounds half upwards for negative deltas as well as positive
+            // ones -- which is why the rounding is written as an add and not as a conditional.
+            const int delta = to - from;
+            const int num = delta * at;
+            const int value = from + ((num + int(kMorphScale) / 2) >> kMorphShift);
+            out[t][p] = uint8_t(clamp_int(value, 0, kParamMax));
+        }
+    }
+}
+
+// --- macros ---------------------------------------------------------------
+
+uint8_t macro_value(const MacroTarget &target, uint8_t position) {
+    const int low = int(clamp_u8(target.low, 0, kParamMax));
+    const int high = int(clamp_u8(target.high, 0, kParamMax));
+    const int at = clamp_int(int(position), 0, 127);
+
+    // A divide by 127, which is not a power of two. Affordable here and not in scene_morph: a
+    // macro has at most kMacroTargets targets and there are kMacros of them, so this runs at
+    // most 16 times when a knob moves, against the morph's 128.
+    //
+    // Rounded to nearest, which is NOT about reaching the ends -- those are exact either way,
+    // since delta * 127 / 127 is delta. It is about the middle: truncating biases every
+    // intermediate value towards `low`, so a knob swept up lags by a value for most of its
+    // travel and two macros driving the same parameter from different ranges disagree.
+    const int delta = high - low;
+    const int num = delta * at;
+    const int rounded = num >= 0 ? (num + 63) / 127 : -((-num + 63) / 127);
+    return uint8_t(clamp_int(low + rounded, 0, kParamMax));
+}
+
+void macro_apply(const Macro &macro, uint8_t position, uint8_t out[kTracks][kKitParams]) {
+    for (int i = 0; i < kMacroTargets; i++) {
+        const MacroTarget &target = macro.targets[i];
+        if (target.enabled == 0) continue;
+        // A macro set up by a build with more tracks or parameters must not write past the
+        // array. Skipped rather than clamped: clamping would drive someone else's parameter.
+        if (target.track >= kTracks || target.param >= kKitParams) continue;
+        out[target.track][target.param] = macro_value(target, position);
+    }
+}
+
+int macro_count(const Macro &macro) {
+    int n = 0;
+    for (int i = 0; i < kMacroTargets; i++) {
+        const MacroTarget &target = macro.targets[i];
+        if (target.enabled != 0 && target.track < kTracks && target.param < kKitParams) n++;
+    }
+    return n;
+}
+
+void perform_init(SceneSet &scenes, MacroSet &macros) {
+    // Scene by scene rather than `scenes = SceneSet{}`: the set is over 2 KiB and the habit one
+    // structure up would be a megabyte (core/project.cpp says the same about Project).
+    for (int s = 0; s < kScenes; s++) scene_erase(scenes.scenes[s]);
+    for (int m = 0; m < kMacros; m++) {
+        for (int i = 0; i < kMacroTargets; i++) macros.macros[m].targets[i] = MacroTarget{};
+    }
+}
+
+// --- PERFORM.BIN ----------------------------------------------------------
+
+uint32_t perform_bytes() { return kPerformTotalBytes; }
+
+SerializeResult perform_write(const SceneSet &scenes, const MacroSet &macros, uint8_t *buffer,
+                              uint32_t capacity, uint32_t *written) {
+    if (written != nullptr) *written = 0;
+    if (buffer == nullptr || capacity < kPerformTotalBytes) {
+        return SerializeResult::buffer_too_small;
+    }
+
+    const Section sections[kPerformSections] = {
+        {kSectionPerformScenes, kScenesOffset, kScenesBytes},
+        {kSectionPerformMacros, kMacrosOffset, kMacrosBytes},
+    };
+
+    Writer w(buffer, capacity);
+    write_container(w, kPerformVersion, sections, kPerformSections,
+                    kPerformTotalBytes - kHeaderBytes);
+
+    // Values go down as they stand; clamping belongs to the reader, which is the side that
+    // cannot trust its bytes (core/project.cpp's rule).
+    for (int s = 0; s < kScenes; s++) {
+        const Scene &scene = scenes.scenes[s];
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = 0; p < kKitParams; p++) w.u8(scene.values[t][p]);
+            w.u8(scene.stored[t][0]);
+            w.u8(scene.stored[t][1]);
+        }
+    }
+
+    for (int m = 0; m < kMacros; m++) {
+        for (int i = 0; i < kMacroTargets; i++) {
+            const MacroTarget &target = macros.macros[m].targets[i];
+            w.u8(target.enabled);
+            w.u8(target.track);
+            w.u8(target.param);
+            w.u8(target.low);
+            w.u8(target.high);
+        }
+    }
+
+    if (!w.ok() || w.size() != kPerformTotalBytes) return SerializeResult::buffer_too_small;
+    return finish_container(w, buffer, kPerformTotalBytes, written);
+}
+
+SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *buffer,
+                             uint32_t size) {
+    // Every refusal goes through here, so a refused load leaves an empty set rather than half a
+    // file. A missing PERFORM.BIN is not this function's business: `app/` treats a file that is
+    // not there as "no scenes" and never calls this.
+    const auto refuse = [&scenes, &macros](SerializeResult why) {
+        perform_init(scenes, macros);
+        return why;
+    };
+
+    const uint16_t wanted[kPerformSections] = {kSectionPerformScenes, kSectionPerformMacros};
+    uint32_t offset[kPerformSections] = {};
+    uint32_t length[kPerformSections] = {};
+    const SerializeResult found =
+        find_sections(buffer, size, kPerformVersion, wanted, kPerformSections, offset, length);
+    if (found != SerializeResult::ok) return refuse(found);
+    if (length[0] < kScenesBytes) return refuse(SerializeResult::malformed);
+    if (length[1] < kMacrosBytes) return refuse(SerializeResult::malformed);
+
+    Reader r(buffer, size);
+    if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
+
+    for (int s = 0; s < kScenes; s++) {
+        Scene &scene = scenes.scenes[s];
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = 0; p < kKitParams; p++) {
+                // Clamped, for core/project.cpp's reason about a kit parameter: dsp/ maps these
+                // as table indices, so a 255 that survived the CRC is an out-of-range read in a
+                // machine rather than an odd sound.
+                scene.values[t][p] = clamp_u8(r.u8(), 0, kParamMax);
+            }
+            // Every bit of both bytes is a parameter this build has, so these are taken as they
+            // come -- there is no spare bit that could mean anything else.
+            scene.stored[t][0] = r.u8();
+            scene.stored[t][1] = r.u8();
+        }
+    }
+    if (!r.ok()) return refuse(SerializeResult::truncated);
+
+    if (!r.seek(kHeaderBytes + offset[1])) return refuse(SerializeResult::malformed);
+    for (int m = 0; m < kMacros; m++) {
+        for (int i = 0; i < kMacroTargets; i++) {
+            const uint8_t enabled = r.u8();
+            const uint8_t track = r.u8();
+            const uint8_t param = r.u8();
+            const uint8_t low = r.u8();
+            const uint8_t high = r.u8();
+
+            // A target naming a track or parameter that cannot exist is dropped WHOLE rather
+            // than clamped, the same way core/project.cpp drops a chain entry naming no
+            // pattern: clamping would quietly drive a parameter nobody assigned.
+            const bool usable = enabled != 0 && track < uint8_t(kTracks) &&
+                                param < uint8_t(kKitParams);
+            MacroTarget &target = macros.macros[m].targets[i];
+            target.enabled = usable ? 1 : 0;
+            target.track = usable ? track : 0;
+            target.param = usable ? param : 0;
+            target.low = usable ? clamp_u8(low, 0, kParamMax) : 0;
+            target.high = usable ? clamp_u8(high, 0, kParamMax) : kParamMax;
+        }
+    }
+    if (!r.ok()) return refuse(SerializeResult::truncated);
+
+    return SerializeResult::ok;
+}
+
+}  // namespace strata
