@@ -1,30 +1,40 @@
-# Handoff: where M4 stands, and what a cloud session can and cannot do
+# Handoff: what the cloud sessions built, and what none of it has run on
 
-Written mid-M4 when the development machine had to go off, and **updated by the cloud session
-that picked it up afterwards**. `main` is green and untouched at `d0d2c23` (M3 plus the licence).
-`m4-wip` now holds the M4 work.
+Written mid-M4 when the development machine had to go off, and rewritten since by the cloud
+session that picked it up. **`main` is now at M5**, not M3: M4 and most of M5 were merged on the
+user's instruction with the host suite green and nothing else verified.
 
-## The build is no longer broken
+## State
 
-The snapshot at `d455543` was deliberately unbuildable: `app/` called functions that did not
-exist. That is fixed. As of `5611588`:
-
-| | state |
+| | |
 |---|---|
-| `core/project` | 51 tests, 8 of 8 mutants caught |
-| `core/queue` | 42 tests, 7 of 7 new mutants caught |
-| `core/samplepool` | 33 tests, 24 of 24 mutants caught |
-| `core/pcm` | 37 tests, green with the full suite |
-| `app/` | compiles clean, all 31 TUs, `-Wall -Wextra -Werror` |
-| `app/storage` | projects, autosave, the sample loader, F3 PROJECT — written, **nothing run** |
-| `make -C host test` | **571 tests, 425,261 checks, 0 failures** |
+| `make -C host test` | **684 tests, 454,581 checks, 0 failures** |
+| `main` was | `d0d2c23` (M3 plus the licence), 408 tests / 221,035 checks |
+| `app/` | compiles clean, all 33 TUs, `-Wall -Wextra -Werror`; every symbol resolves except `enaga::host()` |
+| Device build, emulator, cl6x, load figures, listening | **none of it done** |
 
-`main` was 408 tests / 221,035 checks; the four M4 modules add 163 tests.
+M4, complete and unverified: `core/project`, `core/pcm`, `core/queue`, `core/samplepool`, the
+`app/` refactor to the project model, and `app/storage` (projects on the card, autosave,
+`on_card`, the background sample loader, F3 PROJECT).
+
+M5, complete and unverified except where noted: `core/scale` (15 scales, folding, degree
+stepping), `core/mutate` (rotate, Euclidean density, four bounded randomizers), `core/perform`
+(16 scenes, the A-to-B morph, 4 macros, PERFORM.BIN, mute states, auto-fill), the key and scale
+settable in F3, and `dsp/repeat` (beat repeat). Every `core/` module is host-tested AND
+mutation-tested. `dsp/repeat` is host-tested for correctness; its LOAD is not measured.
+
+Still not written in M5: throws, and the `app/` wiring that makes mutation, scenes, macros,
+mute states and auto-fill reachable from the panel. The core logic for all of them is in and
+tested; what is missing is the commands and the PERFORM screen.
+
+**One correction to the record**: commit `a83abf5`'s message says "15 tests" and "681 tests"
+where it should say 19 and 684. The code and the docs are right; that one message is not, and it
+is already pushed so it stays as it is.
 
 ## Read this before trusting the above
 
-**Nothing in M4 has been verified on the unit, or in the emulator, or measured.** The cloud
-session has no toolchain. What "`app/` compiles" means precisely:
+**Nothing in M4 or M5 has been verified on the unit, or in the emulator, or measured.** The
+cloud sessions have no toolchain. What "`app/` compiles" means precisely:
 
 - all 30 translation units (`core/`, `dsp/`, `app/`) compile with the device build's own flags;
 - every symbol they reference resolves within STRATA except `enaga::host()`, which Enaga's
@@ -32,7 +42,11 @@ session has no toolchain. What "`app/` compiles" means precisely:
 - `tools/build.sh`'s flat-namespace check passes.
 
 It does **not** mean the app links, boots, or sounds like anything. That is the first job on the
-machine, and it is why (a), (b) and (c) below come before any merge.
+machine.
+
+**The merge to `main` happened anyway, on the user's instruction**, with the original rule ("do
+not merge until the device build and `scenario_m3.sh` are green") knowingly set aside. `main`
+before the merge was `d0d2c23`, if it needs to go back.
 
 ## What a cloud session CAN do
 
@@ -54,29 +68,31 @@ machine, and it is why (a), (b) and (c) below come before any merge.
 
 ## Next steps, in order
 
-All of M4's code is written. None of it past `core/` has run. What is left is verification, and
-it all needs the machine:
+All of M4 and most of M5 is written. None of it past `core/` and `dsp/`'s host tests has run.
 
 1. **`tools/build.sh` must link for the device.** Everything compiles and every symbol resolves,
    so what remains is the link and whatever the tic6x toolchain says that a host compiler does
    not.
 2. **`tests/scenario_m3.sh` must still pass** — it proves undo end to end, and `app/engine.cpp`
-   changed underneath it.
-3. **Work `docs/UNIT_CHECKLIST.md`'s new M4 section.** Every box is open. The ones that matter
-   most, in order: does it start with no card; does a power cycle restore the project; does
-   swapping a sample on a sounding track stay clean; does pulling the card during a save, a load
-   and a resample leave the project intact. That last one is `docs/PLAN.md`'s exit criterion.
-4. **The M4 emulator scenario**, then the load measured with and without cl6x, then
-   `docs/BUDGET.md`. The new figure to record is memory, not just CPU: `Storage::init` takes
-   64 MiB for the region plus 18 MiB of staging.
-5. `tools/render.sh` for a listen — nothing has been heard since M3.
+   has changed under it twice since.
+3. **Measure `dsp/repeat`.** It is the one DSP change M5 made, it is a per-block tax on the
+   master output, and whether it fits is the entire question about it. `docs/BUDGET.md` has the
+   rows waiting and `docs/UNIT_CHECKLIST.md`'s M5 section leads with them. If it does not fit,
+   `docs/SPEC.md` ranks cutting effects above cutting voices.
+4. **Check the memory.** 64 MiB sample region + 18 MiB loader staging + 2.93 MiB repeat ring is
+   85 MiB of the ~124 MiB heap before anything else, and the staging was never in the spec's
+   table. This is the figure most likely to be a problem and it is cheap to check.
+5. **Work `docs/UNIT_CHECKLIST.md`'s M4 and M5 sections.** Every box is open. The ones that
+   decide whether the milestones stand: does it start with no card, does a power cycle restore
+   the project, does swapping a sample on a sounding track stay clean, does pulling the card
+   during a save leave the project intact.
+6. The M4 and M5 emulator scenarios, then `tools/render.sh` for a listen — nothing has been
+   heard since M3.
 
-Do not merge `m4-wip` to `main` until 1 and 2 are green.
+### Read the app code before trusting it
 
-### Read the M4 app code before trusting it
-
-It was written in one pass with no way to run it. Three bugs were found by re-reading it that a
-compiler could not have caught, and the odds that it was the last three are poor:
+It was written with no way to run it. Six bugs were found by re-reading or by mutation-testing
+that a compiler could not have caught, and the odds that those were the last six are poor:
 
 - `pool_.reset()` after a project load forgets every reservation while the samplers still hold
   pointers into those ranges. Its own contract says the caller must have silenced every track
@@ -85,6 +101,16 @@ compiler could not have caught, and the odds that it was the last three are poor
   `read_done_` false and the conversion stalled after one slice.
 - a new project inherited the old one's name, so saving it would have overwritten a project the
   user never asked to touch.
+- `app/engine.cpp` stored 60 in `Pattern::root`, a field `core/serialize.cpp` reduces to `% 12`
+  on load, and then used it as a MIDI note — so the default pattern's notes would have come back
+  at the bottom of the MIDI range after a save and a load. The core side was right and tested;
+  the engine was the side that disagreed.
+- `dsp/repeat`'s `hold()` guard looked redundant to every test, because nothing called it twice
+  in a row. `hold(pad_down)` once a block is the obvious wiring, and without the guard the loop
+  re-arms every block and stutters at the block rate.
+- the scene morph's skip of an untouched parameter looked equivalent to writing the kit value
+  back, because every test handed it a fresh copy of the kit. It is not equivalent once a macro
+  has written into that buffer, which is how `app/` will call it.
 
 The places to look hardest, because they are where a mistake is silent rather than loud: the
 epoch wait in `Storage::step_sample_epoch`, the slice arithmetic in `step_sample_convert` and
