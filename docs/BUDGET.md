@@ -374,6 +374,31 @@ the 8-track architecture holds. See `docs/PLAN.md` M0.5.
 Candidates, cheapest first: mono send busses, a shared filter across the drum tracks, lo-fi out
 of the fixed chain into an optional stage, or a cheaper reverb.
 
+### M4 and M5 — written in the cloud, so NOT MEASURED
+
+Both milestones' code was written in a cloud session with no toolchain: no device build, no
+emulator, no `cl6x`, no load scenario. Every figure below is open, and this section exists so
+that the gap is on the record rather than inferred from its absence.
+
+CLAUDE.md requires a load figure with and without cl6x after any DSP change. **M5 made one** --
+`dsp/repeat` -- and that figure does not exist. It is the first thing to measure on the machine,
+because beat repeat is a per-block tax on the master output and whether it fits is the entire
+question about it.
+
+| Change | Expected shape | Measured (cl6x) | Measured (GCC) |
+| --- | --- | --- | --- |
+| M4, projects and samples | no audio-path cost: the loader is main-context, and `Cmd::set_sample` is one pointer swap a block | | |
+| M5, `dsp/repeat` idle | one copy of the block into the ring, every block | | |
+| M5, `dsp/repeat` held | one interpolated stereo read a frame, replacing the output | | |
+| M5, scene morph | 128 interpolations when the position moves, control rate, shift not divide | | |
+| M5, macros | at most 16 values when a knob moves, control rate | | |
+| M5, mutation | one-off per press, main context via the command ring | | |
+
+`dsp/repeat`'s two loops are in `repeatloops.ti.c` and so go to cl6x, which is the 2.2x that the
+60% target depends on. The idle path is the one that is always on, and it is a straight copy --
+if that does not come out near free, something is wrong with the measurement rather than the
+code.
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |
@@ -384,13 +409,17 @@ of the fixed chain into an optional stage, or a cheaper reverb.
 
 ## Memory
 
-Budgeted in `docs/SPEC.md` at about 76 MiB of the ~124 MiB app heap. Nothing measured yet; the
-skeleton allocates nothing.
+Budgeted in `docs/SPEC.md` at about 76 MiB of the ~124 MiB app heap. The figures below are what
+the code now ASKS FOR at init, read off the source rather than measured on a unit -- no build has
+run. M4 and M5 together take 64 MiB for the sample region, 18 MiB of loader staging and 2.93 MiB
+for the beat-repeat ring, which is 85 MiB before anything else, against a spec table that did not
+count the staging at all.
 
 | Use | Budget | Measured |
 | --- | --- | --- |
-| Samples, int16 (32 MiB default, 64 MiB ceiling) | 32-64 MiB | |
-| Beat repeat ring (2 bars at 60 BPM, stereo float) | 2.93 MiB | |
+| Samples, int16 (32 MiB default, 64 MiB ceiling) | 32-64 MiB | **64 MiB** reserved at init, from the heap. The CEILING, not the default: a project may raise its budget long after `init()` is over, and CLAUDE.md allows no allocation after it |
+| Sample loader staging (M4) | not budgeted | **18 MiB**, from the heap: 11.5 MiB for one whole file (`files::load` wants a buffer for all of it) and 5.8 MiB for a resample's int16 source. Both sized from `docs/SPEC.md`'s own 30 s in-RAM limit, and a FIXED cost rather than a per-sample one. **This is the figure most worth checking against the heap on the unit** -- it was not in the spec's table and 64 + 18 is 82 MiB of the ~124 MiB |
+| Beat repeat ring (2 bars at 60 BPM, stereo float) | 2.93 MiB | **2.93 MiB** (3,072,000 bytes) reserved at init. Below 60 BPM the ring holds less than two bars, which costs nothing: the longest loop offered is a quarter note, 3 s even at 20 BPM |
 | Delay and reverb buffers | 2 MiB | |
 | Patterns, kit, scenes, 16 undo levels | 2 MiB | **~148 KiB** so far: 17 whole-pattern undo snapshots (~140 KiB) plus the live pattern and the clipboard. In bss, not the heap |
 | Recording ring and stream buffers | 1 MiB | |

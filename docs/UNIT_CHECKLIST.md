@@ -279,6 +279,79 @@ project and never needs a restart."*
 - [ ] A pattern change clears the undo history (it belonged to the pattern left behind) and
       restarts the `1ST` conditions.
 
+## M5 — performance layer
+
+Also written in the cloud, so also unrun. `core/scale`, `core/mutate` and `core/perform` are
+host-tested and mutation-tested; `dsp/repeat` is host-tested for correctness but its LOAD is
+unmeasured, and that is the one figure that decides whether beat repeat ships.
+
+The exit criterion from `docs/PLAN.md`: *"a 30-minute jam using only the performance row, F7
+PERFORM and pattern changes, with no edit screens and no underruns."*
+
+**Beat repeat — the load question first**
+
+- [ ] `dsp/repeat` idle: the per-block cost of copying the block into the ring, with and without
+      cl6x, into `docs/BUDGET.md`. It is always on, so it is a fixed tax on every block.
+- [ ] `dsp/repeat` held: the per-block cost of the interpolated read. Worst case is the shortest
+      loop at half rate.
+- [ ] Worst case with eight tracks AND a repeat held still under 60%. If it is not, this is the
+      effect to cut first -- `docs/SPEC.md` ranks cutting effects above cutting voices.
+- [ ] The 2.93 MiB ring, plus M4's 64 MiB region and 18 MiB of staging, against the real heap.
+      85 MiB before anything else, and the staging was never in the spec's table.
+- [ ] Hold the pad through a tempo change: the loop length is derived from ticks, so it should
+      follow without a click at the seam.
+- [ ] Hold it for four seconds and release: the mix resumes where the music actually is, not
+      where the repeat left off. That is intended (`dsp/repeat.hpp` says why) -- confirm it does
+      not sound like a dropout.
+- [ ] Each of the seven lengths, and the triplets against a metronome: 1/4T should be three in
+      the time of two 1/4.
+- [ ] Pitch-down an octave, by ear against a known tone.
+
+**Mutation**
+
+- [ ] MUTATE on a track, then F1 + CLR: the pattern comes back exactly. "OK keeps it, CLR
+      reverts" is the existing undo and nothing else, so this is really a test that a mutation
+      is exactly one undo level.
+- [ ] Press MUTATE twice: two different results, not the same one twice.
+- [ ] The same pattern, the same press count, after a save and a reload: the same result. Seeded
+      from the pattern is the claim.
+- [ ] Density up and down on a 16-step track: the hits redistribute evenly rather than one being
+      added where there was room. Audible as the rhythm changing shape, which is intended.
+- [ ] Notes on a melodic track with a scale set: everything stays in the key.
+
+**Key and scale**
+
+- [ ] F3 PROJECT, encoder B walks the key and C the scale; the screen reads "KEY C MINOR".
+- [ ] The key wraps at B to C; the scale stops at both ends.
+- [ ] Save, power cycle, reopen: the key and scale come back. **This is also the regression test
+      for the root bug** -- `app/engine.cpp` used to store 60 in a field the loader reduces to
+      `% 12`, so the default pattern's notes would have come back at the bottom of the MIDI
+      range.
+- [ ] The note names read correctly as flats: DB, EB, GB, AB, BB. If the font turns out to have a
+      '#', sharps would be the more conventional spelling for the major keys.
+
+**Scenes, morph and macros**
+
+- [ ] Capture a scene, change the sound, capture a second, then sweep VALUE: the sound crosses
+      from one to the other.
+- [ ] A scene that stores only one track: sweeping it must not drag the other seven.
+- [ ] A parameter only one scene stores fades to the KIT value at the far end, not back to
+      itself. This is the morph rule most likely to feel wrong in the room, so listen for it.
+- [ ] A macro with two targets, one inverted: one knob opening a filter while it closes a send.
+- [ ] Macro setup and scenes survive a save and a reload (PERFORM.BIN, 2,424 bytes, next to
+      PROJECT.BIN).
+- [ ] A project with no PERFORM.BIN -- anything M4 wrote -- opens with empty scenes rather than
+      refusing.
+
+**Mutes and fill**
+
+- [ ] F1 + a lower pad mutes in any mode; MUTE mode makes the lower pads mutes.
+- [ ] A mute armed for the next bar lands on the bar, and pressing three pads before it means
+      the third.
+- [ ] The eight stored states recall from the upper row and survive a save.
+- [ ] Auto-fill at 4, 8 and 16 bars fires on the LAST bar of the period, and FILL conditions
+      follow it.
+
 ## M0.5 — budget spike
 
 Folded into the M2 worst-case measurement above — see `docs/BUDGET.md` for why. These two lines
