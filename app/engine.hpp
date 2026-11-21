@@ -29,6 +29,7 @@
 #include "perc.hpp"
 #include "queue.hpp"       // and core/project.hpp through it: the project owns the live pattern
 #include "sample.hpp"
+#include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
 #include "scheduler.hpp"
 #include "snare.hpp"
 #include "stepedit.hpp"

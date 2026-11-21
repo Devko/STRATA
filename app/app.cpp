@@ -465,16 +465,40 @@ public:
         // which run B, A, C, D. See docs/ENAGA_API.md -- confusing the two silently swaps A
         // and B, and nothing catches it.
 
-        // In PROJECT mode encoder A walks when a queued change lands. It is only ever read when
-        // a pattern is queued, so it changes nothing by itself.
-        if (mode_ == Mode::project && encoder == 0) {
-            const int next = int(queue_mode_) + delta;
-            queue_mode_ = QueueMode(next < 0 ? 0
-                                             : (next >= int(QueueMode::count)
-                                                    ? int(QueueMode::count) - 1
-                                                    : next));
-            notice(queue_mode_name(queue_mode_));
-            return;
+        // PROJECT mode's own encoders: A picks when a queued change lands, B the key and C the
+        // scale. A is only ever read when a pattern is queued, so it changes nothing by itself;
+        // B and C apply at once, because the global key is what the melodic tracks and every
+        // mutation fold into and there is nothing to confirm.
+        if (mode_ == Mode::project) {
+            if (encoder == 0) {
+                const int next = int(queue_mode_) + delta;
+                queue_mode_ = QueueMode(next < 0 ? 0
+                                                 : (next >= int(QueueMode::count)
+                                                        ? int(QueueMode::count) - 1
+                                                        : next));
+                notice(queue_mode_name(queue_mode_));
+                return;
+            }
+            if (encoder == 1) {
+                // The key wraps: twelve pitch classes in a circle is what they are, and walking
+                // off one end to be stopped there would be wrong rather than merely annoying.
+                const int root = (int(engine_.pattern().root) + delta % 12 + 12) % 12;
+                post(Cmd::set_root, 0, 0, uint8_t(root));
+                notice(note_name(uint8_t(root)));
+                return;
+            }
+            if (encoder == 2) {
+                // The scale does NOT wrap, and it is clamped to what this build has. An id a
+                // later build wrote survives a load (core/project.cpp leaves it alone), so the
+                // user can be looking at a scale the encoder cannot reach -- walking from there
+                // lands on the nearest one this build knows rather than jumping to chromatic.
+                const int current = int(engine_.pattern().scale);
+                int next = (current < kScaleCount ? current : kScaleCount - 1) + delta;
+                next = next < 0 ? 0 : (next >= kScaleCount ? kScaleCount - 1 : next);
+                post(Cmd::set_scale, 0, 0, uint8_t(next));
+                notice(scale_name(next));
+                return;
+            }
         }
         if (encoder < 0 || encoder > 3) return;
 
@@ -1203,6 +1227,17 @@ public:
         }
         *out = 0;
         canvas.text(0, 27, line, busy != nullptr ? 12 : 9);
+
+        // The global key and scale, on encoders B and C. Drawn from the live PATTERN rather than
+        // from the project settings, because the pattern's copy is what the sequencer and every
+        // mutation actually fold into -- a pattern loaded in its own key must read as that key.
+        out = line;
+        append(out, "KEY ");
+        append(out, note_name(engine_.pattern().root));
+        *out++ = ' ';
+        append(out, scale_name(int(engine_.pattern().scale)));
+        *out = 0;
+        canvas.text(0, 94, line, 11);
 
         // The bank being browsed, which is not necessarily the one playing.
         out = line;

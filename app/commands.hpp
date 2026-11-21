@@ -85,6 +85,13 @@ enum class Cmd : uint8_t {
     kit_store,
     kit_recall,
 
+    // The global key and scale (docs/SPEC.md, "Musical defaults that help creativity"). Both
+    // apply to the PROJECT's settings and to the live pattern at once: the pattern's own copy is
+    // what the sequencer and core/mutate read, so a pattern saved in its own key keeps it, and
+    // the project's copy is the default a new pattern gets.
+    set_root,          // a: pitch class 0-11
+    set_scale,         // a: a core/scale.hpp Scale id
+
     // A project was loaded: 1.03 MiB arrived through `Engine::project_for_load` rather than
     // through this ring, so everything derived from the pattern is now stale. `kit_recall` alone
     // is not enough -- the scheduler's track lengths, speeds and swing all came from the pattern

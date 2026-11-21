@@ -13,6 +13,10 @@ namespace {
 // leaks into the next step.
 constexpr int kMaxLocksApplied = kLocksPerStep;
 
+// Middle C. The pattern's root is a pitch class (core/pattern.hpp), so turning it into a note
+// needs an octave, and this is the one the default pattern uses.
+constexpr uint8_t kDefaultOctaveNote = 60;
+
 uint8_t clamp_u8(int value) {
     return uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value));
 }
@@ -209,7 +213,12 @@ void Engine::load_default_pattern() {
     project_init(project_);
 
     pattern_init(live());
-    live().root = 60;
+    // A PITCH CLASS, not a note. core/pattern.hpp documents `root` as 0-11 and
+    // core/serialize.cpp enforces it with `root % 12` on load, so the 60 this used to hold came
+    // back as 0 after a save and a load -- and the notes below, taken straight from it, would
+    // have come back at the very bottom of the MIDI range.
+    live().root = 0;                       // C
+    live().scale = uint8_t(Scale::minor);  // the default techno key (core/scale.hpp)
     live().seed = 0x5713A7Au;
     live().master_length = 16;
     live().swing = kSwingMin;
@@ -233,7 +242,9 @@ void Engine::load_default_pattern() {
         for (int i = 0; i < count; i++) {
             Step &s = live().tracks[track].steps[steps[i]];
             s.flags = kStepTrig;
-            s.note = live().root;
+            // The root in a playable octave. The pattern's root is a pitch class, so it needs
+            // an octave to become a note.
+            s.note = uint8_t(kDefaultOctaveNote + live().root);
             s.velocity = velocity;
             s.length = 8;            // one step
         }
@@ -523,6 +534,26 @@ void Engine::apply(const Command &command) {
 
         case Cmd::kit_recall:
             params_from_kit();
+            break;
+
+        case Cmd::set_root:
+            // A pitch class in both places, except that ProjectSettings::root is documented as a
+            // MIDI note with a default of 60, so it keeps the middle octave while the pattern's
+            // stays a pitch class. core/scale only ever reads `root % 12`, so the two name the
+            // same key.
+            if (command.a < 12) {
+                live().root = command.a;
+                project_.settings.root = uint8_t(kDefaultOctaveNote + command.a);
+            }
+            break;
+
+        case Cmd::set_scale:
+            // Not range-checked against kScaleCount, deliberately: core/project.cpp leaves the
+            // scale byte unclamped so an id from a later build survives a round trip, and
+            // core/scale plays an unknown id chromatically. Clamping here would be the one place
+            // that threw it away.
+            live().scale = command.a;
+            project_.settings.scale = command.a;
             break;
 
         case Cmd::project_loaded:

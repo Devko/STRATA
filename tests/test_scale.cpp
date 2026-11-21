@@ -119,6 +119,32 @@ TEST(scale_names_are_upper_case_and_fit_the_screen) {
     }
 }
 
+TEST(scale_note_names_are_the_twelve_pitch_classes_in_flats) {
+    const char *want[12] = {"C", "DB", "D",  "EB", "E",  "F",
+                            "GB", "G",  "AB", "A",  "BB", "B"};
+    for (int i = 0; i < 12; i++) CHECK_EQ(note_name(uint8_t(i)), want[i]);
+
+    // Only the pitch class is read, so every octave names the same note.
+    for (int note = 0; note <= 127; note++) {
+        CHECK_EQ(note_name(uint8_t(note)), want[note % 12]);
+    }
+
+    // Upper case and nothing the font might not have: no '#', no lower case.
+    for (int i = 0; i < 12; i++) {
+        for (const char *p = note_name(uint8_t(i)); *p != '\0'; p++) {
+            CHECK(*p >= 'A' && *p <= 'G');
+        }
+    }
+}
+
+TEST(scale_octave_numbering_puts_middle_c_at_four) {
+    static_assert(note_octave(60) == 4, "middle C is C4 in this convention");
+    CHECK_EQ(note_octave(60), 4);
+    CHECK_EQ(note_octave(0), -1);
+    CHECK_EQ(note_octave(127), 9);
+    CHECK_EQ(note_octave(72), 5);
+}
+
 // --- the key --------------------------------------------------------------
 
 TEST(scale_only_the_roots_pitch_class_matters) {

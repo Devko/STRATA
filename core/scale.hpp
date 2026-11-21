@@ -134,6 +134,22 @@ const char *scale_name(int scale);
 // How many notes the scale has in an octave: 1 to 12. An unknown id gives 12.
 int scale_size(int scale);
 
+// --- naming a key ---------------------------------------------------------
+
+// The twelve pitch classes, 0 being C. Only `note % 12` is read, so a MIDI note and a pitch
+// class both work.
+//
+// Spelled with FLATS -- C, DB, D, EB ... -- and in upper case, for two reasons. The device font
+// has "upper case, digits and a few symbols only" (docs/ENAGA_API.md) and nothing in the app
+// draws a '#' today, so a sharp sign is unproven; and techno lives in minor keys, where the
+// flat spelling is the one a musician would write anyway. 'B' therefore does double duty as the
+// note B and as the flat sign, which reads correctly in context: "BB" is B flat.
+const char *note_name(uint8_t note);
+
+// Which octave a MIDI note is in, in the convention where middle C (60) is C4. For the screen
+// only; nothing here depends on it.
+constexpr int note_octave(uint8_t note) { return int(note) / 12 - 1; }
+
 // --- notes ----------------------------------------------------------------
 //
 // `root` is a MIDI note, and only its pitch class matters: root 60 and root 0 are the same key.

@@ -43,6 +43,23 @@ const char *scale_name(int scale) {
     }
 }
 
+const char *note_name(uint8_t note) {
+    switch (note % 12) {
+        case 0:  return "C";
+        case 1:  return "DB";
+        case 2:  return "D";
+        case 3:  return "EB";
+        case 4:  return "E";
+        case 5:  return "F";
+        case 6:  return "GB";
+        case 7:  return "G";
+        case 8:  return "AB";
+        case 9:  return "A";
+        case 10: return "BB";
+        default: return "B";
+    }
+}
+
 int scale_size(int scale) {
     const uint16_t mask = scale_mask(scale);
     int n = 0;
