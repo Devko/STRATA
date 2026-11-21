@@ -85,6 +85,12 @@ enum class Cmd : uint8_t {
     kit_store,
     kit_recall,
 
+    // A project was loaded: 1.03 MiB arrived through `Engine::project_for_load` rather than
+    // through this ring, so everything derived from the pattern is now stale. `kit_recall` alone
+    // is not enough -- the scheduler's track lengths, speeds and swing all came from the pattern
+    // that was replaced, and the undo history belonged to it too.
+    project_loaded,
+
     // Sample swapping, in the order docs/SPEC.md requires. `clear_sample` takes the sample away
     // from a track and bumps that track's epoch in Status; only once the UI has SEEN the epoch
     // change is the audio side known to have stopped reading, and only then may the loader

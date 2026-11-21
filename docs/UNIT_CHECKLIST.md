@@ -192,6 +192,93 @@ the command ring and the undo stack are known to work before you touch the hardw
       `FULL n`. Try to reach it (eight locks on every step of several tracks) and confirm the
       message appears and nothing else misbehaves.
 
+## M4 — projects and storage
+
+Written from the cloud, so **none of it has run**: no device build, no emulator, no listening.
+Every box here is open, and the first three are the ones that decide whether the rest is worth
+checking.
+
+The exit criterion from `docs/PLAN.md` is the hard one: *"a power cycle restores the last state;
+pulling the card during a save, during sample loading and during resampling never corrupts the
+project and never needs a restart."*
+
+**Does it even run**
+
+- [ ] `tools/build.sh` links. Everything compiles and every symbol resolves on a host, but no
+      cross linker has seen it.
+- [ ] `tests/scenario_m3.sh` still passes: `app/engine.cpp` changed underneath it.
+- [ ] The app starts with no card in the slot. A first run with nothing to open must keep the
+      built-in default pattern, not fail `init()`.
+- [ ] Memory: `Storage::init` takes 64 MiB for the region plus **18 MiB of staging** (`raw_`
+      11.5 MiB for one whole file, `src_` 5.8 MiB for a resample's source, both sized from
+      `docs/SPEC.md`'s own 30 s in-RAM limit). That is a fixed cost, not per sample. Confirm it
+      against the ~124 MiB app heap and record it in `docs/BUDGET.md`.
+
+**Projects**
+
+- [ ] F3 opens PROJECT. The bank grid shows A, the live pattern is boxed, and the top line's
+      pattern now follows the chain rather than reading `A01` for ever.
+- [ ] OK saves. `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (251 bytes),
+      `KIT.BIN` (1,076 bytes) and a `BANK_x.BIN` per touched bank.
+- [ ] Only dirty banks are written. Edit one pattern in bank A, save, and confirm no
+      `BANK_B.BIN` appears.
+- [ ] Power cycle. The project reopens on the pattern it was left on, not A01.
+- [ ] F1 + OK reloads from the card and discards unsaved edits.
+- [ ] F1 + CLR starts a new project under a NEW name (`NEW1`, `NEW2`...), so saving it cannot
+      overwrite the project it came from.
+- [ ] A load with the transport RUNNING stops it first. Under CLOCK SRC = MIDI or SYNC, where
+      `clock::stop()` returns false, the load is REFUSED and the screen says `EXT CLOCK` — it
+      must not load anyway.
+- [ ] Hand-damage a `BANK_x.BIN` byte: the other 15 patterns still load and the screen says
+      `PATTERN LOST`.
+
+**Autosave**
+
+- [ ] Stopping the transport writes `/ENAGA/DATA/STRATA/AUTOSAVE/`. A stop arriving from MIDI
+      autosaves too, since it follows the transport and not the key.
+- [ ] Leaving the app (Enaga's menu) runs `stop()` and the autosave lands inside the 3 s budget.
+- [ ] With an autosave newer than the project, the next start opens the autosave. "Newer" is a
+      counter in `SETTINGS.TXT` (`PROJSEQ` / `AUTOSEQ`), because `files::Info` carries no
+      timestamp — confirm the counters move.
+
+**Samples, and the swap protocol**
+
+- [ ] A project whose kit names a WAV loads it at open, and the track stays silent while it
+      loads rather than glitching.
+- [ ] The `SMP` line shows `O` loaded, `.` loading, `X` failed, `-` empty, and the pool's used
+      and budget in MiB.
+- [ ] A 44.1 kHz file is resampled and plays at the right pitch. An 8-bit, 24-bit and 32-bit
+      float file each load (`core/pcm` is host-tested; this is the wiring).
+- [ ] A file over 30 s at a rate other than 48 kHz says `TOO LONG` rather than loading a
+      fraction of itself.
+- [ ] **The swap, while the track is sounding.** Hold a sample playing and load another on the
+      same track. The protocol is clear → wait for `Status::sample_epoch` → release → load →
+      hand over, and the failure it prevents is audible garbage rather than a crash. If it ever
+      says `NO SWAP`, the epoch never moved and that is a real bug, not a slow card.
+- [ ] A track whose new kit names no file loses its old sample on load instead of keeping the
+      previous project's sound.
+
+**Pulling the card — the exit criterion**
+
+- [ ] Pull during a save. `files::save` writes `NAME.TMP` and replaces, so the project must be
+      either the old one or the new one, never half.
+- [ ] Pull during sample loading, and during resampling. The screen says `NO CARD`, nothing is
+      written, and no restart is needed.
+- [ ] Put it back: the samples the kit names are offered again automatically.
+- [ ] Pull it, then save: refused, with `NO CARD` on screen.
+
+**Queue and chains**
+
+- [ ] STEP 1-16 in PROJECT queues that pattern; encoder A picks END / 16 / 32 / NOW.
+- [ ] With the transport STOPPED a queued change switches at once, because there is no end of a
+      pass to wait for.
+- [ ] A change armed a few ticks late still lands on the boundary it just missed
+      (`kQueueGraceTicks`), and the new pattern's step 0 has already gone by — `core/queue.hpp`
+      says so and it should be audible at the seam.
+- [ ] UP toggles the chain; starting one jumps to its first entry. CLR cancels a queued change.
+- [ ] A pattern change clears the undo history (it belonged to the pattern left behind) and
+      restarts the `1ST` conditions.
+
 ## M0.5 — budget spike
 
 Folded into the M2 worst-case measurement above — see `docs/BUDGET.md` for why. These two lines

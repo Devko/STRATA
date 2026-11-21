@@ -10,7 +10,7 @@
 // transport. docs/SPEC.md, "Software architecture".
 #include "engine.hpp"
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
-#include "samplepool.hpp"   // the sample region is carved up on THIS side; see Strata::init
+#include "storage.hpp"      // projects, autosave and the sample loader: the card side
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
@@ -20,10 +20,6 @@
 namespace {
 
 using namespace strata;
-
-// The sample region: the ceiling docs/SPEC.md allows, not a project's default budget. See
-// Strata::init for why it is this side's to take and why it is the ceiling.
-constexpr uint32_t kSampleRegionBytes = kSampleBudgetMaxMib << 20;
 
 // --- text helpers (no printf, no libm, and the font is upper case and digits) ---
 
@@ -116,7 +112,7 @@ constexpr int track_for_pad(int pad) { return pad % 2 == 0 ? pad / 2 : -1; }
 // The modes of docs/SPEC.md's function block. F4 = GRID, F7 = MIXER, F8 = EDIT, and the two
 // selection keys under the screen move within whichever mode is showing -- the step page in
 // GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
-enum class Mode : uint8_t { grid, edit, mixer };
+enum class Mode : uint8_t { grid, edit, mixer, project };
 
 // The step page shows four of a step's fields at a time, so the selection keys page through
 // them. Derived rather than written down: core/stepedit.hpp owns how many fields there are.
@@ -137,23 +133,34 @@ public:
     bool init() override {
         if (!engine_.init(float(ENAGA_SAMPLE_RATE))) return false;
 
-        // Sample memory, from the heap, here and nowhere else. The CEILING is reserved rather
-        // than the default budget, because a project may raise its budget long after init() is
-        // over and allocating then would break CLAUDE.md's rule that every buffer is taken in
-        // init(). 64 MiB of the ~124 MiB app heap, which is what docs/SPEC.md's memory table
-        // budgets for samples.
-        //
-        // It is taken on THIS side, not in Engine::init, so that no pool state is shared across
-        // the command ring: the loader here reserves, fills and releases ranges, and the audio
-        // side is handed nothing but a base pointer (app/engine.hpp's `sample_region_`).
-        sample_region_ = new int16_t[kSampleRegionBytes / sizeof(int16_t)];
-        if (sample_region_ == nullptr) return false;
-        samples_.init(kSampleBudgetDefaultMib << 20);
-        engine_.set_sample_region(sample_region_, kSampleRegionBytes);
+        // Storage takes the sample region and the staging buffers and hands the region's base to
+        // the engine. Everything slow -- files, the pool, the loader -- lives on this side of the
+        // ring (app/storage.hpp).
+        if (!storage_.init(engine_)) return false;
 
         enaga::clock::set_tempo(130.0f);     // the spec's reference tempo
+
+        // docs/SPEC.md: "On start, STRATA reopens the last project and offers the autosave if it
+        // is newer." Nothing on the card is not an error -- it is a first run, and the engine's
+        // built-in default pattern stays.
+        if (storage_.open_last()) notice("OPENING");
+
         enaga::log("strata ready");
         return true;
+    }
+
+    void stop() override {
+        // Destructors never run on this platform (CLAUDE.md), so this is the last chance. The
+        // budget is 3 s including the save.
+        storage_.save_for_shutdown();
+        enaga::log("strata stopped");
+    }
+
+    void on_card(bool usable) override {
+        // Every file handle opened before a removal is already dead; Storage abandons whatever
+        // was in flight and writes nothing until a card is back.
+        storage_.on_card(usable);
+        notice(usable ? "CARD IN" : "CARD OUT");
     }
 
     void audio(const float *in, float *out, uint32_t frames) override {
@@ -166,6 +173,14 @@ public:
         if (key == ENAGA_KEY_F1) { shift_ = down; return; }
         if (key == ENAGA_KEY_PUSH_VALUE) { value_pushed_ = down; return; }
 
+        // In PROJECT mode a STEP key queues a pattern change rather than toggling a trig, so it
+        // is taken here, before the editing path, and only on the press -- there is no modifier
+        // gesture to decide on the release.
+        if (mode_ == Mode::project && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
+            if (down) queue_shown_pattern(key - ENAGA_KEY_STEP1);
+            return;
+        }
+
         // A STEP key needs its release as well as its press. Holding one is a modifier -- it
         // locks a parameter, opens the step page or starts a range -- and a step held as a
         // modifier must NOT toggle its trig when it comes up. That can only be decided on the
@@ -176,6 +191,10 @@ public:
         }
 
         if (!down) return;
+
+        // PROJECT mode's own keys. Taken before the switch so the editing meanings of OK, CLR
+        // and UP cannot fire while the card side is what is on screen.
+        if (mode_ == Mode::project && on_project_key(key)) return;
 
         switch (key) {
             case ENAGA_KEY_F5:
@@ -202,6 +221,10 @@ public:
                 notice(rec_ ? "REC ON" : "REC OFF");
                 break;
 
+            case ENAGA_KEY_F3:                         // PROJECT: banks, patterns and the card
+                mode_ = Mode::project;
+                step_page_ = false;
+                break;
             case ENAGA_KEY_F4:                         // HOME: the grid
                 mode_ = Mode::grid;
                 step_page_ = false;
@@ -335,6 +358,11 @@ public:
             case Mode::mixer:
                 mixer_bank_ = (mixer_bank_ + delta + 2) % 2;           // tracks 1-4 or 5-8
                 break;
+            case Mode::project:
+                // The bank being SHOWN, which is not the bank playing: a queued change is armed
+                // from the shown bank, so browsing must not switch anything by itself.
+                shown_bank_ = (shown_bank_ + delta + kBanks) % kBanks;
+                break;
         }
     }
 
@@ -436,6 +464,18 @@ public:
         // The ENCODER EVENT id is alphabetical (0-3 = A-D), unlike the PUSH-button key codes,
         // which run B, A, C, D. See docs/ENAGA_API.md -- confusing the two silently swaps A
         // and B, and nothing catches it.
+
+        // In PROJECT mode encoder A walks when a queued change lands. It is only ever read when
+        // a pattern is queued, so it changes nothing by itself.
+        if (mode_ == Mode::project && encoder == 0) {
+            const int next = int(queue_mode_) + delta;
+            queue_mode_ = QueueMode(next < 0 ? 0
+                                             : (next >= int(QueueMode::count)
+                                                    ? int(QueueMode::count) - 1
+                                                    : next));
+            notice(queue_mode_name(queue_mode_));
+            return;
+        }
         if (encoder < 0 || encoder > 3) return;
 
         // 1. A held STEP key: lock this page's parameter on that step. The single most
@@ -585,12 +625,23 @@ public:
         // the chain state here is what keeps conditions in step with an outside transport.
         (void)position;
         if (what == ENAGA_TRANSPORT_START || what == ENAGA_TRANSPORT_LOCATE) stop_armed_ = false;
+
+        // docs/SPEC.md: "Autosave to AUTOSAVE/ whenever the transport stops." It follows the
+        // transport rather than the key, so a stop arriving from MIDI or SYNC autosaves too --
+        // which is the case where the user never pressed anything and would least expect to
+        // lose work.
+        if (what == ENAGA_TRANSPORT_STOP) storage_.request_autosave();
     }
 
     // --- LEDs -------------------------------------------------------------
 
     void update(uint32_t ms) override {
         last_ms_ = ms;
+
+        // One bounded slice of whatever the card side has in flight. It never blocks and never
+        // waits on the audio side: a command ring that has not drained simply means "not this
+        // pass" (app/storage.hpp).
+        storage_.service();
 
         // Log transport and clock-source changes. Cheap (a handful of comparisons), only fires on
         // a change, and it is the one thing worth seeing in an emulator run or a unit log: it
@@ -709,9 +760,13 @@ public:
         const enaga::clock::State clock = enaga::clock::state();
         const bool running = clock.running != 0;
 
-        // Top line on every screen: pattern, tempo, play state, audio load.
+        // Top line on every screen: the live pattern, tempo, play state, audio load. The pattern
+        // comes from the status rather than from the project, because a chain or a queued change
+        // moves it on the audio side.
         out = line;
-        append(out, "A01 ");
+        *out++ = bank_letter(int(status.live_bank.load(std::memory_order_relaxed)));
+        append_padded(out, uint32_t(status.live_slot.load(std::memory_order_relaxed)) + 1, 2);
+        *out++ = ' ';
         append_tenths(out, uint32_t(clock.tempo * 10.0f + 0.5f));
         append(out, running ? " > " : " . ");
         append_tenths(out, enaga::audio_load());
@@ -732,9 +787,10 @@ public:
             draw_step_page(canvas);
         } else {
             switch (mode_) {
-                case Mode::grid:  draw_grid(canvas, running); break;
-                case Mode::edit:  draw_edit(canvas); break;
-                case Mode::mixer: draw_mixer(canvas); break;
+                case Mode::grid:    draw_grid(canvas, running); break;
+                case Mode::edit:    draw_edit(canvas); break;
+                case Mode::mixer:   draw_mixer(canvas); break;
+                case Mode::project: draw_project(canvas); break;
             }
         }
 
@@ -1043,6 +1099,176 @@ public:
         }
     }
 
+    // --- PROJECT: banks, patterns and the card ---------------------------
+
+    // True when the key belonged to this mode. OK saves, F1 + OK reads the card again, F1 + CLR
+    // starts an empty project, CLR cancels a queued change and UP toggles the chain.
+    //
+    // There is no file browser: a project's name comes from the settings and a track's sample
+    // path comes from its kit, which is what docs/SPEC.md's "reopens the last project" and
+    // "loaded whole into RAM at project open" need. Picking a different project or a different
+    // sample from the card is a browser, and a browser is not in M4.
+    bool on_project_key(int key) {
+        switch (key) {
+            case ENAGA_KEY_OK:
+                if (shift_) {
+                    // Reading the card again throws away everything unsaved, so it says what it
+                    // is doing rather than looking like nothing happened.
+                    storage_.request_reload();
+                    notice("RELOADING");
+                } else {
+                    storage_.request_save();
+                    notice("SAVING");
+                }
+                return true;
+
+            case ENAGA_KEY_CLR:
+                if (shift_) {
+                    storage_.request_new();
+                    notice("NEW PROJECT");
+                } else {
+                    post(Cmd::cancel_queue);
+                    notice("QUEUE OFF");
+                }
+                return true;
+
+            case ENAGA_KEY_UP: {
+                // The chain follows the project's own entries; starting one jumps to its first.
+                const bool on = engine_.chain().active;
+                post(Cmd::set_chain, 0, 0, on ? 0 : 1);
+                notice(on ? "CHAIN OFF" : "CHAIN ON");
+                return true;
+            }
+
+            case ENAGA_KEY_DOWN:
+                // Load the selected track's sample again. The one thing a user can do about a
+                // FAIL, and the only way back after a card has been out.
+                if (storage_.request_sample(selected_)) notice("LOADING");
+                else notice("NO SAMPLE");
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    void queue_shown_pattern(int slot) {
+        if (!project_index_valid(shown_bank_, slot)) return;
+        // The audio side decides when it lands, from the tick the sequencer is actually on. With
+        // the transport stopped it switches at once, because there is no end of a pass to wait
+        // for (core/queue.hpp, and Engine::apply's queue_pattern).
+        Command command;
+        command.cmd = Cmd::queue_pattern;
+        command.a = uint8_t(shown_bank_);
+        command.b = uint8_t(slot);
+        command.c = uint8_t(queue_mode_);
+        engine_.commands().post(command);
+        storage_.note_command(Cmd::queue_pattern,
+                              int(engine_.status().live_bank.load(std::memory_order_relaxed)));
+
+        char *out = notice_buffer_;
+        *out++ = bank_letter(shown_bank_);
+        append_padded(out, uint32_t(slot) + 1, 2);
+        append(out, " ");
+        append(out, queue_mode_name(queue_mode_));
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    void draw_project(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const Status &status = engine_.status();
+
+        // The project, and whether RAM differs from the card. An unsaved project that looked
+        // saved is the worst outcome this screen can produce, so the marker is on the name.
+        out = line;
+        append(out, storage_.project_name());
+        if (storage_.dirty()) append(out, " *");
+        if (!storage_.card_usable()) append(out, " NO CARD");
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        // What the card side is doing, or what went wrong last. Both matter: a load that failed
+        // silently is the least diagnosable thing a sampler can do.
+        out = line;
+        const char *busy = storage_.busy_text();
+        if (busy != nullptr) {
+            append(out, busy);
+            append(out, " ");
+            append_number(out, uint32_t(storage_.progress()));
+            *out++ = '%';
+        } else if (storage_.last_error() != nullptr) {
+            append(out, storage_.last_error());
+        }
+        *out = 0;
+        canvas.text(0, 27, line, busy != nullptr ? 12 : 9);
+
+        // The bank being browsed, which is not necessarily the one playing.
+        out = line;
+        append(out, "BANK ");
+        *out++ = bank_letter(shown_bank_);
+        append(out, "   ");
+        append(out, queue_mode_name(queue_mode_));
+        if (engine_.chain().active) append(out, " CHAIN");
+        *out = 0;
+        canvas.text(0, 40, line, 12);
+
+        // The bank's 16 slots, four by four. Filled = the pattern has trigs; the live one is
+        // boxed and a queued one is marked, so "what is playing" and "what will play" are both
+        // on screen at once.
+        const int live_bank = int(status.live_bank.load(std::memory_order_relaxed));
+        const int live_slot = int(status.live_slot.load(std::memory_order_relaxed));
+        const Queue &queue = engine_.queue();
+        const Project &project = engine_.project();
+
+        for (int slot = 0; slot < kPatternsPerBank; slot++) {
+            const int x = (slot % 4) * 30 + 2;
+            const int y = (slot / 4) * 13 + 51;
+
+            int trigs = 0;
+            const Pattern &pattern = project.patterns[shown_bank_][slot];
+            for (int t = 0; t < kTracks && trigs == 0; t++) {
+                for (int i = 0; i < int(pattern.tracks[t].length); i++) {
+                    if (pattern.tracks[t].steps[i].flags & (kStepTrig | kStepTrigless)) {
+                        trigs = 1;
+                        break;
+                    }
+                }
+            }
+
+            const bool is_live = shown_bank_ == live_bank && slot == live_slot;
+            const bool is_queued = queue.pending && int(queue.bank) == shown_bank_ &&
+                                   int(queue.slot) == slot;
+            canvas.rect(x, y, 26, 11, is_live ? 10 : (trigs ? 5 : 2));
+            out = line;
+            append_padded(out, uint32_t(slot) + 1, 2);
+            if (is_queued) *out++ = '>';
+            *out = 0;
+            canvas.text(x + 3, y + 2, line, is_live ? 0 : 15);
+        }
+
+        // The sample pool: what each track is doing and how much of the budget is gone. The pool
+        // lives on this side with the loader, so this is read directly and not through a status.
+        const SamplePool &pool = storage_.samples();
+        out = line;
+        append(out, "SMP ");
+        for (int t = 0; t < kTracks; t++) {
+            const SampleState state = pool.slot(t).state;
+            *out++ = state == SampleState::ready    ? 'O'
+                     : state == SampleState::loading ? '.'
+                     : state == SampleState::failed  ? 'X'
+                                                     : '-';
+        }
+        append(out, " ");
+        append_number(out, pool.used() >> 20);
+        *out++ = '/';
+        append_number(out, pool.budget() >> 20);
+        append(out, "M");
+        *out = 0;
+        canvas.text(0, 105, line, 10);
+    }
+
 private:
     void post(Cmd cmd, uint8_t track = 0, uint8_t step = 0, uint8_t a = 0, uint8_t b = 0) {
         Command command;
@@ -1052,6 +1278,12 @@ private:
         command.a = a;
         command.b = b;
         engine_.commands().post(command);
+
+        // Which of a project's ten files this edit will have changed. The live bank is read from
+        // the status rather than assumed, because a chain may have moved the live pattern without
+        // the UI asking (app/storage.hpp says why the flags live on this side).
+        storage_.note_command(
+            cmd, int(engine_.status().live_bank.load(std::memory_order_relaxed)));
     }
 
     // An encoder delta, as a signed byte. The audio side applies it to the authoritative step,
@@ -1092,20 +1324,17 @@ private:
 
     Engine engine_;
 
-    // The sample region and the pool that carves it up. Both belong to the main context: the
-    // loader is what reserves, fills and releases ranges, so keeping the pool here means there is
-    // no pool state shared across the ring at all. The handover to the audio side is a command
-    // carrying a byte offset, a frame count and a channel count.
-    //
-    // Releasing a range is the dangerous half, and docs/SPEC.md fixes the order: post
-    // `Cmd::clear_sample`, WAIT for `Status::sample_epoch[track]` to change, and only then
-    // release and load over the memory. Releasing before the epoch confirms overwrites what a
-    // voice is still reading.
-    int16_t *sample_region_ = nullptr;
-    SamplePool samples_;
+    // The card side: projects, autosave and the sample loader, all in this context. It owns the
+    // sample region and the pool, so no pool state is shared across the ring at all
+    // (app/storage.hpp).
+    Storage storage_;
 
     Mode mode_ = Mode::grid;
     int selected_ = 0;
+    int shown_bank_ = 0;                        // PROJECT mode browses a bank without switching
+    QueueMode queue_mode_ = QueueMode::end_of_pattern;
+    char notice_buffer_[24] = {};               // notice() keeps the pointer, so dynamic text
+                                                // needs somewhere of its own to live
     int page_ = 0;            // step page 1-4, for 64-step tracks
     int param_page_ = int(Page::src);
     int mixer_bank_ = 0;      // 0 = tracks 1-4, 1 = tracks 5-8

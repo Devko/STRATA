@@ -525,6 +525,21 @@ void Engine::apply(const Command &command) {
             params_from_kit();
             break;
 
+        case Cmd::project_loaded:
+            // Everything derived from the pattern that was just replaced. The kit first, because
+            // the machines read `params_` and not `project_.kit`; then the undo history, which
+            // belonged to a pattern that no longer exists (restoring it would write another
+            // project's steps over this one); then the scheduler, whose track lengths, speeds and
+            // swing all came from the old pattern.
+            params_from_kit();
+            undo_.clear();
+            queue_clear(queue_);
+            chain_.active = false;
+            scheduler_.reset(true);
+            reconfigure();
+            boundary_known_ = false;
+            break;
+
         case Cmd::clear_sample:
             // The first half of the sample swap docs/SPEC.md requires. The voices go first,
             // because they are reading the buffer that is about to be released, and the epoch
