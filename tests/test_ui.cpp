@@ -75,6 +75,8 @@ struct UiProbe {
     static bool notice_showing(const Strata &app) { return app.notice_showing(); }
 
     static int pressure_pad(const Strata &app) { return app.pressure_pad_; }
+    static int take_bars_index(const Strata &app) { return app.take_bars_index_; }
+    static int resample_track(const Strata &app) { return app.resample_track_; }
     static uint8_t macro_knob(const Strata &app, int macro) {
         return app.macro_position_[macro];
     }
@@ -1238,4 +1240,90 @@ TEST(ui_pad_pressure_clamps_a_value_outside_the_events_range) {
     pump();
     CHECK_EQ(int(app_engine().macro_position(0)), 0);     // the knob's position, not a wrap
     app.on_pad_release(0);
+}
+
+// --- the resample gesture -------------------------------------------------------------------
+//
+// docs/SPEC.md's key table gives F1 + F2 to "Resample setup". Everything behind it was built and
+// tested in tests/test_app.cpp; these are about it being REACHABLE, which is the step this
+// project has forgotten before -- a feature with no gesture is a feature nobody has.
+
+TEST(ui_f1_f2_opens_resample_setup_and_ok_arms_a_take) {
+    Strata &app = fresh();
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+
+    // F2 on its own is still REC, which is the other half of the key.
+    const bool rec_before = UiProbe::rec(app);
+    key(ENAGA_KEY_F2);
+    CHECK(UiProbe::rec(app) != rec_before);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    key(ENAGA_KEY_F2);                                   // back off
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_F2, true);
+    app.on_key(ENAGA_KEY_F2, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+    CHECK_EQ(UiProbe::rec(app) != rec_before, false);    // and it did not toggle REC as well
+
+    // The two settings: encoder A walks the four lengths SPEC allows, the selection keys the
+    // destination.
+    CHECK_EQ(UiProbe::take_bars_index(app), 0);          // 1 bar
+    app.on_encoder(0, +1);
+    CHECK_EQ(UiProbe::take_bars_index(app), 1);          // 2 bars
+    app.on_encoder(0, +2);
+    CHECK_EQ(UiProbe::take_bars_index(app), 3);          // 8 bars
+    app.on_encoder(0, +1);
+    CHECK_EQ(UiProbe::take_bars_index(app), 0);          // and round again: only four choices
+
+    CHECK_EQ(UiProbe::resample_track(app), -1);          // the file only, by default
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+    CHECK_EQ(UiProbe::resample_track(app), 0);
+    app.on_key(ENAGA_KEY_SELECT_LEFT, true);
+    app.on_key(ENAGA_KEY_SELECT_LEFT, false);
+    CHECK_EQ(UiProbe::resample_track(app), -1);
+
+    // OK arms it, and the engine agrees.
+    key(ENAGA_KEY_OK);
+    pump();
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 1);
+    CHECK_EQ(UiProbe::notice(app), "ARMED: PRESS PLAY");  // the clock is not running
+
+    // CLR cancels it, and does NOT erase a step on the way past.
+    key(ENAGA_KEY_CLR);
+    pump();
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
+    CHECK_EQ(UiProbe::notice(app), "CANCELLED");
+}
+
+TEST(ui_the_resample_gesture_records_and_writes_through_the_panel_alone) {
+    // The whole feature from the keys, with nothing posted by hand: this is what a person can
+    // actually do with the box.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+
+    // Something to record, and a transport.
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    host.set_running(true);
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_F2, true);
+    app.on_key(ENAGA_KEY_F2, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    key(ENAGA_KEY_OK);                                   // one bar, to the file
+    pump();
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 1);
+
+    host.deliver_tick(384, 0);                           // a bar line starts it
+    bool written = false;
+    for (int i = 0; i < 4000 && !written; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+        written = host.has_file("/RECORD/STRATA_1.WAV");
+    }
+    CHECK(written);
+    CHECK(app_storage().last_error() == nullptr);
+    CHECK_EQ(app_storage().last_take_name(), "STRATA_1.WAV");   // and the screen can say so
 }

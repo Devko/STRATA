@@ -156,7 +156,12 @@ constexpr uint8_t kKeyVelocity = 100;
 // The modes of docs/SPEC.md's function block. F4 = GRID, F7 = MIXER, F8 = EDIT, and the two
 // selection keys under the screen move within whichever mode is showing -- the step page in
 // GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
-enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys };
+enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample };
+
+// How long a take is. docs/SPEC.md: "1, 2, 4 or 8 bars", so these four and nothing between --
+// a resample is a loop and a loop is a power of two bars.
+constexpr uint8_t kTakeBars[] = {1, 2, 4, 8};
+constexpr int kTakeBarChoices = int(sizeof kTakeBars / sizeof kTakeBars[0]);
 
 // The step page shows four of a step's fields at a time, so the selection keys page through
 // them. Derived rather than written down: core/stepedit.hpp owns how many fields there are.
@@ -326,7 +331,16 @@ public:
                 stop_armed_ = !stop_armed_;
                 break;
 
-            case ENAGA_KEY_F2:                         // REC: live and motion recording
+            case ENAGA_KEY_F2:                         // REC, or F1 + F2 for resample setup
+                if (shift_) {
+                    // docs/SPEC.md's key table gives F1 + F2 to "Resample setup". A mode rather
+                    // than a one-shot, because a take has two settings to choose -- how many
+                    // bars and where it lands -- and OK is what commits it.
+                    mode_ = Mode::resample;
+                    leave_mode();
+                    notice("RESAMPLE");
+                    break;
+                }
                 rec_ = !rec_;
                 // A whole recording pass is one undo level, so the gesture ends when recording
                 // does -- and the next pass must not coalesce into the last one.
@@ -356,6 +370,15 @@ public:
                 break;
 
             case ENAGA_KEY_OK:
+                // RESAMPLE mode first: OK is what commits a take, and there is no step to hold.
+                if (mode_ == Mode::resample) {
+                    post(Cmd::resample_arm, 0, 0, kTakeBars[take_bars_index_]);
+                    // And the card side, asked for now so the write happens the moment the take
+                    // finishes rather than needing a second press at exactly the right time.
+                    storage_.request_resample_write(resample_track_);
+                    notice(enaga::clock::running() ? "ARMED" : "ARMED: PRESS PLAY");
+                    break;
+                }
                 if (held_step_ >= 0) {
                     // Hold STEP + OK: the step page, on that step (docs/SPEC.md, "Step editing").
                     step_page_ = true;
@@ -377,6 +400,11 @@ public:
                     post(Cmd::undo);                   // F1 + CLR = undo
                     end_gesture();
                     notice("UNDO");
+                } else if (mode_ == Mode::resample) {
+                    // In RESAMPLE, CLR cancels the take rather than erasing a step: there is no
+                    // selection in this mode and a take is the only thing there is to cancel.
+                    post(Cmd::resample_cancel);
+                    notice("CANCELLED");
                 } else {
                     erase_selection();
                 }
@@ -532,6 +560,15 @@ public:
                 selected_ = (selected_ + delta + kTracks) % kTracks;
                 end_gesture();
                 break;
+            case Mode::resample:
+                // The selection keys walk the DESTINATION: -1 is "the file only", then the eight
+                // tracks. A track that hosts no Sampler is still offered, because which machine
+                // a track hosts becomes switchable in M6/M7 and the kit's path is what the
+                // loader reads either way.
+                resample_track_ = resample_track_ + delta;
+                if (resample_track_ < -1) resample_track_ = kTracks - 1;
+                if (resample_track_ >= kTracks) resample_track_ = -1;
+                break;
             case Mode::perform:
                 // How hard a mutation mutates. The one number in this mode with no encoder of
                 // its own, all four being macros.
@@ -675,6 +712,13 @@ public:
             macro_position_[encoder] =
                 uint8_t(next < 0 ? 0 : (next > 127 ? 127 : next));
             post(Cmd::set_macro, 0, 0, uint8_t(encoder), macro_position_[encoder]);
+            return;
+        }
+
+        // RESAMPLE mode's one encoder: A walks the four lengths docs/SPEC.md allows.
+        if (mode_ == Mode::resample && encoder == 0) {
+            const int next = (take_bars_index_ + delta) % kTakeBarChoices;
+            take_bars_index_ = next < 0 ? next + kTakeBarChoices : next;
             return;
         }
 
@@ -1222,6 +1266,7 @@ public:
                 case Mode::project: draw_project(canvas); break;
                 case Mode::perform: draw_perform(canvas); break;
                 case Mode::keys:    draw_keys(canvas); break;
+                case Mode::resample: draw_resample(canvas); break;
             }
         }
 
@@ -1556,6 +1601,61 @@ public:
         // in and a part programmed in sound the same.
         post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity);
         record_note(selected_, note, kKeyVelocity);
+    }
+
+    void draw_resample(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const uint8_t state = engine_.status().resample_state.load(std::memory_order_relaxed);
+
+        append(out, "RESAMPLE ");
+        append_number(out, uint32_t(kTakeBars[take_bars_index_]));
+        append(out, state == 1u ? " BAR  WAIT" : " BAR");
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        out = line;
+        append(out, "TO ");
+        if (resample_track_ < 0) {
+            append(out, "FILE");
+        } else {
+            append(out, "TRK ");
+            append_number(out, uint32_t(resample_track_) + 1);
+        }
+        *out = 0;
+        canvas.text(0, 28, line, 10);
+
+        // What the take is doing, from the two words the audio side publishes. A bar at 130 BPM
+        // is 88,615 frames, so a percentage is the only figure that fits and the only one anyone
+        // reads while recording.
+        out = line;
+        const uint32_t frames = engine_.status().resample_frames.load(std::memory_order_relaxed);
+        switch (state) {
+            case 1u: append(out, "ARMED"); break;
+            case 2u: {
+                append(out, "REC ");
+                const uint32_t bar_frames =
+                    uint32_t(float(kTakeBars[take_bars_index_]) * float(kTicksPerBar) * 230.77f);
+                const uint32_t percent = bar_frames == 0u ? 0u : frames * 100u / bar_frames;
+                append_number(out, percent > 100u ? 100u : percent);
+                *out++ = '%';
+                break;
+            }
+            case 3u: append(out, "WRITING"); break;
+            default: append(out, "OK ARMS, CLR CANCELS"); break;
+        }
+        *out = 0;
+        canvas.text(0, 40, line, state == 2u ? 15 : 10);
+
+        if (engine_.status().resample_clamped.load(std::memory_order_relaxed) != 0u) {
+            canvas.text(0, 50, "SHORTENED TO 30S", 10);
+        } else if (storage_.last_take_name()[0] != 0) {
+            out = line;
+            append(out, "LAST ");
+            append(out, storage_.last_take_name());
+            *out = 0;
+            canvas.text(0, 50, line, 10);
+        }
     }
 
     void draw_keys(enaga::Canvas &canvas) {
@@ -2064,6 +2164,10 @@ private:
 
     // The pad currently bending macro 1, and the last value sent for it. -1 for none; see
     // on_pad_pressure on why one pad at a time and why only changes are posted.
+    // Resampling's two settings: how many bars, and where the take lands (-1 = the file only).
+    int take_bars_index_ = 0;
+    int resample_track_ = -1;
+
     int pressure_pad_ = -1;
     uint8_t pressure_sent_ = 0;
     uint8_t macro_position_[kMacros] = {};

@@ -669,6 +669,36 @@ the duck's dropped trigger); the other two are here.
       by the compiler's goodwill; it is now a literal table, and the hat's own tests passing is
       what proves the table matches the fold. Nothing to check by ear.
 
+### Resampling — written tonight, reachable from the panel, never heard
+
+docs/SPEC.md's eighth performance tool, end to end: record the finished master for 1, 2, 4 or 8
+bars, write it to `/RECORD/STRATA_<n>.WAV`, and load it back into a track in one action. The
+gesture is **F1 + F2**, which is where SPEC's key table puts "Resample setup": encoder A walks
+the four lengths, the selection keys walk the destination (the file only, or one of the eight
+tracks), OK arms and CLR cancels.
+
+Host-tested end to end through a fake card -- the written file is checked by PARSING it with
+`<enaga/wav.hpp>` -- and the gesture is tested from the keys with nothing posted by hand. What no
+test can tell you is whether a take sounds right, which is the whole point of the feature.
+
+- [ ] **Record a bar and listen to it.** It should be the mix you just heard, including beat
+      repeat if you played one into the take -- it records the FINISHED master, after the limiter.
+- [ ] **It should LOOP.** The take begins on a bar line, not under your finger, which is the only
+      reason a round number of bars is worth recording. If the loop has a gap or a stutter at the
+      join, the bar alignment is the first thing to suspect.
+- [ ] **Load it straight into a track and play it.** That is "in one action": OK with a track
+      chosen writes the file, puts its path in that track's kit and loads it through the ordinary
+      sample swap.
+- [ ] 8 bars below about 64 BPM is longer than the 30-second buffer. The take is SHORTENED rather
+      than refused -- a short loop is usable and a refusal mid-performance is not -- and the
+      screen says `SHORTENED TO 30S`. Check it says that rather than silently giving you less.
+- [ ] A second take does not overwrite the first: the number comes from the settings and survives
+      a restart. Record three and check `/RECORD` holds `STRATA_1`, `_2` and `_3`.
+- [ ] Arming with the transport stopped says `ARMED: PRESS PLAY` and waits. Nothing records until
+      the clock crosses a bar line.
+- [ ] A second arm during a take is refused and counted, because there is no undo for a lost
+      take. Check the screen says something rather than quietly restarting.
+
 ## M0.5 — budget spike
 
 Folded into the M2 worst-case measurement above — see `docs/BUDGET.md` for why. These two lines
