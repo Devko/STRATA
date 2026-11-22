@@ -1647,6 +1647,40 @@ TEST(storage_a_reload_asked_for_during_an_autosave_leaves_that_autosave_in_its_f
     CHECK(storage().dirty());
 }
 
+TEST(storage_a_command_the_card_side_posts_into_a_full_ring_is_sent_later_not_dropped) {
+    // `request_save` posts `kit_store` from the key press, and the UI may have filled the ring in
+    // the same pass. The ring refuses a post when full, and Storage used to ignore the refusal: the
+    // save then serialized the kit as of the last store and a knob turn was lost from the file.
+    clean();
+
+    post(Cmd::set_param, 3, 0, uint8_t(kLvl), 42);
+    pump(2);
+    CHECK_EQ(int(kit_value(3, kLvl)), 42);
+
+    // The ring full of an idempotent edit, so only the store is in question.
+    Command same;
+    same.cmd = Cmd::set_param;
+    same.track = 3;
+    same.a = uint8_t(kLvl);
+    same.b = 42;
+    int posted = 0;
+    while (engine().commands().post(same)) posted++;
+    CHECK(posted > 100);
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(engine().project().kit.tracks[3].params[kLvl]), 42);
+
+    // And it is in the file, not just in RAM.
+    post(Cmd::set_param, 3, 0, uint8_t(kLvl), 7);
+    pump(2);
+    CHECK(reload_now());
+    CHECK(settle());
+    pump(4);
+    CHECK_EQ(int(kit_value(3, kLvl)), 42);
+}
+
 TEST(storage_a_save_already_asked_for_beats_an_autosave) {
     // Both arrive before either can start -- the transport stops at the same moment the user
     // presses SAVE. `request_autosave` stands down while a save is pending, and `service()` takes

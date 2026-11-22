@@ -147,10 +147,32 @@ bool mutates_perform(Cmd cmd) {
 void Storage::post(Cmd cmd) {
     Command command;
     command.cmd = cmd;
+    post(command);
+}
+
+// Every command this file posts is one the protocols depend on -- a `clear_sample` the epoch wait
+// is waiting for, the `set_sample` that ends a swap, the `kit_store` a save serializes, the
+// `project_loaded` that tells the audio side its derived state is stale. So none may be dropped
+// on a full ring. One that does not fit waits here, in order, and service() sends it before it
+// does anything else; while any waits, nothing new starts, exactly as for a non-empty ring.
+void Storage::post(const Command &command) {
+    if (backlog_n_ == 0 && engine_->commands().post(command)) return;
+    if (backlog_n_ < kBacklog) {
+        backlog_[backlog_n_++] = command;
+        return;
+    }
+    // Unreachable: no pass posts more than two, and a backlog holds every pass back. Counted on
+    // the ring's own drop counter if it ever happens, so it is visible rather than silent.
     engine_->commands().post(command);
 }
 
-void Storage::post(const Command &command) { engine_->commands().post(command); }
+bool Storage::flush_backlog() {
+    int sent = 0;
+    while (sent < backlog_n_ && engine_->commands().post(backlog_[sent])) sent++;
+    for (int i = sent; i < backlog_n_; i++) backlog_[i - sent] = backlog_[i];
+    backlog_n_ -= sent;
+    return backlog_n_ == 0;
+}
 
 // --- setting up -----------------------------------------------------------
 
@@ -514,6 +536,9 @@ int Storage::progress() const {
 int Storage::loading_track() const { return sample_track_; }
 
 void Storage::service() {
+    // A command that did not fit in the ring goes first, and until it has, nothing moves on.
+    if (!flush_backlog()) return;
+
     // A new project first, and before the card check: it is RAM only, so it needs no card. It
     // waits for an idle loader and an empty ring like a load, and for a save asked for before
     // it, which belongs to the project being replaced.
@@ -889,8 +914,8 @@ void Storage::step_sample_epoch() {
         // counting -- but a track whose epoch never moves must not hang the loader for ever.
         if (++epoch_waited_ < kEpochPasses) return;
         // Giving the range back unconfirmed is safe for one reason only: the `clear_sample`
-        // posted above is still in the ring, and service() starts nothing while the ring is
-        // non-empty. So the audio side kills the voice before anything can write here again.
+        // posted above is still in the ring (or in `backlog_`, if the ring was full), and
+        // service() starts nothing while either holds anything. So the audio side kills the voice before anything can write here again.
         // tests/test_storage.cpp pins it; drop that gate and this line becomes the bug.
         pool_.fail(track);
         sample_track_ = -1;
@@ -1234,7 +1259,7 @@ void Storage::save_for_shutdown() {
     // and 64 commands apply per block, so this is many times longer than it can possibly need,
     // and it is still a rounding error against the 3 s budget.
     const uint32_t deadline = enaga::ms() + 100u;
-    while (!engine_->commands().empty() && enaga::ms() < deadline) {
+    while ((!flush_backlog() || !engine_->commands().empty()) && enaga::ms() < deadline) {
     }
 
     autosave_ = true;

@@ -221,6 +221,7 @@ private:
     void step_sample_resample();
     void start_next_sample();
     void start_new();
+    bool flush_backlog();          // true when nothing is left waiting
     void sample_loaded(int32_t result);      // the files::load callback, main context
     void hand_sample_over();
 
@@ -253,6 +254,9 @@ private:
     bool load_pending_ = false;
     bool load_autosave_ = false;   // which folder the pending load reads; copied into autosave_
                                    // only when it starts, so a running save keeps its own
+    static constexpr int kBacklog = 4;
+    Command backlog_[kBacklog] = {};   // posts that met a full ring, sent first by service()
+    int backlog_n_ = 0;
     bool new_pending_ = false;     // request_new, waiting for the ring like a load
     uint32_t save_seq_ = 0;        // monotonic, so a start can tell which of the two is newer
 
