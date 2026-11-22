@@ -1,4 +1,17 @@
-# Handoff: M4 and M5, now actually built and run
+# Handoff: M6 is feature-complete, and nothing has been heard
+
+**Read this first.** Every figure in this file comes from a cloud container: the host suite, a
+tic6x device build and an instruction-counting emulator with no cache model. **Nothing in this
+project has ever run on the unit**, so no exit criterion involving load or feel is met, whatever
+the numbers say. 193 checklist boxes, none ticked.
+
+The two things that gate everything and cannot be done from here: **boot `build/APP.ENA`**, and
+**answer the cl6x licence question**. VA POLY measures 4.25 points a voice -- 11.3x what SPEC
+budgets for the whole machine -- and whether that passes depends entirely on a 2.2x multiplier
+nobody has been able to run.
+
+## Previously: M4 and M5, built and run
+
 
 Written mid-M4 when the development machine had to go off, and rewritten twice since by the
 cloud sessions that picked it up. **The headline has changed: there is now a device build and
@@ -8,9 +21,9 @@ three emulator scenarios pass.**
 
 | | |
 |---|---|
-| `make -C host test` | **823 tests, 531,652 checks, 0 failures** — and `app/` is in the suite now |
+| `make -C host test` | **972 tests, 538,446 checks, 0 failures** — `core/`, `dsp/` and all of `app/` |
 | `tests/fakehost.cpp` | **a fake Enaga, so app/ is testable.** `enaga::host()` is 38 function pointers the app runtime normally defines and this Makefile does not link it, so the tests define it instead: `app/engine.cpp` and `app/storage.cpp` build for the host with no `#ifdef` in either. The clock is programmable (`deliver_tick(24, 37)`) and a `files::load` is held in flight until a test releases it |
-| `tools/build.sh` | **links.** APP.ENA, 422,600 bytes; payload 422,536; bss 1,265,512; no BOOT, MCU or SPI sections |
+| `tools/build.sh` | **links.** APP.ENA, 463,424 bytes; bss 1,333,776; no BOOT, MCU or SPI sections |
 | `tests/scenario_m3.sh` | **passes**, 33.39% peak, 0 overruns — the undo trail is exactly right after everything M4, M5 and M6 did to `app/engine.cpp` |
 | `tests/scenario_m4.sh` | **passes**, 28.64%: autosave, save, and a queued change switching immediately with the clock stopped |
 | `tests/scenario_m5.sh` | **passes**, 28.64%: beat repeat's tax is now below the noise of the peak block; see docs/BUDGET.md |
