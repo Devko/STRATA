@@ -440,6 +440,21 @@ New after the walkthrough was written. The emulator can only walk to the page
       hold a key: the run starts at once.
 - [ ] Save, power cycle: the ARP settings come back.
 
+## 13i. Song mode: mute recalls and SONG (5 min)
+
+New after the walkthrough was written. FUNC+RIGHT is a held combination the emulator cannot
+press, so this is its first run outside the host tests. Play A01 GROOVE.
+
+- [ ] PROJECT, octave RIGHT: CHAIN. Build three entries (OK on an empty chain, then OK twice):
+      A01, A02, A01, each X1. Turn B on entry 2: `M2` at the end of its row (no kick, factory).
+- [ ] FUNC+UP: chain on. Entry 2 starts **without the kick**, on the bar line, no click. Entry 3
+      (no recall) keeps it muted: `--` leaves the mutes as they are.
+- [ ] FUNC+RIGHT: `SONG: PLAY ONCE`, the header ends `SONG`. Unmute the kick, F1+F6 (reset), PLAY:
+      the chain plays A01, A02 without kick, A01, then **stops** with `SONG END`, nothing after
+      the last bar, no hanging note. PLAY: it starts again from entry 1.
+- [ ] FUNC+RIGHT again: `LOOP CHAIN`, and the chain goes round as before.
+- [ ] Save, power cycle: SONG and the `M2` come back. The page boxes and rows fit the screen.
+
 ## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). PROJECT, FUNC+LEFT once: `AGAIN TO RELOAD`, nothing changes.
