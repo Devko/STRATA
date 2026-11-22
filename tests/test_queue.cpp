@@ -1036,3 +1036,69 @@ TEST(a_chain_change_is_armed_and_lands_like_any_other) {
     CHECK_EQ(int(queue.bank), 0);                     // cleared after the switch
     CHECK(!queue.pending);
 }
+
+// --- editing a chain --------------------------------------------------------
+
+TEST(chain_insert_set_and_remove_keep_the_chain_a_prefix) {
+    Project &p = g_project;
+    set_chain(p, nullptr, 0);
+    CHECK_EQ(chain_length(p), 0);
+
+    CHECK(chain_insert(p, 0, 0, 2, 1));               // A03
+    CHECK(chain_insert(p, 1, 1, 0, 4));               // B01 x4, after it
+    CHECK(chain_insert(p, 0, 0, 0, 2));               // A01 x2, in front
+    CHECK_EQ(chain_length(p), 3);
+    CHECK_EQ(int(p.settings.chain_length), 3);
+    CHECK_EQ(int(p.chain[0].slot), 0);
+    CHECK_EQ(int(p.chain[1].slot), 2);
+    CHECK_EQ(int(p.chain[2].bank), 1);
+    CHECK_EQ(int(p.chain[2].repeats), 4);
+
+    CHECK(chain_set(p, 1, 7, 15, 16));
+    CHECK_EQ(int(p.chain[1].bank), 7);
+    CHECK_EQ(int(p.chain[1].repeats), 16);
+
+    CHECK(chain_remove(p, 0));
+    CHECK_EQ(chain_length(p), 2);
+    CHECK_EQ(int(p.chain[0].bank), 7);
+    CHECK_EQ(int(p.chain[2].repeats), 0);             // the vacated entry is zeroed
+    CHECK(chain_remove(p, 1));
+    CHECK(chain_remove(p, 0));
+    CHECK_EQ(chain_length(p), 0);
+    CHECK_EQ(int(p.settings.chain_length), 0);
+}
+
+TEST(chain_edits_refuse_what_cannot_be_in_a_chain) {
+    Project &p = g_project;
+    const Entry two[] = {{0, 0, 1}, {0, 1, 1}};
+    set_chain(p, two, 2);
+
+    CHECK(!chain_set(p, 2, 0, 0, 1));                 // past the end
+    CHECK(!chain_set(p, -1, 0, 0, 1));
+    CHECK(!chain_set(p, 0, 0, 0, 0));                 // no repeats
+    CHECK(!chain_set(p, 0, uint8_t(kBanks), 0, 1));   // no such bank
+    CHECK(!chain_insert(p, 3, 0, 0, 1));              // a gap
+    CHECK(!chain_remove(p, 2));
+    CHECK_EQ(chain_length(p), 2);
+    CHECK_EQ(int(p.chain[1].slot), 1);
+
+    // Full.
+    set_chain(p, nullptr, 0);
+    for (int i = 0; i < kChainEntries; i++) CHECK(chain_insert(p, i, 0, uint8_t(i % 16), 1));
+    CHECK(!chain_insert(p, 0, 0, 0, 1));
+    CHECK_EQ(chain_length(p), kChainEntries);
+}
+
+TEST(chain_edits_first_cut_a_damaged_chain_back_to_what_plays) {
+    // Declared length 5, but entry 2 has no repeats: only two entries play, and an insert at the
+    // end lands after those two, not after the garbage.
+    Project &p = g_project;
+    const Entry broken[] = {{0, 0, 1}, {0, 1, 1}, {0, 2, 0}, {0, 3, 1}, {0, 4, 1}};
+    set_chain(p, broken, 5);
+    CHECK_EQ(chain_length(p), 2);
+    CHECK(chain_insert(p, 2, 1, 1, 1));
+    CHECK_EQ(chain_length(p), 3);
+    CHECK_EQ(int(p.chain[2].bank), 1);
+    CHECK_EQ(int(p.chain[3].repeats), 0);
+    CHECK_EQ(int(p.settings.chain_length), 3);
+}

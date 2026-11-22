@@ -118,6 +118,8 @@ constexpr int kSamplePathBytes = 112;
 
 // docs/SPEC.md: "Chains: up to 64 entries per project, each a pattern plus a repeat count."
 constexpr int kChainEntries = 64;
+// The most passes one entry repeats for from the CHAIN page (the file allows up to 255).
+constexpr int kChainRepeatsMax = 16;
 
 // --- the kit --------------------------------------------------------------
 
@@ -171,7 +173,9 @@ struct ProjectSettings {
     uint16_t tempo_centi_bpm = 13000;    // 130.00 BPM; Enaga's clock takes BPM x 100
     uint8_t root = 60;
     uint8_t scale = 0;
-    uint8_t swing = uint8_t(kSwingMin);
+    // No swing here. The file kept a project-wide swing that nothing read; the sequencer only
+    // ever used the PATTERN's (core/pattern.hpp), so the field is gone and its byte in
+    // PROJECT.BIN is reserved (core/project.cpp).
     uint8_t quantize = 100;              // the live-record quantize amount, 0-100
     uint8_t mute_states[8] = {};         // 8 stored mute states, one bit per track
 
@@ -181,6 +185,15 @@ struct ProjectSettings {
 
     uint8_t chain_length = 0;            // how many chain entries are in use
     bool chain_enabled = false;
+
+    // What was live when the project was saved: the mutes as they stood (one bit per track,
+    // bit t = track t muted) and which scenes sat in the morph's slots A and B. Restored on
+    // open, so a set comes back the way it was left rather than all unmuted. The engine owns
+    // them while the project is open; these are its copies for the file. The scene ids are
+    // kept as read and validated by the engine, which knows how many scenes there are.
+    uint8_t live_mutes = 0;
+    uint8_t scene_a = 0;
+    uint8_t scene_b = 1;
 
     // The two send effects and the master bus, as encoder bytes rather than as the floats the
     // mixer runs on. One byte per field, in dsp/buses.hpp's `SendField` and `MasterField`
@@ -268,6 +281,9 @@ constexpr uint16_t kSectionProjectChain = 2;
 // simply does not ask for it. The version therefore does NOT move: the meaning of no existing
 // byte has changed, which is the only thing kProjectVersion tracks.
 constexpr uint16_t kSectionProjectMixer = 3;
+// The live mutes and the A/B scene choice. Optional on read for the same reason as the mixer:
+// an older file without it opens with everything unmuted and scenes 1 and 2, as it always did.
+constexpr uint16_t kSectionProjectLive = 4;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;

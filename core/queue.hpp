@@ -165,6 +165,24 @@ bool chain_start(const Project &project, ChainPlayer &player);
 // clears the undo history and restarts the `1ST` conditions.
 bool chain_advance(const Project &project, ChainPlayer &player, uint8_t &bank, uint8_t &slot);
 
+// --- editing a chain (PROJECT's CHAIN page) --------------------------------
+//
+// Each edit keeps the chain what `chain_length` reads: a prefix of usable entries with every
+// entry after it zeroed, and `settings.chain_length` equal to the prefix. A chain whose stored
+// length and entries disagreed (a damaged file) is first cut back to the usable prefix. All
+// three refuse an index outside the chain, a pattern that cannot exist and a repeat count of
+// 0, leaving the project as it was.
+
+// Replace entry `at` (0 .. length-1).
+bool chain_set(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats);
+
+// Insert a new entry so that it becomes entry `at` (0 .. length); the entries from `at` on move
+// up one. False when the chain already holds kChainEntries.
+bool chain_insert(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats);
+
+// Remove entry `at` (0 .. length-1); the entries after it move down one.
+bool chain_remove(Project &project, int at);
+
 // The pattern the chain is currently on, for the screen. False when the chain is not active.
 bool chain_current(const Project &project, const ChainPlayer &player, uint8_t &bank,
                    uint8_t &slot);

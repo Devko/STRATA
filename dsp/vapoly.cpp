@@ -191,6 +191,20 @@ void VaPoly::trigger(const Trig &trig) {
     active_ = true;
 }
 
+void VaPoly::release(uint8_t note) {
+    for (Slot &s : slots_) {
+        if (s.note != int(note)) continue;
+        if (s.pending) {
+            // Not started yet: a one-frame gate, so it starts and is let go on the next frame
+            // through the same path as a step's length.
+            s.gate = 1;
+        } else if (s.voice.sounding()) {
+            s.voice.gate_off();
+            s.gate = -1;
+        }
+    }
+}
+
 int VaPoly::allocate(uint8_t note) {
     // 1. The voice already sounding this note, if it has started. A repeated chord reuses its
     //    own voices; a waiting voice is not a match, so a ratchet keeps both of its hits.

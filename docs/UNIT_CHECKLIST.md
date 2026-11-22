@@ -901,3 +901,51 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
       On SETUP, CLR goes back.
 - [ ] Notices (an octave, a scene captured, `F1+F3 AGAIN TO SAVE`) appear on the second line in
       every mode, not only in GRID.
+
+## F1 + F5 restart, F1 + F6 stop and reset
+
+- [ ] Playing, F1 + F5: every track jumps back to step 1 on the beat and keeps playing; held
+      notes ring on. The screen says RESTART.
+- [ ] F1 + F6 while playing with a pattern change queued: it stops, the tails are cut at once
+      (no second press needed), the queued change is gone, and the next PLAY starts at step 1.
+- [ ] With CLOCK SRC on MIDI or SYNC both show EXT CLOCK and change nothing.
+
+## The live mutes and scene A/B are saved with the project
+
+- [ ] Mute two tracks, pick scene 7 into slot B (hold scene B + STEP 7), save, power off, power
+      on. The project comes back with the same two tracks muted and scene 7 in slot B.
+- [ ] A project saved by an older build opens with everything unmuted on scenes 1 and 2.
+
+## Hold STEP + VALUE sets the note
+
+- [ ] Hold a STEP key and turn VALUE: the step's note moves (play it to hear), the tempo does
+      not, and letting go leaves the trig as it was. F1 + CLR undoes the whole turn at once.
+
+## MUTATE: OK keeps, CLR reverts; undo works in PERFORM
+
+- [ ] Press MUTATE, then CLR: the track sounds as before and the screen says REVERTED. Press it
+      again, then OK: it stays (KEPT). Works the same in GRID, EDIT and PERFORM.
+- [ ] In PERFORM, F1 + CLR undoes and F1 + OK redoes. Plain CLR still clears the selected macro.
+- [ ] Hold scene A and press CLR: scene A's slot is erased (SCENE ERASED). This used to be F1 + OK.
+
+## PROJECT: the CHAIN and PATTERN pages
+
+The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SETUP.
+
+- [ ] CHAIN: OK on an empty chain adds the playing pattern. STEP 3 makes it A03, VALUE sets the
+      repeats (X1 to X16), OK adds a copy below, LEFT and RIGHT step its pattern, UP and DOWN
+      move between entries, F1 + LEFT removes one. Build A01 X2, A03 X1 and turn it on with
+      F1 + UP: it plays A01 twice, A03 once, and loops. The PLAY marker follows.
+- [ ] Save and reopen: the chain comes back, and so does whether it was on.
+- [ ] PATTERN: LEN at 8 makes a queued change land every 8 steps; SWG moves the swing exactly as
+      VALUE pushed + turned does. F1 + CLR in GRID undoes a LEN change.
+
+## KEYS: a key holds its note
+
+- [ ] KEYS on a VA POLY track with DEC up high: hold three STEP keys for a chord, let one go. That
+      note fades with its release and the other two keep sounding until let go.
+- [ ] The same on a SAMPLE track with a long sample and DEC at hold: the sample plays while the
+      key is down and tails out when it comes up.
+- [ ] Hold a key, change octave, let go: the note stops (it does not hang).
+- [ ] Hold a key and press F4 to leave KEYS: the note stops.
+- [ ] Drum tracks behave as before: letting go changes nothing.

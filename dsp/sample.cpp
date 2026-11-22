@@ -283,6 +283,7 @@ void Sampler::trigger(const Trig &trig) {
         v.gain = 1.0f;
     }
     v.next = trig;
+    v.release_on_start = false;
     v.wait = trig.frame > 65535u ? 65535 : int(trig.frame);
     if (v.wait < v.fade) v.wait = v.fade;
     v.pending = true;
@@ -294,6 +295,16 @@ void Sampler::release_all() {
     // step to zero. A pending trig still starts -- it was scheduled before the stop.
     for (Voice &v : voices_) {
         if (v.playing) v.amp.gate_off();
+    }
+}
+
+void Sampler::release(uint8_t note) {
+    // `next` is the trig a voice is playing once it has started, and the one it is waiting for
+    // before that.
+    for (Voice &v : voices_) {
+        if (v.next.note != note) continue;
+        if (v.pending) v.release_on_start = true;
+        else if (v.playing) v.amp.gate_off();
     }
 }
 
@@ -388,6 +399,10 @@ void Sampler::start(Voice &v) {
     v.level = clamp(velocity * (t.accent ? 1.25f : 1.0f), 0.0f, 1.0f);
     v.amp.gate_on(true);
     v.playing = true;
+    if (v.release_on_start) {
+        v.amp.gate_off();
+        v.release_on_start = false;
+    }
 }
 
 void Sampler::silence(Voice &v) {

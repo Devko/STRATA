@@ -422,7 +422,16 @@ void VaMono::trigger(const Trig &trig) {
     next_ = trig;
     wait_ = int(trig.frame);
     pending_ = true;
+    release_on_start_ = false;
     active_ = true;
+}
+
+void VaMono::release(uint8_t note) {
+    // `next_` is the note sounding once it has started, and the one waiting before that. A
+    // different note has taken the voice since (legato playing): leave it alone.
+    if (next_.note != note) return;
+    if (pending_) release_on_start_ = true;
+    else voice_.gate_off();
 }
 
 void VaMono::release_all() {
@@ -433,6 +442,7 @@ void VaMono::release_all() {
 
 void VaMono::kill_all() {
     pending_ = false;
+    release_on_start_ = false;
     wait_ = 0;
     voice_.kill();
     active_ = false;
@@ -499,6 +509,10 @@ void VaMono::start() {
     // sounding note puts a step in the output, which is a click.
     if (!was_sounding) voice_.reset_phases();
     voice_.gate_on();
+    if (release_on_start_) {
+        voice_.gate_off();
+        release_on_start_ = false;
+    }
 }
 
 }  // namespace strata
