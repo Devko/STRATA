@@ -187,7 +187,7 @@ Eight tools change the music live without touching the stored pattern unless you
 | Throws | Hold to push delay or reverb send to full on the selected tracks; release returns it | No |
 | Mutation | Variations of the selected track: rotate, Euclidean density up or down, bounded randomizing of velocity, micro-timing, probability and notes in scale. Seeded and undoable | OK keeps it, CLR reverts |
 | Macros | 4 macros on encoders A-D in PERFORM mode. Each drives up to 4 parameters on any tracks, each towards its own end. **[rev]** At 0 a macro lets go, and turning it up sweeps each parameter from its live value (kit, then morph) to that end, so a resting macro never holds an EDIT knob or a scene (Roland, 2026-11-22) | Macro setup saves |
-| Resample | Record the master or one track for 1, 2, 4 or 8 bars to `/RECORD` as WAV, then load it into a SAMPLE or GRAIN track in one action | Writes a file |
+| Resample | Record the master or one track for 1, 2, 4 or 8 bars to `/RECORD` as WAV, then load it into a SAMPLE or GRAIN track in one action. **[rev]** Or record the audio input (2026-11-22): encoder B in RESAMPLE picks MASTER or an input route (LINE, LINE L, MIC, DYN MIC, HI-Z) through `enaga::system::input`, C its level; the take is `audio()`'s `in`, bar-aligned like a master take, with a meter and no monitoring. Recording one track alone is still not built | Writes a file |
 
 **Musical defaults that help creativity**
 
@@ -356,6 +356,12 @@ The enum numbering is therefore not the order the UI shows the speeds in.
 - Loaded in the background with `files::load`, whose `done` callback runs in the main context. A track whose sample is still loading stays silent rather than glitching.
 - Files not at 48 kHz are resampled once at load, in main-loop slices.
 - Streams (`files::Stream`) are used only for recording and for loops longer than 30 s.
+  **[rev] Not for loops (Roland, 2026-11-22).** A file too big for the loader's staging buffer is
+  read a 4 MiB chunk at a time (`files::File`) and converted straight into the pool, so a 48 kHz
+  loop of any length the pool and `Cmd::set_sample`'s 24-bit frame count allow (349 s) loads
+  whole and keeps pitch, slices and GRAIN, at no CPU cost. Other rates still convert whole into
+  the 30 s (at 96 kHz) source buffer. Automatic, not a setting. Streaming playback, as a fallback
+  for files that do not fit the pool, is not built and waits for Roland's call.
 - **[rev]** Samples are picked on the box with the **sample browser** (2026-11-22): OK in EDIT or
   MACHINE on a SAMPLE or GRAIN track lists `/SAMPLES` (and `/RECORD`) through `files::list`, and
   OK on a WAV puts its path in the track's kit and loads it through the ordinary swap, transport

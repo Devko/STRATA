@@ -3641,3 +3641,193 @@ TEST(storage_a_kit_save_stores_the_knob_turned_just_before_it) {
     CHECK_EQ(int(kit_read(kit, g_scratch, bytes)), int(SerializeResult::ok));
     CHECK_EQ(int(kit.tracks[2].params[5]), 77);
 }
+
+// --- a file bigger than the loader's staging buffer, read in chunks ---------------------------
+//
+// Roland, 2026-11-22: loops over 30 s load whole, a chunk at a time, instead of streaming. A
+// file bigger than raw_ (16.5 MiB) is opened and read 4 MiB at a time into raw_, each chunk
+// converted straight into the pool. These files are built in place on the fake card.
+
+namespace {
+
+constexpr uint32_t kRawLimit = 30u * 96000u * 6u + 64u * 1024u;   // app/storage.hpp's kRawBytes
+
+// A 48 kHz stereo 24-bit file whose frames are big_value(f) in the top 16 bits, so a frame read
+// one byte off, or a carry across a chunk lost, shows as a wrong value. 6-byte frames do not
+// divide a 4 MiB chunk, so every chunk boundary splits a frame.
+uint32_t make_long24(const char *path, uint32_t frames, uint32_t declared_frames = 0) {
+    const uint32_t bytes = 44u + frames * 6u;
+    uint8_t *p = FakeHost::the().create_file(path, bytes);
+    CHECK(p != nullptr);
+    if (p == nullptr) return 0;
+    enaga::wav::Format format;
+    format.channels = 2;
+    format.rate = 48000;
+    format.bits = 24;
+    enaga::wav::header(p, format, (declared_frames != 0 ? declared_frames : frames) * 6u);
+    for (uint32_t f = 0; f < frames; f++) {
+        const uint16_t l = uint16_t(big_value(f)), r = uint16_t(-big_value(f));
+        uint8_t *q = p + 44u + 6u * f;
+        q[0] = 0; q[1] = uint8_t(l); q[2] = uint8_t(l >> 8);
+        q[3] = 0; q[4] = uint8_t(r); q[5] = uint8_t(r >> 8);
+    }
+    return bytes;
+}
+
+bool settle_long() { return settle(24, 40000); }
+
+}  // namespace
+
+TEST(storage_a_file_bigger_than_the_staging_buffer_loads_whole_in_chunks) {
+    clean();
+    // 3,000,000 frames: 62.5 s at 48 kHz, 18 MB on the card -- refused TOO BIG before.
+    constexpr uint32_t kFrames = 3000000;
+    CHECK(make_long24("/SAMPLES/STEM.WAV", kFrames) > kRawLimit);
+    kit_sample(kLoopTrack, "/SAMPLES/STEM.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle_long());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
+    CHECK_EQ(uint32_t(loop->sample_frames()), kFrames);
+    const int16_t *pcm = loop->sample_data();
+    CHECK(pcm != nullptr);
+    if (pcm != nullptr && uint32_t(loop->sample_frames()) == kFrames) {
+        uint32_t wrong = 0;
+        for (uint32_t f = 0; f < kFrames; f++) {
+            wrong += pcm[2 * f] != big_value(f) ? 1u : 0u;
+            wrong += pcm[2 * f + 1] != int16_t(-big_value(f)) ? 1u : 0u;
+        }
+        CHECK_EQ(wrong, 0u);
+    }
+    // The file is closed again: all eight handles are free.
+    for (int i = 0; i < int(ENAGA_FILES_OPEN); i++) {
+        enaga::files::File probe;
+        CHECK(probe.open("/SAMPLES/STEM.WAV", ENAGA_FILE_READ) == ENAGA_FILE_OK);
+        probe.close();
+    }
+    storage().request_new();
+    CHECK(settle_long());
+}
+
+TEST(storage_a_long_file_shorter_than_its_header_says_plays_what_is_there) {
+    clean();
+    constexpr uint32_t kFrames = 3000000;
+    make_long24("/SAMPLES/CUT.WAV", kFrames, kFrames + 500000);
+    kit_sample(kLoopTrack, "/SAMPLES/CUT.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle_long());
+    CHECK(storage().last_error() == nullptr);
+    const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
+    CHECK_EQ(uint32_t(loop->sample_frames()), kFrames);
+    storage().request_new();
+    CHECK(settle_long());
+}
+
+TEST(storage_a_long_file_at_another_rate_is_resampled_or_refused_by_the_source_buffer) {
+    clean();
+    // 32-bit float stereo at 44.1 kHz: 8-byte frames make 2.5 M frames (56.7 s) a 20 MB file,
+    // past raw_, yet inside src_'s 2,880,000 frames -- so it is read in chunks and resampled.
+    {
+        constexpr uint32_t kFrames = 2500000;
+        uint8_t *p = FakeHost::the().create_file("/SAMPLES/F441.WAV", 44u + kFrames * 8u);
+        CHECK(p != nullptr);
+        enaga::wav::Format format;
+        format.encoding = uint16_t(enaga::wav::floating);
+        format.channels = 2;
+        format.rate = 44100;
+        format.bits = 32;
+        enaga::wav::header(p, format, kFrames * 8u);
+        std::memset(p + 44, 0, kFrames * 8u);   // silence is 0.0f
+        kit_sample(kLoopTrack, "/SAMPLES/F441.WAV");
+        CHECK(storage().request_sample(kLoopTrack));
+        CHECK(settle_long());
+        CHECK(storage().last_error() == nullptr);
+        CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+        const uint32_t expect = Resampler::make(44100, 48000).output_frames(kFrames);
+        CHECK_EQ(slot_of(kLoopTrack).frames, expect);
+        FakeHost::the().remove_file("/SAMPLES/F441.WAV");
+    }
+    // One past src_ is refused TOO LONG, as a whole file is, and holds nothing.
+    {
+        constexpr uint32_t kFrames = 30u * 96000u + 1u;
+        uint8_t *p = FakeHost::the().create_file("/SAMPLES/F441.WAV", 44u + kFrames * 8u);
+        CHECK(p != nullptr);
+        enaga::wav::Format format;
+        format.encoding = uint16_t(enaga::wav::floating);
+        format.channels = 2;
+        format.rate = 44100;
+        format.bits = 32;
+        enaga::wav::header(p, format, kFrames * 8u);
+        kit_sample(kLoopTrack, "/SAMPLES/F441.WAV");
+        CHECK(storage().request_sample(kLoopTrack));
+        CHECK(settle_long());
+        CHECK_EQ(storage().last_error(), "TOO LONG");
+        CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+        CHECK_EQ(slot_of(kLoopTrack).bytes, 0u);
+    }
+    storage().request_new();
+    CHECK(settle_long());
+}
+
+TEST(storage_a_file_past_the_24_bit_frame_count_is_refused_before_it_is_read) {
+    clean();
+    // Mono 16-bit, 2^24 frames: 32 MiB of file, one frame past what Cmd::set_sample can carry.
+    constexpr uint32_t kFrames = 1u << 24;
+    uint8_t *p = FakeHost::the().create_file("/SAMPLES/HUGE.WAV", 44u + kFrames * 2u);
+    CHECK(p != nullptr);
+    if (p != nullptr) {
+        enaga::wav::Format format;
+        format.channels = 1;
+        format.rate = 48000;
+        format.bits = 16;
+        enaga::wav::header(p, format, kFrames * 2u);
+    }
+    kit_sample(kLoopTrack, "/SAMPLES/HUGE.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle_long());
+    CHECK_EQ(storage().last_error(), "TOO LONG");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 0u);         // refused before anything was reserved
+    CHECK_EQ(storage().progress(), 0);
+    FakeHost::the().remove_file("/SAMPLES/HUGE.WAV");
+    storage().request_new();
+    CHECK(settle_long());
+}
+
+TEST(storage_a_card_pulled_or_failing_mid_chunk_fails_the_track_and_frees_the_handle) {
+    clean();
+    make_long24("/SAMPLES/STEM.WAV", 3000000);
+    kit_sample(kLoopTrack, "/SAMPLES/STEM.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    // Until it is between chunks, a few passes in.
+    for (int i = 0; i < 4000 && storage().progress() < 20; i++) pump();
+    CHECK(storage().progress() >= 20);
+    CHECK(storage().progress() < 100);
+    FakeHost::the().set_read_error(true);
+    CHECK(settle_long());
+    CHECK(storage().last_error() != nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 0u);
+    FakeHost::the().set_read_error(false);
+
+    // Again, and this time the card goes.
+    CHECK(storage().request_sample(kLoopTrack));
+    for (int i = 0; i < 4000 && storage().progress() < 20; i++) pump();
+    FakeHost::the().set_card(false);
+    storage().on_card(false);
+    pump(20);
+    CHECK_EQ(storage().loading_track(), -1);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    FakeHost::the().set_card(true);
+    storage().on_card(true);                         // which asks for every track again
+    CHECK(settle_long());
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    for (int i = 0; i < int(ENAGA_FILES_OPEN); i++) {
+        enaga::files::File probe;
+        CHECK(probe.open("/SAMPLES/STEM.WAV", ENAGA_FILE_READ) == ENAGA_FILE_OK);
+        probe.close();
+    }
+    storage().request_new();
+    CHECK(settle_long());
+}

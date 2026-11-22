@@ -442,8 +442,11 @@ void Storage::on_card(bool usable) {
     // (`sample_track_` is -1 whenever no sample job runs, so the job test is belt and braces, and
     // the `sample_queue_ = 0` below is re-filled by the request_all_samples a returning card
     // makes. Both survive mutation for that reason.)
+    // A long file's handle is dead with the card; closing it ends its pending read CANCELLED.
+    chunk_file_.close();
+    chunked_ = false;
     if (job_ == Job::sample_epoch || job_ == Job::sample_read || job_ == Job::sample_convert ||
-        job_ == Job::sample_resample) {
+        job_ == Job::sample_resample || job_ == Job::sample_chunk) {
         if (sample_track_ >= 0) pool_.fail(sample_track_);
         sample_track_ = -1;
     }
@@ -521,6 +524,10 @@ void Storage::finish_job(const char *error) {
         enaga::log(line);
     }
 
+    // A long file read in chunks is finished with whichever way its job ended.
+    if (chunk_file_.is_open()) chunk_file_.close();
+    chunked_ = false;
+
     const bool project_job = job_ == Job::save || job_ == Job::load;
     job_ = Job::idle;
     step_ = 0;
@@ -540,6 +547,7 @@ const char *Storage::busy_text() const {
         case Job::sample_epoch: return "SWAPPING";
         case Job::sample_read: return "READING";
         case Job::sample_convert: return "CONVERTING";
+        case Job::sample_chunk: return "LOADING LONG";
         case Job::sample_resample: return "RESAMPLING";
         case Job::take_write: return "WRITING";
         case Job::kit_scan: return "READING KITS";
@@ -564,7 +572,11 @@ int Storage::progress() const {
         // Both products fit: frames are capped at kSrcFrames (2,880,000) and at the 24 bits
         // Cmd::set_sample carries (16,777,215), so times 100 they stay inside a uint32_t.
         case Job::sample_convert:
+        case Job::sample_chunk:
             return src_frames_ == 0 ? 0 : int(src_done_ * 100u / src_frames_);
+        case Job::sample_read:
+            // Between two chunks of a long file: how far it has got, not 0.
+            return chunked_ && src_frames_ != 0 ? int(src_done_ * 100u / src_frames_) : 0;
         case Job::sample_resample:
             return out_frames_ == 0 ? 0 : int(out_done_ * 100u / out_frames_);
         case Job::kit_scan:
@@ -612,6 +624,13 @@ void Storage::service() {
                     if (sample_track_ >= 0) pool_.fail(sample_track_);
                     sample_track_ = -1;
                     finish_job(enaga::files::error_name(read_result_));
+                } else if (chunked_) {
+                    // The chunk is in raw_ after whatever part of a frame was carried over.
+                    chunk_have_ = chunk_carry_ + uint32_t(read_result_);
+                    chunk_file_pos_ += uint32_t(read_result_);
+                    chunk_pos_ = 0;
+                    begin_job(Job::sample_chunk);
+                    step_sample_chunk();
                 } else {
                     // The job has to MOVE ON here. Leaving it at sample_read would stall after
                     // this first slice: the next pass would find read_done_ false and do nothing.
@@ -622,6 +641,7 @@ void Storage::service() {
             return;
         case Job::sample_convert: step_sample_convert(); return;
         case Job::sample_resample: step_sample_resample(); return;
+        case Job::sample_chunk: step_sample_chunk(); return;
         case Job::take_write: step_take_write(); return;
         case Job::kit_scan: step_kit_scan(); return;
         // Both run start to finish in the pass that begins them, so neither is ever found here.
@@ -1262,6 +1282,22 @@ void Storage::step_sample_epoch() {
     }
     *out = '\0';
 
+    // A file bigger than raw_ is read a chunk at a time (app/storage.hpp, "a file bigger than
+    // raw_"). Asked first, because files::load would only refuse it as TOO BIG after reading
+    // nothing. An info that fails falls through to the load, which reports the same error.
+    src_done_ = 0;
+    out_done_ = 0;
+    src_frames_ = 0;
+    out_frames_ = 0;
+    chunked_ = false;
+    {
+        enaga::files::Info info{};
+        if (enaga::files::info(path, info) == ENAGA_FILE_OK && info.size > kRawBytes) {
+            if (start_chunked(path, info.size)) begin_job(Job::sample_read);
+            return;
+        }
+    }
+
     // Background, with the callback in the main context: docs/SPEC.md names files::load for
     // exactly this. `raw_` belongs to Enaga until the callback, which is why nothing else may
     // start a read while `read_in_flight_` is set.
@@ -1420,6 +1456,188 @@ void Storage::step_sample_convert() {
         out_done_ = src_done_;
         hand_sample_over();
     }
+}
+
+bool Storage::start_chunked(const char *path, uint32_t file_bytes) {
+    const int track = sample_track_;
+    const int32_t opened = chunk_file_.open(path, ENAGA_FILE_READ);
+    if (opened < 0) {
+        pool_.fail(track);
+        sample_track_ = -1;
+        finish_job(enaga::files::error_name(opened));
+        return false;
+    }
+    chunked_ = true;
+    chunk_file_bytes_ = file_bytes;
+    chunk_file_pos_ = 0;
+    chunk_have_ = 0;
+    chunk_pos_ = 0;
+    chunk_carry_ = 0;
+    if (!read_next_chunk()) {
+        pool_.fail(track);
+        sample_track_ = -1;
+        finish_job("READ FAILED");
+        return false;
+    }
+    return true;
+}
+
+// Queue the next chunk into raw_, after the `chunk_carry_` bytes already at its start. False when
+// the read could not be queued; the caller fails the job.
+bool Storage::read_next_chunk() {
+    const uint32_t left = chunk_file_bytes_ - chunk_file_pos_;
+    const uint32_t room = kChunkBytes - chunk_carry_;
+    const uint32_t want = left < room ? left : room;
+    read_in_flight_ = true;
+    read_done_ = false;
+    const int32_t queued =
+        chunk_file_.read<&Storage::sample_loaded>(raw_ + chunk_carry_, want, this);
+    if (queued < 0) {
+        read_in_flight_ = false;
+        return false;
+    }
+    return true;
+}
+
+void Storage::step_sample_chunk() {
+    const int track = sample_track_;
+    if (track < 0) {
+        finish_job(nullptr);
+        return;
+    }
+
+    // The first chunk: the header, the format and the reservation, as step_sample_convert does
+    // for a whole file. What differs is that the file's length comes from its size, not from
+    // what one read returned.
+    if (src_frames_ == 0 && src_done_ == 0 && chunk_file_pos_ == chunk_have_) {
+        if (!enaga::wav::parse(raw_, chunk_have_, format_)) {
+            pool_.fail(track);
+            sample_track_ = -1;
+            finish_job("NOT A WAV");
+            return;
+        }
+        encoding_ = pcm_format_of(format_.encoding, format_.bits);
+        const uint32_t frame_bytes = format_.frame_bytes();
+        if (encoding_ == PcmFormat::unknown || frame_bytes == 0 ||
+            format_.data_offset >= chunk_have_) {
+            pool_.fail(track);
+            sample_track_ = -1;
+            finish_job("BAD FORMAT");
+            return;
+        }
+        if (format_.channels > 2) {
+            pool_.fail(track);
+            sample_track_ = -1;
+            finish_job("TOO MANY CH");
+            return;
+        }
+        // The data chunk's own length, or the rest of the file when the header says 0 or more
+        // than is there -- the same rule a whole file follows.
+        const uint32_t rest = chunk_file_bytes_ - format_.data_offset;
+        const uint32_t data_bytes =
+            (format_.data_bytes == 0 || format_.data_bytes > rest) ? rest : format_.data_bytes;
+        src_frames_ = data_bytes / frame_bytes;
+        if (src_frames_ == 0) {
+            pool_.fail(track);
+            sample_track_ = -1;
+            finish_job("EMPTY");
+            return;
+        }
+        antialias_ = Antialias::make(format_.rate, uint32_t(ENAGA_SAMPLE_RATE));
+        if (format_.rate == uint32_t(ENAGA_SAMPLE_RATE)) {
+            out_frames_ = src_frames_;
+        } else {
+            if (src_frames_ > kSrcFrames) {
+                pool_.fail(track);
+                sample_track_ = -1;
+                finish_job("TOO LONG");
+                return;
+            }
+            cursor_ = Resampler::make(format_.rate, uint32_t(ENAGA_SAMPLE_RATE));
+            out_frames_ = cursor_.output_frames(src_frames_);
+        }
+        // Cmd::set_sample carries 24 bits of frames: 349 s at 48 kHz. Refused before anything is
+        // reserved, not after minutes of reading.
+        if (out_frames_ > 0xFFFFFFu) {
+            pool_.fail(track);
+            sample_track_ = -1;
+            finish_job("TOO LONG");
+            return;
+        }
+        const uint32_t bytes =
+            out_frames_ * uint32_t(format_.channels) * uint32_t(sizeof(int16_t));
+        if (!pool_.reserve(track, bytes)) {
+            pool_.fail(track);
+            sample_track_ = -1;
+            finish_job("NO ROOM");
+            return;
+        }
+        out_offset_ = pool_.slot(track).offset;
+        if ((out_offset_ % sizeof(int16_t)) != 0) {
+            pool_.fail(track);
+            sample_track_ = -1;
+            finish_job("MISALIGNED");
+            return;
+        }
+        chunk_pos_ = format_.data_offset;
+    }
+
+    const int channels = int(format_.channels);
+    const uint32_t frame_bytes = format_.frame_bytes();
+    const bool resampling = format_.rate != uint32_t(ENAGA_SAMPLE_RATE);
+    int16_t *destination = resampling ? src_ : region_ + out_offset_ / sizeof(int16_t);
+
+    // One slice of this chunk.
+    const uint32_t in_chunk = (chunk_have_ - chunk_pos_) / frame_bytes;
+    const uint32_t left = src_frames_ - src_done_;
+    uint32_t want = in_chunk < kSliceFrames ? in_chunk : kSliceFrames;
+    if (want > left) want = left;
+    const uint32_t did =
+        want == 0 ? 0
+                  : pcm_to_s16(raw_ + chunk_pos_, want * frame_bytes, encoding_, channels,
+                               destination + size_t(src_done_) * size_t(channels), want);
+    if (resampling && did != 0) {
+        pcm_antialias(destination + size_t(src_done_) * size_t(channels), did, channels,
+                      antialias_);
+    }
+    src_done_ += did;
+    chunk_pos_ += did * frame_bytes;
+
+    const bool file_done = chunk_file_pos_ >= chunk_file_bytes_;
+    const bool chunk_spent = chunk_have_ - chunk_pos_ < frame_bytes;
+    if (src_done_ >= src_frames_ || (chunk_spent && file_done)) {
+        // All of it, or all the file holds (shorter than its header said: what is there plays).
+        src_frames_ = src_done_;
+        if (chunk_file_.is_open()) chunk_file_.close();
+        chunked_ = false;
+        if (src_frames_ == 0) {
+            pool_.fail(track);
+            sample_track_ = -1;
+            finish_job("EMPTY");
+            return;
+        }
+        if (resampling) {
+            begin_job(Job::sample_resample);
+            out_done_ = 0;
+            cursor_ = Resampler::make(format_.rate, uint32_t(ENAGA_SAMPLE_RATE));
+            return;
+        }
+        out_done_ = src_done_;
+        hand_sample_over();
+        return;
+    }
+    if (!chunk_spent) return;                  // more of this chunk on the next pass
+
+    // The chunk is used up: keep the part of a frame that straddles its end, read the next.
+    chunk_carry_ = chunk_have_ - chunk_pos_;
+    for (uint32_t i = 0; i < chunk_carry_; i++) raw_[i] = raw_[chunk_pos_ + i];
+    if (!read_next_chunk()) {
+        pool_.fail(track);
+        sample_track_ = -1;
+        finish_job("READ FAILED");
+        return;
+    }
+    begin_job(Job::sample_read);
 }
 
 void Storage::step_take_write() {

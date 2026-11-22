@@ -1,6 +1,7 @@
 #include "engine.hpp"
 
 #include "factory.hpp"
+#include "masterloops.h"   // strata_master_peak, for the input meter
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
@@ -1085,6 +1086,9 @@ void Engine::apply(const Command &command) {
             // handed to capture_.arm(). A mutation run found it (docs/MUTATION.md); it is kept as
             // the record of what was asked for, for a future RESAMPLE screen to show.
             resample_bars_ = uint8_t(bars);
+            // Chosen at the arm and kept for the take: a source switched halfway would make a
+            // take that is half one thing and half another.
+            capture_input_ = command.b == 1;
             break;
         }
 
@@ -1720,7 +1724,6 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
 // --- the block ------------------------------------------------------------
 
 void Engine::process(const float *in, float *out, uint32_t frames) {
-    (void)in;
 
     if (!ready_) {
         for (uint32_t i = 0; i < 2 * frames; i++) out[i] = 0.0f;
@@ -1809,7 +1812,22 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // The take, from the FINISHED master: after the mixer, the limiter and beat repeat, which is
     // what comes out of the box (dsp/capture.hpp). A tap, so `out` is not modified.
-    capture_.process(out, int(frames));
+    //
+    // Or from the audio INPUT, when the take was armed with that source: the codec's buffer as it
+    // arrives, before anything STRATA plays, so a synth sampled into a track is the synth alone.
+    // A host that gives no input buffer (the tests' rigs) records silence rather than nothing, so
+    // the take still ends on its frame and the card side still gets a file.
+    static const float kSilence[2u * ENAGA_BLOCK_FRAMES] = {};
+    const float *input = in != nullptr ? in : (frames <= ENAGA_BLOCK_FRAMES ? kSilence : nullptr);
+    capture_.process(capture_input_ ? input : out, int(frames));
+
+    // The input's level, every block, for the RESAMPLE screen's meter: one pass of the master's
+    // own peak loop over the interleaved buffer (L and R alike, so one plane of 2n samples).
+    if (in != nullptr) {
+        const float peak = strata_master_peak(in, in, int(2u * frames));
+        const float clipped = peak > 1.0f ? 1.0f : peak;
+        status_.input_peak.store(uint16_t(clipped * 1000.0f), std::memory_order_relaxed);
+    }
 
     status_.resample_state.store(capture_.done()        ? 3u
                                  : capture_.recording() ? 2u

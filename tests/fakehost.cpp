@@ -89,6 +89,10 @@ void FakeHost::install() {
 }
 
 void FakeHost::reset() {
+    input_source_ = input_level_ = -1;
+    input_calls_ = 0;
+    input_result_ = 0;
+    headphones_ = false;
     clock_ = enaga_clock_state_t{};
     clock_.source = ENAGA_CLOCK_INTERNAL;
     clock_.tempo = 130.0f;            // the default beat's tempo, so a test that forgets is sane
@@ -215,6 +219,24 @@ int FakeHost::add(const char *path, uint32_t bytes, bool folder) {
     e.folder = folder;
     used_ += bytes;
     return count_++;
+}
+
+uint8_t *FakeHost::create_file(const char *path, uint32_t bytes) {
+    int index = find(path);
+    if (index >= 0 && files_[index].capacity >= bytes) {
+        files_[index].bytes = bytes;
+        return arena_ + files_[index].offset;
+    }
+    if (index >= 0) {
+        if (used_ + bytes > kArenaBytes) return nullptr;
+        Entry &e = files_[index];
+        e.offset = used_;
+        e.capacity = e.bytes = bytes;
+        used_ += bytes;
+        return arena_ + e.offset;
+    }
+    index = add(path, bytes, false);
+    return index < 0 ? nullptr : arena_ + files_[index].offset;
 }
 
 bool FakeHost::write_file(const char *path, const void *data, uint32_t bytes) {
@@ -616,9 +638,18 @@ int32_t FakeHost::t_stream_close(int32_t, const void *, uint32_t) { return ENAGA
 void FakeHost::t_open_menu() {}
 void FakeHost::t_set_busy(uint32_t) {}
 void FakeHost::t_speaker(uint32_t) {}
-int32_t FakeHost::t_headphones() { return 0; }
+int32_t FakeHost::t_headphones() { return the().headphones_ ? 1 : 0; }
 uint32_t FakeHost::t_device() { return the().device_; }
-int32_t FakeHost::t_input(uint32_t, uint32_t) { return 0; }
+int32_t FakeHost::t_input(uint32_t source, uint32_t level) {
+    FakeHost &h = the();
+    h.input_calls_++;
+    // As abi.h: -1 for a source or level it does not know, else whatever the test set.
+    if (source > ENAGA_INPUT_LINE_MONO || level > ENAGA_INPUT_HIGH) return -1;
+    if (h.input_result_ != 0) return h.input_result_;
+    h.input_source_ = int(source);
+    h.input_level_ = int(level);
+    return 0;
+}
 int32_t FakeHost::t_midi_send(uint32_t, const uint8_t *, uint32_t) { return 0; }
 uint32_t FakeHost::t_midi_channel() { return 0; }
 
