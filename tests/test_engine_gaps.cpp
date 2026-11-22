@@ -34,6 +34,7 @@ namespace {
 
 constexpr uint8_t kPoly = 6;     // CHORD, VA POLY: the machine that reports its prepared DEC
 constexpr uint8_t kDec = 8;      // AMP slot 0
+constexpr int kRigBlock = strata::test::kRigBlock;
 
 Engine &eng() { return strata::test::engine(); }
 
@@ -927,4 +928,240 @@ TEST(gaps_a_resample_of_zero_bars_is_one_bar_and_of_twenty_is_eight) {
     CHECK_NEAR(double(eng().capture().wanted()), 2.0 * double(one_bar), 2.0);
     post(Cmd::resample_cancel);
     pump();
+}
+
+// --- the block ------------------------------------------------------------------------------------
+
+namespace {
+
+// Blocks after the tick block until `track`'s trigger counter reaches `want`, or -1.
+int blocks_until(int track, uint8_t start, int want, int limit) {
+    for (int b = 0; b < limit; b++) {
+        if (int(uint8_t(triggers(track) - start)) >= want) return b;
+        pump();
+    }
+    return -1;
+}
+
+}  // namespace
+
+TEST(gaps_a_ratchet_hit_lands_in_the_block_its_frame_falls_in_and_follows_the_tempo) {
+    // 120 BPM is exactly 250 frames a tick, so a step is 6000 frames and the second hit of a
+    // two-hit ratchet is at frame 3000: block 46 of 64 frames (2944..3007). A hit deferred
+    // without its frame measured from the next block, or with its block length counted twice,
+    // lands a block late or early.
+    fresh();
+    FakeHost::the().set_tempo(120.0f);
+    FakeHost::the().set_running(true);
+    pump(2);
+    put_trig(0, 0);
+    raw_step(0, 0).ratchet = 2;
+    const uint8_t t0 = triggers(0);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();                                            // block 0: the first hit
+    CHECK_EQ(int(uint8_t(triggers(0) - t0)), 1);
+    CHECK_EQ(blocks_until(0, t0, 2, 200), 3000 / kRigBlock - 0);
+
+    // At 60 BPM a tick is twice as long, so the same hit is at frame 6000: block 93. The tempo
+    // change re-derives the scheduler's step length; without that it would stay at block 46.
+    fresh();
+    FakeHost::the().set_tempo(60.0f);
+    FakeHost::the().set_running(true);
+    pump(2);
+    put_trig(0, 0);
+    raw_step(0, 0).ratchet = 2;
+    const uint8_t t1 = triggers(0);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    CHECK_EQ(blocks_until(0, t1, 2, 400), 6000 / kRigBlock);
+    FakeHost::the().set_tempo(120.0f);
+    pump(2);
+}
+
+TEST(gaps_two_ticks_in_one_block_both_play) {
+    // At 64 frames a block and hundreds of frames a tick the rig never put two ticks in one
+    // block, so the loop over `clock::ticks()` was only ever run once. At a fast tempo or a
+    // larger block it runs more, and every tick must be resolved.
+    fresh();
+    FakeHost::the().set_running(true);
+    put_trig(0, 0);
+    put_trig(0, 1);
+    const uint8_t t0 = triggers(0);
+    FakeHost::the().deliver_tick(0, 0);
+    FakeHost::the().deliver_tick(24, 40);
+    pump();
+    CHECK_EQ(int(uint8_t(triggers(0) - t0)), 2);
+    CHECK_EQ(playhead(0), 1);
+}
+
+TEST(gaps_an_engine_that_never_initialised_writes_silence) {
+    // App::init can fail (a buffer it could not take), and the audio callback still runs.
+    static Engine never;
+    static float out[2 * kRigBlock];
+    for (float &x : out) x = 1.0f;
+    never.process(nullptr, out, uint32_t(kRigBlock));
+    for (int i = 0; i < 2 * kRigBlock; i++) CHECK(out[i] == 0.0f);
+}
+
+TEST(gaps_the_status_counts_rendered_tracks_and_reports_the_peak) {
+    fresh();
+    strata::test::settle(400);
+    pump();
+    CHECK_EQ(int(eng().status().voices.load(std::memory_order_relaxed)), 0);
+    post(Cmd::trigger_note, 0, 0, 36, 127);
+    post(Cmd::trigger_note, kPoly, 0, 60, 127);
+    post(Cmd::trigger_note, 5, 0, 48, 127);
+    pump();
+    CHECK_EQ(int(eng().status().voices.load(std::memory_order_relaxed)), 3);
+    // A loud kick peaks well above a tenth of full scale; x1000 that is over 100.
+    pump(4);
+    CHECK(eng().status().peak_milli.load(std::memory_order_relaxed) > 100u);
+    // A muted track is not rendered, so it is not counted.
+    post(Cmd::set_mute, 5, 0, 1, 0);
+    pump();
+    CHECK_EQ(int(eng().status().voices.load(std::memory_order_relaxed)), 2);
+    post(Cmd::set_mute, 5, 0, 0, 0);
+    pump();
+
+    // And the clock's own state, which the UI draws the transport from.
+    FakeHost::the().set_running(true);
+    FakeHost::the().set_position(777);
+    pump();
+    CHECK_EQ(eng().status().tick.load(std::memory_order_relaxed), 777u);
+    CHECK_EQ(int(eng().status().running.load(std::memory_order_relaxed)), 1);
+    FakeHost::the().set_running(false);
+    pump();
+    CHECK_EQ(int(eng().status().running.load(std::memory_order_relaxed)), 0);
+}
+
+TEST(gaps_a_throw_on_the_first_track_opens_its_send) {
+    fresh();
+    pump();
+    constexpr int kSendA = 14;
+    post(Cmd::set_param, 0, 0, kSendA, 0);
+    pump();
+    post(Cmd::set_throw, 0, 0, 1);                     // track 1, the delay
+    pump();
+    CHECK_EQ(int(eng().performed(0, kSendA)), 127);
+    post(Cmd::set_throw, 0, 0, 0);
+    pump();
+    CHECK_EQ(int(eng().performed(0, kSendA)), 0);
+}
+
+TEST(gaps_a_loaded_kit_is_clamped_and_cuts_what_was_sounding) {
+    fresh();
+    pump();
+    post(Cmd::trigger_note, 0, 0, 36, 127);
+    post(Cmd::trigger_note, kPoly, 0, 60, 127);
+    pump(2);
+    CHECK(poly().sounding_voices() > 0);
+
+    Project &incoming = eng().project_for_load();
+    incoming.kit.tracks[0].params[0] = 200;            // past a knob's range
+    incoming.kit.tracks[1].params[0] = 41;
+    incoming.kit.tracks[0].level = 1.5f;
+    incoming.kit.tracks[1].level = 3.0f;               // past the fader's
+    incoming.kit.tracks[2].level = -1.0f;
+    incoming.kit.tracks[4].machine = uint8_t(MachineId::count);   // a machine this build lacks
+    post(Cmd::project_loaded);
+    pump();
+    CHECK_EQ(int(eng().params(0).get(0)), 127);
+    CHECK_EQ(int(eng().params(1).get(0)), 41);
+    CHECK_NEAR(eng().level(0), 1.5f, 1e-6);
+    CHECK_NEAR(eng().level(1), 2.0f, 1e-6);
+    CHECK_NEAR(eng().level(2), 0.0f, 1e-6);
+    CHECK_EQ(int(eng().machine_id(4)), int(MachineId::kick));
+    // Everything that was sounding was cut, the first track included.
+    CHECK_EQ(poly().sounding_voices(), 0);
+    CHECK_EQ(int(eng().status().voices.load(std::memory_order_relaxed)), 0);
+}
+
+TEST(gaps_muting_one_track_cuts_only_that_track) {
+    fresh();
+    pump();
+    post(Cmd::trigger_note, 0, 0, 36, 127);
+    post(Cmd::trigger_note, kPoly, 0, 60, 127);
+    pump(2);
+    post(Cmd::set_mute, 0, 0, 1, 0);                  // the first track
+    pump();
+    CHECK(eng().muted(0));
+    CHECK(poly().sounding_voices() > 0);               // the chord rings on
+    CHECK_EQ(int(eng().status().voices.load(std::memory_order_relaxed)), 1);
+    post(Cmd::set_mute, 0, 0, 0, 0);
+    pump();
+    // Unmuting is not a cut either.
+    CHECK(poly().sounding_voices() > 0);
+}
+
+TEST(gaps_bars_are_counted_one_by_one_and_resynced_on_a_jump_back) {
+    fresh();
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    const uint32_t start = eng().bar();
+    for (uint32_t b = 1; b <= 3; b++) {
+        FakeHost::the().deliver_tick(b * kTicksPerBar - 1, 0);
+        pump();
+        CHECK_EQ(eng().bar(), start + b - 1);
+        FakeHost::the().deliver_tick(b * kTicksPerBar, 0);
+        pump();
+        CHECK_EQ(eng().bar(), start + b);
+    }
+    // Back exactly one bar and a tick: resynced from the tick.
+    FakeHost::the().deliver_tick(2 * kTicksPerBar - 1, 0);
+    pump();
+    CHECK_EQ(eng().bar(), 1u);
+    FakeHost::the().deliver_tick(2 * kTicksPerBar, 0);
+    pump();
+    CHECK_EQ(eng().bar(), 2u);
+}
+
+TEST(gaps_a_chain_with_repeats_moves_on_after_the_right_number_of_passes) {
+    // Every pass boundary after the first is derived from the one before; a boundary one pass
+    // off moves the chain on a pass early or late.
+    fresh();
+    post(Cmd::set_master_length, 0, 0, 4);             // 96-tick passes, on A1 ...
+    pump();
+    chain_edit(ChainEdit::insert, 0, 0, 0, 3);         // A1 three times
+    chain_edit(ChainEdit::insert, 1, 0, 1, 1);         // then A2
+    FakeHost::the().set_running(true);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    for (uint32_t t = 0; t < 3 * 96; t += 12) {
+        FakeHost::the().deliver_tick(t, 0);
+        pump();
+        CHECK_EQ(int(eng().project().slot), 0);
+    }
+    FakeHost::the().deliver_tick(3 * 96, 0);
+    pump();
+    CHECK_EQ(int(eng().project().slot), 1);
+}
+
+TEST(gaps_a_queued_pattern_starts_its_own_first_pass_with_its_own_lengths) {
+    fresh();
+    // The pattern to switch to: B1, track 1 four steps long with a 1ST trig on step 1.
+    Pattern &next = eng().project_for_load().patterns[1][0];
+    next.tracks[0].length = 4;
+    next.tracks[0].steps[0].flags = kStepTrig;
+    next.tracks[0].steps[0].velocity = 100;
+    next.tracks[0].steps[0].condition = condition_pack(Condition::FIRST);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    FakeHost::the().deliver_tick(30, 0);
+    pump();
+    post(Cmd::queue_pattern, 0, 0, 1, 0, uint8_t(QueueMode::immediate));
+    pump();
+    CHECK_EQ(int(eng().project().bank), 1);
+    const uint8_t t0 = triggers(0);
+    FakeHost::the().deliver_tick(48, 0);
+    pump();
+    // The switch restarted nothing about the clock, but the new pattern is 4 steps long, so
+    // tick 48 is its step 3 -- not step 3 of a 16-step track, which would be the same here --
+    // and tick 96 + 0 wraps to step 1, where 1ST fires because this is the first pass after a
+    // pattern change.
+    FakeHost::the().deliver_tick(96, 0);
+    pump();
+    CHECK_EQ(playhead(0), 0);
+    CHECK_EQ(int(uint8_t(triggers(0) - t0)), 1);
 }
