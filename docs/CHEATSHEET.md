@@ -160,7 +160,8 @@ folders are listed (no `._` files), at most 256 a folder. Picking a file makes t
 | CHAIN | `CHAIN 3/64 ON`, `>02 A05 X2 PLAY` | Entries used, chain on/off; cursor, entry, pattern, repeats, playing now |
 | PATTERN | `>LEN 16 STEPS`, `SWG 54%` | Master length; swing (`>` = field VALUE changes) |
 | PROJECT slots | `05>`, bright box | Queued slot; live slot (bright), has trigs (mid), empty (dark) |
-| PROJECT | `SMP O.X- 12/32M` | Per track sample: O ready, . loading, X failed, - none; MiB used/budget |
+| PROJECT | `SMP OS.X- 12/32M` | Per track sample: O ready, S streamed from the card, . loading, X failed, - none; MiB used/budget |
+| Any | `STREAM LATE` | The card fell behind a streamed file; the gap played as silence |
 | PROJECT | `UNSAVED`, `NO CARD` | RAM differs from the card; no usable card |
 | KIT | `>03 KIT`, `EMPTY`, `UNREADABLE`, `...` | Cursor and slot: holds a kit, nothing, a damaged file, not read yet; the cursor's kit below as two lines of four machines |
 | PERFORM | `A1 12P`, `>A`, `3P` | Scene slot and its parameter count; selected macro; macro targets |

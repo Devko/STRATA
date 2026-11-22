@@ -1014,6 +1014,20 @@ add `scenario_m3.sh` both ways after this change to the next emulator session (t
 cannot select an input route, so the conversion path is only reachable on the unit: section 8c
 of the walkthrough asks for MAX while recording from the input).
 
+### Streaming (2026-11-22): unmeasured, estimated under 1 point per streamed track
+
+Costs nothing on a project that streams nothing: `top_up_streams` and `watch_streams` test one
+flag per track. A streamed track adds, per block, (a) `pcm_to_s16` over the frames that arrived
+(64 at the root pitch, up to 512 while refilling after a restart) and a copy of the carry, and
+(b) the stream voice in `dsp/sample.cpp`, which fetches its four taps through a per-sample
+branch (head, fifo or silence) instead of `generate()`'s branch-free interior. It is one voice,
+against the four a whole-loaded SAMPLE track may run, and it is plain C++ rather than a
+`*.ti.c` loop: an estimate of 30-40 cycles a sample puts it at **0.4-0.5 points a streamed track**
+with the conversion, GCC or cl6x alike. No scenario streams yet (the emulator has no file large
+enough on its card); measure with section 15d of the walkthrough: LOAD with three streamed
+tracks against none. If it is worse than 1 point a track, the fetch is the lever: a fast path
+for a run of samples wholly inside the head or wholly inside the fifo.
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |
@@ -1046,5 +1060,5 @@ count the staging at all.
 | Beat repeat ring (2 bars at 60 BPM, stereo float) | 2.93 MiB | **2.93 MiB** (3,072,000 bytes) reserved at init. Below 60 BPM the ring holds less than two bars, which costs nothing: the longest loop offered is a quarter note, 3 s even at 20 BPM |
 | Delay and reverb buffers | 2 MiB | |
 | Patterns, kit, scenes, 16 undo levels | 2 MiB | **~148 KiB** so far: 17 whole-pattern undo snapshots (~140 KiB) plus the live pattern and the clipboard. In bss, not the heap |
-| Recording ring and stream buffers | 1 MiB | |
+| Recording ring and stream buffers | 1 MiB | **1.13 MiB**: four 256 KiB `files::Stream` rings from the heap (streaming, 2026-11-22), plus eight 16 KiB frame fifos in the engine (bss). The take is not here: it is `Capture`'s own 5.49 MiB. `tests/test_memory.cpp`: init is now **102.2 MiB** of the heap, 17.8 MiB spare |
 | App image, voice pools, UI | 4 MiB | **396 KiB** of text, 52 bytes of data and **1.21 MiB of bss** in the linked ELF (`tic6x-elf-size`). The bss is mostly the live Project at 1.03 MiB plus the undo stack; the 85 MiB above is heap, taken in init() and not in the image |
