@@ -1730,6 +1730,41 @@ TEST(engine_a_morph_is_heard_between_steps_and_not_only_at_the_next_trig) {
     CHECK(pump(8) > 0.01f);                        // the same note, no new trig
 }
 
+TEST(engine_a_macro_at_rest_hands_its_parameter_back_to_the_knob) {
+    // The bug this rule fixes: an assigned macro at 0 used to write its `low` on every rebuild,
+    // so turning that parameter in EDIT moved the screen and not the sound.
+    Engine &engine = clean();
+    post_macro_assign(0, kPoly, kLvl, 40, 120);
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    pump();
+    post(Cmd::set_param, kPoly, 0, kLvl, 90);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 90);   // the knob is heard
+    post(Cmd::set_param, kPoly, 0, kLvl, 17);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 17);   // every time
+
+    // Moved off 0, the macro has it; back to 0, the knob has it again.
+    post(Cmd::set_macro, 0, 0, 0, 127);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 120);
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 17);
+}
+
+TEST(engine_a_macro_at_rest_lets_a_scene_morph_through) {
+    // Scenes are built under macros (kit -> morph -> macros); a resting macro on the same
+    // parameter used to overwrite the morph.
+    Engine &engine = clean();
+    two_scenes_differing_in(kPoly, kLvl, 10, 110);
+    post_macro_assign(0, kPoly, kLvl, 50, 60);
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    post_u(Cmd::set_morph, kMorphScale);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 110);
+}
+
 TEST(engine_a_macro_drives_its_assigned_targets) {
     Engine &engine = clean();
     // Two targets on one macro, one of them inverted: one knob opening a filter while it closes
@@ -1739,11 +1774,18 @@ TEST(engine_a_macro_drives_its_assigned_targets) {
     pump();
     CHECK_EQ(macro_count(engine.macros().macros[0]), 2);
 
+    // At 0 the macro writes nothing: both parameters are the kit's (core/perform.hpp).
     post(Cmd::set_macro, 0, 0, 0, 0);
     pump();
     CHECK_EQ(int(engine.macro_position(0)), 0);
-    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 0);
-    CHECK_EQ(int(engine.performed(kMono, kLvl)), 127);
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), int(engine.params(kPoly).v[kLvl]));
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), int(engine.params(kMono).v[kLvl]));
+
+    // One detent up and the range is the macro's.
+    post(Cmd::set_macro, 0, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 1);
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), 126);
 
     post(Cmd::set_macro, 0, 0, 0, 127);
     pump();

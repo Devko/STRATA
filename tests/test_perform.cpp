@@ -938,3 +938,16 @@ TEST(perform_read_never_looks_past_the_bytes_it_was_given) {
         if (ok != (size == written)) CHECK_EQ(ok, size == written);
     }
 }
+
+TEST(macro_apply_at_position_zero_writes_nothing) {
+    // The knob owns the parameter while the macro rests (core/perform.hpp).
+    Macro macro{};
+    macro.targets[0] = MacroTarget{1, 2, 3, 100, 20};
+    uint8_t out[kTracks][kKitParams] = {};
+    out[2][3] = 77;
+    macro_apply(macro, 0, out);
+    CHECK_EQ(int(out[2][3]), 77);
+    macro_apply(macro, 1, out);
+    CHECK_EQ(int(out[2][3]), 99);
+}
+

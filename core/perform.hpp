@@ -179,6 +179,14 @@ void macro_range_through(uint8_t now, uint8_t far, uint8_t position, uint8_t &lo
 // parameter that does not exist are skipped -- a macro set up for a build with more parameters
 // must not write past the array.
 //
+// **At position 0 a macro writes nothing: the knob has the parameter back.** It used to write
+// `low` at 0 like at every other position, so an assigned macro held its parameters for as long
+// as it stayed assigned -- turning that parameter's knob in EDIT moved the screen and not the
+// sound, and a scene morphing the same parameter was overwritten too. Roland's decision,
+// 2026-11-22. The price is one step: a parameter whose knob moved while the macro sat at 0 goes
+// to the macro's own range on the first detent up. An assignment made with `macro_range_through`
+// at 0 has `low` equal to the knob, so an untouched parameter does not jump at all.
+//
 // Later targets win over earlier ones when two drive the same parameter. That is a consequence
 // of writing them in order rather than a decision worth defending; the UI should not offer it.
 void macro_apply(const Macro &macro, uint8_t position, uint8_t out[kTracks][kKitParams]);

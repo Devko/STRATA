@@ -103,9 +103,13 @@ TEST(dispatch_every_macro_command_reaches_what_is_heard) {
     pump(2);
     CHECK_EQ(int(engine.performed(1, kLvl)), 10);
 
-    post(Cmd::set_macro, 0, 0, 0, 0);                    // moved: heard at once
+    post(Cmd::set_macro, 0, 0, 0, 1);                    // moved: heard at once
     pump(2);
-    CHECK_EQ(int(engine.performed(1, kLvl)), 110);
+    CHECK_EQ(int(engine.performed(1, kLvl)), 109);
+
+    post(Cmd::set_macro, 0, 0, 0, 0);                    // at rest the knob has it back
+    pump(2);
+    CHECK_EQ(int(engine.performed(1, kLvl)), int(kit));
 
     post(Cmd::macro_clear, 0, 0, 0);                     // cleared: back to the kit
     pump(2);

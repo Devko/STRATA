@@ -284,6 +284,8 @@ void macro_range_through(uint8_t now, uint8_t far, uint8_t position, uint8_t &lo
 }
 
 void macro_apply(const Macro &macro, uint8_t position, uint8_t out[kTracks][kKitParams]) {
+    // At rest the knob owns the parameter (core/perform.hpp).
+    if (position == 0) return;
     for (int i = 0; i < kMacroTargets; i++) {
         const MacroTarget &target = macro.targets[i];
         if (target.enabled == 0) continue;
