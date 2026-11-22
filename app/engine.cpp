@@ -967,8 +967,9 @@ void Engine::apply(const Command &command) {
             if (command.a < kScenes) {
                 // The kit as it is NOW, which means refreshing it from `params_` first.
                 //
-                // `project_.kit` is only written by `Cmd::kit_store`, and nothing posts that
-                // except a save -- while a knob turn writes `params_`. So a capture read the kit
+                // `project_.kit` is only written by `Cmd::kit_store`, and only a save (of the
+                // project or of a kit) posts that -- while a knob turn writes `params_`. So a
+                // capture read the kit
                 // as of the last SAVE: pressing OK in PERFORM stored the sound the project had
                 // when it was last written, not the sound in the room. Found independently by
                 // two reviews, from opposite directions, and the comment that used to be here
