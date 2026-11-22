@@ -276,6 +276,8 @@ LEDs update from the main context only. The UI keeps a shadow of every LED and s
 
 A project is one folder on the card. It loads fully into RAM when opened (patterns about 1.1 MiB, samples up to 64 MiB) and saves bank by bank with Enaga's crash-safe `files::save`.
 
+**[rev]** Projects are picked and named on the panel: PROJECT's fifth page, PROJECTS, lists the folders in `PROJECTS/`; OK twice opens one (like a reload, it drops unsaved work and stops the transport) and makes it the one STRATA starts with; FUNC+DOWN is SAVE AS, a name typed with Enaga's `ui::TextEntry` (16 characters of A-Z, 0-9, space and `- + . # !`), written whole into a new folder. A name another folder already has is refused rather than overwritten. Delete and rename stay on the computer: Enaga has no rename.
+
 **Card layout**
 
 ```

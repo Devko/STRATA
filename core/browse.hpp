@@ -77,6 +77,10 @@ public:
     // or -1. For putting the cursor on the file a track already plays.
     int find(const char *name) const;
 
+    // Are these the same name, compared without regard to case as FAT does? Null is no name and
+    // matches nothing.
+    static bool same_name(const char *a, const char *b);
+
     // The folder above this one: "/SAMPLES/KICKS" -> "/SAMPLES". A top folder ("/SAMPLES") has no
     // parent on the card, so it writes "" -- the virtual root.
     static void parent_of(const char *folder, char *out, int max);
