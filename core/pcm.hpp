@@ -108,4 +108,40 @@ struct Resampler {
 uint32_t pcm_resample(const int16_t *in, uint32_t in_frames, int channels, Resampler &cursor,
                       int16_t *out, uint32_t max_out);
 
+// --- anti-aliasing ----------------------------------------------------------
+
+// The low-pass a DOWNSAMPLE needs before pcm_resample reads the source.
+//
+// Linear interpolation at a lower rate keeps everything above the new Nyquist and folds it back
+// down: a 96 kHz file with energy at 30 kHz plays it at 18 kHz. So when the source rate is above
+// the output rate, the converted source is filtered in place first. An upsample (44.1 to 48 kHz,
+// the common case) has nothing above the new Nyquist to fold, and gets no filter.
+//
+// An 8th-order Butterworth, four biquads, with its corner at 5/12 of the output rate (20 kHz at
+// 48 kHz). That is 23 dB down where a 96 kHz file's 28 kHz would fold to 20 kHz, 37 dB at 34 kHz
+// (folding to 14 kHz) and 48 dB at 40 kHz (to 8 kHz). It runs once at load in main-loop slices,
+// like the resampler, so its cost is load time and not the audio block's: docs/BUDGET.md,
+// "Load time". The coefficients are made once per file, where a divide is fine; the filter loop
+// has none.
+//
+// Float state, carried here between slices, so a file filtered in slices is bit-identical to one
+// filtered in one call.
+struct Antialias {
+    static constexpr int kSections = 4;
+    static constexpr int kMaxChannels = 2;
+
+    bool active = false;                  // false: pcm_antialias leaves the frames alone
+    float b0[kSections] = {}, b1[kSections] = {}, b2[kSections] = {};
+    float a1[kSections] = {}, a2[kSections] = {};
+    float z1[kMaxChannels][kSections] = {}, z2[kMaxChannels][kSections] = {};
+
+    // Active only when both rates are believable and source_rate > output_rate.
+    static Antialias make(uint32_t source_rate, uint32_t output_rate);
+};
+
+// Filter `frames` frames of `channels` interleaved int16 in place, advancing `filter`'s state.
+// Does nothing when the filter is not active or `channels` is outside 1..kMaxChannels. Clamped
+// to int16, because a Butterworth rings past a full-scale edge.
+void pcm_antialias(int16_t *samples, uint32_t frames, int channels, Antialias &filter);
+
 }  // namespace strata

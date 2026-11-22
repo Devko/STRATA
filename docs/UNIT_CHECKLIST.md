@@ -848,3 +848,14 @@ wants confirming on the unit, because "bit-exact" was argued against GCC and the
 - [ ] Record the unit's load with cl6x for a 4- and a 6-voice chord, and put both in
       docs/BUDGET.md next to the GCC-only table. That column is the one this container cannot
       produce, and the 60% target depends on it.
+
+## Downsampled samples are low-passed at load
+
+core/pcm now filters a file above 48 kHz before resampling it, so content above 24 kHz no longer
+folds back as audible tones. It costs main-loop time at load, estimated and not measured.
+
+- [ ] Load a 30 s stereo 96 kHz WAV and time it. Put the figure in docs/BUDGET.md, "Load time".
+      The screen must keep drawing and the keys keep answering while it shows RESAMPLING.
+- [ ] Load a 96 kHz sweep that runs past 24 kHz and play it. Nothing should come back down as a
+      falling tone after the sweep passes 24 kHz.
+- [ ] A 44.1 kHz file must sound exactly as before: it is not filtered.

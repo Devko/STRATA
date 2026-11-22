@@ -802,6 +802,26 @@ after the last hit with high feedback, which matters for battery and for any hea
 passage was relying on. Not re-measured: this cloud session has no emulator and no cl6x. Run the
 load scenario with feedback at 0.95 to confirm.
 
+### Load time: the downsample low-pass (2026-11-22, host only)
+
+A file above 48 kHz is now low-passed before the load-time resample (`Antialias` in core/pcm:
+8th-order Butterworth at 20 kHz, four float biquads per channel). Before, a 96 kHz file's 34 kHz
+came back at 14 kHz at full level; now it is more than 30 dB down (tests/test_pcm.cpp). **This is
+not an audio-block cost**: it runs in the main loop's convert slices, once per file, and only for
+files above 48 kHz. 44.1 kHz files, the common case, are not filtered at all.
+
+| Measure | Figure | Where |
+| --- | --- | --- |
+| Filter, 30 s stereo 96 kHz (11 MiB of int16) | 52-64 ms, 170-210 MiB/s | host, x86 2.3 GHz, GCC -O2 |
+| Linear resample of the same | 11 ms | same |
+| Filter on the unit, estimated | 0.6 s (cl6x) to about 2 s (GCC) for that file | 4 serial biquads, about 40 cycles per sample at best |
+| Card read of the same file, for comparison | 1.5 s at 7,600 KiB/s | measured earlier |
+
+So the worst case roughly doubles the load time of a long 96 kHz file, and one 48,000-frame convert
+slice grows by an estimated 10-26 ms, which is main-loop time (screen and keys), not audio. Not
+measured on the unit: docs/UNIT_CHECKLIST.md has the line. If a slice turns out to stall the
+screen, the fix is a smaller slice for downsampled files, not dropping the filter.
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |

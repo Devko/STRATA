@@ -1909,6 +1909,42 @@ TEST(storage_a_wav_at_another_rate_is_resampled_once_at_load) {
     CHECK(slot_of(kLoopTrack).frames > 1000u);
 }
 
+TEST(storage_a_downsampled_wav_is_low_passed_before_it_is_resampled) {
+    // The loader's bytes are what core/pcm's low-pass then resample give for the same square
+    // wave, and not what the resample alone gives: the filter is wired into the convert step.
+    // That the result does not depend on the slicing is core/pcm's test.
+    clean();
+    constexpr uint32_t kFrames = 4800;
+    make_wav("/SAMPLES/AA96.WAV", 96000, 2, 16, kFrames);
+    kit_sample(kLoopTrack, "/SAMPLES/AA96.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    pump(2);
+
+    static int16_t source[kFrames * 2];
+    static int16_t filtered[kFrames * 2];
+    static int16_t plain[kFrames * 2];
+    for (uint32_t f = 0; f < kFrames; f++) {
+        source[f * 2] = source[f * 2 + 1] = (f / 32u) % 2u == 0u ? 12000 : -12000;
+    }
+    Resampler cursor = Resampler::make(96000, 48000);
+    const uint32_t n_plain = pcm_resample(source, kFrames, 2, cursor, plain, kFrames);
+    Antialias lowpass = Antialias::make(96000, 48000);
+    pcm_antialias(source, kFrames, 2, lowpass);
+    cursor = Resampler::make(96000, 48000);
+    const uint32_t n = pcm_resample(source, kFrames, 2, cursor, filtered, kFrames);
+    CHECK_EQ(n, n_plain);
+
+    const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
+    CHECK_EQ(uint32_t(loop->sample_frames()), n);
+    const int16_t *pcm = loop->sample_data();
+    CHECK(pcm != nullptr);
+    if (pcm != nullptr && uint32_t(loop->sample_frames()) == n) {
+        CHECK(std::memcmp(pcm, filtered, n * 2 * sizeof(int16_t)) == 0);
+        CHECK(std::memcmp(pcm, plain, n * 2 * sizeof(int16_t)) != 0);
+    }
+}
+
 TEST(storage_a_chunk_after_the_data_is_not_counted_as_audio) {
     // A WAV may carry chunks AFTER its data -- LIST, cue and id3 are all common -- and those bytes
     // are not audio: played, they are a burst of noise on the end of the sample. The frame count
