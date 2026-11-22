@@ -249,6 +249,9 @@ Back to GRID, track 2 selected, playing.
       entry and that pattern is live; PLAY starts the set from the top. With the chain off the
       pattern stays where it was.
 
+- [ ] STOP right after the third kick (the locked step 9), then turn D DRIVE in PERFORM and play
+      a kick pad: the kick follows the macro. A stop used to leave that step's lock holding it.
+
 ## 12. PROJECT pages: slots, CHAIN, PATTERN, SETUP (6 min)
 
 PROJECT, then octave RIGHT walks CHAIN, PATTERN, SETUP; octave LEFT walks back; CLR on any of
@@ -341,7 +344,8 @@ New after the walkthrough was written: a DJ isolator on the master, LOW / MID / 
 - [ ] Change the tempo (unsaved). PROJECT, FUNC+LEFT once: `AGAIN TO RELOAD`, nothing changes.
       Again within 2 s: `RELOADING`, and the tempo is back to 142.0.
 - [ ] FUNC+RIGHT once: `AGAIN FOR NEW`, nothing changes. Twice: `NEW PROJECT`, and it is the
-      factory project again (A01 GROOVE, all eight tracks audible; NEW used to be silent). A single press of either key never loses work.
+      factory project again (A01 GROOVE, all eight tracks audible; NEW used to be silent).
+      Track 8's blips play too: a SAMPLE track with no file now plays the placeholder (PR #42). A single press of either key never loses work.
 - [ ] Both also work from the SETUP page.
 
 ## 15. Kit browser: FUNC+EDIT twice (6 min)
