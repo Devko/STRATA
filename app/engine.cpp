@@ -36,7 +36,8 @@ static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first
                   kFactoryAmp == page_first(Page::amp) && kFactoryFx == page_first(Page::fx),
               "core/factory.hpp's page layout and dsp/track.hpp's have diverged");
 
-static_assert(kKitParams == kParams,
+static_assert(kKitParams == kTrackParams && kKitSoundParams == kParams &&
+                  kKitLfoParams == kLfoParams,
               "core/project.hpp's kit record and dsp/track.hpp's TrackParams have diverged; a "
               "saved project would come back with the wrong number of parameters per track");
 
@@ -75,7 +76,11 @@ bool Engine::init(float sample_rate) {
         pool_[t].poly.init(rate_);
         pool_[t].sampler.init(rate_);
         pool_[t].grain.init(rate_);
+        // A seed per track, so eight S&H LFOs do not move together. Fixed, so a render is
+        // repeatable.
+        lfo_[t].init(0x9E3779B9u * uint32_t(t + 1));
     }
+    inv_rate_ = enaga::dsp::reciprocal(rate_);
 
     // The duck fires from the kick, and the kick itself must not duck.
     //
@@ -266,7 +271,7 @@ void Engine::forget_prepared() {
 void Engine::prepare_machine(int track) {
     Machine *machine = machines_[track];
     if (machine == nullptr) return;
-    const TrackParams &params = effective_[track];
+    const TrackParams &params = sounding(track);
     if (prepare_memo_ && machine_prepared_for_[track] == machine &&
         __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0) {
         return;
@@ -277,7 +282,7 @@ void Engine::prepare_machine(int track) {
 }
 
 void Engine::prepare_chain(int track) {
-    const TrackParams &params = effective_[track];
+    const TrackParams &params = sounding(track);
     const ChainMix &mix = mix_[track];
     if (prepare_memo_ && chain_prepared_valid_[track] &&
         chain_prepared_mix_[track].level == mix.level &&
@@ -446,7 +451,7 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::lock_delta: {
-            if (command.a >= kParams) break;
+            if (command.a >= kTrackParams) break;
             const uint8_t param = command.a;
 
             // The base is the step's own lock if it has one, and the kit value if it does not --
@@ -479,7 +484,7 @@ void Engine::apply(const Command &command) {
                 // parameter this mask does not claim -- undoes the line above before a sample is
                 // rendered, leaving exactly the silence the comment says it prevents. fire()
                 // rebuilds the mask for the next step, so this only has to hold until then.
-                locked_[track] = uint16_t(locked_[track] | uint16_t(1u << param));
+                locked_[track] = locked_[track] | (1u << param);
             }
             break;
         }
@@ -837,7 +842,7 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::set_param:
-            if (command.a < kParams) {
+            if (command.a < kTrackParams) {
                 uint8_t value = command.b;
                 if (command.c == kDeltaFlag) {
                     const int next = int(params_[track].v[command.a]) + int(int8_t(command.b));
@@ -964,7 +969,7 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::macro_assign:
-            if (command.a >= kMacros || command.b >= kParams) {
+            if (command.a >= kMacros || command.b >= kTrackParams) {
                 // Counted, like the "macro is full" refusal below it. Two refusals in one
                 // command reported two different ways is how a user concludes the box is broken.
                 status_.bump_refused();
@@ -1188,7 +1193,7 @@ void Engine::apply(const Command &command) {
 void Engine::kit_from_params() {
     for (int t = 0; t < kTracks; t++) {
         KitTrack &track = project_.kit.tracks[t];
-        for (int i = 0; i < kParams; i++) track.params[i] = params_[t].v[i];
+        for (int i = 0; i < kTrackParams; i++) track.params[i] = params_[t].v[i];
         track.level = mix_[t].level;
         // `machine` and `sample` are not derived from anything the engine owns yet: a track's
         // machine is fixed at init until M6 makes it switchable, and sample paths arrive with
@@ -1234,7 +1239,7 @@ void Engine::params_from_kit() {
 
     for (int t = 0; t < kTracks; t++) {
         const KitTrack &track = project_.kit.tracks[t];
-        for (int i = 0; i < kParams; i++) {
+        for (int i = 0; i < kTrackParams; i++) {
             params_[t].v[i] = track.params[i] > 127 ? uint8_t(127) : track.params[i];
         }
         // Rebuilt from the kit so a loaded project is heard immediately rather than at the next
@@ -1282,7 +1287,7 @@ void Engine::apply_performance() {
 
     // The kit as stored.
     for (int t = 0; t < kTracks; t++) {
-        for (int p = 0; p < kParams; p++) performed_[t][p] = params_[t].v[p];
+        for (int p = 0; p < kTrackParams; p++) performed_[t][p] = params_[t].v[p];
     }
 
     // The scenes, if two are assigned. An empty scene behaves as the kit, so an unassigned slot
@@ -1549,15 +1554,15 @@ void Engine::fire(const StepEvent &event) {
     // why this happens before the trig check.
     // From `performed_`, not `params_`: the morph, the macros and any throw are part of the
     // sound a step starts from, and only the step's own locks go over the top of them.
-    for (int p = 0; p < kParams; p++) effective_[track].v[p] = performed_[track][p];
+    for (int p = 0; p < kTrackParams; p++) effective_[track].v[p] = performed_[track][p];
 
     const LockView locks = pattern_step_locks(live(), track, int(event.step));
     int applied = 0;
-    uint16_t locked = 0;
+    uint32_t locked = 0;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
-        if (lock->param >= kParams || applied >= kMaxLocksApplied) continue;
+        if (lock->param >= kTrackParams || applied >= kMaxLocksApplied) continue;
         effective_[track].v[lock->param] = lock->value;
-        locked = uint16_t(locked | uint16_t(1u << lock->param));
+        locked = locked | (1u << lock->param);
         applied++;
     }
     // Which parameters this step has locked, so the performance layer leaves them alone until
@@ -1651,6 +1656,53 @@ void Engine::fire(const StepEvent &event) {
     }
 }
 
+// --- the LFOs -------------------------------------------------------------
+//
+// Once per block, after the locks: each track whose LFO is on gets `modulated_`, its effective
+// parameters with the destination byte moved, and `sounding()` hands that to prepare. A track
+// whose LFO is off is prepared from `effective_` exactly as before, which is what keeps every
+// existing render bit-exact: nothing below runs for it but one compare.
+
+void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fraction_in) {
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t *bytes = &effective_[t].v[kParams];
+        if (__builtin_memcmp(lfo_bytes_[t], bytes, kLfoParams) != 0) {
+            for (int i = 0; i < kLfoParams; i++) lfo_bytes_[t][i] = bytes[i];
+            lfo_settings_[t] = LfoSettings::make(bytes);
+        }
+        const LfoSettings &s = lfo_settings_[t];
+        if (!s.on()) {
+            modulating_[t] = false;
+            continue;
+        }
+
+        float value;
+        if (s.sync_ticks == 0) {
+            value = lfo_[t].advance(s.wave, s.hz * float(frames) * inv_rate_);
+        } else if (running) {
+            // On the clock's own position, so a synced LFO sits on the bar wherever the song is
+            // and follows an external clock. A multiply and a floor rather than `%`: this chip
+            // has no integer divide. A float holds the position to well under a tick for the
+            // first 2^24 ticks, about 22 hours at 130 BPM.
+            const float fraction = fraction_in < 0.0f ? 0.0f
+                                   : (fraction_in > 1.0f ? 1.0f : fraction_in);
+            float phase = (float(position) + fraction) * s.inv_sync_ticks;
+            phase -= float(enaga::dsp::floor_int(phase));
+            value = lfo_[t].seek(s.wave, phase >= 1.0f || phase < 0.0f ? 0.0f : phase);
+        } else {
+            // Stopped: keep moving at the tempo, so the sound does not freeze between takes.
+            const float ticks = float(frames) * inv_samples_per_tick_;
+            value = lfo_[t].advance(s.wave, ticks * s.inv_sync_ticks);
+        }
+        lfo_value_[t] = value;
+
+        modulated_[t] = effective_[t];
+        uint8_t &target = modulated_[t].v[s.dest];
+        target = lfo_apply(target, value, s.depth);
+        modulating_[t] = true;
+    }
+}
+
 // --- the block ------------------------------------------------------------
 
 void Engine::process(const float *in, float *out, uint32_t frames) {
@@ -1676,6 +1728,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         tempo_ = clock_now.tempo;
         const float bpm = tempo_ > 1.0f ? tempo_ : 1.0f;
         samples_per_tick_ = rate_ * 60.0f / (bpm * float(enaga::clock::ppqn));
+        inv_samples_per_tick_ = enaga::dsp::reciprocal(samples_per_tick_);
         reconfigure();
     }
 
@@ -1698,12 +1751,16 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // current step has a lock, which always wins. Without this a morph would only be heard at
     // the next trig, and sweeping VALUE between steps would do nothing at all.
     for (int t = 0; t < kTracks; t++) {
-        const uint16_t locked = locked_[t];
-        for (int p = 0; p < kParams; p++) {
+        const uint32_t locked = locked_[t];
+        for (int p = 0; p < kTrackParams; p++) {
             if ((locked >> p & 1u) != 0) continue;
             effective_[t].v[p] = performed_[t][p];
         }
     }
+
+    // The LFOs, last, over everything: the kit, the morph, the macros and the step's locks all
+    // decide where the destination sits, and the LFO moves it about there (dsp/lfo.hpp).
+    run_lfos(frames, clock_now.running, clock_now.position, clock_now.fraction);
 
     mixer_.prepare(sends_, master_);
     mixer_.begin_block(int(frames));

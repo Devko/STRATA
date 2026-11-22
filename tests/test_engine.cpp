@@ -1871,7 +1871,7 @@ TEST(engine_a_macro_with_four_targets_refuses_a_fifth) {
     CHECK_EQ(macro_count(engine.macros().macros[1]), kMacroTargets);
 
     // A parameter index no track has is not a target either.
-    post_macro_assign(2, 0, uint8_t(kParams), 0, 127);
+    post_macro_assign(2, 0, uint8_t(kTrackParams), 0, 127);
     pump();
     CHECK_EQ(macro_count(engine.macros().macros[2]), 0);
 }
@@ -2206,13 +2206,13 @@ TEST(engine_a_parameter_a_track_does_not_have_is_ignored) {
     pump();
     CHECK_EQ(int(kit_value(0, kLvl)), 127);        // clamped to the top of the range
 
-    post(Cmd::set_param, 0, 0, uint8_t(kParams), 5);
+    post(Cmd::set_param, 0, 0, uint8_t(kTrackParams), 5);
     post(Cmd::set_param, 0, 0, 200, 5);
     pump();
-    for (int p = 0; p < kParams; p++) CHECK(int(kit_value(0, p)) != 5);
+    for (int p = 0; p < kTrackParams; p++) CHECK(int(kit_value(0, p)) != 5);
 
     // And a lock on a parameter no track has is not stored either.
-    post(Cmd::lock_delta, 0, 0, uint8_t(kParams), uint8_t(int8_t(-1)));
+    post(Cmd::lock_delta, 0, 0, uint8_t(kTrackParams), uint8_t(int8_t(-1)));
     pump();
     CHECK_EQ(int(pattern_locks_reachable(engine.pattern())), 0);
 }
