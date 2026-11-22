@@ -827,6 +827,10 @@ void Storage::step_sample_epoch() {
         // Not yet. A wrap is harmless -- this compares against the value it saw rather than
         // counting -- but a track whose epoch never moves must not hang the loader for ever.
         if (++epoch_waited_ < kEpochPasses) return;
+        // Giving the range back unconfirmed is safe for one reason only: the `clear_sample`
+        // posted above is still in the ring, and service() starts nothing while the ring is
+        // non-empty. So the audio side kills the voice before anything can write here again.
+        // tests/test_storage.cpp pins it; drop that gate and this line becomes the bug.
         pool_.fail(track);
         sample_track_ = -1;
         finish_job("NO SWAP");

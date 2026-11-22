@@ -2236,6 +2236,38 @@ TEST(storage_a_sample_swap_gives_up_if_the_epoch_never_moves) {
     CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
 }
 
+TEST(storage_after_no_swap_nothing_new_starts_until_the_clear_is_applied) {
+    // NO SWAP gives the track's range back WITHOUT the epoch's confirmation, which on its face
+    // is the one thing the swap protocol forbids: a voice may still be reading it. What makes it
+    // safe is that the `clear_sample` it posted is still in the ring, and the card side starts
+    // nothing -- no load, no save, no other swap -- while the ring is non-empty. So the audio side
+    // applies the clear, and kills the voice, before anything can write that memory again. This
+    // test pins that ordering, because removing either half would bring the bug back silently.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    make_wav("/SAMPLES/STUCK.WAV", 48000, 1, 16, 300);
+    make_wav("/SAMPLES/NEXT.WAV", 48000, 1, 16, 300);
+    kit_sample(kLoopTrack, "/SAMPLES/STUCK.WAV");
+    kit_sample(kLoopTrack - 1, "/SAMPLES/NEXT.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    for (int i = 0; i < 513; i++) storage().service();
+    CHECK_EQ(storage().last_error(), "NO SWAP");
+    CHECK(!engine().commands().empty());             // the clear is still waiting
+
+    // Another track asks. The card side alone, as long as it likes: nothing starts.
+    CHECK(storage().request_sample(kLoopTrack - 1));
+    for (int i = 0; i < 600; i++) storage().service();
+    CHECK(storage().busy_text() == nullptr);
+    CHECK_EQ(host.loads(), 0);
+
+    // The audio side drains the ring -- the stuck track's clear included -- and only then does
+    // the next swap run.
+    CHECK(settle());
+    CHECK(host.loads() > 0);
+    CHECK_EQ(int(slot_of(kLoopTrack - 1).state), int(SampleState::ready));
+}
+
 TEST(storage_a_card_pulled_mid_read_holds_the_buffer_until_the_callback) {
     // `raw_` belongs to Enaga until the callback, which still arrives after a removal -- with an
     // error. So the job is abandoned and the track fails, but nothing may start another read until
