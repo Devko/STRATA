@@ -29,7 +29,7 @@ The stock firmware is sample-only. STRATA's edge is synthesized drums and bass n
 - A linear song timeline. Pattern chains only.
 - Multi-take audio tracks like the stock GLOBAL tracks.
 - USB audio and USB mass storage (no stack yet; planned for Enaga E5). **[rev]** USB MIDI does exist, and it arrives through the same `on_midi` path as the DIN jacks, so it costs nothing extra once MIDI is wired.
-- A full sample editor. Start, end, loop and slices only.
+- A full sample editor. Start, end, loop and slices only. **[rev]** Slices can follow the sample: SLC AUTO (push SLC's knob on EDIT) cuts at the strongest hits found when the sample loads (`core/onsets.hpp`: hop energy against the recent mean, up to 15 points, ranked), instead of into equal parts. The points are found again at every load, not stored; KIT.BIN's optional third section holds only each track's AUTO flag. Points cannot be moved by hand.
 - Testing on the Lofi-12 XT and CyDrums. Same board, so keep key labels device-aware, but develop and test on the SmplTrek.
 
 ## Platform facts and constraints

@@ -3937,3 +3937,63 @@ TEST(ui_layout_the_projects_page_and_save_as) {
     key(ENAGA_KEY_CLR);
     key(ENAGA_KEY_F4);
 }
+
+// --- SLC AUTO: push SLC's knob on a SAMPLE track ----------------------------------------------
+
+TEST(ui_pushing_slc_on_a_sample_track_turns_auto_slicing_on_and_off) {
+    Strata &app = fresh();
+    const KitTrack &kit = app_engine().project().kit.tracks[0];
+    sample_track_in_edit();
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+
+    // SLC is the fourth knob on SRC: push D.
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceAuto));
+    CHECK(std::strcmp(UiProbe::notice(app), "SLICES AUTO") == 0);
+    CHECK(app_storage().dirty());
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+    CHECK(std::strcmp(UiProbe::notice(app), "SLICES EVEN") == 0);
+
+    // Pushing another knob, or on another page, does not touch it.
+    key(ENAGA_KEY_PUSH_A);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+    key(ENAGA_KEY_SELECT_LEFT);
+
+    // FUNC + push is still the kill EQ, not this.
+    shift_key(ENAGA_KEY_PUSH_A);
+    shift_key(ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+
+    // Nor on a track that is not SAMPLE: GRAIN has no slices.
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::grain));
+    pump(4);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_slc_auto_line) {
+    Strata &app = fresh();
+    sample_track_in_edit();
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    check_layout(app, "EDIT SRC, SAMPLE, slices even");
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    pump(2000);                                      // let the SLICES AUTO notice go
+    check_layout(app, "EDIT SRC, SAMPLE, AUTO with no hits");
+    const_cast<Status &>(app_engine().status()).slice_points[0].store(15);
+    check_layout(app, "EDIT SRC, SAMPLE, AUTO with 15 hits");
+    const_cast<Status &>(app_engine().status()).slice_points[0].store(0);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    key(ENAGA_KEY_F4);
+}

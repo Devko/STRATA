@@ -316,6 +316,9 @@ const char *mode_name(Mode mode) {
     }
 }
 
+// SAMPLE's SLC, the parameter SLC AUTO goes with (dsp/sample.cpp's parameter table).
+constexpr int kSlcParam = 3;
+
 const char *page_name(Page page) {
     switch (page) {
         case Page::src:  return "SRC";
@@ -408,6 +411,26 @@ public:
             end_gesture();
             notice("LOCK CLEARED");
             return;
+        }
+
+        // SLC AUTO: on EDIT, a SAMPLE track, push the knob that turns SLC. Cuts at the hits found
+        // in the sample (core/onsets.hpp) rather than evenly; push again for even. Before the
+        // kill switches so FUNC + push stays theirs: this one is without FUNC.
+        if (mode_ == Mode::edit && !shift_ &&
+            (key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||
+             key == ENAGA_KEY_PUSH_D) &&
+            engine_.machine_id(selected_) == uint8_t(MachineId::sample)) {
+            const int encoder = key == ENAGA_KEY_PUSH_A   ? 0
+                                : key == ENAGA_KEY_PUSH_B ? 1
+                                : key == ENAGA_KEY_PUSH_C ? 2
+                                                          : 3;
+            if (page_first(Page(param_page_)) + encoder == kSlcParam) {
+                if (!down) return;
+                const bool on = !slices_auto(selected_);
+                post(Cmd::set_slice_mode, uint8_t(selected_), 0, on ? kSliceAuto : kSliceEqual);
+                notice(on ? "SLICES AUTO" : "SLICES EVEN");
+                return;
+            }
         }
 
         // The master kill EQ's kill switches: push A, B or C on the MIXER's EQ page, or FUNC +
@@ -2250,6 +2273,31 @@ public:
         canvas.text(0, 96, "FUNC+EDIT: MACHINE", 7);
         // And a sample track's file is picked from here.
         if (plays_files(selected_)) canvas.text(0, 105, "OK: PICK SAMPLE", 7);
+        // And how SAMPLE's SLC cuts, on the page SLC is on.
+        if (engine_.machine_id(selected_) == uint8_t(MachineId::sample) &&
+            base <= kSlcParam && kSlcParam < base + 4) {
+            out = line;
+            if (!slices_auto(selected_)) {
+                append(out, "PUSH SLC: AUTO SLICE");
+            } else {
+                const uint8_t hits =
+                    engine_.status().slice_points[selected_].load(std::memory_order_relaxed);
+                append(out, "SLC AUTO: ");
+                if (hits == 0) {
+                    append(out, "NO HITS");
+                } else {
+                    append_number(out, hits);
+                    append(out, hits == 1 ? " HIT" : " HITS");
+                }
+            }
+            *out = 0;
+            canvas.text(0, 87, line, 7);          // between the knobs and the hints below
+        }
+    }
+
+    // SLC AUTO on this track: the kit's byte, which only the audio side writes, by command.
+    bool slices_auto(int track) const {
+        return engine_.project().kit.tracks[track].slice_mode == kSliceAuto;
     }
 
     // --- MIXER: four levels at a time, with meters -----------------------

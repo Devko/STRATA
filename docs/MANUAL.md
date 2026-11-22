@@ -351,6 +351,16 @@ window is cut into equal slices and the **note picks the slice**: C4 (60) is sli
 2, and so on, so a chopped loop lies across the notes in order. The factory LOOP track uses 8
 slices. Loop modes repeat the window or the slice.
 
+**SLC AUTO.** Equal slices only fit a loop whose hits sit on an even grid. A played break does
+not, so its slices start before or after the hit they were meant to hold. Push **D** (the SLC
+knob) on the SRC page to turn **AUTO** on: SLC then cuts at the hits STRATA found in the sample
+when it loaded, instead of evenly. SLC still sets how many slices: at SLC 8 the window is cut at
+its 7 strongest hits, in order. The line under the knobs says `SLC AUTO: 12 HITS` (up to 15 are
+found per sample), and with fewer hits inside the STA/LEN window there are fewer slices. With no
+hit in the window (`NO HITS`, or a window between two hits), it cuts evenly as before. Push D
+again for even slices (`SLICES EVEN`). AUTO is saved with the kit. A streamed file has no
+slices either way.
+
 ### GRN: GRAIN
 
 Granular playback of the track's sample: up to 8 overlapping grains in one voice. The most
