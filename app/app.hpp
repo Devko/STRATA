@@ -1675,9 +1675,9 @@ public:
         // so a page walked with the selection keys is all it can see of MIXER and SETUP.
         {
             const int screen = int(mode_) * 16 + (mode_ == Mode::mixer ? mixer_bank_
-                                                                       : (mode_ == Mode::project
-                                                                              ? int(project_page_)
-                                                                              : 0));
+                                                  : mode_ == Mode::project ? int(project_page_)
+                                                  : mode_ == Mode::edit    ? param_page_
+                                                                           : 0);
             if (screen != logged_screen_) {
                 logged_screen_ = screen;
                 char line[24];
@@ -1690,6 +1690,10 @@ public:
                 } else if (mode_ == Mode::project && project_page_ != ProjectPage::slots) {
                     *out++ = ' ';
                     append(out, project_page_name(project_page_));
+                } else if (mode_ == Mode::edit) {
+                    // EDIT's page, so a scenario can reach the LFO page with the selection keys.
+                    *out++ = ' ';
+                    append(out, page_name(Page(param_page_)));
                 }
                 *out = 0;
                 enaga::log(line);
