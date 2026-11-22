@@ -274,4 +274,50 @@ bool chain_current(const Project &project, const ChainPlayer &player, uint8_t &b
     return true;
 }
 
+// --- editing a chain -----------------------------------------------------------
+
+namespace {
+
+// Cut the chain back to its usable prefix and zero everything after it, so the edits below can
+// treat `length` as the truth. Returns the length.
+int chain_normalize(Project &project) {
+    const int length = chain_length(project);
+    for (int i = length; i < kChainEntries; i++) project.chain[i] = ChainEntry{};
+    project.settings.chain_length = uint8_t(length);
+    return length;
+}
+
+bool chain_entry_valid(uint8_t bank, uint8_t slot, uint8_t repeats) {
+    return repeats != 0 && project_index_valid(int(bank), int(slot));
+}
+
+}  // namespace
+
+bool chain_set(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats) {
+    if (!chain_entry_valid(bank, slot, repeats)) return false;
+    const int length = chain_normalize(project);
+    if (at < 0 || at >= length) return false;
+    project.chain[at] = ChainEntry{bank, slot, repeats};
+    return true;
+}
+
+bool chain_insert(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats) {
+    if (!chain_entry_valid(bank, slot, repeats)) return false;
+    const int length = chain_normalize(project);
+    if (at < 0 || at > length || length >= kChainEntries) return false;
+    for (int i = length; i > at; i--) project.chain[i] = project.chain[i - 1];
+    project.chain[at] = ChainEntry{bank, slot, repeats};
+    project.settings.chain_length = uint8_t(length + 1);
+    return true;
+}
+
+bool chain_remove(Project &project, int at) {
+    const int length = chain_normalize(project);
+    if (at < 0 || at >= length) return false;
+    for (int i = at; i + 1 < length; i++) project.chain[i] = project.chain[i + 1];
+    project.chain[length - 1] = ChainEntry{};
+    project.settings.chain_length = uint8_t(length - 1);
+    return true;
+}
+
 }  // namespace strata
