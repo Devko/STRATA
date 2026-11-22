@@ -337,6 +337,22 @@ project. Back in STRATA's project from 14 (or any project), playing.
       recalled kit is what comes back.
 - [ ] Kits are shared: FUNC+RIGHT twice (new project), FUNC+EDIT twice: slot 1 is still there.
 
+## 15b. Sample browser: OK on a SMP or GRN track (5 min)
+
+New 2026-11-22. Put a few WAVs in `/SAMPLES` on the card first (the two test files from
+`unit-test/` will do, plus one in a subfolder, and a file whose name has `_` in it).
+
+- [ ] EDIT on track 8 (SMP): the page says `OK: PICK SAMPLE`. OK opens `SAMPLES T8 SMP` with
+      the folder's WAVs and folders (`/` after a folder), no `._` files, no overlaps.
+- [ ] PLAYING, DOWN to a file and OK: `LOADING`, the line under the title shows the load, then
+      track 8 plays the new file and **the beat never stops**. Click at the swap? `________`
+- [ ] DOWN, OK again: the next file replaces it. The `NOW` line names the file.
+- [ ] OK on a folder opens it; CLR goes up with the cursor on that folder; CLR at `/SAMPLES`
+      shows `SAMPLES/` and `RECORD/`; CLR there goes back to EDIT. Same from MACHINE (OK).
+- [ ] Reopen the browser: it starts in the track's folder with the cursor on its file.
+- [ ] PROJECT says `UNSAVED`; save, reload (FUNC+LEFT twice): track 8 has the picked file.
+- [ ] A folder of many files: listing time `________` (about how long `READING FOLDER` shows).
+
 ## 16. Six voices: the STRATA6 app (4 min)
 
 STRATA6 is the same build with the chord stab set to MIN11 (six notes). Leave STRATA through
@@ -1401,6 +1417,19 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
 - [ ] After a recall PROJECT says `UNSAVED`; FUNC+PROJECT twice saves it, and the reopened project
       has the recalled kit.
 - [ ] Kits are shared: start a NEW project (PROJECT, FUNC+RIGHT twice) and slot 1 is still there.
+
+## SAMPLES: the sample browser (OK on a SMP or GRN track)
+
+- [ ] OK in EDIT or MACHINE on a SMP or GRN track opens the browser in the track's folder (or
+      `/SAMPLES`), cursor on its file; on any other machine OK does nothing there.
+- [ ] Only WAVs (any case of `.wav`) and folders are listed, sorted folders first; macOS `._`
+      files and `.Trashes` are not. A folder of 300 files shows 256 and `+44`.
+- [ ] OK loads with the transport running; repeated OKs on different files never wedge the
+      loader, and the last one picked is what plays. Pulling the card mid-listing: `NO CARD` or
+      an error, and the browser still answers CLR.
+- [ ] `/SAMPLES` missing on the card: an error line (`NOT FOUND`), CLR still reaches `RECORD/`.
+      (The host fake answers NOT FOUND for a missing folder; Enaga's real answer is unverified.)
+- [ ] A long name is cut to the line, and `_` shows as `-`.
 
 ## Factory content: audition list (2026-11-22)
 
