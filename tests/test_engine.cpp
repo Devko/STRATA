@@ -1931,6 +1931,25 @@ TEST(engine_never_touches_the_transport_itself) {
     CHECK_NEAR(host.tempo(), 130.0f, 0.01);
 }
 
+TEST(engine_a_tempo_that_is_not_a_number_or_out_of_range_is_refused_before_conversion) {
+    // int() of a NaN or of a float past INT_MAX is undefined, and the range check used to run
+    // on the int AFTER that conversion. It now runs on the float.
+    Engine &engine = clean();
+    post_f(Cmd::set_tempo, 120.0f);
+    pump();
+    const uint16_t good = engine.project().settings.tempo_centi_bpm;
+    CHECK_EQ(int(good), 12000);
+
+    const uint32_t before = refused();
+    post_f(Cmd::set_tempo, __builtin_nanf(""));
+    post_f(Cmd::set_tempo, __builtin_inff());
+    post_f(Cmd::set_tempo, 1.0e30f);
+    post_f(Cmd::set_tempo, -1.0e30f);
+    pump();
+    CHECK_EQ(int(refused() - before), 4);
+    CHECK_EQ(int(engine.project().settings.tempo_centi_bpm), int(good));
+}
+
 TEST(engine_follows_the_clock_rather_than_a_play_command) {
     Engine &engine = clean();
     (void)engine;

@@ -439,9 +439,12 @@ void Engine::apply(const Command &command) {
             // tempo: a comparison against NaN is false, which is why the clamp is written as
             // "inside the range, or the default" rather than as two one-sided tests.
             {
+                // Range-checked as a FLOAT, before the conversion: int() of a NaN or of a value
+                // past INT_MAX is undefined behaviour, so testing the int afterwards was too late.
                 const float centi = command.f * 100.0f;
-                const int rounded = int(centi + 0.5f);
-                const bool sane = rounded >= int(kTempoCentiMin) && rounded <= int(kTempoCentiMax);
+                const bool sane =
+                    centi >= float(kTempoCentiMin) - 0.5f && centi < float(kTempoCentiMax) + 0.5f;
+                const int rounded = sane ? int(centi + 0.5f) : 0;
                 project_.settings.tempo_centi_bpm =
                     sane ? uint16_t(rounded) : project_.settings.tempo_centi_bpm;
                 if (!sane) status_.bump_refused();
