@@ -72,6 +72,7 @@ struct UiProbe {
     static bool mute_mode(const Strata &app) { return app.mute_mode_; }
     static int scene_holding(const Strata &app) { return app.scene_holding_; }
     static int keys_octave(const Strata &app) { return app.keys_octave_; }
+    static int keys_held_note(const Strata &app, int key) { return app.keys_held_note_[key]; }
 
     static const char *notice(const Strata &app) { return app.notice_; }
     static bool notice_showing(const Strata &app) { return app.notice_showing(); }
@@ -839,6 +840,26 @@ TEST(ui_a_mutation_is_kept_with_ok_and_reverted_with_clr_in_any_mode) {
     CHECK(!same());                                  // the mutation is back
     CHECK_EQ(UiProbe::notice(app), "REDO");
     key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_a_keys_key_holds_its_note_until_it_comes_up) {
+    // KEYS: the press plays, the release lets that same note go -- even after an octave change
+    // while it was down -- and a mode change lets go of whatever is still held.
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F4);                          // KEYS
+    step_down(0);
+    const int note = UiProbe::keys_held_note(app, 0);
+    CHECK(note >= 0);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    step_up(0);
+    CHECK_EQ(UiProbe::keys_held_note(app, 0), -1);
+
+    step_down(2);
+    CHECK(UiProbe::keys_held_note(app, 2) >= 0);
+    key(ENAGA_KEY_F4);                                // away, with the key still down
+    CHECK_EQ(UiProbe::keys_held_note(app, 2), -1);
+    step_up(2);
     pump(2);
 }
 

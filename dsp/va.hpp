@@ -259,6 +259,7 @@ public:
     void prepare(const TrackParams &params) override;
     void trigger(const Trig &trig) override;
     void release_all() override;
+    void release(uint8_t note) override;
     void kill_all() override;
     void render_add(float *out, int frames) override;
     bool active() const override { return active_; }
@@ -300,6 +301,7 @@ private:
     Trig next_{};                       // the pending trig and the frames until it starts
     int wait_ = 0;
     bool pending_ = false;
+    bool release_on_start_ = false;     // released before its frame: let go as soon as it starts
 
     float work_[VaVoice::kControl] = {};    // the slice being built
     float env_[VaVoice::kControl] = {};

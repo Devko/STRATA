@@ -802,6 +802,13 @@ after the last hit with high feedback, which matters for battery and for any hea
 passage was relying on. Not re-measured: this cloud session has no emulator and no cl6x. Run the
 load scenario with feedback at 0.95 to confirm.
 
+### KEYS note release (2026-11-22, not measured)
+
+`Machine::release(note)` was added to VA, VA POLY and SAMPLE for KEYS mode's key-up. It runs once
+per key release, in the command handler, and touches no render loop: the only per-voice addition
+is a flag test when a voice STARTS. No figure above changes. Not re-measured, because this cloud
+session has no emulator and no cl6x; the next load scenario run on Roland's PC covers it.
+
 ### Load time: the downsample low-pass (2026-11-22, host only)
 
 A file above 48 kHz is now low-passed before the load-time resample (`Antialias` in core/pcm:

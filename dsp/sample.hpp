@@ -65,6 +65,7 @@ public:
     void prepare(const TrackParams &params) override;
     void trigger(const Trig &trig) override;
     void release_all() override;
+    void release(uint8_t note) override;
     void kill_all() override;
     void render_add(float *out, int frames) override;
     bool active() const override { return active_; }
@@ -137,6 +138,7 @@ private:
         int fade = 0;           // frames of fade left, 0 when not fading
         int wait = 0;           // frames until `next` starts
         bool pending = false;
+        bool release_on_start = false;   // released before its frame: let go once it starts
         Trig next{};
 
         // An Envelope with sustain 0 parks in the `sustain` stage rather than reaching `idle`

@@ -1395,3 +1395,63 @@ TEST(vapoly_is_safe_to_trigger_before_the_first_prepare) {
     CHECK(finite_within(g_a, blocks * kBlk, kChordBound));
     CHECK(peak(g_a, blocks * kBlk) > 0.0f);
 }
+
+// --- release(note): KEYS mode letting a key go --------------------------------------------------
+
+TEST(vapoly_releasing_a_note_is_its_gate_closing_on_that_frame) {
+    // A key held for K blocks then let go must sound exactly like the same note carrying a gate of
+    // K blocks: same release, same tail, from the same frame. And only that note of a chord.
+    const TrackParams p = patch();
+    constexpr int kHeld = 20;
+    const int blocks = blocks_for(1.5f);
+    const uint8_t notes[] = {60, 64, 67};
+
+    VaPoly gated;
+    gated.init(kRate);
+    gated.prepare(p);
+    for (uint8_t note : notes) {
+        gated.trigger(hit(note, 100, false, 0, note == 64 ? uint32_t(kHeld * kBlk) : 0u));
+    }
+    clear(g_a, blocks * kBlk);
+    const int n = render(gated, p, g_a, blocks);
+
+    VaPoly held;
+    held.init(kRate);
+    held.prepare(p);
+    for (uint8_t note : notes) held.trigger(hit(note, 100, false, 0, 0));
+    clear(g_b, blocks * kBlk);
+    render(held, p, g_b, kHeld);
+    held.release(64);
+    held.release(50);                                  // a note nothing holds: nothing happens
+    render(held, p, g_b + kHeld * kBlk, blocks - kHeld);
+
+    CHECK_EQ(first_difference(g_a, g_b, n), -1);
+    CHECK(holds(held, 60));
+    CHECK(holds(held, 67));
+}
+
+TEST(vapoly_a_note_released_before_its_frame_still_starts_and_is_let_go) {
+    // Pressed and released inside one block: the note must not be lost and must not hang. It
+    // starts on its frame and is released one frame later, exactly as a one-frame gate is.
+    const TrackParams p = patch();
+    const int blocks = blocks_for(1.0f);
+
+    VaPoly gated;
+    gated.init(kRate);
+    gated.prepare(p);
+    gated.trigger(hit(60, 100, false, 40, 1));
+    clear(g_a, blocks * kBlk);
+    const int n = render(gated, p, g_a, blocks);
+
+    VaPoly tapped;
+    tapped.init(kRate);
+    tapped.prepare(p);
+    tapped.trigger(hit(60, 100, false, 40, 0));
+    tapped.release(60);
+    clear(g_b, blocks * kBlk);
+    render(tapped, p, g_b, blocks);
+
+    CHECK_EQ(first_difference(g_a, g_b, n), -1);
+    CHECK(peak(g_b, n) > 0.0f);
+    CHECK(!tapped.active());
+}

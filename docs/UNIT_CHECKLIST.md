@@ -938,3 +938,13 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
 - [ ] Save and reopen: the chain comes back, and so does whether it was on.
 - [ ] PATTERN: LEN at 8 makes a queued change land every 8 steps; SWG moves the swing exactly as
       VALUE pushed + turned does. F1 + CLR in GRID undoes a LEN change.
+
+## KEYS: a key holds its note
+
+- [ ] KEYS on a VA POLY track with DEC up high: hold three STEP keys for a chord, let one go. That
+      note fades with its release and the other two keep sounding until let go.
+- [ ] The same on a SAMPLE track with a long sample and DEC at hold: the sample plays while the
+      key is down and tails out when it comes up.
+- [ ] Hold a key, change octave, let go: the note stops (it does not hang).
+- [ ] Hold a key and press F4 to leave KEYS: the note stops.
+- [ ] Drum tracks behave as before: letting go changes nothing.

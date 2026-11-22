@@ -1095,6 +1095,13 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::release_note:
+            // A KEYS key coming up. Not refused on a muted track or with nothing holding the
+            // note: a release with nothing to let go is the second half of a gesture whose
+            // first half was swallowed, and it changes nothing (dsp/track.hpp, `release`).
+            if (machines_[track]) machines_[track]->release(clamp_u8(command.a));
+            break;
+
         case Cmd::resample_arm: {
             // Bars into FRAMES, here, because only this side knows the tempo in samples. A bar
             // is kTicksPerBar ticks whatever the pattern's length is -- a resample is a length of

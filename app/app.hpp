@@ -414,9 +414,10 @@ public:
 
         // In KEYS the STEP keys are an instrument: sixteen degrees of the project's scale from
         // the root up, which is what docs/SPEC.md means by "STEP keys play notes in scale".
-        // Taken on the press only -- see keys_note below on why there is no release.
+        // The press plays the note and the release lets it go (play_key, below).
         if (mode_ == Mode::keys && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
             if (down) play_key(key - ENAGA_KEY_STEP1);
+            else release_key(key - ENAGA_KEY_STEP1);
             return;
         }
 
@@ -806,6 +807,9 @@ public:
     void leave_mode() {
         step_page_ = false;
         mutation_pending_ = false;
+        // A KEYS key held across a mode change: its release goes to the next mode, so the note
+        // is let go here or it would hang on a sustaining machine.
+        for (int i = 0; i < 16; i++) release_key(i);
         if (held_step_ >= 0) {
             release_hold();
             end_gesture();
@@ -2217,16 +2221,23 @@ public:
         return scale_step(scale_fold(uint8_t(base), root, scale), root, scale, step);
     }
 
-    // A STEP key played. One trigger, no release.
-    //
-    // There is no release because the `Machine` interface has none: `dsp/track.hpp` offers
-    // `release_all()` and nothing per-note, so releasing one key of a held chord would silence
-    // the whole machine. A pad hit has the same shape (`on_pad_press` triggers and
-    // `on_pad_release` does nothing for the lower pads), so this is consistent rather than a
-    // gap peculiar to KEYS -- but it IS why `Cmd::release_note` is still unimplemented, and
-    // giving it meaning needs a per-note release on the machine interface first.
+    // A STEP key played, and its release. The note is held while the key is down: the press
+    // triggers with no gate and the release lets that note go (dsp/track.hpp, `release`), so a
+    // pad or a chord on VA, VA POLY or SAMPLE sustains for as long as it is held. The note is
+    // remembered per key, so an octave change while a key is down still releases what it
+    // started rather than a note it never played.
+    void release_key(int step) {
+        if (step < 0 || step >= 16 || keys_held_note_[step] < 0) return;
+        post(Cmd::release_note, uint8_t(keys_held_track_[step]), 0,
+             uint8_t(keys_held_note_[step]));
+        keys_held_note_[step] = -1;
+    }
+
     void play_key(int step) {
         const uint8_t note = keys_note(step);
+        release_key(step);                       // a press without its release: let that go first
+        keys_held_note_[step] = int16_t(note);
+        keys_held_track_[step] = uint8_t(selected_);
         // A key has no velocity. 100 is what the default kit's own trigs use, so a part played
         // in and a part programmed in sound the same.
         post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity);
@@ -3198,6 +3209,9 @@ private:
     // owns that, and the UI reads it back through the accessors.
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
     bool mutation_pending_ = false;             // a MUTATE waiting for OK (keep) or CLR (revert)
+    int16_t keys_held_note_[16] = {-1, -1, -1, -1, -1, -1, -1, -1,
+                                   -1, -1, -1, -1, -1, -1, -1, -1};   // KEYS: what each key holds
+    uint8_t keys_held_track_[16] = {};          // and on which track
     int scene_holding_ = -1;                    // a scene pad held: -1, 0 for A, 1 for B
     int macro_selected_ = 0;
 
