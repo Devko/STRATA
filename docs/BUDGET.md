@@ -881,7 +881,7 @@ scene or knob really did move: those prepare as before.
 1. **The worst case in this file is the default kit's, not the app's.** Since machine switching
    (M6), any track can host VA POLY, and nothing caps voices across tracks. At 2.16 points a
    voice (cl6x, emulator), eight tracks of six-voice chords would be ~104% of the block before the
-   chains and sends, and **four** would already be over 60%. GRAIN at full density is similar
+   chains and sends, and **four** would reach about 60% with the other four tracks playing. GRAIN at full density is similar
    (+9.2 points a track, GCC-only). This is a design decision, not an optimisation: a global
    sustained-voice budget with cross-track stealing is the usual answer, and tonight's unit
    figures should set its size.
