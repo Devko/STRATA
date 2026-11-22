@@ -257,6 +257,15 @@ used in. All three are small and all three are here rather than only in a commen
 | **The send and master settings** | MIXER mode's pages 3-6: DLY, REV, ROUTE, MST, on the selection keys next to the two pages of faders | The spec gives the sends no gesture at all and the master only F1 + VALUE for the DJ filter. Fourteen settings reach PROJECT.BIN; a setting in a file that no gesture can change is a setting nobody can use. MIXER is the mode already about the buses |
 | **The record quantize amount** | PROJECT mode's SETUP page, encoder A | It was on F1 + VALUE, which the spec gives to the master DJ filter. That had nowhere to go either -- it is one knob with no page -- so the spec's own assignment won and quantize moved |
 | **The SETUP page itself** | The octave keys, in PROJECT mode only | Every F-key is taken, plain and with F1. In PROJECT mode the octave keys were setting GRID's step page, which is not on screen there, so the gesture was free |
+| **Chains and the master length** (Roland approved, 2026-11-22) | PROJECT's CHAIN and PATTERN pages, between the slots and SETUP on the octave keys. CHAIN is a list: UP/DOWN pick an entry, LEFT/RIGHT step its pattern, a STEP key sets it, VALUE or A the repeats (1-16), OK adds, F1 + LEFT removes. PATTERN holds LEN (master length) and SWG | The spec gives chains and the master length no gesture, so CHAIN ON always refused. Chain edits are not undoable: core/undo snapshots the pattern and the chain is not in it |
+| **Erasing a scene** | Hold the scene pad + CLR, in PERFORM | It was F1 + OK, which the spec gives to redo; redo and undo now work in PERFORM |
+
+**Decided with Roland on 2026-11-22.** The project-wide swing is removed (nothing read it; the
+pattern's swing is the one that plays), with its PROJECT.BIN byte reserved. The live mutes and
+the scenes in slots A and B are saved with the project and restored on open. A KEYS key holds its
+note until it comes up (`Machine::release`). MUTATE waits for OK (keep) or CLR (revert).
+**Still open:** F1 + OK and F1 + CLR in PROJECT reload the card and start a new project, so undo
+and redo are not on those keys there. Changing that needs new homes for reload and new.
 
 **EDIT has no encoder-slot strip at the bottom**, against the spec's "Bottom area: the 4 encoder
 slots" on every screen. EDIT already shows the same four parameters in large type, one row per

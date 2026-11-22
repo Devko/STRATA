@@ -1096,3 +1096,56 @@ TEST(va_an_accented_voice_does_not_read_an_unaccented_voices_coefficients) {
     for (int i = 0; i < n; i++) CHECK(out_accented[i] == out_alone[i]);
     CHECK_EQ(cache.count, 2);                                        // two keys, not one
 }
+
+// --- release(note): KEYS mode letting a key go --------------------------------------------------
+
+TEST(va_releasing_the_sounding_note_is_a_release_and_another_note_is_ignored) {
+    const TrackParams p = patch();
+    constexpr int kHeld = 12;
+    const int blocks = blocks_for(1.0f);
+    float *buffers[2] = {g_a, g_b};
+    for (int pass = 0; pass < 2; pass++) {
+        VaMono va;
+        va.init(kRate);
+        va.prepare(p);
+        va.trigger(hit(60));
+        clear(buffers[pass], blocks * kBlk);
+        render(va, p, buffers[pass], kHeld);
+        if (pass == 0) va.release_all(); else va.release(60);
+        render(va, p, buffers[pass] + kHeld * kBlk, blocks - kHeld);
+    }
+    bool same = true;
+    for (int i = 0; i < blocks * kBlk; i++) same = same && g_a[i] == g_b[i];
+    CHECK(same);
+
+    // A key that is not the sounding note (the voice moved on to another) changes nothing.
+    for (int pass = 0; pass < 2; pass++) {
+        VaMono va;
+        va.init(kRate);
+        va.prepare(p);
+        va.trigger(hit(60));
+        clear(buffers[pass], blocks * kBlk);
+        render(va, p, buffers[pass], kHeld);
+        if (pass == 1) va.release(55);
+        render(va, p, buffers[pass] + kHeld * kBlk, blocks - kHeld);
+    }
+    same = true;
+    for (int i = 0; i < blocks * kBlk; i++) same = same && g_a[i] == g_b[i];
+    CHECK(same);
+}
+
+TEST(va_a_note_released_before_its_frame_does_not_hang) {
+    // As for the sampler: a press and release inside one block is not something the key scan
+    // delivers; what matters is that the voice is let go.
+    TrackParams p = patch();
+    VaMono va;
+    va.init(kRate);
+    va.prepare(p);
+    va.trigger(hit(60, 100, false, false, 40));
+    va.release(60);
+    const int blocks = blocks_for(1.9f);
+    clear(g_a, blocks * kBlk);
+    const int n = render(va, p, g_a, blocks);
+    CHECK(peak(g_a + n - 8 * kBlk, 8 * kBlk) < 1e-4f);
+    CHECK(!va.active());
+}

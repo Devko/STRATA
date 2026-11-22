@@ -11,14 +11,14 @@
 //
 // ## The bytes
 //
-// PROJECT.BIN, 277 bytes, three sections (the third is the mixer's, added later and
-// OPTIONAL on read). Fixed size: nothing in it is variable length.
+// PROJECT.BIN, 292 bytes, four sections (the third, the mixer's, and the fourth, the live
+// state's, were added later and are OPTIONAL on read). Fixed size: nothing in it is variable length.
 //
 //     settings (id 1), 19 bytes
 //         0   2  tempo, centi-BPM
 //         2   1  root note
 //         3   1  scale
-//         4   1  swing, 50..75
+//         4   1  reserved: was a project swing nothing read. Written as 50, ignored on read
 //         5   1  live-record quantize, 0..100
 //         6   8  the 8 stored mute states, one bit per track
 //        14   1  sample budget, MiB
@@ -28,6 +28,11 @@
 //        18   1  the live pattern's slot
 //     chain (id 2), 192 bytes
 //         64 entries of (bank, slot, repeats); repeats 0 means unused
+//     mixer (id 3), the send and master bytes
+//     live (id 4), 3 bytes
+//         0   1  the live mutes, one bit per track
+//         1   1  the scene in morph slot A
+//         2   1  the scene in morph slot B
 //
 // KIT.BIN, 1,076 bytes, one section.
 //
@@ -283,7 +288,7 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PROJECT.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kProjectSections = 3;
+constexpr uint32_t kProjectSections = 4;
 constexpr uint32_t kProjectSettingsBytes = 19;
 constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
 constexpr uint32_t kProjectMixerBytes = uint32_t(kSendFields) + uint32_t(kMasterFields);
@@ -291,12 +296,14 @@ constexpr uint32_t kProjectTableBytes = kProjectSections * kSectionEntryBytes;
 constexpr uint32_t kProjectSettingsOffset = kProjectTableBytes;
 constexpr uint32_t kProjectChainOffset = kProjectSettingsOffset + kProjectSettingsBytes;
 constexpr uint32_t kProjectMixerOffset = kProjectChainOffset + kProjectChainBytes;
-constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectMixerOffset + kProjectMixerBytes;
+constexpr uint32_t kProjectLiveBytes = 3;          // live mutes, scene A, scene B
+constexpr uint32_t kProjectLiveOffset = kProjectMixerOffset + kProjectMixerBytes;
+constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectLiveOffset + kProjectLiveBytes;
 
-// How many of `wanted` at the END of the list a reader may do without. One: the mixer section,
-// which did not exist when the format was first written, so a PROJECT.BIN from before it has
-// two sections and must still load (core/project.hpp, kSectionProjectMixer).
-constexpr uint32_t kProjectOptionalSections = 1;
+// How many of `wanted` at the END of the list a reader may do without. Two: the mixer and the
+// live sections, neither of which existed when the format was first written, so a PROJECT.BIN
+// from before them has two or three sections and must still load (core/project.hpp).
+constexpr uint32_t kProjectOptionalSections = 2;
 
 static_assert(sizeof(ProjectSettings::mute_states) == 8,
               "the settings section is 19 bytes on the strength of 8 mute states");
@@ -398,6 +405,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
         {kSectionProjectSettings, kProjectSettingsOffset, kProjectSettingsBytes},
         {kSectionProjectChain, kProjectChainOffset, kProjectChainBytes},
         {kSectionProjectMixer, kProjectMixerOffset, kProjectMixerBytes},
+        {kSectionProjectLive, kProjectLiveOffset, kProjectLiveBytes},
     };
 
     Writer w(buffer, capacity);
@@ -411,7 +419,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     w.u16(s.tempo_centi_bpm);
     w.u8(s.root);
     w.u8(s.scale);
-    w.u8(s.swing);
+    w.u8(uint8_t(kSwingMin));   // the reserved byte: a legal swing, for builds that still read it
     w.u8(s.quantize);
     for (uint32_t i = 0; i < sizeof(s.mute_states); i++) w.u8(s.mute_states[i]);
     w.u8(s.sample_budget_mib);
@@ -429,6 +437,10 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     // The sends and the master, as the encoder bytes they are everywhere but inside the mixer.
     for (int i = 0; i < kSendFields; i++) w.u8(s.sends[i]);
     for (int i = 0; i < kMasterFields; i++) w.u8(s.master[i]);
+
+    w.u8(s.live_mutes);
+    w.u8(s.scene_a);
+    w.u8(s.scene_b);
 
     if (!w.ok() || w.size() != kProjectTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kProjectTotalBytes, written);
@@ -469,7 +481,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
 
     // The mixer section is LAST and OPTIONAL: see `kProjectOptionalSections`.
     const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain,
-                                               kSectionProjectMixer};
+                                               kSectionProjectMixer, kSectionProjectLive};
     uint32_t offset[kProjectSections] = {};
     uint32_t length[kProjectSections] = {};
     const SerializeResult found =
@@ -483,6 +495,9 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     if (offset[2] != 0 && length[2] < kProjectMixerBytes) {
         return refuse(SerializeResult::malformed);
     }
+    if (offset[3] != 0 && length[3] < kProjectLiveBytes) {
+        return refuse(SerializeResult::malformed);
+    }
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -490,7 +505,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     const uint16_t tempo = r.u16();
     const uint8_t root = r.u8();
     const uint8_t scale = r.u8();
-    const uint8_t swing = r.u8();
+    (void)r.u8();                // reserved (the old project swing)
     const uint8_t quantize = r.u8();
     uint8_t mutes[sizeof(ProjectSettings::mute_states)] = {};
     for (uint32_t i = 0; i < sizeof(mutes); i++) mutes[i] = r.u8();
@@ -509,7 +524,6 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // round trip rather than be thrown away. The UI draws an unknown id as the chromatic
     // default.
     s.scale = scale;
-    s.swing = clamp_u8(swing, uint8_t(kSwingMin), uint8_t(kSwingMax));
     s.quantize = clamp_u8(quantize, 0, 100);
     // Every bit pattern is a legal set of mute states for 8 tracks, so these are taken as they
     // come.
@@ -552,6 +566,21 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         // here rather than there keeps the mapping a pure function of a legal byte.
         for (int i = 0; i < kSendFields; i++) s.sends[i] = clamp_u8(r.u8(), 0, 127);
         for (int i = 0; i < kMasterFields; i++) s.master[i] = clamp_u8(r.u8(), 0, 127);
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // The live mutes and the A/B scenes, defaulted rather than left alone when absent, for the
+    // mixer's reason above. Every mute byte is legal; the scene ids are the engine's to check.
+    if (offset[3] == 0) {
+        const ProjectSettings defaults;
+        s.live_mutes = defaults.live_mutes;
+        s.scene_a = defaults.scene_a;
+        s.scene_b = defaults.scene_b;
+    } else {
+        if (!r.seek(kHeaderBytes + offset[3])) return refuse(SerializeResult::malformed);
+        s.live_mutes = r.u8();
+        s.scene_a = r.u8();
+        s.scene_b = r.u8();
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
 
