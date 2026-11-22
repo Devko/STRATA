@@ -362,6 +362,29 @@ TEST(midi_out_each_arp_hit_is_a_note_with_its_own_note_off) {
     host().set_running(false);
 }
 
+TEST(midi_out_mid_arpeggiates_a_chord_step_through_its_chord) {
+    // MID sends a chord step as its chord (above), so with the arp on it runs THROUGH the chord,
+    // as VA POLY does. It used to take only the step's root: the chord was lost to one note
+    // repeated at the arp's rate.
+    start(3, 4, kMid);
+    put_trig(3, 0);
+    raw_step(3, 0).note = 60;
+    raw_step(3, 0).chord = uint8_t(ChordType::minor);  // C Eb G
+    set_arp(3, 1, 6);                                 // UP, 1/32T: hits on ticks 0, 8 and 16
+    host().clear_midi();
+    host().set_running(true);
+    for (uint32_t tick = 0; tick < 36; tick++) {
+        host().deliver_tick(tick, 0);
+        pump();
+    }
+    host().set_running(false);
+    pump(400);
+    CHECK_EQ(ons(4, 60), 1);
+    CHECK_EQ(ons(4, 63), 1);
+    CHECK_EQ(ons(4, 67), 1);
+    CHECK_EQ(offs(4), ons(4));
+}
+
 TEST(midi_out_note_repeat_sends_every_roll_hit_and_ends_each) {
     start(0, 9, kMid);
     host().set_running(false);
