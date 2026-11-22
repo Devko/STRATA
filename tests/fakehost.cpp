@@ -118,6 +118,7 @@ void FakeHost::reset() {
     log_[0] = '\0';
     log_lines_ = 0;
     leds_ = 0;
+    clear_text();
     audio_load_ = 0;
     ms_ = 0;
 }
@@ -324,7 +325,23 @@ void FakeHost::t_fatal(const char *reason) {
     h.t_log(reason == nullptr ? "FATAL" : reason);
 }
 
-void FakeHost::t_text(uint8_t *, int, int, const char *, uint8_t) {}
+void FakeHost::t_text(uint8_t *, int x, int y, const char *text, uint8_t grey) {
+    FakeHost &h = the();
+    if (h.text_count_ >= kTextDraws) {
+        h.text_dropped_++;
+        return;
+    }
+    TextDraw &draw = h.text_[h.text_count_++];
+    draw.x = x;
+    draw.y = y;
+    draw.grey = grey;
+    draw.length = 0;
+    while (text != nullptr && text[draw.length] != '\0') {
+        if (draw.length < int(sizeof draw.text) - 1) draw.text[draw.length] = text[draw.length];
+        draw.length++;
+    }
+    draw.text[draw.length < int(sizeof draw.text) - 1 ? draw.length : int(sizeof draw.text) - 1] = '\0';
+}
 uint32_t FakeHost::t_audio_load() { return the().audio_load_; }
 uint32_t FakeHost::t_audio_load_peak() { return the().audio_load_; }
 void FakeHost::t_led(uint32_t, uint32_t, uint32_t, uint32_t) { the().leds_++; }
