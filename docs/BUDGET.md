@@ -443,7 +443,7 @@ suite 539,926 checks, 0 failures. `tools/build.sh` sends `chainloops`, `drumloop
 0 overruns in every run. **Worst case 23.49% with cl6x, against the 60% target.**
 
 **VA POLY per voice**, by the method of the sections below (swap the stab's chord type in
-`build_default_beat`, re-run `scenario_m3.sh`; the bass adds one more `VaVoice`):
+`build_default_beat` (now `groove` in core/factory.cpp), re-run `scenario_m3.sh`; the bass adds one more `VaVoice`):
 
 | Chord on the stab | VaVoices | cl6x | GCC only |
 | --- | --- | --- | --- |
