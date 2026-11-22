@@ -115,8 +115,8 @@ of the panel and screenshots of every screen.
 
 ### Known limits
 
-- Tested on one SmplTrek on {{RELEASE_DATE}}, with the {{BUILD}} build: MAX read
-  {{MAX_A01}} on A01 GROOVE and {{MAX_A04}} on A04 PEAK. Every other load figure comes from the
+- Tested on one SmplTrek on {{RELEASE_DATE}}, with the {{BUILD}} build. {{UNIT_LOAD}} Every other
+  load figure comes from the
   emulator, which models no caches.
 - VA POLY is the expensive machine: all tracks together share **12 VA POLY voices**. Past that,
   the quietest sounding voice is cut with a short fade. The number is provisional.
