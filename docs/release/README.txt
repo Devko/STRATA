@@ -69,5 +69,10 @@ the unit completely. Your projects stay on the card.
 
 MORE
 ----
-CHANGELOG.md lists what is in this release and its known limits. The one-page reference
-for every gesture and screen is docs/CHEATSHEET.md in the repository.
+CHANGELOG.md lists what is in this release and its known limits. In the repository,
+docs/MANUAL.md is the user manual and docs/CHEATSHEET.md has every control on one page:
+
+  https://github.com/Devko/STRATA/blob/{RELEASE}/docs/MANUAL.md
+  https://github.com/Devko/STRATA/blob/{RELEASE}/docs/CHEATSHEET.md
+
+Put your own WAV files in /SAMPLES/ on the card; the sample browser opens there.

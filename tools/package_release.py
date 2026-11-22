@@ -21,7 +21,7 @@ listed and left out. Both files are checked before anything is written, and the 
   3.x and it carries more than one section), and Sonicware's firmware must never be redistributed.
   So does any file with BOOT or MCU sections.
 
-It also refuses while CHANGELOG.md still has a TODO(release) or calls the release "unreleased",
+It also refuses while CHANGELOG.md still has a TODO(release), an unfilled {{FIELD}}, or no date,
 unless --draft is given; a draft zip is named ...-draft.zip so it cannot be mistaken for the real one.
 
 The zip is reproducible: fixed timestamps and order, so the same inputs give the same bytes.
@@ -164,6 +164,9 @@ def check_notes(release, changelog):
     reasons = []
     if "TODO(release)" in changelog:
         reasons.append("CHANGELOG.md still has TODO(release)")
+    fields = sorted(set(re.findall(r"\{\{[A-Z_0-9]+\}\}", changelog)))
+    if fields:
+        reasons.append(f"CHANGELOG.md has unfilled fields {', '.join(fields)} (tools/publish_release.sh fills them)")
     version = release[1:]
     if not re.search(r"^## \[" + re.escape(version) + r"\] - \d{4}-\d{2}-\d{2}\s*$", changelog, re.M):
         reasons.append(f"CHANGELOG.md has no dated '## [{version}] - YYYY-MM-DD' heading")

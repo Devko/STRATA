@@ -66,32 +66,45 @@ the default techno kit:
 | 4 | **HAT** (open) | Same machine, long decay, choked by track 3 |
 | 5 | **PERC** | 2-operator FM percussion: rims, toms, blips |
 | 6 | **BASS** | Mono VA with accent and slide |
-| 7 | **CHORD** | Poly VA, 6 voices, a chord per step |
+| 7 | **CHORD** | Poly VA, a chord of up to six notes per step |
 | 8 | **LOOP** | Sample, slices or a granular loop locked to tempo |
 
-- **Machines:** KICK, SNARE, HAT, PERC, SAMPLE, GRAIN, VA MONO and VA POLY. The drum synthesis
-  follows Mutable Instruments Plaits, reimplemented (see [docs/SOUND.md](docs/SOUND.md)).
-- **Per-track inserts:** drive, multimode filter (LP, HP, BP, 12 or 24 dB), lo-fi, amp envelope,
-  sidechain duck, pan, level.
-- **Sends and master:** tempo-synced ping-pong delay, reverb, a one-knob DJ filter, glue
-  compressor and limiter.
+- **Machines:** KICK, SNARE, HAT, PERC, SAMPLE, GRAIN, VA MONO and VA POLY, plus **MID**, which
+  plays an outboard synth over MIDI. The drum synthesis follows Mutable Instruments Plaits,
+  reimplemented (see [docs/SOUND.md](docs/SOUND.md)). SAMPLE slices by note, and SLC AUTO cuts a
+  break at its hits.
+- **Per track:** drive, multimode filter (LP, HP, BP, 12 or 24 dB), lo-fi, amp envelope,
+  sidechain duck, pan, level, an **LFO** (six shapes, free or synced) and an **arpeggiator**.
+- **Sends and master:** a tempo-synced ping-pong delay with a LONG mode (up to 12 s, tape wow) and
+  a reverb with a HALL mode (shimmer); a one-knob DJ filter, a three-band kill EQ, glue compressor
+  and limiter.
 
 ### Sequencer
 
-- Up to 64 steps per track, per-track length and speed (polymeter), swing and micro-timing
+- Up to 64 steps per track, per-track length, speed and swing (polymeter), micro-timing
 - Parameter locks, trig conditions, probability and ratchets
 - Live recording and motion recording, a Euclidean generator, and KEYS mode for playing notes in
   a scale
-- Projects, banks and queued pattern changes, with autosave and background sample loading
+- Banks of patterns with queued changes, and a chain that becomes a song: each entry can recall a
+  mute state, and song mode stops at the end
 - 16 levels of undo
 
 ### Performance
 
 - A fixed row of seven performance pads: **FILL**, **REPEAT**, **MUTE**, **SCENE A**, **SCENE B**,
   **THROW** and **MUTATE**
-- Scenes with a morph between them, four macros and mute latching
-- Beat repeat, delay and reverb throws, and seeded mutation you can keep or revert
-- Follows the unit's clock: internal, MIDI clock or SYNC IN
+- Scenes with a morph between them, four macros and mute states
+- Beat repeat, note repeat, delay and reverb throws, tape stop, delay freeze, and seeded mutation
+  you can keep or revert
+- Resampling the master or an audio input to a file or a track
+
+### Samples, projects and MIDI
+
+- A sample browser on the unit; WAVs at any rate and depth, long samples at 48 kHz, and files too
+  big for memory streamed from the card
+- Projects with autosave, a project browser with save-as, and a kit library shared by all projects
+- MIDI out per track, MIDI in for notes, CCs and program changes, and the unit's clock: internal,
+  MIDI clock or SYNC IN
 
 New to STRATA? [docs/MANUAL.md](docs/MANUAL.md) is the user manual: the concepts, a first-beat
 tutorial on the factory project, every machine, performing, saving and troubleshooting. A
