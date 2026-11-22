@@ -15,7 +15,9 @@ key held down while you do the rest.
 | MIXER | F7 | Levels, delay, reverb, routing, master |
 | PERFORM | F1+F7 | Scenes, morph, macros, mutation |
 | PROJECT | F3 | Banks and patterns, key and scale, the card |
-| SETUP | F3, then octave RIGHT | Record quantize; shows clock and MIDI settings |
+| CHAIN | F3, then octave RIGHT | The pattern chain as a list |
+| PATTERN | F3, octave RIGHT twice | Master length (LEN) and swing (SWG) of the playing pattern |
+| SETUP | F3, octave RIGHT three times | Record quantize; shows clock and MIDI settings |
 | RESAMPLE | F1+F2 | Record the output to a file or a track |
 | Step page | Hold STEP + OK | One step's own fields (opens over GRID) |
 | Enaga menu | F1+POWER | CLOCK SRC, CLOCK/SYNC OUT, MIDI CH |
@@ -24,10 +26,12 @@ key held down while you do the rest.
 
 | Keys | Action |
 | --- | --- |
-| F5 / F6 | Play / stop. F6 again cuts the tails. Refused under an outside clock (EXT) |
+| F5 / F6 | Play / stop. F6 again cuts the tails. Refused under an outside clock (EXT CLOCK) |
+| F1+F5 | Restart from step 1, playing or not (RESTART) |
+| F1+F6 | Stop, cut the tails, drop a queued change, back to step 1 (RESET) |
 | F2 | Live record on/off (REC on the edit line, F2 lit red) |
 | F1+F3, F1+F3 (within 2 s) | Save the project |
-| F1+CLR / F1+OK | Undo / redo (not in PROJECT or PERFORM, where they mean something else) |
+| F1+CLR / F1+OK | Undo / redo (not in PROJECT, where they start a new project / reload) |
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph) |
 | VALUE push + turn | Pattern swing |
 | F1 + VALUE | Master DJ filter (LP n / OFF / HP n) |
@@ -44,9 +48,9 @@ key held down while you do the rest.
 | Upper 1 FILL | Fill while held | |
 | Upper 2 REPEAT | Beat repeat while held; VALUE picks 1/4 ... 1/16T | F1 at the press: pitch drops |
 | Upper 3 MUTE | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, F1+STEP on the next bar, push VALUE+STEP stores |
-| Upper 4/5 SCENE A/B | Hold + STEP 1-16 picks that side's scene | Hold + OK (PERFORM) captures the selected track only |
+| Upper 4/5 SCENE A/B | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
 | Upper 6 THROW | Delay throw while held | F1: reverb throw |
-| Upper 7 MUTATE | Mutates the selected track (type and amount set in PERFORM) | Undo it with F1+CLR outside PERFORM |
+| Upper 7 MUTATE | Mutates the selected track (type and amount set in PERFORM) | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT |
 
 ## Step editing (GRID, EDIT, MIXER, MACHINE, RESAMPLE)
 
@@ -56,6 +60,7 @@ key held down while you do the rest.
 | Octave L/R | Step page 1-4 (64 steps) |
 | Hold STEP + turn A-D | Lock that parameter of the current EDIT page on the step |
 | Hold STEP + push A-D | Remove that one lock (LOCK CLEARED) |
+| Hold STEP + turn VALUE | Set the step's note |
 | Hold STEP + OK | Open the step page on that step |
 | Hold STEP + CLR | Clear the step |
 | Hold STEP + UP / DOWN | Copy / paste the step |
@@ -82,15 +87,24 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | MIXER | — | Page (6) | Page | Levels or page fields | — / clear | Copy / paste |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | A: bars | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | UP: chain on/off, DOWN: reload track's sample |
+| CHAIN | Entry | Entry's pattern -/+ | Bank A-H | A: repeats X1-X16 | Add entry / back | LEFT: remove entry, UP: chain on/off |
+| PATTERN | Change field -/+ | Field LEN / SWG | Bank A-H | A: LEN 1-64, B: SWG | — / back | UP: chain on/off |
 | PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Macros A-D | Capture scene / clear macro | UP/DOWN: auto-fill OFF 4 8 16 |
 
-**KEYS:** STEP 1-16 play the scale from the root; octave keys also change the octave.
+**KEYS:** STEP 1-16 play the scale from the root and hold the note until released; octave keys also change the octave.
 **PROJECT:** STEP 1-16 queue that slot of the shown bank; F1+OK reloads the project from the card
-(unsaved work is lost), F1+CLR starts a new project; octave RIGHT opens SETUP, octave LEFT or CLR
-goes back. In SETUP, A sets the record quantize.
+(unsaved work is lost), F1+CLR starts a new project. The octave keys walk the pages PROJECT,
+CHAIN, PATTERN, SETUP; CLR on any of them goes back to the slots. In SETUP, A sets the record
+quantize.
+**CHAIN:** a STEP key puts that slot of the shown bank into the entry under the cursor (or starts
+the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playing pattern when
+empty), up to 64 entries. Chain edits are not undoable.
+**PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
+(END) and the chain wait for.
 **PERFORM:** STEP 1-16 assign that parameter of the selected track to the selected macro; VALUE
 is the A/B morph; OK captures into scene A's slot (with a scene pad held: that scene, selected
-track only); F1+OK erases it.
+track only); scene pad + CLR erases it. Mutes, mute states and the A/B scene choice are saved with
+the project.
 **MIDI in:** channels 1-8 play tracks 1-8, other channels play the selected track.
 
 ## The screen
@@ -104,6 +118,8 @@ track only); F1+OK erases it.
 | GRID edit line | `REC Q50 SEL 1-8 FULL 2 U3/R1` | Recording + quantize, selection, refused edits (lock pool full), undo/redo depth |
 | Step page | `TRIG` `TRIGLESS` `OFF`, `LOCKS n` | What the step is and how many locks it holds |
 | PROJECT | `BANK A   END CHAIN` | Shown bank, queue mode, chain running |
+| CHAIN | `CHAIN 3/64 ON`, `>02 A05 X2 PLAY` | Entries used, chain on/off; cursor, entry, pattern, repeats, playing now |
+| PATTERN | `>LEN 16 STEPS`, `SWG 54%` | Master length; swing (`>` = field VALUE changes) |
 | PROJECT slots | `05>`, bright box | Queued slot; live slot (bright), has trigs (mid), empty (dark) |
 | PROJECT | `SMP O.X- 12/32M` | Per track sample: O ready, . loading, X failed, - none; MiB used/budget |
 | PROJECT | `UNSAVED`, `NO CARD` | RAM differs from the card; no usable card |
