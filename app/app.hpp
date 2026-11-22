@@ -554,8 +554,14 @@ public:
         if (mode_ == Mode::kit && on_kit_key(key)) return;
         if (mode_ == Mode::samples && on_samples_key(key)) return;
         // A mutation waiting for its verdict takes OK and CLR first, in whatever mode: OK keeps
-        // it, CLR reverts it. Only the plain keys; F1 + CLR and F1 + OK stay undo and redo.
-        if (mutation_pending_ && !shift_ && (key == ENAGA_KEY_OK || key == ENAGA_KEY_CLR)) {
+        // it, CLR reverts it. Only the plain keys; F1 + CLR and F1 + OK stay undo and redo. And
+        // not where OK and CLR already mean something more specific: a held STEP (its page, its
+        // clear), a range (its clear), a held scene pad (capture, erase) and RESAMPLE (arm,
+        // cancel). There the verdict took the key, and a held step's release then toggled its
+        // trig as well, because nothing had marked the hold as used.
+        if (mutation_pending_ && !shift_ && (key == ENAGA_KEY_OK || key == ENAGA_KEY_CLR) &&
+            held_step_ < 0 && range_first_ < 0 && scene_holding_ < 0 &&
+            mode_ != Mode::resample) {
             mutation_pending_ = false;
             if (key == ENAGA_KEY_CLR) {
                 post(Cmd::undo);
