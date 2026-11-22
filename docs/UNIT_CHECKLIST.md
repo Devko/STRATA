@@ -377,6 +377,27 @@ Enaga's menu and start STRATA6.
 
 These go into `docs/BUDGET.md` as the first unit rows (U1-U5 and E1-E5 in "Optimization review"), and the ticks into the reference list below.
 
+## 18. If it passed: the v0.1.0 release
+
+Only after the walkthrough passes and Roland says go. `docs/release/RELEASING.md` is the
+procedure and wins where this summary differs.
+
+- [ ] **Before packaging.** The card being released passed this walkthrough, build noted on the
+      first line. If `APP.ENA` is a cl6x build, read the cl6x licence for conditions on its
+      output and record them in `docs/BUDGET.md` ("The cl6x licence question, examined"); if in
+      doubt, release a GCC-only build. `SmplTrek.bin` on the card is Enaga's own v0.2.0 release
+      file (SHA-256 matches the release zip). `APP.ENA` is plain STRATA, not STRATA6.
+- [ ] **Notes.** Replace every `TODO(release)` in `CHANGELOG.md` and `docs/release/v0.1.0.md`
+      with tonight's result and the MAX readings from 17; date `## [0.1.0]`. Commit on a branch,
+      merge.
+- [ ] **Package** (WSL): `python3 -B tests/test_package_release.py`, then
+      `python3 -B tools/package_release.py v0.1.0`. SHA-256 of the zip: `________________`
+- [ ] Optional: unzip onto a freshly formatted card, install, play A01.
+- [ ] **Publish (Roland's go).** Tag `v0.1.0` on the merged commit and push it; GitHub release
+      "STRATA 0.1.0", pre-release, body from `docs/release/v0.1.0.md`; attach
+      `STRATA-v0.1.0-smpltrek.zip` and its `.sha256`. Then update README's install section and
+      badge.
+
 ---
 
 # Reference: the full list by milestone
@@ -739,9 +760,10 @@ PERFORM and pattern changes, with no edit screens and no underruns."*
 - [ ] A parameter only one scene stores fades to the KIT value at the far end, not back to
       itself. This is the morph rule most likely to feel wrong in the room, so listen for it.
 - [ ] A macro with two targets, one inverted: one knob opening a filter while it closes a send.
-- [ ] Assign a macro with its knob half way up: the parameter does not move on assignment, and the
-      knob then sweeps it towards the far end. (Only a parameter at 0 or 127 heading for the other
-      end still jumps once: `macro_range_through` has no non-flat line for it.)
+- [x] ~~Assign a macro with its knob half way up: the parameter does not move on assignment.~~
+      Superseded 2026-11-22 (PR #34): a macro at 0 lets go, a raised one sweeps from the live
+      value, and assigning with the knob up moves the parameter at once. See "Factory content"
+      at the end and walkthrough 3b.
 - [ ] Macro setup and scenes survive a save and a reload (PERFORM.BIN, 2,424 bytes, next to
       PROJECT.BIN).
 - [ ] A project with no PERFORM.BIN -- anything M4 wrote -- opens with empty scenes rather than
@@ -774,15 +796,14 @@ gesture is the mistake this milestone made twice before it was caught.
 - [ ] Upper row, left to right: FILL (hold), REPEAT (hold, VALUE picks the length, F1 the
       pitch-down), MUTE mode (toggle), scene A (hold + STEP picks), scene B, THROW (hold, F1 for
       reverb), MUTATE.
-- [ ] F1 + F7 opens PERFORM: encoders A-D are the macros, VALUE is the morph.
+- [ ] FUNC + MIXER opens PERFORM: encoders A-D are the macros, VALUE is the morph.
 - [ ] In PERFORM: OK captures a scene (the selected track only while a scene pad is held),
       scene pad + CLR erases one, **STEP 1-16 assigns that parameter of the selected track to the
-      selected macro**, the octave keys pick which macro, CLR clears it, UP and DOWN walk the
+      selected macro**, LEFT/RIGHT pick which macro, CLR clears it, UP and DOWN walk the
       mutation, the selection keys its amount.
-- [ ] A macro assigned in one press is immediately usable: the range runs from where the
-      parameter is now to whichever end is further away, so the knob always has somewhere to go.
-      That is a guess at intent — check it feels right, since the ranges are stored and a richer
-      editor can refine them later.
+- [ ] A macro assigned in one press is immediately usable, and since PR #34 it sweeps from the
+      parameter's live value (the kit, a morph or the EDIT knob), letting go again at 0. Check it
+      feels right; the ranges are stored and a richer editor can refine them later.
 - [ ] A throw released puts the stored send back by itself. Nothing was written to the kit, so
       there is nothing to undo and nothing to save.
 - [ ] A lock still wins over a morph: lock a cutoff on one step, sweep the morph, and that step
