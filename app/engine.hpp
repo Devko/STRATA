@@ -397,6 +397,10 @@ private:
     // and there is no cross-context struct to tear. core/queue.hpp was written expecting that.
     Queue queue_;
     ChainPlayer chain_;
+    // Song mode: the song has played to its end and the sequencer is silent until the transport
+    // stops or starts again (`cross_boundary`).
+    bool song_over_ = false;
+    void chain_entry_started();
 
     // See `kit_for_recall`. Written by the main context, read by `Cmd::kit_recall` only.
     Kit kit_inbox_;
