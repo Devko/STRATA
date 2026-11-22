@@ -332,3 +332,91 @@ TEST(golden_beat_repeat) {
         check_golden(name, g_out, 2 * frames);
     }
 }
+
+namespace {
+
+// Like render(), plus the calls a performance makes between trigs: a key up on one note, STOP
+// (release_all), a second STOP (kill_all), and a key up after the kill.
+int render_with_releases(Machine &m, const TrackParams &params, const Trig *trigs, int count,
+                         int frames) {
+    for (int i = 0; i < frames; i++) g_out[i] = 0.0f;
+    for (int at = 0, block = 0; at < frames; at += kBlk, block++) {
+        m.prepare(params);
+        if (block == 30) m.release(60);
+        if (block == 50) m.release_all();
+        if (block == 70) m.kill_all();
+        if (block == 90) m.release(67);
+        for (int k = 0; k < count; k++) {
+            if (int(trigs[k].frame) >= at && int(trigs[k].frame) < at + kBlk) {
+                Trig t = trigs[k];
+                t.frame = uint32_t(int(t.frame) - at);
+                m.trigger(t);
+            }
+        }
+        m.render_add(g_out + at, kBlk);
+    }
+    return frames;
+}
+
+}  // namespace
+
+// Dense: two hits in one block, retriggers while every voice still sounds (so later hits steal
+// one and fade or choke it), a chord bigger than any voice pool, accents and mixed gate lengths,
+// key ups, STOP and STOP again -- over a short render, so a steal's fade is a large part of what
+// is summarised. Four more patches: everything at the top, everything at the bottom, and two
+// more scatterings, which between them reach knob zones (clap counts, ratio slots, detune
+// halves) the two patches above do not.
+TEST(golden_dense_retriggers) {
+    make_sample();
+    const Trig dense[] = {
+        trig(60, 127, 0, false, 400),   trig(64, 60, 40, false, 900),  trig(67, 127, 300, true, 0),
+        trig(48, 100, 650, false, 200), trig(72, 30, 700, false, 2000), trig(55, 127, 1400, true, 50),
+        trig(60, 90, 1430, false, 0),   trig(43, 127, 2600, false, 700), trig(79, 80, 2610, true, 1),
+        trig(36, 127, 2700, false, 0),  trig(40, 120, 2700, false, 0),  trig(45, 110, 2701, false, 0),
+        trig(50, 100, 2702, false, 0),  trig(53, 90, 2703, false, 0),   trig(57, 80, 2704, false, 0),
+        trig(62, 70, 2705, false, 0),   trig(65, 60, 2706, false, 0),   trig(69, 127, 2707, true, 0),
+        trig(74, 127, 2708, false, 0),  trig(77, 127, 2709, false, 0),  trig(81, 127, 2710, false, 0),
+        trig(60, 110, 4100, false, 0),  trig(52, 110, 4300, false, 1500), trig(67, 127, 4700, true, 0),
+        trig(67, 127, 4701, false, 0),  trig(60, 127, 5000, false, 300)};
+    const int count = int(sizeof(dense) / sizeof(dense[0]));
+    const int frames = 6400;
+    TrackParams patches[4];
+    for (int i = 0; i < kParams; i++) {
+        patches[0].set(i, 127);
+        patches[1].set(i, 0);
+        patches[2].set(i, uint8_t((i * 53 + 5) % 128));
+        patches[3].set(i, uint8_t((i * 29 + 97) % 128));
+    }
+    for (int which = 0; which < 4; which++) {
+        const TrackParams &p = patches[which];
+        char name[40];
+#define STRATA_DENSE(Type, label)                                         \
+        {                                                                 \
+            static Type machine;                                          \
+            machine.init(kRate);                                          \
+            render_with_releases(machine, p, dense, count, frames);       \
+            std::snprintf(name, sizeof name, "dense-" label "/%d", which); \
+            check_golden(name, g_out, frames);                            \
+        }
+        STRATA_DENSE(Kick, "kick")
+        STRATA_DENSE(Snare, "snare")
+        STRATA_DENSE(Hat, "hat")
+        STRATA_DENSE(Perc, "perc")
+        STRATA_DENSE(VaMono, "vamono")
+        STRATA_DENSE(VaPoly, "vapoly")
+#undef STRATA_DENSE
+        static Sampler sampler;
+        sampler.init(kRate);
+        sampler.set_sample(g_sample, 48000, 1, 44100.0f);
+        render_with_releases(sampler, p, dense, count, frames);
+        std::snprintf(name, sizeof name, "dense-sample/%d", which);
+        check_golden(name, g_out, frames);
+
+        static Granular grain;
+        grain.init(kRate);
+        grain.set_sample(g_sample, 48000, 1, 44100.0f);
+        render_with_releases(grain, p, dense, count, frames);
+        std::snprintf(name, sizeof name, "dense-grain/%d", which);
+        check_golden(name, g_out, frames);
+    }
+}
