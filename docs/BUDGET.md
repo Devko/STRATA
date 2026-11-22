@@ -838,6 +838,119 @@ per key release, in the command handler, and touches no render loop: the only pe
 is a flag test when a voice STARTS. No figure above changes. Not re-measured, because this cloud
 session has no emulator and no cl6x; the next load scenario run on Roland's PC covers it.
 
+### The arpeggiator (2026-11-22, not measured)
+
+The arp (core/arp.hpp, the scheduling in app/engine.cpp) adds no per-sample work: a hit is an
+ordinary `trigger`, as a step's is. What it adds is control rate: one `ArpSettings::make` (four
+multiplies and shifts) per step fired, and per clock tick a check of two runs on each of eight
+tracks, plus a re-read of the four bytes for a held KEYS run. With every arp off that is sixteen
+flag tests a tick, about 0.5 ticks a block at 120 BPM. Off is bit-exact: zeroed bytes are OFF and
+every golden render is unchanged.
+
+A running arp costs what its notes cost. A 1/32 arp on a one-step bass note is two triggers where
+there was one, so the voice load is the machine's, at the higher note rate: on VA POLY each hit
+takes a voice from the shared budget of 12 (`Engine::kPolyVoiceBudget`), which is the ceiling
+whatever the arp does. Not re-measured, because this cloud session has no emulator and no cl6x;
+`tests/scenario_lfo.sh` now also walks to the ARP page, and U7/U8-style figures for a running
+arp come from 13h on the unit.
+
+### The master kill EQ (2026-11-22, host only)
+
+A three-band DJ isolator on the master, after the DJ filter (`Mixer::kill_eq`, loop in
+`dsp/masterloops.ti.c`, so it goes through cl6x). Two Linkwitz-Riley crossovers per channel
+(250 Hz and 2.5 kHz, two Butterworth SVF stages a side) plus an all-pass that keeps LOW in phase
+with the rest: **7 SVF steps per channel per sample**, 14 a sample for the stereo bus, with the
+three gains and the fade ramped across the block. **It costs nothing while bypassed**: with all
+three bands flat and no kill switch on, `kill_eq` returns after three compares, and the output is
+the input to the bit (`tests/test_killeq.cpp`). It starts on the first knob move or switch and
+stops again about 30 blocks after everything is back to flat (the gains glide, then a four-block
+fade). So it is not a fixed tax: it is paid while a performer is using it.
+
+Measured in a cloud session (x86 2.3 GHz, GCC -O2), so these are proxies, not unit figures:
+
+| Measure | Host time per 64-frame block | Share |
+| --- | --- | --- |
+| The kill EQ's loop, stereo, running | 1,683 ns | |
+| The DJ filter (two SVF cascades), for comparison | 475 ns | the EQ is 3.5x the DJ filter |
+| A01 GROOVE, whole engine, EQ bypassed (`host/render.cpp`'s loop) | ~23,900 ns | |
+| A01 GROOVE with LOW killed, whole engine | ~25,250 ns | +5.5% (+1,300 ns) |
+| A04 PEAK with LOW killed, whole engine | ~28,400 ns against ~25,000 | +6-13%, noisy |
+
+Scaled by the default beat's emulator figures (A01 is `scenario_m3.sh`'s beat: 19.17% cl6x,
+31.92% GCC-only), the loop's 7% of the host block is an **estimate of about 1.3 points with
+cl6x and 2.2 GCC-only**, against the ranked-ideas list's guess of 0.5-1 point. The worst case
+then moves from 23.49% to about **24.8% cl6x** (39.60% to about 41.8% GCC-only) with the EQ
+running, inside 60% either way. The loop is a chain of dependent SVF steps, which is exactly the
+shape cl6x's software pipelining overlaps across samples and GCC does not, so the cl6x figure
+could come in well under the proxy; only the emulator says.
+
+If it is too dear on the unit, in order: drop the LOW all-pass (6 SVFs, the sum ripples a
+fraction of a dB around 250 Hz), then 12 dB crossovers (3 SVFs, but the MID kill falls to about
+-15 dB, which is no longer a kill).
+
+To measure on Roland's PC: **E6** below (`tests/scenario_killeq.sh`, which kills all three bands
+on the EQ page and reads the peak, against `scenario_m7.sh` with the EQ bypassed), both compilers.
+On the unit: **U6**.
+
+### Tape stop and delay freeze (2026-11-22, host only)
+
+Both are held moves and **cost nothing until pressed**: the tape stop records only while it runs
+(the read never needs a frame from before the press), and the freeze records forward from the
+press rather than keeping a history. Neither touches the default path, so every render that
+never presses them is unchanged to the bit (the goldens pass untouched). Loops in
+`dsp/stoploops.ti.c`, so both go through cl6x.
+
+| Measure (x86 2.3 GHz, GCC -O2, per 64-frame block) | Host time |
+| --- | --- |
+| Tape stop, running (write, interpolated read, level, crossfade; stereo) | ~220 ns |
+| Delay freeze, looping (stereo read and crossfade) | ~115 ns |
+| Delay freeze, recording (stereo copy) | ~27 ns |
+| The master peak detector, for scale | ~57 ns |
+
+Against A01's ~23.9 us host block that is about 0.9% for the tape stop and 0.5% for the freeze
+(plus a clear and two mixes for routing the delay through its wet planes while frozen), so an
+**estimate of about 0.2 points cl6x / 0.3 GCC-only for the tape stop and 0.1 / 0.2 for the
+freeze**, and only while held. The freeze also keeps the delay running while held, which the
+worst case already counts (both sends running). No emulator scenario: both are held key
+combinations, and the emulator's `--key` only taps. Unit check: **U8** (UNIT_CHECKLIST 13g).
+
+Memory: the freeze's loop is 1.46 MiB (4 s of stereo float: two 2 s delay times) and the tape
+stop's ring 0.46 MiB (1.25 s), both taken in init. `tests/test_memory.cpp` itemises them: init
+is about 104.1 MiB of the 120 MiB heap with the stream rings from main, 15.9 MiB spare.
+
+### Per-track LFO (2026-11-22, host only)
+
+One LFO per track, parameters 16-19 (dsp/lfo.hpp). It runs once per **block**, not per sample,
+and moves its destination's byte. The cost is the LFO step itself (a few dozen instructions)
+plus one `prepare` of the modulated track in each block where that byte actually changed. There
+is no per-sample work, so the `*.ti.c` loops are untouched and nothing here needs cl6x. The
+extra code is control-rate C++, which the cl6x build also compiles with GCC, so the absolute
+cost should be about the same with both compilers.
+
+Host figures: callgrind, x86, GCC -O2, the factory project, 6,000 blocks, init (~15.1 M Ir)
+subtracted. The bench is a throwaway driver of `Engine`, not a test.
+
+| Case | Change in Ir | Share of the block's work |
+| --- | --- | --- |
+| Every LFO off, against `main` (PEAK, slot 3) | +2.6 M on 735.6 M | +0.35%, about 430 instructions a block for 8 compares and the copy |
+| 8 LFOs on a machine parameter (SRC 2), slot 3 | +15.5 M | +2.1% |
+| 8 LFOs on DRV, slot 3 | +24.7 M | +3.4% |
+| 8 LFOs, synced 1/16, on DRV, slot 3 | +24.7 M | +3.4% |
+| 8 LFOs on PAN, slot 3 | +16.4 M | +2.3% |
+| 8 LFOs on DRV, slots 0, 1, 2 | | +3.2%, +3.3%, +3.0% |
+
+- **Off is bit-exact.** With every LFO off the render matches `main` bit for bit (energy
+  20167.792 on both), and `tests/test_lfo.cpp` holds that with two engines side by side. Zeroed
+  bytes are OFF, so no golden render changes.
+- **On costs about 515 instructions per LFO per block at worst**: the chain's DRV re-prepare is
+  the dearest destination. In load points that is roughly 0.15-0.3 points each, and **1.1 to 1.4
+  points for all eight** at the GCC-only emulator's scale. With cl6x the worst case is about 23.5%
+  plus about 2.5 points (the cost is control-rate code, so it does not shrink with cl6x and
+  grows a little as a share of the block). That is well under 60%.
+- A slow, deep LFO moves its byte less often than once a block, so the figures above (a fast free
+  rate and a 1/16) are the expensive end.
+- E7 and U7 below measure it for real.
+
 ### Load time: the downsample low-pass (2026-11-22, host only)
 
 A file above 48 kHz is now low-passed before the load-time resample (`Antialias` in core/pcm:
@@ -953,6 +1066,8 @@ scene or knob really did move: those prepare as before.
 | E2 | VA POLY per voice, after | MIN7 vs MIN11 in `build_default_beat`, `scenario_m3.sh`, both compilers | does 2.16 (cl6x) / 3.82 (GCC) move? |
 | E3 | The app's real worst case | temporarily set four tracks to `va_poly` with MIN11 chords in `build_default_beat`; then six; then eight | where it crosses 60% and where it overruns: sizes the voice budget in finding 1 |
 | E4 | The prepare memo's share | `scenario_m5.sh` (scenes and macros move parameters, so it prepares more) against `scenario_m3.sh` | the gap between them, before and after |
+| E6 | The master kill EQ running | `tests/scenario_killeq.sh` against `tests/scenario_m7.sh` (same beat, EQ bypassed), with cl6x and with `ENAGA_TI_CGT=none` | the difference is the EQ's cost; the proxy above says ~1.3 cl6x / ~2.2 GCC-only |
+| E7 | Eight LFOs running | `tests/scenario_lfo.sh` as it is (every LFO off: should match `scenario_factory.sh`), then again after a temporary edit to `factory_kit` in core/factory.cpp setting each track's `params[17] = 40` (RAT, about 3 Hz free), `params[18] = 127` (DEP) and `params[19] = 38` (DST = DRV), with cl6x and with `ENAGA_TI_CGT=none`; revert the edit | the difference is eight LFOs' cost; the host figures say about 1.1-1.4 points GCC, and about the same with cl6x |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
@@ -963,7 +1078,32 @@ scene or knob really did move: those prepare as before.
 | U2 | MAX with the chord at MIN11 (six voices), then with tracks 5 and 6 also switched to VA POLY playing chords | per-voice cost on the unit; where it overruns |
 | U3 | GRAIN on a multi-second sample, DEN 127, SPR 127, at PIT 64 and at PIT 127 with a high note | the DDR cost of high-pitch grains (finding 6) |
 | U4 | Delay FBK at max, TIM 1/1, one hit, then silence | LOAD stays up while the tail rings and drops when it ends |
+| U6 | MAX on A01 GROOVE with the kill EQ running (FUNC + push A, then let it play 60 s with LOW killed), against U1 | the EQ's cost on the unit; should match E6's cl6x difference times the unit/emulator ratio |
+| U7 | MAX on A01 GROOVE with LFOs on four tracks (EDIT, selection RIGHT four times to LFO; C = DEP 127, D = DST DRV or CUT, B = RAT a fast free rate), against U1 | the cost of four LFOs on the unit; about half of E7's difference times the unit/emulator ratio |
 | U5 | Load a 15 s 96 kHz stereo WAV (`unit-test/STRATA_1.WAV` in the project files; `SWEEP_30S_96K.WAV`, 30 s, now loads as well) | seconds to playable; whether the screen or keys stall during it |
+
+### Sampling from the input (2026-11-22): unmeasured, expected negligible
+
+`Engine::process` now runs `strata_master_peak` over the input block every block (128 floats,
+for the RESAMPLE meter), and a take from the input converts `in` instead of `out` -- the same
+conversion a master take already does. No voice, filter or effect is added. Not yet measured:
+add `scenario_m3.sh` both ways after this change to the next emulator session (the emulator
+cannot select an input route, so the conversion path is only reachable on the unit: section 8c
+of the walkthrough asks for MAX while recording from the input).
+
+### Streaming (2026-11-22): unmeasured, estimated under 1 point per streamed track
+
+Costs nothing on a project that streams nothing: `top_up_streams` and `watch_streams` test one
+flag per track. A streamed track adds, per block, (a) `pcm_to_s16` over the frames that arrived
+(64 at the root pitch, up to 512 while refilling after a restart) and a copy of the carry, and
+(b) the stream voice in `dsp/sample.cpp`, which fetches its four taps through a per-sample
+branch (head, fifo or silence) instead of `generate()`'s branch-free interior. It is one voice,
+against the four a whole-loaded SAMPLE track may run, and it is plain C++ rather than a
+`*.ti.c` loop: an estimate of 30-40 cycles a sample puts it at **0.4-0.5 points a streamed track**
+with the conversion, GCC or cl6x alike. No scenario streams yet (the emulator has no file large
+enough on its card); measure with section 15d of the walkthrough: LOAD with three streamed
+tracks against none. If it is worse than 1 point a track, the fetch is the lever: a fast path
+for a run of samples wholly inside the head or wholly inside the fifo.
 
 ### Later milestones
 
@@ -997,5 +1137,5 @@ count the staging at all.
 | Beat repeat ring (2 bars at 60 BPM, stereo float) | 2.93 MiB | **2.93 MiB** (3,072,000 bytes) reserved at init. Below 60 BPM the ring holds less than two bars, which costs nothing: the longest loop offered is a quarter note, 3 s even at 20 BPM |
 | Delay and reverb buffers | 2 MiB | |
 | Patterns, kit, scenes, 16 undo levels | 2 MiB | **~148 KiB** so far: 17 whole-pattern undo snapshots (~140 KiB) plus the live pattern and the clipboard. In bss, not the heap |
-| Recording ring and stream buffers | 1 MiB | |
+| Recording ring and stream buffers | 1 MiB | **1.13 MiB**: four 256 KiB `files::Stream` rings from the heap (streaming, 2026-11-22), plus eight 16 KiB frame fifos in the engine (bss). The take is not here: it is `Capture`'s own 5.49 MiB. `tests/test_memory.cpp`: init is now **102.2 MiB** of the heap, 17.8 MiB spare |
 | App image, voice pools, UI | 4 MiB | **396 KiB** of text, 52 bytes of data and **1.21 MiB of bss** in the linked ELF (`tic6x-elf-size`). The bss is mostly the live Project at 1.03 MiB plus the undo stack; the 85 MiB above is heap, taken in init() and not in the image |

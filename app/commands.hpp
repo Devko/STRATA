@@ -43,6 +43,10 @@ enum class Cmd : uint8_t {
     set_track_length,  // track, a: length; or c = 1: b is an int8 delta (kDeltaFlag below)
     set_track_speed,   // track, a: speed
     set_pattern_swing, // a: swing; or c = 1: b is an int8 delta
+    // A track's own swing over the pattern's: a = 0 (kSwingInherit, follow the pattern) or
+    // 50-75; or c = 1: b is an int8 delta walked along PAT, 50 .. 75 (core/pattern.hpp,
+    // `track_swing_step`).
+    set_track_swing,   // track, a: swing; or c = 1: b is an int8 delta
 
     // --- pattern editing, M3 -----------------------------------------------
     //
@@ -115,6 +119,15 @@ enum class Cmd : uint8_t {
     // is 16.7 M frames -- 349 s of mono at 48 kHz, well past the 30 s above which docs/SPEC.md
     // streams from the card instead of loading into RAM)
     set_sample,
+    // Streaming (app/storage.hpp, "Streaming"). `set_stream` hands over a file too big for the
+    // pool: its head (resident, like a sample) and how to read the rest, from
+    // Engine::stream_for_load(track) -- more than 16 bytes, so through that inbox, written by the
+    // main context just before the post. It follows a clear_sample like set_sample does.
+    // `stream_attach` tells the audio side that the track's stream is open at the head's end and
+    // filled: a: the low byte, b: the high byte of the restart count it was opened for, so an
+    // attach for a restart already superseded is ignored.
+    set_stream,        // track
+    stream_attach,     // track, a|b: Status::stream_want's value it answers
 
     // --- kit and sound ---
     set_param,         // track, a: param index, b: value; or c = 1: b is an int8 delta
@@ -173,7 +186,7 @@ enum class Cmd : uint8_t {
     // Beat repeat. The length is in note values and the engine turns it into frames, because
     // only the audio side knows the tempo in samples (dsp/repeat.hpp).
     set_repeat,        // a: RepeatLength, b: 1 = held, c: 1 = pitch down
-    trigger_note,      // track, a: note, b: velocity -- a pad hit, played live
+    trigger_note,      // track, a: note, b: velocity, c: 1 = a held KEYS key (a release follows)
     release_note,      // track, a: note
 
     // Resampling, docs/SPEC.md's eighth performance tool. Three commands, because a take spans
@@ -184,7 +197,11 @@ enum class Cmd : uint8_t {
     // not bar-aligned does not loop, which is the whole point of recording a round number of
     // bars. `resample_release` is the main context saying it has finished with the buffer, which
     // is what lets the next take be armed (dsp/capture.hpp).
-    resample_arm,      // a: bars 1-8
+    //
+    // `b` is the SOURCE: 0 the finished master, 1 the audio input (SPEC's "Resample with a chosen
+    // input source"). Which input, and at what level, is the main context's enaga::system::input
+    // call; the audio side only chooses which buffer the take is written from.
+    resample_arm,      // a: bars 1-8, b: 0 master, 1 the audio input
     resample_cancel,
     resample_release,
 
@@ -212,12 +229,30 @@ enum class Cmd : uint8_t {
     // a: length; or c = 1: b is an int8 delta.
     set_master_length,
 
+    // The master kill EQ's kill switches (dsp/buses.hpp): a: band 0 LOW, 1 MID, 2 HIGH;
+    // b: 0 back, 1 killed, 2 toggle. A switch rather than a knob delta because it is a switch:
+    // FUNC + push A/B/C anywhere, or a plain push on the MIXER's EQ page. The switches live in
+    // the project (ProjectSettings::eq_kills) and save with it, like the live mutes.
+    eq_kill,
+
+    // Note repeat (FUNC + FILL in any mode): a held lower pad rolls its track's note at beat
+    // repeat's length, on the clock's grid while the transport runs and free from the press while
+    // it is stopped. a: note, b: velocity, c: 0 let go, 1 press (the first hit sounds now),
+    // 2 new velocity from the pad's pressure. Played, not recorded: the pattern is untouched.
+    note_repeat,
+
+    // Held master moves (FUNC + MUTATE, FUNC + push D), a: 1 held, 0 let go. The delay freeze loops
+    // what is echoing and cuts the delay's feed (dsp/freeze.hpp); the tape stop slows the finished
+    // master to a standstill over two beats (dsp/tapestop.hpp). Performance, not edits: no file.
+    delay_freeze,
+    tape_stop,
+
     count
 };
 
 // Exactly 16 bytes, as the spec requires. Everything an edit needs fits: a target, two small
 // values and one float for the things that are genuinely continuous.
-// `Command::c` set to this on set_param, set_track_length, set_pattern_swing and
+// `Command::c` set to this on set_param, set_track_length, set_pattern_swing, set_track_swing and
 // set_track_level makes the value a DELTA, applied on the audio side to the authoritative value.
 // The encoders send these: the UI reads engine state a block late, so "current + delta" computed
 // there loses every click after the first in a block -- the reason the M3 commands are deltas.
@@ -225,10 +260,14 @@ enum class Cmd : uint8_t {
 constexpr uint8_t kDeltaFlag = 1;
 
 // `Cmd::chain_edit`'s operation, in `a`.
-// set, insert and remove carry the entry whole; `pattern_delta` and `repeats_delta` move the
-// entry's pattern (through the 128, bank by bank) or its repeat count (1-16) by the int8 in `b`,
-// so knob clicks applied a block late are not lost.
-enum class ChainEdit : uint8_t { set = 0, insert, remove, pattern_delta, repeats_delta };
+// set, insert and remove carry the entry whole (bank b, slot c, repeats d, mute recall e);
+// `pattern_delta`, `repeats_delta` and `mutes_delta` move the entry's pattern (through the 128,
+// bank by bank), its repeat count (1-16) or its mute recall (0 none, 1-8) by the int8 in `b`,
+// so knob clicks applied a block late are not lost. `song` sets song mode, b = 0 or 1, and
+// ignores the entry.
+enum class ChainEdit : uint8_t {
+    set = 0, insert, remove, pattern_delta, repeats_delta, mutes_delta, song
+};
 
 struct Command {
     Cmd cmd = Cmd::none;
@@ -359,10 +398,32 @@ struct Status {
     std::atomic<uint8_t> resample_state{0};
     std::atomic<uint32_t> resample_frames{0};
     std::atomic<uint8_t> resample_clamped{0};   // the take was longer than the buffer holds
+    // The audio input's peak over the last block, 0-1000 (per mille of full scale), so the
+    // RESAMPLE screen can show a level to set the input by before a take. 1000 means it clipped.
+    std::atomic<uint16_t> input_peak{0};
+
+    // Streaming. Per track, bumped (with release) each time the audio side stops reading the
+    // track's stream and wants it reopened after the head: a trigger, a loop wrapping, or a new
+    // streamed file. The card side reopens and answers with Cmd::stream_attach carrying the value
+    // it saw. Written after the audio side stopped reading, so the card side may close the
+    // stream as soon as it sees the change. `stream_late` counts taps that came before the card
+    // did (dsp/sample.hpp), summed over the tracks, for the screen's STREAM LATE.
+    std::atomic<uint16_t> stream_want[8] = {};
+    std::atomic<uint32_t> stream_late{0};
 
     // Which pattern is live, so the UI can draw it without reaching into the project.
     std::atomic<uint8_t> live_bank{0};
     std::atomic<uint8_t> live_slot{0};
+
+    // Song mode. Bumped by the audio side when a song reaches its end: the main context watches
+    // for the change and stops the transport, which only it can do (<enaga/clock.hpp>).
+    std::atomic<uint8_t> song_end{0};
+
+    // Audio context only, one writer, as bump_triggered.
+    void bump_song_end() {
+        song_end.store(uint8_t(song_end.load(std::memory_order_relaxed) + 1),
+                       std::memory_order_release);
+    }
 
     // Audio context only, so the load and the store cannot interleave with another writer.
     void bump_sample_epoch(int track) {

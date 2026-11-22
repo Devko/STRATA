@@ -107,7 +107,7 @@ Machine, then drive (asymmetric soft clip), multimode filter (LP, HP, BP, 12 or 
 - **Send A, delay:** tempo-synced stereo delay with ping-pong and filtered feedback (`enaga::StereoDelay`).
 - **Send B, reverb:** `enaga::Reverb` with pre-delay, size, damping and a high-pass on the input. Delay can feed the reverb.
 - **Sidechain duck:** a duck envelope (attack, hold, release) fired by a chosen trigger track (default track 1). Trigger-based, not an envelope follower: tighter and cheaper.
-- **Master:** one-knob DJ filter (left = low-pass, right = high-pass), glue compressor, soft limiter, output level.
+- **Master:** one-knob DJ filter (left = low-pass, right = high-pass), **[rev]** a three-band kill EQ (a DJ isolator: LOW / MID / HI split at 250 Hz and 2.5 kHz with 24 dB Linkwitz-Riley crossovers, each band from a kill to +6 dB with a latching kill switch, bypassed while flat), glue compressor, soft limiter, output level.
 
 **Parameters**
 
@@ -115,6 +115,8 @@ Machine, then drive (asymmetric soft clip), multimode filter (LP, HP, BP, 12 or 
 - Stored as 0-127 in patterns and kits so parameter locks stay small. Each machine maps them to physical units.
 - The audio side ramps every parameter change across one block, so edits and locks never click.
 - One LFO per track (sine, triangle, saw, square, sample and hold), free or tempo-synced, routable to any of the 16 parameters.
+- **[rev]** The LFO is a fifth EDIT page, LFO, after FX: four more bytes per track (16-19), stored, locked, scened, morphed and macro'd like the 16 sound parameters. A = WAV (SIN TRI RMP SAW SQR S+H; RMP rises, SAW falls), B = RAT (0-63 free, 0.06 to 32 Hz; 64-127 synced, 8 bars down to 1/32 including dotted and triplets), C = DEP (127 swings about 64 counts either side), D = DST (OFF or one of the 16 sound parameters). It runs at block rate and moves its destination's byte, so it costs nothing per sample. A synced LFO takes its phase from the clock's tick count. All-zero bytes are OFF, so older kits and scenes sound as they did. dsp/lfo.hpp has the detail.
+- **[rev]** Each track has an **arpeggiator**, a sixth EDIT page, ARP, after LFO: four more bytes per track (20-23), stored, locked and scened like the rest. A = MOD (OFF UP DN U/D ORD RND), B = RAT (1/4 1/8 1/8T 1/16 1/16T 1/32 1/32T), C = OCT (1-4 octaves), D = GAT (each hit's length, 50-99% of the spacing). With MOD on, a sequenced step's note -- a POLY step's whole chord -- plays as a run of single notes at RAT for the step's length, and the track's next step takes over. In KEYS, the held keys are arpeggiated while any is down, on the clock's grid with the transport running and free at the tempo when stopped; a pad hit plays once. RND plays the same notes every pass. All-zero bytes are OFF, so older kits play as they did. core/arp.hpp has the note logic; the engine schedules the hits on the clock's ticks, at control rate.
 - Voices come from fixed pools allocated in `init()`; nothing is allocated while playing.
 
 ## Sequencer
@@ -130,7 +132,7 @@ STRATA does not implement a clock and does not own the tempo. Enaga's `<enaga/cl
 - **The clock's source is the user's CLOCK SRC setting**: INTERNAL, MIDI clock at MIDI IN, or SYNC IN. Under an outside source `start`, `stop` and `set_tempo` do nothing and return `false`, and `on_transport` reports what the outside clock did.
 - So PLAY and STOP must handle a refusal and follow `on_transport` instead, and the tempo display shows `EXT` whenever `clock::source()` is not internal. This is not deferrable: it shapes the transport from the first milestone.
 - With CLOCK OUT on, Enaga already sends MIDI clock and transport; with SYNC OUT on, pulses at SYNC OUT. STRATA only exposes the settings.
-- **STRATA's own timing work**: swing 50-75% per pattern on even 16ths with an optional per-track override, per-track length and speed, and micro-timing.
+- **STRATA's own timing work**: swing 50-75% per pattern on even 16ths with an optional per-track override (**[rev]** set on PROJECT's PATTERN page, encoder C, PAT or 50-75), per-track length and speed, and micro-timing.
 - STOP stops with release tails, STOP twice cuts all voices.
 
 **Pattern structure**
@@ -171,6 +173,7 @@ STRATA does not implement a clock and does not own the tempo. Enaga's `<enaga/cl
 
 - The next pattern is queued and switches at the end of the current one, or after 16 or 32 steps, or at once keeping the position.
 - Chains: up to 64 entries per project, each a pattern plus a repeat count. No song timeline in v1.
+- **[rev] Song mode** (Roland, 2026-11-22): a chain entry may also recall one of the 8 stored mute states as it starts, so the chain holds sections (an intro without the kick, a breakdown) and not only patterns. A SONG switch on the CHAIN page (FUNC+RIGHT) plays the chain once and stops the transport at its end, back on entry 1, instead of looping. Still a chain, not a timeline. PROJECT.BIN's optional section 5 holds the switch and the 64 recalls; an older file loops with no recalls.
 - Copy, paste and clear for steps, tracks and patterns; 16 levels of undo for edits.
 
 ## Performance and creativity
@@ -181,12 +184,14 @@ Eight tools change the music live without touching the stored pattern unless you
 | --- | --- | --- |
 | Mutes | Lower pads toggle track mutes, instantly or at the next bar. 8 stored mute states per project, recalled from the upper row | Saved with the pattern |
 | Fill | Hold to activate `FILL` conditions; optional auto-fill every 4, 8 or 16 bars | No |
-| Scenes and morph | A scene stores parameter values for any tracks. Assign scene A and scene B, then VALUE crossfades the live sound from A to B. 16 scenes per project | Scene edits save; the morph position does not |
+| Scenes and morph | A scene stores parameter values for any tracks. Assign scene A and scene B, then VALUE crossfades the live sound from A to B. 16 scenes per project. **[rev]** A whole capture also stores the master kill EQ's three band knobs (not its kill switches), and the morph crossfades them by the same rule | Scene edits save; the morph position does not |
 | Beat repeat | Hold to loop the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the master output from a 2-bar ring buffer, with optional pitch-down | No |
+| Note repeat | **[rev]** FUNC + FILL toggles NOTE RPT: a held lower pad rolls its track's root at beat repeat's length, on the clock's grid while running and free while stopped, and its pressure sets the velocity instead of bending macro 1. Not recorded | No |
 | Throws | Hold to push delay or reverb send to full on the selected tracks; release returns it | No |
+| Tape stop and delay freeze | **[rev]** Held master moves (Roland, 2026-11-22). FUNC + push D: the finished master slows to a standstill over two beats, pitch and level falling, back on release with a 5 ms crossfade. FUNC + MUTATE: the delay's next echo period (one delay time, two with ping-pong) is recorded and looped while held, the delay's feed cut; release crossfades back to its tail | No |
 | Mutation | Variations of the selected track: rotate, Euclidean density up or down, bounded randomizing of velocity, micro-timing, probability and notes in scale. Seeded and undoable | OK keeps it, CLR reverts |
-| Macros | 4 macros on encoders A-D in PERFORM mode. Each drives up to 4 parameters on any tracks, each towards its own end. **[rev]** At 0 a macro lets go, and turning it up sweeps each parameter from its live value (kit, then morph) to that end, so a resting macro never holds an EDIT knob or a scene (Roland, 2026-11-22) | Macro setup saves |
-| Resample | Record the master or one track for 1, 2, 4 or 8 bars to `/RECORD` as WAV, then load it into a SAMPLE or GRAIN track in one action | Writes a file |
+| Macros | 4 macros on encoders A-D in PERFORM mode. Each drives up to 4 parameters on any tracks, each towards its own end. **[rev]** At 0 a macro lets go, and turning it up sweeps each parameter from its live value (kit, then morph) to that end, so a resting macro never holds an EDIT knob or a scene (Roland, 2026-11-22). **[rev]** A target may also be a master kill EQ band (FUNC + STEP 5-7 in PERFORM; 1-4 are the LFO) | Macro setup saves |
+| Resample | Record the master or one track for 1, 2, 4 or 8 bars to `/RECORD` as WAV, then load it into a SAMPLE or GRAIN track in one action. **[rev]** Or record the audio input (2026-11-22): encoder B in RESAMPLE picks MASTER or an input route (LINE, LINE L, MIC, DYN MIC, HI-Z) through `enaga::system::input`, C its level; the take is `audio()`'s `in`, bar-aligned like a master take, with a meter and no monitoring. Recording one track alone is still not built | Writes a file |
 
 **Musical defaults that help creativity**
 
@@ -225,12 +230,13 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 | F5 (PLAY) | Play | Restart from step 1 |
 | F6 (STOP) | Stop; twice cuts all voices | Stop and reset all tracks |
 | F7 (MIXER) | Mixer: A-D levels of 4 tracks, selection keys switch 1-4 and 5-8 | PERFORM mode: A-D macros, VALUE morph |
-| F8 (EDIT) | Sound pages of the selected track; selection keys switch SRC, FLTR, AMP, FX | Kit and machine select. **[rev]** The first press is MACHINE; F1 + F8 again opens the KIT browser (16 kits on the card), and again goes back |
+| F8 (EDIT) | Sound pages of the selected track; selection keys switch SRC, FLTR, AMP, FX **[rev]**, LFO and ARP | Kit and machine select. **[rev]** The first press is MACHINE; F1 + F8 again opens the KIT browser (16 kits on the card), and again goes back |
 | Octave left/right | Step page 1-4 in GRID; octave in KEYS | Pattern length |
 | UP, DOWN | **[rev]** The rows on screen: the track in GRID, EDIT and KEYS; the machine in MACHINE; the kit slot in KIT; the length in RESAMPLE; the mutation in PERFORM; the slot cursor in PROJECT. With a STEP held: copy, paste | Copy, paste. In PROJECT: chain on/off, reload the sample. In KIT: read the card again, save the kit into the slot. In PERFORM: auto-fill |
 | LEFT, RIGHT | **[rev]** Sideways: the page wherever the selection keys flip pages; the step on the step page; octave in KEYS; macro in PERFORM; track in MACHINE; the page of eight kit slots in KIT; destination in RESAMPLE; the slot cursor in PROJECT | Free |
-| OK, CLR | Confirm, cancel. **[rev]** OK picks the slot under the cursor in PROJECT, and recalls the kit under it in KIT (twice, since a recall is not undoable); CLR closes the step page and SETUP | F1 + CLR = undo, F1 + OK = redo |
+| OK, CLR | Confirm, cancel. **[rev]** OK picks the slot under the cursor in PROJECT, and recalls the kit under it in KIT (twice, since a recall is not undoable), and in EDIT or MACHINE on a SAMPLE or GRAIN track opens the sample browser, where it loads a file or opens a folder; CLR closes the step page and SETUP, and goes up a folder in the browser | F1 + CLR = undo, F1 + OK = redo |
 | VALUE | Tempo; push + turn = swing. **[rev]** Shows `EXT` and refuses edits when CLOCK SRC is not INTERNAL | Master DJ filter |
+| Push A, B, C | **[rev]** Remove a lock with a STEP held. On the MIXER's EQ page: the kill EQ's LOW, MID, HI kill switch | **[rev]** The master kill EQ's LOW, MID, HI kill switch, in every mode |
 
 **[rev] Navigation.** The arrows follow Enaga's own menu and SETTINGS page, so one habit works in
 STRATA and in Enaga: UP and DOWN move through the rows on screen, LEFT and RIGHT move sideways,
@@ -271,13 +277,15 @@ LEDs update from the main context only. The UI keeps a shadow of every LED and s
 
 A project is one folder on the card. It loads fully into RAM when opened (patterns about 1.1 MiB, samples up to 64 MiB) and saves bank by bank with Enaga's crash-safe `files::save`.
 
+**[rev]** Projects are picked and named on the panel: PROJECT's fifth page, PROJECTS, lists the folders in `PROJECTS/`; OK twice opens one (like a reload, it drops unsaved work and stops the transport) and makes it the one STRATA starts with; FUNC+DOWN is SAVE AS, a name typed with Enaga's `ui::TextEntry` (16 characters of A-Z, 0-9, space and `- + . # !`), written whole into a new folder. A name another folder already has is refused rather than overwritten. Delete and rename stay on the computer: Enaga has no rename.
+
 **Card layout**
 
 ```
 /ENAGA/APPS/STRATA/APP.ENA                  the app (8.3 folder name = package name)
 /ENAGA/DATA/STRATA/SETTINGS.TXT             last project, preferences (<enaga/settings.hpp>)
 /ENAGA/DATA/STRATA/PROJECTS/<NAME>/PROJECT.BIN   tempo, scenes, macros, chains, mute states
-                                  /KIT.BIN       per track: machine, 16 parameters, LFO, mixer, sample path
+                                  /KIT.BIN       per track: machine, 16 parameters, LFO, arp, mixer, sample path
                                   /BANK_A.BIN … BANK_H.BIN   16 patterns each
 /ENAGA/DATA/STRATA/AUTOSAVE/                the working copy, same layout
 /ENAGA/DATA/STRATA/KITS/KIT_01.BIN … KIT_16.BIN   [rev] the kit library, shared by every project; KIT.BIN's format
@@ -290,6 +298,7 @@ A project is one folder on the card. It loads fully into RAM when opened (patter
 - Little-endian binary: magic `STRA`, format version, section table, CRC-32 over the payload.
 - Written and read byte by byte through a small serializer. Never cast file bytes to structs (alignment rule).
 - An unknown version or a bad CRC is refused with a message on screen; it never crashes the app.
+- **[rev]** A format grows by adding an OPTIONAL section at the end, not by a version bump: an older file without it loads with that feature off. KIT.BIN's section 2 holds the four LFO bytes per track, and PERFORM.BIN's section 3 holds each scene's LFO values and their stored mask. KIT.BIN's section 3 holds the four ARP bytes per track and PERFORM.BIN's section 5 each scene's ARP values, and PROJECT.BIN's section 5 song mode (their stored bits are the high nibble of the LFO's mask byte). An older reader ignores the extra sections.
 
 **Core structures (sketch)**
 
@@ -353,6 +362,26 @@ The enum numbering is therefore not the order the UI shows the speeds in.
 - Loaded in the background with `files::load`, whose `done` callback runs in the main context. A track whose sample is still loading stays silent rather than glitching.
 - Files not at 48 kHz are resampled once at load, in main-loop slices.
 - Streams (`files::Stream`) are used only for recording and for loops longer than 30 s.
+  **[rev] Not for loops (Roland, 2026-11-22).** A file too big for the loader's staging buffer is
+  read a 4 MiB chunk at a time (`files::File`) and converted straight into the pool, so a 48 kHz
+  loop of any length the pool and `Cmd::set_sample`'s 24-bit frame count allow (349 s) loads
+  whole and keeps pitch, slices and GRAIN, at no CPU cost. Other rates still convert whole into
+  the 30 s (at 96 kHz) source buffer. Automatic, not a setting.
+  **[rev] Streaming playback as the fallback (Roland, 2026-11-22).** A file the pool cannot hold
+  -- past the memory left, past 349 s, or not at 48 kHz and past the source buffer -- is
+  streamed instead of refused: its first 2 s load into the pool as a head and the rest is read
+  through a `files::Stream` (256 KiB ring) into a per-track frame fifo in `audio()`
+  (`core/streamfifo.hpp`). A trigger or a loop wrap plays the head while the card side reopens
+  the stream at the head's end, so a restart is instant. A streamed file plays forward on one
+  voice at its own rate: PIT, the note, the envelope, LVL and loop apply; START, LEN, slices and
+  reverse do not, and GRAIN on that track plays only the head. Four streamed tracks at most
+  (`STREAMS FULL`); a card that falls behind plays silence and keeps time (`STREAM LATE`).
+  `app/storage.hpp`, "streaming", has the protocol.
+- **[rev]** Samples are picked on the box with the **sample browser** (2026-11-22): OK in EDIT or
+  MACHINE on a SAMPLE or GRAIN track lists `/SAMPLES` (and `/RECORD`) through `files::list`, and
+  OK on a WAV puts its path in the track's kit and loads it through the ordinary swap, transport
+  running. `core/browse.hpp` holds what is listed (WAVs and folders, no `._` files, 256 entries
+  of 64 bytes, paths that fit the kit's 112 bytes).
 
 **Saving**
 
@@ -411,6 +440,7 @@ That is conservative: Enaga's 1,868-cycle voice is a full VA with a mod matrix, 
 | Send A delay + Send B reverb | 12-16% | measured together at 16% |
 | 8 per-track insert chains | 8-16% | extrapolated; the main unknown |
 | Master (DJ filter, glue comp, limiter) | 2-4% | extrapolated |
+| **[rev]** Master kill EQ, only while a band is off flat | ~1.4% (GCC-only ~2.2%) | host proxy, docs/BUDGET.md; 0 while bypassed |
 | Sequencer, command ring, beat-repeat write | ~2% | extrapolated |
 | Enaga itself | 3% | measured |
 | **Total** | **~38-52%** | inside the 60% target |

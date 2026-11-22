@@ -179,7 +179,9 @@ Engine &fresh() {
     // starting point for a test about whether anything was heard. Mid values with the level up is
     // the patch tests/test_va.cpp and the others start from.
     for (int t = 0; t < kTracks; t++) {
-        for (int i = 0; i < kKitParams; i++) incoming.kit.tracks[t].params[i] = 64;
+        // The SOUND parameters only: the LFO's four bytes stay 0, which is OFF (dsp/lfo.hpp).
+        // At 64 they would be a sine at 0.25 Hz moving parameter 8 on every track.
+        for (int i = 0; i < kKitSoundParams; i++) incoming.kit.tracks[t].params[i] = 64;
         incoming.kit.tracks[t].params[11] = 127;     // LVL on every machine (dsp/track.hpp)
     }
 

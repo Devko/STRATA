@@ -19,7 +19,7 @@ at the top of `docs/UNIT_CHECKLIST.md` is the first pass over it.
 | `make -C host test` | **1,125 tests, 594,524 checks, 0 failures** on `main` at `95c6eb1` (PR #33): `core/`, `dsp/` and all of `app/` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image: `APP.ENA` 484,160 bytes GCC-only (476,008 cl6x), bss 1,334,848; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here |
-| `tools/scenarios.sh` | **9 scenarios**: m0, m1, m3–m7, `factory`, `kits`. Worst measured: **23.49% with cl6x, 39.60% GCC-only** (`docs/BUDGET.md`), before today's afternoon PRs. `factory` and `kits` have not been run with cl6x yet |
+| `tools/scenarios.sh` | **11 scenarios**: m0, m1, m3–m7, `factory`, `kits`, `killeq` (the master kill EQ running; never run yet), `lfo` (the LFO and track swing pages draw; never run yet). Worst measured: **23.49% with cl6x, 39.60% GCC-only** (`docs/BUDGET.md`), before today's afternoon PRs. `factory` and `kits` have not been run with cl6x yet |
 | unit | boots, plays, LOAD about 0–26%. **No MAX reading yet**: the readout is PR #17, still open |
 | memory | init takes **101.2 MiB of a 120 MiB heap** since PR #31 (`tests/test_memory.cpp`), 18.8 MiB spare against an 8 MiB headroom rule. Never checked on the unit |
 | milestones | M0–M6 feature-complete, M7's app side done; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -187,6 +187,9 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
 - **The shared voice budget** (PR #30): past 12 VA POLY voices across all tracks, a new note
   chokes the quietest started voice on any POLY track (a 64-frame fade); a note is dropped only
   when every counted voice is still waiting for its frame. GRAIN and VA MONO are not counted.
+- **A SAMPLE or GRAIN track with no file plays the placeholder** (Roland, 2026-11-22): `Cmd::clear_sample`
+  gives both readers the static placeholder rather than nothing, so NEW and a reopened factory
+  project keep the LOOP part, as a card-less boot does.
 - **The factory content is one function**, `factory_project` in `core/factory.cpp`, used by both
   `Engine::init` (no card) and `Storage::start_new` (NEW). Change sounds and patterns there only.
   `project_init` stays blank because the tests' `fresh()` builds on it. It ships macros B ACID,

@@ -1,6 +1,9 @@
 #include "engine.hpp"
 
+#include "arp.hpp"       // the arpeggiator's notes; the engine schedules them
 #include "factory.hpp"
+#include "masterloops.h"   // strata_master_peak, for the input meter
+#include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
@@ -36,7 +39,9 @@ static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first
                   kFactoryAmp == page_first(Page::amp) && kFactoryFx == page_first(Page::fx),
               "core/factory.hpp's page layout and dsp/track.hpp's have diverged");
 
-static_assert(kKitParams == kParams,
+static_assert(kKitParams == kTrackParams && kKitSoundParams == kParams &&
+                  kKitLfoParams == kLfoParams && kKitArpParams == kArpParams &&
+                  kKitLfoEnd == kArpFirst && kArpBytes == kArpParams,
               "core/project.hpp's kit record and dsp/track.hpp's TrackParams have diverged; a "
               "saved project would come back with the wrong number of parameters per track");
 
@@ -49,6 +54,7 @@ bool Engine::init(float sample_rate) {
 
     // Beat repeat's 2-bar ring, 2.93 MiB, here with every other buffer in the signal path.
     if (!repeat_.init(rate_)) return false;
+    if (!tape_stop_.init(rate_)) return false;
     if (!capture_.init(rate_)) return false;
 
     perform_init(scenes_, macros_);
@@ -75,7 +81,11 @@ bool Engine::init(float sample_rate) {
         pool_[t].poly.init(rate_);
         pool_[t].sampler.init(rate_);
         pool_[t].grain.init(rate_);
+        // A seed per track, so eight S&H LFOs do not move together. Fixed, so a render is
+        // repeatable.
+        lfo_[t].init(0x9E3779B9u * uint32_t(t + 1));
     }
+    inv_rate_ = enaga::dsp::reciprocal(rate_);
 
     // The duck fires from the kick, and the kick itself must not duck.
     //
@@ -187,9 +197,11 @@ void Engine::build_placeholder_sample() {
     // switched to SAMPLE or GRAIN before any card has been read should make a sound rather than
     // silence, and this is the only PCM the app owns before a load: eight pointers to one static
     // array, which costs nothing.
+    placeholder_ = pcm;
+    placeholder_frames_ = uint32_t(kTotalFrames);
     for (int t = 0; t < kTracks; t++) {
-        pool_[t].sampler.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
-        pool_[t].grain.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
+        pool_[t].sampler.set_sample(placeholder_, placeholder_frames_, 1, rate_);
+        pool_[t].grain.set_sample(placeholder_, placeholder_frames_, 1, rate_);
     }
 }
 
@@ -264,7 +276,7 @@ void Engine::forget_prepared() {
 void Engine::prepare_machine(int track) {
     Machine *machine = machines_[track];
     if (machine == nullptr) return;
-    const TrackParams &params = effective_[track];
+    const TrackParams &params = sounding(track);
     if (prepare_memo_ && machine_prepared_for_[track] == machine &&
         __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0) {
         return;
@@ -275,7 +287,7 @@ void Engine::prepare_machine(int track) {
 }
 
 void Engine::prepare_chain(int track) {
-    const TrackParams &params = effective_[track];
+    const TrackParams &params = sounding(track);
     const ChainMix &mix = mix_[track];
     if (prepare_memo_ && chain_prepared_valid_[track] &&
         chain_prepared_mix_[track].level == mix.level &&
@@ -307,10 +319,13 @@ void Engine::apply(const Command &command) {
             // Nothing to do here. enaga::clock's transport calls are MAIN CONTEXT (see
             // <enaga/clock.hpp>), so app/ drives them directly; routing them through this ring
             // would call them from the audio context, where they silently do nothing. The
-            // command still exists because the UI's intent is worth seeing in a trace.
+            // command still exists because the UI's intent is worth seeing in a trace. It does end
+            // a finished song's silence, which matters under an outside clock that never stopped.
+            song_over_ = false;
             break;
 
         case Cmd::stop:
+            song_over_ = false;
             // Only the voice side of a stop belongs here; the clock itself was already stopped
             // by the main context.
             if (command.a) {
@@ -327,6 +342,14 @@ void Engine::apply(const Command &command) {
             // blocks later would be a note after the transport stopped.
             deferred_count_ = 0;
             scheduler_.reset(true);
+            // And a sequenced arp, whose step is gone. A held KEYS arp keeps going.
+            for (int t = 0; t < kTracks; t++) seq_arp_[t].on = false;
+            // And the last step's locks. A lock lasts as long as its step, and with the transport
+            // stopped no step is playing: left masked, every parameter that step locked was shut
+            // out of the performance layer until the next PLAY, so a macro or the morph on it
+            // did nothing and a pad played the dead step's value. The per-block copy in
+            // process() puts the performed values back in this same block.
+            for (int t = 0; t < kTracks; t++) locked_[t] = 0;
             break;
 
         case Cmd::set_tempo:
@@ -400,6 +423,22 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_track_swing: {
+            // A delta walks PAT, 50 .. 75; an absolute value is taken if it is PAT or in range
+            // and clamped otherwise, so a damaged command cannot store a swing the scheduler
+            // would have to clamp again. The scheduler already reads `TrackPattern::swing`
+            // (core/scheduler.cpp), so all this has to do is store it and re-derive the timing.
+            uint8_t &swing = live().tracks[track].swing;
+            swing = command.c == kDeltaFlag ? track_swing_step(swing, int(int8_t(command.b)))
+                    : command.a == kSwingInherit
+                        ? kSwingInherit
+                        : uint8_t(command.a < kSwingMin ? kSwingMin
+                                                        : (command.a > kSwingMax ? kSwingMax
+                                                                                 : command.a));
+            reconfigure();
+            break;
+        }
+
         case Cmd::set_master_length: {
             const int wanted = command.c == kDeltaFlag
                                    ? int(live().master_length) + int(int8_t(command.b))
@@ -422,7 +461,7 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::lock_delta: {
-            if (command.a >= kParams) break;
+            if (command.a >= kTrackParams) break;
             const uint8_t param = command.a;
 
             // The base is the step's own lock if it has one, and the kit value if it does not --
@@ -455,7 +494,7 @@ void Engine::apply(const Command &command) {
                 // parameter this mask does not claim -- undoes the line above before a sample is
                 // rendered, leaving exactly the silence the comment says it prevents. fire()
                 // rebuilds the mask for the next step, so this only has to hold until then.
-                locked_[track] = uint16_t(locked_[track] | uint16_t(1u << param));
+                locked_[track] = locked_[track] | (1u << param);
             }
             break;
         }
@@ -562,9 +601,12 @@ void Engine::apply(const Command &command) {
             // count resyncs on the next tick. The voices ring on: this is a restart, not a stop.
             deferred_count_ = 0;
             scheduler_.reset(true);
+            // And a sequenced arp, whose step is gone. A held KEYS arp keeps going.
+            for (int t = 0; t < kTracks; t++) seq_arp_[t].on = false;
             // Mutation-equivalent (docs/MUTATION.md): resolve_tick already sends an origin past
             // the new tick back to 0. Kept so that this case says everything a restart resets.
             origin_ = 0;
+            song_over_ = false;
             boundary_known_ = false;
             bar_known_ = false;
             break;
@@ -574,10 +616,10 @@ void Engine::apply(const Command &command) {
             bool done = false;
             switch (ChainEdit(command.a)) {
                 case ChainEdit::set:
-                    done = chain_set(project_, at, command.b, command.c, command.d);
+                    done = chain_set(project_, at, command.b, command.c, command.d, command.e);
                     break;
                 case ChainEdit::insert:
-                    done = chain_insert(project_, at, command.b, command.c, command.d);
+                    done = chain_insert(project_, at, command.b, command.c, command.d, command.e);
                     // The player's entry is an index: keep it on the entry it is playing.
                     if (done) chain_player_inserted(chain_, at);
                     break;
@@ -585,8 +627,13 @@ void Engine::apply(const Command &command) {
                     done = chain_remove(project_, at);
                     if (done) chain_player_removed(chain_, at);
                     break;
+                case ChainEdit::song:
+                    project_.settings.chain_song = command.b != 0;
+                    done = true;
+                    break;
                 case ChainEdit::pattern_delta:
-                case ChainEdit::repeats_delta: {
+                case ChainEdit::repeats_delta:
+                case ChainEdit::mutes_delta: {
                     if (at >= chain_length(project_)) break;
                     const ChainEntry entry = project_.chain[at];
                     const int delta = int(int8_t(command.b));
@@ -595,12 +642,19 @@ void Engine::apply(const Command &command) {
                         const int last = kBanks * kPatternsPerBank - 1;
                         index = index < 0 ? 0 : (index > last ? last : index);
                         done = chain_set(project_, at, uint8_t(index / kPatternsPerBank),
-                                         uint8_t(index % kPatternsPerBank), entry.repeats);
+                                         uint8_t(index % kPatternsPerBank), entry.repeats,
+                                         entry.mutes);
+                    } else if (ChainEdit(command.a) == ChainEdit::mutes_delta) {
+                        int mutes = int(entry.mutes) + delta;
+                        mutes = mutes < 0 ? 0 : (mutes > kChainMutesMax ? kChainMutesMax : mutes);
+                        done = chain_set(project_, at, entry.bank, entry.slot, entry.repeats,
+                                         uint8_t(mutes));
                     } else {
                         int repeats = int(entry.repeats) + delta;
                         repeats = repeats < 1 ? 1 : (repeats > kChainRepeatsMax ? kChainRepeatsMax
                                                                                 : repeats);
-                        done = chain_set(project_, at, entry.bank, entry.slot, uint8_t(repeats));
+                        done = chain_set(project_, at, entry.bank, entry.slot, uint8_t(repeats),
+                                         entry.mutes);
                     }
                     break;
                 }
@@ -631,6 +685,7 @@ void Engine::apply(const Command &command) {
                 if (chain_start(project_, chain_)) {
                     switch_pattern(int(project_.chain[chain_.entry].bank),
                                    int(project_.chain[chain_.entry].slot));
+                    chain_entry_started();
                 } else {
                     status_.bump_refused();
                 }
@@ -639,6 +694,7 @@ void Engine::apply(const Command &command) {
                 // back: a performer turning the chain off wants to stay where they are.
                 chain_.active = false;
             }
+            song_over_ = false;
             // And record it, which nothing did: `ProjectSettings::chain_enabled` round-tripped
             // through the serializer while never being written, so a project saved with its
             // chain running reopened with it off. The player's own `active` is the live truth;
@@ -718,6 +774,16 @@ void Engine::apply(const Command &command) {
             }
             deferred_count_ = 0;                 // hits of a pattern that no longer exists
             scheduler_.reset(true);
+            // And both arps: the step is gone, and so is the kit whose ARP page the held run
+            // followed. Keys still down play plainly until they come up.
+            for (int t = 0; t < kTracks; t++) {
+                seq_arp_[t].on = false;
+                held_arp_[t].on = false;
+                held_count_[t] = 0;
+            }
+            song_over_ = false;
+            // The lock mask of a step of a pattern that no longer exists (Cmd::stop says why).
+            for (int t = 0; t < kTracks; t++) locked_[t] = 0;
             reconfigure();
             // The sends and the master, which arrived with the file as fourteen bytes. Without
             // this the mixer would keep running the PREVIOUS project's delay and reverb while
@@ -751,8 +817,17 @@ void Engine::apply(const Command &command) {
             // its pointer: clearing only the hosted one left the other pointing into a range the
             // loader is about to overwrite, and switching back played whatever landed there.
             // set_sample kills each machine's voices first (dsp/sample.hpp, dsp/grain.hpp).
-            pool_[track].sampler.set_sample(nullptr, 0, 1, rate_);
-            pool_[track].grain.set_sample(nullptr, 0, 1, rate_);
+            //
+            // What they are given instead is the placeholder, not nothing: it is a static array
+            // outside the region, so the loader may write over the range at once, and a track
+            // whose kit names no file plays what it played before any card was read. The
+            // factory's LOOP track is SAMPLE with no file, so a nullptr here made NEW, and every
+            // project saved from the factory and opened again, lose that track's part.
+            pool_[track].sampler.set_sample(placeholder_, placeholder_frames_, 1, rate_);
+            pool_[track].grain.set_sample(placeholder_, placeholder_frames_, 1, rate_);
+            // A streamed sample stops being read here too, BEFORE the epoch: the card side closes
+            // the track's stream once it sees the bump.
+            stop_stream(track);
             // Bumped even for a track that hosts no Sampler. The loader waits for this change
             // before it releases the range, so a track that was never reading anything must
             // still report that it has stopped, or the wait never ends.
@@ -786,8 +861,65 @@ void Engine::apply(const Command &command) {
                 break;
             }
             const int16_t *data = sample_region_ + command.u / sizeof(int16_t);
+            stop_stream(track);
             pool_[track].sampler.set_sample(data, frames, channels, rate_);
             pool_[track].grain.set_sample(data, frames, channels, rate_);
+            break;
+        }
+
+        case Cmd::set_stream: {
+            // The head is checked against the region exactly as set_sample's buffer is.
+            const StreamInfo &info = stream_inbox_[track];
+            const int channels = info.channels == 2 ? 2 : 1;
+            const uint32_t head_bytes = info.head_frames * uint32_t(channels) * 2u;
+            const bool usable = sample_region_ != nullptr && info.head_frames != 0 &&
+                                info.head_frames <= uint32_t(Sampler::kMaxFrames) &&
+                                info.head_offset % sizeof(int16_t) == 0 &&
+                                info.head_offset <= sample_region_bytes_ &&
+                                head_bytes <= sample_region_bytes_ - info.head_offset &&
+                                info.frame_bytes != 0 && info.frame_bytes <= 8 &&
+                                info.encoding != 0 && info.encoding < uint8_t(PcmFormat::count);
+            if (!usable) {
+                status_.bump_refused();
+                break;
+            }
+            const int16_t *head = sample_region_ + info.head_offset / sizeof(int16_t);
+            const float rate = float(info.rate);
+            stop_stream(track);
+            Sampler &sampler = pool_[track].sampler;
+            sampler.set_stream(head, info.head_frames, info.total_frames, channels, rate,
+                               &fifos_[track]);
+            // GRAIN plays what is resident: the head. A grain cloud jumps about the file, which
+            // a stream cannot do.
+            pool_[track].grain.set_sample(head, info.head_frames, channels, rate);
+            if (!sampler.streaming()) {
+                status_.bump_refused();
+                break;
+            }
+            StreamState &st = stream_state_[track];
+            st.on = true;
+            st.attached = false;
+            st.encoding = info.encoding;
+            st.frame_bytes = info.frame_bytes;
+            st.carry = 0;
+            st.total = info.total_frames;
+            st.restarts_seen = sampler.stream_restarts();
+            st.late_seen = sampler.stream_late();
+            // Ask for the stream: the card side opens it after the head and attaches.
+            st.want = uint16_t(st.want + 1u);
+            status_.stream_want[track].store(st.want, std::memory_order_release);
+            break;
+        }
+
+        case Cmd::stream_attach: {
+            StreamState &st = stream_state_[track];
+            const uint16_t answered = uint16_t(command.a | uint16_t(command.b) << 8);
+            // An answer to an older request is stale: the stream it opened was for a restart
+            // that has since been superseded, and the card side is already reopening.
+            if (st.on && answered == st.want) {
+                st.attached = true;
+                st.carry = 0;
+            }
             break;
         }
 
@@ -805,7 +937,7 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::set_param:
-            if (command.a < kParams) {
+            if (command.a < kTrackParams) {
                 uint8_t value = command.b;
                 if (command.c == kDeltaFlag) {
                     const int next = int(params_[track].v[command.a]) + int(int8_t(command.b));
@@ -896,7 +1028,14 @@ void Engine::apply(const Command &command) {
                 // being performed.
                 if (command.b != 0) scene_capture_track(scenes_.scenes[command.a], project_.kit,
                                                         track);
-                else scene_capture(scenes_.scenes[command.a], project_.kit);
+                else {
+                    scene_capture(scenes_.scenes[command.a], project_.kit);
+                    // A whole capture is the whole sound, so the master EQ's knobs too (not
+                    // its kill switches, which are a hand on the panel). A one-track capture
+                    // leaves the EQ out: it is not that track's.
+                    scene_capture_master(scenes_.scenes[command.a],
+                                         &project_.settings.master[kMasterEqFirst]);
+                }
                 perform_dirty_ = true;
             }
             break;
@@ -932,7 +1071,9 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::macro_assign:
-            if (command.a >= kMacros || command.b >= kParams) {
+            // `b` past the twenty track parameters names a master EQ band: kTrackParams + 0-2.
+            // The track byte cannot carry it -- every command naming track 8 is refused at the top.
+            if (command.a >= kMacros || command.b >= kTrackParams + kMasterBands) {
                 // Counted, like the "macro is full" refusal below it. Two refusals in one
                 // command reported two different ways is how a user concludes the box is broken.
                 status_.bump_refused();
@@ -951,8 +1092,9 @@ void Engine::apply(const Command &command) {
                     break;
                 }
                 macro.targets[slot].enabled = 1;
-                macro.targets[slot].track = uint8_t(track);
-                macro.targets[slot].param = command.b;
+                const bool on_master = command.b >= kTrackParams;
+                macro.targets[slot].track = on_master ? kMacroMasterTrack : uint8_t(track);
+                macro.targets[slot].param = on_master ? uint8_t(command.b - kTrackParams) : command.b;
                 // From the parameter's value now to the end the macro heads for. `c` is that
                 // value and `d` the end. A macro sweeps from the LIVE value (core/perform.hpp), so
                 // `low` is a record for the screen; with the macro knob already up, the parameter
@@ -1007,6 +1149,19 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::trigger_note: {
+            // A held KEYS key on a track whose arp is on joins the held notes instead: the arp
+            // plays them (core/arp.hpp). A pad or MIDI note has no release to end a hold.
+            if (command.c == 1 && arp_settings(track).on()) {
+                const uint8_t note = clamp_u8(command.a);
+                uint8_t &count = held_count_[track];
+                bool have = false;
+                for (int i = 0; i < count; i++) have = have || held_notes_[track][i] == note;
+                if (!have && count < kArpMaxInput) held_notes_[track][count++] = note;
+                held_arp_[track].velocity =
+                    uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
+                arp_held_changed(track);
+                break;
+            }
             // A pad hit, played live. It sounds now, at the start of the block: the main context
             // cannot know a frame offset, and the spec's latency stamping belongs to recording.
             // Not on a muted track: a muted track is not rendered, so the note would wait in the
@@ -1023,12 +1178,53 @@ void Engine::apply(const Command &command) {
             break;
         }
 
-        case Cmd::release_note:
+        case Cmd::note_repeat: {
+            Roll &roll = rolls_[track];
+            const uint8_t velocity =
+                uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
+            if (command.c == 0) {
+                // Let go. The last hit keeps its gate and ends by itself.
+                roll.on = false;
+            } else if (command.c == 1) {
+                roll.on = true;
+                roll.note = clamp_u8(command.a);
+                roll.velocity = velocity;
+                roll.last_tick = tick_;
+                roll.countdown = roll_period_frames();
+                roll_fire(track, 0);
+            } else if (command.c == 2) {
+                if (roll.on) roll.velocity = velocity;   // pressure on a pad that is not rolling
+            } else {
+                status_.bump_refused();
+            }
+            break;
+        }
+
+        case Cmd::delay_freeze:
+            mixer_.freeze_delay(command.a != 0);
+            break;
+
+        case Cmd::tape_stop:
+            tape_stop_.hold(command.a != 0);
+            break;
+
+        case Cmd::release_note: {
             // A KEYS key coming up. Not refused on a muted track or with nothing holding the
             // note: a release with nothing to let go is the second half of a gesture whose
             // first half was swallowed, and it changes nothing (dsp/track.hpp, `release`).
             if (machines_[track]) machines_[track]->release(clamp_u8(command.a));
+            // And out of the arp's held notes, if it was one.
+            const uint8_t note = clamp_u8(command.a);
+            uint8_t &count = held_count_[track];
+            for (int i = 0; i < count; i++) {
+                if (held_notes_[track][i] != note) continue;
+                for (int j = i; j + 1 < count; j++) held_notes_[track][j] = held_notes_[track][j + 1];
+                count--;
+                arp_held_changed(track);
+                break;
+            }
             break;
+        }
 
         case Cmd::resample_arm: {
             // Bars into FRAMES, here, because only this side knows the tempo in samples. A bar
@@ -1048,6 +1244,9 @@ void Engine::apply(const Command &command) {
             // handed to capture_.arm(). A mutation run found it (docs/MUTATION.md); it is kept as
             // the record of what was asked for, for a future RESAMPLE screen to show.
             resample_bars_ = uint8_t(bars);
+            // Chosen at the arm and kept for the take: a source switched halfway would make a
+            // take that is half one thing and half another.
+            capture_input_ = command.b == 1;
             break;
         }
 
@@ -1086,6 +1285,19 @@ void Engine::apply(const Command &command) {
                                  int(int8_t(command.b)));
             apply_mixer_bytes();
             break;
+
+        case Cmd::eq_kill: {
+            if (command.a >= uint8_t(kKillBands) || command.b > 2) {
+                status_.bump_refused();
+                break;
+            }
+            const uint8_t bit = uint8_t(1u << command.a);
+            uint8_t &kills = project_.settings.eq_kills;
+            kills = command.b == 0 ? uint8_t(kills & ~bit)
+                                   : (command.b == 1 ? uint8_t(kills | bit) : uint8_t(kills ^ bit));
+            apply_mixer_bytes();
+            break;
+        }
 
         case Cmd::set_quantize: {
             // The live-record quantize amount, 0-100. It lived in `app/` alone, so it was lost
@@ -1156,7 +1368,7 @@ void Engine::apply(const Command &command) {
 void Engine::kit_from_params() {
     for (int t = 0; t < kTracks; t++) {
         KitTrack &track = project_.kit.tracks[t];
-        for (int i = 0; i < kParams; i++) track.params[i] = params_[t].v[i];
+        for (int i = 0; i < kTrackParams; i++) track.params[i] = params_[t].v[i];
         track.level = mix_[t].level;
         // `machine` and `sample` are not derived from anything the engine owns yet: a track's
         // machine is fixed at init until M6 makes it switchable, and sample paths arrive with
@@ -1179,6 +1391,10 @@ void Engine::apply_mixer_bytes() {
 
     sends_from_bytes(sends_, settings.sends, beat_seconds);
     master_from_bytes(master_, settings.master);
+    master_.kills = uint8_t(settings.eq_kills & kKillAll);
+    // The EQ's bands come from the performance layer, which reads these bytes as its base: the
+    // morph and the macros go over the knobs. Recomputed before this block's mixer.prepare.
+    perform_dirty_ = true;
     // `Mixer::prepare` compares against what it last resolved, so an unchanged struct costs one
     // comparison and a changed one redesigns only what moved. Nothing to do here but hand it
     // over on the next block.
@@ -1202,7 +1418,7 @@ void Engine::params_from_kit() {
 
     for (int t = 0; t < kTracks; t++) {
         const KitTrack &track = project_.kit.tracks[t];
-        for (int i = 0; i < kParams; i++) {
+        for (int i = 0; i < kTrackParams; i++) {
             params_[t].v[i] = track.params[i] > 127 ? uint8_t(127) : track.params[i];
         }
         // Rebuilt from the kit so a loaded project is heard immediately rather than at the next
@@ -1244,13 +1460,16 @@ uint32_t Engine::gate_frames_for(int track, uint8_t length_index) const {
 // stored kit is still there, so releasing a throw or sweeping the morph back needs no memory of
 // what it was.
 
+static_assert(kMasterEqFirst == int(MasterField::eq_low) && kMasterBands == kKillBands,
+              "core/perform.hpp's view of the master EQ bytes and dsp/buses.hpp's disagree");
+
 void Engine::apply_performance() {
     if (!perform_dirty_) return;
     perform_dirty_ = false;
 
     // The kit as stored.
     for (int t = 0; t < kTracks; t++) {
-        for (int p = 0; p < kParams; p++) performed_[t][p] = params_[t].v[p];
+        for (int p = 0; p < kTrackParams; p++) performed_[t][p] = params_[t].v[p];
     }
 
     // The scenes, if two are assigned. An empty scene behaves as the kit, so an unassigned slot
@@ -1264,6 +1483,23 @@ void Engine::apply_performance() {
     // calls a consequence rather than a decision.
     for (int m = 0; m < kMacros; m++) {
         macro_apply(macros_.macros[m], macro_position_[m], performed_);
+    }
+
+    // The master kill EQ's bands, by the same layering: the knobs, the morph, the macros. Into
+    // the mixer's settings here, because nothing else rebuilds them when only a macro moves.
+    for (int b = 0; b < kMasterBands; b++) {
+        performed_master_[b] = project_.settings.master[kMasterEqFirst + b];
+    }
+    if (scene_a_ < kScenes && scene_b_ < kScenes) {
+        scene_morph_master(scenes_.scenes[scene_a_], scenes_.scenes[scene_b_], morph_,
+                           performed_master_);
+    }
+    for (int m = 0; m < kMacros; m++) {
+        macro_apply_master(macros_.macros[m], macro_position_[m], performed_master_);
+    }
+    for (int b = 0; b < kMasterBands; b++) {
+        const uint8_t field = uint8_t(int(MasterField::eq_low) + b);
+        master_field_set(master_, field, master_value_from_byte(field, performed_master_[b]));
     }
 
     // The throw, over everything: it is the most immediate thing on the panel and should not be
@@ -1341,6 +1577,27 @@ void Engine::on_bar() {
 void Engine::cross_boundary(uint32_t boundary) {
     if (!chain_.active) return;
 
+    // Song mode: the last pass of the last entry has ended. The song goes back to entry 1 for
+    // the next PLAY and is silent until then; the main context sees `song_end` and stops the
+    // transport (only it can). Releasing here rather than waiting for its Cmd::stop is what
+    // keeps the step on this boundary from sounding in the block or two before that arrives.
+    if (project_.settings.chain_song && chain_at_end(project_, chain_)) {
+        if (chain_start(project_, chain_)) {
+            switch_pattern(int(project_.chain[chain_.entry].bank),
+                           int(project_.chain[chain_.entry].slot));
+            chain_entry_started();
+        }
+        origin_ = boundary;
+        song_over_ = true;
+        for (int t = 0; t < kTracks; t++) {
+            if (machines_[t]) machines_[t]->release_all();
+            seq_arp_[t].on = false;
+        }
+        deferred_count_ = 0;
+        status_.bump_song_end();
+        return;
+    }
+
     uint8_t bank = 0, slot = 0;
     // chain_advance reports a PATTERN change, not an entry change, so a chain that repeats one
     // pattern returns false here and nothing is switched -- which is what keeps 1ST from firing
@@ -1350,6 +1607,14 @@ void Engine::cross_boundary(uint32_t boundary) {
         // The next entry starts on the boundary the last one ended on, at its step 1.
         origin_ = boundary;
     }
+    // A new entry (or a one-entry chain's next pass of it) recalls its mutes on the boundary.
+    if (chain_.played == 0) chain_entry_started();
+}
+
+// A chain entry has just started: its mute recall, if it has one, now (song mode).
+void Engine::chain_entry_started() {
+    const int state = chain_entry_mutes(project_, chain_);
+    if (state >= 0) apply_mutes(project_.settings.mute_states[state]);
 }
 
 Project &Engine::project_for_load() { return project_; }
@@ -1377,6 +1642,8 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // with the clock stopped gets (Cmd::queue_pattern).
     const bool jumped_back = tick < tick_;
     tick_ = tick;
+    // A finished song plays again from a transport that went back (a stop and PLAY).
+    if (jumped_back) song_over_ = false;
 
     // A transport that relocated to before the pattern's start (a START from 0 after a switch)
     // measures from 0 again. Only ever backwards: a CONTINUE resumes past the origin and keeps it.
@@ -1454,6 +1721,9 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // turning auto-fill on takes effect at the next bar rather than mid-bar.
     perform_.fill = fill_held_ || auto_fill_active(auto_fill_, bar_);
 
+    // A finished song is silent until the transport stops or starts again.
+    if (song_over_) return;
+
     // The pattern's own tick: steps, passes and conditions all count from where it started.
     const int count =
         scheduler_.tick(tick - origin_, frame, live(), perform_, events_, kMaxEventsPerTick);
@@ -1489,6 +1759,182 @@ void Engine::dispatch(const StepEvent &event, uint32_t frames) {
     held.frame -= frames;
 }
 
+// --- note repeat ---------------------------------------------------------
+
+float Engine::roll_period_frames() const {
+    return float(repeat_length_ticks(repeat_length_)) * samples_per_tick_;
+}
+
+// Half the period: a POLY or MONO roll is a string of notes, not one held note retriggering.
+uint32_t Engine::roll_gate_frames() const {
+    const float half = 0.5f * roll_period_frames();
+    return half < 1.0f ? 1u : uint32_t(half);
+}
+
+void Engine::roll_fire(int track, uint32_t frame) {
+    // Not on a muted track, for the reason Cmd::trigger_note gives.
+    if (machines_[track] == nullptr || muted_[track]) return;
+    const Roll &roll = rolls_[track];
+    Trig trig;
+    trig.note = roll.note;
+    trig.velocity = roll.velocity;
+    trig.frame = frame;
+    trig.gate_frames = roll_gate_frames();
+    if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
+    status_.bump_triggered(track);
+}
+
+// The transport is running: hit on the grid of beat repeat's length, counted from the clock's
+// zero so a roll lands on the same ticks as the pattern's steps. One modulo per tick, not per
+// track -- this chip has no integer divide, and a tick is control rate.
+void Engine::roll_tick(uint32_t tick, uint32_t frame) {
+    bool any = false;
+    for (int t = 0; t < kTracks; t++) any = any || rolls_[t].on;
+    if (!any) return;
+    const uint32_t length = uint32_t(repeat_length_ticks(repeat_length_));
+    if (tick % length != 0) return;
+    for (int t = 0; t < kTracks; t++) {
+        Roll &roll = rolls_[t];
+        if (!roll.on) continue;
+        // The press already hit: a grid tick less than half a length after it would be a flam.
+        if (tick >= roll.last_tick && tick - roll.last_tick < (length >> 1)) continue;
+        roll.last_tick = tick;
+        roll_fire(t, frame);
+        roll.countdown = roll_period_frames();
+    }
+}
+
+// The transport is stopped: a free roll from the press, at the tempo's length in frames.
+void Engine::roll_free(uint32_t frames) {
+    const float period = roll_period_frames();
+    for (int t = 0; t < kTracks; t++) {
+        Roll &roll = rolls_[t];
+        if (!roll.on) continue;
+        if (period < 1.0f) continue;              // the tempo has not settled: the press only
+        if (roll.countdown > period) roll.countdown = period;   // the length got shorter
+        while (roll.countdown < float(frames)) {
+            const float at = roll.countdown < 0.0f ? 0.0f : roll.countdown;
+            roll_fire(t, uint32_t(at));
+            roll.countdown += period;
+        }
+        roll.countdown -= float(frames);
+    }
+}
+
+// --- the arpeggiator ------------------------------------------------------
+
+ArpSettings Engine::arp_settings(int track) const {
+    return ArpSettings::make(&effective_[track].v[kArpFirst]);
+}
+
+void Engine::arp_hit(int track, ArpRun &run, uint32_t frame) {
+    const uint8_t note = arp_note(run.cycle, run.length, run.mode, run.hit, run.seed);
+    run.hit++;
+    if (machines_[track] == nullptr || muted_[track]) return;
+    Trig trig;
+    trig.note = note;
+    trig.velocity = run.velocity;
+    trig.accent = run.accent && run.hit == 1;     // the step's accent, on its first hit
+    trig.frame = frame;
+    // The hit's gate: GATE's share of the spacing. One float multiply at control rate.
+    const float spacing = float(run.rate) * samples_per_tick_;
+    const float gate = spacing * float(run.gate_percent) * 0.01f;
+    trig.gate_frames = gate < 1.0f ? 1u : uint32_t(gate);
+    if (make_room_for_poly_voice(track, note)) machines_[track]->trigger(trig);
+    status_.bump_triggered(track);              // each hit lights the track, as a step does
+}
+
+void Engine::arp_tick(uint32_t tick, uint32_t frame) {
+    for (int t = 0; t < kTracks; t++) {
+        ArpRun *runs[2] = {&seq_arp_[t], &held_arp_[t]};
+        for (ArpRun *run : runs) {
+            if (!run->on) continue;
+            if (run == &held_arp_[t]) arp_follow(t);
+            if (!run->on) continue;
+            // (Written as a sum: next_tick - rate would wrap below a run started near tick 0.)
+            if (tick >= run->end_tick || tick + run->rate < run->next_tick) {
+                // Past the step's length -- or the transport jumped back past the run's start.
+                if (run == &seq_arp_[t]) {
+                    run->on = false;
+                    continue;
+                }
+                run->next_tick = tick;                // a held run just picks the clock up again
+            }
+            if (tick < run->next_tick) continue;
+            arp_hit(t, *run, frame);
+            run->next_tick = tick + run->rate;
+            run->countdown = float(run->rate) * samples_per_tick_;
+        }
+    }
+}
+
+// Held runs with the transport stopped: free from the first key, at the tempo's spacing.
+void Engine::arp_free(uint32_t frames) {
+    for (int t = 0; t < kTracks; t++) {
+        ArpRun &run = held_arp_[t];
+        if (!run.on) continue;
+        arp_follow(t);
+        if (!run.on) continue;
+        const float spacing = float(run.rate) * samples_per_tick_;
+        if (spacing < 1.0f) continue;
+        if (run.countdown > spacing) run.countdown = spacing;
+        while (run.countdown < float(frames)) {
+            const float at = run.countdown < 0.0f ? 0.0f : run.countdown;
+            arp_hit(t, run, uint32_t(at));
+            run.countdown += spacing;
+        }
+        run.countdown -= float(frames);
+    }
+}
+
+// A held run follows the ARP page while the keys are down: RAT and GAT at once, MOD and OCT by
+// rebuilding the cycle, and MOD turned to OFF ends it. Four byte reads a track a tick, and the
+// rebuild only when something it depends on moved.
+void Engine::arp_follow(int track) {
+    ArpRun &run = held_arp_[track];
+    const ArpSettings arp = arp_settings(track);
+    if (!arp.on()) {
+        run.on = false;
+        held_count_[track] = 0;
+        return;
+    }
+    run.rate = arp.rate_ticks;
+    run.gate_percent = arp.gate_percent;
+    if (arp.mode != run.mode || arp.octaves != run.octaves) {
+        run.mode = arp.mode;
+        run.octaves = arp.octaves;
+        run.length = uint8_t(arp_cycle(held_notes_[track], held_count_[track], arp, run.cycle));
+        if (run.length == 0) run.on = false;
+    }
+}
+
+// The held KEYS notes changed: rebuild the cycle, start the run on the first key and stop it on
+// the last. The hit count carries on, so adding a note does not restart the pattern.
+void Engine::arp_held_changed(int track) {
+    ArpRun &run = held_arp_[track];
+    const ArpSettings arp = arp_settings(track);
+    run.length = uint8_t(arp_cycle(held_notes_[track], held_count_[track], arp, run.cycle));
+    if (run.length == 0) {
+        run.on = false;
+        return;
+    }
+    run.mode = arp.mode;
+    run.octaves = arp.octaves;
+    run.rate = arp.rate_ticks;
+    run.gate_percent = arp.gate_percent;
+    run.end_tick = 0xFFFFFFFFu;
+    if (run.on) return;
+    run.on = true;
+    run.hit = 0;
+    run.seed = uint32_t(track) * 131u + 7u;
+    run.accent = false;
+    // The first hit now; then on the grid of the rate while running, or free while stopped.
+    arp_hit(track, run, 0);
+    const uint32_t r = run.rate;
+    run.next_tick = tick_ - tick_ % r + r;
+    run.countdown = float(r) * samples_per_tick_;
+}
+
 void Engine::deliver_deferred(uint32_t frames) {
     // Oldest first, and compacted in one pass: an event that fires is removed and the rest keep
     // their order, so a ratchet's hits stay in the order the scheduler produced them.
@@ -1517,15 +1963,15 @@ void Engine::fire(const StepEvent &event) {
     // why this happens before the trig check.
     // From `performed_`, not `params_`: the morph, the macros and any throw are part of the
     // sound a step starts from, and only the step's own locks go over the top of them.
-    for (int p = 0; p < kParams; p++) effective_[track].v[p] = performed_[track][p];
+    for (int p = 0; p < kTrackParams; p++) effective_[track].v[p] = performed_[track][p];
 
     const LockView locks = pattern_step_locks(live(), track, int(event.step));
     int applied = 0;
-    uint16_t locked = 0;
+    uint32_t locked = 0;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
-        if (lock->param >= kParams || applied >= kMaxLocksApplied) continue;
+        if (lock->param >= kTrackParams || applied >= kMaxLocksApplied) continue;
         effective_[track].v[lock->param] = lock->value;
-        locked = uint16_t(locked | uint16_t(1u << lock->param));
+        locked = locked | (1u << lock->param);
         applied++;
     }
     // Which parameters this step has locked, so the performance layer leaves them alone until
@@ -1580,6 +2026,43 @@ void Engine::fire(const StepEvent &event) {
         trig.frame = event.frame;
         trig.gate_frames = gate_frames_for(track, event.length_index);
 
+        const ArpSettings arp = arp_settings(track);
+        if (arp.on()) {
+            // The arp takes the step: its notes (the chord on POLY, the one note elsewhere) become
+            // a cycle walked at the arp's rate for the step's length -- or until the next step,
+            // for a step with no length. The first hit is now, on the step's own frame.
+            uint8_t input[kChordMaxNotes];
+            int count = 1;
+            input[0] = note;
+            if (polys_[track] != nullptr) {
+                const uint8_t packed = folding.tracks[track].steps[event.step].chord;
+                count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
+                                     VaPoly::kVoices);
+            }
+            ArpRun &run = seq_arp_[track];
+            run.mode = arp.mode;
+            run.rate = arp.rate_ticks;
+            run.gate_percent = arp.gate_percent;
+            run.length = uint8_t(arp_cycle(input, count, arp, run.cycle));
+            run.velocity = event.velocity;
+            run.accent = event.accent;
+            run.hit = 0;
+            // The same notes every pass: the seed is the track and the step, not the time.
+            run.seed = uint32_t(track) * 131u + uint32_t(event.step);
+            run.next_tick = tick_ + run.rate;
+            const uint32_t gate = trig.gate_frames;
+            run.end_tick = 0xFFFFFFFFu;
+            if (gate > 0 && samples_per_tick_ > 0.0f) {
+                // Rounded, and exclusive: a one-step length at 1/32 is the hits on 0 and 12, and not
+                // a third on the next step's own tick.
+                run.end_tick = tick_ + uint32_t(float(gate) * inv_samples_per_tick_ + 0.5f);
+            }
+            run.on = run.length > 0;
+            if (run.on) arp_hit(track, run, event.frame);
+            if (track == duck_source_) mixer_.trigger_duck(event.frame);
+            return;
+        }
+
         if (polys_[track] != nullptr) {
             // A POLY track plays a CHORD, which is several notes on one frame rather than one
             // call carrying several notes. That is deliberate and it is why VA POLY's allocator
@@ -1619,10 +2102,56 @@ void Engine::fire(const StepEvent &event) {
     }
 }
 
+// --- the LFOs -------------------------------------------------------------
+//
+// Once per block, after the locks: each track whose LFO is on gets `modulated_`, its effective
+// parameters with the destination byte moved, and `sounding()` hands that to prepare. A track
+// whose LFO is off is prepared from `effective_` exactly as before, which is what keeps every
+// existing render bit-exact: nothing below runs for it but one compare.
+
+void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fraction_in) {
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t *bytes = &effective_[t].v[kParams];
+        if (__builtin_memcmp(lfo_bytes_[t], bytes, kLfoParams) != 0) {
+            for (int i = 0; i < kLfoParams; i++) lfo_bytes_[t][i] = bytes[i];
+            lfo_settings_[t] = LfoSettings::make(bytes);
+        }
+        const LfoSettings &s = lfo_settings_[t];
+        if (!s.on()) {
+            modulating_[t] = false;
+            continue;
+        }
+
+        float value;
+        if (s.sync_ticks == 0) {
+            value = lfo_[t].advance(s.wave, s.hz * float(frames) * inv_rate_);
+        } else if (running) {
+            // On the clock's own position, so a synced LFO sits on the bar wherever the song is
+            // and follows an external clock. A multiply and a floor rather than `%`: this chip
+            // has no integer divide. A float holds the position to well under a tick for the
+            // first 2^24 ticks, about 22 hours at 130 BPM.
+            const float fraction = fraction_in < 0.0f ? 0.0f
+                                   : (fraction_in > 1.0f ? 1.0f : fraction_in);
+            float phase = (float(position) + fraction) * s.inv_sync_ticks;
+            phase -= float(enaga::dsp::floor_int(phase));
+            value = lfo_[t].seek(s.wave, phase >= 1.0f || phase < 0.0f ? 0.0f : phase);
+        } else {
+            // Stopped: keep moving at the tempo, so the sound does not freeze between takes.
+            const float ticks = float(frames) * inv_samples_per_tick_;
+            value = lfo_[t].advance(s.wave, ticks * s.inv_sync_ticks);
+        }
+        lfo_value_[t] = value;
+
+        modulated_[t] = effective_[t];
+        uint8_t &target = modulated_[t].v[s.dest];
+        target = lfo_apply(target, value, s.depth);
+        modulating_[t] = true;
+    }
+}
+
 // --- the block ------------------------------------------------------------
 
 void Engine::process(const float *in, float *out, uint32_t frames) {
-    (void)in;
 
     if (!ready_) {
         for (uint32_t i = 0; i < 2 * frames; i++) out[i] = 0.0f;
@@ -1644,6 +2173,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         tempo_ = clock_now.tempo;
         const float bpm = tempo_ > 1.0f ? tempo_ : 1.0f;
         samples_per_tick_ = rate_ * 60.0f / (bpm * float(enaga::clock::ppqn));
+        inv_samples_per_tick_ = enaga::dsp::reciprocal(samples_per_tick_);
         reconfigure();
     }
 
@@ -1654,24 +2184,39 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // and a machine's voice allocation sees triggers in the order they arrive.
     deliver_deferred(frames);
 
+    // Note repeat and held arps with the transport stopped: no ticks arrive, so they count frames.
+    if (!enaga::clock::running()) {
+        roll_free(frames);
+        arp_free(frames);
+    }
+
     // Enaga's clock reports the ticks falling in this block, each with the frame it lands on.
     // That frame is what makes a step start on an exact sample.
     enaga::clock::Tick ticks[16];
     const uint32_t tick_count = enaga::clock::ticks(ticks, 16);
     for (uint32_t i = 0; i < tick_count; i++) {
         resolve_tick(ticks[i].tick, ticks[i].frame);
+        roll_tick(ticks[i].tick, ticks[i].frame);
+        arp_tick(ticks[i].tick, ticks[i].frame);
     }
 
     // What the performance layer produced, into the values the machines read -- except where the
     // current step has a lock, which always wins. Without this a morph would only be heard at
     // the next trig, and sweeping VALUE between steps would do nothing at all.
     for (int t = 0; t < kTracks; t++) {
-        const uint16_t locked = locked_[t];
-        for (int p = 0; p < kParams; p++) {
+        const uint32_t locked = locked_[t];
+        for (int p = 0; p < kTrackParams; p++) {
             if ((locked >> p & 1u) != 0) continue;
             effective_[t].v[p] = performed_[t][p];
         }
     }
+
+    // The LFOs, last, over everything: the kit, the morph, the macros and the step's locks all
+    // decide where the destination sits, and the LFO moves it about there (dsp/lfo.hpp).
+    run_lfos(frames, clock_now.running, clock_now.position, clock_now.fraction);
+
+    // A streamed sample's next frames, before anything renders from them.
+    top_up_streams();
 
     mixer_.prepare(sends_, master_);
     mixer_.begin_block(int(frames));
@@ -1696,6 +2241,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     mixer_.finish_block(out, int(frames));
 
+    // A stream voice that went back to frame 0 in this block needs its stream reopened.
+    watch_streams();
+
     // Beat repeat is LAST, on the finished master: that is what "the master output" means, and
     // it is why it captures the limiter and the master filter too (dsp/repeat.hpp). The length
     // is a note value, so the frames follow the tempo.
@@ -1704,9 +2252,29 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     repeat_.hold(repeat_held_);
     repeat_.process(out, int(frames));
 
+    // The tape stop, after beat repeat: it stops whatever is coming out, a repeat included. Two
+    // beats from full speed to a standstill, so it lands with the music.
+    tape_stop_.set(2.0f * float(enaga::clock::ppqn) * samples_per_tick_);
+    tape_stop_.process(out, int(frames));
+
     // The take, from the FINISHED master: after the mixer, the limiter and beat repeat, which is
     // what comes out of the box (dsp/capture.hpp). A tap, so `out` is not modified.
-    capture_.process(out, int(frames));
+    //
+    // Or from the audio INPUT, when the take was armed with that source: the codec's buffer as it
+    // arrives, before anything STRATA plays, so a synth sampled into a track is the synth alone.
+    // A host that gives no input buffer (the tests' rigs) records silence rather than nothing, so
+    // the take still ends on its frame and the card side still gets a file.
+    static const float kSilence[2u * ENAGA_BLOCK_FRAMES] = {};
+    const float *input = in != nullptr ? in : (frames <= ENAGA_BLOCK_FRAMES ? kSilence : nullptr);
+    capture_.process(capture_input_ ? input : out, int(frames));
+
+    // The input's level, every block, for the RESAMPLE screen's meter: one pass of the master's
+    // own peak loop over the interleaved buffer (L and R alike, so one plane of 2n samples).
+    if (in != nullptr) {
+        const float peak = strata_master_peak(in, in, int(2u * frames));
+        const float clipped = peak > 1.0f ? 1.0f : peak;
+        status_.input_peak.store(uint16_t(clipped * 1000.0f), std::memory_order_relaxed);
+    }
 
     status_.resample_state.store(capture_.done()        ? 3u
                                  : capture_.recording() ? 2u
@@ -1736,6 +2304,71 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     const float scaled = peak * 1000.0f;
     status_.peak_milli.store(uint16_t(scaled > 65535.0f ? 65535.0f : scaled),
                              std::memory_order_relaxed);
+}
+
+// --- streaming ------------------------------------------------------------------
+//
+// app/storage.hpp, "Streaming", has the protocol. This side reads: each block, up to
+// kStreamReadFrames of each attached track's file into its fifo, converted to int16 on the way
+// (core/pcm.hpp). Enaga's stream never waits (a short read is an underrun or the end), so this
+// costs a copy and a conversion of what arrived and nothing else.
+
+void Engine::stop_stream(int track) {
+    StreamState &st = stream_state_[track];
+    st.on = false;
+    st.attached = false;
+    st.carry = 0;
+}
+
+void Engine::top_up_streams() {
+    for (int t = 0; t < kTracks; t++) {
+        StreamState &st = stream_state_[t];
+        if (!st.on || !st.attached) continue;
+        StreamFifo &fifo = fifos_[t];
+        const uint32_t next = fifo.next_frame();
+        if (next >= st.total) continue;               // the whole file is in
+        uint32_t room = 0;
+        int16_t *span = fifo.write_span(&room);
+        uint32_t n = room < kStreamReadFrames ? room : kStreamReadFrames;
+        if (n > st.total - next) n = st.total - next;
+        if (n == 0) continue;
+
+        const uint32_t fb = st.frame_bytes;
+        for (uint32_t i = 0; i < st.carry; i++) stream_bytes_[i] = st.carry_bytes[i];
+        const uint32_t want = n * fb - st.carry;
+        const uint32_t got = streams_[t].read(stream_bytes_ + st.carry, want);
+        const uint32_t have = st.carry + (got > want ? want : got);
+        const uint32_t frames = stream_frames_in(have, fb);
+        if (frames != 0) {
+            const uint32_t did = pcm_to_s16(stream_bytes_, frames * fb, PcmFormat(st.encoding),
+                                            fifo.channels(), span, frames);
+            fifo.commit(did);
+        }
+        const uint32_t used = frames * fb;
+        st.carry = uint8_t(have - used);
+        for (uint32_t i = 0; i < st.carry; i++) st.carry_bytes[i] = stream_bytes_[used + i];
+    }
+}
+
+void Engine::watch_streams() {
+    for (int t = 0; t < kTracks; t++) {
+        StreamState &st = stream_state_[t];
+        if (!st.on) continue;
+        const Sampler &sampler = pool_[t].sampler;
+        const uint32_t late = sampler.stream_late();
+        stream_late_ += late - st.late_seen;
+        st.late_seen = late;
+        const uint32_t restarts = sampler.stream_restarts();
+        if (restarts == st.restarts_seen) continue;
+        st.restarts_seen = restarts;
+        // Stop reading FIRST, then say so: the card side may close the stream the moment it
+        // sees the new value, and the release store is what orders the two.
+        st.attached = false;
+        st.carry = 0;
+        st.want = uint16_t(st.want + 1u);
+        status_.stream_want[t].store(st.want, std::memory_order_release);
+    }
+    status_.stream_late.store(stream_late_, std::memory_order_relaxed);
 }
 
 }  // namespace strata
