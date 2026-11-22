@@ -20,12 +20,14 @@
 #define STRATA_TI_HINTS 0
 #endif
 
-/* The VA voice's fused back half (valoops.h, strata_va_back): on. It is bit-exact on the host,
- * and on 2026-11-22 its cl6x render matched the GCC render of the device build bit for bit,
- * while the three separate passes built by cl6x drifted from GCC (docs/BUDGET.md, "The cl6x
- * vectorisation pass"). 0 restores those passes; tools/ti_ab.sh's `nofuse` variant builds it. */
+/* The VA voice's fused back half (valoops.h, strata_va_back). OFF until its cl6x build is
+ * explained: it is bit-exact on the host and with GCC, but a clean A/B on 2026-11-22 found that
+ * its cl6x build drifts from the unfused path (which cl6x and GCC render identically) by enough
+ * to move a voice's phase within half a second (docs/BUDGET.md, "The cl6x vectorisation pass").
+ * Worth ~1.7 points with cl6x once it is bit-exact there. tools/ti_ab.sh's `fused` variant
+ * builds it. */
 #ifndef STRATA_VA_FUSED
-#define STRATA_VA_FUSED 1
+#define STRATA_VA_FUSED 0
 #endif
 
 #if defined(__TI_COMPILER_VERSION__) && STRATA_TI_HINTS

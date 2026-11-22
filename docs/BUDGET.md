@@ -1270,6 +1270,18 @@ caller that uses them. Being chased in the vectorisation thread (cl6x `--fp_reas
 library first: a rounding difference that flips a level threshold, such as `VaVoice::sounding()`
 deciding whether the next note resets the oscillator phases, would look exactly like this).
 
+**Corrected the same evening, and the fusion is OFF again (PR #73).** A clean rerun
+(`reassoc_check.sh`: one worktree, every build from scratch, 4 s renders compared with the GCC
+build of the unfused path) found the opposite of the paragraph above: **cl6x and GCC render the
+unfused path identically** (with and without `--fp_reassoc=off`), and **the fused loop built by
+cl6x is the one that departs** -- first by 6.2e-5 of full scale at 0.365 s, then by the size of
+the signal with peaks and RMS unchanged. The earlier cl6x-vs-GCC comparison was on the ti_ab
+renders and cannot be reproduced; this rerun is the one to trust. The suspect is cl6x
+reassociating the fused loop's float arithmetic (it reorders freely by default), giving a
+rounding difference that tips a voice threshold (`VaVoice::sounding()` decides whether the next
+note resets the oscillator phases). The deciding run is the fused build with `--fp_reassoc=off`.
+Until then the unit runs the unfused path, which every build renders the same.
+
 `tools/ti_loops.py --enaga` confirmed the in-place reasoning: Enaga's `enaga_svf_cascade` has a
 54-cycle version (in and out may alias) beside its 21-cycle one, and an in-place call gets the
 54; `strata_svf_cascade_inplace` is 21. `enaga_one_pole_process` 18 vs `strata_one_pole_inplace`
