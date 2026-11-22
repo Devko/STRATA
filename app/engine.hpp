@@ -513,6 +513,7 @@ private:
     // loop. dsp/capture.hpp holds the rest of the reasoning.
     Capture capture_;
     uint8_t resample_bars_ = 0;      // 0 = nothing armed
+    bool capture_input_ = false;     // the armed or running take records the input, not the master
 
     // Which track's trigs fire the sidechain duck. docs/SPEC.md: track 1 by default.
     int duck_source_ = 0;

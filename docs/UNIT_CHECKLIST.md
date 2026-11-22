@@ -216,6 +216,19 @@ Resampling gives track 8 a multi-second sample without a file browser, and check
       **MAX `________ %`** Over PIT 64 by `________` points (the DDR cost of high-pitch grains).
 - [ ] Leave track 8 on GRN for section 13.
 
+## 8c. Sampling from the input (5 min)
+
+New 2026-11-22. A synth, a phone or anything with a line out into INPUT L/R.
+
+- [ ] FUNC+REC, then B: `FROM LINE NORM` and a meter. Play the source: the meter moves; turn C
+      until it stays short of `CLIP`. Level used: `________`
+- [ ] `TO TRK 8` (or FILE), OK, PLAY: the take starts on the bar, writes, and track 8 plays the
+      source alone, not the beat. Clean start and end? `________`
+- [ ] B through LINE L, MIC, DYN MIC, HI-Z: each routes (no `INPUT REFUSED`); MIC with no
+      headphones says `MIC NEEDS HEADPHONES` and records silence, with headphones it records.
+      Which routes worked: `________`
+- [ ] B back to MASTER: a take is the beat again. MAX while recording from the input `________ %`
+
 ## 9. KEYS: a held key sustains (3 min)
 
 Select track 7 (VA POLY), EDIT AMP page, DEC up high. FUNC+HOME for KEYS.
@@ -391,6 +404,20 @@ New 2026-11-22. Put a few WAVs in `/SAMPLES` on the card first (the two test fil
 - [ ] Reopen the browser: it starts in the track's folder with the cursor on its file.
 - [ ] PROJECT says `UNSAVED`; save, reload (FUNC+LEFT twice): track 8 has the picked file.
 - [ ] A folder of many files: listing time `________` (about how long `READING FOLDER` shows).
+
+## 15c. A long stem (4 min)
+
+New 2026-11-22: files over the old 30 s limit load whole, in chunks. Put a 48 kHz stereo WAV of
+2-2.5 minutes (25-30 MB) in `/SAMPLES`.
+
+- [ ] Pick it for track 8 in the sample browser while playing: `LOADING LONG` with a rising
+      percentage, the beat never stops. Seconds to playable `________` (expect about 4 s).
+      Keys and screen responsive while it loads? `________`
+- [ ] It plays from the start, all the way through (STA 0, LEN 127, PLY LOOP); on GRN, POS
+      sweeps the whole file. Clicks at 4 MiB boundaries (every ~22 s of stereo 24-bit, ~44 s of
+      16-bit)? `________`
+- [ ] PROJECT's SMP line shows the memory used, about `27/32M`. A second one on another track:
+      `NO ROOM`, and the first keeps playing.
 
 ## 16. Six voices: the STRATA6 app (4 min)
 
@@ -1476,6 +1503,18 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
 - [ ] `/SAMPLES` missing on the card: an error line (`NOT FOUND`), CLR still reaches `RECORD/`.
       (The host fake answers NOT FOUND for a missing folder; Enaga's real answer is unverified.)
 - [ ] A long name is cut to the line, and `_` shows as `-`.
+
+## RESAMPLE from the audio input (B: source, C: level)
+
+- [ ] Every route Enaga offers records what is plugged into it: LINE stereo keeps L and R apart,
+      LINE L puts INPUT L on both sides, HI-Z and DYN MIC take their jacks, MIC needs headphones.
+      Enaga's input routes "have not been checked route by route" (SPEC), so a route that fails
+      is an Enaga report, with the route and the level.
+- [ ] The meter tracks the input and reads `CLIP` at full scale; the recorded file is the input
+      at the level shown, nothing of STRATA's own output in it.
+- [ ] Turning B or C during a take does not change the take's source (it is fixed at the arm),
+      and the 10 ms gap of a route change is not in a take armed afterwards.
+- [ ] After leaving STRATA, Enaga's own input setting is back to LINE, NORMAL.
 
 ## Factory content: audition list (2026-11-22)
 

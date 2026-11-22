@@ -110,6 +110,9 @@ public:
 
     // Seed or inspect the card directly, without going through the app.
     bool write_file(const char *path, const void *data, uint32_t bytes);
+    // A file of `bytes`, to be filled in place through the pointer returned (nullptr when the
+    // card has no room). For files too big for any buffer a test could hold.
+    uint8_t *create_file(const char *path, uint32_t bytes);
     int32_t read_file(const char *path, void *out, uint32_t max) const;
 
     // The first `max` bytes, however big the file is. `read_file` mirrors the ABI and refuses a
@@ -128,6 +131,16 @@ public:
     int loads() const { return loads_; }
     int read_alls() const { return read_alls_; }
     int folders_made() const { return folders_made_; }
+
+    // --- the audio input (enaga::system::input) and headphones ----------------
+    //
+    // The route last chosen, -1 before any; `set_input_result` makes the next calls answer as the
+    // codec would (-1 unknown source or level, -2 no answer). Headphones are out by default.
+    int input_source() const { return input_source_; }
+    int input_level() const { return input_level_; }
+    int input_calls() const { return input_calls_; }
+    void set_input_result(int32_t result) { input_result_ = result; }
+    void set_headphones(bool in) { headphones_ = in; }
 
     // --- held asynchrony --------------------------------------------------
     //
@@ -181,7 +194,9 @@ private:
     static constexpr int kHandles = int(ENAGA_FILES_OPEN);
 
     static constexpr int kMaxFiles = 48;
-    static constexpr uint32_t kArenaBytes = 4u << 20;
+    // 48 MiB: a project or two, and the long WAVs the chunked loader is tested with (a file
+    // bigger than the loader's 16.5 MiB staging buffer, and one past Cmd::set_sample's 24 bits).
+    static constexpr uint32_t kArenaBytes = 48u << 20;
     static constexpr uint32_t kPathMax = ENAGA_FILE_PATH_MAX + 1u;
 
     struct Entry {
@@ -287,6 +302,11 @@ private:
     bool read_error_ = false;
     bool in_audio_ = false;
 
+    int input_source_ = -1;
+    int input_level_ = -1;
+    int input_calls_ = 0;
+    int32_t input_result_ = 0;
+    bool headphones_ = false;
     int saves_ = 0;
     int loads_ = 0;
     int read_alls_ = 0;
