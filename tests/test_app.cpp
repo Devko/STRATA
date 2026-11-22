@@ -531,6 +531,26 @@ TEST(app_a_second_stop_drops_ratchet_hits_still_waiting) {
     CHECK(stopped < 2.0f * plain + 1e-6f);
 }
 
+TEST(app_a_first_stop_drops_ratchet_hits_still_waiting_too) {
+    // The soft STOP released the voices but left the waiting ratchet hits, so new notes arrived
+    // blocks after the transport had stopped. Counted as triggers, which the hits would bump.
+    Engine &engine = fresh();
+    kick_blip();
+    put_trig(0, 0);
+    post(Cmd::step_field_delta, 0, 0, uint8_t(StepField::ratchet_count), 7);   // 8 hits
+    pump();
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump(2);
+    post(Cmd::stop, 0, 0, 0);                  // a = 0: the first, soft press
+    pump();
+    FakeHost::the().set_running(false);
+    const uint8_t after_stop = engine.status().triggered[0].load(std::memory_order_relaxed);
+    pump(100);
+    CHECK_EQ(int(engine.status().triggered[0].load(std::memory_order_relaxed)), int(after_stop));
+}
+
 // --- resampling, end to end ------------------------------------------------------------------
 //
 // docs/SPEC.md's eighth performance tool: "Record the master or one track for 1, 2, 4 or 8 bars

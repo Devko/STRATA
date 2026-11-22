@@ -409,14 +409,15 @@ void Engine::apply(const Command &command) {
                 for (int t = 0; t < kTracks; t++) {
                     silence_track(t);
                 }
-                // And the ratchet hits still waiting for their block. A second STOP means
-                // silence now, so a hit landing four blocks later would be a note after it.
-                deferred_count_ = 0;
             } else {
                 for (int t = 0; t < kTracks; t++) {
                     if (machines_[t]) machines_[t]->release_all();
                 }
             }
+            // And the ratchet hits still waiting for their block, on EITHER stop. They are new
+            // notes, not tails: a soft stop releases what is sounding, and a hit landing four
+            // blocks later would be a note after the transport stopped.
+            deferred_count_ = 0;
             scheduler_.reset(true);
             break;
 
