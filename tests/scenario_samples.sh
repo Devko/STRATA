@@ -77,7 +77,8 @@ check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_re
 check("strata ready" in log, "init() ran to completion")
 check("run int" in log, "the transport started", f"log={log}")
 
-check("scr EDIT" in log, "EDIT opened", f"log={log}")
+# The EDIT screen logs its page too ("scr EDIT SRC").
+check(any(l == "scr EDIT" or l.startswith("scr EDIT ") for l in log), "EDIT opened", f"log={log}")
 check("scr SAMPLES" in log, "OK on the SAMPLE track opened the browser", f"log={log}")
 lists = [line for line in log if line.startswith("browse ")]
 check(len(lists) >= 1, "files::list answered", f"lines={lists}")
