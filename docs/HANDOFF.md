@@ -2,13 +2,16 @@
 
 **Read this first, then `CLAUDE.md`, then `docs/SPEC.md`, `docs/REVIEW.md` and `docs/PLAN.md`.**
 
-Every figure in this project comes from a cloud container: the host suite, a tic6x device build
-and an instruction-counting emulator with **no cache model**. **Nothing in STRATA has ever run on
-the unit.** No exit criterion involving load or feel is met, whatever the numbers say. 213
-checklist boxes in `docs/UNIT_CHECKLIST.md`, **none ticked**.
+**STRATA has booted on the unit.** On 2026-11-22 Roland ran it on his SmplTrek with Enaga 0.2.0
+firmware: it starts and plays the default beat, with the on-screen LOAD reading about 0–26%.
+Precise PEAK and six-voice chord figures are still to come from a local build.
 
-The one thing that gates everything and cannot be done from a container: **boot
-`build/APP.ENA`**.
+Every other figure in this project comes from a cloud container: the host suite, a tic6x device
+build and an instruction-counting emulator with **no cache model**. No exit criterion involving
+load or feel is met until the unit confirms it. Almost all of the 213 checklist boxes in
+`docs/UNIT_CHECKLIST.md` are still open.
+
+What gates everything now: **work `docs/UNIT_CHECKLIST.md` on the unit**.
 
 ---
 
@@ -352,8 +355,8 @@ The emulator moves the same way, by `STRATA_EMULATOR_COMMIT` in `tools/env.sh`, 
 Everything below the first item can be done from a container. The first item cannot, and it is
 worth more than all the rest together.
 
-1. **Boot `build/APP.ENA` on the unit, and work `docs/UNIT_CHECKLIST.md`.** 213 boxes, none
-   ticked, nothing in this project has ever made a sound. Start with the sections that decide
+1. **Work `docs/UNIT_CHECKLIST.md` on the unit.** It boots and plays the default beat
+   (2026-11-22); almost every box is still open. Start with the sections that decide
    whether a milestone stands: does it start with no card; does a power cycle restore the
    project; does swapping a sample on a sounding track stay clean; does pulling the card during a
    save leave the project intact. Then the new sections at the end — the sends and the master,
