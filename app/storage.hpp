@@ -79,6 +79,10 @@ class Engine;
 // more than 30 s out of the same frames -- 44.1 kHz about 65 s -- which costs nothing and is not
 // refused; a higher one (176.4 or 192 kHz) gets half. What a long file costs once LOADED is the
 // sample pool's to refuse (NO ROOM), as it always was.
+//
+// [2026-11-22] The limit now binds only files at OTHER rates, through src_. A file bigger than raw_
+// is read in chunks (below, "a file bigger than raw_"), so a 48 kHz file may be as long as the
+// pool and Cmd::set_sample's 24-bit frame count allow.
 constexpr uint32_t kMaxSampleSeconds = 30;
 constexpr uint32_t kMaxSampleSourceRate = 96000;
 
@@ -267,6 +271,7 @@ private:
         sample_read,       // files::load in flight
         sample_convert,    // pcm_to_s16, in slices
         sample_resample,   // pcm_resample, in slices
+        sample_chunk,      // a file bigger than raw_: one chunk converted, in slices (below)
         take_write,        // a resample's WAV, header then payload
         kit_scan,          // the kit library's sixteen slots, one file per pass
         kit_save,          // one kit into its slot: started and finished in one pass
@@ -294,6 +299,9 @@ private:
     void step_sample_epoch();
     void step_sample_convert();
     void step_sample_resample();
+    void step_sample_chunk();
+    bool start_chunked(const char *path, uint32_t file_bytes);
+    bool read_next_chunk();
     void start_next_sample();
     void start_new();
     bool flush_backlog();          // true when nothing is left waiting
@@ -382,6 +390,22 @@ private:
     bool read_done_ = false;
     int32_t read_result_ = 0;
 
+    // --- a file bigger than raw_, read a chunk at a time ---
+    //
+    // docs/SPEC.md planned streams for loops over 30 s. Roland's call (2026-11-22) was to load
+    // them whole instead, so they keep pitch, slices and GRAIN: a file that does not fit raw_ is
+    // opened and read into it a chunk at a time, each chunk converted straight into the pool (a
+    // 48 kHz file, any length the pool and Cmd::set_sample's 24-bit frame count allow) or into
+    // src_ (any other rate, up to kSrcFrames of the file, as before). raw_ is the chunk buffer,
+    // so this costs no memory. Short files keep the one files::load docs/SPEC.md names.
+    enaga::files::File chunk_file_;
+    bool chunked_ = false;         // the sample job in flight reads chunks
+    uint32_t chunk_file_bytes_ = 0;  // the file's size
+    uint32_t chunk_file_pos_ = 0;  // bytes of it read so far
+    uint32_t chunk_have_ = 0;      // valid bytes in raw_
+    uint32_t chunk_pos_ = 0;       // the next unconverted byte in raw_
+    uint32_t chunk_carry_ = 0;     // part of a frame kept at raw_'s start for the next read
+
     enaga::wav::Format format_;
     PcmFormat encoding_ = PcmFormat::unknown;
     uint32_t src_frames_ = 0;      // frames in the file
@@ -432,6 +456,11 @@ private:
     // and a few hundred microseconds of work, so the UI's 20 fps is never at risk and a 30 s
     // file still finishes in well under a second of wall time.
     static constexpr uint32_t kSliceFrames = 48000;
+
+    // How much of a long file one read asks for. Enaga works a read in the main loop a slice per
+    // pass whatever its size, so this only sets how often a read is queued: 4 MiB is about half
+    // a second of the card at 7.6 MB/s.
+    static constexpr uint32_t kChunkBytes = 4u << 20;
 
     // How many passes to wait for a sample epoch before giving up. update() runs at least 750
     // times a second, so this is a fraction of a second -- long enough for any real block, short
