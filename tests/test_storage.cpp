@@ -2426,6 +2426,7 @@ TEST(storage_request_new_is_refused_under_an_external_clock) {
     host.set_source(ENAGA_CLOCK_MIDI);
     host.set_running(true);
     storage().request_new();
+    storage().service();                                 // it runs from the card side's pass
 
     CHECK_EQ(storage().last_error(), "EXT CLOCK");
     CHECK_EQ(storage().project_name(), before);          // not renamed
@@ -2498,4 +2499,107 @@ TEST(storage_request_new_is_ram_only_and_takes_a_fresh_name) {
     storage().request_new();
     CHECK(settle());
     CHECK_EQ(new_name_number(storage().project_name()), number + 1);
+}
+
+TEST(storage_request_new_takes_everything_of_the_old_project_away) {
+    // What the two tests above do not look at: everything a new project has to undo besides the
+    // patterns and the name. Each line below is one assignment in `request_new` that mutation
+    // testing showed could be deleted with the whole suite still passing.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    // A sample on a track and a raised budget, by the real route: saved, then read back.
+    make_wav("/SAMPLES/OLD.WAV", 48000, 1, 16, 600);
+    kit_sample(kLoopTrack, "/SAMPLES/OLD.WAV");
+    engine().project_for_load().settings.sample_budget_mib = 48;
+    post(Cmd::project_loaded);
+    pump(2);
+    storage().note_command(Cmd::mute_store, 0);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    storage().request_reload();
+    CHECK(settle());
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(storage().samples().budget(), 48u << 20);
+
+    // A scene and a macro, which live in PERFORM.BIN and not in the project.
+    post(Cmd::kit_store);
+    post(Cmd::scene_capture, 0, 0, 5, 0);
+    Command assign;
+    assign.cmd = Cmd::macro_assign;
+    assign.track = 1;
+    assign.a = 2;
+    assign.b = 9;
+    assign.c = 20;
+    assign.d = 110;
+    engine().commands().post(assign);
+    pump(4);
+    CHECK(scene_count(engine().scenes().scenes[5]) > 0);
+    CHECK_EQ(int(engine().macros().macros[2].targets[0].enabled), 1);
+
+    // A reason still on screen from something that failed earlier.
+    kit_sample(kLoopTrack - 1, "/SAMPLES/MISSING.WAV");
+    CHECK(storage().request_sample(kLoopTrack - 1));
+    CHECK(settle());
+    CHECK(storage().last_error() != nullptr);
+
+    // And the transport running on the INTERNAL clock, which a new project may stop. Only an
+    // outside clock refuses (the test above); this one must not.
+    host.set_running(true);
+    storage().request_new();
+    storage().service();
+    CHECK(!host.running());
+    CHECK(storage().last_error() == nullptr);      // the old reason does not outlive its project
+
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::empty));   // off its track
+    CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);
+    CHECK_EQ(scene_count(engine().scenes().scenes[5]), 0);
+    CHECK_EQ(int(engine().macros().macros[2].targets[0].enabled), 0);
+}
+
+TEST(storage_request_new_waits_for_the_command_ring) {
+    // `project_init` rewrites all of pattern memory from the main context, and the audio side
+    // applies pending edits to that memory whether or not the clock runs. So a new project waits
+    // for the ring like a load does. It used to run inside the key press, on top of whatever that
+    // press and the ones before it had left in the ring.
+    clean();
+    char before_bytes[Storage::kNameBytes];
+    std::strcpy(before_bytes, storage().project_name());
+    const char *before = before_bytes;
+
+    post(Cmd::toggle_trig, 0, 6);
+    storage().request_new();
+    for (int i = 0; i < 50; i++) storage().service();
+    CHECK_EQ(storage().project_name(), before);          // not yet
+    CHECK(!engine().commands().empty());
+
+    // Drained: the edit lands on the OLD project, and then the new one replaces it whole.
+    CHECK(settle());
+    CHECK(std::strcmp(storage().project_name(), before) != 0);
+    CHECK_EQ(int(engine().pattern().tracks[0].steps[6].flags), 0);
+}
+
+TEST(storage_request_new_needs_no_card) {
+    // RAM only, so pulling the card must not make NEW do nothing -- service() returns early
+    // without a card, and the new project is handled before that.
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::toggle_trig, 0, 7);
+    pump(2);
+    host.set_card(false);
+    storage().on_card(false);
+    char before_bytes[Storage::kNameBytes];
+    std::strcpy(before_bytes, storage().project_name());
+    const char *before = before_bytes;
+
+    storage().request_new();
+    pump(4);
+    CHECK(std::strcmp(storage().project_name(), before) != 0);
+    CHECK_EQ(int(engine().pattern().tracks[0].steps[7].flags), 0);
+
+    host.set_card(true);
+    storage().on_card(true);
+    CHECK(settle());
 }

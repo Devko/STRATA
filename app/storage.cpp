@@ -248,12 +248,32 @@ void Storage::request_reload() {
     // away everything unsaved.
     autosave_ = false;
     load_pending_ = true;
+    new_pending_ = false;
 }
 
 void Storage::request_new() {
+    // Queued, not done here. It used to run on the spot, and the UI calls this straight from a
+    // key press -- with whatever edits that same press and the ones before it left in the ring.
+    // `project_init` rewrites 1.03 MiB of pattern memory from the main context, and the audio
+    // side applies pending edits to that memory whether or not the clock runs: two contexts
+    // writing the same bytes, which is what app/storage.hpp's first protocol exists to rule out.
+    // service() starts it once the ring is empty, as it does a load.
+    //
+    // The latest of a new project and a reload is the one the user meant.
+    new_pending_ = true;
+    load_pending_ = false;
+}
+
+void Storage::start_new() {
     // RAM only: nothing is written until a save, so a new project cannot lose the one on the
     // card by itself.
     if (!enaga::clock::running() || enaga::clock::stop()) {
+        // The scenes and macros FIRST, then the project, then the post. `Cmd::project_loaded` is
+        // what tells the audio side that everything it derives is stale -- the performance layer
+        // included (app/engine.cpp sets its own `perform_dirty_` there) -- so it has to come
+        // after every write it describes. This used to post first and then call
+        // `performance_changed()`, a plain bool the audio side also writes, from this context.
+        perform_init(engine_->scenes_for_load(), engine_->macros_for_load());
         project_init(engine_->project_for_load());
         post(Cmd::project_loaded);
 
@@ -261,7 +281,12 @@ void Storage::request_new() {
         // a project the user never asked to touch, which is the one unrecoverable mistake this
         // screen could make. The counter lives in the settings so the names stay distinct across
         // restarts; there is no file browser in M4 to offer anything better.
-        // A new name names a folder with nothing in it, so the next save has to write all ten.
+        //
+        // A new name names a folder with nothing in it, so the next save has to write all ten:
+        // `project_complete_` is what makes a save write every file. The dirty flags below are a
+        // second, separate fact -- that RAM differs from the card, which the screen shows -- and
+        // either one alone would get this save right, which is why deleting one of them is a
+        // mutation no test can kill. Both are kept because each answers its own question.
         project_complete_ = false;
 
         const int32_t next = settings_.get(kKeyNewSeq, 0) + 1;
@@ -277,11 +302,10 @@ void Storage::request_new() {
         // for the reason step_load gives.
         sample_queue_ = 0xFFu;
         wanted_budget_ = uint32_t(kSampleBudgetDefaultMib) << 20;
-        perform_init(engine_->scenes_for_load(), engine_->macros_for_load());
-        engine_->performance_changed();
         project_dirty_ = kit_dirty_ = perform_dirty_ = true;
         for (int b = 0; b < kBanks; b++) bank_dirty_[b] = true;
         error_ = nullptr;
+        project_error_ = nullptr;
     } else {
         error_ = "EXT CLOCK";
     }
@@ -471,6 +495,16 @@ int Storage::progress() const {
 int Storage::loading_track() const { return sample_track_; }
 
 void Storage::service() {
+    // A new project first, and before the card check: it is RAM only, so it needs no card. It
+    // waits for an idle loader and an empty ring like a load, and for a save asked for before
+    // it, which belongs to the project being replaced.
+    if (new_pending_ && job_ == Job::idle && engine_->commands().empty() &&
+        !(card_usable_ && (save_pending_ || autosave_pending_))) {
+        new_pending_ = false;
+        start_new();
+        return;
+    }
+
     if (!card_usable_) return;
 
     // A save or a load is one file per pass, and the UI runs between passes. The ring was empty
