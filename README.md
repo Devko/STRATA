@@ -82,8 +82,8 @@ Still needs a human:
 - **cl6x figures.** TI's cl6x runs only on the developer's machine, so the cloud figures are
   GCC-only. The licence question once filed here is settled (docs/BUDGET.md): no TI code reaches
   `APP.ENA`.
-- **Two calls that need ears and eyes:** whether a SAMPLE/GRAIN track played melodically should
-  fold into the key, and the note spelling (flats in `core/scale`, sharps on the step page).
+- **Hearing it.** Nothing has been listened to on the hardware yet, including the scale fold on
+  GRAIN and unsliced SAMPLE tracks (decided 2026-11-22, with notes spelled in sharps everywhere).
 
 ## Licence
 
