@@ -24,7 +24,8 @@
  * explained: it is bit-exact on the host and with GCC, but a clean A/B on 2026-11-22 found that
  * its cl6x build drifts from the unfused path (which cl6x and GCC render identically) by enough
  * to move a voice's phase within half a second (docs/BUDGET.md, "The cl6x vectorisation pass").
- * Worth ~1.7 points with cl6x once it is bit-exact there. tools/ti_ab.sh's `fused` variant
+ * --fp_reassoc=off changes nothing and the C674x has no FMA, so it is not rounding: cl6x
+ * miscompiles it or it has undefined behaviour GCC tolerates. Worth ~1.7 points once found. tools/ti_ab.sh's `fused` variant
  * builds it. */
 #ifndef STRATA_VA_FUSED
 #define STRATA_VA_FUSED 0
