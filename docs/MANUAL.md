@@ -646,13 +646,27 @@ STRATA reads WAV files: 8, 16 or 24-bit, or 32-bit float, mono or stereo, at any
 (other rates are converted to 48 kHz on load). A file may be up to **30 s at 96 kHz**; at lower
 rates the same buffer holds more (about 65 s at 44.1 kHz).
 
-There is no sample browser yet. A track gets a sample in three ways:
+### Picking a sample: the sample browser
 
-1. **Resample into it** (section 5): the take is written and loaded in one action.
-2. **Recall a kit** that names a sample.
-3. **Replace the file the kit names** on the card (for example `/RECORD/STRATA_1.WAV`) with your
-   own WAV of the same name, then in PROJECT select the track and press `FUNC+DOWN` to reload
-   it (`LOADING`).
+On a SMP or GRN track, press **OK** in EDIT (the page says `OK: PICK SAMPLE`) or in MACHINE. The
+browser opens in the folder of the file the track plays, with the cursor on it, or in `/SAMPLES`.
+
+- UP/DOWN (or A) move the cursor, LEFT/RIGHT or the selection keys turn a page of eight.
+- **OK on a file loads it into the track at once**, with the beat playing, and the cursor stays
+  put: press DOWN and OK again to try the next one. The line under the title says `READING`,
+  `CONVERTING` and so on while it loads, and the `NOW` line shows the file the track plays.
+- OK on a folder (shown with a `/`) opens it. **CLR goes up a folder**; at the top are `SAMPLES/`
+  and `RECORD/` (your resampled takes), and CLR from there goes back to where you came from.
+- `FUNC+UP` reads the folder again, for a card swapped or a take just written.
+
+Only WAV files and folders are listed; macOS's `._` files are hidden. A folder shows its first
+256 entries; the count line says `+n` when it left some out, and also counts names too long to
+store (a sample's whole path, folders included, may be 111 characters). Picking a file makes the
+project UNSAVED, like any kit change. Names are shown in capitals, with characters the screen
+cannot draw (such as `_`) shown as `-`.
+
+A track also gets a sample by **resampling into it** (section 5) or by **recalling a kit** that
+names one.
 
 ---
 

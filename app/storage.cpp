@@ -1114,6 +1114,76 @@ bool Storage::request_resample_write(int into_track) {
     return true;
 }
 
+// --- the sample browser ---------------------------------------------------
+
+bool Storage::request_browse(const char *folder) {
+    if (folder == nullptr) return false;
+    int n = 0;
+    while (folder[n] != '\0') n++;
+    if (n + 1 > SampleList::kFolderBytes) return false;
+    for (int i = 0; i <= n; i++) browse_wanted_[i] = folder[i];
+    browse_error_ = nullptr;
+    if (list_in_flight_) {
+        browse_pending_ = true;            // started by list_done, after the one in flight
+        return true;
+    }
+    browse_pending_ = true;
+    start_browse();
+    return true;
+}
+
+void Storage::start_browse() {
+    browse_pending_ = false;
+    if (browse_wanted_[0] == '\0') {
+        list_.open_root();                 // the virtual root needs no card
+        return;
+    }
+    if (!list_.open(browse_wanted_)) {
+        list_.open_root();
+        browse_error_ = "BAD PATH";
+        return;
+    }
+    if (!card_usable_) {
+        browse_error_ = "NO CARD";
+        return;
+    }
+    list_in_flight_ = true;
+    const int32_t queued =
+        enaga::files::list<&Storage::list_entry, &Storage::list_done>(list_.folder(), this);
+    if (queued < 0) {
+        list_in_flight_ = false;
+        browse_error_ = enaga::files::error_name(queued);
+    }
+}
+
+void Storage::list_entry(const enaga::files::Info &entry) {
+    // Main context, from inside Enaga's list request. The table is the one start_browse opened:
+    // only one listing is ever in flight, so these entries cannot belong to another folder.
+    list_.add(entry.name, (entry.flags & ENAGA_FILE_FOLDER) != 0u);
+}
+
+void Storage::list_done(int32_t result) {
+    list_in_flight_ = false;
+    if (result < 0) browse_error_ = enaga::files::error_name(result);
+    // For tests/scenario_samples.sh, which can only read the log.
+    enaga::log(result < 0 ? "browse failed" : "browse listed");
+    if (browse_pending_) start_browse();
+}
+
+bool Storage::request_sample_file(int track, const char *path) {
+    if (track < 0 || track >= kTracks || path == nullptr || path[0] == '\0') return false;
+    int n = 0;
+    while (path[n] != '\0') n++;
+    if (n + 1 > kSamplePathBytes) return false;
+    // The sample paths are the main context's (app/engine.cpp, Cmd::kit_recall); the audio side
+    // never reads them. The loader reads this path when the track's swap starts, so a second
+    // pick while the first is still loading simply loads again with the newer one.
+    char *out = engine_->project_for_load().kit.tracks[track].sample;
+    for (int i = 0; i <= n; i++) out[i] = path[i];
+    kit_dirty_ = true;
+    return request_sample(track);
+}
+
 bool Storage::request_sample(int track) {
     if (track < 0 || track >= kTracks) return false;
     if (engine_->project().kit.tracks[track].sample[0] == '\0') return false;
