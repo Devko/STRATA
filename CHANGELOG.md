@@ -9,7 +9,8 @@ the project file format or the controls.
 The first release: STRATA on a SmplTrek running Enaga 0.2.0. Early, and released so that people
 with a unit can play it and report back. Release notes: [docs/release/v0.1.0.md](docs/release/v0.1.0.md).
 How to play it: [docs/MANUAL.md](docs/MANUAL.md), and every control on one page in
-[docs/CHEATSHEET.md](docs/CHEATSHEET.md).
+[docs/CHEATSHEET.md](docs/CHEATSHEET.md). Both have a labelled diagram of the panel and
+screenshots of every screen.
 
 ### Requires
 

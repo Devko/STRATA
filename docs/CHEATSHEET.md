@@ -9,6 +9,8 @@ every mode, and FUNC + a function key is the label printed under it.
 
 ## Key legend
 
+![The SmplTrek panel with STRATA's button groups: screen, knobs, screen keys, arrow pad, function block, OK and CLR, STEP keys, pad-row keys, performance pads and track pads](screens/panel.svg)
+
 | Panel label (SmplTrek) | Code / SPEC name | Where |
 | --- | --- | --- |
 | FUNC, REC, PROJECT, HOME | F1, F2, F3, F4 | Function block, upper row, left to right |
@@ -50,6 +52,24 @@ Hold FUNC alone for a moment and the screen lists them, with what the upper pads
 | Step page | Hold STEP + OK | One step's own fields (opens over GRID) |
 | Enaga menu | FUNC+POWER | CLOCK SRC, CLOCK/SYNC OUT, MIDI CH |
 
+## Screens
+
+Drawn by the app's own screen code on the host build, on the factory project
+(`tools/screenshots.sh` redraws them). The cheatsheet's "The screen" table below explains what
+each line means.
+
+<table>
+<tr><td align="center"><img src="screens/grid.png" width="200" alt="GRID"><br><sub>GRID</sub></td><td align="center"><img src="screens/keys.png" width="200" alt="KEYS (HOME twice)"><br><sub>KEYS (HOME twice)</sub></td><td align="center"><img src="screens/step.png" width="200" alt="Step page (hold STEP + OK)"><br><sub>Step page (hold STEP + OK)</sub></td></tr>
+<tr><td align="center"><img src="screens/edit.png" width="200" alt="EDIT, SRC"><br><sub>EDIT, SRC</sub></td><td align="center"><img src="screens/edit_fltr.png" width="200" alt="EDIT, FLTR"><br><sub>EDIT, FLTR</sub></td><td align="center"><img src="screens/edit_amp.png" width="200" alt="EDIT, AMP"><br><sub>EDIT, AMP</sub></td></tr>
+<tr><td align="center"><img src="screens/edit_fx.png" width="200" alt="EDIT, FX"><br><sub>EDIT, FX</sub></td><td align="center"><img src="screens/edit_lfo.png" width="200" alt="EDIT, LFO"><br><sub>EDIT, LFO</sub></td><td align="center"><img src="screens/edit_arp.png" width="200" alt="EDIT, ARP"><br><sub>EDIT, ARP</sub></td></tr>
+<tr><td align="center"><img src="screens/machine.png" width="200" alt="MACHINE (FUNC+EDIT)"><br><sub>MACHINE (FUNC+EDIT)</sub></td><td align="center"><img src="screens/kit.png" width="200" alt="KIT (FUNC+EDIT twice)"><br><sub>KIT (FUNC+EDIT twice)</sub></td><td align="center"><img src="screens/samples.png" width="200" alt="SAMPLES (FUNC+PROJECT)"><br><sub>SAMPLES (FUNC+PROJECT)</sub></td></tr>
+<tr><td align="center"><img src="screens/mixer.png" width="200" alt="MIXER, TRK 1-4"><br><sub>MIXER, TRK 1-4</sub></td><td align="center"><img src="screens/mixer_dly.png" width="200" alt="MIXER, DLY"><br><sub>MIXER, DLY</sub></td><td align="center"><img src="screens/mixer_mst.png" width="200" alt="MIXER, MST"><br><sub>MIXER, MST</sub></td></tr>
+<tr><td align="center"><img src="screens/mixer_eq.png" width="200" alt="MIXER, EQ"><br><sub>MIXER, EQ</sub></td><td align="center"><img src="screens/perform.png" width="200" alt="PERFORM (FUNC+MIXER)"><br><sub>PERFORM (FUNC+MIXER)</sub></td><td align="center"><img src="screens/resample.png" width="200" alt="RESAMPLE (FUNC+REC)"><br><sub>RESAMPLE (FUNC+REC)</sub></td></tr>
+<tr><td align="center"><img src="screens/project.png" width="200" alt="PROJECT"><br><sub>PROJECT</sub></td><td align="center"><img src="screens/chain.png" width="200" alt="CHAIN"><br><sub>CHAIN</sub></td><td align="center"><img src="screens/pattern.png" width="200" alt="PATTERN"><br><sub>PATTERN</sub></td></tr>
+<tr><td align="center"><img src="screens/setup.png" width="200" alt="SETUP"><br><sub>SETUP</sub></td><td align="center"><img src="screens/projects.png" width="200" alt="PROJECTS"><br><sub>PROJECTS</sub></td><td align="center"><img src="screens/menu.png" width="200" alt="FUNC menu (FUNC+HOME)"><br><sub>FUNC menu (FUNC+HOME)</sub></td></tr>
+<tr><td align="center"><img src="screens/help.png" width="200" alt="FUNC held alone"><br><sub>FUNC held alone</sub></td><td align="center"><img src="screens/mutate.png" width="200" alt="MUTATE pressed"><br><sub>MUTATE pressed</sub></td><td align="center"><img src="screens/scene.png" width="200" alt="SCENE A held"><br><sub>SCENE A held</sub></td></tr>
+</table>
+
 ## Keys that work everywhere
 
 | Keys | Action |
@@ -81,17 +101,13 @@ screen when pressed.
 
 | Pad | Plain | With FUNC / held |
 | --- | --- | --- |
-| Lower 1-8 | Select the track and play its root note; pressure bends macro 1 up | FUNC: mute or unmute on the next bar. In NOTE RPT: rolls while held at REPEAT's length, pressure is the velocity |
+| Lower 1-8 | Select the track and play its root note; pressure bends macro A up | FUNC: mute or unmute on the next bar. In NOTE RPT: rolls while held at REPEAT's length, pressure is the velocity |
 | Upper 1 FILL (printed TRK 1) | Fill while held | FUNC: NOTE RPT on/off (`NOTE RPT`, `PADS PLAY`; `NRPT` on PERFORM's bar line) |
 | Upper 2 REPEAT (TRK 2) | Beat repeat while held; VALUE picks 1/4 ... 1/16T | FUNC at the press: pitch drops |
 | Upper 3 MUTE (TRK 3) | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B (TRK 4/5) | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
 | Upper 6 THROW (TRK 6) | Delay throw while held | FUNC: reverb throw |
 | Upper 7 MUTATE (TRK 7) | Mutates the selected track (type and amount set in PERFORM): `MUTATE T1 VELOCITY`, then `OK KEEPS CLR REVERTS` and the pad bright until you answer; `T1 NOTHING TO MUTATE` when it changed nothing (an empty track, amount 0). The default type, VELOCITY, is subtle on drums: ROT LEFT/RIGHT or DENSITY show on the grid | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT, KIT and SAMPLES, and not while a STEP, a range or a scene pad is held or in RESAMPLE, where OK and CLR keep their own jobs. Any other edit also keeps it. FUNC (hold): delay freeze, the echoes loop and nothing new goes in (`FREEZE`, `FRZ` on PERFORM's bar line) |
-
-The upper row is always lit, dim, in each pad's own colour, and bright while the pad is held or
-its mode is on: FILL (and NOTE RPT) white, REPEAT cyan, MUTE MODE red, SCENE A green, SCENE B
-blue, THROW amber, MUTATE (waiting for OK / CLR, or FREEZE) violet.
 
 ## Step editing (GRID, EDIT, MIXER, MACHINE, RESAMPLE)
 
@@ -180,7 +196,7 @@ there: steps, chords, ratchets, arp hits, note repeat, pads, KEYS and MIDI IN. M
 itself; its SRC and AMP knobs send CC 74 71 73 72 and 70 75 76 77 when they move (locks too), and
 its LFO sends its destination's CC as it moves, at most every 20 ms.
 Notes end with their step length, a key or note let go, a mute, STOP; the second STOP and
-FUNC+F6 also send All Notes Off. Enaga 0.2.0: unplug USB (or keep its MIDI port open on the
+FUNC+STOP also send All Notes Off. Enaga 0.2.0: unplug USB (or keep its MIDI port open on the
 computer) when driving gear from the DIN jack.
 **MIDI in:** channels 1-8 play tracks 1-8, other channels play the selected track. Notes are
 held until their note-off. CC 16-31 set the track's 16 parameters (SRC, FLTR, AMP, FX in order);
