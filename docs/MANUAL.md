@@ -62,7 +62,7 @@ A machine is one of eight sound engines. Any track can host any machine (MACHINE
 | 7 | PLY (VA POLY) | Chord stabs |
 | 8 | SMP (SAMPLE) | Loop, cut into slices |
 
-Every track has **16 parameters on four pages** of four, one parameter per encoder A-D:
+Every track has **16 parameters on four pages** of four, one parameter per encoder A-D (and a fifth page for its LFO, below):
 
 - **SRC** and **AMP** belong to the machine and change meaning with it (section 3).
 - **FLTR** and **FX** belong to the insert chain and are the same on every track:
@@ -71,6 +71,30 @@ Every track has **16 parameters on four pages** of four, one parameter per encod
 
 Parameters run 0-127. Every change is smoothed over one audio block, so turning a knob or
 playing a locked step never clicks.
+
+### The LFO
+
+Every track also has **one LFO**, on a fifth EDIT page, **LFO**, after FX (EDIT, then the
+selection keys or LEFT/RIGHT). It moves one of the track's 16 parameters up and down on its own:
+
+- **A, WAV**: the shape. SIN, TRI, RMP (a rising ramp), SAW (a falling one), SQR and S+H (a new
+  random value each cycle). One click is one shape.
+- **B, RAT**: the rate. The lower half runs **free**, from `0.06` Hz (one sweep every 16 s) up to
+  `32` Hz. The upper half is **synced** to the tempo, from `8B` (eight bars) down to `1/32`, with
+  dotted (`1/4.`) and triplet (`1/8T`) lengths in between. A synced LFO stays in time with the
+  bar wherever the song is, follows an outside clock, and starts on the one when you press PLAY.
+- **C, DEP**: how far. At 127 the parameter swings about 64 either side of where its knob is.
+- **D, DST**: which parameter, by name, or `OFF`. One click is one parameter.
+
+The line under the knobs shows where the destination is right now (`NOW CUT 87`), or `LFO OFF:
+SET DEP+DST` until both are up. A new track's LFO is off, and so is every track in a project
+saved before the LFO existed.
+
+The four LFO settings are parameters like any other: hold a STEP and turn one to lock it on that
+step (a deeper sweep on one step, a different shape for a fill), store them in a scene and morph
+between two LFO settings, or put DEP on a macro to fade the movement in. The LFO moves the
+parameter in its 0-127 steps about 750 times a second: smooth on a filter or a pan, but a slow,
+deep sweep of a pitch can be heard stepping.
 
 ### Patterns, banks and the project
 
@@ -437,6 +461,10 @@ track. Hold a STEP and press UP / DOWN to copy / paste one step. Everything goes
 - `VALUE push + turn`: the pattern's swing, 50-75%, on the even 16ths.
 - PROJECT, octave RIGHT twice: the **PATTERN** page, where A sets the master length (LEN) and B
   the swing (SWG).
+- **Each track can swing on its own**, on the same page: under LEN and SWG are eight TRACK SWING
+  fields, `PAT` (follow SWG) or 50-75%. LEFT/RIGHT walk the fields, and C (or VALUE) changes the
+  one under `>`; with `>` on LEN or SWG, C sets the selected track's. Hats at 66 over a straight
+  kick and bass is the classic use. It is saved with the pattern and undoable.
 
 A 12-step perc against a 16-step kick lands somewhere new each bar for three bars; GROOVE+ does
 exactly this.
@@ -537,8 +565,10 @@ filter while it closes a send.
 1. Select a track (lower pad) and a macro (LEFT/RIGHT or the octave keys).
 2. Press a **STEP** key: STEP 1-4 are that track's SRC parameters, 5-8 FLTR, 9-12 AMP, 13-16 FX.
    The screen confirms, for example `A T6 CUT`. Repeat for up to four parameters, on any tracks.
-   **FUNC + STEP 1, 2 or 3** puts the master kill EQ's LOW, MID or HI on the macro instead
-   (`A EQ LOW`): from flat, the macro sweeps that band down to a kill.
+   **FUNC + STEP 1-4** assign the track's LFO settings instead, WAV RAT DEP DST: a macro on DEP
+   fades a wobble in.
+   **FUNC + STEP 5, 6 or 7** puts the master kill EQ's LOW, MID or HI on the macro (`A EQ LOW`):
+   from flat, the macro sweeps that band down to a kill.
 3. Turn the macro's encoder (A-D).
 
 The target is whichever end of 0-127 is further from the parameter's value when you assign it,

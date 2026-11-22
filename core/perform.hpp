@@ -90,15 +90,16 @@ constexpr uint8_t kMacroMasterTrack = uint8_t(kTracks);
 
 // --- scenes ---------------------------------------------------------------
 
-// One scene: a value for any subset of the 8 x 16 track parameters.
+// One scene: a value for any subset of the 8 x 20 track parameters (16 sound, then the LFO's 4).
 //
 // `stored` is what makes "any tracks" work -- a scene that only touches the bass line must not
-// drag every other track's sound with it when it is morphed to. One bit per parameter, two bytes
-// per track, and zeroed memory means a scene that stores nothing, which is what an empty scene
-// is.
+// drag every other track's sound with it when it is morphed to. One bit per parameter, three
+// bytes per track (the third holds the LFO's four bits), and zeroed memory means a scene that
+// stores nothing, which is what an empty scene is.
+constexpr int kSceneStoredBytes = (kKitParams + 7) / 8;
 struct Scene {
     uint8_t values[kTracks][kKitParams] = {};
-    uint8_t stored[kTracks][2] = {};
+    uint8_t stored[kTracks][kSceneStoredBytes] = {};
     // The master kill EQ's three band bytes (ProjectSettings::master, from kMasterEqFirst), and
     // which of them the scene stores, bit 0 LOW. A whole-kit capture stores all three, so a
     // morph to a scene with the lows cut sweeps them out; the kill SWITCHES are not in a scene,
@@ -323,9 +324,14 @@ constexpr bool auto_fill_active(AutoFill period, uint32_t bar) {
 constexpr uint16_t kPerformVersion = 1;
 constexpr uint16_t kSectionPerformScenes = 1;
 constexpr uint16_t kSectionPerformMacros = 2;
+// The scenes' LFO bytes: per scene, per track, the four values and then the bitmask byte whose
+// low four bits say which are stored. OPTIONAL on read: a PERFORM.BIN from before the LFO loads
+// with no scene storing any LFO byte. Section 1 keeps its 16 values and two mask bytes a track,
+// so an older build reads a newer file unchanged and simply never asks for this one.
+constexpr uint16_t kSectionPerformSceneLfo = 3;
 // The scenes' master EQ bytes: 4 per scene (three bands, then the stored bits). OPTIONAL on read:
-// a PERFORM.BIN from before it has two sections and loads with no scene storing the EQ.
-constexpr uint16_t kSectionPerformSceneMaster = 3;
+// a PERFORM.BIN from before it loads with no scene storing the EQ.
+constexpr uint16_t kSectionPerformSceneMaster = 4;
 
 // Loading is value-tolerant but structure-strict, exactly as the other three file types are: a
 // macro naming a track that does not exist is dropped, while a bad magic, an unknown version, a

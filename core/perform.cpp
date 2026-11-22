@@ -66,6 +66,8 @@ SerializeResult finish_container(Writer &w, uint8_t *buffer, uint32_t total, uin
 
 // The checks in pattern_read's order: the declared payload against the buffer, then the CRC,
 // then the version, then the table.
+// The last `optional` of `wanted` may be missing, and come back as offset 0 (core/project.cpp's
+// copy says why a format grows this way).
 SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t version,
                               const uint16_t *wanted, uint32_t count, uint32_t *offset,
                               uint32_t *length, uint32_t optional = 0) {
@@ -118,10 +120,10 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PERFORM.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kPerformSections = 3;
-// The last one, the scenes' master EQ, may be absent (an older file).
-constexpr uint32_t kPerformOptionalSections = 1;
-constexpr uint32_t kSceneTrackBytes = uint32_t(kKitParams) + 2;      // values, then the bitmask
+constexpr uint32_t kPerformSections = 4;
+// The last two, the scenes' LFO bytes and their master EQ, may each be absent (an older file).
+constexpr uint32_t kPerformOptionalSections = 2;
+constexpr uint32_t kSceneTrackBytes = uint32_t(kKitSoundParams) + 2; // values, then the bitmask
 constexpr uint32_t kSceneBytes = kSceneTrackBytes * uint32_t(kTracks);
 constexpr uint32_t kScenesBytes = kSceneBytes * uint32_t(kScenes);
 constexpr uint32_t kMacroTargetBytes = 5;                            // enabled, track, param, low, high
@@ -130,13 +132,20 @@ constexpr uint32_t kMacrosBytes =
 constexpr uint32_t kPerformTableBytes = kPerformSections * kSectionEntryBytes;
 constexpr uint32_t kScenesOffset = kPerformTableBytes;
 constexpr uint32_t kMacrosOffset = kScenesOffset + kScenesBytes;
+// The LFO's four values and its mask byte, per track per scene.
+constexpr uint32_t kSceneLfoTrackBytes = uint32_t(kKitLfoParams) + 1;
+constexpr uint32_t kSceneLfoBytes =
+    kSceneLfoTrackBytes * uint32_t(kTracks) * uint32_t(kScenes);
+constexpr uint32_t kSceneLfoOffset = kMacrosOffset + kMacrosBytes;
 constexpr uint32_t kSceneMasterBytes = uint32_t(kMasterBands) + 1;
 constexpr uint32_t kScenesMasterBytes = kSceneMasterBytes * uint32_t(kScenes);
-constexpr uint32_t kScenesMasterOffset = kMacrosOffset + kMacrosBytes;
+constexpr uint32_t kScenesMasterOffset = kSceneLfoOffset + kSceneLfoBytes;
 constexpr uint32_t kPerformTotalBytes = kHeaderBytes + kScenesMasterOffset + kScenesMasterBytes;
 
-static_assert(kKitParams == 16, "a scene's stored bitmask is two bytes on the strength of 16 "
-                                "parameters per track");
+static_assert(kKitSoundParams == 16, "section 1's stored bitmask is two bytes on the strength of "
+                                     "16 sound parameters per track");
+static_assert(kKitLfoParams <= 8 && kSceneStoredBytes == 3,
+              "the LFO's stored bits are the low bits of the third mask byte");
 
 }  // namespace
 
@@ -176,8 +185,7 @@ void scene_capture_master(Scene &scene, const uint8_t bands[kMasterBands]) {
 
 void scene_erase(Scene &scene) {
     for (int t = 0; t < kTracks; t++) {
-        scene.stored[t][0] = 0;
-        scene.stored[t][1] = 0;
+        for (int i = 0; i < kSceneStoredBytes; i++) scene.stored[t][i] = 0;
         for (int p = 0; p < kKitParams; p++) scene.values[t][p] = 0;
     }
     for (int b = 0; b < kMasterBands; b++) scene.master[b] = 0;
@@ -205,9 +213,11 @@ void scene_morph(const Scene &a, const Scene &b, uint16_t position,
         // Both bitmasks for this track, read once. A track neither scene touches is the common
         // case in a performance -- a scene for the bass line says nothing about the drums -- and
         // skipping it whole is what keeps this cheap enough for control rate.
-        const uint16_t mask_a = uint16_t(uint16_t(a.stored[t][0]) | uint16_t(a.stored[t][1]) << 8);
-        const uint16_t mask_b = uint16_t(uint16_t(b.stored[t][0]) | uint16_t(b.stored[t][1]) << 8);
-        const uint16_t touched = uint16_t(mask_a | mask_b);
+        const uint32_t mask_a = uint32_t(a.stored[t][0]) | uint32_t(a.stored[t][1]) << 8 |
+                                uint32_t(a.stored[t][2]) << 16;
+        const uint32_t mask_b = uint32_t(b.stored[t][0]) | uint32_t(b.stored[t][1]) << 8 |
+                                uint32_t(b.stored[t][2]) << 16;
+        const uint32_t touched = mask_a | mask_b;
         if (touched == 0) continue;
 
         for (int p = 0; p < kKitParams; p++) {
@@ -427,6 +437,7 @@ SerializeResult perform_write(const SceneSet &scenes, const MacroSet &macros, ui
     const Section sections[kPerformSections] = {
         {kSectionPerformScenes, kScenesOffset, kScenesBytes},
         {kSectionPerformMacros, kMacrosOffset, kMacrosBytes},
+        {kSectionPerformSceneLfo, kSceneLfoOffset, kSceneLfoBytes},
         {kSectionPerformSceneMaster, kScenesMasterOffset, kScenesMasterBytes},
     };
 
@@ -439,7 +450,7 @@ SerializeResult perform_write(const SceneSet &scenes, const MacroSet &macros, ui
     for (int s = 0; s < kScenes; s++) {
         const Scene &scene = scenes.scenes[s];
         for (int t = 0; t < kTracks; t++) {
-            for (int p = 0; p < kKitParams; p++) w.u8(scene.values[t][p]);
+            for (int p = 0; p < kKitSoundParams; p++) w.u8(scene.values[t][p]);
             w.u8(scene.stored[t][0]);
             w.u8(scene.stored[t][1]);
         }
@@ -453,6 +464,14 @@ SerializeResult perform_write(const SceneSet &scenes, const MacroSet &macros, ui
             w.u8(target.param);
             w.u8(target.low);
             w.u8(target.high);
+        }
+    }
+
+    for (int s = 0; s < kScenes; s++) {
+        const Scene &scene = scenes.scenes[s];
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = kKitSoundParams; p < kKitParams; p++) w.u8(scene.values[t][p]);
+            w.u8(scene.stored[t][2]);
         }
     }
 
@@ -477,17 +496,18 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
     };
 
     const uint16_t wanted[kPerformSections] = {kSectionPerformScenes, kSectionPerformMacros,
-                                               kSectionPerformSceneMaster};
+                                               kSectionPerformSceneLfo, kSectionPerformSceneMaster};
     uint32_t offset[kPerformSections] = {};
     uint32_t length[kPerformSections] = {};
-    const SerializeResult found =
-        find_sections(buffer, size, kPerformVersion, wanted, kPerformSections, offset, length,
-                      kPerformOptionalSections);
+    const SerializeResult found = find_sections(buffer, size, kPerformVersion, wanted,
+                                                kPerformSections, offset, length,
+                                                kPerformOptionalSections);
     if (found != SerializeResult::ok) return refuse(found);
     if (length[0] < kScenesBytes) return refuse(SerializeResult::malformed);
     if (length[1] < kMacrosBytes) return refuse(SerializeResult::malformed);
-    // Present but short is damage; absent is a file from before the kill EQ.
-    if (offset[2] != 0 && length[2] < kScenesMasterBytes) return refuse(SerializeResult::malformed);
+    // Present but short is damage; absent is a file from before the LFO or the kill EQ.
+    if (offset[2] != 0 && length[2] < kSceneLfoBytes) return refuse(SerializeResult::malformed);
+    if (offset[3] != 0 && length[3] < kScenesMasterBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -495,7 +515,7 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
     for (int s = 0; s < kScenes; s++) {
         Scene &scene = scenes.scenes[s];
         for (int t = 0; t < kTracks; t++) {
-            for (int p = 0; p < kKitParams; p++) {
+            for (int p = 0; p < kKitSoundParams; p++) {
                 // Clamped, for core/project.cpp's reason about a kit parameter: dsp/ maps these
                 // as table indices, so a 255 that survived the CRC is an out-of-range read in a
                 // machine rather than an odd sound.
@@ -536,17 +556,42 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
     }
     if (!r.ok()) return refuse(SerializeResult::truncated);
 
-    // The scenes' master EQ bytes. Absent means no scene stores the EQ -- set explicitly, since
-    // `scenes` may hold the previous project's.
-    for (int s = 0; s < kScenes; s++) {
-        Scene &scene = scenes.scenes[s];
-        if (offset[2] == 0) {
+    // The scenes' LFO bytes. Absent: a file from before the LFO, so no scene stores one --
+    // set explicitly, since `scenes` is the engine's set and may hold the last project's.
+    if (offset[2] == 0) {
+        for (int s = 0; s < kScenes; s++) {
+            for (int t = 0; t < kTracks; t++) {
+                Scene &scene = scenes.scenes[s];
+                for (int p = kKitSoundParams; p < kKitParams; p++) scene.values[t][p] = 0;
+                scene.stored[t][2] = 0;
+            }
+        }
+    } else {
+        if (!r.seek(kHeaderBytes + offset[2])) return refuse(SerializeResult::malformed);
+        for (int s = 0; s < kScenes; s++) {
+            Scene &scene = scenes.scenes[s];
+            for (int t = 0; t < kTracks; t++) {
+                for (int p = kKitSoundParams; p < kKitParams; p++) {
+                    scene.values[t][p] = clamp_u8(r.u8(), 0, kParamMax);
+                }
+                // Only the low four bits name a parameter this build has; the rest are dropped,
+                // so a damaged byte cannot mark a parameter past the end of `values` as stored.
+                scene.stored[t][2] = uint8_t(r.u8() & ((1u << kKitLfoParams) - 1u));
+            }
+        }
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // The scenes' master EQ bytes. Absent means no scene stores the EQ -- set explicitly, for the
+    // same reason.
+    if (offset[3] == 0) {
+        for (int s = 0; s < kScenes; s++) {
+            Scene &scene = scenes.scenes[s];
             for (int b = 0; b < kMasterBands; b++) scene.master[b] = 0;
             scene.master_stored = 0;
         }
-    }
-    if (offset[2] != 0) {
-        if (!r.seek(kHeaderBytes + offset[2])) return refuse(SerializeResult::malformed);
+    } else {
+        if (!r.seek(kHeaderBytes + offset[3])) return refuse(SerializeResult::malformed);
         for (int s = 0; s < kScenes; s++) {
             Scene &scene = scenes.scenes[s];
             for (int b = 0; b < kMasterBands; b++) scene.master[b] = clamp_u8(r.u8(), 0, kParamMax);

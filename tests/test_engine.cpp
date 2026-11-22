@@ -793,6 +793,44 @@ TEST(engine_swing_moves_the_odd_steps_and_leaves_the_even_ones) {
     CHECK_EQ(int(engine.pattern().swing), kSwingMin);
 }
 
+TEST(engine_a_tracks_own_swing_overrides_the_patterns_and_pat_follows_it_again) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 1);
+    post(Cmd::set_pattern_swing, 0, 0, uint8_t(kSwingMin));
+    post(Cmd::set_track_swing, kPoly, 0, uint8_t(kSwingMax));
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), kSwingMax);
+    // The pattern is straight and the track swings: step 1 lands 12 ticks late.
+    CHECK_EQ(fired_on(kPoly, 24u), 0);
+    CHECK_EQ(fired_on(kPoly, 36u), 1);
+
+    // A delta walks down from 75; past 50 it reaches PAT and the track follows the pattern.
+    post(Cmd::set_track_swing, kPoly, 0, 0, uint8_t(int8_t(-30)), kDeltaFlag);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), int(kSwingInherit));
+    CHECK_EQ(fired_on(kPoly, 1536u + 24u), 1);
+    post(Cmd::set_pattern_swing, 0, 0, uint8_t(kSwingMax));
+    pump();
+    CHECK_EQ(fired_on(kPoly, 2u * 1536u + 24u), 0);
+    CHECK_EQ(fired_on(kPoly, 2u * 1536u + 36u), 1);
+
+    // An absolute value out of range clamps; 0 is PAT, not 50.
+    post(Cmd::set_track_swing, kPoly, 0, 200);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), kSwingMax);
+    post(Cmd::set_track_swing, kPoly, 0, 3);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), kSwingMin);
+    post(Cmd::set_track_swing, kPoly, 0, uint8_t(kSwingInherit));
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), int(kSwingInherit));
+    // Other tracks were never touched.
+    for (int t = 0; t < kTracks; t++) {
+        if (t != kPoly) CHECK_EQ(int(engine.pattern().tracks[t].swing), int(kSwingInherit));
+    }
+}
+
 TEST(engine_micro_timing_moves_a_step_off_the_grid_and_adds_to_swing) {
     Engine &engine = clean();
     (void)engine;
@@ -1832,9 +1870,9 @@ TEST(engine_a_macro_with_four_targets_refuses_a_fifth) {
     CHECK_EQ(int(refused() - before), 1);
     CHECK_EQ(macro_count(engine.macros().macros[1]), kMacroTargets);
 
-    // A parameter index no track has is not a target either (kParams + 0-2 are the master
+    // A parameter index no track has is not a target either (kTrackParams + 0-2 are the master
     // EQ's bands, so the first one with no meaning is past them).
-    post_macro_assign(2, 0, uint8_t(kParams + kMasterBands), 0, 127);
+    post_macro_assign(2, 0, uint8_t(kTrackParams + kMasterBands), 0, 127);
     pump();
     CHECK_EQ(macro_count(engine.macros().macros[2]), 0);
 }
@@ -2169,13 +2207,13 @@ TEST(engine_a_parameter_a_track_does_not_have_is_ignored) {
     pump();
     CHECK_EQ(int(kit_value(0, kLvl)), 127);        // clamped to the top of the range
 
-    post(Cmd::set_param, 0, 0, uint8_t(kParams), 5);
+    post(Cmd::set_param, 0, 0, uint8_t(kTrackParams), 5);
     post(Cmd::set_param, 0, 0, 200, 5);
     pump();
-    for (int p = 0; p < kParams; p++) CHECK(int(kit_value(0, p)) != 5);
+    for (int p = 0; p < kTrackParams; p++) CHECK(int(kit_value(0, p)) != 5);
 
     // And a lock on a parameter no track has is not stored either.
-    post(Cmd::lock_delta, 0, 0, uint8_t(kParams), uint8_t(int8_t(-1)));
+    post(Cmd::lock_delta, 0, 0, uint8_t(kTrackParams), uint8_t(int8_t(-1)));
     pump();
     CHECK_EQ(int(pattern_locks_reachable(engine.pattern())), 0);
 }
@@ -2776,7 +2814,7 @@ TEST(engine_a_stop_ends_the_last_steps_locks_so_a_macro_reaches_them) {
 TEST(engine_a_macro_on_the_master_eq_sweeps_a_band_and_lets_go) {
     Engine &engine = clean();
     strata::test::set_master_byte(uint8_t(MasterField::eq_low), 64);
-    post_macro_assign(3, 0, uint8_t(kParams + 0), 64, 0);         // LOW, towards a kill
+    post_macro_assign(3, 0, uint8_t(kTrackParams + 0), 64, 0);         // LOW, towards a kill
     pump();
     CHECK_EQ(macro_count(engine.macros().macros[3]), 1);
     CHECK_EQ(int(engine.macros().macros[3].targets[0].track), int(kMacroMasterTrack));
