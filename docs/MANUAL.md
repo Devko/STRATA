@@ -499,9 +499,13 @@ Mutes and mute states are saved with the project.
 In PERFORM (`FUNC+MIXER`) the top shows `A1 0P` and `B2 9P`: which scene is on each side and how
 many parameters it stores, and the morph bar between them. **VALUE** morphs.
 
-- **OK** captures the whole current sound into the scene on side A.
+- **OK** captures the whole current sound into the scene on side A, including the master kill
+  EQ's three knobs (not its kill switches).
 - Hold a scene pad + **OK** captures only the selected track into that side's scene.
 - Hold a scene pad + **CLR** erases that side's scene.
+
+Because a whole capture holds the kill EQ's knobs, a scene captured with LOW turned down to
+`KILL` turns the morph into a slow low-end fade: morph towards it over a build.
 
 A useful habit: leave side A on an empty scene, build a sound, capture it into a scene on side B,
 then undo your knob moves and morph back and forth. The morph position itself is not saved.
@@ -533,6 +537,8 @@ filter while it closes a send.
 1. Select a track (lower pad) and a macro (LEFT/RIGHT or the octave keys).
 2. Press a **STEP** key: STEP 1-4 are that track's SRC parameters, 5-8 FLTR, 9-12 AMP, 13-16 FX.
    The screen confirms, for example `A T6 CUT`. Repeat for up to four parameters, on any tracks.
+   **FUNC + STEP 1, 2 or 3** puts the master kill EQ's LOW, MID or HI on the macro instead
+   (`A EQ LOW`): from flat, the macro sweeps that band down to a kill.
 3. Turn the macro's encoder (A-D).
 
 The target is whichever end of 0-127 is further from the parameter's value when you assign it,

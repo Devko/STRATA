@@ -125,7 +125,9 @@ the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playin
 empty), up to 64 entries. Chain edits are not undoable.
 **PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
 (END) and the chain wait for.
-**PERFORM:** STEP 1-16 assign that parameter of the selected track to the selected macro. A macro
+**PERFORM:** STEP 1-16 assign that parameter of the selected track to the selected macro;
+FUNC+STEP 1-3 assign the master kill EQ's LOW, MID or HI (`A EQ LOW`). OK's whole capture also
+stores the kill EQ's three knobs, so the morph can sweep them. A macro
 at 0 lets go: its parameters follow their EDIT knobs and the morph, and turning it up sweeps from
 wherever they are. A new project has B ACID (bass filter), C DUB (chord and rim sends) and D DRIVE
 (kick and hats); A is left for you, and pad pressure bends it. VALUE is the A/B morph; OK captures into scene A's slot (with a scene pad held: that scene, selected

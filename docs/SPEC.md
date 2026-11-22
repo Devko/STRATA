@@ -181,11 +181,11 @@ Eight tools change the music live without touching the stored pattern unless you
 | --- | --- | --- |
 | Mutes | Lower pads toggle track mutes, instantly or at the next bar. 8 stored mute states per project, recalled from the upper row | Saved with the pattern |
 | Fill | Hold to activate `FILL` conditions; optional auto-fill every 4, 8 or 16 bars | No |
-| Scenes and morph | A scene stores parameter values for any tracks. Assign scene A and scene B, then VALUE crossfades the live sound from A to B. 16 scenes per project | Scene edits save; the morph position does not |
+| Scenes and morph | A scene stores parameter values for any tracks. Assign scene A and scene B, then VALUE crossfades the live sound from A to B. 16 scenes per project. **[rev]** A whole capture also stores the master kill EQ's three band knobs (not its kill switches), and the morph crossfades them by the same rule | Scene edits save; the morph position does not |
 | Beat repeat | Hold to loop the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the master output from a 2-bar ring buffer, with optional pitch-down | No |
 | Throws | Hold to push delay or reverb send to full on the selected tracks; release returns it | No |
 | Mutation | Variations of the selected track: rotate, Euclidean density up or down, bounded randomizing of velocity, micro-timing, probability and notes in scale. Seeded and undoable | OK keeps it, CLR reverts |
-| Macros | 4 macros on encoders A-D in PERFORM mode. Each drives up to 4 parameters on any tracks, each towards its own end. **[rev]** At 0 a macro lets go, and turning it up sweeps each parameter from its live value (kit, then morph) to that end, so a resting macro never holds an EDIT knob or a scene (Roland, 2026-11-22) | Macro setup saves |
+| Macros | 4 macros on encoders A-D in PERFORM mode. Each drives up to 4 parameters on any tracks, each towards its own end. **[rev]** At 0 a macro lets go, and turning it up sweeps each parameter from its live value (kit, then morph) to that end, so a resting macro never holds an EDIT knob or a scene (Roland, 2026-11-22). **[rev]** A target may also be a master kill EQ band (FUNC + STEP 1-3 in PERFORM) | Macro setup saves |
 | Resample | Record the master or one track for 1, 2, 4 or 8 bars to `/RECORD` as WAV, then load it into a SAMPLE or GRAIN track in one action | Writes a file |
 
 **Musical defaults that help creativity**
