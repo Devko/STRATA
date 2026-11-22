@@ -2309,7 +2309,7 @@ public:
         }
 
         canvas.text(0, 103, "ARROWS: MACHINE TRACK", 7);
-        canvas.text(0, 112, "F1+EDIT AGAIN: KITS", 7);
+        canvas.text(0, 112, "FUNC+EDIT AGAIN: KITS", 7);
     }
 
     // --- KIT: the kit library (FUNC+EDIT twice) ---------------------------
@@ -2329,7 +2329,7 @@ public:
         append_padded(out, uint32_t(first + 1), 2);
         *out++ = '-';
         append_padded(out, uint32_t(first + 8), 2);
-        if (!storage_.card_usable()) append(out, "  NO CARD");
+        append(out, storage_.card_usable() ? "    OK LOAD" : "  NO CARD");
         *out = 0;
         canvas.text(0, 18, line, 15);
 
@@ -2341,7 +2341,7 @@ public:
         } else if (storage_.last_error() != nullptr) {
             append_shown(out, storage_.last_error(), kLineChars);
         } else {
-            append(out, "OK LOAD  F1+DOWN SAVE");
+            append(out, "FUNC+DOWN: SAVE HERE");
         }
         *out = 0;
         canvas.text(0, 27, line, busy != nullptr ? 12 : 9);

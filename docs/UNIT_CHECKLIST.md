@@ -1165,3 +1165,22 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
 - [ ] In PROJECT, F1 + CLR undoes and F1 + OK redoes (try a LEN change on the PATTERN page).
 - [ ] F1 + LEFT once shows AGAIN TO RELOAD and changes nothing; twice reloads the project from the
       card. F1 + RIGHT twice starts a new project. A single press of either never loses work.
+
+## KIT: the kit browser (FUNC+EDIT twice)
+
+- [ ] FUNC+EDIT opens MACHINE, whose last line says `FUNC+EDIT AGAIN: KITS`. FUNC+EDIT again opens
+      KIT: `KITS 01-08    OK LOAD`, eight rows, and on a new card every row reads `EMPTY` after a
+      moment. CLR (or FUNC+EDIT) goes back to MACHINE. The layout reads cleanly, no overlaps.
+- [ ] Turn a few knobs and switch a machine, then FUNC+DOWN on slot 1: `SAVING KIT`, the row reads
+      `KIT` and the two lines below show the eight machines. The card has
+      `/ENAGA/DATA/STRATA/KITS/KIT_01.BIN`.
+- [ ] Change the sound, then with the beat PLAYING press OK on slot 1: `OK AGAIN TO LOAD`, nothing
+      changes. OK again: the stored sound comes back and the beat does not stop. Listen for a
+      click or a dropout at the recall, and read LOAD/PEAK straight after it.
+- [ ] FUNC+DOWN on slot 1 again says `AGAIN TO OVERWRITE`; only the second press writes.
+- [ ] A kit with a sample on track 8: recall a kit with the SAME sample while playing -- the loop
+      does not stop. Recall one naming another WAV -- the track reloads (PROJECT shows `.` then `O`).
+- [ ] After a recall PROJECT says `UNSAVED`; FUNC+PROJECT twice saves it, and the reopened project
+      has the recalled kit.
+- [ ] Kits are shared: start a NEW project (PROJECT, FUNC+RIGHT twice) and slot 1 is still there.
+
