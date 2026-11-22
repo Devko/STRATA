@@ -99,6 +99,9 @@ struct UiProbe {
     static int slot_cursor(const Strata &app) { return app.slot_cursor_; }
     static int macro_selected(const Strata &app) { return app.macro_selected_; }
     static int quantize(const Strata &app) { return app.quantize(); }
+    static int project_cursor(const Strata &app) { return app.project_cursor_; }
+    static bool name_entry_open(const Strata &app) { return app.name_entry_.active(); }
+    static const char *name_entry_text(Strata &app) { return app.name_entry_.text(); }
 };
 
 }  // namespace strata::test
@@ -3507,4 +3510,213 @@ TEST(ui_a_late_stream_is_said_once_and_not_every_pass) {
     CHECK_EQ(UiProbe::notice(app), "STREAM LATE");
     CHECK(UiProbe::notice_showing(app));
     status.stream_late.store(0, std::memory_order_relaxed);
+}
+
+// --- the PROJECTS page (PROJECT, the octave keys past SETUP) ------------------------------------
+
+namespace {
+
+// Two projects on the card, FIRST and SECOND, with SECOND the one open. Saved through Storage,
+// which is what the page lists: the folders under PROJECTS/.
+void two_projects() {
+    CHECK(app_storage().request_save_as("FIRST"));
+    CHECK(pump_until_idle());
+    CHECK(app_storage().request_save_as("SECOND"));
+    CHECK(pump_until_idle());
+    CHECK(app_storage().last_error() == nullptr);
+    CHECK(std::strcmp(app_storage().project_name(), "SECOND") == 0);
+}
+
+// PROJECT, then the octave keys to the last page, then the card read.
+void to_projects_page(Strata &app) {
+    key(ENAGA_KEY_F3);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 4);
+    for (int i = 0; i < 200 && app_storage().browsing(); i++) pump();
+    pump();
+}
+
+// The name entry's text, made into `wanted` by its own controls: VALUE steps each character until
+// it is the one wanted, encoder A moves on. Spaces past the end clear what the old name left.
+void type_name(Strata &app, const char *wanted) {
+    const int length = int(std::strlen(wanted));
+    for (int i = 0; i < enaga::ui::TextEntry::max_chars; i++) {
+        const char target = i < length ? wanted[i] : ' ';
+        for (int tries = 0; tries < 64; tries++) {
+            const char *text = UiProbe::name_entry_text(app);
+            const char at = i < int(std::strlen(text)) ? text[i] : ' ';
+            if (at == target) break;
+            app.on_encoder(4, +1);
+        }
+        app.on_encoder(0, +1);
+    }
+    CHECK(std::strcmp(UiProbe::name_entry_text(app), wanted) == 0);
+}
+
+}  // namespace
+
+TEST(ui_projects_lists_the_card_and_starts_on_the_open_one) {
+    Strata &app = fresh();
+    two_projects();
+    to_projects_page(app);
+    const SampleList &list = app_storage().browse_list();
+    CHECK(list.find("FIRST") >= 0);
+    CHECK(list.find("SECOND") >= 0);
+    CHECK_EQ(UiProbe::project_cursor(app), list.find("SECOND"));
+    // The arrows and encoder A move it, and stop at the ends.
+    for (int i = 0; i < 40; i++) key(ENAGA_KEY_UP);
+    CHECK_EQ(UiProbe::project_cursor(app), 0);
+    app.on_encoder(0, +100);
+    CHECK_EQ(UiProbe::project_cursor(app), list.count() - 1);
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_projects_ok_twice_opens_another_project) {
+    Strata &app = fresh();
+    two_projects();
+    // Something only FIRST has: a trig saved into it, then SECOND saved without it.
+    CHECK(app_storage().request_save_as("FIRST"));
+    CHECK(pump_until_idle());
+    step_down(4);
+    step_up(4);
+    pump(2);
+    CHECK(trig_at(0, 4));
+    CHECK(app_storage().request_save_as("SECOND"));
+    CHECK(pump_until_idle());
+    to_projects_page(app);
+
+    // OK on the open one says so and does nothing.
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "ALREADY OPEN") == 0);
+
+    const int first = app_storage().browse_list().find("FIRST");
+    CHECK(first >= 0);
+    app.on_encoder(0, first - UiProbe::project_cursor(app));
+    CHECK_EQ(UiProbe::project_cursor(app), first);
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "AGAIN TO OPEN") == 0);
+    pump(4);
+    CHECK(std::strcmp(app_storage().project_name(), "SECOND") == 0);   // once is not enough
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "OPENING") == 0);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+    CHECK(pump_until_idle());
+    CHECK(app_storage().last_error() == nullptr);
+    CHECK(std::strcmp(app_storage().project_name(), "FIRST") == 0);
+    CHECK(!trig_at(0, 4));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_projects_a_press_on_another_entry_disarms_the_open) {
+    Strata &app = fresh();
+    two_projects();
+    to_projects_page(app);
+    const int first = app_storage().browse_list().find("FIRST");
+    app.on_encoder(0, first - UiProbe::project_cursor(app));
+    key(ENAGA_KEY_OK);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_OK);                               // armed again, not opened
+    CHECK(std::strcmp(UiProbe::notice(app), "AGAIN TO OPEN") == 0);
+    pump(4);
+    CHECK(std::strcmp(app_storage().project_name(), "SECOND") == 0);
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_projects_func_down_saves_under_a_typed_name) {
+    Strata &app = fresh();
+    two_projects();
+    to_projects_page(app);
+    shift_key(ENAGA_KEY_DOWN);
+    CHECK(UiProbe::name_entry_open(app));
+    CHECK(std::strcmp(UiProbe::name_entry_text(app), "SECOND") == 0);   // starts from its name
+
+    // While it is open every key is its own: GRID does not leave.
+    key(ENAGA_KEY_F4);
+    CHECK(UiProbe::name_entry_open(app));
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+
+    type_name(app, "THIRD 2");
+    key(ENAGA_KEY_OK);
+    CHECK(!UiProbe::name_entry_open(app));
+    CHECK(std::strcmp(UiProbe::notice(app), "SAVING") == 0);
+    CHECK(pump_until_idle());
+    CHECK(app_storage().last_error() == nullptr);
+    CHECK(std::strcmp(app_storage().project_name(), "THIRD 2") == 0);
+    // The list is read again once the save is on the card, and the new one is in it.
+    for (int i = 0; i < 400 && app_storage().browse_list().find("THIRD 2") < 0; i++) pump();
+    CHECK(app_storage().browse_list().find("THIRD 2") >= 0);
+    CHECK(app_storage().browse_list().find("SECOND") >= 0);           // the old one stays
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_projects_save_as_will_not_take_another_projects_name) {
+    Strata &app = fresh();
+    two_projects();
+    to_projects_page(app);
+    shift_key(ENAGA_KEY_DOWN);
+    type_name(app, "FIRST");
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "NAME TAKEN") == 0);
+    pump(8);
+    CHECK(std::strcmp(app_storage().project_name(), "SECOND") == 0);
+
+    // An empty name, and CLR, change nothing either.
+    shift_key(ENAGA_KEY_DOWN);
+    type_name(app, "");
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "NO NAME") == 0);
+    shift_key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_CLR);
+    CHECK(!UiProbe::name_entry_open(app));
+    CHECK(std::strcmp(UiProbe::notice(app), "NAME KEPT") == 0);
+    CHECK_EQ(UiProbe::project_page(app), 4);         // that CLR was the entry's, not the page's
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_the_projects_page_and_save_as) {
+    Strata &app = fresh();
+    to_projects_page(app);
+    check_layout(app, "PROJECTS, only the default");
+    // A full page and then some, with the longest names the panel can type.
+    char name[24];
+    for (int i = 0; i < 11; i++) {
+        std::memcpy(name, "WWWWWWWWWWWWWW00", 17);
+        name[14] = char('0' + i / 10);
+        name[15] = char('0' + i % 10);
+        CHECK(app_storage().request_save_as(name));
+        CHECK(pump_until_idle());
+    }
+    shift_key(ENAGA_KEY_UP);
+    for (int i = 0; i < 200 && app_storage().browsing(); i++) pump();
+    pump();
+    check_layout(app, "PROJECTS, a long list");
+    key(ENAGA_KEY_F4);                               // an edit, then straight back
+    step_down(0);
+    step_up(0);
+    pump(2);
+    key(ENAGA_KEY_F3);
+    for (int i = 0; i < 200 && app_storage().browsing(); i++) pump();
+    pump();
+    CHECK_EQ(UiProbe::project_page(app), 4);
+    CHECK(app_storage().dirty());
+    check_layout(app, "PROJECTS, unsaved");
+    key(ENAGA_KEY_RIGHT);
+    check_layout(app, "PROJECTS, page 2");
+    shift_key(ENAGA_KEY_DOWN);
+    app.on_encoder(0, +100);                         // the cursor at the last place
+    check_layout(app, "SAVE AS");
+    key(ENAGA_KEY_CLR);
+    app.on_card(false);
+    shift_key(ENAGA_KEY_UP);
+    pump(4);
+    check_layout(app, "PROJECTS, no card");
+    app.on_card(true);
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
 }
