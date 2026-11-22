@@ -1951,6 +1951,44 @@ TEST(storage_a_wav_at_another_rate_is_resampled_once_at_load) {
     CHECK(slot_of(kLoopTrack).frames > 1000u);
 }
 
+// A WAV too big for g_scratch: 30 s of 96 kHz mono 8-bit is 2.88 MB. Its own buffer, file scope
+// (the frame rule), sized for one frame past 30 s.
+constexpr uint32_t kLong96Frames = kMaxSampleSeconds * 96000u;
+uint8_t g_long_wav[44u + kLong96Frames + 1u];
+
+uint32_t make_long_wav(const char *path, uint32_t frames) {
+    enaga::wav::Format format;
+    format.encoding = uint16_t(enaga::wav::pcm);
+    format.channels = 1;
+    format.rate = 96000;
+    format.bits = 8;
+    enaga::wav::header(g_long_wav, format, frames);
+    for (uint32_t f = 0; f < frames; f++) g_long_wav[44u + f] = (f / 64u) % 2u ? 0x20u : 0xE0u;
+    CHECK(FakeHost::the().write_file(path, g_long_wav, 44u + frames));
+    return 44u + frames;
+}
+
+TEST(storage_thirty_seconds_of_a_96k_file_loads) {
+    // Roland, 2026-11-22: the 30 s limit is 30 s of the FILE. The loader's resample buffer used
+    // to count 30 s of 48 kHz frames, so a 96 kHz file was refused TOO LONG past 15 s. Mono
+    // 8-bit keeps the file inside the fake card; the frame count is what the limit reads.
+    clean();
+    make_long_wav("/SAMPLES/LONG96.WAV", kLong96Frames + 1u);     // one frame past 30 s
+    kit_sample(kLoopTrack, "/SAMPLES/LONG96.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() != nullptr);
+    CHECK_EQ(storage().last_error(), "TOO LONG");
+    CHECK(slot_of(kLoopTrack).state != SampleState::ready);
+
+    make_long_wav("/SAMPLES/LONG96.WAV", kLong96Frames);          // exactly 30 s, in place
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, Resampler::make(96000, 48000).output_frames(kLong96Frames));
+    CHECK_EQ(slot_of(kLoopTrack).frames, kMaxSampleSeconds * 48000u);   // 30 s at 48 kHz
+    FakeHost::the().reset();                                     // give the arena back
+}
+
 TEST(storage_a_downsampled_wav_is_low_passed_before_it_is_resampled) {
     // The loader's bytes are what core/pcm's low-pass then resample give for the same square
     // wave, and not what the resample alone gives: the filter is wired into the convert step.
