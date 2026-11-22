@@ -105,8 +105,8 @@ Machine, then drive (asymmetric soft clip), multimode filter (LP, HP, BP, 12 or 
 
 **Mixer and buses**
 
-- **Send A, delay:** tempo-synced stereo delay with ping-pong and filtered feedback (`enaga::StereoDelay`).
-- **Send B, reverb:** `enaga::Reverb` with pre-delay, size, damping and a high-pass on the input. Delay can feed the reverb.
+- **Send A, delay:** tempo-synced stereo delay with ping-pong and filtered feedback (`enaga::StereoDelay`). **[rev]** A second mode, LONG (Roland, 2026-11-22): up to 12 s (the division times X1-X8), tape wow, diffusion and a low cut in the feedback, and an in-place freeze (`dsp/ambient.hpp`).
+- **Send B, reverb:** `enaga::Reverb` with pre-delay, size, damping and a high-pass on the input. Delay can feed the reverb. **[rev]** A second mode, HALL: eight long swept lines with size, modulation and an octave-up shimmer.
 - **Sidechain duck:** a duck envelope (attack, hold, release) fired by a chosen trigger track (default track 1). Trigger-based, not an envelope follower: tighter and cheaper.
 - **Master:** one-knob DJ filter (left = low-pass, right = high-pass), **[rev]** a three-band kill EQ (a DJ isolator: LOW / MID / HI split at 250 Hz and 2.5 kHz with 24 dB Linkwitz-Riley crossovers, each band from a kill to +6 dB with a latching kill switch, bypassed while flat), glue compressor, soft limiter, output level.
 
@@ -470,7 +470,7 @@ The 8 insert chains are the largest unmeasured term in the design, so they are m
 | --- | --- |
 | Samples, int16 | 64 MiB |
 | Beat repeat ring: 2 bars at 60 BPM, stereo float | 3 MiB |
-| Delay and reverb buffers | 2 MiB |
+| Delay and reverb buffers | 2 MiB; **[rev]** 7 MiB with the LONG delay and the HALL |
 | Patterns, kit, scenes, 16 undo levels | 2 MiB |
 | Recording ring and stream buffers | 1 MiB |
 | App image, voice pools, UI | 4 MiB |

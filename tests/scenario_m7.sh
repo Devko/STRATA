@@ -54,13 +54,15 @@ python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 21@380000000 \
     --key 9@440000000 \
-    --key 9@500000000 \
-    --key 9@560000000 \
-    --key 9@620000000 \
-    --key 9@680000000 \
-    --key 20@760000000 \
-    --key 31@820000000 \
-    --key 16@900000000 \
+    --key 9@490000000 \
+    --key 9@540000000 \
+    --key 9@590000000 \
+    --key 9@640000000 \
+    --key 9@690000000 \
+    --key 9@740000000 \
+    --key 20@800000000 \
+    --key 31@860000000 \
+    --key 16@940000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
@@ -104,7 +106,9 @@ wanted = [
     "scr MIXER TRK 1-4",
     "scr MIXER TRK 5-8",
     "scr MIXER DLY",
+    "scr MIXER DLY+",
     "scr MIXER REV",
+    "scr MIXER REV+",
     "scr MIXER ROUTE",
     "scr MIXER MST",
     "scr PROJECT SETUP",
