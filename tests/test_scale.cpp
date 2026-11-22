@@ -360,3 +360,15 @@ TEST(scale_stepping_up_then_down_returns_to_where_it_started) {
         }
     }
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(scale_fold_and_step_reach_both_ends_of_the_midi_range) {
+    // C major pentatonic: 126 is F#, out; 125 (F) is out too, and 127 (G) is in. The fold has
+    // to take 127, the top note, rather than walking on to 124.
+    CHECK_EQ(int(scale_fold(126, 0, int(Scale::major_pentatonic))), 127);
+    // Stepping onto 0 and onto 127 is a step like any other.
+    CHECK_EQ(int(scale_step(1, 0, int(Scale::chromatic), -1)), 0);
+    CHECK_EQ(int(scale_step(126, 0, int(Scale::chromatic), 1)), 127);
+    CHECK_EQ(int(scale_step(2, 0, int(Scale::major), -1)), 0);
+}

@@ -1023,3 +1023,57 @@ TEST(step_field_text_agrees_with_note_name_for_the_note_field) {
     }
     CHECK_EQ(disagreed.subject, -1);
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(field_text_signs_a_micro_of_one_and_shows_the_ratchet_range_ends) {
+    char buf[kStepFieldTextMax];
+    Step step{};
+    step.micro = 1;
+    step_field_text(step, StepField::micro, buf, int(sizeof(buf)));
+    CHECK_EQ((const char *)buf, "+1");
+    step.micro = -1;
+    step_field_text(step, StepField::micro, buf, int(sizeof(buf)));
+    CHECK_EQ((const char *)buf, "-1");
+    step.micro = 0;
+    step_field_text(step, StepField::micro, buf, int(sizeof(buf)));
+    CHECK_EQ((const char *)buf, "0");
+
+    step.ratchet = ratchet_pack(uint8_t(kRatchetMin), RatchetRamp::none);
+    step_field_text(step, StepField::ratchet_count, buf, int(sizeof(buf)));
+    CHECK_EQ((const char *)buf, "1");
+    step.ratchet = ratchet_pack(uint8_t(kRatchetMax), RatchetRamp::none);
+    step_field_text(step, StepField::ratchet_count, buf, int(sizeof(buf)));
+    CHECK_EQ((const char *)buf, "8");
+}
+
+TEST(a_chord_name_keeps_its_space_when_there_is_no_inversion_to_make_room_for) {
+    char buf[kStepFieldTextMax];
+    Step step{};
+    step.chord = chord_pack(ChordType::fifth_octave, 0);
+    step_field_text(step, StepField::chord, buf, int(sizeof(buf)));
+    CHECK_EQ((const char *)buf, "5TH OCT");
+}
+
+TEST(the_chord_walk_clamps_both_ends_and_an_invalid_byte_sits_at_its_start) {
+    const uint8_t last = chord_at_walk_position(kChordWalkPositions - 1);
+    CHECK(last != 0);
+    CHECK_EQ(int(chord_at_walk_position(-3)), int(chord_at_walk_position(0)));
+    CHECK_EQ(int(chord_at_walk_position(kChordWalkPositions)), int(last));
+    CHECK_EQ(int(chord_at_walk_position(kChordWalkPositions + 9)), int(last));
+    // A byte that is not a chord counts as the walk's start, so one click up is position 1.
+    Step step{};
+    step.chord = 0xFF;
+    step_field_apply(step, StepField::chord, +1);
+    CHECK_EQ(int(step.chord), int(chord_at_walk_position(1)));
+}
+
+TEST(a_field_index_past_the_table_changes_nothing) {
+    Step step{};
+    step.velocity = 90;
+    step.note = 60;
+    const Step before = step;
+    step_field_apply(step, StepField(kStepFields), 5);
+    step_field_apply(step, StepField(-1), 5);
+    CHECK(std::memcmp(&step, &before, sizeof(Step)) == 0);
+}

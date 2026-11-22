@@ -148,7 +148,12 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
 ### 5. The standard this code is held to
 
 - **Mutation testing, not just coverage.** A surviving mutation is a missing test or an
-  equivalence argued in a comment in the owning file.
+  equivalence argued in a comment in the owning file. docs/MUTATION.md has every file's score,
+  the equivalent classes and the accepted gaps; dsp/freeze, lfo and tapestop are not run yet.
+- **Golden renders pin every machine's sound** (tests/test_golden.cpp). A deliberate sound
+  change regenerates them after listening (`STRATA_GOLDEN=print build/host/strata-tests >
+  /tmp/g.txt; python3 tools/golden_update.py /tmp/g.txt`), and the diff of
+  tests/golden_data.inc goes in the same commit.
 - **AddressSanitizer and UBSan over the whole suite** (`make -C host test SANITIZE=1`, also in
   CI), with `detect_leaks=0`: `BeatRepeat::init` allocates its ring with `new[]` and nothing
   frees it, by design.
