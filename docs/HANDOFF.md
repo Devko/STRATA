@@ -21,7 +21,7 @@ at the top of `docs/UNIT_CHECKLIST.md` is the first pass over it.
 | `tools/build.sh` | links. Last measured image: `APP.ENA` 484,160 bytes GCC-only (476,008 cl6x), bss 1,334,848; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here |
 | `tools/scenarios.sh` | **11 scenarios**: m0, m1, m3–m7, `factory`, `kits`, `killeq` (the master kill EQ running; never run yet), `lfo` (the LFO and track swing pages draw; never run yet). Worst measured: **23.49% with cl6x, 39.60% GCC-only** (`docs/BUDGET.md`), before today's afternoon PRs. `factory` and `kits` have not been run with cl6x yet |
 | unit | boots, plays, LOAD about 0–26%. **No MAX reading yet**: the readout is PR #17, still open |
-| memory | init takes **101.2 MiB of a 120 MiB heap** since PR #31 (`tests/test_memory.cpp`), 18.8 MiB spare against an 8 MiB headroom rule. Never checked on the unit |
+| memory | init takes **109.1 MiB of a 120 MiB heap** since the sends' ambient modes (`tests/test_memory.cpp`), 10.9 MiB spare against an 8 MiB headroom rule: only 2.9 MiB left for anything else that allocates in init. Never checked on the unit |
 | milestones | M0–M6 feature-complete, M7's app side done; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
 | VA POLY | 2.16 points per voice with cl6x, 3.82 GCC-only (emulator). **A shared budget of 12 voices across all tracks** (`Engine::kPolyVoiceBudget`, PR #30), provisional until the unit's MAX |
 | Enaga | pinned at release **v0.2.0 (`3da7f89`)**, the unit's firmware. `tools/enaga_check.sh` passes |
@@ -73,8 +73,12 @@ Smaller open items, none urgent:
   profile from `docs/BUDGET.md` (finding 5).
 - **Try Enaga v0.2.0's prebuilt GCC toolchain** (in its SDK zip). It is the same compiler
   `tools/build_toolchain.sh` spends 30 minutes building in a cloud session.
-- `delay_ping_pong` and `delay_to_reverb` share a MIXER page with two empty slots, because ten
-  send fields do not divide into four. Fine, but Roland may want them placed differently.
+- `delay_ping_pong`, `delay_to_reverb` and the LONG delay's low cut share the ROUTE page with one
+  empty slot, because nineteen send fields do not divide into four. Fine, but Roland may want
+  them placed differently.
+- **The sends' ambient modes** (LONG delay, HALL reverb with shimmer; `dsp/ambient.hpp`) are
+  host-tested only: E11 (`tests/scenario_ambient.sh`, both compilers) and U9 (UNIT_CHECKLIST 13j)
+  are owed, and their load figures in `docs/BUDGET.md` are host estimates.
 
 ---
 

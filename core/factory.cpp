@@ -140,8 +140,11 @@ void factory_mixer(ProjectSettings &s) {
     // feedback than the struct default so a throw rings for a bar, a slightly darker tone,
     // ping-pong, full return, and some of it into the reverb. The reverb: 2 s, a little darker,
     // the 180 Hz input high-pass that keeps the kick out of it, full return.
-    const uint8_t sends[kSendFields] = {kDefaultDelayDivision, 60, 56, 127, 127, 28, 58, 72, 61, 127};
-    for (int i = 0; i < kSendFields; i++) s.sends[i] = sends[i];
+    const uint8_t sends[kSendFieldsV1] = {kDefaultDelayDivision, 60, 56, 127, 127, 28, 58, 72, 61, 127};
+    for (int i = 0; i < kSendFieldsV1; i++) s.sends[i] = sends[i];
+    // The ambient modes stay classic, with their knobs where a fresh project has them.
+    const ProjectSettings defaults;
+    for (int i = kSendFieldsV1; i < kSendFields; i++) s.sends[i] = defaults.sends[i];
     // The master as ProjectSettings{} has it: flat DJ filter, gentle glue, the limiter, unity.
 }
 

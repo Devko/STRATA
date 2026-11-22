@@ -110,7 +110,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | KEYS | Track | Octave (OCT 0-7) | Track | Current EDIT page params | — | Copy / paste |
 | MACHINE | Machine | Track | Track | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
-| MIXER | — | Page (7) | Page | Levels or page fields; on EQ, push A-C kills a band | — / clear | Copy / paste |
+| MIXER | — | Page (9) | Page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode | — / clear | Copy / paste |
 | SAMPLES | Entry | Page of 8 | Page of 8 | A: entry | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | UP: chain on/off, DOWN: reload track's sample, LEFT: reload project, RIGHT: new project |
@@ -223,8 +223,10 @@ condition result), NEI / NOT NEI (the track to the left's), 1ST / NOT 1ST (first
 **Chords:** 1 NOTE, MIN, MAJ, SUS2, SUS4, DIM, MIN7, DOM7, MAJ7, MIN9, MIN11, 5TH, OCT, 5TH OCT; `/n` = inversion n.
 
 **MIXER pages:** TRK 1-4, TRK 5-8 (levels) · DLY: TIM time (1/32 ... 1/1, T triplet, D dotted),
-FBK feedback, TON tone, LVL · REV: DEC decay, DMP damping, HPF high-pass, LVL · ROUTE: PNG ping-pong,
-D>R delay into reverb · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
+FBK feedback, TON tone, LVL · DLY+: TYP CLAS/LONG (push A flips it), MUL X1-X8 (LONG: time x MUL,
+up to 12 s), WOW tape wobble, DIF diffusion · REV: DEC decay, DMP damping, HPF high-pass, LVL ·
+REV+: TYP ROOM/HALL (push A), SIZ size, MOD sweep, SHM octave-up shimmer · ROUTE: PNG ping-pong,
+D>R delay into reverb, LCT the LONG delay's low cut · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
 LOW (below 250 Hz), MID, HI (above 2.5 kHz), each flat at centre, KILL at the bottom, +6 dB at the top.
 
 **Lists:** queue modes END (end of pattern), 16, 32 (steps), NOW · repeat 1/4 1/8 1/16 1/32 1/4T

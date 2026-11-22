@@ -49,9 +49,11 @@ python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" \
     --key 9@560000000 \
     --key 9@600000000 \
     --key 9@640000000 \
-    --key 1@700000000 \
-    --key 0@740000000 \
-    --key 2@780000000 \
+    --key 9@680000000 \
+    --key 9@720000000 \
+    --key 1@780000000 \
+    --key 0@820000000 \
+    --key 2@860000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2

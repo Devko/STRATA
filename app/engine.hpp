@@ -173,6 +173,9 @@ public:
     // The held master moves, for the screen and the tests.
     const TapeStop &tape_stop() const { return tape_stop_; }
     const DelayFreeze &delay_freeze() const { return mixer_.freeze(); }
+    // Either delay's freeze: the classic's loop copy or the LONG delay's own.
+    bool delay_frozen() const { return mixer_.delay_frozen(); }
+    const Mixer &mixer() const { return mixer_; }
 
     // Whether an arp is running on `track`: a sequenced step's, or held KEYS keys'.
     bool arp_running(int track) const {
