@@ -415,6 +415,7 @@ const Expect kTable[] = {
     {Cmd::set_track_length, kDirtyBank, "set_track_length"},
     {Cmd::set_track_speed, kDirtyBank, "set_track_speed"},
     {Cmd::set_pattern_swing, kDirtyBank, "set_pattern_swing"},
+    {Cmd::set_master_length, kDirtyBank, "set_master_length"},
     {Cmd::step_field_delta, kDirtyBank, "step_field_delta"},
     // A lock lands in the pattern's shared pool, which the bank file carries.
     {Cmd::lock_delta, kDirtyBank, "lock_delta"},
@@ -493,12 +494,13 @@ const Expect kTable[] = {
     // The live-record quantize amount. PROJECT.BIN has had a field for it since M4 and nothing
     // wrote it: the value lived in `app/` alone and went back to 100 on every restart.
     {Cmd::set_quantize, kDirtyProject, "set_quantize"},
+    {Cmd::restart, 0u, "restart"},
+    // The chain's entries are PROJECT.BIN's second section.
+    {Cmd::chain_edit, kDirtyProject, "chain_edit"},
 
     // --- the performance layer --------------------------------------------
     //
-    // A live mute is engine state; PROJECT.BIN holds the eight STORED mute states and not the
-    // current one. So this flag is conservative: one 251-byte write for an edit the file does
-    // not record. (Whether the live mutes should be saved is docs/REVIEW.md's open question.)
+    // PROJECT.BIN's live section holds the mutes as they stand (core/project.hpp).
     {Cmd::set_mute, kDirtyProject, "set_mute"},
     // The fill pad is where a hand is, not part of the project.
     {Cmd::set_fill, 0u, "set_fill"},
@@ -508,9 +510,8 @@ const Expect kTable[] = {
     // PERFORM.BIN holds the scenes and the macro setup, and nothing else.
     {Cmd::scene_capture, kDirtyPerform, "scene_capture"},
     {Cmd::scene_erase, kDirtyPerform, "scene_erase"},
-    // WHICH scenes are in slots A and B is engine state (`scene_a_`, `scene_b_`) and has no
-    // section in PERFORM.BIN, so there is nothing to dirty. It is also not restored on open.
-    {Cmd::scene_select, 0u, "scene_select"},
+    // WHICH scenes are in slots A and B is in PROJECT.BIN's live section, restored on open.
+    {Cmd::scene_select, kDirtyProject, "scene_select"},
     // The morph position and a macro's position are where the performer's hands are. docs/SPEC.md
     // is explicit that those do not save.
     {Cmd::set_morph, 0u, "set_morph"},
@@ -521,8 +522,8 @@ const Expect kTable[] = {
 
     // `mute_store` writes `project_.settings.mute_states[slot]`, which PROJECT.BIN holds.
     {Cmd::mute_store, kDirtyProject, "mute_store"},
-    // A recall applies a stored state to the live mutes and changes no stored byte.
-    {Cmd::mute_recall, 0u, "mute_recall"},
+    // A recall changes the live mutes, which PROJECT.BIN's live section holds.
+    {Cmd::mute_recall, kDirtyProject, "mute_recall"},
 
     // Auto-fill, a throw and beat repeat are all live-only: no file has a field for any of them.
     {Cmd::set_auto_fill, 0u, "set_auto_fill"},
@@ -669,7 +670,6 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     p.settings.root = 64;
     p.settings.scale = 3;
     p.settings.quantize = 70;
-    p.settings.swing = uint8_t(kSwingMin + 2);
     p.settings.chain_enabled = true;
     p.settings.chain_length = 3;
     p.chain[0] = ChainEntry{1, 2, 3};
@@ -727,8 +727,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
 
     // The sizes tests/test_project.cpp pins from the serializer, reached here through the real
     // card protocol: a file that came out a different size means the two have drifted apart.
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 277);
-    CHECK_EQ(project_bytes(), 277u);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 292);
+    CHECK_EQ(project_bytes(), 292u);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1076);
     CHECK_EQ(kit_bytes(), 1076u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 2424);
@@ -775,7 +775,6 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     CHECK_EQ(int(back.settings.root), 64);
     CHECK_EQ(int(back.settings.scale), 3);
     CHECK_EQ(int(back.settings.quantize), 70);
-    CHECK_EQ(int(back.settings.swing), int(kSwingMin + 2));
     CHECK(back.settings.chain_enabled);
     CHECK_EQ(int(back.settings.chain_length), 3);
     CHECK_EQ(int(back.chain[0].bank), 1);
@@ -827,6 +826,44 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
 
     // And nothing is dirty after a load: what is in RAM is what is on the card.
     CHECK(!storage().dirty());
+}
+
+TEST(storage_the_live_mutes_and_scene_choice_come_back_with_the_project) {
+    // A set left with tracks muted and a scene picked into slot B reopens that way, rather than
+    // all unmuted on scenes 1 and 2.
+    clean();
+    post(Cmd::set_mute, 2, 0, 1, 0);
+    post(Cmd::set_mute, 5, 0, 1, 0);
+    post(Cmd::scene_select, 0, 0, 1, 6);
+    pump(2);
+    CHECK(engine().muted(2));
+    CHECK(engine().muted(5));
+    CHECK_EQ(engine().scene_slot(1), 6);
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+
+    // Away: a blank project is all unmuted on scenes 1 and 2.
+    project_init(engine().project_for_load());
+    post(Cmd::project_loaded);
+    pump(4);
+    CHECK(!engine().muted(2));
+    CHECK_EQ(engine().scene_slot(1), 1);
+
+    storage().request_reload();
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    pump(4);
+    CHECK(engine().muted(2));
+    CHECK(engine().muted(5));
+    CHECK(!engine().muted(0));
+    CHECK_EQ(engine().scene_slot(0), 0);
+    CHECK_EQ(engine().scene_slot(1), 6);
+
+    post(Cmd::set_mute, 2, 0, 0, 0);
+    post(Cmd::set_mute, 5, 0, 0, 0);
+    pump(2);
 }
 
 TEST(storage_a_save_waits_for_the_command_ring_to_drain) {
@@ -1560,7 +1597,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         }
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 277);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 292);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1076);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 2424);
 

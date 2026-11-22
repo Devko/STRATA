@@ -37,7 +37,8 @@ using namespace strata;
 // 277, not the 251 the format had before the mixer section: one more section-table entry (12)
 // and the 14 send and master bytes. An OLD 251-byte file still loads, because that section is
 // optional on read -- `a_project_file_from_before_the_mixer_section_still_loads` is the proof.
-constexpr uint32_t kProjectFileBytes = 277;
+// 292 since the live section: another table entry (12) and its 3 bytes, optional likewise.
+constexpr uint32_t kProjectFileBytes = 292;
 constexpr uint32_t kKitFileBytes = 1076;
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
@@ -131,8 +132,10 @@ ProjectSettings busy_settings() {
     s.tempo_centi_bpm = 14537;
     s.root = 65;
     s.scale = 4;
-    s.swing = 63;
     s.quantize = 72;
+    s.live_mutes = 0x3C;
+    s.scene_a = 4;
+    s.scene_b = 11;
     for (uint32_t i = 0; i < sizeof(s.mute_states); i++) s.mute_states[i] = uint8_t(0x11 * (i + 1));
     s.sample_budget_mib = 48;
     s.chain_length = 9;
@@ -398,7 +401,6 @@ TEST(project_init_empties_everything_and_lives_on_a01) {
     const ProjectSettings fresh;
     CHECK_EQ(int(g_source.settings.tempo_centi_bpm), int(fresh.tempo_centi_bpm));
     CHECK_EQ(int(g_source.settings.root), int(fresh.root));
-    CHECK_EQ(int(g_source.settings.swing), int(fresh.swing));
     CHECK_EQ(int(g_source.settings.quantize), int(fresh.quantize));
     CHECK_EQ(int(g_source.settings.sample_budget_mib), int(fresh.sample_budget_mib));
     CHECK_EQ(int(g_source.settings.chain_length), 0);
@@ -480,8 +482,10 @@ TEST(project_round_trips_every_settings_field) {
     CHECK_EQ(int(b.tempo_centi_bpm), int(a.tempo_centi_bpm));
     CHECK_EQ(int(b.root), int(a.root));
     CHECK_EQ(int(b.scale), int(a.scale));
-    CHECK_EQ(int(b.swing), int(a.swing));
     CHECK_EQ(int(b.quantize), int(a.quantize));
+    CHECK_EQ(int(b.live_mutes), int(a.live_mutes));
+    CHECK_EQ(int(b.scene_a), int(a.scene_a));
+    CHECK_EQ(int(b.scene_b), int(a.scene_b));
     for (uint32_t i = 0; i < sizeof(a.mute_states); i++) {
         CHECK_EQ(int(b.mute_states[i]), int(a.mute_states[i]));
     }
@@ -574,8 +578,13 @@ TEST(project_a_file_from_before_the_mixer_section_still_loads) {
 
     project_init(g_loaded);
     g_loaded.settings.sends[0] = 99;             // so "the defaults" is a claim and not a tie
+    g_loaded.settings.live_mutes = 0x55;
+    g_loaded.settings.scene_a = 9;
     CHECK_EQ(int(project_read(g_loaded, rebuilt, kHeaderBytes + old_payload)),
              int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.live_mutes), 0);
+    CHECK_EQ(int(g_loaded.settings.scene_a), 0);
+    CHECK_EQ(int(g_loaded.settings.scene_b), 1);
 
     // The two sections that are there arrived...
     CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(g_source.settings.tempo_centi_bpm));
@@ -586,6 +595,44 @@ TEST(project_a_file_from_before_the_mixer_section_still_loads) {
     for (int i = 0; i < kMasterFields; i++) {
         CHECK_EQ(int(g_loaded.settings.master[i]), int(fresh.master[i]));
     }
+}
+
+TEST(project_the_live_mutes_and_scenes_round_trip) {
+    fill_project(g_source, 0);
+    g_source.settings.live_mutes = 0xA5;
+    g_source.settings.scene_a = 7;
+    g_source.settings.scene_b = 12;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.live_mutes), 0xA5);
+    CHECK_EQ(int(g_loaded.settings.scene_a), 7);
+    CHECK_EQ(int(g_loaded.settings.scene_b), 12);
+}
+
+TEST(project_a_file_from_before_the_live_section_opens_unmuted_on_scenes_1_and_2) {
+    // A three-section file is the same bytes with no live entry the reader asks for: renaming
+    // the entry to an id nobody reads gives exactly that, without rebuilding the table.
+    fill_project(g_source, 0);
+    g_source.settings.live_mutes = 0xFF;
+    g_source.settings.scene_a = 5;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    for (uint32_t e = 0; e < 4; e++) {
+        const uint32_t at = kHeaderBytes + e * kSectionEntryBytes;
+        if (peek_u16(g_project, at) == kSectionProjectLive) poke_u16(g_project, at, 99);
+    }
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    g_loaded.settings.live_mutes = 0x0F;          // a previous project's, which must not survive
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.live_mutes), 0);
+    CHECK_EQ(int(g_loaded.settings.scene_a), 0);
+    CHECK_EQ(int(g_loaded.settings.scene_b), 1);
+    CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(g_source.settings.tempo_centi_bpm));
 }
 
 // Present but short is damage, not an old file: a writer that declared the section declared its
@@ -655,18 +702,20 @@ TEST(project_the_header_says_strata_and_the_version) {
     CHECK_EQ(int(g_project[2]), int(kMagic2));
     CHECK_EQ(int(g_project[3]), int(kMagic3));
     CHECK_EQ(int(peek_u16(g_project, kVersionOffset)), int(kProjectVersion));
-    CHECK_EQ(int(peek_u16(g_project, 6)), 3);                       // settings, chain, mixer
+    CHECK_EQ(int(peek_u16(g_project, 6)), 4);                 // settings, chain, mixer, live
     CHECK_EQ(peek_u32(g_project, 8), kProjectFileBytes - kHeaderBytes);
     CHECK_EQ(peek_u32(g_project, kCrcOffset),
              crc32(g_project + kHeaderBytes, kProjectFileBytes - kHeaderBytes));
 
-    // All three sections are there, in order, and clear of the table.
+    // All four sections are there, in order, and clear of the table.
     const uint32_t settings = section_at(g_project, kSectionProjectSettings);
     const uint32_t chain = section_at(g_project, kSectionProjectChain);
     const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
-    CHECK_EQ(settings, kHeaderBytes + 3 * kSectionEntryBytes);
+    const uint32_t live = section_at(g_project, kSectionProjectLive);
+    CHECK_EQ(settings, kHeaderBytes + 4 * kSectionEntryBytes);
     CHECK_EQ(chain, settings + 19);
     CHECK_EQ(mixer, chain + 64 * 3);
+    CHECK_EQ(live, mixer + uint32_t(kSendFields + kMasterFields));
 }
 
 // --- PROJECT.BIN: value-tolerant ------------------------------------------
@@ -730,17 +779,19 @@ TEST(project_the_root_note_and_the_quantize_amount_are_clamped) {
     CHECK_EQ(int(g_loaded.settings.quantize), 100);
 }
 
-TEST(project_swing_is_clamped_to_the_fifty_to_seventyfive_range) {
+TEST(project_the_old_swing_byte_is_written_as_50_and_ignored_on_read) {
+    // The project swing is gone (nothing read it); its byte stays so old files still line up.
     const uint32_t at = fresh_project_file();
+    CHECK_EQ(int(g_project[at + 4]), int(kSwingMin));
 
     for (int value = 0; value < 256; value++) {
         g_project[at + 4] = uint8_t(value);
         refresh_crc(g_project);
         CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
                  int(SerializeResult::ok));
-        const int got = int(g_loaded.settings.swing);
-        const int want = value < kSwingMin ? kSwingMin : (value > kSwingMax ? kSwingMax : value);
-        if (got != want) CHECK_EQ(got, want);
+        if (g_loaded.settings.quantize != g_source.settings.quantize) {
+            CHECK_EQ(int(g_loaded.settings.quantize), int(g_source.settings.quantize));
+        }
     }
 }
 

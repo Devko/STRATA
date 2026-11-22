@@ -250,7 +250,7 @@ TEST(app_the_first_save_of_a_project_writes_all_ten_files) {
 
     // The sizes tests/test_project.cpp pins, reached through the real card protocol this time.
     std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/PROJECT.BIN");
-    CHECK_EQ(host.file_bytes(path), 277);   // core/project.cpp: 263 + the 14 mixer bytes
+    CHECK_EQ(host.file_bytes(path), 292);   // core/project.cpp: 263 + 14 mixer + 12 + 3 live bytes
     std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/KIT.BIN");
     CHECK_EQ(host.file_bytes(path), 1076);
     std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/PERFORM.BIN");

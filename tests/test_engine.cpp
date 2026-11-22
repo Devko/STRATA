@@ -2061,6 +2061,37 @@ TEST(engine_a_parameter_a_track_does_not_have_is_ignored) {
     CHECK_EQ(int(pattern_locks_reachable(engine.pattern())), 0);
 }
 
+TEST(engine_release_note_lets_a_held_note_go_early) {
+    // KEYS mode's key release. A pad note on VA POLY with DEC at the top rings for seconds; let
+    // go after ten blocks, it is silent long before that.
+    int held = -1;
+    clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 127);
+    post(Cmd::trigger_note, kPoly, 0, 60, 100);
+    for (int b = 0; b < 8000; b++) {
+        pump();
+        if (poly().sounding_voices() == 0) {
+            held = b;
+            break;
+        }
+    }
+
+    int released = -1;
+    clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 127);
+    post(Cmd::trigger_note, kPoly, 0, 60, 100);
+    post(Cmd::trigger_note, kPoly, 0, 67, 100);
+    for (int b = 0; b < 10; b++) pump();
+    post(Cmd::release_note, kPoly, 0, 60);
+    for (int b = 10; b < 8000; b++) {
+        pump();
+        if (released < 0 && poly().sounding_voices() == 1) released = b;
+    }
+    CHECK(held > 100);
+    CHECK(released > 0);
+    CHECK(released < held / 2);
+}
+
 TEST(engine_a_command_it_does_not_handle_changes_nothing) {
     // The commands that legitimately do nothing: `none` is the ring's empty slot, a release of a
     // note nothing is holding is the second half of a gesture whose first half never fired, and

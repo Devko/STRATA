@@ -198,6 +198,20 @@ enum class Cmd : uint8_t {
     // rather than holding a second copy that a save could not see.
     set_quantize,      // b: int8 delta, clamped to 0-100
 
+    // F1 + F5 (docs/SPEC.md): every track back to its step 1 from the next tick, without
+    // touching the voices. The main context has already located the clock to 0; this resets
+    // what the audio side derives from the position -- the pattern's origin, its pass count and
+    // the chaining state that 1ST and the conditions read.
+    restart,
+
+    // PROJECT's CHAIN page. step: the entry index, a: ChainEdit, b: bank, c: slot, d: repeats.
+    // core/queue.hpp's chain_set / chain_insert / chain_remove, which keep the chain a prefix.
+    chain_edit,
+
+    // The pattern's master length in steps, 1-64: what a queued change and a chain wait for.
+    // a: length; or c = 1: b is an int8 delta.
+    set_master_length,
+
     count
 };
 
@@ -209,6 +223,12 @@ enum class Cmd : uint8_t {
 // there loses every click after the first in a block -- the reason the M3 commands are deltas.
 // An absolute value (c = 0) is still what a load, a test or a recall sends.
 constexpr uint8_t kDeltaFlag = 1;
+
+// `Cmd::chain_edit`'s operation, in `a`.
+// set, insert and remove carry the entry whole; `pattern_delta` and `repeats_delta` move the
+// entry's pattern (through the 128, bank by bank) or its repeat count (1-16) by the int8 in `b`,
+// so knob clicks applied a block late are not lost.
+enum class ChainEdit : uint8_t { set = 0, insert, remove, pattern_delta, repeats_delta };
 
 struct Command {
     Cmd cmd = Cmd::none;

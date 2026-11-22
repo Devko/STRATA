@@ -108,6 +108,7 @@ public:
     void prepare(const TrackParams &params) override;
     void trigger(const Trig &trig) override;
     void release_all() override;
+    void release(uint8_t note) override;
     void kill_all() override;
     void render_add(float *out, int frames) override;
     bool active() const override { return active_; }

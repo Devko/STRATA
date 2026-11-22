@@ -358,7 +358,7 @@ public:
         }
 
         // MUTE mode turns STEP 1-8 into the eight stored mute states: recall on a tap, store
-        // with F1. docs/SPEC.md says they are "recalled from the upper row", but the upper row is
+        // with VALUE pushed (F1 is taken: it makes a recall wait for the bar). docs/SPEC.md says they are "recalled from the upper row", but the upper row is
         // seven FIXED performance pads and there are eight states, so that cannot be taken
         // literally. The STEP keys are the only run of eight free while MUTE mode is on, and
         // MUTE mode is a mode, so repurposing them there is the smallest deviation available.
@@ -400,18 +400,24 @@ public:
         // is taken here, before the editing path, and only on the press -- there is no modifier
         // gesture to decide on the release.
         if (mode_ == Mode::project && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
-            if (down) {
-                slot_cursor_ = key - ENAGA_KEY_STEP1;   // the cursor follows, so OK repeats it
-                queue_shown_pattern(slot_cursor_);
+            if (!down) return;
+            // On the CHAIN page a STEP key is that slot of the shown bank, written into the
+            // entry under the cursor -- or the first entry, when the chain is empty.
+            if (project_page_ == ProjectPage::chain) {
+                chain_put_slot(key - ENAGA_KEY_STEP1);
+                return;
             }
+            slot_cursor_ = key - ENAGA_KEY_STEP1;       // the cursor follows, so OK repeats it
+            queue_shown_pattern(slot_cursor_);
             return;
         }
 
         // In KEYS the STEP keys are an instrument: sixteen degrees of the project's scale from
         // the root up, which is what docs/SPEC.md means by "STEP keys play notes in scale".
-        // Taken on the press only -- see keys_note below on why there is no release.
+        // The press plays the note and the release lets it go (play_key, below).
         if (mode_ == Mode::keys && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
             if (down) play_key(key - ENAGA_KEY_STEP1);
+            else release_key(key - ENAGA_KEY_STEP1);
             return;
         }
 
@@ -438,6 +444,19 @@ public:
         // PROJECT and PERFORM mode's own keys. Taken before the switch so the editing meanings
         // of OK, CLR and the arrows cannot fire while one of them is what is on screen.
         if (mode_ == Mode::project && on_project_key(key)) return;
+        // A mutation waiting for its verdict takes OK and CLR first, in whatever mode: OK keeps
+        // it, CLR reverts it. Only the plain keys; F1 + CLR and F1 + OK stay undo and redo.
+        if (mutation_pending_ && !shift_ && (key == ENAGA_KEY_OK || key == ENAGA_KEY_CLR)) {
+            mutation_pending_ = false;
+            if (key == ENAGA_KEY_CLR) {
+                post(Cmd::undo);
+                end_gesture();
+                notice("REVERTED");
+            } else {
+                notice("KEPT");
+            }
+            return;
+        }
         if (mode_ == Mode::perform && on_perform_key(key)) return;
 
         switch (key) {
@@ -456,11 +475,47 @@ public:
                 // rather than through the command ring. start() returns false under an external
                 // clock source, where STRATA can only follow -- the screen shows EXT and the
                 // refusal is simply recorded.
+                if (shift_) {
+                    // F1 + F5: restart from step 1 (docs/SPEC.md), playing or not. Running, the
+                    // clock is located back to 0 and keeps going; stopped, START already begins
+                    // at 0. Either way the audio side resets what it measures from the position.
+                    // An outside clock refuses both, and then nothing is reset: the playheads
+                    // must stay with the master.
+                    const bool ok = enaga::clock::running() ? enaga::clock::locate(0)
+                                                            : enaga::clock::start();
+                    clock_refused_ = !ok;
+                    if (!ok) {
+                        notice("EXT CLOCK");
+                        break;
+                    }
+                    stop_armed_ = false;
+                    post(Cmd::restart);
+                    notice("RESTART");
+                    break;
+                }
                 clock_refused_ = !enaga::clock::start();
                 stop_armed_ = false;
                 post(Cmd::play);                       // for the audio side's trace only
                 break;
             case ENAGA_KEY_F6:
+                if (shift_) {
+                    // F1 + F6: stop and reset all tracks (docs/SPEC.md). Everything a plain STOP
+                    // does, and the second press's cut, in one: the tails are cut, a queued
+                    // pattern change is dropped and the clock goes back to 0, so the next PLAY
+                    // or CONTINUE starts at step 1 with nothing pending. Refused under an
+                    // outside clock that keeps running, exactly as plain F6 is.
+                    clock_refused_ = !enaga::clock::stop();
+                    if (clock_refused_ && enaga::clock::running()) {
+                        notice("EXT CLOCK");
+                        break;
+                    }
+                    enaga::clock::locate(0);
+                    post(Cmd::stop, 0, 0, 1);
+                    post(Cmd::cancel_queue);
+                    stop_armed_ = false;
+                    notice("RESET");
+                    break;
+                }
                 clock_refused_ = !enaga::clock::stop();
                 // Refused while an outside clock keeps running: nothing stopped, so nothing is
                 // released or reset either -- doing so cut every voice and sent the playheads back
@@ -621,8 +676,12 @@ public:
                     // key in docs/SPEC.md's table is taken, plain and with F1, and the octave
                     // keys do nothing in this mode -- they were setting GRID's step page, which
                     // is not on screen here.
-                    project_setup_ = delta > 0;
-                    notice(project_setup_ ? "SETUP" : "PROJECT");
+                    // Four pages now: the slots, CHAIN, PATTERN and SETUP, walked in that order
+                    // and stopping at the ends.
+                    const int next = int(project_page_) + delta;
+                    const int last = int(ProjectPage::count) - 1;
+                    project_page_ = ProjectPage(next < 0 ? 0 : (next > last ? last : next));
+                    notice(project_page_name(project_page_));
                     break;
                 }
                 if (shift_) {
@@ -747,6 +806,10 @@ public:
 
     void leave_mode() {
         step_page_ = false;
+        mutation_pending_ = false;
+        // A KEYS key held across a mode change: its release goes to the next mode, so the note
+        // is let go here or it would hang on a sustaining machine.
+        for (int i = 0; i < 16; i++) release_key(i);
         if (held_step_ >= 0) {
             release_hold();
             end_gesture();
@@ -922,6 +985,32 @@ public:
                 notice(repeat_length_name(repeat_length_));
                 return;
             }
+            // A held STEP key: VALUE sets that step's note (docs/SPEC.md, "Step editing": hold
+            // STEP + VALUE). Before the tempo, which it used to turn instead -- with a finger
+            // on a step, the tempo is the last thing the hand means. The same field and the
+            // same undo coalescing as the step page's NOTE, and the key counts as used, so its
+            // release does not toggle the trig.
+            if (held_step_ >= 0) {
+                held_used_ = true;
+                mark(GestureKind::field, selected_, held_step_);
+                post_delta(Cmd::step_field_delta, selected_, held_step_,
+                           uint8_t(StepField::note), delta);
+                notice("NOTE");
+                return;
+            }
+            // PROJECT's CHAIN and PATTERN pages: VALUE edits the thing under the cursor -- the
+            // entry's repeat count, or the highlighted field. Not with VALUE pushed (swing) or F1
+            // (the DJ filter), which keep their meanings everywhere.
+            if (mode_ == Mode::project && !value_pushed_ && !shift_) {
+                if (project_page_ == ProjectPage::chain) {
+                    chain_delta(ChainEdit::repeats_delta, delta);
+                    return;
+                }
+                if (project_page_ == ProjectPage::pattern) {
+                    pattern_field_delta(pattern_field_, delta);
+                    return;
+                }
+            }
             // In PERFORM, VALUE is the morph: the one continuous control the layer has.
             if (mode_ == Mode::perform && !value_pushed_ && !shift_) {
                 const int next = int(morph_) + delta * (int(kMorphScale) / 64);
@@ -1027,7 +1116,19 @@ public:
         // <enaga/clock.hpp> and <enaga/midi.hpp> expose no way to write them, so STRATA shows
         // them and says where they live, which is all docs/SPEC.md's "STRATA only exposes the
         // settings" can mean.
-        if (mode_ == Mode::project && project_setup_) {
+        // CHAIN: A is the entry's repeat count. PATTERN: A is LEN and B is SWG.
+        if (mode_ == Mode::project && project_page_ == ProjectPage::chain) {
+            if (encoder == 0) chain_delta(ChainEdit::repeats_delta, delta);
+            return;
+        }
+        if (mode_ == Mode::project && project_page_ == ProjectPage::pattern) {
+            if (encoder == 0 || encoder == 1) {
+                pattern_field_ = encoder;
+                pattern_field_delta(encoder, delta);
+            }
+            return;
+        }
+        if (mode_ == Mode::project && project_setup()) {
             if (encoder != 0) return;
             post_delta(Cmd::set_quantize, 0, 0, 0, delta * 5);
             notice("QUANTIZE");
@@ -1315,6 +1416,9 @@ public:
                 mark(GestureKind::paste, selected_, 0);
                 post_mutate();
                 end_gesture();
+                // docs/SPEC.md: "OK keeps, CLR reverts". The mutation is already one undo level,
+                // so keeping is just forgetting it is pending and reverting is that undo.
+                mutation_pending_ = true;
                 break;
 
             default:
@@ -1514,7 +1618,9 @@ public:
         // so a page walked with the selection keys is all it can see of MIXER and SETUP.
         {
             const int screen = int(mode_) * 16 + (mode_ == Mode::mixer ? mixer_bank_
-                                                                       : (project_setup_ ? 1 : 0));
+                                                                       : (mode_ == Mode::project
+                                                                              ? int(project_page_)
+                                                                              : 0));
             if (screen != logged_screen_) {
                 logged_screen_ = screen;
                 char line[24];
@@ -1524,8 +1630,9 @@ public:
                 if (mode_ == Mode::mixer) {
                     *out++ = ' ';
                     append(out, kMixerPages[mixer_bank_].name);
-                } else if (mode_ == Mode::project && project_setup_) {
-                    append(out, " SETUP");
+                } else if (mode_ == Mode::project && project_page_ != ProjectPage::slots) {
+                    *out++ = ' ';
+                    append(out, project_page_name(project_page_));
                 }
                 *out = 0;
                 enaga::log(line);
@@ -2114,16 +2221,23 @@ public:
         return scale_step(scale_fold(uint8_t(base), root, scale), root, scale, step);
     }
 
-    // A STEP key played. One trigger, no release.
-    //
-    // There is no release because the `Machine` interface has none: `dsp/track.hpp` offers
-    // `release_all()` and nothing per-note, so releasing one key of a held chord would silence
-    // the whole machine. A pad hit has the same shape (`on_pad_press` triggers and
-    // `on_pad_release` does nothing for the lower pads), so this is consistent rather than a
-    // gap peculiar to KEYS -- but it IS why `Cmd::release_note` is still unimplemented, and
-    // giving it meaning needs a per-note release on the machine interface first.
+    // A STEP key played, and its release. The note is held while the key is down: the press
+    // triggers with no gate and the release lets that note go (dsp/track.hpp, `release`), so a
+    // pad or a chord on VA, VA POLY or SAMPLE sustains for as long as it is held. The note is
+    // remembered per key, so an octave change while a key is down still releases what it
+    // started rather than a note it never played.
+    void release_key(int step) {
+        if (step < 0 || step >= 16 || keys_held_note_[step] < 0) return;
+        post(Cmd::release_note, uint8_t(keys_held_track_[step]), 0,
+             uint8_t(keys_held_note_[step]));
+        keys_held_note_[step] = -1;
+    }
+
     void play_key(int step) {
         const uint8_t note = keys_note(step);
+        release_key(step);                       // a press without its release: let that go first
+        keys_held_note_[step] = int16_t(note);
+        keys_held_track_[step] = uint8_t(selected_);
         // A key has no velocity. 100 is what the default kit's own trigs use, so a part played
         // in and a part programmed in sound the same.
         post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity);
@@ -2277,24 +2391,30 @@ public:
     bool on_perform_key(int key) {
         switch (key) {
             case ENAGA_KEY_OK: {
-                // Into whichever slot is held, or slot A's scene. F1 erases instead, because a
-                // scene you cannot empty is one you can only overwrite.
+                // F1 + OK is redo here as everywhere (docs/SPEC.md), so it falls through to
+                // the shared handler.
+                if (shift_) return false;
+                // Into whichever slot is held, or slot A's scene. The selected track only when a
+                // scene pad is held: capturing one track is what makes "a scene stores parameter
+                // values for any tracks" usable.
                 const int slot = scene_holding_ >= 0 ? scene_holding_ : 0;
                 const int scene = engine_.scene_slot(slot);
-                if (shift_) {
-                    post(Cmd::scene_erase, 0, 0, uint8_t(scene));
-                    notice("SCENE ERASED");
-                } else {
-                    // The selected track only when a scene pad is held: capturing one track is
-                    // what makes "a scene stores parameter values for any tracks" usable.
-                    post(Cmd::scene_capture, uint8_t(selected_), 0, uint8_t(scene),
-                         scene_holding_ >= 0 ? 1 : 0);
-                    notice(scene_holding_ >= 0 ? "TRACK CAPTURED" : "SCENE CAPTURED");
-                }
+                post(Cmd::scene_capture, uint8_t(selected_), 0, uint8_t(scene),
+                     scene_holding_ >= 0 ? 1 : 0);
+                notice(scene_holding_ >= 0 ? "TRACK CAPTURED" : "SCENE CAPTURED");
                 return true;
             }
 
             case ENAGA_KEY_CLR:
+                // F1 + CLR is undo, which is how a MUTATE is taken back without leaving PERFORM.
+                if (shift_) return false;
+                // A scene pad held + CLR erases that slot's scene: a scene you cannot empty is
+                // one you can only overwrite. (It was F1 + OK, which the spec gives to redo.)
+                if (scene_holding_ >= 0) {
+                    post(Cmd::scene_erase, 0, 0, uint8_t(engine_.scene_slot(scene_holding_)));
+                    notice("SCENE ERASED");
+                    return true;
+                }
                 post(Cmd::macro_clear, 0, 0, uint8_t(macro_selected_));
                 notice("MACRO CLEARED");
                 return true;
@@ -2480,6 +2600,8 @@ public:
     // "loaded whole into RAM at project open" need. Picking a different project or a different
     // sample from the card is a browser, and a browser is not in M4.
     bool on_project_key(int key) {
+        if (project_page_ == ProjectPage::chain && on_chain_key(key)) return true;
+        if (project_page_ == ProjectPage::pattern && on_pattern_page_key(key)) return true;
         switch (key) {
             case ENAGA_KEY_OK:
                 if (shift_) {
@@ -2487,7 +2609,7 @@ public:
                     // is doing rather than looking like nothing happened.
                     storage_.request_reload();
                     notice("RELOADING");
-                } else if (!project_setup_) {
+                } else if (project_page_ == ProjectPage::slots) {
                     // OK picks the slot under the cursor, as OK picks in every Enaga list.
                     // Saving is F1 + F3 twice (docs/SPEC.md's key table).
                     queue_shown_pattern(slot_cursor_);
@@ -2498,8 +2620,8 @@ public:
                 if (shift_) {
                     storage_.request_new();
                     notice("NEW PROJECT");
-                } else if (project_setup_) {
-                    project_setup_ = false;            // back, from the SETUP page
+                } else if (project_page_ != ProjectPage::slots) {
+                    project_page_ = ProjectPage::slots;   // back, from any other page
                     notice("PROJECT");
                 } else {
                     post(Cmd::cancel_queue);
@@ -2544,7 +2666,7 @@ public:
     // them in reading order, UP and DOWN by a row. It stops at the ends rather than wrapping,
     // because the bank is on the selection keys and wrapping would hide where the edge is.
     void move_slot_cursor(int delta) {
-        if (project_setup_) return;
+        if (project_page_ != ProjectPage::slots) return;
         const int next = slot_cursor_ + delta;
         if (next >= 0 && next < kPatternsPerBank) slot_cursor_ = next;
     }
@@ -2568,6 +2690,227 @@ public:
         append(out, queue_mode_name(queue_mode_));
         *out = 0;
         notice(notice_buffer_);
+    }
+
+    // --- PROJECT's CHAIN page ---------------------------------------------
+    //
+    // The chain as a list, one entry per row: UP and DOWN move through the entries, LEFT and
+    // RIGHT step the entry's pattern through the 128, a STEP key sets it to that slot of the
+    // shown bank, VALUE (or A) sets how many times it repeats. OK adds an entry after the cursor
+    // -- a copy of the one there, or the playing pattern when the chain is empty -- and F1 + LEFT
+    // removes the one under the cursor. CLR goes back. F1 + UP is still CHAIN ON/OFF.
+    //
+    // The entries are the audio side's (it plays them), so every edit is a command, and the
+    // knob and arrow edits are deltas applied there. Chain edits are not undoable: core/undo
+    // snapshots the pattern, and the chain is not in a pattern.
+
+    int chain_entries() const { return chain_length(engine_.project()); }
+
+    void chain_clamp_cursor() {
+        const int length = chain_entries();
+        if (chain_cursor_ >= length) chain_cursor_ = length - 1;
+        if (chain_cursor_ < 0) chain_cursor_ = 0;
+    }
+
+    void post_chain(ChainEdit edit, int at, uint8_t b = 0, uint8_t c = 0, uint8_t d = 0) {
+        Command command;
+        command.cmd = Cmd::chain_edit;
+        command.step = uint8_t(at);
+        command.a = uint8_t(edit);
+        command.b = b;
+        command.c = c;
+        command.d = d;
+        post_command(command);
+    }
+
+    void chain_delta(ChainEdit edit, int delta) {
+        if (chain_entries() == 0) {
+            notice("CHAIN EMPTY");
+            return;
+        }
+        chain_clamp_cursor();
+        post_chain(edit, chain_cursor_, uint8_t(int8_t(clamp_delta(delta))));
+    }
+
+    void chain_put_slot(int slot) {
+        const int length = chain_entries();
+        if (length == 0) {
+            post_chain(ChainEdit::insert, 0, uint8_t(shown_bank_), uint8_t(slot), 1);
+            chain_cursor_ = 0;
+        } else {
+            chain_clamp_cursor();
+            const uint8_t repeats = engine_.project().chain[chain_cursor_].repeats;
+            post_chain(ChainEdit::set, chain_cursor_, uint8_t(shown_bank_), uint8_t(slot),
+                       repeats);
+        }
+        char *out = notice_buffer_;
+        *out++ = bank_letter(shown_bank_);
+        append_padded(out, uint32_t(slot) + 1, 2);
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    bool on_chain_key(int key) {
+        const int length = chain_entries();
+        switch (key) {
+            case ENAGA_KEY_OK: {
+                if (shift_) return false;                 // F1 + OK: reload, as on the slots
+                if (length >= kChainEntries) {
+                    notice("CHAIN FULL");
+                    return true;
+                }
+                if (length == 0) {
+                    const Status &status = engine_.status();
+                    post_chain(ChainEdit::insert, 0,
+                               status.live_bank.load(std::memory_order_relaxed),
+                               status.live_slot.load(std::memory_order_relaxed), 1);
+                    chain_cursor_ = 0;
+                } else {
+                    chain_clamp_cursor();
+                    const ChainEntry entry = engine_.project().chain[chain_cursor_];
+                    post_chain(ChainEdit::insert, chain_cursor_ + 1, entry.bank, entry.slot,
+                               entry.repeats);
+                    chain_cursor_++;
+                }
+                notice("ENTRY ADDED");
+                return true;
+            }
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (shift_) return false;                 // chain on/off, sample reload
+                chain_cursor_ += key == ENAGA_KEY_UP ? -1 : 1;
+                chain_clamp_cursor();
+                return true;
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (shift_) {
+                    if (key == ENAGA_KEY_RIGHT) return true;   // free
+                    if (length == 0) return true;
+                    chain_clamp_cursor();
+                    post_chain(ChainEdit::remove, chain_cursor_);
+                    if (chain_cursor_ > 0 && chain_cursor_ >= length - 1) chain_cursor_--;
+                    notice("ENTRY REMOVED");
+                    return true;
+                }
+                chain_delta(ChainEdit::pattern_delta, key == ENAGA_KEY_LEFT ? -1 : 1);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    void draw_chain(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const Project &project = engine_.project();
+        const int length = chain_length(project);
+        const ChainPlayer &player = engine_.chain();
+
+        append(out, "CHAIN ");
+        append_number(out, uint32_t(length));
+        append(out, "/64");
+        append(out, player.active ? " ON" : " OFF");
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        if (length == 0) {
+            canvas.text(0, 40, "EMPTY", 11);
+            canvas.text(0, 52, "OK ADDS THE PLAYING", 9);
+            canvas.text(0, 61, "PATTERN. STEP KEYS", 9);
+            canvas.text(0, 70, "ADD FROM THIS BANK", 9);
+        } else {
+            // Seven rows, scrolled so the cursor stays on screen.
+            constexpr int kRows = 7;
+            int first = chain_cursor_ - kRows / 2;
+            if (first > length - kRows) first = length - kRows;
+            if (first < 0) first = 0;
+            for (int row = 0; row < kRows && first + row < length; row++) {
+                const int i = first + row;
+                const ChainEntry &entry = project.chain[i];
+                out = line;
+                *out++ = i == chain_cursor_ ? '>' : ' ';
+                append_padded(out, uint32_t(i) + 1, 2);
+                *out++ = ' ';
+                *out++ = bank_letter(int(entry.bank));
+                append_padded(out, uint32_t(entry.slot) + 1, 2);
+                append(out, " X");
+                append_number(out, uint32_t(entry.repeats));
+                if (player.active && int(player.entry) == i) append(out, " PLAY");
+                *out = 0;
+                canvas.text(0, 30 + row * 10, line, i == chain_cursor_ ? 15 : 10);
+            }
+        }
+
+        canvas.text(0, 103, "OK ADD  F1+LEFT DEL", 7);
+        canvas.text(0, 112, "VALUE REPEATS", 7);
+    }
+
+    // --- PROJECT's PATTERN page: the master length and the swing ----------
+
+    void pattern_field_delta(int field, int delta) {
+        if (field == 0) {
+            mark(GestureKind::length, 0, 0);
+            post(Cmd::set_master_length, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
+            notice("LEN");
+        } else {
+            mark(GestureKind::length, 0, 0);
+            post(Cmd::set_pattern_swing, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
+            notice("SWING");
+        }
+    }
+
+    bool on_pattern_page_key(int key) {
+        switch (key) {
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (shift_) return true;                  // F1 + LEFT/RIGHT: free
+                pattern_field_ = key == ENAGA_KEY_LEFT ? 0 : 1;
+                return true;
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (shift_) return false;
+                pattern_field_delta(pattern_field_, key == ENAGA_KEY_UP ? 1 : -1);
+                end_gesture();
+                return true;
+            case ENAGA_KEY_OK:
+                return !shift_;                           // nothing to pick here
+            default:
+                return false;
+        }
+    }
+
+    void draw_pattern_page(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const Status &status = engine_.status();
+        const Pattern &pattern = engine_.pattern();
+
+        append(out, "PATTERN ");
+        *out++ = bank_letter(int(status.live_bank.load(std::memory_order_relaxed)));
+        append_padded(out, uint32_t(status.live_slot.load(std::memory_order_relaxed)) + 1, 2);
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        out = line;
+        *out++ = pattern_field_ == 0 ? '>' : ' ';
+        append(out, "LEN ");
+        append_number(out, uint32_t(pattern.master_length));
+        append(out, " STEPS");
+        *out = 0;
+        canvas.text(0, 40, line, pattern_field_ == 0 ? 15 : 10);
+
+        out = line;
+        *out++ = pattern_field_ == 1 ? '>' : ' ';
+        append(out, "SWG ");
+        append_number(out, uint32_t(pattern.swing));
+        *out++ = '%';
+        *out = 0;
+        canvas.text(0, 52, line, pattern_field_ == 1 ? 15 : 10);
+
+        canvas.text(0, 76, "LEN IS WHAT A QUEUED", 8);
+        canvas.text(0, 85, "CHANGE AND A CHAIN", 8);
+        canvas.text(0, 94, "WAIT FOR", 8);
+        canvas.text(0, 112, "UP DOWN VALUE OR A B", 7);
     }
 
     // --- PROJECT's SETUP page: the clock, MIDI and the record quantize ----
@@ -2633,8 +2976,16 @@ public:
     }
 
     void draw_project(enaga::Canvas &canvas) {
-        if (project_setup_) {
+        if (project_setup()) {
             draw_setup(canvas);
+            return;
+        }
+        if (project_page_ == ProjectPage::chain) {
+            draw_chain(canvas);
+            return;
+        }
+        if (project_page_ == ProjectPage::pattern) {
+            draw_pattern_page(canvas);
             return;
         }
         char line[40];
@@ -2819,6 +3170,9 @@ private:
     // selected track changing. Nothing else distinguishes "the same sweep" from "the same knob,
     // a minute later".
     void mark(GestureKind kind, int track, int step) {
+        // Any new edit settles a mutation still waiting for OK or CLR: CLR would otherwise undo
+        // the newer edit and say it reverted the mutation.
+        mutation_pending_ = false;
         post(Cmd::undo_mark, uint8_t(track), uint8_t(step), uint8_t(kind), gesture_seq_);
     }
 
@@ -2854,6 +3208,10 @@ private:
     // All of it is which control is selected or held, never what the layer produces: the engine
     // owns that, and the UI reads it back through the accessors.
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
+    bool mutation_pending_ = false;             // a MUTATE waiting for OK (keep) or CLR (revert)
+    int16_t keys_held_note_[16] = {-1, -1, -1, -1, -1, -1, -1, -1,
+                                   -1, -1, -1, -1, -1, -1, -1, -1};   // KEYS: what each key holds
+    uint8_t keys_held_track_[16] = {};          // and on which track
     int scene_holding_ = -1;                    // a scene pad held: -1, 0 for A, 1 for B
     int macro_selected_ = 0;
 
@@ -2886,7 +3244,21 @@ private:
     int page_ = 0;            // step page 1-4, for 64-step tracks
     int param_page_ = int(Page::src);
     int mixer_bank_ = 0;      // which kMixerPages entry: the faders, then the sends and master
-    bool project_setup_ = false;   // PROJECT mode's second page, on the octave keys
+    // PROJECT mode's pages, on the octave keys: the slots, the chain, the pattern's own
+    // settings and SETUP.
+    enum class ProjectPage : uint8_t { slots = 0, chain, pattern, setup, count };
+    ProjectPage project_page_ = ProjectPage::slots;
+    bool project_setup() const { return project_page_ == ProjectPage::setup; }
+    int chain_cursor_ = 0;         // the CHAIN page's entry
+    int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG
+    static const char *project_page_name(ProjectPage page) {
+        switch (page) {
+            case ProjectPage::slots:   return "PROJECT";
+            case ProjectPage::chain:   return "CHAIN";
+            case ProjectPage::pattern: return "PATTERN";
+            default:                   return "SETUP";
+        }
+    }
     int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
     bool save_armed_ = false;      // F1 + F3 once; the second press within kSaveArmMs saves
     uint32_t save_armed_at_ms_ = 0;

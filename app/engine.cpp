@@ -497,6 +497,18 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_master_length: {
+            const int wanted = command.c == kDeltaFlag
+                                   ? int(live().master_length) + int(int8_t(command.b))
+                                   : int(command.a);
+            live().master_length = uint8_t(wanted < 1 ? 1
+                                                      : (wanted > kStepsPerTrack ? kStepsPerTrack
+                                                                                 : wanted));
+            // The pass length moved, so the next boundary is measured again from the origin.
+            boundary_known_ = false;
+            break;
+        }
+
         // --- M3: deltas, undo, ranges and recording ---------------------------
 
         case Cmd::step_field_delta:
@@ -640,6 +652,63 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::restart:
+            // The position is the clock's, and it was moved to 0 by the main context. What is
+            // left is everything measured from it: the pattern starts again at tick 0 with a
+            // fresh pass count, ratchet hits still waiting would land after the jump, and the bar
+            // count resyncs on the next tick. The voices ring on: this is a restart, not a stop.
+            deferred_count_ = 0;
+            scheduler_.reset(true);
+            origin_ = 0;
+            boundary_known_ = false;
+            bar_known_ = false;
+            break;
+
+        case Cmd::chain_edit: {
+            const int at = int(command.step);
+            bool done = false;
+            switch (ChainEdit(command.a)) {
+                case ChainEdit::set:
+                    done = chain_set(project_, at, command.b, command.c, command.d);
+                    break;
+                case ChainEdit::insert:
+                    done = chain_insert(project_, at, command.b, command.c, command.d);
+                    break;
+                case ChainEdit::remove:
+                    done = chain_remove(project_, at);
+                    break;
+                case ChainEdit::pattern_delta:
+                case ChainEdit::repeats_delta: {
+                    if (at >= chain_length(project_)) break;
+                    const ChainEntry entry = project_.chain[at];
+                    const int delta = int(int8_t(command.b));
+                    if (ChainEdit(command.a) == ChainEdit::pattern_delta) {
+                        int index = int(entry.bank) * kPatternsPerBank + int(entry.slot) + delta;
+                        const int last = kBanks * kPatternsPerBank - 1;
+                        index = index < 0 ? 0 : (index > last ? last : index);
+                        done = chain_set(project_, at, uint8_t(index / kPatternsPerBank),
+                                         uint8_t(index % kPatternsPerBank), entry.repeats);
+                    } else {
+                        int repeats = int(entry.repeats) + delta;
+                        repeats = repeats < 1 ? 1 : (repeats > kChainRepeatsMax ? kChainRepeatsMax
+                                                                                : repeats);
+                        done = chain_set(project_, at, entry.bank, entry.slot, uint8_t(repeats));
+                    }
+                    break;
+                }
+            }
+            if (!done) {
+                status_.bump_refused();
+                break;
+            }
+            // A chain emptied while it plays stops being followed; the pattern keeps playing.
+            if (chain_length(project_) == 0) {
+                chain_.active = false;
+                project_.settings.chain_enabled = false;
+            }
+            break;
+        }
+
         case Cmd::cancel_queue:
             // Unconditional: cancelling a queue that is not armed is what the UI does when the
             // user presses the same pattern twice, and it is not an error.
@@ -730,6 +799,19 @@ void Engine::apply(const Command &command) {
             // the screen drew the new project's numbers.
             apply_mixer_bytes();
             boundary_known_ = false;
+            // The set as it was left: the live mutes and the scenes in slots A and B. A scene id
+            // this build does not have falls back to the default pair rather than indexing past
+            // the scene table.
+            apply_mutes(project_.settings.live_mutes);
+            {
+                const ProjectSettings defaults;
+                scene_a_ = project_.settings.scene_a < kScenes ? project_.settings.scene_a
+                                                               : defaults.scene_a;
+                scene_b_ = project_.settings.scene_b < kScenes ? project_.settings.scene_b
+                                                               : defaults.scene_b;
+                project_.settings.scene_a = scene_a_;
+                project_.settings.scene_b = scene_b_;
+            }
             break;
 
         case Cmd::clear_sample:
@@ -904,6 +986,9 @@ void Engine::apply(const Command &command) {
             if (command.b < kScenes) {
                 if (command.a == 0) scene_a_ = command.b;
                 else scene_b_ = command.b;
+                // And the project's copy, which is what a save writes.
+                project_.settings.scene_a = scene_a_;
+                project_.settings.scene_b = scene_b_;
                 perform_dirty_ = true;
             }
             break;
@@ -1009,6 +1094,13 @@ void Engine::apply(const Command &command) {
             }
             break;
         }
+
+        case Cmd::release_note:
+            // A KEYS key coming up. Not refused on a muted track or with nothing holding the
+            // note: a release with nothing to let go is the second half of a gesture whose
+            // first half was swallowed, and it changes nothing (dsp/track.hpp, `release`).
+            if (machines_[track]) machines_[track]->release(clamp_u8(command.a));
+            break;
 
         case Cmd::resample_arm: {
             // Bars into FRAMES, here, because only this side knows the tempo in samples. A bar
@@ -1299,6 +1391,8 @@ void Engine::apply_mutes(uint8_t state) {
         if (now && !muted_[t]) silence_track(t);
     }
     mute_state_apply(state, muted_);
+    // PROJECT.BIN's copy, so a save keeps the mutes as they stand (core/project.hpp).
+    project_.settings.live_mutes = mute_state_capture(muted_);
 }
 
 void Engine::on_bar() {

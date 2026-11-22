@@ -1137,6 +1137,64 @@ TEST(sample_release_all_leaves_a_tail) {
     CHECK(all_zero(g_other + 40 * kBlk, 40 * kBlk));
 }
 
+TEST(sample_release_lets_go_of_one_note_and_leaves_the_others) {
+    // KEYS mode: two keys held, one let go. Its voice tails out; the other carries on exactly as
+    // if it had been played alone.
+    const int frames = 48000;
+    fill_const(g_mono, frames, 1, 16384);
+    const TrackParams p = plain();
+    const uint8_t a = Sampler::kRootNote;
+    const uint8_t b = uint8_t(Sampler::kRootNote + 12);
+
+    Sampler both;
+    both.init(kRate);
+    both.set_sample(g_mono, uint32_t(frames), 1, kRate);
+    both.prepare(p);
+    both.trigger(hit(a));
+    both.trigger(hit(b));
+    clear(g_out, kCapture);
+    render_blocks(both, p, g_out, 8);
+    both.release(a);
+    both.release(uint8_t(a + 1));                    // a note nothing holds: nothing happens
+    clear(g_out, kCapture);
+    render_blocks(both, p, g_out, 80);
+    CHECK(both.active());
+
+    Sampler alone;
+    alone.init(kRate);
+    alone.set_sample(g_mono, uint32_t(frames), 1, kRate);
+    alone.prepare(p);
+    alone.trigger(hit(b));
+    clear(g_other, kCapture);
+    render_blocks(alone, p, g_other, 8);
+    clear(g_other, kCapture);
+    render_blocks(alone, p, g_other, 80);
+
+    // Once A's 30 ms tail is over, what is left is B alone, to the bit.
+    bool same = true;
+    for (int i = 40 * kBlk; i < 80 * kBlk; i++) same = same && g_out[i] == g_other[i];
+    CHECK(same);
+    CHECK(peak(g_out + 40 * kBlk, 40 * kBlk) > 0.3f);
+}
+
+TEST(sample_a_note_released_before_its_frame_does_not_hang) {
+    // Pressed and released inside one 1.3 ms block, which a 6 ms key scan never delivers: the
+    // point is only that the voice is let go rather than left holding.
+    const int frames = 48000;
+    fill_const(g_mono, frames, 1, 16384);
+    Sampler s;
+    s.init(kRate);
+    s.set_sample(g_mono, uint32_t(frames), 1, kRate);
+    const TrackParams p = plain();
+    s.prepare(p);
+    s.trigger(hit(Sampler::kRootNote, 127, 40));
+    s.release(Sampler::kRootNote);
+    clear(g_out, kCapture);
+    render_blocks(s, p, g_out, 80);
+    CHECK(!s.active());
+    CHECK(all_zero(g_out + 40 * kBlk, 40 * kBlk));
+}
+
 // --- parameters -----------------------------------------------------------
 
 TEST(sample_extreme_parameters_stay_finite) {

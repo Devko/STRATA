@@ -39,6 +39,8 @@
 #include <enaga/abi.h>
 #include <enaga/clock.hpp>
 
+#include <cstring>
+
 using strata::test::FakeHost;
 using strata::test::peak_of;
 
@@ -70,6 +72,7 @@ struct UiProbe {
     static bool mute_mode(const Strata &app) { return app.mute_mode_; }
     static int scene_holding(const Strata &app) { return app.scene_holding_; }
     static int keys_octave(const Strata &app) { return app.keys_octave_; }
+    static int keys_held_note(const Strata &app, int key) { return app.keys_held_note_[key]; }
 
     static const char *notice(const Strata &app) { return app.notice_; }
     static bool notice_showing(const Strata &app) { return app.notice_showing(); }
@@ -83,7 +86,11 @@ struct UiProbe {
 
     static uint32_t tempo_tenths(const Strata &app) { return app.tempo_tenths_; }
     static bool clock_refused(const Strata &app) { return app.clock_refused_; }
-    static bool project_setup(const Strata &app) { return app.project_setup_; }
+    static bool stop_armed(const Strata &app) { return app.stop_armed_; }
+    static bool project_setup(const Strata &app) { return app.project_setup(); }
+    static int project_page(const Strata &app) { return int(app.project_page_); }
+    static int chain_cursor(const Strata &app) { return app.chain_cursor_; }
+    static int pattern_field(const Strata &app) { return app.pattern_field_; }
     static int slot_cursor(const Strata &app) { return app.slot_cursor_; }
     static int macro_selected(const Strata &app) { return app.macro_selected_; }
     static int quantize(const Strata &app) { return app.quantize(); }
@@ -663,6 +670,78 @@ TEST(ui_stop_under_a_running_outside_clock_resets_nothing_until_the_clock_stops)
     host.set_source(ENAGA_CLOCK_INTERNAL);
 }
 
+TEST(ui_f1_f5_restarts_every_track_from_step_1_while_playing) {
+    // docs/SPEC.md's key table: F1 + F5 is "Restart from step 1". Running, the clock is located
+    // to 0 and keeps going, and the playheads follow it back rather than carrying on from where
+    // the pass count had got to.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_F5);
+    CHECK(host.running());
+    for (uint32_t t = 0; t <= 24 * 5; t += 24) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 5);
+
+    const int locates = host.control_calls(ENAGA_CLOCK_LOCATE);
+    shift_key(ENAGA_KEY_F5);
+    pump(2);
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_LOCATE), locates + 1);
+    CHECK(host.running());
+    CHECK_EQ(int(host.position()), 0);
+    CHECK_EQ(UiProbe::notice(app), "RESTART");
+    for (uint32_t t = 0; t <= 24 * 2; t += 24) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 2);
+
+    // Under an outside clock it is refused and nothing moves.
+    host.set_source(ENAGA_CLOCK_MIDI);
+    shift_key(ENAGA_KEY_F5);
+    pump(2);
+    CHECK(UiProbe::clock_refused(app));
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
+    CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 2);
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+    key(ENAGA_KEY_F6);
+}
+
+TEST(ui_f1_f6_stops_cuts_and_resets_in_one_press) {
+    // F1 + F6: "Stop and reset all tracks". One press does what STOP and its second press do,
+    // drops a queued pattern change, and puts the clock back at 0.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_F5);
+    for (uint32_t t = 0; t <= 24 * 3; t += 24) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    post_cmd(Cmd::queue_pattern, 0, 1, 0);
+    pump(2);
+    CHECK(app_engine().queue().pending);
+
+    shift_key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(!host.running());
+    CHECK_EQ(int(host.position()), 0);
+    CHECK(!app_engine().queue().pending);
+    CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 0);
+    CHECK_EQ(UiProbe::notice(app), "RESET");
+    CHECK(!UiProbe::stop_armed(app));          // the cut is done: the next F6 is a plain stop
+
+    // Refused under a running outside clock, like plain F6.
+    host.set_source(ENAGA_CLOCK_MIDI);
+    host.set_running(true);
+    shift_key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(host.running());
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
+    host.set_running(false);
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+}
+
 // --- the two ways a hold used to be stranded ------------------------------------------------
 //
 // docs/UNIT_CHECKLIST.md: "Hold a STEP key, change page or mode, let go, then turn an encoder. No
@@ -670,6 +749,119 @@ TEST(ui_stop_under_a_running_outside_clock_resets_nothing_until_the_clock_stops)
 // against the press's page on the way in, and KEYS, PERFORM and MUTE swallow the STEP keys
 // entirely -- so a hold could be stranded forever, and the next encoder move wrote a lock onto a
 // phantom step."
+
+TEST(ui_hold_step_and_turn_value_sets_that_steps_note) {
+    // docs/SPEC.md, "Step editing": hold STEP + VALUE: note. It used to turn the tempo.
+    Strata &app = fresh();
+    const Step &step = app_engine().pattern().tracks[0].steps[3];
+    const int note = int(step.note);
+    const uint8_t flags = step.flags;
+    const uint32_t tempo = UiProbe::tempo_tenths(app);
+
+    step_down(3);
+    app.on_encoder(4, +2);
+    pump(2);
+    step_up(3);
+    pump(2);
+    CHECK_EQ(int(step.note), note + 2);
+    CHECK_EQ(int(step.flags), int(flags));            // used as a modifier: no toggle
+    CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
+
+    // One undo puts it back.
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(int(step.note), note);
+}
+
+TEST(ui_a_mutation_is_kept_with_ok_and_reverted_with_clr_in_any_mode) {
+    // docs/SPEC.md: MUTATE, "OK keeps, CLR reverts". And F1 + CLR undoes one in PERFORM, where
+    // plain CLR clears a macro -- before this a mutation could not be undone without leaving.
+    Strata &app = fresh();
+    for (int i = 0; i < 16; i += 4) {                // trigs for the velocity mutation to move
+        if ((app_engine().pattern().tracks[0].steps[i].flags & kStepTrig) == 0) {
+            step_down(i);
+            step_up(i);
+        }
+    }
+    pump(2);
+    static TrackPattern before;
+    std::memcpy(&before, &app_engine().pattern().tracks[0], sizeof before);
+    const auto same = [] {
+        return std::memcmp(&before, &app_engine().pattern().tracks[0], sizeof before) == 0;
+    };
+    const auto mutate = [&app] {
+        app.on_pad_press(13, 100);
+        app.on_pad_release(13);
+        pump(2);
+    };
+
+    mutate();
+    CHECK(!same());
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(same());
+    CHECK_EQ(UiProbe::notice(app), "REVERTED");
+
+    mutate();
+    CHECK(!same());
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!same());
+    CHECK_EQ(UiProbe::notice(app), "KEPT");
+    CHECK(!UiProbe::step_page(app));                 // OK was the verdict, not "open the step"
+    shift_key(ENAGA_KEY_CLR);                        // and an undo after keeping still works
+    pump(2);
+    CHECK(same());
+
+    // In PERFORM: F1 + CLR is undo, not "clear the macro".
+    shift_key(ENAGA_KEY_F7);
+    pump(2);
+    mutate();
+    key(ENAGA_KEY_OK);                               // kept
+    CHECK(!same());
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(same());
+    CHECK_EQ(UiProbe::notice(app), "UNDO");
+
+    // A scene pad held + CLR erases that scene; F1 + OK is redo.
+    post_cmd(Cmd::kit_store);
+    post_cmd(Cmd::scene_capture, 0, 0, 0);
+    pump(2);
+    CHECK(scene_count(app_engine().scenes().scenes[0]) > 0);
+    app.on_pad_press(7, 100);
+    key(ENAGA_KEY_CLR);
+    app.on_pad_release(7);
+    pump(2);
+    CHECK_EQ(scene_count(app_engine().scenes().scenes[0]), 0);
+    CHECK_EQ(UiProbe::notice(app), "SCENE ERASED");
+    shift_key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!same());                                  // the mutation is back
+    CHECK_EQ(UiProbe::notice(app), "REDO");
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_a_keys_key_holds_its_note_until_it_comes_up) {
+    // KEYS: the press plays, the release lets that same note go -- even after an octave change
+    // while it was down -- and a mode change lets go of whatever is still held.
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F4);                          // KEYS
+    step_down(0);
+    const int note = UiProbe::keys_held_note(app, 0);
+    CHECK(note >= 0);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    step_up(0);
+    CHECK_EQ(UiProbe::keys_held_note(app, 0), -1);
+
+    step_down(2);
+    CHECK(UiProbe::keys_held_note(app, 2) >= 0);
+    key(ENAGA_KEY_F4);                                // away, with the key still down
+    CHECK_EQ(UiProbe::keys_held_note(app, 2), -1);
+    step_up(2);
+    pump(2);
+}
 
 TEST(ui_a_hold_that_crosses_a_page_change_resolves_to_the_step_it_started_on) {
     Strata &app = fresh();
@@ -1567,8 +1759,10 @@ void mixer_page(Strata &app, int page) {
 void setup_page(Strata &app, bool on) {
     app.on_key(ENAGA_KEY_F3, true);
     app.on_key(ENAGA_KEY_F3, false);
-    app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, true);
-    app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, false);
+    for (int i = 0; i < 3; i++) {                   // past CHAIN and PATTERN, or back to the slots
+        app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, true);
+        app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, false);
+    }
     CHECK_EQ(UiProbe::project_setup(app), on);
 }
 
@@ -2057,6 +2251,143 @@ TEST(ui_layout_project_and_setup) {
     }
     setup_page(app, false);
     key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_chain_and_pattern_pages) {
+    Strata &app = fresh();
+    worst_case_content(app);
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 1);
+    check_layout(app, "CHAIN, empty");
+    // A full chain of the widest entries, with the cursor at the top, the middle and the end.
+    for (int i = 0; i < kChainEntries; i++) {
+        app_engine().project_for_load().chain[i] = ChainEntry{7, 15, 16};
+    }
+    app_engine().project_for_load().settings.chain_length = uint8_t(kChainEntries);
+    post_cmd(Cmd::set_chain, 1);
+    pump(2);
+    check_layout(app, "CHAIN, full");
+    for (int i = 0; i < 40; i++) key(ENAGA_KEY_DOWN);
+    check_layout(app, "CHAIN, cursor in the middle");
+    for (int i = 0; i < 40; i++) key(ENAGA_KEY_DOWN);
+    check_layout(app, "CHAIN, cursor at the end");
+    post_cmd(Cmd::set_chain, 0);
+    for (int i = 0; i < kChainEntries; i++) app_engine().project_for_load().chain[i] = ChainEntry{};
+    app_engine().project_for_load().settings.chain_length = 0;
+    pump(2);
+
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 2);
+    check_layout(app, "PATTERN");
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_chain_page_builds_a_chain_that_plays) {
+    // docs/REVIEW.md: no gesture wrote a chain entry, so CHAIN ON always refused.
+    Strata &app = fresh();
+    const Project &project = app_engine().project();
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 1);
+    CHECK_EQ(chain_length(project), 0);
+
+    // OK on an empty chain adds the playing pattern; a STEP key then sets the entry's slot.
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(chain_length(project), 1);
+    key(ENAGA_KEY_STEP1 + 2);                         // A03
+    pump(2);
+    CHECK_EQ(int(project.chain[0].slot), 2);
+
+    // VALUE sets the repeats, in one event of several clicks, clamped to 1-16.
+    app.on_encoder(4, +3);
+    pump(2);
+    CHECK_EQ(int(project.chain[0].repeats), 4);
+    app.on_encoder(4, -10);
+    pump(2);
+    CHECK_EQ(int(project.chain[0].repeats), 1);
+
+    // OK copies the entry after the cursor and moves onto it; RIGHT steps its pattern.
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(chain_length(project), 2);
+    CHECK_EQ(UiProbe::chain_cursor(app), 1);
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK_EQ(int(project.chain[1].slot), 4);          // A05
+    CHECK_EQ(int(project.chain[0].slot), 2);
+
+    // UP goes back to the first; F1 + LEFT removes it, and the second moves up.
+    key(ENAGA_KEY_UP);
+    CHECK_EQ(UiProbe::chain_cursor(app), 0);
+    the_app().on_key(ENAGA_KEY_F1, true);
+    key(ENAGA_KEY_LEFT);
+    the_app().on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(chain_length(project), 1);
+    CHECK_EQ(int(project.chain[0].slot), 4);
+    key(ENAGA_KEY_OK);                                // and back to two: A05, A05
+    pump(2);
+
+    // F1 + UP turns it on, which now works, and it is saved as a project edit.
+    shift_key(ENAGA_KEY_UP);
+    pump(2);
+    CHECK(app_engine().chain().active);
+    CHECK_EQ(int(app_engine().status().live_slot.load(std::memory_order_relaxed)), 4);
+    CHECK(app_storage().dirty());
+
+    // Removing every entry turns it off rather than leaving it following nothing.
+    for (int i = 0; i < 2; i++) {
+        the_app().on_key(ENAGA_KEY_F1, true);
+        key(ENAGA_KEY_LEFT);
+        the_app().on_key(ENAGA_KEY_F1, false);
+        pump(2);
+    }
+    CHECK_EQ(chain_length(project), 0);
+    CHECK(!app_engine().chain().active);
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_pattern_page_sets_the_master_length_and_the_swing) {
+    Strata &app = fresh();
+    const Pattern &pattern = app_engine().pattern();
+    const int length = int(pattern.master_length);
+    const int swing = int(pattern.swing);
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 2);
+    CHECK_EQ(UiProbe::pattern_field(app), 0);
+
+    app.on_encoder(4, -4);                            // VALUE: LEN
+    pump(2);
+    CHECK_EQ(int(pattern.master_length), length - 4);
+    key(ENAGA_KEY_UP);                                // UP: one more
+    pump(2);
+    CHECK_EQ(int(pattern.master_length), length - 3);
+
+    key(ENAGA_KEY_RIGHT);                             // onto SWG
+    CHECK_EQ(UiProbe::pattern_field(app), 1);
+    app.on_encoder(4, +3);
+    pump(2);
+    CHECK_EQ(int(pattern.swing), swing + 3);
+    app.on_encoder(0, +100);                          // A: LEN again, clamped at 64
+    pump(2);
+    CHECK_EQ(int(pattern.master_length), 64);
+    CHECK_EQ(UiProbe::pattern_field(app), 0);
+
+    // A pattern edit, so undoable (from GRID: in PROJECT, F1 + CLR is NEW PROJECT).
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(int(pattern.master_length) < 64);
 }
 
 // --- the arrow keys ---------------------------------------------------------------------------
