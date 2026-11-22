@@ -149,6 +149,9 @@ Back to GRID, track 2 selected, playing.
 - [ ] Playing, FUNC+PLAY: everything jumps to step 1 on the beat and keeps playing; `RESTART`.
 - [ ] In PROJECT queue another slot, then FUNC+STOP before it lands: stops, tails cut at once,
       the queued change is gone (`RESET`), the next PLAY starts at step 1 of the old pattern.
+- [ ] With a chain running and on its second entry, FUNC+STOP: the chain goes back to its first
+      entry and that pattern is live; PLAY starts the set from the top. With the chain off the
+      pattern stays where it was.
 
 ## 12. PROJECT pages: slots, CHAIN, PATTERN, SETUP (6 min)
 

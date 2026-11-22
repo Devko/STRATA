@@ -48,7 +48,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | --- | --- |
 | PLAY / STOP | Play / stop. STOP again cuts the tails. Refused under an outside clock (EXT CLOCK) |
 | FUNC+PLAY | Restart from step 1, playing or not (RESTART) |
-| FUNC+STOP | Stop, cut the tails, drop a queued change, back to step 1 (RESET) |
+| FUNC+STOP | Stop, cut the tails, drop a queued change, back to step 1, a running chain back to its first entry (RESET) |
 | REC | Live record on/off (REC on the edit line, REC lit red) |
 | FUNC+PROJECT, FUNC+PROJECT (within 2 s) | Save the project |
 | FUNC+CLR / FUNC+OK | Undo / redo, in every mode and page |
@@ -112,7 +112,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | PATTERN | Change field -/+ | Field LEN / SWG | Bank A-H | A: LEN 1-64, B: SWG | — / back | UP: chain on/off |
 | PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Macros A-D | Capture scene / clear macro | UP/DOWN: auto-fill OFF 4 8 16 |
 
-**KEYS:** STEP 1-16 play the scale from the root and hold the note until released; octave keys also change the octave.
+**KEYS:** STEP 1-16 play the scale from the root and hold the note until released; octave keys also change the octave. Letting go also releases that note if the sequencer is playing it on the same track.
 **PROJECT:** STEP 1-16 queue that slot of the shown bank. On the slots and SETUP pages, FUNC+LEFT
 reloads the project from the card and FUNC+RIGHT starts a new one; both throw away unsaved work, so
 each needs a second press within 2 s (AGAIN TO RELOAD, AGAIN FOR NEW). The octave keys walk the pages PROJECT,
