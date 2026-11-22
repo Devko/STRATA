@@ -31,7 +31,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | GRID | HOME | All 8 tracks; STEP keys edit the selected track |
 | KEYS | FUNC+HOME | STEP keys play 16 scale degrees on the selected track |
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, its LFO and its ARP |
-| MACHINE | FUNC+EDIT | Pick the machine on each track |
+| MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice | Save and recall whole kits: 16 slots on the card, shared by all projects |
 | SAMPLES | OK in EDIT or MACHINE, on a SMP or GRN track | Pick the track's WAV from `/SAMPLES` or `/RECORD` |
 | MIXER | MIXER | Levels, delay, reverb, routing, master |
@@ -108,7 +108,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | GRID | Track | Step page 1-4 | Step page | Current EDIT page params | — / clear | Copy / paste |
 | EDIT | Track | Page SRC FLTR AMP FX LFO ARP | Page | The page's 4 params | SMP/GRN: open SAMPLES / clear | Copy / paste |
 | KEYS | Track | Octave (OCT 0-7) | Track | Current EDIT page params | — | Copy / paste |
-| MACHINE | Machine | Track | Track | A: machine | SMP/GRN: open SAMPLES / — | Copy / paste |
+| MACHINE | Machine | Track | Track | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
 | MIXER | — | Page (7) | Page | Levels or page fields; on EQ, push A-C kills a band | — / clear | Copy / paste |
 | SAMPLES | Entry | Page of 8 | Page of 8 | A: entry | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
@@ -154,7 +154,15 @@ UNSAVED until it is saved with FUNC+PROJECT twice.
 **SAMPLES:** one OK loads the file into the track at once, the beat keeps playing and the cursor
 stays, so DOWN, OK tries the next. The top level holds `SAMPLES/` and `RECORD/`. Only WAVs and
 folders are listed (no `._` files), at most 256 a folder. Picking a file makes the project UNSAVED.
-**MIDI in:** channels 1-8 play tracks 1-8, other channels play the selected track.
+**MIDI out:** a track with a MIDI OUT channel (MACHINE, encoder B) sends every note it plays
+there: steps, chords, ratchets, arp hits, note repeat, pads, KEYS and MIDI IN. MID is the machine that plays nothing
+itself; its SRC and AMP knobs send CC 74 71 73 72 and 70 75 76 77 when they move (locks too).
+Notes end with their step length, a key or note let go, a mute, STOP; the second STOP and
+FUNC+F6 also send All Notes Off. Enaga 0.2.0: unplug USB (or keep its MIDI port open on the
+computer) when driving gear from the DIN jack.
+**MIDI in:** channels 1-8 play tracks 1-8, other channels play the selected track. Notes are
+held until their note-off. CC 16-31 set the track's 16 parameters (SRC, FLTR, AMP, FX in order);
+CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pattern A01-H16.
 
 ## The screen
 

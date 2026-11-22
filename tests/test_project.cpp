@@ -40,7 +40,8 @@ using namespace strata;
 // 292 since the live section: another table entry (12) and its 3 bytes, optional likewise.
 // 296 since the kill EQ grew the mixer section by its three band bytes and the kill switches.
 // 373 since song mode: a fifth table entry (12) and its 65 bytes, optional like the others.
-constexpr uint32_t kProjectFileBytes = 373;
+// 393 since MIDI OUT: a sixth entry (12) and one channel per track (8).
+constexpr uint32_t kProjectFileBytes = 393;
 constexpr uint32_t kKitFileBytes = 1164;   // 1076 before the LFO and arp sections (12 + 8 x 4 each)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
@@ -666,6 +667,70 @@ TEST(project_a_file_from_before_the_live_section_opens_unmuted_on_scenes_1_and_2
     CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(g_source.settings.tempo_centi_bpm));
 }
 
+TEST(project_the_midi_out_channels_round_trip) {
+    fill_project(g_source, 0);
+    for (int t = 0; t < kTracks; t++) g_source.settings.midi_out[t] = uint8_t(t * 2 + 1);
+    g_source.settings.midi_out[3] = kMidiOutOff;
+    g_source.settings.midi_out[7] = 16;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_loaded.settings.midi_out[t]), int(g_source.settings.midi_out[t]));
+    }
+}
+
+TEST(project_a_file_from_before_the_midi_section_opens_with_midi_out_off) {
+    fill_project(g_source, 0);
+    for (int t = 0; t < kTracks; t++) g_source.settings.midi_out[t] = 9;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    for (uint32_t e = 0; e < 6; e++) {
+        const uint32_t at = kHeaderBytes + e * kSectionEntryBytes;
+        if (peek_u16(g_project, at) == kSectionProjectMidi) poke_u16(g_project, at, 99);
+    }
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    for (int t = 0; t < kTracks; t++) g_loaded.settings.midi_out[t] = 4;   // a previous project's
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(g_loaded.settings.midi_out[t]), 0);
+    CHECK_EQ(int(g_loaded.settings.live_mutes), int(g_source.settings.live_mutes));
+}
+
+TEST(project_a_damaged_midi_out_channel_turns_that_track_off) {
+    fill_project(g_source, 0);
+    for (int t = 0; t < kTracks; t++) g_source.settings.midi_out[t] = 2;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    const uint32_t midi = section_at(g_project, kSectionProjectMidi);
+    g_project[midi + 1] = 17;        // one past the last channel
+    g_project[midi + 5] = 0xFF;
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.midi_out[0]), 2);
+    CHECK_EQ(int(g_loaded.settings.midi_out[1]), 0);
+    CHECK_EQ(int(g_loaded.settings.midi_out[5]), 0);
+    CHECK_EQ(int(g_loaded.settings.midi_out[6]), 2);
+}
+
+TEST(project_refuses_a_midi_section_that_is_short) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    poke_u32(g_project, section_entry_at(g_project, kSectionProjectMidi) + 8, uint32_t(kTracks - 1));
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::malformed));
+}
+
+// Present but short is damage, not an old file: a writer that declared the section declared its
+// size too, so a reader that accepted a truncated one would read the chain's bytes as a mixer.
 TEST(project_song_mode_and_the_mute_recalls_round_trip) {
     fill_project(g_source, 0);
     g_source.settings.chain_song = true;
@@ -701,8 +766,10 @@ TEST(project_a_file_from_before_song_mode_loops_and_recalls_no_mutes) {
     uint32_t written = 0;
     CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
              int(SerializeResult::ok));
-    const uint32_t old_size = drop_last_section(g_project, g_project_alt);
-    CHECK_EQ(old_size, kProjectFileBytes - 12 - 65);
+    // The MIDI section came after song mode, so a file from before song mode had neither.
+    uint32_t old_size = drop_last_section(g_project, g_project_alt);
+    old_size = drop_last_section(g_project_alt, g_project_alt);
+    CHECK_EQ(old_size, kProjectFileBytes - 12 - 8 - 12 - 65);
     // A previous project's song settings, which must not survive into this one.
     project_init(g_loaded);
     g_loaded.settings.chain_song = true;
@@ -834,7 +901,7 @@ TEST(project_the_header_says_strata_and_the_version) {
     CHECK_EQ(int(g_project[2]), int(kMagic2));
     CHECK_EQ(int(g_project[3]), int(kMagic3));
     CHECK_EQ(int(peek_u16(g_project, kVersionOffset)), int(kProjectVersion));
-    CHECK_EQ(int(peek_u16(g_project, 6)), 5);                 // settings, chain, mixer, live, song
+    CHECK_EQ(int(peek_u16(g_project, 6)), 6);   // settings, chain, mixer, live, song, MIDI
     CHECK_EQ(peek_u32(g_project, 8), kProjectFileBytes - kHeaderBytes);
     CHECK_EQ(peek_u32(g_project, kCrcOffset),
              crc32(g_project + kHeaderBytes, kProjectFileBytes - kHeaderBytes));
@@ -845,12 +912,14 @@ TEST(project_the_header_says_strata_and_the_version) {
     const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
     const uint32_t live = section_at(g_project, kSectionProjectLive);
     const uint32_t song = section_at(g_project, kSectionProjectSong);
-    CHECK_EQ(settings, kHeaderBytes + 5 * kSectionEntryBytes);
+    CHECK_EQ(settings, kHeaderBytes + 6 * kSectionEntryBytes);
     CHECK_EQ(chain, settings + 19);
     CHECK_EQ(mixer, chain + 64 * 3);
     CHECK_EQ(live, mixer + uint32_t(kSendFields + kMasterFields + 1));
+    const uint32_t midi = section_at(g_project, kSectionProjectMidi);
     CHECK_EQ(song, live + 3);
-    CHECK_EQ(song + 1 + 64, kProjectFileBytes);
+    CHECK_EQ(midi, song + 1 + 64);
+    CHECK_EQ(midi + 8, kProjectFileBytes);
 }
 
 // --- PROJECT.BIN: value-tolerant ------------------------------------------
@@ -2188,7 +2257,7 @@ TEST(the_four_file_types_agree_about_which_damage_wins) {
 
 TEST(project_a_machine_id_one_past_the_table_has_no_name) {
     CHECK_EQ(machine_name(uint8_t(MachineId::count)), "---");
-    CHECK_EQ(machine_name(uint8_t(MachineId::count) - 1), "PLY");
+    CHECK_EQ(machine_name(uint8_t(MachineId::count) - 1), "MID");
 }
 
 TEST(project_settings_at_the_bottom_of_their_ranges_survive_a_round_trip) {

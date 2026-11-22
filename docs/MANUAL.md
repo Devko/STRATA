@@ -48,8 +48,9 @@ also walk the tracks in GRID, EDIT and KEYS.
 
 ### Machines
 
-A machine is one of eight sound engines. Any track can host any machine (MACHINE mode,
-`FUNC+EDIT`). The default kit uses all eight, one per track:
+A machine is one of eight sound engines, plus **MID**, which plays an outboard synth over MIDI
+instead (section 3). Any track can host any machine (MACHINE mode, `FUNC+EDIT`). The default kit
+uses the eight sound engines, one per track:
 
 | Track | Machine | Default role |
 | :---: | --- | --- |
@@ -421,6 +422,44 @@ Every note is a sustaining voice and costs CPU while it rings. All VA POLY track
 a budget of **12 voices**; past it, the quietest note is faded out quickly to make room. A longer
 DEC means more notes overlap.
 
+### MID: MIDI
+
+MID makes no sound of its own. It is for a track whose sound is an outboard synth, a drum
+machine or a modular: the track's notes go to MIDI OUT and STRATA spends no voice and no CPU on
+them. Give the track a channel first (MACHINE, encoder **B**); MACHINE shows `B: MIDI OUT OFF`
+brightly on a MID track that has none, because then it does nothing at all.
+
+| Page | A | B | C | D |
+| --- | --- | --- | --- | --- |
+| SRC | **C74** CC 74 (brightness, cutoff) | **C71** CC 71 (resonance) | **C73** CC 73 (attack) | **C72** CC 72 (release) |
+| AMP | **C70** CC 70 | **C75** CC 75 | **C76** CC 76 | **C77** CC 77 |
+
+These are the General MIDI 2 sound controllers, which many synths answer without any setup; on
+others, MIDI-learn them. A CC is sent when its value **moves** (a knob, a lock, a scene, a macro),
+never just because a track became MID, so a synth you set up by hand keeps its sound until you
+touch a knob. A step's locked CCs go out just before its note. FLTR and FX do nothing on MID.
+
+MID sends its notes as written, without folding them into the scale (the receiver may be a drum
+machine, where a note picks a sound). A step with a chord sends the whole chord.
+
+### MIDI out on any track
+
+Every machine can send, not only MID: give a KCK or PLY track a channel and its notes go to MIDI
+OUT as well as sounding, to double a part on a synth. A track sends every note it plays: steps
+(with their velocity; an accent sends 127), ratchets, chords (the whole chord, even past the
+12-voice budget, which only counts STRATA's own voices), every arp hit and note repeat hit, pad
+hits, KEYS and MIDI IN notes.
+
+Every note gets its note-off. A step ends after its LEN (one step if it has none, and so does a
+pad hit); a KEYS key or a MIDI IN note when you let go. Muting the track, changing its channel or
+machine, recalling a kit and STOP end its notes at once. The **second STOP** and **FUNC+STOP** also
+send All Notes Off on every channel a track uses, for a synth that missed something. Notes leave
+within one audio block (1.3 ms) of their step. The channels are saved with the project.
+
+**With Enaga 0.2.0 firmware, unplug USB while driving gear from the MIDI OUT jack**, or keep a
+program on the computer reading the SmplTrek's USB MIDI port. On 0.2.0 a computer that is not
+reading fills the USB queue and stops the DIN jack with it; Enaga fixed this after the release.
+
 ### The key and the scale
 
 Each pattern has a key (root) and a scale, set in PROJECT with encoders **B** (key) and **C**
@@ -433,8 +472,8 @@ WHOLE TONE, DIMINISHED. Notes are named with sharps (D#, not Eb).
 ### Changing a track's machine
 
 `FUNC+EDIT` opens MACHINE. UP/DOWN or encoder A pick the machine, and you hear the change at
-once; LEFT/RIGHT or the selection keys move to the next track. `FUNC+EDIT` again opens the kit
-library (section 6).
+once; LEFT/RIGHT or the selection keys move to the next track. Encoder **B** sets the track's MIDI
+OUT channel: OFF, or 1-16. `FUNC+EDIT` again opens the kit library (section 6).
 
 ---
 
@@ -531,7 +570,20 @@ are recorded with their timing, corrected for the pad's latency and quantized by
 page, encoder A, 0-100%; 0 keeps your timing as micro-timing). A hit that cannot be stored where it
 was played says `OFF GRID`. One recording pass is one undo level.
 
-MIDI in: channels 1-8 play tracks 1-8; other channels play the selected track.
+### MIDI in
+
+MIDI IN (the DIN jack, or USB MIDI) plays STRATA like the pads:
+
+- **Notes**: channels 1-8 play tracks 1-8; other channels play the selected track. A note is held
+  until its note-off, so a pad or a chord on VA, VA POLY or SAMPLE sustains under your finger, and
+  it is let go on the track it started on even if you have selected another one since. Notes are
+  recorded like pad hits while REC is on.
+- **CC 16-31** set the track's sixteen parameters in page order: 16-19 SRC, 20-23 FLTR, 24-27
+  AMP, 28-31 FX. They change the kit, as turning the knob would (they are not motion-recorded).
+- **CC 120 and 123** (All Sound Off, All Notes Off) let go of every note MIDI IN is holding on
+  that channel. Enaga sends 123 by itself when a keyboard's active sensing stops.
+- **Program change** on your MIDI CH (the Enaga menu, SETUP shows it) queues pattern 1-128,
+  which is A01 to H16, in the queue mode PROJECT has set, exactly as pressing the slot would.
 
 ---
 

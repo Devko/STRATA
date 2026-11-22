@@ -8,7 +8,7 @@ from, with the background for each check.
 
 **Time.** The whole pass is about three hours. If the evening runs short, do 0-3b, 13 and 16
 first (safety, the MAX readings, save and restore), then the sections for today's new features
-(8c, 13d-13i, 14b, 15b-15d), then the rest.
+(8c, 8d, 13d-13i, 14b, 15b-15d), then the rest.
 
 Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`), and so are
 the on-screen hints. `FUNC+X` = hold FUNC, press X.
@@ -30,6 +30,8 @@ From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c
       Emulator peak, cl6x `________ %`
 - [ ] The same with `ENAGA_TI_CGT=none tests/scenario_factory.sh` (GCC only).
       Emulator peak, GCC `________ %`
+- [ ] `tests/scenario_midi.sh` (new: track 1 to MID on the running beat, both STOPs) passes with
+      cl6x and GCC only. It is part of E1's `tools/scenarios.sh` too. Peak `____ %` / `____ %`
 - [ ] **E1.** `tools/scenarios.sh` (every scenario) passes, with cl6x and with GCC only, on main
       now and on `eb46d43` (before the DSP optimizations, PR #26): four columns for BUDGET's
       optimization review. `scenario_m3.sh` cl6x now: `________ %` (unit/emulator ratio in 3)
@@ -238,6 +240,32 @@ New 2026-11-22. A synth, a phone or anything with a line out into INPUT L/R.
       headphones says `MIC NEEDS HEADPHONES` and records silence, with headphones it records.
       Which routes worked: `________`
 - [ ] B back to MASTER: a take is the beat again. MAX while recording from the input `________ %`
+
+## 8d. MIDI out and in (8 min, needs a synth or a MIDI monitor on MIDI OUT)
+
+First time STRATA has sent MIDI, and probably the first time Enaga's MIDI OUT has run on a unit,
+so a fault here may be Enaga's (see "Expect to find Enaga bugs"). **Unplug USB first**: on Enaga
+0.2.0 a computer that is not reading USB MIDI stops the DIN jack too (fixed upstream after the
+release, `192f03f`). Synth or monitor on channel `____`.
+
+- [ ] Track 6 (bass), FUNC+EDIT: the page shows nine machines in three columns and
+      `B: MIDI OUT OFF`. Turn B to your synth's channel: `B: MIDI OUT CH n`. The bass line plays on
+      the synth **and** on STRATA, note for note. Each note ends (no hanging notes); long LEN steps
+      hold longer on the synth.
+- [ ] UP/DOWN to `MID`: STRATA's bass stops, the synth keeps playing it. LOAD drops (one track
+      fewer). EDIT on track 6: SRC shows `C74 C71 C73 C72`; turning A changes the synth's cutoff
+      if it answers CC 74 (or watch the monitor). Switching to MID sent no CCs by itself: `____`
+- [ ] Lock C74 on one step: the synth's cutoff jumps on that step and comes back after it.
+- [ ] Mute track 6 (FUNC+pad): the synth stops at once, no hanging note. Unmute.
+- [ ] STOP once: the synth stops. PLAY, then STOP twice: the monitor shows CC 123 on the channel.
+      FUNC+STOP the same.
+- [ ] KEYS on track 6: a held key holds the synth's note until you let go.
+- [ ] Turn B back to OFF while a long note sounds: it ends.
+- [ ] MIDI IN, a keyboard on channel 6 (track 6, back on MNO): a held key sustains and ends on
+      release. CC 17 from the keyboard moves track 6's SRC B. A program change 5 on your MIDI CH
+      (SETUP shows it) queues A05.
+- [ ] Timing: record the synth and STRATA's own kick together; the synth's notes are within about
+      2 ms of the kick: `________ ms`
 
 ## 9. KEYS: a held key sustains (3 min)
 
@@ -1391,6 +1419,30 @@ stand only if that measurement is ever disputed.
       The app must recover without a restart (`on_card(false)` closes the dead handles).
 - [ ] Timing: record line out at 48 kHz and measure 16th-note click spacing over 5 minutes.
       M1's bar is onset jitter under 0.1 ms.
+
+## MIDI out per track, MID, and MIDI in (after v0.1)
+
+Host-tested (`tests/test_midiout.cpp`, `tests/test_midi.cpp`, the MIDI tests at the end of
+`tests/test_ui.cpp`) and drawn on the emulator (`tests/scenario_midi.sh`, keys only: it cannot
+turn the channel knob or send MIDI IN). Never heard. Section 8d of the walkthrough is the short
+version; these are the rest.
+
+- [ ] Two tracks on one channel playing the same pitch: one note on the synth, never a hanging
+      one (the second note-on ends the first).
+- [ ] A VA POLY MIN11 stab with a MIDI OUT channel: the synth gets all six notes even while
+      STRATA's 12-voice budget chokes its own.
+- [ ] A ratchet x4 on a MID track: four notes, evenly spaced.
+- [ ] Kit recall (KIT, OK twice) with a MIDI note held: it ends. The channels themselves stay
+      (they are the project's, not the kit's).
+- [ ] Save, power cycle: the MIDI OUT channels come back. A project saved before this change opens
+      with every track OFF.
+- [ ] Fill the queue: eight tracks on MID with 1/16 ratchets x8 and CCs moving on all of them.
+      No hanging note after STOP (a refused note-off is retried until it goes). LOAD: `____ %`
+- [ ] MIDI IN on channel 10 (selected track): select track 3, hold a note, select track 5, let
+      go -- the note on track 3 ends.
+- [ ] Unplug a keyboard with a key held (active sensing stops): Enaga sends CC 123, the note ends.
+- [ ] With USB plugged into a PC that is NOT reading the port: on 0.2.0 firmware, does DIN out
+      stall? `____` On firmware with upstream `192f03f`: it must not.
 
 ## Expect to find Enaga bugs, not just STRATA bugs
 

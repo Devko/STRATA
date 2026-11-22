@@ -557,6 +557,10 @@ const Expect kTable[] = {
     // Which machine a track hosts is a KIT field -- KitTrack::machine, on disk since M4 -- which
     // is why machine switching needed no change to the file format.
     {Cmd::set_machine, kDirtyKit, "set_machine"},
+
+    // MIDI OUT's channel per track is PROJECT.BIN's fifth section: cabling, not a sound, so not
+    // the kit (core/project.hpp).
+    {Cmd::set_midi_out, kDirtyProject, "set_midi_out"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:
@@ -739,8 +743,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
 
     // The sizes tests/test_project.cpp pins from the serializer, reached here through the real
     // card protocol: a file that came out a different size means the two have drifted apart.
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 373);
-    CHECK_EQ(project_bytes(), 373u);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 393);
+    CHECK_EQ(project_bytes(), 393u);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1164);
     CHECK_EQ(kit_bytes(), 1164u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 3804);
@@ -1614,7 +1618,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         }
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 373);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 393);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1164);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 3804);
 

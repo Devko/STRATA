@@ -11,9 +11,9 @@
 //
 // ## The bytes
 //
-// PROJECT.BIN, 373 bytes, five sections (the third, the mixer's, the fourth, the live state's,
-// and the fifth, song mode's, were added later and are OPTIONAL on read). Fixed size: nothing in
-// it is variable length.
+// PROJECT.BIN, 393 bytes, six sections (the third, the mixer's, the fourth, the live state's,
+// the fifth, song mode's, and the sixth, MIDI OUT's, were added later and are OPTIONAL on read).
+// Fixed size: nothing in it is variable length.
 //
 //     settings (id 1), 19 bytes
 //         0   2  tempo, centi-BPM
@@ -37,6 +37,7 @@
 //     song (id 5), 65 bytes
 //         0   1  SONG: 1 plays the chain once and stops, 0 loops it
 //         1  64  each chain entry's mute recall: 0 none, 1-8 that stored mute state
+//     midi (id 5), 8 bytes: each track's MIDI OUT channel, 0 off or 1-16
 //
 // KIT.BIN, 1,076 bytes, one section.
 //
@@ -79,13 +80,16 @@
 // not something to slip in here.
 #include "project.hpp"
 
+
 namespace strata {
 const char *machine_name(uint8_t id) {
     // Upper case and three characters, because that is what the device font draws and what every
     // other name in this project is (docs/ENAGA_API.md). Indexed by MachineId, so the order here
     // is the order on disk.
-    static const char *const names[] = {"KCK", "SNR", "HAT", "PRC",
-                                        "SMP", "GRN", "MNO", "PLY"};
+    static const char *const names[] = {"KCK", "SNR", "HAT", "PRC", "SMP",
+                                        "GRN", "MNO", "PLY", "MID"};
+    static_assert(int(sizeof(names) / sizeof(names[0])) == int(MachineId::count),
+                  "a machine with no name draws as the next machine's");
     return id < uint8_t(MachineId::count) ? names[id] : "---";
 }
 
@@ -292,7 +296,7 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PROJECT.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kProjectSections = 5;
+constexpr uint32_t kProjectSections = 6;
 constexpr uint32_t kProjectSettingsBytes = 19;
 constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
 // The sends, the master bytes and the kill switches. The section GREW when the kill EQ came
@@ -311,12 +315,15 @@ constexpr uint32_t kProjectLiveOffset = kProjectMixerOffset + kProjectMixerBytes
 // Song mode: the SONG switch, then each chain entry's mute recall.
 constexpr uint32_t kProjectSongBytes = 1 + uint32_t(kChainEntries);
 constexpr uint32_t kProjectSongOffset = kProjectLiveOffset + kProjectLiveBytes;
-constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectSongOffset + kProjectSongBytes;
+constexpr uint32_t kProjectMidiBytes = uint32_t(kTracks);   // MIDI OUT channel per track
+constexpr uint32_t kProjectMidiOffset = kProjectSongOffset + kProjectSongBytes;
+constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectMidiOffset + kProjectMidiBytes;
 
-// How many of `wanted` at the END of the list a reader may do without. Three: the mixer, the
-// live and the song sections, none of which existed when the format was first written, so a
-// PROJECT.BIN from before them has two to four sections and must still load (core/project.hpp).
-constexpr uint32_t kProjectOptionalSections = 3;
+// How many of `wanted` at the END of the list a reader may do without. Four: the mixer, the
+// live, the song and the MIDI sections, none of which existed when the format was first written,
+// so a PROJECT.BIN from before them has two to five sections and must still load
+// (core/project.hpp).
+constexpr uint32_t kProjectOptionalSections = 4;
 
 static_assert(sizeof(ProjectSettings::mute_states) == 8,
               "the settings section is 19 bytes on the strength of 8 mute states");
@@ -429,6 +436,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
         {kSectionProjectMixer, kProjectMixerOffset, kProjectMixerBytes},
         {kSectionProjectLive, kProjectLiveOffset, kProjectLiveBytes},
         {kSectionProjectSong, kProjectSongOffset, kProjectSongBytes},
+        {kSectionProjectMidi, kProjectMidiOffset, kProjectMidiBytes},
     };
 
     Writer w(buffer, capacity);
@@ -468,6 +476,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
 
     w.u8(s.chain_song ? 1 : 0);
     for (int i = 0; i < kChainEntries; i++) w.u8(project.chain[i].mutes);
+    for (int t = 0; t < kTracks; t++) w.u8(s.midi_out[t]);
 
     if (!w.ok() || w.size() != kProjectTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kProjectTotalBytes, written);
@@ -509,7 +518,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // The mixer section is LAST and OPTIONAL: see `kProjectOptionalSections`.
     const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain,
                                                kSectionProjectMixer, kSectionProjectLive,
-                                               kSectionProjectSong};
+                                               kSectionProjectSong, kSectionProjectMidi};
     uint32_t offset[kProjectSections] = {};
     uint32_t length[kProjectSections] = {};
     const SerializeResult found =
@@ -527,6 +536,9 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         return refuse(SerializeResult::malformed);
     }
     if (offset[4] != 0 && length[4] < kProjectSongBytes) {
+        return refuse(SerializeResult::malformed);
+    }
+    if (offset[5] != 0 && length[5] < kProjectMidiBytes) {
         return refuse(SerializeResult::malformed);
     }
 
@@ -637,6 +649,18 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
             const uint8_t mutes = r.u8();
             const bool usable = project.chain[i].repeats != 0 && mutes <= kChainMutesMax;
             project.chain[i].mutes = usable ? mutes : 0;
+        }
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // The MIDI OUT channels: absent is an older file, where no track sent MIDI. A byte past 16
+    // is damage and turns that track's MIDI out off rather than onto some channel nobody chose.
+    for (int t = 0; t < kTracks; t++) s.midi_out[t] = kMidiOutOff;
+    if (offset[5] != 0) {
+        if (!r.seek(kHeaderBytes + offset[5])) return refuse(SerializeResult::malformed);
+        for (int t = 0; t < kTracks; t++) {
+            const uint8_t channel = r.u8();
+            s.midi_out[t] = channel <= kMidiChannels ? channel : kMidiOutOff;
         }
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }

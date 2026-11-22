@@ -8,6 +8,7 @@
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
 #include <enaga/dsp.hpp>
+#include <enaga/midi.hpp>
 
 namespace strata {
 
@@ -23,6 +24,8 @@ constexpr int kMaxLocksApplied = kLocksPerStep;
 constexpr uint8_t kDefaultOctaveNote = 60;
 // The mixer page's fader ceiling, which an encoder delta stops at (Cmd::set_track_level).
 constexpr float kFaderDeltaMax = 1.5f;
+// MIDI out's gate for a note with none of its own: core/timing.hpp's index 8, one step.
+constexpr uint8_t kMidiDefaultLength = 8;
 
 uint8_t clamp_u8(int value) {
     return uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value));
@@ -81,11 +84,13 @@ bool Engine::init(float sample_rate) {
         pool_[t].poly.init(rate_);
         pool_[t].sampler.init(rate_);
         pool_[t].grain.init(rate_);
+        pool_[t].midi.init(rate_);
         // A seed per track, so eight S&H LFOs do not move together. Fixed, so a render is
         // repeatable.
         lfo_[t].init(0x9E3779B9u * uint32_t(t + 1));
     }
     inv_rate_ = enaga::dsp::reciprocal(rate_);
+    midi_out_.clear();
 
     // The duck fires from the kick, and the kick itself must not duck.
     //
@@ -139,6 +144,7 @@ void Engine::rewire_machines() {
             case MachineId::sample:  machines_[t] = &own.sampler; break;
             case MachineId::grain:   machines_[t] = &own.grain; break;
             case MachineId::va_mono: machines_[t] = &own.mono; break;
+            case MachineId::midi:    machines_[t] = &own.midi; break;
             case MachineId::va_poly:
                 machines_[t] = &own.poly;
                 polys_[t] = &own.poly;
@@ -337,6 +343,13 @@ void Engine::apply(const Command &command) {
                     if (machines_[t]) machines_[t]->release_all();
                 }
             }
+            // MIDI out ends with the transport on either stop: an outboard synth has no tail of
+            // STRATA's to cut, only notes it will hold until told. The second press and FUNC+F6
+            // (both `a` = 1) also send All Notes Off on every channel in use, for a synth that
+            // missed a note-off -- a cable pulled mid-note, a queue that was full -- since a
+            // hanging note is the one MIDI fault the panel could not otherwise clear.
+            midi_out_.release_all(midi_sink_);
+            if (command.a) midi_all_notes_off();
             // And the ratchet hits still waiting for their block, on EITHER stop. They are new
             // notes, not tails: a soft stop releases what is sounding, and a hit landing four
             // blocks later would be a note after the transport stopped.
@@ -1174,6 +1187,10 @@ void Engine::apply(const Command &command) {
                 // A pad on a POLY track counts against the shared budget like a step does.
                 if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
                 status_.bump_triggered(track);
+                // And to MIDI OUT. A key or a MIDI IN note (c = 1) is held until its release; a
+                // pad has none, so it lasts one step, as a step with no gate does.
+                send_midi_notes(track, &trig.note, 1, trig.velocity, 0,
+                                command.c == 1 ? kMidiHeld : midi_gate(track, 0));
             }
             break;
         }
@@ -1213,6 +1230,7 @@ void Engine::apply(const Command &command) {
             // note: a release with nothing to let go is the second half of a gesture whose
             // first half was swallowed, and it changes nothing (dsp/track.hpp, `release`).
             if (machines_[track]) machines_[track]->release(clamp_u8(command.a));
+            midi_out_.release(midi_sink_, track, clamp_u8(command.a));
             // And out of the arp's held notes, if it was one.
             const uint8_t note = clamp_u8(command.a);
             uint8_t &count = held_count_[track];
@@ -1223,6 +1241,21 @@ void Engine::apply(const Command &command) {
                 arp_held_changed(track);
                 break;
             }
+            break;
+        }
+
+        case Cmd::set_midi_out: {
+            int next = command.a;
+            if (command.c == kDeltaFlag) {
+                next = int(project_.settings.midi_out[track]) + int(int8_t(command.b));
+            }
+            next = next < 0 ? 0 : (next > kMidiChannels ? kMidiChannels : next);
+            if (next == int(project_.settings.midi_out[track])) break;
+            // The notes already sent end on the channel they went out on (each slot keeps its
+            // own), and the CCs are sent afresh only when they next move.
+            midi_out_.release_track(midi_sink_, track);
+            project_.settings.midi_out[track] = uint8_t(next);
+            cc_known_[track] = false;
             break;
         }
 
@@ -1326,6 +1359,7 @@ void Engine::apply(const Command &command) {
 
             machine_id_[track] = command.a;
             project_.kit.tracks[track].machine = command.a;
+            cc_known_[track] = false;     // a MID track's CCs start from what they are now
             rewire_machines();
 
             // The new machine reads this track's parameters, which mean different things to it:
@@ -1413,6 +1447,7 @@ void Engine::params_from_kit() {
     // machine back -- Cmd::set_machine silences the machine it leaves for the same reason.
     for (int t = 0; t < kTracks; t++) {
         silence_track(t);
+        cc_known_[t] = false;
     }
     rewire_machines();
 
@@ -1547,6 +1582,9 @@ void Engine::switch_pattern(int bank, int slot) {
 void Engine::silence_track(int track) {
     if (machines_[track] != nullptr) machines_[track]->kill_all();
     mixer_.chain(track).clear_state();
+    // Its MIDI notes too: every caller -- a mute, a machine switch, a kit recall or load, the
+    // second STOP -- is a case where an outboard synth must stop with the track.
+    midi_out_.release_track(midi_sink_, track);
 }
 
 // Mutes change here and nowhere else. A muted track is not rendered at all (that is the CPU it
@@ -1782,6 +1820,7 @@ void Engine::roll_fire(int track, uint32_t frame) {
     trig.gate_frames = roll_gate_frames();
     if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
     status_.bump_triggered(track);
+    send_midi_notes(track, &trig.note, 1, trig.velocity, frame, midi_gate(track, trig.gate_frames));
 }
 
 // The transport is running: hit on the grid of beat repeat's length, counted from the clock's
@@ -1842,6 +1881,10 @@ void Engine::arp_hit(int track, ArpRun &run, uint32_t frame) {
     trig.gate_frames = gate < 1.0f ? 1u : uint32_t(gate);
     if (make_room_for_poly_voice(track, note)) machines_[track]->trigger(trig);
     status_.bump_triggered(track);              // each hit lights the track, as a step does
+    // Each hit to MIDI OUT too, with its own gate; a MID track's CCs go ahead of the note.
+    if (machine_id_[track] == uint8_t(MachineId::midi)) send_midi_ccs(track);
+    send_midi_notes(track, &trig.note, 1, trig.accent ? uint8_t(127) : trig.velocity, frame,
+                    trig.gate_frames);
 }
 
 void Engine::arp_tick(uint32_t tick, uint32_t frame) {
@@ -2026,6 +2069,10 @@ void Engine::fire(const StepEvent &event) {
         trig.frame = event.frame;
         trig.gate_frames = gate_frames_for(track, event.length_index);
 
+        // MIDI out's copy of the trig. An accent is the top velocity, the nearest thing MIDI
+        // has, and a step with no gate lasts a step, because a note-on needs a note-off.
+        const uint8_t midi_velocity = event.accent ? uint8_t(127) : event.velocity;
+        const uint32_t midi_gate_frames = midi_gate(track, trig.gate_frames);
         const ArpSettings arp = arp_settings(track);
         if (arp.on()) {
             // The arp takes the step: its notes (the chord on POLY, the one note elsewhere) become
@@ -2089,8 +2136,27 @@ void Engine::fire(const StepEvent &event) {
                 if (!make_room_for_poly_voice(track, trig.note)) continue;
                 machines_[track]->trigger(trig);
             }
+            // MIDI out gets the whole chord: the budget is about this box's CPU, and an
+            // outboard synth's voices are not ours to count.
+            send_midi_notes(track, notes, voiced, midi_velocity, trig.frame, midi_gate_frames);
+        } else if (machine_id_[track] == uint8_t(MachineId::midi)) {
+            // MID plays nothing here. A step with a chord sends the chord, folded and voiced
+            // exactly as VA POLY would play it; a plain step sends its note as written.
+            // The step's locks first, as CCs, so the synth plays this note with them -- the
+            // per-block pass would send them after the note-on, a block too late for its attack.
+            send_midi_ccs(track);
+            const uint8_t packed = folding.tracks[track].steps[event.step].chord;
+            uint8_t notes[kChordMaxNotes];
+            int count = 1;
+            notes[0] = note;
+            if ((packed & kChordTypeMask) != uint8_t(ChordType::none)) {
+                count = chord_expand(event.note, packed, key_root_now, key_scale_now, notes,
+                                     kChordMaxNotes);
+            }
+            send_midi_notes(track, notes, count, midi_velocity, trig.frame, midi_gate_frames);
         } else {
             machines_[track]->trigger(trig);
+            send_midi_notes(track, &note, 1, midi_velocity, trig.frame, midi_gate_frames);
         }
 
         // Once per step, not once per note: a chord is one trig as far as the screen is
@@ -2160,6 +2226,10 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     apply_commands();
 
+    // MIDI out's note-offs that fall in this block, and any a full queue refused earlier.
+    // Before this block's trigs, so a note ending as the same pitch starts again is ended first.
+    midi_out_.begin_block(midi_sink_, frames);
+
     // The kit with the morph, the macros and any throw over it. Control rate, and only when one
     // of them has moved.
     apply_performance();
@@ -2211,6 +2281,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         }
     }
 
+    // A MID track's knobs, locks, scenes and macros, as CCs, now that `effective_` is final.
+    send_midi_ccs();
     // The LFOs, last, over everything: the kit, the morph, the macros and the step's locks all
     // decide where the destination sits, and the LFO moves it about there (dsp/lfo.hpp).
     run_lfos(frames, clock_now.running, clock_now.position, clock_now.fraction);
@@ -2286,6 +2358,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     publish_playheads();
 
+    // Every MIDI gate is a block nearer its end.
+    midi_out_.end_block(frames);
+
     // Publish for the UI. Relaxed stores of single words: the UI only ever wants the newest.
     const enaga::clock::State clock = enaga::clock::state();
     status_.tick.store(clock.position, std::memory_order_relaxed);
@@ -2304,6 +2379,67 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     const float scaled = peak * 1000.0f;
     status_.peak_milli.store(uint16_t(scaled > 65535.0f ? 65535.0f : scaled),
                              std::memory_order_relaxed);
+}
+
+// --- MIDI out ---------------------------------------------------------------
+
+bool Engine::EnagaMidi::send(const uint8_t *bytes, uint32_t count) {
+    return enaga::midi::send(bytes, count);
+}
+
+uint32_t Engine::midi_gate(int track, uint32_t gate_frames) const {
+    if (gate_frames > 0) return gate_frames;
+    // One step, the length a step with no gate of its own is drawn with. Index 8 of
+    // core/timing.hpp's table is 16 sixteenths: one step whatever the track's speed.
+    const uint32_t step = gate_frames_for(track, kMidiDefaultLength);
+    // Before the clock has reported a tempo there is no step to measure, so a tenth of a second.
+    return step > 0 ? step : uint32_t(rate_ * 0.1f);
+}
+
+void Engine::send_midi_notes(int track, const uint8_t *notes, int count, uint8_t velocity,
+                             uint32_t frame, uint32_t gate) {
+    const uint8_t channel = project_.settings.midi_out[track];
+    if (channel == kMidiOutOff) return;
+    for (int i = 0; i < count; i++) {
+        midi_out_.note_on(midi_sink_, track, channel, notes[i], velocity, frame, gate);
+    }
+}
+
+void Engine::send_midi_ccs() {
+    for (int t = 0; t < kTracks; t++) send_midi_ccs(t);
+}
+
+void Engine::send_midi_ccs(int t) {
+    const uint8_t channel = project_.settings.midi_out[t];
+    if (machine_id_[t] != uint8_t(MachineId::midi) || channel == kMidiOutOff || muted_[t]) return;
+    if (!cc_known_[t]) {
+        // The values as they stand become the reference; only a MOVE is sent.
+        for (int p = 0; p < kParams; p++) cc_sent_[t][p] = effective_[t].v[p];
+        cc_known_[t] = true;
+        return;
+    }
+    for (int p = 0; p < kParams; p++) {
+        const uint8_t cc = MidiMachine::cc_for(p);
+        const uint8_t value = effective_[t].v[p];
+        if (cc == 0 || value == cc_sent_[t][p]) continue;
+        uint8_t bytes[3];
+        midi_message(bytes, 0xB0u, channel, cc, value);
+        // Remembered only once it has left: a full queue is retried next block with the newest
+        // value, which is all a CC needs.
+        if (midi_sink_.send(bytes, 3)) cc_sent_[t][p] = value;
+    }
+}
+
+void Engine::midi_all_notes_off() {
+    bool done[kMidiChannels + 1] = {};
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t channel = project_.settings.midi_out[t];
+        if (channel == kMidiOutOff || channel > kMidiChannels || done[channel]) continue;
+        done[channel] = true;
+        uint8_t bytes[3];
+        midi_message(bytes, 0xB0u, channel, kMidiAllNotesOff, 0);
+        midi_sink_.send(bytes, 3);   // best effort: the tracked note-offs went first
+    }
 }
 
 // --- streaming ------------------------------------------------------------------
