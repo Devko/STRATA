@@ -256,8 +256,9 @@ struct ProjectSettings {
     // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out, and the
     // kill EQ's three bands at their flat (bypassed) centre.
     uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64};
-    // The kill EQ's kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. Saved, like the live
-    // mutes, so a set comes back the way it was left. Stored after the master bytes.
+    // The kill EQ's kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. Live only: PROJECT.BIN
+    // keeps their byte, after the master bytes, but writes it as 0 and ignores it on read
+    // (Roland, 2026-11-22), so a project never opens with a band killed.
     uint8_t eq_kills = 0;
 };
 

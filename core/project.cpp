@@ -473,7 +473,10 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     // The sends and the master, as the encoder bytes they are everywhere but inside the mixer.
     for (int i = 0; i < kSendFieldsV1; i++) w.u8(s.sends[i]);
     for (int i = 0; i < kMasterFields; i++) w.u8(s.master[i]);
-    w.u8(s.eq_kills);
+    // The kill switches are a performance move and are NOT saved (Roland, 2026-11-22): a
+    // project saved or autosaved with LOW killed came back with no bass. The byte stays, as 0,
+    // so the layout an older build reads is unchanged.
+    w.u8(0);
     for (int i = kSendFieldsV1; i < kSendFields; i++) w.u8(s.sends[i]);
 
     w.u8(s.live_mutes);
@@ -624,8 +627,10 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         const int master_fields = has_eq ? kMasterFields : kMasterFieldsV1;
         for (int i = 0; i < master_fields; i++) s.master[i] = clamp_u8(r.u8(), 0, 127);
         for (int i = master_fields; i < kMasterFields; i++) s.master[i] = defaults.master[i];
-        // Only the three switch bits mean anything.
-        s.eq_kills = has_eq ? uint8_t(r.u8() & 0x7u) : defaults.eq_kills;
+        // The switch byte is skipped: kills are not saved, and a file from before that decision
+        // may hold some. A project always opens with every band in.
+        if (has_eq) (void)r.u8();
+        s.eq_kills = defaults.eq_kills;
         // The ambient modes, after the switches; an older file is classic on both sends.
         for (int i = kSendFieldsV1; i < kSendFields; i++) {
             s.sends[i] = has_ambient ? clamp_u8(r.u8(), 0, 127) : defaults.sends[i];
