@@ -965,6 +965,30 @@ scene or knob really did move: those prepare as before.
 | U4 | Delay FBK at max, TIM 1/1, one hit, then silence | LOAD stays up while the tail rings and drops when it ends |
 | U5 | Load a 15 s 96 kHz stereo WAV (`unit-test/STRATA_1.WAV` in the project files; `SWEEP_30S_96K.WAV`, 30 s, now loads as well) | seconds to playable; whether the screen or keys stall during it |
 
+### MIDI out (after v0.1, 2026-11-22)
+
+**Not measured yet: no emulator or device toolchain in the session that built it.** Owed:
+`tests/scenario_midi.sh` with cl6x and with `ENAGA_TI_CGT=none`, on the PC (UNIT_CHECKLIST, "On the
+PC"), and section 8c's LOAD on the unit.
+
+What it adds to `audio()`, all control rate and none of it in a `*.ti.c` loop:
+
+- `MidiOut::begin_block` and `end_block`: two passes over 64 slots of 8 bytes, every block.
+- per trig on a track with a channel: one `enaga::midi::send` of 3 bytes per note (a chord is up
+  to six), and a scan of the 64 slots for the same pitch.
+- per block, for each MID track with a channel: 8 compares of its CC slots, a send when one moved.
+- **MID itself renders nothing** and reports `active() == false`, so the mixer skips the track:
+  no machine render, no insert chain, no prepare. A part moved from VA POLY to MID frees its
+  voices (2.16 points each with cl6x) and its chain.
+
+Estimate: well under 0.1 point with eight MIDI tracks, against the 2-4 points one sustaining
+track costs. The timing is the real limit, not the CPU: a note leaves in the block its step falls
+in (up to 1.33 ms early, because sends carry no timestamp), and DIN takes 0.96 ms a 3-byte
+message, so a six-note chord's last note leaves about 6 ms after its first.
+
+Memory: `MidiOut` 512 bytes and the CC memo 136 bytes in `Engine`; MIDI IN's held-note map 2 KiB
+in the app; MID adds 8 bytes (a vtable pointer) per track to the machine pool. All bss.
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |

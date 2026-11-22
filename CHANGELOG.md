@@ -32,6 +32,12 @@ with a unit can play it and report back. Release notes: [docs/release/v0.1.0.md]
 - **Performance:** seven performance pads (FILL, REPEAT, MUTE, SCENE A, SCENE B, THROW, MUTATE),
   scenes with a morph between them, four macros, mute states, beat repeat, delay and reverb throws,
   seeded mutation you can keep or revert, pad pressure, and resampling the output to a file or a track.
+- **MIDI out per track:** any track can send its notes (steps, chords, ratchets, pads, KEYS, MIDI
+  in) on a channel set on MACHINE's encoder B, with a note-off for every note, including on mute
+  and STOP; the second STOP and FUNC+STOP add All Notes Off. A ninth machine, **MID**, plays
+  nothing itself and sends its SRC and AMP knobs as CCs.
+- **MIDI in:** notes are held until their note-off, CC 16-31 set the track's parameters, and a
+  program change on the unit's MIDI channel queues a pattern.
 - **Sync:** follows the unit's clock (internal, MIDI clock or SYNC IN), chosen in the Enaga menu.
   Under an external clock STRATA refuses tempo edits and follows the transport.
 - **Factory project**, on first start and for every NEW project: a techno kit at 130 BPM in
@@ -48,4 +54,7 @@ with a unit can play it and report back. Release notes: [docs/release/v0.1.0.md]
   the quietest sounding voice is cut with a short fade. The number is provisional.
 - MIDI clock, SYNC in and out, and USB MIDI are Enaga features that STRATA may be the first app to
   use on a unit. Expect rough edges there.
+- MIDI out on Enaga 0.2.0: with USB connected to a computer that is not reading the SmplTrek's
+  MIDI port, the MIDI OUT jack stops too. Enaga fixed it after 0.2.0 (`192f03f`); until a firmware
+  release has it, unplug USB when driving gear from the jack.
 - The Lofi-12 XT and CyDrums are the same board, but STRATA has not run on either.
