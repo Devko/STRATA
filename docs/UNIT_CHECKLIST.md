@@ -859,3 +859,22 @@ folds back as audible tones. It costs main-loop time at load, estimated and not 
 - [ ] Load a 96 kHz sweep that runs past 24 kHz and play it. Nothing should come back down as a
       falling tone after the sweep passes 24 kHz.
 - [ ] A 44.1 kHz file must sound exactly as before: it is not filtered.
+
+## Screen layout (first boot showed overlapping text)
+
+The first boot on a unit showed text drawn over other text and over the bars. The host suite now
+records every string the app draws and holds every screen to the font's real metrics (5 x 7
+glyphs, 6-pixel advance, 21 characters a line, the font's character set): no string may cross
+another, run off the screen, or partly cover a bar (`tests/test_ui.cpp`, "the screen's layout").
+What it cannot judge is whether the result reads well on the OLED.
+
+- [ ] GRID: the four encoder slots at the bottom show the name over the value, four clean
+      columns, the fourth fully on screen. The track line ("T1 ... X3/4") ends inside the screen.
+- [ ] EDIT: each row reads "A CUT 064" with its bar; the title names the machine; the hint
+      "F1+EDIT: MACHINE" is legible.
+- [ ] PERFORM: the macro bars stop above the two hint lines; the selected macro shows as ">A".
+- [ ] PROJECT: the KEY line sits below the 16 pattern slots, not through the last row; an
+      unsaved project says UNSAVED on the second line.
+- [ ] MACHINE: the kit reads as two lines of four; SETUP's three hint lines have no '?' in them.
+- [ ] The dim greys (2-4) used for empty steps and bar backgrounds are visible on the OLED but
+      clearly darker than text. The emulator cannot tell us this.
