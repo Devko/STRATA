@@ -298,6 +298,81 @@ void Storage::request_reload() {
     load_autosave_ = false;
     load_pending_ = true;
     new_pending_ = false;
+    open_pending_ = false;         // the latest ask wins: this one reads the current name
+}
+
+namespace {
+
+bool name_char(char c) {
+    return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '-' || c == '+' ||
+           c == '.' || c == '#' || c == '!';
+}
+
+void copy_name(char *out, const char *name, int max) {
+    int i = 0;
+    for (; name[i] != '\0' && i < max - 1; i++) out[i] = name[i];
+    out[i] = '\0';
+}
+
+bool same_name(const char *a, const char *b) {
+    // FAT compares names without regard to case, so two names differing only in case are one
+    // folder.
+    for (int i = 0;; i++) {
+        char x = a[i], y = b[i];
+        if (x >= 'a' && x <= 'z') x = char(x - 'a' + 'A');
+        if (y >= 'a' && y <= 'z') y = char(y - 'a' + 'A');
+        if (x != y) return false;
+        if (x == '\0') return true;
+    }
+}
+
+}  // namespace
+
+bool Storage::valid_name(const char *name) {
+    if (name == nullptr || name[0] == '\0' || name[0] == ' ' || name[0] == '.') return false;
+    int n = 0;
+    for (; name[n] != '\0'; n++) {
+        // Lower case too: a folder a PC made, which FAT will find whatever its case.
+        char c = name[n];
+        if (c >= 'a' && c <= 'z') c = char(c - 'a' + 'A');
+        if (!name_char(c)) return false;
+    }
+    return n < kNameBytes;
+}
+
+bool Storage::projects_folder(char *out, uint32_t max) const {
+    if (max == 0) return false;
+    char *p = out;
+    const char *end = out + max - 1;
+    append_text(p, enaga::files::data_folder(), end);
+    append_text(p, "/PROJECTS", end);
+    if (p >= end) return false;
+    *p = '\0';
+    return true;
+}
+
+bool Storage::request_open(const char *name) {
+    if (!valid_name(name)) return false;
+    copy_name(open_name_, name, kNameBytes);
+    open_pending_ = true;
+    load_autosave_ = false;
+    load_pending_ = true;
+    new_pending_ = false;
+    return true;
+}
+
+bool Storage::request_save_as(const char *name) {
+    if (!valid_name(name)) return false;
+    if (!same_name(name, name_)) {
+        // A new folder: every file is written (`project_complete_`), and until that save lands
+        // the screen says UNSAVED, because nothing of this project is under this name yet.
+        copy_name(name_, name, kNameBytes);
+        project_complete_ = false;
+        project_dirty_ = kit_dirty_ = perform_dirty_ = true;
+        for (int b = 0; b < kBanks; b++) bank_dirty_[b] = true;
+    }
+    request_save();
+    return true;
 }
 
 void Storage::request_new() {
@@ -311,6 +386,7 @@ void Storage::request_new() {
     // The latest of a new project and a reload is the one the user meant.
     new_pending_ = true;
     load_pending_ = false;
+    open_pending_ = false;
 }
 
 void Storage::start_new() {
@@ -348,6 +424,10 @@ void Storage::start_new() {
         append_text(out, "NEW", end);
         append_number(out, uint32_t(next), end);
         *out = '\0';
+        // And it is the name the next start uses, so an autosave of this project is not opened
+        // under the old one -- whose folder the next save would then overwrite with it. Written
+        // to the card with the next save or autosave, which both save the settings.
+        settings_.set(kKeyProject, name_);
 
         // Every track goes through the swap, so the previous project's samples come off their
         // tracks without anything writing over memory a voice is reading. Not pool_.reset(),
@@ -455,7 +535,7 @@ void Storage::on_card(bool usable) {
         sample_track_ = -1;
     }
     job_ = Job::idle;
-    save_pending_ = autosave_pending_ = load_pending_ = false;
+    save_pending_ = autosave_pending_ = load_pending_ = open_pending_ = opening_ = false;
     kit_scan_pending_ = false;
     sample_queue_ = 0;
     error_ = "NO CARD";
@@ -511,6 +591,22 @@ void Storage::finish_job(const char *error) {
             // project folder -- an autosave says nothing about what is in the project's own.
             // A failed save leaves this alone, so the next one writes everything again.
             if (!autosave_) project_complete_ = true;
+        }
+    }
+
+    // An open that could not read the project's PROJECT.BIN changed nothing in RAM (step_load
+    // stops there), so the project keeps its own name. One that got through is now the project
+    // the next start opens: named in the settings and counted newer than any autosave, which
+    // still holds the project that was left.
+    if (job_ == Job::load && opening_) {
+        opening_ = false;
+        if (error != nullptr) {
+            copy_name(name_, kept_name_, kNameBytes);
+        } else {
+            save_seq_++;
+            settings_.set(kKeyProjectSeq, int32_t(save_seq_));
+            settings_.set(kKeyProject, name_);
+            settings_.save();
         }
     }
 
@@ -669,12 +765,20 @@ void Storage::service() {
         // Under an external clock `stop()` returns false and the load is refused, which is
         // CLAUDE.md's rule about handling the refusal rather than loading anyway.
         if (enaga::clock::running() && !enaga::clock::stop()) {
-            load_pending_ = false;
+            load_pending_ = open_pending_ = false;
             error_ = "EXT CLOCK";
             return;
         }
         load_pending_ = false;
         autosave_ = load_autosave_;
+        // An open reads the other project's folder: the name changes now, for project_path, and
+        // goes back in finish_job if that folder turns out not to hold a project.
+        opening_ = open_pending_;
+        open_pending_ = false;
+        if (opening_) {
+            copy_name(kept_name_, name_, kNameBytes);
+            copy_name(name_, open_name_, kNameBytes);
+        }
         begin_job(Job::load);
         return;
     }
