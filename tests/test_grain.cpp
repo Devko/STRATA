@@ -1898,3 +1898,83 @@ TEST(grain_a_stereo_source_whose_channels_cancel_is_exactly_silent) {
     }
     CHECK(loudest > 0.05f);
 }
+
+// --- gaps a mutation run found (docs/MUTATION.md) -------------------------------------------
+
+TEST(grain_a_new_sample_s_rate_takes_effect_without_a_prepare) {
+    // The engine prepares a machine only when its parameters change (docs/BUDGET.md,
+    // "Optimization review"), so a sample swapped in under unchanged knobs has to bring its own
+    // read step with it.
+    fill_sine(g_mono, kSrcFrames, 1, 300.0f, kRate, 0.6f);
+    Granular g;
+    g.init(kRate);
+    g.prepare(plain());
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, 24000.0f);
+    CHECK_NEAR(g.read_step(), 0.5f, 1e-5);
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, 96000.0f);
+    CHECK_NEAR(g.read_step(), 2.0f, 1e-5);
+}
+
+TEST(grain_before_the_first_prepare_it_plays_the_mid_settings) {
+    // What init() promises: a trigger before any prepare() plays every knob at 64, POS included.
+    fill_sine(g_mono, kSrcFrames, 1, 440.0f, kRate, 0.6f);
+    for (int i = kSrcFrames / 2; i < kSrcFrames; i++) g_mono[i] = int16_t(g_mono[i] / 4);
+    static Granular a, b;
+    a.init(kRate);
+    b.init(kRate);
+    b.prepare(uniform(64));
+    a.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    b.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    a.trigger(hit());
+    b.trigger(hit());
+    clear(g_out, 24 * kBlk);
+    clear(g_other, 24 * kBlk);
+    for (int k = 0; k < 24; k++) {
+        a.render_add(g_out + k * kBlk, kBlk);
+        b.render_add(g_other + k * kBlk, kBlk);
+    }
+    CHECK(peak(g_out, 24 * kBlk) > 0.0f);
+    int different = 0;
+    for (int i = 0; i < 24 * kBlk; i++) different += g_out[i] != g_other[i];
+    CHECK_EQ(different, 0);
+}
+
+TEST(grain_accepts_a_sample_of_exactly_the_largest_size) {
+    // kMaxFrames is a size it takes, not the first it refuses. Nothing is rendered, so the
+    // buffer behind the pointer never has to be that long.
+    Granular g;
+    g.init(kRate);
+    g.set_sample(g_mono, uint32_t(Granular::kMaxFrames), 1, kRate);
+    g.trigger(hit());
+    CHECK(g.active());
+    g.set_sample(g_mono, uint32_t(Granular::kMaxFrames) + 1u, 1, kRate);
+    g.trigger(hit());
+    CHECK(!g.active());
+}
+
+TEST(grain_a_retrigger_cancels_a_release_waiting_for_the_last_one) {
+    // A key up before its note has started marks that note to release on start; a new trig
+    // that takes the voice is a new note, and holds.
+    fill_sine(g_mono, kSrcFrames, 1, 440.0f, kRate, 0.6f);
+    static Granular once, twice;
+    const TrackParams p = plain();
+    Granular *const both[] = {&once, &twice};
+    for (Granular *g : both) {
+        g->init(kRate);
+        g->set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+        g->prepare(p);
+    }
+    once.trigger(hit(Granular::kRootNote, 127, 200));
+    twice.trigger(hit(Granular::kRootNote, 127, 200));
+    twice.release(Granular::kRootNote);
+    twice.trigger(hit(Granular::kRootNote, 127, 200));
+    clear(g_out, kCapture);
+    clear(g_other, kCapture);
+    const int blocks = kCapture / kBlk;
+    render_blocks(once, p, g_out, blocks);
+    render_blocks(twice, p, g_other, blocks);
+    CHECK(peak(g_out + kCapture - 4800, 4800) > 0.05f);
+    int different = 0;
+    for (int i = 0; i < kCapture; i++) different += g_out[i] != g_other[i];
+    CHECK_EQ(different, 0);
+}
