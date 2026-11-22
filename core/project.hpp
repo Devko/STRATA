@@ -135,7 +135,14 @@ struct KitTrack {
     uint8_t machine = 0;                        // which machine the track hosts
     float level = 1.0f;                         // the mixer fader
     char sample[kSamplePathBytes] = {};         // empty when the track plays no file
+    // SLC AUTO: 1 cuts a SAMPLE track's slices at the hits found in its sample
+    // (core/onsets.hpp), 0 into equal slices. Not a parameter, so no lock, scene or LFO moves
+    // it: it says what kind of sample this is, like the path beside it.
+    uint8_t slice_mode = 0;
 };
+
+constexpr uint8_t kSliceEqual = 0;
+constexpr uint8_t kSliceAuto = 1;
 
 struct Kit {
     KitTrack tracks[kTracks];
@@ -305,6 +312,9 @@ constexpr uint16_t kSectionKitTracks = 1;
 // LFO off (all four bytes 0), which is also what zeroed bytes mean to dsp/lfo.hpp. The version
 // does not move: no existing byte changed its meaning.
 constexpr uint16_t kSectionKitLfo = 2;
+// SLC AUTO, one byte per track (KitTrack::slice_mode). Optional on read like the LFO: a KIT.BIN
+// from before it loads with every track slicing equally, which is what slicing always did.
+constexpr uint16_t kSectionKitSlices = 3;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

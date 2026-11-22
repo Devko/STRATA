@@ -34,13 +34,16 @@
 //         1   1  the scene in morph slot A
 //         2   1  the scene in morph slot B
 //
-// KIT.BIN, 1,076 bytes, one section.
+// KIT.BIN, 1,140 bytes, three sections (1,076 and one before the LFO, 1,120 and two before
+// SLC AUTO; both still load).
 //
 //     tracks (id 1), 8 x 131 bytes
 //         0  16  the 16 parameters, 0..127
 //        16   1  machine
 //        17   2  mixer fader, thousandths of unity
 //        19 112  sample path, NUL-terminated
+//     lfo (id 2), 8 x 4 bytes: parameters 16-19
+//     slices (id 3), 8 x 1 byte: KitTrack::slice_mode, 0 equal, 1 AUTO
 //
 // BANK_x.BIN, one section holding 16 patterns, each one `pattern_write`'s own container back to
 // back. The patterns are the section's bytes, so the bank's CRC covers them as well as its own
@@ -322,9 +325,9 @@ static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
-constexpr uint32_t kKitSections = 2;
-// The second, the LFO, is optional on read: see kSectionKitLfo.
-constexpr uint32_t kKitOptionalSections = 1;
+constexpr uint32_t kKitSections = 3;
+// The second and third, the LFO and SLC AUTO, are optional on read: see kSectionKitLfo.
+constexpr uint32_t kKitOptionalSections = 2;
 constexpr uint32_t kKitTrackBytes =
     uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
@@ -332,7 +335,9 @@ constexpr uint32_t kKitLfoBytes = uint32_t(kKitLfoParams) * uint32_t(kTracks);
 constexpr uint32_t kKitTableBytes = kKitSections * kSectionEntryBytes;
 constexpr uint32_t kKitTracksOffset = kKitTableBytes;
 constexpr uint32_t kKitLfoOffset = kKitTracksOffset + kKitTracksBytes;
-constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitLfoOffset + kKitLfoBytes;
+constexpr uint32_t kKitSlicesBytes = uint32_t(kTracks);
+constexpr uint32_t kKitSlicesOffset = kKitLfoOffset + kKitLfoBytes;
+constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitSlicesOffset + kKitSlicesBytes;
 static_assert(kKitSoundParams == 16, "KIT.BIN's track section has carried 16 parameters since M4");
 
 // --- BANK_x.BIN sizes -----------------------------------------------------
@@ -632,6 +637,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
     const Section sections[kKitSections] = {
         {kSectionKitTracks, kKitTracksOffset, kKitTracksBytes},
         {kSectionKitLfo, kKitLfoOffset, kKitLfoBytes},
+        {kSectionKitSlices, kKitSlicesOffset, kKitSlicesBytes},
     };
 
     Writer w(buffer, capacity);
@@ -647,6 +653,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
     for (int t = 0; t < kTracks; t++) {
         for (int p = kKitSoundParams; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
     }
+    for (int t = 0; t < kTracks; t++) w.u8(kit.tracks[t].slice_mode);
 
     if (!w.ok() || w.size() != kKitTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kKitTotalBytes, written);
@@ -658,7 +665,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
         return why;
     };
 
-    const uint16_t wanted[kKitSections] = {kSectionKitTracks, kSectionKitLfo};
+    const uint16_t wanted[kKitSections] = {kSectionKitTracks, kSectionKitLfo, kSectionKitSlices};
     uint32_t offset[kKitSections] = {};
     uint32_t length[kKitSections] = {};
     const SerializeResult found = find_sections(buffer, size, kKitVersion, wanted, kKitSections,
@@ -667,6 +674,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (length[0] < kKitTracksBytes) return refuse(SerializeResult::malformed);
     // Present but short is damage; absent is a kit from before the LFO.
     if (offset[1] != 0 && length[1] < kKitLfoBytes) return refuse(SerializeResult::malformed);
+    if (offset[2] != 0 && length[2] < kKitSlicesBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -696,16 +704,26 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
         for (int t = 0; t < kTracks; t++) {
             for (int p = kKitSoundParams; p < kKitParams; p++) kit.tracks[t].params[p] = 0;
         }
-        return SerializeResult::ok;
-    }
-    if (!r.seek(kHeaderBytes + offset[1])) return refuse(SerializeResult::malformed);
-    for (int t = 0; t < kTracks; t++) {
-        for (int p = kKitSoundParams; p < kKitParams; p++) {
-            kit.tracks[t].params[p] = clamp_u8(r.u8(), 0, kParamMax);
+    } else {
+        if (!r.seek(kHeaderBytes + offset[1])) return refuse(SerializeResult::malformed);
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = kKitSoundParams; p < kKitParams; p++) {
+                kit.tracks[t].params[p] = clamp_u8(r.u8(), 0, kParamMax);
+            }
         }
+        if (!r.ok()) return refuse(SerializeResult::truncated);
     }
-    if (!r.ok()) return refuse(SerializeResult::truncated);
 
+    // SLC AUTO. Absent is a kit from before it: equal slices everywhere, set explicitly for the
+    // reason the LFO's absence is. Anything but 1 is equal, so a damaged byte slices as before.
+    for (int t = 0; t < kTracks; t++) kit.tracks[t].slice_mode = kSliceEqual;
+    if (offset[2] != 0) {
+        if (!r.seek(kHeaderBytes + offset[2])) return refuse(SerializeResult::malformed);
+        for (int t = 0; t < kTracks; t++) {
+            kit.tracks[t].slice_mode = r.u8() == kSliceAuto ? kSliceAuto : kSliceEqual;
+        }
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
     return SerializeResult::ok;
 }
 
