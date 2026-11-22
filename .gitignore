@@ -18,3 +18,7 @@ desktop.ini
 
 # Agent worktrees: a subagent's own checkout, never project content.
 .claude/worktrees/
+
+# Python bytecode (tools/*.py, tests/*.py run without -B)
+__pycache__/
+*.pyc
