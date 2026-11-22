@@ -270,7 +270,7 @@ morph is continuous, so crossfading the two has no single sensible meaning. Revi
 
 | Risk | Spec's rank | Revised |
 | --- | --- | --- |
-| cl6x licence / availability | "release blocked or slower build" | **Highest.** The 60% target needs its 2.2×. Check TI's redistribution terms now |
+| cl6x licence / availability | "release blocked or slower build" | **Downgraded, 2026-11-22.** The AVAILABILITY half stands: the 60% target needs cl6x's 2.2x. The LICENCE half rested on a premise nobody checked and that does not survive reading the build -- no TI code, no TI headers and no TI run-time library reach `APP.ENA`, only instruction sequences. docs/BUDGET.md has the table and the one file still worth reading |
 | 8 insert chains + master cost | not identified | **High.** The largest unmeasured term. Measure at M1, not M2 |
 | Enaga's app interface changes before 1.0 | high | Unchanged. The ABI is "provisional until 1.0"; keep Enaga calls behind an adapter in `app/` |
 | MIDI/SYNC unverified on a unit | — | **New.** Implemented but never run on hardware. STRATA may be the first to exercise it; budget debugging time and report upstream |

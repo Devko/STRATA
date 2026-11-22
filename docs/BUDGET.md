@@ -374,6 +374,45 @@ the 8-track architecture holds. See `docs/PLAN.md` M0.5.
 Candidates, cheapest first: mono send busses, a shared filter across the drum tracks, lo-fi out
 of the fixed chain into an optional stage, or a cheaper reverb.
 
+### The cl6x licence question, examined — and the premise was wrong
+
+docs/SPEC.md's risk table says "TI cl6x licence for distributing built code" blocks "the headline
+claim, not just a release date", docs/REVIEW.md rates it the project's **highest** risk, and this
+document has carried it as "still needs a human's reading" since M2. Several sessions, including
+one that repeated it a dozen times in an evening, treated it as established. **Nobody had checked
+it, and the technical premise it rests on is false.**
+
+What `third_party/enaga/tools/build_app.py` actually does with cl6x, read line by line:
+
+| In the shipped `APP.ENA` | Where it comes from | Licence |
+| --- | --- | --- |
+| `dsp/*.ti.c` objects | STRATA's own source, compiled by cl6x | ours |
+| `libenaga_dsp.a` | Enaga's `runtime/dsp/*.c`, compiled by cl6x | MIT |
+| everything else | STRATA and Enaga, compiled by GCC | ours / MIT |
+| `libgcc` | GNU | GPL + Runtime Library Exception |
+| **TI headers** | **none** — all ten `.ti.c`/`dsp/*.c` files include only our own headers and `<enaga/dsp*.h>` | — |
+| **TI run-time support library** | **none** — the link is GNU `ld` with `-nostdlib`, and `build_app.py` then asserts `nm -u` is empty | — |
+
+So the only TI-originated content in the binary is **instruction sequences TI's code generator
+chose from our source**. No TI code, no TI headers, no `rts6740_elf.lib`. That is what a compiler
+is for, and compiler licences restrict redistributing the TOOLS, not their output.
+
+**The inversion worth noticing:** the one third-party library actually linked into `APP.ENA` is
+`libgcc`, and no document here lists it as a risk. Its GPL-with-Runtime-Library-Exception is what
+permits shipping a binary that links it -- the exception exists for exactly this -- but it is a
+real third-party licence in the artefact, where TI's contributes none.
+
+**This is not a legal opinion and it is still unverified.** What is left is a ten-minute read of
+a file that is already on the development machine: TI's installer ships its licence inside
+`~/ti/ti-cgt-c6000_8.5.0.LTS` (a `LICENSE`, `*manifest*` or `license` directory). Read the grant
+clause and look for (1) an explicit right to reproduce and distribute code the tools produce,
+(2) whether that right is conditioned on running on a TI device -- the C6748 satisfies such a
+condition -- and (3) any notice requirement attached to OUTPUT rather than to the tools. A cloud
+session cannot do this: `ti.com` and `software-dl.ti.com` are outside its allowed network.
+
+Until that read happens the honest status is **"unverified, and the reason it was thought to be a
+blocker does not survive looking at the build"** -- not "blocked".
+
 ### M4, M5 and M6 — measured in the emulator, GCC-only (2026-11-21)
 
 A cloud session built the tic6x toolchain from source and ran the emulator, so these are real

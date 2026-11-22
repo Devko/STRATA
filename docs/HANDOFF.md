@@ -5,10 +5,18 @@ tic6x device build and an instruction-counting emulator with no cache model. **N
 project has ever run on the unit**, so no exit criterion involving load or feel is met, whatever
 the numbers say. 193 checklist boxes, none ticked.
 
-The two things that gate everything and cannot be done from here: **boot `build/APP.ENA`**, and
-**answer the cl6x licence question**. VA POLY measures 4.25 points a voice -- 11.3x what SPEC
-budgets for the whole machine -- and whether that passes depends entirely on a 2.2x multiplier
-nobody has been able to run.
+The one thing that gates everything and cannot be done from here: **boot `build/APP.ENA`**. VA
+POLY measures 4.25 points a voice -- 11.3x what SPEC budgets for the whole machine -- and whether
+that passes depends on a 2.2x multiplier nobody has been able to run.
+
+**The cl6x licence question is no longer one of the two.** It was carried as the project's highest
+risk for months and the premise turned out to be false: the build puts no TI code, no TI headers
+and no TI run-time library in `APP.ENA` -- cl6x compiles our own and Enaga's source and GNU `ld`
+links it with `-nostdlib`. Only instruction sequences remain, which is what a compiler is for.
+docs/BUDGET.md has the file-by-file table. What is left is a ten-minute read of the licence TI's
+installer already put in `~/ti/ti-cgt-c6000_8.5.0.LTS`, and it is a confirmation rather than a
+gate. Worth knowing: the one third-party library actually in the binary is `libgcc`, which no
+document had listed as a risk at all.
 
 ## Previously: M4 and M5, built and run
 
