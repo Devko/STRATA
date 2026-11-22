@@ -524,6 +524,10 @@ const Expect kTable[] = {
     {Cmd::resample_arm, 0u, "resample_arm"},
     {Cmd::resample_cancel, 0u, "resample_cancel"},
     {Cmd::resample_release, 0u, "resample_release"},
+
+    // Which machine a track hosts is a KIT field -- KitTrack::machine, on disk since M4 -- which
+    // is why machine switching needed no change to the file format.
+    {Cmd::set_machine, kDirtyKit, "set_machine"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:

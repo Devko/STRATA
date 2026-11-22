@@ -88,6 +88,9 @@ bool mutates_pattern(Cmd cmd) {
 bool mutates_kit(Cmd cmd) {
     switch (cmd) {
         case Cmd::set_param:
+        // Which machine a track hosts is a kit field (KitTrack::machine) and has been since M4,
+        // which is the whole reason machine switching needed no file-format change.
+        case Cmd::set_machine:
         case Cmd::set_track_level:
         case Cmd::clear_sample:
         case Cmd::set_sample:

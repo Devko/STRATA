@@ -70,6 +70,15 @@
 #include "project.hpp"
 
 namespace strata {
+const char *machine_name(uint8_t id) {
+    // Upper case and three characters, because that is what the device font draws and what every
+    // other name in this project is (docs/ENAGA_API.md). Indexed by MachineId, so the order here
+    // is the order on disk.
+    static const char *const names[] = {"KCK", "SNR", "HAT", "PRC",
+                                        "SMP", "GRN", "MNO", "PLY"};
+    return id < uint8_t(MachineId::count) ? names[id] : "---";
+}
+
 namespace {
 
 // --- clamps ---------------------------------------------------------------
@@ -300,6 +309,21 @@ void kit_clear(Kit &kit) {
     // One track at a time: `kit = Kit{}` would be a kilobyte of temporary, and the same habit
     // one struct up would be a megabyte (project.hpp).
     for (int t = 0; t < kTracks; t++) kit.tracks[t] = KitTrack{};
+
+    // And the eight machines docs/SPEC.md's default kit assigns, rather than eight of machine 0.
+    //
+    // This matters now that `KitTrack::machine` is honoured: a track hosts what its kit names, so
+    // a kit of zeroes is eight KICKs and a new project would have no bass, no chord and no
+    // sampler until the user switched seven tracks by hand. A NEW PROJECT SHOULD BE PLAYABLE.
+    //
+    // It is here rather than in app/ because it is a property of the file: a KIT.BIN written by
+    // this build and read by the next one has to mean the same thing, and "what a blank kit
+    // means" is as much part of the format as the field's domain is.
+    static constexpr MachineId kDefaultMachines[kTracks] = {
+        MachineId::kick,  MachineId::snare,   MachineId::hat,     MachineId::hat,
+        MachineId::perc,  MachineId::va_mono, MachineId::va_poly, MachineId::sample,
+    };
+    for (int t = 0; t < kTracks; t++) kit.tracks[t].machine = uint8_t(kDefaultMachines[t]);
 }
 
 }  // namespace

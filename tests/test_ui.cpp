@@ -1327,3 +1327,97 @@ TEST(ui_the_resample_gesture_records_and_writes_through_the_panel_alone) {
     CHECK(app_storage().last_error() == nullptr);
     CHECK_EQ(app_storage().last_take_name(), "STRATA_1.WAV");   // and the screen can say so
 }
+
+// --- machine switching ----------------------------------------------------------------------
+//
+// docs/SPEC.md's key table gives F1 + F8 to "Kit and machine select", and docs/PLAN.md deferred
+// the whole thing because "a track switching to VA POLY would want six voices it does not
+// currently own". That turned out to be a memory question with a measured answer: every machine
+// of every track is 72.6 KiB, so every track has one of each and switching is a pointer swap.
+//
+// The thing this finally makes true is that GRAIN is reachable at all. It has been in the tree,
+// host-tested and mutation-tested, with no way to hear it -- the default kit fills all eight
+// tracks and nothing could free a slot.
+
+TEST(ui_f1_f8_switches_a_tracks_machine_and_grain_is_reachable_at_last) {
+    Strata &app = fresh();
+
+    // F8 alone is still EDIT, which is the other half of the key.
+    key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_F8, true);
+    app.on_key(ENAGA_KEY_F8, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+
+    // The default kit, by id: KICK SNARE HAT HAT PERC MNO PLY SMP.
+    const MachineId expected[kTracks] = {
+        MachineId::kick,  MachineId::snare,   MachineId::hat,     MachineId::hat,
+        MachineId::perc,  MachineId::va_mono, MachineId::va_poly, MachineId::sample,
+    };
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(app_engine().machine_id(t)), int(expected[t]));
+    }
+
+    // Walk track 1 to GRAIN. The encoder posts on every click, so each one is a real change.
+    const int steps = int(MachineId::grain) - int(MachineId::kick);
+    for (int i = 0; i < steps; i++) {
+        app.on_encoder(0, +1);
+        pump();
+    }
+    CHECK_EQ(int(app_engine().machine_id(0)), int(MachineId::grain));
+    CHECK_EQ(machine_name(app_engine().machine_id(0)), "GRN");
+
+    // And it is the machine the engine renders: a trig on that track makes a GRAIN sound.
+    key(ENAGA_KEY_F4);                               // back to GRID so a STEP key edits
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    CHECK(pump(40) > 0.0f);
+
+    // The kit holds it, so it survives a save: KitTrack::machine has been on disk since M4 and
+    // this is the first thing to honour it.
+    CHECK_EQ(int(app_engine().project().kit.tracks[0].machine), int(MachineId::grain));
+    CHECK(app_storage().dirty());
+}
+
+TEST(ui_switching_a_machine_silences_the_one_it_leaves) {
+    // The machine being left will never be rendered again, so it cannot release its own tail --
+    // a voice left sounding in an object nothing calls is a note that never ends and never shows
+    // up in the voice count either.
+    Strata &app = fresh();
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    CHECK(pump(2) > 0.01f);                          // the kick is ringing
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_F8, true);
+    app.on_key(ENAGA_KEY_F8, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    app.on_encoder(0, +1);                           // KICK -> SNARE, mid-note
+    pump();
+
+    // Nothing of the kick is left. The master reverb still rings, so what is checked is that the
+    // machine itself is idle rather than that the output is silent.
+    CHECK(app_engine().machine(0) != nullptr);
+    CHECK(!app_engine().machine(0)->active());
+    CHECK_EQ(int(app_engine().machine_id(0)), int(MachineId::snare));
+}
+
+TEST(ui_a_machine_id_this_build_does_not_have_is_refused) {
+    // The ids are on disk, so a kit from a later build can name a machine this one lacks.
+    // core/project.hpp's rule is that it plays NOTHING rather than being reinterpreted as an
+    // index -- a silent track is recoverable and a wrong pointer is not.
+    Strata &app = fresh();
+    const uint32_t refused = app_engine().status().refused.load(std::memory_order_relaxed);
+    post_cmd(Cmd::set_machine, uint8_t(MachineId::count));
+    pump();
+    CHECK(app_engine().status().refused.load(std::memory_order_relaxed) > refused);
+    CHECK_EQ(int(app_engine().machine_id(0)), int(MachineId::kick));   // unchanged
+    (void)app;
+}

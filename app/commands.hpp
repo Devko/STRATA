@@ -181,6 +181,11 @@ enum class Cmd : uint8_t {
     resample_cancel,
     resample_release,
 
+    // Which machine a track hosts (core/project.hpp's MachineId, which is what KIT.BIN stores).
+    // The audio side swaps the pointer at a block boundary and kills the voices of the machine
+    // being left, because a machine that is no longer rendered cannot release its own tail.
+    set_machine,       // track, a: MachineId
+
     count
 };
 

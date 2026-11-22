@@ -22,6 +22,7 @@
 
 #include "buses.hpp"
 #include "capture.hpp"    // resampling's take buffer
+#include "grain.hpp"      // GRAIN, reachable at last: a track can host any machine
 #include "commands.hpp"
 #include "editops.hpp"
 #include "hat.hpp"
@@ -82,6 +83,11 @@ public:
     // The finished take, for the card to write. Valid from the main context only while
     // `status().resample_state` reads 3, which is the same discipline a project save uses.
     const Capture &capture() const { return capture_; }
+
+    // Which machine a track hosts, as a core/project.hpp machine id. For the screen.
+    uint8_t machine_id(int track) const {
+        return track >= 0 && track < kTracks ? machine_id_[track] : 0;
+    }
 
     // The same buffer, writable, so the card can put a WAV header in the bytes reserved for one.
     // Main context, and only while `status().resample_state` reads 3 -- see dsp/capture.hpp on
@@ -192,14 +198,39 @@ private:
     // the voice-pool question answered (a track switching to VA POLY would want six voices it
     // does not currently own), so for now the assignment is fixed at init and a machine change
     // is a later milestone. Tracks with no machine are silent and cost one compare.
-    Kick kick_;
-    Snare snare_;
-    Hat hat_closed_;
-    Hat hat_open_;
-    Perc perc_;
-    VaMono bass_;
-    VaPoly stab_;      // CHORD: six voices, so a step's chord byte can be heard as a chord
-    Sampler loop_;
+    // EVERY track's own instance of EVERY machine.
+    //
+    // docs/PLAN.md deferred machine switching because "a track switching to VA POLY would want
+    // six voices it does not currently own", and this is the answer: give every track all of
+    // them and point `machines_[t]` at the one its kit names. The question was about memory, so
+    // it was settled by measuring rather than by designing a pool --
+    //
+    //   Kick 1840  Snare 1592  Hat 840  Perc 704  VaMono 384  VaPoly 896  Sampler 928
+    //   Granular 2104  =  9,288 bytes a track, 72.6 KiB for eight
+    //
+    // -- against the 85 MiB this app already takes. A pool would have cost allocation logic, a
+    // failure mode when it ran dry and a reason for a track to be refused a machine, to save
+    // seventy kilobytes.
+    //
+    // What it does NOT solve is the budget: eight tracks of VA POLY is 48 voices at 4.25 points
+    // each (docs/BUDGET.md), which is four times the block. Nothing here prevents that, and
+    // nothing should -- the same is true of eight tracks of anything.
+    struct TrackMachines {
+        Kick kick;
+        Snare snare;
+        Hat hat;
+        Perc perc;
+        VaMono mono;
+        VaPoly poly;
+        Sampler sampler;
+        Granular grain;
+    };
+    TrackMachines pool_[kTracks];
+
+    // The hat choke is a pair, and the pair is tracks 3 and 4 of the DEFAULT kit. Machine
+    // switching makes that an assumption rather than a fact, so it is re-derived on every
+    // change: a closed hat chokes an open one only while both tracks still host a Hat.
+    void rewire_machines();
 
     Machine *machines_[kTracks] = {};
 
@@ -208,6 +239,7 @@ private:
     // fixed at init anyway, so it is simply recorded alongside machines_ there. A track that
     // hosts no Sampler refuses a sample command rather than reinterpreting a pointer.
     Sampler *samplers_[kTracks] = {};
+    uint8_t machine_id_[kTracks] = {};
 
     // And which tracks host a VaPoly, for the same reason and recorded the same way: a chord is
     // several notes on one frame, so `fire` has to know that this track can take them. A track

@@ -411,12 +411,23 @@ TEST(project_init_empties_everything_and_lives_on_a01) {
         for (int p = 0; p < kKitParams; p++) {
             if (g_source.kit.tracks[t].params[p] != 0) kit_set++;
         }
-        if (g_source.kit.tracks[t].machine != 0) kit_set++;
         if (g_source.kit.tracks[t].sample[0] != '\0') kit_set++;
         // The fader's default is unity, not zero: a project that opened silent would look broken.
         CHECK_NEAR(g_source.kit.tracks[t].level, 1.0f, 0.0f);
     }
     CHECK_EQ(kit_set, 0);
+
+    // The MACHINES are not zero, and that is the point. `KitTrack::machine` is honoured now --
+    // a track hosts what its kit names -- so a kit of zeroes would be eight KICKs and a new
+    // project would have no bass, no chord and no sampler until seven tracks were switched by
+    // hand. A blank kit is docs/SPEC.md's default kit instead.
+    const MachineId expected[kTracks] = {
+        MachineId::kick,  MachineId::snare,   MachineId::hat,     MachineId::hat,
+        MachineId::perc,  MachineId::va_mono, MachineId::va_poly, MachineId::sample,
+    };
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_source.kit.tracks[t].machine), int(expected[t]));
+    }
 
     int non_empty = 0, dirty = 0;
     for (int bank = 0; bank < kBanks; bank++) {
@@ -1198,11 +1209,17 @@ TEST(kit_read_refuses_a_damaged_container_and_clears_the_kit) {
         for (int p = 0; p < kKitParams; p++) {
             if (track.params[p] != 0) set++;
         }
-        if (track.machine != 0) set++;
         if (track.sample[0] != '\0') set++;
         if (!(track.level == fresh.level)) set++;
     }
     CHECK_EQ(set, 0);
+
+    // And a refused kit leaves the DEFAULT machines, not eight of machine 0: `kit_clear` is what
+    // a refusal falls back to, and a cleared kit is docs/SPEC.md's default kit (core/project.cpp
+    // says why the file format owns that and not app/).
+    CHECK_EQ(int(g_kit_loaded.tracks[0].machine), int(MachineId::kick));
+    CHECK_EQ(int(g_kit_loaded.tracks[6].machine), int(MachineId::va_poly));
+    CHECK_EQ(int(g_kit_loaded.tracks[7].machine), int(MachineId::sample));
 
     fresh_kit_file();
     poke_u16(g_kit_file, kVersionOffset, uint16_t(kKitVersion + 1));

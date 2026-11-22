@@ -156,7 +156,7 @@ constexpr uint8_t kKeyVelocity = 100;
 // The modes of docs/SPEC.md's function block. F4 = GRID, F7 = MIXER, F8 = EDIT, and the two
 // selection keys under the screen move within whichever mode is showing -- the step page in
 // GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
-enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample };
+enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample, machine };
 
 // How long a take is. docs/SPEC.md: "1, 2, 4 or 8 bars", so these four and nothing between --
 // a resample is a loop and a loop is a power of two bars.
@@ -364,7 +364,16 @@ public:
                 mode_ = shift_ ? Mode::perform : Mode::mixer;
                 leave_mode();
                 break;
-            case ENAGA_KEY_F8:                         // EDIT: the sound pages
+            case ENAGA_KEY_F8:                         // EDIT: the sound pages, or machine select
+                if (shift_) {
+                    // docs/SPEC.md's key table: F1 + F8 is "Kit and machine select". The machine
+                    // half is what M6 needed and now has; a kit BROWSER wants a file list and is
+                    // M7's, so this is the machine select and says so on screen.
+                    mode_ = Mode::machine;
+                    leave_mode();
+                    notice("MACHINE");
+                    break;
+                }
                 mode_ = Mode::edit;
                 leave_mode();
                 break;
@@ -560,6 +569,12 @@ public:
                 selected_ = (selected_ + delta + kTracks) % kTracks;
                 end_gesture();
                 break;
+            case Mode::machine:
+                // The selection keys walk the TRACK, so one hand can go along the eight of them
+                // without leaving the mode -- the same thing they do in KEYS.
+                selected_ = (selected_ + delta + kTracks) % kTracks;
+                end_gesture();
+                break;
             case Mode::resample:
                 // The selection keys walk the DESTINATION: -1 is "the file only", then the eight
                 // tracks. A track that hosts no Sampler is still offered, because which machine
@@ -712,6 +727,18 @@ public:
             macro_position_[encoder] =
                 uint8_t(next < 0 ? 0 : (next > 127 ? 127 : next));
             post(Cmd::set_macro, 0, 0, uint8_t(encoder), macro_position_[encoder]);
+            return;
+        }
+
+        // MACHINE mode's one encoder: A walks the machines this build has. The change is posted
+        // on every click rather than on an OK, because hearing it is the point -- a machine
+        // select you have to confirm is a menu, and docs/SPEC.md's whole argument for this box is
+        // that a change is one gesture.
+        if (mode_ == Mode::machine && encoder == 0) {
+            const int count = int(MachineId::count);
+            const int next = (int(engine_.machine_id(selected_)) + delta) % count;
+            post(Cmd::set_machine, uint8_t(selected_), 0,
+                 uint8_t(next < 0 ? next + count : next));
             return;
         }
 
@@ -1267,6 +1294,7 @@ public:
                 case Mode::perform: draw_perform(canvas); break;
                 case Mode::keys:    draw_keys(canvas); break;
                 case Mode::resample: draw_resample(canvas); break;
+                case Mode::machine: draw_machine(canvas); break;
             }
         }
 
@@ -1601,6 +1629,29 @@ public:
         // in and a part programmed in sound the same.
         post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity);
         record_note(selected_, note, kKeyVelocity);
+    }
+
+    void draw_machine(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        append(out, "MACHINE T");
+        append_number(out, uint32_t(selected_) + 1);
+        append(out, "  ");
+        append(out, machine_name(engine_.machine_id(selected_)));
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        // All eight tracks at once, because the question anyone in this mode is asking is "what
+        // is this kit", not "what is this track".
+        out = line;
+        for (int t = 0; t < kTracks; t++) {
+            append(out, machine_name(engine_.machine_id(t)));
+            if (t != kTracks - 1) *out++ = ' ';
+        }
+        *out = 0;
+        canvas.text(0, 30, line, 10);
+
+        canvas.text(0, 42, "A PICKS, ARROWS WALK TRACKS", 10);
     }
 
     void draw_resample(enaga::Canvas &canvas) {

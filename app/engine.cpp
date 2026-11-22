@@ -34,15 +34,8 @@ static_assert(kKitParams == kParams,
 bool Engine::init(float sample_rate) {
     rate_ = sample_rate;
 
-    // Every allocation in the signal path happens here and nowhere else.
-    kick_.init(rate_);
-    snare_.init(rate_);
-    hat_closed_.init(rate_);
-    hat_open_.init(rate_);
-    perc_.init(rate_);
-    bass_.init(rate_);
-    stab_.init(rate_);
-    loop_.init(rate_);
+    // Every allocation in the signal path happens here and nowhere else. The machines are
+    // initialised below, where the pool is: every track owns one of every machine.
     mixer_.init(rate_);
 
     // Beat repeat's 2-bar ring, 2.93 MiB, here with every other buffer in the signal path.
@@ -62,25 +55,33 @@ bool Engine::init(float sample_rate) {
     // The default techno kit of docs/SPEC.md. Every slot is filled now that VA POLY exists;
     // GRAIN has no track in the default kit and arrives with machine switching. An empty slot
     // would be silent, not a crash.
-    machines_[0] = &kick_;
-    machines_[1] = &snare_;
-    machines_[2] = &hat_closed_;
-    machines_[3] = &hat_open_;
-    machines_[4] = &perc_;
-    machines_[5] = &bass_;
-    machines_[6] = &stab_;     // CHORD, on VA POLY's six voices
-    machines_[7] = &loop_;
+    // Every machine of every track, once, here -- so a kit change later is a pointer swap and
+    // not an allocation (CLAUDE.md: everything is taken in init()).
+    for (int t = 0; t < kTracks; t++) {
+        pool_[t].kick.init(rate_);
+        pool_[t].snare.init(rate_);
+        pool_[t].hat.init(rate_);
+        pool_[t].perc.init(rate_);
+        pool_[t].mono.init(rate_);
+        pool_[t].poly.init(rate_);
+        pool_[t].sampler.init(rate_);
+        pool_[t].grain.init(rate_);
+    }
 
-    // The one track hosting a Sampler today. docs/SPEC.md gives SAMPLE to track 8 in the default
-    // kit; M6 makes a track's machine switchable and this gains the rest.
-    samplers_[7] = &loop_;
+    // docs/SPEC.md's default kit, by machine ID rather than by pointer: KICK, SNARE, HAT, HAT,
+    // PERC, VA MONO, VA POLY, SAMPLE.
+    machine_id_[0] = uint8_t(MachineId::kick);
+    machine_id_[1] = uint8_t(MachineId::snare);
+    machine_id_[2] = uint8_t(MachineId::hat);
+    machine_id_[3] = uint8_t(MachineId::hat);
+    machine_id_[4] = uint8_t(MachineId::perc);
+    machine_id_[5] = uint8_t(MachineId::va_mono);
+    machine_id_[6] = uint8_t(MachineId::va_poly);
+    machine_id_[7] = uint8_t(MachineId::sample);
+    rewire_machines();
+    for (int t = 0; t < kTracks; t++) project_.kit.tracks[t].machine = machine_id_[t];
 
-    // And the one hosting VA POLY, so `fire` knows which track can be sent a chord.
-    polys_[6] = &stab_;
 
-    // Track 3 chokes track 4: a closed hat cuts an open one. The spec's choke group, wired here
-    // because the machines deliberately do not know about tracks.
-    hat_closed_.set_choke_target(&hat_open_);
 
     // The duck fires from the kick, and the kick itself must not duck.
     //
@@ -114,6 +115,49 @@ bool Engine::init(float sample_rate) {
 void Engine::set_sample_region(const int16_t *base, uint32_t bytes) {
     sample_region_ = base;
     sample_region_bytes_ = bytes;
+}
+
+void Engine::rewire_machines() {
+    for (int t = 0; t < kTracks; t++) {
+        TrackMachines &own = pool_[t];
+        samplers_[t] = nullptr;
+        polys_[t] = nullptr;
+
+        switch (MachineId(machine_id_[t])) {
+            case MachineId::kick:    machines_[t] = &own.kick; break;
+            case MachineId::snare:   machines_[t] = &own.snare; break;
+            case MachineId::hat:     machines_[t] = &own.hat; break;
+            case MachineId::perc:    machines_[t] = &own.perc; break;
+            case MachineId::sample:
+                machines_[t] = &own.sampler;
+                samplers_[t] = &own.sampler;
+                break;
+            case MachineId::grain:   machines_[t] = &own.grain; break;
+            case MachineId::va_mono: machines_[t] = &own.mono; break;
+            case MachineId::va_poly:
+                machines_[t] = &own.poly;
+                polys_[t] = &own.poly;
+                break;
+            default:
+                // A kit naming a machine this build does not have plays nothing rather than
+                // reinterpreting an index: core/project.hpp says the file format needs the domain
+                // for exactly this reason, and a silent track is recoverable where a wrong
+                // pointer is not.
+                machines_[t] = nullptr;
+                break;
+        }
+    }
+
+    // The hat choke, re-derived rather than wired once. docs/SPEC.md's default kit puts a closed
+    // hat on track 3 and an open one on track 4, and a closed hat cuts an open one -- but that is
+    // a fact about the DEFAULT KIT, not about the tracks, and machine switching can take either
+    // of them away. So the pair is only joined while both tracks still host a Hat, and every Hat
+    // in the pool has its target cleared first.
+    for (int t = 0; t < kTracks; t++) pool_[t].hat.set_choke_target(nullptr);
+    if (MachineId(machine_id_[2]) == MachineId::hat &&
+        MachineId(machine_id_[3]) == MachineId::hat) {
+        pool_[2].hat.set_choke_target(&pool_[3].hat);
+    }
 }
 
 void Engine::load_default_kit() {
@@ -222,7 +266,14 @@ void Engine::build_placeholder_sample() {
         }
     }
 
-    loop_.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
+    // Into EVERY track's Sampler and Granular, not just the one the default kit uses. A track
+    // switched to SAMPLE or GRAIN before any card has been read should make a sound rather than
+    // silence, and this is the only PCM the app owns before a load: eight pointers to one static
+    // array, which costs nothing.
+    for (int t = 0; t < kTracks; t++) {
+        pool_[t].sampler.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
+        pool_[t].grain.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
+    }
 }
 
 void Engine::load_default_pattern() {
@@ -893,6 +944,36 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_machine: {
+            if (command.a >= uint8_t(MachineId::count)) {
+                status_.bump_refused();
+                break;
+            }
+            if (machine_id_[track] == command.a) break;      // already hosting it
+
+            // The machine being LEFT is silenced first. It will not be rendered again, so it
+            // cannot release its own tail -- and a voice left sounding in an object nothing
+            // calls is a note that never ends and never ends up in the voice count either.
+            if (machines_[track] != nullptr) machines_[track]->kill_all();
+
+            machine_id_[track] = command.a;
+            project_.kit.tracks[track].machine = command.a;
+            rewire_machines();
+
+            // The new machine reads this track's parameters, which mean different things to it:
+            // slot 10 is GLD on VA MONO and DET on VA POLY, and the FLTR page is the insert
+            // chain's on both. Nothing is translated -- docs/SPEC.md gives each machine the same
+            // sixteen slots on purpose, so the knobs keep their positions and the sound changes,
+            // which is what switching a machine is for.
+            if (machines_[track] != nullptr) machines_[track]->prepare(effective_[track]);
+
+            // And the sample, if the new machine plays one. The loader's path is in the kit; a
+            // track switched to SAMPLE or GRAIN before any card has been read falls back to the
+            // placeholder every machine in the pool was given at init.
+            perform_dirty_ = true;
+            break;
+        }
+
         case Cmd::resample_cancel:
             capture_.cancel();
             resample_bars_ = 0;
@@ -928,6 +1009,15 @@ void Engine::kit_from_params() {
 }
 
 void Engine::params_from_kit() {
+    // The machines first, because a loaded project names its own: KIT.BIN has held
+    // `KitTrack::machine` since M4 and nothing honoured it until machine switching existed, so
+    // every project opened with the default kit's eight whatever it had been saved with.
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t id = project_.kit.tracks[t].machine;
+        machine_id_[t] = id < uint8_t(MachineId::count) ? id : uint8_t(MachineId::kick);
+    }
+    rewire_machines();
+
     for (int t = 0; t < kTracks; t++) {
         const KitTrack &track = project_.kit.tracks[t];
         for (int i = 0; i < kParams; i++) {

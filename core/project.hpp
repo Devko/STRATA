@@ -59,6 +59,33 @@ constexpr int kKitParams = 16;
 // app/'s machine pool. app/ asserts that the two agree.
 constexpr int kMachines = 8;
 
+// Which machine a track hosts, as the number KIT.BIN stores.
+//
+// **These ids are PERMANENT.** They are on disk the moment a kit is saved, so renumbering them
+// would make every existing project play the wrong machines -- the same rule core/scale.hpp
+// states for its scale ids, and for the same reason. New machines go on the END.
+//
+// The order is docs/SPEC.md's "Machines (v1)" list, read left to right, so a reader comparing
+// the two sees the same sequence. A kit naming an id this build does not have plays NOTHING
+// rather than being reinterpreted as an index into app/'s pool: a silent track is recoverable
+// and a wrong pointer is not.
+enum class MachineId : uint8_t {
+    kick = 0,
+    snare,
+    hat,
+    perc,
+    sample,
+    grain,
+    va_mono,
+    va_poly,
+    count
+};
+static_assert(int(MachineId::count) == kMachines,
+              "kMachines is the domain KIT.BIN stores: it has to match the id list exactly");
+
+// The three-letter name for the screen, or "---" for an id this build does not have.
+const char *machine_name(uint8_t id);
+
 // A sample path, including its terminator. Enaga's paths are absolute and UTF-8
 // ("/SAMPLES/Kick 01.wav"), and long names are supported, so this has to hold a real one rather
 // than an 8.3 name.
