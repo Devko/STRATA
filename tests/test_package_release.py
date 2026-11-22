@@ -194,6 +194,8 @@ class PackageRelease(unittest.TestCase):
         self.assertEqual(len(pr.check_notes("v0.1.0", final + "TODO(release)\n")), 1)
         self.assertEqual(len(pr.check_notes("v0.1.0", final.replace("2026-11-23", "unreleased"))), 1)
         self.assertEqual(len(pr.check_notes("v0.2.0", final)), 1)
+        self.assertEqual(len(pr.check_notes("v0.1.0", final + "MAX {{MAX_A01}}\n")), 1)
+        self.assertEqual(len(pr.check_notes("v0.1.0", final.replace("2026-11-23", "{{RELEASE_DATE}}"))), 2)
 
     def test_an_unfinished_changelog_needs_draft(self):
         self.good_card()
