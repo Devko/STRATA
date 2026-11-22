@@ -790,8 +790,19 @@ public:
 
     void walk_machine(int delta) {
         const int count = int(MachineId::count);
-        const int next = (int(engine_.machine_id(selected_)) + delta) % count;
-        post(Cmd::set_machine, uint8_t(selected_), 0, uint8_t(next < 0 ? next + count : next));
+        int next = (int(engine_.machine_id(selected_)) + delta) % count;
+        next = next < 0 ? next + count : next;
+        post(Cmd::set_machine, uint8_t(selected_), 0, uint8_t(next));
+        // `mch <track> <machine>`: one line per change, for the emulator scenarios and a unit
+        // log, where nothing else says which machine a track was given.
+        char line[16];
+        char *out = line;
+        append(out, "mch ");
+        append_number(out, uint32_t(selected_) + 1);
+        append(out, " ");
+        append(out, machine_name(uint8_t(next)));
+        *out = 0;
+        enaga::log(line);
     }
 
     void walk_keys_octave(int delta) {
