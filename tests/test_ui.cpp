@@ -196,6 +196,15 @@ const Step &step_of(int track, int step) {
 
 bool trig_at(int track, int step) { return (step_of(track, step).flags & kStepTrig) != 0; }
 
+void post_cmd_track_param(int track, int param, uint8_t value) {
+    Command command;
+    command.cmd = Cmd::set_param;
+    command.track = uint8_t(track);
+    command.a = uint8_t(param);
+    command.b = value;
+    app_engine().commands().post(command);
+}
+
 int locks_on_track(int track) {
     int total = 0;
     for (int s = 0; s < kStepsPerTrack; s++) total += int(step_of(track, s).lock_count);
@@ -267,7 +276,7 @@ Strata &fresh() {
     Project &incoming = app_engine().project_for_load();
     project_init(incoming);
     for (int t = 0; t < kTracks; t++) {
-        for (int i = 0; i < kKitParams; i++) incoming.kit.tracks[t].params[i] = 64;
+        for (int i = 0; i < kKitSoundParams; i++) incoming.kit.tracks[t].params[i] = 64;
         incoming.kit.tracks[t].params[kLvl] = 127;
     }
     post_cmd(Cmd::project_loaded);
@@ -469,7 +478,7 @@ TEST(ui_the_parameter_page_decides_which_parameter_an_encoder_writes) {
     // The pages wrap, so the four of them are reachable in either direction.
     key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
-    for (int i = 0; i < kPages; i++) key(ENAGA_KEY_SELECT_LEFT);
+    for (int i = 0; i < kEditPages; i++) key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
 
     // And a lock follows the same page. The step page is not open and the mode is GRID, but
@@ -2273,7 +2282,7 @@ TEST(ui_layout_edit_on_every_machine) {
         post_track(Cmd::set_machine, 0, uint8_t(machine));
         pump(4);
         key(ENAGA_KEY_F8);
-        for (int page = 0; page < kPages; page++) {
+        for (int page = 0; page < kEditPages; page++) {
             check_layout(app, machine_name(uint8_t(machine)));
             key(ENAGA_KEY_SELECT_RIGHT);
         }
@@ -2692,13 +2701,80 @@ TEST(ui_arrows_on_the_step_page_walk_the_step_and_clr_goes_back) {
     CHECK(trig_at(0, 0));
 }
 
+TEST(ui_the_lfo_is_edits_fifth_page) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                // EDIT, track 1
+    while (UiProbe::param_page(app) != int(Page::lfo)) key(ENAGA_KEY_SELECT_RIGHT);
+    check_layout(app, "EDIT LFO, off");
+
+    // One click is one shape on A and one destination on D.
+    app.on_encoder(0, +1);
+    pump();
+    CHECK_EQ(int(lfo_wave(app_engine().params(0).v[kLfoWave])), int(LfoWave::triangle));
+    app.on_encoder(3, +3);
+    pump();
+    CHECK_EQ(lfo_dest(app_engine().params(0).v[kLfoDest]), 2);
+    CHECK(!app_engine().lfo_on(0));                   // no depth yet
+    app.on_encoder(2, +50);
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[kLfoDepth]), 50);
+    CHECK(app_engine().lfo_on(0));
+    check_layout(app, "EDIT LFO, running");
+
+    // The widest words the page can show: a free rate, every synced length, every destination.
+    for (int r = 0; r < 128; r += 3) {
+        post_cmd_track_param(0, kLfoRate, uint8_t(r));
+        pump();
+        check_layout(app, "EDIT LFO, rate");
+    }
+    for (int d = 0; d <= kParams; d++) {
+        post_cmd_track_param(0, kLfoDest, lfo_dest_byte(d - 1));
+        pump();
+        check_layout(app, "EDIT LFO, destination");
+    }
+
+    // Hold a STEP and turn C: a lock on the LFO's depth, removed by pushing C.
+    key(ENAGA_KEY_F4);                                // GRID; the page stays LFO
+    step_down(5);
+    app.on_encoder(2, -10);
+    pump();
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(kLfoDepth), value));
+    CHECK_EQ(int(value), 40);
+    app.on_key(ENAGA_KEY_PUSH_C, true);
+    app.on_key(ENAGA_KEY_PUSH_C, false);
+    step_up(5);
+    pump();
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(kLfoDepth), value));
+
+    // PERFORM: FUNC + STEP 3 hands the LFO's depth to the selected macro.
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    shift_key(ENAGA_KEY_STEP1 + 2);
+    pump();
+    const MacroTarget &target = app_engine().macros().macros[0].targets[0];
+    CHECK_EQ(int(target.enabled), 1);
+    CHECK_EQ(int(target.param), kLfoDepth);
+    CHECK_EQ(UiProbe::notice(app), "A T1 DEP");
+    post_cmd(Cmd::macro_clear, 0);
+    pump();
+
+    // Back to SRC for the tests after this one, and the LFO off.
+    post_cmd_track_param(0, kLfoDepth, 0);
+    post_cmd_track_param(0, kLfoDest, 0);
+    pump();
+    key(ENAGA_KEY_F8);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_arrows_in_edit_keys_perform_machine_and_resample) {
     Strata &app = fresh();
 
     key(ENAGA_KEY_F8);                             // EDIT: sideways is the parameter page
     const int param_page = UiProbe::param_page(app);
     key(ENAGA_KEY_RIGHT);
-    CHECK_EQ(UiProbe::param_page(app), (param_page + 1) % kPages);
+    CHECK_EQ(UiProbe::param_page(app), (param_page + 1) % kEditPages);
     key(ENAGA_KEY_LEFT);
     CHECK_EQ(UiProbe::param_page(app), param_page);
     key(ENAGA_KEY_DOWN);                           // and the rows are the tracks

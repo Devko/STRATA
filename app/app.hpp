@@ -287,9 +287,16 @@ const char *page_name(Page page) {
         case Page::fltr: return "FLTR";
         case Page::amp:  return "AMP";
         case Page::fx:   return "FX";
+        case Page::lfo:  return "LFO";
         default:         return "?";
     }
 }
+
+// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp). The selection keys walk
+// all five; everywhere else a page is still four encoders over four parameters.
+constexpr int kEditPages = kPages + 1;
+static_assert(page_first(Page(kEditPages - 1)) + kParamsPerPage == kTrackParams,
+              "EDIT's last page is the last four track parameters");
 
 class Strata : public enaga::App {
     friend struct strata::test::UiProbe;    // tests/test_ui.cpp only; see the note above
@@ -434,8 +441,12 @@ public:
         // selected macro. The STEP keys are already a sixteen-wide selector in the step page, so
         // this is the gesture they have; without it a macro could never be set up at all, and
         // "4 macros driving up to 4 parameters" would be a feature with no way in.
+        // With FUNC held, STEP 1-4 are the LFO's four bytes instead (WAV RAT DEP DST), so a macro
+        // can sweep an LFO's depth or rate too. STEP 5-16 do nothing with FUNC.
         if (mode_ == Mode::perform && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
-            if (down) assign_macro(key - ENAGA_KEY_STEP1);
+            const int step = key - ENAGA_KEY_STEP1;
+            if (down && !shift_) assign_macro(step);
+            if (down && shift_ && step < kLfoParams) assign_macro(kParams + step);
             return;
         }
 
@@ -889,7 +900,7 @@ public:
                 page_ = (page_ + delta + 4) % 4;                       // step page 1-4
                 break;
             case Mode::edit:
-                param_page_ = (param_page_ + delta + kPages) % kPages; // SRC/FLTR/AMP/FX
+                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. LFO
                 break;
             case Mode::mixer:
                 // Faders, then the delay, the reverb, the routing and the master.
@@ -1222,7 +1233,8 @@ public:
             held_used_ = true;
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::lock, selected_, held_step_);
-            post_delta(Cmd::lock_delta, selected_, held_step_, uint8_t(index), delta);
+            post_delta(Cmd::lock_delta, selected_, held_step_, uint8_t(index),
+                       delta * lfo_click(index));
             return;
         }
 
@@ -1270,7 +1282,7 @@ public:
             const int step = int(engine_.status().playhead[selected_].load(std::memory_order_relaxed));
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::motion, selected_, 0);
-            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta);
+            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta * lfo_click(index));
             return;
         }
 
@@ -1313,9 +1325,11 @@ public:
         }
 
         // 5. Otherwise A-D edit the four parameters of the current page on the selected track.
+        // One click is one shape or one destination on the LFO's WAV and DST (dsp/lfo.hpp,
+        // `lfo_click`), and one count everywhere else.
         const int index = page_first(Page(param_page_)) + encoder;
-        post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index), clamp_delta(delta),
-             kDeltaFlag);
+        post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index),
+             clamp_delta(delta * lfo_click(index)), kDeltaFlag);
     }
 
     void on_pad_press(int pad, int velocity) override {
@@ -2005,12 +2019,13 @@ public:
         *out = 0;
         canvas.text(0, 20, line, 14);
 
-        // Which of the four pages is showing, as a row of boxes: the spec's selection keys
+        // Which of the five pages is showing, as a row of boxes: the spec's selection keys
         // flip between them, so showing where you are matters more than labels.
-        for (int p = 0; p < kPages; p++) {
+        for (int p = 0; p < kEditPages; p++) {
             const uint8_t grey = p == param_page_ ? 14 : 4;
-            canvas.rect(p * 32 + 2, 32, 28, 3, grey);
+            canvas.rect(p * 25 + 2, 32, 22, 3, grey);
         }
+        const bool lfo_page = param_page_ == int(Page::lfo);
 
         // The four parameters in large type, one row per encoder: its letter, the name, the
         // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
@@ -2033,12 +2048,32 @@ public:
             canvas.text(10, y, line, 13);
 
             out = line;
-            append_padded(out, value, 3);
+            append_param_value(out, index, value);
             *out = 0;
             canvas.text(34, y, line, 15);
 
-            const int bar = int(value) * 70 / 127;
-            canvas.rect(56, y + 2, bar < 1 ? 1 : bar, 4, 9);
+            // The LFO's values are words up to five characters long ("1/16T"), so its bars start
+            // further right.
+            const int bar_x = lfo_page ? 70 : 56;
+            const int bar = int(value) * (lfo_page ? 56 : 70) / 127;
+            canvas.rect(bar_x, y + 2, bar < 1 ? 1 : bar, 4, 9);
+        }
+
+        if (lfo_page) {
+            // What the LFO is doing to its destination right now, so a moving number says it runs.
+            out = line;
+            if (engine_.lfo_on(selected_)) {
+                const int dest = lfo_dest(engine_.params(selected_).v[kLfoDest]);
+                append(out, "NOW ");
+                append(out, track_param_name(dest));
+                *out++ = ' ';
+                append_padded(out, engine_.sounding(selected_).v[dest], 3);
+            } else {
+                append(out, "LFO OFF: SET DEP+DST");
+            }
+            *out = 0;
+            canvas.text(0, 96, line, 7);
+            return;
         }
 
         // The machine is changed somewhere else, and nothing said where.
@@ -2220,13 +2255,53 @@ public:
 
     // --- shared pieces ----------------------------------------------------
 
-    // The machine names SRC and AMP; the insert chain names FLTR and FX.
-    const char *param_name_for(int index) const {
-        if (param_page_ == int(Page::fltr) || param_page_ == int(Page::fx)) {
-            return InsertChain::param_name(index);
-        }
+    // The machine names SRC and AMP; the insert chain names FLTR and FX; the LFO its own page.
+    const char *param_name_for(int index) const { return track_param_name(index); }
+
+    // By the parameter's own page rather than the page on screen, so a macro assignment or the
+    // LFO's destination can name a parameter from any page.
+    const char *track_param_name(int index) const {
+        if (index < 0 || index >= kTrackParams) return "---";
+        if (index >= kParams) return lfo_param_name(index);
+        const int page = index / kParamsPerPage;
+        if (page == int(Page::fltr) || page == int(Page::fx)) return InsertChain::param_name(index);
         const Machine *machine = engine_.machine(selected_);
         return machine ? machine->param_name(index) : "---";
+    }
+
+    // A parameter's value as the screen shows it: the byte, except on the LFO's page, where it
+    // is a shape, a rate (Hz free, a note length synced), a depth, and a destination. At most
+    // five characters.
+    void append_param_value(char *&out, int index, uint8_t value) const {
+        switch (index) {
+            case kLfoWave:
+                append(out, lfo_wave_name(lfo_wave(value)));
+                return;
+            case kLfoRate:
+                if (value >= kLfoSyncFirst) {
+                    append(out, lfo_sync_name(value));
+                } else {
+                    // Hundredths below 1 Hz ("0.06"), tenths below 10 ("2.5"), then whole.
+                    const uint32_t centi = lfo_free_centi_hz(value);
+                    if (centi < 100) {
+                        append(out, "0.");
+                        append_padded(out, centi, 2);
+                    } else if (centi < 1000) {
+                        append_tenths(out, (centi + 5) / 10);
+                    } else {
+                        append_number(out, (centi + 50) / 100);
+                    }
+                }
+                return;
+            case kLfoDest: {
+                const int dest = lfo_dest(value);
+                append(out, dest < 0 ? "OFF" : track_param_name(dest));
+                return;
+            }
+            default:
+                append_padded(out, value, 3);
+                return;
+        }
     }
 
     // The four encoder slots along the bottom: a three-letter name, the value under it and a
@@ -2244,7 +2319,7 @@ public:
             canvas.text(slot * 32, y, line, 12);
 
             out = line;
-            append_padded(out, engine_.params(selected_).v[index], 3);
+            append_param_value(out, index, engine_.params(selected_).v[index]);
             *out = 0;
             canvas.text(slot * 32, y + 8, line, 15);
 
@@ -2675,7 +2750,7 @@ public:
     // that a macro assigned in one press is usable in the next -- the ranges are stored, so a
     // richer editor can refine them later without changing the format.
     void assign_macro(int param) {
-        if (param < 0 || param >= kParams) return;
+        if (param < 0 || param >= kTrackParams) return;
         const uint8_t now = engine_.performed(selected_, param);
         const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
         Command command;
@@ -2692,9 +2767,7 @@ public:
         append(out, " T");
         append_number(out, uint32_t(selected_) + 1);
         append(out, " ");
-        append(out, engine_.machine(selected_) != nullptr
-                        ? engine_.machine(selected_)->param_name(param)
-                        : "---");
+        append(out, track_param_name(param));
         *out = 0;
         notice(notice_buffer_);
     }
