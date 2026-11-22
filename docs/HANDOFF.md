@@ -382,8 +382,8 @@ worth more than all the rest together.
    `Storage::step_sample_epoch`, the slice arithmetic in `step_sample_convert` and
    `step_sample_resample` (every pointer there is an offset into the 64 MiB region), and the
    deferred-save condition in `Storage::service`.
-5. **Check the memory.** 64 MiB sample region + 18 MiB loader staging + 2.93 MiB repeat ring is
-   85 MiB of the ~124 MiB heap before anything else, and the staging was never in the spec's
+5. **Check the memory.** 64 MiB sample region + 27.5 MiB loader staging + 2.93 MiB repeat ring is
+   94.5 MiB of the ~124 MiB heap before anything else, and the staging was never in the spec's
    table. Cheap to check and the figure most likely to be a problem.
 6. **The two open questions above that need an ear** — the note spelling, and whether a sample
    track folds.
