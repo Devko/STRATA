@@ -300,6 +300,26 @@ public:
         if (key == ENAGA_KEY_F1) { shift_ = down; return; }
         if (key == ENAGA_KEY_PUSH_VALUE) { value_pushed_ = down; return; }
 
+        // Hold STEP + push A-D: take that parameter's lock off the held step -- the undo of
+        // "hold STEP + turn A-D", on the same knob. Without it a lock could be turned but never
+        // removed short of erasing the whole step. The pushes are numbered B, A, C, D in the ABI
+        // (docs/ENAGA_API.md), so they are mapped by name rather than by arithmetic.
+        if (held_step_ >= 0 && (key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B ||
+                                key == ENAGA_KEY_PUSH_C || key == ENAGA_KEY_PUSH_D)) {
+            if (!down) return;
+            const int encoder = key == ENAGA_KEY_PUSH_A   ? 0
+                                : key == ENAGA_KEY_PUSH_B ? 1
+                                : key == ENAGA_KEY_PUSH_C ? 2
+                                                          : 3;
+            const int index = page_first(Page(param_page_)) + encoder;
+            held_used_ = true;
+            mark(GestureKind::erase, selected_, held_step_);
+            post(Cmd::clear_lock, uint8_t(selected_), uint8_t(held_step_), uint8_t(index));
+            end_gesture();
+            notice("LOCK CLEARED");
+            return;
+        }
+
         // MUTE mode turns STEP 1-8 into the eight stored mute states: recall on a tap, store
         // with F1. docs/SPEC.md says they are "recalled from the upper row", but the upper row is
         // seven FIXED performance pads and there are eight states, so that cannot be taken

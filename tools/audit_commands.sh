@@ -9,22 +9,20 @@
 #
 # Comments and `case` labels are stripped before counting posters. The recipe HANDOFF.md first
 # gave counted both: `release_note`, which appears only in a comment in app/app.hpp, looked
-# posted, and so did `clear_lock`, which app/storage.cpp only READS in mutates_pattern().
+# posted, and so did `clear_lock`, which app/storage.cpp only READS in mutates_pattern() -- it
+# had no gesture until hold STEP + push A-D.
 #
 # The names below are known and argued where they live; anything else fails.
 #   none          the command ring's empty slot, never posted.
 #   kit_recall    handled, no caller yet: waits for the kit BROWSER half of F1 + F8.
 #   release_note  neither: a held KEYS key has no known duration (see app/app.hpp).
-#   clear_lock    handled, no caller: docs/SPEC.md gives no gesture for removing one parameter
-#                 lock, so a lock can be turned but never taken off a step. The gesture is a
-#                 UI decision for a person; until it is made, this name stays listed.
 #
 # Usage: tools/audit_commands.sh     exit 0 when only the known names come back.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-KNOWN=" none kit_recall release_note clear_lock "
+KNOWN=" none kit_recall release_note "
 
 # Drop // comments, whole-line or trailing, so a mention in prose is not a use.
 code() { sed -E 's#//.*$##' "$@"; }

@@ -1470,24 +1470,20 @@ void Engine::fire(const StepEvent &event) {
         // the thing that needed fixing.
         machines_[track]->prepare(effective_[track]);
 
-        // FIXED: the note is folded into the key on a MELODIC track, and left alone on every
-        // other kind.
+        // The note is folded into the key on a MELODIC track and left alone on every other
+        // kind; `machine_folds_note` (core/project.hpp) says which, and why. Both VAs and GRAIN
+        // fold, SAMPLE folds only while unsliced -- its slice count is read after the prepare
+        // above, so a locked or scene-moved SLC counts -- and the drums never do.
         //
-        // The asymmetry this replaces: `core/chord`'s `chord_expand` folds the step's note
-        // before stacking on it, and does so even for a type-`none` chord, which is a single
-        // note -- so identical step data sounded different depending on which machine a track
-        // hosted, folded on a POLY track and as written on a MONO one. docs/SPEC.md says
-        // "melodic tracks fold notes into the scale" and meant both.
-        //
-        // What was missing was any notion of WHICH machines are melodic; folding every track
-        // would retune the drums, since dsp/kick.cpp reads `note` as a pitch. Machine switching
-        // is what gave the engine that notion, and `machine_is_melodic` (core/project.hpp) is
-        // it: the two VAs, which read a note as a pitch in the key, and not the drums or the
-        // samplers, which read it as a tuning or a slice.
+        // History: `core/chord`'s `chord_expand` folds the step's note even for a type-`none`
+        // chord, so before this the same step data played folded on a POLY track and as written
+        // on a MONO one.
         const Pattern &folding = live();
-        const uint8_t note = machine_is_melodic(machine_id_[track])
+        const int slices = pool_[track].sampler.slices();
+        const uint8_t note = machine_folds_note(machine_id_[track], slices)
                                  ? scale_fold(event.note, folding.root, int(folding.scale))
                                  : event.note;
+        sent_note_[track] = note;
 
         Trig trig;
         trig.note = note;

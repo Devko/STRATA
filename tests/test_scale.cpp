@@ -119,9 +119,9 @@ TEST(scale_names_are_upper_case_and_fit_the_screen) {
     }
 }
 
-TEST(scale_note_names_are_the_twelve_pitch_classes_in_flats) {
-    const char *want[12] = {"C", "DB", "D",  "EB", "E",  "F",
-                            "GB", "G",  "AB", "A",  "BB", "B"};
+TEST(scale_note_names_are_the_twelve_pitch_classes_in_sharps) {
+    const char *want[12] = {"C", "C#", "D",  "D#", "E",  "F",
+                            "F#", "G",  "G#", "A", "A#", "B"};
     for (int i = 0; i < 12; i++) CHECK_EQ(note_name(uint8_t(i)), want[i]);
 
     // Only the pitch class is read, so every octave names the same note.
@@ -129,10 +129,10 @@ TEST(scale_note_names_are_the_twelve_pitch_classes_in_flats) {
         CHECK_EQ(note_name(uint8_t(note)), want[note % 12]);
     }
 
-    // Upper case and nothing the font might not have: no '#', no lower case.
+    // Upper case and a sharp, nothing else: no flats, no lower case.
     for (int i = 0; i < 12; i++) {
         for (const char *p = note_name(uint8_t(i)); *p != '\0'; p++) {
-            CHECK(*p >= 'A' && *p <= 'G');
+            CHECK((*p >= 'A' && *p <= 'G') || *p == '#');
         }
     }
 }

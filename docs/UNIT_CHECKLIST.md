@@ -97,6 +97,11 @@ standing in for CHORD, and the LOOP sampler. The default pattern plays all of th
       then prepared from the unlocked kit every block, so a lock on a cutoff or a decay did
       nothing at all while a locked *note* worked fine. If locks ever look right on screen and
       sound wrong, that asymmetry is the first thing to suspect.
+- [ ] **Clearing one lock.** Hold STEP 9 on the kick and push encoder A on the AMP page: the
+      screen says LOCK CLEARED, the step's LED loses its red if it had no other lock, and the
+      third kick goes back to the kit's long body. Check every knob, not just A -- Enaga numbers
+      the pushes B, A, C, D, and a push that clears the wrong parameter is exactly what that
+      ordering invites. F1 + CLR puts the lock back.
 - [ ] While there: turn a knob on a track whose current step carries a lock on that same
       parameter. The knob should be heard at once, and the lock should win again from the next
       step.
@@ -337,8 +342,9 @@ PERFORM and pattern changes, with no edit screens and no underruns."*
       for the root bug** -- `app/engine.cpp` used to store 60 in a field the loader reduces to
       `% 12`, so the default pattern's notes would have come back at the bottom of the MIDI
       range.
-- [ ] The note names read correctly as flats: DB, EB, GB, AB, BB. If the font turns out to have a
-      '#', sharps would be the more conventional spelling for the major keys.
+- [ ] The note names read correctly as sharps: C#, D#, F#, G#, A#, and the '#' is legible at
+      this size. The key on PROJECT and the NOTE field on the step page spell the same pitch the
+      same way (sharps everywhere since 2026-11-22).
 
 **Scenes, morph and macros**
 
@@ -425,16 +431,17 @@ step's chord byte onto its voices.
 |---|---|---|
 | A per-note note-off, so `Step::length` can be heard | **A duration on the `Trig`.** `Trig::gate_frames` is additive — no new virtual, no note-to-voice map in the engine — and the machine releases its own voice when the count runs out. `Step::length` has been stored since M3 and makes a sound for the first time | A held KEYS key and `Cmd::release_note` still have no known duration, so they still cannot be released. A `release(note)` virtual can land later without disturbing the gate; it is not needed for a sequenced part |
 | `render_add_stereo`, promised by a comment and declared nowhere | **The comment was wrong, and was corrected.** Machines are mono and the chain spreads them, which is what the rest of the code implements; VA POLY took pitch detune instead of stereo unison for the same reason | Whether a stereo machine is worth it at all. The cost is not the virtual but `InsertChain` being mono, so a stereo track doubles that track's insert work — on the two most expensive machines. That is a question for after a unit measurement, not before |
-| Whether `Engine::fire` folds a MONO note into the scale | **FIXED: it does, and so does every melodic machine.** `machine_is_melodic` (core/project.hpp) is the notion that was missing — the two VAs and nothing else — and machine switching is what supplied it. A POLY and a MONO track now play identical step data identically | Whether a SAMPLE or GRAIN track used melodically should fold too. They read `note` as a transposition, and on SAMPLE it also picks the slice, so a fold there moves a sliced one-shot to a different slice. Listen first |
+| Whether `Engine::fire` folds a MONO note into the scale | **FIXED: it does, and so does every melodic machine.** `machine_folds_note` (core/project.hpp) is the notion that was missing — the two VAs, GRAIN, and SAMPLE while unsliced — and machine switching is what supplied it. A POLY and a MONO track now play identical step data identically | Decided 2026-11-22: GRAIN folds, SAMPLE folds only at SLC = 1, a sliced sample never folds. Listen to confirm it (below) |
 
 - [ ] **The fold, now that both sides do it.** Put the same note value on a MONO track and a
       POLY one in a scale that does not contain it. They must now AGREE, both in key. They
-      disagreed until machine switching supplied `machine_is_melodic`.
+      disagreed until machine switching supplied `machine_folds_note`.
 - [ ] And the drums do NOT fold: put a kick on a note the scale does not contain, in a minor
       key, and it must not change pitch. Folding it would retune it, which is the reason the
       predicate exists rather than a blanket fold.
-- [ ] A SAMPLE or GRAIN track played melodically: it does not fold either, which is the open
-      question in the table above. Listen to whether it should.
+- [ ] GRAIN played melodically in a minor key folds into it, like the VAs.
+- [ ] SAMPLE with SLC at 1 (one-shot) folds; turn SLC up and the same steps play their slices
+      as written, unmoved by the key. Lock SLC on one step and check that step follows its lock.
 
 **VA POLY (`dsp/vapoly`)** — 41 host tests, 16 of 18 mutations caught on the machine and 11 of
 14 on the gate (all five survivors honest, and named in `tests/test_vapoly.cpp`), and VaMono's
@@ -663,12 +670,10 @@ That review read 14,423 lines with 531,652 checks already behind them and found 
 one rule violation and one stale comment. The two bugs are fixed and have tests (the ratchet, and
 the duck's dropped trigger); the other two are here.
 
-- [ ] **Two note spellings in one app, and nobody has decided which.** `core/scale.cpp` names
-      notes with FLATS -- "EB" -- and the step page's NOTE field uses SHARPS -- "D#3" -- so the
-      same pitch has two names on two screens. '#' is in the device font, so the comment claiming
-      a sharp was "unproven" was wrong and has been removed rather than repaired. Look at both
-      screens and pick one. There are also two overloads named `note_name` with opposite
-      conventions, which is a pair a future caller can pick the wrong one of.
+- [x] ~~Two note spellings in one app~~ **Decided 2026-11-22: sharps everywhere.**
+      `core/scale.cpp` now spells "D#" like the step page's "D#3", and a host test holds the two
+      `note_name` overloads to one spelling. What is left to see on the unit is in the scale
+      section above (the '#' legible at screen size).
 - [ ] A 64-bit divide was sitting in the audio path (`dsp/hat.cpp`, each voice's start phase).
       On this toolchain that does not merely cost cycles, it does not LINK -- it drags in
       libgcc's ARM unwinder. GCC happened to fold it to six constants, so the rule was being kept

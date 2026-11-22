@@ -336,6 +336,51 @@ TEST(ui_a_step_held_with_an_encoder_locks_that_step_and_does_not_toggle_its_trig
     CHECK_EQ(locks_on_track(0), 1);
 }
 
+TEST(ui_a_step_held_with_a_knob_pushed_clears_that_lock_and_only_that_one) {
+    // Hold STEP + push A-D takes that parameter's lock off the step: the undo of hold STEP +
+    // turn, on the same knob. Before it, Cmd::clear_lock had a handler and no gesture
+    // (tools/audit_commands.sh), so a lock could only be removed by erasing the whole step.
+    Strata &app = fresh();
+    const int kStep = 5;
+    const int param_a = encoder_param(0);
+    const int param_b = encoder_param(1);
+
+    step_down(kStep);
+    app.on_encoder(0, +4);
+    app.on_encoder(1, +6);
+    pump();
+    step_up(kStep);
+    pump();
+    CHECK_EQ(int(step_of(0, kStep).lock_count), 2);
+    const int depth = int(undo_depth());
+
+    // B, which the ABI numbers 0 -- the mapping is by name, and this is what would catch it.
+    step_down(kStep);
+    key(ENAGA_KEY_PUSH_B);
+    CHECK(UiProbe::held_used(app));
+    pump();
+    step_up(kStep);
+    pump();
+
+    uint8_t value = 0;
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, kStep, uint8_t(param_b), value));
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, kStep, uint8_t(param_a), value));
+    CHECK_EQ(int(step_of(0, kStep).lock_count), 1);
+    CHECK(!trig_at(0, kStep));                     // the release was swallowed, not a toggle
+    CHECK_EQ(int(undo_depth()), depth + 1);        // its own undo level
+
+    // F1 + CLR brings it back.
+    shift_key(ENAGA_KEY_CLR);
+    pump();
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, kStep, uint8_t(param_b), value));
+    CHECK_EQ(int(step_of(0, kStep).lock_count), 2);
+
+    // A push with no step held clears nothing.
+    key(ENAGA_KEY_PUSH_A);
+    pump();
+    CHECK_EQ(int(step_of(0, kStep).lock_count), 2);
+}
+
 TEST(ui_an_encoder_with_no_step_held_writes_the_kit_and_not_a_lock) {
     // The other half of the routing: in GRID with nothing held, A-D are the four parameters of
     // the current page on the selected track (case 5 in `on_encoder`).

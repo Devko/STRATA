@@ -8,12 +8,12 @@ Revised from `docs/SPEC.md` after validating it against Enaga at `1b41111`. Read
 
 | | Spec | This plan |
 | --- | --- | --- |
-| Enaga pin | `269c015` | **`1b41111`** — the pin in the spec predates MIDI, SYNC, the clock and pad pressure |
+| Enaga pin | `269c015` | **`v0.2.0`** (`3da7f89`), was `1b41111` until 2026-11-22 — the pin in the spec predates MIDI, SYNC, the clock and pad pressure |
 | Master clock | `core/clock`, 96 PPQN, 32.32 fixed point, drift tests | **Deleted.** Enaga owns it; `core/scheduler` sits on `clock::ticks()` |
 | MIDI / SYNC | M7: implement in an Enaga fork, upstream as PRs | **Already in Enaga.** M7 shrinks to verifying it on the unit |
 | External sync | deferred to M7 | **M1.** It changes transport and tempo behaviour that M1 builds |
 | Budget gate | "measure at M1 and M2 exits" | **New M0.5 spike** before any engine work — effects are the dominant cost |
-| Budget lever | cut chord voices | **Cut effects or insert stages.** Voices are ~11% of the block in total |
+| Budget lever | cut chord voices | **Cut effects or insert stages.** Voices are ~11% of the block in total (true of drums; a sustaining VA POLY voice is 3.82 points alone, see docs/BUDGET.md) |
 | cl6x | a release risk | **A requirement** for the 60% target (worth ~2.2×) |
 | Build host | implied Linux | **WSL Ubuntu**, `build/` inside the WSL filesystem, no cmake |
 | Milestones | 8 (M0–M7) | 9 (M0, M0.5, M1–M7), with M7 much smaller |
@@ -47,12 +47,13 @@ Finished after that table was last written, and all of it on `main`:
 | --- | --- |
 | **the sends and the master** | Both commands had no handler AND no caller, so every delay and reverb setting and the spec's master DJ filter sat at a compile-time default for the life of the app, in no file. All fourteen are now encoder bytes in PROJECT.BIN's third (optional) section, reachable from four new MIXER pages and F1 + VALUE |
 | **the tempo, quantize and `chain_enabled`** | All three round-tripped through the serializer while nothing in `app/` wrote them. A project saved at 142 BPM reopened at 130 |
-| **the melodic fold** | `machine_is_melodic` settled the POLY/MONO asymmetry M6 left open: both VAs fold a step's note into the key, the drums and samplers do not |
+| **the melodic fold** | `machine_folds_note` settled the POLY/MONO asymmetry M6 left open: both VAs and GRAIN fold a step's note into the key, SAMPLE only while unsliced (SLC = 1), the drums never |
 | **VA POLY, 4.30 → 3.82 points a voice** | A fused output tail in `dsp/valoops.ti.c` and filter coefficients shared between the voices of a chord. Both bit-exact; every scenario with a VA voice came down ~1.6 points |
 
-The two things that gate everything and cannot be done here: **boot `build/APP.ENA` on a unit**,
-and **answer the cl6x licence question**. docs/BUDGET.md records cl6x as worth ~2.2x and the 60%
-target depends on it, so a GCC-only figure over 60% means nothing either way.
+The one thing that gates everything and cannot be done here: **boot `build/APP.ENA` on a unit**.
+The cl6x licence question is settled (docs/BUDGET.md, "The cl6x licence question, examined");
+what remains is that cl6x runs only on the user's machine. docs/BUDGET.md records it as worth
+~2.2x and the 60% target depends on it, so a GCC-only figure over 60% means nothing either way.
 
 docs/UNIT_CHECKLIST.md holds the gestures to try, and **none of its boxes is ticked.**
 
@@ -67,7 +68,7 @@ Everything here is setup; none of it is STRATA's design. Do it once, in WSL.
    for editing but point `ENAGA_BUILD` at a path inside the WSL filesystem, because building
    across 9p is slow.
 2. **Dependencies.**
-   - `third_party/enaga` as a submodule pinned at `1b41111`.
+   - `third_party/enaga` as a submodule pinned at `1b41111` (now release `v0.2.0`, `3da7f89`).
    - `seawaffle/smpltrek-re` cloned separately; `ENAGA_EMULATOR=<re>/emulator` (the directory
      holding `cpu.py`). It is not a submodule — Enaga's tools take it by environment variable.
 3. **Cross toolchain.** `tools/build_tic6x_binutils.sh` then `tools/build_tic6x_gcc.sh`
@@ -292,7 +293,7 @@ The spec's version with the corrections folded in:
 - Read docs/SPEC.md, docs/REVIEW.md and docs/PLAN.md before any change, and follow the
   milestone order in PLAN.md. Ask before changing a decision they record.
 - Target: an Enaga app on the Sonicware SmplTrek (TI C6748, 372 MHz). Enaga is pinned at
-  1b41111. Read third_party/enaga/docs/api.md for every API you use.
+  v0.2.0 (3da7f89). Read third_party/enaga/docs/api.md for every API you use.
 - Build in WSL, not Windows. Keep build/ inside the WSL filesystem. There is no cmake.
 - Do not write a master clock. Enaga owns it: <enaga/clock.hpp>, 96 PPQN, and
   clock::ticks() in audio() gives each tick's frame in the block. STRATA schedules steps

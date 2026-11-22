@@ -20,6 +20,12 @@ export ENAGA_TOOLCHAIN
 : "${ENAGA_EMULATOR:=$STRATA_ROOT/third_party/smpltrek-re/emulator}"
 export ENAGA_EMULATOR
 
+# The emulator commit STRATA's scenarios were last checked against. A plain clone has no pin of
+# its own, so this is it: tools/fetch_emulator.sh checks it out and tools/enaga_check.sh fails
+# when the clone is elsewhere. Move it in the same commit as anything that depends on it.
+STRATA_EMULATOR_URL="https://github.com/seawaffle/smpltrek-re"
+STRATA_EMULATOR_COMMIT="11ac9a0ae1fb5126728950792504c9e304257101"
+
 # Build output, also off /mnt/d.
 : "${ENAGA_BUILD:=$HOME/strata-build}"
 export ENAGA_BUILD

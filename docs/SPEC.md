@@ -68,7 +68,7 @@ STRATA is one Enaga app on a TI C6748 DSP at 372 MHz with about 124 MiB of heap.
 - `build_app.py` compiles **one flat folder** with Enaga's include path only. Filenames must be unique across `core/`, `dsp/` and `app/`, and includes are bare (`#include "pattern.hpp"`). **[rev]**
 - The build host is Linux. On Windows that means WSL; there is no cmake there, and `build/` belongs inside the WSL filesystem rather than on `/mnt/d`. **[rev]**
 - F1 + POWER always opens the Enaga menu and POWER never reaches the app. F1 alone is the app's shift key.
-- The app interface is provisional: Enaga is pinned at **`1b41111`** **[rev]** and breaking changes are expected before 1.0.
+- The app interface is provisional: Enaga is pinned at release **`v0.2.0`** (`3da7f89`; `1b41111` until 2026-11-22) **[rev]** and breaking changes are expected before 1.0.
 
 ## Sound architecture
 
@@ -232,7 +232,7 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 
 **Step editing**
 
-- Tap STEP: toggle trig. Hold STEP + turn A-D: lock that parameter on the current page. Hold STEP + VALUE: note.
+- Tap STEP: toggle trig. Hold STEP + turn A-D: lock that parameter on the current page. Hold STEP + push A-D: clear that parameter's lock on the step (one undo level). Hold STEP + VALUE: note.
 - Hold STEP + OK: open the step page (note, velocity, length, micro-timing / probability, condition, ratchet, accent and slide) on A-D, selection keys switch its two pages.
 - Hold two STEP keys: set the selection range for copy, clear and mutation.
 
@@ -503,7 +503,7 @@ Every feature is proven three times: by host tests on your PC, by a scripted run
 | --- | --- | --- |
 | **TI cl6x licence for distributing built code [rev]** | **The 60% target is unreachable on GCC alone, so this blocks the headline claim, not just a release date** | Read TI's redistribution terms in M0, before the architecture leans further on it; keep every `*.ti.c` GCC-clean; record both figures always |
 | **8 insert chains and the master cost [rev]** | The largest unmeasured term; a late discovery would force an architecture change | Measure in M0.5, before any engine work. If the fixed tax exceeds ~30%: mono sends, a shared drum filter, lo-fi out of the fixed chain, or a cheaper reverb |
-| Enaga's app interface changes before 1.0 | Rework in the glue layer | Pin `1b41111`; keep all Enaga calls in `app/` behind a thin adapter |
+| Enaga's app interface changes before 1.0 | Rework in the glue layer | Pin an Enaga release (`v0.2.0`) that matches the unit's firmware; keep all Enaga calls in `app/` behind a thin adapter |
 | **Enaga's MIDI and SYNC have never run on a unit [rev]** | Sync may fail in ways that are not STRATA's fault | Expect to debug Enaga during M7; verify early with a cable loop; report upstream with the failing case |
 | Pad feel (velocity from two reports, crosstalk between some pads) | Finger drumming feels off | Tune the velocity curve per pad; test early in M1. Enaga lists crosstalk as an open item |
 | Built-in font has upper case, digits and 11 symbols only | Cramped, plain screens | Draw a custom bitmap font and icons into `canvas.data()` — and note there is no UI toolkit at all, so every widget is STRATA's |
@@ -535,7 +535,7 @@ strata/
   docs/PLAN.md            authoritative build order, CLAUDE.md and first prompts
   docs/BUDGET.md          measured CPU load per component, updated at every milestone
   docs/UNIT_CHECKLIST.md  what to check at the next session on the unit
-  third_party/enaga/      git submodule, pinned at 1b41111
+  third_party/enaga/      git submodule, pinned at v0.2.0 (3da7f89)
   core/                   portable C++20: scheduler, pattern, steps, conditions, locks, mutation, serializer
   dsp/                    machines and effects; may use <enaga/dsp.h>, which also builds on the host
   app/                    Enaga glue: App subclass, input, LEDs, screens, files

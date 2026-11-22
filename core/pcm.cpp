@@ -48,6 +48,12 @@ constexpr uint16_t kEncodingFloat = 3;
 constexpr int32_t kS16Min = -32768;
 constexpr int32_t kS16Max = 32767;
 
+// WAV states its channel count in a uint16, but `channels` arrives here as an int. A value past
+// this would overflow the frame size to zero and turn the one division below into a division by
+// zero, so it is refused rather than trusted -- the same reflex as core/project.hpp's refusal to
+// believe a damaged byte asking for 4 GiB.
+constexpr int kChannelsMax = 65535;
+
 // 1.0 in the cursor's 32.32 fixed point.
 constexpr uint64_t kOne = uint64_t(1) << 32;
 
@@ -188,7 +194,8 @@ const char *pcm_format_name(PcmFormat format) {
 uint32_t pcm_to_s16(const uint8_t *in, uint32_t in_bytes, PcmFormat format, int channels,
                     int16_t *out, uint32_t max_frames) {
     const uint32_t sample_bytes = pcm_sample_bytes(format);
-    if (in == nullptr || out == nullptr || sample_bytes == 0 || channels <= 0) return 0;
+    if (in == nullptr || out == nullptr || sample_bytes == 0) return 0;
+    if (channels <= 0 || channels > kChannelsMax) return 0;
 
     const uint32_t frame_bytes = sample_bytes * uint32_t(channels);
     // The only division here, and it is once per call. Flooring is the point: a frame that is
@@ -230,6 +237,9 @@ uint32_t pcm_to_s16(const uint8_t *in, uint32_t in_bytes, PcmFormat format, int 
         }
         break;
     case PcmFormat::s32:
+        // The same shape as 24-bit: the top half-word is the int16 and the low half-word decides
+        // whether it rounds up. Kept in 32 bits, so the rounding needs no 64-bit intermediate
+        // and the most positive sample cannot overflow on its way to being clamped.
         for (uint32_t i = 0; i < samples; i++, p += 4) {
             const uint32_t bits = u32le(p);
             const int32_t high = signed_of(bits >> 16, 0x8000u);

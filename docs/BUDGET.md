@@ -12,7 +12,7 @@ One 64-frame block at 372 MHz is **496,000 cycles**. Every share below is a shar
 | --- | --- |
 | tic6x-elf GCC | 13.3.0, built from source by `tools/build_toolchain.sh` into `~/strata-toolchain/tic6x` |
 | TI cl6x | **8.5.0.LTS, installed** at `~/ti/ti-cgt-c6000_8.5.0.LTS`; Enaga's `paths.py` finds it automatically |
-| Current build | **cl6x** — `tools/build.sh` reports `built with cl6x: the DSP library, chainloops.ti.c, drumloops.ti.c, masterloops.ti.c` |
+| Current build | **cl6x** — `tools/build.sh` reports `built with cl6x: the DSP library, chainloops.ti.c, drumloops.ti.c, grainloops.ti.c, masterloops.ti.c, repeatloops.ti.c, valoops.ti.c` |
 
 ### cl6x is load-bearing, and it is now measured on our own code
 
@@ -27,15 +27,14 @@ STRATA's own figures now say the same thing, and the decisive pair is the eight-
 **M2's exit bar is 40%. With cl6x there is comfortable room; GCC-only fails it.** That settles the
 question the first version of this section left open: a GCC-only STRATA does not hit its targets.
 
-### The one thing still open: redistribution
+### Redistribution: settled (2026-11-22)
 
-Installing cl6x is done. **Whether TI's terms permit distributing what it builds is not**, and it
-is not Claude's to settle. A released `APP.ENA` contains cl6x-compiled code, and the figures above
-say we cannot simply fall back to GCC if the answer is no. Worth reading before a public release,
-and worth raising with Enaga upstream, which has the same exposure.
-
-Until it is settled, record **every** load figure twice — with cl6x and with
-`ENAGA_TI_CGT=none` — so a GCC-only release never becomes a late surprise.
+This heading used to say whether TI's terms permit distributing what cl6x builds was still open.
+It was examined and the premise was wrong: no TI code, headers or run-time library reach
+`APP.ENA`. The reasoning and the one TI file still worth reading are in
+**"The cl6x licence question, examined"** further down. What stands is availability: cl6x runs
+only on the user's machine, so cloud figures are GCC-only. Keep recording load figures both ways
+whenever cl6x is available.
 
 ## Reference figures from Enaga (measured on a unit, caches on)
 
@@ -412,6 +411,47 @@ session cannot do this: `ti.com` and `software-dl.ti.com` are outside its allowe
 
 Until that read happens the honest status is **"unverified, and the reason it was thought to be a
 blocker does not survive looking at the build"** -- not "blocked".
+
+### All seven scenarios with cl6x, and VA POLY per voice (2026-11-22)
+
+The column every section below was missing. Run on the development machine (WSL, cl6x
+8.5.0.LTS), `main` at `bf8e5a4`, emulator `smpltrek-re` at `4b0d711`, then again on the Enaga
+v0.2.0 pin with the emulator at `11ac9a0`: **every figure below came out identical on both, to
+the cycle, and the cl6x `APP.ENA` is byte-identical** (476,008 bytes, SHA-256 `353f8956…`). Host
+suite 539,926 checks, 0 failures. `tools/build.sh` sends `chainloops`, `drumloops`, `grainloops`,
+`masterloops`, `repeatloops` and `valoops` (`*.ti.c`) and the DSP library through cl6x.
+
+| Scenario | cl6x | GCC only | ratio |
+| --- | --- | --- | --- |
+| `scenario_m0.sh` — init, nothing playing | **2.54%** | 2.87% | 1.13x |
+| `scenario_m1.sh` — the beat | **23.49%** | 39.60% | 1.69x |
+| `scenario_m3.sh` — the default beat | **19.17%** | 31.92% | 1.67x |
+| `scenario_m4.sh` — + stop, queue, save | **16.94%** | 27.16% | 1.60x |
+| `scenario_m5.sh` — + PERFORM, scenes, macros | **19.37%** | 34.54% | 1.78x |
+| `scenario_m6.sh` — + KEYS, three keys recorded | **21.28%** | 36.61% | 1.72x |
+| `scenario_m7.sh` — + every MIXER page and SETUP | **23.49%** | 39.60% | 1.69x |
+
+0 overruns in every run. **Worst case 23.49% with cl6x, against the 60% target.**
+
+**VA POLY per voice**, by the method of the sections below (swap the stab's chord type in
+`build_default_beat`, re-run `scenario_m3.sh`; the bass adds one more `VaVoice`):
+
+| Chord on the stab | VaVoices | cl6x | GCC only |
+| --- | --- | --- | --- |
+| none (a single note) | 2 | 12.81% | 20.63% |
+| `5TH` | 3 | 14.87% | 24.30% |
+| `MIN7` — the default kit | 5 | **19.17%** | 31.92% |
+| `MIN11` — all six voices | 7 | **23.48%** | 39.55% |
+
+**2.16 points per voice with cl6x** (MIN7 → MIN11; 2.06 from none → 5TH), against **3.82**
+GCC-only, so cl6x is worth **1.77x on the voice** — less than the 2.2x Enaga measured on its own
+synth, more than enough. Six VA POLY voices are therefore ~13.0% of the block on the C674x
+model, which is still ~5.7x the 11,208 cycles `docs/SPEC.md` budgets for the whole machine:
+explanation 1 of "VA POLY costs 4.25 points per voice" below is now ruled out as the whole
+story (cl6x is not worth an order of magnitude here), and explanation 2 — SPEC budgeted a cheaper
+voice than the one that was built — is what is left. The whole machine still fits: the worst
+scenario is under 24%, so **M6's budget exit stands on the emulator**, and only the unit, with
+its caches, can confirm it.
 
 ### M4, M5 and M6 — measured in the emulator, GCC-only (2026-11-21)
 

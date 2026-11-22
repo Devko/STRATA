@@ -89,6 +89,13 @@ public:
         return track >= 0 && track < kTracks ? machine_id_[track] : 0;
     }
 
+    // The note the last trig on `track` handed its machine, after the scale fold. Written and
+    // read on the audio side only; the host tests read it because the rig runs both contexts on
+    // one thread, and a Sampler or Granular cannot be asked what note it was given.
+    uint8_t sent_note(int track) const {
+        return track >= 0 && track < kTracks ? sent_note_[track] : 0;
+    }
+
     // The same buffer, writable, so the card can put a WAV header in the bytes reserved for one.
     // Main context, and only while `status().resample_state` reads 3 -- see dsp/capture.hpp on
     // why the reserved bytes exist and why the audio side never touches them.
@@ -244,6 +251,7 @@ private:
     Machine *machines_[kTracks] = {};
 
     uint8_t machine_id_[kTracks] = {};
+    uint8_t sent_note_[kTracks] = {};  // see sent_note()
 
     // And which tracks host a VaPoly, for the same reason and recorded the same way: a chord is
     // several notes on one frame, so `fire` has to know that this track can take them. A track
