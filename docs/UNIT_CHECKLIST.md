@@ -1401,9 +1401,19 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
 - [ ] **PERFORM, VALUE**: morphs from the kit (scene 1) to DUB (scene 2): chord, rim and blips into
       the sends with longer tails. Scenes 3 (DARK: filters close) and 4 (TENSION: the acid opens,
       hats and kick tighten) are there to assign to A or B.
-- [ ] **PERFORM, A-D: no macros ship.** An assigned macro holds its parameters at its own value
-      even at 0, so a shipped macro would freeze those EDIT knobs. Assign your own; the factory
-      leaves them empty on purpose (core/factory.cpp).
+- [ ] **PERFORM, B-D**: B ACID (bass cutoff, resonance, envelope), C DUB (chord and rim into the
+      delay and reverb), D DRIVE (kick longer and driven, both hats longer). Each must be audible
+      from the first detent, with no jump. A is empty on purpose: pad pressure bends macro A.
+- [ ] **A macro at 0 lets go, and sweeps from where the sound is** (2026-11-22). With ACID at 0,
+      turn BASS CUT in EDIT: it is heard. Turn ACID up: the cutoff opens from where you left it,
+      with no jump. Back to 0: your value is back. The same with the morph: morph fully to DUB,
+      then turn C up one detent: the chord's delay send must not drop.
+- [ ] **Assigning with the macro knob up** (STEP in PERFORM while the macro is not at 0): the
+      parameter moves at once to where the knob puts it -- the macro taking effect. The EDIT
+      value is not rewritten, and back at 0 the parameter is where it was.
+- [ ] **A project saved before this change** with macros may play them differently: a resting
+      macro used to hold its targets at `low`, and a moving one swept from `low`; now both start
+      from the kit value. Re-check any project you saved with macros before 2026-11-22.
 - [ ] **Mute states** 1-8: all, no kick, drums only, no hats, no bass, kick + bass, melodic parts
       only, the bare groove without rim and blips.
 - [ ] Anything that sounds wrong, say which and how: each value has its arithmetic in a comment
