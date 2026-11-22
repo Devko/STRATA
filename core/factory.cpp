@@ -481,11 +481,12 @@ void factory_chain(Project &project) {
 
 // tic6x-elf-g++ 13.3.0 crashes on this function at -O2 (internal compiler error in
 // haifa-sched.cc:1597, priority(), during c6x_reorg's post-reload scheduling), with every helper
-// above inlined into it. -fno-unroll-loops moved the crash to emit_nop_after and the two together
-// segfaulted, so the attribute turns off only that scheduling pass. The function runs once, at
-// first start and on NEW, so the slower code costs nothing. Remove once the cross GCC is fixed.
+// above inlined into it. The crash moves with small edits: -fno-unroll-loops moved it to
+// emit_nop_after, and turning off only the post-reload scheduling pass fixed one tree and not an
+// older one. -O1 compiled every tree tried. The function runs once, at first start and on NEW, so
+// the slower code costs nothing. Remove once the cross GCC is fixed.
 #if defined(__GNUC__) && !defined(__clang__)
-__attribute__((optimize("no-schedule-insns2")))
+__attribute__((optimize("O1")))
 #endif
 void factory_project(Project &project, SceneSet &scenes, MacroSet &macros) {
     project_init(project);
