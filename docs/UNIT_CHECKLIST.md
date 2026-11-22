@@ -397,6 +397,20 @@ New 2026-11-22. Put a few WAVs in `/SAMPLES` on the card first (the two test fil
 - [ ] PROJECT says `UNSAVED`; save, reload (FUNC+LEFT twice): track 8 has the picked file.
 - [ ] A folder of many files: listing time `________` (about how long `READING FOLDER` shows).
 
+## 15c. A long stem (4 min)
+
+New 2026-11-22: files over the old 30 s limit load whole, in chunks. Put a 48 kHz stereo WAV of
+2-2.5 minutes (25-30 MB) in `/SAMPLES`.
+
+- [ ] Pick it for track 8 in the sample browser while playing: `LOADING LONG` with a rising
+      percentage, the beat never stops. Seconds to playable `________` (expect about 4 s).
+      Keys and screen responsive while it loads? `________`
+- [ ] It plays from the start, all the way through (STA 0, LEN 127, PLY LOOP); on GRN, POS
+      sweeps the whole file. Clicks at 4 MiB boundaries (every ~22 s of stereo 24-bit, ~44 s of
+      16-bit)? `________`
+- [ ] PROJECT's SMP line shows the memory used, about `27/32M`. A second one on another track:
+      `NO ROOM`, and the first keeps playing.
+
 ## 16. Six voices: the STRATA6 app (4 min)
 
 STRATA6 is the same build with the chord stab set to MIN11 (six notes). Leave STRATA through
