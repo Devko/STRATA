@@ -84,6 +84,8 @@ TEST(lfo_rate_runs_free_below_64_and_synced_above) {
         CHECK(lfo_sync_ticks(uint8_t(r)) <= last);
         last = lfo_sync_ticks(uint8_t(r));
     }
+    CHECK_EQ(lfo_sync_name(63), "---");
+    CHECK_EQ(lfo_sync_name(64), "8B");               // the first synced count is a rate too
     CHECK_EQ(lfo_sync_name(76), "1B");
     CHECK_EQ(lfo_sync_name(96), "1/4");
     CHECK_EQ(lfo_sync_name(100), "1/8.");
@@ -95,6 +97,21 @@ TEST(lfo_rate_runs_free_below_64_and_synced_above) {
     CHECK_EQ(lfo_free_centi_hz(0), 6u);
     CHECK_EQ(lfo_free_centi_hz(63), 3200u);
     for (int r = 1; r < 64; r++) CHECK(lfo_free_hz(uint8_t(r)) > lfo_free_hz(uint8_t(r - 1)));
+}
+
+TEST(lfo_settings_take_the_free_rate_from_the_rat_byte) {
+    // LfoSettings::make: a free rate's Hz comes from RAT (byte 1) and only while free; a synced
+    // one has none. WAV, DEP and DST are set to other values so a wrong byte shows.
+    const uint8_t free_bytes[kLfoParams] = {30, 21, 100, 5};
+    const LfoSettings f = LfoSettings::make(free_bytes);
+    CHECK_EQ(f.sync_ticks, 0u);
+    CHECK_NEAR(f.hz, lfo_free_hz(21), 1e-6f);
+    CHECK(f.hz > 0.0f);
+    const uint8_t synced_bytes[kLfoParams] = {30, 96, 100, 5};
+    const LfoSettings s = LfoSettings::make(synced_bytes);
+    CHECK_EQ(s.sync_ticks, 96u);
+    CHECK_EQ(s.hz, 0.0f);
+    CHECK_NEAR(s.inv_sync_ticks, 1.0f / 96.0f, 1e-6f);
 }
 
 TEST(lfo_apply_moves_the_byte_by_depth_and_clamps) {
