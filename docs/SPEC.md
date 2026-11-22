@@ -186,7 +186,7 @@ Eight tools change the music live without touching the stored pattern unless you
 | Throws | Hold to push delay or reverb send to full on the selected tracks; release returns it | No |
 | Mutation | Variations of the selected track: rotate, Euclidean density up or down, bounded randomizing of velocity, micro-timing, probability and notes in scale. Seeded and undoable | OK keeps it, CLR reverts |
 | Macros | 4 macros on encoders A-D in PERFORM mode. Each drives up to 4 parameters on any tracks, each towards its own end. **[rev]** At 0 a macro lets go, and turning it up sweeps each parameter from its live value (kit, then morph) to that end, so a resting macro never holds an EDIT knob or a scene (Roland, 2026-11-22) | Macro setup saves |
-| Resample | Record the master or one track for 1, 2, 4 or 8 bars to `/RECORD` as WAV, then load it into a SAMPLE or GRAIN track in one action | Writes a file |
+| Resample | Record the master or one track for 1, 2, 4 or 8 bars to `/RECORD` as WAV, then load it into a SAMPLE or GRAIN track in one action. **[rev]** Or record the audio input (2026-11-22): encoder B in RESAMPLE picks MASTER or an input route (LINE, LINE L, MIC, DYN MIC, HI-Z) through `enaga::system::input`, C its level; the take is `audio()`'s `in`, bar-aligned like a master take, with a meter and no monitoring. Recording one track alone is still not built | Writes a file |
 
 **Musical defaults that help creativity**
 

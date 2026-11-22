@@ -597,6 +597,18 @@ track as the destination, the take also becomes that track's sample and loads st
 an 8-bar jam can become the loop on track 8 for SAMPLE or GRAIN. A take is at most 30 s
 (`SHORTENED TO 30S`). CLR cancels.
 
+**Sampling from the input.** B picks where the take comes from: `MASTER` (the default) or one of
+the inputs, `LINE` (INPUT L and R), `LINE L` (INPUT L alone, on both sides), `MIC` (the built-in
+microphone, which Enaga keeps silent unless headphones are in: the screen says
+`MIC NEEDS HEADPHONES`), `DYN MIC` (INPUT R through the mic preamp) or `HI-Z` (INPUT L for a
+guitar). C sets the input level, `LOW`, `NORM` or `HIGH` (on LINE, LOW is the -20 dB pad). An
+input shows a meter under `FROM ...`; set the level so it does not reach `CLIP`. The take is the
+input alone, before anything STRATA plays, and otherwise works exactly like a master take: it
+starts on the next bar line with the transport running, lasts 1-8 bars, and lands in a file or
+a track. You do not hear the input through STRATA; listen to the source directly. Turning B or C
+makes the input quiet for about 10 ms, and Enaga puts the input back to LINE, NORM when STRATA
+stops.
+
 ---
 
 ## 6. Saving, loading and the card

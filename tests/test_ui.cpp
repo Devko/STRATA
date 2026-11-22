@@ -3382,3 +3382,110 @@ TEST(storage_a_second_folder_asked_for_mid_listing_waits_its_turn) {
     CHECK(!storage.request_sample_file(0, ""));
     CHECK_EQ(app_engine().project().kit.tracks[0].sample[0], '\0');
 }
+
+// --- RESAMPLE from the audio input ---------------------------------------------------------
+
+TEST(ui_resample_b_picks_the_source_and_routes_the_input) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    shift_key(ENAGA_KEY_F2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);   // UI state outlives fresh(): MASTER
+
+    app.on_encoder(1, +1);                         // B: LINE
+    CHECK_EQ(host.input_source(), int(ENAGA_INPUT_LINE_STEREO));
+    CHECK_EQ(UiProbe::notice(app), "LINE");
+    for (int i = 0; i < 3; i++) app.on_encoder(2, -1);
+    CHECK_EQ(host.input_level(), int(ENAGA_INPUT_LOW));
+    app.on_encoder(2, +1);
+    CHECK_EQ(host.input_level(), int(ENAGA_INPUT_NORMAL));
+    app.on_encoder(2, +1);                         // C: HIGH
+    CHECK_EQ(host.input_level(), int(ENAGA_INPUT_HIGH));
+    app.on_encoder(2, +5);                         // and no further
+    CHECK_EQ(host.input_level(), int(ENAGA_INPUT_HIGH));
+    for (int i = 0; i < 10; i++) app.on_encoder(1, +1);
+    CHECK_EQ(host.input_source(), int(ENAGA_INPUT_HIZ));    // the last one, and it stops there
+
+    // OK arms a take FROM THE INPUT: the engine is told source 1.
+    const int calls = host.input_calls();
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(host.input_calls(), calls);           // already routed: no second 10 ms gap
+    pump(2);
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 1);
+    key(ENAGA_KEY_CLR);                            // cancel
+    pump(2);
+
+    // Back to the master: C has nothing to set, and the route is left alone.
+    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);
+    const int before = host.input_calls();
+    app.on_encoder(2, -1);
+    CHECK_EQ(host.input_calls(), before);
+    // D does nothing here, and never reaches a sound parameter.
+    const uint8_t d_param = app_engine().params(0).v[3];
+    app.on_encoder(3, +5);
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[3]), int(d_param));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_resample_a_refused_route_is_shown_and_tried_again_at_the_arm) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    shift_key(ENAGA_KEY_F2);
+    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);   // MASTER
+    host.set_input_result(-2);                     // the codec did not answer
+    app.on_encoder(1, +1);
+    CHECK_EQ(UiProbe::notice(app), "INPUT REFUSED");
+    host.set_input_result(0);
+    const int calls = host.input_calls();
+    key(ENAGA_KEY_OK);                             // not applied yet: the arm tries again
+    CHECK_EQ(host.input_calls(), calls + 1);
+    CHECK_EQ(host.input_source(), int(ENAGA_INPUT_LINE_STEREO));
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_resample_sources) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    shift_key(ENAGA_KEY_F2);
+    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);   // MASTER
+    pump(400);
+    check_layout(app, "RESAMPLE, master");
+    app.on_encoder(2, +1);
+    app.on_encoder(2, +1);                         // HIGH: the longest level name
+    for (int s = 1; s < kTakeSourceChoices; s++) {
+        app.on_encoder(1, +1);
+        pump(400);
+        check_layout(app, kTakeSources[s].name);
+    }
+    // The mic without headphones says so; with them it does not.
+    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);
+    app.on_encoder(1, +1);
+    app.on_encoder(1, +1);
+    app.on_encoder(1, +1);                         // MIC
+    pump(400);
+    check_layout(app, "RESAMPLE, mic without headphones");
+    host.set_headphones(true);
+    check_layout(app, "RESAMPLE, mic");
+    host.set_headphones(false);
+    host.set_input_result(-1);
+    app.on_encoder(1, +1);
+    pump(400);
+    check_layout(app, "RESAMPLE, refused");
+    host.set_input_result(0);
+    // A full meter, clipping, and an armed take.
+    static float in[2 * ENAGA_BLOCK_FRAMES];
+    for (float &x : in) x = 1.0f;
+    static float out[2 * ENAGA_BLOCK_FRAMES];
+    app.audio(in, out, ENAGA_BLOCK_FRAMES);
+    app.on_encoder(1, +1);
+    key(ENAGA_KEY_OK);
+    pump(400);
+    app.audio(in, out, ENAGA_BLOCK_FRAMES);
+    check_layout(app, "RESAMPLE, clipping and armed");
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    key(ENAGA_KEY_F4);
+}
