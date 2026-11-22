@@ -33,4 +33,22 @@
 #define STRATA_BLOCK_LOOP
 #endif
 
+/* Packed 16-bit arithmetic, the SIMD the C674x does have (from the C64x+): DOTP2 multiplies two
+ * pairs of 16-bit halves and adds the products in one instruction. A stereo int16 frame is such
+ * a pair, so one unaligned 32-bit load and a DOTP2 by (1, 1) give L + R where the plain C needs
+ * two 16-bit loads and an add. The sample readers are load-bound (two .D units, and a stereo
+ * Hermite read takes eight taps a sample), so halving their loads is the point. The sum is exact
+ * in integers either way, so this is bit-exact by arithmetic -- but the host cannot run it, which
+ * is why it waits behind STRATA_TI_PACKED for tonight's cl6x render and measurement. */
+#ifndef STRATA_TI_PACKED
+#define STRATA_TI_PACKED 0
+#endif
+
+#if defined(__TI_COMPILER_VERSION__) && STRATA_TI_PACKED
+#include <c6x.h>
+#define STRATA_PAIR_SUM(p) ((int32_t)_dotp2((int)_mem4_const(p), 0x00010001))
+#else
+#define STRATA_PAIR_SUM(p) ((int32_t)(p)[0] + (int32_t)(p)[1])
+#endif
+
 #endif

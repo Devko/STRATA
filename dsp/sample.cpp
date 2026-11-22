@@ -52,6 +52,8 @@
 //     quality is cheap in the direction this machine is already bound.
 #include "sample.hpp"
 
+#include "sampleloops.h"
+
 namespace strata {
 namespace {
 
@@ -555,22 +557,18 @@ void Sampler::generate(Voice &v, int32_t istep, uint32_t fstep, float inv_step, 
             int k = estimate >= float(room) ? room : (estimate >= 1.0f ? int(estimate) : 1);
             while (k > 1 && run_end(v.pos, v.frac, istep, fstep, k) > v.safe_hi) k >>= 1;
 
+            // The run itself is a cl6x loop (dsp/sampleloops.ti.c): the same read4 and the same
+            // stepping as the loop that used to be here, which GCC compiled in every build. The
+            // last sample is read without advancing, so the pointer is never walked past the
+            // final valid tap.
             const int16_t *p = src + (v.read0 + v.dir * v.pos) * kCh;
-            uint32_t frac = v.frac;
-            int32_t pos = v.pos;
-            // The last sample is emitted outside the loop so the pointer is never walked past
-            // the final valid tap.
-            for (int j = 0; j < k - 1; j++) {
-                dst[i + j] = read4<kCh>(p, stride, float(int32_t(frac)) * kInvFracScale);
-                frac += fstep;
-                const uint32_t carry = frac >> kFracBits;
-                frac &= kFracMask;
-                p += istride + (carry != 0u ? stride : 0);
-                pos += istep + int32_t(carry);
+            if constexpr (kCh == 2) {
+                strata_sample_read_stereo(dst + i, k, p, stride, istride, &v.frac, fstep, &v.pos,
+                                          istep);
+            } else {
+                strata_sample_read_mono(dst + i, k, p, stride, istride, &v.frac, fstep, &v.pos,
+                                        istep);
             }
-            dst[i + k - 1] = read4<kCh>(p, stride, float(int32_t(frac)) * kInvFracScale);
-            v.frac = frac;
-            v.pos = pos;
             i += k;
         }
 

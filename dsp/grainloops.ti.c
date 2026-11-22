@@ -30,6 +30,8 @@
 
 #include <enaga/dsp/math.h>
 
+#include "tihints.h"
+
 /* Q16 to float, and the window phase to a table index. Both constants, so cl6x keeps them in
  * registers across the loop. The first is written out rather than as 1.0f / 65536.0f, which is
  * what dsp/repeatloops.ti.c does with its Q32 scale and for the same reason: it is exact either
@@ -141,8 +143,8 @@ void strata_grain_add_stereo(float *restrict out, int n, const int16_t *restrict
         /* The pair summed as integers, so a stereo grain still costs one int-to-float convert
          * per tap; the halving rides on the caller's output gain. */
         const int32_t o = pos + pos;
-        const float a = (float)((int32_t)src[o] + (int32_t)src[o + 1]);
-        const float b = (float)((int32_t)src[o + 2] + (int32_t)src[o + 3]);
+        const float a = (float)STRATA_PAIR_SUM(src + o);        /* tihints.h: DOTP2 on cl6x */
+        const float b = (float)STRATA_PAIR_SUM(src + o + 2);
         const float s = a + (b - a) * t;
 
         out[i] += gain * strata_grain_window(window, q, peak, rise, fall) * s;
