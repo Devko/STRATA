@@ -173,7 +173,9 @@ struct ProjectSettings {
     uint16_t tempo_centi_bpm = 13000;    // 130.00 BPM; Enaga's clock takes BPM x 100
     uint8_t root = 60;
     uint8_t scale = 0;
-    uint8_t swing = uint8_t(kSwingMin);
+    // No swing here. The file kept a project-wide swing that nothing read; the sequencer only
+    // ever used the PATTERN's (core/pattern.hpp), so the field is gone and its byte in
+    // PROJECT.BIN is reserved (core/project.cpp).
     uint8_t quantize = 100;              // the live-record quantize amount, 0-100
     uint8_t mute_states[8] = {};         // 8 stored mute states, one bit per track
 

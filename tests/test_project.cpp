@@ -132,8 +132,10 @@ ProjectSettings busy_settings() {
     s.tempo_centi_bpm = 14537;
     s.root = 65;
     s.scale = 4;
-    s.swing = 63;
     s.quantize = 72;
+    s.live_mutes = 0x3C;
+    s.scene_a = 4;
+    s.scene_b = 11;
     for (uint32_t i = 0; i < sizeof(s.mute_states); i++) s.mute_states[i] = uint8_t(0x11 * (i + 1));
     s.sample_budget_mib = 48;
     s.chain_length = 9;
@@ -399,7 +401,6 @@ TEST(project_init_empties_everything_and_lives_on_a01) {
     const ProjectSettings fresh;
     CHECK_EQ(int(g_source.settings.tempo_centi_bpm), int(fresh.tempo_centi_bpm));
     CHECK_EQ(int(g_source.settings.root), int(fresh.root));
-    CHECK_EQ(int(g_source.settings.swing), int(fresh.swing));
     CHECK_EQ(int(g_source.settings.quantize), int(fresh.quantize));
     CHECK_EQ(int(g_source.settings.sample_budget_mib), int(fresh.sample_budget_mib));
     CHECK_EQ(int(g_source.settings.chain_length), 0);
@@ -481,8 +482,10 @@ TEST(project_round_trips_every_settings_field) {
     CHECK_EQ(int(b.tempo_centi_bpm), int(a.tempo_centi_bpm));
     CHECK_EQ(int(b.root), int(a.root));
     CHECK_EQ(int(b.scale), int(a.scale));
-    CHECK_EQ(int(b.swing), int(a.swing));
     CHECK_EQ(int(b.quantize), int(a.quantize));
+    CHECK_EQ(int(b.live_mutes), int(a.live_mutes));
+    CHECK_EQ(int(b.scene_a), int(a.scene_a));
+    CHECK_EQ(int(b.scene_b), int(a.scene_b));
     for (uint32_t i = 0; i < sizeof(a.mute_states); i++) {
         CHECK_EQ(int(b.mute_states[i]), int(a.mute_states[i]));
     }
@@ -776,17 +779,19 @@ TEST(project_the_root_note_and_the_quantize_amount_are_clamped) {
     CHECK_EQ(int(g_loaded.settings.quantize), 100);
 }
 
-TEST(project_swing_is_clamped_to_the_fifty_to_seventyfive_range) {
+TEST(project_the_old_swing_byte_is_written_as_50_and_ignored_on_read) {
+    // The project swing is gone (nothing read it); its byte stays so old files still line up.
     const uint32_t at = fresh_project_file();
+    CHECK_EQ(int(g_project[at + 4]), int(kSwingMin));
 
     for (int value = 0; value < 256; value++) {
         g_project[at + 4] = uint8_t(value);
         refresh_crc(g_project);
         CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
                  int(SerializeResult::ok));
-        const int got = int(g_loaded.settings.swing);
-        const int want = value < kSwingMin ? kSwingMin : (value > kSwingMax ? kSwingMax : value);
-        if (got != want) CHECK_EQ(got, want);
+        if (g_loaded.settings.quantize != g_source.settings.quantize) {
+            CHECK_EQ(int(g_loaded.settings.quantize), int(g_source.settings.quantize));
+        }
     }
 }
 

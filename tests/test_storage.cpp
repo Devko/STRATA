@@ -670,7 +670,6 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     p.settings.root = 64;
     p.settings.scale = 3;
     p.settings.quantize = 70;
-    p.settings.swing = uint8_t(kSwingMin + 2);
     p.settings.chain_enabled = true;
     p.settings.chain_length = 3;
     p.chain[0] = ChainEntry{1, 2, 3};
@@ -776,7 +775,6 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     CHECK_EQ(int(back.settings.root), 64);
     CHECK_EQ(int(back.settings.scale), 3);
     CHECK_EQ(int(back.settings.quantize), 70);
-    CHECK_EQ(int(back.settings.swing), int(kSwingMin + 2));
     CHECK(back.settings.chain_enabled);
     CHECK_EQ(int(back.settings.chain_length), 3);
     CHECK_EQ(int(back.chain[0].bank), 1);

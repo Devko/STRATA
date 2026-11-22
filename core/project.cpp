@@ -18,7 +18,7 @@
 //         0   2  tempo, centi-BPM
 //         2   1  root note
 //         3   1  scale
-//         4   1  swing, 50..75
+//         4   1  reserved: was a project swing nothing read. Written as 50, ignored on read
 //         5   1  live-record quantize, 0..100
 //         6   8  the 8 stored mute states, one bit per track
 //        14   1  sample budget, MiB
@@ -419,7 +419,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     w.u16(s.tempo_centi_bpm);
     w.u8(s.root);
     w.u8(s.scale);
-    w.u8(s.swing);
+    w.u8(uint8_t(kSwingMin));   // the reserved byte: a legal swing, for builds that still read it
     w.u8(s.quantize);
     for (uint32_t i = 0; i < sizeof(s.mute_states); i++) w.u8(s.mute_states[i]);
     w.u8(s.sample_budget_mib);
@@ -505,7 +505,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     const uint16_t tempo = r.u16();
     const uint8_t root = r.u8();
     const uint8_t scale = r.u8();
-    const uint8_t swing = r.u8();
+    (void)r.u8();                // reserved (the old project swing)
     const uint8_t quantize = r.u8();
     uint8_t mutes[sizeof(ProjectSettings::mute_states)] = {};
     for (uint32_t i = 0; i < sizeof(mutes); i++) mutes[i] = r.u8();
@@ -524,7 +524,6 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // round trip rather than be thrown away. The UI draws an unknown id as the chromatic
     // default.
     s.scale = scale;
-    s.swing = clamp_u8(swing, uint8_t(kSwingMin), uint8_t(kSwingMax));
     s.quantize = clamp_u8(quantize, 0, 100);
     // Every bit pattern is a legal set of mute states for 8 tracks, so these are taken as they
     // come.
