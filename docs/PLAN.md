@@ -26,12 +26,13 @@ deferred concern (external sync) pulled forward into M1.
 ## Where it actually stands (2026-11-22)
 
 Every figure here is from a cloud session: the host suite, the tic6x device build and the
-emulator. **Nothing in this project has ever run on the unit**, so no exit criterion involving
-load or feel is met, whatever the numbers below say.
+emulator, except one: **STRATA booted on the unit on 2026-11-22** (Enaga 0.2.0) and plays the
+default beat with the on-screen LOAD at about 0–26%. No other exit criterion involving load or
+feel is met until the unit confirms it, whatever the numbers below say.
 
 | | State | What is actually true |
 | --- | --- | --- |
-| M0 | code complete | `tools/build.sh` links: APP.ENA, no BOOT, MCU or SPI sections. **Never booted.** Its nine checklist boxes need the hardware |
+| M0 | code complete | `tools/build.sh` links: APP.ENA, no BOOT, MCU or SPI sections. **Boots on the unit** (2026-11-22); the rest of its checklist boxes need the hardware |
 | M0.5 | folded into M2 | See docs/BUDGET.md; the spike's four configurations were never measured on the unit |
 | M1 | code complete | 4-track beat plays in the emulator. Exit wanted "under 15%"; it reads 33.07% GCC-only with a chord on the stab, which is not comparable — different kit, no cl6x, no cache model |
 | M2 | code complete | Full kit, mixer, insert chain, sends, master. The sidechain duck was **dead code until this session** (both arms of its depth ternary were 0) |
@@ -50,7 +51,7 @@ Finished after that table was last written, and all of it on `main`:
 | **the melodic fold** | `machine_folds_note` settled the POLY/MONO asymmetry M6 left open: both VAs and GRAIN fold a step's note into the key, SAMPLE only while unsliced (SLC = 1), the drums never |
 | **VA POLY, 4.30 → 3.82 points a voice** | A fused output tail in `dsp/valoops.ti.c` and filter coefficients shared between the voices of a chord. Both bit-exact; every scenario with a VA voice came down ~1.6 points |
 
-The one thing that gates everything and cannot be done here: **boot `build/APP.ENA` on a unit**.
+What gates everything now, and cannot be done here: **work `docs/UNIT_CHECKLIST.md` on the unit**. It boots (2026-11-22).
 The cl6x licence question is settled (docs/BUDGET.md, "The cl6x licence question, examined");
 what remains is that cl6x runs only on the user's machine. docs/BUDGET.md records it as worth
 ~2.2x and the 60% target depends on it, so a GCC-only figure over 60% means nothing either way.
