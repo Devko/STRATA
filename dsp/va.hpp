@@ -222,6 +222,14 @@ public:
     }
 
     float amp_level() const { return amp_.level(); }
+
+    // Fade out over kChokeFrames and stop: how the shared voice budget takes a voice from
+    // another track (va.cpp says why not a kill or a release). A no-op on a silent voice or one
+    // already fading. gate_on() cancels it, so a choked voice can be taken for a new note.
+    static constexpr int kChokeFrames = 64;
+    void choke();
+    bool choking() const { return choke_left_ > 0; }
+
     float pitch() const { return pitch_; }
     float target_pitch() const { return target_; }
     bool accent() const { return accent_; }
@@ -263,6 +271,9 @@ private:
     // the slices a trig or a gate cuts short.
     int ramp_n_ = 0;
     float inv_n_ = 0.0f;
+
+    int choke_left_ = 0;                // frames of the choke fade still to run, 0 when none
+    float choke_step_ = 0.0f;           // the output gain it takes off per frame
 };
 
 // --- the machine ----------------------------------------------------------

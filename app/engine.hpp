@@ -85,6 +85,16 @@ public:
     const TrackParams &params(int track) const { return params_[track]; }
     const Machine *machine(int track) const { return machines_[track]; }
 
+    // The shared voice budget: at most kPolyVoiceBudget VA POLY voices sounding across every
+    // track at once. Any track can host VA POLY (machine switching), each has six voices and a
+    // sustaining voice costs ~2.2 points with cl6x (docs/BUDGET.md), so eight chord tracks
+    // would be past 100% of the block with nothing to stop them. Past the budget, a new note
+    // chokes the quietest started voice on ANY POLY track (a 1.3 ms fade, VaVoice::choke); if
+    // every counted voice is still waiting for its frame, the new note is dropped rather than
+    // let the total grow. Twelve is two full six-voice chords: a starting point to be set from
+    // the unit's MAX readings (docs/BUDGET.md, U2), not a measured limit.
+    static constexpr int kPolyVoiceBudget = 12;
+
     // Tests only: false makes every prepare() run, as it did before the memo, so a test can
     // render the same input both ways and compare the output bit for bit.
     void set_prepare_memo(bool on) { prepare_memo_ = on; forget_prepared(); }
@@ -336,6 +346,8 @@ private:
     // the machine it was prepared for, and a flag every applied command clears. Skipping is
     // therefore bit-exact by construction, which tests/test_engine.cpp holds it to by rendering
     // with the memo on and off.
+    bool make_room_for_poly_voice(int track, uint8_t note);
+
     void prepare_machine(int track);
     void prepare_chain(int track);
     void forget_prepared();

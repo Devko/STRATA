@@ -266,6 +266,7 @@ void VaVoice::kill() {
     svf_b_.reset();
     sync_carry_ = 0.0f;
     gain_ = 0.0f;
+    choke_left_ = 0;
 }
 
 void VaVoice::reset() {
@@ -285,6 +286,7 @@ void VaVoice::set_note(float velocity, bool accent, bool slide) {
 }
 
 void VaVoice::gate_on() {
+    choke_left_ = 0;       // a choked voice taken for a new note is a new note, not a fade
     amp_.gate_on();        // from the level it is at: resetting it under a note is a click
     fenv_.gate_on(true);   // the sweep always starts from closed, however loud the old note was
 }
@@ -377,8 +379,13 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
 
     amp_.render(env, n, accent_ ? s.amp_shape_accent : s.amp_shape);
 
-    const float target = s.out_gain * (kVelocityFloor + (1.0f - kVelocityFloor) * velocity_) *
-                         (accent_ ? kAccentGain : 1.0f);
+    float target = s.out_gain * (kVelocityFloor + (1.0f - kVelocityFloor) * velocity_) *
+                   (accent_ ? kAccentGain : 1.0f);
+    // A choked voice ramps its output gain to zero over kChokeFrames instead (choke(), below).
+    if (choke_left_ > 0) {
+        const float lowered = gain_ - choke_step_ * float(n);
+        target = choke_left_ <= n || lowered < 0.0f ? 0.0f : lowered;
+    }
 
     // The whole tail in ONE pass: the soft clip, the amplitude envelope and the ramped add.
     //
@@ -397,6 +404,25 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     }
     strata_va_tail(out, work, env, n, s.drive, gain_, (target - gain_) * inv_n_);
     gain_ = target;
+
+    if (choke_left_ > 0) {
+        choke_left_ -= n;
+        if (choke_left_ <= 0) {
+            choke_left_ = 0;
+            kill();            // the ramp has reached zero: nothing is cut that can be heard
+        }
+    }
+}
+
+// The shared voice budget's way out (app/engine.cpp, make_room_for_poly_voice): a fade of the
+// output gain to zero over kChokeFrames, then a kill. A kill on its own would put a step the
+// size of the voice's level into the mix; a release would keep the voice -- and its cost --
+// running for another 60 ms, which is the cost the budget exists to bound. 64 frames is 1.3 ms:
+// short enough that the budget is back within a block, long enough not to click.
+void VaVoice::choke() {
+    if (!sounding() || choke_left_ > 0) return;
+    choke_left_ = kChokeFrames;
+    choke_step_ = gain_ * (1.0f / float(kChokeFrames));
 }
 
 // --- the machine ----------------------------------------------------------

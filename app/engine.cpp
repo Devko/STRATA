@@ -221,6 +221,39 @@ void Engine::apply_commands() {
 // Bit-exact by construction: a prepare() is a pure function of its arguments and of state only
 // a command changes, and the memo holds the arguments and is cleared by every command.
 
+// --- the shared voice budget ------------------------------------------------------------------
+
+// Before a VA POLY trig on `track`: true if it may go ahead. See kPolyVoiceBudget (engine.hpp).
+bool Engine::make_room_for_poly_voice(int track, uint8_t note) {
+    VaPoly *target = polys_[track];
+    if (target == nullptr || !target->would_add_voice(note)) return true;
+
+    int used = 0;
+    for (int t = 0; t < kTracks; t++) {
+        if (polys_[t] != nullptr) used += polys_[t]->budget_voices();
+    }
+    if (used < kPolyVoiceBudget) return true;
+
+    // The quietest started voice anywhere, this track included. Ties go to the lowest track,
+    // so the choice is deterministic.
+    int pick_track = -1;
+    int pick_slot = -1;
+    float quietest = 0.0f;
+    for (int t = 0; t < kTracks; t++) {
+        if (polys_[t] == nullptr) continue;
+        float level = 0.0f;
+        const int slot = polys_[t]->quietest_voice(level);
+        if (slot >= 0 && (pick_track < 0 || level < quietest)) {
+            pick_track = t;
+            pick_slot = slot;
+            quietest = level;
+        }
+    }
+    if (pick_track < 0) return false;   // everything counted is still waiting: drop this note
+    polys_[pick_track]->choke(pick_slot);
+    return true;
+}
+
 void Engine::forget_prepared() {
     for (int t = 0; t < kTracks; t++) {
         machine_prepared_for_[t] = nullptr;
@@ -980,7 +1013,8 @@ void Engine::apply(const Command &command) {
                 trig.note = clamp_u8(command.a);
                 trig.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
                 trig.frame = 0;
-                machines_[track]->trigger(trig);
+                // A pad on a POLY track counts against the shared budget like a step does.
+                if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
                 status_.bump_triggered(track);
             }
             break;
@@ -1560,6 +1594,8 @@ void Engine::fire(const StepEvent &event) {
                                             notes, VaPoly::kVoices);
             for (int i = 0; i < voiced; i++) {
                 trig.note = notes[i];
+                // The budget across every POLY track (kPolyVoiceBudget, engine.hpp).
+                if (!make_room_for_poly_voice(track, trig.note)) continue;
                 machines_[track]->trigger(trig);
             }
         } else {
