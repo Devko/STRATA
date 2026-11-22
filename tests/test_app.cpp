@@ -761,6 +761,43 @@ TEST(app_a_resample_can_land_in_a_track_in_one_action) {
     CHECK(storage().last_error() == nullptr);
 }
 
+TEST(app_a_take_landed_in_track_one_replaces_a_longer_path_and_marks_the_kit) {
+    // The first track is a track like any other (`take_track_ >= 0`), the take's path replaces
+    // the kit's WHOLE path -- a longer one that was there before must not show through after
+    // the terminator -- and the kit is dirty, so the next save keeps the take on the track.
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+    put_trig(0, 0);
+    post(Cmd::set_param, 0, 0, 11, 127);
+    pump();
+    char *path = engine.project_for_load().kit.tracks[0].sample;
+    std::memset(path, 0, kSamplePathBytes);
+    std::strcpy(path, "/SAMPLES/A_PATH_MUCH_LONGER_THAN_ANY_TAKE_NAME_EVER_IS.WAV");
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(!storage().dirty());
+    host.set_running(true);
+
+    post(Cmd::resample_arm, 0, 0, 1);
+    CHECK(storage().request_resample_write(0));
+    host.deliver_tick(384, 0);
+    bool landed = false;
+    for (int i = 0; i < 4000 && !landed; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+        landed = std::strncmp(engine.project().kit.tracks[0].sample, "/RECORD/", 8) == 0 &&
+                 storage().busy_text() == nullptr &&
+                 engine.status().resample_state.load(std::memory_order_relaxed) == 0u;
+    }
+    CHECK(landed);
+    char expected[64];
+    std::strcpy(expected, "/RECORD/");
+    std::strcat(expected, storage().last_take_name());
+    CHECK_EQ(engine.project().kit.tracks[0].sample, static_cast<const char *>(expected));
+    CHECK(storage().dirty());
+    CHECK_EQ(storage().loading_track(), -1);
+}
+
 TEST(app_a_second_resample_is_refused_while_one_is_running) {
     // There is no undo for a lost take: the audio is gone. dsp/capture refuses, and the engine
     // counts the refusal so the screen can say so.

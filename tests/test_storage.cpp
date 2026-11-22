@@ -3073,3 +3073,126 @@ TEST(storage_a_deliberate_save_puts_the_project_name_in_the_settings) {
     settings.load();
     CHECK_EQ(settings.text("PROJECT", ""), storage().project_name());
 }
+
+// =============================================================================================
+// 7c. What a line-by-line mutation run found (tools/mutation_test.py)
+// =============================================================================================
+//
+// The tests above came from hand-picked mutants. tools/mutation_test.py mutates every line of
+// app/storage.cpp; these close what it found. The survivors that change no behaviour are argued
+// in app/storage.cpp and listed in docs/MUTATION.md.
+
+namespace {
+
+// A WAV bigger than g_scratch: 8-bit PCM, which is one byte a sample, so the converted int16 is
+// twice the file -- the cheapest way to ask the pool for a lot of room.
+// 3.5 MiB: the fake card's arena is 4 MiB (tests/fakehost.hpp), and the settings and the project
+// files have to fit next to it.
+uint8_t g_big[7u << 19];
+
+uint32_t make_big_wav(const char *path, uint32_t rate, int channels, uint32_t frames) {
+    enaga::wav::Format format;
+    format.encoding = uint16_t(enaga::wav::pcm);
+    format.channels = uint16_t(channels);
+    format.rate = rate;
+    format.bits = 8;
+    const uint32_t data = frames * uint32_t(channels);
+    CHECK(44u + data <= uint32_t(sizeof g_big));
+    enaga::wav::header(g_big, format, data);
+    for (uint32_t i = 0; i < data; i++) g_big[44u + i] = uint8_t(((i / 64u) & 1u) ? 0x20u : 0xE0u);
+    CHECK(FakeHost::the().write_file(path, g_big, 44u + data));
+    return 44u + data;
+}
+
+}  // namespace
+
+TEST(storage_every_refused_sample_leaves_the_loader_idle) {
+    // `sample_track_ = -1` on each refusal is what `loading_track()` reports, and the screen
+    // draws "loading" from it. Only NOT A WAV was ever checked.
+    clean();
+    kit_sample(kLoopTrack, "/SAMPLES/NOWHERE.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "NOT FOUND");
+    CHECK_EQ(storage().loading_track(), -1);
+
+    make_wav("/SAMPLES/E0.WAV", 48000, 2, 16, 0);
+    kit_sample(kLoopTrack, "/SAMPLES/E0.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "BAD FORMAT");
+    CHECK_EQ(storage().loading_track(), -1);
+
+    make_wav("/SAMPLES/C3.WAV", 48000, 3, 16, 100);
+    kit_sample(kLoopTrack, "/SAMPLES/C3.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "TOO MANY CH");
+    CHECK_EQ(storage().loading_track(), -1);
+
+    make_wav("/SAMPLES/E1.WAV", 48000, 2, 16, 0, nullptr, 0, false, false, 3);
+    kit_sample(kLoopTrack, "/SAMPLES/E1.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "EMPTY");
+    CHECK_EQ(storage().loading_track(), -1);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+}
+
+TEST(storage_a_file_to_resample_longer_than_the_source_buffer_is_refused) {
+    // A file at another rate is converted whole into src_ before it is resampled, and src_ is
+    // sized for docs/SPEC.md's 30 s -- past that the spec says the file is streamed instead. So
+    // 33 s at 44.1 kHz (more frames than 30 s at 48 kHz) is refused with a reason, rather than
+    // written past the buffer.
+    clean();
+    make_big_wav("/SAMPLES/LONG441.WAV", 44100, 1, 44100u * 33u);
+    kit_sample(kLoopTrack, "/SAMPLES/LONG441.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "TOO LONG");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    CHECK_EQ(storage().loading_track(), -1);
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 0u);
+
+    // 29 s at the same rate is fine.
+    make_big_wav("/SAMPLES/OK441.WAV", 44100, 1, 44100u * 29u);
+    kit_sample(kLoopTrack, "/SAMPLES/OK441.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+
+    storage().request_new();                    // and give the 2.5 MB back
+    CHECK(settle());
+}
+
+TEST(storage_a_sample_the_pool_has_no_room_for_is_refused_and_the_rest_play) {
+    // 3.5 MiB of 8-bit stereo is 7 MiB once converted, so the budget holds `fit` of them and
+    // the next is refused with NO ROOM and holds nothing, while the ones before it stay loaded.
+    // The budget is whatever the tests before left it at (32 MiB unless one is mid-change), so
+    // the count is worked out rather than assumed; anything up to 56 MiB leaves a track over.
+    clean();
+    const uint32_t frames = (uint32_t(sizeof g_big) - 44u) / 2u;
+    make_big_wav("/SAMPLES/BIG.WAV", 48000, 2, frames);
+    const uint32_t converted = frames * 2u * 2u;
+    const uint32_t fit = storage().samples().budget() / converted;
+    CHECK(fit >= 1u && fit + 1u <= uint32_t(kTracks));
+
+    for (uint32_t t = 0; t <= fit; t++) kit_sample(int(t), "/SAMPLES/BIG.WAV");
+    for (uint32_t t = 0; t <= fit; t++) {
+        CHECK(storage().request_sample(int(t)));
+        CHECK(settle(24, 40000));
+    }
+    for (uint32_t t = 0; t < fit; t++) {
+        CHECK_EQ(int(slot_of(int(t)).state), int(SampleState::ready));
+    }
+    CHECK_EQ(storage().last_error(), "NO ROOM");
+    CHECK_EQ(int(slot_of(int(fit)).state), int(SampleState::failed));
+    CHECK_EQ(slot_of(int(fit)).bytes, 0u);
+    CHECK_EQ(storage().loading_track(), -1);
+
+    // NEW names no file for any track, so every track goes through the swap's "no file" branch:
+    // the sample is taken away, the memory given back, and the loader ends idle.
+    storage().request_new();
+    CHECK(settle(24, 40000));
+    for (uint32_t t = 0; t <= fit; t++) {
+        CHECK_EQ(int(slot_of(int(t)).state), int(SampleState::empty));
+        CHECK_EQ(slot_of(int(t)).bytes, 0u);
+    }
+    CHECK_EQ(storage().samples().used(), 0u);
+    CHECK_EQ(storage().loading_track(), -1);
+}
