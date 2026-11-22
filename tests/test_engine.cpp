@@ -32,9 +32,10 @@
 // deliberately does not build (its `ENAGA_APP(Strata)` defines a device package's entry points).
 // What this file can check is the half of CLAUDE.md's transport rule that IS in the engine: that
 // the engine never calls the transport itself, and that what it plays comes from the clock's own
-// state rather than from a command. The same goes for the sample region -- app/app.cpp hands it
-// over in init, so `sample_region_` is null here and every `Cmd::set_sample` is refused before
-// its field checks are reached.
+// state rather than from a command. The sample region is NOT in that position: the rig's
+// `Storage::init` hands the engine its 64 MiB region exactly as `App::init` does on the unit, so
+// `Cmd::set_sample`'s offset, frame-count and alignment checks are reachable here, and
+// tests/test_engine_gaps.cpp drives them.
 #include "apprig.hpp"
 #include "check.hpp"
 #include "fakehost.hpp"
@@ -2352,11 +2353,8 @@ TEST(engine_clearing_a_sample_bumps_the_epoch_even_for_a_track_that_has_none) {
     }
 
     // A sample goes to the track's Sampler and Grain whatever the track hosts, so a POLY track
-    // takes it too -- and both are refused here, because app/app.cpp is what hands the
-    // engine its sample region and host/Makefile does not build app/app.cpp. So
-    // `sample_region_ == nullptr` and the offset, frame-count and alignment checks cannot be
-    // reached from the host at all; what they guard is the pool arithmetic on the other side of
-    // the ring, which tests/test_samplepool.cpp covers.
+    // takes it too. These two carry no frames, which is refused whatever the region; the
+    // bounds against the region are tests/test_engine_gaps.cpp's.
     uint32_t before = refused();
     post(Cmd::set_sample, kPoly, 0, 1);
     pump();
