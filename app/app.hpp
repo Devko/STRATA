@@ -253,7 +253,7 @@ constexpr uint8_t kKeyVelocity = 100;
 // The modes of docs/SPEC.md's function block. F4 = GRID, F7 = MIXER, F8 = EDIT, and the two
 // selection keys under the screen move within whichever mode is showing -- the step page in
 // GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
-enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample, machine, kit };
+enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample, machine, kit, samples };
 
 // How long a take is. docs/SPEC.md: "1, 2, 4 or 8 bars", so these four and nothing between --
 // a resample is a loop and a loop is a power of two bars.
@@ -277,6 +277,7 @@ const char *mode_name(Mode mode) {
         case Mode::resample: return "RESAMPLE";
         case Mode::machine:  return "MACHINE";
         case Mode::kit:      return "KIT";
+        case Mode::samples:  return "SAMPLES";
         default:             return "?";
     }
 }
@@ -454,6 +455,7 @@ public:
         // of OK, CLR and the arrows cannot fire while one of them is what is on screen.
         if (mode_ == Mode::project && on_project_key(key)) return;
         if (mode_ == Mode::kit && on_kit_key(key)) return;
+        if (mode_ == Mode::samples && on_samples_key(key)) return;
         // A mutation waiting for its verdict takes OK and CLR first, in whatever mode: OK keeps
         // it, CLR reverts it. Only the plain keys; F1 + CLR and F1 + OK stay undo and redo.
         if (mutation_pending_ && !shift_ && (key == ENAGA_KEY_OK || key == ENAGA_KEY_CLR)) {
@@ -636,6 +638,11 @@ public:
                     notice("REDO");
                 } else if (step_page_) {
                     step_page_ = false;                // OK again closes it
+                } else if ((mode_ == Mode::edit || mode_ == Mode::machine) &&
+                           plays_files(selected_)) {
+                    // OK picks, as in every Enaga list: on a SAMPLE or GRAIN track, from the
+                    // sound pages or the machine list, it opens the sample browser on that track.
+                    open_samples();
                 }
                 break;
 
@@ -763,6 +770,7 @@ public:
             case Mode::project:                 // PROJECT, PERFORM and KIT have their own handlers
             case Mode::perform:
             case Mode::kit:
+            case Mode::samples:
                 break;
         }
     }
@@ -931,6 +939,10 @@ public:
             case Mode::kit:
                 // The selection keys flip the browser's two pages of eight, like LEFT and RIGHT.
                 move_kit_cursor_to(kit_cursor_ + delta * 8);
+                break;
+            case Mode::samples:
+                // A page of the list, like LEFT and RIGHT.
+                move_sample_cursor_to(sample_cursor_ + delta * kSampleRows);
                 break;
         }
     }
@@ -1138,6 +1150,12 @@ public:
         // and must not fall through to the sound parameters of a screen that is not showing.
         if (mode_ == Mode::kit && encoder >= 0 && encoder < 4) {
             if (encoder == 0) move_kit_cursor_to(kit_cursor_ + delta);
+            return;
+        }
+
+        // SAMPLES: A scrolls the list, as UP and DOWN do. B to D have nothing to set here.
+        if (mode_ == Mode::samples && encoder >= 0 && encoder < 4) {
+            if (encoder == 0) move_sample_cursor_to(sample_cursor_ + delta);
             return;
         }
 
@@ -1784,6 +1802,7 @@ public:
                 case Mode::resample: draw_resample(canvas); break;
                 case Mode::machine: draw_machine(canvas); break;
                 case Mode::kit:     draw_kit(canvas); break;
+                case Mode::samples: draw_samples(canvas); break;
             }
         }
 
@@ -2037,6 +2056,8 @@ public:
 
         // The machine is changed somewhere else, and nothing said where.
         canvas.text(0, 96, "FUNC+EDIT: MACHINE", 7);
+        // And a sample track's file is picked from here.
+        if (plays_files(selected_)) canvas.text(0, 105, "OK: PICK SAMPLE", 7);
     }
 
     // --- MIXER: four levels at a time, with meters -----------------------
@@ -2318,8 +2339,242 @@ public:
             canvas.text(x + 4, y + 2, machine_name(uint8_t(m)), on ? 0 : 11);
         }
 
-        canvas.text(0, 103, "ARROWS: MACHINE TRACK", 7);
+        canvas.text(0, 103, plays_files(selected_) ? "OK: PICK SAMPLE" : "ARROWS: MACHINE TRACK",
+                    7);
         canvas.text(0, 112, "FUNC+EDIT AGAIN: KITS", 7);
+    }
+
+    // --- SAMPLES: the sample browser (OK on a SAMPLE or GRAIN track) -------
+    //
+    // One folder of the card as a list (core/browse.hpp, filled by app/storage.cpp). The arrows
+    // work as in every Enaga list: UP and DOWN move the cursor, LEFT and RIGHT turn a page, OK
+    // opens a folder or loads the file into the track, CLR goes up a folder and, from the top,
+    // back to where the browser was opened. One OK loads, with the transport running: picking
+    // samples by ear is what this is for, so the cursor stays where it is and the next OK tries
+    // the next file. Nothing is lost that cannot be picked again, which is why it takes one
+    // press and the kit browser's recall takes two.
+
+    static constexpr int kSampleRows = 8;
+
+    static bool is_file_machine(uint8_t id) {
+        return id == uint8_t(MachineId::sample) || id == uint8_t(MachineId::grain);
+    }
+    bool plays_files(int track) const { return is_file_machine(engine_.machine_id(track)); }
+
+    void open_samples() {
+        samples_return_ = mode_;
+        mode_ = Mode::samples;
+        leave_mode();
+        // Where the track's file is, when it is somewhere the browser shows; else SAMPLES.
+        const char *current = engine_.project().kit.tracks[selected_].sample;
+        char folder[SampleList::kFolderBytes];
+        if (!SampleList::in_browsable_folder(current) ||
+            !SampleList::folder_of(current, folder, int(sizeof folder))) {
+            const char *top = "/SAMPLES";
+            int i = 0;
+            for (; top[i] != '\0'; i++) folder[i] = top[i];
+            folder[i] = '\0';
+        }
+        browse_to(folder);
+        notice(storage_.card_usable() ? "SAMPLES" : "NO CARD");
+    }
+
+    // List `folder` and put the cursor on `select` once the list is in ("" for the top, or for
+    // the track's own file when the folder is the one it lives in).
+    void browse_to(const char *folder) {
+        storage_.request_browse(folder);
+        sample_cursor_ = 0;
+        sample_seek_ = true;
+        // What the folder we came OUT of was called, so CLR lands the cursor back on it.
+        sample_seek_name_[0] = '\0';
+    }
+
+    void move_sample_cursor_to(int index) {
+        const int count = storage_.browse_list().count();
+        sample_cursor_ = index < 0 ? 0 : (index >= count ? (count > 0 ? count - 1 : 0) : index);
+    }
+
+    // Once a listing is in, the cursor goes to what we were looking for: the folder we came up
+    // out of, or the file the track plays.
+    void settle_sample_cursor() {
+        if (!sample_seek_ || storage_.browsing()) return;
+        sample_seek_ = false;
+        const SampleList &list = storage_.browse_list();
+        const char *want = sample_seek_name_[0] != '\0'
+                               ? sample_seek_name_
+                               : SampleList::name_of(engine_.project().kit.tracks[selected_].sample);
+        const int at = list.find(want);
+        sample_cursor_ = at < 0 ? 0 : at;
+    }
+
+    bool on_samples_key(int key) {
+        // A STEP held makes OK, CLR and the arrows its own chords (step page, clear, copy).
+        if (held_step_ >= 0) return false;
+        const SampleList &list = storage_.browse_list();
+        switch (key) {
+            case ENAGA_KEY_OK: {
+                if (shift_) return false;               // F1 + OK is redo, as everywhere
+                if (storage_.browsing() || list.count() == 0) return true;
+                if (list.is_folder(sample_cursor_)) {
+                    char folder[SampleList::kFolderBytes];
+                    if (list.at_root()) {
+                        // The root's two entries are the card's top folders.
+                        char *out = folder;
+                        *out++ = '/';
+                        const char *name = list.name(sample_cursor_);
+                        while (*name != '\0' && out < folder + sizeof folder - 1) *out++ = *name++;
+                        *out = '\0';
+                    } else if (!list.path_of(sample_cursor_, folder, int(sizeof folder))) {
+                        notice("PATH TOO LONG");
+                        return true;
+                    }
+                    browse_to(folder);
+                    return true;
+                }
+                char path[kSamplePathBytes];
+                if (!list.path_of(sample_cursor_, path, int(sizeof path))) {
+                    notice("PATH TOO LONG");
+                    return true;
+                }
+                if (!plays_files(selected_)) {
+                    notice("SMP OR GRN ONLY");
+                } else if (!storage_.card_usable()) {
+                    notice("NO CARD");
+                } else if (storage_.request_sample_file(selected_, path)) {
+                    notice("LOADING");
+                } else {
+                    notice("PATH TOO LONG");
+                }
+                return true;
+            }
+
+            case ENAGA_KEY_CLR: {
+                if (shift_) return false;               // F1 + CLR is undo
+                if (list.at_root()) {
+                    mode_ = samples_return_;            // back, where the browser came from
+                    leave_mode();
+                    notice(mode_name(mode_));
+                    return true;
+                }
+                // Up a folder, with the cursor on the one we left.
+                char parent[SampleList::kFolderBytes];
+                SampleList::parent_of(list.folder(), parent, int(sizeof parent));
+                const char *left = SampleList::name_of(list.folder());
+                int i = 0;
+                for (; left[i] != '\0' && i < SampleList::kEntryNameBytes - 1; i++) {
+                    sample_seek_name_[i] = left[i];
+                }
+                sample_seek_name_[i] = '\0';
+                storage_.request_browse(parent);
+                sample_cursor_ = 0;
+                sample_seek_ = true;
+                return true;
+            }
+
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (shift_) {
+                    // FUNC+UP reads the folder again (a card swapped, a take just written).
+                    if (key == ENAGA_KEY_UP) {
+                        char again[SampleList::kFolderBytes];
+                        const char *f = list.folder();
+                        int i = 0;
+                        for (; f[i] != '\0'; i++) again[i] = f[i];
+                        again[i] = '\0';
+                        storage_.request_browse(again);
+                        sample_seek_ = false;
+                        notice("READING");
+                    }
+                    return true;
+                }
+                move_sample_cursor_to(sample_cursor_ + (key == ENAGA_KEY_UP ? -1 : +1));
+                return true;
+
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (!shift_) {
+                    move_sample_cursor_to(sample_cursor_ +
+                                          (key == ENAGA_KEY_LEFT ? -kSampleRows : kSampleRows));
+                }
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    void draw_samples(enaga::Canvas &canvas) {
+        settle_sample_cursor();
+        const SampleList &list = storage_.browse_list();
+        char line[40];
+        char *out = line;
+        append(out, "SAMPLES T");
+        append_number(out, uint32_t(selected_) + 1);
+        append(out, " ");
+        append(out, machine_name(engine_.machine_id(selected_)));
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        // Where we are, or what is happening: the folder's tail, since its end is the part that
+        // tells two folders apart.
+        out = line;
+        const char *busy = storage_.busy_text();
+        if (storage_.browsing()) {
+            append(out, "READING FOLDER");
+        } else if (storage_.browse_error() != nullptr) {
+            append_shown(out, storage_.browse_error(), kLineChars);
+        } else if (busy != nullptr && storage_.loading_track() == selected_) {
+            append(out, busy);
+        } else if (list.at_root()) {
+            append(out, "CARD");
+        } else {
+            const char *folder = list.folder();
+            int n = 0;
+            while (folder[n] != '\0') n++;
+            append_shown(out, n > kLineChars ? folder + (n - kLineChars) : folder, kLineChars);
+        }
+        *out = 0;
+        canvas.text(0, 27, line, 10);
+
+        const int count = list.count();
+        const int first = (sample_cursor_ / kSampleRows) * kSampleRows;
+        if (count == 0 && !storage_.browsing()) {
+            canvas.text(0, 37, list.skipped() > 0 ? "NOTHING THAT FITS" : "NO WAV FILES HERE", 9);
+        }
+        for (int i = 0; i < kSampleRows && first + i < count; i++) {
+            const int at = first + i;
+            out = line;
+            *out++ = at == sample_cursor_ ? '>' : ' ';
+            // A folder ends in '/', which the font has; a long name is cut to the line.
+            const bool folder = list.is_folder(at);
+            append_shown(out, list.name(at), kLineChars - 2);
+            if (folder) *out++ = '/';
+            *out = 0;
+            canvas.text(0, 37 + i * 8, line, at == sample_cursor_ ? 15 : (folder ? 11 : 9));
+        }
+
+        // What the track plays now, and where in the list we are.
+        out = line;
+        const char *current = engine_.project().kit.tracks[selected_].sample;
+        append(out, "NOW ");
+        append_shown(out, current[0] != '\0' ? SampleList::name_of(current) : "LOOP", kLineChars - 4);
+        *out = 0;
+        canvas.text(0, 103, line, 11);
+
+        out = line;
+        if (count > 0) {
+            append_number(out, uint32_t(sample_cursor_ + 1));
+            *out++ = '/';
+            append_number(out, uint32_t(count));
+            if (list.skipped() > 0) {
+                append(out, " +");
+                append_number(out, uint32_t(list.skipped()));
+            }
+            append(out, "  ");
+        }
+        append(out, "OK LOAD CLR UP");
+        *out = 0;
+        canvas.text(0, 112, line, 7);
     }
 
     // --- KIT: the kit library (FUNC+EDIT twice) ---------------------------
@@ -3494,6 +3749,10 @@ private:
     CardAction card_armed_ = CardAction::none;   // F1 + LEFT / RIGHT in PROJECT, armed once
     uint32_t card_armed_at_ms_ = 0;
     int kit_cursor_ = 0;                        // KIT: the slot under the cursor, 0-15
+    int sample_cursor_ = 0;                     // SAMPLES: the entry under the cursor
+    bool sample_seek_ = false;                  // put the cursor on a name once the list is in
+    char sample_seek_name_[SampleList::kEntryNameBytes] = {};
+    Mode samples_return_ = Mode::edit;          // where CLR at the top goes back to
     KitAction kit_armed_ = KitAction::none;     // KIT: OK or F1 + DOWN pressed once
     uint32_t kit_armed_at_ms_ = 0;
     static constexpr uint32_t kSaveArmMs = 2000;
