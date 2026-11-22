@@ -16,7 +16,8 @@ at the top of `docs/UNIT_CHECKLIST.md` is the first pass over it.
 
 | | |
 | --- | --- |
-| `make -C host test` | **1,120 tests, 594,168 checks, 0 failures** on `main` at `01b64ab` (PR #31): `core/`, `dsp/` and all of `app/` |
+| `make -C host test` | **1,125 tests, 594,524 checks, 0 failures** on `main` at `95c6eb1` (PR #33): `core/`, `dsp/` and all of `app/` |
+| CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image: `APP.ENA` 484,160 bytes GCC-only (476,008 cl6x), bss 1,334,848; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here |
 | `tools/scenarios.sh` | **9 scenarios**: m0, m1, m3–m7, `factory`, `kits`. Worst measured: **23.49% with cl6x, 39.60% GCC-only** (`docs/BUDGET.md`), before today's afternoon PRs. `factory` and `kits` have not been run with cl6x yet |
 | unit | boots, plays, LOAD about 0–26%. **No MAX reading yet**: the readout is PR #17, still open |
@@ -55,11 +56,10 @@ at the top of `docs/UNIT_CHECKLIST.md` is the first pass over it.
    during a save and during sample loading, swapping a sample on a sounding track, the M5
    30-minute jam, and M7's hour locked to external MIDI clock.
 
-Work running in other threads today, not to be duplicated here: **factory macros** ("Make fresh
-projects sound good": a macro at 0 hands its parameters back to the knob, then a few shipped
-macros), **CI for the host tests** ("Set up CI for host tests"), **the release** ("Prepare the
-v0.1 release"), **a user manual** ("Write the STRATA user manual") and **engine test gaps**
-("Close the engine test gaps"). When one of them merges, update the table and the steps above.
+Work running in other threads, not to be duplicated here: **the release** ("Prepare the v0.1
+release"), **a user manual** ("Write the STRATA user manual") and **engine test gaps** ("Close
+the engine test gaps"). Factory macros (PR #34) and CI (PR #33) have merged. When another
+merges, update the table and the steps above.
 
 Smaller open items, none urgent:
 
@@ -149,8 +149,9 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
 
 - **Mutation testing, not just coverage.** A surviving mutation is a missing test or an
   equivalence argued in a comment in the owning file.
-- **AddressSanitizer over the whole suite after any DSP change**, with `detect_leaks=0`:
-  `BeatRepeat::init` allocates its ring with `new[]` and nothing frees it, by design.
+- **AddressSanitizer and UBSan over the whole suite** (`make -C host test SANITIZE=1`, also in
+  CI), with `detect_leaks=0`: `BeatRepeat::init` allocates its ring with `new[]` and nothing
+  frees it, by design.
 - **Bit-exactness gates a DSP refactor**, pinned with `==`, not a tolerance. Every optimization
   merged today (prepare-on-change, cached VA increments, the anti-aliasing loop in
   `core/pcmloops.ti.c`) has a test that runs old and new side by side.
@@ -188,7 +189,12 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
   when every counted voice is still waiting for its frame. GRAIN and VA MONO are not counted.
 - **The factory content is one function**, `factory_project` in `core/factory.cpp`, used by both
   `Engine::init` (no card) and `Storage::start_new` (NEW). Change sounds and patterns there only.
-  `project_init` stays blank because the tests' `fresh()` builds on it.
+  `project_init` stays blank because the tests' `fresh()` builds on it. It ships macros B ACID,
+  C DUB and D DRIVE and leaves A empty, because pad pressure bends macro A on whichever track is
+  selected.
+- **A macro sweeps from the parameter's live value** (kit, then morph) to its high end, so at 0
+  it is exactly the knob and EDIT and the morph keep working (PR #34). Before that, an assigned
+  macro froze its parameters at `low`, which is why no macros shipped at first.
 - **Navigation follows Enaga's menus**: UP/DOWN move between rows, LEFT/RIGHT sideways, OK picks,
   CLR goes back. New list-like settings go on the arrows, not new chords. `docs/CHEATSHEET.md` has
   the full map; on-screen hints name keys as printed on the panel (FUNC, PROJECT, EDIT).

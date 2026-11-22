@@ -37,10 +37,10 @@ about 0–26%. No exit criterion involving load or feel is met until the unit co
 | M2 | code complete | Eight-track worst case 23.61% cl6x, 44.26% GCC-only (emulator), against a 40% exit |
 | M3 | code complete | Locks, conditions, ratchets, micro-timing, polymeter, recording, 16 undo levels; undo also in PERFORM and PROJECT |
 | M4 | code complete | Projects, banks, chains, autosave, background loading. **A kit browser** (16 kits shared by all projects), and the **factory project** (a tuned kit, A01–A04, scenes, mute states) on first boot and NEW. Samples up to 30 s of the file at up to 96 kHz |
-| M5 | code complete | Scenes, morph, macros, mutes, beat repeat, throws, MUTATE (OK keeps, CLR reverts). Most of it is on pads, which the emulator cannot press, so most of it has never run outside the host tests |
+| M5 | code complete | Scenes, morph, macros (three shipped in the factory project; a macro sweeps from the live value, so 0 is the knob), mutes, beat repeat, throws, MUTATE (OK keeps, CLR reverts). Most of it is on pads, which the emulator cannot press, so most of it has never run outside the host tests |
 | M6 | **feature-complete, unheard** | Euclid, KEYS (a held key sustains), chords, VA POLY, GRAIN, resampling, pad pressure, machine switching. Budget exit stands **on the emulator** (worst scenario under 24% with cl6x); a shared 12-voice VA POLY budget keeps a POLY-heavy kit inside it |
 | M7 | **app side done** | The sync settings are the user's, in Enaga's menu; PROJECT's SETUP page shows them and VALUE refuses a tempo edit under an external clock. The rest is verification on the unit |
-| v0.1 | **in preparation** | Release notes, CHANGELOG and packaging in the thread "Prepare the v0.1 release"; a user manual in "Write the STRATA user manual"; CI for the host tests in "Set up CI for host tests". Waits for the unit's numbers (below) |
+| v0.1 | **in preparation** | Release notes, CHANGELOG and packaging in the thread "Prepare the v0.1 release"; a user manual in "Write the STRATA user manual". CI runs the host suite, ASan/UBSan and the repo checks on every PR. Waits for the unit's numbers (below) |
 
 Also on `main` since the first boot, all host-tested and none heard yet: the arrow-key navigation
 model and a layout test over every screen; the CHAIN and PATTERN pages in PROJECT; chains that
@@ -270,7 +270,8 @@ walked through and its numbers recorded.
   README.txt, and a draft GitHub release (thread "Prepare the v0.1 release").
 - A user manual (thread "Write the STRATA user manual"); `docs/CHEATSHEET.md` stays the one-page
   reference.
-- CI running `make -C host test` on every PR (thread "Set up CI for host tests").
+- CI on every PR (`.github/workflows/ci.yml`, merged in PR #33): the host suite, ASan/UBSan,
+  the layout check, the command audit and the Enaga pin check.
 
 **Exit:** tonight's walkthrough done, U1–U5 in `docs/BUDGET.md`, the VA POLY budget set from
 them, and every milestone exit the release notes claim backed by a unit row or labelled
@@ -295,7 +296,8 @@ entry points.
 - Every load figure is recorded twice, with and without cl6x.
 - **Mutation testing is the house standard** for `core/`, `dsp/` and `app/`: a surviving mutation
   is a missing test or an equivalence written down in the owning file.
-- **AddressSanitizer over the whole suite** after a DSP change (`detect_leaks=0`).
+- **AddressSanitizer and UBSan over the whole suite** (`make -C host test SANITIZE=1`), in CI on
+  every PR.
 - **Bit-exactness** gates a DSP refactor, pinned with `==`.
 - **Every screen passes the layout test** in `tests/test_ui.cpp` (Enaga's font, 21 characters a
   line, its charset).
