@@ -1,62 +1,81 @@
 # STRATA cheatsheet
 
 Built from the key handlers and draw code in `app/app.hpp`, so it says what the build does, not
-only what docs/SPEC.md planned. `F1+X` means hold F1 (FUNC) and press X. "Hold STEP" means a STEP
-key held down while you do the rest.
+only what docs/SPEC.md planned. Keys are named as printed on the SmplTrek. `FUNC+X` means hold
+FUNC and press X; "hold STEP" means a STEP key held down while you do the rest.
+
+## Key legend
+
+| Panel label (SmplTrek) | Code / SPEC name | Where |
+| --- | --- | --- |
+| FUNC, REC, PROJECT, HOME | F1, F2, F3, F4 | Function block, upper row, left to right |
+| PLAY, STOP, MIXER, EDIT | F5, F6, F7, F8 | Function block, lower row, left to right |
+| OK, CLR | OK, CLR | Right of the function block |
+| UP, DOWN, LEFT, RIGHT | the arrows | Cursor keys |
+| Octave left / right | OCTAVE_LEFT / RIGHT | The two octave buttons |
+| Selection left / right | SELECT_LEFT / RIGHT | The two buttons under the screen |
+| A, B, C, D | encoders A-D | Four knobs; each also pushes |
+| VALUE | encoder 4 | The VALUE knob; it also pushes |
+| STEP 1-16 | STEP keys | The 16 step buttons |
+| Pads | lower 1-8, upper 1-7 | Lower row = tracks, upper row = performance |
+
+The Lofi-12 XT and CyDrums print other names on the function block; this sheet uses the SmplTrek's.
+The F-key labels are from Enaga's `docs/hardware.md`, taken from the original firmware's test page.
+Some on-screen hints still use the code names: `F1+F3 AGAIN TO SAVE`, `F1+CLR UNDO`, `F1+EDIT: MACHINE`.
 
 ## Modes: how to get there
 
 | Mode | Keys | What it is for |
 | --- | --- | --- |
-| GRID | F4 | All 8 tracks; STEP keys edit the selected track |
-| KEYS | F1+F4 | STEP keys play 16 scale degrees on the selected track |
-| EDIT | F8 | The selected track's sound: pages SRC, FLTR, AMP, FX |
-| MACHINE | F1+F8 | Pick the machine on each track |
-| MIXER | F7 | Levels, delay, reverb, routing, master |
-| PERFORM | F1+F7 | Scenes, morph, macros, mutation |
-| PROJECT | F3 | Banks and patterns, key and scale, the card |
-| CHAIN | F3, then octave RIGHT | The pattern chain as a list |
-| PATTERN | F3, octave RIGHT twice | Master length (LEN) and swing (SWG) of the playing pattern |
-| SETUP | F3, octave RIGHT three times | Record quantize; shows clock and MIDI settings |
-| RESAMPLE | F1+F2 | Record the output to a file or a track |
+| GRID | HOME | All 8 tracks; STEP keys edit the selected track |
+| KEYS | FUNC+HOME | STEP keys play 16 scale degrees on the selected track |
+| EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX |
+| MACHINE | FUNC+EDIT | Pick the machine on each track |
+| MIXER | MIXER | Levels, delay, reverb, routing, master |
+| PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
+| PROJECT | PROJECT | Banks and patterns, key and scale, the card |
+| CHAIN | PROJECT, then octave RIGHT | The pattern chain as a list |
+| PATTERN | PROJECT, octave RIGHT twice | Master length (LEN) and swing (SWG) of the playing pattern |
+| SETUP | PROJECT, octave RIGHT three times | Record quantize; shows clock and MIDI settings |
+| RESAMPLE | FUNC+REC | Record the output to a file or a track |
 | Step page | Hold STEP + OK | One step's own fields (opens over GRID) |
-| Enaga menu | F1+POWER | CLOCK SRC, CLOCK/SYNC OUT, MIDI CH |
+| Enaga menu | FUNC+POWER | CLOCK SRC, CLOCK/SYNC OUT, MIDI CH |
 
 ## Keys that work everywhere
 
 | Keys | Action |
 | --- | --- |
-| F5 / F6 | Play / stop. F6 again cuts the tails. Refused under an outside clock (EXT CLOCK) |
-| F1+F5 | Restart from step 1, playing or not (RESTART) |
-| F1+F6 | Stop, cut the tails, drop a queued change, back to step 1 (RESET) |
-| F2 | Live record on/off (REC on the edit line, F2 lit red) |
-| F1+F3, F1+F3 (within 2 s) | Save the project |
-| F1+CLR / F1+OK | Undo / redo, in every mode and page |
+| PLAY / STOP | Play / stop. STOP again cuts the tails. Refused under an outside clock (EXT CLOCK) |
+| FUNC+PLAY | Restart from step 1, playing or not (RESTART) |
+| FUNC+STOP | Stop, cut the tails, drop a queued change, back to step 1 (RESET) |
+| REC | Live record on/off (REC on the edit line, REC lit red) |
+| FUNC+PROJECT, FUNC+PROJECT (within 2 s) | Save the project |
+| FUNC+CLR / FUNC+OK | Undo / redo, in every mode and page |
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph) |
 | VALUE push + turn | Pattern swing |
-| F1 + VALUE | Master DJ filter (LP n / OFF / HP n) |
-| F1 + octave L/R | Selected track's length (polymeter); not in KEYS, PROJECT, PERFORM |
-| F1 + selection L/R | Selected track's speed: 2, 1, 3/4, 1/2, 1/4, 1/8 |
+| FUNC + VALUE | Master DJ filter (LP n / OFF / HP n) |
+| FUNC + octave L/R | Selected track's length (polymeter); not in KEYS, PROJECT, PERFORM |
+| FUNC + selection L/R | Selected track's speed: 2, 1, 3/4, 1/2, 1/4, 1/8 |
 | Arrows | UP/DOWN move through rows, LEFT/RIGHT sideways, OK picks, CLR goes back |
-| F1 + UP / DOWN | The mode's second action (copy/paste while editing) |
+| FUNC + UP / DOWN | The mode's second action (copy/paste while editing) |
 
 ## Pads
 
-| Pad | Plain | With F1 / held |
+| Pad | Plain | With FUNC / held |
 | --- | --- | --- |
-| Lower 1-8 | Select the track and play its root note; pressure bends macro 1 up | F1: mute or unmute on the next bar |
+| Lower 1-8 | Select the track and play its root note; pressure bends macro 1 up | FUNC: mute or unmute on the next bar |
 | Upper 1 FILL | Fill while held | |
-| Upper 2 REPEAT | Beat repeat while held; VALUE picks 1/4 ... 1/16T | F1 at the press: pitch drops |
-| Upper 3 MUTE | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, F1+STEP on the next bar, push VALUE+STEP stores |
+| Upper 2 REPEAT | Beat repeat while held; VALUE picks 1/4 ... 1/16T | FUNC at the press: pitch drops |
+| Upper 3 MUTE | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
-| Upper 6 THROW | Delay throw while held | F1: reverb throw |
+| Upper 6 THROW | Delay throw while held | FUNC: reverb throw |
 | Upper 7 MUTATE | Mutates the selected track (type and amount set in PERFORM) | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT |
 
 ## Step editing (GRID, EDIT, MIXER, MACHINE, RESAMPLE)
 
 | Gesture | Action |
 | --- | --- |
-| Tap STEP | Toggle trig. F1 + tap: toggle trigless (locks, no note) |
+| Tap STEP | Toggle trig. FUNC + tap: toggle trigless (locks, no note) |
 | Octave L/R | Step page 1-4 (64 steps) |
 | Hold STEP + turn A-D | Lock that parameter of the current EDIT page on the step |
 | Hold STEP + push A-D | Remove that one lock (LOCK CLEARED) |
@@ -65,12 +84,12 @@ key held down while you do the rest.
 | Hold STEP + CLR | Clear the step |
 | Hold STEP + UP / DOWN | Copy / paste the step |
 | Hold two STEPs | Select the range between them (SEL a-b) |
-| Range + CLR / F1+UP / F1+DOWN | Clear / copy / paste the range |
+| Range + CLR / FUNC+UP / FUNC+DOWN | Clear / copy / paste the range |
 | Range + A / B | Transpose / nudge micro-timing of the range |
-| CLR, nothing held | Clear the whole track (F1+CLR brings it back) |
-| F1+UP / F1+DOWN, nothing held | Copy / paste the whole track |
+| CLR, nothing held | Clear the whole track (FUNC+CLR brings it back) |
+| FUNC+UP / FUNC+DOWN, nothing held | Copy / paste the whole track |
 | REC on, playing, turn A-D | Motion record: locks land on the playing step |
-| F1 + A / B / C (GRID) | Euclidean fill: hits, steps, rotation (EUC h/s Rn) |
+| FUNC + A / B / C (GRID) | Euclidean fill: hits, steps, rotation (EUC h/s Rn) |
 
 **Step page.** A-D edit four fields; selection keys flip the three field pages; LEFT/RIGHT move
 to the previous/next step; OK or CLR close it.
@@ -78,7 +97,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 
 ## Per mode
 
-| Mode | UP / DOWN | LEFT / RIGHT | Selection L/R | A-D | OK / CLR | F1 + arrow |
+| Mode | UP / DOWN | LEFT / RIGHT | Selection L/R | A-D | OK / CLR | FUNC + arrow |
 | --- | --- | --- | --- | --- | --- | --- |
 | GRID | Track | Step page 1-4 | Step page | Current EDIT page params | — / clear | Copy / paste |
 | EDIT | Track | Page SRC FLTR AMP FX | Page | The page's 4 params | — / clear | Copy / paste |
@@ -92,8 +111,8 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Macros A-D | Capture scene / clear macro | UP/DOWN: auto-fill OFF 4 8 16 |
 
 **KEYS:** STEP 1-16 play the scale from the root and hold the note until released; octave keys also change the octave.
-**PROJECT:** STEP 1-16 queue that slot of the shown bank. On the slots and SETUP pages, F1+LEFT
-reloads the project from the card and F1+RIGHT starts a new one; both throw away unsaved work, so
+**PROJECT:** STEP 1-16 queue that slot of the shown bank. On the slots and SETUP pages, FUNC+LEFT
+reloads the project from the card and FUNC+RIGHT starts a new one; both throw away unsaved work, so
 each needs a second press within 2 s (AGAIN TO RELOAD, AGAIN FOR NEW). The octave keys walk the pages PROJECT,
 CHAIN, PATTERN, SETUP; CLR on any of them goes back to the slots. In SETUP, A sets the record
 quantize.
