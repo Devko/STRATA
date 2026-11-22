@@ -1,6 +1,8 @@
 // The card side of STRATA. app/storage.hpp has the design and the three protocols.
 #include "storage.hpp"
 
+#include "factory.hpp"
+
 #include "engine.hpp"
 
 #include <enaga/app.hpp>
@@ -310,8 +312,11 @@ void Storage::start_new() {
         // included (app/engine.cpp sets its own `perform_dirty_` there) -- so it has to come
         // after every write it describes. This used to post first and then call
         // `performance_changed()`, a plain bool the audio side also writes, from this context.
-        perform_init(engine_->scenes_for_load(), engine_->macros_for_load());
-        project_init(engine_->project_for_load());
+        //
+        // The FACTORY project, not a blank one (core/factory.hpp): `project_init` alone leaves
+        // LVL 0 on every track, so NEW used to give a silent instrument with nothing in it.
+        factory_project(engine_->project_for_load(), engine_->scenes_for_load(),
+                        engine_->macros_for_load());
         post(Cmd::project_loaded);
 
         // A new project takes a NEW NAME. Keeping the old one would make the next save overwrite

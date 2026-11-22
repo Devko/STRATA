@@ -2497,7 +2497,8 @@ TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_moved_to_f1_arrows) {
     CHECK_EQ(UiProbe::notice(app), "NEW PROJECT");
     CHECK(pump_until_idle());
     pump(4);
-    CHECK_EQ(int(pattern.master_length), int(Pattern{}.master_length));   // a blank project's
+    // The factory project's first pattern (core/factory.hpp), not the edited one.
+    CHECK_EQ(int(pattern.master_length), int(strata::test::factory().patterns[0][0].master_length));
     key(ENAGA_KEY_F4);
 }
 
