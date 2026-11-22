@@ -71,7 +71,15 @@ class Engine;
 // How long a sample may be and still be loaded whole into RAM. docs/SPEC.md puts streams at
 // "loops longer than 30 s", so 30 seconds is the design limit, and it is what sizes the staging
 // buffers below rather than a number picked to make them fit.
+//
+// Thirty seconds OF THE FILE, at its own rate, up to kMaxSampleSourceRate. The buffers used to
+// be sized in 48 kHz frames, so a 96 kHz file got 15 s and a 30 s one was refused TOO LONG
+// (Roland, 2026-11-22: the limit should mean 30 s of the file's own length). A lower rate gets
+// more than 30 s out of the same frames -- 44.1 kHz about 65 s -- which costs nothing and is not
+// refused; a higher one (176.4 or 192 kHz) gets half. What a long file costs once LOADED is the
+// sample pool's to refuse (NO ROOM), as it always was.
 constexpr uint32_t kMaxSampleSeconds = 30;
+constexpr uint32_t kMaxSampleSourceRate = 96000;
 
 class Storage {
 public:
@@ -361,9 +369,12 @@ private:
     //   file_     one project file at a time. A bank is the biggest at about 129 KiB.
     //
     // raw_ and src_ are a fixed cost, not a per-sample one, and they are sized from
-    // kMaxSampleSeconds rather than chosen to fit: 30 s of stereo 32-bit float is the largest
-    // file the design loads whole, and 30 s of stereo int16 is the largest thing a resample
-    // reads.
+    // kMaxSampleSeconds at kMaxSampleSourceRate rather than chosen to fit: 30 s of a 96 kHz
+    // stereo 24-bit file (plus room for its header and the chunks a WAV carries after its data)
+    // is the largest file the design loads whole, and 30 s of 96 kHz stereo int16 is the largest
+    // thing a resample reads. A 96 kHz 32-bit float file is 23 MB at 30 s and gets about 22 s
+    // (files::load refuses a longer one as TOO BIG). tests/test_memory.cpp holds the total to
+    // the heap.
     int16_t *region_ = nullptr;
     uint8_t *raw_ = nullptr;
     int16_t *src_ = nullptr;
@@ -372,8 +383,12 @@ private:
     SamplePool pool_;
 
     static constexpr uint32_t kRegionBytes = kSampleBudgetMaxMib << 20;
-    static constexpr uint32_t kRawBytes = kMaxSampleSeconds * 48000u * 2u * 4u;   // stereo f32
-    static constexpr uint32_t kSrcFrames = kMaxSampleSeconds * 48000u;
+    // Header and trailing chunks: a LIST or a cue is a few hundred bytes, embedded artwork in an
+    // id3 chunk can be tens of KiB.
+    static constexpr uint32_t kRawSlackBytes = 64u * 1024u;
+    static constexpr uint32_t kRawBytes =
+        kMaxSampleSeconds * kMaxSampleSourceRate * 2u * 3u + kRawSlackBytes;     // stereo s24
+    static constexpr uint32_t kSrcFrames = kMaxSampleSeconds * kMaxSampleSourceRate;
     static constexpr uint32_t kSrcBytes = kSrcFrames * 2u * sizeof(int16_t);      // stereo s16
     static constexpr uint32_t kFileBytes = kBankMaxBytes;
 
