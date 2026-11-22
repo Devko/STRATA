@@ -14,8 +14,8 @@ conditions, and a performance layer for long, evolving live sets. Built as an
 ![Status](https://img.shields.io/badge/status-first%20boot%20on%20hardware-yellow)
 ![Licence](https://img.shields.io/badge/licence-MIT-green)
 
-[Features](#features) · [Install](#installing-on-a-smpltrek) · [Build](#building) ·
-[Status](#status) · [Documents](#documents)
+[Screens](#screens) · [Features](#features) · [Install](#installing-on-a-smpltrek) ·
+[Build](#building) · [Status](#status) · [Documents](#documents)
 
 </div>
 
@@ -41,6 +41,14 @@ Design principles, from [docs/SPEC.md](docs/SPEC.md):
 - **Controlled accidents.** Randomness is seeded, bounded and undoable.
 - **Always restorable.** STRATA never writes the SPI flash. All state lives on the SD card, so one
   official update restores the unit.
+
+## Screens
+
+![STRATA's screens: GRID, the step page, EDIT, MIXER, PERFORM, KEYS, MACHINE and PROJECT](docs/screens/overview.png)
+
+<sub>Top: GRID with the default beat playing, the step page, a track's sound page, MIXER.
+Bottom: PERFORM, KEYS, MACHINE, PROJECT. Drawn by the app's own screen code on the host build,
+in Enaga's font; `tools/screenshots.sh` redraws them.</sub>
 
 ## Features
 
@@ -88,6 +96,11 @@ A one-page reference for every gesture, screen and abbreviation is in
 [docs/CHEATSHEET.md](docs/CHEATSHEET.md).
 
 ## Installing on a SmplTrek
+
+> [!CAUTION]
+> Installing third-party firmware is **at your own risk**. Neither Enaga nor STRATA is made,
+> supported or endorsed by Sonicware, and installing them may affect your warranty. Keep an
+> official update file at hand so you can restore the unit.
 
 STRATA runs on top of Enaga, so the unit needs Enaga's firmware first, then the STRATA app on the
 SD card. There is no prebuilt STRATA release yet: build `APP.ENA` yourself (see
@@ -205,6 +218,17 @@ Load figures are in [docs/BUDGET.md](docs/BUDGET.md), the state of each mileston
 | [docs/ENAGA_API.md](docs/ENAGA_API.md) | The verified Enaga signatures STRATA uses |
 | [docs/SOUND.md](docs/SOUND.md) | Where the drum synthesis comes from, and how it is used |
 | [docs/REVIEW.md](docs/REVIEW.md) | The platform review the spec was corrected against |
+
+## Disclaimer
+
+STRATA is an independent hobby project. It is **not affiliated with, endorsed by or supported by
+Sonicware**. Sonicware, SmplTrek, Lofi-12 XT and CyDrums are trademarks of their respective
+owners and are used here only to say which hardware STRATA runs on.
+
+STRATA is provided **as is, without warranty of any kind**, and with no guarantee that it works,
+keeps your data safe or suits any purpose (see [LICENSE](LICENSE)). You install and use it at
+your own risk; the authors are not liable for any damage to your device, your data or anything
+else. Please do not contact Sonicware support about STRATA or Enaga.
 
 ## Licence
 
