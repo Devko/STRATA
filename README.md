@@ -185,12 +185,21 @@ tools/render.sh              # render the output to a WAV offline
 ### Continuous integration
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request and every push
-to `main`:
+to `main`, in about a minute:
 
-- `make -C host test`, the whole host suite with GCC, warnings as errors;
-- the same suite under AddressSanitizer and UBSan at `-O1` (`make -C host test SANITIZE=1`);
+- the whole host suite with GCC, warnings as errors, as parallel shards on every core
+  (`make -C host test JOBS=N`), with a 120-second watchdog per test and a 15-minute cap per job;
+- the same suite under AddressSanitizer and UBSan at `-O1` (`SANITIZE=1`), sharded the same way;
 - the font layout check over every screen (the `ui_layout_*` tests, run by name);
 - `tools/audit_commands.sh` and `tools/enaga_check.sh` (local checks only).
+
+Builds go through ccache, cached between runs. A pull request that changes only documentation
+(`*.md`, `docs/`) skips the two test jobs but still reports them as passed; the repo checks
+always run. On `main` the suite also runs once serially, in registration order.
+
+**The same checks locally:** `tools/ci_local.sh` (WSL or Linux) runs every lane above side by side
+and prints one line per lane with its time; `--quick` leaves out the sanitizers, and
+`--scenarios` adds the emulator scenarios afterwards, which CI cannot run.
 
 **What CI does not run:** the device build, the emulator scenarios and every load figure. They
 need the tic6x cross toolchain and, for the real numbers, TI cl6x, which only exists on the
