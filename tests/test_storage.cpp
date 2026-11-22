@@ -776,6 +776,11 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     CHECK_EQ(int(back.settings.scale), 3);
     CHECK_EQ(int(back.settings.quantize), 70);
     CHECK(back.settings.chain_enabled);
+    // And the chain is FOLLOWED again, not just remembered: the flag used to be read by nothing.
+    // The saved live pattern (C12, below) is not an entry, so it plays out its pass first.
+    CHECK(engine().chain().active);
+    CHECK(engine().chain().orphaned);
+    CHECK_EQ(int(engine().chain().entry), 0);
     CHECK_EQ(int(back.settings.chain_length), 3);
     CHECK_EQ(int(back.chain[0].bank), 1);
     CHECK_EQ(int(back.chain[0].slot), 2);

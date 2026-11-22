@@ -1155,6 +1155,8 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
 
 - [ ] Press MUTATE, then CLR: the track sounds as before and the screen says REVERTED. Press it
       again, then OK: it stays (KEPT). Works the same in GRID, EDIT and PERFORM.
+- [ ] MUTATE, then F1 + CLR (undo), then plain CLR: CLR does what CLR does in that mode and does
+      NOT say REVERTED or undo a second edit.
 - [ ] In PERFORM, F1 + CLR undoes and F1 + OK redoes. Plain CLR still clears the selected macro.
 - [ ] Hold scene A and press CLR: scene A's slot is erased (SCENE ERASED). This used to be F1 + OK.
 
@@ -1166,7 +1168,14 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
       repeats (X1 to X16), OK adds a copy below, LEFT and RIGHT step its pattern, UP and DOWN
       move between entries, F1 + LEFT removes one. Build A01 X2, A03 X1 and turn it on with
       F1 + UP: it plays A01 twice, A03 once, and loops. The PLAY marker follows.
-- [ ] Save and reopen: the chain comes back, and so does whether it was on.
+- [ ] Save and reopen: the chain comes back, and so does whether it was on. With it on, the saved
+      pattern plays its pass and then the chain carries on from its first entry (it used to
+      reopen off, whatever the file said).
+- [ ] While the chain plays, add an entry ABOVE the playing one (cursor up, OK): the chain carries
+      on with the entry it was playing and the PLAY marker moves with it. Remove the playing
+      entry (F1 + LEFT): the pattern finishes its pass and the NEXT entry plays, none skipped.
+- [ ] Queue a pattern (END), then STOP and PLAY before it lands: it lands as the transport
+      starts, not as many bars late as the clock had run.
 - [ ] PATTERN: LEN at 8 makes a queued change land every 8 steps; SWG moves the swing exactly as
       VALUE pushed + turned does. F1 + CLR in GRID undoes a LEN change.
 
@@ -1179,6 +1188,8 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
 - [ ] Hold a key, change octave, let go: the note stops (it does not hang).
 - [ ] Hold a key and press F4 to leave KEYS: the note stops.
 - [ ] Drum tracks behave as before: letting go changes nothing.
+- [ ] The same on a GRAIN track with DEC at 127 (hold): the cloud thins out when the key comes up
+      (it used to sound until STOP).
 
 ## PROJECT: undo and redo, and where reload and new went
 

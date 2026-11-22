@@ -673,9 +673,12 @@ void Engine::apply(const Command &command) {
                     break;
                 case ChainEdit::insert:
                     done = chain_insert(project_, at, command.b, command.c, command.d);
+                    // The player's entry is an index: keep it on the entry it is playing.
+                    if (done) chain_player_inserted(chain_, at);
                     break;
                 case ChainEdit::remove:
                     done = chain_remove(project_, at);
+                    if (done) chain_player_removed(chain_, at);
                     break;
                 case ChainEdit::pattern_delta:
                 case ChainEdit::repeats_delta: {
@@ -801,6 +804,13 @@ void Engine::apply(const Command &command) {
             undo_.clear();
             queue_clear(queue_);
             chain_.active = false;
+            // A project saved with its chain running reopens with it running. The flag was
+            // written by every save and read by nothing, so the chain came back off while the
+            // file -- and the next save -- said on. The saved live pattern still opens; the
+            // chain takes over from its first entry at the end of that pass (chain_resume).
+            if (project_.settings.chain_enabled && !chain_resume(project_, chain_)) {
+                project_.settings.chain_enabled = false;
+            }
             deferred_count_ = 0;                 // hits of a pattern that no longer exists
             scheduler_.reset(true);
             reconfigure();
@@ -1449,6 +1459,13 @@ void Engine::reconfigure() {
 // --- the tick -------------------------------------------------------------
 
 void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
+    // The transport jumped BACK (a stop and start, F1 + F5, or an outside clock relocating). A
+    // change still queued was armed for a boundary measured on the old position: left alone it
+    // waited until the clock caught up with that tick again -- a change queued at bar 40 and
+    // then STOP and PLAY landed forty bars late. The boundary it was waiting for is gone, so it
+    // happens now, at this tick, from the new pattern's step 1: the same reading a change queued
+    // with the clock stopped gets (Cmd::queue_pattern).
+    const bool jumped_back = tick < tick_;
     tick_ = tick;
 
     // A transport that relocated to before the pattern's start (a START from 0 after a switch)
@@ -1461,6 +1478,13 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // A queued change takes effect BEFORE the tick is resolved, so this tick plays the new
     // pattern's steps rather than one last step of the old one. Every mode but NOW starts the
     // new pattern at its step 1 on the boundary the change was queued for (core/queue.hpp).
+    if (jumped_back && queue_.pending) {
+        switch_pattern(queue_.bank, queue_.slot);
+        queue_clear(queue_);
+        origin_ = tick;
+        boundary_known_ = false;
+    }
+
     if (queue_due(queue_, tick)) {
         const bool restart = queue_.restart;
         const uint32_t start = queue_.start_tick;

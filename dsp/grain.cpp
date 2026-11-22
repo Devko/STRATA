@@ -296,7 +296,18 @@ void Granular::trigger(const Trig &trig) {
     next_ = trig;
     wait_ = trig.frame > 65535u ? 65535 : int(trig.frame);
     pending_ = true;
+    release_on_start_ = false;
     active_ = true;
+}
+
+void Granular::release(uint8_t note) {
+    // A KEYS key coming up. One voice, so `next_` is the note sounding once it has started and
+    // the one waiting before that; a different note has taken the voice since, so leave it.
+    // Without this a cloud at DEC 127 (hold) played from KEYS never stopped: every other
+    // sustaining machine had a release and this one fell back to the base class's no-op.
+    if (next_.note != note) return;
+    if (pending_) release_on_start_ = true;
+    else if (voice_on_) amp_.gate_off();
 }
 
 void Granular::release_all() {
@@ -313,6 +324,7 @@ void Granular::kill_all() {
     }
     amp_.kill();
     pending_ = false;
+    release_on_start_ = false;
     wait_ = 0;
     voice_on_ = false;
     hop_countdown_ = 0;
@@ -364,6 +376,10 @@ void Granular::start_voice() {
     amp_.gate_on(true);
     voice_on_ = true;
     hop_countdown_ = 0;    // the first grain starts on the trig's own frame: sample accurate
+    if (release_on_start_) {
+        amp_.gate_off();
+        release_on_start_ = false;
+    }
 }
 
 // One grain onset. Control rate, at most a handful of times a block (the hop floor is what bounds

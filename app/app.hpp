@@ -625,6 +625,7 @@ public:
                     held_used_ = true;                 // so the release does not toggle the trig
                     mode_ = Mode::grid;
                 } else if (shift_) {
+                    mutation_pending_ = false;         // settled, or CLR would undo a 2nd level
                     post(Cmd::redo);                   // F1 + OK = redo
                     end_gesture();
                     notice("REDO");
@@ -635,6 +636,10 @@ public:
 
             case ENAGA_KEY_CLR:
                 if (shift_) {
+                    // An undo settles a pending MUTATE: it has either just been taken back or was
+                    // never the newest edit. Left pending, the next plain CLR undid ANOTHER level
+                    // -- the edit before the mutation -- and said REVERTED.
+                    mutation_pending_ = false;
                     post(Cmd::undo);                   // F1 + CLR = undo
                     end_gesture();
                     notice("UNDO");
@@ -3049,7 +3054,9 @@ public:
                 append_padded(out, uint32_t(entry.slot) + 1, 2);
                 append(out, " X");
                 append_number(out, uint32_t(entry.repeats));
-                if (player.active && int(player.entry) == i) append(out, " PLAY");
+                if (player.active && !player.orphaned && int(player.entry) == i) {
+                    append(out, " PLAY");
+                }
                 *out = 0;
                 canvas.text(0, 30 + row * 10, line, i == chain_cursor_ ? 15 : 10);
             }
