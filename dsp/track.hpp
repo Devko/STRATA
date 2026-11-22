@@ -135,8 +135,13 @@ public:
 
     // Let go of `note`: every voice playing it goes into its release, and one still waiting for
     // its frame is released as soon as it starts. A key coming up in KEYS mode
-    // (`Cmd::release_note`). The sustaining machines -- VA, VA POLY and SAMPLE -- implement it;
-    // a one-shot drum has nothing to let go of, so the default does nothing.
+    // (`Cmd::release_note`). The sustaining machines -- VA, VA POLY, SAMPLE and GRAIN --
+    // implement it; a one-shot drum has nothing to let go of, so the default does nothing.
+    //
+    // It is by NOTE, not by who started it: a key let go on a track whose sequencer is playing
+    // the same note releases the sequencer's voice too. Accepted by Roland on 2026-11-22 -- the
+    // alternative is a per-voice owner tag in every machine for a case that is mostly a player
+    // doubling the part.
     virtual void release(uint8_t note) { (void)note; }
 
     // Add this block's mono output into out[0..frames).

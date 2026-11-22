@@ -1063,6 +1063,49 @@ TEST(va_a_cached_coefficient_is_bit_identical_to_a_computed_one) {
     CHECK(cache.count <= VaFilterCache::kEntries);
 }
 
+TEST(va_cached_oscillator_increments_are_bit_identical_to_computed_ones) {
+    // dsp/va.cpp computes the oscillators' dt and 1/dt only when the pitch has moved. Before
+    // every slice a copy of the voice is told to forget them, so it computes them afresh; the
+    // two must agree bit for bit through a held note (every step a hit) and a glide (every step
+    // a miss), and through a glide that arrives and holds again.
+    constexpr int n = VaVoice::kControl;
+    const TrackParams p = patch();
+    VaSettings settings = VaSettings::make(p, 48000.0f, 1.0f / 48000.0f);
+    settings.glide_coef = 0.2f;                 // a glide that arrives within the test
+
+    VaVoice voice;
+    voice.reset();
+    voice.seed(0x51F3A27Du);
+    voice.set_pitch(48.0f);
+    voice.set_target(48.0f);
+    voice.set_note(100.0f / 127.0f, false, false);
+    voice.gate_on();
+
+    float work[n];
+    float env[n];
+    int compared = 0;
+    float before_last = 0.0f;
+    for (int slice = 0; slice < 120; slice++) {
+        if (slice == 119) before_last = voice.pitch();
+        if (slice == 30) voice.set_target(60.0f);   // glide up, then hold
+        VaVoice fresh = voice;
+        fresh.forget_increments();
+        float out_cached[n] = {};
+        float out_fresh[n] = {};
+        voice.run(settings, out_cached, n, work, env, nullptr);
+        fresh.run(settings, out_fresh, n, work, env, nullptr);
+        for (int i = 0; i < n; i++) {
+            CHECK(out_cached[i] == out_fresh[i]);
+            compared++;
+        }
+    }
+    CHECK_EQ(compared, 120 * n);
+    // The glide settled -- a one-pole stops moving once its step is under half an ulp -- so the
+    // last slices were hits, and the glide before them misses: both paths were compared.
+    CHECK(voice.pitch() == before_last);
+    CHECK(voice.pitch() > 59.99f);
+}
+
 TEST(va_an_accented_voice_does_not_read_an_unaccented_voices_coefficients) {
     // The accent is part of the key because it moves both the cutoff and the resonance. A cache
     // that keyed on the envelope alone would hand an accented voice the plain voice's filter --

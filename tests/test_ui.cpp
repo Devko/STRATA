@@ -90,6 +90,7 @@ struct UiProbe {
     static bool stop_armed(const Strata &app) { return app.stop_armed_; }
     static bool project_setup(const Strata &app) { return app.project_setup(); }
     static int project_page(const Strata &app) { return int(app.project_page_); }
+    static int kit_cursor(const Strata &app) { return app.kit_cursor_; }
     static int chain_cursor(const Strata &app) { return app.chain_cursor_; }
     static int pattern_field(const Strata &app) { return app.pattern_field_; }
     static int slot_cursor(const Strata &app) { return app.slot_cursor_; }
@@ -743,6 +744,46 @@ TEST(ui_f1_f6_stops_cuts_and_resets_in_one_press) {
     host.set_source(ENAGA_CLOCK_INTERNAL);
 }
 
+TEST(ui_f1_f6_puts_a_running_chain_back_on_its_first_entry) {
+    // Roland, 2026-11-22: FUNC + STOP resets a running chain too, so the set starts again from
+    // the top. A chain that is off stays off and the pattern stays where it is.
+    Strata &app = fresh();
+    (void)app;
+    FakeHost &host = FakeHost::the();
+    Project &incoming = app_engine().project_for_load();
+    project_init(incoming);
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1};
+    incoming.chain[1] = ChainEntry{0, 1, 1};
+    post_cmd(Cmd::project_loaded);
+    pump(2);
+
+    key(ENAGA_KEY_F5);
+    host.deliver_tick(0, 0);
+    pump();
+    post_cmd(Cmd::set_chain, 1);
+    pump(2);
+    host.deliver_tick(1536, 0);                    // the pass ends: entry 2, A02
+    pump(2);
+    CHECK_EQ(int(app_engine().chain().entry), 1);
+    CHECK_EQ(int(app_engine().project().slot), 1);
+
+    shift_key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(app_engine().chain().active);
+    CHECK_EQ(int(app_engine().chain().entry), 0);
+    CHECK_EQ(int(app_engine().project().slot), 0);
+
+    // Chain off: F1 + F6 leaves the pattern alone.
+    post_cmd(Cmd::set_chain, 0);
+    post_cmd(Cmd::queue_pattern, 0, 1, 0);        // stopped, so A02 at once
+    pump(2);
+    shift_key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(!app_engine().chain().active);
+    CHECK_EQ(int(app_engine().project().slot), 1);
+}
+
 // --- the two ways a hold used to be stranded ------------------------------------------------
 //
 // docs/UNIT_CHECKLIST.md: "Hold a STEP key, change page or mode, let go, then turn an encoder. No
@@ -842,6 +883,35 @@ TEST(ui_a_mutation_is_kept_with_ok_and_reverted_with_clr_in_any_mode) {
     CHECK_EQ(UiProbe::notice(app), "REDO");
     key(ENAGA_KEY_F4);
     pump(2);
+}
+
+TEST(ui_an_undo_settles_a_pending_mutation) {
+    // MUTATE, then F1 + CLR takes it back. The mutation used to stay "pending", so the next plain
+    // CLR undid a SECOND level -- the edit before the mutation -- and said REVERTED.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    for (int i = 0; i < 16; i += 4) {
+        if ((app_engine().pattern().tracks[0].steps[i].flags & kStepTrig) == 0) {
+            step_down(i);
+            step_up(i);
+        }
+    }
+    step_down(1);                                    // the edit before the mutation: a trig
+    step_up(1);
+    pump(2);
+    const bool had_trig = (app_engine().pattern().tracks[0].steps[1].flags & kStepTrig) != 0;
+
+    app.on_pad_press(13, 100);                       // MUTATE
+    app.on_pad_release(13);
+    pump(2);
+    shift_key(ENAGA_KEY_CLR);                        // undo: the mutation is gone
+    pump(2);
+    key(ENAGA_KEY_CLR);                              // plain CLR: erases the track, as in GRID
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "REVERTED") != 0);
+    shift_key(ENAGA_KEY_CLR);                        // and that erase undoes back to the trig
+    pump(2);
+    CHECK_EQ((app_engine().pattern().tracks[0].steps[1].flags & kStepTrig) != 0, had_trig);
 }
 
 TEST(ui_a_keys_key_holds_its_note_until_it_comes_up) {
@@ -1048,7 +1118,7 @@ TEST(ui_two_held_steps_make_a_range_that_survives_until_a_fresh_single_press) {
     // of.
     key(ENAGA_KEY_CLR);
     pump(2);
-    CHECK_EQ(UiProbe::notice(app), "CLEARED  F1+CLR UNDO");
+    CHECK_EQ(UiProbe::notice(app), "CLEARED FUNC+CLR UNDO");
     for (int s = 0; s < kStepsPerTrack; s++) CHECK(!trig_at(0, s));
 }
 
@@ -2229,6 +2299,41 @@ TEST(ui_layout_mixer_perform_keys_machine_resample) {
     CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
     check_layout(app, "MACHINE");
 
+    // And the kit browser behind it, on both pages, with every slot state on screen: a kit, an
+    // empty slot, an unreadable one and one not yet read.
+    shift_key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::kit));
+    check_layout(app, "KIT, reading");
+    pump_until_idle();
+    app_storage().request_kit_save(0);
+    for (int i = 0; i < 4000 && app_storage().kit_slot(0).state != Storage::SlotState::used; i++) {
+        pump();
+    }
+    CHECK_EQ(int(app_storage().kit_slot(0).state), int(Storage::SlotState::used));
+    const char junk[] = "JUNK";
+    FakeHost::the().write_file("/ENAGA/DATA/STRATA/KITS/KIT_02.BIN", junk, sizeof junk);
+    app_storage().request_kit_scan();
+    pump_until_idle();
+    pump(400);                                  // past the notice
+    CHECK_EQ(int(app_storage().kit_slot(1).state), int(Storage::SlotState::bad));
+    check_layout(app, "KIT");
+    key(ENAGA_KEY_DOWN);
+    check_layout(app, "KIT, an unreadable slot");
+    key(ENAGA_KEY_RIGHT);
+    check_layout(app, "KIT, slots 9-16");
+    key(ENAGA_KEY_OK);
+    key(ENAGA_KEY_LEFT);
+    key(ENAGA_KEY_OK);
+    pump(4);
+    check_layout(app, "KIT, after a refused load");
+    FakeHost::the().set_card(false);
+    app_storage().on_card(false);
+    check_layout(app, "KIT, no card");
+    FakeHost::the().set_card(true);
+    app_storage().on_card(true);
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+
     shift_key(ENAGA_KEY_F2);
     CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
     check_layout(app, "RESAMPLE");
@@ -2432,7 +2537,8 @@ TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_moved_to_f1_arrows) {
     CHECK_EQ(UiProbe::notice(app), "NEW PROJECT");
     CHECK(pump_until_idle());
     pump(4);
-    CHECK_EQ(int(pattern.master_length), int(Pattern{}.master_length));   // a blank project's
+    // The factory project's first pattern (core/factory.hpp), not the edited one.
+    CHECK_EQ(int(pattern.master_length), int(strata::test::factory().patterns[0][0].master_length));
     key(ENAGA_KEY_F4);
 }
 
@@ -2603,13 +2709,13 @@ TEST(ui_f1_f3_twice_saves_and_once_does_not) {
     Strata &app = fresh();
     shift_key(ENAGA_KEY_F3);
     CHECK_EQ(UiProbe::mode(app), int(Mode::project));
-    CHECK_EQ(UiProbe::notice(app), "F1+F3 AGAIN TO SAVE");
+    CHECK_EQ(UiProbe::notice(app), "FUNC+PROJECT TO SAVE");
     pump(4);
     CHECK(app_storage().busy_text() == nullptr);   // once is not a save
 
     pump(2100);                                    // too late: this arms again instead
     shift_key(ENAGA_KEY_F3);
-    CHECK_EQ(UiProbe::notice(app), "F1+F3 AGAIN TO SAVE");
+    CHECK_EQ(UiProbe::notice(app), "FUNC+PROJECT TO SAVE");
 
     shift_key(ENAGA_KEY_F3);
     CHECK_EQ(UiProbe::notice(app), "SAVING");
@@ -2725,4 +2831,126 @@ TEST(ui_screenshots) {
     key(ENAGA_KEY_F4);
     host.set_device(0);
     host.set_audio_load(0);
+}
+
+// --- the kit browser (FUNC+EDIT twice) -------------------------------------------------------
+
+TEST(ui_f1_edit_twice_opens_the_kit_browser_and_clr_goes_back) {
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    shift_key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::kit));
+    CHECK_EQ(UiProbe::notice(app), "KITS");
+    // Opening it reads the card, so the slots say what is in them.
+    CHECK(pump_until_idle());
+    CHECK_EQ(int(app_storage().kit_slot(0).state), int(Storage::SlotState::empty));
+
+    shift_key(ENAGA_KEY_F8);                       // and again: back to the machines
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    shift_key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::kit));
+    key(ENAGA_KEY_CLR);                            // CLR goes back, as on every Enaga list
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+
+    // From anywhere else, F1 + EDIT is still the machine select first.
+    key(ENAGA_KEY_F4);
+    shift_key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_kit_cursor_follows_the_arrows_the_step_keys_and_encoder_a) {
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F8);
+    shift_key(ENAGA_KEY_F8);
+    key(ENAGA_KEY_STEP1);                          // the cursor is remembered between visits
+    CHECK_EQ(UiProbe::kit_cursor(app), 0);
+    key(ENAGA_KEY_UP);                             // stops at the top rather than wrapping
+    CHECK_EQ(UiProbe::kit_cursor(app), 0);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::kit_cursor(app), 2);
+    key(ENAGA_KEY_RIGHT);                          // the page of eight
+    CHECK_EQ(UiProbe::kit_cursor(app), 10);
+    key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::kit_cursor(app), 15);
+    key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::kit_cursor(app), 7);
+    key(ENAGA_KEY_SELECT_RIGHT);                   // the selection keys flip the page too
+    CHECK_EQ(UiProbe::kit_cursor(app), 15);
+    app.on_encoder(0, -3);
+    CHECK_EQ(UiProbe::kit_cursor(app), 12);
+    key(ENAGA_KEY_STEP1 + 4);                      // a STEP key is that slot, and loads nothing
+    CHECK_EQ(UiProbe::kit_cursor(app), 4);
+    CHECK_EQ(int(UiProbe::mode(app)), int(Mode::kit));
+
+    // B to D have nothing to set here and must not reach the sound behind the screen.
+    const uint8_t before = app_engine().params(UiProbe::selected(app)).v[1];
+    app.on_encoder(1, +5);
+    pump(2);
+    CHECK_EQ(int(app_engine().params(UiProbe::selected(app)).v[1]), int(before));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_a_kit_is_saved_with_f1_down_and_recalled_with_ok_twice) {
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F8);
+    shift_key(ENAGA_KEY_F8);
+    CHECK(pump_until_idle());
+    key(ENAGA_KEY_STEP1 + 1);                      // slot 2
+
+    // A sound to keep: track 1's first knob.
+    post_cmd(Cmd::set_param, 0, 90);               // a = param 0 on track 0, b = value
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[0]), 90);
+
+    // Into an empty slot at once.
+    shift_key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::notice(app), "SAVING KIT");
+    // The save waits for an idle loader -- fresh() re-offers the samples -- and an empty ring.
+    for (int i = 0; i < 4000 && app_storage().kit_slot(1).state != Storage::SlotState::used; i++) {
+        pump();
+    }
+    CHECK_EQ(int(app_storage().kit_slot(1).state), int(Storage::SlotState::used));
+    CHECK(FakeHost::the().has_file("/ENAGA/DATA/STRATA/KITS/KIT_02.BIN"));
+
+    // Over a kit, only on the second press.
+    shift_key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN TO OVERWRITE");
+
+    post_cmd(Cmd::set_param, 0, 11);
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[0]), 11);
+
+    // OK once arms; OK again within the window recalls.
+    pump(2100);                                    // the overwrite arm lapses
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO LOAD");
+    pump(6);
+    CHECK_EQ(int(app_engine().params(0).v[0]), 11);            // once is not a recall
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "LOADING KIT");
+    for (int i = 0; i < 4000 && app_engine().params(0).v[0] != 90; i++) pump();
+    CHECK_EQ(int(app_engine().params(0).v[0]), 90);
+
+    // An arm is for one slot: moving the cursor drops it.
+    key(ENAGA_KEY_OK);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO LOAD");
+
+    // An empty slot says so and loads nothing.
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "EMPTY SLOT");
+
+    // F1 + OK and F1 + CLR stay redo and undo.
+    shift_key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "REDO");
+    shift_key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::notice(app), "UNDO");
+    CHECK_EQ(int(UiProbe::mode(app)), int(Mode::kit));
+    key(ENAGA_KEY_F4);
 }

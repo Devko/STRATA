@@ -724,7 +724,7 @@ TEST(gaps_the_same_gesture_counter_on_another_track_or_step_is_another_undo_leve
 
 // --- a load, again ------------------------------------------------------------------------------
 
-TEST(gaps_a_load_stops_a_chain_and_plays_its_first_pass_as_a_first_pass) {
+TEST(gaps_a_load_with_no_chain_running_stops_the_one_playing_and_its_first_pass_is_a_first_pass) {
     fresh();
     chain_edit(ChainEdit::insert, 0, 0, 0, 1);
     post(Cmd::set_chain, 0, 0, 1);
@@ -741,6 +741,9 @@ TEST(gaps_a_load_stops_a_chain_and_plays_its_first_pass_as_a_first_pass) {
     pump();
     FakeHost::the().set_running(false);
 
+    // The project that arrives was saved with no chain running. (One saved with its chain on
+    // resumes it -- chain_resume -- which is tests/test_engine.cpp's business.)
+    eng().project_for_load().settings.chain_enabled = false;
     Pattern &incoming = eng().project_for_load().live();
     incoming.tracks[0].length = 4;
     incoming.tracks[0].steps[0].flags = kStepTrig;

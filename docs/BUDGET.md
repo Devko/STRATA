@@ -443,7 +443,7 @@ suite 539,926 checks, 0 failures. `tools/build.sh` sends `chainloops`, `drumloop
 0 overruns in every run. **Worst case 23.49% with cl6x, against the 60% target.**
 
 **VA POLY per voice**, by the method of the sections below (swap the stab's chord type in
-`build_default_beat`, re-run `scenario_m3.sh`; the bass adds one more `VaVoice`):
+`build_default_beat` (now `groove` in core/factory.cpp), re-run `scenario_m3.sh`; the bass adds one more `VaVoice`):
 
 | Chord on the stab | VaVoices | cl6x | GCC only |
 | --- | --- | --- | --- |
@@ -811,6 +811,26 @@ after the last hit with high feedback, which matters for battery and for any hea
 passage was relying on. Not re-measured: this cloud session has no emulator and no cl6x. Run the
 load scenario with feedback at 0.95 to confirm.
 
+### Factory content (2026-11-22, not measured)
+
+core/factory.hpp replaced the hand-built default beat. Two things it does cost load, and neither
+has been measured, because this cloud session has no emulator and no cl6x:
+
+- **The sends are open on the default kit.** Chord, rim, blips, clap and the open hat feed the
+  delay and the reverb, where the old default kept every send closed (the "cheap settings" row
+  above, 17.00% cl6x). The "worst case" row already has both sends running on every track, so
+  the sends add nothing that row did not already pay for; they move the DEFAULT beat from the
+  cheap row towards it.
+- **A03 BREAK lets chord voices overlap.** Its two chords decay over about 0.7 s and start
+  0.92 s apart with four notes each, so VA POLY can hold all six voices -- the `MIN11` row above
+  (23.48% cl6x, 39.55% GCC-only, measured with the sends closed). Six is the machine's ceiling,
+  so no factory pattern can go past it.
+
+Estimate for the heaviest factory pattern (A03 or A04): the six-voice row plus the sends, about
+**27-29% cl6x and 44-48% GCC-only**, inside 60% either way. `tests/scenario_factory.sh` plays A01
+and then A04 and records the peak; run it, and `scenario_m3.sh` for the new default beat, with
+and without cl6x, and put the figures here.
+
 ### KEYS note release (2026-11-22, not measured)
 
 `Machine::release(note)` was added to VA, VA POLY and SAMPLE for KEYS mode's key-up. It runs once
@@ -837,6 +857,110 @@ So the worst case roughly doubles the load time of a long 96 kHz file, and one 4
 slice grows by an estimated 10-26 ms, which is main-loop time (screen and keys), not audio. Not
 measured on the unit: docs/UNIT_CHECKLIST.md has the line. If a slice turns out to stall the
 screen, the fix is a smaller slice for downsampled files, not dropping the filter.
+
+### Optimization review (2026-11-22, host only)
+
+A review of the audio path for cycles, after the first unit boot. Everything here was measured in a
+cloud session with **no emulator and no cl6x**, so the figures are host (x86, GCC -O2) proxies:
+callgrind instruction counts and wall time over the default beat, 130 BPM, with denormals flushed
+as the C674x FPU flushes them. They say what moved and in which direction, not what the unit will
+read. The emulator and cl6x runs that turn them into figures are listed at the end.
+
+#### Profile of the default beat (host, callgrind, 6,000 blocks)
+
+| Share of x86 instructions | Where |
+| --- | --- |
+| 27% | KICK: the body shaper is 8%, but the **click path** (noise, two one-poles, an SVF, three mixes) runs for the whole note, long after its transient envelope has decayed |
+| 16% | `enaga_envelope_render` across every machine: branch-free but a loop-carried one-pole, so it cannot pipeline below its recurrence on either compiler |
+| 15% | VA POLY's four-note chord; VA MONO 6% |
+| 18% | SNARE; HAT 11% |
+| 9% | `enaga_svf_process` |
+| ~3% | every `prepare()` together -- per block, per sounding track, plus once more per trig |
+
+Two of these are scalar control-rate code that stays GCC-compiled in the cl6x build (only `*.ti.c`
+and Enaga's library go to cl6x), so on the unit they are a larger share than x86 suggests: the
+prepares, and the VA voice's per-slice pitch maths.
+
+#### Three changes, all bit-exact
+
+| Change | How it is held to bit-exact | Host effect |
+| --- | --- | --- |
+| **Prepare only on change** (`app/engine.cpp`): a track's machine and insert chain are prepared only when its 16 parameter bytes, its mix or its machine moved, and every applied command clears the memo (a sample, a machine switch, a kit recall or a project load are all commands) | two engines side by side, one preparing every block and one memoised, through locks, knob moves, machine switches, a sample load, a mute, a kit recall and a project load: every output sample compared (`engine_skipping_an_unchanged_prepare_is_bit_exact`). Removing the per-command reset fails it with 2,914 samples different | **-3.3%** of the default beat's instructions; output hash identical over 30,000 blocks |
+| **VA oscillator increments cached** (`dsp/va.cpp`): `semitones` and two reciprocals per slice per voice only when the pitch moved (VA POLY never glides), and the ramp's `reciprocal(n)` only when n changed | a copy of the voice made to forget the cache before every slice, compared through a held note and a glide (`va_cached_oscillator_increments_are_bit_identical_to_computed_ones`) | -0.5% of the default beat; more per voice in a six-voice chord |
+| **Load-time anti-aliasing loop in `core/pcmloops.ti.c`**, with stereo filtered in one pass so the two channels' cascades overlap | against the old loop, mono and stereo, uneven slices, two rates, state included (`the_antialias_loop_is_bit_exact_against_the_loop_it_replaced`) | 30 s of 96 kHz stereo: 69-70 ms -> 59-61 ms. The real gain is cl6x pipelining the cascade, which x86 cannot show |
+
+**Expected on the unit, unmeasured:** the prepare memo removes the most scalar work of the three.
+Enaga measured scalar GCC transcendentals at roughly 70 cycles each on this core ("pitch 3.2%: five
+exp2 and two divisions" per voice-step, docs/design.md); the default beat's prepares are on the
+order of a hundred of those a block, plus the second prepare on every trig, so **0.5 to 2 points
+off the peak** is the plausible range in both builds. Nothing changes in a block where a lock,
+scene or knob really did move: those prepare as before.
+
+#### Findings that are not changes
+
+1. **The worst case in this file is the default kit's, not the app's.** Since machine switching
+   (M6), any track can host VA POLY, and nothing caps voices across tracks. At 2.16 points a
+   voice (cl6x, emulator), eight tracks of six-voice chords would be ~104% of the block before the
+   chains and sends, and **four** would reach about 60% with the other four tracks playing. GRAIN at full density is similar
+   (+9.2 points a track, GCC-only). This is a design decision, not an optimisation: a global
+   sustained-voice budget with cross-track stealing is the usual answer, and tonight's unit
+   figures should set its size.
+2. **The unit may be slower than the emulator, not faster.** The emulator's cl6x default beat is
+   19.17% (`scenario_m3.sh`); the unit's on-screen LOAD read up to about 26% at first boot. If
+   the MAX readout confirms that ratio (~1.35x), the cache and DDR costs the emulator cannot see
+   are real, and every headroom figure above shrinks by it. Do not plan voice counts from the
+   "25% faster on hardware" figure until MAX says so.
+3. **More voices: yes, with care.** Against 60%, the cl6x worst case of 23.5% leaves ~36 points:
+   about 16 more VA voices on emulator figures, or ~9 if the unit is 1.35x. Raising VA POLY from
+   six voices to eight costs ~4.3 points (cl6x) and fits either way -- but only once (1) is
+   answered, because it raises the ceiling of every POLY track at once.
+4. **KICK's click path** (27% of the host profile, the largest machine) keeps running for the
+   whole note after `transient_env_` has decayed to nothing audible. Skipping it once the
+   transient envelope is idle would be a large saving, but it is **not bit-exact**: the shared
+   noise generator would advance differently, so later hits get different (equally random) noise.
+   It wants a listening test, so it is not in this change.
+5. **`enaga_envelope_render` is recurrence-bound.** Decay and release are geometric
+   (`l *= 1 - d` with sustain 0), which a closed form or a two-step unroll could pipeline. That is
+   Enaga's code (CLAUDE.md: never modify it) and would not be bit-exact; worth raising upstream
+   with this profile.
+6. **Cache, by working set** (the unit has 32 KiB L1D and 256 KiB L2, all cache, DDR behind):
+   - The reverb's eight lines and four diffusers are ~100 KiB, which fits L2 but not L1D, and
+     competes there with ~396 KiB of code (the hot subset is much smaller) and the sample reads.
+   - The delay (768 KiB) and the beat-repeat ring (2.93 MiB) are sequential streams: a few new
+     lines a block each, so cheap whatever their size.
+   - **GRAIN's feared "all misses" is the wrong picture at normal pitch:** each grain reads a
+     contiguous run per block (64 frames x 2-4 bytes), so 1-2 new lines per grain, ~16 for eight
+     grains. The bad case is **high pitch**: at the 32x step ceiling a stereo grain reads 8 KiB a
+     block, every tap a new line, ~500 misses a block for eight grains. SAMPLE at high pitch is
+     the same in miniature. Only the unit can price a miss.
+   - The undo snapshot (8.2 KiB, once per edit gesture) evicts a quarter of L1D in the block it
+     happens in; a one-off, not a trend.
+7. **Send tails to -60 dB** (above): the worst case is unchanged, because every figure above
+   already runs both sends. What changes is how long they keep running unfed -- up to 272 s at
+   feedback 0.95 on a 2 s delay -- which only matters for headroom a quiet passage relied on.
+8. Two comments say a float division is hardware on this core (`Engine::process`,
+   `Granular::fit_length`). It is not: GCC inlines a reciprocal estimate and two refinements
+   (Enaga's docs/design.md), cl6x calls `__c6xabi_divf`. Harmless where they are, at control rate.
+
+#### To measure on Roland's PC (emulator, cl6x and GCC)
+
+| # | What | How | Record |
+| --- | --- | --- | --- |
+| E1 | All seven scenarios, before and after this change | `tools/scenarios.sh` on `main` before the merge (eb46d43) and after, once with cl6x and once with `ENAGA_TI_CGT=none` | four columns in a new table here; expect a small drop with cl6x, larger GCC-only |
+| E2 | VA POLY per voice, after | MIN7 vs MIN11 in `build_default_beat`, `scenario_m3.sh`, both compilers | does 2.16 (cl6x) / 3.82 (GCC) move? |
+| E3 | The app's real worst case | temporarily set four tracks to `va_poly` with MIN11 chords in `build_default_beat`; then six; then eight | where it crosses 60% and where it overruns: sizes the voice budget in finding 1 |
+| E4 | The prepare memo's share | `scenario_m5.sh` (scenes and macros move parameters, so it prepares more) against `scenario_m3.sh` | the gap between them, before and after |
+| E5 | Load time of a 15 s 96 kHz stereo WAV (the longest that loads: `kSrcFrames` is 30 s of 48 kHz frames, counted at the file's rate) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
+
+#### To measure on the unit (with the MAX readout from PR #17)
+
+| # | What | Record |
+| --- | --- | --- |
+| U1 | MAX on the default beat, this build | against the emulator's cl6x `scenario_m3.sh`: the unit/emulator ratio (finding 2) |
+| U2 | MAX with the chord at MIN11 (six voices), then with tracks 5 and 6 also switched to VA POLY playing chords | per-voice cost on the unit; where it overruns |
+| U3 | GRAIN on a multi-second sample, DEN 127, SPR 127, at PIT 64 and at PIT 127 with a high note | the DDR cost of high-pitch grains (finding 6) |
+| U4 | Delay FBK at max, TIM 1/1, one hit, then silence | LOAD stays up while the tail rings and drops when it ends |
+| U5 | Load a 15 s 96 kHz stereo WAV (`unit-test/STRATA_1.WAV` in the project files; 30 s at 96 kHz is refused TOO LONG) | seconds to playable; whether the screen or keys stall during it |
 
 ### Later milestones
 

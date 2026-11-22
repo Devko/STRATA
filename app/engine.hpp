@@ -85,6 +85,10 @@ public:
     const TrackParams &params(int track) const { return params_[track]; }
     const Machine *machine(int track) const { return machines_[track]; }
 
+    // Tests only: false makes every prepare() run, as it did before the memo, so a test can
+    // render the same input both ways and compare the output bit for bit.
+    void set_prepare_memo(bool on) { prepare_memo_ = on; forget_prepared(); }
+
     // The finished take, for the card to write. Valid from the main context only while
     // `status().resample_state` reads 3, which is the same discipline a project save uses.
     const Capture &capture() const { return capture_; }
@@ -156,6 +160,16 @@ public:
     // a 16-byte command.
     Project &project_for_load();
 
+    // The kit browser's inbox (app/storage.cpp, "the kit library"): a kit read off the card,
+    // waiting for `Cmd::kit_recall` with `a` = 1 to copy it into `project_.kit` on the audio side.
+    //
+    // A smaller hole than `project_for_load` and one that needs no stopped transport: the audio
+    // side reads this ONLY while applying that command, and the main context writes it only
+    // while the command ring is EMPTY -- so no recall that could read it is pending, and the one
+    // it is about to post is the next thing to look. A recall therefore plays straight through a
+    // running pattern, which is what a kit change on stage needs.
+    Kit &kit_for_recall() { return kit_inbox_; }
+
     // App::init() only, before the first audio block. The region and the SamplePool that carves
     // it up belong to the MAIN context (see `sample_region_` below); the audio side is handed the
     // base so `Cmd::set_sample` can turn the loader's byte offset into a pointer, and the size so
@@ -206,8 +220,6 @@ private:
     // tempo-synced) and by a project load.
     void apply_mixer_bytes();
 
-    void load_default_kit();
-    void load_default_pattern();
     void build_placeholder_sample();
 
     // --- the machine pool ---
@@ -282,6 +294,9 @@ private:
     Queue queue_;
     ChainPlayer chain_;
 
+    // See `kit_for_recall`. Written by the main context, read by `Cmd::kit_recall` only.
+    Kit kit_inbox_;
+
     // The kit: a track's parameters as stored, with no locks applied.
     TrackParams params_[kTracks] = {};
 
@@ -313,6 +328,23 @@ private:
 
     ChainMix mix_[kTracks] = {};
     bool muted_[kTracks] = {};
+
+    // What each track's machine and insert chain were last prepared from, so a block whose
+    // parameters have not moved skips both prepare() calls (docs/BUDGET.md, "Prepare only on
+    // change"). Every prepare() is a pure function of its arguments plus state that only a
+    // COMMAND changes (a sample, a machine switch, a project load), so the memo is the bytes,
+    // the machine it was prepared for, and a flag every applied command clears. Skipping is
+    // therefore bit-exact by construction, which tests/test_engine.cpp holds it to by rendering
+    // with the memo on and off.
+    void prepare_machine(int track);
+    void prepare_chain(int track);
+    void forget_prepared();
+    TrackParams machine_prepared_[kTracks] = {};
+    const Machine *machine_prepared_for_[kTracks] = {};
+    TrackParams chain_prepared_[kTracks] = {};
+    ChainMix chain_prepared_mix_[kTracks] = {};
+    bool chain_prepared_valid_[kTracks] = {};
+    bool prepare_memo_ = true;
 
     Scheduler scheduler_;
     Mixer mixer_;

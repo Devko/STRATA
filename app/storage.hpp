@@ -149,6 +149,40 @@ public:
     // Queue every track whose kit names a file. What a project open does.
     void request_all_samples();
 
+    // --- the kit library ---------------------------------------------------
+    //
+    // docs/SPEC.md's "Kit and machine select" (FUNC+EDIT, twice for the kits). Sixteen kits on
+    // the card, shared by every project: `<data folder>/KITS/KIT_01.BIN` .. `KIT_16.BIN`, each in
+    // KIT.BIN's own format, so a kit is exactly what a project's KIT.BIN holds -- machines,
+    // parameters, faders and sample paths.
+    //
+    // A save is a project save's protocol in small: post `Cmd::kit_store`, wait for the ring to
+    // drain, write one file. A load is a project load's in small, minus the stopped transport:
+    // read the file into `Engine::kit_for_recall()` while the ring is empty, put the recalled
+    // sample paths in place, post `Cmd::kit_recall` with a = 1, and send every track whose path
+    // CHANGED through the ordinary sample swap. A track whose path did not change keeps playing.
+
+    static constexpr int kKitSlots = 16;
+
+    // What the browser shows of one slot. `unknown` until a scan has read it.
+    enum class SlotState : uint8_t { unknown, empty, used, bad };
+    struct KitSlot {
+        SlotState state = SlotState::unknown;
+        uint8_t machines[kTracks] = {};
+    };
+
+    // Read all sixteen slots, a file per pass, so the browser can say which hold a kit and what
+    // is in it. Queued like everything else.
+    void request_kit_scan();
+
+    // Store the kit as it sounds now into a slot, or recall one. Queued; false for a slot that
+    // does not exist or with no usable card.
+    bool request_kit_save(int slot);
+    bool request_kit_load(int slot);
+
+    // A slot outside 0..15 reads as unknown.
+    const KitSlot &kit_slot(int slot) const;
+
     // --- the card ---------------------------------------------------------
 
     // Enaga's on_card. On a removal every open handle is already dead, so the job in flight is
@@ -200,6 +234,9 @@ private:
         sample_convert,    // pcm_to_s16, in slices
         sample_resample,   // pcm_resample, in slices
         take_write,        // a resample's WAV, header then payload
+        kit_scan,          // the kit library's sixteen slots, one file per pass
+        kit_save,          // one kit into its slot: started and finished in one pass
+        kit_load,          // one kit out of its slot, likewise
     };
 
     // --- paths ---
@@ -214,6 +251,10 @@ private:
     void step_save();
     void step_load();
     void step_take_write();
+    void step_kit_scan();
+    void run_kit_save();
+    void run_kit_load();
+    bool kit_path(char *out, uint32_t max, int slot, bool folder_only) const;
 
     // --- samples ---
     void step_sample_epoch();
@@ -274,6 +315,13 @@ private:
     // after a save that wrote every file, and after a successful load, which could not have
     // happened unless the files were there.
     bool project_complete_ = false;
+
+    // The kit library. -1 when nothing is asked for.
+    int kit_save_slot_ = -1;
+    int kit_load_slot_ = -1;
+    bool kit_scan_pending_ = false;
+    KitSlot kit_slots_[kKitSlots] = {};
+    Kit kit_scratch_;              // a scan reads each slot into this, never into the engine
 
     bool perform_dirty_ = false;   // the scenes and macro setup, in PERFORM.BIN
     bool kit_dirty_ = false;

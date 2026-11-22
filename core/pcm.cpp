@@ -33,6 +33,8 @@
 //     -1.0 converts to -32768 and +1.0 clamps to 32767.
 #include "pcm.hpp"
 
+#include "pcmloops.h"
+
 #include <cstddef>
 
 namespace strata {
@@ -392,23 +394,19 @@ Antialias Antialias::make(uint32_t source_rate, uint32_t output_rate) {
 void pcm_antialias(int16_t *samples, uint32_t frames, int channels, Antialias &filter) {
     if (!filter.active || samples == nullptr || channels < 1 || channels > Antialias::kMaxChannels)
         return;
+    static_assert(Antialias::kSections == STRATA_AA_SECTIONS,
+                  "core/pcmloops.ti.c unrolls exactly this many sections");
+    // The loop is core/pcmloops.ti.c's, so cl6x can pipeline the cascade (pcmloops.h says why).
+    // Stereo runs both channels in one pass, whose two independent cascades overlap.
+    if (channels == 2) {
+        strata_antialias_stereo(samples, frames, filter.b0, filter.b1, filter.b2, filter.a1,
+                                filter.a2, filter.z1[0], filter.z2[0], filter.z1[1],
+                                filter.z2[1]);
+        return;
+    }
     for (int ch = 0; ch < channels; ch++) {
-        float *z1 = filter.z1[ch];
-        float *z2 = filter.z2[ch];
-        int16_t *p = samples + ch;
-        for (uint32_t i = 0; i < frames; i++, p += channels) {
-            float x = float(*p);
-            // Transposed direct form II, one section after another.
-            for (int k = 0; k < Antialias::kSections; k++) {
-                const float y = filter.b0[k] * x + z1[k];
-                z1[k] = filter.b1[k] * x - filter.a1[k] * y + z2[k];
-                z2[k] = filter.b2[k] * x - filter.a2[k] * y;
-                x = y;
-            }
-            const float r = x + (x >= 0.0f ? 0.5f : -0.5f);
-            const int32_t v = r >= 32767.0f ? 32767 : (r <= -32768.0f ? -32768 : int32_t(r));
-            *p = int16_t(v);
-        }
+        strata_antialias(samples + ch, frames, channels, filter.b0, filter.b1, filter.b2,
+                         filter.a1, filter.a2, filter.z1[ch], filter.z2[ch]);
     }
 }
 

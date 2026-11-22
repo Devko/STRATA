@@ -45,7 +45,7 @@ SRC       := $(CORE_SRC) $(DSP_SRC) $(APP_SRC) $(TEST_SRC)
 # dsp/*.ti.c: the hot inner loops CLAUDE.md requires to be plain C (the device build sends them
 # to cl6x, this one builds them with GCC as the fallback does). They are what the C++ in dsp/
 # calls, so the host tests exercise exactly the same code the unit runs.
-DSP_C_SRC := $(wildcard $(ROOT)/dsp/*.c)
+DSP_C_SRC := $(wildcard $(ROOT)/dsp/*.c) $(wildcard $(ROOT)/core/*.c)
 DSP_C_OBJ := $(patsubst $(ROOT)/%.c,$(OUT)/%.o,$(DSP_C_SRC))
 
 # <enaga/dsp.hpp> is a C++ wrapper over block functions implemented in C under
@@ -65,7 +65,7 @@ DEP := $(OBJ:.o=.d)
 
 BIN := $(OUT)/strata-tests
 
-.PHONY: test list build clean
+.PHONY: test list build clean render
 test: $(BIN)
 	@$(BIN)
 
@@ -86,7 +86,20 @@ $(OUT)/%.o: $(ROOT)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+# The offline renderer (host/render.cpp): every object the tests use except the runner and the
+# tests themselves, plus tests/fakehost.o for the clock. Writes WAVs into $(OUT)/render.
+RENDER_OBJ := $(filter-out $(OUT)/tests/%,$(OBJ)) $(OUT)/tests/fakehost.o $(OUT)/host/render.o
+RENDER_BIN := $(OUT)/strata-render
+
+render: $(RENDER_BIN)
+	@mkdir -p $(OUT)/render
+	@$(RENDER_BIN) $(OUT)/render $(BARS)
+
+$(RENDER_BIN): $(RENDER_OBJ)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(RENDER_OBJ) -o $@
+
 clean:
 	rm -rf $(OUT)
 
--include $(DEP)
+-include $(DEP) $(OUT)/host/render.d

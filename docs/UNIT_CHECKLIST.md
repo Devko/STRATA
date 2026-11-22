@@ -1,8 +1,377 @@
-# What to check at the next session on the unit
+# Unit checklist
+
+The first part is **tonight's walkthrough** (2026-11-22): one pass, top to bottom, with the unit
+in hand. It covers everything merged today and is ordered so each mode is visited once. Tick the
+box, write the value or a word on the line, and move on; anything odd goes in the notes line and
+is chased tomorrow. The second part, "Reference", is the full per-milestone list it was drawn
+from, with the background for each check.
+
+Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`), and so are
+the on-screen hints. `FUNC+X` = hold FUNC, press X.
+
+Build on the card: STRATA `________`  STRATA6 `________`  cl6x / GCC only: `________`
+
+---
+
+# Tonight's walkthrough
+
+## On the PC, before building the card (15 min, plus E2-E5 if there is time)
+
+From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c 'cd
+/mnt/d/DEV/STRATA && ...'`), on an up-to-date main with PR #17 (the MAX readout) merged.
+
+- [ ] `make -C host test` passes. Checks: `________`
+- [ ] `tests/scenario_factory.sh` passes with cl6x: it plays A01 GROOVE, queues A04 PEAK while
+      running, and checks the switch, no overruns and peak under 60%.
+      Emulator peak, cl6x `________ %`
+- [ ] The same with `ENAGA_TI_CGT=none tests/scenario_factory.sh` (GCC only).
+      Emulator peak, GCC `________ %`
+- [ ] **E1.** `tools/scenarios.sh` (every scenario) passes, with cl6x and with GCC only, on main
+      now and on `eb46d43` (before the DSP optimizations, PR #26): four columns for BUDGET's
+      optimization review. `scenario_m3.sh` cl6x now: `________ %` (unit/emulator ratio in 3)
+- [ ] For U5 (section 13b), the test file is ready in the project files, `unit-test/`:
+      **`STRATA_1.WAV`**, a 15 s stereo 16-bit 96 kHz linear sweep from 100 Hz to 46 kHz at
+      -6 dBFS. Also there, `SWEEP_30S_96K.WAV`, the same sweep at 30 s (see 13b for why two).
+
+The next four are BUDGET's emulator runs (`docs/BUDGET.md`, "Optimization review"). They are not
+needed for tonight's unit session; do them if the PC is free.
+
+- [ ] **E2.** VA POLY per voice after PR #26: MIN7 vs MIN11 in `groove()` (`core/factory.cpp`,
+      where `build_default_beat` went), `scenario_m3.sh`, both compilers. Was 2.16 cl6x / 3.82
+      GCC per voice. Now: `________` / `________`
+- [ ] **E3.** The app's real worst case: four, then six, then eight tracks on `va_poly` with MIN11
+      chords. Crosses 60% at `____` tracks, overruns at `____`.
+- [ ] **E4.** `scenario_m5.sh` against `scenario_m3.sh`, before and after PR #26 (the prepare
+      memo's share). Gap before `________`, after `________`
+- [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
+      `________ s` / `________ s`
+- [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
+      tracks soloed to `build/host/render/`. Anything that already sounds wrong: `________`
+- [ ] STRATA6: in `core/factory.cpp`, `groove()`, both stabs `ChordType::min7` -> `min11`, then
+      `tools/build.sh --name STRATA6`, and revert the edit. (The stab used to live in
+      `build_default_beat`; that function is gone.)
+- [ ] Both apps copied to the card.
+
+## 0. Before power-on (2 min)
+
+- [ ] SYSTEM INFO shows **BOOT 1.0.17**.
+- [ ] A spare SD card with the official `SmplTrek.bin` is within reach.
+- [ ] Power adapter in, **batteries out**. HOME held at power-on reaches BOOT MODE (try it once now).
+- [ ] The card holds `/ENAGA/APPS/STRATA/APP.ENA` and `/ENAGA/APPS/STRATA6/APP.ENA`.
+
+## 1. Start and first look (3 min)
+
+Start STRATA from Enaga's app list. Do not press anything yet.
+
+- [ ] The app starts and the screen is readable: no text over text, over a bar or off the edge.
+- [ ] Top line reads like `A01 130.0 . 3.2%` (bank+slot, tempo, `.` stopped, load).
+      Idle load: `________ %`
+- [ ] Bottom line shows a **MAX** figure (like `TRK8 MAX23.5 SMPLTREK` once playing) and the
+      device name SMPLTREK. No MAX means the build predates PR #17.
+- [ ] No noise or clicks with the transport stopped.
+
+## 2. Panel labels match the cheatsheet legend (3 min)
+
+Press each key once from GRID (HOME) and check the screen agrees. Notes: `________________`
+
+- [ ] **HOME** shows GRID. **EDIT** shows EDIT (title names the machine). **MIXER** shows MIXER.
+      **PROJECT** shows PROJECT. HOME again.
+- [ ] **PLAY** starts the beat (`>` on the top line), **STOP** stops it.
+- [ ] **REC** toggles `REC ON` / `REC OFF` and lights red. Leave it OFF.
+- [ ] **FUNC** held + **HOME** opens KEYS; **FUNC+EDIT** opens MACHINE; **FUNC+MIXER** opens
+      PERFORM; **FUNC+REC** opens RESAMPLE (CLR backs out). HOME to return.
+- [ ] The octave pair and the selection pair under the screen are where the legend says
+      (in GRID, both flip the step page `PG1`...`PG4`).
+- [ ] Encoders A, B, C, D in GRID move the four slots left to right, **in that order** (A and B
+      not swapped).
+
+## 3. A01 GROOVE (the factory default beat), and the MAX CPU readout (5 min)
+
+A first start and every NEW project are the factory project (`core/factory.cpp`): bank A holds
+four patterns. Tracks: 1 kick, 2 clap, 3 closed hat, 4 open hat, 5 rim (PERC), 6 bass,
+7 chord (VA POLY), 8 blips (SAMPLE). Nobody has listened to it yet, so judge it.
+
+- [ ] PLAY: all eight tracks play, at 130.0 with a little swing (54). The chord stab on track 7
+      (steps 4 and 11) is **four notes together** (Cm7), not one note and not a flam.
+- [ ] Kick: a tight 909-ish thump, tuned low (G, about 49 Hz). The third kick of the bar is shorter
+      (a lock on step 9) and the next one reverts.
+- [ ] Clap: a three-burst 909 clap. Hats bright, the open hat cut by the next closed hat.
+- [ ] Bass on the offbeats with one slide up to Eb. **Loud enough against the kick?** Does the
+      sidechain duck pump it rather than chop it? `________`
+- [ ] The stab sits in a dotted-1/8 ping-pong delay and the reverb (dub chord).
+- [ ] **U1.** STOP, then PLAY: MAX restarts from the new run. Let it play **60 s**, then read:
+      top-line load range `________ %` to `________ %`, **MAX `________ %`**.
+      Divided by E1's `scenario_m3.sh` cl6x figure = unit/emulator ratio `________`
+      (about 1.35 would mean the cache and DDR costs the emulator cannot see are real).
+- [ ] Turn VALUE: tempo follows smoothly. Push VALUE + turn: swing. Back to 130.0.
+
+## 3b. The rest of the factory project: A02-A04, chain, scenes, mute states (10 min)
+
+Queue each pattern with PROJECT + STEP 2, 3, 4 (it lands at the end of the bar), HOME to watch.
+Fix anything by naming the track and what is wrong: each value is one number in core/factory.cpp.
+
+- [ ] **A02 GROOVE+**: a kick pickup on step 15 every fourth bar, a hat roll into every bar, the
+      rim on a 12-step loop drifting against the bar, Cm7 then Abmaj7, blips on a 7-step loop.
+      Hold FILL (upper pad 1): an extra clap on step 16. `________`
+- [ ] **A03 BREAK**: no kick or bass; Cm7 and Abmaj7 with long tails into the delay and reverb,
+      a rim at 35% probability. Up to six chord voices ring here: STOP, PLAY, 60 s,
+      **MAX `________ %`** `________`
+- [ ] **A04 PEAK**: 16th hats with ratchets, an acid line with slides and accents, the 5TH OCT
+      rave stab. Hold FILL for kick and clap rolls. The heaviest factory pattern: STOP, PLAY, 60 s,
+      **MAX `________ %`** `________`
+- [ ] **The factory chain** ships OFF. PROJECT, octave RIGHT (CHAIN): A01 X2, A02 X2, A03, A04 X2,
+      A02. FUNC+UP turns it on: it walks the set and loops; the `PLAY` marker follows. Leave it ON.
+- [ ] **Scenes**: FUNC+MIXER (PERFORM), turn VALUE: the morph goes from the kit (scene 1) to DUB
+      (scene 2): chord, rim and blips into the sends with longer tails. Hold SCENE B + STEP 3:
+      DARK (filters close); STEP 4: TENSION (acid opens, hats and kick tighten). Back to B = 2.
+- [ ] **No macros ship**: A-D in PERFORM are empty on purpose (an assigned macro would freeze
+      its EDIT knobs).
+- [ ] **Mute states**: MUTE (upper pad 3), then STEP 1-8: all, no kick, drums only, no hats,
+      no bass, kick + bass, melodic only, groove without rim and blips. STEP 1, then MUTE to leave.
+- [ ] Overall: does the factory project sound good? First thing to change: `________________`
+
+## 4. Screen layout, mode by mode (4 min)
+
+The beat can keep playing. One look per screen; note any overlap or illegible text.
+
+- [ ] GRID: four encoder slots at the bottom, name over value, the fourth fully on screen; the
+      track line (`T1 ... L16 X1`) ends inside the screen.
+- [ ] EDIT: rows read like `A CUT 064` with a bar; hint `FUNC+EDIT: MACHINE` is legible.
+- [ ] MACHINE (FUNC+EDIT): the kit reads as two lines of four.
+- [ ] MIXER: selection keys walk TRK 1-4, TRK 5-8, DLY, REV, ROUTE, MST; every page draws.
+- [ ] PERFORM (FUNC+MIXER): macro bars stop above the two hint lines; selected macro shows `>A`.
+- [ ] PROJECT: the KEY line sits below the 16 slots, not through the last row.
+- [ ] Dim greys (empty steps, bar backgrounds) are visible but clearly darker than text.
+      Notes: `________________`
+
+## 5. Arrow keys (3 min)
+
+- [ ] GRID and EDIT: UP/DOWN walk the track **without playing it**; LEFT/RIGHT flip the step page
+      (GRID) or SRC/FLTR/AMP/FX (EDIT).
+- [ ] Hold STEP 1 + OK opens the step page; LEFT/RIGHT walk to the previous/next step and wrap;
+      CLR closes it and erases nothing.
+- [ ] PERFORM: LEFT/RIGHT pick the macro, UP/DOWN walk the mutation type.
+- [ ] RESAMPLE: UP/DOWN pick the bars, LEFT/RIGHT where the take goes; CLR backs out.
+- [ ] Notices (e.g. an octave change) appear on the second line in every mode.
+
+## 6. Step editing: locks, clearing one lock, the note, undo/redo (6 min)
+
+In GRID on track 1 (KICK), playing.
+
+- [ ] Hold STEP 5 and turn A: that step is locked (LED red) and the trig does **not** toggle when
+      you let go.
+- [ ] Hold STEP 5 and **push A**: `LOCK CLEARED`, the lock is gone. Repeat for B, C, D (lock with
+      a turn, clear with that knob's push): each push clears **its own** knob.
+      A `__` B `__` C `__` D `__`
+- [ ] EDIT, RIGHT twice to the AMP page, HOME. Hold STEP 9 and push A (DEC): the third kick goes back
+      to the long body. FUNC+CLR puts the lock back.
+- [ ] Hold a STEP and turn VALUE: the step's note moves (`NOTE`), the tempo does not, the trig is
+      unchanged on release. FUNC+CLR undoes the whole turn at once.
+- [ ] FUNC+CLR = `UNDO`, FUNC+OK = `REDO`; the CLR and OK keys light when there is something to
+      undo / redo. Sweep a locked knob 40 clicks, undo once: the whole sweep goes.
+- [ ] CLR with nothing held clears the track (`CLEARED FUNC+CLR UNDO`); FUNC+CLR brings it back.
+
+## 7. Key, scale and sharps (2 min)
+
+- [ ] PROJECT: B walks the key, C the scale. Walk the key through C#, D#, F#, G#, A#: always
+      sharps, and the `#` is legible. It wraps B to C; the scale stops at both ends.
+- [ ] Hold a STEP on track 7 + OK: the step page's NOTE (A) spells the same way, e.g. `C#3`.
+- [ ] Set the key back to **C MINOR**.
+
+## 8. Machine select, GRAIN, and the scale fold (8 min)
+
+The fold test: one step plays a C#, then switch PROJECT's scale between CHROMATIC (C# stays) and
+MINOR (C# is not in C minor, so a folding track moves it). Repeat on each track below.
+
+- [ ] Select track 7. FUNC+EDIT: UP/DOWN change the track's machine at once (`MACHINE`),
+      LEFT/RIGHT walk the track. Discoverable? `________`
+- [ ] **VA (track 7):** set a step's NOTE to C#3. CHROMATIC vs MINOR: the pitch **changes**.
+- [ ] **Kick (track 1):** NOTE to C#3. CHROMATIC vs MINOR: the pitch does **not** change.
+- [ ] **GRAIN:** track 8 to GRN (FUNC+EDIT, UP/DOWN). It sounds (the first time GRAIN has been
+      heard on a unit). Turn POS SIZ DEN SPR: each audibly does something.
+      Load with GRAIN playing, MAX `________ %`
+- [ ] GRAIN with a C#3 step: CHROMATIC vs MINOR **changes** the pitch.
+- [ ] **SAMPLE, sliced:** track 8 back to SMP. SLC (EDIT SRC, D) is at 8: the C#3 step does
+      **not** move with the scale.
+- [ ] **SAMPLE, one-shot:** turn SLC fully down (1). Now the step **does** move with the scale.
+- [ ] Set SLC back to 8 (or FUNC+CLR) and the scale to MINOR.
+
+## 8b. U3: GRAIN on a long sample, at high pitch (5 min)
+
+Resampling gives track 8 a multi-second sample without a file browser, and checks RESAMPLE too.
+
+- [ ] FUNC+REC: UP/DOWN to `RESAMPLE 4 BAR`, LEFT/RIGHT to `TO TRK 8`, OK arms. Playing, it records from
+      the next bar line, writes the take (`WRITING`, then `LAST STRATA_n`) and track 8 loads it.
+      Take name: `________`. Does the take sound like the mix and loop cleanly? `________`
+- [ ] Track 8 to GRN (FUNC+EDIT). EDIT SRC: DEN 127, SPR 127. AMP: PIT 64.
+      **MAX `________ %`**
+- [ ] AMP PIT 127, and a step on track 8 at a high note (step page NOTE, e.g. C6).
+      **MAX `________ %`** Over PIT 64 by `________` points (the DDR cost of high-pitch grains).
+- [ ] Leave track 8 on GRN for section 13.
+
+## 9. KEYS: a held key sustains (3 min)
+
+Select track 7 (VA POLY), EDIT AMP page, DEC up high. FUNC+HOME for KEYS.
+
+- [ ] The screen shows sixteen note names under the keys, roots brighter, all sharps.
+- [ ] Hold three STEP keys: a chord. Let one go: **that** note fades, the other two keep sounding
+      until released.
+- [ ] Hold a key, change octave (LEFT/RIGHT), let go: the note stops, nothing hangs.
+- [ ] Hold a key and press HOME: the note stops.
+- [ ] On track 1 (KICK) letting go of a key changes nothing.
+- [ ] On a GRAIN track (FUNC+EDIT, track 8 to GRN) with DEC at 127: the cloud thins out when the
+      key comes up. Leave track 8 on GRN.
+
+## 10. MUTATE keep and revert; PERFORM undo (4 min)
+
+Back to GRID, track 2 selected, playing.
+
+- [ ] Press MUTATE (upper pad 7): the track changes. CLR: it sounds as before, `REVERTED`.
+- [ ] MUTATE again, then OK: it stays, `KEPT`. Same in EDIT and in PERFORM.
+- [ ] MUTATE, then FUNC+CLR (undo), then plain CLR: CLR does its normal job in that mode, with no
+      `REVERTED` and no second undo.
+- [ ] PERFORM: FUNC+CLR undoes and FUNC+OK redoes; plain CLR still clears the selected macro.
+- [ ] Hold SCENE A (upper pad 4) + CLR: `SCENE ERASED`.
+
+## 11. Transport: FUNC+PLAY and FUNC+STOP (2 min)
+
+- [ ] Playing, FUNC+PLAY: everything jumps to step 1 on the beat and keeps playing; `RESTART`.
+- [ ] In PROJECT queue another slot, then FUNC+STOP before it lands: stops, tails cut at once,
+      the queued change is gone (`RESET`), the next PLAY starts at step 1 of the old pattern.
+- [ ] With a chain running and on its second entry, FUNC+STOP: the chain goes back to its first
+      entry and that pattern is live; PLAY starts the set from the top. With the chain off the
+      pattern stays where it was.
+
+## 12. PROJECT pages: slots, CHAIN, PATTERN, SETUP (6 min)
+
+PROJECT, then octave RIGHT walks CHAIN, PATTERN, SETUP; octave LEFT walks back; CLR on any of
+them returns to the slots.
+
+- [ ] Slots: the arrows move a frame over the 16 slots, OK queues the framed slot; a STEP key
+      queues and moves the frame there.
+- [ ] CHAIN (the factory chain, ON from 3b): UP/DOWN move the cursor, STEP 3 sets the entry to
+      A03, VALUE its repeats, OK adds a copy below (`ENTRY ADDED`), FUNC+LEFT removes one
+      (`ENTRY REMOVED`).
+- [ ] While it plays, add an entry ABOVE the playing one: the chain carries on with the entry it
+      was playing and the `PLAY` marker moves with it. Remove the playing entry: that pattern
+      finishes its pass and the NEXT entry plays, none skipped.
+- [ ] Queue a pattern (END), then STOP and PLAY before it lands: it lands as the transport
+      starts, not bars late.
+- [ ] PATTERN: LEN to 8 (`LEN`): a queued change lands every 8 steps. SWG moves swing exactly
+      as VALUE push + turn does.
+- [ ] Still in PROJECT: FUNC+CLR undoes that LEN change, FUNC+OK redoes it.
+- [ ] SETUP: shows CLOCK SRC, tempo, MIDI CH, QUANTIZE. A sets QUANTIZE in fives; B C D do nothing.
+
+## 13. Save, power cycle, restore (5 min)
+
+Set up something to recognise: the chain left ON, tracks 3 and 5 muted (FUNC + lower pad),
+scene 7 in slot B (hold SCENE B + STEP 7), tempo **142.0**, key **D# MINOR**, track 8 on GRN.
+
+- [ ] FUNC+PROJECT once: `FUNC+PROJECT TO SAVE`, nothing written. Again within 2 s: `SAVING`, and
+      `UNSAVED` disappears from PROJECT.
+- [ ] Power off, power on, start STRATA. It reopens with: the chain on (the saved pattern plays
+      its pass, then the chain carries on from its first entry), tracks 3 and 5 muted,
+      scene 7 in B, 142.0, D# MINOR, track 8 on GRN. Missing: `________________`
+
+## 13b. U5: loading a long 96 kHz WAV (5 min)
+
+Track 8's kit names the take from 8b (`/RECORD/STRATA_n.WAV`, `STRATA_1` on a card with no
+earlier takes). Swap that file for the 96 kHz sweep.
+
+**Why 15 s and not 30 s:** the loader's resample buffer holds 30 s of 48 kHz frames (1,440,000,
+`kSrcFrames` in `app/storage.hpp`), and it counts the file's own frames. So a 96 kHz file can be at
+most 15 s, and a 30 s one is refused with `TOO LONG`. That limit is in seconds of 48 kHz, not in
+seconds of the file. The 30 s file checks the refusal.
+
+- [ ] Power off. Copy `unit-test/STRATA_1.WAV` from the project files over `/RECORD/STRATA_1.WAV`
+      on the card (rename it if 8b showed another number). Card back, power on, start STRATA.
+- [ ] It loads once as the project opens. Then PROJECT, track 8 selected, FUNC+DOWN (reload
+      the track's sample) to time it: from `LOADING` until
+      the SMP line shows `O` for track 8: `________ s`
+- [ ] While it loads (`RESAMPLING`), the screen keeps drawing and the keys answer. Stalls? `________`
+- [ ] Play it on SMP (FUNC+EDIT, track 8 to SMP, SLC down to 1): the sweep rises for about 8 s
+      to 24 kHz and fades out of hearing well before that. In the second half it must stay
+      silent: no falling tone coming back down. Back to GRN.
+- [ ] Optional: copy `SWEEP_30S_96K.WAV` over the same name instead and reload. It should say
+      `TOO LONG` and leave the track silent, with no hang.
+
+## 13c. U4: the delay tail (5 min, a good break)
+
+Section 14 reloads the saved project, which puts the delay back afterwards.
+
+- [ ] STOP. MIXER, DLY page: A (TIM) to `1/1`, B (FBK) to the top. EDIT FX on track 2 (clap): C
+      (SNA) up. Idle LOAD `________ %`
+- [ ] Tap lower pad 2 once, then nothing. LOAD while the tail rings: `________ %`. It drops back
+      after `________` (at 130 BPM and feedback 0.95 this can take several minutes; the tail
+      must keep decaying and never grow).
+
+## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
+
+- [ ] Change the tempo (unsaved). PROJECT, FUNC+LEFT once: `AGAIN TO RELOAD`, nothing changes.
+      Again within 2 s: `RELOADING`, and the tempo is back to 142.0.
+- [ ] FUNC+RIGHT once: `AGAIN FOR NEW`, nothing changes. Twice: `NEW PROJECT`, and it is the
+      factory project again (A01 GROOVE, all eight tracks audible; NEW used to be silent). A single press of either key never loses work.
+- [ ] Both also work from the SETUP page.
+
+## 15. Kit browser: FUNC+EDIT twice (6 min)
+
+Kits (machines, parameters, faders, sample paths) live on the card in 16 slots shared by every
+project. Back in STRATA's project from 14 (or any project), playing.
+
+- [ ] FUNC+EDIT opens MACHINE; its last line says `FUNC+EDIT AGAIN: KITS`. FUNC+EDIT again opens
+      KIT: `KITS 01-08    OK LOAD`, eight rows, `EMPTY` on a fresh card after a moment. LEFT/RIGHT
+      (or the selection keys) show slots 09-16. CLR goes back to MACHINE. No overlaps.
+- [ ] Change a few knobs and put track 8 on GRN. On slot 1, FUNC+DOWN: `SAVING KIT`, the row reads
+      `KIT` and the two lines below show the eight machines (GRN last).
+- [ ] FUNC+DOWN on slot 1 again: `AGAIN TO OVERWRITE`; only a second press writes.
+- [ ] Change the sound (track 8 back to SMP, a knob or two). Still playing, OK on slot 1:
+      `OK AGAIN TO LOAD`, nothing changes. OK again: the slot-1 sound is back and **the beat
+      does not stop**. Click or dropout at the recall? `________`
+      STOP, PLAY, recall again: MAX `________ %`
+- [ ] STEP keys only move the cursor; they never load.
+- [ ] PROJECT now says `UNSAVED`. FUNC+PROJECT twice, then FUNC+LEFT twice (reload): the
+      recalled kit is what comes back.
+- [ ] Kits are shared: FUNC+RIGHT twice (new project), FUNC+EDIT twice: slot 1 is still there.
+
+## 16. Six voices: the STRATA6 app (4 min)
+
+STRATA6 is the same build with the chord stab set to MIN11 (six notes). Leave STRATA through
+Enaga's menu and start STRATA6.
+
+- [ ] The stab is six notes together, nothing crackles.
+- [ ] PLAY, let it run **60 s**: top-line load range `________ %` to `________ %`,
+      **MAX `________ %`**. Difference to STRATA's MAX = cost of two more voices:
+      `________` points.
+- [ ] **U2.** Now switch tracks 5 (rim) and 6 (bass) to PLY (FUNC+EDIT) and give their trigs
+      MIN11 chords (hold STEP + OK, third page, CHRD). Three six-voice tracks:
+      **MAX `________ %`**. Overruns (crackle, LOAD near 100)? `________`
+
+## 17. Write the numbers down
+
+| Reading | Value |
+| --- | --- |
+| Idle load (1) | |
+| scenario_factory.sh emulator peak, cl6x / GCC (PC) | |
+| E1 `scenario_m3.sh` cl6x, emulator (PC) | |
+| U1 A01 GROOVE MAX, 60 s (3), and ratio to E1 | |
+| A03 BREAK MAX, 60 s (3b) | |
+| A04 PEAK MAX, 60 s (3b) | |
+| GRAIN on track 8 MAX (8) | |
+| U3 GRAIN on the take, DEN/SPR 127: PIT 64 / PIT 127 (8b) | |
+| U5 15 s 96 kHz WAV load time (13b) | |
+| U4 delay tail: LOAD while ringing, time to drop (13c) | |
+| MAX straight after a kit recall (15) | |
+| STRATA6 MAX, 60 s (16) | |
+| U2 STRATA6 + tracks 5 and 6 as MIN11 POLY (16) | |
+
+These go into `docs/BUDGET.md` as the first unit rows (U1-U5 and E1-E5 in "Optimization review"), and the ticks into the reference list below.
+
+---
+
+# Reference: the full list by milestone
 
 Only the unit settles CPU load, timing and feel. Everything here needs the hardware, so it
-cannot be closed from a development machine. Work top to bottom and record figures in
-`docs/BUDGET.md`.
+cannot be closed from a development machine. Record figures in `docs/BUDGET.md`.
 
 ## Before powering anything on — safety
 
@@ -87,10 +456,11 @@ standing in for CHORD, and the LOOP sampler. The default pattern plays all of th
       what the encoders do.
 - [ ] Listen for aliasing on PERC and BASS at the top of their ranges, and for a click when a
       voice is stolen on any machine.
-- [ ] **Parameter locks, and listen properly.** The default pattern ships with two: the third
-      kick of the bar has a shorter body (KICK DEC locked on step 9) and one closed hat opens up
-      (HAT DEC on step 11). Both must be *audible*, and the step after each must revert to the
-      kit value.
+- [ ] **Parameter locks, and listen properly.** The default pattern (A01 GROOVE) locks the third
+      kick of the bar to a shorter body (KICK DEC on step 9); A02 pitches the rim with TUN locks
+      on steps 8 and 11, A03 opens the chord's decay and sends, A04 opens the acid bass's
+      resonance on steps 8 and 15. Each must be *audible*, and the step after each must revert to
+      the kit value.
 
       This needs an ear rather than a test. `app/` cannot be host-tested — it is the only part
       of the project that includes Enaga headers, so there is no unit test standing behind this
@@ -231,14 +601,15 @@ project and never needs a restart."*
 
 - [ ] F3 opens PROJECT. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
-- [ ] F1 + F3 twice saves (once only says `F1+F3 AGAIN TO SAVE`). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (277 bytes),
+- [ ] F1 + F3 twice saves (once only says `FUNC+PROJECT TO SAVE`). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (277 bytes),
       `KIT.BIN` (1,076 bytes) and a `BANK_x.BIN` per touched bank.
 - [ ] Only dirty banks are written. Edit one pattern in bank A, save, and confirm no
       `BANK_B.BIN` appears.
 - [ ] Power cycle. The project reopens on the pattern it was left on, not A01.
-- [ ] F1 + OK reloads from the card and discards unsaved edits.
-- [ ] F1 + CLR starts a new project under a NEW name (`NEW1`, `NEW2`...), so saving it cannot
-      overwrite the project it came from.
+- [ ] FUNC + LEFT twice in PROJECT reloads from the card and discards unsaved edits (it was
+      F1 + OK until 2026-11-22).
+- [ ] FUNC + RIGHT twice in PROJECT starts a new project under a NEW name (`NEW1`, `NEW2`...), so
+      saving it cannot overwrite the project it came from (it was F1 + CLR).
 - [ ] A load with the transport RUNNING stops it first. Under CLOCK SRC = MIDI or SYNC, where
       `clock::stop()` returns false, the load is REFUSED and the screen says `EXT CLOCK` — it
       must not load anyway.
@@ -392,7 +763,7 @@ gesture is the mistake this milestone made twice before it was caught.
       reverb), MUTATE.
 - [ ] F1 + F7 opens PERFORM: encoders A-D are the macros, VALUE is the morph.
 - [ ] In PERFORM: OK captures a scene (the selected track only while a scene pad is held),
-      F1 + OK erases one, **STEP 1-16 assigns that parameter of the selected track to the
+      scene pad + CLR erases one, **STEP 1-16 assigns that parameter of the selected track to the
       selected macro**, the octave keys pick which macro, CLR clears it, UP and DOWN walk the
       mutation, the selection keys its amount.
 - [ ] A macro assigned in one press is immediately usable: the range runs from where the
@@ -484,9 +855,9 @@ calls it: a POLY step's chord byte is expanded onto VA POLY's voices on one fram
 itself has no host test, because nothing in `app/` does — so the boxes below are the only check
 on it.
 
-- [ ] **The default kit's stab is a MIN7.** It is in `build_default_beat` so the chord path runs
-      every time anyone plays the default kit, the way the two parameter locks are. Four notes
-      should sound, together, on steps 1 and 9 of track 7. One note means the expansion is not
+- [ ] **The default kit's stab is a MIN7.** It is in A01 (core/factory.cpp) so the chord path runs
+      every time anyone plays the default beat, the way the parameter locks are. Four notes
+      should sound, together, on steps 4 and 11 of track 7. One note means the expansion is not
       running; a flam means the notes are not landing on the same frame.
 - [ ] A POLY step with each chord type sounds like its name. The table is semitone stacks folded
       into the key, which gives the diatonic triad on every degree of a mode — so MAJ on the root
@@ -511,11 +882,8 @@ whether it works.
       seven-note scale they should span just over two octaves and every one should be in key.
 - [ ] The octave keys move the octave; the selection keys change track without leaving the mode.
 - [ ] Change the key or scale in F3 and the KEYS layout follows it.
-- [ ] **A key has no release.** `dsp/track.hpp`'s Machine interface has `release_all()` and
-      nothing per-note, so releasing one key of a held chord would silence the whole machine. A
-      long VA note therefore plays its own decay rather than stopping when you let go. If that
-      feels wrong on the unit, the fix is a per-note release on the machine interface, and
-      `Cmd::release_note` is sitting in the enum unimplemented waiting for it.
+- [x] ~~A key has no release.~~ Superseded 2026-11-22: letting go of a key releases its note
+      (see "KEYS: a key holds its note" at the end).
 
 **GRAIN (`dsp/grain`)** — 46 host tests, 64,759 checks, and **not one of these boxes can be
 ticked, because GRAIN cannot be reached.** docs/SPEC.md's default kit fills all eight tracks with
@@ -734,8 +1102,9 @@ saved with a different kit used to come back with the default one's machines.
 - [ ] **The hat choke follows the kit.** A closed hat cuts an open one, and that pair is now
       re-derived rather than wired: move either hat off tracks 3 or 4 and the choke should stop,
       put them back and it should return.
-- [ ] **A new project is playable.** A blank kit is docs/SPEC.md's default kit, not eight KICKs —
-      which is what a kit of zeroes would have meant once the field was honoured.
+- [ ] **A new project is playable.** NEW gives the factory project (core/factory.hpp): docs/SPEC.md's
+      eight machines with their sounds set, and bank A's four patterns. Until 2026-11-22 it gave
+      a kit with LVL 0 on every track, so a new project was silent.
 - [ ] **A GRAIN track plays the track's card sample**, not the placeholder, and a track switched
       SAMPLE → GRAIN → SAMPLE across a sample change plays the new file on both.
 - [ ] **A track switched to SAMPLE or GRAIN before any card has been read still makes a sound**:
@@ -855,7 +1224,7 @@ wants confirming on the unit, because "bit-exact" was argued against GCC and the
 core/pcm now filters a file above 48 kHz before resampling it, so content above 24 kHz no longer
 folds back as audible tones. It costs main-loop time at load, estimated and not measured.
 
-- [ ] Load a 30 s stereo 96 kHz WAV and time it. Put the figure in docs/BUDGET.md, "Load time".
+- [ ] Load a 15 s stereo 96 kHz WAV (the longest that loads; 30 s at 96 kHz is TOO LONG) and time it. Put the figure in docs/BUDGET.md, "Load time".
       The screen must keep drawing and the keys keep answering while it shows RESAMPLING.
 - [ ] Load a 96 kHz sweep that runs past 24 kHz and play it. Nothing should come back down as a
       falling tone after the sweep passes 24 kHz.
@@ -872,7 +1241,7 @@ What it cannot judge is whether the result reads well on the OLED.
 - [ ] GRID: the four encoder slots at the bottom show the name over the value, four clean
       columns, the fourth fully on screen. The track line ("T1 ... X3/4") ends inside the screen.
 - [ ] EDIT: each row reads "A CUT 064" with its bar; the title names the machine; the hint
-      "F1+EDIT: MACHINE" is legible.
+      "FUNC+EDIT: MACHINE" is legible.
 - [ ] PERFORM: the macro bars stop above the two hint lines; the selected macro shows as ">A".
 - [ ] PROJECT: the KEY line sits below the 16 pattern slots, not through the last row; an
       unsaved project says UNSAVED on the second line.
@@ -894,12 +1263,12 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
 - [ ] KEYS: LEFT and RIGHT are the octave. PERFORM: LEFT and RIGHT pick the macro; UP and DOWN
       still walk the mutation.
 - [ ] MACHINE (F1 + EDIT): the eight machines are a list; UP and DOWN change the track's machine
-      at once, LEFT and RIGHT walk the track. EDIT's screen says `F1+EDIT: MACHINE`.
+      at once, LEFT and RIGHT walk the track. EDIT's screen says `FUNC+EDIT: MACHINE`.
 - [ ] RESAMPLE: UP and DOWN pick the length, LEFT and RIGHT where the take goes.
 - [ ] PROJECT: the arrows move a frame over the 16 slots and OK queues the framed one; a STEP key
       queues and moves the frame there. F1 + UP toggles the chain, F1 + DOWN reloads the sample.
       On SETUP, CLR goes back.
-- [ ] Notices (an octave, a scene captured, `F1+F3 AGAIN TO SAVE`) appear on the second line in
+- [ ] Notices (an octave, a scene captured, `FUNC+PROJECT TO SAVE`) appear on the second line in
       every mode, not only in GRID.
 
 ## F1 + F5 restart, F1 + F6 stop and reset
@@ -925,6 +1294,8 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
 
 - [ ] Press MUTATE, then CLR: the track sounds as before and the screen says REVERTED. Press it
       again, then OK: it stays (KEPT). Works the same in GRID, EDIT and PERFORM.
+- [ ] MUTATE, then F1 + CLR (undo), then plain CLR: CLR does what CLR does in that mode and does
+      NOT say REVERTED or undo a second edit.
 - [ ] In PERFORM, F1 + CLR undoes and F1 + OK redoes. Plain CLR still clears the selected macro.
 - [ ] Hold scene A and press CLR: scene A's slot is erased (SCENE ERASED). This used to be F1 + OK.
 
@@ -936,7 +1307,14 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
       repeats (X1 to X16), OK adds a copy below, LEFT and RIGHT step its pattern, UP and DOWN
       move between entries, F1 + LEFT removes one. Build A01 X2, A03 X1 and turn it on with
       F1 + UP: it plays A01 twice, A03 once, and loops. The PLAY marker follows.
-- [ ] Save and reopen: the chain comes back, and so does whether it was on.
+- [ ] Save and reopen: the chain comes back, and so does whether it was on. With it on, the saved
+      pattern plays its pass and then the chain carries on from its first entry (it used to
+      reopen off, whatever the file said).
+- [ ] While the chain plays, add an entry ABOVE the playing one (cursor up, OK): the chain carries
+      on with the entry it was playing and the PLAY marker moves with it. Remove the playing
+      entry (F1 + LEFT): the pattern finishes its pass and the NEXT entry plays, none skipped.
+- [ ] Queue a pattern (END), then STOP and PLAY before it lands: it lands as the transport
+      starts, not as many bars late as the clock had run.
 - [ ] PATTERN: LEN at 8 makes a queued change land every 8 steps; SWG moves the swing exactly as
       VALUE pushed + turned does. F1 + CLR in GRID undoes a LEN change.
 
@@ -949,9 +1327,68 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
 - [ ] Hold a key, change octave, let go: the note stops (it does not hang).
 - [ ] Hold a key and press F4 to leave KEYS: the note stops.
 - [ ] Drum tracks behave as before: letting go changes nothing.
+- [ ] The same on a GRAIN track with DEC at 127 (hold): the cloud thins out when the key comes up
+      (it used to sound until STOP).
 
 ## PROJECT: undo and redo, and where reload and new went
 
 - [ ] In PROJECT, F1 + CLR undoes and F1 + OK redoes (try a LEN change on the PATTERN page).
 - [ ] F1 + LEFT once shows AGAIN TO RELOAD and changes nothing; twice reloads the project from the
       card. F1 + RIGHT twice starts a new project. A single press of either never loses work.
+
+## KIT: the kit browser (FUNC+EDIT twice)
+
+- [ ] FUNC+EDIT opens MACHINE, whose last line says `FUNC+EDIT AGAIN: KITS`. FUNC+EDIT again opens
+      KIT: `KITS 01-08    OK LOAD`, eight rows, and on a new card every row reads `EMPTY` after a
+      moment. CLR (or FUNC+EDIT) goes back to MACHINE. The layout reads cleanly, no overlaps.
+- [ ] Turn a few knobs and switch a machine, then FUNC+DOWN on slot 1: `SAVING KIT`, the row reads
+      `KIT` and the two lines below show the eight machines. The card has
+      `/ENAGA/DATA/STRATA/KITS/KIT_01.BIN`.
+- [ ] Change the sound, then with the beat PLAYING press OK on slot 1: `OK AGAIN TO LOAD`, nothing
+      changes. OK again: the stored sound comes back and the beat does not stop. Listen for a
+      click or a dropout at the recall, and read LOAD/PEAK straight after it.
+- [ ] FUNC+DOWN on slot 1 again says `AGAIN TO OVERWRITE`; only the second press writes.
+- [ ] A kit with a sample on track 8: recall a kit with the SAME sample while playing -- the loop
+      does not stop. Recall one naming another WAV -- the track reloads (PROJECT shows `.` then `O`).
+- [ ] After a recall PROJECT says `UNSAVED`; FUNC+PROJECT twice saves it, and the reopened project
+      has the recalled kit.
+- [ ] Kits are shared: start a NEW project (PROJECT, FUNC+RIGHT twice) and slot 1 is still there.
+
+## Factory content: audition list (2026-11-22)
+
+A first boot with no card and a NEW project (PROJECT, F1 + RIGHT twice) now hold the same thing:
+core/factory.hpp. Chosen from the references in docs/SOUND.md and balanced by rendering on the
+host (`make -C host render`, which writes the four patterns and A01's eight tracks soloed to
+`build/host/render/`), but **nobody has listened to it**. Levels measured there, A01, RMS over
+8 bars: kick -18.7 dBFS, bass -26.0, clap -27.8, hats -28.1 / -26.8, chord -28.2 (with its
+sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
+
+- [ ] **A01 GROOVE**, PLAY on a fresh start. The kick should be a tight 909-ish thump tuned to G
+      (about 49 Hz, the fifth of C), the clap a three-burst 909 clap, the hats bright (closed
+      band-pass at 3.8 kHz, open at 3.5 kHz, where the old default's 1.2 kHz was dull), the
+      open hat cut short by the next closed hat. The bass rolls on the offbeats with one slide
+      up to Eb; the Cm7 stab sits in a dotted-1/8 ping-pong and the reverb. A little swing (54).
+- [ ] Is the **bass loud enough against the kick**, and does the sidechain duck pump it musically
+      rather than chop it? It renders 7 dB under the kick, with LVL at the top and the fader at
+      1.25.
+- [ ] **A02 GROOVE+**: a kick pickup on step 15 every fourth bar, a hat roll into every bar, the
+      rim on a 12-step loop (it drifts against the bar for three bars), Cm7 then Abmaj7, blips
+      on a 7-step loop. Hold FILL: an extra clap on step 16.
+- [ ] **A03 BREAK**: no kick or bass; Cm7 and Abmaj7 with long tails into the delay and reverb, a
+      rim ticking at 35% probability. Up to six chord voices ring here, so read LOAD on it.
+- [ ] **A04 PEAK**: 16th hats with ratchets, an acid line with slides and accents, the 5TH OCT rave
+      stab. Hold FILL for the kick and clap rolls. The highest-load factory pattern: read LOAD
+      and MAX here.
+- [ ] **The chain**: PROJECT, F1 + UP turns it on. A01 x2, A02 x2, A03, A04 x2, A02, then loops.
+      It ships OFF on purpose, so PLAY on a fresh project jams on A01 rather than walking off.
+- [ ] **PERFORM, VALUE**: morphs from the kit (scene 1) to DUB (scene 2): chord, rim and blips into
+      the sends with longer tails. Scenes 3 (DARK: filters close) and 4 (TENSION: the acid opens,
+      hats and kick tighten) are there to assign to A or B.
+- [ ] **PERFORM, A-D: no macros ship.** An assigned macro holds its parameters at its own value
+      even at 0, so a shipped macro would freeze those EDIT knobs. Assign your own; the factory
+      leaves them empty on purpose (core/factory.cpp).
+- [ ] **Mute states** 1-8: all, no kick, drums only, no hats, no bass, kick + bass, melodic parts
+      only, the bare groove without rim and blips.
+- [ ] Anything that sounds wrong, say which and how: each value has its arithmetic in a comment
+      in core/factory.cpp, so a change is one number.
+

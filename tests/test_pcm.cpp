@@ -979,3 +979,73 @@ TEST(the_antialias_filter_keeps_channels_apart_and_clamps_instead_of_wrapping) {
     CHECK_EQ(three[0], 100);
     CHECK_EQ(three[2], 300);
 }
+
+// --- the anti-aliasing loop in core/pcmloops.ti.c ---------------------------------------------
+
+namespace {
+
+// pcm_antialias's loop as it was written in core/pcm.cpp before it moved to core/pcmloops.ti.c,
+// kept here as the reference the move is held to.
+void antialias_reference(int16_t *samples, uint32_t frames, int channels, Antialias &filter) {
+    for (int ch = 0; ch < channels; ch++) {
+        float *z1 = filter.z1[ch];
+        float *z2 = filter.z2[ch];
+        int16_t *p = samples + ch;
+        for (uint32_t i = 0; i < frames; i++, p += channels) {
+            float x = float(*p);
+            for (int k = 0; k < Antialias::kSections; k++) {
+                const float y = filter.b0[k] * x + z1[k];
+                z1[k] = filter.b1[k] * x - filter.a1[k] * y + z2[k];
+                z2[k] = filter.b2[k] * x - filter.a2[k] * y;
+                x = y;
+            }
+            const float r = x + (x >= 0.0f ? 0.5f : -0.5f);
+            const int32_t v = r >= 32767.0f ? 32767 : (r <= -32768.0f ? -32768 : int32_t(r));
+            *p = int16_t(v);
+        }
+    }
+}
+
+}  // namespace
+
+TEST(the_antialias_loop_is_bit_exact_against_the_loop_it_replaced) {
+    // Mono and stereo noise with full-scale square bursts in it, so the clamp and both rounding halves
+    // are exercised, filtered in uneven slices with the state carried between them -- the way
+    // Storage feeds it -- at two source rates.
+    constexpr uint32_t frames = 20000;
+    static int16_t moved[2 * frames];
+    static int16_t reference[2 * frames];
+    const uint32_t rates[2] = {96000, 88200};
+    for (int channels = 1; channels <= 2; channels++)
+    for (uint32_t rate : rates) {
+        uint32_t seed = 0x2468ACE1u;
+        for (uint32_t i = 0; i < 2 * frames; i++) {
+            seed = seed * 1664525u + 1013904223u;
+            const bool burst = (i / 997) % 5 == 0;
+            moved[i] = burst ? int16_t((i / 23) % 2 == 0 ? 32767 : -32768)
+                             : int16_t(int32_t(seed >> 16) - 32768);
+            reference[i] = moved[i];
+        }
+        Antialias a = Antialias::make(rate, 48000);
+        Antialias b = Antialias::make(rate, 48000);
+        CHECK(a.active);
+        uint32_t done = 0;
+        uint32_t slice = 1;
+        while (done < frames) {
+            const uint32_t n = frames - done < slice ? frames - done : slice;
+            pcm_antialias(moved + channels * done, n, channels, a);
+            antialias_reference(reference + channels * done, n, channels, b);
+            done += n;
+            slice = slice * 3 + 7;              // 1, 10, 37, 118, ... uneven on purpose
+        }
+        int differing = 0;
+        for (uint32_t i = 0; i < 2 * frames; i++) differing += moved[i] != reference[i] ? 1 : 0;
+        CHECK_EQ(differing, 0);
+        for (int ch = 0; ch < channels; ch++) {
+            for (int k = 0; k < Antialias::kSections; k++) {
+                CHECK(a.z1[ch][k] == b.z1[ch][k]);
+                CHECK(a.z2[ch][k] == b.z2[ch][k]);
+            }
+        }
+    }
+}

@@ -88,7 +88,7 @@ enum class Cmd : uint8_t {
     // different structures in different layers, so they are copied across explicitly: `store`
     // before a save, `recall` after a load. Both run on the audio side, which owns both.
     kit_store,
-    kit_recall,
+    kit_recall,        // a: 1 = from Engine::kit_for_recall (the kit browser), 0 = re-apply project_.kit
 
     // The global key and scale (docs/SPEC.md, "Musical defaults that help creativity"). Both
     // apply to the PROJECT's settings and to the live pattern at once: the pattern's own copy is

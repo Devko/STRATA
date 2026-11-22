@@ -253,7 +253,7 @@ constexpr uint8_t kKeyVelocity = 100;
 // The modes of docs/SPEC.md's function block. F4 = GRID, F7 = MIXER, F8 = EDIT, and the two
 // selection keys under the screen move within whichever mode is showing -- the step page in
 // GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
-enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample, machine };
+enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample, machine, kit };
 
 // How long a take is. docs/SPEC.md: "1, 2, 4 or 8 bars", so these four and nothing between --
 // a resample is a loop and a loop is a power of two bars.
@@ -276,6 +276,7 @@ const char *mode_name(Mode mode) {
         case Mode::keys:     return "KEYS";
         case Mode::resample: return "RESAMPLE";
         case Mode::machine:  return "MACHINE";
+        case Mode::kit:      return "KIT";
         default:             return "?";
     }
 }
@@ -396,6 +397,14 @@ public:
             return;
         }
 
+        // In KIT mode the sixteen STEP keys are the sixteen kit slots: a press puts the cursor
+        // there, and OK (twice) recalls it. Only the cursor -- a slot key that loaded at once
+        // would throw the sound away on a stray press.
+        if (mode_ == Mode::kit && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
+            if (down) move_kit_cursor_to(key - ENAGA_KEY_STEP1);
+            return;
+        }
+
         // In PROJECT mode a STEP key queues a pattern change rather than toggling a trig, so it
         // is taken here, before the editing path, and only on the press -- there is no modifier
         // gesture to decide on the release.
@@ -444,6 +453,7 @@ public:
         // PROJECT and PERFORM mode's own keys. Taken before the switch so the editing meanings
         // of OK, CLR and the arrows cannot fire while one of them is what is on screen.
         if (mode_ == Mode::project && on_project_key(key)) return;
+        if (mode_ == Mode::kit && on_kit_key(key)) return;
         // A mutation waiting for its verdict takes OK and CLR first, in whatever mode: OK keeps
         // it, CLR reverts it. Only the plain keys; F1 + CLR and F1 + OK stay undo and redo.
         if (mutation_pending_ && !shift_ && (key == ENAGA_KEY_OK || key == ENAGA_KEY_CLR)) {
@@ -502,8 +512,10 @@ public:
                     // F1 + F6: stop and reset all tracks (docs/SPEC.md). Everything a plain STOP
                     // does, and the second press's cut, in one: the tails are cut, a queued
                     // pattern change is dropped and the clock goes back to 0, so the next PLAY
-                    // or CONTINUE starts at step 1 with nothing pending. Refused under an
-                    // outside clock that keeps running, exactly as plain F6 is.
+                    // or CONTINUE starts at step 1 with nothing pending -- and a running chain
+                    // goes back to its first entry, so a whole set starts again from the top
+                    // (Roland, 2026-11-22). Refused under an outside clock that keeps running,
+                    // exactly as plain F6 is.
                     clock_refused_ = !enaga::clock::stop();
                     if (clock_refused_ && enaga::clock::running()) {
                         notice("EXT CLOCK");
@@ -512,6 +524,9 @@ public:
                     enaga::clock::locate(0);
                     post(Cmd::stop, 0, 0, 1);
                     post(Cmd::cancel_queue);
+                    // Starting the chain again is what puts it on entry 1 and that entry's
+                    // pattern live; with the clock stopped the switch is immediate.
+                    if (engine_.chain().active) post(Cmd::set_chain, 0, 0, 1);
                     stop_armed_ = false;
                     notice("RESET");
                     break;
@@ -566,7 +581,7 @@ public:
                     } else {
                         save_armed_ = true;
                         save_armed_at_ms_ = last_ms_;
-                        notice("F1+F3 AGAIN TO SAVE");
+                        notice("FUNC+PROJECT TO SAVE");
                     }
                 }
                 break;
@@ -580,12 +595,17 @@ public:
                 break;
             case ENAGA_KEY_F8:                         // EDIT: the sound pages, or machine select
                 if (shift_) {
-                    // docs/SPEC.md's key table: F1 + F8 is "Kit and machine select". The machine
-                    // half is what M6 needed and now has; a kit BROWSER wants a file list and is
-                    // M7's, so this is the machine select and says so on screen.
-                    mode_ = Mode::machine;
-                    leave_mode();
-                    notice("MACHINE");
+                    // docs/SPEC.md's key table: F1 + F8 is "Kit and machine select". The first
+                    // press is the machine select; pressed again from there it is the kit
+                    // browser, and from the browser it goes back -- one key for both halves, as
+                    // the spec gives it, and MACHINE's screen says so.
+                    if (mode_ == Mode::machine) {
+                        open_kits();
+                    } else {
+                        mode_ = Mode::machine;
+                        leave_mode();
+                        notice("MACHINE");
+                    }
                     break;
                 }
                 mode_ = Mode::edit;
@@ -610,6 +630,7 @@ public:
                     held_used_ = true;                 // so the release does not toggle the trig
                     mode_ = Mode::grid;
                 } else if (shift_) {
+                    mutation_pending_ = false;         // settled, or CLR would undo a 2nd level
                     post(Cmd::redo);                   // F1 + OK = redo
                     end_gesture();
                     notice("REDO");
@@ -620,6 +641,10 @@ public:
 
             case ENAGA_KEY_CLR:
                 if (shift_) {
+                    // An undo settles a pending MUTATE: it has either just been taken back or was
+                    // never the newest edit. Left pending, the next plain CLR undid ANOTHER level
+                    // -- the edit before the mutation -- and said REVERTED.
+                    mutation_pending_ = false;
                     post(Cmd::undo);                   // F1 + CLR = undo
                     end_gesture();
                     notice("UNDO");
@@ -735,8 +760,9 @@ public:
                 take_bars_index_ = (take_bars_index_ + delta + kTakeBarChoices) % kTakeBarChoices;
                 break;
             case Mode::mixer:                   // nothing is selected by row on the mixer
-            case Mode::project:                 // PROJECT and PERFORM have their own handlers
+            case Mode::project:                 // PROJECT, PERFORM and KIT have their own handlers
             case Mode::perform:
+            case Mode::kit:
                 break;
         }
     }
@@ -902,6 +928,10 @@ public:
                 mutate_amount_ = (mutate_amount_ + delta * 10 + 110) % 110;
                 if (mutate_amount_ > 100) mutate_amount_ = 100;
                 break;
+            case Mode::kit:
+                // The selection keys flip the browser's two pages of eight, like LEFT and RIGHT.
+                move_kit_cursor_to(kit_cursor_ + delta * 8);
+                break;
         }
     }
 
@@ -942,7 +972,7 @@ public:
         } else {
             mark(GestureKind::erase, selected_, 0);
             post(Cmd::track_erase, uint8_t(selected_));
-            notice("CLEARED  F1+CLR UNDO");   // 21 characters at most
+            notice("CLEARED FUNC+CLR UNDO");    // 21 characters at most
         }
         end_gesture();
     }
@@ -1101,6 +1131,13 @@ public:
         // that a change is one gesture.
         if (mode_ == Mode::machine && encoder == 0) {
             walk_machine(delta);
+            return;
+        }
+
+        // KIT mode: A walks the slot cursor, as UP and DOWN do. B to D have nothing to set here,
+        // and must not fall through to the sound parameters of a screen that is not showing.
+        if (mode_ == Mode::kit && encoder >= 0 && encoder < 4) {
+            if (encoder == 0) move_kit_cursor_to(kit_cursor_ + delta);
             return;
         }
 
@@ -1746,6 +1783,7 @@ public:
                 case Mode::keys:    draw_keys(canvas); break;
                 case Mode::resample: draw_resample(canvas); break;
                 case Mode::machine: draw_machine(canvas); break;
+                case Mode::kit:     draw_kit(canvas); break;
             }
         }
 
@@ -1998,7 +2036,7 @@ public:
         }
 
         // The machine is changed somewhere else, and nothing said where.
-        canvas.text(0, 96, "F1+EDIT: MACHINE", 7);
+        canvas.text(0, 96, "FUNC+EDIT: MACHINE", 7);
     }
 
     // --- MIXER: four levels at a time, with meters -----------------------
@@ -2280,8 +2318,170 @@ public:
             canvas.text(x + 4, y + 2, machine_name(uint8_t(m)), on ? 0 : 11);
         }
 
-        canvas.text(0, 103, "UP DOWN OR A: MACHINE", 7);
-        canvas.text(0, 112, "LEFT RIGHT: TRACK", 7);
+        canvas.text(0, 103, "ARROWS: MACHINE TRACK", 7);
+        canvas.text(0, 112, "FUNC+EDIT AGAIN: KITS", 7);
+    }
+
+    // --- KIT: the kit library (FUNC+EDIT twice) ---------------------------
+    //
+    // Sixteen kits on the card, shared by every project (app/storage.hpp, "the kit library").
+    // The list is the arrows' rows, as every Enaga list is: UP and DOWN move the cursor, LEFT and
+    // RIGHT flip the two pages of eight, OK picks -- twice, because a recall replaces the sound
+    // and is not undoable -- and CLR goes back to MACHINE. F1 + DOWN puts the kit down into the
+    // slot, the same direction it pastes in every editing mode; over a kit already there it
+    // takes a second press. F1 + UP reads the card again.
+
+    void draw_kit(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const int first = (kit_cursor_ / 8) * 8;
+        append(out, "KITS ");
+        append_padded(out, uint32_t(first + 1), 2);
+        *out++ = '-';
+        append_padded(out, uint32_t(first + 8), 2);
+        append(out, storage_.card_usable() ? "    OK LOAD" : "  NO CARD");
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        // What the card is doing, what went wrong, or what the keys do.
+        out = line;
+        const char *busy = storage_.busy_text();
+        if (busy != nullptr) {
+            append(out, busy);
+        } else if (storage_.last_error() != nullptr) {
+            append_shown(out, storage_.last_error(), kLineChars);
+        } else {
+            append(out, "FUNC+DOWN: SAVE HERE");
+        }
+        *out = 0;
+        canvas.text(0, 27, line, busy != nullptr ? 12 : 9);
+
+        for (int i = 0; i < 8; i++) {
+            const int slot = first + i;
+            const Storage::KitSlot &info = storage_.kit_slot(slot);
+            out = line;
+            *out++ = slot == kit_cursor_ ? '>' : ' ';
+            append_padded(out, uint32_t(slot + 1), 2);
+            *out++ = ' ';
+            append(out, kit_state_name(info.state));
+            *out = 0;
+            canvas.text(0, 37 + i * 8, line, slot == kit_cursor_ ? 15 : 9);
+        }
+
+        // The slot under the cursor, as MACHINE draws the kit in play: two lines of four.
+        const Storage::KitSlot &info = storage_.kit_slot(kit_cursor_);
+        if (info.state == Storage::SlotState::used) {
+            for (int half = 0; half < 2; half++) {
+                out = line;
+                append_number(out, uint32_t(half * 4 + 1));
+                *out++ = '-';
+                append_number(out, uint32_t(half * 4 + 4));
+                for (int t = half * 4; t < half * 4 + 4; t++) {
+                    *out++ = ' ';
+                    append(out, machine_name(info.machines[t]));
+                }
+                *out = 0;
+                canvas.text(0, 103 + half * 9, line, 11);
+            }
+        }
+    }
+
+    static const char *kit_state_name(Storage::SlotState state) {
+        switch (state) {
+            case Storage::SlotState::empty: return "EMPTY";
+            case Storage::SlotState::used:  return "KIT";
+            case Storage::SlotState::bad:   return "UNREADABLE";
+            default:                        return "...";
+        }
+    }
+
+    void open_kits() {
+        mode_ = Mode::kit;
+        leave_mode();
+        kit_armed_ = KitAction::none;
+        storage_.request_kit_scan();
+        notice(storage_.card_usable() ? "KITS" : "NO CARD");
+    }
+
+    void move_kit_cursor_to(int slot) {
+        const int next = slot < 0 ? 0 : (slot >= Storage::kKitSlots ? Storage::kKitSlots - 1 : slot);
+        if (next != kit_cursor_) kit_armed_ = KitAction::none;   // an arm is for one slot
+        kit_cursor_ = next;
+    }
+
+    enum class KitAction : uint8_t { none, load, save };
+
+    // A second press of the same key on the same slot within kSaveArmMs, as a project save,
+    // reload and NEW take. True when this press is that second one.
+    bool kit_second_press(KitAction action) {
+        if (kit_armed_ == action && uint32_t(last_ms_ - kit_armed_at_ms_) < kSaveArmMs) {
+            kit_armed_ = KitAction::none;
+            return true;
+        }
+        kit_armed_ = action;
+        kit_armed_at_ms_ = last_ms_;
+        return false;
+    }
+
+    bool on_kit_key(int key) {
+        switch (key) {
+            case ENAGA_KEY_OK: {
+                if (shift_) return false;               // F1 + OK is redo, as everywhere
+                const Storage::SlotState state = storage_.kit_slot(kit_cursor_).state;
+                if (state == Storage::SlotState::empty) {
+                    kit_armed_ = KitAction::none;
+                    notice("EMPTY SLOT");
+                } else if (!storage_.card_usable()) {
+                    notice("NO CARD");
+                } else if (kit_second_press(KitAction::load)) {
+                    storage_.request_kit_load(kit_cursor_);
+                    notice("LOADING KIT");
+                } else {
+                    notice("OK AGAIN TO LOAD");
+                }
+                return true;
+            }
+
+            case ENAGA_KEY_CLR:
+                if (shift_) return false;               // F1 + CLR is undo
+                mode_ = Mode::machine;                  // back, where the browser came from
+                leave_mode();
+                notice("MACHINE");
+                return true;
+
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (!shift_) {
+                    move_kit_cursor_to(kit_cursor_ + (key == ENAGA_KEY_UP ? -1 : +1));
+                } else if (key == ENAGA_KEY_UP) {
+                    storage_.request_kit_scan();
+                    notice(storage_.card_usable() ? "READING KITS" : "NO CARD");
+                } else {
+                    // Straight into an empty slot; over a kit, or a slot not yet read, only on
+                    // the second press -- the kit already there is not undoable either.
+                    const bool empty =
+                        storage_.kit_slot(kit_cursor_).state == Storage::SlotState::empty;
+                    if (!storage_.card_usable()) {
+                        notice("NO CARD");
+                    } else if (empty || kit_second_press(KitAction::save)) {
+                        kit_armed_ = KitAction::none;
+                        storage_.request_kit_save(kit_cursor_);
+                        notice("SAVING KIT");
+                    } else {
+                        notice("AGAIN TO OVERWRITE");
+                    }
+                }
+                return true;
+
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                // The page of eight; F1 + LEFT / RIGHT are free here, and kept free.
+                if (!shift_) move_kit_cursor_to(kit_cursor_ + (key == ENAGA_KEY_LEFT ? -8 : +8));
+                return true;
+
+            default:
+                return false;
+        }
     }
 
     void draw_resample(enaga::Canvas &canvas) {
@@ -2550,7 +2750,7 @@ public:
 
         // The gesture that is not otherwise discoverable.
         canvas.text(0, 78, "STEP ASSIGNS TO MACRO", 7);
-        canvas.text(0, 87, "F1+UP AUTOFILL", 7);
+        canvas.text(0, 87, "FUNC+UP AUTOFILL", 7);
 
         // What MUTATE will do, and to which track.
         out = line;
@@ -2859,13 +3059,15 @@ public:
                 append_padded(out, uint32_t(entry.slot) + 1, 2);
                 append(out, " X");
                 append_number(out, uint32_t(entry.repeats));
-                if (player.active && int(player.entry) == i) append(out, " PLAY");
+                if (player.active && !player.orphaned && int(player.entry) == i) {
+                    append(out, " PLAY");
+                }
                 *out = 0;
                 canvas.text(0, 30 + row * 10, line, i == chain_cursor_ ? 15 : 10);
             }
         }
 
-        canvas.text(0, 103, "OK ADD  F1+LEFT DEL", 7);
+        canvas.text(0, 103, "OK ADD  FUNC+LEFT DEL", 7);
         canvas.text(0, 112, "VALUE REPEATS", 7);
     }
 
@@ -2996,7 +3198,7 @@ public:
         // No commas: the font has none, and each drew as '?'.
         canvas.text(0, 94, "CLK SRC/OUT SYNC OUT", 7);
         canvas.text(0, 103, "MIDI CH: SET IN", 7);
-        canvas.text(0, 112, "F1+POWER > SETTINGS", 7);
+        canvas.text(0, 112, "FUNC+POWER > SETTINGS", 7);
     }
 
     void draw_project(enaga::Canvas &canvas) {
@@ -3288,6 +3490,9 @@ private:
     uint32_t save_armed_at_ms_ = 0;
     CardAction card_armed_ = CardAction::none;   // F1 + LEFT / RIGHT in PROJECT, armed once
     uint32_t card_armed_at_ms_ = 0;
+    int kit_cursor_ = 0;                        // KIT: the slot under the cursor, 0-15
+    KitAction kit_armed_ = KitAction::none;     // KIT: OK or F1 + DOWN pressed once
+    uint32_t kit_armed_at_ms_ = 0;
     static constexpr uint32_t kSaveArmMs = 2000;
 
     // The project tempo this side has already reconciled with the clock, so that a LOAD is
