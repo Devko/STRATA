@@ -84,6 +84,8 @@ struct UiProbe {
     static uint32_t tempo_tenths(const Strata &app) { return app.tempo_tenths_; }
     static bool clock_refused(const Strata &app) { return app.clock_refused_; }
     static bool project_setup(const Strata &app) { return app.project_setup_; }
+    static int slot_cursor(const Strata &app) { return app.slot_cursor_; }
+    static int macro_selected(const Strata &app) { return app.macro_selected_; }
     static int quantize(const Strata &app) { return app.quantize(); }
 };
 
@@ -1027,8 +1029,8 @@ TEST(ui_play_is_refused_while_a_project_is_loading) {
     Strata &app = fresh();
     FakeHost &host = FakeHost::the();
 
-    key(ENAGA_KEY_F3);                             // PROJECT
-    key(ENAGA_KEY_OK);                             // save, so there is something to read back
+    shift_key(ENAGA_KEY_F3);                       // F1 + F3 twice: save, so there is
+    shift_key(ENAGA_KEY_F3);                       // something to read back
     CHECK_EQ(UiProbe::notice(app), "SAVING");
     CHECK(pump_until_idle());
     CHECK(app_storage().last_error() == nullptr);
@@ -2054,5 +2056,188 @@ TEST(ui_layout_project_and_setup) {
         check_layout(app, "SETUP");
     }
     setup_page(app, false);
+    key(ENAGA_KEY_F4);
+}
+
+// --- the arrow keys ---------------------------------------------------------------------------
+//
+// One model in every mode, Enaga's own (its menu and SETTINGS page): UP and DOWN move through the
+// rows on screen, LEFT and RIGHT move sideways, OK picks and CLR goes back. Before this, LEFT and
+// RIGHT did nothing anywhere and UP and DOWN were copy and paste.
+
+TEST(ui_arrows_in_grid_walk_tracks_and_pages_and_f1_copies_and_pastes) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    const int page = UiProbe::page(app);
+
+    key(ENAGA_KEY_DOWN);                           // the rows are the tracks
+    CHECK_EQ(UiProbe::selected(app), 1);
+    key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_UP);                             // and they wrap, as the selection keys do
+    CHECK_EQ(UiProbe::selected(app), kTracks - 1);
+    key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::selected(app), 0);
+
+    key(ENAGA_KEY_RIGHT);                          // sideways is the step page
+    CHECK_EQ(UiProbe::page(app), (page + 1) % 4);
+    key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::page(app), page);
+
+    // F1 + UP copies the track, F1 + DOWN pastes it onto the track the arrows moved to.
+    for (int i = 0; i < 4 && UiProbe::page(app) != 0; i++) key(ENAGA_KEY_LEFT);
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    CHECK(trig_at(0, 0));
+    shift_key(ENAGA_KEY_UP);
+    pump(2);
+    key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::selected(app), 1);
+    CHECK(!trig_at(1, 0));
+    shift_key(ENAGA_KEY_DOWN);
+    pump(2);
+    CHECK(trig_at(1, 0));
+
+    // With a STEP held, plain UP and DOWN still copy and paste that step: a key pressed with a
+    // step held is a chord on the step, not navigation.
+    step_down(0);
+    key(ENAGA_KEY_UP);
+    step_up(0);
+    CHECK_EQ(UiProbe::selected(app), 1);           // it did not move the track
+    CHECK(trig_at(1, 0));                          // and the release did not toggle the trig
+    step_down(5);
+    key(ENAGA_KEY_DOWN);
+    step_up(5);
+    pump(2);
+    CHECK(trig_at(1, 5));
+}
+
+TEST(ui_arrows_on_the_step_page_walk_the_step_and_clr_goes_back) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_STEP1);                          // a trig on track 1, step 1
+    pump(2);
+    step_down(0);
+    key(ENAGA_KEY_OK);
+    step_up(0);
+    CHECK(UiProbe::step_page(app));
+    CHECK_EQ(UiProbe::page_step(app), 0);
+
+    key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::page_step(app), 1);
+    key(ENAGA_KEY_LEFT);
+    key(ENAGA_KEY_LEFT);                           // wraps to the track's last step
+    CHECK_EQ(UiProbe::page_step(app),
+             int(app_engine().pattern().tracks[0].length) - 1);
+
+    // CLR is back. It used to erase the whole track from here.
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(!UiProbe::step_page(app));
+    CHECK(trig_at(0, 0));
+}
+
+TEST(ui_arrows_in_edit_keys_perform_machine_and_resample) {
+    Strata &app = fresh();
+
+    key(ENAGA_KEY_F8);                             // EDIT: sideways is the parameter page
+    const int param_page = UiProbe::param_page(app);
+    key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::param_page(app), (param_page + 1) % kPages);
+    key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::param_page(app), param_page);
+    key(ENAGA_KEY_DOWN);                           // and the rows are the tracks
+    CHECK_EQ(UiProbe::selected(app), 1);
+    key(ENAGA_KEY_UP);
+
+    shift_key(ENAGA_KEY_F4);                       // KEYS: sideways is the octave
+    const int octave = UiProbe::keys_octave(app);
+    key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::keys_octave(app), octave + 1);
+    key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::keys_octave(app), octave);
+
+    shift_key(ENAGA_KEY_F7);                       // PERFORM: sideways is the macro
+    const int macro = UiProbe::macro_selected(app);
+    key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::macro_selected(app), (macro + 1) % kMacros);
+    key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::macro_selected(app), macro);
+
+    shift_key(ENAGA_KEY_F8);                       // MACHINE: the rows are the machines
+    const int machine = int(app_engine().machine_id(0));
+    key(ENAGA_KEY_DOWN);
+    pump(4);
+    CHECK_EQ(int(app_engine().machine_id(0)), (machine + 1) % int(MachineId::count));
+    key(ENAGA_KEY_UP);
+    pump(4);
+    CHECK_EQ(int(app_engine().machine_id(0)), machine);
+    key(ENAGA_KEY_RIGHT);                          // and sideways is the track
+    CHECK_EQ(UiProbe::selected(app), 1);
+    key(ENAGA_KEY_LEFT);
+
+    shift_key(ENAGA_KEY_F2);                       // RESAMPLE: rows are the length, sideways
+    const int bars = UiProbe::take_bars_index(app);   // where the take goes
+    const int where = UiProbe::resample_track(app);
+    key(ENAGA_KEY_DOWN);
+    CHECK(UiProbe::take_bars_index(app) != bars);
+    key(ENAGA_KEY_UP);
+    CHECK_EQ(UiProbe::take_bars_index(app), bars);
+    key(ENAGA_KEY_RIGHT);
+    CHECK(UiProbe::resample_track(app) != where);
+    key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::resample_track(app), where);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_arrows_in_project_move_a_slot_cursor_and_ok_queues_it) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F3);
+    for (int i = 0; i < 20; i++) key(ENAGA_KEY_LEFT);   // to slot 1; it stops, never wraps
+    CHECK_EQ(UiProbe::slot_cursor(app), 0);
+    key(ENAGA_KEY_UP);
+    CHECK_EQ(UiProbe::slot_cursor(app), 0);
+
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_DOWN);                           // a row is four slots
+    CHECK_EQ(UiProbe::slot_cursor(app), 5);
+
+    // OK queues the slot under the cursor. Stopped, the change lands at once.
+    key(ENAGA_KEY_OK);
+    pump(4);
+    CHECK_EQ(int(app_engine().status().live_slot.load(std::memory_order_relaxed)), 5);
+    CHECK(app_storage().busy_text() == nullptr);   // and OK did not start a save
+
+    // A STEP key queues too, and the cursor follows it.
+    key(ENAGA_KEY_STEP1);
+    pump(4);
+    CHECK_EQ(UiProbe::slot_cursor(app), 0);
+    CHECK_EQ(int(app_engine().status().live_slot.load(std::memory_order_relaxed)), 0);
+
+    // On the SETUP page CLR goes back, and the arrows leave the cursor alone.
+    setup_page(app, true);
+    key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::slot_cursor(app), 0);
+    key(ENAGA_KEY_CLR);
+    CHECK(!UiProbe::project_setup(app));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_f1_f3_twice_saves_and_once_does_not) {
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F3);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+    CHECK_EQ(UiProbe::notice(app), "F1+F3 AGAIN TO SAVE");
+    pump(4);
+    CHECK(app_storage().busy_text() == nullptr);   // once is not a save
+
+    pump(2100);                                    // too late: this arms again instead
+    shift_key(ENAGA_KEY_F3);
+    CHECK_EQ(UiProbe::notice(app), "F1+F3 AGAIN TO SAVE");
+
+    shift_key(ENAGA_KEY_F3);
+    CHECK_EQ(UiProbe::notice(app), "SAVING");
+    CHECK(pump_until_idle());
+    CHECK(app_storage().last_error() == nullptr);
+    CHECK(!app_storage().dirty());
     key(ENAGA_KEY_F4);
 }

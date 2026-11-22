@@ -400,7 +400,10 @@ public:
         // is taken here, before the editing path, and only on the press -- there is no modifier
         // gesture to decide on the release.
         if (mode_ == Mode::project && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
-            if (down) queue_shown_pattern(key - ENAGA_KEY_STEP1);
+            if (down) {
+                slot_cursor_ = key - ENAGA_KEY_STEP1;   // the cursor follows, so OK repeats it
+                queue_shown_pattern(slot_cursor_);
+            }
             return;
         }
 
@@ -496,6 +499,21 @@ public:
             case ENAGA_KEY_F3:                         // PROJECT: banks, patterns and the card
                 mode_ = Mode::project;
                 leave_mode();
+                if (shift_) {
+                    // docs/SPEC.md's key table: "F1 + F3 twice = save project". Twice, so a
+                    // save is never one stray press; within two seconds, so an old first press
+                    // does not arm a save minutes later. OK used to save here, but OK is what
+                    // picks the slot under the cursor now, as it picks in every Enaga list.
+                    if (save_armed_ && uint32_t(last_ms_ - save_armed_at_ms_) < kSaveArmMs) {
+                        save_armed_ = false;
+                        storage_.request_save();
+                        notice("SAVING");
+                    } else {
+                        save_armed_ = true;
+                        save_armed_at_ms_ = last_ms_;
+                        notice("F1+F3 AGAIN TO SAVE");
+                    }
+                }
                 break;
             case ENAGA_KEY_F4:                         // HOME: the grid, or KEYS with F1
                 mode_ = shift_ ? Mode::keys : Mode::grid;
@@ -550,6 +568,11 @@ public:
                     post(Cmd::undo);                   // F1 + CLR = undo
                     end_gesture();
                     notice("UNDO");
+                } else if (step_page_ && held_step_ < 0 && range_first_ < 0) {
+                    // CLR is "back" on Enaga's lists, and the step page is a page you opened.
+                    // It used to fall through to erase_selection, which with nothing selected
+                    // erases the WHOLE TRACK -- from a screen showing one step.
+                    step_page_ = false;
                 } else if (mode_ == Mode::resample) {
                     // In RESAMPLE, CLR cancels the take rather than erasing a step: there is no
                     // selection in this mode and a take is the only thing there is to cancel.
@@ -560,14 +583,25 @@ public:
                 }
                 break;
 
-            // Copy and paste. docs/SPEC.md asks for them for steps, tracks and patterns but
-            // maps no keys, and the arrow keys are the only unused pair on the panel. UP takes
-            // the selection, DOWN puts it down again.
+            // The arrow keys navigate, as they do in Enaga's own menu and SETTINGS page: UP and
+            // DOWN move through the rows on screen, LEFT and RIGHT move sideways (see
+            // `vertical` and `horizontal`). PROJECT and PERFORM take theirs in their own key
+            // handlers above.
+            //
+            // Copy and paste moved to F1 + UP and F1 + DOWN -- and stay on plain UP and DOWN
+            // while a STEP is held, because a key held with a step is already a chord on that
+            // step and cannot be navigation. UP takes the selection, DOWN puts it down again.
             case ENAGA_KEY_UP:
-                copy_selection();
-                break;
             case ENAGA_KEY_DOWN:
-                paste_selection();
+                if (shift_ || held_step_ >= 0) {
+                    if (key == ENAGA_KEY_UP) copy_selection(); else paste_selection();
+                } else {
+                    vertical(key == ENAGA_KEY_UP ? -1 : +1);
+                }
+                break;
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (!shift_) horizontal(key == ENAGA_KEY_LEFT ? -1 : +1);
                 break;
 
             // The octave keys are the step page in GRID; with F1 they are the track's length,
@@ -577,12 +611,7 @@ public:
                 const int delta = key == ENAGA_KEY_OCTAVE_LEFT ? -1 : +1;
                 if (mode_ == Mode::keys) {
                     // "Step page 1-4 in GRID; octave in KEYS" (docs/SPEC.md's key table).
-                    keys_octave_ = clamp_int(keys_octave_ + delta, -3, 4);
-                    char *out = notice_buffer_;
-                    append(out, "OCT ");
-                    append_number(out, uint32_t(keys_octave_ + 3));
-                    *out = 0;
-                    notice(notice_buffer_);
+                    walk_keys_octave(delta);
                     break;
                 }
                 if (mode_ == Mode::project) {
@@ -620,6 +649,73 @@ public:
             default:
                 break;
         }
+    }
+
+    // --- the arrow keys -----------------------------------------------------
+    //
+    // One model for every mode, Enaga's own (its menu and SETTINGS page): UP and DOWN move the
+    // cursor through the rows on screen, LEFT and RIGHT move sideways -- the page, where the
+    // screen has pages, exactly as the selection keys do. OK picks and CLR goes back. F1 + an
+    // arrow is the mode's second meaning (copy and paste in the editing modes).
+
+    void vertical(int delta) {
+        switch (mode_) {
+            case Mode::grid:
+            case Mode::edit:
+            case Mode::keys:
+                // The tracks are the rows: GRID draws them top to bottom. Silent, unlike a pad,
+                // which plays the track it selects.
+                walk_track(delta);
+                break;
+            case Mode::machine:
+                // The machine list, applied at once like encoder A.
+                walk_machine(delta);
+                break;
+            case Mode::resample:
+                // The take's length, A's other way in.
+                take_bars_index_ = (take_bars_index_ + delta + kTakeBarChoices) % kTakeBarChoices;
+                break;
+            case Mode::mixer:                   // nothing is selected by row on the mixer
+            case Mode::project:                 // PROJECT and PERFORM have their own handlers
+            case Mode::perform:
+                break;
+        }
+    }
+
+    void horizontal(int delta) {
+        if (step_page_) {
+            // The step page walks along the track, so a run of steps is edited without going
+            // back to the grid for each one.
+            const int length = int(engine_.pattern().tracks[selected_].length);
+            page_step_ = (page_step_ + delta + length) % (length < 1 ? 1 : length);
+            return;
+        }
+        if (mode_ == Mode::keys) {
+            walk_keys_octave(delta);
+            return;
+        }
+        select(delta);                          // the page, or what the selection keys walk
+    }
+
+    void walk_track(int delta) {
+        const int next = (selected_ + delta + kTracks) % kTracks;
+        if (next != selected_) end_gesture();   // a different track is a different edit
+        selected_ = next;
+    }
+
+    void walk_machine(int delta) {
+        const int count = int(MachineId::count);
+        const int next = (int(engine_.machine_id(selected_)) + delta) % count;
+        post(Cmd::set_machine, uint8_t(selected_), 0, uint8_t(next < 0 ? next + count : next));
+    }
+
+    void walk_keys_octave(int delta) {
+        keys_octave_ = clamp_int(keys_octave_ + delta, -3, 4);
+        char *out = notice_buffer_;
+        append(out, "OCT ");
+        append_number(out, uint32_t(keys_octave_ + 3));
+        *out = 0;
+        notice(notice_buffer_);
     }
 
     // --- STEP keys: tap, hold, and a pair for a range --------------------
@@ -915,10 +1011,7 @@ public:
         // select you have to confirm is a menu, and docs/SPEC.md's whole argument for this box is
         // that a change is one gesture.
         if (mode_ == Mode::machine && encoder == 0) {
-            const int count = int(MachineId::count);
-            const int next = (int(engine_.machine_id(selected_)) + delta) % count;
-            post(Cmd::set_machine, uint8_t(selected_), 0,
-                 uint8_t(next < 0 ? next + count : next));
+            walk_machine(delta);
             return;
         }
 
@@ -1517,7 +1610,15 @@ public:
         *out = 0;
         canvas.text(0, 0, line, 14);
 
-        if (int(clock.source) != ENAGA_CLOCK_INTERNAL) {
+        if ((step_page_ || mode_ != Mode::grid) && notice_showing()) {
+            // What just happened, on the second line. GRID shows it in its edit-state line; every
+            // other screen had nowhere for it, so a gesture there (F1 + F3's "again to save", an
+            // octave, a scene captured) answered with nothing at all.
+            out = line;
+            append_shown(out, notice_, kLineChars);
+            *out = 0;
+            canvas.text(0, 9, line, 15);
+        } else if (int(clock.source) != ENAGA_CLOCK_INTERNAL) {
             // The tempo is not ours to set under an external source, so say so rather than
             // showing a number the user cannot change.
             canvas.text(0, 9, int(clock.source) == ENAGA_CLOCK_MIDI ? "EXT MIDI" : "EXT SYNC", 10);
@@ -2054,8 +2155,19 @@ public:
             canvas.text(0, 30 + half * 9, line, 10);
         }
 
-        canvas.text(0, 54, "A PICKS THE MACHINE", 10);
-        canvas.text(0, 63, "SELECT KEYS: TRACK", 10);
+        // The machines as a list, the selected track's lit: UP and DOWN (or A) walk it, which is
+        // the cursor the arrows move everywhere else. Two columns of four, read down.
+        const int current = int(engine_.machine_id(selected_));
+        for (int m = 0; m < int(MachineId::count); m++) {
+            const int x = (m / 4) * 64;
+            const int y = 52 + (m % 4) * 12;
+            const bool on = m == current;
+            canvas.rect(x + 1, y, 60, 11, on ? 10 : 2);
+            canvas.text(x + 4, y + 2, machine_name(uint8_t(m)), on ? 0 : 11);
+        }
+
+        canvas.text(0, 103, "UP DOWN OR A: MACHINE", 7);
+        canvas.text(0, 112, "LEFT RIGHT: TRACK", 7);
     }
 
     void draw_resample(enaga::Canvas &canvas) {
@@ -2111,6 +2223,9 @@ public:
             *out = 0;
             canvas.text(0, 50, line, 10);
         }
+
+        canvas.text(0, 103, "UP DOWN OR A: BARS", 7);
+        canvas.text(0, 112, "LEFT RIGHT: WHERE TO", 7);
     }
 
     void draw_keys(enaga::Canvas &canvas) {
@@ -2211,9 +2326,12 @@ public:
             }
 
             case ENAGA_KEY_OCTAVE_LEFT:
-            case ENAGA_KEY_OCTAVE_RIGHT: {
-                // Which macro CLR clears and F1 + a parameter assigns to.
-                const int delta = key == ENAGA_KEY_OCTAVE_LEFT ? -1 : 1;
+            case ENAGA_KEY_OCTAVE_RIGHT:
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT: {
+                // Which macro CLR clears and F1 + a parameter assigns to. The arrows too: the
+                // macros are the row of four across the screen.
+                const int delta = key == ENAGA_KEY_OCTAVE_LEFT || key == ENAGA_KEY_LEFT ? -1 : 1;
                 macro_selected_ = (macro_selected_ + delta + kMacros) % kMacros;
                 return true;
             }
@@ -2369,9 +2487,10 @@ public:
                     // is doing rather than looking like nothing happened.
                     storage_.request_reload();
                     notice("RELOADING");
-                } else {
-                    storage_.request_save();
-                    notice("SAVING");
+                } else if (!project_setup_) {
+                    // OK picks the slot under the cursor, as OK picks in every Enaga list.
+                    // Saving is F1 + F3 twice (docs/SPEC.md's key table).
+                    queue_shown_pattern(slot_cursor_);
                 }
                 return true;
 
@@ -2379,30 +2498,55 @@ public:
                 if (shift_) {
                     storage_.request_new();
                     notice("NEW PROJECT");
+                } else if (project_setup_) {
+                    project_setup_ = false;            // back, from the SETUP page
+                    notice("PROJECT");
                 } else {
                     post(Cmd::cancel_queue);
                     notice("QUEUE OFF");
                 }
                 return true;
 
-            case ENAGA_KEY_UP: {
-                // The chain follows the project's own entries; starting one jumps to its first.
-                const bool on = engine_.chain().active;
-                post(Cmd::set_chain, 0, 0, on ? 0 : 1);
-                notice(on ? "CHAIN OFF" : "CHAIN ON");
+            case ENAGA_KEY_UP:
+                if (shift_) {
+                    // The chain follows the project's own entries; starting one jumps to its
+                    // first.
+                    const bool on = engine_.chain().active;
+                    post(Cmd::set_chain, 0, 0, on ? 0 : 1);
+                    notice(on ? "CHAIN OFF" : "CHAIN ON");
+                } else {
+                    move_slot_cursor(-4);
+                }
                 return true;
-            }
 
             case ENAGA_KEY_DOWN:
-                // Load the selected track's sample again. The one thing a user can do about a
-                // FAIL, and the only way back after a card has been out.
-                if (storage_.request_sample(selected_)) notice("LOADING");
-                else notice("NO SAMPLE");
+                if (shift_) {
+                    // Load the selected track's sample again. The one thing a user can do about
+                    // a FAIL, and the only way back after a card has been out.
+                    if (storage_.request_sample(selected_)) notice("LOADING");
+                    else notice("NO SAMPLE");
+                } else {
+                    move_slot_cursor(+4);
+                }
+                return true;
+
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (!shift_) move_slot_cursor(key == ENAGA_KEY_LEFT ? -1 : +1);
                 return true;
 
             default:
                 return false;
         }
+    }
+
+    // The cursor over PROJECT's sixteen slots, drawn four by four: LEFT and RIGHT step through
+    // them in reading order, UP and DOWN by a row. It stops at the ends rather than wrapping,
+    // because the bank is on the selection keys and wrapping would hide where the edge is.
+    void move_slot_cursor(int delta) {
+        if (project_setup_) return;
+        const int next = slot_cursor_ + delta;
+        if (next >= 0 && next < kPatternsPerBank) slot_cursor_ = next;
     }
 
     void queue_shown_pattern(int slot) {
@@ -2574,6 +2718,12 @@ public:
             const bool is_live = shown_bank_ == live_bank && slot == live_slot;
             const bool is_queued = queue.pending && int(queue.bank) == shown_bank_ &&
                                    int(queue.slot) == slot;
+            if (slot == slot_cursor_) {
+                // The cursor: a frame round the slot, in the gap between slots, so it never
+                // touches the number inside.
+                canvas.rect(x - 1, y - 1, 28, 13, 15);
+                canvas.rect(x, y, 26, 11, 0);
+            }
             canvas.rect(x, y, 26, 11, is_live ? 10 : (trigs ? 5 : 2));
             out = line;
             append_padded(out, uint32_t(slot) + 1, 2);
@@ -2737,6 +2887,10 @@ private:
     int param_page_ = int(Page::src);
     int mixer_bank_ = 0;      // which kMixerPages entry: the faders, then the sends and master
     bool project_setup_ = false;   // PROJECT mode's second page, on the octave keys
+    int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
+    bool save_armed_ = false;      // F1 + F3 once; the second press within kSaveArmMs saves
+    uint32_t save_armed_at_ms_ = 0;
+    static constexpr uint32_t kSaveArmMs = 2000;
 
     // The project tempo this side has already reconciled with the clock, so that a LOAD is
     // adopted and the engine's echo of our own knob move is not.
