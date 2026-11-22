@@ -2827,6 +2827,18 @@ TEST(ui_screenshots) {
     key(ENAGA_KEY_F3);
     write_shot(folder, "project");
 
+    // The kit browser, with the factory kit stored in slot 1 so the screen has a kit to show.
+    shift_key(ENAGA_KEY_F8);
+    shift_key(ENAGA_KEY_F8);
+    CHECK(pump_until_idle());
+    shift_key(ENAGA_KEY_DOWN);
+    for (int i = 0; i < 4000 && app_storage().kit_slot(0).state != Storage::SlotState::used; i++) {
+        pump();
+    }
+    CHECK_EQ(int(app_storage().kit_slot(0).state), int(Storage::SlotState::used));
+    pump(2100);                                 // let the SAVING KIT notice lapse
+    write_shot(folder, "kit");
+
     key(ENAGA_KEY_F6);
     key(ENAGA_KEY_F4);
     host.set_device(0);
