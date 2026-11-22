@@ -21,6 +21,8 @@
 // a stack smash that the host build will not notice and the unit will.
 #include "stepedit.hpp"
 
+#include "chord.hpp"
+
 #include "timing.hpp"
 
 namespace strata {
@@ -77,7 +79,7 @@ constexpr Range kRanges[] = {
     {0, kRatchetRampPositions - 1},  // ramp: cycles rather than clamps
     {0, 1},                          // accent
     {0, 1},                          // slide
-    {0, 63},                         // chord: POLY type and inversion
+    {0, kChordWalkPositions - 1},    // chord: a position in the walk of named chords
 };
 static_assert(sizeof(kRanges) / sizeof(kRanges[0]) == kStepFields,
               "kRanges must have one entry per StepField, in the enum's order");
@@ -88,6 +90,44 @@ constexpr const char *kFieldNames[] = {
 };
 static_assert(sizeof(kFieldNames) / sizeof(kFieldNames[0]) == kStepFields,
               "every StepField needs a label");
+
+// --- the chord walk -------------------------------------------------------
+//
+// The chord byte packs a type and an inversion (core/chord.hpp), and most of 0..63 is not a
+// chord: a type id this build does not have, or an inversion deeper than the chord has notes.
+// The encoder used to walk the raw byte, so two clicks in three landed on bytes that play a
+// single note and showed as a bare number. It walks the valid encodings instead, in type order
+// and then by inversion, and the screen shows the chord's name. A byte a later build wrote is
+// left exactly as it is until the knob is turned.
+
+namespace {
+constexpr int chord_walk_length() {
+    int n = 0;
+    for (int t = 0; t < kChordTypeCount; t++) n += chord_max_inversion(ChordType(t)) + 1;
+    return n;
+}
+static_assert(chord_walk_length() == kChordWalkPositions,
+              "stepedit.hpp's kChordWalkPositions must count core/chord.hpp's table");
+}  // namespace
+
+uint8_t chord_at(int position) {
+    int left = position < 0 ? 0 : (position >= kChordWalkPositions ? kChordWalkPositions - 1
+                                                                    : position);
+    for (int t = 0; t < kChordTypeCount; t++) {
+        const int inversions = chord_max_inversion(ChordType(t)) + 1;
+        if (left < inversions) return chord_pack(ChordType(t), uint8_t(left));
+        left -= inversions;
+    }
+    return 0;
+}
+
+int chord_position_of(uint8_t packed) {
+    if (!chord_valid(packed)) return 0;
+    const int type = int(chord_type(packed));
+    int position = 0;
+    for (int t = 0; t < type; t++) position += chord_max_inversion(ChordType(t)) + 1;
+    return position + int(chord_inversion(packed));
+}
 
 // --- the condition walk ---------------------------------------------------
 
@@ -288,7 +328,7 @@ int step_field_value(const Step &step, StepField field) {
         case StepField::ratchet_ramp:  return int(uint8_t(ratchet_ramp(step.ratchet)));
         case StepField::accent:        return flag_value(step, kStepAccent);
         case StepField::slide:         return flag_value(step, kStepSlide);
-        case StepField::chord:         return int(step.chord);
+        case StepField::chord:         return chord_position_of(step.chord);
         case StepField::count:
         default:                       return 0;
     }
@@ -350,7 +390,11 @@ void step_field_apply(Step &step, StepField field, int delta) {
                      walk(flag_value(step, kStepSlide), delta, range.lo, range.hi) != 0);
             break;
         case StepField::chord:
-            step.chord = uint8_t(walk(int(step.chord), delta, range.lo, range.hi));
+            // A zero delta writes nothing, so a byte this build cannot name survives a glance.
+            if (delta != 0) {
+                step.chord =
+                    chord_at(walk(chord_position_of(step.chord), delta, range.lo, range.hi));
+            }
             break;
         case StepField::count:
         default:
@@ -428,9 +472,28 @@ void step_field_text(const Step &step, StepField field, char *out, int max) {
         case StepField::slide:
             w.text(flag_value(step, kStepSlide) != 0 ? "ON" : "--");
             break;
-        case StepField::chord:
-            w.number(uint32_t(step.chord));
+        case StepField::chord: {
+            if (!chord_valid(step.chord)) {
+                w.put('?');
+                break;
+            }
+            // The name, and "/n" for an inversion. "5TH OCT/2" would be nine characters, so a
+            // name that would not fit with its inversion drops its spaces ("5THOCT/2").
+            const char *name = chord_name(chord_type(step.chord));
+            const uint8_t inversion = chord_inversion(step.chord);
+            int length = 0;
+            while (name[length] != '\0') length++;
+            const bool squeeze = inversion != 0 && length + 2 > kStepFieldTextMax - 1;
+            for (const char *c = name; *c != '\0'; c++) {
+                if (squeeze && *c == ' ') continue;
+                w.put(*c);
+            }
+            if (inversion != 0) {
+                w.put('/');
+                w.number(uint32_t(inversion));
+            }
             break;
+        }
         case StepField::count:
         default:
             // A field id this build does not know. Say so rather than draw an empty slot.
@@ -445,5 +508,8 @@ void note_name(uint8_t note, char *out, int max) {
     write_note(w, note);
     w.finish();
 }
+
+uint8_t chord_at_walk_position(int position) { return chord_at(position); }
+int chord_walk_position(uint8_t packed) { return chord_position_of(packed); }
 
 }  // namespace strata

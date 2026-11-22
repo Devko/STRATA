@@ -148,6 +148,21 @@ public:
     int leds_set() const { return leds_; }
     void set_audio_load(uint32_t per_mille);   // what enaga::audio_load() reports
 
+    // Every `Canvas::text` call since the last `clear_text()`, in order. The real host draws the
+    // string with Enaga's 5 x 7 font; this one only records it, so a test can check where text
+    // lands (tests/test_ui.cpp's layout checks) without a copy of the font's bitmaps.
+    struct TextDraw {
+        int x, y;
+        uint8_t grey;
+        int length;                            // the whole string's, even past `text`'s room
+        char text[48];
+    };
+    static constexpr int kTextDraws = 64;
+    void clear_text() { text_count_ = 0; text_dropped_ = 0; }
+    int text_count() const { return text_count_; }
+    int text_dropped() const { return text_dropped_; }   // calls past kTextDraws
+    const TextDraw &text_draw(int index) const { return text_[index]; }
+
     // The struct the app sees. `enaga::host()` returns this.
     const enaga_host_t &abi() const { return abi_; }
 
@@ -282,6 +297,9 @@ private:
     static constexpr int kLogHistory = 32;
     char log_history_[kLogHistory][kLogMax]{};
     int log_lines_ = 0;
+    TextDraw text_[kTextDraws]{};
+    int text_count_ = 0;
+    int text_dropped_ = 0;
     int leds_ = 0;
     uint32_t audio_load_ = 0;
     uint32_t ms_ = 0;

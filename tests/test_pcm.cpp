@@ -868,3 +868,114 @@ TEST(resampling_refuses_what_it_cannot_read) {
     CHECK_EQ(u64(cursor.position), 0ull);      // the cursor did not move while refusing
     for (int i = 0; i < 4; i++) CHECK_EQ(got[i], 9);
 }
+
+// --- anti-aliasing ----------------------------------------------------------
+
+namespace {
+
+// A mono tone at `hz` in a `rate` file, low-passed if `filter` says so, then resampled to 48 kHz.
+// Returns the output's RMS over its middle, past the filter's start-up, as a fraction of the
+// input's.
+double tone_through(double hz, uint32_t rate, bool filter) {
+    constexpr uint32_t frames = 16000;
+    constexpr double amplitude = 16000.0;
+    for (uint32_t i = 0; i < frames; i++) {
+        g_source[i] = int16_t(std::lround(amplitude * std::sin(2.0 * M_PI * hz * i / rate)));
+    }
+    Antialias lowpass = Antialias::make(rate, 48000);
+    if (filter) pcm_antialias(g_source, frames, 1, lowpass);
+    Resampler cursor = Resampler::make(rate, 48000);
+    const uint32_t n = pcm_resample(g_source, frames, 1, cursor, g_one_call, kScratchSamples);
+    double sum = 0.0;
+    uint32_t count = 0;
+    for (uint32_t i = n / 4; i < n * 3 / 4; i++, count++) sum += double(g_one_call[i]) * g_one_call[i];
+    return std::sqrt(sum / count) / (amplitude / std::sqrt(2.0));
+}
+
+}  // namespace
+
+TEST(the_antialias_filter_is_only_for_a_downsample) {
+    CHECK(Antialias::make(96000, 48000).active);
+    CHECK(Antialias::make(88200, 48000).active);
+    CHECK(Antialias::make(48001, 48000).active);
+    CHECK(!Antialias::make(48000, 48000).active);
+    CHECK(!Antialias::make(44100, 48000).active);
+    CHECK(!Antialias::make(0, 48000).active);
+    CHECK(!Antialias::make(4000000, 48000).active);
+
+    // Inactive means untouched.
+    int16_t samples[4] = {-32768, 5, 32767, -1};
+    Antialias off = Antialias::make(44100, 48000);
+    pcm_antialias(samples, 2, 2, off);
+    CHECK_EQ(samples[0], -32768);
+    CHECK_EQ(samples[1], 5);
+    CHECK_EQ(samples[2], 32767);
+    CHECK_EQ(samples[3], -1);
+}
+
+TEST(a_downsample_no_longer_folds_a_high_tone_back_down) {
+    // 34 kHz in a 96 kHz file folds to 14 kHz at 48 kHz. Linear interpolation at exactly 2:1
+    // takes every other sample, so without the filter the alias arrives at full level: the
+    // first check is that this test can see the problem at all.
+    CHECK(tone_through(34000.0, 96000, false) > 0.9);
+    CHECK(tone_through(34000.0, 96000, true) < 0.03);        // more than 30 dB down
+    CHECK(tone_through(30000.0, 88200, true) < 0.1);         // folds to 18 kHz: 20 dB down
+
+    // And what is below the corner passes. 1 kHz and 10 kHz within a tenth of a dB; 18 kHz, near
+    // the corner, within 1 dB.
+    const double low = tone_through(1000.0, 96000, true);
+    CHECK(low > 0.988 && low < 1.012);
+    const double mid = tone_through(10000.0, 96000, true);
+    CHECK(mid > 0.988 && mid < 1.012);
+    const double high = tone_through(18000.0, 96000, true);
+    CHECK(high > 0.89 && high < 1.12);
+}
+
+TEST(antialiasing_in_slices_matches_one_call) {
+    constexpr uint32_t frames = 5000;
+    constexpr int channels = 2;
+    lcg_reset(0xA11A5u);
+    for (uint32_t i = 0; i < frames * channels; i++) g_source[i] = lcg_s16();
+    std::memcpy(g_one_call, g_source, frames * channels * sizeof(int16_t));
+    std::memcpy(g_sliced, g_source, frames * channels * sizeof(int16_t));
+
+    Antialias one = Antialias::make(96000, 48000);
+    pcm_antialias(g_one_call, frames, channels, one);
+    Antialias sliced = Antialias::make(96000, 48000);
+    for (uint32_t at = 0; at < frames; at += 97) {
+        const uint32_t n = frames - at < 97 ? frames - at : 97;
+        pcm_antialias(g_sliced + at * channels, n, channels, sliced);
+    }
+    CHECK(std::memcmp(g_one_call, g_sliced, frames * channels * sizeof(int16_t)) == 0);
+    // Something happened: random noise is mostly above 20 kHz at 96 kHz.
+    CHECK(std::memcmp(g_one_call, g_source, frames * channels * sizeof(int16_t)) != 0);
+}
+
+TEST(the_antialias_filter_keeps_channels_apart_and_clamps_instead_of_wrapping) {
+    // A full-scale square in the left channel rings past the rails; the right channel is silent
+    // and must stay silent. A wrap would show as a sample of the wrong sign mid-plateau.
+    constexpr uint32_t frames = 4000;
+    for (uint32_t i = 0; i < frames; i++) {
+        g_source[i * 2] = (i / 200) % 2 ? int16_t(-32768) : int16_t(32767);
+        g_source[i * 2 + 1] = 0;
+    }
+    Antialias filter = Antialias::make(96000, 48000);
+    pcm_antialias(g_source, frames, 2, filter);
+    bool clamped = false;
+    for (uint32_t i = 0; i < frames; i++) {
+        CHECK_EQ(g_source[i * 2 + 1], 0);
+        const uint32_t into = i % 200;
+        if (into >= 20 && into < 180) {       // the plateau, past the ringing
+            const bool high = (i / 200) % 2 == 0;
+            CHECK(high ? g_source[i * 2] > 30000 : g_source[i * 2] < -30000);
+        }
+        if (g_source[i * 2] == 32767 || g_source[i * 2] == -32768) clamped = true;
+    }
+    CHECK(clamped);
+    // More channels than it keeps state for: left alone rather than half-filtered.
+    int16_t three[3] = {100, 200, 300};
+    Antialias other = Antialias::make(96000, 48000);
+    pcm_antialias(three, 1, 3, other);
+    CHECK_EQ(three[0], 100);
+    CHECK_EQ(three[2], 300);
+}

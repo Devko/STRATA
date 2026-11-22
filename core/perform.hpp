@@ -164,6 +164,17 @@ struct MacroSet {
 // correct for an inverted target. Meaningless for a disabled target, which `macro_apply` skips.
 uint8_t macro_value(const MacroTarget &target, uint8_t position);
 
+// A target range that passes through `now` at the knob's current `position` and heads for `far`
+// at the top of the knob (or the bottom, when the knob is already at the top). Assigning a macro
+// with `low = now, high = far` made the parameter jump to wherever `position` put it in that
+// range the moment it was assigned; this keeps it where it is, to within one step of rounding.
+//
+// `high` is `far` whenever a `low` in 0..127 can reach `now` at `position`; otherwise `low` is
+// clamped and `high` solved for instead. At position 127 the range runs from `far` up to `now`.
+// The one exception: `now` at an end of 0..127 and `far` the other end, with the knob in
+// between, has no such line except a flat one; it gets the plain range and jumps once.
+void macro_range_through(uint8_t now, uint8_t far, uint8_t position, uint8_t &low, uint8_t &high);
+
 // Write every enabled target of `macro` into `out` at `position`. Targets naming a track or
 // parameter that does not exist are skipped -- a macro set up for a build with more parameters
 // must not write past the array.

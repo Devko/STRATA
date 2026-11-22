@@ -14,6 +14,7 @@
 
 #include "scale.hpp"
 #include "stepedit.hpp"
+#include "chord.hpp"
 #include "timing.hpp"
 
 #include <cstring>
@@ -96,7 +97,7 @@ bool field_in_range(const Step &step, StepField field) {
             return uint8_t(ratchet_ramp(step.ratchet)) <= uint8_t(RatchetRamp::down);
         case StepField::accent:
         case StepField::slide:       return true;    // one bit is always in range
-        case StepField::chord:       return step.chord <= 63;
+        case StepField::chord:       return chord_valid(step.chord);
         case StepField::count:
         default:                     return true;
     }
@@ -280,7 +281,7 @@ TEST(the_documented_ranges_are_the_ends_of_the_walk) {
         {StepField::ratchet_count, kRatchetMin, kRatchetMax},
         {StepField::accent, 0, 1},
         {StepField::slide, 0, 1},
-        {StepField::chord, 0, 63},
+        {StepField::chord, 0, kChordWalkPositions - 1},
     };
 
     for (const Ends &ends : kEnds) {
@@ -674,7 +675,7 @@ TEST(step_field_value_reads_the_byte_and_the_condition_reads_as_a_position) {
     CHECK_EQ(step_field_value(step, StepField::ratchet_ramp), int(RatchetRamp::up));
     CHECK_EQ(step_field_value(step, StepField::accent), 1);
     CHECK_EQ(step_field_value(step, StepField::slide), 0);
-    CHECK_EQ(step_field_value(step, StepField::chord), 21);
+    CHECK_EQ(step_field_value(step, StepField::chord), chord_walk_position(21));
     CHECK_EQ(step_field_value(step, StepField::count), 0);
 
     // The condition's value is a walk position, which is why it is not what gets printed.
@@ -721,6 +722,33 @@ TEST(step_field_text_never_writes_past_max_for_any_byte_of_any_field) {
     CHECK_EQ(unterminated.subject, -1);
     CHECK_EQ(empty.subject, -1);
     CHECK_EQ(unclean.subject, -1);
+}
+
+TEST(the_chord_field_shows_names_and_leaves_a_byte_it_cannot_name_alone) {
+    char buf[kStepFieldTextMax];
+    Step step{};
+    step_field_text(step, StepField::chord, buf, int(sizeof(buf)));
+    CHECK_EQ((const char *)buf, "1 NOTE");
+
+    step.chord = chord_pack(ChordType::min7, 2);
+    step_field_text(step, StepField::chord, buf, int(sizeof(buf)));
+    CHECK_EQ((const char *)buf, "MIN7/2");
+
+    step.chord = chord_pack(ChordType::fifth_octave, 2);
+    step_field_text(step, StepField::chord, buf, int(sizeof(buf)));
+    CHECK_EQ((const char *)buf, "5THOCT/2");          // squeezed to fit
+
+    // One click from a single note is MIN, not byte 1's neighbour.
+    step.chord = 0;
+    step_field_apply(step, StepField::chord, +1);
+    CHECK_EQ(int(step.chord), int(chord_pack(ChordType::minor, 0)));
+
+    // A byte a later build wrote: shown as '?', untouched by a zero delta.
+    step.chord = 0x0E;                                  // type id 14, free in this build
+    step_field_text(step, StepField::chord, buf, int(sizeof(buf)));
+    CHECK_EQ((const char *)buf, "?");
+    step_field_apply(step, StepField::chord, 0);
+    CHECK_EQ(int(step.chord), 0x0E);
 }
 
 TEST(step_field_text_fits_in_kStepFieldTextMax) {

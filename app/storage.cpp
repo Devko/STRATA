@@ -1026,6 +1026,8 @@ void Storage::step_sample_convert() {
             return;
         }
 
+        // Inactive unless this is a downsample; core/pcm.hpp says why.
+        antialias_ = Antialias::make(format_.rate, uint32_t(ENAGA_SAMPLE_RATE));
         if (format_.rate == uint32_t(ENAGA_SAMPLE_RATE)) {
             out_frames_ = src_frames_;
         } else {
@@ -1075,6 +1077,10 @@ void Storage::step_sample_convert() {
     const uint32_t available = uint32_t(read_result_) - at;
     const uint32_t did = pcm_to_s16(raw_ + at, available, encoding_, channels,
                                     destination + size_t(src_done_) * size_t(channels), want);
+    // A downsample's source is low-passed as it arrives, slice by slice, so the resample below
+    // has nothing above the new Nyquist to fold back down.
+    if (resampling) pcm_antialias(destination + size_t(src_done_) * size_t(channels), did, channels,
+                                  antialias_);
     src_done_ += did;
 
     if (did == 0 || src_done_ >= src_frames_) {

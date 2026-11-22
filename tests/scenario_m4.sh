@@ -21,7 +21,10 @@
 # wrong. Testing it stopped also keeps the scenario short: waiting for a 16-step pass at 130 BPM
 # would cost another two seconds of emulated time.
 #
-# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F6 = 29, F3 = 20, OK = 23,
+# The save is F1 + F3 twice (docs/SPEC.md's key table); OK in PROJECT queues the slot under the
+# cursor now, as OK picks in every Enaga list.
+#
+# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F6 = 29, F3 = 20, F1 = 19,
 # STEP n = 31 + n. A press is released 20 M cycles later.
 #
 # The first press must come LATE: Enaga's panel MCU link is not streaming in the first ~200 M
@@ -32,7 +35,7 @@ cd "$(dirname "$0")/.."
 # shellcheck source=tools/env.sh
 source tools/env.sh
 
-CYCLES=900000000
+CYCLES=1000000000   # 100 M more than before: the save is now two presses, 60 M later
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -60,7 +63,8 @@ python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" \
     --key 29@420000000 \
     --key 20@500000000 \
     --key 33@560000000 \
-    --key 23@640000000 \
+    --key 19@640000000 --key 20@645000000 \
+    --key 19@700000000 --key 20@705000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
