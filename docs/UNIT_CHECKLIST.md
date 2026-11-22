@@ -165,7 +165,8 @@ The beat can keep playing. One look per screen; note any overlap or illegible te
 - [ ] GRID: four encoder slots at the bottom, name over value, the fourth fully on screen; the
       track line (`T1 ... L16 X1`) ends inside the screen.
 - [ ] EDIT: rows read like `A CUT 064` with a bar; hint `FUNC+EDIT: MACHINE` is legible.
-- [ ] MACHINE (FUNC+EDIT): the kit reads as two lines of four.
+- [ ] MACHINE (FUNC+EDIT): the nine machines read as three columns of three, with `B: MIDI OUT`
+      below, no overlaps.
 - [ ] MIXER: selection keys walk TRK 1-4, TRK 5-8, DLY, REV, ROUTE, MST; every page draws.
 - [ ] PERFORM (FUNC+MIXER): macro bars stop above the two hint lines; selected macro shows `>A`.
 - [ ] PROJECT: the KEY line sits below the 16 slots, not through the last row.
@@ -333,7 +334,7 @@ them returns to the slots.
 - [ ] Slots: the arrows move a frame over the 16 slots, OK queues the framed slot; a STEP key
       queues and moves the frame there.
 - [ ] CHAIN (the factory chain, ON from 3b): UP/DOWN move the cursor, STEP 3 sets the entry to
-      A03, VALUE its repeats, OK adds a copy below (`ENTRY ADDED`), FUNC+LEFT removes one
+      A03, VALUE its repeats, OK adds a copy below (`ENTRY ADDED`), FUNC+LEFT twice removes one
       (`ENTRY REMOVED`).
 - [ ] While it plays, add an entry ABOVE the playing one: the chain carries on with the entry it
       was playing and the `PLAY` marker moves with it. Remove the playing entry: that pattern
@@ -544,7 +545,7 @@ clap already feed both sends.
       top and SHM at the top, play 30 s of chords: it shimmers and swells but **stays below
       clipping** (PEAK under 1.0); stop playing and it dies away.
 - [ ] Push A on both pages again: `DLY CLASSIC`, `REV ROOM`, and the beat sounds as it did
-      before. Save (F1+F3 twice), power cycle, reload: the modes and knobs come back as saved.
+      before. Save (FUNC+PROJECT twice), power cycle, reload: the modes and knobs come back as saved.
 - [ ] **U9.** A01 GROOVE with LONG (`X4`, DIF and WOW up) and HALL (SHM up) for 60 s:
       **MAX `________ %`** against U1's `________ %`.
 
