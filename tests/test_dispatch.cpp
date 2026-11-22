@@ -96,13 +96,16 @@ TEST(dispatch_every_macro_command_reaches_what_is_heard) {
     pump(2);
     CHECK_EQ(int(engine.performed(1, kLvl)), int(kit));  // ...but drives nothing yet
 
-    post_full(Cmd::macro_assign, 1, 0, kLvl, 10, 110);   // assigned: heard at once
+    // Assigned with the parameter at 10, heading for 110. The knob is at the top, so the range
+    // runs from 110 at the bottom up to 10 at the knob: the value does not jump on assignment
+    // (core/perform.hpp, macro_range_through), and the knob then sweeps it towards 110.
+    post_full(Cmd::macro_assign, 1, 0, kLvl, 10, 110);
     pump(2);
-    CHECK_EQ(int(engine.performed(1, kLvl)), 110);
+    CHECK_EQ(int(engine.performed(1, kLvl)), 10);
 
     post(Cmd::set_macro, 0, 0, 0, 0);                    // moved: heard at once
     pump(2);
-    CHECK_EQ(int(engine.performed(1, kLvl)), 10);
+    CHECK_EQ(int(engine.performed(1, kLvl)), 110);
 
     post(Cmd::macro_clear, 0, 0, 0);                     // cleared: back to the kit
     pump(2);

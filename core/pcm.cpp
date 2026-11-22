@@ -334,4 +334,82 @@ uint32_t pcm_resample(const int16_t *in, uint32_t in_frames, int channels, Resam
     return written;
 }
 
+// --- anti-aliasing ------------------------------------------------------------
+
+namespace {
+
+constexpr double kPi = 3.14159265358979323846;
+
+// sin and cos for 0 <= x <= pi/2, by Taylor series: core/ has no libm and cannot include
+// <enaga/dsp.hpp>. Fourteen terms are past double precision over that range, and this runs
+// once per file.
+void sin_cos(double x, double &s, double &c) {
+    double term_s = x, term_c = 1.0;
+    s = 0.0;
+    c = 0.0;
+    const double x2 = x * x;
+    for (int n = 0; n < 14; n++) {
+        s += term_s;
+        c += term_c;
+        term_s *= -x2 / double((2 * n + 2) * (2 * n + 3));
+        term_c *= -x2 / double((2 * n + 1) * (2 * n + 2));
+    }
+}
+
+}  // namespace
+
+Antialias Antialias::make(uint32_t source_rate, uint32_t output_rate) {
+    Antialias filter;
+    const bool believable = source_rate >= kRateMin && source_rate <= kRateMax &&
+                            output_rate >= kRateMin && output_rate <= kRateMax;
+    if (!believable || source_rate <= output_rate) return filter;
+
+    // The corner, 5/12 of the output rate, as an angle: w = pi * fc / fs, and K = tan(w) is the
+    // bilinear transform's prewarped frequency. fc < fs / 2 always holds, because the output
+    // rate is below the source rate, so w < pi / 2 and the series above is in range.
+    const double w = kPi * (double(output_rate) * 5.0 / 12.0) / double(source_rate);
+    double s = 0.0, c = 1.0;
+    sin_cos(w, s, c);
+    const double k = s / c;
+    const double k2 = k * k;
+
+    // The Qs of an 8th-order Butterworth: 1 / (2 cos((2i + 1) pi / 16)).
+    for (int i = 0; i < kSections; i++) {
+        double ps = 0.0, pc = 1.0;
+        sin_cos(double(2 * i + 1) * kPi / 16.0, ps, pc);
+        const double q = 1.0 / (2.0 * pc);
+        const double norm = 1.0 / (1.0 + k / q + k2);
+        filter.b0[i] = float(k2 * norm);
+        filter.b1[i] = float(2.0 * k2 * norm);
+        filter.b2[i] = float(k2 * norm);
+        filter.a1[i] = float(2.0 * (k2 - 1.0) * norm);
+        filter.a2[i] = float((1.0 - k / q + k2) * norm);
+    }
+    filter.active = true;
+    return filter;
+}
+
+void pcm_antialias(int16_t *samples, uint32_t frames, int channels, Antialias &filter) {
+    if (!filter.active || samples == nullptr || channels < 1 || channels > Antialias::kMaxChannels)
+        return;
+    for (int ch = 0; ch < channels; ch++) {
+        float *z1 = filter.z1[ch];
+        float *z2 = filter.z2[ch];
+        int16_t *p = samples + ch;
+        for (uint32_t i = 0; i < frames; i++, p += channels) {
+            float x = float(*p);
+            // Transposed direct form II, one section after another.
+            for (int k = 0; k < Antialias::kSections; k++) {
+                const float y = filter.b0[k] * x + z1[k];
+                z1[k] = filter.b1[k] * x - filter.a1[k] * y + z2[k];
+                z2[k] = filter.b2[k] * x - filter.a2[k] * y;
+                x = y;
+            }
+            const float r = x + (x >= 0.0f ? 0.5f : -0.5f);
+            const int32_t v = r >= 32767.0f ? 32767 : (r <= -32768.0f ? -32768 : int32_t(r));
+            *p = int16_t(v);
+        }
+    }
+}
+
 }  // namespace strata

@@ -60,7 +60,7 @@ int step_field_positions(StepField field);
 //
 // Ranges: note 0-127, velocity 1-127, length 1..kLengthMax (never 0, which is the invalid
 // sentinel), micro -kMicroRange..+kMicroRange, probability 0-100, ratchet count
-// kRatchetMin..kRatchetMax, accent and slide 0 or 1, chord 0-63.
+// kRatchetMin..kRatchetMax, accent and slide 0 or 1, chord a position in the walk of named chords (below).
 void step_field_apply(Step &step, StepField field, int delta);
 
 // --- the condition walk ---------------------------------------------------
@@ -87,6 +87,15 @@ constexpr int kConditionPositions = 44;
 
 int condition_position(uint8_t packed);     // byte -> position
 uint8_t condition_at_position(int position);   // position -> byte
+
+// --- the chord walk -------------------------------------------------------
+//
+// The chord field's encoder positions: every valid packing of core/chord.hpp's table, in type
+// order and then by inversion -- 0 is a single note, 1-3 MIN and its inversions, and so on.
+// `chord_walk_position` reads a byte that is not a valid chord as position 0.
+constexpr int kChordWalkPositions = 43;
+int chord_walk_position(uint8_t packed);
+uint8_t chord_at_walk_position(int position);
 
 // --- text -----------------------------------------------------------------
 

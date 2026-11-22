@@ -298,6 +298,7 @@ private:
     uint32_t out_done_ = 0;
     uint32_t out_offset_ = 0;      // the pool's byte offset for this slot
     Resampler cursor_;
+    Antialias antialias_;          // a downsample's low-pass, carried across slices
 
     // The buffers, all taken in init().
     //
