@@ -49,9 +49,17 @@ constexpr int kBanks = 8;                    // A..H
 constexpr int kPatternsPerBank = 16;
 constexpr int kProjectPatterns = kBanks * kPatternsPerBank;   // 128
 
-// Parameters per track, mirroring dsp/track.hpp's kParams without depending on it. app/ asserts
-// that the two agree.
-constexpr int kKitParams = 16;
+// Parameters per track, mirroring dsp/track.hpp's kTrackParams without depending on it. app/
+// asserts that the three agree: 16 SOUND parameters (the machine's and the insert chain's) and
+// then the 4 bytes of the track's LFO (dsp/lfo.hpp). The split matters to the files: KIT.BIN and
+// PERFORM.BIN carried 16 a track before the LFO existed, so the four LFO bytes travel in sections
+// of their own that an older file simply does not have. The arpeggiator's four (core/arp.hpp)
+// follow the LFO's in the same way, and in a section of their own again.
+constexpr int kKitSoundParams = 16;
+constexpr int kKitLfoParams = 4;
+constexpr int kKitLfoEnd = kKitSoundParams + kKitLfoParams;
+constexpr int kKitArpParams = 4;
+constexpr int kKitParams = kKitLfoEnd + kKitArpParams;
 
 // How many machines a track can host, mirroring dsp/'s machine list the same way and for the
 // same reason as kKitParams: docs/SPEC.md, "Machines (v1)" -- KICK, SNARE, HAT, PERC, SAMPLE,
@@ -147,11 +155,19 @@ struct Kit {
 //
 // `repeats` of 0 means the entry is unused, which is also what zeroed memory means -- a chain
 // of 64 zeroed entries is an empty chain rather than 64 infinite repeats of pattern A01.
+//
+// `mutes` is song mode's: 0 leaves the mutes as they are, 1-8 recalls that stored mute state
+// (`ProjectSettings::mute_states`) as the entry starts, so a chain can hold sections -- an intro
+// without the kick, a breakdown -- and not only patterns. Zeroed, it changes nothing.
 struct ChainEntry {
     uint8_t bank = 0;
     uint8_t slot = 0;
     uint8_t repeats = 0;
+    uint8_t mutes = 0;
 };
+
+// The highest `ChainEntry::mutes`: one per stored mute state.
+constexpr uint8_t kChainMutesMax = 8;
 
 // --- the project ----------------------------------------------------------
 
@@ -194,6 +210,9 @@ struct ProjectSettings {
 
     uint8_t chain_length = 0;            // how many chain entries are in use
     bool chain_enabled = false;
+    // Song mode: the chain plays through ONCE and the transport stops at its end, back on entry
+    // 1, instead of looping. Off, a chain loops as it always has.
+    bool chain_song = false;
 
     // What was live when the project was saved: the mutes as they stood (one bit per track,
     // bit t = track t muted) and which scenes sat in the morph's slots A and B. Restored on
@@ -303,12 +322,23 @@ constexpr uint16_t kSectionProjectMixer = 3;
 // The live mutes and the A/B scene choice. Optional on read for the same reason as the mixer:
 // an older file without it opens with everything unmuted and scenes 1 and 2, as it always did.
 constexpr uint16_t kSectionProjectLive = 4;
+// Song mode: the SONG switch and each chain entry's mute recall (`ChainEntry::mutes`). Optional
+// on read: an older file has a looping chain with no mute recalls, which is what zeroes mean.
+constexpr uint16_t kSectionProjectSong = 5;
 // Each track's MIDI OUT channel (core/midiout.hpp): eight bytes, 0 off or 1-16. Optional on read
-// like the two above: an older file has every track's MIDI out off, which is what it played.
-constexpr uint16_t kSectionProjectMidi = 5;
+// like the ones above: an older file has every track's MIDI out off, which is what it played.
+constexpr uint16_t kSectionProjectMidi = 6;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;
+// The LFO's four bytes per track (core/project.hpp, kKitLfoParams). OPTIONAL on read, like the
+// project's mixer section: a KIT.BIN from before the LFO has one section and loads with every
+// LFO off (all four bytes 0), which is also what zeroed bytes mean to dsp/lfo.hpp. The version
+// does not move: no existing byte changed its meaning.
+constexpr uint16_t kSectionKitLfo = 2;
+// The arpeggiator's four bytes per track (kKitArpParams), OPTIONAL in the same way: a KIT.BIN
+// from before the arp loads with every arp OFF.
+constexpr uint16_t kSectionKitArp = 3;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

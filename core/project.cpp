@@ -11,8 +11,9 @@
 //
 // ## The bytes
 //
-// PROJECT.BIN, 316 bytes, five sections (the third, the mixer's, the fourth, the live state's,
-// and the fifth, MIDI OUT's, were added later and are OPTIONAL on read). Fixed size: nothing in it is variable length.
+// PROJECT.BIN, 393 bytes, six sections (the third, the mixer's, the fourth, the live state's,
+// the fifth, song mode's, and the sixth, MIDI OUT's, were added later and are OPTIONAL on read).
+// Fixed size: nothing in it is variable length.
 //
 //     settings (id 1), 19 bytes
 //         0   2  tempo, centi-BPM
@@ -33,6 +34,9 @@
 //         0   1  the live mutes, one bit per track
 //         1   1  the scene in morph slot A
 //         2   1  the scene in morph slot B
+//     song (id 5), 65 bytes
+//         0   1  SONG: 1 plays the chain once and stops, 0 loops it
+//         1  64  each chain entry's mute recall: 0 none, 1-8 that stored mute state
 //     midi (id 5), 8 bytes: each track's MIDI OUT channel, 0 off or 1-16
 //
 // KIT.BIN, 1,076 bytes, one section.
@@ -292,7 +296,7 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PROJECT.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kProjectSections = 5;
+constexpr uint32_t kProjectSections = 6;
 constexpr uint32_t kProjectSettingsBytes = 19;
 constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
 // The sends, the master bytes and the kill switches. The section GREW when the kill EQ came
@@ -308,14 +312,18 @@ constexpr uint32_t kProjectChainOffset = kProjectSettingsOffset + kProjectSettin
 constexpr uint32_t kProjectMixerOffset = kProjectChainOffset + kProjectChainBytes;
 constexpr uint32_t kProjectLiveBytes = 3;          // live mutes, scene A, scene B
 constexpr uint32_t kProjectLiveOffset = kProjectMixerOffset + kProjectMixerBytes;
+// Song mode: the SONG switch, then each chain entry's mute recall.
+constexpr uint32_t kProjectSongBytes = 1 + uint32_t(kChainEntries);
+constexpr uint32_t kProjectSongOffset = kProjectLiveOffset + kProjectLiveBytes;
 constexpr uint32_t kProjectMidiBytes = uint32_t(kTracks);   // MIDI OUT channel per track
-constexpr uint32_t kProjectMidiOffset = kProjectLiveOffset + kProjectLiveBytes;
+constexpr uint32_t kProjectMidiOffset = kProjectSongOffset + kProjectSongBytes;
 constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectMidiOffset + kProjectMidiBytes;
 
-// How many of `wanted` at the END of the list a reader may do without. Three: the mixer, the
-// live and the MIDI sections, none of which existed when the format was first written, so a
-// PROJECT.BIN from before them has two to four sections and must still load (core/project.hpp).
-constexpr uint32_t kProjectOptionalSections = 3;
+// How many of `wanted` at the END of the list a reader may do without. Four: the mixer, the
+// live, the song and the MIDI sections, none of which existed when the format was first written,
+// so a PROJECT.BIN from before them has two to five sections and must still load
+// (core/project.hpp).
+constexpr uint32_t kProjectOptionalSections = 4;
 
 static_assert(sizeof(ProjectSettings::mute_states) == 8,
               "the settings section is 19 bytes on the strength of 8 mute states");
@@ -328,12 +336,20 @@ static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
-constexpr uint32_t kKitSections = 1;
-constexpr uint32_t kKitTrackBytes = uint32_t(kKitParams) + 1 + 2 + uint32_t(kSamplePathBytes);
+constexpr uint32_t kKitSections = 3;
+// The second and third, the LFO and the arp, are optional on read: see kSectionKitLfo.
+constexpr uint32_t kKitOptionalSections = 2;
+constexpr uint32_t kKitTrackBytes =
+    uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
+constexpr uint32_t kKitLfoBytes = uint32_t(kKitLfoParams) * uint32_t(kTracks);
 constexpr uint32_t kKitTableBytes = kKitSections * kSectionEntryBytes;
 constexpr uint32_t kKitTracksOffset = kKitTableBytes;
-constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitTracksOffset + kKitTracksBytes;
+constexpr uint32_t kKitLfoOffset = kKitTracksOffset + kKitTracksBytes;
+constexpr uint32_t kKitArpBytes = uint32_t(kKitArpParams) * uint32_t(kTracks);
+constexpr uint32_t kKitArpOffset = kKitLfoOffset + kKitLfoBytes;
+constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitArpOffset + kKitArpBytes;
+static_assert(kKitSoundParams == 16, "KIT.BIN's track section has carried 16 parameters since M4");
 
 // --- BANK_x.BIN sizes -----------------------------------------------------
 
@@ -419,6 +435,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
         {kSectionProjectChain, kProjectChainOffset, kProjectChainBytes},
         {kSectionProjectMixer, kProjectMixerOffset, kProjectMixerBytes},
         {kSectionProjectLive, kProjectLiveOffset, kProjectLiveBytes},
+        {kSectionProjectSong, kProjectSongOffset, kProjectSongBytes},
         {kSectionProjectMidi, kProjectMidiOffset, kProjectMidiBytes},
     };
 
@@ -457,6 +474,8 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     w.u8(s.scene_a);
     w.u8(s.scene_b);
 
+    w.u8(s.chain_song ? 1 : 0);
+    for (int i = 0; i < kChainEntries; i++) w.u8(project.chain[i].mutes);
     for (int t = 0; t < kTracks; t++) w.u8(s.midi_out[t]);
 
     if (!w.ok() || w.size() != kProjectTotalBytes) return SerializeResult::buffer_too_small;
@@ -499,7 +518,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // The mixer section is LAST and OPTIONAL: see `kProjectOptionalSections`.
     const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain,
                                                kSectionProjectMixer, kSectionProjectLive,
-                                               kSectionProjectMidi};
+                                               kSectionProjectSong, kSectionProjectMidi};
     uint32_t offset[kProjectSections] = {};
     uint32_t length[kProjectSections] = {};
     const SerializeResult found =
@@ -516,7 +535,10 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     if (offset[3] != 0 && length[3] < kProjectLiveBytes) {
         return refuse(SerializeResult::malformed);
     }
-    if (offset[4] != 0 && length[4] < kProjectMidiBytes) {
+    if (offset[4] != 0 && length[4] < kProjectSongBytes) {
+        return refuse(SerializeResult::malformed);
+    }
+    if (offset[5] != 0 && length[5] < kProjectMidiBytes) {
         return refuse(SerializeResult::malformed);
     }
 
@@ -615,11 +637,27 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
 
+    // Song mode, defaulted when absent for the mixer's reason: a looping chain, no mute recalls.
+    // A recall past the eight states is dropped to none, and so is one on an entry the chain
+    // section left unused, so an unused entry stays the zeroed entry project.hpp says it is.
+    s.chain_song = false;
+    for (int i = 0; i < kChainEntries; i++) project.chain[i].mutes = 0;
+    if (offset[4] != 0) {
+        if (!r.seek(kHeaderBytes + offset[4])) return refuse(SerializeResult::malformed);
+        s.chain_song = r.u8() != 0;
+        for (int i = 0; i < kChainEntries; i++) {
+            const uint8_t mutes = r.u8();
+            const bool usable = project.chain[i].repeats != 0 && mutes <= kChainMutesMax;
+            project.chain[i].mutes = usable ? mutes : 0;
+        }
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
     // The MIDI OUT channels: absent is an older file, where no track sent MIDI. A byte past 16
     // is damage and turns that track's MIDI out off rather than onto some channel nobody chose.
     for (int t = 0; t < kTracks; t++) s.midi_out[t] = kMidiOutOff;
-    if (offset[4] != 0) {
-        if (!r.seek(kHeaderBytes + offset[4])) return refuse(SerializeResult::malformed);
+    if (offset[5] != 0) {
+        if (!r.seek(kHeaderBytes + offset[5])) return refuse(SerializeResult::malformed);
         for (int t = 0; t < kTracks; t++) {
             const uint8_t channel = r.u8();
             s.midi_out[t] = channel <= kMidiChannels ? channel : kMidiOutOff;
@@ -650,6 +688,8 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
 
     const Section sections[kKitSections] = {
         {kSectionKitTracks, kKitTracksOffset, kKitTracksBytes},
+        {kSectionKitLfo, kKitLfoOffset, kKitLfoBytes},
+        {kSectionKitArp, kKitArpOffset, kKitArpBytes},
     };
 
     Writer w(buffer, capacity);
@@ -657,10 +697,16 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
 
     for (int t = 0; t < kTracks; t++) {
         const KitTrack &track = kit.tracks[t];
-        for (int p = 0; p < kKitParams; p++) w.u8(track.params[p]);
+        for (int p = 0; p < kKitSoundParams; p++) w.u8(track.params[p]);
         w.u8(track.machine);
         w.u16(level_to_milli(track.level));
         write_path(w, track.sample);
+    }
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitLfoEnd; p++) w.u8(kit.tracks[t].params[p]);
+    }
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitLfoEnd; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
     }
 
     if (!w.ok() || w.size() != kKitTotalBytes) return SerializeResult::buffer_too_small;
@@ -673,13 +719,16 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
         return why;
     };
 
-    const uint16_t wanted[kKitSections] = {kSectionKitTracks};
+    const uint16_t wanted[kKitSections] = {kSectionKitTracks, kSectionKitLfo, kSectionKitArp};
     uint32_t offset[kKitSections] = {};
     uint32_t length[kKitSections] = {};
-    const SerializeResult found =
-        find_sections(buffer, size, kKitVersion, wanted, kKitSections, offset, length);
+    const SerializeResult found = find_sections(buffer, size, kKitVersion, wanted, kKitSections,
+                                                offset, length, kKitOptionalSections);
     if (found != SerializeResult::ok) return refuse(found);
     if (length[0] < kKitTracksBytes) return refuse(SerializeResult::malformed);
+    // Present but short is damage; absent is a kit from before the LFO.
+    if (offset[1] != 0 && length[1] < kKitLfoBytes) return refuse(SerializeResult::malformed);
+    if (offset[2] != 0 && length[2] < kKitArpBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -689,7 +738,9 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
         // Clamped, not taken as they come: dsp/track.hpp maps a parameter either by x(1/127) or
         // as a table index, so a 255 that survived the CRC would be an out-of-range read down
         // in a machine rather than an odd sound.
-        for (int p = 0; p < kKitParams; p++) track.params[p] = clamp_u8(r.u8(), 0, kParamMax);
+        for (int p = 0; p < kKitSoundParams; p++) {
+            track.params[p] = clamp_u8(r.u8(), 0, kParamMax);
+        }
         const uint8_t machine = r.u8();
         // A machine this build does not have falls back to the FIRST machine, not the last one:
         // an unknown id should land somewhere known, and clamping to kMachines - 1 would hand a
@@ -699,6 +750,28 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
         read_path(r, track.sample);
     }
     if (!r.ok()) return refuse(SerializeResult::truncated);
+
+    // The LFO, then the arp. Absent means a kit written before it existed, and then it is OFF --
+    // explicitly, because `kit` may be a buffer holding the previous kit (the kit browser's
+    // inbox, a project load), and "left alone" would carry its settings into a kit that has none.
+    const int firsts[2] = {kKitSoundParams, kKitLfoEnd};
+    const int ends[2] = {kKitLfoEnd, kKitParams};
+    for (int k = 0; k < 2; k++) {
+        const uint32_t at = offset[1 + k];
+        if (at == 0) {
+            for (int t = 0; t < kTracks; t++) {
+                for (int p = firsts[k]; p < ends[k]; p++) kit.tracks[t].params[p] = 0;
+            }
+            continue;
+        }
+        if (!r.seek(kHeaderBytes + at)) return refuse(SerializeResult::malformed);
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = firsts[k]; p < ends[k]; p++) {
+                kit.tracks[t].params[p] = clamp_u8(r.u8(), 0, kParamMax);
+            }
+        }
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
 
     return SerializeResult::ok;
 }

@@ -52,6 +52,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include <enaga/settings.hpp>
@@ -416,6 +417,7 @@ const Expect kTable[] = {
     {Cmd::set_track_length, kDirtyBank, "set_track_length"},
     {Cmd::set_track_speed, kDirtyBank, "set_track_speed"},
     {Cmd::set_pattern_swing, kDirtyBank, "set_pattern_swing"},
+    {Cmd::set_track_swing, kDirtyBank, "set_track_swing"},
     {Cmd::set_master_length, kDirtyBank, "set_master_length"},
     {Cmd::step_field_delta, kDirtyBank, "step_field_delta"},
     // A lock lands in the pattern's shared pool, which the bank file carries.
@@ -480,6 +482,10 @@ const Expect kTable[] = {
     // 1,076-byte write.
     {Cmd::clear_sample, kDirtyKit, "clear_sample"},
     {Cmd::set_sample, kDirtyKit, "set_sample"},
+    // A streamed file is the same swap's second half. Attaching its stream changes nothing on
+    // the card: it is the card side telling the audio side the stream is open.
+    {Cmd::set_stream, kDirtyKit, "set_stream"},
+    {Cmd::stream_attach, 0u, "stream_attach"},
 
     {Cmd::set_param, kDirtyKit, "set_param"},
     // The mixer fader, which `kit_from_params` copies into `KitTrack::level`.
@@ -536,6 +542,9 @@ const Expect kTable[] = {
     // A pad hit sounds and is not recorded (core/record posts `record_hit` for that).
     {Cmd::trigger_note, 0u, "trigger_note"},
     {Cmd::release_note, 0u, "release_note"},
+    {Cmd::note_repeat, 0u, "note_repeat"},   // a roll is played, not written
+    {Cmd::delay_freeze, 0u, "delay_freeze"},
+    {Cmd::tape_stop, 0u, "tape_stop"},
 
     // Resampling dirties no project file. The take goes to /RECORD as its own WAV -- which is
     // not one of a project's eleven files -- and the arm, the cancel and the release only move
@@ -734,12 +743,12 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
 
     // The sizes tests/test_project.cpp pins from the serializer, reached here through the real
     // card protocol: a file that came out a different size means the two have drifted apart.
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 316);
-    CHECK_EQ(project_bytes(), 316u);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1076);
-    CHECK_EQ(kit_bytes(), 1076u);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 2424);
-    CHECK_EQ(perform_bytes(), 2424u);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 393);
+    CHECK_EQ(project_bytes(), 393u);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1164);
+    CHECK_EQ(kit_bytes(), 1164u);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 3804);
+    CHECK_EQ(perform_bytes(), 3804u);
     for (int b = 0; b < kBanks; b++) {
         char name[12];
         CHECK(bank_file_name(b, name, int(sizeof name)));
@@ -1025,7 +1034,7 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     CHECK(pump_until_idle());
     CHECK(storage().last_error() == nullptr);
     keep_pristine(kit);
-    CHECK_EQ(g_pristine_bytes, 1076u);
+    CHECK_EQ(g_pristine_bytes, 1164u);
 
     // A sanity pass first: the pristine file loads.
     CHECK(reload_now());
@@ -1609,9 +1618,9 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         }
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 316);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1076);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 2424);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 393);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1164);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 3804);
 
     // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.
     CHECK_EQ(host.saves() - saves_before, kFileN + 1);
@@ -3643,4 +3652,546 @@ TEST(storage_a_kit_save_stores_the_knob_turned_just_before_it) {
     Kit kit;
     CHECK_EQ(int(kit_read(kit, g_scratch, bytes)), int(SerializeResult::ok));
     CHECK_EQ(int(kit.tracks[2].params[5]), 77);
+}
+
+// --- a file bigger than the loader's staging buffer, read in chunks ---------------------------
+//
+// Roland, 2026-11-22: loops over 30 s load whole, a chunk at a time, instead of streaming. A
+// file bigger than raw_ (16.5 MiB) is opened and read 4 MiB at a time into raw_, each chunk
+// converted straight into the pool. These files are built in place on the fake card.
+
+namespace {
+
+constexpr uint32_t kRawLimit = 30u * 96000u * 6u + 64u * 1024u;   // app/storage.hpp's kRawBytes
+
+// A 48 kHz stereo 24-bit file whose frames are big_value(f) in the top 16 bits, so a frame read
+// one byte off, or a carry across a chunk lost, shows as a wrong value. 6-byte frames do not
+// divide a 4 MiB chunk, so every chunk boundary splits a frame.
+uint32_t make_long24(const char *path, uint32_t frames, uint32_t declared_frames = 0) {
+    const uint32_t bytes = 44u + frames * 6u;
+    uint8_t *p = FakeHost::the().create_file(path, bytes);
+    CHECK(p != nullptr);
+    if (p == nullptr) return 0;
+    enaga::wav::Format format;
+    format.channels = 2;
+    format.rate = 48000;
+    format.bits = 24;
+    enaga::wav::header(p, format, (declared_frames != 0 ? declared_frames : frames) * 6u);
+    for (uint32_t f = 0; f < frames; f++) {
+        const uint16_t l = uint16_t(big_value(f)), r = uint16_t(-big_value(f));
+        uint8_t *q = p + 44u + 6u * f;
+        q[0] = 0; q[1] = uint8_t(l); q[2] = uint8_t(l >> 8);
+        q[3] = 0; q[4] = uint8_t(r); q[5] = uint8_t(r >> 8);
+    }
+    return bytes;
+}
+
+bool settle_long() { return settle(24, 40000); }
+
+}  // namespace
+
+TEST(storage_a_file_bigger_than_the_staging_buffer_loads_whole_in_chunks) {
+    clean();
+    // 3,000,000 frames: 62.5 s at 48 kHz, 18 MB on the card -- refused TOO BIG before.
+    constexpr uint32_t kFrames = 3000000;
+    CHECK(make_long24("/SAMPLES/STEM.WAV", kFrames) > kRawLimit);
+    kit_sample(kLoopTrack, "/SAMPLES/STEM.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle_long());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
+    CHECK_EQ(uint32_t(loop->sample_frames()), kFrames);
+    const int16_t *pcm = loop->sample_data();
+    CHECK(pcm != nullptr);
+    if (pcm != nullptr && uint32_t(loop->sample_frames()) == kFrames) {
+        uint32_t wrong = 0;
+        for (uint32_t f = 0; f < kFrames; f++) {
+            wrong += pcm[2 * f] != big_value(f) ? 1u : 0u;
+            wrong += pcm[2 * f + 1] != int16_t(-big_value(f)) ? 1u : 0u;
+        }
+        CHECK_EQ(wrong, 0u);
+    }
+    // The file is closed again: all eight handles are free.
+    for (int i = 0; i < int(ENAGA_FILES_OPEN); i++) {
+        enaga::files::File probe;
+        CHECK(probe.open("/SAMPLES/STEM.WAV", ENAGA_FILE_READ) == ENAGA_FILE_OK);
+        probe.close();
+    }
+    storage().request_new();
+    CHECK(settle_long());
+}
+
+TEST(storage_a_long_file_shorter_than_its_header_says_plays_what_is_there) {
+    clean();
+    constexpr uint32_t kFrames = 3000000;
+    make_long24("/SAMPLES/CUT.WAV", kFrames, kFrames + 500000);
+    kit_sample(kLoopTrack, "/SAMPLES/CUT.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle_long());
+    CHECK(storage().last_error() == nullptr);
+    const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
+    CHECK_EQ(uint32_t(loop->sample_frames()), kFrames);
+    storage().request_new();
+    CHECK(settle_long());
+}
+
+TEST(storage_a_long_file_at_another_rate_is_resampled_or_streamed_past_the_source_buffer) {
+    clean();
+    // 32-bit float stereo at 44.1 kHz: 8-byte frames make 2.5 M frames (56.7 s) a 20 MB file,
+    // past raw_, yet inside src_'s 2,880,000 frames -- so it is read in chunks and resampled.
+    {
+        constexpr uint32_t kFrames = 2500000;
+        uint8_t *p = FakeHost::the().create_file("/SAMPLES/F441.WAV", 44u + kFrames * 8u);
+        CHECK(p != nullptr);
+        enaga::wav::Format format;
+        format.encoding = uint16_t(enaga::wav::floating);
+        format.channels = 2;
+        format.rate = 44100;
+        format.bits = 32;
+        enaga::wav::header(p, format, kFrames * 8u);
+        std::memset(p + 44, 0, kFrames * 8u);   // silence is 0.0f
+        kit_sample(kLoopTrack, "/SAMPLES/F441.WAV");
+        CHECK(storage().request_sample(kLoopTrack));
+        CHECK(settle_long());
+        CHECK(storage().last_error() == nullptr);
+        CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+        const uint32_t expect = Resampler::make(44100, 48000).output_frames(kFrames);
+        CHECK_EQ(slot_of(kLoopTrack).frames, expect);
+        FakeHost::the().remove_file("/SAMPLES/F441.WAV");
+    }
+    // One past src_ cannot be resampled whole, so it streams, at its own rate: the head is two
+    // seconds OF THE FILE, not resampled.
+    {
+        constexpr uint32_t kFrames = 30u * 96000u + 1u;
+        uint8_t *p = FakeHost::the().create_file("/SAMPLES/F441.WAV", 44u + kFrames * 8u);
+        CHECK(p != nullptr);
+        enaga::wav::Format format;
+        format.encoding = uint16_t(enaga::wav::floating);
+        format.channels = 2;
+        format.rate = 44100;
+        format.bits = 32;
+        enaga::wav::header(p, format, kFrames * 8u);
+        kit_sample(kLoopTrack, "/SAMPLES/F441.WAV");
+        CHECK(storage().request_sample(kLoopTrack));
+        CHECK(settle_long());
+        CHECK(storage().last_error() == nullptr);
+        CHECK(storage().streaming(kLoopTrack));
+        CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+        CHECK_EQ(slot_of(kLoopTrack).frames, 2u * 44100u);
+        CHECK_EQ(slot_of(kLoopTrack).rate, 44100u);
+        CHECK_EQ(FakeHost::the().last_stream_offset(), 44u + 2u * 44100u * 8u);
+    }
+    storage().request_new();
+    CHECK(settle_long());
+}
+
+// --- a file too big for the pool, streamed -----------------------------------------------------
+//
+// Roland, 2026-11-22: a file the pool cannot hold streams. Its first two seconds load as a head,
+// the rest is read from the card while it plays (app/storage.hpp, "streaming").
+
+namespace {
+
+// Mono 16-bit at 48 kHz, frame f = big_value(f): 2^24 frames is one past Cmd::set_sample's 24
+// bits, so it can never be loaded whole, whatever the pool holds.
+constexpr uint32_t kHugeFrames = (1u << 24) + 1000u;
+constexpr uint32_t kHeadFrames = 2u * 48000u;
+
+void make_huge(const char *path) {
+    uint8_t *p = FakeHost::the().create_file(path, 44u + kHugeFrames * 2u);
+    CHECK(p != nullptr);
+    if (p == nullptr) return;
+    enaga::wav::Format format;
+    format.channels = 1;
+    format.rate = 48000;
+    format.bits = 16;
+    enaga::wav::header(p, format, kHugeFrames * 2u);
+    for (uint32_t f = 0; f < kHugeFrames; f++) {
+        const uint16_t v = uint16_t(big_value(f));
+        p[44u + 2u * f] = uint8_t(v);
+        p[45u + 2u * f] = uint8_t(v >> 8);
+    }
+}
+
+const Sampler &loop_sampler() {
+    return *static_cast<const Sampler *>(engine().machine(kLoopTrack));
+}
+
+// The loop track as a plain forward one-shot that holds, sends closed, one trig on step 0.
+void play_loop_once() {
+    post(Cmd::set_param, kLoopTrack, 0, 8, 0);        // ATK: instant
+    post(Cmd::set_param, kLoopTrack, 0, 9, 127);      // DEC: hold
+    post(Cmd::set_param, kLoopTrack, 0, 10, 0);       // PLY: forward, one shot
+    post(Cmd::set_param, kLoopTrack, 0, 14, 0);
+    post(Cmd::set_param, kLoopTrack, 0, 15, 0);
+    post(Cmd::toggle_trig, uint8_t(kLoopTrack), 0);
+    pump(2);
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);               // once: no tick comes again by itself
+    pump(1);
+}
+
+}  // namespace
+
+TEST(storage_a_file_past_the_24_bit_frame_count_streams) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    make_huge("/SAMPLES/HUGE.WAV");
+    kit_sample(kLoopTrack, "/SAMPLES/HUGE.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle_long());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(storage().streaming(kLoopTrack));
+    // Only the head is resident.
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, kHeadFrames);
+    CHECK_EQ(slot_of(kLoopTrack).bytes, kHeadFrames * 2u);
+    const Sampler &loop = loop_sampler();
+    CHECK(loop.streaming());
+    CHECK_EQ(loop.stream_frames(), kHugeFrames);
+    CHECK_EQ(int(loop.sample_data()[1234]), int(big_value(1234)));
+    // The stream is open after the head and the audio side reads it.
+    CHECK_EQ(host.stream_opens(), 1);
+    CHECK_EQ(host.streams_open(), 1);
+    CHECK_EQ(host.last_stream_offset(), 44u + kHeadFrames * 2u);
+    CHECK(engine().stream_attached(kLoopTrack));
+    // And what it read is the file, frame for frame, from the head's end.
+    {
+        const StreamFifo &fifo = engine().stream_fifo(kLoopTrack);
+        CHECK(fifo.has(kHeadFrames));
+        uint32_t wrong = 0, seen = 0;
+        for (uint32_t f = kHeadFrames; f < kHeadFrames + 3000u && fifo.has(f); f++, seen++) {
+            wrong += fifo.frame(f)[0] != big_value(f) ? 1u : 0u;
+        }
+        CHECK(seen >= 2048u);
+        CHECK_EQ(wrong, 0u);
+    }
+
+    // Played past the head: the trigger reopens the stream (the fifo was filled for a voice
+    // that was not playing yet, which is fine, and is thrown away), and the voice reads on.
+    play_loop_once();
+    CHECK(settle(4, 100));
+    CHECK_EQ(host.stream_opens(), 2);
+    CHECK_EQ(host.last_stream_offset(), 44u + kHeadFrames * 2u);
+    pump(1600);                                       // 2.1 s
+    CHECK(loop.stream_position() > kHeadFrames + 4000u);
+    CHECK_EQ(loop.stream_late(), 0u);
+    CHECK_EQ(engine().status().stream_late.load(), 0u);
+    CHECK(loop.active());
+
+    // The swap closes it: a new project takes every sample away.
+    storage().request_new();
+    CHECK(settle_long());
+    CHECK(!storage().streaming(kLoopTrack));
+    CHECK_EQ(host.streams_open(), 0);
+    CHECK(!engine().stream_attached(kLoopTrack));
+    host.remove_file("/SAMPLES/HUGE.WAV");
+}
+
+TEST(storage_a_stream_of_24_bit_frames_split_across_reads_arrives_whole) {
+    // 44.1 kHz stereo 24-bit, past src_ so it streams: six-byte frames, read 1000 bytes at a
+    // time, so nearly every read ends inside a frame and the engine has to carry the rest.
+    clean();
+    FakeHost &host = FakeHost::the();
+    constexpr uint32_t kFrames = 2900000;
+    const uint32_t bytes = 44u + kFrames * 6u;
+    CHECK(bytes > kRawLimit);
+    uint8_t *p = host.create_file("/SAMPLES/S24.WAV", bytes);
+    CHECK(p != nullptr);
+    if (p != nullptr) {
+        enaga::wav::Format format;
+        format.channels = 2;
+        format.rate = 44100;
+        format.bits = 24;
+        enaga::wav::header(p, format, kFrames * 6u);
+        for (uint32_t f = 0; f < kFrames; f++) {
+            const uint16_t l = uint16_t(big_value(f)), r = uint16_t(-big_value(f));
+            uint8_t *q = p + 44u + 6u * f;
+            q[0] = 0; q[1] = uint8_t(l); q[2] = uint8_t(l >> 8);
+            q[3] = 0; q[4] = uint8_t(r); q[5] = uint8_t(r >> 8);
+        }
+    }
+    host.set_stream_read_limit(1000);
+    kit_sample(kLoopTrack, "/SAMPLES/S24.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle_long());
+    CHECK(storage().streaming(kLoopTrack));
+    const uint32_t head = 2u * 44100u;
+    CHECK_EQ(host.last_stream_offset(), 44u + head * 6u);
+    pump(20);
+    const StreamFifo &fifo = engine().stream_fifo(kLoopTrack);
+    uint32_t wrong = 0, seen = 0;
+    for (uint32_t f = head; f < head + StreamFifo::kFrames && fifo.has(f); f++, seen++) {
+        wrong += fifo.frame(f)[0] != big_value(f) ? 1u : 0u;
+        wrong += fifo.frame(f)[1] != int16_t(-big_value(f)) ? 1u : 0u;
+    }
+    CHECK(seen >= 2000u);
+    CHECK_EQ(wrong, 0u);
+    host.set_stream_read_limit(0);
+    storage().request_new();
+    CHECK(settle_long());
+    host.remove_file("/SAMPLES/S24.WAV");
+}
+
+TEST(storage_a_stream_that_falls_behind_plays_silence_then_catches_up) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    make_huge("/SAMPLES/HUGE.WAV");
+    kit_sample(kLoopTrack, "/SAMPLES/HUGE.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle_long());
+    play_loop_once();
+    CHECK(settle(4, 100));
+    host.set_stream_stall(true);                      // the card stops delivering
+    pump(1600);                                       // past the head
+    const Sampler &loop = loop_sampler();
+    CHECK(loop.stream_late() > 0u);
+    CHECK(engine().status().stream_late.load() > 0u);
+    const uint32_t at = loop.stream_position();
+    CHECK(at > kHeadFrames);                          // it kept time
+    host.set_stream_stall(false);
+    pump(200);                                        // catching up, 448 frames a block
+    const uint32_t late = loop.stream_late();
+    pump(100);
+    CHECK_EQ(loop.stream_late(), late);
+    CHECK(loop.stream_position() > at + 300u * 64u - 64u);
+    storage().request_new();
+    CHECK(settle_long());
+    host.remove_file("/SAMPLES/HUGE.WAV");
+}
+
+TEST(storage_a_stream_is_reopened_for_the_newest_restart_only) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    make_huge("/SAMPLES/HUGE.WAV");
+    kit_sample(kLoopTrack, "/SAMPLES/HUGE.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle_long());
+    CHECK_EQ(host.stream_opens(), 1);
+    // Each open now takes a while to fill, so restarts pile up before any attach.
+    host.set_stream_fill_polls(1000);
+    play_loop_once();
+    pump(3);
+    CHECK_EQ(host.stream_opens(), 2);
+    CHECK(!engine().stream_attached(kLoopTrack));
+    host.deliver_tick(24u * 64u, 0);                  // step 0 again: another restart
+    pump(3);
+    CHECK_EQ(host.stream_opens(), 3);                 // the filling one was dropped for it
+    CHECK_EQ(host.streams_open(), 1);
+    CHECK(!engine().stream_attached(kLoopTrack));
+    host.set_stream_fill_polls(0);
+    // A ring already counting down keeps its count: let the open finish filling.
+    for (int i = 0; i < 1100 && !engine().stream_attached(kLoopTrack); i++) pump();
+    CHECK(engine().stream_attached(kLoopTrack));
+    CHECK_EQ(host.stream_opens(), 3);
+    storage().request_new();
+    CHECK(settle_long());
+    host.remove_file("/SAMPLES/HUGE.WAV");
+}
+
+TEST(storage_four_tracks_stream_at_once_and_a_fifth_is_refused) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    make_huge("/SAMPLES/HUGE.WAV");
+    for (int t = 0; t < 5; t++) kit_sample(t, "/SAMPLES/HUGE.WAV");
+    for (int t = 0; t < 5; t++) CHECK(storage().request_sample(t));
+    for (int t = 0; t < 4; t++) {
+        // One at a time, so the fifth's refusal is the last word.
+        CHECK(settle_long());
+    }
+    CHECK(settle_long());
+    int streaming = 0;
+    for (int t = 0; t < 5; t++) streaming += storage().streaming(t) ? 1 : 0;
+    CHECK_EQ(streaming, 4);
+    CHECK(!storage().streaming(4));
+    CHECK_EQ(int(slot_of(4).state), int(SampleState::failed));
+    CHECK_EQ(host.streams_open(), 4);
+    for (int t = 0; t < 5; t++) kit_sample(t, "");
+    storage().request_new();
+    CHECK(settle_long());
+    CHECK_EQ(host.streams_open(), 0);
+    host.remove_file("/SAMPLES/HUGE.WAV");
+}
+
+TEST(storage_a_stream_comes_back_with_the_card) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    make_huge("/SAMPLES/HUGE.WAV");
+    kit_sample(kLoopTrack, "/SAMPLES/HUGE.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle_long());
+    CHECK(storage().streaming(kLoopTrack));
+    host.set_card(false);
+    storage().on_card(false);
+    pump(10);
+    host.set_card(true);
+    storage().on_card(true);                          // which reloads every track
+    CHECK(settle_long());
+    CHECK(storage().streaming(kLoopTrack));
+    CHECK(engine().stream_attached(kLoopTrack));
+    CHECK_EQ(host.streams_open(), 1);
+    storage().request_new();
+    CHECK(settle_long());
+    host.remove_file("/SAMPLES/HUGE.WAV");
+}
+
+TEST(storage_a_card_pulled_or_failing_mid_chunk_fails_the_track_and_frees_the_handle) {
+    clean();
+    make_long24("/SAMPLES/STEM.WAV", 3000000);
+    kit_sample(kLoopTrack, "/SAMPLES/STEM.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    // Until it is between chunks, a few passes in.
+    for (int i = 0; i < 4000 && storage().progress() < 20; i++) pump();
+    CHECK(storage().progress() >= 20);
+    CHECK(storage().progress() < 100);
+    FakeHost::the().set_read_error(true);
+    CHECK(settle_long());
+    CHECK(storage().last_error() != nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 0u);
+    FakeHost::the().set_read_error(false);
+
+    // Again, and this time the card goes.
+    CHECK(storage().request_sample(kLoopTrack));
+    for (int i = 0; i < 4000 && storage().progress() < 20; i++) pump();
+    FakeHost::the().set_card(false);
+    storage().on_card(false);
+    pump(20);
+    CHECK_EQ(storage().loading_track(), -1);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    FakeHost::the().set_card(true);
+    storage().on_card(true);                         // which asks for every track again
+    CHECK(settle_long());
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    for (int i = 0; i < int(ENAGA_FILES_OPEN); i++) {
+        enaga::files::File probe;
+        CHECK(probe.open("/SAMPLES/STEM.WAV", ENAGA_FILE_READ) == ENAGA_FILE_OK);
+        probe.close();
+    }
+    storage().request_new();
+    CHECK(settle_long());
+}
+
+// --- the project browser: open another project, save under a new name --------------------------
+
+namespace {
+
+bool settings_say(const char *line) {
+    static char text[2048];
+    const int32_t got = FakeHost::the().read_prefix("/ENAGA/DATA/STRATA/SETTINGS.TXT", text,
+                                                    sizeof text - 1);
+    if (got < 0) return false;
+    text[got] = '\0';
+    return std::strstr(text, line) != nullptr;
+}
+
+}  // namespace
+
+TEST(storage_save_as_writes_a_new_folder_and_leaves_the_old_one) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::toggle_trig, 0, 3);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    char old_name[Storage::kNameBytes];
+    std::strcpy(old_name, storage().project_name());
+
+    CHECK(storage().request_save_as("LIVE SET 2"));
+    CHECK(storage().dirty());                       // nothing under the new name yet
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(std::strcmp(storage().project_name(), "LIVE SET 2"), 0);
+    CHECK(!storage().dirty());
+    for (int i = 0; i < kFileN; i++) CHECK(host.has_file(card_path(kFiles[i])));
+    CHECK(settings_say("PROJECT=LIVE SET 2"));
+
+    // The old folder is still there and still its own: a trig added now goes only to the new one.
+    post(Cmd::toggle_trig, 0, 5);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+    storage().request_save();
+    CHECK(pump_until_idle());
+
+    CHECK(storage().request_open(old_name));
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(std::strcmp(storage().project_name(), old_name), 0);
+    CHECK(engine().pattern().tracks[0].steps[3].flags != 0);
+    CHECK_EQ(int(engine().pattern().tracks[0].steps[5].flags), 0);
+    CHECK(settings_say(old_name));
+
+    // And back again: the new one has both trigs.
+    CHECK(storage().request_open("LIVE SET 2"));
+    CHECK(settle());
+    CHECK_EQ(std::strcmp(storage().project_name(), "LIVE SET 2"), 0);
+    CHECK(engine().pattern().tracks[0].steps[5].flags != 0);
+    CHECK(!storage().dirty());
+}
+
+TEST(storage_an_open_makes_the_project_the_one_the_next_start_opens) {
+    clean();
+    CHECK(storage().request_save_as("FIRST"));
+    CHECK(pump_until_idle());
+    CHECK(storage().request_save_as("OTHER"));
+    CHECK(pump_until_idle());
+    // An autosave of OTHER, newer than its save: what a stop leaves.
+    storage().request_autosave();
+    CHECK(pump_until_idle());
+    CHECK(storage().request_open("FIRST"));
+    CHECK(settle());
+    CHECK_EQ(std::strcmp(storage().project_name(), "FIRST"), 0);
+    // The open is counted newer than that autosave, so a start opens FIRST, not OTHER's
+    // autosave under FIRST's name.
+    int project_seq = -1, auto_seq = -1;
+    {
+        static char text[2048];
+        const int32_t got = FakeHost::the().read_prefix("/ENAGA/DATA/STRATA/SETTINGS.TXT", text,
+                                                        sizeof text - 1);
+        CHECK(got > 0);
+        text[got > 0 ? got : 0] = '\0';
+        const char *p = std::strstr(text, "PROJSEQ=");
+        const char *a = std::strstr(text, "AUTOSEQ=");
+        if (p != nullptr) project_seq = std::atoi(p + 8);
+        if (a != nullptr) auto_seq = std::atoi(a + 8);
+    }
+    CHECK(project_seq > auto_seq);
+    CHECK(settings_say("PROJECT=FIRST"));
+}
+
+TEST(storage_opening_a_folder_that_is_not_a_project_changes_nothing) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::toggle_trig, 0, 7);
+    pump(2);
+    char name[Storage::kNameBytes];
+    std::strcpy(name, storage().project_name());
+    CHECK(host.write_file("/ENAGA/DATA/STRATA/PROJECTS/JUNK/NOTES.TXT", "x", 1));
+    CHECK(storage().request_open("JUNK"));
+    CHECK(pump_until_idle());
+    check_error("a folder with no PROJECT.BIN", "NOT FOUND");
+    CHECK_EQ(std::strcmp(storage().project_name(), name), 0);
+    CHECK(engine().pattern().tracks[0].steps[7].flags != 0);
+    CHECK(settle());
+}
+
+TEST(storage_project_names_are_what_the_panel_can_type) {
+    CHECK(Storage::valid_name("A"));
+    CHECK(Storage::valid_name("LIVE SET 2"));
+    CHECK(Storage::valid_name("TECHNO-01+#!.X"));
+    CHECK(Storage::valid_name("lower"));                    // a PC's folder: FAT finds it anyway
+    CHECK(Storage::valid_name("ABCDEFGHIJKLMNOPQRSTUVW"));  // 23
+    CHECK(!Storage::valid_name("ABCDEFGHIJKLMNOPQRSTUVWX"));
+    CHECK(!Storage::valid_name(""));
+    CHECK(!Storage::valid_name(nullptr));
+    CHECK(!Storage::valid_name(" LEADING"));
+    CHECK(!Storage::valid_name(".HIDDEN"));
+    CHECK(!Storage::valid_name("A/B"));
+    CHECK(!Storage::valid_name("A_B"));
+    clean();
+    CHECK(!storage().request_open("../X"));
+    CHECK(!storage().request_save_as(""));
+    CHECK(!pump_until_idle(20));                            // nothing was queued
 }

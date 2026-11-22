@@ -329,3 +329,53 @@ TEST(midi_out_the_same_pitch_retriggered_is_ended_first) {
     CHECK_EQ(int(host().midi_sent(1).status), 0x82);
     CHECK_EQ(int(host().midi_sent(2).status), 0x92);
 }
+
+// --- the arp and note repeat ---------------------------------------------------------------
+
+namespace {
+
+// The ARP page's four knobs on `track`, at the bottom of each zone (as test_engine's set_arp).
+void set_arp(uint8_t track, int mode, int rate) {
+    auto smallest = [](int zone, int zones) { return uint8_t((zone * 128 + zones - 1) / zones); };
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 0), smallest(mode, int(ArpMode::count)));
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 1), smallest(rate, kArpRates));
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 2), 0);
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 3), 0);
+    pump();
+}
+
+}  // namespace
+
+TEST(midi_out_each_arp_hit_is_a_note_with_its_own_note_off) {
+    start(0, 4, kMid);
+    put_trig(0, 0);
+    set_arp(0, 1, 5);                              // UP, 1/32: hits on ticks 0 and 12
+    host().clear_midi();
+    host().set_running(true);
+    for (uint32_t tick = 0; tick < 24; tick++) {
+        host().deliver_tick(tick, 0);
+        pump();
+    }
+    CHECK_EQ(ons(4), 2);
+    pump(400);
+    CHECK_EQ(offs(4), 2);                          // each hit ended, none hanging
+    host().set_running(false);
+}
+
+TEST(midi_out_note_repeat_sends_every_roll_hit_and_ends_each) {
+    start(0, 9, kMid);
+    host().set_running(false);
+    host().set_tempo(120.0f);
+    // Beat repeat's length is engine state no fresh() resets: a sixteenth, so 6,000 frames.
+    post(Cmd::set_repeat, 0, 0, uint8_t(RepeatLength::sixteenth), 0, 0);
+    pump();
+    host().clear_midi();
+    post(Cmd::note_repeat, 0, 0, 60, 100, 1);
+    pump();
+    CHECK_EQ(ons(9, 60), 1);                       // the press hits at once
+    pump(1000);                                    // over half a second: four more sixteenths
+    post(Cmd::note_repeat, 0, 0, 0, 0, 0);
+    pump(300);
+    CHECK(ons(9, 60) >= 5);
+    CHECK_EQ(offs(9, 60), ons(9, 60));
+}

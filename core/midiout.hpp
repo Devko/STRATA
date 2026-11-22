@@ -1,8 +1,8 @@
 // MIDI note out: which notes STRATA has sent, and when each one must end.
 //
 // docs/SPEC.md, "MIDI out". A track with a MIDI OUT channel sends every note it plays -- steps,
-// ratchets, chords, pads, KEYS and notes arriving at MIDI IN -- as a note-on on that channel,
-// and this module is what guarantees the matching note-off. A hanging note on an outboard synth
+// ratchets, chords, arp hits, note repeat, pads, KEYS and notes arriving at MIDI IN -- as a
+// note-on on that channel, and this module is what guarantees the matching note-off. A hanging note on an outboard synth
 // is the one MIDI bug a performer cannot fix from STRATA's panel, so every way a note can end is
 // here and host-tested:
 //

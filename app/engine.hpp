@@ -35,18 +35,24 @@
 #include "perform.hpp"   // scenes, the morph, macros, mute states, auto-fill
 #include "queue.hpp"       // and core/project.hpp through it: the project owns the live pattern
 #include "repeat.hpp"    // beat repeat, on the master output
+#include "tapestop.hpp"  // the tape stop, after beat repeat
+#include "arp.hpp"       // the arpeggiator's notes
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
 #include "scheduler.hpp"
 #include "snare.hpp"
 #include "stepedit.hpp"
+#include "streamfifo.hpp"  // a streamed sample's read-ahead, per track
 #include "track.hpp"
 #include "chord.hpp"     // a POLY step's chord byte, expanded in fire()
 #include "undo.hpp"
 #include "va.hpp"
 #include "vapoly.hpp"    // the CHORD track's six voices
+#include "lfo.hpp"       // one LFO per track, parameters 16-19
 
 #include <cstdint>
+
+#include <enaga/files.hpp>  // files::Stream: a streamed sample's tail, read in audio()
 
 namespace strata {
 
@@ -152,13 +158,41 @@ public:
     const BeatRepeat &repeat() const { return repeat_; }
     RepeatLength repeat_length() const { return repeat_length_; }
 
+    // The held master moves, for the screen and the tests.
+    const TapeStop &tape_stop() const { return tape_stop_; }
+    const DelayFreeze &delay_freeze() const { return mixer_.freeze(); }
+
+    // Whether an arp is running on `track`: a sequenced step's, or held KEYS keys'.
+    bool arp_running(int track) const {
+        return track >= 0 && track < kTracks && (seq_arp_[track].on || held_arp_[track].on);
+    }
+
+    // Whether a note repeat is rolling on `track` (Cmd::note_repeat).
+    bool rolling(int track) const { return track >= 0 && track < kTracks && rolls_[track].on; }
+
     // The performance layer writes over the kit without changing it, so the UI has to be able to
     // draw what is actually being heard as well as what is stored. `params` is the kit; this is
     // the kit with the morph, the macros and any throw over the top.
     uint8_t performed(int track, int param) const {
-        return track >= 0 && track < kTracks && param >= 0 && param < kParams
+        return track >= 0 && track < kTracks && param >= 0 && param < kTrackParams
                    ? performed_[track][param]
                    : 0;
+    }
+
+    // The LFO, for the screen: is it moving a parameter on `track`, its last value (-1..1), and
+    // what the machines are prepared from -- the kit, performed, locked and LFO'd. Audio-side
+    // single words and bytes, read as `performed` is.
+    bool lfo_on(int track) const { return track >= 0 && track < kTracks && modulating_[track]; }
+    float lfo_value(int track) const {
+        return track >= 0 && track < kTracks ? lfo_value_[track] : 0.0f;
+    }
+    const TrackParams &sounding(int track) const {
+        return modulating_[track] ? modulated_[track] : effective_[track];
+    }
+
+    // The master EQ band byte being heard (0-2), with the morph and macros over the knob.
+    uint8_t performed_master(int band) const {
+        return band >= 0 && band < kMasterBands ? performed_master_[band] : 0;
     }
 
     // The scenes and macros, writable, for a LOAD to fill -- the same hole and the same rules as
@@ -195,6 +229,30 @@ public:
     // base so `Cmd::set_sample` can turn the loader's byte offset into a pointer, and the size so
     // that an offset from a damaged command cannot be followed out of the region.
     void set_sample_region(const int16_t *base, uint32_t bytes);
+
+    // --- streaming (app/storage.hpp, "Streaming") ---
+
+    // What Cmd::set_stream hands over, too much for a command: written by the main context just
+    // before the post and read by the audio side only while applying it -- kit_for_recall's rule.
+    struct StreamInfo {
+        uint32_t head_offset = 0;   // the head's byte offset in the sample region
+        uint32_t head_frames = 0;   // resident frames, the file's first
+        uint32_t total_frames = 0;  // the whole file's
+        uint32_t rate = 0;          // the file's own rate: a stream is not resampled
+        uint8_t channels = 1;
+        uint8_t encoding = 0;       // a PcmFormat
+        uint8_t frame_bytes = 0;    // in the file
+    };
+    StreamInfo &stream_for_load(int track) { return stream_inbox_[track]; }
+
+    // The track's stream. The MAIN context opens and closes it, the AUDIO context reads it, and
+    // never both at once: the audio side reads only between a Cmd::stream_attach and its own
+    // next Status::stream_want bump, and the card side opens or closes only after seeing a bump
+    // (or the epoch of a clear_sample) and before posting an attach.
+    enaga::files::Stream &stream(int track) { return streams_[track]; }
+    // For tests: is the audio side reading the track's stream?
+    bool stream_attached(int track) const { return stream_state_[track].attached; }
+    const StreamFifo &stream_fifo(int track) const { return fifos_[track]; }
 
 private:
     void apply_commands();
@@ -319,6 +377,33 @@ private:
     };
     TrackMachines pool_[kTracks];
 
+    // Streaming, per track. Audio side only, apart from the inbox and the stream objects, whose
+    // rules are at stream_for_load and stream() above.
+    struct StreamState {
+        bool on = false;              // the track's Sampler is in stream mode
+        bool attached = false;        // reading streams_[t] into fifos_[t]
+        uint8_t encoding = 0;
+        uint8_t frame_bytes = 0;
+        uint8_t carry = 0;            // bytes of a frame split across two reads
+        uint8_t carry_bytes[8] = {};
+        uint32_t total = 0;
+        uint32_t restarts_seen = 0;
+        uint32_t late_seen = 0;
+        uint16_t want = 0;            // what Status::stream_want[t] holds
+    };
+    void top_up_streams();            // before rendering: the card's bytes into the fifos
+    void watch_streams();             // after: a restart detaches and asks for a reopen
+    void stop_stream(int track);      // leave stream mode (clear_sample)
+    // Frames read per track per block at most: 512 is eight blocks of a voice at the root pitch,
+    // so a fifo emptied by a restart is full again well before the head runs out.
+    static constexpr uint32_t kStreamReadFrames = 512;
+    StreamInfo stream_inbox_[kTracks]{};
+    StreamState stream_state_[kTracks]{};
+    StreamFifo fifos_[kTracks];
+    enaga::files::Stream streams_[kTracks];
+    uint8_t stream_bytes_[kStreamReadFrames * 8u + 8u] = {};
+    uint32_t stream_late_ = 0;        // Status::stream_late: only ever grows
+
     // The hat choke is a pair, and the pair is tracks 3 and 4 of the DEFAULT kit. Machine
     // switching makes that an assumption rather than a fact, so it is re-derived on every
     // change: a closed hat chokes an open one only while both tracks still host a Hat.
@@ -352,6 +437,10 @@ private:
     // and there is no cross-context struct to tear. core/queue.hpp was written expecting that.
     Queue queue_;
     ChainPlayer chain_;
+    // Song mode: the song has played to its end and the sequencer is silent until the transport
+    // stops or starts again (`cross_boundary`).
+    bool song_over_ = false;
+    void chain_entry_started();
 
     // See `kit_for_recall`. Written by the main context, read by `Cmd::kit_recall` only.
     Kit kit_inbox_;
@@ -376,14 +465,29 @@ private:
     // `effective_` from. Separate from `params_` because a scene, a macro and a throw must not
     // change the kit: none of them is saved, none is undone, and letting go of a throw has to
     // get the stored value back.
-    uint8_t performed_[kTracks][kParams] = {};
+    uint8_t performed_[kTracks][kTrackParams] = {};
+    // The master kill EQ's three band bytes with the morph and the macros over the project's,
+    // which is what the mixer runs on. The kill switches are not in here: they are the panel's.
+    uint8_t performed_master_[kMasterBands] = {64, 64, 64};
     bool perform_dirty_ = true;
 
     // Which of a track's parameters the CURRENT step has locked, one bit each. The performance
     // layer skips them, so a lock always wins over a morph -- which is what docs/REVIEW.md's
     // "base kit values only" means from the other side. Set by `fire` and therefore lasting
     // exactly as long as the step does.
-    uint16_t locked_[kTracks] = {};
+    uint32_t locked_[kTracks] = {};
+    static_assert(kTrackParams <= 32, "locked_ holds one bit per parameter");
+
+    // The LFOs (dsp/lfo.hpp). `lfo_bytes_` is what `lfo_settings_` was made from, so the
+    // settings are rebuilt only when a byte moves; `modulated_` is `effective_` with the
+    // destination moved, valid while `modulating_` says so.
+    void run_lfos(uint32_t frames, bool running, uint32_t position, float fraction);
+    TrackLfo lfo_[kTracks];
+    LfoSettings lfo_settings_[kTracks];
+    uint8_t lfo_bytes_[kTracks][kLfoParams] = {};
+    TrackParams modulated_[kTracks] = {};
+    bool modulating_[kTracks] = {};
+    float lfo_value_[kTracks] = {};
 
     ChainMix mix_[kTracks] = {};
     bool muted_[kTracks] = {};
@@ -455,7 +559,56 @@ private:
     int throw_track_ = 0;
 
     BeatRepeat repeat_;
+    TapeStop tape_stop_;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
+
+    // Note repeat, one roll per track (Cmd::note_repeat). `countdown` is frames to the next hit
+    // with the transport stopped; `last_tick` is the tick of the press, so the first grid tick
+    // after it is skipped when it would land on top of the press's own hit.
+    struct Roll {
+        bool on = false;
+        uint8_t note = 60;
+        uint8_t velocity = 100;
+        uint32_t last_tick = 0;
+        float countdown = 0.0f;
+    };
+    Roll rolls_[kTracks];
+
+    // The arpeggiator (core/arp.hpp). One run per track for a sequenced step -- started by
+    // `fire`, ending with the step's length or at the next step -- and one for held KEYS keys,
+    // which runs while any is down. Both hit on the clock's ticks while it runs; the held one
+    // counts frames while it is stopped, as a note repeat does.
+    struct ArpRun {
+        bool on = false;
+        ArpMode mode = ArpMode::off;
+        uint8_t length = 0;
+        uint8_t octaves = 1;
+        uint8_t rate = 24;           // ticks between hits
+        uint8_t gate_percent = 50;
+        uint8_t velocity = 100;
+        bool accent = false;
+        uint32_t hit = 0;
+        uint32_t next_tick = 0;
+        uint32_t end_tick = 0xFFFFFFFFu;
+        uint32_t seed = 0;
+        float countdown = 0.0f;      // frames to the next hit, transport stopped (held runs)
+        uint8_t cycle[kArpMaxCycle] = {};
+    };
+    ArpRun seq_arp_[kTracks];
+    ArpRun held_arp_[kTracks];
+    uint8_t held_notes_[kTracks][kArpMaxInput] = {};
+    uint8_t held_count_[kTracks] = {};
+    ArpSettings arp_settings(int track) const;
+    void arp_hit(int track, ArpRun &run, uint32_t frame);
+    void arp_tick(uint32_t tick, uint32_t frame);
+    void arp_free(uint32_t frames);
+    void arp_held_changed(int track);
+    void arp_follow(int track);
+    void roll_fire(int track, uint32_t frame);
+    void roll_tick(uint32_t tick, uint32_t frame);
+    void roll_free(uint32_t frames);
+    float roll_period_frames() const;
+    uint32_t roll_gate_frames() const;
     bool repeat_held_ = false;
     bool repeat_pitch_ = false;
 
@@ -533,6 +686,8 @@ private:
     // every block. Enaga's clock reports the tempo; core/ cannot ask it.
     float tempo_ = 0.0f;
     float samples_per_tick_ = 0.0f;   // derived from it; see reconfigure()
+    float inv_samples_per_tick_ = 0.0f;
+    float inv_rate_ = 1.0f / 48000.0f;
 
     SendSettings sends_;
     MasterSettings master_;
@@ -545,6 +700,7 @@ private:
     // loop. dsp/capture.hpp holds the rest of the reasoning.
     Capture capture_;
     uint8_t resample_bars_ = 0;      // 0 = nothing armed
+    bool capture_input_ = false;     // the armed or running take records the input, not the master
 
     // Which track's trigs fire the sidechain duck. docs/SPEC.md: track 1 by default.
     int duck_source_ = 0;

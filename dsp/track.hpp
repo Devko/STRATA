@@ -37,19 +37,36 @@ namespace strata {
 
 // --- parameters -----------------------------------------------------------
 
+// The SOUND parameters: what a machine and its insert chain are prepared from.
 constexpr int kParams = 16;
 constexpr int kPages = 4;
 constexpr int kParamsPerPage = 4;
 
-enum class Page : uint8_t { src = 0, fltr = 1, amp = 2, fx = 3 };
+// And a fifth page that is not sound: the track's LFO (dsp/lfo.hpp), four bytes after the 16,
+// stored, locked, scened and macro'd like any other parameter, so every one of those works on
+// it with no code of its own. No machine and no chain reads them, which is why `prepare` and
+// its memo still look at the first kParams only: an LFO setting changing does not re-prepare a
+// machine. What the LFO DOES to its destination arrives as an ordinary change to that byte.
+constexpr int kLfoParams = 4;
+// And a sixth: the arpeggiator (core/arp.hpp), MOD RAT OCT GATE, read by the engine's scheduler
+// and by nothing that renders, for the same reasons.
+constexpr int kArpParams = 4;
+constexpr int kArpFirst = kParams + kLfoParams;
+constexpr int kTrackParams = kArpFirst + kArpParams;
+
+enum class Page : uint8_t { src = 0, fltr = 1, amp = 2, fx = 3, lfo = 4, arp = 5 };
 
 constexpr int page_first(Page page) { return int(page) * kParamsPerPage; }
+static_assert(page_first(Page::lfo) == kParams, "the LFO page is the four bytes after the sound");
+static_assert(kLfoParams == kParamsPerPage, "the LFO is one page of four");
+static_assert(page_first(Page::arp) == kArpFirst, "the ARP page is the four bytes after the LFO");
+static_assert(kArpParams == kParamsPerPage, "the arp is one page of four");
 
-// All 16 of a track's parameters, as stored in a kit and overridden by locks. Values are 0-127;
+// All 24 of a track's parameters, as stored in a kit and overridden by locks. Values are 0-127;
 // each machine and the chain map them to physical units themselves, so the sequencer never
-// needs to know what a parameter means.
+// needs to know what a parameter means. Machines read v[0..kParams) only.
 struct TrackParams {
-    uint8_t v[kParams];
+    uint8_t v[kTrackParams];
 
     uint8_t get(int index) const { return v[index]; }
     uint8_t get(Page page, int offset) const { return v[page_first(page) + offset]; }

@@ -23,6 +23,7 @@
 // the anonymous namespace below keeps everything in it internal to each of them.
 #pragma once
 
+#include "arp.hpp"          // the ARP page's names and clicks
 #include "engine.hpp"
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
@@ -30,6 +31,7 @@
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
 #include <enaga/midi.hpp>
+#include <enaga/ui.hpp>
 
 #include <cstdint>
 
@@ -146,6 +148,10 @@ constexpr int kMixerPageCount = int(sizeof(kMixerPages) / sizeof(kMixerPages[0])
 
 // Which MIXER page is the kill EQ's, for the plain-push kill switches.
 constexpr int kMixerEqPage = kMixerPageCount - 1;
+
+// PERFORM: FUNC + STEP 1-4 hand a macro the LFO's bytes, FUNC + STEP 5-7 the master EQ's bands.
+constexpr int kMacroEqFirstStep = kLfoParams;
+static_assert(kMacroEqFirstStep + kMasterBands <= 16, "the EQ's bands fit on the STEP keys");
 static_assert(kMixerPages[kMixerEqPage].master &&
                   kMixerPages[kMixerEqPage].field[0] == int8_t(MasterField::eq_low),
               "kMixerEqPage no longer names the kill EQ's page");
@@ -264,12 +270,30 @@ constexpr uint8_t kKeyVelocity = 100;
 // The modes of docs/SPEC.md's function block. F4 = GRID, F7 = MIXER, F8 = EDIT, and the two
 // selection keys under the screen move within whichever mode is showing -- the step page in
 // GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
-enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample, machine, kit };
+enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample, machine, kit, samples };
 
 // How long a take is. docs/SPEC.md: "1, 2, 4 or 8 bars", so these four and nothing between --
 // a resample is a loop and a loop is a power of two bars.
 constexpr uint8_t kTakeBars[] = {1, 2, 4, 8};
 constexpr int kTakeBarChoices = int(sizeof kTakeBars / sizeof kTakeBars[0]);
+
+// Where a take comes from: the finished master, or one of the audio input's routes as Enaga
+// names them (<enaga/abi.h>, enaga_input_source). docs/SPEC.md: "Resample with a chosen input
+// source"; Enaga's `system::input` is the call, main context only.
+struct TakeSource {
+    const char *name;     // 7 characters at most: "FROM DYN MIC HIGH" is 17
+    int input;            // the enaga_input_source, or -1 for the master
+};
+constexpr TakeSource kTakeSources[] = {
+    {"MASTER", -1},
+    {"LINE", ENAGA_INPUT_LINE_STEREO},
+    {"LINE L", ENAGA_INPUT_LINE_MONO},
+    {"MIC", ENAGA_INPUT_MIC},
+    {"DYN MIC", ENAGA_INPUT_DYNAMIC_MIC},
+    {"HI-Z", ENAGA_INPUT_HIZ},
+};
+constexpr int kTakeSourceChoices = int(sizeof kTakeSources / sizeof kTakeSources[0]);
+constexpr const char *kInputLevelNames[] = {"LOW", "NORM", "HIGH"};   // enaga_input_level
 
 // The step page shows four of a step's fields at a time, so the selection keys page through
 // them. Derived rather than written down: core/stepedit.hpp owns how many fields there are.
@@ -288,6 +312,7 @@ const char *mode_name(Mode mode) {
         case Mode::resample: return "RESAMPLE";
         case Mode::machine:  return "MACHINE";
         case Mode::kit:      return "KIT";
+        case Mode::samples:  return "SAMPLES";
         default:             return "?";
     }
 }
@@ -298,9 +323,24 @@ const char *page_name(Page page) {
         case Page::fltr: return "FLTR";
         case Page::amp:  return "AMP";
         case Page::fx:   return "FX";
+        case Page::lfo:  return "LFO";
+        case Page::arp:  return "ARP";
         default:         return "?";
     }
 }
+
+// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp) and its arpeggiator
+// (core/arp.hpp). The selection keys walk all six; everywhere else a page is still four encoders
+// over four parameters.
+constexpr int kEditPages = kPages + 2;
+
+// Encoder counts per click: one zone on the arp's MOD RAT OCT, one shape or destination on the
+// LFO's WAV and DST, one count everywhere else.
+constexpr int param_click(int index) {
+    return index >= kArpFirst ? arp_click(index - kArpFirst) : lfo_click(index);
+}
+static_assert(page_first(Page(kEditPages - 1)) + kParamsPerPage == kTrackParams,
+              "EDIT's last page is the last four track parameters");
 
 class Strata : public enaga::App {
     friend struct strata::test::UiProbe;    // tests/test_ui.cpp only; see the note above
@@ -348,6 +388,31 @@ public:
     void on_key(int key, bool down) override {
         if (key == ENAGA_KEY_F1) { shift_ = down; return; }
         if (key == ENAGA_KEY_PUSH_VALUE) { value_pushed_ = down; return; }
+
+        // Typing a project's name (PROJECTS page, FUNC+DOWN): the entry takes every key until OK
+        // or CLR closes it (<enaga/ui.hpp>). F1 and VALUE's push are tracked above, so a FUNC
+        // still held from opening it is let go of properly.
+        if (name_entry_.active()) {
+            // A tape stop held from before the entry opened still ends with its key.
+            if (!down && key == ENAGA_KEY_PUSH_D && tape_held_) {
+                tape_held_ = false;
+                post(Cmd::tape_stop, 0, 0, 0);
+            }
+            const enaga::ui::Action action = name_entry_.key(key, down);
+            if (action == enaga::ui::Action::chosen) finish_save_as();
+            if (action == enaga::ui::Action::no) notice("NAME KEPT");
+            return;
+        }
+
+        // FUNC + push D, HELD: the tape stop, in every mode -- beside FUNC + push A-C, the kill
+        // EQ, so the master moves are under one hand. Its release ends it whether or not FUNC is
+        // still down, and before the held-step gesture below can take the key.
+        if (key == ENAGA_KEY_PUSH_D && (down ? shift_ : tape_held_)) {
+            tape_held_ = down;
+            post(Cmd::tape_stop, 0, 0, down ? 1 : 0);
+            if (down) notice("TAPE STOP");
+            return;
+        }
 
         // Hold STEP + push A-D: take that parameter's lock off the held step -- the undo of
         // "hold STEP + turn A-D", on the same knob. Without it a lock could be turned but never
@@ -457,8 +522,18 @@ public:
         // selected macro. The STEP keys are already a sixteen-wide selector in the step page, so
         // this is the gesture they have; without it a macro could never be set up at all, and
         // "4 macros driving up to 4 parameters" would be a feature with no way in.
+        // With FUNC held, STEP 1-4 are the LFO's four bytes instead (WAV RAT DEP DST), so a macro
+        // can sweep an LFO's depth or rate too.
         if (mode_ == Mode::perform && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
-            if (down) assign_macro(key - ENAGA_KEY_STEP1);
+            // FUNC + STEP 5-7 are the master kill EQ's LOW, MID and HI: a macro can sweep the lows
+            // out over a build. STEP 8-16 with FUNC do nothing rather than assign a track
+            // parameter the hand did not mean.
+            const int step = key - ENAGA_KEY_STEP1;
+            if (down && !shift_) assign_macro(step);
+            if (down && shift_ && step < kLfoParams) assign_macro(kParams + step);
+            if (down && shift_ && step >= kMacroEqFirstStep && step < kMacroEqFirstStep + kMasterBands) {
+                assign_macro_master(step - kMacroEqFirstStep);
+            }
             return;
         }
 
@@ -477,6 +552,7 @@ public:
         // of OK, CLR and the arrows cannot fire while one of them is what is on screen.
         if (mode_ == Mode::project && on_project_key(key)) return;
         if (mode_ == Mode::kit && on_kit_key(key)) return;
+        if (mode_ == Mode::samples && on_samples_key(key)) return;
         // A mutation waiting for its verdict takes OK and CLR first, in whatever mode: OK keeps
         // it, CLR reverts it. Only the plain keys; F1 + CLR and F1 + OK stay undo and redo.
         if (mutation_pending_ && !shift_ && (key == ENAGA_KEY_OK || key == ENAGA_KEY_CLR)) {
@@ -592,6 +668,9 @@ public:
             case ENAGA_KEY_F3:                         // PROJECT: banks, patterns and the card
                 mode_ = Mode::project;
                 leave_mode();
+                // Back on PROJECTS: the list it shares with the sample browser may hold samples
+                // now, so it is read again.
+                if (project_page_ == ProjectPage::files) list_projects();
                 if (shift_) {
                     // docs/SPEC.md's key table: "F1 + F3 twice = save project". Twice, so a
                     // save is never one stray press; within two seconds, so an old first press
@@ -638,7 +717,10 @@ public:
             case ENAGA_KEY_OK:
                 // RESAMPLE mode first: OK is what commits a take, and there is no step to hold.
                 if (mode_ == Mode::resample) {
-                    post(Cmd::resample_arm, 0, 0, kTakeBars[take_bars_index_]);
+                    // From the input: make sure the route is the one on screen before the take.
+                    if (kTakeSources[take_source_].input >= 0 && !input_applied_) apply_input();
+                    post(Cmd::resample_arm, 0, 0, kTakeBars[take_bars_index_],
+                         kTakeSources[take_source_].input >= 0 ? 1 : 0);
                     // And the card side, asked for now so the write happens the moment the take
                     // finishes rather than needing a second press at exactly the right time.
                     storage_.request_resample_write(resample_track_);
@@ -659,6 +741,11 @@ public:
                     notice("REDO");
                 } else if (step_page_) {
                     step_page_ = false;                // OK again closes it
+                } else if ((mode_ == Mode::edit || mode_ == Mode::machine) &&
+                           plays_files(selected_)) {
+                    // OK picks, as in every Enaga list: on a SAMPLE or GRAIN track, from the
+                    // sound pages or the machine list, it opens the sample browser on that track.
+                    open_samples();
                 }
                 break;
 
@@ -728,7 +815,11 @@ public:
                     // and stopping at the ends.
                     const int next = int(project_page_) + delta;
                     const int last = int(ProjectPage::count) - 1;
+                    const ProjectPage was = project_page_;
                     project_page_ = ProjectPage(next < 0 ? 0 : (next > last ? last : next));
+                    if (project_page_ == ProjectPage::files && was != ProjectPage::files) {
+                        list_projects();
+                    }
                     notice(project_page_name(project_page_));
                     break;
                 }
@@ -786,6 +877,7 @@ public:
             case Mode::project:                 // PROJECT, PERFORM and KIT have their own handlers
             case Mode::perform:
             case Mode::kit:
+            case Mode::samples:
                 break;
         }
     }
@@ -923,7 +1015,7 @@ public:
                 page_ = (page_ + delta + 4) % 4;                       // step page 1-4
                 break;
             case Mode::edit:
-                param_page_ = (param_page_ + delta + kPages) % kPages; // SRC/FLTR/AMP/FX
+                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. ARP
                 break;
             case Mode::mixer:
                 // Faders, then the delay, the reverb, the routing and the master.
@@ -965,6 +1057,10 @@ public:
             case Mode::kit:
                 // The selection keys flip the browser's two pages of eight, like LEFT and RIGHT.
                 move_kit_cursor_to(kit_cursor_ + delta * 8);
+                break;
+            case Mode::samples:
+                // A page of the list, like LEFT and RIGHT.
+                move_sample_cursor_to(sample_cursor_ + delta * kSampleRows);
                 break;
         }
     }
@@ -1036,6 +1132,10 @@ public:
     }
 
     void on_encoder(int encoder, int delta) override {
+        if (name_entry_.active()) {
+            name_entry_.encoder(encoder, delta);      // A moves, B and VALUE pick the character
+            return;
+        }
         if (encoder == 4) {
             // VALUE picks the beat-repeat length while that pad is held, which is what
             // docs/SPEC.md gives it, and it has to come before the tempo.
@@ -1184,10 +1284,27 @@ public:
             return;
         }
 
-        // RESAMPLE mode's one encoder: A walks the four lengths docs/SPEC.md allows.
-        if (mode_ == Mode::resample && encoder == 0) {
-            const int next = (take_bars_index_ + delta) % kTakeBarChoices;
-            take_bars_index_ = next < 0 ? next + kTakeBarChoices : next;
+        // SAMPLES: A scrolls the list, as UP and DOWN do. B to D have nothing to set here.
+        if (mode_ == Mode::samples && encoder >= 0 && encoder < 4) {
+            if (encoder == 0) move_sample_cursor_to(sample_cursor_ + delta);
+            return;
+        }
+
+        // RESAMPLE mode's encoders: A walks the four lengths docs/SPEC.md allows, B the source
+        // (the master or an input route), C the input's level. D has nothing to set here, and
+        // must not fall through to the sound parameters of a screen that is not showing.
+        if (mode_ == Mode::resample && encoder >= 0 && encoder < 4) {
+            if (encoder == 0) {
+                const int next = (take_bars_index_ + delta) % kTakeBarChoices;
+                take_bars_index_ = next < 0 ? next + kTakeBarChoices : next;
+            } else if (encoder == 1) {
+                take_source_ = clamp_int(take_source_ + (delta > 0 ? 1 : -1), 0,
+                                         kTakeSourceChoices - 1);
+                if (kTakeSources[take_source_].input >= 0) apply_input();
+            } else if (encoder == 2 && kTakeSources[take_source_].input >= 0) {
+                take_level_ = clamp_int(take_level_ + (delta > 0 ? 1 : -1), 0, 2);
+                apply_input();
+            }
             return;
         }
 
@@ -1196,16 +1313,27 @@ public:
         // <enaga/clock.hpp> and <enaga/midi.hpp> expose no way to write them, so STRATA shows
         // them and says where they live, which is all docs/SPEC.md's "STRATA only exposes the
         // settings" can mean.
-        // CHAIN: A is the entry's repeat count. PATTERN: A is LEN and B is SWG.
+        // CHAIN: A is the entry's repeat count. PATTERN: A is LEN, B is SWG and C the swing of
+        // the track under the cursor (the selected track's, when the cursor is on LEN or SWG).
         if (mode_ == Mode::project && project_page_ == ProjectPage::chain) {
             if (encoder == 0) chain_delta(ChainEdit::repeats_delta, delta);
+            if (encoder == 1) chain_delta(ChainEdit::mutes_delta, delta);
             return;
         }
         if (mode_ == Mode::project && project_page_ == ProjectPage::pattern) {
             if (encoder == 0 || encoder == 1) {
                 pattern_field_ = encoder;
                 pattern_field_delta(encoder, delta);
+            } else if (encoder == 2) {
+                if (pattern_field_ < kPatternFieldTrackSwing) {
+                    pattern_field_ = kPatternFieldTrackSwing + selected_;
+                }
+                pattern_field_delta(pattern_field_, delta);
             }
+            return;
+        }
+        if (mode_ == Mode::project && project_page_ == ProjectPage::files) {
+            if (encoder == 0) move_project_cursor_to(project_cursor_ + delta);
             return;
         }
         if (mode_ == Mode::project && project_setup()) {
@@ -1259,7 +1387,8 @@ public:
             held_used_ = true;
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::lock, selected_, held_step_);
-            post_delta(Cmd::lock_delta, selected_, held_step_, uint8_t(index), delta);
+            post_delta(Cmd::lock_delta, selected_, held_step_, uint8_t(index),
+                       delta * param_click(index));
             return;
         }
 
@@ -1307,7 +1436,7 @@ public:
             const int step = int(engine_.status().playhead[selected_].load(std::memory_order_relaxed));
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::motion, selected_, 0);
-            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta);
+            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta * param_click(index));
             return;
         }
 
@@ -1350,9 +1479,11 @@ public:
         }
 
         // 5. Otherwise A-D edit the four parameters of the current page on the selected track.
+        // One click is one shape or one destination on the LFO's WAV and DST (dsp/lfo.hpp,
+        // `lfo_click`), and one count everywhere else.
         const int index = page_first(Page(param_page_)) + encoder;
-        post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index), clamp_delta(delta),
-             kDeltaFlag);
+        post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index),
+             clamp_delta(delta * param_click(index)), kDeltaFlag);
     }
 
     void on_pad_press(int pad, int velocity) override {
@@ -1379,6 +1510,16 @@ public:
         selected_ = track;
         // The root in a playable octave: the pattern's root is a pitch class (core/pattern.hpp).
         const uint8_t note = uint8_t(kPadOctaveNote + engine_.key_root());
+
+        // NOTE RPT: the pad rolls for as long as it is held, and is not recorded -- a roll is a
+        // performance over the pattern, like beat repeat, not a string of steps to write.
+        if (note_repeat_mode_) {
+            rolling_pads_ = uint16_t(rolling_pads_ | (1u << track));
+            roll_velocity_[track] = uint8_t(velocity < 1 ? 1 : velocity);
+            post(Cmd::note_repeat, uint8_t(track), 0, note, roll_velocity_[track], 1);
+            return;
+        }
+
         post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity));
         record_note(track, note, uint8_t(velocity));
     }
@@ -1386,6 +1527,15 @@ public:
     void on_pad_release(int pad) override {
         if (is_perform_pad(pad)) {
             on_perform_pad(pad, false);
+            return;
+        }
+
+        // A rolling pad stops on its own release, whatever the mode is by now: NOTE RPT turned
+        // off under a held pad must not leave the roll running.
+        const int track = track_for_pad(pad);
+        if (track >= 0 && track < kTracks && (rolling_pads_ >> track & 1u) != 0) {
+            rolling_pads_ = uint16_t(rolling_pads_ & ~(1u << track));
+            post(Cmd::note_repeat, uint8_t(track), 0, 0, 0, 0);
             return;
         }
 
@@ -1426,6 +1576,18 @@ public:
         // fire is a claim about a situation that cannot arise.
         const int track = track_for_pad(pad);
         if (track < 0 || track >= kTracks) return;
+
+        // A rolling pad's pressure is the roll's velocity instead: lean in and the roll swells.
+        // Change-filtered like the macro, and never below 1, which is silence on most machines.
+        if ((rolling_pads_ >> track & 1u) != 0) {
+            const uint8_t velocity =
+                uint8_t(pressure < 1 ? 1 : (pressure > 127 ? 127 : pressure));
+            if (velocity == roll_velocity_[track]) return;
+            roll_velocity_[track] = velocity;
+            post(Cmd::note_repeat, uint8_t(track), 0, 0, velocity, 2);
+            return;
+        }
+
         if (track != selected_) return;                   // "the SELECTED track's macro 1"
 
         const uint8_t clamped = uint8_t(pressure < 0 ? 0 : (pressure > 127 ? 127 : pressure));
@@ -1446,6 +1608,13 @@ public:
     void on_perform_pad(int pad, bool down) {
         switch (PerformPad(pad)) {
             case PerformPad::fill:
+                // FUNC + FILL turns NOTE RPT on and off; the fill itself is untouched. A FILL
+                // released with FUNC still down after an ordinary press still lets the fill go.
+                if (down && shift_) {
+                    note_repeat_mode_ = !note_repeat_mode_;
+                    notice(note_repeat_mode_ ? "NOTE RPT" : "PADS PLAY");
+                    break;
+                }
                 post(Cmd::set_fill, 0, 0, down ? 1 : 0);
                 break;
 
@@ -1490,6 +1659,14 @@ public:
                 break;
 
             case PerformPad::mutate:
+                // FUNC + MUTATE, held: the delay freeze. The release ends it whether or not FUNC
+                // is still down, and a freeze press is not a mutation.
+                if (down ? shift_ : freeze_held_) {
+                    freeze_held_ = down;
+                    post(Cmd::delay_freeze, 0, 0, down ? 1 : 0);
+                    if (down) notice("FREEZE");
+                    break;
+                }
                 if (!down) break;
                 // One undo level, then the mutation. CLR reverts it because CLR is the undo that
                 // already exists -- core/mutate.hpp's whole argument for having no commit step.
@@ -1675,6 +1852,38 @@ public:
         // pass" (app/storage.hpp).
         storage_.service();
 
+        // The PROJECTS page's list, once the card has answered: the cursor onto the open
+        // project, and a fresh read after a SAVE AS has landed.
+        if (mode_ == Mode::project && project_page_ == ProjectPage::files) settle_project_cursor();
+
+        // A streamed file the card could not keep up with (app/storage.hpp, "streaming"): the
+        // audio side played silence where frames were missing. Said once, then not again for a
+        // couple of seconds, so a slow card is visible without the screen saying nothing else.
+        {
+            const uint32_t late = engine_.status().stream_late.load(std::memory_order_relaxed);
+            if (late != stream_late_seen_) {
+                stream_late_seen_ = late;
+                if (uint32_t(ms - stream_late_said_ms_) > 2000u) {
+                    stream_late_said_ms_ = ms;
+                    notice("STREAM LATE");
+                }
+            }
+        }
+
+        // Song mode: the chain played to its end (Engine::cross_boundary). Only this context may
+        // stop the clock. Back to 0 as well, so PLAY starts the song from the top -- the engine
+        // is already on entry 1. Under an outside clock that keeps running the stop is refused;
+        // the engine stays silent until PLAY or the outside STOP.
+        {
+            const uint8_t ends = engine_.status().song_end.load(std::memory_order_acquire);
+            if (ends != song_end_seen_) {
+                song_end_seen_ = ends;
+                clock_refused_ = !enaga::clock::stop();
+                if (!clock_refused_ || !enaga::clock::running()) enaga::clock::locate(0);
+                notice("SONG END");
+            }
+        }
+
         // The tempo a LOADED project brought with it. PROJECT.BIN has always had the field and
         // nothing read it, so every project opened at whatever the clock happened to be set to
         // -- a project saved at 142 came back at 130. Watched here rather than hooked to the end
@@ -1754,9 +1963,9 @@ public:
         // so a page walked with the selection keys is all it can see of MIXER and SETUP.
         {
             const int screen = int(mode_) * 16 + (mode_ == Mode::mixer ? mixer_bank_
-                                                                       : (mode_ == Mode::project
-                                                                              ? int(project_page_)
-                                                                              : 0));
+                                                  : mode_ == Mode::project ? int(project_page_)
+                                                  : mode_ == Mode::edit    ? param_page_
+                                                                           : 0);
             if (screen != logged_screen_) {
                 logged_screen_ = screen;
                 char line[24];
@@ -1769,6 +1978,10 @@ public:
                 } else if (mode_ == Mode::project && project_page_ != ProjectPage::slots) {
                     *out++ = ' ';
                     append(out, project_page_name(project_page_));
+                } else if (mode_ == Mode::edit) {
+                    // EDIT's page, so a scenario can reach the LFO page with the selection keys.
+                    *out++ = ' ';
+                    append(out, page_name(Page(param_page_)));
                 }
                 *out = 0;
                 enaga::log(line);
@@ -1883,6 +2096,7 @@ public:
                 case Mode::resample: draw_resample(canvas); break;
                 case Mode::machine: draw_machine(canvas); break;
                 case Mode::kit:     draw_kit(canvas); break;
+                case Mode::samples: draw_samples(canvas); break;
             }
         }
 
@@ -2098,12 +2312,15 @@ public:
         *out = 0;
         canvas.text(0, 20, line, 14);
 
-        // Which of the four pages is showing, as a row of boxes: the spec's selection keys
+        // Which of the six pages is showing, as a row of boxes: the spec's selection keys
         // flip between them, so showing where you are matters more than labels.
-        for (int p = 0; p < kPages; p++) {
+        for (int p = 0; p < kEditPages; p++) {
             const uint8_t grey = p == param_page_ ? 14 : 4;
-            canvas.rect(p * 32 + 2, 32, 28, 3, grey);
+            canvas.rect(p * 21 + 1, 32, 19, 3, grey);
         }
+        const bool lfo_page = param_page_ == int(Page::lfo);
+        const bool arp_page = param_page_ == int(Page::arp);
+        const bool word_page = lfo_page || arp_page;
 
         // The four parameters in large type, one row per encoder: its letter, the name, the
         // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
@@ -2126,16 +2343,59 @@ public:
             canvas.text(10, y, line, 13);
 
             out = line;
-            append_padded(out, value, 3);
+            append_param_value(out, index, value);
             *out = 0;
             canvas.text(34, y, line, 15);
 
-            const int bar = int(value) * 70 / 127;
-            canvas.rect(56, y + 2, bar < 1 ? 1 : bar, 4, 9);
+            // The LFO's values are words up to five characters long ("1/16T"), so its bars start
+            // further right.
+            const int bar_x = word_page ? 70 : 56;
+            const int bar = int(value) * (word_page ? 56 : 70) / 127;
+            canvas.rect(bar_x, y + 2, bar < 1 ? 1 : bar, 4, 9);
+        }
+
+        if (lfo_page) {
+            // What the LFO is doing to its destination right now, so a moving number says it runs.
+            out = line;
+            if (engine_.lfo_on(selected_)) {
+                const int dest = lfo_dest(engine_.params(selected_).v[kLfoDest]);
+                append(out, "NOW ");
+                append(out, track_param_name(dest));
+                *out++ = ' ';
+                append_padded(out, engine_.sounding(selected_).v[dest], 3);
+            } else {
+                append(out, "LFO OFF: SET DEP+DST");
+            }
+            *out = 0;
+            canvas.text(0, 96, line, 7);
+            return;
+        }
+
+        if (arp_page) {
+            // What the arp will do, in a line: "UP 1/16 X2 75%", or how to start one.
+            const uint8_t *arp = &engine_.params(selected_).v[kArpFirst];
+            out = line;
+            if (arp_mode_index(arp[0]) == 0) {
+                append(out, "ARP OFF: TURN MOD");
+            } else {
+                append(out, arp_mode_name(arp[0]));
+                *out++ = ' ';
+                append(out, arp_rate_name(arp[1]));
+                append(out, " X");
+                append_number(out, uint32_t(arp_octaves(arp[2])));
+                *out++ = ' ';
+                append_number(out, uint32_t(arp_gate_percent(arp[3])));
+                *out++ = '%';
+            }
+            *out = 0;
+            canvas.text(0, 96, line, 7);
+            return;
         }
 
         // The machine is changed somewhere else, and nothing said where.
         canvas.text(0, 96, "FUNC+EDIT: MACHINE", 7);
+        // And a sample track's file is picked from here.
+        if (plays_files(selected_)) canvas.text(0, 105, "OK: PICK SAMPLE", 7);
     }
 
     // --- MIXER: four levels at a time, with meters -----------------------
@@ -2344,13 +2604,68 @@ public:
 
     // --- shared pieces ----------------------------------------------------
 
-    // The machine names SRC and AMP; the insert chain names FLTR and FX.
-    const char *param_name_for(int index) const {
-        if (param_page_ == int(Page::fltr) || param_page_ == int(Page::fx)) {
-            return InsertChain::param_name(index);
-        }
+    // The machine names SRC and AMP; the insert chain names FLTR and FX; the LFO its own page.
+    const char *param_name_for(int index) const { return track_param_name(index); }
+
+    // By the parameter's own page rather than the page on screen, so a macro assignment or the
+    // LFO's destination can name a parameter from any page.
+    const char *track_param_name(int index) const {
+        if (index < 0 || index >= kTrackParams) return "---";
+        if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
+        if (index >= kParams) return lfo_param_name(index);
+        const int page = index / kParamsPerPage;
+        if (page == int(Page::fltr) || page == int(Page::fx)) return InsertChain::param_name(index);
         const Machine *machine = engine_.machine(selected_);
         return machine ? machine->param_name(index) : "---";
+    }
+
+    // A parameter's value as the screen shows it: the byte, except on the LFO's page, where it
+    // is a shape, a rate (Hz free, a note length synced), a depth, and a destination. At most
+    // five characters.
+    void append_param_value(char *&out, int index, uint8_t value) const {
+        switch (index) {
+            case kLfoWave:
+                append(out, lfo_wave_name(lfo_wave(value)));
+                return;
+            case kLfoRate:
+                if (value >= kLfoSyncFirst) {
+                    append(out, lfo_sync_name(value));
+                } else {
+                    // Hundredths below 1 Hz ("0.06"), tenths below 10 ("2.5"), then whole.
+                    const uint32_t centi = lfo_free_centi_hz(value);
+                    if (centi < 100) {
+                        append(out, "0.");
+                        append_padded(out, centi, 2);
+                    } else if (centi < 1000) {
+                        append_tenths(out, (centi + 5) / 10);
+                    } else {
+                        append_number(out, (centi + 50) / 100);
+                    }
+                }
+                return;
+            case kLfoDest: {
+                const int dest = lfo_dest(value);
+                append(out, dest < 0 ? "OFF" : track_param_name(dest));
+                return;
+            }
+            case kArpFirst + 0:
+                append(out, arp_mode_name(value));
+                return;
+            case kArpFirst + 1:
+                append(out, arp_rate_name(value));
+                return;
+            case kArpFirst + 2:
+                *out++ = 'X';
+                append_number(out, uint32_t(arp_octaves(value)));
+                return;
+            case kArpFirst + 3:
+                append_number(out, uint32_t(arp_gate_percent(value)));
+                *out++ = '%';
+                return;
+            default:
+                append_padded(out, value, 3);
+                return;
+        }
     }
 
     // The four encoder slots along the bottom: a three-letter name, the value under it and a
@@ -2368,7 +2683,7 @@ public:
             canvas.text(slot * 32, y, line, 12);
 
             out = line;
-            append_padded(out, engine_.params(selected_).v[index], 3);
+            append_param_value(out, index, engine_.params(selected_).v[index]);
             *out = 0;
             canvas.text(slot * 32, y + 8, line, 15);
 
@@ -2408,7 +2723,8 @@ public:
         keys_held_track_[step] = uint8_t(selected_);
         // A key has no velocity. 100 is what the default kit's own trigs use, so a part played
         // in and a part programmed in sound the same.
-        // c = 1: held, so MIDI OUT holds it too until the key comes up.
+        // c = 1: a held key, whose release follows -- what lets the arp hold it (core/arp.hpp),
+        // and MIDI OUT hold it until the key comes up.
         post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity, 1);
         record_note(selected_, note, kKeyVelocity);
     }
@@ -2467,8 +2783,431 @@ public:
                             engine_.machine_id(selected_) == uint8_t(MachineId::midi);
         canvas.text(0, 89, line, silent ? 15 : 12);
 
-        canvas.text(0, 103, "ARROWS: MACHINE TRACK", 7);
+        canvas.text(0, 103, plays_files(selected_) ? "OK: PICK SAMPLE" : "ARROWS: MACHINE TRACK",
+                    7);
         canvas.text(0, 112, "FUNC+EDIT AGAIN: KITS", 7);
+    }
+
+    // --- SAMPLES: the sample browser (OK on a SAMPLE or GRAIN track) -------
+    //
+    // One folder of the card as a list (core/browse.hpp, filled by app/storage.cpp). The arrows
+    // work as in every Enaga list: UP and DOWN move the cursor, LEFT and RIGHT turn a page, OK
+    // opens a folder or loads the file into the track, CLR goes up a folder and, from the top,
+    // back to where the browser was opened. One OK loads, with the transport running: picking
+    // samples by ear is what this is for, so the cursor stays where it is and the next OK tries
+    // the next file. Nothing is lost that cannot be picked again, which is why it takes one
+    // press and the kit browser's recall takes two.
+
+    static constexpr int kSampleRows = 8;
+
+    static bool is_file_machine(uint8_t id) {
+        return id == uint8_t(MachineId::sample) || id == uint8_t(MachineId::grain);
+    }
+    bool plays_files(int track) const { return is_file_machine(engine_.machine_id(track)); }
+
+    void open_samples() {
+        samples_return_ = mode_;
+        mode_ = Mode::samples;
+        leave_mode();
+        // Where the track's file is, when it is somewhere the browser shows; else SAMPLES.
+        const char *current = engine_.project().kit.tracks[selected_].sample;
+        char folder[SampleList::kFolderBytes];
+        if (!SampleList::in_browsable_folder(current) ||
+            !SampleList::folder_of(current, folder, int(sizeof folder))) {
+            const char *top = "/SAMPLES";
+            int i = 0;
+            for (; top[i] != '\0'; i++) folder[i] = top[i];
+            folder[i] = '\0';
+        }
+        browse_to(folder);
+        notice(storage_.card_usable() ? "SAMPLES" : "NO CARD");
+    }
+
+    // List `folder` and put the cursor on `select` once the list is in ("" for the top, or for
+    // the track's own file when the folder is the one it lives in).
+    void browse_to(const char *folder) {
+        storage_.request_browse(folder);
+        sample_cursor_ = 0;
+        sample_seek_ = true;
+        // What the folder we came OUT of was called, so CLR lands the cursor back on it.
+        sample_seek_name_[0] = '\0';
+    }
+
+    void move_sample_cursor_to(int index) {
+        const int count = storage_.browse_list().count();
+        sample_cursor_ = index < 0 ? 0 : (index >= count ? (count > 0 ? count - 1 : 0) : index);
+    }
+
+    // Once a listing is in, the cursor goes to what we were looking for: the folder we came up
+    // out of, or the file the track plays.
+    void settle_sample_cursor() {
+        if (!sample_seek_ || storage_.browsing()) return;
+        sample_seek_ = false;
+        const SampleList &list = storage_.browse_list();
+        const char *want = sample_seek_name_[0] != '\0'
+                               ? sample_seek_name_
+                               : SampleList::name_of(engine_.project().kit.tracks[selected_].sample);
+        const int at = list.find(want);
+        sample_cursor_ = at < 0 ? 0 : at;
+    }
+
+    bool on_samples_key(int key) {
+        // A STEP held makes OK, CLR and the arrows its own chords (step page, clear, copy).
+        if (held_step_ >= 0) return false;
+        const SampleList &list = storage_.browse_list();
+        switch (key) {
+            case ENAGA_KEY_OK: {
+                if (shift_) return false;               // F1 + OK is redo, as everywhere
+                if (storage_.browsing() || list.count() == 0) return true;
+                if (list.is_folder(sample_cursor_)) {
+                    char folder[SampleList::kFolderBytes];
+                    if (list.at_root()) {
+                        // The root's two entries are the card's top folders.
+                        char *out = folder;
+                        *out++ = '/';
+                        const char *name = list.name(sample_cursor_);
+                        while (*name != '\0' && out < folder + sizeof folder - 1) *out++ = *name++;
+                        *out = '\0';
+                    } else if (!list.path_of(sample_cursor_, folder, int(sizeof folder))) {
+                        notice("PATH TOO LONG");
+                        return true;
+                    }
+                    browse_to(folder);
+                    return true;
+                }
+                char path[kSamplePathBytes];
+                if (!list.path_of(sample_cursor_, path, int(sizeof path))) {
+                    notice("PATH TOO LONG");
+                    return true;
+                }
+                if (!plays_files(selected_)) {
+                    notice("SMP OR GRN ONLY");
+                } else if (!storage_.card_usable()) {
+                    notice("NO CARD");
+                } else if (storage_.request_sample_file(selected_, path)) {
+                    notice("LOADING");
+                } else {
+                    notice("PATH TOO LONG");
+                }
+                return true;
+            }
+
+            case ENAGA_KEY_CLR: {
+                if (shift_) return false;               // F1 + CLR is undo
+                if (list.at_root()) {
+                    mode_ = samples_return_;            // back, where the browser came from
+                    leave_mode();
+                    notice(mode_name(mode_));
+                    return true;
+                }
+                // Up a folder, with the cursor on the one we left.
+                char parent[SampleList::kFolderBytes];
+                SampleList::parent_of(list.folder(), parent, int(sizeof parent));
+                const char *left = SampleList::name_of(list.folder());
+                int i = 0;
+                for (; left[i] != '\0' && i < SampleList::kEntryNameBytes - 1; i++) {
+                    sample_seek_name_[i] = left[i];
+                }
+                sample_seek_name_[i] = '\0';
+                storage_.request_browse(parent);
+                sample_cursor_ = 0;
+                sample_seek_ = true;
+                return true;
+            }
+
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (shift_) {
+                    // FUNC+UP reads the folder again (a card swapped, a take just written).
+                    if (key == ENAGA_KEY_UP) {
+                        char again[SampleList::kFolderBytes];
+                        const char *f = list.folder();
+                        int i = 0;
+                        for (; f[i] != '\0'; i++) again[i] = f[i];
+                        again[i] = '\0';
+                        storage_.request_browse(again);
+                        sample_seek_ = false;
+                        notice("READING");
+                    }
+                    return true;
+                }
+                move_sample_cursor_to(sample_cursor_ + (key == ENAGA_KEY_UP ? -1 : +1));
+                return true;
+
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (!shift_) {
+                    move_sample_cursor_to(sample_cursor_ +
+                                          (key == ENAGA_KEY_LEFT ? -kSampleRows : kSampleRows));
+                }
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    void draw_samples(enaga::Canvas &canvas) {
+        settle_sample_cursor();
+        const SampleList &list = storage_.browse_list();
+        char line[40];
+        char *out = line;
+        append(out, "SAMPLES T");
+        append_number(out, uint32_t(selected_) + 1);
+        append(out, " ");
+        append(out, machine_name(engine_.machine_id(selected_)));
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        // Where we are, or what is happening: the folder's tail, since its end is the part that
+        // tells two folders apart.
+        out = line;
+        const char *busy = storage_.busy_text();
+        if (storage_.browsing()) {
+            append(out, "READING FOLDER");
+        } else if (storage_.browse_error() != nullptr) {
+            append_shown(out, storage_.browse_error(), kLineChars);
+        } else if (busy != nullptr && storage_.loading_track() == selected_) {
+            append(out, busy);
+        } else if (list.at_root()) {
+            append(out, "CARD");
+        } else {
+            const char *folder = list.folder();
+            int n = 0;
+            while (folder[n] != '\0') n++;
+            append_shown(out, n > kLineChars ? folder + (n - kLineChars) : folder, kLineChars);
+        }
+        *out = 0;
+        canvas.text(0, 27, line, 10);
+
+        const int count = list.count();
+        const int first = (sample_cursor_ / kSampleRows) * kSampleRows;
+        if (count == 0 && !storage_.browsing()) {
+            canvas.text(0, 37, list.skipped() > 0 ? "NOTHING THAT FITS" : "NO WAV FILES HERE", 9);
+        }
+        for (int i = 0; i < kSampleRows && first + i < count; i++) {
+            const int at = first + i;
+            out = line;
+            *out++ = at == sample_cursor_ ? '>' : ' ';
+            // A folder ends in '/', which the font has; a long name is cut to the line.
+            const bool folder = list.is_folder(at);
+            append_shown(out, list.name(at), kLineChars - 2);
+            if (folder) *out++ = '/';
+            *out = 0;
+            canvas.text(0, 37 + i * 8, line, at == sample_cursor_ ? 15 : (folder ? 11 : 9));
+        }
+
+        // What the track plays now, and where in the list we are.
+        out = line;
+        const char *current = engine_.project().kit.tracks[selected_].sample;
+        append(out, "NOW ");
+        append_shown(out, current[0] != '\0' ? SampleList::name_of(current) : "LOOP", kLineChars - 4);
+        *out = 0;
+        canvas.text(0, 103, line, 11);
+
+        out = line;
+        if (count > 0) {
+            append_number(out, uint32_t(sample_cursor_ + 1));
+            *out++ = '/';
+            append_number(out, uint32_t(count));
+            if (list.skipped() > 0) {
+                append(out, " +");
+                append_number(out, uint32_t(list.skipped()));
+            }
+            append(out, "  ");
+        }
+        append(out, "OK LOAD CLR UP");
+        *out = 0;
+        canvas.text(0, 112, line, 7);
+    }
+
+    // --- PROJECT's PROJECTS page: open another project, save under a new name ----
+
+    // The card's projects: the folders in PROJECTS/, listed into the same table the sample
+    // browser uses (the two are never on screen together).
+    void list_projects() {
+        char folder[SampleList::kFolderBytes];
+        if (!storage_.projects_folder(folder, sizeof folder)) return;
+        storage_.request_browse(folder);
+        project_cursor_ = 0;
+        project_seek_ = true;
+        open_armed_ = -1;
+    }
+
+    void move_project_cursor_to(int index) {
+        const int count = storage_.browse_list().count();
+        project_cursor_ = index < 0 ? 0 : (index >= count ? (count > 0 ? count - 1 : 0) : index);
+        open_armed_ = -1;
+    }
+
+    void settle_project_cursor() {
+        // A SAVE AS made a folder the list does not have yet: read it again once it is written.
+        if (projects_reread_ && storage_.busy_text() == nullptr && !storage_.dirty() &&
+            !storage_.browsing()) {
+            projects_reread_ = false;
+            list_projects();
+        }
+        if (!project_seek_ || storage_.browsing()) return;
+        project_seek_ = false;
+        const int at = storage_.browse_list().find(storage_.project_name());
+        project_cursor_ = at < 0 ? 0 : at;
+    }
+
+    bool on_projects_key(int key) {
+        if (held_step_ >= 0) return false;
+        const SampleList &list = storage_.browse_list();
+        switch (key) {
+            case ENAGA_KEY_OK: {
+                if (shift_) return false;               // F1 + OK is redo
+                if (storage_.browsing() || list.count() == 0) return true;
+                const char *name = list.name(project_cursor_);
+                if (!list.is_folder(project_cursor_)) {
+                    notice("NOT A PROJECT");
+                    return true;
+                }
+                if (SampleList::same_name(name, storage_.project_name())) {
+                    notice("ALREADY OPEN");
+                    return true;
+                }
+                if (!Storage::valid_name(name)) {
+                    notice("NAME NOT USABLE");
+                    return true;
+                }
+                // Opening throws away what is unsaved and stops the transport, so it takes a
+                // second press within kSaveArmMs, as a reload does.
+                if (open_armed_ == project_cursor_ &&
+                    uint32_t(last_ms_ - open_armed_at_ms_) < kSaveArmMs) {
+                    open_armed_ = -1;
+                    storage_.request_open(name);
+                    project_page_ = ProjectPage::slots;
+                    notice("OPENING");
+                    return true;
+                }
+                open_armed_ = project_cursor_;
+                open_armed_at_ms_ = last_ms_;
+                notice("AGAIN TO OPEN");
+                return true;
+            }
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (shift_) {
+                    if (key == ENAGA_KEY_UP) {
+                        list_projects();                // FUNC+UP reads the card again
+                        notice("READING");
+                    } else if (!storage_.card_usable()) {
+                        notice("NO CARD");
+                    } else {
+                        // FUNC+DOWN: SAVE AS, starting from the name it has.
+                        name_entry_.open("SAVE AS", storage_.project_name());
+                    }
+                    return true;
+                }
+                move_project_cursor_to(project_cursor_ + (key == ENAGA_KEY_UP ? -1 : +1));
+                return true;
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (shift_) return false;               // reload and new, as on the slots
+                move_project_cursor_to(project_cursor_ +
+                                       (key == ENAGA_KEY_LEFT ? -kSampleRows : kSampleRows));
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // OK on the name entry.
+    void finish_save_as() {
+        char name[Storage::kNameBytes];
+        const char *typed = name_entry_.text();
+        int n = 0;
+        for (; typed[n] != '\0' && n < Storage::kNameBytes - 1; n++) name[n] = typed[n];
+        name[n] = '\0';
+        if (name[0] == '\0') {
+            notice("NO NAME");
+            return;
+        }
+        // Another project's folder is not overwritten by a SAVE AS: it is that project.
+        const SampleList &list = storage_.browse_list();
+        const int at = list.find(name);
+        if (at >= 0 && list.is_folder(at) && !SampleList::same_name(name, storage_.project_name())) {
+            notice("NAME TAKEN");
+            return;
+        }
+        if (!storage_.request_save_as(name)) {
+            notice("NAME NOT USABLE");
+            return;
+        }
+        projects_reread_ = true;
+        notice("SAVING");
+    }
+
+    // The SAVE AS entry. Enaga's TextEntry does the editing; its own draw() puts each character
+    // in a box 7 px from the next, which reads as separate words beside the rest of STRATA's
+    // screens, so the name is drawn here as one string with a line under each place and a bright
+    // one under the cursor.
+    void draw_name_entry(enaga::Canvas &canvas) {
+        constexpr int kChars = enaga::ui::TextEntry::max_chars;
+        constexpr int kX = (128 - kChars * 6) / 2;
+        canvas.text(0, 18, "SAVE AS", 15);
+        canvas.text(kX, 48, name_entry_.text(), 15);
+        for (int i = 0; i < kChars; i++) {
+            canvas.rect(kX + i * 6, 57, 5, 1, i == name_entry_.cursor() ? 15 : 4);
+        }
+        canvas.text(0, 84, "A / LEFT RIGHT: MOVE", 6);
+        canvas.text(0, 94, "B / VALUE: CHARACTER", 6);
+        canvas.text(0, 104, "OK: SAVE  CLR: CANCEL", 6);
+    }
+
+    void draw_projects(enaga::Canvas &canvas) {
+        if (name_entry_.active()) {
+            draw_name_entry(canvas);
+            return;
+        }
+        const SampleList &list = storage_.browse_list();
+        char line[40];
+        char *out = line;
+        canvas.text(0, 18, "PROJECTS", 15);
+
+        out = line;
+        const char *busy = storage_.busy_text();
+        if (storage_.browsing()) {
+            append(out, "READING CARD");
+        } else if (storage_.browse_error() != nullptr) {
+            append_shown(out, storage_.browse_error(), kLineChars);
+        } else if (busy != nullptr) {
+            append(out, busy);
+        } else {
+            append(out, "NOW ");
+            append_shown(out, storage_.project_name(), kLineChars - 4);
+        }
+        *out = 0;
+        canvas.text(0, 27, line, 10);
+
+        const int count = list.count();
+        const int first = (project_cursor_ / kSampleRows) * kSampleRows;
+        if (count == 0 && !storage_.browsing()) canvas.text(0, 37, "NO PROJECTS YET", 9);
+        for (int i = 0; i < kSampleRows && first + i < count; i++) {
+            const int at = first + i;
+            out = line;
+            *out++ = at == project_cursor_ ? '>' : ' ';
+            append_shown(out, list.name(at), kLineChars - 1);
+            *out = 0;
+            const bool open = SampleList::same_name(list.name(at), storage_.project_name());
+            canvas.text(0, 37 + i * 8, line,
+                        at == project_cursor_ ? 15 : (open ? 12 : (list.is_folder(at) ? 10 : 5)));
+        }
+
+        canvas.text(0, 103, storage_.dirty() ? "UNSAVED  F+DN SAVE AS" : "FUNC+DOWN: SAVE AS", 7);
+        out = line;
+        if (count > 0) {
+            append_number(out, uint32_t(project_cursor_ + 1));
+            *out++ = '/';
+            append_number(out, uint32_t(count));
+            append(out, "  ");
+        }
+        append(out, "OK OPEN CLR BACK");
+        *out = 0;
+        canvas.text(0, 112, line, 7);
     }
 
     // --- KIT: the kit library (FUNC+EDIT twice) ---------------------------
@@ -2687,8 +3426,46 @@ public:
             canvas.text(0, 50, line, 10);
         }
 
+        // Where the take comes from, and for an input its level and a meter to set it by.
+        const TakeSource &source = kTakeSources[take_source_];
+        out = line;
+        append(out, "FROM ");
+        append(out, source.name);
+        if (source.input >= 0) {
+            append(out, " ");
+            append(out, kInputLevelNames[take_level_]);
+        }
+        *out = 0;
+        canvas.text(0, 62, line, 12);
+        if (source.input >= 0) {
+            const uint32_t peak = engine_.status().input_peak.load(std::memory_order_relaxed);
+            canvas.text(0, 72, peak >= 990u ? "CLIP" : "IN", peak >= 990u ? 15 : 9);
+            const int bar = int(peak > 1000u ? 1000u : peak) * 96 / 1000;
+            canvas.rect(28, 73, 96, 5, 2);
+            if (bar > 0) canvas.rect(28, 73, bar, 5, peak >= 990u ? 15 : 10);
+            if (input_result_ != 0) {
+                canvas.text(0, 82, "INPUT REFUSED", 15);
+            } else if (source.input == ENAGA_INPUT_MIC && !enaga::system::headphones()) {
+                // Enaga keeps the built-in mic silent without headphones, against feedback.
+                canvas.text(0, 82, "MIC NEEDS HEADPHONES", 10);
+            }
+        }
+
+        canvas.text(0, 94, "B: FROM  C: LEVEL", 7);
         canvas.text(0, 103, "UP DOWN OR A: BARS", 7);
         canvas.text(0, 112, "LEFT RIGHT: WHERE TO", 7);
+    }
+
+    // Route the input as the screen says. Enaga answers 0, -1 for a source or level it does not
+    // know, -2 when the codec did not answer; the screen keeps the refusal until the next try.
+    // The input is quiet for about 10 ms around the change, which is why this runs on a turn of
+    // B or C and not on every arm.
+    void apply_input() {
+        const int source = kTakeSources[take_source_].input;
+        if (source < 0) return;
+        input_result_ = enaga::system::input(source, take_level_);
+        input_applied_ = input_result_ == 0;
+        notice(input_result_ == 0 ? kTakeSources[take_source_].name : "INPUT REFUSED");
     }
 
     void draw_keys(enaga::Canvas &canvas) {
@@ -2818,7 +3595,7 @@ public:
     // that a macro assigned in one press is usable in the next -- the ranges are stored, so a
     // richer editor can refine them later without changing the format.
     void assign_macro(int param) {
-        if (param < 0 || param >= kParams) return;
+        if (param < 0 || param >= kTrackParams) return;
         const uint8_t now = engine_.performed(selected_, param);
         const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
         Command command;
@@ -2835,9 +3612,30 @@ public:
         append(out, " T");
         append_number(out, uint32_t(selected_) + 1);
         append(out, " ");
-        append(out, engine_.machine(selected_) != nullptr
-                        ? engine_.machine(selected_)->param_name(param)
-                        : "---");
+        append(out, track_param_name(param));
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    // Assign one master kill EQ band to the selected macro, by the same "towards the far end"
+    // guess: a band at flat or above heads for a kill, which is what a build wants.
+    void assign_macro_master(int band) {
+        if (band < 0 || band >= kMasterBands) return;
+        const uint8_t now = engine_.performed_master(band);
+        const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
+        Command command;
+        command.cmd = Cmd::macro_assign;
+        command.track = 0;
+        command.a = uint8_t(macro_selected_);
+        command.b = uint8_t(kTrackParams + band);          // past the track parameters: the EQ
+        command.c = now;
+        command.d = far;
+        post_command(command);
+
+        char *out = notice_buffer_;
+        *out++ = char('A' + macro_selected_);
+        append(out, " EQ ");
+        append(out, master_field_name(uint8_t(int(MasterField::eq_low) + band)));
         *out = 0;
         notice(notice_buffer_);
     }
@@ -2934,10 +3732,12 @@ public:
         canvas.text(0, 104, line, 9);
 
         // The bar on a line of its own: with everything above on, "FILL AF16 1/16T- DLY BAR
-        // 1000" is 29 characters.
+        // 1000" is 29 characters. The held modes ride on it: "BAR 1000 NRPT FRZ" is 17.
         out = line;
         append(out, "BAR ");
         append_number(out, engine_.bar() % 1000u + 1u);
+        if (note_repeat_mode_) append(out, " NRPT");
+        if (engine_.delay_freeze().held()) append(out, " FRZ");
         *out = 0;
         canvas.text(0, 112, line, 9);
     }
@@ -2954,6 +3754,7 @@ public:
     bool on_project_key(int key) {
         if (project_page_ == ProjectPage::chain && on_chain_key(key)) return true;
         if (project_page_ == ProjectPage::pattern && on_pattern_page_key(key)) return true;
+        if (project_page_ == ProjectPage::files && on_projects_key(key)) return true;
         switch (key) {
             case ENAGA_KEY_OK:
                 // F1 + OK is redo here as everywhere (docs/SPEC.md); the shared handler has it.
@@ -3075,6 +3876,8 @@ public:
     // shown bank, VALUE (or A) sets how many times it repeats. OK adds an entry after the cursor
     // -- a copy of the one there, or the playing pattern when the chain is empty -- and F1 + LEFT
     // removes the one under the cursor. CLR goes back. F1 + UP is still CHAIN ON/OFF.
+    // Song mode: B sets the entry's mute recall (`--`, or M1-M8, a stored mute state recalled as
+    // the entry starts), and F1 + RIGHT switches SONG (play once, then stop) and LOOP.
     //
     // The entries are the audio side's (it plays them), so every edit is a command, and the
     // knob and arrow edits are deltas applied there. Chain edits are not undoable: core/undo
@@ -3088,7 +3891,8 @@ public:
         if (chain_cursor_ < 0) chain_cursor_ = 0;
     }
 
-    void post_chain(ChainEdit edit, int at, uint8_t b = 0, uint8_t c = 0, uint8_t d = 0) {
+    void post_chain(ChainEdit edit, int at, uint8_t b = 0, uint8_t c = 0, uint8_t d = 0,
+                    uint8_t e = 0) {
         Command command;
         command.cmd = Cmd::chain_edit;
         command.step = uint8_t(at);
@@ -3096,6 +3900,7 @@ public:
         command.b = b;
         command.c = c;
         command.d = d;
+        command.e = e;
         post_command(command);
     }
 
@@ -3115,9 +3920,9 @@ public:
             chain_cursor_ = 0;
         } else {
             chain_clamp_cursor();
-            const uint8_t repeats = engine_.project().chain[chain_cursor_].repeats;
+            const ChainEntry &entry = engine_.project().chain[chain_cursor_];
             post_chain(ChainEdit::set, chain_cursor_, uint8_t(shown_bank_), uint8_t(slot),
-                       repeats);
+                       entry.repeats, entry.mutes);
         }
         char *out = notice_buffer_;
         *out++ = bank_letter(shown_bank_);
@@ -3145,7 +3950,7 @@ public:
                     chain_clamp_cursor();
                     const ChainEntry entry = engine_.project().chain[chain_cursor_];
                     post_chain(ChainEdit::insert, chain_cursor_ + 1, entry.bank, entry.slot,
-                               entry.repeats);
+                               entry.repeats, entry.mutes);
                     chain_cursor_++;
                 }
                 notice("ENTRY ADDED");
@@ -3160,7 +3965,13 @@ public:
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
                 if (shift_) {
-                    if (key == ENAGA_KEY_RIGHT) return true;   // free
+                    if (key == ENAGA_KEY_RIGHT) {
+                        // SONG or LOOP: whether the chain stops at its end.
+                        const bool song = !engine_.project().settings.chain_song;
+                        post_chain(ChainEdit::song, 0, song ? 1 : 0);
+                        notice(song ? "SONG: PLAY ONCE" : "LOOP CHAIN");
+                        return true;
+                    }
                     if (length == 0) return true;
                     chain_clamp_cursor();
                     post_chain(ChainEdit::remove, chain_cursor_);
@@ -3186,6 +3997,7 @@ public:
         append_number(out, uint32_t(length));
         append(out, "/64");
         append(out, player.active ? " ON" : " OFF");
+        append(out, project.settings.chain_song ? " SONG" : " LOOP");
         *out = 0;
         canvas.text(0, 18, line, 15);
 
@@ -3211,6 +4023,10 @@ public:
                 append_padded(out, uint32_t(entry.slot) + 1, 2);
                 append(out, " X");
                 append_number(out, uint32_t(entry.repeats));
+                if (entry.mutes != 0) {
+                    append(out, " M");
+                    append_number(out, uint32_t(entry.mutes));
+                }
                 if (player.active && !player.orphaned && int(player.entry) == i) {
                     append(out, " PLAY");
                 }
@@ -3220,20 +4036,32 @@ public:
         }
 
         canvas.text(0, 103, "OK ADD  FUNC+LEFT DEL", 7);
-        canvas.text(0, 112, "VALUE REPEATS", 7);
+        canvas.text(0, 112, "A:RPT B:MUT F+RT SONG", 7);
     }
 
     // --- PROJECT's PATTERN page: the master length and the swing ----------
+
+    // The fields, in the order LEFT and RIGHT walk them: LEN, SWG, then each track's own swing.
+    static constexpr int kPatternFieldTrackSwing = 2;
+    static constexpr int kPatternFields = kPatternFieldTrackSwing + kTracks;
 
     void pattern_field_delta(int field, int delta) {
         if (field == 0) {
             mark(GestureKind::length, 0, 0);
             post(Cmd::set_master_length, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
             notice("LEN");
-        } else {
+        } else if (field == 1) {
             mark(GestureKind::length, 0, 0);
             post(Cmd::set_pattern_swing, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
             notice("SWING");
+        } else if (field < kPatternFields) {
+            // A track's own swing (docs/SPEC.md, "an optional per-track override"). PAT, then
+            // 50 to 75; the engine walks the delta (core/pattern.hpp, `track_swing_step`). One
+            // gesture per track, so a sweep is one undo level, as LEN and SWG are.
+            const int track = field - kPatternFieldTrackSwing;
+            mark(GestureKind::length, track, 0);
+            post(Cmd::set_track_swing, uint8_t(track), 0, 0, clamp_delta(delta), kDeltaFlag);
+            notice("TRACK SWING");
         }
     }
 
@@ -3242,7 +4070,9 @@ public:
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
                 if (shift_) return true;                  // F1 + LEFT/RIGHT: free
-                pattern_field_ = key == ENAGA_KEY_LEFT ? 0 : 1;
+                // Sideways through LEN, SWG and the eight track swings, stopping at the ends.
+                pattern_field_ = clamp_int(pattern_field_ + (key == ENAGA_KEY_LEFT ? -1 : 1), 0,
+                                           kPatternFields - 1);
                 return true;
             case ENAGA_KEY_UP:
             case ENAGA_KEY_DOWN:
@@ -3275,7 +4105,7 @@ public:
         append_number(out, uint32_t(pattern.master_length));
         append(out, " STEPS");
         *out = 0;
-        canvas.text(0, 40, line, pattern_field_ == 0 ? 15 : 10);
+        canvas.text(0, 32, line, pattern_field_ == 0 ? 15 : 10);
 
         out = line;
         *out++ = pattern_field_ == 1 ? '>' : ' ';
@@ -3283,12 +4113,30 @@ public:
         append_number(out, uint32_t(pattern.swing));
         *out++ = '%';
         *out = 0;
-        canvas.text(0, 52, line, pattern_field_ == 1 ? 15 : 10);
+        canvas.text(0, 42, line, pattern_field_ == 1 ? 15 : 10);
 
-        canvas.text(0, 76, "LEN IS WHAT A QUEUED", 8);
-        canvas.text(0, 85, "CHANGE AND A CHAIN", 8);
-        canvas.text(0, 94, "WAIT FOR", 8);
-        canvas.text(0, 112, "UP DOWN VALUE OR A B", 7);
+        // Each track's own swing, two to a row: PAT follows SWG above, a number overrides it.
+        canvas.text(0, 56, "TRACK SWING", 8);
+        for (int t = 0; t < kTracks; t++) {
+            const int field = kPatternFieldTrackSwing + t;
+            const uint8_t swing = pattern.tracks[t].swing;
+            out = line;
+            *out++ = pattern_field_ == field ? '>' : ' ';
+            append_number(out, uint32_t(t + 1));
+            *out++ = ' ';
+            if (swing == kSwingInherit) {
+                append(out, "PAT");
+            } else {
+                append_number(out, uint32_t(swing));
+                *out++ = '%';
+            }
+            *out = 0;
+            canvas.text((t & 1) * 60, 66 + (t >> 1) * 9, line,
+                        pattern_field_ == field ? 15 : (swing == kSwingInherit ? 8 : 12));
+        }
+
+        canvas.text(0, 103, "LEFT RIGHT PICK", 7);
+        canvas.text(0, 112, "UP DOWN VALUE A B C", 7);
     }
 
     // --- PROJECT's SETUP page: the clock, MIDI and the record quantize ----
@@ -3364,6 +4212,10 @@ public:
         }
         if (project_page_ == ProjectPage::pattern) {
             draw_pattern_page(canvas);
+            return;
+        }
+        if (project_page_ == ProjectPage::files) {
+            draw_projects(canvas);
             return;
         }
         char line[40];
@@ -3468,7 +4320,9 @@ public:
         append(out, "SMP ");
         for (int t = 0; t < kTracks; t++) {
             const SampleState state = pool.slot(t).state;
-            *out++ = state == SampleState::ready    ? 'O'
+            // S: ready, and streamed from the card rather than held whole.
+            *out++ = state == SampleState::ready && storage_.streaming(t) ? 'S'
+                     : state == SampleState::ready  ? 'O'
                      : state == SampleState::loading ? '.'
                      : state == SampleState::failed  ? 'X'
                                                      : '-';
@@ -3569,6 +4423,9 @@ private:
     }
 
     Engine engine_;
+    uint32_t stream_late_seen_ = 0;    // Status::stream_late as last noticed
+    uint8_t song_end_seen_ = 0;        // Status::song_end as last acted on
+    uint32_t stream_late_said_ms_ = 0;
 
     // The card side: projects, autosave and the sample loader, all in this context. It owns the
     // sample region and the pool, so no pool state is shared across the ring at all
@@ -3586,6 +4443,11 @@ private:
     // All of it is which control is selected or held, never what the layer produces: the engine
     // owns that, and the UI reads it back through the accessors.
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
+    bool note_repeat_mode_ = false;             // FUNC + FILL: a held lower pad rolls
+    bool tape_held_ = false;                    // FUNC + push D went down and has not come up
+    bool freeze_held_ = false;                  // FUNC + MUTATE went down and has not come up
+    uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)
+    uint8_t roll_velocity_[kTracks] = {};       // the last velocity sent for each roll
     bool mutation_pending_ = false;             // a MUTATE waiting for OK (keep) or CLR (revert)
     int16_t keys_held_note_[16] = {-1, -1, -1, -1, -1, -1, -1, -1,
                                    -1, -1, -1, -1, -1, -1, -1, -1};   // KEYS: what each key holds
@@ -3598,6 +4460,13 @@ private:
     // Resampling's two settings: how many bars, and where the take lands (-1 = the file only).
     int take_bars_index_ = 0;
     int resample_track_ = -1;
+    // And where it comes from: an index into kTakeSources (0, the master, by default), the input
+    // level (enaga_input_level, NORMAL as Enaga starts), and whether the route on screen has been
+    // applied. Not saved: Enaga puts the input back to LINE, NORMAL when the app stops anyway.
+    int take_source_ = 0;
+    int take_level_ = ENAGA_INPUT_NORMAL;
+    bool input_applied_ = false;
+    int input_result_ = 0;
 
     int pressure_pad_ = -1;
     uint8_t pressure_sent_ = 0;
@@ -3624,25 +4493,37 @@ private:
     int mixer_bank_ = 0;      // which kMixerPages entry: the faders, then the sends and master
     // PROJECT mode's pages, on the octave keys: the slots, the chain, the pattern's own
     // settings and SETUP.
-    enum class ProjectPage : uint8_t { slots = 0, chain, pattern, setup, count };
+    enum class ProjectPage : uint8_t { slots = 0, chain, pattern, setup, files, count };
     ProjectPage project_page_ = ProjectPage::slots;
     bool project_setup() const { return project_page_ == ProjectPage::setup; }
     int chain_cursor_ = 0;         // the CHAIN page's entry
-    int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG
+    int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG, 2-9 track swings
     static const char *project_page_name(ProjectPage page) {
         switch (page) {
             case ProjectPage::slots:   return "PROJECT";
             case ProjectPage::chain:   return "CHAIN";
             case ProjectPage::pattern: return "PATTERN";
+            case ProjectPage::files:   return "PROJECTS";
             default:                   return "SETUP";
         }
     }
+    // The PROJECTS page: the card's projects, the cursor on them, and the name being typed.
+    int project_cursor_ = 0;
+    bool project_seek_ = false;    // put the cursor on the open project once the list is in
+    bool projects_reread_ = false; // list again once a SAVE AS has landed
+    int open_armed_ = -1;          // OK once on this entry; the second within kSaveArmMs opens
+    uint32_t open_armed_at_ms_ = 0;
+    enaga::ui::TextEntry name_entry_;
     int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
     bool save_armed_ = false;      // F1 + F3 once; the second press within kSaveArmMs saves
     uint32_t save_armed_at_ms_ = 0;
     CardAction card_armed_ = CardAction::none;   // F1 + LEFT / RIGHT in PROJECT, armed once
     uint32_t card_armed_at_ms_ = 0;
     int kit_cursor_ = 0;                        // KIT: the slot under the cursor, 0-15
+    int sample_cursor_ = 0;                     // SAMPLES: the entry under the cursor
+    bool sample_seek_ = false;                  // put the cursor on a name once the list is in
+    char sample_seek_name_[SampleList::kEntryNameBytes] = {};
+    Mode samples_return_ = Mode::edit;          // where CLR at the top goes back to
     KitAction kit_armed_ = KitAction::none;     // KIT: OK or F1 + DOWN pressed once
     uint32_t kit_armed_at_ms_ = 0;
     static constexpr uint32_t kSaveArmMs = 2000;

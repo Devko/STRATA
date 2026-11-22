@@ -6,6 +6,10 @@ box, write the value or a word on the line, and move on; anything odd goes in th
 is chased tomorrow. The second part, "Reference", is the full per-milestone list it was drawn
 from, with the background for each check.
 
+**Time.** The whole pass is about three hours. If the evening runs short, do 0-3b, 13 and 16
+first (safety, the MAX readings, save and restore), then the sections for today's new features
+(8c, 8d, 13d-13i, 14b, 15b-15d), then the rest.
+
 Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`), and so are
 the on-screen hints. `FUNC+X` = hold FUNC, press X.
 
@@ -49,6 +53,11 @@ needed for tonight's unit session; do them if the PC is free.
       the EQ runs) against `tests/scenario_m7.sh` (EQ bypassed), both compilers. Proxy estimate
       ~1.3 points cl6x, ~2.2 GCC-only (`docs/BUDGET.md`, "The master kill EQ").
       cl6x `________ %` vs `________ %`, GCC `________ %` vs `________ %`
+- [ ] **E7.** Eight LFOs' cost: `tests/scenario_lfo.sh` as it is (every LFO off, should match
+      `scenario_factory.sh`), then again after the temporary `factory_kit` edit in
+      `docs/BUDGET.md` ("Per-track LFO", E7: every track `params[17] = 40`, `[18] = 127`,
+      `[19] = 38`), both compilers, and revert the edit. Host estimate ~1.1-1.4 points.
+      Off: cl6x `________ %` GCC `________ %`. Eight on: cl6x `________ %` GCC `________ %`
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
@@ -156,7 +165,7 @@ The beat can keep playing. One look per screen; note any overlap or illegible te
 ## 5. Arrow keys (3 min)
 
 - [ ] GRID and EDIT: UP/DOWN walk the track **without playing it**; LEFT/RIGHT flip the step page
-      (GRID) or SRC/FLTR/AMP/FX (EDIT).
+      (GRID) or SRC/FLTR/AMP/FX/LFO/ARP (EDIT).
 - [ ] Hold STEP 1 + OK opens the step page; LEFT/RIGHT walk to the previous/next step and wrap;
       CLR closes it and erases nothing.
 - [ ] PERFORM: LEFT/RIGHT pick the macro, UP/DOWN walk the mutation type.
@@ -207,7 +216,8 @@ MINOR (C# is not in C minor, so a folding track moves it). Repeat on each track 
 
 ## 8b. U3: GRAIN on a long sample, at high pitch (5 min)
 
-Resampling gives track 8 a multi-second sample without a file browser, and checks RESAMPLE too.
+Resampling gives track 8 a multi-second sample and checks RESAMPLE too. (A WAV picked in the
+sample browser, 15b, would also do.)
 
 - [ ] FUNC+REC: UP/DOWN to `RESAMPLE 4 BAR`, LEFT/RIGHT to `TO TRK 8`, OK arms. Playing, it records from
       the next bar line, writes the take (`WRITING`, then `LAST STRATA_n`) and track 8 loads it.
@@ -218,7 +228,20 @@ Resampling gives track 8 a multi-second sample without a file browser, and check
       **MAX `________ %`** Over PIT 64 by `________` points (the DDR cost of high-pitch grains).
 - [ ] Leave track 8 on GRN for section 13.
 
-## 8c. MIDI out and in (8 min, needs a synth or a MIDI monitor on MIDI OUT)
+## 8c. Sampling from the input (5 min)
+
+New 2026-11-22. A synth, a phone or anything with a line out into INPUT L/R.
+
+- [ ] FUNC+REC, then B: `FROM LINE NORM` and a meter. Play the source: the meter moves; turn C
+      until it stays short of `CLIP`. Level used: `________`
+- [ ] `TO TRK 8` (or FILE), OK, PLAY: the take starts on the bar, writes, and track 8 plays the
+      source alone, not the beat. Clean start and end? `________`
+- [ ] B through LINE L, MIC, DYN MIC, HI-Z: each routes (no `INPUT REFUSED`); MIC with no
+      headphones says `MIC NEEDS HEADPHONES` and records silence, with headphones it records.
+      Which routes worked: `________`
+- [ ] B back to MASTER: a take is the beat again. MAX while recording from the input `________ %`
+
+## 8d. MIDI out and in (8 min, needs a synth or a MIDI monitor on MIDI OUT)
 
 First time STRATA has sent MIDI, and probably the first time Enaga's MIDI OUT has run on a unit,
 so a fault here may be Enaga's (see "Expect to find Enaga bugs"). **Unplug USB first**: on Enaga
@@ -366,6 +389,104 @@ New after the walkthrough was written: a DJ isolator on the master, LOW / MID / 
       U1's figure (the EQ switches itself off).
 - [ ] Kill HI, save (FUNC+PROJECT twice), power cycle: it reopens with HI killed (`KILL` on the
       EQ page). Bring it back.
+- [ ] **A macro on the EQ.** PERFORM, select macro A (LEFT/RIGHT), FUNC + STEP 5: `A EQ LOW`.
+      Turn A up slowly over a few bars: the lows fade down to nothing; back to 0 and they are
+      exactly back. CLR clears macro A.
+- [ ] **A scene with the EQ.** In PERFORM put empty scene 9 on side A (hold SCENE A + STEP 9).
+      MIXER EQ: LOW to `KILL`. PERFORM: OK captures the sound, EQ knobs included, into scene 9.
+      EQ page: LOW back to `0`. PERFORM: scene 9 to side B (SCENE B + STEP 9), empty scene 10 to
+      side A (SCENE A + STEP 10). Sweep VALUE towards B: the lows fade out; back towards A, they
+      return. The EQ page's LOW knob stays at `0` throughout (a morph is not an edit).
+
+## 13e. The per-track LFO and per-track swing (8 min)
+
+New after the walkthrough was written. Play A01 GROOVE, select track 7 (the chord stab).
+
+- [ ] EDIT, then selection RIGHT four times: a fifth page box lights, `LFO`, with WAV RAT DEP
+      DST on A-D. The line below reads `LFO OFF: SET DEP+DST`. The sound has not changed.
+- [ ] D (DST): one click is one destination, `OFF`, then the sound's names (`CUT`, `DRV`, ...).
+      Pick CUT (or DRV if the track's filter is open). C (DEP) up to about 100: the stab sweeps,
+      and the line reads `NOW CUT nnn`, moving. **No clicks or zipper noise** on a fast rate.
+- [ ] A (WAV): one click is one shape, SIN TRI RMP SAW SQR S+H. S+H steps randomly, SQR jumps.
+- [ ] B (RAT): below the middle reads Hz (`0.06` up to `32`), above it note lengths (`8B`
+      down to `1/32`, `.` dotted, `T` triplet). Set `1B`: the sweep repeats once a bar, **in time
+      with the beat**, and FUNC+PLAY restarts it on the one.
+- [ ] Hold a STEP + turn C on the LFO page: a DEP lock on that step only (the sweep deepens on
+      that step). Clearing it works as for any lock.
+- [ ] PERFORM: hold FUNC + STEP 3 assigns DEP to the selected macro (the notice names `DEP`).
+      Turn the macro: the sweep fades in from wherever DEP was.
+- [ ] Store a scene with the LFO on, another with it off; the morph fades the depth between them.
+- [ ] Undo (FUNC+CLR) takes back an LFO edit like any other.
+- [ ] **U7.** LFOs on four tracks (DEP 127, DST DRV or CUT, a fast free RAT), 60 s: **MAX
+      `________ %`** against U1's `________ %`. Difference: `________` points.
+- [ ] Save (FUNC+PROJECT twice), power cycle: the LFO settings come back, still in time.
+- [ ] **Track swing.** PROJECT, octave RIGHT twice (PATTERN): below LEN and SWG, eight track
+      swings, `PAT` by default. LEFT/RIGHT walk the fields, C changes the one under the cursor.
+      Set the hats' track to 66 with SWG at 50: only the hats swing. Back to `PAT`: they follow
+      SWG again. It saves with the pattern, and undo takes it back.
+
+## 13f. Note repeat on the pads (4 min)
+
+New after the walkthrough was written. The emulator cannot press pads, so this is the first time
+it runs anywhere but the host tests.
+
+- [ ] **FUNC + FILL** (hold FUNC, tap FILL): `NOTE RPT`, no fill, and PERFORM's last line reads
+      `BAR n NRPT`.
+- [ ] Transport running, hold lower pad 1: the kick rolls in sixteenths, locked to the beat. Let
+      go: it stops at once. Hold REPEAT and turn VALUE to 1/32, let REPEAT go, roll again: 1/32.
+- [ ] Hold pad 7 (CHORD) and lean on it: the roll gets louder with pressure, softer as you ease
+      off. Macro 1 does not move.
+- [ ] Transport stopped: a held pad still rolls, at the tempo's sixteenths.
+- [ ] FUNC + FILL again: `PADS PLAY`, and a pad plays one note. REC on: a roll records nothing.
+
+## 13g. Tape stop and delay freeze (4 min)
+
+New after the walkthrough was written. Both are held key combinations, which the emulator
+cannot press, so this is their first run outside the host tests. Play A01 GROOVE.
+
+- [ ] **Hold FUNC, then hold push D**: `TAPE STOP`. The beat slows and drops in pitch to silence
+      over about two beats, no click at the start. Let go of FUNC first, keep holding D: still
+      stopped. Let go of D: the beat is back at once, in time, **no click**.
+- [ ] Let go of D half way through a stop: it comes straight back from the slowed sound.
+- [ ] **U8.** Hold a tape stop for 10 s: **MAX `________ %`** against U1's `________ %`.
+- [ ] Turn the chord's SnA (delay send) up and play a few chord stabs. **Hold FUNC, then hold
+      MUTATE**: `FREEZE`, `FRZ` on PERFORM's bar line. The echo keeps looping at the same level;
+      new stabs play dry and are not echoed. Let go: the loop fades into the delay's tail, then
+      new stabs echo again. FUNC + MUTATE mutated nothing (no `KEPT`/`REVERTED` prompt).
+
+## 13h. The arpeggiator (5 min)
+
+New after the walkthrough was written. The emulator can only walk to the page
+(`tests/scenario_lfo.sh` checks `scr EDIT ARP`), so the sound is first heard here. Play A01 GROOVE.
+
+- [ ] Select track 6 (MNO), EDIT, selection RIGHT five times: a sixth page box lights, `ARP`, with
+      MOD RAT OCT GAT on A-D, and `ARP OFF: TURN MOD` below. The page boxes still fit.
+- [ ] Turn A one click: `UP`, and the line reads `UP 1/4 X1 50%`. A run lasts as long as the
+      step's LEN, so a one-step bass note still plays once at 1/4. Turn B to `1/32` (`UP 1/32 X1`):
+      every bass note doubles. C to `X2`: the second note is an octave up. Turn D: the notes get
+      longer. Turn A back to `OFF`: the bass is exactly as before.
+- [ ] Track 7 (PLY), MOD UP, RAT `1/16`, then set a chord step's LEN to `4 STP` on the step page:
+      the chord plays as four single notes going up it.
+- [ ] MOD `RND`: the run is random but the **same every bar**.
+- [ ] KEYS (FUNC+HOME) on track 6 with MOD UP: hold two keys, the run alternates them in time
+      with the beat; let one go, it plays the other; let both go, it stops. Stop the transport and
+      hold a key: the run starts at once.
+- [ ] Save, power cycle: the ARP settings come back.
+
+## 13i. Song mode: mute recalls and SONG (5 min)
+
+New after the walkthrough was written. FUNC+RIGHT is a held combination the emulator cannot
+press, so this is its first run outside the host tests. Play A01 GROOVE.
+
+- [ ] PROJECT, octave RIGHT: CHAIN. Build three entries (OK on an empty chain, then OK twice):
+      A01, A02, A01, each X1. Turn B on entry 2: `M2` at the end of its row (no kick, factory).
+- [ ] FUNC+UP: chain on. Entry 2 starts **without the kick**, on the bar line, no click. Entry 3
+      (no recall) keeps it muted: `--` leaves the mutes as they are.
+- [ ] FUNC+RIGHT: `SONG: PLAY ONCE`, the header ends `SONG`. Unmute the kick, FUNC+STOP (reset), PLAY:
+      the chain plays A01, A02 without kick, A01, then **stops** with `SONG END`, nothing after
+      the last bar, no hanging note. PLAY: it starts again from entry 1.
+- [ ] FUNC+RIGHT again: `LOOP CHAIN`, and the chain goes round as before.
+- [ ] Save, power cycle: SONG and the `M2` come back. The page boxes and rows fit the screen.
 
 ## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
 
@@ -375,6 +496,20 @@ New after the walkthrough was written: a DJ isolator on the master, LOW / MID / 
       factory project again (A01 GROOVE, all eight tracks audible; NEW used to be silent).
       Track 8's blips play too: a SAMPLE track with no file now plays the placeholder (PR #42). A single press of either key never loses work.
 - [ ] Both also work from the SETUP page.
+
+## 14b. Projects: open and save as (4 min)
+
+New 2026-11-22. PROJECT, octave RIGHT four times: `PROJECTS`.
+
+- [ ] The list shows `DEFAULT` (and any other project folders), with the cursor on the open one
+      and `NOW DEFAULT` at the top. OK on it says `ALREADY OPEN`.
+- [ ] FUNC+DOWN: `SAVE AS` with `DEFAULT` in the entry. Make it `LIVE 1` with A and VALUE, OK:
+      `SAVING`, then `LIVE 1` appears in the list and `NOW LIVE 1`. The text is readable and the
+      underline sits under the right character? `________`
+- [ ] Change something, then OK twice on `DEFAULT`: `AGAIN TO OPEN`, then `OPENING`; the change
+      is gone and DEFAULT plays as it was saved.
+- [ ] Power cycle: STRATA comes back with `DEFAULT`, the one opened last.
+- [ ] SAVE AS `LIVE 1` from DEFAULT says `NAME TAKEN` and writes nothing.
 
 ## 15. Kit browser: FUNC+EDIT twice (6 min)
 
@@ -395,6 +530,52 @@ project. Back in STRATA's project from 14 (or any project), playing.
 - [ ] PROJECT now says `UNSAVED`. FUNC+PROJECT twice, then FUNC+LEFT twice (reload): the
       recalled kit is what comes back.
 - [ ] Kits are shared: FUNC+RIGHT twice (new project), FUNC+EDIT twice: slot 1 is still there.
+
+## 15b. Sample browser: OK on a SMP or GRN track (5 min)
+
+New 2026-11-22. Put a few WAVs in `/SAMPLES` on the card first (the two test files from
+`unit-test/` will do, plus one in a subfolder, and a file whose name has `_` in it).
+
+- [ ] EDIT on track 8 (SMP): the page says `OK: PICK SAMPLE`. OK opens `SAMPLES T8 SMP` with
+      the folder's WAVs and folders (`/` after a folder), no `._` files, no overlaps.
+- [ ] PLAYING, DOWN to a file and OK: `LOADING`, the line under the title shows the load, then
+      track 8 plays the new file and **the beat never stops**. Click at the swap? `________`
+- [ ] DOWN, OK again: the next file replaces it. The `NOW` line names the file.
+- [ ] OK on a folder opens it; CLR goes up with the cursor on that folder; CLR at `/SAMPLES`
+      shows `SAMPLES/` and `RECORD/`; CLR there goes back to EDIT. Same from MACHINE (OK).
+- [ ] Reopen the browser: it starts in the track's folder with the cursor on its file.
+- [ ] PROJECT says `UNSAVED`; save, reload (FUNC+LEFT twice): track 8 has the picked file.
+- [ ] A folder of many files: listing time `________` (about how long `READING FOLDER` shows).
+
+## 15c. A long stem (4 min)
+
+New 2026-11-22: files over the old 30 s limit load whole, in chunks. Put a 48 kHz stereo WAV of
+2-2.5 minutes (25-30 MB) in `/SAMPLES`.
+
+- [ ] Pick it for track 8 in the sample browser while playing: `LOADING LONG` with a rising
+      percentage, the beat never stops. Seconds to playable `________` (expect about 4 s).
+      Keys and screen responsive while it loads? `________`
+- [ ] It plays from the start, all the way through (STA 0, LEN 127, PLY LOOP); on GRN, POS
+      sweeps the whole file. Clicks at 4 MiB boundaries (every ~22 s of stereo 24-bit, ~44 s of
+      16-bit)? `________`
+- [ ] PROJECT's SMP line shows the memory used, about `27/32M`. A second one on another track:
+      `NO ROOM`, and the first keeps playing.
+
+## 15d. A stem bigger than memory, streamed (5 min)
+
+New 2026-11-22: a file the sample memory cannot hold streams from the card. Put a 48 kHz stereo
+16-bit WAV of 4-5 minutes (45-55 MB) in `/SAMPLES`.
+
+- [ ] Pick it for track 8 while playing: `LOADING LONG` only briefly (the first chunk), then the
+      SMP line shows `S` for track 8 and about `0/32M` more used (its 2 s head is 0.4 MiB).
+- [ ] With STA 0, PLY LOOP and one trig on step 1, it plays the whole file and loops: no gap
+      at 2 s (where the head ends and the card takes over)? `________` At the loop? `________`
+- [ ] Trig it every bar for 2 minutes: every restart starts clean, no `STREAM LATE`? `________`
+- [ ] Two more streamed tracks (copies of the file on tracks 6 and 7) at once: `STREAM LATE`
+      ever? `________` LOAD range `________ %` with three streams against without `________ %`.
+- [ ] A fifth streamed track says `STREAMS FULL`.
+- [ ] Pull the card while it streams: silence and `STREAM LATE`, no crash. Card back in: it
+      streams again after the reload.
 
 ## 16. Six voices: the STRATA6 app (4 min)
 
@@ -431,6 +612,9 @@ Enaga's menu and start STRATA6.
 | U4 delay tail: LOAD while ringing, time to drop (13c) | |
 | E6 kill EQ, `scenario_killeq.sh` vs `scenario_m7.sh`, cl6x / GCC (PC) | |
 | U6 A01 GROOVE MAX with LOW killed, 60 s, and the difference to U1 (13d) | |
+| E7 eight LFOs, `scenario_lfo.sh` off / on, cl6x / GCC (PC) | |
+| U7 A01 GROOVE MAX with four LFOs, 60 s, and the difference to U1 (13e) | |
+| U8 A01 GROOVE MAX holding a tape stop, 10 s (13g) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
 | U2 STRATA6 + tracks 5 and 6 as MIN11 POLY, capped at 12 voices (16) | |
@@ -870,6 +1054,14 @@ gesture is the mistake this milestone made twice before it was caught.
 - [ ] A lock still wins over a morph: lock a cutoff on one step, sweep the morph, and that step
       should keep its locked value while the others move.
 
+- [ ] **The per-track LFO** (added 2026-11-22): EDIT's fifth page, WAV RAT DEP DST; zeroed bytes
+      are OFF, so older kits and scenes sound as they did. Free and synced rates, every shape,
+      p-locks, macros, scenes and the morph on the four bytes, save and reload (KIT.BIN's LFO
+      section, PERFORM.BIN's scene LFO section). A kit or project from an older build loads with
+      every LFO off. Section 13e of the walkthrough.
+- [ ] **Per-track swing** (added 2026-11-22): PROJECT's PATTERN page, PAT or 50-75 per track,
+      saved in the pattern, undoable. Section 13e.
+
 ## M6 — full concept (started)
 
 The Euclidean generator and KEYS mode so far. `core/` is host-tested and mutation-tested; the gesture is
@@ -1232,7 +1424,7 @@ stand only if that measurement is ever disputed.
 
 Host-tested (`tests/test_midiout.cpp`, `tests/test_midi.cpp`, the MIDI tests at the end of
 `tests/test_ui.cpp`) and drawn on the emulator (`tests/scenario_midi.sh`, keys only: it cannot
-turn the channel knob or send MIDI IN). Never heard. Section 8c of the walkthrough is the short
+turn the channel knob or send MIDI IN). Never heard. Section 8d of the walkthrough is the short
 version; these are the rest.
 
 - [ ] Two tracks on one channel playing the same pitch: one note on the synth, never a hanging
@@ -1491,6 +1683,31 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
 - [ ] After a recall PROJECT says `UNSAVED`; FUNC+PROJECT twice saves it, and the reopened project
       has the recalled kit.
 - [ ] Kits are shared: start a NEW project (PROJECT, FUNC+RIGHT twice) and slot 1 is still there.
+
+## SAMPLES: the sample browser (OK on a SMP or GRN track)
+
+- [ ] OK in EDIT or MACHINE on a SMP or GRN track opens the browser in the track's folder (or
+      `/SAMPLES`), cursor on its file; on any other machine OK does nothing there.
+- [ ] Only WAVs (any case of `.wav`) and folders are listed, sorted folders first; macOS `._`
+      files and `.Trashes` are not. A folder of 300 files shows 256 and `+44`.
+- [ ] OK loads with the transport running; repeated OKs on different files never wedge the
+      loader, and the last one picked is what plays. Pulling the card mid-listing: `NO CARD` or
+      an error, and the browser still answers CLR.
+- [ ] `/SAMPLES` missing on the card: an error line (`NOT FOUND`), CLR still reaches `RECORD/`.
+      (The host fake answers NOT FOUND for a missing folder; Enaga's real answer is unverified.)
+- [ ] A long name is cut to the line, and `_` shows as `-`.
+
+## RESAMPLE from the audio input (B: source, C: level)
+
+- [ ] Every route Enaga offers records what is plugged into it: LINE stereo keeps L and R apart,
+      LINE L puts INPUT L on both sides, HI-Z and DYN MIC take their jacks, MIC needs headphones.
+      Enaga's input routes "have not been checked route by route" (SPEC), so a route that fails
+      is an Enaga report, with the route and the level.
+- [ ] The meter tracks the input and reads `CLIP` at full scale; the recorded file is the input
+      at the level shown, nothing of STRATA's own output in it.
+- [ ] Turning B or C during a take does not change the take's source (it is fixed at the arm),
+      and the 10 ms gap of a route change is not in a take armed afterwards.
+- [ ] After leaving STRATA, Enaga's own input setting is back to LINE, NORMAL.
 
 ## Factory content: audition list (2026-11-22)
 

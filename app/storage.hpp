@@ -52,6 +52,7 @@
 // mistake by a wide margin.
 #pragma once
 
+#include "browse.hpp"
 #include "commands.hpp"
 #include "pcm.hpp"
 #include "perform.hpp"
@@ -78,6 +79,10 @@ class Engine;
 // more than 30 s out of the same frames -- 44.1 kHz about 65 s -- which costs nothing and is not
 // refused; a higher one (176.4 or 192 kHz) gets half. What a long file costs once LOADED is the
 // sample pool's to refuse (NO ROOM), as it always was.
+//
+// [2026-11-22] The limit now binds only files at OTHER rates, through src_. A file bigger than raw_
+// is read in chunks (below, "a file bigger than raw_"), so a 48 kHz file may be as long as the
+// pool and Cmd::set_sample's 24-bit frame count allow.
 constexpr uint32_t kMaxSampleSeconds = 30;
 constexpr uint32_t kMaxSampleSourceRate = 96000;
 
@@ -116,6 +121,27 @@ public:
     // when there was nothing to open, which is not an error -- it means a first run, and the
     // engine's built-in default pattern stays.
     bool open_last();
+
+    // --- the project browser (PROJECT mode's PROJECTS page) ---
+
+    // Open another project from the card: `name` is a folder in PROJECTS/. Queued like a reload
+    // and with its rules -- the transport stops, unsaved work is thrown away (the UI asks twice),
+    // and an external clock that will not stop refuses it. The name becomes the project's only
+    // once the load has read its PROJECT.BIN: a folder that is not a project leaves the current
+    // one as it was, name and all. A project opened this way is what the next start opens.
+    // False for a name that could not be a project's (valid_name).
+    bool request_open(const char *name);
+
+    // Save under a new name: a new folder with all ten files, the old one left as it is. The
+    // project is called `name` from here on. False for a name that could not be one.
+    bool request_save_as(const char *name);
+
+    // A name a project folder can have: 1 to kNameBytes-1 characters of the panel's text entry
+    // (A-Z 0-9 space - + . # !), not starting with a space or a dot.
+    static bool valid_name(const char *name);
+
+    // "<data folder>/PROJECTS", for the browser's listing.
+    bool projects_folder(char *out, uint32_t max) const;
 
     // App::stop(), whose budget is 3 s including saves. Blocking and bounded: it drains the ring
     // for a few milliseconds and then writes, because destructors never run on this platform and
@@ -156,6 +182,38 @@ public:
 
     // Queue every track whose kit names a file. What a project open does.
     void request_all_samples();
+
+    // --- the sample browser ------------------------------------------------
+    //
+    // One folder of the card at a time, listed with `files::list` into `browse_list()`
+    // (core/browse.hpp says what is kept). The listing runs beside the job machine rather than
+    // in it: it touches none of the loader's buffers, Enaga runs requests in the order they are
+    // made, and a browser that waited for a 30 s sample to convert before it could show a folder
+    // would be no browser. Only one listing is in flight; asking for another meanwhile queues it,
+    // because the entries of the first would otherwise land in the second's table.
+
+    // Show `folder` ("" is the browser's own root: SAMPLES and RECORD). The root is filled at
+    // once; a folder on the card is listed in the background. False for a folder too long to
+    // show, with nothing changed.
+    bool request_browse(const char *folder);
+
+    // True until the folder asked for last has been listed.
+    bool browsing() const { return list_in_flight_ || browse_pending_; }
+    const SampleList &browse_list() const { return list_; }
+    // Why the last listing failed (NOT FOUND, NO CARD...), or nullptr.
+    const char *browse_error() const { return browse_error_; }
+
+    // --- streaming (below, "streaming: a file too big for the pool") ---
+
+    // Does this track play a streamed file? For the screen's sample line and for tests.
+    bool streaming(int track) const {
+        return track >= 0 && track < kTracks && streams_[track].on;
+    }
+
+    // Put a file in a track's kit and load it, through the ordinary swap -- the same thing a
+    // resample into a track does at its end. False for a track that is not one, or a path that
+    // is empty or would not fit the kit's kSamplePathBytes. The kit becomes UNSAVED.
+    bool request_sample_file(int track, const char *path);
 
     // --- the kit library ---------------------------------------------------
     //
@@ -241,6 +299,7 @@ private:
         sample_read,       // files::load in flight
         sample_convert,    // pcm_to_s16, in slices
         sample_resample,   // pcm_resample, in slices
+        sample_chunk,      // a file bigger than raw_: one chunk converted, in slices (below)
         take_write,        // a resample's WAV, header then payload
         kit_scan,          // the kit library's sixteen slots, one file per pass
         kit_save,          // one kit into its slot: started and finished in one pass
@@ -268,6 +327,9 @@ private:
     void step_sample_epoch();
     void step_sample_convert();
     void step_sample_resample();
+    void step_sample_chunk();
+    bool start_chunked(const char *path, uint32_t file_bytes);
+    bool read_next_chunk();
     void start_next_sample();
     void start_new();
     bool flush_backlog();          // true when nothing is left waiting
@@ -283,6 +345,11 @@ private:
     enaga::Settings settings_;
 
     char name_[kNameBytes] = {};
+    // request_open: the name the pending load reads, and the one to go back to if it fails.
+    char open_name_[kNameBytes] = {};
+    char kept_name_[kNameBytes] = {};
+    bool open_pending_ = false;    // the pending load is an open of open_name_
+    bool opening_ = false;         // the load in flight is one
     bool card_usable_ = true;
     // Resampling. `take_pending_` is a request waiting for the audio side to finish the take;
     // `take_track_` is the track to load it into afterwards, or -1 for "just the file".
@@ -335,6 +402,16 @@ private:
     bool kit_dirty_ = false;
     bool bank_dirty_[kBanks] = {};
 
+    // --- the sample browser ---
+    void start_browse();
+    void list_entry(const enaga::files::Info &entry);   // files::list callbacks, main context
+    void list_done(int32_t result);
+    SampleList list_;
+    char browse_wanted_[SampleList::kFolderBytes] = {};
+    bool browse_pending_ = false;  // asked for, not yet started (one is in flight)
+    bool list_in_flight_ = false;  // a files::list owns the callbacks until its done()
+    const char *browse_error_ = nullptr;
+
     // --- the sample loader ---
     uint8_t sample_queue_ = 0;     // one bit per track, waiting to be loaded
     uint32_t wanted_budget_ = 0;   // a loaded project's budget, applied once nothing is reserved
@@ -345,6 +422,73 @@ private:
     bool read_in_flight_ = false;  // a files::load owns raw_ until its callback
     bool read_done_ = false;
     int32_t read_result_ = 0;
+
+    // --- a file bigger than raw_, read a chunk at a time ---
+    //
+    // docs/SPEC.md planned streams for loops over 30 s. Roland's call (2026-11-22) was to load
+    // them whole instead, so they keep pitch, slices and GRAIN: a file that does not fit raw_ is
+    // opened and read into it a chunk at a time, each chunk converted straight into the pool (a
+    // 48 kHz file, any length the pool and Cmd::set_sample's 24-bit frame count allow) or into
+    // src_ (any other rate, up to kSrcFrames of the file, as before). raw_ is the chunk buffer,
+    // so this costs no memory. Short files keep the one files::load docs/SPEC.md names.
+    enaga::files::File chunk_file_;
+    bool chunked_ = false;         // the sample job in flight reads chunks
+    uint32_t chunk_file_bytes_ = 0;  // the file's size
+    uint32_t chunk_file_pos_ = 0;  // bytes of it read so far
+    uint32_t chunk_have_ = 0;      // valid bytes in raw_
+    uint32_t chunk_pos_ = 0;       // the next unconverted byte in raw_
+    uint32_t chunk_carry_ = 0;     // part of a frame kept at raw_'s start for the next read
+
+    // --- streaming: a file too big for the pool ---
+    //
+    // Roland's call (2026-11-22), after chunked loading: a file the pool cannot hold is STREAMED
+    // rather than refused. Its first kStreamHeadSeconds are loaded into the pool as a HEAD,
+    // converted like any sample but not resampled (a stream plays at the file's own rate), and
+    // the rest is read from the card while it plays, through an Enaga `files::Stream` that
+    // belongs to the engine (Engine::stream). The head is what makes a restart instant: a
+    // trigger or a loop wrap plays the head from RAM while this side closes the stream and opens
+    // it again at the head's end, which an Enaga stream needs because it only reads forward.
+    //
+    // The protocol, per track:
+    //   1. The chunk job decides the file streams (begin_stream), converts the head into the
+    //      pool, fills Engine::stream_for_load and posts Cmd::set_stream (hand_stream_over).
+    //   2. The audio side puts the Sampler in stream mode and bumps Status::stream_want.
+    //   3. service_streams sees the bump, closes the stream, opens it at the head's end and,
+    //      once Enaga says it is filled, posts Cmd::stream_attach with the value it answered.
+    //   4. The audio side reads it into the track's fifo every block until the voice goes back
+    //      to frame 0, when it stops reading and bumps stream_want again: back to 3.
+    //   5. A sample swap's clear_sample stops the reading before its epoch, so once the epoch
+    //      moves (step_sample_epoch) end_stream closes the stream and frees the ring.
+    // The card side never touches the stream between an attach and the next bump, and the audio
+    // side never reads it outside that window, so the Stream object has one user at a time.
+    //
+    // A card pulled mid-stream makes reads come back short (silence, STREAM LATE); the card
+    // coming back reloads every track (on_card), which reopens it.
+    struct StreamPlan {
+        bool on = false;           // the track plays a streamed file
+        bool attached = false;     // the attach for `seq` is posted
+        bool failed = false;       // the open for `seq` failed: wait for the next restart
+        int8_t ring = -1;
+        uint16_t seq = 0;          // the Status::stream_want value last acted on
+        uint32_t offset = 0;       // the file byte where the tail (after the head) begins
+        char path[kSamplePathBytes] = {};
+    };
+    void service_streams();
+    const char *begin_stream(int track, const char *whole);   // nullptr: it streams
+    void hand_stream_over();
+    void end_stream(int track);
+    StreamPlan streams_[kTracks];
+    bool streaming_ = false;       // the sample job in flight converts a stream's head
+    uint32_t stream_total_ = 0;    // that file's frames
+    int8_t stream_ring_ = -1;      // and the ring it will use
+    // Four streamed tracks at once, each with a ring of 256 KiB: 1.36 s of 48 kHz stereo 16-bit
+    // and 0.34 s of the heaviest file allowed (96 kHz stereo float), against card reads that
+    // take milliseconds. 1 MiB in all, from docs/SPEC.md's "recording ring and stream buffers".
+    static constexpr int kStreamRings = 4;
+    static constexpr uint32_t kStreamRingBytes = 256u << 10;
+    // How much of a streamed file is resident: the time a restart has to reopen the stream.
+    static constexpr uint32_t kStreamHeadSeconds = 2;
+    uint8_t *rings_[kStreamRings] = {};
 
     enaga::wav::Format format_;
     PcmFormat encoding_ = PcmFormat::unknown;
@@ -396,6 +540,11 @@ private:
     // and a few hundred microseconds of work, so the UI's 20 fps is never at risk and a 30 s
     // file still finishes in well under a second of wall time.
     static constexpr uint32_t kSliceFrames = 48000;
+
+    // How much of a long file one read asks for. Enaga works a read in the main loop a slice per
+    // pass whatever its size, so this only sets how often a read is queued: 4 MiB is about half
+    // a second of the card at 7.6 MB/s.
+    static constexpr uint32_t kChunkBytes = 4u << 20;
 
     // How many passes to wait for a sample epoch before giving up. update() runs at least 750
     // times a second, so this is a fraction of a second -- long enough for any real block, short

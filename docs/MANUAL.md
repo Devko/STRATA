@@ -63,7 +63,7 @@ uses the eight sound engines, one per track:
 | 7 | PLY (VA POLY) | Chord stabs |
 | 8 | SMP (SAMPLE) | Loop, cut into slices |
 
-Every track has **16 parameters on four pages** of four, one parameter per encoder A-D:
+Every track has **16 parameters on four pages** of four, one parameter per encoder A-D (and a fifth and a sixth page for its LFO and its arpeggiator, below):
 
 - **SRC** and **AMP** belong to the machine and change meaning with it (section 3).
 - **FLTR** and **FX** belong to the insert chain and are the same on every track:
@@ -72,6 +72,56 @@ Every track has **16 parameters on four pages** of four, one parameter per encod
 
 Parameters run 0-127. Every change is smoothed over one audio block, so turning a knob or
 playing a locked step never clicks.
+
+### The LFO
+
+Every track also has **one LFO**, on a fifth EDIT page, **LFO**, after FX (EDIT, then the
+selection keys or LEFT/RIGHT). It moves one of the track's 16 parameters up and down on its own:
+
+- **A, WAV**: the shape. SIN, TRI, RMP (a rising ramp), SAW (a falling one), SQR and S+H (a new
+  random value each cycle). One click is one shape.
+- **B, RAT**: the rate. The lower half runs **free**, from `0.06` Hz (one sweep every 16 s) up to
+  `32` Hz. The upper half is **synced** to the tempo, from `8B` (eight bars) down to `1/32`, with
+  dotted (`1/4.`) and triplet (`1/8T`) lengths in between. A synced LFO stays in time with the
+  bar wherever the song is, follows an outside clock, and starts on the one when you press PLAY.
+- **C, DEP**: how far. At 127 the parameter swings about 64 either side of where its knob is.
+- **D, DST**: which parameter, by name, or `OFF`. One click is one parameter.
+
+The line under the knobs shows where the destination is right now (`NOW CUT 87`), or `LFO OFF:
+SET DEP+DST` until both are up. A new track's LFO is off, and so is every track in a project
+saved before the LFO existed.
+
+The four LFO settings are parameters like any other: hold a STEP and turn one to lock it on that
+step (a deeper sweep on one step, a different shape for a fill), store them in a scene and morph
+between two LFO settings, or put DEP on a macro to fade the movement in. The LFO moves the
+parameter in its 0-127 steps about 750 times a second: smooth on a filter or a pan, but a slow,
+deep sweep of a pitch can be heard stepping.
+
+### The arpeggiator
+
+Every track also has an **arpeggiator**, on a sixth EDIT page, **ARP**, after LFO. It turns a
+note into a run of notes:
+
+- **A, MOD**: OFF, UP, DN (down), U/D (up and back down), ORD (in the order played) or RND. One
+  click is one mode.
+- **B, RAT**: the spacing of the notes, `1/4` down to `1/32T`. Always in time with the tempo.
+- **C, OCT**: how many octaves the run climbs, `X1` to `X4`.
+- **D, GAT**: how long each note is, from `50%` of the spacing (staccato) to `99%` (legato).
+
+The line under the knobs reads the whole setting (`UP 1/16 X2 75%`), or `ARP OFF: TURN MOD`.
+
+**On the sequencer**, a step on a track whose arp is on plays its note as a run for the step's
+length: set a step's length to 4 steps and a 1/16 arp plays four notes. On the PLY track the run
+walks the step's chord, one note at a time. The track's next step starts a new run. RND plays the
+same notes on every pass of the pattern, so a random arp is still a part you can keep.
+
+**In KEYS**, hold keys and the arp plays them, adding each key you press to the run and dropping
+each one you let go; it stops when the last key comes up. With the transport running the notes
+land on the beat; stopped, the run starts the moment you press. A pad hit plays one note.
+
+The four settings are parameters like any other: hold a STEP and turn MOD to arpeggiate just that
+step, or store two scenes with different arps. A new track's arp is off, and so is every track
+in a project saved before the arp existed.
 
 ### Patterns, banks and the project
 
@@ -100,7 +150,8 @@ locks glow amber.
 
 The **chain** plays patterns in order: up to 64 entries, each a pattern and a repeat count
 (X1-X16). It is a list, not a song timeline. You build it on PROJECT's CHAIN page and turn it on
-and off with `FUNC+UP` in PROJECT.
+and off with `FUNC+UP` in PROJECT. Each entry can also recall a **mute state** as it starts, and
+**SONG** mode plays the chain once and stops, so a chain can be a whole arrangement (below).
 
 ### Scenes and morphing
 
@@ -147,9 +198,9 @@ Everything STRATA keeps is on the SD card, never in the unit's flash:
 /RECORD/STRATA_<n>.WAV                         resampled takes
 ```
 
-The first project is called `DEFAULT`. A new project is named `NEW1`, `NEW2` and so on. There
-is no file browser yet, so projects cannot be renamed or picked from a list on the unit; STRATA
-reopens the last one.
+The first project is called `DEFAULT`. A new project is named `NEW1`, `NEW2` and so on. Give a
+project its own name with SAVE AS and pick another one on the PROJECTS page (section 6). STRATA
+reopens whichever was open last.
 
 ---
 
@@ -396,7 +447,8 @@ machine, where a note picks a sound). A step with a chord sends the whole chord.
 Every machine can send, not only MID: give a KCK or PLY track a channel and its notes go to MIDI
 OUT as well as sounding, to double a part on a synth. A track sends every note it plays: steps
 (with their velocity; an accent sends 127), ratchets, chords (the whole chord, even past the
-12-voice budget, which only counts STRATA's own voices), pad hits, KEYS and MIDI IN notes.
+12-voice budget, which only counts STRATA's own voices), every arp hit and note repeat hit, pad
+hits, KEYS and MIDI IN notes.
 
 Every note gets its note-off. A step ends after its LEN (one step if it has none, and so does a
 pad hit); a KEYS key or a MIDI IN note when you let go. Muting the track, changing its channel or
@@ -475,6 +527,10 @@ track. Hold a STEP and press UP / DOWN to copy / paste one step. Everything goes
 - `VALUE push + turn`: the pattern's swing, 50-75%, on the even 16ths.
 - PROJECT, octave RIGHT twice: the **PATTERN** page, where A sets the master length (LEN) and B
   the swing (SWG).
+- **Each track can swing on its own**, on the same page: under LEN and SWG are eight TRACK SWING
+  fields, `PAT` (follow SWG) or 50-75%. LEFT/RIGHT walk the fields, and C (or VALUE) changes the
+  one under `>`; with `>` on LEN or SWG, C sets the selected track's. Hats at 66 over a straight
+  kick and bass is the classic use. It is saved with the pattern and undoable.
 
 A 12-step perc against a 16-step kick lands somewhere new each bar for three bars; GROOVE+ does
 exactly this.
@@ -496,6 +552,16 @@ The **CHAIN** page (PROJECT, octave RIGHT) lists the entries, `>02 A05 X2 PLAY`.
 cursor, a STEP key puts that slot of the shown bank into the entry, LEFT/RIGHT step the entry's
 pattern, A or VALUE set its repeats, OK adds a copy after the cursor (up to 64), FUNC+LEFT removes
 the entry, FUNC+UP turns the chain on or off. Chain edits are not undoable.
+
+**Song mode.** B sets the entry's **mute recall**: `--` leaves the mutes alone, `M1`-`M8` recalls
+that stored mute state the moment the entry starts (the row reads `>02 A05 X2 M3`). Store an
+intro without the kick in state 2 and a breakdown in state 3, point entries at them, and the
+chain plays sections rather than just patterns. **FUNC+RIGHT** switches the chain between `LOOP`
+(round and round, as before) and `SONG`: the chain plays through once, the transport stops at
+the end of the last entry (`SONG END`), and the next PLAY starts it again from entry 1. Under an
+outside clock that keeps running, STRATA goes quiet at the end and waits for PLAY or the outside
+STOP. The header shows which (`CHAIN 3/64 ON SONG`). Both are saved with the project; a project
+from before song mode loops, with no recalls.
 
 ### Recording
 
@@ -550,9 +616,13 @@ Mutes and mute states are saved with the project.
 In PERFORM (`FUNC+MIXER`) the top shows `A1 0P` and `B2 9P`: which scene is on each side and how
 many parameters it stores, and the morph bar between them. **VALUE** morphs.
 
-- **OK** captures the whole current sound into the scene on side A.
+- **OK** captures the whole current sound into the scene on side A, including the master kill
+  EQ's three knobs (not its kill switches).
 - Hold a scene pad + **OK** captures only the selected track into that side's scene.
 - Hold a scene pad + **CLR** erases that side's scene.
+
+Because a whole capture holds the kill EQ's knobs, a scene captured with LOW turned down to
+`KILL` turns the morph into a slow low-end fade: morph towards it over a build.
 
 A useful habit: leave side A on an empty scene, build a sound, capture it into a scene on side B,
 then undo your knob moves and morph back and forth. The morph position itself is not saved.
@@ -584,6 +654,10 @@ filter while it closes a send.
 1. Select a track (lower pad) and a macro (LEFT/RIGHT or the octave keys).
 2. Press a **STEP** key: STEP 1-4 are that track's SRC parameters, 5-8 FLTR, 9-12 AMP, 13-16 FX.
    The screen confirms, for example `A T6 CUT`. Repeat for up to four parameters, on any tracks.
+   **FUNC + STEP 1-4** assign the track's LFO settings instead, WAV RAT DEP DST: a macro on DEP
+   fades a wobble in.
+   **FUNC + STEP 5, 6 or 7** puts the master kill EQ's LOW, MID or HI on the macro (`A EQ LOW`):
+   from flat, the macro sweeps that band down to a kill.
 3. Turn the macro's encoder (A-D).
 
 The target is whichever end of 0-127 is further from the parameter's value when you assign it,
@@ -601,6 +675,16 @@ REPEAT loops the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the finished maste
 release and the music is where it would have been. In PERFORM, **FUNC+UP / FUNC+DOWN** set
 **auto-fill**: OFF, or FILL on the last bar of every 4, 8 or 16. PERFORM's lower lines show what
 is active: `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n`.
+
+### Note repeat
+
+**FUNC + FILL** turns **NOTE RPT** on (`NOTE RPT`, and `NRPT` after the bar number in PERFORM);
+again turns it off (`PADS PLAY`). While it is on, holding a lower pad rolls that track's note at
+beat repeat's length: 1/16 until you pick another with REPEAT + VALUE. With the transport running
+the hits land on the beat grid, so a roll is always in time; stopped, it rolls from the moment you
+press. Leaning on the pad sets each hit's velocity, so pressure swells and fades the roll (macro 1
+is left alone while a pad rolls). Hold two pads for two rolls. Rolls are played, not written: REC
+does not record them.
 
 ### The master kill EQ
 
@@ -621,6 +705,22 @@ the EQ is bypassed and costs nothing; turning a knob or throwing a switch starts
 switches itself off again a few milliseconds after everything is flat. The knobs and the
 switches are saved with the project, so a project saved with the lows killed reopens that way:
 look for `KILL` on the EQ page.
+
+### Tape stop and delay freeze
+
+Two held master moves, in **any mode**:
+
+- **Tape stop: hold FUNC, then hold push D** (`TAPE STOP`). The whole output slows to a standstill
+  over two beats, its pitch and level falling together, and stays silent while you hold. Let go
+  of push D (FUNC may already be up) and the music is straight back, in time: the pattern kept
+  playing underneath. Let go half way and it comes back from wherever the slow-down had got to.
+- **Delay freeze: hold FUNC, then hold MUTATE** (`FREEZE`, and `FRZ` after the bar number in
+  PERFORM). Whatever is echoing in the delay loops for as long as you hold, and nothing new
+  goes into the delay, so you can play over a frozen echo. It loops one delay time (two with
+  ping-pong); the first loop starts one echo period after the press. Let go and it fades back to
+  the delay's own tail. FUNC + MUTATE never mutates.
+
+Neither is saved or undone; both cost nothing until pressed.
 
 ### Mutation
 
@@ -648,6 +748,18 @@ track as the destination, the take also becomes that track's sample and loads st
 an 8-bar jam can become the loop on track 8 for SAMPLE or GRAIN. A take is at most 30 s
 (`SHORTENED TO 30S`). CLR cancels.
 
+**Sampling from the input.** B picks where the take comes from: `MASTER` (the default) or one of
+the inputs, `LINE` (INPUT L and R), `LINE L` (INPUT L alone, on both sides), `MIC` (the built-in
+microphone, which Enaga keeps silent unless headphones are in: the screen says
+`MIC NEEDS HEADPHONES`), `DYN MIC` (INPUT R through the mic preamp) or `HI-Z` (INPUT L for a
+guitar). C sets the input level, `LOW`, `NORM` or `HIGH` (on LINE, LOW is the -20 dB pad). An
+input shows a meter under `FROM ...`; set the level so it does not reach `CLIP`. The take is the
+input alone, before anything STRATA plays, and otherwise works exactly like a master take: it
+starts on the next bar line with the transport running, lasts 1-8 bars, and lands in a file or
+a track. You do not hear the input through STRATA; listen to the source directly. Turning B or C
+makes the input quiet for about 10 ms, and Enaga puts the input back to LINE, NORM when STRATA
+stops.
+
 ---
 
 ## 6. Saving, loading and the card
@@ -673,6 +785,25 @@ On PROJECT's slots or SETUP page:
 
 Both stop the transport.
 
+### Projects: open and save as
+
+PROJECT, then octave RIGHT four times, is the PROJECTS page: every project folder on the card,
+with `NOW` and the open one's name at the top. UP/DOWN or A move the cursor, LEFT/RIGHT go a page
+of eight at a time.
+
+- **Open:** OK on a project, then OK again within 2 s (`AGAIN TO OPEN`). What is unsaved in the
+  open project is thrown away and the transport stops, as with a reload. STRATA starts with that
+  project from now on.
+- **Save as:** `FUNC+DOWN` opens a name entry starting from the current name. A or LEFT/RIGHT
+  move along it, B, VALUE or UP/DOWN change the character under the cursor (A-Z, 0-9, space and
+  `- + . # !`, up to 16), OK saves, CLR cancels (`NAME KEPT`). The project is written whole into
+  a new folder and carries on under the new name; the old folder stays as it was saved. A name
+  another project already has is refused (`NAME TAKEN`): open that one instead.
+- `FUNC+UP` reads the card again. CLR goes back to the slots.
+
+There is no delete or rename on the unit: remove or rename a folder in
+`/ENAGA/DATA/STRATA/PROJECTS/` on a computer.
+
 ### The kit library
 
 `FUNC+EDIT` twice opens KIT. Sixteen slots, two pages of eight; each shows `KIT`, `EMPTY`,
@@ -691,19 +822,49 @@ A recalled kit makes the project UNSAVED until you save it.
 
 Samples are loaded whole into RAM in the background: the track stays silent until its sample is
 ready, and everything else keeps playing. The PROJECT screen's `SMP` line shows each track (`O`
-loaded, `.` loading, `X` failed, `-` none) and the memory used out of the budget, `12/32M`.
+loaded, `S` streamed from the card, `.` loading, `X` failed, `-` none) and the memory used out of
+the budget, `12/32M`.
 
 STRATA reads WAV files: 8, 16 or 24-bit, or 32-bit float, mono or stereo, at any sample rate
-(other rates are converted to 48 kHz on load). A file may be up to **30 s at 96 kHz**; at lower
-rates the same buffer holds more (about 65 s at 44.1 kHz).
+(other rates are converted to 48 kHz on load).
 
-There is no sample browser yet. A track gets a sample in three ways:
+- **At 48 kHz a file may be any length that fits the sample memory.** With the project's 32 MiB
+  that is about 2.9 minutes of stereo, or 5.8 of mono, shared by all tracks; the hard limit is
+  349 s. A long file is read in pieces (`LOADING LONG` and a percentage), about 7 s for a 50 MB
+  stem, while everything keeps playing, and then plays like any other sample: pitch, slices,
+  GRAIN.
+- **At any other rate** a file is converted whole, so it may be up to **30 s at 96 kHz**; at
+  lower rates the same buffer holds more (about 65 s at 44.1 kHz). Save long stems at 48 kHz.
+- **A file too big for all that is streamed** from the card instead: one too big for the sample
+  memory left, longer than 349 s, or at another rate and longer than the above. Its first two
+  seconds load into memory and the rest is read while it plays; the SMP line shows `S` for the
+  track. A streamed file plays from its start, forward, on one voice: pitch, the note, ATK, DEC,
+  LVL and loop work, but START, LEN, slices and reverse do not, and on GRN only the first two
+  seconds play. Up to four tracks can stream at once. If the card cannot keep up, the gap plays
+  as silence, the loop stays in time and the screen says `STREAM LATE`; a fast card (class 10 or
+  better) avoids it.
 
-1. **Resample into it** (section 5): the take is written and loaded in one action.
-2. **Recall a kit** that names a sample.
-3. **Replace the file the kit names** on the card (for example `/RECORD/STRATA_1.WAV`) with your
-   own WAV of the same name, then in PROJECT select the track and press `FUNC+DOWN` to reload
-   it (`LOADING`).
+### Picking a sample: the sample browser
+
+On a SMP or GRN track, press **OK** in EDIT (the page says `OK: PICK SAMPLE`) or in MACHINE. The
+browser opens in the folder of the file the track plays, with the cursor on it, or in `/SAMPLES`.
+
+- UP/DOWN (or A) move the cursor, LEFT/RIGHT or the selection keys turn a page of eight.
+- **OK on a file loads it into the track at once**, with the beat playing, and the cursor stays
+  put: press DOWN and OK again to try the next one. The line under the title says `READING`,
+  `CONVERTING` and so on while it loads, and the `NOW` line shows the file the track plays.
+- OK on a folder (shown with a `/`) opens it. **CLR goes up a folder**; at the top are `SAMPLES/`
+  and `RECORD/` (your resampled takes), and CLR from there goes back to where you came from.
+- `FUNC+UP` reads the folder again, for a card swapped or a take just written.
+
+Only WAV files and folders are listed; macOS's `._` files are hidden. A folder shows its first
+256 entries; the count line says `+n` when it left some out, and also counts names too long to
+store (a sample's whole path, folders included, may be 111 characters). Picking a file makes the
+project UNSAVED, like any kit change. Names are shown in capitals, with characters the screen
+cannot draw (such as `_`) shown as `-`.
+
+A track also gets a sample by **resampling into it** (section 5) or by **recalling a kit** that
+names one.
 
 ---
 
@@ -724,6 +885,11 @@ There is no sample browser yet. A track gets a sample in three ways:
   kept one later.
 - **Kill the lows for the build.** FUNC+A takes the kick and bass out; push it again exactly on
   the one of the drop. FUNC+C on its own thins a busy top end for a breakdown.
+- **Snare rolls into the drop.** FUNC+FILL, then hold the snare's pad and press harder over the
+  last bar; REPEAT + VALUE to 1/32 for the final beat.
+- **Tape stop into the drop.** Hold FUNC + push D on the last two beats of a build and let go
+  exactly on the one. Or throw the chord into the delay, then FUNC + MUTATE to keep the echo as
+  a pad while the beat drops out.
 - **Throws on the off-beat parts.** THROW on the rim or the chord for a bar, then let it ring.
 - **Resample a moment you like.** An 8-bar take of a jam into track 8, then sliced or on GRAIN,
   turns a happy accident into material.
@@ -756,8 +922,11 @@ Shown on the PROJECT screen under the project name, and the track shows `X` on t
 
 | Message | Meaning | What to do |
 | --- | --- | --- |
-| `TOO LONG` | Longer than 30 s at its own rate (up to 96 kHz) | Trim it, or save it at 48 kHz or lower |
-| `NO ROOM` | Does not fit in the sample memory left (`SMP ... nn/32M`) | Use shorter or mono samples, or free a track |
+| `TOO LONG` | Longer than six hours | Trim it |
+| `NO ROOM` | Does not fit in the sample memory left (`SMP ... nn/32M`), not even its first two seconds to stream | Use shorter or mono samples, or free a track |
+| `STREAMS FULL` | Four tracks already stream | Free one of them, or use a shorter file that fits in memory |
+| `STREAM FAILED` | The card would not open the file for streaming | Check the card; pick the sample again |
+| `STREAM LATE` | The card fell behind a streamed file: a gap played as silence | Use a faster card, fewer streamed tracks, or 16-bit files |
 | `NOT A WAV` / `BAD FORMAT` | Not a WAV STRATA reads | Export as 16 or 24-bit PCM WAV |
 | `TOO MANY CH` | More than two channels | Export as mono or stereo |
 | `EMPTY` | No audio in the file | |
