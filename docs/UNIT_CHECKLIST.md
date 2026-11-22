@@ -225,7 +225,7 @@ project and never needs a restart."*
 
 - [ ] F3 opens PROJECT. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
-- [ ] OK saves. `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (251 bytes),
+- [ ] OK saves. `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (277 bytes),
       `KIT.BIN` (1,076 bytes) and a `BANK_x.BIN` per touched bank.
 - [ ] Only dirty banks are written. Edit one pattern in bank A, save, and confirm no
       `BANK_B.BIN` appears.
@@ -762,3 +762,48 @@ case; never patch `third_party/enaga` in this repo.
       presses around 1,500 and hard around 3,400.
 - [ ] Crosstalk between neighbouring pads — Enaga lists this as an open item, so characterise
       it before tuning a per-pad curve.
+
+---
+
+## The sends, the master and SETUP
+
+These were the last settings in the app that nothing could change: `Cmd::set_sends` and
+`Cmd::set_master` had no handler and no caller, so every delay and reverb setting and the spec's
+master DJ filter sat at a compile-time default for the life of the app, and PROJECT.BIN had no
+section for them. All fourteen are now encoder bytes in the project file. `docs/REVIEW.md` 2a
+records where each gesture went and why.
+
+- [ ] F7, then the selection keys: MIXER walks TRK 1-4, TRK 5-8, DLY, REV, ROUTE, MST and back
+      round. Every page draws, with its four names, values and bars.
+- [ ] On DLY, encoder A walks the delay's DIVISION: `1/32`, `1/16T`, `1/16`, `1/8T`, `1/8`,
+      `1/8D`, `1/4`, `1/4D`, `1/2`, `1/1`. The page's `TIME nnn MS` line follows it, and the
+      ends HOLD rather than wrapping.
+- [ ] **Hear the tempo-sync.** Set the delay to `1/4` and turn VALUE: the repeats stay on the
+      beat. This is the one thing the host tests cannot check — they can only read the number.
+- [ ] On DLY, B is feedback, C tone, D the return level. B at the top is a long tail that
+      decays; it must NOT grow without bound (the field stops at 0.95).
+- [ ] On REV, A is decay 0.2–30 s, B damping, C the input high-pass 20 Hz–2 kHz, D the return.
+      A's travel should feel even — it is exponential, so a click at the bottom and a click at
+      the top are the same musical step.
+- [ ] On ROUTE, A throws the delay's ping-pong on and off (`ON` / `OFF`), B feeds the delay into
+      the reverb. C and D are empty and must do NOTHING — in particular they must not fall
+      through to the track faders underneath.
+- [ ] On MST, A is the DJ filter, B the glue compressor, C the limiter threshold, D the output
+      level. A reads `OFF` at centre, `LP nn` below it and `HP nn` above.
+- [ ] **F1 + VALUE is the master DJ filter**, as `docs/SPEC.md`'s key table says, from anywhere.
+      The notice shows `DJ OFF`, `DJ LP nn` or `DJ HP nn`. The tempo must not move with it.
+- [ ] Save, power cycle, reopen: every one of the fourteen comes back. Before this they did not
+      exist in any file.
+- [ ] A project saved by an older build (two sections, 251 bytes) still loads, and its sends and
+      master come up at the DEFAULTS rather than at the previous project's.
+- [ ] **The tempo saves.** Set 142.0, save, power cycle: it reopens at 142.0, not 130.0. The
+      clock follows on the first update pass.
+- [ ] F3, then OCTAVE RIGHT: the SETUP page. It shows CLOCK SRC, the tempo and whose it is,
+      MIDI CH and QUANTIZE, and says the first three are set in the Enaga menu. OCTAVE LEFT
+      goes back.
+- [ ] Encoder A on SETUP is QUANTIZE, 0-100 in fives, clamped at both ends. B, C and D do
+      nothing there — and must not reach PROJECT mode's key and scale encoders underneath.
+- [ ] Quantize survives a save and a power cycle. It used to live only in `app/`.
+- [ ] Change CLOCK SRC to MIDI in the Enaga menu with nothing plugged in: SETUP says `MIDI`, the
+      tempo line says `EXT`, and **turning VALUE is refused** — the number must not move. Before
+      this it moved and Enaga threw the call away, so the two drifted apart with every click.

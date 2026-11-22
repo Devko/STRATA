@@ -246,6 +246,27 @@ Everything below was checked against the headers and needs no revision.
 
 ---
 
+## 2a. Deviations from the spec's key table, and why
+
+docs/SPEC.md's key table assigns every key, plain and with F1. Three things it does not give a
+gesture to had to be reachable anyway, so each took a key that does nothing in the mode it is
+used in. All three are small and all three are here rather than only in a comment.
+
+| What | Where it went | Why it could not go where the spec says |
+| --- | --- | --- |
+| **The send and master settings** | MIXER mode's pages 3-6: DLY, REV, ROUTE, MST, on the selection keys next to the two pages of faders | The spec gives the sends no gesture at all and the master only F1 + VALUE for the DJ filter. Fourteen settings reach PROJECT.BIN; a setting in a file that no gesture can change is a setting nobody can use. MIXER is the mode already about the buses |
+| **The record quantize amount** | PROJECT mode's SETUP page, encoder A | It was on F1 + VALUE, which the spec gives to the master DJ filter. That had nowhere to go either -- it is one knob with no page -- so the spec's own assignment won and quantize moved |
+| **The SETUP page itself** | The octave keys, in PROJECT mode only | Every F-key is taken, plain and with F1. In PROJECT mode the octave keys were setting GRID's step page, which is not on screen there, so the gesture was free |
+
+**CLOCK SRC, CLOCK OUT, SYNC OUT and MIDI CH are NOT editable, and that is not a deviation.**
+`<enaga/clock.hpp>` and `<enaga/midi.hpp>` expose `source()` and `channel()` and nothing that
+writes either: they are the user's settings, in the Enaga menu. docs/SPEC.md's "STRATA only
+exposes the settings" can therefore only mean *shows* them, which the SETUP page does, with a
+line saying where they live. That is the whole of M7's app-side work besides the tempo refusal
+the spec asks for in its key table, which `app/` now honours.
+
+---
+
 ## 3. Answers to the spec's open questions
 
 **How much sample RAM per project?** 64 MiB at the measured 7,600 KiB/s is about **8.4 s** of
