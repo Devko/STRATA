@@ -838,6 +838,44 @@ per key release, in the command handler, and touches no render loop: the only pe
 is a flag test when a voice STARTS. No figure above changes. Not re-measured, because this cloud
 session has no emulator and no cl6x; the next load scenario run on Roland's PC covers it.
 
+### The master kill EQ (2026-11-22, host only)
+
+A three-band DJ isolator on the master, after the DJ filter (`Mixer::kill_eq`, loop in
+`dsp/masterloops.ti.c`, so it goes through cl6x). Two Linkwitz-Riley crossovers per channel
+(250 Hz and 2.5 kHz, two Butterworth SVF stages a side) plus an all-pass that keeps LOW in phase
+with the rest: **7 SVF steps per channel per sample**, 14 a sample for the stereo bus, with the
+three gains and the fade ramped across the block. **It costs nothing while bypassed**: with all
+three bands flat and no kill switch on, `kill_eq` returns after three compares, and the output is
+the input to the bit (`tests/test_killeq.cpp`). It starts on the first knob move or switch and
+stops again about 30 blocks after everything is back to flat (the gains glide, then a four-block
+fade). So it is not a fixed tax: it is paid while a performer is using it.
+
+Measured in a cloud session (x86 2.3 GHz, GCC -O2), so these are proxies, not unit figures:
+
+| Measure | Host time per 64-frame block | Share |
+| --- | --- | --- |
+| The kill EQ's loop, stereo, running | 1,683 ns | |
+| The DJ filter (two SVF cascades), for comparison | 475 ns | the EQ is 3.5x the DJ filter |
+| A01 GROOVE, whole engine, EQ bypassed (`host/render.cpp`'s loop) | ~23,900 ns | |
+| A01 GROOVE with LOW killed, whole engine | ~25,250 ns | +5.5% (+1,300 ns) |
+| A04 PEAK with LOW killed, whole engine | ~28,400 ns against ~25,000 | +6-13%, noisy |
+
+Scaled by the default beat's emulator figures (A01 is `scenario_m3.sh`'s beat: 19.17% cl6x,
+31.92% GCC-only), the loop's 7% of the host block is an **estimate of about 1.3 points with
+cl6x and 2.2 GCC-only**, against the ranked-ideas list's guess of 0.5-1 point. The worst case
+then moves from 23.49% to about **24.8% cl6x** (39.60% to about 41.8% GCC-only) with the EQ
+running, inside 60% either way. The loop is a chain of dependent SVF steps, which is exactly the
+shape cl6x's software pipelining overlaps across samples and GCC does not, so the cl6x figure
+could come in well under the proxy; only the emulator says.
+
+If it is too dear on the unit, in order: drop the LOW all-pass (6 SVFs, the sum ripples a
+fraction of a dB around 250 Hz), then 12 dB crossovers (3 SVFs, but the MID kill falls to about
+-15 dB, which is no longer a kill).
+
+To measure on Roland's PC: **E6** below (`tests/scenario_killeq.sh`, which kills all three bands
+on the EQ page and reads the peak, against `scenario_m7.sh` with the EQ bypassed), both compilers.
+On the unit: **U6**.
+
 ### Load time: the downsample low-pass (2026-11-22, host only)
 
 A file above 48 kHz is now low-passed before the load-time resample (`Antialias` in core/pcm:
@@ -953,6 +991,7 @@ scene or knob really did move: those prepare as before.
 | E2 | VA POLY per voice, after | MIN7 vs MIN11 in `build_default_beat`, `scenario_m3.sh`, both compilers | does 2.16 (cl6x) / 3.82 (GCC) move? |
 | E3 | The app's real worst case | temporarily set four tracks to `va_poly` with MIN11 chords in `build_default_beat`; then six; then eight | where it crosses 60% and where it overruns: sizes the voice budget in finding 1 |
 | E4 | The prepare memo's share | `scenario_m5.sh` (scenes and macros move parameters, so it prepares more) against `scenario_m3.sh` | the gap between them, before and after |
+| E6 | The master kill EQ running | `tests/scenario_killeq.sh` against `tests/scenario_m7.sh` (same beat, EQ bypassed), with cl6x and with `ENAGA_TI_CGT=none` | the difference is the EQ's cost; the proxy above says ~1.3 cl6x / ~2.2 GCC-only |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
@@ -963,6 +1002,7 @@ scene or knob really did move: those prepare as before.
 | U2 | MAX with the chord at MIN11 (six voices), then with tracks 5 and 6 also switched to VA POLY playing chords | per-voice cost on the unit; where it overruns |
 | U3 | GRAIN on a multi-second sample, DEN 127, SPR 127, at PIT 64 and at PIT 127 with a high note | the DDR cost of high-pitch grains (finding 6) |
 | U4 | Delay FBK at max, TIM 1/1, one hit, then silence | LOAD stays up while the tail rings and drops when it ends |
+| U6 | MAX on A01 GROOVE with the kill EQ running (FUNC + push A, then let it play 60 s with LOW killed), against U1 | the EQ's cost on the unit; should match E6's cl6x difference times the unit/emulator ratio |
 | U5 | Load a 15 s 96 kHz stereo WAV (`unit-test/STRATA_1.WAV` in the project files; `SWEEP_30S_96K.WAV`, 30 s, now loads as well) | seconds to playable; whether the screen or keys stall during it |
 
 ### MIDI out (after v0.1, 2026-11-22)

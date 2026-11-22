@@ -126,6 +126,8 @@ bool mutates_project(Cmd cmd) {
         // setting was lost the moment the app restarted.
         case Cmd::set_sends:
         case Cmd::set_master:
+        // And the kill EQ's switches, which sit in the same section.
+        case Cmd::eq_kill:
         // The live-record quantize amount, which has a field in PROJECT.BIN and until now was
         // kept only in `app/` -- settable, saved nowhere.
         case Cmd::set_quantize:

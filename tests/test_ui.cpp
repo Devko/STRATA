@@ -1852,8 +1852,8 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     mixer_page(app, 0);
     CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
 
-    // The selection keys page through: two pages of faders, then DLY, REV, ROUTE and MST.
-    for (int i = 1; i < 6; i++) {
+    // The selection keys page through: two pages of faders, then DLY, REV, ROUTE, MST and EQ.
+    for (int i = 1; i < 7; i++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
         CHECK_EQ(UiProbe::mixer_bank(app), i);
@@ -1864,7 +1864,95 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     CHECK_EQ(UiProbe::mixer_bank(app), 0);
     app.on_key(ENAGA_KEY_SELECT_LEFT, true);
     app.on_key(ENAGA_KEY_SELECT_LEFT, false);
-    CHECK_EQ(UiProbe::mixer_bank(app), 5);
+    CHECK_EQ(UiProbe::mixer_bank(app), 6);
+}
+
+// The master kill EQ (dsp/buses.hpp): its MIXER page, its knobs and its kill switches.
+
+void press_key(Strata &app, int code) {
+    app.on_key(code, true);
+    app.on_key(code, false);
+}
+
+TEST(ui_the_eq_page_knobs_move_the_bands_and_a_push_kills_one) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    // fresh() does not reset the project's mixer bytes, so start from what is there.
+    for (int b = 0; b < kKillBands; b++) post_cmd(Cmd::eq_kill, uint8_t(b), 0);
+    pump(2);
+    mixer_page(app, kMixerEqPage);
+
+    // B is MID: two counts a click, like every master knob.
+    const int before = int(engine.project().settings.master[int(MasterField::eq_mid)]);
+    app.on_encoder(1, -5);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_mid)]), before - 10);
+    CHECK(app_storage().dirty());
+    app.on_encoder(1, +5);
+    pump(2);
+
+    // A plain push of A on this page throws LOW's kill switch, and a second push lets it go.
+    press_key(app, ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0x1);
+    CHECK_EQ(int(engine.master().kills), 0x1);
+    CHECK(std::strcmp(UiProbe::notice(app), "KILL LOW") == 0);
+    press_key(app, ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "LOW BACK") == 0);
+
+    // D has no field on this page, and its push does nothing to the switches.
+    press_key(app, ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
+}
+
+// FUNC + push A/B/C is the kill switch from any mode, next to FUNC + VALUE's DJ filter; a plain
+// push away from the EQ page is not, so nothing else that pushes a knob can kill the bass.
+TEST(ui_func_and_a_knob_push_kill_a_band_from_any_mode) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    for (int b = 0; b < kKillBands; b++) post_cmd(Cmd::eq_kill, uint8_t(b), 0);
+    pump(2);
+
+    press_key(app, ENAGA_KEY_F4);                      // GRID
+    press_key(app, ENAGA_KEY_PUSH_C);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
+
+    shift_key(ENAGA_KEY_PUSH_C);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0x4);
+    CHECK(std::strcmp(UiProbe::notice(app), "KILL HI") == 0);
+
+    // In PERFORM too, where A-D are the macros: the kill is a push, the macros are turns.
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    shift_key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0x6);
+    shift_key(ENAGA_KEY_PUSH_C);
+    shift_key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
+}
+
+// The engine refuses a band or an operation it does not have, and counts it.
+TEST(ui_an_eq_kill_for_a_band_that_does_not_exist_is_refused) {
+    fresh();
+    Engine &engine = app_engine();
+    post_cmd(Cmd::eq_kill, uint8_t(kKillBands), 1);
+    post_cmd(Cmd::eq_kill, 0, 3);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
+    post_cmd(Cmd::eq_kill, 1, 1);                    // set, then set again: still set
+    post_cmd(Cmd::eq_kill, 1, 1);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0x2);
+    post_cmd(Cmd::eq_kill, 1, 0);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
 }
 
 TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
@@ -2281,6 +2369,30 @@ TEST(ui_layout_edit_on_every_machine) {
     post_track(Cmd::set_machine, 0, 0);
     pump(4);
     key(ENAGA_KEY_F4);
+}
+
+// Every way the EQ page can read -- a switched band, a knob at the bottom, at the top, flat --
+// fits the screen.
+TEST(ui_layout_the_eq_page_at_its_extremes) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    mixer_page(app, kMixerEqPage);
+    post_cmd(Cmd::eq_kill, 0, 1);
+    for (int i = 0; i < 40; i++) app.on_encoder(1, -5);
+    for (int i = 0; i < 40; i++) app.on_encoder(2, +5);
+    pump(4);
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_mid)]), 0);
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_high)]), 127);
+    check_layout(app, "MIXER EQ, killed and at the ends");
+    // And back to flat, so later tests start bypassed.
+    post_cmd(Cmd::eq_kill, 0, 0);
+    for (int i = 0; i < 32; i++) app.on_encoder(1, +1);     // 0 -> 64, two counts a click
+    pump(4);
+    post_cmd(Cmd::set_master, uint8_t(MasterField::eq_high), uint8_t(int8_t(-63)));
+    pump(4);
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_mid)]), 64);
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_high)]), 64);
+    check_layout(app, "MIXER EQ, flat");
 }
 
 TEST(ui_layout_mixer_perform_keys_machine_resample) {
