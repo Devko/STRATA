@@ -560,6 +560,22 @@ int32_t FakeHost::t_file_list(const char *path, enaga_file_entry_t entry, enaga_
     if (h.pending_ >= kMaxPending) return ENAGA_FILE_TOO_MANY;
 
     const uint32_t n = uint32_t(std::strlen(path));
+
+    // A folder that is not there ends with NOT FOUND, as FatFs's f_opendir answers FR_NO_PATH.
+    // The ABI does not say which error; it does say a list ends with "the number of entries ...
+    // or a negative enaga_file_error", and "an empty folder" and "no such folder" are different
+    // answers a browser shows differently. It exists when it was made, or when anything is in it.
+    bool exists = n == 1;                        // "/" always does
+    for (int i = 0; i < h.count_ && !exists; i++) {
+        const char *p = h.files_[i].path;
+        if (std::strncmp(p, path, n) != 0) continue;
+        if (p[n] == '\0' ? h.files_[i].folder : p[n] == '/') exists = true;
+    }
+    if (!exists) {
+        h.pending_queue_[h.pending_++] = Pending{done, user, int32_t(ENAGA_FILE_NOT_FOUND)};
+        return ENAGA_FILE_OK;
+    }
+
     int listed = 0;
     for (int i = 0; i < h.count_; i++) {
         // Immediate children only: the path is a prefix and what follows holds no further '/'.

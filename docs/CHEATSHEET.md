@@ -33,6 +33,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX |
 | MACHINE | FUNC+EDIT | Pick the machine on each track |
 | KIT | FUNC+EDIT twice | Save and recall whole kits: 16 slots on the card, shared by all projects |
+| SAMPLES | OK in EDIT or MACHINE, on a SMP or GRN track | Pick the track's WAV from `/SAMPLES` or `/RECORD` |
 | MIXER | MIXER | Levels, delay, reverb, routing, master |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
 | PROJECT | PROJECT | Banks and patterns, key and scale, the card |
@@ -103,11 +104,12 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | Mode | UP / DOWN | LEFT / RIGHT | Selection L/R | A-D | OK / CLR | FUNC + arrow |
 | --- | --- | --- | --- | --- | --- | --- |
 | GRID | Track | Step page 1-4 | Step page | Current EDIT page params | — / clear | Copy / paste |
-| EDIT | Track | Page SRC FLTR AMP FX | Page | The page's 4 params | — / clear | Copy / paste |
+| EDIT | Track | Page SRC FLTR AMP FX | Page | The page's 4 params | SMP/GRN: open SAMPLES / clear | Copy / paste |
 | KEYS | Track | Octave (OCT 0-7) | Track | Current EDIT page params | — | Copy / paste |
-| MACHINE | Machine | Track | Track | A: machine | — | Copy / paste |
+| MACHINE | Machine | Track | Track | A: machine | SMP/GRN: open SAMPLES / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
 | MIXER | — | Page (7) | Page | Levels or page fields; on EQ, push A-C kills a band | — / clear | Copy / paste |
+| SAMPLES | Entry | Page of 8 | Page of 8 | A: entry | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | A: bars | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | UP: chain on/off, DOWN: reload track's sample, LEFT: reload project, RIGHT: new project |
 | CHAIN | Entry | Entry's pattern -/+ | Bank A-H | A: repeats X1-X16 | Add entry / back | LEFT: remove entry, UP: chain on/off |
@@ -141,6 +143,9 @@ their sample in the background; the others keep playing theirs. FUNC+DOWN saves 
 into an empty slot at once, and over a stored kit on a second press (AGAIN TO OVERWRITE). The kits
 live in `/ENAGA/DATA/STRATA/KITS/KIT_01.BIN` ... `KIT_16.BIN`. A recalled kit makes the project
 UNSAVED until it is saved with FUNC+PROJECT twice.
+**SAMPLES:** one OK loads the file into the track at once, the beat keeps playing and the cursor
+stays, so DOWN, OK tries the next. The top level holds `SAMPLES/` and `RECORD/`. Only WAVs and
+folders are listed (no `._` files), at most 256 a folder. Picking a file makes the project UNSAVED.
 **MIDI in:** channels 1-8 play tracks 1-8, other channels play the selected track.
 
 ## The screen
@@ -164,6 +169,7 @@ UNSAVED until it is saved with FUNC+PROJECT twice.
 | PERFORM | `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n` | Mutation, track, amount; fill, auto-fill, repeat (`-` pitched down), throw; bar count |
 | MIXER | `T1 M`, `ON`/`--`, `PEAK` | Track muted; machine present; master peak |
 | MIXER EQ | `0`, `-20`, `+12`, `KILL` | Band flat, cut, boosted; killed by its switch or a knob at the bottom |
+| SAMPLES | `/SAMPLES/KICKS`, `>K1.WAV`, `LOOPS/`, `NOW K1.WAV`, `3/40 +2` | Folder (or `READING FOLDER`, `NOT FOUND`, `NO CARD`, the load's progress); cursor; a folder; the track's file; position, count, entries left out |
 | RESAMPLE | `TO FILE`, `ARMED`, `REC 40%`, `WRITING`, `LAST name` | Destination and take state |
 
 ## Abbreviations

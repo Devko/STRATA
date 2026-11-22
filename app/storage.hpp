@@ -52,6 +52,7 @@
 // mistake by a wide margin.
 #pragma once
 
+#include "browse.hpp"
 #include "commands.hpp"
 #include "pcm.hpp"
 #include "perform.hpp"
@@ -156,6 +157,31 @@ public:
 
     // Queue every track whose kit names a file. What a project open does.
     void request_all_samples();
+
+    // --- the sample browser ------------------------------------------------
+    //
+    // One folder of the card at a time, listed with `files::list` into `browse_list()`
+    // (core/browse.hpp says what is kept). The listing runs beside the job machine rather than
+    // in it: it touches none of the loader's buffers, Enaga runs requests in the order they are
+    // made, and a browser that waited for a 30 s sample to convert before it could show a folder
+    // would be no browser. Only one listing is in flight; asking for another meanwhile queues it,
+    // because the entries of the first would otherwise land in the second's table.
+
+    // Show `folder` ("" is the browser's own root: SAMPLES and RECORD). The root is filled at
+    // once; a folder on the card is listed in the background. False for a folder too long to
+    // show, with nothing changed.
+    bool request_browse(const char *folder);
+
+    // True until the folder asked for last has been listed.
+    bool browsing() const { return list_in_flight_ || browse_pending_; }
+    const SampleList &browse_list() const { return list_; }
+    // Why the last listing failed (NOT FOUND, NO CARD...), or nullptr.
+    const char *browse_error() const { return browse_error_; }
+
+    // Put a file in a track's kit and load it, through the ordinary swap -- the same thing a
+    // resample into a track does at its end. False for a track that is not one, or a path that
+    // is empty or would not fit the kit's kSamplePathBytes. The kit becomes UNSAVED.
+    bool request_sample_file(int track, const char *path);
 
     // --- the kit library ---------------------------------------------------
     //
@@ -334,6 +360,16 @@ private:
     bool perform_dirty_ = false;   // the scenes and macro setup, in PERFORM.BIN
     bool kit_dirty_ = false;
     bool bank_dirty_[kBanks] = {};
+
+    // --- the sample browser ---
+    void start_browse();
+    void list_entry(const enaga::files::Info &entry);   // files::list callbacks, main context
+    void list_done(int32_t result);
+    SampleList list_;
+    char browse_wanted_[SampleList::kFolderBytes] = {};
+    bool browse_pending_ = false;  // asked for, not yet started (one is in flight)
+    bool list_in_flight_ = false;  // a files::list owns the callbacks until its done()
+    const char *browse_error_ = nullptr;
 
     // --- the sample loader ---
     uint8_t sample_queue_ = 0;     // one bit per track, waiting to be loaded

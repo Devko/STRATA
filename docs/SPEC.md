@@ -229,7 +229,7 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 | Octave left/right | Step page 1-4 in GRID; octave in KEYS | Pattern length |
 | UP, DOWN | **[rev]** The rows on screen: the track in GRID, EDIT and KEYS; the machine in MACHINE; the kit slot in KIT; the length in RESAMPLE; the mutation in PERFORM; the slot cursor in PROJECT. With a STEP held: copy, paste | Copy, paste. In PROJECT: chain on/off, reload the sample. In KIT: read the card again, save the kit into the slot. In PERFORM: auto-fill |
 | LEFT, RIGHT | **[rev]** Sideways: the page wherever the selection keys flip pages; the step on the step page; octave in KEYS; macro in PERFORM; track in MACHINE; the page of eight kit slots in KIT; destination in RESAMPLE; the slot cursor in PROJECT | Free |
-| OK, CLR | Confirm, cancel. **[rev]** OK picks the slot under the cursor in PROJECT, and recalls the kit under it in KIT (twice, since a recall is not undoable); CLR closes the step page and SETUP | F1 + CLR = undo, F1 + OK = redo |
+| OK, CLR | Confirm, cancel. **[rev]** OK picks the slot under the cursor in PROJECT, and recalls the kit under it in KIT (twice, since a recall is not undoable), and in EDIT or MACHINE on a SAMPLE or GRAIN track opens the sample browser, where it loads a file or opens a folder; CLR closes the step page and SETUP, and goes up a folder in the browser | F1 + CLR = undo, F1 + OK = redo |
 | VALUE | Tempo; push + turn = swing. **[rev]** Shows `EXT` and refuses edits when CLOCK SRC is not INTERNAL | Master DJ filter |
 | Push A, B, C | **[rev]** Remove a lock with a STEP held. On the MIXER's EQ page: the kill EQ's LOW, MID, HI kill switch | **[rev]** The master kill EQ's LOW, MID, HI kill switch, in every mode |
 
@@ -354,6 +354,11 @@ The enum numbering is therefore not the order the UI shows the speeds in.
 - Loaded in the background with `files::load`, whose `done` callback runs in the main context. A track whose sample is still loading stays silent rather than glitching.
 - Files not at 48 kHz are resampled once at load, in main-loop slices.
 - Streams (`files::Stream`) are used only for recording and for loops longer than 30 s.
+- **[rev]** Samples are picked on the box with the **sample browser** (2026-11-22): OK in EDIT or
+  MACHINE on a SAMPLE or GRAIN track lists `/SAMPLES` (and `/RECORD`) through `files::list`, and
+  OK on a WAV puts its path in the track's kit and loads it through the ordinary swap, transport
+  running. `core/browse.hpp` holds what is listed (WAVs and folders, no `._` files, 256 entries
+  of 64 bytes, paths that fit the kit's 112 bytes).
 
 **Saving**
 
