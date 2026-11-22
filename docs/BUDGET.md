@@ -925,6 +925,44 @@ Memory: the freeze's loop is 1.46 MiB (4 s of stereo float: two 2 s delay times)
 stop's ring 0.46 MiB (1.25 s), both taken in init. `tests/test_memory.cpp` itemises them: init
 is about 104.1 MiB of the 120 MiB heap with the stream rings from main, 15.9 MiB spare.
 
+### The sends' ambient modes: LONG delay and HALL reverb (2026-11-22, host only)
+
+A second mode on each send (Roland's choice over a third send; `dsp/ambient.hpp`): send A's LONG
+delay and send B's HALL reverb, loops in `dsp/ambientloops.ti.c`, so both go through cl6x. The
+classic modes stay the default and their path is untouched: every golden render passes unchanged.
+Each mode runs only while it has a tail, as the classic ones do, and a mode switched away from
+rings out unfed, so for a few seconds after a switch **both** of a send's modes run.
+
+| Measure (x86 2.3 GHz, GCC -O2, per 64-frame block, steady state) | Host time |
+| --- | --- |
+| Classic delay (Enaga StereoDelay, ping-pong) | ~305 ns |
+| Classic reverb (Enaga Reverb) | ~1,600 ns |
+| LONG delay (12 s line, wow, four all-passes a side, low cut, tone) | ~1,400 ns |
+| HALL reverb (eight swept lines, four all-passes, shimmer) | ~2,500 ns |
+
+Classic sends together ~1.9 us, ambient ~3.9 us: about twice the send cost. Against A01's ~23.9
+us host block, and with the tape stop's proxy (0.9% of the host block ~ 0.2 points cl6x, 0.3
+GCC-only), that is an **estimate of +1.9 points cl6x / +2.8 GCC-only** with both ambient modes
+on, and **+3.6 / +5.3** for the few seconds after switching while the classic tails still ring.
+On the worst case above (23.61% cl6x, 44.26% GCC-only, both sends running) that is about 27% and
+50% at the very worst, inside the 60% target. The cl6x share is the least certain number here:
+the per-sample feedback loops carry a dependency from frame to frame, which software pipelining
+cannot hide as well as it does in the voices' loops.
+
+Emulator: **E11**, `tests/scenario_ambient.sh` (push A on DLY+ and REV+ switches both modes on the
+default beat, whose chord and clap feed both sends), against `scenario_m3.sh`, with cl6x and
+`ENAGA_TI_CGT=none`. Not run yet: no device build in the cloud session that wrote it. Unit:
+**U9** (UNIT_CHECKLIST 13j).
+
+| Scenario | cl6x | GCC-only |
+| --- | --- | --- |
+| `scenario_m3.sh` (classic) | | |
+| `scenario_ambient.sh` (LONG + HALL, both tails at first) | | |
+
+If the unit's MAX says it does not fit, cut in this order (CLAUDE.md: effects before voices): the
+HALL's shimmer (a two-tap read and a ring write a frame), its modulation (a phasor and the
+fractional reads), then the LONG delay's diffusion to two all-passes a side.
+
 ### Per-track LFO (2026-11-22, host only)
 
 One LFO per track, parameters 16-19 (dsp/lfo.hpp). It runs once per **block**, not per sample,
@@ -1112,6 +1150,15 @@ enough on its card); measure with section 15d of the walkthrough: LOAD with thre
 tracks against none. If it is worse than 1 point a track, the fetch is the lever: a fast path
 for a run of samples wholly inside the head or wholly inside the fifo.
 
+### SLC AUTO (2026-11-22): no audio cost, one pass at load
+
+The hits are found in the main context, as each slice of a load is written into the pool
+(`core/onsets.hpp`): one abs and one add per sample, and a few compares per 256-frame hop. That
+is less than the int16 conversion beside it, so a load should not be measurably slower. In the
+audio context nothing per sample changes: the cuts are worked out in `Sampler::recompute_window`
+at control rate (at most 15 compares), and a trigger reads two of them instead of multiplying.
+With AUTO off (the default) the Sampler renders bit for bit as before.
+
 ### MIDI out (after v0.1, 2026-11-22)
 
 **Not measured yet: no emulator or device toolchain in the session that built it.** Owed:
@@ -1268,7 +1315,7 @@ count the staging at all.
 | Samples, int16 (32 MiB default, 64 MiB ceiling) | 32-64 MiB | **64 MiB** reserved at init, from the heap. The CEILING, not the default: a project may raise its budget long after `init()` is over, and CLAUDE.md allows no allocation after it |
 | Sample loader staging (M4) | not budgeted | **27.5 MiB**, from the heap: 16.5 MiB for one whole file (`files::load` wants a buffer for all of it; 30 s of 96 kHz stereo 24-bit plus 64 KiB of chunks) and 11 MiB for a resample's int16 source (30 s of 96 kHz stereo). Sized from `docs/SPEC.md`'s own 30 s in-RAM limit counted in the FILE's length, and a FIXED cost rather than a per-sample one. Was 18 MiB when the limit was counted in 48 kHz frames. `tests/test_memory.cpp`: init is 101.2 MiB of a 120 MiB heap, 18.8 MiB spare against an 8 MiB headroom rule. **Worth checking against the heap on the unit** -- 64 + 27.5 is 91.5 MiB of the ~124 MiB |
 | Beat repeat ring (2 bars at 60 BPM, stereo float) | 2.93 MiB | **2.93 MiB** (3,072,000 bytes) reserved at init. Below 60 BPM the ring holds less than two bars, which costs nothing: the longest loop offered is a quarter note, 3 s even at 20 BPM |
-| Delay and reverb buffers | 2 MiB | |
+| Delay and reverb buffers | 2 MiB | **1.10 MiB** in Enaga's classic StereoDelay and Reverb, plus **4.99 MiB** for the ambient modes (2026-11-22): the LONG delay's 12 s of stereo float and its all-pass rings (4.44 MiB) and the HALL's lines (0.55 MiB). `tests/test_memory.cpp`: init is **109.1 MiB** of the heap, **10.9 MiB spare** against the 8 MiB rule |
 | Patterns, kit, scenes, 16 undo levels | 2 MiB | **~148 KiB** so far: 17 whole-pattern undo snapshots (~140 KiB) plus the live pattern and the clipboard. In bss, not the heap |
 | Recording ring and stream buffers | 1 MiB | **1.13 MiB**: four 256 KiB `files::Stream` rings from the heap (streaming, 2026-11-22), plus eight 16 KiB frame fifos in the engine (bss). The take is not here: it is `Capture`'s own 5.49 MiB. `tests/test_memory.cpp`: init is now **102.2 MiB** of the heap, 17.8 MiB spare |
 | App image, voice pools, UI | 4 MiB | **396 KiB** of text, 52 bytes of data and **1.21 MiB of bss** in the linked ELF (`tic6x-elf-size`). The bss is mostly the live Project at 1.03 MiB plus the undo stack; the 85 MiB above is heap, taken in init() and not in the image |

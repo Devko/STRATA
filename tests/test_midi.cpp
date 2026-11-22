@@ -418,3 +418,31 @@ TEST(midi_out_note_repeat_sends_every_roll_hit_and_ends_each) {
     CHECK(ons(9, 60) >= 5);
     CHECK_EQ(offs(9, 60), ons(9, 60));
 }
+
+TEST(midi_out_an_lfo_on_mid_sends_its_cc_at_a_capped_rate) {
+    // Roland, 2026-11-22: an LFO on a MID track moves the synth, through the destination's CC,
+    // at most once per Engine::kLfoCcMs (20 ms) so sixteen tracks fit down a DIN cable.
+    start(0, 6, kMid);
+    pump(2);
+    post(Cmd::set_param, 0, 0, uint8_t(kLfoRate), 60);         // free and fast
+    post(Cmd::set_param, 0, 0, uint8_t(kLfoDest), lfo_dest_byte(0));   // SRC slot 0: CC 74
+    post(Cmd::set_param, 0, 0, uint8_t(kLfoDepth), 127);
+    pump();
+    host().clear_midi();
+    pump(9600 / strata::test::kRigBlock);                       // 200 ms at 48 kHz
+    const int sent = ccs(6, 74);
+    CHECK(sent >= 8);
+    CHECK(sent <= 11);
+    int lowest = 127, highest = 0;
+    for (int i = 0; i < host().midi_count(); i++) {
+        const int b = host().midi_sent(i).b;
+        lowest = b < lowest ? b : lowest;
+        highest = b > highest ? b : highest;
+    }
+    CHECK(highest - lowest > 20);                               // it moves the synth
+
+    // Turned off, the CC goes back to where the knob is, at once.
+    post(Cmd::set_param, 0, 0, uint8_t(kLfoDepth), 0);
+    pump(2);
+    CHECK_EQ(int(host().midi_sent(host().midi_count() - 1).b), int(eng().params(0).v[0]));
+}

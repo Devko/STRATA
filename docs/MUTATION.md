@@ -87,6 +87,42 @@ resets (a third of the machines' survivors), steal tie-breaks, and the sampler's
 "After" for the second pass re-ran only the survivors: the code under test did not change, so a
 mutant the old suite killed is still killed.
 
+## Third pass: the afternoon's tape stop, freeze, LFO and stream fifo (2026-11-22)
+
+| File | Before | After | New tests |
+| --- | --- | --- | --- |
+| dsp/tapestop.cpp | 19 / 24 (44.2%) | 22 / 21 (51.2%) | tests/test_tapestop.cpp |
+| dsp/lfo.cpp | 28 / 17 (62.2%) | 31 / 14 (68.9%) | tests/test_lfo.cpp |
+| dsp/freeze.cpp | 36 / 17 (67.9%) | unchanged | none: all equivalent |
+| core/streamfifo.cpp | 14 / 7 (66.7%) | unchanged | none: all equivalent |
+
+What the new tests close: a second tape stop starting from the first one's standstill (the
+`lag_` and `speed_` resets in `hold`), the release fade cut to one block (`!held_ && wet_ <= 0`
+as `||`), a free LFO's rate read from the wrong byte or zeroed in `LfoSettings::make`, and
+`lfo_sync_name(64)` (the first synced count) showing `---`.
+
+Equivalent, and why:
+
+- **`init` on a fresh object** (tapestop 13-25, freeze 11-18, lfo 94): the members already hold
+  those values, the ring is zero from the zeroing loop's other bound, and `new` never returns
+  null with `-fno-exceptions` on the host. The same class as the machines' fresh-object resets.
+- **Clamp boundaries at the clamp value** (tapestop 32, freeze 27 and 46, lfo 25, 76, 79, 88):
+  `<` and `<=` differ only where both branches give the same number.
+- **Zero-length blocks** (tapestop 50, freeze 42): a zero-frame call does nothing either way, and
+  a one-frame block skipped by `n <= 1` is never made by the engine (Enaga's blocks are 64).
+- **`lfo_free_hz` for a synced byte** (lfo 43): only called while the rate is free.
+- **`sync_ticks == 1`** (lfo 86): no division is one tick, so `inv_sync_ticks` is the same.
+- **`seek` with no phase change** (lfo 120): `dt` 0 and 1 land on the same phase; only S+H could
+  tell them apart, by drawing a new value, and a synced seek to the same phase does not happen
+  within one tick.
+- **freeze 29, 52 and 61**: `read_` is set again when recording ends, and a release left in
+  `releasing` at gain 0 outputs exactly what `idle` does.
+- **core/streamfifo.cpp 18 and 27-29**: the float estimate in `stream_frames_in` is already exact
+  for every size the tests use, so the two correction loops never run and their mutants cannot
+  show; the span clamp is equal at the boundary.
+
+The `*.ti.c` loop (`dsp/stoploops.ti.c`) is not mutated by the harness, as before.
+
 ## Golden renders
 
 The DSP files could not be pinned by property tests alone. A hit that sounds, decays and moves
@@ -274,8 +310,8 @@ Second pass:
   grain onset at 1/65536 of a frame, and the window's last entry (1.5e-4) zeroed: all below
   what a golden render's tolerance can see.
 - The send tails' exact formula is pinned at one setting each; feedback at exactly 0.001 is not.
-- dsp/freeze, dsp/lfo, dsp/tapestop and Sampler's new code arrived from main after these runs
-  and have not been run line by line yet.
+- dsp/freeze, dsp/lfo, dsp/tapestop and core/streamfifo: run in the third pass below. Sampler's
+  stream voice (dsp/sample.cpp, `generate_stream` and `stream_tap`) has not been run line by line.
 
 ## Found along the way
 

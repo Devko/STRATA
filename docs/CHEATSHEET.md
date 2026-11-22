@@ -58,8 +58,8 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph) |
 | VALUE push + turn | Pattern swing |
 | FUNC + VALUE | Master DJ filter (LP n / OFF / HP n) |
-| FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`) |
-| FUNC + push D (hold) | Tape stop: the master slows to a standstill over two beats; let go and it is back (`TAPE STOP`) |
+| FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
+| FUNC + push D (hold) | Tape stop: the master slows to a standstill over two beats; let go and it is back (`TAPE STOP`). Not while a STEP is held: that clears the D lock |
 | FUNC + octave L/R | Selected track's length (polymeter); not in KEYS, PROJECT, PERFORM |
 | FUNC + selection L/R | Selected track's speed: 2, 1, 3/4, 1/2, 1/4, 1/8 |
 | Arrows | UP/DOWN move through rows, LEFT/RIGHT sideways, OK picks, CLR goes back |
@@ -84,7 +84,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | Tap STEP | Toggle trig. FUNC + tap: toggle trigless (locks, no note) |
 | Octave L/R | Step page 1-4 (64 steps) |
 | Hold STEP + turn A-D | Lock that parameter of the current EDIT page on the step |
-| Hold STEP + push A-D | Remove that one lock (LOCK CLEARED). With FUNC also held, push D is still the tape stop |
+| Hold STEP + push A-D | Remove that one lock (LOCK CLEARED), with or without FUNC held |
 | Hold STEP + turn VALUE | Set the step's note |
 | Hold STEP + OK | Open the step page on that step |
 | Hold STEP + CLR | Clear the step |
@@ -110,11 +110,11 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | KEYS | Track | Octave (OCT 0-7) | Track | Current EDIT page params | — | Copy / paste |
 | MACHINE | Machine | Track | Track | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
-| MIXER | — | Page (7) | Page | Levels or page fields; on EQ, push A-C kills a band | — / clear | Copy / paste |
+| MIXER | — | Page (9) | Page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode | — / clear | Copy / paste |
 | SAMPLES | Entry | Page of 8 | Page of 8 | A: entry | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | UP: chain on/off, DOWN: reload track's sample, LEFT: reload project, RIGHT: new project |
-| CHAIN | Entry | Entry's pattern -/+ | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8 | Add entry / back | LEFT: remove entry, RIGHT: SONG/LOOP, UP: chain on/off |
+| CHAIN | Entry | Entry's pattern -/+ | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8 | Add entry / back | LEFT twice: remove entry, RIGHT: SONG/LOOP, UP: chain on/off |
 | PATTERN | Change field -/+ | Field LEN / SWG / track 1-8 swing | Bank A-H | A: LEN 1-64, B: SWG, C: track swing (PAT, 50-75) | — / back | UP: chain on/off |
 | PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Macros A-D | Capture scene / clear macro | UP/DOWN: auto-fill OFF 4 8 16 |
 
@@ -130,7 +130,7 @@ FUNC+DOWN is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the chara
 under that name (NAME TAKEN if another project has it), CLR cancels. FUNC+UP reads the card again.
 **CHAIN:** a STEP key puts that slot of the shown bank into the entry under the cursor (or starts
 the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playing pattern when
-empty), up to 64 entries. FUNC+LEFT removes the entry at once (no second press, not undoable); FUNC+DOWN reloads the selected track's sample, as on the slots. B recalls a mute state as the entry starts; FUNC+RIGHT: SONG plays
+empty), up to 64 entries. FUNC+LEFT twice within 2 s removes the entry under the cursor (`AGAIN TO REMOVE`, then `ENTRY REMOVED`; not undoable); FUNC+DOWN reloads the selected track's sample, as on the slots. B recalls a mute state as the entry starts; FUNC+RIGHT: SONG plays
 the chain once and stops (`SONG END`), LOOP repeats it. Chain edits are not undoable.
 **PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
 (END) and the chain wait for. The eight TRACK SWING fields read `PAT` (follow SWG) or 50-75%: C
@@ -156,7 +156,8 @@ stays, so DOWN, OK tries the next. The top level holds `SAMPLES/` and `RECORD/`.
 folders are listed (no `._` files), at most 256 a folder. Picking a file makes the project UNSAVED.
 **MIDI out:** a track with a MIDI OUT channel (MACHINE, encoder B) sends every note it plays
 there: steps, chords, ratchets, arp hits, note repeat, pads, KEYS and MIDI IN. MID is the machine that plays nothing
-itself; its SRC and AMP knobs send CC 74 71 73 72 and 70 75 76 77 when they move (locks too).
+itself; its SRC and AMP knobs send CC 74 71 73 72 and 70 75 76 77 when they move (locks too), and
+its LFO sends its destination's CC as it moves, at most every 20 ms.
 Notes end with their step length, a key or note let go, a mute, STOP; the second STOP and
 FUNC+F6 also send All Notes Off. Enaga 0.2.0: unplug USB (or keep its MIDI port open on the
 computer) when driving gear from the DIN jack.
@@ -207,7 +208,7 @@ MNO VA mono · PLY VA poly.
 | SNR | TUN, SNP snappy, TON noise tone, CLP clap mode | DEC, SPR clap spread, BDY body, LVL |
 | HAT | TUN, TON tone, NOI noise, DTN detune | DEC, CHO choke time, CHK choke group, LVL |
 | PRC | TUN, RAT ratio, IDX FM index, IDD index decay | DEC, SWP pitch sweep, SWT sweep time, LVL |
-| SMP | PIT pitch, STA start, LEN length, SLC slices (1 = one-shot) | ATK attack, DEC, PLY play mode (fwd/loop/rev/rev loop), LVL |
+| SMP | PIT pitch, STA start, LEN length, SLC slices (1 = one-shot; push D: AUTO cuts at the hits) | ATK attack, DEC, PLY play mode (fwd/loop/rev/rev loop), LVL |
 | GRN | POS position, SIZ grain size, DEN density, SPR spray | PIT pitch, SHP grain shape, DEC, LVL |
 | MNO | TUN, MOD filter mode, CUT cutoff, RES resonance | DEC, ENV filter env amount, GLD glide, LVL |
 | PLY | TUN, MOD, CUT, RES | DEC, ENV, DET detune, LVL |
@@ -223,8 +224,10 @@ condition result), NEI / NOT NEI (the track to the left's), 1ST / NOT 1ST (first
 **Chords:** 1 NOTE, MIN, MAJ, SUS2, SUS4, DIM, MIN7, DOM7, MAJ7, MIN9, MIN11, 5TH, OCT, 5TH OCT; `/n` = inversion n.
 
 **MIXER pages:** TRK 1-4, TRK 5-8 (levels) · DLY: TIM time (1/32 ... 1/1, T triplet, D dotted),
-FBK feedback, TON tone, LVL · REV: DEC decay, DMP damping, HPF high-pass, LVL · ROUTE: PNG ping-pong,
-D>R delay into reverb · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
+FBK feedback, TON tone, LVL · DLY+: TYP CLAS/LONG (push A flips it), MUL X1-X8 (LONG: time x MUL,
+up to 12 s), WOW tape wobble, DIF diffusion · REV: DEC decay, DMP damping, HPF high-pass, LVL ·
+REV+: TYP ROOM/HALL (push A), SIZ size, MOD sweep, SHM octave-up shimmer · ROUTE: PNG ping-pong,
+D>R delay into reverb, LCT the LONG delay's low cut · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
 LOW (below 250 Hz), MID, HI (above 2.5 kHz), each flat at centre, KILL at the bottom, +6 dB at the top.
 
 **Lists:** queue modes END (end of pattern), 16, 32 (steps), NOW · repeat 1/4 1/8 1/16 1/32 1/4T

@@ -876,6 +876,9 @@ void Engine::apply(const Command &command) {
             const int16_t *data = sample_region_ + command.u / sizeof(int16_t);
             stop_stream(track);
             pool_[track].sampler.set_sample(data, frames, channels, rate_);
+            pool_[track].sampler.set_slice_points(slice_inbox_[track]);
+            status_.slice_points[track].store(uint8_t(pool_[track].sampler.point_count()),
+                                              std::memory_order_relaxed);
             pool_[track].grain.set_sample(data, frames, channels, rate_);
             break;
         }
@@ -902,6 +905,7 @@ void Engine::apply(const Command &command) {
             Sampler &sampler = pool_[track].sampler;
             sampler.set_stream(head, info.head_frames, info.total_frames, channels, rate,
                                &fifos_[track]);
+            status_.slice_points[track].store(0, std::memory_order_relaxed);   // never sliced
             // GRAIN plays what is resident: the head. A grain cloud jumps about the file, which
             // a stream cannot do.
             pool_[track].grain.set_sample(head, info.head_frames, channels, rate);
@@ -970,6 +974,13 @@ void Engine::apply(const Command &command) {
                 effective_[track].v[command.a] = clamp_u8(value);
             }
             break;
+
+        case Cmd::set_slice_mode: {
+            const uint8_t mode = command.a == kSliceAuto ? kSliceAuto : kSliceEqual;
+            project_.kit.tracks[track].slice_mode = mode;
+            pool_[track].sampler.set_auto_slices(mode == kSliceAuto);
+            break;
+        }
 
         case Cmd::set_track_level: {
             // A NaN fails both comparisons and would pass straight through, so it is caught first.
@@ -1460,6 +1471,7 @@ void Engine::params_from_kit() {
         // step, which is the same reason Cmd::set_param mirrors into effective_.
         effective_[t] = params_[t];
         mix_[t].level = track.level < 0.0f ? 0.0f : (track.level > 2.0f ? 2.0f : track.level);
+        pool_[t].sampler.set_auto_slices(track.slice_mode == kSliceAuto);
     }
 }
 
@@ -2287,11 +2299,11 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         }
     }
 
-    // A MID track's knobs, locks, scenes and macros, as CCs, now that `effective_` is final.
-    send_midi_ccs();
     // The LFOs, last, over everything: the kit, the morph, the macros and the step's locks all
     // decide where the destination sits, and the LFO moves it about there (dsp/lfo.hpp).
     run_lfos(frames, clock_now.running, clock_now.position, clock_now.fraction);
+    // A MID track's knobs, locks, scenes, macros and LFO, as CCs, now that all of them are in.
+    send_midi_ccs(frames);
 
     // A streamed sample's next frames, before anything renders from them.
     top_up_streams();
@@ -2411,13 +2423,21 @@ void Engine::send_midi_notes(int track, const uint8_t *notes, int count, uint8_t
     }
 }
 
-void Engine::send_midi_ccs() {
-    for (int t = 0; t < kTracks; t++) send_midi_ccs(t);
+void Engine::send_midi_ccs(uint32_t frames) {
+    for (int t = 0; t < kTracks; t++) {
+        lfo_cc_wait_[t] = lfo_cc_wait_[t] > frames ? lfo_cc_wait_[t] - frames : 0u;
+        send_midi_ccs(t, true);
+    }
 }
 
-void Engine::send_midi_ccs(int t) {
+void Engine::send_midi_ccs(int t, bool throttle) {
     const uint8_t channel = project_.settings.midi_out[t];
     if (machine_id_[t] != uint8_t(MachineId::midi) || channel == kMidiOutOff || muted_[t]) return;
+    // The LFO's destination is worked out here from `effective_` rather than read from
+    // `modulated_`: ahead of a note, the step's lock is in `effective_` but `modulated_` is
+    // still last block's.
+    const LfoSettings &lfo = lfo_settings_[t];
+    const int lfo_dest = modulating_[t] ? int(lfo.dest) : -1;
     if (!cc_known_[t]) {
         // The values as they stand become the reference; only a MOVE is sent.
         for (int p = 0; p < kParams; p++) cc_sent_[t][p] = effective_[t].v[p];
@@ -2426,13 +2446,19 @@ void Engine::send_midi_ccs(int t) {
     }
     for (int p = 0; p < kParams; p++) {
         const uint8_t cc = MidiMachine::cc_for(p);
-        const uint8_t value = effective_[t].v[p];
+        uint8_t value = effective_[t].v[p];
+        const bool moved_by_lfo = p == lfo_dest;
+        if (moved_by_lfo) value = lfo_apply(value, lfo_value_[t], lfo.depth);
         if (cc == 0 || value == cc_sent_[t][p]) continue;
+        if (moved_by_lfo && throttle && lfo_cc_wait_[t] > 0) continue;
         uint8_t bytes[3];
         midi_message(bytes, 0xB0u, channel, cc, value);
         // Remembered only once it has left: a full queue is retried next block with the newest
         // value, which is all a CC needs.
-        if (midi_sink_.send(bytes, 3)) cc_sent_[t][p] = value;
+        if (midi_sink_.send(bytes, 3)) {
+            cc_sent_[t][p] = value;
+            if (moved_by_lfo) lfo_cc_wait_[t] = uint32_t(rate_ * (kLfoCcMs * 0.001f));
+        }
     }
 }
 

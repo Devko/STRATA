@@ -131,10 +131,16 @@ constexpr MixerPage kMixerPages[] = {
     {"TRK 5-8", false, {-1, -1, -1, -1}},
     {"DLY", false, {int8_t(SendField::delay_seconds), int8_t(SendField::delay_feedback),
                     int8_t(SendField::delay_tone), int8_t(SendField::delay_level)}},
+    // The ambient modes (dsp/ambient.hpp), each beside its send: TYP switches the mode, and the
+    // rest only sound once it is on.
+    {"DLY+", false, {int8_t(SendField::delay_mode), int8_t(SendField::delay_multiplier),
+                     int8_t(SendField::delay_wow), int8_t(SendField::delay_diffusion)}},
     {"REV", false, {int8_t(SendField::reverb_decay_s), int8_t(SendField::reverb_damping),
                     int8_t(SendField::reverb_high_pass_hz), int8_t(SendField::reverb_level)}},
+    {"REV+", false, {int8_t(SendField::reverb_mode), int8_t(SendField::reverb_size),
+                     int8_t(SendField::reverb_mod), int8_t(SendField::reverb_shimmer)}},
     {"ROUTE", false, {int8_t(SendField::delay_ping_pong), int8_t(SendField::delay_to_reverb),
-                      -1, -1}},
+                      int8_t(SendField::delay_low_cut_hz), -1}},
     {"MST", true, {int8_t(MasterField::dj), int8_t(MasterField::compressor),
                    int8_t(MasterField::limit), int8_t(MasterField::level)}},
     // The kill EQ, next to the master it sits in. Push A, B or C to throw that band's kill
@@ -148,6 +154,13 @@ constexpr int kMixerPageCount = int(sizeof(kMixerPages) / sizeof(kMixerPages[0])
 
 // Which MIXER page is the kill EQ's, for the plain-push kill switches.
 constexpr int kMixerEqPage = kMixerPageCount - 1;
+
+// The ambient modes' pages, whose push A throws the mode switch (TYP) like turning it does.
+constexpr int kMixerLongPage = 3;
+constexpr int kMixerHallPage = 5;
+static_assert(kMixerPages[kMixerLongPage].field[0] == int8_t(SendField::delay_mode) &&
+                  kMixerPages[kMixerHallPage].field[0] == int8_t(SendField::reverb_mode),
+              "the ambient pages moved: push A would throw the wrong switch");
 
 // PERFORM: FUNC + STEP 1-4 hand a macro the LFO's bytes, FUNC + STEP 5-7 the master EQ's bands.
 constexpr int kMacroEqFirstStep = kLfoParams;
@@ -317,6 +330,9 @@ const char *mode_name(Mode mode) {
     }
 }
 
+// SAMPLE's SLC, the parameter SLC AUTO goes with (dsp/sample.cpp's parameter table).
+constexpr int kSlcParam = 3;
+
 const char *page_name(Page page) {
     switch (page) {
         case Page::src:  return "SRC";
@@ -410,8 +426,10 @@ public:
 
         // FUNC + push D, HELD: the tape stop, in every mode -- beside FUNC + push A-C, the kill
         // EQ, so the master moves are under one hand. Its release ends it whether or not FUNC is
-        // still down, and before the held-step gesture below can take the key.
-        if (key == ENAGA_KEY_PUSH_D && (down ? shift_ : tape_held_)) {
+        // still down, and before the held-step gesture below can take the key. Not while a STEP is
+        // held: then FUNC + push D clears that step's D lock, as FUNC + push A-C clear theirs
+        // (Roland, 2026-11-22) -- every push with a step held is the step's.
+        if (key == ENAGA_KEY_PUSH_D && (down ? shift_ && held_step_ < 0 : tape_held_)) {
             tape_held_ = down;
             post(Cmd::tape_stop, 0, 0, down ? 1 : 0);
             if (down) notice("TAPE STOP");
@@ -438,6 +456,26 @@ public:
             return;
         }
 
+        // SLC AUTO: on EDIT, a SAMPLE track, push the knob that turns SLC. Cuts at the hits found
+        // in the sample (core/onsets.hpp) rather than evenly; push again for even. Before the
+        // kill switches so FUNC + push stays theirs: this one is without FUNC.
+        if (mode_ == Mode::edit && !shift_ &&
+            (key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||
+             key == ENAGA_KEY_PUSH_D) &&
+            engine_.machine_id(selected_) == uint8_t(MachineId::sample)) {
+            const int encoder = key == ENAGA_KEY_PUSH_A   ? 0
+                                : key == ENAGA_KEY_PUSH_B ? 1
+                                : key == ENAGA_KEY_PUSH_C ? 2
+                                                          : 3;
+            if (page_first(Page(param_page_)) + encoder == kSlcParam) {
+                if (!down) return;
+                const bool on = !slices_auto(selected_);
+                post(Cmd::set_slice_mode, uint8_t(selected_), 0, on ? kSliceAuto : kSliceEqual);
+                notice(on ? "SLICES AUTO" : "SLICES EVEN");
+                return;
+            }
+        }
+
         // The master kill EQ's kill switches: push A, B or C on the MIXER's EQ page, or FUNC +
         // push A, B or C from anywhere -- next to FUNC + VALUE, the DJ filter, so both master
         // moves are under one hand in every mode, PERFORM included. A switch latches: push to
@@ -448,6 +486,23 @@ public:
                 if (down) toggle_kill(key == ENAGA_KEY_PUSH_A ? 0 : (key == ENAGA_KEY_PUSH_B ? 1 : 2));
                 return;
             }
+        }
+
+        // The ambient modes: push A on DLY+ or REV+ throws that send's mode, CLAS to LONG or
+        // ROOM to HALL and back. A switch is a push as much as a turn, and a push is what the
+        // emulator can press (tests/scenario_ambient.sh).
+        if (key == ENAGA_KEY_PUSH_A && mode_ == Mode::mixer &&
+            (mixer_bank_ == kMixerLongPage || mixer_bank_ == kMixerHallPage)) {
+            if (!down) return;
+            const bool long_page = mixer_bank_ == kMixerLongPage;
+            const SendField field = long_page ? SendField::delay_mode : SendField::reverb_mode;
+            const bool on = engine_.project().settings.sends[int(field)] >= 64;
+            post_delta(Cmd::set_sends, 0, 0, uint8_t(field), on ? -1 : +1);
+            static const char *const names[2][2] = {{"REV ROOM", "REV HALL"},
+                                                    {"DLY CLASSIC", "DLY LONG"}};
+            notice(names[long_page ? 1 : 0][on ? 0 : 1]);
+            enaga::log(names[long_page ? 1 : 0][on ? 0 : 1]);
+            return;
         }
 
         // MUTE mode turns STEP 1-8 into the eight stored mute states: recall on a tap, store
@@ -2424,6 +2479,31 @@ public:
         canvas.text(0, 96, "FUNC+EDIT: MACHINE", 7);
         // And a sample track's file is picked from here.
         if (plays_files(selected_)) canvas.text(0, 105, "OK: PICK SAMPLE", 7);
+        // And how SAMPLE's SLC cuts, on the page SLC is on.
+        if (engine_.machine_id(selected_) == uint8_t(MachineId::sample) &&
+            base <= kSlcParam && kSlcParam < base + 4) {
+            out = line;
+            if (!slices_auto(selected_)) {
+                append(out, "PUSH SLC: AUTO SLICE");
+            } else {
+                const uint8_t hits =
+                    engine_.status().slice_points[selected_].load(std::memory_order_relaxed);
+                append(out, "SLC AUTO: ");
+                if (hits == 0) {
+                    append(out, "NO HITS");
+                } else {
+                    append_number(out, hits);
+                    append(out, hits == 1 ? " HIT" : " HITS");
+                }
+            }
+            *out = 0;
+            canvas.text(0, 87, line, 7);          // between the knobs and the hints below
+        }
+    }
+
+    // SLC AUTO on this track: the kit's byte, which only the audio side writes, by command.
+    bool slices_auto(int track) const {
+        return engine_.project().kit.tracks[track].slice_mode == kSliceAuto;
     }
 
     // --- MIXER: four levels at a time, with meters -----------------------
@@ -2478,6 +2558,19 @@ public:
         }
         if (!kMixerPages[page].master && field == int8_t(SendField::delay_ping_pong)) {
             append(out, byte >= 64 ? "ON" : "OFF");
+            return;
+        }
+        if (!kMixerPages[page].master && field == int8_t(SendField::delay_mode)) {
+            append(out, byte >= 64 ? "LONG" : "CLAS");
+            return;
+        }
+        if (!kMixerPages[page].master && field == int8_t(SendField::reverb_mode)) {
+            append(out, byte >= 64 ? "HALL" : "ROOM");
+            return;
+        }
+        if (!kMixerPages[page].master && field == int8_t(SendField::delay_multiplier)) {
+            append(out, "X");
+            append_number(out, uint32_t(delay_multiplier_value(byte)));
             return;
         }
         if (kMixerPages[page].master && field == int8_t(MasterField::dj)) {
@@ -2552,10 +2645,12 @@ public:
 
         // What the delay is actually doing, in milliseconds, which is the one thing a division
         // does not tell you -- and the number that says whether the tempo-sync is working.
-        if (mixer_bank_ == 2) {
+        // On the LONG page too: there it is the division times the multiplier, up to 12 s.
+        if (mixer_bank_ == 2 || mixer_bank_ == 3) {
             out = line;
             append(out, "TIME ");
-            append_number(out, uint32_t(engine_.sends().delay_seconds * 1000.0f + 0.5f));
+            append_number(out,
+                          uint32_t(effective_delay_seconds(engine_.sends()) * 1000.0f + 0.5f));
             append(out, " MS");
             *out = 0;
             canvas.text(0, 98, line, 10);
@@ -3765,7 +3860,7 @@ public:
         append(out, "BAR ");
         append_number(out, engine_.bar() % 1000u + 1u);
         if (note_repeat_mode_) append(out, " NRPT");
-        if (engine_.delay_freeze().held()) append(out, " FRZ");
+        if (engine_.delay_frozen()) append(out, " FRZ");
         *out = 0;
         canvas.text(0, 112, line, 9);
     }
@@ -4002,6 +4097,17 @@ public:
                     }
                     if (length == 0) return true;
                     chain_clamp_cursor();
+                    // A removal is not undoable, so it takes a second press within kSaveArmMs
+                    // on the same entry, as FUNC+LEFT's reload does on the other PROJECT pages
+                    // (Roland, 2026-11-22).
+                    if (chain_remove_armed_ != chain_cursor_ ||
+                        uint32_t(last_ms_ - chain_remove_armed_at_ms_) >= kSaveArmMs) {
+                        chain_remove_armed_ = chain_cursor_;
+                        chain_remove_armed_at_ms_ = last_ms_;
+                        notice("AGAIN TO REMOVE");
+                        return true;
+                    }
+                    chain_remove_armed_ = -1;
                     post_chain(ChainEdit::remove, chain_cursor_);
                     if (chain_cursor_ > 0 && chain_cursor_ >= length - 1) chain_cursor_--;
                     notice("ENTRY REMOVED");
@@ -4545,6 +4651,8 @@ private:
     int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
     bool save_armed_ = false;      // F1 + F3 once; the second press within kSaveArmMs saves
     uint32_t save_armed_at_ms_ = 0;
+    int chain_remove_armed_ = -1;                 // CHAIN's F1 + LEFT, armed on this entry
+    uint32_t chain_remove_armed_at_ms_ = 0;
     CardAction card_armed_ = CardAction::none;   // F1 + LEFT / RIGHT in PROJECT, armed once
     uint32_t card_armed_at_ms_ = 0;
     int kit_cursor_ = 0;                        // KIT: the slot under the cursor, 0-15

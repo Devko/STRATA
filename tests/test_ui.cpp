@@ -638,6 +638,31 @@ TEST(ui_func_push_d_holds_a_tape_stop_and_func_mutate_a_delay_freeze) {
     CHECK_EQ(int(undo_depth()), int(undo_before));
 }
 
+TEST(ui_func_push_d_with_a_step_held_clears_its_lock_not_a_tape_stop) {
+    // Roland, 2026-11-22: every push with a STEP held is the step's. FUNC + push A-C already
+    // cleared that step's lock there; FUNC + push D was a tape stop instead.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    pump(2);
+    step_down(5);
+    app.on_encoder(3, +6);                           // lock D on step 6
+    pump(2);
+    uint8_t value = 0;
+    const int param = page_first(Page(UiProbe::param_page(app))) + 3;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(param), value));
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_D, true);
+    pump(2);
+    CHECK(!app_engine().tape_stop().held());
+    CHECK_EQ(UiProbe::notice(app), "LOCK CLEARED");
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    step_up(5);
+    pump(2);
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(param), value));
+    CHECK(!app_engine().tape_stop().held());
+}
+
 TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {
     // A third mutation-testing gap: dropping `page_ * 16` from `on_step_key` survived everything
     // above, because every test before this one works on page 1 where the offset is zero -- and
@@ -2037,8 +2062,10 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     mixer_page(app, 0);
     CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
 
-    // The selection keys page through: two pages of faders, then DLY, REV, ROUTE, MST and EQ.
-    for (int i = 1; i < 7; i++) {
+    // The selection keys page through: two pages of faders, then DLY, DLY+, REV, REV+, ROUTE,
+    // MST and EQ.
+    CHECK_EQ(kMixerPageCount, 9);
+    for (int i = 1; i < kMixerPageCount; i++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
         CHECK_EQ(UiProbe::mixer_bank(app), i);
@@ -2049,7 +2076,7 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     CHECK_EQ(UiProbe::mixer_bank(app), 0);
     app.on_key(ENAGA_KEY_SELECT_LEFT, true);
     app.on_key(ENAGA_KEY_SELECT_LEFT, false);
-    CHECK_EQ(UiProbe::mixer_bank(app), 6);
+    CHECK_EQ(UiProbe::mixer_bank(app), kMixerPageCount - 1);
 }
 
 // The master kill EQ (dsp/buses.hpp): its MIXER page, its knobs and its kill switches.
@@ -2206,7 +2233,7 @@ TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
 TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
     Strata &app = fresh();
     Engine &engine = app_engine();
-    mixer_page(app, 4);                                // ROUTE
+    mixer_page(app, 6);                                // ROUTE
 
     // A is the ping-pong switch: either direction throws it, because a switch is not a knob.
     CHECK(engine.sends().delay_ping_pong);
@@ -2217,15 +2244,128 @@ TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
     pump(2);
     CHECK(engine.sends().delay_ping_pong);
 
-    // C and D are empty -- ten send fields do not divide into four. Turning them changes
-    // nothing and, in particular, does not fall through to the track faders below.
+    // D is empty -- nineteen send fields do not divide into four. Turning it changes nothing
+    // and, in particular, does not fall through to the track faders below.
     const uint32_t refused_before = engine.status().refused.load(std::memory_order_relaxed);
     const float level_before = engine.level(0);
-    app.on_encoder(2, +5);
+    uint8_t sends_before[kSendFields];
+    for (int i = 0; i < kSendFields; i++) sends_before[i] = engine.project().settings.sends[i];
     app.on_encoder(3, +5);
     pump(2);
     CHECK_NEAR(engine.level(0), level_before, 1e-6);
     CHECK_EQ(int(engine.status().refused.load(std::memory_order_relaxed) - refused_before), 0);
+    for (int i = 0; i < kSendFields; i++) {
+        CHECK_EQ(int(engine.project().settings.sends[i]), int(sends_before[i]));
+    }
+}
+
+namespace {
+
+// Does the drawn screen hold this text, as a whole string or inside one?
+bool screen_has(Strata &app, const char *wanted) {
+    FakeHost &host = FakeHost::the();
+    enaga::Canvas canvas(g_pixels);
+    host.clear_text();
+    app.draw(canvas);
+    for (int i = 0; i < host.text_count(); i++) {
+        if (std::strstr(host.text_draw(i).text, wanted) != nullptr) return true;
+    }
+    return false;
+}
+
+}  // namespace
+
+// The ambient modes' pages (dsp/ambient.hpp): DLY+ beside DLY, REV+ beside REV. Their TYP knob is
+// a switch, MUL steps by one multiplier, and the delay's TIME line counts the multiplier in LONG.
+TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    mixer_page(app, 3);                                // DLY+
+    CHECK(!engine.sends().delay_long);
+    app.on_encoder(0, +1);
+    pump(2);
+    CHECK(engine.sends().delay_long);
+    CHECK(screen_has(app, "LONG"));
+
+    // MUL: one click a multiplier, holding at both ends.
+    CHECK_EQ(int(engine.sends().delay_multiplier), 2);
+    app.on_encoder(1, +1);
+    pump(2);
+    CHECK_EQ(int(engine.sends().delay_multiplier), 3);
+    app.on_encoder(1, +20);
+    pump(2);
+    CHECK_EQ(int(engine.sends().delay_multiplier), 8);
+    CHECK(screen_has(app, "X8"));
+    app.on_encoder(1, -20);
+    pump(2);
+    CHECK_EQ(int(engine.sends().delay_multiplier), 1);
+
+    // Dotted 1/8 at the fresh project's 130 BPM is 0.346 s; X4 makes it 1.385 s, on the
+    // screen too.
+    app.on_encoder(1, +3);
+    pump(2);
+    CHECK_NEAR(effective_delay_seconds(engine.sends()), 4.0f * 0.75f * 60.0f / 130.0f, 1e-4);
+    CHECK(screen_has(app, "TIME 1385 MS"));
+
+    const float wow = engine.sends().delay_wow;
+    app.on_encoder(2, +4);
+    pump(2);
+    CHECK(engine.sends().delay_wow > wow);
+    const float diffusion = engine.sends().delay_diffusion;
+    app.on_encoder(3, -4);
+    pump(2);
+    CHECK(engine.sends().delay_diffusion < diffusion);
+
+    mixer_page(app, 5);                                // REV+
+    CHECK(!engine.sends().reverb_hall);
+    app.on_encoder(0, +1);
+    pump(2);
+    CHECK(engine.sends().reverb_hall);
+    CHECK(screen_has(app, "HALL"));
+    const float size = engine.sends().reverb_size;
+    app.on_encoder(1, -4);
+    pump(2);
+    CHECK(engine.sends().reverb_size < size);
+    app.on_encoder(3, +10);
+    pump(2);
+    CHECK(engine.sends().reverb_shimmer > 0.0f);
+    app.on_encoder(0, -1);
+    pump(2);
+    CHECK(!engine.sends().reverb_hall);
+    CHECK(screen_has(app, "ROOM"));
+
+    mixer_page(app, 6);                                // ROUTE: the LONG delay's low cut on C
+    const float low_cut = engine.sends().delay_low_cut_hz;
+    app.on_encoder(2, +6);
+    pump(2);
+    CHECK(engine.sends().delay_low_cut_hz > low_cut);
+
+    // Push A on either page throws its switch too, both ways.
+    mixer_page(app, 3);
+    CHECK(engine.sends().delay_long);
+    app.on_key(ENAGA_KEY_PUSH_A, true);
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    CHECK(!engine.sends().delay_long);
+    app.on_key(ENAGA_KEY_PUSH_A, true);
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    CHECK(engine.sends().delay_long);
+    mixer_page(app, 5);
+    app.on_key(ENAGA_KEY_PUSH_A, true);
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    CHECK(engine.sends().reverb_hall);
+    app.on_key(ENAGA_KEY_PUSH_A, true);
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    CHECK(!engine.sends().reverb_hall);
+
+    // Back to classic for whoever comes next.
+    mixer_page(app, 3);
+    app.on_encoder(0, -1);
+    pump(2);
+    CHECK(!engine.sends().delay_long);
 }
 
 TEST(ui_f1_and_value_is_the_master_dj_filter) {
@@ -2851,8 +2991,22 @@ TEST(ui_the_chain_page_sets_mute_recalls_and_song_mode) {
     CHECK(!enaga::clock::running());
     CHECK_EQ(UiProbe::notice(app), "SONG END");
 
-    // Back as it was, for the tests after this one.
+    // FUNC + LEFT removes an entry only on a second press (Roland, 2026-11-22): not undoable.
     shift_key(ENAGA_KEY_RIGHT);
+    shift_key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(chain_length(project), 2);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN TO REMOVE");
+    // Too late: past two seconds the first press is forgotten and this one only arms again.
+    pump(2100);
+    shift_key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(chain_length(project), 2);
+    shift_key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(chain_length(project), 1);
+    CHECK_EQ(UiProbe::notice(app), "ENTRY REMOVED");
+    // Back as it was, for the tests after this one.
     for (int i = 0; i < 2; i++) {
         shift_key(ENAGA_KEY_LEFT);
         pump(2);
@@ -2902,6 +3056,9 @@ TEST(ui_the_chain_page_builds_a_chain_that_plays) {
     key(ENAGA_KEY_UP);
     CHECK_EQ(UiProbe::chain_cursor(app), 0);
     the_app().on_key(ENAGA_KEY_F1, true);
+    key(ENAGA_KEY_LEFT);                              // the first press only arms it
+    pump(2);
+    CHECK_EQ(chain_length(project), 2);
     key(ENAGA_KEY_LEFT);
     the_app().on_key(ENAGA_KEY_F1, false);
     pump(2);
@@ -2920,6 +3077,7 @@ TEST(ui_the_chain_page_builds_a_chain_that_plays) {
     // Removing every entry turns it off rather than leaving it following nothing.
     for (int i = 0; i < 2; i++) {
         the_app().on_key(ENAGA_KEY_F1, true);
+        key(ENAGA_KEY_LEFT);
         key(ENAGA_KEY_LEFT);
         the_app().on_key(ENAGA_KEY_F1, false);
         pump(2);
@@ -4224,6 +4382,65 @@ TEST(ui_layout_the_projects_page_and_save_as) {
     key(ENAGA_KEY_F4);
 }
 
+// --- SLC AUTO: push SLC's knob on a SAMPLE track ----------------------------------------------
+
+TEST(ui_pushing_slc_on_a_sample_track_turns_auto_slicing_on_and_off) {
+    Strata &app = fresh();
+    const KitTrack &kit = app_engine().project().kit.tracks[0];
+    sample_track_in_edit();
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+
+    // SLC is the fourth knob on SRC: push D.
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceAuto));
+    CHECK(std::strcmp(UiProbe::notice(app), "SLICES AUTO") == 0);
+    CHECK(app_storage().dirty());
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+    CHECK(std::strcmp(UiProbe::notice(app), "SLICES EVEN") == 0);
+
+    // Pushing another knob, or on another page, does not touch it.
+    key(ENAGA_KEY_PUSH_A);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+    key(ENAGA_KEY_SELECT_LEFT);
+
+    // FUNC + push is still the kill EQ, not this.
+    shift_key(ENAGA_KEY_PUSH_A);
+    shift_key(ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+
+    // Nor on a track that is not SAMPLE: GRAIN has no slices.
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::grain));
+    pump(4);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_slc_auto_line) {
+    Strata &app = fresh();
+    sample_track_in_edit();
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    check_layout(app, "EDIT SRC, SAMPLE, slices even");
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    pump(2000);                                      // let the SLICES AUTO notice go
+    check_layout(app, "EDIT SRC, SAMPLE, AUTO with no hits");
+    const_cast<Status &>(app_engine().status()).slice_points[0].store(15);
+    check_layout(app, "EDIT SRC, SAMPLE, AUTO with 15 hits");
+    const_cast<Status &>(app_engine().status()).slice_points[0].store(0);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    key(ENAGA_KEY_F4);
+}
 
 // --- MIDI in, and MIDI OUT's channel on the MACHINE page ------------------------------------
 //

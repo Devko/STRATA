@@ -55,6 +55,7 @@
 
 #include <enaga/dsp.hpp>
 
+#include "onsets.hpp"
 #include "streamfifo.hpp"
 #include "track.hpp"
 
@@ -91,6 +92,25 @@ public:
     void set_stream(const int16_t *head, uint32_t head_frames, uint32_t total_frames, int channels,
                     float source_rate, StreamFifo *fifo);
     bool streaming() const { return fifo_ != nullptr; }
+
+    // SLC AUTO (docs/SPEC.md, "SAMPLE"): with `on`, SLC = n cuts the START/LEN window at the n - 1
+    // strongest of the sample's points (core/onsets.hpp) instead of into n equal slices. Points
+    // outside the window do not count, so the window can hold fewer slices than SLC asks for;
+    // with none inside it, AUTO falls back to equal slices rather than to one. Off by default,
+    // and off changes nothing: equal slicing is exactly what it was.
+    //
+    // The points belong to the sample, so set_sample forgets them; the engine hands the new
+    // sample's points right after (app/engine.cpp, Cmd::set_sample). Control rate: the cuts are
+    // worked out here and in prepare(), never per sample.
+    void set_slice_points(const SlicePoints &points);
+    void set_auto_slices(bool on);
+    bool auto_slices() const { return auto_; }
+    // How many slices the next trigger chooses among, and whether they are the detected ones.
+    int slice_count() const { return cuts_ > 0 ? cuts_ : slices_; }
+    bool slicing_by_points() const { return cuts_ > 0; }
+    int point_count() const { return points_.count; }
+    // The i-th slice's first frame, for tests and a later waveform display.
+    int32_t slice_start(int i) const;
     uint32_t stream_restarts() const { return restarts_; }
     // Taps the fifo did not have when the voice wanted them: the card was late. They play as
     // silence and time goes on, so the loop stays on the beat.
@@ -220,6 +240,12 @@ private:
     int32_t window_len_ = 0;
     float slice_frames_ = 0.0f;    // window_len_ / slices_, kept in float: no integer divide
     int32_t play_len_ = 0;         // what one trigger plays: the window, or one slice of it
+    // SLC AUTO: the sample's points, and the cuts SLC makes of them. cut_[0..cuts_] bound cuts_
+    // slices; cuts_ is 0 when slicing is equal.
+    SlicePoints points_{};
+    bool auto_ = false;
+    int cuts_ = 0;
+    int32_t cut_[kSlicesMax + 1] = {};
     bool loop_ = false;            // PLY
     bool reverse_ = false;
     float out_gain_ = 0.25f;       // LVL

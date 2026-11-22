@@ -139,6 +139,9 @@ TEST(tapestop_release_fades_back_without_a_click_and_bypasses_again) {
     }
     CHECK(!t.running());
     CHECK(blocks <= kTapeStopFadeFrames / kFrames + 1);
+    // And no shorter: the whole fade is heard, not cut to the live signal after one block (a
+    // mutation run found `!held_ && wet_ <= 0` could become `||` with nothing noticing).
+    CHECK(blocks >= kTapeStopFadeFrames / kFrames);
     if (!(worst < slope + 0.5f / 256.0f + 1e-4f)) std::printf("    worst %g\n", double(worst));
     CHECK(worst < slope + 0.5f / 256.0f + 1e-4f);
 
@@ -147,6 +150,45 @@ TEST(tapestop_release_fades_back_without_a_click_and_bypasses_again) {
     for (int i = 0; i < 2 * kFrames; i++) ref[i] = io[i];
     t.process(io, kFrames);
     for (int i = 0; i < 2 * kFrames; i++) CHECK_EQ(io[i], ref[i]);
+}
+
+TEST(tapestop_a_second_press_starts_again_from_full_speed) {
+    // Press, stop, let go, press again: the second stop starts from the live frame at full speed,
+    // as the first did -- not from the standstill and the full lag the first one ended on, which
+    // would make the second press an instant silence (both resets were mutation survivors).
+    TapeStop &t = tape();
+    t.set(0.25f * kRate);
+    float io[2 * kFrames];
+    int b = 0;
+    t.hold(true);
+    for (; b < 300; b++) {
+        sine_block(io, b);
+        t.process(io, kFrames);
+    }
+    CHECK_EQ(t.speed(), 0.0f);
+    t.hold(false);
+    for (int k = 0; k < 20 && t.running(); k++) {
+        sine_block(io, b++);
+        t.process(io, kFrames);
+    }
+    CHECK(!t.running());
+
+    t.hold(true);
+    CHECK_EQ(t.speed(), 1.0f);
+    sine_block(io, b);
+    float live[2 * kFrames];
+    for (int i = 0; i < 2 * kFrames; i++) live[i] = io[i];
+    t.process(io, kFrames);
+    CHECK_EQ(io[0], live[0]);
+    // One block in, the tape has slowed by a block's worth of a quarter-second ramp: it still
+    // sounds, close to the live sine.
+    float worst = 0.0f;
+    for (int i = 0; i < 2 * kFrames; i++) {
+        const float d = io[i] - live[i];
+        worst = (d < 0.0f ? -d : d) > worst ? (d < 0.0f ? -d : d) : worst;
+    }
+    if (!(worst < 0.05f)) std::printf("    worst %g\n", double(worst));
+    CHECK(worst < 0.05f);
 }
 
 TEST(tapestop_the_length_is_clamped_and_lag_never_leaves_the_ring) {

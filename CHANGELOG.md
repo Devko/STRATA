@@ -24,6 +24,9 @@ with a unit can play it and report back. Release notes: [docs/release/v0.1.0.md]
   sidechain duck, pan and level.
 - **Sends and master:** tempo-synced ping-pong delay, reverb, a one-knob DJ filter, glue
   compressor and limiter.
+- **Ambient send modes:** the delay's LONG mode (up to 12 s, X1-X8 the division, tape wow,
+  diffusion, low cut, an in-place freeze) and the reverb's HALL mode (a large swept tail with
+  size, modulation and an octave-up shimmer), on MIXER's DLY+ and REV+ pages.
 - **Sequencer:** up to 64 steps per track, per-track length and speed, swing and micro-timing,
   parameter locks, trig conditions, probability, ratchets, live and motion recording, a Euclidean
   generator, KEYS mode for playing notes in a scale, and 16 levels of undo.

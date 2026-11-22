@@ -8,7 +8,7 @@ from, with the background for each check.
 
 **Time.** The whole pass is about three hours. If the evening runs short, do 0-3b, 13 and 16
 first (safety, the MAX readings, save and restore), then the sections for today's new features
-(8c, 8d, 13d-13i, 14b, 15b-15d), then the rest.
+(8c, 8d, 13d-13j, 14b, 15b-15d), then the rest.
 
 Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`), and so are
 the on-screen hints. `FUNC+X` = hold FUNC, press X.
@@ -63,6 +63,11 @@ needed for tonight's unit session; do them if the PC is free.
       (about an hour; builds each variant in its own worktree, so main is untouched). Audio check
       all `identical`: yes / no `____`. `head` vs `base`, scenario_m3 cl6x: `____ %` vs `____ %`.
       VA POLY per voice on `head` (E2's method): `________`
+- [ ] **E11.** The sends' ambient modes: `tests/scenario_ambient.sh` (DLY+ push A to LONG, REV+
+      push A to HALL, on the default beat whose sends are open) against `scenario_m3.sh`, both
+      compilers. Host estimate +1.9 points cl6x / +2.8 GCC-only once the classic tails have
+      gone, +3.6 / +5.3 while they still ring (`docs/BUDGET.md`, "The sends' ambient modes").
+      cl6x `________ %` vs `________ %`, GCC `________ %` vs `________ %`
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
@@ -227,6 +232,9 @@ sample browser, 15b, would also do.)
 - [ ] FUNC+REC: UP/DOWN to `RESAMPLE 4 BAR`, LEFT/RIGHT to `TO TRK 8`, OK arms. Playing, it records from
       the next bar line, writes the take (`WRITING`, then `LAST STRATA_n`) and track 8 loads it.
       Take name: `________`. Does the take sound like the mix and loop cleanly? `________`
+- [ ] **Take written in chunks (new tonight).** During `WRITING` the screen keeps moving (PLAY
+      cursor, LOAD) instead of freezing for seconds, and a streamed track (15c) plays on with no
+      `STREAM LATE`. An 8-bar take writes in about 3 s: `________ s`
 - [ ] Track 8 to GRN (FUNC+EDIT). EDIT SRC: DEN 127, SPR 127. AMP: PIT 64.
       **MAX `________ %`**
 - [ ] AMP PIT 127, and a step on track 8 at a high note (step page NOTE, e.g. C6).
@@ -270,6 +278,9 @@ release, `192f03f`). Synth or monitor on channel `____`.
       start another app (or power off): the synth's note ends. Before this fix it hung there.
 - [ ] EDIT ARP on track 6 (MID), MOD UP, and give one step a MIN chord (step page 3, CHRD): the
       synth arpeggiates the chord's three notes, not the root alone.
+- [ ] **LFO on MID (new tonight).** EDIT LFO on track 6 (MID): DST to C74, DEP 127, RAT about
+      `1.00`. The synth's cutoff sweeps with it; the monitor shows CC 74 about 50 times a second,
+      no more. DEP back to 0: the CC returns to the knob's value.
 - [ ] MIDI IN, a keyboard on channel 6 (track 6, back on MNO): a held key sustains and ends on
       release. CC 17 from the keyboard moves track 6's SRC B. A program change 5 on your MIDI CH
       (SETUP shows it) queues A05.
@@ -400,8 +411,8 @@ New after the walkthrough was written: a DJ isolator on the master, LOW / MID / 
       `________ %`. Difference = the EQ's cost on the unit: `________` points.
 - [ ] Bring everything back to flat (`0`, no `KILL`): after a moment MAX should fall back to
       U1's figure (the EQ switches itself off).
-- [ ] Kill HI, save (FUNC+PROJECT twice), power cycle: it reopens with HI killed (`KILL` on the
-      EQ page). Bring it back.
+- [ ] **Kills are not saved (changed tonight).** Kill HI, save (FUNC+PROJECT twice), power
+      cycle: it reopens with every band back (no `KILL` on the EQ page). The EQ knobs are kept.
 - [ ] **A macro on the EQ.** PERFORM, select macro A (LEFT/RIGHT), FUNC + STEP 5: `A EQ LOW`.
       Turn A up slowly over a few bars: the lows fade down to nothing; back to 0 and they are
       exactly back. CLR clears macro A.
@@ -462,6 +473,8 @@ cannot press, so this is their first run outside the host tests. Play A01 GROOVE
       stopped. Let go of D: the beat is back at once, in time, **no click**.
 - [ ] Let go of D half way through a stop: it comes straight back from the slowed sound.
 - [ ] **U8.** Hold a tape stop for 10 s: **MAX `________ %`** against U1's `________ %`.
+- [ ] **Changed tonight.** Lock D on a step (hold STEP, turn D). Hold that STEP, then FUNC, push
+      D: `LOCK CLEARED`, and **no** tape stop. Without a STEP held, FUNC + push D is still the stop.
 - [ ] Turn the chord's SnA (delay send) up and play a few chord stabs. **Hold FUNC, then hold
       MUTATE**: `FREEZE`, `FRZ` on PERFORM's bar line. The echo keeps looping at the same level;
       new stabs play dry and are not echoed. Let go: the loop fades into the delay's tail, then
@@ -499,7 +512,41 @@ press, so this is its first run outside the host tests. Play A01 GROOVE.
       the chain plays A01, A02 without kick, A01, then **stops** with `SONG END`, nothing after
       the last bar, no hanging note. PLAY: it starts again from entry 1.
 - [ ] FUNC+RIGHT again: `LOOP CHAIN`, and the chain goes round as before.
+- [ ] **Changed tonight.** On entry 3, FUNC+LEFT once: `AGAIN TO REMOVE`, nothing removed. Wait
+      3 s and press again: still `AGAIN TO REMOVE`. Press twice quickly: `ENTRY REMOVED`.
 - [ ] Save, power cycle: SONG and the `M2` come back. The page boxes and rows fit the screen.
+
+## 13j. The ambient delay and reverb: LONG and HALL (8 min)
+
+New: send A has a LONG mode (up to 12 s, wow, diffusion, low cut) and send B a HALL mode (a
+bigger, swept tail with shimmer). Both are on MIXER pages beside their send: DLY+ after DLY,
+REV+ after REV; the LONG delay's low cut is C on ROUTE. Play A01 GROOVE; the chord and the
+clap already feed both sends.
+
+- [ ] MIXER, DLY+: push A (or turn A): `DLY LONG`, the slot reads `LONG`. The echoes carry on
+      with no click, the classic ones ringing out underneath. B (MUL) to `X4`: the bottom line
+      reads `TIME 1385 MS` at 130 BPM (dotted 1/8 times four), and the echoes land on the beat.
+- [ ] B to `X8`, then DLY's TIM to `1/1`: TIME reads `12000 MS` (clamped). One clap, then
+      listen: the first echo comes 12 s later, **on the beat**, as clean as the dry clap.
+- [ ] Back to `1/8D X4`. Turn the time while it rings: the echoes bend in pitch like tape and
+      settle, no clicks. C (WOW) up: a slow tape wobble, wider with the knob. D (DIF) up: each
+      repeat softer-edged, washing out after three or four. ROUTE, C (LCT) up: the repeats thin
+      out at the bottom.
+- [ ] FBK to the top with DIF and WOW up, feed it for 20 s: it builds to a dense wash and
+      **stays at a steady level**, never running away or distorting harshly.
+- [ ] **Hold FUNC, then hold MUTATE** in LONG: `FRZ` on PERFORM's bar line, the wash holds
+      exactly as it is, new hits play dry. Hold it for 30 s: no fading, no growing. Let go: it
+      decays at the FBK setting again.
+- [ ] MIXER, REV+: push A: `REV HALL`. A big, soft, slow-moving tail. DEC (REV, A) to the top:
+      a long wash that never rings metallic. B (SIZ) down then up: smaller then bigger, a short
+      pitch bend while it moves. C (MOD) at 0 against the top: still against slowly swirling.
+- [ ] D (SHM) up on a held chord: an octave-up shimmer rises out of the tail. With DEC at the
+      top and SHM at the top, play 30 s of chords: it shimmers and swells but **stays below
+      clipping** (PEAK under 1.0); stop playing and it dies away.
+- [ ] Push A on both pages again: `DLY CLASSIC`, `REV ROOM`, and the beat sounds as it did
+      before. Save (F1+F3 twice), power cycle, reload: the modes and knobs come back as saved.
+- [ ] **U9.** A01 GROOVE with LONG (`X4`, DIF and WOW up) and HALL (SHM up) for 60 s:
+      **MAX `________ %`** against U1's `________ %`.
 
 ## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
 
@@ -574,6 +621,20 @@ New 2026-11-22: files over the old 30 s limit load whole, in chunks. Put a 48 kH
 - [ ] PROJECT's SMP line shows the memory used, about `27/32M`. A second one on another track:
       `NO ROOM`, and the first keeps playing.
 
+## 15c2. SLC AUTO on a played break (4 min)
+
+New 2026-11-22. Put a drum break that was played, not programmed (any loop that is not on a
+grid), in `/SAMPLES` and pick it for track 8 (SAMPLE).
+
+- [ ] EDIT, SRC page: the line under the knobs says `PUSH SLC: AUTO SLICE`. Push D:
+      `SLICES AUTO`, then `SLC AUTO: n HITS` with n about the number of hits you can hear
+      (up to 15). n = `________`
+- [ ] SLC 8, trigs on notes 60-67 on steps 1, 3, 5 ... 15: each slice starts on a hit, with no
+      flam or cut-off attack at its start? `________` Compare with push D again (even).
+- [ ] Load time of the break against before (the hits are found while it loads): any slower to
+      play? `________`
+- [ ] Save, power cycle: track 8 is still AUTO, same slices.
+
 ## 15d. A stem bigger than memory, streamed (5 min)
 
 New 2026-11-22: a file the sample memory cannot hold streams from the card. Put a 48 kHz stereo
@@ -628,6 +689,8 @@ Enaga's menu and start STRATA6.
 | E7 eight LFOs, `scenario_lfo.sh` off / on, cl6x / GCC (PC) | |
 | U7 A01 GROOVE MAX with four LFOs, 60 s, and the difference to U1 (13e) | |
 | U8 A01 GROOVE MAX holding a tape stop, 10 s (13g) | |
+| E11 ambient modes, `scenario_ambient.sh` vs `scenario_m3.sh`, cl6x / GCC (PC) | |
+| U9 A01 GROOVE MAX with LONG and HALL, 60 s, and the difference to U1 (13j) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
 | U2 STRATA6 + tracks 5 and 6 as MIN11 POLY, capped at 12 voices (16) | |

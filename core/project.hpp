@@ -143,7 +143,14 @@ struct KitTrack {
     uint8_t machine = 0;                        // which machine the track hosts
     float level = 1.0f;                         // the mixer fader
     char sample[kSamplePathBytes] = {};         // empty when the track plays no file
+    // SLC AUTO: 1 cuts a SAMPLE track's slices at the hits found in its sample
+    // (core/onsets.hpp), 0 into equal slices. Not a parameter, so no lock, scene or LFO moves
+    // it: it says what kind of sample this is, like the path beside it.
+    uint8_t slice_mode = 0;
 };
+
+constexpr uint8_t kSliceEqual = 0;
+constexpr uint8_t kSliceAuto = 1;
 
 struct Kit {
     KitTrack tracks[kTracks];
@@ -182,7 +189,9 @@ constexpr uint16_t kTempoCentiMax = 30000;    // 300.00 BPM
 // dsp/buses.hpp's enums because core/ cannot include dsp/ -- dsp/buses.hpp reaches Enaga and
 // CLAUDE.md says core/ never does. dsp/buses.hpp static_asserts that the two agree, so the day
 // a field is added the build stops here rather than writing a short section.
-constexpr int kSendFields = 10;
+constexpr int kSendFields = 19;
+// What a PROJECT.BIN written before the ambient modes holds; the other nine follow the master's.
+constexpr int kSendFieldsV1 = 10;
 constexpr int kMasterFields = 7;
 // What a PROJECT.BIN written before the kill EQ holds: the DJ filter, compressor, limiter and
 // level. The three EQ bands were appended after them, so a short mixer section is an older file.
@@ -192,6 +201,8 @@ constexpr int kMasterFieldsV1 = 4;
 // encoder at that position produces. Named here because `ProjectSettings` needs it as an
 // initialiser and a bare 64 next to nine other numbers says nothing.
 constexpr uint8_t kDefaultDelayDivision = 64;
+// The LONG delay's default multiplier: X2, index 1 of dsp/buses.hpp's six, as a band's middle.
+constexpr uint8_t kDefaultDelayMultiplier = 32;
 
 // Settings that belong to the project rather than to a pattern.
 struct ProjectSettings {
@@ -244,12 +255,17 @@ struct ProjectSettings {
     // The bytes that reproduce dsp/buses.hpp's documented defaults through that mapping:
     // dotted 1/8, 40% feedback, mid tone, ping-pong on, full return, no delay into the reverb,
     // a 2 s reverb, mid damping, a 180 Hz input high-pass, full return.
-    uint8_t sends[kSendFields] = {kDefaultDelayDivision, 53, 64, 127, 127, 0, 58, 64, 61, 127};
+    uint8_t sends[kSendFields] = {kDefaultDelayDivision, 53, 64, 127, 127, 0, 58, 64, 61, 127,
+                                  // The ambient modes: off (classic), and where their knobs
+                                  // start when switched on -- X2, a little wow, half diffusion,
+                                  // a 120 Hz low cut; a big hall, some sweep, no shimmer.
+                                  0, kDefaultDelayMultiplier, 57, 64, 58, 0, 96, 51, 0};
     // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out, and the
     // kill EQ's three bands at their flat (bypassed) centre.
     uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64};
-    // The kill EQ's kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. Saved, like the live
-    // mutes, so a set comes back the way it was left. Stored after the master bytes.
+    // The kill EQ's kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. Live only: PROJECT.BIN
+    // keeps their byte, after the master bytes, but writes it as 0 and ignores it on read
+    // (Roland, 2026-11-22), so a project never opens with a band killed.
     uint8_t eq_kills = 0;
 };
 
@@ -339,6 +355,9 @@ constexpr uint16_t kSectionKitLfo = 2;
 // The arpeggiator's four bytes per track (kKitArpParams), OPTIONAL in the same way: a KIT.BIN
 // from before the arp loads with every arp OFF.
 constexpr uint16_t kSectionKitArp = 3;
+// SLC AUTO, one byte per track (KitTrack::slice_mode). Optional on read like the LFO and the
+// arp: a KIT.BIN from before it loads with every track slicing equally, as slicing always did.
+constexpr uint16_t kSectionKitSlices = 4;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

@@ -379,6 +379,16 @@ window is cut into equal slices and the **note picks the slice**: C4 (60) is sli
 2, and so on, so a chopped loop lies across the notes in order. The factory LOOP track uses 8
 slices. Loop modes repeat the window or the slice.
 
+**SLC AUTO.** Equal slices only fit a loop whose hits sit on an even grid. A played break does
+not, so its slices start before or after the hit they were meant to hold. Push **D** (the SLC
+knob) on the SRC page to turn **AUTO** on: SLC then cuts at the hits STRATA found in the sample
+when it loaded, instead of evenly. SLC still sets how many slices: at SLC 8 the window is cut at
+its 7 strongest hits, in order. The line under the knobs says `SLC AUTO: 12 HITS` (up to 15 are
+found per sample), and with fewer hits inside the STA/LEN window there are fewer slices. With no
+hit in the window (`NO HITS`, or a window between two hits), it cuts evenly as before. Push D
+again for even slices (`SLICES EVEN`). AUTO is saved with the kit. A streamed file has no
+slices either way.
+
 ### GRN: GRAIN
 
 Granular playback of the track's sample: up to 8 overlapping grains in one voice. The most
@@ -720,7 +730,32 @@ Two held master moves, in **any mode**:
   ping-pong); the first loop starts one echo period after the press. Let go and it fades back to
   the delay's own tail. FUNC + MUTATE never mutates.
 
-Neither is saved or undone; both cost nothing until pressed.
+Neither is saved or undone; both cost nothing until pressed. With the delay in its LONG mode
+(below) the freeze is the LONG delay's own: the whole wash holds exactly as it is, whatever its
+length, from the moment you press.
+
+### Ambient delay and reverb: LONG and HALL
+
+Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
+send, `DLY+` after `DLY` and `REV+` after `REV`. **Push A** on either page (or turn A) flips the
+mode; the old mode's echoes ring out underneath, so a switch never clicks.
+
+- **LONG delay** (`DLY+`, A: `CLAS` / `LONG`). The echo time is DLY's division times **MUL**
+  (B: `X1` to `X8`), up to **12 s**: `1/1 X4` is four bars. The bottom line shows the time in
+  milliseconds. **WOW** (C) is a slow tape wobble on the repeats; **DIF** (D) smears each repeat
+  a little more than the last, so echoes turn into a wash after a few passes. The first echo is
+  always clean and on the beat. FBK, TON, LVL and PNG work as in the classic mode, and ROUTE's
+  **LCT** (C) cuts the lows from the repeats so a long tail stays clear of the kick and bass.
+  Turning the time while it rings bends the echoes like tape, rather than jumping.
+- **HALL reverb** (`REV+`, A: `ROOM` / `HALL`). A bigger, softer tail that moves slowly, so even
+  a 30 s DEC never rings metallic. **SIZ** (B) is the size of the space, **MOD** (C) how much the
+  tail drifts, **SHM** (D) feeds the tail back an octave up: a rising shimmer over held chords.
+  DEC, DMP, HPF and LVL work as in the classic mode, and D>R sends the LONG delay into the HALL
+  for the biggest wash.
+
+The modes and their knobs are saved with the project; a project from before they existed opens
+with both sends classic. Both cost more CPU than the classic modes while they sound (about
+twice the send cost), and nothing once they fall silent.
 
 ### Mutation
 
