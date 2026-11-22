@@ -364,6 +364,8 @@ void Mixer::init(float sample_rate) {
 
     // The only allocation in this file, and the reason init() belongs in App::init().
     delay_.init(kMaxDelaySeconds, sample_rate);
+    // Two delay times: with ping-pong the echoes swap sides each pass and repeat every second.
+    freeze_.init(sample_rate, 2.0f * kMaxDelaySeconds);
     reverb_.init(sample_rate);
 
     duck_.init(sample_rate);
@@ -415,6 +417,7 @@ void Mixer::resolve_sends(const SendSettings &sends) {
     const float seconds = ed::clamp(sends.delay_seconds, 0.001f, kMaxDelaySeconds);
     const float feedback = ed::clamp(sends.delay_feedback, 0.0f, 0.95f);
     delay_.set(seconds, feedback, ed::clamp(sends.delay_tone, 0.0f, 1.0f), sends.delay_ping_pong);
+    delay_loop_frames_ = int(seconds * rate_) * (sends.delay_ping_pong ? 2 : 1);
     delay_level_ = ed::clamp(sends.delay_level, 0.0f, 4.0f);
     delay_to_reverb_ = ed::clamp(sends.delay_to_reverb, 0.0f, 1.0f);
 
@@ -527,21 +530,29 @@ void Mixer::finish_block(float *out, int frames) {
     const int n = frames_;
 
     // --- send A: the delay -------------------------------------------------------------------
+    // A freeze keeps the delay running whatever its tail says, and while held cuts its feed.
+    const bool freezing = freeze_.active();
+    if (freezing) delay_tail_ = delay_tail_ > 1 ? delay_tail_ : 1;
     if (n > 0 && delay_tail_ > 0) {
         delay_tail_--;
+        if (freeze_.held()) enaga_clear(send_a_, n);
         // The send bus is mono and the delay's two inputs must not alias, so the feed is copied
         // once per block: 64 floats against the delay's own cost is nothing.
         for (int i = 0; i < n; i++) send_a_right_[i] = send_a_[i];
-        if (delay_to_reverb_ > 0.0f) {
+        if (delay_to_reverb_ > 0.0f || freezing) {
+            // The wet signal on its own: the reverb wants it, or the freeze records or replaces it.
             enaga_clear(wet_l_, n);
             enaga_clear(wet_r_, n);
             delay_.process(send_a_, send_a_right_, wet_l_, wet_r_, n, 1.0f);
+            if (freezing) freeze_.process(wet_l_, wet_r_, n);
             enaga_mix(mix_l_, wet_l_, n, delay_level_);
             enaga_mix(mix_r_, wet_r_, n, delay_level_);
-            const float into_reverb = delay_to_reverb_ * 0.5f;
-            enaga_mix(send_b_, wet_l_, n, into_reverb);
-            enaga_mix(send_b_, wet_r_, n, into_reverb);
-            reverb_tail_ = reverb_tail_blocks_;   // the delay is feeding it, so keep it running
+            if (delay_to_reverb_ > 0.0f) {
+                const float into_reverb = delay_to_reverb_ * 0.5f;
+                enaga_mix(send_b_, wet_l_, n, into_reverb);
+                enaga_mix(send_b_, wet_r_, n, into_reverb);
+                reverb_tail_ = reverb_tail_blocks_;   // the delay is feeding it: keep it running
+            }
         } else {
             // Nothing needs the wet signal on its own, so the delay writes straight into the mix.
             delay_.process(send_a_, send_a_right_, mix_l_, mix_r_, n, delay_level_);

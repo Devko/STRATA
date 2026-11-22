@@ -44,6 +44,7 @@
 #include <enaga/dsp.hpp>
 
 #include "chain.hpp"
+#include "freeze.hpp"
 #include "project.hpp"
 #include "track.hpp"
 
@@ -217,6 +218,11 @@ public:
     void trigger_duck(uint32_t frame = 0) { duck_.trigger(frame); }
     const Duck &duck() const { return duck_; }
 
+    // The delay freeze (dsp/freeze.hpp): held, the echoes now in the delay loop for as long as it
+    // is held and nothing new goes in. The loop is one delay time, two with ping-pong.
+    void freeze_delay(bool held) { freeze_.hold(held, delay_loop_frames_); }
+    const DelayFreeze &freeze() const { return freeze_; }
+
     InsertChain &chain(int track) { return chains_[track]; }
     const InsertChain &chain(int track) const { return chains_[track]; }
 
@@ -262,6 +268,8 @@ private:
     bool duck_active_ = false;
 
     enaga::dsp::StereoDelay delay_;
+    DelayFreeze freeze_;
+    int delay_loop_frames_ = 2;   // one echo period, for a freeze pressed now
     enaga::dsp::Reverb reverb_;
     enaga::dsp::Biquad reverb_high_pass_;
     enaga::dsp::BiquadCoefficients reverb_high_pass_coefficients_{};
