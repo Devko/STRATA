@@ -302,8 +302,10 @@ void set_probability(uint8_t track, uint8_t step, int value) {
 }
 
 void set_chord(uint8_t track, uint8_t step, ChordType type, uint8_t inversion = 0) {
-    const int now = int(live_step(track, step).chord);
-    const int want = int(chord_pack(type, inversion));
+    // The encoder walks named chords, not bytes (core/stepedit.hpp), so the delta is a distance
+    // in that walk.
+    const int now = chord_walk_position(live_step(track, step).chord);
+    const int want = chord_walk_position(chord_pack(type, inversion));
     post(Cmd::step_field_delta, track, step, uint8_t(StepField::chord),
          uint8_t(int8_t(want - now)));
     pump();

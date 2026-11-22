@@ -241,22 +241,32 @@ TEST(chord_the_packing_round_trips_through_the_byte) {
     }
 }
 
-TEST(chord_the_packed_byte_fits_the_step_editors_field) {
-    // core/stepedit.cpp publishes this field's editable range and that file is not this module's
-    // to change, so a packing that overflowed it would encode chords the step editor could never
-    // walk to. Six bits, 64 positions.
+TEST(chord_the_step_editor_walks_every_valid_chord_and_nothing_else) {
+    // The encoder used to walk the raw byte 0..63, two thirds of which is not a chord. It walks
+    // the valid packings now, in type order and then by inversion, and each one exactly once.
     const int positions = step_field_positions(StepField::chord);
-    CHECK_EQ(positions, 64);
-    for (int id = 0; id < kChordTypeCount; id++) {
-        for (uint8_t inversion = 0; inversion <= kChordInversionMax; inversion++) {
-            CHECK(int(chord_pack(ChordType(id), inversion)) < positions);
+    CHECK_EQ(positions, kChordWalkPositions);
+    int valid = 0;
+    for (int byte = 0; byte < 256; byte++) valid += chord_valid(uint8_t(byte)) ? 1 : 0;
+    CHECK_EQ(valid, positions);
+
+    uint8_t previous = 0;
+    for (int p = 0; p < positions; p++) {
+        const uint8_t packed = chord_at_walk_position(p);
+        CHECK(chord_valid(packed));
+        CHECK_EQ(chord_walk_position(packed), p);
+        if (p > 0) {
+            const bool later_type = int(chord_type(packed)) > int(chord_type(previous));
+            const bool next_inversion = chord_type(packed) == chord_type(previous) &&
+                                        chord_inversion(packed) == chord_inversion(previous) + 1;
+            CHECK(later_type || next_inversion);
         }
+        previous = packed;
     }
-    // And the field is exactly as wide as the packing says it is.
+    // The packing itself is unchanged: six bits, reserved bits on top.
     CHECK_EQ(int(kChordTypeMask) + 1, kChordTypeIds);
     CHECK_EQ(int(kChordInversionMask) << kChordInversionShift, 0x30);
     CHECK_EQ(int(kChordReservedMask), 0xC0);
-    CHECK_EQ(int(kChordTypeMask | (kChordInversionMask << kChordInversionShift)), positions - 1);
 }
 
 TEST(chord_an_id_this_build_does_not_have_is_a_single_note) {
