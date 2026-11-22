@@ -354,6 +354,9 @@ PERFORM and pattern changes, with no edit screens and no underruns."*
 - [ ] A parameter only one scene stores fades to the KIT value at the far end, not back to
       itself. This is the morph rule most likely to feel wrong in the room, so listen for it.
 - [ ] A macro with two targets, one inverted: one knob opening a filter while it closes a send.
+- [ ] Assign a macro with its knob half way up: the parameter does not move on assignment, and the
+      knob then sweeps it towards the far end. (Only a parameter at 0 or 127 heading for the other
+      end still jumps once: `macro_range_through` has no non-flat line for it.)
 - [ ] Macro setup and scenes survive a save and a reload (PERFORM.BIN, 2,424 bytes, next to
       PROJECT.BIN).
 - [ ] A project with no PERFORM.BIN -- anything M4 wrote -- opens with empty scenes rather than
@@ -453,6 +456,8 @@ mix (-20.8 dBFS under the limiter) on every stab step, and 4.25 points of load p
 
 - [ ] Six notes sound together; a seventh steals the quietest started voice rather than being
       dropped.
+- [ ] **The step page's CHRD field reads chord names** (MIN, MIN7/2, 5THOCT/2) and every click is a
+      different chord: 43 positions, no dead bytes.
 - [ ] **A chord's six notes on the same frame all sound.** A voice is busy from the moment it
       takes a trig, not from the frame that trig starts on — the subagent found the bug this
       prevents via a surviving mutation, and the test is
@@ -843,6 +848,17 @@ wants confirming on the unit, because "bit-exact" was argued against GCC and the
 - [ ] Record the unit's load with cl6x for a 4- and a 6-voice chord, and put both in
       docs/BUDGET.md next to the GCC-only table. That column is the one this container cannot
       produce, and the 60% target depends on it.
+
+## Downsampled samples are low-passed at load
+
+core/pcm now filters a file above 48 kHz before resampling it, so content above 24 kHz no longer
+folds back as audible tones. It costs main-loop time at load, estimated and not measured.
+
+- [ ] Load a 30 s stereo 96 kHz WAV and time it. Put the figure in docs/BUDGET.md, "Load time".
+      The screen must keep drawing and the keys keep answering while it shows RESAMPLING.
+- [ ] Load a 96 kHz sweep that runs past 24 kHz and play it. Nothing should come back down as a
+      falling tone after the sweep passes 24 kHz.
+- [ ] A 44.1 kHz file must sound exactly as before: it is not filtered.
 
 ## Screen layout (first boot showed overlapping text)
 
