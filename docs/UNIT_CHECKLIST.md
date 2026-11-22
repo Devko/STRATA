@@ -1401,6 +1401,9 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
 - [ ] **PERFORM, A-D**: ACID (bass cutoff, resonance, envelope), DUB (chord and rim into the
       delay and reverb), HATS (both longer, closed brighter), KICK (longer body, more drive).
       Each must be audible from the first detent, with no jump.
+- [ ] **Pad pressure now has something to bend.** Pressure drives macro 1, which is ACID on a new
+      project: pressing a lower pad hard should open the bass filter, and letting go should
+      return it. Check it feels musical rather than accidental on light finger drumming.
 - [ ] **A macro at 0 lets go** (2026-11-22). With ACID at 0, turn BASS CUT in EDIT: it is heard.
       Turn ACID up: the macro has the cutoff. Back to 0: the knob's value comes back. The same
       with the morph: a scene that stores a parameter a resting macro drives is heard. One known
