@@ -40,6 +40,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | CHAIN | PROJECT, then octave RIGHT | The pattern chain as a list |
 | PATTERN | PROJECT, octave RIGHT twice | Master length (LEN), swing (SWG) and each track's own swing of the playing pattern |
 | SETUP | PROJECT, octave RIGHT three times | Record quantize; shows clock and MIDI settings |
+| PROJECTS | PROJECT, octave RIGHT four times | Open another project from the card, or save this one under a new name |
 | RESAMPLE | FUNC+REC | Record the output, or the audio input, to a file or a track |
 | Step page | Hold STEP + OK | One step's own fields (opens over GRID) |
 | Enaga menu | FUNC+POWER | CLOCK SRC, CLOCK/SYNC OUT, MIDI CH |
@@ -120,8 +121,12 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 **PROJECT:** STEP 1-16 queue that slot of the shown bank. On the slots and SETUP pages, FUNC+LEFT
 reloads the project from the card and FUNC+RIGHT starts a new one; both throw away unsaved work, so
 each needs a second press within 2 s (AGAIN TO RELOAD, AGAIN FOR NEW). The octave keys walk the pages PROJECT,
-CHAIN, PATTERN, SETUP; CLR on any of them goes back to the slots. In SETUP, A sets the record
+CHAIN, PATTERN, SETUP, PROJECTS; CLR on any of them goes back to the slots. In SETUP, A sets the record
 quantize.
+**PROJECTS:** UP/DOWN or A move, LEFT/RIGHT page by 8. OK twice within 2 s opens the project
+under the cursor (AGAIN TO OPEN; it throws away unsaved work and stops the transport).
+FUNC+DOWN is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the character, OK saves
+under that name (NAME TAKEN if another project has it), CLR cancels. FUNC+UP reads the card again.
 **CHAIN:** a STEP key puts that slot of the shown bank into the entry under the cursor (or starts
 the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playing pattern when
 empty), up to 64 entries. Chain edits are not undoable.
