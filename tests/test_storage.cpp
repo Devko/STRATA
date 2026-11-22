@@ -52,6 +52,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include <enaga/settings.hpp>
@@ -4066,4 +4067,127 @@ TEST(storage_a_card_pulled_or_failing_mid_chunk_fails_the_track_and_frees_the_ha
     }
     storage().request_new();
     CHECK(settle_long());
+}
+
+// --- the project browser: open another project, save under a new name --------------------------
+
+namespace {
+
+bool settings_say(const char *line) {
+    static char text[2048];
+    const int32_t got = FakeHost::the().read_prefix("/ENAGA/DATA/STRATA/SETTINGS.TXT", text,
+                                                    sizeof text - 1);
+    if (got < 0) return false;
+    text[got] = '\0';
+    return std::strstr(text, line) != nullptr;
+}
+
+}  // namespace
+
+TEST(storage_save_as_writes_a_new_folder_and_leaves_the_old_one) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::toggle_trig, 0, 3);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    char old_name[Storage::kNameBytes];
+    std::strcpy(old_name, storage().project_name());
+
+    CHECK(storage().request_save_as("LIVE SET 2"));
+    CHECK(storage().dirty());                       // nothing under the new name yet
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(std::strcmp(storage().project_name(), "LIVE SET 2"), 0);
+    CHECK(!storage().dirty());
+    for (int i = 0; i < kFileN; i++) CHECK(host.has_file(card_path(kFiles[i])));
+    CHECK(settings_say("PROJECT=LIVE SET 2"));
+
+    // The old folder is still there and still its own: a trig added now goes only to the new one.
+    post(Cmd::toggle_trig, 0, 5);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+    storage().request_save();
+    CHECK(pump_until_idle());
+
+    CHECK(storage().request_open(old_name));
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(std::strcmp(storage().project_name(), old_name), 0);
+    CHECK(engine().pattern().tracks[0].steps[3].flags != 0);
+    CHECK_EQ(int(engine().pattern().tracks[0].steps[5].flags), 0);
+    CHECK(settings_say(old_name));
+
+    // And back again: the new one has both trigs.
+    CHECK(storage().request_open("LIVE SET 2"));
+    CHECK(settle());
+    CHECK_EQ(std::strcmp(storage().project_name(), "LIVE SET 2"), 0);
+    CHECK(engine().pattern().tracks[0].steps[5].flags != 0);
+    CHECK(!storage().dirty());
+}
+
+TEST(storage_an_open_makes_the_project_the_one_the_next_start_opens) {
+    clean();
+    CHECK(storage().request_save_as("FIRST"));
+    CHECK(pump_until_idle());
+    CHECK(storage().request_save_as("OTHER"));
+    CHECK(pump_until_idle());
+    // An autosave of OTHER, newer than its save: what a stop leaves.
+    storage().request_autosave();
+    CHECK(pump_until_idle());
+    CHECK(storage().request_open("FIRST"));
+    CHECK(settle());
+    CHECK_EQ(std::strcmp(storage().project_name(), "FIRST"), 0);
+    // The open is counted newer than that autosave, so a start opens FIRST, not OTHER's
+    // autosave under FIRST's name.
+    int project_seq = -1, auto_seq = -1;
+    {
+        static char text[2048];
+        const int32_t got = FakeHost::the().read_prefix("/ENAGA/DATA/STRATA/SETTINGS.TXT", text,
+                                                        sizeof text - 1);
+        CHECK(got > 0);
+        text[got > 0 ? got : 0] = '\0';
+        const char *p = std::strstr(text, "PROJSEQ=");
+        const char *a = std::strstr(text, "AUTOSEQ=");
+        if (p != nullptr) project_seq = std::atoi(p + 8);
+        if (a != nullptr) auto_seq = std::atoi(a + 8);
+    }
+    CHECK(project_seq > auto_seq);
+    CHECK(settings_say("PROJECT=FIRST"));
+}
+
+TEST(storage_opening_a_folder_that_is_not_a_project_changes_nothing) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::toggle_trig, 0, 7);
+    pump(2);
+    char name[Storage::kNameBytes];
+    std::strcpy(name, storage().project_name());
+    CHECK(host.write_file("/ENAGA/DATA/STRATA/PROJECTS/JUNK/NOTES.TXT", "x", 1));
+    CHECK(storage().request_open("JUNK"));
+    CHECK(pump_until_idle());
+    check_error("a folder with no PROJECT.BIN", "NOT FOUND");
+    CHECK_EQ(std::strcmp(storage().project_name(), name), 0);
+    CHECK(engine().pattern().tracks[0].steps[7].flags != 0);
+    CHECK(settle());
+}
+
+TEST(storage_project_names_are_what_the_panel_can_type) {
+    CHECK(Storage::valid_name("A"));
+    CHECK(Storage::valid_name("LIVE SET 2"));
+    CHECK(Storage::valid_name("TECHNO-01+#!.X"));
+    CHECK(Storage::valid_name("lower"));                    // a PC's folder: FAT finds it anyway
+    CHECK(Storage::valid_name("ABCDEFGHIJKLMNOPQRSTUVW"));  // 23
+    CHECK(!Storage::valid_name("ABCDEFGHIJKLMNOPQRSTUVWX"));
+    CHECK(!Storage::valid_name(""));
+    CHECK(!Storage::valid_name(nullptr));
+    CHECK(!Storage::valid_name(" LEADING"));
+    CHECK(!Storage::valid_name(".HIDDEN"));
+    CHECK(!Storage::valid_name("A/B"));
+    CHECK(!Storage::valid_name("A_B"));
+    clean();
+    CHECK(!storage().request_open("../X"));
+    CHECK(!storage().request_save_as(""));
+    CHECK(!pump_until_idle(20));                            // nothing was queued
 }

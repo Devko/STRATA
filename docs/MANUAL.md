@@ -170,9 +170,9 @@ Everything STRATA keeps is on the SD card, never in the unit's flash:
 /RECORD/STRATA_<n>.WAV                         resampled takes
 ```
 
-The first project is called `DEFAULT`. A new project is named `NEW1`, `NEW2` and so on. There
-is no file browser yet, so projects cannot be renamed or picked from a list on the unit; STRATA
-reopens the last one.
+The first project is called `DEFAULT`. A new project is named `NEW1`, `NEW2` and so on. Give a
+project its own name with SAVE AS and pick another one on the PROJECTS page (section 6). STRATA
+reopens whichever was open last.
 
 ---
 
@@ -695,6 +695,25 @@ On PROJECT's slots or SETUP page:
   Nothing is written until you save it, so the old project is untouched.
 
 Both stop the transport.
+
+### Projects: open and save as
+
+PROJECT, then octave RIGHT four times, is the PROJECTS page: every project folder on the card,
+with `NOW` and the open one's name at the top. UP/DOWN or A move the cursor, LEFT/RIGHT go a page
+of eight at a time.
+
+- **Open:** OK on a project, then OK again within 2 s (`AGAIN TO OPEN`). What is unsaved in the
+  open project is thrown away and the transport stops, as with a reload. STRATA starts with that
+  project from now on.
+- **Save as:** `FUNC+DOWN` opens a name entry starting from the current name. A or LEFT/RIGHT
+  move along it, B, VALUE or UP/DOWN change the character under the cursor (A-Z, 0-9, space and
+  `- + . # !`, up to 16), OK saves, CLR cancels (`NAME KEPT`). The project is written whole into
+  a new folder and carries on under the new name; the old folder stays as it was saved. A name
+  another project already has is refused (`NAME TAKEN`): open that one instead.
+- `FUNC+UP` reads the card again. CLR goes back to the slots.
+
+There is no delete or rename on the unit: remove or rename a folder in
+`/ENAGA/DATA/STRATA/PROJECTS/` on a computer.
 
 ### The kit library
 

@@ -30,6 +30,7 @@
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
 #include <enaga/midi.hpp>
+#include <enaga/ui.hpp>
 
 #include <cstdint>
 
@@ -379,6 +380,21 @@ public:
         if (key == ENAGA_KEY_F1) { shift_ = down; return; }
         if (key == ENAGA_KEY_PUSH_VALUE) { value_pushed_ = down; return; }
 
+        // Typing a project's name (PROJECTS page, FUNC+DOWN): the entry takes every key until OK
+        // or CLR closes it (<enaga/ui.hpp>). F1 and VALUE's push are tracked above, so a FUNC
+        // still held from opening it is let go of properly.
+        if (name_entry_.active()) {
+            // A tape stop held from before the entry opened still ends with its key.
+            if (!down && key == ENAGA_KEY_PUSH_D && tape_held_) {
+                tape_held_ = false;
+                post(Cmd::tape_stop, 0, 0, 0);
+            }
+            const enaga::ui::Action action = name_entry_.key(key, down);
+            if (action == enaga::ui::Action::chosen) finish_save_as();
+            if (action == enaga::ui::Action::no) notice("NAME KEPT");
+            return;
+        }
+
         // FUNC + push D, HELD: the tape stop, in every mode -- beside FUNC + push A-C, the kill
         // EQ, so the master moves are under one hand. Its release ends it whether or not FUNC is
         // still down, and before the held-step gesture below can take the key.
@@ -643,6 +659,9 @@ public:
             case ENAGA_KEY_F3:                         // PROJECT: banks, patterns and the card
                 mode_ = Mode::project;
                 leave_mode();
+                // Back on PROJECTS: the list it shares with the sample browser may hold samples
+                // now, so it is read again.
+                if (project_page_ == ProjectPage::files) list_projects();
                 if (shift_) {
                     // docs/SPEC.md's key table: "F1 + F3 twice = save project". Twice, so a
                     // save is never one stray press; within two seconds, so an old first press
@@ -787,7 +806,11 @@ public:
                     // and stopping at the ends.
                     const int next = int(project_page_) + delta;
                     const int last = int(ProjectPage::count) - 1;
+                    const ProjectPage was = project_page_;
                     project_page_ = ProjectPage(next < 0 ? 0 : (next > last ? last : next));
+                    if (project_page_ == ProjectPage::files && was != ProjectPage::files) {
+                        list_projects();
+                    }
                     notice(project_page_name(project_page_));
                     break;
                 }
@@ -1089,6 +1112,10 @@ public:
     }
 
     void on_encoder(int encoder, int delta) override {
+        if (name_entry_.active()) {
+            name_entry_.encoder(encoder, delta);      // A moves, B and VALUE pick the character
+            return;
+        }
         if (encoder == 4) {
             // VALUE picks the beat-repeat length while that pad is held, which is what
             // docs/SPEC.md gives it, and it has to come before the tempo.
@@ -1273,6 +1300,10 @@ public:
                 }
                 pattern_field_delta(pattern_field_, delta);
             }
+            return;
+        }
+        if (mode_ == Mode::project && project_page_ == ProjectPage::files) {
+            if (encoder == 0) move_project_cursor_to(project_cursor_ + delta);
             return;
         }
         if (mode_ == Mode::project && project_setup()) {
@@ -1734,6 +1765,10 @@ public:
         // waits on the audio side: a command ring that has not drained simply means "not this
         // pass" (app/storage.hpp).
         storage_.service();
+
+        // The PROJECTS page's list, once the card has answered: the cursor onto the open
+        // project, and a fresh read after a SAVE AS has landed.
+        if (mode_ == Mode::project && project_page_ == ProjectPage::files) settle_project_cursor();
 
         // A streamed file the card could not keep up with (app/storage.hpp, "streaming"): the
         // audio side played silence where frames were missing. Said once, then not again for a
@@ -2828,6 +2863,195 @@ public:
         canvas.text(0, 112, line, 7);
     }
 
+    // --- PROJECT's PROJECTS page: open another project, save under a new name ----
+
+    // The card's projects: the folders in PROJECTS/, listed into the same table the sample
+    // browser uses (the two are never on screen together).
+    void list_projects() {
+        char folder[SampleList::kFolderBytes];
+        if (!storage_.projects_folder(folder, sizeof folder)) return;
+        storage_.request_browse(folder);
+        project_cursor_ = 0;
+        project_seek_ = true;
+        open_armed_ = -1;
+    }
+
+    void move_project_cursor_to(int index) {
+        const int count = storage_.browse_list().count();
+        project_cursor_ = index < 0 ? 0 : (index >= count ? (count > 0 ? count - 1 : 0) : index);
+        open_armed_ = -1;
+    }
+
+    void settle_project_cursor() {
+        // A SAVE AS made a folder the list does not have yet: read it again once it is written.
+        if (projects_reread_ && storage_.busy_text() == nullptr && !storage_.dirty() &&
+            !storage_.browsing()) {
+            projects_reread_ = false;
+            list_projects();
+        }
+        if (!project_seek_ || storage_.browsing()) return;
+        project_seek_ = false;
+        const int at = storage_.browse_list().find(storage_.project_name());
+        project_cursor_ = at < 0 ? 0 : at;
+    }
+
+    bool on_projects_key(int key) {
+        if (held_step_ >= 0) return false;
+        const SampleList &list = storage_.browse_list();
+        switch (key) {
+            case ENAGA_KEY_OK: {
+                if (shift_) return false;               // F1 + OK is redo
+                if (storage_.browsing() || list.count() == 0) return true;
+                const char *name = list.name(project_cursor_);
+                if (!list.is_folder(project_cursor_)) {
+                    notice("NOT A PROJECT");
+                    return true;
+                }
+                if (SampleList::same_name(name, storage_.project_name())) {
+                    notice("ALREADY OPEN");
+                    return true;
+                }
+                if (!Storage::valid_name(name)) {
+                    notice("NAME NOT USABLE");
+                    return true;
+                }
+                // Opening throws away what is unsaved and stops the transport, so it takes a
+                // second press within kSaveArmMs, as a reload does.
+                if (open_armed_ == project_cursor_ &&
+                    uint32_t(last_ms_ - open_armed_at_ms_) < kSaveArmMs) {
+                    open_armed_ = -1;
+                    storage_.request_open(name);
+                    project_page_ = ProjectPage::slots;
+                    notice("OPENING");
+                    return true;
+                }
+                open_armed_ = project_cursor_;
+                open_armed_at_ms_ = last_ms_;
+                notice("AGAIN TO OPEN");
+                return true;
+            }
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (shift_) {
+                    if (key == ENAGA_KEY_UP) {
+                        list_projects();                // FUNC+UP reads the card again
+                        notice("READING");
+                    } else if (!storage_.card_usable()) {
+                        notice("NO CARD");
+                    } else {
+                        // FUNC+DOWN: SAVE AS, starting from the name it has.
+                        name_entry_.open("SAVE AS", storage_.project_name());
+                    }
+                    return true;
+                }
+                move_project_cursor_to(project_cursor_ + (key == ENAGA_KEY_UP ? -1 : +1));
+                return true;
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (shift_) return false;               // reload and new, as on the slots
+                move_project_cursor_to(project_cursor_ +
+                                       (key == ENAGA_KEY_LEFT ? -kSampleRows : kSampleRows));
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // OK on the name entry.
+    void finish_save_as() {
+        char name[Storage::kNameBytes];
+        const char *typed = name_entry_.text();
+        int n = 0;
+        for (; typed[n] != '\0' && n < Storage::kNameBytes - 1; n++) name[n] = typed[n];
+        name[n] = '\0';
+        if (name[0] == '\0') {
+            notice("NO NAME");
+            return;
+        }
+        // Another project's folder is not overwritten by a SAVE AS: it is that project.
+        const SampleList &list = storage_.browse_list();
+        const int at = list.find(name);
+        if (at >= 0 && list.is_folder(at) && !SampleList::same_name(name, storage_.project_name())) {
+            notice("NAME TAKEN");
+            return;
+        }
+        if (!storage_.request_save_as(name)) {
+            notice("NAME NOT USABLE");
+            return;
+        }
+        projects_reread_ = true;
+        notice("SAVING");
+    }
+
+    // The SAVE AS entry. Enaga's TextEntry does the editing; its own draw() puts each character
+    // in a box 7 px from the next, which reads as separate words beside the rest of STRATA's
+    // screens, so the name is drawn here as one string with a line under each place and a bright
+    // one under the cursor.
+    void draw_name_entry(enaga::Canvas &canvas) {
+        constexpr int kChars = enaga::ui::TextEntry::max_chars;
+        constexpr int kX = (128 - kChars * 6) / 2;
+        canvas.text(0, 18, "SAVE AS", 15);
+        canvas.text(kX, 48, name_entry_.text(), 15);
+        for (int i = 0; i < kChars; i++) {
+            canvas.rect(kX + i * 6, 57, 5, 1, i == name_entry_.cursor() ? 15 : 4);
+        }
+        canvas.text(0, 84, "A / LEFT RIGHT: MOVE", 6);
+        canvas.text(0, 94, "B / VALUE: CHARACTER", 6);
+        canvas.text(0, 104, "OK: SAVE  CLR: CANCEL", 6);
+    }
+
+    void draw_projects(enaga::Canvas &canvas) {
+        if (name_entry_.active()) {
+            draw_name_entry(canvas);
+            return;
+        }
+        const SampleList &list = storage_.browse_list();
+        char line[40];
+        char *out = line;
+        canvas.text(0, 18, "PROJECTS", 15);
+
+        out = line;
+        const char *busy = storage_.busy_text();
+        if (storage_.browsing()) {
+            append(out, "READING CARD");
+        } else if (storage_.browse_error() != nullptr) {
+            append_shown(out, storage_.browse_error(), kLineChars);
+        } else if (busy != nullptr) {
+            append(out, busy);
+        } else {
+            append(out, "NOW ");
+            append_shown(out, storage_.project_name(), kLineChars - 4);
+        }
+        *out = 0;
+        canvas.text(0, 27, line, 10);
+
+        const int count = list.count();
+        const int first = (project_cursor_ / kSampleRows) * kSampleRows;
+        if (count == 0 && !storage_.browsing()) canvas.text(0, 37, "NO PROJECTS YET", 9);
+        for (int i = 0; i < kSampleRows && first + i < count; i++) {
+            const int at = first + i;
+            out = line;
+            *out++ = at == project_cursor_ ? '>' : ' ';
+            append_shown(out, list.name(at), kLineChars - 1);
+            *out = 0;
+            const bool open = SampleList::same_name(list.name(at), storage_.project_name());
+            canvas.text(0, 37 + i * 8, line,
+                        at == project_cursor_ ? 15 : (open ? 12 : (list.is_folder(at) ? 10 : 5)));
+        }
+
+        canvas.text(0, 103, storage_.dirty() ? "UNSAVED  F+DN SAVE AS" : "FUNC+DOWN: SAVE AS", 7);
+        out = line;
+        if (count > 0) {
+            append_number(out, uint32_t(project_cursor_ + 1));
+            *out++ = '/';
+            append_number(out, uint32_t(count));
+            append(out, "  ");
+        }
+        append(out, "OK OPEN CLR BACK");
+        *out = 0;
+        canvas.text(0, 112, line, 7);
+    }
+
     // --- KIT: the kit library (FUNC+EDIT twice) ---------------------------
     //
     // Sixteen kits on the card, shared by every project (app/storage.hpp, "the kit library").
@@ -3372,6 +3596,7 @@ public:
     bool on_project_key(int key) {
         if (project_page_ == ProjectPage::chain && on_chain_key(key)) return true;
         if (project_page_ == ProjectPage::pattern && on_pattern_page_key(key)) return true;
+        if (project_page_ == ProjectPage::files && on_projects_key(key)) return true;
         switch (key) {
             case ENAGA_KEY_OK:
                 // F1 + OK is redo here as everywhere (docs/SPEC.md); the shared handler has it.
@@ -3816,6 +4041,10 @@ public:
             draw_pattern_page(canvas);
             return;
         }
+        if (project_page_ == ProjectPage::files) {
+            draw_projects(canvas);
+            return;
+        }
         char line[40];
         char *out = line;
         const Status &status = engine_.status();
@@ -4090,7 +4319,7 @@ private:
     int mixer_bank_ = 0;      // which kMixerPages entry: the faders, then the sends and master
     // PROJECT mode's pages, on the octave keys: the slots, the chain, the pattern's own
     // settings and SETUP.
-    enum class ProjectPage : uint8_t { slots = 0, chain, pattern, setup, count };
+    enum class ProjectPage : uint8_t { slots = 0, chain, pattern, setup, files, count };
     ProjectPage project_page_ = ProjectPage::slots;
     bool project_setup() const { return project_page_ == ProjectPage::setup; }
     int chain_cursor_ = 0;         // the CHAIN page's entry
@@ -4100,9 +4329,17 @@ private:
             case ProjectPage::slots:   return "PROJECT";
             case ProjectPage::chain:   return "CHAIN";
             case ProjectPage::pattern: return "PATTERN";
+            case ProjectPage::files:   return "PROJECTS";
             default:                   return "SETUP";
         }
     }
+    // The PROJECTS page: the card's projects, the cursor on them, and the name being typed.
+    int project_cursor_ = 0;
+    bool project_seek_ = false;    // put the cursor on the open project once the list is in
+    bool projects_reread_ = false; // list again once a SAVE AS has landed
+    int open_armed_ = -1;          // OK once on this entry; the second within kSaveArmMs opens
+    uint32_t open_armed_at_ms_ = 0;
+    enaga::ui::TextEntry name_entry_;
     int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
     bool save_armed_ = false;      // F1 + F3 once; the second press within kSaveArmMs saves
     uint32_t save_armed_at_ms_ = 0;

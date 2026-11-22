@@ -133,12 +133,16 @@ bool SampleList::path_of(int i, char *out, int max) const {
 int SampleList::find(const char *wanted) const {
     if (wanted == nullptr) return -1;
     for (int i = 0; i < count_; i++) {
-        const char *n = name(i);
-        int k = 0;
-        while (n[k] != '\0' && upper(n[k]) == upper(wanted[k])) k++;
-        if (n[k] == '\0' && wanted[k] == '\0') return i;
+        if (same_name(name(i), wanted)) return i;
     }
     return -1;
+}
+
+bool SampleList::same_name(const char *a, const char *b) {
+    if (a == nullptr || b == nullptr) return false;
+    int k = 0;
+    while (a[k] != '\0' && upper(a[k]) == upper(b[k])) k++;
+    return a[k] == '\0' && b[k] == '\0';
 }
 
 void SampleList::parent_of(const char *folder, char *out, int max) {

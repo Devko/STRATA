@@ -430,6 +430,20 @@ cannot press, so this is their first run outside the host tests. Play A01 GROOVE
       Track 8's blips play too: a SAMPLE track with no file now plays the placeholder (PR #42). A single press of either key never loses work.
 - [ ] Both also work from the SETUP page.
 
+## 14b. Projects: open and save as (4 min)
+
+New 2026-11-22. PROJECT, octave RIGHT four times: `PROJECTS`.
+
+- [ ] The list shows `DEFAULT` (and any other project folders), with the cursor on the open one
+      and `NOW DEFAULT` at the top. OK on it says `ALREADY OPEN`.
+- [ ] FUNC+DOWN: `SAVE AS` with `DEFAULT` in the entry. Make it `LIVE 1` with A and VALUE, OK:
+      `SAVING`, then `LIVE 1` appears in the list and `NOW LIVE 1`. The text is readable and the
+      underline sits under the right character? `________`
+- [ ] Change something, then OK twice on `DEFAULT`: `AGAIN TO OPEN`, then `OPENING`; the change
+      is gone and DEFAULT plays as it was saved.
+- [ ] Power cycle: STRATA comes back with `DEFAULT`, the one opened last.
+- [ ] SAVE AS `LIVE 1` from DEFAULT says `NAME TAKEN` and writes nothing.
+
 ## 15. Kit browser: FUNC+EDIT twice (6 min)
 
 Kits (machines, parameters, faders, sample paths) live on the card in 16 slots shared by every
