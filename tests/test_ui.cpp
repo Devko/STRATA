@@ -4976,7 +4976,7 @@ void enter(Strata &app, int s) {
             key(ENAGA_KEY_F3);
             // docs/CONTROLS.md: the screen keys walk PROJECT's pages, the pad-row keys the bank.
             for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_LEFT);   // the slots, first
-            while (UiProbe::shown_bank(app) != 0) key(ENAGA_KEY_OCTAVE_RIGHT);   // bank A
+            for (int i = 0; i < 8 && UiProbe::shown_bank(app) != 0; i++) key(ENAGA_KEY_OCTAVE_RIGHT);
             for (int i = s_project; i < s; i++) key(ENAGA_KEY_SELECT_RIGHT);
             break;
     }
@@ -5247,6 +5247,18 @@ bool lit(int pad, uint8_t r, uint8_t g, uint8_t b) {
     return level.r == r && level.g == g && level.b == b;
 }
 
+// docs/CONTROLS.md: an upper pad is always lit in its own colour, at 2 idle and 10 while held or
+// on, so the row reads as tools and each says which one it is.
+bool lit_dim(int pad) {
+    const Rgb c = kPerformColour[pad / 2];
+    return lit(pad, uint8_t(c.r * 2 / 10), uint8_t(c.g * 2 / 10), uint8_t(c.b * 2 / 10));
+}
+
+bool lit_bright(int pad) {
+    const Rgb c = kPerformColour[pad / 2];
+    return lit(pad, c.r, c.g, c.b);
+}
+
 void fade_notice() {
     g_ms += 4000;
     pump(2);
@@ -5262,7 +5274,7 @@ TEST(ui_mutate_says_what_it_did_and_waits_for_ok_or_clr_on_screen_and_on_the_pad
     }
     pump(4);
     fade_notice();
-    CHECK(lit(13, 2, 2, 2));                          // available: white 2
+    CHECK(lit_dim(13));                               // available: its colour at 2
 
     app.on_pad_press(13, 100);                        // upper 7
     app.on_pad_release(13);
@@ -5270,7 +5282,7 @@ TEST(ui_mutate_says_what_it_did_and_waits_for_ok_or_clr_on_screen_and_on_the_pad
     // What it did and to which track -- the bare "VELOCITY" did not read as anything happening.
     CHECK(screen_has(app, "MUTATE T1 VELOCITY"));
     check_layout(app, "GRID, MUTATE notice");
-    CHECK(lit(13, 10, 5, 0));                         // waiting for a verdict: its colour at 10
+    CHECK(lit_bright(13));                            // waiting for a verdict: its colour at 10
 
     // The notice fades; the question does not.
     fade_notice();
@@ -5280,7 +5292,7 @@ TEST(ui_mutate_says_what_it_did_and_waits_for_ok_or_clr_on_screen_and_on_the_pad
     pump(2);
     // A mode change settles a pending mutation (leave_mode), so the hint goes with it.
     CHECK(!screen_has(app, "OK KEEPS CLR REVERTS"));
-    CHECK(lit(13, 2, 2, 2));
+    CHECK(lit_dim(13));
 
     // In EDIT: press, fade, and the hint is on the second line.
     app.on_pad_press(13, 100);
@@ -5294,7 +5306,7 @@ TEST(ui_mutate_says_what_it_did_and_waits_for_ok_or_clr_on_screen_and_on_the_pad
     CHECK(screen_has(app, "KEPT"));
     fade_notice();
     CHECK(!screen_has(app, "OK KEEPS CLR REVERTS"));
-    CHECK(lit(13, 2, 2, 2));
+    CHECK(lit_dim(13));
 }
 
 TEST(ui_mutate_on_an_empty_track_says_there_was_nothing_to_mutate) {
@@ -5305,7 +5317,7 @@ TEST(ui_mutate_on_an_empty_track_says_there_was_nothing_to_mutate) {
     pump(4);
     CHECK(screen_has(app, "T1 NOTHING TO MUTATE"));
     check_layout(app, "GRID, nothing to mutate");
-    CHECK(lit(13, 2, 2, 2));                          // nothing is waiting for a verdict
+    CHECK(lit_dim(13));                               // nothing is waiting for a verdict
     fade_notice();
     CHECK(!screen_has(app, "OK KEEPS CLR REVERTS"));
     // So CLR is CLR again, not a "REVERTED" of a mutation that never happened.
@@ -5315,65 +5327,60 @@ TEST(ui_mutate_on_an_empty_track_says_there_was_nothing_to_mutate) {
     (void)depth;
 }
 
-TEST(ui_the_upper_pads_light_white_and_their_colour_while_active) {
+TEST(ui_the_upper_pads_light_dim_in_their_colour_and_bright_while_active) {
     Strata &app = fresh();
     pump(2);
-    for (int pad = 1; pad <= 13; pad += 2) CHECK(lit(pad, 2, 2, 2));
+    for (int pad = 1; pad <= 13; pad += 2) CHECK(lit_dim(pad));
 
     app.on_pad_press(1, 100);                         // FILL, held
     pump(2);
-    CHECK(lit(1, 10, 10, 0));
+    CHECK(lit_bright(1));
     app.on_pad_release(1);
     pump(2);
-    CHECK(lit(1, 2, 2, 2));
+    CHECK(lit_dim(1));
 
     app.on_pad_press(11, 100);                        // THROW, held
     pump(2);
-    CHECK(lit(11, 0, 10, 4));
+    CHECK(lit_bright(11));
     app.on_pad_release(11);
     pump(2);
-    CHECK(lit(11, 2, 2, 2));
+    CHECK(lit_dim(11));
 
     app.on_pad_press(5, 100);                         // MUTE MODE: a toggle, lit while on
     app.on_pad_release(5);
     pump(2);
-    CHECK(lit(5, 10, 0, 0));
+    CHECK(lit_bright(5));
     app.on_pad_press(5, 100);
     app.on_pad_release(5);
     pump(2);
-    CHECK(lit(5, 2, 2, 2));
+    CHECK(lit_dim(5));
 
     app.on_key(ENAGA_KEY_F1, true);                   // FUNC + FILL: NOTE RPT stays lit
     app.on_pad_press(1, 100);
     app.on_pad_release(1);
     app.on_key(ENAGA_KEY_F1, false);
     pump(2);
-    CHECK(lit(1, 10, 10, 0));
+    CHECK(lit_bright(1));
     app.on_key(ENAGA_KEY_F1, true);
     app.on_pad_press(1, 100);
     app.on_pad_release(1);
     app.on_key(ENAGA_KEY_F1, false);
     pump(2);
-    CHECK(lit(1, 2, 2, 2));
+    CHECK(lit_dim(1));
 }
 
 // The other inputs the audit above found working with nothing on screen.
 TEST(ui_inputs_that_worked_unseen_now_say_what_they_did) {
     Strata &app = fresh();
 
-    // FUNC + octave / selection outside GRID: the track's length and speed, live.
+    // FUNC + pad-row key outside GRID: the track's length, live. (The speed is a FUNC menu row,
+    // which shows its own value.)
     key(ENAGA_KEY_F8);
     shift_key(ENAGA_KEY_OCTAVE_LEFT);                 // a blank track is 64 long
     pump(2);
     CHECK(screen_has(app, "T1 LEN 63 X1"));           // the value AFTER the audio side applied it
     check_layout(app, "EDIT, length");
-    shift_key(ENAGA_KEY_SELECT_RIGHT);
-    pump(2);
-    CHECK(screen_has(app, "T1 LEN 63 X"));
-    CHECK(!screen_has(app, "T1 LEN 63 X1"));          // the speed moved off 1
-    check_layout(app, "EDIT, speed");
-    shift_key(ENAGA_KEY_SELECT_LEFT);                 // put both back
-    shift_key(ENAGA_KEY_OCTAVE_RIGHT);
+    shift_key(ENAGA_KEY_OCTAVE_RIGHT);                // put it back
     pump(2);
     CHECK(screen_has(app, "T1 LEN 64 X1"));
 
@@ -5387,7 +5394,7 @@ TEST(ui_inputs_that_worked_unseen_now_say_what_they_did) {
     check_layout(app, "EDIT, mute at bar");
 
     // KEYS has no knob slots: a turn says which knob and where it is now.
-    shift_key(ENAGA_KEY_F4);
+    open_keys();
     pump(2);
     app.on_encoder(0, +3);
     pump(2);
@@ -5406,14 +5413,18 @@ TEST(ui_inputs_that_worked_unseen_now_say_what_they_did) {
     CHECK(screen_has(app, "MACRO B 6"));               // three clicks of two
     check_layout(app, "PERFORM, macro");
 
-    // PROJECT: the bank the selection keys pick, which CHAIN does not draw.
+    // CHAIN: the bank the pad-row keys pick, which CHAIN does not draw.
     key(ENAGA_KEY_F3);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_LEFT);       // the slots, first
+    key(ENAGA_KEY_SELECT_RIGHT);                                   // CHAIN
+    for (int i = 0; i < 8 && UiProbe::shown_bank(app) != 0; i++) {
+        key(ENAGA_KEY_OCTAVE_RIGHT);                               // it outlives fresh()
+    }
+    CHECK_EQ(UiProbe::shown_bank(app), 0);
     key(ENAGA_KEY_OCTAVE_RIGHT);
-    while (UiProbe::shown_bank(app) != 0) key(ENAGA_KEY_SELECT_RIGHT);   // it outlives fresh()
-    key(ENAGA_KEY_SELECT_RIGHT);
     pump(2);
     CHECK(screen_has(app, "BANK B"));
-    key(ENAGA_KEY_SELECT_LEFT);
+    key(ENAGA_KEY_OCTAVE_LEFT);
 
     // STOP on a stopped box arms the cut, and the second press cuts.
     key(ENAGA_KEY_F6);
