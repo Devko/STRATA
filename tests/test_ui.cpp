@@ -100,6 +100,7 @@ struct UiProbe {
     static int slot_cursor(const Strata &app) { return app.slot_cursor_; }
     static int macro_selected(const Strata &app) { return app.macro_selected_; }
     static int quantize(const Strata &app) { return app.quantize(); }
+    static uint32_t cpu_max(const Strata &app) { return app.cpu_max_; }
     static int project_cursor(const Strata &app) { return app.project_cursor_; }
     static bool name_entry_open(const Strata &app) { return app.name_entry_.active(); }
     static const char *name_entry_text(Strata &app) { return app.name_entry_.text(); }
@@ -2526,6 +2527,49 @@ TEST(ui_the_setup_page_and_the_mixer_pages_draw) {
         app.draw(canvas);
     }
     CHECK(true);        // it did not fault, which is the claim
+}
+
+// The bottom line's MAX. The top line shows the LAST block's cost, which on the unit changes 750
+// times a second and cannot be read (the first boot found that out). MAX holds the highest block
+// since the transport last started, so it has to do two things: keep a peak against the quieter
+// blocks after it, and forget it on PLAY so the figure belongs to what is playing now.
+TEST(ui_the_held_cpu_max_keeps_the_highest_block_and_restarts_on_play) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_running(false);
+    pump(2);
+
+    host.set_audio_load(150);
+    pump();
+    host.set_audio_load(90);
+    pump(3);
+    CHECK_EQ(UiProbe::cpu_max(app), 150u);          // held against the later, cheaper blocks
+
+    host.set_running(true);                         // PLAY: a fresh maximum, starting here
+    host.set_audio_load(40);
+    pump();
+    CHECK_EQ(UiProbe::cpu_max(app), 40u);
+
+    host.set_audio_load(260);
+    pump();
+    host.set_audio_load(30);
+    pump(5);
+    CHECK_EQ(UiProbe::cpu_max(app), 260u);          // still running: held
+
+    host.set_running(false);                        // a stop alone does not clear it ...
+    pump();
+    CHECK_EQ(UiProbe::cpu_max(app), 260u);
+    host.set_running(true);                         // ... the next start does
+    host.set_audio_load(10);
+    pump();
+    CHECK_EQ(UiProbe::cpu_max(app), 10u);
+
+    enaga::Canvas canvas(g_pixels);
+    app.draw(canvas);                               // the bottom line with a figure in it
+
+    host.set_running(false);
+    host.set_audio_load(0);
+    pump();
 }
 
 // --- the screen's layout ----------------------------------------------------------------------

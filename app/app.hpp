@@ -1976,6 +1976,10 @@ public:
             const bool running = clock.running != 0;
             const int source = int(clock.source);
             if (running != logged_running_ || source != logged_source_) {
+                // A start begins a fresh MAX, so the figure on screen belongs to what is playing
+                // now and not to a load or an earlier pattern. Here rather than in on_transport
+                // because this edge is seen whoever started the clock.
+                if (running && !logged_running_) cpu_max_ = 0;
                 logged_running_ = running;
                 logged_source_ = source;
                 enaga::log(running ? (source == ENAGA_CLOCK_INTERNAL ? "run int"
@@ -1983,6 +1987,15 @@ public:
                                    : "stopped");
             }
             (void)logged_position_;
+        }
+
+        // The held CPU maximum for the bottom line. The top line's figure is the LAST block, which
+        // changes 750 times a second and cannot be read on the unit. update() runs after every
+        // block, so polling here sees each block's cost. Enaga's own audio_load_peak() is held
+        // since the app started, which includes init and every load; this one restarts on PLAY.
+        {
+            const uint32_t load = enaga::audio_load();
+            cpu_max_ = load > cpu_max_ ? load : cpu_max_;
         }
 
         const Status &status = engine_.status();
@@ -2171,6 +2184,11 @@ public:
         out = line;
         append(out, "TRK");
         append_number(out, status.voices.load(std::memory_order_relaxed));
+        // The held CPU maximum, percent like the top line but without the sign and the space:
+        // "TRK8 MAX99.9 SMPLTREK" is 21 characters, 125 pixels, and the screen is 128. A longer
+        // line (100.0, LOFI-12 XT, DROP) is clipped by Enaga's pixel writer, never overrun.
+        append(out, " MAX");
+        append_tenths(out, cpu_max_);
         append(out, " ");
         // A dropped edit takes the device's place: "V12 LOFI-12 XT DROP 99" is 22 characters,
         // one past the edge, and the drop count is the part that matters.
@@ -4685,6 +4703,7 @@ private:
     const char *notice_ = nullptr;
     uint32_t notice_at_ms_ = 0;
     uint32_t last_ms_ = 0;
+    uint32_t cpu_max_ = 0;         // per mille, the highest block cost since the last start
 
     LedShadow leds_;
     uint32_t tempo_tenths_ = 1300;
