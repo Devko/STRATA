@@ -101,6 +101,13 @@ struct UiProbe {
     static int slot_cursor(const Strata &app) { return app.slot_cursor_; }
     static int macro_selected(const Strata &app) { return app.macro_selected_; }
     static int quantize(const Strata &app) { return app.quantize(); }
+    static int menu_cursor(const Strata &app) { return app.menu_cursor_; }
+    static bool func_help(const Strata &app) { return app.func_help_showing(); }
+    static uint8_t pad_r(const Strata &app, int pad) { return app.leds_.pad_r[pad]; }
+    static uint8_t pad_g(const Strata &app, int pad) { return app.leds_.pad_g[pad]; }
+    static uint8_t pad_b(const Strata &app, int pad) { return app.leds_.pad_b[pad]; }
+    static uint8_t key_red(const Strata &app, int code) { return app.leds_.key_red[code]; }
+    static uint8_t key_green(const Strata &app, int code) { return app.leds_.key_green[code]; }
     static uint32_t cpu_max(const Strata &app) { return app.cpu_max_; }
     static int project_cursor(const Strata &app) { return app.project_cursor_; }
     static bool name_entry_open(const Strata &app) { return app.name_entry_.active(); }
@@ -196,6 +203,36 @@ void shift_key(int code) {                 // F1 + that key, F1 released after
     the_app().on_key(ENAGA_KEY_F1, false);
 }
 
+// HOME double-tapped is KEYS (docs/CONTROLS.md). From GRID one more press would leave KEYS
+// again, so this presses until it is there.
+void open_keys() {
+    for (int i = 0; i < 3 && UiProbe::mode(the_app()) != int(Mode::keys); i++) key(ENAGA_KEY_F4);
+}
+
+// The FUNC menu's rows, in order (app/app.hpp, MenuItem).
+enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuKits,
+                     kMenuSample, kMenuSpeed, kMenuChain, kMenuSong, kMenuAutofill,
+                     kMenuQuantize, kMenuRowCount };
+
+// FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
+void menu_to(int row) {
+    if (UiProbe::mode(the_app()) == int(Mode::menu)) key(ENAGA_KEY_CLR);
+    shift_key(ENAGA_KEY_F4);
+    for (int i = 0; i < row; i++) key(ENAGA_KEY_DOWN);
+}
+
+// Open the menu on `row` and press OK once.
+void menu_run(int row) {
+    menu_to(row);
+    key(ENAGA_KEY_OK);
+}
+
+// A setting row: OK steps it once, then CLR closes the menu, back to the screen it opened over.
+void menu_toggle(int row) {
+    menu_run(row);
+    key(ENAGA_KEY_CLR);
+}
+
 void step_down(int raw) { the_app().on_key(ENAGA_KEY_STEP1 + raw, true); }
 void step_up(int raw) { the_app().on_key(ENAGA_KEY_STEP1 + raw, false); }
 
@@ -274,7 +311,13 @@ Strata &fresh() {
     }
     if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
 
+    // HOME after the last test's HOME must not be a double tap (which is KEYS), and nor must the
+    // test's own first HOME after this one: a second apart, as the app's clock sees it.
+    g_ms += 1000;
+    pump();
     key(ENAGA_KEY_F4);                     // GRID: closes the step page and drops any hold
+    g_ms += 1000;
+    pump();
     for (int i = 0; i < 4; i++) key(ENAGA_KEY_OCTAVE_LEFT);   // step page 1 of 4, clamped at 0
     step_down(0);                          // a fresh single press drops any selection...
     step_up(0);                            // ...and its release toggles a trig, wiped below
@@ -699,12 +742,18 @@ TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {
     for (int i = 0; i < 6; i++) key(ENAGA_KEY_OCTAVE_LEFT);
     CHECK_EQ(UiProbe::page(app), 0);
 
-    // The selection keys move the page in GRID as well, and those WRAP -- the spec's key table
-    // gives both, and `select()` is the one that goes round.
-    key(ENAGA_KEY_SELECT_LEFT);
+    // LEFT and RIGHT move the step page in GRID as well, and those WRAP. The screen keys do
+    // not: on GRID they turn the EDIT page that A-D work on (docs/CONTROLS.md).
+    key(ENAGA_KEY_LEFT);
     CHECK_EQ(UiProbe::page(app), 3);
+    key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::page(app), 0);
+    const int param_page = UiProbe::param_page(app);
     key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(UiProbe::page(app), 0);
+    CHECK_EQ(UiProbe::param_page(app), (param_page + 1) % kEditPages);
+    key(ENAGA_KEY_SELECT_LEFT);
+    CHECK_EQ(UiProbe::param_page(app), param_page);
 }
 
 TEST(ui_the_value_encoder_is_the_tempo_and_a_refused_transport_is_recorded) {
@@ -1083,7 +1132,7 @@ TEST(ui_leaving_the_app_ends_a_held_midi_note) {
     Strata &app = fresh();
     post_cmd(Cmd::set_midi_out, 7);                 // track 1 to channel 7
     pump(2);
-    shift_key(ENAGA_KEY_F4);                         // KEYS
+    open_keys();                                     // KEYS
     FakeHost::the().clear_midi();
     step_down(0);
     pump(2);
@@ -1129,7 +1178,7 @@ TEST(ui_a_keys_key_holds_its_note_until_it_comes_up) {
     // KEYS: the press plays, the release lets that same note go -- even after an octave change
     // while it was down -- and a mode change lets go of whatever is still held.
     Strata &app = fresh();
-    shift_key(ENAGA_KEY_F4);                          // KEYS
+    open_keys();                                      // KEYS
     step_down(0);
     const int note = UiProbe::keys_held_note(app, 0);
     CHECK(note >= 0);
@@ -1189,7 +1238,7 @@ TEST(ui_a_hold_that_crosses_a_mode_change_is_dropped_rather_than_stranded) {
         Mode expected;
     };
     const Case cases[] = {
-        {"KEYS", ENAGA_KEY_F4, true, Mode::keys},
+        {"MENU", ENAGA_KEY_F4, true, Mode::menu},
         {"PERFORM", ENAGA_KEY_F7, true, Mode::perform},
         {"PROJECT", ENAGA_KEY_F3, false, Mode::project},
         {"EDIT", ENAGA_KEY_F8, false, Mode::edit},
@@ -1347,7 +1396,7 @@ TEST(ui_every_mode_key_closes_the_step_page) {
     const Case cases[] = {
         {ENAGA_KEY_F3, false, Mode::project}, {ENAGA_KEY_F4, false, Mode::grid},
         {ENAGA_KEY_F7, false, Mode::mixer},   {ENAGA_KEY_F8, false, Mode::edit},
-        {ENAGA_KEY_F4, true, Mode::keys},     {ENAGA_KEY_F7, true, Mode::perform},
+        {ENAGA_KEY_F4, true, Mode::menu},     {ENAGA_KEY_F7, true, Mode::perform},
     };
 
     for (const Case &c : cases) {
@@ -1376,7 +1425,7 @@ TEST(ui_f1_picks_keys_over_grid_and_perform_over_mixer) {
 
     key(ENAGA_KEY_F4);
     CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
-    shift_key(ENAGA_KEY_F4);
+    open_keys();
     CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
 
     key(ENAGA_KEY_F7);
@@ -1410,7 +1459,7 @@ TEST(ui_keys_mode_plays_sixteen_degrees_of_the_scale_and_not_semitones) {
     CHECK_EQ(int(app_engine().pattern().scale), int(Scale::minor));
     CHECK_EQ(app_engine().pattern().root, app_engine().project().settings.root % 12);
 
-    shift_key(ENAGA_KEY_F4);
+    open_keys();
     CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
 
     const uint8_t root = 2;
@@ -1450,7 +1499,7 @@ TEST(ui_keys_mode_plays_sixteen_degrees_of_the_scale_and_not_semitones) {
         app.on_encoder(2, +1);
         pump();
         CHECK_EQ(int(app_engine().pattern().scale), s);
-        shift_key(ENAGA_KEY_F4);
+        open_keys();
         for (int i = 0; i < 16; i++) CHECK(scale_contains(app.keys_note(i), root, s));
         key(ENAGA_KEY_F3);
     }
@@ -1465,7 +1514,7 @@ TEST(ui_a_step_key_in_keys_mode_plays_and_records_the_scale_note) {
     key(ENAGA_KEY_F3);
     app.on_encoder(2, +1);                         // minor, so a degree is not a semitone
     pump();
-    shift_key(ENAGA_KEY_F4);
+    open_keys();
 
     FakeHost &host = FakeHost::the();
     host.set_running(true);
@@ -1503,15 +1552,15 @@ TEST(ui_play_is_refused_while_a_project_is_loading) {
     Strata &app = fresh();
     FakeHost &host = FakeHost::the();
 
-    shift_key(ENAGA_KEY_F3);                       // F1 + F3 twice: save, so there is
-    shift_key(ENAGA_KEY_F3);                       // something to read back
+    menu_run(kMenuSave);                           // FUNC + HOME, OK: save, so there is
+                                                   // something to read back
     CHECK_EQ(UiProbe::notice(app), "SAVING");
     CHECK(pump_until_idle());
     CHECK(app_storage().last_error() == nullptr);
 
-    shift_key(ENAGA_KEY_LEFT);                     // F1 + LEFT twice: read the card again
-    CHECK_EQ(UiProbe::notice(app), "AGAIN TO RELOAD");
-    shift_key(ENAGA_KEY_LEFT);
+    menu_run(kMenuReload);                         // RELOAD PROJECT, OK twice
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO RELOAD");
+    key(ENAGA_KEY_OK);
     CHECK_EQ(UiProbe::notice(app), "RELOADING");
     pump();                                        // one pass of service(): the load starts
     CHECK(app_storage().loading_project());
@@ -2044,8 +2093,8 @@ void setup_page(Strata &app, bool on) {
     app.on_key(ENAGA_KEY_F3, true);
     app.on_key(ENAGA_KEY_F3, false);
     for (int i = 0; i < 3; i++) {                   // past CHAIN and PATTERN, or back to the slots
-        app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, true);
-        app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, false);
+        app.on_key(on ? ENAGA_KEY_SELECT_RIGHT : ENAGA_KEY_SELECT_LEFT, true);
+        app.on_key(on ? ENAGA_KEY_SELECT_RIGHT : ENAGA_KEY_SELECT_LEFT, false);
     }
     CHECK_EQ(UiProbe::project_setup(app), on);
 }
@@ -2840,7 +2889,7 @@ TEST(ui_layout_mixer_perform_keys_machine_resample) {
     post_cmd(Cmd::set_auto_fill, uint8_t(AutoFill::off));
     pump(2);
 
-    shift_key(ENAGA_KEY_F4);
+    open_keys();
     CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
     for (int scale = 0; scale < kScaleCount; scale++) {
         post_cmd(Cmd::set_scale, uint8_t(scale));
@@ -2918,7 +2967,7 @@ TEST(ui_layout_chain_and_pattern_pages) {
     Strata &app = fresh();
     worst_case_content(app);
     key(ENAGA_KEY_F3);
-    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(UiProbe::project_page(app), 1);
     check_layout(app, "CHAIN, empty");
     // A full chain of the widest entries, with the cursor at the top, the middle and the end.
@@ -2940,7 +2989,7 @@ TEST(ui_layout_chain_and_pattern_pages) {
     app_engine().project_for_load().settings.chain_song = false;
     pump(2);
 
-    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(UiProbe::project_page(app), 2);
     check_layout(app, "PATTERN");
     key(ENAGA_KEY_CLR);
@@ -2952,7 +3001,7 @@ TEST(ui_the_chain_page_sets_mute_recalls_and_song_mode) {
     Strata &app = fresh();
     const Project &project = app_engine().project();
     key(ENAGA_KEY_F3);
-    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(UiProbe::project_page(app), 1);
     key(ENAGA_KEY_OK);                                // one entry: the playing pattern
     pump(2);
@@ -2972,18 +3021,21 @@ TEST(ui_the_chain_page_sets_mute_recalls_and_song_mode) {
     CHECK_EQ(int(project.chain[1].mutes), 3);
     check_layout(app, "CHAIN, with mute recalls");
 
-    // FUNC + RIGHT switches SONG and LOOP.
+    // The FUNC menu's CHAIN END row switches SONG and LOOP, and CLR comes back to CHAIN.
     CHECK(!project.settings.chain_song);
-    shift_key(ENAGA_KEY_RIGHT);
+    menu_run(kMenuSong);
     pump(2);
     CHECK(project.settings.chain_song);
     CHECK_EQ(UiProbe::notice(app), "SONG: PLAY ONCE");
-    shift_key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_OK);
     pump(2);
     CHECK(!project.settings.chain_song);
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+    CHECK_EQ(UiProbe::project_page(app), 1);
 
     // The end of a song stops the transport, from this side.
-    shift_key(ENAGA_KEY_RIGHT);
+    menu_toggle(kMenuSong);
     pump(2);
     key(ENAGA_KEY_F5);
     CHECK(enaga::clock::running());
@@ -2992,24 +3044,24 @@ TEST(ui_the_chain_page_sets_mute_recalls_and_song_mode) {
     CHECK(!enaga::clock::running());
     CHECK_EQ(UiProbe::notice(app), "SONG END");
 
-    // FUNC + LEFT removes an entry only on a second press (Roland, 2026-11-22): not undoable.
-    shift_key(ENAGA_KEY_RIGHT);
-    shift_key(ENAGA_KEY_LEFT);
+    // CLR removes an entry only on a second press (Roland, 2026-11-22): not undoable.
+    menu_toggle(kMenuSong);
+    key(ENAGA_KEY_CLR);
     pump(2);
     CHECK_EQ(chain_length(project), 2);
     CHECK_EQ(UiProbe::notice(app), "AGAIN TO REMOVE");
     // Too late: past two seconds the first press is forgotten and this one only arms again.
     pump(2100);
-    shift_key(ENAGA_KEY_LEFT);
+    key(ENAGA_KEY_CLR);
     pump(2);
     CHECK_EQ(chain_length(project), 2);
-    shift_key(ENAGA_KEY_LEFT);
+    key(ENAGA_KEY_CLR);
     pump(2);
     CHECK_EQ(chain_length(project), 1);
     CHECK_EQ(UiProbe::notice(app), "ENTRY REMOVED");
     // Back as it was, for the tests after this one.
     for (int i = 0; i < 2; i++) {
-        shift_key(ENAGA_KEY_LEFT);
+        key(ENAGA_KEY_CLR);
         pump(2);
     }
     CHECK_EQ(chain_length(project), 0);
@@ -3022,7 +3074,7 @@ TEST(ui_the_chain_page_builds_a_chain_that_plays) {
     Strata &app = fresh();
     const Project &project = app_engine().project();
     key(ENAGA_KEY_F3);
-    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(UiProbe::project_page(app), 1);
     CHECK_EQ(chain_length(project), 0);
 
@@ -3053,23 +3105,21 @@ TEST(ui_the_chain_page_builds_a_chain_that_plays) {
     CHECK_EQ(int(project.chain[1].slot), 4);          // A05
     CHECK_EQ(int(project.chain[0].slot), 2);
 
-    // UP goes back to the first; F1 + LEFT removes it, and the second moves up.
+    // UP goes back to the first; CLR twice removes it, and the second moves up.
     key(ENAGA_KEY_UP);
     CHECK_EQ(UiProbe::chain_cursor(app), 0);
-    the_app().on_key(ENAGA_KEY_F1, true);
-    key(ENAGA_KEY_LEFT);                              // the first press only arms it
+    key(ENAGA_KEY_CLR);                               // the first press only arms it
     pump(2);
     CHECK_EQ(chain_length(project), 2);
-    key(ENAGA_KEY_LEFT);
-    the_app().on_key(ENAGA_KEY_F1, false);
+    key(ENAGA_KEY_CLR);
     pump(2);
     CHECK_EQ(chain_length(project), 1);
     CHECK_EQ(int(project.chain[0].slot), 4);
     key(ENAGA_KEY_OK);                                // and back to two: A05, A05
     pump(2);
 
-    // F1 + UP turns it on, which now works, and it is saved as a project edit.
-    shift_key(ENAGA_KEY_UP);
+    // The FUNC menu's CHAIN row turns it on, which now works, and it is saved as a project edit.
+    menu_toggle(kMenuChain);
     pump(2);
     CHECK(app_engine().chain().active);
     CHECK_EQ(int(app_engine().status().live_slot.load(std::memory_order_relaxed)), 4);
@@ -3077,10 +3127,8 @@ TEST(ui_the_chain_page_builds_a_chain_that_plays) {
 
     // Removing every entry turns it off rather than leaving it following nothing.
     for (int i = 0; i < 2; i++) {
-        the_app().on_key(ENAGA_KEY_F1, true);
-        key(ENAGA_KEY_LEFT);
-        key(ENAGA_KEY_LEFT);
-        the_app().on_key(ENAGA_KEY_F1, false);
+        key(ENAGA_KEY_CLR);
+        key(ENAGA_KEY_CLR);
         pump(2);
     }
     CHECK_EQ(chain_length(project), 0);
@@ -3096,8 +3144,8 @@ TEST(ui_the_pattern_page_sets_the_master_length_and_the_swing) {
     const int length = int(pattern.master_length);
     const int swing = int(pattern.swing);
     key(ENAGA_KEY_F3);
-    key(ENAGA_KEY_OCTAVE_RIGHT);
-    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(UiProbe::project_page(app), 2);
     CHECK_EQ(UiProbe::pattern_field(app), 0);
 
@@ -3130,8 +3178,8 @@ TEST(ui_the_pattern_page_sets_each_tracks_own_swing) {
     Strata &app = fresh();
     const Pattern &pattern = app_engine().pattern();
     key(ENAGA_KEY_F3);
-    key(ENAGA_KEY_OCTAVE_RIGHT);
-    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(UiProbe::project_page(app), 2);
     for (int t = 0; t < kTracks; t++) CHECK_EQ(int(pattern.tracks[t].swing), int(kSwingInherit));
 
@@ -3183,16 +3231,17 @@ TEST(ui_the_pattern_page_sets_each_tracks_own_swing) {
     CHECK_EQ(int(pattern.tracks[1].swing), kSwingMin + 10);
 }
 
-TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_moved_to_f1_arrows) {
+TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_are_in_the_menu) {
     // F1 + CLR and F1 + OK were NEW PROJECT and RELOAD here, so undo and redo were the one pair
     // of keys that changed meaning in one mode. Now they are undo and redo everywhere, and the
-    // card's two whole-project actions are F1 + LEFT and F1 + RIGHT, each pressed twice.
+    // card's two whole-project actions are FUNC menu rows, each needing OK twice
+    // (docs/CONTROLS.md).
     Strata &app = fresh();
     const Pattern &pattern = app_engine().pattern();
     const int length = int(pattern.master_length);
     key(ENAGA_KEY_F3);
-    key(ENAGA_KEY_OCTAVE_RIGHT);
-    key(ENAGA_KEY_OCTAVE_RIGHT);                      // PATTERN
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);                      // PATTERN
     app.on_encoder(0, -2);
     pump(2);
     CHECK_EQ(int(pattern.master_length), length - 2);
@@ -3207,19 +3256,29 @@ TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_moved_to_f1_arrows) {
     CHECK_EQ(int(pattern.master_length), length - 2);
     CHECK_EQ(UiProbe::notice(app), "REDO");
 
-    // One F1 + RIGHT only arms; a stray press does not throw the project away.
+    // FUNC + arrows do nothing on the slots now.
     key(ENAGA_KEY_CLR);                               // back to the slots
     shift_key(ENAGA_KEY_RIGHT);
-    pump(2);
-    CHECK_EQ(UiProbe::notice(app), "AGAIN FOR NEW");
-    CHECK_EQ(int(pattern.master_length), length - 2);
-    // A different action in between disarms it: LEFT then RIGHT is two first presses.
     shift_key(ENAGA_KEY_LEFT);
-    CHECK_EQ(UiProbe::notice(app), "AGAIN TO RELOAD");
-    shift_key(ENAGA_KEY_RIGHT);
-    CHECK_EQ(UiProbe::notice(app), "AGAIN FOR NEW");
-    shift_key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(!app_storage().loading_project());
+    CHECK_EQ(int(pattern.master_length), length - 2);
+
+    // One OK on NEW PROJECT only arms; a stray press does not throw the project away.
+    menu_run(kMenuNew);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN FOR NEW");
+    CHECK_EQ(int(pattern.master_length), length - 2);
+    // Moving to another row disarms it: NEW, RELOAD, NEW is three first presses.
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO RELOAD");
+    key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN FOR NEW");
+    key(ENAGA_KEY_OK);
     CHECK_EQ(UiProbe::notice(app), "NEW PROJECT");
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));  // the menu closed, back on PROJECT
     CHECK(pump_until_idle());
     pump(4);
     // The factory project's first pattern (core/factory.hpp), not the edited one.
@@ -3398,7 +3457,7 @@ TEST(ui_the_arp_is_edits_sixth_page_and_keys_play_it) {
     // KEYS: a key held on a track whose arp is on starts it; the key coming up stops it.
     post_cmd_track_param(0, uint8_t(kArpFirst + 0), 22);      // UP
     pump();
-    shift_key(ENAGA_KEY_F4);
+    open_keys();
     CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
     app.on_key(ENAGA_KEY_STEP1, true);
     pump(2);
@@ -3428,7 +3487,7 @@ TEST(ui_arrows_in_edit_keys_perform_machine_and_resample) {
     CHECK_EQ(UiProbe::selected(app), 1);
     key(ENAGA_KEY_UP);
 
-    shift_key(ENAGA_KEY_F4);                       // KEYS: sideways is the octave
+    open_keys();                                   // KEYS: sideways is the octave
     const int octave = UiProbe::keys_octave(app);
     key(ENAGA_KEY_RIGHT);
     CHECK_EQ(UiProbe::keys_octave(app), octave + 1);
@@ -3501,23 +3560,28 @@ TEST(ui_arrows_in_project_move_a_slot_cursor_and_ok_queues_it) {
     key(ENAGA_KEY_F4);
 }
 
-TEST(ui_f1_f3_twice_saves_and_once_does_not) {
+TEST(ui_func_home_opens_the_menu_and_ok_saves) {
+    // docs/CONTROLS.md: FUNC + HOME (printed "system") is the FUNC menu, and its cursor starts on
+    // SAVE, so FUNC + HOME, OK is a save -- two presses, as the old FUNC + PROJECT twice was.
     Strata &app = fresh();
-    shift_key(ENAGA_KEY_F3);
-    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
-    CHECK_EQ(UiProbe::notice(app), "FUNC+PROJECT TO SAVE");
+    key(ENAGA_KEY_F7);                              // from MIXER, to see it come back there
+    shift_key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuSave));
     pump(4);
-    CHECK(app_storage().busy_text() == nullptr);   // once is not a save
+    CHECK(app_storage().busy_text() == nullptr);   // opening it is not a save
 
-    pump(2100);                                    // too late: this arms again instead
-    shift_key(ENAGA_KEY_F3);
-    CHECK_EQ(UiProbe::notice(app), "FUNC+PROJECT TO SAVE");
-
-    shift_key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OK);
     CHECK_EQ(UiProbe::notice(app), "SAVING");
+    CHECK_EQ(UiProbe::mode(app), int(Mode::mixer)); // back where it opened
     CHECK(pump_until_idle());
     CHECK(app_storage().last_error() == nullptr);
     CHECK(!app_storage().dirty());
+
+    // FUNC + PROJECT is the sample browser now ("pool"), and saves nothing.
+    shift_key(ENAGA_KEY_F3);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+    pump_until_idle();                              // let its listing finish before the next test
     key(ENAGA_KEY_F4);
 }
 
@@ -3614,7 +3678,7 @@ TEST(ui_screenshots) {
     shift_key(ENAGA_KEY_F7);
     write_shot(folder, "perform");
 
-    shift_key(ENAGA_KEY_F4);
+    open_keys();
     write_shot(folder, "keys");
 
     shift_key(ENAGA_KEY_F8);
@@ -4192,7 +4256,7 @@ void two_projects() {
 // PROJECT, then the octave keys to the last page, then the card read.
 void to_projects_page(Strata &app) {
     key(ENAGA_KEY_F3);
-    for (int i = 0; i < 6; i++) key(ENAGA_KEY_OCTAVE_RIGHT);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(UiProbe::project_page(app), 4);
     for (int i = 0; i < 200 && app_storage().browsing(); i++) pump();
     pump();
@@ -4593,6 +4657,368 @@ TEST(ui_layout_machine_with_mid_and_every_midi_out_state) {
     key(ENAGA_KEY_F4);
 }
 
+// --- the controls concept (docs/CONTROLS.md) -------------------------------------------------
+//
+// Built from the SmplTrek's panel: each group of buttons has one job in every mode, FUNC + a
+// function key is the label printed under it, the setup actions are in the FUNC menu, and the
+// performance pads (printed TRK 1-7) are lit and named on the screen.
+
+namespace {
+
+int pad_level(const Strata &app, int pad) {
+    const int r = UiProbe::pad_r(app, pad), g = UiProbe::pad_g(app, pad),
+              b = UiProbe::pad_b(app, pad);
+    return r > g ? (r > b ? r : b) : (g > b ? g : b);
+}
+
+}  // namespace
+
+TEST(ui_home_is_grid_and_a_double_tap_is_keys) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F7);
+    key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));    // from anywhere: GRID
+    key(ENAGA_KEY_F4);                                 // again at once: KEYS
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+    CHECK_EQ(UiProbe::notice(app), "KEYS");
+    key(ENAGA_KEY_F4);                                 // from KEYS: GRID
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+
+    // A second press after the double-tap window is just HOME again: a reflex press on GRID
+    // stays on GRID.
+    pump(500);
+    key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    pump(500);
+    key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+}
+
+TEST(ui_func_keys_follow_their_printed_second_labels) {
+    // REC "sampling", PROJECT "pool", HOME "system", MIXER "fx", EDIT "rec src".
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+    shift_key(ENAGA_KEY_F3);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+    pump_until_idle();
+    shift_key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+    shift_key(ENAGA_KEY_F4);                           // again: closed, back to SAMPLES
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    shift_key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_menu_scrolls_runs_and_goes_back) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                  // over EDIT
+    shift_key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuSave));
+    key(ENAGA_KEY_UP);                                  // wraps to the last row
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuRowCount) - 1);
+    key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuSave));
+    app.on_encoder(0, +2);                              // A scrolls too
+    CHECK_EQ(UiProbe::menu_cursor(app), 2);
+
+    // The STEP keys and the pad-row and screen keys do nothing under the menu.
+    const int trigs_before = locks_on_track(0);
+    key(ENAGA_KEY_STEP1 + 3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    pump(2);
+    CHECK(!trig_at(0, 3));
+    CHECK_EQ(locks_on_track(0), trigs_before);
+    CHECK_EQ(UiProbe::page(app), 0);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+
+    // FUNC + CLR / OK are still undo and redo in the menu.
+    shift_key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::notice(app), "UNDO");
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+
+    key(ENAGA_KEY_CLR);                                 // back where it opened
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    shift_key(ENAGA_KEY_F4);                            // and it opens on SAVE again
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuSave));
+    key(ENAGA_KEY_F7);                                  // a mode key leaves it too
+    CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_menu_setting_rows_change_with_left_right_b_and_ok) {
+    Strata &app = fresh();
+    const Pattern &pattern = app_engine().pattern();
+
+    // TRACK SPEED: the selected track's, X1 to the right is slower.
+    const uint8_t speed = pattern.tracks[0].speed;
+    menu_to(kMenuSpeed);
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(pattern.tracks[0].speed != speed);
+    key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].speed), int(speed));
+    // OK steps forward and goes round, so one key reaches every speed.
+    for (int i = 0; i < int(Speed::count); i++) {
+        key(ENAGA_KEY_OK);
+        pump(2);
+    }
+    CHECK_EQ(int(pattern.tracks[0].speed), int(speed));
+
+    // AUTO-FILL wraps OFF 4 8 16.
+    key(ENAGA_KEY_CLR);
+    menu_to(kMenuAutofill);
+    const int fill = int(app_engine().auto_fill());
+    app.on_encoder(1, +1);                               // B, like RIGHT
+    pump(2);
+    CHECK_EQ(int(app_engine().auto_fill()), (fill + 1) % int(AutoFill::count));
+    key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(int(app_engine().auto_fill()), fill);
+
+    // QUANTIZE, by fives.
+    key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuQuantize));
+    const int q = UiProbe::quantize(app);
+    key(q >= 100 ? ENAGA_KEY_LEFT : ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK_EQ(UiProbe::quantize(app), q >= 100 ? q - 5 : q + 5);
+    key(q >= 100 ? ENAGA_KEY_RIGHT : ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(UiProbe::quantize(app), q);
+
+    // An action row ignores LEFT and RIGHT.
+    key(ENAGA_KEY_CLR);
+    menu_to(kMenuReload);
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(!app_storage().loading_project());
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_menu_reaches_kits_projects_and_save_as) {
+    Strata &app = fresh();
+    menu_run(kMenuKits);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::kit));
+    pump_until_idle();
+
+    menu_run(kMenuOpen);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+    CHECK_EQ(UiProbe::project_page(app), 4);            // PROJECTS
+    pump_until_idle();
+
+    menu_run(kMenuSaveAs);
+    CHECK(UiProbe::name_entry_open(app));
+    key(ENAGA_KEY_CLR);                                  // cancel the entry
+    CHECK(!UiProbe::name_entry_open(app));
+    pump_until_idle();
+
+    key(ENAGA_KEY_SELECT_LEFT);
+    for (int i = 0; i < 4; i++) key(ENAGA_KEY_SELECT_LEFT);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_each_button_group_has_one_job_in_project) {
+    // The screen keys turn PROJECT's pages; the pad-row keys pick the bank the STEP keys mean.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F3);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+    const int bank = UiProbe::shown_bank(app);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::shown_bank(app), (bank + 1) % 8);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+    CHECK_EQ(UiProbe::notice(app)[0], 'B');
+    key(ENAGA_KEY_OCTAVE_LEFT);
+    CHECK_EQ(UiProbe::shown_bank(app), bank);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 1);
+    CHECK_EQ(UiProbe::shown_bank(app), bank);
+    key(ENAGA_KEY_SELECT_LEFT);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_keys_and_grid_screen_keys_turn_the_knob_page) {
+    Strata &app = fresh();
+    const int before = UiProbe::param_page(app);
+    open_keys();
+    const int track = UiProbe::selected(app);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(UiProbe::param_page(app), (before + 1) % kEditPages);
+    CHECK_EQ(UiProbe::selected(app), track);              // no longer the track
+    key(ENAGA_KEY_SELECT_LEFT);
+    CHECK_EQ(UiProbe::param_page(app), before);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_pad_row_keys_do_nothing_where_the_step_keys_never_change) {
+    // KIT: the STEP keys are always the sixteen slots, so the pad-row keys are not passed on to
+    // a GRID that is not on screen. FUNC + them is still the track's length, as everywhere.
+    Strata &app = fresh();
+    const int length = int(app_engine().pattern().tracks[0].length);
+    menu_run(kMenuKits);
+    pump_until_idle();
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    shift_key(ENAGA_KEY_OCTAVE_LEFT);
+    pump(2);
+    CHECK_EQ(UiProbe::page(app), 0);
+    CHECK_EQ(int(app_engine().pattern().tracks[0].length), length - 1);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::kit));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_perform_pad_row_keys_do_nothing_and_arrows_pick_the_macro) {
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F7);
+    const int macro = UiProbe::macro_selected(app);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::macro_selected(app), macro);
+    key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::macro_selected(app), (macro + 1) % 4);
+    key(ENAGA_KEY_LEFT);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_performance_pads_are_lit_and_named) {
+    Strata &app = fresh();
+    pump(2);
+    // Every one of the seven is lit, dim, while nothing is held.
+    for (int pad = 1; pad <= 13; pad += 2) {
+        CHECK(pad_level(app, pad) > 0);
+        CHECK(pad_level(app, pad) <= 2);
+    }
+
+    app.on_pad_press(1, 100);                             // FILL
+    pump(2);
+    CHECK(pad_level(app, 1) >= 8);
+    CHECK_EQ(UiProbe::notice(app), "FILL");
+    app.on_pad_release(1);
+    pump(2);
+    CHECK(pad_level(app, 1) <= 2);
+
+    app.on_pad_press(5, 100);                             // MUTE MODE stays bright while on
+    app.on_pad_release(5);
+    pump(2);
+    CHECK(pad_level(app, 5) >= 8);
+    app.on_pad_press(5, 100);
+    app.on_pad_release(5);
+    pump(2);
+    CHECK(pad_level(app, 5) <= 2);
+
+    app.on_pad_press(11, 100);                            // THROW
+    CHECK_EQ(UiProbe::notice(app), "THROW DELAY");
+    pump(2);
+    CHECK(pad_level(app, 11) >= 8);
+    app.on_pad_release(11);
+
+    app.on_pad_press(7, 100);                             // SCENE A
+    CHECK_EQ(UiProbe::notice(app), "SCENE A: STEP PICKS");
+    app.on_pad_release(7);
+
+    for (int i = 0; i < 16; i += 4) { step_down(i); step_up(i); }   // something to mutate
+    pump(4);
+    app.on_pad_press(13, 100);                            // MUTATE: names what it did
+    app.on_pad_release(13);
+    pump(2);
+    CHECK(std::strncmp(UiProbe::notice(app), "MUTATE T1 ", 10) == 0);
+    CHECK(pad_level(app, 13) >= 8);                       // pending: OK keeps, CLR reverts
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(pad_level(app, 13) <= 2);
+
+    check_layout(app, "GRID after the performance pads");
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_mode_keys_light_where_you_are) {
+    Strata &app = fresh();
+    pump(2);
+    CHECK(UiProbe::key_green(app, ENAGA_KEY_F4) > 0);    // GRID: HOME green
+    CHECK_EQ(int(UiProbe::key_red(app, ENAGA_KEY_F4)), 0);
+    open_keys();
+    pump(2);
+    CHECK(UiProbe::key_green(app, ENAGA_KEY_F4) > 0);    // KEYS: amber
+    CHECK(UiProbe::key_red(app, ENAGA_KEY_F4) > 0);
+    shift_key(ENAGA_KEY_F4);
+    pump(2);
+    CHECK(UiProbe::key_red(app, ENAGA_KEY_F4) > 0);      // the menu: red
+    CHECK_EQ(int(UiProbe::key_green(app, ENAGA_KEY_F4)), 0);
+    key(ENAGA_KEY_CLR);
+    shift_key(ENAGA_KEY_F7);
+    pump(2);
+    CHECK(UiProbe::key_red(app, ENAGA_KEY_F7) > 0);      // PERFORM: MIXER red
+    key(ENAGA_KEY_F7);
+    pump(2);
+    CHECK(UiProbe::key_green(app, ENAGA_KEY_F7) > 0);
+    CHECK_EQ(int(UiProbe::key_red(app, ENAGA_KEY_F7)), 0);
+    shift_key(ENAGA_KEY_F2);
+    pump(2);
+    CHECK(UiProbe::key_green(app, ENAGA_KEY_F2) > 0);    // RESAMPLE: REC green
+    app.on_key(ENAGA_KEY_F1, true);
+    pump(2);
+    CHECK(UiProbe::key_green(app, ENAGA_KEY_F1) > 0);    // FUNC lit while held
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(UiProbe::key_green(app, ENAGA_KEY_F1)), 0);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_func_held_alone_shows_the_help_and_a_chord_does_not) {
+    Strata &app = fresh();
+    app.on_key(ENAGA_KEY_F1, true);
+    pump(100);
+    CHECK(!UiProbe::func_help(app));                     // not at once: a chord is quick
+    pump(600);
+    CHECK(UiProbe::func_help(app));
+    check_layout(app, "FUNC help");
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(!UiProbe::func_help(app));
+
+    // FUNC + a key (here a pad mute) means the hand knew: no help however long FUNC stays down.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(2, 100);
+    app.on_pad_release(2);
+    pump(800);
+    CHECK(!UiProbe::func_help(app));
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    app.on_key(ENAGA_KEY_F1, true);                      // and the mute back
+    app.on_pad_press(2, 100);
+    app.on_pad_release(2);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(4);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_the_func_menu) {
+    Strata &app = fresh();
+    worst_case_content(app);
+    shift_key(ENAGA_KEY_F4);
+    check_layout(app, "FUNC menu, top");
+    for (int i = 0; i < kMenuRowCount; i++) {
+        key(ENAGA_KEY_DOWN);
+        check_layout(app, "FUNC menu, scrolled");
+    }
+    for (int t = 0; t < kTracks; t++) {                  // the speed row's value at every speed
+        menu_to(kMenuSpeed);
+        for (int i = 0; i < int(Speed::count); i++) {
+            key(ENAGA_KEY_OK);
+            pump(2);
+            check_layout(app, "FUNC menu, TRACK SPEED");
+        }
+        key(ENAGA_KEY_CLR);
+        key(ENAGA_KEY_DOWN);                              // next track (GRID rows)
+    }
+    key(ENAGA_KEY_F4);
+}
+
 // --- the control audit: does every input show that it did something? ------------------------
 //
 // Roland pressed upper pad 7 on the unit and saw nothing happen. It had worked -- a velocity
@@ -4639,19 +5065,20 @@ bool same(const Look &a, const Look &b) { return a.screen == b.screen && a.leds 
 
 
 enum Screen { s_grid, s_keys, s_edit, s_machine, s_kit, s_mixer, s_perform, s_project, s_chain,
-              s_pattern, s_setup, s_projects, s_resample, s_count };
+              s_pattern, s_setup, s_projects, s_resample, s_menu, s_count };
 
 const char *screen_name(int s) {
     static const char *names[] = {"GRID", "KEYS", "EDIT", "MACHINE", "KIT", "MIXER", "PERFORM",
                                   "PROJECT", "CHAIN", "PATTERN", "SETUP", "PROJECTS",
-                                  "RESAMPLE"};
+                                  "RESAMPLE", "MENU"};
     return names[s];
 }
 
 void enter(Strata &app, int s) {
     switch (s) {
         case s_grid: key(ENAGA_KEY_F4); break;
-        case s_keys: shift_key(ENAGA_KEY_F4); break;
+        case s_keys: open_keys(); break;
+        case s_menu: key(ENAGA_KEY_F4); shift_key(ENAGA_KEY_F4); break;   // over GRID
         case s_edit:
             key(ENAGA_KEY_F8);
             while (UiProbe::param_page(app) != 0) key(ENAGA_KEY_SELECT_RIGHT);   // SRC
@@ -4667,9 +5094,10 @@ void enter(Strata &app, int s) {
         case s_resample: shift_key(ENAGA_KEY_F2); break;
         default:
             key(ENAGA_KEY_F3);
-            for (int i = 0; i < 6; i++) key(ENAGA_KEY_OCTAVE_LEFT);   // the slots, first
-            while (UiProbe::shown_bank(app) != 0) key(ENAGA_KEY_SELECT_RIGHT);   // bank A
-            for (int i = s_project; i < s; i++) key(ENAGA_KEY_OCTAVE_RIGHT);
+            // docs/CONTROLS.md: the screen keys walk PROJECT's pages, the pad-row keys the bank.
+            for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_LEFT);   // the slots, first
+            for (int i = 0; i < 8 && UiProbe::shown_bank(app) != 0; i++) key(ENAGA_KEY_OCTAVE_RIGHT);
+            for (int i = s_project; i < s; i++) key(ENAGA_KEY_SELECT_RIGHT);
             break;
     }
     (void)app;
@@ -4681,10 +5109,11 @@ void enter(Strata &app, int s) {
 void settle_screen(int s) {
     post_cmd(Cmd::stop, 0, 0, 1);
     pump(2);
-    // KIT reads its sixteen slots from the card a pass at a time.
+    // KIT reads its sixteen slots from the card a pass at a time, and says READING KITS until
+    // all sixteen are in, not only the eight on its first page.
     for (int i = 0; s == s_kit && i < 2000; i++) {
         bool reading = false;
-        for (int k = 0; k < 8; k++) {
+        for (int k = 0; k < Storage::kKitSlots; k++) {
             reading = reading || app_storage().kit_slot(k).state == Storage::SlotState::unknown;
         }
         if (!reading) break;
@@ -4761,8 +5190,12 @@ bool visible(int s, const Probe &p, bool func) {
     some_content();
     if (s == s_projects) two_projects();
     enter(app, s);
-    if (func) app.on_key(ENAGA_KEY_F1, true);
     settle_screen(s);
+    // FUNC goes down after the screen has settled and a moment before the probe, well inside
+    // the 0.6 s that FUNC held alone takes to show its help (which any input then takes away,
+    // and so would pass for an answer).
+    if (func) app.on_key(ENAGA_KEY_F1, true);
+    pump(1);
     const Look before = look(app);
     press(app, p, true);
     pump(3);
@@ -4790,11 +5223,27 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
     if (knob_push && !func) return "push: needs a held STEP";
     // VALUE pushed is a modifier: pushed AND turned is the swing.
     if (p.kind == in_key && p.id == ENAGA_KEY_PUSH_VALUE) return "push VALUE: a modifier";
-    // docs/SPEC.md's key table: F1 + LEFT / RIGHT are free outside PROJECT's slot page.
-    if (func && p.kind == in_key && (p.id == ENAGA_KEY_LEFT || p.id == ENAGA_KEY_RIGHT) &&
-        s != s_project) {
+    // docs/CONTROLS.md: FUNC + LEFT / RIGHT are free everywhere (PROJECT's card actions moved
+    // to the FUNC menu).
+    if (func && p.kind == in_key && (p.id == ENAGA_KEY_LEFT || p.id == ENAGA_KEY_RIGHT)) {
         return "FUNC + LEFT/RIGHT: free";
     }
+
+    // docs/CONTROLS.md: the screen keys turn pages and have no FUNC job (TRACK SPEED, which
+    // was FUNC + screen key, is in the FUNC menu).
+    if (func && p.kind == in_key &&
+        (p.id == ENAGA_KEY_SELECT_LEFT || p.id == ENAGA_KEY_SELECT_RIGHT)) {
+        return "FUNC + screen key: free";
+    }
+    // The FUNC menu is a list: the arrows, A, B, OK and CLR. The STEP keys, the screen keys and
+    // the pad-row keys do nothing in it, plain or with FUNC, and C and D have nothing to turn.
+    if (s == s_menu && p.kind == in_key &&
+        (p.id == ENAGA_KEY_SELECT_LEFT || p.id == ENAGA_KEY_SELECT_RIGHT ||
+         p.id == ENAGA_KEY_OCTAVE_LEFT || p.id == ENAGA_KEY_OCTAVE_RIGHT ||
+         p.id == ENAGA_KEY_STEP1 + 1)) {
+        return "menu: no job";
+    }
+    if (s == s_menu && p.kind == in_turn_up && (p.id == 2 || p.id == 3)) return "menu: no job";
 
     static const struct { int screen; bool func; const char *name; const char *why; } kQuiet[] = {
         // At the end of a range, from where every probe starts.
@@ -4804,7 +5253,25 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_kit, false, "SEL LEFT", "the cursor is on slot 1"},
         {s_kit, false, "LEFT", "ditto"}, {s_kit, false, "UP", "ditto"},
         {s_kit, false, "A-", "ditto"}, {s_kit, true, "A-", "ditto"},
-        {s_kit, false, "OCT LEFT", "already step page 1"},
+        // docs/CONTROLS.md: the pad-row keys choose which sixteen the STEP keys mean, and in
+        // KIT, SAMPLES, PERFORM and the menu those sixteen never change.
+        {s_kit, false, "OCT LEFT", "the STEP keys always mean the same"},
+        {s_kit, false, "OCT RIGHT", "ditto"},
+        {s_perform, false, "OCT LEFT", "ditto"}, {s_perform, false, "OCT RIGHT", "ditto"},
+        // The cursor starts on SAVE, which has no value for LEFT / RIGHT or B to change.
+        {s_menu, false, "LEFT", "SAVE has no value"}, {s_menu, false, "RIGHT", "ditto"},
+        {s_menu, false, "B+", "ditto"}, {s_menu, true, "B+", "ditto"},
+        // FUNC + UP / DOWN is copy / paste on the editing screens and read / store on the card
+        // lists. PERFORM's auto-fill and PROJECT's chain and sample reload moved to the menu.
+        {s_perform, true, "UP", "auto-fill is in the FUNC menu"},
+        {s_perform, true, "DOWN", "ditto"},
+        {s_project, true, "UP", "chain and sample reload are in the FUNC menu"},
+        {s_project, true, "DOWN", "ditto"},
+        {s_chain, true, "UP", "CHAIN on / off is in the FUNC menu"},
+        {s_chain, true, "DOWN", "ditto"},
+        {s_pattern, true, "UP", "ditto"}, {s_pattern, true, "DOWN", "ditto"},
+        {s_setup, true, "UP", "SETUP only shows"}, {s_setup, true, "DOWN", "ditto"},
+        {s_menu, true, "UP", "no copy / paste in a list"}, {s_menu, true, "DOWN", "ditto"},
         {s_mixer, false, "OCT LEFT", "already step page 1"},
         {s_projects, false, "DOWN", "the cursor is on the last project"},
         {s_projects, false, "RIGHT", "ditto"},
@@ -4900,6 +5367,18 @@ bool lit(int pad, uint8_t r, uint8_t g, uint8_t b) {
     return level.r == r && level.g == g && level.b == b;
 }
 
+// docs/CONTROLS.md: an upper pad is always lit in its own colour, at 2 idle and 10 while held or
+// on, so the row reads as tools and each says which one it is.
+bool lit_dim(int pad) {
+    const Rgb c = kPerformColour[pad / 2];
+    return lit(pad, uint8_t(c.r * 2 / 10), uint8_t(c.g * 2 / 10), uint8_t(c.b * 2 / 10));
+}
+
+bool lit_bright(int pad) {
+    const Rgb c = kPerformColour[pad / 2];
+    return lit(pad, c.r, c.g, c.b);
+}
+
 void fade_notice() {
     g_ms += 4000;
     pump(2);
@@ -4915,7 +5394,7 @@ TEST(ui_mutate_says_what_it_did_and_waits_for_ok_or_clr_on_screen_and_on_the_pad
     }
     pump(4);
     fade_notice();
-    CHECK(lit(13, 2, 2, 2));                          // available: white 2
+    CHECK(lit_dim(13));                               // available: its colour at 2
 
     app.on_pad_press(13, 100);                        // upper 7
     app.on_pad_release(13);
@@ -4923,7 +5402,7 @@ TEST(ui_mutate_says_what_it_did_and_waits_for_ok_or_clr_on_screen_and_on_the_pad
     // What it did and to which track -- the bare "VELOCITY" did not read as anything happening.
     CHECK(screen_has(app, "MUTATE T1 VELOCITY"));
     check_layout(app, "GRID, MUTATE notice");
-    CHECK(lit(13, 10, 5, 0));                         // waiting for a verdict: its colour at 10
+    CHECK(lit_bright(13));                            // waiting for a verdict: its colour at 10
 
     // The notice fades; the question does not.
     fade_notice();
@@ -4933,7 +5412,7 @@ TEST(ui_mutate_says_what_it_did_and_waits_for_ok_or_clr_on_screen_and_on_the_pad
     pump(2);
     // A mode change settles a pending mutation (leave_mode), so the hint goes with it.
     CHECK(!screen_has(app, "OK KEEPS CLR REVERTS"));
-    CHECK(lit(13, 2, 2, 2));
+    CHECK(lit_dim(13));
 
     // In EDIT: press, fade, and the hint is on the second line.
     app.on_pad_press(13, 100);
@@ -4947,7 +5426,7 @@ TEST(ui_mutate_says_what_it_did_and_waits_for_ok_or_clr_on_screen_and_on_the_pad
     CHECK(screen_has(app, "KEPT"));
     fade_notice();
     CHECK(!screen_has(app, "OK KEEPS CLR REVERTS"));
-    CHECK(lit(13, 2, 2, 2));
+    CHECK(lit_dim(13));
 }
 
 TEST(ui_mutate_on_an_empty_track_says_there_was_nothing_to_mutate) {
@@ -4958,7 +5437,7 @@ TEST(ui_mutate_on_an_empty_track_says_there_was_nothing_to_mutate) {
     pump(4);
     CHECK(screen_has(app, "T1 NOTHING TO MUTATE"));
     check_layout(app, "GRID, nothing to mutate");
-    CHECK(lit(13, 2, 2, 2));                          // nothing is waiting for a verdict
+    CHECK(lit_dim(13));                               // nothing is waiting for a verdict
     fade_notice();
     CHECK(!screen_has(app, "OK KEEPS CLR REVERTS"));
     // So CLR is CLR again, not a "REVERTED" of a mutation that never happened.
@@ -4968,65 +5447,60 @@ TEST(ui_mutate_on_an_empty_track_says_there_was_nothing_to_mutate) {
     (void)depth;
 }
 
-TEST(ui_the_upper_pads_light_white_and_their_colour_while_active) {
+TEST(ui_the_upper_pads_light_dim_in_their_colour_and_bright_while_active) {
     Strata &app = fresh();
     pump(2);
-    for (int pad = 1; pad <= 13; pad += 2) CHECK(lit(pad, 2, 2, 2));
+    for (int pad = 1; pad <= 13; pad += 2) CHECK(lit_dim(pad));
 
     app.on_pad_press(1, 100);                         // FILL, held
     pump(2);
-    CHECK(lit(1, 10, 10, 0));
+    CHECK(lit_bright(1));
     app.on_pad_release(1);
     pump(2);
-    CHECK(lit(1, 2, 2, 2));
+    CHECK(lit_dim(1));
 
     app.on_pad_press(11, 100);                        // THROW, held
     pump(2);
-    CHECK(lit(11, 0, 10, 4));
+    CHECK(lit_bright(11));
     app.on_pad_release(11);
     pump(2);
-    CHECK(lit(11, 2, 2, 2));
+    CHECK(lit_dim(11));
 
     app.on_pad_press(5, 100);                         // MUTE MODE: a toggle, lit while on
     app.on_pad_release(5);
     pump(2);
-    CHECK(lit(5, 10, 0, 0));
+    CHECK(lit_bright(5));
     app.on_pad_press(5, 100);
     app.on_pad_release(5);
     pump(2);
-    CHECK(lit(5, 2, 2, 2));
+    CHECK(lit_dim(5));
 
     app.on_key(ENAGA_KEY_F1, true);                   // FUNC + FILL: NOTE RPT stays lit
     app.on_pad_press(1, 100);
     app.on_pad_release(1);
     app.on_key(ENAGA_KEY_F1, false);
     pump(2);
-    CHECK(lit(1, 10, 10, 0));
+    CHECK(lit_bright(1));
     app.on_key(ENAGA_KEY_F1, true);
     app.on_pad_press(1, 100);
     app.on_pad_release(1);
     app.on_key(ENAGA_KEY_F1, false);
     pump(2);
-    CHECK(lit(1, 2, 2, 2));
+    CHECK(lit_dim(1));
 }
 
 // The other inputs the audit above found working with nothing on screen.
 TEST(ui_inputs_that_worked_unseen_now_say_what_they_did) {
     Strata &app = fresh();
 
-    // FUNC + octave / selection outside GRID: the track's length and speed, live.
+    // FUNC + pad-row key outside GRID: the track's length, live. (The speed is a FUNC menu row,
+    // which shows its own value.)
     key(ENAGA_KEY_F8);
     shift_key(ENAGA_KEY_OCTAVE_LEFT);                 // a blank track is 64 long
     pump(2);
     CHECK(screen_has(app, "T1 LEN 63 X1"));           // the value AFTER the audio side applied it
     check_layout(app, "EDIT, length");
-    shift_key(ENAGA_KEY_SELECT_RIGHT);
-    pump(2);
-    CHECK(screen_has(app, "T1 LEN 63 X"));
-    CHECK(!screen_has(app, "T1 LEN 63 X1"));          // the speed moved off 1
-    check_layout(app, "EDIT, speed");
-    shift_key(ENAGA_KEY_SELECT_LEFT);                 // put both back
-    shift_key(ENAGA_KEY_OCTAVE_RIGHT);
+    shift_key(ENAGA_KEY_OCTAVE_RIGHT);                // put it back
     pump(2);
     CHECK(screen_has(app, "T1 LEN 64 X1"));
 
@@ -5040,7 +5514,7 @@ TEST(ui_inputs_that_worked_unseen_now_say_what_they_did) {
     check_layout(app, "EDIT, mute at bar");
 
     // KEYS has no knob slots: a turn says which knob and where it is now.
-    shift_key(ENAGA_KEY_F4);
+    open_keys();
     pump(2);
     app.on_encoder(0, +3);
     pump(2);
@@ -5059,14 +5533,18 @@ TEST(ui_inputs_that_worked_unseen_now_say_what_they_did) {
     CHECK(screen_has(app, "MACRO B 6"));               // three clicks of two
     check_layout(app, "PERFORM, macro");
 
-    // PROJECT: the bank the selection keys pick, which CHAIN does not draw.
+    // CHAIN: the bank the pad-row keys pick, which CHAIN does not draw.
     key(ENAGA_KEY_F3);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_LEFT);       // the slots, first
+    key(ENAGA_KEY_SELECT_RIGHT);                                   // CHAIN
+    for (int i = 0; i < 8 && UiProbe::shown_bank(app) != 0; i++) {
+        key(ENAGA_KEY_OCTAVE_RIGHT);                               // it outlives fresh()
+    }
+    CHECK_EQ(UiProbe::shown_bank(app), 0);
     key(ENAGA_KEY_OCTAVE_RIGHT);
-    while (UiProbe::shown_bank(app) != 0) key(ENAGA_KEY_SELECT_RIGHT);   // it outlives fresh()
-    key(ENAGA_KEY_SELECT_RIGHT);
     pump(2);
     CHECK(screen_has(app, "BANK B"));
-    key(ENAGA_KEY_SELECT_LEFT);
+    key(ENAGA_KEY_OCTAVE_LEFT);
 
     // STOP on a stopped box arms the cut, and the second press cuts.
     key(ENAGA_KEY_F6);

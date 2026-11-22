@@ -1244,6 +1244,62 @@ two flags are off until tonight's measurements.
 | E9 | A/B of the whole pass | `bash tools/ti_ab.sh --gcc` (about an hour: six variants x six scenarios x two compilers, plus renders) | the two load tables it prints, and its audio check. **Expected: every variant `identical`.** A difference means cl6x reassociates differently in a fused loop than in separate ones (`--fp_reassoc`), and is a finding to bring back, not a reason to merge a flag |
 | E10 | VA POLY per voice after the pass | E2's method (MIN7 vs MIN11 in `groove()`), on `head` | was 2.16 cl6x / 3.82 GCC; expected ~1.7 cl6x |
 
+#### Tonight's results (2026-11-22, Roland's PC, cl6x 8.5.0.LTS, emulator 11ac9a0)
+
+`tools/ti_ab.sh --gcc` on 426a4b5 (main + #65 + #17). `base` did not build (a tic6x GCC ICE in
+`core/factory.cpp` on the older tree, fixed by PR #71), so there is no before/after column yet.
+
+| Scenario, cl6x | nofuse | fused (head then) | hints | packed |
+| --- | --- | --- | --- | --- |
+| m3 | 25.24% | 23.48% (-1.76) | 23.45% | 23.48% |
+| m1 / m7 / factory / samples | 25.96% | 24.27% (-1.69) | 24.25% | 24.27% |
+| ambient | 31.62% | 29.78% (-1.84) | 29.75% | 29.78% |
+
+GCC only: 49.16 -> 48.47 (m1), 44.12 -> 43.25 (m3). **Audio:** with GCC every variant is
+identical. With cl6x, `hints` and `packed` are identical to the fused head, but the fused head
+and `nofuse` differ on 365,891 of 401,018 samples, worst 1.44 of full scale.
+`tools/render_diff.py` then compared each cl6x render with its GCC render: **the fused head built
+by cl6x is bit-identical to GCC's; the unfused path built by cl6x is the one that departs** --
+from GCC and from the fused head in the same way. Its first difference is tiny (6.2e-5 of full
+scale at 0.366 s), and from 0.25 s on the difference is the size of the signal while each
+window's peak and the RMS stay identical: the two renders play the same notes with state or
+phase drifted apart, not a voice gone silent. So the fusion stays on, and the open question is
+the old three-pass path under cl6x -- which is what the unit has run until #61, and is still how
+Enaga's `enaga_svf_cascade`, `enaga_svf_process` and `enaga_envelope_render` are built for every
+caller that uses them. Being chased in the vectorisation thread (cl6x `--fp_reassoc` on Enaga's
+library first: a rounding difference that flips a level threshold, such as `VaVoice::sounding()`
+deciding whether the next note resets the oscillator phases, would look exactly like this).
+
+**Corrected the same evening, and the fusion is OFF again (PR #73).** A clean rerun
+(`reassoc_check.sh`: one worktree, every build from scratch, 4 s renders compared with the GCC
+build of the unfused path) found the opposite of the paragraph above: **cl6x and GCC render the
+unfused path identically** (with and without `--fp_reassoc=off`), and **the fused loop built by
+cl6x is the one that departs** -- first by 6.2e-5 of full scale at 0.365 s, then by the size of
+the signal with peaks and RMS unchanged. The earlier cl6x-vs-GCC comparison was on the ti_ab
+renders and cannot be reproduced; this rerun is the one to trust. The suspect is cl6x
+reassociating the fused loop's float arithmetic (it reorders freely by default), giving a
+rounding difference that tips a voice threshold (`VaVoice::sounding()` decides whether the next
+note resets the oscillator phases). The deciding run is the fused build with `--fp_reassoc=off`.
+Until then the unit runs the unfused path, which every build renders the same.
+
+**Decided (same evening): it is not rounding, and the fusion stays off.** The fused loop built
+by cl6x with `--fp_reassoc=off` departs from GCC in exactly the same way (366,019 of 401,018
+samples, first at 0.3646 s); the GCC device build of the fused loop is identical to the unfused
+path. The C674x has no fused multiply-add, so contraction cannot explain it either. What is left
+is cl6x compiling `strata_va_back` to something other than its C -- a compiler bug, or undefined
+behaviour in the kernel that GCC happens to tolerate -- and neither is acceptable in the audio
+path. To bring the ~1.7 points back: build `valoops.ti.c` with cl6x at `-O2` and `-O0` to see
+where the result changes, read the pipelined loop in the `-k` assembly, and only then report a
+cl6x bug or fix the kernel. Not before v0.1.
+
+`tools/ti_loops.py --enaga` confirmed the in-place reasoning: Enaga's `enaga_svf_cascade` has a
+54-cycle version (in and out may alias) beside its 21-cycle one, and an in-place call gets the
+54; `strata_svf_cascade_inplace` is 21. `enaga_one_pole_process` 18 vs `strata_one_pole_inplace`
+13, `enaga_biquad_process` 27 vs 9. `hints` buys 0.02-0.03 points and `packed` nothing, so both
+stay off. Not pipelined: `strata_antialias_stereo` and `strata_kill_eq`'s second loop (no
+schedule found), `strata_long_delay_process` and `strata_hall_process:153` (control code in the
+loop), and Enaga's `enaga_oscillator_sync_add:177` (control code).
+
 **Turning a flag on** is one line in `dsp/tihints.h`, and needs all three: E9's audio check says
 `identical` for that variant, its load column is lower than `head` in the scenarios it touches
 (`samples` for PACKED; all of them for HINTS), and `make -C host test` still passes. Then record
