@@ -1168,3 +1168,53 @@ TEST(gaps_a_queued_pattern_starts_its_own_first_pass_with_its_own_lengths) {
     CHECK_EQ(playhead(0), 0);
     CHECK_EQ(int(uint8_t(triggers(0) - t0)), 1);
 }
+
+TEST(gaps_a_restart_measures_the_next_pass_from_the_new_start) {
+    // A restart puts the clock back at 0. The boundary waiting from before it was measured on the
+    // old position, two passes on; kept, the chain would sit out two extra passes of A1.
+    fresh();
+    post(Cmd::set_master_length, 0, 0, 4);             // 96-tick passes on A1
+    pump();
+    chain_edit(ChainEdit::insert, 0, 0, 0, 3);         // A1 three times
+    chain_edit(ChainEdit::insert, 1, 0, 1, 1);         // then A2
+    FakeHost::the().set_running(true);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    for (uint32_t t = 0; t <= 200; t += 8) {            // two boundaries crossed, the next at 288
+        FakeHost::the().deliver_tick(t, 0);
+        pump();
+    }
+    CHECK_EQ(int(eng().project().slot), 0);
+
+    post(Cmd::restart);
+    pump();
+    for (uint32_t t = 0; t < 96; t += 8) {
+        FakeHost::the().deliver_tick(t, 0);
+        pump();
+        CHECK_EQ(int(eng().project().slot), 0);
+    }
+    FakeHost::the().deliver_tick(96, 0);               // the third pass of A1 ends here
+    pump();
+    CHECK_EQ(int(eng().project().slot), 1);
+}
+
+TEST(gaps_a_knob_turned_over_a_locked_step_is_heard_until_that_step_plays_again) {
+    // set_param mirrors the new value into `effective_`. For an unlocked parameter the per-block
+    // copy would write the same value anyway; over a lock it is the only thing that does, so the
+    // turn is heard at once instead of waiting for a step that has no lock.
+    fresh();
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 0);
+    post(Cmd::lock_delta, kPoly, 0, kDec, uint8_t(int8_t(40)));
+    pump();
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    const float locked = poly().decay_seconds();
+
+    post(Cmd::set_param, kPoly, 0, kDec, 0);           // the kit's DEC all the way down
+    pump();
+    const float turned = poly().decay_seconds();
+    CHECK(turned < locked * 0.5f);
+    pump(4);
+    CHECK_NEAR(poly().decay_seconds(), turned, 1e-6);
+}
