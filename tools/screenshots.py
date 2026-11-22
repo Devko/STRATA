@@ -6,7 +6,8 @@
 DUMPS holds NAME.pgm (the canvas, greys 0-15) and NAME.txt ("x y grey text" a line) as written
 by the ui_screenshots host test (tools/screenshots.sh runs both). The text is drawn here, in
 Enaga's own 5 x 7 font, read from third_party/enaga/firmware/hal/gfx.c so nothing is copied.
-Writes OUT/NAME.png for each screen and OUT/overview.png with all of them. Standard library only.
+Writes OUT/NAME.png for every screen dumped and OUT/overview.png with the main ones (ORDER).
+Standard library only.
 """
 import os
 import re
@@ -116,12 +117,15 @@ def main():
     dumps, out = sys.argv[1], sys.argv[2]
     os.makedirs(out, exist_ok=True)
     font, unknown = load_font()
-    images = []
-    for name in ORDER:
-        image = render(load_screen(dumps, name, font, unknown))
-        write_png(os.path.join(out, name + ".png"), *image)
-        images.append(image)
-    write_png(os.path.join(out, "overview.png"), *tile(images, 3, 24))
+    names = sorted(f[:-4] for f in os.listdir(dumps) if f.endswith(".pgm"))
+    missing = [n for n in ORDER if n not in names]
+    if missing:
+        sys.exit("no dump for %s" % ", ".join(missing))
+    images = {}
+    for name in names:
+        images[name] = render(load_screen(dumps, name, font, unknown))
+        write_png(os.path.join(out, name + ".png"), *images[name])
+    write_png(os.path.join(out, "overview.png"), *tile([images[n] for n in ORDER], 3, 24))
     print("wrote %d screens and overview.png to %s" % (len(images), out))
 
 

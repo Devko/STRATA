@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Redraw the README's screenshots (docs/screens/) from the host build.
+# Redraw the screenshots in docs/screens/ (README, MANUAL, CHEATSHEET) from the host build, and
+# the labelled panel diagram (docs/screens/panel.svg).
 #
 #   tools/screenshots.sh
 #
@@ -18,3 +19,4 @@ dumps="$(mktemp -d)"
 trap 'rm -rf "$dumps"' EXIT
 STRATA_SHOTS="$dumps" "$bin" --only ui_screenshots
 python3 -B tools/screenshots.py "$dumps" docs/screens
+python3 -B tools/panel_diagram.py docs/screens/panel.svg

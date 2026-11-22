@@ -1,0 +1,208 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1220" height="810" viewBox="0 0 1220 810" font-family="Helvetica, Arial, sans-serif">
+<rect width="1220" height="810" fill="#ffffff"/>
+<rect x="300.0" y="40.0" width="620.0" height="730.0" rx="16.0" fill="#1b1e23" stroke="#3a3f46" stroke-width="2.0"/>
+<text x="354.0" y="126.0" font-size="7.2" fill="#6a737e" text-anchor="middle" font-weight="normal">IN</text>
+<circle cx="354.0" cy="142.0" r="9.0" fill="#0f1114" stroke="#4a5058" stroke-width="1.5"/>
+<text x="406.0" y="126.0" font-size="7.2" fill="#6a737e" text-anchor="middle" font-weight="normal">SYNC</text>
+<circle cx="406.0" cy="142.0" r="9.0" fill="#0f1114" stroke="#4a5058" stroke-width="1.5"/>
+<text x="458.0" y="126.0" font-size="7.2" fill="#6a737e" text-anchor="middle" font-weight="normal">OUT</text>
+<circle cx="458.0" cy="142.0" r="9.0" fill="#0f1114" stroke="#4a5058" stroke-width="1.5"/>
+<rect x="344.0" y="177.5" width="124.0" height="13.0" rx="6.5" fill="#0f1114" stroke="none" stroke-width="1.5"/>
+<rect x="344.0" y="197.5" width="124.0" height="13.0" rx="6.5" fill="#0f1114" stroke="none" stroke-width="1.5"/>
+<rect x="344.0" y="217.5" width="124.0" height="13.0" rx="6.5" fill="#0f1114" stroke="none" stroke-width="1.5"/>
+<text x="368.0" y="276.0" font-size="7.2" fill="#6a737e" text-anchor="middle" font-weight="normal">L</text>
+<circle cx="368.0" cy="302.0" r="26.0" fill="#22262b" stroke="#4a5058" stroke-width="1.5"/>
+<text x="460.0" y="276.0" font-size="7.2" fill="#6a737e" text-anchor="middle" font-weight="normal">R</text>
+<circle cx="460.0" cy="302.0" r="26.0" fill="#22262b" stroke="#4a5058" stroke-width="1.5"/>
+<circle cx="824.0" cy="134.0" r="22.0" fill="#22262b" stroke="#4a5058" stroke-width="1.5"/>
+<text x="870.0" y="204.0" font-size="7.2" fill="#6a737e" text-anchor="middle" font-weight="normal">VOL</text>
+<circle cx="872.0" cy="236.0" r="30.0" fill="#22262b" stroke="#4a5058" stroke-width="1.5"/>
+<rect x="521.0" y="152.0" width="164.0" height="164.0" rx="6.0" fill="#050707" stroke="#9aa4b2" stroke-width="2.5"/>
+<text x="603.0" y="238.0" font-size="10.0" fill="#6a737e" text-anchor="middle" font-weight="normal">128 x 128</text>
+<rect x="542.0" y="339.0" width="44.0" height="14.0" rx="7.0" fill="#2a2f36" stroke="#c070e0" stroke-width="2.2"/>
+<rect x="610.0" y="339.0" width="44.0" height="14.0" rx="7.0" fill="#2a2f36" stroke="#c070e0" stroke-width="2.2"/>
+<circle cx="728.0" cy="236.0" r="26.0" fill="#2a2f36" stroke="#e0a030" stroke-width="2.4"/>
+<text x="728.0" y="240.0" font-size="11.0" fill="#ffffff" text-anchor="middle" font-weight="bold">A</text>
+<circle cx="790.0" cy="236.0" r="26.0" fill="#2a2f36" stroke="#e0a030" stroke-width="2.4"/>
+<text x="790.0" y="240.0" font-size="11.0" fill="#ffffff" text-anchor="middle" font-weight="bold">B</text>
+<circle cx="728.0" cy="314.0" r="26.0" fill="#2a2f36" stroke="#e0a030" stroke-width="2.4"/>
+<text x="728.0" y="318.0" font-size="11.0" fill="#ffffff" text-anchor="middle" font-weight="bold">C</text>
+<circle cx="790.0" cy="314.0" r="26.0" fill="#2a2f36" stroke="#e0a030" stroke-width="2.4"/>
+<text x="790.0" y="318.0" font-size="11.0" fill="#ffffff" text-anchor="middle" font-weight="bold">D</text>
+<circle cx="872.0" cy="318.0" r="30.0" fill="#2a2f36" stroke="#e0a030" stroke-width="2.4"/>
+<text x="872.0" y="322.0" font-size="11.0" fill="#ffffff" text-anchor="middle" font-weight="bold">VAL</text>
+<circle cx="400.0" cy="414.0" r="62.0" fill="#15181c" stroke="#40a0f0" stroke-width="2.4"/>
+<rect x="383.0" y="364.0" width="34.0" height="28.0" rx="5.0" fill="#2a2f36" stroke="#40a0f0" stroke-width="2.2"/>
+<text x="400.0" y="382.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">^</text>
+<rect x="345.0" y="400.0" width="34.0" height="28.0" rx="5.0" fill="#2a2f36" stroke="#40a0f0" stroke-width="2.2"/>
+<text x="362.0" y="418.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">&lt;</text>
+<rect x="421.0" y="400.0" width="34.0" height="28.0" rx="5.0" fill="#2a2f36" stroke="#40a0f0" stroke-width="2.2"/>
+<text x="438.0" y="418.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">&gt;</text>
+<rect x="383.0" y="436.0" width="34.0" height="28.0" rx="5.0" fill="#2a2f36" stroke="#40a0f0" stroke-width="2.2"/>
+<text x="400.0" y="454.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">v</text>
+<rect x="452.0" y="368.0" width="310.0" height="104.0" rx="6.0" fill="none" stroke="#50c878" stroke-width="2.4"/>
+<rect x="466.0" y="375.0" width="60.0" height="26.0" rx="5.0" fill="#2a2f36" stroke="#50c878" stroke-width="2.2"/>
+<text x="496.0" y="391.6" font-size="9.2" fill="#ffffff" text-anchor="middle" font-weight="bold">FUNC</text>
+<text x="496.0" y="410.0" font-size="8.0" fill="#50c878" text-anchor="middle" font-weight="bold">(hold: help)</text>
+<rect x="540.0" y="375.0" width="60.0" height="26.0" rx="5.0" fill="#2a2f36" stroke="#50c878" stroke-width="2.2"/>
+<text x="570.0" y="391.6" font-size="9.2" fill="#ffffff" text-anchor="middle" font-weight="bold">REC</text>
+<text x="570.0" y="410.0" font-size="8.0" fill="#50c878" text-anchor="middle" font-weight="bold">RESAMPLE</text>
+<rect x="614.0" y="375.0" width="60.0" height="26.0" rx="5.0" fill="#2a2f36" stroke="#50c878" stroke-width="2.2"/>
+<text x="644.0" y="391.6" font-size="9.2" fill="#ffffff" text-anchor="middle" font-weight="bold">PROJECT</text>
+<text x="644.0" y="410.0" font-size="8.0" fill="#50c878" text-anchor="middle" font-weight="bold">SAMPLES</text>
+<rect x="688.0" y="375.0" width="60.0" height="26.0" rx="5.0" fill="#2a2f36" stroke="#50c878" stroke-width="2.2"/>
+<text x="718.0" y="391.6" font-size="9.2" fill="#ffffff" text-anchor="middle" font-weight="bold">HOME</text>
+<text x="718.0" y="410.0" font-size="8.0" fill="#50c878" text-anchor="middle" font-weight="bold">MENU</text>
+<rect x="466.0" y="427.0" width="60.0" height="26.0" rx="5.0" fill="#2a2f36" stroke="#50c878" stroke-width="2.2"/>
+<text x="496.0" y="443.6" font-size="9.2" fill="#ffffff" text-anchor="middle" font-weight="bold">PLAY</text>
+<text x="496.0" y="462.0" font-size="8.0" fill="#50c878" text-anchor="middle" font-weight="bold">RESTART</text>
+<rect x="540.0" y="427.0" width="60.0" height="26.0" rx="5.0" fill="#2a2f36" stroke="#50c878" stroke-width="2.2"/>
+<text x="570.0" y="443.6" font-size="9.2" fill="#ffffff" text-anchor="middle" font-weight="bold">STOP</text>
+<text x="570.0" y="462.0" font-size="8.0" fill="#50c878" text-anchor="middle" font-weight="bold">RESET</text>
+<rect x="614.0" y="427.0" width="60.0" height="26.0" rx="5.0" fill="#2a2f36" stroke="#50c878" stroke-width="2.2"/>
+<text x="644.0" y="443.6" font-size="9.2" fill="#ffffff" text-anchor="middle" font-weight="bold">MIXER</text>
+<text x="644.0" y="462.0" font-size="8.0" fill="#50c878" text-anchor="middle" font-weight="bold">PERFORM</text>
+<rect x="688.0" y="427.0" width="60.0" height="26.0" rx="5.0" fill="#2a2f36" stroke="#50c878" stroke-width="2.2"/>
+<text x="718.0" y="443.6" font-size="9.2" fill="#ffffff" text-anchor="middle" font-weight="bold">EDIT</text>
+<text x="718.0" y="462.0" font-size="8.0" fill="#50c878" text-anchor="middle" font-weight="bold">MACHINE</text>
+<circle cx="796.0" cy="424.0" r="21.0" fill="#2a2f36" stroke="#f06070" stroke-width="2.4"/>
+<text x="796.0" y="427.6" font-size="10.0" fill="#ffffff" text-anchor="middle" font-weight="bold">CLR</text>
+<circle cx="856.0" cy="396.0" r="21.0" fill="#2a2f36" stroke="#f06070" stroke-width="2.4"/>
+<text x="856.0" y="399.6" font-size="10.0" fill="#ffffff" text-anchor="middle" font-weight="bold">OK</text>
+<rect x="337.0" y="479.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="360.0" y="506.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">1</text>
+<rect x="408.2" y="479.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="431.2" y="506.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">2</text>
+<rect x="479.4" y="479.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="502.4" y="506.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">3</text>
+<rect x="550.6" y="479.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="573.6" y="506.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">4</text>
+<rect x="621.8" y="479.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="644.8" y="506.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">5</text>
+<rect x="693.0" y="479.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="716.0" y="506.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">6</text>
+<rect x="764.2" y="479.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="787.2" y="506.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">7</text>
+<rect x="835.4" y="479.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="858.4" y="506.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">8</text>
+<rect x="337.0" y="541.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="360.0" y="568.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">9</text>
+<rect x="408.2" y="541.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="431.2" y="568.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">10</text>
+<rect x="479.4" y="541.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="502.4" y="568.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">11</text>
+<rect x="550.6" y="541.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="573.6" y="568.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">12</text>
+<rect x="621.8" y="541.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="644.8" y="568.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">13</text>
+<rect x="693.0" y="541.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="716.0" y="568.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">14</text>
+<rect x="764.2" y="541.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="787.2" y="568.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">15</text>
+<rect x="835.4" y="541.0" width="46.0" height="46.0" rx="6.0" fill="#2a2f36" stroke="#f0d040" stroke-width="2.2"/>
+<text x="858.4" y="568.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">16</text>
+<rect x="321.0" y="623.0" width="26.0" height="30.0" rx="6.0" fill="#2a2f36" stroke="#e060a0" stroke-width="2.2"/>
+<text x="334.0" y="642.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">&lt;</text>
+<rect x="873.0" y="623.0" width="26.0" height="30.0" rx="6.0" fill="#2a2f36" stroke="#e060a0" stroke-width="2.2"/>
+<text x="886.0" y="642.0" font-size="12.0" fill="#ffffff" text-anchor="middle" font-weight="bold">&gt;</text>
+<rect x="329.0" y="692.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#30c0c0" stroke-width="2.2"/>
+<text x="356.0" y="688.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">TRK 8</text>
+<text x="356.0" y="723.0" font-size="14.0" fill="#ffffff" text-anchor="middle" font-weight="bold">T1</text>
+<rect x="365.0" y="612.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#ff8c40" stroke-width="2.2"/>
+<text x="392.0" y="608.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">TRK 1</text>
+<text x="392.0" y="641.6" font-size="10.0" fill="#ffffff" text-anchor="middle" font-weight="bold">FILL</text>
+<rect x="400.2" y="692.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#30c0c0" stroke-width="2.2"/>
+<text x="427.2" y="688.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">TRK 9</text>
+<text x="427.2" y="723.0" font-size="14.0" fill="#ffffff" text-anchor="middle" font-weight="bold">T2</text>
+<rect x="436.2" y="612.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#ff8c40" stroke-width="2.2"/>
+<text x="463.2" y="608.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">TRK 2</text>
+<text x="463.2" y="641.6" font-size="8.6" fill="#ffffff" text-anchor="middle" font-weight="bold">REPEAT</text>
+<rect x="471.4" y="692.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#30c0c0" stroke-width="2.2"/>
+<text x="498.4" y="688.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">TRK 10</text>
+<text x="498.4" y="723.0" font-size="14.0" fill="#ffffff" text-anchor="middle" font-weight="bold">T3</text>
+<rect x="507.4" y="612.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#ff8c40" stroke-width="2.2"/>
+<text x="534.4" y="608.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">TRK 3</text>
+<text x="534.4" y="641.6" font-size="10.0" fill="#ffffff" text-anchor="middle" font-weight="bold">MUTE</text>
+<rect x="542.6" y="692.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#30c0c0" stroke-width="2.2"/>
+<text x="569.6" y="688.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">GLOBAL 1</text>
+<text x="569.6" y="723.0" font-size="14.0" fill="#ffffff" text-anchor="middle" font-weight="bold">T4</text>
+<rect x="578.6" y="612.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#ff8c40" stroke-width="2.2"/>
+<text x="605.6" y="608.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">TRK 4</text>
+<text x="605.6" y="641.6" font-size="8.6" fill="#ffffff" text-anchor="middle" font-weight="bold">SCENE A</text>
+<rect x="613.8" y="692.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#30c0c0" stroke-width="2.2"/>
+<text x="640.8" y="688.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">GLOBAL 2</text>
+<text x="640.8" y="723.0" font-size="14.0" fill="#ffffff" text-anchor="middle" font-weight="bold">T5</text>
+<rect x="649.8" y="612.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#ff8c40" stroke-width="2.2"/>
+<text x="676.8" y="608.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">TRK 5</text>
+<text x="676.8" y="641.6" font-size="8.6" fill="#ffffff" text-anchor="middle" font-weight="bold">SCENE B</text>
+<rect x="685.0" y="692.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#30c0c0" stroke-width="2.2"/>
+<text x="712.0" y="688.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">GLOBAL 3</text>
+<text x="712.0" y="723.0" font-size="14.0" fill="#ffffff" text-anchor="middle" font-weight="bold">T6</text>
+<rect x="721.0" y="612.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#ff8c40" stroke-width="2.2"/>
+<text x="748.0" y="608.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">TRK 6</text>
+<text x="748.0" y="641.6" font-size="10.0" fill="#ffffff" text-anchor="middle" font-weight="bold">THROW</text>
+<rect x="756.2" y="692.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#30c0c0" stroke-width="2.2"/>
+<text x="783.2" y="688.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">USB AUDIO</text>
+<text x="783.2" y="723.0" font-size="14.0" fill="#ffffff" text-anchor="middle" font-weight="bold">T7</text>
+<rect x="792.2" y="612.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#ff8c40" stroke-width="2.2"/>
+<text x="819.2" y="608.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">TRK 7</text>
+<text x="819.2" y="641.6" font-size="8.6" fill="#ffffff" text-anchor="middle" font-weight="bold">MUTATE</text>
+<rect x="827.4" y="692.0" width="54.0" height="52.0" rx="6.0" fill="#2a2f36" stroke="#30c0c0" stroke-width="2.2"/>
+<text x="854.4" y="688.0" font-size="6.8" fill="#9aa4b2" text-anchor="middle" font-weight="normal">EXT SRC</text>
+<text x="854.4" y="723.0" font-size="14.0" fill="#ffffff" text-anchor="middle" font-weight="bold">T8</text>
+<polyline points="286.0,106.0 286.0,106.0 527.0,200.0" fill="none" stroke="#9aa4b2" stroke-width="2"/>
+<circle cx="527.0" cy="200.0" r="3.5" fill="#9aa4b2"/>
+<text x="16.0" y="110.0" font-size="13.0" fill="#9aa4b2" text-anchor="start" font-weight="bold">SCREEN</text>
+<text x="16.0" y="127.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">The mode, the track, and the four</text>
+<text x="16.0" y="142.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">values the knobs A-D turn</text>
+<polyline points="286.0,226.0 286.0,226.0 542.0,346.0" fill="none" stroke="#c070e0" stroke-width="2"/>
+<circle cx="542.0" cy="346.0" r="3.5" fill="#c070e0"/>
+<text x="16.0" y="230.0" font-size="13.0" fill="#c070e0" text-anchor="start" font-weight="bold">SCREEN KEYS</text>
+<text x="16.0" y="247.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">The screen's pages: EDIT's six,</text>
+<text x="16.0" y="262.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">MIXER's nine, PROJECT's five</text>
+<polyline points="286.0,341.0 286.0,341.0 338.0,414.0" fill="none" stroke="#40a0f0" stroke-width="2"/>
+<circle cx="338.0" cy="414.0" r="3.5" fill="#40a0f0"/>
+<text x="16.0" y="345.0" font-size="13.0" fill="#40a0f0" text-anchor="start" font-weight="bold">ARROW PAD</text>
+<text x="16.0" y="362.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">The cursor: UP/DOWN rows (tracks,</text>
+<text x="16.0" y="377.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">lists), LEFT/RIGHT sideways</text>
+<polyline points="286.0,466.0 286.0,466.0 338.0,502.0" fill="none" stroke="#f0d040" stroke-width="2"/>
+<circle cx="338.0" cy="502.0" r="3.5" fill="#f0d040"/>
+<text x="16.0" y="470.0" font-size="13.0" fill="#f0d040" text-anchor="start" font-weight="bold">STEP 1-16</text>
+<text x="16.0" y="487.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">The 16 steps of the selected track.</text>
+<text x="16.0" y="502.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">Hold one and turn a knob = lock</text>
+<polyline points="286.0,581.0 286.0,581.0 322.0,638.0" fill="none" stroke="#e060a0" stroke-width="2"/>
+<circle cx="322.0" cy="638.0" r="3.5" fill="#e060a0"/>
+<text x="16.0" y="585.0" font-size="13.0" fill="#e060a0" text-anchor="start" font-weight="bold">PAD-ROW KEYS</text>
+<text x="16.0" y="602.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">Which 16 the STEP keys mean: step</text>
+<text x="16.0" y="617.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">page 1-4, KEYS octave, bank A-H.</text>
+<text x="16.0" y="632.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">FUNC + key: the track's length</text>
+<polyline points="286.0,706.0 286.0,706.0 330.0,718.0" fill="none" stroke="#30c0c0" stroke-width="2"/>
+<circle cx="330.0" cy="718.0" r="3.5" fill="#30c0c0"/>
+<text x="16.0" y="710.0" font-size="13.0" fill="#30c0c0" text-anchor="start" font-weight="bold">TRACK PADS</text>
+<text x="16.0" y="727.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">Tracks 1-8: select and play.</text>
+<text x="16.0" y="742.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">FUNC + pad: mute on the next bar</text>
+<polyline points="934.0,246.0 934.0,246.0 902.0,280.0" fill="none" stroke="#e0a030" stroke-width="2"/>
+<circle cx="902.0" cy="280.0" r="3.5" fill="#e0a030"/>
+<text x="1204.0" y="250.0" font-size="13.0" fill="#e0a030" text-anchor="end" font-weight="bold">KNOBS A-D, VALUE</text>
+<text x="1204.0" y="267.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">A-D: the four values on screen,</text>
+<text x="1204.0" y="282.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">push = that value's switch.</text>
+<text x="1204.0" y="297.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">VALUE: tempo; push + turn = swing</text>
+<polyline points="934.0,376.0 934.0,376.0 877.0,396.0" fill="none" stroke="#f06070" stroke-width="2"/>
+<circle cx="877.0" cy="396.0" r="3.5" fill="#f06070"/>
+<text x="1204.0" y="380.0" font-size="13.0" fill="#f06070" text-anchor="end" font-weight="bold">OK / CLR</text>
+<text x="1204.0" y="397.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">OK picks or confirms, CLR goes back</text>
+<text x="1204.0" y="412.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">or clears. FUNC + CLR / OK:</text>
+<text x="1204.0" y="427.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">undo / redo</text>
+<polyline points="934.0,466.0 934.0,466.0 762.0,466.0" fill="none" stroke="#50c878" stroke-width="2"/>
+<circle cx="762.0" cy="466.0" r="3.5" fill="#50c878"/>
+<text x="1204.0" y="470.0" font-size="13.0" fill="#50c878" text-anchor="end" font-weight="bold">FUNCTION BLOCK</text>
+<text x="1204.0" y="487.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">Plain: go to that screen.</text>
+<text x="1204.0" y="502.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">FUNC + key: the word under it</text>
+<text x="1204.0" y="517.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">(its printed second label)</text>
+<polyline points="934.0,586.0 934.0,586.0 882.0,608.0" fill="none" stroke="#ff8c40" stroke-width="2"/>
+<circle cx="882.0" cy="608.0" r="3.5" fill="#ff8c40"/>
+<text x="1204.0" y="590.0" font-size="13.0" fill="#ff8c40" text-anchor="end" font-weight="bold">PERFORMANCE PADS</text>
+<text x="1204.0" y="607.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">Printed TRK 1-7; in STRATA the same</text>
+<text x="1204.0" y="622.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">seven tools in every mode.</text>
+<text x="1204.0" y="637.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">Lit dim, bright while held or on</text>
+</svg>

@@ -3585,126 +3585,6 @@ TEST(ui_func_home_opens_the_menu_and_ok_saves) {
     key(ENAGA_KEY_F4);
 }
 
-// --- screenshots for the README ---------------------------------------------------------------
-//
-// Not a check. With STRATA_SHOTS set to a folder, this draws the main screens on the default beat
-// and writes each one there as NAME.pgm (the canvas: every rect, greys 0-15) and NAME.txt (every
-// string drawn, "x y grey text" a line). tools/screenshots.sh runs it alone, with --only, so the
-// app is on its first init and still holds the default beat, then lays the text over the canvas
-// in Enaga's own 5 x 7 font (read from third_party/enaga/firmware/hal/gfx.c) and writes PNGs.
-// Without STRATA_SHOTS it returns at once, so the suite is unchanged.
-
-namespace {
-
-// Blocks with the clock running at 130 BPM: 96 PPQN is 208 ticks a second, 0.277 a block. The
-// fake clock delivers no ticks by itself, so without this the beat would stand still.
-uint32_t g_shot_tick = 0;
-float g_shot_due = 0.0f;
-
-void play_blocks(int blocks) {
-    FakeHost &host = FakeHost::the();
-    constexpr float kTicksPerBlock = 130.0f / 60.0f * 96.0f * float(kBlk) / 48000.0f;
-    for (int b = 0; b < blocks; b++) {
-        g_shot_due += kTicksPerBlock;
-        if (host.running() && g_shot_due >= 1.0f) {
-            g_shot_due -= 1.0f;
-            host.deliver_tick(g_shot_tick++, 0);
-        }
-        pump(1);
-    }
-}
-
-void write_shot(const char *folder, const char *name) {
-    FakeHost &host = FakeHost::the();
-    enaga::Canvas canvas(g_pixels);
-    play_blocks(1600);                          // past any notice (1.5 s) the last key left
-    host.clear_text();
-    the_app().draw(canvas);
-
-    char path[512];
-    std::snprintf(path, sizeof path, "%s/%s.pgm", folder, name);
-    FILE *pgm = std::fopen(path, "wb");
-    CHECK(pgm != nullptr);
-    if (pgm == nullptr) return;
-    std::fprintf(pgm, "P5\n%d %d\n15\n", enaga::Canvas::width, enaga::Canvas::height);
-    std::fwrite(g_pixels, 1, sizeof g_pixels, pgm);
-    std::fclose(pgm);
-
-    std::snprintf(path, sizeof path, "%s/%s.txt", folder, name);
-    FILE *txt = std::fopen(path, "w");
-    CHECK(txt != nullptr);
-    if (txt == nullptr) return;
-    for (int i = 0; i < host.text_count(); i++) {
-        const FakeHost::TextDraw &d = host.text_draw(i);
-        std::fprintf(txt, "%d %d %d %s\n", d.x, d.y, int(d.grey), d.text);
-    }
-    std::fclose(txt);
-}
-
-}  // namespace
-
-TEST(ui_screenshots) {
-    const char *folder = std::getenv("STRATA_SHOTS");
-    if (folder == nullptr || folder[0] == '\0') return;
-
-    // The app's first init, as on the unit: the default beat, not `fresh()`'s blank project.
-    FakeHost &host = FakeHost::the();
-    host.reset();
-    host.set_device(ENAGA_DEVICE_SMPLTREK);
-    host.set_audio_load(200);                   // 20.0%, near the emulator's cl6x figure for the beat
-    Strata &app = the_app();
-    CHECK(app.init());
-    app.on_card(true);
-
-    key(ENAGA_KEY_F4);                          // GRID, track 1
-    app.on_pad_press(0, 100);
-    app.on_pad_release(0);
-    key(ENAGA_KEY_F5);                          // play, so the playhead shows
-    play_blocks(900);
-    write_shot(folder, "grid");
-
-    step_down(0);                               // the step page for track 1, step 1
-    key(ENAGA_KEY_OK);
-    step_up(0);
-    write_shot(folder, "step");
-    key(ENAGA_KEY_F4);
-
-    key(ENAGA_KEY_F8);                          // the sound pages of the kick
-    write_shot(folder, "edit");
-
-    mixer_page(app, 0);
-    write_shot(folder, "mixer");
-
-    shift_key(ENAGA_KEY_F7);
-    write_shot(folder, "perform");
-
-    open_keys();
-    write_shot(folder, "keys");
-
-    shift_key(ENAGA_KEY_F8);
-    write_shot(folder, "machine");
-
-    key(ENAGA_KEY_F3);
-    write_shot(folder, "project");
-
-    // The kit browser, with the factory kit stored in slot 1 so the screen has a kit to show.
-    shift_key(ENAGA_KEY_F8);
-    shift_key(ENAGA_KEY_F8);
-    CHECK(pump_until_idle());
-    shift_key(ENAGA_KEY_DOWN);
-    for (int i = 0; i < 4000 && app_storage().kit_slot(0).state != Storage::SlotState::used; i++) {
-        pump();
-    }
-    CHECK_EQ(int(app_storage().kit_slot(0).state), int(Storage::SlotState::used));
-    pump(2100);                                 // let the SAVING KIT notice lapse
-    write_shot(folder, "kit");
-
-    key(ENAGA_KEY_F6);
-    key(ENAGA_KEY_F4);
-    host.set_device(0);
-    host.set_audio_load(0);
-}
-
 // --- the kit browser (FUNC+EDIT twice) -------------------------------------------------------
 
 TEST(ui_f1_edit_twice_opens_the_kit_browser_and_clr_goes_back) {
@@ -5553,4 +5433,186 @@ TEST(ui_inputs_that_worked_unseen_now_say_what_they_did) {
     key(ENAGA_KEY_F6);
     pump(2);
     CHECK(screen_has(app, "STOP") || screen_has(app, "TAILS CUT"));
+}
+
+// --- screenshots for the README, the manual and the cheatsheet --------------------------------
+//
+// Not a check. With STRATA_SHOTS set to a folder, this draws every screen on the default beat
+// and writes each one there as NAME.pgm (the canvas: every rect, greys 0-15) and NAME.txt (every
+// string drawn, "x y grey text" a line). tools/screenshots.sh runs it alone, with --only, so the
+// app is on its first init and still holds the default beat, then lays the text over the canvas
+// in Enaga's own 5 x 7 font (read from third_party/enaga/firmware/hal/gfx.c) and writes PNGs.
+// Without STRATA_SHOTS it returns at once, so the suite is unchanged. It sits last in the file
+// because it uses the sample browser's card helpers above.
+
+namespace {
+
+// Blocks with the clock running at 130 BPM: 96 PPQN is 208 ticks a second, 0.277 a block. The
+// fake clock delivers no ticks by itself, so without this the beat would stand still.
+uint32_t g_shot_tick = 0;
+float g_shot_due = 0.0f;
+
+void play_blocks(int blocks) {
+    FakeHost &host = FakeHost::the();
+    constexpr float kTicksPerBlock = 130.0f / 60.0f * 96.0f * float(kBlk) / 48000.0f;
+    for (int b = 0; b < blocks; b++) {
+        g_shot_due += kTicksPerBlock;
+        if (host.running() && g_shot_due >= 1.0f) {
+            g_shot_due -= 1.0f;
+            host.deliver_tick(g_shot_tick++, 0);
+        }
+        pump(1);
+    }
+}
+
+// `settle` blocks are played first: by default past any notice (1.5 s) the last key left, fewer
+// to catch the notice itself.
+void write_shot(const char *folder, const char *name, int settle = 1600) {
+    FakeHost &host = FakeHost::the();
+    enaga::Canvas canvas(g_pixels);
+    play_blocks(settle);
+    host.clear_text();
+    the_app().draw(canvas);
+
+    char path[512];
+    std::snprintf(path, sizeof path, "%s/%s.pgm", folder, name);
+    FILE *pgm = std::fopen(path, "wb");
+    CHECK(pgm != nullptr);
+    if (pgm == nullptr) return;
+    std::fprintf(pgm, "P5\n%d %d\n15\n", enaga::Canvas::width, enaga::Canvas::height);
+    std::fwrite(g_pixels, 1, sizeof g_pixels, pgm);
+    std::fclose(pgm);
+
+    std::snprintf(path, sizeof path, "%s/%s.txt", folder, name);
+    FILE *txt = std::fopen(path, "w");
+    CHECK(txt != nullptr);
+    if (txt == nullptr) return;
+    for (int i = 0; i < host.text_count(); i++) {
+        const FakeHost::TextDraw &d = host.text_draw(i);
+        std::fprintf(txt, "%d %d %d %s\n", d.x, d.y, int(d.grey), d.text);
+    }
+    std::fclose(txt);
+}
+
+}  // namespace
+
+TEST(ui_screenshots) {
+    const char *folder = std::getenv("STRATA_SHOTS");
+    if (folder == nullptr || folder[0] == '\0') return;
+
+    // The app's first init, as on the unit: the default beat, not `fresh()`'s blank project.
+    FakeHost &host = FakeHost::the();
+    host.reset();
+    host.set_device(ENAGA_DEVICE_SMPLTREK);
+    host.set_audio_load(200);                   // 20.0%, near the emulator's cl6x figure for the beat
+    Strata &app = the_app();
+    CHECK(app.init());
+    app.on_card(true);
+
+    key(ENAGA_KEY_F4);                          // GRID, track 1
+    app.on_pad_press(0, 100);
+    app.on_pad_release(0);
+    key(ENAGA_KEY_F5);                          // play, so the playhead shows
+    play_blocks(900);
+    write_shot(folder, "grid");
+
+    // FUNC held alone: after 0.6 s the help over the screen (docs/CONTROLS.md, FUNC help).
+    app.on_key(ENAGA_KEY_F1, true);
+    write_shot(folder, "help", 800);
+    CHECK(UiProbe::func_help(app));
+    app.on_key(ENAGA_KEY_F1, false);
+
+    shift_key(ENAGA_KEY_F4);                    // the FUNC menu, cursor on SAVE
+    write_shot(folder, "menu");
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+    key(ENAGA_KEY_CLR);
+
+    // MUTATE (upper pad 7) waits for OK or CLR and says so for as long as it waits.
+    app.on_pad_press(13, 100);
+    app.on_pad_release(13);
+    write_shot(folder, "mutate", 200);
+    key(ENAGA_KEY_CLR);                         // and reverts it, so the beat is the default again
+
+    // SCENE A (upper pad 4) held: the notice says the STEP keys pick a scene.
+    app.on_pad_press(7, 100);
+    write_shot(folder, "scene", 40);
+    app.on_pad_release(7);
+
+    step_down(0);                               // the step page for track 1, step 1
+    key(ENAGA_KEY_OK);
+    step_up(0);
+    write_shot(folder, "step");
+    key(ENAGA_KEY_F4);
+
+    key(ENAGA_KEY_F8);                          // the sound pages of the kick
+    write_shot(folder, "edit");
+    const char *const edit_pages[] = {"edit_fltr", "edit_amp", "edit_fx", "edit_lfo", "edit_arp"};
+    for (const char *page : edit_pages) {
+        key(ENAGA_KEY_SELECT_RIGHT);
+        write_shot(folder, page);
+    }
+
+    mixer_page(app, 0);
+    write_shot(folder, "mixer");
+    mixer_page(app, 2);
+    write_shot(folder, "mixer_dly");
+    mixer_page(app, kMixerPageCount - 2);
+    write_shot(folder, "mixer_mst");
+    mixer_page(app, kMixerEqPage);
+    write_shot(folder, "mixer_eq");
+
+    shift_key(ENAGA_KEY_F7);
+    write_shot(folder, "perform");
+
+    open_keys();
+    write_shot(folder, "keys");
+
+    shift_key(ENAGA_KEY_F8);
+    write_shot(folder, "machine");
+
+    shift_key(ENAGA_KEY_F2);                    // FUNC + REC: RESAMPLE
+    write_shot(folder, "resample");
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+
+    key(ENAGA_KEY_F3);
+    write_shot(folder, "project");
+    // A project on the card, so PROJECTS has one to list.
+    CHECK(app_storage().request_save_as("TECHNO"));
+    CHECK(pump_until_idle());
+    const char *const project_pages[] = {"chain", "pattern", "setup", "projects"};
+    for (int p = 0; p < 4; p++) {
+        key(ENAGA_KEY_SELECT_RIGHT);
+        for (int i = 0; i < 400 && app_storage().browsing(); i++) pump();
+        CHECK_EQ(UiProbe::project_page(app), p + 1);
+        write_shot(folder, project_pages[p]);
+    }
+
+    // The kit browser, with the factory kit stored in slot 1 so the screen has a kit to show.
+    shift_key(ENAGA_KEY_F8);
+    shift_key(ENAGA_KEY_F8);
+    CHECK(pump_until_idle());
+    shift_key(ENAGA_KEY_DOWN);
+    for (int i = 0; i < 4000 && app_storage().kit_slot(0).state != Storage::SlotState::used; i++) {
+        pump();
+    }
+    CHECK_EQ(int(app_storage().kit_slot(0).state), int(Storage::SlotState::used));
+    pump(2100);                                 // let the SAVING KIT notice lapse
+    write_shot(folder, "kit");
+
+    // The sample browser on track 8, the default beat's SAMPLE track, with a few files on the card.
+    seed_sample_card();
+    key(ENAGA_KEY_F4);
+    app.on_pad_press(14, 100);
+    app.on_pad_release(14);
+    key(ENAGA_KEY_F8);
+    key(ENAGA_KEY_OK);
+    for (int i = 0; i < 400 && app_storage().browsing(); i++) pump();
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+    write_shot(folder, "samples");
+    key(ENAGA_KEY_CLR);
+
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F4);
+    host.set_device(0);
+    host.set_audio_load(0);
 }
