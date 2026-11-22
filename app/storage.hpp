@@ -251,6 +251,8 @@ private:
     bool save_pending_ = false;    // requested, waiting for the ring to drain
     bool autosave_pending_ = false;
     bool load_pending_ = false;
+    bool load_autosave_ = false;   // which folder the pending load reads; copied into autosave_
+                                   // only when it starts, so a running save keeps its own
     bool new_pending_ = false;     // request_new, waiting for the ring like a load
     uint32_t save_seq_ = 0;        // monotonic, so a start can tell which of the two is newer
 

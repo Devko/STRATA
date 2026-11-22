@@ -251,7 +251,11 @@ void Storage::request_reload() {
     // The project, not the autosave, even if this session opened the autosave: "read the card
     // again" means the last deliberate save. The UI says RELOADING first, because this throws
     // away everything unsaved.
-    autosave_ = false;
+    //
+    // The folder is chosen when the load STARTS, not here: `autosave_` also says which folder a
+    // save job in progress is writing, and flipping it under a running autosave sent the rest of
+    // that snapshot into PROJECT/ as if it were a deliberate save -- the opposite of discarding.
+    load_autosave_ = false;
     load_pending_ = true;
     new_pending_ = false;
 }
@@ -331,7 +335,7 @@ bool Storage::open_last() {
     if (prefer_auto && project_path(path, sizeof path, true, "PROJECT.BIN")) {
         enaga::files::Info info;
         if (enaga::files::info(path, info) == ENAGA_FILE_OK) {
-            autosave_ = true;
+            load_autosave_ = true;
             load_pending_ = true;
             return true;
         }
@@ -339,7 +343,7 @@ bool Storage::open_last() {
     if (project_path(path, sizeof path, false, "PROJECT.BIN")) {
         enaga::files::Info info;
         if (enaga::files::info(path, info) == ENAGA_FILE_OK) {
-            autosave_ = false;
+            load_autosave_ = false;
             load_pending_ = true;
             return true;
         }
@@ -570,6 +574,7 @@ void Storage::service() {
             return;
         }
         load_pending_ = false;
+        autosave_ = load_autosave_;
         begin_job(Job::load);
         return;
     }

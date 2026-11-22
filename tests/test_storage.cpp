@@ -1617,6 +1617,36 @@ TEST(storage_an_autosave_does_not_make_the_project_folder_complete) {
     CHECK((engine().pattern().tracks[0].steps[2].flags & kStepTrig) != 0);
 }
 
+TEST(storage_a_reload_asked_for_during_an_autosave_leaves_that_autosave_in_its_folder) {
+    // `request_reload` used to set `autosave_ = false` on the spot. That flag also names the folder
+    // a running save writes, so an autosave interrupted by RELOAD wrote its remaining files into
+    // PROJECT/ and was then counted as a deliberate save. The load now picks its folder when it
+    // starts, after the autosave has finished.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    post(Cmd::toggle_trig, 0, 5);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+
+    storage().request_autosave();
+    pump(3);                                   // the autosave is under way, a file per pass
+    CHECK_EQ(storage().busy_text(), "AUTOSAVING");
+    storage().request_reload();
+    CHECK(pump_until_idle());
+    CHECK(host.logged("autosaved"));
+
+    for (int i = 0; i < kFileN; i++) {
+        if (host.has_file(card_path(kFiles[i]))) {
+            std::printf("    PROJECT/%s was written by an autosave\n", kFiles[i]);
+        }
+        CHECK(!host.has_file(card_path(kFiles[i])));
+        CHECK(host.has_file(card_path(kFiles[i], true)));
+    }
+    // And no deliberate save happened, so the project is still unsaved.
+    CHECK(storage().dirty());
+}
+
 TEST(storage_a_save_already_asked_for_beats_an_autosave) {
     // Both arrive before either can start -- the transport stops at the same moment the user
     // presses SAVE. `request_autosave` stands down while a save is pending, and `service()` takes
