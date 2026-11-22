@@ -120,6 +120,7 @@ void FakeHost::reset() {
     leds_ = 0;
     clear_text();
     audio_load_ = 0;
+    device_ = 0;
     ms_ = 0;
 }
 
@@ -305,6 +306,7 @@ bool FakeHost::logged(const char *text) const {
 }
 
 void FakeHost::set_audio_load(uint32_t per_mille) { audio_load_ = per_mille; }
+void FakeHost::set_device(uint32_t device) { device_ = device; }
 
 // --- the trampolines ------------------------------------------------------
 
@@ -599,7 +601,7 @@ void FakeHost::t_open_menu() {}
 void FakeHost::t_set_busy(uint32_t) {}
 void FakeHost::t_speaker(uint32_t) {}
 int32_t FakeHost::t_headphones() { return 0; }
-uint32_t FakeHost::t_device() { return 0; }
+uint32_t FakeHost::t_device() { return the().device_; }
 int32_t FakeHost::t_input(uint32_t, uint32_t) { return 0; }
 int32_t FakeHost::t_midi_send(uint32_t, const uint8_t *, uint32_t) { return 0; }
 uint32_t FakeHost::t_midi_channel() { return 0; }

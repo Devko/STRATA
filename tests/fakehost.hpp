@@ -147,6 +147,7 @@ public:
 
     int leds_set() const { return leds_; }
     void set_audio_load(uint32_t per_mille);   // what enaga::audio_load() reports
+    void set_device(uint32_t device);          // what enaga::system::device() reports; 0 after reset
 
     // Every `Canvas::text` call since the last `clear_text()`, in order. The real host draws the
     // string with Enaga's 5 x 7 font; this one only records it, so a test can check where text
@@ -302,6 +303,7 @@ private:
     int text_dropped_ = 0;
     int leds_ = 0;
     uint32_t audio_load_ = 0;
+    uint32_t device_ = 0;
     uint32_t ms_ = 0;
 };
 
