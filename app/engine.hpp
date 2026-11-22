@@ -224,6 +224,12 @@ public:
     };
     StreamInfo &stream_for_load(int track) { return stream_inbox_[track]; }
 
+    // A sample's slice points (core/onsets.hpp), for SLC AUTO. An inbox like the stream's: the
+    // loader writes the track's entry just before it posts Cmd::set_sample, and the audio side
+    // copies it into the Sampler when it applies that command. A set_sample is only posted after
+    // the track's previous one has been applied (the clear_sample epoch), so the two never meet.
+    SlicePoints &slices_for_load(int track) { return slice_inbox_[track]; }
+
     // The track's stream. The MAIN context opens and closes it, the AUDIO context reads it, and
     // never both at once: the audio side reads only between a Cmd::stream_attach and its own
     // next Status::stream_want bump, and the card side opens or closes only after seeing a bump
@@ -347,6 +353,7 @@ private:
     // so a fifo emptied by a restart is full again well before the head runs out.
     static constexpr uint32_t kStreamReadFrames = 512;
     StreamInfo stream_inbox_[kTracks]{};
+    SlicePoints slice_inbox_[kTracks]{};
     StreamState stream_state_[kTracks]{};
     StreamFifo fifos_[kTracks];
     enaga::files::Stream streams_[kTracks];

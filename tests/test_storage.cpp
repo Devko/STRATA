@@ -486,6 +486,7 @@ const Expect kTable[] = {
     // the card: it is the card side telling the audio side the stream is open.
     {Cmd::set_stream, kDirtyKit, "set_stream"},
     {Cmd::stream_attach, 0u, "stream_attach"},
+    {Cmd::set_slice_mode, kDirtyKit, "set_slice_mode"},
 
     {Cmd::set_param, kDirtyKit, "set_param"},
     // The mixer fader, which `kit_from_params` copies into `KitTrack::level`.
@@ -739,8 +740,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     // card protocol: a file that came out a different size means the two have drifted apart.
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 296);
     CHECK_EQ(project_bytes(), 296u);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1120);
-    CHECK_EQ(kit_bytes(), 1120u);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1140);
+    CHECK_EQ(kit_bytes(), 1140u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 3152);
     CHECK_EQ(perform_bytes(), 3152u);
     for (int b = 0; b < kBanks; b++) {
@@ -1028,7 +1029,7 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     CHECK(pump_until_idle());
     CHECK(storage().last_error() == nullptr);
     keep_pristine(kit);
-    CHECK_EQ(g_pristine_bytes, 1120u);
+    CHECK_EQ(g_pristine_bytes, 1140u);
 
     // A sanity pass first: the pristine file loads.
     CHECK(reload_now());
@@ -1613,7 +1614,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 296);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1120);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1140);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 3152);
 
     // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.
@@ -4188,4 +4189,135 @@ TEST(storage_project_names_are_what_the_panel_can_type) {
     CHECK(!storage().request_open("../X"));
     CHECK(!storage().request_save_as(""));
     CHECK(!pump_until_idle(20));                            // nothing was queued
+}
+
+// =============================================================================================
+// SLC AUTO: a sample's slice points are found as it loads (core/onsets.hpp)
+// =============================================================================================
+
+namespace {
+
+// Silence with drum hits: decaying noise bursts from `at[i]` at `peak[i]`, the same every run.
+// `bits` 16 or 24; the file is written straight into the fake card.
+int32_t hit_value(uint32_t f, const uint32_t *at, const int32_t *peak, int hits, uint32_t *seed) {
+    int32_t v = 0;
+    for (int i = 0; i < hits; i++) {
+        if (f < at[i] || f - at[i] >= 2880u) continue;
+        *seed = *seed * 1664525u + 1013904223u;
+        const int32_t noise = int32_t(*seed >> 16) - 32768;
+        const int32_t level = peak[i] - int32_t((f - at[i]) * uint32_t(peak[i]) / 2880u);
+        v += noise * level >> 15;
+    }
+    return v > 32767 ? 32767 : (v < -32768 ? -32768 : v);
+}
+
+void make_hits_wav(const char *path, uint32_t rate, int channels, int bits, uint32_t frames,
+                   const uint32_t *at, const int32_t *peak, int hits) {
+    const uint32_t sample_bytes = uint32_t(bits) / 8u;
+    const uint32_t frame_bytes = sample_bytes * uint32_t(channels);
+    uint8_t *p = FakeHost::the().create_file(path, 44u + frames * frame_bytes);
+    CHECK(p != nullptr);
+    if (p == nullptr) return;
+    enaga::wav::Format format;
+    format.channels = uint16_t(channels);
+    format.rate = rate;
+    format.bits = uint16_t(bits);
+    enaga::wav::header(p, format, frames * frame_bytes);
+    uint32_t seed = 7;
+    uint8_t *q = p + 44;
+    for (uint32_t f = 0; f < frames; f++) {
+        const int32_t v = hit_value(f, at, peak, hits, &seed);
+        for (int c = 0; c < channels; c++) {
+            if (bits == 24) *q++ = 0;
+            *q++ = uint8_t(v);
+            *q++ = uint8_t(v >> 8);
+        }
+    }
+}
+
+const uint32_t kHitAt[] = {10000, 30000, 50000, 61111};
+const int32_t kHitPeak[] = {30000, 6000, 15000, 22000};
+
+// The cut lands at most one hop (plus a resample's few frames) before the hit, never after it.
+bool cut_near(uint32_t cut, uint32_t hit) {
+    return cut <= hit + 2u && hit - cut < OnsetFinder::kHop + 4u;
+}
+
+}  // namespace
+
+TEST(storage_a_sample_brings_its_slice_points_and_slc_auto_cuts_there) {
+    clean();
+    CHECK(settle());                 // the swaps the previous test's kit left behind, all of them
+    make_hits_wav("/SAMPLES/BREAK.WAV", 48000, 1, 16, 72000, kHitAt, kHitPeak, 4);
+    kit_sample(kLoopTrack, "/SAMPLES/BREAK.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    const Sampler &loop = loop_sampler();
+    CHECK_EQ(loop.point_count(), 4);
+
+    // AUTO (Cmd::set_slice_mode, a KIT.BIN change: the dirty table above) and SLC 3 over the
+    // whole sample: the two strongest hits, 10000 (30000) and 61111 (22000), cut it.
+    post(Cmd::set_slice_mode, kLoopTrack, 0, kSliceAuto);
+    post(Cmd::set_param, kLoopTrack, 0, 1, 0);           // STA: the start
+    post(Cmd::set_param, kLoopTrack, 0, 2, 127);         // LEN: all of it
+    post(Cmd::set_param, kLoopTrack, 0, 3, 17);          // SLC 3
+    play_loop_once();                                    // a trig: the machine reads its knobs
+    FakeHost::the().set_running(false);
+    pump(2);
+    CHECK_EQ(int(engine().project().kit.tracks[kLoopTrack].slice_mode), int(kSliceAuto));
+    CHECK(loop.slicing_by_points());
+    CHECK_EQ(loop.slice_count(), 3);
+    CHECK_EQ(loop.slice_start(0), 0);
+    CHECK(cut_near(uint32_t(loop.slice_start(1)), 10000));
+    CHECK(cut_near(uint32_t(loop.slice_start(2)), 61111));
+
+    // Saved and reopened, the track is still AUTO, and the reloaded sample brings its points.
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    storage().request_reload();
+    CHECK(settle());
+    CHECK_EQ(int(engine().project().kit.tracks[kLoopTrack].slice_mode), int(kSliceAuto));
+    CHECK(loop_sampler().auto_slices());
+    CHECK_EQ(loop_sampler().point_count(), 4);
+
+    post(Cmd::set_slice_mode, kLoopTrack, 0, kSliceEqual);
+    pump(2);
+    CHECK(!loop_sampler().slicing_by_points());
+}
+
+TEST(storage_slice_points_survive_the_resample_and_the_chunked_load) {
+    clean();
+    // 44.1 kHz: the points are found in the resampled 48 kHz PCM the track plays, so they land
+    // at 48/44.1 of the file's frame.
+    make_hits_wav("/SAMPLES/BREAK44.WAV", 44100, 2, 16, 72000, kHitAt, kHitPeak, 4);
+    kit_sample(kLoopTrack, "/SAMPLES/BREAK44.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    {
+        const SlicePoints &points = engine().slices_for_load(kLoopTrack);
+        CHECK_EQ(int(points.count), 4);
+        for (int i = 0; i < 4 && i < points.count; i++) {
+            CHECK(cut_near(points.at[i], uint32_t(uint64_t(kHitAt[i]) * 48000u / 44100u)));
+        }
+        CHECK_EQ(loop_sampler().point_count(), 4);
+    }
+
+    // Past the staging buffer, read in 4 MiB chunks whose ends split frames: the points are the
+    // same as for a small file, one hit at the end of the first chunk included.
+    const uint32_t frames = 3000000;                      // 62.5 s, 24-bit stereo, 18 MB
+    const uint32_t chunk_frames = (4u << 20) / 6u;         // where the first chunk ends
+    const uint32_t at[] = {100000, chunk_frames - 50, 2000000, 2999000};
+    const int32_t peak[] = {20000, 25000, 9000, 15000};
+    make_hits_wav("/SAMPLES/STEM.WAV", 48000, 2, 24, frames, at, peak, 4);
+    kit_sample(kLoopTrack, "/SAMPLES/STEM.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(settle_long());
+    CHECK(storage().last_error() == nullptr);
+    const SlicePoints &points = engine().slices_for_load(kLoopTrack);
+    CHECK_EQ(int(points.count), 4);
+    for (int i = 0; i < 4 && i < points.count; i++) CHECK(cut_near(points.at[i], at[i]));
+    CHECK_EQ(int(points.rank[1]), 0);
+    storage().request_new();
+    CHECK(settle_long());
 }

@@ -54,6 +54,7 @@
 
 #include "browse.hpp"
 #include "commands.hpp"
+#include "onsets.hpp"
 #include "pcm.hpp"
 #include "perform.hpp"
 #include "project.hpp"
@@ -499,6 +500,7 @@ private:
     uint32_t out_offset_ = 0;      // the pool's byte offset for this slot
     Resampler cursor_;
     Antialias antialias_;          // a downsample's low-pass, carried across slices
+    OnsetFinder onsets_;           // the slice points of the sample being loaded, as it lands
 
     // The buffers, all taken in init().
     //
