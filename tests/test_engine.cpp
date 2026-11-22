@@ -235,6 +235,7 @@ Engine &clean() {
     post(Cmd::set_auto_fill, 0, 0, uint8_t(AutoFill::off));
     post(Cmd::set_throw, 0, 0, 0);
     post(Cmd::set_repeat, 0, 0, uint8_t(RepeatLength::sixteenth), 0, 0);
+    for (uint8_t t = 0; t < kTracks; t++) post(Cmd::note_repeat, t, 0, 0, 0, 0);
     post_u(Cmd::set_morph, 0);
     for (uint8_t m = 0; m < kMacros; m++) {
         post(Cmd::macro_clear, 0, 0, m);
@@ -2216,6 +2217,98 @@ TEST(engine_a_parameter_a_track_does_not_have_is_ignored) {
     post(Cmd::lock_delta, 0, 0, uint8_t(kTrackParams), uint8_t(int8_t(-1)));
     pump();
     CHECK_EQ(int(pattern_locks_reachable(engine.pattern())), 0);
+}
+
+// --- note repeat -----------------------------------------------------------------------------
+
+// A track with nothing on it, so every trigger counted is the roll's.
+void empty_track(Engine &engine, int track) {
+    for (int s = 0; s < kStepsPerTrack; s++) engine.project_for_load().live().tracks[track].steps[s].flags = 0;
+}
+
+TEST(engine_note_repeat_stopped_rolls_free_at_the_repeat_length) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(false);
+    FakeHost::the().set_tempo(120.0f);
+    empty_track(engine, kPoly);
+    pump();
+    // At 120 BPM a sixteenth is 0.125 s: 6,000 frames at 48 kHz.
+    const float period = 24.0f * kRate * 60.0f / (120.0f * 96.0f);
+    const uint8_t before = triggers(kPoly);
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 1);
+    pump();
+    CHECK_EQ(int(uint8_t(triggers(kPoly) - before)), 1);    // the press hits at once
+    CHECK(engine.rolling(kPoly));
+    const int blocks = int(4.0f * period / float(kBlk)) + 1;   // a little past four periods
+    for (int b = 1; b < blocks; b++) pump();
+    CHECK_EQ(int(uint8_t(triggers(kPoly) - before)), 5);
+
+    // Let go and it stops.
+    post(Cmd::note_repeat, kPoly, 0, 0, 0, 0);
+    const uint8_t at_release = triggers(kPoly);
+    for (int b = 0; b < blocks; b++) pump();
+    CHECK(!engine.rolling(kPoly));
+    CHECK_EQ(int(triggers(kPoly)), int(at_release));
+}
+
+TEST(engine_note_repeat_running_hits_the_grid_and_skips_a_flam) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kPoly);
+    tick_at(100);
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 1);
+    CHECK_EQ(fired_on(kPoly, 101), 1);          // the press, on the block it arrives
+    int hits = 0;
+    for (uint32_t t = 102; t <= 200; t++) hits += fired_on(kPoly, t);
+    CHECK_EQ(hits, 4);                           // 120, 144, 168, 192
+
+    // Pressed half a length or less before a grid tick, that tick is skipped: no flam.
+    post(Cmd::note_repeat, kPoly, 0, 0, 0, 0);
+    tick_at(205);
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 1);
+    CHECK_EQ(fired_on(kPoly, 210), 1);          // the press
+    CHECK_EQ(fired_on(kPoly, 216), 0);          // 6 ticks after the press: skipped
+    CHECK_EQ(fired_on(kPoly, 240), 1);
+    post(Cmd::note_repeat, kPoly, 0, 0, 0, 0);
+    pump();
+
+    // The length is beat repeat's: a thirty-second hits every 12 ticks.
+    post(Cmd::set_repeat, 0, 0, uint8_t(RepeatLength::thirty_second), 0, 0);
+    tick_at(300);
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 1);
+    pump();
+    hits = 0;
+    for (uint32_t t = 301; t <= 360; t++) hits += fired_on(kPoly, t);
+    CHECK_EQ(hits, 5);                           // 312, 324, 336, 348, 360
+    post(Cmd::note_repeat, kPoly, 0, 0, 0, 0);
+    post(Cmd::set_repeat, 0, 0, uint8_t(RepeatLength::sixteenth), 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_note_repeat_velocity_mute_and_refusal) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(false);
+    empty_track(engine, kPoly);
+    // Pressure on a pad that is not rolling changes nothing and starts nothing.
+    post(Cmd::note_repeat, kPoly, 0, 0, 90, 2);
+    pump();
+    CHECK(!engine.rolling(kPoly));
+    // A muted track rolls silently: the roll is held, nothing fires.
+    post(Cmd::set_mute, kPoly, 0, 1, 0);
+    const uint8_t before = triggers(kPoly);
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 1);
+    for (int b = 0; b < 400; b++) pump();
+    CHECK(engine.rolling(kPoly));
+    CHECK_EQ(int(triggers(kPoly)), int(before));
+    post(Cmd::note_repeat, kPoly, 0, 0, 0, 0);
+    post(Cmd::set_mute, kPoly, 0, 0, 0);
+    // An action past 2 is refused.
+    const uint32_t refusals = refused();
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 3);
+    pump();
+    CHECK_EQ(refused(), refusals + 1);
+    CHECK(!engine.rolling(kPoly));
 }
 
 TEST(engine_release_note_lets_a_held_note_go_early) {
