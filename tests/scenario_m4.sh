@@ -10,7 +10,8 @@
 #
 #   1. app/app.cpp logs `g<16 trig bits in hex> u<undo depth>` whenever the selected track's
 #      current page changes. A switch from A01 (the default beat, kick on steps 1, 5, 9 and 13 =
-#      g1111) to A02 (never touched, so empty = g0000) therefore shows up as a line. That is the
+#      g1111) to A05 (empty: the factory fills A01-A04 only, core/factory.hpp) therefore shows up
+#      as a line. That is the
 #      pattern change, observed rather than assumed.
 #   2. app/storage.cpp logs one line per finished save or load. Without it a scenario could only
 #      say the app did not crash while saving, which is the least interesting thing about a save.
@@ -57,12 +58,12 @@ STAGE="$ENAGA_BUILD/stage/STRATA"
 mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_m4.log"
 
-echo "running the emulator for $CYCLES cycles: play, stop, queue A02, save ..."
+echo "running the emulator for $CYCLES cycles: play, stop, queue A05, save ..."
 python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 29@420000000 \
     --key 20@500000000 \
-    --key 33@560000000 \
+    --key 36@560000000 \
     --key 19@640000000 --key 20@645000000 \
     --key 19@700000000 --key 20@705000000 \
     > "$LOG" 2>&1 || {
@@ -107,13 +108,13 @@ check(report.get("app_name") == "STRATA", "the app Enaga booted is this one",
 check("run int" in log, "the transport started", f"log={log}")
 check("stopped" in log, "and stopped again before the switch")
 
-# The pattern change. A01 is the default beat on track 1 (kick on 1, 5, 9, 13 = g1111); A02 has
-# never been touched, so it is empty. With the transport stopped the switch is immediate, so the
+# The pattern change. A01 is the default beat on track 1 (kick on 1, 5, 9, 13 = g1111); A05 is
+# past the four the factory fills, so it is empty. With the transport stopped the switch is immediate, so the
 # empty grid must appear in the trail.
 grids = [line for line in log if re.fullmatch(r"g[0-9A-F]{4} u\d+", line)]
 check(len(grids) >= 2, "the grid changed at all", f"grids={grids}")
 check(grids and grids[0] == "g1111 u0", "it started on the default beat", f"first={grids[:1]}")
-check("g0000 u0" in grids, "queueing A02 switched to an empty pattern", f"grids={grids}")
+check("g0000 u0" in grids, "queueing A05 switched to an empty pattern", f"grids={grids}")
 
 if grids and "g0000 u0" not in grids:
     print("        the queue did not switch with the transport stopped, which is the one case")

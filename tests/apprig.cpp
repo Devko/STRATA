@@ -3,6 +3,7 @@
 #include "apprig.hpp"
 
 #include "fakehost.hpp"
+#include "factory.hpp"
 #include "project.hpp"
 
 namespace strata::test {
@@ -136,6 +137,23 @@ MasterSettings default_master() {
     master_from_bytes(master, defaults.master);
     return master;
 }
+
+namespace {
+Project g_factory;
+SceneSet g_factory_scenes;
+MacroSet g_factory_macros;
+bool g_factory_ready = false;
+
+void build_factory() {
+    if (g_factory_ready) return;
+    factory_project(g_factory, g_factory_scenes, g_factory_macros);
+    g_factory_ready = true;
+}
+}  // namespace
+
+const Project &factory() { build_factory(); return g_factory; }
+const SceneSet &factory_scenes() { build_factory(); return g_factory_scenes; }
+const MacroSet &factory_macros() { build_factory(); return g_factory_macros; }
 
 Engine &fresh() {
     FakeHost &host = FakeHost::the();

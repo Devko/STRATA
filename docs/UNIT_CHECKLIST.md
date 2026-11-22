@@ -322,10 +322,11 @@ standing in for CHORD, and the LOOP sampler. The default pattern plays all of th
       what the encoders do.
 - [ ] Listen for aliasing on PERC and BASS at the top of their ranges, and for a click when a
       voice is stolen on any machine.
-- [ ] **Parameter locks, and listen properly.** The default pattern ships with two: the third
-      kick of the bar has a shorter body (KICK DEC locked on step 9) and one closed hat opens up
-      (HAT DEC on step 11). Both must be *audible*, and the step after each must revert to the
-      kit value.
+- [ ] **Parameter locks, and listen properly.** The default pattern (A01 GROOVE) locks the third
+      kick of the bar to a shorter body (KICK DEC on step 9); A02 pitches the rim with TUN locks
+      on steps 8 and 11, A03 opens the chord's decay and sends, A04 opens the acid bass's
+      resonance on steps 8 and 15. Each must be *audible*, and the step after each must revert to
+      the kit value.
 
       This needs an ear rather than a test. `app/` cannot be host-tested — it is the only part
       of the project that includes Enaga headers, so there is no unit test standing behind this
@@ -720,9 +721,9 @@ calls it: a POLY step's chord byte is expanded onto VA POLY's voices on one fram
 itself has no host test, because nothing in `app/` does — so the boxes below are the only check
 on it.
 
-- [ ] **The default kit's stab is a MIN7.** It is in `build_default_beat` so the chord path runs
-      every time anyone plays the default kit, the way the two parameter locks are. Four notes
-      should sound, together, on steps 1 and 9 of track 7. One note means the expansion is not
+- [ ] **The default kit's stab is a MIN7.** It is in A01 (core/factory.cpp) so the chord path runs
+      every time anyone plays the default beat, the way the parameter locks are. Four notes
+      should sound, together, on steps 4 and 11 of track 7. One note means the expansion is not
       running; a flam means the notes are not landing on the same frame.
 - [ ] A POLY step with each chord type sounds like its name. The table is semitone stacks folded
       into the key, which gives the diatonic triad on every degree of a mode — so MAJ on the root
@@ -967,8 +968,9 @@ saved with a different kit used to come back with the default one's machines.
 - [ ] **The hat choke follows the kit.** A closed hat cuts an open one, and that pair is now
       re-derived rather than wired: move either hat off tracks 3 or 4 and the choke should stop,
       put them back and it should return.
-- [ ] **A new project is playable.** A blank kit is docs/SPEC.md's default kit, not eight KICKs —
-      which is what a kit of zeroes would have meant once the field was honoured.
+- [ ] **A new project is playable.** NEW gives the factory project (core/factory.hpp): docs/SPEC.md's
+      eight machines with their sounds set, and bank A's four patterns. Until 2026-11-22 it gave
+      a kit with LVL 0 on every track, so a new project was silent.
 - [ ] **A GRAIN track plays the track's card sample**, not the placeholder, and a track switched
       SAMPLE → GRAIN → SAMPLE across a sample change plays the new file on both.
 - [ ] **A track switched to SAMPLE or GRAIN before any card has been read still makes a sound**:
@@ -1217,4 +1219,42 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
 - [ ] After a recall PROJECT says `UNSAVED`; FUNC+PROJECT twice saves it, and the reopened project
       has the recalled kit.
 - [ ] Kits are shared: start a NEW project (PROJECT, FUNC+RIGHT twice) and slot 1 is still there.
+
+## Factory content: audition list (2026-11-22)
+
+A first boot with no card and a NEW project (PROJECT, F1 + RIGHT twice) now hold the same thing:
+core/factory.hpp. Chosen from the references in docs/SOUND.md and balanced by rendering on the
+host (`make -C host render`, which writes the four patterns and A01's eight tracks soloed to
+`build/host/render/`), but **nobody has listened to it**. Levels measured there, A01, RMS over
+8 bars: kick -18.7 dBFS, bass -26.0, clap -27.8, hats -28.1 / -26.8, chord -28.2 (with its
+sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
+
+- [ ] **A01 GROOVE**, PLAY on a fresh start. The kick should be a tight 909-ish thump tuned to G
+      (about 49 Hz, the fifth of C), the clap a three-burst 909 clap, the hats bright (closed
+      band-pass at 3.8 kHz, open at 3.5 kHz, where the old default's 1.2 kHz was dull), the
+      open hat cut short by the next closed hat. The bass rolls on the offbeats with one slide
+      up to Eb; the Cm7 stab sits in a dotted-1/8 ping-pong and the reverb. A little swing (54).
+- [ ] Is the **bass loud enough against the kick**, and does the sidechain duck pump it musically
+      rather than chop it? It renders 7 dB under the kick, with LVL at the top and the fader at
+      1.25.
+- [ ] **A02 GROOVE+**: a kick pickup on step 15 every fourth bar, a hat roll into every bar, the
+      rim on a 12-step loop (it drifts against the bar for three bars), Cm7 then Abmaj7, blips
+      on a 7-step loop. Hold FILL: an extra clap on step 16.
+- [ ] **A03 BREAK**: no kick or bass; Cm7 and Abmaj7 with long tails into the delay and reverb, a
+      rim ticking at 35% probability. Up to six chord voices ring here, so read LOAD on it.
+- [ ] **A04 PEAK**: 16th hats with ratchets, an acid line with slides and accents, the 5TH OCT rave
+      stab. Hold FILL for the kick and clap rolls. The highest-load factory pattern: read LOAD
+      and MAX here.
+- [ ] **The chain**: PROJECT, F1 + UP turns it on. A01 x2, A02 x2, A03, A04 x2, A02, then loops.
+      It ships OFF on purpose, so PLAY on a fresh project jams on A01 rather than walking off.
+- [ ] **PERFORM, VALUE**: morphs from the kit (scene 1) to DUB (scene 2): chord, rim and blips into
+      the sends with longer tails. Scenes 3 (DARK: filters close) and 4 (TENSION: the acid opens,
+      hats and kick tighten) are there to assign to A or B.
+- [ ] **PERFORM, A-D: no macros ship.** An assigned macro holds its parameters at its own value
+      even at 0, so a shipped macro would freeze those EDIT knobs. Assign your own; the factory
+      leaves them empty on purpose (core/factory.cpp).
+- [ ] **Mute states** 1-8: all, no kick, drums only, no hats, no bass, kick + bass, melodic parts
+      only, the bare groove without rim and blips.
+- [ ] Anything that sounds wrong, say which and how: each value has its arithmetic in a comment
+      in core/factory.cpp, so a change is one number.
 
