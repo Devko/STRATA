@@ -23,6 +23,7 @@
 // the anonymous namespace below keeps everything in it internal to each of them.
 #pragma once
 
+#include "arp.hpp"          // the ARP page's names and clicks
 #include "engine.hpp"
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
@@ -323,13 +324,21 @@ const char *page_name(Page page) {
         case Page::amp:  return "AMP";
         case Page::fx:   return "FX";
         case Page::lfo:  return "LFO";
+        case Page::arp:  return "ARP";
         default:         return "?";
     }
 }
 
-// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp). The selection keys walk
-// all five; everywhere else a page is still four encoders over four parameters.
-constexpr int kEditPages = kPages + 1;
+// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp) and its arpeggiator
+// (core/arp.hpp). The selection keys walk all six; everywhere else a page is still four encoders
+// over four parameters.
+constexpr int kEditPages = kPages + 2;
+
+// Encoder counts per click: one zone on the arp's MOD RAT OCT, one shape or destination on the
+// LFO's WAV and DST, one count everywhere else.
+constexpr int param_click(int index) {
+    return index >= kArpFirst ? arp_click(index - kArpFirst) : lfo_click(index);
+}
 static_assert(page_first(Page(kEditPages - 1)) + kParamsPerPage == kTrackParams,
               "EDIT's last page is the last four track parameters");
 
@@ -995,7 +1004,7 @@ public:
                 page_ = (page_ + delta + 4) % 4;                       // step page 1-4
                 break;
             case Mode::edit:
-                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. LFO
+                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. ARP
                 break;
             case Mode::mixer:
                 // Faders, then the delay, the reverb, the routing and the master.
@@ -1358,7 +1367,7 @@ public:
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::lock, selected_, held_step_);
             post_delta(Cmd::lock_delta, selected_, held_step_, uint8_t(index),
-                       delta * lfo_click(index));
+                       delta * param_click(index));
             return;
         }
 
@@ -1406,7 +1415,7 @@ public:
             const int step = int(engine_.status().playhead[selected_].load(std::memory_order_relaxed));
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::motion, selected_, 0);
-            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta * lfo_click(index));
+            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta * param_click(index));
             return;
         }
 
@@ -1453,7 +1462,7 @@ public:
         // `lfo_click`), and one count everywhere else.
         const int index = page_first(Page(param_page_)) + encoder;
         post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index),
-             clamp_delta(delta * lfo_click(index)), kDeltaFlag);
+             clamp_delta(delta * param_click(index)), kDeltaFlag);
     }
 
     void on_pad_press(int pad, int velocity) override {
@@ -2212,13 +2221,15 @@ public:
         *out = 0;
         canvas.text(0, 20, line, 14);
 
-        // Which of the five pages is showing, as a row of boxes: the spec's selection keys
+        // Which of the six pages is showing, as a row of boxes: the spec's selection keys
         // flip between them, so showing where you are matters more than labels.
         for (int p = 0; p < kEditPages; p++) {
             const uint8_t grey = p == param_page_ ? 14 : 4;
-            canvas.rect(p * 25 + 2, 32, 22, 3, grey);
+            canvas.rect(p * 21 + 1, 32, 19, 3, grey);
         }
         const bool lfo_page = param_page_ == int(Page::lfo);
+        const bool arp_page = param_page_ == int(Page::arp);
+        const bool word_page = lfo_page || arp_page;
 
         // The four parameters in large type, one row per encoder: its letter, the name, the
         // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
@@ -2247,8 +2258,8 @@ public:
 
             // The LFO's values are words up to five characters long ("1/16T"), so its bars start
             // further right.
-            const int bar_x = lfo_page ? 70 : 56;
-            const int bar = int(value) * (lfo_page ? 56 : 70) / 127;
+            const int bar_x = word_page ? 70 : 56;
+            const int bar = int(value) * (word_page ? 56 : 70) / 127;
             canvas.rect(bar_x, y + 2, bar < 1 ? 1 : bar, 4, 9);
         }
 
@@ -2263,6 +2274,27 @@ public:
                 append_padded(out, engine_.sounding(selected_).v[dest], 3);
             } else {
                 append(out, "LFO OFF: SET DEP+DST");
+            }
+            *out = 0;
+            canvas.text(0, 96, line, 7);
+            return;
+        }
+
+        if (arp_page) {
+            // What the arp will do, in a line: "UP 1/16 X2 75%", or how to start one.
+            const uint8_t *arp = &engine_.params(selected_).v[kArpFirst];
+            out = line;
+            if (arp_mode_index(arp[0]) == 0) {
+                append(out, "ARP OFF: TURN MOD");
+            } else {
+                append(out, arp_mode_name(arp[0]));
+                *out++ = ' ';
+                append(out, arp_rate_name(arp[1]));
+                append(out, " X");
+                append_number(out, uint32_t(arp_octaves(arp[2])));
+                *out++ = ' ';
+                append_number(out, uint32_t(arp_gate_percent(arp[3])));
+                *out++ = '%';
             }
             *out = 0;
             canvas.text(0, 96, line, 7);
@@ -2488,6 +2520,7 @@ public:
     // LFO's destination can name a parameter from any page.
     const char *track_param_name(int index) const {
         if (index < 0 || index >= kTrackParams) return "---";
+        if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
         if (index >= kParams) return lfo_param_name(index);
         const int page = index / kParamsPerPage;
         if (page == int(Page::fltr) || page == int(Page::fx)) return InsertChain::param_name(index);
@@ -2524,6 +2557,20 @@ public:
                 append(out, dest < 0 ? "OFF" : track_param_name(dest));
                 return;
             }
+            case kArpFirst + 0:
+                append(out, arp_mode_name(value));
+                return;
+            case kArpFirst + 1:
+                append(out, arp_rate_name(value));
+                return;
+            case kArpFirst + 2:
+                *out++ = 'X';
+                append_number(out, uint32_t(arp_octaves(value)));
+                return;
+            case kArpFirst + 3:
+                append_number(out, uint32_t(arp_gate_percent(value)));
+                *out++ = '%';
+                return;
             default:
                 append_padded(out, value, 3);
                 return;
@@ -2585,7 +2632,8 @@ public:
         keys_held_track_[step] = uint8_t(selected_);
         // A key has no velocity. 100 is what the default kit's own trigs use, so a part played
         // in and a part programmed in sound the same.
-        post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity);
+        // c = 1: a held key, whose release follows -- what lets the arp hold it (core/arp.hpp).
+        post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity, 1);
         record_note(selected_, note, kKeyVelocity);
     }
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# LFO and per-track swing emulator scenario: the two new screens draw on the C674x with the real
+# LFO, ARP and per-track swing emulator scenario: the new screens draw on the C674x with the real
 # font, and the beat keeps playing inside the load target while they are up.
 #
 # The emulator presses keys and turns no encoders (docs/HANDOFF.md, section 2), so this cannot
-# switch an LFO on: it walks EDIT to its fifth page (scr EDIT LFO) and PROJECT to its PATTERN page
+# switch an LFO on: it walks EDIT to its fifth page (scr EDIT LFO), one more to the ARP page (scr EDIT ARP), and PROJECT to its PATTERN page
 # (scr PROJECT PATTERN, where the eight track swings are), which is what proves both draw without
 # a fault. The LOAD of eight running LFOs is measured separately, by the temporary factory edit in
 # docs/BUDGET.md ("Per-track LFO", E7).
@@ -39,11 +39,12 @@ STAGE="$ENAGA_BUILD/stage/STRATA"
 mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_lfo.log"
 
-echo "running the emulator for $CYCLES cycles: play, EDIT to LFO, PROJECT to PATTERN ..."
+echo "running the emulator for $CYCLES cycles: play, EDIT to LFO and ARP, PROJECT to PATTERN ..."
 python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 28@360000000 \
     --key 9@400000000 --key 9@440000000 --key 9@480000000 --key 9@520000000 \
+    --key 9@560000000 \
     --key 20@600000000 \
     --key 31@660000000 --key 31@700000000 \
     > "$LOG" 2>&1 || {
@@ -81,6 +82,7 @@ check("strata ready" in log, "init() ran to completion")
 check("run int" in log, "the transport started", f"log={log}")
 check("scr EDIT SRC" in screens, "EDIT opened on SRC", f"screens={screens}")
 check("scr EDIT LFO" in screens, "four selection presses reached the LFO page", f"screens={screens}")
+check("scr EDIT ARP" in screens, "a fifth reached the ARP page", f"screens={screens}")
 check("scr PROJECT PATTERN" in screens, "PROJECT reached PATTERN (the track swings)",
       f"screens={screens}")
 
@@ -96,8 +98,8 @@ check(percent < 60.0, "load is inside the target", f"{percent:.2f}% peak")
 
 print()
 print(f"emulator peak load: {percent:.2f}%  ({peak} of {CYCLES_PER_BLOCK} cycles, {blocks} blocks)")
-print("note: no cache model here. With every LFO off this should match scenario_factory.sh to")
-print("      within noise: an LFO that is off costs one compare a block.")
+print("note: no cache model here. With every LFO and arp off this should match scenario_factory.sh to")
+print("      within noise: an LFO or arp that is off costs a compare a block.")
 
 sys.exit(1 if failures else 0)
 PY

@@ -322,9 +322,9 @@ static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
-constexpr uint32_t kKitSections = 2;
-// The second, the LFO, is optional on read: see kSectionKitLfo.
-constexpr uint32_t kKitOptionalSections = 1;
+constexpr uint32_t kKitSections = 3;
+// The second and third, the LFO and the arp, are optional on read: see kSectionKitLfo.
+constexpr uint32_t kKitOptionalSections = 2;
 constexpr uint32_t kKitTrackBytes =
     uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
@@ -332,7 +332,9 @@ constexpr uint32_t kKitLfoBytes = uint32_t(kKitLfoParams) * uint32_t(kTracks);
 constexpr uint32_t kKitTableBytes = kKitSections * kSectionEntryBytes;
 constexpr uint32_t kKitTracksOffset = kKitTableBytes;
 constexpr uint32_t kKitLfoOffset = kKitTracksOffset + kKitTracksBytes;
-constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitLfoOffset + kKitLfoBytes;
+constexpr uint32_t kKitArpBytes = uint32_t(kKitArpParams) * uint32_t(kTracks);
+constexpr uint32_t kKitArpOffset = kKitLfoOffset + kKitLfoBytes;
+constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitArpOffset + kKitArpBytes;
 static_assert(kKitSoundParams == 16, "KIT.BIN's track section has carried 16 parameters since M4");
 
 // --- BANK_x.BIN sizes -----------------------------------------------------
@@ -632,6 +634,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
     const Section sections[kKitSections] = {
         {kSectionKitTracks, kKitTracksOffset, kKitTracksBytes},
         {kSectionKitLfo, kKitLfoOffset, kKitLfoBytes},
+        {kSectionKitArp, kKitArpOffset, kKitArpBytes},
     };
 
     Writer w(buffer, capacity);
@@ -645,7 +648,10 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
         write_path(w, track.sample);
     }
     for (int t = 0; t < kTracks; t++) {
-        for (int p = kKitSoundParams; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
+        for (int p = kKitSoundParams; p < kKitLfoEnd; p++) w.u8(kit.tracks[t].params[p]);
+    }
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitLfoEnd; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
     }
 
     if (!w.ok() || w.size() != kKitTotalBytes) return SerializeResult::buffer_too_small;
@@ -658,7 +664,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
         return why;
     };
 
-    const uint16_t wanted[kKitSections] = {kSectionKitTracks, kSectionKitLfo};
+    const uint16_t wanted[kKitSections] = {kSectionKitTracks, kSectionKitLfo, kSectionKitArp};
     uint32_t offset[kKitSections] = {};
     uint32_t length[kKitSections] = {};
     const SerializeResult found = find_sections(buffer, size, kKitVersion, wanted, kKitSections,
@@ -667,6 +673,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (length[0] < kKitTracksBytes) return refuse(SerializeResult::malformed);
     // Present but short is damage; absent is a kit from before the LFO.
     if (offset[1] != 0 && length[1] < kKitLfoBytes) return refuse(SerializeResult::malformed);
+    if (offset[2] != 0 && length[2] < kKitArpBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -689,22 +696,27 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     }
     if (!r.ok()) return refuse(SerializeResult::truncated);
 
-    // The LFO. Absent means a kit written before it existed, and then every LFO is OFF --
+    // The LFO, then the arp. Absent means a kit written before it existed, and then it is OFF --
     // explicitly, because `kit` may be a buffer holding the previous kit (the kit browser's
-    // inbox, a project load), and "left alone" would carry its LFOs into a kit that has none.
-    if (offset[1] == 0) {
+    // inbox, a project load), and "left alone" would carry its settings into a kit that has none.
+    const int firsts[2] = {kKitSoundParams, kKitLfoEnd};
+    const int ends[2] = {kKitLfoEnd, kKitParams};
+    for (int k = 0; k < 2; k++) {
+        const uint32_t at = offset[1 + k];
+        if (at == 0) {
+            for (int t = 0; t < kTracks; t++) {
+                for (int p = firsts[k]; p < ends[k]; p++) kit.tracks[t].params[p] = 0;
+            }
+            continue;
+        }
+        if (!r.seek(kHeaderBytes + at)) return refuse(SerializeResult::malformed);
         for (int t = 0; t < kTracks; t++) {
-            for (int p = kKitSoundParams; p < kKitParams; p++) kit.tracks[t].params[p] = 0;
+            for (int p = firsts[k]; p < ends[k]; p++) {
+                kit.tracks[t].params[p] = clamp_u8(r.u8(), 0, kParamMax);
+            }
         }
-        return SerializeResult::ok;
+        if (!r.ok()) return refuse(SerializeResult::truncated);
     }
-    if (!r.seek(kHeaderBytes + offset[1])) return refuse(SerializeResult::malformed);
-    for (int t = 0; t < kTracks; t++) {
-        for (int p = kKitSoundParams; p < kKitParams; p++) {
-            kit.tracks[t].params[p] = clamp_u8(r.u8(), 0, kParamMax);
-        }
-    }
-    if (!r.ok()) return refuse(SerializeResult::truncated);
 
     return SerializeResult::ok;
 }

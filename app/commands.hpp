@@ -186,7 +186,7 @@ enum class Cmd : uint8_t {
     // Beat repeat. The length is in note values and the engine turns it into frames, because
     // only the audio side knows the tempo in samples (dsp/repeat.hpp).
     set_repeat,        // a: RepeatLength, b: 1 = held, c: 1 = pitch down
-    trigger_note,      // track, a: note, b: velocity -- a pad hit, played live
+    trigger_note,      // track, a: note, b: velocity, c: 1 = a held KEYS key (a release follows)
     release_note,      // track, a: note
 
     // Resampling, docs/SPEC.md's eighth performance tool. Three commands, because a take spans

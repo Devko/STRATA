@@ -62,7 +62,7 @@ A machine is one of eight sound engines. Any track can host any machine (MACHINE
 | 7 | PLY (VA POLY) | Chord stabs |
 | 8 | SMP (SAMPLE) | Loop, cut into slices |
 
-Every track has **16 parameters on four pages** of four, one parameter per encoder A-D (and a fifth page for its LFO, below):
+Every track has **16 parameters on four pages** of four, one parameter per encoder A-D (and a fifth and a sixth page for its LFO and its arpeggiator, below):
 
 - **SRC** and **AMP** belong to the machine and change meaning with it (section 3).
 - **FLTR** and **FX** belong to the insert chain and are the same on every track:
@@ -95,6 +95,32 @@ step (a deeper sweep on one step, a different shape for a fill), store them in a
 between two LFO settings, or put DEP on a macro to fade the movement in. The LFO moves the
 parameter in its 0-127 steps about 750 times a second: smooth on a filter or a pan, but a slow,
 deep sweep of a pitch can be heard stepping.
+
+### The arpeggiator
+
+Every track also has an **arpeggiator**, on a sixth EDIT page, **ARP**, after LFO. It turns a
+note into a run of notes:
+
+- **A, MOD**: OFF, UP, DN (down), U/D (up and back down), ORD (in the order played) or RND. One
+  click is one mode.
+- **B, RAT**: the spacing of the notes, `1/4` down to `1/32T`. Always in time with the tempo.
+- **C, OCT**: how many octaves the run climbs, `X1` to `X4`.
+- **D, GAT**: how long each note is, from `50%` of the spacing (staccato) to `99%` (legato).
+
+The line under the knobs reads the whole setting (`UP 1/16 X2 75%`), or `ARP OFF: TURN MOD`.
+
+**On the sequencer**, a step on a track whose arp is on plays its note as a run for the step's
+length: set a step's length to 4 steps and a 1/16 arp plays four notes. On the PLY track the run
+walks the step's chord, one note at a time. The track's next step starts a new run. RND plays the
+same notes on every pass of the pattern, so a random arp is still a part you can keep.
+
+**In KEYS**, hold keys and the arp plays them, adding each key you press to the run and dropping
+each one you let go; it stops when the last key comes up. With the transport running the notes
+land on the beat; stopped, the run starts the moment you press. A pad hit plays one note.
+
+The four settings are parameters like any other: hold a STEP and turn MOD to arpeggiate just that
+step, or store two scenes with different arps. A new track's arp is off, and so is every track
+in a project saved before the arp existed.
 
 ### Patterns, banks and the project
 

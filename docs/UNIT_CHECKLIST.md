@@ -421,6 +421,25 @@ cannot press, so this is their first run outside the host tests. Play A01 GROOVE
       new stabs play dry and are not echoed. Let go: the loop fades into the delay's tail, then
       new stabs echo again. FUNC + MUTATE mutated nothing (no `KEPT`/`REVERTED` prompt).
 
+## 13h. The arpeggiator (5 min)
+
+New after the walkthrough was written. The emulator can only walk to the page
+(`tests/scenario_lfo.sh` checks `scr EDIT ARP`), so the sound is first heard here. Play A01 GROOVE.
+
+- [ ] Select track 6 (MNO), EDIT, selection RIGHT five times: a sixth page box lights, `ARP`, with
+      MOD RAT OCT GAT on A-D, and `ARP OFF: TURN MOD` below. The page boxes still fit.
+- [ ] Turn A one click: `UP`, and the line reads `UP 1/4 X1 50%`. A run lasts as long as the
+      step's LEN, so a one-step bass note still plays once at 1/4. Turn B to `1/32` (`UP 1/32 X1`):
+      every bass note doubles. C to `X2`: the second note is an octave up. Turn D: the notes get
+      longer. Turn A back to `OFF`: the bass is exactly as before.
+- [ ] Track 7 (PLY), MOD UP, RAT `1/16`, then set a chord step's LEN to `4 STP` on the step page:
+      the chord plays as four single notes going up it.
+- [ ] MOD `RND`: the run is random but the **same every bar**.
+- [ ] KEYS (FUNC+HOME) on track 6 with MOD UP: hold two keys, the run alternates them in time
+      with the beat; let one go, it plays the other; let both go, it stops. Stop the transport and
+      hold a key: the run starts at once.
+- [ ] Save, power cycle: the ARP settings come back.
+
 ## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). PROJECT, FUNC+LEFT once: `AGAIN TO RELOAD`, nothing changes.
