@@ -949,3 +949,9 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
 - [ ] Hold a key, change octave, let go: the note stops (it does not hang).
 - [ ] Hold a key and press F4 to leave KEYS: the note stops.
 - [ ] Drum tracks behave as before: letting go changes nothing.
+
+## PROJECT: undo and redo, and where reload and new went
+
+- [ ] In PROJECT, F1 + CLR undoes and F1 + OK redoes (try a LEN change on the PATTERN page).
+- [ ] F1 + LEFT once shows AGAIN TO RELOAD and changes nothing; twice reloads the project from the
+      card. F1 + RIGHT twice starts a new project. A single press of either never loses work.
