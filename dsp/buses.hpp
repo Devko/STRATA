@@ -174,6 +174,9 @@ public:
     // 2 s covers a bar at 120 BPM and every useful division below it; 1 MiB of the 2 MiB
     // docs/SPEC.md budgets for delay and reverb buffers.
     static constexpr float kMaxDelaySeconds = 2.0f;
+    // The longest a send keeps running unfed: feedback 0.95 on a 2 s delay needs 272 s to fall
+    // 60 dB. Bounded only so a damaged setting cannot make the count overflow.
+    static constexpr float kMaxTailSeconds = 300.0f;
 
     Mixer() = default;
     Mixer(const Mixer &) = delete;

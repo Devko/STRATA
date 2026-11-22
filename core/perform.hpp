@@ -129,10 +129,11 @@ int scene_count(const Scene &scene);
 // A parameter neither stores is left exactly as `out` had it. A scene that stores nothing
 // therefore behaves as the kit, which is what an unassigned slot should do.
 //
-// `position` is clamped. `out` is a copy of the kit, not the kit itself: the caller owns the
-// distinction between the kit a file holds and the values the machines read
-// (app/engine.cpp's `params_` against `project_.kit`).
-void scene_morph(const Scene &a, const Scene &b, uint16_t position, const Kit &kit,
+// `position` is clamped. `out` comes in holding the LIVE kit and is also where the end a scene
+// does not store is read from. It used to take a separate `Kit`, and the engine passed
+// `project_.kit` -- the kit as last saved, refreshed only by `Cmd::kit_store` -- so a morph
+// towards an empty scene pulled every knob turned since the last save back to its saved value.
+void scene_morph(const Scene &a, const Scene &b, uint16_t position,
                  uint8_t out[kTracks][kKitParams]);
 
 // --- macros ---------------------------------------------------------------

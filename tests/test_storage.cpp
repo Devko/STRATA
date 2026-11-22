@@ -1617,6 +1617,70 @@ TEST(storage_an_autosave_does_not_make_the_project_folder_complete) {
     CHECK((engine().pattern().tracks[0].steps[2].flags & kStepTrig) != 0);
 }
 
+TEST(storage_a_reload_asked_for_during_an_autosave_leaves_that_autosave_in_its_folder) {
+    // `request_reload` used to set `autosave_ = false` on the spot. That flag also names the folder
+    // a running save writes, so an autosave interrupted by RELOAD wrote its remaining files into
+    // PROJECT/ and was then counted as a deliberate save. The load now picks its folder when it
+    // starts, after the autosave has finished.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    post(Cmd::toggle_trig, 0, 5);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+
+    storage().request_autosave();
+    pump(3);                                   // the autosave is under way, a file per pass
+    CHECK_EQ(storage().busy_text(), "AUTOSAVING");
+    storage().request_reload();
+    CHECK(pump_until_idle());
+    CHECK(host.logged("autosaved"));
+
+    for (int i = 0; i < kFileN; i++) {
+        if (host.has_file(card_path(kFiles[i]))) {
+            std::printf("    PROJECT/%s was written by an autosave\n", kFiles[i]);
+        }
+        CHECK(!host.has_file(card_path(kFiles[i])));
+        CHECK(host.has_file(card_path(kFiles[i], true)));
+    }
+    // And no deliberate save happened, so the project is still unsaved.
+    CHECK(storage().dirty());
+}
+
+TEST(storage_a_command_the_card_side_posts_into_a_full_ring_is_sent_later_not_dropped) {
+    // `request_save` posts `kit_store` from the key press, and the UI may have filled the ring in
+    // the same pass. The ring refuses a post when full, and Storage used to ignore the refusal: the
+    // save then serialized the kit as of the last store and a knob turn was lost from the file.
+    clean();
+
+    post(Cmd::set_param, 3, 0, uint8_t(kLvl), 42);
+    pump(2);
+    CHECK_EQ(int(kit_value(3, kLvl)), 42);
+
+    // The ring full of an idempotent edit, so only the store is in question.
+    Command same;
+    same.cmd = Cmd::set_param;
+    same.track = 3;
+    same.a = uint8_t(kLvl);
+    same.b = 42;
+    int posted = 0;
+    while (engine().commands().post(same)) posted++;
+    CHECK(posted > 100);
+
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(engine().project().kit.tracks[3].params[kLvl]), 42);
+
+    // And it is in the file, not just in RAM.
+    post(Cmd::set_param, 3, 0, uint8_t(kLvl), 7);
+    pump(2);
+    CHECK(reload_now());
+    CHECK(settle());
+    pump(4);
+    CHECK_EQ(int(kit_value(3, kLvl)), 42);
+}
+
 TEST(storage_a_save_already_asked_for_beats_an_autosave) {
     // Both arrive before either can start -- the transport stops at the same moment the user
     // presses SAVE. `request_autosave` stands down while a save is pending, and `service()` takes
@@ -2131,6 +2195,40 @@ TEST(storage_a_request_made_while_a_job_runs_is_queued_and_not_dropped) {
     CHECK(host.read_alls() >= reads_before);
 }
 
+TEST(storage_a_card_sample_reaches_both_sample_machines_of_a_track) {
+    // Every track owns a Sampler and a Grain, and `clear_sample` / `set_sample` used to reach only
+    // the one the track hosted. So GRAIN never got a card sample, and a track switched away from
+    // SAMPLE kept a pointer into a range the loader then gave to another file.
+    clean();
+    make_wav("/SAMPLES/ONE.WAV", 48000, 1, 16, 2400);
+    kit_sample(kLoopTrack, "/SAMPLES/ONE.WAV");
+    CHECK(load_sample(kLoopTrack));
+    pump(2);
+    const Sampler *sampler = static_cast<const Sampler *>(engine().machine(kLoopTrack));
+    const int16_t *first = sampler->sample_data();
+    CHECK(first != nullptr);
+    CHECK_EQ(sampler->sample_frames(), 2400);
+
+    // To GRAIN: it plays the same sample, not the placeholder.
+    post(Cmd::set_machine, uint8_t(kLoopTrack), 0, uint8_t(MachineId::grain));
+    pump(2);
+    const Granular *grain = static_cast<const Granular *>(engine().machine(kLoopTrack));
+    CHECK(grain->sample_data() == first);
+    CHECK_EQ(grain->sample_frames(), 2400);
+
+    // A new file while the track hosts GRAIN, then back to SAMPLE: the Sampler has the new one.
+    make_wav("/SAMPLES/TWO.WAV", 48000, 1, 16, 1200);
+    kit_sample(kLoopTrack, "/SAMPLES/TWO.WAV");
+    CHECK(load_sample(kLoopTrack));
+    pump(2);
+    CHECK_EQ(grain->sample_frames(), 1200);
+    post(Cmd::set_machine, uint8_t(kLoopTrack), 0, uint8_t(MachineId::sample));
+    pump(2);
+    CHECK(engine().machine(kLoopTrack) == sampler);
+    CHECK_EQ(sampler->sample_frames(), 1200);
+    CHECK(sampler->sample_data() == grain->sample_data());
+}
+
 TEST(storage_the_handover_carries_the_frame_count_and_the_channels_intact) {
     // The only three things that cross from the loader to the audio side: a byte offset, a frame
     // count in 24 bits and a channel count (app/commands.hpp). A truncated frame count would play
@@ -2148,8 +2246,8 @@ TEST(storage_the_handover_carries_the_frame_count_and_the_channels_intact) {
     CHECK_EQ(slot_of(kLoopTrack).frames, 70000u);
     pump(2);                                        // the handover command lands on the audio side
 
-    // `machines_[7]` and `samplers_[7]` are the same object (app/engine.cpp), so the cast is to
-    // the type the engine put there. No dynamic_cast: this build has no RTTI.
+    // Track 7 hosts SAMPLE in the default kit, so `machines_[7]` is its Sampler (app/engine.cpp)
+    // and the cast is to the type the engine put there. No dynamic_cast: this build has no RTTI.
     const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
     CHECK(loop->has_sample());
     CHECK_EQ(loop->sample_frames(), 70000);

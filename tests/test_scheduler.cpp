@@ -1446,7 +1446,12 @@ TEST(every_step_of_every_length_fires_once_per_pass) {
             for (int i = 0; i < n; i++) fired[events[i].step]++;
         }
 
-        for (int step = 0; step < length; step++) CHECK_EQ(fired[step], loops);
+        // Step 1 sits at micro -11 here, so it is pulled before each pass's start: the first
+        // pass's lands on tick 0 (it has no earlier tick) and the pass after the last one's
+        // lands inside this window too. Every other step fires exactly once per pass.
+        for (int step = 0; step < length; step++) {
+            CHECK_EQ(fired[step], loops + (step == 0 ? 1 : 0));
+        }
         for (int step = length; step < kStepsPerTrack; step++) CHECK_EQ(fired[step], 0);
     }
 }

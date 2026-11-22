@@ -1342,6 +1342,51 @@ TEST(engine_a_queued_change_waits_for_the_end_of_the_pass) {
     CHECK_EQ(live_slot(), 5);
 }
 
+TEST(engine_a_queued_change_starts_the_new_pattern_at_step_1) {
+    // docs/SPEC.md: the next pattern switches "at the end of the current one, or after 16 or 32
+    // steps, or at once keeping the position". Only the last keeps the position. The new pattern
+    // used to be resolved from the absolute tick, so a blank pattern's 64-step tracks came in on
+    // step 16 at the first 16-step boundary.
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(100);
+    post(Cmd::queue_pattern, 0, 0, 0, 1, uint8_t(QueueMode::after_16));
+    pump();
+    CHECK_EQ(int(engine.queue().switch_tick), 384);
+
+    tick_at(384);
+    CHECK_EQ(live_slot(), 1);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(playhead(t), 0);
+    tick_at(384 + 24);
+    CHECK_EQ(playhead(0), 1);
+
+    // And "the end of the current one" is now counted from where it started: one 64-step pass
+    // after tick 384, not the next multiple of 1536 from tick 0.
+    tick_at(400);
+    post(Cmd::queue_pattern, 0, 0, 0, 2, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK_EQ(int(engine.queue().switch_tick), 384 + 1536);
+    tick_at(384 + 1536);
+    CHECK_EQ(live_slot(), 2);
+    CHECK_EQ(playhead(0), 0);
+
+    // NOW keeps the position, as the spec says.
+    tick_at(384 + 1536 + 24 * 5);
+    CHECK_EQ(playhead(0), 5);
+    post(Cmd::queue_pattern, 0, 0, 0, 3, uint8_t(QueueMode::immediate));
+    pump();
+    tick_at(384 + 1536 + 24 * 6);
+    CHECK_EQ(live_slot(), 3);
+    CHECK_EQ(playhead(0), 6);
+
+    // A START from tick 0 measures from 0 again.
+    tick_at(0);
+    CHECK_EQ(playhead(0), 0);
+    tick_at(24 * 3);
+    CHECK_EQ(playhead(0), 3);
+}
+
 TEST(engine_a_queued_change_lands_at_once_while_the_transport_is_stopped) {
     Engine &engine = clean();
     CHECK(!FakeHost::the().running());
@@ -1460,6 +1505,31 @@ TEST(engine_a_mute_stops_a_tracks_trigs_without_stopping_the_sequencer) {
     CHECK(!engine.muted(kPoly));
     CHECK_EQ(fired_on(kPoly, 1536u), 1);
     CHECK_EQ(poly().busy_voices(), 1);
+}
+
+TEST(engine_a_mute_silences_the_voices_it_finds_rather_than_freezing_them) {
+    // A muted track is not rendered, so a voice left in its machine stopped mid-note and resumed
+    // on unmute -- a sustaining POLY chord came back from where it was. And a pad hit on a muted
+    // track waited in the machine and sounded on unmute. A mute now cuts the track's voices, and
+    // a muted track takes no pad hits.
+    Engine &engine = clean();
+    post(Cmd::trigger_note, kPoly, 0, 60, 100);
+    pump(2);
+    CHECK(poly().busy_voices() > 0);
+
+    post(Cmd::set_mute, kPoly, 0, 1, 0);
+    pump();
+    CHECK(engine.muted(kPoly));
+    CHECK_EQ(poly().busy_voices(), 0);
+
+    post(Cmd::trigger_note, kPoly, 0, 64, 100);    // a pad hit while muted
+    pump();
+    CHECK_EQ(poly().busy_voices(), 0);
+
+    post(Cmd::set_mute, kPoly, 0, 0, 0);
+    pump();
+    CHECK_EQ(poly().busy_voices(), 0);             // nothing resumes, nothing was waiting
+    CHECK_NEAR(energy(4), 0.0f, 1e-6);
 }
 
 TEST(engine_a_mute_armed_for_the_bar_waits_for_the_bar) {
@@ -1861,6 +1931,25 @@ TEST(engine_never_touches_the_transport_itself) {
     CHECK_NEAR(host.tempo(), 130.0f, 0.01);
 }
 
+TEST(engine_a_tempo_that_is_not_a_number_or_out_of_range_is_refused_before_conversion) {
+    // int() of a NaN or of a float past INT_MAX is undefined, and the range check used to run
+    // on the int AFTER that conversion. It now runs on the float.
+    Engine &engine = clean();
+    post_f(Cmd::set_tempo, 120.0f);
+    pump();
+    const uint16_t good = engine.project().settings.tempo_centi_bpm;
+    CHECK_EQ(int(good), 12000);
+
+    const uint32_t before = refused();
+    post_f(Cmd::set_tempo, __builtin_nanf(""));
+    post_f(Cmd::set_tempo, __builtin_inff());
+    post_f(Cmd::set_tempo, 1.0e30f);
+    post_f(Cmd::set_tempo, -1.0e30f);
+    pump();
+    CHECK_EQ(int(refused() - before), 4);
+    CHECK_EQ(int(engine.project().settings.tempo_centi_bpm), int(good));
+}
+
 TEST(engine_follows_the_clock_rather_than_a_play_command) {
     Engine &engine = clean();
     (void)engine;
@@ -2184,6 +2273,32 @@ TEST(engine_the_key_and_the_scale_land_in_both_places) {
     CHECK_EQ(int(engine.project().settings.scale), 200);
 }
 
+TEST(engine_the_key_is_global_and_survives_a_pattern_switch_and_an_undo) {
+    // docs/SPEC.md: "Global key and scale". The engine folded with the LIVE PATTERN's copy, so
+    // every other pattern played in its zeroed default (C chromatic), the key changed on a
+    // pattern switch, and an undo reverted it. It now folds with PROJECT.BIN's.
+    Engine &engine = clean();
+    post(Cmd::set_root, 0, 0, 2);
+    post(Cmd::set_scale, 0, 0, uint8_t(Scale::dorian));
+    pump();
+    CHECK_EQ(int(engine.key_root()), 2);
+    CHECK_EQ(int(engine.key_scale()), int(Scale::dorian));
+
+    post(Cmd::queue_pattern, 0, 0, 0, 9, uint8_t(QueueMode::immediate));   // stopped: at once
+    pump();
+    CHECK_EQ(live_slot(), 9);
+    CHECK_EQ(int(engine.key_root()), 2);
+    CHECK_EQ(int(engine.key_scale()), int(Scale::dorian));
+
+    post(Cmd::undo_mark, 0, 5, uint8_t(GestureKind::trig), 1);
+    post(Cmd::toggle_trig, 0, 5);
+    post(Cmd::set_root, 0, 0, 4);
+    pump();
+    post(Cmd::undo);
+    pump();
+    CHECK_EQ(int(engine.key_root()), 4);           // the edit undone, the key kept
+}
+
 TEST(engine_clearing_a_sample_bumps_the_epoch_even_for_a_track_that_has_none) {
     Engine &engine = clean();
     // Tracks 1 to 7 host no Sampler in the default kit, which is the case this is about. Track 8
@@ -2203,18 +2318,16 @@ TEST(engine_clearing_a_sample_bumps_the_epoch_even_for_a_track_that_has_none) {
         CHECK_EQ(int(uint8_t(after - before)), 1);
     }
 
-    // A sample for a track that hosts no Sampler is refused rather than reinterpreting a
-    // pointer: the build has no RTTI to ask a Machine* with, so `samplers_` records it.
-    uint32_t before = refused();
-    post(Cmd::set_sample, kPoly, 0, 1);
-    pump();
-    CHECK_EQ(int(refused() - before), 1);
-
-    // Track 8 does host one -- and is still refused here, because app/app.cpp is what hands the
+    // A sample goes to the track's Sampler and Grain whatever the track hosts, so a POLY track
+    // takes it too -- and both are refused here, because app/app.cpp is what hands the
     // engine its sample region and host/Makefile does not build app/app.cpp. So
     // `sample_region_ == nullptr` and the offset, frame-count and alignment checks cannot be
     // reached from the host at all; what they guard is the pool arithmetic on the other side of
     // the ring, which tests/test_samplepool.cpp covers.
+    uint32_t before = refused();
+    post(Cmd::set_sample, kPoly, 0, 1);
+    pump();
+    CHECK_EQ(int(refused() - before), 1);
     before = refused();
     post(Cmd::set_sample, 7, 0, 1);
     pump();

@@ -422,6 +422,14 @@ public:
                 break;
             case ENAGA_KEY_F6:
                 clock_refused_ = !enaga::clock::stop();
+                // Refused while an outside clock keeps running: nothing stopped, so nothing is
+                // released or reset either -- doing so cut every voice and sent the playheads back
+                // to step 1 while the clock carried on, and the pattern then played out of step
+                // with the master. STRATA follows the outside STOP when it comes (on_transport).
+                if (clock_refused_ && enaga::clock::running()) {
+                    notice("EXT CLOCK");
+                    break;
+                }
                 // The second press cuts the tails. Only that part is the audio side's job.
                 post(Cmd::stop, 0, 0, stop_armed_ ? 1 : 0);
                 stop_armed_ = !stop_armed_;
@@ -552,11 +560,10 @@ public:
                     break;
                 }
                 if (shift_) {
-                    const int length = int(engine_.pattern().tracks[selected_].length) + delta;
+                    // A delta, applied by the audio side (app/commands.hpp, kDeltaFlag).
                     mark(GestureKind::length, selected_, 0);
-                    post(Cmd::set_track_length, uint8_t(selected_), 0,
-                         uint8_t(length < 1 ? 1
-                                            : (length > kStepsPerTrack ? kStepsPerTrack : length)));
+                    post(Cmd::set_track_length, uint8_t(selected_), 0, 0, clamp_delta(delta),
+                         kDeltaFlag);
                     end_gesture();
                 } else {
                     const int next = page_ + delta;
@@ -795,11 +802,8 @@ public:
             }
             if (value_pushed_) {
                 // VALUE pushed and turned is the pattern's swing, as the spec's key table says.
-                const int swing = int(engine_.pattern().swing) + delta;
                 mark(GestureKind::length, 0, 0);
-                post(Cmd::set_pattern_swing, 0, 0,
-                     uint8_t(swing < kSwingMin ? kSwingMin
-                                               : (swing > kSwingMax ? kSwingMax : swing)));
+                post(Cmd::set_pattern_swing, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
                 return;
             }
             if (shift_) {
@@ -917,7 +921,7 @@ public:
             if (encoder == 1) {
                 // The key wraps: twelve pitch classes in a circle is what they are, and walking
                 // off one end to be stopped there would be wrong rather than merely annoying.
-                const int root = (int(engine_.pattern().root) + delta % 12 + 12) % 12;
+                const int root = (int(engine_.key_root()) + delta % 12 + 12) % 12;
                 post(Cmd::set_root, 0, 0, uint8_t(root));
                 notice(note_name(uint8_t(root)));
                 return;
@@ -927,7 +931,7 @@ public:
                 // later build wrote survives a load (core/project.cpp leaves it alone), so the
                 // user can be looking at a scale the encoder cannot reach -- walking from there
                 // lands on the nearest one this build knows rather than jumping to chromatic.
-                const int current = int(engine_.pattern().scale);
+                const int current = int(engine_.key_scale());
                 int next = (current < kScaleCount ? current : kScaleCount - 1) + delta;
                 next = next < 0 ? 0 : (next >= kScaleCount ? kScaleCount - 1 : next);
                 post(Cmd::set_scale, 0, 0, uint8_t(next));
@@ -962,13 +966,11 @@ public:
                 // A-D are the levels of the four tracks in the current bank.
                 const int track = mixer_bank_ * 4 + encoder;
                 if (track >= kTracks) return;
-                float level = engine_.level(track) + float(delta) * 0.02f;
-                if (level < 0.0f) level = 0.0f;
-                if (level > 1.5f) level = 1.5f;
                 Command command;
                 command.cmd = Cmd::set_track_level;
                 command.track = uint8_t(track);
-                command.f = level;
+                command.c = kDeltaFlag;            // the engine adds it and clamps at 1.5
+                command.f = float(delta) * 0.02f;
                 post_command(command);
                 return;
             }
@@ -1038,9 +1040,8 @@ public:
 
         // 5. Otherwise A-D edit the four parameters of the current page on the selected track.
         const int index = page_first(Page(param_page_)) + encoder;
-        const int value = int(engine_.params(selected_).v[index]) + delta;
-        post(Cmd::set_param, uint8_t(selected_), 0,
-             uint8_t(index), uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value)));
+        post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index), clamp_delta(delta),
+             kDeltaFlag);
     }
 
     void on_pad_press(int pad, int velocity) override {
@@ -1066,7 +1067,7 @@ public:
         if (track != selected_) end_gesture();         // a different track is a different edit
         selected_ = track;
         // The root in a playable octave: the pattern's root is a pitch class (core/pattern.hpp).
-        const uint8_t note = uint8_t(kPadOctaveNote + engine_.pattern().root % 12);
+        const uint8_t note = uint8_t(kPadOctaveNote + engine_.key_root());
         post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity));
         record_note(track, note, uint8_t(velocity));
     }
@@ -1201,8 +1202,6 @@ public:
         command.c = 0;                       // the whole track
         command.u = mutate_variant_++;       // a new result each press
         post_command(command);
-        storage_.note_command(Cmd::mutate,
-                              int(engine_.status().live_bank.load(std::memory_order_relaxed)));
         char *out = notice_buffer_;
         append(out, mutation_name(mutation_));
         *out = 0;
@@ -1271,10 +1270,18 @@ public:
     }
 
     void on_transport(int what, uint32_t position) override {
-        // Under an external clock STRATA cannot start or stop anything; it follows. Resetting
-        // the chain state here is what keeps conditions in step with an outside transport.
+        // Under an external clock STRATA cannot start or stop anything; it follows. Enaga sends
+        // this for every transport change whoever made it (docs/ENAGA_API.md), so a STOP from
+        // MIDI or SYNC is followed exactly as F6 is: voices released and the sequencer reset,
+        // which is what keeps the conditions and the playheads in step with the outside
+        // transport. A STOP that F6 made arrives here too; releasing twice is harmless. The next
+        // F6 press is then the one that cuts the tails.
         (void)position;
         if (what == ENAGA_TRANSPORT_START || what == ENAGA_TRANSPORT_LOCATE) stop_armed_ = false;
+        if (what == ENAGA_TRANSPORT_STOP) {
+            post(Cmd::stop, 0, 0, 0);
+            stop_armed_ = true;
+        }
 
         // docs/SPEC.md: "Autosave to AUTOSAVE/ whenever the transport stops." It follows the
         // transport rather than the key, so a stop arriving from MIDI or SYNC autosaves too --
@@ -1510,10 +1517,11 @@ public:
             }
         }
 
-        // The bottom line on every mode: voices, the device, and any dropped edits. A dropped
-        // command should be visible rather than mysterious (app/commands.hpp).
+        // The bottom line on every mode: tracks sounding, the device, and any dropped edits. A
+        // dropped command should be visible rather than mysterious (app/commands.hpp). It said
+        // "V" for voices, but the count is of tracks (Status::voices), so a chord read as one.
         out = line;
-        append(out, "V");
+        append(out, "TRK");
         append_number(out, status.voices.load(std::memory_order_relaxed));
         // Percent, like the top line, but without the sign: "V18 MAX 99.9 SMPLTREK" is 21
         // characters, 126 pixels, and the screen is 128. A longer line (100.0, LOFI-12 XT, DROP)
@@ -1939,8 +1947,8 @@ public:
     // current octave. By DEGREES rather than semitones, which is the whole reason core/scale
     // exists -- sixteen keys then span two octaves of a seven-note scale and stay in the key.
     uint8_t keys_note(int step) const {
-        const uint8_t root = uint8_t(engine_.pattern().root % 12);
-        const int scale = int(engine_.pattern().scale);
+        const uint8_t root = engine_.key_root();
+        const int scale = int(engine_.key_scale());
         const int base = clamp_int(kPadOctaveNote + keys_octave_ * 12 + int(root), 0, 127);
         return scale_step(scale_fold(uint8_t(base), root, scale), root, scale, step);
     }
@@ -2042,8 +2050,8 @@ public:
     void draw_keys(enaga::Canvas &canvas) {
         char line[40];
         char *out = line;
-        const uint8_t root = uint8_t(engine_.pattern().root % 12);
-        const int scale = int(engine_.pattern().scale);
+        const uint8_t root = engine_.key_root();
+        const int scale = int(engine_.key_scale());
 
         out = line;
         append(out, "KEYS T");
@@ -2168,8 +2176,6 @@ public:
         command.c = now;
         command.d = far;
         post_command(command);
-        storage_.note_command(Cmd::macro_assign,
-                              int(engine_.status().live_bank.load(std::memory_order_relaxed)));
 
         char *out = notice_buffer_;
         *out++ = char('A' + macro_selected_);
@@ -2338,8 +2344,6 @@ public:
         command.b = uint8_t(slot);
         command.c = uint8_t(queue_mode_);
         post_command(command);
-        storage_.note_command(Cmd::queue_pattern,
-                              int(engine_.status().live_bank.load(std::memory_order_relaxed)));
 
         char *out = notice_buffer_;
         *out++ = bank_letter(shown_bank_);
@@ -2449,9 +2453,9 @@ public:
         // mutation actually fold into -- a pattern loaded in its own key must read as that key.
         out = line;
         append(out, "KEY ");
-        append(out, note_name(engine_.pattern().root));
+        append(out, note_name(engine_.key_root()));
         *out++ = ' ';
-        append(out, scale_name(int(engine_.pattern().scale)));
+        append(out, scale_name(int(engine_.key_scale())));
         *out = 0;
         canvas.text(0, 94, line, 11);
 
@@ -2565,8 +2569,13 @@ private:
     // An encoder delta, as a signed byte. The audio side applies it to the authoritative step,
     // which is why these carry a delta and not a value (app/commands.hpp explains the choice).
     void post_delta(Cmd cmd, int track, int step, uint8_t a, int delta) {
+        post(cmd, uint8_t(track), uint8_t(step), a, clamp_delta(delta));
+    }
+
+    // An encoder delta as the signed byte a command carries.
+    static uint8_t clamp_delta(int delta) {
         const int clamped = delta < -120 ? -120 : (delta > 120 ? 120 : delta);
-        post(cmd, uint8_t(track), uint8_t(step), a, uint8_t(int8_t(clamped)));
+        return uint8_t(int8_t(clamped));
     }
 
     // --- undo gestures ----------------------------------------------------

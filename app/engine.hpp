@@ -66,6 +66,11 @@ public:
     // Read-only views for the UI to draw from. The UI must not write through these: every edit
     // goes through the command ring, so that a save and the transport cannot race.
     const Pattern &pattern() const { return project_.live(); }
+    // The key, which docs/SPEC.md makes GLOBAL: PROJECT.BIN's root and scale, not the live
+    // pattern's copies. Reading the pattern's meant every other pattern played in C chromatic
+    // (its zeroed default), the key changed on a pattern switch, and an undo reverted it.
+    uint8_t key_root() const { return uint8_t(project_.settings.root % 12); }
+    uint8_t key_scale() const { return project_.settings.scale; }
 
     // The project, for the UI to draw the bank and pattern grid from and for a save to serialize.
     //
@@ -167,10 +172,12 @@ private:
     void switch_pattern(int bank, int slot);
 
     // The pass boundary passed: let a chain move on if one is playing.
-    void cross_boundary(uint32_t tick);
+    void cross_boundary(uint32_t boundary);
 
     // A bar started: release anything armed for one.
     void on_bar();
+    void apply_mutes(uint8_t state);
+    void silence_track(int track);     // kill_all plus the insert chain's state   // the only writer of muted_ after init
     void resolve_tick(uint32_t tick, uint32_t frame);
 
     // The eight playheads into Status, every block. See the implementation on why not only on a
@@ -248,11 +255,6 @@ private:
 
     Machine *machines_[kTracks] = {};
 
-    // Which tracks host a Sampler, for `Cmd::set_sample` and `Cmd::clear_sample`. The build has
-    // no RTTI (CLAUDE.md), so a Machine* cannot be asked whether it is one; the assignment is
-    // fixed at init anyway, so it is simply recorded alongside machines_ there. A track that
-    // hosts no Sampler refuses a sample command rather than reinterpreting a pointer.
-    Sampler *samplers_[kTracks] = {};
     uint8_t machine_id_[kTracks] = {};
     uint8_t sent_note_[kTracks] = {};  // see sent_note()
 
@@ -386,6 +388,9 @@ private:
     // on the audio side precisely so that it can use the tick the sequencer is actually on, which
     // the main context cannot know (core/queue.hpp).
     uint32_t tick_ = 0;
+    // The tick the playing pattern started on. Queued and chained switches restart the pattern
+    // on their boundary, and the scheduler is handed `tick - origin_` (core/queue.hpp).
+    uint32_t origin_ = 0;
 
     // The per-tick event buffer lives here rather than on the audio stack: at the true worst
     // case it is 4 KiB, and the platform caps a stack frame at 16 KiB.

@@ -213,16 +213,30 @@ TEST(perform_morph_at_the_ends_is_each_scene_exactly) {
     }
 
     fill_out_from_kit(g_kit);
-    scene_morph(a, b, 0, g_kit, g_out);
+    scene_morph(a, b, 0, g_out);
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(g_out[t][p]), int(a.values[t][p]));
     }
 
     fill_out_from_kit(g_kit);
-    scene_morph(a, b, kMorphScale, g_kit, g_out);
+    scene_morph(a, b, kMorphScale, g_out);
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(g_out[t][p]), int(b.values[t][p]));
     }
+}
+
+TEST(perform_the_end_a_scene_does_not_store_is_the_live_value_in_out) {
+    // The engine passed the kit as last SAVED, so a morph towards an empty scene pulled a knob
+    // turned since the save back to its saved value. The fallback is now whatever `out` holds
+    // on the way in, which the engine fills from the live kit.
+    fill_kit(g_kit);
+    perform_init(g_scenes, g_macros);
+    scene_set(g_scenes.scenes[0], 2, 5, 100);      // A stores one value, B stores nothing
+
+    fill_out_from_kit(g_kit);
+    g_out[2][5] = 20;                               // the live knob, moved since the save
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale, g_out);
+    CHECK_EQ(int(g_out[2][5]), 20);                // fully at B: the live value, not the kit's
 }
 
 TEST(perform_morph_halfway_is_halfway) {
@@ -234,7 +248,7 @@ TEST(perform_morph_halfway_is_halfway) {
     scene_set(g_scenes.scenes[1], 0, 1, 41);        // one apart: the rounding shows
 
     fill_out_from_kit(g_kit);
-    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, g_kit, g_out);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, g_out);
     CHECK_EQ(int(g_out[0][0]), 50);
     // 40.5 rounds up, which is what adding half the scale before the shift does.
     CHECK_EQ(int(g_out[0][1]), 41);
@@ -257,7 +271,7 @@ TEST(perform_morph_does_not_reset_what_it_was_handed) {
             g_out[t][p] = uint8_t((g_kit.tracks[t].params[p] + 64) % 128);
         }
     }
-    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, g_kit, g_out);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, g_out);
 
     // The one parameter a scene stores was morphed...
     CHECK_EQ(int(g_out[0][0]), 50);
@@ -284,7 +298,7 @@ TEST(perform_morph_is_monotonic_and_in_range) {
     int previous_up = -1, previous_down = 999;
     for (uint32_t at = 0; at <= kMorphScale; at += 8) {
         fill_out_from_kit(g_kit);
-        scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], uint16_t(at), g_kit, g_out);
+        scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], uint16_t(at), g_out);
         const int up = int(g_out[2][3]);
         const int down = int(g_out[2][4]);
         CHECK(up >= previous_up);
@@ -312,7 +326,7 @@ TEST(perform_morph_leaves_a_parameter_neither_scene_stores_alone) {
     }
 
     fill_out_from_kit(g_kit);
-    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, g_kit, g_out);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, g_out);
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
             if (t == 5) continue;
@@ -331,25 +345,25 @@ TEST(perform_the_end_a_scene_does_not_store_is_the_kit_value) {
     scene_set(g_scenes.scenes[0], 0, 0, 20);          // A stores it; B does not
 
     fill_out_from_kit(g_kit);
-    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], 0, g_kit, g_out);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], 0, g_out);
     CHECK_EQ(int(g_out[0][0]), 20);
 
     fill_out_from_kit(g_kit);
-    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale, g_kit, g_out);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale, g_out);
     CHECK_EQ(int(g_out[0][0]), 60);                   // the kit, not 20
 
     fill_out_from_kit(g_kit);
-    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, g_kit, g_out);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, g_out);
     CHECK_EQ(int(g_out[0][0]), 40);
 
     // And the other way round: B stores it, A does not.
     perform_init(g_scenes, g_macros);
     scene_set(g_scenes.scenes[1], 0, 0, 100);
     fill_out_from_kit(g_kit);
-    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], 0, g_kit, g_out);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], 0, g_out);
     CHECK_EQ(int(g_out[0][0]), 60);
     fill_out_from_kit(g_kit);
-    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale, g_kit, g_out);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale, g_out);
     CHECK_EQ(int(g_out[0][0]), 100);
 }
 
@@ -359,7 +373,7 @@ TEST(perform_an_empty_scene_morphs_as_the_kit) {
     perform_init(g_scenes, g_macros);
     for (uint32_t at : {0u, uint32_t(kMorphScale) / 3, uint32_t(kMorphScale)}) {
         fill_out_from_kit(g_kit);
-        scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], uint16_t(at), g_kit, g_out);
+        scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], uint16_t(at), g_out);
         for (int t = 0; t < kTracks; t++) {
             for (int p = 0; p < kKitParams; p++) {
                 CHECK_EQ(int(g_out[t][p]), int(g_kit.tracks[t].params[p]));
@@ -374,7 +388,7 @@ TEST(perform_a_morph_position_past_the_end_is_clamped) {
     scene_set(g_scenes.scenes[0], 0, 0, 10);
     scene_set(g_scenes.scenes[1], 0, 0, 90);
     fill_out_from_kit(g_kit);
-    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], 65535, g_kit, g_out);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], 65535, g_out);
     CHECK_EQ(int(g_out[0][0]), 90);
 }
 
@@ -384,7 +398,7 @@ TEST(perform_morphing_a_scene_onto_itself_changes_nothing) {
     scene_capture(g_scenes.scenes[0], g_kit);
     for (uint32_t at = 0; at <= kMorphScale; at += 64) {
         fill_out_from_kit(g_kit);
-        scene_morph(g_scenes.scenes[0], g_scenes.scenes[0], uint16_t(at), g_kit, g_out);
+        scene_morph(g_scenes.scenes[0], g_scenes.scenes[0], uint16_t(at), g_out);
         for (int t = 0; t < kTracks; t++) {
             for (int p = 0; p < kKitParams; p++) {
                 CHECK_EQ(int(g_out[t][p]), int(g_kit.tracks[t].params[p]));

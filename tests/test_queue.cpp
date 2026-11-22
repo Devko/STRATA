@@ -163,6 +163,39 @@ TEST(after_16_and_after_32_land_on_the_1x_grid_whatever_the_pattern_is) {
     }
 }
 
+TEST(every_mode_but_now_restarts_the_pattern_on_its_boundary) {
+    // docs/SPEC.md: only "at once" keeps the position, so the other three modes say where the new
+    // pattern's step 1 is: the boundary, or for a forgiven late press the boundary just missed.
+    Queue q;
+    CHECK(queue_arm(q, 0, 1, QueueMode::after_16, 100, 1536));
+    CHECK(q.restart);
+    CHECK_EQ(q.switch_tick, 384u);
+    CHECK_EQ(q.start_tick, 384u);
+
+    CHECK(queue_arm(q, 0, 1, QueueMode::after_32, 770, 1536));     // 2 ticks late: forgiven
+    CHECK_EQ(q.switch_tick, 771u);
+    CHECK_EQ(q.start_tick, 768u);
+
+    CHECK(queue_arm(q, 0, 1, QueueMode::immediate, 500, 1536));
+    CHECK(!q.restart);
+    CHECK_EQ(q.switch_tick, 501u);
+
+    // The end of the pattern counts from the pattern's own start, `origin`.
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 400, 360, 384));
+    CHECK(q.restart);
+    CHECK_EQ(q.switch_tick, 744u);
+    CHECK_EQ(q.start_tick, 744u);
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 750, 360, 384));   // 6 late: forgiven
+    CHECK_EQ(q.switch_tick, 751u);
+    CHECK_EQ(q.start_tick, 744u);
+    // An origin after the armed tick (the transport relocated) reads as 0.
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 100, 360, 384));
+    CHECK_EQ(q.switch_tick, 360u);
+    // And saturates rather than wrapping.
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 0xFFFFFF00u, 1536, 0xFFFFFE00u));
+    CHECK_EQ(q.switch_tick, 0xFFFFFFFFu);
+}
+
 TEST(the_grace_window_is_half_a_sixteenth) {
     CHECK_EQ(kQueueGraceTicks, 12);
     CHECK_EQ(kQueueGraceTicks, kTicksPerSixteenth / 2);
