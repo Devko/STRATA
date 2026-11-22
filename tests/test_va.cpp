@@ -1192,3 +1192,44 @@ TEST(va_a_note_released_before_its_frame_does_not_hang) {
     CHECK(peak(g_a + n - 8 * kBlk, 8 * kBlk) < 1e-4f);
     CHECK(!va.active());
 }
+
+TEST(va_a_choked_voice_fades_out_and_stops) {
+    constexpr int n = VaVoice::kControl;
+    const TrackParams p = patch();
+    const VaSettings settings = VaSettings::make(p, 48000.0f, 1.0f / 48000.0f);
+    VaVoice voice;
+    voice.reset();
+    voice.set_pitch(48.0f);
+    voice.set_target(48.0f);
+    voice.set_note(1.0f, false, false);
+    voice.gate_on();
+    float work[n];
+    float env[n];
+    float out[n];
+    for (int slice = 0; slice < 40; slice++) {          // well into the note
+        clear(out, n);
+        voice.run(settings, out, n, work, env, nullptr);
+    }
+    CHECK(voice.sounding());
+    const float before = peak(out, n);
+    CHECK(before > 0.05f);
+
+    voice.choke();
+    CHECK(voice.choking());
+    float fade[VaVoice::kChokeFrames];
+    clear(fade, VaVoice::kChokeFrames);
+    for (int at = 0; at < VaVoice::kChokeFrames; at += n) {
+        voice.run(settings, fade + at, n, work, env, nullptr);
+    }
+    // Faded, not cut: the last slice is far quieter than the note, and then it is over.
+    CHECK(peak(fade + VaVoice::kChokeFrames - n, n) < 0.3f * before);
+    CHECK(!voice.sounding());
+    CHECK(!voice.choking());
+
+    // And a choked voice taken for a new note is a new note, not a fade.
+    voice.gate_on();
+    voice.run(settings, out, n, work, env, nullptr);
+    voice.choke();
+    voice.gate_on();
+    CHECK(!voice.choking());
+}

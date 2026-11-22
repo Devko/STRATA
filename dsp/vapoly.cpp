@@ -246,6 +246,37 @@ int VaPoly::allocate(uint8_t note) {
     return pick;
 }
 
+bool VaPoly::would_add_voice(uint8_t note) const {
+    for (const Slot &s : slots_) {
+        if (!s.pending && s.note == int(note) && s.voice.sounding() && !s.voice.choking()) {
+            return false;                    // allocate() retriggers this voice in place
+        }
+    }
+    for (const Slot &s : slots_) {
+        if (!s.busy()) return true;          // a free slot: one more voice sounding
+    }
+    // Every slot busy: allocate() steals one of this machine's own. Stealing a choking slot
+    // brings a voice back into the count; any other steal is one out and one in.
+    for (const Slot &s : slots_) {
+        if (s.voice.choking()) return true;
+    }
+    return false;
+}
+
+int VaPoly::quietest_voice(float &level) const {
+    int pick = -1;
+    for (int i = 0; i < kVoices; i++) {
+        const Slot &s = slots_[i];
+        if (s.pending || !s.voice.sounding() || s.voice.choking()) continue;
+        const float l = s.voice.amp_level();
+        if (pick < 0 || l < level) {
+            pick = i;
+            level = l;
+        }
+    }
+    return pick;
+}
+
 void VaPoly::release_all() {
     // STOP once: every sounding voice gets its release tail, filter envelope included so no
     // bright ghost is left behind. A pending trig still starts -- it was scheduled before the

@@ -2563,3 +2563,76 @@ TEST(engine_skipping_an_unchanged_prepare_is_bit_exact) {
     // And the passage really sounds: two silent renders would agree whatever the memo did.
     CHECK(peak > 0.1f);
 }
+
+// --- the shared voice budget ---------------------------------------------------------------------
+
+namespace {
+
+int poly_voices_counted() {
+    int n = 0;
+    for (int t = 0; t < kTracks; t++) {
+        const Machine *m = strata::test::engine().machine(t);
+        if (m != nullptr && strata::test::engine().project().kit.tracks[t].machine ==
+                                uint8_t(MachineId::va_poly)) {
+            n += static_cast<const VaPoly *>(m)->budget_voices();
+        }
+    }
+    return n;
+}
+
+}  // namespace
+
+TEST(engine_the_shared_voice_budget_caps_va_poly_across_tracks) {
+    clean();
+    // Four POLY tracks with long notes, so nothing ends on its own during the test.
+    const uint8_t tracks[4] = {2, 3, 4, kPoly};
+    uint8_t was[4];
+    for (int i = 0; i < 4; i++) {
+        was[i] = strata::test::engine().project().kit.tracks[tracks[i]].machine;
+        post(Cmd::set_machine, tracks[i], 0, uint8_t(MachineId::va_poly));
+        post(Cmd::set_param, tracks[i], 0, kDec, 127);
+    }
+    pump();
+    CHECK_EQ(poly_voices_counted(), 0);
+
+    // Six notes on each of the four tracks in one block: 24 asked for. The first twelve take
+    // the budget; the other twelve find every counted voice still waiting for its frame, so
+    // there is nothing to fade, and they are dropped rather than let the total grow.
+    for (int i = 0; i < 4; i++) {
+        for (int n = 0; n < VaPoly::kVoices; n++) {
+            post(Cmd::trigger_note, tracks[i], 0, uint8_t(48 + 2 * n), 100);
+        }
+    }
+    pump();
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+    pump(20);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+
+    // Now everything counted has started. Six more notes on a track with none sounding each
+    // fade out the quietest voice elsewhere, so they sound and the total stays at the budget.
+    const VaPoly &last = *static_cast<const VaPoly *>(strata::test::engine().machine(kPoly));
+    CHECK_EQ(last.busy_voices(), 0);
+    for (int n = 0; n < VaPoly::kVoices; n++) {
+        post(Cmd::trigger_note, kPoly, 0, uint8_t(72 + n), 100);
+    }
+    pump();
+    CHECK_EQ(last.busy_voices(), VaPoly::kVoices);
+    CHECK(poly_voices_counted() <= Engine::kPolyVoiceBudget);
+    pump(2);                                   // the fades (64 frames) are over
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+    int sounding = 0;
+    for (int i = 0; i < 4; i++) {
+        sounding += static_cast<const VaPoly *>(strata::test::engine().machine(tracks[i]))
+                        ->sounding_voices();
+    }
+    CHECK_EQ(sounding, Engine::kPolyVoiceBudget);   // the faded ones really stopped
+
+    // A retrigger of a note already sounding costs nothing extra and chokes nothing.
+    post(Cmd::trigger_note, kPoly, 0, 72, 100);
+    pump();
+    CHECK_EQ(last.busy_voices(), VaPoly::kVoices);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+
+    for (int i = 0; i < 4; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
+    pump();
+}
