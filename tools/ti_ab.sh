@@ -13,7 +13,7 @@
 #
 #   base     the tree before the pass: <ref> as it is
 #   head     this tree as committed: what merges
-#   nofuse   head + STRATA_VA_FUSED 0    (the VA voice's filter, envelope and tail as three passes)
+#   fused    head + STRATA_VA_FUSED 1    (the VA voice's filter, envelope and tail in one loop)
 #   hints    head + STRATA_TI_HINTS 1    (MUST_ITERATE on the block loops)
 #   packed   head + STRATA_TI_PACKED 1   (DOTP2 stereo pairs in SAMPLE and GRAIN)
 #   all      head + both flags
@@ -37,7 +37,7 @@ ROOT="$(pwd)"
 source tools/env.sh
 
 SCENARIOS="m0 m1 m3 m7 factory samples"
-VARIANTS="base nofuse head hints packed all"
+VARIANTS="base head fused hints packed all"
 BASE=""
 GCC=0
 RENDER_SECONDS=4
@@ -94,7 +94,7 @@ make_tree() {   # make_tree <variant> -> prints the worktree path
         ln -s "$ROOT/third_party/smpltrek-re" "$tree/third_party/smpltrek-re"
     fi
     case "$v" in
-        nofuse) set_flag "$tree" STRATA_VA_FUSED 0 ;;
+        fused)  set_flag "$tree" STRATA_VA_FUSED 1 ;;
         hints)  set_flag "$tree" STRATA_TI_HINTS 1 ;;
         packed) set_flag "$tree" STRATA_TI_PACKED 1 ;;
         all)    set_flag "$tree" STRATA_TI_HINTS 1 && set_flag "$tree" STRATA_TI_PACKED 1 ;;
