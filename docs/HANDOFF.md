@@ -231,6 +231,15 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
   fixed bugs and the queue protocol. The bugs are in commit `1108ee0`; the queue
   protocol is in section 6 above.
 
+- **Test order.** The host suite passes in registration order, with `--only` on any one test,
+  and as contiguous shards (`--shard K/N`, what `make -C host test JOBS=N` and CI run). It does
+  NOT pass in a random order: a shuffled run fails dozens of `ui_`, `app_`, `storage_` and
+  `ambient_` tests and once crashed, because `tests/apprig.cpp`'s `fresh()` still lets some engine
+  and app state through from one test to the next. Sharding found and fixed three such leaks
+  (the bar count and an armed take, the previous kit's sample requests, a stale project error);
+  the rest are why the shards are contiguous blocks and not round robin. Replay any order with
+  `strata-tests --names FILE` (one test name per line) to find the test that leaks.
+
 ### 8. Upstream, and moving the Enaga pin
 
 [seawaffle/enaga#1](https://github.com/seawaffle/enaga/pull/1) is open: it keeps libgcc's unwinder
