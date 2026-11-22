@@ -8,7 +8,7 @@ Revised from `docs/SPEC.md` after validating it against Enaga at `1b41111`. Read
 
 | | Spec | This plan |
 | --- | --- | --- |
-| Enaga pin | `269c015` | **`1b41111`** — the pin in the spec predates MIDI, SYNC, the clock and pad pressure |
+| Enaga pin | `269c015` | **`v0.2.0`** (`3da7f89`), was `1b41111` until 2026-11-22 — the pin in the spec predates MIDI, SYNC, the clock and pad pressure |
 | Master clock | `core/clock`, 96 PPQN, 32.32 fixed point, drift tests | **Deleted.** Enaga owns it; `core/scheduler` sits on `clock::ticks()` |
 | MIDI / SYNC | M7: implement in an Enaga fork, upstream as PRs | **Already in Enaga.** M7 shrinks to verifying it on the unit |
 | External sync | deferred to M7 | **M1.** It changes transport and tempo behaviour that M1 builds |
@@ -68,7 +68,7 @@ Everything here is setup; none of it is STRATA's design. Do it once, in WSL.
    for editing but point `ENAGA_BUILD` at a path inside the WSL filesystem, because building
    across 9p is slow.
 2. **Dependencies.**
-   - `third_party/enaga` as a submodule pinned at `1b41111`.
+   - `third_party/enaga` as a submodule pinned at `1b41111` (now release `v0.2.0`, `3da7f89`).
    - `seawaffle/smpltrek-re` cloned separately; `ENAGA_EMULATOR=<re>/emulator` (the directory
      holding `cpu.py`). It is not a submodule — Enaga's tools take it by environment variable.
 3. **Cross toolchain.** `tools/build_tic6x_binutils.sh` then `tools/build_tic6x_gcc.sh`
@@ -293,7 +293,7 @@ The spec's version with the corrections folded in:
 - Read docs/SPEC.md, docs/REVIEW.md and docs/PLAN.md before any change, and follow the
   milestone order in PLAN.md. Ask before changing a decision they record.
 - Target: an Enaga app on the Sonicware SmplTrek (TI C6748, 372 MHz). Enaga is pinned at
-  1b41111. Read third_party/enaga/docs/api.md for every API you use.
+  v0.2.0 (3da7f89). Read third_party/enaga/docs/api.md for every API you use.
 - Build in WSL, not Windows. Keep build/ inside the WSL filesystem. There is no cmake.
 - Do not write a master clock. Enaga owns it: <enaga/clock.hpp>, 96 PPQN, and
   clock::ticks() in audio() gives each tick's frame in the block. STRATA schedules steps

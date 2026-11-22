@@ -1,6 +1,9 @@
 # Enaga API cheat sheet
 
-**Every signature here was read out of the headers at the pinned commit `1b41111` and compiled.**
+**Every signature here was read out of the headers at the pinned commit `1b41111` and compiled,
+and re-checked against release `v0.2.0` (`3da7f89`), the current pin.** Between the two, nothing
+STRATA uses changed: `midi.hpp` gained a comment and `abi.h` an optional package icon flag.
+`<enaga/ui.hpp>` and `<enaga/bytes.hpp>` are new in v0.2.0 and STRATA uses neither.
 Nothing is from memory. If something you need is missing, read the header — do not guess a name,
 because the plausible guesses are mostly wrong (`Oscillator::set`, `SvfCoefficients::set`,
 `Envelope::gate`, `--version` on cl6x: all invented, all wrong).
