@@ -36,6 +36,7 @@
 #include "kick.hpp"
 
 #include "drumloops.h"
+#include "filterloops.h"
 
 namespace strata {
 namespace {
@@ -286,7 +287,7 @@ void Kick::run(Voice &v, float *out, int n) {
     v.amp.render(env_, n, amp_shape_);
     enaga_scale(env_, n, v.trigger_level);
     enaga_multiply(body_, env_, n);
-    v.tone_lp.process(body_, body_, n, tone_coefficient);
+    strata_one_pole_inplace(&v.tone_lp.state_, tone_coefficient, body_, n);
 
     // The transient: a 1 ms gate, slewed, high-passed and band-limited, plus attack noise. Both
     // ride the transient envelope. The gate and the slew are one pass, which keeps the state
@@ -296,11 +297,11 @@ void Kick::run(Voice &v, float *out, int n) {
         const int gate = v.gate < n ? v.gate : n;
         v.gate -= gate;
         strata_kick_click(click_, n, gate, &v.slew, &v.click_hp);
-        v.click_band.process(click_, click_, n, click_coefficients_, Svf::low_pass);
+        strata_svf_inplace(&v.click_band.state_, &click_coefficients_, Svf::low_pass, click_, n);
 
         enaga_clear(noise_, n);
         rng_.add_noise(noise_, n, 1.0f);
-        v.noise_lp.process(noise_, noise_, n, 0.05f);
+        strata_one_pole_inplace(&v.noise_lp.state_, 0.05f, noise_, n);
         v.noise_hp.process(noise_, aux_, n, 0.005f);
         enaga_mix(noise_, aux_, n, -1.0f);         // the band between the two one-poles
         enaga_add(click_, noise_, n);

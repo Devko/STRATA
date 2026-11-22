@@ -36,6 +36,7 @@
 #include "snare.hpp"
 
 #include "drumloops.h"
+#include "filterloops.h"
 
 namespace strata {
 namespace {
@@ -284,14 +285,14 @@ void Snare::run(Voice &v, float *out, int n) {
     v.drum.render(env_, n, drum_shape_);
     enaga_scale(env_, n, v.trigger_level * drum_gain_);
     enaga_multiply(drum_, env_, n);
-    v.drum_lp.process(drum_, drum_, n, drum_lp);
+    strata_one_pole_inplace(&v.drum_lp.state_, drum_lp, drum_, n);
     enaga_clear(mix_, n);
     enaga_add(mix_, drum_, n);
 
     // The noise: band-pass by a low-pass with snappy's Q and then a one-pole high-pass.
     enaga_clear(noise_, n);
     rng_.add_noise(noise_, n, 1.0f);
-    v.noise_band.process(noise_, noise_, n, band_coefficients, Svf::low_pass);
+    strata_svf_inplace(&v.noise_band.state_, &band_coefficients, Svf::low_pass, noise_, n);
     v.noise_hp.process(noise_, aux_, n, hp_coefficient);
     enaga_mix(noise_, aux_, n, -1.0f);     // one-pole high-pass: the signal less its low-pass
 

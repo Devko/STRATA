@@ -27,6 +27,7 @@
 #include "buses.hpp"
 
 #include "masterloops.h"
+#include "filterloops.h"
 
 #include <cstddef>
 
@@ -717,7 +718,7 @@ void Mixer::finish_block(float *out, int frames) {
     // The high-pass runs once for whichever mode is fed; a mode ringing out unfed takes silence.
     const bool fed_b = hall_mode_ ? hall_tail_ > 0 : reverb_tail_ > 0;
     if (n > 0 && fed_b) {
-        reverb_high_pass_.process(send_b_, send_b_, n, reverb_high_pass_coefficients_);
+        strata_biquad_inplace(&reverb_high_pass_.state_, &reverb_high_pass_coefficients_, send_b_, n);
     }
     if (n > 0 && reverb_tail_ > 0) {
         reverb_tail_--;
@@ -754,10 +755,11 @@ void Mixer::freeze_delay(bool held) {
 void Mixer::master(int n) {
     // --- the one-knob DJ filter: 24 dB per channel, and bypassed in the dead zone -------------
     if (dj_on_) {
-        ed::Svf::cascade(dj_l_a_, dj_coefficients_, dj_l_b_, dj_coefficients_, mix_l_, mix_l_, n,
-                         dj_output_);
-        ed::Svf::cascade(dj_r_a_, dj_coefficients_, dj_r_b_, dj_coefficients_, mix_r_, mix_r_, n,
-                         dj_output_);
+        // Both channels in one loop: two independent recurrences side by side, which is what
+        // fills this core's units (filterloops.h). Bit-identical to two Svf::cascade calls.
+        strata_svf_cascade_stereo_inplace(&dj_l_a_.state_, &dj_l_b_.state_, &dj_r_a_.state_,
+                                          &dj_r_b_.state_, &dj_coefficients_, &dj_coefficients_,
+                                          dj_output_, mix_l_, mix_r_, n);
     }
 
     // --- the kill EQ, after the filter and before the detector, so the compressor sees the cut -

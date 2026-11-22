@@ -37,10 +37,9 @@
 //     card pulled between the two cannot be produced here. What is checked is the consequence the
 //     app is responsible for: a failed or interrupted save leaves the project on the card readable
 //     and does not mark it complete.
-//   * `save_for_shutdown`'s ring drain. It spins on `enaga::ms()` while the audio side drains the
-//     ring, and on the host nothing advances `ms()` but the spin itself and nothing drains the
-//     ring but `pump()`. So it is called with an already-empty ring, which is the state
-//     `App::stop` reaches in practice, and the 100 ms deadline is left to the unit.
+//   * That `App::stop` really runs with the audio callback gone (Enaga's apps_unload clears it
+//     first). `save_for_shutdown` relies on it to apply the ring from the main context; the
+//     host runs both sides on one thread, so it cannot tell the difference.
 #include "apprig.hpp"
 #include "check.hpp"
 #include "fakehost.hpp"
@@ -1819,9 +1818,7 @@ TEST(storage_save_for_shutdown_writes_the_autosave_in_one_call) {
     // last chance to keep the user's work. It is the one blocking path in app/storage.cpp: no
     // passes, no slices.
     //
-    // Its ring drain cannot be exercised on the host -- nothing advances `enaga::ms()` but the
-    // spin itself and nothing drains the ring but `pump()` -- so this calls it with an empty ring,
-    // which is the state App::stop reaches once the audio side has applied the last edit.
+    // An empty ring here; the next test has one with edits still in it.
     clean();
     FakeHost &host = FakeHost::the();
 
@@ -1843,6 +1840,26 @@ TEST(storage_save_for_shutdown_writes_the_autosave_in_one_call) {
     const int after = host.saves();
     storage().save_for_shutdown();
     CHECK_EQ(host.saves(), after);
+}
+
+TEST(storage_save_for_shutdown_applies_the_edits_still_in_the_ring) {
+    // On the unit nothing drains the ring during App::stop: Enaga removes the audio callback
+    // before it calls stop(). The shutdown save posts its own kit_store, and it used to spin
+    // 100 ms waiting for an audio side that never came, then save a kit without it -- the knob
+    // turned just before switching app was not in the autosave.
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::set_param, 0, 0, uint8_t(kLvl), 77);  // posted, and no block runs after it
+    CHECK(!engine().commands().empty());
+
+    storage().save_for_shutdown();
+    CHECK(engine().commands().empty());
+
+    static Kit kit;
+    const int32_t got = host.read_file(card_path("KIT.BIN", true), g_scratch, kScratchBytes);
+    CHECK(got > 0);
+    CHECK(kit_read(kit, g_scratch, uint32_t(got)) == SerializeResult::ok);
+    CHECK_EQ(int(kit.tracks[0].params[kLvl]), 77);
 }
 
 // =============================================================================================

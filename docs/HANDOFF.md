@@ -77,7 +77,7 @@ Smaller open items, none urgent:
   empty slot, because nineteen send fields do not divide into four. Fine, but Roland may want
   them placed differently.
 - **The sends' ambient modes** (LONG delay, HALL reverb with shimmer; `dsp/ambient.hpp`) are
-  host-tested only: E8 (`tests/scenario_ambient.sh`, both compilers) and U9 (UNIT_CHECKLIST 13j)
+  host-tested only: E11 (`tests/scenario_ambient.sh`, both compilers) and U9 (UNIT_CHECKLIST 13j)
   are owed, and their load figures in `docs/BUDGET.md` are host estimates.
 
 ---

@@ -381,6 +381,10 @@ public:
     void stop() override {
         // Destructors never run on this platform (CLAUDE.md), so this is the last chance. The
         // budget is 3 s including the save.
+        // MIDI first: a note left sounding on outboard gear would hang there, and the save can
+        // take most of the budget. Enaga has already removed the audio callback, so the main
+        // context may end the notes itself.
+        engine_.end_midi_for_shutdown();
         storage_.save_for_shutdown();
         enaga::log("strata stopped");
     }
@@ -584,8 +588,14 @@ public:
         if (mode_ == Mode::kit && on_kit_key(key)) return;
         if (mode_ == Mode::samples && on_samples_key(key)) return;
         // A mutation waiting for its verdict takes OK and CLR first, in whatever mode: OK keeps
-        // it, CLR reverts it. Only the plain keys; F1 + CLR and F1 + OK stay undo and redo.
-        if (mutation_pending_ && !shift_ && (key == ENAGA_KEY_OK || key == ENAGA_KEY_CLR)) {
+        // it, CLR reverts it. Only the plain keys; F1 + CLR and F1 + OK stay undo and redo. And
+        // not where OK and CLR already mean something more specific: a held STEP (its page, its
+        // clear), a range (its clear), a held scene pad (capture, erase) and RESAMPLE (arm,
+        // cancel). There the verdict took the key, and a held step's release then toggled its
+        // trig as well, because nothing had marked the hold as used.
+        if (mutation_pending_ && !shift_ && (key == ENAGA_KEY_OK || key == ENAGA_KEY_CLR) &&
+            held_step_ < 0 && range_first_ < 0 && scene_holding_ < 0 &&
+            mode_ != Mode::resample) {
             mutation_pending_ = false;
             if (key == ENAGA_KEY_CLR) {
                 post(Cmd::undo);

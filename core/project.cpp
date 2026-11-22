@@ -37,7 +37,7 @@
 //     song (id 5), 65 bytes
 //         0   1  SONG: 1 plays the chain once and stops, 0 loops it
 //         1  64  each chain entry's mute recall: 0 none, 1-8 that stored mute state
-//     midi (id 5), 8 bytes: each track's MIDI OUT channel, 0 off or 1-16
+//     midi (id 6), 8 bytes: each track's MIDI OUT channel, 0 off or 1-16
 //
 // KIT.BIN, 1,076 bytes, one section.
 //

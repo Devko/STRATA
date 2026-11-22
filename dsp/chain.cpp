@@ -45,6 +45,7 @@
 #include "chain.hpp"
 
 #include "chainloops.h"
+#include "filterloops.h"
 
 namespace strata {
 namespace ed = enaga::dsp;
@@ -293,10 +294,10 @@ void InsertChain::process(float *mono, int frames, const ChainOut &out) {
     // --- filter: 24 dB is a cascade, two poles for about the price of one --------------------
     if (mode_ != FilterMode::off) {
         if (filter_24_) {
-            ed::Svf::cascade(svf_a_, coefficients_, svf_b_, coefficients_, mono, mono, frames,
-                             svf_output_);
+            strata_svf_cascade_inplace(&svf_a_.state_, &coefficients_, &svf_b_.state_,
+                                       &coefficients_, svf_output_, mono, frames);
         } else {
-            svf_a_.process(mono, mono, frames, coefficients_, svf_output_);
+            strata_svf_inplace(&svf_a_.state_, &coefficients_, svf_output_, mono, frames);
         }
     }
 

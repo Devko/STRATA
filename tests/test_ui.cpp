@@ -990,6 +990,85 @@ TEST(ui_a_mutation_is_kept_with_ok_and_reverted_with_clr_in_any_mode) {
     pump(2);
 }
 
+TEST(ui_a_pending_mutation_leaves_a_held_step_its_own_ok_and_clr) {
+    // MUTATE, then hold a STEP + CLR to clear that step. The verdict used to take the CLR first:
+    // the mutation was reverted instead, and because nothing marked the hold as used, its
+    // release then TOGGLED the step's trig -- two edits nobody asked for. A held step, a range,
+    // a scene pad and RESAMPLE all give OK and CLR a meaning of their own, and keep it.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    for (int i = 0; i < 16; i += 4) {
+        if ((app_engine().pattern().tracks[0].steps[i].flags & kStepTrig) == 0) {
+            step_down(i);
+            step_up(i);
+        }
+    }
+    pump(2);
+    const auto mutate = [&app] {
+        app.on_pad_press(13, 100);
+        app.on_pad_release(13);
+        pump(2);
+    };
+
+    mutate();
+    static TrackPattern mutated;
+    std::memcpy(&mutated, &app_engine().pattern().tracks[0], sizeof mutated);
+    CHECK((mutated.steps[4].flags & kStepTrig) != 0);
+    step_down(4);
+    key(ENAGA_KEY_CLR);                              // hold STEP 5 + CLR: clear that step
+    step_up(4);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "STEP CLEARED");
+    CHECK((app_engine().pattern().tracks[0].steps[4].flags & kStepTrig) == 0);
+    // Nothing else moved: the mutation is still there on the other steps.
+    CHECK_EQ(app_engine().pattern().tracks[0].steps[8].velocity, mutated.steps[8].velocity);
+    CHECK_EQ(app_engine().pattern().tracks[0].steps[12].velocity, mutated.steps[12].velocity);
+
+    // Hold STEP + OK opens the step page rather than keeping the mutation.
+    mutate();
+    step_down(8);
+    key(ENAGA_KEY_OK);
+    step_up(8);
+    pump(2);
+    CHECK(UiProbe::step_page(app));
+    CHECK_EQ(UiProbe::page_step(app), 8);
+    key(ENAGA_KEY_OK);                               // close it
+    pump(2);
+
+    // RESAMPLE: OK arms the take, CLR cancels it -- not a verdict on a mutation.
+    mutate();
+    shift_key(ENAGA_KEY_F2);                         // RESAMPLE: a mode change settles it
+    pump(2);
+    mutate();
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "KEPT") != 0);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "CANCELLED");
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_leaving_the_app_ends_a_held_midi_note) {
+    // App::stop, the switch to another app or a power-off: a KEYS key still down with MIDI OUT
+    // on sent a note nobody could stop once STRATA was gone.
+    Strata &app = fresh();
+    post_cmd(Cmd::set_midi_out, 7);                 // track 1 to channel 7
+    pump(2);
+    shift_key(ENAGA_KEY_F4);                         // KEYS
+    FakeHost::the().clear_midi();
+    step_down(0);
+    pump(2);
+    CHECK_EQ(FakeHost::the().midi_messages(0x90, 7), 1);
+    app.stop();
+    CHECK_EQ(FakeHost::the().midi_messages(0x80, 7), 1);
+    step_up(0);
+    post_cmd(Cmd::set_midi_out, 0);
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
 TEST(ui_an_undo_settles_a_pending_mutation) {
     // MUTATE, then F1 + CLR takes it back. The mutation used to stay "pending", so the next plain
     // CLR undid a SECOND level -- the edit before the mutation -- and said REVERTED.

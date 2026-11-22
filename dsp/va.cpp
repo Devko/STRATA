@@ -70,6 +70,7 @@
 // docs/BUDGET.md has what it was worth. There is no hand-written loop left in this file.
 #include "va.hpp"
 
+#include "tihints.h"
 #include "valoops.h"
 
 namespace strata {
@@ -360,25 +361,6 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     sub_.render_add(work, n, Wave::triangle, 0.5f * dt1, 2.0f * inv1, s.level_sub);
     rng_.add_noise(work, n, noise);
 
-    switch (s.mode) {
-        case VaMode::lp24: {
-            const SvfCoefficients c1 = SvfCoefficients::from_g(g, kStageOneK);
-            Svf::cascade(svf_a_, c1, svf_b_, c2, work, work, n);
-            break;
-        }
-        case VaMode::lp12:
-            svf_b_.process(work, work, n, c2, Svf::low_pass);
-            break;
-        case VaMode::bp12:
-            svf_b_.process(work, work, n, c2, Svf::band_pass);
-            break;
-        case VaMode::hp12:
-            svf_b_.process(work, work, n, c2, Svf::high_pass);
-            break;
-    }
-
-    amp_.render(env, n, accent_ ? s.amp_shape_accent : s.amp_shape);
-
     float target = s.out_gain * (kVelocityFloor + (1.0f - kVelocityFloor) * velocity_) *
                    (accent_ ? kAccentGain : 1.0f);
     // A choked voice ramps its output gain to zero over kChokeFrames instead (choke(), below).
@@ -402,7 +384,38 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
         ramp_n_ = n;
         inv_n_ = reciprocal(float(n));
     }
+#if STRATA_VA_FUSED
+    // The filter, the amplitude envelope and the tail in ONE loop (valoops.h): three recurrences
+    // that each kept this core's units mostly idle, overlapped. Bit-exact against the three
+    // passes below, which tests/test_va.cpp checks in every mode and envelope stage.
+    // LP24's first stage only: the 12 dB modes never read c1, so they skip its reciprocal.
+    const SvfCoefficients c1 =
+        s.mode == VaMode::lp24 ? SvfCoefficients::from_g(g, kStageOneK) : c2;
+    strata_va_back(out, work, n, int(s.mode), &svf_a_.state_, &c1, &svf_b_.state_, &c2,
+                   &amp_.state_, accent_ ? &s.amp_shape_accent : &s.amp_shape, s.drive, gain_,
+                   (target - gain_) * inv_n_);
+    (void)env;
+#else
+    switch (s.mode) {
+        case VaMode::lp24: {
+            const SvfCoefficients c1 = SvfCoefficients::from_g(g, kStageOneK);
+            Svf::cascade(svf_a_, c1, svf_b_, c2, work, work, n);
+            break;
+        }
+        case VaMode::lp12:
+            svf_b_.process(work, work, n, c2, Svf::low_pass);
+            break;
+        case VaMode::bp12:
+            svf_b_.process(work, work, n, c2, Svf::band_pass);
+            break;
+        case VaMode::hp12:
+            svf_b_.process(work, work, n, c2, Svf::high_pass);
+            break;
+    }
+
+    amp_.render(env, n, accent_ ? s.amp_shape_accent : s.amp_shape);
     strata_va_tail(out, work, env, n, s.drive, gain_, (target - gain_) * inv_n_);
+#endif
     gain_ = target;
 
     if (choke_left_ > 0) {
