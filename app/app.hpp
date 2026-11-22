@@ -2604,12 +2604,9 @@ public:
         if (project_page_ == ProjectPage::pattern && on_pattern_page_key(key)) return true;
         switch (key) {
             case ENAGA_KEY_OK:
-                if (shift_) {
-                    // Reading the card again throws away everything unsaved, so it says what it
-                    // is doing rather than looking like nothing happened.
-                    storage_.request_reload();
-                    notice("RELOADING");
-                } else if (project_page_ == ProjectPage::slots) {
+                // F1 + OK is redo here as everywhere (docs/SPEC.md); the shared handler has it.
+                if (shift_) return false;
+                if (project_page_ == ProjectPage::slots) {
                     // OK picks the slot under the cursor, as OK picks in every Enaga list.
                     // Saving is F1 + F3 twice (docs/SPEC.md's key table).
                     queue_shown_pattern(slot_cursor_);
@@ -2617,10 +2614,9 @@ public:
                 return true;
 
             case ENAGA_KEY_CLR:
-                if (shift_) {
-                    storage_.request_new();
-                    notice("NEW PROJECT");
-                } else if (project_page_ != ProjectPage::slots) {
+                // F1 + CLR is undo, likewise.
+                if (shift_) return false;
+                if (project_page_ != ProjectPage::slots) {
                     project_page_ = ProjectPage::slots;   // back, from any other page
                     notice("PROJECT");
                 } else {
@@ -2654,12 +2650,40 @@ public:
 
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
-                if (!shift_) move_slot_cursor(key == ENAGA_KEY_LEFT ? -1 : +1);
+                if (shift_) {
+                    // The card's two whole-project actions, PROJECT's F1 + arrow (the mode's
+                    // second meaning, as copy and paste are in GRID): F1 + LEFT reads the
+                    // project from the card again, F1 + RIGHT starts a new one. Both throw away
+                    // what is unsaved, so each takes a second press within kSaveArmMs, as a save
+                    // does. They were F1 + OK and F1 + CLR, which the spec gives to redo and undo.
+                    arm_card_action(key == ENAGA_KEY_LEFT ? CardAction::reload : CardAction::fresh);
+                } else {
+                    move_slot_cursor(key == ENAGA_KEY_LEFT ? -1 : +1);
+                }
                 return true;
 
             default:
                 return false;
         }
+    }
+
+    enum class CardAction : uint8_t { none, reload, fresh };
+
+    void arm_card_action(CardAction action) {
+        if (card_armed_ == action && uint32_t(last_ms_ - card_armed_at_ms_) < kSaveArmMs) {
+            card_armed_ = CardAction::none;
+            if (action == CardAction::reload) {
+                storage_.request_reload();
+                notice("RELOADING");
+            } else {
+                storage_.request_new();
+                notice("NEW PROJECT");
+            }
+            return;
+        }
+        card_armed_ = action;
+        card_armed_at_ms_ = last_ms_;
+        notice(action == CardAction::reload ? "AGAIN TO RELOAD" : "AGAIN FOR NEW");
     }
 
     // The cursor over PROJECT's sixteen slots, drawn four by four: LEFT and RIGHT step through
@@ -3262,6 +3286,8 @@ private:
     int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
     bool save_armed_ = false;      // F1 + F3 once; the second press within kSaveArmMs saves
     uint32_t save_armed_at_ms_ = 0;
+    CardAction card_armed_ = CardAction::none;   // F1 + LEFT / RIGHT in PROJECT, armed once
+    uint32_t card_armed_at_ms_ = 0;
     static constexpr uint32_t kSaveArmMs = 2000;
 
     // The project tempo this side has already reconciled with the clock, so that a LOAD is

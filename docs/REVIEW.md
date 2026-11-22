@@ -264,8 +264,10 @@ used in. All three are small and all three are here rather than only in a commen
 pattern's swing is the one that plays), with its PROJECT.BIN byte reserved. The live mutes and
 the scenes in slots A and B are saved with the project and restored on open. A KEYS key holds its
 note until it comes up (`Machine::release`). MUTATE waits for OK (keep) or CLR (revert).
-**Still open:** F1 + OK and F1 + CLR in PROJECT reload the card and start a new project, so undo
-and redo are not on those keys there. Changing that needs new homes for reload and new.
+F1 + OK and F1 + CLR are redo and undo in PROJECT too, as the spec says. Reading the project from
+the card again and starting a new one moved to F1 + LEFT and F1 + RIGHT on PROJECT's slots page,
+each pressed twice within two seconds like a save (approved by Roland, 2026-11-22). Bank select
+is on the selection keys in PROJECT, so F1 + F3 is save only; docs/SPEC.md's key table says so.
 
 **EDIT has no encoder-slot strip at the bottom**, against the spec's "Bottom area: the 4 encoder
 slots" on every screen. EDIT already shows the same four parameters in large type, one row per

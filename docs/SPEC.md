@@ -220,7 +220,7 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 | --- | --- | --- |
 | F1 (FUNC) | Shift | F1 + POWER is the Enaga menu |
 | F2 (REC) | Live record on or off | Resample setup |
-| F3 (PROJECT) | Pattern mode: STEP 1-16 queues a pattern in the bank | Bank select; F1 + F3 twice = save project |
+| F3 (PROJECT) | Pattern mode: STEP 1-16 queues a pattern in the bank. **[rev]** The bank is on the selection keys in this mode | F1 + F3 twice = save project. **[rev]** No longer bank select: the selection keys took it |
 | F4 (HOME) | GRID mode: STEP keys edit the selected track | KEYS mode: STEP keys play notes in scale |
 | F5 (PLAY) | Play | Restart from step 1 |
 | F6 (STOP) | Stop; twice cuts all voices | Stop and reset all tracks |

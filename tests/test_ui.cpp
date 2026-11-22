@@ -1227,7 +1227,9 @@ TEST(ui_play_is_refused_while_a_project_is_loading) {
     CHECK(pump_until_idle());
     CHECK(app_storage().last_error() == nullptr);
 
-    shift_key(ENAGA_KEY_OK);                       // F1 + OK: read the card again
+    shift_key(ENAGA_KEY_LEFT);                     // F1 + LEFT twice: read the card again
+    CHECK_EQ(UiProbe::notice(app), "AGAIN TO RELOAD");
+    shift_key(ENAGA_KEY_LEFT);
     CHECK_EQ(UiProbe::notice(app), "RELOADING");
     pump();                                        // one pass of service(): the load starts
     CHECK(app_storage().loading_project());
@@ -2382,12 +2384,55 @@ TEST(ui_the_pattern_page_sets_the_master_length_and_the_swing) {
     CHECK_EQ(int(pattern.master_length), 64);
     CHECK_EQ(UiProbe::pattern_field(app), 0);
 
-    // A pattern edit, so undoable (from GRID: in PROJECT, F1 + CLR is NEW PROJECT).
+    // A pattern edit, so undoable.
     key(ENAGA_KEY_CLR);
     key(ENAGA_KEY_F4);
     shift_key(ENAGA_KEY_CLR);
     pump(2);
     CHECK(int(pattern.master_length) < 64);
+}
+
+TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_moved_to_f1_arrows) {
+    // F1 + CLR and F1 + OK were NEW PROJECT and RELOAD here, so undo and redo were the one pair
+    // of keys that changed meaning in one mode. Now they are undo and redo everywhere, and the
+    // card's two whole-project actions are F1 + LEFT and F1 + RIGHT, each pressed twice.
+    Strata &app = fresh();
+    const Pattern &pattern = app_engine().pattern();
+    const int length = int(pattern.master_length);
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_OCTAVE_RIGHT);                      // PATTERN
+    app.on_encoder(0, -2);
+    pump(2);
+    CHECK_EQ(int(pattern.master_length), length - 2);
+
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(int(pattern.master_length), length);
+    CHECK_EQ(UiProbe::notice(app), "UNDO");
+    CHECK(!app_storage().loading_project());
+    shift_key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(int(pattern.master_length), length - 2);
+    CHECK_EQ(UiProbe::notice(app), "REDO");
+
+    // One F1 + RIGHT only arms; a stray press does not throw the project away.
+    key(ENAGA_KEY_CLR);                               // back to the slots
+    shift_key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN FOR NEW");
+    CHECK_EQ(int(pattern.master_length), length - 2);
+    // A different action in between disarms it: LEFT then RIGHT is two first presses.
+    shift_key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN TO RELOAD");
+    shift_key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN FOR NEW");
+    shift_key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::notice(app), "NEW PROJECT");
+    CHECK(pump_until_idle());
+    pump(4);
+    CHECK_EQ(int(pattern.master_length), int(Pattern{}.master_length));   // a blank project's
+    key(ENAGA_KEY_F4);
 }
 
 // --- the arrow keys ---------------------------------------------------------------------------
