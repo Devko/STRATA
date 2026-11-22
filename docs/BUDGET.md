@@ -1282,6 +1282,16 @@ rounding difference that tips a voice threshold (`VaVoice::sounding()` decides w
 note resets the oscillator phases). The deciding run is the fused build with `--fp_reassoc=off`.
 Until then the unit runs the unfused path, which every build renders the same.
 
+**Decided (same evening): it is not rounding, and the fusion stays off.** The fused loop built
+by cl6x with `--fp_reassoc=off` departs from GCC in exactly the same way (366,019 of 401,018
+samples, first at 0.3646 s); the GCC device build of the fused loop is identical to the unfused
+path. The C674x has no fused multiply-add, so contraction cannot explain it either. What is left
+is cl6x compiling `strata_va_back` to something other than its C -- a compiler bug, or undefined
+behaviour in the kernel that GCC happens to tolerate -- and neither is acceptable in the audio
+path. To bring the ~1.7 points back: build `valoops.ti.c` with cl6x at `-O2` and `-O0` to see
+where the result changes, read the pipelined loop in the `-k` assembly, and only then report a
+cl6x bug or fix the kernel. Not before v0.1.
+
 `tools/ti_loops.py --enaga` confirmed the in-place reasoning: Enaga's `enaga_svf_cascade` has a
 54-cycle version (in and out may alias) beside its 21-cycle one, and an in-place call gets the
 54; `strata_svf_cascade_inplace` is 21. `enaga_one_pole_process` 18 vs `strata_one_pole_inplace`
