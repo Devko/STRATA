@@ -319,10 +319,13 @@ void Engine::apply(const Command &command) {
             // Nothing to do here. enaga::clock's transport calls are MAIN CONTEXT (see
             // <enaga/clock.hpp>), so app/ drives them directly; routing them through this ring
             // would call them from the audio context, where they silently do nothing. The
-            // command still exists because the UI's intent is worth seeing in a trace.
+            // command still exists because the UI's intent is worth seeing in a trace. It does end
+            // a finished song's silence, which matters under an outside clock that never stopped.
+            song_over_ = false;
             break;
 
         case Cmd::stop:
+            song_over_ = false;
             // Only the voice side of a stop belongs here; the clock itself was already stopped
             // by the main context.
             if (command.a) {
@@ -603,6 +606,7 @@ void Engine::apply(const Command &command) {
             // Mutation-equivalent (docs/MUTATION.md): resolve_tick already sends an origin past
             // the new tick back to 0. Kept so that this case says everything a restart resets.
             origin_ = 0;
+            song_over_ = false;
             boundary_known_ = false;
             bar_known_ = false;
             break;
@@ -612,10 +616,10 @@ void Engine::apply(const Command &command) {
             bool done = false;
             switch (ChainEdit(command.a)) {
                 case ChainEdit::set:
-                    done = chain_set(project_, at, command.b, command.c, command.d);
+                    done = chain_set(project_, at, command.b, command.c, command.d, command.e);
                     break;
                 case ChainEdit::insert:
-                    done = chain_insert(project_, at, command.b, command.c, command.d);
+                    done = chain_insert(project_, at, command.b, command.c, command.d, command.e);
                     // The player's entry is an index: keep it on the entry it is playing.
                     if (done) chain_player_inserted(chain_, at);
                     break;
@@ -623,8 +627,13 @@ void Engine::apply(const Command &command) {
                     done = chain_remove(project_, at);
                     if (done) chain_player_removed(chain_, at);
                     break;
+                case ChainEdit::song:
+                    project_.settings.chain_song = command.b != 0;
+                    done = true;
+                    break;
                 case ChainEdit::pattern_delta:
-                case ChainEdit::repeats_delta: {
+                case ChainEdit::repeats_delta:
+                case ChainEdit::mutes_delta: {
                     if (at >= chain_length(project_)) break;
                     const ChainEntry entry = project_.chain[at];
                     const int delta = int(int8_t(command.b));
@@ -633,12 +642,19 @@ void Engine::apply(const Command &command) {
                         const int last = kBanks * kPatternsPerBank - 1;
                         index = index < 0 ? 0 : (index > last ? last : index);
                         done = chain_set(project_, at, uint8_t(index / kPatternsPerBank),
-                                         uint8_t(index % kPatternsPerBank), entry.repeats);
+                                         uint8_t(index % kPatternsPerBank), entry.repeats,
+                                         entry.mutes);
+                    } else if (ChainEdit(command.a) == ChainEdit::mutes_delta) {
+                        int mutes = int(entry.mutes) + delta;
+                        mutes = mutes < 0 ? 0 : (mutes > kChainMutesMax ? kChainMutesMax : mutes);
+                        done = chain_set(project_, at, entry.bank, entry.slot, entry.repeats,
+                                         uint8_t(mutes));
                     } else {
                         int repeats = int(entry.repeats) + delta;
                         repeats = repeats < 1 ? 1 : (repeats > kChainRepeatsMax ? kChainRepeatsMax
                                                                                 : repeats);
-                        done = chain_set(project_, at, entry.bank, entry.slot, uint8_t(repeats));
+                        done = chain_set(project_, at, entry.bank, entry.slot, uint8_t(repeats),
+                                         entry.mutes);
                     }
                     break;
                 }
@@ -669,6 +685,7 @@ void Engine::apply(const Command &command) {
                 if (chain_start(project_, chain_)) {
                     switch_pattern(int(project_.chain[chain_.entry].bank),
                                    int(project_.chain[chain_.entry].slot));
+                    chain_entry_started();
                 } else {
                     status_.bump_refused();
                 }
@@ -677,6 +694,7 @@ void Engine::apply(const Command &command) {
                 // back: a performer turning the chain off wants to stay where they are.
                 chain_.active = false;
             }
+            song_over_ = false;
             // And record it, which nothing did: `ProjectSettings::chain_enabled` round-tripped
             // through the serializer while never being written, so a project saved with its
             // chain running reopened with it off. The player's own `active` is the live truth;
@@ -763,6 +781,7 @@ void Engine::apply(const Command &command) {
                 held_arp_[t].on = false;
                 held_count_[t] = 0;
             }
+            song_over_ = false;
             // The lock mask of a step of a pattern that no longer exists (Cmd::stop says why).
             for (int t = 0; t < kTracks; t++) locked_[t] = 0;
             reconfigure();
@@ -1558,6 +1577,27 @@ void Engine::on_bar() {
 void Engine::cross_boundary(uint32_t boundary) {
     if (!chain_.active) return;
 
+    // Song mode: the last pass of the last entry has ended. The song goes back to entry 1 for
+    // the next PLAY and is silent until then; the main context sees `song_end` and stops the
+    // transport (only it can). Releasing here rather than waiting for its Cmd::stop is what
+    // keeps the step on this boundary from sounding in the block or two before that arrives.
+    if (project_.settings.chain_song && chain_at_end(project_, chain_)) {
+        if (chain_start(project_, chain_)) {
+            switch_pattern(int(project_.chain[chain_.entry].bank),
+                           int(project_.chain[chain_.entry].slot));
+            chain_entry_started();
+        }
+        origin_ = boundary;
+        song_over_ = true;
+        for (int t = 0; t < kTracks; t++) {
+            if (machines_[t]) machines_[t]->release_all();
+            seq_arp_[t].on = false;
+        }
+        deferred_count_ = 0;
+        status_.bump_song_end();
+        return;
+    }
+
     uint8_t bank = 0, slot = 0;
     // chain_advance reports a PATTERN change, not an entry change, so a chain that repeats one
     // pattern returns false here and nothing is switched -- which is what keeps 1ST from firing
@@ -1567,6 +1607,14 @@ void Engine::cross_boundary(uint32_t boundary) {
         // The next entry starts on the boundary the last one ended on, at its step 1.
         origin_ = boundary;
     }
+    // A new entry (or a one-entry chain's next pass of it) recalls its mutes on the boundary.
+    if (chain_.played == 0) chain_entry_started();
+}
+
+// A chain entry has just started: its mute recall, if it has one, now (song mode).
+void Engine::chain_entry_started() {
+    const int state = chain_entry_mutes(project_, chain_);
+    if (state >= 0) apply_mutes(project_.settings.mute_states[state]);
 }
 
 Project &Engine::project_for_load() { return project_; }
@@ -1594,6 +1642,8 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // with the clock stopped gets (Cmd::queue_pattern).
     const bool jumped_back = tick < tick_;
     tick_ = tick;
+    // A finished song plays again from a transport that went back (a stop and PLAY).
+    if (jumped_back) song_over_ = false;
 
     // A transport that relocated to before the pattern's start (a START from 0 after a switch)
     // measures from 0 again. Only ever backwards: a CONTINUE resumes past the origin and keeps it.
@@ -1670,6 +1720,9 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // FILL is the pad OR the auto-fill bar. Resolved here rather than in the command, so that
     // turning auto-fill on takes effect at the next bar rather than mid-bar.
     perform_.fill = fill_held_ || auto_fill_active(auto_fill_, bar_);
+
+    // A finished song is silent until the transport stops or starts again.
+    if (song_over_) return;
 
     // The pattern's own tick: steps, passes and conditions all count from where it started.
     const int count =
