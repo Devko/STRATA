@@ -1439,6 +1439,16 @@ public:
         selected_ = track;
         // The root in a playable octave: the pattern's root is a pitch class (core/pattern.hpp).
         const uint8_t note = uint8_t(kPadOctaveNote + engine_.key_root());
+
+        // NOTE RPT: the pad rolls for as long as it is held, and is not recorded -- a roll is a
+        // performance over the pattern, like beat repeat, not a string of steps to write.
+        if (note_repeat_mode_) {
+            rolling_pads_ = uint16_t(rolling_pads_ | (1u << track));
+            roll_velocity_[track] = uint8_t(velocity < 1 ? 1 : velocity);
+            post(Cmd::note_repeat, uint8_t(track), 0, note, roll_velocity_[track], 1);
+            return;
+        }
+
         post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity));
         record_note(track, note, uint8_t(velocity));
     }
@@ -1446,6 +1456,15 @@ public:
     void on_pad_release(int pad) override {
         if (is_perform_pad(pad)) {
             on_perform_pad(pad, false);
+            return;
+        }
+
+        // A rolling pad stops on its own release, whatever the mode is by now: NOTE RPT turned
+        // off under a held pad must not leave the roll running.
+        const int track = track_for_pad(pad);
+        if (track >= 0 && track < kTracks && (rolling_pads_ >> track & 1u) != 0) {
+            rolling_pads_ = uint16_t(rolling_pads_ & ~(1u << track));
+            post(Cmd::note_repeat, uint8_t(track), 0, 0, 0, 0);
             return;
         }
 
@@ -1486,6 +1505,18 @@ public:
         // fire is a claim about a situation that cannot arise.
         const int track = track_for_pad(pad);
         if (track < 0 || track >= kTracks) return;
+
+        // A rolling pad's pressure is the roll's velocity instead: lean in and the roll swells.
+        // Change-filtered like the macro, and never below 1, which is silence on most machines.
+        if ((rolling_pads_ >> track & 1u) != 0) {
+            const uint8_t velocity =
+                uint8_t(pressure < 1 ? 1 : (pressure > 127 ? 127 : pressure));
+            if (velocity == roll_velocity_[track]) return;
+            roll_velocity_[track] = velocity;
+            post(Cmd::note_repeat, uint8_t(track), 0, 0, velocity, 2);
+            return;
+        }
+
         if (track != selected_) return;                   // "the SELECTED track's macro 1"
 
         const uint8_t clamped = uint8_t(pressure < 0 ? 0 : (pressure > 127 ? 127 : pressure));
@@ -1506,6 +1537,13 @@ public:
     void on_perform_pad(int pad, bool down) {
         switch (PerformPad(pad)) {
             case PerformPad::fill:
+                // FUNC + FILL turns NOTE RPT on and off; the fill itself is untouched. A FILL
+                // released with FUNC still down after an ordinary press still lets the fill go.
+                if (down && shift_) {
+                    note_repeat_mode_ = !note_repeat_mode_;
+                    notice(note_repeat_mode_ ? "NOTE RPT" : "PADS PLAY");
+                    break;
+                }
                 post(Cmd::set_fill, 0, 0, down ? 1 : 0);
                 break;
 
@@ -3284,6 +3322,7 @@ public:
         out = line;
         append(out, "BAR ");
         append_number(out, engine_.bar() % 1000u + 1u);
+        if (note_repeat_mode_) append(out, " NRPT");
         *out = 0;
         canvas.text(0, 112, line, 9);
     }
@@ -3964,6 +4003,9 @@ private:
     // All of it is which control is selected or held, never what the layer produces: the engine
     // owns that, and the UI reads it back through the accessors.
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
+    bool note_repeat_mode_ = false;             // FUNC + FILL: a held lower pad rolls
+    uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)
+    uint8_t roll_velocity_[kTracks] = {};       // the last velocity sent for each roll
     bool mutation_pending_ = false;             // a MUTATE waiting for OK (keep) or CLR (revert)
     int16_t keys_held_note_[16] = {-1, -1, -1, -1, -1, -1, -1, -1,
                                    -1, -1, -1, -1, -1, -1, -1, -1};   // KEYS: what each key holds

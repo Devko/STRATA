@@ -143,6 +143,9 @@ public:
     const BeatRepeat &repeat() const { return repeat_; }
     RepeatLength repeat_length() const { return repeat_length_; }
 
+    // Whether a note repeat is rolling on `track` (Cmd::note_repeat).
+    bool rolling(int track) const { return track >= 0 && track < kTracks && rolls_[track].on; }
+
     // The performance layer writes over the kit without changing it, so the UI has to be able to
     // draw what is actually being heard as well as what is stored. `params` is the kit; this is
     // the kit with the morph, the macros and any throw over the top.
@@ -448,6 +451,23 @@ private:
 
     BeatRepeat repeat_;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
+
+    // Note repeat, one roll per track (Cmd::note_repeat). `countdown` is frames to the next hit
+    // with the transport stopped; `last_tick` is the tick of the press, so the first grid tick
+    // after it is skipped when it would land on top of the press's own hit.
+    struct Roll {
+        bool on = false;
+        uint8_t note = 60;
+        uint8_t velocity = 100;
+        uint32_t last_tick = 0;
+        float countdown = 0.0f;
+    };
+    Roll rolls_[kTracks];
+    void roll_fire(int track, uint32_t frame);
+    void roll_tick(uint32_t tick, uint32_t frame);
+    void roll_free(uint32_t frames);
+    float roll_period_frames() const;
+    uint32_t roll_gate_frames() const;
     bool repeat_held_ = false;
     bool repeat_pitch_ = false;
 

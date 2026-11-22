@@ -392,6 +392,20 @@ New after the walkthrough was written. Play A01 GROOVE, select track 8 (the chor
       Set the hats' track to 66 with SWG at 50: only the hats swing. Back to `PAT`: they follow
       SWG again. It saves with the pattern, and undo takes it back.
 
+## 13f. Note repeat on the pads (4 min)
+
+New after the walkthrough was written. The emulator cannot press pads, so this is the first time
+it runs anywhere but the host tests.
+
+- [ ] **FUNC + FILL** (hold FUNC, tap FILL): `NOTE RPT`, no fill, and PERFORM's last line reads
+      `BAR n NRPT`.
+- [ ] Transport running, hold lower pad 1: the kick rolls in sixteenths, locked to the beat. Let
+      go: it stops at once. Hold REPEAT and turn VALUE to 1/32, let REPEAT go, roll again: 1/32.
+- [ ] Hold pad 7 (CHORD) and lean on it: the roll gets louder with pressure, softer as you ease
+      off. Macro 1 does not move.
+- [ ] Transport stopped: a held pad still rolls, at the tempo's sixteenths.
+- [ ] FUNC + FILL again: `PADS PLAY`, and a pad plays one note. REC on: a roll records nothing.
+
 ## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). PROJECT, FUNC+LEFT once: `AGAIN TO RELOAD`, nothing changes.

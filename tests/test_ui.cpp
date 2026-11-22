@@ -73,6 +73,7 @@ struct UiProbe {
 
     static bool rec(const Strata &app) { return app.rec_; }
     static bool mute_mode(const Strata &app) { return app.mute_mode_; }
+    static bool note_repeat_mode(const Strata &app) { return app.note_repeat_mode_; }
     static int scene_holding(const Strata &app) { return app.scene_holding_; }
     static int keys_octave(const Strata &app) { return app.keys_octave_; }
     static int keys_held_note(const Strata &app, int key) { return app.keys_held_note_[key]; }
@@ -257,6 +258,12 @@ Strata &fresh() {
     if (UiProbe::mute_mode(app)) {         // the MUTE pad is a toggle, so it takes another press
         app.on_pad_press(5, 100);
         app.on_pad_release(5);
+    }
+    if (UiProbe::note_repeat_mode(app)) {  // FUNC + FILL is a toggle too
+        app.on_key(ENAGA_KEY_F1, true);
+        app.on_pad_press(1, 100);
+        app.on_pad_release(1);
+        app.on_key(ENAGA_KEY_F1, false);
     }
     if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
 
@@ -542,6 +549,53 @@ TEST(ui_a_lower_pad_selects_its_track_and_everything_else_follows) {
     pump(2);
     CHECK(app_engine().muted(2));
     CHECK_EQ(UiProbe::selected(app), 2);
+}
+
+TEST(ui_func_fill_turns_note_repeat_on_and_a_held_pad_rolls) {
+    Strata &app = fresh();
+    // FUNC + FILL toggles the mode and does not start a fill.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK(UiProbe::note_repeat_mode(app));
+    CHECK(std::strcmp(UiProbe::notice(app), "NOTE RPT") == 0);
+    CHECK(!app_engine().fill());
+
+    // A held lower pad rolls its track, selects it, and its pressure is the roll's velocity, not
+    // macro 1.
+    const uint8_t macro = app_engine().macro_position(0);
+    app.on_pad_press(4, 100);
+    pump(2);
+    CHECK(app_engine().rolling(2));
+    CHECK_EQ(UiProbe::selected(app), 2);
+    app.on_pad_pressure(4, 127);
+    pump(2);
+    CHECK_EQ(int(app_engine().macro_position(0)), int(macro));
+    app.on_pad_release(4);
+    pump(2);
+    CHECK(!app_engine().rolling(2));
+
+    // Turning the mode off under a held pad does not leave the roll running.
+    app.on_pad_press(6, 100);
+    pump(2);
+    CHECK(app_engine().rolling(3));
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(!UiProbe::note_repeat_mode(app));
+    CHECK(std::strcmp(UiProbe::notice(app), "PADS PLAY") == 0);
+    app.on_pad_release(6);
+    pump(2);
+    CHECK(!app_engine().rolling(3));
+
+    // And with the mode off a pad plays one note again.
+    app.on_pad_press(6, 100);
+    pump(2);
+    CHECK(!app_engine().rolling(3));
+    app.on_pad_release(6);
 }
 
 TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {

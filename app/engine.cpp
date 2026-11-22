@@ -1071,6 +1071,28 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::note_repeat: {
+            Roll &roll = rolls_[track];
+            const uint8_t velocity =
+                uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
+            if (command.c == 0) {
+                // Let go. The last hit keeps its gate and ends by itself.
+                roll.on = false;
+            } else if (command.c == 1) {
+                roll.on = true;
+                roll.note = clamp_u8(command.a);
+                roll.velocity = velocity;
+                roll.last_tick = tick_;
+                roll.countdown = roll_period_frames();
+                roll_fire(track, 0);
+            } else if (command.c == 2) {
+                if (roll.on) roll.velocity = velocity;   // pressure on a pad that is not rolling
+            } else {
+                status_.bump_refused();
+            }
+            break;
+        }
+
         case Cmd::release_note:
             // A KEYS key coming up. Not refused on a muted track or with nothing holding the
             // note: a release with nothing to let go is the second half of a gesture whose
@@ -1577,6 +1599,68 @@ void Engine::dispatch(const StepEvent &event, uint32_t frames) {
     held.frame -= frames;
 }
 
+// --- note repeat ---------------------------------------------------------
+
+float Engine::roll_period_frames() const {
+    return float(repeat_length_ticks(repeat_length_)) * samples_per_tick_;
+}
+
+// Half the period: a POLY or MONO roll is a string of notes, not one held note retriggering.
+uint32_t Engine::roll_gate_frames() const {
+    const float half = 0.5f * roll_period_frames();
+    return half < 1.0f ? 1u : uint32_t(half);
+}
+
+void Engine::roll_fire(int track, uint32_t frame) {
+    // Not on a muted track, for the reason Cmd::trigger_note gives.
+    if (machines_[track] == nullptr || muted_[track]) return;
+    const Roll &roll = rolls_[track];
+    Trig trig;
+    trig.note = roll.note;
+    trig.velocity = roll.velocity;
+    trig.frame = frame;
+    trig.gate_frames = roll_gate_frames();
+    if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
+    status_.bump_triggered(track);
+}
+
+// The transport is running: hit on the grid of beat repeat's length, counted from the clock's
+// zero so a roll lands on the same ticks as the pattern's steps. One modulo per tick, not per
+// track -- this chip has no integer divide, and a tick is control rate.
+void Engine::roll_tick(uint32_t tick, uint32_t frame) {
+    bool any = false;
+    for (int t = 0; t < kTracks; t++) any = any || rolls_[t].on;
+    if (!any) return;
+    const uint32_t length = uint32_t(repeat_length_ticks(repeat_length_));
+    if (tick % length != 0) return;
+    for (int t = 0; t < kTracks; t++) {
+        Roll &roll = rolls_[t];
+        if (!roll.on) continue;
+        // The press already hit: a grid tick less than half a length after it would be a flam.
+        if (tick >= roll.last_tick && tick - roll.last_tick < (length >> 1)) continue;
+        roll.last_tick = tick;
+        roll_fire(t, frame);
+        roll.countdown = roll_period_frames();
+    }
+}
+
+// The transport is stopped: a free roll from the press, at the tempo's length in frames.
+void Engine::roll_free(uint32_t frames) {
+    const float period = roll_period_frames();
+    for (int t = 0; t < kTracks; t++) {
+        Roll &roll = rolls_[t];
+        if (!roll.on) continue;
+        if (period < 1.0f) continue;              // the tempo has not settled: the press only
+        if (roll.countdown > period) roll.countdown = period;   // the length got shorter
+        while (roll.countdown < float(frames)) {
+            const float at = roll.countdown < 0.0f ? 0.0f : roll.countdown;
+            roll_fire(t, uint32_t(at));
+            roll.countdown += period;
+        }
+        roll.countdown -= float(frames);
+    }
+}
+
 void Engine::deliver_deferred(uint32_t frames) {
     // Oldest first, and compacted in one pass: an event that fires is removed and the rest keep
     // their order, so a ratchet's hits stay in the order the scheduler produced them.
@@ -1789,12 +1873,16 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // and a machine's voice allocation sees triggers in the order they arrive.
     deliver_deferred(frames);
 
+    // Note repeat with the transport stopped: no ticks arrive, so the rolls count frames.
+    if (!enaga::clock::running()) roll_free(frames);
+
     // Enaga's clock reports the ticks falling in this block, each with the frame it lands on.
     // That frame is what makes a step start on an exact sample.
     enaga::clock::Tick ticks[16];
     const uint32_t tick_count = enaga::clock::ticks(ticks, 16);
     for (uint32_t i = 0; i < tick_count; i++) {
         resolve_tick(ticks[i].tick, ticks[i].frame);
+        roll_tick(ticks[i].tick, ticks[i].frame);
     }
 
     // What the performance layer produced, into the values the machines read -- except where the

@@ -587,6 +587,16 @@ release and the music is where it would have been. In PERFORM, **FUNC+UP / FUNC+
 **auto-fill**: OFF, or FILL on the last bar of every 4, 8 or 16. PERFORM's lower lines show what
 is active: `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n`.
 
+### Note repeat
+
+**FUNC + FILL** turns **NOTE RPT** on (`NOTE RPT`, and `NRPT` after the bar number in PERFORM);
+again turns it off (`PADS PLAY`). While it is on, holding a lower pad rolls that track's note at
+beat repeat's length: 1/16 until you pick another with REPEAT + VALUE. With the transport running
+the hits land on the beat grid, so a roll is always in time; stopped, it rolls from the moment you
+press. Leaning on the pad sets each hit's velocity, so pressure swells and fades the roll (macro 1
+is left alone while a pad rolls). Hold two pads for two rolls. Rolls are played, not written: REC
+does not record them.
+
 ### The master kill EQ
 
 The master has a DJ-style **kill EQ** (an isolator) after the DJ filter: three bands split at
@@ -742,6 +752,8 @@ names one.
   kept one later.
 - **Kill the lows for the build.** FUNC+A takes the kick and bass out; push it again exactly on
   the one of the drop. FUNC+C on its own thins a busy top end for a breakdown.
+- **Snare rolls into the drop.** FUNC+FILL, then hold the snare's pad and press harder over the
+  last bar; REPEAT + VALUE to 1/32 for the final beat.
 - **Throws on the off-beat parts.** THROW on the rim or the chord for a bar, then let it ring.
 - **Resample a moment you like.** An 8-bar take of a jam into track 8, then sliced or on GRAIN,
   turns a happy accident into material.

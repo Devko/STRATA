@@ -226,6 +226,12 @@ enum class Cmd : uint8_t {
     // the project (ProjectSettings::eq_kills) and save with it, like the live mutes.
     eq_kill,
 
+    // Note repeat (FUNC + FILL in any mode): a held lower pad rolls its track's note at beat
+    // repeat's length, on the clock's grid while the transport runs and free from the press while
+    // it is stopped. a: note, b: velocity, c: 0 let go, 1 press (the first hit sounds now),
+    // 2 new velocity from the pad's pressure. Played, not recorded: the pattern is untouched.
+    note_repeat,
+
     count
 };
 
