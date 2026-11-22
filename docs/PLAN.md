@@ -247,7 +247,7 @@ implemented but **have never run on a unit** — STRATA may be the first thing t
 - ~~Sync settings UI in STRATA (source, clock out, SYNC out, MIDI channel).~~ **Done, and
   smaller than it looked.** None of the four is settable from an app: `<enaga/clock.hpp>` and
   `<enaga/midi.hpp>` expose `source()` and `channel()` and no writer, because they are the
-  user's settings in the Enaga menu. PROJECT mode's SETUP page (PROJECT, then octave RIGHT three times) shows
+  user's settings in the Enaga menu. PROJECT mode's SETUP page (PROJECT, then the screen key RIGHT three times; the octave keys until docs/CONTROLS.md) shows
   CLOCK SRC, the tempo and whose it is, MIDI CH and the record quantize amount, and says where
   the first three are changed. VALUE refuses a tempo edit when the source is not INTERNAL,
   which is the one behaviour the spec's key table asks for and `app/` did not have.

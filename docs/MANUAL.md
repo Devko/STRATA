@@ -9,10 +9,28 @@ early (see the README's status), so where the hardware has not confirmed somethi
 manual says so.
 
 **Key names.** Keys are named as printed on the SmplTrek: FUNC, REC, PROJECT, HOME, PLAY, STOP,
-MIXER, EDIT, OK, CLR, the arrows (UP, DOWN, LEFT, RIGHT), the octave keys, the two selection keys
-under the screen, encoders A-D and VALUE, STEP 1-16 and the pads. `FUNC+X` means hold FUNC and
-press X. "Hold STEP" means hold a STEP key down while you do the rest. The cheatsheet's key
-legend maps these to the F1-F8 names used in the code and in docs/SPEC.md.
+MIXER, EDIT, OK, CLR, the arrow pad (UP, DOWN, LEFT, RIGHT), the **screen keys** (the pair just
+under the screen), the **pad-row keys** (the pair at the ends of the upper pad row, printed as
+octave), encoders A-D and VALUE, STEP 1-16 and the pads. `FUNC+X` means hold FUNC and press X.
+"Hold STEP" means hold a STEP key down while you do the rest. The cheatsheet's key legend maps
+these to the F1-F8 names used in the code and in docs/SPEC.md.
+
+**How the controls are laid out** ([CONTROLS.md](CONTROLS.md)). Each group of buttons does one
+kind of thing everywhere: the arrow pad moves the cursor (OK picks, CLR goes back), the screen
+keys turn the screen's pages, and the pad-row keys choose which sixteen the STEP keys mean (step
+page, octave, bank). FUNC + a function key does what is printed under that key: REC "sampling"
+is RESAMPLE, PROJECT "pool" is the sample browser, HOME "system" is the **FUNC menu**, MIXER "fx"
+is PERFORM. The rare setup actions (save as, open, new, reload, kits, chain on/off, song mode,
+track speed, auto-fill, quantize) live in the FUNC menu, named on the screen. The upper pads are
+printed TRK 1-7, but in STRATA they are the performance pads: each is lit in its own colour and
+names itself on the screen when pressed. Hold FUNC alone for a moment to see a summary.
+
+![The SmplTrek panel with STRATA's button groups: screen, knobs, screen keys, arrow pad, function block, OK and CLR, STEP keys, pad-row keys, performance pads and track pads](screens/panel.svg)
+
+<p><img src="screens/help.png" width="256" alt="FUNC held alone: FUNC + each function key, and the performance pads"> <img src="screens/menu.png" width="256" alt="The FUNC menu, opened with FUNC+HOME, on SAVE"></p>
+
+<sub>Left: FUNC held alone shows what FUNC + each function key does and what the upper pads are.
+Right: the FUNC menu (FUNC+HOME), which always opens on SAVE.</sub>
 
 **Contents**
 
@@ -28,7 +46,9 @@ legend maps these to the F1-F8 names used in the code and in docs/SPEC.md.
 ![STRATA's screens: GRID, the step page, EDIT, MIXER, PERFORM, KEYS, MACHINE, KIT and PROJECT](screens/overview.png)
 
 <sub>The factory project playing. Top: GRID, the step page, EDIT. Middle: MIXER, PERFORM (with the
-factory macros B, C and D), KEYS. Bottom: MACHINE, the KIT browser, PROJECT.</sub>
+factory macros B, C and D), KEYS. Bottom: MACHINE, the KIT browser, PROJECT. Every screenshot in
+this manual is drawn by the app's own screen code on the host build, in Enaga's font
+(`tools/screenshots.sh`), so it shows what the build shows.</sub>
 
 ---
 
@@ -47,6 +67,11 @@ The selected track is the one the STEP keys, the encoders, KEYS and MUTATE work 
 also walk the tracks in GRID, EDIT and KEYS.
 
 ### Machines
+
+<p><img src="screens/edit.png" width="256" alt="EDIT, the kick's SRC page"> <img src="screens/edit_fltr.png" width="256" alt="EDIT, the FLTR page"></p>
+
+<sub>EDIT on the kick: the machine's SRC page and the insert chain's FLTR page. The bars above the knobs are the six pages; the screen keys turn them.</sub>
+
 
 A machine is one of eight sound engines, plus **MID**, which plays an outboard synth over MIDI
 instead (section 3). Any track can host any machine (MACHINE mode, `FUNC+EDIT`). The default kit
@@ -75,8 +100,10 @@ playing a locked step never clicks.
 
 ### The LFO
 
+<p><img src="screens/edit_lfo.png" width="256" alt="EDIT, the LFO page"></p>
+
 Every track also has **one LFO**, on a fifth EDIT page, **LFO**, after FX (EDIT, then the
-selection keys or LEFT/RIGHT). It moves one of the track's 16 parameters up and down on its own:
+screen keys or LEFT/RIGHT). It moves one of the track's 16 parameters up and down on its own:
 
 - **A, WAV**: the shape. SIN, TRI, RMP (a rising ramp), SAW (a falling one), SQR and S+H (a new
   random value each cycle). One click is one shape.
@@ -98,6 +125,8 @@ parameter in its 0-127 steps about 750 times a second: smooth on a filter or a p
 deep sweep of a pitch can be heard stepping.
 
 ### The arpeggiator
+
+<p><img src="screens/edit_arp.png" width="256" alt="EDIT, the ARP page"></p>
 
 Every track also has an **arpeggiator**, on a sixth EDIT page, **ARP**, after LFO. It turns a
 note into a run of notes:
@@ -125,6 +154,8 @@ in a project saved before the arp existed.
 
 ### Patterns, banks and the project
 
+<p><img src="screens/project.png" width="256" alt="PROJECT: bank A's sixteen slots"></p>
+
 A **pattern** holds all eight tracks: up to 64 steps per track, with their notes, parameter locks
 and conditions, plus the pattern's master length, swing, key and scale. Patterns live in
 **8 banks (A-H) of 16 slots**, 128 per project. The top line of every screen names the pattern
@@ -148,12 +179,16 @@ locks glow amber.
 
 ### The chain
 
+<p><img src="screens/chain.png" width="256" alt="PROJECT's CHAIN page"></p>
+
 The **chain** plays patterns in order: up to 64 entries, each a pattern and a repeat count
 (X1-X16). It is a list, not a song timeline. You build it on PROJECT's CHAIN page and turn it on
-and off with `FUNC+UP` in PROJECT. Each entry can also recall a **mute state** as it starts, and
+and off with the FUNC menu's CHAIN row (FUNC+HOME). Each entry can also recall a **mute state** as it starts, and
 **SONG** mode plays the chain once and stops, so a chain can be a whole arrangement (below).
 
 ### Scenes and morphing
+
+<p><img src="screens/perform.png" width="256" alt="PERFORM: scenes, the morph bar and the macros"></p>
 
 A **scene** is a snapshot of parameter values for any tracks. A project has 16. Two of them sit
 on the **A** and **B** sides, and in PERFORM the VALUE knob **morphs** the live sound from A to
@@ -170,6 +205,11 @@ project has three: **B ACID**, **C DUB** and **D DRIVE**. Macro A is left for yo
 the selected track's pad pushes it up while you lean on it.
 
 ### MUTATE
+
+<p><img src="screens/mutate.png" width="256" alt="GRID after MUTATE: MUTATE T1 VELOCITY"></p>
+
+<sub>Right after the press: what was mutated, on which track. Then `OK KEEPS CLR REVERTS` until you answer, with the MUTATE pad lit bright.</sub>
+
 
 **MUTATE** (upper pad 7) makes a seeded variation of the selected track: rotate it, add or
 remove hits, or nudge velocity, timing, probability or notes within the scale. It is one undo
@@ -233,9 +273,14 @@ and lets tails ring; STOP again cuts them.
 
 ### 2. Edit steps
 
+<p><img src="screens/grid.png" width="256" alt="GRID: eight tracks, the selected one highlighted"></p>
+
+<sub>GRID: one row per track, the playhead on the top row; under it the selected track (`T1`), its step page, length and speed, and the four knobs of the current EDIT page.</sub>
+
+
 Press **HOME** for GRID: all eight tracks as rows, the selected one highlighted. Tap lower pad 2
 to select the clap. Its steps show on the STEP LEDs; tap **STEP 8** to add a clap, tap it again to
-remove it. The octave keys move between the four 16-step pages of a 64-step track; `L16` on screen
+remove it. The pad-row keys (or LEFT/RIGHT) move between the four 16-step pages of a 64-step track; `L16` on screen
 is the track's length.
 
 Clear the whole track with **CLR**, and get it back with **FUNC+CLR** (undo). FUNC+OK is redo.
@@ -243,7 +288,7 @@ There are 16 levels.
 
 ### 3. Lock a parameter
 
-Select the kick (lower pad 1) and press **EDIT**. The selection keys (or LEFT/RIGHT) flip the
+Select the kick (lower pad 1) and press **EDIT**. The screen keys (or LEFT/RIGHT) flip the
 pages SRC, FLTR, AMP, FX; go to **AMP**. Now hold **STEP 13** and turn **A** (DEC) down: the last
 kick of the bar is shorter. That is a lock. GROOVE already has one on step 9; hold STEP 9 and push
 **A** to remove it (`LOCK CLEARED`).
@@ -252,16 +297,20 @@ The encoders work the same way in GRID: they edit the current EDIT page of the s
 
 ### 4. Change a note, open the step page
 
+<p><img src="screens/step.png" width="256" alt="The step page for step 1 of track 1"></p>
+
 Select the bass (pad 6). Hold a STEP that has a note and turn **VALUE**: that changes the step's
 note. Hold the STEP and press **OK** to open the **step page**: A-D edit NOTE, VEL, LEN, MICR;
-the selection keys flip to PROB, COND, RTCH, RAMP and then ACNT, SLID, CHRD. LEFT/RIGHT walk to
+the screen keys flip to PROB, COND, RTCH, RAMP and then ACNT, SLID, CHRD. LEFT/RIGHT walk to
 the neighbouring steps. Turn SLID on for a 303-style slide into the next note. OK or CLR closes
 it.
 
 ### 5. Play it in
 
-Press **FUNC+HOME** for KEYS: STEP 1-16 play the scale from the root (C minor here), and the
-octave keys change octave. Press **REC** (it lights red) while playing and what you play is
+<p><img src="screens/keys.png" width="256" alt="KEYS: sixteen notes of C minor"></p>
+
+Press **HOME twice quickly** for KEYS: STEP 1-16 play the scale from the root (C minor here), and
+the pad-row keys change octave. Press **REC** (it lights red) while playing and what you play is
 recorded onto the selected track, quantized by the SETUP page's QUANTIZE amount (100% by
 default). Pads record too, with their velocity. REC again stops. Turning A-D while recording
 writes locks onto the steps as they pass (motion recording).
@@ -273,10 +322,16 @@ Press **PROJECT**. The 16 slots of bank A are on screen and on the STEP keys. Pr
 a change lands: END, after 16 or 32 steps, or NOW. Go on to A03 and A04. In PEAK, hold the
 **FILL** pad (upper pad 1) for the last bar to hear the kick and clap rolls.
 
-To let STRATA play the arrangement itself, press **FUNC+UP** in PROJECT (`CHAIN ON`).
+To let STRATA play the arrangement itself, press **FUNC+HOME**, scroll to CHAIN and press OK
+(`CHAIN ON`), then CLR to close the menu.
 **FUNC+STOP** stops and resets everything, and puts a running chain back to its first entry.
 
 ### 7. Perform
+
+<p><img src="screens/scene.png" width="256" alt="SCENE A held: STEP PICKS"></p>
+
+<sub>Every performance pad names itself when pressed: here SCENE A, held.</sub>
+
 
 Back in A01, press **FUNC+MIXER** for PERFORM. Turn **VALUE**: the bar at the top moves from
 scene A (1, empty) to scene B (2, DUB), and the groove fades into a dub version of itself. Hold
@@ -302,8 +357,8 @@ Then try the rest of the upper row, in any mode:
 
 ### 8. Save
 
-Press **FUNC+PROJECT** twice within two seconds (`FUNC+PROJECT TO SAVE`, then `SAVING`). The
-PROJECT screen stops saying `UNSAVED`. STRATA also autosaves whenever the transport stops.
+Press **FUNC+HOME** (the FUNC menu opens on SAVE), then **OK** (`SAVING`). The PROJECT screen
+stops saying `UNSAVED`. STRATA also autosaves whenever the transport stops.
 
 ---
 
@@ -481,8 +536,10 @@ WHOLE TONE, DIMINISHED. Notes are named with sharps (D#, not Eb).
 
 ### Changing a track's machine
 
+<p><img src="screens/machine.png" width="256" alt="MACHINE for track 1"></p>
+
 `FUNC+EDIT` opens MACHINE. UP/DOWN or encoder A pick the machine, and you hear the change at
-once; LEFT/RIGHT or the selection keys move to the next track. Encoder **B** sets the track's MIDI
+once; LEFT/RIGHT or the screen keys move to the next track. Encoder **B** sets the track's MIDI
 OUT channel: OFF, or 1-16. `FUNC+EDIT` again opens the kit library (section 6).
 
 ---
@@ -532,10 +589,12 @@ track. Hold a STEP and press UP / DOWN to copy / paste one step. Everything goes
 
 ### Length, speed and swing
 
-- `FUNC + octave keys`: the selected track's length, 1-64 steps.
-- `FUNC + selection keys`: its speed, 2x, 1x, 3/4, 1/2, 1/4, 1/8.
+<p><img src="screens/pattern.png" width="256" alt="PROJECT's PATTERN page"></p>
+
+- `FUNC + pad-row keys`: the selected track's length, 1-64 steps.
+- The FUNC menu's TRACK SPEED row: its speed, 2x, 1x, 3/4, 1/2, 1/4, 1/8 (LEFT/RIGHT).
 - `VALUE push + turn`: the pattern's swing, 50-75%, on the even 16ths.
-- PROJECT, octave RIGHT twice: the **PATTERN** page, where A sets the master length (LEN) and B
+- PROJECT, screen key RIGHT twice: the **PATTERN** page, where A sets the master length (LEN) and B
   the swing (SWG).
 - **Each track can swing on its own**, on the same page: under LEN and SWG are eight TRACK SWING
   fields, `PAT` (follow SWG) or 50-75%. LEFT/RIGHT walk the fields, and C (or VALUE) changes the
@@ -553,20 +612,20 @@ plays the 8-step figure twice. Edit the result by hand afterwards.
 
 ### Pattern changes and the chain
 
-In PROJECT, the selection keys (or LEFT/RIGHT) pick the **shown** bank, which is not necessarily
+In PROJECT, the pad-row keys pick the **shown** bank, which is not necessarily
 the playing one; STEP 1-16 or the cursor plus OK queue a slot from it. CLR cancels a queued change
 (`QUEUE OFF`). The slots show the playing pattern bright, patterns with trigs mid grey, empty ones
 dark, and `05>` marks a queued slot.
 
-The **CHAIN** page (PROJECT, octave RIGHT) lists the entries, `>02 A05 X2 PLAY`. UP/DOWN move the
+The **CHAIN** page (PROJECT, screen key RIGHT) lists the entries, `>02 A05 X2 PLAY`. UP/DOWN move the
 cursor, a STEP key puts that slot of the shown bank into the entry, LEFT/RIGHT step the entry's
-pattern, A or VALUE set its repeats, OK adds a copy after the cursor (up to 64), FUNC+LEFT removes
-the entry, FUNC+UP turns the chain on or off. Chain edits are not undoable.
+pattern, A or VALUE set its repeats, OK adds a copy after the cursor (up to 64), CLR twice removes
+the entry, and the FUNC menu's CHAIN row turns the chain on or off. Chain edits are not undoable.
 
 **Song mode.** B sets the entry's **mute recall**: `--` leaves the mutes alone, `M1`-`M8` recalls
 that stored mute state the moment the entry starts (the row reads `>02 A05 X2 M3`). Store an
 intro without the kick in state 2 and a breakdown in state 3, point entries at them, and the
-chain plays sections rather than just patterns. **FUNC+RIGHT** switches the chain between `LOOP`
+chain plays sections rather than just patterns. The FUNC menu's **CHAIN END** row switches the chain between `LOOP`
 (round and round, as before) and `SONG`: the chain plays through once, the transport stops at
 the end of the last entry (`SONG END`), and the next PLAY starts it again from entry 1. Under an
 outside clock that keeps running, STRATA goes quiet at the end and waits for PLAY or the outside
@@ -603,13 +662,13 @@ The seven upper pads are the same in every mode:
 
 | Pad | Plain | With FUNC |
 | --- | --- | --- |
-| 1 FILL | FILL conditions on while held | |
+| 1 FILL | FILL conditions on while held | NOTE RPT on/off |
 | 2 REPEAT | Beat repeat of the master while held; VALUE picks the length | Pitch drops as it repeats |
 | 3 MUTE | MUTE MODE on/off: lower pads mute at once | |
 | 4 SCENE A | Hold + STEP 1-16 puts that scene on side A | |
 | 5 SCENE B | The same for side B | |
 | 6 THROW | Selected track's delay send to full while held | Reverb instead |
-| 7 MUTATE | Mutate the selected track; OK keeps, CLR reverts | |
+| 7 MUTATE | Mutate the selected track; OK keeps, CLR reverts | Held: delay freeze |
 
 ### Mutes
 
@@ -661,7 +720,7 @@ filter while it closes a send.
 
 **Assigning your own:**
 
-1. Select a track (lower pad) and a macro (LEFT/RIGHT or the octave keys).
+1. Select a track (lower pad) and a macro (LEFT/RIGHT).
 2. Press a **STEP** key: STEP 1-4 are that track's SRC parameters, 5-8 FLTR, 9-12 AMP, 13-16 FX.
    The screen confirms, for example `A T6 CUT`. Repeat for up to four parameters, on any tracks.
    **FUNC + STEP 1-4** assign the track's LFO settings instead, WAV RAT DEP DST: a macro on DEP
@@ -682,7 +741,7 @@ to the selected track's sound and the pads become expressive.
 ### Beat repeat, throws and auto-fill
 
 REPEAT loops the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the finished master while held;
-release and the music is where it would have been. In PERFORM, **FUNC+UP / FUNC+DOWN** set
+release and the music is where it would have been. The FUNC menu's **AUTO-FILL** row sets
 **auto-fill**: OFF, or FILL on the last bar of every 4, 8 or 16. PERFORM's lower lines show what
 is active: `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n`.
 
@@ -692,11 +751,13 @@ is active: `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n`.
 again turns it off (`PADS PLAY`). While it is on, holding a lower pad rolls that track's note at
 beat repeat's length: 1/16 until you pick another with REPEAT + VALUE. With the transport running
 the hits land on the beat grid, so a roll is always in time; stopped, it rolls from the moment you
-press. Leaning on the pad sets each hit's velocity, so pressure swells and fades the roll (macro 1
+press. Leaning on the pad sets each hit's velocity, so pressure swells and fades the roll (macro A
 is left alone while a pad rolls). Hold two pads for two rolls. Rolls are played, not written: REC
 does not record them.
 
 ### The master kill EQ
+
+<p><img src="screens/mixer_eq.png" width="256" alt="MIXER's EQ page"></p>
 
 The master has a DJ-style **kill EQ** (an isolator) after the DJ filter: three bands split at
 250 Hz and 2.5 kHz, LOW, MID and HI. Each band has a knob and a kill switch.
@@ -705,7 +766,7 @@ The master has a DJ-style **kill EQ** (an isolator) after the DJ filter: three b
   turning the encoders is still the macros). The notice says `KILL LOW` or `LOW BACK`. A switch
   latches: push to take the band out, push again to bring it back. On the MIXER's EQ page a
   plain push of A, B or C does the same.
-- **The knobs**: MIXER, then the selection keys (or LEFT/RIGHT) to the last page, `EQ`. A, B and
+- **The knobs**: MIXER, then the screen keys (or LEFT/RIGHT) to the last page, `EQ`. A, B and
   C are LOW, MID and HI: centre (`0`) is flat, down to `KILL` at the bottom, up to +6 dB at the
   top (`+63`). D is empty.
 
@@ -736,6 +797,11 @@ length, from the moment you press.
 
 ### Ambient delay and reverb: LONG and HALL
 
+<p><img src="screens/mixer.png" width="256" alt="MIXER: the faders of tracks 1-4"> <img src="screens/mixer_dly.png" width="256" alt="MIXER's DLY page"></p>
+
+<sub>MIXER's first page, the faders, and the DLY page. The screen keys walk all nine: TRK 1-4, TRK 5-8, DLY, DLY+, REV, REV+, ROUTE, MST, EQ.</sub>
+
+
 Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
 send, `DLY+` after `DLY` and `REV+` after `REV`. **Push A** on either page (or turn A) flips the
 mode; the old mode's echoes ring out underneath, so a switch never clicks.
@@ -759,7 +825,7 @@ twice the send cost), and nothing once they fall silent.
 
 ### Mutation
 
-In PERFORM, UP/DOWN pick the mutation and the selection keys the amount (0-100, in tens):
+In PERFORM, UP/DOWN pick the mutation and the screen keys the amount (0-100, in tens):
 
 | Mutation | What it does |
 | --- | --- |
@@ -775,8 +841,10 @@ are seeded, so the same press on the same pattern gives the same result again.
 
 ### Resampling
 
+<p><img src="screens/resample.png" width="256" alt="RESAMPLE: 1 bar to a file, from the master"></p>
+
 `FUNC+REC` opens RESAMPLE. UP/DOWN or A set the length (1, 2, 4 or 8 bars); LEFT/RIGHT or the
-selection keys set where it goes: `TO FILE`, or `TO TRK n`. OK arms it (`ARMED`), and the take
+screen keys set where it goes: `TO FILE`, or `TO TRK n`. OK arms it (`ARMED`), and the take
 starts on the next bar line (`REC 40%`), records the finished master including repeat and
 effects, and is written to `/RECORD/STRATA_<n>.WAV` (`WRITING`, then `LAST STRATA_n`). With a
 track as the destination, the take also becomes that track's sample and loads straight away, so
@@ -801,7 +869,9 @@ stops.
 
 ### Saving
 
-- **Save:** `FUNC+PROJECT` twice within 2 s. Only the files that changed are written, and the
+<p><img src="screens/menu.png" width="256" alt="The FUNC menu on SAVE"></p>
+
+- **Save:** `FUNC+HOME`, then `OK` (the FUNC menu opens on SAVE). Only the files that changed are written, and the
   audio keeps playing.
 - **Autosave:** every time the transport stops (from STOP or from an outside clock), and when
   you leave the app through the Enaga menu, into `AUTOSAVE/`.
@@ -811,25 +881,27 @@ stops.
 
 ### Reload and new
 
-On PROJECT's slots or SETUP page:
+In the FUNC menu (FUNC+HOME), each with OK twice within 2 s:
 
-- `FUNC+LEFT` twice (`AGAIN TO RELOAD`): read the project back from its last save, throwing away
+- RELOAD PROJECT (`OK AGAIN TO RELOAD`): read the project back from its last save, throwing away
   what is unsaved.
-- `FUNC+RIGHT` twice (`AGAIN FOR NEW`): a new project with the factory content, named `NEWn`.
+- NEW PROJECT (`OK AGAIN FOR NEW`): a new project with the factory content, named `NEWn`.
   Nothing is written until you save it, so the old project is untouched.
 
 Both stop the transport.
 
 ### Projects: open and save as
 
-PROJECT, then octave RIGHT four times, is the PROJECTS page: every project folder on the card,
+<p><img src="screens/projects.png" width="256" alt="The PROJECTS page"></p>
+
+PROJECT, then screen key RIGHT four times (or the FUNC menu's OPEN PROJECT), is the PROJECTS page: every project folder on the card,
 with `NOW` and the open one's name at the top. UP/DOWN or A move the cursor, LEFT/RIGHT go a page
 of eight at a time.
 
 - **Open:** OK on a project, then OK again within 2 s (`AGAIN TO OPEN`). What is unsaved in the
   open project is thrown away and the transport stops, as with a reload. STRATA starts with that
   project from now on.
-- **Save as:** `FUNC+DOWN` opens a name entry starting from the current name. A or LEFT/RIGHT
+- **Save as:** `FUNC+DOWN` here, or the FUNC menu's SAVE AS, opens a name entry starting from the current name. A or LEFT/RIGHT
   move along it, B, VALUE or UP/DOWN change the character under the cursor (A-Z, 0-9, space and
   `- + . # !`, up to 16), OK saves, CLR cancels (`NAME KEPT`). The project is written whole into
   a new folder and carries on under the new name; the old folder stays as it was saved. A name
@@ -840,6 +912,8 @@ There is no delete or rename on the unit: remove or rename a folder in
 `/ENAGA/DATA/STRATA/PROJECTS/` on a computer.
 
 ### The kit library
+
+<p><img src="screens/kit.png" width="256" alt="KIT: the kit library"></p>
 
 `FUNC+EDIT` twice opens KIT. Sixteen slots, two pages of eight; each shows `KIT`, `EMPTY`,
 `UNREADABLE` or `...` (not read yet), and the kit under the cursor is listed as its eight
@@ -881,10 +955,12 @@ STRATA reads WAV files: 8, 16 or 24-bit, or 32-bit float, mono or stereo, at any
 
 ### Picking a sample: the sample browser
 
+<p><img src="screens/samples.png" width="256" alt="SAMPLES on track 8, in /SAMPLES"></p>
+
 On a SMP or GRN track, press **OK** in EDIT (the page says `OK: PICK SAMPLE`) or in MACHINE. The
 browser opens in the folder of the file the track plays, with the cursor on it, or in `/SAMPLES`.
 
-- UP/DOWN (or A) move the cursor, LEFT/RIGHT or the selection keys turn a page of eight.
+- UP/DOWN (or A) move the cursor, LEFT/RIGHT or the screen keys turn a page of eight.
 - **OK on a file loads it into the track at once**, with the beat playing, and the cursor stays
   put: press DOWN and OK again to try the next one. The line under the title says `READING`,
   `CONVERTING` and so on while it loads, and the `NOW` line shows the file the track plays.
@@ -965,15 +1041,17 @@ Shown on the PROJECT screen under the project name, and the track shows `X` on t
 | `NOT A WAV` / `BAD FORMAT` | Not a WAV STRATA reads | Export as 16 or 24-bit PCM WAV |
 | `TOO MANY CH` | More than two channels | Export as mono or stereo |
 | `EMPTY` | No audio in the file | |
-| `NO SAMPLE` | `FUNC+DOWN` on a track whose kit names no file | |
+| `NO SAMPLE` | the FUNC menu's RELOAD SAMPLE on a track whose kit names no file | |
 | `NO CARD` | The card is missing or unusable | Reinsert it; samples reload by themselves |
 | `NO SWAP` | The sample handover did not complete | A bug: please report it |
 
 ### External clock
 
+<p><img src="screens/setup.png" width="256" alt="PROJECT's SETUP page"></p>
+
 The clock source is a unit setting, not STRATA's: **FUNC+POWER** opens the Enaga menu with CLOCK
-SRC (INTERNAL, MIDI, SYNC), CLOCK/SYNC OUT and MIDI CH. PROJECT's SETUP page (PROJECT, octave
-RIGHT three times) shows them.
+SRC (INTERNAL, MIDI, SYNC), CLOCK/SYNC OUT and MIDI CH. PROJECT's SETUP page (PROJECT, screen
+key RIGHT three times) shows them.
 
 Under MIDI or SYNC, line 2 shows `EXT MIDI` or `EXT SYNC`, and STRATA **follows**: PLAY, STOP,
 FUNC+PLAY, FUNC+STOP and the tempo knob are refused with `EXT CLOCK` while the outside clock
@@ -995,7 +1073,7 @@ new one needs the transport stopped, so stop the master first.
 
 - **FUNC+STOP** resets the transport, the queue and the chain.
 - **FUNC+CLR** undoes the last edit, up to 16.
-- `FUNC+LEFT` twice in PROJECT reloads the last save.
+- **FUNC+HOME, OK** saves; the menu's RELOAD PROJECT (OK twice) reloads the last save.
 - **FUNC+POWER** leaves for the Enaga menu; STRATA autosaves on the way out.
 
 ---

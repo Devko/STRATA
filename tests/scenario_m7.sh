@@ -61,10 +61,10 @@ python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" \
     --key 9@690000000 \
     --key 9@740000000 \
     --key 20@800000000 \
-    --key 31@860000000 \
-    --key 31@910000000 \
-    --key 31@960000000 \
-    --key 16@1020000000 \
+    --key 9@860000000 \
+    --key 9@910000000 \
+    --key 9@960000000 \
+    --key 8@1020000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
@@ -121,8 +121,8 @@ wanted = [
 for name in wanted:
     check(name in screens, f"drew {name[4:]}", "" if name in screens else f"screens={screens}")
 
-# PROJECT walks slots, CHAIN, PATTERN, SETUP: three OCTAVE_RIGHTs reach SETUP, and one
-# OCTAVE_LEFT steps back to PATTERN, so the octave keys move both ways. (The log ring holds 16
+# PROJECT walks slots, CHAIN, PATTERN, SETUP: three SELECT_RIGHTs (the screen keys) reach SETUP,
+# and one SELECT_LEFT steps back to PATTERN, so the screen keys move both ways. (The log ring holds 16
 # lines; this sequence ends with exactly the first MIXER page still in it.)
 check(screens and screens[-1] == "scr PROJECT PATTERN", "and left SETUP again",
       f"last={screens[-1:]}")

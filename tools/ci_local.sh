@@ -68,6 +68,13 @@ lane_gcc() {
             "$bin" --only "$t" > /dev/null || { echo "layout FAIL: $t"; "$bin" --only "$t"; ok=1; }
         done
         echo "layout: every ui_layout_ test passes by name"
+        # The screenshots still draw (CI's "Screenshots still draw"), into a scratch folder.
+        local shots="$OUT/shots"
+        rm -rf "$shots"; mkdir -p "$shots/dumps"
+        STRATA_SHOTS="$shots/dumps" "$bin" --only ui_screenshots > /dev/null &&
+            python3 -B tools/screenshots.py "$shots/dumps" "$shots/screens" > /dev/null &&
+            python3 -B tools/panel_diagram.py "$shots/screens/panel.svg" > /dev/null &&
+            echo "screenshots: draw" || { echo "screenshots FAIL"; ok=1; }
         return $ok
     }
 }

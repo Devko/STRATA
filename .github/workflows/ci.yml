@@ -73,6 +73,17 @@ jobs:
             build/host/strata-tests --only "$t"
           done
 
+      # The manual's and cheatsheet's screenshots come from ui_screenshots: check its key presses
+      # still reach every screen and the PNGs still draw, so tools/screenshots.sh keeps working.
+      # It does not compare them with docs/screens/: a UI change redraws them by hand.
+      - name: Screenshots still draw
+        if: steps.changes.outputs.code == 'true'
+        run: |
+          dumps="$RUNNER_TEMP/shots"; mkdir -p "$dumps"
+          STRATA_SHOTS="$dumps" build/host/strata-tests --only ui_screenshots
+          python3 -B tools/screenshots.py "$dumps" "$RUNNER_TEMP/screens"
+          python3 -B tools/panel_diagram.py "$RUNNER_TEMP/screens/panel.svg"
+
       # Insurance on main: the serial run, in registration order, exactly as
       # before sharding. The shards keep that order inside each block, so the two should agree;
       # this is what would show it if they ever stopped doing so.

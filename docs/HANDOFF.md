@@ -61,6 +61,13 @@ release"), **a user manual** ("Write the STRATA user manual") and **engine test 
 the engine test gaps"). Factory macros (PR #34) and CI (PR #33) have merged. When another
 merges, update the table and the steps above.
 
+**Controls (2026-11-22 evening).** After the first evening on the unit, the controls were rebuilt
+from the SmplTrek's panel: docs/CONTROLS.md is the reference the key handlers follow. FUNC + a
+function key is its printed second label, the setup actions are in the FUNC menu (FUNC + HOME;
+FUNC + HOME, OK saves), the screen keys turn pages and the pad-row keys pick the bank or step page.
+Its unit check is the first section of docs/UNIT_CHECKLIST.md; `tests/scenario_controls.sh` has not
+run yet (the cloud cannot build the toolchain).
+
 Smaller open items, none urgent:
 
 - **KICK's click path** runs for the whole note after its transient has decayed: about a quarter

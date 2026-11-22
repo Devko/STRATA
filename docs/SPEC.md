@@ -231,21 +231,35 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 | Upper 6 | 11 | THROW (hold; delay, or reverb with F1) |
 | Upper 7 | 13 | MUTATE selected track (OK keeps, CLR reverts) |
 
+**[rev]** The upper pads are printed TRK 1-7 on the SmplTrek. Roland kept tracks on the lower row
+and the tools above (2026-11-22), so each upper pad is lit dim in its own colour, bright while
+held or on, and names itself on the screen when pressed; FUNC held alone shows the row
+(docs/CONTROLS.md).
+
 **Function block and other keys**
+
+**[rev] The controls concept ([CONTROLS.md](CONTROLS.md), 2026-11-22) supersedes this table where
+they differ.** Built from the SmplTrek's panel: FUNC + a function key is the label printed under
+it (REC "sampling" = RESAMPLE, PROJECT "pool" = SAMPLES, HOME "system" = the FUNC menu, MIXER
+"fx" = PERFORM); the screen keys (SELECT) turn the screen's pages everywhere; the pad-row keys
+(OCTAVE) pick which sixteen the STEP keys mean; the rare setup actions (save, save as, open,
+new, reload, kits, sample reload, track speed, chain on/off, song, auto-fill, quantize) are in
+the FUNC menu. KEYS is HOME double-tapped. The rows below are updated to match.
 
 | Key | Plain | With F1 |
 | --- | --- | --- |
 | F1 (FUNC) | Shift | F1 + POWER is the Enaga menu |
 | F2 (REC) | Live record on or off | Resample setup |
-| F3 (PROJECT) | Pattern mode: STEP 1-16 queues a pattern in the bank. **[rev]** The bank is on the selection keys in this mode | F1 + F3 twice = save project. **[rev]** No longer bank select: the selection keys took it |
-| F4 (HOME) | GRID mode: STEP keys edit the selected track | KEYS mode: STEP keys play notes in scale |
+| F3 (PROJECT) | Pattern mode: STEP 1-16 queues a pattern in the bank. **[rev]** The bank is on the pad-row (octave) keys, the pages on the screen keys | **[rev]** SAMPLES, the selected track's sample browser ("pool"). Save moved to the FUNC menu |
+| F4 (HOME) | GRID mode: STEP keys edit the selected track. **[rev]** Double-tapped: KEYS mode, STEP keys play notes in scale | **[rev]** The FUNC menu ("system"); the save is FUNC + HOME, OK |
 | F5 (PLAY) | Play | Restart from step 1 |
 | F6 (STOP) | Stop; twice cuts all voices | Stop and reset all tracks |
-| F7 (MIXER) | Mixer: A-D levels of 4 tracks, selection keys switch 1-4 and 5-8 | PERFORM mode: A-D macros, VALUE morph |
+| F7 (MIXER) | Mixer: A-D levels of 4 tracks, screen keys switch the pages | PERFORM mode: A-D macros, VALUE morph |
 | F8 (EDIT) | Sound pages of the selected track; selection keys switch SRC, FLTR, AMP, FX **[rev]**, LFO and ARP | Kit and machine select. **[rev]** The first press is MACHINE; F1 + F8 again opens the KIT browser (16 kits on the card), and again goes back |
-| Octave left/right | Step page 1-4 in GRID; octave in KEYS | Pattern length |
-| UP, DOWN | **[rev]** The rows on screen: the track in GRID, EDIT and KEYS; the machine in MACHINE; the kit slot in KIT; the length in RESAMPLE; the mutation in PERFORM; the slot cursor in PROJECT. With a STEP held: copy, paste | Copy, paste. In PROJECT: chain on/off, reload the sample. In KIT: read the card again, save the kit into the slot. In PERFORM: auto-fill |
-| LEFT, RIGHT | **[rev]** Sideways: the page wherever the selection keys flip pages; the step on the step page; octave in KEYS; macro in PERFORM; track in MACHINE; the page of eight kit slots in KIT; destination in RESAMPLE; the slot cursor in PROJECT | Free |
+| Octave left/right | Step page 1-4 in GRID; octave in KEYS. **[rev]** Bank A-H in PROJECT; nothing in PERFORM, KIT, SAMPLES and the menu | Pattern length |
+| UP, DOWN | **[rev]** The rows on screen: the track in GRID, EDIT and KEYS; the machine in MACHINE; the kit slot in KIT; the length in RESAMPLE; the mutation in PERFORM; the slot cursor in PROJECT; the row in the FUNC menu. With a STEP held: copy, paste | Copy, paste. In KIT: read the card again, save the kit into the slot. In PROJECTS: read again, save as. **[rev]** PROJECT's chain and sample reload and PERFORM's auto-fill moved to the FUNC menu |
+| LEFT, RIGHT | **[rev]** Sideways: the step page in GRID; the page wherever the screen keys flip pages; the step on the step page; octave in KEYS; macro in PERFORM; track in MACHINE; the page of eight kit slots in KIT; destination in RESAMPLE; the slot cursor in PROJECT; a setting row's value in the FUNC menu | Free |
+| Selection left/right | **[rev]** The screen's pages, in every mode (on GRID and KEYS: the EDIT page A-D turn); PROJECT's five pages | **[rev]** Nothing (the track speed is the FUNC menu's TRACK SPEED) |
 | OK, CLR | Confirm, cancel. **[rev]** OK picks the slot under the cursor in PROJECT, and recalls the kit under it in KIT (twice, since a recall is not undoable), and in EDIT or MACHINE on a SAMPLE or GRAIN track opens the sample browser, where it loads a file or opens a folder; CLR closes the step page and SETUP, and goes up a folder in the browser | F1 + CLR = undo, F1 + OK = redo |
 | VALUE | Tempo; push + turn = swing. **[rev]** Shows `EXT` and refuses edits when CLOCK SRC is not INTERNAL | Master DJ filter |
 | Push A, B, C | **[rev]** Remove a lock with a STEP held. On the MIXER's EQ page: the kill EQ's LOW, MID, HI kill switch | **[rev]** The master kill EQ's LOW, MID, HI kill switch, in every mode; with a STEP held, still removes that lock (push D too, which is otherwise the tape stop) |
@@ -270,7 +284,7 @@ OK picks, CLR goes back, and F1 + an arrow is the mode's second meaning. New lis
 | STEP | Trig with condition or probability | Green 2 |
 | STEP | Playhead | Red 10 |
 | Lower pads | Track idle / triggered / muted | Track colour at 2 / 10 for 60 ms / off |
-| Upper pads | Function available / active | White 2 / function colour 10 |
+| Upper pads | Function available / active | Own colour at 2 / at 10 (docs/CONTROLS.md) |
 | F-keys | Current mode | Green 8; REC red 8 while recording |
 | VALUE ring | Beat pulse | White 10 on the beat, fading over 100 ms |
 

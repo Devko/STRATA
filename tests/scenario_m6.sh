@@ -21,8 +21,8 @@
 # a flaky test dressed up as a precise one.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F2 = 26, F1 = 19, F4 = 27,
-# STEP n = 31 + n. A press is released 20 M cycles later, so F1 at 500 M is still down when F4
-# arrives at 505 M -- which is how F1 + F4 (KEYS) is driven here.
+# STEP n = 31 + n. A press is released 20 M cycles later. HOME twice within 400 ms (149 M cycles)
+# is KEYS (docs/CONTROLS.md): 460 M and 500 M are 0.11 s apart.
 #
 # The first press must come LATE: Enaga's panel MCU link is not streaming in the first ~200 M
 # cycles and a press before that is silently swallowed (tests/scenario_m1.sh).
@@ -58,7 +58,7 @@ echo "running the emulator for $CYCLES cycles: play, REC on, KEYS, three keys ..
 python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 26@380000000 \
-    --key 19@460000000 --key 27@465000000 \
+    --key 27@460000000 --key 27@500000000 \
     --key 32@540000000 \
     --key 34@620000000 \
     --key 36@700000000 \
@@ -117,7 +117,7 @@ if len(grids) >= 2:
           f"{grids[0]} -> {grids[-1]}")
 else:
     check(False, "a key played in KEYS recorded a note", f"only {grids}")
-    print("        nothing was recorded. Either KEYS did not play (F1 + F4 never took, or the")
+    print("        nothing was recorded. Either KEYS did not play (HOME twice never took, or the")
     print("        STEP keys are still going to the editing path), or REC was not on, or")
     print("        core/record refused the hit. The log above says which.")
 
