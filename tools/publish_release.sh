@@ -3,6 +3,10 @@
 #
 #   tools/publish_release.sh v0.1.0 --build cl6x --ti-licence-read --max-a01 23.5 --max-a04 31.2
 #   tools/publish_release.sh v0.1.0 --build gcc --max-a01 38.0 --max-a04 47.5 --dry-run
+#   tools/publish_release.sh v0.1.0 --build cl6x --ti-licence-read --unit-load "Load stayed ..."
+#
+# --unit-load replaces the two MAX figures with a sentence of your own, for when the clean A01
+# and A04 readings were not taken. It goes into the notes as written, so end it with a full stop.
 #
 # Run it in WSL, from a clean checkout of main, after the walkthrough in docs/UNIT_CHECKLIST.md
 # passed and Roland said go. It refuses at the first thing that is not right and changes nothing
@@ -34,18 +38,19 @@ die() { echo "publish_release: $*" >&2; exit 1; }
 say() { echo "== $*"; }
 
 TAG="${1:-}"
-[ -n "$TAG" ] && [ "${TAG#-}" = "$TAG" ] || die "usage: tools/publish_release.sh vX.Y.Z --build cl6x|gcc --max-a01 N --max-a04 N [--ti-licence-read] [--card DIR] [--date YYYY-MM-DD] [--draft] [--dry-run]"
+[ -n "$TAG" ] && [ "${TAG#-}" = "$TAG" ] || die "usage: tools/publish_release.sh vX.Y.Z --build cl6x|gcc (--max-a01 N --max-a04 N | --unit-load TEXT) [--ti-licence-read] [--card DIR] [--date YYYY-MM-DD] [--draft] [--dry-run]"
 shift
 [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "the tag should look like v0.1.0, not $TAG"
 VERSION="${TAG#v}"
 
-BUILD="" MAX_A01="" MAX_A04="" TI_READ=0 CARD="$ROOT/build/card" DATE=$(date +%F) DRAFT=0 DRY=0
+BUILD="" MAX_A01="" MAX_A04="" UNIT_LOAD="" TI_READ=0 CARD="$ROOT/build/card" DATE=$(date +%F) DRAFT=0 DRY=0
 SKIP_BUILD=0 SKIP_ENAGA=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --build)             BUILD="$2"; shift 2 ;;
         --max-a01)           MAX_A01="$2"; shift 2 ;;
         --max-a04)           MAX_A04="$2"; shift 2 ;;
+        --unit-load)         UNIT_LOAD="$2"; shift 2 ;;
         --ti-licence-read)   TI_READ=1; shift ;;
         --card)              CARD="$2"; shift 2 ;;
         --date)              DATE="$2"; shift 2 ;;
@@ -62,8 +67,14 @@ case "$BUILD" in
     gcc)  BUILD_LABEL="GCC-only" ;;
     *)    die "--build cl6x or --build gcc: say which compiler built the card's APP.ENA" ;;
 esac
-[[ "$MAX_A01" =~ ^[0-9]+(\.[0-9])?$ ]] || die "--max-a01: the MAX reading on A01, e.g. 23.5"
-[[ "$MAX_A04" =~ ^[0-9]+(\.[0-9])?$ ]] || die "--max-a04: the MAX reading on A04, e.g. 31.2"
+if [ -n "$UNIT_LOAD" ]; then
+    [ -z "$MAX_A01$MAX_A04" ] || die "--unit-load or the two MAX figures, not both"
+    [[ "$UNIT_LOAD" == *. ]] || die "--unit-load: a sentence, ending with a full stop"
+else
+    [[ "$MAX_A01" =~ ^[0-9]+(\.[0-9])?$ ]] || die "--max-a01: the MAX reading on A01, e.g. 23.5 (or --unit-load)"
+    [[ "$MAX_A04" =~ ^[0-9]+(\.[0-9])?$ ]] || die "--max-a04: the MAX reading on A04, e.g. 31.2 (or --unit-load)"
+    UNIT_LOAD="MAX, the highest audio load since PLAY, read $MAX_A01% on A01 GROOVE and $MAX_A04% on A04 PEAK."
+fi
 [[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "--date YYYY-MM-DD"
 if [ "$BUILD" = cl6x ] && [ "$TI_READ" -ne 1 ]; then
     die "a cl6x build ships only after TI's licence text in ~/ti/ti-cgt-c6000_* was read for any
@@ -160,7 +171,7 @@ open(path, "w", encoding="utf-8", newline="\n").write(text)
 PY
 }
 for f in "${FILES[@]}"; do
-    fill "$f" "RELEASE_DATE=$DATE" "BUILD=$BUILD_LABEL" "MAX_A01=$MAX_A01%" "MAX_A04=$MAX_A04%"
+    fill "$f" "RELEASE_DATE=$DATE" "BUILD=$BUILD_LABEL" "UNIT_LOAD=$UNIT_LOAD"
 done
 python3 -B tests/test_package_release.py >/dev/null 2>&1 || die "tests/test_package_release.py failed"
 python3 -B tools/package_release.py "$TAG" --card "$CARD" --out build/release
@@ -187,7 +198,7 @@ git add "${FILES[@]}"
 git commit -q -m "release: $TAG
 
 The changelog dated $DATE and the notes filled from the unit test: $BUILD_LABEL build,
-MAX $MAX_A01% on A01 and $MAX_A04% on A04. Zip sha256 $ZIP_SHA."
+$UNIT_LOAD Zip sha256 $ZIP_SHA."
 trap 'rm -rf "$WORK"' EXIT          # the filled notes are committed now
 git tag -a "$TAG" -m "STRATA $VERSION"
 git push -q origin "$BRANCH" "$TAG"
