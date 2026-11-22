@@ -3,6 +3,7 @@
 Built from the key handlers and draw code in `app/app.hpp`, so it says what the build does, not
 only what docs/SPEC.md planned. Keys are named as printed on the SmplTrek. `FUNC+X` means hold
 FUNC and press X; "hold STEP" means a STEP key held down while you do the rest.
+[MANUAL.md](MANUAL.md) explains the concepts behind these and walks through a first beat.
 
 ## Key legend
 
