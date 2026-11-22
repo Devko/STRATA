@@ -368,6 +368,10 @@ public:
     void stop() override {
         // Destructors never run on this platform (CLAUDE.md), so this is the last chance. The
         // budget is 3 s including the save.
+        // MIDI first: a note left sounding on outboard gear would hang there, and the save can
+        // take most of the budget. Enaga has already removed the audio callback, so the main
+        // context may end the notes itself.
+        engine_.end_midi_for_shutdown();
         storage_.save_for_shutdown();
         enaga::log("strata stopped");
     }

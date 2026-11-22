@@ -2436,6 +2436,16 @@ void Engine::send_midi_ccs(int t) {
     }
 }
 
+void Engine::drain_commands_for_shutdown() {
+    // Bounded: a ring holds far fewer than this many blocks' worth of commands.
+    for (int i = 0; i < 1024 && !commands_.empty(); i++) apply_commands();
+}
+
+void Engine::end_midi_for_shutdown() {
+    midi_out_.release_all(midi_sink_);
+    midi_all_notes_off();
+}
+
 void Engine::midi_all_notes_off() {
     bool done[kMidiChannels + 1] = {};
     for (int t = 0; t < kTracks; t++) {

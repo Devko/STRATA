@@ -362,6 +362,22 @@ TEST(midi_out_each_arp_hit_is_a_note_with_its_own_note_off) {
     host().set_running(false);
 }
 
+TEST(midi_out_leaving_the_app_ends_every_note) {
+    // App::stop: a held note and a gated one both end, with All Notes Off after them, because
+    // no STRATA panel is left to stop a note that hangs on the outboard synth.
+    start(0, 5);
+    post(Cmd::trigger_note, 0, 0, 60, 100, 1);       // a held KEYS note
+    post(Cmd::trigger_note, 0, 0, 64, 100, 0);       // a pad: a step's gate
+    pump();
+    CHECK_EQ(ons(5), 2);
+    CHECK_EQ(eng().midi_notes().sounding(), 2);
+    eng().end_midi_for_shutdown();
+    CHECK_EQ(offs(5, 60), 1);
+    CHECK_EQ(offs(5, 64), 1);
+    CHECK_EQ(ccs(5, kMidiAllNotesOff), 1);
+    CHECK_EQ(eng().midi_notes().sounding(), 0);
+}
+
 TEST(midi_out_mid_arpeggiates_a_chord_step_through_its_chord) {
     // MID sends a chord step as its chord (above), so with the arp on it runs THROUGH the chord,
     // as VA POLY does. It used to take only the step's root: the chord was lost to one note

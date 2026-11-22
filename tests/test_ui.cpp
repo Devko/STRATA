@@ -1050,6 +1050,25 @@ TEST(ui_a_pending_mutation_leaves_a_held_step_its_own_ok_and_clr) {
     pump(2);
 }
 
+TEST(ui_leaving_the_app_ends_a_held_midi_note) {
+    // App::stop, the switch to another app or a power-off: a KEYS key still down with MIDI OUT
+    // on sent a note nobody could stop once STRATA was gone.
+    Strata &app = fresh();
+    post_cmd(Cmd::set_midi_out, 7);                 // track 1 to channel 7
+    pump(2);
+    shift_key(ENAGA_KEY_F4);                         // KEYS
+    FakeHost::the().clear_midi();
+    step_down(0);
+    pump(2);
+    CHECK_EQ(FakeHost::the().midi_messages(0x90, 7), 1);
+    app.stop();
+    CHECK_EQ(FakeHost::the().midi_messages(0x80, 7), 1);
+    step_up(0);
+    post_cmd(Cmd::set_midi_out, 0);
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
 TEST(ui_an_undo_settles_a_pending_mutation) {
     // MUTATE, then F1 + CLR takes it back. The mutation used to stay "pending", so the next plain
     // CLR undid a SECOND level -- the edit before the mutation -- and said REVERTED.
