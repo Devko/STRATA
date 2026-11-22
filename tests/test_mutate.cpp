@@ -983,3 +983,72 @@ TEST(mutate_every_kind_leaves_a_pattern_the_sequencer_can_read) {
         CHECK_EQ(differences(g_pattern, g_before), 0);
     }
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(mutate_the_draw_is_pinned_so_a_seeded_mutation_recalls_the_same_after_an_update) {
+    // docs/SPEC.md: "every random operation takes its seed from the pattern, so a mutation can
+    // be recalled exactly". Determinism within one build is tested above; this pins the draw
+    // ACROSS builds, which a change to the hash would break without any other test noticing.
+    struct Draw {
+        uint32_t seed;
+        int track;
+        int step;
+        Mutation kind;
+        uint32_t variant;
+        int value;
+    };
+    const Draw draws[] = {
+        {0x0u, 0, 0, Mutation::velocity, 0u, -11},
+        {0x0u, 0, 0, Mutation::velocity, 1u, 24},
+        {0x0u, 0, 0, Mutation::notes, 0u, 28},
+        {0x0u, 0, 0, Mutation::notes, 1u, -28},
+        {0x0u, 0, 63, Mutation::velocity, 0u, 16},
+        {0x0u, 0, 63, Mutation::velocity, 1u, -10},
+        {0x0u, 0, 63, Mutation::notes, 0u, 33},
+        {0x0u, 0, 63, Mutation::notes, 1u, -26},
+        {0x0u, 7, 0, Mutation::velocity, 0u, -13},
+        {0x0u, 7, 0, Mutation::velocity, 1u, -22},
+        {0x0u, 7, 0, Mutation::notes, 0u, 32},
+        {0x0u, 7, 0, Mutation::notes, 1u, 39},
+        {0x0u, 7, 63, Mutation::velocity, 0u, 2},
+        {0x0u, 7, 63, Mutation::velocity, 1u, 8},
+        {0x0u, 7, 63, Mutation::notes, 0u, -47},
+        {0x0u, 7, 63, Mutation::notes, 1u, -48},
+        {0x5EEDu, 0, 0, Mutation::velocity, 0u, -43},
+        {0x5EEDu, 0, 0, Mutation::velocity, 1u, -1},
+        {0x5EEDu, 0, 0, Mutation::notes, 0u, 31},
+        {0x5EEDu, 0, 0, Mutation::notes, 1u, -44},
+        {0x5EEDu, 0, 63, Mutation::velocity, 0u, -26},
+        {0x5EEDu, 0, 63, Mutation::velocity, 1u, -30},
+        {0x5EEDu, 0, 63, Mutation::notes, 0u, 20},
+        {0x5EEDu, 0, 63, Mutation::notes, 1u, 28},
+        {0x5EEDu, 7, 0, Mutation::velocity, 0u, 42},
+        {0x5EEDu, 7, 0, Mutation::velocity, 1u, -32},
+        {0x5EEDu, 7, 0, Mutation::notes, 0u, 32},
+        {0x5EEDu, 7, 0, Mutation::notes, 1u, -36},
+        {0x5EEDu, 7, 63, Mutation::velocity, 0u, -24},
+        {0x5EEDu, 7, 63, Mutation::velocity, 1u, 34},
+        {0x5EEDu, 7, 63, Mutation::notes, 0u, -30},
+        {0x5EEDu, 7, 63, Mutation::notes, 1u, -41},
+    };
+    for (const Draw &d : draws) {
+        CHECK_EQ(mutate_draw(d.seed, d.track, d.step, d.kind, d.variant, 48), d.value);
+    }
+}
+
+TEST(mutate_a_draw_reaches_both_ends_of_its_span) {
+    // [-span, span] inclusive: 2 * span + 1 values. A range one short loses the top end.
+    for (int span : {1, 3, 48}) {
+        int low = 0, high = 0;
+        for (uint32_t v = 0; v < 4000; v++) {
+            const int d = mutate_draw(0x5EEDu, 1, 2, Mutation::velocity, v, span);
+            CHECK(d >= -span && d <= span);
+            if (d < low) low = d;
+            if (d > high) high = d;
+        }
+        CHECK_EQ(low, -span);
+        CHECK_EQ(high, span);
+    }
+    CHECK_EQ(mutate_draw(1, 0, 0, Mutation::velocity, 0, 0), 0);
+}

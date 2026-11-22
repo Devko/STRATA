@@ -7,7 +7,9 @@
 //            it converts the division, not this file.
 //   Send B   a reverb with a high-pass on its input.
 //   Master   a one-knob DJ filter (left of centre low-pass, right high-pass, flat in the
-//            middle), a glue compressor, a soft limiter and an output level.
+//            middle), a three-band kill EQ (a DJ isolator: LOW, MID and HIGH from kill to
+//            +6 dB, flat and bypassed in the middle, each with a kill switch), a glue
+//            compressor, a soft limiter and an output level.
 //   Duck     one trigger-based duck envelope for the whole mixer (dsp/chain.hpp); which track
 //            fires it is the app's business.
 //
@@ -42,6 +44,7 @@
 #include <enaga/dsp.hpp>
 
 #include "chain.hpp"
+#include "freeze.hpp"
 #include "project.hpp"
 #include "track.hpp"
 
@@ -101,13 +104,33 @@ struct MasterSettings {
     float compressor = 0.3f;    // the glue compressor, 0 off (and bypassed)
     float limit = 0.80f;        // the soft limiter's threshold; the ceiling is always +-1
     float level = 1.0f;         // output level, 0 to 1
+    // The kill EQ's three bands, as linear gains: 0 is a kill, 1 flat, 2 is +6 dB. All three
+    // at exactly 1 with no kill switch on bypasses the stage, so a master that never touches it
+    // pays nothing and stays bit-exact.
+    float eq_low = 1.0f;
+    float eq_mid = 1.0f;
+    float eq_high = 1.0f;
+    // The kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. A switched band is silent whatever
+    // its knob says, and coming back puts it where the knob is.
+    uint8_t kills = 0;
 
     bool operator==(const MasterSettings &) const = default;
 };
 
 // Which field `Cmd::set_master` is carrying. Permanent, and on disk, for the same reason as
-// SendField above.
-enum class MasterField : uint8_t { dj = 0, compressor, limit, level, count };
+// SendField above: the kill EQ's bands were added at the END.
+enum class MasterField : uint8_t {
+    dj = 0, compressor, limit, level, eq_low, eq_mid, eq_high, count
+};
+
+// The kill EQ's bands, in `MasterSettings::kills` bit order and MasterField order.
+constexpr int kKillBands = 3;
+constexpr uint8_t kKillAll = 0x7;
+
+// Where the bands split. Fixed, as on a DJ mixer's isolator: a performer reaches for LOW to take
+// the kick and bass out, and the knob has to mean the same thing in every project.
+constexpr float kKillLowHz = 250.0f;
+constexpr float kKillHighHz = 2500.0f;
 
 bool master_field_set(MasterSettings &settings, uint8_t field, float value);
 float master_field_get(const MasterSettings &settings, uint8_t field);
@@ -177,6 +200,8 @@ public:
     // The longest a send keeps running unfed: feedback 0.95 on a 2 s delay needs 272 s to fall
     // 60 dB. Bounded only so a damaged setting cannot make the count overflow.
     static constexpr float kMaxTailSeconds = 300.0f;
+    // The kill EQ's filter state per channel: 7 SVFs of two floats (dsp/masterloops.h).
+    static constexpr int kKillEqStates = 14;
 
     Mixer() = default;
     Mixer(const Mixer &) = delete;
@@ -192,6 +217,11 @@ public:
     void set_duck(float attack_s, float hold_s, float release_s) { duck_.set(attack_s, hold_s, release_s); }
     void trigger_duck(uint32_t frame = 0) { duck_.trigger(frame); }
     const Duck &duck() const { return duck_; }
+
+    // The delay freeze (dsp/freeze.hpp): held, the echoes now in the delay loop for as long as it
+    // is held and nothing new goes in. The loop is one delay time, two with ping-pong.
+    void freeze_delay(bool held) { freeze_.hold(held, delay_loop_frames_); }
+    const DelayFreeze &freeze() const { return freeze_; }
 
     InsertChain &chain(int track) { return chains_[track]; }
     const InsertChain &chain(int track) const { return chains_[track]; }
@@ -212,6 +242,9 @@ public:
     float peak() const { return peak_; }
     bool delay_running() const { return delay_tail_ > 0; }
     bool reverb_running() const { return reverb_tail_ > 0; }
+    // Is the kill EQ running this block, and how far in it is faded (0 bypassed ... 1 in)?
+    bool kill_eq_running() const { return eq_wet_ > 0.0f; }
+    float kill_eq_wet() const { return eq_wet_; }
 
 private:
     // Settings to coefficients, only when the settings have actually changed.
@@ -222,6 +255,11 @@ private:
     // output level as one ramp, then the soft limiter.
     void master(int frames);
 
+    // The kill EQ, in place on mix_l_ / mix_r_, after the DJ filter. Per block it moves each
+    // band's gain halfway to its target and fades the stage in or out; it runs only while a
+    // band is off flat or a fade is still going.
+    void kill_eq(int frames);
+
     float rate_ = 48000.0f;
     int frames_ = 0;
 
@@ -230,6 +268,8 @@ private:
     bool duck_active_ = false;
 
     enaga::dsp::StereoDelay delay_;
+    DelayFreeze freeze_;
+    int delay_loop_frames_ = 2;   // one echo period, for a freeze pressed now
     enaga::dsp::Reverb reverb_;
     enaga::dsp::Biquad reverb_high_pass_;
     enaga::dsp::BiquadCoefficients reverb_high_pass_coefficients_{};
@@ -251,6 +291,17 @@ private:
     float compressor_attack_ = 0.5f, compressor_release_ = 0.05f;
     float limit_threshold_ = 0.8f, limit_inv_headroom_ = 5.0f, limit_headroom_ = 0.2f;
     float out_level_ = 1.0f;
+
+    // The kill EQ. Two Linkwitz-Riley crossovers (24 dB, two Butterworth SVF stages a side),
+    // so LOW + MID + HIGH at unity is an all-pass rather than a comb, and the LOW band through
+    // the upper crossover's all-pass so the three stay in phase. 7 SVFs a channel; see
+    // dsp/masterloops.h for the loop.
+    enaga::dsp::SvfCoefficients eq_low_split_{}, eq_high_split_{};
+    float eq_state_l_[kKillEqStates] = {};
+    float eq_state_r_[kKillEqStates] = {};
+    float eq_target_[kKillBands] = {1.0f, 1.0f, 1.0f};   // after the kill switches
+    float eq_gain_[kKillBands] = {1.0f, 1.0f, 1.0f};     // where the smoothed gains are
+    float eq_wet_ = 0.0f;                                  // 0 bypassed ... 1 fully in
 
     // Running state.
     float compressor_gain_ = 1.0f;   // smoothed, one update per block

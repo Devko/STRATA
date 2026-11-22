@@ -70,6 +70,7 @@
 // docs/BUDGET.md has what it was worth. There is no hand-written loop left in this file.
 #include "va.hpp"
 
+#include "tihints.h"
 #include "valoops.h"
 
 namespace strata {
@@ -266,6 +267,7 @@ void VaVoice::kill() {
     svf_b_.reset();
     sync_carry_ = 0.0f;
     gain_ = 0.0f;
+    choke_left_ = 0;
 }
 
 void VaVoice::reset() {
@@ -285,6 +287,7 @@ void VaVoice::set_note(float velocity, bool accent, bool slide) {
 }
 
 void VaVoice::gate_on() {
+    choke_left_ = 0;       // a choked voice taken for a new note is a new note, not a fade
     amp_.gate_on();        // from the level it is at: resetting it under a note is a click
     fenv_.gate_on(true);   // the sweep always starts from closed, however loud the old note was
 }
@@ -302,11 +305,22 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
 
     const float fenv = fenv_.step(accent_ ? s.fenv_shape_accent : s.fenv_shape);
 
-    const float hz = 440.0f * semitones(pitch_ - 69.0f);
-    const float dt1 = clamp(hz * s.inv_rate, 1e-5f, 0.45f);
-    const float inv1 = reciprocal(dt1);
-    const float dt2 = clamp(dt1 * kOsc2Ratio, 1e-5f, 0.45f);
-    const float inv2 = reciprocal(dt2);
+    // The oscillators' increments, recomputed only when the pitch has moved: a semitones() and
+    // two reciprocals a control step per voice, for a value that is constant for the whole of a
+    // held note. Same inputs, same arithmetic, so the cached bits are the computed ones.
+    if (pitch_ != osc_pitch_ || s.inv_rate != osc_inv_rate_) {
+        osc_pitch_ = pitch_;
+        osc_inv_rate_ = s.inv_rate;
+        const float hz = 440.0f * semitones(pitch_ - 69.0f);
+        dt1_ = clamp(hz * s.inv_rate, 1e-5f, 0.45f);
+        inv1_ = reciprocal(dt1_);
+        dt2_ = clamp(dt1_ * kOsc2Ratio, 1e-5f, 0.45f);
+        inv2_ = reciprocal(dt2_);
+    }
+    const float dt1 = dt1_;
+    const float inv1 = inv1_;
+    const float dt2 = dt2_;
+    const float inv2 = inv2_;
 
     // Accent opens the filter two ways: the base cutoff lifts, and the sweep above it reaches
     // further. No key tracking, deliberately -- the machine this follows has a fixed-frequency
@@ -347,6 +361,41 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     sub_.render_add(work, n, Wave::triangle, 0.5f * dt1, 2.0f * inv1, s.level_sub);
     rng_.add_noise(work, n, noise);
 
+    float target = s.out_gain * (kVelocityFloor + (1.0f - kVelocityFloor) * velocity_) *
+                   (accent_ ? kAccentGain : 1.0f);
+    // A choked voice ramps its output gain to zero over kChokeFrames instead (choke(), below).
+    if (choke_left_ > 0) {
+        const float lowered = gain_ - choke_step_ * float(n);
+        target = choke_left_ <= n || lowered < 0.0f ? 0.0f : lowered;
+    }
+
+    // The whole tail in ONE pass: the soft clip, the amplitude envelope and the ramped add.
+    //
+    // The soft clip sits AFTER the filter, which is what bounds the voice to +-1 however far
+    // resonance pushes the peak, and is the right place for the dirt a driven bass wants. It
+    // used to be `enaga_soft_clip_buffer`, then `enaga_multiply`, then a `mix_ramp` written out
+    // in this file -- three passes over the slice with `work` round-tripped through memory. This
+    // file's header has named the fusion as the thing to do since M2, and docs/BUDGET.md's
+    // measurement is why it is worth doing: VA POLY runs this tail six times a block, four
+    // slices each, and 82% of its 4.3 points per voice is the per-sample loop.
+    //
+    // Bit-exact, deliberately: same expressions, same order, same associations (dsp/valoops.h).
+    if (n != ramp_n_) {
+        ramp_n_ = n;
+        inv_n_ = reciprocal(float(n));
+    }
+#if STRATA_VA_FUSED
+    // The filter, the amplitude envelope and the tail in ONE loop (valoops.h): three recurrences
+    // that each kept this core's units mostly idle, overlapped. Bit-exact against the three
+    // passes below, which tests/test_va.cpp checks in every mode and envelope stage.
+    // LP24's first stage only: the 12 dB modes never read c1, so they skip its reciprocal.
+    const SvfCoefficients c1 =
+        s.mode == VaMode::lp24 ? SvfCoefficients::from_g(g, kStageOneK) : c2;
+    strata_va_back(out, work, n, int(s.mode), &svf_a_.state_, &c1, &svf_b_.state_, &c2,
+                   &amp_.state_, accent_ ? &s.amp_shape_accent : &s.amp_shape, s.drive, gain_,
+                   (target - gain_) * inv_n_);
+    (void)env;
+#else
     switch (s.mode) {
         case VaMode::lp24: {
             const SvfCoefficients c1 = SvfCoefficients::from_g(g, kStageOneK);
@@ -365,23 +414,28 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     }
 
     amp_.render(env, n, accent_ ? s.amp_shape_accent : s.amp_shape);
-
-    const float target = s.out_gain * (kVelocityFloor + (1.0f - kVelocityFloor) * velocity_) *
-                         (accent_ ? kAccentGain : 1.0f);
-
-    // The whole tail in ONE pass: the soft clip, the amplitude envelope and the ramped add.
-    //
-    // The soft clip sits AFTER the filter, which is what bounds the voice to +-1 however far
-    // resonance pushes the peak, and is the right place for the dirt a driven bass wants. It
-    // used to be `enaga_soft_clip_buffer`, then `enaga_multiply`, then a `mix_ramp` written out
-    // in this file -- three passes over the slice with `work` round-tripped through memory. This
-    // file's header has named the fusion as the thing to do since M2, and docs/BUDGET.md's
-    // measurement is why it is worth doing: VA POLY runs this tail six times a block, four
-    // slices each, and 82% of its 4.3 points per voice is the per-sample loop.
-    //
-    // Bit-exact, deliberately: same expressions, same order, same associations (dsp/valoops.h).
-    strata_va_tail(out, work, env, n, s.drive, gain_, (target - gain_) * reciprocal(float(n)));
+    strata_va_tail(out, work, env, n, s.drive, gain_, (target - gain_) * inv_n_);
+#endif
     gain_ = target;
+
+    if (choke_left_ > 0) {
+        choke_left_ -= n;
+        if (choke_left_ <= 0) {
+            choke_left_ = 0;
+            kill();            // the ramp has reached zero: nothing is cut that can be heard
+        }
+    }
+}
+
+// The shared voice budget's way out (app/engine.cpp, make_room_for_poly_voice): a fade of the
+// output gain to zero over kChokeFrames, then a kill. A kill on its own would put a step the
+// size of the voice's level into the mix; a release would keep the voice -- and its cost --
+// running for another 60 ms, which is the cost the budget exists to bound. 64 frames is 1.3 ms:
+// short enough that the budget is back within a block, long enough not to click.
+void VaVoice::choke() {
+    if (!sounding() || choke_left_ > 0) return;
+    choke_left_ = kChokeFrames;
+    choke_step_ = gain_ * (1.0f / float(kChokeFrames));
 }
 
 // --- the machine ----------------------------------------------------------
@@ -422,7 +476,16 @@ void VaMono::trigger(const Trig &trig) {
     next_ = trig;
     wait_ = int(trig.frame);
     pending_ = true;
+    release_on_start_ = false;
     active_ = true;
+}
+
+void VaMono::release(uint8_t note) {
+    // `next_` is the note sounding once it has started, and the one waiting before that. A
+    // different note has taken the voice since (legato playing): leave it alone.
+    if (next_.note != note) return;
+    if (pending_) release_on_start_ = true;
+    else voice_.gate_off();
 }
 
 void VaMono::release_all() {
@@ -433,6 +496,7 @@ void VaMono::release_all() {
 
 void VaMono::kill_all() {
     pending_ = false;
+    release_on_start_ = false;
     wait_ = 0;
     voice_.kill();
     active_ = false;
@@ -499,6 +563,10 @@ void VaMono::start() {
     // sounding note puts a step in the output, which is a click.
     if (!was_sounding) voice_.reset_phases();
     voice_.gate_on();
+    if (release_on_start_) {
+        voice_.gate_off();
+        release_on_start_ = false;
+    }
 }
 
 }  // namespace strata

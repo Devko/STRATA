@@ -35,6 +35,7 @@
 // `enaga::files`.
 #pragma once
 
+#include "midiout.hpp"     // kMidiOutOff and kMidiChannels: ProjectSettings::midi_out's domain
 #include "pattern.hpp"
 #include "serialize.hpp"
 
@@ -48,16 +49,24 @@ constexpr int kBanks = 8;                    // A..H
 constexpr int kPatternsPerBank = 16;
 constexpr int kProjectPatterns = kBanks * kPatternsPerBank;   // 128
 
-// Parameters per track, mirroring dsp/track.hpp's kParams without depending on it. app/ asserts
-// that the two agree.
-constexpr int kKitParams = 16;
+// Parameters per track, mirroring dsp/track.hpp's kTrackParams without depending on it. app/
+// asserts that the three agree: 16 SOUND parameters (the machine's and the insert chain's) and
+// then the 4 bytes of the track's LFO (dsp/lfo.hpp). The split matters to the files: KIT.BIN and
+// PERFORM.BIN carried 16 a track before the LFO existed, so the four LFO bytes travel in sections
+// of their own that an older file simply does not have. The arpeggiator's four (core/arp.hpp)
+// follow the LFO's in the same way, and in a section of their own again.
+constexpr int kKitSoundParams = 16;
+constexpr int kKitLfoParams = 4;
+constexpr int kKitLfoEnd = kKitSoundParams + kKitLfoParams;
+constexpr int kKitArpParams = 4;
+constexpr int kKitParams = kKitLfoEnd + kKitArpParams;
 
 // How many machines a track can host, mirroring dsp/'s machine list the same way and for the
 // same reason as kKitParams: docs/SPEC.md, "Machines (v1)" -- KICK, SNARE, HAT, PERC, SAMPLE,
-// GRAIN, VA MONO and VA POLY. The file format needs the domain of KitTrack::machine, because a
+// GRAIN, VA MONO and VA POLY -- plus MID, which plays nothing here and sends MIDI (dsp/extmidi.hpp). The file format needs the domain of KitTrack::machine, because a
 // kit naming machine 12 has to become something this build can host rather than an index into
 // app/'s machine pool. app/ asserts that the two agree.
-constexpr int kMachines = 8;
+constexpr int kMachines = 9;
 
 // Which machine a track hosts, as the number KIT.BIN stores.
 //
@@ -78,6 +87,7 @@ enum class MachineId : uint8_t {
     grain,
     va_mono,
     va_poly,
+    midi,        // MID: no audio; the track's notes and eight CCs go to MIDI OUT
     count
 };
 static_assert(int(MachineId::count) == kMachines,
@@ -98,6 +108,9 @@ const char *machine_name(uint8_t id);
 //     window and the track plays like an instrument. With SLC > 1 the note picks the SLICE, and
 //     folding it would play a different slice -- not a musical operation at all -- so a sliced
 //     sample never folds. Roland's decision, 2026-11-22.
+//   - MID never folds. The note goes to someone else's instrument, which may be a drum machine
+//     mapping notes to sounds, so it leaves exactly as written -- a chord step still sends its
+//     chord, which `chord_expand` folds as it builds it.
 //   - The DRUM machines read `note` as a pitch too (dsp/kick.cpp tunes the body from it), but
 //     folding it would RETUNE them: a kick written at D on a C minor track would move, and
 //     nobody writing a drum part is thinking in degrees.
@@ -118,6 +131,9 @@ constexpr int kSamplePathBytes = 112;
 
 // docs/SPEC.md: "Chains: up to 64 entries per project, each a pattern plus a repeat count."
 constexpr int kChainEntries = 64;
+// The most passes one entry repeats for from the CHAIN page (the file allows up to 255). Kept at
+// 16 by Roland's decision on 2026-11-22: a longer section is two entries of the same pattern.
+constexpr int kChainRepeatsMax = 16;
 
 // --- the kit --------------------------------------------------------------
 
@@ -139,11 +155,19 @@ struct Kit {
 //
 // `repeats` of 0 means the entry is unused, which is also what zeroed memory means -- a chain
 // of 64 zeroed entries is an empty chain rather than 64 infinite repeats of pattern A01.
+//
+// `mutes` is song mode's: 0 leaves the mutes as they are, 1-8 recalls that stored mute state
+// (`ProjectSettings::mute_states`) as the entry starts, so a chain can hold sections -- an intro
+// without the kick, a breakdown -- and not only patterns. Zeroed, it changes nothing.
 struct ChainEntry {
     uint8_t bank = 0;
     uint8_t slot = 0;
     uint8_t repeats = 0;
+    uint8_t mutes = 0;
 };
+
+// The highest `ChainEntry::mutes`: one per stored mute state.
+constexpr uint8_t kChainMutesMax = 8;
 
 // --- the project ----------------------------------------------------------
 
@@ -159,7 +183,10 @@ constexpr uint16_t kTempoCentiMax = 30000;    // 300.00 BPM
 // CLAUDE.md says core/ never does. dsp/buses.hpp static_asserts that the two agree, so the day
 // a field is added the build stops here rather than writing a short section.
 constexpr int kSendFields = 10;
-constexpr int kMasterFields = 4;
+constexpr int kMasterFields = 7;
+// What a PROJECT.BIN written before the kill EQ holds: the DJ filter, compressor, limiter and
+// level. The three EQ bands were appended after them, so a short mixer section is an older file.
+constexpr int kMasterFieldsV1 = 4;
 
 // The delay's default division: dotted 1/8, index 5 of dsp/buses.hpp's table, as the byte an
 // encoder at that position produces. Named here because `ProjectSettings` needs it as an
@@ -171,7 +198,9 @@ struct ProjectSettings {
     uint16_t tempo_centi_bpm = 13000;    // 130.00 BPM; Enaga's clock takes BPM x 100
     uint8_t root = 60;
     uint8_t scale = 0;
-    uint8_t swing = uint8_t(kSwingMin);
+    // No swing here. The file kept a project-wide swing that nothing read; the sequencer only
+    // ever used the PATTERN's (core/pattern.hpp), so the field is gone and its byte in
+    // PROJECT.BIN is reserved (core/project.cpp).
     uint8_t quantize = 100;              // the live-record quantize amount, 0-100
     uint8_t mute_states[8] = {};         // 8 stored mute states, one bit per track
 
@@ -181,6 +210,24 @@ struct ProjectSettings {
 
     uint8_t chain_length = 0;            // how many chain entries are in use
     bool chain_enabled = false;
+    // Song mode: the chain plays through ONCE and the transport stops at its end, back on entry
+    // 1, instead of looping. Off, a chain loops as it always has.
+    bool chain_song = false;
+
+    // What was live when the project was saved: the mutes as they stood (one bit per track,
+    // bit t = track t muted) and which scenes sat in the morph's slots A and B. Restored on
+    // open, so a set comes back the way it was left rather than all unmuted. The engine owns
+    // them while the project is open; these are its copies for the file. The scene ids are
+    // kept as read and validated by the engine, which knows how many scenes there are.
+    uint8_t live_mutes = 0;
+    uint8_t scene_a = 0;
+    uint8_t scene_b = 1;
+
+    // Each track's MIDI OUT channel: 0 off, 1-16 the channel as printed on gear. A track with a
+    // channel sends every note it plays there (core/midiout.hpp). In the PROJECT rather than the
+    // kit because it is cabling -- which outboard synth listens where -- not a sound: recalling a
+    // kit must not re-route the synths on stage.
+    uint8_t midi_out[kTracks] = {};
 
     // The two send effects and the master bus, as encoder bytes rather than as the floats the
     // mixer runs on. One byte per field, in dsp/buses.hpp's `SendField` and `MasterField`
@@ -198,8 +245,12 @@ struct ProjectSettings {
     // dotted 1/8, 40% feedback, mid tone, ping-pong on, full return, no delay into the reverb,
     // a 2 s reverb, mid damping, a 180 Hz input high-pass, full return.
     uint8_t sends[kSendFields] = {kDefaultDelayDivision, 53, 64, 127, 127, 0, 58, 64, 61, 127};
-    // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out.
-    uint8_t master[kMasterFields] = {64, 38, 101, 127};
+    // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out, and the
+    // kill EQ's three bands at their flat (bypassed) centre.
+    uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64};
+    // The kill EQ's kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. Saved, like the live
+    // mutes, so a set comes back the way it was left. Stored after the master bytes.
+    uint8_t eq_kills = 0;
 };
 
 struct Project {
@@ -268,9 +319,26 @@ constexpr uint16_t kSectionProjectChain = 2;
 // simply does not ask for it. The version therefore does NOT move: the meaning of no existing
 // byte has changed, which is the only thing kProjectVersion tracks.
 constexpr uint16_t kSectionProjectMixer = 3;
+// The live mutes and the A/B scene choice. Optional on read for the same reason as the mixer:
+// an older file without it opens with everything unmuted and scenes 1 and 2, as it always did.
+constexpr uint16_t kSectionProjectLive = 4;
+// Song mode: the SONG switch and each chain entry's mute recall (`ChainEntry::mutes`). Optional
+// on read: an older file has a looping chain with no mute recalls, which is what zeroes mean.
+constexpr uint16_t kSectionProjectSong = 5;
+// Each track's MIDI OUT channel (core/midiout.hpp): eight bytes, 0 off or 1-16. Optional on read
+// like the ones above: an older file has every track's MIDI out off, which is what it played.
+constexpr uint16_t kSectionProjectMidi = 6;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;
+// The LFO's four bytes per track (core/project.hpp, kKitLfoParams). OPTIONAL on read, like the
+// project's mixer section: a KIT.BIN from before the LFO has one section and loads with every
+// LFO off (all four bytes 0), which is also what zeroed bytes mean to dsp/lfo.hpp. The version
+// does not move: no existing byte changed its meaning.
+constexpr uint16_t kSectionKitLfo = 2;
+// The arpeggiator's four bytes per track (kKitArpParams), OPTIONAL in the same way: a KIT.BIN
+// from before the arp loads with every arp OFF.
+constexpr uint16_t kSectionKitArp = 3;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

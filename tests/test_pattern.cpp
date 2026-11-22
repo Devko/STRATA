@@ -649,3 +649,106 @@ TEST(sanitize_clamps_a_length_at_both_ends) {
         if (raw >= 1 && raw <= kLengthMax) CHECK_EQ(int(step.length), raw);
     }
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+namespace {
+Pattern g_gap_pattern;
+}
+
+TEST(a_damaged_run_reads_as_no_locks_and_is_dropped_before_it_grows) {
+    Pattern &p = g_gap_pattern;
+    pattern_init(p);
+    CHECK(pattern_set_lock(p, 0, 0, 1, 11));
+    CHECK(pattern_set_lock(p, 0, 0, 2, 22));
+    Step &s = p.tracks[0].steps[1];
+    s.lock_first = 0;
+    s.lock_count = uint8_t(kLocksPerStep + 1);          // longer than a step may hold
+    CHECK_EQ(int(pattern_step_locks(p, 0, 1).count), 0);
+    s.lock_first = kNoLock;                              // a count with nowhere to point
+    s.lock_count = 1;
+    CHECK_EQ(int(pattern_step_locks(p, 0, 1).count), 0);
+    // Locking that step starts a fresh run of one, rather than copying what kNoLock pointed at.
+    CHECK(pattern_set_lock(p, 0, 1, 7, 70));
+    const LockView view = pattern_step_locks(p, 0, 1);
+    CHECK_EQ(int(view.count), 1);
+    CHECK_EQ(int(view.locks[0].param), 7);
+    CHECK_EQ(int(view.locks[0].value), 70);
+}
+
+TEST(a_run_moved_to_the_top_of_the_pool_keeps_every_lock_in_order) {
+    Pattern &p = g_gap_pattern;
+    pattern_init(p);
+    CHECK(pattern_set_lock(p, 2, 4, 1, 11));
+    CHECK(pattern_set_lock(p, 2, 4, 2, 22));
+    CHECK(pattern_set_lock(p, 2, 4, 3, 33));
+    CHECK(pattern_set_lock(p, 2, 5, 9, 99));            // buries step 4's run
+    CHECK(pattern_set_lock(p, 2, 4, 4, 44));            // so this relocates it
+    const LockView view = pattern_step_locks(p, 2, 4);
+    CHECK_EQ(int(view.count), 4);
+    for (int k = 0; k < 4; k++) {
+        CHECK_EQ(int(view.locks[k].param), k + 1);
+        CHECK_EQ(int(view.locks[k].value), 11 * (k + 1));
+    }
+}
+
+TEST(clearing_a_lock_from_the_run_at_the_top_gives_its_slot_back) {
+    Pattern &p = g_gap_pattern;
+    pattern_init(p);
+    CHECK(pattern_set_lock(p, 0, 0, 1, 10));
+    CHECK(pattern_set_lock(p, 0, 1, 1, 10));
+    CHECK(pattern_set_lock(p, 0, 1, 2, 20));
+    CHECK(pattern_set_lock(p, 0, 1, 3, 30));
+    CHECK_EQ(int(p.locks_used), 4);
+    CHECK(pattern_clear_lock(p, 0, 1, 2));
+    CHECK_EQ(int(p.locks_used), 3);
+}
+
+TEST(a_full_pool_refuses_to_grow_the_run_at_its_top_and_compacts_without_loss) {
+    // 127 steps of 8, one of 1 and one of 7 on top: exactly kLockPool, with room in the top
+    // step's run but none in the pool.
+    Pattern &p = g_gap_pattern;
+    pattern_init(p);
+    int step = 0;
+    for (; step < 127; step++) {
+        for (uint8_t k = 0; k < kLocksPerStep; k++) {
+            CHECK(pattern_set_lock(p, step / kStepsPerTrack, step % kStepsPerTrack, k, k));
+        }
+    }
+    CHECK(pattern_set_lock(p, 1, 63, 0, 5));
+    for (uint8_t k = 0; k < 7; k++) CHECK(pattern_set_lock(p, 2, 0, k, uint8_t(k + 1)));
+    CHECK_EQ(int(p.locks_used), kLockPool);
+    CHECK(!pattern_set_lock(p, 2, 0, 7, 9));
+    CHECK_EQ(int(p.locks_used), kLockPool);
+    CHECK_EQ(int(pattern_step_locks(p, 2, 0).count), 7);
+
+    // Compacting a pool that is exactly full of reachable locks keeps every one of them.
+    CHECK_EQ(int(pattern_compact_locks(p)), kLockPool);
+    CHECK_EQ(int(pattern_locks_reachable(p)), kLockPool);
+    CHECK_EQ(int(pattern_step_locks(p, 2, 0).count), 7);
+}
+
+TEST(packing_a_b_with_no_numbers_gives_one_of_the_shortest_cycle) {
+    const uint8_t ab = condition_pack(Condition::A_B);
+    CHECK_EQ(int(condition_a(ab)), 1);
+    CHECK_EQ(int(condition_b(ab)), int(kConditionBMin));
+    CHECK_EQ(int(condition_pack(Condition(kConditionKinds))), int(Condition::NONE));
+}
+
+TEST(a_track_swing_walks_pat_then_fifty_to_seventy_five) {
+    // The PATTERN page's per-track line: PAT, 50, 51 .. 75. Down from 50 is PAT and stays there.
+    CHECK_EQ(int(track_swing_step(kSwingInherit, +1)), kSwingMin);
+    CHECK_EQ(int(track_swing_step(kSwingInherit, +4)), kSwingMin + 3);
+    CHECK_EQ(int(track_swing_step(kSwingInherit, -1)), int(kSwingInherit));
+    CHECK_EQ(int(track_swing_step(kSwingMin, -1)), int(kSwingInherit));
+    CHECK_EQ(int(track_swing_step(kSwingMin, -100)), int(kSwingInherit));
+    CHECK_EQ(int(track_swing_step(60, +3)), 63);
+    CHECK_EQ(int(track_swing_step(60, -3)), 57);
+    CHECK_EQ(int(track_swing_step(kSwingMax, +1)), kSwingMax);
+    CHECK_EQ(int(track_swing_step(kSwingInherit, +100)), kSwingMax);
+    // A damaged byte between PAT and 50 counts as PAT; one above 75 as 75.
+    CHECK_EQ(int(track_swing_step(20, +1)), kSwingMin);
+    CHECK_EQ(int(track_swing_step(20, 0)), int(kSwingInherit));
+    CHECK_EQ(int(track_swing_step(200, 0)), kSwingMax);
+    CHECK_EQ(int(track_swing_step(200, -1)), kSwingMax - 1);
+}

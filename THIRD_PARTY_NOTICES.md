@@ -8,6 +8,10 @@ A note on why the second entry is here at all: STRATA **reimplements** published
 topologies rather than porting anyone's code, so it is arguable that no notice is owed for it.
 Reproducing it costs nothing and removes the argument, which is the better trade.
 
+Sonicware, SmplTrek, Lofi-12 XT and CyDrums are trademarks of their respective owners. STRATA is
+not affiliated with or endorsed by Sonicware, and no Sonicware code, firmware or sounds are part
+of it.
+
 ---
 
 ## Enaga
@@ -40,6 +44,73 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+### Enaga's firmware, in a release zip
+
+A STRATA release zip (`tools/package_release.py`) also carries Enaga's SmplTrek update file,
+`SmplTrek.bin` at v0.2.0, so a user installs the exact firmware STRATA was built and tested
+against. That is permitted: checked 2026-11-22 against the pinned source, the image is built
+only from code under these licences, and Enaga's README states it "contains no Sonicware code".
+
+| In `SmplTrek.bin` | Licence | What redistributing a binary asks |
+| --- | --- | --- |
+| Enaga (`firmware/`, `loader/`) | MIT, notice above | include the notice: this file, in the zip |
+| FatFs R0.15a (`firmware/third_party/fatfs`), © 2024 ChaN | 1-clause BSD-style | nothing for a binary; the notice is below anyway |
+| TinyUSB, a subset (`firmware/third_party/tinyusb`), © hathach and contributors | MIT | include the notice: below |
+| `libgcc` | GPL-3 with the GCC Runtime Library Exception | nothing: the exception permits it |
+
+`tools/package_release.py` refuses any `SmplTrek.bin` that is not exactly one SYSTEM image at
+Enaga's pinned version for the SmplTrek, so an official Sonicware update file, whose firmware
+must never be redistributed, cannot end up in a zip by mistake.
+
+#### TinyUSB
+
+<https://github.com/hathach/tinyusb>
+
+```
+The MIT License (MIT)
+
+Copyright (c) 2012-2026, hathach (tinyusb.org)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
+
+#### FatFs
+
+<http://elm-chan.org/fsw/ff/>
+
+```
+FatFs - Generic FAT Filesystem Module  R0.15a
+Copyright (C) 2024, ChaN, all right reserved.
+
+FatFs module is an open source software. Redistribution and use of FatFs in
+source and binary forms, with or without modification, are permitted provided
+that the following condition is met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this condition and the following disclaimer.
+
+This software is provided by the copyright holder and contributors "AS IS"
+and any warranties related to this software are DISCLAIMED.
+The copyright owner or contributors be NOT LIABLE for any damages caused
+by use of this software.
 ```
 
 ---
@@ -97,9 +168,12 @@ turn bind anyone building on STRATA:
   and its forks) are *clients* that draw its screen over USB rather than implementations of its
   sound engine. There is nothing there to read even with a licence that allowed it.
 
-## If the toolchain's output is ever redistributed
+## If the toolchain's output is redistributed
 
-Separate from everything above, and still open: `docs/BUDGET.md` records that TI's `cl6x` is
-load-bearing for the CPU target, and whether TI's licence permits redistributing `cl6x`-compiled
-output inside a released `APP.ENA` has not been read by anyone. That is a question about TI's
+Separate from everything above: an `APP.ENA` built with TI's `cl6x` contains no TI code, headers
+or run-time library, only instruction sequences cl6x chose from STRATA's and Enaga's source
+(`docs/BUDGET.md`, "The cl6x licence question, examined"). Compiler licences restrict the tools,
+not their output. What is still owed before the first release built with cl6x is the ten-minute
+read of the licence text TI's installer put in `~/ti/ti-cgt-c6000_8.5.0.LTS`, to confirm no
+condition is attached to output (`docs/release/RELEASING.md`). That is a question about TI's
 terms, not about any licence in this file.

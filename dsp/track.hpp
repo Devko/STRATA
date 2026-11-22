@@ -37,19 +37,36 @@ namespace strata {
 
 // --- parameters -----------------------------------------------------------
 
+// The SOUND parameters: what a machine and its insert chain are prepared from.
 constexpr int kParams = 16;
 constexpr int kPages = 4;
 constexpr int kParamsPerPage = 4;
 
-enum class Page : uint8_t { src = 0, fltr = 1, amp = 2, fx = 3 };
+// And a fifth page that is not sound: the track's LFO (dsp/lfo.hpp), four bytes after the 16,
+// stored, locked, scened and macro'd like any other parameter, so every one of those works on
+// it with no code of its own. No machine and no chain reads them, which is why `prepare` and
+// its memo still look at the first kParams only: an LFO setting changing does not re-prepare a
+// machine. What the LFO DOES to its destination arrives as an ordinary change to that byte.
+constexpr int kLfoParams = 4;
+// And a sixth: the arpeggiator (core/arp.hpp), MOD RAT OCT GATE, read by the engine's scheduler
+// and by nothing that renders, for the same reasons.
+constexpr int kArpParams = 4;
+constexpr int kArpFirst = kParams + kLfoParams;
+constexpr int kTrackParams = kArpFirst + kArpParams;
+
+enum class Page : uint8_t { src = 0, fltr = 1, amp = 2, fx = 3, lfo = 4, arp = 5 };
 
 constexpr int page_first(Page page) { return int(page) * kParamsPerPage; }
+static_assert(page_first(Page::lfo) == kParams, "the LFO page is the four bytes after the sound");
+static_assert(kLfoParams == kParamsPerPage, "the LFO is one page of four");
+static_assert(page_first(Page::arp) == kArpFirst, "the ARP page is the four bytes after the LFO");
+static_assert(kArpParams == kParamsPerPage, "the arp is one page of four");
 
-// All 16 of a track's parameters, as stored in a kit and overridden by locks. Values are 0-127;
+// All 24 of a track's parameters, as stored in a kit and overridden by locks. Values are 0-127;
 // each machine and the chain map them to physical units themselves, so the sequencer never
-// needs to know what a parameter means.
+// needs to know what a parameter means. Machines read v[0..kParams) only.
 struct TrackParams {
-    uint8_t v[kParams];
+    uint8_t v[kTrackParams];
 
     uint8_t get(int index) const { return v[index]; }
     uint8_t get(Page page, int offset) const { return v[page_first(page) + offset]; }
@@ -80,12 +97,10 @@ struct Trig {
     // a voice is released, so the caller converts to SAMPLES at control rate, where the tempo is
     // known". `Engine::fire` is that caller.
     //
-    // A DURATION rather than a note-off is what lets this exist without a per-note release on
-    // the interface below. The machine owns the voice, so it owns when the voice stops, and
-    // nothing has to keep a note-to-voice map or schedule anything. The cost is that a HELD key
-    // has no duration to give, which is why KEYS mode still cannot release a key and
-    // `Cmd::release_note` is still unimplemented -- those want a `release(note)` virtual, which
-    // is a separate decision and can be added later without disturbing this.
+    // A DURATION rather than a note-off, for the sequencer: the machine owns the voice, so it
+    // owns when the voice stops, and nothing has to schedule anything. A HELD key has no
+    // duration to give, so KEYS mode triggers with 0 and ends the note with `Machine::release`
+    // when the key comes up.
     //
     // A machine may ignore it entirely. The one-shot drums do.
     uint32_t gate_frames = 0;
@@ -134,6 +149,17 @@ public:
 
     // Hard cut, no tail (STOP twice, or a choke group).
     virtual void kill_all() = 0;
+
+    // Let go of `note`: every voice playing it goes into its release, and one still waiting for
+    // its frame is released as soon as it starts. A key coming up in KEYS mode
+    // (`Cmd::release_note`). The sustaining machines -- VA, VA POLY, SAMPLE and GRAIN --
+    // implement it; a one-shot drum has nothing to let go of, so the default does nothing.
+    //
+    // It is by NOTE, not by who started it: a key let go on a track whose sequencer is playing
+    // the same note releases the sequencer's voice too. Accepted by Roland on 2026-11-22 -- the
+    // alternative is a per-voice owner tag in every machine for a case that is mostly a player
+    // doubling the part.
+    virtual void release(uint8_t note) { (void)note; }
 
     // Add this block's mono output into out[0..frames).
     virtual void render_add(float *out, int frames) = 0;

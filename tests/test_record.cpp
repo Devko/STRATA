@@ -703,3 +703,13 @@ TEST(a_long_recording_stays_consistent) {
     CHECK_EQ(int(distant.loop), 100000);
     CHECK_EQ(int(distant.micro), 0);
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(stamp_normalise_carries_a_fraction_that_rounds_up_to_a_whole_tick) {
+    // -1e-9 floors to -1, and 1 - 1e-9 is 1.0f in a float: the fold has to carry it, or the
+    // stamp would land a whole tick early with fraction 0.
+    const Stamp tiny = stamp_normalise(stamp_at(5, -1.0e-9f));
+    CHECK_EQ(tiny.tick, 5u);
+    CHECK_EQ(tiny.fraction, 0.0f);
+}

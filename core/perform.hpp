@@ -74,17 +74,38 @@ static_assert((1u << kMorphShift) == kMorphScale,
 static_assert((kMorphScale & (kMorphScale - 1)) == 0,
               "kMorphScale must be a power of two: the morph shifts rather than divides");
 
+// --- the master kill EQ's bands, as the performance layer sees them --------
+//
+// core/ cannot include dsp/buses.hpp, so the EQ's place in ProjectSettings::master is stated here
+// and app/ static_asserts it against MasterField::eq_low and kKillBands.
+constexpr int kMasterBands = 3;
+constexpr int kMasterEqFirst = 4;
+static_assert(kMasterEqFirst + kMasterBands == kMasterFields,
+              "the kill EQ's bands are the last three master bytes");
+
+// A macro target on the master EQ rather than a track: `track` is this, `param` the band 0-2.
+// One past the last track, so a build without it drops such a target as a track it does not
+// have, which is what an older build reading a newer PERFORM.BIN should do.
+constexpr uint8_t kMacroMasterTrack = uint8_t(kTracks);
+
 // --- scenes ---------------------------------------------------------------
 
-// One scene: a value for any subset of the 8 x 16 track parameters.
+// One scene: a value for any subset of the 8 x 20 track parameters (16 sound, then the LFO's 4).
 //
 // `stored` is what makes "any tracks" work -- a scene that only touches the bass line must not
-// drag every other track's sound with it when it is morphed to. One bit per parameter, two bytes
-// per track, and zeroed memory means a scene that stores nothing, which is what an empty scene
-// is.
+// drag every other track's sound with it when it is morphed to. One bit per parameter, three
+// bytes per track (the third holds the LFO's four bits), and zeroed memory means a scene that
+// stores nothing, which is what an empty scene is.
+constexpr int kSceneStoredBytes = (kKitParams + 7) / 8;
 struct Scene {
     uint8_t values[kTracks][kKitParams] = {};
-    uint8_t stored[kTracks][2] = {};
+    uint8_t stored[kTracks][kSceneStoredBytes] = {};
+    // The master kill EQ's three band bytes (ProjectSettings::master, from kMasterEqFirst), and
+    // which of them the scene stores, bit 0 LOW. A whole-kit capture stores all three, so a
+    // morph to a scene with the lows cut sweeps them out; the kill SWITCHES are not in a scene,
+    // they are a hand on the panel.
+    uint8_t master[kMasterBands] = {};
+    uint8_t master_stored = 0;
 };
 
 struct SceneSet {
@@ -107,6 +128,9 @@ void scene_capture(Scene &scene, const Kit &kit);
 
 // Store one track's parameters only, which is what capturing with a track selected does.
 void scene_capture_track(Scene &scene, const Kit &kit, int track);
+
+// Store the master EQ's three band bytes, which a whole-kit capture also does in the engine.
+void scene_capture_master(Scene &scene, const uint8_t bands[kMasterBands]);
 
 // Forget everything. A scene that stores nothing is skipped entirely by the morph.
 void scene_erase(Scene &scene);
@@ -136,11 +160,19 @@ int scene_count(const Scene &scene);
 void scene_morph(const Scene &a, const Scene &b, uint16_t position,
                  uint8_t out[kTracks][kKitParams]);
 
+// The same crossfade for the master EQ's three band bytes, by the same rule: `out` holds the
+// live bytes on the way in, and the end a scene does not store is that live value.
+void scene_morph_master(const Scene &a, const Scene &b, uint16_t position,
+                        uint8_t out[kMasterBands]);
+
 // --- macros ---------------------------------------------------------------
 
-// One parameter a macro drives, over its own range. `low` is the value at macro 0 and `high` the
-// value at 127, and low may be ABOVE high: an inverted target is how one knob opens a filter
-// while it closes a send, which is most of what makes a macro worth having.
+// One parameter a macro drives. `high` is the value at 127, and it may be BELOW where the
+// parameter starts: an inverted target is how one knob opens a filter while it closes a send,
+// which is most of what makes a macro worth having.
+//
+// `low` is the parameter's value when the target was assigned. `macro_apply` no longer reads it: since 2026-11-22 a macro sweeps from the parameter's LIVE
+// value (see below), so `low` is kept for the screen, for the file, and for `macro_value`.
 //
 // `enabled` 0 means the target is unused, which is also what zeroed memory means -- the same
 // convention as `ChainEntry::repeats` (core/project.hpp).
@@ -179,9 +211,37 @@ void macro_range_through(uint8_t now, uint8_t far, uint8_t position, uint8_t &lo
 // parameter that does not exist are skipped -- a macro set up for a build with more parameters
 // must not write past the array.
 //
+// **A macro sweeps from the parameter's live value to `high`.** `out` comes in holding what the
+// machines would play without macros -- the kit, then the morph -- and each target writes
+//
+//     live + (high - live) * position / 127
+//
+// So at position 0 a macro writes exactly what is already there: the EDIT knob and the morph have
+// the parameter back. It used to write `low` at 0 like at every other position, so an assigned
+// macro held its parameters for as long as it stayed assigned: turning that knob in EDIT moved
+// the screen and not the sound, and a scene morphing the same parameter was overwritten.
+// Roland's decision, 2026-11-22. And because the sweep starts from the live value, the first
+// detent up is a nudge from wherever the sound is -- after a knob turn or a morph too -- never
+// a jump to a stored `low`.
+//
 // Later targets win over earlier ones when two drive the same parameter. That is a consequence
 // of writing them in order rather than a decision worth defending; the UI should not offer it.
 void macro_apply(const Macro &macro, uint8_t position, uint8_t out[kTracks][kKitParams]);
+
+// And the targets on the master EQ (`track == kMacroMasterTrack`), into its three band bytes,
+// the same sweep from the live value. `macro_apply` skips these, this skips the track ones.
+void macro_apply_master(const Macro &macro, uint8_t position, uint8_t out[kMasterBands]);
+
+// Does this target name something this build has: a track parameter, or a master EQ band?
+constexpr bool macro_target_usable(const MacroTarget &target) {
+    return target.enabled != 0 &&
+           ((target.track < kTracks && target.param < kKitParams) ||
+            (target.track == kMacroMasterTrack && target.param < kMasterBands));
+}
+
+// One target's value at `position`, swept from `live` towards `high` as `macro_apply` does it.
+// Rounded to nearest; exactly `live` at 0 and exactly `high` at 127.
+uint8_t macro_value_from(uint8_t live, const MacroTarget &target, uint8_t position);
 
 // How many targets are enabled and usable, for the screen.
 int macro_count(const Macro &macro);
@@ -264,6 +324,17 @@ constexpr bool auto_fill_active(AutoFill period, uint32_t bar) {
 constexpr uint16_t kPerformVersion = 1;
 constexpr uint16_t kSectionPerformScenes = 1;
 constexpr uint16_t kSectionPerformMacros = 2;
+// The scenes' LFO bytes: per scene, per track, the four values and then the bitmask byte whose
+// low four bits say which are stored. OPTIONAL on read: a PERFORM.BIN from before the LFO loads
+// with no scene storing any LFO byte. Section 1 keeps its 16 values and two mask bytes a track,
+// so an older build reads a newer file unchanged and simply never asks for this one.
+constexpr uint16_t kSectionPerformSceneLfo = 3;
+// The scenes' master EQ bytes: 4 per scene (three bands, then the stored bits). OPTIONAL on read:
+// a PERFORM.BIN from before it loads with no scene storing the EQ.
+constexpr uint16_t kSectionPerformSceneMaster = 4;
+// The scenes' arp bytes: per scene, per track, the four values and then a byte whose low four
+// bits say which are stored. OPTIONAL on read, like the LFO's.
+constexpr uint16_t kSectionPerformSceneArp = 5;
 
 // Loading is value-tolerant but structure-strict, exactly as the other three file types are: a
 // macro naming a track that does not exist is dropped, while a bad magic, an unknown version, a

@@ -21,6 +21,7 @@
 // header, rounded up to 8, at least 16. Allocation happens once, in init(), and nothing is
 // freed, so a first-fit list never fragments and the sum is the whole story.
 #include "check.hpp"
+#include "fakehost.hpp"
 
 #include "capture.hpp"
 #include "engine.hpp"
@@ -116,6 +117,9 @@ const Footprint &footprint() {
     static bool done = false;
     if (done) return measured;
     done = true;
+    // The fake host first: its 48 MiB card arena is taken on first use, which is inside the
+    // count below when this test runs on its own (--only) and nothing has touched it yet.
+    (void)strata::test::FakeHost::the();
     g_requested = 0;
     g_device = 0;
     g_allocations = 0;
@@ -151,26 +155,39 @@ TEST(memory_init_is_what_the_budget_says) {
     // app/storage: the sample region at its CEILING (a project may raise its budget after
     // init), the loader's float and int16 staging, and one project file.
     const uint64_t region = uint64_t(kSampleBudgetMaxMib) * kMiB;
-    const uint64_t raw = uint64_t(kMaxSampleSeconds) * 48000u * 2u * 4u;      // stereo f32
-    const uint64_t src = uint64_t(kMaxSampleSeconds) * 48000u * 2u * 2u;      // stereo s16
+    // 30 s of the FILE at up to 96 kHz (app/storage.hpp): stereo 24-bit plus 64 KiB of header
+    // and trailing chunks as read, stereo int16 as converted for the resample.
+    const uint64_t raw = uint64_t(kMaxSampleSeconds) * kMaxSampleSourceRate * 2u * 3u + 65536u;
+    const uint64_t src = uint64_t(kMaxSampleSeconds) * kMaxSampleSourceRate * 2u * 2u;
     const uint64_t file = kBankMaxBytes;
+    // Streaming (app/storage.hpp): four Enaga stream rings of 256 KiB, what docs/SPEC.md's
+    // "recording ring and stream buffers" line budgeted. (The engine's per-track fifos are
+    // members, not allocations.)
+    const uint64_t rings = 4u * 256u * 1024u;
 
     // app/engine: the beat-repeat ring (stereo float) and the resample take (stereo int16 plus
     // a WAV header, dsp/capture.hpp).
     const uint64_t repeat = uint64_t(48000.0f * kRepeatSeconds) * 2u * 4u;
     const uint64_t capture = Capture::kHeaderBytes + uint64_t(48000.0f * kCaptureSeconds) * 2u * 2u;
 
-    const uint64_t itemised = region + raw + src + file + repeat + capture;
+    // The delay freeze's loop (two delay times of stereo float, dsp/freeze.hpp) and the tape
+    // stop's ring (dsp/tapestop.hpp).
+    const uint64_t freeze = uint64_t(48000.0f * 2.0f * Mixer::kMaxDelaySeconds) * 2u * 4u;
+    const uint64_t tape = uint64_t(48000.0f * kTapeStopRingSeconds) * 2u * 4u;
+
+    const uint64_t itemised = region + raw + src + file + rings + repeat + capture + freeze + tape;
     CHECK(f.requested >= itemised);
 
     // The rest is Enaga's master delay and reverb lines, sized inside Enaga. docs/SPEC.md budgets
     // them at 2 MiB, which is the bound here.
     const uint64_t buses = f.requested - itemised;
-    std::printf("    region %.2f, loader staging %.2f, file %.2f, repeat %.2f, capture %.2f, "
-                "delay+reverb %.2f MiB\n",
+    std::printf("    region %.2f, loader staging %.2f, file %.2f, stream rings %.2f, repeat %.2f, "
+                "capture %.2f, freeze %.2f, tape stop %.2f, delay+reverb %.2f MiB\n",
                 double(region) / double(kMiB), double(raw + src) / double(kMiB),
-                double(file) / double(kMiB), double(repeat) / double(kMiB),
-                double(capture) / double(kMiB), double(buses) / double(kMiB));
+                double(file) / double(kMiB), double(rings) / double(kMiB),
+                double(repeat) / double(kMiB), double(capture) / double(kMiB),
+                double(freeze) / double(kMiB), double(tape) / double(kMiB),
+                double(buses) / double(kMiB));
     CHECK(buses > 0);
     CHECK(buses <= 2u * kMiB);
 }

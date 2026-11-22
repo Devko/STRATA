@@ -53,6 +53,15 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### First boot on the unit (2026-11-22)
+
+| Configuration | LOAD on screen | Where | Date |
+| --- | --- | --- | --- |
+| Default beat, Enaga 0.2.0 firmware | **about 0–26%** | **unit** | 2026-11-22 |
+
+Read by eye from the app's LOAD line, not logged. Precise PEAK and the six-voice chord load on
+the unit are still to be recorded here.
+
 ### M0 — skeleton
 
 | Configuration | Peak | Blocks | Overruns | Where | Date |
@@ -434,7 +443,7 @@ suite 539,926 checks, 0 failures. `tools/build.sh` sends `chainloops`, `drumloop
 0 overruns in every run. **Worst case 23.49% with cl6x, against the 60% target.**
 
 **VA POLY per voice**, by the method of the sections below (swap the stab's chord type in
-`build_default_beat`, re-run `scenario_m3.sh`; the bass adds one more `VaVoice`):
+`build_default_beat` (now `groove` in core/factory.cpp), re-run `scenario_m3.sh`; the bass adds one more `VaVoice`):
 
 | Chord on the stab | VaVoices | cl6x | GCC only |
 | --- | --- | --- | --- |
@@ -809,6 +818,146 @@ and 19.83% at 0.95; a 32 s `tools/render.sh` peaks at 120,852 cycles (24.4%) at 
 (24.4%) at 0.95, 0 overruns in 24,282 blocks, RMS -14.8 and -7.2 dBFS. The longer tail costs
 nothing at the peak, as argued above.
 
+### Factory content (2026-11-22, not measured)
+
+core/factory.hpp replaced the hand-built default beat. Two things it does cost load, and neither
+has been measured, because this cloud session has no emulator and no cl6x:
+
+- **The sends are open on the default kit.** Chord, rim, blips, clap and the open hat feed the
+  delay and the reverb, where the old default kept every send closed (the "cheap settings" row
+  above, 17.00% cl6x). The "worst case" row already has both sends running on every track, so
+  the sends add nothing that row did not already pay for; they move the DEFAULT beat from the
+  cheap row towards it.
+- **A03 BREAK lets chord voices overlap.** Its two chords decay over about 0.7 s and start
+  0.92 s apart with four notes each, so VA POLY can hold all six voices -- the `MIN11` row above
+  (23.48% cl6x, 39.55% GCC-only, measured with the sends closed). Six is the machine's ceiling,
+  so no factory pattern can go past it.
+
+Estimate for the heaviest factory pattern (A03 or A04): the six-voice row plus the sends, about
+**27-29% cl6x and 44-48% GCC-only**, inside 60% either way. `tests/scenario_factory.sh` plays A01
+and then A04 and records the peak; run it, and `scenario_m3.sh` for the new default beat, with
+and without cl6x, and put the figures here.
+
+### KEYS note release (2026-11-22, not measured)
+
+`Machine::release(note)` was added to VA, VA POLY and SAMPLE for KEYS mode's key-up. It runs once
+per key release, in the command handler, and touches no render loop: the only per-voice addition
+is a flag test when a voice STARTS. No figure above changes. Not re-measured, because this cloud
+session has no emulator and no cl6x; the next load scenario run on Roland's PC covers it.
+
+### The arpeggiator (2026-11-22, not measured)
+
+The arp (core/arp.hpp, the scheduling in app/engine.cpp) adds no per-sample work: a hit is an
+ordinary `trigger`, as a step's is. What it adds is control rate: one `ArpSettings::make` (four
+multiplies and shifts) per step fired, and per clock tick a check of two runs on each of eight
+tracks, plus a re-read of the four bytes for a held KEYS run. With every arp off that is sixteen
+flag tests a tick, about 0.5 ticks a block at 120 BPM. Off is bit-exact: zeroed bytes are OFF and
+every golden render is unchanged.
+
+A running arp costs what its notes cost. A 1/32 arp on a one-step bass note is two triggers where
+there was one, so the voice load is the machine's, at the higher note rate: on VA POLY each hit
+takes a voice from the shared budget of 12 (`Engine::kPolyVoiceBudget`), which is the ceiling
+whatever the arp does. Not re-measured, because this cloud session has no emulator and no cl6x;
+`tests/scenario_lfo.sh` now also walks to the ARP page, and U7/U8-style figures for a running
+arp come from 13h on the unit.
+
+### The master kill EQ (2026-11-22, host only)
+
+A three-band DJ isolator on the master, after the DJ filter (`Mixer::kill_eq`, loop in
+`dsp/masterloops.ti.c`, so it goes through cl6x). Two Linkwitz-Riley crossovers per channel
+(250 Hz and 2.5 kHz, two Butterworth SVF stages a side) plus an all-pass that keeps LOW in phase
+with the rest: **7 SVF steps per channel per sample**, 14 a sample for the stereo bus, with the
+three gains and the fade ramped across the block. **It costs nothing while bypassed**: with all
+three bands flat and no kill switch on, `kill_eq` returns after three compares, and the output is
+the input to the bit (`tests/test_killeq.cpp`). It starts on the first knob move or switch and
+stops again about 30 blocks after everything is back to flat (the gains glide, then a four-block
+fade). So it is not a fixed tax: it is paid while a performer is using it.
+
+Measured in a cloud session (x86 2.3 GHz, GCC -O2), so these are proxies, not unit figures:
+
+| Measure | Host time per 64-frame block | Share |
+| --- | --- | --- |
+| The kill EQ's loop, stereo, running | 1,683 ns | |
+| The DJ filter (two SVF cascades), for comparison | 475 ns | the EQ is 3.5x the DJ filter |
+| A01 GROOVE, whole engine, EQ bypassed (`host/render.cpp`'s loop) | ~23,900 ns | |
+| A01 GROOVE with LOW killed, whole engine | ~25,250 ns | +5.5% (+1,300 ns) |
+| A04 PEAK with LOW killed, whole engine | ~28,400 ns against ~25,000 | +6-13%, noisy |
+
+Scaled by the default beat's emulator figures (A01 is `scenario_m3.sh`'s beat: 19.17% cl6x,
+31.92% GCC-only), the loop's 7% of the host block is an **estimate of about 1.3 points with
+cl6x and 2.2 GCC-only**, against the ranked-ideas list's guess of 0.5-1 point. The worst case
+then moves from 23.49% to about **24.8% cl6x** (39.60% to about 41.8% GCC-only) with the EQ
+running, inside 60% either way. The loop is a chain of dependent SVF steps, which is exactly the
+shape cl6x's software pipelining overlaps across samples and GCC does not, so the cl6x figure
+could come in well under the proxy; only the emulator says.
+
+If it is too dear on the unit, in order: drop the LOW all-pass (6 SVFs, the sum ripples a
+fraction of a dB around 250 Hz), then 12 dB crossovers (3 SVFs, but the MID kill falls to about
+-15 dB, which is no longer a kill).
+
+To measure on Roland's PC: **E6** below (`tests/scenario_killeq.sh`, which kills all three bands
+on the EQ page and reads the peak, against `scenario_m7.sh` with the EQ bypassed), both compilers.
+On the unit: **U6**.
+
+### Tape stop and delay freeze (2026-11-22, host only)
+
+Both are held moves and **cost nothing until pressed**: the tape stop records only while it runs
+(the read never needs a frame from before the press), and the freeze records forward from the
+press rather than keeping a history. Neither touches the default path, so every render that
+never presses them is unchanged to the bit (the goldens pass untouched). Loops in
+`dsp/stoploops.ti.c`, so both go through cl6x.
+
+| Measure (x86 2.3 GHz, GCC -O2, per 64-frame block) | Host time |
+| --- | --- |
+| Tape stop, running (write, interpolated read, level, crossfade; stereo) | ~220 ns |
+| Delay freeze, looping (stereo read and crossfade) | ~115 ns |
+| Delay freeze, recording (stereo copy) | ~27 ns |
+| The master peak detector, for scale | ~57 ns |
+
+Against A01's ~23.9 us host block that is about 0.9% for the tape stop and 0.5% for the freeze
+(plus a clear and two mixes for routing the delay through its wet planes while frozen), so an
+**estimate of about 0.2 points cl6x / 0.3 GCC-only for the tape stop and 0.1 / 0.2 for the
+freeze**, and only while held. The freeze also keeps the delay running while held, which the
+worst case already counts (both sends running). No emulator scenario: both are held key
+combinations, and the emulator's `--key` only taps. Unit check: **U8** (UNIT_CHECKLIST 13g).
+
+Memory: the freeze's loop is 1.46 MiB (4 s of stereo float: two 2 s delay times) and the tape
+stop's ring 0.46 MiB (1.25 s), both taken in init. `tests/test_memory.cpp` itemises them: init
+is about 104.1 MiB of the 120 MiB heap with the stream rings from main, 15.9 MiB spare.
+
+### Per-track LFO (2026-11-22, host only)
+
+One LFO per track, parameters 16-19 (dsp/lfo.hpp). It runs once per **block**, not per sample,
+and moves its destination's byte. The cost is the LFO step itself (a few dozen instructions)
+plus one `prepare` of the modulated track in each block where that byte actually changed. There
+is no per-sample work, so the `*.ti.c` loops are untouched and nothing here needs cl6x. The
+extra code is control-rate C++, which the cl6x build also compiles with GCC, so the absolute
+cost should be about the same with both compilers.
+
+Host figures: callgrind, x86, GCC -O2, the factory project, 6,000 blocks, init (~15.1 M Ir)
+subtracted. The bench is a throwaway driver of `Engine`, not a test.
+
+| Case | Change in Ir | Share of the block's work |
+| --- | --- | --- |
+| Every LFO off, against `main` (PEAK, slot 3) | +2.6 M on 735.6 M | +0.35%, about 430 instructions a block for 8 compares and the copy |
+| 8 LFOs on a machine parameter (SRC 2), slot 3 | +15.5 M | +2.1% |
+| 8 LFOs on DRV, slot 3 | +24.7 M | +3.4% |
+| 8 LFOs, synced 1/16, on DRV, slot 3 | +24.7 M | +3.4% |
+| 8 LFOs on PAN, slot 3 | +16.4 M | +2.3% |
+| 8 LFOs on DRV, slots 0, 1, 2 | | +3.2%, +3.3%, +3.0% |
+
+- **Off is bit-exact.** With every LFO off the render matches `main` bit for bit (energy
+  20167.792 on both), and `tests/test_lfo.cpp` holds that with two engines side by side. Zeroed
+  bytes are OFF, so no golden render changes.
+- **On costs about 515 instructions per LFO per block at worst**: the chain's DRV re-prepare is
+  the dearest destination. In load points that is roughly 0.15-0.3 points each, and **1.1 to 1.4
+  points for all eight** at the GCC-only emulator's scale. With cl6x the worst case is about 23.5%
+  plus about 2.5 points (the cost is control-rate code, so it does not shrink with cl6x and
+  grows a little as a share of the block). That is well under 60%.
+- A slow, deep LFO moves its byte less often than once a block, so the figures above (a fast free
+  rate and a 1/16) are the expensive end.
+- E7 and U7 below measure it for real.
+
 ### Load time: the downsample low-pass (2026-11-22, host only)
 
 A file above 48 kHz is now low-passed before the load-time resample (`Antialias` in core/pcm:
@@ -828,6 +977,266 @@ So the worst case roughly doubles the load time of a long 96 kHz file, and one 4
 slice grows by an estimated 10-26 ms, which is main-loop time (screen and keys), not audio. Not
 measured on the unit: docs/UNIT_CHECKLIST.md has the line. If a slice turns out to stall the
 screen, the fix is a smaller slice for downsampled files, not dropping the filter.
+
+### Optimization review (2026-11-22, host only)
+
+A review of the audio path for cycles, after the first unit boot. Everything here was measured in a
+cloud session with **no emulator and no cl6x**, so the figures are host (x86, GCC -O2) proxies:
+callgrind instruction counts and wall time over the default beat, 130 BPM, with denormals flushed
+as the C674x FPU flushes them. They say what moved and in which direction, not what the unit will
+read. The emulator and cl6x runs that turn them into figures are listed at the end.
+
+#### Profile of the default beat (host, callgrind, 6,000 blocks)
+
+| Share of x86 instructions | Where |
+| --- | --- |
+| 27% | KICK: the body shaper is 8%, but the **click path** (noise, two one-poles, an SVF, three mixes) runs for the whole note, long after its transient envelope has decayed |
+| 16% | `enaga_envelope_render` across every machine: branch-free but a loop-carried one-pole, so it cannot pipeline below its recurrence on either compiler |
+| 15% | VA POLY's four-note chord; VA MONO 6% |
+| 18% | SNARE; HAT 11% |
+| 9% | `enaga_svf_process` |
+| ~3% | every `prepare()` together -- per block, per sounding track, plus once more per trig |
+
+Two of these are scalar control-rate code that stays GCC-compiled in the cl6x build (only `*.ti.c`
+and Enaga's library go to cl6x), so on the unit they are a larger share than x86 suggests: the
+prepares, and the VA voice's per-slice pitch maths.
+
+#### Three changes, all bit-exact
+
+| Change | How it is held to bit-exact | Host effect |
+| --- | --- | --- |
+| **Prepare only on change** (`app/engine.cpp`): a track's machine and insert chain are prepared only when its 16 parameter bytes, its mix or its machine moved, and every applied command clears the memo (a sample, a machine switch, a kit recall or a project load are all commands) | two engines side by side, one preparing every block and one memoised, through locks, knob moves, machine switches, a sample load, a mute, a kit recall and a project load: every output sample compared (`engine_skipping_an_unchanged_prepare_is_bit_exact`). Removing the per-command reset fails it with 2,914 samples different | **-3.3%** of the default beat's instructions; output hash identical over 30,000 blocks |
+| **VA oscillator increments cached** (`dsp/va.cpp`): `semitones` and two reciprocals per slice per voice only when the pitch moved (VA POLY never glides), and the ramp's `reciprocal(n)` only when n changed | a copy of the voice made to forget the cache before every slice, compared through a held note and a glide (`va_cached_oscillator_increments_are_bit_identical_to_computed_ones`) | -0.5% of the default beat; more per voice in a six-voice chord |
+| **Load-time anti-aliasing loop in `core/pcmloops.ti.c`**, with stereo filtered in one pass so the two channels' cascades overlap | against the old loop, mono and stereo, uneven slices, two rates, state included (`the_antialias_loop_is_bit_exact_against_the_loop_it_replaced`) | 30 s of 96 kHz stereo: 69-70 ms -> 59-61 ms. The real gain is cl6x pipelining the cascade, which x86 cannot show |
+
+**Expected on the unit, unmeasured:** the prepare memo removes the most scalar work of the three.
+Enaga measured scalar GCC transcendentals at roughly 70 cycles each on this core ("pitch 3.2%: five
+exp2 and two divisions" per voice-step, docs/design.md); the default beat's prepares are on the
+order of a hundred of those a block, plus the second prepare on every trig, so **0.5 to 2 points
+off the peak** is the plausible range in both builds. Nothing changes in a block where a lock,
+scene or knob really did move: those prepare as before.
+
+#### Findings that are not changes
+
+1. **The worst case in this file is the default kit's, not the app's.** Since machine switching
+   (M6), any track can host VA POLY, and nothing caps voices across tracks. At 2.16 points a
+   voice (cl6x, emulator), eight tracks of six-voice chords would be ~104% of the block before the
+   chains and sends, and **four** would reach about 60% with the other four tracks playing. GRAIN at full density is similar
+   (+9.2 points a track, GCC-only). **Answered 2026-11-22 (Roland chose a shared budget):**
+   `Engine::kPolyVoiceBudget` caps VA POLY voices across all tracks at 12. A new note past the
+   cap fades out the quietest started voice on any POLY track (`VaVoice::choke`, 64 frames), and
+   is dropped if every counted voice is still waiting for its frame. Twelve voices are ~26 points
+   with cl6x on emulator figures; the unit's MAX sets the final value (UNIT_CHECKLIST, "The
+   shared VA POLY voice budget"). GRAIN and VA MONO are not in the budget.
+2. **The unit may be slower than the emulator, not faster.** The emulator's cl6x default beat is
+   19.17% (`scenario_m3.sh`); the unit's on-screen LOAD read up to about 26% at first boot. If
+   the MAX readout confirms that ratio (~1.35x), the cache and DDR costs the emulator cannot see
+   are real, and every headroom figure above shrinks by it. Do not plan voice counts from the
+   "25% faster on hardware" figure until MAX says so.
+3. **More voices: yes, with care.** Against 60%, the cl6x worst case of 23.5% leaves ~36 points:
+   about 16 more VA voices on emulator figures, or ~9 if the unit is 1.35x. Raising VA POLY from
+   six voices to eight costs ~4.3 points (cl6x) and fits either way -- but only once (1) is
+   answered, because it raises the ceiling of every POLY track at once.
+4. **KICK's click path** (27% of the host profile, the largest machine) keeps running for the
+   whole note after `transient_env_` has decayed to nothing audible. Skipping it once the
+   transient envelope is idle would be a large saving, but it is **not bit-exact**: the shared
+   noise generator would advance differently, so later hits get different (equally random) noise.
+   It wants a listening test, so it is not in this change.
+5. **`enaga_envelope_render` is recurrence-bound.** Decay and release are geometric
+   (`l *= 1 - d` with sustain 0), which a closed form or a two-step unroll could pipeline. That is
+   Enaga's code (CLAUDE.md: never modify it) and would not be bit-exact; worth raising upstream
+   with this profile.
+6. **Cache, by working set** (the unit has 32 KiB L1D and 256 KiB L2, all cache, DDR behind):
+   - The reverb's eight lines and four diffusers are ~100 KiB, which fits L2 but not L1D, and
+     competes there with ~396 KiB of code (the hot subset is much smaller) and the sample reads.
+   - The delay (768 KiB) and the beat-repeat ring (2.93 MiB) are sequential streams: a few new
+     lines a block each, so cheap whatever their size.
+   - **GRAIN's feared "all misses" is the wrong picture at normal pitch:** each grain reads a
+     contiguous run per block (64 frames x 2-4 bytes), so 1-2 new lines per grain, ~16 for eight
+     grains. The bad case is **high pitch**: at the 32x step ceiling a stereo grain reads 8 KiB a
+     block, every tap a new line, ~500 misses a block for eight grains. SAMPLE at high pitch is
+     the same in miniature. Only the unit can price a miss.
+   - The undo snapshot (8.2 KiB, once per edit gesture) evicts a quarter of L1D in the block it
+     happens in; a one-off, not a trend.
+7. **Send tails to -60 dB** (above): the worst case is unchanged, because every figure above
+   already runs both sends. What changes is how long they keep running unfed -- up to 272 s at
+   feedback 0.95 on a 2 s delay -- which only matters for headroom a quiet passage relied on.
+8. Two comments say a float division is hardware on this core (`Engine::process`,
+   `Granular::fit_length`). It is not: GCC inlines a reciprocal estimate and two refinements
+   (Enaga's docs/design.md), cl6x calls `__c6xabi_divf`. Harmless where they are, at control rate.
+
+#### To measure on Roland's PC (emulator, cl6x and GCC)
+
+| # | What | How | Record |
+| --- | --- | --- | --- |
+| E1 | All seven scenarios, before and after this change | `tools/scenarios.sh` on `main` before the merge (eb46d43) and after, once with cl6x and once with `ENAGA_TI_CGT=none` | four columns in a new table here; expect a small drop with cl6x, larger GCC-only |
+| E2 | VA POLY per voice, after | MIN7 vs MIN11 in `build_default_beat`, `scenario_m3.sh`, both compilers | does 2.16 (cl6x) / 3.82 (GCC) move? |
+| E3 | The app's real worst case | temporarily set four tracks to `va_poly` with MIN11 chords in `build_default_beat`; then six; then eight | where it crosses 60% and where it overruns: sizes the voice budget in finding 1 |
+| E4 | The prepare memo's share | `scenario_m5.sh` (scenes and macros move parameters, so it prepares more) against `scenario_m3.sh` | the gap between them, before and after |
+| E6 | The master kill EQ running | `tests/scenario_killeq.sh` against `tests/scenario_m7.sh` (same beat, EQ bypassed), with cl6x and with `ENAGA_TI_CGT=none` | the difference is the EQ's cost; the proxy above says ~1.3 cl6x / ~2.2 GCC-only |
+| E7 | Eight LFOs running | `tests/scenario_lfo.sh` as it is (every LFO off: should match `scenario_factory.sh`), then again after a temporary edit to `factory_kit` in core/factory.cpp setting each track's `params[17] = 40` (RAT, about 3 Hz free), `params[18] = 127` (DEP) and `params[19] = 38` (DST = DRV), with cl6x and with `ENAGA_TI_CGT=none`; revert the edit | the difference is eight LFOs' cost; the host figures say about 1.1-1.4 points GCC, and about the same with cl6x |
+| E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
+
+#### To measure on the unit (with the MAX readout from PR #17)
+
+| # | What | Record |
+| --- | --- | --- |
+| U1 | MAX on the default beat, this build | against the emulator's cl6x `scenario_m3.sh`: the unit/emulator ratio (finding 2) |
+| U2 | MAX with the chord at MIN11 (six voices), then with tracks 5 and 6 also switched to VA POLY playing chords | per-voice cost on the unit; where it overruns |
+| U3 | GRAIN on a multi-second sample, DEN 127, SPR 127, at PIT 64 and at PIT 127 with a high note | the DDR cost of high-pitch grains (finding 6) |
+| U4 | Delay FBK at max, TIM 1/1, one hit, then silence | LOAD stays up while the tail rings and drops when it ends |
+| U6 | MAX on A01 GROOVE with the kill EQ running (FUNC + push A, then let it play 60 s with LOW killed), against U1 | the EQ's cost on the unit; should match E6's cl6x difference times the unit/emulator ratio |
+| U7 | MAX on A01 GROOVE with LFOs on four tracks (EDIT, selection RIGHT four times to LFO; C = DEP 127, D = DST DRV or CUT, B = RAT a fast free rate), against U1 | the cost of four LFOs on the unit; about half of E7's difference times the unit/emulator ratio |
+| U5 | Load a 15 s 96 kHz stereo WAV (`unit-test/STRATA_1.WAV` in the project files; `SWEEP_30S_96K.WAV`, 30 s, now loads as well) | seconds to playable; whether the screen or keys stall during it |
+
+### Sampling from the input (2026-11-22): unmeasured, expected negligible
+
+`Engine::process` now runs `strata_master_peak` over the input block every block (128 floats,
+for the RESAMPLE meter), and a take from the input converts `in` instead of `out` -- the same
+conversion a master take already does. No voice, filter or effect is added. Not yet measured:
+add `scenario_m3.sh` both ways after this change to the next emulator session (the emulator
+cannot select an input route, so the conversion path is only reachable on the unit: section 8c
+of the walkthrough asks for MAX while recording from the input).
+
+### Streaming (2026-11-22): unmeasured, estimated under 1 point per streamed track
+
+Costs nothing on a project that streams nothing: `top_up_streams` and `watch_streams` test one
+flag per track. A streamed track adds, per block, (a) `pcm_to_s16` over the frames that arrived
+(64 at the root pitch, up to 512 while refilling after a restart) and a copy of the carry, and
+(b) the stream voice in `dsp/sample.cpp`, which fetches its four taps through a per-sample
+branch (head, fifo or silence) instead of `generate()`'s branch-free interior. It is one voice,
+against the four a whole-loaded SAMPLE track may run, and it is plain C++ rather than a
+`*.ti.c` loop: an estimate of 30-40 cycles a sample puts it at **0.4-0.5 points a streamed track**
+with the conversion, GCC or cl6x alike. No scenario streams yet (the emulator has no file large
+enough on its card); measure with section 15d of the walkthrough: LOAD with three streamed
+tracks against none. If it is worse than 1 point a track, the fetch is the lever: a fast path
+for a run of samples wholly inside the head or wholly inside the fifo.
+
+### MIDI out (after v0.1, 2026-11-22)
+
+**Not measured yet: no emulator or device toolchain in the session that built it.** Owed:
+`tests/scenario_midi.sh` with cl6x and with `ENAGA_TI_CGT=none`, on the PC (UNIT_CHECKLIST, "On the
+PC"), and section 8d's LOAD on the unit.
+
+What it adds to `audio()`, all control rate and none of it in a `*.ti.c` loop:
+
+- `MidiOut::begin_block` and `end_block`: two passes over 64 slots of 8 bytes, every block.
+- per trig on a track with a channel: one `enaga::midi::send` of 3 bytes per note (a chord is up
+  to six), and a scan of the 64 slots for the same pitch.
+- per block, for each MID track with a channel: 8 compares of its CC slots, a send when one moved.
+- **MID itself renders nothing** and reports `active() == false`, so the mixer skips the track:
+  no machine render, no insert chain, no prepare. A part moved from VA POLY to MID frees its
+  voices (2.16 points each with cl6x) and its chain.
+
+Estimate: well under 0.1 point with eight MIDI tracks, against the 2-4 points one sustaining
+track costs. The timing is the real limit, not the CPU: a note leaves in the block its step falls
+in (up to 1.33 ms early, because sends carry no timestamp), and DIN takes 0.96 ms a 3-byte
+message, so a six-note chord's last note leaves about 6 ms after its first.
+
+Memory: `MidiOut` 512 bytes and the CC memo 136 bytes in `Engine`; MIDI IN's held-note map 2 KiB
+in the app; MID adds 8 bytes (a vtable pointer) per track to the machine pool. All bss.
+
+### The cl6x vectorisation pass (2026-11-22, host only, cl6x figures owed tonight)
+
+**Is there vector code for this chip?** The core is a **C674x** (`build_app.py` builds with
+`-mv6740` and GCC with `-march=c674x`). It has **no packed-float instructions**: the two-way
+single-precision SIMD people mean by "vector float" on TI DSPs (`DMPYSP`, `DADDSP`, `CMPYSP`) is
+the C66x, a later core. What the C674x has is (a) an eight-unit VLIW pipeline that cl6x fills by
+**software pipelining** -- overlapping successive iterations of a branch-free loop -- which is
+where the 1.7-1.8x in the tables above comes from, and (b) the C64x+ **packed 16-bit integer**
+instructions (`DOTP2`, `ADD2`, `MPY2`, ...), which suit int16 sample data and nothing else
+STRATA computes. So vectorising here means giving the pipeliner loops it can overlap, and using
+packed 16-bit where a loop reads int16.
+
+The numbers that decide what is worth doing are the C674x latencies: a float add, subtract or
+multiply takes **4 cycles** to come back, `INTSP` 4, a load 5. A loop whose next iteration needs
+this iteration's float result -- every filter, envelope, one-pole and gain ramp -- cannot start
+an iteration more often than the length of that chain, however idle the eight units are. Those
+are the loops this pass targets.
+
+#### What changed, and what each change is expected to buy
+
+Every change is **bit-exact on the host** (memcmp against the code or Enaga function it replaced,
+and the 89 golden renders unchanged). The first four rows are on in the build that merges; the
+two flags are off until tonight's measurements.
+
+| Change | Where | Mechanism | Expected on cl6x (reasoned, not measured) |
+| --- | --- | --- | --- |
+| **In-place filter kernels** (`dsp/filterloops.ti.c`) | insert chain filter, DJ filter, reverb high-pass, KICK, SNARE, HAT | Enaga's `enaga_svf_process` / `_cascade` / `enaga_one_pole_process` / `enaga_biquad_process` take an `in` and an `out` that may alias, so cl6x must issue the next sample's load after this sample's store: a load (5) plus the path from input to output joins the recurrence. STRATA always filters in place, so these run Enaga's own inline steps over **one restrict buffer** | one-pole ~18 -> ~12 cycles/sample; 24 dB cascades ~30 -> ~20; single 12 dB SVF **no change** (its own state recurrence, ~20, is already as long as the alias chain) |
+| **DJ filter in stereo** (same file) | master | both channels' cascades in one loop: two independent recurrences overlap | ~2 x 30 -> ~22 cycles/frame while the DJ filter is on |
+| **VA back half fused** (`strata_va_back`, `dsp/valoops.ti.c`) | every VA MONO and VA POLY voice | filter, amp envelope and output tail were three passes, each recurrence-bound (cascade ~30, envelope ~15, gain ramp ~5 cycles/sample) plus three loop prologues per 16-frame slice; one loop overlaps them, so a sample costs about the slowest chain | LP24: ~880 -> ~350 cycles a slice, **~2,100 cycles (~0.4 points) per voice per block**, so VA POLY from 2.16 to about **1.7 points a voice**; ~5 points across the 12-voice budget. Less in the 12 dB modes |
+| **SAMPLE's interior read** (`dsp/sampleloops.ti.c`) | every SAMPLE voice not streaming | the Hermite read loop was C++, so GCC compiled it in every build: M2's situation exactly. Same expressions, now cl6x | M2's 1.5-2x on the loop: roughly ~25 -> ~6-8 cycles/sample mono, ~0.2-0.3 points per sounding voice |
+| `STRATA_TI_PACKED` (**off**) | SAMPLE and GRAIN stereo taps | a stereo int16 frame as one unaligned 32-bit load and `DOTP2` by (1, 1): L + R in one instruction instead of two loads and an add. These loops are load-bound (two .D units, eight taps a stereo Hermite sample) | stereo SAMPLE read ~8 -> ~5 cycles/sample; GRAIN stereo similar. Exact in integers, but only cl6x can run it, hence off |
+| `STRATA_TI_HINTS` (**off**) | every new kernel | `MUST_ITERATE(1)` on loops whose function has returned for n <= 0: cl6x can drop the zero-trip guard. No larger minimum or multiple is true in general, because slices are cut at trigs and gates | a few cycles per call; probably under 0.3 points in total. Measured to decide, not assumed |
+
+**Not done, and why:**
+
+- **`_rcpsp` for `enaga_reciprocal`** in the drum shapers (an 8-bit hardware estimate and two
+  Newton steps instead of a bit trick and three). Saves two multiplies of about twenty in KICK's
+  shaper, changes the sound by an ulp the host cannot reproduce, and so could not be checked by
+  the golden renders. Not worth it.
+- **Rewriting Enaga's oscillators, envelope or SVF** (CLAUDE.md forbids touching `third_party/`).
+  The kernels above call Enaga's own inline steps (`enaga_svf_step`, `enaga_one_pole_step`,
+  `enaga_biquad_step`), so a pin bump that changes a filter changes STRATA with it; the envelope
+  body is the one copy, and `va_the_fused_back_half_is_bit_exact_against_filter_envelope_and_tail`
+  fails if Enaga's envelope ever moves away from it. Two upstream suggestions follow from this
+  pass and are worth an Enaga issue once tonight's report backs them: in-place variants of the
+  filter block functions with one restrict buffer, and the envelope's decay as a closed form.
+- **Pairing VA POLY voices** in one loop (two voices' filters side by side, as the DJ filter's
+  channels are). The next lever after the fusion, and a bigger rewrite of `VaVoice::run`; wait
+  for `tools/ti_loops.py` to say whether the fused loop is still recurrence-bound.
+- **TI's DSPLIB.** Its float kernels are FIRs, FFTs, matrix and vector maths, none of which STRATA
+  runs per sample; its filters are biquads in a different form. It would add a TI library to the
+  package, which the licence section above was careful to keep out, for nothing STRATA needs.
+
+#### Tonight, on Roland's PC (WSL, cl6x)
+
+| # | What | How | Record |
+| --- | --- | --- | --- |
+| E8 | Per-loop pipelining report | `python3 -B tools/ti_loops.py --enaga` and again with `-D STRATA_TI_HINTS=1 -D STRATA_TI_PACKED=1` | paste both tables here. Any `NOT PIPELINED` line is the next fix; `bound = recurrence` on a hot loop says pairing would pay |
+| E9 | A/B of the whole pass | `bash tools/ti_ab.sh --gcc` (about an hour: six variants x six scenarios x two compilers, plus renders) | the two load tables it prints, and its audio check. **Expected: every variant `identical`.** A difference means cl6x reassociates differently in a fused loop than in separate ones (`--fp_reassoc`), and is a finding to bring back, not a reason to merge a flag |
+| E10 | VA POLY per voice after the pass | E2's method (MIN7 vs MIN11 in `groove()`), on `head` | was 2.16 cl6x / 3.82 GCC; expected ~1.7 cl6x |
+
+**Turning a flag on** is one line in `dsp/tihints.h`, and needs all three: E9's audio check says
+`identical` for that variant, its load column is lower than `head` in the scenarios it touches
+(`samples` for PACKED; all of them for HINTS), and `make -C host test` still passes. Then record
+the figures here and move the flag's row in the table above to "on".
+
+### Everything at once (2026-11-22, an estimate, not a measurement)
+
+Every afternoon feature was priced alone. Added together, on the worst case above (`scenario_m1`
+/ `m7`: the default beat with drive, LP24, lo-fi and both sends on all eight tracks, 23.49% cl6x
+and 39.60% GCC-only, emulator), with each one at its own section's figure:
+
+| On top of the worst case | cl6x (points) | GCC only (points) | Source |
+| --- | --- | --- | --- |
+| The worst case itself | 23.5 | 39.6 | the table above |
+| VA POLY at the shared cap: 12 voices, against the default beat's 4 | +17.3 | +30.6 | 8 x 2.16 / 3.82 |
+| The master kill EQ running | +1.3 | +2.2 | "The master kill EQ" |
+| Eight LFOs, on the dearest destination (DRV) | +2.5 | +1.4 | "Per-track LFO" |
+| Tape stop and delay freeze, both held | +0.3 | +0.5 | "Tape stop and delay freeze" |
+| Four streamed tracks | +2.0 | +2.0 | "Streaming" |
+| MIDI out on all eight tracks, arp and note repeat | ~0.1 | ~0.1 | control rate; their voices are the cap's |
+| **Total, emulator** | **~47** | **~76** | |
+| **If the unit is 1.35x the emulator** (BUDGET finding 2) | **~63** | | |
+
+So on the emulator with cl6x everything at once fits under 60% with ~13 points to spare, and the
+GCC-only figure is over it, as it has been since M2 (meaningless either way: CLAUDE.md). **On the
+unit it may not fit**: if first boot's ~1.35x holds, the all-on figure is about 63%. The lever, in
+CLAUDE.md's order, is effects and insert stages first, then `kPolyVoiceBudget` (each voice off
+the cap is 2.16 points, or ~2.9 at 1.35x). The arp and note repeat add no cost of their own past
+the cap: every POLY hit they make is counted against the 12.
+
+Two things the cap does not bound, and the table does not count:
+
+- **GRAIN at full density is outside the voice budget**: +9.2 points a track GCC-only ("GRAIN
+  measured"), roughly +5.4 with cl6x at the usual 1.7x. Two dense GRAIN tracks in place of two
+  drum tracks would take the unit figure past 70%.
+- **VA MONO is outside it too**, but it is one voice a track, about 2.2 points each at most.
+
+To measure: U-row "everything on" on the unit with the MAX readout -- four POLY tracks holding
+MIN11 chords with the arp at 1/32, the kill EQ with a band killed, eight LFOs on DRV, tape stop
+held, freeze held, two streamed stems -- and E3 on the PC first.
 
 ### Later milestones
 
@@ -849,16 +1258,17 @@ what the code asks for in `init()`; the image figures are read off the linked EL
 **The 85 MiB does fit.** The emulator boots the app to `APP RUNNING` rather than `APP INIT
 FAILED`, and `App::init` returns false if any of those allocations fails -- so all three
 scenarios passing is also the memory check. It is still worth re-checking on the unit, where the
-heap is the real one. M4 and M5 together take 64 MiB for the sample region, 18 MiB of loader staging and 2.93 MiB
-for the beat-repeat ring, which is 85 MiB before anything else, against a spec table that did not
+heap is the real one. M4 and M5 together take 64 MiB for the sample region, 27.5 MiB of loader staging (18 MiB before
+2026-11-22, when the 30 s limit became 30 s of a file at up to 96 kHz) and 2.93 MiB
+for the beat-repeat ring, which is 94.5 MiB before anything else, against a spec table that did not
 count the staging at all.
 
 | Use | Budget | Measured |
 | --- | --- | --- |
 | Samples, int16 (32 MiB default, 64 MiB ceiling) | 32-64 MiB | **64 MiB** reserved at init, from the heap. The CEILING, not the default: a project may raise its budget long after `init()` is over, and CLAUDE.md allows no allocation after it |
-| Sample loader staging (M4) | not budgeted | **18 MiB**, from the heap: 11.5 MiB for one whole file (`files::load` wants a buffer for all of it) and 5.8 MiB for a resample's int16 source. Both sized from `docs/SPEC.md`'s own 30 s in-RAM limit, and a FIXED cost rather than a per-sample one. **This is the figure most worth checking against the heap on the unit** -- it was not in the spec's table and 64 + 18 is 82 MiB of the ~124 MiB |
+| Sample loader staging (M4) | not budgeted | **27.5 MiB**, from the heap: 16.5 MiB for one whole file (`files::load` wants a buffer for all of it; 30 s of 96 kHz stereo 24-bit plus 64 KiB of chunks) and 11 MiB for a resample's int16 source (30 s of 96 kHz stereo). Sized from `docs/SPEC.md`'s own 30 s in-RAM limit counted in the FILE's length, and a FIXED cost rather than a per-sample one. Was 18 MiB when the limit was counted in 48 kHz frames. `tests/test_memory.cpp`: init is 101.2 MiB of a 120 MiB heap, 18.8 MiB spare against an 8 MiB headroom rule. **Worth checking against the heap on the unit** -- 64 + 27.5 is 91.5 MiB of the ~124 MiB |
 | Beat repeat ring (2 bars at 60 BPM, stereo float) | 2.93 MiB | **2.93 MiB** (3,072,000 bytes) reserved at init. Below 60 BPM the ring holds less than two bars, which costs nothing: the longest loop offered is a quarter note, 3 s even at 20 BPM |
 | Delay and reverb buffers | 2 MiB | |
 | Patterns, kit, scenes, 16 undo levels | 2 MiB | **~148 KiB** so far: 17 whole-pattern undo snapshots (~140 KiB) plus the live pattern and the clipboard. In bss, not the heap |
-| Recording ring and stream buffers | 1 MiB | |
+| Recording ring and stream buffers | 1 MiB | **1.13 MiB**: four 256 KiB `files::Stream` rings from the heap (streaming, 2026-11-22), plus eight 16 KiB frame fifos in the engine (bss). The take is not here: it is `Capture`'s own 5.49 MiB. `tests/test_memory.cpp`: init is now **102.2 MiB** of the heap, 17.8 MiB spare |
 | App image, voice pools, UI | 4 MiB | **396 KiB** of text, 52 bytes of data and **1.21 MiB of bss** in the linked ELF (`tic6x-elf-size`). The bss is mostly the live Project at 1.03 MiB plus the undo stack; the 85 MiB above is heap, taken in init() and not in the image |

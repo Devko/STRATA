@@ -96,25 +96,38 @@ TEST(dispatch_every_macro_command_reaches_what_is_heard) {
     pump(2);
     CHECK_EQ(int(engine.performed(1, kLvl)), int(kit));  // ...but drives nothing yet
 
-    // Assigned with the parameter at 10, heading for 110. The knob is at the top, so the range
-    // runs from 110 at the bottom up to 10 at the knob: the value does not jump on assignment
-    // (core/perform.hpp, macro_range_through), and the knob then sweeps it towards 110.
+    // Assigned with the parameter at 10, heading for 110, while the knob is at the top: the macro
+    // takes effect at once, so the parameter goes to where the knob puts it (core/perform.hpp).
+    // `performed` was the kit's value; the assignment reads 10 as "now" because the command says so.
     post_full(Cmd::macro_assign, 1, 0, kLvl, 10, 110);
     pump(2);
-    CHECK_EQ(int(engine.performed(1, kLvl)), 10);
+    CHECK_EQ(int(engine.performed(1, kLvl)), 110);
+    CHECK_EQ(int(engine.params(1).v[kLvl]), int(kit));   // the kit is never rewritten
 
-    post(Cmd::set_macro, 0, 0, 0, 0);                    // moved: heard at once
+    post(Cmd::set_macro, 0, 0, 0, 0);                    // at rest the knob has it back
+    pump(2);
+    CHECK_EQ(int(engine.performed(1, kLvl)), int(kit));
+
+    post(Cmd::set_param, 1, 0, kLvl, 30);                // and the knob is heard
+    pump(2);
+    CHECK_EQ(int(engine.performed(1, kLvl)), 30);
+    post(Cmd::set_macro, 0, 0, 0, 1);                    // one detent: a nudge from there
+    pump(2);
+    CHECK_EQ(int(engine.performed(1, kLvl)), 31);
+    post(Cmd::set_macro, 0, 0, 0, 127);
     pump(2);
     CHECK_EQ(int(engine.performed(1, kLvl)), 110);
 
     post(Cmd::macro_clear, 0, 0, 0);                     // cleared: back to the kit
     pump(2);
-    CHECK_EQ(int(engine.performed(1, kLvl)), int(kit));
+    CHECK_EQ(int(engine.performed(1, kLvl)), 30);
 
     // And the refusals are counted, both of them.
     const uint32_t refused = engine.status().refused.load(std::memory_order_relaxed);
     post_full(Cmd::macro_assign, 1, kMacros, kLvl, 0, 127);
-    post_full(Cmd::macro_assign, 1, 0, kParams, 0, 127);
+    // kTrackParams to kTrackParams + 2 name the master EQ's bands, so the first index with no
+    // meaning is one past them.
+    post_full(Cmd::macro_assign, 1, 0, kTrackParams + kMasterBands, 0, 127);
     pump(2);
     CHECK_EQ(engine.status().refused.load(std::memory_order_relaxed), refused + 2);
 }

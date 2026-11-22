@@ -668,6 +668,25 @@ TEST(chain_length_ignores_whether_the_chain_is_enabled) {
     CHECK_EQ(chain_length(g_project), 2);
 }
 
+// --- the caller's half ------------------------------------------------------
+//
+// `chain_advance` reports a change against the LIVE pattern, `project.bank` / `.slot`, so these
+// tests play the engine's part: starting a chain puts its first entry live, and a reported change
+// is switched to. Without that the project's live pattern would be whatever an earlier test left.
+static bool start_chain(ChainPlayer &player) {
+    if (!chain_start(g_project, player)) return false;
+    g_project.bank = g_project.chain[player.entry].bank;
+    g_project.slot = g_project.chain[player.entry].slot;
+    return true;
+}
+
+static bool advance(ChainPlayer &player, uint8_t &bank, uint8_t &slot) {
+    if (!chain_advance(g_project, player, bank, slot)) return false;
+    g_project.bank = bank;
+    g_project.slot = slot;
+    return true;
+}
+
 // --- starting -------------------------------------------------------------
 
 TEST(chain_start_on_an_empty_chain_leaves_the_player_inactive) {
@@ -678,7 +697,7 @@ TEST(chain_start_on_an_empty_chain_leaves_the_player_inactive) {
     player.played = 4;
 
     uint8_t bank = 99, slot = 99;
-    CHECK(!chain_start(g_project, player));
+    CHECK(!start_chain(player));
     CHECK(!player.active);
     CHECK_EQ(int(player.entry), 0);
     CHECK_EQ(int(player.played), 0);
@@ -689,7 +708,7 @@ TEST(chain_start_on_an_empty_chain_leaves_the_player_inactive) {
     // A chain whose first entry is unused is empty too, however long it claims to be.
     const Entry entries[] = {{0, 0, 0}, {1, 1, 4}};
     set_chain(g_project, entries, 2, 2);
-    CHECK(!chain_start(g_project, player));
+    CHECK(!start_chain(player));
     CHECK(!player.active);
 }
 
@@ -698,7 +717,7 @@ TEST(chain_start_puts_the_player_on_the_first_entry) {
     set_chain(g_project, entries, 2);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
     CHECK(player.active);
     CHECK_EQ(int(player.entry), 0);
     CHECK_EQ(int(player.played), 0);
@@ -730,7 +749,7 @@ TEST(a_chain_plays_each_entry_its_repeats_times_and_wraps) {
     set_chain(g_project, entries, 3);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
 
     struct Expected {
         bool changed;       // does the pattern change on this pass?
@@ -762,7 +781,7 @@ TEST(a_chain_plays_each_entry_its_repeats_times_and_wraps) {
         passes[want.playing]++;
 
         uint8_t next_bank = 99, next_slot = 99;
-        const bool changed = chain_advance(g_project, player, next_bank, next_slot);
+        const bool changed = advance(player, next_bank, next_slot);
         CHECK_EQ(changed, want.changed);
         if (changed) {
             CHECK_EQ(int(next_bank), int(want.bank));
@@ -794,11 +813,11 @@ TEST(a_one_entry_chain_never_reports_a_change) {
     set_chain(g_project, one, 1);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
 
     for (int pass = 0; pass < 10; pass++) {
         uint8_t bank = 99, slot = 99;
-        CHECK(!chain_advance(g_project, player, bank, slot));
+        CHECK(!advance(player, bank, slot));
         CHECK_EQ(int(bank), 99);
         CHECK_EQ(int(slot), 99);
         CHECK(player.active);
@@ -817,13 +836,13 @@ TEST(a_one_entry_chain_with_several_repeats_counts_its_passes) {
     set_chain(g_project, one, 1);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
 
     // played goes 1, 2, then wraps to 0 as the entry is used up and starts again.
     const int expected_played[] = {1, 2, 0};
     for (int pass = 0; pass < 9; pass++) {
         uint8_t bank = 99, slot = 99;
-        CHECK(!chain_advance(g_project, player, bank, slot));      // same pattern throughout
+        CHECK(!advance(player, bank, slot));      // same pattern throughout
         CHECK_EQ(int(player.played), expected_played[pass % 3]);
         CHECK_EQ(int(player.entry), 0);
     }
@@ -836,19 +855,19 @@ TEST(two_entries_naming_one_pattern_report_no_change_but_still_advance) {
     set_chain(g_project, entries, 3);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
 
     uint8_t bank = 99, slot = 99;
-    CHECK(!chain_advance(g_project, player, bank, slot));     // entry 0 -> entry 1, same A02
+    CHECK(!advance(player, bank, slot));     // entry 0 -> entry 1, same A02
     CHECK_EQ(int(player.entry), 1);
     CHECK_EQ(int(bank), 99);
 
-    CHECK(chain_advance(g_project, player, bank, slot));      // entry 1 -> entry 2, C03
+    CHECK(advance(player, bank, slot));      // entry 1 -> entry 2, C03
     CHECK_EQ(int(player.entry), 2);
     CHECK_EQ(int(bank), 2);
     CHECK_EQ(int(slot), 2);
 
-    CHECK(chain_advance(g_project, player, bank, slot));      // wraps to entry 0, back to A02
+    CHECK(advance(player, bank, slot));      // wraps to entry 0, back to A02
     CHECK_EQ(int(player.entry), 0);
     CHECK_EQ(int(bank), 1);
     CHECK_EQ(int(slot), 1);
@@ -864,12 +883,12 @@ TEST(a_full_chain_of_64_entries_walks_every_one_and_wraps) {
     CHECK_EQ(chain_length(g_project), kChainEntries);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
 
     int seen[kChainEntries] = {};
     for (int pass = 0; pass < kChainEntries * 2; pass++) {
         uint8_t bank = 99, slot = 99;
-        CHECK(chain_advance(g_project, player, bank, slot));
+        CHECK(advance(player, bank, slot));
         const int entry = (pass + 1) % kChainEntries;       // starts on 0, so pass 0 lands on 1
         CHECK_EQ(int(player.entry), entry);
         CHECK_EQ(int(bank), int(entries[entry].bank));
@@ -890,7 +909,7 @@ TEST(a_long_chain_with_mixed_repeats_holds_its_totals) {
     set_chain(g_project, entries, count);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
 
     const int cycles = 5;
     int total_repeats = 0;
@@ -901,7 +920,7 @@ TEST(a_long_chain_with_mixed_repeats_holds_its_totals) {
     for (int pass = 0; pass < total_repeats * cycles; pass++) {
         passes[player.entry]++;
         uint8_t bank = 99, slot = 99;
-        if (chain_advance(g_project, player, bank, slot)) changes++;
+        if (advance(player, bank, slot)) changes++;
     }
     for (int i = 0; i < count; i++) CHECK_EQ(passes[i], int(entries[i].repeats) * cycles);
 
@@ -917,17 +936,17 @@ TEST(a_high_repeat_count_cannot_overflow_the_pass_counter) {
     set_chain(g_project, entries, 2);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
 
     for (int pass = 1; pass < 255; pass++) {
         uint8_t bank = 99, slot = 99;
-        CHECK(!chain_advance(g_project, player, bank, slot));
+        CHECK(!advance(player, bank, slot));
         CHECK_EQ(int(player.entry), 0);
         CHECK_EQ(int(player.played), pass);
     }
 
     uint8_t bank = 99, slot = 99;
-    CHECK(chain_advance(g_project, player, bank, slot));    // the 255th pass ends the entry
+    CHECK(advance(player, bank, slot));    // the 255th pass ends the entry
     CHECK_EQ(int(player.entry), 1);
     CHECK_EQ(int(bank), 1);
     CHECK_EQ(int(slot), 0);
@@ -941,7 +960,7 @@ TEST(chain_advance_on_an_inactive_player_does_nothing) {
 
     ChainPlayer player;                    // never started
     uint8_t bank = 99, slot = 99;
-    CHECK(!chain_advance(g_project, player, bank, slot));
+    CHECK(!advance(player, bank, slot));
     CHECK(!player.active);
     CHECK_EQ(int(bank), 99);
     CHECK_EQ(int(slot), 99);
@@ -952,12 +971,12 @@ TEST(a_chain_emptied_while_it_plays_stops_being_followed) {
     set_chain(g_project, entries, 2);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
 
     g_project.settings.chain_length = 0;              // the user cleared the chain
 
     uint8_t bank = 99, slot = 99;
-    CHECK(!chain_advance(g_project, player, bank, slot));
+    CHECK(!advance(player, bank, slot));
     CHECK(!player.active);                            // rather than reporting a dropped entry
     CHECK_EQ(int(bank), 99);
     CHECK(!chain_current(g_project, player, bank, slot));
@@ -968,11 +987,11 @@ TEST(a_chain_shortened_while_it_plays_wraps_to_an_entry_that_still_exists) {
     set_chain(g_project, entries, 4);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
     uint8_t bank = 99, slot = 99;
-    CHECK(chain_advance(g_project, player, bank, slot));
-    CHECK(chain_advance(g_project, player, bank, slot));
-    CHECK(chain_advance(g_project, player, bank, slot));
+    CHECK(advance(player, bank, slot));
+    CHECK(advance(player, bank, slot));
+    CHECK(advance(player, bank, slot));
     CHECK_EQ(int(player.entry), 3);
 
     g_project.settings.chain_length = 2;              // entries 2 and 3 are gone
@@ -983,12 +1002,12 @@ TEST(a_chain_shortened_while_it_plays_wraps_to_an_entry_that_still_exists) {
     CHECK_EQ(int(bank), 0);
     CHECK_EQ(int(slot), 0);
 
-    CHECK(chain_advance(g_project, player, bank, slot));
+    CHECK(advance(player, bank, slot));
     CHECK_EQ(int(player.entry), 1);
     CHECK_EQ(int(bank), 1);
     CHECK_EQ(int(slot), 1);
 
-    CHECK(chain_advance(g_project, player, bank, slot));     // and wraps within the new length
+    CHECK(advance(player, bank, slot));     // and wraps within the new length
     CHECK_EQ(int(player.entry), 0);
     CHECK_EQ(int(bank), 0);
 }
@@ -998,13 +1017,13 @@ TEST(an_entry_damaged_while_it_plays_truncates_the_chain_under_the_player) {
     set_chain(g_project, entries, 3);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
     g_project.chain[1].bank = uint8_t(kBanks);        // entry 1 now names nothing
     CHECK_EQ(chain_length(g_project), 1);
 
     // One usable entry left, and it is the one playing: the chain loops it and reports nothing.
     uint8_t bank = 99, slot = 99;
-    CHECK(!chain_advance(g_project, player, bank, slot));
+    CHECK(!advance(player, bank, slot));
     CHECK_EQ(int(player.entry), 0);
     CHECK(player.active);
     CHECK(chain_current(g_project, player, bank, slot));
@@ -1021,10 +1040,10 @@ TEST(a_chain_change_is_armed_and_lands_like_any_other) {
     set_chain(g_project, entries, 2);
 
     ChainPlayer player;
-    CHECK(chain_start(g_project, player));
+    CHECK(start_chain(player));
 
     uint8_t bank = 99, slot = 99;
-    CHECK(chain_advance(g_project, player, bank, slot));
+    CHECK(advance(player, bank, slot));
 
     Queue queue;
     CHECK(queue_arm(queue, int(bank), int(slot), QueueMode::end_of_pattern, 100, int(k16Steps)));
@@ -1035,4 +1054,414 @@ TEST(a_chain_change_is_armed_and_lands_like_any_other) {
     CHECK(fire.first_tick >= k16Steps);
     CHECK_EQ(int(queue.bank), 0);                     // cleared after the switch
     CHECK(!queue.pending);
+}
+
+// --- editing a chain --------------------------------------------------------
+
+TEST(chain_insert_set_and_remove_keep_the_chain_a_prefix) {
+    Project &p = g_project;
+    set_chain(p, nullptr, 0);
+    CHECK_EQ(chain_length(p), 0);
+
+    CHECK(chain_insert(p, 0, 0, 2, 1));               // A03
+    CHECK(chain_insert(p, 1, 1, 0, 4));               // B01 x4, after it
+    CHECK(chain_insert(p, 0, 0, 0, 2));               // A01 x2, in front
+    CHECK_EQ(chain_length(p), 3);
+    CHECK_EQ(int(p.settings.chain_length), 3);
+    CHECK_EQ(int(p.chain[0].slot), 0);
+    CHECK_EQ(int(p.chain[1].slot), 2);
+    CHECK_EQ(int(p.chain[2].bank), 1);
+    CHECK_EQ(int(p.chain[2].repeats), 4);
+
+    CHECK(chain_set(p, 1, 7, 15, 16));
+    CHECK_EQ(int(p.chain[1].bank), 7);
+    CHECK_EQ(int(p.chain[1].repeats), 16);
+
+    CHECK(chain_remove(p, 0));
+    CHECK_EQ(chain_length(p), 2);
+    CHECK_EQ(int(p.chain[0].bank), 7);
+    CHECK_EQ(int(p.chain[2].repeats), 0);             // the vacated entry is zeroed
+    CHECK(chain_remove(p, 1));
+    CHECK(chain_remove(p, 0));
+    CHECK_EQ(chain_length(p), 0);
+    CHECK_EQ(int(p.settings.chain_length), 0);
+}
+
+TEST(chain_edits_refuse_what_cannot_be_in_a_chain) {
+    Project &p = g_project;
+    const Entry two[] = {{0, 0, 1}, {0, 1, 1}};
+    set_chain(p, two, 2);
+
+    CHECK(!chain_set(p, 2, 0, 0, 1));                 // past the end
+    CHECK(!chain_set(p, -1, 0, 0, 1));
+    CHECK(!chain_set(p, 0, 0, 0, 0));                 // no repeats
+    CHECK(!chain_set(p, 0, uint8_t(kBanks), 0, 1));   // no such bank
+    CHECK(!chain_insert(p, 3, 0, 0, 1));              // a gap
+    CHECK(!chain_remove(p, 2));
+    CHECK_EQ(chain_length(p), 2);
+    CHECK_EQ(int(p.chain[1].slot), 1);
+
+    // Full.
+    set_chain(p, nullptr, 0);
+    for (int i = 0; i < kChainEntries; i++) CHECK(chain_insert(p, i, 0, uint8_t(i % 16), 1));
+    CHECK(!chain_insert(p, 0, 0, 0, 1));
+    CHECK_EQ(chain_length(p), kChainEntries);
+}
+
+TEST(chain_edits_first_cut_a_damaged_chain_back_to_what_plays) {
+    // Declared length 5, but entry 2 has no repeats: only two entries play, and an insert at the
+    // end lands after those two, not after the garbage.
+    Project &p = g_project;
+    const Entry broken[] = {{0, 0, 1}, {0, 1, 1}, {0, 2, 0}, {0, 3, 1}, {0, 4, 1}};
+    set_chain(p, broken, 5);
+    CHECK_EQ(chain_length(p), 2);
+    CHECK(chain_insert(p, 2, 1, 1, 1));
+    CHECK_EQ(chain_length(p), 3);
+    CHECK_EQ(int(p.chain[2].bank), 1);
+    CHECK_EQ(int(p.chain[3].repeats), 0);
+    CHECK_EQ(int(p.settings.chain_length), 3);
+}
+
+TEST(a_refused_chain_edit_leaves_a_damaged_chain_as_it_was) {
+    // queue.hpp: a refused edit leaves the project as it was. The cut-back used to run before
+    // the index was checked, so a refused remove still rewrote a damaged chain's tail.
+    Project &p = g_project;
+    const Entry broken[] = {{0, 0, 1}, {0, 1, 1}, {0, 2, 0}, {0, 3, 1}};
+    set_chain(p, broken, 4);
+    CHECK(!chain_remove(p, 3));
+    CHECK(!chain_set(p, 2, 0, 0, 1));
+    CHECK(!chain_insert(p, 3, 0, 0, 1));
+    CHECK_EQ(int(p.settings.chain_length), 4);
+    CHECK_EQ(int(p.chain[3].slot), 3);
+    CHECK_EQ(int(p.chain[3].repeats), 1);
+}
+
+// --- editing a chain while it plays -------------------------------------------
+//
+// `ChainPlayer::entry` is an index, and the CHAIN page renumbers entries under it.
+
+TEST(an_entry_added_above_the_playing_one_does_not_move_the_chain) {
+    // A01, A02, A03. Playing A02 (entry 1); an entry is added at the top.
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}, {0, 2, 1}};
+    set_chain(g_project, entries, 3);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));
+    CHECK_EQ(int(slot), 1);
+
+    CHECK(chain_insert(g_project, 0, 0, 9, 1));       // A10 in front
+    chain_player_inserted(player, 0);
+    CHECK_EQ(int(player.entry), 2);                   // still on A02
+
+    CHECK(advance(player, bank, slot));               // A02 -> A03, not A02 again
+    CHECK_EQ(int(slot), 2);
+    CHECK(advance(player, bank, slot));               // and wraps to the new first entry
+    CHECK_EQ(int(slot), 9);
+
+    // An entry added BELOW the playing one leaves the index alone.
+    chain_player_inserted(player, 1);
+    CHECK_EQ(int(player.entry), 0);
+}
+
+TEST(removing_the_playing_entry_plays_the_next_one_rather_than_skipping_it) {
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 2}, {0, 2, 1}, {0, 3, 1}};
+    set_chain(g_project, entries, 4);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));               // A02, first of two passes
+    CHECK_EQ(int(slot), 1);
+
+    CHECK(chain_remove(g_project, 1));
+    chain_player_removed(player, 1);
+    CHECK(!chain_current(g_project, player, bank, slot));   // nothing in the chain plays now
+
+    CHECK(advance(player, bank, slot));               // A03 next, not A04
+    CHECK_EQ(int(slot), 2);
+    CHECK_EQ(int(player.entry), 1);
+    CHECK(advance(player, bank, slot));
+    CHECK_EQ(int(slot), 3);
+
+    // Removing an entry above the playing one moves the index down with it.
+    chain_player_removed(player, 0);
+    CHECK_EQ(int(player.entry), 1);
+}
+
+TEST(removing_the_last_entry_while_it_plays_wraps_to_the_first) {
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}};
+    set_chain(g_project, entries, 2);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));               // A02, entry 1
+    CHECK(chain_remove(g_project, 1));
+    chain_player_removed(player, 1);
+    CHECK(advance(player, bank, slot));               // back to A01
+    CHECK_EQ(int(slot), 0);
+}
+
+TEST(editing_the_playing_entry_still_switches_to_the_next_one) {
+    // A01, A02. Playing A01, the user turns entry 0 to A02. The next entry is A02 -- the same as
+    // the EDITED entry but not the pattern sounding -- so the chain must still switch.
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}};
+    set_chain(g_project, entries, 2);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(chain_set(g_project, 0, 0, 1, 1));
+    CHECK(advance(player, bank, slot));
+    CHECK_EQ(int(slot), 1);
+}
+
+TEST(chain_resume_keeps_the_live_pattern_and_continues_from_the_first_entry) {
+    // A project reopened with its chain on (Cmd::project_loaded).
+    const Entry entries[] = {{0, 0, 2}, {0, 1, 1}};
+    set_chain(g_project, entries, 2);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+
+    g_project.bank = 3;                                // saved on D06, not an entry
+    g_project.slot = 5;
+    CHECK(chain_resume(g_project, player));
+    CHECK(player.active);
+    CHECK(advance(player, bank, slot));                // D06's pass ends: A01, the first entry
+    CHECK_EQ(int(slot), 0);
+    CHECK(!advance(player, bank, slot));               // its second pass
+    CHECK(advance(player, bank, slot));
+    CHECK_EQ(int(slot), 1);
+
+    // Saved on the first entry: the chain simply runs from there.
+    g_project.bank = 0;
+    g_project.slot = 0;
+    CHECK(chain_resume(g_project, player));
+    CHECK(!player.orphaned);
+    CHECK(!advance(player, bank, slot));               // A01's second pass
+    CHECK(advance(player, bank, slot));
+    CHECK_EQ(int(slot), 1);
+
+    set_chain(g_project, nullptr, 0);
+    CHECK(!chain_resume(g_project, player));
+    CHECK(!player.active);
+}
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(a_restart_boundary_is_found_at_the_edge_of_the_grace_window_and_past_the_first_pass) {
+    Queue q;
+    // Exactly kQueueGraceTicks late is still forgiven: the new pattern starts on the boundary
+    // just missed, not the one after.
+    CHECK(queue_arm(q, 0, 1, QueueMode::after_16, k16Steps + 12, 1536));
+    CHECK_EQ(q.switch_tick, k16Steps + 13);
+    CHECK_EQ(q.start_tick, k16Steps);
+    // Outside it, and several passes in: the start is the next boundary, not the end of time.
+    CHECK(queue_arm(q, 0, 1, QueueMode::after_16, 5 * k16Steps + 100, 1536));
+    CHECK_EQ(q.start_tick, 6 * k16Steps);
+    CHECK_EQ(q.switch_tick, 6 * k16Steps);
+}
+
+TEST(the_end_of_pattern_counts_from_an_origin_equal_to_the_armed_tick_and_far_behind_it) {
+    Queue q;
+    // A pattern that began on this very tick: the press is at its step 1, forgiven.
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 100, 384, 100));
+    CHECK_EQ(q.switch_tick, 101u);
+    CHECK_EQ(q.start_tick, 100u);
+    // More than a pass after the origin: both ticks are the origin plus whole passes.
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 600, 384, 100));
+    CHECK_EQ(q.switch_tick, 868u);
+    CHECK_EQ(q.start_tick, 868u);
+}
+
+TEST(a_pattern_one_tick_long_is_its_own_grid_and_a_broken_length_arms_on_a_sixteenth) {
+    // One tick is a legal (if absurd) loop: every press is on a boundary, so the change lands on
+    // the very next tick, in queue_switch_tick and in queue_arm alike.
+    CHECK_EQ(queue_switch_tick(QueueMode::end_of_pattern, 20, 1), 21u);
+    Queue q;
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 20, 1));
+    CHECK_EQ(q.switch_tick, 21u);
+    CHECK_EQ(q.start_tick, 20u);
+    // 0 or less cannot divide: queue_arm treats it as a sixteenth, as queue_switch_tick does.
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 40, 0));
+    CHECK_EQ(q.switch_tick, 48u);
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 40, -5));
+    CHECK_EQ(q.switch_tick, 48u);
+}
+
+TEST(starting_a_chain_forgets_the_passes_a_previous_run_had_played) {
+    const Entry entries[] = {{0, 0, 2}, {0, 1, 1}};
+    set_chain(g_project, entries, 2);
+    ChainPlayer player;
+    player.played = 1;                                 // left by a chain stopped mid-entry
+    CHECK(start_chain(player));
+    uint8_t bank = 0, slot = 0;
+    CHECK(!advance(player, bank, slot));               // A01's first pass of two, not its last
+    CHECK(advance(player, bank, slot));
+    CHECK_EQ(int(slot), 1);
+}
+
+TEST(a_chain_resumed_on_another_bank_knows_it_is_not_on_an_entry) {
+    // B01 shares A01's slot number and the second entry's bank: only the bank of the FIRST
+    // entry tells the player it is not on it.
+    const Entry entries[] = {{0, 0, 2}, {1, 1, 1}};
+    set_chain(g_project, entries, 2);
+    g_project.bank = 1;
+    g_project.slot = 0;
+    ChainPlayer player;
+    CHECK(chain_resume(g_project, player));
+    CHECK(player.orphaned);
+    uint8_t bank = 9, slot = 9;
+    CHECK(advance(player, bank, slot));                // B01's pass ends: A01 starts
+    CHECK_EQ(int(bank), 0);
+    CHECK_EQ(int(slot), 0);
+}
+
+TEST(removing_the_playing_entry_reports_the_next_one_with_its_bank) {
+    const Entry entries[] = {{0, 0, 1}, {1, 4, 1}, {2, 7, 1}};
+    set_chain(g_project, entries, 3);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));               // B05
+    CHECK(chain_remove(g_project, 1));
+    chain_player_removed(player, 1);
+    CHECK(advance(player, bank, slot));               // C08, bank and all
+    CHECK_EQ(int(bank), 2);
+    CHECK_EQ(int(slot), 7);
+}
+
+TEST(removing_the_playing_entry_when_the_next_names_the_same_pattern_reports_no_change) {
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}, {0, 1, 1}, {0, 2, 1}};
+    set_chain(g_project, entries, 4);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));               // A02, entry 1
+    CHECK(chain_remove(g_project, 1));
+    chain_player_removed(player, 1);
+    CHECK(!advance(player, bank, slot));              // entry 1 is A02 again: nothing to switch
+    CHECK_EQ(int(player.entry), 1);
+    CHECK(chain_current(g_project, player, bank, slot));
+    CHECK_EQ(int(slot), 1);
+    CHECK(advance(player, bank, slot));               // then A03
+    CHECK_EQ(int(slot), 2);
+}
+
+TEST(a_player_that_wrapped_past_a_shortened_chain_is_on_the_first_entry_from_then_on) {
+    // The player's index is brought back into the chain whenever it advances, so an entry
+    // inserted later moves it from where it really is, not from where it was.
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}};
+    set_chain(g_project, entries, 2);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));               // A02, entry 1
+    CHECK(chain_remove(g_project, 1));
+    chain_player_removed(player, 1);
+    CHECK(advance(player, bank, slot));               // the only entry left: A01
+    CHECK_EQ(int(player.entry), 0);
+    CHECK(chain_insert(g_project, 0, 0, 9, 1));       // A10 in front
+    chain_player_inserted(player, 0);
+    CHECK(chain_current(g_project, player, bank, slot));
+    CHECK_EQ(int(slot), 0);                           // still A01
+
+    // The same through a repeat: X is played again from inside a chain cut back under Z.
+    const Entry more[] = {{0, 3, 2}, {0, 4, 1}, {0, 5, 1}};
+    set_chain(g_project, more, 3);
+    CHECK(start_chain(player));
+    CHECK(!advance(player, bank, slot));              // A04's second pass
+    CHECK(advance(player, bank, slot));               // A05
+    CHECK(advance(player, bank, slot));               // A06, entry 2
+    g_project.settings.chain_length = 1;              // only A04 is left
+    CHECK(!advance(player, bank, slot));              // A04 again, its first pass of two
+    CHECK_EQ(int(player.entry), 0);
+    CHECK(chain_insert(g_project, 0, 0, 9, 1));
+    chain_player_inserted(player, 0);
+    CHECK(chain_current(g_project, player, bank, slot));
+    CHECK_EQ(int(slot), 3);
+}
+
+TEST(a_chain_cut_back_to_exactly_the_playing_entry_reads_as_its_first_entry) {
+    const Entry entries[] = {{1, 0, 1}, {1, 1, 1}, {1, 2, 1}};
+    set_chain(g_project, entries, 3);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));
+    CHECK(advance(player, bank, slot));               // B03, entry 2
+    g_project.settings.chain_length = 2;              // the entry at the player's index is gone
+    CHECK(chain_current(g_project, player, bank, slot));
+    CHECK_EQ(int(bank), 1);
+    CHECK_EQ(int(slot), 0);
+}
+
+TEST(an_entry_inserted_at_the_playing_index_pushes_the_player_down_with_its_entry) {
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}};
+    set_chain(g_project, entries, 2);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));               // A02, entry 1
+    CHECK(chain_insert(g_project, 1, 0, 9, 1));       // A10 in at index 1, above A02
+    chain_player_inserted(player, 1);
+    CHECK_EQ(int(player.entry), 2);
+    CHECK(chain_current(g_project, player, bank, slot));
+    CHECK_EQ(int(slot), 1);                           // still A02
+}
+
+// --- song mode ------------------------------------------------------------
+
+TEST(chain_at_end_is_the_last_pass_of_the_last_entry_only) {
+    const Entry entries[] = {{0, 0, 2}, {0, 1, 1}};
+    set_chain(g_project, entries, 2, 2);
+    ChainPlayer player;
+    CHECK(!chain_at_end(g_project, player));          // not started
+    CHECK(chain_start(g_project, player));
+    uint8_t bank = 0, slot = 0;
+    CHECK(!chain_at_end(g_project, player));          // entry 1, pass 1 of 2
+    chain_advance(g_project, player, bank, slot);
+    CHECK(!chain_at_end(g_project, player));          // entry 1, pass 2: entry 2 is next
+    chain_advance(g_project, player, bank, slot);
+    CHECK(chain_at_end(g_project, player));           // entry 2, its only pass
+    chain_advance(g_project, player, bank, slot);     // a looping chain wraps
+    CHECK_EQ(int(player.entry), 0);
+    CHECK(!chain_at_end(g_project, player));
+    // An orphaned player has an entry to go to, so it is not at the end.
+    player.entry = 1;
+    player.played = 0;
+    player.orphaned = true;
+    CHECK(!chain_at_end(g_project, player));
+}
+
+TEST(chain_entry_mutes_names_the_state_an_entry_recalls) {
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}};
+    set_chain(g_project, entries, 2, 2);
+    g_project.chain[1].mutes = 3;                     // recall state 3, index 2
+    ChainPlayer player;
+    CHECK_EQ(chain_entry_mutes(g_project, player), -1);
+    CHECK(chain_start(g_project, player));
+    CHECK_EQ(chain_entry_mutes(g_project, player), -1);   // entry 1 leaves the mutes alone
+    uint8_t bank = 0, slot = 0;
+    chain_advance(g_project, player, bank, slot);
+    CHECK_EQ(chain_entry_mutes(g_project, player), 2);
+    g_project.chain[1].mutes = 9;                     // damage: past the eight states
+    CHECK_EQ(chain_entry_mutes(g_project, player), -1);
+    g_project.chain[1].mutes = 0;
+}
+
+TEST(chain_edits_carry_the_mute_recall_and_refuse_past_eight) {
+    const Entry entries[] = {{0, 0, 1}};
+    set_chain(g_project, entries, 1, 1);
+    CHECK(chain_set(g_project, 0, 0, 2, 1, 8));
+    CHECK_EQ(int(g_project.chain[0].mutes), 8);
+    CHECK(!chain_set(g_project, 0, 0, 2, 1, 9));
+    CHECK_EQ(int(g_project.chain[0].mutes), 8);       // a refusal changes nothing
+    CHECK(chain_insert(g_project, 1, 0, 3, 2, 4));
+    CHECK_EQ(int(g_project.chain[1].mutes), 4);
+    CHECK(!chain_insert(g_project, 2, 0, 3, 2, 9));
+    CHECK_EQ(chain_length(g_project), 2);
+    // Without the argument, an entry recalls nothing, as before song mode.
+    CHECK(chain_set(g_project, 1, 0, 3, 2));
+    CHECK_EQ(int(g_project.chain[1].mutes), 0);
+    CHECK(chain_remove(g_project, 0));
+    CHECK_EQ(int(g_project.chain[1].mutes), 0);       // the vacated entry is zeroed whole
 }

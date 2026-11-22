@@ -191,6 +191,20 @@ void VaPoly::trigger(const Trig &trig) {
     active_ = true;
 }
 
+void VaPoly::release(uint8_t note) {
+    for (Slot &s : slots_) {
+        if (s.note != int(note)) continue;
+        if (s.pending) {
+            // Not started yet: a one-frame gate, so it starts and is let go on the next frame
+            // through the same path as a step's length.
+            s.gate = 1;
+        } else if (s.voice.sounding()) {
+            s.voice.gate_off();
+            s.gate = -1;
+        }
+    }
+}
+
 int VaPoly::allocate(uint8_t note) {
     // 1. The voice already sounding this note, if it has started. A repeated chord reuses its
     //    own voices; a waiting voice is not a match, so a ratchet keeps both of its hits.
@@ -232,6 +246,39 @@ int VaPoly::allocate(uint8_t note) {
     return pick;
 }
 
+bool VaPoly::would_add_voice(uint8_t note) const {
+    for (const Slot &s : slots_) {
+        if (!s.pending && s.note == int(note) && s.voice.sounding() && !s.voice.choking()) {
+            return false;                    // allocate() retriggers this voice in place
+        }
+    }
+    for (const Slot &s : slots_) {
+        if (!s.busy()) return true;          // a free slot: one more voice sounding
+    }
+    // Every slot busy: allocate() steals one of this machine's own. Stealing a choking slot
+    // brings a voice back into the count; any other steal is one out and one in.
+    // A choking slot already holding a pending trig is counted (budget_voices), so taking it
+    // again is one out and one in, like any other steal.
+    for (const Slot &s : slots_) {
+        if (s.voice.choking() && !s.pending) return true;
+    }
+    return false;
+}
+
+int VaPoly::quietest_voice(float &level) const {
+    int pick = -1;
+    for (int i = 0; i < kVoices; i++) {
+        const Slot &s = slots_[i];
+        if (s.pending || !s.voice.sounding() || s.voice.choking()) continue;
+        const float l = s.voice.amp_level();
+        if (pick < 0 || l < level) {
+            pick = i;
+            level = l;
+        }
+    }
+    return pick;
+}
+
 void VaPoly::release_all() {
     // STOP once: every sounding voice gets its release tail, filter envelope included so no
     // bright ghost is left behind. A pending trig still starts -- it was scheduled before the
@@ -251,6 +298,14 @@ void VaPoly::kill_all() {
 
 void VaPoly::render_add(float *out, int frames) {
     if (!active_) return;   // nothing sounding and nothing pending: an idle machine costs a test
+
+    // Once a block, here as well as in prepare(). The entries are keyed on this block's filter
+    // envelope values, so a cache carried across blocks fills with last block's keys and stops
+    // taking new ones -- still correct, but every voice would miss. prepare() used to be the
+    // only clear, and it ran every block; app/engine.cpp now skips it when the parameters have
+    // not moved, which leaves the settings, and so every entry, valid but the cache full.
+    filter_cache_.clear();
+
     bool busy = false;
     for (int i = 0; i < kVoices; i++) {
         if (!slots_[i].busy()) continue;   // an idle voice costs one envelope read and a compare

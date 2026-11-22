@@ -508,3 +508,71 @@ TEST(repeat_survives_a_block_of_no_frames_and_an_uninitialised_object) {
     g_repeat.process(g_block, 0);
     g_repeat.process(g_block, -4);
 }
+
+// --- gaps a mutation run found (docs/MUTATION.md) -------------------------------------------
+
+namespace {
+
+BeatRepeat g_fresh;
+bool g_fresh_ready = false;
+
+BeatRepeat &fresh() {
+    if (!g_fresh_ready) g_fresh_ready = g_fresh.init(kRate);
+    CHECK(g_fresh_ready);
+    return g_fresh;
+}
+
+}  // namespace
+
+TEST(repeat_a_one_frame_loop_repeats_that_frame) {
+    // The shortest loop is one frame, and a request for none is that frame too, not a ring of
+    // silence and not two frames.
+    BeatRepeat &r = fresh();
+    for (uint32_t ask : {0u, 1u}) {
+        r.hold(false);
+        r.set(ask, false);
+        fill_counting(g_block, kBlock, 5000);
+        r.process(g_block, kBlock);                 // the last frame captured is 5063
+        r.hold(true);
+        CHECK(r.active());
+        fill_counting(g_block, kBlock, 0);
+        r.process(g_block, kBlock);
+        for (int i = 0; i < kBlock; i++) CHECK_EQ(g_block[2 * i], 5063.0f);
+        r.hold(false);
+    }
+}
+
+TEST(repeat_a_new_press_starts_on_a_whole_frame_after_a_pitched_down_one) {
+    // An octave down advances half a frame a sample, so a release mid-way leaves half a frame
+    // behind. The next press starts on the loop's first frame exactly, not between two.
+    BeatRepeat &r = fresh();
+    r.hold(false);
+    r.set(16, true);
+    fill_counting(g_block, kBlock, 100);
+    r.process(g_block, kBlock);                     // the loop is 148..163
+    r.hold(true);
+    fill_counting(g_block, 3, 0);
+    r.process(g_block, 3);                          // three samples: 1.5 frames in
+    r.hold(false);
+    r.set(16, false);
+    r.hold(true);
+    fill_counting(g_block, 1, 0);
+    r.process(g_block, 1);
+    CHECK_EQ(g_block[0], 148.0f);
+    r.hold(false);
+}
+
+TEST(repeat_captures_a_one_frame_block) {
+    BeatRepeat &r = fresh();
+    r.hold(false);
+    r.set(1, false);
+    fill_counting(g_block, kBlock, 0);
+    r.process(g_block, kBlock);
+    fill_counting(g_block, 1, 777);
+    r.process(g_block, 1);                          // idle: captured
+    r.hold(true);
+    fill_counting(g_block, kBlock, 0);
+    r.process(g_block, kBlock);
+    CHECK_EQ(g_block[0], 777.0f);
+    r.hold(false);
+}

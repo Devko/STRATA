@@ -45,6 +45,12 @@ Storage &storage();
 // that wants a note puts its own trig down.
 Engine &fresh();
 
+// The factory project (core/factory.hpp), built once into memory of its own: what a NEW project
+// and a card-less boot are expected to hold. Its scenes and macros come with it.
+const Project &factory();
+const SceneSet &factory_scenes();
+const MacroSet &factory_macros();
+
 // Run `blocks` audio blocks, servicing the card between each. Returns the loudest sample seen,
 // so a caller that only cares whether something sounded needs no loop of its own.
 float pump(int blocks = 1);

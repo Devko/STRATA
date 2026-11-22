@@ -128,6 +128,17 @@ constexpr RatchetRamp ratchet_ramp(uint8_t packed) { return RatchetRamp(packed >
 // that range, which makes it the natural "follow the pattern" sentinel.
 constexpr uint8_t kSwingInherit = 0;
 
+// A track's swing moved by `delta` encoder clicks along the one line the PATTERN page shows:
+// PAT (follow the pattern), then 50 to 75. One click below 50 is PAT, and nothing is below PAT,
+// so a knob turned all the way down always lands on "follow the pattern" rather than on 50 --
+// which would look the same and stop following. A damaged byte between 1 and 49 counts as PAT.
+constexpr uint8_t track_swing_step(uint8_t current, int delta) {
+    const int at = current < kSwingMin ? kSwingMin - 1 : (current > kSwingMax ? kSwingMax : current);
+    const int next = at + delta;
+    if (next < kSwingMin) return kSwingInherit;
+    return uint8_t(next > kSwingMax ? kSwingMax : next);
+}
+
 // --- the structures -------------------------------------------------------
 
 // Exactly 12 bytes. Do not reorder: see the header comment.

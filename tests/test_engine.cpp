@@ -32,9 +32,10 @@
 // deliberately does not build (its `ENAGA_APP(Strata)` defines a device package's entry points).
 // What this file can check is the half of CLAUDE.md's transport rule that IS in the engine: that
 // the engine never calls the transport itself, and that what it plays comes from the clock's own
-// state rather than from a command. The same goes for the sample region -- app/app.cpp hands it
-// over in init, so `sample_region_` is null here and every `Cmd::set_sample` is refused before
-// its field checks are reached.
+// state rather than from a command. The sample region is NOT in that position: the rig's
+// `Storage::init` hands the engine its 64 MiB region exactly as `App::init` does on the unit, so
+// `Cmd::set_sample`'s offset, frame-count and alignment checks are reachable here, and
+// tests/test_engine_gaps.cpp drives them.
 #include "apprig.hpp"
 #include "check.hpp"
 #include "fakehost.hpp"
@@ -234,6 +235,7 @@ Engine &clean() {
     post(Cmd::set_auto_fill, 0, 0, uint8_t(AutoFill::off));
     post(Cmd::set_throw, 0, 0, 0);
     post(Cmd::set_repeat, 0, 0, uint8_t(RepeatLength::sixteenth), 0, 0);
+    for (uint8_t t = 0; t < kTracks; t++) post(Cmd::note_repeat, t, 0, 0, 0, 0);
     post_u(Cmd::set_morph, 0);
     for (uint8_t m = 0; m < kMacros; m++) {
         post(Cmd::macro_clear, 0, 0, m);
@@ -792,6 +794,44 @@ TEST(engine_swing_moves_the_odd_steps_and_leaves_the_even_ones) {
     CHECK_EQ(int(engine.pattern().swing), kSwingMin);
 }
 
+TEST(engine_a_tracks_own_swing_overrides_the_patterns_and_pat_follows_it_again) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 1);
+    post(Cmd::set_pattern_swing, 0, 0, uint8_t(kSwingMin));
+    post(Cmd::set_track_swing, kPoly, 0, uint8_t(kSwingMax));
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), kSwingMax);
+    // The pattern is straight and the track swings: step 1 lands 12 ticks late.
+    CHECK_EQ(fired_on(kPoly, 24u), 0);
+    CHECK_EQ(fired_on(kPoly, 36u), 1);
+
+    // A delta walks down from 75; past 50 it reaches PAT and the track follows the pattern.
+    post(Cmd::set_track_swing, kPoly, 0, 0, uint8_t(int8_t(-30)), kDeltaFlag);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), int(kSwingInherit));
+    CHECK_EQ(fired_on(kPoly, 1536u + 24u), 1);
+    post(Cmd::set_pattern_swing, 0, 0, uint8_t(kSwingMax));
+    pump();
+    CHECK_EQ(fired_on(kPoly, 2u * 1536u + 24u), 0);
+    CHECK_EQ(fired_on(kPoly, 2u * 1536u + 36u), 1);
+
+    // An absolute value out of range clamps; 0 is PAT, not 50.
+    post(Cmd::set_track_swing, kPoly, 0, 200);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), kSwingMax);
+    post(Cmd::set_track_swing, kPoly, 0, 3);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), kSwingMin);
+    post(Cmd::set_track_swing, kPoly, 0, uint8_t(kSwingInherit));
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), int(kSwingInherit));
+    // Other tracks were never touched.
+    for (int t = 0; t < kTracks; t++) {
+        if (t != kPoly) CHECK_EQ(int(engine.pattern().tracks[t].swing), int(kSwingInherit));
+    }
+}
+
 TEST(engine_micro_timing_moves_a_step_off_the_grid_and_adds_to_swing) {
     Engine &engine = clean();
     (void)engine;
@@ -1310,6 +1350,32 @@ TEST(engine_a_pattern_change_clears_the_undo_history) {
 
 // --- the queue and chains --------------------------------------------------------------------
 
+TEST(engine_a_queued_change_lands_at_once_when_the_transport_jumps_back) {
+    // STOP and PLAY (or F1 + F5, or an outside clock relocating) put the clock back to 0. The
+    // change was armed for tick 1536 of the OLD position, and used to wait there -- a change
+    // queued deep into a set and then STOP, PLAY landed that many bars late.
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    tick_at(3000);
+    post(Cmd::queue_pattern, 0, 0, 1, 3, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK(engine.queue().pending);
+    CHECK_EQ(int(engine.queue().switch_tick), 3072);
+
+    tick_at(0);                                    // the transport starts again from 0
+    CHECK(!engine.queue().pending);
+    CHECK_EQ(live_bank(), 1);
+    CHECK_EQ(live_slot(), 3);
+
+    // And a forward tick does not: the next change still waits for its boundary.
+    tick_at(100);
+    post(Cmd::queue_pattern, 0, 0, 0, 0, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    tick_at(101);
+    CHECK(engine.queue().pending);
+    CHECK_EQ(live_slot(), 3);
+}
+
 TEST(engine_a_queued_change_waits_for_the_end_of_the_pass) {
     Engine &engine = clean();
     FakeHost::the().set_running(true);
@@ -1473,6 +1539,164 @@ TEST(engine_a_chain_advances_at_the_pass_boundary) {
     tick_at(2u * 1536u + 1u);
     tick_at(3u * 1536u);
     CHECK_EQ(live_slot(), 0);
+}
+
+TEST(engine_a_chain_edited_while_it_plays_stays_on_the_entry_it_is_playing) {
+    // The CHAIN page renumbers entries under a running player. Adding an entry above the playing
+    // one used to move the chain onto the wrong entry, and removing the playing one skipped the
+    // entry after it.
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    project_init(incoming);
+    incoming.settings.chain_length = 3;
+    incoming.chain[0] = ChainEntry{0, 0, 1};
+    incoming.chain[1] = ChainEntry{0, 1, 1};
+    incoming.chain[2] = ChainEntry{0, 2, 1};
+    post(Cmd::project_loaded);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    tick_at(1536);
+    CHECK_EQ(live_slot(), 1);                      // entry 1, A02
+    tick_at(1537);
+
+    Command insert;                                // A10 at the top
+    insert.cmd = Cmd::chain_edit;
+    insert.step = 0;
+    insert.a = uint8_t(ChainEdit::insert);
+    insert.b = 0;
+    insert.c = 9;
+    insert.d = 1;
+    CHECK(engine.commands().post(insert));
+    pump();
+    CHECK_EQ(int(engine.chain().entry), 2);        // still A02
+
+    Command remove;                                // and A02 itself goes
+    remove.cmd = Cmd::chain_edit;
+    remove.step = 2;
+    remove.a = uint8_t(ChainEdit::remove);
+    CHECK(engine.commands().post(remove));
+    pump();
+    CHECK_EQ(live_slot(), 1);                      // it plays out its pass
+    tick_at(2u * 1536u);
+    CHECK_EQ(live_slot(), 2);                      // then A03, not A10
+    CHECK_EQ(int(engine.chain().entry), 2);
+}
+
+// --- song mode -------------------------------------------------------------------------------
+
+void chain_op(ChainEdit op, uint8_t at, uint8_t b = 0, uint8_t c = 0, uint8_t d = 0, uint8_t e = 0) {
+    Command command;
+    command.cmd = Cmd::chain_edit;
+    command.step = at;
+    command.a = uint8_t(op);
+    command.b = b;
+    command.c = c;
+    command.d = d;
+    command.e = e;
+    CHECK(strata::test::engine().commands().post(command));
+    pump();
+}
+
+TEST(engine_a_chain_entry_recalls_its_mute_state_as_it_starts) {
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};   // leaves the mutes alone
+    incoming.chain[1] = ChainEntry{0, 1, 1, 3};   // recalls state 3
+    for (int i = 2; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    post(Cmd::project_loaded);
+    pump();
+    // Mute state 3 is track 1 muted, stored from the live mutes.
+    post(Cmd::set_mute, 0, 0, 1, 0);
+    post(Cmd::mute_store, 0, 0, 2);
+    post(Cmd::set_mute, 0, 0, 0, 0);
+    pump();
+
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK(!engine.muted(0));
+    tick_at(1536);                                 // entry 2 starts: track 1 muted
+    CHECK_EQ(live_slot(), 1);
+    CHECK(engine.muted(0));
+    CHECK(!engine.muted(1));
+
+    // The knob walks the recall 0-8 and clamps; a set from a STEP key keeps it.
+    chain_op(ChainEdit::mutes_delta, 1, uint8_t(int8_t(20)));
+    CHECK_EQ(int(engine.project().chain[1].mutes), 8);
+    chain_op(ChainEdit::mutes_delta, 1, uint8_t(int8_t(-20)));
+    CHECK_EQ(int(engine.project().chain[1].mutes), 0);
+    chain_op(ChainEdit::mutes_delta, 1, 2);
+    chain_op(ChainEdit::pattern_delta, 1, 1);
+    chain_op(ChainEdit::repeats_delta, 1, 1);
+    CHECK_EQ(int(engine.project().chain[1].mutes), 2);
+    const uint32_t before = refused();
+    chain_op(ChainEdit::set, 1, 0, 1, 1, 9);       // past eight: refused
+    CHECK_EQ(int(refused() - before), 1);
+
+    post(Cmd::set_chain, 0, 0, 0);
+    post(Cmd::set_mute, 0, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_song_mode_plays_the_chain_once_and_asks_for_a_stop) {
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};
+    incoming.chain[1] = ChainEntry{0, 1, 1, 0};
+    for (int i = 2; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    post(Cmd::project_loaded);
+    pump();
+    put_trig(kMono, 0);                            // A01 and A02 each sound on step 1
+    post(Cmd::queue_pattern, 0, 0, 0, 1, uint8_t(QueueMode::immediate));
+    pump();
+    put_trig(kMono, 0);
+    chain_op(ChainEdit::song, 0, 1);
+    CHECK(engine.project().settings.chain_song);
+
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    tick_at(1);                                    // the switch to A01 re-derives the boundary
+    const uint8_t ends = engine.status().song_end.load();
+    tick_at(1536);                                 // entry 2
+    CHECK_EQ(live_slot(), 1);
+    CHECK_EQ(int(engine.status().song_end.load()), int(ends));
+    tick_at(1537);
+    // The end of the last entry: back on entry 1, a stop asked for, and silent meanwhile.
+    CHECK_EQ(fired_on(kMono, 2u * 1536u), 0);
+    CHECK_EQ(int(uint8_t(engine.status().song_end.load() - ends)), 1);
+    CHECK(engine.chain().active);
+    CHECK_EQ(int(engine.chain().entry), 0);
+    CHECK_EQ(live_slot(), 0);
+    int hits = 0;
+    for (uint32_t t = 2u * 1536u + 1u; t < 3u * 1536u; t++) hits += fired_on(kMono, t);
+    CHECK_EQ(hits, 0);
+
+    // The stop the main context sends, then PLAY from 0: the song plays from the top.
+    post(Cmd::stop, 0, 0, 0);
+    pump();
+    CHECK_EQ(fired_on(kMono, 0), 1);
+    CHECK_EQ(live_slot(), 0);
+
+    // Song off: the chain loops as before.
+    chain_op(ChainEdit::song, 0, 0);
+    tick_at(1536);
+    tick_at(1537);
+    tick_at(2u * 1536u);
+    CHECK_EQ(int(uint8_t(engine.status().song_end.load() - ends)), 1);
+    CHECK_EQ(live_slot(), 0);
+    CHECK_EQ(int(engine.chain().entry), 0);
+    post(Cmd::set_chain, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
 }
 
 TEST(engine_starting_an_empty_chain_is_refused) {
@@ -1660,20 +1884,67 @@ TEST(engine_a_morph_is_heard_between_steps_and_not_only_at_the_next_trig) {
     CHECK(pump(8) > 0.01f);                        // the same note, no new trig
 }
 
+TEST(engine_a_macro_at_rest_hands_its_parameter_back_to_the_knob) {
+    // The bug this rule fixes: an assigned macro at 0 used to write its `low` on every rebuild,
+    // so turning that parameter in EDIT moved the screen and not the sound.
+    Engine &engine = clean();
+    post_macro_assign(0, kPoly, kLvl, 40, 120);
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    pump();
+    post(Cmd::set_param, kPoly, 0, kLvl, 90);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 90);   // the knob is heard
+    post(Cmd::set_param, kPoly, 0, kLvl, 17);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 17);   // every time
+
+    // Moved off 0, the macro has it; back to 0, the knob has it again.
+    post(Cmd::set_macro, 0, 0, 0, 127);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 120);
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 17);
+}
+
+TEST(engine_a_macro_at_rest_lets_a_scene_morph_through) {
+    // Scenes are built under macros (kit -> morph -> macros); a resting macro on the same
+    // parameter used to overwrite the morph.
+    Engine &engine = clean();
+    two_scenes_differing_in(kPoly, kLvl, 10, 110);
+    post_macro_assign(0, kPoly, kLvl, 50, 60);
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    post_u(Cmd::set_morph, kMorphScale);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 110);
+}
+
 TEST(engine_a_macro_drives_its_assigned_targets) {
     Engine &engine = clean();
     // Two targets on one macro, one of them inverted: one knob opening a filter while it closes
     // a send is most of what makes a macro worth having (core/perform.hpp).
+    // The parameters start where the ranges do: a macro sweeps from the LIVE value to `high`
+    // (core/perform.hpp), so these are the values a knob turned to 0 and 127 would leave.
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    post(Cmd::set_param, kPoly, 0, kLvl, 0);
+    post(Cmd::set_param, kMono, 0, kLvl, 127);
     post_macro_assign(0, kPoly, kLvl, 0, 127);
     post_macro_assign(0, kMono, kLvl, 127, 0);
     pump();
     CHECK_EQ(macro_count(engine.macros().macros[0]), 2);
 
+    // At 0 the macro writes nothing: both parameters are the kit's (core/perform.hpp).
     post(Cmd::set_macro, 0, 0, 0, 0);
     pump();
     CHECK_EQ(int(engine.macro_position(0)), 0);
-    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 0);
-    CHECK_EQ(int(engine.performed(kMono, kLvl)), 127);
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), int(engine.params(kPoly).v[kLvl]));
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), int(engine.params(kMono).v[kLvl]));
+
+    // One detent up and the range is the macro's.
+    post(Cmd::set_macro, 0, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 1);
+    CHECK_EQ(int(engine.performed(kMono, kLvl)), 126);
 
     post(Cmd::set_macro, 0, 0, 0, 127);
     pump();
@@ -1691,7 +1962,7 @@ TEST(engine_a_macro_drives_its_assigned_targets) {
     post(Cmd::set_macro, 0, 0, 0, 200);
     pump();
     CHECK_EQ(int(engine.macro_position(0)), 127);
-    CHECK_EQ(int(kit_value(kPoly, kLvl)), 127);
+    CHECK_EQ(int(kit_value(kPoly, kLvl)), 0);            // the value this test set, untouched
 
     post(Cmd::macro_clear, 0, 0, 0);
     pump();
@@ -1714,8 +1985,9 @@ TEST(engine_a_macro_with_four_targets_refuses_a_fifth) {
     CHECK_EQ(int(refused() - before), 1);
     CHECK_EQ(macro_count(engine.macros().macros[1]), kMacroTargets);
 
-    // A parameter index no track has is not a target either.
-    post_macro_assign(2, 0, uint8_t(kParams), 0, 127);
+    // A parameter index no track has is not a target either (kTrackParams + 0-2 are the master
+    // EQ's bands, so the first one with no meaning is past them).
+    post_macro_assign(2, 0, uint8_t(kTrackParams + kMasterBands), 0, 127);
     pump();
     CHECK_EQ(macro_count(engine.macros().macros[2]), 0);
 }
@@ -2050,15 +2322,313 @@ TEST(engine_a_parameter_a_track_does_not_have_is_ignored) {
     pump();
     CHECK_EQ(int(kit_value(0, kLvl)), 127);        // clamped to the top of the range
 
-    post(Cmd::set_param, 0, 0, uint8_t(kParams), 5);
+    post(Cmd::set_param, 0, 0, uint8_t(kTrackParams), 5);
     post(Cmd::set_param, 0, 0, 200, 5);
     pump();
-    for (int p = 0; p < kParams; p++) CHECK(int(kit_value(0, p)) != 5);
+    for (int p = 0; p < kTrackParams; p++) CHECK(int(kit_value(0, p)) != 5);
 
     // And a lock on a parameter no track has is not stored either.
-    post(Cmd::lock_delta, 0, 0, uint8_t(kParams), uint8_t(int8_t(-1)));
+    post(Cmd::lock_delta, 0, 0, uint8_t(kTrackParams), uint8_t(int8_t(-1)));
     pump();
     CHECK_EQ(int(pattern_locks_reachable(engine.pattern())), 0);
+}
+
+// --- note repeat -----------------------------------------------------------------------------
+
+// A track with nothing on it, so every trigger counted is the roll's.
+void empty_track(Engine &engine, int track) {
+    for (int s = 0; s < kStepsPerTrack; s++) engine.project_for_load().live().tracks[track].steps[s].flags = 0;
+}
+
+TEST(engine_note_repeat_stopped_rolls_free_at_the_repeat_length) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(false);
+    FakeHost::the().set_tempo(120.0f);
+    empty_track(engine, kPoly);
+    pump();
+    // At 120 BPM a sixteenth is 0.125 s: 6,000 frames at 48 kHz.
+    const float period = 24.0f * kRate * 60.0f / (120.0f * 96.0f);
+    const uint8_t before = triggers(kPoly);
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 1);
+    pump();
+    CHECK_EQ(int(uint8_t(triggers(kPoly) - before)), 1);    // the press hits at once
+    CHECK(engine.rolling(kPoly));
+    const int blocks = int(4.0f * period / float(kBlk)) + 1;   // a little past four periods
+    for (int b = 1; b < blocks; b++) pump();
+    CHECK_EQ(int(uint8_t(triggers(kPoly) - before)), 5);
+
+    // Let go and it stops.
+    post(Cmd::note_repeat, kPoly, 0, 0, 0, 0);
+    const uint8_t at_release = triggers(kPoly);
+    for (int b = 0; b < blocks; b++) pump();
+    CHECK(!engine.rolling(kPoly));
+    CHECK_EQ(int(triggers(kPoly)), int(at_release));
+}
+
+TEST(engine_note_repeat_running_hits_the_grid_and_skips_a_flam) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kPoly);
+    tick_at(100);
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 1);
+    CHECK_EQ(fired_on(kPoly, 101), 1);          // the press, on the block it arrives
+    int hits = 0;
+    for (uint32_t t = 102; t <= 200; t++) hits += fired_on(kPoly, t);
+    CHECK_EQ(hits, 4);                           // 120, 144, 168, 192
+
+    // Pressed half a length or less before a grid tick, that tick is skipped: no flam.
+    post(Cmd::note_repeat, kPoly, 0, 0, 0, 0);
+    tick_at(205);
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 1);
+    CHECK_EQ(fired_on(kPoly, 210), 1);          // the press
+    CHECK_EQ(fired_on(kPoly, 216), 0);          // 6 ticks after the press: skipped
+    CHECK_EQ(fired_on(kPoly, 240), 1);
+    post(Cmd::note_repeat, kPoly, 0, 0, 0, 0);
+    pump();
+
+    // The length is beat repeat's: a thirty-second hits every 12 ticks.
+    post(Cmd::set_repeat, 0, 0, uint8_t(RepeatLength::thirty_second), 0, 0);
+    tick_at(300);
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 1);
+    pump();
+    hits = 0;
+    for (uint32_t t = 301; t <= 360; t++) hits += fired_on(kPoly, t);
+    CHECK_EQ(hits, 5);                           // 312, 324, 336, 348, 360
+    post(Cmd::note_repeat, kPoly, 0, 0, 0, 0);
+    post(Cmd::set_repeat, 0, 0, uint8_t(RepeatLength::sixteenth), 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_note_repeat_velocity_mute_and_refusal) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(false);
+    empty_track(engine, kPoly);
+    // Pressure on a pad that is not rolling changes nothing and starts nothing.
+    post(Cmd::note_repeat, kPoly, 0, 0, 90, 2);
+    pump();
+    CHECK(!engine.rolling(kPoly));
+    // A muted track rolls silently: the roll is held, nothing fires.
+    post(Cmd::set_mute, kPoly, 0, 1, 0);
+    const uint8_t before = triggers(kPoly);
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 1);
+    for (int b = 0; b < 400; b++) pump();
+    CHECK(engine.rolling(kPoly));
+    CHECK_EQ(int(triggers(kPoly)), int(before));
+    post(Cmd::note_repeat, kPoly, 0, 0, 0, 0);
+    post(Cmd::set_mute, kPoly, 0, 0, 0);
+    // An action past 2 is refused.
+    const uint32_t refusals = refused();
+    post(Cmd::note_repeat, kPoly, 0, 60, 100, 3);
+    pump();
+    CHECK_EQ(refused(), refusals + 1);
+    CHECK(!engine.rolling(kPoly));
+}
+
+// --- the arpeggiator --------------------------------------------------------------------------
+
+// The four ARP bytes on `track`, as the smallest byte of each zone (core/arp.hpp): MOD 1 = UP,
+// RAT 5 = 1/32, OCT 1 = one octave.
+void set_arp(uint8_t track, int mode, int rate, int octaves = 1, uint8_t gate = 0) {
+    auto smallest = [](int zone, int zones) { return uint8_t((zone * 128 + zones - 1) / zones); };
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 0), smallest(mode, int(ArpMode::count)));
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 1), smallest(rate, kArpRates));
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 2), smallest(octaves - 1, kArpMaxOctaves));
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 3), gate);
+    pump();
+}
+
+// One pass of a fresh pattern: 64 steps of 24 ticks.
+constexpr uint32_t kPass = uint32_t(kStepsPerTrack) * 24u;
+
+// Hits on `track` over ticks [from, to).
+int hits_between(int track, uint32_t from, uint32_t to) {
+    int hits = 0;
+    for (uint32_t t = from; t < to; t++) hits += fired_on(track, t);
+    return hits;
+}
+
+TEST(engine_arp_off_plays_a_step_once) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kMono);
+    put_trig(kMono, 0);
+    CHECK_EQ(hits_between(kMono, 0, kPass), 1);
+    CHECK(!engine.arp_running(kMono));
+    FakeHost::the().set_running(false);
+}
+
+TEST(engine_arp_a_step_hits_at_the_rate_for_its_length) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kMono);
+    put_trig(kMono, 0);
+    set_arp(kMono, 1, 5);                        // UP, 1/32: every 12 ticks
+    // A one-step length (24 ticks): 0 and 12, and not the next step's own tick.
+    CHECK_EQ(hits_between(kMono, 0, kPass), 2);
+    CHECK(!engine.arp_running(kMono));
+    // Every pass the same.
+    CHECK_EQ(hits_between(kMono, kPass, 2 * kPass), 2);
+    // Four steps (96 ticks): eight hits.
+    set_length_index(kMono, 0, 12);
+    CHECK_EQ(hits_between(kMono, 2 * kPass, 3 * kPass), 8);
+    // A 1/8 (48 ticks) over the same four steps: two.
+    set_arp(kMono, 1, 1);
+    CHECK_EQ(hits_between(kMono, 3 * kPass, 4 * kPass), 2);
+    // Back to OFF: the step plays once, as before.
+    set_arp(kMono, 0, 0);
+    CHECK_EQ(hits_between(kMono, 4 * kPass, 5 * kPass), 1);
+    FakeHost::the().set_running(false);
+}
+
+TEST(engine_arp_a_lock_on_mod_arps_one_step_only) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kMono);
+    put_trig(kMono, 0);
+    put_trig(kMono, 8);
+    set_arp(kMono, 0, 5);                        // OFF on the kit, 1/32
+    CHECK(pattern_set_lock(engine.project_for_load().live(), kMono, 8, uint8_t(kArpFirst), 22));
+    CHECK_EQ(hits_between(kMono, 0, 8 * 24), 1);         // step 0: one note
+    CHECK_EQ(hits_between(kMono, 8 * 24, 9 * 24), 2);    // step 8, locked UP: 2 hits
+    CHECK_EQ(hits_between(kMono, 9 * 24, kPass), 0);
+    FakeHost::the().set_running(false);
+}
+
+TEST(engine_arp_a_new_step_takes_over_and_stop_ends_it) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kMono);
+    put_trig(kMono, 0);
+    put_trig(kMono, 2);
+    set_length_index(kMono, 0, 16);              // 16 steps: longer than the gap to step 2
+    set_arp(kMono, 1, 3);                        // 1/16: every 24 ticks
+    // Step 0 hits on 0 and 24; step 2 restarts the run on 48 rather than adding to it.
+    CHECK_EQ(hits_between(kMono, 0, 48), 2);
+    CHECK_EQ(fired_on(kMono, 48), 1);
+    CHECK(engine.arp_running(kMono));
+    // A stop ends a sequenced run: nothing plays from it with the transport stopped.
+    post(Cmd::stop, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+    CHECK(!engine.arp_running(kMono));
+    const uint8_t before = triggers(kMono);
+    for (int b = 0; b < 400; b++) pump();
+    CHECK_EQ(int(triggers(kMono)), int(before));
+}
+
+TEST(engine_arp_on_a_chord_walks_its_notes_and_a_muted_track_stays_silent) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kPoly);
+    put_trig(kPoly, 0);
+    set_chord(kPoly, 0, ChordType::major);
+    set_length_index(kPoly, 0, 12);              // four steps
+    set_arp(kPoly, 1, 3);                        // UP, 1/16
+    // One note at a time: the step's first hit starts one voice, not the chord's three, and the
+    // four steps' length holds four hits.
+    CHECK_EQ(fired_on(kPoly, 0), 1);
+    CHECK_EQ(poly().sounding_voices(), 1);
+    CHECK_EQ(hits_between(kPoly, 1, 96), 3);
+    CHECK_EQ(hits_between(kPoly, kPass, kPass + 96), 4);
+    // Muted, the run carries on and plays nothing.
+    post(Cmd::set_mute, kPoly, 0, 1, 0);
+    CHECK_EQ(hits_between(kPoly, 2 * kPass, 2 * kPass + 96), 0);
+    post(Cmd::set_mute, kPoly, 0, 0, 0);
+    CHECK(!engine.arp_running(kPoly));
+    FakeHost::the().set_running(false);
+}
+
+TEST(engine_arp_held_keys_run_on_the_grid_and_stop_on_the_last_key_up) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kMono);
+    set_arp(kMono, 1, 3);                        // UP, 1/16
+    tick_at(100);
+    post(Cmd::trigger_note, kMono, 0, 60, 100, 1);
+    CHECK_EQ(fired_on(kMono, 101), 1);          // the first key hits at once
+    CHECK(engine.arp_running(kMono));
+    post(Cmd::trigger_note, kMono, 0, 64, 100, 1);
+    // A second key joins the cycle; it does not hit on its own.
+    CHECK_EQ(fired_on(kMono, 102), 0);
+    CHECK_EQ(hits_between(kMono, 103, 200), 4); // 120, 144, 168, 192
+    post(Cmd::release_note, kMono, 0, 60);
+    CHECK_EQ(hits_between(kMono, 200, 241), 2); // 216, 240: 64 alone, still running
+    post(Cmd::release_note, kMono, 0, 64);
+    pump();
+    CHECK(!engine.arp_running(kMono));
+    CHECK_EQ(hits_between(kMono, 241, 340), 0);
+
+    // A plain pad hit (no release to follow) plays once even with the arp on.
+    post(Cmd::trigger_note, kMono, 0, 60, 100, 0);
+    CHECK_EQ(fired_on(kMono, 341), 1);
+    CHECK(!engine.arp_running(kMono));
+    CHECK_EQ(hits_between(kMono, 342, 440), 0);
+    FakeHost::the().set_running(false);
+}
+
+TEST(engine_arp_held_keys_run_free_while_stopped_and_follow_the_page) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(false);
+    FakeHost::the().set_tempo(120.0f);
+    empty_track(engine, kMono);
+    set_arp(kMono, 1, 3);                        // 1/16: 6,000 frames at 120 BPM
+    const float period = 24.0f * kRate * 60.0f / (120.0f * 96.0f);
+    const uint8_t before = triggers(kMono);
+    post(Cmd::trigger_note, kMono, 0, 60, 100, 1);
+    pump();
+    CHECK_EQ(int(uint8_t(triggers(kMono) - before)), 1);
+    const int blocks = int(4.0f * period / float(kBlk)) + 1;
+    for (int b = 1; b < blocks; b++) pump();
+    CHECK_EQ(int(uint8_t(triggers(kMono) - before)), 5);
+
+    // RAT turned while the key is down: 1/32 from here on.
+    set_arp(kMono, 1, 5);
+    const uint8_t faster = triggers(kMono);
+    for (int b = 0; b < blocks; b++) pump();
+    const int hits = int(uint8_t(triggers(kMono) - faster));
+    CHECK(hits >= 7 && hits <= 9);
+
+    // MOD to OFF ends the run, with the key still down.
+    set_arp(kMono, 0, 5);
+    pump();
+    CHECK(!engine.arp_running(kMono));
+    const uint8_t off = triggers(kMono);
+    for (int b = 0; b < blocks; b++) pump();
+    CHECK_EQ(int(triggers(kMono)), int(off));
+    post(Cmd::release_note, kMono, 0, 60);
+    pump();
+}
+
+TEST(engine_release_note_lets_a_held_note_go_early) {
+    // KEYS mode's key release. A pad note on VA POLY with DEC at the top rings for seconds; let
+    // go after ten blocks, it is silent long before that.
+    int held = -1;
+    clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 127);
+    post(Cmd::trigger_note, kPoly, 0, 60, 100);
+    for (int b = 0; b < 8000; b++) {
+        pump();
+        if (poly().sounding_voices() == 0) {
+            held = b;
+            break;
+        }
+    }
+
+    int released = -1;
+    clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 127);
+    post(Cmd::trigger_note, kPoly, 0, 60, 100);
+    post(Cmd::trigger_note, kPoly, 0, 67, 100);
+    for (int b = 0; b < 10; b++) pump();
+    post(Cmd::release_note, kPoly, 0, 60);
+    for (int b = 10; b < 8000; b++) {
+        pump();
+        if (released < 0 && poly().sounding_voices() == 1) released = b;
+    }
+    CHECK(held > 100);
+    CHECK(released > 0);
+    CHECK(released < held / 2);
 }
 
 TEST(engine_a_command_it_does_not_handle_changes_nothing) {
@@ -2321,11 +2891,8 @@ TEST(engine_clearing_a_sample_bumps_the_epoch_even_for_a_track_that_has_none) {
     }
 
     // A sample goes to the track's Sampler and Grain whatever the track hosts, so a POLY track
-    // takes it too -- and both are refused here, because app/app.cpp is what hands the
-    // engine its sample region and host/Makefile does not build app/app.cpp. So
-    // `sample_region_ == nullptr` and the offset, frame-count and alignment checks cannot be
-    // reached from the host at all; what they guard is the pool arithmetic on the other side of
-    // the ring, which tests/test_samplepool.cpp covers.
+    // takes it too. These two carry no frames, which is refused whatever the region; the
+    // bounds against the region are tests/test_engine_gaps.cpp's.
     uint32_t before = refused();
     post(Cmd::set_sample, kPoly, 0, 1);
     pump();
@@ -2334,4 +2901,363 @@ TEST(engine_clearing_a_sample_bumps_the_epoch_even_for_a_track_that_has_none) {
     post(Cmd::set_sample, 7, 0, 1);
     pump();
     CHECK_EQ(int(refused() - before), 1);
+}
+
+// --- prepare only on change ----------------------------------------------------------------------
+
+// app/engine.cpp's prepare memo claims to be bit-exact by construction. This holds it to that:
+// two engines, initialised identically, one preparing every block as before and one skipping
+// unchanged prepares, fed the same ticks and the same commands -- the default beat with its
+// locks and chord, knobs moving mid-note, machine switches, a sample load, a mute, a kit recall
+// from the browser and a project load -- must produce the same bits.
+//
+// Two engines rather than the rig's one rendered twice, because the rig's engine carries state
+// between renders (oscillator phases, noise generators, the delay line) that no command resets,
+// so the same passage rendered twice on it does not hash the same even with nothing changed.
+TEST(engine_skipping_an_unchanged_prepare_is_bit_exact) {
+    static Engine *every_block = nullptr;
+    static Engine *on_change = nullptr;
+    if (every_block == nullptr) {
+        every_block = new Engine;
+        on_change = new Engine;
+        FakeHost::the().reset();
+        FakeHost::the().set_tempo(130.0f);
+        CHECK(every_block->init(kRate));
+        CHECK(on_change->init(kRate));
+        // A sample region of their own, so a real set_sample can land (the rig has none): one
+        // second of a decaying saw, longer than the 0.4 s placeholder every machine starts with.
+        static int16_t region[48000];
+        for (int i = 0; i < 48000; i++) {
+            region[i] = int16_t((i % 211) * 150 - 15000) * int16_t(1 + (48000 - i) / 12000) / 4;
+        }
+        every_block->set_sample_region(region, sizeof region);
+        on_change->set_sample_region(region, sizeof region);
+    }
+    every_block->set_prepare_memo(false);
+    on_change->set_prepare_memo(true);
+    Engine *const engines[2] = {every_block, on_change};
+
+    auto post_both = [&](Cmd cmd, uint8_t track, uint8_t step, uint8_t a, uint8_t b) {
+        Command command;
+        command.cmd = cmd;
+        command.track = track;
+        command.step = step;
+        command.a = a;
+        command.b = b;
+        for (Engine *e : engines) CHECK(e->commands().post(command));
+    };
+    post_both(Cmd::set_param, 0, 0, kFilterMod, 40);      // a filter on two tracks, so the
+    post_both(Cmd::set_param, kMono, 0, kFilterMod, 100); // chain's coefficients count too
+    post_both(Cmd::set_param, 1, 0, kSendA, 90);
+    post_both(Cmd::set_param, 2, 0, kSendB, 90);
+    post_both(Cmd::lock_delta, kPoly, 4, kDec, uint8_t(int8_t(-40)));
+    post_both(Cmd::lock_delta, 0, 8, kDrv, uint8_t(int8_t(60)));
+
+    // A kit for the browser's recall: the live one with a different machine on two tracks and
+    // other knobs, so the recall moves machines, parameters and faders at once.
+    auto stage_recall = [&]() {
+        for (Engine *e : engines) {
+            Kit &kit = e->kit_for_recall();
+            kit = e->project().kit;
+            kit.tracks[4].machine = uint8_t(MachineId::va_mono);
+            kit.tracks[5].params[2] = 20;       // VA CUT
+            kit.tracks[1].params[8] = 110;      // SNARE DEC
+            kit.tracks[1].level = 0.6f;
+        }
+    };
+
+    FakeHost::the().set_running(true);
+    const double frames_per_tick = double(kRate) * 60.0 / (130.0 * 96.0);
+    double next = 0.0;
+    uint32_t tick = 0;
+    float out[2][kStereo];
+    float peak = 0.0f;
+    int differing = 0;
+    // One bar is about 1,385 blocks at 130 BPM, so each event below has notes around it.
+    for (int b = 0; b < 6000; b++) {
+        if (b == 300) post_both(Cmd::set_param, kMono, 0, kDec, 100);     // a knob, mid-note
+        if (b == 500) post_both(Cmd::set_machine, 4, 0, uint8_t(MachineId::va_poly), 0);
+        if (b == 700) post_both(Cmd::set_param, kPoly, 0, kLvl, 90);
+        // GRAIN on the loop track with SPR at the top, prepared against the 0.4 s placeholder,
+        // which clamps the spray to the sample's length. A longer sample later lifts the clamp
+        // only if the machine is prepared again: an input to prepare() that is not a parameter,
+        // which is the case the memo's reset on every command exists for.
+        if (b == 900) post_both(Cmd::set_machine, 7, 0, uint8_t(MachineId::grain), 0);
+        if (b == 910) post_both(Cmd::set_param, 7, 0, 3, 127);
+        if (b == 2600) {
+            Command load;
+            load.cmd = Cmd::set_sample;
+            load.track = 7;
+            load.a = 1;
+            load.u = 0;
+            load.c = uint8_t(48000 & 0xFF);
+            load.d = uint8_t((48000 >> 8) & 0xFF);
+            load.e = uint8_t(48000 >> 16);
+            for (Engine *e : engines) CHECK(e->commands().post(load));
+        }
+        if (b == 3400) post_both(Cmd::set_mute, 3, 0, 1, 0);
+        if (b == 3600) {
+            stage_recall();
+            post_both(Cmd::kit_recall, 0, 0, 1, 0);       // the kit browser
+        }
+        if (b == 4400) post_both(Cmd::project_loaded, 0, 0, 0, 0);   // the live project, again
+        if (b == 5000) post_both(Cmd::set_machine, 7, 0, uint8_t(MachineId::sample), 0);
+        const double block_start = double(b * kBlk);
+        for (int e = 0; e < 2; e++) {
+            // The fake hands its tick queue out once, so each engine is given the block's ticks.
+            for (double t = next; t < block_start + double(kBlk); t += frames_per_tick) {
+                FakeHost::the().deliver_tick(tick + uint32_t((t - next) / frames_per_tick + 0.5),
+                                             uint32_t(t - block_start));
+            }
+            engines[e]->process(nullptr, out[e], uint32_t(kBlk));
+        }
+        while (next < block_start + double(kBlk)) {
+            next += frames_per_tick;
+            tick++;
+        }
+        for (int i = 0; i < kStereo; i++) {
+            if (__builtin_memcmp(&out[0][i], &out[1][i], sizeof(float)) != 0) differing++;
+        }
+        const float p = peak_of(out[0], kStereo);
+        if (p > peak) peak = p;
+    }
+    FakeHost::the().set_running(false);
+
+    CHECK_EQ(differing, 0);
+    // Every command landed, the sample included: a refused set_sample would test nothing.
+    CHECK_EQ(int(on_change->status().refused.load(std::memory_order_relaxed)), 0);
+    // And the passage really sounds: two silent renders would agree whatever the memo did.
+    CHECK(peak > 0.1f);
+}
+
+// --- the shared voice budget ---------------------------------------------------------------------
+
+namespace {
+
+int poly_voices_counted() {
+    int n = 0;
+    for (int t = 0; t < kTracks; t++) {
+        const Machine *m = strata::test::engine().machine(t);
+        if (m != nullptr && strata::test::engine().project().kit.tracks[t].machine ==
+                                uint8_t(MachineId::va_poly)) {
+            n += static_cast<const VaPoly *>(m)->budget_voices();
+        }
+    }
+    return n;
+}
+
+}  // namespace
+
+// A note that takes over a voice still fading from a choke is a voice from the moment it takes
+// it, like any other pending trig. It used to go uncounted until its frame came, because a
+// choking voice is not counted, so a later note in the same block found room that was not there
+// and the budget ended the block one voice over. The case is an ordinary one: a chord repeated
+// on its next step while a third POLY track has just choked one of its notes.
+TEST(engine_a_note_on_a_choking_voice_counts_against_the_budget_at_once) {
+    clean();
+    const uint8_t tracks[3] = {2, 3, 4};
+    uint8_t was[3];
+    for (int i = 0; i < 3; i++) {
+        was[i] = strata::test::engine().project().kit.tracks[tracks[i]].machine;
+        post(Cmd::set_machine, tracks[i], 0, uint8_t(MachineId::va_poly));
+        post(Cmd::set_param, tracks[i], 0, kDec, 127);
+    }
+    pump();
+
+    // Two full chords, started: the budget is spent.
+    for (int i = 0; i < 2; i++) {
+        for (int n = 0; n < VaPoly::kVoices; n++) {
+            post(Cmd::trigger_note, tracks[i], 0, uint8_t(48 + 2 * n), 100);
+        }
+    }
+    pump(4);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+
+    // One block: a note on the third track chokes a voice of the first; the first track
+    // repeats that voice's note, which takes the fading voice back; and the third track plays
+    // one more note.
+    post(Cmd::trigger_note, tracks[2], 0, 72, 100);
+    for (int n = 0; n < VaPoly::kVoices; n++) {
+        post(Cmd::trigger_note, tracks[0], 0, uint8_t(48 + 2 * n), 100);
+    }
+    post(Cmd::trigger_note, tracks[2], 0, 74, 100);
+    pump();
+    CHECK(poly_voices_counted() <= Engine::kPolyVoiceBudget);
+    pump(4);                                   // every note has started, every fade is over
+    int sounding = 0;
+    for (int i = 0; i < 3; i++) {
+        sounding += static_cast<const VaPoly *>(strata::test::engine().machine(tracks[i]))
+                        ->sounding_voices();
+    }
+    CHECK(sounding <= Engine::kPolyVoiceBudget);
+    CHECK_EQ(poly_voices_counted(), sounding);
+
+    for (int i = 0; i < 3; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
+    pump();
+}
+
+TEST(engine_the_shared_voice_budget_caps_va_poly_across_tracks) {
+    clean();
+    // Four POLY tracks with long notes, so nothing ends on its own during the test.
+    const uint8_t tracks[4] = {2, 3, 4, kPoly};
+    uint8_t was[4];
+    for (int i = 0; i < 4; i++) {
+        was[i] = strata::test::engine().project().kit.tracks[tracks[i]].machine;
+        post(Cmd::set_machine, tracks[i], 0, uint8_t(MachineId::va_poly));
+        post(Cmd::set_param, tracks[i], 0, kDec, 127);
+    }
+    pump();
+    CHECK_EQ(poly_voices_counted(), 0);
+
+    // Six notes on each of the four tracks in one block: 24 asked for. The first twelve take
+    // the budget; the other twelve find every counted voice still waiting for its frame, so
+    // there is nothing to fade, and they are dropped rather than let the total grow.
+    for (int i = 0; i < 4; i++) {
+        for (int n = 0; n < VaPoly::kVoices; n++) {
+            post(Cmd::trigger_note, tracks[i], 0, uint8_t(48 + 2 * n), 100);
+        }
+    }
+    pump();
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+    pump(20);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+
+    // Now everything counted has started. Six more notes on a track with none sounding each
+    // fade out the quietest voice elsewhere, so they sound and the total stays at the budget.
+    const VaPoly &last = *static_cast<const VaPoly *>(strata::test::engine().machine(kPoly));
+    CHECK_EQ(last.busy_voices(), 0);
+    for (int n = 0; n < VaPoly::kVoices; n++) {
+        post(Cmd::trigger_note, kPoly, 0, uint8_t(72 + n), 100);
+    }
+    pump();
+    CHECK_EQ(last.busy_voices(), VaPoly::kVoices);
+    CHECK(poly_voices_counted() <= Engine::kPolyVoiceBudget);
+    pump(2);                                   // the fades (64 frames) are over
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+    int sounding = 0;
+    for (int i = 0; i < 4; i++) {
+        sounding += static_cast<const VaPoly *>(strata::test::engine().machine(tracks[i]))
+                        ->sounding_voices();
+    }
+    CHECK_EQ(sounding, Engine::kPolyVoiceBudget);   // the faded ones really stopped
+
+    // A retrigger of a note already sounding costs nothing extra and chokes nothing.
+    post(Cmd::trigger_note, kPoly, 0, 72, 100);
+    pump();
+    CHECK_EQ(last.busy_voices(), VaPoly::kVoices);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+
+    for (int i = 0; i < 4; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
+    pump();
+}
+
+// A lock lasts exactly as long as its step, and a stopped transport has no step playing. The
+// mask of locked parameters used to outlive the stop, so the performance layer stayed shut out
+// of every parameter the last step had locked: with the transport stopped, a macro (or the
+// morph) on such a parameter moved the screen and not the sound, and a pad played the old
+// step's lock. Stopping ends the step, so it ends its locks.
+TEST(engine_a_stop_ends_the_last_steps_locks_so_a_macro_reaches_them) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::set_param, 0, 0, kLvl, 100);
+    put_trig(0, 0);
+
+    host.set_running(true);
+    host.deliver_tick(0, 0);
+    pump();
+    // A lock taking the level to 0 on the step that is playing: heard at once, and masked.
+    post(Cmd::lock_delta, 0, 0, kLvl, uint8_t(int8_t(-100)));
+    pump();
+
+    host.set_running(false);
+    post(Cmd::stop, 0, 0, 1);
+    pump();
+    CHECK(settle());
+
+    // Macro B takes the level from the kit's 100 to 127.
+    post_macro_assign(1, 0, kLvl, 100, 127);
+    post(Cmd::set_macro, 0, 0, 1, 127);
+    pump();
+    CHECK_EQ(int(strata::test::engine().performed(0, kLvl)), 127);
+
+    // A pad on the track: it sounds at the macro's level, not at the dead step's lock of 0.
+    post(Cmd::trigger_note, 0, 0, 60, 100);
+    CHECK(energy(20) > 0.01f);
+
+    post(Cmd::macro_clear, 0, 0, 1);
+    post(Cmd::set_macro, 0, 0, 1, 0);
+    pump();
+}
+
+// --- the master kill EQ through the performance layer ------------------------------------------
+
+// A macro on an EQ band sweeps it from the knob towards the far end, and at 0 lets go; the kill
+// switches stay the panel's whatever the macro does.
+TEST(engine_a_macro_on_the_master_eq_sweeps_a_band_and_lets_go) {
+    Engine &engine = clean();
+    strata::test::set_master_byte(uint8_t(MasterField::eq_low), 64);
+    post_macro_assign(3, 0, uint8_t(kTrackParams + 0), 64, 0);         // LOW, towards a kill
+    pump();
+    CHECK_EQ(macro_count(engine.macros().macros[3]), 1);
+    CHECK_EQ(int(engine.macros().macros[3].targets[0].track), int(kMacroMasterTrack));
+    CHECK_EQ(engine.master().eq_low, 1.0f);
+
+    post(Cmd::set_macro, 0, 0, 3, 127);
+    pump();
+    CHECK_EQ(int(engine.performed_master(0)), 0);
+    CHECK_EQ(engine.master().eq_low, 0.0f);
+    CHECK_EQ(engine.master().eq_mid, 1.0f);
+    // The knob underneath is unchanged: a macro is a hand on top, not an edit.
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_low)]), 64);
+
+    post(Cmd::set_macro, 0, 0, 3, 0);
+    pump();
+    CHECK_EQ(engine.master().eq_low, 1.0f);
+
+    // Turning the knob with the macro at rest moves the band, as for a track parameter.
+    strata::test::set_master_byte(uint8_t(MasterField::eq_low), 32);
+    pump();
+    CHECK_EQ(int(engine.performed_master(0)), 32);
+    CHECK_NEAR(engine.master().eq_low, 0.25f, 1e-6);
+
+    post(Cmd::macro_clear, 0, 0, 3);
+    strata::test::set_master_byte(uint8_t(MasterField::eq_low), 64);
+    pump();
+}
+
+// A whole capture stores the EQ's knobs; morphing to it sweeps them. A one-track capture does not.
+TEST(engine_a_scene_captures_and_morphs_the_master_eq) {
+    Engine &engine = clean();
+    post(Cmd::scene_erase, 0, 0, 0);
+    post(Cmd::scene_erase, 0, 0, 1);
+    post(Cmd::scene_select, 0, 0, 0, 0);
+    post(Cmd::scene_select, 0, 0, 1, 1);
+    strata::test::set_master_byte(uint8_t(MasterField::eq_high), 0);    // HI cut in scene 1
+    post(Cmd::scene_capture, 0, 0, 1, 0);
+    pump();
+    CHECK_EQ(int(engine.scenes().scenes[1].master_stored), 0x7);
+    CHECK_EQ(int(engine.scenes().scenes[1].master[2]), 0);
+
+    strata::test::set_master_byte(uint8_t(MasterField::eq_high), 64);   // the knob back to flat
+    Command morph;
+    morph.cmd = Cmd::set_morph;
+    morph.u = kMorphScale;
+    strata::test::engine().commands().post(morph);
+    pump();
+    CHECK_EQ(int(engine.performed_master(2)), 0);
+    CHECK_EQ(engine.master().eq_high, 0.0f);
+
+    morph.u = 0;
+    strata::test::engine().commands().post(morph);
+    pump();
+    CHECK_EQ(engine.master().eq_high, 1.0f);
+
+    // One track's capture leaves the EQ out of the scene.
+    post(Cmd::scene_capture, 2, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.scenes().scenes[0].master_stored), 0);
+
+    post(Cmd::scene_erase, 0, 0, 0);
+    post(Cmd::scene_erase, 0, 0, 1);
+    pump();
 }

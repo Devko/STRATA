@@ -1063,6 +1063,49 @@ TEST(va_a_cached_coefficient_is_bit_identical_to_a_computed_one) {
     CHECK(cache.count <= VaFilterCache::kEntries);
 }
 
+TEST(va_cached_oscillator_increments_are_bit_identical_to_computed_ones) {
+    // dsp/va.cpp computes the oscillators' dt and 1/dt only when the pitch has moved. Before
+    // every slice a copy of the voice is told to forget them, so it computes them afresh; the
+    // two must agree bit for bit through a held note (every step a hit) and a glide (every step
+    // a miss), and through a glide that arrives and holds again.
+    constexpr int n = VaVoice::kControl;
+    const TrackParams p = patch();
+    VaSettings settings = VaSettings::make(p, 48000.0f, 1.0f / 48000.0f);
+    settings.glide_coef = 0.2f;                 // a glide that arrives within the test
+
+    VaVoice voice;
+    voice.reset();
+    voice.seed(0x51F3A27Du);
+    voice.set_pitch(48.0f);
+    voice.set_target(48.0f);
+    voice.set_note(100.0f / 127.0f, false, false);
+    voice.gate_on();
+
+    float work[n];
+    float env[n];
+    int compared = 0;
+    float before_last = 0.0f;
+    for (int slice = 0; slice < 120; slice++) {
+        if (slice == 119) before_last = voice.pitch();
+        if (slice == 30) voice.set_target(60.0f);   // glide up, then hold
+        VaVoice fresh = voice;
+        fresh.forget_increments();
+        float out_cached[n] = {};
+        float out_fresh[n] = {};
+        voice.run(settings, out_cached, n, work, env, nullptr);
+        fresh.run(settings, out_fresh, n, work, env, nullptr);
+        for (int i = 0; i < n; i++) {
+            CHECK(out_cached[i] == out_fresh[i]);
+            compared++;
+        }
+    }
+    CHECK_EQ(compared, 120 * n);
+    // The glide settled -- a one-pole stops moving once its step is under half an ulp -- so the
+    // last slices were hits, and the glide before them misses: both paths were compared.
+    CHECK(voice.pitch() == before_last);
+    CHECK(voice.pitch() > 59.99f);
+}
+
 TEST(va_an_accented_voice_does_not_read_an_unaccented_voices_coefficients) {
     // The accent is part of the key because it moves both the cutoff and the resonance. A cache
     // that keyed on the envelope alone would hand an accented voice the plain voice's filter --
@@ -1095,4 +1138,168 @@ TEST(va_an_accented_voice_does_not_read_an_unaccented_voices_coefficients) {
 
     for (int i = 0; i < n; i++) CHECK(out_accented[i] == out_alone[i]);
     CHECK_EQ(cache.count, 2);                                        // two keys, not one
+}
+
+// --- release(note): KEYS mode letting a key go --------------------------------------------------
+
+TEST(va_releasing_the_sounding_note_is_a_release_and_another_note_is_ignored) {
+    const TrackParams p = patch();
+    constexpr int kHeld = 12;
+    const int blocks = blocks_for(1.0f);
+    float *buffers[2] = {g_a, g_b};
+    for (int pass = 0; pass < 2; pass++) {
+        VaMono va;
+        va.init(kRate);
+        va.prepare(p);
+        va.trigger(hit(60));
+        clear(buffers[pass], blocks * kBlk);
+        render(va, p, buffers[pass], kHeld);
+        if (pass == 0) va.release_all(); else va.release(60);
+        render(va, p, buffers[pass] + kHeld * kBlk, blocks - kHeld);
+    }
+    bool same = true;
+    for (int i = 0; i < blocks * kBlk; i++) same = same && g_a[i] == g_b[i];
+    CHECK(same);
+
+    // A key that is not the sounding note (the voice moved on to another) changes nothing.
+    for (int pass = 0; pass < 2; pass++) {
+        VaMono va;
+        va.init(kRate);
+        va.prepare(p);
+        va.trigger(hit(60));
+        clear(buffers[pass], blocks * kBlk);
+        render(va, p, buffers[pass], kHeld);
+        if (pass == 1) va.release(55);
+        render(va, p, buffers[pass] + kHeld * kBlk, blocks - kHeld);
+    }
+    same = true;
+    for (int i = 0; i < blocks * kBlk; i++) same = same && g_a[i] == g_b[i];
+    CHECK(same);
+}
+
+TEST(va_a_note_released_before_its_frame_does_not_hang) {
+    // As for the sampler: a press and release inside one block is not something the key scan
+    // delivers; what matters is that the voice is let go.
+    TrackParams p = patch();
+    VaMono va;
+    va.init(kRate);
+    va.prepare(p);
+    va.trigger(hit(60, 100, false, false, 40));
+    va.release(60);
+    const int blocks = blocks_for(1.9f);
+    clear(g_a, blocks * kBlk);
+    const int n = render(va, p, g_a, blocks);
+    CHECK(peak(g_a + n - 8 * kBlk, 8 * kBlk) < 1e-4f);
+    CHECK(!va.active());
+}
+
+TEST(va_a_choked_voice_fades_out_and_stops) {
+    constexpr int n = VaVoice::kControl;
+    const TrackParams p = patch();
+    const VaSettings settings = VaSettings::make(p, 48000.0f, 1.0f / 48000.0f);
+    VaVoice voice;
+    voice.reset();
+    voice.set_pitch(48.0f);
+    voice.set_target(48.0f);
+    voice.set_note(1.0f, false, false);
+    voice.gate_on();
+    float work[n];
+    float env[n];
+    float out[n];
+    for (int slice = 0; slice < 40; slice++) {          // well into the note
+        clear(out, n);
+        voice.run(settings, out, n, work, env, nullptr);
+    }
+    CHECK(voice.sounding());
+    const float before = peak(out, n);
+    CHECK(before > 0.05f);
+
+    voice.choke();
+    CHECK(voice.choking());
+    float fade[VaVoice::kChokeFrames];
+    clear(fade, VaVoice::kChokeFrames);
+    for (int at = 0; at < VaVoice::kChokeFrames; at += n) {
+        voice.run(settings, fade + at, n, work, env, nullptr);
+    }
+    // Faded, not cut: the last slice is far quieter than the note, and then it is over.
+    CHECK(peak(fade + VaVoice::kChokeFrames - n, n) < 0.3f * before);
+    CHECK(!voice.sounding());
+    CHECK(!voice.choking());
+
+    // And a choked voice taken for a new note is a new note, not a fade.
+    voice.gate_on();
+    voice.run(settings, out, n, work, env, nullptr);
+    voice.choke();
+    voice.gate_on();
+    CHECK(!voice.choking());
+}
+
+// The fused back half (dsp/valoops.ti.c, strata_va_back) against the three passes it replaced,
+// with the Enaga functions themselves as the reference: every filter mode, every envelope stage,
+// and slices in which the envelope changes stage (attack peaks into decay, decay settles into
+// sustain, release reaches zero and goes idle) -- the flags carried through the loop are the part
+// most easily got subtly wrong. Compared with memcmp, so even a -0.0 for a 0.0 fails.
+TEST(va_the_fused_back_half_is_bit_exact_against_filter_envelope_and_tail) {
+    constexpr int kN = 16;
+    enaga_svf_coefficients c1, c2;
+    {
+        const float g = 0.35f;
+        const float a1 = enaga_reciprocal(1.0f + g * (g + 1.0f));
+        c1 = {a1, g * a1, g * g * a1, 1.0f};
+        const float b1 = enaga_reciprocal(1.0f + g * (g + 0.1f));
+        c2 = {b1, g * b1, g * g * b1, 0.1f};    // resonant: the soft clip gets pushed
+    }
+    // Fast enough that each stage boundary falls inside one 16-sample slice somewhere.
+    const enaga_envelope_shape shapes[] = {{0.3f, 0.2f, 0.0f, 0.25f}, {0.05f, 0.01f, 0.4f, 0.02f}};
+    const int starts[] = {ENAGA_ENV_ATTACK, ENAGA_ENV_DECAY, ENAGA_ENV_SUSTAIN, ENAGA_ENV_RELEASE,
+                          ENAGA_ENV_IDLE};
+    const float levels[] = {0.0f, 0.9f, 0.4f, 0.03f};
+
+    int compared = 0;
+    for (int mode = STRATA_VA_LP24; mode <= STRATA_VA_HP12; mode++) {
+        for (const enaga_envelope_shape &shape : shapes) {
+            for (int start : starts) {
+                for (float level : levels) {
+                    enaga_svf ra{0.01f, -0.02f}, rb{0.2f, 0.1f}, fa = ra, fb = rb;
+                    enaga_envelope ramp{start, level}, famp = ramp;
+                    float rbus[kN], fbus[kN];
+                    for (int i = 0; i < kN; i++) rbus[i] = fbus[i] = 0.25f - float(i) * 0.03f;
+                    uint32_t seed = 0xC0FFEEu + uint32_t(mode * 131 + start * 7);
+                    float gain = 0.2f;
+                    // Twelve slices of different lengths through one voice: state carries.
+                    for (int slice = 0; slice < 12; slice++) {
+                        const int n = 1 + (slice * 5) % kN;
+                        float work[kN], ref_work[kN], env[kN];
+                        for (int i = 0; i < n; i++) {
+                            work[i] = enaga_bipolar(enaga_xorshift(&seed)) * 1.7f;
+                            ref_work[i] = work[i];
+                        }
+                        const float step = (slice % 3 == 0 ? -0.01f : 0.004f);
+                        // The reference: va.cpp's three passes, through Enaga's own functions.
+                        if (mode == STRATA_VA_LP24) {
+                            enaga_svf_cascade(&ra, &c1, &rb, &c2, ENAGA_SVF_LOW, ref_work, ref_work,
+                                              n);
+                        } else {
+                            enaga_svf_process(&rb, &c2, mode - STRATA_VA_LP12, ref_work, ref_work,
+                                              n);
+                        }
+                        enaga_envelope_render(&ramp, &shape, env, n);
+                        strata_va_tail(rbus, ref_work, env, n, 1.3f, gain, step);
+                        // The fused kernel.
+                        strata_va_back(fbus, work, n, mode, &fa, &c1, &fb, &c2, &famp, &shape,
+                                       1.3f, gain, step);
+                        gain += step * float(n);
+
+                        CHECK(std::memcmp(rbus, fbus, sizeof rbus) == 0);
+                        CHECK(std::memcmp(&ra, &fa, sizeof ra) == 0);
+                        CHECK(std::memcmp(&rb, &fb, sizeof rb) == 0);
+                        CHECK_EQ(famp.stage, ramp.stage);
+                        CHECK(std::memcmp(&famp.level, &ramp.level, sizeof(float)) == 0);
+                        compared++;
+                    }
+                }
+            }
+        }
+    }
+    CHECK_EQ(compared, 4 * 2 * 5 * 4 * 12);
 }

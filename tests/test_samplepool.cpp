@@ -845,3 +845,27 @@ TEST(samplepool_survives_churn_without_handing_out_the_same_bytes_twice) {
     CHECK(pool.reserve(0, 32 * kMib));
     CHECK(sane(pool));
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(an_empty_pool_can_shrink_to_nothing_and_grow_again) {
+    SamplePool pool;
+    pool.init(8 * kMib);
+    CHECK(pool.set_budget(0));
+    CHECK_EQ(pool.largest_free(), 0u);
+    CHECK(!pool.reserve(0, 2));
+    CHECK(pool.set_budget(8 * kMib));
+    CHECK_EQ(pool.largest_free(), 8u * kMib);
+}
+
+TEST(a_one_byte_range_is_given_back_like_any_other) {
+    // Nothing in app/ asks for an odd size, but the free list must not lose a byte when one is.
+    SamplePool pool;
+    pool.init(1 * kMib);
+    CHECK(pool.reserve(0, 1));
+    CHECK(pool.reserve(1, 1000));
+    pool.release(0);
+    pool.release(1);
+    CHECK_EQ(pool.largest_free(), 1u * kMib);
+    CHECK(pool.reserve(2, 1 * kMib));
+}

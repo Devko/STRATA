@@ -55,6 +55,7 @@
 
 #include <enaga/dsp.hpp>
 
+#include "streamfifo.hpp"
 #include "track.hpp"
 
 namespace strata {
@@ -65,6 +66,7 @@ public:
     void prepare(const TrackParams &params) override;
     void trigger(const Trig &trig) override;
     void release_all() override;
+    void release(uint8_t note) override;
     void kill_all() override;
     void render_add(float *out, int frames) override;
     bool active() const override { return active_; }
@@ -73,6 +75,29 @@ public:
     // Hand the machine already-resident PCM. See the ownership rules at the top of this file.
     // Passing nullptr (or frames < kMinFrames, or channels outside 1-2) leaves the track silent.
     void set_sample(const int16_t *data, uint32_t frames, int channels, float source_rate);
+
+    // A STREAMED sample (app/storage.hpp, "Streaming"): `head` is its first `head_frames`,
+    // resident like any sample, and the rest arrives in `fifo`, numbered as in the file, which
+    // the engine fills from the card every block. Same ownership rules as set_sample, for the
+    // head and for the fifo. `source_rate` is the file's own: a streamed file is played at its
+    // rate rather than resampled, because nothing converts it ahead of time.
+    //
+    // A streamed sample plays forward from its first frame, on one voice: START, LEN, SLC and
+    // reverse do not apply, since each would need the stream to jump, and an Enaga stream only
+    // reads on. PIT, the trig note, the envelope, LVL and loop do. Each time playback goes back to
+    // frame 0 -- a trigger, or a loop wrapping -- the fifo is emptied and `stream_restarts()`
+    // moves, which is the engine's signal to have the stream reopened after the head.
+    // set_sample (or a nullptr head) leaves stream mode.
+    void set_stream(const int16_t *head, uint32_t head_frames, uint32_t total_frames, int channels,
+                    float source_rate, StreamFifo *fifo);
+    bool streaming() const { return fifo_ != nullptr; }
+    uint32_t stream_restarts() const { return restarts_; }
+    // Taps the fifo did not have when the voice wanted them: the card was late. They play as
+    // silence and time goes on, so the loop stays on the beat.
+    uint32_t stream_late() const { return late_; }
+    // Where the stream voice is, in file frames, for the engine's drop and for tests.
+    uint32_t stream_position() const { return uint32_t(voices_[0].pos); }
+    uint32_t stream_frames() const { return stream_total_; }
 
     // For the UI's voice count (docs/SPEC.md publishes one every block) and for tests.
     int playing_voices() const {
@@ -101,6 +126,9 @@ public:
     static constexpr int kMinFrames = 4;
     // Index math stays in int32 -- 67M frames is 128 MiB mono, twice the whole sample budget.
     static constexpr int kMaxFrames = 1 << 26;
+    // A streamed file's length: 2^30 frames is over six hours at 48 kHz, and the position
+    // (pos + 2 taps + a 32-frame step) stays well inside int32.
+    static constexpr uint32_t kMaxStreamFrames = 1u << 30;
     // Note 60 is slice 0 and the untransposed pitch, the same root the drum machines use.
     static constexpr int kRootNote = 60;
 
@@ -137,6 +165,7 @@ private:
         int fade = 0;           // frames of fade left, 0 when not fading
         int wait = 0;           // frames until `next` starts
         bool pending = false;
+        bool release_on_start = false;   // released before its frame: let go once it starts
         Trig next{};
 
         // An Envelope with sustain 0 parks in the `sustain` stage rather than reaching `idle`
@@ -161,6 +190,12 @@ private:
     // and the mono case does not pay for a stereo sum.
     template <int kCh>
     void generate(Voice &voice, int32_t istep, uint32_t fstep, float inv_step, float *dst, int n);
+    // The stream voice's: taps from the head or the fifo, by file frame.
+    template <int kCh>
+    void generate_stream(Voice &voice, int32_t istep, uint32_t fstep, float *dst, int n);
+    template <int kCh>
+    float stream_tap(int32_t frame);
+    void restart_stream();
 
     Voice voices_[kVoices];
     enaga::dsp::EnvelopeShape amp_shape_{};
@@ -190,6 +225,12 @@ private:
     float out_gain_ = 0.25f;       // LVL
     int steal_cursor_ = 0;         // rotates, so equally loud voices are stolen in turn
     bool active_ = false;
+
+    // Stream mode (set_stream). data_ and frames_ are the head.
+    StreamFifo *fifo_ = nullptr;
+    uint32_t stream_total_ = 0;
+    uint32_t restarts_ = 0;
+    uint32_t late_ = 0;
 
     float voice_[kBlock] = {};
     float env_[kBlock] = {};

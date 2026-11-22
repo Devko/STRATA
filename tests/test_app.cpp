@@ -54,6 +54,18 @@ using strata::test::storage;
 constexpr int kBlk = strata::test::kRigBlock;
 constexpr int kStereo = strata::test::kRigStereo;
 
+// A file in the current project's folder. The name comes from Storage rather than being spelled
+// "DEFAULT": `request_new()` renames the project for the rest of the process, so a test that
+// hard-codes the folder passes only while it happens to run before tests/test_storage.cpp's
+// first NEW -- which is link order, not a property of the code.
+const char *project_file(char (&path)[ENAGA_FILE_PATH_MAX + 1], const char *file) {
+    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/");
+    std::strcat(path, storage().project_name());
+    std::strcat(path, "/");
+    std::strcat(path, file);
+    return path;
+}
+
 }  // namespace
 
 // --- the harness itself ---------------------------------------------------------------------
@@ -243,18 +255,16 @@ TEST(app_the_first_save_of_a_project_writes_all_ten_files) {
                            "BANK_H.BIN"};
     char path[ENAGA_FILE_PATH_MAX + 1];
     for (const char *file : files) {
-        std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/");
-        std::strcat(path, file);
-        CHECK(host.has_file(path));
+        CHECK(host.has_file(project_file(path, file)));
     }
 
     // The sizes tests/test_project.cpp pins, reached through the real card protocol this time.
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/PROJECT.BIN");
-    CHECK_EQ(host.file_bytes(path), 277);   // core/project.cpp: 263 + the 14 mixer bytes
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/KIT.BIN");
-    CHECK_EQ(host.file_bytes(path), 1076);
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/PERFORM.BIN");
-    CHECK_EQ(host.file_bytes(path), 2424);
+    project_file(path, "PROJECT.BIN");
+    CHECK_EQ(host.file_bytes(path), 393);   // core/project.cpp: 296, 12 + 65 song, 12 + 8 MIDI
+    project_file(path, "KIT.BIN");
+    CHECK_EQ(host.file_bytes(path), 1164);  // 1076, then the LFO and arp sections: 2 x (12 + 8 x 4)
+    project_file(path, "PERFORM.BIN");
+    CHECK_EQ(host.file_bytes(path), 3804);  // 2424, the scenes' LFO (12 + 640), EQ (12 + 64), arp (12 + 640)
 }
 
 TEST(app_a_saved_project_reloads) {
@@ -328,12 +338,12 @@ TEST(app_a_save_asked_for_with_no_card_lands_when_one_arrives) {
     CHECK(!storage().dirty());
 
     char path[ENAGA_FILE_PATH_MAX + 1];
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/KIT.BIN");
+    project_file(path, "KIT.BIN");
     CHECK(host.has_file(path));
 
     // And it was a FULL save, because the card swap made `project_complete_` a claim about a
     // card nobody had looked at.
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/BANK_H.BIN");
+    project_file(path, "BANK_H.BIN");
     CHECK(host.has_file(path));
 }
 
@@ -751,6 +761,43 @@ TEST(app_a_resample_can_land_in_a_track_in_one_action) {
     CHECK(storage().last_error() == nullptr);
 }
 
+TEST(app_a_take_landed_in_track_one_replaces_a_longer_path_and_marks_the_kit) {
+    // The first track is a track like any other (`take_track_ >= 0`), the take's path replaces
+    // the kit's WHOLE path -- a longer one that was there before must not show through after
+    // the terminator -- and the kit is dirty, so the next save keeps the take on the track.
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+    put_trig(0, 0);
+    post(Cmd::set_param, 0, 0, 11, 127);
+    pump();
+    char *path = engine.project_for_load().kit.tracks[0].sample;
+    std::memset(path, 0, kSamplePathBytes);
+    std::strcpy(path, "/SAMPLES/A_PATH_MUCH_LONGER_THAN_ANY_TAKE_NAME_EVER_IS.WAV");
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(!storage().dirty());
+    host.set_running(true);
+
+    post(Cmd::resample_arm, 0, 0, 1);
+    CHECK(storage().request_resample_write(0));
+    host.deliver_tick(384, 0);
+    bool landed = false;
+    for (int i = 0; i < 4000 && !landed; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+        landed = std::strncmp(engine.project().kit.tracks[0].sample, "/RECORD/", 8) == 0 &&
+                 storage().busy_text() == nullptr &&
+                 engine.status().resample_state.load(std::memory_order_relaxed) == 0u;
+    }
+    CHECK(landed);
+    char expected[64];
+    std::strcpy(expected, "/RECORD/");
+    std::strcat(expected, storage().last_take_name());
+    CHECK_EQ(engine.project().kit.tracks[0].sample, static_cast<const char *>(expected));
+    CHECK(storage().dirty());
+    CHECK_EQ(storage().loading_track(), -1);
+}
+
 TEST(app_a_second_resample_is_refused_while_one_is_running) {
     // There is no undo for a lost take: the audio is gone. dsp/capture refuses, and the engine
     // counts the refusal so the screen can say so.
@@ -773,4 +820,106 @@ TEST(app_a_second_resample_is_refused_while_one_is_running) {
     pump();
     CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 0);
     CHECK_EQ(int(engine.status().resample_frames.load(std::memory_order_relaxed)), 0);
+}
+
+// --- sampling from the audio input ----------------------------------------------------------
+//
+// docs/SPEC.md: "Resample with a chosen input source". The same take as above, armed with source
+// 1: the buffer is written from audio()'s `in`, not from the master, and the master is not
+// touched by it. Driven by hand rather than through pump(), because pump() gives no input.
+
+namespace {
+
+float g_in[2 * ENAGA_BLOCK_FRAMES];
+float g_master[2 * ENAGA_BLOCK_FRAMES];
+
+// Run takes until the card side has written one, with `left` and `right` on the input.
+bool take_from(uint8_t source, float left, float right) {
+    Engine &engine = strata::test::engine();
+    FakeHost &host = FakeHost::the();
+    for (uint32_t i = 0; i < ENAGA_BLOCK_FRAMES; i++) {
+        g_in[2 * i] = left;
+        g_in[2 * i + 1] = right;
+    }
+    post(Cmd::resample_arm, 0, 0, 1, source);
+    storage().request_resample_write();
+    host.deliver_tick(384, 0);
+    for (int i = 0; i < 3000; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        engine.process(g_in, g_master, ENAGA_BLOCK_FRAMES);
+        storage().service();
+        host.complete_loads();
+        const uint8_t state = engine.status().resample_state.load(std::memory_order_relaxed);
+        if (i > 4 && state == 0u) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int16_t s16_at(const uint8_t *p) { return int16_t(uint16_t(p[0]) | uint16_t(p[1]) << 8); }
+
+// Where the last take went. The number comes from the settings, which outlive fresh().
+const char *last_take_path() {
+    static char path[64];
+    std::snprintf(path, sizeof path, "/RECORD/%s", storage().last_take_name());
+    return path;
+}
+
+}  // namespace
+
+TEST(app_a_take_from_the_input_records_the_input_not_the_master) {
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    CHECK(take_from(1, 0.5f, -0.25f));
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.has_file(last_take_path()));
+
+    // A frame well inside the take: L and R as they came in, not the (silent) master.
+    static uint8_t head[44 + 4 * 1100];
+    CHECK(host.read_prefix(last_take_path(), head, sizeof head) == int32_t(sizeof head));
+    const int16_t l = s16_at(head + 44 + 4 * 1000), r = s16_at(head + 44 + 4 * 1000 + 2);
+    CHECK(l > 16300 && l < 16400);
+    CHECK(r < -8150 && r > -8250);
+
+    // The meter saw it too: 0.5 is 500 per mille.
+    CHECK_EQ(int(engine.status().input_peak.load(std::memory_order_relaxed)), 500);
+
+    // A master take with the same input: the input is NOT in it (the fresh project is silent).
+    CHECK(take_from(0, 0.5f, -0.25f));
+    CHECK(host.read_prefix(last_take_path(), head, sizeof head) == int32_t(sizeof head));
+    CHECK_EQ(int(s16_at(head + 44 + 4 * 1000)), 0);
+    CHECK_EQ(int(s16_at(head + 44 + 4 * 1000 + 2)), 0);
+    host.set_running(false);
+}
+
+TEST(app_an_input_take_with_no_input_buffer_records_silence_and_ends) {
+    // The rigs pass no input. The take must still end on its frame and reach the card.
+    fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    post(Cmd::resample_arm, 0, 0, 1, 1);
+    storage().request_resample_write();
+    pump();
+    host.deliver_tick(384, 0);
+    for (int i = 0; i < 3000; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+        const uint8_t state =
+            strata::test::engine().status().resample_state.load(std::memory_order_relaxed);
+        if (i > 4 && state == 0u) break;
+    }
+    CHECK(host.has_file(last_take_path()));
+    host.set_running(false);
+}
+
+TEST(app_the_input_peak_clamps_at_full_scale) {
+    Engine &engine = fresh();
+    for (uint32_t i = 0; i < 2 * ENAGA_BLOCK_FRAMES; i++) g_in[i] = (i == 7) ? -3.0f : 0.1f;
+    engine.process(g_in, g_master, ENAGA_BLOCK_FRAMES);
+    CHECK_EQ(int(engine.status().input_peak.load(std::memory_order_relaxed)), 1000);
+    for (uint32_t i = 0; i < 2 * ENAGA_BLOCK_FRAMES; i++) g_in[i] = 0.0f;
+    engine.process(g_in, g_master, ENAGA_BLOCK_FRAMES);
+    CHECK_EQ(int(engine.status().input_peak.load(std::memory_order_relaxed)), 0);
 }

@@ -3,6 +3,7 @@
 #include "apprig.hpp"
 
 #include "fakehost.hpp"
+#include "factory.hpp"
 #include "project.hpp"
 
 namespace strata::test {
@@ -137,6 +138,23 @@ MasterSettings default_master() {
     return master;
 }
 
+namespace {
+Project g_factory;
+SceneSet g_factory_scenes;
+MacroSet g_factory_macros;
+bool g_factory_ready = false;
+
+void build_factory() {
+    if (g_factory_ready) return;
+    factory_project(g_factory, g_factory_scenes, g_factory_macros);
+    g_factory_ready = true;
+}
+}  // namespace
+
+const Project &factory() { build_factory(); return g_factory; }
+const SceneSet &factory_scenes() { build_factory(); return g_factory_scenes; }
+const MacroSet &factory_macros() { build_factory(); return g_factory_macros; }
+
 Engine &fresh() {
     FakeHost &host = FakeHost::the();
     host.reset();
@@ -161,7 +179,9 @@ Engine &fresh() {
     // starting point for a test about whether anything was heard. Mid values with the level up is
     // the patch tests/test_va.cpp and the others start from.
     for (int t = 0; t < kTracks; t++) {
-        for (int i = 0; i < kKitParams; i++) incoming.kit.tracks[t].params[i] = 64;
+        // The SOUND parameters only: the LFO's four bytes stay 0, which is OFF (dsp/lfo.hpp).
+        // At 64 they would be a sine at 0.25 Hz moving parameter 8 on every track.
+        for (int i = 0; i < kKitSoundParams; i++) incoming.kit.tracks[t].params[i] = 64;
         incoming.kit.tracks[t].params[11] = 127;     // LVL on every machine (dsp/track.hpp)
     }
 

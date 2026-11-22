@@ -27,6 +27,7 @@
 #include "buses.hpp"
 
 #include "masterloops.h"
+#include "filterloops.h"
 
 namespace strata {
 namespace {
@@ -122,6 +123,15 @@ bool master_field_set(MasterSettings &settings, uint8_t field, float value) {
         case MasterField::level:
             settings.level = clamp_to(value, 0.0f, 1.0f);
             return true;
+        case MasterField::eq_low:
+            settings.eq_low = clamp_to(value, 0.0f, 2.0f);
+            return true;
+        case MasterField::eq_mid:
+            settings.eq_mid = clamp_to(value, 0.0f, 2.0f);
+            return true;
+        case MasterField::eq_high:
+            settings.eq_high = clamp_to(value, 0.0f, 2.0f);
+            return true;
         default:
             return false;
     }
@@ -133,12 +143,15 @@ float master_field_get(const MasterSettings &settings, uint8_t field) {
         case MasterField::compressor: return settings.compressor;
         case MasterField::limit:      return settings.limit;
         case MasterField::level:      return settings.level;
+        case MasterField::eq_low:     return settings.eq_low;
+        case MasterField::eq_mid:     return settings.eq_mid;
+        case MasterField::eq_high:    return settings.eq_high;
         default:                      return 0.0f;
     }
 }
 
 const char *master_field_name(uint8_t field) {
-    static const char *const names[] = {"DJ", "CMP", "LIM", "LVL"};
+    static const char *const names[] = {"DJ", "CMP", "LIM", "LVL", "LOW", "MID", "HI"};
     return field < uint8_t(MasterField::count) ? names[field] : "---";
 }
 
@@ -275,6 +288,16 @@ float master_value_from_byte(uint8_t field, uint8_t byte) {
         case MasterField::compressor: return byte_unit(byte);
         case MasterField::limit:      return 0.1f + byte_unit(byte) * 0.88f;
         case MasterField::level:      return byte_unit(byte);
+        // The kill EQ's bands: centred like the DJ filter, 64 exactly flat. Below it a square
+        // law down to a kill at 0 (-12 dB half way down, which is where a DJ isolator's knob
+        // starts to sound like a cut); above it up to +6 dB at 127.
+        case MasterField::eq_low:
+        case MasterField::eq_mid:
+        case MasterField::eq_high: {
+            if (byte >= 64) return 1.0f + float((byte > 127 ? 127 : byte) - 64) * (1.0f / 63.0f);
+            const float u = float(byte) * (1.0f / 64.0f);
+            return u * u;
+        }
         default:                      return 0.0f;
     }
 }
@@ -319,6 +342,20 @@ constexpr float kCompressorSlope = 0.75f;   // 1 - 1/4
 constexpr float kCompressorAttackRate = 100.0f;      // 1 / 10 ms
 constexpr float kCompressorReleaseRate = 6.6667f;    // 1 / 150 ms
 
+// Kill EQ: each band's gain moves this far to its target per block (64 frames), so a kill is
+// -6 dB after 1.3 ms, -40 dB after 9 ms and gone after 13 ms -- quick enough to land on the one,
+// smooth enough not to click on a full-scale kick. The stage fades in and out over four blocks
+// (5.3 ms), and a gain this close to its target is taken as there.
+constexpr float kKillEqGlide = 0.5f;
+constexpr float kKillEqFadeStep = 0.25f;
+constexpr float kKillEqSnap = 0.0001f;
+constexpr float kButterworthK = 1.41421356f;   // 1 / Q for Q = 0.7071
+
+static_assert(Mixer::kKillEqStates == STRATA_KILL_EQ_STATES,
+              "the kill EQ's state size and its loop's have diverged");
+static_assert(sizeof(enaga::dsp::SvfCoefficients) == 4 * sizeof(float),
+              "strata_kill_eq reads SvfCoefficients as a1 a2 a3 k");
+
 float largest(float a, float b) { return a > b ? a : b; }
 
 }  // namespace
@@ -328,6 +365,8 @@ void Mixer::init(float sample_rate) {
 
     // The only allocation in this file, and the reason init() belongs in App::init().
     delay_.init(kMaxDelaySeconds, sample_rate);
+    // Two delay times: with ping-pong the echoes swap sides each pass and repeat every second.
+    freeze_.init(sample_rate, 2.0f * kMaxDelaySeconds);
     reverb_.init(sample_rate);
 
     duck_.init(sample_rate);
@@ -338,6 +377,19 @@ void Mixer::init(float sample_rate) {
     dj_l_b_.reset();
     dj_r_a_.reset();
     dj_r_b_.reset();
+    for (int i = 0; i < kKillEqStates; i++) {
+        eq_state_l_[i] = 0.0f;
+        eq_state_r_[i] = 0.0f;
+    }
+    for (int b = 0; b < kKillBands; b++) {
+        eq_target_[b] = 1.0f;
+        eq_gain_[b] = 1.0f;
+    }
+    eq_wet_ = 0.0f;
+    eq_low_split_ = ed::SvfCoefficients::from_g(ed::tan_pi(kKillLowHz * ed::reciprocal(sample_rate)),
+                                                kButterworthK);
+    eq_high_split_ = ed::SvfCoefficients::from_g(
+        ed::tan_pi(kKillHighHz * ed::reciprocal(sample_rate)), kButterworthK);
     compressor_gain_ = 1.0f;
     master_gain_ = 1.0f;
     delay_tail_ = 0;
@@ -366,6 +418,7 @@ void Mixer::resolve_sends(const SendSettings &sends) {
     const float seconds = ed::clamp(sends.delay_seconds, 0.001f, kMaxDelaySeconds);
     const float feedback = ed::clamp(sends.delay_feedback, 0.0f, 0.95f);
     delay_.set(seconds, feedback, ed::clamp(sends.delay_tone, 0.0f, 1.0f), sends.delay_ping_pong);
+    delay_loop_frames_ = int(seconds * rate_) * (sends.delay_ping_pong ? 2 : 1);
     delay_level_ = ed::clamp(sends.delay_level, 0.0f, 4.0f);
     delay_to_reverb_ = ed::clamp(sends.delay_to_reverb, 0.0f, 1.0f);
 
@@ -434,6 +487,14 @@ void Mixer::resolve_master(const MasterSettings &master_settings) {
     limit_headroom_ = 1.0f - limit_threshold_;
     limit_inv_headroom_ = ed::reciprocal(limit_headroom_);
     out_level_ = ed::clamp(master_settings.level, 0.0f, 1.0f);
+
+    // --- master: the kill EQ's targets, with the switches over the knobs ----------------------
+    const float knobs[kKillBands] = {master_settings.eq_low, master_settings.eq_mid,
+                                     master_settings.eq_high};
+    for (int b = 0; b < kKillBands; b++) {
+        const bool killed = (master_settings.kills >> b & 1u) != 0;
+        eq_target_[b] = killed ? 0.0f : ed::clamp(knobs[b], 0.0f, 2.0f);
+    }
 }
 
 void Mixer::begin_block(int frames) {
@@ -470,21 +531,29 @@ void Mixer::finish_block(float *out, int frames) {
     const int n = frames_;
 
     // --- send A: the delay -------------------------------------------------------------------
+    // A freeze keeps the delay running whatever its tail says, and while held cuts its feed.
+    const bool freezing = freeze_.active();
+    if (freezing) delay_tail_ = delay_tail_ > 1 ? delay_tail_ : 1;
     if (n > 0 && delay_tail_ > 0) {
         delay_tail_--;
+        if (freeze_.held()) enaga_clear(send_a_, n);
         // The send bus is mono and the delay's two inputs must not alias, so the feed is copied
         // once per block: 64 floats against the delay's own cost is nothing.
         for (int i = 0; i < n; i++) send_a_right_[i] = send_a_[i];
-        if (delay_to_reverb_ > 0.0f) {
+        if (delay_to_reverb_ > 0.0f || freezing) {
+            // The wet signal on its own: the reverb wants it, or the freeze records or replaces it.
             enaga_clear(wet_l_, n);
             enaga_clear(wet_r_, n);
             delay_.process(send_a_, send_a_right_, wet_l_, wet_r_, n, 1.0f);
+            if (freezing) freeze_.process(wet_l_, wet_r_, n);
             enaga_mix(mix_l_, wet_l_, n, delay_level_);
             enaga_mix(mix_r_, wet_r_, n, delay_level_);
-            const float into_reverb = delay_to_reverb_ * 0.5f;
-            enaga_mix(send_b_, wet_l_, n, into_reverb);
-            enaga_mix(send_b_, wet_r_, n, into_reverb);
-            reverb_tail_ = reverb_tail_blocks_;   // the delay is feeding it, so keep it running
+            if (delay_to_reverb_ > 0.0f) {
+                const float into_reverb = delay_to_reverb_ * 0.5f;
+                enaga_mix(send_b_, wet_l_, n, into_reverb);
+                enaga_mix(send_b_, wet_r_, n, into_reverb);
+                reverb_tail_ = reverb_tail_blocks_;   // the delay is feeding it: keep it running
+            }
         } else {
             // Nothing needs the wet signal on its own, so the delay writes straight into the mix.
             delay_.process(send_a_, send_a_right_, mix_l_, mix_r_, n, delay_level_);
@@ -494,7 +563,7 @@ void Mixer::finish_block(float *out, int frames) {
     // --- send B: the reverb, high-passed first ------------------------------------------------
     if (n > 0 && reverb_tail_ > 0) {
         reverb_tail_--;
-        reverb_high_pass_.process(send_b_, send_b_, n, reverb_high_pass_coefficients_);
+        strata_biquad_inplace(&reverb_high_pass_.state_, &reverb_high_pass_coefficients_, send_b_, n);
         reverb_.process(send_b_, kSilence, mix_l_, mix_r_, n, reverb_level_ * 2.0f);
     }
 
@@ -510,11 +579,15 @@ void Mixer::finish_block(float *out, int frames) {
 void Mixer::master(int n) {
     // --- the one-knob DJ filter: 24 dB per channel, and bypassed in the dead zone -------------
     if (dj_on_) {
-        ed::Svf::cascade(dj_l_a_, dj_coefficients_, dj_l_b_, dj_coefficients_, mix_l_, mix_l_, n,
-                         dj_output_);
-        ed::Svf::cascade(dj_r_a_, dj_coefficients_, dj_r_b_, dj_coefficients_, mix_r_, mix_r_, n,
-                         dj_output_);
+        // Both channels in one loop: two independent recurrences side by side, which is what
+        // fills this core's units (filterloops.h). Bit-identical to two Svf::cascade calls.
+        strata_svf_cascade_stereo_inplace(&dj_l_a_.state_, &dj_l_b_.state_, &dj_r_a_.state_,
+                                          &dj_r_b_.state_, &dj_coefficients_, &dj_coefficients_,
+                                          dj_output_, mix_l_, mix_r_, n);
     }
+
+    // --- the kill EQ, after the filter and before the detector, so the compressor sees the cut -
+    kill_eq(n);
 
     // --- the block's peak: the compressor's detector and the limiter's skip test --------------
     const float peak = strata_master_peak(mix_l_, mix_r_, n);
@@ -550,6 +623,47 @@ void Mixer::master(int n) {
         strata_master_limit(mix_l_, mix_r_, n, limit_threshold_, limit_headroom_,
                             limit_inv_headroom_);
     }
+}
+
+void Mixer::kill_eq(int n) {
+    // This block's gains: halfway to the targets, and exactly there once close.
+    bool flat = true;
+    float next[kKillBands];
+    for (int b = 0; b < kKillBands; b++) {
+        const float moved = eq_gain_[b] + kKillEqGlide * (eq_target_[b] - eq_gain_[b]);
+        const float gap = moved - eq_target_[b];
+        next[b] = (gap < kKillEqSnap && gap > -kKillEqSnap) ? eq_target_[b] : moved;
+        flat = flat && next[b] == 1.0f && eq_gain_[b] == 1.0f;
+    }
+
+    // Fade the stage in while any band is off flat, and out again once all three are back and
+    // have been for a block. The fade is what makes the bypass safe: the crossovers' sum is an
+    // all-pass, not a wire, so switching straight between them would click on a loud low end.
+    const float wet_to = flat ? (eq_wet_ - kKillEqFadeStep < 0.0f ? 0.0f : eq_wet_ - kKillEqFadeStep)
+                              : (eq_wet_ + kKillEqFadeStep > 1.0f ? 1.0f : eq_wet_ + kKillEqFadeStep);
+    if (eq_wet_ == 0.0f && wet_to == 0.0f) {
+        // Bypassed, and staying so: nothing runs, nothing is touched.
+        for (int b = 0; b < kKillBands; b++) eq_gain_[b] = next[b];
+        return;
+    }
+    if (eq_wet_ == 0.0f) {
+        // Starting from bypass: from silence, not from whatever the last use left behind.
+        for (int i = 0; i < kKillEqStates; i++) {
+            eq_state_l_[i] = 0.0f;
+            eq_state_r_[i] = 0.0f;
+        }
+    }
+
+    if (n != ramp_frames_) {
+        ramp_frames_ = n;
+        inv_frames_ = ed::reciprocal(float(n));
+    }
+    float steps[kKillBands];
+    for (int b = 0; b < kKillBands; b++) steps[b] = (next[b] - eq_gain_[b]) * inv_frames_;
+    strata_kill_eq(mix_l_, mix_r_, n, eq_state_l_, eq_state_r_, &eq_low_split_.a1,
+                   &eq_high_split_.a1, eq_gain_, steps, eq_wet_, (wet_to - eq_wet_) * inv_frames_);
+    for (int b = 0; b < kKillBands; b++) eq_gain_[b] = next[b];
+    eq_wet_ = wet_to;
 }
 
 }  // namespace strata

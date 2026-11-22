@@ -210,7 +210,16 @@ bool chain_start(const Project &project, ChainPlayer &player) {
 
     player.active = true;
     player.entry = 0;
+    player.orphaned = false;
     player.played = 0;
+    return true;
+}
+
+bool chain_resume(const Project &project, ChainPlayer &player) {
+    if (!chain_start(project, player)) return false;
+    // `orphaned` is exactly "what is playing is not an entry; entry 0 comes next".
+    player.orphaned =
+        project.chain[0].bank != project.bank || project.chain[0].slot != project.slot;
     return true;
 }
 
@@ -223,6 +232,18 @@ bool chain_advance(const Project &project, ChainPlayer &player, uint8_t &bank, u
         // pattern from memory that is no longer in the chain.
         player.active = false;
         return false;
+    }
+
+    // The playing entry was removed: the one now at its index comes next, from its first pass.
+    if (player.orphaned) {
+        player.orphaned = false;
+        player.entry = uint8_t(cursor.entry);
+        player.played = 0;
+        const ChainEntry &upcoming = project.chain[cursor.entry];
+        if (upcoming.bank == project.bank && upcoming.slot == project.slot) return false;
+        bank = upcoming.bank;
+        slot = upcoming.slot;
+        return true;
     }
 
     const ChainEntry &current = project.chain[cursor.entry];
@@ -255,7 +276,9 @@ bool chain_advance(const Project &project, ChainPlayer &player, uint8_t &bank, u
     // track -- so reporting a change where there is none would make `1ST` fire on every pass of
     // a one-pattern chain, which is audibly wrong, and would throw away an edit history the user
     // can still see.
-    if (upcoming.bank == current.bank && upcoming.slot == current.slot) return false;
+    // Against the LIVE pattern rather than `current` (queue.hpp): an entry edited while it
+    // played names a pattern that is not the one sounding.
+    if (upcoming.bank == project.bank && upcoming.slot == project.slot) return false;
 
     bank = upcoming.bank;
     slot = upcoming.slot;
@@ -264,7 +287,7 @@ bool chain_advance(const Project &project, ChainPlayer &player, uint8_t &bank, u
 
 bool chain_current(const Project &project, const ChainPlayer &player, uint8_t &bank,
                    uint8_t &slot) {
-    if (!player.active) return false;
+    if (!player.active || player.orphaned) return false;   // nothing in the chain is playing
 
     const ChainCursor cursor = chain_cursor(project, player);
     if (cursor.length <= 0) return false;
@@ -272,6 +295,89 @@ bool chain_current(const Project &project, const ChainPlayer &player, uint8_t &b
     bank = project.chain[cursor.entry].bank;
     slot = project.chain[cursor.entry].slot;
     return true;
+}
+
+// --- editing a chain -----------------------------------------------------------
+
+namespace {
+
+// Cut the chain back to its usable prefix and zero everything after it, so the edits below can
+// treat `length` as the truth. Returns the length.
+int chain_normalize(Project &project) {
+    const int length = chain_length(project);
+    for (int i = length; i < kChainEntries; i++) project.chain[i] = ChainEntry{};
+    project.settings.chain_length = uint8_t(length);
+    return length;
+}
+
+bool chain_entry_valid(uint8_t bank, uint8_t slot, uint8_t repeats, uint8_t mutes) {
+    return repeats != 0 && mutes <= kChainMutesMax && project_index_valid(int(bank), int(slot));
+}
+
+}  // namespace
+
+bool chain_set(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats,
+               uint8_t mutes) {
+    // Every refusal is decided before `chain_normalize` writes anything, so a refused edit leaves
+    // the project exactly as it was, as queue.hpp promises.
+    if (!chain_entry_valid(bank, slot, repeats, mutes)) return false;
+    if (at < 0 || at >= chain_length(project)) return false;
+    chain_normalize(project);
+    project.chain[at] = ChainEntry{bank, slot, repeats, mutes};
+    return true;
+}
+
+bool chain_insert(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats,
+                  uint8_t mutes) {
+    if (!chain_entry_valid(bank, slot, repeats, mutes)) return false;
+    const int usable = chain_length(project);
+    if (at < 0 || at > usable || usable >= kChainEntries) return false;
+    const int length = chain_normalize(project);
+    for (int i = length; i > at; i--) project.chain[i] = project.chain[i - 1];
+    project.chain[at] = ChainEntry{bank, slot, repeats, mutes};
+    project.settings.chain_length = uint8_t(length + 1);
+    return true;
+}
+
+bool chain_remove(Project &project, int at) {
+    if (at < 0 || at >= chain_length(project)) return false;
+    const int length = chain_normalize(project);
+    for (int i = at; i + 1 < length; i++) project.chain[i] = project.chain[i + 1];
+    project.chain[length - 1] = ChainEntry{};
+    project.settings.chain_length = uint8_t(length - 1);
+    return true;
+}
+
+bool chain_at_end(const Project &project, const ChainPlayer &player) {
+    if (!player.active || player.orphaned) return false;
+    const ChainCursor cursor = chain_cursor(project, player);
+    if (cursor.length <= 0 || cursor.entry != cursor.length - 1) return false;
+    return int(player.played) + 1 >= int(project.chain[cursor.entry].repeats);
+}
+
+int chain_entry_mutes(const Project &project, const ChainPlayer &player) {
+    if (!player.active || player.orphaned) return -1;
+    const ChainCursor cursor = chain_cursor(project, player);
+    if (cursor.length <= 0) return -1;
+    const uint8_t mutes = project.chain[cursor.entry].mutes;
+    return mutes == 0 || mutes > kChainMutesMax ? -1 : int(mutes) - 1;
+}
+
+void chain_player_inserted(ChainPlayer &player, int at) {
+    if (!player.active) return;
+    // At or above the playing entry: it moves down one, and so does the player.
+    if (at <= int(player.entry) && player.entry < kChainEntries - 1) player.entry++;
+}
+
+void chain_player_removed(ChainPlayer &player, int at) {
+    if (!player.active || at < 0) return;
+    if (at < int(player.entry)) {
+        player.entry--;
+    } else if (at == int(player.entry) && !player.orphaned) {
+        // The entry being played is gone. `entry` now names the one after it, which plays next.
+        player.orphaned = true;
+        player.played = 0;
+    }
 }
 
 }  // namespace strata

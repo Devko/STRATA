@@ -108,6 +108,7 @@ public:
     void prepare(const TrackParams &params) override;
     void trigger(const Trig &trig) override;
     void release_all() override;
+    void release(uint8_t note) override;
     void kill_all() override;
     void render_add(float *out, int frames) override;
     bool active() const override { return active_; }
@@ -138,6 +139,31 @@ public:
         return n;
     }
     // The note a slot holds, or -1 if it holds none. Slots are 0..kVoices-1.
+    // --- the shared voice budget (app/engine.cpp, make_room_for_poly_voice) ---
+    //
+    // A voice counts against the budget from the moment it takes a trig until it is silent,
+    // EXCEPT while it is choking: a choke is already paid for, and counting it would make the
+    // next note of a chord choke a second voice for the room the first one freed.
+    //
+    // A PENDING trig counts even on a slot still choking. Its start cancels the choke (gate_on),
+    // so it is a voice from the moment it takes the slot; left uncounted until its frame, a
+    // later note in the same block found room that was not there and the block ended over budget.
+    int budget_voices() const {
+        int n = 0;
+        for (const Slot &s : slots_) n += s.pending || (s.voice.sounding() && !s.voice.choking());
+        return n;
+    }
+    // Whether a trig on `note` would take a voice that is not already counted: false when it
+    // retriggers the voice already sounding that note, or when every slot is busy and it would
+    // steal one of this machine's own (allocate(), in vapoly.cpp, decides the same way).
+    bool would_add_voice(uint8_t note) const;
+    // The quietest voice the budget may take: sounding, started, not already choking. Its slot,
+    // or -1 when there is none; `level` is its amplitude envelope's level.
+    int quietest_voice(float &level) const;
+    void choke(int slot) {
+        if (slot >= 0 && slot < kVoices) slots_[slot].voice.choke();
+    }
+
     int voice_note(int slot) const {
         if (slot < 0 || slot >= kVoices) return -1;
         return slots_[slot].busy() ? slots_[slot].note : -1;

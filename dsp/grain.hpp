@@ -143,6 +143,7 @@ public:
     void prepare(const TrackParams &params) override;
     void trigger(const Trig &trig) override;
     void release_all() override;
+    void release(uint8_t note) override;
     void kill_all() override;
     void render_add(float *out, int frames) override;
     bool active() const override { return active_; }
@@ -300,6 +301,7 @@ private:
     int steal_cursor_ = 0;         // rotates, so equally advanced grains are stolen in turn
     int wait_ = 0;                 // frames until `next_` starts
     bool pending_ = false;
+    bool release_on_start_ = false;   // released before its frame: let go as soon as it starts
     bool voice_on_ = false;        // the scheduler is running: gate on, or releasing
     bool active_ = false;
     Trig next_{};

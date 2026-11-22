@@ -966,3 +966,72 @@ TEST(every_result_has_a_message_for_the_screen) {
         }
     }
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+namespace {
+
+uint32_t entry_of(const uint8_t *buffer, uint16_t id) {
+    const uint32_t sections = peek_u16(buffer, 6);
+    for (uint32_t i = 0; i < sections; i++) {
+        const uint32_t entry = kHeaderBytes + i * kSectionEntryBytes;
+        if (peek_u16(buffer, entry) == id) return entry;
+    }
+    return 0;
+}
+
+uint32_t write_busy() {
+    make_busy_pattern(g_source);
+    uint32_t written = 0;
+    CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
+             int(SerializeResult::ok));
+    return written;
+}
+
+}  // namespace
+
+TEST(a_reader_that_ran_out_returns_zero_for_every_width) {
+    const uint8_t one[1] = {0xAB};
+    Reader r(one, 1);
+    CHECK_EQ(int(r.u16()), 0);
+    CHECK(!r.ok());
+    CHECK_EQ(int(r.u8()), 0);
+    CHECK_EQ(int(r.u16()), 0);
+    CHECK_EQ(r.u32(), 0u);
+    Reader q(one, 1);
+    CHECK_EQ(q.u32(), 0u);
+    CHECK(!q.ok());
+}
+
+TEST(the_section_table_reserved_bytes_are_written_as_zero) {
+    write_busy();
+    for (uint32_t i = 0; i < peek_u16(g_buffer, 6); i++) {
+        CHECK_EQ(int(peek_u16(g_buffer, kHeaderBytes + i * kSectionEntryBytes + 2)), 0);
+    }
+}
+
+TEST(a_section_pointing_into_the_table_or_a_lock_section_one_byte_short_is_malformed) {
+    const uint32_t size = write_busy();
+    const uint32_t header = entry_of(g_buffer, kSectionPatternHeader);
+    poke_u32(g_buffer, header + 4, kSectionEntryBytes);   // inside the three-entry table
+    refresh_crc(g_buffer);
+    uint32_t consumed = 0;
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, size, &consumed)),
+             int(SerializeResult::malformed));
+
+    write_busy();
+    const uint32_t locks = entry_of(g_buffer, kSectionLocks);
+    poke_u32(g_buffer, locks + 8, peek_u32(g_buffer, locks + 8) - 1);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, size, &consumed)),
+             int(SerializeResult::malformed));
+}
+
+TEST(a_speed_byte_one_past_the_table_loads_as_normal_speed) {
+    const uint32_t size = write_busy();
+    g_buffer[section_at(g_buffer, kSectionTracks) + 1] = uint8_t(Speed::count);
+    refresh_crc(g_buffer);
+    uint32_t consumed = 0;
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, size, &consumed)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.tracks[0].speed), int(Speed::x1));
+}

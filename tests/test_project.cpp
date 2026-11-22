@@ -37,8 +37,12 @@ using namespace strata;
 // 277, not the 251 the format had before the mixer section: one more section-table entry (12)
 // and the 14 send and master bytes. An OLD 251-byte file still loads, because that section is
 // optional on read -- `a_project_file_from_before_the_mixer_section_still_loads` is the proof.
-constexpr uint32_t kProjectFileBytes = 277;
-constexpr uint32_t kKitFileBytes = 1076;
+// 292 since the live section: another table entry (12) and its 3 bytes, optional likewise.
+// 296 since the kill EQ grew the mixer section by its three band bytes and the kill switches.
+// 373 since song mode: a fifth table entry (12) and its 65 bytes, optional like the others.
+// 393 since MIDI OUT: a sixth entry (12) and one channel per track (8).
+constexpr uint32_t kProjectFileBytes = 393;
+constexpr uint32_t kKitFileBytes = 1164;   // 1076 before the LFO and arp sections (12 + 8 x 4 each)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -111,6 +115,31 @@ uint32_t section_entry_at(const uint8_t *buffer, uint16_t id) {
     return 0;
 }
 
+// The file as the build before its LAST section existed wrote it: one table entry fewer, every
+// section 12 bytes earlier, the last section's bytes gone. Returns the new size. The last section
+// is the one at the end of the payload, which is how every writer here lays them out.
+uint32_t drop_last_section(const uint8_t *file, uint8_t *out) {
+    const uint32_t count = peek_u16(file, 6);
+    const uint32_t last = kHeaderBytes + (count - 1) * kSectionEntryBytes;
+    const uint32_t cut = peek_u32(file, last + 4);          // where the last section starts
+    for (uint32_t i = 0; i < kHeaderBytes; i++) out[i] = file[i];
+    for (uint32_t i = 0; i + 1 < count; i++) {
+        const uint32_t from = kHeaderBytes + i * kSectionEntryBytes;
+        poke_u16(out, from, peek_u16(file, from));
+        poke_u16(out, from + 2, 0);
+        poke_u32(out, from + 4, peek_u32(file, from + 4) - kSectionEntryBytes);
+        poke_u32(out, from + 8, peek_u32(file, from + 8));
+    }
+    const uint32_t data_from = kHeaderBytes + count * kSectionEntryBytes;
+    const uint32_t data_to = kHeaderBytes + cut;
+    uint32_t at = kHeaderBytes + (count - 1) * kSectionEntryBytes;
+    for (uint32_t i = data_from; i < data_to; i++) out[at++] = file[i];
+    poke_u16(out, 6, uint16_t(count - 1));
+    poke_u32(out, 8, at - kHeaderBytes);
+    refresh_crc(out);
+    return at;
+}
+
 void fill_sentinel(uint8_t *buffer, uint32_t size) {
     for (uint32_t i = 0; i < size; i++) buffer[i] = kSentinel;
 }
@@ -131,8 +160,10 @@ ProjectSettings busy_settings() {
     s.tempo_centi_bpm = 14537;
     s.root = 65;
     s.scale = 4;
-    s.swing = 63;
     s.quantize = 72;
+    s.live_mutes = 0x3C;
+    s.scene_a = 4;
+    s.scene_b = 11;
     for (uint32_t i = 0; i < sizeof(s.mute_states); i++) s.mute_states[i] = uint8_t(0x11 * (i + 1));
     s.sample_budget_mib = 48;
     s.chain_length = 9;
@@ -141,6 +172,7 @@ ProjectSettings busy_settings() {
     // encoder's 0-127, so that a round trip that mixed two of them up shows as a value.
     for (int i = 0; i < kSendFields; i++) s.sends[i] = uint8_t(3 + i * 11);
     for (int i = 0; i < kMasterFields; i++) s.master[i] = uint8_t(120 - i * 7);
+    s.eq_kills = 0x5;      // LOW and HIGH switched, MID not
     return s;
 }
 
@@ -398,7 +430,6 @@ TEST(project_init_empties_everything_and_lives_on_a01) {
     const ProjectSettings fresh;
     CHECK_EQ(int(g_source.settings.tempo_centi_bpm), int(fresh.tempo_centi_bpm));
     CHECK_EQ(int(g_source.settings.root), int(fresh.root));
-    CHECK_EQ(int(g_source.settings.swing), int(fresh.swing));
     CHECK_EQ(int(g_source.settings.quantize), int(fresh.quantize));
     CHECK_EQ(int(g_source.settings.sample_budget_mib), int(fresh.sample_budget_mib));
     CHECK_EQ(int(g_source.settings.chain_length), 0);
@@ -480,8 +511,10 @@ TEST(project_round_trips_every_settings_field) {
     CHECK_EQ(int(b.tempo_centi_bpm), int(a.tempo_centi_bpm));
     CHECK_EQ(int(b.root), int(a.root));
     CHECK_EQ(int(b.scale), int(a.scale));
-    CHECK_EQ(int(b.swing), int(a.swing));
     CHECK_EQ(int(b.quantize), int(a.quantize));
+    CHECK_EQ(int(b.live_mutes), int(a.live_mutes));
+    CHECK_EQ(int(b.scene_a), int(a.scene_a));
+    CHECK_EQ(int(b.scene_b), int(a.scene_b));
     for (uint32_t i = 0; i < sizeof(a.mute_states); i++) {
         CHECK_EQ(int(b.mute_states[i]), int(a.mute_states[i]));
     }
@@ -499,7 +532,10 @@ TEST(project_round_trips_every_settings_field) {
     for (int i = 0; i < kSendFields; i++) CHECK_EQ(int(b.sends[i]), int(a.sends[i]));
     for (int i = 0; i < kMasterFields; i++) CHECK_EQ(int(b.master[i]), int(a.master[i]));
     CHECK_EQ(int(b.sends[0]), 3);
-    CHECK_EQ(int(b.master[kMasterFields - 1]), 99);
+    CHECK_EQ(int(b.master[kMasterFieldsV1 - 1]), 99);
+    // The kill EQ's bands and switches, which grew the section.
+    CHECK_EQ(int(b.master[kMasterFields - 1]), 78);
+    CHECK_EQ(int(b.eq_kills), 0x5);
 }
 
 // A mixer byte past the encoder's range is clamped, not taken. dsp/buses.cpp maps a byte with
@@ -574,8 +610,13 @@ TEST(project_a_file_from_before_the_mixer_section_still_loads) {
 
     project_init(g_loaded);
     g_loaded.settings.sends[0] = 99;             // so "the defaults" is a claim and not a tie
+    g_loaded.settings.live_mutes = 0x55;
+    g_loaded.settings.scene_a = 9;
     CHECK_EQ(int(project_read(g_loaded, rebuilt, kHeaderBytes + old_payload)),
              int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.live_mutes), 0);
+    CHECK_EQ(int(g_loaded.settings.scene_a), 0);
+    CHECK_EQ(int(g_loaded.settings.scene_b), 1);
 
     // The two sections that are there arrived...
     CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(g_source.settings.tempo_centi_bpm));
@@ -586,6 +627,164 @@ TEST(project_a_file_from_before_the_mixer_section_still_loads) {
     for (int i = 0; i < kMasterFields; i++) {
         CHECK_EQ(int(g_loaded.settings.master[i]), int(fresh.master[i]));
     }
+}
+
+TEST(project_the_live_mutes_and_scenes_round_trip) {
+    fill_project(g_source, 0);
+    g_source.settings.live_mutes = 0xA5;
+    g_source.settings.scene_a = 7;
+    g_source.settings.scene_b = 12;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.live_mutes), 0xA5);
+    CHECK_EQ(int(g_loaded.settings.scene_a), 7);
+    CHECK_EQ(int(g_loaded.settings.scene_b), 12);
+}
+
+TEST(project_a_file_from_before_the_live_section_opens_unmuted_on_scenes_1_and_2) {
+    // A three-section file is the same bytes with no live entry the reader asks for: renaming
+    // the entry to an id nobody reads gives exactly that, without rebuilding the table.
+    fill_project(g_source, 0);
+    g_source.settings.live_mutes = 0xFF;
+    g_source.settings.scene_a = 5;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    for (uint32_t e = 0; e < 4; e++) {
+        const uint32_t at = kHeaderBytes + e * kSectionEntryBytes;
+        if (peek_u16(g_project, at) == kSectionProjectLive) poke_u16(g_project, at, 99);
+    }
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    g_loaded.settings.live_mutes = 0x0F;          // a previous project's, which must not survive
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.live_mutes), 0);
+    CHECK_EQ(int(g_loaded.settings.scene_a), 0);
+    CHECK_EQ(int(g_loaded.settings.scene_b), 1);
+    CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(g_source.settings.tempo_centi_bpm));
+}
+
+TEST(project_the_midi_out_channels_round_trip) {
+    fill_project(g_source, 0);
+    for (int t = 0; t < kTracks; t++) g_source.settings.midi_out[t] = uint8_t(t * 2 + 1);
+    g_source.settings.midi_out[3] = kMidiOutOff;
+    g_source.settings.midi_out[7] = 16;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_loaded.settings.midi_out[t]), int(g_source.settings.midi_out[t]));
+    }
+}
+
+TEST(project_a_file_from_before_the_midi_section_opens_with_midi_out_off) {
+    fill_project(g_source, 0);
+    for (int t = 0; t < kTracks; t++) g_source.settings.midi_out[t] = 9;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    for (uint32_t e = 0; e < 6; e++) {
+        const uint32_t at = kHeaderBytes + e * kSectionEntryBytes;
+        if (peek_u16(g_project, at) == kSectionProjectMidi) poke_u16(g_project, at, 99);
+    }
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    for (int t = 0; t < kTracks; t++) g_loaded.settings.midi_out[t] = 4;   // a previous project's
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(g_loaded.settings.midi_out[t]), 0);
+    CHECK_EQ(int(g_loaded.settings.live_mutes), int(g_source.settings.live_mutes));
+}
+
+TEST(project_a_damaged_midi_out_channel_turns_that_track_off) {
+    fill_project(g_source, 0);
+    for (int t = 0; t < kTracks; t++) g_source.settings.midi_out[t] = 2;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    const uint32_t midi = section_at(g_project, kSectionProjectMidi);
+    g_project[midi + 1] = 17;        // one past the last channel
+    g_project[midi + 5] = 0xFF;
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.midi_out[0]), 2);
+    CHECK_EQ(int(g_loaded.settings.midi_out[1]), 0);
+    CHECK_EQ(int(g_loaded.settings.midi_out[5]), 0);
+    CHECK_EQ(int(g_loaded.settings.midi_out[6]), 2);
+}
+
+TEST(project_refuses_a_midi_section_that_is_short) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    poke_u32(g_project, section_entry_at(g_project, kSectionProjectMidi) + 8, uint32_t(kTracks - 1));
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::malformed));
+}
+
+// Present but short is damage, not an old file: a writer that declared the section declared its
+// size too, so a reader that accepted a truncated one would read the chain's bytes as a mixer.
+TEST(project_song_mode_and_the_mute_recalls_round_trip) {
+    fill_project(g_source, 0);
+    g_source.settings.chain_song = true;
+    for (int i = 0; i < kChainEntries; i++) g_source.chain[i].mutes = uint8_t(i % 9);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK(g_loaded.settings.chain_song);
+    for (int i = 0; i < kChainEntries; i++) {
+        CHECK_EQ(int(g_loaded.chain[i].mutes), i % 9);
+    }
+
+    // A recall past the eight states is dropped, and so is one on an unused entry.
+    const uint32_t song = section_at(g_project, kSectionProjectSong);
+    g_project[song + 1 + 1] = 200;
+    g_source.chain[5].repeats = 0;
+    CHECK_EQ(int(project_write(g_source, g_project_alt, uint32_t(sizeof(g_project_alt)), &written)),
+             int(SerializeResult::ok));
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.chain[1].mutes), 0);
+    CHECK_EQ(int(project_read(g_loaded, g_project_alt, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.chain[5].mutes), 0);
+    CHECK_EQ(int(g_loaded.chain[6].mutes), 6);
+}
+
+TEST(project_a_file_from_before_song_mode_loops_and_recalls_no_mutes) {
+    fill_project(g_source, 0);
+    g_source.settings.chain_song = true;
+    for (int i = 0; i < kChainEntries; i++) g_source.chain[i].mutes = 3;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    // The MIDI section came after song mode, so a file from before song mode had neither.
+    uint32_t old_size = drop_last_section(g_project, g_project_alt);
+    old_size = drop_last_section(g_project_alt, g_project_alt);
+    CHECK_EQ(old_size, kProjectFileBytes - 12 - 8 - 12 - 65);
+    // A previous project's song settings, which must not survive into this one.
+    project_init(g_loaded);
+    g_loaded.settings.chain_song = true;
+    for (int i = 0; i < kChainEntries; i++) g_loaded.chain[i].mutes = 5;
+    CHECK_EQ(int(project_read(g_loaded, g_project_alt, old_size)), int(SerializeResult::ok));
+    CHECK(!g_loaded.settings.chain_song);
+    for (int i = 0; i < kChainEntries; i++) CHECK_EQ(int(g_loaded.chain[i].mutes), 0);
+    // Everything else came through.
+    CHECK_EQ(int(g_loaded.settings.live_mutes), int(g_source.settings.live_mutes));
+    CHECK_EQ(int(g_loaded.chain[3].repeats), int(g_source.chain[3].repeats));
+
+    // Present but short is damage.
+    poke_u32(g_project, section_entry_at(g_project, kSectionProjectSong) + 8, 10);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::malformed));
 }
 
 // Present but short is damage, not an old file: a writer that declared the section declared its
@@ -602,6 +801,53 @@ TEST(project_refuses_a_mixer_section_that_is_short) {
 
     project_init(g_loaded);
     CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::malformed));
+}
+
+// The kill EQ GREW the mixer section rather than adding one: a file from before it has a 14-byte
+// mixer section (sends and the first four master bytes) and must still load, with the bands flat
+// and the switches off -- set to the defaults, not left as whatever the buffer held.
+TEST(project_a_mixer_section_from_before_the_kill_eq_loads_flat) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+
+    // The third table entry's size field, cut to what the old writer declared. The bytes after
+    // it stay in the file, as junk an old reader never asked for.
+    poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8,
+             uint32_t(kSendFields + kMasterFieldsV1));
+    refresh_crc(g_project);
+
+    project_init(g_loaded);
+    g_loaded.settings.master[int(kMasterFieldsV1)] = 3;
+    g_loaded.settings.eq_kills = 0x7;
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int i = 0; i < kSendFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.sends[i]), int(g_source.settings.sends[i]));
+    }
+    for (int i = 0; i < kMasterFieldsV1; i++) {
+        CHECK_EQ(int(g_loaded.settings.master[i]), int(g_source.settings.master[i]));
+    }
+    for (int i = kMasterFieldsV1; i < kMasterFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.master[i]), 64);
+    }
+    CHECK_EQ(int(g_loaded.settings.eq_kills), 0);
+    // And the live section, found by id, is still read whole.
+    CHECK_EQ(int(g_loaded.settings.live_mutes), int(g_source.settings.live_mutes));
+}
+
+// A file whose kill-switch byte has bits past the three bands keeps only the three.
+TEST(project_keeps_only_the_three_kill_switch_bits) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
+    g_project[mixer + uint32_t(kSendFields + kMasterFields)] = 0xFA;
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.eq_kills), 0x2);
 }
 
 TEST(project_round_trips_the_live_pattern_and_the_whole_chain) {
@@ -655,18 +901,25 @@ TEST(project_the_header_says_strata_and_the_version) {
     CHECK_EQ(int(g_project[2]), int(kMagic2));
     CHECK_EQ(int(g_project[3]), int(kMagic3));
     CHECK_EQ(int(peek_u16(g_project, kVersionOffset)), int(kProjectVersion));
-    CHECK_EQ(int(peek_u16(g_project, 6)), 3);                       // settings, chain, mixer
+    CHECK_EQ(int(peek_u16(g_project, 6)), 6);   // settings, chain, mixer, live, song, MIDI
     CHECK_EQ(peek_u32(g_project, 8), kProjectFileBytes - kHeaderBytes);
     CHECK_EQ(peek_u32(g_project, kCrcOffset),
              crc32(g_project + kHeaderBytes, kProjectFileBytes - kHeaderBytes));
 
-    // All three sections are there, in order, and clear of the table.
+    // All five sections are there, in order, and clear of the table.
     const uint32_t settings = section_at(g_project, kSectionProjectSettings);
     const uint32_t chain = section_at(g_project, kSectionProjectChain);
     const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
-    CHECK_EQ(settings, kHeaderBytes + 3 * kSectionEntryBytes);
+    const uint32_t live = section_at(g_project, kSectionProjectLive);
+    const uint32_t song = section_at(g_project, kSectionProjectSong);
+    CHECK_EQ(settings, kHeaderBytes + 6 * kSectionEntryBytes);
     CHECK_EQ(chain, settings + 19);
     CHECK_EQ(mixer, chain + 64 * 3);
+    CHECK_EQ(live, mixer + uint32_t(kSendFields + kMasterFields + 1));
+    const uint32_t midi = section_at(g_project, kSectionProjectMidi);
+    CHECK_EQ(song, live + 3);
+    CHECK_EQ(midi, song + 1 + 64);
+    CHECK_EQ(midi + 8, kProjectFileBytes);
 }
 
 // --- PROJECT.BIN: value-tolerant ------------------------------------------
@@ -730,17 +983,19 @@ TEST(project_the_root_note_and_the_quantize_amount_are_clamped) {
     CHECK_EQ(int(g_loaded.settings.quantize), 100);
 }
 
-TEST(project_swing_is_clamped_to_the_fifty_to_seventyfive_range) {
+TEST(project_the_old_swing_byte_is_written_as_50_and_ignored_on_read) {
+    // The project swing is gone (nothing read it); its byte stays so old files still line up.
     const uint32_t at = fresh_project_file();
+    CHECK_EQ(int(g_project[at + 4]), int(kSwingMin));
 
     for (int value = 0; value < 256; value++) {
         g_project[at + 4] = uint8_t(value);
         refresh_crc(g_project);
         CHECK_EQ(int(project_read(g_loaded, g_project, kProjectFileBytes)),
                  int(SerializeResult::ok));
-        const int got = int(g_loaded.settings.swing);
-        const int want = value < kSwingMin ? kSwingMin : (value > kSwingMax ? kSwingMax : value);
-        if (got != want) CHECK_EQ(got, want);
+        if (g_loaded.settings.quantize != g_source.settings.quantize) {
+            CHECK_EQ(int(g_loaded.settings.quantize), int(g_source.settings.quantize));
+        }
     }
 }
 
@@ -1051,7 +1306,7 @@ TEST(project_read_never_looks_past_the_bytes_it_was_given) {
 namespace {
 
 // One track's record inside the tracks section: 16 parameters, the machine, the fader, the path.
-constexpr uint32_t kTrackRecordBytes = uint32_t(kKitParams) + 1 + 2 + uint32_t(kSamplePathBytes);
+constexpr uint32_t kTrackRecordBytes = uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 
 uint32_t kit_track_at(const uint8_t *file, int track) {
     return section_at(file, kSectionKitTracks) + uint32_t(track) * kTrackRecordBytes;
@@ -1067,7 +1322,7 @@ uint32_t fresh_kit_file() {
 
 // The fader as it went down on disk, in thousandths of unity.
 uint16_t stored_level(const uint8_t *file, int track) {
-    return peek_u16(file, kit_track_at(file, track) + kKitParams + 1);
+    return peek_u16(file, kit_track_at(file, track) + kKitSoundParams + 1);
 }
 
 }  // namespace
@@ -1129,7 +1384,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 1);     // one section
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 3);     // the tracks, the LFO, the arp
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -1137,16 +1392,96 @@ TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
 
     // dsp/track.hpp maps a parameter either by x(1/127) or as a table index, so a 255 that
     // survived the CRC would be an out-of-range read down in a machine rather than an odd sound.
-    for (int p = 0; p < kKitParams; p++) g_kit_file[at + uint32_t(p)] = uint8_t(128 + p);
+    for (int p = 0; p < kKitSoundParams; p++) g_kit_file[at + uint32_t(p)] = uint8_t(128 + p);
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
-    for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
+    for (int p = 0; p < kKitSoundParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
 
     // 127 itself is not clamped away.
-    for (int p = 0; p < kKitParams; p++) g_kit_file[at + uint32_t(p)] = 127;
+    for (int p = 0; p < kKitSoundParams; p++) g_kit_file[at + uint32_t(p)] = 127;
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
-    for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
+    for (int p = 0; p < kKitSoundParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
+}
+
+TEST(kit_the_lfo_and_arp_bytes_round_trip_and_are_clamped_on_the_way_in) {
+    // The LFO's four bytes a track (kSectionKitLfo) and the arp's four (kSectionKitArp), each in
+    // a section of its own.
+    fresh_kit_file();
+    CHECK(section_at(g_kit_file, kSectionKitLfo) != 0u);
+    CHECK(section_at(g_kit_file, kSectionKitArp) != 0u);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+    }
+    // Laid out track by track, four bytes each, in parameter order.
+    const uint32_t lfo = section_at(g_kit_file, kSectionKitLfo);
+    CHECK_EQ(int(g_kit_file[lfo + 4 * 3 + 2]), int(g_kit_source.tracks[3].params[kKitSoundParams + 2]));
+    const uint32_t arp = section_at(g_kit_file, kSectionKitArp);
+    CHECK_EQ(int(g_kit_file[arp + 4 * 5 + 1]), int(g_kit_source.tracks[5].params[kKitLfoEnd + 1]));
+
+    for (uint32_t i = 0; i < uint32_t(kKitLfoParams * kTracks); i++) g_kit_file[lfo + i] = 200;
+    for (uint32_t i = 0; i < uint32_t(kKitArpParams * kTracks); i++) g_kit_file[arp + i] = 201;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 127);
+        }
+    }
+}
+
+TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_and_arp_off) {
+    // Backward compatibility: a KIT.BIN with the tracks section only -- what every build before
+    // the LFO wrote -- still loads, keeps its sound, and turns every LFO and arp OFF rather than
+    // leaving whatever the kit it is read into held.
+    fresh_kit_file();
+    const uint32_t lfo_size = drop_last_section(g_kit_file, g_kit_alt);
+    CHECK_EQ(lfo_size, 1120u);                    // what the LFO's build wrote
+    for (uint32_t i = 0; i < lfo_size; i++) g_kit_file[i] = g_kit_alt[i];
+
+    // That one first: the LFO comes back, the arp is off.
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitParams; p++) g_kit_loaded.tracks[t].params[p] = 99;
+    }
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, lfo_size)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitLfoEnd; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+        for (int p = kKitLfoEnd; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 0);
+        }
+    }
+
+    const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
+    CHECK_EQ(old_size, 1076u);
+    CHECK_EQ(int(peek_u16(g_kit_alt, 6)), 1);
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitParams; p++) g_kit_loaded.tracks[t].params[p] = 99;
+    }
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitSoundParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+        for (int p = kKitSoundParams; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 0);
+        }
+        CHECK_EQ(int(g_kit_loaded.tracks[t].machine), int(g_kit_source.tracks[t].machine));
+    }
+
+    // Present but short is damage, not an old file -- for either section.
+    for (uint16_t id : {kSectionKitLfo, kSectionKitArp}) {
+        fresh_kit_file();
+        const uint32_t entry = section_entry_at(g_kit_file, id);
+        poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
+        refresh_crc(g_kit_file);
+        CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
+                 int(SerializeResult::malformed));
+    }
 }
 
 TEST(kit_an_unknown_machine_falls_back_to_the_first_one) {
@@ -1155,7 +1490,7 @@ TEST(kit_an_unknown_machine_falls_back_to_the_first_one) {
     // Not the last one: an unknown id should land somewhere known, and clamping to kMachines - 1
     // would hand a damaged byte whichever machine happens to sit at the end of the list.
     for (int t = 0; t < kTracks; t++) {
-        g_kit_file[kit_track_at(g_kit_file, t) + kKitParams] = uint8_t(kMachines + t);
+        g_kit_file[kit_track_at(g_kit_file, t) + kKitSoundParams] = uint8_t(kMachines + t);
     }
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
@@ -1163,7 +1498,7 @@ TEST(kit_an_unknown_machine_falls_back_to_the_first_one) {
 
     // Every machine this build does have survives.
     for (int t = 0; t < kTracks; t++) {
-        g_kit_file[kit_track_at(g_kit_file, t) + kKitParams] = uint8_t(t % kMachines);
+        g_kit_file[kit_track_at(g_kit_file, t) + kKitSoundParams] = uint8_t(t % kMachines);
     }
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
@@ -1210,7 +1545,7 @@ TEST(kit_the_fader_is_stored_in_thousandths_and_cannot_carry_a_nan) {
 
 TEST(kit_a_fader_above_the_engines_ceiling_in_a_file_is_clamped_on_the_way_in) {
     fresh_kit_file();
-    poke_u16(g_kit_file, kit_track_at(g_kit_file, 2) + kKitParams + 1, 65535);
+    poke_u16(g_kit_file, kit_track_at(g_kit_file, 2) + kKitSoundParams + 1, 65535);
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
     // An infinity is a blown output, so nothing above the engine's own ceiling (2.0, the most
@@ -1251,7 +1586,7 @@ TEST(kit_a_path_filling_every_byte_loses_its_last_character_not_its_terminator) 
     uint32_t written = 0;
     CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), &written)),
              int(SerializeResult::ok));
-    const uint32_t path = kit_track_at(g_kit_file, 0) + kKitParams + 3;
+    const uint32_t path = kit_track_at(g_kit_file, 0) + kKitSoundParams + 3;
     CHECK_EQ(int(g_kit_file[path + kSamplePathBytes - 1]), 0);
 
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, written)), int(SerializeResult::ok));
@@ -1278,7 +1613,7 @@ TEST(kit_a_shortened_path_leaves_no_trace_of_the_old_one) {
     CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), &written)),
              int(SerializeResult::ok));
 
-    const uint32_t path = kit_track_at(g_kit_file, 0) + kKitParams + 3;
+    const uint32_t path = kit_track_at(g_kit_file, 0) + kKitSoundParams + 3;
     CHECK_EQ(std::strcmp(reinterpret_cast<const char *>(g_kit_file + path), now), 0);
     int nonzero_tail = 0;
     for (int i = int(std::strlen(now)); i < kSamplePathBytes; i++) {
@@ -1289,7 +1624,7 @@ TEST(kit_a_shortened_path_leaves_no_trace_of_the_old_one) {
 
 TEST(kit_nothing_past_a_paths_terminator_is_read_back) {
     fresh_kit_file();
-    const uint32_t path = kit_track_at(g_kit_file, 1) + kKitParams + 3;
+    const uint32_t path = kit_track_at(g_kit_file, 1) + kKitSoundParams + 3;
 
     g_kit_file[path + 0] = 'A';
     g_kit_file[path + 1] = 'B';
@@ -1326,7 +1661,7 @@ TEST(kit_read_refuses_a_damaged_container_and_clears_the_kit) {
     int set = 0;
     for (int t = 0; t < kTracks; t++) {
         const KitTrack &track = g_kit_loaded.tracks[t];
-        for (int p = 0; p < kKitParams; p++) {
+        for (int p = 0; p < kKitSoundParams; p++) {
             if (track.params[p] != 0) set++;
         }
         if (track.sample[0] != '\0') set++;
@@ -1916,4 +2251,58 @@ TEST(the_four_file_types_agree_about_which_damage_wins) {
             check_same_reason(kind, read_file(kind, file, size), one.want);
         }
     }
+}
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(project_a_machine_id_one_past_the_table_has_no_name) {
+    CHECK_EQ(machine_name(uint8_t(MachineId::count)), "---");
+    CHECK_EQ(machine_name(uint8_t(MachineId::count) - 1), "MID");
+}
+
+TEST(project_settings_at_the_bottom_of_their_ranges_survive_a_round_trip) {
+    // C is root 0 and quantize 0 is "off": both are the bottom of a clamp, and a clamp one too
+    // high would turn them into C# and 1%. The same for a send or master byte of 0.
+    fill_project(g_source, 2);
+    ProjectSettings &s = g_source.settings;
+    s.root = 0;
+    s.quantize = 0;
+    for (int i = 0; i < kSendFields; i++) s.sends[i] = 0;
+    for (int i = 0; i < kMasterFields; i++) s.master[i] = 0;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, kProjectFileBytes, &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    const ProjectSettings &l = g_loaded.settings;
+    CHECK_EQ(int(l.root), 0);
+    CHECK_EQ(int(l.quantize), 0);
+    for (int i = 0; i < kSendFields; i++) CHECK_EQ(int(l.sends[i]), 0);
+    for (int i = 0; i < kMasterFields; i++) CHECK_EQ(int(l.master[i]), 0);
+}
+
+TEST(project_a_payload_declared_one_byte_past_the_file_is_truncated) {
+    fill_project(g_source, 2);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, kProjectFileBytes, &written)),
+             int(SerializeResult::ok));
+    poke_u32(g_project, 8, written - kHeaderBytes + 1);
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::truncated));
+}
+
+TEST(bank_a_section_cut_short_counts_every_pattern_it_lost) {
+    const uint32_t written = fresh_bank_file(2);
+    (void)written;
+    // Keep the first ten patterns whole and eight bytes of the eleventh's header: the rest
+    // cannot be found, and all six of them are reported.
+    uint32_t keep = 0;
+    for (int slot = 0; slot < 10; slot++) keep += pattern_bytes(g_source.patterns[2][slot]);
+    poke_u32(g_bank, kHeaderBytes + 8, keep + 8);
+    refresh_crc(g_bank);
+    project_init(g_loaded);
+    int refused = -1;
+    CHECK_EQ(int(bank_read(g_loaded, 2, g_bank, written, &refused)), int(SerializeResult::ok));
+    CHECK_EQ(refused, 6);
 }

@@ -110,6 +110,9 @@ public:
 
     // Seed or inspect the card directly, without going through the app.
     bool write_file(const char *path, const void *data, uint32_t bytes);
+    // A file of `bytes`, to be filled in place through the pointer returned (nullptr when the
+    // card has no room). For files too big for any buffer a test could hold.
+    uint8_t *create_file(const char *path, uint32_t bytes);
     int32_t read_file(const char *path, void *out, uint32_t max) const;
 
     // The first `max` bytes, however big the file is. `read_file` mirrors the ABI and refuses a
@@ -129,6 +132,32 @@ public:
     int read_alls() const { return read_alls_; }
     int folders_made() const { return folders_made_; }
 
+    // --- the audio input (enaga::system::input) and headphones ----------------
+    //
+    // The route last chosen, -1 before any; `set_input_result` makes the next calls answer as the
+    // codec would (-1 unknown source or level, -2 no answer). Headphones are out by default.
+    int input_source() const { return input_source_; }
+    int input_level() const { return input_level_; }
+    int input_calls() const { return input_calls_; }
+    void set_input_result(int32_t result) { input_result_ = result; }
+    void set_headphones(bool in) { headphones_ = in; }
+
+    // --- streams (files::Stream, playback only) -----------------------------
+    //
+    // A playback stream reads the card's file from its offset. It reports FILLING for the
+    // first `set_stream_fill_polls` status calls after an open, and reads nothing meanwhile, as
+    // a ring that has not yet been full; `set_stream_stall` makes every read come back empty, as
+    // a card that cannot keep up. Recording streams are still refused: STRATA writes takes with
+    // files::save.
+    void set_stream_fill_polls(int polls) { stream_fill_polls_ = polls; }
+    void set_stream_stall(bool stall) { stream_stall_ = stall; }
+    // At most this many bytes per read (0: no limit), as a ring that holds less than was asked
+    // for: a frame then arrives split across two reads.
+    void set_stream_read_limit(uint32_t bytes) { stream_read_limit_ = bytes; }
+    int stream_opens() const { return stream_opens_; }
+    int streams_open() const;
+    uint32_t last_stream_offset() const { return last_stream_offset_; }
+
     // --- held asynchrony --------------------------------------------------
     //
     // `file_load` queues its completion instead of calling `done` straight away, so a load is in
@@ -147,6 +176,7 @@ public:
 
     int leds_set() const { return leds_; }
     void set_audio_load(uint32_t per_mille);   // what enaga::audio_load() reports
+    void set_device(uint32_t device);          // what enaga::system::device() reports; 0 after reset
 
     // Every `Canvas::text` call since the last `clear_text()`, in order. The real host draws the
     // string with Enaga's 5 x 7 font; this one only records it, so a test can check where text
@@ -162,6 +192,25 @@ public:
     int text_count() const { return text_count_; }
     int text_dropped() const { return text_dropped_; }   // calls past kTextDraws
     const TextDraw &text_draw(int index) const { return text_[index]; }
+
+    // --- MIDI --------------------------------------------------------------
+    //
+    // Every message `midi_send` queued since the last `clear_midi()`, three bytes each (a
+    // two-byte message is padded with 0). `set_midi_full` makes it refuse, as a full 2 KiB queue
+    // does: nothing queued, -1. `set_midi_channel` is the user's MIDI CH, 0-15.
+    struct MidiSent {
+        uint8_t status, a, b;
+    };
+    static constexpr int kMidiLog = 1024;
+    void clear_midi() { midi_count_ = 0; midi_refused_ = 0; }
+    int midi_count() const { return midi_count_; }
+    int midi_refused() const { return midi_refused_; }
+    const MidiSent &midi_sent(int index) const { return midi_[index]; }
+    void set_midi_full(bool full) { midi_full_ = full; }
+    void set_midi_channel(uint32_t channel) { midi_channel_ = channel; }
+    // Messages of this kind (0x90, 0x80, 0xB0...) on channel 1-16, optionally only `a` (note or
+    // controller) when `a` >= 0.
+    int midi_messages(uint8_t kind, int channel, int a = -1) const;
 
     // The struct the app sees. `enaga::host()` returns this.
     const enaga_host_t &abi() const { return abi_; }
@@ -180,7 +229,9 @@ private:
     static constexpr int kHandles = int(ENAGA_FILES_OPEN);
 
     static constexpr int kMaxFiles = 48;
-    static constexpr uint32_t kArenaBytes = 4u << 20;
+    // 48 MiB: a project or two, and the long WAVs the chunked loader is tested with (a file
+    // bigger than the loader's 16.5 MiB staging buffer, and one past Cmd::set_sample's 24 bits).
+    static constexpr uint32_t kArenaBytes = 48u << 20;
     static constexpr uint32_t kPathMax = ENAGA_FILE_PATH_MAX + 1u;
 
     struct Entry {
@@ -197,6 +248,21 @@ private:
         uint32_t position;
         uint32_t mode;
     };
+
+    struct FakeStream {
+        bool open;
+        int entry;
+        uint32_t position;     // the next byte of the file a read returns
+        uint32_t offset;       // where it was opened
+        int fill_polls;        // status calls left that say FILLING
+    };
+    static constexpr int kStreams = int(ENAGA_STREAMS);
+    FakeStream streams_[kStreams]{};
+    int stream_fill_polls_ = 0;
+    bool stream_stall_ = false;
+    uint32_t stream_read_limit_ = 0;
+    int stream_opens_ = 0;
+    uint32_t last_stream_offset_ = 0;
 
     struct Pending {
         enaga_file_done_t done;
@@ -286,10 +352,22 @@ private:
     bool read_error_ = false;
     bool in_audio_ = false;
 
+    int input_source_ = -1;
+    int input_level_ = -1;
+    int input_calls_ = 0;
+    int32_t input_result_ = 0;
+    bool headphones_ = false;
     int saves_ = 0;
     int loads_ = 0;
     int read_alls_ = 0;
     int folders_made_ = 0;
+
+    // --- MIDI ---
+    MidiSent midi_[kMidiLog]{};
+    int midi_count_ = 0;
+    int midi_refused_ = 0;
+    bool midi_full_ = false;
+    uint32_t midi_channel_ = 0;
 
     // --- the panel ---
     static constexpr int kLogMax = 128;
@@ -302,6 +380,7 @@ private:
     int text_dropped_ = 0;
     int leds_ = 0;
     uint32_t audio_load_ = 0;
+    uint32_t device_ = 0;
     uint32_t ms_ = 0;
 };
 

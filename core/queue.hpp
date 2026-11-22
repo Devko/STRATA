@@ -144,6 +144,10 @@ struct ChainPlayer {
     bool active = false;
     uint8_t entry = 0;       // which chain entry is playing
     uint8_t played = 0;      // how many passes of it have finished
+    // The entry that was playing has been removed from the chain (`chain_player_removed`).
+    // The pattern goes on to the end of its pass, and `entry` is then the one that comes next:
+    // it starts on the following boundary, from its first pass.
+    bool orphaned = false;
 };
 
 // How many entries of `project.chain` are usable: entries are read in order and the first one
@@ -154,6 +158,11 @@ int chain_length(const Project &project);
 // Start a chain at its first entry. False when the chain is empty, leaving `player` inactive.
 bool chain_start(const Project &project, ChainPlayer &player);
 
+// Follow the chain again without moving off the live pattern: a project reopened with its chain
+// on. The live pattern plays out its pass and the chain then continues from its first entry --
+// at once, if the live pattern IS the first entry. False when the chain is empty.
+bool chain_resume(const Project &project, ChainPlayer &player);
+
 // One pass of the current entry has finished. Advances `played`, and when the entry's repeats are
 // used up moves to the next entry, wrapping at the end -- a chain loops, it does not stop.
 //
@@ -162,8 +171,48 @@ bool chain_start(const Project &project, ChainPlayer &player);
 // moved to the NEXT ENTRY and that entry names the pattern already playing, as a one-entry chain
 // does on every pass. `bank` and `slot` are then untouched, and `chain_current` says where the
 // chain is. The test is the pattern, not the entry, because a pattern change is not free: it
-// clears the undo history and restarts the `1ST` conditions.
+// clears the undo history and restarts the `1ST` conditions. "Already playing" means the LIVE
+// pattern, `project.bank` / `project.slot`, not the entry being left: the two differ once the
+// playing entry has been edited, and comparing with the entry then kept the old pattern playing
+// under the next entry's name.
 bool chain_advance(const Project &project, ChainPlayer &player, uint8_t &bank, uint8_t &slot);
+
+// Song mode: is the pass now ending the chain's last? True on the last pass of the last entry,
+// which is where a song stops instead of wrapping. False for an inactive player, an empty chain
+// and a player whose entry was removed (it has a next entry to go to).
+bool chain_at_end(const Project &project, const ChainPlayer &player);
+
+// The mute state the chain's current entry recalls, 0-7, or -1 for none. Read when an entry
+// starts: `chain_start`, and a `chain_advance` that left `played` at 0.
+int chain_entry_mutes(const Project &project, const ChainPlayer &player);
+
+// --- editing a chain (PROJECT's CHAIN page) --------------------------------
+//
+// Each edit keeps the chain what `chain_length` reads: a prefix of usable entries with every
+// entry after it zeroed, and `settings.chain_length` equal to the prefix. A chain whose stored
+// length and entries disagreed (a damaged file) is first cut back to the usable prefix. All
+// three refuse an index outside the chain, a pattern that cannot exist and a repeat count of
+// 0, leaving the project as it was.
+
+// Replace entry `at` (0 .. length-1). `mutes` is the entry's mute recall, 0-8
+// (`ChainEntry::mutes`); past 8 is refused.
+bool chain_set(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats,
+               uint8_t mutes = 0);
+
+// Insert a new entry so that it becomes entry `at` (0 .. length); the entries from `at` on move
+// up one. False when the chain already holds kChainEntries.
+bool chain_insert(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats,
+                  uint8_t mutes = 0);
+
+// Remove entry `at` (0 .. length-1); the entries after it move down one.
+bool chain_remove(Project &project, int at);
+
+// Keep a running player on the entry it is actually playing across an edit. `chain_insert` and
+// `chain_remove` renumber the entries, and `ChainPlayer::entry` is an index: without these, an
+// entry added above the playing one made the chain carry on from the wrong entry, and removing
+// the playing entry made it skip the one after it. Call each after the matching edit succeeded.
+void chain_player_inserted(ChainPlayer &player, int at);
+void chain_player_removed(ChainPlayer &player, int at);
 
 // The pattern the chain is currently on, for the screen. False when the chain is not active.
 bool chain_current(const Project &project, const ChainPlayer &player, uint8_t &bank,

@@ -203,6 +203,9 @@ public:
 
     void set_note(float velocity, bool accent, bool slide);
     void set_pitch(float note) { pitch_ = note; }
+    // Tests: drop the cached oscillator increments, so the next control step computes them.
+    // A voice copied and then made to forget must render the same bits as the original.
+    void forget_increments() { osc_inv_rate_ = 0.0f; }
     void set_target(float note) { target_ = note; }
     void gate_on();
     void gate_off() {
@@ -219,6 +222,14 @@ public:
     }
 
     float amp_level() const { return amp_.level(); }
+
+    // Fade out over kChokeFrames and stop: how the shared voice budget takes a voice from
+    // another track (va.cpp says why not a kill or a release). A no-op on a silent voice or one
+    // already fading. gate_on() cancels it, so a choked voice can be taken for a new note.
+    static constexpr int kChokeFrames = 64;
+    void choke();
+    bool choking() const { return choke_left_ > 0; }
+
     float pitch() const { return pitch_; }
     float target_pitch() const { return target_; }
     bool accent() const { return accent_; }
@@ -246,6 +257,23 @@ private:
     float velocity_ = 1.0f;             // this note's velocity, 0-1
     bool accent_ = false;               // this note's accent flag
     bool slide_ = false;                // this note arrived on a slid step
+
+    // The oscillators' increments and their reciprocals, as of the last control step, and the
+    // pitch and rate they came from. A held note does not glide -- VA POLY never does, VA MONO
+    // only while GLD is moving it -- so most control steps would recompute a semitones() and two
+    // reciprocals into the bits already here. Keyed by exact float equality on both inputs, so a
+    // hit is bit-exact by construction (va.cpp, run()).
+    float osc_pitch_ = 0.0f;
+    float osc_inv_rate_ = 0.0f;         // 0 never matches a real rate: the first step computes
+    float dt1_ = 0.0f, inv1_ = 0.0f, dt2_ = 0.0f, inv2_ = 0.0f;
+
+    // reciprocal(float(n)) for the slice length the last slice had: n is kControl on all but
+    // the slices a trig or a gate cuts short.
+    int ramp_n_ = 0;
+    float inv_n_ = 0.0f;
+
+    int choke_left_ = 0;                // frames of the choke fade still to run, 0 when none
+    float choke_step_ = 0.0f;           // the output gain it takes off per frame
 };
 
 // --- the machine ----------------------------------------------------------
@@ -259,6 +287,7 @@ public:
     void prepare(const TrackParams &params) override;
     void trigger(const Trig &trig) override;
     void release_all() override;
+    void release(uint8_t note) override;
     void kill_all() override;
     void render_add(float *out, int frames) override;
     bool active() const override { return active_; }
@@ -300,6 +329,7 @@ private:
     Trig next_{};                       // the pending trig and the frames until it starts
     int wait_ = 0;
     bool pending_ = false;
+    bool release_on_start_ = false;     // released before its frame: let go as soon as it starts
 
     float work_[VaVoice::kControl] = {};    // the slice being built
     float env_[VaVoice::kControl] = {};
