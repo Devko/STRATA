@@ -38,6 +38,7 @@
 #include "scheduler.hpp"
 #include "snare.hpp"
 #include "stepedit.hpp"
+#include "streamfifo.hpp"  // a streamed sample's read-ahead, per track
 #include "track.hpp"
 #include "chord.hpp"     // a POLY step's chord byte, expanded in fire()
 #include "undo.hpp"
@@ -46,6 +47,8 @@
 #include "lfo.hpp"       // one LFO per track, parameters 16-19
 
 #include <cstdint>
+
+#include <enaga/files.hpp>  // files::Stream: a streamed sample's tail, read in audio()
 
 namespace strata {
 
@@ -206,6 +209,30 @@ public:
     // that an offset from a damaged command cannot be followed out of the region.
     void set_sample_region(const int16_t *base, uint32_t bytes);
 
+    // --- streaming (app/storage.hpp, "Streaming") ---
+
+    // What Cmd::set_stream hands over, too much for a command: written by the main context just
+    // before the post and read by the audio side only while applying it -- kit_for_recall's rule.
+    struct StreamInfo {
+        uint32_t head_offset = 0;   // the head's byte offset in the sample region
+        uint32_t head_frames = 0;   // resident frames, the file's first
+        uint32_t total_frames = 0;  // the whole file's
+        uint32_t rate = 0;          // the file's own rate: a stream is not resampled
+        uint8_t channels = 1;
+        uint8_t encoding = 0;       // a PcmFormat
+        uint8_t frame_bytes = 0;    // in the file
+    };
+    StreamInfo &stream_for_load(int track) { return stream_inbox_[track]; }
+
+    // The track's stream. The MAIN context opens and closes it, the AUDIO context reads it, and
+    // never both at once: the audio side reads only between a Cmd::stream_attach and its own
+    // next Status::stream_want bump, and the card side opens or closes only after seeing a bump
+    // (or the epoch of a clear_sample) and before posting an attach.
+    enaga::files::Stream &stream(int track) { return streams_[track]; }
+    // For tests: is the audio side reading the track's stream?
+    bool stream_attached(int track) const { return stream_state_[track].attached; }
+    const StreamFifo &stream_fifo(int track) const { return fifos_[track]; }
+
 private:
     void apply_commands();
     void apply(const Command &command);
@@ -298,6 +325,33 @@ private:
         Granular grain;
     };
     TrackMachines pool_[kTracks];
+
+    // Streaming, per track. Audio side only, apart from the inbox and the stream objects, whose
+    // rules are at stream_for_load and stream() above.
+    struct StreamState {
+        bool on = false;              // the track's Sampler is in stream mode
+        bool attached = false;        // reading streams_[t] into fifos_[t]
+        uint8_t encoding = 0;
+        uint8_t frame_bytes = 0;
+        uint8_t carry = 0;            // bytes of a frame split across two reads
+        uint8_t carry_bytes[8] = {};
+        uint32_t total = 0;
+        uint32_t restarts_seen = 0;
+        uint32_t late_seen = 0;
+        uint16_t want = 0;            // what Status::stream_want[t] holds
+    };
+    void top_up_streams();            // before rendering: the card's bytes into the fifos
+    void watch_streams();             // after: a restart detaches and asks for a reopen
+    void stop_stream(int track);      // leave stream mode (clear_sample)
+    // Frames read per track per block at most: 512 is eight blocks of a voice at the root pitch,
+    // so a fifo emptied by a restart is full again well before the head runs out.
+    static constexpr uint32_t kStreamReadFrames = 512;
+    StreamInfo stream_inbox_[kTracks]{};
+    StreamState stream_state_[kTracks]{};
+    StreamFifo fifos_[kTracks];
+    enaga::files::Stream streams_[kTracks];
+    uint8_t stream_bytes_[kStreamReadFrames * 8u + 8u] = {};
+    uint32_t stream_late_ = 0;        // Status::stream_late: only ever grows
 
     // The hat choke is a pair, and the pair is tracks 3 and 4 of the DEFAULT kit. Machine
     // switching makes that an assumption rather than a fact, so it is re-derived on every

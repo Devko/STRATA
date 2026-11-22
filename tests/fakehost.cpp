@@ -106,6 +106,12 @@ void FakeHost::reset() {
     count_ = 0;
     for (int i = 0; i < kMaxFiles; i++) files_[i] = Entry{};
     for (int i = 0; i < kHandles; i++) handles_[i] = Handle{};
+    for (int i = 0; i < kStreams; i++) streams_[i] = FakeStream{};
+    stream_fill_polls_ = 0;
+    stream_stall_ = false;
+    stream_read_limit_ = 0;
+    stream_opens_ = 0;
+    last_stream_offset_ = 0;
     pending_ = 0;
 
     card_ = true;
@@ -620,20 +626,78 @@ int32_t FakeHost::t_file_list(const char *path, enaga_file_entry_t entry, enaga_
 
 const char *FakeHost::t_file_data_folder() { return "/ENAGA/DATA/STRATA"; }
 
-// Streams: STRATA does not use them (nothing in app/ calls stream_*), so these refuse rather
-// than pretend. A test that starts needing them will see the refusal and this will grow.
-int32_t FakeHost::t_stream_open(const char *, uint32_t, void *, uint32_t) {
-    return ENAGA_FILE_NOT_FOUND;
+// Streams. Playback reads the card's file; recording is refused (STRATA records with save).
+int FakeHost::streams_open() const {
+    int n = 0;
+    for (int i = 0; i < kStreams; i++) n += streams_[i].open ? 1 : 0;
+    return n;
+}
+
+int32_t FakeHost::t_stream_open(const char *path, uint32_t offset, void *ring,
+                                uint32_t ring_bytes) {
+    FakeHost &h = the();
+    const int32_t card = h.card_check();
+    if (card != ENAGA_FILE_OK) return card;
+    const int32_t bad = h.path_check(path);
+    if (bad != ENAGA_FILE_OK) return bad;
+    // The ABI's rule for the ring: a power of two, at least the minimum.
+    if (ring == nullptr || ring_bytes < ENAGA_STREAM_RING_MIN ||
+        (ring_bytes & (ring_bytes - 1u)) != 0u) {
+        return ENAGA_FILE_BAD_HANDLE;
+    }
+    const int entry = h.find(path);
+    if (entry < 0 || h.files_[entry].folder) return ENAGA_FILE_NOT_FOUND;
+    for (int i = 0; i < kStreams; i++) {
+        if (h.streams_[i].open) continue;
+        h.streams_[i] = FakeStream{true, entry, offset, offset, h.stream_fill_polls_};
+        h.stream_opens_++;
+        h.last_stream_offset_ = offset;
+        return int32_t(i);
+    }
+    return ENAGA_FILE_TOO_MANY;
 }
 int32_t FakeHost::t_stream_create(const char *, uint32_t, void *, uint32_t) {
     return ENAGA_FILE_DENIED;
 }
-uint32_t FakeHost::t_stream_read(int32_t, void *, uint32_t) { return 0; }
-uint32_t FakeHost::t_stream_write(int32_t, const void *, uint32_t) { return 0; }
-int32_t FakeHost::t_stream_status(int32_t, enaga_stream_status_t *) {
-    return ENAGA_FILE_BAD_HANDLE;
+uint32_t FakeHost::t_stream_read(int32_t stream, void *out, uint32_t bytes) {
+    FakeHost &h = the();
+    if (stream < 0 || stream >= kStreams || !h.streams_[stream].open) return 0;
+    FakeStream &st = h.streams_[stream];
+    if (!h.card_ || h.stream_stall_ || st.fill_polls > 0) return 0;
+    const Entry &e = h.files_[st.entry];
+    if (st.position >= e.bytes) return 0;
+    const uint32_t left = e.bytes - st.position;
+    uint32_t n = bytes < left ? bytes : left;
+    if (h.stream_read_limit_ != 0 && n > h.stream_read_limit_) n = h.stream_read_limit_;
+    std::memcpy(out, h.arena_ + e.offset + st.position, n);
+    st.position += n;
+    return n;
 }
-int32_t FakeHost::t_stream_close(int32_t, const void *, uint32_t) { return ENAGA_FILE_BAD_HANDLE; }
+uint32_t FakeHost::t_stream_write(int32_t, const void *, uint32_t) { return 0; }
+int32_t FakeHost::t_stream_status(int32_t stream, enaga_stream_status_t *status) {
+    FakeHost &h = the();
+    if (stream < 0 || stream >= kStreams || !h.streams_[stream].open) return ENAGA_FILE_BAD_HANDLE;
+    FakeStream &st = h.streams_[stream];
+    *status = enaga_stream_status_t{};
+    status->position = st.position - st.offset;
+    if (!h.card_) {
+        status->state = ENAGA_FILE_NO_CARD;
+    } else if (st.fill_polls > 0) {
+        st.fill_polls--;
+        status->state = ENAGA_STREAM_FILLING;
+    } else if (st.position >= h.files_[st.entry].bytes) {
+        status->state = ENAGA_STREAM_ENDED;
+    } else {
+        status->state = ENAGA_STREAM_RUNNING;
+    }
+    return ENAGA_FILE_OK;
+}
+int32_t FakeHost::t_stream_close(int32_t stream, const void *, uint32_t) {
+    FakeHost &h = the();
+    if (stream < 0 || stream >= kStreams || !h.streams_[stream].open) return ENAGA_FILE_BAD_HANDLE;
+    h.streams_[stream].open = false;
+    return ENAGA_FILE_OK;
+}
 
 void FakeHost::t_open_menu() {}
 void FakeHost::t_set_busy(uint32_t) {}

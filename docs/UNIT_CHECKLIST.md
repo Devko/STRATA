@@ -465,6 +465,22 @@ New 2026-11-22: files over the old 30 s limit load whole, in chunks. Put a 48 kH
 - [ ] PROJECT's SMP line shows the memory used, about `27/32M`. A second one on another track:
       `NO ROOM`, and the first keeps playing.
 
+## 15d. A stem bigger than memory, streamed (5 min)
+
+New 2026-11-22: a file the sample memory cannot hold streams from the card. Put a 48 kHz stereo
+16-bit WAV of 4-5 minutes (45-55 MB) in `/SAMPLES`.
+
+- [ ] Pick it for track 8 while playing: `LOADING LONG` only briefly (the first chunk), then the
+      SMP line shows `S` for track 8 and about `0/32M` more used (its 2 s head is 0.4 MiB).
+- [ ] With STA 0, PLY LOOP and one trig on step 1, it plays the whole file and loops: no gap
+      at 2 s (where the head ends and the card takes over)? `________` At the loop? `________`
+- [ ] Trig it every bar for 2 minutes: every restart starts clean, no `STREAM LATE`? `________`
+- [ ] Two more streamed tracks (copies of the file on tracks 6 and 7) at once: `STREAM LATE`
+      ever? `________` LOAD range `________ %` with three streams against without `________ %`.
+- [ ] A fifth streamed track says `STREAMS FULL`.
+- [ ] Pull the card while it streams: silence and `STREAM LATE`, no crash. Card back in: it
+      streams again after the reload.
+
 ## 16. Six voices: the STRATA6 app (4 min)
 
 STRATA6 is the same build with the chord stab set to MIN11 (six notes). Leave STRATA through

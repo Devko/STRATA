@@ -1717,6 +1717,20 @@ public:
         // pass" (app/storage.hpp).
         storage_.service();
 
+        // A streamed file the card could not keep up with (app/storage.hpp, "streaming"): the
+        // audio side played silence where frames were missing. Said once, then not again for a
+        // couple of seconds, so a slow card is visible without the screen saying nothing else.
+        {
+            const uint32_t late = engine_.status().stream_late.load(std::memory_order_relaxed);
+            if (late != stream_late_seen_) {
+                stream_late_seen_ = late;
+                if (uint32_t(ms - stream_late_said_ms_) > 2000u) {
+                    stream_late_said_ms_ = ms;
+                    notice("STREAM LATE");
+                }
+            }
+        }
+
         // The tempo a LOADED project brought with it. PROJECT.BIN has always had the field and
         // nothing read it, so every project opened at whatever the clock happened to be set to
         // -- a project saved at 142 came back at 130. Watched here rather than hooked to the end
@@ -3885,7 +3899,9 @@ public:
         append(out, "SMP ");
         for (int t = 0; t < kTracks; t++) {
             const SampleState state = pool.slot(t).state;
-            *out++ = state == SampleState::ready    ? 'O'
+            // S: ready, and streamed from the card rather than held whole.
+            *out++ = state == SampleState::ready && storage_.streaming(t) ? 'S'
+                     : state == SampleState::ready  ? 'O'
                      : state == SampleState::loading ? '.'
                      : state == SampleState::failed  ? 'X'
                                                      : '-';
@@ -3986,6 +4002,8 @@ private:
     }
 
     Engine engine_;
+    uint32_t stream_late_seen_ = 0;    // Status::stream_late as last noticed
+    uint32_t stream_late_said_ms_ = 0;
 
     // The card side: projects, autosave and the sample loader, all in this context. It owns the
     // sample region and the pool, so no pool state is shared across the ring at all

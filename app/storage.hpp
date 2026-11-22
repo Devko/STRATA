@@ -182,6 +182,13 @@ public:
     // Why the last listing failed (NOT FOUND, NO CARD...), or nullptr.
     const char *browse_error() const { return browse_error_; }
 
+    // --- streaming (below, "streaming: a file too big for the pool") ---
+
+    // Does this track play a streamed file? For the screen's sample line and for tests.
+    bool streaming(int track) const {
+        return track >= 0 && track < kTracks && streams_[track].on;
+    }
+
     // Put a file in a track's kit and load it, through the ordinary swap -- the same thing a
     // resample into a track does at its end. False for a track that is not one, or a path that
     // is empty or would not fit the kit's kSamplePathBytes. The kit becomes UNSAVED.
@@ -405,6 +412,57 @@ private:
     uint32_t chunk_have_ = 0;      // valid bytes in raw_
     uint32_t chunk_pos_ = 0;       // the next unconverted byte in raw_
     uint32_t chunk_carry_ = 0;     // part of a frame kept at raw_'s start for the next read
+
+    // --- streaming: a file too big for the pool ---
+    //
+    // Roland's call (2026-11-22), after chunked loading: a file the pool cannot hold is STREAMED
+    // rather than refused. Its first kStreamHeadSeconds are loaded into the pool as a HEAD,
+    // converted like any sample but not resampled (a stream plays at the file's own rate), and
+    // the rest is read from the card while it plays, through an Enaga `files::Stream` that
+    // belongs to the engine (Engine::stream). The head is what makes a restart instant: a
+    // trigger or a loop wrap plays the head from RAM while this side closes the stream and opens
+    // it again at the head's end, which an Enaga stream needs because it only reads forward.
+    //
+    // The protocol, per track:
+    //   1. The chunk job decides the file streams (begin_stream), converts the head into the
+    //      pool, fills Engine::stream_for_load and posts Cmd::set_stream (hand_stream_over).
+    //   2. The audio side puts the Sampler in stream mode and bumps Status::stream_want.
+    //   3. service_streams sees the bump, closes the stream, opens it at the head's end and,
+    //      once Enaga says it is filled, posts Cmd::stream_attach with the value it answered.
+    //   4. The audio side reads it into the track's fifo every block until the voice goes back
+    //      to frame 0, when it stops reading and bumps stream_want again: back to 3.
+    //   5. A sample swap's clear_sample stops the reading before its epoch, so once the epoch
+    //      moves (step_sample_epoch) end_stream closes the stream and frees the ring.
+    // The card side never touches the stream between an attach and the next bump, and the audio
+    // side never reads it outside that window, so the Stream object has one user at a time.
+    //
+    // A card pulled mid-stream makes reads come back short (silence, STREAM LATE); the card
+    // coming back reloads every track (on_card), which reopens it.
+    struct StreamPlan {
+        bool on = false;           // the track plays a streamed file
+        bool attached = false;     // the attach for `seq` is posted
+        bool failed = false;       // the open for `seq` failed: wait for the next restart
+        int8_t ring = -1;
+        uint16_t seq = 0;          // the Status::stream_want value last acted on
+        uint32_t offset = 0;       // the file byte where the tail (after the head) begins
+        char path[kSamplePathBytes] = {};
+    };
+    void service_streams();
+    const char *begin_stream(int track, const char *whole);   // nullptr: it streams
+    void hand_stream_over();
+    void end_stream(int track);
+    StreamPlan streams_[kTracks];
+    bool streaming_ = false;       // the sample job in flight converts a stream's head
+    uint32_t stream_total_ = 0;    // that file's frames
+    int8_t stream_ring_ = -1;      // and the ring it will use
+    // Four streamed tracks at once, each with a ring of 256 KiB: 1.36 s of 48 kHz stereo 16-bit
+    // and 0.34 s of the heaviest file allowed (96 kHz stereo float), against card reads that
+    // take milliseconds. 1 MiB in all, from docs/SPEC.md's "recording ring and stream buffers".
+    static constexpr int kStreamRings = 4;
+    static constexpr uint32_t kStreamRingBytes = 256u << 10;
+    // How much of a streamed file is resident: the time a restart has to reopen the stream.
+    static constexpr uint32_t kStreamHeadSeconds = 2;
+    uint8_t *rings_[kStreamRings] = {};
 
     enaga::wav::Format format_;
     PcmFormat encoding_ = PcmFormat::unknown;

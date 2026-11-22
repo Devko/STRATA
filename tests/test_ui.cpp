@@ -3706,3 +3706,22 @@ TEST(ui_layout_resample_sources) {
     pump(2);
     key(ENAGA_KEY_F4);
 }
+
+TEST(ui_a_late_stream_is_said_once_and_not_every_pass) {
+    // Status::stream_late moves when the card could not keep up with a streamed file. Written by
+    // the audio side; set by hand here, which is what a const_cast on the engine's own Status is.
+    Strata &app = fresh();
+    Status &status = const_cast<Status &>(UiProbe::engine(app).status());
+    for (int i = 0; i < 2100; i++) app.update(uint32_t(i));     // past the quiet start
+    status.stream_late.store(5, std::memory_order_relaxed);
+    app.update(3000);
+    CHECK_EQ(UiProbe::notice(app), "STREAM LATE");
+    status.stream_late.store(9, std::memory_order_relaxed);
+    app.update(4700);              // the notice has gone (1.5 s), and it is not said again yet
+    CHECK(!UiProbe::notice_showing(app));
+    status.stream_late.store(12, std::memory_order_relaxed);
+    app.update(5200);
+    CHECK_EQ(UiProbe::notice(app), "STREAM LATE");
+    CHECK(UiProbe::notice_showing(app));
+    status.stream_late.store(0, std::memory_order_relaxed);
+}

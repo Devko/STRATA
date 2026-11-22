@@ -98,6 +98,7 @@ bool mutates_kit(Cmd cmd) {
         case Cmd::set_track_level:
         case Cmd::clear_sample:
         case Cmd::set_sample:
+        case Cmd::set_stream:
         case Cmd::kit_store:
             return true;
         default:
@@ -198,6 +199,10 @@ bool Storage::init(Engine &engine) {
     src_ = new int16_t[kSrcBytes / sizeof(int16_t)];
     file_ = new uint8_t[kFileBytes];
     if (region_ == nullptr || raw_ == nullptr || src_ == nullptr || file_ == nullptr) return false;
+    for (int r = 0; r < kStreamRings; r++) {
+        rings_[r] = new uint8_t[kStreamRingBytes];
+        if (rings_[r] == nullptr) return false;
+    }
 
     pool_.init(kSampleBudgetDefaultMib << 20);
     engine_->set_sample_region(region_, kRegionBytes);
@@ -524,9 +529,11 @@ void Storage::finish_job(const char *error) {
         enaga::log(line);
     }
 
-    // A long file read in chunks is finished with whichever way its job ended.
+    // A long file read in chunks is finished with whichever way its job ended, and so is a
+    // stream's head (a stream that got as far as hand_stream_over has its own plan by now).
     if (chunk_file_.is_open()) chunk_file_.close();
     chunked_ = false;
+    streaming_ = false;
 
     const bool project_job = job_ == Job::save || job_ == Job::load;
     job_ = Job::idle;
@@ -591,6 +598,10 @@ int Storage::loading_track() const { return sample_track_; }
 void Storage::service() {
     // A command that did not fit in the ring goes first, and until it has, nothing moves on.
     if (!flush_backlog()) return;
+
+    // Streams before anything else, every pass and whatever job runs: a restart has the head's
+    // two seconds to be reopened, and a 4 MiB chunk read must not stand in its way.
+    service_streams();
 
     // A new project first, and before the card check: it is RAM only, so it needs no card. It
     // waits for an idle loader and an empty ring like a load, and for a save asked for before
@@ -1259,7 +1270,9 @@ void Storage::step_sample_epoch() {
         return;
     }
 
-    // Confirmed: the audio side has stopped reading, so the memory is ours. Only now.
+    // Confirmed: the audio side has stopped reading, so the memory is ours. Only now. Its
+    // stream too, if it played one: clear_sample stopped the reading before the epoch moved.
+    end_stream(track);
     pool_.release(track);
 
     // A track the kit names no file for is finished here: back on the placeholder (Cmd::clear_sample),
@@ -1544,33 +1557,33 @@ void Storage::step_sample_chunk() {
             return;
         }
         antialias_ = Antialias::make(format_.rate, uint32_t(ENAGA_SAMPLE_RATE));
+        // Whole if it fits, streamed if it does not (app/storage.hpp, "streaming"). `whole` is
+        // why it cannot be loaded whole, and what the screen says if it cannot stream either.
+        const char *whole = nullptr;
         if (format_.rate == uint32_t(ENAGA_SAMPLE_RATE)) {
             out_frames_ = src_frames_;
+        } else if (src_frames_ > kSrcFrames) {
+            whole = "TOO LONG";
         } else {
-            if (src_frames_ > kSrcFrames) {
-                pool_.fail(track);
-                sample_track_ = -1;
-                finish_job("TOO LONG");
-                return;
-            }
             cursor_ = Resampler::make(format_.rate, uint32_t(ENAGA_SAMPLE_RATE));
             out_frames_ = cursor_.output_frames(src_frames_);
         }
-        // Cmd::set_sample carries 24 bits of frames: 349 s at 48 kHz. Refused before anything is
+        // Cmd::set_sample carries 24 bits of frames: 349 s at 48 kHz. Decided before anything is
         // reserved, not after minutes of reading.
-        if (out_frames_ > 0xFFFFFFu) {
-            pool_.fail(track);
-            sample_track_ = -1;
-            finish_job("TOO LONG");
-            return;
+        if (whole == nullptr && out_frames_ > 0xFFFFFFu) whole = "TOO LONG";
+        if (whole == nullptr &&
+            !pool_.reserve(track, out_frames_ * uint32_t(format_.channels) *
+                                      uint32_t(sizeof(int16_t)))) {
+            whole = "NO ROOM";
         }
-        const uint32_t bytes =
-            out_frames_ * uint32_t(format_.channels) * uint32_t(sizeof(int16_t));
-        if (!pool_.reserve(track, bytes)) {
-            pool_.fail(track);
-            sample_track_ = -1;
-            finish_job("NO ROOM");
-            return;
+        if (whole != nullptr) {
+            const char *why = begin_stream(track, whole);
+            if (why != nullptr) {
+                pool_.fail(track);
+                sample_track_ = -1;
+                finish_job(why);
+                return;
+            }
         }
         out_offset_ = pool_.slot(track).offset;
         if ((out_offset_ % sizeof(int16_t)) != 0) {
@@ -1584,7 +1597,8 @@ void Storage::step_sample_chunk() {
 
     const int channels = int(format_.channels);
     const uint32_t frame_bytes = format_.frame_bytes();
-    const bool resampling = format_.rate != uint32_t(ENAGA_SAMPLE_RATE);
+    // A stream's head is not resampled: the file plays at its own rate (begin_stream).
+    const bool resampling = !streaming_ && format_.rate != uint32_t(ENAGA_SAMPLE_RATE);
     int16_t *destination = resampling ? src_ : region_ + out_offset_ / sizeof(int16_t);
 
     // One slice of this chunk.
@@ -1614,6 +1628,10 @@ void Storage::step_sample_chunk() {
             pool_.fail(track);
             sample_track_ = -1;
             finish_job("EMPTY");
+            return;
+        }
+        if (streaming_) {
+            hand_stream_over();
             return;
         }
         if (resampling) {
@@ -1786,6 +1804,137 @@ void Storage::hand_sample_over() {
     post(command);
 
     finish_job(nullptr);
+}
+
+// --- streaming ----------------------------------------------------------------
+//
+// app/storage.hpp, "streaming: a file too big for the pool", has the protocol.
+
+const char *Storage::begin_stream(int track, const char *whole) {
+    const uint32_t rate = format_.rate;
+    // The Sampler plays a stream at its own rate, as a step. Past the rates the loader takes at
+    // all, refused as before.
+    if (rate < 8000u || rate > kMaxSampleSourceRate) return whole;
+    const uint32_t head = rate * kStreamHeadSeconds;
+    // A file no longer than its head would be a stream of nothing: it simply does not fit.
+    if (src_frames_ <= head) return whole;
+    if (src_frames_ > Sampler::kMaxStreamFrames) return "TOO LONG";
+
+    int ring = -1;
+    for (int r = 0; r < kStreamRings && ring < 0; r++) {
+        bool used = false;
+        for (int t = 0; t < kTracks; t++) used = used || (streams_[t].on && streams_[t].ring == r);
+        if (!used) ring = r;
+    }
+    if (ring < 0) return "STREAMS FULL";
+
+    // The head comes out of the first chunk, which is 4 MiB: two seconds of even 96 kHz stereo
+    // float is 1.5 MB. Checked anyway, since a header may put its data anywhere.
+    const uint32_t frame_bytes = format_.frame_bytes();
+    if (format_.data_offset + head * frame_bytes > chunk_have_) return whole;
+    if (!pool_.reserve(track, head * uint32_t(format_.channels) * uint32_t(sizeof(int16_t)))) {
+        return "NO ROOM";
+    }
+    streaming_ = true;
+    stream_total_ = src_frames_;
+    stream_ring_ = int8_t(ring);
+    src_frames_ = head;
+    out_frames_ = head;
+    return nullptr;
+}
+
+void Storage::hand_stream_over() {
+    const int track = sample_track_;
+    sample_track_ = -1;
+    if (track < 0) {
+        finish_job(nullptr);
+        return;
+    }
+    const int channels = int(format_.channels);
+    const uint32_t head = src_done_;
+    if (!pool_.finish(track, head, channels, format_.rate)) {
+        pool_.fail(track);
+        finish_job("POOL REFUSED");
+        return;
+    }
+
+    // The inbox first, then the plan, then the post: the audio side reads the inbox when it
+    // applies the command, and the plan starts from the stream_want value BEFORE that apply, so
+    // the bump the apply makes is the one service_streams answers.
+    Engine::StreamInfo &info = engine_->stream_for_load(track);
+    info.head_offset = out_offset_;
+    info.head_frames = head;
+    info.total_frames = stream_total_;
+    info.rate = format_.rate;
+    info.channels = uint8_t(channels);
+    info.encoding = uint8_t(encoding_);
+    info.frame_bytes = uint8_t(format_.frame_bytes());
+
+    StreamPlan &plan = streams_[track];
+    plan = StreamPlan{};
+    plan.on = true;
+    plan.ring = stream_ring_;
+    plan.offset = format_.data_offset + head * format_.frame_bytes();
+    plan.seq = engine_->status().stream_want[track].load(std::memory_order_acquire);
+    const char *path = engine_->project().kit.tracks[track].sample;
+    for (int i = 0; i < kSamplePathBytes; i++) {
+        plan.path[i] = path[i];
+        if (path[i] == '\0') break;
+    }
+    plan.path[kSamplePathBytes - 1] = '\0';
+
+    Command command;
+    command.cmd = Cmd::set_stream;
+    command.track = uint8_t(track);
+    post(command);
+    finish_job(nullptr);
+}
+
+void Storage::end_stream(int track) {
+    StreamPlan &plan = streams_[track];
+    if (!plan.on) return;
+    engine_->stream(track).close();
+    plan = StreamPlan{};
+}
+
+void Storage::service_streams() {
+    for (int t = 0; t < kTracks; t++) {
+        StreamPlan &plan = streams_[t];
+        if (!plan.on) continue;
+        enaga::files::Stream &stream = engine_->stream(t);
+        const uint16_t want = engine_->status().stream_want[t].load(std::memory_order_acquire);
+        if (want != plan.seq) {
+            // The audio side stopped reading before it bumped `want`, so the stream is ours.
+            stream.close();
+            plan.seq = want;
+            plan.attached = false;
+            plan.failed = false;
+            const int32_t opened =
+                card_usable_ ? stream.open(plan.path, plan.offset, rings_[plan.ring],
+                                           kStreamRingBytes)
+                             : int32_t(ENAGA_FILE_NO_CARD);
+            if (opened < 0) {
+                plan.failed = true;
+                error_ = "STREAM FAILED";
+                continue;
+            }
+        }
+        if (plan.attached || plan.failed || !stream.is_open()) continue;
+        const enaga::files::Stream::Status status = stream.status();
+        if (status.state < 0) {
+            plan.failed = true;
+            error_ = "STREAM FAILED";
+            continue;
+        }
+        if (status.state < ENAGA_STREAM_RUNNING) continue;     // still filling
+        Command command;
+        command.cmd = Cmd::stream_attach;
+        command.track = uint8_t(t);
+        command.a = uint8_t(want & 0xFFu);
+        command.b = uint8_t(want >> 8);
+        post(command);
+        plan.attached = true;
+    }
 }
 
 void Storage::save_for_shutdown() {

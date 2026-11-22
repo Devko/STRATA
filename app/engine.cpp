@@ -2,6 +2,7 @@
 
 #include "factory.hpp"
 #include "masterloops.h"   // strata_master_peak, for the input meter
+#include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
@@ -791,6 +792,9 @@ void Engine::apply(const Command &command) {
             // project saved from the factory and opened again, lose that track's part.
             pool_[track].sampler.set_sample(placeholder_, placeholder_frames_, 1, rate_);
             pool_[track].grain.set_sample(placeholder_, placeholder_frames_, 1, rate_);
+            // A streamed sample stops being read here too, BEFORE the epoch: the card side closes
+            // the track's stream once it sees the bump.
+            stop_stream(track);
             // Bumped even for a track that hosts no Sampler. The loader waits for this change
             // before it releases the range, so a track that was never reading anything must
             // still report that it has stopped, or the wait never ends.
@@ -824,8 +828,65 @@ void Engine::apply(const Command &command) {
                 break;
             }
             const int16_t *data = sample_region_ + command.u / sizeof(int16_t);
+            stop_stream(track);
             pool_[track].sampler.set_sample(data, frames, channels, rate_);
             pool_[track].grain.set_sample(data, frames, channels, rate_);
+            break;
+        }
+
+        case Cmd::set_stream: {
+            // The head is checked against the region exactly as set_sample's buffer is.
+            const StreamInfo &info = stream_inbox_[track];
+            const int channels = info.channels == 2 ? 2 : 1;
+            const uint32_t head_bytes = info.head_frames * uint32_t(channels) * 2u;
+            const bool usable = sample_region_ != nullptr && info.head_frames != 0 &&
+                                info.head_frames <= uint32_t(Sampler::kMaxFrames) &&
+                                info.head_offset % sizeof(int16_t) == 0 &&
+                                info.head_offset <= sample_region_bytes_ &&
+                                head_bytes <= sample_region_bytes_ - info.head_offset &&
+                                info.frame_bytes != 0 && info.frame_bytes <= 8 &&
+                                info.encoding != 0 && info.encoding < uint8_t(PcmFormat::count);
+            if (!usable) {
+                status_.bump_refused();
+                break;
+            }
+            const int16_t *head = sample_region_ + info.head_offset / sizeof(int16_t);
+            const float rate = float(info.rate);
+            stop_stream(track);
+            Sampler &sampler = pool_[track].sampler;
+            sampler.set_stream(head, info.head_frames, info.total_frames, channels, rate,
+                               &fifos_[track]);
+            // GRAIN plays what is resident: the head. A grain cloud jumps about the file, which
+            // a stream cannot do.
+            pool_[track].grain.set_sample(head, info.head_frames, channels, rate);
+            if (!sampler.streaming()) {
+                status_.bump_refused();
+                break;
+            }
+            StreamState &st = stream_state_[track];
+            st.on = true;
+            st.attached = false;
+            st.encoding = info.encoding;
+            st.frame_bytes = info.frame_bytes;
+            st.carry = 0;
+            st.total = info.total_frames;
+            st.restarts_seen = sampler.stream_restarts();
+            st.late_seen = sampler.stream_late();
+            // Ask for the stream: the card side opens it after the head and attaches.
+            st.want = uint16_t(st.want + 1u);
+            status_.stream_want[track].store(st.want, std::memory_order_release);
+            break;
+        }
+
+        case Cmd::stream_attach: {
+            StreamState &st = stream_state_[track];
+            const uint16_t answered = uint16_t(command.a | uint16_t(command.b) << 8);
+            // An answer to an older request is stale: the stream it opened was for a restart
+            // that has since been superseded, and the card side is already reopening.
+            if (st.on && answered == st.want) {
+                st.attached = true;
+                st.carry = 0;
+            }
             break;
         }
 
@@ -1900,6 +1961,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // decide where the destination sits, and the LFO moves it about there (dsp/lfo.hpp).
     run_lfos(frames, clock_now.running, clock_now.position, clock_now.fraction);
 
+    // A streamed sample's next frames, before anything renders from them.
+    top_up_streams();
+
     mixer_.prepare(sends_, master_);
     mixer_.begin_block(int(frames));
 
@@ -1922,6 +1986,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     }
 
     mixer_.finish_block(out, int(frames));
+
+    // A stream voice that went back to frame 0 in this block needs its stream reopened.
+    watch_streams();
 
     // Beat repeat is LAST, on the finished master: that is what "the master output" means, and
     // it is why it captures the limiter and the master filter too (dsp/repeat.hpp). The length
@@ -1978,6 +2045,71 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     const float scaled = peak * 1000.0f;
     status_.peak_milli.store(uint16_t(scaled > 65535.0f ? 65535.0f : scaled),
                              std::memory_order_relaxed);
+}
+
+// --- streaming ------------------------------------------------------------------
+//
+// app/storage.hpp, "Streaming", has the protocol. This side reads: each block, up to
+// kStreamReadFrames of each attached track's file into its fifo, converted to int16 on the way
+// (core/pcm.hpp). Enaga's stream never waits (a short read is an underrun or the end), so this
+// costs a copy and a conversion of what arrived and nothing else.
+
+void Engine::stop_stream(int track) {
+    StreamState &st = stream_state_[track];
+    st.on = false;
+    st.attached = false;
+    st.carry = 0;
+}
+
+void Engine::top_up_streams() {
+    for (int t = 0; t < kTracks; t++) {
+        StreamState &st = stream_state_[t];
+        if (!st.on || !st.attached) continue;
+        StreamFifo &fifo = fifos_[t];
+        const uint32_t next = fifo.next_frame();
+        if (next >= st.total) continue;               // the whole file is in
+        uint32_t room = 0;
+        int16_t *span = fifo.write_span(&room);
+        uint32_t n = room < kStreamReadFrames ? room : kStreamReadFrames;
+        if (n > st.total - next) n = st.total - next;
+        if (n == 0) continue;
+
+        const uint32_t fb = st.frame_bytes;
+        for (uint32_t i = 0; i < st.carry; i++) stream_bytes_[i] = st.carry_bytes[i];
+        const uint32_t want = n * fb - st.carry;
+        const uint32_t got = streams_[t].read(stream_bytes_ + st.carry, want);
+        const uint32_t have = st.carry + (got > want ? want : got);
+        const uint32_t frames = stream_frames_in(have, fb);
+        if (frames != 0) {
+            const uint32_t did = pcm_to_s16(stream_bytes_, frames * fb, PcmFormat(st.encoding),
+                                            fifo.channels(), span, frames);
+            fifo.commit(did);
+        }
+        const uint32_t used = frames * fb;
+        st.carry = uint8_t(have - used);
+        for (uint32_t i = 0; i < st.carry; i++) st.carry_bytes[i] = stream_bytes_[used + i];
+    }
+}
+
+void Engine::watch_streams() {
+    for (int t = 0; t < kTracks; t++) {
+        StreamState &st = stream_state_[t];
+        if (!st.on) continue;
+        const Sampler &sampler = pool_[t].sampler;
+        const uint32_t late = sampler.stream_late();
+        stream_late_ += late - st.late_seen;
+        st.late_seen = late;
+        const uint32_t restarts = sampler.stream_restarts();
+        if (restarts == st.restarts_seen) continue;
+        st.restarts_seen = restarts;
+        // Stop reading FIRST, then say so: the card side may close the stream the moment it
+        // sees the new value, and the release store is what orders the two.
+        st.attached = false;
+        st.carry = 0;
+        st.want = uint16_t(st.want + 1u);
+        status_.stream_want[t].store(st.want, std::memory_order_release);
+    }
+    status_.stream_late.store(stream_late_, std::memory_order_relaxed);
 }
 
 }  // namespace strata

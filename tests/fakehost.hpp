@@ -142,6 +142,22 @@ public:
     void set_input_result(int32_t result) { input_result_ = result; }
     void set_headphones(bool in) { headphones_ = in; }
 
+    // --- streams (files::Stream, playback only) -----------------------------
+    //
+    // A playback stream reads the card's file from its offset. It reports FILLING for the
+    // first `set_stream_fill_polls` status calls after an open, and reads nothing meanwhile, as
+    // a ring that has not yet been full; `set_stream_stall` makes every read come back empty, as
+    // a card that cannot keep up. Recording streams are still refused: STRATA writes takes with
+    // files::save.
+    void set_stream_fill_polls(int polls) { stream_fill_polls_ = polls; }
+    void set_stream_stall(bool stall) { stream_stall_ = stall; }
+    // At most this many bytes per read (0: no limit), as a ring that holds less than was asked
+    // for: a frame then arrives split across two reads.
+    void set_stream_read_limit(uint32_t bytes) { stream_read_limit_ = bytes; }
+    int stream_opens() const { return stream_opens_; }
+    int streams_open() const;
+    uint32_t last_stream_offset() const { return last_stream_offset_; }
+
     // --- held asynchrony --------------------------------------------------
     //
     // `file_load` queues its completion instead of calling `done` straight away, so a load is in
@@ -213,6 +229,21 @@ private:
         uint32_t position;
         uint32_t mode;
     };
+
+    struct FakeStream {
+        bool open;
+        int entry;
+        uint32_t position;     // the next byte of the file a read returns
+        uint32_t offset;       // where it was opened
+        int fill_polls;        // status calls left that say FILLING
+    };
+    static constexpr int kStreams = int(ENAGA_STREAMS);
+    FakeStream streams_[kStreams]{};
+    int stream_fill_polls_ = 0;
+    bool stream_stall_ = false;
+    uint32_t stream_read_limit_ = 0;
+    int stream_opens_ = 0;
+    uint32_t last_stream_offset_ = 0;
 
     struct Pending {
         enaga_file_done_t done;
