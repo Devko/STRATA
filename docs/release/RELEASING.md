@@ -1,60 +1,76 @@
 # Releasing STRATA
 
 A release is a zip for the SD card, made from the card that passed the unit test, and a GitHub
-release that carries it. Nothing here is published until the unit test passes and Roland says go.
+pre-release that carries it. Nothing is published until the unit test passes and Roland says go.
+Publishing is one command, `tools/publish_release.sh`, and it refuses rather than guesses.
 
-## 1. Before packaging
+## Before: the card is what ships
 
-- [ ] The unit walkthrough at the top of `docs/UNIT_CHECKLIST.md` passed on the card being
-      released, with the build noted on its first line (cl6x or GCC only).
+- [ ] The card was built from `main` as it is now (`tools/build.sh`, no `--name`) and the
+      walkthrough at the top of `docs/UNIT_CHECKLIST.md` passed on it.
+- [ ] `SmplTrek.bin` on it is the file from Enaga's own v0.2.0 release zip,
+      `enaga-v0.2.0-smpltrek.zip` (<https://github.com/seawaffle/enaga/releases/tag/v0.2.0>),
+      not a local firmware build. The script checks this.
 - [ ] If the `APP.ENA` was built with cl6x: read the licence text in
       `~/ti/ti-cgt-c6000_8.5.0.LTS` (a `LICENSE`, `*manifest*` or `license` directory) for a
       condition on distributing the compiler's **output**, and record what it says in
       `docs/BUDGET.md`, "The cl6x licence question, examined". If it attaches one, stop and ask.
       If in doubt, release a GCC-only build (`ENAGA_TI_CGT=none tools/build.sh`) instead.
-- [ ] `SmplTrek.bin` on the card is **Enaga's own v0.2.0 release file**, not a local build: its
-      SHA-256 matches the one in the SmplTrek zip from
-      <https://github.com/seawaffle/enaga/releases/tag/v0.2.0>. (The script checks it is Enaga
-      0.2.0 for the SmplTrek and nothing else; it cannot tell a local build from the release.)
-- [ ] The `APP.ENA` is the plain STRATA build, not STRATA6: `tools/build.sh` with no `--name`.
-      The script refuses any package not named STRATA, and leaves `ENAGA/APPS/STRATA6/` out.
+- [ ] `gh` is installed in WSL and logged in (`gh auth status`).
 
-## 2. Fill in the notes
+## Publish: one command
 
-- [ ] Replace every `TODO(release)` in `CHANGELOG.md` and `docs/release/v0.1.0.md` with the
-      unit test's result and the MAX readings.
-- [ ] In `CHANGELOG.md`, change `## [0.1.0] - unreleased` to the release date,
-      `## [0.1.0] - YYYY-MM-DD`.
-- [ ] Commit both, on a branch, and merge it.
-
-## 3. Package
-
-In WSL, from the repository:
+In WSL, from a clean checkout of `main`:
 
 ```sh
-python3 -B tests/test_package_release.py           # the script's own tests
-python3 -B tools/package_release.py v0.1.0            # build/card -> build/release/
+tools/publish_release.sh v0.1.0 --build gcc --max-a01 30.1 --max-a04 41.7 --dry-run   # read it first
+tools/publish_release.sh v0.1.0 --build gcc --max-a01 30.1 --max-a04 41.7             # publish
 ```
 
-It refuses while a `TODO(release)` is left or the changelog is undated; `--draft` makes a trial
-zip named `...-draft.zip` before then. `--no-firmware` makes an `...-app-only.zip` with only
-`APP.ENA`, whose README.txt points to Enaga's release instead. The output names both files'
-SHA-256 and the zip's; `SHA256SUMS.txt` in the zip lists the card files.
+`--build` says which compiler built the card (`gcc`, or `cl6x` together with
+`--ti-licence-read`), and the two figures are the MAX readings on A01 and A04 from the
+walkthrough. `--draft` creates the GitHub release as a draft to look at before pressing Publish.
+`--card DIR` takes a card folder other than `build/card`, and `--date` overrides today's date.
 
-Optional, and worth it: unzip it onto a freshly formatted card, install, and play A01.
+What it does, refusing at the first thing that is wrong:
 
-## 4. Publish (Roland's go)
+1. The tree is clean, HEAD is `origin/main`, and neither the tag nor the release exists.
+2. It rebuilds `APP.ENA` from HEAD with the same compiler and compares it byte for byte with the
+   card's, so the release is the code it is tagged as. (`--skip-build-check` only if the card was
+   deliberately built elsewhere.)
+3. It downloads Enaga's release zip with `gh` and checks the card's `SmplTrek.bin` is the file in
+   it, byte for byte. (`--skip-enaga-check` only when GitHub is unreachable; compare SHA-256 by
+   hand then.)
+4. It fills the `{{FIELDS}}` in `CHANGELOG.md` and `docs/release/v0.1.0.md` (date, build, MAX
+   readings, the zip's SHA-256), runs `tests/test_package_release.py`, and builds the zip with
+   `tools/package_release.py`. `--dry-run` prints the release text here and stops, leaving the
+   tree as it was.
+5. It commits the filled notes on `release/v0.1.0`, tags that commit `v0.1.0`, pushes both, creates
+   the GitHub pre-release "STRATA 0.1.0" with the zip and its `.sha256`, and opens a PR that
+   brings the dated changelog into `main`.
 
-- [ ] Tag the merged commit: `git tag -a v0.1.0 -m "STRATA 0.1.0"` and push the tag.
-- [ ] Create the GitHub release from tag `v0.1.0`, title **STRATA 0.1.0**, marked **pre-release**,
-      body = `docs/release/v0.1.0.md` below its `---` line, with the SHA-256 filled in.
-- [ ] Attach `STRATA-v0.1.0-smpltrek.zip` and its `.sha256`.
-- [ ] Publish. Then update README.md's "Installing on a SmplTrek" (it says there is no prebuilt
-      release yet) and the status badge, in a follow-up commit.
+## After
+
+- [ ] Merge the `release/v0.1.0` PR.
+- [ ] Update README.md's "Installing on a SmplTrek" (it says there is no prebuilt release yet)
+      and the status badge.
+- [ ] Optional, and worth it: download the zip from the release page, unzip it onto a freshly
+      formatted card, install, and play A01.
+
+## The pieces, for doing a step by hand
+
+- `tools/package_release.py vX.Y.Z [--card DIR] [--out DIR] [--no-firmware] [--draft]` builds the
+  zip alone. It takes only `SmplTrek.bin` and `ENAGA/APPS/STRATA/APP.ENA` from the card, and
+  refuses an update file that is not one SYSTEM image of the pinned Enaga for the SmplTrek, an
+  `APP.ENA` not named STRATA or built for another ABI, and a changelog with unfilled fields
+  unless `--draft`. `--no-firmware` makes an `...-app-only.zip` whose README.txt points to
+  Enaga's release instead.
+- `docs/release/README.txt` is the README inside the zip; `docs/release/vX.Y.Z.md` is the release
+  body (everything below its `---` line).
 
 ## Rules that do not change
 
 - Never put an official Sonicware update file in a zip, and never one with BOOT or MCU sections.
-  The script refuses both.
+  The packaging script refuses both.
 - Enaga's version in the zip is the pinned one. Moving it follows `docs/HANDOFF.md`, "Moving the
   Enaga pin", and the README.txt, the notes and this file move with it.
