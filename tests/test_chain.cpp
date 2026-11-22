@@ -748,6 +748,81 @@ TEST(mixer_delay_repeats_at_about_the_set_time) {
     CHECK(at > 2200 && at < 2600);    // at roughly the time that was asked for
 }
 
+namespace {
+
+// One block through the mixer: track 0 fed `mono` when `feed`, otherwise not rendered at all --
+// which is what the engine does with a track that has gone idle. Returns the block's peak.
+float tail_block(Mixer &mixer, const SendSettings &sends, const MasterSettings &master,
+                 const TrackParams &p, bool feed, float impulse) {
+    static float mono[kFrames], out[2 * kFrames];
+    ChainMix mix;
+    mixer.prepare(sends, master);
+    mixer.begin_block(kFrames);
+    if (feed) {
+        for (int i = 0; i < kFrames; i++) mono[i] = i == 0 ? impulse : 0.0f;
+        mixer.chain(0).prepare(p, mix);
+        mixer.add_track(0, mono);
+    }
+    mixer.finish_block(out, kFrames);
+    float peak = 0.0f;
+    for (int i = 0; i < 2 * kFrames; i++) peak = absolute(out[i]) > peak ? absolute(out[i]) : peak;
+    return peak;
+}
+
+}  // namespace
+
+TEST(mixer_a_long_delay_tail_is_not_cut_off_and_a_finished_one_leaves_nothing_to_replay) {
+    // The tail gate stopped the delay after at most 8 s: at feedback 0.95 on a 1 s delay the
+    // echoes were still plainly audible, and stopped dead. The frozen line then replayed the next
+    // time the send was fed. The gate now holds until the tail is 60 dB down.
+    static Mixer mixer;
+    mixer.init(kRate);
+    SendSettings sends;
+    sends.delay_seconds = 1.0f;
+    sends.delay_feedback = 0.95f;
+    sends.delay_tone = 1.0f;
+    sends.delay_ping_pong = false;
+    sends.delay_level = 1.0f;
+    sends.delay_to_reverb = 0.0f;
+    sends.reverb_level = 0.0f;
+    const MasterSettings master = transparent_master();
+    TrackParams p = neutral_params();
+    p.set(kSna, 127);
+    p.set(kSnb, 0);
+
+    const int per_second = int(kRate) / kFrames;
+    tail_block(mixer, sends, master, p, true, 1.0f);
+    float first = 0.0f, at_ten = 0.0f;
+    for (int b = 1; b < per_second * 11; b++) {
+        const float peak = tail_block(mixer, sends, master, p, false, 0.0f);
+        if (b < per_second * 2) first = peak > first ? peak : first;
+        if (b >= per_second * 10) at_ten = peak > at_ten ? peak : at_ten;
+    }
+    CHECK(first > 0.01f);
+    // Measured 0.91 and 0.15: the tone filter softens each pass, so the peak falls faster than
+    // 0.95 per repeat, but -15 dB is still plainly audible. The old gate gave exactly 0 here.
+    CHECK(at_ten > 0.05f * first);
+
+    // A short, light delay, run out, then fed silence: nothing audible comes back.
+    static Mixer quick;
+    quick.init(kRate);
+    sends.delay_seconds = 0.2f;
+    sends.delay_feedback = 0.5f;
+    tail_block(quick, sends, master, p, true, 1.0f);
+    float echo = 0.0f;
+    for (int b = 1; b < per_second * 4; b++) {
+        const float peak = tail_block(quick, sends, master, p, false, 0.0f);
+        echo = peak > echo ? peak : echo;
+    }
+    float replay = 0.0f;
+    for (int b = 0; b < per_second; b++) {
+        const float peak = tail_block(quick, sends, master, p, true, 0.0f);
+        replay = peak > replay ? peak : replay;
+    }
+    CHECK(echo > 0.01f);
+    CHECK(replay < 0.002f * echo);
+}
+
 TEST(mixer_reverb_produces_a_decaying_tail) {
     Mixer mixer;
     mixer.init(kRate);
