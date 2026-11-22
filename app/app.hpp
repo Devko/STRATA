@@ -1202,8 +1202,6 @@ public:
         command.c = 0;                       // the whole track
         command.u = mutate_variant_++;       // a new result each press
         post_command(command);
-        storage_.note_command(Cmd::mutate,
-                              int(engine_.status().live_bank.load(std::memory_order_relaxed)));
         char *out = notice_buffer_;
         append(out, mutation_name(mutation_));
         *out = 0;
@@ -2160,8 +2158,6 @@ public:
         command.c = now;
         command.d = far;
         post_command(command);
-        storage_.note_command(Cmd::macro_assign,
-                              int(engine_.status().live_bank.load(std::memory_order_relaxed)));
 
         char *out = notice_buffer_;
         *out++ = char('A' + macro_selected_);
@@ -2330,8 +2326,6 @@ public:
         command.b = uint8_t(slot);
         command.c = uint8_t(queue_mode_);
         post_command(command);
-        storage_.note_command(Cmd::queue_pattern,
-                              int(engine_.status().live_bank.load(std::memory_order_relaxed)));
 
         char *out = notice_buffer_;
         *out++ = bank_letter(shown_bank_);
