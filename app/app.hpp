@@ -566,7 +566,7 @@ public:
                     } else {
                         save_armed_ = true;
                         save_armed_at_ms_ = last_ms_;
-                        notice("F1+F3 AGAIN TO SAVE");
+                        notice("FUNC+PROJECT TO SAVE");
                     }
                 }
                 break;
@@ -942,7 +942,7 @@ public:
         } else {
             mark(GestureKind::erase, selected_, 0);
             post(Cmd::track_erase, uint8_t(selected_));
-            notice("CLEARED  F1+CLR UNDO");   // 21 characters at most
+            notice("CLEARED FUNC+CLR UNDO");    // 21 characters at most
         }
         end_gesture();
     }
@@ -1998,7 +1998,7 @@ public:
         }
 
         // The machine is changed somewhere else, and nothing said where.
-        canvas.text(0, 96, "F1+EDIT: MACHINE", 7);
+        canvas.text(0, 96, "FUNC+EDIT: MACHINE", 7);
     }
 
     // --- MIXER: four levels at a time, with meters -----------------------
@@ -2550,7 +2550,7 @@ public:
 
         // The gesture that is not otherwise discoverable.
         canvas.text(0, 78, "STEP ASSIGNS TO MACRO", 7);
-        canvas.text(0, 87, "F1+UP AUTOFILL", 7);
+        canvas.text(0, 87, "FUNC+UP AUTOFILL", 7);
 
         // What MUTATE will do, and to which track.
         out = line;
@@ -2865,7 +2865,7 @@ public:
             }
         }
 
-        canvas.text(0, 103, "OK ADD  F1+LEFT DEL", 7);
+        canvas.text(0, 103, "OK ADD  FUNC+LEFT DEL", 7);
         canvas.text(0, 112, "VALUE REPEATS", 7);
     }
 
@@ -2996,7 +2996,7 @@ public:
         // No commas: the font has none, and each drew as '?'.
         canvas.text(0, 94, "CLK SRC/OUT SYNC OUT", 7);
         canvas.text(0, 103, "MIDI CH: SET IN", 7);
-        canvas.text(0, 112, "F1+POWER > SETTINGS", 7);
+        canvas.text(0, 112, "FUNC+POWER > SETTINGS", 7);
     }
 
     void draw_project(enaga::Canvas &canvas) {
