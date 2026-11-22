@@ -132,6 +132,9 @@ enum class Cmd : uint8_t {
     // --- kit and sound ---
     set_param,         // track, a: param index, b: value; or c = 1: b is an int8 delta
     set_track_level,   // track, f: level; or c = 1: f is a delta, the result clamped to 1.5
+    // SLC AUTO on a track (KitTrack::slice_mode): a: kSliceAuto or kSliceEqual. The points it
+    // cuts at came with the sample (Engine::slices_for_load).
+    set_slice_mode,    // track, a: 0 equal, 1 AUTO
     // One send or master setting. `a` is the field -- dsp/buses.hpp's SendField or MasterField,
     // whose numbers are permanent because they reach PROJECT.BIN -- and `b` is an encoder DELTA,
     // as a signed byte, exactly like `set_param` and the step fields and for the same reason.
@@ -376,6 +379,9 @@ struct Status {
     std::atomic<uint32_t> blocks{0};           // audio blocks processed, for liveness
     std::atomic<uint8_t> playhead[8] = {};     // per-track step, for the grid
     std::atomic<uint8_t> triggered[8] = {};    // bumped on each trig, for the pad LEDs
+    // How many slice points (core/onsets.hpp) the track's sample came with, 0-15, for EDIT's
+    // SLICES line. Written when the audio side applies a set_sample or set_stream.
+    std::atomic<uint8_t> slice_points[8] = {};
     std::atomic<uint16_t> peak_milli{0};       // master peak x 1000
     // How many TRACKS rendered last block (an active machine, not muted), 0-8. Not a voice
     // count: a six-note POLY chord is one. Shown as TRK on the status line.

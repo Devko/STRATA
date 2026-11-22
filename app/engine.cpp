@@ -876,6 +876,9 @@ void Engine::apply(const Command &command) {
             const int16_t *data = sample_region_ + command.u / sizeof(int16_t);
             stop_stream(track);
             pool_[track].sampler.set_sample(data, frames, channels, rate_);
+            pool_[track].sampler.set_slice_points(slice_inbox_[track]);
+            status_.slice_points[track].store(uint8_t(pool_[track].sampler.point_count()),
+                                              std::memory_order_relaxed);
             pool_[track].grain.set_sample(data, frames, channels, rate_);
             break;
         }
@@ -902,6 +905,7 @@ void Engine::apply(const Command &command) {
             Sampler &sampler = pool_[track].sampler;
             sampler.set_stream(head, info.head_frames, info.total_frames, channels, rate,
                                &fifos_[track]);
+            status_.slice_points[track].store(0, std::memory_order_relaxed);   // never sliced
             // GRAIN plays what is resident: the head. A grain cloud jumps about the file, which
             // a stream cannot do.
             pool_[track].grain.set_sample(head, info.head_frames, channels, rate);
@@ -970,6 +974,13 @@ void Engine::apply(const Command &command) {
                 effective_[track].v[command.a] = clamp_u8(value);
             }
             break;
+
+        case Cmd::set_slice_mode: {
+            const uint8_t mode = command.a == kSliceAuto ? kSliceAuto : kSliceEqual;
+            project_.kit.tracks[track].slice_mode = mode;
+            pool_[track].sampler.set_auto_slices(mode == kSliceAuto);
+            break;
+        }
 
         case Cmd::set_track_level: {
             // A NaN fails both comparisons and would pass straight through, so it is caught first.
@@ -1460,6 +1471,7 @@ void Engine::params_from_kit() {
         // step, which is the same reason Cmd::set_param mirrors into effective_.
         effective_[t] = params_[t];
         mix_[t].level = track.level < 0.0f ? 0.0f : (track.level > 2.0f ? 2.0f : track.level);
+        pool_[t].sampler.set_auto_slices(track.slice_mode == kSliceAuto);
     }
 }
 

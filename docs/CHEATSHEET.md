@@ -208,7 +208,7 @@ MNO VA mono · PLY VA poly.
 | SNR | TUN, SNP snappy, TON noise tone, CLP clap mode | DEC, SPR clap spread, BDY body, LVL |
 | HAT | TUN, TON tone, NOI noise, DTN detune | DEC, CHO choke time, CHK choke group, LVL |
 | PRC | TUN, RAT ratio, IDX FM index, IDD index decay | DEC, SWP pitch sweep, SWT sweep time, LVL |
-| SMP | PIT pitch, STA start, LEN length, SLC slices (1 = one-shot) | ATK attack, DEC, PLY play mode (fwd/loop/rev/rev loop), LVL |
+| SMP | PIT pitch, STA start, LEN length, SLC slices (1 = one-shot; push D: AUTO cuts at the hits) | ATK attack, DEC, PLY play mode (fwd/loop/rev/rev loop), LVL |
 | GRN | POS position, SIZ grain size, DEN density, SPR spray | PIT pitch, SHP grain shape, DEC, LVL |
 | MNO | TUN, MOD filter mode, CUT cutoff, RES resonance | DEC, ENV filter env amount, GLD glide, LVL |
 | PLY | TUN, MOD, CUT, RES | DEC, ENV, DET detune, LVL |
