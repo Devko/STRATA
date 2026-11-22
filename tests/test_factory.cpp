@@ -156,10 +156,12 @@ TEST(factory_the_chain_names_factory_patterns_and_is_off) {
 
 TEST(factory_macros_start_at_the_kit_and_scene_a_is_the_kit) {
     make();
-    // Four macros, every target starting at the kit's own value (so the first detent is a nudge,
+    // Three macros, every target starting at the kit's own value (so the first detent is a nudge,
     // not a jump) and going somewhere (so the knob does something).
     int targets = 0;
-    for (int m = 0; m < kMacros; m++) {
+    // Macro A stays empty: pad pressure bends it on whichever track is selected.
+    CHECK_EQ(macro_count(g_macros.macros[0]), 0);
+    for (int m = 1; m < kMacros; m++) {
         CHECK(macro_count(g_macros.macros[m]) > 0);
         for (const MacroTarget &t : g_macros.macros[m].targets) {
             if (!t.enabled) continue;
@@ -321,16 +323,46 @@ TEST(factory_macros_at_rest_leave_every_knob_heard) {
     storage().request_new();
     CHECK(settle());
     make();
-    const MacroTarget &cut = g_macros.macros[0].targets[0];           // ACID: the bass cutoff
-    CHECK_EQ(int(e.macro_position(0)), 0);
+    const MacroTarget &cut = g_macros.macros[1].targets[0];           // ACID: the bass cutoff
+    CHECK_EQ(int(e.macro_position(1)), 0);
     post(Cmd::set_param, cut.track, 0, cut.param, 20);
     pump(2);
     CHECK_EQ(int(e.performed(cut.track, cut.param)), 20);
-    post(Cmd::set_macro, 0, 0, 0, 127);
+    post(Cmd::set_macro, 0, 0, 1, 1);                                 // one detent: no jump
+    pump(2);
+    CHECK(int(e.performed(cut.track, cut.param)) - 20 <= 1);
+    post(Cmd::set_macro, 0, 0, 1, 127);
     pump(2);
     CHECK_EQ(int(e.performed(cut.track, cut.param)), int(cut.high));
-    post(Cmd::set_macro, 0, 0, 0, 0);
+    post(Cmd::set_macro, 0, 0, 1, 0);
     pump(2);
     CHECK_EQ(int(e.performed(cut.track, cut.param)), 20);
+}
+
+TEST(factory_macros_move_on_from_the_morph_not_back_to_the_kit) {
+    // Morphed fully to DUB, the chord's delay send is the scene's 112. The DUB macro shares that
+    // parameter; its first detent must nudge from 112, not drop to the kit's 72.
+    using namespace strata::test;
+    Engine &e = fresh();
+    storage().request_new();
+    CHECK(settle());
+    make();
+    const MacroTarget &send = g_macros.macros[2].targets[0];          // DUB: the chord's SNA
+    CHECK(scene_has(g_scenes.scenes[1], send.track, send.param));
+    const int scene = g_scenes.scenes[1].values[send.track][send.param];
+    CHECK(scene != int(send.low));
+    Command morph;
+    morph.cmd = Cmd::set_morph;
+    morph.u = kMorphScale;
+    e.commands().post(morph);
+    pump(2);
+    CHECK_EQ(int(e.performed(send.track, send.param)), scene);
+    post(Cmd::set_macro, 0, 0, 2, 1);
+    pump(2);
+    const int nudged = int(e.performed(send.track, send.param));
+    CHECK(nudged >= scene && nudged - scene <= 1);
+    post(Cmd::set_macro, 0, 0, 2, 0);
+    post(Cmd::set_morph);
+    pump(2);
 }
 

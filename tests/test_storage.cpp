@@ -3025,6 +3025,8 @@ TEST(storage_request_new_takes_everything_of_the_old_project_away) {
     CHECK_EQ(int(target.enabled), int(wanted.enabled));
     CHECK_EQ(int(target.track), int(wanted.track));
     CHECK_EQ(int(target.param), int(wanted.param));
+    CHECK_EQ(int(target.low), int(wanted.low));
+    CHECK_EQ(int(target.high), int(wanted.high));
 }
 
 TEST(storage_request_new_waits_for_the_command_ring) {

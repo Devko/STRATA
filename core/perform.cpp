@@ -283,8 +283,21 @@ void macro_range_through(uint8_t now, uint8_t far, uint8_t position, uint8_t &lo
     }
 }
 
+uint8_t macro_value_from(uint8_t live, const MacroTarget &target, uint8_t position) {
+    // macro_value's arithmetic with `live` in place of `low`, for the same reasons: a divide by
+    // 127 that at most 16 targets pay when a knob moves, rounded to nearest so a swept knob does
+    // not lag. The ends are exact.
+    const int from = int(clamp_u8(live, 0, kParamMax));
+    const int high = int(clamp_u8(target.high, 0, kParamMax));
+    const int at = clamp_int(int(position), 0, 127);
+    const int num = (high - from) * at;
+    const int rounded = num >= 0 ? (num + 63) / 127 : -((-num + 63) / 127);
+    return uint8_t(clamp_int(from + rounded, 0, kParamMax));
+}
+
 void macro_apply(const Macro &macro, uint8_t position, uint8_t out[kTracks][kKitParams]) {
-    // At rest the knob owns the parameter (core/perform.hpp).
+    // At rest the knob owns the parameter (core/perform.hpp); the sweep below gives `live` at 0
+    // anyway, and this keeps the resting case free of arithmetic.
     if (position == 0) return;
     for (int i = 0; i < kMacroTargets; i++) {
         const MacroTarget &target = macro.targets[i];
@@ -292,7 +305,8 @@ void macro_apply(const Macro &macro, uint8_t position, uint8_t out[kTracks][kKit
         // A macro set up by a build with more tracks or parameters must not write past the
         // array. Skipped rather than clamped: clamping would drive someone else's parameter.
         if (target.track >= kTracks || target.param >= kKitParams) continue;
-        out[target.track][target.param] = macro_value(target, position);
+        uint8_t &value = out[target.track][target.param];
+        value = macro_value_from(value, target, position);
     }
 }
 

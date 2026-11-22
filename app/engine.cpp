@@ -956,6 +956,13 @@ void Engine::apply(const Command &command) {
                 // `c` is that value and `d` the end the macro heads for.
                 macro_range_through(command.c, command.d, macro_position_[command.a],
                                     macro.targets[slot].low, macro.targets[slot].high);
+                // A macro sweeps from the parameter's live value (core/perform.hpp), so with the
+                // knob already up the line through `now` starts at `low`, not at the kit: the kit
+                // takes `low`, which is what the parameter will be when the macro comes back to
+                // 0. At 0 `low` IS `now` and nothing moves. app/storage.cpp marks the kit dirty.
+                if (macro_position_[command.a] > 0 && command.b < kParams) {
+                    params_[track].v[command.b] = macro.targets[slot].low;
+                }
                 perform_dirty_ = true;
             }
             break;

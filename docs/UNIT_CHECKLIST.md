@@ -1398,17 +1398,18 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
 - [ ] **PERFORM, VALUE**: morphs from the kit (scene 1) to DUB (scene 2): chord, rim and blips into
       the sends with longer tails. Scenes 3 (DARK: filters close) and 4 (TENSION: the acid opens,
       hats and kick tighten) are there to assign to A or B.
-- [ ] **PERFORM, A-D**: ACID (bass cutoff, resonance, envelope), DUB (chord and rim into the
-      delay and reverb), HATS (both longer, closed brighter), KICK (longer body, more drive).
-      Each must be audible from the first detent, with no jump.
-- [ ] **Pad pressure now has something to bend.** Pressure drives macro 1, which is ACID on a new
-      project: pressing a lower pad hard should open the bass filter, and letting go should
-      return it. Check it feels musical rather than accidental on light finger drumming.
-- [ ] **A macro at 0 lets go** (2026-11-22). With ACID at 0, turn BASS CUT in EDIT: it is heard.
-      Turn ACID up: the macro has the cutoff. Back to 0: the knob's value comes back. The same
-      with the morph: a scene that stores a parameter a resting macro drives is heard. One known
-      step: if the knob moved while the macro sat at 0, the first detent up jumps to the macro's
-      range.
+- [ ] **PERFORM, B-D**: B ACID (bass cutoff, resonance, envelope), C DUB (chord and rim into the
+      delay and reverb), D DRIVE (kick longer and driven, both hats longer). Each must be audible
+      from the first detent, with no jump. A is empty on purpose: pad pressure bends macro A.
+- [ ] **A macro at 0 lets go, and sweeps from where the sound is** (2026-11-22). With ACID at 0,
+      turn BASS CUT in EDIT: it is heard. Turn ACID up: the cutoff opens from where you left it,
+      with no jump. Back to 0: your value is back. The same with the morph: morph fully to DUB,
+      then turn C up one detent: the chord's delay send must not drop.
+- [ ] **Assigning with the macro knob up** (STEP in PERFORM while A-D is not at 0): nothing moves
+      on assignment, and the parameter's EDIT value changes to where the range starts, which is
+      what it plays once the macro is back at 0.
+- [ ] **A project saved before this change** that had a macro assigned above 0 may open sounding
+      different: a resting macro used to hold its targets at `low`, and now the kit value plays.
 - [ ] **Mute states** 1-8: all, no kick, drums only, no hats, no bass, kick + bass, melodic parts
       only, the bare groove without rim and blips.
 - [ ] Anything that sounds wrong, say which and how: each value has its arithmetic in a comment

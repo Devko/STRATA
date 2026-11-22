@@ -124,9 +124,9 @@ empty), up to 64 entries. Chain edits are not undoable.
 **PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
 (END) and the chain wait for.
 **PERFORM:** STEP 1-16 assign that parameter of the selected track to the selected macro. A macro
-at 0 lets go: its parameters follow their EDIT knobs and the morph until it moves. A new project
-has four: A ACID (bass filter), B DUB (chord and rim sends), C HATS (longer, brighter), D KICK
-(longer, more drive); VALUE is the A/B morph; OK captures into scene A's slot (with a scene pad held: that scene, selected
+at 0 lets go: its parameters follow their EDIT knobs and the morph, and turning it up sweeps from
+wherever they are. A new project has B ACID (bass filter), C DUB (chord and rim sends) and D DRIVE
+(kick and hats); A is left for you, and pad pressure bends it. VALUE is the A/B morph; OK captures into scene A's slot (with a scene pad held: that scene, selected
 track only); scene pad + CLR erases it. Mutes, mute states and the A/B scene choice are saved with
 the project.
 **KIT:** a kit is everything KIT.BIN holds: the eight machines, their parameters, the faders and

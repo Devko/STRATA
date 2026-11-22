@@ -425,14 +425,15 @@ void factory_scenes(SceneSet &scenes) {
     scene_set(tension, kChord, kAmp1, 100);
 }
 
-// The four macros on encoders A-D in PERFORM. Each target starts at the kit's own value, so the
-// first detent up is a nudge from where the sound already is, not a jump. At position 0 a macro
-// writes nothing (core/perform.hpp), so these never hold a knob or a scene: every parameter they
-// drive is still the EDIT knob's, and the morph's, until the macro moves.
+// Three macros, on encoders B-D in PERFORM. A macro sweeps from the parameter's LIVE value to
+// its `high` and writes nothing at 0 (core/perform.hpp), so these never hold a knob or a scene:
+// every parameter they drive answers its EDIT knob and the morph until the macro moves, and the
+// first detent up is a nudge from wherever the sound is. `low` records the kit value for the
+// screen.
 //
-// Kept apart from the DUB scene's parameters where they can be, so that a macro and the morph
-// moved together each do something audible: DUB the macro sends the chord and rim; DUB the scene
-// also lengthens the chord and the blips' sends, which no macro touches.
+// Macro A is left empty on purpose: pad pressure bends macro 1 whichever track is selected
+// (docs/SPEC.md), and a factory macro there would make every firm pad hit move one track's
+// sound. Assign A to the selected track and the pads bend it.
 void target(Macro &macro, int slot, const Kit &kit, int track, int param, uint8_t high) {
     MacroTarget &t = macro.targets[slot];
     t.enabled = 1;
@@ -443,28 +444,24 @@ void target(Macro &macro, int slot, const Kit &kit, int track, int param, uint8_
 }
 
 void factory_macros(MacroSet &macros, const Kit &kit) {
-    // A: ACID -- the bass filter opens, the resonance and the envelope rise. The 303 move.
-    Macro &acid = macros.macros[0];
+    // B: ACID -- the bass filter opens, the resonance and the envelope rise. The 303 move.
+    Macro &acid = macros.macros[1];
     target(acid, 0, kit, kBass, kSrc2, 112);
     target(acid, 1, kit, kBass, kSrc3, 118);
     target(acid, 2, kit, kBass, kAmp1, 104);
 
-    // B: DUB -- the chord and the rim into the delay and the reverb.
-    Macro &dub = macros.macros[1];
+    // C: DUB -- the chord and the rim into the delay and the reverb.
+    Macro &dub = macros.macros[2];
     target(dub, 0, kit, kChord, kSna, 120);
     target(dub, 1, kit, kChord, kSnb, 120);
     target(dub, 2, kit, kPerc, kSna, 110);
 
-    // C: HATS -- both hats longer, the closed one brighter.
-    Macro &hats = macros.macros[2];
-    target(hats, 0, kit, kClosed, kAmp0, 64);
-    target(hats, 1, kit, kOpen, kAmp0, 104);
-    target(hats, 2, kit, kClosed, kSrc1, 127);
-
-    // D: KICK -- a longer body, driven harder.
-    Macro &kick = macros.macros[3];
-    target(kick, 0, kit, kKick, kAmp0, 108);
-    target(kick, 1, kit, kKick, kDrv, 90);
+    // D: DRIVE -- the kick longer and driven harder, both hats longer.
+    Macro &drive = macros.macros[3];
+    target(drive, 0, kit, kKick, kAmp0, 100);
+    target(drive, 1, kit, kKick, kDrv, 90);
+    target(drive, 2, kit, kClosed, kAmp0, 56);
+    target(drive, 3, kit, kOpen, kAmp0, 100);
 }
 
 void factory_chain(Project &project) {

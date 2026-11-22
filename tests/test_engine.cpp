@@ -1769,6 +1769,11 @@ TEST(engine_a_macro_drives_its_assigned_targets) {
     Engine &engine = clean();
     // Two targets on one macro, one of them inverted: one knob opening a filter while it closes
     // a send is most of what makes a macro worth having (core/perform.hpp).
+    // The parameters start where the ranges do: a macro sweeps from the LIVE value to `high`
+    // (core/perform.hpp), so these are the values a knob turned to 0 and 127 would leave.
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    post(Cmd::set_param, kPoly, 0, kLvl, 0);
+    post(Cmd::set_param, kMono, 0, kLvl, 127);
     post_macro_assign(0, kPoly, kLvl, 0, 127);
     post_macro_assign(0, kMono, kLvl, 127, 0);
     pump();
@@ -1803,7 +1808,7 @@ TEST(engine_a_macro_drives_its_assigned_targets) {
     post(Cmd::set_macro, 0, 0, 0, 200);
     pump();
     CHECK_EQ(int(engine.macro_position(0)), 127);
-    CHECK_EQ(int(kit_value(kPoly, kLvl)), 127);
+    CHECK_EQ(int(kit_value(kPoly, kLvl)), 0);            // the value this test set, untouched
 
     post(Cmd::macro_clear, 0, 0, 0);
     pump();

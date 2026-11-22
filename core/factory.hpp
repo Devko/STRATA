@@ -22,8 +22,8 @@
 //     trig conditions, probability, ratchets, slides, accents, chords, swing and polymeter;
 //   - a chain over those four, built but OFF -- STRATA is a jamming instrument, and a chain
 //     that advanced on its own the first time someone pressed PLAY would fight them;
-//   - eight mute states, three scenes and four macros (ACID, DUB, HATS, KICK), so the
-//     performance row and PERFORM do something from the first minute.
+//   - eight mute states, three scenes and three macros (B ACID, C DUB, D DRIVE; A is left for
+//     pad pressure), so the performance row and PERFORM do something from the first minute.
 //
 // Banks B-H are empty, so a user's own work starts on a clean page.
 //
