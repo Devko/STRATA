@@ -40,7 +40,8 @@ STRATA has **eight tracks**. The eight lower pads are the tracks, left to right:
 it and hear it. Each track holds one **machine** (the sound source) followed by the same fixed
 **insert chain**: drive, a multimode filter, lo-fi, the amplitude stage, the sidechain duck, pan
 and level. From there each track goes to the mixer, the two send effects (delay and reverb) and
-the master bus.
+the master bus: the DJ filter, a three-band kill EQ, the glue compressor, the limiter and the
+output level.
 
 The selected track is the one the STEP keys, the encoders, KEYS and MUTATE work on. UP and DOWN
 also walk the tracks in GRID, EDIT and KEYS.
@@ -244,6 +245,8 @@ Then try the rest of the upper row, in any mode:
 - Hold **REPEAT** (upper 2) for a beat repeat of the master; turn VALUE while holding it to pick
   1/4 to 1/16T.
 - Select the bass and tap **MUTATE** (upper 7). Like it: OK. Don't: CLR.
+- Hold **FUNC** and push encoder **A**: the lows are gone (`KILL LOW`). Push FUNC+A again on the
+  one and they slam back (`LOW BACK`). FUNC+B and FUNC+C do the same for the mids and the highs.
 
 ### 8. Save
 
@@ -548,6 +551,26 @@ release and the music is where it would have been. In PERFORM, **FUNC+UP / FUNC+
 **auto-fill**: OFF, or FILL on the last bar of every 4, 8 or 16. PERFORM's lower lines show what
 is active: `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n`.
 
+### The master kill EQ
+
+The master has a DJ-style **kill EQ** (an isolator) after the DJ filter: three bands split at
+250 Hz and 2.5 kHz, LOW, MID and HI. Each band has a knob and a kill switch.
+
+- **The switches**: FUNC + push encoder A, B or C, in **any mode** (PERFORM included, where
+  turning the encoders is still the macros). The notice says `KILL LOW` or `LOW BACK`. A switch
+  latches: push to take the band out, push again to bring it back. On the MIXER's EQ page a
+  plain push of A, B or C does the same.
+- **The knobs**: MIXER, then the selection keys (or LEFT/RIGHT) to the last page, `EQ`. A, B and
+  C are LOW, MID and HI: centre (`0`) is flat, down to `KILL` at the bottom, up to +6 dB at the
+  top (`+63`). D is empty.
+
+A kill takes its band down by 30-50 dB within about 10 ms and comes back as fast, with no click.
+Coming back puts the band where its knob is. While all three bands are flat and no switch is on,
+the EQ is bypassed and costs nothing; turning a knob or throwing a switch starts it, and it
+switches itself off again a few milliseconds after everything is flat. The knobs and the
+switches are saved with the project, so a project saved with the lows killed reopens that way:
+look for `KILL` on the EQ page.
+
 ### Mutation
 
 In PERFORM, UP/DOWN pick the mutation and the selection keys the amount (0-100, in tens):
@@ -623,13 +646,27 @@ STRATA reads WAV files: 8, 16 or 24-bit, or 32-bit float, mono or stereo, at any
 (other rates are converted to 48 kHz on load). A file may be up to **30 s at 96 kHz**; at lower
 rates the same buffer holds more (about 65 s at 44.1 kHz).
 
-There is no sample browser yet. A track gets a sample in three ways:
+### Picking a sample: the sample browser
 
-1. **Resample into it** (section 5): the take is written and loaded in one action.
-2. **Recall a kit** that names a sample.
-3. **Replace the file the kit names** on the card (for example `/RECORD/STRATA_1.WAV`) with your
-   own WAV of the same name, then in PROJECT select the track and press `FUNC+DOWN` to reload
-   it (`LOADING`).
+On a SMP or GRN track, press **OK** in EDIT (the page says `OK: PICK SAMPLE`) or in MACHINE. The
+browser opens in the folder of the file the track plays, with the cursor on it, or in `/SAMPLES`.
+
+- UP/DOWN (or A) move the cursor, LEFT/RIGHT or the selection keys turn a page of eight.
+- **OK on a file loads it into the track at once**, with the beat playing, and the cursor stays
+  put: press DOWN and OK again to try the next one. The line under the title says `READING`,
+  `CONVERTING` and so on while it loads, and the `NOW` line shows the file the track plays.
+- OK on a folder (shown with a `/`) opens it. **CLR goes up a folder**; at the top are `SAMPLES/`
+  and `RECORD/` (your resampled takes), and CLR from there goes back to where you came from.
+- `FUNC+UP` reads the folder again, for a card swapped or a take just written.
+
+Only WAV files and folders are listed; macOS's `._` files are hidden. A folder shows its first
+256 entries; the count line says `+n` when it left some out, and also counts names too long to
+store (a sample's whole path, folders included, may be 111 characters). Picking a file makes the
+project UNSAVED, like any kit change. Names are shown in capitals, with characters the screen
+cannot draw (such as `_`) shown as `-`.
+
+A track also gets a sample by **resampling into it** (section 5) or by **recalling a kit** that
+names one.
 
 ---
 
@@ -648,6 +685,8 @@ There is no sample browser yet. A track gets a sample in three ways:
   0 is always exactly where you started.
 - **Mutate, then decide.** MUTATE is free to try: CLR takes it back, and FUNC+CLR undoes even a
   kept one later.
+- **Kill the lows for the build.** FUNC+A takes the kick and bass out; push it again exactly on
+  the one of the drop. FUNC+C on its own thins a busy top end for a breakdown.
 - **Throws on the off-beat parts.** THROW on the rim or the chord for a bar, then let it ring.
 - **Resample a moment you like.** An 8-bar take of a jam into track 8, then sliced or on GRAIN,
   turns a happy accident into material.

@@ -38,7 +38,8 @@ using namespace strata;
 // and the 14 send and master bytes. An OLD 251-byte file still loads, because that section is
 // optional on read -- `a_project_file_from_before_the_mixer_section_still_loads` is the proof.
 // 292 since the live section: another table entry (12) and its 3 bytes, optional likewise.
-constexpr uint32_t kProjectFileBytes = 292;
+// 296 since the kill EQ grew the mixer section by its three band bytes and the kill switches.
+constexpr uint32_t kProjectFileBytes = 296;
 constexpr uint32_t kKitFileBytes = 1120;   // 1076 before the LFO section (12 + 8 x 4)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
@@ -169,6 +170,7 @@ ProjectSettings busy_settings() {
     // encoder's 0-127, so that a round trip that mixed two of them up shows as a value.
     for (int i = 0; i < kSendFields; i++) s.sends[i] = uint8_t(3 + i * 11);
     for (int i = 0; i < kMasterFields; i++) s.master[i] = uint8_t(120 - i * 7);
+    s.eq_kills = 0x5;      // LOW and HIGH switched, MID not
     return s;
 }
 
@@ -528,7 +530,10 @@ TEST(project_round_trips_every_settings_field) {
     for (int i = 0; i < kSendFields; i++) CHECK_EQ(int(b.sends[i]), int(a.sends[i]));
     for (int i = 0; i < kMasterFields; i++) CHECK_EQ(int(b.master[i]), int(a.master[i]));
     CHECK_EQ(int(b.sends[0]), 3);
-    CHECK_EQ(int(b.master[kMasterFields - 1]), 99);
+    CHECK_EQ(int(b.master[kMasterFieldsV1 - 1]), 99);
+    // The kill EQ's bands and switches, which grew the section.
+    CHECK_EQ(int(b.master[kMasterFields - 1]), 78);
+    CHECK_EQ(int(b.eq_kills), 0x5);
 }
 
 // A mixer byte past the encoder's range is clamped, not taken. dsp/buses.cpp maps a byte with
@@ -676,6 +681,53 @@ TEST(project_refuses_a_mixer_section_that_is_short) {
     CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::malformed));
 }
 
+// The kill EQ GREW the mixer section rather than adding one: a file from before it has a 14-byte
+// mixer section (sends and the first four master bytes) and must still load, with the bands flat
+// and the switches off -- set to the defaults, not left as whatever the buffer held.
+TEST(project_a_mixer_section_from_before_the_kill_eq_loads_flat) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+
+    // The third table entry's size field, cut to what the old writer declared. The bytes after
+    // it stay in the file, as junk an old reader never asked for.
+    poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8,
+             uint32_t(kSendFields + kMasterFieldsV1));
+    refresh_crc(g_project);
+
+    project_init(g_loaded);
+    g_loaded.settings.master[int(kMasterFieldsV1)] = 3;
+    g_loaded.settings.eq_kills = 0x7;
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int i = 0; i < kSendFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.sends[i]), int(g_source.settings.sends[i]));
+    }
+    for (int i = 0; i < kMasterFieldsV1; i++) {
+        CHECK_EQ(int(g_loaded.settings.master[i]), int(g_source.settings.master[i]));
+    }
+    for (int i = kMasterFieldsV1; i < kMasterFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.master[i]), 64);
+    }
+    CHECK_EQ(int(g_loaded.settings.eq_kills), 0);
+    // And the live section, found by id, is still read whole.
+    CHECK_EQ(int(g_loaded.settings.live_mutes), int(g_source.settings.live_mutes));
+}
+
+// A file whose kill-switch byte has bits past the three bands keeps only the three.
+TEST(project_keeps_only_the_three_kill_switch_bits) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
+    g_project[mixer + uint32_t(kSendFields + kMasterFields)] = 0xFA;
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.eq_kills), 0x2);
+}
+
 TEST(project_round_trips_the_live_pattern_and_the_whole_chain) {
     fill_project(g_source, 5);
     uint32_t written = 0;
@@ -740,7 +792,7 @@ TEST(project_the_header_says_strata_and_the_version) {
     CHECK_EQ(settings, kHeaderBytes + 4 * kSectionEntryBytes);
     CHECK_EQ(chain, settings + 19);
     CHECK_EQ(mixer, chain + 64 * 3);
-    CHECK_EQ(live, mixer + uint32_t(kSendFields + kMasterFields));
+    CHECK_EQ(live, mixer + uint32_t(kSendFields + kMasterFields + 1));
 }
 
 // --- PROJECT.BIN: value-tolerant ------------------------------------------

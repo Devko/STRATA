@@ -107,7 +107,7 @@ Machine, then drive (asymmetric soft clip), multimode filter (LP, HP, BP, 12 or 
 - **Send A, delay:** tempo-synced stereo delay with ping-pong and filtered feedback (`enaga::StereoDelay`).
 - **Send B, reverb:** `enaga::Reverb` with pre-delay, size, damping and a high-pass on the input. Delay can feed the reverb.
 - **Sidechain duck:** a duck envelope (attack, hold, release) fired by a chosen trigger track (default track 1). Trigger-based, not an envelope follower: tighter and cheaper.
-- **Master:** one-knob DJ filter (left = low-pass, right = high-pass), glue compressor, soft limiter, output level.
+- **Master:** one-knob DJ filter (left = low-pass, right = high-pass), **[rev]** a three-band kill EQ (a DJ isolator: LOW / MID / HI split at 250 Hz and 2.5 kHz with 24 dB Linkwitz-Riley crossovers, each band from a kill to +6 dB with a latching kill switch, bypassed while flat), glue compressor, soft limiter, output level.
 
 **Parameters**
 
@@ -229,8 +229,9 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 | Octave left/right | Step page 1-4 in GRID; octave in KEYS | Pattern length |
 | UP, DOWN | **[rev]** The rows on screen: the track in GRID, EDIT and KEYS; the machine in MACHINE; the kit slot in KIT; the length in RESAMPLE; the mutation in PERFORM; the slot cursor in PROJECT. With a STEP held: copy, paste | Copy, paste. In PROJECT: chain on/off, reload the sample. In KIT: read the card again, save the kit into the slot. In PERFORM: auto-fill |
 | LEFT, RIGHT | **[rev]** Sideways: the page wherever the selection keys flip pages; the step on the step page; octave in KEYS; macro in PERFORM; track in MACHINE; the page of eight kit slots in KIT; destination in RESAMPLE; the slot cursor in PROJECT | Free |
-| OK, CLR | Confirm, cancel. **[rev]** OK picks the slot under the cursor in PROJECT, and recalls the kit under it in KIT (twice, since a recall is not undoable); CLR closes the step page and SETUP | F1 + CLR = undo, F1 + OK = redo |
+| OK, CLR | Confirm, cancel. **[rev]** OK picks the slot under the cursor in PROJECT, and recalls the kit under it in KIT (twice, since a recall is not undoable), and in EDIT or MACHINE on a SAMPLE or GRAIN track opens the sample browser, where it loads a file or opens a folder; CLR closes the step page and SETUP, and goes up a folder in the browser | F1 + CLR = undo, F1 + OK = redo |
 | VALUE | Tempo; push + turn = swing. **[rev]** Shows `EXT` and refuses edits when CLOCK SRC is not INTERNAL | Master DJ filter |
+| Push A, B, C | **[rev]** Remove a lock with a STEP held. On the MIXER's EQ page: the kill EQ's LOW, MID, HI kill switch | **[rev]** The master kill EQ's LOW, MID, HI kill switch, in every mode |
 
 **[rev] Navigation.** The arrows follow Enaga's own menu and SETTINGS page, so one habit works in
 STRATA and in Enaga: UP and DOWN move through the rows on screen, LEFT and RIGHT move sideways,
@@ -353,6 +354,11 @@ The enum numbering is therefore not the order the UI shows the speeds in.
 - Loaded in the background with `files::load`, whose `done` callback runs in the main context. A track whose sample is still loading stays silent rather than glitching.
 - Files not at 48 kHz are resampled once at load, in main-loop slices.
 - Streams (`files::Stream`) are used only for recording and for loops longer than 30 s.
+- **[rev]** Samples are picked on the box with the **sample browser** (2026-11-22): OK in EDIT or
+  MACHINE on a SAMPLE or GRAIN track lists `/SAMPLES` (and `/RECORD`) through `files::list`, and
+  OK on a WAV puts its path in the track's kit and loads it through the ordinary swap, transport
+  running. `core/browse.hpp` holds what is listed (WAVs and folders, no `._` files, 256 entries
+  of 64 bytes, paths that fit the kit's 112 bytes).
 
 **Saving**
 
@@ -411,6 +417,7 @@ That is conservative: Enaga's 1,868-cycle voice is a full VA with a mod matrix, 
 | Send A delay + Send B reverb | 12-16% | measured together at 16% |
 | 8 per-track insert chains | 8-16% | extrapolated; the main unknown |
 | Master (DJ filter, glue comp, limiter) | 2-4% | extrapolated |
+| **[rev]** Master kill EQ, only while a band is off flat | ~1.4% (GCC-only ~2.2%) | host proxy, docs/BUDGET.md; 0 while bypassed |
 | Sequencer, command ring, beat-repeat write | ~2% | extrapolated |
 | Enaga itself | 3% | measured |
 | **Total** | **~38-52%** | inside the 60% target |

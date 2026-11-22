@@ -216,6 +216,12 @@ enum class Cmd : uint8_t {
     // a: length; or c = 1: b is an int8 delta.
     set_master_length,
 
+    // The master kill EQ's kill switches (dsp/buses.hpp): a: band 0 LOW, 1 MID, 2 HIGH;
+    // b: 0 back, 1 killed, 2 toggle. A switch rather than a knob delta because it is a switch:
+    // FUNC + push A/B/C anywhere, or a plain push on the MIXER's EQ page. The switches live in
+    // the project (ProjectSettings::eq_kills) and save with it, like the live mutes.
+    eq_kill,
+
     count
 };
 

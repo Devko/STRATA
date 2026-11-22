@@ -291,7 +291,13 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 constexpr uint32_t kProjectSections = 4;
 constexpr uint32_t kProjectSettingsBytes = 19;
 constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
-constexpr uint32_t kProjectMixerBytes = uint32_t(kSendFields) + uint32_t(kMasterFields);
+// The sends, the master bytes and the kill switches. The section GREW when the kill EQ came
+// (three band bytes after the master's four, then the switches): a reader takes what it knows from
+// the front, so an older build reads a newer file's first 14 bytes and ignores the rest, and this
+// build reads an older file's 14 and defaults the EQ. No version bump, because no existing byte
+// changed meaning (find_sections says why that is the rule).
+constexpr uint32_t kProjectMixerBytes = uint32_t(kSendFields) + uint32_t(kMasterFields) + 1;
+constexpr uint32_t kProjectMixerBytesV1 = uint32_t(kSendFields) + uint32_t(kMasterFieldsV1);
 constexpr uint32_t kProjectTableBytes = kProjectSections * kSectionEntryBytes;
 constexpr uint32_t kProjectSettingsOffset = kProjectTableBytes;
 constexpr uint32_t kProjectChainOffset = kProjectSettingsOffset + kProjectSettingsBytes;
@@ -310,7 +316,8 @@ static_assert(sizeof(ProjectSettings::mute_states) == 8,
 static_assert(kProjectSettingsBytes == 2 + 4 + sizeof(ProjectSettings::mute_states) + 3 + 2,
               "the settings section and the fields written into it have diverged");
 static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
-                                        sizeof(ProjectSettings::master),
+                                        sizeof(ProjectSettings::master) +
+                                        sizeof(ProjectSettings::eq_kills),
               "the mixer section and the bytes written into it have diverged");
 
 // --- KIT.BIN sizes --------------------------------------------------------
@@ -443,6 +450,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     // The sends and the master, as the encoder bytes they are everywhere but inside the mixer.
     for (int i = 0; i < kSendFields; i++) w.u8(s.sends[i]);
     for (int i = 0; i < kMasterFields; i++) w.u8(s.master[i]);
+    w.u8(s.eq_kills);
 
     w.u8(s.live_mutes);
     w.u8(s.scene_a);
@@ -498,7 +506,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     if (length[1] < kProjectChainBytes) return refuse(SerializeResult::malformed);
     // Present but SHORT is damage, not an old file: a writer that declared the section declared
     // its size too. Absent is the old file, and that is the `offset[2] != 0` test below.
-    if (offset[2] != 0 && length[2] < kProjectMixerBytes) {
+    if (offset[2] != 0 && length[2] < kProjectMixerBytesV1) {
         return refuse(SerializeResult::malformed);
     }
     if (offset[3] != 0 && length[3] < kProjectLiveBytes) {
@@ -565,13 +573,23 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         const ProjectSettings defaults;
         for (int i = 0; i < kSendFields; i++) s.sends[i] = defaults.sends[i];
         for (int i = 0; i < kMasterFields; i++) s.master[i] = defaults.master[i];
+        s.eq_kills = defaults.eq_kills;
     } else {
         if (!r.seek(kHeaderBytes + offset[2])) return refuse(SerializeResult::malformed);
         // Clamped to 0-127, the encoder's range, because dsp/buses.hpp maps a byte through
         // `byte_unit` and a 255 there would be double the top of the field's range. Clamping
         // here rather than there keeps the mapping a pure function of a legal byte.
         for (int i = 0; i < kSendFields; i++) s.sends[i] = clamp_u8(r.u8(), 0, 127);
-        for (int i = 0; i < kMasterFields; i++) s.master[i] = clamp_u8(r.u8(), 0, 127);
+        // A section from before the kill EQ stops after the fourth master byte: the bands and
+        // the switches then take the defaults, flat and off, for the same "never left alone"
+        // reason as above.
+        const bool has_eq = length[2] >= kProjectMixerBytes;
+        const ProjectSettings defaults;
+        const int master_fields = has_eq ? kMasterFields : kMasterFieldsV1;
+        for (int i = 0; i < master_fields; i++) s.master[i] = clamp_u8(r.u8(), 0, 127);
+        for (int i = master_fields; i < kMasterFields; i++) s.master[i] = defaults.master[i];
+        // Only the three switch bits mean anything.
+        s.eq_kills = has_eq ? uint8_t(r.u8() & 0x7u) : defaults.eq_kills;
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
 

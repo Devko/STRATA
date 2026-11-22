@@ -38,6 +38,8 @@
 
 #include <enaga/abi.h>
 #include <enaga/clock.hpp>
+#include <enaga/files.hpp>
+#include <enaga/wav.hpp>
 
 #include <cstdlib>
 #include <cstring>
@@ -91,6 +93,7 @@ struct UiProbe {
     static bool project_setup(const Strata &app) { return app.project_setup(); }
     static int project_page(const Strata &app) { return int(app.project_page_); }
     static int kit_cursor(const Strata &app) { return app.kit_cursor_; }
+    static int sample_cursor(const Strata &app) { return app.sample_cursor_; }
     static int chain_cursor(const Strata &app) { return app.chain_cursor_; }
     static int pattern_field(const Strata &app) { return app.pattern_field_; }
     static int slot_cursor(const Strata &app) { return app.slot_cursor_; }
@@ -1861,8 +1864,8 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     mixer_page(app, 0);
     CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
 
-    // The selection keys page through: two pages of faders, then DLY, REV, ROUTE and MST.
-    for (int i = 1; i < 6; i++) {
+    // The selection keys page through: two pages of faders, then DLY, REV, ROUTE, MST and EQ.
+    for (int i = 1; i < 7; i++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
         CHECK_EQ(UiProbe::mixer_bank(app), i);
@@ -1873,7 +1876,95 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     CHECK_EQ(UiProbe::mixer_bank(app), 0);
     app.on_key(ENAGA_KEY_SELECT_LEFT, true);
     app.on_key(ENAGA_KEY_SELECT_LEFT, false);
-    CHECK_EQ(UiProbe::mixer_bank(app), 5);
+    CHECK_EQ(UiProbe::mixer_bank(app), 6);
+}
+
+// The master kill EQ (dsp/buses.hpp): its MIXER page, its knobs and its kill switches.
+
+void press_key(Strata &app, int code) {
+    app.on_key(code, true);
+    app.on_key(code, false);
+}
+
+TEST(ui_the_eq_page_knobs_move_the_bands_and_a_push_kills_one) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    // fresh() does not reset the project's mixer bytes, so start from what is there.
+    for (int b = 0; b < kKillBands; b++) post_cmd(Cmd::eq_kill, uint8_t(b), 0);
+    pump(2);
+    mixer_page(app, kMixerEqPage);
+
+    // B is MID: two counts a click, like every master knob.
+    const int before = int(engine.project().settings.master[int(MasterField::eq_mid)]);
+    app.on_encoder(1, -5);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_mid)]), before - 10);
+    CHECK(app_storage().dirty());
+    app.on_encoder(1, +5);
+    pump(2);
+
+    // A plain push of A on this page throws LOW's kill switch, and a second push lets it go.
+    press_key(app, ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0x1);
+    CHECK_EQ(int(engine.master().kills), 0x1);
+    CHECK(std::strcmp(UiProbe::notice(app), "KILL LOW") == 0);
+    press_key(app, ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "LOW BACK") == 0);
+
+    // D has no field on this page, and its push does nothing to the switches.
+    press_key(app, ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
+}
+
+// FUNC + push A/B/C is the kill switch from any mode, next to FUNC + VALUE's DJ filter; a plain
+// push away from the EQ page is not, so nothing else that pushes a knob can kill the bass.
+TEST(ui_func_and_a_knob_push_kill_a_band_from_any_mode) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    for (int b = 0; b < kKillBands; b++) post_cmd(Cmd::eq_kill, uint8_t(b), 0);
+    pump(2);
+
+    press_key(app, ENAGA_KEY_F4);                      // GRID
+    press_key(app, ENAGA_KEY_PUSH_C);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
+
+    shift_key(ENAGA_KEY_PUSH_C);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0x4);
+    CHECK(std::strcmp(UiProbe::notice(app), "KILL HI") == 0);
+
+    // In PERFORM too, where A-D are the macros: the kill is a push, the macros are turns.
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    shift_key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0x6);
+    shift_key(ENAGA_KEY_PUSH_C);
+    shift_key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
+}
+
+// The engine refuses a band or an operation it does not have, and counts it.
+TEST(ui_an_eq_kill_for_a_band_that_does_not_exist_is_refused) {
+    fresh();
+    Engine &engine = app_engine();
+    post_cmd(Cmd::eq_kill, uint8_t(kKillBands), 1);
+    post_cmd(Cmd::eq_kill, 0, 3);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
+    post_cmd(Cmd::eq_kill, 1, 1);                    // set, then set again: still set
+    post_cmd(Cmd::eq_kill, 1, 1);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0x2);
+    post_cmd(Cmd::eq_kill, 1, 0);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), 0);
 }
 
 TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
@@ -2290,6 +2381,30 @@ TEST(ui_layout_edit_on_every_machine) {
     post_track(Cmd::set_machine, 0, 0);
     pump(4);
     key(ENAGA_KEY_F4);
+}
+
+// Every way the EQ page can read -- a switched band, a knob at the bottom, at the top, flat --
+// fits the screen.
+TEST(ui_layout_the_eq_page_at_its_extremes) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    mixer_page(app, kMixerEqPage);
+    post_cmd(Cmd::eq_kill, 0, 1);
+    for (int i = 0; i < 40; i++) app.on_encoder(1, -5);
+    for (int i = 0; i < 40; i++) app.on_encoder(2, +5);
+    pump(4);
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_mid)]), 0);
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_high)]), 127);
+    check_layout(app, "MIXER EQ, killed and at the ends");
+    // And back to flat, so later tests start bypassed.
+    post_cmd(Cmd::eq_kill, 0, 0);
+    for (int i = 0; i < 32; i++) app.on_encoder(1, +1);     // 0 -> 64, two counts a click
+    pump(4);
+    post_cmd(Cmd::set_master, uint8_t(MasterField::eq_high), uint8_t(int8_t(-63)));
+    pump(4);
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_mid)]), 64);
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_high)]), 64);
+    check_layout(app, "MIXER EQ, flat");
 }
 
 TEST(ui_layout_mixer_perform_keys_machine_resample) {
@@ -3114,4 +3229,289 @@ TEST(ui_a_kit_is_saved_with_f1_down_and_recalled_with_ok_twice) {
     CHECK_EQ(UiProbe::notice(app), "UNDO");
     CHECK_EQ(int(UiProbe::mode(app)), int(Mode::kit));
     key(ENAGA_KEY_F4);
+}
+
+// --- the sample browser ------------------------------------------------------
+
+namespace {
+
+// A short 48 kHz mono WAV on the fake card: a header and `frames` of a loud square.
+void card_wav(const char *path, uint32_t frames = 480) {
+    static uint8_t bytes[44 + 2 * 4800];
+    if (frames > 4800) frames = 4800;
+    enaga::wav::Format format;
+    format.channels = 1;
+    format.rate = 48000;
+    format.bits = 16;
+    enaga::wav::header(bytes, format, frames * 2u);
+    for (uint32_t f = 0; f < frames; f++) {
+        const int16_t v = (f / 16u) % 2u == 0u ? 9000 : -9000;
+        bytes[44 + 2 * f] = uint8_t(uint16_t(v) & 0xFFu);
+        bytes[45 + 2 * f] = uint8_t(uint16_t(v) >> 8);
+    }
+    FakeHost::the().write_file(path, bytes, 44u + frames * 2u);
+}
+
+// A card with something in each place the browser shows.
+void seed_sample_card() {
+    enaga::files::make_folder("/SAMPLES");
+    enaga::files::make_folder("/SAMPLES/KICKS");
+    enaga::files::make_folder("/RECORD");
+    card_wav("/SAMPLES/b loop.wav");
+    card_wav("/SAMPLES/A_HIT.WAV");
+    card_wav("/SAMPLES/KICKS/K1.WAV", 960);
+    card_wav("/RECORD/STRATA_1.WAV");
+    const char text[] = "not audio";
+    FakeHost::the().write_file("/SAMPLES/README.TXT", text, sizeof text);
+    FakeHost::the().write_file("/SAMPLES/._A_HIT.WAV", text, sizeof text);
+}
+
+// Track 1 as a SAMPLE track, on its EDIT page.
+void sample_track_in_edit() {
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::sample));
+    pump(4);
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_F8);
+}
+
+}  // namespace
+
+TEST(ui_samples_ok_on_a_sample_track_opens_the_browser_in_samples) {
+    Strata &app = fresh();
+    seed_sample_card();
+    sample_track_in_edit();
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+    pump(4);
+    const SampleList &list = app_storage().browse_list();
+    CHECK(std::strcmp(list.folder(), "/SAMPLES") == 0);
+    // KICKS first (a folder), then the two WAVs by name; the text file and the macOS fork are
+    // not offered.
+    CHECK_EQ(list.count(), 3);
+    CHECK(std::strcmp(list.name(0), "KICKS") == 0);
+    CHECK(std::strcmp(list.name(1), "A_HIT.WAV") == 0);
+    CHECK(std::strcmp(list.name(2), "b loop.wav") == 0);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_samples_ok_does_nothing_on_a_track_that_plays_no_file) {
+    Strata &app = fresh();
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::kick));
+    pump(4);
+    key(ENAGA_KEY_F8);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    // And MACHINE's OK opens it once the machine is a sampler: the natural order of the two.
+    shift_key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::grain));
+    pump(4);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+    key(ENAGA_KEY_CLR);                            // SAMPLES -> the root
+    pump(2);
+    key(ENAGA_KEY_CLR);                            // the root -> back where it came from
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_samples_ok_loads_the_file_into_the_track_while_playing) {
+    Strata &app = fresh();
+    seed_sample_card();
+    sample_track_in_edit();
+    key(ENAGA_KEY_F5);                             // playing: the load happens under it
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_DOWN);                           // A_HIT.WAV
+    CHECK_EQ(UiProbe::sample_cursor(app), 1);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "LOADING");
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));      // stays, for the next try
+    CHECK(std::strcmp(app_engine().project().kit.tracks[0].sample, "/SAMPLES/A_HIT.WAV") == 0);
+    CHECK(app_storage().dirty());
+    for (int i = 0; i < 4000 && app_storage().samples().slot(0).state != SampleState::ready; i++) {
+        pump();
+    }
+    CHECK_EQ(int(app_storage().samples().slot(0).state), int(SampleState::ready));
+    CHECK_EQ(int(app_storage().samples().slot(0).frames), 480);
+
+    // Into a folder and a second file: the newer pick replaces the first.
+    key(ENAGA_KEY_UP);                             // KICKS
+    key(ENAGA_KEY_OK);
+    pump(4);
+    CHECK(std::strcmp(app_storage().browse_list().folder(), "/SAMPLES/KICKS") == 0);
+    key(ENAGA_KEY_OK);
+    for (int i = 0; i < 4000 && app_storage().samples().slot(0).frames != 960; i++) pump();
+    CHECK(std::strcmp(app_engine().project().kit.tracks[0].sample, "/SAMPLES/KICKS/K1.WAV") == 0);
+    CHECK_EQ(int(app_storage().samples().slot(0).frames), 960);
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_samples_clr_climbs_to_the_root_and_reaches_record) {
+    Strata &app = fresh();
+    seed_sample_card();
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_OK);                             // into KICKS
+    pump(4);
+    CHECK(std::strcmp(app_storage().browse_list().folder(), "/SAMPLES/KICKS") == 0);
+    key(ENAGA_KEY_CLR);                            // back up: the cursor lands on KICKS
+    pump(4);
+    CHECK(std::strcmp(app_storage().browse_list().folder(), "/SAMPLES") == 0);
+    {
+        enaga::Canvas canvas(g_pixels);
+        app.draw(canvas);
+    }
+    CHECK_EQ(UiProbe::sample_cursor(app), 0);
+    key(ENAGA_KEY_CLR);                            // the root: SAMPLES, RECORD
+    pump(2);
+    const SampleList &list = app_storage().browse_list();
+    CHECK(list.at_root());
+    CHECK_EQ(list.count(), 2);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_OK);                             // RECORD
+    pump(4);
+    CHECK(std::strcmp(list.folder(), "/RECORD") == 0);
+    CHECK_EQ(list.count(), 1);
+    CHECK(std::strcmp(list.name(0), "STRATA_1.WAV") == 0);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_samples_reopens_on_the_file_the_track_plays) {
+    Strata &app = fresh();
+    seed_sample_card();
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);                           // b loop.wav
+    key(ENAGA_KEY_OK);
+    pump(20);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    key(ENAGA_KEY_OK);                             // again: straight to /SAMPLES, on that file
+    pump(4);
+    enaga::Canvas canvas(g_pixels);
+    app.draw(canvas);
+    CHECK_EQ(UiProbe::sample_cursor(app), 2);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_samples_says_why_a_folder_is_empty_or_missing) {
+    Strata &app = fresh();
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);                             // no /SAMPLES on this card
+    pump(4);
+    CHECK(app_storage().browse_error() != nullptr);
+    CHECK_EQ(app_storage().browse_list().count(), 0);
+    key(ENAGA_KEY_OK);                             // nothing to pick: nothing happens
+    CHECK_EQ(app_engine().project().kit.tracks[0].sample[0], '\0');
+    key(ENAGA_KEY_CLR);                            // up to the root still works
+    pump(2);
+    CHECK(app_storage().browse_list().at_root());
+    CHECK(app_storage().browse_error() == nullptr);
+    (void)app;
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_samples) {
+    Strata &app = fresh();
+    seed_sample_card();
+    // A name longer than the line, and enough files for a second page.
+    card_wav("/SAMPLES/A VERY LONG SAMPLE NAME THAT RUNS OFF.WAV");
+    char path[48];
+    for (int i = 0; i < 12; i++) {
+        std::snprintf(path, sizeof path, "/SAMPLES/hat_%02d.wav", i);
+        card_wav(path);
+    }
+    sample_track_in_edit();
+    check_layout(app, "EDIT on a SAMPLE track");
+    key(ENAGA_KEY_OK);
+    check_layout(app, "SAMPLES, reading");
+    pump(400);                                     // past the notice
+    check_layout(app, "SAMPLES");
+    key(ENAGA_KEY_RIGHT);
+    check_layout(app, "SAMPLES, page 2");
+    for (int i = 0; i < 40; i++) key(ENAGA_KEY_DOWN);
+    check_layout(app, "SAMPLES, last entry");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    check_layout(app, "SAMPLES, loading");
+    pump_until_idle();
+    pump(400);
+    check_layout(app, "SAMPLES, loaded");
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    check_layout(app, "SAMPLES, root");
+    FakeHost::the().set_card(false);
+    app_storage().on_card(false);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    check_layout(app, "SAMPLES, no card");
+    FakeHost::the().set_card(true);
+    app_storage().on_card(true);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    key(ENAGA_KEY_CLR);
+    shift_key(ENAGA_KEY_F8);
+    check_layout(app, "MACHINE on a SAMPLE track");
+    key(ENAGA_KEY_F4);
+}
+
+TEST(storage_a_second_folder_asked_for_mid_listing_waits_its_turn) {
+    // Only one files::list is in flight: the entries of the first would otherwise land in the
+    // second's table.
+    fresh();
+    seed_sample_card();
+    Storage &storage = app_storage();
+    CHECK(storage.request_browse("/SAMPLES"));
+    CHECK(storage.browsing());
+    CHECK(storage.request_browse("/RECORD"));
+    CHECK(storage.browsing());
+    for (int i = 0; i < 8 && storage.browsing(); i++) FakeHost::the().complete_loads();
+    CHECK(!storage.browsing());
+    const SampleList &list = storage.browse_list();
+    CHECK(std::strcmp(list.folder(), "/RECORD") == 0);
+    CHECK_EQ(list.count(), 1);
+    CHECK(std::strcmp(list.name(0), "STRATA_1.WAV") == 0);
+    // Too long a folder is refused with nothing changed; "" is the root, with no card needed.
+    char huge[SampleList::kFolderBytes + 8];
+    std::memset(huge, 'X', sizeof huge);
+    huge[0] = '/';
+    huge[sizeof huge - 1] = '\0';
+    CHECK(!storage.request_browse(huge));
+    CHECK(std::strcmp(list.folder(), "/RECORD") == 0);
+    FakeHost::the().set_card(false);
+    storage.on_card(false);
+    CHECK(storage.request_browse(""));
+    CHECK(list.at_root());
+    CHECK(storage.request_browse("/SAMPLES"));
+    CHECK(std::strcmp(storage.browse_error(), "NO CARD") == 0);
+    FakeHost::the().set_card(true);
+    storage.on_card(true);
+    // A path the kit cannot hold is refused before it touches the kit.
+    char long_path[kSamplePathBytes + 4];
+    std::memset(long_path, 'P', sizeof long_path);
+    long_path[0] = '/';
+    long_path[sizeof long_path - 1] = '\0';
+    CHECK(!storage.request_sample_file(0, long_path));
+    CHECK(!storage.request_sample_file(-1, "/SAMPLES/A_HIT.WAV"));
+    CHECK(!storage.request_sample_file(kTracks, "/SAMPLES/A_HIT.WAV"));
+    CHECK(!storage.request_sample_file(0, ""));
+    CHECK_EQ(app_engine().project().kit.tracks[0].sample[0], '\0');
 }
