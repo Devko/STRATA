@@ -116,6 +116,7 @@ Machine, then drive (asymmetric soft clip), multimode filter (LP, HP, BP, 12 or 
 - The audio side ramps every parameter change across one block, so edits and locks never click.
 - One LFO per track (sine, triangle, saw, square, sample and hold), free or tempo-synced, routable to any of the 16 parameters.
 - **[rev]** The LFO is a fifth EDIT page, LFO, after FX: four more bytes per track (16-19), stored, locked, scened, morphed and macro'd like the 16 sound parameters. A = WAV (SIN TRI RMP SAW SQR S+H; RMP rises, SAW falls), B = RAT (0-63 free, 0.06 to 32 Hz; 64-127 synced, 8 bars down to 1/32 including dotted and triplets), C = DEP (127 swings about 64 counts either side), D = DST (OFF or one of the 16 sound parameters). It runs at block rate and moves its destination's byte, so it costs nothing per sample. A synced LFO takes its phase from the clock's tick count. All-zero bytes are OFF, so older kits and scenes sound as they did. dsp/lfo.hpp has the detail.
+- **[rev]** Each track has an **arpeggiator**, a sixth EDIT page, ARP, after LFO: four more bytes per track (20-23), stored, locked and scened like the rest. A = MOD (OFF UP DN U/D ORD RND), B = RAT (1/4 1/8 1/8T 1/16 1/16T 1/32 1/32T), C = OCT (1-4 octaves), D = GAT (each hit's length, 50-99% of the spacing). With MOD on, a sequenced step's note -- a POLY step's whole chord -- plays as a run of single notes at RAT for the step's length, and the track's next step takes over. In KEYS, the held keys are arpeggiated while any is down, on the clock's grid with the transport running and free at the tempo when stopped; a pad hit plays once. RND plays the same notes every pass. All-zero bytes are OFF, so older kits play as they did. core/arp.hpp has the note logic; the engine schedules the hits on the clock's ticks, at control rate.
 - Voices come from fixed pools allocated in `init()`; nothing is allocated while playing.
 
 ## Sequencer
@@ -228,7 +229,7 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 | F5 (PLAY) | Play | Restart from step 1 |
 | F6 (STOP) | Stop; twice cuts all voices | Stop and reset all tracks |
 | F7 (MIXER) | Mixer: A-D levels of 4 tracks, selection keys switch 1-4 and 5-8 | PERFORM mode: A-D macros, VALUE morph |
-| F8 (EDIT) | Sound pages of the selected track; selection keys switch SRC, FLTR, AMP, FX **[rev]** and LFO | Kit and machine select. **[rev]** The first press is MACHINE; F1 + F8 again opens the KIT browser (16 kits on the card), and again goes back |
+| F8 (EDIT) | Sound pages of the selected track; selection keys switch SRC, FLTR, AMP, FX **[rev]**, LFO and ARP | Kit and machine select. **[rev]** The first press is MACHINE; F1 + F8 again opens the KIT browser (16 kits on the card), and again goes back |
 | Octave left/right | Step page 1-4 in GRID; octave in KEYS | Pattern length |
 | UP, DOWN | **[rev]** The rows on screen: the track in GRID, EDIT and KEYS; the machine in MACHINE; the kit slot in KIT; the length in RESAMPLE; the mutation in PERFORM; the slot cursor in PROJECT. With a STEP held: copy, paste | Copy, paste. In PROJECT: chain on/off, reload the sample. In KIT: read the card again, save the kit into the slot. In PERFORM: auto-fill |
 | LEFT, RIGHT | **[rev]** Sideways: the page wherever the selection keys flip pages; the step on the step page; octave in KEYS; macro in PERFORM; track in MACHINE; the page of eight kit slots in KIT; destination in RESAMPLE; the slot cursor in PROJECT | Free |
@@ -281,7 +282,7 @@ A project is one folder on the card. It loads fully into RAM when opened (patter
 /ENAGA/APPS/STRATA/APP.ENA                  the app (8.3 folder name = package name)
 /ENAGA/DATA/STRATA/SETTINGS.TXT             last project, preferences (<enaga/settings.hpp>)
 /ENAGA/DATA/STRATA/PROJECTS/<NAME>/PROJECT.BIN   tempo, scenes, macros, chains, mute states
-                                  /KIT.BIN       per track: machine, 16 parameters, LFO, mixer, sample path
+                                  /KIT.BIN       per track: machine, 16 parameters, LFO, arp, mixer, sample path
                                   /BANK_A.BIN … BANK_H.BIN   16 patterns each
 /ENAGA/DATA/STRATA/AUTOSAVE/                the working copy, same layout
 /ENAGA/DATA/STRATA/KITS/KIT_01.BIN … KIT_16.BIN   [rev] the kit library, shared by every project; KIT.BIN's format
@@ -294,7 +295,7 @@ A project is one folder on the card. It loads fully into RAM when opened (patter
 - Little-endian binary: magic `STRA`, format version, section table, CRC-32 over the payload.
 - Written and read byte by byte through a small serializer. Never cast file bytes to structs (alignment rule).
 - An unknown version or a bad CRC is refused with a message on screen; it never crashes the app.
-- **[rev]** A format grows by adding an OPTIONAL section at the end, not by a version bump: an older file without it loads with that feature off. KIT.BIN's section 2 holds the four LFO bytes per track, and PERFORM.BIN's section 3 holds each scene's LFO values and their stored mask. An older reader ignores the extra section.
+- **[rev]** A format grows by adding an OPTIONAL section at the end, not by a version bump: an older file without it loads with that feature off. KIT.BIN's section 2 holds the four LFO bytes per track, and PERFORM.BIN's section 3 holds each scene's LFO values and their stored mask. KIT.BIN's section 3 holds the four ARP bytes per track and PERFORM.BIN's section 5 each scene's ARP values (their stored bits are the high nibble of the LFO's mask byte). An older reader ignores the extra sections.
 
 **Core structures (sketch)**
 

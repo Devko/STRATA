@@ -838,6 +838,22 @@ per key release, in the command handler, and touches no render loop: the only pe
 is a flag test when a voice STARTS. No figure above changes. Not re-measured, because this cloud
 session has no emulator and no cl6x; the next load scenario run on Roland's PC covers it.
 
+### The arpeggiator (2026-11-22, not measured)
+
+The arp (core/arp.hpp, the scheduling in app/engine.cpp) adds no per-sample work: a hit is an
+ordinary `trigger`, as a step's is. What it adds is control rate: one `ArpSettings::make` (four
+multiplies and shifts) per step fired, and per clock tick a check of two runs on each of eight
+tracks, plus a re-read of the four bytes for a held KEYS run. With every arp off that is sixteen
+flag tests a tick, about 0.5 ticks a block at 120 BPM. Off is bit-exact: zeroed bytes are OFF and
+every golden render is unchanged.
+
+A running arp costs what its notes cost. A 1/32 arp on a one-step bass note is two triggers where
+there was one, so the voice load is the machine's, at the higher note rate: on VA POLY each hit
+takes a voice from the shared budget of 12 (`Engine::kPolyVoiceBudget`), which is the ceiling
+whatever the arp does. Not re-measured, because this cloud session has no emulator and no cl6x;
+`tests/scenario_lfo.sh` now also walks to the ARP page, and U7/U8-style figures for a running
+arp come from 13h on the unit.
+
 ### The master kill EQ (2026-11-22, host only)
 
 A three-band DJ isolator on the master, after the DJ filter (`Mixer::kill_eq`, loop in
