@@ -6,6 +6,9 @@
 # include <enaga/dsp.h>, which builds on the host too.
 #
 #   make -C host test     build and run the tests
+#   make -C host test -j4 JOBS=4
+#                         the same suite as four processes side by side (tools/test_shards.sh):
+#                         about 2x faster, bounded by the one 6-second UI audit test
 #   make -C host list     print the test names
 #   make -C host build    build the test binary without running it
 #   make -C host clean
@@ -80,8 +83,15 @@ DEP := $(OBJ:.o=.d)
 BIN := $(OUT)/strata-tests
 
 .PHONY: test list build clean render
+# JOBS=N runs the suite as shards on N processes (tools/test_shards.sh); without it, one process
+# in registration order, as always. TEST_TIMEOUT is the per-test watchdog in seconds for either.
+TEST_TIMEOUT ?= 0
 test: $(BIN)
-	@$(BIN)
+ifeq ($(strip $(JOBS)),)
+	@$(BIN) --timeout $(TEST_TIMEOUT)
+else
+	@$(ROOT)/tools/test_shards.sh $(BIN) $(JOBS) $(if $(filter-out 0,$(TEST_TIMEOUT)),$(TEST_TIMEOUT),120)
+endif
 
 build: $(BIN)
 
