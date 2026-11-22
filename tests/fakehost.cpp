@@ -221,6 +221,24 @@ int FakeHost::add(const char *path, uint32_t bytes, bool folder) {
     return count_++;
 }
 
+uint8_t *FakeHost::create_file(const char *path, uint32_t bytes) {
+    int index = find(path);
+    if (index >= 0 && files_[index].capacity >= bytes) {
+        files_[index].bytes = bytes;
+        return arena_ + files_[index].offset;
+    }
+    if (index >= 0) {
+        if (used_ + bytes > kArenaBytes) return nullptr;
+        Entry &e = files_[index];
+        e.offset = used_;
+        e.capacity = e.bytes = bytes;
+        used_ += bytes;
+        return arena_ + e.offset;
+    }
+    index = add(path, bytes, false);
+    return index < 0 ? nullptr : arena_ + files_[index].offset;
+}
+
 bool FakeHost::write_file(const char *path, const void *data, uint32_t bytes) {
     int index = find(path);
     if (index >= 0) {

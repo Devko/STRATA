@@ -110,6 +110,9 @@ public:
 
     // Seed or inspect the card directly, without going through the app.
     bool write_file(const char *path, const void *data, uint32_t bytes);
+    // A file of `bytes`, to be filled in place through the pointer returned (nullptr when the
+    // card has no room). For files too big for any buffer a test could hold.
+    uint8_t *create_file(const char *path, uint32_t bytes);
     int32_t read_file(const char *path, void *out, uint32_t max) const;
 
     // The first `max` bytes, however big the file is. `read_file` mirrors the ABI and refuses a
@@ -191,7 +194,9 @@ private:
     static constexpr int kHandles = int(ENAGA_FILES_OPEN);
 
     static constexpr int kMaxFiles = 48;
-    static constexpr uint32_t kArenaBytes = 4u << 20;
+    // 48 MiB: a project or two, and the long WAVs the chunked loader is tested with (a file
+    // bigger than the loader's 16.5 MiB staging buffer, and one past Cmd::set_sample's 24 bits).
+    static constexpr uint32_t kArenaBytes = 48u << 20;
     static constexpr uint32_t kPathMax = ENAGA_FILE_PATH_MAX + 1u;
 
     struct Entry {
