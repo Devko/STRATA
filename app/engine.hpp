@@ -85,6 +85,10 @@ public:
     const TrackParams &params(int track) const { return params_[track]; }
     const Machine *machine(int track) const { return machines_[track]; }
 
+    // Tests only: false makes every prepare() run, as it did before the memo, so a test can
+    // render the same input both ways and compare the output bit for bit.
+    void set_prepare_memo(bool on) { prepare_memo_ = on; forget_prepared(); }
+
     // The finished take, for the card to write. Valid from the main context only while
     // `status().resample_state` reads 3, which is the same discipline a project save uses.
     const Capture &capture() const { return capture_; }
@@ -324,6 +328,23 @@ private:
 
     ChainMix mix_[kTracks] = {};
     bool muted_[kTracks] = {};
+
+    // What each track's machine and insert chain were last prepared from, so a block whose
+    // parameters have not moved skips both prepare() calls (docs/BUDGET.md, "Prepare only on
+    // change"). Every prepare() is a pure function of its arguments plus state that only a
+    // COMMAND changes (a sample, a machine switch, a project load), so the memo is the bytes,
+    // the machine it was prepared for, and a flag every applied command clears. Skipping is
+    // therefore bit-exact by construction, which tests/test_engine.cpp holds it to by rendering
+    // with the memo on and off.
+    void prepare_machine(int track);
+    void prepare_chain(int track);
+    void forget_prepared();
+    TrackParams machine_prepared_[kTracks] = {};
+    const Machine *machine_prepared_for_[kTracks] = {};
+    TrackParams chain_prepared_[kTracks] = {};
+    ChainMix chain_prepared_mix_[kTracks] = {};
+    bool chain_prepared_valid_[kTracks] = {};
+    bool prepare_memo_ = true;
 
     Scheduler scheduler_;
     Mixer mixer_;

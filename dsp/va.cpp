@@ -302,11 +302,22 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
 
     const float fenv = fenv_.step(accent_ ? s.fenv_shape_accent : s.fenv_shape);
 
-    const float hz = 440.0f * semitones(pitch_ - 69.0f);
-    const float dt1 = clamp(hz * s.inv_rate, 1e-5f, 0.45f);
-    const float inv1 = reciprocal(dt1);
-    const float dt2 = clamp(dt1 * kOsc2Ratio, 1e-5f, 0.45f);
-    const float inv2 = reciprocal(dt2);
+    // The oscillators' increments, recomputed only when the pitch has moved: a semitones() and
+    // two reciprocals a control step per voice, for a value that is constant for the whole of a
+    // held note. Same inputs, same arithmetic, so the cached bits are the computed ones.
+    if (pitch_ != osc_pitch_ || s.inv_rate != osc_inv_rate_) {
+        osc_pitch_ = pitch_;
+        osc_inv_rate_ = s.inv_rate;
+        const float hz = 440.0f * semitones(pitch_ - 69.0f);
+        dt1_ = clamp(hz * s.inv_rate, 1e-5f, 0.45f);
+        inv1_ = reciprocal(dt1_);
+        dt2_ = clamp(dt1_ * kOsc2Ratio, 1e-5f, 0.45f);
+        inv2_ = reciprocal(dt2_);
+    }
+    const float dt1 = dt1_;
+    const float inv1 = inv1_;
+    const float dt2 = dt2_;
+    const float inv2 = inv2_;
 
     // Accent opens the filter two ways: the base cutoff lifts, and the sweep above it reaches
     // further. No key tracking, deliberately -- the machine this follows has a fixed-frequency
@@ -380,7 +391,11 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     // slices each, and 82% of its 4.3 points per voice is the per-sample loop.
     //
     // Bit-exact, deliberately: same expressions, same order, same associations (dsp/valoops.h).
-    strata_va_tail(out, work, env, n, s.drive, gain_, (target - gain_) * reciprocal(float(n)));
+    if (n != ramp_n_) {
+        ramp_n_ = n;
+        inv_n_ = reciprocal(float(n));
+    }
+    strata_va_tail(out, work, env, n, s.drive, gain_, (target - gain_) * inv_n_);
     gain_ = target;
 }
 

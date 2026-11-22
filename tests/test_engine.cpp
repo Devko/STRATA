@@ -2436,3 +2436,130 @@ TEST(engine_clearing_a_sample_bumps_the_epoch_even_for_a_track_that_has_none) {
     pump();
     CHECK_EQ(int(refused() - before), 1);
 }
+
+// --- prepare only on change ----------------------------------------------------------------------
+
+// app/engine.cpp's prepare memo claims to be bit-exact by construction. This holds it to that:
+// two engines, initialised identically, one preparing every block as before and one skipping
+// unchanged prepares, fed the same ticks and the same commands -- the default beat with its
+// locks and chord, knobs moving mid-note, machine switches, a sample load, a mute, a kit recall
+// from the browser and a project load -- must produce the same bits.
+//
+// Two engines rather than the rig's one rendered twice, because the rig's engine carries state
+// between renders (oscillator phases, noise generators, the delay line) that no command resets,
+// so the same passage rendered twice on it does not hash the same even with nothing changed.
+TEST(engine_skipping_an_unchanged_prepare_is_bit_exact) {
+    static Engine *every_block = nullptr;
+    static Engine *on_change = nullptr;
+    if (every_block == nullptr) {
+        every_block = new Engine;
+        on_change = new Engine;
+        FakeHost::the().reset();
+        FakeHost::the().set_tempo(130.0f);
+        CHECK(every_block->init(kRate));
+        CHECK(on_change->init(kRate));
+        // A sample region of their own, so a real set_sample can land (the rig has none): one
+        // second of a decaying saw, longer than the 0.4 s placeholder every machine starts with.
+        static int16_t region[48000];
+        for (int i = 0; i < 48000; i++) {
+            region[i] = int16_t((i % 211) * 150 - 15000) * int16_t(1 + (48000 - i) / 12000) / 4;
+        }
+        every_block->set_sample_region(region, sizeof region);
+        on_change->set_sample_region(region, sizeof region);
+    }
+    every_block->set_prepare_memo(false);
+    on_change->set_prepare_memo(true);
+    Engine *const engines[2] = {every_block, on_change};
+
+    auto post_both = [&](Cmd cmd, uint8_t track, uint8_t step, uint8_t a, uint8_t b) {
+        Command command;
+        command.cmd = cmd;
+        command.track = track;
+        command.step = step;
+        command.a = a;
+        command.b = b;
+        for (Engine *e : engines) CHECK(e->commands().post(command));
+    };
+    post_both(Cmd::set_param, 0, 0, kFilterMod, 40);      // a filter on two tracks, so the
+    post_both(Cmd::set_param, kMono, 0, kFilterMod, 100); // chain's coefficients count too
+    post_both(Cmd::set_param, 1, 0, kSendA, 90);
+    post_both(Cmd::set_param, 2, 0, kSendB, 90);
+    post_both(Cmd::lock_delta, kPoly, 4, kDec, uint8_t(int8_t(-40)));
+    post_both(Cmd::lock_delta, 0, 8, kDrv, uint8_t(int8_t(60)));
+
+    // A kit for the browser's recall: the live one with a different machine on two tracks and
+    // other knobs, so the recall moves machines, parameters and faders at once.
+    auto stage_recall = [&]() {
+        for (Engine *e : engines) {
+            Kit &kit = e->kit_for_recall();
+            kit = e->project().kit;
+            kit.tracks[4].machine = uint8_t(MachineId::va_mono);
+            kit.tracks[5].params[2] = 20;       // VA CUT
+            kit.tracks[1].params[8] = 110;      // SNARE DEC
+            kit.tracks[1].level = 0.6f;
+        }
+    };
+
+    FakeHost::the().set_running(true);
+    const double frames_per_tick = double(kRate) * 60.0 / (130.0 * 96.0);
+    double next = 0.0;
+    uint32_t tick = 0;
+    float out[2][kStereo];
+    float peak = 0.0f;
+    int differing = 0;
+    // One bar is about 1,385 blocks at 130 BPM, so each event below has notes around it.
+    for (int b = 0; b < 6000; b++) {
+        if (b == 300) post_both(Cmd::set_param, kMono, 0, kDec, 100);     // a knob, mid-note
+        if (b == 500) post_both(Cmd::set_machine, 4, 0, uint8_t(MachineId::va_poly), 0);
+        if (b == 700) post_both(Cmd::set_param, kPoly, 0, kLvl, 90);
+        // GRAIN on the loop track with SPR at the top, prepared against the 0.4 s placeholder,
+        // which clamps the spray to the sample's length. A longer sample later lifts the clamp
+        // only if the machine is prepared again: an input to prepare() that is not a parameter,
+        // which is the case the memo's reset on every command exists for.
+        if (b == 900) post_both(Cmd::set_machine, 7, 0, uint8_t(MachineId::grain), 0);
+        if (b == 910) post_both(Cmd::set_param, 7, 0, 3, 127);
+        if (b == 2600) {
+            Command load;
+            load.cmd = Cmd::set_sample;
+            load.track = 7;
+            load.a = 1;
+            load.u = 0;
+            load.c = uint8_t(48000 & 0xFF);
+            load.d = uint8_t((48000 >> 8) & 0xFF);
+            load.e = uint8_t(48000 >> 16);
+            for (Engine *e : engines) CHECK(e->commands().post(load));
+        }
+        if (b == 3400) post_both(Cmd::set_mute, 3, 0, 1, 0);
+        if (b == 3600) {
+            stage_recall();
+            post_both(Cmd::kit_recall, 0, 0, 1, 0);       // the kit browser
+        }
+        if (b == 4400) post_both(Cmd::project_loaded, 0, 0, 0, 0);   // the live project, again
+        if (b == 5000) post_both(Cmd::set_machine, 7, 0, uint8_t(MachineId::sample), 0);
+        const double block_start = double(b * kBlk);
+        for (int e = 0; e < 2; e++) {
+            // The fake hands its tick queue out once, so each engine is given the block's ticks.
+            for (double t = next; t < block_start + double(kBlk); t += frames_per_tick) {
+                FakeHost::the().deliver_tick(tick + uint32_t((t - next) / frames_per_tick + 0.5),
+                                             uint32_t(t - block_start));
+            }
+            engines[e]->process(nullptr, out[e], uint32_t(kBlk));
+        }
+        while (next < block_start + double(kBlk)) {
+            next += frames_per_tick;
+            tick++;
+        }
+        for (int i = 0; i < kStereo; i++) {
+            if (__builtin_memcmp(&out[0][i], &out[1][i], sizeof(float)) != 0) differing++;
+        }
+        const float p = peak_of(out[0], kStereo);
+        if (p > peak) peak = p;
+    }
+    FakeHost::the().set_running(false);
+
+    CHECK_EQ(differing, 0);
+    // Every command landed, the sample included: a refused set_sample would test nothing.
+    CHECK_EQ(int(on_change->status().refused.load(std::memory_order_relaxed)), 0);
+    // And the passage really sounds: two silent renders would agree whatever the memo did.
+    CHECK(peak > 0.1f);
+}

@@ -265,6 +265,14 @@ void VaPoly::kill_all() {
 
 void VaPoly::render_add(float *out, int frames) {
     if (!active_) return;   // nothing sounding and nothing pending: an idle machine costs a test
+
+    // Once a block, here as well as in prepare(). The entries are keyed on this block's filter
+    // envelope values, so a cache carried across blocks fills with last block's keys and stops
+    // taking new ones -- still correct, but every voice would miss. prepare() used to be the
+    // only clear, and it ran every block; app/engine.cpp now skips it when the parameters have
+    // not moved, which leaves the settings, and so every entry, valid but the cache full.
+    filter_cache_.clear();
+
     bool busy = false;
     for (int i = 0; i < kVoices; i++) {
         if (!slots_[i].busy()) continue;   // an idle voice costs one envelope read and a compare
