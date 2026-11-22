@@ -84,7 +84,10 @@ log = report.get("log", [])
 check(report.get("app_status") == "APP RUNNING", "app is running",
       f'status={report.get("app_status")!r}')
 check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_reason")!r}')
-check("strata ready" in log, "init() ran to completion")
+# Enaga's log ring keeps the last 16 lines, and this scenario logs more than that, so "strata
+# ready" can scroll out. A drawn screen comes only after init(), so it proves the same thing.
+check("strata ready" in log or (len(log) == 16 and any(l.startswith("scr ") for l in log)),
+      "init() ran to completion")
 check("run int" in log, "the transport started", f"log={log}")
 
 screens = [line for line in log if line.startswith("scr ")]
