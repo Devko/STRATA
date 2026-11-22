@@ -637,6 +637,31 @@ TEST(ui_func_push_d_holds_a_tape_stop_and_func_mutate_a_delay_freeze) {
     CHECK_EQ(int(undo_depth()), int(undo_before));
 }
 
+TEST(ui_func_push_d_with_a_step_held_clears_its_lock_not_a_tape_stop) {
+    // Roland, 2026-11-22: every push with a STEP held is the step's. FUNC + push A-C already
+    // cleared that step's lock there; FUNC + push D was a tape stop instead.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    pump(2);
+    step_down(5);
+    app.on_encoder(3, +6);                           // lock D on step 6
+    pump(2);
+    uint8_t value = 0;
+    const int param = page_first(Page(UiProbe::param_page(app))) + 3;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(param), value));
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_D, true);
+    pump(2);
+    CHECK(!app_engine().tape_stop().held());
+    CHECK_EQ(UiProbe::notice(app), "LOCK CLEARED");
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    step_up(5);
+    pump(2);
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(param), value));
+    CHECK(!app_engine().tape_stop().held());
+}
+
 TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {
     // A third mutation-testing gap: dropping `page_ * 16` from `on_step_key` survived everything
     // above, because every test before this one works on page 1 where the offset is zero -- and

@@ -423,8 +423,10 @@ public:
 
         // FUNC + push D, HELD: the tape stop, in every mode -- beside FUNC + push A-C, the kill
         // EQ, so the master moves are under one hand. Its release ends it whether or not FUNC is
-        // still down, and before the held-step gesture below can take the key.
-        if (key == ENAGA_KEY_PUSH_D && (down ? shift_ : tape_held_)) {
+        // still down, and before the held-step gesture below can take the key. Not while a STEP is
+        // held: then FUNC + push D clears that step's D lock, as FUNC + push A-C clear theirs
+        // (Roland, 2026-11-22) -- every push with a step held is the step's.
+        if (key == ENAGA_KEY_PUSH_D && (down ? shift_ && held_step_ < 0 : tape_held_)) {
             tape_held_ = down;
             post(Cmd::tape_stop, 0, 0, down ? 1 : 0);
             if (down) notice("TAPE STOP");
