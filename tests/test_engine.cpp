@@ -2197,18 +2197,16 @@ TEST(engine_clearing_a_sample_bumps_the_epoch_even_for_a_track_that_has_none) {
         CHECK_EQ(int(uint8_t(after - before)), 1);
     }
 
-    // A sample for a track that hosts no Sampler is refused rather than reinterpreting a
-    // pointer: the build has no RTTI to ask a Machine* with, so `samplers_` records it.
-    uint32_t before = refused();
-    post(Cmd::set_sample, kPoly, 0, 1);
-    pump();
-    CHECK_EQ(int(refused() - before), 1);
-
-    // Track 8 does host one -- and is still refused here, because app/app.cpp is what hands the
+    // A sample goes to the track's Sampler and Grain whatever the track hosts, so a POLY track
+    // takes it too -- and both are refused here, because app/app.cpp is what hands the
     // engine its sample region and host/Makefile does not build app/app.cpp. So
     // `sample_region_ == nullptr` and the offset, frame-count and alignment checks cannot be
     // reached from the host at all; what they guard is the pool arithmetic on the other side of
     // the ring, which tests/test_samplepool.cpp covers.
+    uint32_t before = refused();
+    post(Cmd::set_sample, kPoly, 0, 1);
+    pump();
+    CHECK_EQ(int(refused() - before), 1);
     before = refused();
     post(Cmd::set_sample, 7, 0, 1);
     pump();

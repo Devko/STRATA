@@ -120,7 +120,6 @@ void Engine::set_sample_region(const int16_t *base, uint32_t bytes) {
 void Engine::rewire_machines() {
     for (int t = 0; t < kTracks; t++) {
         TrackMachines &own = pool_[t];
-        samplers_[t] = nullptr;
         polys_[t] = nullptr;
 
         switch (MachineId(machine_id_[t])) {
@@ -128,10 +127,7 @@ void Engine::rewire_machines() {
             case MachineId::snare:   machines_[t] = &own.snare; break;
             case MachineId::hat:     machines_[t] = &own.hat; break;
             case MachineId::perc:    machines_[t] = &own.perc; break;
-            case MachineId::sample:
-                machines_[t] = &own.sampler;
-                samplers_[t] = &own.sampler;
-                break;
+            case MachineId::sample:  machines_[t] = &own.sampler; break;
             case MachineId::grain:   machines_[t] = &own.grain; break;
             case MachineId::va_mono: machines_[t] = &own.mono; break;
             case MachineId::va_poly:
@@ -725,12 +721,14 @@ void Engine::apply(const Command &command) {
             // goes last, because the loader may act on it the instant it sees the change -- and
             // what it does is write over that memory. Reversing the two is the bug this protocol
             // exists to prevent.
-            if (samplers_[track] != nullptr) {
-                samplers_[track]->kill_all();
-                // And drop the pointer itself: a null sample is a legal, expected state and
-                // leaves the track silent rather than glitching (dsp/sample.hpp).
-                samplers_[track]->set_sample(nullptr, 0, 1, rate_);
-            }
+            //
+            // Both of the track's sample readers, whichever machine the track hosts now. Every
+            // track owns a Sampler AND a Grain (pool_), and a machine switched away still holds
+            // its pointer: clearing only the hosted one left the other pointing into a range the
+            // loader is about to overwrite, and switching back played whatever landed there.
+            // set_sample kills each machine's voices first (dsp/sample.hpp, dsp/grain.hpp).
+            pool_[track].sampler.set_sample(nullptr, 0, 1, rate_);
+            pool_[track].grain.set_sample(nullptr, 0, 1, rate_);
             // Bumped even for a track that hosts no Sampler. The loader waits for this change
             // before it releases the range, so a track that was never reading anything must
             // still report that it has stopped, or the wait never ends.
@@ -738,10 +736,9 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::set_sample: {
-            if (samplers_[track] == nullptr) {
-                status_.bump_refused();
-                break;
-            }
+            // To both readers, for the reason in clear_sample: the track's sample belongs to the
+            // track, and SAMPLE and GRAIN are two ways of playing it. Refusing a track that did
+            // not host a Sampler is why GRAIN never got a card sample.
             // 24 bits of frames: 16.7 M frames, which is 349 s of mono at 48 kHz and well past
             // the 30 s above which docs/SPEC.md streams from the card instead.
             const uint32_t frames = uint32_t(command.c) | uint32_t(command.d) << 8 |
@@ -764,8 +761,9 @@ void Engine::apply(const Command &command) {
                 status_.bump_refused();
                 break;
             }
-            samplers_[track]->set_sample(sample_region_ + command.u / sizeof(int16_t), frames,
-                                         channels, rate_);
+            const int16_t *data = sample_region_ + command.u / sizeof(int16_t);
+            pool_[track].sampler.set_sample(data, frames, channels, rate_);
+            pool_[track].grain.set_sample(data, frames, channels, rate_);
             break;
         }
 

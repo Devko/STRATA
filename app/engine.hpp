@@ -241,11 +241,6 @@ private:
 
     Machine *machines_[kTracks] = {};
 
-    // Which tracks host a Sampler, for `Cmd::set_sample` and `Cmd::clear_sample`. The build has
-    // no RTTI (CLAUDE.md), so a Machine* cannot be asked whether it is one; the assignment is
-    // fixed at init anyway, so it is simply recorded alongside machines_ there. A track that
-    // hosts no Sampler refuses a sample command rather than reinterpreting a pointer.
-    Sampler *samplers_[kTracks] = {};
     uint8_t machine_id_[kTracks] = {};
 
     // And which tracks host a VaPoly, for the same reason and recorded the same way: a chord is

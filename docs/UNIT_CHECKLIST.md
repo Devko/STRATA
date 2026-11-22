@@ -725,6 +725,8 @@ saved with a different kit used to come back with the default one's machines.
       put them back and it should return.
 - [ ] **A new project is playable.** A blank kit is docs/SPEC.md's default kit, not eight KICKs —
       which is what a kit of zeroes would have meant once the field was honoured.
+- [ ] **A GRAIN track plays the track's card sample**, not the placeholder, and a track switched
+      SAMPLE → GRAIN → SAMPLE across a sample change plays the new file on both.
 - [ ] **A track switched to SAMPLE or GRAIN before any card has been read still makes a sound**:
       every machine in the pool gets the placeholder at init.
 - [ ] Save a project with switched machines, reopen it, and check it comes back the same. This is
