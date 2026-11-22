@@ -39,7 +39,8 @@ struct Registry {
     static const char *current;
 
     static void add(const char *name, void (*fn)());
-    static int run_all();
+    static int run_all(int shard = 0, int shards = 1, unsigned timeout_s = 0);
+    static int run_names(const char *path, unsigned timeout_s);
 };
 
 struct Register {
