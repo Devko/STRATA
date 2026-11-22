@@ -45,7 +45,7 @@ SRC       := $(CORE_SRC) $(DSP_SRC) $(APP_SRC) $(TEST_SRC)
 # dsp/*.ti.c: the hot inner loops CLAUDE.md requires to be plain C (the device build sends them
 # to cl6x, this one builds them with GCC as the fallback does). They are what the C++ in dsp/
 # calls, so the host tests exercise exactly the same code the unit runs.
-DSP_C_SRC := $(wildcard $(ROOT)/dsp/*.c)
+DSP_C_SRC := $(wildcard $(ROOT)/dsp/*.c) $(wildcard $(ROOT)/core/*.c)
 DSP_C_OBJ := $(patsubst $(ROOT)/%.c,$(OUT)/%.o,$(DSP_C_SRC))
 
 # <enaga/dsp.hpp> is a C++ wrapper over block functions implemented in C under
