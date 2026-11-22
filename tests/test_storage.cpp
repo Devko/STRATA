@@ -739,8 +739,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
 
     // The sizes tests/test_project.cpp pins from the serializer, reached here through the real
     // card protocol: a file that came out a different size means the two have drifted apart.
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 296);
-    CHECK_EQ(project_bytes(), 296u);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 373);
+    CHECK_EQ(project_bytes(), 373u);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1164);
     CHECK_EQ(kit_bytes(), 1164u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 3804);
@@ -1614,7 +1614,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         }
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 296);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 373);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1164);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 3804);
 

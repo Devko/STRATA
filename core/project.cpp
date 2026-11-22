@@ -11,8 +11,9 @@
 //
 // ## The bytes
 //
-// PROJECT.BIN, 292 bytes, four sections (the third, the mixer's, and the fourth, the live
-// state's, were added later and are OPTIONAL on read). Fixed size: nothing in it is variable length.
+// PROJECT.BIN, 373 bytes, five sections (the third, the mixer's, the fourth, the live state's,
+// and the fifth, song mode's, were added later and are OPTIONAL on read). Fixed size: nothing in
+// it is variable length.
 //
 //     settings (id 1), 19 bytes
 //         0   2  tempo, centi-BPM
@@ -33,6 +34,9 @@
 //         0   1  the live mutes, one bit per track
 //         1   1  the scene in morph slot A
 //         2   1  the scene in morph slot B
+//     song (id 5), 65 bytes
+//         0   1  SONG: 1 plays the chain once and stops, 0 loops it
+//         1  64  each chain entry's mute recall: 0 none, 1-8 that stored mute state
 //
 // KIT.BIN, 1,076 bytes, one section.
 //
@@ -288,7 +292,7 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PROJECT.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kProjectSections = 4;
+constexpr uint32_t kProjectSections = 5;
 constexpr uint32_t kProjectSettingsBytes = 19;
 constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
 // The sends, the master bytes and the kill switches. The section GREW when the kill EQ came
@@ -304,12 +308,15 @@ constexpr uint32_t kProjectChainOffset = kProjectSettingsOffset + kProjectSettin
 constexpr uint32_t kProjectMixerOffset = kProjectChainOffset + kProjectChainBytes;
 constexpr uint32_t kProjectLiveBytes = 3;          // live mutes, scene A, scene B
 constexpr uint32_t kProjectLiveOffset = kProjectMixerOffset + kProjectMixerBytes;
-constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectLiveOffset + kProjectLiveBytes;
+// Song mode: the SONG switch, then each chain entry's mute recall.
+constexpr uint32_t kProjectSongBytes = 1 + uint32_t(kChainEntries);
+constexpr uint32_t kProjectSongOffset = kProjectLiveOffset + kProjectLiveBytes;
+constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectSongOffset + kProjectSongBytes;
 
-// How many of `wanted` at the END of the list a reader may do without. Two: the mixer and the
-// live sections, neither of which existed when the format was first written, so a PROJECT.BIN
-// from before them has two or three sections and must still load (core/project.hpp).
-constexpr uint32_t kProjectOptionalSections = 2;
+// How many of `wanted` at the END of the list a reader may do without. Three: the mixer, the
+// live and the song sections, none of which existed when the format was first written, so a
+// PROJECT.BIN from before them has two to four sections and must still load (core/project.hpp).
+constexpr uint32_t kProjectOptionalSections = 3;
 
 static_assert(sizeof(ProjectSettings::mute_states) == 8,
               "the settings section is 19 bytes on the strength of 8 mute states");
@@ -421,6 +428,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
         {kSectionProjectChain, kProjectChainOffset, kProjectChainBytes},
         {kSectionProjectMixer, kProjectMixerOffset, kProjectMixerBytes},
         {kSectionProjectLive, kProjectLiveOffset, kProjectLiveBytes},
+        {kSectionProjectSong, kProjectSongOffset, kProjectSongBytes},
     };
 
     Writer w(buffer, capacity);
@@ -457,6 +465,9 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     w.u8(s.live_mutes);
     w.u8(s.scene_a);
     w.u8(s.scene_b);
+
+    w.u8(s.chain_song ? 1 : 0);
+    for (int i = 0; i < kChainEntries; i++) w.u8(project.chain[i].mutes);
 
     if (!w.ok() || w.size() != kProjectTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kProjectTotalBytes, written);
@@ -497,7 +508,8 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
 
     // The mixer section is LAST and OPTIONAL: see `kProjectOptionalSections`.
     const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain,
-                                               kSectionProjectMixer, kSectionProjectLive};
+                                               kSectionProjectMixer, kSectionProjectLive,
+                                               kSectionProjectSong};
     uint32_t offset[kProjectSections] = {};
     uint32_t length[kProjectSections] = {};
     const SerializeResult found =
@@ -512,6 +524,9 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         return refuse(SerializeResult::malformed);
     }
     if (offset[3] != 0 && length[3] < kProjectLiveBytes) {
+        return refuse(SerializeResult::malformed);
+    }
+    if (offset[4] != 0 && length[4] < kProjectSongBytes) {
         return refuse(SerializeResult::malformed);
     }
 
@@ -607,6 +622,22 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         s.live_mutes = r.u8();
         s.scene_a = r.u8();
         s.scene_b = r.u8();
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // Song mode, defaulted when absent for the mixer's reason: a looping chain, no mute recalls.
+    // A recall past the eight states is dropped to none, and so is one on an entry the chain
+    // section left unused, so an unused entry stays the zeroed entry project.hpp says it is.
+    s.chain_song = false;
+    for (int i = 0; i < kChainEntries; i++) project.chain[i].mutes = 0;
+    if (offset[4] != 0) {
+        if (!r.seek(kHeaderBytes + offset[4])) return refuse(SerializeResult::malformed);
+        s.chain_song = r.u8() != 0;
+        for (int i = 0; i < kChainEntries; i++) {
+            const uint8_t mutes = r.u8();
+            const bool usable = project.chain[i].repeats != 0 && mutes <= kChainMutesMax;
+            project.chain[i].mutes = usable ? mutes : 0;
+        }
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
 
