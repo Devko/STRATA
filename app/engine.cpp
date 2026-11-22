@@ -135,10 +135,9 @@ void Engine::rewire_machines() {
                 polys_[t] = &own.poly;
                 break;
             default:
-                // A kit naming a machine this build does not have plays nothing rather than
-                // reinterpreting an index: core/project.hpp says the file format needs the domain
-                // for exactly this reason, and a silent track is recoverable where a wrong
-                // pointer is not.
+                // Defensive only: kit_read and params_from_kit both map an id this build does
+                // not have to KICK (core/project.cpp says why), so no kit reaches this. If one
+                // ever did, a silent track is recoverable where a reinterpreted index is not.
                 machines_[t] = nullptr;
                 break;
         }
@@ -408,7 +407,7 @@ void Engine::apply(const Command &command) {
             // by the main context.
             if (command.a) {
                 for (int t = 0; t < kTracks; t++) {
-                    if (machines_[t]) machines_[t]->kill_all();
+                    silence_track(t);
                 }
                 // And the ratchet hits still waiting for their block. A second STOP means
                 // silence now, so a hit landing four blocks later would be a note after it.
@@ -810,7 +809,10 @@ void Engine::apply(const Command &command) {
                 state = uint8_t(state ^ uint8_t(1u << track));
                 mute_latch_arm(mute_latch_, state);
             } else {
-                muted_[track] = command.a != 0;
+                uint8_t state = mute_state_capture(muted_);
+                state = command.a != 0 ? uint8_t(state | (1u << track))
+                                       : uint8_t(state & ~(1u << track));
+                apply_mutes(state);
             }
             break;
 
@@ -934,7 +936,7 @@ void Engine::apply(const Command &command) {
             if (command.a < 8) {
                 const uint8_t state = project_.settings.mute_states[command.a];
                 if (command.b != 0) mute_latch_arm(mute_latch_, state);
-                else mute_state_apply(state, muted_);
+                else apply_mutes(state);
             }
             break;
 
@@ -961,7 +963,9 @@ void Engine::apply(const Command &command) {
         case Cmd::trigger_note: {
             // A pad hit, played live. It sounds now, at the start of the block: the main context
             // cannot know a frame offset, and the spec's latency stamping belongs to recording.
-            if (machines_[track]) {
+            // Not on a muted track: a muted track is not rendered, so the note would wait in the
+            // machine and sound the moment the track was unmuted.
+            if (machines_[track] && !muted_[track]) {
                 Trig trig;
                 trig.note = clamp_u8(command.a);
                 trig.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
@@ -1049,7 +1053,7 @@ void Engine::apply(const Command &command) {
             // The machine being LEFT is silenced first. It will not be rendered again, so it
             // cannot release its own tail -- and a voice left sounding in an object nothing
             // calls is a note that never ends and never ends up in the voice count either.
-            if (machines_[track] != nullptr) machines_[track]->kill_all();
+            silence_track(track);
 
             machine_id_[track] = command.a;
             project_.kit.tracks[track].machine = command.a;
@@ -1131,6 +1135,12 @@ void Engine::params_from_kit() {
         const uint8_t id = project_.kit.tracks[t].machine;
         machine_id_[t] = id < uint8_t(MachineId::count) ? id : uint8_t(MachineId::kick);
     }
+    // Whatever was sounding goes first. A machine the new kit takes off a track is never
+    // rendered again, so a voice left in it would freeze and resume if a later kit put that
+    // machine back -- Cmd::set_machine silences the machine it leaves for the same reason.
+    for (int t = 0; t < kTracks; t++) {
+        silence_track(t);
+    }
     rewire_machines();
 
     for (int t = 0; t < kTracks; t++) {
@@ -1189,8 +1199,8 @@ void Engine::apply_performance() {
     // The scenes, if two are assigned. An empty scene behaves as the kit, so an unassigned slot
     // costs one pass and changes nothing (core/perform.hpp).
     if (scene_a_ < kScenes && scene_b_ < kScenes) {
-        scene_morph(scenes_.scenes[scene_a_], scenes_.scenes[scene_b_], morph_, project_.kit,
-                    performed_);
+        // `performed_` holds the live kit (above), which is the end a scene does not store.
+        scene_morph(scenes_.scenes[scene_a_], scenes_.scenes[scene_b_], morph_, performed_);
     }
 
     // The macros, over the morph. Later targets win over earlier ones, which core/perform.hpp
@@ -1232,9 +1242,29 @@ void Engine::switch_pattern(int bank, int slot) {
 }
 
 // A bar started. The only thing that waits for one is a mute change armed for it.
+// Cut a track dead: its voices, and its insert chain's filter and lo-fi state. A track stops
+// being rendered the moment its machine goes idle, so the chain is frozen with whatever energy
+// its filters held at the cut -- harmless after a natural decay, but after a kill it was a
+// stored transient that played out on the track's next note (a kick at LVL 0 came out at 0.42).
+void Engine::silence_track(int track) {
+    if (machines_[track] != nullptr) machines_[track]->kill_all();
+    mixer_.chain(track).clear_state();
+}
+
+// Mutes change here and nowhere else. A muted track is not rendered at all (that is the CPU it
+// saves), so a voice left in its machine would freeze mid-note and resume on unmute. Newly muted
+// tracks are therefore silenced on the spot.
+void Engine::apply_mutes(uint8_t state) {
+    for (int t = 0; t < kTracks; t++) {
+        const bool now = (state >> t & 1u) != 0;
+        if (now && !muted_[t]) silence_track(t);
+    }
+    mute_state_apply(state, muted_);
+}
+
 void Engine::on_bar() {
     uint8_t state = 0;
-    if (mute_latch_release(mute_latch_, state)) mute_state_apply(state, muted_);
+    if (mute_latch_release(mute_latch_, state)) apply_mutes(state);
 
     // And an armed take starts HERE, on the bar line, which is the whole reason resampling has
     // an armed state at all: a take that begins under the user's finger does not loop, and a

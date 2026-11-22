@@ -164,6 +164,8 @@ private:
 
     // A bar started: release anything armed for one.
     void on_bar();
+    void apply_mutes(uint8_t state);
+    void silence_track(int track);     // kill_all plus the insert chain's state   // the only writer of muted_ after init
     void resolve_tick(uint32_t tick, uint32_t frame);
 
     // The eight playheads into Status, every block. See the implementation on why not only on a

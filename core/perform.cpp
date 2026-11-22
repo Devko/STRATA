@@ -183,7 +183,7 @@ int scene_count(const Scene &scene) {
 
 // --- the morph ------------------------------------------------------------
 
-void scene_morph(const Scene &a, const Scene &b, uint16_t position, const Kit &kit,
+void scene_morph(const Scene &a, const Scene &b, uint16_t position,
                  uint8_t out[kTracks][kKitParams]) {
     const int at = clamp_int(int(position), 0, int(kMorphScale));
 
@@ -202,8 +202,10 @@ void scene_morph(const Scene &a, const Scene &b, uint16_t position, const Kit &k
             // The end a scene does not store is the KIT value, not the other scene's held
             // constant. core/perform.hpp says why: it makes the sweep fade A's changes away
             // where B says nothing about them, which is what a crossfade between two sounds
-            // means.
-            const int fallback = int(kit.tracks[t].params[p]);
+            // means. The kit value is what `out` holds on the way in -- the live kit the caller
+            // copied there -- and not a stored Kit, which in the engine is only refreshed by a
+            // save and went stale with every knob turned since.
+            const int fallback = int(out[t][p]);
             const int from = (mask_a >> p & 1u) != 0 ? int(a.values[t][p]) : fallback;
             const int to = (mask_b >> p & 1u) != 0 ? int(b.values[t][p]) : fallback;
 

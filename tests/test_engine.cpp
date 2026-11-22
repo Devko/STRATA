@@ -1456,6 +1456,31 @@ TEST(engine_a_mute_stops_a_tracks_trigs_without_stopping_the_sequencer) {
     CHECK_EQ(poly().busy_voices(), 1);
 }
 
+TEST(engine_a_mute_silences_the_voices_it_finds_rather_than_freezing_them) {
+    // A muted track is not rendered, so a voice left in its machine stopped mid-note and resumed
+    // on unmute -- a sustaining POLY chord came back from where it was. And a pad hit on a muted
+    // track waited in the machine and sounded on unmute. A mute now cuts the track's voices, and
+    // a muted track takes no pad hits.
+    Engine &engine = clean();
+    post(Cmd::trigger_note, kPoly, 0, 60, 100);
+    pump(2);
+    CHECK(poly().busy_voices() > 0);
+
+    post(Cmd::set_mute, kPoly, 0, 1, 0);
+    pump();
+    CHECK(engine.muted(kPoly));
+    CHECK_EQ(poly().busy_voices(), 0);
+
+    post(Cmd::trigger_note, kPoly, 0, 64, 100);    // a pad hit while muted
+    pump();
+    CHECK_EQ(poly().busy_voices(), 0);
+
+    post(Cmd::set_mute, kPoly, 0, 0, 0);
+    pump();
+    CHECK_EQ(poly().busy_voices(), 0);             // nothing resumes, nothing was waiting
+    CHECK_NEAR(energy(4), 0.0f, 1e-6);
+}
+
 TEST(engine_a_mute_armed_for_the_bar_waits_for_the_bar) {
     Engine &engine = clean();
     FakeHost::the().set_running(true);
