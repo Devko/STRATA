@@ -12,9 +12,8 @@
 # Variants (docs/BUDGET.md, "The cl6x vectorisation pass", says what each one isolates):
 #
 #   base     the tree before the pass: <ref> as it is
-#   nofuse   this tree with STRATA_VA_FUSED 0: the in-place filters and the sampler move, but the
-#            VA voice's filter, envelope and tail as three passes
 #   head     this tree as committed: what merges
+#   nofuse   head + STRATA_VA_FUSED 0    (the VA voice's filter, envelope and tail as three passes)
 #   hints    head + STRATA_TI_HINTS 1    (MUST_ITERATE on the block loops)
 #   packed   head + STRATA_TI_PACKED 1   (DOTP2 stereo pairs in SAMPLE and GRAIN)
 #   all      head + both flags
@@ -194,30 +193,24 @@ for cc in ("cl6x", "gcc"):
         print(f"| {s} | " + " | ".join(cells) + " |")
     print()
 
-def frames(path):
-    with wave.open(path, "rb") as w:
-        data = w.readframes(w.getnframes())
-    return struct.unpack(f"<{len(data) // 4}i", data)
+sys.path.insert(0, "tools")
+from render_diff import compare
 
 for cc in ("cl6x", "gcc"):
     ref = renders.get(("head", cc))
     if ref is None:
         continue
-    print(f"Audio against head, {cc} (32-bit render of the default beat)")
-    a = frames(ref)
+    print(f"=== Audio against head, {cc} (32-bit render of the default beat) ===")
     for v in variants:
-        if v == "head" or (v, cc) not in renders:
-            continue
-        b = frames(renders[(v, cc)])
-        n = min(len(a), len(b))
-        diff = [abs(a[i] - b[i]) for i in range(n) if a[i] != b[i]]
-        if not diff and len(a) == len(b):
-            print(f"  {v:7s} identical ({n} samples)")
-        else:
-            worst = max(diff) if diff else 0
-            print(f"  {v:7s} DIFFERS: {len(diff)} of {n} samples, worst {worst} LSB of 2^31"
-                  f" ({worst / 2147483648.0:.2e} full scale)" + ("" if len(a) == len(b) else ", lengths differ"))
-    print()
+        if v != "head" and (v, cc) in renders:
+            compare(ref, renders[(v, cc)], f"{v} vs head, {cc}")
+
+# The same variant from both compilers. Before this pass, cl6x and GCC rendered the same audio;
+# a variant whose cl6x render departs from its GCC render by more than rounding is the one cl6x
+# builds wrongly.
+for v in variants:
+    if (v, "cl6x") in renders and (v, "gcc") in renders:
+        compare(renders[(v, "cl6x")], renders[(v, "gcc")], f"=== {v}: cl6x vs gcc ===")
 PY
 
 for v in $VARIANTS; do
