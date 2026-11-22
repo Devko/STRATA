@@ -121,7 +121,9 @@ check(report.get("audio_overruns", -1) == 0, "no audio overruns",
 peak = report.get("audio_cycles_peak", 0)
 percent = 100.0 * peak / CYCLES_PER_BLOCK
 check(percent > 5.0, "the beat is actually sounding", f"{percent:.2f}% peak")
-check(percent < 40.0, "load has not regressed badly", f"{percent:.2f}% peak")
+# 50%, not 40%: the factory content (open sends, the Cm7 stab) put the default beat at 43.25%
+# GCC-only on 2026-11-22, as docs/BUDGET.md's "Factory content" predicted; cl6x reads 23.48%.
+check(percent < 50.0, "load has not regressed badly", f"{percent:.2f}% peak")
 
 print()
 print(f"emulator peak load: {percent:.2f}%  ({peak} of {CYCLES_PER_BLOCK} cycles, {blocks} blocks)")

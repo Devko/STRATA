@@ -759,21 +759,16 @@ These go into `docs/BUDGET.md` as the first unit rows (U1-U5 and E1-E5 in "Optim
 Only after the walkthrough passes and Roland says go. `docs/release/RELEASING.md` is the
 procedure and wins where this summary differs.
 
-- [ ] **Before packaging.** The card being released passed this walkthrough, build noted on the
-      first line. If `APP.ENA` is a cl6x build, read the cl6x licence for conditions on its
-      output and record them in `docs/BUDGET.md` ("The cl6x licence question, examined"); if in
-      doubt, release a GCC-only build. `SmplTrek.bin` on the card is Enaga's own v0.2.0 release
-      file (SHA-256 matches the release zip). `APP.ENA` is plain STRATA, not STRATA6.
-- [ ] **Notes.** Replace every `TODO(release)` in `CHANGELOG.md` and `docs/release/v0.1.0.md`
-      with tonight's result and the MAX readings from 17; date `## [0.1.0]`. Commit on a branch,
-      merge.
-- [ ] **Package** (WSL): `python3 -B tests/test_package_release.py`, then
-      `python3 -B tools/package_release.py v0.1.0`. SHA-256 of the zip: `________________`
-- [ ] Optional: unzip onto a freshly formatted card, install, play A01.
-- [ ] **Publish (Roland's go).** Tag `v0.1.0` on the merged commit and push it; GitHub release
-      "STRATA 0.1.0", pre-release, body from `docs/release/v0.1.0.md`; attach
-      `STRATA-v0.1.0-smpltrek.zip` and its `.sha256`. Then update README's install section and
-      badge.
+- [ ] **The card is what ships.** It was built from `main` as it is now, the walkthrough passed
+      on it, and `SmplTrek.bin` on it is Enaga's own v0.2.0 release file. If `APP.ENA` is a cl6x
+      build, TI's licence text was read for conditions on its output and recorded in
+      `docs/BUDGET.md`; if in doubt, release a GCC-only build.
+- [ ] **One command** (WSL, on `main`, clean tree), with the build and the two MAX readings
+      from section 3:
+      `tools/publish_release.sh v0.1.0 --build gcc --max-a01 __._ --max-a04 __._`
+      (`--build cl6x --ti-licence-read` for a cl6x card). Add `--dry-run` first to read the
+      release text without publishing, or `--draft` to publish as a GitHub draft.
+- [ ] Merge the `release/v0.1.0` PR it opens, then update README's install section and badge.
 
 ---
 
