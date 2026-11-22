@@ -699,6 +699,34 @@ test can tell you is whether a take sounds right, which is the whole point of th
 - [ ] A second arm during a take is refused and counted, because there is no undo for a lost
       take. Check the screen says something rather than quietly restarting.
 
+### Machine switching — F1 + F8, and the thing that makes GRAIN audible
+
+Every track owns one of every machine (72.6 KiB, measured) and switching is a pointer swap.
+`KitTrack::machine` has been in KIT.BIN since M4 and nothing honoured it until now, so a project
+saved with a different kit used to come back with the default one's machines.
+
+- [ ] **Put GRAIN on a track and play it.** This is the first time it can be heard at all: it
+      has been in the tree, host-tested and mutation-tested twice, with no way to reach it.
+      Everything in its own section above — POS, SIZ, DEN, SPR, PIT, SHP — is now listenable.
+- [ ] **The knobs keep their positions across a switch and the sound changes.** Nothing is
+      translated: slot 10 is GLD on VA MONO and DET on VA POLY, and docs/SPEC.md gives every
+      machine the same sixteen slots on purpose. Check that reads as a feature and not as a bug.
+- [ ] **Switch a machine mid-note.** The one being left is silenced, because it will never be
+      rendered again and so cannot release its own tail. A click there is expected; a note that
+      never ends is the bug this prevents.
+- [ ] **The hat choke follows the kit.** A closed hat cuts an open one, and that pair is now
+      re-derived rather than wired: move either hat off tracks 3 or 4 and the choke should stop,
+      put them back and it should return.
+- [ ] **A new project is playable.** A blank kit is docs/SPEC.md's default kit, not eight KICKs —
+      which is what a kit of zeroes would have meant once the field was honoured.
+- [ ] **A track switched to SAMPLE or GRAIN before any card has been read still makes a sound**:
+      every machine in the pool gets the placeholder at init.
+- [ ] Save a project with switched machines, reopen it, and check it comes back the same. This is
+      the first build in which that field means anything.
+- [ ] **Eight tracks of VA POLY is four times the block** and nothing stops you. Worth trying
+      once to know what it sounds like when it overruns, and worth knowing that the same is true
+      of eight tracks of anything.
+
 ## M0.5 — budget spike
 
 Folded into the M2 worst-case measurement above — see `docs/BUDGET.md` for why. These two lines

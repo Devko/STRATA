@@ -38,7 +38,7 @@ load or feel is met, whatever the numbers below say.
 | M3 | code complete | Sequencer depth, 16 undo levels. `Step::length` became audible only this session, on VA POLY |
 | M4 | code complete | Ten files per project, autosave, background sample loading. **Two data-loss bugs found this session** once app/ became host-testable |
 | M5 | code complete | Scenes, morph, macros, mutes, beat repeat, throws, mutation. Seven of its eight tools are on the upper PADS and **the emulator cannot press a pad**, so most of it has never executed |
-| M6 | nearly | Euclidean generator, KEYS, core/chord, VA POLY (registered, chords expanded in `fire`), GRAIN (written, **unreachable** — the default kit fills all eight tracks). Left: resampling, pad pressure. **Its budget exit is in doubt**: VA POLY costs 4.25 points per voice, 11.3x what SPEC budgets for the whole machine |
+| M6 | **feature-complete, unheard** | Euclidean generator, KEYS, core/chord, VA POLY with chords, GRAIN, resampling, pad pressure — and machine switching, which is what made GRAIN reachable at all. Every feature has host tests; not one has been heard. **Its budget exit is in doubt**: VA POLY costs 4.25 points per voice, 11.3x what SPEC budgets for the whole machine |
 | M7 | not started | Sync settings UI unwritten. Everything else in it is unit verification by definition |
 
 The two things that gate everything and cannot be done here: **boot `build/APP.ENA` on a unit**,
@@ -203,7 +203,18 @@ with no edit screens and no underruns.
 VA POLY with chords, GRAIN, KEYS mode, resampling, pad pressure via `on_pad_pressure`
 (Enaga's own cube curve — app-side filtering is no longer needed), Euclidean generator.
 
+**Machine switching was added to this milestone**, because GRAIN was otherwise unreachable: the
+default kit fills all eight tracks and nothing could free a slot. The plan put it off over "a
+track switching to VA POLY would want six voices it does not currently own", which turned out to
+be a memory question with a measured answer — 72.6 KiB for every track to own every machine —
+so every track owns one of each and switching is a pointer swap. KIT.BIN already had the field.
+
 **Exit:** every machine and tool in the spec, worst-case load under 60% on the unit.
+
+**Where it stands:** the feature list is complete and host-tested, and the load figure is the
+open question. VA POLY measures 4.25 points a voice (docs/BUDGET.md), so a six-voice chord is
+25.6% of the block on its own against SPEC's 11,208 cycles for the whole machine. Whether that
+passes depends entirely on cl6x, which nobody has been able to run.
 
 ---
 
