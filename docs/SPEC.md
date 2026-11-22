@@ -225,11 +225,11 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 | F5 (PLAY) | Play | Restart from step 1 |
 | F6 (STOP) | Stop; twice cuts all voices | Stop and reset all tracks |
 | F7 (MIXER) | Mixer: A-D levels of 4 tracks, selection keys switch 1-4 and 5-8 | PERFORM mode: A-D macros, VALUE morph |
-| F8 (EDIT) | Sound pages of the selected track; selection keys switch SRC, FLTR, AMP, FX | Kit and machine select |
+| F8 (EDIT) | Sound pages of the selected track; selection keys switch SRC, FLTR, AMP, FX | Kit and machine select. **[rev]** The first press is MACHINE; F1 + F8 again opens the KIT browser (16 kits on the card), and again goes back |
 | Octave left/right | Step page 1-4 in GRID; octave in KEYS | Pattern length |
-| UP, DOWN | **[rev]** The rows on screen: the track in GRID, EDIT and KEYS; the machine in MACHINE; the length in RESAMPLE; the mutation in PERFORM; the slot cursor in PROJECT. With a STEP held: copy, paste | Copy, paste. In PROJECT: chain on/off, reload the sample. In PERFORM: auto-fill |
-| LEFT, RIGHT | **[rev]** Sideways: the page wherever the selection keys flip pages; the step on the step page; octave in KEYS; macro in PERFORM; track in MACHINE; destination in RESAMPLE; the slot cursor in PROJECT | Free |
-| OK, CLR | Confirm, cancel. **[rev]** OK picks the slot under the cursor in PROJECT; CLR closes the step page and SETUP | F1 + CLR = undo, F1 + OK = redo |
+| UP, DOWN | **[rev]** The rows on screen: the track in GRID, EDIT and KEYS; the machine in MACHINE; the kit slot in KIT; the length in RESAMPLE; the mutation in PERFORM; the slot cursor in PROJECT. With a STEP held: copy, paste | Copy, paste. In PROJECT: chain on/off, reload the sample. In KIT: read the card again, save the kit into the slot. In PERFORM: auto-fill |
+| LEFT, RIGHT | **[rev]** Sideways: the page wherever the selection keys flip pages; the step on the step page; octave in KEYS; macro in PERFORM; track in MACHINE; the page of eight kit slots in KIT; destination in RESAMPLE; the slot cursor in PROJECT | Free |
+| OK, CLR | Confirm, cancel. **[rev]** OK picks the slot under the cursor in PROJECT, and recalls the kit under it in KIT (twice, since a recall is not undoable); CLR closes the step page and SETUP | F1 + CLR = undo, F1 + OK = redo |
 | VALUE | Tempo; push + turn = swing. **[rev]** Shows `EXT` and refuses edits when CLOCK SRC is not INTERNAL | Master DJ filter |
 
 **[rev] Navigation.** The arrows follow Enaga's own menu and SETTINGS page, so one habit works in
@@ -280,6 +280,7 @@ A project is one folder on the card. It loads fully into RAM when opened (patter
                                   /KIT.BIN       per track: machine, 16 parameters, LFO, mixer, sample path
                                   /BANK_A.BIN … BANK_H.BIN   16 patterns each
 /ENAGA/DATA/STRATA/AUTOSAVE/                the working copy, same layout
+/ENAGA/DATA/STRATA/KITS/KIT_01.BIN … KIT_16.BIN   [rev] the kit library, shared by every project; KIT.BIN's format
 /SAMPLES/…                                  user samples, WAV 16/24/32-bit, mono or stereo
 /RECORD/STRATA_<n>.WAV                      resampled audio
 ```

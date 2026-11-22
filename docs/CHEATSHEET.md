@@ -21,7 +21,7 @@ FUNC and press X; "hold STEP" means a STEP key held down while you do the rest.
 
 The Lofi-12 XT and CyDrums print other names on the function block; this sheet uses the SmplTrek's.
 The F-key labels are from Enaga's `docs/hardware.md`, taken from the original firmware's test page.
-Some on-screen hints still use the code names: `F1+F3 AGAIN TO SAVE`, `F1+CLR UNDO`, `F1+EDIT: MACHINE`.
+The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACHINE`).
 
 ## Modes: how to get there
 
@@ -31,6 +31,7 @@ Some on-screen hints still use the code names: `F1+F3 AGAIN TO SAVE`, `F1+CLR UN
 | KEYS | FUNC+HOME | STEP keys play 16 scale degrees on the selected track |
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX |
 | MACHINE | FUNC+EDIT | Pick the machine on each track |
+| KIT | FUNC+EDIT twice | Save and recall whole kits: 16 slots on the card, shared by all projects |
 | MIXER | MIXER | Levels, delay, reverb, routing, master |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
 | PROJECT | PROJECT | Banks and patterns, key and scale, the card |
@@ -103,6 +104,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | EDIT | Track | Page SRC FLTR AMP FX | Page | The page's 4 params | — / clear | Copy / paste |
 | KEYS | Track | Octave (OCT 0-7) | Track | Current EDIT page params | — | Copy / paste |
 | MACHINE | Machine | Track | Track | A: machine | — | Copy / paste |
+| KIT | Slot | Page of 8 slots | Page of 8 slots | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
 | MIXER | — | Page (6) | Page | Levels or page fields | — / clear | Copy / paste |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | A: bars | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | UP: chain on/off, DOWN: reload track's sample, LEFT: reload project, RIGHT: new project |
@@ -125,6 +127,14 @@ empty), up to 64 entries. Chain edits are not undoable.
 is the A/B morph; OK captures into scene A's slot (with a scene pad held: that scene, selected
 track only); scene pad + CLR erases it. Mutes, mute states and the A/B scene choice are saved with
 the project.
+**KIT:** a kit is everything KIT.BIN holds: the eight machines, their parameters, the faders and
+the sample paths. STEP 1-16 move the cursor to that slot (they never load). OK once shows OK AGAIN TO
+LOAD; OK again within 2 s recalls the kit, and the transport keeps playing. A recall cuts the tails
+and is not undoable, which is why it takes two presses. Tracks whose sample path changed reload
+their sample in the background; the others keep playing theirs. FUNC+DOWN saves the current kit
+into an empty slot at once, and over a stored kit on a second press (AGAIN TO OVERWRITE). The kits
+live in `/ENAGA/DATA/STRATA/KITS/KIT_01.BIN` ... `KIT_16.BIN`. A recalled kit makes the project
+UNSAVED until it is saved with FUNC+PROJECT twice.
 **MIDI in:** channels 1-8 play tracks 1-8, other channels play the selected track.
 
 ## The screen
@@ -143,6 +153,7 @@ the project.
 | PROJECT slots | `05>`, bright box | Queued slot; live slot (bright), has trigs (mid), empty (dark) |
 | PROJECT | `SMP O.X- 12/32M` | Per track sample: O ready, . loading, X failed, - none; MiB used/budget |
 | PROJECT | `UNSAVED`, `NO CARD` | RAM differs from the card; no usable card |
+| KIT | `>03 KIT`, `EMPTY`, `UNREADABLE`, `...` | Cursor and slot: holds a kit, nothing, a damaged file, not read yet; the cursor's kit below as two lines of four machines |
 | PERFORM | `A1 12P`, `>A`, `3 PRM` | Scene slot and its parameter count; selected macro; macro targets |
 | PERFORM | `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n` | Mutation, track, amount; fill, auto-fill, repeat (`-` pitched down), throw; bar count |
 | MIXER | `T1 M`, `ON`/`--`, `PEAK` | Track muted; machine present; master peak |

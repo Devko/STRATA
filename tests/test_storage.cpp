@@ -3078,3 +3078,221 @@ TEST(storage_a_deliberate_save_puts_the_project_name_in_the_settings) {
     settings.load();
     CHECK_EQ(settings.text("PROJECT", ""), storage().project_name());
 }
+
+// =============================================================================================
+// The kit library (FUNC+EDIT twice): sixteen kits in <data folder>/KITS, shared by projects
+// =============================================================================================
+
+namespace {
+
+const char *kit_slot_path(int slot) {
+    static char path[64];
+    std::snprintf(path, sizeof path, "%s/KITS/KIT_%02d.BIN", kDataFolder, slot + 1);
+    return path;
+}
+
+// Wait for the kit job asked for to run, and every sample swap it queued after it.
+bool kit_settle() { return settle(); }
+
+}  // namespace
+
+TEST(storage_a_kit_saved_to_a_slot_comes_back_on_recall) {
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    // A sound worth keeping: track 1's first knob and its machine, track 2's fader.
+    post(Cmd::set_param, 0, 0, 0, 101);
+    post(Cmd::set_machine, 1, 0, uint8_t(MachineId::grain));
+    pump(2);
+    CHECK_EQ(int(kit_value(0, 0)), 101);
+
+    CHECK(storage().request_kit_save(2));
+    CHECK(kit_settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.has_file(kit_slot_path(2)));
+    CHECK_EQ(host.file_bytes(kit_slot_path(2)), int32_t(kit_bytes()));
+    CHECK(host.logged("kit saved"));
+    CHECK_EQ(int(storage().kit_slot(2).state), int(Storage::SlotState::used));
+    CHECK_EQ(int(storage().kit_slot(2).machines[1]), int(MachineId::grain));
+
+    // Change it, then recall: everything a sound is comes back.
+    post(Cmd::set_param, 0, 0, 0, 7);
+    post(Cmd::set_machine, 1, 0, uint8_t(MachineId::kick));
+    pump(2);
+    CHECK_EQ(int(kit_value(0, 0)), 7);
+
+    storage().request_save();               // so "dirty" below is the recall's doing
+    CHECK(kit_settle());
+    CHECK(!storage().dirty());
+
+    CHECK(storage().request_kit_load(2));
+    CHECK(kit_settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.logged("kit loaded"));
+    CHECK_EQ(int(kit_value(0, 0)), 101);
+    CHECK_EQ(int(engine().machine_id(1)), int(MachineId::grain));
+    CHECK_EQ(int(engine().project().kit.tracks[1].machine), int(MachineId::grain));
+    // RAM's kit is no longer the project's KIT.BIN, so a save has something to write.
+    CHECK(storage().dirty());
+}
+
+TEST(storage_a_kit_recall_is_heard_and_plays_through_a_running_transport) {
+    // A recall must not stop the clock (unlike a project load), and the recalled sound must be
+    // what plays -- not only what is drawn: the per-block copy rebuilds `effective_` from
+    // `performed_`, which only `perform_dirty_` refreshes.
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::set_param, 0, 0, 3, 120);
+    pump(2);
+    CHECK(storage().request_kit_save(0));
+    CHECK(kit_settle());
+
+    post(Cmd::set_param, 0, 0, 3, 10);
+    pump(2);
+    host.set_running(true);
+    CHECK(storage().request_kit_load(0));
+    CHECK(kit_settle());
+    CHECK(enaga::clock::running());
+    CHECK_EQ(int(kit_value(0, 3)), 120);
+    CHECK_EQ(int(engine().performed(0, 3)), 120);
+    host.set_running(false);
+}
+
+TEST(storage_a_kit_recall_swaps_only_the_tracks_whose_sample_changed) {
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    make_wav("/SAMPLES/KA.WAV", 48000, 1, 16, 2400);
+    make_wav("/SAMPLES/KB.WAV", 48000, 1, 16, 1200);
+    kit_sample(kLoopTrack, "/SAMPLES/KA.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 2400u);
+    CHECK(storage().request_kit_save(0));       // slot 1 plays KA
+    CHECK(kit_settle());
+
+    // Recalling a kit with the same path reads no WAV: the loop keeps playing.
+    const int loads = host.loads();
+    CHECK(storage().request_kit_load(0));
+    CHECK(kit_settle());
+    CHECK_EQ(host.loads(), loads);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+
+    // A kit naming another file swaps that track, through the ordinary loader.
+    kit_sample(kLoopTrack, "/SAMPLES/KB.WAV");
+    CHECK(storage().request_kit_save(1));       // slot 2 names KB (the path is the kit's)
+    CHECK(kit_settle());
+    CHECK(storage().request_kit_load(0));       // back to KA
+    CHECK(kit_settle());
+    CHECK_EQ(host.loads(), loads + 1);
+    CHECK_EQ(std::strcmp(engine().project().kit.tracks[kLoopTrack].sample, "/SAMPLES/KA.WAV"), 0);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, 2400u);
+
+    // And a kit naming no file takes the sample off the track.
+    kit_sample(kLoopTrack, "");
+    CHECK(storage().request_kit_save(2));
+    CHECK(kit_settle());
+    CHECK(storage().request_kit_load(0));
+    CHECK(kit_settle());
+    CHECK(storage().request_kit_load(2));
+    CHECK(kit_settle());
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::empty));
+}
+
+TEST(storage_the_kit_scan_tells_empty_used_and_damaged_slots_apart) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    CHECK_EQ(int(storage().kit_slot(0).state), int(Storage::SlotState::unknown));
+    CHECK_EQ(int(storage().kit_slot(-1).state), int(Storage::SlotState::unknown));
+    CHECK_EQ(int(storage().kit_slot(16).state), int(Storage::SlotState::unknown));
+
+    CHECK(storage().request_kit_save(3));
+    CHECK(kit_settle());
+    const char junk[] = "NOT A KIT AT ALL";
+    CHECK(host.write_file(kit_slot_path(9), junk, sizeof junk));
+
+    storage().request_kit_scan();
+    CHECK(kit_settle());
+    for (int slot = 0; slot < Storage::kKitSlots; slot++) {
+        const Storage::SlotState want = slot == 3 ? Storage::SlotState::used
+                                      : slot == 9 ? Storage::SlotState::bad
+                                                  : Storage::SlotState::empty;
+        CHECK_EQ(int(storage().kit_slot(slot).state), int(want));
+    }
+    // The default kit's machines, read back from the file.
+    CHECK_EQ(int(storage().kit_slot(3).machines[0]), int(engine().machine_id(0)));
+    CHECK_EQ(int(storage().kit_slot(3).machines[7]), int(engine().machine_id(7)));
+
+    // A card swap forgets all of it: the slots are about a card that may be gone.
+    storage().on_card(false);
+    storage().on_card(true);
+    CHECK_EQ(int(storage().kit_slot(3).state), int(Storage::SlotState::unknown));
+    CHECK(settle());
+}
+
+TEST(storage_a_damaged_or_empty_kit_slot_changes_nothing) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::set_param, 0, 0, 0, 33);
+    pump(2);
+    kit_sample(kLoopTrack, "/SAMPLES/KEEP.WAV");
+
+    // A kit job starts and finishes in one pass, so there is no busy pass for pump_until_idle to
+    // see; a few passes are enough for the ring to drain and the job to run.
+    CHECK(storage().request_kit_load(5));       // nothing there
+    pump(4);
+    check_error("an empty slot", "EMPTY SLOT");
+    CHECK(host.logged("kit load failed EMPTY SLOT"));
+    CHECK_EQ(int(storage().kit_slot(5).state), int(Storage::SlotState::empty));
+
+    // A kit whose CRC does not add up is refused whole: not one knob, not one path.
+    CHECK(storage().request_kit_save(6));
+    CHECK(kit_settle());
+    const uint32_t bytes = fetch(kit_slot_path(6));
+    g_scratch[bytes - 1] ^= 0x5Au;
+    store(kit_slot_path(6), bytes);
+    kit_sample(kLoopTrack, "/SAMPLES/OTHER.WAV");
+    post(Cmd::set_param, 0, 0, 0, 44);
+    pump(2);
+
+    CHECK(storage().request_kit_load(6));
+    pump(4);
+    CHECK(storage().last_error() != nullptr);
+    CHECK_EQ(int(storage().kit_slot(6).state), int(Storage::SlotState::bad));
+    CHECK_EQ(int(kit_value(0, 0)), 44);
+    CHECK_EQ(std::strcmp(engine().project().kit.tracks[kLoopTrack].sample, "/SAMPLES/OTHER.WAV"),
+             0);
+    kit_sample(kLoopTrack, "");
+    CHECK(settle());
+}
+
+TEST(storage_kit_requests_need_a_slot_and_a_card) {
+    clean();
+    CHECK(!storage().request_kit_save(-1));
+    CHECK(!storage().request_kit_save(Storage::kKitSlots));
+    CHECK(!storage().request_kit_load(-1));
+    CHECK(!storage().request_kit_load(Storage::kKitSlots));
+
+    FakeHost::the().set_card(false);
+    storage().on_card(false);
+    CHECK(!storage().request_kit_save(0));
+    CHECK(!storage().request_kit_load(0));
+    storage().request_kit_scan();
+    CHECK(!pump_until_idle(50));                // nothing ran
+    FakeHost::the().set_card(true);
+    storage().on_card(true);
+    CHECK(settle());
+}
+
+TEST(storage_a_kit_save_stores_the_knob_turned_just_before_it) {
+    // The `kit_store` a save posts copies `params_` into `project_.kit`, and the write waits for
+    // the ring to drain -- so an edit posted in the same breath as the save is in the file.
+    clean();
+    post(Cmd::set_param, 2, 0, 5, 77);
+    CHECK(storage().request_kit_save(11));
+    CHECK(kit_settle());
+    const uint32_t bytes = fetch(kit_slot_path(11));
+    Kit kit;
+    CHECK_EQ(int(kit_read(kit, g_scratch, bytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(kit.tracks[2].params[5]), 77);
+}

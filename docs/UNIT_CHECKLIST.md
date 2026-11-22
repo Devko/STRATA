@@ -1,8 +1,220 @@
-# What to check at the next session on the unit
+# Unit checklist
+
+The first part is **tonight's walkthrough** (2026-11-22): one pass, top to bottom, with the unit
+in hand. It covers everything merged today and is ordered so each mode is visited once. Tick the
+box, write the value or a word on the line, and move on; anything odd goes in the notes line and
+is chased tomorrow. The second part, "Reference", is the full per-milestone list it was drawn
+from, with the background for each check.
+
+Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`). Some
+on-screen hints still use the code names: **F1 = FUNC, F3 = PROJECT, F8 = EDIT** (so
+`F1+F3 AGAIN TO SAVE` means press FUNC+PROJECT again). `FUNC+X` = hold FUNC, press X.
+
+Build on the card: STRATA `________`  STRATA6 `________`  cl6x / GCC only: `________`
+
+---
+
+# Tonight's walkthrough
+
+## 0. Before power-on (2 min)
+
+- [ ] SYSTEM INFO shows **BOOT 1.0.17**.
+- [ ] A spare SD card with the official `SmplTrek.bin` is within reach.
+- [ ] Power adapter in, **batteries out**. HOME held at power-on reaches BOOT MODE (try it once now).
+- [ ] The card holds `/ENAGA/APPS/STRATA/APP.ENA` and `/ENAGA/APPS/STRATA6/APP.ENA`.
+
+## 1. Start and first look (3 min)
+
+Start STRATA from Enaga's app list. Do not press anything yet.
+
+- [ ] The app starts and the screen is readable: no text over text, over a bar or off the edge.
+- [ ] Top line reads like `A01 130.0 . 3.2%` (bank+slot, tempo, `.` stopped, load).
+      Idle load: `________ %`
+- [ ] Bottom line shows a **MAX** figure (like `TRK8 MAX23.5 SMPLTREK` once playing) and the
+      device name SMPLTREK. No MAX means the build predates PR #17.
+- [ ] No noise or clicks with the transport stopped.
+
+## 2. Panel labels match the cheatsheet legend (3 min)
+
+Press each key once from GRID (HOME) and check the screen agrees. Notes: `________________`
+
+- [ ] **HOME** shows GRID. **EDIT** shows EDIT (title names the machine). **MIXER** shows MIXER.
+      **PROJECT** shows PROJECT. HOME again.
+- [ ] **PLAY** starts the beat (`>` on the top line), **STOP** stops it.
+- [ ] **REC** toggles `REC ON` / `REC OFF` and lights red. Leave it OFF.
+- [ ] **FUNC** held + **HOME** opens KEYS; **FUNC+EDIT** opens MACHINE; **FUNC+MIXER** opens
+      PERFORM; **FUNC+REC** opens RESAMPLE (CLR backs out). HOME to return.
+- [ ] The octave pair and the selection pair under the screen are where the legend says
+      (in GRID, both flip the step page `PG1`...`PG4`).
+- [ ] Encoders A, B, C, D in GRID move the four slots left to right, **in that order** (A and B
+      not swapped).
+
+## 3. Default beat, and the MAX CPU readout (5 min)
+
+- [ ] PLAY: all eight tracks play. The chord stab on track 7 is **four notes together**
+      (MIN7), not one note and not a flam.
+- [ ] The third kick of the bar is shorter (lock on step 9) and one closed hat opens (step 11);
+      the steps after revert.
+- [ ] STOP, then PLAY: MAX restarts from the new run. Let it play **60 s**, then read:
+      top-line load range `________ %` to `________ %`, **MAX `________ %`**.
+- [ ] Turn VALUE: tempo follows smoothly. Push VALUE + turn: swing. Back to 130.0.
+
+## 4. Screen layout, mode by mode (4 min)
+
+The beat can keep playing. One look per screen; note any overlap or illegible text.
+
+- [ ] GRID: four encoder slots at the bottom, name over value, the fourth fully on screen; the
+      track line (`T1 ... L16 X1`) ends inside the screen.
+- [ ] EDIT: rows read like `A CUT 064` with a bar; hint `F1+EDIT: MACHINE` is legible.
+- [ ] MACHINE (FUNC+EDIT): the kit reads as two lines of four.
+- [ ] MIXER: selection keys walk TRK 1-4, TRK 5-8, DLY, REV, ROUTE, MST; every page draws.
+- [ ] PERFORM (FUNC+MIXER): macro bars stop above the two hint lines; selected macro shows `>A`.
+- [ ] PROJECT: the KEY line sits below the 16 slots, not through the last row.
+- [ ] Dim greys (empty steps, bar backgrounds) are visible but clearly darker than text.
+      Notes: `________________`
+
+## 5. Arrow keys (3 min)
+
+- [ ] GRID and EDIT: UP/DOWN walk the track **without playing it**; LEFT/RIGHT flip the step page
+      (GRID) or SRC/FLTR/AMP/FX (EDIT).
+- [ ] Hold STEP 1 + OK opens the step page; LEFT/RIGHT walk to the previous/next step and wrap;
+      CLR closes it and erases nothing.
+- [ ] PERFORM: LEFT/RIGHT pick the macro, UP/DOWN walk the mutation type.
+- [ ] RESAMPLE: UP/DOWN pick the bars, LEFT/RIGHT where the take goes; CLR backs out.
+- [ ] Notices (e.g. an octave change) appear on the second line in every mode.
+
+## 6. Step editing: locks, clearing one lock, the note, undo/redo (6 min)
+
+In GRID on track 1 (KICK), playing.
+
+- [ ] Hold STEP 5 and turn A: that step is locked (LED red) and the trig does **not** toggle when
+      you let go.
+- [ ] Hold STEP 5 and **push A**: `LOCK CLEARED`, the lock is gone. Repeat for B, C, D (lock with
+      a turn, clear with that knob's push): each push clears **its own** knob.
+      A `__` B `__` C `__` D `__`
+- [ ] EDIT, RIGHT twice to the AMP page, HOME. Hold STEP 9 and push A (DEC): the third kick goes back
+      to the long body. FUNC+CLR puts the lock back.
+- [ ] Hold a STEP and turn VALUE: the step's note moves (`NOTE`), the tempo does not, the trig is
+      unchanged on release. FUNC+CLR undoes the whole turn at once.
+- [ ] FUNC+CLR = `UNDO`, FUNC+OK = `REDO`; the CLR and OK keys light when there is something to
+      undo / redo. Sweep a locked knob 40 clicks, undo once: the whole sweep goes.
+- [ ] CLR with nothing held clears the track (`CLEARED  F1+CLR UNDO`); FUNC+CLR brings it back.
+
+## 7. Key, scale and sharps (2 min)
+
+- [ ] PROJECT: B walks the key, C the scale. Walk the key through C#, D#, F#, G#, A#: always
+      sharps, and the `#` is legible. It wraps B to C; the scale stops at both ends.
+- [ ] Hold a STEP on track 7 + OK: the step page's NOTE (A) spells the same way, e.g. `C#3`.
+- [ ] Set the key back to **C MINOR**.
+
+## 8. Machine select, GRAIN, and the scale fold (8 min)
+
+The fold test: one step plays a C#, then switch PROJECT's scale between CHROMATIC (C# stays) and
+MINOR (C# is not in C minor, so a folding track moves it). Repeat on each track below.
+
+- [ ] Select track 7. FUNC+EDIT: UP/DOWN change the track's machine at once (`MACHINE`),
+      LEFT/RIGHT walk the track. Discoverable? `________`
+- [ ] **VA (track 7):** set a step's NOTE to C#3. CHROMATIC vs MINOR: the pitch **changes**.
+- [ ] **Kick (track 1):** NOTE to C#3. CHROMATIC vs MINOR: the pitch does **not** change.
+- [ ] **GRAIN:** track 8 to GRN (FUNC+EDIT, UP/DOWN). It sounds (the first time GRAIN has been
+      heard on a unit). Turn POS SIZ DEN SPR: each audibly does something.
+      Load with GRAIN playing, MAX `________ %`
+- [ ] GRAIN with a C#3 step: CHROMATIC vs MINOR **changes** the pitch.
+- [ ] **SAMPLE, sliced:** track 8 back to SMP. SLC (EDIT SRC, D) is at 8: the C#3 step does
+      **not** move with the scale.
+- [ ] **SAMPLE, one-shot:** turn SLC fully down (1). Now the step **does** move with the scale.
+- [ ] Set SLC back to 8 (or FUNC+CLR) and the scale to MINOR.
+
+## 9. KEYS: a held key sustains (3 min)
+
+Select track 7 (VA POLY), EDIT AMP page, DEC up high. FUNC+HOME for KEYS.
+
+- [ ] The screen shows sixteen note names under the keys, roots brighter, all sharps.
+- [ ] Hold three STEP keys: a chord. Let one go: **that** note fades, the other two keep sounding
+      until released.
+- [ ] Hold a key, change octave (LEFT/RIGHT), let go: the note stops, nothing hangs.
+- [ ] Hold a key and press HOME: the note stops.
+- [ ] On track 1 (KICK) letting go of a key changes nothing.
+
+## 10. MUTATE keep and revert; PERFORM undo (4 min)
+
+Back to GRID, track 2 selected, playing.
+
+- [ ] Press MUTATE (upper pad 7): the track changes. CLR: it sounds as before, `REVERTED`.
+- [ ] MUTATE again, then OK: it stays, `KEPT`. Same in EDIT and in PERFORM.
+- [ ] PERFORM: FUNC+CLR undoes and FUNC+OK redoes; plain CLR still clears the selected macro.
+- [ ] Hold SCENE A (upper pad 4) + CLR: `SCENE ERASED`.
+
+## 11. Transport: FUNC+PLAY and FUNC+STOP (2 min)
+
+- [ ] Playing, FUNC+PLAY: everything jumps to step 1 on the beat and keeps playing; `RESTART`.
+- [ ] In PROJECT queue another slot, then FUNC+STOP before it lands: stops, tails cut at once,
+      the queued change is gone (`RESET`), the next PLAY starts at step 1 of the old pattern.
+
+## 12. PROJECT pages: slots, CHAIN, PATTERN, SETUP (6 min)
+
+PROJECT, then octave RIGHT walks CHAIN, PATTERN, SETUP; octave LEFT walks back; CLR on any of
+them returns to the slots.
+
+- [ ] Slots: the arrows move a frame over the 16 slots, OK queues the framed slot; a STEP key
+      queues and moves the frame there.
+- [ ] CHAIN: OK on an empty chain adds the playing pattern (`ENTRY ADDED`). STEP 3 makes it A03,
+      VALUE sets repeats. Build **A01 X2, A03 X1**, FUNC+UP turns it on (`CHAIN ON`): A01 twice,
+      A03 once, loop; the `PLAY` marker follows. FUNC+LEFT removes an entry.
+- [ ] PATTERN: LEN to 8 (`LEN`): a queued change lands every 8 steps. SWG moves swing exactly
+      as VALUE push + turn does.
+- [ ] Still in PROJECT: FUNC+CLR undoes that LEN change, FUNC+OK redoes it.
+- [ ] SETUP: shows CLOCK SRC, tempo, MIDI CH, QUANTIZE. A sets QUANTIZE in fives; B C D do nothing.
+
+## 13. Save, power cycle, restore (5 min)
+
+Set up something to recognise: the chain from 12 left ON, tracks 3 and 5 muted (FUNC + lower pad),
+scene 7 in slot B (hold SCENE B + STEP 7), tempo **142.0**, key **D# MINOR**, track 8 on GRN.
+
+- [ ] FUNC+PROJECT once: `F1+F3 AGAIN TO SAVE`, nothing written. Again within 2 s: `SAVING`, and
+      `UNSAVED` disappears from PROJECT.
+- [ ] Power off, power on, start STRATA. It reopens with: the chain on, tracks 3 and 5 muted,
+      scene 7 in B, 142.0, D# MINOR, track 8 on GRN. Missing: `________________`
+
+## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
+
+- [ ] Change the tempo (unsaved). PROJECT, FUNC+LEFT once: `AGAIN TO RELOAD`, nothing changes.
+      Again within 2 s: `RELOADING`, and the tempo is back to 142.0.
+- [ ] FUNC+RIGHT once: `AGAIN FOR NEW`, nothing changes. Twice: `NEW PROJECT`, and it plays the
+      default kit. A single press of either key never loses work.
+- [ ] Both also work from the SETUP page.
+
+## 15. Six voices: the STRATA6 app (4 min)
+
+STRATA6 is the same build with the chord stab set to MIN11 (six notes). Leave STRATA through
+Enaga's menu and start STRATA6.
+
+- [ ] The stab is six notes together, nothing crackles.
+- [ ] PLAY, let it run **60 s**: top-line load range `________ %` to `________ %`,
+      **MAX `________ %`**. Difference to STRATA's MAX = cost of two more voices:
+      `________` points.
+
+## 16. Write the numbers down
+
+| Reading | Value |
+| --- | --- |
+| Idle load (1) | |
+| Default beat MAX, 60 s (3) | |
+| GRAIN on track 8 MAX (8) | |
+| STRATA6 MAX, 60 s (15) | |
+
+These go into `docs/BUDGET.md` as the first unit rows, and the ticks into the reference list below.
+
+## Added later today
+
+Kit browser and new sound content land here when they merge.
+
+---
+
+# Reference: the full list by milestone
 
 Only the unit settles CPU load, timing and feel. Everything here needs the hardware, so it
-cannot be closed from a development machine. Work top to bottom and record figures in
-`docs/BUDGET.md`.
+cannot be closed from a development machine. Record figures in `docs/BUDGET.md`.
 
 ## Before powering anything on — safety
 
@@ -231,14 +443,15 @@ project and never needs a restart."*
 
 - [ ] F3 opens PROJECT. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
-- [ ] F1 + F3 twice saves (once only says `F1+F3 AGAIN TO SAVE`). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (277 bytes),
+- [ ] F1 + F3 twice saves (once only says `FUNC+PROJECT TO SAVE`). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (277 bytes),
       `KIT.BIN` (1,076 bytes) and a `BANK_x.BIN` per touched bank.
 - [ ] Only dirty banks are written. Edit one pattern in bank A, save, and confirm no
       `BANK_B.BIN` appears.
 - [ ] Power cycle. The project reopens on the pattern it was left on, not A01.
-- [ ] F1 + OK reloads from the card and discards unsaved edits.
-- [ ] F1 + CLR starts a new project under a NEW name (`NEW1`, `NEW2`...), so saving it cannot
-      overwrite the project it came from.
+- [ ] FUNC + LEFT twice in PROJECT reloads from the card and discards unsaved edits (it was
+      F1 + OK until 2026-11-22).
+- [ ] FUNC + RIGHT twice in PROJECT starts a new project under a NEW name (`NEW1`, `NEW2`...), so
+      saving it cannot overwrite the project it came from (it was F1 + CLR).
 - [ ] A load with the transport RUNNING stops it first. Under CLOCK SRC = MIDI or SYNC, where
       `clock::stop()` returns false, the load is REFUSED and the screen says `EXT CLOCK` — it
       must not load anyway.
@@ -392,7 +605,7 @@ gesture is the mistake this milestone made twice before it was caught.
       reverb), MUTATE.
 - [ ] F1 + F7 opens PERFORM: encoders A-D are the macros, VALUE is the morph.
 - [ ] In PERFORM: OK captures a scene (the selected track only while a scene pad is held),
-      F1 + OK erases one, **STEP 1-16 assigns that parameter of the selected track to the
+      scene pad + CLR erases one, **STEP 1-16 assigns that parameter of the selected track to the
       selected macro**, the octave keys pick which macro, CLR clears it, UP and DOWN walk the
       mutation, the selection keys its amount.
 - [ ] A macro assigned in one press is immediately usable: the range runs from where the
@@ -511,11 +724,8 @@ whether it works.
       seven-note scale they should span just over two octaves and every one should be in key.
 - [ ] The octave keys move the octave; the selection keys change track without leaving the mode.
 - [ ] Change the key or scale in F3 and the KEYS layout follows it.
-- [ ] **A key has no release.** `dsp/track.hpp`'s Machine interface has `release_all()` and
-      nothing per-note, so releasing one key of a held chord would silence the whole machine. A
-      long VA note therefore plays its own decay rather than stopping when you let go. If that
-      feels wrong on the unit, the fix is a per-note release on the machine interface, and
-      `Cmd::release_note` is sitting in the enum unimplemented waiting for it.
+- [x] ~~A key has no release.~~ Superseded 2026-11-22: letting go of a key releases its note
+      (see "KEYS: a key holds its note" at the end).
 
 **GRAIN (`dsp/grain`)** — 46 host tests, 64,759 checks, and **not one of these boxes can be
 ticked, because GRAIN cannot be reached.** docs/SPEC.md's default kit fills all eight tracks with
@@ -899,7 +1109,7 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
 - [ ] PROJECT: the arrows move a frame over the 16 slots and OK queues the framed one; a STEP key
       queues and moves the frame there. F1 + UP toggles the chain, F1 + DOWN reloads the sample.
       On SETUP, CLR goes back.
-- [ ] Notices (an octave, a scene captured, `F1+F3 AGAIN TO SAVE`) appear on the second line in
+- [ ] Notices (an octave, a scene captured, `FUNC+PROJECT TO SAVE`) appear on the second line in
       every mode, not only in GRID.
 
 ## F1 + F5 restart, F1 + F6 stop and reset
@@ -966,3 +1176,22 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
 - [ ] In PROJECT, F1 + CLR undoes and F1 + OK redoes (try a LEN change on the PATTERN page).
 - [ ] F1 + LEFT once shows AGAIN TO RELOAD and changes nothing; twice reloads the project from the
       card. F1 + RIGHT twice starts a new project. A single press of either never loses work.
+
+## KIT: the kit browser (FUNC+EDIT twice)
+
+- [ ] FUNC+EDIT opens MACHINE, whose last line says `FUNC+EDIT AGAIN: KITS`. FUNC+EDIT again opens
+      KIT: `KITS 01-08    OK LOAD`, eight rows, and on a new card every row reads `EMPTY` after a
+      moment. CLR (or FUNC+EDIT) goes back to MACHINE. The layout reads cleanly, no overlaps.
+- [ ] Turn a few knobs and switch a machine, then FUNC+DOWN on slot 1: `SAVING KIT`, the row reads
+      `KIT` and the two lines below show the eight machines. The card has
+      `/ENAGA/DATA/STRATA/KITS/KIT_01.BIN`.
+- [ ] Change the sound, then with the beat PLAYING press OK on slot 1: `OK AGAIN TO LOAD`, nothing
+      changes. OK again: the stored sound comes back and the beat does not stop. Listen for a
+      click or a dropout at the recall, and read LOAD/PEAK straight after it.
+- [ ] FUNC+DOWN on slot 1 again says `AGAIN TO OVERWRITE`; only the second press writes.
+- [ ] A kit with a sample on track 8: recall a kit with the SAME sample while playing -- the loop
+      does not stop. Recall one naming another WAV -- the track reloads (PROJECT shows `.` then `O`).
+- [ ] After a recall PROJECT says `UNSAVED`; FUNC+PROJECT twice saves it, and the reopened project
+      has the recalled kit.
+- [ ] Kits are shared: start a NEW project (PROJECT, FUNC+RIGHT twice) and slot 1 is still there.
+
