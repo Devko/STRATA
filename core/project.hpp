@@ -35,6 +35,7 @@
 // `enaga::files`.
 #pragma once
 
+#include "midiout.hpp"     // kMidiOutOff and kMidiChannels: ProjectSettings::midi_out's domain
 #include "pattern.hpp"
 #include "serialize.hpp"
 
@@ -196,6 +197,12 @@ struct ProjectSettings {
     uint8_t scene_a = 0;
     uint8_t scene_b = 1;
 
+    // Each track's MIDI OUT channel: 0 off, 1-16 the channel as printed on gear. A track with a
+    // channel sends every note it plays there (core/midiout.hpp). In the PROJECT rather than the
+    // kit because it is cabling -- which outboard synth listens where -- not a sound: recalling a
+    // kit must not re-route the synths on stage.
+    uint8_t midi_out[kTracks] = {};
+
     // The two send effects and the master bus, as encoder bytes rather than as the floats the
     // mixer runs on. One byte per field, in dsp/buses.hpp's `SendField` and `MasterField`
     // order, which is why those two enums are declared permanent: these indices reach a file.
@@ -285,6 +292,9 @@ constexpr uint16_t kSectionProjectMixer = 3;
 // The live mutes and the A/B scene choice. Optional on read for the same reason as the mixer:
 // an older file without it opens with everything unmuted and scenes 1 and 2, as it always did.
 constexpr uint16_t kSectionProjectLive = 4;
+// Each track's MIDI OUT channel (core/midiout.hpp): eight bytes, 0 off or 1-16. Optional on read
+// like the two above: an older file has every track's MIDI out off, which is what it played.
+constexpr uint16_t kSectionProjectMidi = 5;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;
