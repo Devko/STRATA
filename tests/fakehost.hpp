@@ -129,6 +129,16 @@ public:
     int read_alls() const { return read_alls_; }
     int folders_made() const { return folders_made_; }
 
+    // --- the audio input (enaga::system::input) and headphones ----------------
+    //
+    // The route last chosen, -1 before any; `set_input_result` makes the next calls answer as the
+    // codec would (-1 unknown source or level, -2 no answer). Headphones are out by default.
+    int input_source() const { return input_source_; }
+    int input_level() const { return input_level_; }
+    int input_calls() const { return input_calls_; }
+    void set_input_result(int32_t result) { input_result_ = result; }
+    void set_headphones(bool in) { headphones_ = in; }
+
     // --- held asynchrony --------------------------------------------------
     //
     // `file_load` queues its completion instead of calling `done` straight away, so a load is in
@@ -287,6 +297,11 @@ private:
     bool read_error_ = false;
     bool in_audio_ = false;
 
+    int input_source_ = -1;
+    int input_level_ = -1;
+    int input_calls_ = 0;
+    int32_t input_result_ = 0;
+    bool headphones_ = false;
     int saves_ = 0;
     int loads_ = 0;
     int read_alls_ = 0;

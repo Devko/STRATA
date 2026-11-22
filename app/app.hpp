@@ -260,6 +260,24 @@ enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample,
 constexpr uint8_t kTakeBars[] = {1, 2, 4, 8};
 constexpr int kTakeBarChoices = int(sizeof kTakeBars / sizeof kTakeBars[0]);
 
+// Where a take comes from: the finished master, or one of the audio input's routes as Enaga
+// names them (<enaga/abi.h>, enaga_input_source). docs/SPEC.md: "Resample with a chosen input
+// source"; Enaga's `system::input` is the call, main context only.
+struct TakeSource {
+    const char *name;     // 7 characters at most: "FROM DYN MIC HIGH" is 17
+    int input;            // the enaga_input_source, or -1 for the master
+};
+constexpr TakeSource kTakeSources[] = {
+    {"MASTER", -1},
+    {"LINE", ENAGA_INPUT_LINE_STEREO},
+    {"LINE L", ENAGA_INPUT_LINE_MONO},
+    {"MIC", ENAGA_INPUT_MIC},
+    {"DYN MIC", ENAGA_INPUT_DYNAMIC_MIC},
+    {"HI-Z", ENAGA_INPUT_HIZ},
+};
+constexpr int kTakeSourceChoices = int(sizeof kTakeSources / sizeof kTakeSources[0]);
+constexpr const char *kInputLevelNames[] = {"LOW", "NORM", "HIGH"};   // enaga_input_level
+
 // The step page shows four of a step's fields at a time, so the selection keys page through
 // them. Derived rather than written down: core/stepedit.hpp owns how many fields there are.
 constexpr int kFieldPages = (kStepFields + 3) / 4;
@@ -617,7 +635,10 @@ public:
             case ENAGA_KEY_OK:
                 // RESAMPLE mode first: OK is what commits a take, and there is no step to hold.
                 if (mode_ == Mode::resample) {
-                    post(Cmd::resample_arm, 0, 0, kTakeBars[take_bars_index_]);
+                    // From the input: make sure the route is the one on screen before the take.
+                    if (kTakeSources[take_source_].input >= 0 && !input_applied_) apply_input();
+                    post(Cmd::resample_arm, 0, 0, kTakeBars[take_bars_index_],
+                         kTakeSources[take_source_].input >= 0 ? 1 : 0);
                     // And the card side, asked for now so the write happens the moment the take
                     // finishes rather than needing a second press at exactly the right time.
                     storage_.request_resample_write(resample_track_);
@@ -1159,10 +1180,21 @@ public:
             return;
         }
 
-        // RESAMPLE mode's one encoder: A walks the four lengths docs/SPEC.md allows.
-        if (mode_ == Mode::resample && encoder == 0) {
-            const int next = (take_bars_index_ + delta) % kTakeBarChoices;
-            take_bars_index_ = next < 0 ? next + kTakeBarChoices : next;
+        // RESAMPLE mode's encoders: A walks the four lengths docs/SPEC.md allows, B the source
+        // (the master or an input route), C the input's level. D has nothing to set here, and
+        // must not fall through to the sound parameters of a screen that is not showing.
+        if (mode_ == Mode::resample && encoder >= 0 && encoder < 4) {
+            if (encoder == 0) {
+                const int next = (take_bars_index_ + delta) % kTakeBarChoices;
+                take_bars_index_ = next < 0 ? next + kTakeBarChoices : next;
+            } else if (encoder == 1) {
+                take_source_ = clamp_int(take_source_ + (delta > 0 ? 1 : -1), 0,
+                                         kTakeSourceChoices - 1);
+                if (kTakeSources[take_source_].input >= 0) apply_input();
+            } else if (encoder == 2 && kTakeSources[take_source_].input >= 0) {
+                take_level_ = clamp_int(take_level_ + (delta > 0 ? 1 : -1), 0, 2);
+                apply_input();
+            }
             return;
         }
 
@@ -2793,8 +2825,46 @@ public:
             canvas.text(0, 50, line, 10);
         }
 
+        // Where the take comes from, and for an input its level and a meter to set it by.
+        const TakeSource &source = kTakeSources[take_source_];
+        out = line;
+        append(out, "FROM ");
+        append(out, source.name);
+        if (source.input >= 0) {
+            append(out, " ");
+            append(out, kInputLevelNames[take_level_]);
+        }
+        *out = 0;
+        canvas.text(0, 62, line, 12);
+        if (source.input >= 0) {
+            const uint32_t peak = engine_.status().input_peak.load(std::memory_order_relaxed);
+            canvas.text(0, 72, peak >= 990u ? "CLIP" : "IN", peak >= 990u ? 15 : 9);
+            const int bar = int(peak > 1000u ? 1000u : peak) * 96 / 1000;
+            canvas.rect(28, 73, 96, 5, 2);
+            if (bar > 0) canvas.rect(28, 73, bar, 5, peak >= 990u ? 15 : 10);
+            if (input_result_ != 0) {
+                canvas.text(0, 82, "INPUT REFUSED", 15);
+            } else if (source.input == ENAGA_INPUT_MIC && !enaga::system::headphones()) {
+                // Enaga keeps the built-in mic silent without headphones, against feedback.
+                canvas.text(0, 82, "MIC NEEDS HEADPHONES", 10);
+            }
+        }
+
+        canvas.text(0, 94, "B: FROM  C: LEVEL", 7);
         canvas.text(0, 103, "UP DOWN OR A: BARS", 7);
         canvas.text(0, 112, "LEFT RIGHT: WHERE TO", 7);
+    }
+
+    // Route the input as the screen says. Enaga answers 0, -1 for a source or level it does not
+    // know, -2 when the codec did not answer; the screen keeps the refusal until the next try.
+    // The input is quiet for about 10 ms around the change, which is why this runs on a turn of
+    // B or C and not on every arm.
+    void apply_input() {
+        const int source = kTakeSources[take_source_].input;
+        if (source < 0) return;
+        input_result_ = enaga::system::input(source, take_level_);
+        input_applied_ = input_result_ == 0;
+        notice(input_result_ == 0 ? kTakeSources[take_source_].name : "INPUT REFUSED");
     }
 
     void draw_keys(enaga::Canvas &canvas) {
@@ -3704,6 +3774,13 @@ private:
     // Resampling's two settings: how many bars, and where the take lands (-1 = the file only).
     int take_bars_index_ = 0;
     int resample_track_ = -1;
+    // And where it comes from: an index into kTakeSources (0, the master, by default), the input
+    // level (enaga_input_level, NORMAL as Enaga starts), and whether the route on screen has been
+    // applied. Not saved: Enaga puts the input back to LINE, NORMAL when the app stops anyway.
+    int take_source_ = 0;
+    int take_level_ = ENAGA_INPUT_NORMAL;
+    bool input_applied_ = false;
+    int input_result_ = 0;
 
     int pressure_pad_ = -1;
     uint8_t pressure_sent_ = 0;
