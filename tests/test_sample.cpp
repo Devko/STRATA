@@ -1502,3 +1502,148 @@ TEST(sample_stream_refuses_what_is_not_a_stream_and_set_sample_leaves_it) {
     CHECK(!g_streamer.streaming());
     CHECK(g_streamer.has_sample());
 }
+
+// --- SLC AUTO: slices at the sample's detected points --------------------------
+
+namespace {
+
+// Three points: 3000 the strongest, 5000 next, 1000 the weakest.
+SlicePoints three_points() {
+    SlicePoints points;
+    points.count = 3;
+    points.at[0] = 1000;
+    points.at[1] = 3000;
+    points.at[2] = 5000;
+    points.rank[0] = 2;
+    points.rank[1] = 0;
+    points.rank[2] = 1;
+    return points;
+}
+
+// SLC set to n slices: slices_ = 1 + round(unit * 15).
+uint8_t slc_for(int slices) {
+    for (int v = 0; v <= 127; v++) {
+        TrackParams p = plain();
+        p.set(3, uint8_t(v));
+        Sampler s;
+        s.init(kRate);
+        s.prepare(p);
+        if (s.slices() == slices) return uint8_t(v);
+    }
+    return 0;
+}
+
+}  // namespace
+
+TEST(sample_auto_slices_cut_at_the_strongest_points) {
+    const int frames = 8192;
+    fill_ramp(g_mono, frames, 1, 0, 32000);
+    TrackParams p = plain();
+    p.set(3, slc_for(3));
+
+    Sampler s;
+    s.init(kRate);
+    s.set_sample(g_mono, uint32_t(frames), 1, kRate);
+    s.set_slice_points(three_points());
+    s.prepare(p);
+    CHECK(!s.slicing_by_points());                     // off until asked for
+    CHECK_EQ(s.slice_count(), 3);
+    s.set_auto_slices(true);
+    CHECK(s.slicing_by_points());
+    // Three slices: cut at the two strongest, 3000 and 5000, not at 1000.
+    CHECK_EQ(s.slice_count(), 3);
+    CHECK_EQ(s.slice_start(0), 0);
+    CHECK_EQ(s.slice_start(1), 3000);
+    CHECK_EQ(s.slice_start(2), 5000);
+
+    const int lengths[] = {3000, 2000, frames - 5000};
+    for (int slice = 0; slice < 3; slice++) {
+        Sampler one;
+        one.init(kRate);
+        one.set_sample(g_mono, uint32_t(frames), 1, kRate);
+        one.set_slice_points(three_points());
+        one.set_auto_slices(true);
+        one.prepare(p);
+        one.trigger(hit(uint8_t(Sampler::kRootNote + slice)));
+        clear(g_out, kCapture);
+        const int n = render_blocks(one, p, g_out, 64);
+        CHECK(finite_within(g_out, n, 4.0f));
+        CHECK_NEAR(g_out[0], float(g_mono[s.slice_start(slice)]) * (1.0f / 32768.0f), 0.005);
+        CHECK(!one.active());
+        CHECK(!all_zero(g_out + lengths[slice] - 64, 32));          // still playing near its end
+        CHECK(all_zero(g_out + lengths[slice] + kBlk, n - lengths[slice] - kBlk));
+    }
+
+    // SLC 4 uses all three; SLC 16 cannot have more slices than there are points.
+    p.set(3, slc_for(4));
+    s.prepare(p);
+    CHECK_EQ(s.slice_count(), 4);
+    CHECK_EQ(s.slice_start(1), 1000);
+    p.set(3, 127);
+    s.prepare(p);
+    CHECK_EQ(s.slice_count(), 4);
+    // SLC 1 is a one-shot, AUTO or not.
+    p.set(3, 0);
+    s.prepare(p);
+    CHECK(!s.slicing_by_points());
+    CHECK_EQ(s.slice_count(), 1);
+}
+
+TEST(sample_auto_slices_keep_to_the_window_and_fall_back_to_equal) {
+    const int frames = 8192;
+    fill_ramp(g_mono, frames, 1, 0, 32000);
+    Sampler s;
+    s.init(kRate);
+    s.set_sample(g_mono, uint32_t(frames), 1, kRate);
+    s.set_slice_points(three_points());
+    s.set_auto_slices(true);
+    TrackParams p = plain();
+    p.set(3, 127);
+    p.set(1, 32);                                      // START about a quarter in: 2047
+    s.prepare(p);
+    // 1000 is before the window: the slices start at the window and cut at 3000 and 5000.
+    CHECK_EQ(s.slice_count(), 3);
+    CHECK_EQ(s.slice_start(0), s.window_start());
+    CHECK_EQ(s.slice_start(1), 3000);
+
+    // A window with no point in it: equal slices, exactly as without AUTO.
+    p.set(1, 90);                                      // START past 5000
+    s.prepare(p);
+    CHECK(!s.slicing_by_points());
+    CHECK_EQ(s.slice_count(), 16);
+
+    // A new sample forgets the old one's points: equal again until the engine hands new ones.
+    p.set(1, 0);
+    s.set_sample(g_mono, uint32_t(frames), 1, kRate);
+    s.prepare(p);
+    CHECK(s.auto_slices());
+    CHECK(!s.slicing_by_points());
+    CHECK_EQ(s.point_count(), 0);
+}
+
+TEST(sample_auto_slices_off_is_bit_exact_with_equal_slicing) {
+    const int frames = 8192;
+    fill_ramp(g_mono, frames, 1, 0, 32000);
+    TrackParams p = plain();
+    p.set(3, slc_for(4));
+    for (int note = 0; note < 4; note++) {
+        Sampler plain_one;
+        Sampler with_points;
+        plain_one.init(kRate);
+        with_points.init(kRate);
+        plain_one.set_sample(g_mono, uint32_t(frames), 1, kRate);
+        with_points.set_sample(g_mono, uint32_t(frames), 1, kRate);
+        with_points.set_slice_points(three_points());       // points, but AUTO off
+        plain_one.prepare(p);
+        with_points.prepare(p);
+        plain_one.trigger(hit(uint8_t(Sampler::kRootNote + note)));
+        with_points.trigger(hit(uint8_t(Sampler::kRootNote + note)));
+        clear(g_out, kCapture);
+        clear(g_other, kCapture);
+        const int n = render_blocks(plain_one, p, g_out, 24);
+        render_blocks(with_points, p, g_other, 24);
+        bool same = true;
+        for (int i = 0; i < n; i++) same = same && g_out[i] == g_other[i];
+        CHECK(same);
+    }
+}

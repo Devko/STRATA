@@ -215,6 +215,7 @@ void Sampler::recompute_window() {
     window_len_ = 0;
     slice_frames_ = 0.0f;
     play_len_ = 0;
+    cuts_ = 0;
     if (!playable_) return;
 
     if (fifo_ != nullptr) {
@@ -231,6 +232,36 @@ void Sampler::recompute_window() {
     window_len_ = clampi(int32_t(length_unit_ * float(available) + 0.5f), 0, available);
     slice_frames_ = float(window_len_) * kInvSlices[slices_ - 1];
     play_len_ = clampi(int32_t(slice_frames_), 0, window_len_);
+
+    // SLC AUTO: the window cut at the strongest slices_ - 1 points inside it, in place order.
+    if (!auto_ || slices_ < 2 || points_.count == 0) return;
+    const int32_t end = window_start_ + window_len_;
+    int n = 0;
+    cut_[n++] = window_start_;
+    for (int i = 0; i < points_.count; i++) {
+        const int32_t at = int32_t(points_.at[i]);
+        if (int(points_.rank[i]) >= slices_ - 1 || at <= window_start_ || at >= end) continue;
+        cut_[n++] = at;
+    }
+    if (n < 2) return;                 // no point inside the window: equal slices, as without
+    cut_[n] = end;
+    cuts_ = n;
+}
+
+void Sampler::set_slice_points(const SlicePoints &points) {
+    points_ = points;
+    if (points_.count > SlicePoints::kMax) points_.count = 0;
+    recompute_window();
+}
+
+void Sampler::set_auto_slices(bool on) {
+    auto_ = on;
+    recompute_window();
+}
+
+int32_t Sampler::slice_start(int i) const {
+    if (cuts_ > 0) return cut_[clampi(i, 0, cuts_ - 1)];
+    return window_start_ + int32_t(float(clampi(i, 0, slices_ - 1)) * slice_frames_);
 }
 
 void Sampler::set_sample(const int16_t *data, uint32_t frames, int channels, float source_rate) {
@@ -239,6 +270,7 @@ void Sampler::set_sample(const int16_t *data, uint32_t frames, int channels, flo
     kill_all();
     fifo_ = nullptr;
     stream_total_ = 0;
+    points_ = SlicePoints{};           // the old sample's; the engine hands the new one's next
 
     const bool ok = data != nullptr && (channels == 1 || channels == 2) &&
                     frames >= uint32_t(kMinFrames) && frames <= uint32_t(kMaxFrames);
@@ -408,7 +440,13 @@ void Sampler::start(Voice &v) {
 
     int32_t base = window_start_;
     int32_t len = play_len_;
-    if (slices_ > 1) {
+    if (cuts_ > 0) {
+        // SLC AUTO: the note picks a slice between two detected cuts, clamped as below.
+        const int slice = clampi(int32_t(t.note) - kRootNote, 0, cuts_ - 1);
+        base = cut_[slice];
+        len = cut_[slice + 1] - base;
+        v.note_ratio = 1.0f;
+    } else if (slices_ > 1) {
         // The note picks a slice. Clamped, not wrapped: notes past the last slice hold on it,
         // which keeps a chopped loop in order across the pads and needs no integer modulo.
         const int32_t slice = clampi(int32_t(t.note) - kRootNote, 0, slices_ - 1);
