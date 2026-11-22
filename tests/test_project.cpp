@@ -40,8 +40,9 @@ using namespace strata;
 // 292 since the live section: another table entry (12) and its 3 bytes, optional likewise.
 // 296 since the kill EQ grew the mixer section by its three band bytes and the kill switches.
 // 373 since song mode: a fifth table entry (12) and its 65 bytes, optional like the others.
-// 393 since MIDI OUT: a sixth entry (12) and one channel per track (8).
-constexpr uint32_t kProjectFileBytes = 393;
+// 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
+// ambient modes: nine bytes on the end of the mixer section.
+constexpr uint32_t kProjectFileBytes = 402;
 constexpr uint32_t kKitFileBytes = 1164;   // 1076 before the LFO and arp sections (12 + 8 x 4 each)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
@@ -170,7 +171,7 @@ ProjectSettings busy_settings() {
     s.chain_enabled = true;
     // All 14 mixer bytes different from each other and from their defaults, and all inside the
     // encoder's 0-127, so that a round trip that mixed two of them up shows as a value.
-    for (int i = 0; i < kSendFields; i++) s.sends[i] = uint8_t(3 + i * 11);
+    for (int i = 0; i < kSendFields; i++) s.sends[i] = uint8_t((3 + i * 11) % 127);
     for (int i = 0; i < kMasterFields; i++) s.master[i] = uint8_t(120 - i * 7);
     s.eq_kills = 0x5;      // LOW and HIGH switched, MID not
     return s;
@@ -553,7 +554,7 @@ TEST(project_clamps_a_mixer_byte_past_the_encoder_range) {
     // which owns those enums, reaches Enaga -- core/ never does (CLAUDE.md).
     const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
     g_project[mixer + 1] = 255;
-    g_project[mixer + uint32_t(kSendFields) + 3] = 200;
+    g_project[mixer + uint32_t(kSendFieldsV1) + 3] = 200;
     refresh_crc(g_project);
 
     project_init(g_loaded);
@@ -796,7 +797,7 @@ TEST(project_refuses_a_mixer_section_that_is_short) {
              int(SerializeResult::ok));
 
     // The third table entry's size field: {id, reserved, offset, size} at 24 bytes in.
-    poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8, uint32_t(kSendFields));
+    poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8, uint32_t(kSendFieldsV1));
     refresh_crc(g_project);
 
     project_init(g_loaded);
@@ -815,15 +816,20 @@ TEST(project_a_mixer_section_from_before_the_kill_eq_loads_flat) {
     // The third table entry's size field, cut to what the old writer declared. The bytes after
     // it stay in the file, as junk an old reader never asked for.
     poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8,
-             uint32_t(kSendFields + kMasterFieldsV1));
+             uint32_t(kSendFieldsV1 + kMasterFieldsV1));
     refresh_crc(g_project);
 
     project_init(g_loaded);
     g_loaded.settings.master[int(kMasterFieldsV1)] = 3;
     g_loaded.settings.eq_kills = 0x7;
     CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
-    for (int i = 0; i < kSendFields; i++) {
+    for (int i = 0; i < kSendFieldsV1; i++) {
         CHECK_EQ(int(g_loaded.settings.sends[i]), int(g_source.settings.sends[i]));
+    }
+    // Older than the ambient modes too: both sends classic, their knobs at the defaults.
+    const ProjectSettings defaults;
+    for (int i = kSendFieldsV1; i < kSendFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.sends[i]), int(defaults.sends[i]));
     }
     for (int i = 0; i < kMasterFieldsV1; i++) {
         CHECK_EQ(int(g_loaded.settings.master[i]), int(g_source.settings.master[i]));
@@ -836,6 +842,55 @@ TEST(project_a_mixer_section_from_before_the_kill_eq_loads_flat) {
     CHECK_EQ(int(g_loaded.settings.live_mutes), int(g_source.settings.live_mutes));
 }
 
+// The ambient modes grew the mixer section again, by nine send bytes after the kill switches. A
+// file from between the two (18 bytes: ten sends, seven master, the switches) keeps every byte it
+// has and opens with both sends in their classic modes.
+TEST(project_a_mixer_section_from_before_the_ambient_modes_loads_classic) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8,
+             uint32_t(kSendFieldsV1 + kMasterFields + 1));
+    refresh_crc(g_project);
+
+    project_init(g_loaded);
+    for (int i = kSendFieldsV1; i < kSendFields; i++) g_loaded.settings.sends[i] = 99;
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int i = 0; i < kSendFieldsV1; i++) {
+        CHECK_EQ(int(g_loaded.settings.sends[i]), int(g_source.settings.sends[i]));
+    }
+    for (int i = 0; i < kMasterFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.master[i]), int(g_source.settings.master[i]));
+    }
+    CHECK_EQ(int(g_loaded.settings.eq_kills), int(g_source.settings.eq_kills));
+    const ProjectSettings defaults;
+    for (int i = kSendFieldsV1; i < kSendFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.sends[i]), int(defaults.sends[i]));
+    }
+    // Index 10 and 15 are the two mode switches (dsp/buses.hpp): classic is below 64.
+    CHECK(defaults.sends[10] < 64);
+    CHECK(defaults.sends[15] < 64);
+}
+
+// And the new bytes sit after the switches, where an older build never looks.
+TEST(project_the_ambient_bytes_follow_the_kill_switches) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
+    for (int i = 0; i < kSendFieldsV1; i++) {
+        CHECK_EQ(int(g_project[mixer + uint32_t(i)]), int(g_source.settings.sends[i]));
+    }
+    CHECK_EQ(int(g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)]),
+             int(g_source.settings.eq_kills));
+    for (int i = kSendFieldsV1; i < kSendFields; i++) {
+        CHECK_EQ(int(g_project[mixer + uint32_t(kMasterFields + 1 + i)]),
+                 int(g_source.settings.sends[i]));
+    }
+}
+
 // A file whose kill-switch byte has bits past the three bands keeps only the three.
 TEST(project_keeps_only_the_three_kill_switch_bits) {
     fill_project(g_source, 0);
@@ -843,7 +898,7 @@ TEST(project_keeps_only_the_three_kill_switch_bits) {
     CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
              int(SerializeResult::ok));
     const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
-    g_project[mixer + uint32_t(kSendFields + kMasterFields)] = 0xFA;
+    g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)] = 0xFA;
     refresh_crc(g_project);
     project_init(g_loaded);
     CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));

@@ -43,6 +43,7 @@
 #include <enaga/abi.h>
 #include <enaga/dsp.hpp>
 
+#include "ambient.hpp"
 #include "chain.hpp"
 #include "freeze.hpp"
 #include "project.hpp"
@@ -64,6 +65,17 @@ struct SendSettings {
     float reverb_damping = 0.5f;      // 0 bright, 1 dark
     float reverb_high_pass_hz = 180.0f;   // the high-pass on the reverb's input
     float reverb_level = 1.0f;        // the reverb's return into the mix
+    // The ambient modes (dsp/ambient.hpp). Every field below is read only in its mode, so the
+    // classic modes, the defaults, render exactly as they did before these existed.
+    bool delay_long = false;          // send A: false the classic delay, true the LONG delay
+    float delay_multiplier = 2.0f;    // LONG: the division times this, 1 to 8
+    float delay_wow = 0.45f;           // LONG: tape wow, 0 to 1
+    float delay_diffusion = 0.5f;     // LONG: the feedback's smear, 0 to 1
+    float delay_low_cut_hz = 120.0f;  // LONG: the feedback's high-pass, 20 to 1000
+    bool reverb_hall = false;         // send B: false the classic reverb, true the HALL
+    float reverb_size = 1.2f;         // HALL: line length scale, 0.35 to 1.8
+    float reverb_mod = 0.4f;          // HALL: the lines' sweep, 0 to 1
+    float reverb_shimmer = 0.0f;      // HALL: the tail fed back an octave up, 0 to 1
 
     bool operator==(const SendSettings &) const = default;
 };
@@ -85,8 +97,25 @@ enum class SendField : uint8_t {
     reverb_damping,
     reverb_high_pass_hz,
     reverb_level,
+    // The ambient modes, appended (2026-11-22). Written to PROJECT.BIN after the master's bytes,
+    // so an older build reading a newer file still finds every byte it knows where it was.
+    delay_mode,
+    delay_multiplier,
+    delay_wow,
+    delay_diffusion,
+    delay_low_cut_hz,
+    reverb_mode,
+    reverb_size,
+    reverb_mod,
+    reverb_shimmer,
     count
 };
+
+// The LONG delay's multipliers, as an encoder byte, shortest first.
+constexpr int kDelayMultipliers = 6;
+int delay_multiplier_index(uint8_t byte);
+uint8_t delay_multiplier_byte(int index);
+int delay_multiplier_value(uint8_t byte);   // 1, 2, 3, 4, 6 or 8
 
 // Write one field, clamped to the range its comment above states. False for an index this build
 // does not have, so the caller can count the refusal.
@@ -188,6 +217,10 @@ float master_value_from_byte(uint8_t field, uint8_t byte);
 // And the whole struct from the bytes a project holds -- `kSendFields` / `kMasterFields` of
 // them. This is how a loaded file, and a fresh project, reach the mixer.
 void sends_from_bytes(SendSettings &settings, const uint8_t *bytes, float beat_seconds);
+
+// The echo period the delay actually runs at: the division clamped to 2 s in the classic mode,
+// the division times the multiplier clamped to 12 s in LONG.
+float effective_delay_seconds(const SendSettings &settings);
 void master_from_bytes(MasterSettings &settings, const uint8_t *bytes);
 
 class Mixer {
@@ -197,6 +230,8 @@ public:
     // 2 s covers a bar at 120 BPM and every useful division below it; 1 MiB of the 2 MiB
     // docs/SPEC.md budgets for delay and reverb buffers.
     static constexpr float kMaxDelaySeconds = 2.0f;
+    // The LONG delay's echo period: four bars of 4/4 down to 80 BPM (dsp/ambient.hpp).
+    static constexpr float kMaxLongDelaySeconds = LongDelay::kMaxSeconds;
     // The longest a send keeps running unfed: feedback 0.95 on a 2 s delay needs 272 s to fall
     // 60 dB. Bounded only so a damaged setting cannot make the count overflow.
     static constexpr float kMaxTailSeconds = 300.0f;
@@ -220,8 +255,11 @@ public:
 
     // The delay freeze (dsp/freeze.hpp): held, the echoes now in the delay loop for as long as it
     // is held and nothing new goes in. The loop is one delay time, two with ping-pong.
-    void freeze_delay(bool held) { freeze_.hold(held, delay_loop_frames_); }
+    // In LONG mode the freeze is the long delay's own, in place (dsp/ambient.hpp); a release
+    // goes to whichever took the press, whatever the mode is by then.
+    void freeze_delay(bool held);
     const DelayFreeze &freeze() const { return freeze_; }
+    bool delay_frozen() const { return freeze_.held() || long_delay_.held(); }
 
     InsertChain &chain(int track) { return chains_[track]; }
     const InsertChain &chain(int track) const { return chains_[track]; }
@@ -240,8 +278,14 @@ public:
     // Introspection for the UI and the tests.
     float compressor_gain() const { return compressor_gain_; }
     float peak() const { return peak_; }
-    bool delay_running() const { return delay_tail_ > 0; }
-    bool reverb_running() const { return reverb_tail_ > 0; }
+    bool delay_running() const { return delay_tail_ > 0 || long_tail_ > 0; }
+    bool reverb_running() const { return reverb_tail_ > 0 || hall_tail_ > 0; }
+    // Each mode's own, for the tests: a mode switched away from rings out its tail unfed.
+    bool classic_delay_running() const { return delay_tail_ > 0; }
+    bool long_delay_running() const { return long_tail_ > 0; }
+    bool classic_reverb_running() const { return reverb_tail_ > 0; }
+    bool hall_running() const { return hall_tail_ > 0; }
+    const LongDelay &long_delay() const { return long_delay_; }
     // Is the kill EQ running this block, and how far in it is faded (0 bypassed ... 1 in)?
     bool kill_eq_running() const { return eq_wet_ > 0.0f; }
     float kill_eq_wet() const { return eq_wet_; }
@@ -271,6 +315,10 @@ private:
     DelayFreeze freeze_;
     int delay_loop_frames_ = 2;   // one echo period, for a freeze pressed now
     enaga::dsp::Reverb reverb_;
+    LongDelay long_delay_;
+    HallReverb hall_;
+    bool long_mode_ = false, hall_mode_ = false;
+    bool freeze_on_long_ = false;    // which delay took the freeze press
     enaga::dsp::Biquad reverb_high_pass_;
     enaga::dsp::BiquadCoefficients reverb_high_pass_coefficients_{};
 
@@ -309,6 +357,8 @@ private:
     float peak_ = 0.0f;              // this block's peak, after the DJ filter
     int delay_tail_ = 0, reverb_tail_ = 0;     // blocks of tail left to render once unfed
     int delay_tail_blocks_ = 1, reverb_tail_blocks_ = 1;
+    int long_tail_ = 0, hall_tail_ = 0;
+    int long_tail_blocks_ = 1, hall_tail_blocks_ = 1;
 
     // 1 / frames, cached: the master's gain ramp needs it and nothing may divide in a loop.
     int ramp_frames_ = 0;

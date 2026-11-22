@@ -131,10 +131,16 @@ constexpr MixerPage kMixerPages[] = {
     {"TRK 5-8", false, {-1, -1, -1, -1}},
     {"DLY", false, {int8_t(SendField::delay_seconds), int8_t(SendField::delay_feedback),
                     int8_t(SendField::delay_tone), int8_t(SendField::delay_level)}},
+    // The ambient modes (dsp/ambient.hpp), each beside its send: TYP switches the mode, and the
+    // rest only sound once it is on.
+    {"DLY+", false, {int8_t(SendField::delay_mode), int8_t(SendField::delay_multiplier),
+                     int8_t(SendField::delay_wow), int8_t(SendField::delay_diffusion)}},
     {"REV", false, {int8_t(SendField::reverb_decay_s), int8_t(SendField::reverb_damping),
                     int8_t(SendField::reverb_high_pass_hz), int8_t(SendField::reverb_level)}},
+    {"REV+", false, {int8_t(SendField::reverb_mode), int8_t(SendField::reverb_size),
+                     int8_t(SendField::reverb_mod), int8_t(SendField::reverb_shimmer)}},
     {"ROUTE", false, {int8_t(SendField::delay_ping_pong), int8_t(SendField::delay_to_reverb),
-                      -1, -1}},
+                      int8_t(SendField::delay_low_cut_hz), -1}},
     {"MST", true, {int8_t(MasterField::dj), int8_t(MasterField::compressor),
                    int8_t(MasterField::limit), int8_t(MasterField::level)}},
     // The kill EQ, next to the master it sits in. Push A, B or C to throw that band's kill
@@ -148,6 +154,13 @@ constexpr int kMixerPageCount = int(sizeof(kMixerPages) / sizeof(kMixerPages[0])
 
 // Which MIXER page is the kill EQ's, for the plain-push kill switches.
 constexpr int kMixerEqPage = kMixerPageCount - 1;
+
+// The ambient modes' pages, whose push A throws the mode switch (TYP) like turning it does.
+constexpr int kMixerLongPage = 3;
+constexpr int kMixerHallPage = 5;
+static_assert(kMixerPages[kMixerLongPage].field[0] == int8_t(SendField::delay_mode) &&
+                  kMixerPages[kMixerHallPage].field[0] == int8_t(SendField::reverb_mode),
+              "the ambient pages moved: push A would throw the wrong switch");
 
 // PERFORM: FUNC + STEP 1-4 hand a macro the LFO's bytes, FUNC + STEP 5-7 the master EQ's bands.
 constexpr int kMacroEqFirstStep = kLfoParams;
@@ -444,6 +457,23 @@ public:
                 if (down) toggle_kill(key == ENAGA_KEY_PUSH_A ? 0 : (key == ENAGA_KEY_PUSH_B ? 1 : 2));
                 return;
             }
+        }
+
+        // The ambient modes: push A on DLY+ or REV+ throws that send's mode, CLAS to LONG or
+        // ROOM to HALL and back. A switch is a push as much as a turn, and a push is what the
+        // emulator can press (tests/scenario_ambient.sh).
+        if (key == ENAGA_KEY_PUSH_A && mode_ == Mode::mixer &&
+            (mixer_bank_ == kMixerLongPage || mixer_bank_ == kMixerHallPage)) {
+            if (!down) return;
+            const bool long_page = mixer_bank_ == kMixerLongPage;
+            const SendField field = long_page ? SendField::delay_mode : SendField::reverb_mode;
+            const bool on = engine_.project().settings.sends[int(field)] >= 64;
+            post_delta(Cmd::set_sends, 0, 0, uint8_t(field), on ? -1 : +1);
+            static const char *const names[2][2] = {{"REV ROOM", "REV HALL"},
+                                                    {"DLY CLASSIC", "DLY LONG"}};
+            notice(names[long_page ? 1 : 0][on ? 0 : 1]);
+            enaga::log(names[long_page ? 1 : 0][on ? 0 : 1]);
+            return;
         }
 
         // MUTE mode turns STEP 1-8 into the eight stored mute states: recall on a tap, store
@@ -2452,6 +2482,19 @@ public:
             append(out, byte >= 64 ? "ON" : "OFF");
             return;
         }
+        if (!kMixerPages[page].master && field == int8_t(SendField::delay_mode)) {
+            append(out, byte >= 64 ? "LONG" : "CLAS");
+            return;
+        }
+        if (!kMixerPages[page].master && field == int8_t(SendField::reverb_mode)) {
+            append(out, byte >= 64 ? "HALL" : "ROOM");
+            return;
+        }
+        if (!kMixerPages[page].master && field == int8_t(SendField::delay_multiplier)) {
+            append(out, "X");
+            append_number(out, uint32_t(delay_multiplier_value(byte)));
+            return;
+        }
         if (kMixerPages[page].master && field == int8_t(MasterField::dj)) {
             // Signed, and the one field whose centre means "off". Shown as the number the knob
             // is at so that finding the flat centre again is possible.
@@ -2524,10 +2567,12 @@ public:
 
         // What the delay is actually doing, in milliseconds, which is the one thing a division
         // does not tell you -- and the number that says whether the tempo-sync is working.
-        if (mixer_bank_ == 2) {
+        // On the LONG page too: there it is the division times the multiplier, up to 12 s.
+        if (mixer_bank_ == 2 || mixer_bank_ == 3) {
             out = line;
             append(out, "TIME ");
-            append_number(out, uint32_t(engine_.sends().delay_seconds * 1000.0f + 0.5f));
+            append_number(out,
+                          uint32_t(effective_delay_seconds(engine_.sends()) * 1000.0f + 0.5f));
             append(out, " MS");
             *out = 0;
             canvas.text(0, 98, line, 10);
@@ -3737,7 +3782,7 @@ public:
         append(out, "BAR ");
         append_number(out, engine_.bar() % 1000u + 1u);
         if (note_repeat_mode_) append(out, " NRPT");
-        if (engine_.delay_freeze().held()) append(out, " FRZ");
+        if (engine_.delay_frozen()) append(out, " FRZ");
         *out = 0;
         canvas.text(0, 112, line, 9);
     }

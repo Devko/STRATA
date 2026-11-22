@@ -2715,7 +2715,10 @@ TEST(engine_the_delay_follows_the_tempo) {
     post_f(Cmd::set_tempo, 20.0f);                       // a beat is 3 s
     pump();
     strata::test::set_send_byte(uint8_t(SendField::delay_seconds), delay_division_byte(9));
-    CHECK_NEAR(engine.sends().delay_seconds, 2.0f, 1e-6);   // 1/1 is four beats, so 12 s
+    // 1/1 is four beats, so 12 s: the classic delay runs at its 2 s, and the field keeps the
+    // whole 12 for the LONG mode, whose limit that is.
+    CHECK_NEAR(effective_delay_seconds(engine.sends()), 2.0f, 1e-6);
+    CHECK_NEAR(engine.sends().delay_seconds, 12.0f, 1e-5);
 
     // And the DIVISION walk holds at both ends rather than wrapping.
     post_delta_to(Cmd::set_sends, uint8_t(SendField::delay_seconds), +30);

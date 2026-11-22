@@ -1236,7 +1236,8 @@ TEST(buses_every_field_setter_stores_what_it_is_given_and_clamps_the_rest) {
         float inside, low, high;   // a value in range, and the two ends of the range
     };
     const Case cases[] = {
-        {SendField::delay_seconds, 1.25f, 0.001f, Mixer::kMaxDelaySeconds},
+        // Up to the LONG delay's 12 s; the classic delay clamps to its own 2 s as it resolves.
+        {SendField::delay_seconds, 1.25f, 0.001f, Mixer::kMaxLongDelaySeconds},
         {SendField::delay_feedback, 0.7f, 0.0f, 0.95f},
         {SendField::delay_tone, 0.2f, 0.0f, 1.0f},
         {SendField::delay_level, 0.3f, 0.0f, 1.0f},
@@ -1245,6 +1246,13 @@ TEST(buses_every_field_setter_stores_what_it_is_given_and_clamps_the_rest) {
         {SendField::reverb_damping, 0.9f, 0.0f, 1.0f},
         {SendField::reverb_high_pass_hz, 650.0f, 20.0f, 2000.0f},
         {SendField::reverb_level, 0.15f, 0.0f, 1.0f},
+        {SendField::delay_multiplier, 3.0f, 1.0f, 8.0f},
+        {SendField::delay_wow, 0.3f, 0.0f, 1.0f},
+        {SendField::delay_diffusion, 0.8f, 0.0f, 1.0f},
+        {SendField::delay_low_cut_hz, 300.0f, 20.0f, 1000.0f},
+        {SendField::reverb_size, 0.7f, HallReverb::kMinSize, HallReverb::kMaxSize},
+        {SendField::reverb_mod, 0.9f, 0.0f, 1.0f},
+        {SendField::reverb_shimmer, 0.25f, 0.0f, 1.0f},
     };
     for (const Case &c : cases) {
         SendSettings s;
