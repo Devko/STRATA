@@ -54,6 +54,18 @@ using strata::test::storage;
 constexpr int kBlk = strata::test::kRigBlock;
 constexpr int kStereo = strata::test::kRigStereo;
 
+// A file in the current project's folder. The name comes from Storage rather than being spelled
+// "DEFAULT": `request_new()` renames the project for the rest of the process, so a test that
+// hard-codes the folder passes only while it happens to run before tests/test_storage.cpp's
+// first NEW -- which is link order, not a property of the code.
+const char *project_file(char (&path)[ENAGA_FILE_PATH_MAX + 1], const char *file) {
+    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/");
+    std::strcat(path, storage().project_name());
+    std::strcat(path, "/");
+    std::strcat(path, file);
+    return path;
+}
+
 }  // namespace
 
 // --- the harness itself ---------------------------------------------------------------------
@@ -243,17 +255,15 @@ TEST(app_the_first_save_of_a_project_writes_all_ten_files) {
                            "BANK_H.BIN"};
     char path[ENAGA_FILE_PATH_MAX + 1];
     for (const char *file : files) {
-        std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/");
-        std::strcat(path, file);
-        CHECK(host.has_file(path));
+        CHECK(host.has_file(project_file(path, file)));
     }
 
     // The sizes tests/test_project.cpp pins, reached through the real card protocol this time.
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/PROJECT.BIN");
+    project_file(path, "PROJECT.BIN");
     CHECK_EQ(host.file_bytes(path), 292);   // core/project.cpp: 263 + 14 mixer + 12 + 3 live bytes
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/KIT.BIN");
+    project_file(path, "KIT.BIN");
     CHECK_EQ(host.file_bytes(path), 1076);
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/PERFORM.BIN");
+    project_file(path, "PERFORM.BIN");
     CHECK_EQ(host.file_bytes(path), 2424);
 }
 
@@ -328,12 +338,12 @@ TEST(app_a_save_asked_for_with_no_card_lands_when_one_arrives) {
     CHECK(!storage().dirty());
 
     char path[ENAGA_FILE_PATH_MAX + 1];
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/KIT.BIN");
+    project_file(path, "KIT.BIN");
     CHECK(host.has_file(path));
 
     // And it was a FULL save, because the card swap made `project_complete_` a claim about a
     // card nobody had looked at.
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/BANK_H.BIN");
+    project_file(path, "BANK_H.BIN");
     CHECK(host.has_file(path));
 }
 
