@@ -2514,6 +2514,63 @@ TEST(ui_the_pattern_page_sets_the_master_length_and_the_swing) {
     CHECK(int(pattern.master_length) < 64);
 }
 
+TEST(ui_the_pattern_page_sets_each_tracks_own_swing) {
+    Strata &app = fresh();
+    const Pattern &pattern = app_engine().pattern();
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 2);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(pattern.tracks[t].swing), int(kSwingInherit));
+
+    // RIGHT walks LEN, SWG, then the tracks; it stops at track 8.
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);                             // track 2
+    CHECK_EQ(UiProbe::pattern_field(app), 3);
+    key(ENAGA_KEY_UP);                                // PAT -> 50
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[1].swing), kSwingMin);
+    app.on_encoder(4, +10);                           // VALUE: 60
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[1].swing), kSwingMin + 10);
+    CHECK_EQ(int(pattern.tracks[0].swing), int(kSwingInherit));
+    check_layout(app, "PATTERN, a track swing set");
+    for (int i = 0; i < 20; i++) key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::pattern_field(app), 9);
+    check_layout(app, "PATTERN, cursor on track 8");
+
+    // Encoder C edits the track under the cursor.
+    app.on_encoder(2, +5);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[7].swing), kSwingMin + 4);
+
+    // From LEN, C jumps to the selected track's swing (track 1 after fresh()).
+    for (int i = 0; i < 20; i++) key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::pattern_field(app), 0);
+    app.on_encoder(2, +1);
+    pump(2);
+    CHECK_EQ(UiProbe::pattern_field(app), 2);
+    CHECK_EQ(int(pattern.tracks[0].swing), kSwingMin);
+    // And down again to PAT.
+    app.on_encoder(2, -3);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].swing), int(kSwingInherit));
+
+    // A pattern edit, so undoable, one level per sweep: the last (track 1, up then back to PAT)
+    // is one level, and the one before it is track 8's.
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].swing), int(kSwingInherit));
+    CHECK_EQ(int(pattern.tracks[7].swing), kSwingMin + 4);
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[7].swing), int(kSwingInherit));
+    CHECK_EQ(int(pattern.tracks[1].swing), kSwingMin + 10);
+}
+
 TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_moved_to_f1_arrows) {
     // F1 + CLR and F1 + OK were NEW PROJECT and RELOAD here, so undo and redo were the one pair
     // of keys that changed meaning in one mode. Now they are undo and redo everywhere, and the

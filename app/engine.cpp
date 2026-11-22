@@ -408,6 +408,22 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_track_swing: {
+            // A delta walks PAT, 50 .. 75; an absolute value is taken if it is PAT or in range
+            // and clamped otherwise, so a damaged command cannot store a swing the scheduler
+            // would have to clamp again. The scheduler already reads `TrackPattern::swing`
+            // (core/scheduler.cpp), so all this has to do is store it and re-derive the timing.
+            uint8_t &swing = live().tracks[track].swing;
+            swing = command.c == kDeltaFlag ? track_swing_step(swing, int(int8_t(command.b)))
+                    : command.a == kSwingInherit
+                        ? kSwingInherit
+                        : uint8_t(command.a < kSwingMin ? kSwingMin
+                                                        : (command.a > kSwingMax ? kSwingMax
+                                                                                 : command.a));
+            reconfigure();
+            break;
+        }
+
         case Cmd::set_master_length: {
             const int wanted = command.c == kDeltaFlag
                                    ? int(live().master_length) + int(int8_t(command.b))

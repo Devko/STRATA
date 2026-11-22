@@ -793,6 +793,44 @@ TEST(engine_swing_moves_the_odd_steps_and_leaves_the_even_ones) {
     CHECK_EQ(int(engine.pattern().swing), kSwingMin);
 }
 
+TEST(engine_a_tracks_own_swing_overrides_the_patterns_and_pat_follows_it_again) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    put_trig(kPoly, 1);
+    post(Cmd::set_pattern_swing, 0, 0, uint8_t(kSwingMin));
+    post(Cmd::set_track_swing, kPoly, 0, uint8_t(kSwingMax));
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), kSwingMax);
+    // The pattern is straight and the track swings: step 1 lands 12 ticks late.
+    CHECK_EQ(fired_on(kPoly, 24u), 0);
+    CHECK_EQ(fired_on(kPoly, 36u), 1);
+
+    // A delta walks down from 75; past 50 it reaches PAT and the track follows the pattern.
+    post(Cmd::set_track_swing, kPoly, 0, 0, uint8_t(int8_t(-30)), kDeltaFlag);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), int(kSwingInherit));
+    CHECK_EQ(fired_on(kPoly, 1536u + 24u), 1);
+    post(Cmd::set_pattern_swing, 0, 0, uint8_t(kSwingMax));
+    pump();
+    CHECK_EQ(fired_on(kPoly, 2u * 1536u + 24u), 0);
+    CHECK_EQ(fired_on(kPoly, 2u * 1536u + 36u), 1);
+
+    // An absolute value out of range clamps; 0 is PAT, not 50.
+    post(Cmd::set_track_swing, kPoly, 0, 200);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), kSwingMax);
+    post(Cmd::set_track_swing, kPoly, 0, 3);
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), kSwingMin);
+    post(Cmd::set_track_swing, kPoly, 0, uint8_t(kSwingInherit));
+    pump();
+    CHECK_EQ(int(engine.pattern().tracks[kPoly].swing), int(kSwingInherit));
+    // Other tracks were never touched.
+    for (int t = 0; t < kTracks; t++) {
+        if (t != kPoly) CHECK_EQ(int(engine.pattern().tracks[t].swing), int(kSwingInherit));
+    }
+}
+
 TEST(engine_micro_timing_moves_a_step_off_the_grid_and_adds_to_swing) {
     Engine &engine = clean();
     (void)engine;

@@ -1153,7 +1153,8 @@ public:
         // <enaga/clock.hpp> and <enaga/midi.hpp> expose no way to write them, so STRATA shows
         // them and says where they live, which is all docs/SPEC.md's "STRATA only exposes the
         // settings" can mean.
-        // CHAIN: A is the entry's repeat count. PATTERN: A is LEN and B is SWG.
+        // CHAIN: A is the entry's repeat count. PATTERN: A is LEN, B is SWG and C the swing of
+        // the track under the cursor (the selected track's, when the cursor is on LEN or SWG).
         if (mode_ == Mode::project && project_page_ == ProjectPage::chain) {
             if (encoder == 0) chain_delta(ChainEdit::repeats_delta, delta);
             return;
@@ -1162,6 +1163,11 @@ public:
             if (encoder == 0 || encoder == 1) {
                 pattern_field_ = encoder;
                 pattern_field_delta(encoder, delta);
+            } else if (encoder == 2) {
+                if (pattern_field_ < kPatternFieldTrackSwing) {
+                    pattern_field_ = kPatternFieldTrackSwing + selected_;
+                }
+                pattern_field_delta(pattern_field_, delta);
             }
             return;
         }
@@ -3076,15 +3082,27 @@ public:
 
     // --- PROJECT's PATTERN page: the master length and the swing ----------
 
+    // The fields, in the order LEFT and RIGHT walk them: LEN, SWG, then each track's own swing.
+    static constexpr int kPatternFieldTrackSwing = 2;
+    static constexpr int kPatternFields = kPatternFieldTrackSwing + kTracks;
+
     void pattern_field_delta(int field, int delta) {
         if (field == 0) {
             mark(GestureKind::length, 0, 0);
             post(Cmd::set_master_length, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
             notice("LEN");
-        } else {
+        } else if (field == 1) {
             mark(GestureKind::length, 0, 0);
             post(Cmd::set_pattern_swing, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
             notice("SWING");
+        } else if (field < kPatternFields) {
+            // A track's own swing (docs/SPEC.md, "an optional per-track override"). PAT, then
+            // 50 to 75; the engine walks the delta (core/pattern.hpp, `track_swing_step`). One
+            // gesture per track, so a sweep is one undo level, as LEN and SWG are.
+            const int track = field - kPatternFieldTrackSwing;
+            mark(GestureKind::length, track, 0);
+            post(Cmd::set_track_swing, uint8_t(track), 0, 0, clamp_delta(delta), kDeltaFlag);
+            notice("TRACK SWING");
         }
     }
 
@@ -3093,7 +3111,9 @@ public:
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
                 if (shift_) return true;                  // F1 + LEFT/RIGHT: free
-                pattern_field_ = key == ENAGA_KEY_LEFT ? 0 : 1;
+                // Sideways through LEN, SWG and the eight track swings, stopping at the ends.
+                pattern_field_ = clamp_int(pattern_field_ + (key == ENAGA_KEY_LEFT ? -1 : 1), 0,
+                                           kPatternFields - 1);
                 return true;
             case ENAGA_KEY_UP:
             case ENAGA_KEY_DOWN:
@@ -3126,7 +3146,7 @@ public:
         append_number(out, uint32_t(pattern.master_length));
         append(out, " STEPS");
         *out = 0;
-        canvas.text(0, 40, line, pattern_field_ == 0 ? 15 : 10);
+        canvas.text(0, 32, line, pattern_field_ == 0 ? 15 : 10);
 
         out = line;
         *out++ = pattern_field_ == 1 ? '>' : ' ';
@@ -3134,12 +3154,30 @@ public:
         append_number(out, uint32_t(pattern.swing));
         *out++ = '%';
         *out = 0;
-        canvas.text(0, 52, line, pattern_field_ == 1 ? 15 : 10);
+        canvas.text(0, 42, line, pattern_field_ == 1 ? 15 : 10);
 
-        canvas.text(0, 76, "LEN IS WHAT A QUEUED", 8);
-        canvas.text(0, 85, "CHANGE AND A CHAIN", 8);
-        canvas.text(0, 94, "WAIT FOR", 8);
-        canvas.text(0, 112, "UP DOWN VALUE OR A B", 7);
+        // Each track's own swing, two to a row: PAT follows SWG above, a number overrides it.
+        canvas.text(0, 56, "TRACK SWING", 8);
+        for (int t = 0; t < kTracks; t++) {
+            const int field = kPatternFieldTrackSwing + t;
+            const uint8_t swing = pattern.tracks[t].swing;
+            out = line;
+            *out++ = pattern_field_ == field ? '>' : ' ';
+            append_number(out, uint32_t(t + 1));
+            *out++ = ' ';
+            if (swing == kSwingInherit) {
+                append(out, "PAT");
+            } else {
+                append_number(out, uint32_t(swing));
+                *out++ = '%';
+            }
+            *out = 0;
+            canvas.text((t & 1) * 60, 66 + (t >> 1) * 9, line,
+                        pattern_field_ == field ? 15 : (swing == kSwingInherit ? 8 : 12));
+        }
+
+        canvas.text(0, 103, "LEFT RIGHT PICK", 7);
+        canvas.text(0, 112, "UP DOWN VALUE A B C", 7);
     }
 
     // --- PROJECT's SETUP page: the clock, MIDI and the record quantize ----
@@ -3479,7 +3517,7 @@ private:
     ProjectPage project_page_ = ProjectPage::slots;
     bool project_setup() const { return project_page_ == ProjectPage::setup; }
     int chain_cursor_ = 0;         // the CHAIN page's entry
-    int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG
+    int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG, 2-9 track swings
     static const char *project_page_name(ProjectPage page) {
         switch (page) {
             case ProjectPage::slots:   return "PROJECT";

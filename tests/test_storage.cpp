@@ -416,6 +416,7 @@ const Expect kTable[] = {
     {Cmd::set_track_length, kDirtyBank, "set_track_length"},
     {Cmd::set_track_speed, kDirtyBank, "set_track_speed"},
     {Cmd::set_pattern_swing, kDirtyBank, "set_pattern_swing"},
+    {Cmd::set_track_swing, kDirtyBank, "set_track_swing"},
     {Cmd::set_master_length, kDirtyBank, "set_master_length"},
     {Cmd::step_field_delta, kDirtyBank, "step_field_delta"},
     // A lock lands in the pattern's shared pool, which the bank file carries.
