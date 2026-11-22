@@ -1297,6 +1297,7 @@ public:
         // the track under the cursor (the selected track's, when the cursor is on LEN or SWG).
         if (mode_ == Mode::project && project_page_ == ProjectPage::chain) {
             if (encoder == 0) chain_delta(ChainEdit::repeats_delta, delta);
+            if (encoder == 1) chain_delta(ChainEdit::mutes_delta, delta);
             return;
         }
         if (mode_ == Mode::project && project_page_ == ProjectPage::pattern) {
@@ -1790,6 +1791,20 @@ public:
                     stream_late_said_ms_ = ms;
                     notice("STREAM LATE");
                 }
+            }
+        }
+
+        // Song mode: the chain played to its end (Engine::cross_boundary). Only this context may
+        // stop the clock. Back to 0 as well, so PLAY starts the song from the top -- the engine
+        // is already on entry 1. Under an outside clock that keeps running the stop is refused;
+        // the engine stays silent until PLAY or the outside STOP.
+        {
+            const uint8_t ends = engine_.status().song_end.load(std::memory_order_acquire);
+            if (ends != song_end_seen_) {
+                song_end_seen_ = ends;
+                clock_refused_ = !enaga::clock::stop();
+                if (!clock_refused_ || !enaga::clock::running()) enaga::clock::locate(0);
+                notice("SONG END");
             }
         }
 
@@ -3766,6 +3781,8 @@ public:
     // shown bank, VALUE (or A) sets how many times it repeats. OK adds an entry after the cursor
     // -- a copy of the one there, or the playing pattern when the chain is empty -- and F1 + LEFT
     // removes the one under the cursor. CLR goes back. F1 + UP is still CHAIN ON/OFF.
+    // Song mode: B sets the entry's mute recall (`--`, or M1-M8, a stored mute state recalled as
+    // the entry starts), and F1 + RIGHT switches SONG (play once, then stop) and LOOP.
     //
     // The entries are the audio side's (it plays them), so every edit is a command, and the
     // knob and arrow edits are deltas applied there. Chain edits are not undoable: core/undo
@@ -3779,7 +3796,8 @@ public:
         if (chain_cursor_ < 0) chain_cursor_ = 0;
     }
 
-    void post_chain(ChainEdit edit, int at, uint8_t b = 0, uint8_t c = 0, uint8_t d = 0) {
+    void post_chain(ChainEdit edit, int at, uint8_t b = 0, uint8_t c = 0, uint8_t d = 0,
+                    uint8_t e = 0) {
         Command command;
         command.cmd = Cmd::chain_edit;
         command.step = uint8_t(at);
@@ -3787,6 +3805,7 @@ public:
         command.b = b;
         command.c = c;
         command.d = d;
+        command.e = e;
         post_command(command);
     }
 
@@ -3806,9 +3825,9 @@ public:
             chain_cursor_ = 0;
         } else {
             chain_clamp_cursor();
-            const uint8_t repeats = engine_.project().chain[chain_cursor_].repeats;
+            const ChainEntry &entry = engine_.project().chain[chain_cursor_];
             post_chain(ChainEdit::set, chain_cursor_, uint8_t(shown_bank_), uint8_t(slot),
-                       repeats);
+                       entry.repeats, entry.mutes);
         }
         char *out = notice_buffer_;
         *out++ = bank_letter(shown_bank_);
@@ -3836,7 +3855,7 @@ public:
                     chain_clamp_cursor();
                     const ChainEntry entry = engine_.project().chain[chain_cursor_];
                     post_chain(ChainEdit::insert, chain_cursor_ + 1, entry.bank, entry.slot,
-                               entry.repeats);
+                               entry.repeats, entry.mutes);
                     chain_cursor_++;
                 }
                 notice("ENTRY ADDED");
@@ -3851,7 +3870,13 @@ public:
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
                 if (shift_) {
-                    if (key == ENAGA_KEY_RIGHT) return true;   // free
+                    if (key == ENAGA_KEY_RIGHT) {
+                        // SONG or LOOP: whether the chain stops at its end.
+                        const bool song = !engine_.project().settings.chain_song;
+                        post_chain(ChainEdit::song, 0, song ? 1 : 0);
+                        notice(song ? "SONG: PLAY ONCE" : "LOOP CHAIN");
+                        return true;
+                    }
                     if (length == 0) return true;
                     chain_clamp_cursor();
                     post_chain(ChainEdit::remove, chain_cursor_);
@@ -3877,6 +3902,7 @@ public:
         append_number(out, uint32_t(length));
         append(out, "/64");
         append(out, player.active ? " ON" : " OFF");
+        append(out, project.settings.chain_song ? " SONG" : " LOOP");
         *out = 0;
         canvas.text(0, 18, line, 15);
 
@@ -3902,6 +3928,10 @@ public:
                 append_padded(out, uint32_t(entry.slot) + 1, 2);
                 append(out, " X");
                 append_number(out, uint32_t(entry.repeats));
+                if (entry.mutes != 0) {
+                    append(out, " M");
+                    append_number(out, uint32_t(entry.mutes));
+                }
                 if (player.active && !player.orphaned && int(player.entry) == i) {
                     append(out, " PLAY");
                 }
@@ -3911,7 +3941,7 @@ public:
         }
 
         canvas.text(0, 103, "OK ADD  FUNC+LEFT DEL", 7);
-        canvas.text(0, 112, "VALUE REPEATS", 7);
+        canvas.text(0, 112, "A:RPT B:MUT F+RT SONG", 7);
     }
 
     // --- PROJECT's PATTERN page: the master length and the swing ----------
@@ -4299,6 +4329,7 @@ private:
 
     Engine engine_;
     uint32_t stream_late_seen_ = 0;    // Status::stream_late as last noticed
+    uint8_t song_end_seen_ = 0;        // Status::song_end as last acted on
     uint32_t stream_late_said_ms_ = 0;
 
     // The card side: projects, autosave and the sample loader, all in this context. It owns the
