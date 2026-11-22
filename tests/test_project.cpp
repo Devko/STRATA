@@ -34,7 +34,10 @@ using namespace strata;
 
 // The sizes project.cpp documents, stated here as constants because the buffers need them at
 // compile time. `the_file_sizes_are_what_the_format_says` holds the functions to them.
-constexpr uint32_t kProjectFileBytes = 251;
+// 277, not the 251 the format had before the mixer section: one more section-table entry (12)
+// and the 14 send and master bytes. An OLD 251-byte file still loads, because that section is
+// optional on read -- `a_project_file_from_before_the_mixer_section_still_loads` is the proof.
+constexpr uint32_t kProjectFileBytes = 277;
 constexpr uint32_t kKitFileBytes = 1076;
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
@@ -134,6 +137,10 @@ ProjectSettings busy_settings() {
     s.sample_budget_mib = 48;
     s.chain_length = 9;
     s.chain_enabled = true;
+    // All 14 mixer bytes different from each other and from their defaults, and all inside the
+    // encoder's 0-127, so that a round trip that mixed two of them up shows as a value.
+    for (int i = 0; i < kSendFields; i++) s.sends[i] = uint8_t(3 + i * 11);
+    for (int i = 0; i < kMasterFields; i++) s.master[i] = uint8_t(120 - i * 7);
     return s;
 }
 
@@ -485,6 +492,116 @@ TEST(project_round_trips_every_settings_field) {
     // `scale` is the one field the reader does not clamp, so a project naming a scale this build
     // does not have still round trips. Checked by value here and by range below.
     CHECK_EQ(int(b.scale), 4);
+
+    // The mixer section. These fourteen bytes are the sends and the master, and before the
+    // section existed they were in NO file: every delay and reverb setting, and the master DJ
+    // filter, came back at its compile-time default however the project had been left.
+    for (int i = 0; i < kSendFields; i++) CHECK_EQ(int(b.sends[i]), int(a.sends[i]));
+    for (int i = 0; i < kMasterFields; i++) CHECK_EQ(int(b.master[i]), int(a.master[i]));
+    CHECK_EQ(int(b.sends[0]), 3);
+    CHECK_EQ(int(b.master[kMasterFields - 1]), 99);
+}
+
+// A mixer byte past the encoder's range is clamped, not taken. dsp/buses.cpp maps a byte with
+// `byte * (1/127)`, so a 255 that got through would put every linear field at twice the top of
+// its range -- a delay level of 2.0, a feedback of 1.9 -- and a feedback above 1 is a delay that
+// grows without bound. The clamp is in the READER, which is the side that cannot trust its bytes.
+TEST(project_clamps_a_mixer_byte_past_the_encoder_range) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+
+    // Index 1 of the sends is `SendField::delay_feedback` and index 3 of the master is
+    // `MasterField::level`. Written as numbers because this is a core/ test and dsp/buses.hpp,
+    // which owns those enums, reaches Enaga -- core/ never does (CLAUDE.md).
+    const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
+    g_project[mixer + 1] = 255;
+    g_project[mixer + uint32_t(kSendFields) + 3] = 200;
+    refresh_crc(g_project);
+
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.sends[1]), 127);
+    CHECK_EQ(int(g_loaded.settings.master[3]), 127);
+    // And the fields next to them are untouched, so the clamp is per byte and not a wipe.
+    CHECK_EQ(int(g_loaded.settings.sends[0]), int(g_source.settings.sends[0]));
+}
+
+// The mixer section is OPTIONAL on read, which is what lets the format grow without a version
+// bump. This builds the two-section file an earlier build wrote -- by rewriting the header's
+// section count and payload length over a real file -- and checks it loads with the defaults.
+TEST(project_a_file_from_before_the_mixer_section_still_loads) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+
+    // Drop the third table entry by moving the second section's bytes back over it, which is
+    // exactly the file a two-section writer produces: table, settings, chain, and no more.
+    const uint32_t old_table = 2 * kSectionEntryBytes;
+    const uint32_t old_settings = old_table;
+    const uint32_t old_chain = old_settings + 19;
+    const uint32_t old_payload = old_chain + uint32_t(kChainEntries) * 3;
+
+    uint8_t rebuilt[kProjectFileBytes + kSlack];
+    fill_sentinel(rebuilt, uint32_t(sizeof(rebuilt)));
+    for (uint32_t i = 0; i < kHeaderBytes; i++) rebuilt[i] = g_project[i];
+
+    // Two entries: {id, reserved, offset, size}.
+    poke_u16(rebuilt, kHeaderBytes + 0, kSectionProjectSettings);
+    poke_u16(rebuilt, kHeaderBytes + 2, 0);
+    poke_u32(rebuilt, kHeaderBytes + 4, old_settings);
+    poke_u32(rebuilt, kHeaderBytes + 8, 19);
+    poke_u16(rebuilt, kHeaderBytes + 12, kSectionProjectChain);
+    poke_u16(rebuilt, kHeaderBytes + 14, 0);
+    poke_u32(rebuilt, kHeaderBytes + 16, old_chain);
+    poke_u32(rebuilt, kHeaderBytes + 20, uint32_t(kChainEntries) * 3);
+
+    // The settings and the chain, copied out of the three-section file.
+    const uint32_t from_settings = section_at(g_project, kSectionProjectSettings);
+    const uint32_t from_chain = section_at(g_project, kSectionProjectChain);
+    for (uint32_t i = 0; i < 19; i++) {
+        rebuilt[kHeaderBytes + old_settings + i] = g_project[from_settings + i];
+    }
+    for (uint32_t i = 0; i < uint32_t(kChainEntries) * 3; i++) {
+        rebuilt[kHeaderBytes + old_chain + i] = g_project[from_chain + i];
+    }
+
+    poke_u16(rebuilt, 6, 2);                     // two sections
+    poke_u32(rebuilt, 8, old_payload);
+    refresh_crc(rebuilt);
+
+    project_init(g_loaded);
+    g_loaded.settings.sends[0] = 99;             // so "the defaults" is a claim and not a tie
+    CHECK_EQ(int(project_read(g_loaded, rebuilt, kHeaderBytes + old_payload)),
+             int(SerializeResult::ok));
+
+    // The two sections that are there arrived...
+    CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(g_source.settings.tempo_centi_bpm));
+    CHECK_EQ(int(g_loaded.settings.chain_length), int(g_source.settings.chain_length));
+    // ...and the one that is not left the DEFAULTS, not the 99 and not the source's bytes.
+    const ProjectSettings fresh;
+    for (int i = 0; i < kSendFields; i++) CHECK_EQ(int(g_loaded.settings.sends[i]), int(fresh.sends[i]));
+    for (int i = 0; i < kMasterFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.master[i]), int(fresh.master[i]));
+    }
+}
+
+// Present but short is damage, not an old file: a writer that declared the section declared its
+// size too, so a reader that accepted a truncated one would read the chain's bytes as a mixer.
+TEST(project_refuses_a_mixer_section_that_is_short) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+
+    // The third table entry's size field: {id, reserved, offset, size} at 24 bytes in.
+    poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8, uint32_t(kSendFields));
+    refresh_crc(g_project);
+
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::malformed));
 }
 
 TEST(project_round_trips_the_live_pattern_and_the_whole_chain) {
@@ -538,16 +655,18 @@ TEST(project_the_header_says_strata_and_the_version) {
     CHECK_EQ(int(g_project[2]), int(kMagic2));
     CHECK_EQ(int(g_project[3]), int(kMagic3));
     CHECK_EQ(int(peek_u16(g_project, kVersionOffset)), int(kProjectVersion));
-    CHECK_EQ(int(peek_u16(g_project, 6)), 2);                       // two sections
+    CHECK_EQ(int(peek_u16(g_project, 6)), 3);                       // settings, chain, mixer
     CHECK_EQ(peek_u32(g_project, 8), kProjectFileBytes - kHeaderBytes);
     CHECK_EQ(peek_u32(g_project, kCrcOffset),
              crc32(g_project + kHeaderBytes, kProjectFileBytes - kHeaderBytes));
 
-    // Both sections are there and clear of the table.
+    // All three sections are there, in order, and clear of the table.
     const uint32_t settings = section_at(g_project, kSectionProjectSettings);
     const uint32_t chain = section_at(g_project, kSectionProjectChain);
-    CHECK_EQ(settings, kHeaderBytes + 2 * kSectionEntryBytes);
+    const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
+    CHECK_EQ(settings, kHeaderBytes + 3 * kSectionEntryBytes);
     CHECK_EQ(chain, settings + 19);
+    CHECK_EQ(mixer, chain + 64 * 3);
 }
 
 // --- PROJECT.BIN: value-tolerant ------------------------------------------

@@ -78,6 +78,19 @@ const float *last_block();
 void post(Cmd cmd, uint8_t track = 0, uint8_t step = 0, uint8_t a = 0, uint8_t b = 0,
           uint8_t c = 0);
 
+// Drive one send or master byte to an exact value and apply it. The command carries a DELTA (so
+// that a sweep of clicks cannot be flattened by a stale read), so this is "the delta from where
+// it is now" -- one command, because the engine moves the byte one count per unit.
+void set_send_byte(uint8_t field, uint8_t target);
+void set_master_byte(uint8_t field, uint8_t target);
+
+// What the sends and the master hold for a fresh project: the floats `ProjectSettings{}`'s
+// fourteen bytes map to at the default tempo. NOT `SendSettings{}` -- the struct's own float
+// defaults are only where the mixer starts before any project reaches it, and the bytes are the
+// source of truth (core/project.hpp). A test that wants "unchanged" compares against these.
+SendSettings default_sends();
+MasterSettings default_master();
+
 // A delta command, clamped the way `post_delta` clamps it.
 void post_delta(Cmd cmd, int track, int step, uint8_t a, int delta);
 

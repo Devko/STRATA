@@ -101,6 +101,20 @@ uint32_t refused() {
     return strata::test::engine().status().refused.load(std::memory_order_relaxed);
 }
 
+// Render `blocks` blocks and return the total energy. Measured over a whole span rather than as
+// a block peak, because a kick's block peak OSCILLATES with its phase against the block length
+// (about 15 blocks per cycle at 50 Hz), so "louder" read from one block is noise. Energy over the
+// span is monotone in what actually sounded.
+float energy(int blocks) {
+    float total = 0.0f;
+    for (int b = 0; b < blocks; b++) {
+        pump();
+        const float *block = strata::test::last_block();
+        for (int i = 0; i < strata::test::kRigStereo; i++) total += block[i] * block[i];
+    }
+    return total;
+}
+
 int live_bank() {
     return int(strata::test::engine().status().live_bank.load(std::memory_order_relaxed));
 }
@@ -140,6 +154,16 @@ void post_u(Cmd cmd, uint32_t u, uint8_t a = 0, uint8_t track = 0) {
     command.track = track;
     command.a = a;
     command.u = u;
+    strata::test::engine().commands().post(command);
+}
+
+// A delta on a send or master FIELD, the way app/app.hpp posts one: `a` names the field and `b`
+// carries a signed byte. For the clamps and the refusals, where the exact landing is the point.
+void post_delta_to(Cmd cmd, uint8_t field, int delta) {
+    Command command;
+    command.cmd = cmd;
+    command.a = field;
+    command.b = uint8_t(int8_t(delta < -120 ? -120 : (delta > 120 ? 120 : delta)));
     strata::test::engine().commands().post(command);
 }
 
@@ -1846,45 +1870,190 @@ TEST(engine_a_parameter_a_track_does_not_have_is_ignored) {
 }
 
 TEST(engine_a_command_it_does_not_handle_changes_nothing) {
+    // The commands that legitimately do nothing: `none` is the ring's empty slot, a release of a
+    // note nothing is holding is the second half of a gesture whose first half never fired, and
+    // a command number this build does not have is what an older UI posting to a newer engine
+    // would look like. None of them is an error, so none of them is counted as a refusal.
     Engine &engine = clean();
-    // `Cmd::set_sends` and `Cmd::set_master` are in the enum and NOTHING handles them: they fall
-    // through `apply`'s default. Nothing posts them either, so today they are symmetric dead
-    // code rather than a live bug -- but it does mean the master DJ filter and every send
-    // setting are fixed at their defaults for the life of the app, and the day a gesture posts
-    // one of these, this test is what says it still does nothing. REPORTED.
-    CHECK(engine.sends() == SendSettings{});
-    CHECK(engine.master() == MasterSettings{});
-
     const uint32_t before = refused();
-    post_f(Cmd::set_sends, 0.5f, 0);
-    post_f(Cmd::set_master, 1.0f, 0);
+
     post(Cmd::none);
     post(Cmd::release_note, kPoly, 0, 60);
-    post(Cmd(200));                                // a command number this build does not have
+    post(Cmd(200));
     pump(2);
 
-    CHECK(engine.sends() == SendSettings{});
-    CHECK(engine.master() == MasterSettings{});
-    CHECK_EQ(int(refused() - before), 0);          // and not even counted as a refusal
+    CHECK(engine.sends() == strata::test::default_sends());
+    CHECK(engine.master() == strata::test::default_master());
+    CHECK_EQ(int(refused() - before), 0);
 }
 
-TEST(engine_a_command_naming_a_track_that_does_not_exist_lands_on_track_zero) {
-    // `apply` CLAMPS the track and the step out of a command rather than refusing it: an index
-    // past the end reads as 0. This test only PINS that -- it is not an endorsement. Every other
-    // out-of-range field in `apply` is refused and counted (`queue_pattern`, `set_sample`,
-    // `macro_assign`), and a UI bug here would silently edit track 1 instead of showing up in
-    // `Status::refused`. REPORTED as a judgement call; changing it belongs to app/.
+// FIXED. `Cmd::set_sends` and `Cmd::set_master` were in the enum with NOTHING handling them:
+// both fell through `apply`'s default, so every delay and reverb setting -- time, feedback,
+// tone, level, decay, damping, high-pass -- and docs/SPEC.md's "Master DJ filter" on F1 + VALUE
+// were frozen at their compile-time defaults for the life of the app, unreachable from any
+// gesture and absent from every file. This test is the live wire.
+TEST(engine_a_send_setting_can_be_changed) {
     Engine &engine = clean();
-    (void)engine;
+    CHECK(engine.sends() == strata::test::default_sends());
+
+    // `a` is the field and `b` a delta on the byte PROJECT.BIN stores; the rig's helper turns a
+    // target into the one delta that reaches it.
+    strata::test::set_send_byte(uint8_t(SendField::delay_feedback), 127);
+    strata::test::set_send_byte(uint8_t(SendField::reverb_damping), 0);
+    strata::test::set_send_byte(uint8_t(SendField::delay_level), 64);
+
+    CHECK_NEAR(engine.sends().delay_feedback, 0.95f, 1e-6);      // the top of the field's range
+    CHECK_NEAR(engine.sends().reverb_damping, 0.0f, 1e-6);
+    CHECK_NEAR(engine.sends().delay_level, 64.0f / 127.0f, 1e-6);
+
+    // The byte lands in the PROJECT, which is what makes it survive a save.
+    CHECK_EQ(int(engine.project().settings.sends[uint8_t(SendField::delay_feedback)]), 127);
+
+    // The byte CLAMPS at both ends rather than wrapping: a delta past the top of the range on a
+    // level knob that wrapped to silence would be the worst possible behaviour on stage.
+    post_delta_to(Cmd::set_sends, uint8_t(SendField::delay_feedback), +120);
+    pump();
+    CHECK_EQ(int(engine.project().settings.sends[uint8_t(SendField::delay_feedback)]), 127);
+    post_delta_to(Cmd::set_sends, uint8_t(SendField::delay_feedback), -120);
+    pump();
+    CHECK_EQ(int(engine.project().settings.sends[uint8_t(SendField::delay_feedback)]), 7);
+
+    // A field index this build does not have is refused and counted, and changes nothing.
+    const uint32_t before = refused();
+    const SendSettings held = engine.sends();
+    post_delta_to(Cmd::set_sends, uint8_t(SendField::count), +10);
+    post_delta_to(Cmd::set_sends, 200, +10);
+    pump();
+    CHECK(engine.sends() == held);
+    CHECK_EQ(int(refused() - before), 2);
+}
+
+// The delay is TEMPO-SYNCED (docs/SPEC.md), which is why the file stores a DIVISION and not a
+// time: the same project at 128 and at 140 BPM has to keep its dotted eighth on the grid. So a
+// tempo change has to re-derive the delay, and that is the engine's job even though the clock
+// itself belongs to the main context.
+TEST(engine_the_delay_follows_the_tempo) {
+    Engine &engine = clean();
+
+    post_f(Cmd::set_tempo, 120.0f);                      // a beat is 0.5 s
+    pump();
+    strata::test::set_send_byte(uint8_t(SendField::delay_seconds), delay_division_byte(6));
+    CHECK_EQ(delay_division_index(engine.project().settings.sends[0]), 6);   // 1/4: one beat
+    CHECK_NEAR(engine.sends().delay_seconds, 0.5f, 1e-5);
+
+    post_f(Cmd::set_tempo, 240.0f);                      // half as long
+    pump();
+    CHECK_NEAR(engine.sends().delay_seconds, 0.25f, 1e-5);
+
+    // And the division itself did not move: it is the time that followed the tempo.
+    CHECK_EQ(delay_division_index(engine.project().settings.sends[0]), 6);
+
+    // A tempo so slow that the division passes the delay line's 2 s is CLAMPED rather than
+    // wrapping or reading past the buffer.
+    post_f(Cmd::set_tempo, 20.0f);                       // a beat is 3 s
+    pump();
+    strata::test::set_send_byte(uint8_t(SendField::delay_seconds), delay_division_byte(9));
+    CHECK_NEAR(engine.sends().delay_seconds, 2.0f, 1e-6);   // 1/1 is four beats, so 12 s
+
+    // And the DIVISION walk holds at both ends rather than wrapping.
+    post_delta_to(Cmd::set_sends, uint8_t(SendField::delay_seconds), +30);
+    pump();
+    CHECK_EQ(delay_division_index(engine.project().settings.sends[0]), kDelayDivisions - 1);
+    post_delta_to(Cmd::set_sends, uint8_t(SendField::delay_seconds), -30);
+    pump();
+    CHECK_EQ(delay_division_index(engine.project().settings.sends[0]), 0);
+
+    post_f(Cmd::set_tempo, 130.0f);
+    pump();
+}
+
+TEST(engine_a_master_setting_can_be_changed) {
+    Engine &engine = clean();
+    CHECK(engine.master() == strata::test::default_master());
+
+    // The DJ filter is the one signed field: 64 is exactly the flat, bypassed centre, below it a
+    // low-pass and above it a high-pass. docs/SPEC.md's F1 + VALUE gesture drives this byte.
+    strata::test::set_master_byte(uint8_t(MasterField::dj), 0);
+    strata::test::set_master_byte(uint8_t(MasterField::compressor), 32);
+    CHECK_NEAR(engine.master().dj, -1.0f, 1e-6);
+    CHECK_NEAR(engine.master().compressor, 32.0f / 127.0f, 1e-6);
+
+    strata::test::set_master_byte(uint8_t(MasterField::dj), 64);
+    CHECK_NEAR(engine.master().dj, 0.0f, 1e-6);          // exactly flat, not nearly
+
+    strata::test::set_master_byte(uint8_t(MasterField::dj), 127);
+    CHECK_NEAR(engine.master().dj, 1.0f, 1e-6);
+
+    // A limiter threshold of zero is a limiter that removes everything, so byte 0 is the floor
+    // `resolve_master` honours and not 0.
+    strata::test::set_master_byte(uint8_t(MasterField::limit), 0);
+    CHECK_NEAR(engine.master().limit, 0.1f, 1e-6);
+
+    const uint32_t before = refused();
+    const MasterSettings held = engine.master();
+    post_delta_to(Cmd::set_master, uint8_t(MasterField::count), +10);
+    pump();
+    CHECK(engine.master() == held);
+    CHECK_EQ(int(refused() - before), 1);
+}
+
+// The settings reach the sound, not just the struct: a long full-feedback delay at full level
+// turns one hit into a line that is still running long after the hit itself has gone.
+TEST(engine_a_send_setting_reaches_the_sound) {
+    clean();
+
+    strata::test::set_send_byte(uint8_t(SendField::delay_seconds), 0);   // 1/32, the shortest
+    strata::test::set_send_byte(uint8_t(SendField::delay_level), 127);
+    strata::test::set_send_byte(uint8_t(SendField::delay_feedback), 0);
+
+    post(Cmd::set_param, 0, 0, kSendA, 127);
+    post(Cmd::trigger_note, 0, 0, 60, 127);
+    const float dry_energy = energy(60);
+
+    // The send gain has to go back to zero before settling: `Mixer::add_track` restarts the
+    // delay's tail every block a track with a non-zero send gain is rendered, so the line never
+    // stops running and `settle()` -- which wants an exactly silent block -- would never return.
+    post(Cmd::set_param, 0, 0, kSendA, 0);
+    CHECK(settle());
+
+    strata::test::set_send_byte(uint8_t(SendField::delay_feedback), 127);
+    post(Cmd::set_param, 0, 0, kSendA, 127);
+    post(Cmd::trigger_note, 0, 0, 60, 127);
+    const float wet_energy = energy(60);
+
+    post(Cmd::set_param, 0, 0, kSendA, 0);
+    strata::test::set_send_byte(uint8_t(SendField::delay_feedback), 0);
+    CHECK(settle());
+
+    // Same hit, same send gain, same delay level: all that changed is the feedback.
+    CHECK(wet_energy > dry_energy * 1.5f);
+}
+
+TEST(engine_a_command_naming_a_track_that_does_not_exist_is_refused) {
+    // FIXED. `apply` used to CLAMP the track and the step out of a command, so an index past the
+    // end read as 0: a command naming track 9 edited track 1 and step 64 edited step 1. A UI bug
+    // there would corrupt a pattern silently, where every other out-of-range field in that
+    // function refuses and counts. This test pinned the clamp; it now pins the refusal.
+    Engine &engine = clean();
+    const uint32_t refused_before = engine.status().refused.load(std::memory_order_relaxed);
+
     CHECK(!trig_at(0, 0));
     post(Cmd::toggle_trig, uint8_t(kTracks), 0);
     pump();
-    CHECK(trig_at(0, 0));
-    CHECK(!trig_at(0, 1));
+    CHECK(!trig_at(0, 0));                         // track 9 did not land on track 1
+    CHECK(engine.status().refused.load(std::memory_order_relaxed) > refused_before);
 
+    const uint32_t refused_mid = engine.status().refused.load(std::memory_order_relaxed);
     post(Cmd::toggle_trig, 0, uint8_t(kStepsPerTrack));
     pump();
-    CHECK(!trig_at(0, 0));                         // step 64 folded onto step 0 and toggled it off
+    CHECK(!trig_at(0, 0));                         // and step 64 did not fold onto step 0
+    CHECK(engine.status().refused.load(std::memory_order_relaxed) > refused_mid);
+
+    // A command inside the range still works, so the guard is about the range and not about
+    // refusing everything.
+    post(Cmd::toggle_trig, uint8_t(kTracks - 1), uint8_t(kStepsPerTrack - 1));
+    pump();
+    CHECK(trig_at(kTracks - 1, kStepsPerTrack - 1));
 }
 
 TEST(engine_the_key_and_the_scale_land_in_both_places) {

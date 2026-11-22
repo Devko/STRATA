@@ -965,3 +965,188 @@ TEST(duck_carries_a_trigger_aimed_past_the_end_of_the_block) {
     CHECK(edge.render(curve, kFrames));
     CHECK(curve[0] > 0.0f);                  // and it fires on frame 0 of the next
 }
+
+// --- the encoder domain: bytes in, physical values out ----------------------------------------
+//
+// Every send and master field is a BYTE under the encoder and in PROJECT.BIN (core/project.hpp
+// says why), and a float only once it reaches the mixer. dsp/buses.cpp is the only place that
+// knows what a byte means, so this is where the mapping is pinned.
+
+TEST(buses_a_division_byte_round_trips_to_its_index) {
+    // The byte a division is stored as has to read back as THAT division. The bands are 12.8
+    // bytes wide -- 128 does not divide by ten -- and rounding the band down to twelve put the
+    // top division's byte in the band below it, so `delay_division_byte(9)` came back as 8.
+    for (int i = 0; i < kDelayDivisions; i++) {
+        CHECK_EQ(delay_division_index(delay_division_byte(i)), i);
+    }
+
+    // Out of range is clamped at both ends rather than reading off the table.
+    CHECK_EQ(delay_division_index(delay_division_byte(-5)), 0);
+    CHECK_EQ(delay_division_index(delay_division_byte(99)), kDelayDivisions - 1);
+
+    // And every byte an encoder can produce names a division, with the two ends where they
+    // belong -- a byte is 0-127 and nothing may read past the table.
+    CHECK_EQ(delay_division_index(0), 0);
+    CHECK_EQ(delay_division_index(127), kDelayDivisions - 1);
+    CHECK_EQ(delay_division_index(255), kDelayDivisions - 1);
+    for (int b = 0; b <= 255; b++) {
+        const int index = delay_division_index(uint8_t(b));
+        CHECK(index >= 0 && index < kDelayDivisions);
+    }
+
+    // The names are four characters at most: the screen's slot is that wide.
+    for (int i = 0; i < kDelayDivisions; i++) {
+        const char *name = delay_division_name(delay_division_byte(i));
+        int length = 0;
+        while (name[length] != 0) length++;
+        CHECK(length >= 3 && length <= 5);
+    }
+    CHECK_EQ(delay_division_name(delay_division_byte(2)), "1/16");
+    CHECK_EQ(delay_division_name(delay_division_byte(5)), "1/8D");
+}
+
+TEST(buses_a_division_is_a_time_only_once_the_tempo_is_known) {
+    // docs/SPEC.md makes send A tempo-synced, so the file stores a division and dsp/ turns it
+    // into seconds with the beat length the app hands it. At 120 BPM a beat is half a second.
+    const float beat = 0.5f;
+    CHECK_NEAR(delay_division_seconds(delay_division_byte(6), beat), 0.5f, 1e-6);   // 1/4
+    CHECK_NEAR(delay_division_seconds(delay_division_byte(4), beat), 0.25f, 1e-6);  // 1/8
+    CHECK_NEAR(delay_division_seconds(delay_division_byte(5), beat), 0.375f, 1e-6); // 1/8D
+    CHECK_NEAR(delay_division_seconds(delay_division_byte(9), beat), 2.0f, 1e-6);   // a bar
+
+    // The divisions are in order, shortest first, so turning the encoder up lengthens the delay.
+    for (int i = 1; i < kDelayDivisions; i++) {
+        CHECK(delay_division_seconds(delay_division_byte(i), beat) >
+              delay_division_seconds(delay_division_byte(i - 1), beat));
+    }
+
+    // Halving the tempo doubles every division, and the triplet is a third of its straight
+    // neighbour two places up -- which is what makes it a triplet rather than a nearby number.
+    CHECK_NEAR(delay_division_seconds(delay_division_byte(6), 1.0f), 1.0f, 1e-6);
+    CHECK_NEAR(delay_division_seconds(delay_division_byte(3), beat),
+               delay_division_seconds(delay_division_byte(6), beat) / 3.0f, 1e-6);
+}
+
+TEST(buses_a_byte_maps_onto_each_field_s_own_range) {
+    // The ends, which are the values that matter: a level knob at the top has to be unity gain
+    // and not 0.992 of it, and a feedback at the top has to be the 0.95 the field allows and
+    // not 1.0, which is a delay that never stops growing.
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::delay_level), 127, 0.5f), 1.0f, 1e-6);
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::delay_level), 0, 0.5f), 0.0f, 1e-6);
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::delay_feedback), 127, 0.5f), 0.95f, 1e-6);
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::reverb_level), 127, 0.5f), 1.0f, 1e-6);
+
+    // The ping-pong is a switch, so the upper half of the travel is on.
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::delay_ping_pong), 63, 0.5f), 0.0f, 1e-6);
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::delay_ping_pong), 64, 0.5f), 1.0f, 1e-6);
+
+    // The two EXPONENTIAL fields, where equal encoder steps are equal musical steps: a reverb
+    // decay linear in seconds spends four fifths of its travel in cathedrals.
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::reverb_decay_s), 0, 0.5f), 0.2f, 1e-5);
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::reverb_decay_s), 127, 0.5f), 30.0f, 0.01);
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::reverb_high_pass_hz), 0, 0.5f), 20.0f,
+               1e-4);
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::reverb_high_pass_hz), 127, 0.5f), 2000.0f,
+               1.0);
+    // Equal steps, equal ratios: the middle of the travel is the geometric mean of the ends,
+    // sqrt(0.2 * 30) = 2.449 s -- 2.498 here because byte 64 of 127 is a hair past halfway.
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::reverb_decay_s), 64, 0.5f), 2.498f, 0.01);
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::reverb_decay_s), 32, 0.5f) *
+                   send_value_from_byte(uint8_t(SendField::reverb_decay_s), 96, 0.5f),
+               send_value_from_byte(uint8_t(SendField::reverb_decay_s), 64, 0.5f) *
+                   send_value_from_byte(uint8_t(SendField::reverb_decay_s), 64, 0.5f),
+               0.01);
+
+    // An index this build does not have reads 0 rather than off the end.
+    CHECK_NEAR(send_value_from_byte(uint8_t(SendField::count), 127, 0.5f), 0.0f, 1e-6);
+    CHECK_NEAR(master_value_from_byte(uint8_t(MasterField::count), 127), 0.0f, 1e-6);
+
+    // The master's one SIGNED field: 64 is exactly the DJ filter's flat, bypassed centre, which
+    // has to be reachable by value and not merely nearly.
+    CHECK_NEAR(master_value_from_byte(uint8_t(MasterField::dj), 64), 0.0f, 1e-6);
+    CHECK_NEAR(master_value_from_byte(uint8_t(MasterField::dj), 0), -1.0f, 1e-6);
+    CHECK_NEAR(master_value_from_byte(uint8_t(MasterField::dj), 127), 1.0f, 1e-6);
+    // The limiter's threshold does not reach 0, because a threshold of zero is a limiter that
+    // removes everything, and it stops where `resolve_master` stops so the field reads back
+    // what the limiter is actually doing.
+    CHECK_NEAR(master_value_from_byte(uint8_t(MasterField::limit), 0), 0.1f, 1e-6);
+    CHECK_NEAR(master_value_from_byte(uint8_t(MasterField::limit), 127), 0.98f, 1e-6);
+}
+
+TEST(buses_the_default_bytes_give_the_documented_defaults) {
+    // `ProjectSettings`'s fourteen bytes are the source of truth, and dsp/buses.hpp's float
+    // defaults are what they are meant to mean. They have to agree, or a fresh project would
+    // not sound like the one the header documents.
+    const ProjectSettings defaults;
+    SendSettings sends;
+    MasterSettings master;
+    sends_from_bytes(sends, defaults.sends, 60.0f / 130.0f);
+    master_from_bytes(master, defaults.master);
+
+    const SendSettings documented;
+    const MasterSettings documented_master;
+    CHECK_NEAR(sends.delay_feedback, documented.delay_feedback, 0.01);
+    CHECK_NEAR(sends.delay_tone, documented.delay_tone, 0.01);
+    CHECK(sends.delay_ping_pong == documented.delay_ping_pong);
+    CHECK_NEAR(sends.delay_level, documented.delay_level, 0.01);
+    CHECK_NEAR(sends.delay_to_reverb, documented.delay_to_reverb, 0.01);
+    CHECK_NEAR(sends.reverb_decay_s, documented.reverb_decay_s, 0.05);
+    CHECK_NEAR(sends.reverb_damping, documented.reverb_damping, 0.01);
+    CHECK_NEAR(sends.reverb_high_pass_hz, documented.reverb_high_pass_hz, 5.0);
+    CHECK_NEAR(sends.reverb_level, documented.reverb_level, 0.01);
+    CHECK_NEAR(master.dj, documented_master.dj, 1e-6);
+    CHECK_NEAR(master.compressor, documented_master.compressor, 0.01);
+    CHECK_NEAR(master.limit, documented_master.limit, 0.01);
+    CHECK_NEAR(master.level, documented_master.level, 0.01);
+
+    // The delay's default is a DIVISION, so it is a time only at a tempo: dotted 1/8, which at
+    // 130 BPM is 0.346 s -- near the 0.375 the struct documents and, unlike it, on the grid.
+    CHECK_EQ(delay_division_index(defaults.sends[0]), 5);
+    CHECK_NEAR(sends.delay_seconds, 0.75f * 60.0f / 130.0f, 1e-5);
+}
+
+TEST(buses_a_step_moves_a_byte_in_its_field_s_own_units) {
+    // A knob: two counts per click, clamped at both ends.
+    CHECK_EQ(int(send_byte_step(uint8_t(SendField::delay_feedback), 60, +4)), 64);
+    CHECK_EQ(int(send_byte_step(uint8_t(SendField::delay_feedback), 60, -70)), 0);
+    CHECK_EQ(int(send_byte_step(uint8_t(SendField::delay_feedback), 60, +120)), 127);
+    CHECK_EQ(int(send_field_click(uint8_t(SendField::delay_feedback))), 2);
+
+    // The delay's time: one DIVISION per unit, holding at both ends.
+    const uint8_t at_4 = delay_division_byte(4);
+    CHECK_EQ(delay_division_index(send_byte_step(uint8_t(SendField::delay_seconds), at_4, +1)), 5);
+    CHECK_EQ(delay_division_index(send_byte_step(uint8_t(SendField::delay_seconds), at_4, -1)), 3);
+    CHECK_EQ(delay_division_index(send_byte_step(uint8_t(SendField::delay_seconds), at_4, +99)),
+             kDelayDivisions - 1);
+    CHECK_EQ(delay_division_index(send_byte_step(uint8_t(SendField::delay_seconds), at_4, -99)), 0);
+    CHECK_EQ(int(send_field_click(uint8_t(SendField::delay_seconds))), 1);
+
+    // The switch: only the sign is read, and zero leaves it alone.
+    CHECK_EQ(int(send_byte_step(uint8_t(SendField::delay_ping_pong), 0, +1)), 127);
+    CHECK_EQ(int(send_byte_step(uint8_t(SendField::delay_ping_pong), 127, -1)), 0);
+    CHECK_EQ(int(send_byte_step(uint8_t(SendField::delay_ping_pong), 99, 0)), 99);
+
+    // A field this build does not have is left where it was rather than written past the array.
+    CHECK_EQ(int(send_byte_step(uint8_t(SendField::count), 40, +10)), 40);
+    CHECK_EQ(int(master_byte_step(uint8_t(MasterField::count), 40, +10)), 40);
+    CHECK_EQ(int(master_byte_step(uint8_t(MasterField::level), 40, +10)), 50);
+}
+
+TEST(buses_the_field_names_fit_the_screen) {
+    // Three characters, which is what a MIXER slot and a notice have room for.
+    for (uint8_t f = 0; f < uint8_t(SendField::count); f++) {
+        const char *name = send_field_name(f);
+        int length = 0;
+        while (name[length] != 0) length++;
+        CHECK(length >= 2 && length <= 3);
+    }
+    for (uint8_t f = 0; f < uint8_t(MasterField::count); f++) {
+        const char *name = master_field_name(f);
+        int length = 0;
+        while (name[length] != 0) length++;
+        CHECK(length >= 2 && length <= 3);
+    }
+    // And an index past the end says so rather than reading off the table.
+    CHECK_EQ(send_field_name(uint8_t(SendField::count)), "---");
+    CHECK_EQ(master_field_name(uint8_t(MasterField::count)), "---");
+}

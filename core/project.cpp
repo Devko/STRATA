@@ -11,7 +11,8 @@
 //
 // ## The bytes
 //
-// PROJECT.BIN, 251 bytes, two sections. Fixed size: nothing in it is variable length.
+// PROJECT.BIN, 277 bytes, three sections (the third is the mixer's, added later and
+// OPTIONAL on read). Fixed size: nothing in it is variable length.
 //
 //     settings (id 1), 19 bytes
 //         0   2  tempo, centi-BPM
@@ -206,7 +207,14 @@ SerializeResult finish_container(Writer &w, uint8_t *buffer, uint32_t total, uin
 }
 
 // Checks the header and finds each wanted section by id. `offset` and `length` are filled in the
-// order of `wanted`, and every one of them has to be there.
+// order of `wanted`, and every one of them has to be there -- except the last `optional`, which
+// come back as offset 0 when the file does not carry them.
+//
+// That tolerance is what lets a file format GROW. A section the writer added later is optional
+// on read, so a file written before it existed still loads with the reader's defaults; and
+// because the table is a lookup by id, an older build reading a newer file simply does not ask
+// for the section it has never heard of. Only a change to what an EXISTING byte means needs the
+// version bumped. Sections ordered so the optional ones are last keeps that to one number.
 //
 // The checks are pattern_read's, in pattern_read's order: the declared payload against the
 // buffer, then the CRC, then the version, then the table. The order is part of the contract --
@@ -217,7 +225,7 @@ SerializeResult finish_container(Writer &w, uint8_t *buffer, uint32_t total, uin
 // `offset[k] == 0` stand for "not found yet" without a second array.
 SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t version,
                               const uint16_t *wanted, uint32_t count, uint32_t *offset,
-                              uint32_t *length) {
+                              uint32_t *length, uint32_t optional = 0) {
     for (uint32_t k = 0; k < count; k++) {
         offset[k] = 0;
         length[k] = 0;
@@ -263,7 +271,8 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
             length[k] = len;
         }
     }
-    for (uint32_t k = 0; k < count; k++) {
+    const uint32_t required = optional >= count ? 0 : count - optional;
+    for (uint32_t k = 0; k < required; k++) {
         if (offset[k] == 0) return SerializeResult::malformed;
     }
     return SerializeResult::ok;
@@ -271,18 +280,28 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PROJECT.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kProjectSections = 2;
+constexpr uint32_t kProjectSections = 3;
 constexpr uint32_t kProjectSettingsBytes = 19;
 constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
+constexpr uint32_t kProjectMixerBytes = uint32_t(kSendFields) + uint32_t(kMasterFields);
 constexpr uint32_t kProjectTableBytes = kProjectSections * kSectionEntryBytes;
 constexpr uint32_t kProjectSettingsOffset = kProjectTableBytes;
 constexpr uint32_t kProjectChainOffset = kProjectSettingsOffset + kProjectSettingsBytes;
-constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectChainOffset + kProjectChainBytes;
+constexpr uint32_t kProjectMixerOffset = kProjectChainOffset + kProjectChainBytes;
+constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectMixerOffset + kProjectMixerBytes;
+
+// How many of `wanted` at the END of the list a reader may do without. One: the mixer section,
+// which did not exist when the format was first written, so a PROJECT.BIN from before it has
+// two sections and must still load (core/project.hpp, kSectionProjectMixer).
+constexpr uint32_t kProjectOptionalSections = 1;
 
 static_assert(sizeof(ProjectSettings::mute_states) == 8,
               "the settings section is 19 bytes on the strength of 8 mute states");
 static_assert(kProjectSettingsBytes == 2 + 4 + sizeof(ProjectSettings::mute_states) + 3 + 2,
               "the settings section and the fields written into it have diverged");
+static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
+                                        sizeof(ProjectSettings::master),
+              "the mixer section and the bytes written into it have diverged");
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
@@ -375,6 +394,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     const Section sections[kProjectSections] = {
         {kSectionProjectSettings, kProjectSettingsOffset, kProjectSettingsBytes},
         {kSectionProjectChain, kProjectChainOffset, kProjectChainBytes},
+        {kSectionProjectMixer, kProjectMixerOffset, kProjectMixerBytes},
     };
 
     Writer w(buffer, capacity);
@@ -402,6 +422,10 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
         w.u8(project.chain[i].slot);
         w.u8(project.chain[i].repeats);
     }
+
+    // The sends and the master, as the encoder bytes they are everywhere but inside the mixer.
+    for (int i = 0; i < kSendFields; i++) w.u8(s.sends[i]);
+    for (int i = 0; i < kMasterFields; i++) w.u8(s.master[i]);
 
     if (!w.ok() || w.size() != kProjectTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kProjectTotalBytes, written);
@@ -431,7 +455,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // Every refusal goes through here, so a refused load leaves the defaults rather than half a
     // file -- but only of what PROJECT.BIN owns. The patterns are deliberately untouched: they
     // come from the bank files, and app/ reads PROJECT.BIN first, so emptying them here would
-    // let one damaged 251-byte file cost 128 patterns that are about to load perfectly well.
+    // let one damaged 277-byte file cost 128 patterns that are about to load perfectly well.
     const auto refuse = [&project](SerializeResult why) {
         project.settings = ProjectSettings{};
         for (int i = 0; i < kChainEntries; i++) project.chain[i] = ChainEntry{};
@@ -440,14 +464,22 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         return why;
     };
 
-    const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain};
+    // The mixer section is LAST and OPTIONAL: see `kProjectOptionalSections`.
+    const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain,
+                                               kSectionProjectMixer};
     uint32_t offset[kProjectSections] = {};
     uint32_t length[kProjectSections] = {};
     const SerializeResult found =
-        find_sections(buffer, size, kProjectVersion, wanted, kProjectSections, offset, length);
+        find_sections(buffer, size, kProjectVersion, wanted, kProjectSections, offset, length,
+                      kProjectOptionalSections);
     if (found != SerializeResult::ok) return refuse(found);
     if (length[0] < kProjectSettingsBytes) return refuse(SerializeResult::malformed);
     if (length[1] < kProjectChainBytes) return refuse(SerializeResult::malformed);
+    // Present but SHORT is damage, not an old file: a writer that declared the section declared
+    // its size too. Absent is the old file, and that is the `offset[2] != 0` test below.
+    if (offset[2] != 0 && length[2] < kProjectMixerBytes) {
+        return refuse(SerializeResult::malformed);
+    }
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -499,6 +531,26 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         project.chain[i].repeats = usable ? repeats : 0;
     }
     if (!r.ok()) return refuse(SerializeResult::truncated);
+
+    // The sends and the master. Absent means a PROJECT.BIN written before the section existed,
+    // and then these fields take the DEFAULTS -- explicitly, not by being left alone. `project`
+    // is a buffer the app reuses (app/engine.hpp's `project_for_load`), so "left alone" would
+    // mean the previous project's delay and reverb quietly carrying over into one whose file
+    // says nothing about them. Every other field here is unconditionally read, so this is the
+    // only one that can happen to.
+    if (offset[2] == 0) {
+        const ProjectSettings defaults;
+        for (int i = 0; i < kSendFields; i++) s.sends[i] = defaults.sends[i];
+        for (int i = 0; i < kMasterFields; i++) s.master[i] = defaults.master[i];
+    } else {
+        if (!r.seek(kHeaderBytes + offset[2])) return refuse(SerializeResult::malformed);
+        // Clamped to 0-127, the encoder's range, because dsp/buses.hpp maps a byte through
+        // `byte_unit` and a 255 there would be double the top of the field's range. Clamping
+        // here rather than there keeps the mapping a pure function of a legal byte.
+        for (int i = 0; i < kSendFields; i++) s.sends[i] = clamp_u8(r.u8(), 0, 127);
+        for (int i = 0; i < kMasterFields; i++) s.master[i] = clamp_u8(r.u8(), 0, 127);
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
 
     // The live pattern. Not a user setting but project state: docs/SPEC.md reopens the last
     // project on start, and reopening it on A01 rather than where the user left off is a loss

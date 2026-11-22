@@ -472,11 +472,16 @@ const Expect kTable[] = {
     // The mixer fader, which `kit_from_params` copies into `KitTrack::level`.
     {Cmd::set_track_level, kDirtyKit, "set_track_level"},
 
-    // The send and master settings are in no file: `SendSettings` and `MasterSettings` have no
-    // section in PROJECT.BIN. So there is nothing to dirty -- and nothing to save, which is a
-    // gap rather than a decision (see the report).
-    {Cmd::set_sends, 0u, "set_sends"},
-    {Cmd::set_master, 0u, "set_master"},
+    // FIXED. The send and master settings used to be in no file -- `SendSettings` and
+    // `MasterSettings` had no section in PROJECT.BIN -- and no handler and no caller either, so
+    // every delay and reverb setting was frozen at its compile-time default for the life of the
+    // app. PROJECT.BIN's third section now holds the fourteen encoder bytes they are derived
+    // from, so both dirty the project.
+    {Cmd::set_sends, kDirtyProject, "set_sends"},
+    {Cmd::set_master, kDirtyProject, "set_master"},
+    // The live-record quantize amount. PROJECT.BIN has had a field for it since M4 and nothing
+    // wrote it: the value lived in `app/` alone and went back to 100 on every restart.
+    {Cmd::set_quantize, kDirtyProject, "set_quantize"},
 
     // --- the performance layer --------------------------------------------
     //
@@ -711,8 +716,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
 
     // The sizes tests/test_project.cpp pins from the serializer, reached here through the real
     // card protocol: a file that came out a different size means the two have drifted apart.
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 251);
-    CHECK_EQ(project_bytes(), 251u);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 277);
+    CHECK_EQ(project_bytes(), 277u);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1076);
     CHECK_EQ(kit_bytes(), 1076u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 2424);
@@ -1483,7 +1488,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         }
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 251);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 277);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1076);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 2424);
 

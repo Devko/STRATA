@@ -185,6 +185,13 @@ private:
     void kit_from_params();
     void params_from_kit();
 
+    // The same idea for the mixer: `project_.settings.sends` / `.master` are the fourteen
+    // encoder bytes a file holds, and `sends_` / `master_` are the floats the mixer runs on.
+    // This is the one direction that exists -- the bytes are the source of truth, so there is no
+    // "read the floats back" to go wrong. Called by a knob move, by a tempo change (the delay is
+    // tempo-synced) and by a project load.
+    void apply_mixer_bytes();
+
     void load_default_kit();
     void load_default_pattern();
     void build_placeholder_sample();

@@ -283,6 +283,11 @@ void Engine::load_default_pattern() {
     // rather than correct. Cheap, once, at init.
     project_init(project_);
 
+    // The sends and the master, from the bytes `project_init` just put there. Without this
+    // `sends_` would hold dsp/buses.hpp's struct defaults rather than what the project says, and
+    // the first knob move would jump the delay from one to the other.
+    apply_mixer_bytes();
+
     pattern_init(live());
     // A PITCH CLASS, not a note. core/pattern.hpp documents `root` as 0-11 and
     // core/serialize.cpp enforces it with `root % 12` on load, so the 60 this used to hold came
@@ -382,8 +387,17 @@ void Engine::apply_commands() {
 }
 
 void Engine::apply(const Command &command) {
-    const int track = command.track < kTracks ? int(command.track) : 0;
-    const int step = command.step < kStepsPerTrack ? int(command.step) : 0;
+    // REFUSED, not clamped. These used to fall back to 0, so a command naming track 9 edited
+    // track 1 and step 64 edited step 1 -- a UI bug would corrupt a pattern silently, where
+    // every other out-of-range field in this function refuses and counts (queue_pattern,
+    // set_sample, macro_assign, the param guards). A refusal the screen can show is recoverable;
+    // an edit on the wrong step is someone's pattern.
+    if (command.track >= kTracks || command.step >= kStepsPerTrack) {
+        status_.bump_refused();
+        return;
+    }
+    const int track = int(command.track);
+    const int step = int(command.step);
 
     switch (command.cmd) {
         case Cmd::play:
@@ -412,7 +426,26 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::set_tempo:
-            // Also main context, for the same reason. Handled in app/.
+            // The clock itself is the main context's business, for the same reason as above, and
+            // app/ has already set it. What the audio side owns is everything DERIVED from the
+            // tempo -- which is the delay, because docs/SPEC.md makes send A tempo-synced: a
+            // project moved from 128 to 140 BPM must keep its dotted eighth on the grid instead
+            // of holding the seconds it happened to be at.
+            //
+            // `f` carries BPM (app/commands.hpp); the project stores centi-BPM, because that is
+            // what Enaga's clock takes and what one PROJECT.BIN field holds. Clamped as an int
+            // after the multiply, so a NaN or a wild float cannot come out the other side as a
+            // tempo: a comparison against NaN is false, which is why the clamp is written as
+            // "inside the range, or the default" rather than as two one-sided tests.
+            {
+                const float centi = command.f * 100.0f;
+                const int rounded = int(centi + 0.5f);
+                const bool sane = rounded >= int(kTempoCentiMin) && rounded <= int(kTempoCentiMax);
+                project_.settings.tempo_centi_bpm =
+                    sane ? uint16_t(rounded) : project_.settings.tempo_centi_bpm;
+                if (!sane) status_.bump_refused();
+            }
+            apply_mixer_bytes();
             break;
 
         case Cmd::toggle_trig: {
@@ -617,6 +650,11 @@ void Engine::apply(const Command &command) {
                 // back: a performer turning the chain off wants to stay where they are.
                 chain_.active = false;
             }
+            // And record it, which nothing did: `ProjectSettings::chain_enabled` round-tripped
+            // through the serializer while never being written, so a project saved with its
+            // chain running reopened with it off. The player's own `active` is the live truth;
+            // this is the copy a file holds.
+            project_.settings.chain_enabled = chain_.active;
             break;
 
         case Cmd::kit_store:
@@ -674,6 +712,10 @@ void Engine::apply(const Command &command) {
             chain_.active = false;
             scheduler_.reset(true);
             reconfigure();
+            // The sends and the master, which arrived with the file as fourteen bytes. Without
+            // this the mixer would keep running the PREVIOUS project's delay and reverb while
+            // the screen drew the new project's numbers.
+            apply_mixer_bytes();
             boundary_known_ = false;
             break;
 
@@ -848,7 +890,13 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::macro_assign:
-            if (command.a < kMacros && command.b < kParams) {
+            if (command.a >= kMacros || command.b >= kParams) {
+                // Counted, like the "macro is full" refusal below it. Two refusals in one
+                // command reported two different ways is how a user concludes the box is broken.
+                status_.bump_refused();
+                break;
+            }
+            {
                 // The next free target. Which of the four it lands in is not something a
                 // performer should have to think about; a macro that is full refuses, visibly.
                 Macro &macro = macros_.macros[command.a];
@@ -944,6 +992,55 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_sends:
+            // Both of these had NO HANDLER AT ALL until now: the two arms fell through `default`,
+            // so every delay and reverb setting, and docs/SPEC.md's "Master DJ filter", was
+            // frozen at its compile-time value for the life of the app -- unreachable from any
+            // gesture and absent from every file.
+            //
+            // `a` is the field and `b` is an encoder DELTA, as a signed byte. The byte the
+            // delta moves is what the project stores (core/project.hpp says why) and the float
+            // the mixer runs on is derived from it, so the file and the sound cannot disagree --
+            // and so a tempo change can re-derive the delay's time from the division the user
+            // actually chose.
+            //
+            // A delta rather than a value for the reason app/commands.hpp gives for every
+            // encoder gesture: the authoritative byte lives here, and a UI that computed the
+            // next one would read the same stale byte for every click in a sweep.
+            if (command.a >= uint8_t(SendField::count)) {
+                status_.bump_refused();
+                break;
+            }
+            project_.settings.sends[command.a] =
+                send_byte_step(command.a, project_.settings.sends[command.a],
+                               int(int8_t(command.b)));
+            apply_mixer_bytes();
+            break;
+
+        case Cmd::set_master:
+            if (command.a >= uint8_t(MasterField::count)) {
+                status_.bump_refused();
+                break;
+            }
+            project_.settings.master[command.a] =
+                master_byte_step(command.a, project_.settings.master[command.a],
+                                 int(int8_t(command.b)));
+            apply_mixer_bytes();
+            break;
+
+        case Cmd::set_quantize: {
+            // The live-record quantize amount, 0-100. It lived in `app/` alone, so it was lost
+            // on every restart and absent from the file even though PROJECT.BIN has a field for
+            // it. Here instead, so the project is the single copy and `app/` reads it back.
+            //
+            // A DELTA in `b`, like every other encoder gesture: the value lives here, so a UI
+            // computing the next one would read the same stale number for every click of a
+            // sweep and only the last would land (app/commands.hpp).
+            const int next = int(project_.settings.quantize) + int(int8_t(command.b));
+            project_.settings.quantize = uint8_t(next < 0 ? 0 : (next > 100 ? 100 : next));
+            break;
+        }
+
         case Cmd::set_machine: {
             if (command.a >= uint8_t(MachineId::count)) {
                 status_.bump_refused();
@@ -1006,6 +1103,26 @@ void Engine::kit_from_params() {
         // machine is fixed at init until M6 makes it switchable, and sample paths arrive with
         // project loading. Leaving them alone keeps what a loaded project said.
     }
+}
+
+void Engine::apply_mixer_bytes() {
+    // 60 / BPM, the length of a beat, which is all dsp/buses.cpp needs to turn the delay's
+    // division into a time. The tempo is in centi-BPM, so this is 6000 / centi -- one divide at
+    // control rate, through `reciprocal` rather than `/` because that is the rule for every
+    // divide in this layer and a knob move is not the place to make an exception.
+    const ProjectSettings &settings = project_.settings;
+    const uint16_t centi = settings.tempo_centi_bpm < kTempoCentiMin
+                               ? uint16_t(kTempoCentiMin)
+                               : (settings.tempo_centi_bpm > kTempoCentiMax
+                                      ? uint16_t(kTempoCentiMax)
+                                      : settings.tempo_centi_bpm);
+    const float beat_seconds = 6000.0f * enaga::dsp::reciprocal(float(centi));
+
+    sends_from_bytes(sends_, settings.sends, beat_seconds);
+    master_from_bytes(master_, settings.master);
+    // `Mixer::prepare` compares against what it last resolved, so an unchanged struct costs one
+    // comparison and a changed one redesigns only what moved. Nothing to do here but hand it
+    // over on the next block.
 }
 
 void Engine::params_from_kit() {
@@ -1287,9 +1404,21 @@ void Engine::fire(const StepEvent &event) {
     locked_[track] = locked;
 
     if (!event.trigless && machines_[track] != nullptr && !muted_[track]) {
-        // Prepare before triggering so the voice starts from the locked values. The render loop
-        // then keeps preparing from effective_, so the lock holds for the whole step rather than
-        // just the instant of the trigger.
+        // This prepare is REDUNDANT today, and kept on purpose. It used to be justified as
+        // "prepare before triggering so the voice starts from the locked values", which
+        // described a data flow this engine does not have: `audio()` resolves every tick BEFORE
+        // the render loop, and the render loop prepares each sounding track from the same
+        // `effective_` this function has just written -- so the locked values are in place
+        // before a single sample is produced, with or without this line. Removing it changed
+        // nothing in 993 tests and 539,519 checks, which is what a redundant control-rate
+        // `Settings::make` per trig looks like.
+        //
+        // What it is really defending is the invariant that no machine's `trigger` reads a
+        // prepared setting: every one of them only stores the Trig and sets `active_`
+        // (dsp/vapoly.cpp, dsp/va.cpp, dsp/kick.cpp and the rest). A machine that broke that
+        // would be silently wrong for its first block without this, and a few hundred cycles
+        // per trig is a cheap price for not having to notice. The comment, not the call, was
+        // the thing that needed fixing.
         machines_[track]->prepare(effective_[track]);
 
         // The note goes to the machine UNFOLDED -- it is not put through `scale_fold` here, and

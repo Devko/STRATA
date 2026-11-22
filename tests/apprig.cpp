@@ -92,6 +92,51 @@ void put_trig(int track, int step) {
     pump();
 }
 
+void set_send_byte(uint8_t field, uint8_t target) {
+    const uint8_t now = g_engine.project().settings.sends[field];
+    // In the FIELD'S own units, which is what the command carries: divisions for the delay's
+    // time, a sign for the ping-pong switch, counts for a knob (dsp/buses.hpp).
+    int delta;
+    if (field == uint8_t(SendField::delay_seconds)) {
+        delta = delay_division_index(target) - delay_division_index(now);
+    } else if (field == uint8_t(SendField::delay_ping_pong)) {
+        delta = target >= 64 ? +1 : -1;
+    } else {
+        delta = int(target) - int(now);
+    }
+    Command command;
+    command.cmd = Cmd::set_sends;
+    command.a = field;
+    command.b = uint8_t(int8_t(delta));
+    g_engine.commands().post(command);
+    pump();
+}
+
+void set_master_byte(uint8_t field, uint8_t target) {
+    const int now = int(g_engine.project().settings.master[field]);
+    Command command;
+    command.cmd = Cmd::set_master;
+    command.a = field;
+    command.b = uint8_t(int8_t(int(target) - now));
+    g_engine.commands().post(command);
+    pump();
+}
+
+SendSettings default_sends() {
+    const ProjectSettings defaults;
+    SendSettings sends;
+    sends_from_bytes(sends, defaults.sends,
+                     6000.0f / float(defaults.tempo_centi_bpm));
+    return sends;
+}
+
+MasterSettings default_master() {
+    const ProjectSettings defaults;
+    MasterSettings master;
+    master_from_bytes(master, defaults.master);
+    return master;
+}
+
 Engine &fresh() {
     FakeHost &host = FakeHost::the();
     host.reset();
@@ -139,6 +184,12 @@ Engine &fresh() {
     for (int m = 0; m < kMacros; m++) post(Cmd::macro_clear, 0, 0, uint8_t(m));
     post(Cmd::set_morph);
     post(Cmd::set_auto_fill);
+
+    // The SEND and MASTER settings come back with `Cmd::project_loaded` above, because
+    // `project_init` reset the fourteen bytes they are derived from and the engine re-derives
+    // them on a load. Nothing to post here -- but it is worth saying, because before those
+    // bytes existed nothing put them back at all, and a test that lengthened the reverb handed
+    // the next test a 10-second tail that `settle()` cannot wait out inside its block limit.
 
     // The scene SLOTS are deliberately not reset. `Cmd::scene_select` refuses a scene index
     // outside 0..kScenes-1, so there is no "unassign" to post -- and none is needed: the scenes

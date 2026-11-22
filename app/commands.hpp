@@ -119,8 +119,15 @@ enum class Cmd : uint8_t {
     // --- kit and sound ---
     set_param,         // track, a: param index, b: value
     set_track_level,   // track, f: level
-    set_sends,         // f: a packed send setting, a: which
-    set_master,        // f: value, a: which
+    // One send or master setting. `a` is the field -- dsp/buses.hpp's SendField or MasterField,
+    // whose numbers are permanent because they reach PROJECT.BIN -- and `b` is an encoder DELTA,
+    // as a signed byte, exactly like `set_param` and the step fields and for the same reason.
+    //
+    // What moves is a BYTE, 0-127, because that is what the project stores and what the encoder
+    // produces, so the file, the screen and the sound cannot disagree; the engine turns it into
+    // the value the mixer runs on, and for the delay's time it needs the tempo to do it.
+    set_sends,         // a: SendField, b: int8 delta
+    set_master,        // a: MasterField, b: int8 delta
 
     // --- performance, M5 ---------------------------------------------------
     //
@@ -185,6 +192,11 @@ enum class Cmd : uint8_t {
     // The audio side swaps the pointer at a block boundary and kills the voices of the machine
     // being left, because a machine that is no longer rendered cannot release its own tail.
     set_machine,       // track, a: MachineId
+
+    // The live-record quantize amount, 0-100 (docs/SPEC.md, "Recording"). It is a PROJECT
+    // setting with a field in PROJECT.BIN, so the engine keeps it and `app/` reads it back
+    // rather than holding a second copy that a save could not see.
+    set_quantize,      // b: int8 delta, clamped to 0-100
 
     count
 };

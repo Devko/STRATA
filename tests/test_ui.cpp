@@ -83,6 +83,8 @@ struct UiProbe {
 
     static uint32_t tempo_tenths(const Strata &app) { return app.tempo_tenths_; }
     static bool clock_refused(const Strata &app) { return app.clock_refused_; }
+    static bool project_setup(const Strata &app) { return app.project_setup_; }
+    static int quantize(const Strata &app) { return app.quantize(); }
 };
 
 }  // namespace strata::test
@@ -503,10 +505,24 @@ TEST(ui_the_value_encoder_is_the_tempo_and_a_refused_transport_is_recorded) {
     // clamps to the MAXIMUM instead of the minimum. An encoder event carries a click or two, so
     // nothing on the panel can produce one -- but it is a latent sign bug rather than a safe
     // idiom, and a test that fed it -5000 would be pinning a value no hand can reach.
-    for (int i = 0; i < 1200; i++) app.on_encoder(4, -1);
+    //
+    // Pumped as it goes, because a tempo click now also POSTS `Cmd::set_tempo` -- the project is
+    // where the tempo is saved, and the engine re-derives the tempo-synced delay from it. 4,200
+    // clicks with no audio block in between would overflow the command ring and the drops would
+    // land on whatever the next test posted. On the unit a block runs every 1.33 ms, so a hand
+    // cannot get more than one or two clicks ahead of the drain.
+    for (int i = 0; i < 1200; i++) {
+        app.on_encoder(4, -1);
+        if ((i & 63) == 63) pump();
+    }
+    pump();
     CHECK_EQ(int(UiProbe::tempo_tenths(app)), 200);
     CHECK_NEAR(host.tempo(), 20.0f, 0.01);
-    for (int i = 0; i < 3000; i++) app.on_encoder(4, +1);
+    for (int i = 0; i < 3000; i++) {
+        app.on_encoder(4, +1);
+        if ((i & 63) == 63) pump();
+    }
+    pump();
     CHECK_EQ(int(UiProbe::tempo_tenths(app)), 3000);
     CHECK_NEAR(host.tempo(), 300.0f, 0.01);
 
@@ -1420,4 +1436,274 @@ TEST(ui_a_machine_id_this_build_does_not_have_is_refused) {
     CHECK(app_engine().status().refused.load(std::memory_order_relaxed) > refused);
     CHECK_EQ(int(app_engine().machine_id(0)), int(MachineId::kick));   // unchanged
     (void)app;
+}
+
+// MIXER mode, on a named page. Walked rather than set, because `mixer_bank_` is UI state that
+// `fresh()` does not reset -- it is where the user left the mode, which is the right behaviour
+// and means a test pressing the selection key a fixed number of times lands wherever the test
+// before it had got to. That cost half an hour: the routing page's test was editing the master.
+void mixer_page(Strata &app, int page) {
+    app.on_key(ENAGA_KEY_F7, true);
+    app.on_key(ENAGA_KEY_F7, false);
+    for (int guard = 0; guard < 12 && UiProbe::mixer_bank(app) != page; guard++) {
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+    }
+    CHECK_EQ(UiProbe::mixer_bank(app), page);
+}
+
+// PROJECT mode's SETUP page, on the octave keys.
+void setup_page(Strata &app, bool on) {
+    app.on_key(ENAGA_KEY_F3, true);
+    app.on_key(ENAGA_KEY_F3, false);
+    app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, true);
+    app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, false);
+    CHECK_EQ(UiProbe::project_setup(app), on);
+}
+
+// --- the sends, the master and the SETUP page -------------------------------------------------
+//
+// FIXED. `Cmd::set_sends` and `Cmd::set_master` had no handler AND no caller: nothing in `app/`
+// posted either, so every delay and reverb setting and docs/SPEC.md's "Master DJ filter" was
+// frozen at a compile-time default for the life of the app. These pin the gestures that reach
+// them.
+
+TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
+    Strata &app = fresh();
+
+    mixer_page(app, 0);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
+
+    // The selection keys page through: two pages of faders, then DLY, REV, ROUTE and MST.
+    for (int i = 1; i < 6; i++) {
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+        CHECK_EQ(UiProbe::mixer_bank(app), i);
+    }
+    // And it wraps rather than sticking.
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+    CHECK_EQ(UiProbe::mixer_bank(app), 0);
+    app.on_key(ENAGA_KEY_SELECT_LEFT, true);
+    app.on_key(ENAGA_KEY_SELECT_LEFT, false);
+    CHECK_EQ(UiProbe::mixer_bank(app), 5);
+}
+
+TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    mixer_page(app, 2);                                // DLY
+
+    // B is the feedback. Two counts per click, so ten clicks is twenty counts.
+    const int before = int(engine.project().settings.sends[int(SendField::delay_feedback)]);
+    app.on_encoder(1, +10);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.sends[int(SendField::delay_feedback)]), before + 20);
+    CHECK_NEAR(engine.sends().delay_feedback, float(before + 20) / 127.0f * 0.95f, 1e-6);
+
+    // And the edit dirtied the PROJECT, which is the file that now holds it.
+    CHECK(app_storage().dirty());
+
+    // A is the delay's TIME, and one click is one DIVISION rather than one count: the file
+    // stores a division because docs/SPEC.md makes send A tempo-synced.
+    const int division = delay_division_index(engine.project().settings.sends[0]);
+    app.on_encoder(0, +1);
+    pump(2);
+    CHECK_EQ(delay_division_index(engine.project().settings.sends[0]), division + 1);
+
+    // The top and the bottom of the division list HOLD rather than wrapping: a delay that
+    // jumped from a bar to a 32nd because the knob went one click too far would not be a
+    // musical control.
+    app.on_encoder(0, +30);
+    pump(2);
+    CHECK_EQ(delay_division_index(engine.project().settings.sends[0]), kDelayDivisions - 1);
+    app.on_encoder(0, -30);
+    pump(2);
+    CHECK_EQ(delay_division_index(engine.project().settings.sends[0]), 0);
+}
+
+TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    mixer_page(app, 4);                                // ROUTE
+
+    // A is the ping-pong switch: either direction throws it, because a switch is not a knob.
+    CHECK(engine.sends().delay_ping_pong);
+    app.on_encoder(0, -1);
+    pump(2);
+    CHECK(!engine.sends().delay_ping_pong);
+    app.on_encoder(0, +1);
+    pump(2);
+    CHECK(engine.sends().delay_ping_pong);
+
+    // C and D are empty -- ten send fields do not divide into four. Turning them changes
+    // nothing and, in particular, does not fall through to the track faders below.
+    const uint32_t refused_before = engine.status().refused.load(std::memory_order_relaxed);
+    const float level_before = engine.level(0);
+    app.on_encoder(2, +5);
+    app.on_encoder(3, +5);
+    pump(2);
+    CHECK_NEAR(engine.level(0), level_before, 1e-6);
+    CHECK_EQ(int(engine.status().refused.load(std::memory_order_relaxed) - refused_before), 0);
+}
+
+TEST(ui_f1_and_value_is_the_master_dj_filter) {
+    // docs/SPEC.md's key table: VALUE with F1 is the "Master DJ filter". It held the record
+    // quantize amount until the master had any settable field at all.
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+
+    CHECK_NEAR(engine.master().dj, 0.0f, 1e-6);        // the flat, bypassed centre
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(4, +16);
+    pump(2);
+    CHECK_NEAR(engine.master().dj, 32.0f / 63.0f, 1e-6);   // above centre: a high-pass
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::dj)]), 96);
+
+    app.on_encoder(4, -60);
+    pump(2);
+    CHECK_NEAR(engine.master().dj, -1.0f, 1e-6);           // and it clamps at full low-pass
+    app.on_key(ENAGA_KEY_F1, false);
+
+    // The TEMPO did not move with it, which is the whole point of the modifier.
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1300);
+}
+
+TEST(ui_the_tempo_is_posted_to_the_project_and_refused_under_an_external_clock) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    FakeHost &host = FakeHost::the();
+
+    // A tempo click reaches PROJECT.BIN's field, which nothing wrote before: a project saved at
+    // 142 reopened at 130 for ever.
+    app.on_encoder(4, +120);
+    pump(2);
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1420);
+    CHECK_EQ(int(engine.project().settings.tempo_centi_bpm), 14200);
+    CHECK(app_storage().dirty());
+
+    // And the tempo-synced delay followed it, without the division moving.
+    const float at_142 = engine.sends().delay_seconds;
+    const int division = delay_division_index(engine.project().settings.sends[0]);
+    app.on_encoder(4, -420);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.tempo_centi_bpm), 10000);
+    CHECK(engine.sends().delay_seconds > at_142 * 1.3f);
+    CHECK_EQ(delay_division_index(engine.project().settings.sends[0]), division);
+
+    // Under an outside clock the knob is REFUSED rather than moved and then ignored
+    // (docs/SPEC.md: VALUE "shows EXT and refuses edits when CLOCK SRC is not INTERNAL").
+    // Before this the app's idea of the tempo drifted from the unit's with every click.
+    host.set_source(ENAGA_CLOCK_MIDI);
+    const int tenths = int(UiProbe::tempo_tenths(app));
+    const int tempo_calls = host.control_calls(ENAGA_CLOCK_TEMPO);
+    app.on_encoder(4, +50);
+    pump(2);
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), tenths);
+    CHECK_EQ(int(engine.project().settings.tempo_centi_bpm), 10000);
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_TEMPO), tempo_calls);
+    CHECK(UiProbe::clock_refused(app));
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+}
+
+TEST(ui_a_loaded_project_brings_its_tempo_with_it) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    FakeHost &host = FakeHost::the();
+
+    // A load writes the project through `project_for_load` and posts `Cmd::project_loaded`,
+    // which is what the card side does. The tempo field is the one being tested.
+    Project &incoming = engine.project_for_load();
+    incoming.settings.tempo_centi_bpm = 14537;
+    post_cmd(Cmd::project_loaded);
+    pump(2);
+
+    // Adopted on the next update pass: the clock set, and the UI's own number with it.
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1453);
+    CHECK_NEAR(host.tempo(), 145.37f, 0.01);
+
+    // And it is adopted ONCE: further passes must not keep setting the clock, or the knob could
+    // never move off a loaded project's tempo.
+    const int tempo_calls = host.control_calls(ENAGA_CLOCK_TEMPO);
+    pump(4);
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_TEMPO), tempo_calls);
+
+    app.on_encoder(4, +10);                            // ten clicks, so one BPM
+    pump(4);
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1463);   // and the echo did not drag it back
+    CHECK_EQ(int(engine.project().settings.tempo_centi_bpm), 14630);
+}
+
+TEST(ui_the_setup_page_holds_the_quantize_amount) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+
+    app.on_key(ENAGA_KEY_F3, true);                    // PROJECT
+    app.on_key(ENAGA_KEY_F3, false);
+    CHECK(!UiProbe::project_setup(app));
+
+    // The octave keys, which do nothing else in this mode (a recorded deviation: every key in
+    // docs/SPEC.md's table is taken, plain and with F1).
+    setup_page(app, true);
+
+    // A is the record quantize amount, which lived in `app/` alone and so was lost on every
+    // restart although PROJECT.BIN has a field for it. Five per click.
+    CHECK_EQ(UiProbe::quantize(app), 100);
+    // In ONE event, which is the point of the command carrying a delta: six clicks computed on
+    // this side would all have read the same stale 100 and only the last would have landed.
+    app.on_encoder(0, -6);
+    pump(2);
+    CHECK_EQ(UiProbe::quantize(app), 70);
+    CHECK_EQ(int(engine.project().settings.quantize), 70);
+    CHECK(app_storage().dirty());
+
+    // It clamps at both ends rather than wrapping.
+    app.on_encoder(0, -40);
+    pump(2);
+    CHECK_EQ(UiProbe::quantize(app), 0);
+    app.on_encoder(0, +40);
+    pump(2);
+    CHECK_EQ(UiProbe::quantize(app), 100);
+
+    // B, C and D are not settings here: the other three on the page are the USER'S, in the
+    // Enaga menu, and <enaga/clock.hpp> and <enaga/midi.hpp> expose no way to write them. In
+    // particular they must not fall through to PROJECT mode's key and scale encoders.
+    const int root_before = int(engine.pattern().root);
+    const int scale_before = int(engine.pattern().scale);
+    app.on_encoder(1, +5);
+    app.on_encoder(2, +5);
+    app.on_encoder(3, +5);
+    pump(2);
+    CHECK_EQ(UiProbe::quantize(app), 100);
+    CHECK_EQ(int(engine.pattern().root), root_before);
+    CHECK_EQ(int(engine.pattern().scale), scale_before);
+
+    setup_page(app, false);
+}
+
+// Every mode draws. The SETUP page is new and reads the clock and the MIDI channel, so it goes
+// through the same check the other screens do: a draw that touched a null machine or ran off a
+// buffer would show up here and nowhere else until a unit was in hand.
+TEST(ui_the_setup_page_and_the_mixer_pages_draw) {
+    Strata &app = fresh();
+    enaga::Canvas canvas(g_pixels);
+
+    setup_page(app, true);
+    app.draw(canvas);
+
+    FakeHost &host = FakeHost::the();
+    const int sources[] = {ENAGA_CLOCK_MIDI, ENAGA_CLOCK_SYNC, ENAGA_CLOCK_INTERNAL};
+    for (int i = 0; i < 3; i++) {
+        host.set_source(sources[i]);
+        app.draw(canvas);
+    }
+    setup_page(app, false);
+
+    // And every MIXER page, for the same reason.
+    for (int page = 0; page < 6; page++) {
+        mixer_page(app, page);
+        app.draw(canvas);
+    }
+    CHECK(true);        // it did not fault, which is the claim
 }

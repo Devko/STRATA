@@ -129,6 +129,18 @@ struct ChainEntry {
 constexpr uint16_t kTempoCentiMin = 2000;     // 20.00 BPM
 constexpr uint16_t kTempoCentiMax = 30000;    // 300.00 BPM
 
+// How many send and master fields a file holds. Stated here rather than taken from
+// dsp/buses.hpp's enums because core/ cannot include dsp/ -- dsp/buses.hpp reaches Enaga and
+// CLAUDE.md says core/ never does. dsp/buses.hpp static_asserts that the two agree, so the day
+// a field is added the build stops here rather than writing a short section.
+constexpr int kSendFields = 10;
+constexpr int kMasterFields = 4;
+
+// The delay's default division: dotted 1/8, index 5 of dsp/buses.hpp's table, as the byte an
+// encoder at that position produces. Named here because `ProjectSettings` needs it as an
+// initialiser and a bare 64 next to nine other numbers says nothing.
+constexpr uint8_t kDefaultDelayDivision = 64;
+
 // Settings that belong to the project rather than to a pattern.
 struct ProjectSettings {
     uint16_t tempo_centi_bpm = 13000;    // 130.00 BPM; Enaga's clock takes BPM x 100
@@ -144,6 +156,25 @@ struct ProjectSettings {
 
     uint8_t chain_length = 0;            // how many chain entries are in use
     bool chain_enabled = false;
+
+    // The two send effects and the master bus, as encoder bytes rather than as the floats the
+    // mixer runs on. One byte per field, in dsp/buses.hpp's `SendField` and `MasterField`
+    // order, which is why those two enums are declared permanent: these indices reach a file.
+    //
+    // Bytes, not floats, for three reasons. The encoder produces a byte, so a knob round-trips
+    // through a save EXACTLY rather than coming back a quantisation step away. A byte cannot
+    // hold a NaN or an infinity, so a damaged file cannot hand the mixer a coefficient that
+    // poisons every later block. And the serializer has no float method, so storing one would
+    // mean bit-casting through a buffer -- which is the thing CLAUDE.md forbids.
+    //
+    // dsp/buses.hpp owns the byte -> value mapping, because only it knows what each field
+    // means; `delay_division` is not even a time until the tempo is known.
+    // The bytes that reproduce dsp/buses.hpp's documented defaults through that mapping:
+    // dotted 1/8, 40% feedback, mid tone, ping-pong on, full return, no delay into the reverb,
+    // a 2 s reverb, mid damping, a 180 Hz input high-pass, full return.
+    uint8_t sends[kSendFields] = {kDefaultDelayDivision, 53, 64, 127, 127, 0, 58, 64, 61, 127};
+    // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out.
+    uint8_t master[kMasterFields] = {64, 38, 101, 127};
 };
 
 struct Project {
@@ -206,6 +237,12 @@ bool bank_file_name(int bank, char *out, int max);
 constexpr uint16_t kProjectVersion = 1;
 constexpr uint16_t kSectionProjectSettings = 1;
 constexpr uint16_t kSectionProjectChain = 2;
+// The sends and the master. OPTIONAL on read: a PROJECT.BIN written before it existed has two
+// sections and still loads, with the defaults above. That is what the format was built for --
+// the section table is a lookup by id, so an older build reading a file with this section
+// simply does not ask for it. The version therefore does NOT move: the meaning of no existing
+// byte has changed, which is the only thing kProjectVersion tracks.
+constexpr uint16_t kSectionProjectMixer = 3;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;
@@ -223,7 +260,7 @@ constexpr uint16_t kSectionBankPatterns = 1;
 
 // PROJECT.BIN: settings, the chain, and which pattern was live. `project_read` touches nothing
 // else -- the patterns come from the bank files, and app/ reads this file first, so a damaged
-// 251 bytes must not cost 128 patterns that are about to load.
+// 277 bytes must not cost 128 patterns that are about to load.
 uint32_t project_bytes();
 SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t capacity,
                               uint32_t *written = nullptr);

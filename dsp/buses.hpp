@@ -42,6 +42,7 @@
 #include <enaga/dsp.hpp>
 
 #include "chain.hpp"
+#include "project.hpp"
 #include "track.hpp"
 
 namespace strata {
@@ -64,6 +65,36 @@ struct SendSettings {
     bool operator==(const SendSettings &) const = default;
 };
 
+// Which field `Cmd::set_sends` is carrying. Next to the struct on purpose: a field list and the
+// indices that name it drift apart the moment they live in different files.
+//
+// **These numbers reach PROJECT.BIN**, so they are permanent in the same way core/scale's scale
+// ids and core/project's MachineId are: new fields go on the END. An index this build does not
+// have is refused and counted rather than writing somewhere unintended.
+enum class SendField : uint8_t {
+    delay_seconds = 0,
+    delay_feedback,
+    delay_tone,
+    delay_ping_pong,
+    delay_level,
+    delay_to_reverb,
+    reverb_decay_s,
+    reverb_damping,
+    reverb_high_pass_hz,
+    reverb_level,
+    count
+};
+
+// Write one field, clamped to the range its comment above states. False for an index this build
+// does not have, so the caller can count the refusal.
+bool send_field_set(SendSettings &settings, uint8_t field, float value);
+
+// What it currently holds, for the screen. 0 for an unknown index.
+float send_field_get(const SendSettings &settings, uint8_t field);
+
+// Three upper-case characters, for the screen; "---" for an unknown index.
+const char *send_field_name(uint8_t field);
+
 // The master chain.
 struct MasterSettings {
     float dj = 0.0f;            // -1 full low-pass ... 0 flat (and bypassed) ... +1 full high-pass
@@ -73,6 +104,68 @@ struct MasterSettings {
 
     bool operator==(const MasterSettings &) const = default;
 };
+
+// Which field `Cmd::set_master` is carrying. Permanent, and on disk, for the same reason as
+// SendField above.
+enum class MasterField : uint8_t { dj = 0, compressor, limit, level, count };
+
+bool master_field_set(MasterSettings &settings, uint8_t field, float value);
+float master_field_get(const MasterSettings &settings, uint8_t field);
+const char *master_field_name(uint8_t field);
+
+// --- the encoder domain, and the file's ----------------------------------------------------
+//
+// Every field above is a BYTE under the encoder and in PROJECT.BIN, and a float only once it
+// reaches the mixer. core/project.hpp holds the bytes; this is the only place that knows what
+// one means. The asserts are what stop a field being added to one side alone.
+static_assert(kSendFields == int(SendField::count),
+              "core/project.hpp's send byte count and SendField have diverged");
+static_assert(kMasterFields == int(MasterField::count),
+              "core/project.hpp's master byte count and MasterField have diverged");
+
+// The delay is TEMPO-SYNCED (docs/SPEC.md), so its byte is a division of the beat and not a
+// time: the same project at 128 and at 140 BPM must give a delay that still lands on the grid.
+// Seconds arrive in `SendSettings` because dsp/ does not own the tempo (CLAUDE.md).
+constexpr int kDelayDivisions = 10;
+
+// Which division a byte names, and the byte an encoder sitting on that division produces.
+int delay_division_index(uint8_t byte);
+uint8_t delay_division_byte(int index);
+
+// Four characters at most, for the screen: "1/16", "1/8D", "1/1". "----" out of range.
+const char *delay_division_name(uint8_t byte);
+
+// The division as a time. `beat_seconds` is 60 / BPM, which only `app/` knows.
+float delay_division_seconds(uint8_t byte, float beat_seconds);
+
+// Move a field's byte by `delta` of ITS OWN UNITS, clamped to 0-127. For almost every field a
+// unit is one count of the byte; for the delay's time it is one DIVISION, and for the ping-pong
+// switch only the sign is read.
+//
+// A delta rather than a value because the UI must not compute the next byte itself. The byte
+// lives in the project, on the audio side, and the audio side applies a command on its next
+// block -- so a hand turning the encoder sixteen times in one pass would read the same stale
+// byte sixteen times and the last post would win, moving the knob by one click instead of
+// sixteen. app/commands.hpp states the rule for every encoder gesture; these are no different.
+uint8_t send_byte_step(uint8_t field, uint8_t byte, int delta);
+uint8_t master_byte_step(uint8_t field, uint8_t byte, int delta);
+
+// How many of those units one encoder CLICK is worth. Two for a knob, so its whole range is 64
+// clicks -- the same feel as a macro -- and one for the two fields whose unit is already a
+// click's worth. The UI scales by this; the engine does not, so that any byte can be reached in
+// one command and a test can ask for an exact value.
+int send_field_click(uint8_t field);
+constexpr int kMasterFieldClick = 2;
+
+// One field's physical value from its byte. `beat_seconds` is read for
+// `SendField::delay_seconds` and ignored for every other field.
+float send_value_from_byte(uint8_t field, uint8_t byte, float beat_seconds);
+float master_value_from_byte(uint8_t field, uint8_t byte);
+
+// And the whole struct from the bytes a project holds -- `kSendFields` / `kMasterFields` of
+// them. This is how a loaded file, and a fresh project, reach the mixer.
+void sends_from_bytes(SendSettings &settings, const uint8_t *bytes, float beat_seconds);
+void master_from_bytes(MasterSettings &settings, const uint8_t *bytes);
 
 class Mixer {
 public:

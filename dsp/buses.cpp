@@ -29,6 +29,270 @@
 #include "masterloops.h"
 
 namespace strata {
+namespace {
+
+float clamp_to(float value, float low, float high) {
+    const float lowered = value < low ? low : value;
+    return lowered > high ? high : lowered;
+}
+
+}  // namespace
+
+// --- the send and master fields, by index ---------------------------------------------------
+//
+// Every setter CLAMPS to the range its field's comment in buses.hpp states, and that is the point
+// of routing them through here rather than letting a caller assign: a reverb decay of 0 is a
+// divide waiting to happen and a feedback of 1.0 is a delay that never stops growing. The UI
+// clamps too, but the UI is not the only caller -- a loaded file is one, and a file can hold
+// anything.
+
+bool send_field_set(SendSettings &settings, uint8_t field, float value) {
+    switch (SendField(field)) {
+        case SendField::delay_seconds:
+            settings.delay_seconds = clamp_to(value, 0.001f, Mixer::kMaxDelaySeconds);
+            return true;
+        case SendField::delay_feedback:
+            settings.delay_feedback = clamp_to(value, 0.0f, 0.95f);
+            return true;
+        case SendField::delay_tone:
+            settings.delay_tone = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        case SendField::delay_ping_pong:
+            settings.delay_ping_pong = value >= 0.5f;
+            return true;
+        case SendField::delay_level:
+            settings.delay_level = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        case SendField::delay_to_reverb:
+            settings.delay_to_reverb = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        case SendField::reverb_decay_s:
+            settings.reverb_decay_s = clamp_to(value, 0.2f, 30.0f);
+            return true;
+        case SendField::reverb_damping:
+            settings.reverb_damping = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        case SendField::reverb_high_pass_hz:
+            settings.reverb_high_pass_hz = clamp_to(value, 20.0f, 2000.0f);
+            return true;
+        case SendField::reverb_level:
+            settings.reverb_level = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        default:
+            return false;
+    }
+}
+
+float send_field_get(const SendSettings &settings, uint8_t field) {
+    switch (SendField(field)) {
+        case SendField::delay_seconds:       return settings.delay_seconds;
+        case SendField::delay_feedback:      return settings.delay_feedback;
+        case SendField::delay_tone:          return settings.delay_tone;
+        case SendField::delay_ping_pong:     return settings.delay_ping_pong ? 1.0f : 0.0f;
+        case SendField::delay_level:         return settings.delay_level;
+        case SendField::delay_to_reverb:     return settings.delay_to_reverb;
+        case SendField::reverb_decay_s:      return settings.reverb_decay_s;
+        case SendField::reverb_damping:      return settings.reverb_damping;
+        case SendField::reverb_high_pass_hz: return settings.reverb_high_pass_hz;
+        case SendField::reverb_level:        return settings.reverb_level;
+        default:                             return 0.0f;
+    }
+}
+
+const char *send_field_name(uint8_t field) {
+    static const char *const names[] = {"TIM", "FBK", "TON", "PNG", "LVL",
+                                        "D>R", "DEC", "DMP", "HPF", "LVL"};
+    return field < uint8_t(SendField::count) ? names[field] : "---";
+}
+
+bool master_field_set(MasterSettings &settings, uint8_t field, float value) {
+    switch (MasterField(field)) {
+        case MasterField::dj:
+            settings.dj = clamp_to(value, -1.0f, 1.0f);      // signed: low-pass below 0
+            return true;
+        case MasterField::compressor:
+            settings.compressor = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        case MasterField::limit:
+            // The same window `resolve_master` honours, not a wider one: a field that reads back
+            // 0.05 while the limiter is running at 0.1 is a lie to whoever draws it. Not down to
+            // 0, because a threshold of zero is a limiter that removes everything.
+            settings.limit = clamp_to(value, 0.1f, 0.98f);
+            return true;
+        case MasterField::level:
+            settings.level = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        default:
+            return false;
+    }
+}
+
+float master_field_get(const MasterSettings &settings, uint8_t field) {
+    switch (MasterField(field)) {
+        case MasterField::dj:         return settings.dj;
+        case MasterField::compressor: return settings.compressor;
+        case MasterField::limit:      return settings.limit;
+        case MasterField::level:      return settings.level;
+        default:                      return 0.0f;
+    }
+}
+
+const char *master_field_name(uint8_t field) {
+    static const char *const names[] = {"DJ", "CMP", "LIM", "LVL"};
+    return field < uint8_t(MasterField::count) ? names[field] : "---";
+}
+
+// --- the encoder domain ---------------------------------------------------------------------
+//
+// A byte is what the encoder produces and what PROJECT.BIN stores (core/project.hpp says why).
+// These turn one into the value the mixer runs on. They are CONTROL RATE at most -- a knob move
+// or a project load -- so the two exponential fields are allowed their exp2.
+
+namespace {
+
+// 0..127 as 0..1. 1/127 rather than 1/128 so that 127 is exactly 1.0: a level knob at the top
+// must be unity gain, not 0.992 of it.
+constexpr float kByteScale = 1.0f / 127.0f;
+
+float byte_unit(uint8_t byte) { return float(byte > 127 ? 127 : byte) * kByteScale; }
+
+// Exponential, for the two fields where equal encoder steps should be equal musical steps: a
+// reverb decay knob that is linear in seconds spends four fifths of its travel in cathedrals.
+float byte_exponential(uint8_t byte, float low, float octaves) {
+    return low * enaga::dsp::exp2(octaves * byte_unit(byte));
+}
+
+// The delay's divisions, in BEATS -- quarter notes, which is what a tempo in BPM counts.
+// Straight, triplet and dotted, shortest first, so that turning the encoder up makes the delay
+// longer. 1/1 is a bar of 4/4; at 130 BPM that is 1.85 s, just inside Mixer::kMaxDelaySeconds,
+// and a slower tempo is clamped there by `send_field_set`.
+constexpr float kDivisionBeats[kDelayDivisions] = {
+    0.125f,          // 1/32
+    1.0f / 6.0f,     // 1/16T
+    0.25f,           // 1/16
+    1.0f / 3.0f,     // 1/8T
+    0.5f,            // 1/8
+    0.75f,           // 1/8D
+    1.0f,            // 1/4
+    1.5f,            // 1/4D
+    2.0f,            // 1/2
+    4.0f,            // 1/1
+};
+
+
+}  // namespace
+
+int delay_division_index(uint8_t byte) {
+    const int index = int(byte > 127 ? 127 : byte) * kDelayDivisions / 128;
+    return index < kDelayDivisions ? index : kDelayDivisions - 1;
+}
+
+uint8_t delay_division_byte(int index) {
+    const int clamped = index < 0 ? 0 : (index >= kDelayDivisions ? kDelayDivisions - 1 : index);
+    // The MIDDLE of the band, not its edge. The bands are 12.8 bytes wide, not 12 -- 128 does
+    // not divide by ten -- so this is (index + 1/2) * 128/10 in integers. Rounding it down to
+    // twelve put the top division's byte in the band below it, and `delay_division_byte(9)`
+    // read back as division 8.
+    return uint8_t((clamped * 128 + 64) / kDelayDivisions);
+}
+
+const char *delay_division_name(uint8_t byte) {
+    static const char *const names[kDelayDivisions] = {"1/32", "1/16T", "1/16", "1/8T", "1/8",
+                                                       "1/8D", "1/4",   "1/4D", "1/2",  "1/1"};
+    return names[delay_division_index(byte)];
+}
+
+float delay_division_seconds(uint8_t byte, float beat_seconds) {
+    return kDivisionBeats[delay_division_index(byte)] * beat_seconds;
+}
+
+namespace {
+
+uint8_t stepped(uint8_t byte, int delta) {
+    const int value = int(byte) + delta;
+    return uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value));
+}
+
+}  // namespace
+
+int send_field_click(uint8_t field) {
+    switch (SendField(field)) {
+        case SendField::delay_seconds:   return 1;    // a division
+        case SendField::delay_ping_pong: return 1;    // a sign
+        default:                         return 2;    // a knob
+    }
+}
+
+uint8_t send_byte_step(uint8_t field, uint8_t byte, int delta) {
+    switch (SendField(field)) {
+        case SendField::delay_seconds: {
+            // One click is one DIVISION, and the ends HOLD rather than wrap: a delay that jumps
+            // from a bar to a 32nd because the knob went one click too far is not a musical
+            // control.
+            const int index = delay_division_index(byte) + delta;
+            return delay_division_byte(index < 0 ? 0
+                                                 : (index >= kDelayDivisions ? kDelayDivisions - 1
+                                                                             : index));
+        }
+        case SendField::delay_ping_pong:
+            // A switch, not a knob: either direction throws it.
+            return delta > 0 ? 127 : (delta < 0 ? 0 : byte);
+        default:
+            return field < uint8_t(SendField::count) ? stepped(byte, delta) : byte;
+    }
+}
+
+uint8_t master_byte_step(uint8_t field, uint8_t byte, int delta) {
+    return field < uint8_t(MasterField::count) ? stepped(byte, delta) : byte;
+}
+
+float send_value_from_byte(uint8_t field, uint8_t byte, float beat_seconds) {
+    switch (SendField(field)) {
+        case SendField::delay_seconds:   return delay_division_seconds(byte, beat_seconds);
+        case SendField::delay_feedback:  return byte_unit(byte) * 0.95f;
+        case SendField::delay_tone:      return byte_unit(byte);
+        // A switch, not a knob: the upper half of the encoder's travel is on.
+        case SendField::delay_ping_pong: return byte >= 64 ? 1.0f : 0.0f;
+        case SendField::delay_level:     return byte_unit(byte);
+        case SendField::delay_to_reverb: return byte_unit(byte);
+        // 0.2 s to 30 s: log2(150) octaves.
+        case SendField::reverb_decay_s:  return byte_exponential(byte, 0.2f, 7.2288f);
+        case SendField::reverb_damping:  return byte_unit(byte);
+        // 20 Hz to 2 kHz: log2(100) octaves.
+        case SendField::reverb_high_pass_hz: return byte_exponential(byte, 20.0f, 6.6439f);
+        case SendField::reverb_level:    return byte_unit(byte);
+        default:                         return 0.0f;
+    }
+}
+
+float master_value_from_byte(uint8_t field, uint8_t byte) {
+    switch (MasterField(field)) {
+        // The one SIGNED field. 64 is exactly 0, which is the DJ filter's flat, bypassed centre,
+        // so the two halves get 64 and 63 positions rather than a centre that is slightly on.
+        case MasterField::dj:
+            return byte <= 64 ? (float(byte) - 64.0f) * (1.0f / 64.0f)
+                              : float(byte - 64) * (1.0f / 63.0f);
+        case MasterField::compressor: return byte_unit(byte);
+        case MasterField::limit:      return 0.1f + byte_unit(byte) * 0.88f;
+        case MasterField::level:      return byte_unit(byte);
+        default:                      return 0.0f;
+    }
+}
+
+void sends_from_bytes(SendSettings &settings, const uint8_t *bytes, float beat_seconds) {
+    if (bytes == nullptr) return;
+    for (uint8_t f = 0; f < uint8_t(SendField::count); f++) {
+        send_field_set(settings, f, send_value_from_byte(f, bytes[f], beat_seconds));
+    }
+}
+
+void master_from_bytes(MasterSettings &settings, const uint8_t *bytes) {
+    if (bytes == nullptr) return;
+    for (uint8_t f = 0; f < uint8_t(MasterField::count); f++) {
+        master_field_set(settings, f, master_value_from_byte(f, bytes[f]));
+    }
+}
+
 namespace ed = enaga::dsp;
 
 namespace {

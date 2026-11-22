@@ -24,11 +24,16 @@
 //
 //   - core/project.hpp's own reasoning for having three files: "saving writes only what
 //     changed". Scene edits and pattern edits happen at different times.
-//   - PROJECT.BIN's layout is fixed at 251 bytes and its format is pinned by tests. Adding
+//   - PROJECT.BIN's layout was fixed at 251 bytes and its format is pinned by tests. Adding
 //     required sections would refuse every file an M4 build wrote, and adding optional ones
-//     would need a reader that tolerates a missing section, which `find_sections` deliberately
-//     does not. A separate file whose absence means "no scenes" costs nothing and breaks
-//     nothing.
+//     needed a reader that tolerates a missing section, which `find_sections` did not then do.
+//     A separate file whose absence means "no scenes" costs nothing and breaks nothing.
+//
+//     Since then the sends and the master DID go into PROJECT.BIN, as an OPTIONAL third
+//     section, and `find_sections` grew the tolerance to allow it (core/project.cpp says how).
+//     The reasoning above still decides THIS file: fourteen bytes that change when a knob moves
+//     belong with the tempo and the chain, while 2.4 KiB of scenes and macro setup do not, and
+//     "saving writes only what changed" is the whole point of there being four files.
 //
 // ## Where this runs
 //

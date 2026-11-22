@@ -29,6 +29,7 @@
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
+#include <enaga/midi.hpp>
 
 #include <cstdint>
 
@@ -70,6 +71,65 @@ void append_hex4(char *&out, uint32_t value) {
         *out++ = char(nibble < 10 ? '0' + nibble : 'A' + (nibble - 10));
     }
 }
+
+// --- the MIXER's pages ----------------------------------------------------------------------
+//
+// Two pages of track faders and then the sends and the master, four encoders at a time.
+// docs/SPEC.md gives the sends no gesture of their own and the master only F1 + VALUE for the DJ
+// filter, so this is a DEVIATION, recorded in docs/REVIEW.md: fourteen settings that reach a
+// file have to be reachable from the panel, and MIXER is the mode that is already about the
+// buses. The DJ filter is on F1 + VALUE as well, as the spec requires.
+//
+// `field` indexes dsp/buses.hpp's SendField, or MasterField on the page marked `master`. -1 is
+// an empty slot, which the routing page has two of: ten send fields do not divide into four.
+struct MixerPage {
+    const char *name;
+    bool master;
+    int8_t field[4];
+};
+
+constexpr int kMixerTrackPages = 2;
+
+constexpr MixerPage kMixerPages[] = {
+    {"TRK 1-4", false, {-1, -1, -1, -1}},        // the faders, handled on their own
+    {"TRK 5-8", false, {-1, -1, -1, -1}},
+    {"DLY", false, {int8_t(SendField::delay_seconds), int8_t(SendField::delay_feedback),
+                    int8_t(SendField::delay_tone), int8_t(SendField::delay_level)}},
+    {"REV", false, {int8_t(SendField::reverb_decay_s), int8_t(SendField::reverb_damping),
+                    int8_t(SendField::reverb_high_pass_hz), int8_t(SendField::reverb_level)}},
+    {"ROUTE", false, {int8_t(SendField::delay_ping_pong), int8_t(SendField::delay_to_reverb),
+                      -1, -1}},
+    {"MST", true, {int8_t(MasterField::dj), int8_t(MasterField::compressor),
+                   int8_t(MasterField::limit), int8_t(MasterField::level)}},
+};
+
+constexpr int kMixerPageCount = int(sizeof(kMixerPages) / sizeof(kMixerPages[0]));
+
+// Every send and master field has a slot on some page. Without this a field added to
+// dsp/buses.hpp would be saved, loaded and completely unreachable -- which is the bug this whole
+// change exists to fix, so it is worth a compile-time check rather than a comment.
+constexpr bool mixer_pages_cover_every_field() {
+    for (int f = 0; f < int(SendField::count); f++) {
+        bool found = false;
+        for (int p = kMixerTrackPages; p < kMixerPageCount; p++) {
+            if (kMixerPages[p].master) continue;
+            for (int slot = 0; slot < 4; slot++) found = found || kMixerPages[p].field[slot] == f;
+        }
+        if (!found) return false;
+    }
+    for (int f = 0; f < int(MasterField::count); f++) {
+        bool found = false;
+        for (int p = kMixerTrackPages; p < kMixerPageCount; p++) {
+            if (!kMixerPages[p].master) continue;
+            for (int slot = 0; slot < 4; slot++) found = found || kMixerPages[p].field[slot] == f;
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
+static_assert(mixer_pages_cover_every_field(),
+              "a send or master field has no MIXER slot, so nothing can reach it");
 
 void append_padded(char *&out, uint32_t value, int width) {
     uint32_t scale = 1;
@@ -166,6 +226,22 @@ constexpr int kTakeBarChoices = int(sizeof kTakeBars / sizeof kTakeBars[0]);
 // The step page shows four of a step's fields at a time, so the selection keys page through
 // them. Derived rather than written down: core/stepedit.hpp owns how many fields there are.
 constexpr int kFieldPages = (kStepFields + 3) / 4;
+
+// The mode's name, for the screen-change log line. Upper case, like everything the device font
+// can draw, and short: a log line is 23 characters.
+const char *mode_name(Mode mode) {
+    switch (mode) {
+        case Mode::grid:     return "GRID";
+        case Mode::edit:     return "EDIT";
+        case Mode::mixer:    return "MIXER";
+        case Mode::project:  return "PROJECT";
+        case Mode::perform:  return "PERFORM";
+        case Mode::keys:     return "KEYS";
+        case Mode::resample: return "RESAMPLE";
+        case Mode::machine:  return "MACHINE";
+        default:             return "?";
+    }
+}
 
 const char *page_name(Page page) {
     switch (page) {
@@ -444,6 +520,17 @@ public:
                     notice(notice_buffer_);
                     break;
                 }
+                if (mode_ == Mode::project) {
+                    // PROJECT mode's SETUP page: the unit's own settings, and the one project
+                    // preference that has nowhere else to live now that F1 + VALUE is the DJ
+                    // filter the spec asks for. A DEVIATION, recorded in docs/REVIEW.md: every
+                    // key in docs/SPEC.md's table is taken, plain and with F1, and the octave
+                    // keys do nothing in this mode -- they were setting GRID's step page, which
+                    // is not on screen here.
+                    project_setup_ = delta > 0;
+                    notice(project_setup_ ? "SETUP" : "PROJECT");
+                    break;
+                }
                 if (shift_) {
                     const int length = int(engine_.pattern().tracks[selected_].length) + delta;
                     mark(GestureKind::length, selected_, 0);
@@ -556,7 +643,9 @@ public:
                 param_page_ = (param_page_ + delta + kPages) % kPages; // SRC/FLTR/AMP/FX
                 break;
             case Mode::mixer:
-                mixer_bank_ = (mixer_bank_ + delta + 2) % 2;           // tracks 1-4 or 5-8
+                // Faders, then the delay, the reverb, the routing and the master.
+                mixer_bank_ =
+                    (mixer_bank_ + delta + kMixerPageCount * 2) % kMixerPageCount;
                 break;
             case Mode::project:
                 // The bank being SHOWN, which is not the bank playing: a queued change is armed
@@ -694,13 +783,37 @@ public:
                 return;
             }
             if (shift_) {
-                // The record quantize amount. The spec gives F1 + VALUE to the master DJ filter,
-                // which is M5's performance layer and does not exist yet; quantize has nowhere
-                // else to live and is useless once recording starts if it cannot be reached
-                // while recording. Whichever of the two moves, it moves then, not now.
-                const int next = quantize_ + delta * 5;
-                quantize_ = next < 0 ? 0 : (next > 100 ? 100 : next);
-                notice("QUANTIZE");
+                // The MASTER DJ FILTER, which is what docs/SPEC.md's key table gives to
+                // F1 + VALUE. It held the record quantize amount until the master had any
+                // settable field at all; quantize moved to PROJECT mode's SETUP page, where
+                // the rest of the unit's preferences are.
+                //
+                // A delta, for the same reason as every other encoder gesture. The notice shows
+                // the byte BEFORE this click, because the one after it does not exist on this
+                // side until the audio side has applied the command -- about 1.3 ms.
+                post_delta(Cmd::set_master, 0, 0, uint8_t(MasterField::dj),
+                           delta * kMasterFieldClick);
+                char *out = notice_buffer_;
+                append(out, "DJ ");
+                const int signed_value =
+                    int(engine_.project().settings.master[int(MasterField::dj)]) - 64;
+                if (signed_value == 0) {
+                    append(out, "OFF");
+                } else {
+                    append(out, signed_value < 0 ? "LP" : "HP");
+                    append_number(out, uint32_t(signed_value < 0 ? -signed_value : signed_value));
+                }
+                *out = 0;
+                notice(notice_buffer_);
+                return;
+            }
+            // REFUSED under an external clock, rather than moved and then ignored. docs/SPEC.md:
+            // VALUE "shows EXT and refuses edits when CLOCK SRC is not INTERNAL". Before this
+            // the knob moved `tempo_tenths_` and Enaga threw the call away, so the app's idea of
+            // the tempo and the unit's drifted apart with every click.
+            if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL) {
+                clock_refused_ = true;
+                notice("EXT CLOCK");
                 return;
             }
             // Clamped as a SIGNED value, before the cast. `tempo_tenths_` is unsigned, so a
@@ -712,8 +825,14 @@ public:
             if (tenths < 200) tenths = 200;                    // Enaga's clock allows 20-300
             if (tenths > 3000) tenths = 3000;
             tempo_tenths_ = uint32_t(tenths);
-            // Main context again, and refused under an external clock.
+            // Main context again.
             clock_refused_ = !enaga::clock::set_tempo(float(tempo_tenths_) * 0.1f);
+            // And the project, which is where the tempo is SAVED. Nothing posted this before, so
+            // `ProjectSettings::tempo_centi_bpm` round-tripped through the serializer while
+            // holding the default for ever: a project saved at 142 reopened at 130. The engine
+            // also re-derives the tempo-synced delay from it.
+            post_tempo(float(tempo_tenths_) * 0.1f);
+            adopted_tempo_centi_ = uint16_t(tempo_tenths_ * 10);
             return;
         }
 
@@ -746,6 +865,18 @@ public:
         if (mode_ == Mode::resample && encoder == 0) {
             const int next = (take_bars_index_ + delta) % kTakeBarChoices;
             take_bars_index_ = next < 0 ? next + kTakeBarChoices : next;
+            return;
+        }
+
+        // The SETUP page: A is the record quantize amount. The other three settings on it --
+        // CLOCK SRC, CLOCK OUT / SYNC OUT and MIDI CH -- are the USER'S, set in the Enaga menu;
+        // <enaga/clock.hpp> and <enaga/midi.hpp> expose no way to write them, so STRATA shows
+        // them and says where they live, which is all docs/SPEC.md's "STRATA only exposes the
+        // settings" can mean.
+        if (mode_ == Mode::project && project_setup_) {
+            if (encoder != 0) return;
+            post_delta(Cmd::set_quantize, 0, 0, 0, delta * 5);
+            notice("QUANTIZE");
             return;
         }
 
@@ -807,17 +938,21 @@ public:
         }
 
         if (mode_ == Mode::mixer) {
-            // A-D are the levels of the four tracks in the current bank.
-            const int track = mixer_bank_ * 4 + encoder;
-            if (track >= kTracks) return;
-            float level = engine_.level(track) + float(delta) * 0.02f;
-            if (level < 0.0f) level = 0.0f;
-            if (level > 1.5f) level = 1.5f;
-            Command command;
-            command.cmd = Cmd::set_track_level;
-            command.track = uint8_t(track);
-            command.f = level;
-            post_command(command);
+            if (mixer_bank_ < kMixerTrackPages) {
+                // A-D are the levels of the four tracks in the current bank.
+                const int track = mixer_bank_ * 4 + encoder;
+                if (track >= kTracks) return;
+                float level = engine_.level(track) + float(delta) * 0.02f;
+                if (level < 0.0f) level = 0.0f;
+                if (level > 1.5f) level = 1.5f;
+                Command command;
+                command.cmd = Cmd::set_track_level;
+                command.track = uint8_t(track);
+                command.f = level;
+                post_command(command);
+                return;
+            }
+            edit_mixer_field(mixer_bank_, encoder, delta);
             return;
         }
 
@@ -1100,7 +1235,7 @@ public:
         timing.speed = Speed(source.speed);
         timing.swing = source.swing == kSwingInherit ? pattern.swing : source.swing;
 
-        const Landing landing = quantize_hit(hit, timing, quantize_);
+        const Landing landing = quantize_hit(hit, timing, quantize());
 
         mark(GestureKind::record, track, 0);     // step 0: one undo level for the whole pass
         Command command;
@@ -1142,6 +1277,25 @@ public:
         // waits on the audio side: a command ring that has not drained simply means "not this
         // pass" (app/storage.hpp).
         storage_.service();
+
+        // The tempo a LOADED project brought with it. PROJECT.BIN has always had the field and
+        // nothing read it, so every project opened at whatever the clock happened to be set to
+        // -- a project saved at 142 came back at 130. Watched here rather than hooked to the end
+        // of a load because a load finishes on the card side, and this is one comparison on a
+        // pass that already does several.
+        //
+        // `adopted_tempo_centi_` is what stops this fighting the knob: a click posts the new
+        // tempo AND records it here, so the engine's copy coming back is not read as a change.
+        {
+            const uint16_t project_centi = engine_.project().settings.tempo_centi_bpm;
+            if (project_centi != adopted_tempo_centi_) {
+                adopted_tempo_centi_ = project_centi;
+                tempo_tenths_ = uint32_t(project_centi) / 10;
+                // Refused under an outside clock, which is not an error: the project's tempo is
+                // simply not what is playing, and the screen already says EXT.
+                clock_refused_ = !enaga::clock::set_tempo(float(project_centi) * 0.01f);
+            }
+        }
 
         // Log transport and clock-source changes. Cheap (a handful of comparisons), only fires on
         // a change, and it is the one thing worth seeing in an emulator run or a unit log: it
@@ -1191,6 +1345,31 @@ public:
                 append_hex4(out, mask);
                 append(out, " u");
                 append_number(out, depth);
+                *out = 0;
+                enaga::log(line);
+            }
+        }
+
+        // Which SCREEN is up, logged on a change for the same reason as the two above: in an
+        // emulator run or a unit log it is the difference between "the app is wedged" and "the
+        // app is on a page I did not expect", and it is what lets a scenario reach a screen
+        // that the emulator cannot otherwise observe -- it exposes key input and no encoders,
+        // so a page walked with the selection keys is all it can see of MIXER and SETUP.
+        {
+            const int screen = int(mode_) * 16 + (mode_ == Mode::mixer ? mixer_bank_
+                                                                       : (project_setup_ ? 1 : 0));
+            if (screen != logged_screen_) {
+                logged_screen_ = screen;
+                char line[24];
+                char *out = line;
+                append(out, "scr ");
+                append(out, mode_name(mode_));
+                if (mode_ == Mode::mixer) {
+                    *out++ = ' ';
+                    append(out, kMixerPages[mixer_bank_].name);
+                } else if (mode_ == Mode::project && project_setup_) {
+                    append(out, " SETUP");
+                }
                 *out = 0;
                 enaga::log(line);
             }
@@ -1378,7 +1557,7 @@ public:
         out = line;
         if (rec_) {
             append(out, "REC Q");
-            append_number(out, uint32_t(quantize_));
+            append_number(out, uint32_t(quantize()));
             append(out, " ");
         }
         if (range_first_ >= 0) {
@@ -1516,7 +1695,130 @@ public:
 
     // --- MIXER: four levels at a time, with meters -----------------------
 
+    // --- MIXER's send and master pages ------------------------------------
+
+    // The byte a slot is currently showing, straight out of the project, which is where the
+    // fourteen of them live (core/project.hpp). There is no app-side copy to drift.
+    uint8_t mixer_byte(int page, int slot) const {
+        const int8_t field = kMixerPages[page].field[slot];
+        if (field < 0) return 0;
+        const ProjectSettings &settings = engine_.project().settings;
+        return kMixerPages[page].master ? settings.master[field] : settings.sends[field];
+    }
+
+    void edit_mixer_field(int page, int slot, int delta) {
+        if (page < 0 || page >= kMixerPageCount || slot < 0 || slot >= 4) return;
+        const int8_t field = kMixerPages[page].field[slot];
+        if (field < 0) return;                       // an empty slot on the routing page
+        const bool master = kMixerPages[page].master;
+
+        // A DELTA, not the next byte: the byte lives in the project on the audio side, so a UI
+        // that computed its own would read the same stale value for every click in a sweep and
+        // only the last one would land. dsp/buses.cpp says what one click is worth here -- two
+        // counts for a knob, one division for the delay's time, a sign for the switch.
+        const int scaled = delta * (master ? kMasterFieldClick : send_field_click(uint8_t(field)));
+        post_delta(master ? Cmd::set_master : Cmd::set_sends, 0, 0, uint8_t(field), scaled);
+        notice(master ? master_field_name(uint8_t(field)) : send_field_name(uint8_t(field)));
+    }
+
+    // What a slot's byte MEANS, as four characters at most: a division, a switch, or the byte.
+    void append_mixer_value(char *&out, int page, int slot) {
+        const int8_t field = kMixerPages[page].field[slot];
+        const uint8_t byte = mixer_byte(page, slot);
+        if (!kMixerPages[page].master && field == int8_t(SendField::delay_seconds)) {
+            append(out, delay_division_name(byte));
+            return;
+        }
+        if (!kMixerPages[page].master && field == int8_t(SendField::delay_ping_pong)) {
+            append(out, byte >= 64 ? "ON" : "OFF");
+            return;
+        }
+        if (kMixerPages[page].master && field == int8_t(MasterField::dj)) {
+            // Signed, and the one field whose centre means "off". Shown as the number the knob
+            // is at so that finding the flat centre again is possible.
+            const int signed_value = int(byte) - 64;
+            if (signed_value == 0) {
+                append(out, "OFF");
+                return;
+            }
+            if (signed_value < 0) {
+                append(out, "LP");
+                append_number(out, uint32_t(-signed_value));
+            } else {
+                append(out, "HP");
+                append_number(out, uint32_t(signed_value));
+            }
+            return;
+        }
+        append_number(out, byte);
+    }
+
+    void draw_mixer_fields(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+
+        append(out, "MIXER ");
+        append(out, kMixerPages[mixer_bank_].name);
+        *out = 0;
+        canvas.text(0, 20, line, 14);
+
+        for (int slot = 0; slot < 4; slot++) {
+            const int8_t field = kMixerPages[mixer_bank_].field[slot];
+            const int x = slot * 32;
+            if (field < 0) {
+                canvas.text(x, 46, "---", 4);
+                continue;
+            }
+            out = line;
+            append(out, kMixerPages[mixer_bank_].master ? master_field_name(uint8_t(field))
+                                                        : send_field_name(uint8_t(field)));
+            *out = 0;
+            canvas.text(x, 46, line, 13);
+
+            out = line;
+            append_mixer_value(out, mixer_bank_, slot);
+            *out = 0;
+            canvas.text(x, 60, line, 15);
+
+            // A bar, so a page of numbers still reads at a glance.
+            const int bar = int(mixer_byte(mixer_bank_, slot)) * 28 / 127;
+            canvas.rect(x + 2, 76, 28, 6, 3);
+            if (bar > 0) canvas.rect(x + 2, 76, bar, 6, 12);
+        }
+
+        // What the delay is actually doing, in milliseconds, which is the one thing a division
+        // does not tell you -- and the number that says whether the tempo-sync is working.
+        if (mixer_bank_ == 2) {
+            out = line;
+            append(out, "TIME ");
+            append_number(out, uint32_t(engine_.sends().delay_seconds * 1000.0f + 0.5f));
+            append(out, " MS");
+            *out = 0;
+            canvas.text(0, 98, line, 10);
+        }
+
+        draw_master_peak(canvas);
+    }
+
+    void draw_master_peak(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const int peak_milli =
+            int(engine_.status().peak_milli.load(std::memory_order_relaxed));
+        append(out, "PEAK ");
+        append_tenths(out, uint32_t(peak_milli));
+        *out = 0;
+        canvas.text(0, 110, line, 11);
+        const int peak_bar = peak_milli * 60 / 1000;
+        canvas.rect(60, 112, peak_bar > 60 ? 60 : (peak_bar < 1 ? 1 : peak_bar), 4,
+                    peak_milli >= 1000 ? 15 : 8);
+    }
+
     void draw_mixer(enaga::Canvas &canvas) {
+        if (mixer_bank_ >= kMixerTrackPages) {
+            draw_mixer_fields(canvas);
+            return;
+        }
         char line[40];
         char *out = line;
 
@@ -1527,9 +1829,6 @@ public:
         append_number(out, uint32_t(mixer_bank_ * 4 + 4));
         *out = 0;
         canvas.text(0, 20, line, 14);
-
-        const Status &status = engine_.status();
-        const int peak_milli = int(status.peak_milli.load(std::memory_order_relaxed));
 
         for (int slot = 0; slot < 4; slot++) {
             const int track = mixer_bank_ * 4 + slot;
@@ -1564,14 +1863,7 @@ public:
         }
 
         // The master peak, as one bar: the only number that says whether it is clipping.
-        out = line;
-        append(out, "PEAK ");
-        append_tenths(out, uint32_t(peak_milli));
-        *out = 0;
-        canvas.text(0, 110, line, 11);
-        const int peak_bar = peak_milli * 60 / 1000;
-        canvas.rect(60, 112, peak_bar > 60 ? 60 : (peak_bar < 1 ? 1 : peak_bar), 4,
-                    peak_milli >= 1000 ? 15 : 8);
+        draw_master_peak(canvas);
     }
 
     // --- shared pieces ----------------------------------------------------
@@ -2020,7 +2312,72 @@ public:
         notice(notice_buffer_);
     }
 
+    // --- PROJECT's SETUP page: the clock, MIDI and the record quantize ----
+
+    static const char *clock_source_name(int source) {
+        switch (source) {
+            case ENAGA_CLOCK_INTERNAL: return "INTERNAL";
+            case ENAGA_CLOCK_MIDI:     return "MIDI";
+            case ENAGA_CLOCK_SYNC:     return "SYNC IN";
+            default:                   return "?";
+        }
+    }
+
+    void draw_setup(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const enaga::clock::State clock = enaga::clock::state();
+
+        canvas.text(0, 20, "SETUP", 14);
+
+        // CLOCK SRC, read from the clock itself rather than from anything STRATA remembers: it
+        // is the user's setting and it can change under us at any moment.
+        out = line;
+        append(out, "CLOCK SRC ");
+        append(out, clock_source_name(int(clock.source)));
+        *out = 0;
+        canvas.text(0, 34, line, 13);
+
+        // The tempo, and whose it is. Under an outside source STRATA does not own it, so the
+        // number is shown as a measurement rather than as a setting (docs/SPEC.md, and
+        // CLAUDE.md: "STRATA does not own the tempo").
+        out = line;
+        append(out, "TEMPO ");
+        append_tenths(out, uint32_t(clock.tempo * 10.0f + 0.5f));
+        append(out, int(clock.source) == ENAGA_CLOCK_INTERNAL ? " OURS" : " EXT");
+        *out = 0;
+        canvas.text(0, 46, line, int(clock.source) == ENAGA_CLOCK_INTERNAL ? 13 : 10);
+
+        // MIDI CH, also the user's.
+        out = line;
+        append(out, "MIDI CH ");
+        append_number(out, uint32_t(enaga::midi::channel() + 1));
+        *out = 0;
+        canvas.text(0, 58, line, 13);
+
+        // The record quantize amount, which IS ours and is on encoder A.
+        out = line;
+        append(out, "QUANTIZE ");
+        append_number(out, uint32_t(quantize()));
+        *out = 0;
+        canvas.text(0, 70, line, 15);
+        const int bar = quantize() * 60 / 100;
+        canvas.rect(0, 80, 60, 5, 3);
+        if (bar > 0) canvas.rect(0, 80, bar, 5, 12);
+
+        // And where the three settings above are changed, because they are not changed here.
+        // CLOCK OUT and SYNC OUT are in the same menu and Enaga exposes no way to read them,
+        // so they are named rather than shown with a state this screen would be guessing at.
+        canvas.text(0, 94, "CLOCK SRC, CLOCK OUT,", 7);
+        canvas.text(0, 103, "SYNC OUT, MIDI CH:", 7);
+        canvas.text(0, 112, "F1 + POWER, SETTINGS", 7);
+    }
+
     void draw_project(enaga::Canvas &canvas) {
+        if (project_setup_) {
+            draw_setup(canvas);
+            return;
+        }
         char line[40];
         char *out = line;
         const Status &status = engine_.status();
@@ -2156,6 +2513,17 @@ private:
             command.cmd, int(engine_.status().live_bank.load(std::memory_order_relaxed)));
     }
 
+    // The tempo, as the engine wants it: BPM in `f` (app/commands.hpp). The engine stores it in
+    // the project -- which is what makes it SAVE -- and re-derives the tempo-synced delay from
+    // it. `enaga::clock::set_tempo` is a separate call, because the clock is Enaga's and the
+    // project is ours; both have to be told, and only one of them can refuse.
+    void post_tempo(float bpm) {
+        Command command;
+        command.cmd = Cmd::set_tempo;
+        command.f = bpm;
+        post_command(command);
+    }
+
     // An encoder delta, as a signed byte. The audio side applies it to the authoritative step,
     // which is why these carry a delta and not a value (app/commands.hpp explains the choice).
     void post_delta(Cmd cmd, int track, int step, uint8_t a, int delta) {
@@ -2241,7 +2609,15 @@ private:
     int euclid_rotation_ = 0;
     int page_ = 0;            // step page 1-4, for 64-step tracks
     int param_page_ = int(Page::src);
-    int mixer_bank_ = 0;      // 0 = tracks 1-4, 1 = tracks 5-8
+    int mixer_bank_ = 0;      // which kMixerPages entry: the faders, then the sends and master
+    bool project_setup_ = false;   // PROJECT mode's second page, on the octave keys
+
+    // The project tempo this side has already reconciled with the clock, so that a LOAD is
+    // adopted and the engine's echo of our own knob move is not.
+    uint16_t adopted_tempo_centi_ = 13000;
+
+    // The screen last logged, as mode * 16 + page. -1 so the first pass logs whatever is up.
+    int logged_screen_ = -1;
     bool shift_ = false;
     bool stop_armed_ = false;
     bool clock_refused_ = false;   // the last transport call was refused: an external source
@@ -2249,7 +2625,10 @@ private:
 
     // --- M3 edit state ----------------------------------------------------
     bool rec_ = false;             // F2: live and motion recording
-    int quantize_ = 100;           // 0-100%, how hard a recorded hit snaps to its step
+    // The live-record quantize amount is a PROJECT field and the project is the only copy:
+    // there is no `quantize_` member, because a second copy here is exactly how the value came
+    // to be settable and unsaveable. The engine owns the write, through `Cmd::set_quantize`.
+    int quantize() const { return int(engine_.project().settings.quantize); }
     int held_step_ = -1;           // the STEP key being held, absolute 0-63; -1 for none
     int held_key_ = -1;            // and the PHYSICAL key it came from, 0-15, so the release
                                    // matches even if the page moved under it
