@@ -21,7 +21,7 @@ FUNC and press X; "hold STEP" means a STEP key held down while you do the rest.
 
 The Lofi-12 XT and CyDrums print other names on the function block; this sheet uses the SmplTrek's.
 The F-key labels are from Enaga's `docs/hardware.md`, taken from the original firmware's test page.
-Some on-screen hints still use the code names: `F1+F3 AGAIN TO SAVE`, `F1+CLR UNDO`, `F1+EDIT: MACHINE`.
+The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACHINE`).
 
 ## Modes: how to get there
 
