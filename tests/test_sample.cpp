@@ -13,10 +13,13 @@
 // out-of-bounds read on the device does not fault, it silently returns garbage.
 #include "check.hpp"
 
+#include <cstring>
+
 #include <enaga/abi.h>
 #include <enaga/dsp.hpp>
 
 #include "sample.hpp"
+#include "sampleloops.h"
 
 using namespace strata;
 
@@ -1501,4 +1504,86 @@ TEST(sample_stream_refuses_what_is_not_a_stream_and_set_sample_leaves_it) {
     g_streamer.set_sample(g_mono, 4000, 1, kRate);
     CHECK(!g_streamer.streaming());
     CHECK(g_streamer.has_sample());
+}
+
+// dsp/sampleloops.ti.c against the interior loop it replaced in Sampler::generate, written out
+// here as it was (Catmull-Rom over four taps, a Q24 fraction, the pointer stepped on the carry):
+// mono and stereo, forwards and backwards, integer and fractional steps, below and above unity,
+// runs of one sample and of a whole block. memcmp, so the read is the same to the bit, and the
+// position it hands back is the same to the frame and the fraction.
+namespace {
+
+float reference_tap(const int16_t *p, int ch) {
+    return ch == 2 ? float(int(p[0]) + int(p[1])) : float(p[0]);
+}
+
+float reference_hermite(float x0, float x1, float x2, float x3, float t) {
+    const float c1 = 0.5f * (x2 - x0);
+    const float c2 = x0 - 2.5f * x1 + 2.0f * x2 - 0.5f * x3;
+    const float c3 = 0.5f * (x3 - x0) + 1.5f * (x1 - x2);
+    return ((c3 * t + c2) * t + c1) * t + x1;
+}
+
+void reference_read(float *dst, int k, const int16_t *p, int stride, int istride, uint32_t &frac,
+                    uint32_t fstep, int32_t &pos, int32_t istep, int ch) {
+    const auto read4 = [&](const int16_t *q, float t) {
+        return reference_hermite(reference_tap(q - stride, ch), reference_tap(q, ch),
+                                 reference_tap(q + stride, ch), reference_tap(q + 2 * stride, ch),
+                                 t);
+    };
+    for (int j = 0; j < k - 1; j++) {
+        dst[j] = read4(p, float(int32_t(frac)) * (1.0f / 16777216.0f));
+        frac += fstep;
+        const uint32_t carry = frac >> 24;
+        frac &= 0xFFFFFFu;
+        p += istride + (carry != 0u ? stride : 0);
+        pos += istep + int32_t(carry);
+    }
+    dst[k - 1] = read4(p, float(int32_t(frac)) * (1.0f / 16777216.0f));
+}
+
+int16_t g_pcm[2 * 8192];
+
+}  // namespace
+
+TEST(sample_the_cl6x_read_loop_is_bit_exact_against_the_loop_it_replaced) {
+    uint32_t seed = 0x2468ACEu;
+    for (int16_t &s : g_pcm) {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        s = int16_t(seed >> 16);    // full scale, both signs: -32768 included sooner or later
+    }
+    const float steps[] = {1.0f, 0.5f, 0.0313f, 1.37f, 2.0f, 7.91f, 31.5f};
+    const int runs[] = {1, 2, 15, 64};
+    int compared = 0;
+    for (int ch = 1; ch <= 2; ch++) {
+        for (int dir = -1; dir <= 1; dir += 2) {
+            for (float step : steps) {
+                for (int k : runs) {
+                    const int32_t istep = int32_t(step);
+                    const uint32_t fstep = uint32_t((step - float(istep)) * 16777216.0f);
+                    const int stride = dir * ch;
+                    // Start mid-buffer: 64 samples at 32x never reach either end from here.
+                    const int16_t *p = g_pcm + 4096 * ch;
+                    uint32_t rf = 0x123456u, of = rf;
+                    int32_t rp = 77, op = rp;
+                    float ref[64], ours[64];
+                    reference_read(ref, k, p, stride, istep * stride, rf, fstep, rp, istep, ch);
+                    if (ch == 2) {
+                        strata_sample_read_stereo(ours, k, p, stride, istep * stride, &of, fstep,
+                                                  &op, istep);
+                    } else {
+                        strata_sample_read_mono(ours, k, p, stride, istep * stride, &of, fstep,
+                                                &op, istep);
+                    }
+                    CHECK(std::memcmp(ref, ours, sizeof(float) * size_t(k)) == 0);
+                    CHECK_EQ(of, rf);
+                    CHECK_EQ(op, rp);
+                    compared++;
+                }
+            }
+        }
+    }
+    CHECK_EQ(compared, 2 * 2 * 7 * 4);
 }

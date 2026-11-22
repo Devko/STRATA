@@ -1129,6 +1129,72 @@ message, so a six-note chord's last note leaves about 6 ms after its first.
 Memory: `MidiOut` 512 bytes and the CC memo 136 bytes in `Engine`; MIDI IN's held-note map 2 KiB
 in the app; MID adds 8 bytes (a vtable pointer) per track to the machine pool. All bss.
 
+### The cl6x vectorisation pass (2026-11-22, host only, cl6x figures owed tonight)
+
+**Is there vector code for this chip?** The core is a **C674x** (`build_app.py` builds with
+`-mv6740` and GCC with `-march=c674x`). It has **no packed-float instructions**: the two-way
+single-precision SIMD people mean by "vector float" on TI DSPs (`DMPYSP`, `DADDSP`, `CMPYSP`) is
+the C66x, a later core. What the C674x has is (a) an eight-unit VLIW pipeline that cl6x fills by
+**software pipelining** -- overlapping successive iterations of a branch-free loop -- which is
+where the 1.7-1.8x in the tables above comes from, and (b) the C64x+ **packed 16-bit integer**
+instructions (`DOTP2`, `ADD2`, `MPY2`, ...), which suit int16 sample data and nothing else
+STRATA computes. So vectorising here means giving the pipeliner loops it can overlap, and using
+packed 16-bit where a loop reads int16.
+
+The numbers that decide what is worth doing are the C674x latencies: a float add, subtract or
+multiply takes **4 cycles** to come back, `INTSP` 4, a load 5. A loop whose next iteration needs
+this iteration's float result -- every filter, envelope, one-pole and gain ramp -- cannot start
+an iteration more often than the length of that chain, however idle the eight units are. Those
+are the loops this pass targets.
+
+#### What changed, and what each change is expected to buy
+
+Every change is **bit-exact on the host** (memcmp against the code or Enaga function it replaced,
+and the 89 golden renders unchanged). The first four rows are on in the build that merges; the
+two flags are off until tonight's measurements.
+
+| Change | Where | Mechanism | Expected on cl6x (reasoned, not measured) |
+| --- | --- | --- | --- |
+| **In-place filter kernels** (`dsp/filterloops.ti.c`) | insert chain filter, DJ filter, reverb high-pass, KICK, SNARE, HAT | Enaga's `enaga_svf_process` / `_cascade` / `enaga_one_pole_process` / `enaga_biquad_process` take an `in` and an `out` that may alias, so cl6x must issue the next sample's load after this sample's store: a load (5) plus the path from input to output joins the recurrence. STRATA always filters in place, so these run Enaga's own inline steps over **one restrict buffer** | one-pole ~18 -> ~12 cycles/sample; 24 dB cascades ~30 -> ~20; single 12 dB SVF **no change** (its own state recurrence, ~20, is already as long as the alias chain) |
+| **DJ filter in stereo** (same file) | master | both channels' cascades in one loop: two independent recurrences overlap | ~2 x 30 -> ~22 cycles/frame while the DJ filter is on |
+| **VA back half fused** (`strata_va_back`, `dsp/valoops.ti.c`) | every VA MONO and VA POLY voice | filter, amp envelope and output tail were three passes, each recurrence-bound (cascade ~30, envelope ~15, gain ramp ~5 cycles/sample) plus three loop prologues per 16-frame slice; one loop overlaps them, so a sample costs about the slowest chain | LP24: ~880 -> ~350 cycles a slice, **~2,100 cycles (~0.4 points) per voice per block**, so VA POLY from 2.16 to about **1.7 points a voice**; ~5 points across the 12-voice budget. Less in the 12 dB modes |
+| **SAMPLE's interior read** (`dsp/sampleloops.ti.c`) | every SAMPLE voice not streaming | the Hermite read loop was C++, so GCC compiled it in every build: M2's situation exactly. Same expressions, now cl6x | M2's 1.5-2x on the loop: roughly ~25 -> ~6-8 cycles/sample mono, ~0.2-0.3 points per sounding voice |
+| `STRATA_TI_PACKED` (**off**) | SAMPLE and GRAIN stereo taps | a stereo int16 frame as one unaligned 32-bit load and `DOTP2` by (1, 1): L + R in one instruction instead of two loads and an add. These loops are load-bound (two .D units, eight taps a stereo Hermite sample) | stereo SAMPLE read ~8 -> ~5 cycles/sample; GRAIN stereo similar. Exact in integers, but only cl6x can run it, hence off |
+| `STRATA_TI_HINTS` (**off**) | every new kernel | `MUST_ITERATE(1)` on loops whose function has returned for n <= 0: cl6x can drop the zero-trip guard. No larger minimum or multiple is true in general, because slices are cut at trigs and gates | a few cycles per call; probably under 0.3 points in total. Measured to decide, not assumed |
+
+**Not done, and why:**
+
+- **`_rcpsp` for `enaga_reciprocal`** in the drum shapers (an 8-bit hardware estimate and two
+  Newton steps instead of a bit trick and three). Saves two multiplies of about twenty in KICK's
+  shaper, changes the sound by an ulp the host cannot reproduce, and so could not be checked by
+  the golden renders. Not worth it.
+- **Rewriting Enaga's oscillators, envelope or SVF** (CLAUDE.md forbids touching `third_party/`).
+  The kernels above call Enaga's own inline steps (`enaga_svf_step`, `enaga_one_pole_step`,
+  `enaga_biquad_step`), so a pin bump that changes a filter changes STRATA with it; the envelope
+  body is the one copy, and `va_the_fused_back_half_is_bit_exact_against_filter_envelope_and_tail`
+  fails if Enaga's envelope ever moves away from it. Two upstream suggestions follow from this
+  pass and are worth an Enaga issue once tonight's report backs them: in-place variants of the
+  filter block functions with one restrict buffer, and the envelope's decay as a closed form.
+- **Pairing VA POLY voices** in one loop (two voices' filters side by side, as the DJ filter's
+  channels are). The next lever after the fusion, and a bigger rewrite of `VaVoice::run`; wait
+  for `tools/ti_loops.py` to say whether the fused loop is still recurrence-bound.
+- **TI's DSPLIB.** Its float kernels are FIRs, FFTs, matrix and vector maths, none of which STRATA
+  runs per sample; its filters are biquads in a different form. It would add a TI library to the
+  package, which the licence section above was careful to keep out, for nothing STRATA needs.
+
+#### Tonight, on Roland's PC (WSL, cl6x)
+
+| # | What | How | Record |
+| --- | --- | --- | --- |
+| E8 | Per-loop pipelining report | `python3 -B tools/ti_loops.py --enaga` and again with `-D STRATA_TI_HINTS=1 -D STRATA_TI_PACKED=1` | paste both tables here. Any `NOT PIPELINED` line is the next fix; `bound = recurrence` on a hot loop says pairing would pay |
+| E9 | A/B of the whole pass | `bash tools/ti_ab.sh --gcc` (about an hour: six variants x six scenarios x two compilers, plus renders) | the two load tables it prints, and its audio check. **Expected: every variant `identical`.** A difference means cl6x reassociates differently in a fused loop than in separate ones (`--fp_reassoc`), and is a finding to bring back, not a reason to merge a flag |
+| E10 | VA POLY per voice after the pass | E2's method (MIN7 vs MIN11 in `groove()`), on `head` | was 2.16 cl6x / 3.82 GCC; expected ~1.7 cl6x |
+
+**Turning a flag on** is one line in `dsp/tihints.h`, and needs all three: E9's audio check says
+`identical` for that variant, its load column is lower than `head` in the scenarios it touches
+(`samples` for PACKED; all of them for HINTS), and `make -C host test` still passes. Then record
+the figures here and move the flag's row in the table above to "on".
+
 ### Everything at once (2026-11-22, an estimate, not a measurement)
 
 Every afternoon feature was priced alone. Added together, on the worst case above (`scenario_m1`

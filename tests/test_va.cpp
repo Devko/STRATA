@@ -1233,3 +1233,73 @@ TEST(va_a_choked_voice_fades_out_and_stops) {
     voice.gate_on();
     CHECK(!voice.choking());
 }
+
+// The fused back half (dsp/valoops.ti.c, strata_va_back) against the three passes it replaced,
+// with the Enaga functions themselves as the reference: every filter mode, every envelope stage,
+// and slices in which the envelope changes stage (attack peaks into decay, decay settles into
+// sustain, release reaches zero and goes idle) -- the flags carried through the loop are the part
+// most easily got subtly wrong. Compared with memcmp, so even a -0.0 for a 0.0 fails.
+TEST(va_the_fused_back_half_is_bit_exact_against_filter_envelope_and_tail) {
+    constexpr int kN = 16;
+    enaga_svf_coefficients c1, c2;
+    {
+        const float g = 0.35f;
+        const float a1 = enaga_reciprocal(1.0f + g * (g + 1.0f));
+        c1 = {a1, g * a1, g * g * a1, 1.0f};
+        const float b1 = enaga_reciprocal(1.0f + g * (g + 0.1f));
+        c2 = {b1, g * b1, g * g * b1, 0.1f};    // resonant: the soft clip gets pushed
+    }
+    // Fast enough that each stage boundary falls inside one 16-sample slice somewhere.
+    const enaga_envelope_shape shapes[] = {{0.3f, 0.2f, 0.0f, 0.25f}, {0.05f, 0.01f, 0.4f, 0.02f}};
+    const int starts[] = {ENAGA_ENV_ATTACK, ENAGA_ENV_DECAY, ENAGA_ENV_SUSTAIN, ENAGA_ENV_RELEASE,
+                          ENAGA_ENV_IDLE};
+    const float levels[] = {0.0f, 0.9f, 0.4f, 0.03f};
+
+    int compared = 0;
+    for (int mode = STRATA_VA_LP24; mode <= STRATA_VA_HP12; mode++) {
+        for (const enaga_envelope_shape &shape : shapes) {
+            for (int start : starts) {
+                for (float level : levels) {
+                    enaga_svf ra{0.01f, -0.02f}, rb{0.2f, 0.1f}, fa = ra, fb = rb;
+                    enaga_envelope ramp{start, level}, famp = ramp;
+                    float rbus[kN], fbus[kN];
+                    for (int i = 0; i < kN; i++) rbus[i] = fbus[i] = 0.25f - float(i) * 0.03f;
+                    uint32_t seed = 0xC0FFEEu + uint32_t(mode * 131 + start * 7);
+                    float gain = 0.2f;
+                    // Twelve slices of different lengths through one voice: state carries.
+                    for (int slice = 0; slice < 12; slice++) {
+                        const int n = 1 + (slice * 5) % kN;
+                        float work[kN], ref_work[kN], env[kN];
+                        for (int i = 0; i < n; i++) {
+                            work[i] = enaga_bipolar(enaga_xorshift(&seed)) * 1.7f;
+                            ref_work[i] = work[i];
+                        }
+                        const float step = (slice % 3 == 0 ? -0.01f : 0.004f);
+                        // The reference: va.cpp's three passes, through Enaga's own functions.
+                        if (mode == STRATA_VA_LP24) {
+                            enaga_svf_cascade(&ra, &c1, &rb, &c2, ENAGA_SVF_LOW, ref_work, ref_work,
+                                              n);
+                        } else {
+                            enaga_svf_process(&rb, &c2, mode - STRATA_VA_LP12, ref_work, ref_work,
+                                              n);
+                        }
+                        enaga_envelope_render(&ramp, &shape, env, n);
+                        strata_va_tail(rbus, ref_work, env, n, 1.3f, gain, step);
+                        // The fused kernel.
+                        strata_va_back(fbus, work, n, mode, &fa, &c1, &fb, &c2, &famp, &shape,
+                                       1.3f, gain, step);
+                        gain += step * float(n);
+
+                        CHECK(std::memcmp(rbus, fbus, sizeof rbus) == 0);
+                        CHECK(std::memcmp(&ra, &fa, sizeof ra) == 0);
+                        CHECK(std::memcmp(&rb, &fb, sizeof rb) == 0);
+                        CHECK_EQ(famp.stage, ramp.stage);
+                        CHECK(std::memcmp(&famp.level, &ramp.level, sizeof(float)) == 0);
+                        compared++;
+                    }
+                }
+            }
+        }
+    }
+    CHECK_EQ(compared, 4 * 2 * 5 * 4 * 12);
+}
