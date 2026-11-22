@@ -389,11 +389,18 @@ versions, not targets.
 
 | Scenario | Blocks | Peak (GCC-only) | Overruns |
 | --- | --- | --- | --- |
-| `scenario_m3.sh` — the default beat, M6 build | 1,257 | **33.39%** | 0 |
-| `scenario_m4.sh` — + stop, queue A02, save | 1,661 | **28.64%** | 0 |
-| `scenario_m5.sh` — + PERFORM, scene capture, macro assign | 1,258 | **28.64%** | 0 |
-| `scenario_m6.sh` — + KEYS, three keys recorded | 1,661 | **38.08%** | 0 |
+| `scenario_m0.sh` — init, nothing playing | 653 | **2.44%** | 0 |
+| `scenario_m1.sh` — the beat, M1's own tripwire | 1,257 | **41.26%** | 0 |
+| `scenario_m3.sh` — the default beat, M6 build | 1,257 | **33.56%** | 0 |
+| `scenario_m4.sh` — + stop, queue A02, save | 1,661 | **28.86%** | 0 |
+| `scenario_m5.sh` — + PERFORM, scene capture, macro assign | 1,258 | **35.86%** | 0 |
+| `scenario_m6.sh` — + KEYS, three keys recorded | 1,661 | **38.25%** | 0 |
 | `tools/render.sh --seconds 8` — 8.2 s continuous | 6,338 | **41.1%** | 0 |
+
+**m1 and m3 play the same beat and read 41.26% and 33.56%**, which is the run-length effect this
+section opens with and not a contradiction: m1's window happens to catch the block where the
+chord, the open hat and the sampler overlap. Compare a scenario against itself across builds,
+never one against another.
 
 **The sidechain duck costs +0.32 points**, and it was free before only because it did nothing.
 `Engine::init` set every track's duck depth with `t == duck_source_ ? 0.0f : 0.0f` -- both arms
