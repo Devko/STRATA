@@ -637,6 +637,31 @@ TEST(ui_func_push_d_holds_a_tape_stop_and_func_mutate_a_delay_freeze) {
     CHECK_EQ(int(undo_depth()), int(undo_before));
 }
 
+TEST(ui_func_push_d_with_a_step_held_clears_its_lock_not_a_tape_stop) {
+    // Roland, 2026-11-22: every push with a STEP held is the step's. FUNC + push A-C already
+    // cleared that step's lock there; FUNC + push D was a tape stop instead.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    pump(2);
+    step_down(5);
+    app.on_encoder(3, +6);                           // lock D on step 6
+    pump(2);
+    uint8_t value = 0;
+    const int param = page_first(Page(UiProbe::param_page(app))) + 3;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(param), value));
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_D, true);
+    pump(2);
+    CHECK(!app_engine().tape_stop().held());
+    CHECK_EQ(UiProbe::notice(app), "LOCK CLEARED");
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    step_up(5);
+    pump(2);
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(param), value));
+    CHECK(!app_engine().tape_stop().held());
+}
+
 TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {
     // A third mutation-testing gap: dropping `page_ * 16` from `on_step_key` survived everything
     // above, because every test before this one works on page 1 where the offset is zero -- and
@@ -2922,8 +2947,22 @@ TEST(ui_the_chain_page_sets_mute_recalls_and_song_mode) {
     CHECK(!enaga::clock::running());
     CHECK_EQ(UiProbe::notice(app), "SONG END");
 
-    // Back as it was, for the tests after this one.
+    // FUNC + LEFT removes an entry only on a second press (Roland, 2026-11-22): not undoable.
     shift_key(ENAGA_KEY_RIGHT);
+    shift_key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(chain_length(project), 2);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN TO REMOVE");
+    // Too late: past two seconds the first press is forgotten and this one only arms again.
+    pump(2100);
+    shift_key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(chain_length(project), 2);
+    shift_key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(chain_length(project), 1);
+    CHECK_EQ(UiProbe::notice(app), "ENTRY REMOVED");
+    // Back as it was, for the tests after this one.
     for (int i = 0; i < 2; i++) {
         shift_key(ENAGA_KEY_LEFT);
         pump(2);
@@ -2973,6 +3012,9 @@ TEST(ui_the_chain_page_builds_a_chain_that_plays) {
     key(ENAGA_KEY_UP);
     CHECK_EQ(UiProbe::chain_cursor(app), 0);
     the_app().on_key(ENAGA_KEY_F1, true);
+    key(ENAGA_KEY_LEFT);                              // the first press only arms it
+    pump(2);
+    CHECK_EQ(chain_length(project), 2);
     key(ENAGA_KEY_LEFT);
     the_app().on_key(ENAGA_KEY_F1, false);
     pump(2);
@@ -2991,6 +3033,7 @@ TEST(ui_the_chain_page_builds_a_chain_that_plays) {
     // Removing every entry turns it off rather than leaving it following nothing.
     for (int i = 0; i < 2; i++) {
         the_app().on_key(ENAGA_KEY_F1, true);
+        key(ENAGA_KEY_LEFT);
         key(ENAGA_KEY_LEFT);
         the_app().on_key(ENAGA_KEY_F1, false);
         pump(2);
@@ -4295,6 +4338,65 @@ TEST(ui_layout_the_projects_page_and_save_as) {
     key(ENAGA_KEY_F4);
 }
 
+// --- SLC AUTO: push SLC's knob on a SAMPLE track ----------------------------------------------
+
+TEST(ui_pushing_slc_on_a_sample_track_turns_auto_slicing_on_and_off) {
+    Strata &app = fresh();
+    const KitTrack &kit = app_engine().project().kit.tracks[0];
+    sample_track_in_edit();
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+
+    // SLC is the fourth knob on SRC: push D.
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceAuto));
+    CHECK(std::strcmp(UiProbe::notice(app), "SLICES AUTO") == 0);
+    CHECK(app_storage().dirty());
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+    CHECK(std::strcmp(UiProbe::notice(app), "SLICES EVEN") == 0);
+
+    // Pushing another knob, or on another page, does not touch it.
+    key(ENAGA_KEY_PUSH_A);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+    key(ENAGA_KEY_SELECT_LEFT);
+
+    // FUNC + push is still the kill EQ, not this.
+    shift_key(ENAGA_KEY_PUSH_A);
+    shift_key(ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+
+    // Nor on a track that is not SAMPLE: GRAIN has no slices.
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::grain));
+    pump(4);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_slc_auto_line) {
+    Strata &app = fresh();
+    sample_track_in_edit();
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    check_layout(app, "EDIT SRC, SAMPLE, slices even");
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    pump(2000);                                      // let the SLICES AUTO notice go
+    check_layout(app, "EDIT SRC, SAMPLE, AUTO with no hits");
+    const_cast<Status &>(app_engine().status()).slice_points[0].store(15);
+    check_layout(app, "EDIT SRC, SAMPLE, AUTO with 15 hits");
+    const_cast<Status &>(app_engine().status()).slice_points[0].store(0);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    key(ENAGA_KEY_F4);
+}
 
 // --- MIDI in, and MIDI OUT's channel on the MACHINE page ------------------------------------
 //

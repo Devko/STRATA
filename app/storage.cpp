@@ -96,6 +96,7 @@ bool mutates_kit(Cmd cmd) {
         // which is the whole reason machine switching needed no file-format change.
         case Cmd::set_machine:
         case Cmd::set_track_level:
+        case Cmd::set_slice_mode:
         case Cmd::clear_sample:
         case Cmd::set_sample:
         case Cmd::set_stream:
@@ -532,6 +533,14 @@ void Storage::on_card(bool usable) {
     // A long file's handle is dead with the card; closing it ends its pending read CANCELLED.
     chunk_file_.close();
     chunked_ = false;
+    // A take half written: its handle is dead too, and the buffer goes back to the audio side,
+    // or the next RESAMPLE could never arm. The file left on the card is cut short.
+    if (job_ == Job::take_write) {
+        if (take_file_.is_open()) take_file_.close();
+        take_write_done_ = false;
+        take_track_ = -1;
+        post(Cmd::resample_release);
+    }
     if (job_ == Job::sample_epoch || job_ == Job::sample_read || job_ == Job::sample_convert ||
         job_ == Job::sample_resample || job_ == Job::sample_chunk) {
         if (sample_track_ >= 0) pool_.fail(sample_track_);
@@ -1553,6 +1562,10 @@ void Storage::step_sample_convert() {
     // has nothing above the new Nyquist to fold back down.
     if (resampling) pcm_antialias(destination + size_t(src_done_) * size_t(channels), did, channels,
                                   antialias_);
+    // At 48 kHz this IS the sample, so its slice points are found as it lands (core/onsets.hpp).
+    if (!resampling) {
+        onsets_.feed(destination + size_t(src_done_) * size_t(channels), src_done_, did, channels);
+    }
     src_done_ += did;
 
     if (did == 0 || src_done_ >= src_frames_) {
@@ -1720,6 +1733,9 @@ void Storage::step_sample_chunk() {
         pcm_antialias(destination + size_t(src_done_) * size_t(channels), did, channels,
                       antialias_);
     }
+    if (!resampling && !streaming_) {
+        onsets_.feed(destination + size_t(src_done_) * size_t(channels), src_done_, did, channels);
+    }
     src_done_ += did;
     chunk_pos_ += did * frame_bytes;
 
@@ -1765,10 +1781,31 @@ void Storage::step_sample_chunk() {
 }
 
 void Storage::step_take_write() {
-    // One pass, because `files::save` is the whole-small-file call and a take is at most 5.76
-    // MiB -- the same call a project file uses, and the card writes about 2 MB/s, so this is the
-    // one job that is allowed to be slow. It is the user asking for it and the screen says
-    // WRITING; splitting it would mean a stream and a second ring, for a job done once a take.
+    // In chunks, one write in flight: the first pass names the file, puts the header in front
+    // and queues the first chunk; each later pass waits for the last write and queues the next.
+    if (take_file_.is_open()) {
+        if (!take_write_done_) return;             // Enaga is still working that chunk
+        take_write_done_ = false;
+        if (take_write_result_ < 0) {
+            end_take_write(enaga::files::error_name(take_write_result_));
+            return;
+        }
+        take_written_ += uint32_t(take_write_result_);
+        if (take_written_ < take_bytes_) {
+            if (!write_next_take_chunk()) end_take_write("WRITE FAILED");
+            return;
+        }
+        const int32_t closed = take_file_.close();
+        if (closed < 0) {
+            end_take_write(enaga::files::error_name(closed));
+            return;
+        }
+        // The buffer goes back to the audio side only now, with the last byte on the card.
+        post(Cmd::resample_release);
+        finish_take_write();
+        return;
+    }
+
     const Capture &take = engine_->capture();
     const uint32_t frames = take.frames();
     if (frames == 0u || take.data() == nullptr) {
@@ -1798,16 +1835,14 @@ void Storage::step_take_write() {
 
     const int32_t made = enaga::files::make_folder("/RECORD");
     if (made < 0) {
-        post(Cmd::resample_release);
-        finish_job(enaga::files::error_name(made));
+        end_take_write(enaga::files::error_name(made));
         return;
     }
 
-    // One call, no copy. dsp/capture.hpp reserves the 44 header bytes IN FRONT of the audio for
-    // exactly this: the header goes into them and the whole thing is one `files::save`, rather
-    // than a second 5.76 MiB buffer or two asynchronous writes and a state machine to sequence
-    // them. The take is already interleaved stereo int16, which is the other half of that
-    // choice -- there is no conversion pass over it in the UI thread at all.
+    // No copy. dsp/capture.hpp reserves the 44 header bytes IN FRONT of the audio for exactly
+    // this: the header goes into them and the file is that one buffer from start to end,
+    // rather than a second 5.76 MiB buffer. The take is already interleaved stereo int16, so
+    // there is no conversion pass over it in the UI thread at all.
     enaga::wav::Format format{};
     format.encoding = enaga::wav::pcm;
     format.channels = 2;
@@ -1816,18 +1851,53 @@ void Storage::step_take_write() {
 
     Capture &writable = engine_->capture_for_write();
     enaga::wav::header(writable.file_base(), format, writable.data_bytes());
-    const int32_t result =
-        enaga::files::save(take_path_, writable.file_base(), writable.file_bytes());
-
-    // The buffer goes back to the audio side either way: a failed write must not leave a take
-    // wedged in it, because nothing else can arm the next one (dsp/capture.hpp).
-    post(Cmd::resample_release);
-
-    if (result < 0) {
-        finish_job(enaga::files::error_name(result));
+    take_bytes_ = writable.file_bytes();
+    take_written_ = 0;
+    take_write_done_ = false;
+    const int32_t opened = take_file_.open(take_path_, ENAGA_FILE_WRITE);
+    if (opened < 0) {
+        end_take_write(enaga::files::error_name(opened));
         return;
     }
+    if (!write_next_take_chunk()) end_take_write("WRITE FAILED");
+}
 
+bool Storage::write_next_take_chunk() {
+    const uint32_t left = take_bytes_ - take_written_;
+    const uint32_t want = left < kTakeChunkBytes ? left : kTakeChunkBytes;
+    const uint8_t *from =
+        static_cast<const uint8_t *>(engine_->capture_for_write().file_base()) + take_written_;
+    take_write_in_flight_ = true;
+    take_write_done_ = false;
+    const int32_t queued =
+        take_file_.write<&Storage::take_chunk_written>(from, want, this);
+    if (queued < 0) {
+        take_write_in_flight_ = false;
+        return false;
+    }
+    return true;
+}
+
+void Storage::take_chunk_written(int32_t result) {
+    take_write_in_flight_ = false;
+    take_write_result_ = result;
+    // A short write that made no progress would wait for ever; call it the card's fault.
+    if (result == 0) take_write_result_ = ENAGA_FILE_CARD_ERROR;
+    take_write_done_ = true;
+}
+
+// A failed take: the half-written file is closed, and the buffer goes back to the audio side
+// either way -- a failed write must not leave a take wedged in it, because nothing else can arm
+// the next one (dsp/capture.hpp).
+void Storage::end_take_write(const char *error) {
+    if (take_file_.is_open()) take_file_.close();
+    take_write_done_ = false;
+    post(Cmd::resample_release);
+    take_track_ = -1;
+    finish_job(error);
+}
+
+void Storage::finish_take_write() {
     // And into a track, if that is what was asked for. docs/SPEC.md wants the whole round trip
     // "in one action", so the kit's path is set and the ordinary sample loader does the rest --
     // the same swap any other sample goes through, epoch handshake included.
@@ -1863,6 +1933,7 @@ void Storage::step_sample_resample() {
                                    : pcm_resample(src_, src_frames_, channels, cursor_,
                                                   destination + size_t(out_done_) * size_t(channels),
                                                   want);
+    onsets_.feed(destination + size_t(out_done_) * size_t(channels), out_done_, did, channels);
     out_done_ += did;
     // 0 means the cursor has passed the end of the source, which is the end of the job as well as
     // the end of the slice.
@@ -1896,6 +1967,10 @@ void Storage::hand_sample_over() {
         finish_job("POOL REFUSED");
         return;
     }
+
+    // Its slice points, for SLC AUTO, through the inbox the command's apply reads. A detector
+    // that did not see exactly these frames, in order, gives none rather than wrong ones.
+    onsets_.finish(out_done_, engine_->slices_for_load(track));
 
     // The handover: an offset, a frame count and a channel count, and nothing else crosses. The
     // audio side checks all three against the region before it forms a pointer.

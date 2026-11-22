@@ -1143,6 +1143,15 @@ enough on its card); measure with section 15d of the walkthrough: LOAD with thre
 tracks against none. If it is worse than 1 point a track, the fetch is the lever: a fast path
 for a run of samples wholly inside the head or wholly inside the fifo.
 
+### SLC AUTO (2026-11-22): no audio cost, one pass at load
+
+The hits are found in the main context, as each slice of a load is written into the pool
+(`core/onsets.hpp`): one abs and one add per sample, and a few compares per 256-frame hop. That
+is less than the int16 conversion beside it, so a load should not be measurably slower. In the
+audio context nothing per sample changes: the cuts are worked out in `Sampler::recompute_window`
+at control rate (at most 15 compares), and a trigger reads two of them instead of multiplying.
+With AUTO off (the default) the Sampler renders bit for bit as before.
+
 ### MIDI out (after v0.1, 2026-11-22)
 
 **Not measured yet: no emulator or device toolchain in the session that built it.** Owed:

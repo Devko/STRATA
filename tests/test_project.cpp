@@ -43,7 +43,7 @@ using namespace strata;
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
 // ambient modes: nine bytes on the end of the mixer section.
 constexpr uint32_t kProjectFileBytes = 402;
-constexpr uint32_t kKitFileBytes = 1164;   // 1076 before the LFO and arp sections (12 + 8 x 4 each)
+constexpr uint32_t kKitFileBytes = 1184;   // 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -536,7 +536,9 @@ TEST(project_round_trips_every_settings_field) {
     CHECK_EQ(int(b.master[kMasterFieldsV1 - 1]), 99);
     // The kill EQ's bands and switches, which grew the section.
     CHECK_EQ(int(b.master[kMasterFields - 1]), 78);
-    CHECK_EQ(int(b.eq_kills), 0x5);
+    // The switches are live only (Roland, 2026-11-22): set in RAM, every band is back in the file.
+    CHECK_EQ(int(a.eq_kills), 0x5);
+    CHECK_EQ(int(b.eq_kills), 0);
 }
 
 // A mixer byte past the encoder's range is clamped, not taken. dsp/buses.cpp maps a byte with
@@ -863,7 +865,7 @@ TEST(project_a_mixer_section_from_before_the_ambient_modes_loads_classic) {
     for (int i = 0; i < kMasterFields; i++) {
         CHECK_EQ(int(g_loaded.settings.master[i]), int(g_source.settings.master[i]));
     }
-    CHECK_EQ(int(g_loaded.settings.eq_kills), int(g_source.settings.eq_kills));
+    CHECK_EQ(int(g_loaded.settings.eq_kills), 0);
     const ProjectSettings defaults;
     for (int i = kSendFieldsV1; i < kSendFields; i++) {
         CHECK_EQ(int(g_loaded.settings.sends[i]), int(defaults.sends[i]));
@@ -883,26 +885,31 @@ TEST(project_the_ambient_bytes_follow_the_kill_switches) {
     for (int i = 0; i < kSendFieldsV1; i++) {
         CHECK_EQ(int(g_project[mixer + uint32_t(i)]), int(g_source.settings.sends[i]));
     }
-    CHECK_EQ(int(g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)]),
-             int(g_source.settings.eq_kills));
+    CHECK_EQ(int(g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)]), 0);
     for (int i = kSendFieldsV1; i < kSendFields; i++) {
         CHECK_EQ(int(g_project[mixer + uint32_t(kMasterFields + 1 + i)]),
                  int(g_source.settings.sends[i]));
     }
 }
 
-// A file whose kill-switch byte has bits past the three bands keeps only the three.
-TEST(project_keeps_only_the_three_kill_switch_bits) {
+// A file written before the switches stopped being saved may still hold some: it opens with
+// every band in, whatever the byte says.
+TEST(project_ignores_a_saved_kill_switch_byte) {
     fill_project(g_source, 0);
     uint32_t written = 0;
     CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
              int(SerializeResult::ok));
     const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
-    g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)] = 0xFA;
+    g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)] = 0x07;
     refresh_crc(g_project);
     project_init(g_loaded);
+    g_loaded.settings.eq_kills = 0x5;                  // and never "left alone" from before
     CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
-    CHECK_EQ(int(g_loaded.settings.eq_kills), 0x2);
+    CHECK_EQ(int(g_loaded.settings.eq_kills), 0);
+    // The bytes after it are still where they were.
+    for (int i = kSendFieldsV1; i < kSendFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.sends[i]), int(g_source.settings.sends[i]));
+    }
 }
 
 TEST(project_round_trips_the_live_pattern_and_the_whole_chain) {
@@ -1439,7 +1446,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 3);     // the tracks, the LFO, the arp
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 4);     // the tracks, the LFO, the arp, SLC AUTO
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -1493,7 +1500,9 @@ TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_and_arp_off) {
     // the LFO wrote -- still loads, keeps its sound, and turns every LFO and arp OFF rather than
     // leaving whatever the kit it is read into held.
     fresh_kit_file();
-    const uint32_t lfo_size = drop_last_section(g_kit_file, g_kit_alt);
+    static uint8_t with_arp[kKitFileBytes];
+    CHECK_EQ(drop_last_section(g_kit_file, with_arp), 1164u);     // SLC AUTO's section first
+    const uint32_t lfo_size = drop_last_section(with_arp, g_kit_alt);
     CHECK_EQ(lfo_size, 1120u);                    // what the LFO's build wrote
     for (uint32_t i = 0; i < lfo_size; i++) g_kit_file[i] = g_kit_alt[i];
 
@@ -2360,4 +2369,43 @@ TEST(bank_a_section_cut_short_counts_every_pattern_it_lost) {
     int refused = -1;
     CHECK_EQ(int(bank_read(g_loaded, 2, g_bank, written, &refused)), int(SerializeResult::ok));
     CHECK_EQ(refused, 6);
+}
+
+TEST(kit_slc_auto_round_trips_and_an_older_file_slices_equally) {
+    fresh_kit_file();
+    // fresh_kit_file wrote g_kit_source; give it AUTO on two tracks and write again.
+    g_kit_source.tracks[2].slice_mode = kSliceAuto;
+    g_kit_source.tracks[7].slice_mode = kSliceAuto;
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_kit_loaded.tracks[t].slice_mode), t == 2 || t == 7 ? 1 : 0);
+    }
+    const uint32_t slices = section_at(g_kit_file, kSectionKitSlices);
+    CHECK_EQ(int(g_kit_file[slices + 7]), 1);
+
+    // A damaged byte slices equally rather than as anything else.
+    g_kit_file[slices + 2] = 77;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_kit_loaded.tracks[2].slice_mode), 0);
+
+    // A KIT.BIN from before SLC AUTO (tracks and LFO) loads, LFO kept, every track equal --
+    // even read into a kit that had AUTO on.
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
+    CHECK_EQ(old_size, 1164u);
+    for (int t = 0; t < kTracks; t++) g_kit_loaded.tracks[t].slice_mode = kSliceAuto;
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_kit_loaded.tracks[t].slice_mode), 0);
+        for (int p = kKitSoundParams; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+    }
+    g_kit_source.tracks[2].slice_mode = kSliceEqual;
+    g_kit_source.tracks[7].slice_mode = kSliceEqual;
 }

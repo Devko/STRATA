@@ -143,7 +143,14 @@ struct KitTrack {
     uint8_t machine = 0;                        // which machine the track hosts
     float level = 1.0f;                         // the mixer fader
     char sample[kSamplePathBytes] = {};         // empty when the track plays no file
+    // SLC AUTO: 1 cuts a SAMPLE track's slices at the hits found in its sample
+    // (core/onsets.hpp), 0 into equal slices. Not a parameter, so no lock, scene or LFO moves
+    // it: it says what kind of sample this is, like the path beside it.
+    uint8_t slice_mode = 0;
 };
+
+constexpr uint8_t kSliceEqual = 0;
+constexpr uint8_t kSliceAuto = 1;
 
 struct Kit {
     KitTrack tracks[kTracks];
@@ -256,8 +263,9 @@ struct ProjectSettings {
     // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out, and the
     // kill EQ's three bands at their flat (bypassed) centre.
     uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64};
-    // The kill EQ's kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. Saved, like the live
-    // mutes, so a set comes back the way it was left. Stored after the master bytes.
+    // The kill EQ's kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. Live only: PROJECT.BIN
+    // keeps their byte, after the master bytes, but writes it as 0 and ignores it on read
+    // (Roland, 2026-11-22), so a project never opens with a band killed.
     uint8_t eq_kills = 0;
 };
 
@@ -347,6 +355,9 @@ constexpr uint16_t kSectionKitLfo = 2;
 // The arpeggiator's four bytes per track (kKitArpParams), OPTIONAL in the same way: a KIT.BIN
 // from before the arp loads with every arp OFF.
 constexpr uint16_t kSectionKitArp = 3;
+// SLC AUTO, one byte per track (KitTrack::slice_mode). Optional on read like the LFO and the
+// arp: a KIT.BIN from before it loads with every track slicing equally, as slicing always did.
+constexpr uint16_t kSectionKitSlices = 4;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

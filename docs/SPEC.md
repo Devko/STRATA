@@ -29,7 +29,7 @@ The stock firmware is sample-only. STRATA's edge is synthesized drums and bass n
 - A linear song timeline. Pattern chains only.
 - Multi-take audio tracks like the stock GLOBAL tracks.
 - USB audio and USB mass storage (no stack yet; planned for Enaga E5). **[rev]** USB MIDI does exist, and it arrives through the same `on_midi` path as the DIN jacks, so it costs nothing extra once MIDI is wired.
-- A full sample editor. Start, end, loop and slices only.
+- A full sample editor. Start, end, loop and slices only. **[rev]** Slices can follow the sample: SLC AUTO (push SLC's knob on EDIT) cuts at the strongest hits found when the sample loads (`core/onsets.hpp`: hop energy against the recent mean, up to 15 points, ranked), instead of into equal parts. The points are found again at every load, not stored; KIT.BIN's optional fourth section (after the LFO's and the arp's) holds only each track's AUTO flag. Points cannot be moved by hand.
 - Testing on the Lofi-12 XT and CyDrums. Same board, so keep key labels device-aware, but develop and test on the SmplTrek.
 
 ## Platform facts and constraints
@@ -108,7 +108,7 @@ Machine, then drive (asymmetric soft clip), multimode filter (LP, HP, BP, 12 or 
 - **Send A, delay:** tempo-synced stereo delay with ping-pong and filtered feedback (`enaga::StereoDelay`). **[rev]** A second mode, LONG (Roland, 2026-11-22): up to 12 s (the division times X1-X8), tape wow, diffusion and a low cut in the feedback, and an in-place freeze (`dsp/ambient.hpp`).
 - **Send B, reverb:** `enaga::Reverb` with pre-delay, size, damping and a high-pass on the input. Delay can feed the reverb. **[rev]** A second mode, HALL: eight long swept lines with size, modulation and an octave-up shimmer.
 - **Sidechain duck:** a duck envelope (attack, hold, release) fired by a chosen trigger track (default track 1). Trigger-based, not an envelope follower: tighter and cheaper.
-- **Master:** one-knob DJ filter (left = low-pass, right = high-pass), **[rev]** a three-band kill EQ (a DJ isolator: LOW / MID / HI split at 250 Hz and 2.5 kHz with 24 dB Linkwitz-Riley crossovers, each band from a kill to +6 dB with a latching kill switch, bypassed while flat), glue compressor, soft limiter, output level.
+- **Master:** one-knob DJ filter (left = low-pass, right = high-pass), **[rev]** a three-band kill EQ (a DJ isolator: LOW / MID / HI split at 250 Hz and 2.5 kHz with 24 dB Linkwitz-Riley crossovers, each band from a kill to +6 dB with a latching kill switch, bypassed while flat; the switches are a performance control and are not saved with the project, Roland 2026-11-22), glue compressor, soft limiter, output level.
 
 **Parameters**
 
@@ -248,7 +248,7 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 | LEFT, RIGHT | **[rev]** Sideways: the page wherever the selection keys flip pages; the step on the step page; octave in KEYS; macro in PERFORM; track in MACHINE; the page of eight kit slots in KIT; destination in RESAMPLE; the slot cursor in PROJECT | Free |
 | OK, CLR | Confirm, cancel. **[rev]** OK picks the slot under the cursor in PROJECT, and recalls the kit under it in KIT (twice, since a recall is not undoable), and in EDIT or MACHINE on a SAMPLE or GRAIN track opens the sample browser, where it loads a file or opens a folder; CLR closes the step page and SETUP, and goes up a folder in the browser | F1 + CLR = undo, F1 + OK = redo |
 | VALUE | Tempo; push + turn = swing. **[rev]** Shows `EXT` and refuses edits when CLOCK SRC is not INTERNAL | Master DJ filter |
-| Push A, B, C | **[rev]** Remove a lock with a STEP held. On the MIXER's EQ page: the kill EQ's LOW, MID, HI kill switch | **[rev]** The master kill EQ's LOW, MID, HI kill switch, in every mode |
+| Push A, B, C | **[rev]** Remove a lock with a STEP held. On the MIXER's EQ page: the kill EQ's LOW, MID, HI kill switch | **[rev]** The master kill EQ's LOW, MID, HI kill switch, in every mode; with a STEP held, still removes that lock (push D too, which is otherwise the tape stop) |
 
 **[rev] Navigation.** The arrows follow Enaga's own menu and SETTINGS page, so one habit works in
 STRATA and in Enaga: UP and DOWN move through the rows on screen, LEFT and RIGHT move sideways,

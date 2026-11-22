@@ -260,6 +260,12 @@ public:
     };
     StreamInfo &stream_for_load(int track) { return stream_inbox_[track]; }
 
+    // A sample's slice points (core/onsets.hpp), for SLC AUTO. An inbox like the stream's: the
+    // loader writes the track's entry just before it posts Cmd::set_sample, and the audio side
+    // copies it into the Sampler when it applies that command. A set_sample is only posted after
+    // the track's previous one has been applied (the clear_sample epoch), so the two never meet.
+    SlicePoints &slices_for_load(int track) { return slice_inbox_[track]; }
+
     // The track's stream. The MAIN context opens and closes it, the AUDIO context reads it, and
     // never both at once: the audio side reads only between a Cmd::stream_attach and its own
     // next Status::stream_want bump, and the card side opens or closes only after seeing a bump
@@ -333,8 +339,10 @@ private:
     // A MIDI gate in frames for a trig whose own gate is 0 (no gate): one step of the track.
     uint32_t midi_gate(int track, uint32_t gate_frames) const;
     // A MID track's eight CC slots: send each one whose value has moved (per block).
-    void send_midi_ccs();
-    void send_midi_ccs(int track);
+    // The per-block pass; `frames` counts down the LFO's CC wait. The one-track form goes
+    // ahead of a note and is never held back.
+    void send_midi_ccs(uint32_t frames);
+    void send_midi_ccs(int track, bool throttle = false);
     // CC 123 on every channel a track sends on: the second STOP and FUNC+F6.
     void midi_all_notes_off();
 
@@ -343,6 +351,11 @@ private:
     // to MID must not throw eight arbitrary values at a synth that was set up by hand.
     uint8_t cc_sent_[kTracks][kParams] = {};
     bool cc_known_[kTracks] = {};
+    // An LFO on a MID track moves its destination's CC every block; the per-block pass sends
+    // it at most once per kLfoCcMs, so sixteen tracks of LFO stay within a DIN port's ~1000
+    // messages a second. Frames left before the next one may go.
+    static constexpr float kLfoCcMs = 20.0f;
+    uint32_t lfo_cc_wait_[kTracks] = {};
 
     // The placeholder's PCM (a static array in build_placeholder_sample), for `Cmd::clear_sample`
     // to fall back to: a track with no file plays it, after a swap as before the first one.
@@ -413,6 +426,7 @@ private:
     // so a fifo emptied by a restart is full again well before the head runs out.
     static constexpr uint32_t kStreamReadFrames = 512;
     StreamInfo stream_inbox_[kTracks]{};
+    SlicePoints slice_inbox_[kTracks]{};
     StreamState stream_state_[kTracks]{};
     StreamFifo fifos_[kTracks];
     enaga::files::Stream streams_[kTracks];
