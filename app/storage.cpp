@@ -189,6 +189,11 @@ bool Storage::init(Engine &engine) {
 
 // --- paths ----------------------------------------------------------------
 
+// Mutation testing note: the path buffers in this file are ENAGA_FILE_PATH_MAX + 1 bytes and every
+// BAD PATH below is unreachable today -- the longest path STRATA builds is the data folder, 10
+// bytes of "/PROJECTS/", a 23-byte name and "/PERFORM.BIN", well under 80 of the ABI's 255. So a
+// buffer two bytes smaller, or a BAD PATH branch deleted, survives the suite, and that is an
+// equivalence rather than a missing test. The checks stay: the data folder is Enaga's to name.
 bool Storage::folder_path(char *out, uint32_t max, bool autosave) const {
     if (max == 0) return false;
     char *p = out;
@@ -319,6 +324,9 @@ bool Storage::open_last() {
     const int32_t auto_seq = settings_.get(kKeyAutoSeq, 0);
 
     char path[ENAGA_FILE_PATH_MAX + 1];
+    // `>` and `>=` differ only on a tie, and the two counters cannot tie once either exists:
+    // they are written from one `save_seq_` that every save bumps first. Both 0 is a card with
+    // neither, where the choice does not matter.
     const bool prefer_auto = auto_seq > project_seq;
     if (prefer_auto && project_path(path, sizeof path, true, "PROJECT.BIN")) {
         enaga::files::Info info;
@@ -383,6 +391,10 @@ void Storage::on_card(bool usable) {
     // flight owns `raw_` until its callback -- which will still arrive, with an error. So the job
     // is abandoned here but `read_in_flight_` is left alone: nothing may reuse that buffer until
     // Enaga has finished with it.
+    //
+    // (`sample_track_` is -1 whenever no sample job runs, so the job test is belt and braces, and
+    // the `sample_queue_ = 0` below is re-filled by the request_all_samples a returning card
+    // makes. Both survive mutation for that reason.)
     if (job_ == Job::sample_epoch || job_ == Job::sample_read || job_ == Job::sample_convert ||
         job_ == Job::sample_resample) {
         if (sample_track_ >= 0) pool_.fail(sample_track_);
@@ -398,7 +410,7 @@ void Storage::on_card(bool usable) {
 
 void Storage::begin_job(Job job) {
     job_ = job;
-    step_ = 0;
+    step_ = 0;      // finish_job zeroes it too; either alone suffices, and each survives deletion
 
     error_ = nullptr;
 
@@ -432,6 +444,7 @@ void Storage::finish_job(const char *error) {
             const char *what = saving ? "save failed " : "load failed ";
             while (*what != '\0') *out++ = *what++;
             const char *why = error;
+            // 12 + 24 + NUL fits 40 with room to spare, so `<=` here is not an overflow either.
             while (*why != '\0' && out < line + 36) *out++ = *why++;
             *out = '\0';
             enaga::log(line);
@@ -524,7 +537,7 @@ void Storage::service() {
         case Job::sample_read: 
             // Nothing to do but wait: Enaga works the load in the main loop between callbacks.
             if (read_done_) {
-                read_done_ = false;
+                read_done_ = false;   // and again before every read starts, so equivalent
                 if (read_result_ < 0) {
                     if (sample_track_ >= 0) pool_.fail(sample_track_);
                     sample_track_ = -1;
@@ -587,7 +600,7 @@ void Storage::service() {
     // the budget stays higher than the project asked, which only ever allows more.
     if (wanted_budget_ != 0 && !read_in_flight_) {
         const uint32_t wanted = wanted_budget_;
-        wanted_budget_ = 0;
+        wanted_budget_ = 0;     // set_budget is idempotent, so re-applying it is harmless
         if (!pool_.set_budget(wanted)) error_ = "BUDGET BUSY";
     }
 }
@@ -641,6 +654,8 @@ void Storage::step_save() {
         file = "PERFORM.BIN";
         res = perform_write(engine_->scenes(), engine_->macros(), file_, kFileBytes, &bytes);
     } else if (index < kFileCount) {
+        // (`<=` survives: index kFileCount names bank kBanks, bank_file_name refuses it, and the
+        // pass is wasted before the next one finishes the job. Equivalent, one pass slower.)
         const int bank = index - kFileFirstBank;
         if (!all && !bank_dirty_[bank]) return;
         char name[12];
@@ -649,6 +664,9 @@ void Storage::step_save() {
             finish_job("BAD PATH");
             return;
         }
+        // A serializer fails only for a buffer too small, and `file_` is kBankMaxBytes, the
+        // largest file there is -- so these refusals cannot happen and deleting their
+        // finish_job survives. Kept, because the sizes are another file's to change.
         res = bank_write(project, bank, file_, kFileBytes, &bytes);
         if (res != SerializeResult::ok) {
             finish_job(serialize_result_name(res));
@@ -689,6 +707,8 @@ void Storage::step_save() {
         return;
     }
     if (!autosave_) {
+        // `!=` survives: request_save marks the kit dirty every time, so KIT.BIN is written by
+        // every deliberate save, and a clear moved onto that write ends in the same state.
         if (index == kFileProject) project_dirty_ = false;
         if (index == kFileKit) kit_dirty_ = false;
         if (index == kFilePerform) perform_dirty_ = false;

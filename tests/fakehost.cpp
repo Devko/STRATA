@@ -106,6 +106,7 @@ void FakeHost::reset() {
 
     card_ = true;
     full_ = false;
+    require_folders_ = false;
     read_error_ = false;
     in_audio_ = false;
 
@@ -429,6 +430,28 @@ int32_t FakeHost::t_file_read_all(const char *path, void *buffer, uint32_t max) 
     return h.read_file(path, buffer, max);
 }
 
+void FakeHost::set_require_folders(bool require) { require_folders_ = require; }
+
+// True when the folder `path` sits in was made, or is the data folder or the root. make_folder
+// makes parents too, so a folder is also there when a folder made INSIDE it is.
+bool FakeHost::parent_exists(const char *path) const {
+    int slash = -1;
+    for (int i = 0; path[i] != '\0'; i++) {
+        if (path[i] == '/') slash = i;
+    }
+    if (slash <= 0) return true;                       // "/NAME": the root
+    const char *data = t_file_data_folder();
+    if (int(std::strlen(data)) == slash && std::strncmp(path, data, size_t(slash)) == 0) return true;
+    for (int i = 0; i < count_; i++) {
+        if (!files_[i].folder) continue;
+        const char *f = files_[i].path;
+        if (std::strncmp(f, path, size_t(slash)) == 0 && (f[slash] == '\0' || f[slash] == '/')) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int32_t FakeHost::t_file_save(const char *path, const void *data, uint32_t bytes) {
     FakeHost &h = the();
     h.saves_++;
@@ -436,6 +459,7 @@ int32_t FakeHost::t_file_save(const char *path, const void *data, uint32_t bytes
     if (card != ENAGA_FILE_OK) return card;
     const int32_t bad = h.path_check(path);
     if (bad != ENAGA_FILE_OK) return bad;
+    if (h.require_folders_ && !h.parent_exists(path)) return ENAGA_FILE_NOT_FOUND;
     if (h.full_) return ENAGA_FILE_FULL;
     return h.write_file(path, data, bytes) ? ENAGA_FILE_OK : ENAGA_FILE_FULL;
 }

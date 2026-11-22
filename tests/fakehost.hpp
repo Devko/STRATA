@@ -101,6 +101,12 @@ public:
     void set_full(bool full);                  // true: writes give ENAGA_FILE_FULL
     void set_read_error(bool fail);            // true: reads give ENAGA_FILE_CARD_ERROR
     void set_audio_context(bool in_audio);     // true: file calls give ENAGA_FILE_WRONG_CONTEXT
+    // true: `files::save` into a folder nobody made gives ENAGA_FILE_NOT_FOUND, as a FAT driver
+    // does (FatFs answers FR_NO_PATH). Off by default, because the ABI comment does not say what
+    // Enaga's own save does with a missing parent -- so this is the strict reading, opted into by
+    // the tests that check STRATA makes its folders before it writes into them. The data folder
+    // counts as existing: Enaga names it, and STRATA's settings live there.
+    void set_require_folders(bool require);
 
     // Seed or inspect the card directly, without going through the app.
     bool write_file(const char *path, const void *data, uint32_t bytes);
@@ -260,6 +266,8 @@ private:
 
     bool card_ = true;
     bool full_ = false;
+    bool require_folders_ = false;
+    bool parent_exists(const char *path) const;
     bool read_error_ = false;
     bool in_audio_ = false;
 
