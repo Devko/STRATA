@@ -33,6 +33,8 @@
 #include "perform.hpp"   // scenes, the morph, macros, mute states, auto-fill
 #include "queue.hpp"       // and core/project.hpp through it: the project owns the live pattern
 #include "repeat.hpp"    // beat repeat, on the master output
+#include "tapestop.hpp"  // the tape stop, after beat repeat
+#include "arp.hpp"       // the arpeggiator's notes
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
 #include "scheduler.hpp"
@@ -145,6 +147,15 @@ public:
     int throwing() const { return throw_bus_; }
     const BeatRepeat &repeat() const { return repeat_; }
     RepeatLength repeat_length() const { return repeat_length_; }
+
+    // The held master moves, for the screen and the tests.
+    const TapeStop &tape_stop() const { return tape_stop_; }
+    const DelayFreeze &delay_freeze() const { return mixer_.freeze(); }
+
+    // Whether an arp is running on `track`: a sequenced step's, or held KEYS keys'.
+    bool arp_running(int track) const {
+        return track >= 0 && track < kTracks && (seq_arp_[track].on || held_arp_[track].on);
+    }
 
     // Whether a note repeat is rolling on `track` (Cmd::note_repeat).
     bool rolling(int track) const { return track >= 0 && track < kTracks && rolls_[track].on; }
@@ -511,6 +522,7 @@ private:
     int throw_track_ = 0;
 
     BeatRepeat repeat_;
+    TapeStop tape_stop_;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
 
     // Note repeat, one roll per track (Cmd::note_repeat). `countdown` is frames to the next hit
@@ -524,6 +536,37 @@ private:
         float countdown = 0.0f;
     };
     Roll rolls_[kTracks];
+
+    // The arpeggiator (core/arp.hpp). One run per track for a sequenced step -- started by
+    // `fire`, ending with the step's length or at the next step -- and one for held KEYS keys,
+    // which runs while any is down. Both hit on the clock's ticks while it runs; the held one
+    // counts frames while it is stopped, as a note repeat does.
+    struct ArpRun {
+        bool on = false;
+        ArpMode mode = ArpMode::off;
+        uint8_t length = 0;
+        uint8_t octaves = 1;
+        uint8_t rate = 24;           // ticks between hits
+        uint8_t gate_percent = 50;
+        uint8_t velocity = 100;
+        bool accent = false;
+        uint32_t hit = 0;
+        uint32_t next_tick = 0;
+        uint32_t end_tick = 0xFFFFFFFFu;
+        uint32_t seed = 0;
+        float countdown = 0.0f;      // frames to the next hit, transport stopped (held runs)
+        uint8_t cycle[kArpMaxCycle] = {};
+    };
+    ArpRun seq_arp_[kTracks];
+    ArpRun held_arp_[kTracks];
+    uint8_t held_notes_[kTracks][kArpMaxInput] = {};
+    uint8_t held_count_[kTracks] = {};
+    ArpSettings arp_settings(int track) const;
+    void arp_hit(int track, ArpRun &run, uint32_t frame);
+    void arp_tick(uint32_t tick, uint32_t frame);
+    void arp_free(uint32_t frames);
+    void arp_held_changed(int track);
+    void arp_follow(int track);
     void roll_fire(int track, uint32_t frame);
     void roll_tick(uint32_t tick, uint32_t frame);
     void roll_free(uint32_t frames);

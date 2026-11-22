@@ -332,6 +332,9 @@ constexpr uint16_t kSectionPerformSceneLfo = 3;
 // The scenes' master EQ bytes: 4 per scene (three bands, then the stored bits). OPTIONAL on read:
 // a PERFORM.BIN from before it loads with no scene storing the EQ.
 constexpr uint16_t kSectionPerformSceneMaster = 4;
+// The scenes' arp bytes: per scene, per track, the four values and then a byte whose low four
+// bits say which are stored. OPTIONAL on read, like the LFO's.
+constexpr uint16_t kSectionPerformSceneArp = 5;
 
 // Loading is value-tolerant but structure-strict, exactly as the other three file types are: a
 // macro naming a track that does not exist is dropped, while a bad magic, an unknown version, a

@@ -30,7 +30,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | --- | --- | --- |
 | GRID | HOME | All 8 tracks; STEP keys edit the selected track |
 | KEYS | FUNC+HOME | STEP keys play 16 scale degrees on the selected track |
-| EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, and its LFO |
+| EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, its LFO and its ARP |
 | MACHINE | FUNC+EDIT | Pick the machine on each track |
 | KIT | FUNC+EDIT twice | Save and recall whole kits: 16 slots on the card, shared by all projects |
 | SAMPLES | OK in EDIT or MACHINE, on a SMP or GRN track | Pick the track's WAV from `/SAMPLES` or `/RECORD` |
@@ -59,6 +59,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | VALUE push + turn | Pattern swing |
 | FUNC + VALUE | Master DJ filter (LP n / OFF / HP n) |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`) |
+| FUNC + push D (hold) | Tape stop: the master slows to a standstill over two beats; let go and it is back (`TAPE STOP`) |
 | FUNC + octave L/R | Selected track's length (polymeter); not in KEYS, PROJECT, PERFORM |
 | FUNC + selection L/R | Selected track's speed: 2, 1, 3/4, 1/2, 1/4, 1/8 |
 | Arrows | UP/DOWN move through rows, LEFT/RIGHT sideways, OK picks, CLR goes back |
@@ -74,7 +75,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | Upper 3 MUTE | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
 | Upper 6 THROW | Delay throw while held | FUNC: reverb throw |
-| Upper 7 MUTATE | Mutates the selected track (type and amount set in PERFORM) | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT |
+| Upper 7 MUTATE | Mutates the selected track (type and amount set in PERFORM) | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT. FUNC (hold): delay freeze, the echoes loop and nothing new goes in (`FREEZE`, `FRZ` on PERFORM's bar line) |
 
 ## Step editing (GRID, EDIT, MIXER, MACHINE, RESAMPLE)
 
@@ -105,7 +106,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | Mode | UP / DOWN | LEFT / RIGHT | Selection L/R | A-D | OK / CLR | FUNC + arrow |
 | --- | --- | --- | --- | --- | --- | --- |
 | GRID | Track | Step page 1-4 | Step page | Current EDIT page params | — / clear | Copy / paste |
-| EDIT | Track | Page SRC FLTR AMP FX LFO | Page | The page's 4 params | SMP/GRN: open SAMPLES / clear | Copy / paste |
+| EDIT | Track | Page SRC FLTR AMP FX LFO ARP | Page | The page's 4 params | SMP/GRN: open SAMPLES / clear | Copy / paste |
 | KEYS | Track | Octave (OCT 0-7) | Track | Current EDIT page params | — | Copy / paste |
 | MACHINE | Machine | Track | Track | A: machine | SMP/GRN: open SAMPLES / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
@@ -168,13 +169,14 @@ folders are listed (no `._` files), at most 256 a folder. Picking a file makes t
 | CHAIN | `CHAIN 3/64 ON`, `>02 A05 X2 PLAY` | Entries used, chain on/off; cursor, entry, pattern, repeats, playing now |
 | PATTERN | `>LEN 16 STEPS`, `SWG 54%`, `3 PAT`, `>5 66%` | Master length; swing; a track following SWG or with its own (`>` = field VALUE changes) |
 | EDIT LFO | `NOW CUT 87`, `LFO OFF: SET DEP+DST` | The destination's value right now; DEP or DST is zero |
+| EDIT ARP | `UP 1/16 X2 75%`, `ARP OFF: TURN MOD` | Mode, rate, octaves, gate; the arp is off |
 | PROJECT slots | `05>`, bright box | Queued slot; live slot (bright), has trigs (mid), empty (dark) |
 | PROJECT | `SMP OS.X- 12/32M` | Per track sample: O ready, S streamed from the card, . loading, X failed, - none; MiB used/budget |
 | Any | `STREAM LATE` | The card fell behind a streamed file; the gap played as silence |
 | PROJECT | `UNSAVED`, `NO CARD` | RAM differs from the card; no usable card |
 | KIT | `>03 KIT`, `EMPTY`, `UNREADABLE`, `...` | Cursor and slot: holds a kit, nothing, a damaged file, not read yet; the cursor's kit below as two lines of four machines |
 | PERFORM | `A1 12P`, `>A`, `3P` | Scene slot and its parameter count; selected macro; macro targets |
-| PERFORM | `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n` | Mutation, track, amount; fill, auto-fill, repeat (`-` pitched down), throw; bar count (`NRPT`: note repeat on) |
+| PERFORM | `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n` | Mutation, track, amount; fill, auto-fill, repeat (`-` pitched down), throw; bar count (`NRPT`: note repeat on, `FRZ`: delay frozen) |
 | MIXER | `T1 M`, `ON`/`--`, `PEAK` | Track muted; machine present; master peak |
 | MIXER EQ | `0`, `-20`, `+12`, `KILL` | Band flat, cut, boosted; killed by its switch or a knob at the bottom |
 | SAMPLES | `/SAMPLES/KICKS`, `>K1.WAV`, `LOOPS/`, `NOW K1.WAV`, `3/40 +2` | Folder (or `READING FOLDER`, `NOT FOUND`, `NO CARD`, the load's progress); cursor; a folder; the track's file; position, count, entries left out |
@@ -186,8 +188,9 @@ folders are listed (no `._` files), at most 256 a folder. Picking a file makes t
 **Machines:** KCK kick · SNR snare · HAT hat · PRC 2-op FM percussion · SMP sampler · GRN granular ·
 MNO VA mono · PLY VA poly.
 
-**EDIT pages:** SRC source · FLTR filter (insert chain) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO.
+**EDIT pages:** SRC source · FLTR filter (insert chain) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator.
 **LFO page:** WAV shape SIN TRI RMP (rising) SAW (falling) SQR S+H · RAT rate, `0.06`-`32` Hz free on the lower half, `8B` (bars) to `1/32` synced on the upper (`.` dotted, `T` triplet) · DEP depth, 127 = about 64 either side · DST the parameter it moves, or OFF. Lockable, scene- and macro-able like any parameter.
+**ARP page:** MOD OFF UP DN U/D ORD RND · RAT `1/4` to `1/32T` · OCT `X1`-`X4` · GAT note length, `50%`-`99%` of the spacing. On, a step plays a run for its length (PLY: through its chord); in KEYS, held keys are arpeggiated. Lockable and scene-able.
 
 | Machine | SRC (A B C D) | AMP (A B C D) |
 | --- | --- | --- |

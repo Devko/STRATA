@@ -258,6 +258,8 @@ Strata &fresh() {
     app.on_pad_release(7);                 // scene A
     app.on_pad_release(9);                 // scene B
     app.on_pad_release(11);                // THROW
+    app.on_pad_release(13);                // MUTATE (a held freeze)
+    app.on_key(ENAGA_KEY_PUSH_D, false);   // a held tape stop
     if (UiProbe::mute_mode(app)) {         // the MUTE pad is a toggle, so it takes another press
         app.on_pad_press(5, 100);
         app.on_pad_release(5);
@@ -599,6 +601,40 @@ TEST(ui_func_fill_turns_note_repeat_on_and_a_held_pad_rolls) {
     pump(2);
     CHECK(!app_engine().rolling(3));
     app.on_pad_release(6);
+}
+
+TEST(ui_func_push_d_holds_a_tape_stop_and_func_mutate_a_delay_freeze) {
+    Strata &app = fresh();
+    pump(2);
+    const uint8_t undo_before = undo_depth();
+
+    // FUNC + push D: the tape stop, for as long as push D is held -- even after FUNC comes up.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_D, true);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK(app_engine().tape_stop().held());
+    CHECK(std::strcmp(UiProbe::notice(app), "TAPE STOP") == 0);
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    pump(2);
+    CHECK(!app_engine().tape_stop().held());
+    // A plain push D is not a tape stop.
+    app.on_key(ENAGA_KEY_PUSH_D, true);
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    pump(2);
+    CHECK(!app_engine().tape_stop().held());
+
+    // FUNC + MUTATE: the delay freeze, held, and no mutation (no undo level).
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(13, 100);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK(app_engine().delay_freeze().held());
+    CHECK(std::strcmp(UiProbe::notice(app), "FREEZE") == 0);
+    app.on_pad_release(13);
+    pump(2);
+    CHECK(!app_engine().delay_freeze().held());
+    CHECK_EQ(int(undo_depth()), int(undo_before));
 }
 
 TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {
@@ -2514,6 +2550,32 @@ TEST(ui_layout_mixer_perform_keys_machine_resample) {
     check_layout(app, "PERFORM, scene 16");
     key(ENAGA_KEY_OCTAVE_RIGHT);
 
+    // The live line at its widest: fill, auto-fill 16, a pitched 1/16T repeat, a delay throw and
+    // a freeze, with note repeat on the bar line.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(1, 100);                   // FUNC + FILL: NOTE RPT
+    app.on_pad_release(1);
+    app.on_pad_press(3, 100);                   // REPEAT, pitched down
+    app.on_encoder(4, +10);                     // to the last length, 1/16T
+    app.on_pad_press(13, 100);                  // FUNC + MUTATE: freeze
+    app.on_key(ENAGA_KEY_F1, false);
+    app.on_pad_press(1, 100);                   // FILL
+    app.on_pad_press(11, 100);                  // THROW, delay
+    post_cmd(Cmd::set_auto_fill, uint8_t(AutoFill::every_16));
+    pump(2);
+    CHECK(app_engine().delay_freeze().held());
+    check_layout(app, "PERFORM, everything live");
+    app.on_pad_release(11);
+    app.on_pad_release(1);
+    app.on_pad_release(13);
+    app.on_pad_release(3);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(1, 100);                   // NOTE RPT off again
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    post_cmd(Cmd::set_auto_fill, uint8_t(AutoFill::off));
+    pump(2);
+
     shift_key(ENAGA_KEY_F4);
     CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
     for (int scale = 0; scale < kScaleCount; scale++) {
@@ -2964,6 +3026,50 @@ TEST(ui_the_lfo_is_edits_fifth_page) {
     // Back to SRC for the tests after this one, and the LFO off.
     post_cmd_track_param(0, kLfoDepth, 0);
     post_cmd_track_param(0, kLfoDest, 0);
+    pump();
+    key(ENAGA_KEY_F8);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_arp_is_edits_sixth_page_and_keys_play_it) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                // EDIT, track 1
+    while (UiProbe::param_page(app) != int(Page::arp)) key(ENAGA_KEY_SELECT_RIGHT);
+    check_layout(app, "EDIT ARP, off");
+
+    // One click is one zone on A, B and C: MOD UP, RAT one faster, OCT 2.
+    app.on_encoder(0, +1);
+    app.on_encoder(1, +1);
+    app.on_encoder(2, +1);
+    pump();
+    const TrackParams &p = app_engine().params(0);
+    CHECK_EQ(arp_mode_index(p.v[kArpFirst + 0]), int(ArpMode::up));
+    CHECK_EQ(arp_rate_index(p.v[kArpFirst + 1]), 1);
+    CHECK_EQ(arp_octaves(p.v[kArpFirst + 2]), 2);
+    check_layout(app, "EDIT ARP, on");
+
+    // The widest words the page can show: every mode, rate, octave count and gate.
+    for (int b = 0; b < 128; b += 3) {
+        for (int i = 0; i < kArpParams; i++) post_cmd_track_param(0, uint8_t(kArpFirst + i), uint8_t(b));
+        pump();
+        check_layout(app, "EDIT ARP, every value");
+    }
+
+    // KEYS: a key held on a track whose arp is on starts it; the key coming up stops it.
+    post_cmd_track_param(0, uint8_t(kArpFirst + 0), 22);      // UP
+    pump();
+    shift_key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+    app.on_key(ENAGA_KEY_STEP1, true);
+    pump(2);
+    CHECK(app_engine().arp_running(0));
+    app.on_key(ENAGA_KEY_STEP1, false);
+    pump(2);
+    CHECK(!app_engine().arp_running(0));
+
+    // Off again, and back to SRC for the tests after this one.
+    for (int i = 0; i < kArpParams; i++) post_cmd_track_param(0, uint8_t(kArpFirst + i), 0);
     pump();
     key(ENAGA_KEY_F8);
     while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);

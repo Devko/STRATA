@@ -1,5 +1,6 @@
 #include "engine.hpp"
 
+#include "arp.hpp"       // the arpeggiator's notes; the engine schedules them
 #include "factory.hpp"
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
@@ -39,7 +40,8 @@ static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first
               "core/factory.hpp's page layout and dsp/track.hpp's have diverged");
 
 static_assert(kKitParams == kTrackParams && kKitSoundParams == kParams &&
-                  kKitLfoParams == kLfoParams,
+                  kKitLfoParams == kLfoParams && kKitArpParams == kArpParams &&
+                  kKitLfoEnd == kArpFirst && kArpBytes == kArpParams,
               "core/project.hpp's kit record and dsp/track.hpp's TrackParams have diverged; a "
               "saved project would come back with the wrong number of parameters per track");
 
@@ -52,6 +54,7 @@ bool Engine::init(float sample_rate) {
 
     // Beat repeat's 2-bar ring, 2.93 MiB, here with every other buffer in the signal path.
     if (!repeat_.init(rate_)) return false;
+    if (!tape_stop_.init(rate_)) return false;
     if (!capture_.init(rate_)) return false;
 
     perform_init(scenes_, macros_);
@@ -336,6 +339,8 @@ void Engine::apply(const Command &command) {
             // blocks later would be a note after the transport stopped.
             deferred_count_ = 0;
             scheduler_.reset(true);
+            // And a sequenced arp, whose step is gone. A held KEYS arp keeps going.
+            for (int t = 0; t < kTracks; t++) seq_arp_[t].on = false;
             // And the last step's locks. A lock lasts as long as its step, and with the transport
             // stopped no step is playing: left masked, every parameter that step locked was shut
             // out of the performance layer until the next PLAY, so a macro or the morph on it
@@ -593,6 +598,8 @@ void Engine::apply(const Command &command) {
             // count resyncs on the next tick. The voices ring on: this is a restart, not a stop.
             deferred_count_ = 0;
             scheduler_.reset(true);
+            // And a sequenced arp, whose step is gone. A held KEYS arp keeps going.
+            for (int t = 0; t < kTracks; t++) seq_arp_[t].on = false;
             // Mutation-equivalent (docs/MUTATION.md): resolve_tick already sends an origin past
             // the new tick back to 0. Kept so that this case says everything a restart resets.
             origin_ = 0;
@@ -749,6 +756,13 @@ void Engine::apply(const Command &command) {
             }
             deferred_count_ = 0;                 // hits of a pattern that no longer exists
             scheduler_.reset(true);
+            // And both arps: the step is gone, and so is the kit whose ARP page the held run
+            // followed. Keys still down play plainly until they come up.
+            for (int t = 0; t < kTracks; t++) {
+                seq_arp_[t].on = false;
+                held_arp_[t].on = false;
+                held_count_[t] = 0;
+            }
             // The lock mask of a step of a pattern that no longer exists (Cmd::stop says why).
             for (int t = 0; t < kTracks; t++) locked_[t] = 0;
             reconfigure();
@@ -1127,6 +1141,19 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::trigger_note: {
+            // A held KEYS key on a track whose arp is on joins the held notes instead: the arp
+            // plays them (core/arp.hpp). A pad or MIDI note has no release to end a hold.
+            if (command.c == 1 && arp_settings(track).on()) {
+                const uint8_t note = clamp_u8(command.a);
+                uint8_t &count = held_count_[track];
+                bool have = false;
+                for (int i = 0; i < count; i++) have = have || held_notes_[track][i] == note;
+                if (!have && count < kArpMaxInput) held_notes_[track][count++] = note;
+                held_arp_[track].velocity =
+                    uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
+                arp_held_changed(track);
+                break;
+            }
             // A pad hit, played live. It sounds now, at the start of the block: the main context
             // cannot know a frame offset, and the spec's latency stamping belongs to recording.
             // Not on a muted track: a muted track is not rendered, so the note would wait in the
@@ -1165,12 +1192,31 @@ void Engine::apply(const Command &command) {
             break;
         }
 
-        case Cmd::release_note:
+        case Cmd::delay_freeze:
+            mixer_.freeze_delay(command.a != 0);
+            break;
+
+        case Cmd::tape_stop:
+            tape_stop_.hold(command.a != 0);
+            break;
+
+        case Cmd::release_note: {
             // A KEYS key coming up. Not refused on a muted track or with nothing holding the
             // note: a release with nothing to let go is the second half of a gesture whose
             // first half was swallowed, and it changes nothing (dsp/track.hpp, `release`).
             if (machines_[track]) machines_[track]->release(clamp_u8(command.a));
+            // And out of the arp's held notes, if it was one.
+            const uint8_t note = clamp_u8(command.a);
+            uint8_t &count = held_count_[track];
+            for (int i = 0; i < count; i++) {
+                if (held_notes_[track][i] != note) continue;
+                for (int j = i; j + 1 < count; j++) held_notes_[track][j] = held_notes_[track][j + 1];
+                count--;
+                arp_held_changed(track);
+                break;
+            }
             break;
+        }
 
         case Cmd::resample_arm: {
             // Bars into FRAMES, here, because only this side knows the tempo in samples. A bar
@@ -1734,6 +1780,120 @@ void Engine::roll_free(uint32_t frames) {
     }
 }
 
+// --- the arpeggiator ------------------------------------------------------
+
+ArpSettings Engine::arp_settings(int track) const {
+    return ArpSettings::make(&effective_[track].v[kArpFirst]);
+}
+
+void Engine::arp_hit(int track, ArpRun &run, uint32_t frame) {
+    const uint8_t note = arp_note(run.cycle, run.length, run.mode, run.hit, run.seed);
+    run.hit++;
+    if (machines_[track] == nullptr || muted_[track]) return;
+    Trig trig;
+    trig.note = note;
+    trig.velocity = run.velocity;
+    trig.accent = run.accent && run.hit == 1;     // the step's accent, on its first hit
+    trig.frame = frame;
+    // The hit's gate: GATE's share of the spacing. One float multiply at control rate.
+    const float spacing = float(run.rate) * samples_per_tick_;
+    const float gate = spacing * float(run.gate_percent) * 0.01f;
+    trig.gate_frames = gate < 1.0f ? 1u : uint32_t(gate);
+    if (make_room_for_poly_voice(track, note)) machines_[track]->trigger(trig);
+    status_.bump_triggered(track);              // each hit lights the track, as a step does
+}
+
+void Engine::arp_tick(uint32_t tick, uint32_t frame) {
+    for (int t = 0; t < kTracks; t++) {
+        ArpRun *runs[2] = {&seq_arp_[t], &held_arp_[t]};
+        for (ArpRun *run : runs) {
+            if (!run->on) continue;
+            if (run == &held_arp_[t]) arp_follow(t);
+            if (!run->on) continue;
+            // (Written as a sum: next_tick - rate would wrap below a run started near tick 0.)
+            if (tick >= run->end_tick || tick + run->rate < run->next_tick) {
+                // Past the step's length -- or the transport jumped back past the run's start.
+                if (run == &seq_arp_[t]) {
+                    run->on = false;
+                    continue;
+                }
+                run->next_tick = tick;                // a held run just picks the clock up again
+            }
+            if (tick < run->next_tick) continue;
+            arp_hit(t, *run, frame);
+            run->next_tick = tick + run->rate;
+            run->countdown = float(run->rate) * samples_per_tick_;
+        }
+    }
+}
+
+// Held runs with the transport stopped: free from the first key, at the tempo's spacing.
+void Engine::arp_free(uint32_t frames) {
+    for (int t = 0; t < kTracks; t++) {
+        ArpRun &run = held_arp_[t];
+        if (!run.on) continue;
+        arp_follow(t);
+        if (!run.on) continue;
+        const float spacing = float(run.rate) * samples_per_tick_;
+        if (spacing < 1.0f) continue;
+        if (run.countdown > spacing) run.countdown = spacing;
+        while (run.countdown < float(frames)) {
+            const float at = run.countdown < 0.0f ? 0.0f : run.countdown;
+            arp_hit(t, run, uint32_t(at));
+            run.countdown += spacing;
+        }
+        run.countdown -= float(frames);
+    }
+}
+
+// A held run follows the ARP page while the keys are down: RAT and GAT at once, MOD and OCT by
+// rebuilding the cycle, and MOD turned to OFF ends it. Four byte reads a track a tick, and the
+// rebuild only when something it depends on moved.
+void Engine::arp_follow(int track) {
+    ArpRun &run = held_arp_[track];
+    const ArpSettings arp = arp_settings(track);
+    if (!arp.on()) {
+        run.on = false;
+        held_count_[track] = 0;
+        return;
+    }
+    run.rate = arp.rate_ticks;
+    run.gate_percent = arp.gate_percent;
+    if (arp.mode != run.mode || arp.octaves != run.octaves) {
+        run.mode = arp.mode;
+        run.octaves = arp.octaves;
+        run.length = uint8_t(arp_cycle(held_notes_[track], held_count_[track], arp, run.cycle));
+        if (run.length == 0) run.on = false;
+    }
+}
+
+// The held KEYS notes changed: rebuild the cycle, start the run on the first key and stop it on
+// the last. The hit count carries on, so adding a note does not restart the pattern.
+void Engine::arp_held_changed(int track) {
+    ArpRun &run = held_arp_[track];
+    const ArpSettings arp = arp_settings(track);
+    run.length = uint8_t(arp_cycle(held_notes_[track], held_count_[track], arp, run.cycle));
+    if (run.length == 0) {
+        run.on = false;
+        return;
+    }
+    run.mode = arp.mode;
+    run.octaves = arp.octaves;
+    run.rate = arp.rate_ticks;
+    run.gate_percent = arp.gate_percent;
+    run.end_tick = 0xFFFFFFFFu;
+    if (run.on) return;
+    run.on = true;
+    run.hit = 0;
+    run.seed = uint32_t(track) * 131u + 7u;
+    run.accent = false;
+    // The first hit now; then on the grid of the rate while running, or free while stopped.
+    arp_hit(track, run, 0);
+    const uint32_t r = run.rate;
+    run.next_tick = tick_ - tick_ % r + r;
+    run.countdown = float(r) * samples_per_tick_;
+}
+
 void Engine::deliver_deferred(uint32_t frames) {
     // Oldest first, and compacted in one pass: an event that fires is removed and the rest keep
     // their order, so a ratchet's hits stay in the order the scheduler produced them.
@@ -1824,6 +1984,43 @@ void Engine::fire(const StepEvent &event) {
         trig.slide = event.slide;
         trig.frame = event.frame;
         trig.gate_frames = gate_frames_for(track, event.length_index);
+
+        const ArpSettings arp = arp_settings(track);
+        if (arp.on()) {
+            // The arp takes the step: its notes (the chord on POLY, the one note elsewhere) become
+            // a cycle walked at the arp's rate for the step's length -- or until the next step,
+            // for a step with no length. The first hit is now, on the step's own frame.
+            uint8_t input[kChordMaxNotes];
+            int count = 1;
+            input[0] = note;
+            if (polys_[track] != nullptr) {
+                const uint8_t packed = folding.tracks[track].steps[event.step].chord;
+                count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
+                                     VaPoly::kVoices);
+            }
+            ArpRun &run = seq_arp_[track];
+            run.mode = arp.mode;
+            run.rate = arp.rate_ticks;
+            run.gate_percent = arp.gate_percent;
+            run.length = uint8_t(arp_cycle(input, count, arp, run.cycle));
+            run.velocity = event.velocity;
+            run.accent = event.accent;
+            run.hit = 0;
+            // The same notes every pass: the seed is the track and the step, not the time.
+            run.seed = uint32_t(track) * 131u + uint32_t(event.step);
+            run.next_tick = tick_ + run.rate;
+            const uint32_t gate = trig.gate_frames;
+            run.end_tick = 0xFFFFFFFFu;
+            if (gate > 0 && samples_per_tick_ > 0.0f) {
+                // Rounded, and exclusive: a one-step length at 1/32 is the hits on 0 and 12, and not
+                // a third on the next step's own tick.
+                run.end_tick = tick_ + uint32_t(float(gate) * inv_samples_per_tick_ + 0.5f);
+            }
+            run.on = run.length > 0;
+            if (run.on) arp_hit(track, run, event.frame);
+            if (track == duck_source_) mixer_.trigger_duck(event.frame);
+            return;
+        }
 
         if (polys_[track] != nullptr) {
             // A POLY track plays a CHORD, which is several notes on one frame rather than one
@@ -1946,8 +2143,11 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // and a machine's voice allocation sees triggers in the order they arrive.
     deliver_deferred(frames);
 
-    // Note repeat with the transport stopped: no ticks arrive, so the rolls count frames.
-    if (!enaga::clock::running()) roll_free(frames);
+    // Note repeat and held arps with the transport stopped: no ticks arrive, so they count frames.
+    if (!enaga::clock::running()) {
+        roll_free(frames);
+        arp_free(frames);
+    }
 
     // Enaga's clock reports the ticks falling in this block, each with the frame it lands on.
     // That frame is what makes a step start on an exact sample.
@@ -1956,6 +2156,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     for (uint32_t i = 0; i < tick_count; i++) {
         resolve_tick(ticks[i].tick, ticks[i].frame);
         roll_tick(ticks[i].tick, ticks[i].frame);
+        arp_tick(ticks[i].tick, ticks[i].frame);
     }
 
     // What the performance layer produced, into the values the machines read -- except where the
@@ -2009,6 +2210,11 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
                 repeat_pitch_);
     repeat_.hold(repeat_held_);
     repeat_.process(out, int(frames));
+
+    // The tape stop, after beat repeat: it stops whatever is coming out, a repeat included. Two
+    // beats from full speed to a standstill, so it lands with the music.
+    tape_stop_.set(2.0f * float(enaga::clock::ppqn) * samples_per_tick_);
+    tape_stop_.process(out, int(frames));
 
     // The take, from the FINISHED master: after the mixer, the limiter and beat repeat, which is
     // what comes out of the box (dsp/capture.hpp). A tap, so `out` is not modified.

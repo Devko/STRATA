@@ -189,7 +189,7 @@ enum class Cmd : uint8_t {
     // Beat repeat. The length is in note values and the engine turns it into frames, because
     // only the audio side knows the tempo in samples (dsp/repeat.hpp).
     set_repeat,        // a: RepeatLength, b: 1 = held, c: 1 = pitch down
-    trigger_note,      // track, a: note, b: velocity -- a pad hit, played live
+    trigger_note,      // track, a: note, b: velocity, c: 1 = a held KEYS key (a release follows)
     release_note,      // track, a: note
 
     // Resampling, docs/SPEC.md's eighth performance tool. Three commands, because a take spans
@@ -243,6 +243,12 @@ enum class Cmd : uint8_t {
     // it is stopped. a: note, b: velocity, c: 0 let go, 1 press (the first hit sounds now),
     // 2 new velocity from the pad's pressure. Played, not recorded: the pattern is untouched.
     note_repeat,
+
+    // Held master moves (FUNC + MUTATE, FUNC + push D), a: 1 held, 0 let go. The delay freeze loops
+    // what is echoing and cuts the delay's feed (dsp/freeze.hpp); the tape stop slows the finished
+    // master to a standstill over two beats (dsp/tapestop.hpp). Performance, not edits: no file.
+    delay_freeze,
+    tape_stop,
 
     count
 };

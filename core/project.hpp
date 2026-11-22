@@ -52,10 +52,13 @@ constexpr int kProjectPatterns = kBanks * kPatternsPerBank;   // 128
 // asserts that the three agree: 16 SOUND parameters (the machine's and the insert chain's) and
 // then the 4 bytes of the track's LFO (dsp/lfo.hpp). The split matters to the files: KIT.BIN and
 // PERFORM.BIN carried 16 a track before the LFO existed, so the four LFO bytes travel in sections
-// of their own that an older file simply does not have.
+// of their own that an older file simply does not have. The arpeggiator's four (core/arp.hpp)
+// follow the LFO's in the same way, and in a section of their own again.
 constexpr int kKitSoundParams = 16;
 constexpr int kKitLfoParams = 4;
-constexpr int kKitParams = kKitSoundParams + kKitLfoParams;
+constexpr int kKitLfoEnd = kKitSoundParams + kKitLfoParams;
+constexpr int kKitArpParams = 4;
+constexpr int kKitParams = kKitLfoEnd + kKitArpParams;
 
 // How many machines a track can host, mirroring dsp/'s machine list the same way and for the
 // same reason as kKitParams: docs/SPEC.md, "Machines (v1)" -- KICK, SNARE, HAT, PERC, SAMPLE,
@@ -312,9 +315,12 @@ constexpr uint16_t kSectionKitTracks = 1;
 // LFO off (all four bytes 0), which is also what zeroed bytes mean to dsp/lfo.hpp. The version
 // does not move: no existing byte changed its meaning.
 constexpr uint16_t kSectionKitLfo = 2;
-// SLC AUTO, one byte per track (KitTrack::slice_mode). Optional on read like the LFO: a KIT.BIN
-// from before it loads with every track slicing equally, which is what slicing always did.
-constexpr uint16_t kSectionKitSlices = 3;
+// The arpeggiator's four bytes per track (kKitArpParams), OPTIONAL in the same way: a KIT.BIN
+// from before the arp loads with every arp OFF.
+constexpr uint16_t kSectionKitArp = 3;
+// SLC AUTO, one byte per track (KitTrack::slice_mode). Optional on read like the LFO and the
+// arp: a KIT.BIN from before it loads with every track slicing equally, as slicing always did.
+constexpr uint16_t kSectionKitSlices = 4;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

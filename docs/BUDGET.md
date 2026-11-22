@@ -838,6 +838,22 @@ per key release, in the command handler, and touches no render loop: the only pe
 is a flag test when a voice STARTS. No figure above changes. Not re-measured, because this cloud
 session has no emulator and no cl6x; the next load scenario run on Roland's PC covers it.
 
+### The arpeggiator (2026-11-22, not measured)
+
+The arp (core/arp.hpp, the scheduling in app/engine.cpp) adds no per-sample work: a hit is an
+ordinary `trigger`, as a step's is. What it adds is control rate: one `ArpSettings::make` (four
+multiplies and shifts) per step fired, and per clock tick a check of two runs on each of eight
+tracks, plus a re-read of the four bytes for a held KEYS run. With every arp off that is sixteen
+flag tests a tick, about 0.5 ticks a block at 120 BPM. Off is bit-exact: zeroed bytes are OFF and
+every golden render is unchanged.
+
+A running arp costs what its notes cost. A 1/32 arp on a one-step bass note is two triggers where
+there was one, so the voice load is the machine's, at the higher note rate: on VA POLY each hit
+takes a voice from the shared budget of 12 (`Engine::kPolyVoiceBudget`), which is the ceiling
+whatever the arp does. Not re-measured, because this cloud session has no emulator and no cl6x;
+`tests/scenario_lfo.sh` now also walks to the ARP page, and U7/U8-style figures for a running
+arp come from 13h on the unit.
+
 ### The master kill EQ (2026-11-22, host only)
 
 A three-band DJ isolator on the master, after the DJ filter (`Mixer::kill_eq`, loop in
@@ -875,6 +891,32 @@ fraction of a dB around 250 Hz), then 12 dB crossovers (3 SVFs, but the MID kill
 To measure on Roland's PC: **E6** below (`tests/scenario_killeq.sh`, which kills all three bands
 on the EQ page and reads the peak, against `scenario_m7.sh` with the EQ bypassed), both compilers.
 On the unit: **U6**.
+
+### Tape stop and delay freeze (2026-11-22, host only)
+
+Both are held moves and **cost nothing until pressed**: the tape stop records only while it runs
+(the read never needs a frame from before the press), and the freeze records forward from the
+press rather than keeping a history. Neither touches the default path, so every render that
+never presses them is unchanged to the bit (the goldens pass untouched). Loops in
+`dsp/stoploops.ti.c`, so both go through cl6x.
+
+| Measure (x86 2.3 GHz, GCC -O2, per 64-frame block) | Host time |
+| --- | --- |
+| Tape stop, running (write, interpolated read, level, crossfade; stereo) | ~220 ns |
+| Delay freeze, looping (stereo read and crossfade) | ~115 ns |
+| Delay freeze, recording (stereo copy) | ~27 ns |
+| The master peak detector, for scale | ~57 ns |
+
+Against A01's ~23.9 us host block that is about 0.9% for the tape stop and 0.5% for the freeze
+(plus a clear and two mixes for routing the delay through its wet planes while frozen), so an
+**estimate of about 0.2 points cl6x / 0.3 GCC-only for the tape stop and 0.1 / 0.2 for the
+freeze**, and only while held. The freeze also keeps the delay running while held, which the
+worst case already counts (both sends running). No emulator scenario: both are held key
+combinations, and the emulator's `--key` only taps. Unit check: **U8** (UNIT_CHECKLIST 13g).
+
+Memory: the freeze's loop is 1.46 MiB (4 s of stereo float: two 2 s delay times) and the tape
+stop's ring 0.46 MiB (1.25 s), both taken in init. `tests/test_memory.cpp` itemises them: init
+is about 104.1 MiB of the 120 MiB heap with the stream rings from main, 15.9 MiB spare.
 
 ### Per-track LFO (2026-11-22, host only)
 

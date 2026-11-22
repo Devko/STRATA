@@ -40,7 +40,7 @@ using namespace strata;
 // 292 since the live section: another table entry (12) and its 3 bytes, optional likewise.
 // 296 since the kill EQ grew the mixer section by its three band bytes and the kill switches.
 constexpr uint32_t kProjectFileBytes = 296;
-constexpr uint32_t kKitFileBytes = 1140;   // 1076 before the LFO (12 + 8 x 4), 1120 before SLC AUTO (12 + 8)
+constexpr uint32_t kKitFileBytes = 1184;   // 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -1257,7 +1257,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 3);     // the tracks, the LFO, SLC AUTO
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 4);     // the tracks, the LFO, the arp, SLC AUTO
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -1277,10 +1277,12 @@ TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
     for (int p = 0; p < kKitSoundParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
 }
 
-TEST(kit_the_lfo_bytes_round_trip_and_are_clamped_on_the_way_in) {
-    // The LFO's four bytes a track (core/project.hpp, kSectionKitLfo), in their own section.
+TEST(kit_the_lfo_and_arp_bytes_round_trip_and_are_clamped_on_the_way_in) {
+    // The LFO's four bytes a track (kSectionKitLfo) and the arp's four (kSectionKitArp), each in
+    // a section of its own.
     fresh_kit_file();
     CHECK(section_at(g_kit_file, kSectionKitLfo) != 0u);
+    CHECK(section_at(g_kit_file, kSectionKitArp) != 0u);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
         for (int p = kKitSoundParams; p < kKitParams; p++) {
@@ -1290,8 +1292,11 @@ TEST(kit_the_lfo_bytes_round_trip_and_are_clamped_on_the_way_in) {
     // Laid out track by track, four bytes each, in parameter order.
     const uint32_t lfo = section_at(g_kit_file, kSectionKitLfo);
     CHECK_EQ(int(g_kit_file[lfo + 4 * 3 + 2]), int(g_kit_source.tracks[3].params[kKitSoundParams + 2]));
+    const uint32_t arp = section_at(g_kit_file, kSectionKitArp);
+    CHECK_EQ(int(g_kit_file[arp + 4 * 5 + 1]), int(g_kit_source.tracks[5].params[kKitLfoEnd + 1]));
 
     for (uint32_t i = 0; i < uint32_t(kKitLfoParams * kTracks); i++) g_kit_file[lfo + i] = 200;
+    for (uint32_t i = 0; i < uint32_t(kKitArpParams * kTracks); i++) g_kit_file[arp + i] = 201;
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
@@ -1301,14 +1306,32 @@ TEST(kit_the_lfo_bytes_round_trip_and_are_clamped_on_the_way_in) {
     }
 }
 
-TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_off) {
+TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_and_arp_off) {
     // Backward compatibility: a KIT.BIN with the tracks section only -- what every build before
-    // the LFO wrote -- still loads, keeps its sound, and turns every LFO OFF rather than leaving
-    // whatever the kit it is read into held.
+    // the LFO wrote -- still loads, keeps its sound, and turns every LFO and arp OFF rather than
+    // leaving whatever the kit it is read into held.
     fresh_kit_file();
-    static uint8_t two_sections[kKitFileBytes];
-    drop_last_section(g_kit_file, two_sections);
-    const uint32_t old_size = drop_last_section(two_sections, g_kit_alt);
+    static uint8_t with_arp[kKitFileBytes];
+    CHECK_EQ(drop_last_section(g_kit_file, with_arp), 1164u);     // SLC AUTO's section first
+    const uint32_t lfo_size = drop_last_section(with_arp, g_kit_alt);
+    CHECK_EQ(lfo_size, 1120u);                    // what the LFO's build wrote
+    for (uint32_t i = 0; i < lfo_size; i++) g_kit_file[i] = g_kit_alt[i];
+
+    // That one first: the LFO comes back, the arp is off.
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitParams; p++) g_kit_loaded.tracks[t].params[p] = 99;
+    }
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, lfo_size)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitLfoEnd; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+        for (int p = kKitLfoEnd; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 0);
+        }
+    }
+
+    const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
     CHECK_EQ(old_size, 1076u);
     CHECK_EQ(int(peek_u16(g_kit_alt, 6)), 1);
     for (int t = 0; t < kTracks; t++) {
@@ -1325,13 +1348,15 @@ TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_off) {
         CHECK_EQ(int(g_kit_loaded.tracks[t].machine), int(g_kit_source.tracks[t].machine));
     }
 
-    // Present but short is damage, not an old file.
-    fresh_kit_file();
-    const uint32_t entry = section_entry_at(g_kit_file, kSectionKitLfo);
-    poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
-    refresh_crc(g_kit_file);
-    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
-             int(SerializeResult::malformed));
+    // Present but short is damage, not an old file -- for either section.
+    for (uint16_t id : {kSectionKitLfo, kSectionKitArp}) {
+        fresh_kit_file();
+        const uint32_t entry = section_entry_at(g_kit_file, id);
+        poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
+        refresh_crc(g_kit_file);
+        CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
+                 int(SerializeResult::malformed));
+    }
 }
 
 TEST(kit_an_unknown_machine_falls_back_to_the_first_one) {
@@ -2129,7 +2154,7 @@ TEST(kit_slc_auto_round_trips_and_an_older_file_slices_equally) {
     CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
              int(SerializeResult::ok));
     const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
-    CHECK_EQ(old_size, 1120u);
+    CHECK_EQ(old_size, 1164u);
     for (int t = 0; t < kTracks; t++) g_kit_loaded.tracks[t].slice_mode = kSliceAuto;
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {

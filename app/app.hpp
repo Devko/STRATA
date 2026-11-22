@@ -23,6 +23,7 @@
 // the anonymous namespace below keeps everything in it internal to each of them.
 #pragma once
 
+#include "arp.hpp"          // the ARP page's names and clicks
 #include "engine.hpp"
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
@@ -326,13 +327,21 @@ const char *page_name(Page page) {
         case Page::amp:  return "AMP";
         case Page::fx:   return "FX";
         case Page::lfo:  return "LFO";
+        case Page::arp:  return "ARP";
         default:         return "?";
     }
 }
 
-// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp). The selection keys walk
-// all five; everywhere else a page is still four encoders over four parameters.
-constexpr int kEditPages = kPages + 1;
+// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp) and its arpeggiator
+// (core/arp.hpp). The selection keys walk all six; everywhere else a page is still four encoders
+// over four parameters.
+constexpr int kEditPages = kPages + 2;
+
+// Encoder counts per click: one zone on the arp's MOD RAT OCT, one shape or destination on the
+// LFO's WAV and DST, one count everywhere else.
+constexpr int param_click(int index) {
+    return index >= kArpFirst ? arp_click(index - kArpFirst) : lfo_click(index);
+}
 static_assert(page_first(Page(kEditPages - 1)) + kParamsPerPage == kTrackParams,
               "EDIT's last page is the last four track parameters");
 
@@ -387,9 +396,24 @@ public:
         // or CLR closes it (<enaga/ui.hpp>). F1 and VALUE's push are tracked above, so a FUNC
         // still held from opening it is let go of properly.
         if (name_entry_.active()) {
+            // A tape stop held from before the entry opened still ends with its key.
+            if (!down && key == ENAGA_KEY_PUSH_D && tape_held_) {
+                tape_held_ = false;
+                post(Cmd::tape_stop, 0, 0, 0);
+            }
             const enaga::ui::Action action = name_entry_.key(key, down);
             if (action == enaga::ui::Action::chosen) finish_save_as();
             if (action == enaga::ui::Action::no) notice("NAME KEPT");
+            return;
+        }
+
+        // FUNC + push D, HELD: the tape stop, in every mode -- beside FUNC + push A-C, the kill
+        // EQ, so the master moves are under one hand. Its release ends it whether or not FUNC is
+        // still down, and before the held-step gesture below can take the key.
+        if (key == ENAGA_KEY_PUSH_D && (down ? shift_ : tape_held_)) {
+            tape_held_ = down;
+            post(Cmd::tape_stop, 0, 0, down ? 1 : 0);
+            if (down) notice("TAPE STOP");
             return;
         }
 
@@ -1003,7 +1027,7 @@ public:
                 page_ = (page_ + delta + 4) % 4;                       // step page 1-4
                 break;
             case Mode::edit:
-                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. LFO
+                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. ARP
                 break;
             case Mode::mixer:
                 // Faders, then the delay, the reverb, the routing and the master.
@@ -1366,7 +1390,7 @@ public:
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::lock, selected_, held_step_);
             post_delta(Cmd::lock_delta, selected_, held_step_, uint8_t(index),
-                       delta * lfo_click(index));
+                       delta * param_click(index));
             return;
         }
 
@@ -1414,7 +1438,7 @@ public:
             const int step = int(engine_.status().playhead[selected_].load(std::memory_order_relaxed));
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::motion, selected_, 0);
-            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta * lfo_click(index));
+            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta * param_click(index));
             return;
         }
 
@@ -1461,7 +1485,7 @@ public:
         // `lfo_click`), and one count everywhere else.
         const int index = page_first(Page(param_page_)) + encoder;
         post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index),
-             clamp_delta(delta * lfo_click(index)), kDeltaFlag);
+             clamp_delta(delta * param_click(index)), kDeltaFlag);
     }
 
     void on_pad_press(int pad, int velocity) override {
@@ -1637,6 +1661,14 @@ public:
                 break;
 
             case PerformPad::mutate:
+                // FUNC + MUTATE, held: the delay freeze. The release ends it whether or not FUNC
+                // is still down, and a freeze press is not a mutation.
+                if (down ? shift_ : freeze_held_) {
+                    freeze_held_ = down;
+                    post(Cmd::delay_freeze, 0, 0, down ? 1 : 0);
+                    if (down) notice("FREEZE");
+                    break;
+                }
                 if (!down) break;
                 // One undo level, then the mutation. CLR reverts it because CLR is the undo that
                 // already exists -- core/mutate.hpp's whole argument for having no commit step.
@@ -2212,13 +2244,15 @@ public:
         *out = 0;
         canvas.text(0, 20, line, 14);
 
-        // Which of the five pages is showing, as a row of boxes: the spec's selection keys
+        // Which of the six pages is showing, as a row of boxes: the spec's selection keys
         // flip between them, so showing where you are matters more than labels.
         for (int p = 0; p < kEditPages; p++) {
             const uint8_t grey = p == param_page_ ? 14 : 4;
-            canvas.rect(p * 25 + 2, 32, 22, 3, grey);
+            canvas.rect(p * 21 + 1, 32, 19, 3, grey);
         }
         const bool lfo_page = param_page_ == int(Page::lfo);
+        const bool arp_page = param_page_ == int(Page::arp);
+        const bool word_page = lfo_page || arp_page;
 
         // The four parameters in large type, one row per encoder: its letter, the name, the
         // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
@@ -2247,8 +2281,8 @@ public:
 
             // The LFO's values are words up to five characters long ("1/16T"), so its bars start
             // further right.
-            const int bar_x = lfo_page ? 70 : 56;
-            const int bar = int(value) * (lfo_page ? 56 : 70) / 127;
+            const int bar_x = word_page ? 70 : 56;
+            const int bar = int(value) * (word_page ? 56 : 70) / 127;
             canvas.rect(bar_x, y + 2, bar < 1 ? 1 : bar, 4, 9);
         }
 
@@ -2263,6 +2297,27 @@ public:
                 append_padded(out, engine_.sounding(selected_).v[dest], 3);
             } else {
                 append(out, "LFO OFF: SET DEP+DST");
+            }
+            *out = 0;
+            canvas.text(0, 96, line, 7);
+            return;
+        }
+
+        if (arp_page) {
+            // What the arp will do, in a line: "UP 1/16 X2 75%", or how to start one.
+            const uint8_t *arp = &engine_.params(selected_).v[kArpFirst];
+            out = line;
+            if (arp_mode_index(arp[0]) == 0) {
+                append(out, "ARP OFF: TURN MOD");
+            } else {
+                append(out, arp_mode_name(arp[0]));
+                *out++ = ' ';
+                append(out, arp_rate_name(arp[1]));
+                append(out, " X");
+                append_number(out, uint32_t(arp_octaves(arp[2])));
+                *out++ = ' ';
+                append_number(out, uint32_t(arp_gate_percent(arp[3])));
+                *out++ = '%';
             }
             *out = 0;
             canvas.text(0, 96, line, 7);
@@ -2513,6 +2568,7 @@ public:
     // LFO's destination can name a parameter from any page.
     const char *track_param_name(int index) const {
         if (index < 0 || index >= kTrackParams) return "---";
+        if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
         if (index >= kParams) return lfo_param_name(index);
         const int page = index / kParamsPerPage;
         if (page == int(Page::fltr) || page == int(Page::fx)) return InsertChain::param_name(index);
@@ -2549,6 +2605,20 @@ public:
                 append(out, dest < 0 ? "OFF" : track_param_name(dest));
                 return;
             }
+            case kArpFirst + 0:
+                append(out, arp_mode_name(value));
+                return;
+            case kArpFirst + 1:
+                append(out, arp_rate_name(value));
+                return;
+            case kArpFirst + 2:
+                *out++ = 'X';
+                append_number(out, uint32_t(arp_octaves(value)));
+                return;
+            case kArpFirst + 3:
+                append_number(out, uint32_t(arp_gate_percent(value)));
+                *out++ = '%';
+                return;
             default:
                 append_padded(out, value, 3);
                 return;
@@ -2610,7 +2680,8 @@ public:
         keys_held_track_[step] = uint8_t(selected_);
         // A key has no velocity. 100 is what the default kit's own trigs use, so a part played
         // in and a part programmed in sound the same.
-        post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity);
+        // c = 1: a held key, whose release follows -- what lets the arp hold it (core/arp.hpp).
+        post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity, 1);
         record_note(selected_, note, kKeyVelocity);
     }
 
@@ -3599,11 +3670,12 @@ public:
         canvas.text(0, 104, line, 9);
 
         // The bar on a line of its own: with everything above on, "FILL AF16 1/16T- DLY BAR
-        // 1000" is 29 characters.
+        // 1000" is 29 characters. The held modes ride on it: "BAR 1000 NRPT FRZ" is 17.
         out = line;
         append(out, "BAR ");
         append_number(out, engine_.bar() % 1000u + 1u);
         if (note_repeat_mode_) append(out, " NRPT");
+        if (engine_.delay_freeze().held()) append(out, " FRZ");
         *out = 0;
         canvas.text(0, 112, line, 9);
     }
@@ -4294,6 +4366,8 @@ private:
     // owns that, and the UI reads it back through the accessors.
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
     bool note_repeat_mode_ = false;             // FUNC + FILL: a held lower pad rolls
+    bool tape_held_ = false;                    // FUNC + push D went down and has not come up
+    bool freeze_held_ = false;                  // FUNC + MUTATE went down and has not come up
     uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)
     uint8_t roll_velocity_[kTracks] = {};       // the last velocity sent for each roll
     bool mutation_pending_ = false;             // a MUTATE waiting for OK (keep) or CLR (revert)

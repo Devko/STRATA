@@ -166,18 +166,24 @@ TEST(memory_init_is_what_the_budget_says) {
     const uint64_t repeat = uint64_t(48000.0f * kRepeatSeconds) * 2u * 4u;
     const uint64_t capture = Capture::kHeaderBytes + uint64_t(48000.0f * kCaptureSeconds) * 2u * 2u;
 
-    const uint64_t itemised = region + raw + src + file + rings + repeat + capture;
+    // The delay freeze's loop (two delay times of stereo float, dsp/freeze.hpp) and the tape
+    // stop's ring (dsp/tapestop.hpp).
+    const uint64_t freeze = uint64_t(48000.0f * 2.0f * Mixer::kMaxDelaySeconds) * 2u * 4u;
+    const uint64_t tape = uint64_t(48000.0f * kTapeStopRingSeconds) * 2u * 4u;
+
+    const uint64_t itemised = region + raw + src + file + rings + repeat + capture + freeze + tape;
     CHECK(f.requested >= itemised);
 
     // The rest is Enaga's master delay and reverb lines, sized inside Enaga. docs/SPEC.md budgets
     // them at 2 MiB, which is the bound here.
     const uint64_t buses = f.requested - itemised;
     std::printf("    region %.2f, loader staging %.2f, file %.2f, stream rings %.2f, repeat %.2f, "
-                "capture %.2f, delay+reverb %.2f MiB\n",
+                "capture %.2f, freeze %.2f, tape stop %.2f, delay+reverb %.2f MiB\n",
                 double(region) / double(kMiB), double(raw + src) / double(kMiB),
                 double(file) / double(kMiB), double(rings) / double(kMiB),
-                double(repeat) / double(kMiB),
-                double(capture) / double(kMiB), double(buses) / double(kMiB));
+                double(repeat) / double(kMiB), double(capture) / double(kMiB),
+                double(freeze) / double(kMiB), double(tape) / double(kMiB),
+                double(buses) / double(kMiB));
     CHECK(buses > 0);
     CHECK(buses <= 2u * kMiB);
 }
