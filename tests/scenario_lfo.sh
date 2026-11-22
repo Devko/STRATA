@@ -6,7 +6,7 @@
 # switch an LFO on: it walks EDIT to its fifth page (scr EDIT LFO) and PROJECT to its PATTERN page
 # (scr PROJECT PATTERN, where the eight track swings are), which is what proves both draw without
 # a fault. The LOAD of eight running LFOs is measured separately, by the temporary factory edit in
-# docs/BUDGET.md ("Per-track LFO", E6).
+# docs/BUDGET.md ("Per-track LFO", E7).
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F8 = 28 EDIT, SELECT_RIGHT = 9,
 # F3 = 20 PROJECT, OCTAVE_RIGHT = 31. The first press comes late: the panel link is not streaming

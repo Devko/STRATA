@@ -876,6 +876,39 @@ To measure on Roland's PC: **E6** below (`tests/scenario_killeq.sh`, which kills
 on the EQ page and reads the peak, against `scenario_m7.sh` with the EQ bypassed), both compilers.
 On the unit: **U6**.
 
+### Per-track LFO (2026-11-22, host only)
+
+One LFO per track, parameters 16-19 (dsp/lfo.hpp). It runs once per **block**, not per sample,
+and moves its destination's byte. The cost is the LFO step itself (a few dozen instructions)
+plus one `prepare` of the modulated track in each block where that byte actually changed. There
+is no per-sample work, so the `*.ti.c` loops are untouched and nothing here needs cl6x. The
+extra code is control-rate C++, which the cl6x build also compiles with GCC, so the absolute
+cost should be about the same with both compilers.
+
+Host figures: callgrind, x86, GCC -O2, the factory project, 6,000 blocks, init (~15.1 M Ir)
+subtracted. The bench is a throwaway driver of `Engine`, not a test.
+
+| Case | Change in Ir | Share of the block's work |
+| --- | --- | --- |
+| Every LFO off, against `main` (PEAK, slot 3) | +2.6 M on 735.6 M | +0.35%, about 430 instructions a block for 8 compares and the copy |
+| 8 LFOs on a machine parameter (SRC 2), slot 3 | +15.5 M | +2.1% |
+| 8 LFOs on DRV, slot 3 | +24.7 M | +3.4% |
+| 8 LFOs, synced 1/16, on DRV, slot 3 | +24.7 M | +3.4% |
+| 8 LFOs on PAN, slot 3 | +16.4 M | +2.3% |
+| 8 LFOs on DRV, slots 0, 1, 2 | | +3.2%, +3.3%, +3.0% |
+
+- **Off is bit-exact.** With every LFO off the render matches `main` bit for bit (energy
+  20167.792 on both), and `tests/test_lfo.cpp` holds that with two engines side by side. Zeroed
+  bytes are OFF, so no golden render changes.
+- **On costs about 515 instructions per LFO per block at worst**: the chain's DRV re-prepare is
+  the dearest destination. In load points that is roughly 0.15-0.3 points each, and **1.1 to 1.4
+  points for all eight** at the GCC-only emulator's scale. With cl6x the worst case is about 23.5%
+  plus about 2.5 points (the cost is control-rate code, so it does not shrink with cl6x and
+  grows a little as a share of the block). That is well under 60%.
+- A slow, deep LFO moves its byte less often than once a block, so the figures above (a fast free
+  rate and a 1/16) are the expensive end.
+- E7 and U7 below measure it for real.
+
 ### Load time: the downsample low-pass (2026-11-22, host only)
 
 A file above 48 kHz is now low-passed before the load-time resample (`Antialias` in core/pcm:
@@ -992,6 +1025,7 @@ scene or knob really did move: those prepare as before.
 | E3 | The app's real worst case | temporarily set four tracks to `va_poly` with MIN11 chords in `build_default_beat`; then six; then eight | where it crosses 60% and where it overruns: sizes the voice budget in finding 1 |
 | E4 | The prepare memo's share | `scenario_m5.sh` (scenes and macros move parameters, so it prepares more) against `scenario_m3.sh` | the gap between them, before and after |
 | E6 | The master kill EQ running | `tests/scenario_killeq.sh` against `tests/scenario_m7.sh` (same beat, EQ bypassed), with cl6x and with `ENAGA_TI_CGT=none` | the difference is the EQ's cost; the proxy above says ~1.3 cl6x / ~2.2 GCC-only |
+| E7 | Eight LFOs running | `tests/scenario_lfo.sh` as it is (every LFO off: should match `scenario_factory.sh`), then again after a temporary edit to `factory_kit` in core/factory.cpp setting each track's `params[17] = 40` (RAT, about 3 Hz free), `params[18] = 127` (DEP) and `params[19] = 38` (DST = DRV), with cl6x and with `ENAGA_TI_CGT=none`; revert the edit | the difference is eight LFOs' cost; the host figures say about 1.1-1.4 points GCC, and about the same with cl6x |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
@@ -1003,6 +1037,7 @@ scene or knob really did move: those prepare as before.
 | U3 | GRAIN on a multi-second sample, DEN 127, SPR 127, at PIT 64 and at PIT 127 with a high note | the DDR cost of high-pitch grains (finding 6) |
 | U4 | Delay FBK at max, TIM 1/1, one hit, then silence | LOAD stays up while the tail rings and drops when it ends |
 | U6 | MAX on A01 GROOVE with the kill EQ running (FUNC + push A, then let it play 60 s with LOW killed), against U1 | the EQ's cost on the unit; should match E6's cl6x difference times the unit/emulator ratio |
+| U7 | MAX on A01 GROOVE with LFOs on four tracks (EDIT, selection RIGHT four times to LFO; C = DEP 127, D = DST DRV or CUT, B = RAT a fast free rate), against U1 | the cost of four LFOs on the unit; about half of E7's difference times the unit/emulator ratio |
 | U5 | Load a 15 s 96 kHz stereo WAV (`unit-test/STRATA_1.WAV` in the project files; `SWEEP_30S_96K.WAV`, 30 s, now loads as well) | seconds to playable; whether the screen or keys stall during it |
 
 ### Later milestones

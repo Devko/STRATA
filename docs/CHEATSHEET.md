@@ -30,7 +30,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | --- | --- | --- |
 | GRID | HOME | All 8 tracks; STEP keys edit the selected track |
 | KEYS | FUNC+HOME | STEP keys play 16 scale degrees on the selected track |
-| EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX |
+| EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, and its LFO |
 | MACHINE | FUNC+EDIT | Pick the machine on each track |
 | KIT | FUNC+EDIT twice | Save and recall whole kits: 16 slots on the card, shared by all projects |
 | SAMPLES | OK in EDIT or MACHINE, on a SMP or GRN track | Pick the track's WAV from `/SAMPLES` or `/RECORD` |
@@ -38,7 +38,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
 | PROJECT | PROJECT | Banks and patterns, key and scale, the card |
 | CHAIN | PROJECT, then octave RIGHT | The pattern chain as a list |
-| PATTERN | PROJECT, octave RIGHT twice | Master length (LEN) and swing (SWG) of the playing pattern |
+| PATTERN | PROJECT, octave RIGHT twice | Master length (LEN), swing (SWG) and each track's own swing of the playing pattern |
 | SETUP | PROJECT, octave RIGHT three times | Record quantize; shows clock and MIDI settings |
 | RESAMPLE | FUNC+REC | Record the output to a file or a track |
 | Step page | Hold STEP + OK | One step's own fields (opens over GRID) |
@@ -104,7 +104,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | Mode | UP / DOWN | LEFT / RIGHT | Selection L/R | A-D | OK / CLR | FUNC + arrow |
 | --- | --- | --- | --- | --- | --- | --- |
 | GRID | Track | Step page 1-4 | Step page | Current EDIT page params | — / clear | Copy / paste |
-| EDIT | Track | Page SRC FLTR AMP FX | Page | The page's 4 params | SMP/GRN: open SAMPLES / clear | Copy / paste |
+| EDIT | Track | Page SRC FLTR AMP FX LFO | Page | The page's 4 params | SMP/GRN: open SAMPLES / clear | Copy / paste |
 | KEYS | Track | Octave (OCT 0-7) | Track | Current EDIT page params | — | Copy / paste |
 | MACHINE | Machine | Track | Track | A: machine | SMP/GRN: open SAMPLES / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
@@ -113,7 +113,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | A: bars | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | UP: chain on/off, DOWN: reload track's sample, LEFT: reload project, RIGHT: new project |
 | CHAIN | Entry | Entry's pattern -/+ | Bank A-H | A: repeats X1-X16 | Add entry / back | LEFT: remove entry, UP: chain on/off |
-| PATTERN | Change field -/+ | Field LEN / SWG | Bank A-H | A: LEN 1-64, B: SWG | — / back | UP: chain on/off |
+| PATTERN | Change field -/+ | Field LEN / SWG / track 1-8 swing | Bank A-H | A: LEN 1-64, B: SWG, C: track swing (PAT, 50-75) | — / back | UP: chain on/off |
 | PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Macros A-D | Capture scene / clear macro | UP/DOWN: auto-fill OFF 4 8 16 |
 
 **KEYS:** STEP 1-16 play the scale from the root and hold the note until released; octave keys also change the octave. Letting go also releases that note if the sequencer is playing it on the same track.
@@ -126,8 +126,9 @@ quantize.
 the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playing pattern when
 empty), up to 64 entries. Chain edits are not undoable.
 **PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
-(END) and the chain wait for.
-**PERFORM:** STEP 1-16 assign that parameter of the selected track to the selected macro. A macro
+(END) and the chain wait for. The eight TRACK SWING fields read `PAT` (follow SWG) or 50-75%: C
+sets the one under `>`, or the selected track's when `>` is on LEN or SWG.
+**PERFORM:** STEP 1-16 assign that parameter of the selected track to the selected macro; FUNC + STEP 1-4 assign its LFO's WAV RAT DEP DST. A macro
 at 0 lets go: its parameters follow their EDIT knobs and the morph, and turning it up sweeps from
 wherever they are. A new project has B ACID (bass filter), C DUB (chord and rim sends) and D DRIVE
 (kick and hats); A is left for you, and pad pressure bends it. VALUE is the A/B morph; OK captures into scene A's slot (with a scene pad held: that scene, selected
@@ -158,7 +159,8 @@ folders are listed (no `._` files), at most 256 a folder. Picking a file makes t
 | Step page | `TRIG` `TRIGLESS` `OFF`, `LOCKS n` | What the step is and how many locks it holds |
 | PROJECT | `BANK A   END CHAIN` | Shown bank, queue mode, chain running |
 | CHAIN | `CHAIN 3/64 ON`, `>02 A05 X2 PLAY` | Entries used, chain on/off; cursor, entry, pattern, repeats, playing now |
-| PATTERN | `>LEN 16 STEPS`, `SWG 54%` | Master length; swing (`>` = field VALUE changes) |
+| PATTERN | `>LEN 16 STEPS`, `SWG 54%`, `3 PAT`, `>5 66%` | Master length; swing; a track following SWG or with its own (`>` = field VALUE changes) |
+| EDIT LFO | `NOW CUT 87`, `LFO OFF: SET DEP+DST` | The destination's value right now; DEP or DST is zero |
 | PROJECT slots | `05>`, bright box | Queued slot; live slot (bright), has trigs (mid), empty (dark) |
 | PROJECT | `SMP O.X- 12/32M` | Per track sample: O ready, . loading, X failed, - none; MiB used/budget |
 | PROJECT | `UNSAVED`, `NO CARD` | RAM differs from the card; no usable card |
@@ -175,7 +177,8 @@ folders are listed (no `._` files), at most 256 a folder. Picking a file makes t
 **Machines:** KCK kick · SNR snare · HAT hat · PRC 2-op FM percussion · SMP sampler · GRN granular ·
 MNO VA mono · PLY VA poly.
 
-**EDIT pages:** SRC source · FLTR filter (insert chain) · AMP amplitude · FX effects (insert chain).
+**EDIT pages:** SRC source · FLTR filter (insert chain) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO.
+**LFO page:** WAV shape SIN TRI RMP (rising) SAW (falling) SQR S+H · RAT rate, `0.06`-`32` Hz free on the lower half, `8B` (bars) to `1/32` synced on the upper (`.` dotted, `T` triplet) · DEP depth, 127 = about 64 either side · DST the parameter it moves, or OFF. Lockable, scene- and macro-able like any parameter.
 
 | Machine | SRC (A B C D) | AMP (A B C D) |
 | --- | --- | --- |

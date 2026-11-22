@@ -47,6 +47,11 @@ needed for tonight's unit session; do them if the PC is free.
       the EQ runs) against `tests/scenario_m7.sh` (EQ bypassed), both compilers. Proxy estimate
       ~1.3 points cl6x, ~2.2 GCC-only (`docs/BUDGET.md`, "The master kill EQ").
       cl6x `________ %` vs `________ %`, GCC `________ %` vs `________ %`
+- [ ] **E7.** Eight LFOs' cost: `tests/scenario_lfo.sh` as it is (every LFO off, should match
+      `scenario_factory.sh`), then again after the temporary `factory_kit` edit in
+      `docs/BUDGET.md` ("Per-track LFO", E7: every track `params[17] = 40`, `[18] = 127`,
+      `[19] = 38`), both compilers, and revert the edit. Host estimate ~1.1-1.4 points.
+      Off: cl6x `________ %` GCC `________ %`. Eight on: cl6x `________ %` GCC `________ %`
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
@@ -339,6 +344,33 @@ New after the walkthrough was written: a DJ isolator on the master, LOW / MID / 
 - [ ] Kill HI, save (FUNC+PROJECT twice), power cycle: it reopens with HI killed (`KILL` on the
       EQ page). Bring it back.
 
+## 13e. The per-track LFO and per-track swing (8 min)
+
+New after the walkthrough was written. Play A01 GROOVE, select track 8 (the chord stab).
+
+- [ ] EDIT, then selection RIGHT four times: a fifth page box lights, `LFO`, with WAV RAT DEP
+      DST on A-D. The line below reads `LFO OFF: SET DEP+DST`. The sound has not changed.
+- [ ] D (DST): one click is one destination, `OFF`, then the sound's names (`CUT`, `DRV`, ...).
+      Pick CUT (or DRV if the track's filter is open). C (DEP) up to about 100: the stab sweeps,
+      and the line reads `NOW CUT nnn`, moving. **No clicks or zipper noise** on a fast rate.
+- [ ] A (WAV): one click is one shape, SIN TRI RMP SAW SQR S+H. S+H steps randomly, SQR jumps.
+- [ ] B (RAT): below the middle reads Hz (`0.06` up to `32`), above it note lengths (`8B`
+      down to `1/32`, `.` dotted, `T` triplet). Set `1B`: the sweep repeats once a bar, **in time
+      with the beat**, and FUNC+PLAY restarts it on the one.
+- [ ] Hold a STEP + turn C on the LFO page: a DEP lock on that step only (the sweep deepens on
+      that step). Clearing it works as for any lock.
+- [ ] PERFORM: hold F1 + STEP 3 assigns DEP to the selected macro (the notice names `DEP`).
+      Turn the macro: the sweep fades in from wherever DEP was.
+- [ ] Store a scene with the LFO on, another with it off; the morph fades the depth between them.
+- [ ] Undo (FUNC+CLR) takes back an LFO edit like any other.
+- [ ] **U7.** LFOs on four tracks (DEP 127, DST DRV or CUT, a fast free RAT), 60 s: **MAX
+      `________ %`** against U1's `________ %`. Difference: `________` points.
+- [ ] Save (FUNC+PROJECT twice), power cycle: the LFO settings come back, still in time.
+- [ ] **Track swing.** PROJECT, octave RIGHT twice (PATTERN): below LEN and SWG, eight track
+      swings, `PAT` by default. LEFT/RIGHT walk the fields, C changes the one under the cursor.
+      Set the hats' track to 66 with SWG at 50: only the hats swing. Back to `PAT`: they follow
+      SWG again. It saves with the pattern, and undo takes it back.
+
 ## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). PROJECT, FUNC+LEFT once: `AGAIN TO RELOAD`, nothing changes.
@@ -419,6 +451,8 @@ Enaga's menu and start STRATA6.
 | U4 delay tail: LOAD while ringing, time to drop (13c) | |
 | E6 kill EQ, `scenario_killeq.sh` vs `scenario_m7.sh`, cl6x / GCC (PC) | |
 | U6 A01 GROOVE MAX with LOW killed, 60 s, and the difference to U1 (13d) | |
+| E7 eight LFOs, `scenario_lfo.sh` off / on, cl6x / GCC (PC) | |
+| U7 A01 GROOVE MAX with four LFOs, 60 s, and the difference to U1 (13e) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
 | U2 STRATA6 + tracks 5 and 6 as MIN11 POLY, capped at 12 voices (16) | |
@@ -857,6 +891,14 @@ gesture is the mistake this milestone made twice before it was caught.
       there is nothing to undo and nothing to save.
 - [ ] A lock still wins over a morph: lock a cutoff on one step, sweep the morph, and that step
       should keep its locked value while the others move.
+
+- [ ] **The per-track LFO** (added 2026-11-22): EDIT's fifth page, WAV RAT DEP DST; zeroed bytes
+      are OFF, so older kits and scenes sound as they did. Free and synced rates, every shape,
+      p-locks, macros, scenes and the morph on the four bytes, save and reload (KIT.BIN's LFO
+      section, PERFORM.BIN's scene LFO section). A kit or project from an older build loads with
+      every LFO off. Section 13e of the walkthrough.
+- [ ] **Per-track swing** (added 2026-11-22): PROJECT's PATTERN page, PAT or 50-75 per track,
+      saved in the pattern, undoable. Section 13e.
 
 ## M6 — full concept (started)
 
