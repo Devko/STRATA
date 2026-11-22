@@ -58,9 +58,16 @@ changes a platform constant fails the host tests rather than drifting silently.
 | Configuration | LOAD on screen | Where | Date |
 | --- | --- | --- | --- |
 | Default beat, Enaga 0.2.0 firmware | **about 0–26%** | **unit** | 2026-11-22 |
+| Default beat, MAX build (#17), cl6x | top line never reached 30% | **unit** | 2026-11-22 |
+| **Stress: long free play, "big effects, a lot of stuff"** | **MAX 84.3%** | **unit** | 2026-11-22 |
 
-Read by eye from the app's LOAD line, not logged. Precise PEAK and the six-voice chord load on
-the unit are still to be recorded here.
+Read by eye, not logged. The first two rows are the top-line LOAD. The stress row is the held MAX
+on the bottom line (#17) after a long session of free play on the controls-remap build (main
+e1ff619, cl6x, VA fusion off). What was on at the peak is not known, so it cannot be split by
+feature. It is well past the 60% target and past "Everything at once"'s ~63% unit estimate below,
+but under 100%: a block at 100% would overrun. Whether anything was audible at the peak is not
+yet recorded. The clean A01 and A04 MAX figures (60 s each, MAX restarted by STOP then PLAY) and
+the six-voice STRATA6 figure are still to be recorded here.
 
 ### M0 — skeleton
 
