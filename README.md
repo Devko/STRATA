@@ -11,7 +11,7 @@ conditions, and a performance layer for long, evolving live sets. Built as an
 ![Platform](https://img.shields.io/badge/platform-SmplTrek-informational)
 ![Runs on](https://img.shields.io/badge/runs%20on-Enaga%20v0.2.0-blueviolet)
 ![Language](https://img.shields.io/badge/C%2B%2B-20-blue)
-![Status](https://img.shields.io/badge/status-not%20yet%20run%20on%20hardware-orange)
+![Status](https://img.shields.io/badge/status-first%20boot%20on%20hardware-yellow)
 ![Licence](https://img.shields.io/badge/licence-MIT-green)
 
 [Features](#features) · [Install](#installing-on-a-smpltrek) · [Build](#building) ·
@@ -20,9 +20,9 @@ conditions, and a performance layer for long, evolving live sets. Built as an
 </div>
 
 > [!WARNING]
-> **STRATA has never run on a real unit.** Everything below has been built, tested on the host
-> and run in the emulator, but nobody has booted it on a SmplTrek yet. Read
-> [Before you install](#before-you-install) first. STRATA is a working title.
+> **STRATA is early.** It first booted on a SmplTrek on 2026-11-22 and plays its default beat,
+> but most of [docs/UNIT_CHECKLIST.md](docs/UNIT_CHECKLIST.md) is still to be worked through on
+> the hardware. Read [Before you install](#before-you-install) first. STRATA is a working title.
 
 ## What it is
 
@@ -170,21 +170,24 @@ collision. Contributors, human or AI, should read [CLAUDE.md](CLAUDE.md) for the
 
 ## Status
 
-**Milestones M0–M6 are feature-complete and M7's app side is done. Nothing has run on a unit.**
+**Milestones M0–M6 are feature-complete and M7's app side is done. STRATA boots and plays on a SmplTrek.**
 
 | | |
 | --- | --- |
 | Host tests | 999 tests, 539,926 checks, all passing |
 | Emulator scenarios | All seven pass, no overruns |
-| Worst-case CPU load | **23.49%** of the audio block with cl6x, 39.60% GCC-only, against a 60% target |
+| On hardware | First boot 2026-11-22 on Enaga 0.2.0: the default beat plays, on-screen LOAD about 0–26% |
+| Worst-case CPU load (emulator) | **23.49%** of the audio block with cl6x, 39.60% GCC-only, against a 60% target |
 | Biggest cost | VA POLY at 2.16 points per voice with cl6x (3.82 GCC-only) |
-| On hardware | **Not yet.** Every figure is from the emulator, which models no caches |
 
 What still needs a person with a unit:
 
-- **Boot it.** [docs/UNIT_CHECKLIST.md](docs/UNIT_CHECKLIST.md) lists everything that needs the
-  hardware, safety steps first. None of it is ticked.
-- **Hear it.** Nothing has been listened to on the hardware yet.
+- **Work the unit checklist.** [docs/UNIT_CHECKLIST.md](docs/UNIT_CHECKLIST.md) lists everything
+  that needs the hardware, safety steps first: card handling, power cycles, sync, and how each
+  machine sounds.
+- **Measure it.** Precise PEAK figures and the six-voice chord load on the unit are still to be
+  recorded in [docs/BUDGET.md](docs/BUDGET.md); the other figures are from the emulator, which
+  models no caches.
 
 Load figures are in [docs/BUDGET.md](docs/BUDGET.md), the state of each milestone in
 [docs/PLAN.md](docs/PLAN.md), and next steps in [docs/HANDOFF.md](docs/HANDOFF.md).

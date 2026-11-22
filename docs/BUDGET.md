@@ -53,6 +53,15 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### First boot on the unit (2026-11-22)
+
+| Configuration | LOAD on screen | Where | Date |
+| --- | --- | --- | --- |
+| Default beat, Enaga 0.2.0 firmware | **about 0–26%** | **unit** | 2026-11-22 |
+
+Read by eye from the app's LOAD line, not logged. Precise PEAK and the six-voice chord load on
+the unit are still to be recorded here.
+
 ### M0 — skeleton
 
 | Configuration | Peak | Blocks | Overruns | Where | Date |

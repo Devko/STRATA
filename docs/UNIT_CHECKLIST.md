@@ -18,7 +18,8 @@ key dead.
 
 ## M0 — skeleton
 
-- [ ] `/ENAGA/APPS/STRATA/APP.ENA` on the card; the app appears in Enaga's app list and starts.
+- [x] `/ENAGA/APPS/STRATA/APP.ENA` on the card; the app appears in Enaga's app list and starts.
+      Booted 2026-11-22 on Enaga 0.2.0 and played the default beat.
 - [ ] The screen shows `STRATA`, the device name, LOAD, PEAK, CLK, BPM and PPQN.
 - [ ] Device name reads **SMPLTREK** (it comes from the bootloader, so it proves
       `system::device()` works rather than a hardcoded string).
