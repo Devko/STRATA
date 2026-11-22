@@ -744,6 +744,29 @@ TEST(ui_f1_f6_stops_cuts_and_resets_in_one_press) {
 // entirely -- so a hold could be stranded forever, and the next encoder move wrote a lock onto a
 // phantom step."
 
+TEST(ui_hold_step_and_turn_value_sets_that_steps_note) {
+    // docs/SPEC.md, "Step editing": hold STEP + VALUE: note. It used to turn the tempo.
+    Strata &app = fresh();
+    const Step &step = app_engine().pattern().tracks[0].steps[3];
+    const int note = int(step.note);
+    const uint8_t flags = step.flags;
+    const uint32_t tempo = UiProbe::tempo_tenths(app);
+
+    step_down(3);
+    app.on_encoder(4, +2);
+    pump(2);
+    step_up(3);
+    pump(2);
+    CHECK_EQ(int(step.note), note + 2);
+    CHECK_EQ(int(step.flags), int(flags));            // used as a modifier: no toggle
+    CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
+
+    // One undo puts it back.
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(int(step.note), note);
+}
+
 TEST(ui_a_hold_that_crosses_a_page_change_resolves_to_the_step_it_started_on) {
     Strata &app = fresh();
     CHECK_EQ(UiProbe::page(app), 0);

@@ -914,3 +914,8 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
 - [ ] Mute two tracks, pick scene 7 into slot B (hold scene B + STEP 7), save, power off, power
       on. The project comes back with the same two tracks muted and scene 7 in slot B.
 - [ ] A project saved by an older build opens with everything unmuted on scenes 1 and 2.
+
+## Hold STEP + VALUE sets the note
+
+- [ ] Hold a STEP key and turn VALUE: the step's note moves (play it to hear), the tempo does
+      not, and letting go leaves the trig as it was. F1 + CLR undoes the whole turn at once.

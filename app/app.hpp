@@ -958,6 +958,19 @@ public:
                 notice(repeat_length_name(repeat_length_));
                 return;
             }
+            // A held STEP key: VALUE sets that step's note (docs/SPEC.md, "Step editing": hold
+            // STEP + VALUE). Before the tempo, which it used to turn instead -- with a finger
+            // on a step, the tempo is the last thing the hand means. The same field and the
+            // same undo coalescing as the step page's NOTE, and the key counts as used, so its
+            // release does not toggle the trig.
+            if (held_step_ >= 0) {
+                held_used_ = true;
+                mark(GestureKind::field, selected_, held_step_);
+                post_delta(Cmd::step_field_delta, selected_, held_step_,
+                           uint8_t(StepField::note), delta);
+                notice("NOTE");
+                return;
+            }
             // In PERFORM, VALUE is the morph: the one continuous control the layer has.
             if (mode_ == Mode::perform && !value_pushed_ && !shift_) {
                 const int next = int(morph_) + delta * (int(kMorphScale) / 64);
