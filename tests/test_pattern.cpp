@@ -649,3 +649,21 @@ TEST(sanitize_clamps_a_length_at_both_ends) {
         if (raw >= 1 && raw <= kLengthMax) CHECK_EQ(int(step.length), raw);
     }
 }
+
+TEST(a_track_swing_walks_pat_then_fifty_to_seventy_five) {
+    // The PATTERN page's per-track line: PAT, 50, 51 .. 75. Down from 50 is PAT and stays there.
+    CHECK_EQ(int(track_swing_step(kSwingInherit, +1)), kSwingMin);
+    CHECK_EQ(int(track_swing_step(kSwingInherit, +4)), kSwingMin + 3);
+    CHECK_EQ(int(track_swing_step(kSwingInherit, -1)), int(kSwingInherit));
+    CHECK_EQ(int(track_swing_step(kSwingMin, -1)), int(kSwingInherit));
+    CHECK_EQ(int(track_swing_step(kSwingMin, -100)), int(kSwingInherit));
+    CHECK_EQ(int(track_swing_step(60, +3)), 63);
+    CHECK_EQ(int(track_swing_step(60, -3)), 57);
+    CHECK_EQ(int(track_swing_step(kSwingMax, +1)), kSwingMax);
+    CHECK_EQ(int(track_swing_step(kSwingInherit, +100)), kSwingMax);
+    // A damaged byte between PAT and 50 counts as PAT; one above 75 as 75.
+    CHECK_EQ(int(track_swing_step(20, +1)), kSwingMin);
+    CHECK_EQ(int(track_swing_step(20, 0)), int(kSwingInherit));
+    CHECK_EQ(int(track_swing_step(200, 0)), kSwingMax);
+    CHECK_EQ(int(track_swing_step(200, -1)), kSwingMax - 1);
+}

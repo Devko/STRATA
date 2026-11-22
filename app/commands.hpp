@@ -43,6 +43,10 @@ enum class Cmd : uint8_t {
     set_track_length,  // track, a: length; or c = 1: b is an int8 delta (kDeltaFlag below)
     set_track_speed,   // track, a: speed
     set_pattern_swing, // a: swing; or c = 1: b is an int8 delta
+    // A track's own swing over the pattern's: a = 0 (kSwingInherit, follow the pattern) or
+    // 50-75; or c = 1: b is an int8 delta walked along PAT, 50 .. 75 (core/pattern.hpp,
+    // `track_swing_step`).
+    set_track_swing,   // track, a: swing; or c = 1: b is an int8 delta
 
     // --- pattern editing, M3 -----------------------------------------------
     //
@@ -231,12 +235,18 @@ enum class Cmd : uint8_t {
     // the project (ProjectSettings::eq_kills) and save with it, like the live mutes.
     eq_kill,
 
+    // Note repeat (FUNC + FILL in any mode): a held lower pad rolls its track's note at beat
+    // repeat's length, on the clock's grid while the transport runs and free from the press while
+    // it is stopped. a: note, b: velocity, c: 0 let go, 1 press (the first hit sounds now),
+    // 2 new velocity from the pad's pressure. Played, not recorded: the pattern is untouched.
+    note_repeat,
+
     count
 };
 
 // Exactly 16 bytes, as the spec requires. Everything an edit needs fits: a target, two small
 // values and one float for the things that are genuinely continuous.
-// `Command::c` set to this on set_param, set_track_length, set_pattern_swing and
+// `Command::c` set to this on set_param, set_track_length, set_pattern_swing, set_track_swing and
 // set_track_level makes the value a DELTA, applied on the audio side to the authoritative value.
 // The encoders send these: the UI reads engine state a block late, so "current + delta" computed
 // there loses every click after the first in a block -- the reason the M3 commands are deltas.

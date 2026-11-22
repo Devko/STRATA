@@ -73,6 +73,7 @@ struct UiProbe {
 
     static bool rec(const Strata &app) { return app.rec_; }
     static bool mute_mode(const Strata &app) { return app.mute_mode_; }
+    static bool note_repeat_mode(const Strata &app) { return app.note_repeat_mode_; }
     static int scene_holding(const Strata &app) { return app.scene_holding_; }
     static int keys_octave(const Strata &app) { return app.keys_octave_; }
     static int keys_held_note(const Strata &app, int key) { return app.keys_held_note_[key]; }
@@ -199,6 +200,15 @@ const Step &step_of(int track, int step) {
 
 bool trig_at(int track, int step) { return (step_of(track, step).flags & kStepTrig) != 0; }
 
+void post_cmd_track_param(int track, int param, uint8_t value) {
+    Command command;
+    command.cmd = Cmd::set_param;
+    command.track = uint8_t(track);
+    command.a = uint8_t(param);
+    command.b = value;
+    app_engine().commands().post(command);
+}
+
 int locks_on_track(int track) {
     int total = 0;
     for (int s = 0; s < kStepsPerTrack; s++) total += int(step_of(track, s).lock_count);
@@ -249,6 +259,12 @@ Strata &fresh() {
         app.on_pad_press(5, 100);
         app.on_pad_release(5);
     }
+    if (UiProbe::note_repeat_mode(app)) {  // FUNC + FILL is a toggle too
+        app.on_key(ENAGA_KEY_F1, true);
+        app.on_pad_press(1, 100);
+        app.on_pad_release(1);
+        app.on_key(ENAGA_KEY_F1, false);
+    }
     if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
 
     key(ENAGA_KEY_F4);                     // GRID: closes the step page and drops any hold
@@ -270,7 +286,7 @@ Strata &fresh() {
     Project &incoming = app_engine().project_for_load();
     project_init(incoming);
     for (int t = 0; t < kTracks; t++) {
-        for (int i = 0; i < kKitParams; i++) incoming.kit.tracks[t].params[i] = 64;
+        for (int i = 0; i < kKitSoundParams; i++) incoming.kit.tracks[t].params[i] = 64;
         incoming.kit.tracks[t].params[kLvl] = 127;
     }
     post_cmd(Cmd::project_loaded);
@@ -472,7 +488,7 @@ TEST(ui_the_parameter_page_decides_which_parameter_an_encoder_writes) {
     // The pages wrap, so the four of them are reachable in either direction.
     key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
-    for (int i = 0; i < kPages; i++) key(ENAGA_KEY_SELECT_LEFT);
+    for (int i = 0; i < kEditPages; i++) key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
 
     // And a lock follows the same page. The step page is not open and the mode is GRID, but
@@ -533,6 +549,53 @@ TEST(ui_a_lower_pad_selects_its_track_and_everything_else_follows) {
     pump(2);
     CHECK(app_engine().muted(2));
     CHECK_EQ(UiProbe::selected(app), 2);
+}
+
+TEST(ui_func_fill_turns_note_repeat_on_and_a_held_pad_rolls) {
+    Strata &app = fresh();
+    // FUNC + FILL toggles the mode and does not start a fill.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK(UiProbe::note_repeat_mode(app));
+    CHECK(std::strcmp(UiProbe::notice(app), "NOTE RPT") == 0);
+    CHECK(!app_engine().fill());
+
+    // A held lower pad rolls its track, selects it, and its pressure is the roll's velocity, not
+    // macro 1.
+    const uint8_t macro = app_engine().macro_position(0);
+    app.on_pad_press(4, 100);
+    pump(2);
+    CHECK(app_engine().rolling(2));
+    CHECK_EQ(UiProbe::selected(app), 2);
+    app.on_pad_pressure(4, 127);
+    pump(2);
+    CHECK_EQ(int(app_engine().macro_position(0)), int(macro));
+    app.on_pad_release(4);
+    pump(2);
+    CHECK(!app_engine().rolling(2));
+
+    // Turning the mode off under a held pad does not leave the roll running.
+    app.on_pad_press(6, 100);
+    pump(2);
+    CHECK(app_engine().rolling(3));
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(!UiProbe::note_repeat_mode(app));
+    CHECK(std::strcmp(UiProbe::notice(app), "PADS PLAY") == 0);
+    app.on_pad_release(6);
+    pump(2);
+    CHECK(!app_engine().rolling(3));
+
+    // And with the mode off a pad plays one note again.
+    app.on_pad_press(6, 100);
+    pump(2);
+    CHECK(!app_engine().rolling(3));
+    app.on_pad_release(6);
 }
 
 TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {
@@ -1958,6 +2021,36 @@ TEST(ui_an_eq_kill_for_a_band_that_does_not_exist_is_refused) {
     CHECK_EQ(int(engine.project().settings.eq_kills), 0);
 }
 
+// In PERFORM, FUNC + STEP 5-7 puts the master EQ's LOW, MID or HI on the selected macro (1-4 are
+// the LFO's); FUNC + STEP 8-16 assign nothing.
+TEST(ui_func_and_step_5_to_7_put_a_master_eq_band_on_a_macro) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    // Whichever macro is selected, emptied first.
+    const int selected = UiProbe::macro_selected(app);
+    post_cmd(Cmd::macro_clear, uint8_t(selected));
+    pump(2);
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_STEP1 + 5, true);              // STEP 6: MID
+    app.on_key(ENAGA_KEY_STEP1 + 5, false);
+    app.on_key(ENAGA_KEY_STEP1 + 9, true);              // nothing: not a band
+    app.on_key(ENAGA_KEY_STEP1 + 9, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    const Macro &macro = engine.macros().macros[selected];
+    CHECK_EQ(macro_count(macro), 1);
+    CHECK_EQ(int(macro.targets[0].track), int(kMacroMasterTrack));
+    CHECK_EQ(int(macro.targets[0].param), 1);            // MID
+    CHECK_EQ(int(macro.targets[0].high), 0);             // from flat, towards a kill
+    CHECK(std::strcmp(UiProbe::notice(app) + 1, " EQ MID") == 0);
+
+    post_cmd(Cmd::macro_clear, uint8_t(selected));
+    pump(2);
+}
+
 TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
     Strata &app = fresh();
     Engine &engine = app_engine();
@@ -2364,7 +2457,7 @@ TEST(ui_layout_edit_on_every_machine) {
         post_track(Cmd::set_machine, 0, uint8_t(machine));
         pump(4);
         key(ENAGA_KEY_F8);
-        for (int page = 0; page < kPages; page++) {
+        for (int page = 0; page < kEditPages; page++) {
             check_layout(app, machine_name(uint8_t(machine)));
             key(ENAGA_KEY_SELECT_RIGHT);
         }
@@ -2629,6 +2722,63 @@ TEST(ui_the_pattern_page_sets_the_master_length_and_the_swing) {
     CHECK(int(pattern.master_length) < 64);
 }
 
+TEST(ui_the_pattern_page_sets_each_tracks_own_swing) {
+    Strata &app = fresh();
+    const Pattern &pattern = app_engine().pattern();
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 2);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(pattern.tracks[t].swing), int(kSwingInherit));
+
+    // RIGHT walks LEN, SWG, then the tracks; it stops at track 8.
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);                             // track 2
+    CHECK_EQ(UiProbe::pattern_field(app), 3);
+    key(ENAGA_KEY_UP);                                // PAT -> 50
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[1].swing), kSwingMin);
+    app.on_encoder(4, +10);                           // VALUE: 60
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[1].swing), kSwingMin + 10);
+    CHECK_EQ(int(pattern.tracks[0].swing), int(kSwingInherit));
+    check_layout(app, "PATTERN, a track swing set");
+    for (int i = 0; i < 20; i++) key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::pattern_field(app), 9);
+    check_layout(app, "PATTERN, cursor on track 8");
+
+    // Encoder C edits the track under the cursor.
+    app.on_encoder(2, +5);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[7].swing), kSwingMin + 4);
+
+    // From LEN, C jumps to the selected track's swing (track 1 after fresh()).
+    for (int i = 0; i < 20; i++) key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::pattern_field(app), 0);
+    app.on_encoder(2, +1);
+    pump(2);
+    CHECK_EQ(UiProbe::pattern_field(app), 2);
+    CHECK_EQ(int(pattern.tracks[0].swing), kSwingMin);
+    // And down again to PAT.
+    app.on_encoder(2, -3);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].swing), int(kSwingInherit));
+
+    // A pattern edit, so undoable, one level per sweep: the last (track 1, up then back to PAT)
+    // is one level, and the one before it is track 8's.
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].swing), int(kSwingInherit));
+    CHECK_EQ(int(pattern.tracks[7].swing), kSwingMin + 4);
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[7].swing), int(kSwingInherit));
+    CHECK_EQ(int(pattern.tracks[1].swing), kSwingMin + 10);
+}
+
 TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_moved_to_f1_arrows) {
     // F1 + CLR and F1 + OK were NEW PROJECT and RELOAD here, so undo and redo were the one pair
     // of keys that changed meaning in one mode. Now they are undo and redo everywhere, and the
@@ -2750,13 +2900,80 @@ TEST(ui_arrows_on_the_step_page_walk_the_step_and_clr_goes_back) {
     CHECK(trig_at(0, 0));
 }
 
+TEST(ui_the_lfo_is_edits_fifth_page) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                // EDIT, track 1
+    while (UiProbe::param_page(app) != int(Page::lfo)) key(ENAGA_KEY_SELECT_RIGHT);
+    check_layout(app, "EDIT LFO, off");
+
+    // One click is one shape on A and one destination on D.
+    app.on_encoder(0, +1);
+    pump();
+    CHECK_EQ(int(lfo_wave(app_engine().params(0).v[kLfoWave])), int(LfoWave::triangle));
+    app.on_encoder(3, +3);
+    pump();
+    CHECK_EQ(lfo_dest(app_engine().params(0).v[kLfoDest]), 2);
+    CHECK(!app_engine().lfo_on(0));                   // no depth yet
+    app.on_encoder(2, +50);
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[kLfoDepth]), 50);
+    CHECK(app_engine().lfo_on(0));
+    check_layout(app, "EDIT LFO, running");
+
+    // The widest words the page can show: a free rate, every synced length, every destination.
+    for (int r = 0; r < 128; r += 3) {
+        post_cmd_track_param(0, kLfoRate, uint8_t(r));
+        pump();
+        check_layout(app, "EDIT LFO, rate");
+    }
+    for (int d = 0; d <= kParams; d++) {
+        post_cmd_track_param(0, kLfoDest, lfo_dest_byte(d - 1));
+        pump();
+        check_layout(app, "EDIT LFO, destination");
+    }
+
+    // Hold a STEP and turn C: a lock on the LFO's depth, removed by pushing C.
+    key(ENAGA_KEY_F4);                                // GRID; the page stays LFO
+    step_down(5);
+    app.on_encoder(2, -10);
+    pump();
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(kLfoDepth), value));
+    CHECK_EQ(int(value), 40);
+    app.on_key(ENAGA_KEY_PUSH_C, true);
+    app.on_key(ENAGA_KEY_PUSH_C, false);
+    step_up(5);
+    pump();
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(kLfoDepth), value));
+
+    // PERFORM: FUNC + STEP 3 hands the LFO's depth to the selected macro.
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    shift_key(ENAGA_KEY_STEP1 + 2);
+    pump();
+    const MacroTarget &target = app_engine().macros().macros[0].targets[0];
+    CHECK_EQ(int(target.enabled), 1);
+    CHECK_EQ(int(target.param), kLfoDepth);
+    CHECK_EQ(UiProbe::notice(app), "A T1 DEP");
+    post_cmd(Cmd::macro_clear, 0);
+    pump();
+
+    // Back to SRC for the tests after this one, and the LFO off.
+    post_cmd_track_param(0, kLfoDepth, 0);
+    post_cmd_track_param(0, kLfoDest, 0);
+    pump();
+    key(ENAGA_KEY_F8);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_arrows_in_edit_keys_perform_machine_and_resample) {
     Strata &app = fresh();
 
     key(ENAGA_KEY_F8);                             // EDIT: sideways is the parameter page
     const int param_page = UiProbe::param_page(app);
     key(ENAGA_KEY_RIGHT);
-    CHECK_EQ(UiProbe::param_page(app), (param_page + 1) % kPages);
+    CHECK_EQ(UiProbe::param_page(app), (param_page + 1) % kEditPages);
     key(ENAGA_KEY_LEFT);
     CHECK_EQ(UiProbe::param_page(app), param_page);
     key(ENAGA_KEY_DOWN);                           // and the rows are the tracks

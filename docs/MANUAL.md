@@ -62,7 +62,7 @@ A machine is one of eight sound engines. Any track can host any machine (MACHINE
 | 7 | PLY (VA POLY) | Chord stabs |
 | 8 | SMP (SAMPLE) | Loop, cut into slices |
 
-Every track has **16 parameters on four pages** of four, one parameter per encoder A-D:
+Every track has **16 parameters on four pages** of four, one parameter per encoder A-D (and a fifth page for its LFO, below):
 
 - **SRC** and **AMP** belong to the machine and change meaning with it (section 3).
 - **FLTR** and **FX** belong to the insert chain and are the same on every track:
@@ -71,6 +71,30 @@ Every track has **16 parameters on four pages** of four, one parameter per encod
 
 Parameters run 0-127. Every change is smoothed over one audio block, so turning a knob or
 playing a locked step never clicks.
+
+### The LFO
+
+Every track also has **one LFO**, on a fifth EDIT page, **LFO**, after FX (EDIT, then the
+selection keys or LEFT/RIGHT). It moves one of the track's 16 parameters up and down on its own:
+
+- **A, WAV**: the shape. SIN, TRI, RMP (a rising ramp), SAW (a falling one), SQR and S+H (a new
+  random value each cycle). One click is one shape.
+- **B, RAT**: the rate. The lower half runs **free**, from `0.06` Hz (one sweep every 16 s) up to
+  `32` Hz. The upper half is **synced** to the tempo, from `8B` (eight bars) down to `1/32`, with
+  dotted (`1/4.`) and triplet (`1/8T`) lengths in between. A synced LFO stays in time with the
+  bar wherever the song is, follows an outside clock, and starts on the one when you press PLAY.
+- **C, DEP**: how far. At 127 the parameter swings about 64 either side of where its knob is.
+- **D, DST**: which parameter, by name, or `OFF`. One click is one parameter.
+
+The line under the knobs shows where the destination is right now (`NOW CUT 87`), or `LFO OFF:
+SET DEP+DST` until both are up. A new track's LFO is off, and so is every track in a project
+saved before the LFO existed.
+
+The four LFO settings are parameters like any other: hold a STEP and turn one to lock it on that
+step (a deeper sweep on one step, a different shape for a fill), store them in a scene and morph
+between two LFO settings, or put DEP on a macro to fade the movement in. The LFO moves the
+parameter in its 0-127 steps about 750 times a second: smooth on a filter or a pan, but a slow,
+deep sweep of a pitch can be heard stepping.
 
 ### Patterns, banks and the project
 
@@ -437,6 +461,10 @@ track. Hold a STEP and press UP / DOWN to copy / paste one step. Everything goes
 - `VALUE push + turn`: the pattern's swing, 50-75%, on the even 16ths.
 - PROJECT, octave RIGHT twice: the **PATTERN** page, where A sets the master length (LEN) and B
   the swing (SWG).
+- **Each track can swing on its own**, on the same page: under LEN and SWG are eight TRACK SWING
+  fields, `PAT` (follow SWG) or 50-75%. LEFT/RIGHT walk the fields, and C (or VALUE) changes the
+  one under `>`; with `>` on LEN or SWG, C sets the selected track's. Hats at 66 over a straight
+  kick and bass is the classic use. It is saved with the pattern and undoable.
 
 A 12-step perc against a 16-step kick lands somewhere new each bar for three bars; GROOVE+ does
 exactly this.
@@ -499,9 +527,13 @@ Mutes and mute states are saved with the project.
 In PERFORM (`FUNC+MIXER`) the top shows `A1 0P` and `B2 9P`: which scene is on each side and how
 many parameters it stores, and the morph bar between them. **VALUE** morphs.
 
-- **OK** captures the whole current sound into the scene on side A.
+- **OK** captures the whole current sound into the scene on side A, including the master kill
+  EQ's three knobs (not its kill switches).
 - Hold a scene pad + **OK** captures only the selected track into that side's scene.
 - Hold a scene pad + **CLR** erases that side's scene.
+
+Because a whole capture holds the kill EQ's knobs, a scene captured with LOW turned down to
+`KILL` turns the morph into a slow low-end fade: morph towards it over a build.
 
 A useful habit: leave side A on an empty scene, build a sound, capture it into a scene on side B,
 then undo your knob moves and morph back and forth. The morph position itself is not saved.
@@ -533,6 +565,10 @@ filter while it closes a send.
 1. Select a track (lower pad) and a macro (LEFT/RIGHT or the octave keys).
 2. Press a **STEP** key: STEP 1-4 are that track's SRC parameters, 5-8 FLTR, 9-12 AMP, 13-16 FX.
    The screen confirms, for example `A T6 CUT`. Repeat for up to four parameters, on any tracks.
+   **FUNC + STEP 1-4** assign the track's LFO settings instead, WAV RAT DEP DST: a macro on DEP
+   fades a wobble in.
+   **FUNC + STEP 5, 6 or 7** puts the master kill EQ's LOW, MID or HI on the macro (`A EQ LOW`):
+   from flat, the macro sweeps that band down to a kill.
 3. Turn the macro's encoder (A-D).
 
 The target is whichever end of 0-127 is further from the parameter's value when you assign it,
@@ -550,6 +586,16 @@ REPEAT loops the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the finished maste
 release and the music is where it would have been. In PERFORM, **FUNC+UP / FUNC+DOWN** set
 **auto-fill**: OFF, or FILL on the last bar of every 4, 8 or 16. PERFORM's lower lines show what
 is active: `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n`.
+
+### Note repeat
+
+**FUNC + FILL** turns **NOTE RPT** on (`NOTE RPT`, and `NRPT` after the bar number in PERFORM);
+again turns it off (`PADS PLAY`). While it is on, holding a lower pad rolls that track's note at
+beat repeat's length: 1/16 until you pick another with REPEAT + VALUE. With the transport running
+the hits land on the beat grid, so a roll is always in time; stopped, it rolls from the moment you
+press. Leaning on the pad sets each hit's velocity, so pressure swells and fades the roll (macro 1
+is left alone while a pad rolls). Hold two pads for two rolls. Rolls are played, not written: REC
+does not record them.
 
 ### The master kill EQ
 
@@ -715,6 +761,8 @@ names one.
   kept one later.
 - **Kill the lows for the build.** FUNC+A takes the kick and bass out; push it again exactly on
   the one of the drop. FUNC+C on its own thins a busy top end for a breakdown.
+- **Snare rolls into the drop.** FUNC+FILL, then hold the snare's pad and press harder over the
+  last bar; REPEAT + VALUE to 1/32 for the final beat.
 - **Throws on the off-beat parts.** THROW on the rim or the chord for a bar, then let it ring.
 - **Resample a moment you like.** An 8-bar take of a jam into track 8, then sliced or on GRAIN,
   turns a happy accident into material.

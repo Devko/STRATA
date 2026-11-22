@@ -40,7 +40,7 @@ using namespace strata;
 // 292 since the live section: another table entry (12) and its 3 bytes, optional likewise.
 // 296 since the kill EQ grew the mixer section by its three band bytes and the kill switches.
 constexpr uint32_t kProjectFileBytes = 296;
-constexpr uint32_t kKitFileBytes = 1076;
+constexpr uint32_t kKitFileBytes = 1120;   // 1076 before the LFO section (12 + 8 x 4)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -111,6 +111,31 @@ uint32_t section_entry_at(const uint8_t *buffer, uint16_t id) {
         if (peek_u16(buffer, entry) == id) return entry;
     }
     return 0;
+}
+
+// The file as the build before its LAST section existed wrote it: one table entry fewer, every
+// section 12 bytes earlier, the last section's bytes gone. Returns the new size. The last section
+// is the one at the end of the payload, which is how every writer here lays them out.
+uint32_t drop_last_section(const uint8_t *file, uint8_t *out) {
+    const uint32_t count = peek_u16(file, 6);
+    const uint32_t last = kHeaderBytes + (count - 1) * kSectionEntryBytes;
+    const uint32_t cut = peek_u32(file, last + 4);          // where the last section starts
+    for (uint32_t i = 0; i < kHeaderBytes; i++) out[i] = file[i];
+    for (uint32_t i = 0; i + 1 < count; i++) {
+        const uint32_t from = kHeaderBytes + i * kSectionEntryBytes;
+        poke_u16(out, from, peek_u16(file, from));
+        poke_u16(out, from + 2, 0);
+        poke_u32(out, from + 4, peek_u32(file, from + 4) - kSectionEntryBytes);
+        poke_u32(out, from + 8, peek_u32(file, from + 8));
+    }
+    const uint32_t data_from = kHeaderBytes + count * kSectionEntryBytes;
+    const uint32_t data_to = kHeaderBytes + cut;
+    uint32_t at = kHeaderBytes + (count - 1) * kSectionEntryBytes;
+    for (uint32_t i = data_from; i < data_to; i++) out[at++] = file[i];
+    poke_u16(out, 6, uint16_t(count - 1));
+    poke_u32(out, 8, at - kHeaderBytes);
+    refresh_crc(out);
+    return at;
 }
 
 void fill_sentinel(uint8_t *buffer, uint32_t size) {
@@ -1154,7 +1179,7 @@ TEST(project_read_never_looks_past_the_bytes_it_was_given) {
 namespace {
 
 // One track's record inside the tracks section: 16 parameters, the machine, the fader, the path.
-constexpr uint32_t kTrackRecordBytes = uint32_t(kKitParams) + 1 + 2 + uint32_t(kSamplePathBytes);
+constexpr uint32_t kTrackRecordBytes = uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 
 uint32_t kit_track_at(const uint8_t *file, int track) {
     return section_at(file, kSectionKitTracks) + uint32_t(track) * kTrackRecordBytes;
@@ -1170,7 +1195,7 @@ uint32_t fresh_kit_file() {
 
 // The fader as it went down on disk, in thousandths of unity.
 uint16_t stored_level(const uint8_t *file, int track) {
-    return peek_u16(file, kit_track_at(file, track) + kKitParams + 1);
+    return peek_u16(file, kit_track_at(file, track) + kKitSoundParams + 1);
 }
 
 }  // namespace
@@ -1232,7 +1257,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 1);     // one section
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 2);     // the tracks, then the LFO
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -1240,16 +1265,71 @@ TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
 
     // dsp/track.hpp maps a parameter either by x(1/127) or as a table index, so a 255 that
     // survived the CRC would be an out-of-range read down in a machine rather than an odd sound.
-    for (int p = 0; p < kKitParams; p++) g_kit_file[at + uint32_t(p)] = uint8_t(128 + p);
+    for (int p = 0; p < kKitSoundParams; p++) g_kit_file[at + uint32_t(p)] = uint8_t(128 + p);
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
-    for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
+    for (int p = 0; p < kKitSoundParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
 
     // 127 itself is not clamped away.
-    for (int p = 0; p < kKitParams; p++) g_kit_file[at + uint32_t(p)] = 127;
+    for (int p = 0; p < kKitSoundParams; p++) g_kit_file[at + uint32_t(p)] = 127;
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
-    for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
+    for (int p = 0; p < kKitSoundParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
+}
+
+TEST(kit_the_lfo_bytes_round_trip_and_are_clamped_on_the_way_in) {
+    // The LFO's four bytes a track (core/project.hpp, kSectionKitLfo), in their own section.
+    fresh_kit_file();
+    CHECK(section_at(g_kit_file, kSectionKitLfo) != 0u);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+    }
+    // Laid out track by track, four bytes each, in parameter order.
+    const uint32_t lfo = section_at(g_kit_file, kSectionKitLfo);
+    CHECK_EQ(int(g_kit_file[lfo + 4 * 3 + 2]), int(g_kit_source.tracks[3].params[kKitSoundParams + 2]));
+
+    for (uint32_t i = 0; i < uint32_t(kKitLfoParams * kTracks); i++) g_kit_file[lfo + i] = 200;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 127);
+        }
+    }
+}
+
+TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_off) {
+    // Backward compatibility: a KIT.BIN with the tracks section only -- what every build before
+    // the LFO wrote -- still loads, keeps its sound, and turns every LFO OFF rather than leaving
+    // whatever the kit it is read into held.
+    fresh_kit_file();
+    const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
+    CHECK_EQ(old_size, 1076u);
+    CHECK_EQ(int(peek_u16(g_kit_alt, 6)), 1);
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitParams; p++) g_kit_loaded.tracks[t].params[p] = 99;
+    }
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitSoundParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+        for (int p = kKitSoundParams; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 0);
+        }
+        CHECK_EQ(int(g_kit_loaded.tracks[t].machine), int(g_kit_source.tracks[t].machine));
+    }
+
+    // Present but short is damage, not an old file.
+    fresh_kit_file();
+    const uint32_t entry = section_entry_at(g_kit_file, kSectionKitLfo);
+    poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
+             int(SerializeResult::malformed));
 }
 
 TEST(kit_an_unknown_machine_falls_back_to_the_first_one) {
@@ -1258,7 +1338,7 @@ TEST(kit_an_unknown_machine_falls_back_to_the_first_one) {
     // Not the last one: an unknown id should land somewhere known, and clamping to kMachines - 1
     // would hand a damaged byte whichever machine happens to sit at the end of the list.
     for (int t = 0; t < kTracks; t++) {
-        g_kit_file[kit_track_at(g_kit_file, t) + kKitParams] = uint8_t(kMachines + t);
+        g_kit_file[kit_track_at(g_kit_file, t) + kKitSoundParams] = uint8_t(kMachines + t);
     }
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
@@ -1266,7 +1346,7 @@ TEST(kit_an_unknown_machine_falls_back_to_the_first_one) {
 
     // Every machine this build does have survives.
     for (int t = 0; t < kTracks; t++) {
-        g_kit_file[kit_track_at(g_kit_file, t) + kKitParams] = uint8_t(t % kMachines);
+        g_kit_file[kit_track_at(g_kit_file, t) + kKitSoundParams] = uint8_t(t % kMachines);
     }
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
@@ -1313,7 +1393,7 @@ TEST(kit_the_fader_is_stored_in_thousandths_and_cannot_carry_a_nan) {
 
 TEST(kit_a_fader_above_the_engines_ceiling_in_a_file_is_clamped_on_the_way_in) {
     fresh_kit_file();
-    poke_u16(g_kit_file, kit_track_at(g_kit_file, 2) + kKitParams + 1, 65535);
+    poke_u16(g_kit_file, kit_track_at(g_kit_file, 2) + kKitSoundParams + 1, 65535);
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
     // An infinity is a blown output, so nothing above the engine's own ceiling (2.0, the most
@@ -1354,7 +1434,7 @@ TEST(kit_a_path_filling_every_byte_loses_its_last_character_not_its_terminator) 
     uint32_t written = 0;
     CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), &written)),
              int(SerializeResult::ok));
-    const uint32_t path = kit_track_at(g_kit_file, 0) + kKitParams + 3;
+    const uint32_t path = kit_track_at(g_kit_file, 0) + kKitSoundParams + 3;
     CHECK_EQ(int(g_kit_file[path + kSamplePathBytes - 1]), 0);
 
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, written)), int(SerializeResult::ok));
@@ -1381,7 +1461,7 @@ TEST(kit_a_shortened_path_leaves_no_trace_of_the_old_one) {
     CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, uint32_t(sizeof(g_kit_file)), &written)),
              int(SerializeResult::ok));
 
-    const uint32_t path = kit_track_at(g_kit_file, 0) + kKitParams + 3;
+    const uint32_t path = kit_track_at(g_kit_file, 0) + kKitSoundParams + 3;
     CHECK_EQ(std::strcmp(reinterpret_cast<const char *>(g_kit_file + path), now), 0);
     int nonzero_tail = 0;
     for (int i = int(std::strlen(now)); i < kSamplePathBytes; i++) {
@@ -1392,7 +1472,7 @@ TEST(kit_a_shortened_path_leaves_no_trace_of_the_old_one) {
 
 TEST(kit_nothing_past_a_paths_terminator_is_read_back) {
     fresh_kit_file();
-    const uint32_t path = kit_track_at(g_kit_file, 1) + kKitParams + 3;
+    const uint32_t path = kit_track_at(g_kit_file, 1) + kKitSoundParams + 3;
 
     g_kit_file[path + 0] = 'A';
     g_kit_file[path + 1] = 'B';
@@ -1429,7 +1509,7 @@ TEST(kit_read_refuses_a_damaged_container_and_clears_the_kit) {
     int set = 0;
     for (int t = 0; t < kTracks; t++) {
         const KitTrack &track = g_kit_loaded.tracks[t];
-        for (int p = 0; p < kKitParams; p++) {
+        for (int p = 0; p < kKitSoundParams; p++) {
             if (track.params[p] != 0) set++;
         }
         if (track.sample[0] != '\0') set++;
