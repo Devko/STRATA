@@ -203,6 +203,9 @@ public:
 
     void set_note(float velocity, bool accent, bool slide);
     void set_pitch(float note) { pitch_ = note; }
+    // Tests: drop the cached oscillator increments, so the next control step computes them.
+    // A voice copied and then made to forget must render the same bits as the original.
+    void forget_increments() { osc_inv_rate_ = 0.0f; }
     void set_target(float note) { target_ = note; }
     void gate_on();
     void gate_off() {
@@ -246,6 +249,20 @@ private:
     float velocity_ = 1.0f;             // this note's velocity, 0-1
     bool accent_ = false;               // this note's accent flag
     bool slide_ = false;                // this note arrived on a slid step
+
+    // The oscillators' increments and their reciprocals, as of the last control step, and the
+    // pitch and rate they came from. A held note does not glide -- VA POLY never does, VA MONO
+    // only while GLD is moving it -- so most control steps would recompute a semitones() and two
+    // reciprocals into the bits already here. Keyed by exact float equality on both inputs, so a
+    // hit is bit-exact by construction (va.cpp, run()).
+    float osc_pitch_ = 0.0f;
+    float osc_inv_rate_ = 0.0f;         // 0 never matches a real rate: the first step computes
+    float dt1_ = 0.0f, inv1_ = 0.0f, dt2_ = 0.0f, inv2_ = 0.0f;
+
+    // reciprocal(float(n)) for the slice length the last slice had: n is kControl on all but
+    // the slices a trig or a gate cuts short.
+    int ramp_n_ = 0;
+    float inv_n_ = 0.0f;
 };
 
 // --- the machine ----------------------------------------------------------
