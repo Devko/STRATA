@@ -116,11 +116,15 @@ float db(float x) { return x > 0.0f ? 20.0f * std::log10(x) : -999.0f; }
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (argc < 2) { std::fprintf(stderr, "usage: %s OUTDIR [BARS]\n", argv[0]); return 2; }
+    if (argc < 2) { std::fprintf(stderr, "usage: %s OUTDIR [BARS 1-24] [STEMS 1-4]\n", argv[0]); return 2; }
     const char *dir = argv[1];
     const int bars = argc > 2 && argv[2][0] ? std::atoi(argv[2]) : 8;
     // The pattern whose tracks are soloed one by one, 1-4.
     const int stems = argc > 3 ? std::atoi(argv[3]) - 1 : 0;
+    if (stems < 0 || stems >= kFactoryPatterns || bars < 1 || bars > 24) {
+        std::fprintf(stderr, "usage: %s OUTDIR [BARS 1-24] [STEMS 1-%d]\n", argv[0], kFactoryPatterns);
+        return 2;
+    }
     FakeHost::the().reset();
     if (!g_engine.init(kRate)) { std::fprintf(stderr, "engine init failed\n"); return 1; }
 

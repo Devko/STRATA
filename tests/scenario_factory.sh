@@ -46,7 +46,7 @@ echo "running the emulator for $CYCLES cycles: play A01, queue A04 while playing
 python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 20@400000000 \
-    --key 34@460000000 \
+    --key 35@460000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2

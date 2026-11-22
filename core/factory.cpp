@@ -229,7 +229,7 @@ void groove(Pattern &p) {
 }
 
 // A02 GROOVE+: the same beat, developing. Trig conditions (a kick pickup every fourth bar, a
-// hat roll every second, a clap on FILL), a perc line on 12 steps against the 16 -- polymeter,
+// hat roll into every bar, a clap on FILL), a perc line on 12 steps against the 16 -- polymeter,
 // so it lands somewhere new each bar for three bars -- with locked pitches, a second chord, and
 // blips on a 7-step loop.
 void groove_plus(Pattern &p) {
@@ -241,9 +241,10 @@ void groove_plus(Pattern &p) {
 
     trig(p, kClap, 15, C4, 76).condition = condition_pack(Condition::FILL);
 
+    // A hat roll into the next bar. Every bar, not on a condition: the ratchet sits on a hit
+    // offbeat_hats already placed, so a 2:2 condition here would drop that hit on the other bars.
     Step &roll = p.tracks[kClosed].steps[15];
     roll.ratchet = ratchet_pack(3, RatchetRamp::up);
-    roll.condition = condition_pack_a_b(2, 2);
 
     // Perc: 12 steps, pitched by locks into a three-note figure.
     for (int i = 0; i < 16; i++) p.tracks[kPerc].steps[i] = Step{};
@@ -258,7 +259,7 @@ void groove_plus(Pattern &p) {
     trig(p, kBass, 7, C2, 64);
     Step &fifth = p.tracks[kBass].steps[14];
     fifth.note = G2;
-    fifth.flags = uint8_t(kStepTrig | kStepSlide);
+    fifth.flags |= kStepSlide;                          // keeps A01's accent
 
     // Cm7 then Abmaj7: i to VI, the most-used move in minor-key techno. Ab C Eb G is inside
     // C minor, so the fold leaves it alone.
@@ -331,7 +332,6 @@ void peak(Pattern &p) {
     for (int step : {7, 15}) {
         Step &s = p.tracks[kClosed].steps[step];
         s.ratchet = ratchet_pack(2, RatchetRamp::down);
-        s.probability = 60;
     }
 
     trig(p, kPerc, 3, C4, 90);
@@ -425,44 +425,13 @@ void factory_scenes(SceneSet &scenes) {
     scene_set(tension, kChord, kAmp1, 100);
 }
 
-// One macro target, starting at the kit's own value so an assigned macro at position 0 changes
-// nothing: `macro_apply` writes `low` at 0, so a `low` that differed from the kit would move the
-// sound the moment the project opened.
-void target(Macro &macro, int slot, const Kit &kit, int track, int param, uint8_t high) {
-    MacroTarget &t = macro.targets[slot];
-    t.enabled = 1;
-    t.track = uint8_t(track);
-    t.param = uint8_t(param);
-    t.low = kit.tracks[track].params[param];
-    t.high = high;
-}
-
-void factory_macros(MacroSet &macros, const Kit &kit) {
-    // A: ACID -- the bass filter opens, resonance and envelope rise.
-    Macro &acid = macros.macros[0];
-    target(acid, 0, kit, kBass, kSrc2, 112);
-    target(acid, 1, kit, kBass, kSrc3, 118);
-    target(acid, 2, kit, kBass, kAmp1, 104);
-
-    // B: DUB -- the chord and the rim into the delay and reverb, the chord's tail longer.
-    Macro &dub = macros.macros[1];
-    target(dub, 0, kit, kChord, kSna, 120);
-    target(dub, 1, kit, kChord, kSnb, 120);
-    target(dub, 2, kit, kPerc, kSna, 110);
-    target(dub, 3, kit, kChord, kAmp0, 96);
-
-    // C: HATS -- longer and brighter.
-    Macro &hats = macros.macros[2];
-    target(hats, 0, kit, kClosed, kAmp0, 64);
-    target(hats, 1, kit, kOpen, kAmp0, 104);
-    target(hats, 2, kit, kClosed, kSrc1, 127);
-
-    // D: KICK -- longer, driven harder, brighter.
-    Macro &kick = macros.macros[3];
-    target(kick, 0, kit, kKick, kAmp0, 108);
-    target(kick, 1, kit, kKick, kDrv, 90);
-    target(kick, 2, kit, kKick, kAmp1, 84);
-}
+// No factory MACROS, on purpose. An enabled macro target writes its `low` at position 0 on every
+// rebuild of the performance layer (core/perform.hpp, `macro_apply`), so a macro shipped on a
+// parameter freezes that parameter's EDIT knob until the macro is cleared: turning BASS CUT would
+// move the screen and not the sound. Scenes have no such cost -- a parameter only one end stores
+// takes the LIVE kit value at the other -- so the factory's performance content is scenes and
+// mute states, and the macros start empty for the user to assign (macro_range_through makes an
+// assignment start where the knob already is).
 
 void factory_chain(Project &project) {
     // GROOVE x2, GROOVE+ x2, BREAK, PEAK x2, GROOVE+: about two minutes at 130 BPM. Built, and
@@ -499,7 +468,6 @@ void factory_project(Project &project, SceneSet &scenes, MacroSet &macros) {
 
     factory_chain(project);
     factory_scenes(scenes);
-    factory_macros(macros, project.kit);
 
     project.bank = 0;
     project.slot = 0;

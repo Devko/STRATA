@@ -22,8 +22,8 @@
 //     trig conditions, probability, ratchets, slides, accents, chords, swing and polymeter;
 //   - a chain over those four, built but OFF -- STRATA is a jamming instrument, and a chain
 //     that advanced on its own the first time someone pressed PLAY would fight them;
-//   - eight mute states, three scenes and four macros, so the performance row and PERFORM
-//     mode do something from the first minute.
+//   - eight mute states and three scenes, so the performance row and the PERFORM morph do
+//     something from the first minute. No macros: core/factory.cpp says why.
 //
 // Banks B-H are empty, so a user's own work starts on a clean page.
 //

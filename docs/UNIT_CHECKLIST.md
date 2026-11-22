@@ -1234,7 +1234,7 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
 - [ ] Is the **bass loud enough against the kick**, and does the sidechain duck pump it musically
       rather than chop it? It renders 7 dB under the kick, with LVL at the top and the fader at
       1.25.
-- [ ] **A02 GROOVE+**: a kick pickup on step 15 every fourth bar, a hat roll every second bar, the
+- [ ] **A02 GROOVE+**: a kick pickup on step 15 every fourth bar, a hat roll into every bar, the
       rim on a 12-step loop (it drifts against the bar for three bars), Cm7 then Abmaj7, blips
       on a 7-step loop. Hold FILL: an extra clap on step 16.
 - [ ] **A03 BREAK**: no kick or bass; Cm7 and Abmaj7 with long tails into the delay and reverb, a
@@ -1247,9 +1247,9 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
 - [ ] **PERFORM, VALUE**: morphs from the kit (scene 1) to DUB (scene 2): chord, rim and blips into
       the sends with longer tails. Scenes 3 (DARK: filters close) and 4 (TENSION: the acid opens,
       hats and kick tighten) are there to assign to A or B.
-- [ ] **PERFORM, A-D**: ACID (bass cutoff, resonance, envelope), DUB (chord and rim sends, chord
-      decay), HATS (longer, brighter), KICK (longer, drive, tone). At 0 each must change
-      nothing; turning each up must be audible.
+- [ ] **PERFORM, A-D: no macros ship.** An assigned macro holds its parameters at its own value
+      even at 0, so a shipped macro would freeze those EDIT knobs. Assign your own; the factory
+      leaves them empty on purpose (core/factory.cpp).
 - [ ] **Mute states** 1-8: all, no kick, drums only, no hats, no bass, kick + bass, melodic parts
       only, the bare groove without rim and blips.
 - [ ] Anything that sounds wrong, say which and how: each value has its arithmetic in a comment

@@ -4,7 +4,7 @@
 // content is VALID -- every byte inside the domain its loader would clamp it to, so nothing in it
 // changes across a save -- that it survives the round trip through all four file types, that it
 // is playable (levels up, every track has something to play), that it keeps the promises the
-// header makes (chain off, macros neutral at position 0, scene A empty, melodic notes in the key),
+// header makes (chain off, no macros, scenes neutral at rest, melodic notes in the key),
 // and that NEW and the card-less boot both get it.
 #include "check.hpp"
 #include "apprig.hpp"
@@ -154,29 +154,11 @@ TEST(factory_the_chain_names_factory_patterns_and_is_off) {
     }
 }
 
-TEST(factory_macros_change_nothing_at_rest_and_scene_a_is_the_kit) {
+TEST(factory_ships_no_macros_and_scene_a_is_the_kit) {
     make();
-    // Macro positions start at 0 and macro_apply writes `low` there, so every target's low must
-    // be the kit's own value or opening the project would move the sound.
-    int targets = 0;
-    for (int m = 0; m < kMacros; m++) {
-        CHECK(macro_count(g_macros.macros[m]) > 0);
-        uint8_t out[kTracks][kKitParams];
-        for (int t = 0; t < kTracks; t++) {
-            for (int i = 0; i < kKitParams; i++) out[t][i] = g_made.kit.tracks[t].params[i];
-        }
-        macro_apply(g_macros.macros[m], 0, out);
-        for (int t = 0; t < kTracks; t++) {
-            for (int i = 0; i < kKitParams; i++) CHECK_EQ(int(out[t][i]), int(g_made.kit.tracks[t].params[i]));
-        }
-        for (const MacroTarget &tg : g_macros.macros[m].targets) {
-            if (!tg.enabled) continue;
-            targets++;
-            CHECK(tg.track < kTracks && tg.param < kKitParams);
-            CHECK(tg.high != tg.low);                            // and the knob does something
-        }
-    }
-    CHECK(targets >= 8);
+    // An enabled macro writes its `low` at position 0 on every rebuild, which would freeze the
+    // EDIT knob of every parameter it drives (core/factory.cpp). So none ships.
+    for (int m = 0; m < kMacros; m++) CHECK_EQ(macro_count(g_macros.macros[m]), 0);
 
     // Slots A and B are scenes 1 and 2; A stores nothing so the morph starts from the kit.
     CHECK_EQ(int(g_made.settings.scene_a), 0);
@@ -185,6 +167,27 @@ TEST(factory_macros_change_nothing_at_rest_and_scene_a_is_the_kit) {
     CHECK(scene_count(g_scenes.scenes[1]) > 0);
     CHECK(scene_count(g_scenes.scenes[2]) > 0);
     CHECK(scene_count(g_scenes.scenes[3]) > 0);
+
+    // At morph position 0 the result is the kit, so shipping scenes moves nothing at rest; at the
+    // far end every stored value arrives.
+    uint8_t out[kTracks][kKitParams];
+    for (int t = 0; t < kTracks; t++) {
+        for (int i = 0; i < kKitParams; i++) out[t][i] = g_made.kit.tracks[t].params[i];
+    }
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], 0, out);
+    for (int t = 0; t < kTracks; t++) {
+        for (int i = 0; i < kKitParams; i++) CHECK_EQ(int(out[t][i]), int(g_made.kit.tracks[t].params[i]));
+    }
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale, out);
+    int moved = 0;
+    for (int t = 0; t < kTracks; t++) {
+        for (int i = 0; i < kKitParams; i++) {
+            if (!scene_has(g_scenes.scenes[1], t, i)) continue;
+            CHECK_EQ(int(out[t][i]), int(g_scenes.scenes[1].values[t][i]));
+            moved += out[t][i] != g_made.kit.tracks[t].params[i];
+        }
+    }
+    CHECK_EQ(moved, scene_count(g_scenes.scenes[1]));      // every stored value is a change
 }
 
 TEST(factory_mute_states_are_distinct_and_start_unmuted) {
@@ -280,7 +283,6 @@ TEST(factory_is_what_a_new_project_holds_and_it_plays) {
         for (int i = 0; i < kKitParams; i++) CHECK_EQ(int(kit_value(t, i)), int(g_made.kit.tracks[t].params[i]));
     }
     CHECK(std::memcmp(e.pattern().tracks, g_made.patterns[0][0].tracks, sizeof g_made.patterns[0][0].tracks) == 0);
-    CHECK_EQ(int(e.macros().macros[0].targets[0].param), int(g_macros.macros[0].targets[0].param));
     CHECK_EQ(scene_count(e.scenes().scenes[1]), scene_count(g_scenes.scenes[1]));
 
     // Two bars of ticks: something sounds, nothing is non-finite, and the limiter holds it in.
