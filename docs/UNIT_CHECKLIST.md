@@ -406,6 +406,21 @@ it runs anywhere but the host tests.
 - [ ] Transport stopped: a held pad still rolls, at the tempo's sixteenths.
 - [ ] FUNC + FILL again: `PADS PLAY`, and a pad plays one note. REC on: a roll records nothing.
 
+## 13g. Tape stop and delay freeze (4 min)
+
+New after the walkthrough was written. Both are held key combinations, which the emulator
+cannot press, so this is their first run outside the host tests. Play A01 GROOVE.
+
+- [ ] **Hold FUNC, then hold push D**: `TAPE STOP`. The beat slows and drops in pitch to silence
+      over about two beats, no click at the start. Let go of FUNC first, keep holding D: still
+      stopped. Let go of D: the beat is back at once, in time, **no click**.
+- [ ] Let go of D half way through a stop: it comes straight back from the slowed sound.
+- [ ] **U8.** Hold a tape stop for 10 s: **MAX `________ %`** against U1's `________ %`.
+- [ ] Turn the chord's SnA (delay send) up and play a few chord stabs. **Hold FUNC, then hold
+      MUTATE**: `FREEZE`, `FRZ` on PERFORM's bar line. The echo keeps looping at the same level;
+      new stabs play dry and are not echoed. Let go: the loop fades into the delay's tail, then
+      new stabs echo again. FUNC + MUTATE mutated nothing (no `KEPT`/`REVERTED` prompt).
+
 ## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). PROJECT, FUNC+LEFT once: `AGAIN TO RELOAD`, nothing changes.
@@ -532,6 +547,7 @@ Enaga's menu and start STRATA6.
 | U6 A01 GROOVE MAX with LOW killed, 60 s, and the difference to U1 (13d) | |
 | E7 eight LFOs, `scenario_lfo.sh` off / on, cl6x / GCC (PC) | |
 | U7 A01 GROOVE MAX with four LFOs, 60 s, and the difference to U1 (13e) | |
+| U8 A01 GROOVE MAX holding a tape stop, 10 s (13g) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
 | U2 STRATA6 + tracks 5 and 6 as MIN11 POLY, capped at 12 voices (16) | |

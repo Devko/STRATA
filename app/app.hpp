@@ -384,9 +384,24 @@ public:
         // or CLR closes it (<enaga/ui.hpp>). F1 and VALUE's push are tracked above, so a FUNC
         // still held from opening it is let go of properly.
         if (name_entry_.active()) {
+            // A tape stop held from before the entry opened still ends with its key.
+            if (!down && key == ENAGA_KEY_PUSH_D && tape_held_) {
+                tape_held_ = false;
+                post(Cmd::tape_stop, 0, 0, 0);
+            }
             const enaga::ui::Action action = name_entry_.key(key, down);
             if (action == enaga::ui::Action::chosen) finish_save_as();
             if (action == enaga::ui::Action::no) notice("NAME KEPT");
+            return;
+        }
+
+        // FUNC + push D, HELD: the tape stop, in every mode -- beside FUNC + push A-C, the kill
+        // EQ, so the master moves are under one hand. Its release ends it whether or not FUNC is
+        // still down, and before the held-step gesture below can take the key.
+        if (key == ENAGA_KEY_PUSH_D && (down ? shift_ : tape_held_)) {
+            tape_held_ = down;
+            post(Cmd::tape_stop, 0, 0, down ? 1 : 0);
+            if (down) notice("TAPE STOP");
             return;
         }
 
@@ -1614,6 +1629,14 @@ public:
                 break;
 
             case PerformPad::mutate:
+                // FUNC + MUTATE, held: the delay freeze. The release ends it whether or not FUNC
+                // is still down, and a freeze press is not a mutation.
+                if (down ? shift_ : freeze_held_) {
+                    freeze_held_ = down;
+                    post(Cmd::delay_freeze, 0, 0, down ? 1 : 0);
+                    if (down) notice("FREEZE");
+                    break;
+                }
                 if (!down) break;
                 // One undo level, then the mutation. CLR reverts it because CLR is the undo that
                 // already exists -- core/mutate.hpp's whole argument for having no commit step.
@@ -3551,11 +3574,12 @@ public:
         canvas.text(0, 104, line, 9);
 
         // The bar on a line of its own: with everything above on, "FILL AF16 1/16T- DLY BAR
-        // 1000" is 29 characters.
+        // 1000" is 29 characters. The held modes ride on it: "BAR 1000 NRPT FRZ" is 17.
         out = line;
         append(out, "BAR ");
         append_number(out, engine_.bar() % 1000u + 1u);
         if (note_repeat_mode_) append(out, " NRPT");
+        if (engine_.delay_freeze().held()) append(out, " FRZ");
         *out = 0;
         canvas.text(0, 112, line, 9);
     }
@@ -4246,6 +4270,8 @@ private:
     // owns that, and the UI reads it back through the accessors.
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
     bool note_repeat_mode_ = false;             // FUNC + FILL: a held lower pad rolls
+    bool tape_held_ = false;                    // FUNC + push D went down and has not come up
+    bool freeze_held_ = false;                  // FUNC + MUTATE went down and has not come up
     uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)
     uint8_t roll_velocity_[kTracks] = {};       // the last velocity sent for each roll
     bool mutation_pending_ = false;             // a MUTATE waiting for OK (keep) or CLR (revert)

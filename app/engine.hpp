@@ -33,6 +33,7 @@
 #include "perform.hpp"   // scenes, the morph, macros, mute states, auto-fill
 #include "queue.hpp"       // and core/project.hpp through it: the project owns the live pattern
 #include "repeat.hpp"    // beat repeat, on the master output
+#include "tapestop.hpp"  // the tape stop, after beat repeat
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
 #include "scheduler.hpp"
@@ -145,6 +146,10 @@ public:
     int throwing() const { return throw_bus_; }
     const BeatRepeat &repeat() const { return repeat_; }
     RepeatLength repeat_length() const { return repeat_length_; }
+
+    // The held master moves, for the screen and the tests.
+    const TapeStop &tape_stop() const { return tape_stop_; }
+    const DelayFreeze &delay_freeze() const { return mixer_.freeze(); }
 
     // Whether a note repeat is rolling on `track` (Cmd::note_repeat).
     bool rolling(int track) const { return track >= 0 && track < kTracks && rolls_[track].on; }
@@ -504,6 +509,7 @@ private:
     int throw_track_ = 0;
 
     BeatRepeat repeat_;
+    TapeStop tape_stop_;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
 
     // Note repeat, one roll per track (Cmd::note_repeat). `countdown` is frames to the next hit

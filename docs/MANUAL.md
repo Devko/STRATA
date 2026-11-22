@@ -617,6 +617,22 @@ switches itself off again a few milliseconds after everything is flat. The knobs
 switches are saved with the project, so a project saved with the lows killed reopens that way:
 look for `KILL` on the EQ page.
 
+### Tape stop and delay freeze
+
+Two held master moves, in **any mode**:
+
+- **Tape stop: hold FUNC, then hold push D** (`TAPE STOP`). The whole output slows to a standstill
+  over two beats, its pitch and level falling together, and stays silent while you hold. Let go
+  of push D (FUNC may already be up) and the music is straight back, in time: the pattern kept
+  playing underneath. Let go half way and it comes back from wherever the slow-down had got to.
+- **Delay freeze: hold FUNC, then hold MUTATE** (`FREEZE`, and `FRZ` after the bar number in
+  PERFORM). Whatever is echoing in the delay loops for as long as you hold, and nothing new
+  goes into the delay, so you can play over a frozen echo. It loops one delay time (two with
+  ping-pong); the first loop starts one echo period after the press. Let go and it fades back to
+  the delay's own tail. FUNC + MUTATE never mutates.
+
+Neither is saved or undone; both cost nothing until pressed.
+
 ### Mutation
 
 In PERFORM, UP/DOWN pick the mutation and the selection keys the amount (0-100, in tens):
@@ -782,6 +798,9 @@ names one.
   the one of the drop. FUNC+C on its own thins a busy top end for a breakdown.
 - **Snare rolls into the drop.** FUNC+FILL, then hold the snare's pad and press harder over the
   last bar; REPEAT + VALUE to 1/32 for the final beat.
+- **Tape stop into the drop.** Hold FUNC + push D on the last two beats of a build and let go
+  exactly on the one. Or throw the chord into the delay, then FUNC + MUTATE to keep the echo as
+  a pad while the beat drops out.
 - **Throws on the off-beat parts.** THROW on the rim or the chord for a bar, then let it ring.
 - **Resample a moment you like.** An 8-bar take of a jam into track 8, then sliced or on GRAIN,
   turns a happy accident into material.

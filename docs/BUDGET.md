@@ -876,6 +876,32 @@ To measure on Roland's PC: **E6** below (`tests/scenario_killeq.sh`, which kills
 on the EQ page and reads the peak, against `scenario_m7.sh` with the EQ bypassed), both compilers.
 On the unit: **U6**.
 
+### Tape stop and delay freeze (2026-11-22, host only)
+
+Both are held moves and **cost nothing until pressed**: the tape stop records only while it runs
+(the read never needs a frame from before the press), and the freeze records forward from the
+press rather than keeping a history. Neither touches the default path, so every render that
+never presses them is unchanged to the bit (the goldens pass untouched). Loops in
+`dsp/stoploops.ti.c`, so both go through cl6x.
+
+| Measure (x86 2.3 GHz, GCC -O2, per 64-frame block) | Host time |
+| --- | --- |
+| Tape stop, running (write, interpolated read, level, crossfade; stereo) | ~220 ns |
+| Delay freeze, looping (stereo read and crossfade) | ~115 ns |
+| Delay freeze, recording (stereo copy) | ~27 ns |
+| The master peak detector, for scale | ~57 ns |
+
+Against A01's ~23.9 us host block that is about 0.9% for the tape stop and 0.5% for the freeze
+(plus a clear and two mixes for routing the delay through its wet planes while frozen), so an
+**estimate of about 0.2 points cl6x / 0.3 GCC-only for the tape stop and 0.1 / 0.2 for the
+freeze**, and only while held. The freeze also keeps the delay running while held, which the
+worst case already counts (both sends running). No emulator scenario: both are held key
+combinations, and the emulator's `--key` only taps. Unit check: **U8** (UNIT_CHECKLIST 13g).
+
+Memory: the freeze's loop is 1.46 MiB (4 s of stereo float: two 2 s delay times) and the tape
+stop's ring 0.46 MiB (1.25 s), both taken in init. `tests/test_memory.cpp` itemises them: init
+is about 104.1 MiB of the 120 MiB heap with the stream rings from main, 15.9 MiB spare.
+
 ### Per-track LFO (2026-11-22, host only)
 
 One LFO per track, parameters 16-19 (dsp/lfo.hpp). It runs once per **block**, not per sample,
