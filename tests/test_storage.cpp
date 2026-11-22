@@ -3128,6 +3128,295 @@ TEST(storage_a_deliberate_save_puts_the_project_name_in_the_settings) {
 }
 
 // =============================================================================================
+// 7c. What a line-by-line mutation run found (tools/mutation_test.py)
+// =============================================================================================
+//
+// The tests above came from hand-picked mutants. tools/mutation_test.py mutates every line of
+// app/storage.cpp; these close what it found. The survivors that change no behaviour are argued
+// in app/storage.cpp and listed in docs/MUTATION.md.
+
+namespace {
+
+// A WAV bigger than g_scratch: 8-bit PCM, which is one byte a sample, so the converted int16 is
+// twice the file -- the cheapest way to ask the pool for a lot of room.
+// 3.5 MiB: the fake card's arena is 4 MiB (tests/fakehost.hpp), and the settings and the project
+// files have to fit next to it.
+uint8_t g_big[7u << 19];
+
+uint32_t make_big_wav(const char *path, uint32_t rate, int channels, uint32_t frames) {
+    enaga::wav::Format format;
+    format.encoding = uint16_t(enaga::wav::pcm);
+    format.channels = uint16_t(channels);
+    format.rate = rate;
+    format.bits = 8;
+    const uint32_t data = frames * uint32_t(channels);
+    CHECK(44u + data <= uint32_t(sizeof g_big));
+    enaga::wav::header(g_big, format, data);
+    for (uint32_t i = 0; i < data; i++) g_big[44u + i] = uint8_t(((i / 64u) & 1u) ? 0x20u : 0xE0u);
+    CHECK(FakeHost::the().write_file(path, g_big, 44u + data));
+    return 44u + data;
+}
+
+}  // namespace
+
+TEST(storage_every_refused_sample_leaves_the_loader_idle) {
+    // `sample_track_ = -1` on each refusal is what `loading_track()` reports, and the screen
+    // draws "loading" from it. Only NOT A WAV was ever checked.
+    clean();
+    kit_sample(kLoopTrack, "/SAMPLES/NOWHERE.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "NOT FOUND");
+    CHECK_EQ(storage().loading_track(), -1);
+
+    make_wav("/SAMPLES/E0.WAV", 48000, 2, 16, 0);
+    kit_sample(kLoopTrack, "/SAMPLES/E0.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "BAD FORMAT");
+    CHECK_EQ(storage().loading_track(), -1);
+
+    make_wav("/SAMPLES/C3.WAV", 48000, 3, 16, 100);
+    kit_sample(kLoopTrack, "/SAMPLES/C3.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "TOO MANY CH");
+    CHECK_EQ(storage().loading_track(), -1);
+
+    make_wav("/SAMPLES/E1.WAV", 48000, 2, 16, 0, nullptr, 0, false, false, 3);
+    kit_sample(kLoopTrack, "/SAMPLES/E1.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "EMPTY");
+    CHECK_EQ(storage().loading_track(), -1);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+}
+
+TEST(storage_a_file_to_resample_longer_than_the_source_buffer_is_refused) {
+    // A file at another rate is converted whole into src_ before it is resampled, and src_ holds
+    // 30 s at kMaxSampleSourceRate (96 kHz): 2,880,000 frames. One frame more is refused with a
+    // reason rather than written past the buffer; exactly that many is fine. At 44.1 kHz that is
+    // about 65 s, as app/storage.hpp says. 8-bit mono keeps the file under the fake card's 4 MiB,
+    // and both files share one name so that only one is on the card at a time.
+    constexpr uint32_t kSrcFrames = 30u * 96000u;
+    clean();
+    make_big_wav("/SAMPLES/LONG441.WAV", 44100, 1, kSrcFrames + 1u);
+    kit_sample(kLoopTrack, "/SAMPLES/LONG441.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK_EQ(storage().last_error(), "TOO LONG");
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    CHECK_EQ(storage().loading_track(), -1);
+    CHECK_EQ(slot_of(kLoopTrack).bytes, 0u);
+
+    make_big_wav("/SAMPLES/LONG441.WAV", 44100, 1, kSrcFrames);
+    kit_sample(kLoopTrack, "/SAMPLES/LONG441.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+
+    storage().request_new();                    // and give the memory back
+    CHECK(settle());
+}
+
+TEST(storage_a_sample_the_pool_has_no_room_for_is_refused_and_the_rest_play) {
+    // 3.5 MiB of 8-bit stereo is 7 MiB once converted, so the budget holds `fit` of them and
+    // the next is refused with NO ROOM and holds nothing, while the ones before it stay loaded.
+    // The budget is whatever the tests before left it at (32 MiB unless one is mid-change), so
+    // the count is worked out rather than assumed; anything up to 56 MiB leaves a track over.
+    clean();
+    const uint32_t frames = (uint32_t(sizeof g_big) - 44u) / 2u;
+    make_big_wav("/SAMPLES/BIG.WAV", 48000, 2, frames);
+    const uint32_t converted = frames * 2u * 2u;
+    const uint32_t fit = storage().samples().budget() / converted;
+    CHECK(fit >= 1u && fit + 1u <= uint32_t(kTracks));
+
+    for (uint32_t t = 0; t <= fit; t++) kit_sample(int(t), "/SAMPLES/BIG.WAV");
+    for (uint32_t t = 0; t <= fit; t++) {
+        CHECK(storage().request_sample(int(t)));
+        CHECK(settle(24, 40000));
+    }
+    for (uint32_t t = 0; t < fit; t++) {
+        CHECK_EQ(int(slot_of(int(t)).state), int(SampleState::ready));
+    }
+    CHECK_EQ(storage().last_error(), "NO ROOM");
+    CHECK_EQ(int(slot_of(int(fit)).state), int(SampleState::failed));
+    CHECK_EQ(slot_of(int(fit)).bytes, 0u);
+    CHECK_EQ(storage().loading_track(), -1);
+
+    // NEW names no file for any track, so every track goes through the swap's "no file" branch:
+    // the sample is taken away, the memory given back, and the loader ends idle.
+    storage().request_new();
+    CHECK(settle(24, 40000));
+    for (uint32_t t = 0; t <= fit; t++) {
+        CHECK_EQ(int(slot_of(int(t)).state), int(SampleState::empty));
+        CHECK_EQ(slot_of(int(t)).bytes, 0u);
+    }
+    CHECK_EQ(storage().samples().used(), 0u);
+    CHECK_EQ(storage().loading_track(), -1);
+}
+
+namespace {
+
+// Stereo 16-bit with every frame distinguishable from its neighbours, written past g_scratch.
+// The right channel is the left negated, so a channel stride of one -- which is what a slice
+// offset computed with the channel count left out would use -- reads the wrong samples.
+int16_t big_value(uint32_t f) { return int16_t(int32_t((f * 7919u) % 60000u) - 30000); }
+
+void make_big_wav16(const char *path, uint32_t rate, uint32_t frames) {
+    enaga::wav::Format format;
+    format.encoding = uint16_t(enaga::wav::pcm);
+    format.channels = 2;
+    format.rate = rate;
+    format.bits = 16;
+    CHECK(44u + frames * 4u <= uint32_t(sizeof g_big));
+    enaga::wav::header(g_big, format, frames * 4u);
+    for (uint32_t f = 0; f < frames; f++) {
+        const int16_t l = big_value(f);
+        const int16_t r = int16_t(-l);
+        g_big[44u + 4u * f] = uint8_t(uint16_t(l));
+        g_big[45u + 4u * f] = uint8_t(uint16_t(l) >> 8);
+        g_big[46u + 4u * f] = uint8_t(uint16_t(r));
+        g_big[47u + 4u * f] = uint8_t(uint16_t(r) >> 8);
+    }
+    CHECK(FakeHost::the().write_file(path, g_big, 44u + frames * 4u));
+}
+
+int16_t g_expect[2 * 130000];
+int16_t g_source[2 * 60000];
+
+}  // namespace
+
+TEST(storage_a_file_longer_than_one_slice_arrives_whole_and_in_order) {
+    // The loader converts 48,000 frames a pass. Every file before this one fitted in a single
+    // pass, where the slice offsets are all zero -- so a slice written at the wrong offset, or
+    // read from the wrong byte, was invisible. 100,000 stereo frames is three passes.
+    clean();
+    constexpr uint32_t kFrames = 100000;
+    make_big_wav16("/SAMPLES/LONG48.WAV", 48000, kFrames);
+    kit_sample(kLoopTrack, "/SAMPLES/LONG48.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
+    CHECK_EQ(uint32_t(loop->sample_frames()), kFrames);
+    CHECK_EQ(loop->sample_channels(), 2);
+    const int16_t *pcm = loop->sample_data();
+    CHECK(pcm != nullptr);
+    if (pcm != nullptr && uint32_t(loop->sample_frames()) == kFrames) {
+        uint32_t wrong = 0;
+        for (uint32_t f = 0; f < kFrames; f++) {
+            wrong += pcm[2 * f] != big_value(f) ? 1u : 0u;
+            wrong += pcm[2 * f + 1] != int16_t(-big_value(f)) ? 1u : 0u;
+        }
+        CHECK_EQ(wrong, 0u);
+    }
+    storage().request_new();
+    CHECK(settle());
+}
+
+TEST(storage_a_resample_longer_than_one_slice_matches_one_done_in_one_go) {
+    // 60,000 stereo frames at 24 kHz is two passes of conversion and three of resampling
+    // (120,000 out). The slices must join into exactly what one uninterrupted resample of the
+    // whole file gives.
+    clean();
+    constexpr uint32_t kFrames = 60000;
+    make_big_wav16("/SAMPLES/LONG24.WAV", 24000, kFrames);
+    for (uint32_t f = 0; f < kFrames; f++) {
+        g_source[2 * f] = big_value(f);
+        g_source[2 * f + 1] = int16_t(-big_value(f));
+    }
+    Resampler cursor = Resampler::make(24000, 48000);
+    const uint32_t n = pcm_resample(g_source, kFrames, 2, cursor, g_expect,
+                                    uint32_t(sizeof g_expect / sizeof g_expect[0] / 2));
+    CHECK(n > 96000u);
+
+    kit_sample(kLoopTrack, "/SAMPLES/LONG24.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
+    CHECK_EQ(uint32_t(loop->sample_frames()), n);
+    const int16_t *pcm = loop->sample_data();
+    if (pcm != nullptr && uint32_t(loop->sample_frames()) == n) {
+        CHECK(std::memcmp(pcm, g_expect, n * 2 * sizeof(int16_t)) == 0);
+    }
+    storage().request_new();
+    CHECK(settle());
+}
+
+TEST(storage_a_save_asked_for_after_an_autosave_stands_the_autosave_down) {
+    // The other order of storage_a_save_already_asked_for_beats_an_autosave: the transport
+    // stops, then SAVE is pressed before the autosave could start. `request_save` clears the
+    // pending autosave, so only the project folder is written.
+    clean();
+    FakeHost &host = FakeHost::the();
+    storage().request_autosave();
+    storage().request_save();
+    CHECK(settle());
+    CHECK(host.logged("saved"));
+    CHECK(!host.logged("autosaved"));
+    CHECK(!host.has_file(card_path("KIT.BIN", true)));
+}
+
+TEST(storage_the_later_of_new_and_reload_is_the_one_that_happens) {
+    clean();
+    storage().request_save();
+    CHECK(pump_until_idle());
+    char saved_name[Storage::kNameBytes];
+    std::strcpy(saved_name, storage().project_name());
+
+    // NEW, then RELOAD before either ran: the reload wins and the name stays.
+    storage().request_new();
+    storage().request_reload();
+    CHECK(settle());
+    CHECK_EQ(storage().project_name(), static_cast<const char *>(saved_name));
+
+    // RELOAD, then NEW: the new project wins and takes a new name -- and the reload does not
+    // run after it, which would look for the new name's folder on the card and fail.
+    storage().request_reload();
+    storage().request_new();
+    CHECK(settle());
+    CHECK(std::strcmp(storage().project_name(), saved_name) != 0);
+    CHECK(storage().last_error() == nullptr);
+}
+
+TEST(storage_a_take_the_card_cannot_hold_is_reported_and_its_buffer_given_back) {
+    // Two places a take write can fail: making /RECORD, and the save into it. Both report the
+    // card's reason, and both give the buffer back to the audio side -- nothing else can, and a
+    // take wedged in it would refuse every resample after it (dsp/capture.hpp). A failed save
+    // must not land the take in a track either: the kit would name a file that is not there.
+    Engine &e = clean();
+    FakeHost &host = FakeHost::the();
+    auto record_a_bar = [&](uint32_t bar_tick) {
+        post(Cmd::resample_arm, 0, 0, 1);
+        host.deliver_tick(bar_tick, 0);
+        for (int i = 0; i < 1500; i++) {
+            if (i % 8 == 0) host.deliver_tick(bar_tick + uint32_t(i), 0);
+            pump();
+            if (e.status().resample_state.load(std::memory_order_relaxed) == 3u) break;
+        }
+        CHECK_EQ(int(e.status().resample_state.load(std::memory_order_relaxed)), 3);
+    };
+    host.set_running(true);
+
+    // No /RECORD and a full card: the folder cannot be made.
+    record_a_bar(384);
+    host.set_full(true);
+    CHECK(storage().request_resample_write());
+    CHECK(settle());
+    CHECK_EQ(storage().last_error(), "CARD FULL");
+    CHECK_EQ(int(e.status().resample_state.load(std::memory_order_relaxed)), 0);
+
+    // /RECORD exists and the card is full: the save itself fails.
+    host.set_full(false);
+    CHECK(enaga::files::make_folder("/RECORD") >= 0);
+    host.set_full(true);
+    const char before = e.project().kit.tracks[kLoopTrack].sample[0];
+    record_a_bar(768);
+    CHECK(storage().request_resample_write(kLoopTrack));
+    CHECK(settle());
+    CHECK_EQ(storage().last_error(), "CARD FULL");
+    CHECK_EQ(int(e.status().resample_state.load(std::memory_order_relaxed)), 0);
+    CHECK_EQ(int(e.project().kit.tracks[kLoopTrack].sample[0]), int(before));
+    host.set_full(false);
+    host.set_running(false);
+}
+
+// =============================================================================================
 // The kit library (FUNC+EDIT twice): sixteen kits in <data folder>/KITS, shared by projects
 // =============================================================================================
 

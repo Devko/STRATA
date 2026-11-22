@@ -436,3 +436,34 @@ TEST(a_long_timing_run_stays_consistent) {
     }
     CHECK_EQ(total, 16 * loops);
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(two_steps_landing_on_one_tick_fill_a_one_slot_buffer_and_no_more) {
+    // At double speed a step is 12 ticks: step 1 pushed +6 and step 2 pulled -6 both land on 18.
+    TrackTiming timing;
+    timing.length = 16;
+    timing.speed = Speed::x2;
+    timing.swing = kSwingMin;
+    int8_t micro[kMaxSteps] = {};
+    micro[1] = 6;
+    micro[2] = -6;
+    Firing firings[3];
+    CHECK_EQ(steps_firing_at(18, timing, micro, firings, 3), 2);
+    firings[1].step = 99;
+    CHECK_EQ(steps_firing_at(18, timing, micro, firings, 1), 1);
+    CHECK_EQ(int(firings[1].step), 99);
+}
+
+TEST(a_stored_length_of_zero_plays_as_one_step) {
+    TrackTiming timing;
+    timing.length = 0;
+    timing.speed = Speed::x1;
+    timing.swing = kSwingMin;
+    Firing firings[kMaxFiringsPerTick];
+    for (uint32_t t = 0; t < 4 * 24; t += 24) {
+        CHECK_EQ(steps_firing_at(t, timing, nullptr, firings, kMaxFiringsPerTick), 1);
+        CHECK_EQ(int(firings[0].step), 0);
+        CHECK_EQ(firings[0].loop, t / 24);
+    }
+}

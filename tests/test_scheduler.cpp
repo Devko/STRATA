@@ -1793,3 +1793,167 @@ TEST(a_long_run_with_everything_active_stays_consistent) {
     }
     CHECK(identical);
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(the_probability_draw_is_pinned_so_a_saved_pattern_plays_the_same_after_an_update) {
+    // The other tests here prove the draw is well spread and deterministic; neither notices if
+    // the hash itself changes. It must not: a pattern's seed is saved with it, and a changed
+    // hash would make every saved probability step play a different sequence after an update.
+    struct Draw {
+        uint32_t seed;
+        int track;
+        int step;
+        uint32_t loop;
+        uint32_t roll;
+    };
+    const Draw draws[] = {
+        {0x0u, 0, 0, 0u, 31u},
+        {0x0u, 0, 0, 999u, 2u},
+        {0x0u, 0, 63, 0u, 48u},
+        {0x0u, 0, 63, 999u, 4u},
+        {0x0u, 7, 0, 0u, 4u},
+        {0x0u, 7, 0, 999u, 30u},
+        {0x0u, 7, 63, 0u, 8u},
+        {0x0u, 7, 63, 999u, 71u},
+        {0x5EEDu, 0, 0, 0u, 36u},
+        {0x5EEDu, 0, 0, 999u, 34u},
+        {0x5EEDu, 0, 63, 0u, 96u},
+        {0x5EEDu, 0, 63, 999u, 94u},
+        {0x5EEDu, 7, 0, 0u, 14u},
+        {0x5EEDu, 7, 0, 999u, 24u},
+        {0x5EEDu, 7, 63, 0u, 81u},
+        {0x5EEDu, 7, 63, 999u, 51u},
+        {0xDEADBEEFu, 0, 0, 0u, 6u},
+        {0xDEADBEEFu, 0, 0, 999u, 31u},
+        {0xDEADBEEFu, 0, 63, 0u, 42u},
+        {0xDEADBEEFu, 0, 63, 999u, 41u},
+        {0xDEADBEEFu, 7, 0, 0u, 34u},
+        {0xDEADBEEFu, 7, 0, 999u, 61u},
+        {0xDEADBEEFu, 7, 63, 0u, 4u},
+        {0xDEADBEEFu, 7, 63, 999u, 0u},
+    };
+    for (const Draw &d : draws) {
+        CHECK_EQ(probability_roll(d.seed, d.track, d.step, d.loop), d.roll);
+    }
+}
+
+TEST(a_ratchet_index_at_or_past_the_count_is_the_last_hit) {
+    for (int ramp = 0; ramp <= int(RatchetRamp::down); ramp++) {
+        const RatchetRamp r = RatchetRamp(ramp);
+        CHECK_EQ(int(ratchet_velocity(100, 4, 4, r)), int(ratchet_velocity(100, 3, 4, r)));
+        CHECK_EQ(int(ratchet_velocity(100, 9, 4, r)), int(ratchet_velocity(100, 3, 4, r)));
+    }
+    CHECK_EQ(ratchet_frame(4, 4, 1000.0f), ratchet_frame(3, 4, 1000.0f));
+    CHECK_EQ(ratchet_frame(3, 4, 1000.0f), 750u);
+}
+
+TEST(a_speed_byte_one_past_the_table_plays_at_normal_speed) {
+    static Pattern pattern;
+    blank(pattern, 4);
+    put_trig(pattern, 0, 1);
+    pattern.tracks[0].speed = uint8_t(Speed::count);
+    Scheduler sched;
+    sched.configure(pattern, kSamplesPerTick);
+    sched.reset();
+    PerformState perform;
+    static Log log;
+    log.clear();
+    run(sched, pattern, perform, 0, 4u * kStepTicks, log);
+    CHECK_EQ(log.count, 1);
+    CHECK_EQ(log.hits[0].tick, kStepTicks);
+}
+
+TEST(shortening_a_track_to_its_playhead_puts_the_playhead_back_on_step_one) {
+    static Pattern pattern;
+    blank(pattern, 8);
+    Scheduler sched;
+    sched.configure(pattern, kSamplesPerTick);
+    sched.reset();
+    PerformState perform;
+    static Log log;
+    log.clear();
+    run(sched, pattern, perform, 0, 4u * kStepTicks + 1u, log);
+    CHECK_EQ(int(sched.playhead(0)), 4);
+    blank(pattern, 4);
+    sched.configure(pattern, kSamplesPerTick);
+    CHECK_EQ(int(sched.playhead(0)), 0);
+}
+
+TEST(the_draw_follows_the_seed_of_the_pattern_handed_to_tick_not_the_configured_one) {
+    // Two seeds that disagree about one 50% step on loop 0.
+    static Pattern pattern;
+    blank(pattern, 1);
+    Step &s = put_trig(pattern, 0, 0);
+    s.probability = 50;
+    uint32_t seed_yes = 0, seed_no = 0;
+    for (uint32_t seed = 1; seed < 1000 && (seed_yes == 0 || seed_no == 0); seed++) {
+        if (probability_roll(seed, 0, 0, 0) < 50) {
+            if (seed_yes == 0) seed_yes = seed;
+        } else if (seed_no == 0) {
+            seed_no = seed;
+        }
+    }
+    CHECK(seed_yes != 0 && seed_no != 0);
+    pattern.seed = seed_no;
+    Scheduler sched;
+    sched.configure(pattern, kSamplesPerTick);
+    sched.reset();
+    pattern.seed = seed_yes;                    // a mutation reseeded it; no configure() since
+    PerformState perform;
+    StepEvent events[kMaxEventsPerTick];
+    CHECK_EQ(sched.tick(0, 0, pattern, perform, events, kMaxEventsPerTick), 1);
+}
+
+TEST(tick_with_no_buffer_or_a_full_one_writes_nothing_past_it) {
+    static Pattern pattern;
+    blank(pattern, 4);
+    for (int t = 0; t < 3; t++) {
+        Step &s = pattern.tracks[t].steps[0];
+        s.flags = kStepTrigless;
+        s.probability = 100;
+    }
+    Scheduler sched;
+    sched.configure(pattern, kSamplesPerTick);
+    sched.reset();
+    PerformState perform;
+    CHECK_EQ(sched.tick(0, 0, pattern, perform, nullptr, 4), 0);
+
+    sched.reset();
+    StepEvent events[3];
+    events[1].track = 99;
+    events[2].track = 99;
+    CHECK_EQ(sched.tick(0, 0, pattern, perform, events, 1), 1);
+    CHECK_EQ(int(events[1].track), 99);
+    CHECK_EQ(int(events[2].track), 99);
+}
+
+TEST(a_trigless_event_carries_its_track_step_note_and_flags) {
+    static Pattern pattern;
+    blank(pattern, 4);
+    for (int v = 0; v < 2; v++) {
+        Step &s = pattern.tracks[5].steps[2];
+        s.flags = uint8_t(kStepTrigless | kStepAccent | kStepSlide);
+        s.note = uint8_t(0x80 | 61);              // the top bit is not part of a note
+        s.velocity = uint8_t(v);
+        s.probability = 100;
+        Scheduler sched;
+        sched.configure(pattern, kSamplesPerTick);
+        sched.reset();
+        PerformState perform;
+        StepEvent events[kMaxEventsPerTick];
+        int n = 0;
+        for (uint32_t t = 0; t <= 2 * kStepTicks && n == 0; t++) {
+            n = sched.tick(t, 7, pattern, perform, events, kMaxEventsPerTick);
+        }
+        CHECK_EQ(n, 1);
+        CHECK(events[0].trigless);
+        CHECK_EQ(int(events[0].track), 5);
+        CHECK_EQ(int(events[0].step), 2);
+        CHECK_EQ(int(events[0].note), 61);
+        CHECK_EQ(int(events[0].velocity), 1);   // 0 and 1 both read as the quietest hit
+        CHECK(events[0].accent);
+        CHECK(events[0].slide);
+        CHECK_EQ(events[0].frame, 7u);
+    }
+}

@@ -939,6 +939,159 @@ TEST(perform_read_never_looks_past_the_bytes_it_was_given) {
     }
 }
 
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(perform_a_scene_index_one_past_the_table_touches_nothing) {
+    // One past the end in either direction writes into the NEXT track's row, or past the scene:
+    // so the neighbours are what is checked.
+    SceneSet &set = g_scenes;
+    perform_init(set, g_macros);
+    fill_kit(g_kit);
+    scene_capture(set.scenes[0], g_kit);
+    const int full = scene_count(set.scenes[0]);
+    scene_set(set.scenes[0], kTracks, 0, 5);
+    scene_set(set.scenes[0], 0, kKitParams, 5);
+    scene_set(set.scenes[0], -1, 0, 5);
+    scene_clear(set.scenes[0], kTracks, 0);
+    scene_clear(set.scenes[0], 0, kKitParams);
+    scene_clear(set.scenes[0], -1, 3);
+    scene_clear(set.scenes[0], 2, -1);
+    CHECK_EQ(scene_count(set.scenes[0]), full);
+    CHECK_EQ(scene_count(set.scenes[1]), 0);
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitParams; p++) {
+            CHECK_EQ(int(set.scenes[0].values[t][p]), int(g_kit.tracks[t].params[p] & 127));
+        }
+    }
+}
+
+TEST(perform_erasing_a_scene_zeroes_its_values_as_well_as_its_bits) {
+    fill_kit(g_kit);
+    Scene &scene = g_scenes.scenes[2];
+    scene_capture(scene, g_kit);
+    scene_erase(scene);
+    CHECK_EQ(scene_count(scene), 0);
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(scene.stored[t][0]), 0);
+        CHECK_EQ(int(scene.stored[t][1]), 0);
+        for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(scene.values[t][p]), 0);
+    }
+}
+
+TEST(perform_a_macro_naming_the_track_or_parameter_one_past_the_end_drives_nothing) {
+    struct {
+        uint8_t out[kTracks][kKitParams];
+        uint8_t after[kKitParams];             // where out[kTracks] would land
+    } guard;
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitParams; p++) guard.out[t][p] = 64;
+    }
+    for (int p = 0; p < kKitParams; p++) guard.after[p] = 64;
+    Macro macro;
+    macro.targets[0] = MacroTarget{1, uint8_t(kTracks), 0, 0, 0};
+    macro.targets[1] = MacroTarget{1, 0, uint8_t(kKitParams), 0, 0};
+    CHECK_EQ(macro_count(macro), 0);
+    macro_apply(macro, 127, guard.out);
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(guard.out[t][p]), 64);
+    }
+    for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(guard.after[p]), 64);
+}
+
+TEST(perform_a_range_through_the_knob_passes_through_the_value_it_was_assigned_at) {
+    // The contract of macro_range_through: the returned range, at the knob's position, gives the
+    // parameter's present value back (to within the rounding of one step), so assigning a macro
+    // does not jump the sound. The single exception is the flat case, which falls back to the
+    // plain range from `now` to `far` -- a macro must never be assigned flat.
+    const uint8_t values[] = {0, 1, 13, 64, 100, 126, 127};
+    for (uint8_t now : values) {
+        for (uint8_t far : values) {
+            if (now == far) continue;
+            for (int p = 0; p <= 127; p++) {
+                uint8_t low = 0, high = 0;
+                macro_range_through(now, far, uint8_t(p), low, high);
+                CHECK(low != high);
+                const bool plain = low == now && high == far;
+                if (plain && p != 0) continue;
+                MacroTarget target{1, 0, 0, low, high};
+                const int got = int(macro_value(target, uint8_t(p)));
+                CHECK(got - int(now) <= 1 && int(now) - got <= 1);
+                if (p > 0 && p < 127 && !plain) {
+                    // Only the end the knob is not at moves; the far end is kept when it can be.
+                    CHECK(high == far || low == 0 || low == 127);
+                }
+            }
+        }
+    }
+    // One step above the bottom is the general case, not the bottom's own: 64 heading to 0.
+    uint8_t low = 0, high = 0;
+    macro_range_through(64, 0, 1, low, high);
+    CHECK_EQ(int(high), 0);
+    CHECK_EQ(int(low), 65);
+}
+
+TEST(perform_clearing_a_mute_latch_forgets_its_state) {
+    MuteLatch latch;
+    mute_latch_arm(latch, 0x5A);
+    mute_latch_clear(latch);
+    CHECK(!latch.pending);
+    CHECK_EQ(int(latch.state), 0);
+}
+
+TEST(perform_a_payload_declared_one_byte_past_the_file_is_truncated) {
+    fill_performance();
+    const uint32_t size = write_performance();
+    poke_u32(g_buffer, 8, size - kHeaderBytes + 1);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::truncated));
+}
+
+TEST(perform_a_section_one_byte_longer_than_the_payload_or_a_short_macro_table_is_malformed) {
+    fill_performance();
+    const uint32_t size = write_performance();
+    const uint32_t entry = section_entry_at(g_buffer, kSectionPerformMacros);
+    const uint32_t len = peek_u32(g_buffer, entry + 8);
+    poke_u32(g_buffer, entry + 8, len + 1);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::malformed));
+
+    write_performance();
+    poke_u32(g_buffer, entry + 8, len - 1);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::malformed));
+}
+
+TEST(perform_the_section_table_reserved_bytes_are_written_as_zero) {
+    fill_performance();
+    write_performance();
+    for (uint32_t i = 0; i < peek_u16(g_buffer, 6); i++) {
+        CHECK_EQ(int(peek_u16(g_buffer, kHeaderBytes + i * kSectionEntryBytes + 2)), 0);
+    }
+}
+
+TEST(perform_a_macro_target_naming_track_or_param_one_past_the_end_is_dropped_whole) {
+    for (int which = 0; which < 2; which++) {
+        fill_performance();
+        const uint32_t size = write_performance();
+        const uint32_t at = section_at(g_buffer, kSectionPerformMacros);
+        g_buffer[at + 0] = 1;
+        g_buffer[at + 1] = which == 0 ? uint8_t(kTracks) : 0;
+        g_buffer[at + 2] = which == 0 ? 0 : uint8_t(kKitParams);
+        g_buffer[at + 3] = 30;
+        g_buffer[at + 4] = 90;
+        refresh_crc(g_buffer);
+        CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+                 int(SerializeResult::ok));
+        const MacroTarget &target = g_loaded_macros.macros[0].targets[0];
+        CHECK_EQ(int(target.enabled), 0);
+        CHECK_EQ(int(target.low), 0);
+        CHECK_EQ(int(target.high), 127);
+    }
+}
+
 TEST(macro_apply_sweeps_from_the_live_value_and_writes_nothing_at_rest) {
     // The knob owns the parameter while the macro rests, and the sweep starts from wherever the
     // parameter is -- not from the stored `low` (core/perform.hpp).

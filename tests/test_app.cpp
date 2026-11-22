@@ -54,6 +54,18 @@ using strata::test::storage;
 constexpr int kBlk = strata::test::kRigBlock;
 constexpr int kStereo = strata::test::kRigStereo;
 
+// A file in the current project's folder. The name comes from Storage rather than being spelled
+// "DEFAULT": `request_new()` renames the project for the rest of the process, so a test that
+// hard-codes the folder passes only while it happens to run before tests/test_storage.cpp's
+// first NEW -- which is link order, not a property of the code.
+const char *project_file(char (&path)[ENAGA_FILE_PATH_MAX + 1], const char *file) {
+    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/");
+    std::strcat(path, storage().project_name());
+    std::strcat(path, "/");
+    std::strcat(path, file);
+    return path;
+}
+
 }  // namespace
 
 // --- the harness itself ---------------------------------------------------------------------
@@ -243,17 +255,15 @@ TEST(app_the_first_save_of_a_project_writes_all_ten_files) {
                            "BANK_H.BIN"};
     char path[ENAGA_FILE_PATH_MAX + 1];
     for (const char *file : files) {
-        std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/");
-        std::strcat(path, file);
-        CHECK(host.has_file(path));
+        CHECK(host.has_file(project_file(path, file)));
     }
 
     // The sizes tests/test_project.cpp pins, reached through the real card protocol this time.
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/PROJECT.BIN");
+    project_file(path, "PROJECT.BIN");
     CHECK_EQ(host.file_bytes(path), 292);   // core/project.cpp: 263 + 14 mixer + 12 + 3 live bytes
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/KIT.BIN");
+    project_file(path, "KIT.BIN");
     CHECK_EQ(host.file_bytes(path), 1076);
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/PERFORM.BIN");
+    project_file(path, "PERFORM.BIN");
     CHECK_EQ(host.file_bytes(path), 2424);
 }
 
@@ -328,12 +338,12 @@ TEST(app_a_save_asked_for_with_no_card_lands_when_one_arrives) {
     CHECK(!storage().dirty());
 
     char path[ENAGA_FILE_PATH_MAX + 1];
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/KIT.BIN");
+    project_file(path, "KIT.BIN");
     CHECK(host.has_file(path));
 
     // And it was a FULL save, because the card swap made `project_complete_` a claim about a
     // card nobody had looked at.
-    std::strcpy(path, "/ENAGA/DATA/STRATA/PROJECTS/DEFAULT/BANK_H.BIN");
+    project_file(path, "BANK_H.BIN");
     CHECK(host.has_file(path));
 }
 
@@ -749,6 +759,43 @@ TEST(app_a_resample_can_land_in_a_track_in_one_action) {
     CHECK(path[0] != '\0');
     CHECK(host.has_file(path));
     CHECK(storage().last_error() == nullptr);
+}
+
+TEST(app_a_take_landed_in_track_one_replaces_a_longer_path_and_marks_the_kit) {
+    // The first track is a track like any other (`take_track_ >= 0`), the take's path replaces
+    // the kit's WHOLE path -- a longer one that was there before must not show through after
+    // the terminator -- and the kit is dirty, so the next save keeps the take on the track.
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+    put_trig(0, 0);
+    post(Cmd::set_param, 0, 0, 11, 127);
+    pump();
+    char *path = engine.project_for_load().kit.tracks[0].sample;
+    std::memset(path, 0, kSamplePathBytes);
+    std::strcpy(path, "/SAMPLES/A_PATH_MUCH_LONGER_THAN_ANY_TAKE_NAME_EVER_IS.WAV");
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(!storage().dirty());
+    host.set_running(true);
+
+    post(Cmd::resample_arm, 0, 0, 1);
+    CHECK(storage().request_resample_write(0));
+    host.deliver_tick(384, 0);
+    bool landed = false;
+    for (int i = 0; i < 4000 && !landed; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+        landed = std::strncmp(engine.project().kit.tracks[0].sample, "/RECORD/", 8) == 0 &&
+                 storage().busy_text() == nullptr &&
+                 engine.status().resample_state.load(std::memory_order_relaxed) == 0u;
+    }
+    CHECK(landed);
+    char expected[64];
+    std::strcpy(expected, "/RECORD/");
+    std::strcat(expected, storage().last_take_name());
+    CHECK_EQ(engine.project().kit.tracks[0].sample, static_cast<const char *>(expected));
+    CHECK(storage().dirty());
+    CHECK_EQ(storage().loading_track(), -1);
 }
 
 TEST(app_a_second_resample_is_refused_while_one_is_running) {

@@ -268,6 +268,9 @@ void Storage::request_save() {
     post(Cmd::kit_store);
     kit_dirty_ = true;
     save_pending_ = true;
+    // Mutation-equivalent (docs/MUTATION.md): service() clears both flags when the save it
+    // starts is the full one, so an autosave left pending here never runs on its own. Kept
+    // because it states the rule: an explicit save stands an autosave down.
     autosave_pending_ = false;
 }
 

@@ -646,3 +646,68 @@ TEST(out_of_range_arguments_change_nothing) {
     CHECK(same_bytes(g_pattern, g_before));
     CHECK(same_lock_views(g_pattern, g_before));
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(a_paste_one_lock_too_big_for_the_full_pool_is_refused_even_after_what_it_overwrites) {
+    // A full pool: 127 steps of 8 locks, one of 7 (track 0 step 3) and one of 1. Pasting two
+    // steps of 8 over steps 2 and 3 gets 8 + 7 back and needs 16: one too many. The refusal has
+    // to count exactly the two destination steps, from zero.
+    pattern_init(g_pattern);
+    fill_track(g_pattern, 0);
+    fill_track(g_pattern, 1);
+    fill_track(g_pattern, 2);
+    for (int s = 0; s < 129; s++) {
+        const int count = s == 3 ? 7 : (s == 128 ? 1 : kLocksPerStep);
+        add_locks(g_pattern, s / kStepsPerTrack, s % kStepsPerTrack, 0, count);
+    }
+    CHECK_EQ(int(pattern_locks_reachable(g_pattern)), kLockPool);
+    range_copy(g_pattern, 0, 0, 2, g_clip);
+    CHECK_EQ(int(range_clip_locks(g_clip)), 16);
+
+    g_before = g_pattern;
+    CHECK(!range_paste(g_pattern, 0, 2, g_clip));
+    CHECK(same_bytes(g_pattern, g_before));
+}
+
+TEST(erasing_steps_at_the_top_of_the_pool_hands_their_slots_back) {
+    pattern_init(g_pattern);
+    fill_track(g_pattern, 0);
+    for (int i = 2; i <= 5; i++) add_locks(g_pattern, 0, i, 0, 2);
+    CHECK_EQ(int(g_pattern.locks_used), 8);
+    range_erase(g_pattern, 0, 4, 2);                 // the two runs on top
+    CHECK_EQ(int(g_pattern.locks_used), 4);
+}
+
+TEST(erasing_a_track_hands_back_the_locks_of_its_first_step_too) {
+    pattern_init(g_pattern);
+    fill_track(g_pattern, 1);
+    add_locks(g_pattern, 1, 0, 0, 3);
+    add_locks(g_pattern, 1, 5, 0, 2);
+    track_erase(g_pattern, 1);
+    CHECK(step_is_empty(g_pattern.tracks[1].steps[0]));
+    CHECK_EQ(int(g_pattern.locks_used), 0);
+}
+
+TEST(a_track_whose_stored_length_is_zero_has_no_range_to_edit) {
+    // A damaged length reads as no steps, not as one: nothing is copied or erased.
+    pattern_init(g_pattern);
+    fill_track(g_pattern, 0);
+    g_pattern.tracks[0].length = 0;
+    g_before = g_pattern;
+    range_erase(g_pattern, 0, 0, 4);
+    CHECK(same_bytes(g_pattern, g_before));
+    range_copy(g_pattern, 0, 0, 4, g_clip);
+    CHECK_EQ(int(g_clip.count), 0);
+}
+
+TEST(a_pasted_step_with_no_locks_names_no_run) {
+    pattern_init(g_pattern);
+    fill_track(g_pattern, 0);
+    add_locks(g_pattern, 0, 1, 0, 2);
+    range_copy(g_pattern, 0, 0, 1, g_clip);          // step 0 has no locks
+    CHECK(range_paste(g_pattern, 0, 8, g_clip));
+    CHECK_EQ(int(g_pattern.tracks[0].steps[8].lock_count), 0);
+    CHECK_EQ(int(g_pattern.tracks[0].steps[8].lock_first), int(kNoLock));
+    CHECK_EQ(int(g_pattern.locks_used), 2);
+}

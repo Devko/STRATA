@@ -1244,3 +1244,166 @@ TEST(chain_resume_keeps_the_live_pattern_and_continues_from_the_first_entry) {
     CHECK(!chain_resume(g_project, player));
     CHECK(!player.active);
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(a_restart_boundary_is_found_at_the_edge_of_the_grace_window_and_past_the_first_pass) {
+    Queue q;
+    // Exactly kQueueGraceTicks late is still forgiven: the new pattern starts on the boundary
+    // just missed, not the one after.
+    CHECK(queue_arm(q, 0, 1, QueueMode::after_16, k16Steps + 12, 1536));
+    CHECK_EQ(q.switch_tick, k16Steps + 13);
+    CHECK_EQ(q.start_tick, k16Steps);
+    // Outside it, and several passes in: the start is the next boundary, not the end of time.
+    CHECK(queue_arm(q, 0, 1, QueueMode::after_16, 5 * k16Steps + 100, 1536));
+    CHECK_EQ(q.start_tick, 6 * k16Steps);
+    CHECK_EQ(q.switch_tick, 6 * k16Steps);
+}
+
+TEST(the_end_of_pattern_counts_from_an_origin_equal_to_the_armed_tick_and_far_behind_it) {
+    Queue q;
+    // A pattern that began on this very tick: the press is at its step 1, forgiven.
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 100, 384, 100));
+    CHECK_EQ(q.switch_tick, 101u);
+    CHECK_EQ(q.start_tick, 100u);
+    // More than a pass after the origin: both ticks are the origin plus whole passes.
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 600, 384, 100));
+    CHECK_EQ(q.switch_tick, 868u);
+    CHECK_EQ(q.start_tick, 868u);
+}
+
+TEST(a_pattern_one_tick_long_is_its_own_grid_and_a_broken_length_arms_on_a_sixteenth) {
+    // One tick is a legal (if absurd) loop: every press is on a boundary, so the change lands on
+    // the very next tick, in queue_switch_tick and in queue_arm alike.
+    CHECK_EQ(queue_switch_tick(QueueMode::end_of_pattern, 20, 1), 21u);
+    Queue q;
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 20, 1));
+    CHECK_EQ(q.switch_tick, 21u);
+    CHECK_EQ(q.start_tick, 20u);
+    // 0 or less cannot divide: queue_arm treats it as a sixteenth, as queue_switch_tick does.
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 40, 0));
+    CHECK_EQ(q.switch_tick, 48u);
+    CHECK(queue_arm(q, 0, 1, QueueMode::end_of_pattern, 40, -5));
+    CHECK_EQ(q.switch_tick, 48u);
+}
+
+TEST(starting_a_chain_forgets_the_passes_a_previous_run_had_played) {
+    const Entry entries[] = {{0, 0, 2}, {0, 1, 1}};
+    set_chain(g_project, entries, 2);
+    ChainPlayer player;
+    player.played = 1;                                 // left by a chain stopped mid-entry
+    CHECK(start_chain(player));
+    uint8_t bank = 0, slot = 0;
+    CHECK(!advance(player, bank, slot));               // A01's first pass of two, not its last
+    CHECK(advance(player, bank, slot));
+    CHECK_EQ(int(slot), 1);
+}
+
+TEST(a_chain_resumed_on_another_bank_knows_it_is_not_on_an_entry) {
+    // B01 shares A01's slot number and the second entry's bank: only the bank of the FIRST
+    // entry tells the player it is not on it.
+    const Entry entries[] = {{0, 0, 2}, {1, 1, 1}};
+    set_chain(g_project, entries, 2);
+    g_project.bank = 1;
+    g_project.slot = 0;
+    ChainPlayer player;
+    CHECK(chain_resume(g_project, player));
+    CHECK(player.orphaned);
+    uint8_t bank = 9, slot = 9;
+    CHECK(advance(player, bank, slot));                // B01's pass ends: A01 starts
+    CHECK_EQ(int(bank), 0);
+    CHECK_EQ(int(slot), 0);
+}
+
+TEST(removing_the_playing_entry_reports_the_next_one_with_its_bank) {
+    const Entry entries[] = {{0, 0, 1}, {1, 4, 1}, {2, 7, 1}};
+    set_chain(g_project, entries, 3);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));               // B05
+    CHECK(chain_remove(g_project, 1));
+    chain_player_removed(player, 1);
+    CHECK(advance(player, bank, slot));               // C08, bank and all
+    CHECK_EQ(int(bank), 2);
+    CHECK_EQ(int(slot), 7);
+}
+
+TEST(removing_the_playing_entry_when_the_next_names_the_same_pattern_reports_no_change) {
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}, {0, 1, 1}, {0, 2, 1}};
+    set_chain(g_project, entries, 4);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));               // A02, entry 1
+    CHECK(chain_remove(g_project, 1));
+    chain_player_removed(player, 1);
+    CHECK(!advance(player, bank, slot));              // entry 1 is A02 again: nothing to switch
+    CHECK_EQ(int(player.entry), 1);
+    CHECK(chain_current(g_project, player, bank, slot));
+    CHECK_EQ(int(slot), 1);
+    CHECK(advance(player, bank, slot));               // then A03
+    CHECK_EQ(int(slot), 2);
+}
+
+TEST(a_player_that_wrapped_past_a_shortened_chain_is_on_the_first_entry_from_then_on) {
+    // The player's index is brought back into the chain whenever it advances, so an entry
+    // inserted later moves it from where it really is, not from where it was.
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}};
+    set_chain(g_project, entries, 2);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));               // A02, entry 1
+    CHECK(chain_remove(g_project, 1));
+    chain_player_removed(player, 1);
+    CHECK(advance(player, bank, slot));               // the only entry left: A01
+    CHECK_EQ(int(player.entry), 0);
+    CHECK(chain_insert(g_project, 0, 0, 9, 1));       // A10 in front
+    chain_player_inserted(player, 0);
+    CHECK(chain_current(g_project, player, bank, slot));
+    CHECK_EQ(int(slot), 0);                           // still A01
+
+    // The same through a repeat: X is played again from inside a chain cut back under Z.
+    const Entry more[] = {{0, 3, 2}, {0, 4, 1}, {0, 5, 1}};
+    set_chain(g_project, more, 3);
+    CHECK(start_chain(player));
+    CHECK(!advance(player, bank, slot));              // A04's second pass
+    CHECK(advance(player, bank, slot));               // A05
+    CHECK(advance(player, bank, slot));               // A06, entry 2
+    g_project.settings.chain_length = 1;              // only A04 is left
+    CHECK(!advance(player, bank, slot));              // A04 again, its first pass of two
+    CHECK_EQ(int(player.entry), 0);
+    CHECK(chain_insert(g_project, 0, 0, 9, 1));
+    chain_player_inserted(player, 0);
+    CHECK(chain_current(g_project, player, bank, slot));
+    CHECK_EQ(int(slot), 3);
+}
+
+TEST(a_chain_cut_back_to_exactly_the_playing_entry_reads_as_its_first_entry) {
+    const Entry entries[] = {{1, 0, 1}, {1, 1, 1}, {1, 2, 1}};
+    set_chain(g_project, entries, 3);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));
+    CHECK(advance(player, bank, slot));               // B03, entry 2
+    g_project.settings.chain_length = 2;              // the entry at the player's index is gone
+    CHECK(chain_current(g_project, player, bank, slot));
+    CHECK_EQ(int(bank), 1);
+    CHECK_EQ(int(slot), 0);
+}
+
+TEST(an_entry_inserted_at_the_playing_index_pushes_the_player_down_with_its_entry) {
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}};
+    set_chain(g_project, entries, 2);
+    ChainPlayer player;
+    uint8_t bank = 0, slot = 0;
+    CHECK(start_chain(player));
+    CHECK(advance(player, bank, slot));               // A02, entry 1
+    CHECK(chain_insert(g_project, 1, 0, 9, 1));       // A10 in at index 1, above A02
+    chain_player_inserted(player, 1);
+    CHECK_EQ(int(player.entry), 2);
+    CHECK(chain_current(g_project, player, bank, slot));
+    CHECK_EQ(int(slot), 1);                           // still A02
+}

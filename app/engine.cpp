@@ -562,6 +562,8 @@ void Engine::apply(const Command &command) {
             // count resyncs on the next tick. The voices ring on: this is a restart, not a stop.
             deferred_count_ = 0;
             scheduler_.reset(true);
+            // Mutation-equivalent (docs/MUTATION.md): resolve_tick already sends an origin past
+            // the new tick back to 0. Kept so that this case says everything a restart resets.
             origin_ = 0;
             boundary_known_ = false;
             bar_known_ = false;
@@ -1042,6 +1044,9 @@ void Engine::apply(const Command &command) {
                 status_.bump_refused();          // a take is running, or one is waiting for the card
                 break;
             }
+            // Written and cleared, but nothing reads it: the take's length is the `frames`
+            // handed to capture_.arm(). A mutation run found it (docs/MUTATION.md); it is kept as
+            // the record of what was asked for, for a future RESAMPLE screen to show.
             resample_bars_ = uint8_t(bars);
             break;
         }
@@ -1433,6 +1438,8 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
         on_bar();
     } else if (tick >= next_bar_tick_) {
         bar_++;
+        // Mutation-equivalent (docs/MUTATION.md): left out, the resync below finds the same
+        // bar by a division. This line is what keeps that division off the ordinary bar.
         next_bar_tick_ += kTicksPerBar;
         // A transport that jumped forward by more than a bar: resync rather than counting up to
         // it one bar per tick.
