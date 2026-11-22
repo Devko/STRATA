@@ -44,6 +44,7 @@
 #include "undo.hpp"
 #include "va.hpp"
 #include "vapoly.hpp"    // the CHORD track's six voices
+#include "lfo.hpp"       // one LFO per track, parameters 16-19
 
 #include <cstdint>
 
@@ -145,13 +146,32 @@ public:
     const BeatRepeat &repeat() const { return repeat_; }
     RepeatLength repeat_length() const { return repeat_length_; }
 
+    // Whether a note repeat is rolling on `track` (Cmd::note_repeat).
+    bool rolling(int track) const { return track >= 0 && track < kTracks && rolls_[track].on; }
+
     // The performance layer writes over the kit without changing it, so the UI has to be able to
     // draw what is actually being heard as well as what is stored. `params` is the kit; this is
     // the kit with the morph, the macros and any throw over the top.
     uint8_t performed(int track, int param) const {
-        return track >= 0 && track < kTracks && param >= 0 && param < kParams
+        return track >= 0 && track < kTracks && param >= 0 && param < kTrackParams
                    ? performed_[track][param]
                    : 0;
+    }
+
+    // The LFO, for the screen: is it moving a parameter on `track`, its last value (-1..1), and
+    // what the machines are prepared from -- the kit, performed, locked and LFO'd. Audio-side
+    // single words and bytes, read as `performed` is.
+    bool lfo_on(int track) const { return track >= 0 && track < kTracks && modulating_[track]; }
+    float lfo_value(int track) const {
+        return track >= 0 && track < kTracks ? lfo_value_[track] : 0.0f;
+    }
+    const TrackParams &sounding(int track) const {
+        return modulating_[track] ? modulated_[track] : effective_[track];
+    }
+
+    // The master EQ band byte being heard (0-2), with the morph and macros over the knob.
+    uint8_t performed_master(int band) const {
+        return band >= 0 && band < kMasterBands ? performed_master_[band] : 0;
     }
 
     // The scenes and macros, writable, for a LOAD to fill -- the same hole and the same rules as
@@ -390,14 +410,29 @@ private:
     // `effective_` from. Separate from `params_` because a scene, a macro and a throw must not
     // change the kit: none of them is saved, none is undone, and letting go of a throw has to
     // get the stored value back.
-    uint8_t performed_[kTracks][kParams] = {};
+    uint8_t performed_[kTracks][kTrackParams] = {};
+    // The master kill EQ's three band bytes with the morph and the macros over the project's,
+    // which is what the mixer runs on. The kill switches are not in here: they are the panel's.
+    uint8_t performed_master_[kMasterBands] = {64, 64, 64};
     bool perform_dirty_ = true;
 
     // Which of a track's parameters the CURRENT step has locked, one bit each. The performance
     // layer skips them, so a lock always wins over a morph -- which is what docs/REVIEW.md's
     // "base kit values only" means from the other side. Set by `fire` and therefore lasting
     // exactly as long as the step does.
-    uint16_t locked_[kTracks] = {};
+    uint32_t locked_[kTracks] = {};
+    static_assert(kTrackParams <= 32, "locked_ holds one bit per parameter");
+
+    // The LFOs (dsp/lfo.hpp). `lfo_bytes_` is what `lfo_settings_` was made from, so the
+    // settings are rebuilt only when a byte moves; `modulated_` is `effective_` with the
+    // destination moved, valid while `modulating_` says so.
+    void run_lfos(uint32_t frames, bool running, uint32_t position, float fraction);
+    TrackLfo lfo_[kTracks];
+    LfoSettings lfo_settings_[kTracks];
+    uint8_t lfo_bytes_[kTracks][kLfoParams] = {};
+    TrackParams modulated_[kTracks] = {};
+    bool modulating_[kTracks] = {};
+    float lfo_value_[kTracks] = {};
 
     ChainMix mix_[kTracks] = {};
     bool muted_[kTracks] = {};
@@ -470,6 +505,23 @@ private:
 
     BeatRepeat repeat_;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
+
+    // Note repeat, one roll per track (Cmd::note_repeat). `countdown` is frames to the next hit
+    // with the transport stopped; `last_tick` is the tick of the press, so the first grid tick
+    // after it is skipped when it would land on top of the press's own hit.
+    struct Roll {
+        bool on = false;
+        uint8_t note = 60;
+        uint8_t velocity = 100;
+        uint32_t last_tick = 0;
+        float countdown = 0.0f;
+    };
+    Roll rolls_[kTracks];
+    void roll_fire(int track, uint32_t frame);
+    void roll_tick(uint32_t tick, uint32_t frame);
+    void roll_free(uint32_t frames);
+    float roll_period_frames() const;
+    uint32_t roll_gate_frames() const;
     bool repeat_held_ = false;
     bool repeat_pitch_ = false;
 
@@ -547,6 +599,8 @@ private:
     // every block. Enaga's clock reports the tempo; core/ cannot ask it.
     float tempo_ = 0.0f;
     float samples_per_tick_ = 0.0f;   // derived from it; see reconfigure()
+    float inv_samples_per_tick_ = 0.0f;
+    float inv_rate_ = 1.0f / 48000.0f;
 
     SendSettings sends_;
     MasterSettings master_;

@@ -147,6 +147,10 @@ constexpr int kMixerPageCount = int(sizeof(kMixerPages) / sizeof(kMixerPages[0])
 
 // Which MIXER page is the kill EQ's, for the plain-push kill switches.
 constexpr int kMixerEqPage = kMixerPageCount - 1;
+
+// PERFORM: FUNC + STEP 1-4 hand a macro the LFO's bytes, FUNC + STEP 5-7 the master EQ's bands.
+constexpr int kMacroEqFirstStep = kLfoParams;
+static_assert(kMacroEqFirstStep + kMasterBands <= 16, "the EQ's bands fit on the STEP keys");
 static_assert(kMixerPages[kMixerEqPage].master &&
                   kMixerPages[kMixerEqPage].field[0] == int8_t(MasterField::eq_low),
               "kMixerEqPage no longer names the kill EQ's page");
@@ -318,9 +322,16 @@ const char *page_name(Page page) {
         case Page::fltr: return "FLTR";
         case Page::amp:  return "AMP";
         case Page::fx:   return "FX";
+        case Page::lfo:  return "LFO";
         default:         return "?";
     }
 }
+
+// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp). The selection keys walk
+// all five; everywhere else a page is still four encoders over four parameters.
+constexpr int kEditPages = kPages + 1;
+static_assert(page_first(Page(kEditPages - 1)) + kParamsPerPage == kTrackParams,
+              "EDIT's last page is the last four track parameters");
 
 class Strata : public enaga::App {
     friend struct strata::test::UiProbe;    // tests/test_ui.cpp only; see the note above
@@ -487,8 +498,18 @@ public:
         // selected macro. The STEP keys are already a sixteen-wide selector in the step page, so
         // this is the gesture they have; without it a macro could never be set up at all, and
         // "4 macros driving up to 4 parameters" would be a feature with no way in.
+        // With FUNC held, STEP 1-4 are the LFO's four bytes instead (WAV RAT DEP DST), so a macro
+        // can sweep an LFO's depth or rate too.
         if (mode_ == Mode::perform && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
-            if (down) assign_macro(key - ENAGA_KEY_STEP1);
+            // FUNC + STEP 5-7 are the master kill EQ's LOW, MID and HI: a macro can sweep the lows
+            // out over a build. STEP 8-16 with FUNC do nothing rather than assign a track
+            // parameter the hand did not mean.
+            const int step = key - ENAGA_KEY_STEP1;
+            if (down && !shift_) assign_macro(step);
+            if (down && shift_ && step < kLfoParams) assign_macro(kParams + step);
+            if (down && shift_ && step >= kMacroEqFirstStep && step < kMacroEqFirstStep + kMasterBands) {
+                assign_macro_master(step - kMacroEqFirstStep);
+            }
             return;
         }
 
@@ -959,7 +980,7 @@ public:
                 page_ = (page_ + delta + 4) % 4;                       // step page 1-4
                 break;
             case Mode::edit:
-                param_page_ = (param_page_ + delta + kPages) % kPages; // SRC/FLTR/AMP/FX
+                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. LFO
                 break;
             case Mode::mixer:
                 // Faders, then the delay, the reverb, the routing and the master.
@@ -1248,7 +1269,8 @@ public:
         // <enaga/clock.hpp> and <enaga/midi.hpp> expose no way to write them, so STRATA shows
         // them and says where they live, which is all docs/SPEC.md's "STRATA only exposes the
         // settings" can mean.
-        // CHAIN: A is the entry's repeat count. PATTERN: A is LEN and B is SWG.
+        // CHAIN: A is the entry's repeat count. PATTERN: A is LEN, B is SWG and C the swing of
+        // the track under the cursor (the selected track's, when the cursor is on LEN or SWG).
         if (mode_ == Mode::project && project_page_ == ProjectPage::chain) {
             if (encoder == 0) chain_delta(ChainEdit::repeats_delta, delta);
             return;
@@ -1257,6 +1279,11 @@ public:
             if (encoder == 0 || encoder == 1) {
                 pattern_field_ = encoder;
                 pattern_field_delta(encoder, delta);
+            } else if (encoder == 2) {
+                if (pattern_field_ < kPatternFieldTrackSwing) {
+                    pattern_field_ = kPatternFieldTrackSwing + selected_;
+                }
+                pattern_field_delta(pattern_field_, delta);
             }
             return;
         }
@@ -1315,7 +1342,8 @@ public:
             held_used_ = true;
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::lock, selected_, held_step_);
-            post_delta(Cmd::lock_delta, selected_, held_step_, uint8_t(index), delta);
+            post_delta(Cmd::lock_delta, selected_, held_step_, uint8_t(index),
+                       delta * lfo_click(index));
             return;
         }
 
@@ -1363,7 +1391,7 @@ public:
             const int step = int(engine_.status().playhead[selected_].load(std::memory_order_relaxed));
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::motion, selected_, 0);
-            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta);
+            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta * lfo_click(index));
             return;
         }
 
@@ -1406,9 +1434,11 @@ public:
         }
 
         // 5. Otherwise A-D edit the four parameters of the current page on the selected track.
+        // One click is one shape or one destination on the LFO's WAV and DST (dsp/lfo.hpp,
+        // `lfo_click`), and one count everywhere else.
         const int index = page_first(Page(param_page_)) + encoder;
-        post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index), clamp_delta(delta),
-             kDeltaFlag);
+        post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index),
+             clamp_delta(delta * lfo_click(index)), kDeltaFlag);
     }
 
     void on_pad_press(int pad, int velocity) override {
@@ -1435,6 +1465,16 @@ public:
         selected_ = track;
         // The root in a playable octave: the pattern's root is a pitch class (core/pattern.hpp).
         const uint8_t note = uint8_t(kPadOctaveNote + engine_.key_root());
+
+        // NOTE RPT: the pad rolls for as long as it is held, and is not recorded -- a roll is a
+        // performance over the pattern, like beat repeat, not a string of steps to write.
+        if (note_repeat_mode_) {
+            rolling_pads_ = uint16_t(rolling_pads_ | (1u << track));
+            roll_velocity_[track] = uint8_t(velocity < 1 ? 1 : velocity);
+            post(Cmd::note_repeat, uint8_t(track), 0, note, roll_velocity_[track], 1);
+            return;
+        }
+
         post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity));
         record_note(track, note, uint8_t(velocity));
     }
@@ -1442,6 +1482,15 @@ public:
     void on_pad_release(int pad) override {
         if (is_perform_pad(pad)) {
             on_perform_pad(pad, false);
+            return;
+        }
+
+        // A rolling pad stops on its own release, whatever the mode is by now: NOTE RPT turned
+        // off under a held pad must not leave the roll running.
+        const int track = track_for_pad(pad);
+        if (track >= 0 && track < kTracks && (rolling_pads_ >> track & 1u) != 0) {
+            rolling_pads_ = uint16_t(rolling_pads_ & ~(1u << track));
+            post(Cmd::note_repeat, uint8_t(track), 0, 0, 0, 0);
             return;
         }
 
@@ -1482,6 +1531,18 @@ public:
         // fire is a claim about a situation that cannot arise.
         const int track = track_for_pad(pad);
         if (track < 0 || track >= kTracks) return;
+
+        // A rolling pad's pressure is the roll's velocity instead: lean in and the roll swells.
+        // Change-filtered like the macro, and never below 1, which is silence on most machines.
+        if ((rolling_pads_ >> track & 1u) != 0) {
+            const uint8_t velocity =
+                uint8_t(pressure < 1 ? 1 : (pressure > 127 ? 127 : pressure));
+            if (velocity == roll_velocity_[track]) return;
+            roll_velocity_[track] = velocity;
+            post(Cmd::note_repeat, uint8_t(track), 0, 0, velocity, 2);
+            return;
+        }
+
         if (track != selected_) return;                   // "the SELECTED track's macro 1"
 
         const uint8_t clamped = uint8_t(pressure < 0 ? 0 : (pressure > 127 ? 127 : pressure));
@@ -1502,6 +1563,13 @@ public:
     void on_perform_pad(int pad, bool down) {
         switch (PerformPad(pad)) {
             case PerformPad::fill:
+                // FUNC + FILL turns NOTE RPT on and off; the fill itself is untouched. A FILL
+                // released with FUNC still down after an ordinary press still lets the fill go.
+                if (down && shift_) {
+                    note_repeat_mode_ = !note_repeat_mode_;
+                    notice(note_repeat_mode_ ? "NOTE RPT" : "PADS PLAY");
+                    break;
+                }
                 post(Cmd::set_fill, 0, 0, down ? 1 : 0);
                 break;
 
@@ -1772,9 +1840,9 @@ public:
         // so a page walked with the selection keys is all it can see of MIXER and SETUP.
         {
             const int screen = int(mode_) * 16 + (mode_ == Mode::mixer ? mixer_bank_
-                                                                       : (mode_ == Mode::project
-                                                                              ? int(project_page_)
-                                                                              : 0));
+                                                  : mode_ == Mode::project ? int(project_page_)
+                                                  : mode_ == Mode::edit    ? param_page_
+                                                                           : 0);
             if (screen != logged_screen_) {
                 logged_screen_ = screen;
                 char line[24];
@@ -1787,6 +1855,10 @@ public:
                 } else if (mode_ == Mode::project && project_page_ != ProjectPage::slots) {
                     *out++ = ' ';
                     append(out, project_page_name(project_page_));
+                } else if (mode_ == Mode::edit) {
+                    // EDIT's page, so a scenario can reach the LFO page with the selection keys.
+                    *out++ = ' ';
+                    append(out, page_name(Page(param_page_)));
                 }
                 *out = 0;
                 enaga::log(line);
@@ -2117,12 +2189,13 @@ public:
         *out = 0;
         canvas.text(0, 20, line, 14);
 
-        // Which of the four pages is showing, as a row of boxes: the spec's selection keys
+        // Which of the five pages is showing, as a row of boxes: the spec's selection keys
         // flip between them, so showing where you are matters more than labels.
-        for (int p = 0; p < kPages; p++) {
+        for (int p = 0; p < kEditPages; p++) {
             const uint8_t grey = p == param_page_ ? 14 : 4;
-            canvas.rect(p * 32 + 2, 32, 28, 3, grey);
+            canvas.rect(p * 25 + 2, 32, 22, 3, grey);
         }
+        const bool lfo_page = param_page_ == int(Page::lfo);
 
         // The four parameters in large type, one row per encoder: its letter, the name, the
         // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
@@ -2145,12 +2218,32 @@ public:
             canvas.text(10, y, line, 13);
 
             out = line;
-            append_padded(out, value, 3);
+            append_param_value(out, index, value);
             *out = 0;
             canvas.text(34, y, line, 15);
 
-            const int bar = int(value) * 70 / 127;
-            canvas.rect(56, y + 2, bar < 1 ? 1 : bar, 4, 9);
+            // The LFO's values are words up to five characters long ("1/16T"), so its bars start
+            // further right.
+            const int bar_x = lfo_page ? 70 : 56;
+            const int bar = int(value) * (lfo_page ? 56 : 70) / 127;
+            canvas.rect(bar_x, y + 2, bar < 1 ? 1 : bar, 4, 9);
+        }
+
+        if (lfo_page) {
+            // What the LFO is doing to its destination right now, so a moving number says it runs.
+            out = line;
+            if (engine_.lfo_on(selected_)) {
+                const int dest = lfo_dest(engine_.params(selected_).v[kLfoDest]);
+                append(out, "NOW ");
+                append(out, track_param_name(dest));
+                *out++ = ' ';
+                append_padded(out, engine_.sounding(selected_).v[dest], 3);
+            } else {
+                append(out, "LFO OFF: SET DEP+DST");
+            }
+            *out = 0;
+            canvas.text(0, 96, line, 7);
+            return;
         }
 
         // The machine is changed somewhere else, and nothing said where.
@@ -2365,13 +2458,53 @@ public:
 
     // --- shared pieces ----------------------------------------------------
 
-    // The machine names SRC and AMP; the insert chain names FLTR and FX.
-    const char *param_name_for(int index) const {
-        if (param_page_ == int(Page::fltr) || param_page_ == int(Page::fx)) {
-            return InsertChain::param_name(index);
-        }
+    // The machine names SRC and AMP; the insert chain names FLTR and FX; the LFO its own page.
+    const char *param_name_for(int index) const { return track_param_name(index); }
+
+    // By the parameter's own page rather than the page on screen, so a macro assignment or the
+    // LFO's destination can name a parameter from any page.
+    const char *track_param_name(int index) const {
+        if (index < 0 || index >= kTrackParams) return "---";
+        if (index >= kParams) return lfo_param_name(index);
+        const int page = index / kParamsPerPage;
+        if (page == int(Page::fltr) || page == int(Page::fx)) return InsertChain::param_name(index);
         const Machine *machine = engine_.machine(selected_);
         return machine ? machine->param_name(index) : "---";
+    }
+
+    // A parameter's value as the screen shows it: the byte, except on the LFO's page, where it
+    // is a shape, a rate (Hz free, a note length synced), a depth, and a destination. At most
+    // five characters.
+    void append_param_value(char *&out, int index, uint8_t value) const {
+        switch (index) {
+            case kLfoWave:
+                append(out, lfo_wave_name(lfo_wave(value)));
+                return;
+            case kLfoRate:
+                if (value >= kLfoSyncFirst) {
+                    append(out, lfo_sync_name(value));
+                } else {
+                    // Hundredths below 1 Hz ("0.06"), tenths below 10 ("2.5"), then whole.
+                    const uint32_t centi = lfo_free_centi_hz(value);
+                    if (centi < 100) {
+                        append(out, "0.");
+                        append_padded(out, centi, 2);
+                    } else if (centi < 1000) {
+                        append_tenths(out, (centi + 5) / 10);
+                    } else {
+                        append_number(out, (centi + 50) / 100);
+                    }
+                }
+                return;
+            case kLfoDest: {
+                const int dest = lfo_dest(value);
+                append(out, dest < 0 ? "OFF" : track_param_name(dest));
+                return;
+            }
+            default:
+                append_padded(out, value, 3);
+                return;
+        }
     }
 
     // The four encoder slots along the bottom: a three-letter name, the value under it and a
@@ -2389,7 +2522,7 @@ public:
             canvas.text(slot * 32, y, line, 12);
 
             out = line;
-            append_padded(out, engine_.params(selected_).v[index], 3);
+            append_param_value(out, index, engine_.params(selected_).v[index]);
             *out = 0;
             canvas.text(slot * 32, y + 8, line, 15);
 
@@ -3281,7 +3414,7 @@ public:
     // that a macro assigned in one press is usable in the next -- the ranges are stored, so a
     // richer editor can refine them later without changing the format.
     void assign_macro(int param) {
-        if (param < 0 || param >= kParams) return;
+        if (param < 0 || param >= kTrackParams) return;
         const uint8_t now = engine_.performed(selected_, param);
         const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
         Command command;
@@ -3298,9 +3431,30 @@ public:
         append(out, " T");
         append_number(out, uint32_t(selected_) + 1);
         append(out, " ");
-        append(out, engine_.machine(selected_) != nullptr
-                        ? engine_.machine(selected_)->param_name(param)
-                        : "---");
+        append(out, track_param_name(param));
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    // Assign one master kill EQ band to the selected macro, by the same "towards the far end"
+    // guess: a band at flat or above heads for a kill, which is what a build wants.
+    void assign_macro_master(int band) {
+        if (band < 0 || band >= kMasterBands) return;
+        const uint8_t now = engine_.performed_master(band);
+        const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
+        Command command;
+        command.cmd = Cmd::macro_assign;
+        command.track = 0;
+        command.a = uint8_t(macro_selected_);
+        command.b = uint8_t(kTrackParams + band);          // past the track parameters: the EQ
+        command.c = now;
+        command.d = far;
+        post_command(command);
+
+        char *out = notice_buffer_;
+        *out++ = char('A' + macro_selected_);
+        append(out, " EQ ");
+        append(out, master_field_name(uint8_t(int(MasterField::eq_low) + band)));
         *out = 0;
         notice(notice_buffer_);
     }
@@ -3401,6 +3555,7 @@ public:
         out = line;
         append(out, "BAR ");
         append_number(out, engine_.bar() % 1000u + 1u);
+        if (note_repeat_mode_) append(out, " NRPT");
         *out = 0;
         canvas.text(0, 112, line, 9);
     }
@@ -3689,15 +3844,27 @@ public:
 
     // --- PROJECT's PATTERN page: the master length and the swing ----------
 
+    // The fields, in the order LEFT and RIGHT walk them: LEN, SWG, then each track's own swing.
+    static constexpr int kPatternFieldTrackSwing = 2;
+    static constexpr int kPatternFields = kPatternFieldTrackSwing + kTracks;
+
     void pattern_field_delta(int field, int delta) {
         if (field == 0) {
             mark(GestureKind::length, 0, 0);
             post(Cmd::set_master_length, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
             notice("LEN");
-        } else {
+        } else if (field == 1) {
             mark(GestureKind::length, 0, 0);
             post(Cmd::set_pattern_swing, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
             notice("SWING");
+        } else if (field < kPatternFields) {
+            // A track's own swing (docs/SPEC.md, "an optional per-track override"). PAT, then
+            // 50 to 75; the engine walks the delta (core/pattern.hpp, `track_swing_step`). One
+            // gesture per track, so a sweep is one undo level, as LEN and SWG are.
+            const int track = field - kPatternFieldTrackSwing;
+            mark(GestureKind::length, track, 0);
+            post(Cmd::set_track_swing, uint8_t(track), 0, 0, clamp_delta(delta), kDeltaFlag);
+            notice("TRACK SWING");
         }
     }
 
@@ -3706,7 +3873,9 @@ public:
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
                 if (shift_) return true;                  // F1 + LEFT/RIGHT: free
-                pattern_field_ = key == ENAGA_KEY_LEFT ? 0 : 1;
+                // Sideways through LEN, SWG and the eight track swings, stopping at the ends.
+                pattern_field_ = clamp_int(pattern_field_ + (key == ENAGA_KEY_LEFT ? -1 : 1), 0,
+                                           kPatternFields - 1);
                 return true;
             case ENAGA_KEY_UP:
             case ENAGA_KEY_DOWN:
@@ -3739,7 +3908,7 @@ public:
         append_number(out, uint32_t(pattern.master_length));
         append(out, " STEPS");
         *out = 0;
-        canvas.text(0, 40, line, pattern_field_ == 0 ? 15 : 10);
+        canvas.text(0, 32, line, pattern_field_ == 0 ? 15 : 10);
 
         out = line;
         *out++ = pattern_field_ == 1 ? '>' : ' ';
@@ -3747,12 +3916,30 @@ public:
         append_number(out, uint32_t(pattern.swing));
         *out++ = '%';
         *out = 0;
-        canvas.text(0, 52, line, pattern_field_ == 1 ? 15 : 10);
+        canvas.text(0, 42, line, pattern_field_ == 1 ? 15 : 10);
 
-        canvas.text(0, 76, "LEN IS WHAT A QUEUED", 8);
-        canvas.text(0, 85, "CHANGE AND A CHAIN", 8);
-        canvas.text(0, 94, "WAIT FOR", 8);
-        canvas.text(0, 112, "UP DOWN VALUE OR A B", 7);
+        // Each track's own swing, two to a row: PAT follows SWG above, a number overrides it.
+        canvas.text(0, 56, "TRACK SWING", 8);
+        for (int t = 0; t < kTracks; t++) {
+            const int field = kPatternFieldTrackSwing + t;
+            const uint8_t swing = pattern.tracks[t].swing;
+            out = line;
+            *out++ = pattern_field_ == field ? '>' : ' ';
+            append_number(out, uint32_t(t + 1));
+            *out++ = ' ';
+            if (swing == kSwingInherit) {
+                append(out, "PAT");
+            } else {
+                append_number(out, uint32_t(swing));
+                *out++ = '%';
+            }
+            *out = 0;
+            canvas.text((t & 1) * 60, 66 + (t >> 1) * 9, line,
+                        pattern_field_ == field ? 15 : (swing == kSwingInherit ? 8 : 12));
+        }
+
+        canvas.text(0, 103, "LEFT RIGHT PICK", 7);
+        canvas.text(0, 112, "UP DOWN VALUE A B C", 7);
     }
 
     // --- PROJECT's SETUP page: the clock, MIDI and the record quantize ----
@@ -4058,6 +4245,9 @@ private:
     // All of it is which control is selected or held, never what the layer produces: the engine
     // owns that, and the UI reads it back through the accessors.
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
+    bool note_repeat_mode_ = false;             // FUNC + FILL: a held lower pad rolls
+    uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)
+    uint8_t roll_velocity_[kTracks] = {};       // the last velocity sent for each roll
     bool mutation_pending_ = false;             // a MUTATE waiting for OK (keep) or CLR (revert)
     int16_t keys_held_note_[16] = {-1, -1, -1, -1, -1, -1, -1, -1,
                                    -1, -1, -1, -1, -1, -1, -1, -1};   // KEYS: what each key holds
@@ -4107,7 +4297,7 @@ private:
     ProjectPage project_page_ = ProjectPage::slots;
     bool project_setup() const { return project_page_ == ProjectPage::setup; }
     int chain_cursor_ = 0;         // the CHAIN page's entry
-    int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG
+    int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG, 2-9 track swings
     static const char *project_page_name(ProjectPage page) {
         switch (page) {
             case ProjectPage::slots:   return "PROJECT";
