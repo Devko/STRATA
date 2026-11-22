@@ -96,6 +96,7 @@ bool mutates_kit(Cmd cmd) {
         // which is the whole reason machine switching needed no file-format change.
         case Cmd::set_machine:
         case Cmd::set_track_level:
+        case Cmd::set_slice_mode:
         case Cmd::clear_sample:
         case Cmd::set_sample:
         case Cmd::set_stream:
@@ -1553,6 +1554,10 @@ void Storage::step_sample_convert() {
     // has nothing above the new Nyquist to fold back down.
     if (resampling) pcm_antialias(destination + size_t(src_done_) * size_t(channels), did, channels,
                                   antialias_);
+    // At 48 kHz this IS the sample, so its slice points are found as it lands (core/onsets.hpp).
+    if (!resampling) {
+        onsets_.feed(destination + size_t(src_done_) * size_t(channels), src_done_, did, channels);
+    }
     src_done_ += did;
 
     if (did == 0 || src_done_ >= src_frames_) {
@@ -1720,6 +1725,9 @@ void Storage::step_sample_chunk() {
         pcm_antialias(destination + size_t(src_done_) * size_t(channels), did, channels,
                       antialias_);
     }
+    if (!resampling && !streaming_) {
+        onsets_.feed(destination + size_t(src_done_) * size_t(channels), src_done_, did, channels);
+    }
     src_done_ += did;
     chunk_pos_ += did * frame_bytes;
 
@@ -1863,6 +1871,7 @@ void Storage::step_sample_resample() {
                                    : pcm_resample(src_, src_frames_, channels, cursor_,
                                                   destination + size_t(out_done_) * size_t(channels),
                                                   want);
+    onsets_.feed(destination + size_t(out_done_) * size_t(channels), out_done_, did, channels);
     out_done_ += did;
     // 0 means the cursor has passed the end of the source, which is the end of the job as well as
     // the end of the slice.
@@ -1896,6 +1905,10 @@ void Storage::hand_sample_over() {
         finish_job("POOL REFUSED");
         return;
     }
+
+    // Its slice points, for SLC AUTO, through the inbox the command's apply reads. A detector
+    // that did not see exactly these frames, in order, gives none rather than wrong ones.
+    onsets_.finish(out_done_, engine_->slices_for_load(track));
 
     // The handover: an offset, a frame count and a channel count, and nothing else crosses. The
     // audio side checks all three against the region before it forms a pointer.

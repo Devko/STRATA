@@ -611,6 +611,20 @@ New 2026-11-22: files over the old 30 s limit load whole, in chunks. Put a 48 kH
 - [ ] PROJECT's SMP line shows the memory used, about `27/32M`. A second one on another track:
       `NO ROOM`, and the first keeps playing.
 
+## 15c2. SLC AUTO on a played break (4 min)
+
+New 2026-11-22. Put a drum break that was played, not programmed (any loop that is not on a
+grid), in `/SAMPLES` and pick it for track 8 (SAMPLE).
+
+- [ ] EDIT, SRC page: the line under the knobs says `PUSH SLC: AUTO SLICE`. Push D:
+      `SLICES AUTO`, then `SLC AUTO: n HITS` with n about the number of hits you can hear
+      (up to 15). n = `________`
+- [ ] SLC 8, trigs on notes 60-67 on steps 1, 3, 5 ... 15: each slice starts on a hit, with no
+      flam or cut-off attack at its start? `________` Compare with push D again (even).
+- [ ] Load time of the break against before (the hits are found while it loads): any slower to
+      play? `________`
+- [ ] Save, power cycle: track 8 is still AUTO, same slices.
+
 ## 15d. A stem bigger than memory, streamed (5 min)
 
 New 2026-11-22: a file the sample memory cannot hold streams from the card. Put a 48 kHz stereo
