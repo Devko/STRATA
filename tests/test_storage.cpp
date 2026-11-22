@@ -1951,6 +1951,44 @@ TEST(storage_a_wav_at_another_rate_is_resampled_once_at_load) {
     CHECK(slot_of(kLoopTrack).frames > 1000u);
 }
 
+// A WAV too big for g_scratch: 30 s of 96 kHz mono 8-bit is 2.88 MB. Its own buffer, file scope
+// (the frame rule), sized for one frame past 30 s.
+constexpr uint32_t kLong96Frames = kMaxSampleSeconds * 96000u;
+uint8_t g_long_wav[44u + kLong96Frames + 1u];
+
+uint32_t make_long_wav(const char *path, uint32_t frames) {
+    enaga::wav::Format format;
+    format.encoding = uint16_t(enaga::wav::pcm);
+    format.channels = 1;
+    format.rate = 96000;
+    format.bits = 8;
+    enaga::wav::header(g_long_wav, format, frames);
+    for (uint32_t f = 0; f < frames; f++) g_long_wav[44u + f] = (f / 64u) % 2u ? 0x20u : 0xE0u;
+    CHECK(FakeHost::the().write_file(path, g_long_wav, 44u + frames));
+    return 44u + frames;
+}
+
+TEST(storage_thirty_seconds_of_a_96k_file_loads) {
+    // Roland, 2026-11-22: the 30 s limit is 30 s of the FILE. The loader's resample buffer used
+    // to count 30 s of 48 kHz frames, so a 96 kHz file was refused TOO LONG past 15 s. Mono
+    // 8-bit keeps the file inside the fake card; the frame count is what the limit reads.
+    clean();
+    make_long_wav("/SAMPLES/LONG96.WAV", kLong96Frames + 1u);     // one frame past 30 s
+    kit_sample(kLoopTrack, "/SAMPLES/LONG96.WAV");
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() != nullptr);
+    CHECK_EQ(storage().last_error(), "TOO LONG");
+    CHECK(slot_of(kLoopTrack).state != SampleState::ready);
+
+    make_long_wav("/SAMPLES/LONG96.WAV", kLong96Frames);          // exactly 30 s, in place
+    CHECK(load_sample(kLoopTrack));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    CHECK_EQ(slot_of(kLoopTrack).frames, Resampler::make(96000, 48000).output_frames(kLong96Frames));
+    CHECK_EQ(slot_of(kLoopTrack).frames, kMaxSampleSeconds * 48000u);   // 30 s at 48 kHz
+    FakeHost::the().reset();                                     // give the arena back
+}
+
 TEST(storage_a_downsampled_wav_is_low_passed_before_it_is_resampled) {
     // The loader's bytes are what core/pcm's low-pass then resample give for the same square
     // wave, and not what the resample alone gives: the filter is wired into the convert step.
@@ -3019,7 +3057,14 @@ TEST(storage_request_new_takes_everything_of_the_old_project_away) {
     CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::empty));   // off its track
     CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);
     CHECK_EQ(scene_count(engine().scenes().scenes[5]), 0);
-    CHECK_EQ(int(engine().macros().macros[2].targets[0].enabled), 0);   // the factory ships none
+    // The macro is the factory's again, not the one assigned above.
+    const MacroTarget &target = engine().macros().macros[2].targets[0];
+    const MacroTarget &wanted = strata::test::factory_macros().macros[2].targets[0];
+    CHECK_EQ(int(target.enabled), int(wanted.enabled));
+    CHECK_EQ(int(target.track), int(wanted.track));
+    CHECK_EQ(int(target.param), int(wanted.param));
+    CHECK_EQ(int(target.low), int(wanted.low));
+    CHECK_EQ(int(target.high), int(wanted.high));
 }
 
 TEST(storage_request_new_waits_for_the_command_ring) {
@@ -3144,12 +3189,14 @@ TEST(storage_every_refused_sample_leaves_the_loader_idle) {
 }
 
 TEST(storage_a_file_to_resample_longer_than_the_source_buffer_is_refused) {
-    // A file at another rate is converted whole into src_ before it is resampled, and src_ is
-    // sized for docs/SPEC.md's 30 s -- past that the spec says the file is streamed instead. So
-    // 33 s at 44.1 kHz (more frames than 30 s at 48 kHz) is refused with a reason, rather than
-    // written past the buffer.
+    // A file at another rate is converted whole into src_ before it is resampled, and src_ holds
+    // 30 s at kMaxSampleSourceRate (96 kHz): 2,880,000 frames. One frame more is refused with a
+    // reason rather than written past the buffer; exactly that many is fine. At 44.1 kHz that is
+    // about 65 s, as app/storage.hpp says. 8-bit mono keeps the file under the fake card's 4 MiB,
+    // and both files share one name so that only one is on the card at a time.
+    constexpr uint32_t kSrcFrames = 30u * 96000u;
     clean();
-    make_big_wav("/SAMPLES/LONG441.WAV", 44100, 1, 44100u * 33u);
+    make_big_wav("/SAMPLES/LONG441.WAV", 44100, 1, kSrcFrames + 1u);
     kit_sample(kLoopTrack, "/SAMPLES/LONG441.WAV");
     CHECK(load_sample(kLoopTrack));
     CHECK_EQ(storage().last_error(), "TOO LONG");
@@ -3157,14 +3204,13 @@ TEST(storage_a_file_to_resample_longer_than_the_source_buffer_is_refused) {
     CHECK_EQ(storage().loading_track(), -1);
     CHECK_EQ(slot_of(kLoopTrack).bytes, 0u);
 
-    // 29 s at the same rate is fine.
-    make_big_wav("/SAMPLES/OK441.WAV", 44100, 1, 44100u * 29u);
-    kit_sample(kLoopTrack, "/SAMPLES/OK441.WAV");
+    make_big_wav("/SAMPLES/LONG441.WAV", 44100, 1, kSrcFrames);
+    kit_sample(kLoopTrack, "/SAMPLES/LONG441.WAV");
     CHECK(load_sample(kLoopTrack));
     CHECK(storage().last_error() == nullptr);
     CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
 
-    storage().request_new();                    // and give the 2.5 MB back
+    storage().request_new();                    // and give the memory back
     CHECK(settle());
 }
 

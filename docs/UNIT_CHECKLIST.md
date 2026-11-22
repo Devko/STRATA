@@ -31,7 +31,7 @@ From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c
       optimization review. `scenario_m3.sh` cl6x now: `________ %` (unit/emulator ratio in 3)
 - [ ] For U5 (section 13b), the test file is ready in the project files, `unit-test/`:
       **`STRATA_1.WAV`**, a 15 s stereo 16-bit 96 kHz linear sweep from 100 Hz to 46 kHz at
-      -6 dBFS. Also there, `SWEEP_30S_96K.WAV`, the same sweep at 30 s (see 13b for why two).
+      -6 dBFS. Also there, `SWEEP_30S_96K.WAV`, the same sweep at 30 s, which now loads too (13b).
 
 The next four are BUDGET's emulator runs (`docs/BUDGET.md`, "Optimization review"). They are not
 needed for tonight's unit session; do them if the PC is free.
@@ -278,10 +278,10 @@ scene 7 in slot B (hold SCENE B + STEP 7), tempo **142.0**, key **D# MINOR**, tr
 Track 8's kit names the take from 8b (`/RECORD/STRATA_n.WAV`, `STRATA_1` on a card with no
 earlier takes). Swap that file for the 96 kHz sweep.
 
-**Why 15 s and not 30 s:** the loader's resample buffer holds 30 s of 48 kHz frames (1,440,000,
-`kSrcFrames` in `app/storage.hpp`), and it counts the file's own frames. So a 96 kHz file can be at
-most 15 s, and a 30 s one is refused with `TOO LONG`. That limit is in seconds of 48 kHz, not in
-seconds of the file. The 30 s file checks the refusal.
+**Both files load now.** The loader's limit is 30 s of the FILE's own length, up to 96 kHz
+(`kSrcFrames` in `app/storage.hpp` is 30 s of 96 kHz frames, 2,880,000; changed 2026-11-22 with
+Roland's OK). It used to be 30 s of 48 kHz frames, which refused the 30 s file `TOO LONG`. The
+15 s file is the timing run; the 30 s one checks that a full-length 96 kHz file loads.
 
 - [ ] Power off. Copy `unit-test/STRATA_1.WAV` from the project files over `/RECORD/STRATA_1.WAV`
       on the card (rename it if 8b showed another number). Card back, power on, start STRATA.
@@ -292,8 +292,9 @@ seconds of the file. The 30 s file checks the refusal.
 - [ ] Play it on SMP (FUNC+EDIT, track 8 to SMP, SLC down to 1): the sweep rises for about 8 s
       to 24 kHz and fades out of hearing well before that. In the second half it must stay
       silent: no falling tone coming back down. Back to GRN.
-- [ ] Optional: copy `SWEEP_30S_96K.WAV` over the same name instead and reload. It should say
-      `TOO LONG` and leave the track silent, with no hang.
+- [ ] Copy `SWEEP_30S_96K.WAV` over the same name instead and reload. It LOADS (no `TOO LONG`),
+      in about twice the 15 s file's time: `________ s`. The sweep now rises for about 16 s to
+      24 kHz and the second half stays silent, as above.
 
 ## 13c. U4: the delay tail (5 min, a good break)
 
@@ -358,7 +359,7 @@ Enaga's menu and start STRATA6.
 | A04 PEAK MAX, 60 s (3b) | |
 | GRAIN on track 8 MAX (8) | |
 | U3 GRAIN on the take, DEN/SPR 127: PIT 64 / PIT 127 (8b) | |
-| U5 15 s 96 kHz WAV load time (13b) | |
+| U5 96 kHz WAV load time, 15 s and 30 s (13b) | |
 | U4 delay tail: LOAD while ringing, time to drop (13c) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
@@ -592,9 +593,10 @@ project and never needs a restart."*
 - [ ] `tests/scenario_m3.sh` still passes: `app/engine.cpp` changed underneath it.
 - [ ] The app starts with no card in the slot. A first run with nothing to open must keep the
       built-in default pattern, not fail `init()`.
-- [ ] Memory: `Storage::init` takes 64 MiB for the region plus **18 MiB of staging** (`raw_`
-      11.5 MiB for one whole file, `src_` 5.8 MiB for a resample's source, both sized from
-      `docs/SPEC.md`'s own 30 s in-RAM limit). That is a fixed cost, not per sample. Confirm it
+- [ ] Memory: `Storage::init` takes 64 MiB for the region plus **27.5 MiB of staging** (`raw_`
+      16.5 MiB for one whole file, `src_` 11 MiB for a resample's source, both sized from
+      `docs/SPEC.md`'s own 30 s in-RAM limit, counted at up to 96 kHz). Host total 101.2 MiB
+      of a 120 MiB heap. That is a fixed cost, not per sample. Confirm it
       against the ~124 MiB app heap and record it in `docs/BUDGET.md`.
 
 **Projects**
@@ -633,8 +635,9 @@ project and never needs a restart."*
       and budget in MiB.
 - [ ] A 44.1 kHz file is resampled and plays at the right pitch. An 8-bit, 24-bit and 32-bit
       float file each load (`core/pcm` is host-tested; this is the wiring).
-- [ ] A file over 30 s at a rate other than 48 kHz says `TOO LONG` rather than loading a
-      fraction of itself.
+- [ ] A 96 kHz file of 30 s loads; one over 30 s says `TOO LONG` rather than loading a fraction
+      of itself. (Below 96 kHz the same buffer holds more than 30 s, so 44.1 kHz loads up to
+      about 65 s.)
 - [ ] **The swap, while the track is sounding.** Hold a sample playing and load another on the
       same track. The protocol is clear → wait for `Status::sample_epoch` → release → load →
       hand over, and the failure it prevents is audible garbage rather than a crash. If it ever
@@ -683,8 +686,8 @@ PERFORM and pattern changes, with no edit screens and no underruns."*
       loop at half rate.
 - [ ] Worst case with eight tracks AND a repeat held still under 60%. If it is not, this is the
       effect to cut first -- `docs/SPEC.md` ranks cutting effects above cutting voices.
-- [ ] The 2.93 MiB ring, plus M4's 64 MiB region and 18 MiB of staging, against the real heap.
-      85 MiB before anything else, and the staging was never in the spec's table.
+- [ ] The 2.93 MiB ring, plus M4's 64 MiB region and 27.5 MiB of staging, against the real heap.
+      About 95 MiB before anything else, and the staging was never in the spec's table.
 - [ ] Hold the pad through a tempo change: the loop length is derived from ticks, so it should
       follow without a click at the seam.
 - [ ] Hold it for four seconds and release: the mix resumes where the music actually is, not
@@ -1238,7 +1241,7 @@ while every counted voice is still waiting for its frame are dropped. Twelve is 
 core/pcm now filters a file above 48 kHz before resampling it, so content above 24 kHz no longer
 folds back as audible tones. It costs main-loop time at load, estimated and not measured.
 
-- [ ] Load a 15 s stereo 96 kHz WAV (the longest that loads; 30 s at 96 kHz is TOO LONG) and time it. Put the figure in docs/BUDGET.md, "Load time".
+- [ ] Load a 15 s and a 30 s stereo 96 kHz WAV (30 s of the file's own length now loads) and time them. Put the figure in docs/BUDGET.md, "Load time".
       The screen must keep drawing and the keys keep answering while it shows RESAMPLING.
 - [ ] Load a 96 kHz sweep that runs past 24 kHz and play it. Nothing should come back down as a
       falling tone after the sweep passes 24 kHz.
@@ -1398,9 +1401,19 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
 - [ ] **PERFORM, VALUE**: morphs from the kit (scene 1) to DUB (scene 2): chord, rim and blips into
       the sends with longer tails. Scenes 3 (DARK: filters close) and 4 (TENSION: the acid opens,
       hats and kick tighten) are there to assign to A or B.
-- [ ] **PERFORM, A-D: no macros ship.** An assigned macro holds its parameters at its own value
-      even at 0, so a shipped macro would freeze those EDIT knobs. Assign your own; the factory
-      leaves them empty on purpose (core/factory.cpp).
+- [ ] **PERFORM, B-D**: B ACID (bass cutoff, resonance, envelope), C DUB (chord and rim into the
+      delay and reverb), D DRIVE (kick longer and driven, both hats longer). Each must be audible
+      from the first detent, with no jump. A is empty on purpose: pad pressure bends macro A.
+- [ ] **A macro at 0 lets go, and sweeps from where the sound is** (2026-11-22). With ACID at 0,
+      turn BASS CUT in EDIT: it is heard. Turn ACID up: the cutoff opens from where you left it,
+      with no jump. Back to 0: your value is back. The same with the morph: morph fully to DUB,
+      then turn C up one detent: the chord's delay send must not drop.
+- [ ] **Assigning with the macro knob up** (STEP in PERFORM while the macro is not at 0): the
+      parameter moves at once to where the knob puts it -- the macro taking effect. The EDIT
+      value is not rewritten, and back at 0 the parameter is where it was.
+- [ ] **A project saved before this change** with macros may play them differently: a resting
+      macro used to hold its targets at `low`, and a moving one swept from `low`; now both start
+      from the kit value. Re-check any project you saved with macros before 2026-11-22.
 - [ ] **Mute states** 1-8: all, no kick, drums only, no hats, no bass, kick + bass, melodic parts
       only, the bare groove without rim and blips.
 - [ ] Anything that sounds wrong, say which and how: each value has its arithmetic in a comment

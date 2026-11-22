@@ -8,6 +8,7 @@ Synthesized drums and bass next to samples, a step sequencer with parameter lock
 conditions, and a performance layer for long, evolving live sets. Built as an
 [Enaga](https://github.com/seawaffle/enaga) app.
 
+[![CI](https://github.com/Devko/STRATA/actions/workflows/ci.yml/badge.svg)](https://github.com/Devko/STRATA/actions/workflows/ci.yml)
 ![Platform](https://img.shields.io/badge/platform-SmplTrek-informational)
 ![Runs on](https://img.shields.io/badge/runs%20on-Enaga%20v0.2.0-blueviolet)
 ![Language](https://img.shields.io/badge/C%2B%2B-20-blue)
@@ -165,6 +166,27 @@ tools/render.sh              # render the output to a WAV offline
   where a GCC build would crawl.
 - The live web panel runs at about 0.4× real time, so its sound breaks up. Use `tools/render.sh`
   to hear it properly.
+
+### Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request and every push
+to `main`:
+
+- `make -C host test`, the whole host suite with GCC, warnings as errors;
+- the same suite under AddressSanitizer and UBSan at `-O1` (`make -C host test SANITIZE=1`);
+- the font layout check over every screen (the `ui_layout_*` tests, run by name);
+- `tools/audit_commands.sh` and `tools/enaga_check.sh` (local checks only).
+
+**What CI does not run:** the device build, the emulator scenarios and every load figure. They
+need the tic6x cross toolchain and, for the real numbers, TI cl6x, which only exists on the
+maintainer's PC (its installer needs an interactive licence click). Run `tools/build.sh` and
+`tools/scenarios.sh` there after any DSP change, and record the figures in
+[docs/BUDGET.md](docs/BUDGET.md) as before.
+
+A weekly job ([`enaga-upstream.yml`](.github/workflows/enaga-upstream.yml)) runs
+`tools/enaga_check.sh --upstream` and opens an issue when Enaga has a newer release or a commit
+touching the app API. It never moves the pin: see [docs/HANDOFF.md](docs/HANDOFF.md), "Moving
+the Enaga pin".
 
 ### Layout
 

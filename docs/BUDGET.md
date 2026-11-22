@@ -953,7 +953,7 @@ scene or knob really did move: those prepare as before.
 | E2 | VA POLY per voice, after | MIN7 vs MIN11 in `build_default_beat`, `scenario_m3.sh`, both compilers | does 2.16 (cl6x) / 3.82 (GCC) move? |
 | E3 | The app's real worst case | temporarily set four tracks to `va_poly` with MIN11 chords in `build_default_beat`; then six; then eight | where it crosses 60% and where it overruns: sizes the voice budget in finding 1 |
 | E4 | The prepare memo's share | `scenario_m5.sh` (scenes and macros move parameters, so it prepares more) against `scenario_m3.sh` | the gap between them, before and after |
-| E5 | Load time of a 15 s 96 kHz stereo WAV (the longest that loads: `kSrcFrames` is 30 s of 48 kHz frames, counted at the file's rate) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
+| E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
 
@@ -963,7 +963,7 @@ scene or knob really did move: those prepare as before.
 | U2 | MAX with the chord at MIN11 (six voices), then with tracks 5 and 6 also switched to VA POLY playing chords | per-voice cost on the unit; where it overruns |
 | U3 | GRAIN on a multi-second sample, DEN 127, SPR 127, at PIT 64 and at PIT 127 with a high note | the DDR cost of high-pitch grains (finding 6) |
 | U4 | Delay FBK at max, TIM 1/1, one hit, then silence | LOAD stays up while the tail rings and drops when it ends |
-| U5 | Load a 15 s 96 kHz stereo WAV (`unit-test/STRATA_1.WAV` in the project files; 30 s at 96 kHz is refused TOO LONG) | seconds to playable; whether the screen or keys stall during it |
+| U5 | Load a 15 s 96 kHz stereo WAV (`unit-test/STRATA_1.WAV` in the project files; `SWEEP_30S_96K.WAV`, 30 s, now loads as well) | seconds to playable; whether the screen or keys stall during it |
 
 ### Later milestones
 
@@ -985,14 +985,15 @@ what the code asks for in `init()`; the image figures are read off the linked EL
 **The 85 MiB does fit.** The emulator boots the app to `APP RUNNING` rather than `APP INIT
 FAILED`, and `App::init` returns false if any of those allocations fails -- so all three
 scenarios passing is also the memory check. It is still worth re-checking on the unit, where the
-heap is the real one. M4 and M5 together take 64 MiB for the sample region, 18 MiB of loader staging and 2.93 MiB
-for the beat-repeat ring, which is 85 MiB before anything else, against a spec table that did not
+heap is the real one. M4 and M5 together take 64 MiB for the sample region, 27.5 MiB of loader staging (18 MiB before
+2026-11-22, when the 30 s limit became 30 s of a file at up to 96 kHz) and 2.93 MiB
+for the beat-repeat ring, which is 94.5 MiB before anything else, against a spec table that did not
 count the staging at all.
 
 | Use | Budget | Measured |
 | --- | --- | --- |
 | Samples, int16 (32 MiB default, 64 MiB ceiling) | 32-64 MiB | **64 MiB** reserved at init, from the heap. The CEILING, not the default: a project may raise its budget long after `init()` is over, and CLAUDE.md allows no allocation after it |
-| Sample loader staging (M4) | not budgeted | **18 MiB**, from the heap: 11.5 MiB for one whole file (`files::load` wants a buffer for all of it) and 5.8 MiB for a resample's int16 source. Both sized from `docs/SPEC.md`'s own 30 s in-RAM limit, and a FIXED cost rather than a per-sample one. **This is the figure most worth checking against the heap on the unit** -- it was not in the spec's table and 64 + 18 is 82 MiB of the ~124 MiB |
+| Sample loader staging (M4) | not budgeted | **27.5 MiB**, from the heap: 16.5 MiB for one whole file (`files::load` wants a buffer for all of it; 30 s of 96 kHz stereo 24-bit plus 64 KiB of chunks) and 11 MiB for a resample's int16 source (30 s of 96 kHz stereo). Sized from `docs/SPEC.md`'s own 30 s in-RAM limit counted in the FILE's length, and a FIXED cost rather than a per-sample one. Was 18 MiB when the limit was counted in 48 kHz frames. `tests/test_memory.cpp`: init is 101.2 MiB of a 120 MiB heap, 18.8 MiB spare against an 8 MiB headroom rule. **Worth checking against the heap on the unit** -- 64 + 27.5 is 91.5 MiB of the ~124 MiB |
 | Beat repeat ring (2 bars at 60 BPM, stereo float) | 2.93 MiB | **2.93 MiB** (3,072,000 bytes) reserved at init. Below 60 BPM the ring holds less than two bars, which costs nothing: the longest loop offered is a quarter note, 3 s even at 20 BPM |
 | Delay and reverb buffers | 2 MiB | |
 | Patterns, kit, scenes, 16 undo levels | 2 MiB | **~148 KiB** so far: 17 whole-pattern undo snapshots (~140 KiB) plus the live pattern and the clipboard. In bss, not the heap |

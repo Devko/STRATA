@@ -7,8 +7,8 @@
 # (third_party/enaga/tools/emulate.py). docs/SPEC.md puts seven of M5's eight tools on the upper
 # PADS: FILL, REPEAT, MUTE mode, scene A and B select, THROW and MUTATE. **None of them can be
 # driven by this harness at all.** Of what is left on keys, a scene capture and a macro
-# assignment are both inaudible by themselves -- a macro at position 0 produces its `low` value,
-# which is the parameter it was assigned from -- and moving a macro or the morph needs an
+# assignment are both inaudible by themselves -- a macro at position 0 writes nothing and leaves
+# the parameter to its knob (core/perform.hpp) -- and moving a macro or the morph needs an
 # encoder, which `emulate.py` also cannot drive.
 #
 # So this scenario cannot show the performance layer performing. Verifying that needs either pad

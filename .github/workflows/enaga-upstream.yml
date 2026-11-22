@@ -1,0 +1,63 @@
+# Weekly: has Enaga (or the emulator) moved past the pin? tools/enaga_check.sh --upstream exits
+# 3 when there is a newer release or a commit touching what an app is built from. This opens an
+# issue with the report; it never moves the pin, which follows docs/HANDOFF.md, "Moving the
+# Enaga pin", and has to match the firmware on the unit.
+name: Enaga upstream
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  upstream:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0   # the report counts commits since the pin, so no shallow submodule
+
+      - name: Emulator clone at the pin
+        run: |
+          source tools/env.sh
+          git clone --quiet "$STRATA_EMULATOR_URL" third_party/smpltrek-re
+          git -C third_party/smpltrek-re checkout --quiet "$STRATA_EMULATOR_COMMIT"
+
+      - name: Compare with upstream
+        id: check
+        run: |
+          set +e
+          tools/enaga_check.sh --upstream > report.txt 2>&1
+          code=$?
+          cat report.txt
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" -eq 0 ] || [ "$code" -eq 3 ]
+
+      - name: Open an issue when upstream has moved
+        if: steps.check.outputs.code == '3'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "Enaga upstream has moved past the pin"
+        run: |
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" --json number --jq '.[0].number')
+          {
+            echo "The weekly \`tools/enaga_check.sh --upstream\` run found something new."
+            echo "Moving the pin is a decision: see docs/HANDOFF.md, \"Moving the Enaga pin\". It must match the firmware on the unit."
+            echo
+            echo '```text'
+            cat report.txt
+            echo '```'
+            echo
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > body.md
+          # One open issue, kept current: edit its body rather than comment every week.
+          if [ -n "$open" ]; then
+            gh issue edit "$open" --repo "$GITHUB_REPOSITORY" --body-file body.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file body.md
+          fi

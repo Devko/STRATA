@@ -953,11 +953,12 @@ void Engine::apply(const Command &command) {
                 macro.targets[slot].enabled = 1;
                 macro.targets[slot].track = uint8_t(track);
                 macro.targets[slot].param = command.b;
-                // Through the parameter's current value at the knob's current position, so
-                // assigning does not move the sound (core/perform.hpp, macro_range_through).
-                // `c` is that value and `d` the end the macro heads for.
-                macro_range_through(command.c, command.d, macro_position_[command.a],
-                                    macro.targets[slot].low, macro.targets[slot].high);
+                // From the parameter's value now to the end the macro heads for. `c` is that
+                // value and `d` the end. A macro sweeps from the LIVE value (core/perform.hpp), so
+                // `low` is a record for the screen; with the macro knob already up, the parameter
+                // goes straight to where the knob puts it, which is the macro taking effect.
+                macro.targets[slot].low = command.c > 127 ? uint8_t(127) : command.c;
+                macro.targets[slot].high = command.d > 127 ? uint8_t(127) : command.d;
                 perform_dirty_ = true;
             }
             break;

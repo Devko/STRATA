@@ -1091,3 +1091,37 @@ TEST(perform_a_macro_target_naming_track_or_param_one_past_the_end_is_dropped_wh
         CHECK_EQ(int(target.high), 127);
     }
 }
+
+TEST(macro_apply_sweeps_from_the_live_value_and_writes_nothing_at_rest) {
+    // The knob owns the parameter while the macro rests, and the sweep starts from wherever the
+    // parameter is -- not from the stored `low` (core/perform.hpp).
+    Macro macro{};
+    macro.targets[0] = MacroTarget{1, 2, 3, 100, 20};
+    uint8_t out[kTracks][kKitParams] = {};
+    out[2][3] = 77;
+    macro_apply(macro, 0, out);
+    CHECK_EQ(int(out[2][3]), 77);
+    for (int at = 0; at <= 127; at++) {
+        out[2][3] = 77;
+        macro_apply(macro, uint8_t(at), out);
+        CHECK_EQ(int(out[2][3]), int(macro_value_from(77, macro.targets[0], uint8_t(at))));
+    }
+    // No jump off 0: one detent moves at most one value (here the 57-value span rounds to 0).
+    out[2][3] = 77;
+    macro_apply(macro, 1, out);
+    CHECK_EQ(int(out[2][3]), 77);
+    out[2][3] = 77;
+    macro_apply(macro, 64, out);
+    CHECK_EQ(int(out[2][3]), 48);
+    out[2][3] = 77;
+    macro_apply(macro, 127, out);
+    CHECK_EQ(int(out[2][3]), 20);
+    // Monotone from live to high, with no step larger than the span allows.
+    int last = 77;
+    for (int at = 1; at <= 127; at++) {
+        const int v = int(macro_value_from(77, macro.targets[0], uint8_t(at)));
+        CHECK(v <= last && last - v <= 1);
+        last = v;
+    }
+}
+

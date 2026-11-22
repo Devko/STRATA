@@ -558,7 +558,7 @@ int Storage::progress() const {
         // (That is the same failure seawaffle/enaga#1 fixes from the other side, and
         // core/pcm.cpp hand-writes div_u64 rather than divide 64-bit for the same reason.)
         //
-        // Both products fit: frames are capped at kSrcFrames (1,440,000) and at the 24 bits
+        // Both products fit: frames are capped at kSrcFrames (2,880,000) and at the 24 bits
         // Cmd::set_sample carries (16,777,215), so times 100 they stay inside a uint32_t.
         case Job::sample_convert:
             return src_frames_ == 0 ? 0 : int(src_done_ * 100u / src_frames_);
@@ -1275,8 +1275,9 @@ void Storage::step_sample_convert() {
             out_frames_ = src_frames_;
         } else {
             // A resample reads the whole converted source, so it has to fit in src_. That buffer
-            // is sized from docs/SPEC.md's own limit -- streams take over above 30 s -- so a file
-            // that does not fit is one the spec says should have been a stream.
+            // is sized from docs/SPEC.md's own limit -- streams take over above 30 s -- counted
+            // in the FILE's frames at up to 96 kHz (app/storage.hpp), so a file that does not
+            // fit is longer than 30 s of itself and one the spec says should have been a stream.
             if (src_frames_ > kSrcFrames) {
                 pool_.fail(track);
                 sample_track_ = -1;

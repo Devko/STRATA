@@ -151,8 +151,10 @@ TEST(memory_init_is_what_the_budget_says) {
     // app/storage: the sample region at its CEILING (a project may raise its budget after
     // init), the loader's float and int16 staging, and one project file.
     const uint64_t region = uint64_t(kSampleBudgetMaxMib) * kMiB;
-    const uint64_t raw = uint64_t(kMaxSampleSeconds) * 48000u * 2u * 4u;      // stereo f32
-    const uint64_t src = uint64_t(kMaxSampleSeconds) * 48000u * 2u * 2u;      // stereo s16
+    // 30 s of the FILE at up to 96 kHz (app/storage.hpp): stereo 24-bit plus 64 KiB of header
+    // and trailing chunks as read, stereo int16 as converted for the resample.
+    const uint64_t raw = uint64_t(kMaxSampleSeconds) * kMaxSampleSourceRate * 2u * 3u + 65536u;
+    const uint64_t src = uint64_t(kMaxSampleSeconds) * kMaxSampleSourceRate * 2u * 2u;
     const uint64_t file = kBankMaxBytes;
 
     // app/engine: the beat-repeat ring (stereo float) and the resample take (stereo int16 plus

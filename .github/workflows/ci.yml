@@ -1,0 +1,73 @@
+# Host-side CI: everything that runs without cl6x, the cross toolchain or the emulator.
+#
+# What does NOT run here, and why: the device build (tools/build.sh) needs the tic6x GCC
+# toolchain (~30 min to build) and, for the real figures, TI cl6x, whose installer needs an
+# interactive licence click and exists only on Roland's PC. The emulator scenarios
+# (tools/scenarios.sh) and every load figure in docs/BUDGET.md depend on that build. Those stay
+# manual: see README.md, "Continuous integration".
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-tests:
+    name: Host tests (GCC)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build and run the suite
+        run: make -C host test -j"$(nproc)"
+
+      # The ui_layout_* tests are in the suite above; run them again by name so a broken screen
+      # shows up as its own failed step instead of one line among thousands.
+      - name: Font layout check (every screen)
+        run: |
+          tests=$(build/host/strata-tests --list | grep '^ui_layout_')
+          [ -n "$tests" ] || { echo "no ui_layout_ tests found"; exit 1; }
+          for t in $tests; do
+            echo "== $t"
+            build/host/strata-tests --only "$t"
+          done
+
+  sanitizers:
+    name: Host tests (ASan + UBSan)
+    runs-on: ubuntu-24.04
+    env:
+      # BeatRepeat's ring is allocated in init() and never freed, by design (docs/HANDOFF.md).
+      ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build and run the suite under ASan and UBSan at -O1
+        run: make -C host test -j"$(nproc)" SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan"
+
+  checks:
+    name: Repo checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Every command is posted and handled
+        run: tools/audit_commands.sh
+
+      - name: Enaga pin (local checks, no upstream)
+        run: tools/enaga_check.sh
