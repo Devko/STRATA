@@ -92,7 +92,9 @@ lane_checks() {
     tools/audit_commands.sh || ok=1
     tools/enaga_check.sh || ok=1
     python3 -B tests/test_package_release.py || ok=1
-    for f in tools/publish_release.sh tools/ci_local.sh tools/test_shards.sh tools/ci_changes.sh; do
+    python3 -B tests/test_enaga_cached.py || ok=1
+    for f in tools/publish_release.sh tools/ci_local.sh tools/test_shards.sh tools/ci_changes.sh \
+             tools/scenarios.sh tools/build.sh; do
         bash -n "$f" || { echo "does not parse: $f"; ok=1; }
     done
     return $ok
