@@ -4031,6 +4031,17 @@ public:
                     }
                     if (length == 0) return true;
                     chain_clamp_cursor();
+                    // A removal is not undoable, so it takes a second press within kSaveArmMs
+                    // on the same entry, as FUNC+LEFT's reload does on the other PROJECT pages
+                    // (Roland, 2026-11-22).
+                    if (chain_remove_armed_ != chain_cursor_ ||
+                        uint32_t(last_ms_ - chain_remove_armed_at_ms_) >= kSaveArmMs) {
+                        chain_remove_armed_ = chain_cursor_;
+                        chain_remove_armed_at_ms_ = last_ms_;
+                        notice("AGAIN TO REMOVE");
+                        return true;
+                    }
+                    chain_remove_armed_ = -1;
                     post_chain(ChainEdit::remove, chain_cursor_);
                     if (chain_cursor_ > 0 && chain_cursor_ >= length - 1) chain_cursor_--;
                     notice("ENTRY REMOVED");
@@ -4574,6 +4585,8 @@ private:
     int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
     bool save_armed_ = false;      // F1 + F3 once; the second press within kSaveArmMs saves
     uint32_t save_armed_at_ms_ = 0;
+    int chain_remove_armed_ = -1;                 // CHAIN's F1 + LEFT, armed on this entry
+    uint32_t chain_remove_armed_at_ms_ = 0;
     CardAction card_armed_ = CardAction::none;   // F1 + LEFT / RIGHT in PROJECT, armed once
     uint32_t card_armed_at_ms_ = 0;
     int kit_cursor_ = 0;                        // KIT: the slot under the cursor, 0-15

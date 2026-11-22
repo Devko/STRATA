@@ -2947,8 +2947,22 @@ TEST(ui_the_chain_page_sets_mute_recalls_and_song_mode) {
     CHECK(!enaga::clock::running());
     CHECK_EQ(UiProbe::notice(app), "SONG END");
 
-    // Back as it was, for the tests after this one.
+    // FUNC + LEFT removes an entry only on a second press (Roland, 2026-11-22): not undoable.
     shift_key(ENAGA_KEY_RIGHT);
+    shift_key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(chain_length(project), 2);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN TO REMOVE");
+    // Too late: past two seconds the first press is forgotten and this one only arms again.
+    pump(2100);
+    shift_key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(chain_length(project), 2);
+    shift_key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(chain_length(project), 1);
+    CHECK_EQ(UiProbe::notice(app), "ENTRY REMOVED");
+    // Back as it was, for the tests after this one.
     for (int i = 0; i < 2; i++) {
         shift_key(ENAGA_KEY_LEFT);
         pump(2);
@@ -2998,6 +3012,9 @@ TEST(ui_the_chain_page_builds_a_chain_that_plays) {
     key(ENAGA_KEY_UP);
     CHECK_EQ(UiProbe::chain_cursor(app), 0);
     the_app().on_key(ENAGA_KEY_F1, true);
+    key(ENAGA_KEY_LEFT);                              // the first press only arms it
+    pump(2);
+    CHECK_EQ(chain_length(project), 2);
     key(ENAGA_KEY_LEFT);
     the_app().on_key(ENAGA_KEY_F1, false);
     pump(2);
@@ -3016,6 +3033,7 @@ TEST(ui_the_chain_page_builds_a_chain_that_plays) {
     // Removing every entry turns it off rather than leaving it following nothing.
     for (int i = 0; i < 2; i++) {
         the_app().on_key(ENAGA_KEY_F1, true);
+        key(ENAGA_KEY_LEFT);
         key(ENAGA_KEY_LEFT);
         the_app().on_key(ENAGA_KEY_F1, false);
         pump(2);
