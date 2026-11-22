@@ -75,7 +75,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | Upper 3 MUTE | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
 | Upper 6 THROW | Delay throw while held | FUNC: reverb throw |
-| Upper 7 MUTATE | Mutates the selected track (type and amount set in PERFORM) | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT. FUNC (hold): delay freeze, the echoes loop and nothing new goes in (`FREEZE`, `FRZ` on PERFORM's bar line) |
+| Upper 7 MUTATE | Mutates the selected track (type and amount set in PERFORM) | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT, KIT and SAMPLES, and not while a STEP, a range or a scene pad is held or in RESAMPLE, where OK and CLR keep their own jobs. Any other edit also keeps it. FUNC (hold): delay freeze, the echoes loop and nothing new goes in (`FREEZE`, `FRZ` on PERFORM's bar line) |
 
 ## Step editing (GRID, EDIT, MIXER, MACHINE, RESAMPLE)
 
@@ -84,7 +84,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | Tap STEP | Toggle trig. FUNC + tap: toggle trigless (locks, no note) |
 | Octave L/R | Step page 1-4 (64 steps) |
 | Hold STEP + turn A-D | Lock that parameter of the current EDIT page on the step |
-| Hold STEP + push A-D | Remove that one lock (LOCK CLEARED) |
+| Hold STEP + push A-D | Remove that one lock (LOCK CLEARED). With FUNC also held, push D is still the tape stop |
 | Hold STEP + turn VALUE | Set the step's note |
 | Hold STEP + OK | Open the step page on that step |
 | Hold STEP + CLR | Clear the step |
@@ -119,7 +119,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Macros A-D | Capture scene / clear macro | UP/DOWN: auto-fill OFF 4 8 16 |
 
 **KEYS:** STEP 1-16 play the scale from the root and hold the note until released; octave keys also change the octave. Letting go also releases that note if the sequencer is playing it on the same track.
-**PROJECT:** STEP 1-16 queue that slot of the shown bank. On the slots and SETUP pages, FUNC+LEFT
+**PROJECT:** STEP 1-16 queue that slot of the shown bank. On the slots, SETUP and PROJECTS pages, FUNC+LEFT
 reloads the project from the card and FUNC+RIGHT starts a new one; both throw away unsaved work, so
 each needs a second press within 2 s (AGAIN TO RELOAD, AGAIN FOR NEW). The octave keys walk the pages PROJECT,
 CHAIN, PATTERN, SETUP, PROJECTS; CLR on any of them goes back to the slots. In SETUP, A sets the record
@@ -130,7 +130,7 @@ FUNC+DOWN is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the chara
 under that name (NAME TAKEN if another project has it), CLR cancels. FUNC+UP reads the card again.
 **CHAIN:** a STEP key puts that slot of the shown bank into the entry under the cursor (or starts
 the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playing pattern when
-empty), up to 64 entries. B recalls a mute state as the entry starts; FUNC+RIGHT: SONG plays
+empty), up to 64 entries. FUNC+LEFT removes the entry at once (no second press, not undoable); FUNC+DOWN reloads the selected track's sample, as on the slots. B recalls a mute state as the entry starts; FUNC+RIGHT: SONG plays
 the chain once and stops (`SONG END`), LOOP repeats it. Chain edits are not undoable.
 **PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
 (END) and the chain wait for. The eight TRACK SWING fields read `PAT` (follow SWG) or 50-75%: C
