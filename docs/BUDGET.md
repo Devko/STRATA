@@ -965,6 +965,15 @@ scene or knob really did move: those prepare as before.
 | U4 | Delay FBK at max, TIM 1/1, one hit, then silence | LOAD stays up while the tail rings and drops when it ends |
 | U5 | Load a 15 s 96 kHz stereo WAV (`unit-test/STRATA_1.WAV` in the project files; `SWEEP_30S_96K.WAV`, 30 s, now loads as well) | seconds to playable; whether the screen or keys stall during it |
 
+### Sampling from the input (2026-11-22): unmeasured, expected negligible
+
+`Engine::process` now runs `strata_master_peak` over the input block every block (128 floats,
+for the RESAMPLE meter), and a take from the input converts `in` instead of `out` -- the same
+conversion a master take already does. No voice, filter or effect is added. Not yet measured:
+add `scenario_m3.sh` both ways after this change to the next emulator session (the emulator
+cannot select an input route, so the conversion path is only reachable on the unit: section 8c
+of the walkthrough asks for MAX while recording from the input).
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |

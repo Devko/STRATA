@@ -109,7 +109,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | KIT | Slot | Page of 8 slots | Page of 8 slots | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
 | MIXER | — | Page (6) | Page | Levels or page fields | — / clear | Copy / paste |
 | SAMPLES | Entry | Page of 8 | Page of 8 | A: entry | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
-| RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | A: bars | Arm / cancel | Copy / paste |
+| RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | UP: chain on/off, DOWN: reload track's sample, LEFT: reload project, RIGHT: new project |
 | CHAIN | Entry | Entry's pattern -/+ | Bank A-H | A: repeats X1-X16 | Add entry / back | LEFT: remove entry, UP: chain on/off |
 | PATTERN | Change field -/+ | Field LEN / SWG | Bank A-H | A: LEN 1-64, B: SWG | — / back | UP: chain on/off |
@@ -167,6 +167,7 @@ folders are listed (no `._` files), at most 256 a folder. Picking a file makes t
 | MIXER | `T1 M`, `ON`/`--`, `PEAK` | Track muted; machine present; master peak |
 | SAMPLES | `/SAMPLES/KICKS`, `>K1.WAV`, `LOOPS/`, `NOW K1.WAV`, `3/40 +2` | Folder (or `READING FOLDER`, `NOT FOUND`, `NO CARD`, the load's progress); cursor; a folder; the track's file; position, count, entries left out |
 | RESAMPLE | `TO FILE`, `ARMED`, `REC 40%`, `WRITING`, `LAST name` | Destination and take state |
+| RESAMPLE | `FROM MASTER`, `FROM LINE NORM`, `IN` / `CLIP` + bar, `MIC NEEDS HEADPHONES`, `INPUT REFUSED` | Take source (MASTER LINE, LINE L, MIC, DYN MIC, HI-Z) and input level (LOW NORM HIGH); the input meter; the mic is silent without headphones; Enaga refused the route |
 
 ## Abbreviations
 

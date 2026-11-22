@@ -212,6 +212,19 @@ Resampling gives track 8 a multi-second sample without a file browser, and check
       **MAX `________ %`** Over PIT 64 by `________` points (the DDR cost of high-pitch grains).
 - [ ] Leave track 8 on GRN for section 13.
 
+## 8c. Sampling from the input (5 min)
+
+New 2026-11-22. A synth, a phone or anything with a line out into INPUT L/R.
+
+- [ ] FUNC+REC, then B: `FROM LINE NORM` and a meter. Play the source: the meter moves; turn C
+      until it stays short of `CLIP`. Level used: `________`
+- [ ] `TO TRK 8` (or FILE), OK, PLAY: the take starts on the bar, writes, and track 8 plays the
+      source alone, not the beat. Clean start and end? `________`
+- [ ] B through LINE L, MIC, DYN MIC, HI-Z: each routes (no `INPUT REFUSED`); MIC with no
+      headphones says `MIC NEEDS HEADPHONES` and records silence, with headphones it records.
+      Which routes worked: `________`
+- [ ] B back to MASTER: a take is the beat again. MAX while recording from the input `________ %`
+
 ## 9. KEYS: a held key sustains (3 min)
 
 Select track 7 (VA POLY), EDIT AMP page, DEC up high. FUNC+HOME for KEYS.
@@ -1430,6 +1443,18 @@ The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SE
 - [ ] `/SAMPLES` missing on the card: an error line (`NOT FOUND`), CLR still reaches `RECORD/`.
       (The host fake answers NOT FOUND for a missing folder; Enaga's real answer is unverified.)
 - [ ] A long name is cut to the line, and `_` shows as `-`.
+
+## RESAMPLE from the audio input (B: source, C: level)
+
+- [ ] Every route Enaga offers records what is plugged into it: LINE stereo keeps L and R apart,
+      LINE L puts INPUT L on both sides, HI-Z and DYN MIC take their jacks, MIC needs headphones.
+      Enaga's input routes "have not been checked route by route" (SPEC), so a route that fails
+      is an Enaga report, with the route and the level.
+- [ ] The meter tracks the input and reads `CLIP` at full scale; the recorded file is the input
+      at the level shown, nothing of STRATA's own output in it.
+- [ ] Turning B or C during a take does not change the take's source (it is fixed at the arm),
+      and the 10 ms gap of a route change is not in a take armed afterwards.
+- [ ] After leaving STRATA, Enaga's own input setting is back to LINE, NORMAL.
 
 ## Factory content: audition list (2026-11-22)
 
