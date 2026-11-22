@@ -3029,6 +3029,50 @@ TEST(ui_the_lfo_is_edits_fifth_page) {
     key(ENAGA_KEY_F4);
 }
 
+TEST(ui_the_arp_is_edits_sixth_page_and_keys_play_it) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                // EDIT, track 1
+    while (UiProbe::param_page(app) != int(Page::arp)) key(ENAGA_KEY_SELECT_RIGHT);
+    check_layout(app, "EDIT ARP, off");
+
+    // One click is one zone on A, B and C: MOD UP, RAT one faster, OCT 2.
+    app.on_encoder(0, +1);
+    app.on_encoder(1, +1);
+    app.on_encoder(2, +1);
+    pump();
+    const TrackParams &p = app_engine().params(0);
+    CHECK_EQ(arp_mode_index(p.v[kArpFirst + 0]), int(ArpMode::up));
+    CHECK_EQ(arp_rate_index(p.v[kArpFirst + 1]), 1);
+    CHECK_EQ(arp_octaves(p.v[kArpFirst + 2]), 2);
+    check_layout(app, "EDIT ARP, on");
+
+    // The widest words the page can show: every mode, rate, octave count and gate.
+    for (int b = 0; b < 128; b += 3) {
+        for (int i = 0; i < kArpParams; i++) post_cmd_track_param(0, uint8_t(kArpFirst + i), uint8_t(b));
+        pump();
+        check_layout(app, "EDIT ARP, every value");
+    }
+
+    // KEYS: a key held on a track whose arp is on starts it; the key coming up stops it.
+    post_cmd_track_param(0, uint8_t(kArpFirst + 0), 22);      // UP
+    pump();
+    shift_key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+    app.on_key(ENAGA_KEY_STEP1, true);
+    pump(2);
+    CHECK(app_engine().arp_running(0));
+    app.on_key(ENAGA_KEY_STEP1, false);
+    pump(2);
+    CHECK(!app_engine().arp_running(0));
+
+    // Off again, and back to SRC for the tests after this one.
+    for (int i = 0; i < kArpParams; i++) post_cmd_track_param(0, uint8_t(kArpFirst + i), 0);
+    pump();
+    key(ENAGA_KEY_F8);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_arrows_in_edit_keys_perform_machine_and_resample) {
     Strata &app = fresh();
 
