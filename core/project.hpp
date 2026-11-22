@@ -86,24 +86,29 @@ static_assert(int(MachineId::count) == kMachines,
 // The three-letter name for the screen, or "---" for an id this build does not have.
 const char *machine_name(uint8_t id);
 
-// Does this machine read a step's note as a PITCH IN THE KEY, so the sequencer should fold the
+// Does this track read a step's note as a PITCH IN THE KEY, so the sequencer should fold the
 // note into the scale before it arrives?
 //
 // docs/SPEC.md: "melodic tracks fold notes into the scale". That sentence needs a notion of
-// which tracks are melodic, and this is it -- the two VAs and nothing else:
+// which tracks are melodic, and this is it:
 //
+//   - The two VAs and GRAIN always fold. They read `note` as a pitch, and a part written on
+//     them is a melody.
+//   - SAMPLE folds only when it is UNSLICED (SLC = 1), where the note transposes the whole
+//     window and the track plays like an instrument. With SLC > 1 the note picks the SLICE, and
+//     folding it would play a different slice -- not a musical operation at all -- so a sliced
+//     sample never folds. Roland's decision, 2026-11-22.
 //   - The DRUM machines read `note` as a pitch too (dsp/kick.cpp tunes the body from it), but
 //     folding it would RETUNE them: a kick written at D on a C minor track would move, and
 //     nobody writing a drum part is thinking in degrees.
-//   - SAMPLE and GRAIN read it as a transposition, and on SAMPLE it also picks the slice. A
-//     fold there would move a sliced one-shot to a different slice, which is not a musical
-//     operation at all. Whether a sample track used melodically should fold is a real question
-//     and an open one; docs/UNIT_CHECKLIST.md carries it.
 //
-// Here rather than in the engine because it is a property of the machine, and core/ is where
-// `MachineId` lives. An id this build does not have is not melodic -- it plays nothing anyway.
-constexpr bool machine_is_melodic(uint8_t id) {
-    return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly);
+// `slices` is the Sampler's slice count as its last `prepare` derived it (locks and scenes
+// included); it is read only for SAMPLE. Here rather than in the engine because it is a property
+// of the machine, and core/ is where `MachineId` lives. An id this build does not have does not
+// fold -- it plays nothing anyway.
+constexpr bool machine_folds_note(uint8_t id, int slices) {
+    return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly) ||
+           id == uint8_t(MachineId::grain) || (id == uint8_t(MachineId::sample) && slices <= 1);
 }
 
 // A sample path, including its terminator. Enaga's paths are absolute and UTF-8

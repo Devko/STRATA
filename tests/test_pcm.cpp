@@ -540,6 +540,10 @@ TEST(conversion_refuses_what_it_cannot_decode) {
     CHECK_EQ(pcm_to_s16(bytes, 8, PcmFormat::s16, 0, out, 4), 0u);
     CHECK_EQ(pcm_to_s16(bytes, 8, PcmFormat::s16, -2, out, 4), 0u);
     CHECK_EQ(pcm_to_s16(bytes, 0, PcmFormat::s16, 1, out, 4), 0u);
+    // More channels than WAV can state, and -- the one that matters -- a count big enough to
+    // overflow the frame size to zero, which without the refusal is a division by zero.
+    CHECK_EQ(pcm_to_s16(bytes, 8, PcmFormat::s16, 65536, out, 4), 0u);
+    CHECK_EQ(pcm_to_s16(bytes, 8, PcmFormat::s32, 1073741824, out, 4), 0u);
     for (int i = 0; i < 4; i++) CHECK_EQ(out[i], 7);      // and wrote nothing while refusing
 }
 

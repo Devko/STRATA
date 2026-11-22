@@ -13,7 +13,7 @@ Reproducing it costs nothing and removes the argument, which is the better trade
 ## Enaga
 
 The app platform STRATA runs on. Vendored as a git submodule at `third_party/enaga`, pinned at
-commit `1b41111`, and **never modified** (`CLAUDE.md`). Its headers and its DSP library are
+release `v0.2.0` (commit `3da7f89`), and **never modified** (`CLAUDE.md`). Its headers and its DSP library are
 compiled into a released `APP.ENA`, so a release distributes Enaga's code as well as STRATA's.
 
 <https://github.com/seawaffle/enaga>
