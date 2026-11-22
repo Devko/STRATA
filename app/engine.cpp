@@ -1107,6 +1107,19 @@ void Engine::apply(const Command &command) {
             apply_mixer_bytes();
             break;
 
+        case Cmd::eq_kill: {
+            if (command.a >= uint8_t(kKillBands) || command.b > 2) {
+                status_.bump_refused();
+                break;
+            }
+            const uint8_t bit = uint8_t(1u << command.a);
+            uint8_t &kills = project_.settings.eq_kills;
+            kills = command.b == 0 ? uint8_t(kills & ~bit)
+                                   : (command.b == 1 ? uint8_t(kills | bit) : uint8_t(kills ^ bit));
+            apply_mixer_bytes();
+            break;
+        }
+
         case Cmd::set_quantize: {
             // The live-record quantize amount, 0-100. It lived in `app/` alone, so it was lost
             // on every restart and absent from the file even though PROJECT.BIN has a field for
@@ -1199,6 +1212,7 @@ void Engine::apply_mixer_bytes() {
 
     sends_from_bytes(sends_, settings.sends, beat_seconds);
     master_from_bytes(master_, settings.master);
+    master_.kills = uint8_t(settings.eq_kills & kKillAll);
     // `Mixer::prepare` compares against what it last resolved, so an unchanged struct costs one
     // comparison and a changed one redesigns only what moved. Nothing to do here but hand it
     // over on the next block.
