@@ -33,7 +33,7 @@ STAGE="$ENAGA_BUILD/stage/STRATA"
 LOG="$ENAGA_BUILD/scenario_m0.log"
 
 echo "running the emulator for $CYCLES cycles ..."
-python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" > "$LOG" 2>&1 || {
+python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
     exit 1

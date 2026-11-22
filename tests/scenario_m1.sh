@@ -45,7 +45,7 @@ LOG="$ENAGA_BUILD/scenario_m1.log"
 
 echo "running the emulator for $CYCLES cycles, PLAY at $PLAY_AT ..."
 # Key 22 is ENAGA_KEY_F5, which STRATA maps to PLAY.
-python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" --key "22@$PLAY_AT" \
+python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" --key "22@$PLAY_AT" \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2

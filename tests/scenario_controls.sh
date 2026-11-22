@@ -42,7 +42,7 @@ mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_controls.log"
 
 echo "running the emulator for $CYCLES cycles: KEYS, PROJECT pages, the FUNC menu, SAMPLES, save ..."
-python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" \
+python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 27@360000000 --key 27@400000000 \
     --key 27@480000000 \
