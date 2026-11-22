@@ -21,7 +21,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-KNOWN=" none release_note "
+KNOWN=" none "
 
 # Drop // comments, whole-line or trailing, so a mention in prose is not a use.
 code() { sed -E 's#//.*$##' "$@"; }
