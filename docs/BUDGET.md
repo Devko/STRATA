@@ -900,7 +900,7 @@ combinations, and the emulator's `--key` only taps. Unit check: **U8** (UNIT_CHE
 
 Memory: the freeze's loop is 1.46 MiB (4 s of stereo float: two 2 s delay times) and the tape
 stop's ring 0.46 MiB (1.25 s), both taken in init. `tests/test_memory.cpp` itemises them: init
-is 103.1 MiB of the 120 MiB heap, 16.9 MiB spare.
+is about 104.1 MiB of the 120 MiB heap with the stream rings from main, 15.9 MiB spare.
 
 ### Per-track LFO (2026-11-22, host only)
 
