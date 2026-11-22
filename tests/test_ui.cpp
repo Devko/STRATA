@@ -552,6 +552,37 @@ TEST(ui_the_value_encoder_is_the_tempo_and_a_refused_transport_is_recorded) {
     CHECK(!host.running());
 }
 
+TEST(ui_stop_under_a_running_outside_clock_resets_nothing_until_the_clock_stops) {
+    // F6 under MIDI or SYNC is refused by the clock, which keeps running. It used to post
+    // `Cmd::stop` anyway, so every voice was cut and the playheads went back to step 1 while the
+    // outside transport carried on. And an outside STOP, delivered through on_transport, posted
+    // nothing, so nothing was released or reset when the master really stopped.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_source(ENAGA_CLOCK_MIDI);
+    host.set_running(true);
+    for (uint32_t t = 0; t <= 24 * 5; t += 24) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 5);
+
+    key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(UiProbe::clock_refused(app));
+    CHECK(host.running());
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
+    CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 5);
+
+    // The master stops: STRATA follows it.
+    host.set_running(false);
+    app.on_transport(ENAGA_TRANSPORT_STOP, 24 * 5);
+    pump(2);
+    CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 0);
+
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+}
+
 // --- the two ways a hold used to be stranded ------------------------------------------------
 //
 // docs/UNIT_CHECKLIST.md: "Hold a STEP key, change page or mode, let go, then turn an encoder. No

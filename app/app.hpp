@@ -402,6 +402,14 @@ public:
                 break;
             case ENAGA_KEY_F6:
                 clock_refused_ = !enaga::clock::stop();
+                // Refused while an outside clock keeps running: nothing stopped, so nothing is
+                // released or reset either -- doing so cut every voice and sent the playheads back
+                // to step 1 while the clock carried on, and the pattern then played out of step
+                // with the master. STRATA follows the outside STOP when it comes (on_transport).
+                if (clock_refused_ && enaga::clock::running()) {
+                    notice("EXT CLOCK");
+                    break;
+                }
                 // The second press cuts the tails. Only that part is the audio side's job.
                 post(Cmd::stop, 0, 0, stop_armed_ ? 1 : 0);
                 stop_armed_ = !stop_armed_;
@@ -1251,10 +1259,18 @@ public:
     }
 
     void on_transport(int what, uint32_t position) override {
-        // Under an external clock STRATA cannot start or stop anything; it follows. Resetting
-        // the chain state here is what keeps conditions in step with an outside transport.
+        // Under an external clock STRATA cannot start or stop anything; it follows. Enaga sends
+        // this for every transport change whoever made it (docs/ENAGA_API.md), so a STOP from
+        // MIDI or SYNC is followed exactly as F6 is: voices released and the sequencer reset,
+        // which is what keeps the conditions and the playheads in step with the outside
+        // transport. A STOP that F6 made arrives here too; releasing twice is harmless. The next
+        // F6 press is then the one that cuts the tails.
         (void)position;
         if (what == ENAGA_TRANSPORT_START || what == ENAGA_TRANSPORT_LOCATE) stop_armed_ = false;
+        if (what == ENAGA_TRANSPORT_STOP) {
+            post(Cmd::stop, 0, 0, 0);
+            stop_armed_ = true;
+        }
 
         // docs/SPEC.md: "Autosave to AUTOSAVE/ whenever the transport stops." It follows the
         // transport rather than the key, so a stop arriving from MIDI or SYNC autosaves too --
