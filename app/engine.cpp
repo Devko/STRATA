@@ -491,9 +491,12 @@ void Engine::apply(const Command &command) {
                     break;
                 case ChainEdit::insert:
                     done = chain_insert(project_, at, command.b, command.c, command.d);
+                    // The player's entry is an index: keep it on the entry it is playing.
+                    if (done) chain_player_inserted(chain_, at);
                     break;
                 case ChainEdit::remove:
                     done = chain_remove(project_, at);
+                    if (done) chain_player_removed(chain_, at);
                     break;
                 case ChainEdit::pattern_delta:
                 case ChainEdit::repeats_delta: {
@@ -561,17 +564,27 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::kit_recall:
-            // NOTHING POSTS THIS YET. A project load does the same work through
-            // Cmd::project_loaded, which also has to reset the scheduler and the undo history,
-            // so this arm is waiting for the gesture docs/SPEC.md's key table gives to F1 + F8:
-            // "Kit and machine select". Left in rather than deleted because the UI for that is
-            // M6 and re-adding it would be the same three lines -- but it is dead until then,
-            // and the reachability audit in docs/HANDOFF.md will keep saying so.
+            // The kit browser (FUNC+EDIT twice, app/app.hpp). With `a` = 1 the kit comes from the
+            // inbox the main context filled while the ring was empty (`kit_for_recall`); with
+            // `a` = 0 it is `project_.kit` as it stands, re-applied.
+            //
+            // Everything a sound is -- the parameters, the machine, the fader -- but NOT the
+            // sample path. Paths are the main context's: only the loader reads them and only the
+            // main context writes them (a load, a resample, and this recall's own swap), so
+            // Storage puts the recalled paths in place itself before it posts this.
+            if (command.a == 1) {
+                for (int t = 0; t < kTracks; t++) {
+                    KitTrack &to = project_.kit.tracks[t];
+                    const KitTrack &from = kit_inbox_.tracks[t];
+                    for (int i = 0; i < kKitParams; i++) to.params[i] = from.params[i];
+                    to.machine = from.machine;
+                    to.level = from.level;
+                }
+            }
             params_from_kit();
             // And the fourth member of the family tests/test_app.cpp has three tests for: the
             // per-block copy rewrites `effective_` from `performed_`, so without this flag the
-            // recalled kit is drawn on screen and the previous one goes on playing. Latent only
-            // because nothing posts this command yet; it becomes audible the day F1 + F8 lands.
+            // recalled kit is drawn on screen and the previous one goes on playing.
             perform_dirty_ = true;
             break;
 
@@ -609,6 +622,13 @@ void Engine::apply(const Command &command) {
             undo_.clear();
             queue_clear(queue_);
             chain_.active = false;
+            // A project saved with its chain running reopens with it running. The flag was
+            // written by every save and read by nothing, so the chain came back off while the
+            // file -- and the next save -- said on. The saved live pattern still opens; the
+            // chain takes over from its first entry at the end of that pass (chain_resume).
+            if (project_.settings.chain_enabled && !chain_resume(project_, chain_)) {
+                project_.settings.chain_enabled = false;
+            }
             deferred_count_ = 0;                 // hits of a pattern that no longer exists
             scheduler_.reset(true);
             reconfigure();
@@ -775,8 +795,9 @@ void Engine::apply(const Command &command) {
             if (command.a < kScenes) {
                 // The kit as it is NOW, which means refreshing it from `params_` first.
                 //
-                // `project_.kit` is only written by `Cmd::kit_store`, and nothing posts that
-                // except a save -- while a knob turn writes `params_`. So a capture read the kit
+                // `project_.kit` is only written by `Cmd::kit_store`, and only a save (of the
+                // project or of a kit) posts that -- while a knob turn writes `params_`. So a
+                // capture read the kit
                 // as of the last SAVE: pressing OK in PERFORM stored the sound the project had
                 // when it was last written, not the sound in the room. Found independently by
                 // two reviews, from opposite directions, and the comment that used to be here
@@ -1256,6 +1277,13 @@ void Engine::reconfigure() {
 // --- the tick -------------------------------------------------------------
 
 void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
+    // The transport jumped BACK (a stop and start, F1 + F5, or an outside clock relocating). A
+    // change still queued was armed for a boundary measured on the old position: left alone it
+    // waited until the clock caught up with that tick again -- a change queued at bar 40 and
+    // then STOP and PLAY landed forty bars late. The boundary it was waiting for is gone, so it
+    // happens now, at this tick, from the new pattern's step 1: the same reading a change queued
+    // with the clock stopped gets (Cmd::queue_pattern).
+    const bool jumped_back = tick < tick_;
     tick_ = tick;
 
     // A transport that relocated to before the pattern's start (a START from 0 after a switch)
@@ -1268,6 +1296,13 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // A queued change takes effect BEFORE the tick is resolved, so this tick plays the new
     // pattern's steps rather than one last step of the old one. Every mode but NOW starts the
     // new pattern at its step 1 on the boundary the change was queued for (core/queue.hpp).
+    if (jumped_back && queue_.pending) {
+        switch_pattern(queue_.bank, queue_.slot);
+        queue_clear(queue_);
+        origin_ = tick;
+        boundary_known_ = false;
+    }
+
     if (queue_due(queue_, tick)) {
         const bool restart = queue_.restart;
         const uint32_t start = queue_.start_tick;

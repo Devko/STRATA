@@ -156,6 +156,16 @@ public:
     // a 16-byte command.
     Project &project_for_load();
 
+    // The kit browser's inbox (app/storage.cpp, "the kit library"): a kit read off the card,
+    // waiting for `Cmd::kit_recall` with `a` = 1 to copy it into `project_.kit` on the audio side.
+    //
+    // A smaller hole than `project_for_load` and one that needs no stopped transport: the audio
+    // side reads this ONLY while applying that command, and the main context writes it only
+    // while the command ring is EMPTY -- so no recall that could read it is pending, and the one
+    // it is about to post is the next thing to look. A recall therefore plays straight through a
+    // running pattern, which is what a kit change on stage needs.
+    Kit &kit_for_recall() { return kit_inbox_; }
+
     // App::init() only, before the first audio block. The region and the SamplePool that carves
     // it up belong to the MAIN context (see `sample_region_` below); the audio side is handed the
     // base so `Cmd::set_sample` can turn the loader's byte offset into a pointer, and the size so
@@ -279,6 +289,9 @@ private:
     // and there is no cross-context struct to tear. core/queue.hpp was written expecting that.
     Queue queue_;
     ChainPlayer chain_;
+
+    // See `kit_for_recall`. Written by the main context, read by `Cmd::kit_recall` only.
+    Kit kit_inbox_;
 
     // The kit: a track's parameters as stored, with no locks applied.
     TrackParams params_[kTracks] = {};

@@ -414,6 +414,10 @@ void Storage::on_card(bool usable) {
     // On the transition only, so a redundant on_card(true) does not force a full save every time.
     if (usable != card_usable_) project_complete_ = false;
 
+    // Whatever the kit library said is about a card that may no longer be in the slot.
+    for (int i = 0; i < kKitSlots; i++) kit_slots_[i] = KitSlot{};
+    kit_save_slot_ = kit_load_slot_ = -1;
+
     card_usable_ = usable;
     if (usable) {
         error_ = nullptr;
@@ -439,6 +443,7 @@ void Storage::on_card(bool usable) {
     }
     job_ = Job::idle;
     save_pending_ = autosave_pending_ = load_pending_ = false;
+    kit_scan_pending_ = false;
     sample_queue_ = 0;
     error_ = "NO CARD";
 }
@@ -496,6 +501,20 @@ void Storage::finish_job(const char *error) {
         }
     }
 
+    // The kit library's two writes and reads get a line too, for the same reason: a scenario can
+    // see nothing else of them. The scan does not -- sixteen passes of it would be noise.
+    if (job_ == Job::kit_save || job_ == Job::kit_load) {
+        char line[40];
+        char *out = line;
+        const char *end = line + 36;
+        append_text(out, job_ == Job::kit_save ? "kit save" : "kit load", end);
+        append_text(out, error != nullptr ? " failed " : (job_ == Job::kit_save ? "d" : "ed"),
+                    end);
+        if (error != nullptr) append_text(out, error, end);
+        *out = '\0';
+        enaga::log(line);
+    }
+
     const bool project_job = job_ == Job::save || job_ == Job::load;
     job_ = Job::idle;
     step_ = 0;
@@ -517,6 +536,9 @@ const char *Storage::busy_text() const {
         case Job::sample_convert: return "CONVERTING";
         case Job::sample_resample: return "RESAMPLING";
         case Job::take_write: return "WRITING";
+        case Job::kit_scan: return "READING KITS";
+        case Job::kit_save: return "SAVING KIT";
+        case Job::kit_load: return "LOADING KIT";
         default: return nullptr;
     }
 }
@@ -539,6 +561,8 @@ int Storage::progress() const {
             return src_frames_ == 0 ? 0 : int(src_done_ * 100u / src_frames_);
         case Job::sample_resample:
             return out_frames_ == 0 ? 0 : int(out_done_ * 100u / out_frames_);
+        case Job::kit_scan:
+            return step_ * 100 / kKitSlots;
         default:
             return 0;
     }
@@ -593,6 +617,10 @@ void Storage::service() {
         case Job::sample_convert: step_sample_convert(); return;
         case Job::sample_resample: step_sample_resample(); return;
         case Job::take_write: step_take_write(); return;
+        case Job::kit_scan: step_kit_scan(); return;
+        // Both run start to finish in the pass that begins them, so neither is ever found here.
+        case Job::kit_save:
+        case Job::kit_load:
         case Job::idle: break;
     }
 
@@ -620,6 +648,24 @@ void Storage::service() {
         begin_job(Job::save);
         return;
     }
+    // The kit library. After a project save or load -- which may be about to replace the kit a
+    // save would store -- and before the samples, because a recall queues swaps of its own.
+    // Each is one file, done in this pass: the ring is empty (checked above), so the audio side
+    // has applied every edit and the `kit_store` a save posted, and is writing nothing.
+    if (kit_save_slot_ >= 0) {
+        run_kit_save();
+        return;
+    }
+    if (kit_load_slot_ >= 0 && !read_in_flight_) {
+        run_kit_load();
+        return;
+    }
+    if (kit_scan_pending_) {
+        kit_scan_pending_ = false;
+        begin_job(Job::kit_scan);
+        return;
+    }
+
     // A finished take, before the sample queue: the whole point is that it is written and then
     // loaded back, and the load-back goes through that same queue.
     if (take_pending_ &&
@@ -864,6 +910,189 @@ void Storage::step_load() {
     sample_queue_ = 0xFFu;
     wanted_budget_ = uint32_t(project.settings.sample_budget_mib) << 20;
 
+    finish_job(nullptr);
+}
+
+// --- the kit library --------------------------------------------------------
+//
+// app/storage.hpp has the design. Sixteen files in one folder beside PROJECTS/, shared by every
+// project, each in KIT.BIN's format.
+
+bool Storage::kit_path(char *out, uint32_t max, int slot, bool folder_only) const {
+    if (max == 0 || slot < 0 || slot >= kKitSlots) return false;
+    char *p = out;
+    const char *end = out + max - 1;
+    append_text(p, enaga::files::data_folder(), end);
+    append_text(p, "/KITS", end);
+    if (!folder_only) {
+        append_text(p, "/KIT_", end);
+        if (p < end) *p++ = char('0' + (slot + 1) / 10);
+        if (p < end) *p++ = char('0' + (slot + 1) % 10);
+        append_text(p, ".BIN", end);
+    }
+    if (p >= end) return false;
+    *p = '\0';
+    return true;
+}
+
+const Storage::KitSlot &Storage::kit_slot(int slot) const {
+    static const KitSlot none{};
+    return slot >= 0 && slot < kKitSlots ? kit_slots_[slot] : none;
+}
+
+void Storage::request_kit_scan() {
+    if (!card_usable_) return;
+    kit_scan_pending_ = true;
+}
+
+bool Storage::request_kit_save(int slot) {
+    if (slot < 0 || slot >= kKitSlots || !card_usable_) return false;
+    // The kit the machines read and the kit a file holds are different structures, so the audio
+    // side copies one into the other first -- and posting it is what defers the write past every
+    // edit before it, exactly as `request_save` does. It also makes the project's own KIT.BIN
+    // differ from RAM, as it does for a project save.
+    post(Cmd::kit_store);
+    kit_dirty_ = true;
+    kit_save_slot_ = slot;
+    kit_load_slot_ = -1;      // the later of the two is the one the user meant
+    return true;
+}
+
+bool Storage::request_kit_load(int slot) {
+    if (slot < 0 || slot >= kKitSlots || !card_usable_) return false;
+    kit_load_slot_ = slot;
+    kit_save_slot_ = -1;
+    return true;
+}
+
+void Storage::step_kit_scan() {
+    const int slot = step_;
+    step_++;
+    if (slot >= kKitSlots) {
+        finish_job(nullptr);
+        return;
+    }
+    KitSlot &out = kit_slots_[slot];
+    out = KitSlot{};
+    char path[ENAGA_FILE_PATH_MAX + 1];
+    if (!kit_path(path, sizeof path, slot, false)) {
+        out.state = SlotState::bad;
+        return;
+    }
+    const int32_t got = enaga::files::read_all(path, file_, kFileBytes);
+    if (got < 0) {
+        // NOT FOUND is an empty slot. Anything else is a slot that could not be read, which the
+        // browser shows rather than offering it as empty and inviting an overwrite.
+        out.state = got == ENAGA_FILE_NOT_FOUND ? SlotState::empty : SlotState::bad;
+        return;
+    }
+    if (kit_read(kit_scratch_, file_, uint32_t(got)) != SerializeResult::ok) {
+        out.state = SlotState::bad;
+        return;
+    }
+    out.state = SlotState::used;
+    for (int t = 0; t < kTracks; t++) out.machines[t] = kit_scratch_.tracks[t].machine;
+}
+
+void Storage::run_kit_save() {
+    const int slot = kit_save_slot_;
+    kit_save_slot_ = -1;
+    begin_job(Job::kit_save);
+
+    char path[ENAGA_FILE_PATH_MAX + 1];
+    if (!kit_path(path, sizeof path, slot, true)) {
+        finish_job("BAD PATH");
+        return;
+    }
+    const int32_t made = enaga::files::make_folder(path);
+    if (made < 0) {
+        finish_job(enaga::files::error_name(made));
+        return;
+    }
+    if (!kit_path(path, sizeof path, slot, false)) {
+        finish_job("BAD PATH");
+        return;
+    }
+    // `kit_store` has been applied -- the ring was empty to get here -- so this is the kit as it
+    // sounds, sample paths included.
+    const Kit &kit = engine_->project().kit;
+    uint32_t bytes = 0;
+    const SerializeResult res = kit_write(kit, file_, kFileBytes, &bytes);
+    if (res != SerializeResult::ok) {
+        finish_job(serialize_result_name(res));
+        return;
+    }
+    // files::save writes a .TMP and renames it, so a pulled card leaves the old kit or the new.
+    const int32_t wrote = enaga::files::save(path, file_, bytes);
+    if (wrote < 0) {
+        finish_job(enaga::files::error_name(wrote));
+        return;
+    }
+    KitSlot &shown = kit_slots_[slot];
+    shown.state = SlotState::used;
+    for (int t = 0; t < kTracks; t++) shown.machines[t] = kit.tracks[t].machine;
+    finish_job(nullptr);
+}
+
+void Storage::run_kit_load() {
+    const int slot = kit_load_slot_;
+    kit_load_slot_ = -1;
+    begin_job(Job::kit_load);
+
+    char path[ENAGA_FILE_PATH_MAX + 1];
+    if (!kit_path(path, sizeof path, slot, false)) {
+        finish_job("BAD PATH");
+        return;
+    }
+    const int32_t got = enaga::files::read_all(path, file_, kFileBytes);
+    if (got < 0) {
+        if (got == ENAGA_FILE_NOT_FOUND) kit_slots_[slot].state = SlotState::empty;
+        finish_job(got == ENAGA_FILE_NOT_FOUND ? "EMPTY SLOT" : enaga::files::error_name(got));
+        return;
+    }
+    // Into the scratch kit first, so a damaged file reaches neither the engine's inbox nor the
+    // project's sample paths: a refused kit changes nothing at all.
+    const SerializeResult res = kit_read(kit_scratch_, file_, uint32_t(got));
+    if (res != SerializeResult::ok) {
+        kit_slots_[slot].state = SlotState::bad;
+        finish_job(serialize_result_name(res));
+        return;
+    }
+
+    // The ring is empty (service() checked), so no recall is pending and the audio side is not
+    // reading the inbox: this is the one window in which the main context may write it.
+    Kit &inbox = engine_->kit_for_recall();
+    inbox = kit_scratch_;
+
+    // The sample paths are the main context's (app/engine.cpp, Cmd::kit_recall). A track whose
+    // path changed goes through the full swap -- clear, wait for the epoch, release, load -- and
+    // one whose path is the same keeps the sample it is playing, so recalling a kit that only
+    // differs in its knobs does not drop a single note of a loop.
+    Kit &kit = engine_->project_for_load().kit;
+    for (int t = 0; t < kTracks; t++) {
+        char *to = kit.tracks[t].sample;
+        const char *from = kit_scratch_.tracks[t].sample;
+        bool same = true;
+        for (int i = 0; i < kSamplePathBytes; i++) {
+            if (to[i] != from[i]) { same = false; break; }
+            if (to[i] == '\0') break;
+        }
+        if (same) continue;
+        for (int i = 0; i < kSamplePathBytes; i++) to[i] = from[i];
+        to[kSamplePathBytes - 1] = '\0';
+        sample_queue_ = uint8_t(sample_queue_ | (1u << t));
+    }
+
+    Command command;
+    command.cmd = Cmd::kit_recall;
+    command.a = 1;
+    post(command);
+
+    // RAM's kit now differs from the project's KIT.BIN.
+    kit_dirty_ = true;
+    KitSlot &shown = kit_slots_[slot];
+    shown.state = SlotState::used;
+    for (int t = 0; t < kTracks; t++) shown.machines[t] = kit_scratch_.tracks[t].machine;
     finish_job(nullptr);
 }
 
