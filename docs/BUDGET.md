@@ -1129,6 +1129,42 @@ message, so a six-note chord's last note leaves about 6 ms after its first.
 Memory: `MidiOut` 512 bytes and the CC memo 136 bytes in `Engine`; MIDI IN's held-note map 2 KiB
 in the app; MID adds 8 bytes (a vtable pointer) per track to the machine pool. All bss.
 
+### Everything at once (2026-11-22, an estimate, not a measurement)
+
+Every afternoon feature was priced alone. Added together, on the worst case above (`scenario_m1`
+/ `m7`: the default beat with drive, LP24, lo-fi and both sends on all eight tracks, 23.49% cl6x
+and 39.60% GCC-only, emulator), with each one at its own section's figure:
+
+| On top of the worst case | cl6x (points) | GCC only (points) | Source |
+| --- | --- | --- | --- |
+| The worst case itself | 23.5 | 39.6 | the table above |
+| VA POLY at the shared cap: 12 voices, against the default beat's 4 | +17.3 | +30.6 | 8 x 2.16 / 3.82 |
+| The master kill EQ running | +1.3 | +2.2 | "The master kill EQ" |
+| Eight LFOs, on the dearest destination (DRV) | +2.5 | +1.4 | "Per-track LFO" |
+| Tape stop and delay freeze, both held | +0.3 | +0.5 | "Tape stop and delay freeze" |
+| Four streamed tracks | +2.0 | +2.0 | "Streaming" |
+| MIDI out on all eight tracks, arp and note repeat | ~0.1 | ~0.1 | control rate; their voices are the cap's |
+| **Total, emulator** | **~47** | **~76** | |
+| **If the unit is 1.35x the emulator** (BUDGET finding 2) | **~63** | | |
+
+So on the emulator with cl6x everything at once fits under 60% with ~13 points to spare, and the
+GCC-only figure is over it, as it has been since M2 (meaningless either way: CLAUDE.md). **On the
+unit it may not fit**: if first boot's ~1.35x holds, the all-on figure is about 63%. The lever, in
+CLAUDE.md's order, is effects and insert stages first, then `kPolyVoiceBudget` (each voice off
+the cap is 2.16 points, or ~2.9 at 1.35x). The arp and note repeat add no cost of their own past
+the cap: every POLY hit they make is counted against the 12.
+
+Two things the cap does not bound, and the table does not count:
+
+- **GRAIN at full density is outside the voice budget**: +9.2 points a track GCC-only ("GRAIN
+  measured"), roughly +5.4 with cl6x at the usual 1.7x. Two dense GRAIN tracks in place of two
+  drum tracks would take the unit figure past 70%.
+- **VA MONO is outside it too**, but it is one voice a track, about 2.2 points each at most.
+
+To measure: U-row "everything on" on the unit with the MAX readout -- four POLY tracks holding
+MIN11 chords with the arp at 1/32, the kill EQ with a band killed, eight LFOs on DRV, tape stop
+held, freeze held, two streamed stems -- and E3 on the PC first.
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |

@@ -21,6 +21,7 @@
 // header, rounded up to 8, at least 16. Allocation happens once, in init(), and nothing is
 // freed, so a first-fit list never fragments and the sum is the whole story.
 #include "check.hpp"
+#include "fakehost.hpp"
 
 #include "capture.hpp"
 #include "engine.hpp"
@@ -116,6 +117,9 @@ const Footprint &footprint() {
     static bool done = false;
     if (done) return measured;
     done = true;
+    // The fake host first: its 48 MiB card arena is taken on first use, which is inside the
+    // count below when this test runs on its own (--only) and nothing has touched it yet.
+    (void)strata::test::FakeHost::the();
     g_requested = 0;
     g_device = 0;
     g_allocations = 0;
