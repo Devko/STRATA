@@ -155,9 +155,17 @@ def setup_worker(i, rel_files):
             p = os.path.join(OUT, d, f[:-4] + ".o")
             if f.endswith(".cpp") and p not in skip and os.path.exists(p):
                 objs.append(p)
-    for d in (os.path.join(OUT, "dsp"), os.path.join(OUT, "third_party", "enaga", "runtime", "dsp")):
-        objs += [os.path.join(d, f) for f in sorted(os.listdir(d))
-                 if f.endswith(".o") and os.path.join(d, f) not in objs]
+    # Then the C: every *.c under core/ and dsp/ (the *.ti.c hot loops) and Enaga's DSP runtime.
+    for d in (os.path.join(OUT, "core"), os.path.join(OUT, "dsp"),
+              os.path.join(OUT, "third_party", "enaga", "runtime", "dsp")):
+        if not os.path.isdir(d):
+            continue
+        src_dir = os.path.join(ROOT, os.path.relpath(d, OUT))
+        for f in sorted(os.listdir(src_dir)):
+            if f.endswith(".c"):
+                p = os.path.join(d, f[:-2] + ".o")
+                if os.path.exists(p) and p not in objs:
+                    objs.append(p)
     inc = ["-I" + os.path.join(wdir, d) for d in ("core", "dsp", "app", "tests")]
     inc.append("-I" + os.path.join(ROOT, "third_party", "enaga", "include"))
     run_o = os.path.join(wdir, "runner.o")
