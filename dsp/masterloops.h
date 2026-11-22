@@ -31,6 +31,22 @@ void strata_master_ramp(float *left, float *right, int n, float gain, float step
 void strata_master_limit(float *left, float *right, int n, float threshold, float headroom,
                          float inv_headroom);
 
+/* The master kill EQ (buses.hpp): two Linkwitz-Riley crossovers per channel, at `low_split` and
+ * `high_split`, splitting each sample into LOW, MID and HIGH, LOW passed through the upper
+ * crossover's all-pass so the three sum flat. Then
+ *
+ *     eq  = gain_low * LOW + gain_mid * MID + gain_high * HIGH
+ *     out = in + wet * (eq - in)
+ *
+ * The three gains and `wet` step by their `*_step` BEFORE each sample, as strata_master_ramp
+ * does, so a block is a linear ramp from the last block's values to this one's. `state_l` and
+ * `state_r` are STRATA_KILL_EQ_STATES floats each, zeroed for a stage starting from bypass.
+ * Branch-free and division-free; 7 SVF steps a channel a sample. */
+#define STRATA_KILL_EQ_STATES 14
+void strata_kill_eq(float *left, float *right, int n, float *state_l, float *state_r,
+                    const float *low_split, const float *high_split, const float *gains,
+                    const float *gain_steps, float wet, float wet_step);
+
 /* The planes into audio()'s interleaved L R L R buffer, and silence in any frames past n. */
 void strata_interleave(float *out, const float *left, const float *right, int n, int frames);
 

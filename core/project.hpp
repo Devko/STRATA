@@ -162,7 +162,10 @@ constexpr uint16_t kTempoCentiMax = 30000;    // 300.00 BPM
 // CLAUDE.md says core/ never does. dsp/buses.hpp static_asserts that the two agree, so the day
 // a field is added the build stops here rather than writing a short section.
 constexpr int kSendFields = 10;
-constexpr int kMasterFields = 4;
+constexpr int kMasterFields = 7;
+// What a PROJECT.BIN written before the kill EQ holds: the DJ filter, compressor, limiter and
+// level. The three EQ bands were appended after them, so a short mixer section is an older file.
+constexpr int kMasterFieldsV1 = 4;
 
 // The delay's default division: dotted 1/8, index 5 of dsp/buses.hpp's table, as the byte an
 // encoder at that position produces. Named here because `ProjectSettings` needs it as an
@@ -212,8 +215,12 @@ struct ProjectSettings {
     // dotted 1/8, 40% feedback, mid tone, ping-pong on, full return, no delay into the reverb,
     // a 2 s reverb, mid damping, a 180 Hz input high-pass, full return.
     uint8_t sends[kSendFields] = {kDefaultDelayDivision, 53, 64, 127, 127, 0, 58, 64, 61, 127};
-    // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out.
-    uint8_t master[kMasterFields] = {64, 38, 101, 127};
+    // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out, and the
+    // kill EQ's three bands at their flat (bypassed) centre.
+    uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64};
+    // The kill EQ's kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. Saved, like the live
+    // mutes, so a set comes back the way it was left. Stored after the master bytes.
+    uint8_t eq_kills = 0;
 };
 
 struct Project {
