@@ -266,6 +266,10 @@ release, `192f03f`). Synth or monitor on channel `____`.
       FUNC+STOP the same.
 - [ ] KEYS on track 6: a held key holds the synth's note until you let go.
 - [ ] Turn B back to OFF while a long note sounds: it ends.
+- [ ] KEYS on track 6, hold a key, and with it still down open the Enaga menu (FUNC+POWER) and
+      start another app (or power off): the synth's note ends. Before this fix it hung there.
+- [ ] EDIT ARP on track 6 (MID), MOD UP, and give one step a MIN chord (step page 3, CHRD): the
+      synth arpeggiates the chord's three notes, not the root alone.
 - [ ] MIDI IN, a keyboard on channel 6 (track 6, back on MNO): a held key sustains and ends on
       release. CC 17 from the keyboard moves track 6's SRC B. A program change 5 on your MIDI CH
       (SETUP shows it) queues A05.
@@ -295,6 +299,8 @@ Back to GRID, track 2 selected, playing.
       `REVERTED` and no second undo.
 - [ ] PERFORM: FUNC+CLR undoes and FUNC+OK redoes; plain CLR still clears the selected macro.
 - [ ] Hold SCENE A (upper pad 4) + CLR: `SCENE ERASED`.
+- [ ] MUTATE, then hold a STEP that has a trig + CLR: `STEP CLEARED`, only that step goes and the
+      mutation stays. MUTATE, then hold a STEP + OK: the step page opens.
 
 ## 11. Transport: FUNC+PLAY and FUNC+STOP (2 min)
 
@@ -335,6 +341,8 @@ scene 7 in slot B (hold SCENE B + STEP 7), tempo **142.0**, key **D# MINOR**, tr
 
 - [ ] FUNC+PROJECT once: `FUNC+PROJECT TO SAVE`, nothing written. Again within 2 s: `SAVING`, and
       `UNSAVED` disappears from PROJECT.
+- [ ] Turn a knob you will recognise (track 1 AMP LVL right down), then without saving power
+      off and on: the AUTOSAVE offered at start has that knob where you left it.
 - [ ] Power off, power on, start STRATA. It reopens with: the chain on (the saved pattern plays
       its pass, then the chain carries on from its first entry), tracks 3 and 5 muted,
       scene 7 in B, 142.0, D# MINOR, track 8 on GRN. Missing: `________________`

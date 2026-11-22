@@ -108,6 +108,18 @@ public:
         return track >= 0 && track < kTracks ? project_.settings.midi_out[track] : 0;
     }
 
+    // The app is stopping (App::stop): end every MIDI note this side has sent, and All Notes Off
+    // on each channel in use. MAIN context, and only once the audio callback is gone -- Enaga
+    // clears it before it calls stop() -- so nothing else is writing the note table. Without it a
+    // note sounding when the user switched app or powered off hung on the outboard synth, with
+    // no STRATA panel left to stop it.
+    void end_midi_for_shutdown();
+
+    // Also App::stop only, for the same reason: apply what is still in the command ring from the
+    // MAIN context, because the audio callback that would apply it is gone. The shutdown save
+    // posts its own `kit_store` and needs it applied before it serializes the kit.
+    void drain_commands_for_shutdown();
+
     // What MIDI out has sounding, for the tests. Audio side; the rig runs both on one thread.
     const MidiOut &midi_notes() const { return midi_out_; }
 

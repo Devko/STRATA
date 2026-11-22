@@ -2081,10 +2081,16 @@ void Engine::fire(const StepEvent &event) {
             uint8_t input[kChordMaxNotes];
             int count = 1;
             input[0] = note;
+            const uint8_t packed = folding.tracks[track].steps[event.step].chord;
             if (polys_[track] != nullptr) {
-                const uint8_t packed = folding.tracks[track].steps[event.step].chord;
                 count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
                                      VaPoly::kVoices);
+            } else if (machine_id_[track] == uint8_t(MachineId::midi) &&
+                       (packed & kChordTypeMask) != uint8_t(ChordType::none)) {
+                // MID sends a chord step as its chord (below), so its arp runs through the
+                // chord too, rather than repeating the root alone.
+                count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
+                                     kChordMaxNotes);
             }
             ArpRun &run = seq_arp_[track];
             run.mode = arp.mode;
@@ -2428,6 +2434,16 @@ void Engine::send_midi_ccs(int t) {
         // value, which is all a CC needs.
         if (midi_sink_.send(bytes, 3)) cc_sent_[t][p] = value;
     }
+}
+
+void Engine::drain_commands_for_shutdown() {
+    // Bounded: a ring holds far fewer than this many blocks' worth of commands.
+    for (int i = 0; i < 1024 && !commands_.empty(); i++) apply_commands();
+}
+
+void Engine::end_midi_for_shutdown() {
+    midi_out_.release_all(midi_sink_);
+    midi_all_notes_off();
 }
 
 void Engine::midi_all_notes_off() {
