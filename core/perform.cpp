@@ -242,6 +242,47 @@ uint8_t macro_value(const MacroTarget &target, uint8_t position) {
     return uint8_t(clamp_int(low + rounded, 0, kParamMax));
 }
 
+void macro_range_through(uint8_t now, uint8_t far, uint8_t position, uint8_t &low,
+                         uint8_t &high) {
+    const int n = int(clamp_u8(now, 0, kParamMax));
+    const int f = int(clamp_u8(far, 0, kParamMax));
+    const int p = clamp_int(int(position), 0, 127);
+    if (p == 0) {                       // the old behaviour, which was already right here
+        low = uint8_t(n);
+        high = uint8_t(f);
+        return;
+    }
+    if (p == 127) {                     // the knob is at the top: sweep down towards `far`
+        low = uint8_t(f);
+        high = uint8_t(n);
+        return;
+    }
+    // value(p) = low + (high - low) * p / 127 = n. With high = f: low = (127 n - f p) / (127 - p).
+    // Control rate (an assignment is a button press), so the divisions are fine here.
+    const int den = 127 - p;
+    int l = (127 * n - f * p);
+    l = l >= 0 ? (l + den / 2) / den : -((-l + den / 2) / den);
+    if (l >= 0 && l <= kParamMax) {
+        low = uint8_t(l);
+        high = uint8_t(f);
+        return;
+    }
+    // Out of range: pin low at its end and solve high = (127 n - low (127 - p)) / p instead.
+    const int pinned = l < 0 ? 0 : kParamMax;
+    int h = 127 * n - pinned * den;
+    h = h >= 0 ? (h + p / 2) / p : -((-h + p / 2) / p);
+    low = uint8_t(pinned);
+    high = uint8_t(clamp_int(h, 0, kParamMax));
+    // The one case no line can serve: the parameter at one end (0, say) with the knob above the
+    // bottom and `far` the other end. A range through (position, 0) heading up would have to be
+    // negative below the knob, so it comes out flat -- a macro that does nothing. The plain range
+    // is better there: one jump on assignment, and then the knob works.
+    if (low == high && n != f) {
+        low = uint8_t(n);
+        high = uint8_t(f);
+    }
+}
+
 void macro_apply(const Macro &macro, uint8_t position, uint8_t out[kTracks][kKitParams]) {
     for (int i = 0; i < kMacroTargets; i++) {
         const MacroTarget &target = macro.targets[i];

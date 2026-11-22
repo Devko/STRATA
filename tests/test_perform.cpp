@@ -239,6 +239,39 @@ TEST(perform_the_end_a_scene_does_not_store_is_the_live_value_in_out) {
     CHECK_EQ(int(g_out[2][5]), 20);                // fully at B: the live value, not the kit's
 }
 
+TEST(perform_a_macro_range_through_the_current_value_does_not_jump) {
+    // For every value, every far end and every knob position: the range the assignment gets puts
+    // the parameter within one step of where it was, and it is a real range (the knob moves it).
+    int worst = 0;
+    bool every_range_moves = true;
+    for (int now = 0; now <= 127; now++) {
+        for (int far : {0, 127}) {
+            for (int position = 0; position <= 127; position++) {
+                uint8_t low = 0, high = 0;
+                macro_range_through(uint8_t(now), uint8_t(far), uint8_t(position), low, high);
+                MacroTarget target;
+                target.enabled = 1;
+                target.low = low;
+                target.high = high;
+                const int at = int(macro_value(target, uint8_t(position)));
+                const int miss = at > now ? at - now : now - at;
+                // The documented exception: an end value heading for the other end.
+                const bool exception = (now == 0 && far == 127) || (now == 127 && far == 0);
+                if (!exception) worst = miss > worst ? miss : worst;
+                if (low == high && now != far) every_range_moves = false;
+            }
+        }
+    }
+    CHECK(worst <= 1);
+    CHECK(every_range_moves);
+
+    // At position 0 it is the plain range, as before.
+    uint8_t low = 0, high = 0;
+    macro_range_through(40, 127, 0, low, high);
+    CHECK_EQ(int(low), 40);
+    CHECK_EQ(int(high), 127);
+}
+
 TEST(perform_morph_halfway_is_halfway) {
     fill_kit(g_kit);
     perform_init(g_scenes, g_macros);
