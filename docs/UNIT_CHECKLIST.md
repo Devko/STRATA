@@ -124,8 +124,11 @@ Fix anything by naming the track and what is wrong: each value is one number in 
 - [ ] **Scenes**: FUNC+MIXER (PERFORM), turn VALUE: the morph goes from the kit (scene 1) to DUB
       (scene 2): chord, rim and blips into the sends with longer tails. Hold SCENE B + STEP 3:
       DARK (filters close); STEP 4: TENSION (acid opens, hats and kick tighten). Back to B = 2.
-- [ ] **No macros ship**: A-D in PERFORM are empty on purpose (an assigned macro would freeze
-      its EDIT knobs).
+- [ ] **Macros B-D ship** (PERFORM, encoders): B ACID (bass cutoff, resonance, envelope), C DUB
+      (chord and rim into delay and reverb), D DRIVE (kick longer and driven, hats longer). Each
+      audible from the first detent, no jump. A is empty; pad pressure bends it.
+- [ ] **A macro at 0 lets go.** ACID at 0, EDIT track 6, turn CUT: heard. Back in PERFORM, ACID up:
+      the cutoff opens from where you left it, no jump; back to 0, your value is back.
 - [ ] **Mute states**: MUTE (upper pad 3), then STEP 1-8: all, no kick, drums only, no hats,
       no bass, kick + bass, melodic only, groove without rim and blips. STEP 1, then MUTE to leave.
 - [ ] Overall: does the factory project sound good? First thing to change: `________________`
@@ -343,9 +346,15 @@ Enaga's menu and start STRATA6.
 - [ ] PLAY, let it run **60 s**: top-line load range `________ %` to `________ %`,
       **MAX `________ %`**. Difference to STRATA's MAX = cost of two more voices:
       `________` points.
-- [ ] **U2.** Now switch tracks 5 (rim) and 6 (bass) to PLY (FUNC+EDIT) and give their trigs
-      MIN11 chords (hold STEP + OK, third page, CHRD). Three six-voice tracks:
-      **MAX `________ %`**. Overruns (crackle, LOAD near 100)? `________`
+- [ ] **U2, and the shared voice budget.** At most **12 VA POLY voices** sound at once across all
+      tracks (`Engine::kPolyVoiceBudget`, new today). Switch tracks 5 (rim) and 6 (bass) to PLY
+      (FUNC+EDIT) and give their trigs MIN11 chords (hold STEP + OK, third page, CHRD): 18
+      voices asked for, 12 allowed. **MAX `________ %`**. Crackle or overrun? `________`
+- [ ] Put a track-5 chord on the same step as the stab: only two chords' worth sounds, the third
+      is dropped, no glitch. Move it one step later: it sounds, and the oldest, quietest voices
+      fade without a click.
+- [ ] From this MAX: is 12 the right budget (largest that keeps the worst case under 60%)?
+      Proposed value `________`
 
 ## 17. Write the numbers down
 
@@ -363,7 +372,8 @@ Enaga's menu and start STRATA6.
 | U4 delay tail: LOAD while ringing, time to drop (13c) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
-| U2 STRATA6 + tracks 5 and 6 as MIN11 POLY (16) | |
+| U2 STRATA6 + tracks 5 and 6 as MIN11 POLY, capped at 12 voices (16) | |
+| Voice budget to set (16) | |
 
 These go into `docs/BUDGET.md` as the first unit rows (U1-U5 and E1-E5 in "Optimization review"), and the ticks into the reference list below.
 
