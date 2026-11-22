@@ -919,3 +919,10 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
 
 - [ ] Hold a STEP key and turn VALUE: the step's note moves (play it to hear), the tempo does
       not, and letting go leaves the trig as it was. F1 + CLR undoes the whole turn at once.
+
+## MUTATE: OK keeps, CLR reverts; undo works in PERFORM
+
+- [ ] Press MUTATE, then CLR: the track sounds as before and the screen says REVERTED. Press it
+      again, then OK: it stays (KEPT). Works the same in GRID, EDIT and PERFORM.
+- [ ] In PERFORM, F1 + CLR undoes and F1 + OK redoes. Plain CLR still clears the selected macro.
+- [ ] Hold scene A and press CLR: scene A's slot is erased (SCENE ERASED). This used to be F1 + OK.

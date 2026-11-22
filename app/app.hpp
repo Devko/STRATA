@@ -438,6 +438,19 @@ public:
         // PROJECT and PERFORM mode's own keys. Taken before the switch so the editing meanings
         // of OK, CLR and the arrows cannot fire while one of them is what is on screen.
         if (mode_ == Mode::project && on_project_key(key)) return;
+        // A mutation waiting for its verdict takes OK and CLR first, in whatever mode: OK keeps
+        // it, CLR reverts it. Only the plain keys; F1 + CLR and F1 + OK stay undo and redo.
+        if (mutation_pending_ && !shift_ && (key == ENAGA_KEY_OK || key == ENAGA_KEY_CLR)) {
+            mutation_pending_ = false;
+            if (key == ENAGA_KEY_CLR) {
+                post(Cmd::undo);
+                end_gesture();
+                notice("REVERTED");
+            } else {
+                notice("KEPT");
+            }
+            return;
+        }
         if (mode_ == Mode::perform && on_perform_key(key)) return;
 
         switch (key) {
@@ -783,6 +796,7 @@ public:
 
     void leave_mode() {
         step_page_ = false;
+        mutation_pending_ = false;
         if (held_step_ >= 0) {
             release_hold();
             end_gesture();
@@ -1364,6 +1378,9 @@ public:
                 mark(GestureKind::paste, selected_, 0);
                 post_mutate();
                 end_gesture();
+                // docs/SPEC.md: "OK keeps, CLR reverts". The mutation is already one undo level,
+                // so keeping is just forgetting it is pending and reverting is that undo.
+                mutation_pending_ = true;
                 break;
 
             default:
@@ -2326,24 +2343,30 @@ public:
     bool on_perform_key(int key) {
         switch (key) {
             case ENAGA_KEY_OK: {
-                // Into whichever slot is held, or slot A's scene. F1 erases instead, because a
-                // scene you cannot empty is one you can only overwrite.
+                // F1 + OK is redo here as everywhere (docs/SPEC.md), so it falls through to
+                // the shared handler.
+                if (shift_) return false;
+                // Into whichever slot is held, or slot A's scene. The selected track only when a
+                // scene pad is held: capturing one track is what makes "a scene stores parameter
+                // values for any tracks" usable.
                 const int slot = scene_holding_ >= 0 ? scene_holding_ : 0;
                 const int scene = engine_.scene_slot(slot);
-                if (shift_) {
-                    post(Cmd::scene_erase, 0, 0, uint8_t(scene));
-                    notice("SCENE ERASED");
-                } else {
-                    // The selected track only when a scene pad is held: capturing one track is
-                    // what makes "a scene stores parameter values for any tracks" usable.
-                    post(Cmd::scene_capture, uint8_t(selected_), 0, uint8_t(scene),
-                         scene_holding_ >= 0 ? 1 : 0);
-                    notice(scene_holding_ >= 0 ? "TRACK CAPTURED" : "SCENE CAPTURED");
-                }
+                post(Cmd::scene_capture, uint8_t(selected_), 0, uint8_t(scene),
+                     scene_holding_ >= 0 ? 1 : 0);
+                notice(scene_holding_ >= 0 ? "TRACK CAPTURED" : "SCENE CAPTURED");
                 return true;
             }
 
             case ENAGA_KEY_CLR:
+                // F1 + CLR is undo, which is how a MUTATE is taken back without leaving PERFORM.
+                if (shift_) return false;
+                // A scene pad held + CLR erases that slot's scene: a scene you cannot empty is
+                // one you can only overwrite. (It was F1 + OK, which the spec gives to redo.)
+                if (scene_holding_ >= 0) {
+                    post(Cmd::scene_erase, 0, 0, uint8_t(engine_.scene_slot(scene_holding_)));
+                    notice("SCENE ERASED");
+                    return true;
+                }
                 post(Cmd::macro_clear, 0, 0, uint8_t(macro_selected_));
                 notice("MACRO CLEARED");
                 return true;
@@ -2868,6 +2891,9 @@ private:
     // selected track changing. Nothing else distinguishes "the same sweep" from "the same knob,
     // a minute later".
     void mark(GestureKind kind, int track, int step) {
+        // Any new edit settles a mutation still waiting for OK or CLR: CLR would otherwise undo
+        // the newer edit and say it reverted the mutation.
+        mutation_pending_ = false;
         post(Cmd::undo_mark, uint8_t(track), uint8_t(step), uint8_t(kind), gesture_seq_);
     }
 
@@ -2903,6 +2929,7 @@ private:
     // All of it is which control is selected or held, never what the layer produces: the engine
     // owns that, and the UI reads it back through the accessors.
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
+    bool mutation_pending_ = false;             // a MUTATE waiting for OK (keep) or CLR (revert)
     int scene_holding_ = -1;                    // a scene pad held: -1, 0 for A, 1 for B
     int macro_selected_ = 0;
 

@@ -39,6 +39,8 @@
 #include <enaga/abi.h>
 #include <enaga/clock.hpp>
 
+#include <cstring>
+
 using strata::test::FakeHost;
 using strata::test::peak_of;
 
@@ -765,6 +767,76 @@ TEST(ui_hold_step_and_turn_value_sets_that_steps_note) {
     shift_key(ENAGA_KEY_CLR);
     pump(2);
     CHECK_EQ(int(step.note), note);
+}
+
+TEST(ui_a_mutation_is_kept_with_ok_and_reverted_with_clr_in_any_mode) {
+    // docs/SPEC.md: MUTATE, "OK keeps, CLR reverts". And F1 + CLR undoes one in PERFORM, where
+    // plain CLR clears a macro -- before this a mutation could not be undone without leaving.
+    Strata &app = fresh();
+    for (int i = 0; i < 16; i += 4) {                // trigs for the velocity mutation to move
+        if ((app_engine().pattern().tracks[0].steps[i].flags & kStepTrig) == 0) {
+            step_down(i);
+            step_up(i);
+        }
+    }
+    pump(2);
+    static TrackPattern before;
+    std::memcpy(&before, &app_engine().pattern().tracks[0], sizeof before);
+    const auto same = [] {
+        return std::memcmp(&before, &app_engine().pattern().tracks[0], sizeof before) == 0;
+    };
+    const auto mutate = [&app] {
+        app.on_pad_press(13, 100);
+        app.on_pad_release(13);
+        pump(2);
+    };
+
+    mutate();
+    CHECK(!same());
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(same());
+    CHECK_EQ(UiProbe::notice(app), "REVERTED");
+
+    mutate();
+    CHECK(!same());
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!same());
+    CHECK_EQ(UiProbe::notice(app), "KEPT");
+    CHECK(!UiProbe::step_page(app));                 // OK was the verdict, not "open the step"
+    shift_key(ENAGA_KEY_CLR);                        // and an undo after keeping still works
+    pump(2);
+    CHECK(same());
+
+    // In PERFORM: F1 + CLR is undo, not "clear the macro".
+    shift_key(ENAGA_KEY_F7);
+    pump(2);
+    mutate();
+    key(ENAGA_KEY_OK);                               // kept
+    CHECK(!same());
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(same());
+    CHECK_EQ(UiProbe::notice(app), "UNDO");
+
+    // A scene pad held + CLR erases that scene; F1 + OK is redo.
+    post_cmd(Cmd::kit_store);
+    post_cmd(Cmd::scene_capture, 0, 0, 0);
+    pump(2);
+    CHECK(scene_count(app_engine().scenes().scenes[0]) > 0);
+    app.on_pad_press(7, 100);
+    key(ENAGA_KEY_CLR);
+    app.on_pad_release(7);
+    pump(2);
+    CHECK_EQ(scene_count(app_engine().scenes().scenes[0]), 0);
+    CHECK_EQ(UiProbe::notice(app), "SCENE ERASED");
+    shift_key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!same());                                  // the mutation is back
+    CHECK_EQ(UiProbe::notice(app), "REDO");
+    key(ENAGA_KEY_F4);
+    pump(2);
 }
 
 TEST(ui_a_hold_that_crosses_a_page_change_resolves_to_the_step_it_started_on) {
