@@ -327,6 +327,12 @@ void Engine::apply(const Command &command) {
             // blocks later would be a note after the transport stopped.
             deferred_count_ = 0;
             scheduler_.reset(true);
+            // And the last step's locks. A lock lasts as long as its step, and with the transport
+            // stopped no step is playing: left masked, every parameter that step locked was shut
+            // out of the performance layer until the next PLAY, so a macro or the morph on it
+            // did nothing and a pad played the dead step's value. The per-block copy in
+            // process() puts the performed values back in this same block.
+            for (int t = 0; t < kTracks; t++) locked_[t] = 0;
             break;
 
         case Cmd::set_tempo:
@@ -718,6 +724,8 @@ void Engine::apply(const Command &command) {
             }
             deferred_count_ = 0;                 // hits of a pattern that no longer exists
             scheduler_.reset(true);
+            // The lock mask of a step of a pattern that no longer exists (Cmd::stop says why).
+            for (int t = 0; t < kTracks; t++) locked_[t] = 0;
             reconfigure();
             // The sends and the master, which arrived with the file as fourteen bytes. Without
             // this the mixer would keep running the PREVIOUS project's delay and reverb while

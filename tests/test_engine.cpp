@@ -2729,3 +2729,41 @@ TEST(engine_the_shared_voice_budget_caps_va_poly_across_tracks) {
     for (int i = 0; i < 4; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
     pump();
 }
+
+// A lock lasts exactly as long as its step, and a stopped transport has no step playing. The
+// mask of locked parameters used to outlive the stop, so the performance layer stayed shut out
+// of every parameter the last step had locked: with the transport stopped, a macro (or the
+// morph) on such a parameter moved the screen and not the sound, and a pad played the old
+// step's lock. Stopping ends the step, so it ends its locks.
+TEST(engine_a_stop_ends_the_last_steps_locks_so_a_macro_reaches_them) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::set_param, 0, 0, kLvl, 100);
+    put_trig(0, 0);
+
+    host.set_running(true);
+    host.deliver_tick(0, 0);
+    pump();
+    // A lock taking the level to 0 on the step that is playing: heard at once, and masked.
+    post(Cmd::lock_delta, 0, 0, kLvl, uint8_t(int8_t(-100)));
+    pump();
+
+    host.set_running(false);
+    post(Cmd::stop, 0, 0, 1);
+    pump();
+    CHECK(settle());
+
+    // Macro B takes the level from the kit's 100 to 127.
+    post_macro_assign(1, 0, kLvl, 100, 127);
+    post(Cmd::set_macro, 0, 0, 1, 127);
+    pump();
+    CHECK_EQ(int(strata::test::engine().performed(0, kLvl)), 127);
+
+    // A pad on the track: it sounds at the macro's level, not at the dead step's lock of 0.
+    post(Cmd::trigger_note, 0, 0, 60, 100);
+    CHECK(energy(20) > 0.01f);
+
+    post(Cmd::macro_clear, 0, 0, 1);
+    post(Cmd::set_macro, 0, 0, 1, 0);
+    pump();
+}
