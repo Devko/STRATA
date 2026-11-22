@@ -15,7 +15,7 @@ Build on the card: STRATA `________`  STRATA6 `________`  cl6x / GCC only: `____
 
 # Tonight's walkthrough
 
-## On the PC, before building the card (15 min)
+## On the PC, before building the card (15 min, plus E2-E5 if there is time)
 
 From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c 'cd
 /mnt/d/DEV/STRATA && ...'`), on an up-to-date main with PR #17 (the MAX readout) merged.
@@ -26,7 +26,24 @@ From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c
       Emulator peak, cl6x `________ %`
 - [ ] The same with `ENAGA_TI_CGT=none tests/scenario_factory.sh` (GCC only).
       Emulator peak, GCC `________ %`
-- [ ] `tools/scenarios.sh` (every scenario) passes, with cl6x and GCC only.
+- [ ] **E1.** `tools/scenarios.sh` (every scenario) passes, with cl6x and with GCC only, on main
+      now and on `eb46d43` (before the DSP optimizations, PR #26): four columns for BUDGET's
+      optimization review. `scenario_m3.sh` cl6x now: `________ %` (unit/emulator ratio in 3)
+- [ ] Prepare for U5 (section 13b): a **30 s stereo 96 kHz WAV** on the PC, ideally a sweep that
+      runs past 24 kHz.
+
+The next four are BUDGET's emulator runs (`docs/BUDGET.md`, "Optimization review"). They are not
+needed for tonight's unit session; do them if the PC is free.
+
+- [ ] **E2.** VA POLY per voice after PR #26: MIN7 vs MIN11 in `groove()` (`core/factory.cpp`,
+      where `build_default_beat` went), `scenario_m3.sh`, both compilers. Was 2.16 cl6x / 3.82
+      GCC per voice. Now: `________` / `________`
+- [ ] **E3.** The app's real worst case: four, then six, then eight tracks on `va_poly` with MIN11
+      chords. Crosses 60% at `____` tracks, overruns at `____`.
+- [ ] **E4.** `scenario_m5.sh` against `scenario_m3.sh`, before and after PR #26 (the prepare
+      memo's share). Gap before `________`, after `________`
+- [ ] **E5.** Load the 30 s 96 kHz WAV through the emulator's card, cl6x vs GCC.
+      `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
       tracks soloed to `build/host/render/`. Anything that already sounds wrong: `________`
 - [ ] STRATA6: in `core/factory.cpp`, `groove()`, both stabs `ChordType::min7` -> `min11`, then
@@ -81,8 +98,10 @@ four patterns. Tracks: 1 kick, 2 clap, 3 closed hat, 4 open hat, 5 rim (PERC), 6
 - [ ] Bass on the offbeats with one slide up to Eb. **Loud enough against the kick?** Does the
       sidechain duck pump it rather than chop it? `________`
 - [ ] The stab sits in a dotted-1/8 ping-pong delay and the reverb (dub chord).
-- [ ] STOP, then PLAY: MAX restarts from the new run. Let it play **60 s**, then read:
+- [ ] **U1.** STOP, then PLAY: MAX restarts from the new run. Let it play **60 s**, then read:
       top-line load range `________ %` to `________ %`, **MAX `________ %`**.
+      Divided by E1's `scenario_m3.sh` cl6x figure = unit/emulator ratio `________`
+      (about 1.35 would mean the cache and DDR costs the emulator cannot see are real).
 - [ ] Turn VALUE: tempo follows smoothly. Push VALUE + turn: swing. Back to 130.0.
 
 ## 3b. The rest of the factory project: A02-A04, chain, scenes, mute states (10 min)
@@ -176,6 +195,19 @@ MINOR (C# is not in C minor, so a folding track moves it). Repeat on each track 
 - [ ] **SAMPLE, one-shot:** turn SLC fully down (1). Now the step **does** move with the scale.
 - [ ] Set SLC back to 8 (or FUNC+CLR) and the scale to MINOR.
 
+## 8b. U3: GRAIN on a long sample, at high pitch (5 min)
+
+Resampling gives track 8 a multi-second sample without a file browser, and checks RESAMPLE too.
+
+- [ ] FUNC+REC: UP/DOWN to `RESAMPLE 4 BAR`, LEFT/RIGHT to `TO TRK 8`, OK arms. Playing, it records from
+      the next bar line, writes the take (`WRITING`, then `LAST STRATA_n`) and track 8 loads it.
+      Take name: `________`. Does the take sound like the mix and loop cleanly? `________`
+- [ ] Track 8 to GRN (FUNC+EDIT). EDIT SRC: DEN 127, SPR 127. AMP: PIT 64.
+      **MAX `________ %`**
+- [ ] AMP PIT 127, and a step on track 8 at a high note (step page NOTE, e.g. C6).
+      **MAX `________ %`** Over PIT 64 by `________` points (the DDR cost of high-pitch grains).
+- [ ] Leave track 8 on GRN for section 13.
+
 ## 9. KEYS: a held key sustains (3 min)
 
 Select track 7 (VA POLY), EDIT AMP page, DEC up high. FUNC+HOME for KEYS.
@@ -187,7 +219,7 @@ Select track 7 (VA POLY), EDIT AMP page, DEC up high. FUNC+HOME for KEYS.
 - [ ] Hold a key and press HOME: the note stops.
 - [ ] On track 1 (KICK) letting go of a key changes nothing.
 - [ ] On a GRAIN track (FUNC+EDIT, track 8 to GRN) with DEC at 127: the cloud thins out when the
-      key comes up. Put track 8 back to SMP.
+      key comes up. Leave track 8 on GRN.
 
 ## 10. MUTATE keep and revert; PERFORM undo (4 min)
 
@@ -240,6 +272,29 @@ scene 7 in slot B (hold SCENE B + STEP 7), tempo **142.0**, key **D# MINOR**, tr
       its pass, then the chain carries on from its first entry), tracks 3 and 5 muted,
       scene 7 in B, 142.0, D# MINOR, track 8 on GRN. Missing: `________________`
 
+## 13b. U5: loading a 30 s 96 kHz WAV (5 min)
+
+Track 8's kit names the take from 8b (`/RECORD/STRATA_n.WAV`). Swap that file for the 96 kHz one.
+
+- [ ] Power off. On the PC, replace `/RECORD/STRATA_n.WAV` (the name from 8b) with the prepared
+      30 s 96 kHz stereo WAV under the same name. Card back, power on, start STRATA.
+- [ ] It loads once as the project opens. Then PROJECT, track 8 selected, FUNC+DOWN (reload
+      the track's sample) to time it: from `LOADING` until
+      the SMP line shows `O` for track 8: `________ s`
+- [ ] While it loads (`RESAMPLING`), the screen keeps drawing and the keys answer. Stalls? `________`
+- [ ] Play it on SMP (FUNC+EDIT, track 8 to SMP, SLC down to 1): past 24 kHz the sweep does not
+      come back down as a falling tone. Back to GRN.
+
+## 13c. U4: the delay tail (5 min, a good break)
+
+Section 14 reloads the saved project, which puts the delay back afterwards.
+
+- [ ] STOP. MIXER, DLY page: A (TIM) to `1/1`, B (FBK) to the top. EDIT FX on track 2 (clap): C
+      (SNA) up. Idle LOAD `________ %`
+- [ ] Tap lower pad 2 once, then nothing. LOAD while the tail rings: `________ %`. It drops back
+      after `________` (at 130 BPM and feedback 0.95 this can take several minutes; the tail
+      must keep decaying and never grow).
+
 ## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). PROJECT, FUNC+LEFT once: `AGAIN TO RELOAD`, nothing changes.
@@ -277,6 +332,9 @@ Enaga's menu and start STRATA6.
 - [ ] PLAY, let it run **60 s**: top-line load range `________ %` to `________ %`,
       **MAX `________ %`**. Difference to STRATA's MAX = cost of two more voices:
       `________` points.
+- [ ] **U2.** Now switch tracks 5 (rim) and 6 (bass) to PLY (FUNC+EDIT) and give their trigs
+      MIN11 chords (hold STEP + OK, third page, CHRD). Three six-voice tracks:
+      **MAX `________ %`**. Overruns (crackle, LOAD near 100)? `________`
 
 ## 17. Write the numbers down
 
@@ -284,14 +342,19 @@ Enaga's menu and start STRATA6.
 | --- | --- |
 | Idle load (1) | |
 | scenario_factory.sh emulator peak, cl6x / GCC (PC) | |
-| A01 GROOVE MAX, 60 s (3) | |
+| E1 `scenario_m3.sh` cl6x, emulator (PC) | |
+| U1 A01 GROOVE MAX, 60 s (3), and ratio to E1 | |
 | A03 BREAK MAX, 60 s (3b) | |
 | A04 PEAK MAX, 60 s (3b) | |
 | GRAIN on track 8 MAX (8) | |
+| U3 GRAIN on the take, DEN/SPR 127: PIT 64 / PIT 127 (8b) | |
+| U5 30 s 96 kHz WAV load time (13b) | |
+| U4 delay tail: LOAD while ringing, time to drop (13c) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
+| U2 STRATA6 + tracks 5 and 6 as MIN11 POLY (16) | |
 
-These go into `docs/BUDGET.md` as the first unit rows, and the ticks into the reference list below.
+These go into `docs/BUDGET.md` as the first unit rows (U1-U5 and E1-E5 in "Optimization review"), and the ticks into the reference list below.
 
 ---
 
