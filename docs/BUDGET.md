@@ -421,15 +421,15 @@ the cycle, and the cl6x `APP.ENA` is byte-identical** (476,008 bytes, SHA-256 `3
 suite 539,926 checks, 0 failures. `tools/build.sh` sends `chainloops`, `drumloops`, `grainloops`,
 `masterloops`, `repeatloops` and `valoops` (`*.ti.c`) and the DSP library through cl6x.
 
-| Scenario | Blocks | cl6x | GCC only | ratio |
-| --- | --- | --- | --- | --- |
-| `scenario_m0.sh` — init, nothing playing | 653 | **2.54%** | 2.87% | 1.13x |
-| `scenario_m1.sh` — the beat | 1,257 | **23.49%** | 39.60% | 1.69x |
-| `scenario_m3.sh` — the default beat | 1,257 | **19.17%** | 31.92% | 1.67x |
-| `scenario_m4.sh` — + stop, queue, save | 1,661 | **16.94%** | 27.16% | 1.60x |
-| `scenario_m5.sh` — + PERFORM, scenes, macros | 1,258 | **19.37%** | 34.54% | 1.78x |
-| `scenario_m6.sh` — + KEYS, three keys recorded | 1,661 | **21.28%** | 36.61% | 1.72x |
-| `scenario_m7.sh` — + every MIXER page and SETUP | 1,257 | **23.49%** | 39.60% | 1.69x |
+| Scenario | cl6x | GCC only | ratio |
+| --- | --- | --- | --- |
+| `scenario_m0.sh` — init, nothing playing | **2.54%** | 2.87% | 1.13x |
+| `scenario_m1.sh` — the beat | **23.49%** | 39.60% | 1.69x |
+| `scenario_m3.sh` — the default beat | **19.17%** | 31.92% | 1.67x |
+| `scenario_m4.sh` — + stop, queue, save | **16.94%** | 27.16% | 1.60x |
+| `scenario_m5.sh` — + PERFORM, scenes, macros | **19.37%** | 34.54% | 1.78x |
+| `scenario_m6.sh` — + KEYS, three keys recorded | **21.28%** | 36.61% | 1.72x |
+| `scenario_m7.sh` — + every MIXER page and SETUP | **23.49%** | 39.60% | 1.69x |
 
 0 overruns in every run. **Worst case 23.49% with cl6x, against the 60% target.**
 
