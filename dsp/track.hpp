@@ -48,15 +48,21 @@ constexpr int kParamsPerPage = 4;
 // its memo still look at the first kParams only: an LFO setting changing does not re-prepare a
 // machine. What the LFO DOES to its destination arrives as an ordinary change to that byte.
 constexpr int kLfoParams = 4;
-constexpr int kTrackParams = kParams + kLfoParams;
+// And a sixth: the arpeggiator (core/arp.hpp), MOD RAT OCT GATE, read by the engine's scheduler
+// and by nothing that renders, for the same reasons.
+constexpr int kArpParams = 4;
+constexpr int kArpFirst = kParams + kLfoParams;
+constexpr int kTrackParams = kArpFirst + kArpParams;
 
-enum class Page : uint8_t { src = 0, fltr = 1, amp = 2, fx = 3, lfo = 4 };
+enum class Page : uint8_t { src = 0, fltr = 1, amp = 2, fx = 3, lfo = 4, arp = 5 };
 
 constexpr int page_first(Page page) { return int(page) * kParamsPerPage; }
 static_assert(page_first(Page::lfo) == kParams, "the LFO page is the four bytes after the sound");
 static_assert(kLfoParams == kParamsPerPage, "the LFO is one page of four");
+static_assert(page_first(Page::arp) == kArpFirst, "the ARP page is the four bytes after the LFO");
+static_assert(kArpParams == kParamsPerPage, "the arp is one page of four");
 
-// All 20 of a track's parameters, as stored in a kit and overridden by locks. Values are 0-127;
+// All 24 of a track's parameters, as stored in a kit and overridden by locks. Values are 0-127;
 // each machine and the chain map them to physical units themselves, so the sequencer never
 // needs to know what a parameter means. Machines read v[0..kParams) only.
 struct TrackParams {

@@ -22,7 +22,7 @@ namespace {
 using namespace strata;
 
 constexpr uint32_t kSlack = 64;
-constexpr uint32_t kPerformFileBytes = 3152;   // 2424, then the scenes' LFO (12 + 640) and EQ (12 + 64)
+constexpr uint32_t kPerformFileBytes = 3804;   // 2424, then the scenes' LFO (12 + 640), EQ (12 + 64) and arp (12 + 640)
 
 uint8_t g_buffer[kPerformFileBytes + kSlack];
 uint8_t g_alternate[kPerformFileBytes + kSlack];
@@ -836,17 +836,19 @@ TEST(perform_the_header_says_strata_and_the_version) {
     const uint32_t written = write_performance();
     CHECK_EQ(int(g_buffer[0]), int(kMagic0));
     CHECK_EQ(int(peek_u16(g_buffer, kVersionOffset)), int(kPerformVersion));
-    CHECK_EQ(int(peek_u16(g_buffer, 6)), 4);          // scenes, macros, the scenes' LFO and EQ
+    CHECK_EQ(int(peek_u16(g_buffer, 6)), 5);          // scenes, macros, the scenes' LFO, EQ, arp
     CHECK_EQ(peek_u32(g_buffer, 8), written - kHeaderBytes);
     CHECK_EQ(peek_u32(g_buffer, kCrcOffset),
              crc32(g_buffer + kHeaderBytes, written - kHeaderBytes));
-    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 4 * kSectionEntryBytes);
+    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 5 * kSectionEntryBytes);
     CHECK(section_at(g_buffer, kSectionPerformMacros) >
           section_at(g_buffer, kSectionPerformScenes));
     CHECK(section_at(g_buffer, kSectionPerformSceneLfo) >
           section_at(g_buffer, kSectionPerformMacros));
     CHECK(section_at(g_buffer, kSectionPerformSceneMaster) >
           section_at(g_buffer, kSectionPerformSceneLfo));
+    CHECK(section_at(g_buffer, kSectionPerformSceneArp) >
+          section_at(g_buffer, kSectionPerformSceneMaster));
 }
 
 TEST(perform_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
@@ -1084,8 +1086,8 @@ TEST(perform_a_payload_declared_one_byte_past_the_file_is_truncated) {
 TEST(perform_a_section_one_byte_longer_than_the_payload_or_a_short_macro_table_is_malformed) {
     fill_performance();
     const uint32_t size = write_performance();
-    // The LAST section, the scenes' master EQ, so one byte more runs past the payload.
-    const uint32_t last = section_entry_at(g_buffer, kSectionPerformSceneMaster);
+    // The LAST section, the scenes' arp, so one byte more runs past the payload.
+    const uint32_t last = section_entry_at(g_buffer, kSectionPerformSceneArp);
     const uint32_t last_len = peek_u32(g_buffer, last + 8);
     poke_u32(g_buffer, last + 8, last_len + 1);
     refresh_crc(g_buffer);
@@ -1111,6 +1113,13 @@ TEST(perform_a_section_one_byte_longer_than_the_payload_or_a_short_macro_table_i
 
     write_performance();
     poke_u32(g_buffer, last + 8, last_len - 1);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::malformed));
+
+    write_performance();
+    const uint32_t master = section_entry_at(g_buffer, kSectionPerformSceneMaster);
+    poke_u32(g_buffer, master + 8, peek_u32(g_buffer, master + 8) - 1);
     refresh_crc(g_buffer);
     CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
              int(SerializeResult::malformed));
@@ -1308,20 +1317,25 @@ TEST(perform_scenes_keep_their_lfo_bytes_through_a_save) {
     refresh_crc(g_buffer);
     CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
              int(SerializeResult::ok));
-    CHECK_EQ(int(g_loaded_scenes.scenes[0].stored[0][2]), (1 << kKitLfoParams) - 1);
+    CHECK_EQ(int(g_loaded_scenes.scenes[0].stored[0][2] & ((1 << kKitLfoParams) - 1)),
+             (1 << kKitLfoParams) - 1);
+    // And the arp's bits come from the arp's own section, not from this byte.
+    CHECK_EQ(int(g_loaded_scenes.scenes[0].stored[0][2] >> kKitLfoParams),
+             int(g_scenes.scenes[0].stored[0][2] >> kKitLfoParams));
 }
 
 TEST(perform_a_file_from_before_the_lfo_loads_with_no_scene_storing_one) {
     fill_performance();
     for (int t = 0; t < kTracks; t++) scene_set(g_scenes.scenes[0], t, kKitSoundParams, 77);
     const uint32_t size = write_performance();
-    // Before the LFO there was no scenes' EQ section either: drop both, the EQ's first.
-    uint8_t *middle = g_buffer;
-    const uint32_t without_eq = drop_last_section(g_buffer, g_alternate);
-    CHECK_EQ(without_eq, 3076u);
-    for (uint32_t i = 0; i < without_eq; i++) middle[i] = g_alternate[i];
-    const uint32_t old_size = drop_last_section(middle, g_alternate);
-    CHECK_EQ(old_size, 2424u);
+    // Before the LFO there was no scenes' EQ or arp section either: drop all three, last first.
+    const uint32_t sizes[3] = {3152u, 3076u, 2424u};
+    uint32_t old_size = size;
+    for (int k = 0; k < 3; k++) {
+        old_size = drop_last_section(g_buffer, g_alternate);
+        CHECK_EQ(old_size, sizes[k]);
+        for (uint32_t i = 0; i < old_size; i++) g_buffer[i] = g_alternate[i];
+    }
     CHECK(old_size < size);
     // Whatever the set held before, the old file says no scene stores an LFO byte.
     for (int s = 0; s < kScenes; s++) {
@@ -1363,4 +1377,43 @@ TEST(perform_the_morph_crosses_lfo_bytes_like_any_other) {
     out[1][kKitSoundParams + 2] = 0;
     macro_apply(g_macros.macros[0], 127, out);
     CHECK_EQ(int(out[1][kKitSoundParams + 2]), 127);
+}
+
+TEST(perform_scenes_keep_their_arp_bytes_and_an_older_file_stores_none) {
+    fill_performance();
+    Scene &scene = g_scenes.scenes[6];
+    scene_set(scene, 4, kKitLfoEnd + 0, 30);
+    scene_set(scene, 4, kKitLfoEnd + 2, 100);
+    scene_clear(scene, 4, kKitLfoEnd + 1);
+    scene_clear(scene, 4, kKitLfoEnd + 3);
+    scene_set(scene, 4, kKitSoundParams + 1, 12);       // an LFO byte beside them
+    const uint32_t size = write_performance();
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::ok));
+    const Scene &loaded = g_loaded_scenes.scenes[6];
+    CHECK(scene_has(loaded, 4, kKitLfoEnd + 0));
+    CHECK(!scene_has(loaded, 4, kKitLfoEnd + 1));
+    CHECK(scene_has(loaded, 4, kKitLfoEnd + 2));
+    CHECK(!scene_has(loaded, 4, kKitLfoEnd + 3));
+    CHECK(scene_has(loaded, 4, kKitSoundParams + 1));
+    CHECK_EQ(int(loaded.values[4][kKitLfoEnd + 2]), 100);
+    for (int s = 0; s < kScenes; s++) {
+        CHECK_EQ(scene_count(g_loaded_scenes.scenes[s]), scene_count(g_scenes.scenes[s]));
+    }
+
+    // The file the LFO and kill EQ builds wrote: everything but the arp comes back.
+    const uint32_t old_size = drop_last_section(g_buffer, g_alternate);
+    CHECK_EQ(old_size, 3152u);
+    for (int s = 0; s < kScenes; s++) scene_set(g_loaded_scenes.scenes[s], 1, kKitLfoEnd, 9);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_alternate, old_size)),
+             int(SerializeResult::ok));
+    CHECK(scene_has(g_loaded_scenes.scenes[6], 4, kKitSoundParams + 1));
+    for (int s = 0; s < kScenes; s++) {
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = kKitLfoEnd; p < kKitParams; p++) {
+                CHECK(!scene_has(g_loaded_scenes.scenes[s], t, p));
+                CHECK_EQ(int(g_loaded_scenes.scenes[s].values[t][p]), 0);
+            }
+        }
+    }
 }
