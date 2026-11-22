@@ -1398,9 +1398,14 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
 - [ ] **PERFORM, VALUE**: morphs from the kit (scene 1) to DUB (scene 2): chord, rim and blips into
       the sends with longer tails. Scenes 3 (DARK: filters close) and 4 (TENSION: the acid opens,
       hats and kick tighten) are there to assign to A or B.
-- [ ] **PERFORM, A-D: no macros ship.** An assigned macro holds its parameters at its own value
-      even at 0, so a shipped macro would freeze those EDIT knobs. Assign your own; the factory
-      leaves them empty on purpose (core/factory.cpp).
+- [ ] **PERFORM, A-D**: ACID (bass cutoff, resonance, envelope), DUB (chord and rim into the
+      delay and reverb), HATS (both longer, closed brighter), KICK (longer body, more drive).
+      Each must be audible from the first detent, with no jump.
+- [ ] **A macro at 0 lets go** (2026-11-22). With ACID at 0, turn BASS CUT in EDIT: it is heard.
+      Turn ACID up: the macro has the cutoff. Back to 0: the knob's value comes back. The same
+      with the morph: a scene that stores a parameter a resting macro drives is heard. One known
+      step: if the knob moved while the macro sat at 0, the first detent up jumps to the macro's
+      range.
 - [ ] **Mute states** 1-8: all, no kick, drums only, no hats, no bass, kick + bass, melodic parts
       only, the bare groove without rim and blips.
 - [ ] Anything that sounds wrong, say which and how: each value has its arithmetic in a comment

@@ -425,13 +425,47 @@ void factory_scenes(SceneSet &scenes) {
     scene_set(tension, kChord, kAmp1, 100);
 }
 
-// No factory MACROS, on purpose. An enabled macro target writes its `low` at position 0 on every
-// rebuild of the performance layer (core/perform.hpp, `macro_apply`), so a macro shipped on a
-// parameter freezes that parameter's EDIT knob until the macro is cleared: turning BASS CUT would
-// move the screen and not the sound. Scenes have no such cost -- a parameter only one end stores
-// takes the LIVE kit value at the other -- so the factory's performance content is scenes and
-// mute states, and the macros start empty for the user to assign (macro_range_through makes an
-// assignment start where the knob already is).
+// The four macros on encoders A-D in PERFORM. Each target starts at the kit's own value, so the
+// first detent up is a nudge from where the sound already is, not a jump. At position 0 a macro
+// writes nothing (core/perform.hpp), so these never hold a knob or a scene: every parameter they
+// drive is still the EDIT knob's, and the morph's, until the macro moves.
+//
+// Kept apart from the DUB scene's parameters where they can be, so that a macro and the morph
+// moved together each do something audible: DUB the macro sends the chord and rim; DUB the scene
+// also lengthens the chord and the blips' sends, which no macro touches.
+void target(Macro &macro, int slot, const Kit &kit, int track, int param, uint8_t high) {
+    MacroTarget &t = macro.targets[slot];
+    t.enabled = 1;
+    t.track = uint8_t(track);
+    t.param = uint8_t(param);
+    t.low = kit.tracks[track].params[param];
+    t.high = high;
+}
+
+void factory_macros(MacroSet &macros, const Kit &kit) {
+    // A: ACID -- the bass filter opens, the resonance and the envelope rise. The 303 move.
+    Macro &acid = macros.macros[0];
+    target(acid, 0, kit, kBass, kSrc2, 112);
+    target(acid, 1, kit, kBass, kSrc3, 118);
+    target(acid, 2, kit, kBass, kAmp1, 104);
+
+    // B: DUB -- the chord and the rim into the delay and the reverb.
+    Macro &dub = macros.macros[1];
+    target(dub, 0, kit, kChord, kSna, 120);
+    target(dub, 1, kit, kChord, kSnb, 120);
+    target(dub, 2, kit, kPerc, kSna, 110);
+
+    // C: HATS -- both hats longer, the closed one brighter.
+    Macro &hats = macros.macros[2];
+    target(hats, 0, kit, kClosed, kAmp0, 64);
+    target(hats, 1, kit, kOpen, kAmp0, 104);
+    target(hats, 2, kit, kClosed, kSrc1, 127);
+
+    // D: KICK -- a longer body, driven harder.
+    Macro &kick = macros.macros[3];
+    target(kick, 0, kit, kKick, kAmp0, 108);
+    target(kick, 1, kit, kKick, kDrv, 90);
+}
 
 void factory_chain(Project &project) {
     // GROOVE x2, GROOVE+ x2, BREAK, PEAK x2, GROOVE+: about two minutes at 130 BPM. Built, and
@@ -468,6 +502,7 @@ void factory_project(Project &project, SceneSet &scenes, MacroSet &macros) {
 
     factory_chain(project);
     factory_scenes(scenes);
+    factory_macros(macros, project.kit);
 
     project.bank = 0;
     project.slot = 0;

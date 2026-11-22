@@ -4,7 +4,7 @@
 // content is VALID -- every byte inside the domain its loader would clamp it to, so nothing in it
 // changes across a save -- that it survives the round trip through all four file types, that it
 // is playable (levels up, every track has something to play), that it keeps the promises the
-// header makes (chain off, no macros, scenes neutral at rest, melodic notes in the key),
+// header makes (chain off, macros and scenes neutral at rest, melodic notes in the key),
 // and that NEW and the card-less boot both get it.
 #include "check.hpp"
 #include "apprig.hpp"
@@ -154,11 +154,22 @@ TEST(factory_the_chain_names_factory_patterns_and_is_off) {
     }
 }
 
-TEST(factory_ships_no_macros_and_scene_a_is_the_kit) {
+TEST(factory_macros_start_at_the_kit_and_scene_a_is_the_kit) {
     make();
-    // An enabled macro writes its `low` at position 0 on every rebuild, which would freeze the
-    // EDIT knob of every parameter it drives (core/factory.cpp). So none ships.
-    for (int m = 0; m < kMacros; m++) CHECK_EQ(macro_count(g_macros.macros[m]), 0);
+    // Four macros, every target starting at the kit's own value (so the first detent is a nudge,
+    // not a jump) and going somewhere (so the knob does something).
+    int targets = 0;
+    for (int m = 0; m < kMacros; m++) {
+        CHECK(macro_count(g_macros.macros[m]) > 0);
+        for (const MacroTarget &t : g_macros.macros[m].targets) {
+            if (!t.enabled) continue;
+            targets++;
+            CHECK(t.track < kTracks && t.param < kKitParams);
+            CHECK_EQ(int(t.low), int(g_made.kit.tracks[t.track].params[t.param]));
+            CHECK(t.high != t.low && t.high <= 127);
+        }
+    }
+    CHECK(targets >= 8);
 
     // Slots A and B are scenes 1 and 2; A stores nothing so the morph starts from the kit.
     CHECK_EQ(int(g_made.settings.scene_a), 0);
@@ -300,3 +311,26 @@ TEST(factory_is_what_a_new_project_holds_and_it_plays) {
     CHECK(loudest > 0.1f);
     CHECK(loudest <= 1.0f);
 }
+
+TEST(factory_macros_at_rest_leave_every_knob_heard) {
+    // The reason the factory once shipped no macros: a resting macro held its parameters. Now
+    // a macro at 0 writes nothing (core/perform.hpp), so on a NEW project every parameter a
+    // factory macro drives still answers its EDIT knob -- and moving the macro takes over.
+    using namespace strata::test;
+    Engine &e = fresh();
+    storage().request_new();
+    CHECK(settle());
+    make();
+    const MacroTarget &cut = g_macros.macros[0].targets[0];           // ACID: the bass cutoff
+    CHECK_EQ(int(e.macro_position(0)), 0);
+    post(Cmd::set_param, cut.track, 0, cut.param, 20);
+    pump(2);
+    CHECK_EQ(int(e.performed(cut.track, cut.param)), 20);
+    post(Cmd::set_macro, 0, 0, 0, 127);
+    pump(2);
+    CHECK_EQ(int(e.performed(cut.track, cut.param)), int(cut.high));
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    pump(2);
+    CHECK_EQ(int(e.performed(cut.track, cut.param)), 20);
+}
+
