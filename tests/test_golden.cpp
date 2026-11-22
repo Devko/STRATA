@@ -420,3 +420,27 @@ TEST(golden_dense_retriggers) {
         check_golden(name, g_out, frames);
     }
 }
+
+// A steal's fade, sample by sample. Two hits fill the voices, and a third at frame 1970 steals
+// one: the stolen voice fades from the top of that block and the new hit starts on its frame.
+// Only the 48 frames from 1960 are summarised, so every second sample of the splice is pinned
+// rather than one in a thousand.
+TEST(golden_a_steal_splice_sample_by_sample) {
+    const Trig hits[] = {trig(60, 127, 0), trig(60, 127, 960), trig(60, 127, 1970, false, 0)};
+    TrackParams p{};
+    for (int i = 0; i < kParams; i++) p.set(i, 100);
+#define STRATA_FADE(Type, label)                                      \
+    {                                                                 \
+        static Type machine;                                          \
+        machine.init(kRate);                                          \
+        render(machine, p, hits, 3, 2048);                            \
+        check_golden("fade-" label, g_out + 1960, 48);                \
+    }
+    STRATA_FADE(Kick, "kick")
+    STRATA_FADE(Snare, "snare")
+    STRATA_FADE(Hat, "hat")
+    STRATA_FADE(Perc, "perc")
+    STRATA_FADE(VaMono, "vamono")
+    STRATA_FADE(VaPoly, "vapoly")
+#undef STRATA_FADE
+}
