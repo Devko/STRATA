@@ -2252,3 +2252,57 @@ TEST(the_four_file_types_agree_about_which_damage_wins) {
         }
     }
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(project_a_machine_id_one_past_the_table_has_no_name) {
+    CHECK_EQ(machine_name(uint8_t(MachineId::count)), "---");
+    CHECK_EQ(machine_name(uint8_t(MachineId::count) - 1), "PLY");
+}
+
+TEST(project_settings_at_the_bottom_of_their_ranges_survive_a_round_trip) {
+    // C is root 0 and quantize 0 is "off": both are the bottom of a clamp, and a clamp one too
+    // high would turn them into C# and 1%. The same for a send or master byte of 0.
+    fill_project(g_source, 2);
+    ProjectSettings &s = g_source.settings;
+    s.root = 0;
+    s.quantize = 0;
+    for (int i = 0; i < kSendFields; i++) s.sends[i] = 0;
+    for (int i = 0; i < kMasterFields; i++) s.master[i] = 0;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, kProjectFileBytes, &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    const ProjectSettings &l = g_loaded.settings;
+    CHECK_EQ(int(l.root), 0);
+    CHECK_EQ(int(l.quantize), 0);
+    for (int i = 0; i < kSendFields; i++) CHECK_EQ(int(l.sends[i]), 0);
+    for (int i = 0; i < kMasterFields; i++) CHECK_EQ(int(l.master[i]), 0);
+}
+
+TEST(project_a_payload_declared_one_byte_past_the_file_is_truncated) {
+    fill_project(g_source, 2);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, kProjectFileBytes, &written)),
+             int(SerializeResult::ok));
+    poke_u32(g_project, 8, written - kHeaderBytes + 1);
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::truncated));
+}
+
+TEST(bank_a_section_cut_short_counts_every_pattern_it_lost) {
+    const uint32_t written = fresh_bank_file(2);
+    (void)written;
+    // Keep the first ten patterns whole and eight bytes of the eleventh's header: the rest
+    // cannot be found, and all six of them are reported.
+    uint32_t keep = 0;
+    for (int slot = 0; slot < 10; slot++) keep += pattern_bytes(g_source.patterns[2][slot]);
+    poke_u32(g_bank, kHeaderBytes + 8, keep + 8);
+    refresh_crc(g_bank);
+    project_init(g_loaded);
+    int refused = -1;
+    CHECK_EQ(int(bank_read(g_loaded, 2, g_bank, written, &refused)), int(SerializeResult::ok));
+    CHECK_EQ(refused, 6);
+}

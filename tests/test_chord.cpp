@@ -819,3 +819,23 @@ TEST(chord_fold_never_writes_more_than_the_caller_asked_for) {
     CHECK_EQ(chord_fold(nullptr, 3, 60, 0, int(Scale::major), notes, 6), 0);
     CHECK_EQ(chord_fold(eight, 3, 60, 0, int(Scale::major), nullptr, 6), 0);
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(chord_pack_has_one_encoding_of_no_chord_whatever_the_inversion) {
+    CHECK_EQ(int(chord_pack(ChordType::none, 2)), 0);
+    CHECK_EQ(int(chord_pack(ChordType::count, 0)), 0);
+    CHECK_EQ(int(chord_pack(ChordType::count, 1)), 0);
+}
+
+TEST(chord_invert_moves_a_two_note_chord_and_may_lift_onto_the_top_note) {
+    uint8_t dyad[2] = {60, 67};
+    CHECK_EQ(chord_invert(dyad, 2, 1), 1);
+    CHECK_EQ(int(dyad[0]), 67);
+    CHECK_EQ(int(dyad[1]), 72);
+    // 115 + 12 is 127, the highest note there is, and still a note.
+    uint8_t high[3] = {115, 119, 122};
+    CHECK_EQ(chord_invert(high, 3, 1), 1);
+    CHECK_EQ(int(high[0]), 119);
+    CHECK_EQ(int(high[2]), 127);
+}
