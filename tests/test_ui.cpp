@@ -1049,7 +1049,7 @@ TEST(ui_two_held_steps_make_a_range_that_survives_until_a_fresh_single_press) {
     // of.
     key(ENAGA_KEY_CLR);
     pump(2);
-    CHECK_EQ(UiProbe::notice(app), "CLEARED  F1+CLR UNDO");
+    CHECK_EQ(UiProbe::notice(app), "CLEARED FUNC+CLR UNDO");
     for (int s = 0; s < kStepsPerTrack; s++) CHECK(!trig_at(0, s));
 }
 
@@ -2639,13 +2639,13 @@ TEST(ui_f1_f3_twice_saves_and_once_does_not) {
     Strata &app = fresh();
     shift_key(ENAGA_KEY_F3);
     CHECK_EQ(UiProbe::mode(app), int(Mode::project));
-    CHECK_EQ(UiProbe::notice(app), "F1+F3 AGAIN TO SAVE");
+    CHECK_EQ(UiProbe::notice(app), "FUNC+PROJECT TO SAVE");
     pump(4);
     CHECK(app_storage().busy_text() == nullptr);   // once is not a save
 
     pump(2100);                                    // too late: this arms again instead
     shift_key(ENAGA_KEY_F3);
-    CHECK_EQ(UiProbe::notice(app), "F1+F3 AGAIN TO SAVE");
+    CHECK_EQ(UiProbe::notice(app), "FUNC+PROJECT TO SAVE");
 
     shift_key(ENAGA_KEY_F3);
     CHECK_EQ(UiProbe::notice(app), "SAVING");
