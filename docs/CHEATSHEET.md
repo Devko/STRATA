@@ -40,7 +40,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | CHAIN | PROJECT, then octave RIGHT | The pattern chain as a list |
 | PATTERN | PROJECT, octave RIGHT twice | Master length (LEN) and swing (SWG) of the playing pattern |
 | SETUP | PROJECT, octave RIGHT three times | Record quantize; shows clock and MIDI settings |
-| RESAMPLE | FUNC+REC | Record the output to a file or a track |
+| RESAMPLE | FUNC+REC | Record the output, or the audio input, to a file or a track |
 | Step page | Hold STEP + OK | One step's own fields (opens over GRID) |
 | Enaga menu | FUNC+POWER | CLOCK SRC, CLOCK/SYNC OUT, MIDI CH |
 
