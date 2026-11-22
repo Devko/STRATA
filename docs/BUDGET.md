@@ -65,8 +65,8 @@ Read by eye, not logged. The first two rows are the top-line LOAD. The stress ro
 on the bottom line (#17) after a long session of free play on the controls-remap build (main
 e1ff619, cl6x, VA fusion off). What was on at the peak is not known, so it cannot be split by
 feature. It is well past the 60% target and past "Everything at once"'s ~63% unit estimate below,
-but under 100%: a block at 100% would overrun. Whether anything was audible at the peak is not
-yet recorded. The clean A01 and A04 MAX figures (60 s each, MAX restarted by STOP then PLAY) and
+but under 100%: a block at 100% would overrun. Roland heard no clicks or noise at any point in
+that session. The clean A01 and A04 MAX figures (60 s each, MAX restarted by STOP then PLAY) and
 the six-voice STRATA6 figure are still to be recorded here.
 
 ### M0 — skeleton
