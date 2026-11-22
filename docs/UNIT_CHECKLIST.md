@@ -58,6 +58,11 @@ needed for tonight's unit session; do them if the PC is free.
       `docs/BUDGET.md` ("Per-track LFO", E7: every track `params[17] = 40`, `[18] = 127`,
       `[19] = 38`), both compilers, and revert the edit. Host estimate ~1.1-1.4 points.
       Off: cl6x `________ %` GCC `________ %`. Eight on: cl6x `________ %` GCC `________ %`
+- [ ] **E8-E10.** The cl6x vectorisation pass (`docs/BUDGET.md`, "The cl6x vectorisation pass"):
+      `python3 -B tools/ti_loops.py --enaga` (pipelining report), then `bash tools/ti_ab.sh --gcc`
+      (about an hour; builds each variant in its own worktree, so main is untouched). Audio check
+      all `identical`: yes / no `____`. `head` vs `base`, scenario_m3 cl6x: `____ %` vs `____ %`.
+      VA POLY per voice on `head` (E2's method): `________`
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
