@@ -29,8 +29,9 @@ From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c
 - [ ] **E1.** `tools/scenarios.sh` (every scenario) passes, with cl6x and with GCC only, on main
       now and on `eb46d43` (before the DSP optimizations, PR #26): four columns for BUDGET's
       optimization review. `scenario_m3.sh` cl6x now: `________ %` (unit/emulator ratio in 3)
-- [ ] Prepare for U5 (section 13b): a **30 s stereo 96 kHz WAV** on the PC, ideally a sweep that
-      runs past 24 kHz.
+- [ ] For U5 (section 13b), the test file is ready in the project files, `unit-test/`:
+      **`STRATA_1.WAV`**, a 15 s stereo 16-bit 96 kHz linear sweep from 100 Hz to 46 kHz at
+      -6 dBFS. Also there, `SWEEP_30S_96K.WAV`, the same sweep at 30 s (see 13b for why two).
 
 The next four are BUDGET's emulator runs (`docs/BUDGET.md`, "Optimization review"). They are not
 needed for tonight's unit session; do them if the PC is free.
@@ -42,7 +43,7 @@ needed for tonight's unit session; do them if the PC is free.
       chords. Crosses 60% at `____` tracks, overruns at `____`.
 - [ ] **E4.** `scenario_m5.sh` against `scenario_m3.sh`, before and after PR #26 (the prepare
       memo's share). Gap before `________`, after `________`
-- [ ] **E5.** Load the 30 s 96 kHz WAV through the emulator's card, cl6x vs GCC.
+- [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
       tracks soloed to `build/host/render/`. Anything that already sounds wrong: `________`
@@ -272,18 +273,27 @@ scene 7 in slot B (hold SCENE B + STEP 7), tempo **142.0**, key **D# MINOR**, tr
       its pass, then the chain carries on from its first entry), tracks 3 and 5 muted,
       scene 7 in B, 142.0, D# MINOR, track 8 on GRN. Missing: `________________`
 
-## 13b. U5: loading a 30 s 96 kHz WAV (5 min)
+## 13b. U5: loading a long 96 kHz WAV (5 min)
 
-Track 8's kit names the take from 8b (`/RECORD/STRATA_n.WAV`). Swap that file for the 96 kHz one.
+Track 8's kit names the take from 8b (`/RECORD/STRATA_n.WAV`, `STRATA_1` on a card with no
+earlier takes). Swap that file for the 96 kHz sweep.
 
-- [ ] Power off. On the PC, replace `/RECORD/STRATA_n.WAV` (the name from 8b) with the prepared
-      30 s 96 kHz stereo WAV under the same name. Card back, power on, start STRATA.
+**Why 15 s and not 30 s:** the loader's resample buffer holds 30 s of 48 kHz frames (1,440,000,
+`kSrcFrames` in `app/storage.hpp`), and it counts the file's own frames. So a 96 kHz file can be at
+most 15 s, and a 30 s one is refused with `TOO LONG`. That limit is in seconds of 48 kHz, not in
+seconds of the file. The 30 s file checks the refusal.
+
+- [ ] Power off. Copy `unit-test/STRATA_1.WAV` from the project files over `/RECORD/STRATA_1.WAV`
+      on the card (rename it if 8b showed another number). Card back, power on, start STRATA.
 - [ ] It loads once as the project opens. Then PROJECT, track 8 selected, FUNC+DOWN (reload
       the track's sample) to time it: from `LOADING` until
       the SMP line shows `O` for track 8: `________ s`
 - [ ] While it loads (`RESAMPLING`), the screen keeps drawing and the keys answer. Stalls? `________`
-- [ ] Play it on SMP (FUNC+EDIT, track 8 to SMP, SLC down to 1): past 24 kHz the sweep does not
-      come back down as a falling tone. Back to GRN.
+- [ ] Play it on SMP (FUNC+EDIT, track 8 to SMP, SLC down to 1): the sweep rises for about 8 s
+      to 24 kHz and fades out of hearing well before that. In the second half it must stay
+      silent: no falling tone coming back down. Back to GRN.
+- [ ] Optional: copy `SWEEP_30S_96K.WAV` over the same name instead and reload. It should say
+      `TOO LONG` and leave the track silent, with no hang.
 
 ## 13c. U4: the delay tail (5 min, a good break)
 
@@ -348,7 +358,7 @@ Enaga's menu and start STRATA6.
 | A04 PEAK MAX, 60 s (3b) | |
 | GRAIN on track 8 MAX (8) | |
 | U3 GRAIN on the take, DEN/SPR 127: PIT 64 / PIT 127 (8b) | |
-| U5 30 s 96 kHz WAV load time (13b) | |
+| U5 15 s 96 kHz WAV load time (13b) | |
 | U4 delay tail: LOAD while ringing, time to drop (13c) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
@@ -1214,7 +1224,7 @@ wants confirming on the unit, because "bit-exact" was argued against GCC and the
 core/pcm now filters a file above 48 kHz before resampling it, so content above 24 kHz no longer
 folds back as audible tones. It costs main-loop time at load, estimated and not measured.
 
-- [ ] Load a 30 s stereo 96 kHz WAV and time it. Put the figure in docs/BUDGET.md, "Load time".
+- [ ] Load a 15 s stereo 96 kHz WAV (the longest that loads; 30 s at 96 kHz is TOO LONG) and time it. Put the figure in docs/BUDGET.md, "Load time".
       The screen must keep drawing and the keys keep answering while it shows RESAMPLING.
 - [ ] Load a 96 kHz sweep that runs past 24 kHz and play it. Nothing should come back down as a
       falling tone after the sweep passes 24 kHz.

@@ -950,7 +950,7 @@ scene or knob really did move: those prepare as before.
 | E2 | VA POLY per voice, after | MIN7 vs MIN11 in `build_default_beat`, `scenario_m3.sh`, both compilers | does 2.16 (cl6x) / 3.82 (GCC) move? |
 | E3 | The app's real worst case | temporarily set four tracks to `va_poly` with MIN11 chords in `build_default_beat`; then six; then eight | where it crosses 60% and where it overruns: sizes the voice budget in finding 1 |
 | E4 | The prepare memo's share | `scenario_m5.sh` (scenes and macros move parameters, so it prepares more) against `scenario_m3.sh` | the gap between them, before and after |
-| E5 | Load time of a 30 s 96 kHz stereo WAV | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
+| E5 | Load time of a 15 s 96 kHz stereo WAV (the longest that loads: `kSrcFrames` is 30 s of 48 kHz frames, counted at the file's rate) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
 
@@ -960,7 +960,7 @@ scene or knob really did move: those prepare as before.
 | U2 | MAX with the chord at MIN11 (six voices), then with tracks 5 and 6 also switched to VA POLY playing chords | per-voice cost on the unit; where it overruns |
 | U3 | GRAIN on a multi-second sample, DEN 127, SPR 127, at PIT 64 and at PIT 127 with a high note | the DDR cost of high-pitch grains (finding 6) |
 | U4 | Delay FBK at max, TIM 1/1, one hit, then silence | LOAD stays up while the tail rings and drops when it ends |
-| U5 | Load a 30 s 96 kHz stereo WAV | seconds to playable; whether the screen or keys stall during it |
+| U5 | Load a 15 s 96 kHz stereo WAV (`unit-test/STRATA_1.WAV` in the project files; 30 s at 96 kHz is refused TOO LONG) | seconds to playable; whether the screen or keys stall during it |
 
 ### Later milestones
 
