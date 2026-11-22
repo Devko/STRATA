@@ -743,17 +743,27 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::kit_recall:
-            // NOTHING POSTS THIS YET. A project load does the same work through
-            // Cmd::project_loaded, which also has to reset the scheduler and the undo history,
-            // so this arm is waiting for the gesture docs/SPEC.md's key table gives to F1 + F8:
-            // "Kit and machine select". Left in rather than deleted because the UI for that is
-            // M6 and re-adding it would be the same three lines -- but it is dead until then,
-            // and the reachability audit in docs/HANDOFF.md will keep saying so.
+            // The kit browser (FUNC+EDIT twice, app/app.hpp). With `a` = 1 the kit comes from the
+            // inbox the main context filled while the ring was empty (`kit_for_recall`); with
+            // `a` = 0 it is `project_.kit` as it stands, re-applied.
+            //
+            // Everything a sound is -- the parameters, the machine, the fader -- but NOT the
+            // sample path. Paths are the main context's: only the loader reads them and only the
+            // main context writes them (a load, a resample, and this recall's own swap), so
+            // Storage puts the recalled paths in place itself before it posts this.
+            if (command.a == 1) {
+                for (int t = 0; t < kTracks; t++) {
+                    KitTrack &to = project_.kit.tracks[t];
+                    const KitTrack &from = kit_inbox_.tracks[t];
+                    for (int i = 0; i < kKitParams; i++) to.params[i] = from.params[i];
+                    to.machine = from.machine;
+                    to.level = from.level;
+                }
+            }
             params_from_kit();
             // And the fourth member of the family tests/test_app.cpp has three tests for: the
             // per-block copy rewrites `effective_` from `performed_`, so without this flag the
-            // recalled kit is drawn on screen and the previous one goes on playing. Latent only
-            // because nothing posts this command yet; it becomes audible the day F1 + F8 lands.
+            // recalled kit is drawn on screen and the previous one goes on playing.
             perform_dirty_ = true;
             break;
 
