@@ -122,6 +122,27 @@ public:
     // engine's built-in default pattern stays.
     bool open_last();
 
+    // --- the project browser (PROJECT mode's PROJECTS page) ---
+
+    // Open another project from the card: `name` is a folder in PROJECTS/. Queued like a reload
+    // and with its rules -- the transport stops, unsaved work is thrown away (the UI asks twice),
+    // and an external clock that will not stop refuses it. The name becomes the project's only
+    // once the load has read its PROJECT.BIN: a folder that is not a project leaves the current
+    // one as it was, name and all. A project opened this way is what the next start opens.
+    // False for a name that could not be a project's (valid_name).
+    bool request_open(const char *name);
+
+    // Save under a new name: a new folder with all ten files, the old one left as it is. The
+    // project is called `name` from here on. False for a name that could not be one.
+    bool request_save_as(const char *name);
+
+    // A name a project folder can have: 1 to kNameBytes-1 characters of the panel's text entry
+    // (A-Z 0-9 space - + . # !), not starting with a space or a dot.
+    static bool valid_name(const char *name);
+
+    // "<data folder>/PROJECTS", for the browser's listing.
+    bool projects_folder(char *out, uint32_t max) const;
+
     // App::stop(), whose budget is 3 s including saves. Blocking and bounded: it drains the ring
     // for a few milliseconds and then writes, because destructors never run on this platform and
     // this is the last chance to keep the user's work.
@@ -324,6 +345,11 @@ private:
     enaga::Settings settings_;
 
     char name_[kNameBytes] = {};
+    // request_open: the name the pending load reads, and the one to go back to if it fails.
+    char open_name_[kNameBytes] = {};
+    char kept_name_[kNameBytes] = {};
+    bool open_pending_ = false;    // the pending load is an open of open_name_
+    bool opening_ = false;         // the load in flight is one
     bool card_usable_ = true;
     // Resampling. `take_pending_` is a request waiting for the audio side to finish the take;
     // `take_track_` is the track to load it into afterwards, or -1 for "just the file".

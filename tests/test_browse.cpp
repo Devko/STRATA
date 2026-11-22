@@ -165,3 +165,13 @@ TEST(browse_parent_folder_and_name_of_a_path) {
     CHECK(!SampleList::in_browsable_folder("/ENAGA/DATA/K1.WAV"));
     CHECK(!SampleList::in_browsable_folder(nullptr));
 }
+
+TEST(browse_same_name_ignores_case_and_nothing_else) {
+    CHECK(SampleList::same_name("DEFAULT", "default"));
+    CHECK(SampleList::same_name("", ""));
+    CHECK(!SampleList::same_name("DEFAULT", "DEFAULT2"));
+    CHECK(!SampleList::same_name("DEFAULT2", "DEFAULT"));
+    CHECK(!SampleList::same_name("A-B", "A_B"));
+    CHECK(!SampleList::same_name(nullptr, "A"));
+    CHECK(!SampleList::same_name("A", nullptr));
+}
