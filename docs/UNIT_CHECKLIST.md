@@ -232,6 +232,9 @@ sample browser, 15b, would also do.)
 - [ ] FUNC+REC: UP/DOWN to `RESAMPLE 4 BAR`, LEFT/RIGHT to `TO TRK 8`, OK arms. Playing, it records from
       the next bar line, writes the take (`WRITING`, then `LAST STRATA_n`) and track 8 loads it.
       Take name: `________`. Does the take sound like the mix and loop cleanly? `________`
+- [ ] **Take written in chunks (new tonight).** During `WRITING` the screen keeps moving (PLAY
+      cursor, LOAD) instead of freezing for seconds, and a streamed track (15c) plays on with no
+      `STREAM LATE`. An 8-bar take writes in about 3 s: `________ s`
 - [ ] Track 8 to GRN (FUNC+EDIT). EDIT SRC: DEN 127, SPR 127. AMP: PIT 64.
       **MAX `________ %`**
 - [ ] AMP PIT 127, and a step on track 8 at a high note (step page NOTE, e.g. C6).
@@ -275,6 +278,9 @@ release, `192f03f`). Synth or monitor on channel `____`.
       start another app (or power off): the synth's note ends. Before this fix it hung there.
 - [ ] EDIT ARP on track 6 (MID), MOD UP, and give one step a MIN chord (step page 3, CHRD): the
       synth arpeggiates the chord's three notes, not the root alone.
+- [ ] **LFO on MID (new tonight).** EDIT LFO on track 6 (MID): DST to C74, DEP 127, RAT about
+      `1.00`. The synth's cutoff sweeps with it; the monitor shows CC 74 about 50 times a second,
+      no more. DEP back to 0: the CC returns to the knob's value.
 - [ ] MIDI IN, a keyboard on channel 6 (track 6, back on MNO): a held key sustains and ends on
       release. CC 17 from the keyboard moves track 6's SRC B. A program change 5 on your MIDI CH
       (SETUP shows it) queues A05.
@@ -405,8 +411,8 @@ New after the walkthrough was written: a DJ isolator on the master, LOW / MID / 
       `________ %`. Difference = the EQ's cost on the unit: `________` points.
 - [ ] Bring everything back to flat (`0`, no `KILL`): after a moment MAX should fall back to
       U1's figure (the EQ switches itself off).
-- [ ] Kill HI, save (FUNC+PROJECT twice), power cycle: it reopens with HI killed (`KILL` on the
-      EQ page). Bring it back.
+- [ ] **Kills are not saved (changed tonight).** Kill HI, save (FUNC+PROJECT twice), power
+      cycle: it reopens with every band back (no `KILL` on the EQ page). The EQ knobs are kept.
 - [ ] **A macro on the EQ.** PERFORM, select macro A (LEFT/RIGHT), FUNC + STEP 5: `A EQ LOW`.
       Turn A up slowly over a few bars: the lows fade down to nothing; back to 0 and they are
       exactly back. CLR clears macro A.
@@ -467,6 +473,8 @@ cannot press, so this is their first run outside the host tests. Play A01 GROOVE
       stopped. Let go of D: the beat is back at once, in time, **no click**.
 - [ ] Let go of D half way through a stop: it comes straight back from the slowed sound.
 - [ ] **U8.** Hold a tape stop for 10 s: **MAX `________ %`** against U1's `________ %`.
+- [ ] **Changed tonight.** Lock D on a step (hold STEP, turn D). Hold that STEP, then FUNC, push
+      D: `LOCK CLEARED`, and **no** tape stop. Without a STEP held, FUNC + push D is still the stop.
 - [ ] Turn the chord's SnA (delay send) up and play a few chord stabs. **Hold FUNC, then hold
       MUTATE**: `FREEZE`, `FRZ` on PERFORM's bar line. The echo keeps looping at the same level;
       new stabs play dry and are not echoed. Let go: the loop fades into the delay's tail, then
@@ -504,6 +512,8 @@ press, so this is its first run outside the host tests. Play A01 GROOVE.
       the chain plays A01, A02 without kick, A01, then **stops** with `SONG END`, nothing after
       the last bar, no hanging note. PLAY: it starts again from entry 1.
 - [ ] FUNC+RIGHT again: `LOOP CHAIN`, and the chain goes round as before.
+- [ ] **Changed tonight.** On entry 3, FUNC+LEFT once: `AGAIN TO REMOVE`, nothing removed. Wait
+      3 s and press again: still `AGAIN TO REMOVE`. Press twice quickly: `ENTRY REMOVED`.
 - [ ] Save, power cycle: SONG and the `M2` come back. The page boxes and rows fit the screen.
 
 ## 13j. The ambient delay and reverb: LONG and HALL (8 min)

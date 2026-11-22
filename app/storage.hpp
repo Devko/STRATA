@@ -359,6 +359,20 @@ private:
     static constexpr uint32_t kTakeNameBytes = 24;
     char take_name_[kTakeNameBytes] = {};
     char take_path_[ENAGA_FILE_PATH_MAX + 1] = {};
+    // The take goes to the card a chunk per pass, one write in flight at a time (Roland,
+    // 2026-11-22): one files::save of 5.76 MiB held the main loop ~3 s, so the UI froze and
+    // streamed tracks, which Enaga refills only between main-loop file slices, ran dry.
+    static constexpr uint32_t kTakeChunkBytes = 32u * 1024u;
+    enaga::files::File take_file_;
+    uint32_t take_bytes_ = 0;          // the whole file, header included
+    uint32_t take_written_ = 0;        // bytes of it on the card so far
+    bool take_write_in_flight_ = false;
+    bool take_write_done_ = false;
+    int32_t take_write_result_ = 0;
+    void take_chunk_written(int32_t result);   // the File::write callback, main context
+    bool write_next_take_chunk();
+    void end_take_write(const char *error);
+    void finish_take_write();
 
     const char *error_ = nullptr;
     const char *project_error_ = nullptr;   // a save's or a load's reason; see last_error()

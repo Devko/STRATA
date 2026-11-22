@@ -923,3 +923,88 @@ TEST(app_the_input_peak_clamps_at_full_scale) {
     engine.process(g_in, g_master, ENAGA_BLOCK_FRAMES);
     CHECK_EQ(int(engine.status().input_peak.load(std::memory_order_relaxed)), 0);
 }
+
+// Roland, 2026-11-22: a take goes to the card a chunk per main-loop pass rather than in one
+// blocking files::save, so the screen and the streamed tracks keep going while it writes. The
+// buffer goes back to the audio side only once the last byte is on the card -- or the card goes.
+namespace {
+
+uint32_t record_a_waiting_take(Engine &engine, uint32_t bar_tick) {
+    FakeHost &host = FakeHost::the();
+    put_trig(0, 0);
+    host.set_running(true);
+    post(Cmd::resample_arm, 0, 0, 1);
+    host.deliver_tick(bar_tick, 0);
+    for (int i = 0; i < 1500; i++) {
+        if (i % 8 == 0) host.deliver_tick(bar_tick + uint32_t(i), 0);
+        pump();
+        if (engine.status().resample_state.load(std::memory_order_relaxed) == 3u) break;
+    }
+    return engine.status().resample_state.load(std::memory_order_relaxed);
+}
+
+}  // namespace
+
+TEST(app_a_take_is_written_a_chunk_per_pass_and_released_after_the_last) {
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+    CHECK_EQ(int(record_a_waiting_take(engine, 384)), 3);   // done, waiting for the card
+    const uint32_t take_bytes = 44u + engine.capture().frames() * 4u;
+    CHECK(take_bytes > 4u * 32768u);                         // more than a few chunks
+
+    storage().request_resample_write();
+    char path[64] = {};
+    int passes = 0;
+    int32_t before = 0;
+    bool grew_in_chunks = true;
+    while (passes < 200 &&
+           engine.status().resample_state.load(std::memory_order_relaxed) != 0u) {
+        pump();
+        passes++;
+        // The name of an earlier test's take may still be there; fresh() emptied the card, so
+        // only a name that is on it is this take's.
+        if (path[0] == '\0' && storage().last_take_name()[0] != '\0') {
+            char candidate[64];
+            std::strcpy(candidate, "/RECORD/");
+            std::strcat(candidate, storage().last_take_name());
+            if (host.has_file(candidate)) std::strcpy(path, candidate);
+        }
+        const int32_t now = path[0] != '\0' && host.has_file(path) ? host.file_bytes(path) : 0;
+        if (now - before > 32768) grew_in_chunks = false;
+        // Not given back while any of it is still to go.
+        if (now < int32_t(take_bytes) &&
+            engine.status().resample_state.load(std::memory_order_relaxed) == 0u) {
+            grew_in_chunks = false;
+        }
+        before = now;
+    }
+    CHECK(grew_in_chunks);
+    CHECK(passes > 4);                                   // not one blocking pass
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 0);
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(host.file_bytes(path), int32_t(take_bytes));
+    static uint8_t head[64];
+    CHECK(host.read_prefix(path, head, sizeof head) > 0);
+    enaga::wav::Format format{};
+    CHECK(enaga::wav::parse(head, sizeof head, format));
+    CHECK_EQ(int(format.data_bytes), int(take_bytes) - 44);
+    host.set_running(false);
+}
+
+TEST(app_a_card_pulled_while_a_take_is_written_gives_the_buffer_back) {
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+    CHECK_EQ(int(record_a_waiting_take(engine, 384)), 3);
+    storage().request_resample_write();
+    pump(3);                                             // a few chunks in
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 3);
+    host.set_card(false);
+    storage().on_card(false);
+    pump(3);
+    // Given back, so the next RESAMPLE can arm.
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 0);
+    host.set_card(true);
+    storage().on_card(true);
+    pump(3);
+    host.set_running(false);
+}

@@ -536,7 +536,9 @@ TEST(project_round_trips_every_settings_field) {
     CHECK_EQ(int(b.master[kMasterFieldsV1 - 1]), 99);
     // The kill EQ's bands and switches, which grew the section.
     CHECK_EQ(int(b.master[kMasterFields - 1]), 78);
-    CHECK_EQ(int(b.eq_kills), 0x5);
+    // The switches are live only (Roland, 2026-11-22): set in RAM, every band is back in the file.
+    CHECK_EQ(int(a.eq_kills), 0x5);
+    CHECK_EQ(int(b.eq_kills), 0);
 }
 
 // A mixer byte past the encoder's range is clamped, not taken. dsp/buses.cpp maps a byte with
@@ -863,7 +865,7 @@ TEST(project_a_mixer_section_from_before_the_ambient_modes_loads_classic) {
     for (int i = 0; i < kMasterFields; i++) {
         CHECK_EQ(int(g_loaded.settings.master[i]), int(g_source.settings.master[i]));
     }
-    CHECK_EQ(int(g_loaded.settings.eq_kills), int(g_source.settings.eq_kills));
+    CHECK_EQ(int(g_loaded.settings.eq_kills), 0);
     const ProjectSettings defaults;
     for (int i = kSendFieldsV1; i < kSendFields; i++) {
         CHECK_EQ(int(g_loaded.settings.sends[i]), int(defaults.sends[i]));
@@ -883,26 +885,31 @@ TEST(project_the_ambient_bytes_follow_the_kill_switches) {
     for (int i = 0; i < kSendFieldsV1; i++) {
         CHECK_EQ(int(g_project[mixer + uint32_t(i)]), int(g_source.settings.sends[i]));
     }
-    CHECK_EQ(int(g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)]),
-             int(g_source.settings.eq_kills));
+    CHECK_EQ(int(g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)]), 0);
     for (int i = kSendFieldsV1; i < kSendFields; i++) {
         CHECK_EQ(int(g_project[mixer + uint32_t(kMasterFields + 1 + i)]),
                  int(g_source.settings.sends[i]));
     }
 }
 
-// A file whose kill-switch byte has bits past the three bands keeps only the three.
-TEST(project_keeps_only_the_three_kill_switch_bits) {
+// A file written before the switches stopped being saved may still hold some: it opens with
+// every band in, whatever the byte says.
+TEST(project_ignores_a_saved_kill_switch_byte) {
     fill_project(g_source, 0);
     uint32_t written = 0;
     CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
              int(SerializeResult::ok));
     const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
-    g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)] = 0xFA;
+    g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)] = 0x07;
     refresh_crc(g_project);
     project_init(g_loaded);
+    g_loaded.settings.eq_kills = 0x5;                  // and never "left alone" from before
     CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
-    CHECK_EQ(int(g_loaded.settings.eq_kills), 0x2);
+    CHECK_EQ(int(g_loaded.settings.eq_kills), 0);
+    // The bytes after it are still where they were.
+    for (int i = kSendFieldsV1; i < kSendFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.sends[i]), int(g_source.settings.sends[i]));
+    }
 }
 
 TEST(project_round_trips_the_live_pattern_and_the_whole_chain) {
