@@ -1030,6 +1030,7 @@ void Engine::apply(const Command &command) {
                 // on an edit that did nothing, and a press that looks like it did nothing had
                 // better say so.
                 status_.bump_refused();
+                status_.bump_mutate_unchanged();
             }
             break;
         }

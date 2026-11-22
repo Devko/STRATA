@@ -314,6 +314,23 @@ Back to GRID, track 2 selected, playing.
 - [ ] MUTATE, then hold a STEP that has a trig + CLR: `STEP CLEARED`, only that step goes and the
       mutation stays. MUTATE, then hold a STEP + OK: the step page opens.
 
+**10b. Every press shows something (3 min).** Roland's first pass: upper pad 7 "did nothing". It had
+mutated the selected track's velocities (the default type), which on a drum part is subtle and
+invisible on the grid, and the screen said only `VELOCITY` for a second and a half.
+
+- [ ] The upper row is lit white, dimly, before anything is pressed; a held FILL, REPEAT, SCENE or
+      THROW lights in its own colour while held; MUTE MODE and NOTE RPT stay lit while on.
+- [ ] Track 2 selected, MUTATE (upper pad 7): `MUTATE T2 VELOCITY`, then `OK KEEPS CLR REVERTS`
+      stays on screen and the pad glows orange until OK or CLR. Is the orange pad visible? `____`
+- [ ] PERFORM, DOWN to `ROT RIGHT` (a change you can see on the grid), back to GRID, MUTATE: the
+      track's trigs move one step right. CLR: back.
+- [ ] Track 8 cleared (CLR with nothing held), MUTATE: `T8 NOTHING TO MUTATE`, the pad stays white.
+- [ ] EDIT, FUNC+octave RIGHT: `T2 LEN ..` on the second line; FUNC+selection RIGHT: the speed.
+- [ ] KEYS, turn A: `T2` and the knob's name and value. PERFORM, turn B: `MACRO B` and its value.
+- [ ] FUNC+lower pad 3: `T3 MUTE AT BAR`. CHAIN, selection RIGHT: `BANK B`. STOP twice while
+      stopped: `STOP`, then `TAILS CUT`.
+- [ ] Anything else that seemed to do nothing, by mode and key: `________________________`
+
 ## 11. Transport: FUNC+PLAY and FUNC+STOP (2 min)
 
 - [ ] Playing, FUNC+PLAY: everything jumps to step 1 on the beat and keeps playing; `RESTART`.

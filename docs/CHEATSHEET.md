@@ -75,7 +75,11 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | Upper 3 MUTE | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
 | Upper 6 THROW | Delay throw while held | FUNC: reverb throw |
-| Upper 7 MUTATE | Mutates the selected track (type and amount set in PERFORM) | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT, KIT and SAMPLES, and not while a STEP, a range or a scene pad is held or in RESAMPLE, where OK and CLR keep their own jobs. Any other edit also keeps it. FUNC (hold): delay freeze, the echoes loop and nothing new goes in (`FREEZE`, `FRZ` on PERFORM's bar line) |
+| Upper 7 MUTATE | Mutates the selected track (type and amount set in PERFORM): `MUTATE T1 VELOCITY`, then `OK KEEPS CLR REVERTS` and the pad orange until you answer; `T1 NOTHING TO MUTATE` when it changed nothing (an empty track, amount 0). The default type, VELOCITY, is subtle on drums: ROT LEFT/RIGHT or DENSITY show on the grid | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT, KIT and SAMPLES, and not while a STEP, a range or a scene pad is held or in RESAMPLE, where OK and CLR keep their own jobs. Any other edit also keeps it. FUNC (hold): delay freeze, the echoes loop and nothing new goes in (`FREEZE`, `FRZ` on PERFORM's bar line) |
+
+The upper row lights white when idle and in its function's colour while held or on: FILL and
+NOTE RPT yellow, REPEAT cyan, MUTE MODE red, SCENE A blue, SCENE B purple, THROW green, MUTATE
+(waiting for OK / CLR) and FREEZE orange.
 
 ## Step editing (GRID, EDIT, MIXER, MACHINE, RESAMPLE)
 

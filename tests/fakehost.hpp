@@ -175,6 +175,11 @@ public:
     bool logged(const char *text) const;       // did any line equal this?
 
     int leds_set() const { return leds_; }
+    // The last level each LED was set to, red, green, blue. NOT cleared by reset(): the app's
+    // LED shadow sends only changes, so the panel's state is whatever was last sent -- as on the
+    // unit, where an LED keeps its level until told otherwise.
+    struct LedLevel { uint8_t r, g, b; };
+    LedLevel led(int address) const { return led_level_[address]; }
     void set_audio_load(uint32_t per_mille);   // what enaga::audio_load() reports
     void set_device(uint32_t device);          // what enaga::system::device() reports; 0 after reset
 
@@ -379,6 +384,7 @@ private:
     int text_count_ = 0;
     int text_dropped_ = 0;
     int leds_ = 0;
+    LedLevel led_level_[ENAGA_LED_COUNT]{};
     uint32_t audio_load_ = 0;
     uint32_t device_ = 0;
     uint32_t ms_ = 0;
