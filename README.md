@@ -241,6 +241,8 @@ Load figures are in [docs/BUDGET.md](docs/BUDGET.md), the state of each mileston
 | [docs/UNIT_CHECKLIST.md](docs/UNIT_CHECKLIST.md) | What needs real hardware to close |
 | [docs/BUDGET.md](docs/BUDGET.md) | Measured CPU and memory figures. Estimates do not go here |
 | [docs/ENAGA_API.md](docs/ENAGA_API.md) | The verified Enaga signatures STRATA uses |
+| [CHANGELOG.md](CHANGELOG.md) | What each release added, and its known limits |
+| [docs/release/RELEASING.md](docs/release/RELEASING.md) | How a release zip is made and published |
 | [docs/SOUND.md](docs/SOUND.md) | Where the drum synthesis comes from, and how it is used |
 | [docs/REVIEW.md](docs/REVIEW.md) | The platform review the spec was corrected against |
 

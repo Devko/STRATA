@@ -71,3 +71,6 @@ jobs:
 
       - name: Enaga pin (local checks, no upstream)
         run: tools/enaga_check.sh
+
+      - name: Release packaging script
+        run: python3 -B tests/test_package_release.py
