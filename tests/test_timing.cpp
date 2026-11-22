@@ -26,12 +26,17 @@ Census take_census(const TrackTiming &timing, const int8_t *micro, int loops) {
     Census census;
     const int loop_ticks = timing.loop_ticks();
 
-    for (int tick = 0; tick < loop_ticks * loops; tick++) {
+    // Counted by PASS, not by tick window: passes 0 to loops-1, scanned one pass past their end
+    // so a step pushed over the last boundary is still found. A tick window would count the
+    // next pass's step 1 when micro-timing pulls it in early, and miss the first pass's when it
+    // is pulled before tick 0 (which now lands on tick 0).
+    for (int tick = 0; tick < loop_ticks * (loops + 1); tick++) {
         Firing firings[kMaxFiringsPerTick];
         const int n = steps_firing_at(uint32_t(tick), timing, micro, firings, kMaxFiringsPerTick);
 
         if (n > census.max_per_tick) census.max_per_tick = n;
         for (int i = 0; i < n; i++) {
+            if (int(firings[i].loop) >= loops) continue;
             census.fired[firings[i].step]++;
             census.total++;
             // The loop number must match the pass the tick falls in, give or take the shift
@@ -314,6 +319,32 @@ TEST(negative_micro_timing_fires_before_the_nominal_tick) {
     if (n == 1) CHECK_EQ(int(firings[0].step), 4);
 }
 
+TEST(step_1_pulled_before_tick_0_fires_on_tick_0_of_the_first_pass) {
+    // Step 0 at negative micro-timing belongs to the tick before the pass starts, which on the
+    // first pass after PLAY does not exist. It was skipped there and first heard a whole loop
+    // later. It now lands on tick 0, once, and every later pass is unchanged.
+    int8_t micro[kMaxSteps] = {};
+    micro[0] = -5;
+
+    TrackTiming timing;
+    timing.length = 16;
+    timing.speed = Speed::x1;
+    timing.swing = kSwingMin;
+
+    Firing firings[kMaxFiringsPerTick];
+    int zero_hits = 0;
+    for (uint32_t t = 0; t < 384u * 3u; t++) {
+        const int n = steps_firing_at(t, timing, micro, firings, kMaxFiringsPerTick);
+        for (int i = 0; i < n; i++) {
+            if (firings[i].step != 0 || firings[i].loop >= 3u) continue;
+            zero_hits++;
+            if (firings[i].loop == 0) CHECK_EQ(t, 0u);
+            else CHECK_EQ(t, firings[i].loop * 384u - 5u);
+        }
+    }
+    CHECK_EQ(zero_hits, 3);      // passes 0, 1 and 2
+}
+
 TEST(micro_timing_is_clamped_not_wrapped) {
     int8_t micro[kMaxSteps] = {};
     micro[2] = 100;        // far outside the legal range
@@ -398,9 +429,10 @@ TEST(a_long_timing_run_stays_consistent) {
     const int loop_ticks = timing.loop_ticks();
     const int loops = 500;
     int total = 0;
-    for (int tick = 0; tick < loop_ticks * loops; tick++) {
+    for (int tick = 0; tick < loop_ticks * (loops + 1); tick++) {
         Firing firings[kMaxFiringsPerTick];
-        total += steps_firing_at(uint32_t(tick), timing, micro, firings, kMaxFiringsPerTick);
+        const int n = steps_firing_at(uint32_t(tick), timing, micro, firings, kMaxFiringsPerTick);
+        for (int i = 0; i < n; i++) total += int(firings[i].loop) < loops ? 1 : 0;
     }
     CHECK_EQ(total, 16 * loops);
 }

@@ -792,6 +792,16 @@ which both products fit in.
 will not link until that PR lands. `core/pcm.cpp` already hand-writes `div_u64` rather than
 divide 64-bit, which is the pattern to follow.
 
+### Send tails held to -60 dB (2026-11-22, not measured)
+
+`Mixer::resolve_sends` used to stop the delay after at most 8 s and the reverb after 12 s unfed.
+They now run until the tail is 60 dB down (up to 272 s for feedback 0.95 on a 2 s delay), because
+the cut was audible and the frozen buffer replayed later. **The worst case is unchanged**: every
+figure above already has both sends running. What changes is how long the sends' fixed cost lasts
+after the last hit with high feedback, which matters for battery and for any headroom a quiet
+passage was relying on. Not re-measured: this cloud session has no emulator and no cl6x. Run the
+load scenario with feedback at 0.95 to confirm.
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |

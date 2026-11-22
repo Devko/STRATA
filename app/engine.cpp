@@ -16,6 +16,8 @@ constexpr int kMaxLocksApplied = kLocksPerStep;
 // Middle C. The pattern's root is a pitch class (core/pattern.hpp), so turning it into a note
 // needs an octave, and this is the one the default pattern uses.
 constexpr uint8_t kDefaultOctaveNote = 60;
+// The mixer page's fader ceiling, which an encoder delta stops at (Cmd::set_track_level).
+constexpr float kFaderDeltaMax = 1.5f;
 
 uint8_t clamp_u8(int value) {
     return uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value));
@@ -120,7 +122,6 @@ void Engine::set_sample_region(const int16_t *base, uint32_t bytes) {
 void Engine::rewire_machines() {
     for (int t = 0; t < kTracks; t++) {
         TrackMachines &own = pool_[t];
-        samplers_[t] = nullptr;
         polys_[t] = nullptr;
 
         switch (MachineId(machine_id_[t])) {
@@ -128,10 +129,7 @@ void Engine::rewire_machines() {
             case MachineId::snare:   machines_[t] = &own.snare; break;
             case MachineId::hat:     machines_[t] = &own.hat; break;
             case MachineId::perc:    machines_[t] = &own.perc; break;
-            case MachineId::sample:
-                machines_[t] = &own.sampler;
-                samplers_[t] = &own.sampler;
-                break;
+            case MachineId::sample:  machines_[t] = &own.sampler; break;
             case MachineId::grain:   machines_[t] = &own.grain; break;
             case MachineId::va_mono: machines_[t] = &own.mono; break;
             case MachineId::va_poly:
@@ -139,10 +137,9 @@ void Engine::rewire_machines() {
                 polys_[t] = &own.poly;
                 break;
             default:
-                // A kit naming a machine this build does not have plays nothing rather than
-                // reinterpreting an index: core/project.hpp says the file format needs the domain
-                // for exactly this reason, and a silent track is recoverable where a wrong
-                // pointer is not.
+                // Defensive only: kit_read and params_from_kit both map an id this build does
+                // not have to KICK (core/project.cpp says why), so no kit reaches this. If one
+                // ever did, a silent track is recoverable where a reinterpreted index is not.
                 machines_[t] = nullptr;
                 break;
         }
@@ -295,6 +292,9 @@ void Engine::load_default_pattern() {
     // have come back at the very bottom of the MIDI range.
     live().root = 0;                       // C
     live().scale = uint8_t(Scale::minor);  // the default techno key (core/scale.hpp)
+    // And the project's, which is the key that is actually played (Engine::key_root).
+    project_.settings.root = uint8_t(kDefaultOctaveNote);
+    project_.settings.scale = uint8_t(Scale::minor);
     live().seed = 0x5713A7Au;
     live().master_length = 16;
     live().swing = kSwingMin;
@@ -412,16 +412,17 @@ void Engine::apply(const Command &command) {
             // by the main context.
             if (command.a) {
                 for (int t = 0; t < kTracks; t++) {
-                    if (machines_[t]) machines_[t]->kill_all();
+                    silence_track(t);
                 }
-                // And the ratchet hits still waiting for their block. A second STOP means
-                // silence now, so a hit landing four blocks later would be a note after it.
-                deferred_count_ = 0;
             } else {
                 for (int t = 0; t < kTracks; t++) {
                     if (machines_[t]) machines_[t]->release_all();
                 }
             }
+            // And the ratchet hits still waiting for their block, on EITHER stop. They are new
+            // notes, not tails: a soft stop releases what is sounding, and a hit landing four
+            // blocks later would be a note after the transport stopped.
+            deferred_count_ = 0;
             scheduler_.reset(true);
             break;
 
@@ -438,9 +439,12 @@ void Engine::apply(const Command &command) {
             // tempo: a comparison against NaN is false, which is why the clamp is written as
             // "inside the range, or the default" rather than as two one-sided tests.
             {
+                // Range-checked as a FLOAT, before the conversion: int() of a NaN or of a value
+                // past INT_MAX is undefined behaviour, so testing the int afterwards was too late.
                 const float centi = command.f * 100.0f;
-                const int rounded = int(centi + 0.5f);
-                const bool sane = rounded >= int(kTempoCentiMin) && rounded <= int(kTempoCentiMax);
+                const bool sane =
+                    centi >= float(kTempoCentiMin) - 0.5f && centi < float(kTempoCentiMax) + 0.5f;
+                const int rounded = sane ? int(centi + 0.5f) : 0;
                 project_.settings.tempo_centi_bpm =
                     sane ? uint16_t(rounded) : project_.settings.tempo_centi_bpm;
                 if (!sane) status_.bump_refused();
@@ -466,11 +470,15 @@ void Engine::apply(const Command &command) {
             pattern_clear_lock(live(), track, step, command.a);
             break;
 
-        case Cmd::set_track_length:
+        case Cmd::set_track_length: {
+            const int wanted = command.c == kDeltaFlag
+                                   ? int(live().tracks[track].length) + int(int8_t(command.b))
+                                   : int(command.a);
             live().tracks[track].length =
-                uint8_t(command.a < 1 ? 1 : (command.a > kStepsPerTrack ? kStepsPerTrack : command.a));
+                uint8_t(wanted < 1 ? 1 : (wanted > kStepsPerTrack ? kStepsPerTrack : wanted));
             reconfigure();
             break;
+        }
 
         case Cmd::set_track_speed:
             if (command.a < uint8_t(Speed::count)) {
@@ -479,11 +487,15 @@ void Engine::apply(const Command &command) {
             }
             break;
 
-        case Cmd::set_pattern_swing:
-            live().swing = uint8_t(command.a < kSwingMin ? kSwingMin
-                                                           : (command.a > kSwingMax ? kSwingMax : command.a));
+        case Cmd::set_pattern_swing: {
+            const int wanted = command.c == kDeltaFlag
+                                   ? int(live().swing) + int(int8_t(command.b))
+                                   : int(command.a);
+            live().swing = uint8_t(wanted < kSwingMin ? kSwingMin
+                                                      : (wanted > kSwingMax ? kSwingMax : wanted));
             reconfigure();
             break;
+        }
 
         // --- M3: deltas, undo, ranges and recording ---------------------------
 
@@ -622,7 +634,7 @@ void Engine::apply(const Command &command) {
             // Armed from `tick_`, the tick the sequencer is actually on. That is the whole
             // reason arming happens on this side (core/queue.hpp): the main context would have
             // to guess, and a guess one block out lands the switch on the wrong pass.
-            if (!queue_arm(queue_, bank, slot, mode, tick_, master_loop_ticks(live()))) {
+            if (!queue_arm(queue_, bank, slot, mode, tick_, master_loop_ticks(live()), origin_)) {
                 status_.bump_refused();
             }
             break;
@@ -710,6 +722,7 @@ void Engine::apply(const Command &command) {
             undo_.clear();
             queue_clear(queue_);
             chain_.active = false;
+            deferred_count_ = 0;                 // hits of a pattern that no longer exists
             scheduler_.reset(true);
             reconfigure();
             // The sends and the master, which arrived with the file as fourteen bytes. Without
@@ -725,12 +738,14 @@ void Engine::apply(const Command &command) {
             // goes last, because the loader may act on it the instant it sees the change -- and
             // what it does is write over that memory. Reversing the two is the bug this protocol
             // exists to prevent.
-            if (samplers_[track] != nullptr) {
-                samplers_[track]->kill_all();
-                // And drop the pointer itself: a null sample is a legal, expected state and
-                // leaves the track silent rather than glitching (dsp/sample.hpp).
-                samplers_[track]->set_sample(nullptr, 0, 1, rate_);
-            }
+            //
+            // Both of the track's sample readers, whichever machine the track hosts now. Every
+            // track owns a Sampler AND a Grain (pool_), and a machine switched away still holds
+            // its pointer: clearing only the hosted one left the other pointing into a range the
+            // loader is about to overwrite, and switching back played whatever landed there.
+            // set_sample kills each machine's voices first (dsp/sample.hpp, dsp/grain.hpp).
+            pool_[track].sampler.set_sample(nullptr, 0, 1, rate_);
+            pool_[track].grain.set_sample(nullptr, 0, 1, rate_);
             // Bumped even for a track that hosts no Sampler. The loader waits for this change
             // before it releases the range, so a track that was never reading anything must
             // still report that it has stopped, or the wait never ends.
@@ -738,10 +753,9 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::set_sample: {
-            if (samplers_[track] == nullptr) {
-                status_.bump_refused();
-                break;
-            }
+            // To both readers, for the reason in clear_sample: the track's sample belongs to the
+            // track, and SAMPLE and GRAIN are two ways of playing it. Refusing a track that did
+            // not host a Sampler is why GRAIN never got a card sample.
             // 24 bits of frames: 16.7 M frames, which is 349 s of mono at 48 kHz and well past
             // the 30 s above which docs/SPEC.md streams from the card instead.
             const uint32_t frames = uint32_t(command.c) | uint32_t(command.d) << 8 |
@@ -764,8 +778,9 @@ void Engine::apply(const Command &command) {
                 status_.bump_refused();
                 break;
             }
-            samplers_[track]->set_sample(sample_region_ + command.u / sizeof(int16_t), frames,
-                                         channels, rate_);
+            const int16_t *data = sample_region_ + command.u / sizeof(int16_t);
+            pool_[track].sampler.set_sample(data, frames, channels, rate_);
+            pool_[track].grain.set_sample(data, frames, channels, rate_);
             break;
         }
 
@@ -784,7 +799,12 @@ void Engine::apply(const Command &command) {
 
         case Cmd::set_param:
             if (command.a < kParams) {
-                params_[track].v[command.a] = clamp_u8(command.b);
+                uint8_t value = command.b;
+                if (command.c == kDeltaFlag) {
+                    const int next = int(params_[track].v[command.a]) + int(int8_t(command.b));
+                    value = uint8_t(next < 0 ? 0 : (next > 127 ? 127 : next));
+                }
+                params_[track].v[command.a] = clamp_u8(value);
                 // `performed_` is built FROM `params_`, and the per-block copy in process()
                 // writes it over every unlocked parameter of `effective_`. So a kit change that
                 // does not set this flag is reverted within the same block: `apply_performance`
@@ -795,13 +815,21 @@ void Engine::apply(const Command &command) {
                 // Mirror into the effective set as well, so the turn is heard in THIS block even
                 // before the copy runs. The next step rebuilds effective_ from the kit anyway,
                 // so a lock on this parameter still wins from then on.
-                effective_[track].v[command.a] = clamp_u8(command.b);
+                effective_[track].v[command.a] = clamp_u8(value);
             }
             break;
 
-        case Cmd::set_track_level:
-            mix_[track].level = command.f < 0.0f ? 0.0f : (command.f > 2.0f ? 2.0f : command.f);
+        case Cmd::set_track_level: {
+            // A NaN fails both comparisons and would pass straight through, so it is caught first.
+            const float f = command.f == command.f ? command.f : 0.0f;
+            if (command.c == kDeltaFlag) {
+                const float next = mix_[track].level + f;
+                mix_[track].level = next < 0.0f ? 0.0f : (next > kFaderDeltaMax ? kFaderDeltaMax : next);
+            } else {
+                mix_[track].level = f < 0.0f ? 0.0f : (f > 2.0f ? 2.0f : f);
+            }
             break;
+        }
 
         case Cmd::set_mute:
             if (command.b != 0) {
@@ -812,7 +840,10 @@ void Engine::apply(const Command &command) {
                 state = uint8_t(state ^ uint8_t(1u << track));
                 mute_latch_arm(mute_latch_, state);
             } else {
-                muted_[track] = command.a != 0;
+                uint8_t state = mute_state_capture(muted_);
+                state = command.a != 0 ? uint8_t(state | (1u << track))
+                                       : uint8_t(state & ~(1u << track));
+                apply_mutes(state);
             }
             break;
 
@@ -936,7 +967,7 @@ void Engine::apply(const Command &command) {
             if (command.a < 8) {
                 const uint8_t state = project_.settings.mute_states[command.a];
                 if (command.b != 0) mute_latch_arm(mute_latch_, state);
-                else mute_state_apply(state, muted_);
+                else apply_mutes(state);
             }
             break;
 
@@ -963,7 +994,9 @@ void Engine::apply(const Command &command) {
         case Cmd::trigger_note: {
             // A pad hit, played live. It sounds now, at the start of the block: the main context
             // cannot know a frame offset, and the spec's latency stamping belongs to recording.
-            if (machines_[track]) {
+            // Not on a muted track: a muted track is not rendered, so the note would wait in the
+            // machine and sound the moment the track was unmuted.
+            if (machines_[track] && !muted_[track]) {
                 Trig trig;
                 trig.note = clamp_u8(command.a);
                 trig.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
@@ -1051,7 +1084,7 @@ void Engine::apply(const Command &command) {
             // The machine being LEFT is silenced first. It will not be rendered again, so it
             // cannot release its own tail -- and a voice left sounding in an object nothing
             // calls is a note that never ends and never ends up in the voice count either.
-            if (machines_[track] != nullptr) machines_[track]->kill_all();
+            silence_track(track);
 
             machine_id_[track] = command.a;
             project_.kit.tracks[track].machine = command.a;
@@ -1133,6 +1166,12 @@ void Engine::params_from_kit() {
         const uint8_t id = project_.kit.tracks[t].machine;
         machine_id_[t] = id < uint8_t(MachineId::count) ? id : uint8_t(MachineId::kick);
     }
+    // Whatever was sounding goes first. A machine the new kit takes off a track is never
+    // rendered again, so a voice left in it would freeze and resume if a later kit put that
+    // machine back -- Cmd::set_machine silences the machine it leaves for the same reason.
+    for (int t = 0; t < kTracks; t++) {
+        silence_track(t);
+    }
     rewire_machines();
 
     for (int t = 0; t < kTracks; t++) {
@@ -1191,8 +1230,8 @@ void Engine::apply_performance() {
     // The scenes, if two are assigned. An empty scene behaves as the kit, so an unassigned slot
     // costs one pass and changes nothing (core/perform.hpp).
     if (scene_a_ < kScenes && scene_b_ < kScenes) {
-        scene_morph(scenes_.scenes[scene_a_], scenes_.scenes[scene_b_], morph_, project_.kit,
-                    performed_);
+        // `performed_` holds the live kit (above), which is the end a scene does not store.
+        scene_morph(scenes_.scenes[scene_a_], scenes_.scenes[scene_b_], morph_, performed_);
     }
 
     // The macros, over the morph. Later targets win over earlier ones, which core/perform.hpp
@@ -1228,15 +1267,40 @@ void Engine::switch_pattern(int bank, int slot) {
     scheduler_.reset(true);
     reconfigure();
 
+    // Ratchet hits still waiting belong to a step of the pattern just left. Fired later, they
+    // would read THIS pattern's locks and chord at that step index (`fire` reads the live
+    // pattern), which is a hit of neither pattern.
+    deferred_count_ = 0;
+
     // The new pattern's master length makes the old boundary meaningless, and deriving the new
     // one needs a tick, which only resolve_tick has.
     boundary_known_ = false;
 }
 
 // A bar started. The only thing that waits for one is a mute change armed for it.
+// Cut a track dead: its voices, and its insert chain's filter and lo-fi state. A track stops
+// being rendered the moment its machine goes idle, so the chain is frozen with whatever energy
+// its filters held at the cut -- harmless after a natural decay, but after a kill it was a
+// stored transient that played out on the track's next note (a kick at LVL 0 came out at 0.42).
+void Engine::silence_track(int track) {
+    if (machines_[track] != nullptr) machines_[track]->kill_all();
+    mixer_.chain(track).clear_state();
+}
+
+// Mutes change here and nowhere else. A muted track is not rendered at all (that is the CPU it
+// saves), so a voice left in its machine would freeze mid-note and resume on unmute. Newly muted
+// tracks are therefore silenced on the spot.
+void Engine::apply_mutes(uint8_t state) {
+    for (int t = 0; t < kTracks; t++) {
+        const bool now = (state >> t & 1u) != 0;
+        if (now && !muted_[t]) silence_track(t);
+    }
+    mute_state_apply(state, muted_);
+}
+
 void Engine::on_bar() {
     uint8_t state = 0;
-    if (mute_latch_release(mute_latch_, state)) mute_state_apply(state, muted_);
+    if (mute_latch_release(mute_latch_, state)) apply_mutes(state);
 
     // And an armed take starts HERE, on the bar line, which is the whole reason resampling has
     // an armed state at all: a take that begins under the user's finger does not loop, and a
@@ -1246,15 +1310,18 @@ void Engine::on_bar() {
     capture_.begin();
 }
 
-void Engine::cross_boundary(uint32_t tick) {
-    (void)tick;
+void Engine::cross_boundary(uint32_t boundary) {
     if (!chain_.active) return;
 
     uint8_t bank = 0, slot = 0;
     // chain_advance reports a PATTERN change, not an entry change, so a chain that repeats one
     // pattern returns false here and nothing is switched -- which is what keeps 1ST from firing
     // on every pass of a one-pattern chain (core/queue.hpp).
-    if (chain_advance(project_, chain_, bank, slot)) switch_pattern(bank, slot);
+    if (chain_advance(project_, chain_, bank, slot)) {
+        switch_pattern(bank, slot);
+        // The next entry starts on the boundary the last one ended on, at its step 1.
+        origin_ = boundary;
+    }
 }
 
 Project &Engine::project_for_load() { return project_; }
@@ -1276,23 +1343,39 @@ void Engine::reconfigure() {
 void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     tick_ = tick;
 
+    // A transport that relocated to before the pattern's start (a START from 0 after a switch)
+    // measures from 0 again. Only ever backwards: a CONTINUE resumes past the origin and keeps it.
+    if (tick < origin_) {
+        origin_ = 0;
+        boundary_known_ = false;
+    }
+
     // A queued change takes effect BEFORE the tick is resolved, so this tick plays the new
-    // pattern's steps rather than one last step of the old one.
+    // pattern's steps rather than one last step of the old one. Every mode but NOW starts the
+    // new pattern at its step 1 on the boundary the change was queued for (core/queue.hpp).
     if (queue_due(queue_, tick)) {
+        const bool restart = queue_.restart;
+        const uint32_t start = queue_.start_tick;
         switch_pattern(queue_.bank, queue_.slot);
         queue_clear(queue_);
+        if (restart) {
+            origin_ = start <= tick ? start : tick;
+            boundary_known_ = false;
+        }
     }
 
     // The end of a pass, for chains. One division per pass of the pattern -- about every two
     // seconds -- rather than one per tick, which is the only reason `next_boundary_` is kept
     // rather than derived.
+    // Passes are counted from the pattern's own start, `origin_`, not from tick 0.
     const uint32_t loop = uint32_t(master_loop_ticks(live()));
     if (!boundary_known_) {
-        next_boundary_ = (tick / loop + 1) * loop;
+        next_boundary_ = origin_ + ((tick - origin_) / loop + 1) * loop;
         boundary_known_ = true;
     } else if (tick >= next_boundary_) {
-        next_boundary_ = (tick / loop + 1) * loop;
-        cross_boundary(tick);
+        const uint32_t crossed = next_boundary_;
+        next_boundary_ = origin_ + ((tick - origin_) / loop + 1) * loop;
+        cross_boundary(crossed);
     }
 
     // Bars, for auto-fill and for anything armed to land on one. Counted rather than divided
@@ -1327,7 +1410,9 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // turning auto-fill on takes effect at the next bar rather than mid-bar.
     perform_.fill = fill_held_ || auto_fill_active(auto_fill_, bar_);
 
-    const int count = scheduler_.tick(tick, frame, live(), perform_, events_, kMaxEventsPerTick);
+    // The pattern's own tick: steps, passes and conditions all count from where it started.
+    const int count =
+        scheduler_.tick(tick - origin_, frame, live(), perform_, events_, kMaxEventsPerTick);
     for (int i = 0; i < count; i++) dispatch(events_[i], block_frames_);
 
     for (int t = 0; t < kTracks; t++) status_.publish_playhead(t, scheduler_.playhead(t));
@@ -1430,9 +1515,11 @@ void Engine::fire(const StepEvent &event) {
         // chord, so before this the same step data played folded on a POLY track and as written
         // on a MONO one.
         const Pattern &folding = live();
+        const uint8_t key_root_now = key_root();
+        const int key_scale_now = int(key_scale());
         const int slices = pool_[track].sampler.slices();
         const uint8_t note = machine_folds_note(machine_id_[track], slices)
-                                 ? scale_fold(event.note, folding.root, int(folding.scale))
+                                 ? scale_fold(event.note, key_root_now, key_scale_now)
                                  : event.note;
         sent_note_[track] = note;
 
@@ -1462,7 +1549,7 @@ void Engine::fire(const StepEvent &event) {
             // `event.note` and not `note`: `chord_expand` folds the root itself, so handing it
             // an already-folded note would be a second fold -- harmless, since folding a note
             // that is in the scale returns it, but it would hide which side owns the rule.
-            const int voiced = chord_expand(event.note, packed, folding.root, int(folding.scale),
+            const int voiced = chord_expand(event.note, packed, key_root_now, key_scale_now,
                                             notes, VaPoly::kVoices);
             for (int i = 0; i < voiced; i++) {
                 trig.note = notes[i];

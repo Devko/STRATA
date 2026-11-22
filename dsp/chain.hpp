@@ -112,6 +112,9 @@ public:
 
     // Filter state, lo-fi hold and gain ramps back to zero. init()-time and kit changes.
     void reset();
+    // Filter state and lo-fi hold only, leaving the gain ramps where they are: for a track whose
+    // voices were just killed, so the next note neither inherits stored energy nor fades in.
+    void clear_state();
 
     // The three-letter encoder label for one of the 16 slots; "---" for the ones a machine owns.
     static const char *param_name(int index);

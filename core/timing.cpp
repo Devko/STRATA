@@ -59,7 +59,11 @@ int steps_firing_at(uint32_t tick, const TrackTiming &timing, const int8_t *micr
     int32_t loop_start = loop * loop_ticks;
 
     for (; candidate <= last_candidate; candidate++) {
-        const int32_t effective = loop_start + effective_tick(int(step_index), timing, micro);
+        // A step pulled before tick 0 -- step 1 with negative micro-timing on the very first pass
+        // after PLAY or a pattern start -- has no tick to land on, so it lands on tick 0. It used
+        // to be skipped, and the first downbeat of a pattern with a pushed kick was silent.
+        const int32_t nominal = loop_start + effective_tick(int(step_index), timing, micro);
+        const int32_t effective = nominal < 0 ? 0 : nominal;
         if (effective == absolute) {
             out[found].step = uint8_t(step_index);
             out[found].loop = uint32_t(loop);

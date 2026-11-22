@@ -186,12 +186,16 @@ void InsertChain::init(float sample_rate) {
 }
 
 void InsertChain::reset() {
+    clear_state();
+    gain_l_ = 0.0f;
+    gain_r_ = 0.0f;
+}
+
+void InsertChain::clear_state() {
     svf_a_.reset();
     svf_b_.reset();
     lofi_phase_ = 0xFFFFFFFFu;     // so the first sample of a block is taken, not a stale hold
     lofi_hold_ = 0.0f;
-    gain_l_ = 0.0f;
-    gain_r_ = 0.0f;
 }
 
 const char *InsertChain::param_name(int index) {

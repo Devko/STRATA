@@ -118,7 +118,10 @@ constexpr uint8_t kParamMax = 127;
 // The uint16_t has room to 65.535, so raising the fader's ceiling later moves this clamp and not
 // the format.
 constexpr uint16_t kLevelScale = 1000;
-constexpr uint16_t kLevelMilliMax = kLevelScale;   // dsp/chain.hpp's fader is 0 to 1
+// The engine's ceiling (app/engine.cpp clamps `set_track_level` to 2.0; the mixer page reaches
+// 1.5). This was 1.0, so a fader above unity came back at unity after a save and a reload.
+constexpr uint16_t kLevelMilliMax = 2 * kLevelScale;
+constexpr float kLevelMax = 2.0f;
 
 uint16_t level_to_milli(float level) {
     // The value is read, not trusted, even on the way out: `level` comes from RAM, where an
@@ -126,7 +129,7 @@ uint16_t level_to_milli(float level) {
     // undefined. Comparison order is what catches it -- every comparison against a NaN is
     // false, so the `>= 0` test is the one that rejects it.
     if (!(level >= 0.0f)) return 0;
-    if (level >= 1.0f) return kLevelMilliMax;
+    if (level >= kLevelMax) return kLevelMilliMax;
     return uint16_t(level * float(kLevelScale) + 0.5f);
 }
 

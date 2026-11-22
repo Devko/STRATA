@@ -17,16 +17,22 @@
 // several ticks and a transport that was stopped and started lands wherever it lands. An
 // equality test would hang a queued change forever the first time a tick was skipped.
 //
-// ## Position is kept across a switch, deliberately
+// ## Where the new pattern starts
 //
-// STRATA does not restart the sequencer on a pattern change: the tick keeps running and the new
-// pattern's steps are resolved from it, so a 16-step pattern followed by a 15-step one stays in
-// time with the bar instead of starting over. That is what makes a chain of unequal patterns
-// musical rather than a stutter, and it falls out of core/timing deriving everything from the
-// absolute tick.
+// docs/SPEC.md: the next pattern "switches at the end of the current one, or after 16 or 32
+// steps, or at once keeping the position". Only the last of those keeps the position. The other
+// three START the new pattern: every track begins at its step 1 on the boundary, whatever its
+// length. The queue says so by handing back `start_tick`, the boundary the switch belongs to, and
+// the engine measures the new pattern's ticks from there (app/engine.cpp, `origin_`).
 //
-// It is also what makes the grace window below cost something: a switch that lands a few ticks
-// into a pass arrives after that pass's step 0 has already played. See `queue_switch_tick`.
+// An earlier version kept the position for every mode, on the theory that a pattern of unequal
+// lengths "stays in time". It did not: the new pattern's tracks were resolved from the absolute
+// tick, so a 64-step track came in on step 16 at the first 16-step boundary and a 12-step track
+// on step 4. Only `immediate` keeps the position now, because that is the one mode that asks to.
+//
+// The grace window below still has a cost: a switch that lands a few ticks after its boundary
+// starts the pattern at that boundary, so the new pattern's step 1 has already gone by. See
+// `queue_switch_tick`.
 #pragma once
 
 #include "pattern.hpp"
@@ -56,6 +62,11 @@ struct Queue {
     uint8_t slot = 0;
     QueueMode mode = QueueMode::end_of_pattern;
     uint32_t switch_tick = 0;    // the first tick at which it should happen
+    // Whether the new pattern starts from its step 1 (every mode but `immediate`), and the tick
+    // its step 1 belongs to: the boundary, which is `switch_tick` itself unless the press was
+    // forgiven by the grace window, when it is the boundary just missed.
+    bool restart = false;
+    uint32_t start_tick = 0;
 };
 
 // The master loop in ticks: `master_length` steps at 1x, which is what `queue_switch_tick`'s
@@ -99,18 +110,24 @@ constexpr int kQueueGraceTicks = kTicksPerSixteenth / 2;    // 12
 // and charging it a whole pattern -- 7.4 s on a 64-step pattern at 130 BPM -- would make the
 // feature unusable in performance, which is the only place it is used.
 //
-// **The price is the other half of this header: position is kept across a switch, so a forgiven
-// press means the new pattern's step 0 has already gone by.** It fired from the OLD pattern, a
-// few ticks before the switch landed, and the new pattern comes in partway through its own first
-// step -- first heard on step 1. That is the right trade for a performance instrument: the change
+// **The price: a forgiven press means the new pattern's step 0 has already gone by.** The new
+// pattern is started at the boundary the press missed (`Queue::start_tick`), so it stays on the
+// grid, but its step 0 fired from the OLD pattern a few ticks before the switch landed, and the
+// new pattern is first heard on step 1. That is the right trade for a performance instrument: the change
 // happens when the player meant it, and one trig at the seam is a smaller surprise than a bar and
 // a half of the pattern they were trying to leave. But it is emphatically not free, and a reader
 // who saw only "late presses are forgiven" would be caught out by it on the unit.
 uint32_t queue_switch_tick(QueueMode mode, uint32_t armed_tick, int pattern_ticks);
 
 // Arm a change. False, with the queue untouched, for an index no pattern exists at.
+//
+// `origin` is the tick the current pattern started on, so that "the end of the current one" is
+// counted from its own start rather than from tick 0: after a 15-step pattern has started on a
+// 16-step boundary, its passes end 15 steps apart from THERE. The 16- and 32-step modes are bars
+// of the transport and ignore it. An `origin` after `armed_tick` (the transport relocated) reads
+// as 0.
 bool queue_arm(Queue &queue, int bank, int slot, QueueMode mode, uint32_t armed_tick,
-               int pattern_ticks);
+               int pattern_ticks, uint32_t origin = 0);
 
 // Is the queued change due on this tick? True exactly once per armed change: the caller then
 // performs the switch and calls `queue_clear`.

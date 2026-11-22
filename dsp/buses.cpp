@@ -377,10 +377,24 @@ void Mixer::resolve_sends(const SendSettings &sends) {
         0.7071f, rate_);
 
     // --- how long each send keeps running after it stops being fed ---------------------------
+    //
+    // Long enough for the tail to fall 60 dB, and no shorter. The send stops RUNNING when this
+    // runs out, which freezes the delay line and the reverb tanks with what they held; so a
+    // tail cut short was audible twice -- echoes still at -18 dB stopped dead (an 8 s cap, at
+    // feedback 0.95 on a 2 s delay), and the frozen buffer played back the next time the send
+    // was fed. At -60 dB neither is audible.
+    //
+    // The delay: one pass per repeat, and -60 dB after log(0.001) / log(feedback) repeats. The
+    // reverb: its decay setting is the RT60 (dsp/buses.hpp), plus a margin for the pre-delay
+    // and the diffusion. Neither changes the worst case docs/BUDGET.md measures, which already
+    // has both sends running; this only decides how long they keep running after the last hit.
     const float blocks_per_second = rate_ * ed::reciprocal(float(kMaxFrames));
-    const float delay_tail_s = ed::clamp(seconds * (2.0f + 24.0f * feedback), 0.05f, 8.0f);
+    constexpr float kLog2Of60dB = -9.9658f;          // log2(0.001)
+    const float repeats = feedback > 0.001f ? kLog2Of60dB * ed::reciprocal(ed::log2(feedback))
+                                            : 0.0f;
+    const float delay_tail_s = ed::clamp(seconds * (repeats + 1.0f) + 0.05f, 0.05f, kMaxTailSeconds);
     delay_tail_blocks_ = int(delay_tail_s * blocks_per_second) + 1;
-    const float reverb_tail_s = ed::clamp(sends.reverb_decay_s * 1.5f, 0.3f, 12.0f);
+    const float reverb_tail_s = ed::clamp(sends.reverb_decay_s * 1.2f + 0.2f, 0.3f, kMaxTailSeconds);
     reverb_tail_blocks_ = int(reverb_tail_s * blocks_per_second) + 1;
 }
 
