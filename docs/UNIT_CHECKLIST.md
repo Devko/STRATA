@@ -6,9 +6,8 @@ box, write the value or a word on the line, and move on; anything odd goes in th
 is chased tomorrow. The second part, "Reference", is the full per-milestone list it was drawn
 from, with the background for each check.
 
-Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`). Some
-on-screen hints still use the code names: **F1 = FUNC, F3 = PROJECT, F8 = EDIT** (so
-`F1+F3 AGAIN TO SAVE` means press FUNC+PROJECT again). `FUNC+X` = hold FUNC, press X.
+Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`), and so are
+the on-screen hints. `FUNC+X` = hold FUNC, press X.
 
 Build on the card: STRATA `________`  STRATA6 `________`  cl6x / GCC only: `________`
 
@@ -65,7 +64,7 @@ The beat can keep playing. One look per screen; note any overlap or illegible te
 
 - [ ] GRID: four encoder slots at the bottom, name over value, the fourth fully on screen; the
       track line (`T1 ... L16 X1`) ends inside the screen.
-- [ ] EDIT: rows read like `A CUT 064` with a bar; hint `F1+EDIT: MACHINE` is legible.
+- [ ] EDIT: rows read like `A CUT 064` with a bar; hint `FUNC+EDIT: MACHINE` is legible.
 - [ ] MACHINE (FUNC+EDIT): the kit reads as two lines of four.
 - [ ] MIXER: selection keys walk TRK 1-4, TRK 5-8, DLY, REV, ROUTE, MST; every page draws.
 - [ ] PERFORM (FUNC+MIXER): macro bars stop above the two hint lines; selected macro shows `>A`.
@@ -98,7 +97,7 @@ In GRID on track 1 (KICK), playing.
       unchanged on release. FUNC+CLR undoes the whole turn at once.
 - [ ] FUNC+CLR = `UNDO`, FUNC+OK = `REDO`; the CLR and OK keys light when there is something to
       undo / redo. Sweep a locked knob 40 clicks, undo once: the whole sweep goes.
-- [ ] CLR with nothing held clears the track (`CLEARED  F1+CLR UNDO`); FUNC+CLR brings it back.
+- [ ] CLR with nothing held clears the track (`CLEARED FUNC+CLR UNDO`); FUNC+CLR brings it back.
 
 ## 7. Key, scale and sharps (2 min)
 
@@ -171,7 +170,7 @@ them returns to the slots.
 Set up something to recognise: the chain from 12 left ON, tracks 3 and 5 muted (FUNC + lower pad),
 scene 7 in slot B (hold SCENE B + STEP 7), tempo **142.0**, key **D# MINOR**, track 8 on GRN.
 
-- [ ] FUNC+PROJECT once: `F1+F3 AGAIN TO SAVE`, nothing written. Again within 2 s: `SAVING`, and
+- [ ] FUNC+PROJECT once: `FUNC+PROJECT TO SAVE`, nothing written. Again within 2 s: `SAVING`, and
       `UNSAVED` disappears from PROJECT.
 - [ ] Power off, power on, start STRATA. It reopens with: the chain on, tracks 3 and 5 muted,
       scene 7 in B, 142.0, D# MINOR, track 8 on GRN. Missing: `________________`
@@ -184,7 +183,27 @@ scene 7 in slot B (hold SCENE B + STEP 7), tempo **142.0**, key **D# MINOR**, tr
       default kit. A single press of either key never loses work.
 - [ ] Both also work from the SETUP page.
 
-## 15. Six voices: the STRATA6 app (4 min)
+## 15. Kit browser: FUNC+EDIT twice (6 min)
+
+Kits (machines, parameters, faders, sample paths) live on the card in 16 slots shared by every
+project. Back in STRATA's project from 14 (or any project), playing.
+
+- [ ] FUNC+EDIT opens MACHINE; its last line says `FUNC+EDIT AGAIN: KITS`. FUNC+EDIT again opens
+      KIT: `KITS 01-08    OK LOAD`, eight rows, `EMPTY` on a fresh card after a moment. LEFT/RIGHT
+      (or the selection keys) show slots 09-16. CLR goes back to MACHINE. No overlaps.
+- [ ] Change a few knobs and put track 8 on GRN. On slot 1, FUNC+DOWN: `SAVING KIT`, the row reads
+      `KIT` and the two lines below show the eight machines (GRN last).
+- [ ] FUNC+DOWN on slot 1 again: `AGAIN TO OVERWRITE`; only a second press writes.
+- [ ] Change the sound (track 8 back to SMP, a knob or two). Still playing, OK on slot 1:
+      `OK AGAIN TO LOAD`, nothing changes. OK again: the slot-1 sound is back and **the beat
+      does not stop**. Click or dropout at the recall? `________`
+      STOP, PLAY, recall again: MAX `________ %`
+- [ ] STEP keys only move the cursor; they never load.
+- [ ] PROJECT now says `UNSAVED`. FUNC+PROJECT twice, then FUNC+LEFT twice (reload): the
+      recalled kit is what comes back.
+- [ ] Kits are shared: FUNC+RIGHT twice (new project), FUNC+EDIT twice: slot 1 is still there.
+
+## 16. Six voices: the STRATA6 app (4 min)
 
 STRATA6 is the same build with the chord stab set to MIN11 (six notes). Leave STRATA through
 Enaga's menu and start STRATA6.
@@ -194,20 +213,21 @@ Enaga's menu and start STRATA6.
       **MAX `________ %`**. Difference to STRATA's MAX = cost of two more voices:
       `________` points.
 
-## 16. Write the numbers down
+## 17. Write the numbers down
 
 | Reading | Value |
 | --- | --- |
 | Idle load (1) | |
 | Default beat MAX, 60 s (3) | |
 | GRAIN on track 8 MAX (8) | |
-| STRATA6 MAX, 60 s (15) | |
+| MAX straight after a kit recall (15) | |
+| STRATA6 MAX, 60 s (16) | |
 
 These go into `docs/BUDGET.md` as the first unit rows, and the ticks into the reference list below.
 
 ## Added later today
 
-Kit browser and new sound content land here when they merge.
+New sound content lands here when it merges.
 
 ---
 
@@ -1082,7 +1102,7 @@ What it cannot judge is whether the result reads well on the OLED.
 - [ ] GRID: the four encoder slots at the bottom show the name over the value, four clean
       columns, the fourth fully on screen. The track line ("T1 ... X3/4") ends inside the screen.
 - [ ] EDIT: each row reads "A CUT 064" with its bar; the title names the machine; the hint
-      "F1+EDIT: MACHINE" is legible.
+      "FUNC+EDIT: MACHINE" is legible.
 - [ ] PERFORM: the macro bars stop above the two hint lines; the selected macro shows as ">A".
 - [ ] PROJECT: the KEY line sits below the 16 pattern slots, not through the last row; an
       unsaved project says UNSAVED on the second line.
@@ -1104,7 +1124,7 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
 - [ ] KEYS: LEFT and RIGHT are the octave. PERFORM: LEFT and RIGHT pick the macro; UP and DOWN
       still walk the mutation.
 - [ ] MACHINE (F1 + EDIT): the eight machines are a list; UP and DOWN change the track's machine
-      at once, LEFT and RIGHT walk the track. EDIT's screen says `F1+EDIT: MACHINE`.
+      at once, LEFT and RIGHT walk the track. EDIT's screen says `FUNC+EDIT: MACHINE`.
 - [ ] RESAMPLE: UP and DOWN pick the length, LEFT and RIGHT where the take goes.
 - [ ] PROJECT: the arrows move a frame over the 16 slots and OK queues the framed one; a STEP key
       queues and moves the frame there. F1 + UP toggles the chain, F1 + DOWN reloads the sample.
