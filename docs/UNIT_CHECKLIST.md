@@ -6,6 +6,10 @@ box, write the value or a word on the line, and move on; anything odd goes in th
 is chased tomorrow. The second part, "Reference", is the full per-milestone list it was drawn
 from, with the background for each check.
 
+**Time.** The whole pass is about three hours. If the evening runs short, do 0-3b, 13 and 16
+first (safety, the MAX readings, save and restore), then the sections for today's new features
+(8c, 13d-13i, 14b, 15b-15d), then the rest.
+
 Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`), and so are
 the on-screen hints. `FUNC+X` = hold FUNC, press X.
 
@@ -159,7 +163,7 @@ The beat can keep playing. One look per screen; note any overlap or illegible te
 ## 5. Arrow keys (3 min)
 
 - [ ] GRID and EDIT: UP/DOWN walk the track **without playing it**; LEFT/RIGHT flip the step page
-      (GRID) or SRC/FLTR/AMP/FX (EDIT).
+      (GRID) or SRC/FLTR/AMP/FX/LFO/ARP (EDIT).
 - [ ] Hold STEP 1 + OK opens the step page; LEFT/RIGHT walk to the previous/next step and wrap;
       CLR closes it and erases nothing.
 - [ ] PERFORM: LEFT/RIGHT pick the macro, UP/DOWN walk the mutation type.
@@ -210,7 +214,8 @@ MINOR (C# is not in C minor, so a folding track moves it). Repeat on each track 
 
 ## 8b. U3: GRAIN on a long sample, at high pitch (5 min)
 
-Resampling gives track 8 a multi-second sample without a file browser, and checks RESAMPLE too.
+Resampling gives track 8 a multi-second sample and checks RESAMPLE too. (A WAV picked in the
+sample browser, 15b, would also do.)
 
 - [ ] FUNC+REC: UP/DOWN to `RESAMPLE 4 BAR`, LEFT/RIGHT to `TO TRK 8`, OK arms. Playing, it records from
       the next bar line, writes the take (`WRITING`, then `LAST STRATA_n`) and track 8 loads it.
@@ -367,7 +372,7 @@ New after the walkthrough was written: a DJ isolator on the master, LOW / MID / 
 
 ## 13e. The per-track LFO and per-track swing (8 min)
 
-New after the walkthrough was written. Play A01 GROOVE, select track 8 (the chord stab).
+New after the walkthrough was written. Play A01 GROOVE, select track 7 (the chord stab).
 
 - [ ] EDIT, then selection RIGHT four times: a fifth page box lights, `LFO`, with WAV RAT DEP
       DST on A-D. The line below reads `LFO OFF: SET DEP+DST`. The sound has not changed.
@@ -380,7 +385,7 @@ New after the walkthrough was written. Play A01 GROOVE, select track 8 (the chor
       with the beat**, and FUNC+PLAY restarts it on the one.
 - [ ] Hold a STEP + turn C on the LFO page: a DEP lock on that step only (the sweep deepens on
       that step). Clearing it works as for any lock.
-- [ ] PERFORM: hold F1 + STEP 3 assigns DEP to the selected macro (the notice names `DEP`).
+- [ ] PERFORM: hold FUNC + STEP 3 assigns DEP to the selected macro (the notice names `DEP`).
       Turn the macro: the sweep fades in from wherever DEP was.
 - [ ] Store a scene with the LFO on, another with it off; the morph fades the depth between them.
 - [ ] Undo (FUNC+CLR) takes back an LFO edit like any other.
@@ -449,7 +454,7 @@ press, so this is its first run outside the host tests. Play A01 GROOVE.
       A01, A02, A01, each X1. Turn B on entry 2: `M2` at the end of its row (no kick, factory).
 - [ ] FUNC+UP: chain on. Entry 2 starts **without the kick**, on the bar line, no click. Entry 3
       (no recall) keeps it muted: `--` leaves the mutes as they are.
-- [ ] FUNC+RIGHT: `SONG: PLAY ONCE`, the header ends `SONG`. Unmute the kick, F1+F6 (reset), PLAY:
+- [ ] FUNC+RIGHT: `SONG: PLAY ONCE`, the header ends `SONG`. Unmute the kick, FUNC+STOP (reset), PLAY:
       the chain plays A01, A02 without kick, A01, then **stops** with `SONG END`, nothing after
       the last bar, no hanging note. PLAY: it starts again from entry 1.
 - [ ] FUNC+RIGHT again: `LOOP CHAIN`, and the chain goes round as before.
