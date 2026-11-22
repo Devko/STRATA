@@ -358,7 +358,7 @@ public:
         }
 
         // MUTE mode turns STEP 1-8 into the eight stored mute states: recall on a tap, store
-        // with F1. docs/SPEC.md says they are "recalled from the upper row", but the upper row is
+        // with VALUE pushed (F1 is taken: it makes a recall wait for the bar). docs/SPEC.md says they are "recalled from the upper row", but the upper row is
         // seven FIXED performance pads and there are eight states, so that cannot be taken
         // literally. The STEP keys are the only run of eight free while MUTE mode is on, and
         // MUTE mode is a mode, so repurposing them there is the smallest deviation available.
