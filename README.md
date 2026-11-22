@@ -45,11 +45,11 @@ Design principles, from [docs/SPEC.md](docs/SPEC.md):
 
 ## Screens
 
-![STRATA's screens: GRID, the step page, EDIT, MIXER, PERFORM, KEYS, MACHINE and PROJECT](docs/screens/overview.png)
+![STRATA's screens: GRID, the step page, EDIT, MIXER, PERFORM, KEYS, MACHINE, KIT and PROJECT](docs/screens/overview.png)
 
-<sub>Top: GRID with the default beat playing, the step page, a track's sound page, MIXER.
-Bottom: PERFORM, KEYS, MACHINE, PROJECT. Drawn by the app's own screen code on the host build,
-in Enaga's font; `tools/screenshots.sh` redraws them.</sub>
+<sub>The factory project playing. Top: GRID, the step page, a track's sound page. Middle: MIXER,
+PERFORM, KEYS. Bottom: MACHINE, the KIT browser, PROJECT. Drawn by the app's own screen code on the
+host build, in Enaga's font; `tools/screenshots.sh` redraws them.</sub>
 
 ## Features
 

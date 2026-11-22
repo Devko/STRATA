@@ -25,10 +25,10 @@ legend maps these to the F1-F8 names used in the code and in docs/SPEC.md.
 7. [Performance tips](#7-performance-tips)
 8. [Troubleshooting](#8-troubleshooting)
 
-![STRATA's screens: GRID, the step page, EDIT, MIXER, PERFORM, KEYS, MACHINE and PROJECT](screens/overview.png)
+![STRATA's screens: GRID, the step page, EDIT, MIXER, PERFORM, KEYS, MACHINE, KIT and PROJECT](screens/overview.png)
 
-<sub>Top: GRID, the step page, EDIT, MIXER. Bottom: PERFORM, KEYS, MACHINE, PROJECT. These were
-drawn before the factory content existed, so the values differ from what a new project shows.</sub>
+<sub>The factory project playing. Top: GRID, the step page, EDIT. Middle: MIXER, PERFORM (with the
+factory macros B, C and D), KEYS. Bottom: MACHINE, the KIT browser, PROJECT.</sub>
 
 ---
 
