@@ -382,8 +382,60 @@ void Engine::apply_commands() {
     // The spec's limit: a burst of edits must not be able to break the deadline.
     for (uint32_t i = 0; i < Commands::kMaxPerBlock; i++) {
         if (!commands_.take(command)) break;
+        // Before apply(), not after: some commands prepare a machine themselves (a machine
+        // switch), and that prepare must not be mistaken for one made with today's inputs.
+        // Any command at all, because the inputs a prepare() reads beyond its parameters -- the
+        // resident sample, which machine the track hosts, the kit -- change only here.
+        forget_prepared();
         apply(command);
     }
+}
+
+// --- prepare only on change -------------------------------------------------------------------
+//
+// Every sounding track's machine and insert chain used to be prepared every block, and a trig
+// prepared its machine once more. Each prepare() is a handful of exp2, exp, tan_pi and float
+// divisions (EnvelopeShape::make alone is three of each), all scalar GCC code in either build,
+// because only *.ti.c files go to cl6x. Parameters move only on a knob, a lock, a scene or a
+// macro, so most blocks were recomputing the numbers they already had. docs/BUDGET.md has what
+// it was worth.
+//
+// Bit-exact by construction: a prepare() is a pure function of its arguments and of state only
+// a command changes, and the memo holds the arguments and is cleared by every command.
+
+void Engine::forget_prepared() {
+    for (int t = 0; t < kTracks; t++) {
+        machine_prepared_for_[t] = nullptr;
+        chain_prepared_valid_[t] = false;
+    }
+}
+
+void Engine::prepare_machine(int track) {
+    Machine *machine = machines_[track];
+    if (machine == nullptr) return;
+    const TrackParams &params = effective_[track];
+    if (prepare_memo_ && machine_prepared_for_[track] == machine &&
+        __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0) {
+        return;
+    }
+    machine->prepare(params);
+    machine_prepared_[track] = params;
+    machine_prepared_for_[track] = machine;
+}
+
+void Engine::prepare_chain(int track) {
+    const TrackParams &params = effective_[track];
+    const ChainMix &mix = mix_[track];
+    if (prepare_memo_ && chain_prepared_valid_[track] &&
+        chain_prepared_mix_[track].level == mix.level &&
+        chain_prepared_mix_[track].duck == mix.duck &&
+        __builtin_memcmp(chain_prepared_[track].v, params.v, kParams) == 0) {
+        return;
+    }
+    mixer_.chain(track).prepare(params, mix);
+    chain_prepared_[track] = params;
+    chain_prepared_mix_[track] = mix;
+    chain_prepared_valid_[track] = true;
 }
 
 void Engine::apply(const Command &command) {
@@ -1612,7 +1664,12 @@ void Engine::fire(const StepEvent &event) {
         // would be silently wrong for its first block without this, and a few hundred cycles
         // per trig is a cheap price for not having to notice. The comment, not the call, was
         // the thing that needed fixing.
-        machines_[track]->prepare(effective_[track]);
+        //
+        // It goes through the memo, which keeps the invariant: when the memo skips, the machine
+        // already holds settings prepared from these exact bytes, for this machine, since the
+        // last command -- so a lock, a machine switch, a sample swap or a project load still
+        // prepares here, and an unchanged step costs a 16-byte compare instead.
+        prepare_machine(track);
 
         // The note is folded into the key on a MELODIC track and left alone on every other
         // kind; `machine_folds_note` (core/project.hpp) says which, and why. Both VAs and GRAIN
@@ -1740,8 +1797,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
         // From effective_, not params_: this is where a parameter lock has to be honoured, for
         // every block of the step rather than only the one that triggered it.
-        machine->prepare(effective_[t]);
-        mixer_.chain(t).prepare(effective_[t], mix_[t]);
+        // Only when something they read has moved (prepare_machine, above).
+        prepare_machine(t);
+        prepare_chain(t);
 
         float *mono = mixer_.scratch();
         enaga_clear(mono, int(frames));
