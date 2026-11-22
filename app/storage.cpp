@@ -1169,8 +1169,8 @@ void Storage::step_sample_epoch() {
     // Confirmed: the audio side has stopped reading, so the memory is ours. Only now.
     pool_.release(track);
 
-    // A track the kit names no file for is finished here: silent, and its memory given back.
-    // That is how a project load takes the previous project's sample off a track.
+    // A track the kit names no file for is finished here: back on the placeholder (Cmd::clear_sample),
+    // its memory given back. That is how a project load takes the previous project's sample off a track.
     if (engine_->project().kit.tracks[track].sample[0] == '\0') {
         sample_track_ = -1;
         finish_job(nullptr);

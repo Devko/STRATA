@@ -367,3 +367,16 @@ TEST(factory_macros_move_on_from_the_morph_not_back_to_the_kit) {
     pump(2);
 }
 
+
+TEST(factory_new_keeps_the_loop_track_playing_the_placeholder) {
+    // The factory LOOP track is SAMPLE with no file: it plays the placeholder every Sampler is
+    // given at init, which is what a first boot without a card plays. NEW must give the same.
+    using namespace strata::test;
+    fresh();
+    storage().request_new();
+    CHECK(settle());
+    constexpr int kLoopTrack = 7;
+    CHECK_EQ(int(engine().machine_id(kLoopTrack)), int(MachineId::sample));
+    const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
+    CHECK(loop->has_sample());
+}

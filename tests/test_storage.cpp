@@ -50,6 +50,7 @@
 #include "project.hpp"
 #include "serialize.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -1889,30 +1890,34 @@ TEST(storage_a_loaded_wav_is_heard) {
 
     host.set_running(true);
     host.deliver_tick(0, 0);
-    const float peak = pump(6);
+    using strata::test::kRigStereo;
+    using strata::test::last_block;
+    static float heard[kRigStereo];
+    float peak = pump(1);
+    for (int i = 0; i < kRigStereo; i++) heard[i] = last_block()[i];
+    peak = std::fmax(peak, pump(5));
     CHECK(peak > 0.01f);
 
-    // And with the sample taken away the SAME step is silent, so what was heard was the file and
-    // not the machine's own noise. The step has to fire for that to mean anything, so the trig
-    // counter is checked too -- and the master reverb is given time to decay first, since its
-    // tail outlives anything the rig can reset (tests/test_app.cpp makes the same allowance).
+    // And with the sample taken away the SAME step plays something else: a track with no file
+    // falls back to the placeholder every Sampler had before a card was read (app/engine.cpp,
+    // Cmd::clear_sample), so what was heard above was the file and not that. The step has to
+    // fire for this to mean anything, so the trig counter is checked too, and the master reverb
+    // is given time to decay first.
     post(Cmd::clear_sample, uint8_t(kLoopTrack));
     pump(40);
+    CHECK(engine().machine(kLoopTrack) != nullptr);
 
-    // The room on its own, with nothing playing, so that the comparison below is against the
-    // reverb's tail rather than against silence the rig cannot promise.
-    const float tail = pump(6);
     const uint8_t fired = engine().status().triggered[kLoopTrack].load(std::memory_order_relaxed);
     host.deliver_tick(24u * 64u, 0);                  // tick 1536 is step 0 again
-    const float without = pump(6);
+    pump(1);
+    float differs = 0.0f;
+    for (int i = 0; i < kRigStereo; i++) {
+        differs = std::fmax(differs, std::fabs(last_block()[i] - heard[i]));
+    }
+    pump(5);
 
     CHECK(engine().status().triggered[kLoopTrack].load(std::memory_order_relaxed) != fired);
-    CHECK(without < 0.5f * peak);                     // nothing like the sample
-    CHECK(without <= 1.5f * tail + 0.001f);           // and nothing the trig added
-    if (without > 1.5f * tail + 0.001f) {
-        std::printf("    with %.4f, tail %.4f, after the swap %.4f\n", double(peak), double(tail),
-                    double(without));
-    }
+    CHECK(differs > 0.01f);                           // not the file any more
 }
 
 TEST(storage_a_wav_at_another_rate_is_resampled_once_at_load) {
@@ -2399,11 +2404,11 @@ TEST(storage_the_handover_carries_the_frame_count_and_the_channels_intact) {
         CHECK_EQ(int(pcm[2 * 1499 + 1]), -1500);
     }
 
-    // And a swap away from it leaves the track holding nothing, rather than a pointer into memory
-    // that is about to be reused.
+    // And a swap away from it leaves the track holding the placeholder, outside the region,
+    // rather than a pointer into memory that is about to be reused.
     post(Cmd::clear_sample, uint8_t(kLoopTrack));
     pump(2);
-    CHECK(!loop->has_sample());
+    CHECK(loop->sample_data() == engine().placeholder());
 }
 
 TEST(storage_a_read_that_fails_after_it_was_queued_fails_that_track) {

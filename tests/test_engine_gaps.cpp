@@ -626,12 +626,13 @@ TEST(gaps_clearing_a_sample_clears_the_grain_reader_too) {
 
     post(Cmd::clear_sample, kSampleTrack);
     pump();
-    CHECK(!sampler_on(kSampleTrack).has_sample());
+    // Back to the placeholder, which lives outside the region (a track with no file plays it).
+    CHECK(sampler_on(kSampleTrack).sample_data() == eng().placeholder());
     // GRAIN reads the same track's sample, and must have let go of it as well.
     post(Cmd::set_machine, kSampleTrack, 0, uint8_t(MachineId::grain));
     pump();
     const Granular &grain = *static_cast<const Granular *>(eng().machine(kSampleTrack));
-    CHECK(!grain.has_sample());
+    CHECK(grain.sample_data() == eng().placeholder());
     post(Cmd::set_machine, kSampleTrack, 0, uint8_t(MachineId::sample));
     pump();
 }

@@ -187,9 +187,11 @@ void Engine::build_placeholder_sample() {
     // switched to SAMPLE or GRAIN before any card has been read should make a sound rather than
     // silence, and this is the only PCM the app owns before a load: eight pointers to one static
     // array, which costs nothing.
+    placeholder_ = pcm;
+    placeholder_frames_ = uint32_t(kTotalFrames);
     for (int t = 0; t < kTracks; t++) {
-        pool_[t].sampler.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
-        pool_[t].grain.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
+        pool_[t].sampler.set_sample(placeholder_, placeholder_frames_, 1, rate_);
+        pool_[t].grain.set_sample(placeholder_, placeholder_frames_, 1, rate_);
     }
 }
 
@@ -759,8 +761,14 @@ void Engine::apply(const Command &command) {
             // its pointer: clearing only the hosted one left the other pointing into a range the
             // loader is about to overwrite, and switching back played whatever landed there.
             // set_sample kills each machine's voices first (dsp/sample.hpp, dsp/grain.hpp).
-            pool_[track].sampler.set_sample(nullptr, 0, 1, rate_);
-            pool_[track].grain.set_sample(nullptr, 0, 1, rate_);
+            //
+            // What they are given instead is the placeholder, not nothing: it is a static array
+            // outside the region, so the loader may write over the range at once, and a track
+            // whose kit names no file plays what it played before any card was read. The
+            // factory's LOOP track is SAMPLE with no file, so a nullptr here made NEW, and every
+            // project saved from the factory and opened again, lose that track's part.
+            pool_[track].sampler.set_sample(placeholder_, placeholder_frames_, 1, rate_);
+            pool_[track].grain.set_sample(placeholder_, placeholder_frames_, 1, rate_);
             // Bumped even for a track that hosts no Sampler. The loader waits for this change
             // before it releases the range, so a track that was never reading anything must
             // still report that it has stopped, or the wait never ends.
