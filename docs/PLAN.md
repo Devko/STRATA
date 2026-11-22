@@ -1,62 +1,70 @@
 # STRATA implementation plan
 
-Revised from `docs/SPEC.md` after validating it against Enaga at `1b41111`. Read
-`docs/REVIEW.md` for the evidence behind each change. This plan supersedes the spec's
-"Milestones" and "Instructions for Claude Code" sections; everything else in the spec stands.
+Revised from `docs/SPEC.md` after validating it against Enaga (`docs/REVIEW.md` has the evidence
+behind each change). This plan supersedes the spec's "Milestones" and "Instructions for Claude
+Code" sections; everything else in the spec stands. `docs/HANDOFF.md` holds the next steps in
+detail, `docs/BUDGET.md` every measured figure, `docs/UNIT_CHECKLIST.md` what is left to check
+on the unit.
 
 ## What changed from the spec's plan
 
 | | Spec | This plan |
 | --- | --- | --- |
-| Enaga pin | `269c015` | **`v0.2.0`** (`3da7f89`), was `1b41111` until 2026-11-22 — the pin in the spec predates MIDI, SYNC, the clock and pad pressure |
+| Enaga pin | `269c015` | **release `v0.2.0` (`3da7f89`)**, the firmware on the unit; only release tags are pinned (`docs/HANDOFF.md`, "Moving the Enaga pin") |
 | Master clock | `core/clock`, 96 PPQN, 32.32 fixed point, drift tests | **Deleted.** Enaga owns it; `core/scheduler` sits on `clock::ticks()` |
 | MIDI / SYNC | M7: implement in an Enaga fork, upstream as PRs | **Already in Enaga.** M7 shrinks to verifying it on the unit |
 | External sync | deferred to M7 | **M1.** It changes transport and tempo behaviour that M1 builds |
-| Budget gate | "measure at M1 and M2 exits" | **New M0.5 spike** before any engine work — effects are the dominant cost |
-| Budget lever | cut chord voices | **Cut effects or insert stages.** Voices are ~11% of the block in total (true of drums; a sustaining VA POLY voice is 3.82 points alone, see docs/BUDGET.md) |
-| cl6x | a release risk | **A requirement** for the 60% target (worth ~2.2×) |
+| Budget gate | "measure at M1 and M2 exits" | **New M0.5 spike** before any engine work: effects are the dominant fixed cost |
+| Budget lever | cut chord voices | **Cut effects or insert stages first.** True for the drums, which go idle; a sustaining VA POLY voice is not cheap (2.16 points with cl6x, 3.82 GCC-only), so VA POLY has a **shared budget of 12 voices** across all tracks |
+| cl6x | a release risk | **A requirement** for the 60% target. Worth 1.6–1.8x on STRATA's scenarios (2.2x on Enaga's synth). Its licence question is settled: no TI code reaches `APP.ENA` |
 | Build host | implied Linux | **WSL Ubuntu**, `build/` inside the WSL filesystem, no cmake |
-| Milestones | 8 (M0–M7) | 9 (M0, M0.5, M1–M7), with M7 much smaller |
-
-Net effect: roughly a milestone of platform work removed, one short spike added, and one
-deferred concern (external sync) pulled forward into M1.
+| Host tests | `core/` and `dsp/` | **`app/` too**, through `tests/fakehost.cpp` (see Testing) |
+| Milestones | 8 (M0–M7) | 9 (M0, M0.5, M1–M7), with M7 much smaller, then the **v0.1 release** |
 
 ---
 
-## Where it actually stands (2026-11-22)
+## Where it stands (2026-11-22, evening)
 
-Every figure here is from a cloud session: the host suite, the tic6x device build and the
-emulator, except one: **STRATA booted on the unit on 2026-11-22** (Enaga 0.2.0) and plays the
-default beat with the on-screen LOAD at about 0–26%. No other exit criterion involving load or
-feel is met until the unit confirms it, whatever the numbers below say.
+Every figure is from the host suite, a device build or the emulator, except one: **STRATA booted
+on the unit on 2026-11-22** (Enaga 0.2.0) and plays the default beat with the on-screen LOAD at
+about 0–26%. No exit criterion involving load or feel is met until the unit confirms it.
 
 | | State | What is actually true |
 | --- | --- | --- |
-| M0 | code complete | `tools/build.sh` links: APP.ENA, no BOOT, MCU or SPI sections. **Boots on the unit** (2026-11-22); the rest of its checklist boxes need the hardware |
-| M0.5 | folded into M2 | See docs/BUDGET.md; the spike's four configurations were never measured on the unit |
-| M1 | code complete | 4-track beat plays in the emulator. Exit wanted "under 15%"; it reads 33.07% GCC-only with a chord on the stab, which is not comparable — different kit, no cl6x, no cache model |
-| M2 | code complete | Full kit, mixer, insert chain, sends, master. The sidechain duck was **dead code until this session** (both arms of its depth ternary were 0) |
-| M3 | code complete | Sequencer depth, 16 undo levels. `Step::length` became audible only this session, on VA POLY |
-| M4 | code complete | Ten files per project, autosave, background sample loading. **Two data-loss bugs found this session** once app/ became host-testable |
-| M5 | code complete | Scenes, morph, macros, mutes, beat repeat, throws, mutation. Seven of its eight tools are on the upper PADS and **the emulator cannot press a pad**, so most of it has never executed |
-| M6 | **feature-complete, unheard** | Euclidean generator, KEYS, core/chord, VA POLY with chords, GRAIN, resampling, pad pressure — and machine switching, which is what made GRAIN reachable at all. Every feature has host tests; not one has been heard. **Its budget exit is in doubt**: VA POLY costs 3.82 points per voice after an optimisation loop, still 10.1x what SPEC budgets for the whole machine |
-| M7 | **the app side is done** | The sync settings are the USER'S, in the Enaga menu: `<enaga/clock.hpp>` and `<enaga/midi.hpp>` expose `source()` and `channel()` and nothing that writes either, so "STRATA only exposes the settings" can only mean showing them. PROJECT mode's SETUP page does, and VALUE now refuses a tempo edit under an external clock as the spec's key table asks. The rest of M7 is unit verification by definition |
+| M0 | code complete, **boots on the unit** | `tools/build.sh` links APP.ENA with no BOOT, MCU or SPI sections, with GCC and with cl6x |
+| M0.5 | folded into M2 | Its four configurations were never measured on the unit; the emulator figures are in `docs/BUDGET.md` |
+| M1 | code complete | Beat in the emulator: 23.49% cl6x, 39.60% GCC-only (all eight tracks and a chord, so not the 4-track exit's configuration). Unit unmeasured |
+| M2 | code complete | Eight-track worst case 23.61% cl6x, 44.26% GCC-only (emulator), against a 40% exit |
+| M3 | code complete | Locks, conditions, ratchets, micro-timing, polymeter, recording, 16 undo levels; undo also in PERFORM and PROJECT |
+| M4 | code complete | Projects, banks, chains, autosave, background loading. **A kit browser** (16 kits shared by all projects), and the **factory project** (a tuned kit, A01–A04, scenes, mute states) on first boot and NEW. Samples up to 30 s of the file at up to 96 kHz |
+| M5 | code complete | Scenes, morph, macros, mutes, beat repeat, throws, MUTATE (OK keeps, CLR reverts). Most of it is on pads, which the emulator cannot press, so most of it has never run outside the host tests |
+| M6 | **feature-complete, unheard** | Euclid, KEYS (a held key sustains), chords, VA POLY, GRAIN, resampling, pad pressure, machine switching. Budget exit stands **on the emulator** (worst scenario under 24% with cl6x); a shared 12-voice VA POLY budget keeps a POLY-heavy kit inside it |
+| M7 | **app side done** | The sync settings are the user's, in Enaga's menu; PROJECT's SETUP page shows them and VALUE refuses a tempo edit under an external clock. The rest is verification on the unit |
+| v0.1 | **in preparation** | Release notes, CHANGELOG and packaging in the thread "Prepare the v0.1 release"; a user manual in "Write the STRATA user manual"; CI for the host tests in "Set up CI for host tests". Waits for the unit's numbers (below) |
 
-Finished after that table was last written, and all of it on `main`:
+Also on `main` since the first boot, all host-tested and none heard yet: the arrow-key navigation
+model and a layout test over every screen; the CHAIN and PATTERN pages in PROJECT; chains that
+keep their place while edited; FUNC+STOP resetting a running chain; removing one p-lock; KEYS
+release by note; a low-pass before downsampling a loaded sample; and three bit-exact
+optimizations (a track is prepared only when its inputs move, cached VA increments, and the load-time
+anti-aliasing loop in `core/pcmloops.ti.c`).
 
-| | |
-| --- | --- |
-| **the sends and the master** | Both commands had no handler AND no caller, so every delay and reverb setting and the spec's master DJ filter sat at a compile-time default for the life of the app, in no file. All fourteen are now encoder bytes in PROJECT.BIN's third (optional) section, reachable from four new MIXER pages and F1 + VALUE |
-| **the tempo, quantize and `chain_enabled`** | All three round-tripped through the serializer while nothing in `app/` wrote them. A project saved at 142 BPM reopened at 130 |
-| **the melodic fold** | `machine_folds_note` settled the POLY/MONO asymmetry M6 left open: both VAs and GRAIN fold a step's note into the key, SAMPLE only while unsliced (SLC = 1), the drums never |
-| **VA POLY, 4.30 → 3.82 points a voice** | A fused output tail in `dsp/valoops.ti.c` and filter coefficients shared between the voices of a chord. Both bit-exact; every scenario with a VA voice came down ~1.6 points |
+## What comes next, in order
 
-What gates everything now, and cannot be done here: **work `docs/UNIT_CHECKLIST.md` on the unit**. It boots (2026-11-22).
-The cl6x licence question is settled (docs/BUDGET.md, "The cl6x licence question, examined");
-what remains is that cl6x runs only on the user's machine. docs/BUDGET.md records it as worth
-~2.2x and the 60% target depends on it, so a GCC-only figure over 60% means nothing either way.
+`docs/HANDOFF.md` has each step in detail.
 
-docs/UNIT_CHECKLIST.md holds the gestures to try, and **none of its boxes is ticked.**
+1. **PR #17, the held CPU MAX readout**, merged tonight on Roland's PC after `main` is merged into
+   it and the suite and every scenario pass with cl6x and GCC-only.
+2. **The emulator runs E1–E5** and `scenario_factory.sh`, both compilers, into `docs/BUDGET.md`.
+3. **Tonight's walkthrough on the unit** (top of `docs/UNIT_CHECKLIST.md`), with STRATA and
+   STRATA6 on the card.
+4. **The first unit rows in `docs/BUDGET.md`** (U1–U5) and the ticks in UNIT_CHECKLIST.
+5. **The final VA POLY voice budget**, set from U1 and U2 (MAX on the default beat and with six
+   voices and more POLY tracks). 12 is provisional.
+6. **v0.1**, once 1–5 are done: the milestone exits below that tonight settles are recorded,
+   and the release thread's notes say plainly which are still emulator-only.
+7. **The rest of the unit checklist**: card pulls during save and load, a start with no card, the
+   M5 jam, and M7's hour on external clock.
 
 ---
 
@@ -69,11 +77,11 @@ Everything here is setup; none of it is STRATA's design. Do it once, in WSL.
    for editing but point `ENAGA_BUILD` at a path inside the WSL filesystem, because building
    across 9p is slow.
 2. **Dependencies.**
-   - `third_party/enaga` as a submodule pinned at `1b41111` (now release `v0.2.0`, `3da7f89`).
+   - `third_party/enaga` as a submodule pinned at a release tag (now `v0.2.0`, `3da7f89`).
    - `seawaffle/smpltrek-re` cloned separately; `ENAGA_EMULATOR=<re>/emulator` (the directory
      holding `cpu.py`). It is not a submodule — Enaga's tools take it by environment variable.
-3. **Cross toolchain.** `tools/build_tic6x_binutils.sh` then `tools/build_tic6x_gcc.sh`
-   (10–30 minutes, into `third_party/enaga/tools/tic6x`).
+3. **Cross toolchain.** `tools/fetch_toolchain_sources.sh` then `tools/build_toolchain.sh`
+   (10–30 minutes, into `~/strata-toolchain/tic6x`).
 4. **TI cl6x.** Install `ti-cgt-c6000` (8.5.0.LTS is what Enaga is tested with) so
    `*.ti.c` and the DSP library get the 2.2×. **Read TI's redistribution terms in this step**
    and record the answer in `docs/BUDGET.md` — the 60% target depends on shipping cl6x-built
@@ -101,8 +109,9 @@ passes with one command; `tools/build.sh` rejects a deliberately duplicated file
 ## M0.5 — Budget spike
 
 **New, and the most valuable two days in this plan.** The spec plans to measure at the M1 and
-M2 exits and to "cut voices before features". Both are wrong: voices are about 11% of the
-block in total, while delay and reverb together measured 16% on their own. The dominant cost
+M2 exits and to "cut voices before features". Both are wrong for the drums, whose voices go idle and
+were about 11% of the block in total, while delay and reverb together measured 16% on their own
+(a sustaining VA POLY voice turned out to be the exception, see M6). The dominant cost
 is the fixed per-block chain, and it is cheapest to learn its real size *before* any engine
 is written against it.
 
@@ -222,10 +231,11 @@ so every track owns one of each and switching is a pointer swap. KIT.BIN already
 
 **Exit:** every machine and tool in the spec, worst-case load under 60% on the unit.
 
-**Where it stands:** the feature list is complete and host-tested, and the load figure is the
-open question. VA POLY measures 4.25 points a voice (docs/BUDGET.md), so a six-voice chord is
-25.6% of the block on its own against SPEC's 11,208 cycles for the whole machine. Whether that
-passes depends entirely on cl6x, which nobody has been able to run.
+**Where it stands:** the feature list is complete and host-tested. The load exit stands on the
+emulator: the worst scenario is 23.49% with cl6x. VA POLY costs 2.16 points a voice with cl6x
+(3.82 GCC-only), far above what SPEC budgeted for the whole machine, and since machine switching
+any track can host it, so `Engine::kPolyVoiceBudget` caps VA POLY at 12 voices across all
+tracks. The unit's MAX readings set the final cap.
 
 ---
 
@@ -237,7 +247,7 @@ implemented but **have never run on a unit** — STRATA may be the first thing t
 - ~~Sync settings UI in STRATA (source, clock out, SYNC out, MIDI channel).~~ **Done, and
   smaller than it looked.** None of the four is settable from an app: `<enaga/clock.hpp>` and
   `<enaga/midi.hpp>` expose `source()` and `channel()` and no writer, because they are the
-  user's settings in the Enaga menu. PROJECT mode's SETUP page (F3, then OCTAVE RIGHT) shows
+  user's settings in the Enaga menu. PROJECT mode's SETUP page (PROJECT, then octave RIGHT three times) shows
   CLOCK SRC, the tempo and whose it is, MIDI CH and the record quantize amount, and says where
   the first three are changed. VALUE refuses a tempo edit when the source is not INTERNAL,
   which is the one behaviour the spec's key table asks for and `app/` did not have.
@@ -251,97 +261,46 @@ gear as master, both on the unit.
 
 ---
 
+## v0.1 — first release
+
+Not in the spec. The first build handed to anyone but Roland: `main` once the unit has been
+walked through and its numbers recorded.
+
+- Release notes and a CHANGELOG, a packaging script that produces the card folder and a
+  README.txt, and a draft GitHub release (thread "Prepare the v0.1 release").
+- A user manual (thread "Write the STRATA user manual"); `docs/CHEATSHEET.md` stays the one-page
+  reference.
+- CI running `make -C host test` on every PR (thread "Set up CI for host tests").
+
+**Exit:** tonight's walkthrough done, U1–U5 in `docs/BUDGET.md`, the VA POLY budget set from
+them, and every milestone exit the release notes claim backed by a unit row or labelled
+emulator-only.
+
+---
+
 ## Testing
 
-The spec's three tiers stand, with one of them **widened this session**: host tests now cover
-`app/` as well as `core/` and `dsp/`, then scripted emulator runs, then a unit checklist, with
-only the unit's numbers counting for load and timing.
+The spec's three tiers stand: host tests, then scripted emulator runs, then the unit checklist,
+with only the unit's numbers counting for load and timing.
 
-**`app/` in the host tests is a change to this plan, made because the plan's own reasoning no
-longer held.** The tiers put `app/` outside host testing because it needs Enaga, and Enaga needs
-hardware. That turned out to be false: Enaga's C++ API is header-only over one struct of function
-pointers that the app runtime defines, and the host Makefile does not link that runtime -- so
-`tests/fakehost.cpp` defines it instead and `app/` compiles for the tests exactly as it does for
-the device, with no `#ifdef` in it. The cost of leaving it untested was five bugs in two sessions,
-two of which lost a user's project. `app/app.cpp` is still outside, because `ENAGA_APP(Strata)`
-defines the package's entry points.
+**Host tests cover `app/` as well as `core/` and `dsp/`.** The tiers put `app/` outside host
+testing because it needs Enaga, and Enaga needs hardware. That was false: Enaga's C++ API is
+header-only over one struct of function pointers that the app runtime defines, so
+`tests/fakehost.cpp` defines it and `app/` compiles for the tests exactly as for the device, with
+no `#ifdef`. `app/app.cpp` alone stays outside, because `ENAGA_APP(Strata)` defines the package's
+entry points.
 
-Three adjustments beyond that:
+- The "no drift over a simulated hour" test belongs to Enaga. STRATA's scheduler tests drive a
+  synthetic tick stream, which keeps them fast and deterministic.
+- Every load figure is recorded twice, with and without cl6x.
+- **Mutation testing is the house standard** for `core/`, `dsp/` and `app/`: a surviving mutation
+  is a missing test or an equivalence written down in the owning file.
+- **AddressSanitizer over the whole suite** after a DSP change (`detect_leaks=0`).
+- **Bit-exactness** gates a DSP refactor, pinned with `==`.
+- **Every screen passes the layout test** in `tests/test_ui.cpp` (Enaga's font, 21 characters a
+  line, its charset).
+- `tools/audit_commands.sh` after any change to `app/commands.hpp`: no command without both a
+  poster and a handler.
 
-- The "no drift over a simulated hour" test moves to Enaga. STRATA's scheduler tests cover
-  swing, speed, length, micro-timing, conditions and seeded mutation against a *synthetic*
-  tick stream, which also makes them fast and deterministic.
-- Every load figure is recorded twice, with and without cl6x, so the GCC-only cost stays
-  visible instead of being discovered at release.
-- **Mutation testing is the house standard** for every module in `core/` and `dsp/`, and now for
-  `app/`: a surviving mutation is either a missing test or a line that changes no behaviour, and
-  which one it is gets written down. Two independent passes over the same module have twice found
-  behaviours the first pass missed, so a module written by one party is mutation-tested by
-  another where that is possible.
-- **AddressSanitizer over the whole suite** after a DSP change. It is a dozen lines of script and
-  it has found what reading did not: an out-of-range read that a value test cannot see, and a
-  `CHECK_EQ` on `const char *` that compared addresses and so passed five tests for no reason.
-
----
-
-## `CLAUDE.md` to install at M0
-
-The spec's version with the corrections folded in:
-
-```markdown
-# STRATA: rules for Claude Code
-
-- Read docs/SPEC.md, docs/REVIEW.md and docs/PLAN.md before any change, and follow the
-  milestone order in PLAN.md. Ask before changing a decision they record.
-- Target: an Enaga app on the Sonicware SmplTrek (TI C6748, 372 MHz). Enaga is pinned at
-  v0.2.0 (3da7f89). Read third_party/enaga/docs/api.md for every API you use.
-- Build in WSL, not Windows. Keep build/ inside the WSL filesystem. There is no cmake.
-- Do not write a master clock. Enaga owns it: <enaga/clock.hpp>, 96 PPQN, and
-  clock::ticks() in audio() gives each tick's frame in the block. STRATA schedules steps
-  on those ticks and owns swing, speed, length and micro-timing only.
-- STRATA does not own the tempo. CLOCK SRC is the user's setting; start/stop/set_tempo
-  return false under external sync. Always handle the refusal and follow on_transport.
-- audio(): no allocation, blocking, files, drawing or LEDs. Buffers are interleaved stereo
-  (L R L R). Cross-context state only through single-writer atomics or SPSC rings.
-- Allocate all voices, buffers and pools in init(). Save state in stop() — destructors
-  never run. No std::vector, std::string or iostreams. No libm: use <enaga/dsp.hpp> math.
-- C++20, -fno-exceptions -fno-rtti, -Wall -Wextra -Werror. Stack frames at most 16 KiB,
-  no VLAs or alloca.
-- Never cast file bytes to structs: serialize byte by byte. No float division in hot loops.
-- Hot inner loops go in *.ti.c files: plain C, branch-free (use ?:), building with both GCC
-  and TI cl6x. cl6x is worth about 2.2x and the 60% target depends on it.
-- build_app.py compiles one flat folder with one include path. Every filename must be
-  unique across core/, dsp/ and app/, and includes are bare ("pattern.hpp").
-- core/ never includes Enaga headers. Every core change comes with a host test.
-- Every feature: host test, then an emulator scenario, then a line in docs/UNIT_CHECKLIST.md.
-- After any DSP change, run the load scenario and update docs/BUDGET.md with figures both
-  with and without cl6x. Worst case must stay under 60%. Cut effects or insert stages before
-  cutting voices: all 18 voices together are about 11% of the block.
-- Never modify third_party/enaga. Enaga bugs are reported upstream with a failing case.
-- Never write the SPI flash. Never produce update files with BOOT or MCU sections.
-- Small commits, one concern each, each with its test.
-```
-
----
-
-## First prompts, corrected
-
-1. "Read docs/SPEC.md, docs/REVIEW.md and docs/PLAN.md. Do M0: repo layout, Enaga as a
-   submodule pinned at **1b41111**, smpltrek-re cloned with `ENAGA_EMULATOR` set,
-   `tools/build.sh` (flat staging with a duplicate-filename check) and `tools/panel.sh`.
-   Build the tic6x toolchain in WSL. Make an empty STRATA app that draws its name, the device
-   and the audio load, and confirm it runs in the emulator panel. Record cl6x's presence and
-   licence terms in docs/BUDGET.md. Stop and report."
-2. "Do M0.5, the budget spike: a throwaway load harness with 8 insert chains, both sends and
-   the master chain, no voices. Measure on the unit with cl6x, without cl6x, with sends off,
-   and with 4 chains instead of 8. Write the figures to docs/BUDGET.md and recommend go or
-   no-go on 8 full insert chains. Stop and report."
-3. "Implement `core/pattern`: the Step, Lock, TrackPattern and Pattern structures from the
-   spec plus the versioned serializer with CRC-32. Host tests: round-trips, and corrupt or
-   unknown-version files refused without a crash."
-4. "Implement `core/scheduler` on top of Enaga's `clock::ticks()`: swing, per-track length and
-   speed, and micro-timing, using the bounded reverse scan in PLAN.md M1. Host tests drive it
-   from a synthetic tick stream — no real clock, no drift tests."
-5. "Implement KICK, SNARE and HAT in `dsp/` with a host renderer that writes 4 bars to WAV.
-   Then build M1's GRID mode in `app/`, including external-sync handling. Measure the load and
-   report against M1's exit criteria."
+`CLAUDE.md` in the repository root is the rule set for Claude Code. It replaces the copy this plan
+used to carry, and the spec's first prompts, which were for M0 and are history.

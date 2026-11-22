@@ -1,17 +1,14 @@
-# Handoff — 2026-11-22
+# Handoff — 2026-11-22, evening
 
 **Read this first, then `CLAUDE.md`, then `docs/SPEC.md`, `docs/REVIEW.md` and `docs/PLAN.md`.**
+This file holds what exists nowhere else in the repo: the state in one table, the next steps in
+order, and the knowledge that lives in no code comment, commit message or other document. When a
+fact here becomes stale, fix it here or delete it; do not append a history.
 
 **STRATA has booted on the unit.** On 2026-11-22 Roland ran it on his SmplTrek with Enaga 0.2.0
-firmware: it starts and plays the default beat, with the on-screen LOAD reading about 0–26%.
-Precise PEAK and six-voice chord figures are still to come from a local build.
-
-Every other figure in this project comes from a cloud container: the host suite, a tic6x device
-build and an instruction-counting emulator with **no cache model**. No exit criterion involving
-load or feel is met until the unit confirms it. Almost all of the 213 checklist boxes in
-`docs/UNIT_CHECKLIST.md` are still open.
-
-What gates everything now: **work `docs/UNIT_CHECKLIST.md` on the unit**.
+firmware: it starts and plays the default beat, the on-screen LOAD reading about 0–26% by eye.
+Everything else, every feature added today included, has been heard by nobody. Tonight's walkthrough
+at the top of `docs/UNIT_CHECKLIST.md` is the first pass over it.
 
 ---
 
@@ -19,327 +16,222 @@ What gates everything now: **work `docs/UNIT_CHECKLIST.md` on the unit**.
 
 | | |
 | --- | --- |
-| `make -C host test` | **999 tests, 539,926 checks, 0 failures** — `core/`, `dsp/` and all of `app/` |
-| `tools/build.sh` | **links.** `APP.ENA` 484,160 bytes, bss 1,334,848, no BOOT / MCU / SPI sections |
-| `tools/scenarios.sh` | **all 7 pass.** m0 2.87%, m1 39.60%, m3 31.92%, m4 27.15%, m5 34.54%, m6 36.61%, m7 39.60%. No overruns |
-| worst measured load | **39.60%** of the block, GCC-only, against a 60% target that assumes cl6x's ~2.2x |
-| milestones | M0–M6 feature-complete; **M7's app side is done** and the rest of M7 is unit verification by definition |
-| the budget risk | **VA POLY, 3.82 points per voice** after an optimisation loop. Six voices is 22.9% of the block on its own, 10.1x what `docs/SPEC.md` budgets for the whole machine |
-| branch | `main`, pushed. The user chose to develop on `main` directly |
+| `make -C host test` | **1,120 tests, 594,168 checks, 0 failures** on `main` at `01b64ab` (PR #31): `core/`, `dsp/` and all of `app/` |
+| `tools/build.sh` | links. Last measured image: `APP.ENA` 484,160 bytes GCC-only (476,008 cl6x), bss 1,334,848; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here |
+| `tools/scenarios.sh` | **9 scenarios**: m0, m1, m3–m7, `factory`, `kits`. Worst measured: **23.49% with cl6x, 39.60% GCC-only** (`docs/BUDGET.md`), before today's afternoon PRs. `factory` and `kits` have not been run with cl6x yet |
+| unit | boots, plays, LOAD about 0–26%. **No MAX reading yet**: the readout is PR #17, still open |
+| memory | init takes **101.2 MiB of a 120 MiB heap** since PR #31 (`tests/test_memory.cpp`), 18.8 MiB spare against an 8 MiB headroom rule. Never checked on the unit |
+| milestones | M0–M6 feature-complete, M7's app side done; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
+| VA POLY | 2.16 points per voice with cl6x, 3.82 GCC-only (emulator). **A shared budget of 12 voices across all tracks** (`Engine::kPolyVoiceBudget`, PR #30), provisional until the unit's MAX |
+| Enaga | pinned at release **v0.2.0 (`3da7f89`)**, the unit's firmware. `tools/enaga_check.sh` passes |
+| branches | work lands on `main` through PRs. Roland's standing rule: a thread may review and merge any PR that is ready (tests pass, review done) without asking |
 
-## What is NOT on file anywhere, and should be
+## What to do next, in order
 
-Everything below is in this file because it exists nowhere else in the repo.
+1. **Tonight, on Roland's PC, before building the card: land PR #17** (the held CPU MAX readout on
+   the bottom line). It was tested against `main` only up to PR #9. Merge `main` into it, run
+   `make -C host test` (the layout test must pass with the MAX text), then `tools/scenarios.sh`
+   with cl6x and with `ENAGA_TI_CGT=none`, and merge if green. Without it the unit gives no
+   number anyone can write down.
+2. **Tonight, on the PC: the emulator runs E1–E5** (`docs/BUDGET.md`, "Optimization review"),
+   plus `scenario_factory.sh` both ways. Record them in `docs/BUDGET.md`. The walkthrough's
+   "On the PC" section lists them in order.
+3. **Tonight, on the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`
+   (copy in the project files, `unit-test/tonight-walkthrough.md`). Build both STRATA and STRATA6
+   onto the card first, as its first section says. It ends with a table of readings.
+4. **Write the readings down where they belong**: U1–U5 as the first unit rows in
+   `docs/BUDGET.md`, the ticks into the reference half of `docs/UNIT_CHECKLIST.md`, and anything
+   odd as an issue or a thread.
+5. **Set the final VA POLY voice budget** from U1 and U2. `kPolyVoiceBudget = 12` assumed the
+   emulator's 2.16 points a voice. If MAX shows the unit about 1.35x slower than the emulator
+   (finding 2 in "Optimization review"), twelve voices are ~35 points, not ~26, and the cap or the
+   six-voice chord may have to come down. Change the constant, its test, `docs/BUDGET.md` and the
+   UNIT_CHECKLIST section "The shared VA POLY voice budget" together.
+6. **Release v0.1.** The thread "Prepare the v0.1 release" is writing the CHANGELOG, release
+   notes and the packaging script, and drafting the GitHub release. It should not be published
+   before steps 1–5: a release whose load has never been read on the unit is a guess.
+7. **Then, from the reference half of `docs/UNIT_CHECKLIST.md`**, the checks that decide whether a
+   milestone stands and that tonight does not reach: a start with no card, pulling the card
+   during a save and during sample loading, swapping a sample on a sounding track, the M5
+   30-minute jam, and M7's hour locked to external MIDI clock.
 
-### 1. cl6x cannot be run from a container, and that is now the only blocker that matters
+Work running in other threads today, not to be duplicated here: **factory macros** ("Make fresh
+projects sound good": a macro at 0 hands its parameters back to the knob, then a few shipped
+macros), **CI for the host tests** ("Set up CI for host tests"), **the release** ("Prepare the
+v0.1 release"), **a user manual** ("Write the STRATA user manual") and **engine test gaps**
+("Close the engine test gaps"). When one of them merges, update the table and the steps above.
 
-TI's installer needs an interactive licence click, so every load figure in `docs/BUDGET.md` is
-the **GCC-only** build. `tools/build.sh` prints `built with GCC only (TI's cl6x not found)` and
-carries on. The toolchain is on the user's machine at `~/ti/ti-cgt-c6000_8.5.0.LTS`.
+Smaller open items, none urgent:
 
-**The cl6x LICENCE question is settled and was a false alarm**, carried as the project's highest
-risk for months. The premise was that shipping a binary built with cl6x needs a licence grant.
-Reading the build disproved it: no TI code, no TI headers and no TI run-time library reach
-`APP.ENA` — cl6x compiles our own and Enaga's source, and GNU `ld` links it with `-nostdlib`
-(`nm -u` on the result is empty of TI symbols). Only instruction sequences remain, which is what
-a compiler is for. `docs/BUDGET.md` has the file-by-file table. The one third-party library
-actually in the binary is **libgcc**, which no document had listed as a risk at all.
+- **KICK's click path** runs for the whole note after its transient has decayed: about a quarter
+  of the host profile. Skipping it is not bit-exact (the shared noise advances differently), so it
+  needs a listening test first. `docs/BUDGET.md`, "Optimization review", finding 4.
+- **Mutation-test the `app/` tests.** `app/` became host-testable late and has not been held to
+  the standard below as thoroughly as `core/` and `dsp/`.
+- **Two Enaga reports to file upstream**, each with a failing case: GCC 13.3.0's internal compiler
+  error on `core/project.cpp` (below), and the recurrence-bound `enaga_envelope_render` with the
+  profile from `docs/BUDGET.md` (finding 5).
+- **Try Enaga v0.2.0's prebuilt GCC toolchain** (in its SDK zip). It is the same compiler
+  `tools/build_toolchain.sh` spends 30 minutes building in a cloud session.
+- `delay_ping_pong` and `delay_to_reverb` share a MIXER page with two empty slots, because ten
+  send fields do not divide into four. Fine, but Roland may want them placed differently.
 
-What is left is a ten-minute read of the licence text the installer already wrote to that
-directory — a confirmation, not a gate. **The AVAILABILITY half of the risk stands**: the 60%
-target needs the 2.2x, and 2.2x was measured on the drum loops, which are already branch-free.
-It is untested on the branchy melodic code.
+---
 
-### 2. The emulator can press KEYS and nothing else
+## What is NOT on file anywhere else
 
-`emulate.py` has one `--key` option. There is **no pad and no encoder entry point in
-`emulator/core/core.h` at all** (checked, not assumed). Consequences that shape every scenario:
+### 1. Where things can run
 
-- `docs/SPEC.md` puts seven of M5's eight performance tools on the upper **pads** — FILL, REPEAT,
-  MUTE mode, both scene selectors, THROW, MUTATE. **None can be driven by any scenario.**
-- Every send and master setting is on an **encoder**, so none can be *changed* from a scenario.
-  `tests/scenario_m7.sh` therefore proves what keys alone can reach: that all four new MIXER
-  pages and PROJECT's SETUP page **draw** on the C674x, in the real build, with the real font.
-  A draw that runs off the canvas is a hard fault on the unit and a silent pass on the host.
-- Held beat repeat, a moving morph and a moving macro are unmeasured for the same reason.
+| Where | Can | Cannot |
+| --- | --- | --- |
+| **Roland's PC** (`D:\DEV\STRATA`, builds in WSL) | everything a container can, plus **cl6x** (TI 8.5.0.LTS at `~/ti/ti-cgt-c6000_8.5.0.LTS`), and it writes the SD card | — |
+| **Cloud session, `strata-toolchain` environment** | host suite; GCC-only device build after `tools/fetch_toolchain_sources.sh` and `tools/build_toolchain.sh` (~30 min); emulator scenarios after `tools/fetch_emulator.sh`; `tools/render.sh`; ASan | cl6x: TI's installer needs an interactive licence click |
+| **Any other cloud session** | host suite (`git submodule update --init --recursive` first), `make -C host render` (the engine to WAV, no emulator), `tools/audit_commands.sh`, `tools/enaga_check.sh` | a device build or the emulator: `ftp.gnu.org` is not reachable |
+| **Nowhere but the unit** | hearing it, feel, real load (caches, DDR), the heap | — |
 
-To make a screen observable from a scenario, `app/app.hpp` logs `scr <MODE> <PAGE>` on a change.
-That is also genuinely useful in a unit log: it is the difference between "the app is wedged" and
-"the app is on a page I did not expect".
+So **every cloud load figure is GCC-only**, and a GCC-only figure over 60% means nothing either way.
+Quote load as "emulator, cl6x" or "emulator, GCC-only" unless `docs/BUDGET.md` has a unit row.
 
-### 3. How a cloud session gets a device build and an emulator
+Cloud-session limits found today: the git proxy refuses deleting a remote branch (403), and the
+GitHub tools cannot set the repository's description or topics; both need Roland.
 
-Two commands, and it took real work to discover:
+The `strata-toolchain` environment's setup script installs `flex` and clones the emulator with a
+bare `git clone`; run `tools/fetch_emulator.sh` after it, which checks out
+`STRATA_EMULATOR_COMMIT` from `tools/env.sh`. The emulator is a plain clone, not a submodule.
+`tools/fetch_toolchain_sources.sh` exists because GCC's `contrib/download_prerequisites` fetches
+GMP, MPFR, MPC and ISL over plain HTTP, which the HTTPS-only proxy does not serve.
 
-```sh
-tools/fetch_toolchain_sources.sh
-```
+### 2. The emulator can press keys and nothing else
 
-```sh
-tools/build_toolchain.sh
-```
+`emulate.py` has `--key` and nothing more, and `emulator/core/core.h` has no pad or encoder entry
+point at all. So no scenario can drive a pad (seven of M5's eight performance tools, pad pressure)
+or turn an encoder (every send, master and EDIT setting). Scenarios prove what keys reach: that
+every page **draws** on the C674x with the real font, which matters because a draw off the canvas
+is a hard fault on the unit and a silent pass on the host. `app/app.hpp` logs `scr <MODE> <PAGE>`
+on each screen change for this; on the unit it tells "wedged" from "on a page I did not expect".
 
-`binutils` takes a few minutes, `gcc` ten to thirty. `tools/fetch_toolchain_sources.sh` exists
-because GCC's own `contrib/download_prerequisites` fetches GMP, MPFR, MPC and ISL over **plain
-HTTP**, which an HTTPS-only proxy does not serve at all; it fetches the same four over HTTPS,
-lays them out where `download_prerequisites` would, and retries.
+### 3. Why the unit may read higher than the emulator
 
-The environment needs `ftp.gnu.org` and `gcc.gnu.org` allowed. A personal cloud environment
-named `strata-toolchain` has them, plus a setup script that installs `flex` (only in the apt
-sources after `apt-get update`) and clones the emulator:
+The emulator models no caches and no DDR latency. Its cl6x default beat is 19.17%
+(`scenario_m3.sh`); the unit's LOAD showed up to about 26% at first boot. If MAX confirms that
+ratio, every headroom figure in `docs/BUDGET.md` shrinks by it. Do not plan voice counts from
+emulator figures alone, and do not take "hardware is faster" from anywhere until MAX says so.
+High-pitch GRAIN and SAMPLE are where the gap should be widest (U3).
 
-```sh
-tools/fetch_emulator.sh     # clones it and checks out STRATA_EMULATOR_COMMIT (tools/env.sh)
-```
+### 4. `tests/fakehost.cpp` is why `app/` is testable
 
-That is a **plain clone, not a submodule**, so `tools/env.sh` pins its commit instead; a bare
-`git clone` would take whatever upstream is that day. (The `strata-toolchain` environment's setup
-script still does a bare clone: run `tools/fetch_emulator.sh` after it.) The toolchain build is deliberately NOT in the setup
-script: it would make every session start ten minutes slower. So a fresh session must run those
-two commands before any scenario, and they are ~30 minutes of the session's time.
+Enaga's C++ API is header-only: every call is an inline function over `enaga::host()`, one C
+struct of function pointers that the app runtime defines. `host/Makefile` does not link that
+runtime, so `tests/fakehost.cpp` defines `enaga::host()` instead, and `app/engine.cpp`,
+`app/storage.cpp` and `app/app.hpp` compile for the tests exactly as for the device, with no
+`#ifdef` in `app/`. The fake adds what the real host cannot: a programmable clock
+(`deliver_tick(24, 37)` puts a tick on frame 37 of the next block; `set_running`, `set_source`),
+loads that complete only on `complete_loads()`, failure injection (`set_card(false)`, `set_full`,
+`set_read_error`, `set_audio_context`), an in-memory card, and `read_prefix()` (because
+`read_file` refuses a buffer smaller than the file, as the ABI does).
 
-### 4. `tests/fakehost.cpp` is why `app/` is testable, and how it works
+`tests/apprig.{hpp,cpp}` sits on top: one shared `Engine` and `Storage` (tens of MiB each, so
+file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`, `post()`,
+`post_delta()`. **Traps it has already fallen into**, fixed and commented in place:
 
-Enaga's C++ API is header-only: every call in `<enaga/app.hpp>`, `<enaga/clock.hpp>`,
-`<enaga/files.hpp>` and the rest is an inline function over `enaga::host()`, which returns one
-plain C struct of **38 function pointers** that is "defined by the app runtime". `host/Makefile`
-does not link Enaga's `runtime.cpp`, so `tests/fakehost.cpp` defines it instead:
-
-```cpp
-namespace enaga {
-const enaga_host_t &host() { return strata::test::FakeHost::the().abi(); }
-}
-```
-
-`app/engine.cpp`, `app/storage.cpp` and `app/app.hpp` therefore compile **for the tests exactly
-as for the device, with no `#ifdef` anywhere in `app/`**. The fake gives the tests things the
-real host cannot:
-
-- a **programmable clock**: `deliver_tick(24, 37)` puts a tick on frame 37 of the next block;
-  `set_running(bool)`, `set_source(ENAGA_CLOCK_MIDI)`, `control_calls(ENAGA_CLOCK_TEMPO)`.
-- **held asynchrony**: a `files::load` does not complete until `complete_loads()` is called, so a
-  test can assert what the app does *while* a load is in flight.
-- **failure injection**: `set_card(false)`, `set_full`, `set_read_error`, `set_audio_context`.
-- an in-memory card: a 4 MiB arena and a 48-entry table.
-- `read_prefix()`, which exists because `read_file` mirrors the ABI and **refuses a buffer
-  smaller than the file**.
-
-`tests/apprig.{hpp,cpp}` is the rig on top: one shared `Engine`/`Storage` (85 MiB each, so they
-are file-scope and never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
-`last_block()`, `post()`, `post_delta()`, `set_send_byte()`, `set_master_byte()`.
-
-**Traps the rig has already fallen into, all of them fixed and commented in place:**
-
-- `fresh()` must post `Cmd::stop` with **`a = 1`** (cut the tails). It had `c = 1`, so the
-  "stop twice" never happened and a 60 ms release tail polluted every onset measurement.
-- `fresh()` must clear the **performance layer**. `apply_performance` builds what the machines
-  read as kit → morph → macros, so a macro left assigned at full position by an earlier test
-  overrides the kit — and a test that then sets a kit parameter and listens finds its knob dead.
-  It cost real time to find and looked exactly like a per-block-copy bug returning.
-- `settle()` waits for **400 consecutive silent blocks**, not one. The master delay is silent
-  *between* its repeats, so one silent block proves nothing.
-- `Mixer::add_track` **restarts the delay's tail every block** a track with a non-zero send gain
-  is rendered. A test that leaves a send open can never settle. Drop the send gain first.
-- A kick's **block peak oscillates with its phase** against the block length — about 15 blocks
-  per cycle at 50 Hz. Any "louder/quieter" claim read from one block is noise. Measure **energy
-  over a whole span**. Three onset-counting attempts died on this, and an agent's "later tick =
-  quieter block" ordering claim was withdrawn for the same reason (measured 0.113, 0.184, 0.180,
-  0.127 — not monotone).
-- `mixer_bank_` and the UI's other mode state are **not reset by `fresh()`** — that is correct,
-  it is where the user left the mode. So a test that presses the selection key a fixed number of
-  times lands wherever the previous test got to. `tests/test_ui.cpp`'s `mixer_page(app, n)` walks
-  to a named page instead.
-- Posting thousands of commands without pumping **overflows the 16-byte command ring**, and the
-  drops land on whatever the next test posted. The tempo test now pumps as it sweeps.
+- `fresh()` posts `Cmd::stop` with `a = 1` (cut the tails), and clears the performance layer: a
+  macro left at full position by an earlier test overrides the kit and makes a knob look dead.
+- `settle()` waits for 400 silent blocks: the delay is silent between its repeats. A test that
+  leaves a send open never settles, because `Mixer::add_track` restarts the delay's tail.
+- A kick's block peak oscillates with its phase against the block. Compare **energy over a
+  span**, never one block's peak.
+- UI mode state (`mixer_bank_` and the like) survives `fresh()` on purpose; walk to a named page
+  (`mixer_page(app, n)` in `tests/test_ui.cpp`) instead of counting key presses.
+- Thousands of commands without a pump overflow the command ring, and the drops land on the next
+  test.
 
 ### 5. The standard this code is held to
 
-- **Mutation testing**, not just coverage. A surviving mutation is either a missing test or an
-  equivalence that must be **argued in the owning file**. Example from this session: the
-  `machines_[track]->prepare()` in `Engine::fire` turned out to be redundant — `audio()` resolves
-  every tick *before* the render loop, and that loop prepares from the same `effective_`.
-  Removing it changed nothing in 996 tests. It was **kept**, with the comment rewritten to say
-  what it actually defends (that no machine's `trigger` reads a prepared setting). The comment
-  was the thing that needed fixing, not the line.
-- **AddressSanitizer over the whole suite after any DSP change.** It found a real harness defect:
-  `CHECK_EQ` compared `const char *` with `==`, so five name tests were comparing addresses and
-  passed only because `-O2` pools identical string literals. At `-O1` under ASan all five failed
-  at once. Fixed with a non-template `strcmp` overload in `tests/check.hpp`.
-  **Run it with `detect_leaks=0`**: `BeatRepeat::init` allocates its 3 MiB ring with `new[]` and
-  nothing frees it, by design — on the unit `init()` runs once and destructors never run — so
-  LeakSanitizer reports ~16 allocations from the repeat tests. Those are expected.
-- **Bit-exactness is the gate for a refactor of DSP.** Both of this session's VA POLY
-  optimisations are bit-exact and each has a test that pins equality with `==` rather than a
-  tolerance. Float multiplication is not associative: a fusion that formed `(gain * clipped) *
-  env` instead of `gain * (clipped * env)` would be a different signal and every exact
-  expectation would drift one ulp at a time.
-- **A feature with no gesture is dead code, and M5 shipped four of them.** `core/scale` went in
-  with no way to pick a scale; `mute_store`, `mute_recall`, `set_auto_fill` and `macro_assign`
-  all went in with no key. The sends and the master were the same mistake at a larger scale: two
-  commands with **no handler and no caller at all**. The check is mechanical and worth running
-  after every milestone:
+- **Mutation testing, not just coverage.** A surviving mutation is a missing test or an
+  equivalence argued in a comment in the owning file.
+- **AddressSanitizer over the whole suite after any DSP change**, with `detect_leaks=0`:
+  `BeatRepeat::init` allocates its ring with `new[]` and nothing frees it, by design.
+- **Bit-exactness gates a DSP refactor**, pinned with `==`, not a tolerance. Every optimization
+  merged today (prepare-on-change, cached VA increments, the anti-aliasing loop in
+  `core/pcmloops.ti.c`) has a test that runs old and new side by side.
+- **A feature with no gesture is dead code.** `tools/audit_commands.sh` lists every `Cmd` with a
+  poster but no handler, or a handler but no poster. Run it after any change to
+  `app/commands.hpp`. Its KNOWN list holds only `none`, the ring's empty slot.
+- **Every screen passes the layout test** in `tests/test_ui.cpp`: Enaga's 5x7 font, 21 characters
+  a line, and its charset (no `*`, `,` or `_`). First boot showed overlapping text; this is why.
 
-```sh
-sed -n "/^enum class Cmd/,/^};/p" app/commands.hpp | grep -oE '^    [a-z_]+,' | tr -d ' ,' | while read -r n; do printf '%-18s %s %s\n' "$n" "$(grep -c "Cmd::$n\b" app/app.hpp)" "$(grep -c "Cmd::$n\b" app/storage.cpp)"; done | awk '$2 == 0 && $3 == 0'
-```
+### 6. Decisions in the code not to re-open without reading them
 
-Both counts, because the card side posts six commands the UI never does — `clear_sample`,
-`set_sample`, `project_loaded`, `kit_store`, `clear_lock`, `resample_release`. As of this
-handoff the audit's `kit_recall` exception is gone: the kit browser (F1 + F8 twice) posts it from
-`app/storage.cpp`, with `a` = 1 to copy the kit the browser read into the engine's inbox
-(`Engine::kit_for_recall`). `tools/audit_commands.sh` dropped it from its KNOWN list.
-`Cmd::none` is the ring's
-empty slot and is never posted by anything.
-
-### 6. What this session changed, and the reasoning that is not in the commits
-
-Four commits on `main`: `3793cb4`, `ce98129`, `a124d73`, `5bceff5`. The commit messages are long
-and carry the reasoning; what follows is only what they do not.
-
-**The sends and master were the largest functional hole in the app.** `Cmd::set_sends` and
-`Cmd::set_master` were in the enum with nothing handling them and nothing posting them. Design
-decisions worth not re-litigating:
-
-- The fourteen settings are **encoder bytes**, not floats, in `ProjectSettings::sends` /
-  `::master`. A byte is what the encoder produces, a byte cannot hold a NaN that would poison
-  every later block, and the serializer has no float method — storing one would mean bit-casting
-  through a buffer, which `CLAUDE.md` forbids.
-- The commands carry a **delta in the field's own units**, not the next byte. The first cut
-  carried the byte, and a sweep of sixteen clicks read the same stale byte sixteen times and
-  moved the knob by one, because the authoritative byte lives on the audio side. This is the same
-  rule `app/commands.hpp` already stated for every other encoder gesture; `Cmd::set_quantize`
-  was changed for the same reason before it ever shipped.
-- The delay's byte is a **division**, not a time, because `docs/SPEC.md` makes send A
-  tempo-synced. `Cmd::set_tempo` re-derives the seconds, which is why the engine now handles a
-  command whose comment used to say "handled in app/".
-- `PROJECT.BIN` grew a **third section, optional on read** — 251 → 277 bytes. `find_sections`
-  gained a tolerance for a missing tail section, which is what lets the format grow without a
-  version bump. **Absent means the DEFAULTS explicitly**, not "leave the struct alone": the
-  project is a buffer the app reuses, so leaving it would carry the previous project's delay into
-  one whose file says nothing about it. That bug was written and then caught by its own test.
-
-**Three UI deviations from the spec's key table**, recorded in `docs/REVIEW.md` §2a. Every key in
-that table is taken, plain and with F1, so each took a key that does nothing in the mode it is
-used in: the sends went to four new MIXER pages on the selection keys; the record quantize amount
-moved off F1 + VALUE (which the spec gives to the master DJ filter) to a SETUP page; that page
-sits on the octave keys in PROJECT mode, where they were setting GRID's step page, which is not
-on screen there.
-
-**M7 turned out to be much smaller than PLAN.md thought.** CLOCK SRC, CLOCK OUT, SYNC OUT and
-MIDI CH are **not settable from an app**: `<enaga/clock.hpp>` and `<enaga/midi.hpp>` expose
-`source()` and `channel()` and no writer, because they are the user's settings in the Enaga menu.
-So "STRATA only exposes the settings" can only mean *showing* them, which the SETUP page does.
-The one real behaviour the spec asks for and `app/` did not have is that **VALUE refuses a tempo
-edit** when the source is not INTERNAL; before, the knob moved the app's own number and Enaga
-threw the call away, so the two drifted apart with every click.
-
-**The VA POLY optimisation loop.** Measured, bit-exact, 4.30 → 3.82 points per voice;
-`docs/BUDGET.md` has the tables and the three avenues examined and rejected. The one thing not in
-the commit: the **average** saving per voice (0.33) is smaller than the **marginal** one (0.48),
-and both are honest — the bass is a `VaMono` with one voice so it shares nothing, and the first
-chord voice of each slice is the one that computes what the others read. Quote the marginal
-figure when asking whether a part fits.
-
-### 7. Decisions recorded in the code that should not be re-opened without reading them
-
-- **The sample swap protocol.** `clear_sample` → wait for `Status::sample_epoch[track]` to change
-  → release the range → load → `set_sample`. `SamplePool::release` makes memory reusable
-  immediately and `core/` deliberately cannot check whether a voice is still reading it.
-  Releasing before the epoch confirms means overwriting memory a voice is reading, which sounds
-  like a broken sampler rather than a broken lifetime.
-- **Saving must not read a torn step.** Drain the command ring first and defer the save by a
-  frame if it is not empty. A *load* additionally requires the transport stopped — with the clock
-  stopped `clock::ticks()` yields nothing, so the scheduler never reads the pattern.
-  `Engine::project_for_load()` is the one deliberate hole in "the main context never writes
-  pattern memory": a load replaces 1.03 MiB, which cannot travel through a 16-byte command.
-- **A duration on the `Trig`, not a `release(note)` virtual.** `Trig::gate_frames` is additive and
-  `Engine::gate_frames_for` fills it from `Step::length`. A held KEYS key still cannot be
-  released — it has no known duration — so `Cmd::release_note` stays unimplemented.
-- **Machines are mono and the chain spreads them.** `render_add_stereo` was a comment promising a
-  function declared nowhere. The real cost of a stereo machine is that `InsertChain` is mono, so
-  a stereo track doubles that track's insert work.
-- **`VaFilterCache` is keyed on a float by exact equality**, which is right here for the same
-  reason it is usually wrong: the question is "are these the same bits", not "are these about
-  equal". `VaPoly::prepare` clearing it is the one thing that must happen for a stale coefficient
-  to be impossible.
+- **The sample swap protocol.** `clear_sample`, then wait for `Status::sample_epoch[track]` to
+  change, then release the range, load, `set_sample`. `SamplePool::release` makes memory reusable
+  at once and `core/` cannot see whether a voice still reads it; releasing early sounds like a
+  broken sampler, not a broken lifetime.
+- **Saving never reads a torn step**: drain the command ring first and defer by a frame if it is
+  not empty. A load also needs the transport stopped. `Engine::project_for_load()` is the one
+  deliberate hole in "the main context never writes pattern memory": a project is 1.03 MiB.
+- **The queue protocol** (`core/queue.hpp`): a queued pattern change lands at the end of the
+  playing pass, at once when the transport is stopped (there is no pass), and at once when the
+  transport jumps back (PR #22).
+- **Sends and master are encoder bytes, commanded by deltas.** A byte cannot hold a NaN and needs
+  no float serializer; a delta, not the next byte, because the authoritative byte lives on the
+  audio side and sixteen fast clicks would read the same stale byte. `PROJECT.BIN`'s third section
+  is optional on read, and absent means the defaults, never "leave the struct alone".
+- **Gate length on the `Trig`, release by note for KEYS.** `Trig::gate_frames` carries a step's
+  length. A KEYS key-up posts `Cmd::release_note`, which releases by note, so it also lets go of
+  the sequencer's same note on that track (decided 2026-11-22).
+- **Machines are mono and the insert chain spreads them**; a stereo machine would double its
+  track's insert work.
+- **`VaFilterCache` is keyed on a float by exact equality**, on purpose: the question is "the same
+  bits", and `VaPoly::prepare` clearing it is what makes a stale coefficient impossible.
+- **The shared voice budget** (PR #30): past 12 VA POLY voices across all tracks, a new note
+  chokes the quietest started voice on any POLY track (a 64-frame fade); a note is dropped only
+  when every counted voice is still waiting for its frame. GRAIN and VA MONO are not counted.
+- **The factory content is one function**, `factory_project` in `core/factory.cpp`, used by both
+  `Engine::init` (no card) and `Storage::start_new` (NEW). Change sounds and patterns there only.
+  `project_init` stays blank because the tests' `fresh()` builds on it.
+- **Navigation follows Enaga's menus**: UP/DOWN move between rows, LEFT/RIGHT sideways, OK picks,
+  CLR goes back. New list-like settings go on the arrows, not new chords. `docs/CHEATSHEET.md` has
+  the full map; on-screen hints name keys as printed on the panel (FUNC, PROJECT, EDIT).
+- **Settled by Roland on 2026-11-22**: note names use sharps everywhere; the scale fold applies to
+  both VAs and GRAIN, and to SAMPLE only while unsliced (SLC = 1); one p-lock is removed by
+  holding the step and pressing the knob or tapping the parameter; FUNC+STOP also puts a running
+  chain back on its first entry; CHAIN repeats are capped at 16; a sample may be 30 s of the
+  file at up to 96 kHz (PR #31).
 - **`core/` never includes an Enaga header**, which is why `kSendFields` / `kMasterFields` are
-  stated in `core/project.hpp` and `static_assert`ed against `SendField::count` in `dsp/buses.hpp`
-  rather than taken from the enum.
+  stated in `core/project.hpp` and `static_assert`ed against the enum in `dsp/buses.hpp`.
 
-- **The factory content is one function** (2026-11-22). `factory_project` in core/factory.cpp
-  builds the kit, mixer, bank A's four patterns, the chain (off), mute states, scenes and macros.
-  `Engine::init` (no card) and `Storage::start_new` (NEW) both call it, so they cannot drift
-  apart again; NEW used to give a kit with LVL 0 everywhere. `project_init` stays blank, which is
-  what the tests' `fresh()` builds on. `make -C host render` renders it to WAV without an
-  emulator (host/render.cpp).
+### 7. Small things noticed and deliberately not fixed
 
-### 8. Open questions that need a person, not a session
+- `dsp/va.cpp`'s flop table predicts ~1,660 cycles a voice; the measurement is ~18,900. The table
+  is kept for the order of its stages, which held; `docs/BUDGET.md` has the real costs.
+- `core/project.cpp`'s `project_read` carries `#pragma GCC optimize("no-unroll-loops")`: GCC
+  13.3.0 for tic6x-elf crashes on it with `-O2 -funroll-loops` (`haifa-sched.cc:1597`). To be
+  reported upstream with that file as the failing case.
+- Two comments say float division is hardware on this core (`Engine::process`,
+  `Granular::fit_length`). It is not; both are at control rate, so harmless.
+- `tests/test_engine.cpp` and `tests/scenario_m4.sh` cite older versions of this file for two
+  fixed bugs and the queue protocol. The bugs are in commit `1108ee0`; the queue
+  protocol is in section 6 above.
 
-1. ~~The note spelling disagrees with itself~~ **Settled 2026-11-22: sharps everywhere.**
-   `core/scale.cpp`'s `note_name` now spells `C#`, `D#` ... like the step page's `C#4`; a test
-   holds the two overloads to the same spelling.
-2. ~~Should SAMPLE or GRAIN fold?~~ **Settled 2026-11-22.** GRAIN folds like the VAs; SAMPLE
-   folds only while unsliced (SLC = 1); a sliced sample never folds, because there the note
-   picks the slice. `machine_folds_note` (core/project.hpp) replaced `machine_is_melodic`.
-   Still to be heard on the unit (docs/UNIT_CHECKLIST.md).
-3. ~~`CLAUDE.md` line 62 is wrong~~ **Settled 2026-11-22.** "All 18 voices together are about
-   11% of the block" held for the drums, not for a sustaining voice (six VA POLY voices are
-   22.9% on their own). With the user's approval CLAUDE.md now states the measured figure; the
-   rule it supports, cut effects or insert stages before voices, is unchanged.
-4. **`delay_ping_pong` and `delay_to_reverb` share a MIXER page with two empty slots**, because
-   ten send fields do not divide into four. Fine, but a person may want them placed differently.
+### 8. Upstream, and moving the Enaga pin
 
-### 9. Small things noticed and deliberately not fixed
+[seawaffle/enaga#1](https://github.com/seawaffle/enaga/pull/1) is open: it keeps libgcc's unwinder
+out of an app's link. It is not in v0.2.0. **Never modify `third_party/enaga`**; Enaga bugs go
+upstream with a failing case.
 
-- `tests/test_record.cpp` and `tests/test_timing.cpp` each define `degenerate_input_is_handled`
-  and `a_long_run_stays_consistent`. They compile (registrations are file-scope statics) but the
-  suite prints each name twice, so a failure does not say which file it was in. Pre-existing from
-  M1/M2.
-- `dsp/va.cpp`'s flop table derives ~1,660 cycles per voice. The measurement is ~18,900 — wrong
-  by a factor of eleven, because 2.5 flops per cycle was taken from Enaga's example and is far
-  too generous for this branchier, un-pipelined code. The table is kept because the **order** of
-  its stages held up; it now says to read `docs/BUDGET.md` for what anything costs.
-- `core/project.cpp`'s `project_read` carries a `#pragma GCC optimize("no-unroll-loops")` around
-  one function. GCC 13.3.0 for tic6x-elf **crashes** compiling it with `-O2 -funroll-loops`
-  (internal compiler error in the instruction scheduler, `haifa-sched.cc:1597`). To be reported
-  upstream with that file as the failing case.
-
-### 10. Upstream
-
-[seawaffle/enaga#1](https://github.com/seawaffle/enaga/pull/1) is open: a fix keeping libgcc's
-unwinder out of an app's link (64-bit division and modulo could not link at all) plus two
-documentation notes, verified against their own 81-test suite. It is **not** in v0.2.0. Nothing in
-STRATA depends on it being merged. **Never modify `third_party/enaga`** — Enaga bugs go upstream
-with a failing case.
-
-**The pin is release `v0.2.0` (`3da7f89`)**, moved from `1b41111` on 2026-11-22. The rule is to
-pin **release tags only**, and the one that matches the Enaga firmware on the unit: Enaga's loader
-checks nothing but `ENAGA_ABI_VERSION` (still 0), so headers and firmware can drift apart with
-nothing failing. v0.2.0 is the release Enaga's own unit session 5 ran on a SmplTrek. What it
-changed since `1b41111`:
-
-- **Among the headers STRATA uses**, only a comment in `midi.hpp` and an optional package flag in
-  `abi.h` (`ENAGA_PACKAGE_ICON`, for a 16×16 menu icon from an `icon.txt`). STRATA has no icon,
-  so its package writes 0 there as before. **Do not add one** while any unit runs firmware older
-  than 0.2.0: that loader refuses any non-zero flags.
-- New and unused by STRATA: `<enaga/ui.hpp>` (List, ParamPage, Dialog, TextEntry),
-  `<enaga/bytes.hpp>`, and an SDK zip with a **prebuilt GCC 13.3.0 toolchain** — the same compiler
-  `tools/build_toolchain.sh` builds, so it could replace the 30-minute build. Not tried yet.
-- `build_app.py`: when the app folder is outside Enaga's tree, intermediates go to
-  `<app>/build`; `tools/build.sh` passes `-o`, so only its staging folder sees that.
-- Firmware: unit session 5 on 0.2.0 logged one unreproduced crash on CHECK's MIDI page. The
-  fix for a stalled USB host holding up DIN (`192f03f`) came **after** the tag.
-
-At the bump, `make -C host test` passed unchanged (539,924 checks, 0 failures). The device
-build and the scenarios were **not** run at v0.2.0 from a container (no tic6x toolchain). The first
-device build after the bump is step 3 of the procedure below; do it before the unit session.
+The pin is **release v0.2.0 (`3da7f89`)**. The rule is to pin release tags only, and the one that
+matches the firmware on the unit: Enaga's loader checks nothing but `ENAGA_ABI_VERSION` (still 0),
+so headers and firmware can drift apart with nothing failing. On the unit, v0.2.0 logged one
+unreproduced crash on CHECK's MIDI page, and the fix for a stalled USB host holding up DIN came
+after the tag. Do not add a package icon (`ENAGA_PACKAGE_ICON`) while any unit runs firmware older
+than 0.2.0: that loader refuses non-zero flags.
 
 #### Moving the Enaga pin
 
 `tools/enaga_check.sh --upstream` reports newer releases and the commits since the pin that touch
 `include/`, `runtime/`, `loader/` or `build_app.py`, and exits 3 when there is something to look
 at. Without `--upstream` it only checks that the checkout, the docs and the emulator match their
-pins. Moving the pin is the user's decision; once made, one commit, in this order:
+pins. Moving the pin is Roland's decision; once made, one commit, in this order:
 
 1. `git -C third_party/enaga fetch --tags && git -C third_party/enaga checkout vX.Y.Z`, then
    `git add third_party/enaga`.
@@ -356,66 +248,9 @@ pins. Moving the pin is the user's decision; once made, one commit, in this orde
 The emulator moves the same way, by `STRATA_EMULATOR_COMMIT` in `tools/env.sh`, then
 `tools/fetch_emulator.sh` and `tools/scenarios.sh`.
 
----
+## Running commands on Roland's Windows host
 
-## What to do next, in order
-
-Everything below the first item can be done from a container. The first item cannot, and it is
-worth more than all the rest together.
-
-1. **Work `docs/UNIT_CHECKLIST.md` on the unit.** It boots and plays the default beat
-   (2026-11-22); almost every box is still open. Start with the sections that decide
-   whether a milestone stands: does it start with no card; does a power cycle restore the
-   project; does swapping a sample on a sounding track stay clean; does pulling the card during a
-   save leave the project intact. Then the new sections at the end — the sends and the master,
-   and VA POLY after the optimisation loop.
-2. **Run the load with cl6x**, on the machine that has it, for a 4- and a 6-voice chord, and put
-   both figures in `docs/BUDGET.md` next to the GCC-only table. `CLAUDE.md` asks for both columns
-   after a DSP change and only one of them can be produced in a container. **This is the number
-   that decides whether M6's budget exit stands.**
-3. **Mutation-test the new `app/` tests** (task #19, never done). `app/` became host-testable only
-   recently and its tests have not been held to the standard the rest of the project is. The two
-   data-loss bugs found when `app/` first became testable are the argument.
-4. **Read `app/` again.** It was written with no way to run it. Ten bugs were found by re-reading
-   or by mutation testing that no compiler could have caught, and the odds that those were the
-   last ten are poor. The places where a mistake is **silent rather than loud**: the epoch wait in
-   `Storage::step_sample_epoch`, the slice arithmetic in `step_sample_convert` and
-   `step_sample_resample` (every pointer there is an offset into the 64 MiB region), and the
-   deferred-save condition in `Storage::service`.
-5. **Check the memory.** 64 MiB sample region + 27.5 MiB loader staging + 2.93 MiB repeat ring is
-   94.5 MiB of the ~124 MiB heap before anything else, and the staging was never in the spec's
-   table. Cheap to check and the figure most likely to be a problem.
-6. **The two open questions above that need an ear** — the note spelling, and whether a sample
-   track folds.
-
-## What a container CAN and CANNOT do
-
-| Can | |
-| --- | --- |
-| `make -C host test` | the whole suite, including `app/`, against `tests/fakehost.cpp`. Needs the `third_party/enaga` submodule for headers (`git submodule update --init --recursive`) and nothing else |
-| `tools/build.sh` | a GCC-only device build, **after** `tools/build_toolchain.sh` (~30 min) |
-| `tools/scenarios.sh` | all seven emulator scenarios, after the toolchain **and** `tools/fetch_emulator.sh` |
-| `tools/enaga_check.sh` | the Enaga and emulator pins; `--upstream` also reports what upstream has added since |
-| `tools/render.sh` | an offline render, same requirements |
-| ASan / UBSan over the suite | with `detect_leaks=0` |
-
-| Cannot | why |
-| --- | --- |
-| Anything with cl6x | the installer needs an interactive licence click. Every load figure is GCC-only |
-| Drive a pad or an encoder in the emulator | `emulate.py` has `--key` and nothing else |
-| Hear anything | no audio out, and `tools/render.sh` only writes a file |
-| Know whether it feels right | the thing the whole checklist exists for |
-
-## Running commands, if the session is on the user's Windows host
-
-The repo is on `D:` and every build runs in WSL, so commands go through `wsl.exe` and Git Bash
-mangles them unless path conversion is off. `CLAUDE.md` has the full form; the short version:
-
-```sh
-MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- bash -c 'cd /mnt/d/DEV/STRATA && make -C host test'
-```
-
-Use `bash -c` with single quotes — `bash -lc` with `VAR=...` assignments loses the variables —
-and for anything longer than one command **write a script to the scratchpad and run it**, because
-inline heredocs and `$VAR` get mangled and `$?`/`PIPESTATUS` read back wrong through the
-`wsl.exe` layer. In a Linux container none of that applies and the commands above are literal.
+The repo is on `D:` and every build runs in WSL. `CLAUDE.md` has the working form; the short
+version is `MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- bash -c '...'`, single
+quotes, and a script file in the scratchpad for anything longer than one command. In a Linux
+container none of that applies.
