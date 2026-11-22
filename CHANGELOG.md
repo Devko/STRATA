@@ -8,7 +8,8 @@ the project file format or the controls.
 
 The first release: STRATA on a SmplTrek running Enaga 0.2.0. Early, and released so that people
 with a unit can play it and report back. Release notes: [docs/release/v0.1.0.md](docs/release/v0.1.0.md).
-How to play it: [docs/MANUAL.md](docs/MANUAL.md), and every control on one page in
+How to play it: [docs/MANUAL.md](docs/MANUAL.md); how the controls are laid out:
+[docs/CONTROLS.md](docs/CONTROLS.md); every control on one page:
 [docs/CHEATSHEET.md](docs/CHEATSHEET.md).
 
 ### Requires
@@ -18,6 +19,24 @@ How to play it: [docs/MANUAL.md](docs/MANUAL.md), and every control on one page 
   different Enaga release may load STRATA and then misbehave.
 
 ### Added
+
+**Controls**
+
+- **One job per button group, in every mode** ([docs/CONTROLS.md](docs/CONTROLS.md)). The arrow
+  pad moves the cursor (OK picks, CLR goes back); the two keys under the screen turn the screen's
+  pages; the two keys at the ends of the upper pad row choose which sixteen the STEP keys mean
+  (step page, octave or bank); knobs A-D turn the four values on screen and push for their switch.
+- **FUNC + a function key does what is printed under it:** sampling, pool (the sample browser),
+  system (the FUNC menu), ◀◀ restart, ▶▶ reset, fx (PERFORM) and rec src (MACHINE and kits).
+  Plain FUNC chords are otherwise kept for moves made while playing.
+- **The FUNC menu** (FUNC + HOME) holds the rare setup actions by name: save (FUNC + HOME, OK),
+  save as, open, new and reload project, kits, sample reload, track speed, chain on/off, song or
+  loop, auto-fill and record quantize.
+- **HOME** always goes to GRID; tapped twice, to KEYS.
+- **The lights say where you are:** a mode key is green on its screen and red on its FUNC screen,
+  and the performance pads are always lit in their own colours. The upper pads are printed
+  TRK 1-7, so each names itself on the screen when pressed, and FUNC held alone shows what every
+  function key and pad does.
 
 **Sound**
 

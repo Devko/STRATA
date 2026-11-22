@@ -53,6 +53,7 @@ INSTALLING
 
 3. Switch on. Enaga starts the last app that ran, or the only one installed.
    F1 + POWER opens the Enaga menu, which lists the apps and switches between them.
+   In STRATA, hold FUNC to see what every key does, and FUNC + HOME then OK saves.
 
 A first start opens the factory project: four patterns in bank A (A01 GROOVE, A02 GROOVE+,
 A03 BREAK, A04 PEAK) at 130 BPM in C minor. Press PLAY.
@@ -70,9 +71,11 @@ the unit completely. Your projects stay on the card.
 MORE
 ----
 CHANGELOG.md lists what is in this release and its known limits. In the repository,
-docs/MANUAL.md is the user manual and docs/CHEATSHEET.md has every control on one page:
+docs/MANUAL.md is the user manual, docs/CONTROLS.md explains how the controls are laid
+out, and docs/CHEATSHEET.md has every control on one page:
 
   https://github.com/Devko/STRATA/blob/{RELEASE}/docs/MANUAL.md
   https://github.com/Devko/STRATA/blob/{RELEASE}/docs/CHEATSHEET.md
+  https://github.com/Devko/STRATA/blob/{RELEASE}/docs/CONTROLS.md
 
 Put your own WAV files in /SAMPLES/ on the card; the sample browser opens there.
