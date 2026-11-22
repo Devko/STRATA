@@ -449,11 +449,13 @@ void Storage::finish_job(const char *error) {
     const bool project_job = job_ == Job::save || job_ == Job::load;
     job_ = Job::idle;
     step_ = 0;
-    if (error != nullptr) {
-        error_ = error;
-        // And kept where the sample swaps that follow a load cannot reach it.
-        if (project_job) project_error_ = error;
-    }
+    if (error != nullptr) error_ = error;
+    // And kept where the sample swaps that follow a load cannot reach it. From `error_`, not only
+    // from `error`: a load that refuses one file carries on with the rest -- step_load records
+    // the reason in `error_` and finishes with nullptr -- and that reason is the one the screen
+    // most needs. Taking it from `error` alone left it in the slot the very next sample job
+    // clears, which is the bug `project_error_` was added to fix.
+    if (project_job && error_ != nullptr) project_error_ = error_;
 }
 
 const char *Storage::busy_text() const {

@@ -147,9 +147,9 @@ bool settle(int quiet = 24, int limit = 8000) {
 // so `settle()` wipes the message this is here to read. tests/apprig.hpp's `pump_until_idle`
 // returns at the first idle pass, which is the one the load finished on.
 //
-// That clearing is a bug, not a quirk of the test: docs/SPEC.md requires a refused load to put a
-// message on screen, and the UI draws at 20 fps while `update()` runs 750 times a second. It is
-// pinned by `storage_the_reason_a_load_refused_a_file_does_not_survive_the_sample_swaps` below.
+// `last_error()` now survives that (`storage_the_reason_a_load_refused_a_file_survives_the_sample_
+// swaps` below), but reading at the finishing pass still says which file the reason came from
+// before any swap could add one of its own.
 bool reload_now() {
     storage().request_reload();
     return pump_until_idle();
@@ -1028,20 +1028,20 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     CHECK(settle());
 }
 
-TEST(storage_the_reason_a_load_refused_a_file_does_not_survive_the_sample_swaps) {
-    // A BUG, pinned rather than fixed (app/ belongs to another pass).
-    //
+TEST(storage_the_reason_a_load_refused_a_file_survives_the_sample_swaps) {
     // docs/SPEC.md: "An unknown version or a bad CRC is refused with a message on screen."
     // app/storage.hpp: the last failure is "sticky until the next job starts, because a load that
     // failed silently is the least diagnosable thing a sampler can do."
     //
     // A project load's LAST act is to queue a sample swap for all eight tracks, and the next pass
     // of `service()` starts one, and `begin_job` clears `error_`. `App::update` runs at least 750
-    // times a second and the screen is drawn at 20 fps, so the message is gone several passes
-    // before anything could draw it: a damaged file reports nothing at all to the user.
+    // times a second and the screen is drawn at 20 fps, so a reason kept only there is gone
+    // before anything could draw it.
     //
-    // The fix is small -- do not clear a sticky error in `begin_job`, or carry the load's reason
-    // separately -- but it is a decision about what the screen shows, so it is reported.
+    // This test used to pin that as a known bug. `project_error_` was then added to fix it, but
+    // only caught a reason passed to `finish_job` -- and a load that refuses one file does not
+    // finish with it: it records it and carries on with the rest. So this exact case still lost
+    // its message, and this test still passed asserting that it did.
     clean();
 
     storage().request_save();
@@ -1055,10 +1055,14 @@ TEST(storage_the_reason_a_load_refused_a_file_does_not_survive_the_sample_swaps)
     CHECK(reload_now());
     check_error("at the pass the load finished on", "BAD CHECKSUM");
 
-    // One more pass of both contexts is all it takes.
     pump(3);
-    CHECK(storage().last_error() == nullptr);          // <- the bug
+    check_error("after the sample swaps began", "BAD CHECKSUM");
     CHECK(settle());
+    check_error("once everything settled", "BAD CHECKSUM");
+
+    // And the next save or load is what clears it.
+    storage().request_save();
+    CHECK(pump_until_idle());
     CHECK(storage().last_error() == nullptr);
 }
 
