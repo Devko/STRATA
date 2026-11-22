@@ -2311,6 +2311,181 @@ TEST(engine_note_repeat_velocity_mute_and_refusal) {
     CHECK(!engine.rolling(kPoly));
 }
 
+// --- the arpeggiator --------------------------------------------------------------------------
+
+// The four ARP bytes on `track`, as the smallest byte of each zone (core/arp.hpp): MOD 1 = UP,
+// RAT 5 = 1/32, OCT 1 = one octave.
+void set_arp(uint8_t track, int mode, int rate, int octaves = 1, uint8_t gate = 0) {
+    auto smallest = [](int zone, int zones) { return uint8_t((zone * 128 + zones - 1) / zones); };
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 0), smallest(mode, int(ArpMode::count)));
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 1), smallest(rate, kArpRates));
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 2), smallest(octaves - 1, kArpMaxOctaves));
+    post(Cmd::set_param, track, 0, uint8_t(kArpFirst + 3), gate);
+    pump();
+}
+
+// One pass of a fresh pattern: 64 steps of 24 ticks.
+constexpr uint32_t kPass = uint32_t(kStepsPerTrack) * 24u;
+
+// Hits on `track` over ticks [from, to).
+int hits_between(int track, uint32_t from, uint32_t to) {
+    int hits = 0;
+    for (uint32_t t = from; t < to; t++) hits += fired_on(track, t);
+    return hits;
+}
+
+TEST(engine_arp_off_plays_a_step_once) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kMono);
+    put_trig(kMono, 0);
+    CHECK_EQ(hits_between(kMono, 0, kPass), 1);
+    CHECK(!engine.arp_running(kMono));
+    FakeHost::the().set_running(false);
+}
+
+TEST(engine_arp_a_step_hits_at_the_rate_for_its_length) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kMono);
+    put_trig(kMono, 0);
+    set_arp(kMono, 1, 5);                        // UP, 1/32: every 12 ticks
+    // A one-step length (24 ticks): 0 and 12, and not the next step's own tick.
+    CHECK_EQ(hits_between(kMono, 0, kPass), 2);
+    CHECK(!engine.arp_running(kMono));
+    // Every pass the same.
+    CHECK_EQ(hits_between(kMono, kPass, 2 * kPass), 2);
+    // Four steps (96 ticks): eight hits.
+    set_length_index(kMono, 0, 12);
+    CHECK_EQ(hits_between(kMono, 2 * kPass, 3 * kPass), 8);
+    // A 1/8 (48 ticks) over the same four steps: two.
+    set_arp(kMono, 1, 1);
+    CHECK_EQ(hits_between(kMono, 3 * kPass, 4 * kPass), 2);
+    // Back to OFF: the step plays once, as before.
+    set_arp(kMono, 0, 0);
+    CHECK_EQ(hits_between(kMono, 4 * kPass, 5 * kPass), 1);
+    FakeHost::the().set_running(false);
+}
+
+TEST(engine_arp_a_lock_on_mod_arps_one_step_only) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kMono);
+    put_trig(kMono, 0);
+    put_trig(kMono, 8);
+    set_arp(kMono, 0, 5);                        // OFF on the kit, 1/32
+    CHECK(pattern_set_lock(engine.project_for_load().live(), kMono, 8, uint8_t(kArpFirst), 22));
+    CHECK_EQ(hits_between(kMono, 0, 8 * 24), 1);         // step 0: one note
+    CHECK_EQ(hits_between(kMono, 8 * 24, 9 * 24), 2);    // step 8, locked UP: 2 hits
+    CHECK_EQ(hits_between(kMono, 9 * 24, kPass), 0);
+    FakeHost::the().set_running(false);
+}
+
+TEST(engine_arp_a_new_step_takes_over_and_stop_ends_it) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kMono);
+    put_trig(kMono, 0);
+    put_trig(kMono, 2);
+    set_length_index(kMono, 0, 16);              // 16 steps: longer than the gap to step 2
+    set_arp(kMono, 1, 3);                        // 1/16: every 24 ticks
+    // Step 0 hits on 0 and 24; step 2 restarts the run on 48 rather than adding to it.
+    CHECK_EQ(hits_between(kMono, 0, 48), 2);
+    CHECK_EQ(fired_on(kMono, 48), 1);
+    CHECK(engine.arp_running(kMono));
+    // A stop ends a sequenced run: nothing plays from it with the transport stopped.
+    post(Cmd::stop, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+    CHECK(!engine.arp_running(kMono));
+    const uint8_t before = triggers(kMono);
+    for (int b = 0; b < 400; b++) pump();
+    CHECK_EQ(int(triggers(kMono)), int(before));
+}
+
+TEST(engine_arp_on_a_chord_walks_its_notes_and_a_muted_track_stays_silent) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kPoly);
+    put_trig(kPoly, 0);
+    set_chord(kPoly, 0, ChordType::major);
+    set_length_index(kPoly, 0, 12);              // four steps
+    set_arp(kPoly, 1, 3);                        // UP, 1/16
+    // One note at a time: the step's first hit starts one voice, not the chord's three, and the
+    // four steps' length holds four hits.
+    CHECK_EQ(fired_on(kPoly, 0), 1);
+    CHECK_EQ(poly().sounding_voices(), 1);
+    CHECK_EQ(hits_between(kPoly, 1, 96), 3);
+    CHECK_EQ(hits_between(kPoly, kPass, kPass + 96), 4);
+    // Muted, the run carries on and plays nothing.
+    post(Cmd::set_mute, kPoly, 0, 1, 0);
+    CHECK_EQ(hits_between(kPoly, 2 * kPass, 2 * kPass + 96), 0);
+    post(Cmd::set_mute, kPoly, 0, 0, 0);
+    CHECK(!engine.arp_running(kPoly));
+    FakeHost::the().set_running(false);
+}
+
+TEST(engine_arp_held_keys_run_on_the_grid_and_stop_on_the_last_key_up) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    empty_track(engine, kMono);
+    set_arp(kMono, 1, 3);                        // UP, 1/16
+    tick_at(100);
+    post(Cmd::trigger_note, kMono, 0, 60, 100, 1);
+    CHECK_EQ(fired_on(kMono, 101), 1);          // the first key hits at once
+    CHECK(engine.arp_running(kMono));
+    post(Cmd::trigger_note, kMono, 0, 64, 100, 1);
+    // A second key joins the cycle; it does not hit on its own.
+    CHECK_EQ(fired_on(kMono, 102), 0);
+    CHECK_EQ(hits_between(kMono, 103, 200), 4); // 120, 144, 168, 192
+    post(Cmd::release_note, kMono, 0, 60);
+    CHECK_EQ(hits_between(kMono, 200, 241), 2); // 216, 240: 64 alone, still running
+    post(Cmd::release_note, kMono, 0, 64);
+    pump();
+    CHECK(!engine.arp_running(kMono));
+    CHECK_EQ(hits_between(kMono, 241, 340), 0);
+
+    // A plain pad hit (no release to follow) plays once even with the arp on.
+    post(Cmd::trigger_note, kMono, 0, 60, 100, 0);
+    CHECK_EQ(fired_on(kMono, 341), 1);
+    CHECK(!engine.arp_running(kMono));
+    CHECK_EQ(hits_between(kMono, 342, 440), 0);
+    FakeHost::the().set_running(false);
+}
+
+TEST(engine_arp_held_keys_run_free_while_stopped_and_follow_the_page) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(false);
+    FakeHost::the().set_tempo(120.0f);
+    empty_track(engine, kMono);
+    set_arp(kMono, 1, 3);                        // 1/16: 6,000 frames at 120 BPM
+    const float period = 24.0f * kRate * 60.0f / (120.0f * 96.0f);
+    const uint8_t before = triggers(kMono);
+    post(Cmd::trigger_note, kMono, 0, 60, 100, 1);
+    pump();
+    CHECK_EQ(int(uint8_t(triggers(kMono) - before)), 1);
+    const int blocks = int(4.0f * period / float(kBlk)) + 1;
+    for (int b = 1; b < blocks; b++) pump();
+    CHECK_EQ(int(uint8_t(triggers(kMono) - before)), 5);
+
+    // RAT turned while the key is down: 1/32 from here on.
+    set_arp(kMono, 1, 5);
+    const uint8_t faster = triggers(kMono);
+    for (int b = 0; b < blocks; b++) pump();
+    const int hits = int(uint8_t(triggers(kMono) - faster));
+    CHECK(hits >= 7 && hits <= 9);
+
+    // MOD to OFF ends the run, with the key still down.
+    set_arp(kMono, 0, 5);
+    pump();
+    CHECK(!engine.arp_running(kMono));
+    const uint8_t off = triggers(kMono);
+    for (int b = 0; b < blocks; b++) pump();
+    CHECK_EQ(int(triggers(kMono)), int(off));
+    post(Cmd::release_note, kMono, 0, 60);
+    pump();
+}
+
 TEST(engine_release_note_lets_a_held_note_go_early) {
     // KEYS mode's key release. A pad note on VA POLY with DEC at the top rings for seconds; let
     // go after ten blocks, it is silent long before that.
