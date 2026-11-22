@@ -829,3 +829,27 @@ TEST(a_long_random_sequence_matches_the_timeline) {
     CHECK(coalesced > 0);
     CHECK(int(next_id) > kUndoLevels + 1);   // the ring really did wrap
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(clearing_the_history_ends_the_gesture_so_the_same_one_marks_again) {
+    g_stack.clear();
+    fill_pattern(g_live, 1);
+    const Gesture gesture = edit(GestureKind::lock, 3);
+    CHECK(g_stack.mark(g_live, gesture));
+    g_stack.clear();
+    CHECK(g_stack.mark(g_live, gesture));
+    CHECK_EQ(g_stack.depth(), 1);
+}
+
+TEST(nothing_is_pending_once_every_level_is_undone_after_the_ring_wrapped) {
+    g_stack.clear();
+    for (int k = 0; k < kUndoLevels + 3; k++) {
+        fill_pattern(g_live, uint32_t(k));
+        CHECK(g_stack.mark(g_live, edit(GestureKind::trig, k)));
+    }
+    while (g_stack.undo(g_live)) {
+    }
+    CHECK_EQ(g_stack.depth(), 0);
+    CHECK_EQ(int(g_stack.pending()), int(GestureKind::none));
+}
