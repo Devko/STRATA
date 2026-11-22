@@ -227,8 +227,15 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 | F7 (MIXER) | Mixer: A-D levels of 4 tracks, selection keys switch 1-4 and 5-8 | PERFORM mode: A-D macros, VALUE morph |
 | F8 (EDIT) | Sound pages of the selected track; selection keys switch SRC, FLTR, AMP, FX | Kit and machine select |
 | Octave left/right | Step page 1-4 in GRID; octave in KEYS | Pattern length |
-| OK, CLR | Confirm, cancel | F1 + CLR = undo, F1 + OK = redo |
+| UP, DOWN | **[rev]** The rows on screen: the track in GRID, EDIT and KEYS; the machine in MACHINE; the length in RESAMPLE; the mutation in PERFORM; the slot cursor in PROJECT. With a STEP held: copy, paste | Copy, paste. In PROJECT: chain on/off, reload the sample. In PERFORM: auto-fill |
+| LEFT, RIGHT | **[rev]** Sideways: the page wherever the selection keys flip pages; the step on the step page; octave in KEYS; macro in PERFORM; track in MACHINE; destination in RESAMPLE; the slot cursor in PROJECT | Free |
+| OK, CLR | Confirm, cancel. **[rev]** OK picks the slot under the cursor in PROJECT; CLR closes the step page and SETUP | F1 + CLR = undo, F1 + OK = redo |
 | VALUE | Tempo; push + turn = swing. **[rev]** Shows `EXT` and refuses edits when CLOCK SRC is not INTERNAL | Master DJ filter |
+
+**[rev] Navigation.** The arrows follow Enaga's own menu and SETTINGS page, so one habit works in
+STRATA and in Enaga: UP and DOWN move through the rows on screen, LEFT and RIGHT move sideways,
+OK picks, CLR goes back, and F1 + an arrow is the mode's second meaning. New list-like settings
+(chain entries, swing) belong on the arrows, not on new key chords.
 
 **Step editing**
 

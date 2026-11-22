@@ -129,8 +129,8 @@ the command ring and the undo stack are known to work before you touch the hardw
       selection keys, and each one does what its name says. **Check the condition field
       specifically**: NONE, then the eight named conditions, then the 35 A:B pairs, clamping at
       both ends rather than wrapping.
-- [ ] Hold two STEP keys: the pair is a selection (the screen says `SEL n-m`). CLR erases it; UP
-      copies it, DOWN pastes it; A transposes it and B nudges its micro-timing.
+- [ ] Hold two STEP keys: the pair is a selection (the screen says `SEL n-m`). CLR erases it; F1 + UP
+      copies it, F1 + DOWN pastes it (plain UP and DOWN still do while a STEP is held); A transposes it and B nudges its micro-timing.
 - [ ] CLR with nothing held erases the **whole track**. Confirm F1 + CLR brings it straight back:
       that is the only thing that makes the bare gesture acceptable.
 
@@ -230,7 +230,7 @@ project and never needs a restart."*
 
 - [ ] F3 opens PROJECT. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
-- [ ] OK saves. `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (277 bytes),
+- [ ] F1 + F3 twice saves (once only says `F1+F3 AGAIN TO SAVE`). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (277 bytes),
       `KIT.BIN` (1,076 bytes) and a `BANK_x.BIN` per touched bank.
 - [ ] Only dirty banks are written. Edit one pattern in bank A, save, and confirm no
       `BANK_B.BIN` appears.
@@ -290,7 +290,7 @@ project and never needs a restart."*
 - [ ] END, 16 and 32 start the new pattern on its step 1 at the boundary, whatever the track
       lengths (a blank pattern's 64-step tracks used to come in on step 16). NOW keeps the
       position. A second END change waits one full pass of the pattern from where it started.
-- [ ] UP toggles the chain; starting one jumps to its first entry. CLR cancels a queued change.
+- [ ] F1 + UP toggles the chain; starting one jumps to its first entry. CLR cancels a queued change.
 - [ ] A pattern change clears the undo history (it belonged to the pattern left behind) and
       restarts the `1ST` conditions.
 
@@ -878,3 +878,25 @@ What it cannot judge is whether the result reads well on the OLED.
 - [ ] MACHINE: the kit reads as two lines of four; SETUP's three hint lines have no '?' in them.
 - [ ] The dim greys (2-4) used for empty steps and bar backgrounds are visible on the OLED but
       clearly darker than text. The emulator cannot tell us this.
+
+## Arrow keys (one navigation model)
+
+The arrows follow Enaga's own menu and SETTINGS page: UP and DOWN move through the rows on
+screen, LEFT and RIGHT move sideways (the page, wherever the selection keys flip pages), OK picks
+and CLR goes back. F1 + an arrow is the mode's second meaning. The host suite pins every mapping
+below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it feels natural.
+
+- [ ] GRID and EDIT: UP and DOWN walk the selected track without playing it; LEFT and RIGHT flip
+      the step page (GRID) or SRC/FLTR/AMP/FX (EDIT). F1 + UP copies, F1 + DOWN pastes.
+- [ ] Step page: LEFT and RIGHT walk to the previous and next step, wrapping at the track's
+      length. CLR closes the page and erases nothing.
+- [ ] KEYS: LEFT and RIGHT are the octave. PERFORM: LEFT and RIGHT pick the macro; UP and DOWN
+      still walk the mutation.
+- [ ] MACHINE (F1 + EDIT): the eight machines are a list; UP and DOWN change the track's machine
+      at once, LEFT and RIGHT walk the track. EDIT's screen says `F1+EDIT: MACHINE`.
+- [ ] RESAMPLE: UP and DOWN pick the length, LEFT and RIGHT where the take goes.
+- [ ] PROJECT: the arrows move a frame over the 16 slots and OK queues the framed one; a STEP key
+      queues and moves the frame there. F1 + UP toggles the chain, F1 + DOWN reloads the sample.
+      On SETUP, CLR goes back.
+- [ ] Notices (an octave, a scene captured, `F1+F3 AGAIN TO SAVE`) appear on the second line in
+      every mode, not only in GRID.
