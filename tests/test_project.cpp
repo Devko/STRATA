@@ -1177,7 +1177,7 @@ TEST(kit_the_fader_is_stored_in_thousandths_and_cannot_carry_a_nan) {
     g_kit_source.tracks[0].level = 0.0f;
     g_kit_source.tracks[1].level = 1.0f;
     g_kit_source.tracks[2].level = 0.5f;
-    g_kit_source.tracks[3].level = 2.0f;                            // above unity
+    g_kit_source.tracks[3].level = 1.5f;                            // above unity: the UI's max
     g_kit_source.tracks[4].level = -1.0f;                           // below zero
     g_kit_source.tracks[5].level = float_from_bits(0x7FC00000u);    // a quiet NaN
     g_kit_source.tracks[6].level = float_from_bits(0x7F800000u);    // +infinity
@@ -1190,31 +1190,32 @@ TEST(kit_the_fader_is_stored_in_thousandths_and_cannot_carry_a_nan) {
     CHECK_EQ(int(stored_level(g_kit_file, 0)), 0);
     CHECK_EQ(int(stored_level(g_kit_file, 1)), 1000);
     CHECK_EQ(int(stored_level(g_kit_file, 2)), 500);
-    CHECK_EQ(int(stored_level(g_kit_file, 3)), 1000);
+    CHECK_EQ(int(stored_level(g_kit_file, 3)), 1500);     // was clamped to 1000 and lost
     CHECK_EQ(int(stored_level(g_kit_file, 4)), 0);
     // Every comparison against a NaN is false, so the `>= 0` test is the one that rejects it.
     CHECK_EQ(int(stored_level(g_kit_file, 5)), 0);
-    CHECK_EQ(int(stored_level(g_kit_file, 6)), 1000);
+    CHECK_EQ(int(stored_level(g_kit_file, 6)), 2000);     // the engine's ceiling
     CHECK_EQ(int(stored_level(g_kit_file, 7)), 0);
 
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, written)), int(SerializeResult::ok));
     CHECK_NEAR(g_kit_loaded.tracks[0].level, 0.0f, 0.0f);
     CHECK_NEAR(g_kit_loaded.tracks[1].level, 1.0f, 0.0f);
     CHECK_NEAR(g_kit_loaded.tracks[2].level, 0.5f, 0.0f);
-    CHECK_NEAR(g_kit_loaded.tracks[3].level, 1.0f, 0.0f);
+    CHECK_NEAR(g_kit_loaded.tracks[3].level, 1.5f, 0.0f);
     CHECK_NEAR(g_kit_loaded.tracks[4].level, 0.0f, 0.0f);
     CHECK_NEAR(g_kit_loaded.tracks[5].level, 0.0f, 0.0f);
-    CHECK_NEAR(g_kit_loaded.tracks[6].level, 1.0f, 0.0f);
+    CHECK_NEAR(g_kit_loaded.tracks[6].level, 2.0f, 0.0f);
     CHECK_NEAR(g_kit_loaded.tracks[7].level, 0.0f, 0.0f);
 }
 
-TEST(kit_a_fader_above_unity_in_a_file_is_clamped_on_the_way_in) {
+TEST(kit_a_fader_above_the_engines_ceiling_in_a_file_is_clamped_on_the_way_in) {
     fresh_kit_file();
     poke_u16(g_kit_file, kit_track_at(g_kit_file, 2) + kKitParams + 1, 65535);
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
-    // An infinity is a blown output, so a gain above unity cannot be allowed out of this file.
-    CHECK_NEAR(g_kit_loaded.tracks[2].level, 1.0f, 0.0f);
+    // An infinity is a blown output, so nothing above the engine's own ceiling (2.0, the most
+    // `Cmd::set_track_level` accepts) is allowed out of this file.
+    CHECK_NEAR(g_kit_loaded.tracks[2].level, 2.0f, 0.0f);
 }
 
 TEST(kit_every_thousandth_of_the_fader_survives_a_round_trip) {
