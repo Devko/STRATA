@@ -1978,3 +1978,54 @@ TEST(grain_a_retrigger_cancels_a_release_waiting_for_the_last_one) {
     for (int i = 0; i < kCapture; i++) different += g_out[i] != g_other[i];
     CHECK_EQ(different, 0);
 }
+
+TEST(grain_a_spawn_takes_a_free_grain_and_steals_only_the_one_furthest_through) {
+    // Watched one frame at a time, every birth is checked against the pool just before it: with
+    // a grain free, a free one is taken and nothing is cut; with all eight busy, the grain
+    // replaced is the one furthest through its window (its quietest point), and the newcomer
+    // takes the full-pool crowd gain.
+    fill_sine(g_mono, kSrcFrames, 1, 200.0f, kRate, 0.8f);
+    static Granular g;
+    g.init(kRate);
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    p.set(1, 127);    // SIZ: the longest grain
+    p.set(2, 127);    // DEN: the deepest overlap, so the pool fills
+    g.prepare(p);
+    g.trigger(hit());
+
+    bool live[Granular::kGrains];
+    int left[Granular::kGrains];
+    float q[Granular::kGrains];
+    int free_births = 0, steals = 0, wrong = 0;
+    static float frame_out[1];
+    for (int f = 0; f < 3 * int(ENAGA_SAMPLE_RATE); f++) {
+        int count = 0;
+        float furthest = -1.0f;
+        for (int i = 0; i < Granular::kGrains; i++) {
+            live[i] = g.grain_live(i);
+            left[i] = g.grain_remaining(i);
+            q[i] = g.grain_state(i).q;
+            count += live[i] ? 1 : 0;
+            if (live[i] && q[i] > furthest) furthest = q[i];
+        }
+        frame_out[0] = 0.0f;
+        g.render_add(frame_out, 1);
+        for (int i = 0; i < Granular::kGrains; i++) {
+            const bool born = g.grain_live(i) && (!live[i] || g.grain_remaining(i) > left[i]);
+            if (!born) continue;
+            if (count < Granular::kGrains) {
+                free_births++;
+                wrong += live[i] ? 1 : 0;
+            } else {
+                steals++;
+                wrong += q[i] == furthest ? 0 : 1;
+                wrong += g.grain_state(i).gain == Granular::kCrowdGain[Granular::kGrains - 1] ? 0
+                                                                                           : 1;
+            }
+        }
+    }
+    CHECK(free_births >= Granular::kGrains);
+    CHECK(steals > 10);
+    CHECK_EQ(wrong, 0);
+}
