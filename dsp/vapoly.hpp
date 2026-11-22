@@ -144,9 +144,13 @@ public:
     // A voice counts against the budget from the moment it takes a trig until it is silent,
     // EXCEPT while it is choking: a choke is already paid for, and counting it would make the
     // next note of a chord choke a second voice for the room the first one freed.
+    //
+    // A PENDING trig counts even on a slot still choking. Its start cancels the choke (gate_on),
+    // so it is a voice from the moment it takes the slot; left uncounted until its frame, a
+    // later note in the same block found room that was not there and the block ended over budget.
     int budget_voices() const {
         int n = 0;
-        for (const Slot &s : slots_) n += s.busy() && !s.voice.choking() ? 1 : 0;
+        for (const Slot &s : slots_) n += s.pending || (s.voice.sounding() && !s.voice.choking());
         return n;
     }
     // Whether a trig on `note` would take a voice that is not already counted: false when it

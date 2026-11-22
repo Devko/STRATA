@@ -2627,6 +2627,54 @@ int poly_voices_counted() {
 
 }  // namespace
 
+// A note that takes over a voice still fading from a choke is a voice from the moment it takes
+// it, like any other pending trig. It used to go uncounted until its frame came, because a
+// choking voice is not counted, so a later note in the same block found room that was not there
+// and the budget ended the block one voice over. The case is an ordinary one: a chord repeated
+// on its next step while a third POLY track has just choked one of its notes.
+TEST(engine_a_note_on_a_choking_voice_counts_against_the_budget_at_once) {
+    clean();
+    const uint8_t tracks[3] = {2, 3, 4};
+    uint8_t was[3];
+    for (int i = 0; i < 3; i++) {
+        was[i] = strata::test::engine().project().kit.tracks[tracks[i]].machine;
+        post(Cmd::set_machine, tracks[i], 0, uint8_t(MachineId::va_poly));
+        post(Cmd::set_param, tracks[i], 0, kDec, 127);
+    }
+    pump();
+
+    // Two full chords, started: the budget is spent.
+    for (int i = 0; i < 2; i++) {
+        for (int n = 0; n < VaPoly::kVoices; n++) {
+            post(Cmd::trigger_note, tracks[i], 0, uint8_t(48 + 2 * n), 100);
+        }
+    }
+    pump(4);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+
+    // One block: a note on the third track chokes a voice of the first; the first track
+    // repeats that voice's note, which takes the fading voice back; and the third track plays
+    // one more note.
+    post(Cmd::trigger_note, tracks[2], 0, 72, 100);
+    for (int n = 0; n < VaPoly::kVoices; n++) {
+        post(Cmd::trigger_note, tracks[0], 0, uint8_t(48 + 2 * n), 100);
+    }
+    post(Cmd::trigger_note, tracks[2], 0, 74, 100);
+    pump();
+    CHECK(poly_voices_counted() <= Engine::kPolyVoiceBudget);
+    pump(4);                                   // every note has started, every fade is over
+    int sounding = 0;
+    for (int i = 0; i < 3; i++) {
+        sounding += static_cast<const VaPoly *>(strata::test::engine().machine(tracks[i]))
+                        ->sounding_voices();
+    }
+    CHECK(sounding <= Engine::kPolyVoiceBudget);
+    CHECK_EQ(poly_voices_counted(), sounding);
+
+    for (int i = 0; i < 3; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
+    pump();
+}
+
 TEST(engine_the_shared_voice_budget_caps_va_poly_across_tracks) {
     clean();
     // Four POLY tracks with long notes, so nothing ends on its own during the test.
