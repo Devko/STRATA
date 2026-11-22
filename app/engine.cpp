@@ -722,6 +722,7 @@ void Engine::apply(const Command &command) {
             undo_.clear();
             queue_clear(queue_);
             chain_.active = false;
+            deferred_count_ = 0;                 // hits of a pattern that no longer exists
             scheduler_.reset(true);
             reconfigure();
             // The sends and the master, which arrived with the file as fourteen bytes. Without
@@ -1265,6 +1266,11 @@ void Engine::switch_pattern(int bank, int slot) {
     // was resolved against a pattern that is no longer playing.
     scheduler_.reset(true);
     reconfigure();
+
+    // Ratchet hits still waiting belong to a step of the pattern just left. Fired later, they
+    // would read THIS pattern's locks and chord at that step index (`fire` reads the live
+    // pattern), which is a hit of neither pattern.
+    deferred_count_ = 0;
 
     // The new pattern's master length makes the old boundary meaningless, and deriving the new
     // one needs a tick, which only resolve_tick has.

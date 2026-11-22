@@ -551,6 +551,26 @@ TEST(app_a_first_stop_drops_ratchet_hits_still_waiting_too) {
     CHECK_EQ(int(engine.status().triggered[0].load(std::memory_order_relaxed)), int(after_stop));
 }
 
+TEST(app_a_pattern_switch_drops_ratchet_hits_of_the_pattern_it_left) {
+    // A deferred hit is fired by step index against the LIVE pattern, so one that crossed a
+    // switch played the new pattern's locks and chord. The switch now drops them.
+    Engine &engine = fresh();
+    kick_blip();
+    put_trig(0, 0);
+    post(Cmd::step_field_delta, 0, 0, uint8_t(StepField::ratchet_count), 7);   // 8 hits
+    pump();
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump(2);
+    post(Cmd::queue_pattern, 0, 0, 0, 5, uint8_t(QueueMode::immediate));
+    pump();
+    const uint8_t after_switch = engine.status().triggered[0].load(std::memory_order_relaxed);
+    pump(40);
+    CHECK_EQ(int(engine.status().triggered[0].load(std::memory_order_relaxed)), int(after_switch));
+    FakeHost::the().set_running(false);
+}
+
 // --- resampling, end to end ------------------------------------------------------------------
 //
 // docs/SPEC.md's eighth performance tool: "Record the master or one track for 1, 2, 4 or 8 bars
