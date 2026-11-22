@@ -714,7 +714,8 @@ A recalled kit makes the project UNSAVED until you save it.
 
 Samples are loaded whole into RAM in the background: the track stays silent until its sample is
 ready, and everything else keeps playing. The PROJECT screen's `SMP` line shows each track (`O`
-loaded, `.` loading, `X` failed, `-` none) and the memory used out of the budget, `12/32M`.
+loaded, `S` streamed from the card, `.` loading, `X` failed, `-` none) and the memory used out of
+the budget, `12/32M`.
 
 STRATA reads WAV files: 8, 16 or 24-bit, or 32-bit float, mono or stereo, at any sample rate
 (other rates are converted to 48 kHz on load).
@@ -726,6 +727,14 @@ STRATA reads WAV files: 8, 16 or 24-bit, or 32-bit float, mono or stereo, at any
   GRAIN.
 - **At any other rate** a file is converted whole, so it may be up to **30 s at 96 kHz**; at
   lower rates the same buffer holds more (about 65 s at 44.1 kHz). Save long stems at 48 kHz.
+- **A file too big for all that is streamed** from the card instead: one too big for the sample
+  memory left, longer than 349 s, or at another rate and longer than the above. Its first two
+  seconds load into memory and the rest is read while it plays; the SMP line shows `S` for the
+  track. A streamed file plays from its start, forward, on one voice: pitch, the note, ATK, DEC,
+  LVL and loop work, but START, LEN, slices and reverse do not, and on GRN only the first two
+  seconds play. Up to four tracks can stream at once. If the card cannot keep up, the gap plays
+  as silence, the loop stays in time and the screen says `STREAM LATE`; a fast card (class 10 or
+  better) avoids it.
 
 ### Picking a sample: the sample browser
 
@@ -805,8 +814,11 @@ Shown on the PROJECT screen under the project name, and the track shows `X` on t
 
 | Message | Meaning | What to do |
 | --- | --- | --- |
-| `TOO LONG` | Not at 48 kHz and longer than 30 s at its own rate (up to 96 kHz), or longer than 349 s | Save it at 48 kHz, or trim it |
-| `NO ROOM` | Does not fit in the sample memory left (`SMP ... nn/32M`) | Use shorter or mono samples, or free a track |
+| `TOO LONG` | Longer than six hours | Trim it |
+| `NO ROOM` | Does not fit in the sample memory left (`SMP ... nn/32M`), not even its first two seconds to stream | Use shorter or mono samples, or free a track |
+| `STREAMS FULL` | Four tracks already stream | Free one of them, or use a shorter file that fits in memory |
+| `STREAM FAILED` | The card would not open the file for streaming | Check the card; pick the sample again |
+| `STREAM LATE` | The card fell behind a streamed file: a gap played as silence | Use a faster card, fewer streamed tracks, or 16-bit files |
 | `NOT A WAV` / `BAD FORMAT` | Not a WAV STRATA reads | Export as 16 or 24-bit PCM WAV |
 | `TOO MANY CH` | More than two channels | Export as mono or stereo |
 | `EMPTY` | No audio in the file | |

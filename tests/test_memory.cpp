@@ -156,6 +156,10 @@ TEST(memory_init_is_what_the_budget_says) {
     const uint64_t raw = uint64_t(kMaxSampleSeconds) * kMaxSampleSourceRate * 2u * 3u + 65536u;
     const uint64_t src = uint64_t(kMaxSampleSeconds) * kMaxSampleSourceRate * 2u * 2u;
     const uint64_t file = kBankMaxBytes;
+    // Streaming (app/storage.hpp): four Enaga stream rings of 256 KiB, what docs/SPEC.md's
+    // "recording ring and stream buffers" line budgeted. (The engine's per-track fifos are
+    // members, not allocations.)
+    const uint64_t rings = 4u * 256u * 1024u;
 
     // app/engine: the beat-repeat ring (stereo float) and the resample take (stereo int16 plus
     // a WAV header, dsp/capture.hpp).
@@ -167,18 +171,19 @@ TEST(memory_init_is_what_the_budget_says) {
     const uint64_t freeze = uint64_t(48000.0f * 2.0f * Mixer::kMaxDelaySeconds) * 2u * 4u;
     const uint64_t tape = uint64_t(48000.0f * kTapeStopRingSeconds) * 2u * 4u;
 
-    const uint64_t itemised = region + raw + src + file + repeat + capture + freeze + tape;
+    const uint64_t itemised = region + raw + src + file + rings + repeat + capture + freeze + tape;
     CHECK(f.requested >= itemised);
 
     // The rest is Enaga's master delay and reverb lines, sized inside Enaga. docs/SPEC.md budgets
     // them at 2 MiB, which is the bound here.
     const uint64_t buses = f.requested - itemised;
-    std::printf("    region %.2f, loader staging %.2f, file %.2f, repeat %.2f, capture %.2f, "
-                "freeze %.2f, tape stop %.2f, delay+reverb %.2f MiB\n",
+    std::printf("    region %.2f, loader staging %.2f, file %.2f, stream rings %.2f, repeat %.2f, "
+                "capture %.2f, freeze %.2f, tape stop %.2f, delay+reverb %.2f MiB\n",
                 double(region) / double(kMiB), double(raw + src) / double(kMiB),
-                double(file) / double(kMiB), double(repeat) / double(kMiB),
-                double(capture) / double(kMiB), double(freeze) / double(kMiB),
-                double(tape) / double(kMiB), double(buses) / double(kMiB));
+                double(file) / double(kMiB), double(rings) / double(kMiB),
+                double(repeat) / double(kMiB), double(capture) / double(kMiB),
+                double(freeze) / double(kMiB), double(tape) / double(kMiB),
+                double(buses) / double(kMiB));
     CHECK(buses > 0);
     CHECK(buses <= 2u * kMiB);
 }

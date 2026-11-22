@@ -362,8 +362,17 @@ The enum numbering is therefore not the order the UI shows the speeds in.
   read a 4 MiB chunk at a time (`files::File`) and converted straight into the pool, so a 48 kHz
   loop of any length the pool and `Cmd::set_sample`'s 24-bit frame count allow (349 s) loads
   whole and keeps pitch, slices and GRAIN, at no CPU cost. Other rates still convert whole into
-  the 30 s (at 96 kHz) source buffer. Automatic, not a setting. Streaming playback, as a fallback
-  for files that do not fit the pool, is not built and waits for Roland's call.
+  the 30 s (at 96 kHz) source buffer. Automatic, not a setting.
+  **[rev] Streaming playback as the fallback (Roland, 2026-11-22).** A file the pool cannot hold
+  -- past the memory left, past 349 s, or not at 48 kHz and past the source buffer -- is
+  streamed instead of refused: its first 2 s load into the pool as a head and the rest is read
+  through a `files::Stream` (256 KiB ring) into a per-track frame fifo in `audio()`
+  (`core/streamfifo.hpp`). A trigger or a loop wrap plays the head while the card side reopens
+  the stream at the head's end, so a restart is instant. A streamed file plays forward on one
+  voice at its own rate: PIT, the note, the envelope, LVL and loop apply; START, LEN, slices and
+  reverse do not, and GRAIN on that track plays only the head. Four streamed tracks at most
+  (`STREAMS FULL`); a card that falls behind plays silence and keeps time (`STREAM LATE`).
+  `app/storage.hpp`, "streaming", has the protocol.
 - **[rev]** Samples are picked on the box with the **sample browser** (2026-11-22): OK in EDIT or
   MACHINE on a SAMPLE or GRAIN track lists `/SAMPLES` (and `/RECORD`) through `files::list`, and
   OK on a WAV puts its path in the track's kit and loads it through the ordinary swap, transport

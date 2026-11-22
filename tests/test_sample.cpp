@@ -1318,3 +1318,187 @@ TEST(sample_swapping_pcm_recomputes_the_window) {
     CHECK(peak(g_out, n) > 0.4f);
     CHECK(!s.active());                      // half of 1024 frames is 10 ms: long gone
 }
+
+// --- stream mode (set_stream) ------------------------------------------------------------------
+//
+// A streamed file: the head resident, the rest arriving in a StreamFifo that the engine fills
+// every block. These feed the fifo by hand from the same PCM a whole-loaded Sampler plays, so the
+// two can be compared sample for sample: with the fifo kept full, streaming is the same sound.
+
+namespace {
+
+StreamFifo g_fifo;
+Sampler g_streamer;   // big: file scope
+Sampler g_whole;
+
+// What the engine's top_up_streams does: as many frames as fit, read on from where it got to.
+// `limit` caps one call, as kStreamReadFrames does; 0 frames is a card that is late.
+void feed(const int16_t *pcm, uint32_t total, int channels, uint32_t limit) {
+    uint32_t room = 0;
+    int16_t *span = g_fifo.write_span(&room);
+    const uint32_t next = g_fifo.next_frame();
+    uint32_t n = room < limit ? room : limit;
+    if (n > total - next) n = total - next;
+    for (uint32_t i = 0; i < n * uint32_t(channels); i++) span[i] = pcm[next * uint32_t(channels) + i];
+    g_fifo.commit(n);
+}
+
+int render_streamed(const TrackParams &p, const int16_t *pcm, uint32_t total, int channels,
+                    float *out, int blocks, uint32_t limit) {
+    for (int b = 0; b < blocks; b++) {
+        feed(pcm, total, channels, limit);
+        g_streamer.prepare(p);
+        g_streamer.render_add(out + b * kBlk, kBlk);
+    }
+    return blocks * kBlk;
+}
+
+}  // namespace
+
+TEST(sample_stream_plays_exactly_what_a_whole_load_plays) {
+    constexpr uint32_t kHead = 3000;
+    fill_sine(g_mono, kSrcFrames, 1, 331.0f, kRate, 0.8f);
+    const TrackParams p = plain();
+    static const int kPitches[] = {64, 90, 30};
+    for (int pitch : kPitches) {
+        TrackParams q = p;
+        q.set(0, uint8_t(pitch));
+        g_whole.init(kRate);
+        g_whole.set_sample(g_mono, kSrcFrames, 1, kRate);
+        g_whole.prepare(q);
+        g_whole.trigger(hit());
+        clear(g_other, kCapture);
+        render_blocks(g_whole, q, g_other, 600);
+
+        g_streamer.init(kRate);
+        g_streamer.set_stream(g_mono, kHead, kSrcFrames, 1, kRate, &g_fifo);
+        CHECK(g_streamer.streaming());
+        CHECK_EQ(g_streamer.stream_frames(), uint32_t(kSrcFrames));
+        g_streamer.prepare(q);
+        g_streamer.trigger(hit());
+        clear(g_out, kCapture);
+        const int n = render_streamed(q, g_mono, kSrcFrames, 1, g_out, 600, 512);
+        int wrong = 0;
+        for (int i = 0; i < n; i++) wrong += g_out[i] != g_other[i] ? 1 : 0;
+        CHECK_EQ(wrong, 0);
+        CHECK_EQ(g_streamer.stream_late(), 0u);
+        CHECK(peak(g_out, n) > 0.5f);
+    }
+}
+
+TEST(sample_stream_stereo_matches_too) {
+    constexpr uint32_t kHead = 2048;
+    fill_sine(g_stereo, kSrcFrames, 2, 517.0f, kRate, 0.7f);
+    const TrackParams p = plain();
+    g_whole.init(kRate);
+    g_whole.set_sample(g_stereo, kSrcFrames, 2, kRate);
+    g_whole.prepare(p);
+    g_whole.trigger(hit(Sampler::kRootNote + 5));
+    clear(g_other, kCapture);
+    render_blocks(g_whole, p, g_other, 400);
+
+    g_streamer.init(kRate);
+    g_streamer.set_stream(g_stereo, kHead, kSrcFrames, 2, kRate, &g_fifo);
+    g_streamer.prepare(p);
+    g_streamer.trigger(hit(Sampler::kRootNote + 5));
+    clear(g_out, kCapture);
+    const int n = render_streamed(p, g_stereo, kSrcFrames, 2, g_out, 400, 512);
+    int wrong = 0;
+    for (int i = 0; i < n; i++) wrong += g_out[i] != g_other[i] ? 1 : 0;
+    CHECK_EQ(wrong, 0);
+}
+
+TEST(sample_stream_ignores_start_slices_and_reverse) {
+    // A stream reads on from frame 0: none of these can make it jump.
+    constexpr uint32_t kHead = 3000;
+    fill_ramp(g_mono, kSrcFrames, 1, -20000, 20000);
+    TrackParams p = plain();
+    p.set(1, 64);       // STA halfway
+    p.set(3, 127);      // SLC 16
+    p.set(10, 64);      // PLY reverse one-shot
+    g_streamer.init(kRate);
+    g_streamer.set_stream(g_mono, kHead, kSrcFrames, 1, kRate, &g_fifo);
+    g_streamer.prepare(p);
+    CHECK_EQ(g_streamer.window_start(), 0);
+    CHECK_EQ(g_streamer.play_length(), kSrcFrames);
+    g_streamer.trigger(hit(Sampler::kRootNote + 3));
+    clear(g_out, kCapture);
+    render_streamed(p, g_mono, kSrcFrames, 1, g_out, 4, 512);
+    // Forward from the bottom of the ramp, transposed by the note rather than slicing.
+    CHECK(g_out[0] < -0.1f);
+    CHECK(g_out[200] > g_out[0]);
+    CHECK(g_streamer.stream_position() > 256u);
+}
+
+TEST(sample_stream_restarts_on_a_trigger_and_on_a_loop) {
+    constexpr uint32_t kHead = 3000;
+    constexpr uint32_t kTotal = 9000;
+    fill_sine(g_mono, kSrcFrames, 1, 200.0f, kRate, 0.5f);
+    TrackParams p = plain();
+    p.set(10, 32);      // PLY forward loop
+    g_streamer.init(kRate);
+    g_streamer.set_stream(g_mono, kHead, kTotal, 1, kRate, &g_fifo);
+    const uint32_t before = g_streamer.stream_restarts();
+    g_streamer.prepare(p);
+    g_streamer.trigger(hit());
+    render_streamed(p, g_mono, kTotal, 1, g_out, 1, 512);
+    CHECK_EQ(g_streamer.stream_restarts(), before + 1);      // the trigger
+    // The fifo now waits for the frame after the head, as the reopened stream will deliver.
+    CHECK_EQ(g_fifo.next_frame() <= kHead + 512u, true);
+    // Through the file and round again: the loop wrap is a restart too.
+    render_streamed(p, g_mono, kTotal, 1, g_out, int(kTotal / kBlk) + 2, 512);
+    CHECK_EQ(g_streamer.stream_restarts(), before + 2);
+    CHECK(g_streamer.active());
+    CHECK(g_streamer.stream_position() < kHead);
+    // A second trigger mid-file: one voice, so it restarts rather than adding a voice.
+    g_streamer.trigger(hit());
+    render_streamed(p, g_mono, kTotal, 1, g_out, 2, 512);
+    CHECK_EQ(g_streamer.stream_restarts(), before + 3);
+    CHECK_EQ(g_streamer.playing_voices(), 1);
+}
+
+TEST(sample_stream_a_late_card_is_silence_and_time_goes_on) {
+    constexpr uint32_t kHead = 1024;
+    fill_const(g_mono, kSrcFrames, 1, 16000);
+    const TrackParams p = plain();
+    g_streamer.init(kRate);
+    g_streamer.set_stream(g_mono, kHead, kSrcFrames, 1, kRate, &g_fifo);
+    g_streamer.prepare(p);
+    g_streamer.trigger(hit());
+    // The head plays; then nothing arrives for 40 blocks.
+    clear(g_out, kCapture);
+    render_streamed(p, g_mono, kSrcFrames, 1, g_out, 15, 0);   // 960 frames: taps inside the head
+    CHECK(g_out[kBlk * 4] > 0.3f);
+    CHECK_EQ(g_streamer.stream_late(), 0u);
+    clear(g_out, kCapture);
+    render_streamed(p, g_mono, kSrcFrames, 1, g_out, 41, 0);
+    CHECK(g_streamer.stream_late() > 0u);
+    CHECK(all_zero(g_out + kBlk * 4, kBlk * 30));
+    const uint32_t at = g_streamer.stream_position();
+    CHECK(at >= uint32_t(56 * kBlk) - 2u);                     // it kept time
+    // The card catches up: what is behind the voice is thrown away and it plays again.
+    clear(g_out, kCapture);
+    render_streamed(p, g_mono, kSrcFrames, 1, g_out, 30, 512);
+    const uint32_t late = g_streamer.stream_late();
+    clear(g_out, kCapture);
+    render_streamed(p, g_mono, kSrcFrames, 1, g_out, 10, 512);
+    CHECK_EQ(g_streamer.stream_late(), late);
+    CHECK(g_out[kBlk * 5] > 0.3f);
+}
+
+TEST(sample_stream_refuses_what_is_not_a_stream_and_set_sample_leaves_it) {
+    fill_const(g_mono, kSrcFrames, 1, 1000);
+    g_streamer.init(kRate);
+    g_streamer.set_stream(g_mono, 4000, 4000, 1, kRate, &g_fifo);     // no tail
+    CHECK(!g_streamer.streaming());
+    CHECK(!g_streamer.has_sample());
+    g_streamer.set_stream(g_mono, 4000, 9000, 1, kRate, nullptr);     // no fifo
+    CHECK(!g_streamer.streaming());
+    g_streamer.set_stream(g_mono, 4000, 9000, 3, kRate, &g_fifo);     // three channels
+    CHECK(!g_streamer.streaming());
+    g_streamer.set_stream(g_mono, 4000, 9000, 1, kRate, &g_fifo);
+    CHECK(g_streamer.streaming());
+    g_streamer.set_sample(g_mono, 4000, 1, kRate);
+    CHECK(!g_streamer.streaming());
+    CHECK(g_streamer.has_sample());
+}

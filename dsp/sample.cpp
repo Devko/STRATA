@@ -217,6 +217,14 @@ void Sampler::recompute_window() {
     play_len_ = 0;
     if (!playable_) return;
 
+    if (fifo_ != nullptr) {
+        // A stream plays the whole file from its start: no window, no slices (set_stream).
+        window_len_ = int32_t(stream_total_);
+        slice_frames_ = float(window_len_);
+        play_len_ = window_len_;
+        return;
+    }
+
     const int32_t last = frames_ - 1;
     window_start_ = clampi(int32_t(start_unit_ * float(last) + 0.5f), 0, last);
     const int32_t available = frames_ - window_start_;
@@ -229,6 +237,8 @@ void Sampler::set_sample(const int16_t *data, uint32_t frames, int channels, flo
     // The voices are reading the buffer that is being taken away, so they stop. A crossfade
     // between two samples belongs to the app, which has both buffers; the machine has one.
     kill_all();
+    fifo_ = nullptr;
+    stream_total_ = 0;
 
     const bool ok = data != nullptr && (channels == 1 || channels == 2) &&
                     frames >= uint32_t(kMinFrames) && frames <= uint32_t(kMaxFrames);
@@ -245,13 +255,29 @@ void Sampler::set_sample(const int16_t *data, uint32_t frames, int channels, flo
     recompute_window();
 }
 
+void Sampler::set_stream(const int16_t *head, uint32_t head_frames, uint32_t total_frames,
+                         int channels, float source_rate, StreamFifo *fifo) {
+    set_sample(head, head_frames, channels, source_rate);
+    const bool ok = playable_ && fifo != nullptr && total_frames > head_frames &&
+                    total_frames <= kMaxStreamFrames;
+    if (!ok) {
+        set_sample(nullptr, 0, 1, rate_);
+        return;
+    }
+    fifo_ = fifo;
+    stream_total_ = total_frames;
+    fifo_->reset(channels_, uint32_t(frames_));
+    recompute_window();
+}
+
 void Sampler::trigger(const Trig &trig) {
     // No sample, or a window too short for four taps: silent, and the machine never goes active.
     // docs/SPEC.md asks for exactly this -- a track whose sample is still loading stays silent.
     if (!playable_ || play_len_ < kMinFrames) return;
 
-    int pick = -1;
-    for (int i = 0; i < kVoices; i++) {
+    // A stream has one voice: there is one stream behind it, and it reads on from one place.
+    int pick = fifo_ != nullptr ? 0 : -1;
+    for (int i = 0; pick < 0 && i < kVoices; i++) {
         if (!voices_[i].busy()) {
             pick = i;
             break;
@@ -356,6 +382,30 @@ void Sampler::start(Voice &v) {
     v.playing = false;
     if (!playable_ || play_len_ < kMinFrames) return;
 
+    if (fifo_ != nullptr) {
+        // The whole file, forward, from frame 0: the head is resident and the rest comes once
+        // the engine has the stream reopened after it.
+        v.note_ratio = clamp(semitones(float(int(t.note) - kRootNote)), kStepMin, kStepMax);
+        v.len = play_len_;
+        v.dir = 1;
+        v.read0 = 0;
+        v.loop = loop_;
+        v.pos = 0;
+        v.frac = 0;
+        v.safe_lo = 0;
+        v.safe_hi = -1;
+        restart_stream();
+        const float velocity = float(t.velocity) * (1.0f / 127.0f);
+        v.level = clamp(velocity * (t.accent ? 1.25f : 1.0f), 0.0f, 1.0f);
+        v.amp.gate_on(true);
+        v.playing = true;
+        if (v.release_on_start) {
+            v.amp.gate_off();
+            v.release_on_start = false;
+        }
+        return;
+    }
+
     int32_t base = window_start_;
     int32_t len = play_len_;
     if (slices_ > 1) {
@@ -443,7 +493,10 @@ void Sampler::run(Voice &v, float *out, int n) {
     const uint32_t fstep = uint32_t(int32_t(clamp(fraction, 0.0f, kFracScale - 1.0f)));
     const float inv_step = reciprocal(step);
 
-    if (channels_ == 2) {
+    if (fifo_ != nullptr) {
+        if (channels_ == 2) generate_stream<2>(v, istep, fstep, voice_, n);
+        else generate_stream<1>(v, istep, fstep, voice_, n);
+    } else if (channels_ == 2) {
         generate<2>(v, istep, fstep, inv_step, voice_, n);
     } else {
         generate<1>(v, istep, fstep, inv_step, voice_, n);
@@ -535,6 +588,57 @@ void Sampler::generate(Voice &v, int32_t istep, uint32_t fstep, float inv_step, 
         }
     }
     while (i < n) dst[i++] = 0.0f;      // the window ended inside this slice
+}
+
+// --- the stream voice -------------------------------------------------------
+//
+// One voice, a per-sample tap fetch with a branch: the head, the fifo, or silence when the card
+// is late. Not the interior fast path generate() has, and it does not need one: there is one
+// such voice per streamed track, against generate()'s four, and the taps are a handful of
+// compares on data already in L1D. Not bit-exact with a whole-loaded file either, and it need
+// not be: a file is streamed only when it cannot be loaded whole.
+
+void Sampler::restart_stream() {
+    // Back to frame 0: the head plays from RAM while the engine has the stream reopened at the
+    // head's end, and whatever the fifo held from the last pass is stale.
+    fifo_->reset(channels_, uint32_t(frames_));
+    restarts_++;
+}
+
+template <int kCh>
+float Sampler::stream_tap(int32_t frame) {
+    const int32_t last = int32_t(stream_total_) - 1;
+    const int32_t f = clampi(frame, 0, last);
+    if (f < frames_) return tap<kCh>(data_ + f * kCh);
+    if (fifo_->has(uint32_t(f))) return tap<kCh>(fifo_->frame(uint32_t(f)));
+    late_++;
+    return 0.0f;
+}
+
+template <int kCh>
+void Sampler::generate_stream(Voice &v, int32_t istep, uint32_t fstep, float *dst, int n) {
+    int i = 0;
+    while (i < n && v.playing) {
+        const float t = float(int32_t(v.frac)) * kInvFracScale;
+        const int32_t p = v.pos;
+        dst[i++] = hermite4(stream_tap<kCh>(p - 1), stream_tap<kCh>(p), stream_tap<kCh>(p + 1),
+                            stream_tap<kCh>(p + 2), t);
+        v.frac += fstep;
+        v.pos += istep + int32_t(v.frac >> kFracBits);
+        v.frac &= kFracMask;
+        if (v.pos >= v.len) {
+            if (v.loop) {
+                while (v.pos >= v.len) v.pos -= v.len;
+                restart_stream();
+            } else {
+                v.playing = false;
+            }
+        }
+    }
+    while (i < n) dst[i++] = 0.0f;
+    // Everything before the next sample's first tap is done with, including frames that have
+    // not arrived yet: they will be thrown away when they do (core/streamfifo.hpp).
+    if (v.pos > 1) fifo_->drop_before(uint32_t(v.pos - 1));
 }
 
 }  // namespace strata
