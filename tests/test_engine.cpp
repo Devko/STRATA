@@ -572,13 +572,16 @@ TEST(engine_a_chords_notes_are_folded_into_the_scale) {
     CHECK_EQ(poly().voice_note(2), 67);
 }
 
-TEST(engine_a_poly_steps_note_is_folded_and_a_mono_steps_note_is_not) {
-    // The asymmetry is DELIBERATE and app/engine.cpp documents it: `fire` sends a note to the
-    // machine unfolded, while `chord_expand` folds the step's note before stacking on it -- even
-    // for a chord of `none`, which is a single note. So identical step data sounds different
-    // depending on which machine the track hosts. There is no notion here of WHICH machines are
-    // melodic, and folding every track would retune the drums, so the decision waits for machine
-    // switching. This pins it, so that the day the notion arrives the change is a decision.
+TEST(engine_a_melodic_tracks_note_is_folded_into_the_key) {
+    // FIXED. `fire` used to send the note to the machine unfolded while `chord_expand` folded
+    // the step's note before stacking on it -- even for a chord of `none`, which is a single
+    // note -- so identical step data sounded different depending on which machine a track
+    // hosted. docs/SPEC.md's "melodic tracks fold notes into the scale" meant both; what was
+    // missing was any notion of which machines are melodic, and folding every track would
+    // retune the drums. Machine switching supplied the notion and `machine_is_melodic` is it.
+    //
+    // Both VAs now fold, and the drums still do not -- which is the other half of the claim and
+    // is below.
     Engine &engine = clean();
     post(Cmd::set_root, 0, 0, 0);
     post(Cmd::set_scale, 0, 0, uint8_t(Scale::minor));
@@ -597,8 +600,55 @@ TEST(engine_a_poly_steps_note_is_folded_and_a_mono_steps_note_is_not) {
     FakeHost::the().set_running(true);
     FakeHost::the().deliver_tick(0, 0);
     pump();
-    CHECK_EQ(poly().voice_note(0), 63);                  // folded into the key
-    CHECK_NEAR(mono().target_pitch(), 64.0f, 1e-4);      // as written
+    CHECK_EQ(poly().voice_note(0), 63);                  // folded into the key...
+    CHECK_NEAR(mono().target_pitch(), 63.0f, 1e-4);      // ...and so is the MONO track now
+
+    // Put the transport back and cut the tails, so the next test measures its own sound and not
+    // this one's: `clean()` resets the pattern and the kit, not a running clock or a ringing
+    // reverb (tests/apprig.hpp says why `settle` exists).
+    FakeHost::the().set_running(false);
+    post(Cmd::stop, 0, 0, 1);
+    pump(2);
+    CHECK(settle());
+}
+
+// And the other half: a machine that reads a note as a tuning or a slice is left alone. Folding
+// a kick's note would RETUNE it -- dsp/kick.cpp tunes the body from `note` -- and nobody writing
+// a drum part is thinking in degrees.
+TEST(engine_a_drum_tracks_note_is_not_folded) {
+    Engine &engine = clean();
+    post(Cmd::set_root, 0, 0, 0);
+    post(Cmd::set_scale, 0, 0, uint8_t(Scale::minor));
+
+    // Track 1 is the KICK of the default kit, and track 6 the BASS on VA MONO. The same step
+    // data on both, on a note the scale does not contain.
+    put_trig(0, 0);
+    put_trig(kMono, 0);
+    post(Cmd::step_field_delta, 0, 0, uint8_t(StepField::note), 4);
+    post(Cmd::step_field_delta, kMono, 0, uint8_t(StepField::note), 4);
+    pump();
+    CHECK_EQ(int(live_step(0, 0).note), 64);
+    CHECK(!scale_contains(64, engine.pattern().root, int(engine.pattern().scale)));
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+
+    // The bass folded to 63 and the kick did not move. The kick cannot be asked what note it is
+    // playing, so this reads the predicate that decides -- the thing that would have to change
+    // for a kick to start being retuned by the key.
+    CHECK_NEAR(mono().target_pitch(), 63.0f, 1e-4);
+    CHECK(machine_is_melodic(engine.machine_id(kMono)));
+    CHECK(!machine_is_melodic(engine.machine_id(0)));
+    CHECK(!machine_is_melodic(uint8_t(MachineId::sample)));
+    CHECK(!machine_is_melodic(uint8_t(MachineId::grain)));
+    CHECK(machine_is_melodic(uint8_t(MachineId::va_poly)));
+    CHECK(!machine_is_melodic(uint8_t(MachineId::count)));
+
+    FakeHost::the().set_running(false);
+    post(Cmd::stop, 0, 0, 1);
+    pump(2);
+    CHECK(settle());
 }
 
 TEST(engine_a_chord_byte_on_a_track_with_no_poly_machine_is_ignored) {
@@ -2002,13 +2052,17 @@ TEST(engine_a_master_setting_can_be_changed) {
 TEST(engine_a_send_setting_reaches_the_sound) {
     clean();
 
-    strata::test::set_send_byte(uint8_t(SendField::delay_seconds), 0);   // 1/32, the shortest
+    // 1/32, the shortest division: 58 ms at 130 BPM, so 43 blocks to a repeat. The windows
+    // below are 300 blocks -- long enough for the feedback to put several repeats in, which is
+    // what makes the two energies differ by a margin rather than by a hair. At 60 blocks they
+    // read 1.49x apart and this test failed for want of window, not for want of a delay.
+    strata::test::set_send_byte(uint8_t(SendField::delay_seconds), 0);
     strata::test::set_send_byte(uint8_t(SendField::delay_level), 127);
     strata::test::set_send_byte(uint8_t(SendField::delay_feedback), 0);
 
     post(Cmd::set_param, 0, 0, kSendA, 127);
     post(Cmd::trigger_note, 0, 0, 60, 127);
-    const float dry_energy = energy(60);
+    const float dry_energy = energy(300);
 
     // The send gain has to go back to zero before settling: `Mixer::add_track` restarts the
     // delay's tail every block a track with a non-zero send gain is rendered, so the line never
@@ -2019,7 +2073,7 @@ TEST(engine_a_send_setting_reaches_the_sound) {
     strata::test::set_send_byte(uint8_t(SendField::delay_feedback), 127);
     post(Cmd::set_param, 0, 0, kSendA, 127);
     post(Cmd::trigger_note, 0, 0, 60, 127);
-    const float wet_energy = energy(60);
+    const float wet_energy = energy(300);
 
     post(Cmd::set_param, 0, 0, kSendA, 0);
     strata::test::set_send_byte(uint8_t(SendField::delay_feedback), 0);

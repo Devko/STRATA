@@ -1421,21 +1421,27 @@ void Engine::fire(const StepEvent &event) {
         // the thing that needed fixing.
         machines_[track]->prepare(effective_[track]);
 
-        // The note goes to the machine UNFOLDED -- it is not put through `scale_fold` here, and
-        // that is a decision rather than an omission.
+        // FIXED: the note is folded into the key on a MELODIC track, and left alone on every
+        // other kind.
         //
-        // `core/chord`'s `chord_expand` folds the step's note before stacking on it, and it does
-        // so even for a type-`none` chord, which is a single note. So identical step data sounds
-        // different depending on which machine a track hosts: folded on a chord track, as
-        // written on a MONO one. docs/SPEC.md's "melodic tracks fold notes into the scale" argues
-        // for folding both, but there is no notion here of WHICH machines are melodic, and
-        // folding every track would retune the drums -- dsp/kick.cpp reads `note` as a pitch.
-        // Inventing that notion now means inventing it twice: machine switching is the change
-        // that gives the engine a real idea of what a track hosts, and that is where this
-        // belongs. Recorded in docs/UNIT_CHECKLIST.md as well, so the unit can be listened to
-        // with the asymmetry in mind rather than discovered by surprise.
+        // The asymmetry this replaces: `core/chord`'s `chord_expand` folds the step's note
+        // before stacking on it, and does so even for a type-`none` chord, which is a single
+        // note -- so identical step data sounded different depending on which machine a track
+        // hosted, folded on a POLY track and as written on a MONO one. docs/SPEC.md says
+        // "melodic tracks fold notes into the scale" and meant both.
+        //
+        // What was missing was any notion of WHICH machines are melodic; folding every track
+        // would retune the drums, since dsp/kick.cpp reads `note` as a pitch. Machine switching
+        // is what gave the engine that notion, and `machine_is_melodic` (core/project.hpp) is
+        // it: the two VAs, which read a note as a pitch in the key, and not the drums or the
+        // samplers, which read it as a tuning or a slice.
+        const Pattern &folding = live();
+        const uint8_t note = machine_is_melodic(machine_id_[track])
+                                 ? scale_fold(event.note, folding.root, int(folding.scale))
+                                 : event.note;
+
         Trig trig;
-        trig.note = event.note;
+        trig.note = note;
         trig.velocity = event.velocity;
         trig.accent = event.accent;
         trig.slide = event.slide;
@@ -1455,10 +1461,12 @@ void Engine::fire(const StepEvent &event) {
             // from its middle (core/chord.hpp says why). A chord type of `none` expands to one
             // note -- the folded root -- so an ordinary melodic POLY part needs no special case
             // here, and gets the fold the comment above says a MONO part does not.
-            const Pattern &pattern = live();
-            const uint8_t packed = pattern.tracks[track].steps[event.step].chord;
+            const uint8_t packed = folding.tracks[track].steps[event.step].chord;
             uint8_t notes[kChordMaxNotes];
-            const int voiced = chord_expand(event.note, packed, pattern.root, int(pattern.scale),
+            // `event.note` and not `note`: `chord_expand` folds the root itself, so handing it
+            // an already-folded note would be a second fold -- harmless, since folding a note
+            // that is in the scale returns it, but it would hide which side owns the rule.
+            const int voiced = chord_expand(event.note, packed, folding.root, int(folding.scale),
                                             notes, VaPoly::kVoices);
             for (int i = 0; i < voiced; i++) {
                 trig.note = notes[i];

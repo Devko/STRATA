@@ -23,7 +23,7 @@ deferred concern (external sync) pulled forward into M1.
 
 ---
 
-## Where it actually stands (2026-11-21)
+## Where it actually stands (2026-11-22)
 
 Every figure here is from a cloud session: the host suite, the tic6x device build and the
 emulator. **Nothing in this project has ever run on the unit**, so no exit criterion involving
@@ -38,8 +38,17 @@ load or feel is met, whatever the numbers below say.
 | M3 | code complete | Sequencer depth, 16 undo levels. `Step::length` became audible only this session, on VA POLY |
 | M4 | code complete | Ten files per project, autosave, background sample loading. **Two data-loss bugs found this session** once app/ became host-testable |
 | M5 | code complete | Scenes, morph, macros, mutes, beat repeat, throws, mutation. Seven of its eight tools are on the upper PADS and **the emulator cannot press a pad**, so most of it has never executed |
-| M6 | **feature-complete, unheard** | Euclidean generator, KEYS, core/chord, VA POLY with chords, GRAIN, resampling, pad pressure — and machine switching, which is what made GRAIN reachable at all. Every feature has host tests; not one has been heard. **Its budget exit is in doubt**: VA POLY costs 4.25 points per voice, 11.3x what SPEC budgets for the whole machine |
-| M7 | not started | Sync settings UI unwritten. Everything else in it is unit verification by definition |
+| M6 | **feature-complete, unheard** | Euclidean generator, KEYS, core/chord, VA POLY with chords, GRAIN, resampling, pad pressure — and machine switching, which is what made GRAIN reachable at all. Every feature has host tests; not one has been heard. **Its budget exit is in doubt**: VA POLY costs 3.82 points per voice after an optimisation loop, still 10.1x what SPEC budgets for the whole machine |
+| M7 | **the app side is done** | The sync settings are the USER'S, in the Enaga menu: `<enaga/clock.hpp>` and `<enaga/midi.hpp>` expose `source()` and `channel()` and nothing that writes either, so "STRATA only exposes the settings" can only mean showing them. PROJECT mode's SETUP page does, and VALUE now refuses a tempo edit under an external clock as the spec's key table asks. The rest of M7 is unit verification by definition |
+
+Finished after that table was last written, and all of it on `main`:
+
+| | |
+| --- | --- |
+| **the sends and the master** | Both commands had no handler AND no caller, so every delay and reverb setting and the spec's master DJ filter sat at a compile-time default for the life of the app, in no file. All fourteen are now encoder bytes in PROJECT.BIN's third (optional) section, reachable from four new MIXER pages and F1 + VALUE |
+| **the tempo, quantize and `chain_enabled`** | All three round-tripped through the serializer while nothing in `app/` wrote them. A project saved at 142 BPM reopened at 130 |
+| **the melodic fold** | `machine_is_melodic` settled the POLY/MONO asymmetry M6 left open: both VAs fold a step's note into the key, the drums and samplers do not |
+| **VA POLY, 4.30 → 3.82 points a voice** | A fused output tail in `dsp/valoops.ti.c` and filter coefficients shared between the voices of a chord. Both bit-exact; every scenario with a VA voice came down ~1.6 points |
 
 The two things that gate everything and cannot be done here: **boot `build/APP.ENA` on a unit**,
 and **answer the cl6x licence question**. docs/BUDGET.md records cl6x as worth ~2.2x and the 60%
@@ -223,7 +232,13 @@ passes depends entirely on cl6x, which nobody has been able to run.
 Was a milestone of platform work; now verification. Enaga's MIDI DIN, SYNC and USB MIDI are
 implemented but **have never run on a unit** — STRATA may be the first thing to exercise them.
 
-- Sync settings UI in STRATA (source, clock out, SYNC out, MIDI channel).
+- ~~Sync settings UI in STRATA (source, clock out, SYNC out, MIDI channel).~~ **Done, and
+  smaller than it looked.** None of the four is settable from an app: `<enaga/clock.hpp>` and
+  `<enaga/midi.hpp>` expose `source()` and `channel()` and no writer, because they are the
+  user's settings in the Enaga menu. PROJECT mode's SETUP page (F3, then OCTAVE RIGHT) shows
+  CLOCK SRC, the tempo and whose it is, MIDI CH and the record quantize amount, and says where
+  the first three are changed. VALUE refuses a tempo edit when the source is not INTERNAL,
+  which is the one behaviour the spec's key table asks for and `app/` did not have.
 - Unit verification: one hour locked to the Force's MIDI clock with no drift; STRATA as clock
   master driving external gear; SYNC in and out against a drum machine.
 - Expect to find bugs in Enaga, not in STRATA. Report them upstream with the failing case;

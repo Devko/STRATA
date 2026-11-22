@@ -422,11 +422,16 @@ step's chord byte onto its voices.
 |---|---|---|
 | A per-note note-off, so `Step::length` can be heard | **A duration on the `Trig`.** `Trig::gate_frames` is additive — no new virtual, no note-to-voice map in the engine — and the machine releases its own voice when the count runs out. `Step::length` has been stored since M3 and makes a sound for the first time | A held KEYS key and `Cmd::release_note` still have no known duration, so they still cannot be released. A `release(note)` virtual can land later without disturbing the gate; it is not needed for a sequenced part |
 | `render_add_stereo`, promised by a comment and declared nowhere | **The comment was wrong, and was corrected.** Machines are mono and the chain spreads them, which is what the rest of the code implements; VA POLY took pitch detune instead of stereo unison for the same reason | Whether a stereo machine is worth it at all. The cost is not the virtual but `InsertChain` being mono, so a stereo track doubles that track's insert work — on the two most expensive machines. That is a question for after a unit measurement, not before |
-| Whether `Engine::fire` folds a MONO note into the scale | **Left as built, and documented in `app/engine.cpp` at the line.** `chord_expand` folds the step's note even for a type-`none` chord, so the asymmetry is POLY tracks vs MONO tracks, not chords vs notes: identical step data sounds different depending on which machine a track hosts | Folding everywhere is what docs/SPEC.md argues for, but it needs a notion of which machines are melodic that does not exist — and folding naively would retune the drums, since KICK reads `note` as a pitch. Machine switching is the change that gives the engine that notion; this belongs there |
+| Whether `Engine::fire` folds a MONO note into the scale | **FIXED: it does, and so does every melodic machine.** `machine_is_melodic` (core/project.hpp) is the notion that was missing — the two VAs and nothing else — and machine switching is what supplied it. A POLY and a MONO track now play identical step data identically | Whether a SAMPLE or GRAIN track used melodically should fold too. They read `note` as a transposition, and on SAMPLE it also picks the slice, so a fold there moves a sliced one-shot to a different slice. Listen first |
 
-- [ ] **Listen for the fold asymmetry.** Put the same note value on a MONO track and a POLY one
-      in a scale that does not contain it. They should disagree, the POLY one being in key. If
-      they sound wrong, that asymmetry is the first thing to suspect.
+- [ ] **The fold, now that both sides do it.** Put the same note value on a MONO track and a
+      POLY one in a scale that does not contain it. They must now AGREE, both in key. They
+      disagreed until machine switching supplied `machine_is_melodic`.
+- [ ] And the drums do NOT fold: put a kick on a note the scale does not contain, in a minor
+      key, and it must not change pitch. Folding it would retune it, which is the reason the
+      predicate exists rather than a blanket fold.
+- [ ] A SAMPLE or GRAIN track played melodically: it does not fold either, which is the open
+      question in the table above. Listen to whether it should.
 
 **VA POLY (`dsp/vapoly`)** — 41 host tests, 16 of 18 mutations caught on the machine and 11 of
 14 on the gate (all five survivors honest, and named in `tests/test_vapoly.cpp`), and VaMono's
@@ -477,11 +482,9 @@ on it.
       note rather than a chord nobody asked for.
 - [ ] Inversions move the voicing without changing the notes. Depth is clamped to one less than
       the note count, because deeper would transpose rather than invert.
-- [ ] **The fold asymmetry is deliberate, not a bug to report.** `core/chord` folds the chord's
-      root into the scale and `Engine::fire` passes a MONO step's note through unfolded, so the
-      same note value plays differently on a POLY track than on a MONO one. The decision and its
-      reasons are in the table above and in `app/engine.cpp` at the line; it is revisited when
-      machine switching lands.
+- [ ] **Both VAs fold now**, so a chord of `none` on a POLY track and the same note on a MONO
+      track are the same pitch. `core/chord` folds the chord's root and `Engine::fire` folds a
+      melodic track's note; the asymmetry between them is gone.
 
 **KEYS mode** — the one M6 feature that IS scenario-tested (`tests/scenario_m6.sh` plays three
 keys with REC on and watches them land in the pattern), so these are about feel rather than
