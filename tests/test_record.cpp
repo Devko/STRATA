@@ -641,7 +641,7 @@ TEST(a_latency_compensated_hit_records_on_the_step_it_was_played) {
 
 // --- robustness -----------------------------------------------------------
 
-TEST(degenerate_input_is_handled) {
+TEST(recording_clamps_degenerate_input) {
     // A zeroed or corrupt length must not divide by zero or index outside the pattern. The
     // clamp is core/timing's, and recording follows it rather than inventing its own.
     const TrackTiming zero_length = track(0, Speed::x1, kSwingMin);
@@ -680,7 +680,7 @@ TEST(degenerate_input_is_handled) {
     CHECK(folded.clamped);
 }
 
-TEST(a_long_run_stays_consistent) {
+TEST(a_long_recording_stays_consistent) {
     // Four minutes or so at 130 BPM, to be sure the tick reduction does not drift or overflow
     // as the loop number grows.
     const TrackTiming timing = track(16, Speed::x1, 62);
