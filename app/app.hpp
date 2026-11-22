@@ -265,27 +265,24 @@ enum class PerformPad : uint8_t { fill = 1, repeat = 3, mute = 5, scene_a = 7, s
 
 constexpr bool is_perform_pad(int pad) { return pad % 2 == 1 && pad >= 1 && pad <= 13; }
 
-// docs/SPEC.md's LED language for the upper row: "function available / active, white 2 /
-// function colour 10". Indexed by upper pad 1-7 (pad id / 2). Until this table the row was never
-// lit at all, so nothing on the panel said these seven pads did anything -- or that MUTATE was
-// still waiting for OK or CLR.
+// The seven, left to right, with the colour each is lit in (docs/CONTROLS.md). The print on
+// the panel says TRK 1-7, so the light and the screen have to say what the pads are instead:
+// FILL white, REPEAT cyan, MUTE red, SCENE A green, SCENE B blue, THROW amber, MUTATE violet.
+constexpr int kPerformPads = 7;
+constexpr int kPerformPadIds[kPerformPads] = {1, 3, 5, 7, 9, 11, 13};
+constexpr Rgb kPerformColour[kPerformPads] = {
+    {8, 8, 8}, {0, 8, 8}, {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, {10, 5, 0}, {8, 0, 10},
+};
+constexpr const char *kPerformPadNames[kPerformPads] = {
+    "FILL", "REPEAT", "MUTE", "SCENE A", "SCENE B", "THROW", "MUTATE",
+};
+
 // What a live notice shows (Strata::echo): nothing, the selected track's length and speed, or a
 // sound parameter's value.
 enum class Echo : uint8_t { none, layout, param };
 
 // What a MUTATE waiting for its verdict shows until OK or CLR answers it.
 constexpr const char *kVerdictHint = "OK KEEPS CLR REVERTS";
-
-constexpr Rgb kPerformPadIdle = {2, 2, 2};
-constexpr Rgb kPerformPadColour[7] = {
-    {10, 10, 0},    // FILL, and NOTE RPT
-    {0, 10, 10},    // REPEAT
-    {10, 0, 0},     // MUTE MODE
-    {0, 4, 10},     // SCENE A
-    {8, 0, 10},     // SCENE B
-    {0, 10, 4},     // THROW
-    {10, 5, 0},     // MUTATE waiting for OK / CLR, or the freeze
-};
 
 int clamp_int(int value, int low, int high) {
     return value < low ? low : (value > high ? high : value);
@@ -305,7 +302,8 @@ constexpr uint8_t kKeyVelocity = 100;
 // The modes of docs/SPEC.md's function block. F4 = GRID, F7 = MIXER, F8 = EDIT, and the two
 // selection keys under the screen move within whichever mode is showing -- the step page in
 // GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
-enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample, machine, kit, samples };
+enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample, machine, kit, samples,
+                            menu };
 
 // How long a take is. docs/SPEC.md: "1, 2, 4 or 8 bars", so these four and nothing between --
 // a resample is a loop and a loop is a power of two bars.
@@ -348,6 +346,7 @@ const char *mode_name(Mode mode) {
         case Mode::machine:  return "MACHINE";
         case Mode::kit:      return "KIT";
         case Mode::samples:  return "SAMPLES";
+        case Mode::menu:     return "MENU";
         default:             return "?";
     }
 }
@@ -428,7 +427,17 @@ public:
     // --- input ------------------------------------------------------------
 
     void on_key(int key, bool down) override {
-        if (key == ENAGA_KEY_F1) { shift_ = down; return; }
+        // FUNC held on its own for a moment shows what FUNC does (draw_func_help). Any other
+        // key, knob or pad while it is down means the hand knew, and the help stays away.
+        if (key == ENAGA_KEY_F1) {
+            shift_ = down;
+            if (down) {
+                shift_at_ms_ = last_ms_;
+                shift_alone_ = true;
+            }
+            return;
+        }
+        if (down) shift_alone_ = false;
         if (key == ENAGA_KEY_PUSH_VALUE) { value_pushed_ = down; return; }
 
         // Typing a project's name (PROJECTS page, FUNC+DOWN): the entry takes every key until OK
@@ -574,6 +583,10 @@ public:
             return;
         }
 
+        // The FUNC menu is a list over whatever was on screen: a STEP key there would toggle a
+        // trig on a track nobody is looking at.
+        if (mode_ == Mode::menu && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) return;
+
         // In PROJECT mode a STEP key queues a pattern change rather than toggling a trig, so it
         // is taken here, before the editing path, and only on the press -- there is no modifier
         // gesture to decide on the release.
@@ -633,6 +646,7 @@ public:
         // of OK, CLR and the arrows cannot fire while one of them is what is on screen.
         if (mode_ == Mode::project && on_project_key(key)) return;
         if (mode_ == Mode::kit && on_kit_key(key)) return;
+        if (mode_ == Mode::menu && on_menu_key(key)) return;
         if (mode_ == Mode::samples && on_samples_key(key)) return;
         // A mutation waiting for its verdict takes OK and CLR first, in whatever mode: OK keeps
         // it, CLR reverts it. Only the plain keys; F1 + CLR and F1 + OK stay undo and redo. And
@@ -755,31 +769,40 @@ public:
             // swallow the STEP keys ahead of on_step_key, so a key held across a mode change
             // never delivers its release and the hold would last until the app was restarted --
             // with the next encoder move writing a lock onto it.
-            case ENAGA_KEY_F3:                         // PROJECT: banks, patterns and the card
+            case ENAGA_KEY_F3:                         // PROJECT, or FUNC: "pool", the samples
+                if (shift_) {
+                    // FUNC + PROJECT is the sample browser: the key's second label is "pool",
+                    // the SmplTrek's own name for its samples (docs/CONTROLS.md). Saving moved
+                    // to the FUNC menu (FUNC + HOME, OK).
+                    open_samples();
+                    break;
+                }
                 mode_ = Mode::project;
                 leave_mode();
                 // Back on PROJECTS: the list it shares with the sample browser may hold samples
                 // now, so it is read again.
                 if (project_page_ == ProjectPage::files) list_projects();
-                if (shift_) {
-                    // docs/SPEC.md's key table: "F1 + F3 twice = save project". Twice, so a
-                    // save is never one stray press; within two seconds, so an old first press
-                    // does not arm a save minutes later. OK used to save here, but OK is what
-                    // picks the slot under the cursor now, as it picks in every Enaga list.
-                    if (save_armed_ && uint32_t(last_ms_ - save_armed_at_ms_) < kSaveArmMs) {
-                        save_armed_ = false;
-                        storage_.request_save();
-                        notice("SAVING");
-                    } else {
-                        save_armed_ = true;
-                        save_armed_at_ms_ = last_ms_;
-                        notice("FUNC+PROJECT TO SAVE");
-                    }
-                }
                 break;
-            case ENAGA_KEY_F4:                         // HOME: the grid, or KEYS with F1
-                mode_ = shift_ ? Mode::keys : Mode::grid;
-                leave_mode();
+            case ENAGA_KEY_F4:                         // HOME: GRID and KEYS; FUNC: "system", the menu
+                if (shift_) {
+                    // The key's second label is "system": the FUNC menu, where the setup actions
+                    // live (docs/CONTROLS.md). Pressed again from the menu, it closes it.
+                    if (mode_ == Mode::menu) close_menu();
+                    else open_menu();
+                    break;
+                }
+                // HOME is GRID, always, so a reflex press gets you home. Double-tapped (the
+                // second press within kDoubleTapMs, already on GRID) it is KEYS.
+                {
+                    const bool double_tap = mode_ == Mode::grid && !step_page_ &&
+                                            home_tapped_ &&
+                                            uint32_t(last_ms_ - home_tapped_at_ms_) < kDoubleTapMs;
+                    home_tapped_ = !double_tap;
+                    home_tapped_at_ms_ = last_ms_;
+                    mode_ = double_tap ? Mode::keys : Mode::grid;
+                    leave_mode();
+                    if (double_tap) notice("KEYS");
+                }
                 break;
             case ENAGA_KEY_F7:                         // MIXER, or PERFORM with F1
                 mode_ = shift_ ? Mode::perform : Mode::mixer;
@@ -889,30 +912,25 @@ public:
             case ENAGA_KEY_OCTAVE_LEFT:
             case ENAGA_KEY_OCTAVE_RIGHT: {
                 const int delta = key == ENAGA_KEY_OCTAVE_LEFT ? -1 : +1;
-                if (mode_ == Mode::keys) {
+                if (mode_ == Mode::keys && !shift_) {
                     // "Step page 1-4 in GRID; octave in KEYS" (docs/SPEC.md's key table).
                     walk_keys_octave(delta);
                     break;
                 }
-                if (mode_ == Mode::project) {
-                    // PROJECT mode's SETUP page: the unit's own settings, and the one project
-                    // preference that has nowhere else to live now that F1 + VALUE is the DJ
-                    // filter the spec asks for. A DEVIATION, recorded in docs/REVIEW.md: every
-                    // key in docs/SPEC.md's table is taken, plain and with F1, and the octave
-                    // keys do nothing in this mode -- they were setting GRID's step page, which
-                    // is not on screen here.
-                    // Four pages now: the slots, CHAIN, PATTERN and SETUP, walked in that order
-                    // and stopping at the ends.
-                    const int next = int(project_page_) + delta;
-                    const int last = int(ProjectPage::count) - 1;
-                    const ProjectPage was = project_page_;
-                    project_page_ = ProjectPage(next < 0 ? 0 : (next > last ? last : next));
-                    if (project_page_ == ProjectPage::files && was != ProjectPage::files) {
-                        list_projects();
-                    }
-                    notice(project_page_name(project_page_));
+                if (mode_ == Mode::project && !shift_) {
+                    // The pad-row keys say which sixteen the STEP keys mean (docs/CONTROLS.md):
+                    // in PROJECT and CHAIN the STEP keys are a bank's sixteen slots, so these
+                    // walk the bank being SHOWN, which is not the bank playing -- a queued change
+                    // is armed from the shown bank, so browsing switches nothing by itself.
+                    shown_bank_ = (shown_bank_ + delta + kBanks) % kBanks;
+                    char *out = notice_buffer_;
+                    append(out, "BANK ");
+                    *out++ = bank_letter(shown_bank_);
+                    *out = 0;
+                    notice(notice_buffer_);
                     break;
                 }
+                if (mode_ == Mode::menu) break;
                 if (shift_) {
                     // A delta, applied by the audio side (app/commands.hpp, kDeltaFlag).
                     mark(GestureKind::length, selected_, 0);
@@ -931,11 +949,13 @@ public:
 
             // The selection keys move within the current mode; with F1 they walk the selected
             // track's speed, the other half of polymeter.
+            // The screen keys turn the screen's pages, in every mode (docs/CONTROLS.md). The
+            // track's speed, which FUNC + these used to walk, is in the FUNC menu.
             case ENAGA_KEY_SELECT_LEFT:
-                if (shift_) walk_speed(-1); else select(-1);
+                if (!shift_) select(-1);
                 break;
             case ENAGA_KEY_SELECT_RIGHT:
-                if (shift_) walk_speed(+1); else select(+1);
+                if (!shift_) select(+1);
                 break;
             default:
                 break;
@@ -971,6 +991,7 @@ public:
             case Mode::perform:
             case Mode::kit:
             case Mode::samples:
+            case Mode::menu:
                 break;
         }
     }
@@ -987,7 +1008,13 @@ public:
             walk_keys_octave(delta);
             return;
         }
-        select(delta);                          // the page, or what the selection keys walk
+        if (mode_ == Mode::grid) {
+            // Sideways along the steps: GRID's step page, as the pad-row keys turn it. The
+            // screen keys are GRID's knob page (the EDIT page A-D work on), not this.
+            page_ = (page_ + delta + 4) % 4;
+            return;
+        }
+        select(delta);                          // the page, or what the screen keys walk
     }
 
     void walk_track(int delta) {
@@ -1105,35 +1132,33 @@ public:
         }
         switch (mode_) {
             case Mode::grid:
-                page_ = (page_ + delta + 4) % 4;                       // step page 1-4
-                break;
+            case Mode::keys:
             case Mode::edit:
+                // GRID and KEYS turn A-D on the current EDIT page, so their screen pages are
+                // EDIT's: SRC .. ARP. One page set for the knobs wherever they are.
                 param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. ARP
+                if (mode_ != Mode::edit) notice(page_name(Page(param_page_)));
                 break;
             case Mode::mixer:
                 // Faders, then the delay, the reverb, the routing and the master.
                 mixer_bank_ =
                     (mixer_bank_ + delta + kMixerPageCount * 2) % kMixerPageCount;
                 break;
-            case Mode::project:
-                // The bank being SHOWN, which is not the bank playing: a queued change is armed
-                // from the shown bank, so browsing must not switch anything by itself.
-                shown_bank_ = (shown_bank_ + delta + kBanks) % kBanks;
-                // CHAIN adds entries from this bank and does not draw it, so say which.
-                {
-                    char *out = notice_buffer_;
-                    append(out, "BANK ");
-                    *out++ = bank_letter(shown_bank_);
-                    *out = 0;
-                    notice(notice_buffer_);
+            case Mode::project: {
+                // PROJECT's pages: the slots, CHAIN, PATTERN, SETUP and PROJECTS, walked in
+                // that order and stopping at the ends. On the screen keys since the controls
+                // concept (docs/CONTROLS.md): they were on the pad-row keys, at the bottom of the
+                // unit, far from the screen they turned.
+                const int next = int(project_page_) + delta;
+                const int last = int(ProjectPage::count) - 1;
+                const ProjectPage was = project_page_;
+                project_page_ = ProjectPage(next < 0 ? 0 : (next > last ? last : next));
+                if (project_page_ == ProjectPage::files && was != ProjectPage::files) {
+                    list_projects();
                 }
+                notice(project_page_name(project_page_));
                 break;
-            case Mode::keys:
-                // The selected track, so a part can be played in on one track and then another
-                // without leaving the mode.
-                selected_ = (selected_ + delta + kTracks) % kTracks;
-                end_gesture();
-                break;
+            }
             case Mode::machine:
                 // The selection keys walk the TRACK, so one hand can go along the eight of them
                 // without leaving the mode -- the same thing they do in KEYS.
@@ -1162,6 +1187,8 @@ public:
             case Mode::samples:
                 // A page of the list, like LEFT and RIGHT.
                 move_sample_cursor_to(sample_cursor_ + delta * kSampleRows);
+                break;
+            case Mode::menu:                    // one page
                 break;
         }
     }
@@ -1234,6 +1261,7 @@ public:
     }
 
     void on_encoder(int encoder, int delta) override {
+        shift_alone_ = false;                   // FUNC + a knob: the hand knew; no help
         if (name_entry_.active()) {
             name_entry_.encoder(encoder, delta);      // A moves, B and VALUE pick the character
             return;
@@ -1391,6 +1419,14 @@ public:
             if (encoder == 1) {
                 post(Cmd::set_midi_out, uint8_t(selected_), 0, 0, clamp_delta(delta), kDeltaFlag);
             }
+            return;
+        }
+
+        // The FUNC menu: A scrolls it, as UP and DOWN do, and B changes the value of a setting
+        // row, as LEFT and RIGHT do. C and D have nothing to set here.
+        if (mode_ == Mode::menu && encoder >= 0 && encoder < 4) {
+            if (encoder == 0) move_menu_cursor(delta);
+            if (encoder == 1) menu_value(delta > 0 ? 1 : -1, false);
             return;
         }
 
@@ -1607,6 +1643,7 @@ public:
     }
 
     void on_pad_press(int pad, int velocity) override {
+        shift_alone_ = false;                   // FUNC + a pad: the hand knew; no help
         // The performance row first: it is the same seven pads in every mode, which is what
         // docs/SPEC.md means by a fixed row.
         if (is_perform_pad(pad)) {
@@ -1749,7 +1786,9 @@ public:
                     notice(note_repeat_mode_ ? "NOTE RPT" : "PADS PLAY");
                     break;
                 }
+                fill_held_ = down;
                 post(Cmd::set_fill, 0, 0, down ? 1 : 0);
+                if (down) notice("FILL");
                 break;
 
             case PerformPad::repeat:
@@ -1758,6 +1797,13 @@ public:
                 repeat_held_ = down;
                 post(Cmd::set_repeat, 0, 0, uint8_t(repeat_length_), down ? 1 : 0,
                      shift_ ? 1 : 0);
+                if (down) {
+                    char *out = notice_buffer_;
+                    append(out, "REPEAT ");
+                    append(out, repeat_length_name(repeat_length_));
+                    *out = 0;
+                    notice(notice_buffer_);
+                }
                 break;
 
             case PerformPad::mute:
@@ -1782,7 +1828,10 @@ public:
                 // a surprise in the middle of a take.
                 scene_holding_ = down ? (PerformPad(pad) == PerformPad::scene_a ? 0 : 1) : -1;
                 // And a scene hold takes all sixteen STEP keys, with the same swallowed release.
-                if (down) drop_hold();
+                if (down) {
+                    drop_hold();
+                    notice(scene_holding_ == 0 ? "SCENE A: STEP PICKS" : "SCENE B: STEP PICKS");
+                }
                 break;
 
             case PerformPad::throw_fx:
@@ -1790,6 +1839,8 @@ public:
                 // -- the engine never wrote over `params_`.
                 post(Cmd::set_throw, uint8_t(selected_), 0,
                      down ? uint8_t(shift_ ? 2 : 1) : uint8_t(0));
+                throw_held_ = down;
+                if (down) notice(shift_ ? "THROW REVERB" : "THROW DELAY");
                 break;
 
             case PerformPad::mutate:
@@ -1807,6 +1858,17 @@ public:
                 mark(GestureKind::paste, selected_, 0);
                 post_mutate();
                 end_gesture();
+                {
+                    // Say what happened, and to which track: a mutation of an empty track, or a
+                    // small one, can be hard to hear, and the pad's print (TRK 7) says nothing.
+                    char *out = notice_buffer_;
+                    append(out, "MUTATE T");
+                    append_number(out, uint32_t(selected_) + 1);
+                    *out++ = ' ';
+                    append(out, mutation_name(mutation_));
+                    *out = 0;
+                    notice(notice_buffer_);
+                }
                 // docs/SPEC.md: "OK keeps, CLR reverts". The mutation is already one undo level,
                 // so keeping is just forgetting it is pending and reverting is that undo.
                 mutation_pending_ = true;
@@ -1814,6 +1876,20 @@ public:
 
             default:
                 break;
+        }
+    }
+
+    // Whether a performance pad is lit bright: held, or its mode on.
+    bool perform_pad_active(PerformPad pad) const {
+        switch (pad) {
+            case PerformPad::fill:     return fill_held_ || note_repeat_mode_;
+            case PerformPad::repeat:   return repeat_held_;
+            case PerformPad::mute:     return mute_mode_;
+            case PerformPad::scene_a:  return scene_holding_ == 0;
+            case PerformPad::scene_b:  return scene_holding_ == 1;
+            case PerformPad::throw_fx: return throw_held_;
+            case PerformPad::mutate:   return mutation_pending_ || freeze_held_;
+            default:                   return false;
         }
     }
 
@@ -2235,30 +2311,35 @@ public:
                       uint8_t(colour.g * scale / 10), uint8_t(colour.b * scale / 10));
         }
 
-        // The upper row: white 2 available, the function's colour at 10 while it is held or
-        // its state is on (docs/SPEC.md, "LED language").
-        for (int i = 0; i < 7; i++) {
-            bool active = (perform_held_ >> i & 1u) != 0;
-            switch (PerformPad(2 * i + 1)) {
-                case PerformPad::fill:   active = active || note_repeat_mode_; break;
-                case PerformPad::mute:   active = mute_mode_; break;   // a toggle: its state
-                case PerformPad::mutate: active = active || mutation_pending_ || freeze_held_;
-                                         break;
-                default: break;
-            }
-            const Rgb colour = active ? kPerformPadColour[i] : kPerformPadIdle;
-            leds_.pad(2 * i + 1, colour.r, colour.g, colour.b);
+        // The performance pads (the upper row, printed TRK 1-7 on the SmplTrek): always lit dim
+        // in their own colour, so the row reads as tools rather than tracks, and bright while
+        // the pad is held or its mode is on (docs/CONTROLS.md).
+        for (int i = 0; i < kPerformPads; i++) {
+            const Rgb colour = kPerformColour[i];
+            const bool held = (perform_held_ >> (kPerformPadIds[i] / 2) & 1u) != 0;
+            const uint8_t level =
+                held || perform_pad_active(PerformPad(kPerformPadIds[i])) ? 10 : 2;
+            leds_.pad(kPerformPadIds[i], uint8_t(colour.r * level / 10),
+                      uint8_t(colour.g * level / 10), uint8_t(colour.b * level / 10));
         }
 
         const bool running = status.running.load(std::memory_order_relaxed) != 0;
         leds_.key(ENAGA_KEY_F5, 0, running ? 8 : 0);
         leds_.key(ENAGA_KEY_F6, running ? 0 : 6, 0);
 
-        // The mode keys light the mode you are in, as the spec's LED language asks.
-        leds_.key(ENAGA_KEY_F4, 0, mode_ == Mode::grid ? 8 : 0);
-        leds_.key(ENAGA_KEY_F7, 0, mode_ == Mode::mixer ? 8 : 0);
-        leds_.key(ENAGA_KEY_F8, 0, mode_ == Mode::edit ? 8 : 0);
-        leds_.key(ENAGA_KEY_F2, rec_ ? 8 : 0, 0);        // REC is red while recording
+        // The mode keys light where you are (docs/CONTROLS.md): green on the key's own screen,
+        // red on its FUNC screen -- the one its second printed label names. HOME is amber in
+        // KEYS (its second press) and red in the FUNC menu ("system").
+        leds_.key(ENAGA_KEY_F4, mode_ == Mode::keys || mode_ == Mode::menu ? 8 : 0,
+                  mode_ == Mode::grid || mode_ == Mode::keys ? 8 : 0);
+        leds_.key(ENAGA_KEY_F3, mode_ == Mode::samples ? 8 : 0, mode_ == Mode::project ? 8 : 0);
+        leds_.key(ENAGA_KEY_F7, mode_ == Mode::perform ? 8 : 0, mode_ == Mode::mixer ? 8 : 0);
+        leds_.key(ENAGA_KEY_F8, mode_ == Mode::machine || mode_ == Mode::kit ? 8 : 0,
+                  mode_ == Mode::edit ? 8 : 0);
+        // REC is red while recording, and green on RESAMPLE ("sampling").
+        leds_.key(ENAGA_KEY_F2, rec_ ? 8 : 0, mode_ == Mode::resample ? 8 : 0);
+        // FUNC lights while it is held, so a chord shows it is being read as one.
+        leds_.key(ENAGA_KEY_F1, 0, shift_ ? 8 : 0);
 
         // CLR and OK light when undo and redo have somewhere to go, which is the only way to
         // know from the panel that F1 + CLR will do anything at all.
@@ -2316,7 +2397,9 @@ public:
             canvas.text(0, 9, "CLOCK REFUSED", 10);
         }
 
-        if (step_page_) {
+        if (func_help_showing()) {
+            draw_func_help(canvas);
+        } else if (step_page_) {
             draw_step_page(canvas);
         } else {
             switch (mode_) {
@@ -2330,6 +2413,7 @@ public:
                 case Mode::machine: draw_machine(canvas); break;
                 case Mode::kit:     draw_kit(canvas); break;
                 case Mode::samples: draw_samples(canvas); break;
+                case Mode::menu:    draw_menu(canvas); break;
             }
         }
 
@@ -2352,6 +2436,37 @@ public:
         else append(out, device_name(enaga::system::device()));
         *out = 0;
         canvas.text(0, 120, line, 7);
+    }
+
+    // --- the FUNC help: FUNC held on its own ------------------------------
+    //
+    // docs/CONTROLS.md: FUNC + a function key is the label printed UNDER that key, and the upper
+    // pads are printed TRK 1-7 but are STRATA's performance pads. Holding FUNC for a moment with
+    // nothing else shows both, over whatever screen is up; the next key, knob or pad (or letting
+    // go of FUNC) takes it away, so it never sits in the way of a chord.
+
+    static constexpr uint32_t kFuncHelpMs = 600;
+
+    bool func_help_showing() const {
+        return shift_ && shift_alone_ && !name_entry_.active() &&
+               uint32_t(last_ms_ - shift_at_ms_) >= kFuncHelpMs;
+    }
+
+    void draw_func_help(enaga::Canvas &canvas) {
+        canvas.rect(0, 9, 128, 110, 0);
+        canvas.text(0, 9, "FUNC + KEY:", 15);
+        static const char *const kLines[] = {
+            "REC   RESAMPLE", "PROJ  SAMPLES", "HOME  MENU", "PLAY  RESTART", "STOP  RESET",
+            "MIXER PERFORM", "EDIT  MACHINE", "OK/CLR REDO/UNDO",
+        };
+        int y = 18;
+        for (const char *line : kLines) {
+            canvas.text(0, y, line, 12);
+            y += 9;
+        }
+        canvas.text(0, y, "UPPER PADS TRK1-7:", 15);
+        canvas.text(0, y + 9, "FILL RPT MUTE SC-A", 12);
+        canvas.text(0, y + 18, "SC-B THROW MUTATE", 12);
     }
 
     // --- GRID: all eight tracks at a glance ------------------------------
@@ -3224,6 +3339,10 @@ public:
                 }
                 return true;
 
+            case ENAGA_KEY_OCTAVE_LEFT:                 // no steps behind this list
+            case ENAGA_KEY_OCTAVE_RIGHT:
+                return !shift_;                         // FUNC: the track's length, as anywhere
+
             default:
                 return false;
         }
@@ -3565,6 +3684,238 @@ public:
         }
     }
 
+
+    // --- the FUNC menu (FUNC + HOME) -----------------------------------------
+    //
+    // docs/CONTROLS.md: the rare setup actions live here, named on the screen, instead of on
+    // FUNC + arrow chords that changed from page to page. HOME's second printed label is
+    // "system", which is what this is. UP/DOWN (or A) move, OK runs the row, LEFT/RIGHT (or B)
+    // change a setting row, CLR or FUNC + HOME closes it and returns to the screen it opened
+    // over. The cursor always starts on SAVE, so FUNC + HOME, OK saves.
+
+    enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, kits, sample, speed,
+                                    chain, song, autofill, quantize, count };
+    static constexpr int kMenuItems = int(MenuItem::count);
+    static constexpr int kMenuRows = 8;
+
+    static const char *menu_item_name(MenuItem item) {
+        switch (item) {
+            case MenuItem::save:     return "SAVE";
+            case MenuItem::save_as:  return "SAVE AS";
+            case MenuItem::open:     return "OPEN PROJECT";
+            case MenuItem::fresh:    return "NEW PROJECT";
+            case MenuItem::reload:   return "RELOAD PROJECT";
+            case MenuItem::kits:     return "KITS";
+            case MenuItem::sample:   return "RELOAD SAMPLE";
+            case MenuItem::speed:    return "TRACK SPEED";
+            case MenuItem::chain:    return "CHAIN";
+            case MenuItem::song:     return "CHAIN END";
+            case MenuItem::autofill: return "AUTO-FILL";
+            case MenuItem::quantize: return "QUANTIZE";
+            default:                 return "?";
+        }
+    }
+
+    // A setting row's value as the row shows it, or "" for an action row.
+    void menu_item_value(MenuItem item, char *out) {
+        switch (item) {
+            case MenuItem::speed:
+                *out++ = 'T';
+                append_number(out, uint32_t(selected_) + 1);
+                *out++ = ' ';
+                append(out, speed_name(Speed(engine_.pattern().tracks[selected_].speed)));
+                break;
+            case MenuItem::chain:
+                append(out, engine_.chain().active ? "ON" : "OFF");
+                break;
+            case MenuItem::song:
+                append(out, engine_.project().settings.chain_song ? "SONG" : "LOOP");
+                break;
+            case MenuItem::autofill:
+                append(out, auto_fill_name(engine_.auto_fill()));
+                break;
+            case MenuItem::quantize:
+                append_number(out, uint32_t(quantize()));
+                break;
+            default:
+                break;
+        }
+        *out = 0;
+    }
+
+    void open_menu() {
+        if (mode_ == Mode::menu) return;
+        menu_return_ = mode_;
+        mode_ = Mode::menu;
+        leave_mode();
+        menu_cursor_ = 0;
+        card_armed_ = CardAction::none;
+        notice("MENU");
+    }
+
+    // `announce`: say where it went back to. Not after an action that has its own notice.
+    void close_menu(bool announce = true) {
+        if (mode_ != Mode::menu) return;
+        mode_ = menu_return_;
+        leave_mode();
+        if (announce) notice(mode_name(mode_));
+    }
+
+    void move_menu_cursor(int delta) {
+        menu_cursor_ = (menu_cursor_ + delta + kMenuItems * 4) % kMenuItems;
+        card_armed_ = CardAction::none;                   // an arm is for one row
+    }
+
+    // Change a setting row by one, LEFT/RIGHT or B. `wrap` is OK's forward step, which goes round
+    // so one key reaches every value; the arrows stop at the ends where the list has ends.
+    void menu_value(int delta, bool wrap) {
+        switch (MenuItem(menu_cursor_)) {
+            case MenuItem::speed: {
+                const uint8_t current = engine_.pattern().tracks[selected_].speed;
+                const bool slowest =
+                    uint8_t(kSpeedDisplayOrder[int(Speed::count) - 1]) == current;
+                if (wrap && slowest) walk_speed(-int(Speed::count));
+                else walk_speed(delta);
+                break;
+            }
+            case MenuItem::chain: {
+                const bool on = engine_.chain().active;
+                post(Cmd::set_chain, 0, 0, on ? 0 : 1);
+                notice(on ? "CHAIN OFF" : "CHAIN ON");
+                break;
+            }
+            case MenuItem::song: {
+                const bool song = !engine_.project().settings.chain_song;
+                post_chain(ChainEdit::song, 0, song ? 1 : 0);
+                notice(song ? "SONG: PLAY ONCE" : "LOOP CHAIN");
+                break;
+            }
+            case MenuItem::autofill: {
+                // Off, 4, 8 or 16 bars. It wraps, since "off" is one of the four rather than an
+                // end stop.
+                const int next = (int(auto_fill_) + delta + int(AutoFill::count)) %
+                                 int(AutoFill::count);
+                auto_fill_ = AutoFill(next);
+                post(Cmd::set_auto_fill, 0, 0, uint8_t(auto_fill_));
+                char *out = notice_buffer_;
+                append(out, "AUTOFILL ");
+                append(out, auto_fill_name(auto_fill_));
+                *out = 0;
+                notice(notice_buffer_);
+                break;
+            }
+            case MenuItem::quantize:
+                if (wrap && quantize() >= 100) post_delta(Cmd::set_quantize, 0, 0, 0, -100);
+                else post_delta(Cmd::set_quantize, 0, 0, 0, delta * 5);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void run_menu_item() {
+        switch (MenuItem(menu_cursor_)) {
+            case MenuItem::save:
+                storage_.request_save();
+                close_menu(false);
+                notice("SAVING");
+                break;
+            case MenuItem::save_as:
+                if (!storage_.card_usable()) {
+                    notice("NO CARD");
+                    break;
+                }
+                // On PROJECTS, so the list the new name is checked against is the card's.
+                mode_ = Mode::project;
+                leave_mode();
+                project_page_ = ProjectPage::files;
+                list_projects();
+                name_entry_.open("SAVE AS", storage_.project_name());
+                break;
+            case MenuItem::open:
+                mode_ = Mode::project;
+                leave_mode();
+                project_page_ = ProjectPage::files;
+                list_projects();
+                notice("OK TWICE OPENS");
+                break;
+            case MenuItem::fresh:
+            case MenuItem::reload: {
+                // Both throw away what is unsaved, so each takes a second OK within kSaveArmMs.
+                const CardAction action =
+                    MenuItem(menu_cursor_) == MenuItem::reload ? CardAction::reload
+                                                               : CardAction::fresh;
+                if (arm_card_action(action)) close_menu(false);
+                break;
+            }
+            case MenuItem::kits:
+                open_kits();
+                break;
+            case MenuItem::sample:
+                // The one thing a user can do about a FAIL, and the only way back after a card
+                // has been out.
+                if (storage_.request_sample(selected_)) notice("LOADING");
+                else notice("NO SAMPLE");
+                break;
+            default:
+                menu_value(+1, true);
+                break;
+        }
+    }
+
+    bool on_menu_key(int key) {
+        switch (key) {
+            case ENAGA_KEY_OK:
+                if (shift_) return false;               // F1 + OK is redo, as everywhere
+                run_menu_item();
+                return true;
+            case ENAGA_KEY_CLR:
+                if (shift_) return false;               // F1 + CLR is undo
+                close_menu();
+                return true;
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (!shift_) move_menu_cursor(key == ENAGA_KEY_UP ? -1 : +1);
+                return true;
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (!shift_) menu_value(key == ENAGA_KEY_LEFT ? -1 : +1, false);
+                return true;
+            case ENAGA_KEY_SELECT_LEFT:
+            case ENAGA_KEY_SELECT_RIGHT:
+            case ENAGA_KEY_OCTAVE_LEFT:
+            case ENAGA_KEY_OCTAVE_RIGHT:
+                return true;                            // one page; no steps behind it
+            default:
+                return false;
+        }
+    }
+
+    void draw_menu(enaga::Canvas &canvas) {
+        char line[40];
+        char value[24];
+        canvas.text(0, 18, "FUNC MENU", 14);
+        int first = menu_cursor_ - kMenuRows / 2;
+        if (first > kMenuItems - kMenuRows) first = kMenuItems - kMenuRows;
+        if (first < 0) first = 0;
+        for (int row = 0; row < kMenuRows && first + row < kMenuItems; row++) {
+            const int i = first + row;
+            const bool here = i == menu_cursor_;
+            char *out = line;
+            *out++ = here ? '>' : ' ';
+            append(out, menu_item_name(MenuItem(i)));
+            *out = 0;
+            const int y = 29 + row * 9;
+            canvas.text(0, y, line, here ? 15 : 9);
+            menu_item_value(MenuItem(i), value);
+            int length = 0;
+            while (value[length] != '\0') length++;
+            if (length > 0) canvas.text(128 - length * 6, y, value, here ? 15 : 9);
+        }
+        canvas.text(0, 103, "OK: RUN   CLR: BACK", 7);
+        canvas.text(0, 111, "LEFT/RIGHT: CHANGE", 7);
+    }
+
     void open_kits() {
         mode_ = Mode::kit;
         leave_mode();
@@ -3648,6 +3999,13 @@ public:
                 // The page of eight; F1 + LEFT / RIGHT are free here, and kept free.
                 if (!shift_) move_kit_cursor_to(kit_cursor_ + (key == ENAGA_KEY_LEFT ? -8 : +8));
                 return true;
+
+            // The STEP keys are always the sixteen slots here, so the pad-row keys, which pick
+            // which sixteen they mean, have nothing to do (docs/CONTROLS.md). With FUNC they are
+            // the selected track's length, as on every screen.
+            case ENAGA_KEY_OCTAVE_LEFT:
+            case ENAGA_KEY_OCTAVE_RIGHT:
+                return !shift_;
 
             default:
                 return false;
@@ -3830,20 +4188,8 @@ public:
             case ENAGA_KEY_UP:
             case ENAGA_KEY_DOWN: {
                 const int delta = key == ENAGA_KEY_UP ? -1 : 1;
-                if (shift_) {
-                    // The auto-fill period: off, 4, 8 or 16 bars. It wraps, since "off" is one
-                    // of the four rather than an end stop.
-                    const int next = (int(auto_fill_) + delta + int(AutoFill::count)) %
-                                     int(AutoFill::count);
-                    auto_fill_ = AutoFill(next);
-                    post(Cmd::set_auto_fill, 0, 0, uint8_t(auto_fill_));
-                    char *out = notice_buffer_;
-                    append(out, "AUTOFILL ");
-                    append(out, auto_fill_name(auto_fill_));
-                    *out = 0;
-                    notice(notice_buffer_);
-                    return true;
-                }
+                // FUNC + UP / DOWN walked the auto-fill period; it is in the FUNC menu now.
+                if (shift_) return true;
                 // Which mutation MUTATE performs. Walked here rather than on an encoder because
                 // all four encoders are macros in this mode.
                 const int next = int(mutation_) + delta;
@@ -3853,14 +4199,19 @@ public:
                 return true;
             }
 
+            // The pad-row keys pick which sixteen the STEP keys mean; in PERFORM the STEP keys
+            // are always the selected track's sixteen parameters, so they have nothing to do.
+            // With FUNC they are the selected track's length, as on every screen.
             case ENAGA_KEY_OCTAVE_LEFT:
             case ENAGA_KEY_OCTAVE_RIGHT:
+                return !shift_;
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT: {
-                // Which macro CLR clears and F1 + a parameter assigns to. The arrows too: the
-                // macros are the row of four across the screen.
-                const int delta = key == ENAGA_KEY_OCTAVE_LEFT || key == ENAGA_KEY_LEFT ? -1 : 1;
-                macro_selected_ = (macro_selected_ + delta + kMacros) % kMacros;
+                // Which macro CLR clears and a STEP key assigns to: the macros are the row of
+                // four across the screen.
+                if (shift_) return true;
+                macro_selected_ = (macro_selected_ + (key == ENAGA_KEY_LEFT ? -1 : 1) + kMacros) %
+                                  kMacros;
                 return true;
             }
 
@@ -3982,7 +4333,7 @@ public:
 
         // The gesture that is not otherwise discoverable.
         canvas.text(0, 78, "STEP ASSIGNS TO MACRO", 7);
-        canvas.text(0, 87, "FUNC+UP AUTOFILL", 7);
+        canvas.text(0, 87, "AUTOFILL: FUNC MENU", 7);
 
         // What MUTATE will do, and to which track.
         out = line;
@@ -4060,41 +4411,17 @@ public:
                 }
                 return true;
 
+            // The arrows move the slot cursor. With FUNC they do nothing here: chain on/off, the
+            // sample reload, RELOAD PROJECT and NEW PROJECT are in the FUNC menu (FUNC + HOME),
+            // where they are named rather than remembered (docs/CONTROLS.md).
             case ENAGA_KEY_UP:
-                if (shift_) {
-                    // The chain follows the project's own entries; starting one jumps to its
-                    // first.
-                    const bool on = engine_.chain().active;
-                    post(Cmd::set_chain, 0, 0, on ? 0 : 1);
-                    notice(on ? "CHAIN OFF" : "CHAIN ON");
-                } else {
-                    move_slot_cursor(-4);
-                }
-                return true;
-
             case ENAGA_KEY_DOWN:
-                if (shift_) {
-                    // Load the selected track's sample again. The one thing a user can do about
-                    // a FAIL, and the only way back after a card has been out.
-                    if (storage_.request_sample(selected_)) notice("LOADING");
-                    else notice("NO SAMPLE");
-                } else {
-                    move_slot_cursor(+4);
-                }
+                if (!shift_) move_slot_cursor(key == ENAGA_KEY_UP ? -4 : +4);
                 return true;
 
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
-                if (shift_) {
-                    // The card's two whole-project actions, PROJECT's F1 + arrow (the mode's
-                    // second meaning, as copy and paste are in GRID): F1 + LEFT reads the
-                    // project from the card again, F1 + RIGHT starts a new one. Both throw away
-                    // what is unsaved, so each takes a second press within kSaveArmMs, as a save
-                    // does. They were F1 + OK and F1 + CLR, which the spec gives to redo and undo.
-                    arm_card_action(key == ENAGA_KEY_LEFT ? CardAction::reload : CardAction::fresh);
-                } else {
-                    move_slot_cursor(key == ENAGA_KEY_LEFT ? -1 : +1);
-                }
+                if (!shift_) move_slot_cursor(key == ENAGA_KEY_LEFT ? -1 : +1);
                 return true;
 
             default:
@@ -4104,7 +4431,8 @@ public:
 
     enum class CardAction : uint8_t { none, reload, fresh };
 
-    void arm_card_action(CardAction action) {
+    // True on the second press, when the action has been asked for.
+    bool arm_card_action(CardAction action) {
         if (card_armed_ == action && uint32_t(last_ms_ - card_armed_at_ms_) < kSaveArmMs) {
             card_armed_ = CardAction::none;
             if (action == CardAction::reload) {
@@ -4114,11 +4442,12 @@ public:
                 storage_.request_new();
                 notice("NEW PROJECT");
             }
-            return;
+            return true;
         }
         card_armed_ = action;
         card_armed_at_ms_ = last_ms_;
-        notice(action == CardAction::reload ? "AGAIN TO RELOAD" : "AGAIN FOR NEW");
+        notice(action == CardAction::reload ? "OK AGAIN TO RELOAD" : "OK AGAIN FOR NEW");
+        return false;
     }
 
     // The cursor over PROJECT's sixteen slots, drawn four by four: LEFT and RIGHT step through
@@ -4217,7 +4546,7 @@ public:
         const int length = chain_entries();
         switch (key) {
             case ENAGA_KEY_OK: {
-                if (shift_) return false;                 // F1 + OK: reload, as on the slots
+                if (shift_) return false;                 // F1 + OK is redo
                 if (length >= kChainEntries) {
                     notice("CHAIN FULL");
                     return true;
@@ -4238,41 +4567,38 @@ public:
                 notice("ENTRY ADDED");
                 return true;
             }
+            case ENAGA_KEY_CLR: {
+                if (shift_) return false;                 // F1 + CLR is undo
+                // CLR clears, as it clears a step or a track: here the entry under the cursor.
+                // An empty chain has nothing to clear, so CLR is "back" there as on the other
+                // PROJECT pages. A removal is not undoable, so it takes a second press within
+                // kSaveArmMs on the same entry (Roland, 2026-11-22).
+                if (length == 0) return false;
+                chain_clamp_cursor();
+                if (chain_remove_armed_ != chain_cursor_ ||
+                    uint32_t(last_ms_ - chain_remove_armed_at_ms_) >= kSaveArmMs) {
+                    chain_remove_armed_ = chain_cursor_;
+                    chain_remove_armed_at_ms_ = last_ms_;
+                    notice("AGAIN TO REMOVE");
+                    return true;
+                }
+                chain_remove_armed_ = -1;
+                post_chain(ChainEdit::remove, chain_cursor_);
+                if (chain_cursor_ > 0 && chain_cursor_ >= length - 1) chain_cursor_--;
+                notice("ENTRY REMOVED");
+                return true;
+            }
             case ENAGA_KEY_UP:
             case ENAGA_KEY_DOWN:
-                if (shift_) return false;                 // chain on/off, sample reload
-                chain_cursor_ += key == ENAGA_KEY_UP ? -1 : 1;
-                chain_clamp_cursor();
+                if (!shift_) {
+                    chain_cursor_ += key == ENAGA_KEY_UP ? -1 : 1;
+                    chain_clamp_cursor();
+                }
                 return true;
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
-                if (shift_) {
-                    if (key == ENAGA_KEY_RIGHT) {
-                        // SONG or LOOP: whether the chain stops at its end.
-                        const bool song = !engine_.project().settings.chain_song;
-                        post_chain(ChainEdit::song, 0, song ? 1 : 0);
-                        notice(song ? "SONG: PLAY ONCE" : "LOOP CHAIN");
-                        return true;
-                    }
-                    if (length == 0) return true;
-                    chain_clamp_cursor();
-                    // A removal is not undoable, so it takes a second press within kSaveArmMs
-                    // on the same entry, as FUNC+LEFT's reload does on the other PROJECT pages
-                    // (Roland, 2026-11-22).
-                    if (chain_remove_armed_ != chain_cursor_ ||
-                        uint32_t(last_ms_ - chain_remove_armed_at_ms_) >= kSaveArmMs) {
-                        chain_remove_armed_ = chain_cursor_;
-                        chain_remove_armed_at_ms_ = last_ms_;
-                        notice("AGAIN TO REMOVE");
-                        return true;
-                    }
-                    chain_remove_armed_ = -1;
-                    post_chain(ChainEdit::remove, chain_cursor_);
-                    if (chain_cursor_ > 0 && chain_cursor_ >= length - 1) chain_cursor_--;
-                    notice("ENTRY REMOVED");
-                    return true;
-                }
-                chain_delta(ChainEdit::pattern_delta, key == ENAGA_KEY_LEFT ? -1 : 1);
+                // FUNC + LEFT / RIGHT were remove and SONG/LOOP: CLR twice and the FUNC menu now.
+                if (!shift_) chain_delta(ChainEdit::pattern_delta, key == ENAGA_KEY_LEFT ? -1 : 1);
                 return true;
             default:
                 return false;
@@ -4328,8 +4654,8 @@ public:
             }
         }
 
-        canvas.text(0, 103, "OK ADD  FUNC+LEFT DEL", 7);
-        canvas.text(0, 112, "A:RPT B:MUT F+RT SONG", 7);
+        canvas.text(0, 103, "OK ADD  CLR X2 REMOVE", 7);
+        canvas.text(0, 112, "A:REPEATS B:MUTES", 7);
     }
 
     // --- PROJECT's PATTERN page: the master length and the swing ----------
@@ -4369,7 +4695,7 @@ public:
                 return true;
             case ENAGA_KEY_UP:
             case ENAGA_KEY_DOWN:
-                if (shift_) return false;
+                if (shift_) return true;                  // F1 + UP/DOWN: nothing to copy here
                 pattern_field_delta(pattern_field_, key == ENAGA_KEY_UP ? 1 : -1);
                 end_gesture();
                 return true;
@@ -4735,6 +5061,8 @@ private:
     // --- the performance layer's UI state (M5) ---
     // All of it is which control is selected or held, never what the layer produces: the engine
     // owns that, and the UI reads it back through the accessors.
+    bool fill_held_ = false;                    // FILL held (its LED)
+    bool throw_held_ = false;                   // THROW held (its LED)
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
     bool note_repeat_mode_ = false;             // FUNC + FILL: a held lower pad rolls
     bool tape_held_ = false;                    // FUNC + push D went down and has not come up
@@ -4818,8 +5146,10 @@ private:
     uint32_t open_armed_at_ms_ = 0;
     enaga::ui::TextEntry name_entry_;
     int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
-    bool save_armed_ = false;      // F1 + F3 once; the second press within kSaveArmMs saves
-    uint32_t save_armed_at_ms_ = 0;
+    Mode menu_return_ = Mode::grid;   // the screen the FUNC menu opened over
+    int menu_cursor_ = 0;             // the FUNC menu's row; SAVE when it opens
+    bool shift_alone_ = false;        // FUNC down and nothing else pressed since
+    uint32_t shift_at_ms_ = 0;        // when FUNC went down
     int chain_remove_armed_ = -1;                 // CHAIN's F1 + LEFT, armed on this entry
     uint32_t chain_remove_armed_at_ms_ = 0;
     CardAction card_armed_ = CardAction::none;   // F1 + LEFT / RIGHT in PROJECT, armed once
@@ -4832,6 +5162,9 @@ private:
     KitAction kit_armed_ = KitAction::none;     // KIT: OK or F1 + DOWN pressed once
     uint32_t kit_armed_at_ms_ = 0;
     static constexpr uint32_t kSaveArmMs = 2000;
+    static constexpr uint32_t kDoubleTapMs = 400;   // HOME, HOME: KEYS
+    bool home_tapped_ = false;
+    uint32_t home_tapped_at_ms_ = 0;
 
     // The project tempo this side has already reconciled with the clock, so that a LOAD is
     // adopted and the engine's echo of our own knob move is not.

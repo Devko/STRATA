@@ -267,7 +267,7 @@ note until it comes up (`Machine::release`). MUTATE waits for OK (keep) or CLR (
 F1 + OK and F1 + CLR are redo and undo in PROJECT too, as the spec says. Reading the project from
 the card again and starting a new one moved to F1 + LEFT and F1 + RIGHT on PROJECT's slots page,
 each pressed twice within two seconds like a save (approved by Roland, 2026-11-22). Bank select
-is on the selection keys in PROJECT, so F1 + F3 is save only; docs/SPEC.md's key table says so.
+is on the selection keys in PROJECT, so F1 + F3 is save only; docs/SPEC.md's key table says so. (Superseded the same evening by docs/CONTROLS.md: both are FUNC menu rows, the bank is on the pad-row keys and the save is FUNC + HOME, OK.)
 
 **EDIT has no encoder-slot strip at the bottom**, against the spec's "Bottom area: the 4 encoder
 slots" on every screen. EDIT already shows the same four parameters in large type, one row per
