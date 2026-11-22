@@ -735,8 +735,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     CHECK_EQ(project_bytes(), 296u);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1120);
     CHECK_EQ(kit_bytes(), 1120u);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 3076);
-    CHECK_EQ(perform_bytes(), 3076u);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 3152);
+    CHECK_EQ(perform_bytes(), 3152u);
     for (int b = 0; b < kBanks; b++) {
         char name[12];
         CHECK(bank_file_name(b, name, int(sizeof name)));
@@ -1608,7 +1608,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
     }
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 296);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1120);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 3076);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 3152);
 
     // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.
     CHECK_EQ(host.saves() - saves_before, kFileN + 1);

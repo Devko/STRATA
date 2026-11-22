@@ -934,7 +934,14 @@ void Engine::apply(const Command &command) {
                 // being performed.
                 if (command.b != 0) scene_capture_track(scenes_.scenes[command.a], project_.kit,
                                                         track);
-                else scene_capture(scenes_.scenes[command.a], project_.kit);
+                else {
+                    scene_capture(scenes_.scenes[command.a], project_.kit);
+                    // A whole capture is the whole sound, so the master EQ's knobs too (not
+                    // its kill switches, which are a hand on the panel). A one-track capture
+                    // leaves the EQ out: it is not that track's.
+                    scene_capture_master(scenes_.scenes[command.a],
+                                         &project_.settings.master[kMasterEqFirst]);
+                }
                 perform_dirty_ = true;
             }
             break;
@@ -970,7 +977,9 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::macro_assign:
-            if (command.a >= kMacros || command.b >= kTrackParams) {
+            // `b` past the twenty track parameters names a master EQ band: kTrackParams + 0-2.
+            // The track byte cannot carry it -- every command naming track 8 is refused at the top.
+            if (command.a >= kMacros || command.b >= kTrackParams + kMasterBands) {
                 // Counted, like the "macro is full" refusal below it. Two refusals in one
                 // command reported two different ways is how a user concludes the box is broken.
                 status_.bump_refused();
@@ -989,8 +998,9 @@ void Engine::apply(const Command &command) {
                     break;
                 }
                 macro.targets[slot].enabled = 1;
-                macro.targets[slot].track = uint8_t(track);
-                macro.targets[slot].param = command.b;
+                const bool on_master = command.b >= kTrackParams;
+                macro.targets[slot].track = on_master ? kMacroMasterTrack : uint8_t(track);
+                macro.targets[slot].param = on_master ? uint8_t(command.b - kTrackParams) : command.b;
                 // From the parameter's value now to the end the macro heads for. `c` is that
                 // value and `d` the end. A macro sweeps from the LIVE value (core/perform.hpp), so
                 // `low` is a record for the screen; with the macro knob already up, the parameter
@@ -1234,6 +1244,9 @@ void Engine::apply_mixer_bytes() {
     sends_from_bytes(sends_, settings.sends, beat_seconds);
     master_from_bytes(master_, settings.master);
     master_.kills = uint8_t(settings.eq_kills & kKillAll);
+    // The EQ's bands come from the performance layer, which reads these bytes as its base: the
+    // morph and the macros go over the knobs. Recomputed before this block's mixer.prepare.
+    perform_dirty_ = true;
     // `Mixer::prepare` compares against what it last resolved, so an unchanged struct costs one
     // comparison and a changed one redesigns only what moved. Nothing to do here but hand it
     // over on the next block.
@@ -1299,6 +1312,9 @@ uint32_t Engine::gate_frames_for(int track, uint8_t length_index) const {
 // stored kit is still there, so releasing a throw or sweeping the morph back needs no memory of
 // what it was.
 
+static_assert(kMasterEqFirst == int(MasterField::eq_low) && kMasterBands == kKillBands,
+              "core/perform.hpp's view of the master EQ bytes and dsp/buses.hpp's disagree");
+
 void Engine::apply_performance() {
     if (!perform_dirty_) return;
     perform_dirty_ = false;
@@ -1319,6 +1335,23 @@ void Engine::apply_performance() {
     // calls a consequence rather than a decision.
     for (int m = 0; m < kMacros; m++) {
         macro_apply(macros_.macros[m], macro_position_[m], performed_);
+    }
+
+    // The master kill EQ's bands, by the same layering: the knobs, the morph, the macros. Into
+    // the mixer's settings here, because nothing else rebuilds them when only a macro moves.
+    for (int b = 0; b < kMasterBands; b++) {
+        performed_master_[b] = project_.settings.master[kMasterEqFirst + b];
+    }
+    if (scene_a_ < kScenes && scene_b_ < kScenes) {
+        scene_morph_master(scenes_.scenes[scene_a_], scenes_.scenes[scene_b_], morph_,
+                           performed_master_);
+    }
+    for (int m = 0; m < kMacros; m++) {
+        macro_apply_master(macros_.macros[m], macro_position_[m], performed_master_);
+    }
+    for (int b = 0; b < kMasterBands; b++) {
+        const uint8_t field = uint8_t(int(MasterField::eq_low) + b);
+        master_field_set(master_, field, master_value_from_byte(field, performed_master_[b]));
     }
 
     // The throw, over everything: it is the most immediate thing on the panel and should not be

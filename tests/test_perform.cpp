@@ -22,7 +22,7 @@ namespace {
 using namespace strata;
 
 constexpr uint32_t kSlack = 64;
-constexpr uint32_t kPerformFileBytes = 3076;   // 2424 before the scenes' LFO section
+constexpr uint32_t kPerformFileBytes = 3152;   // 2424, then the scenes' LFO (12 + 640) and EQ (12 + 64)
 
 uint8_t g_buffer[kPerformFileBytes + kSlack];
 uint8_t g_alternate[kPerformFileBytes + kSlack];
@@ -600,11 +600,14 @@ TEST(perform_a_macro_target_naming_nothing_is_skipped) {
     perform_init(g_scenes, g_macros);
     Macro &macro = g_macros.macros[0];
     macro.targets[0].enabled = 1;
-    macro.targets[0].track = uint8_t(kTracks);        // no such track
+    macro.targets[0].track = uint8_t(kTracks + 1);    // no such track (kTracks is the master EQ)
     macro.targets[0].param = 0;
     macro.targets[1].enabled = 1;
     macro.targets[1].track = 0;
     macro.targets[1].param = uint8_t(kKitParams);     // no such parameter
+    macro.targets[2].enabled = 1;
+    macro.targets[2].track = kMacroMasterTrack;
+    macro.targets[2].param = uint8_t(kMasterBands);   // no such EQ band
     CHECK_EQ(macro_count(macro), 0);
 
     fill_out_from_kit(g_kit);
@@ -833,15 +836,17 @@ TEST(perform_the_header_says_strata_and_the_version) {
     const uint32_t written = write_performance();
     CHECK_EQ(int(g_buffer[0]), int(kMagic0));
     CHECK_EQ(int(peek_u16(g_buffer, kVersionOffset)), int(kPerformVersion));
-    CHECK_EQ(int(peek_u16(g_buffer, 6)), 3);
+    CHECK_EQ(int(peek_u16(g_buffer, 6)), 4);          // scenes, macros, the scenes' LFO and EQ
     CHECK_EQ(peek_u32(g_buffer, 8), written - kHeaderBytes);
     CHECK_EQ(peek_u32(g_buffer, kCrcOffset),
              crc32(g_buffer + kHeaderBytes, written - kHeaderBytes));
-    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 3 * kSectionEntryBytes);
+    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 4 * kSectionEntryBytes);
     CHECK(section_at(g_buffer, kSectionPerformMacros) >
           section_at(g_buffer, kSectionPerformScenes));
     CHECK(section_at(g_buffer, kSectionPerformSceneLfo) >
           section_at(g_buffer, kSectionPerformMacros));
+    CHECK(section_at(g_buffer, kSectionPerformSceneMaster) >
+          section_at(g_buffer, kSectionPerformSceneLfo));
 }
 
 TEST(perform_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
@@ -1015,9 +1020,11 @@ TEST(perform_a_macro_naming_the_track_or_parameter_one_past_the_end_drives_nothi
     }
     for (int p = 0; p < kKitParams; p++) guard.after[p] = 64;
     Macro macro;
-    macro.targets[0] = MacroTarget{1, uint8_t(kTracks), 0, 0, 0};
+    macro.targets[0] = MacroTarget{1, uint8_t(kTracks + 1), 0, 0, 0};
     macro.targets[1] = MacroTarget{1, 0, uint8_t(kKitParams), 0, 0};
-    CHECK_EQ(macro_count(macro), 0);
+    // A master EQ target is not a track target: macro_apply leaves it to macro_apply_master.
+    macro.targets[2] = MacroTarget{1, kMacroMasterTrack, 0, 0, 0};
+    CHECK_EQ(macro_count(macro), 1);
     macro_apply(macro, 127, guard.out);
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(guard.out[t][p]), 64);
@@ -1077,16 +1084,16 @@ TEST(perform_a_payload_declared_one_byte_past_the_file_is_truncated) {
 TEST(perform_a_section_one_byte_longer_than_the_payload_or_a_short_macro_table_is_malformed) {
     fill_performance();
     const uint32_t size = write_performance();
-    // The LAST section, so one byte more runs past the payload (the macros were last until the
-    // scenes' LFO section followed them).
-    const uint32_t entry = section_entry_at(g_buffer, kSectionPerformSceneLfo);
-    const uint32_t len = peek_u32(g_buffer, entry + 8);
-    poke_u32(g_buffer, entry + 8, len + 1);
+    // The LAST section, the scenes' master EQ, so one byte more runs past the payload.
+    const uint32_t last = section_entry_at(g_buffer, kSectionPerformSceneMaster);
+    const uint32_t last_len = peek_u32(g_buffer, last + 8);
+    poke_u32(g_buffer, last + 8, last_len + 1);
     refresh_crc(g_buffer);
     CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
              int(SerializeResult::malformed));
 
-    // A macro table one byte short, and a scenes' LFO section one byte short: both damage.
+    // A macro table one byte short, a scenes' LFO section one byte short, and a scenes' master
+    // section one byte short: all damage, not an old file.
     write_performance();
     const uint32_t macros = section_entry_at(g_buffer, kSectionPerformMacros);
     poke_u32(g_buffer, macros + 8, peek_u32(g_buffer, macros + 8) - 1);
@@ -1094,8 +1101,16 @@ TEST(perform_a_section_one_byte_longer_than_the_payload_or_a_short_macro_table_i
     CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
              int(SerializeResult::malformed));
 
+    const uint32_t entry = section_entry_at(g_buffer, kSectionPerformSceneLfo);
+    const uint32_t len = peek_u32(g_buffer, entry + 8);
     write_performance();
     poke_u32(g_buffer, entry + 8, len - 1);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::malformed));
+
+    write_performance();
+    poke_u32(g_buffer, last + 8, last_len - 1);
     refresh_crc(g_buffer);
     CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
              int(SerializeResult::malformed));
@@ -1110,13 +1125,15 @@ TEST(perform_the_section_table_reserved_bytes_are_written_as_zero) {
 }
 
 TEST(perform_a_macro_target_naming_track_or_param_one_past_the_end_is_dropped_whole) {
-    for (int which = 0; which < 2; which++) {
+    // One past the last track (kTracks is the master EQ now), one past the last parameter, and
+    // one past the master EQ's last band.
+    for (int which = 0; which < 3; which++) {
         fill_performance();
         const uint32_t size = write_performance();
         const uint32_t at = section_at(g_buffer, kSectionPerformMacros);
         g_buffer[at + 0] = 1;
-        g_buffer[at + 1] = which == 0 ? uint8_t(kTracks) : 0;
-        g_buffer[at + 2] = which == 0 ? 0 : uint8_t(kKitParams);
+        g_buffer[at + 1] = which == 0 ? uint8_t(kTracks + 1) : (which == 1 ? 0 : kMacroMasterTrack);
+        g_buffer[at + 2] = which == 0 ? 0 : (which == 1 ? uint8_t(kKitParams) : uint8_t(kMasterBands));
         g_buffer[at + 3] = 30;
         g_buffer[at + 4] = 90;
         refresh_crc(g_buffer);
@@ -1163,6 +1180,107 @@ TEST(macro_apply_sweeps_from_the_live_value_and_writes_nothing_at_rest) {
 }
 
 
+// --- the master kill EQ in scenes and macros --------------------------------------------------
+
+TEST(perform_scene_master_bytes_round_trip_and_an_older_file_stores_none) {
+    fill_performance();
+    const uint8_t bands[kMasterBands] = {10, 64, 120};
+    scene_capture_master(g_scenes.scenes[3], bands);
+    g_scenes.scenes[7].master[1] = 33;
+    g_scenes.scenes[7].master_stored = 0x2;
+    const uint32_t size = write_performance();
+
+    perform_init(g_loaded_scenes, g_loaded_macros);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::ok));
+    for (int s = 0; s < kScenes; s++) {
+        for (int b = 0; b < kMasterBands; b++) {
+            CHECK_EQ(int(g_loaded_scenes.scenes[s].master[b]), int(g_scenes.scenes[s].master[b]));
+        }
+        CHECK_EQ(int(g_loaded_scenes.scenes[s].master_stored),
+                 int(g_scenes.scenes[s].master_stored));
+    }
+    CHECK_EQ(int(g_loaded_scenes.scenes[3].master_stored), 0x7);
+    CHECK_EQ(int(g_loaded_scenes.scenes[3].master[2]), 120);
+
+    // A file from before the section: drop the fourth table entry by declaring three sections, as
+    // the LFO's writer did (the table is a lookup by id, so the extra bytes are never asked for).
+    poke_u16(g_buffer, 6, 3);
+    refresh_crc(g_buffer);
+    g_loaded_scenes.scenes[3].master_stored = 0x7;      // left over from the last project
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::ok));
+    for (int s = 0; s < kScenes; s++) CHECK_EQ(int(g_loaded_scenes.scenes[s].master_stored), 0);
+    // And the rest of the file still arrived.
+    CHECK_EQ(int(g_loaded_scenes.scenes[0].stored[0][0]), int(g_scenes.scenes[0].stored[0][0]));
+}
+
+TEST(perform_a_scene_master_byte_and_its_stored_bits_are_clamped) {
+    fill_performance();
+    const uint32_t size = write_performance();
+    const uint32_t at = section_at(g_buffer, kSectionPerformSceneMaster);
+    g_buffer[at + 0] = 200;
+    g_buffer[at + 3] = 0xFF;
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded_scenes.scenes[0].master[0]), 127);
+    CHECK_EQ(int(g_loaded_scenes.scenes[0].master_stored), 0x7);
+}
+
+TEST(perform_the_master_morph_follows_scene_morph_s_rule) {
+    Scene a, b;
+    uint8_t out[kMasterBands] = {64, 64, 64};
+    // Neither stores anything: untouched.
+    scene_morph_master(a, b, kMorphScale / 2, out);
+    CHECK_EQ(int(out[0]), 64);
+
+    // B stores LOW at 0 (a kill): A's end is the live value, so half way is half way down.
+    const uint8_t killed[kMasterBands] = {0, 64, 64};
+    scene_capture_master(b, killed);
+    scene_morph_master(a, b, kMorphScale / 2, out);
+    CHECK_EQ(int(out[0]), 32);
+    for (int i = 0; i < kMasterBands; i++) out[i] = 64;
+    scene_morph_master(a, b, kMorphScale, out);
+    CHECK_EQ(int(out[0]), 0);
+    CHECK_EQ(int(out[1]), 64);
+    for (int i = 0; i < kMasterBands; i++) out[i] = 64;
+    scene_morph_master(a, b, 0, out);
+    CHECK_EQ(int(out[0]), 64);
+
+    // Counted with the scene, and erased with it.
+    CHECK_EQ(scene_count(b), 3);
+    scene_erase(b);
+    CHECK_EQ(scene_count(b), 0);
+    CHECK_EQ(int(b.master_stored), 0);
+}
+
+TEST(perform_a_master_macro_target_drives_the_eq_and_no_track) {
+    Macro macro;
+    macro.targets[0] = MacroTarget{1, kMacroMasterTrack, 0, 64, 0};   // LOW towards a kill
+    macro.targets[1] = MacroTarget{1, 2, 5, 0, 127};                   // a track parameter
+    CHECK_EQ(macro_count(macro), 2);
+
+    uint8_t eq[kMasterBands] = {64, 64, 64};
+    macro_apply_master(macro, 0, eq);
+    CHECK_EQ(int(eq[0]), 64);                       // at rest it lets go
+    macro_apply_master(macro, 127, eq);
+    CHECK_EQ(int(eq[0]), 0);
+    CHECK_EQ(int(eq[1]), 64);
+    CHECK_EQ(int(eq[2]), 64);
+
+    fill_kit(g_kit);
+    fill_out_from_kit(g_kit);
+    macro_apply(macro, 127, g_out);
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitParams; p++) {
+            if (t == 2 && p == 5) continue;
+            CHECK_EQ(int(g_out[t][p]), int(g_kit.tracks[t].params[p]));
+        }
+    }
+    CHECK_EQ(int(g_out[2][5]), 127);
+}
+
 TEST(perform_scenes_keep_their_lfo_bytes_through_a_save) {
     fill_performance();
     Scene &scene = g_scenes.scenes[5];
@@ -1197,7 +1315,12 @@ TEST(perform_a_file_from_before_the_lfo_loads_with_no_scene_storing_one) {
     fill_performance();
     for (int t = 0; t < kTracks; t++) scene_set(g_scenes.scenes[0], t, kKitSoundParams, 77);
     const uint32_t size = write_performance();
-    const uint32_t old_size = drop_last_section(g_buffer, g_alternate);
+    // Before the LFO there was no scenes' EQ section either: drop both, the EQ's first.
+    uint8_t *middle = g_buffer;
+    const uint32_t without_eq = drop_last_section(g_buffer, g_alternate);
+    CHECK_EQ(without_eq, 3076u);
+    for (uint32_t i = 0; i < without_eq; i++) middle[i] = g_alternate[i];
+    const uint32_t old_size = drop_last_section(middle, g_alternate);
     CHECK_EQ(old_size, 2424u);
     CHECK(old_size < size);
     // Whatever the set held before, the old file says no scene stores an LFO byte.

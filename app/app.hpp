@@ -146,6 +146,10 @@ constexpr int kMixerPageCount = int(sizeof(kMixerPages) / sizeof(kMixerPages[0])
 
 // Which MIXER page is the kill EQ's, for the plain-push kill switches.
 constexpr int kMixerEqPage = kMixerPageCount - 1;
+
+// PERFORM: FUNC + STEP 1-4 hand a macro the LFO's bytes, FUNC + STEP 5-7 the master EQ's bands.
+constexpr int kMacroEqFirstStep = kLfoParams;
+static_assert(kMacroEqFirstStep + kMasterBands <= 16, "the EQ's bands fit on the STEP keys");
 static_assert(kMixerPages[kMixerEqPage].master &&
                   kMixerPages[kMixerEqPage].field[0] == int8_t(MasterField::eq_low),
               "kMixerEqPage no longer names the kill EQ's page");
@@ -484,11 +488,17 @@ public:
         // this is the gesture they have; without it a macro could never be set up at all, and
         // "4 macros driving up to 4 parameters" would be a feature with no way in.
         // With FUNC held, STEP 1-4 are the LFO's four bytes instead (WAV RAT DEP DST), so a macro
-        // can sweep an LFO's depth or rate too. STEP 5-16 do nothing with FUNC.
+        // can sweep an LFO's depth or rate too.
         if (mode_ == Mode::perform && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
+            // FUNC + STEP 5-7 are the master kill EQ's LOW, MID and HI: a macro can sweep the lows
+            // out over a build. STEP 8-16 with FUNC do nothing rather than assign a track
+            // parameter the hand did not mean.
             const int step = key - ENAGA_KEY_STEP1;
             if (down && !shift_) assign_macro(step);
             if (down && shift_ && step < kLfoParams) assign_macro(kParams + step);
+            if (down && shift_ && step >= kMacroEqFirstStep && step < kMacroEqFirstStep + kMasterBands) {
+                assign_macro_master(step - kMacroEqFirstStep);
+            }
             return;
         }
 
@@ -3151,6 +3161,29 @@ public:
         append_number(out, uint32_t(selected_) + 1);
         append(out, " ");
         append(out, track_param_name(param));
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    // Assign one master kill EQ band to the selected macro, by the same "towards the far end"
+    // guess: a band at flat or above heads for a kill, which is what a build wants.
+    void assign_macro_master(int band) {
+        if (band < 0 || band >= kMasterBands) return;
+        const uint8_t now = engine_.performed_master(band);
+        const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
+        Command command;
+        command.cmd = Cmd::macro_assign;
+        command.track = 0;
+        command.a = uint8_t(macro_selected_);
+        command.b = uint8_t(kTrackParams + band);          // past the track parameters: the EQ
+        command.c = now;
+        command.d = far;
+        post_command(command);
+
+        char *out = notice_buffer_;
+        *out++ = char('A' + macro_selected_);
+        append(out, " EQ ");
+        append(out, master_field_name(uint8_t(int(MasterField::eq_low) + band)));
         *out = 0;
         notice(notice_buffer_);
     }

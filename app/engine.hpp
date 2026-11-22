@@ -163,6 +163,11 @@ public:
         return modulating_[track] ? modulated_[track] : effective_[track];
     }
 
+    // The master EQ band byte being heard (0-2), with the morph and macros over the knob.
+    uint8_t performed_master(int band) const {
+        return band >= 0 && band < kMasterBands ? performed_master_[band] : 0;
+    }
+
     // The scenes and macros, writable, for a LOAD to fill -- the same hole and the same rules as
     // `project_for_load`: main context, and only before the audio side reads them again. They
     // are 2.4 KiB, which is more than a 16-byte command carries.
@@ -349,6 +354,9 @@ private:
     // change the kit: none of them is saved, none is undone, and letting go of a throw has to
     // get the stored value back.
     uint8_t performed_[kTracks][kTrackParams] = {};
+    // The master kill EQ's three band bytes with the morph and the macros over the project's,
+    // which is what the mixer runs on. The kill switches are not in here: they are the panel's.
+    uint8_t performed_master_[kMasterBands] = {64, 64, 64};
     bool perform_dirty_ = true;
 
     // Which of a track's parameters the CURRENT step has locked, one bit each. The performance

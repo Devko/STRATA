@@ -356,6 +356,14 @@ New after the walkthrough was written: a DJ isolator on the master, LOW / MID / 
       U1's figure (the EQ switches itself off).
 - [ ] Kill HI, save (FUNC+PROJECT twice), power cycle: it reopens with HI killed (`KILL` on the
       EQ page). Bring it back.
+- [ ] **A macro on the EQ.** PERFORM, select macro A (LEFT/RIGHT), FUNC + STEP 5: `A EQ LOW`.
+      Turn A up slowly over a few bars: the lows fade down to nothing; back to 0 and they are
+      exactly back. CLR clears macro A.
+- [ ] **A scene with the EQ.** In PERFORM put empty scene 9 on side A (hold SCENE A + STEP 9).
+      MIXER EQ: LOW to `KILL`. PERFORM: OK captures the sound, EQ knobs included, into scene 9.
+      EQ page: LOW back to `0`. PERFORM: scene 9 to side B (SCENE B + STEP 9), empty scene 10 to
+      side A (SCENE A + STEP 10). Sweep VALUE towards B: the lows fade out; back towards A, they
+      return. The EQ page's LOW knob stays at `0` throughout (a morph is not an edit).
 
 ## 13e. The per-track LFO and per-track swing (8 min)
 

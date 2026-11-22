@@ -264,7 +264,7 @@ TEST(app_the_first_save_of_a_project_writes_all_ten_files) {
     project_file(path, "KIT.BIN");
     CHECK_EQ(host.file_bytes(path), 1120);  // 1076, then the LFO section: 12 + 8 x 4
     project_file(path, "PERFORM.BIN");
-    CHECK_EQ(host.file_bytes(path), 3076);  // 2424, then the scenes' LFO: 12 + 16 x 8 x 5
+    CHECK_EQ(host.file_bytes(path), 3152);  // 2424, the scenes' LFO (12 + 16 x 8 x 5), their EQ (12 + 16 x 4)
 }
 
 TEST(app_a_saved_project_reloads) {
