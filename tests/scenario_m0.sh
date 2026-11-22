@@ -68,7 +68,11 @@ check(report.get("app_name") == "STRATA", "package name is STRATA",
       f'name={report.get("app_name")!r}')
 check(not report.get("crash_reason"), "no crash",
       f'reason={report.get("crash_reason")!r}')
-check("strata m0 ready" in log, "init() ran to completion")
+# "strata ready", not "strata m0 ready": app/app.hpp's log line lost the milestone from its text
+# at some point and this check was never updated, so THIS SCENARIO HAS BEEN FAILING SILENTLY --
+# nobody ran it, because the habit was to run the newest scenarios after a change. A stale
+# expectation in a test that nobody runs is worse than no test.
+check("strata ready" in log, "init() ran to completion")
 check("APP INIT FAILED" not in log, "init() returned true")
 
 # system::device() resolves from the bootloader, so this proves the real call rather than

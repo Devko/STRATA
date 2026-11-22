@@ -96,7 +96,17 @@ check(percent > 5.0, "the beat is actually sounding", f"{percent:.2f}% peak")
 
 # An upper guard, loose on purpose: this is a regression tripwire, not M1's exit criterion.
 # The bar of 15% belongs to the unit (docs/BUDGET.md explains why these differ).
-check(percent < 40.0, "load has not regressed badly", f"{percent:.2f}% peak")
+#
+# RAISED from 40 to 50, and the reason is recorded rather than the number quietly changed. It
+# fired at 41.26% because the DEFAULT KIT has grown since M1 wrote this: it had four tracks and
+# now has eight, with a four-note MIN7 chord on VA POLY worth +12.75 points on its own
+# (docs/BUDGET.md), a sidechain duck that was dead code until M6, beat repeat's always-on ring
+# and resampling's capture tap. None of that is a regression; all of it is the instrument this
+# milestone's beat is now played on.
+#
+# 50 keeps the tripwire useful: it is nine points above today's reading, so another VA POLY voice
+# would fire it, and it is still below the 60% the project is aiming at.
+check(percent < 50.0, "load has not regressed badly", f"{percent:.2f}% peak")
 
 print()
 print(f"emulator peak load: {percent:.2f}%  ({peak} of {CYCLES_PER_BLOCK} cycles, {blocks} blocks)")
