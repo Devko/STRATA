@@ -40,7 +40,8 @@ STRATA has **eight tracks**. The eight lower pads are the tracks, left to right:
 it and hear it. Each track holds one **machine** (the sound source) followed by the same fixed
 **insert chain**: drive, a multimode filter, lo-fi, the amplitude stage, the sidechain duck, pan
 and level. From there each track goes to the mixer, the two send effects (delay and reverb) and
-the master bus.
+the master bus: the DJ filter, a three-band kill EQ, the glue compressor, the limiter and the
+output level.
 
 The selected track is the one the STEP keys, the encoders, KEYS and MUTATE work on. UP and DOWN
 also walk the tracks in GRID, EDIT and KEYS.
@@ -244,6 +245,8 @@ Then try the rest of the upper row, in any mode:
 - Hold **REPEAT** (upper 2) for a beat repeat of the master; turn VALUE while holding it to pick
   1/4 to 1/16T.
 - Select the bass and tap **MUTATE** (upper 7). Like it: OK. Don't: CLR.
+- Hold **FUNC** and push encoder **A**: the lows are gone (`KILL LOW`). Push FUNC+A again on the
+  one and they slam back (`LOW BACK`). FUNC+B and FUNC+C do the same for the mids and the highs.
 
 ### 8. Save
 
@@ -548,6 +551,26 @@ release and the music is where it would have been. In PERFORM, **FUNC+UP / FUNC+
 **auto-fill**: OFF, or FILL on the last bar of every 4, 8 or 16. PERFORM's lower lines show what
 is active: `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n`.
 
+### The master kill EQ
+
+The master has a DJ-style **kill EQ** (an isolator) after the DJ filter: three bands split at
+250 Hz and 2.5 kHz, LOW, MID and HI. Each band has a knob and a kill switch.
+
+- **The switches**: FUNC + push encoder A, B or C, in **any mode** (PERFORM included, where
+  turning the encoders is still the macros). The notice says `KILL LOW` or `LOW BACK`. A switch
+  latches: push to take the band out, push again to bring it back. On the MIXER's EQ page a
+  plain push of A, B or C does the same.
+- **The knobs**: MIXER, then the selection keys (or LEFT/RIGHT) to the last page, `EQ`. A, B and
+  C are LOW, MID and HI: centre (`0`) is flat, down to `KILL` at the bottom, up to +6 dB at the
+  top (`+63`). D is empty.
+
+A kill takes its band down by 30-50 dB within about 10 ms and comes back as fast, with no click.
+Coming back puts the band where its knob is. While all three bands are flat and no switch is on,
+the EQ is bypassed and costs nothing; turning a knob or throwing a switch starts it, and it
+switches itself off again a few milliseconds after everything is flat. The knobs and the
+switches are saved with the project, so a project saved with the lows killed reopens that way:
+look for `KILL` on the EQ page.
+
 ### Mutation
 
 In PERFORM, UP/DOWN pick the mutation and the selection keys the amount (0-100, in tens):
@@ -662,6 +685,8 @@ names one.
   0 is always exactly where you started.
 - **Mutate, then decide.** MUTATE is free to try: CLR takes it back, and FUNC+CLR undoes even a
   kept one later.
+- **Kill the lows for the build.** FUNC+A takes the kick and bass out; push it again exactly on
+  the one of the drop. FUNC+C on its own thins a busy top end for a breakdown.
 - **Throws on the off-beat parts.** THROW on the rim or the chord for a bar, then let it ring.
 - **Resample a moment you like.** An 8-bar take of a jam into track 8, then sliced or on GRAIN,
   turns a happy accident into material.

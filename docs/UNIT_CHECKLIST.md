@@ -43,6 +43,10 @@ needed for tonight's unit session; do them if the PC is free.
       chords. Crosses 60% at `____` tracks, overruns at `____`.
 - [ ] **E4.** `scenario_m5.sh` against `scenario_m3.sh`, before and after PR #26 (the prepare
       memo's share). Gap before `________`, after `________`
+- [ ] **E6.** The master kill EQ's cost: `tests/scenario_killeq.sh` (kills all three bands, so
+      the EQ runs) against `tests/scenario_m7.sh` (EQ bypassed), both compilers. Proxy estimate
+      ~1.3 points cl6x, ~2.2 GCC-only (`docs/BUDGET.md`, "The master kill EQ").
+      cl6x `________ %` vs `________ %`, GCC `________ %` vs `________ %`
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
@@ -312,6 +316,29 @@ Section 14 reloads the saved project, which puts the delay back afterwards.
       after `________` (at 130 BPM and feedback 0.95 this can take several minutes; the tail
       must keep decaying and never grow).
 
+## 13d. The master kill EQ (5 min)
+
+New after the walkthrough was written: a DJ isolator on the master, LOW / MID / HI split at
+250 Hz and 2.5 kHz. Play A01 GROOVE.
+
+- [ ] **FUNC + push A** (hold FUNC, push encoder A): `KILL LOW`, and the kick and bass are gone
+      within a few milliseconds, **no click or thump**. Push FUNC+A again on the one: `LOW BACK`,
+      they slam back, no click.
+- [ ] FUNC + push B kills the mids (clap body, chord), FUNC + push C the highs (hats). With all
+      three killed it is almost silent; bring them back one at a time.
+- [ ] The same from PERFORM (FUNC+MIXER): FUNC + push works, and turning A-D is still the macros.
+- [ ] MIXER, selection keys to the last page: `MIXER EQ`, LOW MID HI on A B C. Centre reads `0`,
+      bottom `KILL`, top `+63`. Sweep B down slowly: the mids fade out smoothly, no zipper noise.
+      Turn A to the top: the lows +6 dB, the limiter holds it (PEAK at most 1.0).
+- [ ] On that page a plain push of A, B or C throws the switch; a killed band reads `KILL`
+      whatever its knob says, and comes back to where the knob is.
+- [ ] **U6.** Kill LOW and let it play **60 s**: **MAX `________ %`**, against U1's
+      `________ %`. Difference = the EQ's cost on the unit: `________` points.
+- [ ] Bring everything back to flat (`0`, no `KILL`): after a moment MAX should fall back to
+      U1's figure (the EQ switches itself off).
+- [ ] Kill HI, save (FUNC+PROJECT twice), power cycle: it reopens with HI killed (`KILL` on the
+      EQ page). Bring it back.
+
 ## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). PROJECT, FUNC+LEFT once: `AGAIN TO RELOAD`, nothing changes.
@@ -390,6 +417,8 @@ Enaga's menu and start STRATA6.
 | U3 GRAIN on the take, DEN/SPR 127: PIT 64 / PIT 127 (8b) | |
 | U5 96 kHz WAV load time, 15 s and 30 s (13b) | |
 | U4 delay tail: LOAD while ringing, time to drop (13c) | |
+| E6 kill EQ, `scenario_killeq.sh` vs `scenario_m7.sh`, cl6x / GCC (PC) | |
+| U6 A01 GROOVE MAX with LOW killed, 60 s, and the difference to U1 (13d) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
 | U2 STRATA6 + tracks 5 and 6 as MIN11 POLY, capped at 12 voices (16) | |
@@ -1215,7 +1244,7 @@ master DJ filter sat at a compile-time default for the life of the app, and PROJ
 section for them. All fourteen are now encoder bytes in the project file. `docs/REVIEW.md` 2a
 records where each gesture went and why.
 
-- [ ] F7, then the selection keys: MIXER walks TRK 1-4, TRK 5-8, DLY, REV, ROUTE, MST and back
+- [ ] F7, then the selection keys: MIXER walks TRK 1-4, TRK 5-8, DLY, REV, ROUTE, MST, EQ and back
       round. Every page draws, with its four names, values and bars.
 - [ ] On DLY, encoder A walks the delay's DIVISION: `1/32`, `1/16T`, `1/16`, `1/8T`, `1/8`,
       `1/8D`, `1/4`, `1/4D`, `1/2`, `1/1`. The page's `TIME nnn MS` line follows it, and the
@@ -1236,6 +1265,11 @@ records where each gesture went and why.
       The notice shows `DJ OFF`, `DJ LP nn` or `DJ HP nn`. The tempo must not move with it.
 - [ ] Save, power cycle, reopen: every one of the fourteen comes back. Before this they did not
       exist in any file.
+- [ ] **The kill EQ** (added 2026-11-22): MIXER's seventh page, `EQ`, LOW MID HI on A B C, flat at
+      `0`, `KILL` at the bottom, `+63` at the top; push A-C there, or FUNC + push A-C anywhere,
+      latches that band's kill switch. The three bands and the switches save with the project
+      (the mixer section grew from 14 to 18 bytes; a 14-byte section from an older build loads
+      with the EQ flat). A kill and its return must not click on a full-scale kick.
 - [ ] A project saved by an older build (two sections, 251 bytes) still loads, and its sends and
       master come up at the DEFAULTS rather than at the previous project's.
 - [ ] **The tempo saves.** Set 142.0, save, power cycle: it reopens at 142.0, not 130.0. The

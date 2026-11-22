@@ -135,9 +135,20 @@ constexpr MixerPage kMixerPages[] = {
                       -1, -1}},
     {"MST", true, {int8_t(MasterField::dj), int8_t(MasterField::compressor),
                    int8_t(MasterField::limit), int8_t(MasterField::level)}},
+    // The kill EQ, next to the master it sits in. Push A, B or C to throw that band's kill
+    // switch; FUNC + push does the same from any mode.
+    {"EQ", true, {int8_t(MasterField::eq_low), int8_t(MasterField::eq_mid),
+                  int8_t(MasterField::eq_high), -1}},
 };
 
+
 constexpr int kMixerPageCount = int(sizeof(kMixerPages) / sizeof(kMixerPages[0]));
+
+// Which MIXER page is the kill EQ's, for the plain-push kill switches.
+constexpr int kMixerEqPage = kMixerPageCount - 1;
+static_assert(kMixerPages[kMixerEqPage].master &&
+                  kMixerPages[kMixerEqPage].field[0] == int8_t(MasterField::eq_low),
+              "kMixerEqPage no longer names the kill EQ's page");
 
 // Every send and master field has a slot on some page. Without this a field added to
 // dsp/buses.hpp would be saved, loaded and completely unreachable -- which is the bug this whole
@@ -357,6 +368,18 @@ public:
             end_gesture();
             notice("LOCK CLEARED");
             return;
+        }
+
+        // The master kill EQ's kill switches: push A, B or C on the MIXER's EQ page, or FUNC +
+        // push A, B or C from anywhere -- next to FUNC + VALUE, the DJ filter, so both master
+        // moves are under one hand in every mode, PERFORM included. A switch latches: push to
+        // take the lows out for the build, push again on the one.
+        if (key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C) {
+            const bool on_eq_page = mode_ == Mode::mixer && mixer_bank_ == kMixerEqPage;
+            if (shift_ || on_eq_page) {
+                if (down) toggle_kill(key == ENAGA_KEY_PUSH_A ? 0 : (key == ENAGA_KEY_PUSH_B ? 1 : 2));
+                return;
+            }
         }
 
         // MUTE mode turns STEP 1-8 into the eight stored mute states: recall on a tap, store
@@ -2088,6 +2111,20 @@ public:
         notice(master ? master_field_name(uint8_t(field)) : send_field_name(uint8_t(field)));
     }
 
+    // Throw one kill switch. The notice says what it will be once the audio side has applied it,
+    // which is the opposite of what the project says now.
+    void toggle_kill(int band) {
+        if (band < 0 || band >= kKillBands) return;
+        post(Cmd::eq_kill, 0, 0, uint8_t(band), 2);
+        const bool was = (engine_.project().settings.eq_kills >> band & 1u) != 0;
+        static const char *const killed[kKillBands] = {"KILL LOW", "KILL MID", "KILL HI"};
+        static const char *const back[kKillBands] = {"LOW BACK", "MID BACK", "HI BACK"};
+        notice(was ? back[band] : killed[band]);
+        // Logged as well: a kill is a performance move whose effect the emulator cannot hear,
+        // so tests/scenario_killeq.sh reads it here.
+        enaga::log(was ? back[band] : killed[band]);
+    }
+
     // What a slot's byte MEANS, as four characters at most: a division, a switch, or the byte.
     void append_mixer_value(char *&out, int page, int slot) {
         const int8_t field = kMixerPages[page].field[slot];
@@ -2114,6 +2151,23 @@ public:
             } else {
                 append(out, "HP");
                 append_number(out, uint32_t(signed_value));
+            }
+            return;
+        }
+        if (kMixerPages[page].master && field >= int8_t(MasterField::eq_low) &&
+            field <= int8_t(MasterField::eq_high)) {
+            // Centred like the DJ filter: 0 is flat, and a switched band or a knob at the
+            // bottom is a KILL.
+            const int band = field - int8_t(MasterField::eq_low);
+            const bool switched = (engine_.project().settings.eq_kills >> band & 1u) != 0;
+            const int signed_value = int(byte) - 64;
+            if (switched || byte == 0) {
+                append(out, "KILL");
+            } else if (signed_value == 0) {
+                append(out, "0");
+            } else {
+                append(out, signed_value < 0 ? "-" : "+");
+                append_number(out, uint32_t(signed_value < 0 ? -signed_value : signed_value));
             }
             return;
         }
