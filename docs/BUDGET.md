@@ -1244,6 +1244,35 @@ two flags are off until tonight's measurements.
 | E9 | A/B of the whole pass | `bash tools/ti_ab.sh --gcc` (about an hour: six variants x six scenarios x two compilers, plus renders) | the two load tables it prints, and its audio check. **Expected: every variant `identical`.** A difference means cl6x reassociates differently in a fused loop than in separate ones (`--fp_reassoc`), and is a finding to bring back, not a reason to merge a flag |
 | E10 | VA POLY per voice after the pass | E2's method (MIN7 vs MIN11 in `groove()`), on `head` | was 2.16 cl6x / 3.82 GCC; expected ~1.7 cl6x |
 
+#### Tonight's results (2026-11-22, Roland's PC, cl6x 8.5.0.LTS, emulator 11ac9a0)
+
+`tools/ti_ab.sh --gcc` on 426a4b5 (main + #65 + #17). `base` did not build (a tic6x GCC ICE in
+`core/factory.cpp` on the older tree, fixed by PR #71), so there is no before/after column yet.
+
+| Scenario, cl6x | nofuse | fused (head then) | hints | packed |
+| --- | --- | --- | --- | --- |
+| m3 | 25.24% | 23.48% (-1.76) | 23.45% | 23.48% |
+| m1 / m7 / factory / samples | 25.96% | 24.27% (-1.69) | 24.25% | 24.27% |
+| ambient | 31.62% | 29.78% (-1.84) | 29.75% | 29.78% |
+
+GCC only: 49.16 -> 48.47 (m1), 44.12 -> 43.25 (m3). **Audio:** with GCC every variant is
+identical. With cl6x, `hints` and `packed` are identical to the fused head, but **the fused head
+and `nofuse` differ on 365,891 of 401,018 samples, worst 1.44 of full scale**. Reassociation
+alone cannot do that: compiling `valoops.ti.c` with `-fassociative-math` on the host moves A01's
+render by at most 1 LSB of 16 bits. So one of the two cl6x builds plays something different,
+and the fused loop is the new code. **`STRATA_VA_FUSED` is therefore 0 again** (PR #72): the unit
+runs the three passes it has always run. `tools/ti_ab.sh` now has a `fused` variant and compares
+each variant's cl6x render with its GCC render (`tools/render_diff.py`), which says which build
+departs and where it starts.
+
+`tools/ti_loops.py --enaga` confirmed the in-place reasoning: Enaga's `enaga_svf_cascade` has a
+54-cycle version (in and out may alias) beside its 21-cycle one, and an in-place call gets the
+54; `strata_svf_cascade_inplace` is 21. `enaga_one_pole_process` 18 vs `strata_one_pole_inplace`
+13, `enaga_biquad_process` 27 vs 9. `hints` buys 0.02-0.03 points and `packed` nothing, so both
+stay off. Not pipelined: `strata_antialias_stereo` and `strata_kill_eq`'s second loop (no
+schedule found), `strata_long_delay_process` and `strata_hall_process:153` (control code in the
+loop), and Enaga's `enaga_oscillator_sync_add:177` (control code).
+
 **Turning a flag on** is one line in `dsp/tihints.h`, and needs all three: E9's audio check says
 `identical` for that variant, its load column is lower than `head` in the scenarios it touches
 (`samples` for PACKED; all of them for HINTS), and `make -C host test` still passes. Then record
