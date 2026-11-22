@@ -610,6 +610,7 @@ public:
                     held_used_ = true;                 // so the release does not toggle the trig
                     mode_ = Mode::grid;
                 } else if (shift_) {
+                    mutation_pending_ = false;         // settled, or CLR would undo a 2nd level
                     post(Cmd::redo);                   // F1 + OK = redo
                     end_gesture();
                     notice("REDO");
@@ -620,6 +621,10 @@ public:
 
             case ENAGA_KEY_CLR:
                 if (shift_) {
+                    // An undo settles a pending MUTATE: it has either just been taken back or was
+                    // never the newest edit. Left pending, the next plain CLR undid ANOTHER level
+                    // -- the edit before the mutation -- and said REVERTED.
+                    mutation_pending_ = false;
                     post(Cmd::undo);                   // F1 + CLR = undo
                     end_gesture();
                     notice("UNDO");

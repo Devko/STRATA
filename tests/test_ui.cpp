@@ -844,6 +844,35 @@ TEST(ui_a_mutation_is_kept_with_ok_and_reverted_with_clr_in_any_mode) {
     pump(2);
 }
 
+TEST(ui_an_undo_settles_a_pending_mutation) {
+    // MUTATE, then F1 + CLR takes it back. The mutation used to stay "pending", so the next plain
+    // CLR undid a SECOND level -- the edit before the mutation -- and said REVERTED.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    for (int i = 0; i < 16; i += 4) {
+        if ((app_engine().pattern().tracks[0].steps[i].flags & kStepTrig) == 0) {
+            step_down(i);
+            step_up(i);
+        }
+    }
+    step_down(1);                                    // the edit before the mutation: a trig
+    step_up(1);
+    pump(2);
+    const bool had_trig = (app_engine().pattern().tracks[0].steps[1].flags & kStepTrig) != 0;
+
+    app.on_pad_press(13, 100);                       // MUTATE
+    app.on_pad_release(13);
+    pump(2);
+    shift_key(ENAGA_KEY_CLR);                        // undo: the mutation is gone
+    pump(2);
+    key(ENAGA_KEY_CLR);                              // plain CLR: erases the track, as in GRID
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "REVERTED") != 0);
+    shift_key(ENAGA_KEY_CLR);                        // and that erase undoes back to the trig
+    pump(2);
+    CHECK_EQ((app_engine().pattern().tracks[0].steps[1].flags & kStepTrig) != 0, had_trig);
+}
+
 TEST(ui_a_keys_key_holds_its_note_until_it_comes_up) {
     // KEYS: the press plays, the release lets that same note go -- even after an octave change
     // while it was down -- and a mode change lets go of whatever is still held.
