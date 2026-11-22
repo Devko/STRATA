@@ -1219,6 +1219,20 @@ wants confirming on the unit, because "bit-exact" was argued against GCC and the
       docs/BUDGET.md next to the GCC-only table. That column is the one this container cannot
       produce, and the 60% target depends on it.
 
+## The shared VA POLY voice budget (2026-11-22)
+
+At most 12 VA POLY voices sound at once across every track (`Engine::kPolyVoiceBudget`). Past
+that, a new note fades out the quietest voice on any POLY track over 1.3 ms; notes that arrive
+while every counted voice is still waiting for its frame are dropped. Twelve is a starting point.
+
+- [ ] Switch three tracks to VA POLY (FUNC+EDIT, UP/DOWN), give each a six-note chord (MIN11) on
+      the same step, DEC high. Only two chords' worth sounds; the third track's notes are dropped
+      on that step. No glitch, no overrun. MAX `________ %`
+- [ ] Put the third track's chord one step later instead: it sounds, and the oldest, quietest
+      voices of the first two fade without a click.
+- [ ] With MAX from the line above and docs/BUDGET.md's per-voice cost on the unit, decide the
+      budget: largest that keeps the worst case under 60%. New value `________`
+
 ## Downsampled samples are low-passed at load
 
 core/pcm now filters a file above 48 kHz before resampling it, so content above 24 kHz no longer

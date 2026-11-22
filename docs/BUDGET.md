@@ -902,9 +902,12 @@ scene or knob really did move: those prepare as before.
    (M6), any track can host VA POLY, and nothing caps voices across tracks. At 2.16 points a
    voice (cl6x, emulator), eight tracks of six-voice chords would be ~104% of the block before the
    chains and sends, and **four** would reach about 60% with the other four tracks playing. GRAIN at full density is similar
-   (+9.2 points a track, GCC-only). This is a design decision, not an optimisation: a global
-   sustained-voice budget with cross-track stealing is the usual answer, and tonight's unit
-   figures should set its size.
+   (+9.2 points a track, GCC-only). **Answered 2026-11-22 (Roland chose a shared budget):**
+   `Engine::kPolyVoiceBudget` caps VA POLY voices across all tracks at 12. A new note past the
+   cap fades out the quietest started voice on any POLY track (`VaVoice::choke`, 64 frames), and
+   is dropped if every counted voice is still waiting for its frame. Twelve voices are ~26 points
+   with cl6x on emulator figures; the unit's MAX sets the final value (UNIT_CHECKLIST, "The
+   shared VA POLY voice budget"). GRAIN and VA MONO are not in the budget.
 2. **The unit may be slower than the emulator, not faster.** The emulator's cl6x default beat is
    19.17% (`scenario_m3.sh`); the unit's on-screen LOAD read up to about 26% at first boot. If
    the MAX readout confirms that ratio (~1.35x), the cache and DDR costs the emulator cannot see

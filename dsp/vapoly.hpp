@@ -139,6 +139,27 @@ public:
         return n;
     }
     // The note a slot holds, or -1 if it holds none. Slots are 0..kVoices-1.
+    // --- the shared voice budget (app/engine.cpp, make_room_for_poly_voice) ---
+    //
+    // A voice counts against the budget from the moment it takes a trig until it is silent,
+    // EXCEPT while it is choking: a choke is already paid for, and counting it would make the
+    // next note of a chord choke a second voice for the room the first one freed.
+    int budget_voices() const {
+        int n = 0;
+        for (const Slot &s : slots_) n += s.busy() && !s.voice.choking() ? 1 : 0;
+        return n;
+    }
+    // Whether a trig on `note` would take a voice that is not already counted: false when it
+    // retriggers the voice already sounding that note, or when every slot is busy and it would
+    // steal one of this machine's own (allocate(), in vapoly.cpp, decides the same way).
+    bool would_add_voice(uint8_t note) const;
+    // The quietest voice the budget may take: sounding, started, not already choking. Its slot,
+    // or -1 when there is none; `level` is its amplitude envelope's level.
+    int quietest_voice(float &level) const;
+    void choke(int slot) {
+        if (slot >= 0 && slot < kVoices) slots_[slot].voice.choke();
+    }
+
     int voice_note(int slot) const {
         if (slot < 0 || slot >= kVoices) return -1;
         return slots_[slot].busy() ? slots_[slot].note : -1;
