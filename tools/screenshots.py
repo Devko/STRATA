@@ -19,7 +19,7 @@ GFX = os.path.join(ROOT, "third_party", "enaga", "firmware", "hal", "gfx.c")
 W = H = 128
 SCALE = 4          # each screen pixel becomes a 4 x 4 block, with a faint grid like the OLED
 BORDER = 8         # screen pixels of bezel around each screen
-ORDER = ["grid", "step", "edit", "mixer", "perform", "keys", "machine", "project"]
+ORDER = ["grid", "step", "edit", "mixer", "perform", "keys", "machine", "kit", "project"]
 
 
 def load_font():
@@ -121,7 +121,7 @@ def main():
         image = render(load_screen(dumps, name, font, unknown))
         write_png(os.path.join(out, name + ".png"), *image)
         images.append(image)
-    write_png(os.path.join(out, "overview.png"), *tile(images, 4, 24))
+    write_png(os.path.join(out, "overview.png"), *tile(images, 3, 24))
     print("wrote %d screens and overview.png to %s" % (len(images), out))
 
 

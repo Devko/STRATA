@@ -531,16 +531,16 @@ Every feature is proven three times: by host tests on your PC, by a scripted run
 
 ## Instructions for Claude Code
 
-**[rev] The `CLAUDE.md` text and the first prompts now live in `docs/PLAN.md`**, corrected for the pin, the clock, cl6x and the WSL build host. Use those, not an older copy. The repo layout below stands, with the pin and `core/` corrected.
+**[rev] `CLAUDE.md` in the repository root is the rule set**, corrected for the pin, the clock, cl6x and the WSL build host; the first prompts below were for M0 and are history. Use `CLAUDE.md`, not an older copy. The repo layout below stands, with the pin and `core/` corrected.
 
 **Repo layout**
 
 ```
 strata/
-  CLAUDE.md               rules for Claude Code (in docs/PLAN.md)
+  CLAUDE.md               rules for Claude Code
   docs/SPEC.md            this document
   docs/REVIEW.md          the platform review this revision came from
-  docs/PLAN.md            authoritative build order, CLAUDE.md and first prompts
+  docs/PLAN.md            authoritative build order
   docs/BUDGET.md          measured CPU load per component, updated at every milestone
   docs/UNIT_CHECKLIST.md  what to check at the next session on the unit
   third_party/enaga/      git submodule, pinned at v0.2.0 (3da7f89)
@@ -557,7 +557,7 @@ Enaga's `tools/build_app.py` compiles only the `*.cpp` and `*.c` files of one fl
 
 **CLAUDE.md and the first prompts [rev]**
 
-Both moved to `docs/PLAN.md` so there is one copy to keep correct. The versions that stood here are superseded: they pinned `269c015`, told Claude Code to implement `core/clock` with a 32.32 fixed-point tick length and drift tests, and said platform work happens in an Enaga fork. All three are wrong — Enaga owns the clock, the pin is `1b41111`, and there is no fork.
+`CLAUDE.md` in the repository root is the one copy to keep correct; the first prompts were for M0 and are history. The versions that stood here are superseded: they pinned `269c015`, told Claude Code to implement `core/clock` with a 32.32 fixed-point tick length and drift tests, and said platform work happens in an Enaga fork. All three are wrong — Enaga owns the clock, the pin is a release tag (now `v0.2.0`), and there is no fork.
 
 ## Sources
 

@@ -45,11 +45,11 @@ Design principles, from [docs/SPEC.md](docs/SPEC.md):
 
 ## Screens
 
-![STRATA's screens: GRID, the step page, EDIT, MIXER, PERFORM, KEYS, MACHINE and PROJECT](docs/screens/overview.png)
+![STRATA's screens: GRID, the step page, EDIT, MIXER, PERFORM, KEYS, MACHINE, KIT and PROJECT](docs/screens/overview.png)
 
-<sub>Top: GRID with the default beat playing, the step page, a track's sound page, MIXER.
-Bottom: PERFORM, KEYS, MACHINE, PROJECT. Drawn by the app's own screen code on the host build,
-in Enaga's font; `tools/screenshots.sh` redraws them.</sub>
+<sub>The factory project playing. Top: GRID, the step page, a track's sound page. Middle: MIXER,
+PERFORM, KEYS. Bottom: MACHINE, the KIT browser, PROJECT. Drawn by the app's own screen code on the
+host build, in Enaga's font; `tools/screenshots.sh` redraws them.</sub>
 
 ## Features
 
@@ -93,7 +93,9 @@ the default techno kit:
 - Beat repeat, delay and reverb throws, and seeded mutation you can keep or revert
 - Follows the unit's clock: internal, MIDI clock or SYNC IN
 
-A one-page reference for every gesture, screen and abbreviation is in
+New to STRATA? [docs/MANUAL.md](docs/MANUAL.md) is the user manual: the concepts, a first-beat
+tutorial on the factory project, every machine, performing, saving and troubleshooting. A
+one-page reference for every gesture, screen and abbreviation is in
 [docs/CHEATSHEET.md](docs/CHEATSHEET.md).
 
 ## Installing on a SmplTrek
@@ -232,12 +234,15 @@ Load figures are in [docs/BUDGET.md](docs/BUDGET.md), the state of each mileston
 | Document | What it holds |
 | --- | --- |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | **Start here.** Where it stands, what exists nowhere else, next steps |
+| [docs/MANUAL.md](docs/MANUAL.md) | The user manual: concepts, a first-beat tutorial, the machines, performing, troubleshooting |
 | [docs/CHEATSHEET.md](docs/CHEATSHEET.md) | One page of gestures, screens and abbreviations, for playing it |
 | [docs/SPEC.md](docs/SPEC.md) | What STRATA is: sound architecture, sequencer, panel mapping, data model |
 | [docs/PLAN.md](docs/PLAN.md) | The build order. Authoritative for milestones |
 | [docs/UNIT_CHECKLIST.md](docs/UNIT_CHECKLIST.md) | What needs real hardware to close |
 | [docs/BUDGET.md](docs/BUDGET.md) | Measured CPU and memory figures. Estimates do not go here |
 | [docs/ENAGA_API.md](docs/ENAGA_API.md) | The verified Enaga signatures STRATA uses |
+| [CHANGELOG.md](CHANGELOG.md) | What each release added, and its known limits |
+| [docs/release/RELEASING.md](docs/release/RELEASING.md) | How a release zip is made and published |
 | [docs/SOUND.md](docs/SOUND.md) | Where the drum synthesis comes from, and how it is used |
 | [docs/REVIEW.md](docs/REVIEW.md) | The platform review the spec was corrected against |
 

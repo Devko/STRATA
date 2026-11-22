@@ -1,7 +1,8 @@
 # STRATA: rules for Claude Code
 
-- Read docs/SPEC.md, docs/REVIEW.md and docs/PLAN.md before any change, and follow the
-  milestone order in PLAN.md. Ask before changing a decision they record.
+- Read docs/HANDOFF.md (the current state and next steps), then docs/SPEC.md,
+  docs/REVIEW.md and docs/PLAN.md before any change, and follow the milestone order in
+  PLAN.md. Ask before changing a decision they record.
 - Target: an Enaga app on the Sonicware SmplTrek (TI C6748, 372 MHz). Enaga is pinned at
   release v0.2.0 (3da7f89), to match the firmware on the unit. Move it only by docs/HANDOFF.md
   "Moving the Enaga pin", and keep tools/enaga_check.sh passing. **docs/ENAGA_API.md has
@@ -52,7 +53,8 @@ g++ -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -O2 \
   no VLAs or alloca.
 - Never cast file bytes to structs: serialize byte by byte. No float division in hot loops.
 - Hot inner loops go in *.ti.c files: plain C, branch-free (use ?:), building with both GCC
-  and TI cl6x. cl6x is worth about 2.2x and the 60% target depends on it.
+  and TI cl6x. cl6x is worth about 1.7x on STRATA's scenarios and the 60% target depends on
+  it. cl6x runs only on Roland's PC, so cloud load figures are GCC-only.
 - build_app.py compiles one flat folder with one include path. Every filename must be
   unique across core/, dsp/ and app/, and includes are bare ("pattern.hpp").
   tools/build.sh enforces the uniqueness; do not work around it.
@@ -62,8 +64,8 @@ g++ -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -O2 \
 - After any DSP change, run the load scenario and update docs/BUDGET.md with figures both
   with and without cl6x. Worst case must stay under 60%. Cut effects or insert stages before
   cutting voices. Drum voices are cheap (one-shots that go idle); a sustaining voice is not:
-  VA POLY costs 3.82 points per voice GCC-only, so a six-voice chord is ~22.9% of the block on
-  its own (docs/BUDGET.md).
+  VA POLY costs 2.16 points per voice with cl6x and 3.82 GCC-only (emulator, docs/BUDGET.md),
+  which is why VA POLY shares a budget of 12 voices across all tracks (Engine::kPolyVoiceBudget).
 - Never modify third_party/enaga. Enaga bugs are reported upstream with a failing case.
 - Never write the SPI flash. Never produce update files with BOOT or MCU sections.
 - Small commits, one concern each, each with its test.

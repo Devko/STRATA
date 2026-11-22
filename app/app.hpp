@@ -2731,11 +2731,14 @@ public:
 
             const int targets = macro_count(engine_.macros().macros[m]);
             out = line;
+            // "3P", as the scenes above count theirs. "3 PRM" was 29 px in a 32 px slot, so
+            // four of them ran together as "3 PRM3 PRM4 PRM" (the layout test's kMinGap now
+            // catches that).
             if (targets == 0) {
                 append(out, "---");
             } else {
                 append_number(out, uint32_t(targets));
-                append(out, " PRM");
+                *out++ = 'P';
             }
             *out = 0;
             canvas.text(x + 2, 49, line, targets == 0 ? 6 : 11);
