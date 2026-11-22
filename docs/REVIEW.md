@@ -258,6 +258,12 @@ used in. All three are small and all three are here rather than only in a commen
 | **The record quantize amount** | PROJECT mode's SETUP page, encoder A | It was on F1 + VALUE, which the spec gives to the master DJ filter. That had nowhere to go either -- it is one knob with no page -- so the spec's own assignment won and quantize moved |
 | **The SETUP page itself** | The octave keys, in PROJECT mode only | Every F-key is taken, plain and with F1. In PROJECT mode the octave keys were setting GRID's step page, which is not on screen there, so the gesture was free |
 
+**EDIT has no encoder-slot strip at the bottom**, against the spec's "Bottom area: the 4 encoder
+slots" on every screen. EDIT already shows the same four parameters in large type, one row per
+encoder with its letter, and the strip only repeated them; the space it took now names the
+machine gesture (F1 + EDIT). Every other screen that edits parameters keeps the strip, drawn as
+name over value because "CUT 064" on one line is 41 pixels in a 32-pixel slot.
+
 **CLOCK SRC, CLOCK OUT, SYNC OUT and MIDI CH are NOT editable, and that is not a deviation.**
 `<enaga/clock.hpp>` and `<enaga/midi.hpp>` expose `source()` and `channel()` and nothing that
 writes either: they are the user's settings, in the Enaga menu. docs/SPEC.md's "STRATA only

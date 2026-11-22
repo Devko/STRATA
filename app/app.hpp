@@ -65,6 +65,40 @@ void append_tenths(char *&out, uint32_t tenths) {
     *out++ = char('0' + tenths % 10);
 }
 
+// The screen holds 21 characters a line: 128 pixels at the font's 6-pixel advance
+// (<enaga/ui.hpp>'s line_chars). A longer string is cut off at the right edge on the unit.
+constexpr int kLineChars = 21;
+
+// What Enaga's font can draw (third_party/enaga/firmware/hal/gfx.c, font_chars). Anything else
+// comes out as '?'. tests/test_ui.cpp holds every screen to the same list.
+bool font_has(char c) {
+    if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) return true;
+    for (const char *p = " !#+-./:=?%>"; *p; p++) {
+        if (*p == c) return true;
+    }
+    return false;
+}
+
+// Text that did not come from this file -- a project or take name off the card -- as the font
+// can draw it: lower case raised, anything else the font lacks shown as '-', at most `max`
+// characters. "strata_1.wav" would otherwise read "STRATA?1.WAV".
+void append_shown(char *&out, const char *text, int max) {
+    for (int n = 0; text != nullptr && text[n] != '\0' && n < max; n++) {
+        char c = text[n];
+        if (c >= 'a' && c <= 'z') c = char(c - 'a' + 'A');
+        *out++ = font_has(c) ? c : '-';
+    }
+}
+
+// Append `part` only if the line still fits on screen afterwards. For a status line built from
+// optional pieces in order of importance: what does not fit is left out whole, rather than
+// running off the edge half-drawn.
+void append_if_fits(char *&out, const char *line, const char *part) {
+    int used = int(out - line), extra = 0;
+    while (part[extra] != '\0') extra++;
+    if (used + extra <= kLineChars) append(out, part);
+}
+
 void append_hex4(char *&out, uint32_t value) {
     for (int shift = 12; shift >= 0; shift -= 4) {
         const uint32_t nibble = (value >> shift) & 0xFu;
@@ -208,6 +242,9 @@ int clamp_int(int value, int low, int high) {
 // The octave the pads play the root in. The pattern's root is a pitch class (core/pattern.hpp),
 // so it needs one to become a note.
 constexpr uint8_t kPadOctaveNote = 60;
+
+// PERFORM's macro bars, in pixels: tall enough to read, short enough to end above the hints.
+constexpr int kMacroBar = 18;
 
 // The velocity a STEP key plays at. Keys have none of their own, and 100 is what the default
 // kit's trigs use, so a part played in sounds like a part programmed in.
@@ -739,7 +776,7 @@ public:
         } else {
             mark(GestureKind::erase, selected_, 0);
             post(Cmd::track_erase, uint8_t(selected_));
-            notice("TRACK CLEARED  F1+CLR UNDO");
+            notice("CLEARED  F1+CLR UNDO");   // 21 characters at most
         }
         end_gesture();
     }
@@ -1503,9 +1540,11 @@ public:
         append(out, "V");
         append_number(out, status.voices.load(std::memory_order_relaxed));
         append(out, " ");
-        append(out, device_name(enaga::system::device()));
+        // A dropped edit takes the device's place: "V12 LOFI-12 XT DROP 99" is 22 characters,
+        // one past the edge, and the drop count is the part that matters.
         const uint32_t dropped = engine_.commands().dropped();
-        if (dropped) { append(out, " DROP "); append_number(out, dropped); }
+        if (dropped) { append(out, "DROP "); append_number(out, dropped); }
+        else append(out, device_name(enaga::system::device()));
         *out = 0;
         canvas.text(0, 120, line, 7);
     }
@@ -1545,7 +1584,9 @@ public:
         // screen next to the track number rather than behind a menu.
         const TrackPattern &track = engine_.pattern().tracks[selected_];
         out = line;
-        append(out, "TRK ");
+        // "T1", not "TRK 1": with a three-character speed and a two-digit length the long form
+        // was 22 characters, and the speed ran off the right edge.
+        append(out, "T");
         append_number(out, uint32_t(selected_ + 1));
         append(out, muted_[selected_] ? " MUTE" : "     ");
         append(out, " PG");
@@ -1558,7 +1599,7 @@ public:
         canvas.text(0, 84, line, 10);
 
         draw_edit_state(canvas, 92);
-        draw_param_slots(canvas, 102);
+        draw_param_slots(canvas, 101);
     }
 
     // The line that says what editing mode you are in: recording, the quantize amount, the
@@ -1570,37 +1611,60 @@ public:
         const Status &status = engine_.status();
 
         if (notice_showing()) {
-            canvas.text(0, y, notice_, 15);
+            // Cut to the line: a notice is built in places all over this file, and one that ran
+            // off the edge would lose its end, which is usually the part that says what to do.
+            out = line;
+            append_shown(out, notice_, kLineChars);
+            *out = 0;
+            canvas.text(0, y, line, 15);
             return;
         }
 
+        // Built from pieces in order of importance, each left out whole if it would not fit:
+        // all of them at once ("REC Q100 SEL 1-64 U16/R16 FULL 255") is 35 characters. Undo and
+        // redo are also on the CLR and OK LEDs, so they are the first to go.
+        char part[24];
+        char *p = part;
         out = line;
         if (rec_) {
-            append(out, "REC Q");
-            append_number(out, uint32_t(quantize()));
-            append(out, " ");
+            p = part;
+            append(p, "REC Q");
+            append_number(p, uint32_t(quantize()));
+            append(p, " ");
+            *p = 0;
+            append_if_fits(out, line, part);
         }
         if (range_first_ >= 0) {
-            append(out, "SEL ");
-            append_number(out, uint32_t(range_first_ + 1));
-            *out++ = '-';
-            append_number(out, uint32_t(range_last_ + 1));
-            append(out, " ");
-        }
-        append(out, "U");
-        append_number(out, status.undo_depth.load(std::memory_order_relaxed));
-        const uint8_t redo = status.redo_depth.load(std::memory_order_relaxed);
-        if (redo) {
-            append(out, "/R");
-            append_number(out, redo);
+            p = part;
+            append(p, "SEL ");
+            append_number(p, uint32_t(range_first_ + 1));
+            *p++ = '-';
+            append_number(p, uint32_t(range_last_ + 1));
+            append(p, " ");
+            *p = 0;
+            append_if_fits(out, line, part);
         }
         const uint32_t refused = status.refused.load(std::memory_order_relaxed);
         if (refused) {
             // A refused edit is almost always a full lock pool. Saying nothing would leave
             // someone repeating an edit that cannot work.
-            append(out, " FULL ");
-            append_number(out, refused);
+            p = part;
+            append(p, "FULL ");
+            append_number(p, refused);
+            append(p, " ");
+            *p = 0;
+            append_if_fits(out, line, part);
         }
+        p = part;
+        append(p, "U");
+        append_number(p, status.undo_depth.load(std::memory_order_relaxed));
+        const uint8_t redo = status.redo_depth.load(std::memory_order_relaxed);
+        if (redo) {
+            append(p, "/R");
+            append_number(p, redo);
+        }
+        *p = 0;
+        append_if_fits(out, line, part);
         *out = 0;
         canvas.text(0, y, line, rec_ ? 15 : 9);
     }
@@ -1672,8 +1736,10 @@ public:
         char *out = line;
 
         out = line;
-        append(out, "EDIT TRK ");
+        append(out, "EDIT T");
         append_number(out, uint32_t(selected_ + 1));
+        append(out, " ");
+        append(out, machine_name(engine_.machine_id(selected_)));
         append(out, "  ");
         append(out, page_name(Page(param_page_)));
         *out = 0;
@@ -1686,8 +1752,10 @@ public:
             canvas.rect(p * 32 + 2, 32, 28, 3, grey);
         }
 
-        // The four parameters in large type: name, value and a bar each, stacked so they are
-        // readable at a glance rather than squeezed onto one line.
+        // The four parameters in large type, one row per encoder: its letter, the name, the
+        // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
+        // the bottom would only repeat these four, and with names and values side by side it
+        // did not fit four to a line (7 characters is 41 pixels, in a 32-pixel slot).
         const int base = page_first(Page(param_page_));
         for (int slot = 0; slot < 4; slot++) {
             const int index = base + slot;
@@ -1695,9 +1763,14 @@ public:
             const uint8_t value = engine_.params(selected_).v[index];
 
             out = line;
+            *out++ = char('A' + slot);
+            *out = 0;
+            canvas.text(0, y, line, 7);
+
+            out = line;
             append(out, param_name_for(index));
             *out = 0;
-            canvas.text(0, y, line, 13);
+            canvas.text(10, y, line, 13);
 
             out = line;
             append_padded(out, value, 3);
@@ -1708,9 +1781,8 @@ public:
             canvas.rect(56, y + 2, bar < 1 ? 1 : bar, 4, 9);
         }
 
-        // Which encoder is which, since EDIT is where that matters most.
-        canvas.text(0, 96, "A    B    C    D", 7);
-        draw_param_slots(canvas, 106);
+        // The machine is changed somewhere else, and nothing said where.
+        canvas.text(0, 96, "F1+EDIT: MACHINE", 7);
     }
 
     // --- MIXER: four levels at a time, with meters -----------------------
@@ -1897,21 +1969,27 @@ public:
         return machine ? machine->param_name(index) : "---";
     }
 
-    // The four encoder slots along the bottom: a three-letter name, a value and a small bar.
-    void draw_param_slots(enaga::Canvas &canvas, int y = 100) {
+    // The four encoder slots along the bottom: a three-letter name, the value under it and a
+    // small bar, 18 pixels tall from `y`.
+    void draw_param_slots(enaga::Canvas &canvas, int y) {
         char line[40];
         const int base = page_first(Page(param_page_));
         for (int slot = 0; slot < 4; slot++) {
             const int index = base + slot;
+            // Name over value: "CUT 064" on one line is 41 pixels and a slot is 32, so each
+            // slot ran into the next one (and the fourth off the screen).
             char *out = line;
             append(out, param_name_for(index));
-            *out++ = ' ';
-            append_padded(out, engine_.params(selected_).v[index], 3);
             *out = 0;
             canvas.text(slot * 32, y, line, 12);
 
+            out = line;
+            append_padded(out, engine_.params(selected_).v[index], 3);
+            *out = 0;
+            canvas.text(slot * 32, y + 8, line, 15);
+
             const int bar = int(engine_.params(selected_).v[index]) * 28 / 127;
-            canvas.rect(slot * 32, y + 12, bar < 1 ? 1 : bar, 3, 8);
+            canvas.rect(slot * 32, y + 16, bar < 1 ? 1 : bar, 2, 8);
         }
     }
 
@@ -1954,16 +2032,22 @@ public:
         canvas.text(0, 18, line, 15);
 
         // All eight tracks at once, because the question anyone in this mode is asking is "what
-        // is this kit", not "what is this track".
-        out = line;
-        for (int t = 0; t < kTracks; t++) {
-            append(out, machine_name(engine_.machine_id(t)));
-            if (t != kTracks - 1) *out++ = ' ';
+        // is this kit", not "what is this track". Four to a line: eight names are 31 characters.
+        for (int half = 0; half < 2; half++) {
+            out = line;
+            append_number(out, uint32_t(half * 4 + 1));
+            *out++ = '-';
+            append_number(out, uint32_t(half * 4 + 4));
+            for (int t = half * 4; t < half * 4 + 4; t++) {
+                *out++ = ' ';
+                append(out, machine_name(engine_.machine_id(t)));
+            }
+            *out = 0;
+            canvas.text(0, 30 + half * 9, line, 10);
         }
-        *out = 0;
-        canvas.text(0, 30, line, 10);
 
-        canvas.text(0, 42, "A PICKS, ARROWS WALK TRACKS", 10);
+        canvas.text(0, 54, "A PICKS THE MACHINE", 10);
+        canvas.text(0, 63, "SELECT KEYS: TRACK", 10);
     }
 
     void draw_resample(enaga::Canvas &canvas) {
@@ -2005,7 +2089,7 @@ public:
                 break;
             }
             case 3u: append(out, "WRITING"); break;
-            default: append(out, "OK ARMS, CLR CANCELS"); break;
+            default: append(out, "OK ARMS  CLR CANCELS"); break;
         }
         *out = 0;
         canvas.text(0, 40, line, state == 2u ? 15 : 10);
@@ -2015,7 +2099,7 @@ public:
         } else if (storage_.last_take_name()[0] != 0) {
             out = line;
             append(out, "LAST ");
-            append(out, storage_.last_take_name());
+            append_shown(out, storage_.last_take_name(), kLineChars - 5);
             *out = 0;
             canvas.text(0, 50, line, 10);
         }
@@ -2030,7 +2114,7 @@ public:
         out = line;
         append(out, "KEYS T");
         append_number(out, uint32_t(selected_) + 1);
-        append(out, "  ");
+        append(out, " ");                    // one space: "KEYS T1 C# MIXOLYDIAN" is exactly 21
         append(out, note_name(root));
         *out++ = ' ';
         append(out, scale_name(scale));
@@ -2171,23 +2255,19 @@ public:
 
         // The two scenes and where the morph sits between them. The bar is the one thing in this
         // mode that has to be readable at a glance from across a room.
-        out = line;
-        append(out, "A");
-        append_number(out, uint32_t(engine_.scene_slot(0)) + 1);
-        append(out, "  ");
-        append_number(out, uint32_t(scene_count(engine_.scenes().scenes[engine_.scene_slot(0)])));
-        append(out, " PRM");
-        *out = 0;
-        canvas.text(0, 18, line, scene_holding_ == 0 ? 15 : 11);
-
-        out = line;
-        append(out, "B");
-        append_number(out, uint32_t(engine_.scene_slot(1)) + 1);
-        append(out, "  ");
-        append_number(out, uint32_t(scene_count(engine_.scenes().scenes[engine_.scene_slot(1)])));
-        append(out, " PRM");
-        *out = 0;
-        canvas.text(72, 18, line, scene_holding_ == 1 ? 15 : 11);
+        // "A16 128P": the scene and how many parameters it holds. Short, because both have to fit
+        // on one line at any count -- "B16  12 PRM" at x = 72 ran three pixels off the screen.
+        for (int side = 0; side < 2; side++) {
+            out = line;
+            *out++ = side == 0 ? 'A' : 'B';
+            append_number(out, uint32_t(engine_.scene_slot(side)) + 1);
+            *out++ = ' ';
+            append_number(out, uint32_t(scene_count(
+                                   engine_.scenes().scenes[engine_.scene_slot(side)])));
+            *out++ = 'P';
+            *out = 0;
+            canvas.text(side == 0 ? 0 : 72, 18, line, scene_holding_ == side ? 15 : 11);
+        }
 
         const int filled = int(uint32_t(engine_.morph()) * 124u / kMorphScale);
         canvas.rect(2, 28, 124, 5, 3);
@@ -2197,9 +2277,11 @@ public:
         // than looking like one set to zero.
         for (int m = 0; m < kMacros; m++) {
             const int x = m * 32;
+            // The selected macro is marked with '>' before its letter. The font has no '*', so
+            // "A*" drew as "A?" on the unit.
             out = line;
+            if (m == macro_selected_) *out++ = '>';
             *out++ = char('A' + m);
-            if (m == macro_selected_) *out++ = '*';
             *out = 0;
             canvas.text(x + 2, 40, line, m == macro_selected_ ? 15 : 10);
 
@@ -2214,15 +2296,17 @@ public:
             *out = 0;
             canvas.text(x + 2, 49, line, targets == 0 ? 6 : 11);
 
-            const int height = int(engine_.macro_position(m)) * 40 / 127;
-            canvas.rect(x + 2, 60, 12, 40, 2);
-            canvas.rect(x + 2, 60 + (40 - height), 12, height < 1 ? 1 : height,
+            // 18 pixels tall, ending above the hints. At 40 the bars ran down through both
+            // hint lines.
+            const int height = int(engine_.macro_position(m)) * kMacroBar / 127;
+            canvas.rect(x + 2, 58, 12, kMacroBar, 2);
+            canvas.rect(x + 2, 58 + (kMacroBar - height), 12, height < 1 ? 1 : height,
                         targets == 0 ? 5 : 12);
         }
 
         // The gesture that is not otherwise discoverable.
-        canvas.text(0, 95, "STEP ASSIGNS TO MACRO", 7);
-        canvas.text(0, 86, "F1+UP AUTOFILL", 7);
+        canvas.text(0, 78, "STEP ASSIGNS TO MACRO", 7);
+        canvas.text(0, 87, "F1+UP AUTOFILL", 7);
 
         // What MUTATE will do, and to which track.
         out = line;
@@ -2233,7 +2317,7 @@ public:
         append(out, " ");
         append_number(out, uint32_t(mutate_amount_));
         *out = 0;
-        canvas.text(0, 104, line, 11);
+        canvas.text(0, 96, line, 11);
 
         // The live performance state: fill, the repeat and its length, a throw, the bar.
         out = line;
@@ -2248,12 +2332,18 @@ public:
             append(out, engine_.repeat().pitch_down() ? "- " : " ");
         }
         const int throwing = engine_.throwing();
-        if (throwing == 1) append(out, "DLY ");
-        if (throwing == 2) append(out, "REV ");
+        if (throwing == 1) append(out, "DLY");
+        if (throwing == 2) append(out, "REV");
+        *out = 0;
+        canvas.text(0, 104, line, 9);
+
+        // The bar on a line of its own: with everything above on, "FILL AF16 1/16T- DLY BAR
+        // 1000" is 29 characters.
+        out = line;
         append(out, "BAR ");
         append_number(out, engine_.bar() % 1000u + 1u);
         *out = 0;
-        canvas.text(0, 113, line, 9);
+        canvas.text(0, 112, line, 9);
     }
 
     // --- PROJECT: banks, patterns and the card ---------------------------
@@ -2388,9 +2478,10 @@ public:
         // And where the three settings above are changed, because they are not changed here.
         // CLOCK OUT and SYNC OUT are in the same menu and Enaga exposes no way to read them,
         // so they are named rather than shown with a state this screen would be guessing at.
-        canvas.text(0, 94, "CLOCK SRC, CLOCK OUT,", 7);
-        canvas.text(0, 103, "SYNC OUT, MIDI CH:", 7);
-        canvas.text(0, 112, "F1 + POWER, SETTINGS", 7);
+        // No commas: the font has none, and each drew as '?'.
+        canvas.text(0, 94, "CLK SRC/OUT SYNC OUT", 7);
+        canvas.text(0, 103, "MIDI CH: SET IN", 7);
+        canvas.text(0, 112, "F1+POWER > SETTINGS", 7);
     }
 
     void draw_project(enaga::Canvas &canvas) {
@@ -2404,10 +2495,14 @@ public:
 
         // The project, and whether RAM differs from the card. An unsaved project that looked
         // saved is the worst outcome this screen can produce, so the marker is on the name.
+        //
+        // The mark is "UNSAVED" on the status line below rather than a '*' after the name: the
+        // font has no '*', so it drew as '?'. The name is the card's, so it is cut to fit and
+        // shown in characters the font has.
+        const bool usable = storage_.card_usable();
         out = line;
-        append(out, storage_.project_name());
-        if (storage_.dirty()) append(out, " *");
-        if (!storage_.card_usable()) append(out, " NO CARD");
+        append_shown(out, storage_.project_name(), usable ? kLineChars : kLineChars - 8);
+        if (!usable) append(out, " NO CARD");
         *out = 0;
         canvas.text(0, 18, line, 15);
 
@@ -2421,10 +2516,12 @@ public:
             append_number(out, uint32_t(storage_.progress()));
             *out++ = '%';
         } else if (storage_.last_error() != nullptr) {
-            append(out, storage_.last_error());
+            append_shown(out, storage_.last_error(), kLineChars);
+        } else if (storage_.dirty()) {
+            append(out, "UNSAVED");
         }
         *out = 0;
-        canvas.text(0, 27, line, busy != nullptr ? 12 : 9);
+        canvas.text(0, 27, line, busy != nullptr || storage_.dirty() ? 12 : 9);
 
         // The global key and scale, on encoders B and C. Drawn from the live PATTERN rather than
         // from the project settings, because the pattern's copy is what the sequencer and every
@@ -2435,7 +2532,7 @@ public:
         *out++ = ' ';
         append(out, scale_name(int(engine_.pattern().scale)));
         *out = 0;
-        canvas.text(0, 94, line, 11);
+        canvas.text(0, 103, line, 11);   // below the slots: at 94 it ran through their last row
 
         // The bank being browsed, which is not necessarily the one playing.
         out = line;
@@ -2499,7 +2596,7 @@ public:
         append_number(out, pool.budget() >> 20);
         append(out, "M");
         *out = 0;
-        canvas.text(0, 105, line, 10);
+        canvas.text(0, 112, line, 10);
     }
 
 private:

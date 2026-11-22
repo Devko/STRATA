@@ -789,7 +789,7 @@ TEST(ui_two_held_steps_make_a_range_that_survives_until_a_fresh_single_press) {
     // of.
     key(ENAGA_KEY_CLR);
     pump(2);
-    CHECK_EQ(UiProbe::notice(app), "TRACK CLEARED  F1+CLR UNDO");
+    CHECK_EQ(UiProbe::notice(app), "CLEARED  F1+CLR UNDO");
     for (int s = 0; s < kStepsPerTrack; s++) CHECK(!trig_at(0, s));
 }
 
@@ -1751,4 +1751,244 @@ TEST(ui_the_setup_page_and_the_mixer_pages_draw) {
         app.draw(canvas);
     }
     CHECK(true);        // it did not fault, which is the claim
+}
+
+// --- the screen's layout ----------------------------------------------------------------------
+//
+// STRATA's first boot on a SmplTrek showed text drawn over other text and over the bars. Nothing
+// here could have caught it: `FakeHost::t_text` drew nothing, so no test knew where a string
+// landed. It records every call now, and these checks hold every screen to the font's real
+// metrics, taken from Enaga rather than guessed:
+//
+//   - a glyph is 5 x 7 and the advance is 6 (third_party/enaga/firmware/hal/gfx.c, gfx_text;
+//     <enaga/ui.hpp> char_width), so a string of n characters covers 6n - 1 by 7 pixels;
+//   - the screen is 128 x 128, so 21 characters is a full line;
+//   - the font has A-Z, 0-9, space and ! # + - . / : = ? % > (gfx.c font_chars). Anything
+//     else draws as '?', which is how "A*" and "CLOCK SRC, CLOCK OUT," would look on the unit.
+//
+// A string may not cross another string, run off the screen, or PARTLY cover a rect. Sitting
+// wholly on a rect is allowed, because that is a label on a box (KEYS' notes, PROJECT's slots).
+
+namespace {
+
+constexpr char kFontChars[] = " !#+-./0123456789:=?ABCDEFGHIJKLMNOPQRSTUVWXYZ%>";
+constexpr int kAdvance = 6;
+constexpr int kGlyphW = 5;
+constexpr int kGlyphH = 7;
+
+bool in_font(char c) {
+    for (const char *p = kFontChars; *p; p++) {
+        if (*p == c) return true;
+    }
+    return false;
+}
+
+struct Box {
+    int x0, y0, x1, y1;    // inclusive
+};
+
+Box box_of(const FakeHost::TextDraw &d) {
+    return Box{d.x, d.y, d.x + kAdvance * d.length - (kAdvance - kGlyphW) - 1, d.y + kGlyphH - 1};
+}
+
+bool overlap(const Box &a, const Box &b) {
+    return a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
+}
+
+// Draw the screen and report every layout fault on it. `where` names the state in the report.
+int layout_faults(Strata &app, const char *where) {
+    FakeHost &host = FakeHost::the();
+    enaga::Canvas canvas(g_pixels);
+    host.clear_text();
+    app.draw(canvas);                  // rects into g_pixels; text only into the record
+
+    int faults = 0;
+    const auto report = [&](const FakeHost::TextDraw &d, const char *what) {
+        if (faults == 0) std::printf("    layout faults on %s:\n", where);
+        std::printf("      \"%s\" at (%d, %d): %s\n", d.text, d.x, d.y, what);
+        faults++;
+    };
+
+    if (host.text_dropped() != 0) {
+        std::printf("    %s: more than %d strings, the record is incomplete\n", where,
+                    FakeHost::kTextDraws);
+        faults++;
+    }
+
+    for (int i = 0; i < host.text_count(); i++) {
+        const FakeHost::TextDraw &d = host.text_draw(i);
+        if (d.length == 0) continue;
+        const Box b = box_of(d);
+
+        for (int c = 0; c < d.length && c < int(sizeof d.text) - 1; c++) {
+            if (!in_font(d.text[c])) {
+                report(d, "a character the font does not have (draws as ?)");
+                break;
+            }
+        }
+        if (b.x0 < 0 || b.y0 < 0 || b.x1 >= enaga::Canvas::width || b.y1 >= enaga::Canvas::height) {
+            report(d, "runs off the screen");
+        }
+
+        for (int j = 0; j < i; j++) {
+            const FakeHost::TextDraw &other = host.text_draw(j);
+            if (other.length == 0) continue;
+            if (overlap(b, box_of(other))) {
+                char what[96];
+                std::snprintf(what, sizeof what, "crosses \"%s\" at (%d, %d)", other.text, other.x,
+                              other.y);
+                report(d, what);
+            }
+        }
+
+        int lit = 0, area = 0;
+        for (int y = b.y0 < 0 ? 0 : b.y0; y <= b.y1 && y < enaga::Canvas::height; y++) {
+            for (int x = b.x0 < 0 ? 0 : b.x0; x <= b.x1 && x < enaga::Canvas::width; x++) {
+                area++;
+                if (g_pixels[y * enaga::Canvas::width + x] != 0) lit++;
+            }
+        }
+        if (lit != 0 && lit != area) report(d, "partly covers a bar or box");
+    }
+    return faults;
+}
+
+void post_track(Cmd cmd, int track, uint8_t a) {
+    Command command;
+    command.cmd = cmd;
+    command.track = uint8_t(track);
+    command.a = a;
+    app_engine().commands().post(command);
+}
+
+// The longest thing each screen can show, where the length depends on state: a three-character
+// speed and a two-digit length on every track, the longest scale name, every machine.
+void worst_case_content(Strata &app) {
+    for (int t = 0; t < kTracks; t++) {
+        post_track(Cmd::set_track_speed, t, uint8_t(Speed::x3_4));
+        post_track(Cmd::set_track_length, t, 64);
+        pump(1);
+    }
+    post_cmd(Cmd::set_root, 1);                 // C#: a two-character note name
+    post_cmd(Cmd::set_scale, uint8_t(Scale::mixolydian));
+    pump(2);
+    (void)app;
+}
+
+void check_layout(Strata &app, const char *where) {
+    CHECK_EQ(layout_faults(app, where), 0);
+}
+
+}  // namespace
+
+TEST(ui_layout_grid_and_its_step_page) {
+    Strata &app = fresh();
+    worst_case_content(app);
+    key(ENAGA_KEY_F4);
+    the_app().on_key(ENAGA_KEY_F1, true);       // F1 + pad: track 1 muted
+    app.on_pad_press(0, 100);
+    app.on_pad_release(0);
+    the_app().on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    for (int page = 0; page < 4; page++) {
+        check_layout(app, "GRID");
+        key(ENAGA_KEY_SELECT_RIGHT);
+    }
+
+    // Recording, with a selection and undo to show: the edit-state line at its longest.
+    key(ENAGA_KEY_F2);
+    pump(200);                                  // past the REC ON notice
+    step_down(0);
+    step_down(15);
+    step_up(15);
+    step_up(0);
+    pump(2);
+    check_layout(app, "GRID, recording with a selection");
+    key(ENAGA_KEY_F2);
+
+    // The step page, every field page.
+    step_down(2);
+    key(ENAGA_KEY_OK);
+    step_up(2);
+    CHECK(UiProbe::step_page(app));
+    for (int p = 0; p < kFieldPages; p++) {
+        check_layout(app, "STEP PAGE");
+        key(ENAGA_KEY_SELECT_RIGHT);
+    }
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_edit_on_every_machine) {
+    Strata &app = fresh();
+    for (int machine = 0; machine < int(MachineId::count); machine++) {
+        post_track(Cmd::set_machine, 0, uint8_t(machine));
+        pump(4);
+        key(ENAGA_KEY_F8);
+        for (int page = 0; page < kPages; page++) {
+            check_layout(app, machine_name(uint8_t(machine)));
+            key(ENAGA_KEY_SELECT_RIGHT);
+        }
+    }
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_mixer_perform_keys_machine_resample) {
+    Strata &app = fresh();
+    worst_case_content(app);
+    for (int page = 0; page < kMixerPageCount; page++) {
+        mixer_page(app, page);
+        check_layout(app, "MIXER");
+    }
+
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    check_layout(app, "PERFORM");
+    // Two-digit scenes, a macro selected on the right, the mutation at its widest.
+    post_cmd(Cmd::scene_select, 0, kScenes - 1);
+    post_cmd(Cmd::scene_select, 1, kScenes - 1);
+    pump(2);
+    for (int i = 0; i < 12; i++) key(ENAGA_KEY_SELECT_RIGHT);   // the amount, up to 100
+    key(ENAGA_KEY_OCTAVE_LEFT);                                 // macro D
+    check_layout(app, "PERFORM, scene 16");
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+
+    shift_key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+    for (int scale = 0; scale < kScaleCount; scale++) {
+        post_cmd(Cmd::set_scale, uint8_t(scale));
+        pump(2);
+        check_layout(app, scale_name(scale));
+    }
+
+    shift_key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    check_layout(app, "MACHINE");
+
+    shift_key(ENAGA_KEY_F2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+    check_layout(app, "RESAMPLE");
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_project_and_setup) {
+    Strata &app = fresh();
+    worst_case_content(app);
+    key(ENAGA_KEY_F3);
+    check_layout(app, "PROJECT");
+    for (int scale = 0; scale < kScaleCount; scale++) {
+        post_cmd(Cmd::set_scale, uint8_t(scale));
+        pump(2);
+        check_layout(app, scale_name(scale));
+    }
+    setup_page(app, true);
+    FakeHost &host = FakeHost::the();
+    const uint32_t sources[] = {ENAGA_CLOCK_MIDI, ENAGA_CLOCK_SYNC, ENAGA_CLOCK_INTERNAL};
+    for (uint32_t source : sources) {
+        host.set_source(source);
+        check_layout(app, "SETUP");
+    }
+    setup_page(app, false);
+    key(ENAGA_KEY_F4);
 }
