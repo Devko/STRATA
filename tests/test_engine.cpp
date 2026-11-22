@@ -1310,6 +1310,32 @@ TEST(engine_a_pattern_change_clears_the_undo_history) {
 
 // --- the queue and chains --------------------------------------------------------------------
 
+TEST(engine_a_queued_change_lands_at_once_when_the_transport_jumps_back) {
+    // STOP and PLAY (or F1 + F5, or an outside clock relocating) put the clock back to 0. The
+    // change was armed for tick 1536 of the OLD position, and used to wait there -- a change
+    // queued deep into a set and then STOP, PLAY landed that many bars late.
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    tick_at(3000);
+    post(Cmd::queue_pattern, 0, 0, 1, 3, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK(engine.queue().pending);
+    CHECK_EQ(int(engine.queue().switch_tick), 3072);
+
+    tick_at(0);                                    // the transport starts again from 0
+    CHECK(!engine.queue().pending);
+    CHECK_EQ(live_bank(), 1);
+    CHECK_EQ(live_slot(), 3);
+
+    // And a forward tick does not: the next change still waits for its boundary.
+    tick_at(100);
+    post(Cmd::queue_pattern, 0, 0, 0, 0, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    tick_at(101);
+    CHECK(engine.queue().pending);
+    CHECK_EQ(live_slot(), 3);
+}
+
 TEST(engine_a_queued_change_waits_for_the_end_of_the_pass) {
     Engine &engine = clean();
     FakeHost::the().set_running(true);
