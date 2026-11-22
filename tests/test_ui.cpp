@@ -2108,6 +2108,9 @@ constexpr char kFontChars[] = " !#+-./0123456789:=?ABCDEFGHIJKLMNOPQRSTUVWXYZ%>"
 constexpr int kAdvance = 6;
 constexpr int kGlyphW = 5;
 constexpr int kGlyphH = 7;
+// The narrowest blank allowed between two strings on one line. Letters inside a string are 1 px
+// apart; EDIT's "A" beside "TUN" is 5. 3 px read as one word on PERFORM ("3 PRM3 PRM4 PRM").
+constexpr int kMinGap = 4;
 
 bool in_font(char c) {
     for (const char *p = kFontChars; *p; p++) {
@@ -2166,11 +2169,24 @@ int layout_faults(Strata &app, const char *where) {
         for (int j = 0; j < i; j++) {
             const FakeHost::TextDraw &other = host.text_draw(j);
             if (other.length == 0) continue;
-            if (overlap(b, box_of(other))) {
+            const Box o = box_of(other);
+            if (overlap(b, o)) {
                 char what[96];
                 std::snprintf(what, sizeof what, "crosses \"%s\" at (%d, %d)", other.text, other.x,
                               other.y);
                 report(d, what);
+            } else if (b.y0 <= o.y1 && o.y0 <= b.y1) {
+                // Two strings on the same line must not RUN TOGETHER. Inside a string the
+                // glyphs are 1 px apart; two strings a couple of pixels apart read as one word
+                // ("3 PRM3 PRM4 PRM" on PERFORM). So the blank between them must be at least
+                // kMinGap pixels, which is clearly wider than the gap between letters.
+                const int gap = b.x0 > o.x1 ? b.x0 - o.x1 - 1 : o.x0 - b.x1 - 1;
+                if (gap < kMinGap) {
+                    char what[96];
+                    std::snprintf(what, sizeof what, "runs into \"%s\" at (%d, %d), %d px apart",
+                                  other.text, other.x, other.y, gap);
+                    report(d, what);
+                }
             }
         }
 
