@@ -264,7 +264,7 @@ TEST(app_the_first_save_of_a_project_writes_all_ten_files) {
     project_file(path, "KIT.BIN");
     CHECK_EQ(host.file_bytes(path), 1076);
     project_file(path, "PERFORM.BIN");
-    CHECK_EQ(host.file_bytes(path), 2424);
+    CHECK_EQ(host.file_bytes(path), 2500);
 }
 
 TEST(app_a_saved_project_reloads) {

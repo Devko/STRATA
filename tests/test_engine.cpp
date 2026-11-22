@@ -1832,8 +1832,9 @@ TEST(engine_a_macro_with_four_targets_refuses_a_fifth) {
     CHECK_EQ(int(refused() - before), 1);
     CHECK_EQ(macro_count(engine.macros().macros[1]), kMacroTargets);
 
-    // A parameter index no track has is not a target either.
-    post_macro_assign(2, 0, uint8_t(kParams), 0, 127);
+    // A parameter index no track has is not a target either (kParams + 0-2 are the master
+    // EQ's bands, so the first one with no meaning is past them).
+    post_macro_assign(2, 0, uint8_t(kParams + kMasterBands), 0, 127);
     pump();
     CHECK_EQ(macro_count(engine.macros().macros[2]), 0);
 }
@@ -2765,5 +2766,78 @@ TEST(engine_a_stop_ends_the_last_steps_locks_so_a_macro_reaches_them) {
 
     post(Cmd::macro_clear, 0, 0, 1);
     post(Cmd::set_macro, 0, 0, 1, 0);
+    pump();
+}
+
+// --- the master kill EQ through the performance layer ------------------------------------------
+
+// A macro on an EQ band sweeps it from the knob towards the far end, and at 0 lets go; the kill
+// switches stay the panel's whatever the macro does.
+TEST(engine_a_macro_on_the_master_eq_sweeps_a_band_and_lets_go) {
+    Engine &engine = clean();
+    strata::test::set_master_byte(uint8_t(MasterField::eq_low), 64);
+    post_macro_assign(3, 0, uint8_t(kParams + 0), 64, 0);         // LOW, towards a kill
+    pump();
+    CHECK_EQ(macro_count(engine.macros().macros[3]), 1);
+    CHECK_EQ(int(engine.macros().macros[3].targets[0].track), int(kMacroMasterTrack));
+    CHECK_EQ(engine.master().eq_low, 1.0f);
+
+    post(Cmd::set_macro, 0, 0, 3, 127);
+    pump();
+    CHECK_EQ(int(engine.performed_master(0)), 0);
+    CHECK_EQ(engine.master().eq_low, 0.0f);
+    CHECK_EQ(engine.master().eq_mid, 1.0f);
+    // The knob underneath is unchanged: a macro is a hand on top, not an edit.
+    CHECK_EQ(int(engine.project().settings.master[int(MasterField::eq_low)]), 64);
+
+    post(Cmd::set_macro, 0, 0, 3, 0);
+    pump();
+    CHECK_EQ(engine.master().eq_low, 1.0f);
+
+    // Turning the knob with the macro at rest moves the band, as for a track parameter.
+    strata::test::set_master_byte(uint8_t(MasterField::eq_low), 32);
+    pump();
+    CHECK_EQ(int(engine.performed_master(0)), 32);
+    CHECK_NEAR(engine.master().eq_low, 0.25f, 1e-6);
+
+    post(Cmd::macro_clear, 0, 0, 3);
+    strata::test::set_master_byte(uint8_t(MasterField::eq_low), 64);
+    pump();
+}
+
+// A whole capture stores the EQ's knobs; morphing to it sweeps them. A one-track capture does not.
+TEST(engine_a_scene_captures_and_morphs_the_master_eq) {
+    Engine &engine = clean();
+    post(Cmd::scene_erase, 0, 0, 0);
+    post(Cmd::scene_erase, 0, 0, 1);
+    post(Cmd::scene_select, 0, 0, 0, 0);
+    post(Cmd::scene_select, 0, 0, 1, 1);
+    strata::test::set_master_byte(uint8_t(MasterField::eq_high), 0);    // HI cut in scene 1
+    post(Cmd::scene_capture, 0, 0, 1, 0);
+    pump();
+    CHECK_EQ(int(engine.scenes().scenes[1].master_stored), 0x7);
+    CHECK_EQ(int(engine.scenes().scenes[1].master[2]), 0);
+
+    strata::test::set_master_byte(uint8_t(MasterField::eq_high), 64);   // the knob back to flat
+    Command morph;
+    morph.cmd = Cmd::set_morph;
+    morph.u = kMorphScale;
+    strata::test::engine().commands().post(morph);
+    pump();
+    CHECK_EQ(int(engine.performed_master(2)), 0);
+    CHECK_EQ(engine.master().eq_high, 0.0f);
+
+    morph.u = 0;
+    strata::test::engine().commands().post(morph);
+    pump();
+    CHECK_EQ(engine.master().eq_high, 1.0f);
+
+    // One track's capture leaves the EQ out of the scene.
+    post(Cmd::scene_capture, 2, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.scenes().scenes[0].master_stored), 0);
+
+    post(Cmd::scene_erase, 0, 0, 0);
+    post(Cmd::scene_erase, 0, 0, 1);
     pump();
 }

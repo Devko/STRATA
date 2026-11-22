@@ -1955,6 +1955,36 @@ TEST(ui_an_eq_kill_for_a_band_that_does_not_exist_is_refused) {
     CHECK_EQ(int(engine.project().settings.eq_kills), 0);
 }
 
+// In PERFORM, FUNC + STEP 1-3 puts the master EQ's LOW, MID or HI on the selected macro;
+// FUNC + the other STEP keys assign nothing.
+TEST(ui_func_and_step_1_to_3_put_a_master_eq_band_on_a_macro) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    // Whichever macro is selected, emptied first.
+    const int selected = UiProbe::macro_selected(app);
+    post_cmd(Cmd::macro_clear, uint8_t(selected));
+    pump(2);
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_STEP1 + 1, true);
+    app.on_key(ENAGA_KEY_STEP1 + 1, false);
+    app.on_key(ENAGA_KEY_STEP1 + 9, true);              // nothing: not a band
+    app.on_key(ENAGA_KEY_STEP1 + 9, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    const Macro &macro = engine.macros().macros[selected];
+    CHECK_EQ(macro_count(macro), 1);
+    CHECK_EQ(int(macro.targets[0].track), int(kMacroMasterTrack));
+    CHECK_EQ(int(macro.targets[0].param), 1);            // MID
+    CHECK_EQ(int(macro.targets[0].high), 0);             // from flat, towards a kill
+    CHECK(std::strcmp(UiProbe::notice(app) + 1, " EQ MID") == 0);
+
+    post_cmd(Cmd::macro_clear, uint8_t(selected));
+    pump(2);
+}
+
 TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
     Strata &app = fresh();
     Engine &engine = app_engine();

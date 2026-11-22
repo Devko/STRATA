@@ -458,7 +458,15 @@ public:
         // this is the gesture they have; without it a macro could never be set up at all, and
         // "4 macros driving up to 4 parameters" would be a feature with no way in.
         if (mode_ == Mode::perform && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
-            if (down) assign_macro(key - ENAGA_KEY_STEP1);
+            // FUNC + STEP 1-3 is the master kill EQ's LOW, MID and HI instead: a macro can sweep
+            // the lows out over a build. The other thirteen with FUNC do nothing rather than
+            // assign a track parameter the hand did not mean.
+            if (down && shift_) {
+                const int band = key - ENAGA_KEY_STEP1;
+                if (band < kMasterBands) assign_macro_master(band);
+            } else if (down) {
+                assign_macro(key - ENAGA_KEY_STEP1);
+            }
             return;
         }
 
@@ -2743,6 +2751,29 @@ public:
         append(out, engine_.machine(selected_) != nullptr
                         ? engine_.machine(selected_)->param_name(param)
                         : "---");
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    // Assign one master kill EQ band to the selected macro, by the same "towards the far end"
+    // guess: a band at flat or above heads for a kill, which is what a build wants.
+    void assign_macro_master(int band) {
+        if (band < 0 || band >= kMasterBands) return;
+        const uint8_t now = engine_.performed_master(band);
+        const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
+        Command command;
+        command.cmd = Cmd::macro_assign;
+        command.track = 0;
+        command.a = uint8_t(macro_selected_);
+        command.b = uint8_t(kParams + band);          // past the track parameters: the EQ
+        command.c = now;
+        command.d = far;
+        post_command(command);
+
+        char *out = notice_buffer_;
+        *out++ = char('A' + macro_selected_);
+        append(out, " EQ ");
+        append(out, master_field_name(uint8_t(int(MasterField::eq_low) + band)));
         *out = 0;
         notice(notice_buffer_);
     }
