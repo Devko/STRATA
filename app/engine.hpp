@@ -232,6 +232,15 @@ private:
 
     void build_placeholder_sample();
 
+    // The placeholder's PCM (a static array in build_placeholder_sample), for `Cmd::clear_sample`
+    // to fall back to: a track with no file plays it, after a swap as before the first one.
+    const int16_t *placeholder_ = nullptr;
+public:
+    // For tests: the PCM a track with no file plays.
+    const int16_t *placeholder() const { return placeholder_; }
+private:
+    uint32_t placeholder_frames_ = 0;
+
     // --- the machine pool ---
     // Allocated once, here, and pointed at by the track slots. docs/SPEC.md wants any track to
     // host any machine; M1 wires the default techno kit's first four tracks and leaves the rest

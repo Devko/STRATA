@@ -187,9 +187,11 @@ void Engine::build_placeholder_sample() {
     // switched to SAMPLE or GRAIN before any card has been read should make a sound rather than
     // silence, and this is the only PCM the app owns before a load: eight pointers to one static
     // array, which costs nothing.
+    placeholder_ = pcm;
+    placeholder_frames_ = uint32_t(kTotalFrames);
     for (int t = 0; t < kTracks; t++) {
-        pool_[t].sampler.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
-        pool_[t].grain.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
+        pool_[t].sampler.set_sample(placeholder_, placeholder_frames_, 1, rate_);
+        pool_[t].grain.set_sample(placeholder_, placeholder_frames_, 1, rate_);
     }
 }
 
@@ -327,6 +329,12 @@ void Engine::apply(const Command &command) {
             // blocks later would be a note after the transport stopped.
             deferred_count_ = 0;
             scheduler_.reset(true);
+            // And the last step's locks. A lock lasts as long as its step, and with the transport
+            // stopped no step is playing: left masked, every parameter that step locked was shut
+            // out of the performance layer until the next PLAY, so a macro or the morph on it
+            // did nothing and a pad played the dead step's value. The per-block copy in
+            // process() puts the performed values back in this same block.
+            for (int t = 0; t < kTracks; t++) locked_[t] = 0;
             break;
 
         case Cmd::set_tempo:
@@ -718,6 +726,8 @@ void Engine::apply(const Command &command) {
             }
             deferred_count_ = 0;                 // hits of a pattern that no longer exists
             scheduler_.reset(true);
+            // The lock mask of a step of a pattern that no longer exists (Cmd::stop says why).
+            for (int t = 0; t < kTracks; t++) locked_[t] = 0;
             reconfigure();
             // The sends and the master, which arrived with the file as fourteen bytes. Without
             // this the mixer would keep running the PREVIOUS project's delay and reverb while
@@ -751,8 +761,14 @@ void Engine::apply(const Command &command) {
             // its pointer: clearing only the hosted one left the other pointing into a range the
             // loader is about to overwrite, and switching back played whatever landed there.
             // set_sample kills each machine's voices first (dsp/sample.hpp, dsp/grain.hpp).
-            pool_[track].sampler.set_sample(nullptr, 0, 1, rate_);
-            pool_[track].grain.set_sample(nullptr, 0, 1, rate_);
+            //
+            // What they are given instead is the placeholder, not nothing: it is a static array
+            // outside the region, so the loader may write over the range at once, and a track
+            // whose kit names no file plays what it played before any card was read. The
+            // factory's LOOP track is SAMPLE with no file, so a nullptr here made NEW, and every
+            // project saved from the factory and opened again, lose that track's part.
+            pool_[track].sampler.set_sample(placeholder_, placeholder_frames_, 1, rate_);
+            pool_[track].grain.set_sample(placeholder_, placeholder_frames_, 1, rate_);
             // Bumped even for a track that hosts no Sampler. The loader waits for this change
             // before it releases the range, so a track that was never reading anything must
             // still report that it has stopped, or the wait never ends.

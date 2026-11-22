@@ -257,8 +257,10 @@ bool VaPoly::would_add_voice(uint8_t note) const {
     }
     // Every slot busy: allocate() steals one of this machine's own. Stealing a choking slot
     // brings a voice back into the count; any other steal is one out and one in.
+    // A choking slot already holding a pending trig is counted (budget_voices), so taking it
+    // again is one out and one in, like any other steal.
     for (const Slot &s : slots_) {
-        if (s.voice.choking()) return true;
+        if (s.voice.choking() && !s.pending) return true;
     }
     return false;
 }

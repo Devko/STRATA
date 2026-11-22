@@ -187,6 +187,9 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
 - **The shared voice budget** (PR #30): past 12 VA POLY voices across all tracks, a new note
   chokes the quietest started voice on any POLY track (a 64-frame fade); a note is dropped only
   when every counted voice is still waiting for its frame. GRAIN and VA MONO are not counted.
+- **A SAMPLE or GRAIN track with no file plays the placeholder** (Roland, 2026-11-22): `Cmd::clear_sample`
+  gives both readers the static placeholder rather than nothing, so NEW and a reopened factory
+  project keep the LOOP part, as a card-less boot does.
 - **The factory content is one function**, `factory_project` in `core/factory.cpp`, used by both
   `Engine::init` (no card) and `Storage::start_new` (NEW). Change sounds and patterns there only.
   `project_init` stays blank because the tests' `fresh()` builds on it. It ships macros B ACID,

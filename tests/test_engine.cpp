@@ -2627,6 +2627,54 @@ int poly_voices_counted() {
 
 }  // namespace
 
+// A note that takes over a voice still fading from a choke is a voice from the moment it takes
+// it, like any other pending trig. It used to go uncounted until its frame came, because a
+// choking voice is not counted, so a later note in the same block found room that was not there
+// and the budget ended the block one voice over. The case is an ordinary one: a chord repeated
+// on its next step while a third POLY track has just choked one of its notes.
+TEST(engine_a_note_on_a_choking_voice_counts_against_the_budget_at_once) {
+    clean();
+    const uint8_t tracks[3] = {2, 3, 4};
+    uint8_t was[3];
+    for (int i = 0; i < 3; i++) {
+        was[i] = strata::test::engine().project().kit.tracks[tracks[i]].machine;
+        post(Cmd::set_machine, tracks[i], 0, uint8_t(MachineId::va_poly));
+        post(Cmd::set_param, tracks[i], 0, kDec, 127);
+    }
+    pump();
+
+    // Two full chords, started: the budget is spent.
+    for (int i = 0; i < 2; i++) {
+        for (int n = 0; n < VaPoly::kVoices; n++) {
+            post(Cmd::trigger_note, tracks[i], 0, uint8_t(48 + 2 * n), 100);
+        }
+    }
+    pump(4);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+
+    // One block: a note on the third track chokes a voice of the first; the first track
+    // repeats that voice's note, which takes the fading voice back; and the third track plays
+    // one more note.
+    post(Cmd::trigger_note, tracks[2], 0, 72, 100);
+    for (int n = 0; n < VaPoly::kVoices; n++) {
+        post(Cmd::trigger_note, tracks[0], 0, uint8_t(48 + 2 * n), 100);
+    }
+    post(Cmd::trigger_note, tracks[2], 0, 74, 100);
+    pump();
+    CHECK(poly_voices_counted() <= Engine::kPolyVoiceBudget);
+    pump(4);                                   // every note has started, every fade is over
+    int sounding = 0;
+    for (int i = 0; i < 3; i++) {
+        sounding += static_cast<const VaPoly *>(strata::test::engine().machine(tracks[i]))
+                        ->sounding_voices();
+    }
+    CHECK(sounding <= Engine::kPolyVoiceBudget);
+    CHECK_EQ(poly_voices_counted(), sounding);
+
+    for (int i = 0; i < 3; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
+    pump();
+}
+
 TEST(engine_the_shared_voice_budget_caps_va_poly_across_tracks) {
     clean();
     // Four POLY tracks with long notes, so nothing ends on its own during the test.
@@ -2679,5 +2727,43 @@ TEST(engine_the_shared_voice_budget_caps_va_poly_across_tracks) {
     CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
 
     for (int i = 0; i < 4; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
+    pump();
+}
+
+// A lock lasts exactly as long as its step, and a stopped transport has no step playing. The
+// mask of locked parameters used to outlive the stop, so the performance layer stayed shut out
+// of every parameter the last step had locked: with the transport stopped, a macro (or the
+// morph) on such a parameter moved the screen and not the sound, and a pad played the old
+// step's lock. Stopping ends the step, so it ends its locks.
+TEST(engine_a_stop_ends_the_last_steps_locks_so_a_macro_reaches_them) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::set_param, 0, 0, kLvl, 100);
+    put_trig(0, 0);
+
+    host.set_running(true);
+    host.deliver_tick(0, 0);
+    pump();
+    // A lock taking the level to 0 on the step that is playing: heard at once, and masked.
+    post(Cmd::lock_delta, 0, 0, kLvl, uint8_t(int8_t(-100)));
+    pump();
+
+    host.set_running(false);
+    post(Cmd::stop, 0, 0, 1);
+    pump();
+    CHECK(settle());
+
+    // Macro B takes the level from the kit's 100 to 127.
+    post_macro_assign(1, 0, kLvl, 100, 127);
+    post(Cmd::set_macro, 0, 0, 1, 127);
+    pump();
+    CHECK_EQ(int(strata::test::engine().performed(0, kLvl)), 127);
+
+    // A pad on the track: it sounds at the macro's level, not at the dead step's lock of 0.
+    post(Cmd::trigger_note, 0, 0, 60, 100);
+    CHECK(energy(20) > 0.01f);
+
+    post(Cmd::macro_clear, 0, 0, 1);
+    post(Cmd::set_macro, 0, 0, 1, 0);
     pump();
 }
