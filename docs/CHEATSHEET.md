@@ -165,3 +165,8 @@ D>R delay into reverb · MST master: DJ filter, CMP compressor, LIM limiter, LVL
 VELOCITY, MICRO, CHANCE, NOTES · scales CHROMATIC MINOR MAJOR DORIAN PHRYGIAN LYDIAN MIXOLYDIAN
 LOCRIAN, HARM MINOR, MEL MINOR, MINOR PENT, MAJOR PENT, BLUES, WHOLE TONE, DIMINISHED · notes use
 sharps (C# not Db).
+
+---
+
+<sub>STRATA is an independent project, not affiliated with or endorsed by Sonicware. SmplTrek is a
+trademark of its owner. Provided as is, without warranty; use at your own risk (see LICENSE).</sub>
