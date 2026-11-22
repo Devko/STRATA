@@ -662,12 +662,10 @@ That review read 14,423 lines with 531,652 checks already behind them and found 
 one rule violation and one stale comment. The two bugs are fixed and have tests (the ratchet, and
 the duck's dropped trigger); the other two are here.
 
-- [ ] **Two note spellings in one app, and nobody has decided which.** `core/scale.cpp` names
-      notes with FLATS -- "EB" -- and the step page's NOTE field uses SHARPS -- "D#3" -- so the
-      same pitch has two names on two screens. '#' is in the device font, so the comment claiming
-      a sharp was "unproven" was wrong and has been removed rather than repaired. Look at both
-      screens and pick one. There are also two overloads named `note_name` with opposite
-      conventions, which is a pair a future caller can pick the wrong one of.
+- [x] ~~Two note spellings in one app~~ **Decided 2026-11-22: sharps everywhere.**
+      `core/scale.cpp` now spells "D#" like the step page's "D#3", and a host test holds the two
+      `note_name` overloads to one spelling. What is left to see on the unit is in the scale
+      section above (the '#' legible at screen size).
 - [ ] A 64-bit divide was sitting in the audio path (`dsp/hat.cpp`, each voice's start phase).
       On this toolchain that does not merely cost cycles, it does not LINK -- it drags in
       libgcc's ARM unwinder. GCC happened to fold it to six constants, so the rule was being kept
