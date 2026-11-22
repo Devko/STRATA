@@ -40,9 +40,9 @@ enum class Cmd : uint8_t {
     // --- pattern editing ---
     toggle_trig,       // track, step, a: 1 = the trigless bit instead of the trig
     clear_lock,        // track, step, a: param
-    set_track_length,  // track, a: length
+    set_track_length,  // track, a: length; or c = 1: b is an int8 delta (kDeltaFlag below)
     set_track_speed,   // track, a: speed
-    set_pattern_swing, // a: swing
+    set_pattern_swing, // a: swing; or c = 1: b is an int8 delta
 
     // --- pattern editing, M3 -----------------------------------------------
     //
@@ -117,8 +117,8 @@ enum class Cmd : uint8_t {
     set_sample,
 
     // --- kit and sound ---
-    set_param,         // track, a: param index, b: value
-    set_track_level,   // track, f: level
+    set_param,         // track, a: param index, b: value; or c = 1: b is an int8 delta
+    set_track_level,   // track, f: level; or c = 1: f is a delta, the result clamped to 1.5
     // One send or master setting. `a` is the field -- dsp/buses.hpp's SendField or MasterField,
     // whose numbers are permanent because they reach PROJECT.BIN -- and `b` is an encoder DELTA,
     // as a signed byte, exactly like `set_param` and the step fields and for the same reason.
@@ -203,6 +203,13 @@ enum class Cmd : uint8_t {
 
 // Exactly 16 bytes, as the spec requires. Everything an edit needs fits: a target, two small
 // values and one float for the things that are genuinely continuous.
+// `Command::c` set to this on set_param, set_track_length, set_pattern_swing and
+// set_track_level makes the value a DELTA, applied on the audio side to the authoritative value.
+// The encoders send these: the UI reads engine state a block late, so "current + delta" computed
+// there loses every click after the first in a block -- the reason the M3 commands are deltas.
+// An absolute value (c = 0) is still what a load, a test or a recall sends.
+constexpr uint8_t kDeltaFlag = 1;
+
 struct Command {
     Cmd cmd = Cmd::none;
     uint8_t track = 0;

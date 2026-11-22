@@ -16,6 +16,8 @@ constexpr int kMaxLocksApplied = kLocksPerStep;
 // Middle C. The pattern's root is a pitch class (core/pattern.hpp), so turning it into a note
 // needs an octave, and this is the one the default pattern uses.
 constexpr uint8_t kDefaultOctaveNote = 60;
+// The mixer page's fader ceiling, which an encoder delta stops at (Cmd::set_track_level).
+constexpr float kFaderDeltaMax = 1.5f;
 
 uint8_t clamp_u8(int value) {
     return uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value));
@@ -465,11 +467,15 @@ void Engine::apply(const Command &command) {
             pattern_clear_lock(live(), track, step, command.a);
             break;
 
-        case Cmd::set_track_length:
+        case Cmd::set_track_length: {
+            const int wanted = command.c == kDeltaFlag
+                                   ? int(live().tracks[track].length) + int(int8_t(command.b))
+                                   : int(command.a);
             live().tracks[track].length =
-                uint8_t(command.a < 1 ? 1 : (command.a > kStepsPerTrack ? kStepsPerTrack : command.a));
+                uint8_t(wanted < 1 ? 1 : (wanted > kStepsPerTrack ? kStepsPerTrack : wanted));
             reconfigure();
             break;
+        }
 
         case Cmd::set_track_speed:
             if (command.a < uint8_t(Speed::count)) {
@@ -478,11 +484,15 @@ void Engine::apply(const Command &command) {
             }
             break;
 
-        case Cmd::set_pattern_swing:
-            live().swing = uint8_t(command.a < kSwingMin ? kSwingMin
-                                                           : (command.a > kSwingMax ? kSwingMax : command.a));
+        case Cmd::set_pattern_swing: {
+            const int wanted = command.c == kDeltaFlag
+                                   ? int(live().swing) + int(int8_t(command.b))
+                                   : int(command.a);
+            live().swing = uint8_t(wanted < kSwingMin ? kSwingMin
+                                                      : (wanted > kSwingMax ? kSwingMax : wanted));
             reconfigure();
             break;
+        }
 
         // --- M3: deltas, undo, ranges and recording ---------------------------
 
@@ -785,7 +795,12 @@ void Engine::apply(const Command &command) {
 
         case Cmd::set_param:
             if (command.a < kParams) {
-                params_[track].v[command.a] = clamp_u8(command.b);
+                uint8_t value = command.b;
+                if (command.c == kDeltaFlag) {
+                    const int next = int(params_[track].v[command.a]) + int(int8_t(command.b));
+                    value = uint8_t(next < 0 ? 0 : (next > 127 ? 127 : next));
+                }
+                params_[track].v[command.a] = clamp_u8(value);
                 // `performed_` is built FROM `params_`, and the per-block copy in process()
                 // writes it over every unlocked parameter of `effective_`. So a kit change that
                 // does not set this flag is reverted within the same block: `apply_performance`
@@ -796,13 +811,21 @@ void Engine::apply(const Command &command) {
                 // Mirror into the effective set as well, so the turn is heard in THIS block even
                 // before the copy runs. The next step rebuilds effective_ from the kit anyway,
                 // so a lock on this parameter still wins from then on.
-                effective_[track].v[command.a] = clamp_u8(command.b);
+                effective_[track].v[command.a] = clamp_u8(value);
             }
             break;
 
-        case Cmd::set_track_level:
-            mix_[track].level = command.f < 0.0f ? 0.0f : (command.f > 2.0f ? 2.0f : command.f);
+        case Cmd::set_track_level: {
+            // A NaN fails both comparisons and would pass straight through, so it is caught first.
+            const float f = command.f == command.f ? command.f : 0.0f;
+            if (command.c == kDeltaFlag) {
+                const float next = mix_[track].level + f;
+                mix_[track].level = next < 0.0f ? 0.0f : (next > kFaderDeltaMax ? kFaderDeltaMax : next);
+            } else {
+                mix_[track].level = f < 0.0f ? 0.0f : (f > 2.0f ? 2.0f : f);
+            }
             break;
+        }
 
         case Cmd::set_mute:
             if (command.b != 0) {

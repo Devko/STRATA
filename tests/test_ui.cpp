@@ -397,6 +397,39 @@ TEST(ui_an_encoder_with_no_step_held_writes_the_kit_and_not_a_lock) {
     CHECK_EQ(int(undo_depth()), 0);                // a kit edit is not a pattern edit
 }
 
+TEST(ui_every_click_in_a_block_counts_on_the_knobs_the_swing_and_the_length) {
+    // These four computed "engine value + delta" on the UI side and posted the result. The
+    // engine applies commands once a block, so three clicks before the next block all read the
+    // same value and the knob moved one click. They now post deltas the audio side applies.
+    Strata &app = fresh();
+
+    const int param = encoder_param(1);
+    const int before = int(app_engine().params(0).v[param]);
+    app.on_encoder(1, +1);
+    app.on_encoder(1, +1);
+    app.on_encoder(1, +1);
+    pump();
+    CHECK_EQ(int(app_engine().params(0).v[param]), before + 3);
+
+    const int length = int(app_engine().pattern().tracks[0].length);
+    app.on_key(ENAGA_KEY_F1, true);
+    for (int i = 0; i < 3; i++) {
+        app.on_key(ENAGA_KEY_OCTAVE_LEFT, true);
+        app.on_key(ENAGA_KEY_OCTAVE_LEFT, false);
+    }
+    app.on_key(ENAGA_KEY_F1, false);
+    pump();
+    CHECK_EQ(int(app_engine().pattern().tracks[0].length), length - 3);
+
+    const int swing = int(app_engine().pattern().swing);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    app.on_encoder(4, +1);
+    app.on_encoder(4, +1);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump();
+    CHECK_EQ(int(app_engine().pattern().swing), swing + 2);
+}
+
 TEST(ui_the_parameter_page_decides_which_parameter_an_encoder_writes) {
     // Found by mutation testing: dropping `page_first(Page(param_page_))` from the lock index
     // survived every test above, because none of them ever left the SRC page -- where the page

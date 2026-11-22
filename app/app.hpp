@@ -560,11 +560,10 @@ public:
                     break;
                 }
                 if (shift_) {
-                    const int length = int(engine_.pattern().tracks[selected_].length) + delta;
+                    // A delta, applied by the audio side (app/commands.hpp, kDeltaFlag).
                     mark(GestureKind::length, selected_, 0);
-                    post(Cmd::set_track_length, uint8_t(selected_), 0,
-                         uint8_t(length < 1 ? 1
-                                            : (length > kStepsPerTrack ? kStepsPerTrack : length)));
+                    post(Cmd::set_track_length, uint8_t(selected_), 0, 0, clamp_delta(delta),
+                         kDeltaFlag);
                     end_gesture();
                 } else {
                     const int next = page_ + delta;
@@ -803,11 +802,8 @@ public:
             }
             if (value_pushed_) {
                 // VALUE pushed and turned is the pattern's swing, as the spec's key table says.
-                const int swing = int(engine_.pattern().swing) + delta;
                 mark(GestureKind::length, 0, 0);
-                post(Cmd::set_pattern_swing, 0, 0,
-                     uint8_t(swing < kSwingMin ? kSwingMin
-                                               : (swing > kSwingMax ? kSwingMax : swing)));
+                post(Cmd::set_pattern_swing, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
                 return;
             }
             if (shift_) {
@@ -970,13 +966,11 @@ public:
                 // A-D are the levels of the four tracks in the current bank.
                 const int track = mixer_bank_ * 4 + encoder;
                 if (track >= kTracks) return;
-                float level = engine_.level(track) + float(delta) * 0.02f;
-                if (level < 0.0f) level = 0.0f;
-                if (level > 1.5f) level = 1.5f;
                 Command command;
                 command.cmd = Cmd::set_track_level;
                 command.track = uint8_t(track);
-                command.f = level;
+                command.c = kDeltaFlag;            // the engine adds it and clamps at 1.5
+                command.f = float(delta) * 0.02f;
                 post_command(command);
                 return;
             }
@@ -1046,9 +1040,8 @@ public:
 
         // 5. Otherwise A-D edit the four parameters of the current page on the selected track.
         const int index = page_first(Page(param_page_)) + encoder;
-        const int value = int(engine_.params(selected_).v[index]) + delta;
-        post(Cmd::set_param, uint8_t(selected_), 0,
-             uint8_t(index), uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value)));
+        post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index), clamp_delta(delta),
+             kDeltaFlag);
     }
 
     void on_pad_press(int pad, int velocity) override {
@@ -2563,8 +2556,13 @@ private:
     // An encoder delta, as a signed byte. The audio side applies it to the authoritative step,
     // which is why these carry a delta and not a value (app/commands.hpp explains the choice).
     void post_delta(Cmd cmd, int track, int step, uint8_t a, int delta) {
+        post(cmd, uint8_t(track), uint8_t(step), a, clamp_delta(delta));
+    }
+
+    // An encoder delta as the signed byte a command carries.
+    static uint8_t clamp_delta(int delta) {
         const int clamped = delta < -120 ? -120 : (delta > 120 ? 120 : delta);
-        post(cmd, uint8_t(track), uint8_t(step), a, uint8_t(int8_t(clamped)));
+        return uint8_t(int8_t(clamped));
     }
 
     // --- undo gestures ----------------------------------------------------
