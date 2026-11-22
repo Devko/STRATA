@@ -512,8 +512,10 @@ public:
                     // F1 + F6: stop and reset all tracks (docs/SPEC.md). Everything a plain STOP
                     // does, and the second press's cut, in one: the tails are cut, a queued
                     // pattern change is dropped and the clock goes back to 0, so the next PLAY
-                    // or CONTINUE starts at step 1 with nothing pending. Refused under an
-                    // outside clock that keeps running, exactly as plain F6 is.
+                    // or CONTINUE starts at step 1 with nothing pending -- and a running chain
+                    // goes back to its first entry, so a whole set starts again from the top
+                    // (Roland, 2026-11-22). Refused under an outside clock that keeps running,
+                    // exactly as plain F6 is.
                     clock_refused_ = !enaga::clock::stop();
                     if (clock_refused_ && enaga::clock::running()) {
                         notice("EXT CLOCK");
@@ -522,6 +524,9 @@ public:
                     enaga::clock::locate(0);
                     post(Cmd::stop, 0, 0, 1);
                     post(Cmd::cancel_queue);
+                    // Starting the chain again is what puts it on entry 1 and that entry's
+                    // pattern live; with the clock stopped the switch is immediate.
+                    if (engine_.chain().active) post(Cmd::set_chain, 0, 0, 1);
                     stop_armed_ = false;
                     notice("RESET");
                     break;

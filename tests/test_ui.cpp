@@ -744,6 +744,46 @@ TEST(ui_f1_f6_stops_cuts_and_resets_in_one_press) {
     host.set_source(ENAGA_CLOCK_INTERNAL);
 }
 
+TEST(ui_f1_f6_puts_a_running_chain_back_on_its_first_entry) {
+    // Roland, 2026-11-22: FUNC + STOP resets a running chain too, so the set starts again from
+    // the top. A chain that is off stays off and the pattern stays where it is.
+    Strata &app = fresh();
+    (void)app;
+    FakeHost &host = FakeHost::the();
+    Project &incoming = app_engine().project_for_load();
+    project_init(incoming);
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1};
+    incoming.chain[1] = ChainEntry{0, 1, 1};
+    post_cmd(Cmd::project_loaded);
+    pump(2);
+
+    key(ENAGA_KEY_F5);
+    host.deliver_tick(0, 0);
+    pump();
+    post_cmd(Cmd::set_chain, 1);
+    pump(2);
+    host.deliver_tick(1536, 0);                    // the pass ends: entry 2, A02
+    pump(2);
+    CHECK_EQ(int(app_engine().chain().entry), 1);
+    CHECK_EQ(int(app_engine().project().slot), 1);
+
+    shift_key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(app_engine().chain().active);
+    CHECK_EQ(int(app_engine().chain().entry), 0);
+    CHECK_EQ(int(app_engine().project().slot), 0);
+
+    // Chain off: F1 + F6 leaves the pattern alone.
+    post_cmd(Cmd::set_chain, 0);
+    post_cmd(Cmd::queue_pattern, 0, 1, 0);        // stopped, so A02 at once
+    pump(2);
+    shift_key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(!app_engine().chain().active);
+    CHECK_EQ(int(app_engine().project().slot), 1);
+}
+
 // --- the two ways a hold used to be stranded ------------------------------------------------
 //
 // docs/UNIT_CHECKLIST.md: "Hold a STEP key, change page or mode, let go, then turn an encoder. No
