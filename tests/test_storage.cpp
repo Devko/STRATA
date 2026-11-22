@@ -776,6 +776,11 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     CHECK_EQ(int(back.settings.scale), 3);
     CHECK_EQ(int(back.settings.quantize), 70);
     CHECK(back.settings.chain_enabled);
+    // And the chain is FOLLOWED again, not just remembered: the flag used to be read by nothing.
+    // The saved live pattern (C12, below) is not an entry, so it plays out its pass first.
+    CHECK(engine().chain().active);
+    CHECK(engine().chain().orphaned);
+    CHECK_EQ(int(engine().chain().entry), 0);
     CHECK_EQ(int(back.settings.chain_length), 3);
     CHECK_EQ(int(back.chain[0].bank), 1);
     CHECK_EQ(int(back.chain[0].slot), 2);
@@ -2924,11 +2929,14 @@ TEST(storage_request_new_is_ram_only_and_takes_a_fresh_name) {
     CHECK(number > 0);
     CHECK(std::strcmp(storage().project_name(), old_name) != 0);
 
-    // The project in RAM is empty, every file is dirty, and the first save of it writes all
-    // eleven -- a new name names a folder with nothing in it to be a diff against.
+    // The project in RAM is the FACTORY one (core/factory.hpp) -- the edits above are gone and the
+    // kit is playable, where a blank kit had LVL 0 on every track -- every file is dirty, and the
+    // first save of it writes all eleven: a new name names a folder with nothing in it to be a
+    // diff against.
     pump(4);
     CHECK_EQ(int(engine().pattern().tracks[0].steps[1].flags), 0);
-    CHECK_EQ(int(kit_value(0, kLvl)), 0);
+    CHECK_EQ(int(kit_value(0, kLvl)), int(strata::test::factory().kit.tracks[0].params[kLvl]));
+    CHECK(kit_value(0, kLvl) > 0);
     CHECK(storage().dirty());
     CHECK_EQ(scene_count(engine().scenes().scenes[0]), 0);
 
@@ -3011,7 +3019,7 @@ TEST(storage_request_new_takes_everything_of_the_old_project_away) {
     CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::empty));   // off its track
     CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);
     CHECK_EQ(scene_count(engine().scenes().scenes[5]), 0);
-    CHECK_EQ(int(engine().macros().macros[2].targets[0].enabled), 0);
+    CHECK_EQ(int(engine().macros().macros[2].targets[0].enabled), 0);   // the factory ships none
 }
 
 TEST(storage_request_new_waits_for_the_command_ring) {

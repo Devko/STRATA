@@ -220,8 +220,6 @@ private:
     // tempo-synced) and by a project load.
     void apply_mixer_bytes();
 
-    void load_default_kit();
-    void load_default_pattern();
     void build_placeholder_sample();
 
     // --- the machine pool ---

@@ -1,5 +1,7 @@
 #include "engine.hpp"
 
+#include "factory.hpp"
+
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
 #include <enaga/dsp.hpp>
@@ -14,7 +16,7 @@ namespace {
 constexpr int kMaxLocksApplied = kLocksPerStep;
 
 // Middle C. The pattern's root is a pitch class (core/pattern.hpp), so turning it into a note
-// needs an octave, and this is the one the default pattern uses.
+// needs an octave, and this is the one the key command uses.
 constexpr uint8_t kDefaultOctaveNote = 60;
 // The mixer page's fader ceiling, which an encoder delta stops at (Cmd::set_track_level).
 constexpr float kFaderDeltaMax = 1.5f;
@@ -29,6 +31,11 @@ uint8_t clamp_u8(int value) {
 // has. core/project.hpp cannot say so itself: core/ does not depend on dsp/ (core/pattern.hpp
 // explains why), so the two constants are declared apart and checked here, in the one file that
 // includes both.
+// core/factory.cpp writes the kit by index, because core/ cannot see dsp/track.hpp's pages.
+static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first(Page::fltr) &&
+                  kFactoryAmp == page_first(Page::amp) && kFactoryFx == page_first(Page::fx),
+              "core/factory.hpp's page layout and dsp/track.hpp's have diverged");
+
 static_assert(kKitParams == kParams,
               "core/project.hpp's kit record and dsp/track.hpp's TrackParams have diverged; a "
               "saved project would come back with the wrong number of parameters per track");
@@ -70,21 +77,6 @@ bool Engine::init(float sample_rate) {
         pool_[t].grain.init(rate_);
     }
 
-    // docs/SPEC.md's default kit, by machine ID rather than by pointer: KICK, SNARE, HAT, HAT,
-    // PERC, VA MONO, VA POLY, SAMPLE.
-    machine_id_[0] = uint8_t(MachineId::kick);
-    machine_id_[1] = uint8_t(MachineId::snare);
-    machine_id_[2] = uint8_t(MachineId::hat);
-    machine_id_[3] = uint8_t(MachineId::hat);
-    machine_id_[4] = uint8_t(MachineId::perc);
-    machine_id_[5] = uint8_t(MachineId::va_mono);
-    machine_id_[6] = uint8_t(MachineId::va_poly);
-    machine_id_[7] = uint8_t(MachineId::sample);
-    rewire_machines();
-    for (int t = 0; t < kTracks; t++) project_.kit.tracks[t].machine = machine_id_[t];
-
-
-
     // The duck fires from the kick, and the kick itself must not duck.
     //
     // Both arms of this used to be 0.0f, which meant docs/SPEC.md's M2 sidechain duck was dead
@@ -99,10 +91,15 @@ bool Engine::init(float sample_rate) {
     mixer_.set_duck(0.003f, 0.040f, 0.120f);
     for (int t = 0; t < kTracks; t++) mix_[t].duck = t == duck_source_ ? 0.0f : kDuckDepth;
 
-    load_default_kit();
-    for (int t = 0; t < kTracks; t++) effective_[t] = params_[t];   // no locks active yet
+    // The factory project (core/factory.hpp): the same kit, mixer, patterns, scenes and macros
+    // a NEW project gets, so the instrument with no card and a new project are one thing.
+    // params_from_kit assigns the machines, rewires them and copies the kit into `params_` and
+    // `effective_`; then the sends and the master from the project's bytes, so `sends_` does not
+    // hold dsp/buses.hpp's struct defaults until the first knob move.
+    factory_project(project_, scenes_, macros_);
+    params_from_kit();
+    apply_mixer_bytes();
     apply_performance();
-    load_default_pattern();
 
     scheduler_.configure(live());
     scheduler_.reset(true);
@@ -157,83 +154,6 @@ void Engine::rewire_machines() {
     }
 }
 
-void Engine::load_default_kit() {
-    for (int t = 0; t < kTracks; t++) {
-        TrackParams &p = params_[t];
-        for (int i = 0; i < kParams; i++) p.v[i] = 64;   // the middle of every knob
-
-        // FLTR: filter off is both the cheapest setting and the right default for drums.
-        p.v[page_first(Page::fltr) + 0] = 0;    // DRV: no drive
-        p.v[page_first(Page::fltr) + 3] = 0;    // MOD: filter off
-
-        // FX: lo-fi off, centred, sends closed. Closed sends matter: the mixer stops running
-        // delay and reverb entirely when nothing feeds them, which is 16% of the budget.
-        p.v[page_first(Page::fx) + 0] = 0;      // LOF off
-        p.v[page_first(Page::fx) + 1] = 64;     // PAN centre
-        p.v[page_first(Page::fx) + 2] = 0;      // SNA closed
-        p.v[page_first(Page::fx) + 3] = 0;      // SNB closed
-
-        p.v[page_first(Page::amp) + 3] = 100;   // LVL
-        mix_[t].level = 1.0f;
-    }
-
-    // A starting point that sounds like techno rather than like test tones. AMP slot 0 is the
-    // decay on all three machines.
-    params_[0].v[page_first(Page::amp) + 0] = 75;    // KICK: a long-ish body
-    params_[0].v[page_first(Page::fltr) + 0] = 24;   // and a little drive, which the 909 likes
-    params_[1].v[page_first(Page::amp) + 0] = 50;    // SNARE
-    params_[2].v[page_first(Page::amp) + 0] = 22;    // HAT closed: tight
-    params_[3].v[page_first(Page::amp) + 0] = 86;    // HAT open: long
-
-    // Pan the hats apart a little so the stereo image is not a single point.
-    params_[2].v[page_first(Page::fx) + 1] = 52;
-    params_[3].v[page_first(Page::fx) + 1] = 76;
-
-    // PERC as a rimshot, using the settings dsp/perc.cpp documents for one: a short, high,
-    // inharmonic hit (ratio pi) that cuts through without competing with the snare.
-    // SRC is TUN, RAT, IDX, IDD; AMP is DEC, SWP, SWT, LVL.
-    const uint8_t perc_src[4] = {85, 48, 75, 20};
-    const uint8_t perc_amp[4] = {12, 30, 10, 100};
-    for (int i = 0; i < 4; i++) {
-        params_[4].v[page_first(Page::src) + i] = perc_src[i];
-        params_[4].v[page_first(Page::amp) + i] = perc_amp[i];
-    }
-    params_[4].v[page_first(Page::fx) + 1] = 44;    // a touch left of the hats
-
-    // BASS (VA MONO). SRC is TUN, MOD, CUT, RES; AMP is DEC, ENV, GLD, LVL. A techno bass wants
-    // a low-ish cutoff with real resonance and a short filter envelope, so the note moves.
-    const uint8_t bass_src[4] = {64, 40, 46, 84};
-    const uint8_t bass_amp[4] = {38, 72, 18, 104};
-    for (int i = 0; i < 4; i++) {
-        params_[5].v[page_first(Page::src) + i] = bass_src[i];
-        params_[5].v[page_first(Page::amp) + i] = bass_amp[i];
-    }
-
-    // The CHORD slot's stand-in: the same machine, tuned up and opened out so it reads as a
-    // stab rather than a second bass. Replaced by VA POLY in M6, which will cost more (six
-    // voices against this one), so do not read the 8-track figure as final.
-    const uint8_t stab_src[4] = {64, 70, 92, 40};
-    const uint8_t stab_amp[4] = {70, 40, 0, 76};
-    for (int i = 0; i < 4; i++) {
-        params_[6].v[page_first(Page::src) + i] = stab_src[i];
-        params_[6].v[page_first(Page::amp) + i] = stab_amp[i];
-    }
-    params_[6].v[page_first(Page::fx) + 1] = 84;    // off to the right
-
-    // LOOP (SAMPLE). SRC is PIT, STA, LEN, SLC; AMP is ATK, DEC, PLY, LVL. Eight slices, so a
-    // note picks one; the placeholder sample below is built with eight.
-    // SLC must be 60, not 64: the slice count is 1 + knob * 16 / 128 in zones eight knob values
-    // wide, so 64 asks for NINE slices while the placeholder below builds eight. The boundaries
-    // would then fall mid-blip instead of on them. ATK 0 is a true zero attack, which is what a
-    // sliced one-shot wants -- its transient IS the sound.
-    const uint8_t loop_src[4] = {64, 0, 127, 60};   // PIT unity, STA 0, LEN to the end, SLC 8
-    const uint8_t loop_amp[4] = {0, 110, 0, 96};    // ATK instant, DEC long, PLY fwd one-shot
-    for (int i = 0; i < 4; i++) {
-        params_[7].v[page_first(Page::src) + i] = loop_src[i];
-        params_[7].v[page_first(Page::amp) + i] = loop_amp[i];
-    }
-}
-
 // A sliced test loop, so track 8 has something to play before M4 can load a WAV from the card.
 //
 // Eight slices of a short decaying blip, each a fourth apart, which makes the slice feature
@@ -271,108 +191,6 @@ void Engine::build_placeholder_sample() {
         pool_[t].sampler.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
         pool_[t].grain.set_sample(pcm, uint32_t(kTotalFrames), 1, rate_);
     }
-}
-
-void Engine::load_default_pattern() {
-    // Every one of the 128 patterns, not just the live one: a project with 127 uninitialised
-    // patterns would play whatever zeroed memory means the first time someone queued one, and
-    // core/timing.hpp's numbering is deliberately chosen so that zeroed memory is at least sane
-    // rather than correct. Cheap, once, at init.
-    project_init(project_);
-
-    // The sends and the master, from the bytes `project_init` just put there. Without this
-    // `sends_` would hold dsp/buses.hpp's struct defaults rather than what the project says, and
-    // the first knob move would jump the delay from one to the other.
-    apply_mixer_bytes();
-
-    pattern_init(live());
-    // A PITCH CLASS, not a note. core/pattern.hpp documents `root` as 0-11 and
-    // core/serialize.cpp enforces it with `root % 12` on load, so the 60 this used to hold came
-    // back as 0 after a save and a load -- and the notes below, taken straight from it, would
-    // have come back at the very bottom of the MIDI range.
-    live().root = 0;                       // C
-    live().scale = uint8_t(Scale::minor);  // the default techno key (core/scale.hpp)
-    // And the project's, which is the key that is actually played (Engine::key_root).
-    project_.settings.root = uint8_t(kDefaultOctaveNote);
-    project_.settings.scale = uint8_t(Scale::minor);
-    live().seed = 0x5713A7Au;
-    live().master_length = 16;
-    live().swing = kSwingMin;
-
-    for (int t = 0; t < kTracks; t++) {
-        live().tracks[t].length = 16;
-        live().tracks[t].speed = uint8_t(Speed::x1);
-    }
-
-    // Four on the floor, a backbeat clap, offbeat closed hats and one open hat lifting the bar.
-    const uint8_t kick[] = {0, 4, 8, 12};
-    const uint8_t snare[] = {4, 12};
-    const uint8_t closed[] = {2, 6, 10, 14};
-    const uint8_t open[] = {14};
-    const uint8_t perc[] = {7, 15};        // a rim on the last 8th of each half-bar
-    const uint8_t bass[] = {2, 6, 10, 14}; // offbeat under the four-on-the-floor
-    const uint8_t stab[] = {0, 8};
-    const uint8_t loop[] = {1, 5, 9, 13};  // a different slice each time, via the note
-
-    auto put = [&](int track, const uint8_t *steps, int count, uint8_t velocity) {
-        for (int i = 0; i < count; i++) {
-            Step &s = live().tracks[track].steps[steps[i]];
-            s.flags = kStepTrig;
-            // The root in a playable octave. The pattern's root is a pitch class, so it needs
-            // an octave to become a note.
-            s.note = uint8_t(kDefaultOctaveNote + live().root);
-            s.velocity = velocity;
-            s.length = 8;            // one step
-        }
-    };
-
-    put(0, kick, 4, 110);
-    put(1, snare, 2, 100);
-    put(2, closed, 4, 80);
-    put(3, open, 1, 90);
-    put(4, perc, 2, 85);
-    put(5, bass, 4, 100);
-    put(6, stab, 2, 78);
-    put(7, loop, 4, 88);
-
-    // The bass plays low, and slides into the third note: the movement that makes a line groove
-    // rather than pulse. Slide is MONO-only, which is exactly what this track is.
-    for (int i = 0; i < 4; i++) {
-        Step &s = live().tracks[5].steps[bass[i]];
-        s.note = 36;                                   // C2
-    }
-    live().tracks[5].steps[6].flags |= kStepAccent;
-    live().tracks[5].steps[10].flags |= kStepSlide;
-    live().tracks[5].steps[10].note = 43;            // slides up a fifth
-    live().tracks[5].steps[14].flags |= kStepAccent;
-
-    // Successive notes pick successive slices of the placeholder loop.
-    for (int i = 0; i < 4; i++) {
-        live().tracks[7].steps[loop[i]].note = uint8_t(60 + i);
-    }
-
-    // The CHORD track plays a chord, which is what its name says and what makes VA POLY's six
-    // voices reachable without touching the step page. MIN7 is the dub-techno stab, and it is
-    // four notes rather than three, so the chord path is exercised past a triad: `fire` expands
-    // it on one frame and the allocator has to give each note its own voice. Like the two locks
-    // below, this is here so the feature runs every time anyone plays the default kit or an
-    // emulator scenario, rather than only when someone remembers to set it.
-    for (int i = 0; i < 2; i++) {
-        live().tracks[6].steps[stab[i]].chord = chord_pack(ChordType::min7, 0);
-    }
-
-    // Accent the downbeat kick: techno lives on that one.
-    live().tracks[0].steps[0].flags |= kStepAccent;
-    live().tracks[0].steps[0].velocity = 127;
-
-    // Two parameter locks, so the default pattern actually uses the feature docs/SPEC.md calls
-    // STRATA's edge over the stock firmware -- and so the lock path is exercised every time
-    // anyone plays the default kit or runs the emulator scenario.
-    //
-    // The third kick of the bar gets a shorter body, and one closed hat opens up: small
-    // per-step moves that are the whole point of locks.
-    pattern_set_lock(live(), 0, 8, uint8_t(page_first(Page::amp) + 0), 52);   // KICK DEC
-    pattern_set_lock(live(), 2, 10, uint8_t(page_first(Page::amp) + 0), 64);  // HAT DEC
 }
 
 // --- commands -------------------------------------------------------------
@@ -725,9 +543,12 @@ void Engine::apply(const Command &command) {
                     break;
                 case ChainEdit::insert:
                     done = chain_insert(project_, at, command.b, command.c, command.d);
+                    // The player's entry is an index: keep it on the entry it is playing.
+                    if (done) chain_player_inserted(chain_, at);
                     break;
                 case ChainEdit::remove:
                     done = chain_remove(project_, at);
+                    if (done) chain_player_removed(chain_, at);
                     break;
                 case ChainEdit::pattern_delta:
                 case ChainEdit::repeats_delta: {
@@ -853,6 +674,13 @@ void Engine::apply(const Command &command) {
             undo_.clear();
             queue_clear(queue_);
             chain_.active = false;
+            // A project saved with its chain running reopens with it running. The flag was
+            // written by every save and read by nothing, so the chain came back off while the
+            // file -- and the next save -- said on. The saved live pattern still opens; the
+            // chain takes over from its first entry at the end of that pass (chain_resume).
+            if (project_.settings.chain_enabled && !chain_resume(project_, chain_)) {
+                project_.settings.chain_enabled = false;
+            }
             deferred_count_ = 0;                 // hits of a pattern that no longer exists
             scheduler_.reset(true);
             reconfigure();
@@ -1501,6 +1329,13 @@ void Engine::reconfigure() {
 // --- the tick -------------------------------------------------------------
 
 void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
+    // The transport jumped BACK (a stop and start, F1 + F5, or an outside clock relocating). A
+    // change still queued was armed for a boundary measured on the old position: left alone it
+    // waited until the clock caught up with that tick again -- a change queued at bar 40 and
+    // then STOP and PLAY landed forty bars late. The boundary it was waiting for is gone, so it
+    // happens now, at this tick, from the new pattern's step 1: the same reading a change queued
+    // with the clock stopped gets (Cmd::queue_pattern).
+    const bool jumped_back = tick < tick_;
     tick_ = tick;
 
     // A transport that relocated to before the pattern's start (a START from 0 after a switch)
@@ -1513,6 +1348,13 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // A queued change takes effect BEFORE the tick is resolved, so this tick plays the new
     // pattern's steps rather than one last step of the old one. Every mode but NOW starts the
     // new pattern at its step 1 on the boundary the change was queued for (core/queue.hpp).
+    if (jumped_back && queue_.pending) {
+        switch_pattern(queue_.bank, queue_.slot);
+        queue_clear(queue_);
+        origin_ = tick;
+        boundary_known_ = false;
+    }
+
     if (queue_due(queue_, tick)) {
         const bool restart = queue_.restart;
         const uint32_t start = queue_.start_tick;

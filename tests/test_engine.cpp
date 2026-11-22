@@ -1310,6 +1310,32 @@ TEST(engine_a_pattern_change_clears_the_undo_history) {
 
 // --- the queue and chains --------------------------------------------------------------------
 
+TEST(engine_a_queued_change_lands_at_once_when_the_transport_jumps_back) {
+    // STOP and PLAY (or F1 + F5, or an outside clock relocating) put the clock back to 0. The
+    // change was armed for tick 1536 of the OLD position, and used to wait there -- a change
+    // queued deep into a set and then STOP, PLAY landed that many bars late.
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    tick_at(3000);
+    post(Cmd::queue_pattern, 0, 0, 1, 3, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK(engine.queue().pending);
+    CHECK_EQ(int(engine.queue().switch_tick), 3072);
+
+    tick_at(0);                                    // the transport starts again from 0
+    CHECK(!engine.queue().pending);
+    CHECK_EQ(live_bank(), 1);
+    CHECK_EQ(live_slot(), 3);
+
+    // And a forward tick does not: the next change still waits for its boundary.
+    tick_at(100);
+    post(Cmd::queue_pattern, 0, 0, 0, 0, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    tick_at(101);
+    CHECK(engine.queue().pending);
+    CHECK_EQ(live_slot(), 3);
+}
+
 TEST(engine_a_queued_change_waits_for_the_end_of_the_pass) {
     Engine &engine = clean();
     FakeHost::the().set_running(true);
@@ -1473,6 +1499,50 @@ TEST(engine_a_chain_advances_at_the_pass_boundary) {
     tick_at(2u * 1536u + 1u);
     tick_at(3u * 1536u);
     CHECK_EQ(live_slot(), 0);
+}
+
+TEST(engine_a_chain_edited_while_it_plays_stays_on_the_entry_it_is_playing) {
+    // The CHAIN page renumbers entries under a running player. Adding an entry above the playing
+    // one used to move the chain onto the wrong entry, and removing the playing one skipped the
+    // entry after it.
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    project_init(incoming);
+    incoming.settings.chain_length = 3;
+    incoming.chain[0] = ChainEntry{0, 0, 1};
+    incoming.chain[1] = ChainEntry{0, 1, 1};
+    incoming.chain[2] = ChainEntry{0, 2, 1};
+    post(Cmd::project_loaded);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    tick_at(1536);
+    CHECK_EQ(live_slot(), 1);                      // entry 1, A02
+    tick_at(1537);
+
+    Command insert;                                // A10 at the top
+    insert.cmd = Cmd::chain_edit;
+    insert.step = 0;
+    insert.a = uint8_t(ChainEdit::insert);
+    insert.b = 0;
+    insert.c = 9;
+    insert.d = 1;
+    CHECK(engine.commands().post(insert));
+    pump();
+    CHECK_EQ(int(engine.chain().entry), 2);        // still A02
+
+    Command remove;                                // and A02 itself goes
+    remove.cmd = Cmd::chain_edit;
+    remove.step = 2;
+    remove.a = uint8_t(ChainEdit::remove);
+    CHECK(engine.commands().post(remove));
+    pump();
+    CHECK_EQ(live_slot(), 1);                      // it plays out its pass
+    tick_at(2u * 1536u);
+    CHECK_EQ(live_slot(), 2);                      // then A03, not A10
+    CHECK_EQ(int(engine.chain().entry), 2);
 }
 
 TEST(engine_starting_an_empty_chain_is_refused) {

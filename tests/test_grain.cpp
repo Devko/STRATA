@@ -542,6 +542,38 @@ TEST(grain_release_all_leaves_a_tail) {
     CHECK(all_zero(g_out + n - 8 * kBlk, 8 * kBlk));
 }
 
+// KEYS mode lets a key go with release(note). A cloud at DEC 127 (hold) played from KEYS used
+// to sound for ever: Granular had no release, so the base class's no-op swallowed the key-up.
+TEST(grain_releasing_its_note_ends_a_held_cloud) {
+    fill_const(g_mono, kSrcFrames, 1, 20000);
+    const TrackParams p = plain();      // DEC 127: hold
+    for (int pass = 0; pass < 3; pass++) {
+        Granular g;
+        g.init(kRate);
+        g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+        g.prepare(p);
+        Trig t = hit();
+        if (pass == 2) t.frame = 3 * uint32_t(kBlk);   // still waiting for its frame
+        g.trigger(t);
+        if (pass < 2) {
+            clear(g_out, 24 * kBlk);
+            CHECK(peak(g_out, render_blocks(g, p, g_out, 24)) > 0.0f);
+        }
+        // pass 0: another note is let go, and the cloud holds. 1 and 2: its own note is.
+        g.release(uint8_t(pass == 0 ? t.note + 1 : t.note));
+        clear(g_out, kCapture);
+        const int n = render_blocks(g, p, g_out, 600);
+        if (pass == 0) {
+            CHECK(g.active());
+            CHECK(peak(g_out + n - 8 * kBlk, 8 * kBlk) > 0.0f);
+        } else {
+            if (pass == 1) CHECK(peak(g_out, n) > 0.0f);   // a release, not a cut
+            CHECK(!g.active());
+            CHECK(all_zero(g_out + n - 8 * kBlk, 8 * kBlk));
+        }
+    }
+}
+
 TEST(grain_parameter_names_are_three_upper_case_letters) {
     Granular g;
     g.init(kRate);

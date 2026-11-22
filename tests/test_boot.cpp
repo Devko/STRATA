@@ -10,7 +10,7 @@
 // So this file owns an Engine nobody has touched. File scope, as everywhere: it is far over the
 // 16 KiB frame rule.
 //
-// The default PATTERN's notes, accents and locks (app/engine.cpp, load_default_pattern) are
+// The default PATTERN's notes, accents and locks (core/factory.cpp, `groove`) are
 // content, not behaviour -- a different beat is not a bug -- so they are deliberately not pinned
 // note by note. What is pinned is that it exists and plays.
 #include "check.hpp"

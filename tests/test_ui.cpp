@@ -744,6 +744,46 @@ TEST(ui_f1_f6_stops_cuts_and_resets_in_one_press) {
     host.set_source(ENAGA_CLOCK_INTERNAL);
 }
 
+TEST(ui_f1_f6_puts_a_running_chain_back_on_its_first_entry) {
+    // Roland, 2026-11-22: FUNC + STOP resets a running chain too, so the set starts again from
+    // the top. A chain that is off stays off and the pattern stays where it is.
+    Strata &app = fresh();
+    (void)app;
+    FakeHost &host = FakeHost::the();
+    Project &incoming = app_engine().project_for_load();
+    project_init(incoming);
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1};
+    incoming.chain[1] = ChainEntry{0, 1, 1};
+    post_cmd(Cmd::project_loaded);
+    pump(2);
+
+    key(ENAGA_KEY_F5);
+    host.deliver_tick(0, 0);
+    pump();
+    post_cmd(Cmd::set_chain, 1);
+    pump(2);
+    host.deliver_tick(1536, 0);                    // the pass ends: entry 2, A02
+    pump(2);
+    CHECK_EQ(int(app_engine().chain().entry), 1);
+    CHECK_EQ(int(app_engine().project().slot), 1);
+
+    shift_key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(app_engine().chain().active);
+    CHECK_EQ(int(app_engine().chain().entry), 0);
+    CHECK_EQ(int(app_engine().project().slot), 0);
+
+    // Chain off: F1 + F6 leaves the pattern alone.
+    post_cmd(Cmd::set_chain, 0);
+    post_cmd(Cmd::queue_pattern, 0, 1, 0);        // stopped, so A02 at once
+    pump(2);
+    shift_key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(!app_engine().chain().active);
+    CHECK_EQ(int(app_engine().project().slot), 1);
+}
+
 // --- the two ways a hold used to be stranded ------------------------------------------------
 //
 // docs/UNIT_CHECKLIST.md: "Hold a STEP key, change page or mode, let go, then turn an encoder. No
@@ -843,6 +883,35 @@ TEST(ui_a_mutation_is_kept_with_ok_and_reverted_with_clr_in_any_mode) {
     CHECK_EQ(UiProbe::notice(app), "REDO");
     key(ENAGA_KEY_F4);
     pump(2);
+}
+
+TEST(ui_an_undo_settles_a_pending_mutation) {
+    // MUTATE, then F1 + CLR takes it back. The mutation used to stay "pending", so the next plain
+    // CLR undid a SECOND level -- the edit before the mutation -- and said REVERTED.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    for (int i = 0; i < 16; i += 4) {
+        if ((app_engine().pattern().tracks[0].steps[i].flags & kStepTrig) == 0) {
+            step_down(i);
+            step_up(i);
+        }
+    }
+    step_down(1);                                    // the edit before the mutation: a trig
+    step_up(1);
+    pump(2);
+    const bool had_trig = (app_engine().pattern().tracks[0].steps[1].flags & kStepTrig) != 0;
+
+    app.on_pad_press(13, 100);                       // MUTATE
+    app.on_pad_release(13);
+    pump(2);
+    shift_key(ENAGA_KEY_CLR);                        // undo: the mutation is gone
+    pump(2);
+    key(ENAGA_KEY_CLR);                              // plain CLR: erases the track, as in GRID
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "REVERTED") != 0);
+    shift_key(ENAGA_KEY_CLR);                        // and that erase undoes back to the trig
+    pump(2);
+    CHECK_EQ((app_engine().pattern().tracks[0].steps[1].flags & kStepTrig) != 0, had_trig);
 }
 
 TEST(ui_a_keys_key_holds_its_note_until_it_comes_up) {
@@ -2468,7 +2537,8 @@ TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_moved_to_f1_arrows) {
     CHECK_EQ(UiProbe::notice(app), "NEW PROJECT");
     CHECK(pump_until_idle());
     pump(4);
-    CHECK_EQ(int(pattern.master_length), int(Pattern{}.master_length));   // a blank project's
+    // The factory project's first pattern (core/factory.hpp), not the edited one.
+    CHECK_EQ(int(pattern.master_length), int(strata::test::factory().patterns[0][0].master_length));
     key(ENAGA_KEY_F4);
 }
 
