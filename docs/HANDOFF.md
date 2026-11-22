@@ -265,6 +265,13 @@ figure when asking whether a part fits.
   stated in `core/project.hpp` and `static_assert`ed against `SendField::count` in `dsp/buses.hpp`
   rather than taken from the enum.
 
+- **The factory content is one function** (2026-11-22). `factory_project` in core/factory.cpp
+  builds the kit, mixer, bank A's four patterns, the chain (off), mute states, scenes and macros.
+  `Engine::init` (no card) and `Storage::start_new` (NEW) both call it, so they cannot drift
+  apart again; NEW used to give a kit with LVL 0 everywhere. `project_init` stays blank, which is
+  what the tests' `fresh()` builds on. `make -C host render` renders it to WAV without an
+  emulator (host/render.cpp).
+
 ### 8. Open questions that need a person, not a session
 
 1. ~~The note spelling disagrees with itself~~ **Settled 2026-11-22: sharps everywhere.**

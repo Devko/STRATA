@@ -811,6 +811,26 @@ after the last hit with high feedback, which matters for battery and for any hea
 passage was relying on. Not re-measured: this cloud session has no emulator and no cl6x. Run the
 load scenario with feedback at 0.95 to confirm.
 
+### Factory content (2026-11-22, not measured)
+
+core/factory.hpp replaced the hand-built default beat. Two things it does cost load, and neither
+has been measured, because this cloud session has no emulator and no cl6x:
+
+- **The sends are open on the default kit.** Chord, rim, blips, clap and the open hat feed the
+  delay and the reverb, where the old default kept every send closed (the "cheap settings" row
+  above, 17.00% cl6x). The "worst case" row already has both sends running on every track, so
+  the sends add nothing that row did not already pay for; they move the DEFAULT beat from the
+  cheap row towards it.
+- **A03 BREAK lets chord voices overlap.** Its two chords decay over about 0.7 s and start
+  0.92 s apart with four notes each, so VA POLY can hold all six voices -- the `MIN11` row above
+  (23.48% cl6x, 39.55% GCC-only, measured with the sends closed). Six is the machine's ceiling,
+  so no factory pattern can go past it.
+
+Estimate for the heaviest factory pattern (A03 or A04): the six-voice row plus the sends, about
+**27-29% cl6x and 44-48% GCC-only**, inside 60% either way. `tests/scenario_factory.sh` plays A01
+and then A04 and records the peak; run it, and `scenario_m3.sh` for the new default beat, with
+and without cl6x, and put the figures here.
+
 ### KEYS note release (2026-11-22, not measured)
 
 `Machine::release(note)` was added to VA, VA POLY and SAMPLE for KEYS mode's key-up. It runs once
