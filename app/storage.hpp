@@ -22,7 +22,8 @@
 // command ring to drain. Posting makes the ring non-empty, which defers the save by at least one
 // pass, and by the time it is empty the audio side has applied every pending edit and is writing
 // nothing. The UI is single-threaded, so once the ring is empty and the UI is the one saving,
-// nothing is writing pattern memory at all.
+// nothing is writing pattern memory at all. That holds for ONE pass: a save is a file per pass
+// and the UI posts between passes, so every pass of a save or a load waits for the ring again.
 //
 // **A load additionally requires the transport stopped.** With the clock stopped
 // `clock::ticks()` yields nothing, so the scheduler never reads the pattern and 1.03 MiB can be

@@ -861,6 +861,63 @@ TEST(storage_a_save_waits_for_the_command_ring_to_drain) {
     CHECK((engine().pattern().tracks[1].steps[9].flags & kStepTrig) != 0);
 }
 
+TEST(storage_a_save_already_running_waits_for_the_ring_between_files) {
+    // The same protocol, one step further. A save is fourteen passes, one file each, and the UI
+    // runs between them: a knob turned while an autosave is going -- and an autosave starts the
+    // moment the transport stops -- posts an edit between two banks. On the unit the audio side
+    // can apply it in the MIDDLE of the next bank's serialization, because audio() preempts the
+    // main context, and the file gets a step half old and half new. The check before the job
+    // started does not cover this: it ran once, fourteen passes ago.
+    //
+    // So every pass of a save waits for the ring as the first one did. On the host nothing
+    // preempts anything, so what is checked is the condition itself: with an edit pending, a
+    // pass writes nothing.
+    clean();
+    FakeHost &host = FakeHost::the();
+
+    storage().request_save();
+    pump(4);
+    CHECK_EQ(storage().busy_text(), "SAVING");
+    const int written = host.saves();
+    CHECK(written > 0);
+
+    post(Cmd::toggle_trig, 2, 5);
+    CHECK(!engine().commands().empty());
+    for (int i = 0; i < 50; i++) storage().service();
+    CHECK_EQ(host.saves(), written);
+    CHECK_EQ(storage().busy_text(), "SAVING");
+
+    // Drained, it carries on from where it stopped and finishes.
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.saves() > written);
+}
+
+TEST(storage_a_load_already_running_waits_for_the_ring_between_files) {
+    // The load's version, where it is worse: `step_load` WRITES pattern memory from the main
+    // context, so an edit the audio side applies during a pass is two contexts writing the same
+    // bytes. The transport being stopped keeps the scheduler out; it does nothing about the
+    // command ring, which the audio side drains whether or not the clock runs.
+    clean();
+    FakeHost &host = FakeHost::the();
+    storage().request_save();
+    CHECK(settle());
+
+    storage().request_reload();
+    pump(4);
+    CHECK(storage().loading_project());
+    const int read = host.read_alls();
+    CHECK(read > 0);
+
+    post(Cmd::toggle_trig, 2, 5);
+    for (int i = 0; i < 50; i++) storage().service();
+    CHECK_EQ(host.read_alls(), read);
+    CHECK(storage().loading_project());
+
+    CHECK(pump_until_idle());
+    CHECK(host.read_alls() > read);
+}
+
 TEST(storage_busy_text_and_progress_follow_the_job) {
     // What the screen draws while the card is working. Not cosmetic: `busy_text()` is what
     // tests/apprig.hpp waits on, and `progress()` does its percentage in 32-bit arithmetic on

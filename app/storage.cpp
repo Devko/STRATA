@@ -473,6 +473,14 @@ int Storage::loading_track() const { return sample_track_; }
 void Storage::service() {
     if (!card_usable_) return;
 
+    // A save or a load is one file per pass, and the UI runs between passes. The ring was empty
+    // when the job STARTED (below), but an edit posted since can be applied by the audio side in
+    // the middle of this pass -- audio() preempts the main context -- so a save would serialize
+    // a step half old and half new, and a load would have two contexts writing the same pattern
+    // bytes. So every pass waits for the ring exactly as the first one did. A knob turned without
+    // pause holds the job back until it stops; that is the same trade the start already makes.
+    if ((job_ == Job::save || job_ == Job::load) && !engine_->commands().empty()) return;
+
     switch (job_) {
         case Job::save: step_save(); return;
         case Job::load: step_load(); return;
