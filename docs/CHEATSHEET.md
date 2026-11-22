@@ -31,7 +31,7 @@ key held down while you do the rest.
 | F1+F6 | Stop, cut the tails, drop a queued change, back to step 1 (RESET) |
 | F2 | Live record on/off (REC on the edit line, F2 lit red) |
 | F1+F3, F1+F3 (within 2 s) | Save the project |
-| F1+CLR / F1+OK | Undo / redo (not in PROJECT, where they start a new project / reload) |
+| F1+CLR / F1+OK | Undo / redo, in every mode and page |
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph) |
 | VALUE push + turn | Pattern swing |
 | F1 + VALUE | Master DJ filter (LP n / OFF / HP n) |
@@ -86,14 +86,15 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | MACHINE | Machine | Track | Track | A: machine | — | Copy / paste |
 | MIXER | — | Page (6) | Page | Levels or page fields | — / clear | Copy / paste |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | A: bars | Arm / cancel | Copy / paste |
-| PROJECT | Slot cursor by row | Slot cursor | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | UP: chain on/off, DOWN: reload track's sample |
+| PROJECT | Slot cursor by row | Slot cursor | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | UP: chain on/off, DOWN: reload track's sample, LEFT: reload project, RIGHT: new project |
 | CHAIN | Entry | Entry's pattern -/+ | Bank A-H | A: repeats X1-X16 | Add entry / back | LEFT: remove entry, UP: chain on/off |
 | PATTERN | Change field -/+ | Field LEN / SWG | Bank A-H | A: LEN 1-64, B: SWG | — / back | UP: chain on/off |
 | PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Macros A-D | Capture scene / clear macro | UP/DOWN: auto-fill OFF 4 8 16 |
 
 **KEYS:** STEP 1-16 play the scale from the root and hold the note until released; octave keys also change the octave.
-**PROJECT:** STEP 1-16 queue that slot of the shown bank; F1+OK reloads the project from the card
-(unsaved work is lost), F1+CLR starts a new project. The octave keys walk the pages PROJECT,
+**PROJECT:** STEP 1-16 queue that slot of the shown bank. On the slots and SETUP pages, F1+LEFT
+reloads the project from the card and F1+RIGHT starts a new one; both throw away unsaved work, so
+each needs a second press within 2 s (AGAIN TO RELOAD, AGAIN FOR NEW). The octave keys walk the pages PROJECT,
 CHAIN, PATTERN, SETUP; CLR on any of them goes back to the slots. In SETUP, A sets the record
 quantize.
 **CHAIN:** a STEP key puts that slot of the shown bank into the entry under the cursor (or starts
