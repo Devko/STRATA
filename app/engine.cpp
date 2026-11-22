@@ -497,6 +497,18 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_master_length: {
+            const int wanted = command.c == kDeltaFlag
+                                   ? int(live().master_length) + int(int8_t(command.b))
+                                   : int(command.a);
+            live().master_length = uint8_t(wanted < 1 ? 1
+                                                      : (wanted > kStepsPerTrack ? kStepsPerTrack
+                                                                                 : wanted));
+            // The pass length moved, so the next boundary is measured again from the origin.
+            boundary_known_ = false;
+            break;
+        }
+
         // --- M3: deltas, undo, ranges and recording ---------------------------
 
         case Cmd::step_field_delta:
@@ -651,6 +663,51 @@ void Engine::apply(const Command &command) {
             boundary_known_ = false;
             bar_known_ = false;
             break;
+
+        case Cmd::chain_edit: {
+            const int at = int(command.step);
+            bool done = false;
+            switch (ChainEdit(command.a)) {
+                case ChainEdit::set:
+                    done = chain_set(project_, at, command.b, command.c, command.d);
+                    break;
+                case ChainEdit::insert:
+                    done = chain_insert(project_, at, command.b, command.c, command.d);
+                    break;
+                case ChainEdit::remove:
+                    done = chain_remove(project_, at);
+                    break;
+                case ChainEdit::pattern_delta:
+                case ChainEdit::repeats_delta: {
+                    if (at >= chain_length(project_)) break;
+                    const ChainEntry entry = project_.chain[at];
+                    const int delta = int(int8_t(command.b));
+                    if (ChainEdit(command.a) == ChainEdit::pattern_delta) {
+                        int index = int(entry.bank) * kPatternsPerBank + int(entry.slot) + delta;
+                        const int last = kBanks * kPatternsPerBank - 1;
+                        index = index < 0 ? 0 : (index > last ? last : index);
+                        done = chain_set(project_, at, uint8_t(index / kPatternsPerBank),
+                                         uint8_t(index % kPatternsPerBank), entry.repeats);
+                    } else {
+                        int repeats = int(entry.repeats) + delta;
+                        repeats = repeats < 1 ? 1 : (repeats > kChainRepeatsMax ? kChainRepeatsMax
+                                                                                : repeats);
+                        done = chain_set(project_, at, entry.bank, entry.slot, uint8_t(repeats));
+                    }
+                    break;
+                }
+            }
+            if (!done) {
+                status_.bump_refused();
+                break;
+            }
+            // A chain emptied while it plays stops being followed; the pattern keeps playing.
+            if (chain_length(project_) == 0) {
+                chain_.active = false;
+                project_.settings.chain_enabled = false;
+            }
+            break;
+        }
 
         case Cmd::cancel_queue:
             // Unconditional: cancelling a queue that is not armed is what the UI does when the

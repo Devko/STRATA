@@ -86,7 +86,10 @@ struct UiProbe {
     static uint32_t tempo_tenths(const Strata &app) { return app.tempo_tenths_; }
     static bool clock_refused(const Strata &app) { return app.clock_refused_; }
     static bool stop_armed(const Strata &app) { return app.stop_armed_; }
-    static bool project_setup(const Strata &app) { return app.project_setup_; }
+    static bool project_setup(const Strata &app) { return app.project_setup(); }
+    static int project_page(const Strata &app) { return int(app.project_page_); }
+    static int chain_cursor(const Strata &app) { return app.chain_cursor_; }
+    static int pattern_field(const Strata &app) { return app.pattern_field_; }
     static int slot_cursor(const Strata &app) { return app.slot_cursor_; }
     static int macro_selected(const Strata &app) { return app.macro_selected_; }
     static int quantize(const Strata &app) { return app.quantize(); }
@@ -1735,8 +1738,10 @@ void mixer_page(Strata &app, int page) {
 void setup_page(Strata &app, bool on) {
     app.on_key(ENAGA_KEY_F3, true);
     app.on_key(ENAGA_KEY_F3, false);
-    app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, true);
-    app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, false);
+    for (int i = 0; i < 3; i++) {                   // past CHAIN and PATTERN, or back to the slots
+        app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, true);
+        app.on_key(on ? ENAGA_KEY_OCTAVE_RIGHT : ENAGA_KEY_OCTAVE_LEFT, false);
+    }
     CHECK_EQ(UiProbe::project_setup(app), on);
 }
 
@@ -2225,6 +2230,143 @@ TEST(ui_layout_project_and_setup) {
     }
     setup_page(app, false);
     key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_chain_and_pattern_pages) {
+    Strata &app = fresh();
+    worst_case_content(app);
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 1);
+    check_layout(app, "CHAIN, empty");
+    // A full chain of the widest entries, with the cursor at the top, the middle and the end.
+    for (int i = 0; i < kChainEntries; i++) {
+        app_engine().project_for_load().chain[i] = ChainEntry{7, 15, 16};
+    }
+    app_engine().project_for_load().settings.chain_length = uint8_t(kChainEntries);
+    post_cmd(Cmd::set_chain, 1);
+    pump(2);
+    check_layout(app, "CHAIN, full");
+    for (int i = 0; i < 40; i++) key(ENAGA_KEY_DOWN);
+    check_layout(app, "CHAIN, cursor in the middle");
+    for (int i = 0; i < 40; i++) key(ENAGA_KEY_DOWN);
+    check_layout(app, "CHAIN, cursor at the end");
+    post_cmd(Cmd::set_chain, 0);
+    for (int i = 0; i < kChainEntries; i++) app_engine().project_for_load().chain[i] = ChainEntry{};
+    app_engine().project_for_load().settings.chain_length = 0;
+    pump(2);
+
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 2);
+    check_layout(app, "PATTERN");
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_chain_page_builds_a_chain_that_plays) {
+    // docs/REVIEW.md: no gesture wrote a chain entry, so CHAIN ON always refused.
+    Strata &app = fresh();
+    const Project &project = app_engine().project();
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 1);
+    CHECK_EQ(chain_length(project), 0);
+
+    // OK on an empty chain adds the playing pattern; a STEP key then sets the entry's slot.
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(chain_length(project), 1);
+    key(ENAGA_KEY_STEP1 + 2);                         // A03
+    pump(2);
+    CHECK_EQ(int(project.chain[0].slot), 2);
+
+    // VALUE sets the repeats, in one event of several clicks, clamped to 1-16.
+    app.on_encoder(4, +3);
+    pump(2);
+    CHECK_EQ(int(project.chain[0].repeats), 4);
+    app.on_encoder(4, -10);
+    pump(2);
+    CHECK_EQ(int(project.chain[0].repeats), 1);
+
+    // OK copies the entry after the cursor and moves onto it; RIGHT steps its pattern.
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(chain_length(project), 2);
+    CHECK_EQ(UiProbe::chain_cursor(app), 1);
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK_EQ(int(project.chain[1].slot), 4);          // A05
+    CHECK_EQ(int(project.chain[0].slot), 2);
+
+    // UP goes back to the first; F1 + LEFT removes it, and the second moves up.
+    key(ENAGA_KEY_UP);
+    CHECK_EQ(UiProbe::chain_cursor(app), 0);
+    the_app().on_key(ENAGA_KEY_F1, true);
+    key(ENAGA_KEY_LEFT);
+    the_app().on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(chain_length(project), 1);
+    CHECK_EQ(int(project.chain[0].slot), 4);
+    key(ENAGA_KEY_OK);                                // and back to two: A05, A05
+    pump(2);
+
+    // F1 + UP turns it on, which now works, and it is saved as a project edit.
+    shift_key(ENAGA_KEY_UP);
+    pump(2);
+    CHECK(app_engine().chain().active);
+    CHECK_EQ(int(app_engine().status().live_slot.load(std::memory_order_relaxed)), 4);
+    CHECK(app_storage().dirty());
+
+    // Removing every entry turns it off rather than leaving it following nothing.
+    for (int i = 0; i < 2; i++) {
+        the_app().on_key(ENAGA_KEY_F1, true);
+        key(ENAGA_KEY_LEFT);
+        the_app().on_key(ENAGA_KEY_F1, false);
+        pump(2);
+    }
+    CHECK_EQ(chain_length(project), 0);
+    CHECK(!app_engine().chain().active);
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_pattern_page_sets_the_master_length_and_the_swing) {
+    Strata &app = fresh();
+    const Pattern &pattern = app_engine().pattern();
+    const int length = int(pattern.master_length);
+    const int swing = int(pattern.swing);
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 2);
+    CHECK_EQ(UiProbe::pattern_field(app), 0);
+
+    app.on_encoder(4, -4);                            // VALUE: LEN
+    pump(2);
+    CHECK_EQ(int(pattern.master_length), length - 4);
+    key(ENAGA_KEY_UP);                                // UP: one more
+    pump(2);
+    CHECK_EQ(int(pattern.master_length), length - 3);
+
+    key(ENAGA_KEY_RIGHT);                             // onto SWG
+    CHECK_EQ(UiProbe::pattern_field(app), 1);
+    app.on_encoder(4, +3);
+    pump(2);
+    CHECK_EQ(int(pattern.swing), swing + 3);
+    app.on_encoder(0, +100);                          // A: LEN again, clamped at 64
+    pump(2);
+    CHECK_EQ(int(pattern.master_length), 64);
+    CHECK_EQ(UiProbe::pattern_field(app), 0);
+
+    // A pattern edit, so undoable (from GRID: in PROJECT, F1 + CLR is NEW PROJECT).
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(int(pattern.master_length) < 64);
 }
 
 // --- the arrow keys ---------------------------------------------------------------------------

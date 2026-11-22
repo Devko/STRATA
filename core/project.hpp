@@ -118,6 +118,8 @@ constexpr int kSamplePathBytes = 112;
 
 // docs/SPEC.md: "Chains: up to 64 entries per project, each a pattern plus a repeat count."
 constexpr int kChainEntries = 64;
+// The most passes one entry repeats for from the CHAIN page (the file allows up to 255).
+constexpr int kChainRepeatsMax = 16;
 
 // --- the kit --------------------------------------------------------------
 

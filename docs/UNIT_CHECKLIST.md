@@ -926,3 +926,15 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
       again, then OK: it stays (KEPT). Works the same in GRID, EDIT and PERFORM.
 - [ ] In PERFORM, F1 + CLR undoes and F1 + OK redoes. Plain CLR still clears the selected macro.
 - [ ] Hold scene A and press CLR: scene A's slot is erased (SCENE ERASED). This used to be F1 + OK.
+
+## PROJECT: the CHAIN and PATTERN pages
+
+The octave keys in PROJECT now walk four pages: the slots, CHAIN, PATTERN and SETUP.
+
+- [ ] CHAIN: OK on an empty chain adds the playing pattern. STEP 3 makes it A03, VALUE sets the
+      repeats (X1 to X16), OK adds a copy below, LEFT and RIGHT step its pattern, UP and DOWN
+      move between entries, F1 + LEFT removes one. Build A01 X2, A03 X1 and turn it on with
+      F1 + UP: it plays A01 twice, A03 once, and loops. The PLAY marker follows.
+- [ ] Save and reopen: the chain comes back, and so does whether it was on.
+- [ ] PATTERN: LEN at 8 makes a queued change land every 8 steps; SWG moves the swing exactly as
+      VALUE pushed + turned does. F1 + CLR in GRID undoes a LEN change.

@@ -400,10 +400,15 @@ public:
         // is taken here, before the editing path, and only on the press -- there is no modifier
         // gesture to decide on the release.
         if (mode_ == Mode::project && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
-            if (down) {
-                slot_cursor_ = key - ENAGA_KEY_STEP1;   // the cursor follows, so OK repeats it
-                queue_shown_pattern(slot_cursor_);
+            if (!down) return;
+            // On the CHAIN page a STEP key is that slot of the shown bank, written into the
+            // entry under the cursor -- or the first entry, when the chain is empty.
+            if (project_page_ == ProjectPage::chain) {
+                chain_put_slot(key - ENAGA_KEY_STEP1);
+                return;
             }
+            slot_cursor_ = key - ENAGA_KEY_STEP1;       // the cursor follows, so OK repeats it
+            queue_shown_pattern(slot_cursor_);
             return;
         }
 
@@ -670,8 +675,12 @@ public:
                     // key in docs/SPEC.md's table is taken, plain and with F1, and the octave
                     // keys do nothing in this mode -- they were setting GRID's step page, which
                     // is not on screen here.
-                    project_setup_ = delta > 0;
-                    notice(project_setup_ ? "SETUP" : "PROJECT");
+                    // Four pages now: the slots, CHAIN, PATTERN and SETUP, walked in that order
+                    // and stopping at the ends.
+                    const int next = int(project_page_) + delta;
+                    const int last = int(ProjectPage::count) - 1;
+                    project_page_ = ProjectPage(next < 0 ? 0 : (next > last ? last : next));
+                    notice(project_page_name(project_page_));
                     break;
                 }
                 if (shift_) {
@@ -985,6 +994,19 @@ public:
                 notice("NOTE");
                 return;
             }
+            // PROJECT's CHAIN and PATTERN pages: VALUE edits the thing under the cursor -- the
+            // entry's repeat count, or the highlighted field. Not with VALUE pushed (swing) or F1
+            // (the DJ filter), which keep their meanings everywhere.
+            if (mode_ == Mode::project && !value_pushed_ && !shift_) {
+                if (project_page_ == ProjectPage::chain) {
+                    chain_delta(ChainEdit::repeats_delta, delta);
+                    return;
+                }
+                if (project_page_ == ProjectPage::pattern) {
+                    pattern_field_delta(pattern_field_, delta);
+                    return;
+                }
+            }
             // In PERFORM, VALUE is the morph: the one continuous control the layer has.
             if (mode_ == Mode::perform && !value_pushed_ && !shift_) {
                 const int next = int(morph_) + delta * (int(kMorphScale) / 64);
@@ -1090,7 +1112,19 @@ public:
         // <enaga/clock.hpp> and <enaga/midi.hpp> expose no way to write them, so STRATA shows
         // them and says where they live, which is all docs/SPEC.md's "STRATA only exposes the
         // settings" can mean.
-        if (mode_ == Mode::project && project_setup_) {
+        // CHAIN: A is the entry's repeat count. PATTERN: A is LEN and B is SWG.
+        if (mode_ == Mode::project && project_page_ == ProjectPage::chain) {
+            if (encoder == 0) chain_delta(ChainEdit::repeats_delta, delta);
+            return;
+        }
+        if (mode_ == Mode::project && project_page_ == ProjectPage::pattern) {
+            if (encoder == 0 || encoder == 1) {
+                pattern_field_ = encoder;
+                pattern_field_delta(encoder, delta);
+            }
+            return;
+        }
+        if (mode_ == Mode::project && project_setup()) {
             if (encoder != 0) return;
             post_delta(Cmd::set_quantize, 0, 0, 0, delta * 5);
             notice("QUANTIZE");
@@ -1580,7 +1614,9 @@ public:
         // so a page walked with the selection keys is all it can see of MIXER and SETUP.
         {
             const int screen = int(mode_) * 16 + (mode_ == Mode::mixer ? mixer_bank_
-                                                                       : (project_setup_ ? 1 : 0));
+                                                                       : (mode_ == Mode::project
+                                                                              ? int(project_page_)
+                                                                              : 0));
             if (screen != logged_screen_) {
                 logged_screen_ = screen;
                 char line[24];
@@ -1590,8 +1626,9 @@ public:
                 if (mode_ == Mode::mixer) {
                     *out++ = ' ';
                     append(out, kMixerPages[mixer_bank_].name);
-                } else if (mode_ == Mode::project && project_setup_) {
-                    append(out, " SETUP");
+                } else if (mode_ == Mode::project && project_page_ != ProjectPage::slots) {
+                    *out++ = ' ';
+                    append(out, project_page_name(project_page_));
                 }
                 *out = 0;
                 enaga::log(line);
@@ -2552,6 +2589,8 @@ public:
     // "loaded whole into RAM at project open" need. Picking a different project or a different
     // sample from the card is a browser, and a browser is not in M4.
     bool on_project_key(int key) {
+        if (project_page_ == ProjectPage::chain && on_chain_key(key)) return true;
+        if (project_page_ == ProjectPage::pattern && on_pattern_page_key(key)) return true;
         switch (key) {
             case ENAGA_KEY_OK:
                 if (shift_) {
@@ -2559,7 +2598,7 @@ public:
                     // is doing rather than looking like nothing happened.
                     storage_.request_reload();
                     notice("RELOADING");
-                } else if (!project_setup_) {
+                } else if (project_page_ == ProjectPage::slots) {
                     // OK picks the slot under the cursor, as OK picks in every Enaga list.
                     // Saving is F1 + F3 twice (docs/SPEC.md's key table).
                     queue_shown_pattern(slot_cursor_);
@@ -2570,8 +2609,8 @@ public:
                 if (shift_) {
                     storage_.request_new();
                     notice("NEW PROJECT");
-                } else if (project_setup_) {
-                    project_setup_ = false;            // back, from the SETUP page
+                } else if (project_page_ != ProjectPage::slots) {
+                    project_page_ = ProjectPage::slots;   // back, from any other page
                     notice("PROJECT");
                 } else {
                     post(Cmd::cancel_queue);
@@ -2616,7 +2655,7 @@ public:
     // them in reading order, UP and DOWN by a row. It stops at the ends rather than wrapping,
     // because the bank is on the selection keys and wrapping would hide where the edge is.
     void move_slot_cursor(int delta) {
-        if (project_setup_) return;
+        if (project_page_ != ProjectPage::slots) return;
         const int next = slot_cursor_ + delta;
         if (next >= 0 && next < kPatternsPerBank) slot_cursor_ = next;
     }
@@ -2640,6 +2679,227 @@ public:
         append(out, queue_mode_name(queue_mode_));
         *out = 0;
         notice(notice_buffer_);
+    }
+
+    // --- PROJECT's CHAIN page ---------------------------------------------
+    //
+    // The chain as a list, one entry per row: UP and DOWN move through the entries, LEFT and
+    // RIGHT step the entry's pattern through the 128, a STEP key sets it to that slot of the
+    // shown bank, VALUE (or A) sets how many times it repeats. OK adds an entry after the cursor
+    // -- a copy of the one there, or the playing pattern when the chain is empty -- and F1 + LEFT
+    // removes the one under the cursor. CLR goes back. F1 + UP is still CHAIN ON/OFF.
+    //
+    // The entries are the audio side's (it plays them), so every edit is a command, and the
+    // knob and arrow edits are deltas applied there. Chain edits are not undoable: core/undo
+    // snapshots the pattern, and the chain is not in a pattern.
+
+    int chain_entries() const { return chain_length(engine_.project()); }
+
+    void chain_clamp_cursor() {
+        const int length = chain_entries();
+        if (chain_cursor_ >= length) chain_cursor_ = length - 1;
+        if (chain_cursor_ < 0) chain_cursor_ = 0;
+    }
+
+    void post_chain(ChainEdit edit, int at, uint8_t b = 0, uint8_t c = 0, uint8_t d = 0) {
+        Command command;
+        command.cmd = Cmd::chain_edit;
+        command.step = uint8_t(at);
+        command.a = uint8_t(edit);
+        command.b = b;
+        command.c = c;
+        command.d = d;
+        post_command(command);
+    }
+
+    void chain_delta(ChainEdit edit, int delta) {
+        if (chain_entries() == 0) {
+            notice("CHAIN EMPTY");
+            return;
+        }
+        chain_clamp_cursor();
+        post_chain(edit, chain_cursor_, uint8_t(int8_t(clamp_delta(delta))));
+    }
+
+    void chain_put_slot(int slot) {
+        const int length = chain_entries();
+        if (length == 0) {
+            post_chain(ChainEdit::insert, 0, uint8_t(shown_bank_), uint8_t(slot), 1);
+            chain_cursor_ = 0;
+        } else {
+            chain_clamp_cursor();
+            const uint8_t repeats = engine_.project().chain[chain_cursor_].repeats;
+            post_chain(ChainEdit::set, chain_cursor_, uint8_t(shown_bank_), uint8_t(slot),
+                       repeats);
+        }
+        char *out = notice_buffer_;
+        *out++ = bank_letter(shown_bank_);
+        append_padded(out, uint32_t(slot) + 1, 2);
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    bool on_chain_key(int key) {
+        const int length = chain_entries();
+        switch (key) {
+            case ENAGA_KEY_OK: {
+                if (shift_) return false;                 // F1 + OK: reload, as on the slots
+                if (length >= kChainEntries) {
+                    notice("CHAIN FULL");
+                    return true;
+                }
+                if (length == 0) {
+                    const Status &status = engine_.status();
+                    post_chain(ChainEdit::insert, 0,
+                               status.live_bank.load(std::memory_order_relaxed),
+                               status.live_slot.load(std::memory_order_relaxed), 1);
+                    chain_cursor_ = 0;
+                } else {
+                    chain_clamp_cursor();
+                    const ChainEntry entry = engine_.project().chain[chain_cursor_];
+                    post_chain(ChainEdit::insert, chain_cursor_ + 1, entry.bank, entry.slot,
+                               entry.repeats);
+                    chain_cursor_++;
+                }
+                notice("ENTRY ADDED");
+                return true;
+            }
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (shift_) return false;                 // chain on/off, sample reload
+                chain_cursor_ += key == ENAGA_KEY_UP ? -1 : 1;
+                chain_clamp_cursor();
+                return true;
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (shift_) {
+                    if (key == ENAGA_KEY_RIGHT) return true;   // free
+                    if (length == 0) return true;
+                    chain_clamp_cursor();
+                    post_chain(ChainEdit::remove, chain_cursor_);
+                    if (chain_cursor_ > 0 && chain_cursor_ >= length - 1) chain_cursor_--;
+                    notice("ENTRY REMOVED");
+                    return true;
+                }
+                chain_delta(ChainEdit::pattern_delta, key == ENAGA_KEY_LEFT ? -1 : 1);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    void draw_chain(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const Project &project = engine_.project();
+        const int length = chain_length(project);
+        const ChainPlayer &player = engine_.chain();
+
+        append(out, "CHAIN ");
+        append_number(out, uint32_t(length));
+        append(out, "/64");
+        append(out, player.active ? " ON" : " OFF");
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        if (length == 0) {
+            canvas.text(0, 40, "EMPTY", 11);
+            canvas.text(0, 52, "OK ADDS THE PLAYING", 9);
+            canvas.text(0, 61, "PATTERN. STEP KEYS", 9);
+            canvas.text(0, 70, "ADD FROM THIS BANK", 9);
+        } else {
+            // Seven rows, scrolled so the cursor stays on screen.
+            constexpr int kRows = 7;
+            int first = chain_cursor_ - kRows / 2;
+            if (first > length - kRows) first = length - kRows;
+            if (first < 0) first = 0;
+            for (int row = 0; row < kRows && first + row < length; row++) {
+                const int i = first + row;
+                const ChainEntry &entry = project.chain[i];
+                out = line;
+                *out++ = i == chain_cursor_ ? '>' : ' ';
+                append_padded(out, uint32_t(i) + 1, 2);
+                *out++ = ' ';
+                *out++ = bank_letter(int(entry.bank));
+                append_padded(out, uint32_t(entry.slot) + 1, 2);
+                append(out, " X");
+                append_number(out, uint32_t(entry.repeats));
+                if (player.active && int(player.entry) == i) append(out, " PLAY");
+                *out = 0;
+                canvas.text(0, 30 + row * 10, line, i == chain_cursor_ ? 15 : 10);
+            }
+        }
+
+        canvas.text(0, 103, "OK ADD  F1+LEFT DEL", 7);
+        canvas.text(0, 112, "VALUE REPEATS", 7);
+    }
+
+    // --- PROJECT's PATTERN page: the master length and the swing ----------
+
+    void pattern_field_delta(int field, int delta) {
+        if (field == 0) {
+            mark(GestureKind::length, 0, 0);
+            post(Cmd::set_master_length, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
+            notice("LEN");
+        } else {
+            mark(GestureKind::length, 0, 0);
+            post(Cmd::set_pattern_swing, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
+            notice("SWING");
+        }
+    }
+
+    bool on_pattern_page_key(int key) {
+        switch (key) {
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (shift_) return true;                  // F1 + LEFT/RIGHT: free
+                pattern_field_ = key == ENAGA_KEY_LEFT ? 0 : 1;
+                return true;
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (shift_) return false;
+                pattern_field_delta(pattern_field_, key == ENAGA_KEY_UP ? 1 : -1);
+                end_gesture();
+                return true;
+            case ENAGA_KEY_OK:
+                return !shift_;                           // nothing to pick here
+            default:
+                return false;
+        }
+    }
+
+    void draw_pattern_page(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const Status &status = engine_.status();
+        const Pattern &pattern = engine_.pattern();
+
+        append(out, "PATTERN ");
+        *out++ = bank_letter(int(status.live_bank.load(std::memory_order_relaxed)));
+        append_padded(out, uint32_t(status.live_slot.load(std::memory_order_relaxed)) + 1, 2);
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        out = line;
+        *out++ = pattern_field_ == 0 ? '>' : ' ';
+        append(out, "LEN ");
+        append_number(out, uint32_t(pattern.master_length));
+        append(out, " STEPS");
+        *out = 0;
+        canvas.text(0, 40, line, pattern_field_ == 0 ? 15 : 10);
+
+        out = line;
+        *out++ = pattern_field_ == 1 ? '>' : ' ';
+        append(out, "SWG ");
+        append_number(out, uint32_t(pattern.swing));
+        *out++ = '%';
+        *out = 0;
+        canvas.text(0, 52, line, pattern_field_ == 1 ? 15 : 10);
+
+        canvas.text(0, 76, "LEN IS WHAT A QUEUED", 8);
+        canvas.text(0, 85, "CHANGE AND A CHAIN", 8);
+        canvas.text(0, 94, "WAIT FOR", 8);
+        canvas.text(0, 112, "UP DOWN VALUE OR A B", 7);
     }
 
     // --- PROJECT's SETUP page: the clock, MIDI and the record quantize ----
@@ -2705,8 +2965,16 @@ public:
     }
 
     void draw_project(enaga::Canvas &canvas) {
-        if (project_setup_) {
+        if (project_setup()) {
             draw_setup(canvas);
+            return;
+        }
+        if (project_page_ == ProjectPage::chain) {
+            draw_chain(canvas);
+            return;
+        }
+        if (project_page_ == ProjectPage::pattern) {
+            draw_pattern_page(canvas);
             return;
         }
         char line[40];
@@ -2962,7 +3230,21 @@ private:
     int page_ = 0;            // step page 1-4, for 64-step tracks
     int param_page_ = int(Page::src);
     int mixer_bank_ = 0;      // which kMixerPages entry: the faders, then the sends and master
-    bool project_setup_ = false;   // PROJECT mode's second page, on the octave keys
+    // PROJECT mode's pages, on the octave keys: the slots, the chain, the pattern's own
+    // settings and SETUP.
+    enum class ProjectPage : uint8_t { slots = 0, chain, pattern, setup, count };
+    ProjectPage project_page_ = ProjectPage::slots;
+    bool project_setup() const { return project_page_ == ProjectPage::setup; }
+    int chain_cursor_ = 0;         // the CHAIN page's entry
+    int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG
+    static const char *project_page_name(ProjectPage page) {
+        switch (page) {
+            case ProjectPage::slots:   return "PROJECT";
+            case ProjectPage::chain:   return "CHAIN";
+            case ProjectPage::pattern: return "PATTERN";
+            default:                   return "SETUP";
+        }
+    }
     int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
     bool save_armed_ = false;      // F1 + F3 once; the second press within kSaveArmMs saves
     uint32_t save_armed_at_ms_ = 0;

@@ -54,6 +54,7 @@ bool mutates_pattern(Cmd cmd) {
         case Cmd::set_track_length:
         case Cmd::set_track_speed:
         case Cmd::set_pattern_swing:
+        case Cmd::set_master_length:
         case Cmd::step_field_delta:
         case Cmd::lock_delta:
         case Cmd::undo:
@@ -107,6 +108,7 @@ bool mutates_project(Cmd cmd) {
     switch (cmd) {
         case Cmd::set_tempo:
         case Cmd::set_chain:
+        case Cmd::chain_edit:
         case Cmd::queue_pattern:
         case Cmd::set_mute:
         case Cmd::set_root:
