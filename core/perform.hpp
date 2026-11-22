@@ -142,8 +142,7 @@ void scene_morph(const Scene &a, const Scene &b, uint16_t position,
 // parameter starts: an inverted target is how one knob opens a filter while it closes a send,
 // which is most of what makes a macro worth having.
 //
-// `low` is where the range was assigned FROM -- the value at macro 0 when the target was made.
-// `macro_apply` no longer reads it: since 2026-11-22 a macro sweeps from the parameter's LIVE
+// `low` is the parameter's value when the target was assigned. `macro_apply` no longer reads it: since 2026-11-22 a macro sweeps from the parameter's LIVE
 // value (see below), so `low` is kept for the screen, for the file, and for `macro_value`.
 //
 // `enabled` 0 means the target is unused, which is also what zeroed memory means -- the same

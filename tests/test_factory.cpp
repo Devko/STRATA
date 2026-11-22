@@ -17,6 +17,7 @@
 #include "scale.hpp"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 using namespace strata;
@@ -330,7 +331,7 @@ TEST(factory_macros_at_rest_leave_every_knob_heard) {
     CHECK_EQ(int(e.performed(cut.track, cut.param)), 20);
     post(Cmd::set_macro, 0, 0, 1, 1);                                 // one detent: no jump
     pump(2);
-    CHECK(int(e.performed(cut.track, cut.param)) - 20 <= 1);
+    CHECK(std::abs(int(e.performed(cut.track, cut.param)) - 20) <= 1);
     post(Cmd::set_macro, 0, 0, 1, 127);
     pump(2);
     CHECK_EQ(int(e.performed(cut.track, cut.param)), int(cut.high));

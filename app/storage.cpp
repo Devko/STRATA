@@ -95,9 +95,6 @@ bool mutates_kit(Cmd cmd) {
         // which is the whole reason machine switching needed no file-format change.
         case Cmd::set_machine:
         case Cmd::set_track_level:
-        // Assigned with the macro knob up, a target moves the kit parameter to the range's start
-        // (app/engine.cpp), so the kit changes too.
-        case Cmd::macro_assign:
         case Cmd::clear_sample:
         case Cmd::set_sample:
         case Cmd::kit_store:

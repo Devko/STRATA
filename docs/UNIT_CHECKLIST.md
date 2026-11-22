@@ -1408,11 +1408,12 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
       turn BASS CUT in EDIT: it is heard. Turn ACID up: the cutoff opens from where you left it,
       with no jump. Back to 0: your value is back. The same with the morph: morph fully to DUB,
       then turn C up one detent: the chord's delay send must not drop.
-- [ ] **Assigning with the macro knob up** (STEP in PERFORM while A-D is not at 0): nothing moves
-      on assignment, and the parameter's EDIT value changes to where the range starts, which is
-      what it plays once the macro is back at 0.
-- [ ] **A project saved before this change** that had a macro assigned above 0 may open sounding
-      different: a resting macro used to hold its targets at `low`, and now the kit value plays.
+- [ ] **Assigning with the macro knob up** (STEP in PERFORM while the macro is not at 0): the
+      parameter moves at once to where the knob puts it -- the macro taking effect. The EDIT
+      value is not rewritten, and back at 0 the parameter is where it was.
+- [ ] **A project saved before this change** with macros may play them differently: a resting
+      macro used to hold its targets at `low`, and a moving one swept from `low`; now both start
+      from the kit value. Re-check any project you saved with macros before 2026-11-22.
 - [ ] **Mute states** 1-8: all, no kick, drums only, no hats, no bass, kick + bass, melodic parts
       only, the bare groove without rim and blips.
 - [ ] Anything that sounds wrong, say which and how: each value has its arithmetic in a comment
