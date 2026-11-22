@@ -61,7 +61,9 @@ g++ -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -O2 \
 - Every feature: host test, then an emulator scenario, then a line in docs/UNIT_CHECKLIST.md.
 - After any DSP change, run the load scenario and update docs/BUDGET.md with figures both
   with and without cl6x. Worst case must stay under 60%. Cut effects or insert stages before
-  cutting voices: all 18 voices together are about 11% of the block.
+  cutting voices. Drum voices are cheap (one-shots that go idle); a sustaining voice is not:
+  VA POLY costs 3.82 points per voice GCC-only, so a six-voice chord is ~22.9% of the block on
+  its own (docs/BUDGET.md).
 - Never modify third_party/enaga. Enaga bugs are reported upstream with a failing case.
 - Never write the SPI flash. Never produce update files with BOOT or MCU sections.
 - Small commits, one concern each, each with its test.
