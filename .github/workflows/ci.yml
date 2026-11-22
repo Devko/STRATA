@@ -28,9 +28,6 @@ jobs:
     # for GitHub's six hours (PR #74's run did, 2026-11-22); the per-test --timeout below names it
     # long before this.
     timeout-minutes: 15
-    env:
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 300M
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,25 +38,11 @@ jobs:
         id: changes
         run: tools/ci_changes.sh "${{ github.event_name }}" >> "$GITHUB_OUTPUT"
 
-      - name: ccache
-        if: steps.changes.outputs.code == 'true'
-        run: sudo apt-get install -y --no-install-recommends ccache > /dev/null || true
-
-      - uses: actions/cache@v4
-        if: steps.changes.outputs.code == 'true'
-        with:
-          path: .ccache
-          key: ccache-gcc-${{ github.sha }}
-          restore-keys: ccache-gcc-
-
       - name: Build and run the suite (shards on every core, 120 s per test)
         if: steps.changes.outputs.code == 'true'
         run: |
-          cxx=g++; cc=gcc
-          if command -v ccache > /dev/null; then cxx="ccache g++"; cc="ccache gcc"; ccache -z > /dev/null; fi
-          make -C host build -j"$(nproc)" CXX="$cxx" CC="$cc"
-          command -v ccache > /dev/null && ccache -s | grep -Ei 'hits|misses' || true
-          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=120 CXX="$cxx" CC="$cc"
+          make -C host build -j"$(nproc)"
+          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=120
 
       # The ui_layout_* tests are in the suite above; run them again by name so a broken screen
       # shows up as its own failed step instead of one line among thousands.
@@ -99,8 +82,6 @@ jobs:
       # BeatRepeat's ring is allocated in init() and never freed, by design (docs/HANDOFF.md).
       ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 300M
     steps:
       - uses: actions/checkout@v4
         with:
@@ -111,25 +92,11 @@ jobs:
         id: changes
         run: tools/ci_changes.sh "${{ github.event_name }}" >> "$GITHUB_OUTPUT"
 
-      - name: ccache
-        if: steps.changes.outputs.code == 'true'
-        run: sudo apt-get install -y --no-install-recommends ccache > /dev/null || true
-
-      - uses: actions/cache@v4
-        if: steps.changes.outputs.code == 'true'
-        with:
-          path: .ccache
-          key: ccache-asan-${{ github.sha }}
-          restore-keys: ccache-asan-
-
       - name: Build and run the suite under ASan and UBSan at -O1 (shards, 300 s per test)
         if: steps.changes.outputs.code == 'true'
         run: |
-          cxx=g++; cc=gcc
-          if command -v ccache > /dev/null; then cxx="ccache g++"; cc="ccache gcc"; ccache -z > /dev/null; fi
-          make -C host build -j"$(nproc)" SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan" CXX="$cxx" CC="$cc"
-          command -v ccache > /dev/null && ccache -s | grep -Ei 'hits|misses' || true
-          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=300 SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan" CXX="$cxx" CC="$cc"
+          make -C host build -j"$(nproc)" SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan"
+          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=300 SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan"
 
   checks:
     name: Repo checks

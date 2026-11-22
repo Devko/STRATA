@@ -193,7 +193,8 @@ to `main`, in about a minute:
 - the font layout check over every screen (the `ui_layout_*` tests, run by name);
 - `tools/audit_commands.sh` and `tools/enaga_check.sh` (local checks only).
 
-Builds go through ccache, cached between runs. A pull request that changes only documentation
+There is no compiler cache in CI: installing ccache took longer (22 s) than it saved on a
+one-minute run. A pull request that changes only documentation
 (`*.md`, `docs/`) skips the two test jobs but still reports them as passed; the repo checks
 always run. On `main` the suite also runs once serially, in registration order.
 
