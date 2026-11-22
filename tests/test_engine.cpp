@@ -1585,6 +1585,120 @@ TEST(engine_a_chain_edited_while_it_plays_stays_on_the_entry_it_is_playing) {
     CHECK_EQ(int(engine.chain().entry), 2);
 }
 
+// --- song mode -------------------------------------------------------------------------------
+
+void chain_op(ChainEdit op, uint8_t at, uint8_t b = 0, uint8_t c = 0, uint8_t d = 0, uint8_t e = 0) {
+    Command command;
+    command.cmd = Cmd::chain_edit;
+    command.step = at;
+    command.a = uint8_t(op);
+    command.b = b;
+    command.c = c;
+    command.d = d;
+    command.e = e;
+    CHECK(strata::test::engine().commands().post(command));
+    pump();
+}
+
+TEST(engine_a_chain_entry_recalls_its_mute_state_as_it_starts) {
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};   // leaves the mutes alone
+    incoming.chain[1] = ChainEntry{0, 1, 1, 3};   // recalls state 3
+    for (int i = 2; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    post(Cmd::project_loaded);
+    pump();
+    // Mute state 3 is track 1 muted, stored from the live mutes.
+    post(Cmd::set_mute, 0, 0, 1, 0);
+    post(Cmd::mute_store, 0, 0, 2);
+    post(Cmd::set_mute, 0, 0, 0, 0);
+    pump();
+
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK(!engine.muted(0));
+    tick_at(1536);                                 // entry 2 starts: track 1 muted
+    CHECK_EQ(live_slot(), 1);
+    CHECK(engine.muted(0));
+    CHECK(!engine.muted(1));
+
+    // The knob walks the recall 0-8 and clamps; a set from a STEP key keeps it.
+    chain_op(ChainEdit::mutes_delta, 1, uint8_t(int8_t(20)));
+    CHECK_EQ(int(engine.project().chain[1].mutes), 8);
+    chain_op(ChainEdit::mutes_delta, 1, uint8_t(int8_t(-20)));
+    CHECK_EQ(int(engine.project().chain[1].mutes), 0);
+    chain_op(ChainEdit::mutes_delta, 1, 2);
+    chain_op(ChainEdit::pattern_delta, 1, 1);
+    chain_op(ChainEdit::repeats_delta, 1, 1);
+    CHECK_EQ(int(engine.project().chain[1].mutes), 2);
+    const uint32_t before = refused();
+    chain_op(ChainEdit::set, 1, 0, 1, 1, 9);       // past eight: refused
+    CHECK_EQ(int(refused() - before), 1);
+
+    post(Cmd::set_chain, 0, 0, 0);
+    post(Cmd::set_mute, 0, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_song_mode_plays_the_chain_once_and_asks_for_a_stop) {
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};
+    incoming.chain[1] = ChainEntry{0, 1, 1, 0};
+    for (int i = 2; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    post(Cmd::project_loaded);
+    pump();
+    put_trig(kMono, 0);                            // A01 and A02 each sound on step 1
+    post(Cmd::queue_pattern, 0, 0, 0, 1, uint8_t(QueueMode::immediate));
+    pump();
+    put_trig(kMono, 0);
+    chain_op(ChainEdit::song, 0, 1);
+    CHECK(engine.project().settings.chain_song);
+
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    tick_at(1);                                    // the switch to A01 re-derives the boundary
+    const uint8_t ends = engine.status().song_end.load();
+    tick_at(1536);                                 // entry 2
+    CHECK_EQ(live_slot(), 1);
+    CHECK_EQ(int(engine.status().song_end.load()), int(ends));
+    tick_at(1537);
+    // The end of the last entry: back on entry 1, a stop asked for, and silent meanwhile.
+    CHECK_EQ(fired_on(kMono, 2u * 1536u), 0);
+    CHECK_EQ(int(uint8_t(engine.status().song_end.load() - ends)), 1);
+    CHECK(engine.chain().active);
+    CHECK_EQ(int(engine.chain().entry), 0);
+    CHECK_EQ(live_slot(), 0);
+    int hits = 0;
+    for (uint32_t t = 2u * 1536u + 1u; t < 3u * 1536u; t++) hits += fired_on(kMono, t);
+    CHECK_EQ(hits, 0);
+
+    // The stop the main context sends, then PLAY from 0: the song plays from the top.
+    post(Cmd::stop, 0, 0, 0);
+    pump();
+    CHECK_EQ(fired_on(kMono, 0), 1);
+    CHECK_EQ(live_slot(), 0);
+
+    // Song off: the chain loops as before.
+    chain_op(ChainEdit::song, 0, 0);
+    tick_at(1536);
+    tick_at(1537);
+    tick_at(2u * 1536u);
+    CHECK_EQ(int(uint8_t(engine.status().song_end.load() - ends)), 1);
+    CHECK_EQ(live_slot(), 0);
+    CHECK_EQ(int(engine.chain().entry), 0);
+    post(Cmd::set_chain, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
 TEST(engine_starting_an_empty_chain_is_refused) {
     Engine &engine = clean();
     CHECK_EQ(chain_length(engine.project()), 0);

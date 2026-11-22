@@ -173,6 +173,7 @@ STRATA does not implement a clock and does not own the tempo. Enaga's `<enaga/cl
 
 - The next pattern is queued and switches at the end of the current one, or after 16 or 32 steps, or at once keeping the position.
 - Chains: up to 64 entries per project, each a pattern plus a repeat count. No song timeline in v1.
+- **[rev] Song mode** (Roland, 2026-11-22): a chain entry may also recall one of the 8 stored mute states as it starts, so the chain holds sections (an intro without the kick, a breakdown) and not only patterns. A SONG switch on the CHAIN page (FUNC+RIGHT) plays the chain once and stops the transport at its end, back on entry 1, instead of looping. Still a chain, not a timeline. PROJECT.BIN's optional section 5 holds the switch and the 64 recalls; an older file loops with no recalls.
 - Copy, paste and clear for steps, tracks and patterns; 16 levels of undo for edits.
 
 ## Performance and creativity
@@ -297,7 +298,7 @@ A project is one folder on the card. It loads fully into RAM when opened (patter
 - Little-endian binary: magic `STRA`, format version, section table, CRC-32 over the payload.
 - Written and read byte by byte through a small serializer. Never cast file bytes to structs (alignment rule).
 - An unknown version or a bad CRC is refused with a message on screen; it never crashes the app.
-- **[rev]** A format grows by adding an OPTIONAL section at the end, not by a version bump: an older file without it loads with that feature off. KIT.BIN's section 2 holds the four LFO bytes per track, and PERFORM.BIN's section 3 holds each scene's LFO values and their stored mask. KIT.BIN's section 3 holds the four ARP bytes per track and PERFORM.BIN's section 5 each scene's ARP values (their stored bits are the high nibble of the LFO's mask byte). An older reader ignores the extra sections.
+- **[rev]** A format grows by adding an OPTIONAL section at the end, not by a version bump: an older file without it loads with that feature off. KIT.BIN's section 2 holds the four LFO bytes per track, and PERFORM.BIN's section 3 holds each scene's LFO values and their stored mask. KIT.BIN's section 3 holds the four ARP bytes per track and PERFORM.BIN's section 5 each scene's ARP values, and PROJECT.BIN's section 5 song mode (their stored bits are the high nibble of the LFO's mask byte). An older reader ignores the extra sections.
 
 **Core structures (sketch)**
 

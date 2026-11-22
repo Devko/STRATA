@@ -1407,3 +1407,61 @@ TEST(an_entry_inserted_at_the_playing_index_pushes_the_player_down_with_its_entr
     CHECK(chain_current(g_project, player, bank, slot));
     CHECK_EQ(int(slot), 1);                           // still A02
 }
+
+// --- song mode ------------------------------------------------------------
+
+TEST(chain_at_end_is_the_last_pass_of_the_last_entry_only) {
+    const Entry entries[] = {{0, 0, 2}, {0, 1, 1}};
+    set_chain(g_project, entries, 2, 2);
+    ChainPlayer player;
+    CHECK(!chain_at_end(g_project, player));          // not started
+    CHECK(chain_start(g_project, player));
+    uint8_t bank = 0, slot = 0;
+    CHECK(!chain_at_end(g_project, player));          // entry 1, pass 1 of 2
+    chain_advance(g_project, player, bank, slot);
+    CHECK(!chain_at_end(g_project, player));          // entry 1, pass 2: entry 2 is next
+    chain_advance(g_project, player, bank, slot);
+    CHECK(chain_at_end(g_project, player));           // entry 2, its only pass
+    chain_advance(g_project, player, bank, slot);     // a looping chain wraps
+    CHECK_EQ(int(player.entry), 0);
+    CHECK(!chain_at_end(g_project, player));
+    // An orphaned player has an entry to go to, so it is not at the end.
+    player.entry = 1;
+    player.played = 0;
+    player.orphaned = true;
+    CHECK(!chain_at_end(g_project, player));
+}
+
+TEST(chain_entry_mutes_names_the_state_an_entry_recalls) {
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}};
+    set_chain(g_project, entries, 2, 2);
+    g_project.chain[1].mutes = 3;                     // recall state 3, index 2
+    ChainPlayer player;
+    CHECK_EQ(chain_entry_mutes(g_project, player), -1);
+    CHECK(chain_start(g_project, player));
+    CHECK_EQ(chain_entry_mutes(g_project, player), -1);   // entry 1 leaves the mutes alone
+    uint8_t bank = 0, slot = 0;
+    chain_advance(g_project, player, bank, slot);
+    CHECK_EQ(chain_entry_mutes(g_project, player), 2);
+    g_project.chain[1].mutes = 9;                     // damage: past the eight states
+    CHECK_EQ(chain_entry_mutes(g_project, player), -1);
+    g_project.chain[1].mutes = 0;
+}
+
+TEST(chain_edits_carry_the_mute_recall_and_refuse_past_eight) {
+    const Entry entries[] = {{0, 0, 1}};
+    set_chain(g_project, entries, 1, 1);
+    CHECK(chain_set(g_project, 0, 0, 2, 1, 8));
+    CHECK_EQ(int(g_project.chain[0].mutes), 8);
+    CHECK(!chain_set(g_project, 0, 0, 2, 1, 9));
+    CHECK_EQ(int(g_project.chain[0].mutes), 8);       // a refusal changes nothing
+    CHECK(chain_insert(g_project, 1, 0, 3, 2, 4));
+    CHECK_EQ(int(g_project.chain[1].mutes), 4);
+    CHECK(!chain_insert(g_project, 2, 0, 3, 2, 9));
+    CHECK_EQ(chain_length(g_project), 2);
+    // Without the argument, an entry recalls nothing, as before song mode.
+    CHECK(chain_set(g_project, 1, 0, 3, 2));
+    CHECK_EQ(int(g_project.chain[1].mutes), 0);
+    CHECK(chain_remove(g_project, 0));
+    CHECK_EQ(int(g_project.chain[1].mutes), 0);       // the vacated entry is zeroed whole
+}

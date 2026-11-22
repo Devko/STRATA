@@ -39,7 +39,8 @@ using namespace strata;
 // optional on read -- `a_project_file_from_before_the_mixer_section_still_loads` is the proof.
 // 292 since the live section: another table entry (12) and its 3 bytes, optional likewise.
 // 296 since the kill EQ grew the mixer section by its three band bytes and the kill switches.
-constexpr uint32_t kProjectFileBytes = 296;
+// 373 since song mode: a fifth table entry (12) and its 65 bytes, optional like the others.
+constexpr uint32_t kProjectFileBytes = 373;
 constexpr uint32_t kKitFileBytes = 1184;   // 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
@@ -665,6 +666,60 @@ TEST(project_a_file_from_before_the_live_section_opens_unmuted_on_scenes_1_and_2
     CHECK_EQ(int(g_loaded.settings.tempo_centi_bpm), int(g_source.settings.tempo_centi_bpm));
 }
 
+TEST(project_song_mode_and_the_mute_recalls_round_trip) {
+    fill_project(g_source, 0);
+    g_source.settings.chain_song = true;
+    for (int i = 0; i < kChainEntries; i++) g_source.chain[i].mutes = uint8_t(i % 9);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK(g_loaded.settings.chain_song);
+    for (int i = 0; i < kChainEntries; i++) {
+        CHECK_EQ(int(g_loaded.chain[i].mutes), i % 9);
+    }
+
+    // A recall past the eight states is dropped, and so is one on an unused entry.
+    const uint32_t song = section_at(g_project, kSectionProjectSong);
+    g_project[song + 1 + 1] = 200;
+    g_source.chain[5].repeats = 0;
+    CHECK_EQ(int(project_write(g_source, g_project_alt, uint32_t(sizeof(g_project_alt)), &written)),
+             int(SerializeResult::ok));
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.chain[1].mutes), 0);
+    CHECK_EQ(int(project_read(g_loaded, g_project_alt, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.chain[5].mutes), 0);
+    CHECK_EQ(int(g_loaded.chain[6].mutes), 6);
+}
+
+TEST(project_a_file_from_before_song_mode_loops_and_recalls_no_mutes) {
+    fill_project(g_source, 0);
+    g_source.settings.chain_song = true;
+    for (int i = 0; i < kChainEntries; i++) g_source.chain[i].mutes = 3;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    const uint32_t old_size = drop_last_section(g_project, g_project_alt);
+    CHECK_EQ(old_size, kProjectFileBytes - 12 - 65);
+    // A previous project's song settings, which must not survive into this one.
+    project_init(g_loaded);
+    g_loaded.settings.chain_song = true;
+    for (int i = 0; i < kChainEntries; i++) g_loaded.chain[i].mutes = 5;
+    CHECK_EQ(int(project_read(g_loaded, g_project_alt, old_size)), int(SerializeResult::ok));
+    CHECK(!g_loaded.settings.chain_song);
+    for (int i = 0; i < kChainEntries; i++) CHECK_EQ(int(g_loaded.chain[i].mutes), 0);
+    // Everything else came through.
+    CHECK_EQ(int(g_loaded.settings.live_mutes), int(g_source.settings.live_mutes));
+    CHECK_EQ(int(g_loaded.chain[3].repeats), int(g_source.chain[3].repeats));
+
+    // Present but short is damage.
+    poke_u32(g_project, section_entry_at(g_project, kSectionProjectSong) + 8, 10);
+    refresh_crc(g_project);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::malformed));
+}
+
 // Present but short is damage, not an old file: a writer that declared the section declared its
 // size too, so a reader that accepted a truncated one would read the chain's bytes as a mixer.
 TEST(project_refuses_a_mixer_section_that_is_short) {
@@ -779,20 +834,23 @@ TEST(project_the_header_says_strata_and_the_version) {
     CHECK_EQ(int(g_project[2]), int(kMagic2));
     CHECK_EQ(int(g_project[3]), int(kMagic3));
     CHECK_EQ(int(peek_u16(g_project, kVersionOffset)), int(kProjectVersion));
-    CHECK_EQ(int(peek_u16(g_project, 6)), 4);                 // settings, chain, mixer, live
+    CHECK_EQ(int(peek_u16(g_project, 6)), 5);                 // settings, chain, mixer, live, song
     CHECK_EQ(peek_u32(g_project, 8), kProjectFileBytes - kHeaderBytes);
     CHECK_EQ(peek_u32(g_project, kCrcOffset),
              crc32(g_project + kHeaderBytes, kProjectFileBytes - kHeaderBytes));
 
-    // All four sections are there, in order, and clear of the table.
+    // All five sections are there, in order, and clear of the table.
     const uint32_t settings = section_at(g_project, kSectionProjectSettings);
     const uint32_t chain = section_at(g_project, kSectionProjectChain);
     const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
     const uint32_t live = section_at(g_project, kSectionProjectLive);
-    CHECK_EQ(settings, kHeaderBytes + 4 * kSectionEntryBytes);
+    const uint32_t song = section_at(g_project, kSectionProjectSong);
+    CHECK_EQ(settings, kHeaderBytes + 5 * kSectionEntryBytes);
     CHECK_EQ(chain, settings + 19);
     CHECK_EQ(mixer, chain + 64 * 3);
     CHECK_EQ(live, mixer + uint32_t(kSendFields + kMasterFields + 1));
+    CHECK_EQ(song, live + 3);
+    CHECK_EQ(song + 1 + 64, kProjectFileBytes);
 }
 
 // --- PROJECT.BIN: value-tolerant ------------------------------------------

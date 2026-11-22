@@ -157,11 +157,19 @@ struct Kit {
 //
 // `repeats` of 0 means the entry is unused, which is also what zeroed memory means -- a chain
 // of 64 zeroed entries is an empty chain rather than 64 infinite repeats of pattern A01.
+//
+// `mutes` is song mode's: 0 leaves the mutes as they are, 1-8 recalls that stored mute state
+// (`ProjectSettings::mute_states`) as the entry starts, so a chain can hold sections -- an intro
+// without the kick, a breakdown -- and not only patterns. Zeroed, it changes nothing.
 struct ChainEntry {
     uint8_t bank = 0;
     uint8_t slot = 0;
     uint8_t repeats = 0;
+    uint8_t mutes = 0;
 };
+
+// The highest `ChainEntry::mutes`: one per stored mute state.
+constexpr uint8_t kChainMutesMax = 8;
 
 // --- the project ----------------------------------------------------------
 
@@ -204,6 +212,9 @@ struct ProjectSettings {
 
     uint8_t chain_length = 0;            // how many chain entries are in use
     bool chain_enabled = false;
+    // Song mode: the chain plays through ONCE and the transport stops at its end, back on entry
+    // 1, instead of looping. Off, a chain loops as it always has.
+    bool chain_song = false;
 
     // What was live when the project was saved: the mutes as they stood (one bit per track,
     // bit t = track t muted) and which scenes sat in the morph's slots A and B. Restored on
@@ -307,6 +318,9 @@ constexpr uint16_t kSectionProjectMixer = 3;
 // The live mutes and the A/B scene choice. Optional on read for the same reason as the mixer:
 // an older file without it opens with everything unmuted and scenes 1 and 2, as it always did.
 constexpr uint16_t kSectionProjectLive = 4;
+// Song mode: the SONG switch and each chain entry's mute recall (`ChainEntry::mutes`). Optional
+// on read: an older file has a looping chain with no mute recalls, which is what zeroes mean.
+constexpr uint16_t kSectionProjectSong = 5;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;

@@ -177,6 +177,15 @@ bool chain_resume(const Project &project, ChainPlayer &player);
 // under the next entry's name.
 bool chain_advance(const Project &project, ChainPlayer &player, uint8_t &bank, uint8_t &slot);
 
+// Song mode: is the pass now ending the chain's last? True on the last pass of the last entry,
+// which is where a song stops instead of wrapping. False for an inactive player, an empty chain
+// and a player whose entry was removed (it has a next entry to go to).
+bool chain_at_end(const Project &project, const ChainPlayer &player);
+
+// The mute state the chain's current entry recalls, 0-7, or -1 for none. Read when an entry
+// starts: `chain_start`, and a `chain_advance` that left `played` at 0.
+int chain_entry_mutes(const Project &project, const ChainPlayer &player);
+
 // --- editing a chain (PROJECT's CHAIN page) --------------------------------
 //
 // Each edit keeps the chain what `chain_length` reads: a prefix of usable entries with every
@@ -185,12 +194,15 @@ bool chain_advance(const Project &project, ChainPlayer &player, uint8_t &bank, u
 // three refuse an index outside the chain, a pattern that cannot exist and a repeat count of
 // 0, leaving the project as it was.
 
-// Replace entry `at` (0 .. length-1).
-bool chain_set(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats);
+// Replace entry `at` (0 .. length-1). `mutes` is the entry's mute recall, 0-8
+// (`ChainEntry::mutes`); past 8 is refused.
+bool chain_set(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats,
+               uint8_t mutes = 0);
 
 // Insert a new entry so that it becomes entry `at` (0 .. length); the entries from `at` on move
 // up one. False when the chain already holds kChainEntries.
-bool chain_insert(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats);
+bool chain_insert(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats,
+                  uint8_t mutes = 0);
 
 // Remove entry `at` (0 .. length-1); the entries after it move down one.
 bool chain_remove(Project &project, int at);

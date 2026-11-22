@@ -2659,9 +2659,10 @@ TEST(ui_layout_chain_and_pattern_pages) {
     check_layout(app, "CHAIN, empty");
     // A full chain of the widest entries, with the cursor at the top, the middle and the end.
     for (int i = 0; i < kChainEntries; i++) {
-        app_engine().project_for_load().chain[i] = ChainEntry{7, 15, 16};
+        app_engine().project_for_load().chain[i] = ChainEntry{7, 15, 16, 8};
     }
     app_engine().project_for_load().settings.chain_length = uint8_t(kChainEntries);
+    app_engine().project_for_load().settings.chain_song = true;
     post_cmd(Cmd::set_chain, 1);
     pump(2);
     check_layout(app, "CHAIN, full");
@@ -2672,6 +2673,7 @@ TEST(ui_layout_chain_and_pattern_pages) {
     post_cmd(Cmd::set_chain, 0);
     for (int i = 0; i < kChainEntries; i++) app_engine().project_for_load().chain[i] = ChainEntry{};
     app_engine().project_for_load().settings.chain_length = 0;
+    app_engine().project_for_load().settings.chain_song = false;
     pump(2);
 
     key(ENAGA_KEY_OCTAVE_RIGHT);
@@ -2679,6 +2681,61 @@ TEST(ui_layout_chain_and_pattern_pages) {
     check_layout(app, "PATTERN");
     key(ENAGA_KEY_CLR);
     CHECK_EQ(UiProbe::project_page(app), 0);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_chain_page_sets_mute_recalls_and_song_mode) {
+    Strata &app = fresh();
+    const Project &project = app_engine().project();
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 1);
+    key(ENAGA_KEY_OK);                                // one entry: the playing pattern
+    pump(2);
+    CHECK_EQ(chain_length(project), 1);
+
+    // B walks the entry's mute recall, --, M1 ... M8.
+    app.on_encoder(1, +3);
+    pump(2);
+    CHECK_EQ(int(project.chain[0].mutes), 3);
+    // OK copies the entry with its recall; a STEP key keeps it.
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(int(project.chain[1].mutes), 3);
+    key(ENAGA_KEY_STEP1 + 4);
+    pump(2);
+    CHECK_EQ(int(project.chain[1].slot), 4);
+    CHECK_EQ(int(project.chain[1].mutes), 3);
+    check_layout(app, "CHAIN, with mute recalls");
+
+    // FUNC + RIGHT switches SONG and LOOP.
+    CHECK(!project.settings.chain_song);
+    shift_key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(project.settings.chain_song);
+    CHECK_EQ(UiProbe::notice(app), "SONG: PLAY ONCE");
+    shift_key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(!project.settings.chain_song);
+
+    // The end of a song stops the transport, from this side.
+    shift_key(ENAGA_KEY_RIGHT);
+    pump(2);
+    key(ENAGA_KEY_F5);
+    CHECK(enaga::clock::running());
+    const_cast<Status &>(app_engine().status()).bump_song_end();
+    pump(2);
+    CHECK(!enaga::clock::running());
+    CHECK_EQ(UiProbe::notice(app), "SONG END");
+
+    // Back as it was, for the tests after this one.
+    shift_key(ENAGA_KEY_RIGHT);
+    for (int i = 0; i < 2; i++) {
+        shift_key(ENAGA_KEY_LEFT);
+        pump(2);
+    }
+    CHECK_EQ(chain_length(project), 0);
+    key(ENAGA_KEY_CLR);
     key(ENAGA_KEY_F4);
 }
 

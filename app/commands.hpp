@@ -263,10 +263,14 @@ enum class Cmd : uint8_t {
 constexpr uint8_t kDeltaFlag = 1;
 
 // `Cmd::chain_edit`'s operation, in `a`.
-// set, insert and remove carry the entry whole; `pattern_delta` and `repeats_delta` move the
-// entry's pattern (through the 128, bank by bank) or its repeat count (1-16) by the int8 in `b`,
-// so knob clicks applied a block late are not lost.
-enum class ChainEdit : uint8_t { set = 0, insert, remove, pattern_delta, repeats_delta };
+// set, insert and remove carry the entry whole (bank b, slot c, repeats d, mute recall e);
+// `pattern_delta`, `repeats_delta` and `mutes_delta` move the entry's pattern (through the 128,
+// bank by bank), its repeat count (1-16) or its mute recall (0 none, 1-8) by the int8 in `b`,
+// so knob clicks applied a block late are not lost. `song` sets song mode, b = 0 or 1, and
+// ignores the entry.
+enum class ChainEdit : uint8_t {
+    set = 0, insert, remove, pattern_delta, repeats_delta, mutes_delta, song
+};
 
 struct Command {
     Cmd cmd = Cmd::none;
@@ -416,6 +420,16 @@ struct Status {
     // Which pattern is live, so the UI can draw it without reaching into the project.
     std::atomic<uint8_t> live_bank{0};
     std::atomic<uint8_t> live_slot{0};
+
+    // Song mode. Bumped by the audio side when a song reaches its end: the main context watches
+    // for the change and stops the transport, which only it can do (<enaga/clock.hpp>).
+    std::atomic<uint8_t> song_end{0};
+
+    // Audio context only, one writer, as bump_triggered.
+    void bump_song_end() {
+        song_end.store(uint8_t(song_end.load(std::memory_order_relaxed) + 1),
+                       std::memory_order_release);
+    }
 
     // Audio context only, so the load and the store cannot interleave with another writer.
     void bump_sample_epoch(int track) {

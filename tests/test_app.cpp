@@ -260,7 +260,7 @@ TEST(app_the_first_save_of_a_project_writes_all_ten_files) {
 
     // The sizes tests/test_project.cpp pins, reached through the real card protocol this time.
     project_file(path, "PROJECT.BIN");
-    CHECK_EQ(host.file_bytes(path), 296);   // core/project.cpp: 263 + 18 mixer + 12 + 3 live bytes
+    CHECK_EQ(host.file_bytes(path), 373);   // core/project.cpp: 296, then 12 + 65 song bytes
     project_file(path, "KIT.BIN");
     CHECK_EQ(host.file_bytes(path), 1184);  // 1076, the LFO and arp (2 x (12 + 8 x 4)), SLC AUTO (12 + 8)
     project_file(path, "PERFORM.BIN");

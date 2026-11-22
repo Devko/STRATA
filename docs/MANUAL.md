@@ -149,7 +149,8 @@ locks glow amber.
 
 The **chain** plays patterns in order: up to 64 entries, each a pattern and a repeat count
 (X1-X16). It is a list, not a song timeline. You build it on PROJECT's CHAIN page and turn it on
-and off with `FUNC+UP` in PROJECT.
+and off with `FUNC+UP` in PROJECT. Each entry can also recall a **mute state** as it starts, and
+**SONG** mode plays the chain once and stops, so a chain can be a whole arrangement (below).
 
 ### Scenes and morphing
 
@@ -522,6 +523,16 @@ The **CHAIN** page (PROJECT, octave RIGHT) lists the entries, `>02 A05 X2 PLAY`.
 cursor, a STEP key puts that slot of the shown bank into the entry, LEFT/RIGHT step the entry's
 pattern, A or VALUE set its repeats, OK adds a copy after the cursor (up to 64), FUNC+LEFT removes
 the entry, FUNC+UP turns the chain on or off. Chain edits are not undoable.
+
+**Song mode.** B sets the entry's **mute recall**: `--` leaves the mutes alone, `M1`-`M8` recalls
+that stored mute state the moment the entry starts (the row reads `>02 A05 X2 M3`). Store an
+intro without the kick in state 2 and a breakdown in state 3, point entries at them, and the
+chain plays sections rather than just patterns. **FUNC+RIGHT** switches the chain between `LOOP`
+(round and round, as before) and `SONG`: the chain plays through once, the transport stops at
+the end of the last entry (`SONG END`), and the next PLAY starts it again from entry 1. Under an
+outside clock that keeps running, STRATA goes quiet at the end and waits for PLAY or the outside
+STOP. The header shows which (`CHAIN 3/64 ON SONG`). Both are saved with the project; a project
+from before song mode loops, with no recalls.
 
 ### Recording
 
