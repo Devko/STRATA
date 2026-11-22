@@ -157,10 +157,14 @@ const MacroSet &factory_macros() { build_factory(); return g_factory_macros; }
 
 Engine &fresh() {
     FakeHost &host = FakeHost::the();
-    host.reset();
+    // init() before the reset, not after: init reads the settings and the card, and those reads
+    // belong to whichever test happened to run first in the process. Counted after the reset,
+    // they made that test's own read counts wrong -- a test that passed in the full suite failed
+    // with --only, or first in a shard.
     if (!g_ready) {
         g_ready = g_engine.init(float(ENAGA_SAMPLE_RATE)) && g_storage.init(g_engine);
     }
+    host.reset();
 
     // A card SWAP, not just "a card is there". Storage remembers whether the project is complete
     // on the card, and the fake's reset() wiped the card without telling it -- which is exactly
@@ -193,6 +197,16 @@ Engine &fresh() {
 
     post(Cmd::project_loaded);
 
+    // The TRANSPORT's derived state and any take, which nothing above reaches: the engine keeps
+    // its bar count, pass origin and pending ratchets across a fake-host reset, and a take left
+    // armed or waiting for the card refuses the next arm. With them carried over, a test passed
+    // or failed depending on which test ran before it -- invisible in one serial run, found the
+    // first time the suite was split into shards (tools/ci_local.sh). A restart is what the
+    // engine is told when the clock goes back to 0, and cancel plus release empty the capture.
+    post(Cmd::restart);
+    post(Cmd::resample_cancel);
+    post(Cmd::resample_release);
+
     // The PERFORMANCE layer, which `Cmd::project_loaded` does not touch: macros, the morph, the
     // throws, the mutes and auto-fill all live in the engine rather than in the project, so
     // without this they survive from one test to the next.
@@ -222,6 +236,14 @@ Engine &fresh() {
     }
     pump(4);
 
+    // The card swap again, now that the blank project is the engine's. The first one, above, ran
+    // while the engine still held the PREVIOUS test's kit, and a swap re-requests every sample
+    // the kit names -- so the previous test's samples were queued against an empty card, and the
+    // next test inherited the read and the failure ("NO SUCH FILE" in last_error()). Found by
+    // running the suite in shards (tools/ci_local.sh), where a test's predecessor changes.
+    g_storage.on_card(false);
+    g_storage.on_card(true);
+
     // And cut any tails the test before left ringing. A kick decays for well over a block, so
     // without this a test that measures "silence before frame 40" measures the previous test's
     // note.
@@ -249,6 +271,21 @@ Engine &fresh() {
     // It costs a few hundred silent blocks per test, which is microseconds: the whole suite runs
     // in about a second.
     settle();
+
+    // A PROJECT error left by the test before ("PATTERN LOST" from a damaged-file test) is kept
+    // by Storage until the next save or load begins -- correct on the unit, where it is still the
+    // last thing that happened to the project, and a leak here: the next test's
+    // `last_error() == nullptr` failed whenever a damaged-file test ran before it, which only a
+    // sharded run showed. A save is what clears it on the unit, so the rig does the same and then
+    // wipes the card again, so the test starts from an empty one with zero counts.
+    if (g_storage.last_error() != nullptr) {
+        g_storage.request_save();
+        pump_until_idle(2000);
+        host.reset();
+        g_storage.on_card(false);
+        g_storage.on_card(true);
+        pump(4);
+    }
     return g_engine;
 }
 

@@ -24,17 +24,30 @@ jobs:
   host-tests:
     name: Host tests (GCC)
     runs-on: ubuntu-24.04
+    # A healthy run takes about a minute. Without a cap a test that never returns holds the job
+    # for GitHub's six hours (PR #74's run did, 2026-11-22); the per-test --timeout below names it
+    # long before this.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 2      # the merge commit and its base, for the docs-only check
 
-      - name: Build and run the suite
-        run: make -C host test -j"$(nproc)"
+      - name: What changed
+        id: changes
+        run: tools/ci_changes.sh "${{ github.event_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and run the suite (shards on every core, 120 s per test)
+        if: steps.changes.outputs.code == 'true'
+        run: |
+          make -C host build -j"$(nproc)"
+          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=120
 
       # The ui_layout_* tests are in the suite above; run them again by name so a broken screen
       # shows up as its own failed step instead of one line among thousands.
       - name: Font layout check (every screen)
+        if: steps.changes.outputs.code == 'true'
         run: |
           tests=$(build/host/strata-tests --list | grep '^ui_layout_')
           [ -n "$tests" ] || { echo "no ui_layout_ tests found"; exit 1; }
@@ -47,15 +60,24 @@ jobs:
       # still reach every screen and the PNGs still draw, so tools/screenshots.sh keeps working.
       # It does not compare them with docs/screens/: a UI change redraws them by hand.
       - name: Screenshots still draw
+        if: steps.changes.outputs.code == 'true'
         run: |
           dumps="$RUNNER_TEMP/shots"; mkdir -p "$dumps"
           STRATA_SHOTS="$dumps" build/host/strata-tests --only ui_screenshots
           python3 -B tools/screenshots.py "$dumps" "$RUNNER_TEMP/screens"
           python3 -B tools/panel_diagram.py "$RUNNER_TEMP/screens/panel.svg"
 
+      # Insurance on main: the serial run, in registration order, exactly as
+      # before sharding. The shards keep that order inside each block, so the two should agree;
+      # this is what would show it if they ever stopped doing so.
+      - name: Serial run (main only)
+        if: steps.changes.outputs.code == 'true' && github.event_name != 'pull_request'
+        run: build/host/strata-tests --timeout 120 | tail -1
+
   sanitizers:
     name: Host tests (ASan + UBSan)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
       # BeatRepeat's ring is allocated in init() and never freed, by design (docs/HANDOFF.md).
       ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
@@ -64,13 +86,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 2
 
-      - name: Build and run the suite under ASan and UBSan at -O1
-        run: make -C host test -j"$(nproc)" SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan"
+      - name: What changed
+        id: changes
+        run: tools/ci_changes.sh "${{ github.event_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and run the suite under ASan and UBSan at -O1 (shards, 300 s per test)
+        if: steps.changes.outputs.code == 'true'
+        run: |
+          make -C host build -j"$(nproc)" SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan"
+          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=300 SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan"
 
   checks:
     name: Repo checks
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -87,3 +118,9 @@ jobs:
 
       - name: Release publishing script parses
         run: bash -n tools/publish_release.sh
+
+      - name: Local CI and shard scripts parse
+        run: |
+          bash -n tools/ci_local.sh
+          bash -n tools/test_shards.sh
+          bash -n tools/ci_changes.sh
