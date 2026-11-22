@@ -13,9 +13,7 @@
 #
 #   base     the tree before the pass: <ref> as it is
 #   head     this tree as committed: what merges
-#   fused    head + STRATA_VA_FUSED 1    (the VA voice's filter, envelope and tail in one loop;
-#            off since cl6x rendered it differently on 2026-11-22, docs/BUDGET.md)
-#   nofuse   head + STRATA_VA_FUSED 0    (the same as head while the fusion is off)
+#   nofuse   head + STRATA_VA_FUSED 0    (the VA voice's filter, envelope and tail as three passes)
 #   hints    head + STRATA_TI_HINTS 1    (MUST_ITERATE on the block loops)
 #   packed   head + STRATA_TI_PACKED 1   (DOTP2 stereo pairs in SAMPLE and GRAIN)
 #   all      head + both flags
@@ -39,7 +37,7 @@ ROOT="$(pwd)"
 source tools/env.sh
 
 SCENARIOS="m0 m1 m3 m7 factory samples"
-VARIANTS="base head fused hints packed all"
+VARIANTS="base nofuse head hints packed all"
 BASE=""
 GCC=0
 RENDER_SECONDS=4
@@ -97,7 +95,6 @@ make_tree() {   # make_tree <variant> -> prints the worktree path
     fi
     case "$v" in
         nofuse) set_flag "$tree" STRATA_VA_FUSED 0 ;;
-        fused)  set_flag "$tree" STRATA_VA_FUSED 1 ;;
         hints)  set_flag "$tree" STRATA_TI_HINTS 1 ;;
         packed) set_flag "$tree" STRATA_TI_PACKED 1 ;;
         all)    set_flag "$tree" STRATA_TI_HINTS 1 && set_flag "$tree" STRATA_TI_PACKED 1 ;;

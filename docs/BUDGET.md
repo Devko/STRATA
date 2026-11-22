@@ -1256,14 +1256,19 @@ two flags are off until tonight's measurements.
 | ambient | 31.62% | 29.78% (-1.84) | 29.75% | 29.78% |
 
 GCC only: 49.16 -> 48.47 (m1), 44.12 -> 43.25 (m3). **Audio:** with GCC every variant is
-identical. With cl6x, `hints` and `packed` are identical to the fused head, but **the fused head
-and `nofuse` differ on 365,891 of 401,018 samples, worst 1.44 of full scale**. Reassociation
-alone cannot do that: compiling `valoops.ti.c` with `-fassociative-math` on the host moves A01's
-render by at most 1 LSB of 16 bits. So one of the two cl6x builds plays something different,
-and the fused loop is the new code. **`STRATA_VA_FUSED` is therefore 0 again** (PR #72): the unit
-runs the three passes it has always run. `tools/ti_ab.sh` now has a `fused` variant and compares
-each variant's cl6x render with its GCC render (`tools/render_diff.py`), which says which build
-departs and where it starts.
+identical. With cl6x, `hints` and `packed` are identical to the fused head, but the fused head
+and `nofuse` differ on 365,891 of 401,018 samples, worst 1.44 of full scale.
+`tools/render_diff.py` then compared each cl6x render with its GCC render: **the fused head built
+by cl6x is bit-identical to GCC's; the unfused path built by cl6x is the one that departs** --
+from GCC and from the fused head in the same way. Its first difference is tiny (6.2e-5 of full
+scale at 0.366 s), and from 0.25 s on the difference is the size of the signal while each
+window's peak and the RMS stay identical: the two renders play the same notes with state or
+phase drifted apart, not a voice gone silent. So the fusion stays on, and the open question is
+the old three-pass path under cl6x -- which is what the unit has run until #61, and is still how
+Enaga's `enaga_svf_cascade`, `enaga_svf_process` and `enaga_envelope_render` are built for every
+caller that uses them. Being chased in the vectorisation thread (cl6x `--fp_reassoc` on Enaga's
+library first: a rounding difference that flips a level threshold, such as `VaVoice::sounding()`
+deciding whether the next note resets the oscillator phases, would look exactly like this).
 
 `tools/ti_loops.py --enaga` confirmed the in-place reasoning: Enaga's `enaga_svf_cascade` has a
 54-cycle version (in and out may alias) beside its 21-cycle one, and an in-place call gets the
