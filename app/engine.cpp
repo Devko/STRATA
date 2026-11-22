@@ -742,6 +742,19 @@ void Engine::apply(const Command &command) {
             // the screen drew the new project's numbers.
             apply_mixer_bytes();
             boundary_known_ = false;
+            // The set as it was left: the live mutes and the scenes in slots A and B. A scene id
+            // this build does not have falls back to the default pair rather than indexing past
+            // the scene table.
+            apply_mutes(project_.settings.live_mutes);
+            {
+                const ProjectSettings defaults;
+                scene_a_ = project_.settings.scene_a < kScenes ? project_.settings.scene_a
+                                                               : defaults.scene_a;
+                scene_b_ = project_.settings.scene_b < kScenes ? project_.settings.scene_b
+                                                               : defaults.scene_b;
+                project_.settings.scene_a = scene_a_;
+                project_.settings.scene_b = scene_b_;
+            }
             break;
 
         case Cmd::clear_sample:
@@ -916,6 +929,9 @@ void Engine::apply(const Command &command) {
             if (command.b < kScenes) {
                 if (command.a == 0) scene_a_ = command.b;
                 else scene_b_ = command.b;
+                // And the project's copy, which is what a save writes.
+                project_.settings.scene_a = scene_a_;
+                project_.settings.scene_b = scene_b_;
                 perform_dirty_ = true;
             }
             break;
@@ -1311,6 +1327,8 @@ void Engine::apply_mutes(uint8_t state) {
         if (now && !muted_[t]) silence_track(t);
     }
     mute_state_apply(state, muted_);
+    // PROJECT.BIN's copy, so a save keeps the mutes as they stand (core/project.hpp).
+    project_.settings.live_mutes = mute_state_capture(muted_);
 }
 
 void Engine::on_bar() {

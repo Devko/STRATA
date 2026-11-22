@@ -24,7 +24,7 @@ constexpr const char *kDefaultName = "DEFAULT";
 
 // The ten files a project is. The order is the order they are written and read in, and
 // PROJECT.BIN is first on purpose: it is the one that says which pattern was live, and
-// core/project.cpp's `project_read` deliberately does not touch a pattern, so a damaged 277
+// core/project.cpp's `project_read` deliberately does not touch a pattern, so a damaged 292
 // bytes cannot cost the banks that follow it.
 constexpr int kFileProject = 0;
 constexpr int kFileKit = 1;
@@ -113,6 +113,10 @@ bool mutates_project(Cmd cmd) {
         case Cmd::set_scale:
         // The eight stored mute states live in PROJECT.BIN (core/project.hpp).
         case Cmd::mute_store:
+        // And so do the live mutes and which scenes are in slots A and B, so a recall and a
+        // scene pick change the file too.
+        case Cmd::mute_recall:
+        case Cmd::scene_select:
         // The fourteen send and master bytes, which PROJECT.BIN's third section holds. Before
         // that section existed these were in no file at all, so the flag was 0 and a delay
         // setting was lost the moment the app restarted.
@@ -769,7 +773,7 @@ void Storage::step_load() {
         const SerializeResult res = project_read(project, file_, uint32_t(got));
         // A refused PROJECT.BIN is reported but does not stop the load: core/project.cpp leaves
         // the settings at their defaults and deliberately does not touch a pattern, so the banks
-        // that follow still load. One damaged 277-byte file must not cost 128 patterns.
+        // that follow still load. One damaged 292-byte file must not cost 128 patterns.
         if (res != SerializeResult::ok) error_ = serialize_result_name(res);
         return;
     }

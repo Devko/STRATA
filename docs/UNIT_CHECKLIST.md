@@ -908,3 +908,9 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
 - [ ] F1 + F6 while playing with a pattern change queued: it stops, the tails are cut at once
       (no second press needed), the queued change is gone, and the next PLAY starts at step 1.
 - [ ] With CLOCK SRC on MIDI or SYNC both show EXT CLOCK and change nothing.
+
+## The live mutes and scene A/B are saved with the project
+
+- [ ] Mute two tracks, pick scene 7 into slot B (hold scene B + STEP 7), save, power off, power
+      on. The project comes back with the same two tracks muted and scene 7 in slot B.
+- [ ] A project saved by an older build opens with everything unmuted on scenes 1 and 2.

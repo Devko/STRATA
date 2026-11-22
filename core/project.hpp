@@ -182,6 +182,15 @@ struct ProjectSettings {
     uint8_t chain_length = 0;            // how many chain entries are in use
     bool chain_enabled = false;
 
+    // What was live when the project was saved: the mutes as they stood (one bit per track,
+    // bit t = track t muted) and which scenes sat in the morph's slots A and B. Restored on
+    // open, so a set comes back the way it was left rather than all unmuted. The engine owns
+    // them while the project is open; these are its copies for the file. The scene ids are
+    // kept as read and validated by the engine, which knows how many scenes there are.
+    uint8_t live_mutes = 0;
+    uint8_t scene_a = 0;
+    uint8_t scene_b = 1;
+
     // The two send effects and the master bus, as encoder bytes rather than as the floats the
     // mixer runs on. One byte per field, in dsp/buses.hpp's `SendField` and `MasterField`
     // order, which is why those two enums are declared permanent: these indices reach a file.
@@ -268,6 +277,9 @@ constexpr uint16_t kSectionProjectChain = 2;
 // simply does not ask for it. The version therefore does NOT move: the meaning of no existing
 // byte has changed, which is the only thing kProjectVersion tracks.
 constexpr uint16_t kSectionProjectMixer = 3;
+// The live mutes and the A/B scene choice. Optional on read for the same reason as the mixer:
+// an older file without it opens with everything unmuted and scenes 1 and 2, as it always did.
+constexpr uint16_t kSectionProjectLive = 4;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;
