@@ -506,7 +506,7 @@ then undo your knob moves and morph back and forth. The morph position itself is
 ### Macros
 
 In PERFORM the four macros sit across the screen: `>A`, `B`, `C`, `D`, each with `---` (empty) or
-the number of parameters it drives (`3 PRM`), and a bar showing its position.
+the number of parameters it drives (`3P`), and a bar showing its position.
 
 **How a macro moves the sound.** Each parameter on a macro has a target value. At **0** the macro
 writes nothing: the parameter is wherever its EDIT knob and the morph put it, and you can keep
