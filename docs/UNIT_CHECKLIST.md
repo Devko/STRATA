@@ -807,3 +807,26 @@ records where each gesture went and why.
 - [ ] Change CLOCK SRC to MIDI in the Enaga menu with nothing plugged in: SETUP says `MIDI`, the
       tempo line says `EXT`, and **turning VALUE is refused** — the number must not move. Before
       this it moved and Enaga threw the call away, so the two drifted apart with every click.
+
+---
+
+## VA POLY after the optimisation loop
+
+docs/BUDGET.md: a voice went from 4.30 to 3.82 points, GCC-only, from a fused output tail
+(`dsp/valoops.ti.c`) and filter coefficients shared between the voices of a chord. Both are
+bit-exact by construction and by test, so there is nothing new to HEAR -- which is exactly what
+wants confirming on the unit, because "bit-exact" was argued against GCC and the unit runs cl6x.
+
+- [ ] Play the default beat and listen to the CHORD stab. It must sound as it did: same filter
+      movement, same bite on the accent. A shared coefficient that was not actually shareable
+      would show up as the voices of one chord opening at slightly different rates.
+- [ ] Hold a six-note chord (MIN11 from the step page) and sweep CUT and RES on the stab. No
+      zipper, no voice lagging behind the others, nothing crackling at full resonance.
+- [ ] An accented step inside a chord: the accent must open ITS voice further and leave the
+      others alone. The accent is part of the cache's key, and this is what proves it.
+- [ ] A chord with a very short `Step::length`, so the gate cuts slices mid-block. The cache
+      holds eight entries, one block's worth with room to spare; a short gate makes more slices
+      than usual, and the worst case is simply that the extras miss.
+- [ ] Record the unit's load with cl6x for a 4- and a 6-voice chord, and put both in
+      docs/BUDGET.md next to the GCC-only table. That column is the one this container cannot
+      produce, and the 60% target depends on it.

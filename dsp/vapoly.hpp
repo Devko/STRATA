@@ -190,6 +190,11 @@ private:
     // caps a frame at 16 KiB).
     float work_[VaVoice::kControl] = {};
     float env_[VaVoice::kControl] = {};
+
+    // And one set of filter coefficients, shared the same way: the voices of a chord all arrive
+    // at the same ones, because the voice's filter does not track the key (dsp/va.hpp). Cleared
+    // by `prepare`, which is what makes a stale entry impossible.
+    VaFilterCache filter_cache_;
 };
 
 }  // namespace strata

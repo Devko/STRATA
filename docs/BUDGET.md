@@ -489,7 +489,7 @@ kit, fed the placeholder sample, `scenario_m3.sh` re-run. Same build, same beat,
 
 So GRAIN is about 1.5x the Sampler at the density a kit ships with, and **+9.23 points -- about
 45,800 cycles -- with all eight grains in the air**. docs/SPEC.md budgets 21,520 cycles (4.3%),
-so the worst case is 2.1x over, GCC-only. That is a far better position than VA POLY's 11.3x, and
+so the worst case is 2.1x over, GCC-only. That is a far better position than VA POLY's 10.1x, and
 `dsp/grain.hpp`'s derived estimate (~9,000-11,000 cycles for eight grains) was 4.2x optimistic --
 wrong in the same direction as VA POLY's, by less.
 
@@ -519,6 +519,10 @@ cloud may be almost entirely L1D misses -- and the emulator has no cache model, 
 cannot answer it either. Only the unit can.
 
 #### VA POLY costs 4.25 points per voice, and that is the figure to worry about
+
+> Superseded in part: it is **3.82** since the optimisation loop two subsections below, which
+> keeps the method and the reasoning here and replaces only the number. Everything about where
+> the cycles are, and about SPEC's figure, still holds.
 
 The default kit's CHORD track plays a MIN7 -- four notes -- so this is measurable by changing one
 chord type in `build_default_beat` and re-running `scenario_m3.sh`. Four runs, same build, same
@@ -580,6 +584,101 @@ One caveat on the split: it is GCC-only. cl6x pipelines a branch-free per-sample
 than it does the branchy control-rate code, so on the unit the per-sample share should be SMALLER
 than 82% -- which would make the control-rate term relatively more important, not less. That is
 reasoning, not measurement, and it is one more thing the unit decides.
+
+#### The optimisation loop: 4.30 -> 3.82 points per voice, bit-exact
+
+Two changes, each measured on its own, same build and same beat as the table above, GCC-only.
+CLAUDE.md asks for figures with AND without cl6x after a DSP change; the without-cl6x column is
+the only one this environment can produce, because cl6x is not installed here (`tools/build.sh`
+says so: "built with GCC only"). Both changes move work that cl6x compiles BETTER than GCC does
+-- a branch-free fused loop, and a control step with two fewer transcendentals -- so the cl6x
+column should show at least these savings and probably more. That is reasoning, and it is owed a
+run on the machine that has the toolchain.
+The method is that table's: change one chord type in `build_default_beat` and re-run
+`scenario_m3.sh`, which gives a 5-voice reading and a 7-voice one (the chord plus the bass, both
+on a `VaVoice`), and therefore a per-voice figure rather than a total to argue about.
+
+| Build | MIN7, 5 VaVoices | MIN11, 7 VaVoices | per voice |
+| --- | --- | --- | --- |
+| before | 33.56% | 42.16% | **4.30** |
+| + the fused output tail | 32.62% | 40.75% | 4.07 |
+| + shared filter coefficients | **31.92%** | **39.55%** | **3.82** |
+
+**11.3% off a voice**, and both changes are BIT-EXACT: every expectation in tests/test_va.cpp
+and tests/test_vapoly.cpp held unchanged, and each change has a test that pins the equality
+rather than a tolerance.
+
+Across the whole suite, which is the figure to quote because it is what a scenario actually
+reads -- every one of the six that has a VA voice in it came down by the same ~1.6 points:
+
+| Scenario | before | after |
+| --- | --- | --- |
+| `scenario_m0.sh` — init, nothing playing | 2.87% | 2.87% |
+| `scenario_m1.sh` — the beat | 41.26% | **39.60%** |
+| `scenario_m3.sh` — the default beat | 33.56% | **31.92%** |
+| `scenario_m4.sh` — + stop, queue, save | 28.81% | **27.15%** |
+| `scenario_m5.sh` — + PERFORM, scenes, macros | 35.92% | **34.54%** |
+| `scenario_m6.sh` — + KEYS, three keys recorded | 38.25% | **36.61%** |
+| `scenario_m7.sh` — + every MIXER page and SETUP | 41.26% | **39.60%** |
+
+m0 is unchanged to the cycle, which is the control: it plays nothing, so it has no VA voice to
+make cheaper, and an unchanged number there says the difference is the voices and not the build.
+
+The AVERAGE saving per voice is smaller than the marginal 0.48, and both numbers are honest. A
+scenario's five VaVoices save 1.64 between them, 0.33 each: the bass is a `VaMono` with one
+voice, so it passes no cache and gets only the fused tail, and the FIRST chord voice of each
+slice is the one that computes the coefficients the others read. The marginal voice -- the sixth
+of a chord, the one that decides whether a part fits -- saves the full 0.48.
+
+**1. The fused output tail: 0.19 points per voice.** `dsp/valoops.ti.c`'s `strata_va_tail` does
+in one pass what was `enaga_soft_clip_buffer`, then `enaga_multiply`, then a `mix_ramp` written
+out in va.cpp -- three passes over the slice with the 16-float slice buffer written and read
+back twice between them. dsp/va.cpp's own header had named this extraction since M2 and it is
+now the only *.ti.c file the melodic machines have; everything else in the slice is an Enaga
+block function and so already goes through cl6x inside Enaga's library.
+
+The arithmetic is unchanged down to the associations -- `gain * (clipped * env[i])`, because
+`enaga_multiply` formed that product before the ramp multiplied by the gain and float
+multiplication is not associative. `va_the_fused_tail_is_bit_exact_against_the_three_passes_it_replaced`
+runs the three Enaga functions and the fused kernel over the same data and compares with `==`.
+
+**2. Shared filter coefficients: 0.24 points per sharing voice.** The voice's filter has no key
+tracking, which dsp/va.cpp argues for musically -- "a bass line wants the same squelch at every
+note of a pattern". So `g` and `k` depend on the settings, the filter envelope's value and the
+accent, and NOT on the note: the voices of a chord, gated on the same frame with the same
+shapes, run bit-identical filter envelopes and all six were computing the same `semitones` and
+the same `tan_pi`, the two most expensive things in the control step. `VaFilterCache` (eight
+entries, a linear scan, keyed on the envelope value by exact float equality) lets the first
+voice of a slice compute them and the rest read them back.
+
+0.70 points at four chord voices and 1.20 at six, so 0.23 and 0.24 per voice that shares -- a
+consistent **~31% of the 0.78-point control step**, which is about what is left after the
+per-voice `semitones(pitch - 69)` and the oscillators' two reciprocals, the parts that cannot be
+shared because they depend on the note.
+
+Three things were examined and NOT done, with the reasons, so they are not re-examined from
+scratch:
+
+- **Skipping oscillator passes at zero level** cannot help: the VA voice's mix is FIXED in
+  dsp/va.cpp (`kLevelOsc1` 0.60, `kLevelOsc2` 0.14, `kLevelSub` 0.40, `kLevelNoise` 0.016), not
+  user-settable, so no pass is ever at zero and a guard would be dead weight in the hot path.
+- **Writing the noise instead of clearing and then adding it** would save one 1-store-per-sample
+  pass of the eight, and would change the order of the oscillator sum -- float addition is not
+  associative, so the voice would no longer be bit-exact. A ulp of drift for 1% of a pass is the
+  wrong trade.
+- **The "buffered maths" the previous section proposed -- one oscillator pass for all six voices
+  -- does not work**, and it is worth writing down why rather than leaving it as a standing idea.
+  Each voice has its own filter state, its own two envelopes and its own noise stream, so the
+  only thing that could be shared is a sum taken BEFORE the filter -- which is a different
+  instrument, not an optimisation. The voices are necessarily rendered one at a time.
+
+What is left in the per-sample loop is Enaga's: the PolyBLEP saw, the synced PolyBLEP pulse, the
+sub triangle, the noise, one or two SVF stages and the amplitude envelope. None of it is
+STRATA's to rewrite (CLAUDE.md: never modify third_party/enaga), and all of it already compiles
+through cl6x in Enaga's own library. **So the remaining lever really is cl6x's 2.2x and the
+unit, which is where this section's predecessor left it.** Six voices now cost 22.9% of the
+block GCC-only rather than 25.8%; against docs/SPEC.md's 11,208 cycles for the whole machine
+that is 10.1x rather than 11.3x, and the three explanations in the previous section stand.
 
 **`Trig::gate_frames` costs +0.06 points** and nothing more. The previous build of the same four
 scenarios read 22.66 / 22.66 / 23.48 / 30.58, so converting `Step::length` to frames in

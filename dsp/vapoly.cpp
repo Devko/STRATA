@@ -158,6 +158,12 @@ void VaPoly::prepare(const TrackParams &params) {
     // struct and not a set of members (va.hpp).
     settings_ = VaSettings::make(params, rate_, inv_rate_);
 
+    // Everything in the filter cache was derived from the settings that have just been replaced,
+    // so it goes with them. This is the ONE thing that has to happen for a stale coefficient to
+    // be impossible, which is why it sits on the line after the settings rather than anywhere
+    // more convenient (dsp/va.hpp, VaFilterCache).
+    filter_cache_.clear();
+
     // Slot 10 is DET here, so VaSettings::make leaves it alone. The glide coefficients stay at
     // their default of 1 -- arrive at once -- which is what a machine with no glide wants.
     detune_ = kDetuneSemis * params.unit(10);
@@ -295,7 +301,7 @@ void VaPoly::render_slot(int slot, float *out, int frames) {
         // frame at a time -- sixteen times the control-rate work for an identical result.
         // tests/test_vapoly.cpp's steal test pins the audible half; this comment is the rest.
         if (!s.pending && s.gate > 0 && s.gate < n) n = s.gate;
-        s.voice.run(settings_, out + i, n, work_, env_);
+        s.voice.run(settings_, out + i, n, work_, env_, &filter_cache_);
         if (s.pending) s.wait -= n;
         if (!s.pending && s.gate > 0) {
             s.gate -= n;

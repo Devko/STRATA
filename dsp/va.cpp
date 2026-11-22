@@ -53,16 +53,24 @@
 // inside the target, which it should be: the reference carries three ADSRs, two LFOs and an
 // eight-slot modulation matrix that this voice does not.
 //
-// All of the per-sample work except the output ramp is already in Enaga's C block functions,
-// which cl6x compiles and pipelines, so CLAUDE.md's *.ti.c rule bites in one place here:
-// `mix_ramp` -- which is already written, in fact: `strata_mix_ramp` in dsp/drumloops.h is this
-// loop exactly, shared by KICK, SNARE and HAT. It is not called from here only because
-// drumloops.* belongs to another agent's file set. The worthwhile extraction is bigger than
-// that one loop anyway: a single fused pass doing `soft clip -> multiply by the amplitude
-// envelope -> ramped add into the bus` would replace three passes over the slice with one and
-// save two buffer round-trips. That is the candidate to hand the *.ti.c agent, and it is worth
-// six times as much now that VA POLY runs the same slice six times a block.
+// **That derivation is wrong by a factor of eleven, and the table above is still here because
+// the SHAPE of it is right.** Measured on the emulator, a voice costs about 18,900 cycles a
+// block, not 1,660 (docs/BUDGET.md, "VA POLY costs 4.25 points per voice" and the optimisation
+// loop after it). 2.5 flops per cycle was taken from Enaga's example and is far too generous
+// for this code, which is branchier and, in the GCC-only build the figure was taken from, not
+// pipelined at all. The ORDER of the stages has held up -- the synced pulse really is the
+// largest, the control step really is about a fifth of a voice -- so read this table for what
+// to attack and docs/BUDGET.md for what anything costs.
+//
+// All of the per-sample work is in C block functions that cl6x compiles and pipelines: Enaga's
+// for the oscillators, the noise, the filter and the envelope, and `strata_va_tail` in
+// dsp/valoops.ti.c for the output tail -- the soft clip, the amplitude envelope and the ramped
+// add into the bus, fused into one pass. That fusion is what this comment used to ask for; it
+// replaced three passes over the slice and two round-trips of `work` through memory, and
+// docs/BUDGET.md has what it was worth. There is no hand-written loop left in this file.
 #include "va.hpp"
+
+#include "valoops.h"
 
 namespace strata {
 namespace {
@@ -150,16 +158,6 @@ constexpr float kVelocityFloor = 0.25f;        // velocity 1 is a quarter the le
 float to_target(float seconds, float rate) {
     const float steps = seconds * rate;
     return steps < 1.0f ? 1.0f : 1.0f - exp(-EnvelopeShape::kSpan * reciprocal(steps));
-}
-
-// out += gain * in, with gain walking by step each sample: the output ramp, so a change of LVL,
-// of velocity or of accent never puts a step in the bus. Two flops a sample, and the one
-// hand-written loop in this file (see the *.ti.c note at the top).
-void mix_ramp(float *out, const float *in, int n, float gain, float step) {
-    for (int i = 0; i < n; i++) {
-        out[i] += gain * in[i];
-        gain += step;
-    }
 }
 
 }  // namespace
@@ -291,7 +289,8 @@ void VaVoice::gate_on() {
     fenv_.gate_on(true);   // the sweep always starts from closed, however loud the old note was
 }
 
-void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *env) {
+void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *env,
+                  VaFilterCache *shared) {
     if (!sounding()) return;
 
     // --- one control step --------------------------------------------------------------
@@ -312,11 +311,29 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     // Accent opens the filter two ways: the base cutoff lifts, and the sweep above it reaches
     // further. No key tracking, deliberately -- the machine this follows has a fixed-frequency
     // filter, and a bass line wants the same squelch at every note of a pattern.
-    float semis = s.env_semis * fenv;
-    if (accent_) semis = semis * kAccentEnvScale + kAccentCutSemis;
-    const float cutoff = clamp(s.cutoff_hz * semitones(semis), 20.0f, 0.45f * s.rate);
-    const float g = tan_pi(cutoff * s.inv_rate);
-    const float k = accent_ ? clamp(s.k_res - kAccentK, kMinK, s.k_res) : s.k_res;
+    //
+    // That is also what lets `shared` work: nothing below depends on the NOTE, so the voices of
+    // a chord -- whose filter envelopes run bit-identically, being gated together with the same
+    // shapes -- all arrive at the same `g` and `k`. The first of them computes the `semitones`
+    // and the `tan_pi`; the rest read them back (va.hpp, VaFilterCache). A hit is bit-exact by
+    // construction: same inputs, same outputs.
+    float g;
+    float k;
+    const int hit = shared != nullptr ? shared->find(fenv, accent_) : -1;
+    if (hit >= 0) {
+        g = shared->entries[hit].g;
+        k = shared->entries[hit].k;
+    } else {
+        float semis = s.env_semis * fenv;
+        if (accent_) semis = semis * kAccentEnvScale + kAccentCutSemis;
+        const float cutoff = clamp(s.cutoff_hz * semitones(semis), 20.0f, 0.45f * s.rate);
+        g = tan_pi(cutoff * s.inv_rate);
+        k = accent_ ? clamp(s.k_res - kAccentK, kMinK, s.k_res) : s.k_res;
+        if (shared != nullptr) shared->add(fenv, accent_, g, k);
+    }
+
+    // Not cached: `from_g` is one reciprocal and three multiplies, which is not worth a lookup,
+    // and leaving it out keeps an entry to one key and two values.
     const SvfCoefficients c2 = SvfCoefficients::from_g(g, k);
 
     // --- the slice ---------------------------------------------------------------------
@@ -347,16 +364,23 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
             break;
     }
 
-    // The soft clip sits AFTER the filter, which is what bounds the voice to +-1 however far
-    // resonance pushes the peak, and is the right place for the dirt a driven bass wants.
-    enaga_soft_clip_buffer(work, n, s.drive);
-
     amp_.render(env, n, accent_ ? s.amp_shape_accent : s.amp_shape);
-    enaga_multiply(work, env, n);
 
     const float target = s.out_gain * (kVelocityFloor + (1.0f - kVelocityFloor) * velocity_) *
                          (accent_ ? kAccentGain : 1.0f);
-    mix_ramp(out, work, n, gain_, (target - gain_) * reciprocal(float(n)));
+
+    // The whole tail in ONE pass: the soft clip, the amplitude envelope and the ramped add.
+    //
+    // The soft clip sits AFTER the filter, which is what bounds the voice to +-1 however far
+    // resonance pushes the peak, and is the right place for the dirt a driven bass wants. It
+    // used to be `enaga_soft_clip_buffer`, then `enaga_multiply`, then a `mix_ramp` written out
+    // in this file -- three passes over the slice with `work` round-tripped through memory. This
+    // file's header has named the fusion as the thing to do since M2, and docs/BUDGET.md's
+    // measurement is why it is worth doing: VA POLY runs this tail six times a block, four
+    // slices each, and 82% of its 4.3 points per voice is the per-sample loop.
+    //
+    // Bit-exact, deliberately: same expressions, same order, same associations (dsp/valoops.h).
+    strata_va_tail(out, work, env, n, s.drive, gain_, (target - gain_) * reciprocal(float(n)));
     gain_ = target;
 }
 

@@ -12,6 +12,7 @@
 #include <enaga/abi.h>
 
 #include "va.hpp"
+#include "valoops.h"
 
 using namespace strata;
 
@@ -878,4 +879,220 @@ TEST(va_env_amount_opens_the_filter) {
     CHECK(energy(g_b, n) > 4.0f * energy(g_a, n));
     CHECK(sign_changes(g_b, n) > sign_changes(g_a, n));
     CHECK(finite_within(g_b, n, 4.0f));
+}
+
+// --- the fused output tail --------------------------------------------------------------------
+//
+// dsp/valoops.ti.c replaced three passes over the voice's slice -- `enaga_soft_clip_buffer`,
+// `enaga_multiply` and a `mix_ramp` written out in va.cpp -- with one. docs/BUDGET.md has what
+// that was worth; this is what holds it to being the SAME arithmetic, which is the claim the
+// whole rest of this file's expectations rest on.
+//
+// Bit-for-bit, not "near": float multiplication is not associative, so a fusion that formed
+// `(gain * clipped) * env` instead of `gain * (clipped * env)` would be a different signal, and
+// every exact expectation in tests/test_vapoly.cpp would start drifting by one ulp at a time.
+
+TEST(va_the_fused_tail_is_bit_exact_against_the_three_passes_it_replaced) {
+    // Values that exercise every part of it: inside the soft clip's linear region, past its
+    // +-1.5 clamp in both directions, exact zeros, and an envelope that is not monotone.
+    constexpr int n = 16;
+    const float source[n] = {0.0f,   0.25f,  -0.25f, 0.9f,  -0.9f,  1.4f,   -1.4f, 3.0f,
+                             -3.0f,  1e-7f,  -1e-7f, 0.5f,  0.125f, -0.75f, 1.0f,  -1.0f};
+    const float env[n] = {0.0f,  0.1f,  0.35f, 0.7f, 1.0f,  0.95f, 0.6f,  0.4f,
+                          0.25f, 0.15f, 0.08f, 0.9f, 0.45f, 0.3f,  0.55f, 0.02f};
+
+    // Three drives and three gain ramps, including a ramp that goes DOWN and one that does not
+    // move at all -- the case where a slice must stay exact rather than merely close.
+    const float drives[] = {1.0f, 0.37f, 2.5f};
+    const float gains[] = {1.0f, 0.0f, 0.6f};
+    const float steps[] = {0.0f, 0.0625f, -0.03f};
+
+    for (int d = 0; d < 3; d++) {
+        for (int r = 0; r < 3; r++) {
+            // The reference: exactly what va.cpp used to do, in exactly that order, with the
+            // Enaga functions themselves rather than a copy of their bodies.
+            float work[n];
+            float reference[n];
+            for (int i = 0; i < n; i++) {
+                work[i] = source[i];
+                reference[i] = float(i) * 0.5f - 2.0f;   // a bus with something already in it
+            }
+            float scratch[n];
+            for (int i = 0; i < n; i++) scratch[i] = env[i];
+
+            enaga_soft_clip_buffer(work, n, drives[d]);
+            enaga_multiply(work, scratch, n);
+            float gain = gains[r];
+            for (int i = 0; i < n; i++) {
+                reference[i] += gain * work[i];
+                gain += steps[r];
+            }
+
+            // And the fused pass, from the same inputs into the same starting bus.
+            float fused[n];
+            for (int i = 0; i < n; i++) fused[i] = float(i) * 0.5f - 2.0f;
+            strata_va_tail(fused, source, env, n, drives[d], gains[r], steps[r]);
+
+            for (int i = 0; i < n; i++) {
+                CHECK(fused[i] == reference[i]);
+            }
+        }
+    }
+}
+
+TEST(va_the_fused_tail_leaves_its_input_alone) {
+    // The other half of the saving: `work` is read once instead of being written and read back
+    // twice. A kernel that modified it in place would still sound identical for one voice and
+    // would quietly corrupt the slice buffer VA POLY's six voices SHARE (dsp/vapoly.hpp) --
+    // the next voice would clip and envelope the previous voice's output.
+    constexpr int n = 8;
+    const float source[n] = {0.3f, -0.6f, 2.0f, 0.0f, -2.0f, 0.45f, -0.1f, 1.2f};
+    const float env[n] = {1.0f, 0.5f, 0.25f, 0.75f, 0.9f, 0.2f, 0.6f, 0.4f};
+
+    float work[n];
+    float envelope[n];
+    for (int i = 0; i < n; i++) {
+        work[i] = source[i];
+        envelope[i] = env[i];
+    }
+    float out[n] = {};
+    strata_va_tail(out, work, envelope, n, 1.8f, 0.4f, 0.01f);
+
+    for (int i = 0; i < n; i++) {
+        CHECK(work[i] == source[i]);
+        CHECK(envelope[i] == env[i]);
+    }
+
+    // And a zero-length slice is a no-op rather than a read of out[-1]: `render_slot` cuts a
+    // slice short at a trig's frame, and a trig on frame 0 of a block makes that cut zero wide.
+    float untouched[n];
+    for (int i = 0; i < n; i++) untouched[i] = out[i];
+    strata_va_tail(out, work, envelope, 0, 1.0f, 1.0f, 0.0f);
+    for (int i = 0; i < n; i++) CHECK(out[i] == untouched[i]);
+}
+
+// --- the shared filter-coefficient cache ------------------------------------------------------
+//
+// The voices of one machine share `g` and `k`, which they can because the voice's filter does
+// not track the key: nothing in that derivation depends on the note (dsp/va.hpp, VaFilterCache).
+// docs/BUDGET.md has what it saves; these hold it to being the SAME numbers.
+
+TEST(va_the_filter_cache_finds_only_an_exact_match) {
+    VaFilterCache cache;
+    CHECK_EQ(cache.count, 0);
+    CHECK_EQ(cache.find(0.5f, false), -1);
+
+    cache.add(0.5f, false, 0.25f, 1.5f);
+    cache.add(0.5f, true, 0.40f, 1.1f);          // the same envelope, accented: a DIFFERENT entry
+    CHECK_EQ(cache.count, 2);
+    CHECK_EQ(cache.find(0.5f, false), 0);
+    CHECK_EQ(cache.find(0.5f, true), 1);
+
+    // By exact equality, which is the point: a key that is one ulp away is a different filter
+    // setting and must miss rather than hand back a coefficient nobody computed.
+    const float nearly = 0.5f + 6e-8f;
+    CHECK(nearly != 0.5f);
+    CHECK_EQ(cache.find(nearly, false), -1);
+    CHECK_EQ(cache.find(0.4999999f, false), -1);
+
+    CHECK_NEAR(cache.entries[cache.find(0.5f, false)].g, 0.25f, 1e-9);
+    CHECK_NEAR(cache.entries[cache.find(0.5f, true)].k, 1.1f, 1e-9);
+
+    // A full cache stops storing rather than evicting or running off the end: a miss then costs
+    // what it always cost.
+    for (int i = 0; i < 20; i++) cache.add(float(i) + 10.0f, false, 1.0f, 1.0f);
+    CHECK_EQ(cache.count, VaFilterCache::kEntries);
+    CHECK_EQ(cache.find(10.0f, false), 2);                   // the first few did get in
+    CHECK_EQ(cache.find(19.0f, false), -1);                  // and the rest did not
+
+    cache.clear();
+    CHECK_EQ(cache.count, 0);
+    CHECK_EQ(cache.find(0.5f, false), -1);
+}
+
+TEST(va_a_cached_coefficient_is_bit_identical_to_a_computed_one) {
+    // Three voices in the same state. The first fills the cache, the second reads it back, and
+    // the third computes its own with no cache at all. Two and three must agree BIT FOR BIT --
+    // not nearly -- because that is the only thing that makes the sharing safe: a hit is the
+    // same number the voice would have arrived at, so the chord does not drift voice by voice.
+    constexpr int n = VaVoice::kControl;
+    const TrackParams p = patch();
+    const VaSettings settings = VaSettings::make(p, 48000.0f, 1.0f / 48000.0f);
+
+    VaVoice filler, cached, computed;
+    VaVoice *all[3] = {&filler, &cached, &computed};
+    for (int i = 0; i < 3; i++) {
+        all[i]->reset();
+        all[i]->seed(0x51F3A27Du);           // the SAME noise stream, so only the filter differs
+        all[i]->set_pitch(60.0f);
+        all[i]->set_target(60.0f);
+        all[i]->set_note(100.0f / 127.0f, false, false);
+        all[i]->gate_on();
+    }
+
+    VaFilterCache cache;
+    float work[n];
+    float env[n];
+    float out_filler[n] = {};
+    float out_cached[n] = {};
+    float out_computed[n] = {};
+
+    // Several slices, so the cache is exercised across more than one envelope value and the
+    // voices' filter and oscillator state carries forward exactly as it does in a block.
+    for (int slice = 0; slice < 6; slice++) {
+        for (int i = 0; i < n; i++) {
+            out_filler[i] = 0.0f;
+            out_cached[i] = 0.0f;
+            out_computed[i] = 0.0f;
+        }
+        filler.run(settings, out_filler, n, work, env, &cache);
+        cached.run(settings, out_cached, n, work, env, &cache);
+        computed.run(settings, out_computed, n, work, env, nullptr);
+
+        for (int i = 0; i < n; i++) {
+            CHECK(out_cached[i] == out_computed[i]);
+            // And the filler, which computed the same values first, matches them too -- so this
+            // is one signal three ways and not two that happen to agree.
+            CHECK(out_filler[i] == out_computed[i]);
+        }
+    }
+
+    // The cache really was used: six slices of one envelope path is six distinct values, and
+    // eight entries is one block's worth, so the filler filled it and `cached` read it.
+    CHECK(cache.count > 0);
+    CHECK(cache.count <= VaFilterCache::kEntries);
+}
+
+TEST(va_an_accented_voice_does_not_read_an_unaccented_voices_coefficients) {
+    // The accent is part of the key because it moves both the cutoff and the resonance. A cache
+    // that keyed on the envelope alone would hand an accented voice the plain voice's filter --
+    // audible, and exactly the kind of bug a shared cache invites.
+    constexpr int n = VaVoice::kControl;
+    const TrackParams p = patch();
+    const VaSettings settings = VaSettings::make(p, 48000.0f, 1.0f / 48000.0f);
+
+    VaVoice plain, accented, accented_alone;
+    VaVoice *all[3] = {&plain, &accented, &accented_alone};
+    for (int i = 0; i < 3; i++) {
+        all[i]->reset();
+        all[i]->seed(0x7A31C95Fu);
+        all[i]->set_pitch(60.0f);
+        all[i]->set_target(60.0f);
+        all[i]->set_note(100.0f / 127.0f, i > 0, false);     // the first plain, the others accented
+        all[i]->gate_on();
+    }
+
+    VaFilterCache cache;
+    float work[n];
+    float env[n];
+    float out_plain[n] = {};
+    float out_accented[n] = {};
+    float out_alone[n] = {};
+
+    plain.run(settings, out_plain, n, work, env, &cache);            // fills, unaccented
+    accented.run(settings, out_accented, n, work, env, &cache);      // must MISS and compute
+    accented_alone.run(settings, out_alone, n, work, env, nullptr);
+
+    for (int i = 0; i < n; i++) CHECK(out_accented[i] == out_alone[i]);
+    CHECK_EQ(cache.count, 2);                                        // two keys, not one
 }

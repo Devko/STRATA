@@ -124,6 +124,61 @@ struct VaSettings {
 //     v.set_target(note + tune);             // where the pitch is heading ...
 //     v.set_pitch(target);                   // ... and, unless it should glide there, from
 //     v.gate_on();
+
+// Filter coefficients shared between the voices of ONE machine, within one block.
+//
+// Why it is possible at all: the voice's filter has NO KEY TRACKING, which va.cpp argues for on
+// musical grounds -- "a bass line wants the same squelch at every note of a pattern". So `g` and
+// `k` depend on the settings, on the filter envelope's value and on the accent, and NOT on the
+// note. The voices of a chord are gated on the same frame with the same shapes, so their filter
+// envelopes run bit-identically and all six were computing the same `semitones` and the same
+// `tan_pi` -- the two most expensive things in the control step -- six times over.
+//
+// Keyed on the envelope value by EXACT EQUALITY, which is what makes a hit bit-exact rather than
+// merely close: identical inputs, identical outputs, so a shared coefficient is the same number
+// the voice would have computed. A float key is right here for the same reason it is usually
+// wrong -- the question being asked is "are these the same bits", not "are these about equal".
+//
+// The settings are the other half of the key, and they are not stored: `VaPoly::prepare` clears
+// the cache, which is the one thing that must happen for a stale entry to be impossible.
+// docs/BUDGET.md has what it saves.
+struct VaFilterCache {
+    // Four control slices to a block, and a gate closing mid-slice can cut one more, so eight is
+    // one block's worth with room to spare. A full cache simply stops storing: a miss costs what
+    // it always cost.
+    static constexpr int kEntries = 8;
+
+    struct Entry {
+        float fenv;
+        float g;
+        float k;
+        bool accent;
+    };
+
+    Entry entries[kEntries] = {};
+    int count = 0;
+
+    void clear() { count = 0; }
+
+    // The entry for this envelope value and accent, or -1. A linear scan of at most eight float
+    // compares against an exp2 and a tangent, so the scan is the cheap side by a wide margin.
+    int find(float fenv, bool accent) const {
+        for (int i = 0; i < count; i++) {
+            if (entries[i].fenv == fenv && entries[i].accent == accent) return i;
+        }
+        return -1;
+    }
+
+    void add(float fenv, bool accent, float g, float k) {
+        if (count >= kEntries) return;
+        entries[count].fenv = fenv;
+        entries[count].accent = accent;
+        entries[count].g = g;
+        entries[count].k = k;
+        count++;
+    }
+};
+
 class VaVoice {
 public:
     // Frames per control step. 16 is the reference's figure: modulation at 3 kHz, which is fast
@@ -171,7 +226,12 @@ public:
     // One control step and its n samples (n must be 1..kControl), ADDED into out. `work` and
     // `env` are kControl-float scratch buffers the CALLER owns and every voice shares, so six
     // voices of slice never reach the audio stack.
-    void run(const VaSettings &settings, float *out, int n, float *work, float *env);
+    //
+    // `shared`, when given, is the filter-coefficient cache above: the voices of one machine
+    // pass the same one, and a hit skips the control step's `semitones` and `tan_pi`. A caller
+    // with one voice passes nothing, since there is nobody to share with.
+    void run(const VaSettings &settings, float *out, int n, float *work, float *env,
+             VaFilterCache *shared = nullptr);
 
 private:
     enaga::dsp::Oscillator osc1_, osc2_, sub_;
