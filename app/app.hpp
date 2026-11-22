@@ -1523,10 +1523,10 @@ public:
         out = line;
         append(out, "TRK");
         append_number(out, status.voices.load(std::memory_order_relaxed));
-        // Percent, like the top line, but without the sign: "V18 MAX 99.9 SMPLTREK" is 21
-        // characters, 126 pixels, and the screen is 128. A longer line (100.0, LOFI-12 XT, DROP)
-        // is clipped by Enaga's pixel writer at the edge, never overrun.
-        append(out, " MAX ");
+        // The held CPU maximum, percent like the top line but without the sign and the space:
+        // "TRK8 MAX99.9 SMPLTREK" is 21 characters, 126 pixels, and the screen is 128. A longer
+        // line (100.0, LOFI-12 XT, DROP) is clipped by Enaga's pixel writer, never overrun.
+        append(out, " MAX");
         append_tenths(out, cpu_max_);
         append(out, " ");
         append(out, device_name(enaga::system::device()));
