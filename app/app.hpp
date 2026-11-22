@@ -925,7 +925,7 @@ public:
             if (encoder == 1) {
                 // The key wraps: twelve pitch classes in a circle is what they are, and walking
                 // off one end to be stopped there would be wrong rather than merely annoying.
-                const int root = (int(engine_.pattern().root) + delta % 12 + 12) % 12;
+                const int root = (int(engine_.key_root()) + delta % 12 + 12) % 12;
                 post(Cmd::set_root, 0, 0, uint8_t(root));
                 notice(note_name(uint8_t(root)));
                 return;
@@ -935,7 +935,7 @@ public:
                 // later build wrote survives a load (core/project.cpp leaves it alone), so the
                 // user can be looking at a scale the encoder cannot reach -- walking from there
                 // lands on the nearest one this build knows rather than jumping to chromatic.
-                const int current = int(engine_.pattern().scale);
+                const int current = int(engine_.key_scale());
                 int next = (current < kScaleCount ? current : kScaleCount - 1) + delta;
                 next = next < 0 ? 0 : (next >= kScaleCount ? kScaleCount - 1 : next);
                 post(Cmd::set_scale, 0, 0, uint8_t(next));
@@ -1074,7 +1074,7 @@ public:
         if (track != selected_) end_gesture();         // a different track is a different edit
         selected_ = track;
         // The root in a playable octave: the pattern's root is a pitch class (core/pattern.hpp).
-        const uint8_t note = uint8_t(kPadOctaveNote + engine_.pattern().root % 12);
+        const uint8_t note = uint8_t(kPadOctaveNote + engine_.key_root());
         post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity));
         record_note(track, note, uint8_t(velocity));
     }
@@ -1937,8 +1937,8 @@ public:
     // current octave. By DEGREES rather than semitones, which is the whole reason core/scale
     // exists -- sixteen keys then span two octaves of a seven-note scale and stay in the key.
     uint8_t keys_note(int step) const {
-        const uint8_t root = uint8_t(engine_.pattern().root % 12);
-        const int scale = int(engine_.pattern().scale);
+        const uint8_t root = engine_.key_root();
+        const int scale = int(engine_.key_scale());
         const int base = clamp_int(kPadOctaveNote + keys_octave_ * 12 + int(root), 0, 127);
         return scale_step(scale_fold(uint8_t(base), root, scale), root, scale, step);
     }
@@ -2040,8 +2040,8 @@ public:
     void draw_keys(enaga::Canvas &canvas) {
         char line[40];
         char *out = line;
-        const uint8_t root = uint8_t(engine_.pattern().root % 12);
-        const int scale = int(engine_.pattern().scale);
+        const uint8_t root = engine_.key_root();
+        const int scale = int(engine_.key_scale());
 
         out = line;
         append(out, "KEYS T");
@@ -2447,9 +2447,9 @@ public:
         // mutation actually fold into -- a pattern loaded in its own key must read as that key.
         out = line;
         append(out, "KEY ");
-        append(out, note_name(engine_.pattern().root));
+        append(out, note_name(engine_.key_root()));
         *out++ = ' ';
-        append(out, scale_name(int(engine_.pattern().scale)));
+        append(out, scale_name(int(engine_.key_scale())));
         *out = 0;
         canvas.text(0, 94, line, 11);
 

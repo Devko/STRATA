@@ -2254,6 +2254,32 @@ TEST(engine_the_key_and_the_scale_land_in_both_places) {
     CHECK_EQ(int(engine.project().settings.scale), 200);
 }
 
+TEST(engine_the_key_is_global_and_survives_a_pattern_switch_and_an_undo) {
+    // docs/SPEC.md: "Global key and scale". The engine folded with the LIVE PATTERN's copy, so
+    // every other pattern played in its zeroed default (C chromatic), the key changed on a
+    // pattern switch, and an undo reverted it. It now folds with PROJECT.BIN's.
+    Engine &engine = clean();
+    post(Cmd::set_root, 0, 0, 2);
+    post(Cmd::set_scale, 0, 0, uint8_t(Scale::dorian));
+    pump();
+    CHECK_EQ(int(engine.key_root()), 2);
+    CHECK_EQ(int(engine.key_scale()), int(Scale::dorian));
+
+    post(Cmd::queue_pattern, 0, 0, 0, 9, uint8_t(QueueMode::immediate));   // stopped: at once
+    pump();
+    CHECK_EQ(live_slot(), 9);
+    CHECK_EQ(int(engine.key_root()), 2);
+    CHECK_EQ(int(engine.key_scale()), int(Scale::dorian));
+
+    post(Cmd::undo_mark, 0, 5, uint8_t(GestureKind::trig), 1);
+    post(Cmd::toggle_trig, 0, 5);
+    post(Cmd::set_root, 0, 0, 4);
+    pump();
+    post(Cmd::undo);
+    pump();
+    CHECK_EQ(int(engine.key_root()), 4);           // the edit undone, the key kept
+}
+
 TEST(engine_clearing_a_sample_bumps_the_epoch_even_for_a_track_that_has_none) {
     Engine &engine = clean();
     // Tracks 1 to 7 host no Sampler in the default kit, which is the case this is about. Track 8

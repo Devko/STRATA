@@ -66,6 +66,11 @@ public:
     // Read-only views for the UI to draw from. The UI must not write through these: every edit
     // goes through the command ring, so that a save and the transport cannot race.
     const Pattern &pattern() const { return project_.live(); }
+    // The key, which docs/SPEC.md makes GLOBAL: PROJECT.BIN's root and scale, not the live
+    // pattern's copies. Reading the pattern's meant every other pattern played in C chromatic
+    // (its zeroed default), the key changed on a pattern switch, and an undo reverted it.
+    uint8_t key_root() const { return uint8_t(project_.settings.root % 12); }
+    uint8_t key_scale() const { return project_.settings.scale; }
 
     // The project, for the UI to draw the bank and pattern grid from and for a save to serialize.
     //

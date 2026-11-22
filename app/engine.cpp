@@ -290,6 +290,9 @@ void Engine::load_default_pattern() {
     // have come back at the very bottom of the MIDI range.
     live().root = 0;                       // C
     live().scale = uint8_t(Scale::minor);  // the default techno key (core/scale.hpp)
+    // And the project's, which is the key that is actually played (Engine::key_root).
+    project_.settings.root = uint8_t(kDefaultOctaveNote);
+    project_.settings.scale = uint8_t(Scale::minor);
     live().seed = 0x5713A7Au;
     live().master_length = 16;
     live().swing = kSwingMin;
@@ -1480,9 +1483,11 @@ void Engine::fire(const StepEvent &event) {
         // chord, so before this the same step data played folded on a POLY track and as written
         // on a MONO one.
         const Pattern &folding = live();
+        const uint8_t key_root_now = key_root();
+        const int key_scale_now = int(key_scale());
         const int slices = pool_[track].sampler.slices();
         const uint8_t note = machine_folds_note(machine_id_[track], slices)
-                                 ? scale_fold(event.note, folding.root, int(folding.scale))
+                                 ? scale_fold(event.note, key_root_now, key_scale_now)
                                  : event.note;
         sent_note_[track] = note;
 
@@ -1512,7 +1517,7 @@ void Engine::fire(const StepEvent &event) {
             // `event.note` and not `note`: `chord_expand` folds the root itself, so handing it
             // an already-folded note would be a second fold -- harmless, since folding a note
             // that is in the scale returns it, but it would hide which side owns the rule.
-            const int voiced = chord_expand(event.note, packed, folding.root, int(folding.scale),
+            const int voiced = chord_expand(event.note, packed, key_root_now, key_scale_now,
                                             notes, VaPoly::kVoices);
             for (int i = 0; i < voiced; i++) {
                 trig.note = notes[i];
