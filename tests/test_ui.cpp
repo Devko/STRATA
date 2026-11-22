@@ -39,6 +39,7 @@
 #include <enaga/abi.h>
 #include <enaga/clock.hpp>
 
+#include <cstdlib>
 #include <cstring>
 
 using strata::test::FakeHost;
@@ -2616,4 +2617,112 @@ TEST(ui_f1_f3_twice_saves_and_once_does_not) {
     CHECK(app_storage().last_error() == nullptr);
     CHECK(!app_storage().dirty());
     key(ENAGA_KEY_F4);
+}
+
+// --- screenshots for the README ---------------------------------------------------------------
+//
+// Not a check. With STRATA_SHOTS set to a folder, this draws the main screens on the default beat
+// and writes each one there as NAME.pgm (the canvas: every rect, greys 0-15) and NAME.txt (every
+// string drawn, "x y grey text" a line). tools/screenshots.sh runs it alone, with --only, so the
+// app is on its first init and still holds the default beat, then lays the text over the canvas
+// in Enaga's own 5 x 7 font (read from third_party/enaga/firmware/hal/gfx.c) and writes PNGs.
+// Without STRATA_SHOTS it returns at once, so the suite is unchanged.
+
+namespace {
+
+// Blocks with the clock running at 130 BPM: 96 PPQN is 208 ticks a second, 0.277 a block. The
+// fake clock delivers no ticks by itself, so without this the beat would stand still.
+uint32_t g_shot_tick = 0;
+float g_shot_due = 0.0f;
+
+void play_blocks(int blocks) {
+    FakeHost &host = FakeHost::the();
+    constexpr float kTicksPerBlock = 130.0f / 60.0f * 96.0f * float(kBlk) / 48000.0f;
+    for (int b = 0; b < blocks; b++) {
+        g_shot_due += kTicksPerBlock;
+        if (host.running() && g_shot_due >= 1.0f) {
+            g_shot_due -= 1.0f;
+            host.deliver_tick(g_shot_tick++, 0);
+        }
+        pump(1);
+    }
+}
+
+void write_shot(const char *folder, const char *name) {
+    FakeHost &host = FakeHost::the();
+    enaga::Canvas canvas(g_pixels);
+    play_blocks(1600);                          // past any notice (1.5 s) the last key left
+    host.clear_text();
+    the_app().draw(canvas);
+
+    char path[512];
+    std::snprintf(path, sizeof path, "%s/%s.pgm", folder, name);
+    FILE *pgm = std::fopen(path, "wb");
+    CHECK(pgm != nullptr);
+    if (pgm == nullptr) return;
+    std::fprintf(pgm, "P5\n%d %d\n15\n", enaga::Canvas::width, enaga::Canvas::height);
+    std::fwrite(g_pixels, 1, sizeof g_pixels, pgm);
+    std::fclose(pgm);
+
+    std::snprintf(path, sizeof path, "%s/%s.txt", folder, name);
+    FILE *txt = std::fopen(path, "w");
+    CHECK(txt != nullptr);
+    if (txt == nullptr) return;
+    for (int i = 0; i < host.text_count(); i++) {
+        const FakeHost::TextDraw &d = host.text_draw(i);
+        std::fprintf(txt, "%d %d %d %s\n", d.x, d.y, int(d.grey), d.text);
+    }
+    std::fclose(txt);
+}
+
+}  // namespace
+
+TEST(ui_screenshots) {
+    const char *folder = std::getenv("STRATA_SHOTS");
+    if (folder == nullptr || folder[0] == '\0') return;
+
+    // The app's first init, as on the unit: the default beat, not `fresh()`'s blank project.
+    FakeHost &host = FakeHost::the();
+    host.reset();
+    host.set_device(ENAGA_DEVICE_SMPLTREK);
+    host.set_audio_load(200);                   // 20.0%, near the emulator's cl6x figure for the beat
+    Strata &app = the_app();
+    CHECK(app.init());
+    app.on_card(true);
+
+    key(ENAGA_KEY_F4);                          // GRID, track 1
+    app.on_pad_press(0, 100);
+    app.on_pad_release(0);
+    key(ENAGA_KEY_F5);                          // play, so the playhead shows
+    play_blocks(900);
+    write_shot(folder, "grid");
+
+    step_down(0);                               // the step page for track 1, step 1
+    key(ENAGA_KEY_OK);
+    step_up(0);
+    write_shot(folder, "step");
+    key(ENAGA_KEY_F4);
+
+    key(ENAGA_KEY_F8);                          // the sound pages of the kick
+    write_shot(folder, "edit");
+
+    mixer_page(app, 0);
+    write_shot(folder, "mixer");
+
+    shift_key(ENAGA_KEY_F7);
+    write_shot(folder, "perform");
+
+    shift_key(ENAGA_KEY_F4);
+    write_shot(folder, "keys");
+
+    shift_key(ENAGA_KEY_F8);
+    write_shot(folder, "machine");
+
+    key(ENAGA_KEY_F3);
+    write_shot(folder, "project");
+
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F4);
+    host.set_device(0);
+    host.set_audio_load(0);
 }

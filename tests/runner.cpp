@@ -80,5 +80,22 @@ int main(int argc, char **argv) {
         }
         return 0;
     }
+    // --only NAME runs one test. tools/screenshots.sh uses it: the screenshot test must start
+    // from the app's own first init, with the default beat in memory, which a full run would
+    // already have replaced with a blank project.
+    if (argc > 2 && std::strcmp(argv[1], "--only") == 0) {
+        for (int i = 0; i < strata::test::Registry::count; i++) {
+            if (std::strcmp(strata::test::Registry::entries[i].name, argv[2]) != 0) continue;
+            strata::test::Registry::current = argv[2];
+            strata::test::Registry::entries[i].fn();
+            std::printf("%d check%s, %d failure%s\n", strata::test::Registry::checks,
+                        strata::test::Registry::checks == 1 ? "" : "s",
+                        strata::test::Registry::failures,
+                        strata::test::Registry::failures == 1 ? "" : "s");
+            return strata::test::Registry::failures == 0 ? 0 : 1;
+        }
+        std::printf("no test named %s\n", argv[2]);
+        return 1;
+    }
     return strata::test::Registry::run_all();
 }

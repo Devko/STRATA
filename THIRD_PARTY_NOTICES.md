@@ -8,6 +8,10 @@ A note on why the second entry is here at all: STRATA **reimplements** published
 topologies rather than porting anyone's code, so it is arguable that no notice is owed for it.
 Reproducing it costs nothing and removes the argument, which is the better trade.
 
+Sonicware, SmplTrek, Lofi-12 XT and CyDrums are trademarks of their respective owners. STRATA is
+not affiliated with or endorsed by Sonicware, and no Sonicware code, firmware or sounds are part
+of it.
+
 ---
 
 ## Enaga

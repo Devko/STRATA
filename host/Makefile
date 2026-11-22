@@ -7,6 +7,7 @@
 #
 #   make -C host test     build and run the tests
 #   make -C host list     print the test names
+#   make -C host build    build the test binary without running it
 #   make -C host clean
 #
 # There is intentionally no cmake: it is not installed on the WSL build host, and a Makefile is
@@ -64,9 +65,11 @@ DEP := $(OBJ:.o=.d)
 
 BIN := $(OUT)/strata-tests
 
-.PHONY: test list clean
+.PHONY: test list build clean
 test: $(BIN)
 	@$(BIN)
+
+build: $(BIN)
 
 list: $(BIN)
 	@$(BIN) --list
