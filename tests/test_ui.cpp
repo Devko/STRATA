@@ -2982,3 +2982,153 @@ TEST(ui_a_kit_is_saved_with_f1_down_and_recalled_with_ok_twice) {
     CHECK_EQ(int(UiProbe::mode(app)), int(Mode::kit));
     key(ENAGA_KEY_F4);
 }
+
+// --- MIDI in, and MIDI OUT's channel on the MACHINE page ------------------------------------
+//
+// Nothing drove `on_midi` before these: MIDI IN was note-on only and untested. Each message
+// type here goes through the same Strata object the unit runs.
+
+namespace {
+
+enaga::MidiMessage midi(uint8_t status, uint8_t a, uint8_t b) {
+    enaga::MidiMessage m;
+    m.status = status;
+    m.data1 = a;
+    m.data2 = b;
+    m.port = ENAGA_MIDI_DIN;
+    return m;
+}
+
+// MIDI IN on track 1 is easiest to see through MIDI OUT: give track 1 a channel and the notes
+// it is played come back out there, start and end.
+void midi_through(int track, uint8_t channel) {
+    post_track(Cmd::set_midi_out, track, channel);
+    pump(2);
+    FakeHost::the().clear_midi();
+}
+
+}  // namespace
+
+TEST(ui_midi_in_a_note_is_held_until_its_note_off) {
+    Strata &app = fresh();
+    midi_through(0, 12);
+    app.on_midi(midi(0x90, 60, 100));              // channel 1: track 1
+    pump(400);                                     // far past a step: still held
+    FakeHost &host = FakeHost::the();
+    CHECK_EQ(host.midi_messages(0x90, 12, 60), 1);
+    CHECK_EQ(host.midi_messages(0x80, 12, 60), 0);
+    app.on_midi(midi(0x80, 60, 0));
+    pump();
+    CHECK_EQ(host.midi_messages(0x80, 12, 60), 1);
+}
+
+TEST(ui_midi_in_a_note_on_at_velocity_zero_is_a_note_off) {
+    Strata &app = fresh();
+    midi_through(0, 12);
+    app.on_midi(midi(0x90, 62, 90));
+    pump();
+    app.on_midi(midi(0x90, 62, 0));
+    pump();
+    CHECK_EQ(FakeHost::the().midi_messages(0x80, 12, 62), 1);
+}
+
+TEST(ui_midi_in_a_note_off_finds_the_track_its_note_started_on) {
+    // Channel 10 plays the SELECTED track. Select track 3, play, select track 5, let go: the
+    // note on track 3 must end, and track 5 must get no stray release.
+    Strata &app = fresh();
+    midi_through(2, 3);
+    midi_through(4, 5);
+    app.on_pad_press(4, 100);                      // pad 4 is track 3: selected (and played)
+    app.on_pad_release(4);
+    pump(200);                                     // the pad's own MIDI note has ended
+    FakeHost::the().clear_midi();
+    app.on_midi(midi(0x99, 50, 100));
+    pump();
+    CHECK_EQ(FakeHost::the().midi_messages(0x90, 3, 50), 1);
+    app.on_pad_press(8, 100);                      // track 5
+    app.on_pad_release(8);
+    pump();
+    app.on_midi(midi(0x89, 50, 0));
+    pump();
+    CHECK_EQ(FakeHost::the().midi_messages(0x80, 3, 50), 1);
+    CHECK_EQ(FakeHost::the().midi_messages(0x80, 5, 50), 0);
+}
+
+TEST(ui_midi_in_all_notes_off_lets_go_of_every_held_note_on_that_channel) {
+    Strata &app = fresh();
+    midi_through(1, 4);
+    app.on_midi(midi(0x91, 60, 100));
+    app.on_midi(midi(0x91, 63, 100));
+    app.on_midi(midi(0x91, 67, 100));
+    pump();
+    app.on_midi(midi(0xB1, 123, 0));
+    pump();
+    CHECK_EQ(FakeHost::the().midi_messages(0x80, 4), 3);
+    CHECK_EQ(app_engine().midi_notes().sounding(1), 0);
+}
+
+TEST(ui_midi_in_cc_16_to_31_set_the_tracks_sixteen_parameters) {
+    Strata &app = fresh();
+    app.on_midi(midi(0xB2, 16, 5));                // channel 3, CC 16: track 3's slot 0
+    app.on_midi(midi(0xB2, 31, 120));              // CC 31: slot 15
+    app.on_midi(midi(0xB2, 32, 1));                // past the map: nothing
+    app.on_midi(midi(0xB2, 15, 1));
+    pump();
+    CHECK_EQ(int(app_engine().params(2).v[0]), 5);
+    CHECK_EQ(int(app_engine().params(2).v[15]), 120);
+    for (int p = 1; p < 15; p++) CHECK_EQ(int(app_engine().params(2).v[p]), p == kLvl ? 127 : 64);
+    CHECK_EQ(int(app_engine().params(0).v[0]), 64);
+}
+
+TEST(ui_midi_in_program_change_on_the_midi_channel_queues_that_pattern) {
+    Strata &app = fresh();
+    FakeHost::the().set_midi_channel(5);           // the user's MIDI CH is 6
+    app.on_midi(midi(0xC5, 37, 0));                // program 38: bank C, pattern 6
+    pump(2);                                       // stopped: a queued change lands at once
+    CHECK_EQ(int(app_engine().project().bank), 2);
+    CHECK_EQ(int(app_engine().project().slot), 5);
+
+    app.on_midi(midi(0xC0, 0, 0));                 // another channel: not ours
+    pump(2);
+    CHECK_EQ(int(app_engine().project().bank), 2);
+    CHECK_EQ(int(app_engine().project().slot), 5);
+}
+
+TEST(ui_machine_encoder_b_sets_the_tracks_midi_out_channel) {
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    app.on_encoder(1, +3);
+    pump();
+    CHECK_EQ(int(app_engine().midi_out(0)), 3);
+    app.on_encoder(1, -10);
+    pump();
+    CHECK_EQ(int(app_engine().midi_out(0)), 0);
+    // C and D set nothing here, and do not fall through to track 1's parameters.
+    app.on_encoder(2, +5);
+    app.on_encoder(3, +5);
+    pump();
+    for (int p = 0; p < kParams; p++) {
+        CHECK_EQ(int(app_engine().params(0).v[p]), p == kLvl ? 127 : 64);
+    }
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_machine_with_mid_and_every_midi_out_state) {
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F8);
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::midi));
+    pump(2);
+    check_layout(app, "MACHINE, MID with MIDI OUT off");
+    for (uint8_t channel = 1; channel <= 16; channel++) {
+        post_track(Cmd::set_midi_out, 0, channel);
+        pump(2);
+        check_layout(app, "MACHINE, MID with a MIDI OUT channel");
+    }
+    for (int machine = 0; machine < int(MachineId::count); machine++) {
+        post_track(Cmd::set_machine, 0, uint8_t(machine));
+        pump(2);
+        check_layout(app, "MACHINE, each machine lit");
+    }
+    key(ENAGA_KEY_F4);
+}

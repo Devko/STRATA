@@ -25,8 +25,10 @@
 #include "grain.hpp"      // GRAIN, reachable at last: a track can host any machine
 #include "commands.hpp"
 #include "editops.hpp"
+#include "extmidi.hpp"    // MID: the machine that plays nothing and sends MIDI
 #include "hat.hpp"
 #include "kick.hpp"
+#include "midiout.hpp"    // MIDI note out: every note-on gets its note-off
 #include "mutate.hpp"      // Cmd::mutate
 #include "pattern.hpp"
 #include "perc.hpp"
@@ -94,6 +96,14 @@ public:
     // let the total grow. Twelve is two full six-voice chords: a starting point to be set from
     // the unit's MAX readings (docs/BUDGET.md, U2), not a measured limit.
     static constexpr int kPolyVoiceBudget = 12;
+
+    // A track's MIDI OUT channel, 0 off or 1-16 (ProjectSettings::midi_out). For the screen.
+    uint8_t midi_out(int track) const {
+        return track >= 0 && track < kTracks ? project_.settings.midi_out[track] : 0;
+    }
+
+    // What MIDI out has sounding, for the tests. Audio side; the rig runs both on one thread.
+    const MidiOut &midi_notes() const { return midi_out_; }
 
     // Tests only: false makes every prepare() run, as it did before the memo, so a test can
     // render the same input both ways and compare the output bit for bit.
@@ -232,6 +242,35 @@ private:
 
     void build_placeholder_sample();
 
+    // --- MIDI out (core/midiout.hpp) ---
+    //
+    // Sent from the audio context, which <enaga/midi.hpp> allows: a send queues bytes and never
+    // blocks, and returns false rather than waiting when the queue is full. Sending here rather
+    // than posting the notes to the main context is what keeps a note-on within a block of its
+    // step: the main loop runs at the UI's pace, not the audio's.
+    struct EnagaMidi final : MidiSink {
+        bool send(const uint8_t *bytes, uint32_t count) override;
+    };
+    EnagaMidi midi_sink_;
+    MidiOut midi_out_;
+
+    // Send `count` notes of one trig to the track's MIDI OUT channel, if it has one.
+    void send_midi_notes(int track, const uint8_t *notes, int count, uint8_t velocity,
+                         uint32_t frame, uint32_t gate);
+    // A MIDI gate in frames for a trig whose own gate is 0 (no gate): one step of the track.
+    uint32_t midi_gate(int track, uint32_t gate_frames) const;
+    // A MID track's eight CC slots: send each one whose value has moved (per block).
+    void send_midi_ccs();
+    void send_midi_ccs(int track);
+    // CC 123 on every channel a track sends on: the second STOP and FUNC+F6.
+    void midi_all_notes_off();
+
+    // The values each MID track's CC slots last sent, and whether they are known: a slot is sent
+    // when it MOVES, never just because a track became MID or got a channel -- switching a track
+    // to MID must not throw eight arbitrary values at a synth that was set up by hand.
+    uint8_t cc_sent_[kTracks][kParams] = {};
+    bool cc_known_[kTracks] = {};
+
     // The placeholder's PCM (a static array in build_placeholder_sample), for `Cmd::clear_sample`
     // to fall back to: a track with no file plays it, after a swap as before the first one.
     const int16_t *placeholder_ = nullptr;
@@ -276,6 +315,7 @@ private:
         VaPoly poly;
         Sampler sampler;
         Granular grain;
+        MidiMachine midi;   // no state at all: the vtable pointer
     };
     TrackMachines pool_[kTracks];
 

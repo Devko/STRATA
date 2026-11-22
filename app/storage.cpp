@@ -129,6 +129,8 @@ bool mutates_project(Cmd cmd) {
         // The live-record quantize amount, which has a field in PROJECT.BIN and until now was
         // kept only in `app/` -- settable, saved nowhere.
         case Cmd::set_quantize:
+        // Each track's MIDI OUT channel, PROJECT.BIN's fifth section.
+        case Cmd::set_midi_out:
             return true;
         default:
             return false;

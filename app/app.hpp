@@ -1133,6 +1133,15 @@ public:
             walk_machine(delta);
             return;
         }
+        // And B the track's MIDI OUT channel: OFF, 1-16, stopping at the ends. A delta, applied
+        // on the audio side, like every knob. C and D set nothing here, and must not fall through
+        // to the sound parameters of a screen that is not showing.
+        if (mode_ == Mode::machine && encoder >= 1 && encoder < 4) {
+            if (encoder == 1) {
+                post(Cmd::set_midi_out, uint8_t(selected_), 0, 0, clamp_delta(delta), kDeltaFlag);
+            }
+            return;
+        }
 
         // KIT mode: A walks the slot cursor, as UP and DOWN do. B to D have nothing to set here,
         // and must not fall through to the sound parameters of a screen that is not showing.
@@ -1479,6 +1488,8 @@ public:
         notice(notice_buffer_);
     }
 
+    // --- MIDI in -----------------------------------------------------------
+    //
     // MIDI notes take exactly the same path as pad hits, which is the point: `on_midi` is main
     // context and carries no timestamp of its own, so it has nothing better to be stamped with
     // than the clock state read the moment it arrives -- the same thing a pad hit gets
@@ -1487,14 +1498,68 @@ public:
     // The channel picks the track, 1-8 for tracks 1-8, anything else playing the selected one.
     // docs/SPEC.md does not map this; MIDI channel is the obvious choice and a note-for-note
     // omni mapping would make an 8-track box unplayable from a keyboard.
+    //
+    // What arrives (docs/SPEC.md, "MIDI in"):
+    //   - note on: plays the track and records like a pad, HELD until its note off;
+    //   - note off (and a note on at velocity 0, which Enaga delivers as one): lets go of it on
+    //     the track it STARTED on, which matters for channels 9-16 when the selected track has
+    //     moved in between;
+    //   - CC 16-31: the track's sixteen parameters in page order (SRC, FLTR, AMP, FX), set to
+    //     the value, as a knob would; CC 120 and 123 let go of every note this MIDI IN holds on
+    //     that track (Enaga sends 123 itself when active sensing stops);
+    //   - program change on the user's MIDI CH: queues pattern 1-128 (A01-H16) in the queue
+    //     mode the PROJECT page has set, as pressing it there would.
     void on_midi(const enaga::MidiMessage &message) override {
-        if (message.type() != enaga::MidiMessage::note_on) return;
         const int channel = message.channel();
         const int track = channel < kTracks ? channel : selected_;
-        const uint8_t note = uint8_t(message.note());
-        const uint8_t velocity = uint8_t(message.velocity() < 1 ? 1 : message.velocity());
-        post(Cmd::trigger_note, uint8_t(track), 0, note, velocity);
-        record_note(track, note, velocity);
+        switch (message.type()) {
+            case enaga::MidiMessage::note_on: {
+                if (message.velocity() == 0) {             // the running-status note off
+                    midi_note_off(channel, message.note());
+                    break;
+                }
+                const uint8_t note = uint8_t(message.note() & 0x7F);
+                const uint8_t velocity = uint8_t(message.velocity());
+                // A second note on for a note still held here: let the first go, so its off
+                // cannot later end this one on another track.
+                midi_note_off(channel, note);
+                midi_in_held_[channel][note] = uint8_t(track + 1);
+                post(Cmd::trigger_note, uint8_t(track), 0, note, velocity, 1);
+                record_note(track, note, velocity);
+                break;
+            }
+            case enaga::MidiMessage::note_off:
+                midi_note_off(channel, message.note());
+                break;
+            case enaga::MidiMessage::control_change: {
+                const int cc = message.controller();
+                if (cc >= kMidiInFirstParamCc && cc < kMidiInFirstParamCc + kParams) {
+                    post(Cmd::set_param, uint8_t(track), 0, uint8_t(cc - kMidiInFirstParamCc),
+                         uint8_t(message.value() & 0x7F));
+                } else if (cc == 120 || cc == 123) {
+                    for (int note = 0; note < 128; note++) {
+                        if (midi_in_held_[channel][note] != 0) midi_note_off(channel, note);
+                    }
+                }
+                break;
+            }
+            case enaga::MidiMessage::program_change:
+                if (channel != enaga::midi::channel()) break;
+                shown_bank_ = message.program() / kPatternsPerBank;
+                queue_shown_pattern(message.program() % kPatternsPerBank);
+                break;
+            default:
+                break;
+        }
+    }
+
+    // A note off from MIDI IN: the track the note started on lets go of it.
+    void midi_note_off(int channel, int note) {
+        if (channel < 0 || channel >= 16 || note < 0 || note > 127) return;
+        const uint8_t held = midi_in_held_[channel][note];
+        if (held == 0) return;                       // never started here, or already let go
+        midi_in_held_[channel][note] = 0;
+        post(Cmd::release_note, uint8_t(held - 1), 0, uint8_t(note));
     }
 
     // --- live recording ---------------------------------------------------
@@ -2278,7 +2343,8 @@ public:
         keys_held_track_[step] = uint8_t(selected_);
         // A key has no velocity. 100 is what the default kit's own trigs use, so a part played
         // in and a part programmed in sound the same.
-        post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity);
+        // c = 1: held, so MIDI OUT holds it too until the key comes up.
+        post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity, 1);
         record_note(selected_, note, kKeyVelocity);
     }
 
@@ -2308,15 +2374,33 @@ public:
         }
 
         // The machines as a list, the selected track's lit: UP and DOWN (or A) walk it, which is
-        // the cursor the arrows move everywhere else. Two columns of four, read down.
+        // the cursor the arrows move everywhere else. Three columns of three, read down: nine
+        // machines since MID, and four rows of two no longer left room for MIDI OUT below.
         const int current = int(engine_.machine_id(selected_));
         for (int m = 0; m < int(MachineId::count); m++) {
-            const int x = (m / 4) * 64;
-            const int y = 52 + (m % 4) * 12;
+            const int x = (m / 3) * 43;
+            const int y = 50 + (m % 3) * 12;
             const bool on = m == current;
-            canvas.rect(x + 1, y, 60, 11, on ? 10 : 2);
+            canvas.rect(x + 1, y, 40, 11, on ? 10 : 2);
             canvas.text(x + 4, y + 2, machine_name(uint8_t(m)), on ? 0 : 11);
         }
+
+        // The track's MIDI OUT channel, on encoder B: OFF, or the channel its notes are sent on
+        // (core/midiout.hpp). Shown for every machine because every machine can send; on MID it
+        // is the whole point, so a MID track with it OFF says so louder.
+        const uint8_t channel = engine_.midi_out(selected_);
+        out = line;
+        append(out, "B: MIDI OUT ");
+        if (channel == kMidiOutOff) {
+            append(out, "OFF");
+        } else {
+            append(out, "CH ");
+            append_number(out, uint32_t(channel));
+        }
+        *out = 0;
+        const bool silent = channel == kMidiOutOff &&
+                            engine_.machine_id(selected_) == uint8_t(MachineId::midi);
+        canvas.text(0, 89, line, silent ? 15 : 12);
 
         canvas.text(0, 103, "ARROWS: MACHINE TRACK", 7);
         canvas.text(0, 112, "FUNC+EDIT AGAIN: KITS", 7);
@@ -3511,6 +3595,13 @@ private:
 
     // --- M3 edit state ----------------------------------------------------
     bool rec_ = false;             // F2: live and motion recording
+
+    // MIDI IN's held notes: per channel and note, the track it started on plus 1, 0 for none.
+    // 2 KiB, so a note off finds its track even after the selected track has moved.
+    uint8_t midi_in_held_[16][128] = {};
+    // CC 16-31 are the track's sixteen parameters: the "General Purpose" 16-19 and the
+    // undefined 20-31, which no common controller sends by default for anything else.
+    static constexpr int kMidiInFirstParamCc = 16;
     // The live-record quantize amount is a PROJECT field and the project is the only copy:
     // there is no `quantize_` member, because a second copy here is exactly how the value came
     // to be settable and unsaveable. The engine owns the write, through `Cmd::set_quantize`.

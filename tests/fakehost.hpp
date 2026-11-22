@@ -164,6 +164,25 @@ public:
     int text_dropped() const { return text_dropped_; }   // calls past kTextDraws
     const TextDraw &text_draw(int index) const { return text_[index]; }
 
+    // --- MIDI --------------------------------------------------------------
+    //
+    // Every message `midi_send` queued since the last `clear_midi()`, three bytes each (a
+    // two-byte message is padded with 0). `set_midi_full` makes it refuse, as a full 2 KiB queue
+    // does: nothing queued, -1. `set_midi_channel` is the user's MIDI CH, 0-15.
+    struct MidiSent {
+        uint8_t status, a, b;
+    };
+    static constexpr int kMidiLog = 1024;
+    void clear_midi() { midi_count_ = 0; midi_refused_ = 0; }
+    int midi_count() const { return midi_count_; }
+    int midi_refused() const { return midi_refused_; }
+    const MidiSent &midi_sent(int index) const { return midi_[index]; }
+    void set_midi_full(bool full) { midi_full_ = full; }
+    void set_midi_channel(uint32_t channel) { midi_channel_ = channel; }
+    // Messages of this kind (0x90, 0x80, 0xB0...) on channel 1-16, optionally only `a` (note or
+    // controller) when `a` >= 0.
+    int midi_messages(uint8_t kind, int channel, int a = -1) const;
+
     // The struct the app sees. `enaga::host()` returns this.
     const enaga_host_t &abi() const { return abi_; }
 
@@ -291,6 +310,13 @@ private:
     int loads_ = 0;
     int read_alls_ = 0;
     int folders_made_ = 0;
+
+    // --- MIDI ---
+    MidiSent midi_[kMidiLog]{};
+    int midi_count_ = 0;
+    int midi_refused_ = 0;
+    bool midi_full_ = false;
+    uint32_t midi_channel_ = 0;
 
     // --- the panel ---
     static constexpr int kLogMax = 128;

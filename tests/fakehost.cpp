@@ -122,6 +122,10 @@ void FakeHost::reset() {
     audio_load_ = 0;
     device_ = 0;
     ms_ = 0;
+
+    clear_midi();
+    midi_full_ = false;
+    midi_channel_ = 0;
 }
 
 // --- the clock ------------------------------------------------------------
@@ -603,8 +607,37 @@ void FakeHost::t_speaker(uint32_t) {}
 int32_t FakeHost::t_headphones() { return 0; }
 uint32_t FakeHost::t_device() { return the().device_; }
 int32_t FakeHost::t_input(uint32_t, uint32_t) { return 0; }
-int32_t FakeHost::t_midi_send(uint32_t, const uint8_t *, uint32_t) { return 0; }
-uint32_t FakeHost::t_midi_channel() { return 0; }
+// One or more complete messages, as the ABI says; STRATA only ever sends one at a time, and a
+// SysEx or a real-time byte from it would be a bug this records as a 1-byte message.
+int32_t FakeHost::t_midi_send(uint32_t, const uint8_t *data, uint32_t bytes) {
+    FakeHost &h = the();
+    if (h.midi_full_ || data == nullptr || bytes == 0) {
+        h.midi_refused_++;
+        return -1;
+    }
+    if (h.midi_count_ < kMidiLog) {
+        MidiSent &m = h.midi_[h.midi_count_];
+        m.status = data[0];
+        m.a = bytes > 1 ? data[1] : 0;
+        m.b = bytes > 2 ? data[2] : 0;
+    }
+    h.midi_count_++;
+    return 0;
+}
+
+uint32_t FakeHost::t_midi_channel() { return the().midi_channel_; }
+
+int FakeHost::midi_messages(uint8_t kind, int channel, int a) const {
+    int n = 0;
+    const int count = midi_count_ < kMidiLog ? midi_count_ : kMidiLog;
+    for (int i = 0; i < count; i++) {
+        const MidiSent &m = midi_[i];
+        if ((m.status & 0xF0) != kind || (m.status & 0x0F) != channel - 1) continue;
+        if (a >= 0 && m.a != a) continue;
+        n++;
+    }
+    return n;
+}
 
 int32_t FakeHost::t_clock_control(uint32_t command, int32_t value) {
     FakeHost &h = the();

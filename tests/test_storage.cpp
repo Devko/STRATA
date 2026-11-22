@@ -546,6 +546,10 @@ const Expect kTable[] = {
     // Which machine a track hosts is a KIT field -- KitTrack::machine, on disk since M4 -- which
     // is why machine switching needed no change to the file format.
     {Cmd::set_machine, kDirtyKit, "set_machine"},
+
+    // MIDI OUT's channel per track is PROJECT.BIN's fifth section: cabling, not a sound, so not
+    // the kit (core/project.hpp).
+    {Cmd::set_midi_out, kDirtyProject, "set_midi_out"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:
