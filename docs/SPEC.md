@@ -232,7 +232,7 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 
 **Step editing**
 
-- Tap STEP: toggle trig. Hold STEP + turn A-D: lock that parameter on the current page. Hold STEP + VALUE: note.
+- Tap STEP: toggle trig. Hold STEP + turn A-D: lock that parameter on the current page. Hold STEP + push A-D: clear that parameter's lock on the step (one undo level). Hold STEP + VALUE: note.
 - Hold STEP + OK: open the step page (note, velocity, length, micro-timing / probability, condition, ratchet, accent and slide) on A-D, selection keys switch its two pages.
 - Hold two STEP keys: set the selection range for copy, clear and mutation.
 
