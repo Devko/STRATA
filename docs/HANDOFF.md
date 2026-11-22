@@ -185,9 +185,10 @@ sed -n "/^enum class Cmd/,/^};/p" app/commands.hpp | grep -oE '^    [a-z_]+,' | 
 
 Both counts, because the card side posts six commands the UI never does — `clear_sample`,
 `set_sample`, `project_loaded`, `kit_store`, `clear_lock`, `resample_release`. As of this
-handoff the audit comes back with **exactly one** name, and it is deliberate: `Cmd::kit_recall`
-has a handler and no caller, documented at the line, waiting for the kit BROWSER half of the
-spec's F1 + F8 (the machine-select half of that gesture is built). `Cmd::none` is the ring's
+handoff the audit's `kit_recall` exception is gone: the kit browser (F1 + F8 twice) posts it from
+`app/storage.cpp`, with `a` = 1 to copy the kit the browser read into the engine's inbox
+(`Engine::kit_for_recall`). `tools/audit_commands.sh` dropped it from its KNOWN list.
+`Cmd::none` is the ring's
 empty slot and is never posted by anything.
 
 ### 6. What this session changed, and the reasoning that is not in the commits
