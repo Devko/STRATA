@@ -86,10 +86,12 @@ named `strata-toolchain` has them, plus a setup script that installs `flex` (onl
 sources after `apt-get update`) and clones the emulator:
 
 ```sh
-git clone https://github.com/seawaffle/smpltrek-re third_party/smpltrek-re
+tools/fetch_emulator.sh     # clones it and checks out STRATA_EMULATOR_COMMIT (tools/env.sh)
 ```
 
-That is a **plain clone, not a submodule**. The toolchain build is deliberately NOT in the setup
+That is a **plain clone, not a submodule**, so `tools/env.sh` pins its commit instead; a bare
+`git clone` would take whatever upstream is that day. (The `strata-toolchain` environment's setup
+script still does a bare clone: run `tools/fetch_emulator.sh` after it.) The toolchain build is deliberately NOT in the setup
 script: it would make every session start ten minutes slower. So a fresh session must run those
 two commands before any scenario, and they are ~30 minutes of the session's time.
 
@@ -295,28 +297,53 @@ figure when asking whether a part fits.
 
 [seawaffle/enaga#1](https://github.com/seawaffle/enaga/pull/1) is open: a fix keeping libgcc's
 unwinder out of an app's link (64-bit division and modulo could not link at all) plus two
-documentation notes, verified against their own 81-test suite. Nothing in STRATA depends on it
-being merged; the pin stays at `1b41111` either way. **Never modify `third_party/enaga`** —
-Enaga bugs go upstream with a failing case.
+documentation notes, verified against their own 81-test suite. It is **not** in v0.2.0. Nothing in
+STRATA depends on it being merged. **Never modify `third_party/enaga`** — Enaga bugs go upstream
+with a failing case.
 
-**Upstream has moved on (checked 2026-11-22).** `1b41111` is 7 commits past v0.1.0. Upstream
-`main` is 8 commits further at `192f03f`, which includes **v0.2.0** (`3da7f89`). What changed:
+**The pin is release `v0.2.0` (`3da7f89`)**, moved from `1b41111` on 2026-11-22. The rule is to
+pin **release tags only**, and the one that matches the Enaga firmware on the unit: Enaga's loader
+checks nothing but `ENAGA_ABI_VERSION` (still 0), so headers and firmware can drift apart with
+nothing failing. v0.2.0 is the release Enaga's own unit session 5 ran on a SmplTrek. What it
+changed since `1b41111`:
 
-- **ABI unchanged** (`ENAGA_ABI_VERSION` is still 0), so the APP.ENA built at `1b41111` loads on
-  0.2.0 firmware. The package header gained one optional flag (`ENAGA_PACKAGE_ICON`); an app
-  without an icon writes 0 there, as before.
+- **Among the headers STRATA uses**, only a comment in `midi.hpp` and an optional package flag in
+  `abi.h` (`ENAGA_PACKAGE_ICON`, for a 16×16 menu icon from an `icon.txt`). STRATA has no icon,
+  so its package writes 0 there as before. **Do not add one** while any unit runs firmware older
+  than 0.2.0: that loader refuses any non-zero flags.
 - New and unused by STRATA: `<enaga/ui.hpp>` (List, ParamPage, Dialog, TextEntry),
-  `<enaga/bytes.hpp>`, an SDK zip with a prebuilt toolchain, menu icons from an `icon.txt`.
+  `<enaga/bytes.hpp>`, and an SDK zip with a **prebuilt GCC 13.3.0 toolchain** — the same compiler
+  `tools/build_toolchain.sh` builds, so it could replace the 30-minute build. Not tried yet.
 - `build_app.py`: when the app folder is outside Enaga's tree, intermediates go to
   `<app>/build`; `tools/build.sh` passes `-o`, so only its staging folder sees that.
-- Firmware: MIDI out no longer stalls DIN when a USB host stops reading (`192f03f`). Unit
-  session 5 on 0.2.0 logged one unreproduced crash on CHECK's MIDI page.
-- The libgcc fix from enaga#1 is **not** in upstream yet.
+- Firmware: unit session 5 on 0.2.0 logged one unreproduced crash on CHECK's MIDI page. The
+  fix for a stalled USB host holding up DIN (`192f03f`) came **after** the tag.
 
-`make -C host test` passes unchanged against `192f03f` (539,926 checks). The device build and
-the scenarios have **not** been run against it, because this container has no tic6x toolchain.
-Moving the pin is the user's decision; it needs a device build, `tools/scenarios.sh`, and
-docs/ENAGA_API.md re-checked (among the headers STRATA uses, only `midi.hpp`'s comment and `abi.h`'s icon flag changed).
+At the bump, `make -C host test` passed unchanged (539,924 checks, 0 failures). The device
+build and the scenarios were **not** run at v0.2.0 from a container (no tic6x toolchain). The first
+device build after the bump is step 3 of the procedure below; do it before the unit session.
+
+#### Moving the Enaga pin
+
+`tools/enaga_check.sh --upstream` reports newer releases and the commits since the pin that touch
+`include/`, `runtime/`, `loader/` or `build_app.py`, and exits 3 when there is something to look
+at. Without `--upstream` it only checks that the checkout, the docs and the emulator match their
+pins. Moving the pin is the user's decision; once made, one commit, in this order:
+
+1. `git -C third_party/enaga fetch --tags && git -C third_party/enaga checkout vX.Y.Z`, then
+   `git add third_party/enaga`.
+2. `git -C third_party/enaga diff <old> vX.Y.Z -- include runtime loader tools/build_app.py`, and
+   re-check every signature in `docs/ENAGA_API.md` against it. Any `ENAGA_ABI_VERSION` change
+   means the unit's firmware must move in step.
+3. `make -C host test` (`tests/test_platform.cpp` catches a changed platform constant), then
+   `tools/build.sh` with GCC **and** with cl6x, then `tools/scenarios.sh`. Record any load change
+   in `docs/BUDGET.md`.
+4. Update the pin in `CLAUDE.md`, `docs/ENAGA_API.md`, `THIRD_PARTY_NOTICES.md` (the check fails
+   until those three name the new tag and hash), and this section.
+5. `tools/enaga_check.sh` passes.
+
+The emulator moves the same way, by `STRATA_EMULATOR_COMMIT` in `tools/env.sh`, then
+`tools/fetch_emulator.sh` and `tools/scenarios.sh`.
 
 ---
 
@@ -356,7 +383,8 @@ worth more than all the rest together.
 | --- | --- |
 | `make -C host test` | the whole suite, including `app/`, against `tests/fakehost.cpp`. Needs the `third_party/enaga` submodule for headers (`git submodule update --init --recursive`) and nothing else |
 | `tools/build.sh` | a GCC-only device build, **after** `tools/build_toolchain.sh` (~30 min) |
-| `tools/scenarios.sh` | all seven emulator scenarios, after the toolchain **and** the `smpltrek-re` clone |
+| `tools/scenarios.sh` | all seven emulator scenarios, after the toolchain **and** `tools/fetch_emulator.sh` |
+| `tools/enaga_check.sh` | the Enaga and emulator pins; `--upstream` also reports what upstream has added since |
 | `tools/render.sh` | an offline render, same requirements |
 | ASan / UBSan over the suite | with `detect_leaks=0` |
 

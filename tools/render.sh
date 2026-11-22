@@ -16,7 +16,7 @@ source tools/env.sh
 
 if [ ! -f "$ENAGA_EMULATOR/cpu.py" ]; then
     echo "error: no emulator at $ENAGA_EMULATOR (expected cpu.py there)" >&2
-    echo "       git clone https://github.com/seawaffle/smpltrek-re third_party/smpltrek-re" >&2
+    echo "       tools/fetch_emulator.sh" >&2
     exit 1
 fi
 
