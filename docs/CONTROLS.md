@@ -54,7 +54,7 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
    - **Pad-row keys:** which sixteen the STEP keys mean. Step page 1-4 (GRID, EDIT, MIXER,
      MACHINE, RESAMPLE), the octave in KEYS, the bank A-H in PROJECT and CHAIN. Where the STEP
      keys always mean the same sixteen things (PERFORM, KIT, SAMPLES, the menu) they do nothing.
-     FUNC + pad-row key = the selected track's length.
+     FUNC + pad-row key = the selected track's length, on every screen but the menu.
    - **Knobs A-D:** the four values on screen. Push = that value's switch. With a STEP held, turn
      = lock, push = remove the lock.
    - **VALUE:** tempo (PERFORM: morph; CHAIN/PATTERN: the field under the cursor). Push + turn =

@@ -396,6 +396,11 @@ struct Status {
     std::atomic<uint8_t> undo_depth{0};
     std::atomic<uint8_t> redo_depth{0};
     std::atomic<uint32_t> refused{0};
+    // Bumped by the audio side when a MUTATE changed nothing: an empty track, the amount at 0, a
+    // rotation of identical steps, a density already at its end. The UI watches it so the press
+    // says NOTHING TO MUTATE instead of naming a mutation that never happened -- on the unit that
+    // looked exactly like a pad that does nothing. A wrap is harmless: the UI compares.
+    std::atomic<uint8_t> mutate_unchanged{0};
 
     // M4. Per track, bumped by the audio side when it stops reading that track's sample. The
     // loader watches for the change before it releases the memory and loads over it -- the
@@ -447,6 +452,12 @@ struct Status {
     // Audio context only, so load-then-store is safe with one writer (see the note above).
     void bump_refused() {
         refused.store(refused.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+    }
+
+    // Audio context only, one writer, as bump_song_end.
+    void bump_mutate_unchanged() {
+        mutate_unchanged.store(uint8_t(mutate_unchanged.load(std::memory_order_relaxed) + 1),
+                               std::memory_order_release);
     }
 
     void publish_playhead(int track, uint8_t step) {

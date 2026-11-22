@@ -277,6 +277,13 @@ constexpr const char *kPerformPadNames[kPerformPads] = {
     "FILL", "REPEAT", "MUTE", "SCENE A", "SCENE B", "THROW", "MUTATE",
 };
 
+// What a live notice shows (Strata::echo): nothing, the selected track's length and speed, or a
+// sound parameter's value.
+enum class Echo : uint8_t { none, layout, param };
+
+// What a MUTATE waiting for its verdict shows until OK or CLR answers it.
+constexpr const char *kVerdictHint = "OK KEEPS CLR REVERTS";
+
 int clamp_int(int value, int low, int high) {
     return value < low ? low : (value > high ? high : value);
 }
@@ -735,6 +742,9 @@ public:
                 }
                 // The second press cuts the tails. Only that part is the audio side's job.
                 post(Cmd::stop, 0, 0, stop_armed_ ? 1 : 0);
+                // Stopping shows on the top line; the second press's cut was silent, and a STOP
+                // on a stopped box (which arms that cut) looked like a key that does nothing.
+                notice(stop_armed_ ? "TAILS CUT" : "STOP");
                 stop_armed_ = !stop_armed_;
                 break;
 
@@ -902,12 +912,12 @@ public:
             case ENAGA_KEY_OCTAVE_LEFT:
             case ENAGA_KEY_OCTAVE_RIGHT: {
                 const int delta = key == ENAGA_KEY_OCTAVE_LEFT ? -1 : +1;
-                if (mode_ == Mode::keys) {
+                if (mode_ == Mode::keys && !shift_) {
                     // "Step page 1-4 in GRID; octave in KEYS" (docs/SPEC.md's key table).
                     walk_keys_octave(delta);
                     break;
                 }
-                if (mode_ == Mode::project) {
+                if (mode_ == Mode::project && !shift_) {
                     // The pad-row keys say which sixteen the STEP keys mean (docs/CONTROLS.md):
                     // in PROJECT and CHAIN the STEP keys are a bank's sixteen slots, so these
                     // walk the bank being SHOWN, which is not the bank playing -- a queued change
@@ -927,6 +937,9 @@ public:
                     post(Cmd::set_track_length, uint8_t(selected_), 0, 0, clamp_delta(delta),
                          kDeltaFlag);
                     end_gesture();
+                    // Only GRID drew the length, so in EDIT or MACHINE the press changed the
+                    // pattern and nothing on screen.
+                    echo(Echo::layout);
                 } else {
                     const int next = page_ + delta;
                     page_ = next < 0 ? 0 : (next > 3 ? 3 : next);
@@ -1195,6 +1208,7 @@ public:
         mark(GestureKind::length, selected_, 0);
         post(Cmd::set_track_speed, uint8_t(selected_), 0, uint8_t(kSpeedDisplayOrder[index]));
         end_gesture();
+        echo(Echo::layout);                    // as the length: GRID was the only screen with it
     }
 
     // --- CLR, copy and paste ---------------------------------------------
@@ -1372,6 +1386,21 @@ public:
             macro_position_[encoder] =
                 uint8_t(next < 0 ? 0 : (next > 127 ? 127 : next));
             post(Cmd::set_macro, 0, 0, uint8_t(encoder), macro_position_[encoder]);
+            // The bars move a pixel per four or five clicks, and a macro with nothing assigned
+            // moves nothing at all, so a turn says where the macro is -- or that it is empty.
+            {
+                char *out = notice_buffer_;
+                append(out, "MACRO ");
+                *out++ = char('A' + encoder);
+                if (macro_count(engine_.macros().macros[encoder]) == 0) {
+                    append(out, " EMPTY");
+                } else {
+                    *out++ = ' ';
+                    append_number(out, macro_position_[encoder]);
+                }
+                *out = 0;
+                notice(notice_buffer_);
+            }
             return;
         }
 
@@ -1608,6 +1637,9 @@ public:
         const int index = page_first(Page(param_page_)) + encoder;
         post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index),
              clamp_delta(delta * param_click(index)), kDeltaFlag);
+        // KEYS has no knob slots on screen (its sixteen notes fill it), so a turn there changed
+        // the sound and showed nothing. GRID and EDIT draw the slots and need no notice.
+        if (mode_ == Mode::keys) echo(Echo::param, index);
     }
 
     void on_pad_press(int pad, int velocity) override {
@@ -1628,6 +1660,16 @@ public:
         if (shift_ || mute_mode_) {
             post(Cmd::set_mute, uint8_t(track), 0, engine_.muted(track) ? 0 : 1,
                  shift_ ? 1 : 0);
+            // The bar-quantized one waits, so until the bar nothing on screen moved -- and on a
+            // stopped box the bar is not coming. Say what is armed.
+            if (shift_) {
+                char *out = notice_buffer_;
+                append(out, "T");
+                append_number(out, uint32_t(track + 1));
+                append(out, engine_.muted(track) ? " UNMUTE AT BAR" : " MUTE AT BAR");
+                *out = 0;
+                notice(notice_buffer_);
+            }
             return;
         }
 
@@ -1731,6 +1773,10 @@ public:
     // The seven upper pads. Four of them are HELD rather than toggled -- fill, repeat, throw and
     // the two scene selectors -- so each one's release matters as much as its press.
     void on_perform_pad(int pad, bool down) {
+        // Which of the row is held, for its LED. Every pad, toggles too: a held pad is lit
+        // while the finger is on it, which is the first sign the press arrived at all.
+        const uint8_t bit = uint8_t(1u << (pad / 2));
+        perform_held_ = uint8_t(down ? (perform_held_ | bit) : (perform_held_ & ~bit));
         switch (PerformPad(pad)) {
             case PerformPad::fill:
                 // FUNC + FILL turns NOTE RPT on and off; the fill itself is untouched. A FILL
@@ -1857,10 +1903,59 @@ public:
         command.c = 0;                       // the whole track
         command.u = mutate_variant_++;       // a new result each press
         post_command(command);
+        // "MUTATE T1 VELOCITY": what was done and to which track. The bare type name alone
+        // ("VELOCITY") did not read as anything having happened, and a velocity mutation is
+        // invisible on the grid. At most 21 characters: "MUTATE T8 " is 10, the longest
+        // name ("ROT RIGHT", "DENSITY +") 9.
         char *out = notice_buffer_;
+        append(out, "MUTATE T");
+        append_number(out, uint32_t(selected_ + 1));
+        *out++ = ' ';
         append(out, mutation_name(mutation_));
         *out = 0;
         notice(notice_buffer_);
+        mutate_track_ = selected_;
+    }
+
+    // Where OK and CLR are the verdict on a pending MUTATE (on_key): not PROJECT, KIT, SAMPLES
+    // or RESAMPLE, whose own OK and CLR come first, and not while a STEP, a range or a scene pad
+    // is held. The screen only offers the verdict where the keys will give it.
+    bool verdict_keys_free() const {
+        return mutation_pending_ && held_step_ < 0 && range_first_ < 0 && scene_holding_ < 0 &&
+               mode_ != Mode::project && mode_ != Mode::kit && mode_ != Mode::samples &&
+               mode_ != Mode::resample;
+    }
+
+    // Show a live value as the notice (see Echo). GRID draws the track's length and speed on
+    // its own line, so a layout echo is only needed elsewhere -- but it is harmless there.
+    void echo(Echo kind, int param = 0) {
+        echo_ = kind;
+        echo_param_ = param;
+        refresh_echo();
+        notice(echo_buffer_);
+    }
+
+    void refresh_echo() {
+        char *out = echo_buffer_;
+        if (echo_ == Echo::layout) {
+            // "T1 LEN 16 X1/2": the polymeter pair, as GRID's line spells them.
+            const TrackPattern &track = engine_.pattern().tracks[selected_];
+            append(out, "T");
+            append_number(out, uint32_t(selected_ + 1));
+            append(out, " LEN ");
+            append_number(out, track.length);
+            append(out, " X");
+            append(out, speed_name(Speed(track.speed)));
+        } else if (echo_ == Echo::param) {
+            // "T1 CUT 064": the knob's name and where it is now.
+            append(out, "T");
+            append_number(out, uint32_t(selected_ + 1));
+            *out++ = ' ';
+            append(out, param_name_for(echo_param_));
+            *out++ = ' ';
+            append_param_value(out, echo_param_, engine_.params(selected_).v[echo_param_]);
+        }
+        *out = 0;
     }
 
     // --- MIDI in -----------------------------------------------------------
@@ -2034,6 +2129,23 @@ public:
             }
         }
 
+        // A MUTATE that changed nothing (Engine, Cmd::mutate): say so, and there is no verdict
+        // to wait for. Before this the screen named the mutation anyway, and an empty track or
+        // a rotation of identical steps was a pad press that did nothing at all.
+        {
+            const uint8_t none = engine_.status().mutate_unchanged.load(std::memory_order_acquire);
+            if (none != mutate_unchanged_seen_) {
+                mutate_unchanged_seen_ = none;
+                mutation_pending_ = false;
+                char *out = notice_buffer_;
+                append(out, "T");
+                append_number(out, uint32_t(mutate_track_ + 1));
+                append(out, " NOTHING TO MUTATE");
+                *out = 0;
+                notice(notice_buffer_);
+            }
+        }
+
         // Song mode: the chain played to its end (Engine::cross_boundary). Only this context may
         // stop the clock. Back to 0 as well, so PLAY starts the song from the top -- the engine
         // is already on entry 1. Under an outside clock that keeps running the stop is refused;
@@ -2204,7 +2316,9 @@ public:
         // the pad is held or its mode is on (docs/CONTROLS.md).
         for (int i = 0; i < kPerformPads; i++) {
             const Rgb colour = kPerformColour[i];
-            const uint8_t level = perform_pad_active(PerformPad(kPerformPadIds[i])) ? 10 : 2;
+            const bool held = (perform_held_ >> (kPerformPadIds[i] / 2) & 1u) != 0;
+            const uint8_t level =
+                held || perform_pad_active(PerformPad(kPerformPadIds[i])) ? 10 : 2;
             leds_.pad(kPerformPadIds[i], uint8_t(colour.r * level / 10),
                       uint8_t(colour.g * level / 10), uint8_t(colour.b * level / 10));
         }
@@ -2242,6 +2356,7 @@ public:
         char *out = line;
 
         canvas.clear();
+        if (echo_ != Echo::none && notice_ == echo_buffer_) refresh_echo();
 
         const Status &status = engine_.status();
         const enaga::clock::State clock = enaga::clock::state();
@@ -2269,6 +2384,10 @@ public:
             append_shown(out, notice_, kLineChars);
             *out = 0;
             canvas.text(0, 9, line, 15);
+        } else if ((step_page_ || mode_ != Mode::grid) && verdict_keys_free()) {
+            // A MUTATE waiting for its verdict says so for as long as it waits: the notice
+            // fades after a second and a half, and the keys it is waiting on do not.
+            canvas.text(0, 9, kVerdictHint, 15);
         } else if (int(clock.source) != ENAGA_CLOCK_INTERNAL) {
             // The tempo is not ours to set under an external source, so say so rather than
             // showing a number the user cannot change.
@@ -2418,6 +2537,10 @@ public:
             append_shown(out, notice_, kLineChars);
             *out = 0;
             canvas.text(0, y, line, 15);
+            return;
+        }
+        if (verdict_keys_free()) {                       // see draw(): the same hint, in GRID
+            canvas.text(0, y, kVerdictHint, 15);
             return;
         }
 
@@ -3218,7 +3341,7 @@ public:
 
             case ENAGA_KEY_OCTAVE_LEFT:                 // no steps behind this list
             case ENAGA_KEY_OCTAVE_RIGHT:
-                return true;
+                return !shift_;                         // FUNC: the track's length, as anywhere
 
             default:
                 return false;
@@ -3878,10 +4001,11 @@ public:
                 return true;
 
             // The STEP keys are always the sixteen slots here, so the pad-row keys, which pick
-            // which sixteen they mean, have nothing to do (docs/CONTROLS.md).
+            // which sixteen they mean, have nothing to do (docs/CONTROLS.md). With FUNC they are
+            // the selected track's length, as on every screen.
             case ENAGA_KEY_OCTAVE_LEFT:
             case ENAGA_KEY_OCTAVE_RIGHT:
-                return true;
+                return !shift_;
 
             default:
                 return false;
@@ -4077,9 +4201,10 @@ public:
 
             // The pad-row keys pick which sixteen the STEP keys mean; in PERFORM the STEP keys
             // are always the selected track's sixteen parameters, so they have nothing to do.
+            // With FUNC they are the selected track's length, as on every screen.
             case ENAGA_KEY_OCTAVE_LEFT:
             case ENAGA_KEY_OCTAVE_RIGHT:
-                return true;
+                return !shift_;
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT: {
                 // Which macro CLR clears and a STEP key assigns to: the macros are the row of
@@ -4941,6 +5066,16 @@ private:
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
     bool note_repeat_mode_ = false;             // FUNC + FILL: a held lower pad rolls
     bool tape_held_ = false;                    // FUNC + push D went down and has not come up
+    // A notice whose text is the LIVE value rather than the one at the press: a delta the audio
+    // side applies (a track's length, a knob) does not exist on this side until the command has
+    // been drained, so the text is rebuilt on every draw from what the engine now holds. Any
+    // other notice replaces it, because notice() points notice_ elsewhere.
+    Echo echo_ = Echo::none;
+    int echo_param_ = 0;
+    char echo_buffer_[24] = {};
+    uint8_t perform_held_ = 0;                  // upper pads down, bit = pad id / 2
+    int mutate_track_ = 0;                      // the track the last MUTATE went to
+    uint8_t mutate_unchanged_seen_ = 0;         // Status::mutate_unchanged as last noticed
     bool freeze_held_ = false;                  // FUNC + MUTATE went down and has not come up
     uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)
     uint8_t roll_velocity_[kTracks] = {};       // the last velocity sent for each roll

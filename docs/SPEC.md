@@ -284,7 +284,7 @@ OK picks, CLR goes back, and F1 + an arrow is the mode's second meaning. New lis
 | STEP | Trig with condition or probability | Green 2 |
 | STEP | Playhead | Red 10 |
 | Lower pads | Track idle / triggered / muted | Track colour at 2 / 10 for 60 ms / off |
-| Upper pads | Function available / active | White 2 / function colour 10 |
+| Upper pads | Function available / active | Own colour at 2 / at 10 (docs/CONTROLS.md) |
 | F-keys | Current mode | Green 8; REC red 8 while recording |
 | VALUE ring | Beat pulse | White 10 on the beat, fading over 100 ms |
 

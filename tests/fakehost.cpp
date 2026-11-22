@@ -378,7 +378,13 @@ void FakeHost::t_text(uint8_t *, int x, int y, const char *text, uint8_t grey) {
 }
 uint32_t FakeHost::t_audio_load() { return the().audio_load_; }
 uint32_t FakeHost::t_audio_load_peak() { return the().audio_load_; }
-void FakeHost::t_led(uint32_t, uint32_t, uint32_t, uint32_t) { the().leds_++; }
+void FakeHost::t_led(uint32_t led, uint32_t red, uint32_t green, uint32_t blue) {
+    FakeHost &h = the();
+    h.leds_++;
+    if (led < uint32_t(ENAGA_LED_COUNT)) {
+        h.led_level_[led] = {uint8_t(red), uint8_t(green), uint8_t(blue)};
+    }
+}
 
 int32_t FakeHost::t_file_open(const char *path, uint32_t mode) {
     FakeHost &h = the();

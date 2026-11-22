@@ -62,6 +62,7 @@ struct UiProbe {
     static int page(const Strata &app) { return app.page_; }
     static int param_page(const Strata &app) { return app.param_page_; }
     static int mixer_bank(const Strata &app) { return app.mixer_bank_; }
+    static int shown_bank(const Strata &app) { return app.shown_bank_; }
 
     static int held_step(const Strata &app) { return app.held_step_; }
     static int held_key(const Strata &app) { return app.held_key_; }
@@ -101,7 +102,6 @@ struct UiProbe {
     static int macro_selected(const Strata &app) { return app.macro_selected_; }
     static int quantize(const Strata &app) { return app.quantize(); }
     static int menu_cursor(const Strata &app) { return app.menu_cursor_; }
-    static int shown_bank(const Strata &app) { return app.shown_bank_; }
     static bool func_help(const Strata &app) { return app.func_help_showing(); }
     static uint8_t pad_r(const Strata &app, int pad) { return app.leds_.pad_r[pad]; }
     static uint8_t pad_g(const Strata &app, int pad) { return app.leds_.pad_g[pad]; }
@@ -4859,8 +4859,8 @@ TEST(ui_keys_and_grid_screen_keys_turn_the_knob_page) {
 }
 
 TEST(ui_pad_row_keys_do_nothing_where_the_step_keys_never_change) {
-    // KIT: the STEP keys are always the sixteen slots, so the pad-row keys (and FUNC + them, the
-    // track length) are not passed on to a GRID that is not on screen.
+    // KIT: the STEP keys are always the sixteen slots, so the pad-row keys are not passed on to
+    // a GRID that is not on screen. FUNC + them is still the track's length, as everywhere.
     Strata &app = fresh();
     const int length = int(app_engine().pattern().tracks[0].length);
     menu_run(kMenuKits);
@@ -4869,7 +4869,7 @@ TEST(ui_pad_row_keys_do_nothing_where_the_step_keys_never_change) {
     shift_key(ENAGA_KEY_OCTAVE_LEFT);
     pump(2);
     CHECK_EQ(UiProbe::page(app), 0);
-    CHECK_EQ(int(app_engine().pattern().tracks[0].length), length);
+    CHECK_EQ(int(app_engine().pattern().tracks[0].length), length - 1);
     CHECK_EQ(UiProbe::mode(app), int(Mode::kit));
     key(ENAGA_KEY_F4);
 }
@@ -4922,6 +4922,8 @@ TEST(ui_the_performance_pads_are_lit_and_named) {
     CHECK_EQ(UiProbe::notice(app), "SCENE A: STEP PICKS");
     app.on_pad_release(7);
 
+    for (int i = 0; i < 16; i += 4) { step_down(i); step_up(i); }   // something to mutate
+    pump(4);
     app.on_pad_press(13, 100);                            // MUTATE: names what it did
     app.on_pad_release(13);
     pump(2);
@@ -5015,4 +5017,529 @@ TEST(ui_layout_the_func_menu) {
         key(ENAGA_KEY_DOWN);                              // next track (GRID rows)
     }
     key(ENAGA_KEY_F4);
+}
+
+// --- the control audit: does every input show that it did something? ------------------------
+//
+// Roland pressed upper pad 7 on the unit and saw nothing happen. It had worked -- a velocity
+// mutation of the selected track, named for a second and a half by a bare "VELOCITY" -- and
+// nothing on the panel said so. So this walks every mode, presses every key, knob, knob push and
+// pad in it, plain and with FUNC, and checks that the SCREEN or an LED changes, while the input
+// is held or after it is let go. Sound alone does not count: on a stopped box, or on a part that
+// is quiet, it is not there.
+
+namespace {
+
+struct Look {
+    uint32_t screen;      // the pixels and every string drawn, hashed
+    uint32_t leds;        // every LED level, hashed
+};
+
+uint32_t fnv(uint32_t h, const void *data, size_t size) {
+    const auto *p = static_cast<const uint8_t *>(data);
+    for (size_t i = 0; i < size; i++) h = (h ^ p[i]) * 16777619u;
+    return h;
+}
+
+Look look(Strata &app) {
+    FakeHost &host = FakeHost::the();
+    enaga::Canvas canvas(g_pixels);
+    host.clear_text();
+    app.draw(canvas);
+    Look out{2166136261u, 2166136261u};
+    out.screen = fnv(out.screen, g_pixels, sizeof g_pixels);
+    for (int i = 0; i < host.text_count(); i++) {
+        const auto &d = host.text_draw(i);
+        out.screen = fnv(out.screen, d.text, std::strlen(d.text));
+        out.screen = fnv(out.screen, &d.x, sizeof d.x);
+        out.screen = fnv(out.screen, &d.y, sizeof d.y);
+    }
+    for (int a = 0; a < int(ENAGA_LED_COUNT); a++) {
+        const FakeHost::LedLevel level = host.led(a);
+        out.leds = fnv(out.leds, &level, sizeof level);
+    }
+    return out;
+}
+
+bool same(const Look &a, const Look &b) { return a.screen == b.screen && a.leds == b.leds; }
+
+
+enum Screen { s_grid, s_keys, s_edit, s_machine, s_kit, s_mixer, s_perform, s_project, s_chain,
+              s_pattern, s_setup, s_projects, s_resample, s_menu, s_count };
+
+const char *screen_name(int s) {
+    static const char *names[] = {"GRID", "KEYS", "EDIT", "MACHINE", "KIT", "MIXER", "PERFORM",
+                                  "PROJECT", "CHAIN", "PATTERN", "SETUP", "PROJECTS",
+                                  "RESAMPLE", "MENU"};
+    return names[s];
+}
+
+void enter(Strata &app, int s) {
+    switch (s) {
+        case s_grid: key(ENAGA_KEY_F4); break;
+        case s_keys: open_keys(); break;
+        case s_menu: key(ENAGA_KEY_F4); shift_key(ENAGA_KEY_F4); break;   // over GRID
+        case s_edit:
+            key(ENAGA_KEY_F8);
+            while (UiProbe::param_page(app) != 0) key(ENAGA_KEY_SELECT_RIGHT);   // SRC
+            break;
+        case s_machine: shift_key(ENAGA_KEY_F8); break;
+        case s_kit:
+            shift_key(ENAGA_KEY_F8);
+            shift_key(ENAGA_KEY_F8);
+            key(ENAGA_KEY_STEP1);              // the cursor on slot 1: it outlives fresh()
+            break;
+        case s_mixer: mixer_page(app, 0); break;     // the faders, whatever was open last
+        case s_perform: shift_key(ENAGA_KEY_F7); break;
+        case s_resample: shift_key(ENAGA_KEY_F2); break;
+        default:
+            key(ENAGA_KEY_F3);
+            // docs/CONTROLS.md: the screen keys walk PROJECT's pages, the pad-row keys the bank.
+            for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_LEFT);   // the slots, first
+            while (UiProbe::shown_bank(app) != 0) key(ENAGA_KEY_OCTAVE_RIGHT);   // bank A
+            for (int i = s_project; i < s; i++) key(ENAGA_KEY_SELECT_RIGHT);
+            break;
+    }
+    (void)app;
+}
+
+// Hold the screen still before a probe, so nothing moving on its own is taken for an answer:
+// every notice from getting here faded, the track-select note's tail cut (MIXER's PEAK falls
+// with it), and the card read KIT starts with finished.
+void settle_screen(int s) {
+    post_cmd(Cmd::stop, 0, 0, 1);
+    pump(2);
+    // KIT reads its sixteen slots from the card a pass at a time, and says READING KITS until
+    // all sixteen are in, not only the eight on its first page.
+    for (int i = 0; s == s_kit && i < 2000; i++) {
+        bool reading = false;
+        for (int k = 0; k < Storage::kKitSlots; k++) {
+            reading = reading || app_storage().kit_slot(k).state == Storage::SlotState::unknown;
+        }
+        if (!reading) break;
+        pump();
+    }
+    // MIXER draws the master PEAK, which moves with whatever is still ringing -- and the master
+    // delay is silent BETWEEN its repeats, so it has to stay at 0 for a run of blocks (the same
+    // reasoning as tests/apprig.hpp's settle()).
+    for (int i = 0, quiet = 0; s == s_mixer && i < 8000 && quiet < 400; i++) {
+        pump();
+        quiet = app_engine().status().peak_milli.load(std::memory_order_relaxed) == 0 ? quiet + 1
+                                                                                      : 0;
+    }
+    g_ms += 4000;
+    pump(2);
+}
+
+// A track with something on it, so that a mutation, a copy or a clear has material.
+void some_content() {
+    for (int i = 0; i < 16; i += 2) {
+        step_down(i);
+        step_up(i);
+    }
+    pump(4);
+}
+
+enum Input { in_key, in_turn_up, in_turn_down, in_pad, in_none };
+
+struct Probe {
+    Input kind;
+    int id;
+    const char *name;
+};
+
+const Probe kProbes[] = {
+    {in_key, ENAGA_KEY_PUSH_A, "PUSH A"}, {in_key, ENAGA_KEY_PUSH_B, "PUSH B"},
+    {in_key, ENAGA_KEY_PUSH_C, "PUSH C"}, {in_key, ENAGA_KEY_PUSH_D, "PUSH D"},
+    {in_key, ENAGA_KEY_PUSH_VALUE, "PUSH VALUE"},
+    {in_key, ENAGA_KEY_SELECT_LEFT, "SEL LEFT"}, {in_key, ENAGA_KEY_SELECT_RIGHT, "SEL RIGHT"},
+    {in_key, ENAGA_KEY_OCTAVE_LEFT, "OCT LEFT"}, {in_key, ENAGA_KEY_OCTAVE_RIGHT, "OCT RIGHT"},
+    {in_key, ENAGA_KEY_UP, "UP"}, {in_key, ENAGA_KEY_DOWN, "DOWN"},
+    {in_key, ENAGA_KEY_LEFT, "LEFT"}, {in_key, ENAGA_KEY_RIGHT, "RIGHT"},
+    {in_key, ENAGA_KEY_OK, "OK"}, {in_key, ENAGA_KEY_CLR, "CLR"},
+    {in_key, ENAGA_KEY_F2, "REC"}, {in_key, ENAGA_KEY_F5, "PLAY"}, {in_key, ENAGA_KEY_F6, "STOP"},
+    {in_key, ENAGA_KEY_STEP1 + 1, "STEP 2"},
+    {in_turn_up, 0, "A+"}, {in_turn_up, 1, "B+"}, {in_turn_up, 2, "C+"}, {in_turn_up, 3, "D+"},
+    {in_turn_up, 4, "VALUE+"},
+    {in_turn_down, 0, "A-"}, {in_turn_down, 4, "VALUE-"},
+    {in_pad, 2, "LOWER 2"},
+    {in_pad, 1, "UPPER 1"}, {in_pad, 3, "UPPER 2"}, {in_pad, 5, "UPPER 3"},
+    {in_pad, 7, "UPPER 4"}, {in_pad, 9, "UPPER 5"}, {in_pad, 11, "UPPER 6"},
+    {in_pad, 13, "UPPER 7"},
+};
+
+void press(Strata &app, const Probe &p, bool down) {
+    switch (p.kind) {
+        case in_key: app.on_key(p.id, down); break;
+        // A short turn, three clicks: one click of a 0-127 value can be less than a pixel of a
+        // bar, and nobody turns a knob one click to find out what it does.
+        case in_turn_up: if (down) app.on_encoder(p.id, +3); break;
+        case in_turn_down: if (down) app.on_encoder(p.id, -3); break;
+        case in_pad:
+            if (down) app.on_pad_press(p.id, 100);
+            else app.on_pad_release(p.id);
+            break;
+        case in_none:
+            break;
+    }
+}
+
+// Does this input, in this screen, change what is visible? Held, and after it is let go.
+bool visible(int s, const Probe &p, bool func) {
+    Strata &app = fresh();
+    some_content();
+    if (s == s_projects) two_projects();
+    enter(app, s);
+    settle_screen(s);
+    // FUNC goes down after the screen has settled and a moment before the probe, well inside
+    // the 0.6 s that FUNC held alone takes to show its help (which any input then takes away,
+    // and so would pass for an answer).
+    if (func) app.on_key(ENAGA_KEY_F1, true);
+    pump(1);
+    const Look before = look(app);
+    press(app, p, true);
+    pump(3);
+    const Look held = look(app);
+    press(app, p, false);
+    pump(3);
+    const Look after = look(app);
+    if (func) app.on_key(ENAGA_KEY_F1, false);
+    return !same(before, held) || !same(before, after);
+}
+
+}  // namespace
+
+namespace {
+
+// The inputs that are ALLOWED to change nothing visible, each for a reason. Anything else that
+// does is a key that looks broken on the unit, which is the bug this audit exists to catch; an
+// entry here that starts doing something is reported too, so the list cannot go stale.
+const char *quiet_reason(int s, const Probe &p, bool func) {
+    const bool knob_push = p.kind == in_key && p.id <= ENAGA_KEY_PUSH_D;
+    // The rules below allow a whole class of input to be quiet without requiring it (a knob
+    // push that does have a job somewhere is fine); the table after them is exact.
+    // A knob push on its own removes a lock only with a STEP held, and kills a band only on
+    // MIXER's EQ page (and with FUNC, anywhere -- which does show).
+    if (knob_push && !func) return "push: needs a held STEP";
+    // VALUE pushed is a modifier: pushed AND turned is the swing.
+    if (p.kind == in_key && p.id == ENAGA_KEY_PUSH_VALUE) return "push VALUE: a modifier";
+    // docs/CONTROLS.md: FUNC + LEFT / RIGHT are free everywhere (PROJECT's card actions moved
+    // to the FUNC menu).
+    if (func && p.kind == in_key && (p.id == ENAGA_KEY_LEFT || p.id == ENAGA_KEY_RIGHT)) {
+        return "FUNC + LEFT/RIGHT: free";
+    }
+
+    // docs/CONTROLS.md: the screen keys turn pages and have no FUNC job (TRACK SPEED, which
+    // was FUNC + screen key, is in the FUNC menu).
+    if (func && p.kind == in_key &&
+        (p.id == ENAGA_KEY_SELECT_LEFT || p.id == ENAGA_KEY_SELECT_RIGHT)) {
+        return "FUNC + screen key: free";
+    }
+    // The FUNC menu is a list: the arrows, A, B, OK and CLR. The STEP keys, the screen keys and
+    // the pad-row keys do nothing in it, plain or with FUNC, and C and D have nothing to turn.
+    if (s == s_menu && p.kind == in_key &&
+        (p.id == ENAGA_KEY_SELECT_LEFT || p.id == ENAGA_KEY_SELECT_RIGHT ||
+         p.id == ENAGA_KEY_OCTAVE_LEFT || p.id == ENAGA_KEY_OCTAVE_RIGHT ||
+         p.id == ENAGA_KEY_STEP1 + 1)) {
+        return "menu: no job";
+    }
+    if (s == s_menu && p.kind == in_turn_up && (p.id == 2 || p.id == 3)) return "menu: no job";
+
+    static const struct { int screen; bool func; const char *name; const char *why; } kQuiet[] = {
+        // At the end of a range, from where every probe starts.
+        {s_grid, false, "OCT LEFT", "already step page 1"},
+        {s_edit, false, "OCT LEFT", "already step page 1"},
+        {s_machine, false, "OCT LEFT", "already step page 1"},
+        {s_kit, false, "SEL LEFT", "the cursor is on slot 1"},
+        {s_kit, false, "LEFT", "ditto"}, {s_kit, false, "UP", "ditto"},
+        {s_kit, false, "A-", "ditto"}, {s_kit, true, "A-", "ditto"},
+        // docs/CONTROLS.md: the pad-row keys choose which sixteen the STEP keys mean, and in
+        // KIT, SAMPLES, PERFORM and the menu those sixteen never change.
+        {s_kit, false, "OCT LEFT", "the STEP keys always mean the same"},
+        {s_kit, false, "OCT RIGHT", "ditto"},
+        {s_perform, false, "OCT LEFT", "ditto"}, {s_perform, false, "OCT RIGHT", "ditto"},
+        // The cursor starts on SAVE, which has no value for LEFT / RIGHT or B to change.
+        {s_menu, false, "LEFT", "SAVE has no value"}, {s_menu, false, "RIGHT", "ditto"},
+        {s_menu, false, "B+", "ditto"}, {s_menu, true, "B+", "ditto"},
+        // FUNC + UP / DOWN is copy / paste on the editing screens and read / store on the card
+        // lists. PERFORM's auto-fill and PROJECT's chain and sample reload moved to the menu.
+        {s_perform, true, "UP", "auto-fill is in the FUNC menu"},
+        {s_perform, true, "DOWN", "ditto"},
+        {s_project, true, "UP", "chain and sample reload are in the FUNC menu"},
+        {s_project, true, "DOWN", "ditto"},
+        {s_chain, true, "UP", "CHAIN on / off is in the FUNC menu"},
+        {s_chain, true, "DOWN", "ditto"},
+        {s_pattern, true, "UP", "ditto"}, {s_pattern, true, "DOWN", "ditto"},
+        {s_setup, true, "UP", "SETUP only shows"}, {s_setup, true, "DOWN", "ditto"},
+        {s_menu, true, "UP", "no copy / paste in a list"}, {s_menu, true, "DOWN", "ditto"},
+        {s_mixer, false, "OCT LEFT", "already step page 1"},
+        {s_projects, false, "DOWN", "the cursor is on the last project"},
+        {s_projects, false, "RIGHT", "ditto"},
+        {s_projects, false, "A+", "ditto"},
+        {s_projects, true, "A+", "ditto"},
+        {s_resample, false, "OCT LEFT", "already step page 1"},
+        {s_project, false, "UP", "the slot cursor is on the top row"},
+        {s_pattern, false, "LEFT", "the cursor is on the first field"},
+        {s_chain, false, "UP", "an empty chain has no entry to move to"},
+        {s_chain, false, "DOWN", "an empty chain has no entry to move to"},
+        // docs/CHEATSHEET.md marks these "--": no job in that screen.
+        {s_grid, false, "OK", "no job (hold STEP + OK opens the step page)"},
+        {s_keys, false, "OK", "no job"},
+        {s_edit, false, "OK", "no job on a track that plays no file"},
+        {s_machine, false, "OK", "no job on a track that plays no file"},
+        {s_pattern, false, "OK", "no job"},
+        {s_mixer, false, "UP", "no job"}, {s_mixer, false, "DOWN", "no job"},
+        {s_mixer, false, "OK", "no job"},
+        // Knobs a screen does not use. Each is stopped from falling through to the sound
+        // parameters of a screen that is not showing, which is deliberate (app/app.hpp).
+        {s_machine, false, "C+", "MACHINE uses A and B"}, {s_machine, false, "D+", "ditto"},
+        {s_machine, true, "C+", "ditto"}, {s_machine, true, "D+", "ditto"},
+        {s_project, false, "D+", "PROJECT uses A to C"}, {s_project, true, "D+", "ditto"},
+        {s_chain, false, "C+", "CHAIN uses A and B"}, {s_chain, false, "D+", "ditto"},
+        {s_chain, true, "C+", "ditto"}, {s_chain, true, "D+", "ditto"},
+        {s_pattern, false, "D+", "PATTERN uses A to C"}, {s_pattern, true, "D+", "ditto"},
+        {s_resample, false, "D+", "RESAMPLE uses A to C"}, {s_resample, true, "D+", "ditto"},
+        {s_kit, false, "B+", "KIT uses A"}, {s_kit, false, "C+", "ditto"},
+        {s_kit, false, "D+", "ditto"}, {s_kit, true, "B+", "ditto"},
+        {s_kit, true, "C+", "ditto"}, {s_kit, true, "D+", "ditto"},
+        {s_projects, false, "B+", "PROJECTS uses A"}, {s_projects, false, "C+", "ditto"},
+        {s_projects, false, "D+", "ditto"}, {s_projects, true, "B+", "ditto"},
+        {s_projects, true, "C+", "ditto"}, {s_projects, true, "D+", "ditto"},
+        // SETUP shows settings that live in the Enaga menu; only A (quantize) is STRATA's.
+        {s_setup, false, "UP", "SETUP only shows"}, {s_setup, false, "DOWN", "ditto"},
+        {s_setup, false, "LEFT", "ditto"}, {s_setup, false, "RIGHT", "ditto"},
+        {s_setup, false, "OK", "ditto"},
+        {s_setup, false, "B+", "ditto"}, {s_setup, false, "C+", "ditto"},
+        {s_setup, false, "D+", "ditto"}, {s_setup, true, "B+", "ditto"},
+        {s_setup, true, "C+", "ditto"}, {s_setup, true, "D+", "ditto"},
+    };
+    for (const auto &q : kQuiet) {
+        if (q.screen == s && q.func == func && std::strcmp(q.name, p.name) == 0) return q.why;
+    }
+    return nullptr;
+}
+
+bool is_rule(const char *why) {
+    return std::strncmp(why, "push", 4) == 0 || std::strncmp(why, "FUNC + LEFT", 11) == 0;
+}
+
+}  // namespace
+
+TEST(ui_audit_every_input_in_every_screen_shows_it_did_something) {
+    // First, that the screens hold still with no input at all: otherwise a meter or a clock
+    // moving would pass for an answer and the audit would prove nothing.
+    for (int s = 0; s < s_count; s++) {
+        const Probe nothing = {in_none, 0, "nothing"};
+        for (int func = 0; func < 2; func++) {
+            const bool moved = visible(s, nothing, func != 0);
+            if (moved) std::printf("    %s%s moves with no input\n", func ? "FUNC+" : "", screen_name(s));
+            CHECK(!moved);
+        }
+    }
+    for (int func = 0; func < 2; func++) {
+        for (int s = 0; s < s_count; s++) {
+            for (const Probe &p : kProbes) {
+                const bool shows = visible(s, p, func != 0);
+                const char *why = quiet_reason(s, p, func != 0);
+                if (why != nullptr && is_rule(why) && shows) continue;
+                if (!shows && why == nullptr) {
+                    std::printf("    %s: %s%s changes nothing on screen or LEDs\n",
+                                screen_name(s), func ? "FUNC+" : "", p.name);
+                }
+                if (shows && why != nullptr) {
+                    std::printf("    %s: %s%s now shows something: drop it from the list\n",
+                                screen_name(s), func ? "FUNC+" : "", p.name);
+                }
+                CHECK(shows == (why == nullptr));
+            }
+        }
+    }
+}
+
+// --- MUTATE on the unit: upper pad 7 "did nothing" ------------------------------------------
+
+namespace {
+
+FakeHost::LedLevel pad_light(int pad) { return FakeHost::the().led(ENAGA_LED_PAD + pad); }
+
+bool lit(int pad, uint8_t r, uint8_t g, uint8_t b) {
+    const FakeHost::LedLevel level = pad_light(pad);
+    return level.r == r && level.g == g && level.b == b;
+}
+
+void fade_notice() {
+    g_ms += 4000;
+    pump(2);
+}
+
+}  // namespace
+
+TEST(ui_mutate_says_what_it_did_and_waits_for_ok_or_clr_on_screen_and_on_the_pad) {
+    Strata &app = fresh();
+    for (int i = 0; i < 16; i += 4) {                 // trigs for the velocity mutation to move
+        step_down(i);
+        step_up(i);
+    }
+    pump(4);
+    fade_notice();
+    CHECK(lit(13, 2, 2, 2));                          // available: white 2
+
+    app.on_pad_press(13, 100);                        // upper 7
+    app.on_pad_release(13);
+    pump(4);
+    // What it did and to which track -- the bare "VELOCITY" did not read as anything happening.
+    CHECK(screen_has(app, "MUTATE T1 VELOCITY"));
+    check_layout(app, "GRID, MUTATE notice");
+    CHECK(lit(13, 10, 5, 0));                         // waiting for a verdict: its colour at 10
+
+    // The notice fades; the question does not.
+    fade_notice();
+    CHECK(screen_has(app, "OK KEEPS CLR REVERTS"));
+    check_layout(app, "GRID, MUTATE waiting");
+    key(ENAGA_KEY_F8);                                // EDIT has it on its second line too
+    pump(2);
+    // A mode change settles a pending mutation (leave_mode), so the hint goes with it.
+    CHECK(!screen_has(app, "OK KEEPS CLR REVERTS"));
+    CHECK(lit(13, 2, 2, 2));
+
+    // In EDIT: press, fade, and the hint is on the second line.
+    app.on_pad_press(13, 100);
+    app.on_pad_release(13);
+    pump(4);
+    fade_notice();
+    CHECK(screen_has(app, "OK KEEPS CLR REVERTS"));
+    check_layout(app, "EDIT, MUTATE waiting");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(screen_has(app, "KEPT"));
+    fade_notice();
+    CHECK(!screen_has(app, "OK KEEPS CLR REVERTS"));
+    CHECK(lit(13, 2, 2, 2));
+}
+
+TEST(ui_mutate_on_an_empty_track_says_there_was_nothing_to_mutate) {
+    Strata &app = fresh();                            // track 1 is blank
+    const uint8_t depth = undo_depth();
+    app.on_pad_press(13, 100);
+    app.on_pad_release(13);
+    pump(4);
+    CHECK(screen_has(app, "T1 NOTHING TO MUTATE"));
+    check_layout(app, "GRID, nothing to mutate");
+    CHECK(lit(13, 2, 2, 2));                          // nothing is waiting for a verdict
+    fade_notice();
+    CHECK(!screen_has(app, "OK KEEPS CLR REVERTS"));
+    // So CLR is CLR again, not a "REVERTED" of a mutation that never happened.
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(!screen_has(app, "REVERTED"));
+    (void)depth;
+}
+
+TEST(ui_the_upper_pads_light_white_and_their_colour_while_active) {
+    Strata &app = fresh();
+    pump(2);
+    for (int pad = 1; pad <= 13; pad += 2) CHECK(lit(pad, 2, 2, 2));
+
+    app.on_pad_press(1, 100);                         // FILL, held
+    pump(2);
+    CHECK(lit(1, 10, 10, 0));
+    app.on_pad_release(1);
+    pump(2);
+    CHECK(lit(1, 2, 2, 2));
+
+    app.on_pad_press(11, 100);                        // THROW, held
+    pump(2);
+    CHECK(lit(11, 0, 10, 4));
+    app.on_pad_release(11);
+    pump(2);
+    CHECK(lit(11, 2, 2, 2));
+
+    app.on_pad_press(5, 100);                         // MUTE MODE: a toggle, lit while on
+    app.on_pad_release(5);
+    pump(2);
+    CHECK(lit(5, 10, 0, 0));
+    app.on_pad_press(5, 100);
+    app.on_pad_release(5);
+    pump(2);
+    CHECK(lit(5, 2, 2, 2));
+
+    app.on_key(ENAGA_KEY_F1, true);                   // FUNC + FILL: NOTE RPT stays lit
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK(lit(1, 10, 10, 0));
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK(lit(1, 2, 2, 2));
+}
+
+// The other inputs the audit above found working with nothing on screen.
+TEST(ui_inputs_that_worked_unseen_now_say_what_they_did) {
+    Strata &app = fresh();
+
+    // FUNC + octave / selection outside GRID: the track's length and speed, live.
+    key(ENAGA_KEY_F8);
+    shift_key(ENAGA_KEY_OCTAVE_LEFT);                 // a blank track is 64 long
+    pump(2);
+    CHECK(screen_has(app, "T1 LEN 63 X1"));           // the value AFTER the audio side applied it
+    check_layout(app, "EDIT, length");
+    shift_key(ENAGA_KEY_SELECT_RIGHT);
+    pump(2);
+    CHECK(screen_has(app, "T1 LEN 63 X"));
+    CHECK(!screen_has(app, "T1 LEN 63 X1"));          // the speed moved off 1
+    check_layout(app, "EDIT, speed");
+    shift_key(ENAGA_KEY_SELECT_LEFT);                 // put both back
+    shift_key(ENAGA_KEY_OCTAVE_RIGHT);
+    pump(2);
+    CHECK(screen_has(app, "T1 LEN 64 X1"));
+
+    // FUNC + a lower pad: the mute waits for the bar, so say it is armed.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(2, 100);
+    app.on_pad_release(2);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK(screen_has(app, "T2 MUTE AT BAR"));
+    check_layout(app, "EDIT, mute at bar");
+
+    // KEYS has no knob slots: a turn says which knob and where it is now.
+    shift_key(ENAGA_KEY_F4);
+    pump(2);
+    app.on_encoder(0, +3);
+    pump(2);
+    CHECK(UiProbe::notice_showing(app));
+    CHECK(std::strncmp(UiProbe::notice(app), "T1 ", 3) == 0);
+    CHECK(std::strstr(UiProbe::notice(app), "LEN") == nullptr);
+    CHECK(screen_has(app, UiProbe::notice(app)));
+    check_layout(app, "KEYS, knob");
+
+    // PERFORM: a macro turn names it, and says when it drives nothing.
+    shift_key(ENAGA_KEY_F7);
+    pump(2);
+    while (UiProbe::macro_knob(app, 1) > 0) app.on_encoder(1, -64);   // the knob outlives fresh()
+    app.on_encoder(1, +3);
+    pump(2);
+    CHECK(screen_has(app, "MACRO B 6"));               // three clicks of two
+    check_layout(app, "PERFORM, macro");
+
+    // PROJECT: the bank the selection keys pick, which CHAIN does not draw.
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    while (UiProbe::shown_bank(app) != 0) key(ENAGA_KEY_SELECT_RIGHT);   // it outlives fresh()
+    key(ENAGA_KEY_SELECT_RIGHT);
+    pump(2);
+    CHECK(screen_has(app, "BANK B"));
+    key(ENAGA_KEY_SELECT_LEFT);
+
+    // STOP on a stopped box arms the cut, and the second press cuts.
+    key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(screen_has(app, "STOP") || screen_has(app, "TAILS CUT"));
+    key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(screen_has(app, "STOP") || screen_has(app, "TAILS CUT"));
 }

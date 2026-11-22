@@ -65,7 +65,7 @@ Hold FUNC alone for a moment and the screen lists them, with what the upper pads
 | FUNC + VALUE | Master DJ filter (LP n / OFF / HP n) |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
 | FUNC + push D (hold) | Tape stop: the master slows to a standstill over two beats; let go and it is back (`TAPE STOP`). Not while a STEP is held: that clears the D lock |
-| FUNC + pad-row L/R | Selected track's length (polymeter); not in KEYS, PROJECT, PERFORM, KIT, SAMPLES, the menu |
+| FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu |
 | Arrow pad | UP/DOWN move through rows, LEFT/RIGHT sideways, OK picks, CLR goes back |
 | Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn) |
 | Pad-row keys L/R | Which 16 the STEP keys mean: step page, octave (KEYS), bank (PROJECT, CHAIN) |
@@ -87,7 +87,11 @@ screen when pressed.
 | Upper 3 MUTE (TRK 3) | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B (TRK 4/5) | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
 | Upper 6 THROW (TRK 6) | Delay throw while held | FUNC: reverb throw |
-| Upper 7 MUTATE (TRK 7) | Mutates the selected track (`MUTATE T1 NOTES`) (type and amount set in PERFORM) | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT, KIT and SAMPLES, and not while a STEP, a range or a scene pad is held or in RESAMPLE, where OK and CLR keep their own jobs. Any other edit also keeps it. FUNC (hold): delay freeze, the echoes loop and nothing new goes in (`FREEZE`, `FRZ` on PERFORM's bar line) |
+| Upper 7 MUTATE (TRK 7) | Mutates the selected track (type and amount set in PERFORM): `MUTATE T1 VELOCITY`, then `OK KEEPS CLR REVERTS` and the pad bright until you answer; `T1 NOTHING TO MUTATE` when it changed nothing (an empty track, amount 0). The default type, VELOCITY, is subtle on drums: ROT LEFT/RIGHT or DENSITY show on the grid | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT, KIT and SAMPLES, and not while a STEP, a range or a scene pad is held or in RESAMPLE, where OK and CLR keep their own jobs. Any other edit also keeps it. FUNC (hold): delay freeze, the echoes loop and nothing new goes in (`FREEZE`, `FRZ` on PERFORM's bar line) |
+
+The upper row is always lit, dim, in each pad's own colour, and bright while the pad is held or
+its mode is on: FILL (and NOTE RPT) white, REPEAT cyan, MUTE MODE red, SCENE A green, SCENE B
+blue, THROW amber, MUTATE (waiting for OK / CLR, or FREEZE) violet.
 
 ## Step editing (GRID, EDIT, MIXER, MACHINE, RESAMPLE)
 
