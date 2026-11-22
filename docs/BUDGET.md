@@ -802,6 +802,13 @@ after the last hit with high feedback, which matters for battery and for any hea
 passage was relying on. Not re-measured: this cloud session has no emulator and no cl6x. Run the
 load scenario with feedback at 0.95 to confirm.
 
+**Measured 2026-11-22 (WSL, cl6x).** The default kit has every SNA closed, so the stock scenarios
+never feed the delay and read the same at any feedback. With SNA opened to full on every track
+(a test patch in `build_default_beat`, not committed): `scenario_m3.sh` 19.83% at feedback 0.40
+and 19.83% at 0.95; a 32 s `tools/render.sh` peaks at 120,852 cycles (24.4%) at 0.40 and 121,186
+(24.4%) at 0.95, 0 overruns in 24,282 blocks, RMS -14.8 and -7.2 dBFS. The longer tail costs
+nothing at the peak, as argued above.
+
 ### Load time: the downsample low-pass (2026-11-22, host only)
 
 A file above 48 kHz is now low-passed before the load-time resample (`Antialias` in core/pcm:
