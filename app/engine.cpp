@@ -673,9 +673,12 @@ void Engine::apply(const Command &command) {
                     break;
                 case ChainEdit::insert:
                     done = chain_insert(project_, at, command.b, command.c, command.d);
+                    // The player's entry is an index: keep it on the entry it is playing.
+                    if (done) chain_player_inserted(chain_, at);
                     break;
                 case ChainEdit::remove:
                     done = chain_remove(project_, at);
+                    if (done) chain_player_removed(chain_, at);
                     break;
                 case ChainEdit::pattern_delta:
                 case ChainEdit::repeats_delta: {
@@ -791,6 +794,13 @@ void Engine::apply(const Command &command) {
             undo_.clear();
             queue_clear(queue_);
             chain_.active = false;
+            // A project saved with its chain running reopens with it running. The flag was
+            // written by every save and read by nothing, so the chain came back off while the
+            // file -- and the next save -- said on. The saved live pattern still opens; the
+            // chain takes over from its first entry at the end of that pass (chain_resume).
+            if (project_.settings.chain_enabled && !chain_resume(project_, chain_)) {
+                project_.settings.chain_enabled = false;
+            }
             deferred_count_ = 0;                 // hits of a pattern that no longer exists
             scheduler_.reset(true);
             reconfigure();

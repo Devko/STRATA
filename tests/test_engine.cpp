@@ -1475,6 +1475,50 @@ TEST(engine_a_chain_advances_at_the_pass_boundary) {
     CHECK_EQ(live_slot(), 0);
 }
 
+TEST(engine_a_chain_edited_while_it_plays_stays_on_the_entry_it_is_playing) {
+    // The CHAIN page renumbers entries under a running player. Adding an entry above the playing
+    // one used to move the chain onto the wrong entry, and removing the playing one skipped the
+    // entry after it.
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    project_init(incoming);
+    incoming.settings.chain_length = 3;
+    incoming.chain[0] = ChainEntry{0, 0, 1};
+    incoming.chain[1] = ChainEntry{0, 1, 1};
+    incoming.chain[2] = ChainEntry{0, 2, 1};
+    post(Cmd::project_loaded);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    tick_at(1536);
+    CHECK_EQ(live_slot(), 1);                      // entry 1, A02
+    tick_at(1537);
+
+    Command insert;                                // A10 at the top
+    insert.cmd = Cmd::chain_edit;
+    insert.step = 0;
+    insert.a = uint8_t(ChainEdit::insert);
+    insert.b = 0;
+    insert.c = 9;
+    insert.d = 1;
+    CHECK(engine.commands().post(insert));
+    pump();
+    CHECK_EQ(int(engine.chain().entry), 2);        // still A02
+
+    Command remove;                                // and A02 itself goes
+    remove.cmd = Cmd::chain_edit;
+    remove.step = 2;
+    remove.a = uint8_t(ChainEdit::remove);
+    CHECK(engine.commands().post(remove));
+    pump();
+    CHECK_EQ(live_slot(), 1);                      // it plays out its pass
+    tick_at(2u * 1536u);
+    CHECK_EQ(live_slot(), 2);                      // then A03, not A10
+    CHECK_EQ(int(engine.chain().entry), 2);
+}
+
 TEST(engine_starting_an_empty_chain_is_refused) {
     Engine &engine = clean();
     CHECK_EQ(chain_length(engine.project()), 0);

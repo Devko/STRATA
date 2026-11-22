@@ -2859,7 +2859,9 @@ public:
                 append_padded(out, uint32_t(entry.slot) + 1, 2);
                 append(out, " X");
                 append_number(out, uint32_t(entry.repeats));
-                if (player.active && int(player.entry) == i) append(out, " PLAY");
+                if (player.active && !player.orphaned && int(player.entry) == i) {
+                    append(out, " PLAY");
+                }
                 *out = 0;
                 canvas.text(0, 30 + row * 10, line, i == chain_cursor_ ? 15 : 10);
             }
