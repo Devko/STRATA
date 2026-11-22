@@ -821,3 +821,105 @@ TEST(app_a_second_resample_is_refused_while_one_is_running) {
     CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 0);
     CHECK_EQ(int(engine.status().resample_frames.load(std::memory_order_relaxed)), 0);
 }
+
+// --- sampling from the audio input ----------------------------------------------------------
+//
+// docs/SPEC.md: "Resample with a chosen input source". The same take as above, armed with source
+// 1: the buffer is written from audio()'s `in`, not from the master, and the master is not
+// touched by it. Driven by hand rather than through pump(), because pump() gives no input.
+
+namespace {
+
+float g_in[2 * ENAGA_BLOCK_FRAMES];
+float g_master[2 * ENAGA_BLOCK_FRAMES];
+
+// Run takes until the card side has written one, with `left` and `right` on the input.
+bool take_from(uint8_t source, float left, float right) {
+    Engine &engine = strata::test::engine();
+    FakeHost &host = FakeHost::the();
+    for (uint32_t i = 0; i < ENAGA_BLOCK_FRAMES; i++) {
+        g_in[2 * i] = left;
+        g_in[2 * i + 1] = right;
+    }
+    post(Cmd::resample_arm, 0, 0, 1, source);
+    storage().request_resample_write();
+    host.deliver_tick(384, 0);
+    for (int i = 0; i < 3000; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        engine.process(g_in, g_master, ENAGA_BLOCK_FRAMES);
+        storage().service();
+        host.complete_loads();
+        const uint8_t state = engine.status().resample_state.load(std::memory_order_relaxed);
+        if (i > 4 && state == 0u) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int16_t s16_at(const uint8_t *p) { return int16_t(uint16_t(p[0]) | uint16_t(p[1]) << 8); }
+
+// Where the last take went. The number comes from the settings, which outlive fresh().
+const char *last_take_path() {
+    static char path[64];
+    std::snprintf(path, sizeof path, "/RECORD/%s", storage().last_take_name());
+    return path;
+}
+
+}  // namespace
+
+TEST(app_a_take_from_the_input_records_the_input_not_the_master) {
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    CHECK(take_from(1, 0.5f, -0.25f));
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.has_file(last_take_path()));
+
+    // A frame well inside the take: L and R as they came in, not the (silent) master.
+    static uint8_t head[44 + 4 * 1100];
+    CHECK(host.read_prefix(last_take_path(), head, sizeof head) == int32_t(sizeof head));
+    const int16_t l = s16_at(head + 44 + 4 * 1000), r = s16_at(head + 44 + 4 * 1000 + 2);
+    CHECK(l > 16300 && l < 16400);
+    CHECK(r < -8150 && r > -8250);
+
+    // The meter saw it too: 0.5 is 500 per mille.
+    CHECK_EQ(int(engine.status().input_peak.load(std::memory_order_relaxed)), 500);
+
+    // A master take with the same input: the input is NOT in it (the fresh project is silent).
+    CHECK(take_from(0, 0.5f, -0.25f));
+    CHECK(host.read_prefix(last_take_path(), head, sizeof head) == int32_t(sizeof head));
+    CHECK_EQ(int(s16_at(head + 44 + 4 * 1000)), 0);
+    CHECK_EQ(int(s16_at(head + 44 + 4 * 1000 + 2)), 0);
+    host.set_running(false);
+}
+
+TEST(app_an_input_take_with_no_input_buffer_records_silence_and_ends) {
+    // The rigs pass no input. The take must still end on its frame and reach the card.
+    fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    post(Cmd::resample_arm, 0, 0, 1, 1);
+    storage().request_resample_write();
+    pump();
+    host.deliver_tick(384, 0);
+    for (int i = 0; i < 3000; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+        const uint8_t state =
+            strata::test::engine().status().resample_state.load(std::memory_order_relaxed);
+        if (i > 4 && state == 0u) break;
+    }
+    CHECK(host.has_file(last_take_path()));
+    host.set_running(false);
+}
+
+TEST(app_the_input_peak_clamps_at_full_scale) {
+    Engine &engine = fresh();
+    for (uint32_t i = 0; i < 2 * ENAGA_BLOCK_FRAMES; i++) g_in[i] = (i == 7) ? -3.0f : 0.1f;
+    engine.process(g_in, g_master, ENAGA_BLOCK_FRAMES);
+    CHECK_EQ(int(engine.status().input_peak.load(std::memory_order_relaxed)), 1000);
+    for (uint32_t i = 0; i < 2 * ENAGA_BLOCK_FRAMES; i++) g_in[i] = 0.0f;
+    engine.process(g_in, g_master, ENAGA_BLOCK_FRAMES);
+    CHECK_EQ(int(engine.status().input_peak.load(std::memory_order_relaxed)), 0);
+}

@@ -184,7 +184,11 @@ enum class Cmd : uint8_t {
     // not bar-aligned does not loop, which is the whole point of recording a round number of
     // bars. `resample_release` is the main context saying it has finished with the buffer, which
     // is what lets the next take be armed (dsp/capture.hpp).
-    resample_arm,      // a: bars 1-8
+    //
+    // `b` is the SOURCE: 0 the finished master, 1 the audio input (SPEC's "Resample with a chosen
+    // input source"). Which input, and at what level, is the main context's enaga::system::input
+    // call; the audio side only chooses which buffer the take is written from.
+    resample_arm,      // a: bars 1-8, b: 0 master, 1 the audio input
     resample_cancel,
     resample_release,
 
@@ -359,6 +363,9 @@ struct Status {
     std::atomic<uint8_t> resample_state{0};
     std::atomic<uint32_t> resample_frames{0};
     std::atomic<uint8_t> resample_clamped{0};   // the take was longer than the buffer holds
+    // The audio input's peak over the last block, 0-1000 (per mille of full scale), so the
+    // RESAMPLE screen can show a level to set the input by before a take. 1000 means it clipped.
+    std::atomic<uint16_t> input_peak{0};
 
     // Which pattern is live, so the UI can draw it without reaching into the project.
     std::atomic<uint8_t> live_bank{0};
