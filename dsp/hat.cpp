@@ -38,6 +38,7 @@
 #include "hat.hpp"
 
 #include "drumloops.h"
+#include "filterloops.h"
 
 namespace strata {
 namespace {
@@ -286,14 +287,14 @@ void Hat::run(Voice &v, float *out, int n) {
     strata_hat_squares(mix_, n, v.phase, step, sample_hold_step, &v.sample_hold_phase,
                        &v.sample_hold, rng_.state(), noisiness_);
 
-    v.band.process(mix_, mix_, n, band_, Svf::band_pass);
+    strata_svf_inplace(&v.band.state_, &band_, Svf::band_pass, mix_, n);
 
     // The VCA: the envelope times the trigger level, then asymmetric and soft clipped, which is
     // where the trigger level turns into brightness rather than only level.
     v.amp.render(env_, n, v.choked ? choke_shape_ : amp_shape_);
     strata_hat_vca(mix_, env_, n, v.trigger_level);
 
-    v.high.process(mix_, mix_, n, high_, Svf::high_pass);
+    strata_svf_inplace(&v.high.state_, &high_, Svf::high_pass, mix_, n);
 
     if (v.fade > 0) {
         strata_mix_ramp(out, mix_, n, out_gain_ * v.gain, -out_gain_ * kFadeStep);

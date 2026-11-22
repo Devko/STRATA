@@ -330,3 +330,21 @@ TEST(capture_ignores_a_null_or_empty_block) {
     CHECK_EQ(int(capture.frames()), 0);
     CHECK(capture.recording());
 }
+
+TEST(capture_records_a_one_frame_block) {
+    // A block of one frame is still audio: the master can hand over a short block at the end of
+    // a take, and dropping it would make the take a frame short.
+    Capture capture;
+    CHECK(capture.init(kRate));
+    CHECK(capture.arm(3));
+    capture.begin();
+    fill_ramp(g_block, 1, 100);
+    capture.process(g_block, 1);
+    CHECK_EQ(int(capture.frames()), 1);
+    fill_ramp(g_block, 2, 101);
+    capture.process(g_block, 2);
+    CHECK_EQ(int(capture.frames()), 3);
+    CHECK(capture.done());
+    CHECK_EQ(int(capture.data()[0]), int(int16_t(100.0f / 100000.0f * 32767.0f)));
+    CHECK_EQ(int(capture.data()[4]), int(int16_t(102.0f / 100000.0f * 32767.0f)));
+}

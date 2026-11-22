@@ -69,7 +69,7 @@ void settle() {
 struct Stats { float peak; float rms; };
 
 // Play pattern `slot` of bank A from its first tick for `bars` bars, with `solo` (or -1 for all).
-Stats render(int slot, int bars, int solo, int *frames_out) {
+Stats render(int slot, int bars, int solo, int *frames_out, int tail_bars = 1) {
     FakeHost &host = FakeHost::the();
     Project &p = g_engine.project_for_load();
     p.bank = 0;
@@ -83,8 +83,9 @@ Stats render(int slot, int bars, int solo, int *frames_out) {
     host.set_running(true);
     const double frames_per_tick = double(kRate) * 60.0 / (double(kBpm) * 96.0);
     const uint32_t ticks = uint32_t(bars) * 384u;
-    // One extra bar of tail.
-    const int frames = int(double(ticks) * frames_per_tick) + int(kRate * 60.0f / kBpm * 4.0f);
+    // An extra bar of tail, or more.
+    const int frames = int(double(ticks) * frames_per_tick) +
+                       int(kRate * 60.0f / kBpm * 4.0f * float(tail_bars));
     int done = 0;
     uint32_t next_tick = 0;
     double peak = 0.0, sum = 0.0;
@@ -138,6 +139,32 @@ int main(int argc, char **argv) {
         std::printf("A%02d %-8s peak %6.1f dBFS  rms %6.1f dBFS  %s\n", slot + 1, names[slot],
                     db(s.peak), db(s.rms), path);
     }
+    // A01 again through the sends' ambient modes (dsp/ambient.hpp), for a pre-listen: the LONG
+    // delay at dotted 1/8 x4 with wow and diffusion, into a HALL with some shimmer, and four bars
+    // of tail. The project's bytes are set and put back, so nothing after this hears them.
+    {
+        Project &p = g_engine.project_for_load();
+        uint8_t saved[kSendFields];
+        for (int i = 0; i < kSendFields; i++) saved[i] = p.settings.sends[i];
+        uint8_t *sends = p.settings.sends;
+        sends[int(SendField::delay_mode)] = 127;
+        sends[int(SendField::delay_multiplier)] = delay_multiplier_byte(3);   // X4
+        sends[int(SendField::delay_feedback)] = 100;
+        sends[int(SendField::delay_wow)] = 70;
+        sends[int(SendField::delay_diffusion)] = 96;
+        sends[int(SendField::delay_to_reverb)] = 64;
+        sends[int(SendField::reverb_mode)] = 127;
+        sends[int(SendField::reverb_decay_s)] = 100;
+        sends[int(SendField::reverb_shimmer)] = 70;
+        int frames = 0;
+        const Stats s = render(0, bars, -1, &frames, 4);
+        std::snprintf(path, sizeof path, "%s/A01_AMBIENT.wav", dir);
+        write_wav(path, frames);
+        std::printf("A01 AMBIENT  peak %6.1f dBFS  rms %6.1f dBFS  %s\n", db(s.peak), db(s.rms), path);
+        Project &q = g_engine.project_for_load();
+        for (int i = 0; i < kSendFields; i++) q.settings.sends[i] = saved[i];
+    }
+
     static const char *tracks[kTracks] = {"KICK", "CLAP", "HAT C", "HAT O", "PERC", "BASS", "CHORD", "LOOP"};
     for (int t = 0; t < kTracks; t++) {
         int frames = 0;

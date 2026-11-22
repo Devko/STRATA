@@ -48,8 +48,67 @@ The figures are killed / survived. "After" is a fresh run with the new tests in 
 grew by the shared VA POLY voice budget in between, so its totals differ). The after run
 was taken before main's macro change to core/perform.cpp merged in.
 
-Not yet run line by line: core/chord, factory, pattern, pcm, project, record, samplepool, scale,
-serialize and stepedit (2,260 mutants), and dsp/. They are next, a few files at a time.
+The second pass (also 2026-11-22) covered the ten remaining core files and dsp/; its table is
+below. The harness mutates `*.cpp` only, so the `*.ti.c` hot loops (core/pcmloops.ti.c, the
+grain, chain, master and repeat loops) are covered through their callers and the golden renders,
+not line by line.
+
+| File | Before | After | New tests |
+| --- | --- | --- | --- |
+| core/chord.cpp | 84 / 14 (85.7%) | 88 / 10 (89.8%) | tests/test_chord.cpp |
+| core/factory.cpp | 53 / 221 (19.3%) | 53 / 221 (19.3%) | none: preset content |
+| core/pattern.cpp | 206 / 33 (86.2%) | 217 / 22 (90.8%) | tests/test_pattern.cpp |
+| core/pcm.cpp | 194 / 31 (86.2%) | 200 / 25 (88.9%) | tests/test_pcm.cpp |
+| core/project.cpp | 308 / 54 (85.1%) | 314 / 48 (86.7%) | tests/test_project.cpp |
+| core/record.cpp | 64 / 28 (69.6%) | 69 / 23 (75.0%) | tests/test_record.cpp |
+| core/samplepool.cpp | 122 / 28 (81.3%) | 127 / 23 (84.7%) | tests/test_samplepool.cpp |
+| core/scale.cpp | 42 / 12 (77.8%) | 46 / 8 (85.2%) | tests/test_scale.cpp |
+| core/serialize.cpp | 256 / 43 (85.6%) | 264 / 35 (88.3%) | tests/test_serialize.cpp |
+| core/stepedit.cpp | 184 / 43 (81.1%) | 194 / 33 (85.5%) | tests/test_stepedit.cpp |
+| dsp/buses.cpp | 137 / 117 (53.9%) | 183 / 71 (72.0%) | tests/test_chain.cpp, goldens |
+| dsp/capture.cpp | 59 / 23 (72.0%) | 60 / 22 (73.2%) | tests/test_capture.cpp |
+| dsp/chain.cpp | 96 / 40 (70.6%) | 112 / 24 (82.4%) | tests/test_chain.cpp, goldens |
+| dsp/grain.cpp | 189 / 113 (62.6%) | 205 / 97 (67.9%) | tests/test_grain.cpp, goldens |
+| dsp/hat.cpp | 112 / 71 (61.2%) | 134 / 49 (73.2%) | goldens |
+| dsp/kick.cpp | 108 / 74 (59.3%) | 128 / 54 (70.3%) | goldens |
+| dsp/perc.cpp | 135 / 74 (64.6%) | 154 / 55 (73.7%) | goldens |
+| dsp/repeat.cpp | 27 / 38 (41.5%) | 32 / 33 (49.2%) | tests/test_repeat.cpp, goldens |
+| dsp/sample.cpp | 274 / 169 (61.9%) | 295 / 148 (66.6%) | goldens |
+| dsp/snare.cpp | 144 / 84 (63.2%) | 167 / 61 (73.2%) | goldens |
+| dsp/va.cpp | 165 / 67 (71.1%) | 168 / 64 (72.4%) | goldens |
+| dsp/vapoly.cpp | 93 / 72 (56.4%) | 108 / 57 (65.5%) | goldens |
+
+"Before" for dsp/ already had the first 51 golden renders in; a run without any (stopped at 600
+of 2,689 mutants) had 153 of the first 271 buses.cpp mutants surviving. The after runs were taken
+before main's dsp/sample.cpp and dsp/vapoly.cpp changes merged in; vapoly's after figure is from
+before the last golden renders. Most of what survives in dsp/ is in the classes below: fresh-object
+resets (a third of the machines' survivors), steal tie-breaks, and the sampler's fast-path window.
+
+"After" for the second pass re-ran only the survivors: the code under test did not change, so a
+mutant the old suite killed is still killed.
+
+## Golden renders
+
+The DSP files could not be pinned by property tests alone. A hit that sounds, decays and moves
+with its knobs passes whether a coefficient is right or one off, so most dsp/ survivors were
+sound changes nobody would catch until a listening test. tests/test_golden.cpp renders every
+machine, the insert chain over its seven filter modes, the mixer and beat repeat with fixed
+patches and trig patterns, and compares each render with tests/golden_data.inc: 24 samples at
+fixed positions and the mean square, within 1e-7 absolute plus 1e-4 relative. The renders are
+bit-stable at -O2 and under ASan at -O1.
+
+They do not say the sound is right (docs/SOUND.md and the unit checklist do that); they say it
+has not changed by accident. **A deliberate sound change regenerates them**, after listening:
+
+```sh
+make -C host build && STRATA_GOLDEN=print build/host/strata-tests > /tmp/g.txt
+python3 tools/golden_update.py /tmp/g.txt      # rewrites tests/golden_data.inc
+```
+
+and the diff of golden_data.inc goes in the same commit as the DSP change. 89 renders: two patches
+of three spaced hits per machine, a dense pattern (retriggers that steal, a chord bigger than any
+pool, key ups, STOP twice) over four more patches, and a steal's splice summarised sample by
+sample.
 
 ## What was a missing test
 
@@ -73,6 +132,26 @@ worth knowing, because they are the kind that would have broken silently:
 - **Storage**: refused samples leaving the loader idle, TOO LONG and NO ROOM, slices of a long
   file arriving whole and in order, and a later NEW or reload winning.
 - One test-harness defect: `test_app` depended on link order (fixed in its own commit).
+
+The second pass found no bug either. What it found unpinned:
+
+- **Every mixer setter.** sends_from_bytes on the default bytes lands on the defaults, so a
+  setter that dropped its value, or reported failure, still passed. Each field is now set to a
+  value that is not its default, and to both sides of its range.
+- **The tail gate's length**, now pinned to the block for both sends, and the output level's
+  ramp in both directions (a ramp up from 0.5 to 1 could have been skipped).
+- **One-frame blocks** through the mixer, the insert chain, capture and beat repeat.
+- **State that a reset must drop**: the duck's envelope and a trigger aimed past the block, the
+  chain's filter and lo-fi hold on clear_state(), the half frame a pitched-down repeat leaves.
+- **A muted hard-panned track** that the chain called silent while one gain was still ramping.
+- **Grain**: a sample swapped in under unchanged knobs keeps its old read step unless
+  set_sample() recomputes it (the engine prepares only when knobs move); a spawn into a full
+  pool steals the grain furthest through its window and takes the full-pool crowd gain.
+- **Core**: chord packing and inversion at the top of the range, scale folds onto 0 and 127,
+  step-edit labels and walks at both ends, the resampler's steps and antialias coefficients
+  against a formula, damaged lock runs, a full lock pool, serialize's malformed boundaries and a
+  bank cut mid-pattern.
+- **The sound of every machine**, by golden renders (above).
 
 ## What survives on purpose
 
@@ -133,6 +212,52 @@ the knob's value to within one step, and is never flat), over a grid of every ca
 lines) are content, not logic: tests/test_boot.cpp checks what the default beat must do, and a
 value moved by one there is a different preset, not a bug.
 
+### Second pass: core/ and dsp/
+
+**Fresh-object resets.** Every machine's init(), and Mixer, Capture and BeatRepeat's, assigns
+state that the member initialisers already hold and zero-fills buffers that are written before
+they are read. Each object is init()ed once per process, and never reused. (A reset that runs
+again later, such as Duck::reset or InsertChain::clear_state, is tested.)
+
+**Steal tie-breaks.** Which of two equally loud drum voices is stolen, and the rotating cursors
+in VaPoly, Sampler and Granular, change the choice only between voices or grains at exactly the
+same level or window phase.
+
+**A fade that cannot span two slices.** A stolen drum or sample voice fades over 24 frames from
+the top of the block, so with audio()'s 64-frame blocks the gain carried between slices of the
+fade is never read. The splice itself is pinned sample by sample by golden renders.
+
+**Sub-block slicing.** `n = frames - done < kBlock ? ...` in every render_add: audio()'s block is
+kBlock, so the loop runs once.
+
+**Paths that compute the same samples.** Sampler's safe window (safe_lo, safe_hi and the run_end
+estimate) and Granular's fit_length choose between an unclamped fast loop and the clamped one.
+Narrowing them costs CPU and changes nothing; widening them reads past the buffer, which is the
+loop-bounds class above (ASan, and the arithmetic bound tests in test_grain.cpp).
+
+**Skip tests that only save CPU.** InsertChain::silent() when the answer would only add zeros,
+a duck at depth 0, a send at gain 0, the limiter's skip test (unity below the threshold), the
+master ramp skipped at unity, a cached reciprocal recomputed, and the send tails running a block
+longer or shorter past -60 dB.
+
+**Identical or equal at the boundary.** `fltr + 0` against `fltr - 0`; pan and DJ at their exact
+centre; `cos_turns(0.25)` is exactly 0, so the hard-pan snap is the law's own value; a zero
+attack makes `gate_on(true)` and `gate_on(false)` the same.
+
+**Unreachable.** mode_from's clamp (a parameter byte is at most 127), delay_division_index's
+clamp, a null from `new`, the channel count of a refused sample, start_voice() on a machine
+with no sample (trigger() refuses first).
+
+**Preset content.** core/factory.cpp is the factory kits and patterns: 221 of its 274 mutants
+are a value moved by one, which is a different preset. tests/test_factory.cpp checks what each
+kit must do, as test_boot.cpp does for the default beat.
+
+**Core.** Checks that run only inside a static_assert (stepedit's every_label_fits); a Reader's
+position after it has failed (every caller stops); `(p - 128) * 256` against `(p + 128) * 256`
+for 8-bit PCM, equal after the int16 wrap; floor_to_int's negative path, which
+stamp_normalise's carry repairs; record's candidate -1, which cannot win; samplepool merges that
+coalesce() repeats; div_u64 by a denominator of 1, which no caller passes.
+
 ## Accepted gaps
 
 Real behaviour without a test, left for now because the test costs more than the risk:
@@ -142,6 +267,15 @@ Real behaviour without a test, left for now because the test costs more than the
   drain in `save_for_shutdown`.
 - In the engine: a trig's frame and the accent and slide flags reaching the machine, the lock
   pool compaction path through the engine, and the duck.
+
+Second pass:
+
+- Grain: set_sample() clamps SPR to at least 1 frame rather than 0 until the next prepare(), a
+  grain onset at 1/65536 of a frame, and the window's last entry (1.5e-4) zeroed: all below
+  what a golden render's tolerance can see.
+- The send tails' exact formula is pinned at one setting each; feedback at exactly 0.001 is not.
+- dsp/freeze, dsp/lfo, dsp/tapestop and Sampler's new code arrived from main after these runs
+  and have not been run line by line yet.
 
 ## Found along the way
 

@@ -35,6 +35,7 @@
 // `enaga::files`.
 #pragma once
 
+#include "midiout.hpp"     // kMidiOutOff and kMidiChannels: ProjectSettings::midi_out's domain
 #include "pattern.hpp"
 #include "serialize.hpp"
 
@@ -62,10 +63,10 @@ constexpr int kKitParams = kKitLfoEnd + kKitArpParams;
 
 // How many machines a track can host, mirroring dsp/'s machine list the same way and for the
 // same reason as kKitParams: docs/SPEC.md, "Machines (v1)" -- KICK, SNARE, HAT, PERC, SAMPLE,
-// GRAIN, VA MONO and VA POLY. The file format needs the domain of KitTrack::machine, because a
+// GRAIN, VA MONO and VA POLY -- plus MID, which plays nothing here and sends MIDI (dsp/extmidi.hpp). The file format needs the domain of KitTrack::machine, because a
 // kit naming machine 12 has to become something this build can host rather than an index into
 // app/'s machine pool. app/ asserts that the two agree.
-constexpr int kMachines = 8;
+constexpr int kMachines = 9;
 
 // Which machine a track hosts, as the number KIT.BIN stores.
 //
@@ -86,6 +87,7 @@ enum class MachineId : uint8_t {
     grain,
     va_mono,
     va_poly,
+    midi,        // MID: no audio; the track's notes and eight CCs go to MIDI OUT
     count
 };
 static_assert(int(MachineId::count) == kMachines,
@@ -106,6 +108,9 @@ const char *machine_name(uint8_t id);
 //     window and the track plays like an instrument. With SLC > 1 the note picks the SLICE, and
 //     folding it would play a different slice -- not a musical operation at all -- so a sliced
 //     sample never folds. Roland's decision, 2026-11-22.
+//   - MID never folds. The note goes to someone else's instrument, which may be a drum machine
+//     mapping notes to sounds, so it leaves exactly as written -- a chord step still sends its
+//     chord, which `chord_expand` folds as it builds it.
 //   - The DRUM machines read `note` as a pitch too (dsp/kick.cpp tunes the body from it), but
 //     folding it would RETUNE them: a kick written at D on a C minor track would move, and
 //     nobody writing a drum part is thinking in degrees.
@@ -184,7 +189,9 @@ constexpr uint16_t kTempoCentiMax = 30000;    // 300.00 BPM
 // dsp/buses.hpp's enums because core/ cannot include dsp/ -- dsp/buses.hpp reaches Enaga and
 // CLAUDE.md says core/ never does. dsp/buses.hpp static_asserts that the two agree, so the day
 // a field is added the build stops here rather than writing a short section.
-constexpr int kSendFields = 10;
+constexpr int kSendFields = 19;
+// What a PROJECT.BIN written before the ambient modes holds; the other nine follow the master's.
+constexpr int kSendFieldsV1 = 10;
 constexpr int kMasterFields = 7;
 // What a PROJECT.BIN written before the kill EQ holds: the DJ filter, compressor, limiter and
 // level. The three EQ bands were appended after them, so a short mixer section is an older file.
@@ -194,6 +201,8 @@ constexpr int kMasterFieldsV1 = 4;
 // encoder at that position produces. Named here because `ProjectSettings` needs it as an
 // initialiser and a bare 64 next to nine other numbers says nothing.
 constexpr uint8_t kDefaultDelayDivision = 64;
+// The LONG delay's default multiplier: X2, index 1 of dsp/buses.hpp's six, as a band's middle.
+constexpr uint8_t kDefaultDelayMultiplier = 32;
 
 // Settings that belong to the project rather than to a pattern.
 struct ProjectSettings {
@@ -225,6 +234,12 @@ struct ProjectSettings {
     uint8_t scene_a = 0;
     uint8_t scene_b = 1;
 
+    // Each track's MIDI OUT channel: 0 off, 1-16 the channel as printed on gear. A track with a
+    // channel sends every note it plays there (core/midiout.hpp). In the PROJECT rather than the
+    // kit because it is cabling -- which outboard synth listens where -- not a sound: recalling a
+    // kit must not re-route the synths on stage.
+    uint8_t midi_out[kTracks] = {};
+
     // The two send effects and the master bus, as encoder bytes rather than as the floats the
     // mixer runs on. One byte per field, in dsp/buses.hpp's `SendField` and `MasterField`
     // order, which is why those two enums are declared permanent: these indices reach a file.
@@ -240,7 +255,11 @@ struct ProjectSettings {
     // The bytes that reproduce dsp/buses.hpp's documented defaults through that mapping:
     // dotted 1/8, 40% feedback, mid tone, ping-pong on, full return, no delay into the reverb,
     // a 2 s reverb, mid damping, a 180 Hz input high-pass, full return.
-    uint8_t sends[kSendFields] = {kDefaultDelayDivision, 53, 64, 127, 127, 0, 58, 64, 61, 127};
+    uint8_t sends[kSendFields] = {kDefaultDelayDivision, 53, 64, 127, 127, 0, 58, 64, 61, 127,
+                                  // The ambient modes: off (classic), and where their knobs
+                                  // start when switched on -- X2, a little wow, half diffusion,
+                                  // a 120 Hz low cut; a big hall, some sweep, no shimmer.
+                                  0, kDefaultDelayMultiplier, 57, 64, 58, 0, 96, 51, 0};
     // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out, and the
     // kill EQ's three bands at their flat (bypassed) centre.
     uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64};
@@ -321,6 +340,9 @@ constexpr uint16_t kSectionProjectLive = 4;
 // Song mode: the SONG switch and each chain entry's mute recall (`ChainEntry::mutes`). Optional
 // on read: an older file has a looping chain with no mute recalls, which is what zeroes mean.
 constexpr uint16_t kSectionProjectSong = 5;
+// Each track's MIDI OUT channel (core/midiout.hpp): eight bytes, 0 off or 1-16. Optional on read
+// like the ones above: an older file has every track's MIDI out off, which is what it played.
+constexpr uint16_t kSectionProjectMidi = 6;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;

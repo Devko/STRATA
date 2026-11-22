@@ -1049,3 +1049,58 @@ TEST(the_antialias_loop_is_bit_exact_against_the_loop_it_replaced) {
         }
     }
 }
+
+// --- what a line-by-line mutation run found (docs/MUTATION.md) -------------------------------
+
+TEST(a_ratio_that_is_not_a_power_of_two_gets_the_step_long_division_says) {
+    // The other step tests are powers of two, which a long division gets right even with its
+    // remainder comparison off by one. 44.1 to 48 kHz and 48 to 44.1 kHz are the common ones.
+    const uint64_t up = ((uint64_t(44100) << 32) + 48000 - 1) / 48000;
+    const uint64_t down = ((uint64_t(48000) << 32) + 44100 - 1) / 44100;
+    CHECK_EQ(u64(Resampler::make(44100, 48000).step), u64(up));
+    CHECK_EQ(u64(Resampler::make(48000, 44100).step), u64(down));
+    const uint64_t odd = ((uint64_t(32000) << 32) + 44100 - 1) / 44100;
+    CHECK_EQ(u64(Resampler::make(32000, 44100).step), u64(odd));
+    // The frame count is the same long division the other way round.
+    const Resampler r = Resampler::make(44100, 48000);
+    const uint64_t frames = ((uint64_t(1000003) << 32) + up - 1) / up;
+    CHECK_EQ(u64(r.output_frames(1000003)), u64(frames));
+}
+
+TEST(the_rate_limits_themselves_are_believable_rates) {
+    CHECK_EQ(u64(Resampler::make(1000, 1000).step), u64(kOne));
+    CHECK_EQ(u64(Resampler::make(768000, 768000).step), u64(kOne));
+    CHECK_EQ(u64(Resampler::make(768000, 1000).step), u64(768 * kOne));
+    CHECK_EQ(u64(Resampler::make(1000, 768000).step),
+             u64(((uint64_t(1000) << 32) + 768000 - 1) / 768000));
+    CHECK(Antialias::make(768000, 1000).active);
+    CHECK(Antialias::make(2000, 1000).active);
+    CHECK(!Antialias::make(999, 500).active);
+}
+
+TEST(an_interpolated_frame_rounds_to_nearest) {
+    // Halfway between 0 and 1 is 0.5, which rounds to 1; truncating would give 0.
+    const int16_t in[2] = {0, 1};
+    int16_t out[4] = {};
+    Resampler cursor;
+    cursor.step = kOne / 2;
+    CHECK(pcm_resample(in, 2, 1, cursor, out, 4) >= 2);
+    CHECK_EQ(int(out[1]), 1);
+}
+
+TEST(the_antialias_coefficients_are_the_butterworth_the_header_describes) {
+    // Against the textbook formula with the host's libm: the Taylor series in core/pcm.cpp has
+    // to land on the same biquads to float precision.
+    const uint32_t from = 96000, to = 48000;
+    const Antialias f = Antialias::make(from, to);
+    CHECK(f.active);
+    const double k = std::tan(3.14159265358979323846 * (double(to) * 5.0 / 12.0) / double(from));
+    for (int i = 0; i < Antialias::kSections; i++) {
+        const double q = 1.0 / (2.0 * std::cos(double(2 * i + 1) * 3.14159265358979323846 / 16.0));
+        const double norm = 1.0 / (1.0 + k / q + k * k);
+        CHECK_NEAR(f.b0[i], float(k * k * norm), 1e-6);
+        CHECK_NEAR(f.b1[i], float(2.0 * k * k * norm), 1e-6);
+        CHECK_NEAR(f.a1[i], float(2.0 * (k * k - 1.0) * norm), 1e-6);
+        CHECK_NEAR(f.a2[i], float((1.0 - k / q + k * k) * norm), 1e-6);
+    }
+}

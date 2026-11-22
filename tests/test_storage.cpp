@@ -37,10 +37,9 @@
 //     card pulled between the two cannot be produced here. What is checked is the consequence the
 //     app is responsible for: a failed or interrupted save leaves the project on the card readable
 //     and does not mark it complete.
-//   * `save_for_shutdown`'s ring drain. It spins on `enaga::ms()` while the audio side drains the
-//     ring, and on the host nothing advances `ms()` but the spin itself and nothing drains the
-//     ring but `pump()`. So it is called with an already-empty ring, which is the state
-//     `App::stop` reaches in practice, and the 100 ms deadline is left to the unit.
+//   * That `App::stop` really runs with the audio callback gone (Enaga's apps_unload clears it
+//     first). `save_for_shutdown` relies on it to apply the ring from the main context; the
+//     host runs both sides on one thread, so it cannot tell the difference.
 #include "apprig.hpp"
 #include "check.hpp"
 #include "fakehost.hpp"
@@ -558,6 +557,10 @@ const Expect kTable[] = {
     // Which machine a track hosts is a KIT field -- KitTrack::machine, on disk since M4 -- which
     // is why machine switching needed no change to the file format.
     {Cmd::set_machine, kDirtyKit, "set_machine"},
+
+    // MIDI OUT's channel per track is PROJECT.BIN's fifth section: cabling, not a sound, so not
+    // the kit (core/project.hpp).
+    {Cmd::set_midi_out, kDirtyProject, "set_midi_out"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:
@@ -740,8 +743,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
 
     // The sizes tests/test_project.cpp pins from the serializer, reached here through the real
     // card protocol: a file that came out a different size means the two have drifted apart.
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 373);
-    CHECK_EQ(project_bytes(), 373u);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 402);
+    CHECK_EQ(project_bytes(), 402u);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1184);
     CHECK_EQ(kit_bytes(), 1184u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 3804);
@@ -1615,7 +1618,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         }
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 373);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 402);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1184);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 3804);
 
@@ -1816,9 +1819,7 @@ TEST(storage_save_for_shutdown_writes_the_autosave_in_one_call) {
     // last chance to keep the user's work. It is the one blocking path in app/storage.cpp: no
     // passes, no slices.
     //
-    // Its ring drain cannot be exercised on the host -- nothing advances `enaga::ms()` but the
-    // spin itself and nothing drains the ring but `pump()` -- so this calls it with an empty ring,
-    // which is the state App::stop reaches once the audio side has applied the last edit.
+    // An empty ring here; the next test has one with edits still in it.
     clean();
     FakeHost &host = FakeHost::the();
 
@@ -1840,6 +1841,26 @@ TEST(storage_save_for_shutdown_writes_the_autosave_in_one_call) {
     const int after = host.saves();
     storage().save_for_shutdown();
     CHECK_EQ(host.saves(), after);
+}
+
+TEST(storage_save_for_shutdown_applies_the_edits_still_in_the_ring) {
+    // On the unit nothing drains the ring during App::stop: Enaga removes the audio callback
+    // before it calls stop(). The shutdown save posts its own kit_store, and it used to spin
+    // 100 ms waiting for an audio side that never came, then save a kit without it -- the knob
+    // turned just before switching app was not in the autosave.
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::set_param, 0, 0, uint8_t(kLvl), 77);  // posted, and no block runs after it
+    CHECK(!engine().commands().empty());
+
+    storage().save_for_shutdown();
+    CHECK(engine().commands().empty());
+
+    static Kit kit;
+    const int32_t got = host.read_file(card_path("KIT.BIN", true), g_scratch, kScratchBytes);
+    CHECK(got > 0);
+    CHECK(kit_read(kit, g_scratch, uint32_t(got)) == SerializeResult::ok);
+    CHECK_EQ(int(kit.tracks[0].params[kLvl]), 77);
 }
 
 // =============================================================================================

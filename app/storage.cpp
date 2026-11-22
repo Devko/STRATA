@@ -134,6 +134,8 @@ bool mutates_project(Cmd cmd) {
         // The live-record quantize amount, which has a field in PROJECT.BIN and until now was
         // kept only in `app/` -- settable, saved nowhere.
         case Cmd::set_quantize:
+        // Each track's MIDI OUT channel, PROJECT.BIN's fifth section.
+        case Cmd::set_midi_out:
             return true;
         default:
             return false;
@@ -2062,12 +2064,14 @@ void Storage::save_for_shutdown() {
 
     post(Cmd::kit_store);
 
-    // Drain the ring, bounded. The protocol wants an empty ring before a save; a block is 1.33 ms
-    // and 64 commands apply per block, so this is many times longer than it can possibly need,
-    // and it is still a rounding error against the 3 s budget.
-    const uint32_t deadline = enaga::ms() + 100u;
-    while ((!flush_backlog() || !engine_->commands().empty()) && enaga::ms() < deadline) {
-    }
+    // Drain the ring. The protocol wants an empty ring before a save, and nothing else will
+    // empty it: Enaga removes the audio callback BEFORE it calls stop() (its apps_unload), so
+    // the spin on the audio side this used to be ran out its 100 ms and saved without the
+    // `kit_store` above -- the autosave's kit lost every knob turned since the last save. With
+    // the audio side gone the main context applies the commands itself (Engine says why that is
+    // safe), the backlog first.
+    for (int i = 0; i < 64 && !flush_backlog(); i++) engine_->drain_commands_for_shutdown();
+    engine_->drain_commands_for_shutdown();
 
     autosave_ = true;
     begin_job(Job::save);

@@ -31,7 +31,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | GRID | HOME | All 8 tracks; STEP keys edit the selected track |
 | KEYS | FUNC+HOME | STEP keys play 16 scale degrees on the selected track |
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, its LFO and its ARP |
-| MACHINE | FUNC+EDIT | Pick the machine on each track |
+| MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice | Save and recall whole kits: 16 slots on the card, shared by all projects |
 | SAMPLES | OK in EDIT or MACHINE, on a SMP or GRN track | Pick the track's WAV from `/SAMPLES` or `/RECORD` |
 | MIXER | MIXER | Levels, delay, reverb, routing, master |
@@ -75,7 +75,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | Upper 3 MUTE | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
 | Upper 6 THROW | Delay throw while held | FUNC: reverb throw |
-| Upper 7 MUTATE | Mutates the selected track (type and amount set in PERFORM) | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT. FUNC (hold): delay freeze, the echoes loop and nothing new goes in (`FREEZE`, `FRZ` on PERFORM's bar line) |
+| Upper 7 MUTATE | Mutates the selected track (type and amount set in PERFORM) | Then OK keeps it (KEPT), CLR reverts it (REVERTED); any mode but PROJECT, KIT and SAMPLES, and not while a STEP, a range or a scene pad is held or in RESAMPLE, where OK and CLR keep their own jobs. Any other edit also keeps it. FUNC (hold): delay freeze, the echoes loop and nothing new goes in (`FREEZE`, `FRZ` on PERFORM's bar line) |
 
 ## Step editing (GRID, EDIT, MIXER, MACHINE, RESAMPLE)
 
@@ -84,7 +84,7 @@ The on-screen hints use the same names (`FUNC+PROJECT TO SAVE`, `FUNC+EDIT: MACH
 | Tap STEP | Toggle trig. FUNC + tap: toggle trigless (locks, no note) |
 | Octave L/R | Step page 1-4 (64 steps) |
 | Hold STEP + turn A-D | Lock that parameter of the current EDIT page on the step |
-| Hold STEP + push A-D | Remove that one lock (LOCK CLEARED) |
+| Hold STEP + push A-D | Remove that one lock (LOCK CLEARED). With FUNC also held, push D is still the tape stop |
 | Hold STEP + turn VALUE | Set the step's note |
 | Hold STEP + OK | Open the step page on that step |
 | Hold STEP + CLR | Clear the step |
@@ -108,9 +108,9 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | GRID | Track | Step page 1-4 | Step page | Current EDIT page params | — / clear | Copy / paste |
 | EDIT | Track | Page SRC FLTR AMP FX LFO ARP | Page | The page's 4 params | SMP/GRN: open SAMPLES / clear | Copy / paste |
 | KEYS | Track | Octave (OCT 0-7) | Track | Current EDIT page params | — | Copy / paste |
-| MACHINE | Machine | Track | Track | A: machine | SMP/GRN: open SAMPLES / — | Copy / paste |
+| MACHINE | Machine | Track | Track | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
-| MIXER | — | Page (7) | Page | Levels or page fields; on EQ, push A-C kills a band | — / clear | Copy / paste |
+| MIXER | — | Page (9) | Page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode | — / clear | Copy / paste |
 | SAMPLES | Entry | Page of 8 | Page of 8 | A: entry | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | UP: chain on/off, DOWN: reload track's sample, LEFT: reload project, RIGHT: new project |
@@ -119,7 +119,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Macros A-D | Capture scene / clear macro | UP/DOWN: auto-fill OFF 4 8 16 |
 
 **KEYS:** STEP 1-16 play the scale from the root and hold the note until released; octave keys also change the octave. Letting go also releases that note if the sequencer is playing it on the same track.
-**PROJECT:** STEP 1-16 queue that slot of the shown bank. On the slots and SETUP pages, FUNC+LEFT
+**PROJECT:** STEP 1-16 queue that slot of the shown bank. On the slots, SETUP and PROJECTS pages, FUNC+LEFT
 reloads the project from the card and FUNC+RIGHT starts a new one; both throw away unsaved work, so
 each needs a second press within 2 s (AGAIN TO RELOAD, AGAIN FOR NEW). The octave keys walk the pages PROJECT,
 CHAIN, PATTERN, SETUP, PROJECTS; CLR on any of them goes back to the slots. In SETUP, A sets the record
@@ -130,7 +130,7 @@ FUNC+DOWN is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the chara
 under that name (NAME TAKEN if another project has it), CLR cancels. FUNC+UP reads the card again.
 **CHAIN:** a STEP key puts that slot of the shown bank into the entry under the cursor (or starts
 the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playing pattern when
-empty), up to 64 entries. B recalls a mute state as the entry starts; FUNC+RIGHT: SONG plays
+empty), up to 64 entries. FUNC+LEFT removes the entry at once (no second press, not undoable); FUNC+DOWN reloads the selected track's sample, as on the slots. B recalls a mute state as the entry starts; FUNC+RIGHT: SONG plays
 the chain once and stops (`SONG END`), LOOP repeats it. Chain edits are not undoable.
 **PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
 (END) and the chain wait for. The eight TRACK SWING fields read `PAT` (follow SWG) or 50-75%: C
@@ -154,7 +154,15 @@ UNSAVED until it is saved with FUNC+PROJECT twice.
 **SAMPLES:** one OK loads the file into the track at once, the beat keeps playing and the cursor
 stays, so DOWN, OK tries the next. The top level holds `SAMPLES/` and `RECORD/`. Only WAVs and
 folders are listed (no `._` files), at most 256 a folder. Picking a file makes the project UNSAVED.
-**MIDI in:** channels 1-8 play tracks 1-8, other channels play the selected track.
+**MIDI out:** a track with a MIDI OUT channel (MACHINE, encoder B) sends every note it plays
+there: steps, chords, ratchets, arp hits, note repeat, pads, KEYS and MIDI IN. MID is the machine that plays nothing
+itself; its SRC and AMP knobs send CC 74 71 73 72 and 70 75 76 77 when they move (locks too).
+Notes end with their step length, a key or note let go, a mute, STOP; the second STOP and
+FUNC+F6 also send All Notes Off. Enaga 0.2.0: unplug USB (or keep its MIDI port open on the
+computer) when driving gear from the DIN jack.
+**MIDI in:** channels 1-8 play tracks 1-8, other channels play the selected track. Notes are
+held until their note-off. CC 16-31 set the track's 16 parameters (SRC, FLTR, AMP, FX in order);
+CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pattern A01-H16.
 
 ## The screen
 
@@ -215,8 +223,10 @@ condition result), NEI / NOT NEI (the track to the left's), 1ST / NOT 1ST (first
 **Chords:** 1 NOTE, MIN, MAJ, SUS2, SUS4, DIM, MIN7, DOM7, MAJ7, MIN9, MIN11, 5TH, OCT, 5TH OCT; `/n` = inversion n.
 
 **MIXER pages:** TRK 1-4, TRK 5-8 (levels) · DLY: TIM time (1/32 ... 1/1, T triplet, D dotted),
-FBK feedback, TON tone, LVL · REV: DEC decay, DMP damping, HPF high-pass, LVL · ROUTE: PNG ping-pong,
-D>R delay into reverb · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
+FBK feedback, TON tone, LVL · DLY+: TYP CLAS/LONG (push A flips it), MUL X1-X8 (LONG: time x MUL,
+up to 12 s), WOW tape wobble, DIF diffusion · REV: DEC decay, DMP damping, HPF high-pass, LVL ·
+REV+: TYP ROOM/HALL (push A), SIZ size, MOD sweep, SHM octave-up shimmer · ROUTE: PNG ping-pong,
+D>R delay into reverb, LCT the LONG delay's low cut · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
 LOW (below 250 Hz), MID, HI (above 2.5 kHz), each flat at centre, KILL at the bottom, +6 dB at the top.
 
 **Lists:** queue modes END (end of pattern), 16, 32 (steps), NOW · repeat 1/4 1/8 1/16 1/32 1/4T

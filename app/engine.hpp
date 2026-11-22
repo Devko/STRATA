@@ -25,8 +25,10 @@
 #include "grain.hpp"      // GRAIN, reachable at last: a track can host any machine
 #include "commands.hpp"
 #include "editops.hpp"
+#include "extmidi.hpp"    // MID: the machine that plays nothing and sends MIDI
 #include "hat.hpp"
 #include "kick.hpp"
+#include "midiout.hpp"    // MIDI note out: every note-on gets its note-off
 #include "mutate.hpp"      // Cmd::mutate
 #include "pattern.hpp"
 #include "perc.hpp"
@@ -101,6 +103,26 @@ public:
     // the unit's MAX readings (docs/BUDGET.md, U2), not a measured limit.
     static constexpr int kPolyVoiceBudget = 12;
 
+    // A track's MIDI OUT channel, 0 off or 1-16 (ProjectSettings::midi_out). For the screen.
+    uint8_t midi_out(int track) const {
+        return track >= 0 && track < kTracks ? project_.settings.midi_out[track] : 0;
+    }
+
+    // The app is stopping (App::stop): end every MIDI note this side has sent, and All Notes Off
+    // on each channel in use. MAIN context, and only once the audio callback is gone -- Enaga
+    // clears it before it calls stop() -- so nothing else is writing the note table. Without it a
+    // note sounding when the user switched app or powered off hung on the outboard synth, with
+    // no STRATA panel left to stop it.
+    void end_midi_for_shutdown();
+
+    // Also App::stop only, for the same reason: apply what is still in the command ring from the
+    // MAIN context, because the audio callback that would apply it is gone. The shutdown save
+    // posts its own `kit_store` and needs it applied before it serializes the kit.
+    void drain_commands_for_shutdown();
+
+    // What MIDI out has sounding, for the tests. Audio side; the rig runs both on one thread.
+    const MidiOut &midi_notes() const { return midi_out_; }
+
     // Tests only: false makes every prepare() run, as it did before the memo, so a test can
     // render the same input both ways and compare the output bit for bit.
     void set_prepare_memo(bool on) { prepare_memo_ = on; forget_prepared(); }
@@ -151,6 +173,9 @@ public:
     // The held master moves, for the screen and the tests.
     const TapeStop &tape_stop() const { return tape_stop_; }
     const DelayFreeze &delay_freeze() const { return mixer_.freeze(); }
+    // Either delay's freeze: the classic's loop copy or the LONG delay's own.
+    bool delay_frozen() const { return mixer_.delay_frozen(); }
+    const Mixer &mixer() const { return mixer_; }
 
     // Whether an arp is running on `track`: a sequenced step's, or held KEYS keys'.
     bool arp_running(int track) const {
@@ -296,6 +321,35 @@ private:
 
     void build_placeholder_sample();
 
+    // --- MIDI out (core/midiout.hpp) ---
+    //
+    // Sent from the audio context, which <enaga/midi.hpp> allows: a send queues bytes and never
+    // blocks, and returns false rather than waiting when the queue is full. Sending here rather
+    // than posting the notes to the main context is what keeps a note-on within a block of its
+    // step: the main loop runs at the UI's pace, not the audio's.
+    struct EnagaMidi final : MidiSink {
+        bool send(const uint8_t *bytes, uint32_t count) override;
+    };
+    EnagaMidi midi_sink_;
+    MidiOut midi_out_;
+
+    // Send `count` notes of one trig to the track's MIDI OUT channel, if it has one.
+    void send_midi_notes(int track, const uint8_t *notes, int count, uint8_t velocity,
+                         uint32_t frame, uint32_t gate);
+    // A MIDI gate in frames for a trig whose own gate is 0 (no gate): one step of the track.
+    uint32_t midi_gate(int track, uint32_t gate_frames) const;
+    // A MID track's eight CC slots: send each one whose value has moved (per block).
+    void send_midi_ccs();
+    void send_midi_ccs(int track);
+    // CC 123 on every channel a track sends on: the second STOP and FUNC+F6.
+    void midi_all_notes_off();
+
+    // The values each MID track's CC slots last sent, and whether they are known: a slot is sent
+    // when it MOVES, never just because a track became MID or got a channel -- switching a track
+    // to MID must not throw eight arbitrary values at a synth that was set up by hand.
+    uint8_t cc_sent_[kTracks][kParams] = {};
+    bool cc_known_[kTracks] = {};
+
     // The placeholder's PCM (a static array in build_placeholder_sample), for `Cmd::clear_sample`
     // to fall back to: a track with no file plays it, after a swap as before the first one.
     const int16_t *placeholder_ = nullptr;
@@ -340,6 +394,7 @@ private:
         VaPoly poly;
         Sampler sampler;
         Granular grain;
+        MidiMachine midi;   // no state at all: the vtable pointer
     };
     TrackMachines pool_[kTracks];
 

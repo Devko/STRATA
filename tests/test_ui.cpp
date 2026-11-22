@@ -990,6 +990,85 @@ TEST(ui_a_mutation_is_kept_with_ok_and_reverted_with_clr_in_any_mode) {
     pump(2);
 }
 
+TEST(ui_a_pending_mutation_leaves_a_held_step_its_own_ok_and_clr) {
+    // MUTATE, then hold a STEP + CLR to clear that step. The verdict used to take the CLR first:
+    // the mutation was reverted instead, and because nothing marked the hold as used, its
+    // release then TOGGLED the step's trig -- two edits nobody asked for. A held step, a range,
+    // a scene pad and RESAMPLE all give OK and CLR a meaning of their own, and keep it.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    for (int i = 0; i < 16; i += 4) {
+        if ((app_engine().pattern().tracks[0].steps[i].flags & kStepTrig) == 0) {
+            step_down(i);
+            step_up(i);
+        }
+    }
+    pump(2);
+    const auto mutate = [&app] {
+        app.on_pad_press(13, 100);
+        app.on_pad_release(13);
+        pump(2);
+    };
+
+    mutate();
+    static TrackPattern mutated;
+    std::memcpy(&mutated, &app_engine().pattern().tracks[0], sizeof mutated);
+    CHECK((mutated.steps[4].flags & kStepTrig) != 0);
+    step_down(4);
+    key(ENAGA_KEY_CLR);                              // hold STEP 5 + CLR: clear that step
+    step_up(4);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "STEP CLEARED");
+    CHECK((app_engine().pattern().tracks[0].steps[4].flags & kStepTrig) == 0);
+    // Nothing else moved: the mutation is still there on the other steps.
+    CHECK_EQ(app_engine().pattern().tracks[0].steps[8].velocity, mutated.steps[8].velocity);
+    CHECK_EQ(app_engine().pattern().tracks[0].steps[12].velocity, mutated.steps[12].velocity);
+
+    // Hold STEP + OK opens the step page rather than keeping the mutation.
+    mutate();
+    step_down(8);
+    key(ENAGA_KEY_OK);
+    step_up(8);
+    pump(2);
+    CHECK(UiProbe::step_page(app));
+    CHECK_EQ(UiProbe::page_step(app), 8);
+    key(ENAGA_KEY_OK);                               // close it
+    pump(2);
+
+    // RESAMPLE: OK arms the take, CLR cancels it -- not a verdict on a mutation.
+    mutate();
+    shift_key(ENAGA_KEY_F2);                         // RESAMPLE: a mode change settles it
+    pump(2);
+    mutate();
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "KEPT") != 0);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "CANCELLED");
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_leaving_the_app_ends_a_held_midi_note) {
+    // App::stop, the switch to another app or a power-off: a KEYS key still down with MIDI OUT
+    // on sent a note nobody could stop once STRATA was gone.
+    Strata &app = fresh();
+    post_cmd(Cmd::set_midi_out, 7);                 // track 1 to channel 7
+    pump(2);
+    shift_key(ENAGA_KEY_F4);                         // KEYS
+    FakeHost::the().clear_midi();
+    step_down(0);
+    pump(2);
+    CHECK_EQ(FakeHost::the().midi_messages(0x90, 7), 1);
+    app.stop();
+    CHECK_EQ(FakeHost::the().midi_messages(0x80, 7), 1);
+    step_up(0);
+    post_cmd(Cmd::set_midi_out, 0);
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
 TEST(ui_an_undo_settles_a_pending_mutation) {
     // MUTATE, then F1 + CLR takes it back. The mutation used to stay "pending", so the next plain
     // CLR undid a SECOND level -- the edit before the mutation -- and said REVERTED.
@@ -1957,8 +2036,10 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     mixer_page(app, 0);
     CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
 
-    // The selection keys page through: two pages of faders, then DLY, REV, ROUTE, MST and EQ.
-    for (int i = 1; i < 7; i++) {
+    // The selection keys page through: two pages of faders, then DLY, DLY+, REV, REV+, ROUTE,
+    // MST and EQ.
+    CHECK_EQ(kMixerPageCount, 9);
+    for (int i = 1; i < kMixerPageCount; i++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
         CHECK_EQ(UiProbe::mixer_bank(app), i);
@@ -1969,7 +2050,7 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     CHECK_EQ(UiProbe::mixer_bank(app), 0);
     app.on_key(ENAGA_KEY_SELECT_LEFT, true);
     app.on_key(ENAGA_KEY_SELECT_LEFT, false);
-    CHECK_EQ(UiProbe::mixer_bank(app), 6);
+    CHECK_EQ(UiProbe::mixer_bank(app), kMixerPageCount - 1);
 }
 
 // The master kill EQ (dsp/buses.hpp): its MIXER page, its knobs and its kill switches.
@@ -2126,7 +2207,7 @@ TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
 TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
     Strata &app = fresh();
     Engine &engine = app_engine();
-    mixer_page(app, 4);                                // ROUTE
+    mixer_page(app, 6);                                // ROUTE
 
     // A is the ping-pong switch: either direction throws it, because a switch is not a knob.
     CHECK(engine.sends().delay_ping_pong);
@@ -2137,15 +2218,128 @@ TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
     pump(2);
     CHECK(engine.sends().delay_ping_pong);
 
-    // C and D are empty -- ten send fields do not divide into four. Turning them changes
-    // nothing and, in particular, does not fall through to the track faders below.
+    // D is empty -- nineteen send fields do not divide into four. Turning it changes nothing
+    // and, in particular, does not fall through to the track faders below.
     const uint32_t refused_before = engine.status().refused.load(std::memory_order_relaxed);
     const float level_before = engine.level(0);
-    app.on_encoder(2, +5);
+    uint8_t sends_before[kSendFields];
+    for (int i = 0; i < kSendFields; i++) sends_before[i] = engine.project().settings.sends[i];
     app.on_encoder(3, +5);
     pump(2);
     CHECK_NEAR(engine.level(0), level_before, 1e-6);
     CHECK_EQ(int(engine.status().refused.load(std::memory_order_relaxed) - refused_before), 0);
+    for (int i = 0; i < kSendFields; i++) {
+        CHECK_EQ(int(engine.project().settings.sends[i]), int(sends_before[i]));
+    }
+}
+
+namespace {
+
+// Does the drawn screen hold this text, as a whole string or inside one?
+bool screen_has(Strata &app, const char *wanted) {
+    FakeHost &host = FakeHost::the();
+    enaga::Canvas canvas(g_pixels);
+    host.clear_text();
+    app.draw(canvas);
+    for (int i = 0; i < host.text_count(); i++) {
+        if (std::strstr(host.text_draw(i).text, wanted) != nullptr) return true;
+    }
+    return false;
+}
+
+}  // namespace
+
+// The ambient modes' pages (dsp/ambient.hpp): DLY+ beside DLY, REV+ beside REV. Their TYP knob is
+// a switch, MUL steps by one multiplier, and the delay's TIME line counts the multiplier in LONG.
+TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    mixer_page(app, 3);                                // DLY+
+    CHECK(!engine.sends().delay_long);
+    app.on_encoder(0, +1);
+    pump(2);
+    CHECK(engine.sends().delay_long);
+    CHECK(screen_has(app, "LONG"));
+
+    // MUL: one click a multiplier, holding at both ends.
+    CHECK_EQ(int(engine.sends().delay_multiplier), 2);
+    app.on_encoder(1, +1);
+    pump(2);
+    CHECK_EQ(int(engine.sends().delay_multiplier), 3);
+    app.on_encoder(1, +20);
+    pump(2);
+    CHECK_EQ(int(engine.sends().delay_multiplier), 8);
+    CHECK(screen_has(app, "X8"));
+    app.on_encoder(1, -20);
+    pump(2);
+    CHECK_EQ(int(engine.sends().delay_multiplier), 1);
+
+    // Dotted 1/8 at the fresh project's 130 BPM is 0.346 s; X4 makes it 1.385 s, on the
+    // screen too.
+    app.on_encoder(1, +3);
+    pump(2);
+    CHECK_NEAR(effective_delay_seconds(engine.sends()), 4.0f * 0.75f * 60.0f / 130.0f, 1e-4);
+    CHECK(screen_has(app, "TIME 1385 MS"));
+
+    const float wow = engine.sends().delay_wow;
+    app.on_encoder(2, +4);
+    pump(2);
+    CHECK(engine.sends().delay_wow > wow);
+    const float diffusion = engine.sends().delay_diffusion;
+    app.on_encoder(3, -4);
+    pump(2);
+    CHECK(engine.sends().delay_diffusion < diffusion);
+
+    mixer_page(app, 5);                                // REV+
+    CHECK(!engine.sends().reverb_hall);
+    app.on_encoder(0, +1);
+    pump(2);
+    CHECK(engine.sends().reverb_hall);
+    CHECK(screen_has(app, "HALL"));
+    const float size = engine.sends().reverb_size;
+    app.on_encoder(1, -4);
+    pump(2);
+    CHECK(engine.sends().reverb_size < size);
+    app.on_encoder(3, +10);
+    pump(2);
+    CHECK(engine.sends().reverb_shimmer > 0.0f);
+    app.on_encoder(0, -1);
+    pump(2);
+    CHECK(!engine.sends().reverb_hall);
+    CHECK(screen_has(app, "ROOM"));
+
+    mixer_page(app, 6);                                // ROUTE: the LONG delay's low cut on C
+    const float low_cut = engine.sends().delay_low_cut_hz;
+    app.on_encoder(2, +6);
+    pump(2);
+    CHECK(engine.sends().delay_low_cut_hz > low_cut);
+
+    // Push A on either page throws its switch too, both ways.
+    mixer_page(app, 3);
+    CHECK(engine.sends().delay_long);
+    app.on_key(ENAGA_KEY_PUSH_A, true);
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    CHECK(!engine.sends().delay_long);
+    app.on_key(ENAGA_KEY_PUSH_A, true);
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    CHECK(engine.sends().delay_long);
+    mixer_page(app, 5);
+    app.on_key(ENAGA_KEY_PUSH_A, true);
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    CHECK(engine.sends().reverb_hall);
+    app.on_key(ENAGA_KEY_PUSH_A, true);
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    CHECK(!engine.sends().reverb_hall);
+
+    // Back to classic for whoever comes next.
+    mixer_page(app, 3);
+    app.on_encoder(0, -1);
+    pump(2);
+    CHECK(!engine.sends().delay_long);
 }
 
 TEST(ui_f1_and_value_is_the_master_dj_filter) {
@@ -4158,5 +4352,155 @@ TEST(ui_layout_slc_auto_line) {
     const_cast<Status &>(app_engine().status()).slice_points[0].store(0);
     key(ENAGA_KEY_PUSH_D);
     pump(2);
+    key(ENAGA_KEY_F4);
+}
+
+// --- MIDI in, and MIDI OUT's channel on the MACHINE page ------------------------------------
+//
+// Nothing drove `on_midi` before these: MIDI IN was note-on only and untested. Each message
+// type here goes through the same Strata object the unit runs.
+
+namespace {
+
+enaga::MidiMessage midi(uint8_t status, uint8_t a, uint8_t b) {
+    enaga::MidiMessage m;
+    m.status = status;
+    m.data1 = a;
+    m.data2 = b;
+    m.port = ENAGA_MIDI_DIN;
+    return m;
+}
+
+// MIDI IN on track 1 is easiest to see through MIDI OUT: give track 1 a channel and the notes
+// it is played come back out there, start and end.
+void midi_through(int track, uint8_t channel) {
+    post_track(Cmd::set_midi_out, track, channel);
+    pump(2);
+    FakeHost::the().clear_midi();
+}
+
+}  // namespace
+
+TEST(ui_midi_in_a_note_is_held_until_its_note_off) {
+    Strata &app = fresh();
+    midi_through(0, 12);
+    app.on_midi(midi(0x90, 60, 100));              // channel 1: track 1
+    pump(400);                                     // far past a step: still held
+    FakeHost &host = FakeHost::the();
+    CHECK_EQ(host.midi_messages(0x90, 12, 60), 1);
+    CHECK_EQ(host.midi_messages(0x80, 12, 60), 0);
+    app.on_midi(midi(0x80, 60, 0));
+    pump();
+    CHECK_EQ(host.midi_messages(0x80, 12, 60), 1);
+}
+
+TEST(ui_midi_in_a_note_on_at_velocity_zero_is_a_note_off) {
+    Strata &app = fresh();
+    midi_through(0, 12);
+    app.on_midi(midi(0x90, 62, 90));
+    pump();
+    app.on_midi(midi(0x90, 62, 0));
+    pump();
+    CHECK_EQ(FakeHost::the().midi_messages(0x80, 12, 62), 1);
+}
+
+TEST(ui_midi_in_a_note_off_finds_the_track_its_note_started_on) {
+    // Channel 10 plays the SELECTED track. Select track 3, play, select track 5, let go: the
+    // note on track 3 must end, and track 5 must get no stray release.
+    Strata &app = fresh();
+    midi_through(2, 3);
+    midi_through(4, 5);
+    app.on_pad_press(4, 100);                      // pad 4 is track 3: selected (and played)
+    app.on_pad_release(4);
+    pump(200);                                     // the pad's own MIDI note has ended
+    FakeHost::the().clear_midi();
+    app.on_midi(midi(0x99, 50, 100));
+    pump();
+    CHECK_EQ(FakeHost::the().midi_messages(0x90, 3, 50), 1);
+    app.on_pad_press(8, 100);                      // track 5
+    app.on_pad_release(8);
+    pump();
+    app.on_midi(midi(0x89, 50, 0));
+    pump();
+    CHECK_EQ(FakeHost::the().midi_messages(0x80, 3, 50), 1);
+    CHECK_EQ(FakeHost::the().midi_messages(0x80, 5, 50), 0);
+}
+
+TEST(ui_midi_in_all_notes_off_lets_go_of_every_held_note_on_that_channel) {
+    Strata &app = fresh();
+    midi_through(1, 4);
+    app.on_midi(midi(0x91, 60, 100));
+    app.on_midi(midi(0x91, 63, 100));
+    app.on_midi(midi(0x91, 67, 100));
+    pump();
+    app.on_midi(midi(0xB1, 123, 0));
+    pump();
+    CHECK_EQ(FakeHost::the().midi_messages(0x80, 4), 3);
+    CHECK_EQ(app_engine().midi_notes().sounding(1), 0);
+}
+
+TEST(ui_midi_in_cc_16_to_31_set_the_tracks_sixteen_parameters) {
+    Strata &app = fresh();
+    app.on_midi(midi(0xB2, 16, 5));                // channel 3, CC 16: track 3's slot 0
+    app.on_midi(midi(0xB2, 31, 120));              // CC 31: slot 15
+    app.on_midi(midi(0xB2, 32, 1));                // past the map: nothing
+    app.on_midi(midi(0xB2, 15, 1));
+    pump();
+    CHECK_EQ(int(app_engine().params(2).v[0]), 5);
+    CHECK_EQ(int(app_engine().params(2).v[15]), 120);
+    for (int p = 1; p < 15; p++) CHECK_EQ(int(app_engine().params(2).v[p]), p == kLvl ? 127 : 64);
+    CHECK_EQ(int(app_engine().params(0).v[0]), 64);
+}
+
+TEST(ui_midi_in_program_change_on_the_midi_channel_queues_that_pattern) {
+    Strata &app = fresh();
+    FakeHost::the().set_midi_channel(5);           // the user's MIDI CH is 6
+    app.on_midi(midi(0xC5, 37, 0));                // program 38: bank C, pattern 6
+    pump(2);                                       // stopped: a queued change lands at once
+    CHECK_EQ(int(app_engine().project().bank), 2);
+    CHECK_EQ(int(app_engine().project().slot), 5);
+
+    app.on_midi(midi(0xC0, 0, 0));                 // another channel: not ours
+    pump(2);
+    CHECK_EQ(int(app_engine().project().bank), 2);
+    CHECK_EQ(int(app_engine().project().slot), 5);
+}
+
+TEST(ui_machine_encoder_b_sets_the_tracks_midi_out_channel) {
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    app.on_encoder(1, +3);
+    pump();
+    CHECK_EQ(int(app_engine().midi_out(0)), 3);
+    app.on_encoder(1, -10);
+    pump();
+    CHECK_EQ(int(app_engine().midi_out(0)), 0);
+    // C and D set nothing here, and do not fall through to track 1's parameters.
+    app.on_encoder(2, +5);
+    app.on_encoder(3, +5);
+    pump();
+    for (int p = 0; p < kParams; p++) {
+        CHECK_EQ(int(app_engine().params(0).v[p]), p == kLvl ? 127 : 64);
+    }
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_machine_with_mid_and_every_midi_out_state) {
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F8);
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::midi));
+    pump(2);
+    check_layout(app, "MACHINE, MID with MIDI OUT off");
+    for (uint8_t channel = 1; channel <= 16; channel++) {
+        post_track(Cmd::set_midi_out, 0, channel);
+        pump(2);
+        check_layout(app, "MACHINE, MID with a MIDI OUT channel");
+    }
+    for (int machine = 0; machine < int(MachineId::count); machine++) {
+        post_track(Cmd::set_machine, 0, uint8_t(machine));
+        pump(2);
+        check_layout(app, "MACHINE, each machine lit");
+    }
     key(ENAGA_KEY_F4);
 }

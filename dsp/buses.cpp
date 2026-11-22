@@ -27,6 +27,9 @@
 #include "buses.hpp"
 
 #include "masterloops.h"
+#include "filterloops.h"
+
+#include <cstddef>
 
 namespace strata {
 namespace {
@@ -49,7 +52,9 @@ float clamp_to(float value, float low, float high) {
 bool send_field_set(SendSettings &settings, uint8_t field, float value) {
     switch (SendField(field)) {
         case SendField::delay_seconds:
-            settings.delay_seconds = clamp_to(value, 0.001f, Mixer::kMaxDelaySeconds);
+            // Up to the LONG delay's limit: the classic delay clamps to its own 2 s when it
+            // resolves, so a slow 1/1 still lands there exactly as it always did.
+            settings.delay_seconds = clamp_to(value, 0.001f, Mixer::kMaxLongDelaySeconds);
             return true;
         case SendField::delay_feedback:
             settings.delay_feedback = clamp_to(value, 0.0f, 0.95f);
@@ -78,6 +83,33 @@ bool send_field_set(SendSettings &settings, uint8_t field, float value) {
         case SendField::reverb_level:
             settings.reverb_level = clamp_to(value, 0.0f, 1.0f);
             return true;
+        case SendField::delay_mode:
+            settings.delay_long = value >= 0.5f;
+            return true;
+        case SendField::delay_multiplier:
+            settings.delay_multiplier = clamp_to(value, 1.0f, 8.0f);
+            return true;
+        case SendField::delay_wow:
+            settings.delay_wow = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        case SendField::delay_diffusion:
+            settings.delay_diffusion = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        case SendField::delay_low_cut_hz:
+            settings.delay_low_cut_hz = clamp_to(value, 20.0f, 1000.0f);
+            return true;
+        case SendField::reverb_mode:
+            settings.reverb_hall = value >= 0.5f;
+            return true;
+        case SendField::reverb_size:
+            settings.reverb_size = clamp_to(value, HallReverb::kMinSize, HallReverb::kMaxSize);
+            return true;
+        case SendField::reverb_mod:
+            settings.reverb_mod = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        case SendField::reverb_shimmer:
+            settings.reverb_shimmer = clamp_to(value, 0.0f, 1.0f);
+            return true;
         default:
             return false;
     }
@@ -95,13 +127,25 @@ float send_field_get(const SendSettings &settings, uint8_t field) {
         case SendField::reverb_damping:      return settings.reverb_damping;
         case SendField::reverb_high_pass_hz: return settings.reverb_high_pass_hz;
         case SendField::reverb_level:        return settings.reverb_level;
+        case SendField::delay_mode:          return settings.delay_long ? 1.0f : 0.0f;
+        case SendField::delay_multiplier:    return settings.delay_multiplier;
+        case SendField::delay_wow:           return settings.delay_wow;
+        case SendField::delay_diffusion:     return settings.delay_diffusion;
+        case SendField::delay_low_cut_hz:    return settings.delay_low_cut_hz;
+        case SendField::reverb_mode:         return settings.reverb_hall ? 1.0f : 0.0f;
+        case SendField::reverb_size:         return settings.reverb_size;
+        case SendField::reverb_mod:          return settings.reverb_mod;
+        case SendField::reverb_shimmer:      return settings.reverb_shimmer;
         default:                             return 0.0f;
     }
 }
 
 const char *send_field_name(uint8_t field) {
-    static const char *const names[] = {"TIM", "FBK", "TON", "PNG", "LVL",
-                                        "D>R", "DEC", "DMP", "HPF", "LVL"};
+    static const char *const names[] = {"TIM", "FBK", "TON", "PNG", "LVL", "D>R", "DEC",
+                                        "DMP", "HPF", "LVL", "TYP", "MUL", "WOW", "DIF",
+                                        "LCT", "TYP", "SIZ", "MOD", "SHM"};
+    static_assert(sizeof(names) / sizeof(names[0]) == std::size_t(SendField::count),
+                  "a send field without a name");
     return field < uint8_t(SendField::count) ? names[field] : "---";
 }
 
@@ -194,6 +238,24 @@ constexpr float kDivisionBeats[kDelayDivisions] = {
 
 }  // namespace
 
+namespace {
+constexpr int kMultipliers[kDelayMultipliers] = {1, 2, 3, 4, 6, 8};
+}  // namespace
+
+// The multiplier's bands, as the divisions' are: six of them across 0-127, each byte the middle.
+int delay_multiplier_index(uint8_t byte) {
+    const int index = int(byte > 127 ? 127 : byte) * kDelayMultipliers / 128;
+    return index < kDelayMultipliers ? index : kDelayMultipliers - 1;
+}
+
+uint8_t delay_multiplier_byte(int index) {
+    const int clamped =
+        index < 0 ? 0 : (index >= kDelayMultipliers ? kDelayMultipliers - 1 : index);
+    return uint8_t((clamped * 128 + 64) / kDelayMultipliers);
+}
+
+int delay_multiplier_value(uint8_t byte) { return kMultipliers[delay_multiplier_index(byte)]; }
+
 int delay_division_index(uint8_t byte) {
     const int index = int(byte > 127 ? 127 : byte) * kDelayDivisions / 128;
     return index < kDelayDivisions ? index : kDelayDivisions - 1;
@@ -231,6 +293,9 @@ int send_field_click(uint8_t field) {
     switch (SendField(field)) {
         case SendField::delay_seconds:   return 1;    // a division
         case SendField::delay_ping_pong: return 1;    // a sign
+        case SendField::delay_mode:      return 1;    // a sign
+        case SendField::reverb_mode:     return 1;    // a sign
+        case SendField::delay_multiplier: return 1;   // a multiplier
         default:                         return 2;    // a knob
     }
 }
@@ -246,7 +311,13 @@ uint8_t send_byte_step(uint8_t field, uint8_t byte, int delta) {
                                                  : (index >= kDelayDivisions ? kDelayDivisions - 1
                                                                              : index));
         }
+        case SendField::delay_multiplier: {
+            const int index = delay_multiplier_index(byte) + delta;
+            return delay_multiplier_byte(index);
+        }
         case SendField::delay_ping_pong:
+        case SendField::delay_mode:
+        case SendField::reverb_mode:
             // A switch, not a knob: either direction throws it.
             return delta > 0 ? 127 : (delta < 0 ? 0 : byte);
         default:
@@ -273,6 +344,17 @@ float send_value_from_byte(uint8_t field, uint8_t byte, float beat_seconds) {
         // 20 Hz to 2 kHz: log2(100) octaves.
         case SendField::reverb_high_pass_hz: return byte_exponential(byte, 20.0f, 6.6439f);
         case SendField::reverb_level:    return byte_unit(byte);
+        case SendField::delay_mode:      return byte >= 64 ? 1.0f : 0.0f;
+        case SendField::delay_multiplier: return float(delay_multiplier_value(byte));
+        case SendField::delay_wow:       return byte_unit(byte);
+        case SendField::delay_diffusion: return byte_unit(byte);
+        // 20 Hz to 1 kHz: log2(50) octaves.
+        case SendField::delay_low_cut_hz: return byte_exponential(byte, 20.0f, 5.6439f);
+        case SendField::reverb_mode:     return byte >= 64 ? 1.0f : 0.0f;
+        // 0.35 to 1.8 times the hall's lines: log2(1.8 / 0.35) octaves.
+        case SendField::reverb_size:     return byte_exponential(byte, 0.35f, 2.3626f);
+        case SendField::reverb_mod:      return byte_unit(byte);
+        case SendField::reverb_shimmer:  return byte_unit(byte);
         default:                         return 0.0f;
     }
 }
@@ -306,6 +388,12 @@ void sends_from_bytes(SendSettings &settings, const uint8_t *bytes, float beat_s
     for (uint8_t f = 0; f < uint8_t(SendField::count); f++) {
         send_field_set(settings, f, send_value_from_byte(f, bytes[f], beat_seconds));
     }
+}
+
+float effective_delay_seconds(const SendSettings &settings) {
+    if (!settings.delay_long) return clamp_to(settings.delay_seconds, 0.001f, Mixer::kMaxDelaySeconds);
+    return clamp_to(settings.delay_seconds * settings.delay_multiplier, 0.001f,
+                    Mixer::kMaxLongDelaySeconds);
 }
 
 void master_from_bytes(MasterSettings &settings, const uint8_t *bytes) {
@@ -367,6 +455,9 @@ void Mixer::init(float sample_rate) {
     // Two delay times: with ping-pong the echoes swap sides each pass and repeat every second.
     freeze_.init(sample_rate, 2.0f * kMaxDelaySeconds);
     reverb_.init(sample_rate);
+    // The ambient modes' own lines (dsp/ambient.hpp): 4.4 MiB for 12 s of stereo, 0.55 MiB of hall.
+    long_delay_.init(sample_rate);
+    hall_.init(sample_rate);
 
     duck_.init(sample_rate);
     for (int t = 0; t < kTracks; t++) chains_[t].init(sample_rate);
@@ -393,6 +484,8 @@ void Mixer::init(float sample_rate) {
     master_gain_ = 1.0f;
     delay_tail_ = 0;
     reverb_tail_ = 0;
+    long_tail_ = 0;
+    hall_tail_ = 0;
 
     prepare(SendSettings{}, MasterSettings{});
 }
@@ -421,6 +514,21 @@ void Mixer::resolve_sends(const SendSettings &sends) {
     delay_level_ = ed::clamp(sends.delay_level, 0.0f, 4.0f);
     delay_to_reverb_ = ed::clamp(sends.delay_to_reverb, 0.0f, 1.0f);
 
+    // --- send A's LONG mode ---------------------------------------------------------------------
+    // Resolved whichever mode is on, so a switch to it finds the settings already in place. A
+    // delay with nothing sounding jumps to its new time; one that is ringing glides there.
+    long_mode_ = sends.delay_long;
+    const float long_seconds = ed::clamp(sends.delay_seconds * sends.delay_multiplier, 0.001f,
+                                         kMaxLongDelaySeconds);
+    long_delay_.set(long_seconds, feedback, sends.delay_tone, sends.delay_low_cut_hz,
+                    sends.delay_wow, sends.delay_diffusion, sends.delay_ping_pong,
+                    long_tail_ == 0);
+
+    // --- send B's HALL mode ----------------------------------------------------------------------
+    hall_mode_ = sends.reverb_hall;
+    hall_.set(sends.reverb_decay_s, sends.reverb_damping, sends.reverb_size, sends.reverb_mod,
+              sends.reverb_shimmer, hall_tail_ == 0);
+
     // --- send B: the reverb and the high-pass on its input -----------------------------------
     reverb_.set(sends.reverb_decay_s, sends.reverb_damping);
     reverb_level_ = ed::clamp(sends.reverb_level, 0.0f, 4.0f);
@@ -448,6 +556,15 @@ void Mixer::resolve_sends(const SendSettings &sends) {
     delay_tail_blocks_ = int(delay_tail_s * blocks_per_second) + 1;
     const float reverb_tail_s = ed::clamp(sends.reverb_decay_s * 1.2f + 0.2f, 0.3f, kMaxTailSeconds);
     reverb_tail_blocks_ = int(reverb_tail_s * blocks_per_second) + 1;
+    // The LONG delay: the same count over its own period, plus the all-passes' smear. The HALL:
+    // its lines are longer than the classic's and the shimmer re-feeds the tail, so half again.
+    const float long_tail_s =
+        ed::clamp(long_seconds * (repeats + 1.0f) + 0.25f, 0.3f, kMaxTailSeconds);
+    long_tail_blocks_ = int(long_tail_s * blocks_per_second) + 1;
+    const float hall_tail_s = ed::clamp(
+        sends.reverb_decay_s * (1.3f + 0.7f * ed::clamp(sends.reverb_shimmer, 0.0f, 1.0f)) + 0.5f,
+        0.5f, kMaxTailSeconds);
+    hall_tail_blocks_ = int(hall_tail_s * blocks_per_second) + 1;
 }
 
 void Mixer::resolve_master(const MasterSettings &master_settings) {
@@ -514,8 +631,15 @@ void Mixer::add_track(int track, float *mono) {
     // A non-zero send gain on a track the app is bothering to render is what "the send is being
     // fed" means here: it costs nothing to test, and the alternative (scanning the bus for a
     // non-zero sample) costs a pass over every block.
-    if (insert.send_a_gain() > 0.0f) delay_tail_ = delay_tail_blocks_;
-    if (insert.send_b_gain() > 0.0f) reverb_tail_ = reverb_tail_blocks_;
+    // Only the mode that is on is fed; the other rings out what it holds.
+    if (insert.send_a_gain() > 0.0f) {
+        if (long_mode_) long_tail_ = long_tail_blocks_;
+        else delay_tail_ = delay_tail_blocks_;
+    }
+    if (insert.send_b_gain() > 0.0f) {
+        if (hall_mode_) hall_tail_ = hall_tail_blocks_;
+        else reverb_tail_ = reverb_tail_blocks_;
+    }
 
     ChainOut out;
     out.dry_l = mix_l_;
@@ -535,15 +659,22 @@ void Mixer::finish_block(float *out, int frames) {
     if (freezing) delay_tail_ = delay_tail_ > 1 ? delay_tail_ : 1;
     if (n > 0 && delay_tail_ > 0) {
         delay_tail_--;
-        if (freeze_.held()) enaga_clear(send_a_, n);
-        // The send bus is mono and the delay's two inputs must not alias, so the feed is copied
-        // once per block: 64 floats against the delay's own cost is nothing.
-        for (int i = 0; i < n; i++) send_a_right_[i] = send_a_[i];
+        // In LONG mode the classic delay only rings out: its feed is silence, and the bus is
+        // left alone for the long delay below.
+        const float *feed = long_mode_ ? kSilence : send_a_;
+        if (long_mode_) {
+            enaga_clear(send_a_right_, n);
+        } else {
+            if (freeze_.held()) enaga_clear(send_a_, n);
+            // The send bus is mono and the delay's two inputs must not alias, so the feed is
+            // copied once per block: 64 floats against the delay's own cost is nothing.
+            for (int i = 0; i < n; i++) send_a_right_[i] = send_a_[i];
+        }
         if (delay_to_reverb_ > 0.0f || freezing) {
             // The wet signal on its own: the reverb wants it, or the freeze records or replaces it.
             enaga_clear(wet_l_, n);
             enaga_clear(wet_r_, n);
-            delay_.process(send_a_, send_a_right_, wet_l_, wet_r_, n, 1.0f);
+            delay_.process(feed, send_a_right_, wet_l_, wet_r_, n, 1.0f);
             if (freezing) freeze_.process(wet_l_, wet_r_, n);
             enaga_mix(mix_l_, wet_l_, n, delay_level_);
             enaga_mix(mix_r_, wet_r_, n, delay_level_);
@@ -551,19 +682,53 @@ void Mixer::finish_block(float *out, int frames) {
                 const float into_reverb = delay_to_reverb_ * 0.5f;
                 enaga_mix(send_b_, wet_l_, n, into_reverb);
                 enaga_mix(send_b_, wet_r_, n, into_reverb);
-                reverb_tail_ = reverb_tail_blocks_;   // the delay is feeding it: keep it running
+                // The delay is feeding it: keep it running.
+                if (hall_mode_) hall_tail_ = hall_tail_blocks_;
+                else reverb_tail_ = reverb_tail_blocks_;
             }
         } else {
             // Nothing needs the wet signal on its own, so the delay writes straight into the mix.
-            delay_.process(send_a_, send_a_right_, mix_l_, mix_r_, n, delay_level_);
+            delay_.process(feed, send_a_right_, mix_l_, mix_r_, n, delay_level_);
+        }
+    }
+
+    // --- send A's LONG mode -------------------------------------------------------------------
+    // Held, it keeps running whatever its tail says: the loop is the sound.
+    if (long_delay_.held()) long_tail_ = long_tail_ > long_tail_blocks_ ? long_tail_ : long_tail_blocks_;
+    if (n > 0 && long_tail_ > 0) {
+        long_tail_--;
+        const float *feed = long_mode_ ? send_a_ : kSilence;
+        if (delay_to_reverb_ > 0.0f) {
+            enaga_clear(wet_l_, n);
+            enaga_clear(wet_r_, n);
+            long_delay_.process(feed, wet_l_, wet_r_, n, 1.0f);
+            enaga_mix(mix_l_, wet_l_, n, delay_level_);
+            enaga_mix(mix_r_, wet_r_, n, delay_level_);
+            const float into_reverb = delay_to_reverb_ * 0.5f;
+            enaga_mix(send_b_, wet_l_, n, into_reverb);
+            enaga_mix(send_b_, wet_r_, n, into_reverb);
+            if (hall_mode_) hall_tail_ = hall_tail_blocks_;
+            else reverb_tail_ = reverb_tail_blocks_;
+        } else {
+            long_delay_.process(feed, mix_l_, mix_r_, n, delay_level_);
         }
     }
 
     // --- send B: the reverb, high-passed first ------------------------------------------------
+    // The high-pass runs once for whichever mode is fed; a mode ringing out unfed takes silence.
+    const bool fed_b = hall_mode_ ? hall_tail_ > 0 : reverb_tail_ > 0;
+    if (n > 0 && fed_b) {
+        strata_biquad_inplace(&reverb_high_pass_.state_, &reverb_high_pass_coefficients_, send_b_, n);
+    }
     if (n > 0 && reverb_tail_ > 0) {
         reverb_tail_--;
-        reverb_high_pass_.process(send_b_, send_b_, n, reverb_high_pass_coefficients_);
-        reverb_.process(send_b_, kSilence, mix_l_, mix_r_, n, reverb_level_ * 2.0f);
+        reverb_.process(hall_mode_ ? kSilence : send_b_, kSilence, mix_l_, mix_r_, n,
+                        reverb_level_ * 2.0f);
+    }
+    // --- send B's HALL mode -------------------------------------------------------------------
+    if (n > 0 && hall_tail_ > 0) {
+        hall_tail_--;
+        hall_.process(hall_mode_ ? send_b_ : kSilence, mix_l_, mix_r_, n, reverb_level_);
     }
 
     // --- master ------------------------------------------------------------------------------
@@ -575,13 +740,26 @@ void Mixer::finish_block(float *out, int frames) {
     strata_interleave(out, mix_l_, mix_r_, n, frames);
 }
 
+void Mixer::freeze_delay(bool held) {
+    if (held) {
+        if (delay_frozen()) return;
+        freeze_on_long_ = long_mode_;
+        if (freeze_on_long_) long_delay_.hold(true);
+        else freeze_.hold(true, delay_loop_frames_);
+        return;
+    }
+    if (freeze_on_long_) long_delay_.hold(false);
+    else freeze_.hold(false, delay_loop_frames_);
+}
+
 void Mixer::master(int n) {
     // --- the one-knob DJ filter: 24 dB per channel, and bypassed in the dead zone -------------
     if (dj_on_) {
-        ed::Svf::cascade(dj_l_a_, dj_coefficients_, dj_l_b_, dj_coefficients_, mix_l_, mix_l_, n,
-                         dj_output_);
-        ed::Svf::cascade(dj_r_a_, dj_coefficients_, dj_r_b_, dj_coefficients_, mix_r_, mix_r_, n,
-                         dj_output_);
+        // Both channels in one loop: two independent recurrences side by side, which is what
+        // fills this core's units (filterloops.h). Bit-identical to two Svf::cascade calls.
+        strata_svf_cascade_stereo_inplace(&dj_l_a_.state_, &dj_l_b_.state_, &dj_r_a_.state_,
+                                          &dj_r_b_.state_, &dj_coefficients_, &dj_coefficients_,
+                                          dj_output_, mix_l_, mix_r_, n);
     }
 
     // --- the kill EQ, after the filter and before the detector, so the compressor sees the cut -

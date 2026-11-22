@@ -121,6 +121,35 @@ Sources: `ENAGA_CLOCK_INTERNAL`, `_MIDI`, `_SYNC`. Transport events arriving at 
 do nothing and return `false`; follow `on_transport` instead and show `EXT` rather than a tempo
 STRATA pretends to own.
 
+## MIDI (`<enaga/midi.hpp>`, namespace `enaga::midi`)
+
+Read from the header at v0.2.0 and compiled (app/engine.cpp, app/app.hpp, tests/test_midi.cpp).
+
+```cpp
+int channel();                                     // the user's MIDI CH, 0-15
+bool send(const uint8_t *data, uint32_t bytes, uint32_t ports = 0);   // whole messages
+bool note_on(int ch, int note, int velocity);      // ch 0-15; data masked to 7 bits
+bool note_off(int ch, int note, int velocity = 0);
+bool control_change(int ch, int controller, int value);
+bool program_change(int ch, int program);
+// also poly_pressure, channel_pressure, pitch_bend, song_position, song_select,
+// realtime/clock/start/continue_/stop, sysex
+```
+
+**Main OR audio context**, never blocks. All or nothing: `false` when the 2 KiB queue lacks room,
+and then nothing was queued -- a message is never cut. STRATA sends from `audio()` through
+`send` with bytes built by `core/midiout.hpp`'s `midi_message` (core/ cannot include Enaga), so
+`note_on` and friends are not called directly. `ports` 0 is the user's MIDI OUT routing.
+
+Incoming: `on_midi(const MidiMessage &)` in the MAIN context, every message but SysEx, running
+status expanded, **a note-on at velocity 0 arrives as a note-off** (0x8n), active sensing is
+Enaga's (it sends CC 123 on every channel when it stops). `MidiMessage`: `.type()` (`note_on`,
+`note_off`, `control_change`, `program_change`, ...), `.channel()` 0-15, `.note()`, `.velocity()`,
+`.controller()`, `.value()`, `.program()`, `.port` (`ENAGA_MIDI_DIN` or `_USB`).
+
+**v0.2.0 couples DIN and USB out**: a computer on USB that stops reading fills the USB queue and
+every send fails, DIN included. Fixed upstream in `192f03f` (2026-11-21), not yet in a release.
+
 ## DSP (`<enaga/dsp.hpp>`, namespace `enaga::dsp`)
 
 Needs `runtime/dsp/*.c` linked in; `host/Makefile` already does this, and

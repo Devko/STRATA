@@ -97,6 +97,7 @@ Eight tracks, each one machine plus a fixed insert chain, feed a mixer with two 
 | GRAIN | 1 (up to 8 grains) | Granular playback, tempo-locked stretch: position, size, density, spray, pitch |
 | VA MONO | 1 | 2 oscillators with sync, sub, noise, multimode filter, 2 envelopes, accent, slide, glide |
 | VA POLY | 6 | Same voice as VA MONO; chord mode, spread, unison 2 |
+| MID **[rev]** | 0 | No audio. The track's notes go to MIDI OUT, and SRC and AMP's eight slots are sent as CCs (74, 71, 73, 72; 70, 75, 76, 77) when they move. See "MIDI in and out" |
 
 **Per-track insert chain (fixed order)**
 
@@ -104,8 +105,8 @@ Machine, then drive (asymmetric soft clip), multimode filter (LP, HP, BP, 12 or 
 
 **Mixer and buses**
 
-- **Send A, delay:** tempo-synced stereo delay with ping-pong and filtered feedback (`enaga::StereoDelay`).
-- **Send B, reverb:** `enaga::Reverb` with pre-delay, size, damping and a high-pass on the input. Delay can feed the reverb.
+- **Send A, delay:** tempo-synced stereo delay with ping-pong and filtered feedback (`enaga::StereoDelay`). **[rev]** A second mode, LONG (Roland, 2026-11-22): up to 12 s (the division times X1-X8), tape wow, diffusion and a low cut in the feedback, and an in-place freeze (`dsp/ambient.hpp`).
+- **Send B, reverb:** `enaga::Reverb` with pre-delay, size, damping and a high-pass on the input. Delay can feed the reverb. **[rev]** A second mode, HALL: eight long swept lines with size, modulation and an octave-up shimmer.
 - **Sidechain duck:** a duck envelope (attack, hold, release) fired by a chosen trigger track (default track 1). Trigger-based, not an envelope follower: tighter and cheaper.
 - **Master:** one-knob DJ filter (left = low-pass, right = high-pass), **[rev]** a three-band kill EQ (a DJ isolator: LOW / MID / HI split at 250 Hz and 2.5 kHz with 24 dB Linkwitz-Riley crossovers, each band from a kill to +6 dB with a latching kill switch, bypassed while flat), glue compressor, soft limiter, output level.
 
@@ -168,6 +169,17 @@ STRATA does not implement a clock and does not own the tempo. Enaga's `<enaga/cl
 - Step entry: tap STEP to toggle a trig; hold STEP and turn an encoder to lock that parameter.
 - Live recording: REC + PLAY records pad hits with velocity. Each hit is stamped with the audio clock's sample position minus the measured pad latency (about 4-8 ms), then quantized by a 0-100% amount. **[rev]** Incoming MIDI notes go through the same stamping, because `on_midi` is main context and carries no timestamp of its own.
 - Motion recording: encoder moves during live recording write locks on the steps they pass.
+
+**MIDI in and out [rev]**
+
+Added after v0.1 (ranked list #2 and #7). All of it is main- or audio-context calls into `<enaga/midi.hpp>`, which Enaga v0.2.0 has: `midi::send` and the note, CC and program writers, callable from `audio()`, all or nothing when the 2 KiB queue is full.
+
+- **MIDI OUT per track.** Each track has a MIDI OUT channel, OFF or 1-16, on MACHINE's encoder B, saved in PROJECT.BIN (cabling, not a sound, so a kit recall does not re-route it). A track with a channel sends every note it plays there: steps with their velocity (an accent sends 127), ratchets, chords (VA POLY and MID send the whole chord, past the shared voice budget), arp hits and note repeat (each with its own gate), pads, KEYS and MIDI IN notes. Any machine can send, so a STRATA voice can be doubled on a synth; MID sends without sounding.
+- **Every note-on gets its note-off** (`core/midiout`). A step ends after its length (a step with no gate, and a pad, after one step); a KEYS key or a MIDI IN note when it is let go. A mute, a channel change, a machine change, a kit recall or load and STOP end a track's notes at once. The second STOP and FUNC+F6 also send All Notes Off (CC 123) on every channel a track uses. A note-off the queue refuses is retried every block until it goes; a note-on it refuses is simply not sent. A pitch already sounding on the same channel is ended before it is played again, from any track.
+- **Timing.** A note leaves in the block its step falls in, so up to 1.33 ms early, plus the DIN wire (about 1 ms a message). MID sends a step's locked CCs before its note, so the synth plays the note with them.
+- **MIDI IN.** Channels 1-8 play tracks 1-8 and the rest play the selected track, as before. A note is now held until its note-off (or a note-on at velocity 0), which releases it on the track it started on. CC 16-31 set the track's sixteen parameters in page order (SRC, FLTR, AMP, FX) as a knob would. CC 120 and 123 let go of every note MIDI IN holds on that channel. A program change on the user's MIDI CH queues pattern 1-128 (A01-H16) in the PROJECT page's queue mode.
+- Not built: CC motion recording, MIDI IN pitch bend and aftertouch, slide as legato on MIDI OUT, sending clock (Enaga's CLOCK OUT does that).
+- **Firmware.** Enaga v0.2.0 couples DIN and USB MIDI out: with USB connected to a computer that is not reading, the USB queue fills and DIN stalls with it. Upstream fixed it after the release (`192f03f`, 2026-11-21). Until a firmware release carries it, unplug USB, or keep a program reading its MIDI port, when STRATA drives gear from the DIN jack.
 
 **Pattern changes and chains**
 
@@ -284,7 +296,7 @@ A project is one folder on the card. It loads fully into RAM when opened (patter
 ```
 /ENAGA/APPS/STRATA/APP.ENA                  the app (8.3 folder name = package name)
 /ENAGA/DATA/STRATA/SETTINGS.TXT             last project, preferences (<enaga/settings.hpp>)
-/ENAGA/DATA/STRATA/PROJECTS/<NAME>/PROJECT.BIN   tempo, scenes, macros, chains, mute states
+/ENAGA/DATA/STRATA/PROJECTS/<NAME>/PROJECT.BIN   tempo, scenes, macros, chains, mute states, MIDI OUT channels
                                   /KIT.BIN       per track: machine, 16 parameters, LFO, arp, mixer, sample path
                                   /BANK_A.BIN … BANK_H.BIN   16 patterns each
 /ENAGA/DATA/STRATA/AUTOSAVE/                the working copy, same layout
@@ -458,7 +470,7 @@ The 8 insert chains are the largest unmeasured term in the design, so they are m
 | --- | --- |
 | Samples, int16 | 64 MiB |
 | Beat repeat ring: 2 bars at 60 BPM, stereo float | 3 MiB |
-| Delay and reverb buffers | 2 MiB |
+| Delay and reverb buffers | 2 MiB; **[rev]** 7 MiB with the LONG delay and the HALL |
 | Patterns, kit, scenes, 16 undo levels | 2 MiB |
 | Recording ring and stream buffers | 1 MiB |
 | App image, voice pools, UI | 4 MiB |

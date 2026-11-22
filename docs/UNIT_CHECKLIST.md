@@ -8,7 +8,7 @@ from, with the background for each check.
 
 **Time.** The whole pass is about three hours. If the evening runs short, do 0-3b, 13 and 16
 first (safety, the MAX readings, save and restore), then the sections for today's new features
-(8c, 13d-13i, 14b, 15b-15d), then the rest.
+(8c, 8d, 13d-13j, 14b, 15b-15d), then the rest.
 
 Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`), and so are
 the on-screen hints. `FUNC+X` = hold FUNC, press X.
@@ -30,6 +30,8 @@ From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c
       Emulator peak, cl6x `________ %`
 - [ ] The same with `ENAGA_TI_CGT=none tests/scenario_factory.sh` (GCC only).
       Emulator peak, GCC `________ %`
+- [ ] `tests/scenario_midi.sh` (new: track 1 to MID on the running beat, both STOPs) passes with
+      cl6x and GCC only. It is part of E1's `tools/scenarios.sh` too. Peak `____ %` / `____ %`
 - [ ] **E1.** `tools/scenarios.sh` (every scenario) passes, with cl6x and with GCC only, on main
       now and on `eb46d43` (before the DSP optimizations, PR #26): four columns for BUDGET's
       optimization review. `scenario_m3.sh` cl6x now: `________ %` (unit/emulator ratio in 3)
@@ -56,6 +58,16 @@ needed for tonight's unit session; do them if the PC is free.
       `docs/BUDGET.md` ("Per-track LFO", E7: every track `params[17] = 40`, `[18] = 127`,
       `[19] = 38`), both compilers, and revert the edit. Host estimate ~1.1-1.4 points.
       Off: cl6x `________ %` GCC `________ %`. Eight on: cl6x `________ %` GCC `________ %`
+- [ ] **E8-E10.** The cl6x vectorisation pass (`docs/BUDGET.md`, "The cl6x vectorisation pass"):
+      `python3 -B tools/ti_loops.py --enaga` (pipelining report), then `bash tools/ti_ab.sh --gcc`
+      (about an hour; builds each variant in its own worktree, so main is untouched). Audio check
+      all `identical`: yes / no `____`. `head` vs `base`, scenario_m3 cl6x: `____ %` vs `____ %`.
+      VA POLY per voice on `head` (E2's method): `________`
+- [ ] **E11.** The sends' ambient modes: `tests/scenario_ambient.sh` (DLY+ push A to LONG, REV+
+      push A to HALL, on the default beat whose sends are open) against `scenario_m3.sh`, both
+      compilers. Host estimate +1.9 points cl6x / +2.8 GCC-only once the classic tails have
+      gone, +3.6 / +5.3 while they still ring (`docs/BUDGET.md`, "The sends' ambient modes").
+      cl6x `________ %` vs `________ %`, GCC `________ %` vs `________ %`
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
@@ -239,6 +251,36 @@ New 2026-11-22. A synth, a phone or anything with a line out into INPUT L/R.
       Which routes worked: `________`
 - [ ] B back to MASTER: a take is the beat again. MAX while recording from the input `________ %`
 
+## 8d. MIDI out and in (8 min, needs a synth or a MIDI monitor on MIDI OUT)
+
+First time STRATA has sent MIDI, and probably the first time Enaga's MIDI OUT has run on a unit,
+so a fault here may be Enaga's (see "Expect to find Enaga bugs"). **Unplug USB first**: on Enaga
+0.2.0 a computer that is not reading USB MIDI stops the DIN jack too (fixed upstream after the
+release, `192f03f`). Synth or monitor on channel `____`.
+
+- [ ] Track 6 (bass), FUNC+EDIT: the page shows nine machines in three columns and
+      `B: MIDI OUT OFF`. Turn B to your synth's channel: `B: MIDI OUT CH n`. The bass line plays on
+      the synth **and** on STRATA, note for note. Each note ends (no hanging notes); long LEN steps
+      hold longer on the synth.
+- [ ] UP/DOWN to `MID`: STRATA's bass stops, the synth keeps playing it. LOAD drops (one track
+      fewer). EDIT on track 6: SRC shows `C74 C71 C73 C72`; turning A changes the synth's cutoff
+      if it answers CC 74 (or watch the monitor). Switching to MID sent no CCs by itself: `____`
+- [ ] Lock C74 on one step: the synth's cutoff jumps on that step and comes back after it.
+- [ ] Mute track 6 (FUNC+pad): the synth stops at once, no hanging note. Unmute.
+- [ ] STOP once: the synth stops. PLAY, then STOP twice: the monitor shows CC 123 on the channel.
+      FUNC+STOP the same.
+- [ ] KEYS on track 6: a held key holds the synth's note until you let go.
+- [ ] Turn B back to OFF while a long note sounds: it ends.
+- [ ] KEYS on track 6, hold a key, and with it still down open the Enaga menu (FUNC+POWER) and
+      start another app (or power off): the synth's note ends. Before this fix it hung there.
+- [ ] EDIT ARP on track 6 (MID), MOD UP, and give one step a MIN chord (step page 3, CHRD): the
+      synth arpeggiates the chord's three notes, not the root alone.
+- [ ] MIDI IN, a keyboard on channel 6 (track 6, back on MNO): a held key sustains and ends on
+      release. CC 17 from the keyboard moves track 6's SRC B. A program change 5 on your MIDI CH
+      (SETUP shows it) queues A05.
+- [ ] Timing: record the synth and STRATA's own kick together; the synth's notes are within about
+      2 ms of the kick: `________ ms`
+
 ## 9. KEYS: a held key sustains (3 min)
 
 Select track 7 (VA POLY), EDIT AMP page, DEC up high. FUNC+HOME for KEYS.
@@ -262,6 +304,8 @@ Back to GRID, track 2 selected, playing.
       `REVERTED` and no second undo.
 - [ ] PERFORM: FUNC+CLR undoes and FUNC+OK redoes; plain CLR still clears the selected macro.
 - [ ] Hold SCENE A (upper pad 4) + CLR: `SCENE ERASED`.
+- [ ] MUTATE, then hold a STEP that has a trig + CLR: `STEP CLEARED`, only that step goes and the
+      mutation stays. MUTATE, then hold a STEP + OK: the step page opens.
 
 ## 11. Transport: FUNC+PLAY and FUNC+STOP (2 min)
 
@@ -302,6 +346,8 @@ scene 7 in slot B (hold SCENE B + STEP 7), tempo **142.0**, key **D# MINOR**, tr
 
 - [ ] FUNC+PROJECT once: `FUNC+PROJECT TO SAVE`, nothing written. Again within 2 s: `SAVING`, and
       `UNSAVED` disappears from PROJECT.
+- [ ] Turn a knob you will recognise (track 1 AMP LVL right down), then without saving power
+      off and on: the AUTOSAVE offered at start has that knob where you left it.
 - [ ] Power off, power on, start STRATA. It reopens with: the chain on (the saved pattern plays
       its pass, then the chain carries on from its first entry), tracks 3 and 5 muted,
       scene 7 in B, 142.0, D# MINOR, track 8 on GRN. Missing: `________________`
@@ -460,6 +506,38 @@ press, so this is its first run outside the host tests. Play A01 GROOVE.
 - [ ] FUNC+RIGHT again: `LOOP CHAIN`, and the chain goes round as before.
 - [ ] Save, power cycle: SONG and the `M2` come back. The page boxes and rows fit the screen.
 
+## 13j. The ambient delay and reverb: LONG and HALL (8 min)
+
+New: send A has a LONG mode (up to 12 s, wow, diffusion, low cut) and send B a HALL mode (a
+bigger, swept tail with shimmer). Both are on MIXER pages beside their send: DLY+ after DLY,
+REV+ after REV; the LONG delay's low cut is C on ROUTE. Play A01 GROOVE; the chord and the
+clap already feed both sends.
+
+- [ ] MIXER, DLY+: push A (or turn A): `DLY LONG`, the slot reads `LONG`. The echoes carry on
+      with no click, the classic ones ringing out underneath. B (MUL) to `X4`: the bottom line
+      reads `TIME 1385 MS` at 130 BPM (dotted 1/8 times four), and the echoes land on the beat.
+- [ ] B to `X8`, then DLY's TIM to `1/1`: TIME reads `12000 MS` (clamped). One clap, then
+      listen: the first echo comes 12 s later, **on the beat**, as clean as the dry clap.
+- [ ] Back to `1/8D X4`. Turn the time while it rings: the echoes bend in pitch like tape and
+      settle, no clicks. C (WOW) up: a slow tape wobble, wider with the knob. D (DIF) up: each
+      repeat softer-edged, washing out after three or four. ROUTE, C (LCT) up: the repeats thin
+      out at the bottom.
+- [ ] FBK to the top with DIF and WOW up, feed it for 20 s: it builds to a dense wash and
+      **stays at a steady level**, never running away or distorting harshly.
+- [ ] **Hold FUNC, then hold MUTATE** in LONG: `FRZ` on PERFORM's bar line, the wash holds
+      exactly as it is, new hits play dry. Hold it for 30 s: no fading, no growing. Let go: it
+      decays at the FBK setting again.
+- [ ] MIXER, REV+: push A: `REV HALL`. A big, soft, slow-moving tail. DEC (REV, A) to the top:
+      a long wash that never rings metallic. B (SIZ) down then up: smaller then bigger, a short
+      pitch bend while it moves. C (MOD) at 0 against the top: still against slowly swirling.
+- [ ] D (SHM) up on a held chord: an octave-up shimmer rises out of the tail. With DEC at the
+      top and SHM at the top, play 30 s of chords: it shimmers and swells but **stays below
+      clipping** (PEAK under 1.0); stop playing and it dies away.
+- [ ] Push A on both pages again: `DLY CLASSIC`, `REV ROOM`, and the beat sounds as it did
+      before. Save (F1+F3 twice), power cycle, reload: the modes and knobs come back as saved.
+- [ ] **U9.** A01 GROOVE with LONG (`X4`, DIF and WOW up) and HALL (SHM up) for 60 s:
+      **MAX `________ %`** against U1's `________ %`.
+
 ## 14. Reload and new: FUNC+LEFT / FUNC+RIGHT in PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). PROJECT, FUNC+LEFT once: `AGAIN TO RELOAD`, nothing changes.
@@ -601,6 +679,8 @@ Enaga's menu and start STRATA6.
 | E7 eight LFOs, `scenario_lfo.sh` off / on, cl6x / GCC (PC) | |
 | U7 A01 GROOVE MAX with four LFOs, 60 s, and the difference to U1 (13e) | |
 | U8 A01 GROOVE MAX holding a tape stop, 10 s (13g) | |
+| E11 ambient modes, `scenario_ambient.sh` vs `scenario_m3.sh`, cl6x / GCC (PC) | |
+| U9 A01 GROOVE MAX with LONG and HALL, 60 s, and the difference to U1 (13j) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
 | U2 STRATA6 + tracks 5 and 6 as MIN11 POLY, capped at 12 voices (16) | |
@@ -1405,6 +1485,30 @@ stand only if that measurement is ever disputed.
       The app must recover without a restart (`on_card(false)` closes the dead handles).
 - [ ] Timing: record line out at 48 kHz and measure 16th-note click spacing over 5 minutes.
       M1's bar is onset jitter under 0.1 ms.
+
+## MIDI out per track, MID, and MIDI in (after v0.1)
+
+Host-tested (`tests/test_midiout.cpp`, `tests/test_midi.cpp`, the MIDI tests at the end of
+`tests/test_ui.cpp`) and drawn on the emulator (`tests/scenario_midi.sh`, keys only: it cannot
+turn the channel knob or send MIDI IN). Never heard. Section 8d of the walkthrough is the short
+version; these are the rest.
+
+- [ ] Two tracks on one channel playing the same pitch: one note on the synth, never a hanging
+      one (the second note-on ends the first).
+- [ ] A VA POLY MIN11 stab with a MIDI OUT channel: the synth gets all six notes even while
+      STRATA's 12-voice budget chokes its own.
+- [ ] A ratchet x4 on a MID track: four notes, evenly spaced.
+- [ ] Kit recall (KIT, OK twice) with a MIDI note held: it ends. The channels themselves stay
+      (they are the project's, not the kit's).
+- [ ] Save, power cycle: the MIDI OUT channels come back. A project saved before this change opens
+      with every track OFF.
+- [ ] Fill the queue: eight tracks on MID with 1/16 ratchets x8 and CCs moving on all of them.
+      No hanging note after STOP (a refused note-off is retried until it goes). LOAD: `____ %`
+- [ ] MIDI IN on channel 10 (selected track): select track 3, hold a note, select track 5, let
+      go -- the note on track 3 ends.
+- [ ] Unplug a keyboard with a key held (active sensing stops): Enaga sends CC 123, the note ends.
+- [ ] With USB plugged into a PC that is NOT reading the port: on 0.2.0 firmware, does DIN out
+      stall? `____` On firmware with upstream `192f03f`: it must not.
 
 ## Expect to find Enaga bugs, not just STRATA bugs
 
