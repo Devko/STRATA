@@ -232,6 +232,12 @@ enum class Cmd : uint8_t {
     // 2 new velocity from the pad's pressure. Played, not recorded: the pattern is untouched.
     note_repeat,
 
+    // Held master moves (FUNC + MUTATE, FUNC + push D), a: 1 held, 0 let go. The delay freeze loops
+    // what is echoing and cuts the delay's feed (dsp/freeze.hpp); the tape stop slows the finished
+    // master to a standstill over two beats (dsp/tapestop.hpp). Performance, not edits: no file.
+    delay_freeze,
+    tape_stop,
+
     count
 };
 

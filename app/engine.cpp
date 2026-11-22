@@ -51,6 +51,7 @@ bool Engine::init(float sample_rate) {
 
     // Beat repeat's 2-bar ring, 2.93 MiB, here with every other buffer in the signal path.
     if (!repeat_.init(rate_)) return false;
+    if (!tape_stop_.init(rate_)) return false;
     if (!capture_.init(rate_)) return false;
 
     perform_init(scenes_, macros_);
@@ -1093,6 +1094,14 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::delay_freeze:
+            mixer_.freeze_delay(command.a != 0);
+            break;
+
+        case Cmd::tape_stop:
+            tape_stop_.hold(command.a != 0);
+            break;
+
         case Cmd::release_note:
             // A KEYS key coming up. Not refused on a muted track or with nothing holding the
             // note: a release with nothing to let go is the second half of a gesture whose
@@ -1930,6 +1939,11 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
                 repeat_pitch_);
     repeat_.hold(repeat_held_);
     repeat_.process(out, int(frames));
+
+    // The tape stop, after beat repeat: it stops whatever is coming out, a repeat included. Two
+    // beats from full speed to a standstill, so it lands with the music.
+    tape_stop_.set(2.0f * float(enaga::clock::ppqn) * samples_per_tick_);
+    tape_stop_.process(out, int(frames));
 
     // The take, from the FINISHED master: after the mixer, the limiter and beat repeat, which is
     // what comes out of the box (dsp/capture.hpp). A tap, so `out` is not modified.
