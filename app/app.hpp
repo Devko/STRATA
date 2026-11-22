@@ -1506,10 +1506,11 @@ public:
             }
         }
 
-        // The bottom line on every mode: voices, the device, and any dropped edits. A dropped
-        // command should be visible rather than mysterious (app/commands.hpp).
+        // The bottom line on every mode: tracks sounding, the device, and any dropped edits. A
+        // dropped command should be visible rather than mysterious (app/commands.hpp). It said
+        // "V" for voices, but the count is of tracks (Status::voices), so a chord read as one.
         out = line;
-        append(out, "V");
+        append(out, "TRK");
         append_number(out, status.voices.load(std::memory_order_relaxed));
         append(out, " ");
         append(out, device_name(enaga::system::device()));

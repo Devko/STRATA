@@ -311,6 +311,8 @@ struct Status {
     std::atomic<uint8_t> playhead[8] = {};     // per-track step, for the grid
     std::atomic<uint8_t> triggered[8] = {};    // bumped on each trig, for the pad LEDs
     std::atomic<uint16_t> peak_milli{0};       // master peak x 1000
+    // How many TRACKS rendered last block (an active machine, not muted), 0-8. Not a voice
+    // count: a six-note POLY chord is one. Shown as TRK on the status line.
     std::atomic<uint8_t> voices{0};
     std::atomic<uint8_t> running{0};
 
