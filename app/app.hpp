@@ -3216,6 +3216,10 @@ public:
                 }
                 return true;
 
+            case ENAGA_KEY_OCTAVE_LEFT:                 // no steps behind this list
+            case ENAGA_KEY_OCTAVE_RIGHT:
+                return true;
+
             default:
                 return false;
         }
@@ -3871,6 +3875,12 @@ public:
             case ENAGA_KEY_RIGHT:
                 // The page of eight; F1 + LEFT / RIGHT are free here, and kept free.
                 if (!shift_) move_kit_cursor_to(kit_cursor_ + (key == ENAGA_KEY_LEFT ? -8 : +8));
+                return true;
+
+            // The STEP keys are always the sixteen slots here, so the pad-row keys, which pick
+            // which sixteen they mean, have nothing to do (docs/CONTROLS.md).
+            case ENAGA_KEY_OCTAVE_LEFT:
+            case ENAGA_KEY_OCTAVE_RIGHT:
                 return true;
 
             default:

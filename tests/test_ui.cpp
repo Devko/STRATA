@@ -4858,6 +4858,22 @@ TEST(ui_keys_and_grid_screen_keys_turn_the_knob_page) {
     key(ENAGA_KEY_F4);
 }
 
+TEST(ui_pad_row_keys_do_nothing_where_the_step_keys_never_change) {
+    // KIT: the STEP keys are always the sixteen slots, so the pad-row keys (and FUNC + them, the
+    // track length) are not passed on to a GRID that is not on screen.
+    Strata &app = fresh();
+    const int length = int(app_engine().pattern().tracks[0].length);
+    menu_run(kMenuKits);
+    pump_until_idle();
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    shift_key(ENAGA_KEY_OCTAVE_LEFT);
+    pump(2);
+    CHECK_EQ(UiProbe::page(app), 0);
+    CHECK_EQ(int(app_engine().pattern().tracks[0].length), length);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::kit));
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_perform_pad_row_keys_do_nothing_and_arrows_pick_the_macro) {
     Strata &app = fresh();
     shift_key(ENAGA_KEY_F7);
