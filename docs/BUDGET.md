@@ -27,15 +27,14 @@ STRATA's own figures now say the same thing, and the decisive pair is the eight-
 **M2's exit bar is 40%. With cl6x there is comfortable room; GCC-only fails it.** That settles the
 question the first version of this section left open: a GCC-only STRATA does not hit its targets.
 
-### The one thing still open: redistribution
+### Redistribution: settled (2026-11-22)
 
-Installing cl6x is done. **Whether TI's terms permit distributing what it builds is not**, and it
-is not Claude's to settle. A released `APP.ENA` contains cl6x-compiled code, and the figures above
-say we cannot simply fall back to GCC if the answer is no. Worth reading before a public release,
-and worth raising with Enaga upstream, which has the same exposure.
-
-Until it is settled, record **every** load figure twice — with cl6x and with
-`ENAGA_TI_CGT=none` — so a GCC-only release never becomes a late surprise.
+This heading used to say whether TI's terms permit distributing what cl6x builds was still open.
+It was examined and the premise was wrong: no TI code, headers or run-time library reach
+`APP.ENA`. The reasoning and the one TI file still worth reading are in
+**"The cl6x licence question, examined"** further down. What stands is availability: cl6x runs
+only on the user's machine, so cloud figures are GCC-only. Keep recording load figures both ways
+whenever cl6x is available.
 
 ## Reference figures from Enaga (measured on a unit, caches on)
 

@@ -11,10 +11,13 @@ STRATA is a working title. Nothing here is playable yet — see **Status**.
 
 | | |
 | --- | --- |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | **Start here.** Where it stands, what exists nowhere else, next steps |
 | [docs/SPEC.md](docs/SPEC.md) | What STRATA is: sound architecture, sequencer, panel mapping, data model |
 | [docs/PLAN.md](docs/PLAN.md) | The build order. Authoritative for milestones |
 | [docs/REVIEW.md](docs/REVIEW.md) | The platform review the spec was corrected against |
 | [docs/BUDGET.md](docs/BUDGET.md) | Measured CPU and memory figures. Estimates do not go here |
+| [docs/ENAGA_API.md](docs/ENAGA_API.md) | The verified Enaga signatures STRATA uses |
+| [docs/SOUND.md](docs/SOUND.md) | Where the drum synthesis comes from, and how it is used |
 | [docs/UNIT_CHECKLIST.md](docs/UNIT_CHECKLIST.md) | What needs real hardware to close |
 
 ## Building
@@ -55,31 +58,32 @@ collision rather than letting one file silently overwrite another.
 
 ## Status
 
-**M3 complete.** Eight tracks play — KICK, SNARE, two HATs, PERC, BASS, a mono stab standing in
-for CHORD until VA POLY arrives, and the LOOP sampler — through per-track insert chains, a delay
-and a reverb send, and a master chain with a sidechain duck. The sequencer has parameter locks,
-trig conditions, probability, ratchets, micro-timing, polymeter, live and motion recording, and
-16 levels of undo. GRID, EDIT, MIXER and the step page are on the panel.
+**M0–M6 feature-complete, and M7's app side is done; nothing has run on a unit.** Eight tracks —
+KICK, SNARE, two HATs, PERC, BASS, VA POLY chords and the LOOP sampler, with GRAIN and machine
+switching — through per-track insert chains, tempo-synced delay and reverb sends, and a master
+chain with the DJ filter and sidechain duck. The sequencer has parameter locks, trig conditions,
+probability, ratchets, micro-timing, polymeter, live and motion recording, a Euclidean generator,
+KEYS and 16 levels of undo. Projects, banks, queued pattern changes, autosave and background
+sample loading are in (M4); scenes, morph, macros, mutes, beat repeat, throws and mutation (M5).
 
-408 host tests / 221,035 checks, and three scripted emulator scenarios. **Worst case measured so
-far: 23.61% of the audio block with cl6x** against M2's bar of 40% (44.26% without cl6x, which
-does not pass) — see [docs/BUDGET.md](docs/BUDGET.md).
-
-Next is **M4**: projects, banks, queued pattern changes and background sample loading.
+999 host tests / 539,926 checks and seven emulator scenarios, all passing. **Worst case measured:
+39.60% of the block, GCC-only**, against a 60% target that assumes cl6x's ~2.2x. The budget risk
+is VA POLY at 3.82 points per voice. Details in [docs/BUDGET.md](docs/BUDGET.md); the state of
+each milestone in [docs/PLAN.md](docs/PLAN.md); next steps in [docs/HANDOFF.md](docs/HANDOFF.md).
 
 To hear it without a unit, `tools/render.sh` renders the output to a WAV offline; the live web
 panel (`tools/panel.sh`) runs at about 0.4× real time, so its sound breaks up.
 
-Two things still need a human:
+Still needs a human:
 
-- **Shipping cl6x's output.** TI's cl6x 8.5.0.LTS is installed and the under-60% target depends
-  on it — the measurements say a GCC-only release does not pass at all — but whether TI's licence
-  permits redistributing its output inside a released `APP.ENA` has not been read by anyone.
-- **Nothing has run on a unit.** Every load and timing figure here is from the emulator, which
-  models no caches. Enaga's MIDI, SYNC, USB MIDI, input routing and pad pressure have never run
-  on real hardware either, so expect platform bugs as well as app bugs.
-  [docs/UNIT_CHECKLIST.md](docs/UNIT_CHECKLIST.md) accumulates everything that needs the
-  hardware, safety steps first.
+- **Nothing has run on a unit.** Every load and timing figure is from the emulator, which models
+  no caches. [docs/UNIT_CHECKLIST.md](docs/UNIT_CHECKLIST.md) holds everything that needs the
+  hardware, safety steps first, and none of it is ticked.
+- **cl6x figures.** TI's cl6x runs only on the developer's machine, so the cloud figures are
+  GCC-only. The licence question once filed here is settled (docs/BUDGET.md): no TI code reaches
+  `APP.ENA`.
+- **Two calls that need ears and eyes:** whether a SAMPLE/GRAIN track played melodically should
+  fold into the key, and the note spelling (flats in `core/scale`, sharps on the step page).
 
 ## Licence
 
