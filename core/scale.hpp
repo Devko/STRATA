@@ -139,19 +139,14 @@ int scale_size(int scale);
 // The twelve pitch classes, 0 being C. Only `note % 12` is read, so a MIDI note and a pitch
 // class both work.
 //
-// Spelled with FLATS -- C, DB, D, EB ... -- and in upper case: techno lives in minor keys, where
-// the flat spelling is the one a musician would write anyway. 'B' therefore does double duty as
-// the note B and as the flat sign, which reads correctly in context: "BB" is B flat.
+// Spelled with SHARPS -- C, C#, D, D# ... -- in upper case, the same spelling as the step page's
+// NOTE field (`core/stepedit.cpp`), which adds the octave. One spelling everywhere, and sharps
+// because that is what MIDI tools and nearly every groovebox show. Decided by Roland on
+// 2026-11-22; before that this function spelled with flats ("EB") while the step page showed the
+// same pitch as "D#3". '#' is in the device font (docs/SPEC.md lists it).
 //
-// **This disagrees with the step page, and the disagreement is not resolved.** `core/stepedit.cpp`
-// spells the NOTE field with SHARPS -- "C-", "C#", "D-" ... -- and `app/app.hpp` draws it, so the
-// same pitch is "EB" where this function names it and "D#3" on the step page. '#' is in the
-// device font (docs/SPEC.md lists it), so the earlier justification here -- that nothing drew one
-// and a sharp was therefore unproven -- was simply wrong, and is removed rather than repaired.
-//
-// Which spelling the app should use is a decision for someone who can look at both screens;
-// docs/UNIT_CHECKLIST.md carries it. Note also that there are two overloads named `note_name`
-// with opposite conventions, which is a pair a future caller can pick the wrong one of.
+// There are still two overloads named `note_name`: this one is the pitch class alone, the
+// stepedit one writes the octave into a buffer. They now agree on the spelling.
 const char *note_name(uint8_t note);
 
 // Which octave a MIDI note is in, in the convention where middle C (60) is C4. For the screen

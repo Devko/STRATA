@@ -264,14 +264,13 @@ figure when asking whether a part fits.
 
 ### 8. Open questions that need a person, not a session
 
-1. **The note spelling disagrees with itself.** `core/scale.cpp`'s `note_name` spells with FLATS
-   (`C`, `DB`, `D`, `EB`) and `core/stepedit.cpp`'s `note_name` spells with SHARPS and an octave
-   (`C-4`, `C#4`). The same pitch is `EB` on the PROJECT screen and `D#3` on the step page. `#`
-   *is* in the device font. Which spelling the app should use needs someone who can look at both
-   screens; the two overloads with opposite conventions are also a trap for a future caller.
-2. **Should a SAMPLE or GRAIN track played melodically fold its note into the scale?** They read
-   the note as a transposition, and on SAMPLE it also picks the slice, so a fold moves a sliced
-   one-shot to a different slice. Needs an ear.
+1. ~~The note spelling disagrees with itself~~ **Settled 2026-11-22: sharps everywhere.**
+   `core/scale.cpp`'s `note_name` now spells `C#`, `D#` ... like the step page's `C#4`; a test
+   holds the two overloads to the same spelling.
+2. ~~Should SAMPLE or GRAIN fold?~~ **Settled 2026-11-22.** GRAIN folds like the VAs; SAMPLE
+   folds only while unsliced (SLC = 1); a sliced sample never folds, because there the note
+   picks the slice. `machine_folds_note` (core/project.hpp) replaced `machine_is_melodic`.
+   Still to be heard on the unit (docs/UNIT_CHECKLIST.md).
 3. ~~`CLAUDE.md` line 62 is wrong~~ **Settled 2026-11-22.** "All 18 voices together are about
    11% of the block" held for the drums, not for a sustaining voice (six VA POLY voices are
    22.9% on their own). With the user's approval CLAUDE.md now states the measured figure; the

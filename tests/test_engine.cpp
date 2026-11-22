@@ -578,7 +578,7 @@ TEST(engine_a_melodic_tracks_note_is_folded_into_the_key) {
     // note -- so identical step data sounded different depending on which machine a track
     // hosted. docs/SPEC.md's "melodic tracks fold notes into the scale" meant both; what was
     // missing was any notion of which machines are melodic, and folding every track would
-    // retune the drums. Machine switching supplied the notion and `machine_is_melodic` is it.
+    // retune the drums. Machine switching supplied the notion and `machine_folds_note` is it.
     //
     // Both VAs now fold, and the drums still do not -- which is the other half of the claim and
     // is below.
@@ -638,17 +638,68 @@ TEST(engine_a_drum_tracks_note_is_not_folded) {
     // playing, so this reads the predicate that decides -- the thing that would have to change
     // for a kick to start being retuned by the key.
     CHECK_NEAR(mono().target_pitch(), 63.0f, 1e-4);
-    CHECK(machine_is_melodic(engine.machine_id(kMono)));
-    CHECK(!machine_is_melodic(engine.machine_id(0)));
-    CHECK(!machine_is_melodic(uint8_t(MachineId::sample)));
-    CHECK(!machine_is_melodic(uint8_t(MachineId::grain)));
-    CHECK(machine_is_melodic(uint8_t(MachineId::va_poly)));
-    CHECK(!machine_is_melodic(uint8_t(MachineId::count)));
+    CHECK_EQ(int(engine.sent_note(0)), 64);
+    CHECK_EQ(int(engine.sent_note(kMono)), 63);
+    CHECK(machine_folds_note(engine.machine_id(kMono), 1));
+    CHECK(!machine_folds_note(engine.machine_id(0), 1));
 
     FakeHost::the().set_running(false);
     post(Cmd::stop, 0, 0, 1);
     pump(2);
     CHECK(settle());
+}
+
+// The samplers, as decided on 2026-11-22: GRAIN folds like the VAs; SAMPLE folds only while it is
+// unsliced (SLC = 1), where the note transposes the whole window; a SLICED sample never folds,
+// because there the note picks the slice and a fold would play a different one.
+TEST(engine_grain_and_an_unsliced_sample_fold_and_a_sliced_sample_does_not) {
+    constexpr uint8_t kTrack = 7;
+    constexpr uint8_t kSlc = 3;                  // SRC slot 3 on SAMPLE (dsp/sample.cpp)
+    struct Case {
+        MachineId machine;
+        uint8_t slc;                             // the SLC byte: 0 is one slice, 127 sixteen
+        int want;                                // the note the machine is handed
+    };
+    const Case cases[] = {
+        {MachineId::grain, 64, 63},              // GRAIN folds whatever SLC's slot holds
+        {MachineId::sample, 0, 63},              // unsliced: an instrument, folded
+        {MachineId::sample, 127, 64},            // sliced: note 64 is slice 4, left alone
+    };
+    for (const Case &c : cases) {
+        Engine &engine = clean();
+        post(Cmd::set_root, 0, 0, 0);
+        post(Cmd::set_scale, 0, 0, uint8_t(Scale::minor));
+        post(Cmd::set_machine, kTrack, 0, uint8_t(c.machine));
+        post(Cmd::set_param, kTrack, 0, kSlc, c.slc);
+        put_trig(kTrack, 0);
+        post(Cmd::step_field_delta, kTrack, 0, uint8_t(StepField::note), 4);
+        pump();
+        CHECK_EQ(int(engine.machine_id(kTrack)), int(c.machine));
+        CHECK_EQ(int(live_step(kTrack, 0).note), 64);
+        CHECK(!scale_contains(64, engine.pattern().root, int(engine.pattern().scale)));
+
+        FakeHost::the().set_running(true);
+        FakeHost::the().deliver_tick(0, 0);
+        pump();
+        CHECK_EQ(int(engine.sent_note(kTrack)), c.want);
+
+        FakeHost::the().set_running(false);
+        post(Cmd::stop, 0, 0, 1);
+        pump(2);
+        CHECK(settle());
+    }
+
+    // And the predicate itself, at the edges the engine cannot easily reach.
+    CHECK(machine_folds_note(uint8_t(MachineId::va_mono), 16));
+    CHECK(machine_folds_note(uint8_t(MachineId::va_poly), 16));
+    CHECK(machine_folds_note(uint8_t(MachineId::grain), 16));
+    CHECK(machine_folds_note(uint8_t(MachineId::sample), 1));
+    CHECK(!machine_folds_note(uint8_t(MachineId::sample), 2));
+    CHECK(!machine_folds_note(uint8_t(MachineId::kick), 1));
+    CHECK(!machine_folds_note(uint8_t(MachineId::snare), 1));
+    CHECK(!machine_folds_note(uint8_t(MachineId::hat), 1));
+    CHECK(!machine_folds_note(uint8_t(MachineId::perc), 1));
+    CHECK(!machine_folds_note(uint8_t(MachineId::count), 1));
 }
 
 TEST(engine_a_chord_byte_on_a_track_with_no_poly_machine_is_ignored) {

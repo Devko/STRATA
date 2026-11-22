@@ -12,6 +12,7 @@
 // names the byte that broke it and the check count stays a count of invariants.
 #include "check.hpp"
 
+#include "scale.hpp"
 #include "stepedit.hpp"
 #include "timing.hpp"
 
@@ -915,6 +916,19 @@ TEST(note_name_is_the_tracker_spelling_with_middle_c_at_60) {
     CHECK(std::strcmp(buf, "G-9") == 0);
     note_name(24, buf, max);
     CHECK(std::strcmp(buf, "C-1") == 0);
+}
+
+// The step page and the PROJECT screen spell a pitch the same way: core/scale.cpp's pitch-class
+// name is exactly this one's letter and accidental, with the tracker's '-' standing for "none".
+// They disagreed (flats there, sharps here) until 2026-11-22.
+TEST(note_name_agrees_with_the_scale_pages_spelling) {
+    char buf[kStepFieldTextMax];
+    for (int note = 0; note <= 127; note++) {
+        note_name(uint8_t(note), buf, int(sizeof(buf)));
+        const char *pitch = note_name(uint8_t(note));
+        CHECK_EQ(buf[0], pitch[0]);
+        CHECK_EQ(buf[1], pitch[1] == '#' ? '#' : '-');
+    }
 }
 
 TEST(every_note_has_its_own_name_and_fits_a_small_buffer) {

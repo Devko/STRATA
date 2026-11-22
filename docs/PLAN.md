@@ -47,7 +47,7 @@ Finished after that table was last written, and all of it on `main`:
 | --- | --- |
 | **the sends and the master** | Both commands had no handler AND no caller, so every delay and reverb setting and the spec's master DJ filter sat at a compile-time default for the life of the app, in no file. All fourteen are now encoder bytes in PROJECT.BIN's third (optional) section, reachable from four new MIXER pages and F1 + VALUE |
 | **the tempo, quantize and `chain_enabled`** | All three round-tripped through the serializer while nothing in `app/` wrote them. A project saved at 142 BPM reopened at 130 |
-| **the melodic fold** | `machine_is_melodic` settled the POLY/MONO asymmetry M6 left open: both VAs fold a step's note into the key, the drums and samplers do not |
+| **the melodic fold** | `machine_folds_note` settled the POLY/MONO asymmetry M6 left open: both VAs and GRAIN fold a step's note into the key, SAMPLE only while unsliced (SLC = 1), the drums never |
 | **VA POLY, 4.30 → 3.82 points a voice** | A fused output tail in `dsp/valoops.ti.c` and filter coefficients shared between the voices of a chord. Both bit-exact; every scenario with a VA voice came down ~1.6 points |
 
 The one thing that gates everything and cannot be done here: **boot `build/APP.ENA` on a unit**.
