@@ -16,7 +16,7 @@ The one thing that gates everything and cannot be done from a container: **boot
 
 | | |
 | --- | --- |
-| `make -C host test` | **999 tests, 539,924 checks, 0 failures** — `core/`, `dsp/` and all of `app/` |
+| `make -C host test` | **999 tests, 539,926 checks, 0 failures** — `core/`, `dsp/` and all of `app/` |
 | `tools/build.sh` | **links.** `APP.ENA` 484,160 bytes, bss 1,334,848, no BOOT / MCU / SPI sections |
 | `tools/scenarios.sh` | **all 7 pass.** m0 2.87%, m1 39.60%, m3 31.92%, m4 27.15%, m5 34.54%, m6 36.61%, m7 39.60%. No overruns |
 | worst measured load | **39.60%** of the block, GCC-only, against a 60% target that assumes cl6x's ~2.2x |
@@ -270,12 +270,10 @@ figure when asking whether a part fits.
 2. **Should a SAMPLE or GRAIN track played melodically fold its note into the scale?** They read
    the note as a transposition, and on SAMPLE it also picks the slice, so a fold moves a sliced
    one-shot to a different slice. Needs an ear.
-3. **`CLAUDE.md` line 62 is now known to be wrong**: "all 18 voices together are about 11% of the
-   block". That holds for the drums, which are short one-shots that go idle within a step. It
-   does **not** hold for a sustaining voice — six VA POLY voices are 22.9% on their own. The rule
-   it supports ("cut effects or insert stages before cutting voices") may still be right, but the
-   number behind it is not. `docs/BUDGET.md` records the correction; `CLAUDE.md` is the user's
-   file and was left alone.
+3. ~~`CLAUDE.md` line 62 is wrong~~ **Settled 2026-11-22.** "All 18 voices together are about
+   11% of the block" held for the drums, not for a sustaining voice (six VA POLY voices are
+   22.9% on their own). With the user's approval CLAUDE.md now states the measured figure; the
+   rule it supports, cut effects or insert stages before voices, is unchanged.
 4. **`delay_ping_pong` and `delay_to_reverb` share a MIXER page with two empty slots**, because
    ten send fields do not divide into four. Fine, but a person may want them placed differently.
 
@@ -301,6 +299,25 @@ unwinder out of an app's link (64-bit division and modulo could not link at all)
 documentation notes, verified against their own 81-test suite. Nothing in STRATA depends on it
 being merged; the pin stays at `1b41111` either way. **Never modify `third_party/enaga`** —
 Enaga bugs go upstream with a failing case.
+
+**Upstream has moved on (checked 2026-11-22).** `1b41111` is 7 commits past v0.1.0. Upstream
+`main` is 8 commits further at `192f03f`, which includes **v0.2.0** (`3da7f89`). What changed:
+
+- **ABI unchanged** (`ENAGA_ABI_VERSION` is still 0), so the APP.ENA built at `1b41111` loads on
+  0.2.0 firmware. The package header gained one optional flag (`ENAGA_PACKAGE_ICON`); an app
+  without an icon writes 0 there, as before.
+- New and unused by STRATA: `<enaga/ui.hpp>` (List, ParamPage, Dialog, TextEntry),
+  `<enaga/bytes.hpp>`, an SDK zip with a prebuilt toolchain, menu icons from an `icon.txt`.
+- `build_app.py`: when the app folder is outside Enaga's tree, intermediates go to
+  `<app>/build`; `tools/build.sh` passes `-o`, so only its staging folder sees that.
+- Firmware: MIDI out no longer stalls DIN when a USB host stops reading (`192f03f`). Unit
+  session 5 on 0.2.0 logged one unreproduced crash on CHECK's MIDI page.
+- The libgcc fix from enaga#1 is **not** in upstream yet.
+
+`make -C host test` passes unchanged against `192f03f` (539,926 checks). The device build and
+the scenarios have **not** been run against it, because this container has no tic6x toolchain.
+Moving the pin is the user's decision; it needs a device build, `tools/scenarios.sh`, and
+docs/ENAGA_API.md re-checked (among the headers STRATA uses, only `midi.hpp`'s comment and `abi.h`'s icon flag changed).
 
 ---
 

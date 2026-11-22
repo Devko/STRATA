@@ -13,7 +13,7 @@ Revised from `docs/SPEC.md` after validating it against Enaga at `1b41111`. Read
 | MIDI / SYNC | M7: implement in an Enaga fork, upstream as PRs | **Already in Enaga.** M7 shrinks to verifying it on the unit |
 | External sync | deferred to M7 | **M1.** It changes transport and tempo behaviour that M1 builds |
 | Budget gate | "measure at M1 and M2 exits" | **New M0.5 spike** before any engine work — effects are the dominant cost |
-| Budget lever | cut chord voices | **Cut effects or insert stages.** Voices are ~11% of the block in total |
+| Budget lever | cut chord voices | **Cut effects or insert stages.** Voices are ~11% of the block in total (true of drums; a sustaining VA POLY voice is 3.82 points alone, see docs/BUDGET.md) |
 | cl6x | a release risk | **A requirement** for the 60% target (worth ~2.2×) |
 | Build host | implied Linux | **WSL Ubuntu**, `build/` inside the WSL filesystem, no cmake |
 | Milestones | 8 (M0–M7) | 9 (M0, M0.5, M1–M7), with M7 much smaller |
@@ -50,9 +50,10 @@ Finished after that table was last written, and all of it on `main`:
 | **the melodic fold** | `machine_is_melodic` settled the POLY/MONO asymmetry M6 left open: both VAs fold a step's note into the key, the drums and samplers do not |
 | **VA POLY, 4.30 → 3.82 points a voice** | A fused output tail in `dsp/valoops.ti.c` and filter coefficients shared between the voices of a chord. Both bit-exact; every scenario with a VA voice came down ~1.6 points |
 
-The two things that gate everything and cannot be done here: **boot `build/APP.ENA` on a unit**,
-and **answer the cl6x licence question**. docs/BUDGET.md records cl6x as worth ~2.2x and the 60%
-target depends on it, so a GCC-only figure over 60% means nothing either way.
+The one thing that gates everything and cannot be done here: **boot `build/APP.ENA` on a unit**.
+The cl6x licence question is settled (docs/BUDGET.md, "The cl6x licence question, examined");
+what remains is that cl6x runs only on the user's machine. docs/BUDGET.md records it as worth
+~2.2x and the 60% target depends on it, so a GCC-only figure over 60% means nothing either way.
 
 docs/UNIT_CHECKLIST.md holds the gestures to try, and **none of its boxes is ticked.**
 
