@@ -640,6 +640,18 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::restart:
+            // The position is the clock's, and it was moved to 0 by the main context. What is
+            // left is everything measured from it: the pattern starts again at tick 0 with a
+            // fresh pass count, ratchet hits still waiting would land after the jump, and the bar
+            // count resyncs on the next tick. The voices ring on: this is a restart, not a stop.
+            deferred_count_ = 0;
+            scheduler_.reset(true);
+            origin_ = 0;
+            boundary_known_ = false;
+            bar_known_ = false;
+            break;
+
         case Cmd::cancel_queue:
             // Unconditional: cancelling a queue that is not armed is what the UI does when the
             // user presses the same pattern twice, and it is not an error.

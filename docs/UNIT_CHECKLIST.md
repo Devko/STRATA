@@ -900,3 +900,11 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
       On SETUP, CLR goes back.
 - [ ] Notices (an octave, a scene captured, `F1+F3 AGAIN TO SAVE`) appear on the second line in
       every mode, not only in GRID.
+
+## F1 + F5 restart, F1 + F6 stop and reset
+
+- [ ] Playing, F1 + F5: every track jumps back to step 1 on the beat and keeps playing; held
+      notes ring on. The screen says RESTART.
+- [ ] F1 + F6 while playing with a pattern change queued: it stops, the tails are cut at once
+      (no second press needed), the queued change is gone, and the next PLAY starts at step 1.
+- [ ] With CLOCK SRC on MIDI or SYNC both show EXT CLOCK and change nothing.

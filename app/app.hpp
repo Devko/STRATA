@@ -456,11 +456,47 @@ public:
                 // rather than through the command ring. start() returns false under an external
                 // clock source, where STRATA can only follow -- the screen shows EXT and the
                 // refusal is simply recorded.
+                if (shift_) {
+                    // F1 + F5: restart from step 1 (docs/SPEC.md), playing or not. Running, the
+                    // clock is located back to 0 and keeps going; stopped, START already begins
+                    // at 0. Either way the audio side resets what it measures from the position.
+                    // An outside clock refuses both, and then nothing is reset: the playheads
+                    // must stay with the master.
+                    const bool ok = enaga::clock::running() ? enaga::clock::locate(0)
+                                                            : enaga::clock::start();
+                    clock_refused_ = !ok;
+                    if (!ok) {
+                        notice("EXT CLOCK");
+                        break;
+                    }
+                    stop_armed_ = false;
+                    post(Cmd::restart);
+                    notice("RESTART");
+                    break;
+                }
                 clock_refused_ = !enaga::clock::start();
                 stop_armed_ = false;
                 post(Cmd::play);                       // for the audio side's trace only
                 break;
             case ENAGA_KEY_F6:
+                if (shift_) {
+                    // F1 + F6: stop and reset all tracks (docs/SPEC.md). Everything a plain STOP
+                    // does, and the second press's cut, in one: the tails are cut, a queued
+                    // pattern change is dropped and the clock goes back to 0, so the next PLAY
+                    // or CONTINUE starts at step 1 with nothing pending. Refused under an
+                    // outside clock that keeps running, exactly as plain F6 is.
+                    clock_refused_ = !enaga::clock::stop();
+                    if (clock_refused_ && enaga::clock::running()) {
+                        notice("EXT CLOCK");
+                        break;
+                    }
+                    enaga::clock::locate(0);
+                    post(Cmd::stop, 0, 0, 1);
+                    post(Cmd::cancel_queue);
+                    stop_armed_ = false;
+                    notice("RESET");
+                    break;
+                }
                 clock_refused_ = !enaga::clock::stop();
                 // Refused while an outside clock keeps running: nothing stopped, so nothing is
                 // released or reset either -- doing so cut every voice and sent the playheads back

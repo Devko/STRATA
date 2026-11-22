@@ -83,6 +83,7 @@ struct UiProbe {
 
     static uint32_t tempo_tenths(const Strata &app) { return app.tempo_tenths_; }
     static bool clock_refused(const Strata &app) { return app.clock_refused_; }
+    static bool stop_armed(const Strata &app) { return app.stop_armed_; }
     static bool project_setup(const Strata &app) { return app.project_setup_; }
     static int slot_cursor(const Strata &app) { return app.slot_cursor_; }
     static int macro_selected(const Strata &app) { return app.macro_selected_; }
@@ -660,6 +661,78 @@ TEST(ui_stop_under_a_running_outside_clock_resets_nothing_until_the_clock_stops)
     pump(2);
     CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 0);
 
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+}
+
+TEST(ui_f1_f5_restarts_every_track_from_step_1_while_playing) {
+    // docs/SPEC.md's key table: F1 + F5 is "Restart from step 1". Running, the clock is located
+    // to 0 and keeps going, and the playheads follow it back rather than carrying on from where
+    // the pass count had got to.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_F5);
+    CHECK(host.running());
+    for (uint32_t t = 0; t <= 24 * 5; t += 24) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 5);
+
+    const int locates = host.control_calls(ENAGA_CLOCK_LOCATE);
+    shift_key(ENAGA_KEY_F5);
+    pump(2);
+    CHECK_EQ(host.control_calls(ENAGA_CLOCK_LOCATE), locates + 1);
+    CHECK(host.running());
+    CHECK_EQ(int(host.position()), 0);
+    CHECK_EQ(UiProbe::notice(app), "RESTART");
+    for (uint32_t t = 0; t <= 24 * 2; t += 24) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 2);
+
+    // Under an outside clock it is refused and nothing moves.
+    host.set_source(ENAGA_CLOCK_MIDI);
+    shift_key(ENAGA_KEY_F5);
+    pump(2);
+    CHECK(UiProbe::clock_refused(app));
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
+    CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 2);
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+    key(ENAGA_KEY_F6);
+}
+
+TEST(ui_f1_f6_stops_cuts_and_resets_in_one_press) {
+    // F1 + F6: "Stop and reset all tracks". One press does what STOP and its second press do,
+    // drops a queued pattern change, and puts the clock back at 0.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_F5);
+    for (uint32_t t = 0; t <= 24 * 3; t += 24) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    post_cmd(Cmd::queue_pattern, 0, 1, 0);
+    pump(2);
+    CHECK(app_engine().queue().pending);
+
+    shift_key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(!host.running());
+    CHECK_EQ(int(host.position()), 0);
+    CHECK(!app_engine().queue().pending);
+    CHECK_EQ(int(app_engine().status().playhead[0].load(std::memory_order_relaxed)), 0);
+    CHECK_EQ(UiProbe::notice(app), "RESET");
+    CHECK(!UiProbe::stop_armed(app));          // the cut is done: the next F6 is a plain stop
+
+    // Refused under a running outside clock, like plain F6.
+    host.set_source(ENAGA_CLOCK_MIDI);
+    host.set_running(true);
+    shift_key(ENAGA_KEY_F6);
+    pump(2);
+    CHECK(host.running());
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
+    host.set_running(false);
     host.set_source(ENAGA_CLOCK_INTERNAL);
 }
 

@@ -198,6 +198,12 @@ enum class Cmd : uint8_t {
     // rather than holding a second copy that a save could not see.
     set_quantize,      // b: int8 delta, clamped to 0-100
 
+    // F1 + F5 (docs/SPEC.md): every track back to its step 1 from the next tick, without
+    // touching the voices. The main context has already located the clock to 0; this resets
+    // what the audio side derives from the position -- the pattern's origin, its pass count and
+    // the chaining state that 1ST and the conditions read.
+    restart,
+
     count
 };
 
