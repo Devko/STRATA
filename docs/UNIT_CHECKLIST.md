@@ -282,6 +282,9 @@ project and never needs a restart."*
 - [ ] A change armed a few ticks late still lands on the boundary it just missed
       (`kQueueGraceTicks`), and the new pattern's step 0 has already gone by — `core/queue.hpp`
       says so and it should be audible at the seam.
+- [ ] END, 16 and 32 start the new pattern on its step 1 at the boundary, whatever the track
+      lengths (a blank pattern's 64-step tracks used to come in on step 16). NOW keeps the
+      position. A second END change waits one full pass of the pattern from where it started.
 - [ ] UP toggles the chain; starting one jumps to its first entry. CLR cancels a queued change.
 - [ ] A pattern change clears the undo history (it belonged to the pattern left behind) and
       restarts the `1ST` conditions.

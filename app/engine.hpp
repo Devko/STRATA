@@ -160,7 +160,7 @@ private:
     void switch_pattern(int bank, int slot);
 
     // The pass boundary passed: let a chain move on if one is playing.
-    void cross_boundary(uint32_t tick);
+    void cross_boundary(uint32_t boundary);
 
     // A bar started: release anything armed for one.
     void on_bar();
@@ -378,6 +378,9 @@ private:
     // on the audio side precisely so that it can use the tick the sequencer is actually on, which
     // the main context cannot know (core/queue.hpp).
     uint32_t tick_ = 0;
+    // The tick the playing pattern started on. Queued and chained switches restart the pattern
+    // on their boundary, and the scheduler is handed `tick - origin_` (core/queue.hpp).
+    uint32_t origin_ = 0;
 
     // The per-tick event buffer lives here rather than on the audio stack: at the true worst
     // case it is 4 KiB, and the platform caps a stack frame at 16 KiB.

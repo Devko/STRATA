@@ -622,7 +622,7 @@ void Engine::apply(const Command &command) {
             // Armed from `tick_`, the tick the sequencer is actually on. That is the whole
             // reason arming happens on this side (core/queue.hpp): the main context would have
             // to guess, and a guess one block out lands the switch on the wrong pass.
-            if (!queue_arm(queue_, bank, slot, mode, tick_, master_loop_ticks(live()))) {
+            if (!queue_arm(queue_, bank, slot, mode, tick_, master_loop_ticks(live()), origin_)) {
                 status_.bump_refused();
             }
             break;
@@ -1246,15 +1246,18 @@ void Engine::on_bar() {
     capture_.begin();
 }
 
-void Engine::cross_boundary(uint32_t tick) {
-    (void)tick;
+void Engine::cross_boundary(uint32_t boundary) {
     if (!chain_.active) return;
 
     uint8_t bank = 0, slot = 0;
     // chain_advance reports a PATTERN change, not an entry change, so a chain that repeats one
     // pattern returns false here and nothing is switched -- which is what keeps 1ST from firing
     // on every pass of a one-pattern chain (core/queue.hpp).
-    if (chain_advance(project_, chain_, bank, slot)) switch_pattern(bank, slot);
+    if (chain_advance(project_, chain_, bank, slot)) {
+        switch_pattern(bank, slot);
+        // The next entry starts on the boundary the last one ended on, at its step 1.
+        origin_ = boundary;
+    }
 }
 
 Project &Engine::project_for_load() { return project_; }
@@ -1276,23 +1279,39 @@ void Engine::reconfigure() {
 void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     tick_ = tick;
 
+    // A transport that relocated to before the pattern's start (a START from 0 after a switch)
+    // measures from 0 again. Only ever backwards: a CONTINUE resumes past the origin and keeps it.
+    if (tick < origin_) {
+        origin_ = 0;
+        boundary_known_ = false;
+    }
+
     // A queued change takes effect BEFORE the tick is resolved, so this tick plays the new
-    // pattern's steps rather than one last step of the old one.
+    // pattern's steps rather than one last step of the old one. Every mode but NOW starts the
+    // new pattern at its step 1 on the boundary the change was queued for (core/queue.hpp).
     if (queue_due(queue_, tick)) {
+        const bool restart = queue_.restart;
+        const uint32_t start = queue_.start_tick;
         switch_pattern(queue_.bank, queue_.slot);
         queue_clear(queue_);
+        if (restart) {
+            origin_ = start <= tick ? start : tick;
+            boundary_known_ = false;
+        }
     }
 
     // The end of a pass, for chains. One division per pass of the pattern -- about every two
     // seconds -- rather than one per tick, which is the only reason `next_boundary_` is kept
     // rather than derived.
+    // Passes are counted from the pattern's own start, `origin_`, not from tick 0.
     const uint32_t loop = uint32_t(master_loop_ticks(live()));
     if (!boundary_known_) {
-        next_boundary_ = (tick / loop + 1) * loop;
+        next_boundary_ = origin_ + ((tick - origin_) / loop + 1) * loop;
         boundary_known_ = true;
     } else if (tick >= next_boundary_) {
-        next_boundary_ = (tick / loop + 1) * loop;
-        cross_boundary(tick);
+        const uint32_t crossed = next_boundary_;
+        next_boundary_ = origin_ + ((tick - origin_) / loop + 1) * loop;
+        cross_boundary(crossed);
     }
 
     // Bars, for auto-fill and for anything armed to land on one. Counted rather than divided
@@ -1327,7 +1346,9 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // turning auto-fill on takes effect at the next bar rather than mid-bar.
     perform_.fill = fill_held_ || auto_fill_active(auto_fill_, bar_);
 
-    const int count = scheduler_.tick(tick, frame, live(), perform_, events_, kMaxEventsPerTick);
+    // The pattern's own tick: steps, passes and conditions all count from where it started.
+    const int count =
+        scheduler_.tick(tick - origin_, frame, live(), perform_, events_, kMaxEventsPerTick);
     for (int i = 0; i < count; i++) dispatch(events_[i], block_frames_);
 
     for (int t = 0; t < kTracks; t++) status_.publish_playhead(t, scheduler_.playhead(t));

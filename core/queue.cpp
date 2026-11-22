@@ -46,6 +46,16 @@ constexpr uint32_t kTicksPer32Steps = 32u * uint32_t(kTicksPerSixteenth);   // 7
 //
 // This is the one division in the module. It runs when a change is armed, which is control rate:
 // a pad press, not a tick.
+// The boundary a change armed at `tick` belongs to: the one just missed when the press is
+// forgiven, otherwise the next one. Equal to `switch_tick_on_grid` except in the grace window.
+uint32_t boundary_on_grid(uint32_t tick, uint32_t multiple) {
+    const uint32_t since = tick % multiple;
+    const uint32_t previous = tick - since;
+    if (since <= uint32_t(kQueueGraceTicks)) return previous;
+    if (previous > kMaxTick - multiple) return kMaxTick;
+    return previous + multiple;
+}
+
 uint32_t switch_tick_on_grid(uint32_t tick, uint32_t multiple) {
     const uint32_t since = tick % multiple;              // how far into the pass the press was
 
@@ -114,7 +124,7 @@ uint32_t queue_switch_tick(QueueMode mode, uint32_t armed_tick, int pattern_tick
 }
 
 bool queue_arm(Queue &queue, int bank, int slot, QueueMode mode, uint32_t armed_tick,
-               int pattern_ticks) {
+               int pattern_ticks, uint32_t origin) {
     // Checked before anything is written, so a refused arm leaves a change that is already
     // queued exactly as it was. The alternative -- clearing first -- would let a mistyped index
     // cancel a pattern change the user had already set up.
@@ -124,7 +134,37 @@ bool queue_arm(Queue &queue, int bank, int slot, QueueMode mode, uint32_t armed_
     queue.bank = uint8_t(bank);
     queue.slot = uint8_t(slot);
     queue.mode = mode;
-    queue.switch_tick = queue_switch_tick(mode, armed_tick, pattern_ticks);
+
+    switch (mode) {
+        case QueueMode::immediate:
+            queue.switch_tick = queue_switch_tick(mode, armed_tick, pattern_ticks);
+            queue.restart = false;
+            queue.start_tick = 0;
+            break;
+        case QueueMode::after_16:
+        case QueueMode::after_32: {
+            const uint32_t grid = mode == QueueMode::after_16 ? kTicksPer16Steps : kTicksPer32Steps;
+            queue.switch_tick = switch_tick_on_grid(armed_tick, grid);
+            queue.restart = true;
+            queue.start_tick = boundary_on_grid(armed_tick, grid);
+            break;
+        }
+        case QueueMode::end_of_pattern:
+        default: {
+            // Counted from the current pattern's own start. Both results are offsets from
+            // `origin` and are added back saturating, for the reason in the file comment.
+            const uint32_t base = origin <= armed_tick ? origin : 0u;
+            const uint32_t loop = pattern_ticks > 0 ? uint32_t(pattern_ticks)
+                                                    : uint32_t(kTicksPerSixteenth);
+            const uint32_t into = armed_tick - base;
+            const uint32_t at = switch_tick_on_grid(into, loop);
+            const uint32_t start = boundary_on_grid(into, loop);
+            queue.switch_tick = at > kMaxTick - base ? kMaxTick : base + at;
+            queue.start_tick = start > kMaxTick - base ? kMaxTick : base + start;
+            queue.restart = true;
+            break;
+        }
+    }
     return true;
 }
 

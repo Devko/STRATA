@@ -1291,6 +1291,51 @@ TEST(engine_a_queued_change_waits_for_the_end_of_the_pass) {
     CHECK_EQ(live_slot(), 5);
 }
 
+TEST(engine_a_queued_change_starts_the_new_pattern_at_step_1) {
+    // docs/SPEC.md: the next pattern switches "at the end of the current one, or after 16 or 32
+    // steps, or at once keeping the position". Only the last keeps the position. The new pattern
+    // used to be resolved from the absolute tick, so a blank pattern's 64-step tracks came in on
+    // step 16 at the first 16-step boundary.
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(100);
+    post(Cmd::queue_pattern, 0, 0, 0, 1, uint8_t(QueueMode::after_16));
+    pump();
+    CHECK_EQ(int(engine.queue().switch_tick), 384);
+
+    tick_at(384);
+    CHECK_EQ(live_slot(), 1);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(playhead(t), 0);
+    tick_at(384 + 24);
+    CHECK_EQ(playhead(0), 1);
+
+    // And "the end of the current one" is now counted from where it started: one 64-step pass
+    // after tick 384, not the next multiple of 1536 from tick 0.
+    tick_at(400);
+    post(Cmd::queue_pattern, 0, 0, 0, 2, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK_EQ(int(engine.queue().switch_tick), 384 + 1536);
+    tick_at(384 + 1536);
+    CHECK_EQ(live_slot(), 2);
+    CHECK_EQ(playhead(0), 0);
+
+    // NOW keeps the position, as the spec says.
+    tick_at(384 + 1536 + 24 * 5);
+    CHECK_EQ(playhead(0), 5);
+    post(Cmd::queue_pattern, 0, 0, 0, 3, uint8_t(QueueMode::immediate));
+    pump();
+    tick_at(384 + 1536 + 24 * 6);
+    CHECK_EQ(live_slot(), 3);
+    CHECK_EQ(playhead(0), 6);
+
+    // A START from tick 0 measures from 0 again.
+    tick_at(0);
+    CHECK_EQ(playhead(0), 0);
+    tick_at(24 * 3);
+    CHECK_EQ(playhead(0), 3);
+}
+
 TEST(engine_a_queued_change_lands_at_once_while_the_transport_is_stopped) {
     Engine &engine = clean();
     CHECK(!FakeHost::the().running());
