@@ -2924,11 +2924,14 @@ TEST(storage_request_new_is_ram_only_and_takes_a_fresh_name) {
     CHECK(number > 0);
     CHECK(std::strcmp(storage().project_name(), old_name) != 0);
 
-    // The project in RAM is empty, every file is dirty, and the first save of it writes all
-    // eleven -- a new name names a folder with nothing in it to be a diff against.
+    // The project in RAM is the FACTORY one (core/factory.hpp) -- the edits above are gone and the
+    // kit is playable, where a blank kit had LVL 0 on every track -- every file is dirty, and the
+    // first save of it writes all eleven: a new name names a folder with nothing in it to be a
+    // diff against.
     pump(4);
     CHECK_EQ(int(engine().pattern().tracks[0].steps[1].flags), 0);
-    CHECK_EQ(int(kit_value(0, kLvl)), 0);
+    CHECK_EQ(int(kit_value(0, kLvl)), int(strata::test::factory().kit.tracks[0].params[kLvl]));
+    CHECK(kit_value(0, kLvl) > 0);
     CHECK(storage().dirty());
     CHECK_EQ(scene_count(engine().scenes().scenes[0]), 0);
 
@@ -3011,7 +3014,12 @@ TEST(storage_request_new_takes_everything_of_the_old_project_away) {
     CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::empty));   // off its track
     CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);
     CHECK_EQ(scene_count(engine().scenes().scenes[5]), 0);
-    CHECK_EQ(int(engine().macros().macros[2].targets[0].enabled), 0);
+    // The macro is the factory's again, not the one assigned above.
+    const MacroTarget &target = engine().macros().macros[2].targets[0];
+    const MacroTarget &wanted = strata::test::factory_macros().macros[2].targets[0];
+    CHECK_EQ(int(target.enabled), int(wanted.enabled));
+    CHECK_EQ(int(target.track), int(wanted.track));
+    CHECK_EQ(int(target.param), int(wanted.param));
 }
 
 TEST(storage_request_new_waits_for_the_command_ring) {
