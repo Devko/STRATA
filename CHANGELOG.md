@@ -36,7 +36,8 @@ with a unit can play it and report back. Release notes: [docs/release/v0.1.0.md]
   Under an external clock STRATA refuses tempo edits and follows the transport.
 - **Factory project**, on first start and for every NEW project: a techno kit at 130 BPM in
   C minor, patterns A01 GROOVE, A02 GROOVE+, A03 BREAK and A04 PEAK, a chain that walks them
-  (shipped off), scenes DUB, DARK and TENSION, and eight mute states.
+  (shipped off), scenes DUB, DARK and TENSION, three macros (B ACID, C DUB, D DRIVE; A is left
+  free for pad pressure), and eight mute states.
 - **CPU readout:** the top line shows the load of the audio block.
 
 ### Known limits
@@ -47,5 +48,4 @@ with a unit can play it and report back. Release notes: [docs/release/v0.1.0.md]
   the quietest sounding voice is cut with a short fade. The number is provisional.
 - MIDI clock, SYNC in and out, and USB MIDI are Enaga features that STRATA may be the first app to
   use on a unit. Expect rough edges there.
-- No factory macros ship: an assigned macro target would hold its parameter's EDIT knob.
 - The Lofi-12 XT and CyDrums are the same board, but STRATA has not run on either.
