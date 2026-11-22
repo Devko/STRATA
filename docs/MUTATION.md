@@ -34,18 +34,19 @@ Score = killed / (killed + survived). Mutants that do not compile are left out.
 
 | File | Before | After | New tests |
 | --- | --- | --- | --- |
-| app/engine.cpp | 410 / 400 (50.6%) | pending | 45 in tests/test_engine_gaps.cpp |
+| app/engine.cpp | 410 / 400 (50.6%) | 551 / 208 (72.6%) | 46 in tests/test_engine_gaps.cpp |
 | app/storage.cpp | 473 / 262 (64.4%) | 510 / 225 (69.4%) | 12 in tests/test_storage.cpp, section 7c |
-| core/queue.cpp | 163 / 46 (78.0%) | pending | 11 in tests/test_queue.cpp |
-| core/perform.cpp | 240 / 68 (77.9%) | pending | 9 in tests/test_perform.cpp |
-| core/scheduler.cpp | 122 / 50 (70.9%) | pending | 7 in tests/test_scheduler.cpp |
-| core/editops.cpp | 104 / 18 (85.2%) | pending | 5 in tests/test_editops.cpp |
-| core/mutate.cpp | 161 / 49 (76.7%) | pending | 2 in tests/test_mutate.cpp |
-| core/timing.cpp | 36 / 15 (70.6%) | pending | 2 in tests/test_timing.cpp |
-| core/undo.cpp | 44 / 8 (84.6%) | pending | 2 in tests/test_undo.cpp |
+| core/queue.cpp | 163 / 46 (78.0%) | 180 / 29 (86.1%) | 11 in tests/test_queue.cpp |
+| core/perform.cpp | 240 / 68 (77.9%) | 255 / 53 (82.8%) | 9 in tests/test_perform.cpp |
+| core/scheduler.cpp | 122 / 50 (70.9%) | 143 / 29 (83.1%) | 7 in tests/test_scheduler.cpp |
+| core/editops.cpp | 104 / 18 (85.2%) | 112 / 10 (91.8%) | 5 in tests/test_editops.cpp |
+| core/mutate.cpp | 161 / 49 (76.7%) | 172 / 38 (81.9%) | 2 in tests/test_mutate.cpp |
+| core/timing.cpp | 36 / 15 (70.6%) | 39 / 12 (76.5%) | 2 in tests/test_timing.cpp |
+| core/undo.cpp | 44 / 8 (84.6%) | 45 / 7 (86.5%) | 2 in tests/test_undo.cpp |
 
 The figures are killed / survived. "After" is a fresh run with the new tests in (app/engine.cpp
-grew by the shared VA POLY voice budget in between, so its totals differ).
+grew by the shared VA POLY voice budget in between, so its totals differ). The after run
+was taken before main's macro change to core/perform.cpp merged in.
 
 Not yet run line by line: core/chord, factory, pattern, pcm, project, record, samplepool, scale,
 serialize and stepedit (2,260 mutants), and dsp/. They are next, a few files at a time.
