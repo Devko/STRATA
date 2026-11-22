@@ -43,6 +43,7 @@
 #include "undo.hpp"
 #include "va.hpp"
 #include "vapoly.hpp"    // the CHORD track's six voices
+#include "lfo.hpp"       // one LFO per track, parameters 16-19
 
 #include <cstdint>
 
@@ -146,9 +147,20 @@ public:
     // draw what is actually being heard as well as what is stored. `params` is the kit; this is
     // the kit with the morph, the macros and any throw over the top.
     uint8_t performed(int track, int param) const {
-        return track >= 0 && track < kTracks && param >= 0 && param < kParams
+        return track >= 0 && track < kTracks && param >= 0 && param < kTrackParams
                    ? performed_[track][param]
                    : 0;
+    }
+
+    // The LFO, for the screen: is it moving a parameter on `track`, its last value (-1..1), and
+    // what the machines are prepared from -- the kit, performed, locked and LFO'd. Audio-side
+    // single words and bytes, read as `performed` is.
+    bool lfo_on(int track) const { return track >= 0 && track < kTracks && modulating_[track]; }
+    float lfo_value(int track) const {
+        return track >= 0 && track < kTracks ? lfo_value_[track] : 0.0f;
+    }
+    const TrackParams &sounding(int track) const {
+        return modulating_[track] ? modulated_[track] : effective_[track];
     }
 
     // The scenes and macros, writable, for a LOAD to fill -- the same hole and the same rules as
@@ -336,14 +348,26 @@ private:
     // `effective_` from. Separate from `params_` because a scene, a macro and a throw must not
     // change the kit: none of them is saved, none is undone, and letting go of a throw has to
     // get the stored value back.
-    uint8_t performed_[kTracks][kParams] = {};
+    uint8_t performed_[kTracks][kTrackParams] = {};
     bool perform_dirty_ = true;
 
     // Which of a track's parameters the CURRENT step has locked, one bit each. The performance
     // layer skips them, so a lock always wins over a morph -- which is what docs/REVIEW.md's
     // "base kit values only" means from the other side. Set by `fire` and therefore lasting
     // exactly as long as the step does.
-    uint16_t locked_[kTracks] = {};
+    uint32_t locked_[kTracks] = {};
+    static_assert(kTrackParams <= 32, "locked_ holds one bit per parameter");
+
+    // The LFOs (dsp/lfo.hpp). `lfo_bytes_` is what `lfo_settings_` was made from, so the
+    // settings are rebuilt only when a byte moves; `modulated_` is `effective_` with the
+    // destination moved, valid while `modulating_` says so.
+    void run_lfos(uint32_t frames, bool running, uint32_t position, float fraction);
+    TrackLfo lfo_[kTracks];
+    LfoSettings lfo_settings_[kTracks];
+    uint8_t lfo_bytes_[kTracks][kLfoParams] = {};
+    TrackParams modulated_[kTracks] = {};
+    bool modulating_[kTracks] = {};
+    float lfo_value_[kTracks] = {};
 
     ChainMix mix_[kTracks] = {};
     bool muted_[kTracks] = {};
@@ -493,6 +517,8 @@ private:
     // every block. Enaga's clock reports the tempo; core/ cannot ask it.
     float tempo_ = 0.0f;
     float samples_per_tick_ = 0.0f;   // derived from it; see reconfigure()
+    float inv_samples_per_tick_ = 0.0f;
+    float inv_rate_ = 1.0f / 48000.0f;
 
     SendSettings sends_;
     MasterSettings master_;

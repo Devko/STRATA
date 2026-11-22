@@ -48,9 +48,14 @@ constexpr int kBanks = 8;                    // A..H
 constexpr int kPatternsPerBank = 16;
 constexpr int kProjectPatterns = kBanks * kPatternsPerBank;   // 128
 
-// Parameters per track, mirroring dsp/track.hpp's kParams without depending on it. app/ asserts
-// that the two agree.
-constexpr int kKitParams = 16;
+// Parameters per track, mirroring dsp/track.hpp's kTrackParams without depending on it. app/
+// asserts that the three agree: 16 SOUND parameters (the machine's and the insert chain's) and
+// then the 4 bytes of the track's LFO (dsp/lfo.hpp). The split matters to the files: KIT.BIN and
+// PERFORM.BIN carried 16 a track before the LFO existed, so the four LFO bytes travel in sections
+// of their own that an older file simply does not have.
+constexpr int kKitSoundParams = 16;
+constexpr int kKitLfoParams = 4;
+constexpr int kKitParams = kKitSoundParams + kKitLfoParams;
 
 // How many machines a track can host, mirroring dsp/'s machine list the same way and for the
 // same reason as kKitParams: docs/SPEC.md, "Machines (v1)" -- KICK, SNARE, HAT, PERC, SAMPLE,
@@ -295,6 +300,11 @@ constexpr uint16_t kSectionProjectLive = 4;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;
+// The LFO's four bytes per track (core/project.hpp, kKitLfoParams). OPTIONAL on read, like the
+// project's mixer section: a KIT.BIN from before the LFO has one section and loads with every
+// LFO off (all four bytes 0), which is also what zeroed bytes mean to dsp/lfo.hpp. The version
+// does not move: no existing byte changed its meaning.
+constexpr uint16_t kSectionKitLfo = 2;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

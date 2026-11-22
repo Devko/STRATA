@@ -115,6 +115,7 @@ Machine, then drive (asymmetric soft clip), multimode filter (LP, HP, BP, 12 or 
 - Stored as 0-127 in patterns and kits so parameter locks stay small. Each machine maps them to physical units.
 - The audio side ramps every parameter change across one block, so edits and locks never click.
 - One LFO per track (sine, triangle, saw, square, sample and hold), free or tempo-synced, routable to any of the 16 parameters.
+- **[rev]** The LFO is a fifth EDIT page, LFO, after FX: four more bytes per track (16-19), stored, locked, scened, morphed and macro'd like the 16 sound parameters. A = WAV (SIN TRI RMP SAW SQR S+H; RMP rises, SAW falls), B = RAT (0-63 free, 0.06 to 32 Hz; 64-127 synced, 8 bars down to 1/32 including dotted and triplets), C = DEP (127 swings about 64 counts either side), D = DST (OFF or one of the 16 sound parameters). It runs at block rate and moves its destination's byte, so it costs nothing per sample. A synced LFO takes its phase from the clock's tick count. All-zero bytes are OFF, so older kits and scenes sound as they did. dsp/lfo.hpp has the detail.
 - Voices come from fixed pools allocated in `init()`; nothing is allocated while playing.
 
 ## Sequencer
@@ -130,7 +131,7 @@ STRATA does not implement a clock and does not own the tempo. Enaga's `<enaga/cl
 - **The clock's source is the user's CLOCK SRC setting**: INTERNAL, MIDI clock at MIDI IN, or SYNC IN. Under an outside source `start`, `stop` and `set_tempo` do nothing and return `false`, and `on_transport` reports what the outside clock did.
 - So PLAY and STOP must handle a refusal and follow `on_transport` instead, and the tempo display shows `EXT` whenever `clock::source()` is not internal. This is not deferrable: it shapes the transport from the first milestone.
 - With CLOCK OUT on, Enaga already sends MIDI clock and transport; with SYNC OUT on, pulses at SYNC OUT. STRATA only exposes the settings.
-- **STRATA's own timing work**: swing 50-75% per pattern on even 16ths with an optional per-track override, per-track length and speed, and micro-timing.
+- **STRATA's own timing work**: swing 50-75% per pattern on even 16ths with an optional per-track override (**[rev]** set on PROJECT's PATTERN page, encoder C, PAT or 50-75), per-track length and speed, and micro-timing.
 - STOP stops with release tails, STOP twice cuts all voices.
 
 **Pattern structure**
@@ -225,7 +226,7 @@ The panel controller numbers pads left to right, alternating rows: lower row = e
 | F5 (PLAY) | Play | Restart from step 1 |
 | F6 (STOP) | Stop; twice cuts all voices | Stop and reset all tracks |
 | F7 (MIXER) | Mixer: A-D levels of 4 tracks, selection keys switch 1-4 and 5-8 | PERFORM mode: A-D macros, VALUE morph |
-| F8 (EDIT) | Sound pages of the selected track; selection keys switch SRC, FLTR, AMP, FX | Kit and machine select. **[rev]** The first press is MACHINE; F1 + F8 again opens the KIT browser (16 kits on the card), and again goes back |
+| F8 (EDIT) | Sound pages of the selected track; selection keys switch SRC, FLTR, AMP, FX **[rev]** and LFO | Kit and machine select. **[rev]** The first press is MACHINE; F1 + F8 again opens the KIT browser (16 kits on the card), and again goes back |
 | Octave left/right | Step page 1-4 in GRID; octave in KEYS | Pattern length |
 | UP, DOWN | **[rev]** The rows on screen: the track in GRID, EDIT and KEYS; the machine in MACHINE; the kit slot in KIT; the length in RESAMPLE; the mutation in PERFORM; the slot cursor in PROJECT. With a STEP held: copy, paste | Copy, paste. In PROJECT: chain on/off, reload the sample. In KIT: read the card again, save the kit into the slot. In PERFORM: auto-fill |
 | LEFT, RIGHT | **[rev]** Sideways: the page wherever the selection keys flip pages; the step on the step page; octave in KEYS; macro in PERFORM; track in MACHINE; the page of eight kit slots in KIT; destination in RESAMPLE; the slot cursor in PROJECT | Free |
@@ -291,6 +292,7 @@ A project is one folder on the card. It loads fully into RAM when opened (patter
 - Little-endian binary: magic `STRA`, format version, section table, CRC-32 over the payload.
 - Written and read byte by byte through a small serializer. Never cast file bytes to structs (alignment rule).
 - An unknown version or a bad CRC is refused with a message on screen; it never crashes the app.
+- **[rev]** A format grows by adding an OPTIONAL section at the end, not by a version bump: an older file without it loads with that feature off. KIT.BIN's section 2 holds the four LFO bytes per track, and PERFORM.BIN's section 3 holds each scene's LFO values and their stored mask. An older reader ignores the extra section.
 
 **Core structures (sketch)**
 

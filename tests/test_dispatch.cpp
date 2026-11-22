@@ -125,7 +125,7 @@ TEST(dispatch_every_macro_command_reaches_what_is_heard) {
     // And the refusals are counted, both of them.
     const uint32_t refused = engine.status().refused.load(std::memory_order_relaxed);
     post_full(Cmd::macro_assign, 1, kMacros, kLvl, 0, 127);
-    post_full(Cmd::macro_assign, 1, 0, kParams, 0, 127);
+    post_full(Cmd::macro_assign, 1, 0, kTrackParams, 0, 127);
     pump(2);
     CHECK_EQ(engine.status().refused.load(std::memory_order_relaxed), refused + 2);
 }

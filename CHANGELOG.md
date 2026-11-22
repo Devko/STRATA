@@ -27,6 +27,11 @@ with a unit can play it and report back. Release notes: [docs/release/v0.1.0.md]
 - **Sequencer:** up to 64 steps per track, per-track length and speed, swing and micro-timing,
   parameter locks, trig conditions, probability, ratchets, live and motion recording, a Euclidean
   generator, KEYS mode for playing notes in a scale, and 16 levels of undo.
+- **One LFO per track** on EDIT's fifth page: six shapes, free (0.06-32 Hz) or synced (8 bars to
+  1/32, dotted and triplet), routable to any of the 16 parameters, and lockable, scene-able and
+  macro-able like them. Off by default; older kits and projects load with it off.
+- **Per-track swing** on PROJECT's PATTERN page: each track follows the pattern's swing or has its
+  own, 50-75%.
 - **Projects:** banks A-H, queued pattern changes, a pattern chain with repeats, autosave, and
   samples loaded in the background while the beat plays. Samples up to 30 s at up to 96 kHz.
 - **Performance:** seven performance pads (FILL, REPEAT, MUTE, SCENE A, SCENE B, THROW, MUTATE),

@@ -322,12 +322,18 @@ static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
-constexpr uint32_t kKitSections = 1;
-constexpr uint32_t kKitTrackBytes = uint32_t(kKitParams) + 1 + 2 + uint32_t(kSamplePathBytes);
+constexpr uint32_t kKitSections = 2;
+// The second, the LFO, is optional on read: see kSectionKitLfo.
+constexpr uint32_t kKitOptionalSections = 1;
+constexpr uint32_t kKitTrackBytes =
+    uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
+constexpr uint32_t kKitLfoBytes = uint32_t(kKitLfoParams) * uint32_t(kTracks);
 constexpr uint32_t kKitTableBytes = kKitSections * kSectionEntryBytes;
 constexpr uint32_t kKitTracksOffset = kKitTableBytes;
-constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitTracksOffset + kKitTracksBytes;
+constexpr uint32_t kKitLfoOffset = kKitTracksOffset + kKitTracksBytes;
+constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitLfoOffset + kKitLfoBytes;
+static_assert(kKitSoundParams == 16, "KIT.BIN's track section has carried 16 parameters since M4");
 
 // --- BANK_x.BIN sizes -----------------------------------------------------
 
@@ -625,6 +631,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
 
     const Section sections[kKitSections] = {
         {kSectionKitTracks, kKitTracksOffset, kKitTracksBytes},
+        {kSectionKitLfo, kKitLfoOffset, kKitLfoBytes},
     };
 
     Writer w(buffer, capacity);
@@ -632,10 +639,13 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
 
     for (int t = 0; t < kTracks; t++) {
         const KitTrack &track = kit.tracks[t];
-        for (int p = 0; p < kKitParams; p++) w.u8(track.params[p]);
+        for (int p = 0; p < kKitSoundParams; p++) w.u8(track.params[p]);
         w.u8(track.machine);
         w.u16(level_to_milli(track.level));
         write_path(w, track.sample);
+    }
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
     }
 
     if (!w.ok() || w.size() != kKitTotalBytes) return SerializeResult::buffer_too_small;
@@ -648,13 +658,15 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
         return why;
     };
 
-    const uint16_t wanted[kKitSections] = {kSectionKitTracks};
+    const uint16_t wanted[kKitSections] = {kSectionKitTracks, kSectionKitLfo};
     uint32_t offset[kKitSections] = {};
     uint32_t length[kKitSections] = {};
-    const SerializeResult found =
-        find_sections(buffer, size, kKitVersion, wanted, kKitSections, offset, length);
+    const SerializeResult found = find_sections(buffer, size, kKitVersion, wanted, kKitSections,
+                                                offset, length, kKitOptionalSections);
     if (found != SerializeResult::ok) return refuse(found);
     if (length[0] < kKitTracksBytes) return refuse(SerializeResult::malformed);
+    // Present but short is damage; absent is a kit from before the LFO.
+    if (offset[1] != 0 && length[1] < kKitLfoBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -664,7 +676,9 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
         // Clamped, not taken as they come: dsp/track.hpp maps a parameter either by x(1/127) or
         // as a table index, so a 255 that survived the CRC would be an out-of-range read down
         // in a machine rather than an odd sound.
-        for (int p = 0; p < kKitParams; p++) track.params[p] = clamp_u8(r.u8(), 0, kParamMax);
+        for (int p = 0; p < kKitSoundParams; p++) {
+            track.params[p] = clamp_u8(r.u8(), 0, kParamMax);
+        }
         const uint8_t machine = r.u8();
         // A machine this build does not have falls back to the FIRST machine, not the last one:
         // an unknown id should land somewhere known, and clamping to kMachines - 1 would hand a
@@ -672,6 +686,23 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
         track.machine = machine < uint8_t(kMachines) ? machine : 0;
         track.level = level_from_milli(r.u16());
         read_path(r, track.sample);
+    }
+    if (!r.ok()) return refuse(SerializeResult::truncated);
+
+    // The LFO. Absent means a kit written before it existed, and then every LFO is OFF --
+    // explicitly, because `kit` may be a buffer holding the previous kit (the kit browser's
+    // inbox, a project load), and "left alone" would carry its LFOs into a kit that has none.
+    if (offset[1] == 0) {
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = kKitSoundParams; p < kKitParams; p++) kit.tracks[t].params[p] = 0;
+        }
+        return SerializeResult::ok;
+    }
+    if (!r.seek(kHeaderBytes + offset[1])) return refuse(SerializeResult::malformed);
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams; p < kKitParams; p++) {
+            kit.tracks[t].params[p] = clamp_u8(r.u8(), 0, kParamMax);
+        }
     }
     if (!r.ok()) return refuse(SerializeResult::truncated);
 

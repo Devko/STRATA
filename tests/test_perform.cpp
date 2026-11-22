@@ -22,7 +22,7 @@ namespace {
 using namespace strata;
 
 constexpr uint32_t kSlack = 64;
-constexpr uint32_t kPerformFileBytes = 2424;
+constexpr uint32_t kPerformFileBytes = 3076;   // 2424 before the scenes' LFO section
 
 uint8_t g_buffer[kPerformFileBytes + kSlack];
 uint8_t g_alternate[kPerformFileBytes + kSlack];
@@ -73,6 +73,31 @@ uint32_t section_entry_at(const uint8_t *buffer, uint16_t id) {
         if (peek_u16(buffer, entry) == id) return entry;
     }
     return 0;
+}
+
+// The file as the build before its LAST section existed wrote it: one table entry fewer, every
+// section 12 bytes earlier, the last section's bytes gone. Returns the new size. The last section
+// is the one at the end of the payload, which is how every writer here lays them out.
+uint32_t drop_last_section(const uint8_t *file, uint8_t *out) {
+    const uint32_t count = peek_u16(file, 6);
+    const uint32_t last = kHeaderBytes + (count - 1) * kSectionEntryBytes;
+    const uint32_t cut = peek_u32(file, last + 4);          // where the last section starts
+    for (uint32_t i = 0; i < kHeaderBytes; i++) out[i] = file[i];
+    for (uint32_t i = 0; i + 1 < count; i++) {
+        const uint32_t from = kHeaderBytes + i * kSectionEntryBytes;
+        poke_u16(out, from, peek_u16(file, from));
+        poke_u16(out, from + 2, 0);
+        poke_u32(out, from + 4, peek_u32(file, from + 4) - kSectionEntryBytes);
+        poke_u32(out, from + 8, peek_u32(file, from + 8));
+    }
+    const uint32_t data_from = kHeaderBytes + count * kSectionEntryBytes;
+    const uint32_t data_to = kHeaderBytes + cut;
+    uint32_t at = kHeaderBytes + (count - 1) * kSectionEntryBytes;
+    for (uint32_t i = data_from; i < data_to; i++) out[at++] = file[i];
+    poke_u16(out, 6, uint16_t(count - 1));
+    poke_u32(out, 8, at - kHeaderBytes);
+    refresh_crc(out);
+    return at;
 }
 
 // A kit whose every parameter is different, so a morph that crossed two of them over shows up.
@@ -127,14 +152,14 @@ TEST(perform_storing_and_forgetting_one_parameter) {
 }
 
 TEST(perform_every_parameter_has_its_own_bit) {
-    // 8 tracks x 16 parameters in two bytes per track. A mask that aliased would make one
+    // 8 tracks x 20 parameters (16 sound, 4 LFO) in three bytes per track. A mask that aliased would make one
     // parameter's presence imply another's, which would show up as a scene dragging a sound it
     // never stored.
     perform_init(g_scenes, g_macros);
     Scene &scene = g_scenes.scenes[0];
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
-            scene_set(scene, t, p, uint8_t(t * 16 + p));
+            scene_set(scene, t, p, uint8_t((t * kKitParams + p) & 127));
             CHECK_EQ(scene_count(scene), t * kKitParams + p + 1);
         }
     }
@@ -142,7 +167,7 @@ TEST(perform_every_parameter_has_its_own_bit) {
 
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
-            CHECK_EQ(int(scene.values[t][p]), t * 16 + p);
+            CHECK_EQ(int(scene.values[t][p]), (t * kKitParams + p) & 127);
             scene_clear(scene, t, p);
             CHECK(!scene_has(scene, t, p));
         }
@@ -808,13 +833,15 @@ TEST(perform_the_header_says_strata_and_the_version) {
     const uint32_t written = write_performance();
     CHECK_EQ(int(g_buffer[0]), int(kMagic0));
     CHECK_EQ(int(peek_u16(g_buffer, kVersionOffset)), int(kPerformVersion));
-    CHECK_EQ(int(peek_u16(g_buffer, 6)), 2);
+    CHECK_EQ(int(peek_u16(g_buffer, 6)), 3);
     CHECK_EQ(peek_u32(g_buffer, 8), written - kHeaderBytes);
     CHECK_EQ(peek_u32(g_buffer, kCrcOffset),
              crc32(g_buffer + kHeaderBytes, written - kHeaderBytes));
-    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 2 * kSectionEntryBytes);
+    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 3 * kSectionEntryBytes);
     CHECK(section_at(g_buffer, kSectionPerformMacros) >
           section_at(g_buffer, kSectionPerformScenes));
+    CHECK(section_at(g_buffer, kSectionPerformSceneLfo) >
+          section_at(g_buffer, kSectionPerformMacros));
 }
 
 TEST(perform_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
@@ -1050,9 +1077,19 @@ TEST(perform_a_payload_declared_one_byte_past_the_file_is_truncated) {
 TEST(perform_a_section_one_byte_longer_than_the_payload_or_a_short_macro_table_is_malformed) {
     fill_performance();
     const uint32_t size = write_performance();
-    const uint32_t entry = section_entry_at(g_buffer, kSectionPerformMacros);
+    // The LAST section, so one byte more runs past the payload (the macros were last until the
+    // scenes' LFO section followed them).
+    const uint32_t entry = section_entry_at(g_buffer, kSectionPerformSceneLfo);
     const uint32_t len = peek_u32(g_buffer, entry + 8);
     poke_u32(g_buffer, entry + 8, len + 1);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::malformed));
+
+    // A macro table one byte short, and a scenes' LFO section one byte short: both damage.
+    write_performance();
+    const uint32_t macros = section_entry_at(g_buffer, kSectionPerformMacros);
+    poke_u32(g_buffer, macros + 8, peek_u32(g_buffer, macros + 8) - 1);
     refresh_crc(g_buffer);
     CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
              int(SerializeResult::malformed));
@@ -1125,3 +1162,82 @@ TEST(macro_apply_sweeps_from_the_live_value_and_writes_nothing_at_rest) {
     }
 }
 
+
+TEST(perform_scenes_keep_their_lfo_bytes_through_a_save) {
+    fill_performance();
+    Scene &scene = g_scenes.scenes[5];
+    scene_set(scene, 2, kKitSoundParams + 0, 44);
+    scene_set(scene, 2, kKitSoundParams + 3, 90);
+    scene_clear(scene, 2, kKitSoundParams + 1);
+    scene_clear(scene, 2, kKitSoundParams + 2);
+    const uint32_t size = write_performance();
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::ok));
+    const Scene &loaded = g_loaded_scenes.scenes[5];
+    CHECK(scene_has(loaded, 2, kKitSoundParams + 0));
+    CHECK(!scene_has(loaded, 2, kKitSoundParams + 1));
+    CHECK(!scene_has(loaded, 2, kKitSoundParams + 2));
+    CHECK(scene_has(loaded, 2, kKitSoundParams + 3));
+    CHECK_EQ(int(loaded.values[2][kKitSoundParams + 0]), 44);
+    CHECK_EQ(int(loaded.values[2][kKitSoundParams + 3]), 90);
+    for (int s = 0; s < kScenes; s++) {
+        CHECK_EQ(scene_count(g_loaded_scenes.scenes[s]), scene_count(g_scenes.scenes[s]));
+    }
+
+    // The mask byte's high bits name nothing: a damaged one stores no phantom parameter.
+    const uint32_t lfo = section_at(g_buffer, kSectionPerformSceneLfo);
+    g_buffer[lfo + kKitLfoParams] = 0xFF;          // scene 0, track 0's mask byte
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded_scenes.scenes[0].stored[0][2]), (1 << kKitLfoParams) - 1);
+}
+
+TEST(perform_a_file_from_before_the_lfo_loads_with_no_scene_storing_one) {
+    fill_performance();
+    for (int t = 0; t < kTracks; t++) scene_set(g_scenes.scenes[0], t, kKitSoundParams, 77);
+    const uint32_t size = write_performance();
+    const uint32_t old_size = drop_last_section(g_buffer, g_alternate);
+    CHECK_EQ(old_size, 2424u);
+    CHECK(old_size < size);
+    // Whatever the set held before, the old file says no scene stores an LFO byte.
+    for (int s = 0; s < kScenes; s++) {
+        for (int t = 0; t < kTracks; t++) scene_set(g_loaded_scenes.scenes[s], t, kKitSoundParams, 5);
+    }
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_alternate, old_size)),
+             int(SerializeResult::ok));
+    for (int s = 0; s < kScenes; s++) {
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = 0; p < kKitSoundParams; p++) {
+                CHECK_EQ(scene_has(g_loaded_scenes.scenes[s], t, p), scene_has(g_scenes.scenes[s], t, p));
+            }
+            for (int p = kKitSoundParams; p < kKitParams; p++) {
+                CHECK(!scene_has(g_loaded_scenes.scenes[s], t, p));
+                CHECK_EQ(int(g_loaded_scenes.scenes[s].values[t][p]), 0);
+            }
+        }
+    }
+}
+
+TEST(perform_the_morph_crosses_lfo_bytes_like_any_other) {
+    // A scene can store the LFO's depth and rate, and the morph sweeps them.
+    perform_init(g_scenes, g_macros);
+    uint8_t out[kTracks][kKitParams] = {};
+    scene_set(g_scenes.scenes[0], 1, kKitSoundParams + 2, 0);      // DEP 0
+    scene_set(g_scenes.scenes[1], 1, kKitSoundParams + 2, 100);    // DEP 100
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, out);
+    CHECK_EQ(int(out[1][kKitSoundParams + 2]), 50);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale, out);
+    CHECK_EQ(int(out[1][kKitSoundParams + 2]), 100);
+
+    // And a macro drives one.
+    MacroTarget target;
+    target.enabled = 1;
+    target.track = 1;
+    target.param = uint8_t(kKitSoundParams + 2);
+    target.high = 127;
+    g_macros.macros[0].targets[0] = target;
+    out[1][kKitSoundParams + 2] = 0;
+    macro_apply(g_macros.macros[0], 127, out);
+    CHECK_EQ(int(out[1][kKitSoundParams + 2]), 127);
+}

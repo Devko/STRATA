@@ -416,6 +416,7 @@ const Expect kTable[] = {
     {Cmd::set_track_length, kDirtyBank, "set_track_length"},
     {Cmd::set_track_speed, kDirtyBank, "set_track_speed"},
     {Cmd::set_pattern_swing, kDirtyBank, "set_pattern_swing"},
+    {Cmd::set_track_swing, kDirtyBank, "set_track_swing"},
     {Cmd::set_master_length, kDirtyBank, "set_master_length"},
     {Cmd::step_field_delta, kDirtyBank, "step_field_delta"},
     // A lock lands in the pattern's shared pool, which the bank file carries.
@@ -732,10 +733,10 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     // card protocol: a file that came out a different size means the two have drifted apart.
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 296);
     CHECK_EQ(project_bytes(), 296u);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1076);
-    CHECK_EQ(kit_bytes(), 1076u);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 2424);
-    CHECK_EQ(perform_bytes(), 2424u);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1120);
+    CHECK_EQ(kit_bytes(), 1120u);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 3076);
+    CHECK_EQ(perform_bytes(), 3076u);
     for (int b = 0; b < kBanks; b++) {
         char name[12];
         CHECK(bank_file_name(b, name, int(sizeof name)));
@@ -1021,7 +1022,7 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     CHECK(pump_until_idle());
     CHECK(storage().last_error() == nullptr);
     keep_pristine(kit);
-    CHECK_EQ(g_pristine_bytes, 1076u);
+    CHECK_EQ(g_pristine_bytes, 1120u);
 
     // A sanity pass first: the pristine file loads.
     CHECK(reload_now());
@@ -1606,8 +1607,8 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 296);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1076);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 2424);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1120);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 3076);
 
     // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.
     CHECK_EQ(host.saves() - saves_before, kFileN + 1);
