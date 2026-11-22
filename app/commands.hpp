@@ -115,6 +115,15 @@ enum class Cmd : uint8_t {
     // is 16.7 M frames -- 349 s of mono at 48 kHz, well past the 30 s above which docs/SPEC.md
     // streams from the card instead of loading into RAM)
     set_sample,
+    // Streaming (app/storage.hpp, "Streaming"). `set_stream` hands over a file too big for the
+    // pool: its head (resident, like a sample) and how to read the rest, from
+    // Engine::stream_for_load(track) -- more than 16 bytes, so through that inbox, written by the
+    // main context just before the post. It follows a clear_sample like set_sample does.
+    // `stream_attach` tells the audio side that the track's stream is open at the head's end and
+    // filled: a: the low byte, b: the high byte of the restart count it was opened for, so an
+    // attach for a restart already superseded is ignored.
+    set_stream,        // track
+    stream_attach,     // track, a|b: Status::stream_want's value it answers
 
     // --- kit and sound ---
     set_param,         // track, a: param index, b: value; or c = 1: b is an int8 delta
@@ -372,6 +381,15 @@ struct Status {
     // The audio input's peak over the last block, 0-1000 (per mille of full scale), so the
     // RESAMPLE screen can show a level to set the input by before a take. 1000 means it clipped.
     std::atomic<uint16_t> input_peak{0};
+
+    // Streaming. Per track, bumped (with release) each time the audio side stops reading the
+    // track's stream and wants it reopened after the head: a trigger, a loop wrapping, or a new
+    // streamed file. The card side reopens and answers with Cmd::stream_attach carrying the value
+    // it saw. Written after the audio side stopped reading, so the card side may close the
+    // stream as soon as it sees the change. `stream_late` counts taps that came before the card
+    // did (dsp/sample.hpp), summed over the tracks, for the screen's STREAM LATE.
+    std::atomic<uint16_t> stream_want[8] = {};
+    std::atomic<uint32_t> stream_late{0};
 
     // Which pattern is live, so the UI can draw it without reaching into the project.
     std::atomic<uint8_t> live_bank{0};
