@@ -3057,7 +3057,14 @@ TEST(storage_request_new_takes_everything_of_the_old_project_away) {
     CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::empty));   // off its track
     CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);
     CHECK_EQ(scene_count(engine().scenes().scenes[5]), 0);
-    CHECK_EQ(int(engine().macros().macros[2].targets[0].enabled), 0);   // the factory ships none
+    // The macro is the factory's again, not the one assigned above.
+    const MacroTarget &target = engine().macros().macros[2].targets[0];
+    const MacroTarget &wanted = strata::test::factory_macros().macros[2].targets[0];
+    CHECK_EQ(int(target.enabled), int(wanted.enabled));
+    CHECK_EQ(int(target.track), int(wanted.track));
+    CHECK_EQ(int(target.param), int(wanted.param));
+    CHECK_EQ(int(target.low), int(wanted.low));
+    CHECK_EQ(int(target.high), int(wanted.high));
 }
 
 TEST(storage_request_new_waits_for_the_command_ring) {

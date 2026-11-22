@@ -10,6 +10,12 @@
 #   make -C host build    build the test binary without running it
 #   make -C host clean
 #
+#   make -C host test SANITIZE=1 ENAGA_BUILD=/tmp/asan
+#                         the same suite under AddressSanitizer and UBSan at -O1 (docs/HANDOFF.md,
+#                         section 5). Use a separate ENAGA_BUILD so the objects do not mix, and
+#                         run it with ASAN_OPTIONS=detect_leaks=0: BeatRepeat's ring is never
+#                         freed, by design. CI runs exactly this (.github/workflows/ci.yml).
+#
 # There is intentionally no cmake: it is not installed on the WSL build host, and a Makefile is
 # enough for a flat set of sources.
 
@@ -56,6 +62,14 @@ ENAGA_DSP_OBJ := $(patsubst $(ROOT)/%.c,$(OUT)/%.o,$(ENAGA_DSP_SRC))
 
 CC       ?= gcc
 CFLAGS   := -std=c11 -Wall -Wextra -Werror -O2 -g -I$(ENAGA_INC)
+
+# -O1 rather than -O2: at -O2 identical string literals are pooled, which once hid five tests
+# comparing pointers instead of strings (docs/HANDOFF.md, section 5).
+ifeq ($(SANITIZE),1)
+SANFLAGS := -O1 -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all
+CXXFLAGS += $(SANFLAGS)
+CFLAGS   += $(SANFLAGS)
+endif
 
 # Mirror each source to an object under OUT, keeping its directory so that identically named
 # files in core/ and dsp/ do not collide here. The device build forbids that collision anyway

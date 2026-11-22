@@ -14,7 +14,6 @@
 #
 # The names below are known and argued where they live; anything else fails.
 #   none          the command ring's empty slot, never posted.
-#   release_note  neither: a held KEYS key has no known duration (see app/app.hpp).
 #
 # Usage: tools/audit_commands.sh     exit 0 when only the known names come back.
 set -euo pipefail

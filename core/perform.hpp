@@ -138,9 +138,12 @@ void scene_morph(const Scene &a, const Scene &b, uint16_t position,
 
 // --- macros ---------------------------------------------------------------
 
-// One parameter a macro drives, over its own range. `low` is the value at macro 0 and `high` the
-// value at 127, and low may be ABOVE high: an inverted target is how one knob opens a filter
-// while it closes a send, which is most of what makes a macro worth having.
+// One parameter a macro drives. `high` is the value at 127, and it may be BELOW where the
+// parameter starts: an inverted target is how one knob opens a filter while it closes a send,
+// which is most of what makes a macro worth having.
+//
+// `low` is the parameter's value when the target was assigned. `macro_apply` no longer reads it: since 2026-11-22 a macro sweeps from the parameter's LIVE
+// value (see below), so `low` is kept for the screen, for the file, and for `macro_value`.
 //
 // `enabled` 0 means the target is unused, which is also what zeroed memory means -- the same
 // convention as `ChainEntry::repeats` (core/project.hpp).
@@ -179,9 +182,26 @@ void macro_range_through(uint8_t now, uint8_t far, uint8_t position, uint8_t &lo
 // parameter that does not exist are skipped -- a macro set up for a build with more parameters
 // must not write past the array.
 //
+// **A macro sweeps from the parameter's live value to `high`.** `out` comes in holding what the
+// machines would play without macros -- the kit, then the morph -- and each target writes
+//
+//     live + (high - live) * position / 127
+//
+// So at position 0 a macro writes exactly what is already there: the EDIT knob and the morph have
+// the parameter back. It used to write `low` at 0 like at every other position, so an assigned
+// macro held its parameters for as long as it stayed assigned: turning that knob in EDIT moved
+// the screen and not the sound, and a scene morphing the same parameter was overwritten.
+// Roland's decision, 2026-11-22. And because the sweep starts from the live value, the first
+// detent up is a nudge from wherever the sound is -- after a knob turn or a morph too -- never
+// a jump to a stored `low`.
+//
 // Later targets win over earlier ones when two drive the same parameter. That is a consequence
 // of writing them in order rather than a decision worth defending; the UI should not offer it.
 void macro_apply(const Macro &macro, uint8_t position, uint8_t out[kTracks][kKitParams]);
+
+// One target's value at `position`, swept from `live` towards `high` as `macro_apply` does it.
+// Rounded to nearest; exactly `live` at 0 and exactly `high` at 127.
+uint8_t macro_value_from(uint8_t live, const MacroTarget &target, uint8_t position);
 
 // How many targets are enabled and usable, for the screen.
 int macro_count(const Macro &macro);
