@@ -270,12 +270,10 @@ figure when asking whether a part fits.
 2. **Should a SAMPLE or GRAIN track played melodically fold its note into the scale?** They read
    the note as a transposition, and on SAMPLE it also picks the slice, so a fold moves a sliced
    one-shot to a different slice. Needs an ear.
-3. **`CLAUDE.md` line 62 is now known to be wrong**: "all 18 voices together are about 11% of the
-   block". That holds for the drums, which are short one-shots that go idle within a step. It
-   does **not** hold for a sustaining voice — six VA POLY voices are 22.9% on their own. The rule
-   it supports ("cut effects or insert stages before cutting voices") may still be right, but the
-   number behind it is not. `docs/BUDGET.md` records the correction; `CLAUDE.md` is the user's
-   file and was left alone.
+3. ~~`CLAUDE.md` line 62 is wrong~~ **Settled 2026-11-22.** "All 18 voices together are about
+   11% of the block" held for the drums, not for a sustaining voice (six VA POLY voices are
+   22.9% on their own). With the user's approval CLAUDE.md now states the measured figure; the
+   rule it supports, cut effects or insert stages before voices, is unchanged.
 4. **`delay_ping_pong` and `delay_to_reverb` share a MIXER page with two empty slots**, because
    ten send fields do not divide into four. Fine, but a person may want them placed differently.
 
