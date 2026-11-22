@@ -22,7 +22,8 @@
 // command ring to drain. Posting makes the ring non-empty, which defers the save by at least one
 // pass, and by the time it is empty the audio side has applied every pending edit and is writing
 // nothing. The UI is single-threaded, so once the ring is empty and the UI is the one saving,
-// nothing is writing pattern memory at all.
+// nothing is writing pattern memory at all. That holds for ONE pass: a save is a file per pass
+// and the UI posts between passes, so every pass of a save or a load waits for the ring again.
 //
 // **A load additionally requires the transport stopped.** With the clock stopped
 // `clock::ticks()` yields nothing, so the scheduler never reads the pattern and 1.03 MiB can be
@@ -98,7 +99,9 @@ public:
     // reason on screen, under an external clock that will not stop.
     void request_reload();
 
-    // An empty project, in RAM only: nothing is written until a save.
+    // An empty project, in RAM only: nothing is written until a save. Queued like a load, and
+    // for the same reason: it rewrites all of pattern memory from the main context, so it waits
+    // for the command ring to drain. It needs no card, so it runs without one.
     void request_new();
 
     // App::init: the last project named in the settings, or the autosave if it is newer. False
@@ -217,6 +220,7 @@ private:
     void step_sample_convert();
     void step_sample_resample();
     void start_next_sample();
+    void start_new();
     void sample_loaded(int32_t result);      // the files::load callback, main context
     void hand_sample_over();
 
@@ -247,6 +251,7 @@ private:
     bool save_pending_ = false;    // requested, waiting for the ring to drain
     bool autosave_pending_ = false;
     bool load_pending_ = false;
+    bool new_pending_ = false;     // request_new, waiting for the ring like a load
     uint32_t save_seq_ = 0;        // monotonic, so a start can tell which of the two is newer
 
     bool project_dirty_ = false;

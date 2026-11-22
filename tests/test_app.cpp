@@ -623,6 +623,59 @@ TEST(app_a_resample_records_a_bar_and_writes_it_to_the_card) {
     CHECK(host.has_file("/RECORD/STRATA_2.WAV"));
 }
 
+TEST(app_a_take_is_written_once_per_request) {
+    // `take_pending_ = false` once the write starts. Deleting it survived: the next take, which
+    // nobody asked to keep, was written to the card as well.
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+    put_trig(0, 0);
+    post(Cmd::set_param, 0, 0, 11, 127);
+    pump();
+    host.set_running(true);
+
+    auto run_a_take = [&](uint32_t bar_tick) {
+        post(Cmd::resample_arm, 0, 0, 1);
+        host.deliver_tick(bar_tick, 0);
+        for (int i = 0; i < 1500; i++) {
+            if (i % 8 == 0) host.deliver_tick(bar_tick + uint32_t(i), 0);
+            pump();
+            const uint32_t state = engine.status().resample_state.load(std::memory_order_relaxed);
+            if (state == 0u || state == 3u) {
+                if (i > 4) break;
+            }
+        }
+        pump(20);
+    };
+
+    // The take counter lives in the settings and earlier tests have moved it, so the names are
+    // read back rather than assumed.
+    auto take_path = [&](char *out) {
+        std::strcpy(out, "/RECORD/");
+        std::strcat(out, storage().last_take_name());
+    };
+    char first[64];
+    storage().request_resample_write();
+    run_a_take(384);
+    take_path(first);
+    CHECK(storage().last_take_name()[0] != '\0');
+    CHECK(host.has_file(first));
+    const int files = host.file_count();
+
+    // A second take with no request: it finishes and waits in the buffer, and nothing is written.
+    run_a_take(768);
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 3);
+    CHECK_EQ(host.file_count(), files);
+
+    // Asked for now, it is written -- and given back, so the next take can be armed.
+    storage().request_resample_write();
+    pump(20);
+    char second[64];
+    take_path(second);
+    CHECK(std::strcmp(first, second) != 0);
+    CHECK(host.has_file(second));
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 0);
+}
+
 TEST(app_a_resample_can_land_in_a_track_in_one_action) {
     // docs/SPEC.md asks for the round trip "in one action", which is why the load-back is a
     // parameter of the request rather than a second gesture.

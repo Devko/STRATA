@@ -189,6 +189,11 @@ bool Storage::init(Engine &engine) {
 
 // --- paths ----------------------------------------------------------------
 
+// Mutation testing note: the path buffers in this file are ENAGA_FILE_PATH_MAX + 1 bytes and every
+// BAD PATH below is unreachable today -- the longest path STRATA builds is the data folder, 10
+// bytes of "/PROJECTS/", a 23-byte name and "/PERFORM.BIN", well under 80 of the ABI's 255. So a
+// buffer two bytes smaller, or a BAD PATH branch deleted, survives the suite, and that is an
+// equivalence rather than a missing test. The checks stay: the data folder is Enaga's to name.
 bool Storage::folder_path(char *out, uint32_t max, bool autosave) const {
     if (max == 0) return false;
     char *p = out;
@@ -248,12 +253,32 @@ void Storage::request_reload() {
     // away everything unsaved.
     autosave_ = false;
     load_pending_ = true;
+    new_pending_ = false;
 }
 
 void Storage::request_new() {
+    // Queued, not done here. It used to run on the spot, and the UI calls this straight from a
+    // key press -- with whatever edits that same press and the ones before it left in the ring.
+    // `project_init` rewrites 1.03 MiB of pattern memory from the main context, and the audio
+    // side applies pending edits to that memory whether or not the clock runs: two contexts
+    // writing the same bytes, which is what app/storage.hpp's first protocol exists to rule out.
+    // service() starts it once the ring is empty, as it does a load.
+    //
+    // The latest of a new project and a reload is the one the user meant.
+    new_pending_ = true;
+    load_pending_ = false;
+}
+
+void Storage::start_new() {
     // RAM only: nothing is written until a save, so a new project cannot lose the one on the
     // card by itself.
     if (!enaga::clock::running() || enaga::clock::stop()) {
+        // The scenes and macros FIRST, then the project, then the post. `Cmd::project_loaded` is
+        // what tells the audio side that everything it derives is stale -- the performance layer
+        // included (app/engine.cpp sets its own `perform_dirty_` there) -- so it has to come
+        // after every write it describes. This used to post first and then call
+        // `performance_changed()`, a plain bool the audio side also writes, from this context.
+        perform_init(engine_->scenes_for_load(), engine_->macros_for_load());
         project_init(engine_->project_for_load());
         post(Cmd::project_loaded);
 
@@ -261,7 +286,12 @@ void Storage::request_new() {
         // a project the user never asked to touch, which is the one unrecoverable mistake this
         // screen could make. The counter lives in the settings so the names stay distinct across
         // restarts; there is no file browser in M4 to offer anything better.
-        // A new name names a folder with nothing in it, so the next save has to write all ten.
+        //
+        // A new name names a folder with nothing in it, so the next save has to write all ten:
+        // `project_complete_` is what makes a save write every file. The dirty flags below are a
+        // second, separate fact -- that RAM differs from the card, which the screen shows -- and
+        // either one alone would get this save right, which is why deleting one of them is a
+        // mutation no test can kill. Both are kept because each answers its own question.
         project_complete_ = false;
 
         const int32_t next = settings_.get(kKeyNewSeq, 0) + 1;
@@ -277,11 +307,10 @@ void Storage::request_new() {
         // for the reason step_load gives.
         sample_queue_ = 0xFFu;
         wanted_budget_ = uint32_t(kSampleBudgetDefaultMib) << 20;
-        perform_init(engine_->scenes_for_load(), engine_->macros_for_load());
-        engine_->performance_changed();
         project_dirty_ = kit_dirty_ = perform_dirty_ = true;
         for (int b = 0; b < kBanks; b++) bank_dirty_[b] = true;
         error_ = nullptr;
+        project_error_ = nullptr;
     } else {
         error_ = "EXT CLOCK";
     }
@@ -295,6 +324,9 @@ bool Storage::open_last() {
     const int32_t auto_seq = settings_.get(kKeyAutoSeq, 0);
 
     char path[ENAGA_FILE_PATH_MAX + 1];
+    // `>` and `>=` differ only on a tie, and the two counters cannot tie once either exists:
+    // they are written from one `save_seq_` that every save bumps first. Both 0 is a card with
+    // neither, where the choice does not matter.
     const bool prefer_auto = auto_seq > project_seq;
     if (prefer_auto && project_path(path, sizeof path, true, "PROJECT.BIN")) {
         enaga::files::Info info;
@@ -359,6 +391,10 @@ void Storage::on_card(bool usable) {
     // flight owns `raw_` until its callback -- which will still arrive, with an error. So the job
     // is abandoned here but `read_in_flight_` is left alone: nothing may reuse that buffer until
     // Enaga has finished with it.
+    //
+    // (`sample_track_` is -1 whenever no sample job runs, so the job test is belt and braces, and
+    // the `sample_queue_ = 0` below is re-filled by the request_all_samples a returning card
+    // makes. Both survive mutation for that reason.)
     if (job_ == Job::sample_epoch || job_ == Job::sample_read || job_ == Job::sample_convert ||
         job_ == Job::sample_resample) {
         if (sample_track_ >= 0) pool_.fail(sample_track_);
@@ -374,7 +410,7 @@ void Storage::on_card(bool usable) {
 
 void Storage::begin_job(Job job) {
     job_ = job;
-    step_ = 0;
+    step_ = 0;      // finish_job zeroes it too; either alone suffices, and each survives deletion
 
     error_ = nullptr;
 
@@ -408,6 +444,7 @@ void Storage::finish_job(const char *error) {
             const char *what = saving ? "save failed " : "load failed ";
             while (*what != '\0') *out++ = *what++;
             const char *why = error;
+            // 12 + 24 + NUL fits 40 with room to spare, so `<=` here is not an overflow either.
             while (*why != '\0' && out < line + 36) *out++ = *why++;
             *out = '\0';
             enaga::log(line);
@@ -425,11 +462,13 @@ void Storage::finish_job(const char *error) {
     const bool project_job = job_ == Job::save || job_ == Job::load;
     job_ = Job::idle;
     step_ = 0;
-    if (error != nullptr) {
-        error_ = error;
-        // And kept where the sample swaps that follow a load cannot reach it.
-        if (project_job) project_error_ = error;
-    }
+    if (error != nullptr) error_ = error;
+    // And kept where the sample swaps that follow a load cannot reach it. From `error_`, not only
+    // from `error`: a load that refuses one file carries on with the rest -- step_load records
+    // the reason in `error_` and finishes with nullptr -- and that reason is the one the screen
+    // most needs. Taking it from `error` alone left it in the slot the very next sample job
+    // clears, which is the bug `project_error_` was added to fix.
+    if (project_job && error_ != nullptr) project_error_ = error_;
 }
 
 const char *Storage::busy_text() const {
@@ -471,7 +510,25 @@ int Storage::progress() const {
 int Storage::loading_track() const { return sample_track_; }
 
 void Storage::service() {
+    // A new project first, and before the card check: it is RAM only, so it needs no card. It
+    // waits for an idle loader and an empty ring like a load, and for a save asked for before
+    // it, which belongs to the project being replaced.
+    if (new_pending_ && job_ == Job::idle && engine_->commands().empty() &&
+        !(card_usable_ && (save_pending_ || autosave_pending_))) {
+        new_pending_ = false;
+        start_new();
+        return;
+    }
+
     if (!card_usable_) return;
+
+    // A save or a load is one file per pass, and the UI runs between passes. The ring was empty
+    // when the job STARTED (below), but an edit posted since can be applied by the audio side in
+    // the middle of this pass -- audio() preempts the main context -- so a save would serialize
+    // a step half old and half new, and a load would have two contexts writing the same pattern
+    // bytes. So every pass waits for the ring exactly as the first one did. A knob turned without
+    // pause holds the job back until it stops; that is the same trade the start already makes.
+    if ((job_ == Job::save || job_ == Job::load) && !engine_->commands().empty()) return;
 
     switch (job_) {
         case Job::save: step_save(); return;
@@ -480,7 +537,7 @@ void Storage::service() {
         case Job::sample_read: 
             // Nothing to do but wait: Enaga works the load in the main loop between callbacks.
             if (read_done_) {
-                read_done_ = false;
+                read_done_ = false;   // and again before every read starts, so equivalent
                 if (read_result_ < 0) {
                     if (sample_track_ >= 0) pool_.fail(sample_track_);
                     sample_track_ = -1;
@@ -543,7 +600,7 @@ void Storage::service() {
     // the budget stays higher than the project asked, which only ever allows more.
     if (wanted_budget_ != 0 && !read_in_flight_) {
         const uint32_t wanted = wanted_budget_;
-        wanted_budget_ = 0;
+        wanted_budget_ = 0;     // set_budget is idempotent, so re-applying it is harmless
         if (!pool_.set_budget(wanted)) error_ = "BUDGET BUSY";
     }
 }
@@ -597,6 +654,8 @@ void Storage::step_save() {
         file = "PERFORM.BIN";
         res = perform_write(engine_->scenes(), engine_->macros(), file_, kFileBytes, &bytes);
     } else if (index < kFileCount) {
+        // (`<=` survives: index kFileCount names bank kBanks, bank_file_name refuses it, and the
+        // pass is wasted before the next one finishes the job. Equivalent, one pass slower.)
         const int bank = index - kFileFirstBank;
         if (!all && !bank_dirty_[bank]) return;
         char name[12];
@@ -605,6 +664,9 @@ void Storage::step_save() {
             finish_job("BAD PATH");
             return;
         }
+        // A serializer fails only for a buffer too small, and `file_` is kBankMaxBytes, the
+        // largest file there is -- so these refusals cannot happen and deleting their
+        // finish_job survives. Kept, because the sizes are another file's to change.
         res = bank_write(project, bank, file_, kFileBytes, &bytes);
         if (res != SerializeResult::ok) {
             finish_job(serialize_result_name(res));
@@ -645,6 +707,8 @@ void Storage::step_save() {
         return;
     }
     if (!autosave_) {
+        // `!=` survives: request_save marks the kit dirty every time, so KIT.BIN is written by
+        // every deliberate save, and a clear moved onto that write ends in the same state.
         if (index == kFileProject) project_dirty_ = false;
         if (index == kFileKit) kit_dirty_ = false;
         if (index == kFilePerform) perform_dirty_ = false;
@@ -819,6 +883,10 @@ void Storage::step_sample_epoch() {
         // Not yet. A wrap is harmless -- this compares against the value it saw rather than
         // counting -- but a track whose epoch never moves must not hang the loader for ever.
         if (++epoch_waited_ < kEpochPasses) return;
+        // Giving the range back unconfirmed is safe for one reason only: the `clear_sample`
+        // posted above is still in the ring, and service() starts nothing while the ring is
+        // non-empty. So the audio side kills the voice before anything can write here again.
+        // tests/test_storage.cpp pins it; drop that gate and this line becomes the bug.
         pool_.fail(track);
         sample_track_ = -1;
         finish_job("NO SWAP");

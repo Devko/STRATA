@@ -20,6 +20,16 @@ void Registry::add(const char *name, void (*fn)()) {
         failures++;
         return;
     }
+    // A second test under a name already taken is a failure too. Both still run, but the suite
+    // prints the name twice, so a failure no longer says which file it came from -- and --list,
+    // which shards by name, would hand both to whichever shard asked for one.
+    for (int i = 0; i < count; i++) {
+        if (std::strcmp(entries[i].name, name) == 0) {
+            std::printf("test name registered twice, rename one: %s\n", name);
+            failures++;
+            break;
+        }
+    }
     entries[count].name = name;
     entries[count].fn = fn;
     count++;

@@ -369,7 +369,7 @@ TEST(loop_numbers_advance_for_conditions) {
 
 // --- robustness -----------------------------------------------------------
 
-TEST(degenerate_input_is_handled) {
+TEST(timing_clamps_degenerate_input) {
     TrackTiming timing;
     timing.length = 0;              // illegal: clamped to 1
     timing.speed = Speed::x1;
@@ -385,7 +385,7 @@ TEST(degenerate_input_is_handled) {
     CHECK(steps_firing_at(0, timing, nullptr, firings, kMaxFiringsPerTick) >= 0);
 }
 
-TEST(a_long_run_stays_consistent) {
+TEST(a_long_timing_run_stays_consistent) {
     // Roughly four minutes at 130 BPM, to be sure nothing drifts or overflows.
     int8_t micro[kMaxSteps];
     for (int i = 0; i < kMaxSteps; i++) micro[i] = int8_t((i % 23) - kMicroRange);

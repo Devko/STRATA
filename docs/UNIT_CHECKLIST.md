@@ -97,6 +97,11 @@ standing in for CHORD, and the LOOP sampler. The default pattern plays all of th
       then prepared from the unlocked kit every block, so a lock on a cutoff or a decay did
       nothing at all while a locked *note* worked fine. If locks ever look right on screen and
       sound wrong, that asymmetry is the first thing to suspect.
+- [ ] **Clearing one lock.** Hold STEP 9 on the kick and push encoder A on the AMP page: the
+      screen says LOCK CLEARED, the step's LED loses its red if it had no other lock, and the
+      third kick goes back to the kit's long body. Check every knob, not just A -- Enaga numbers
+      the pushes B, A, C, D, and a push that clears the wrong parameter is exactly what that
+      ordering invites. F1 + CLR puts the lock back.
 - [ ] While there: turn a knob on a track whose current step carries a lock on that same
       parameter. The knob should be heard at once, and the lock should win again from the next
       step.
