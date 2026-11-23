@@ -153,6 +153,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | — | Macros A-D | Capture scene / clear macro | — (auto-fill: FUNC menu) |
 | FUNC menu | Row | Change a setting row | — | — | A: row, B: change | Run the row / close | — |
 
+**STEP lights:** a trig is green as bright as its velocity (soft, medium, loud, accent), blinks with a condition or probability, is amber with locks; red = trigless, bright red = the playhead.
 **KEYS:** the pads are a piano: lower 1-8 C D E F G A B C, upper C# D# (octave down) F# G# A# (octave up), at the pad's velocity, held while down, pressure bends macro A; lit as a keyboard (root bright, scale dim, held white); FUNC + pad keeps its usual job. STEP 1-16 play the scale from the root and hold the note until released; the pad-row keys (or LEFT/RIGHT) change the octave of both. Letting go also releases that note if the sequencer is playing it on the same track.
 **PROJECT:** STEP 1-16 queue that slot of the shown bank; the pad-row keys change the shown
 bank. The screen keys walk the pages PROJECT, CHAIN, PATTERN, SETUP, PROJECTS; CLR on any of

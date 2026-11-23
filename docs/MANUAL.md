@@ -620,8 +620,9 @@ OUT channel: OFF, or 1-16. `FUNC+EDIT` again opens the kit library (section 6).
 
 Tap a STEP for a trig; tap again to remove it. **FUNC + tap** makes a **trigless** step: it plays
 no note but its locks still apply, which is how you change a sound mid-note or set up the next
-hit. The STEP LEDs show: green = trig, dim green = trig with a condition or probability, amber =
-trig with locks, red = trigless, bright red = the playhead.
+hit. The STEP LEDs show: green = trig, as bright as its velocity (four steps: soft, medium,
+loud, accent; an accented step is brightest), blinking = trig with a condition or probability,
+amber = trig with locks, red = trigless, bright red = the playhead.
 
 The step page's fields:
 
