@@ -532,7 +532,20 @@ public:
             return;
         }
         if (down) shift_alone_ = false;
-        if (key == ENAGA_KEY_PUSH_VALUE) { value_pushed_ = down; return; }
+        // A press of VALUE on its own, let go with nothing turned or pressed in between, resets
+        // what VALUE is on to 0 (Roland, 2026-11-23; value_reset). Held, it stays the modifier
+        // for swing, STEP, LEFT/RIGHT and CLR, which is why it acts on the RELEASE.
+        if (key == ENAGA_KEY_PUSH_VALUE) {
+            value_pushed_ = down;
+            if (down) {
+                value_alone_ = true;
+            } else if (value_alone_) {
+                value_alone_ = false;
+                value_reset();
+            }
+            return;
+        }
+        if (down) value_alone_ = false;
 
         // Typing a project's name (PROJECTS page, FUNC+DOWN): the entry takes every key until OK
         // or CLR closes it (<enaga/ui.hpp>). F1 and VALUE's push are tracked above, so a FUNC
@@ -1561,6 +1574,7 @@ public:
 
     void on_encoder(int encoder, int delta) override {
         shift_alone_ = false;                   // FUNC + a knob: the hand knew; no help
+        value_alone_ = false;                   // push VALUE + any turn is a chord, not a reset
         if (name_entry_.active()) {
             name_entry_.encoder(encoder, delta);      // A moves, B and VALUE pick the character
             return;
@@ -2006,6 +2020,7 @@ public:
 
     void on_pad_press(int pad, int velocity) override {
         shift_alone_ = false;                   // FUNC + a pad: the hand knew; no help
+        value_alone_ = false;
         // KEYS: both rows are a piano. FUNC + a pad keeps its usual job (mute on the bar, the
         // performance moves), so a mute is still a reach away while playing.
         if (mode_ == Mode::keys && !shift_ && pad >= 0 && pad < kPianoPads) {
@@ -5070,6 +5085,40 @@ public:
         notice("FX OFF");
     }
 
+    // A press of VALUE alone (on_key): what VALUE is on, back to 0. A picked effect's amount
+    // (dry), the looper's mix (live), PERFORM's morph (at rest: the knobs own the sound), and
+    // with FUNC the DJ filter (OFF). Not the tempo, swing or a field: 0 is no tempo, and a reset
+    // there would be a trap rather than a shortcut. Not with a STEP held (VALUE is that step's
+    // note, and hold STEP + push is a lock's removal on A-D) or while a name is typed.
+    void value_reset() {
+        if (held_step_ >= 0 || name_entry_.active() || mode_ == Mode::menu) return;
+        if (shift_) {
+            const int dj = int(engine_.project().settings.master[int(MasterField::dj)]);
+            if (dj != 64) post_delta(Cmd::set_master, 0, 0, uint8_t(MasterField::dj), 64 - dj);
+            notice("DJ OFF");
+            return;
+        }
+        if (perf_picked_ == PerfFx::looper) {
+            loop_mix_ = 0;
+            post(Cmd::looper, 0, 0, 0, 0);
+            perf_notice(PerfFx::looper, false);
+            return;
+        }
+        if (perf_picked_ != PerfFx::none) {
+            perf_set(perf_fx_, 0);
+            perf_notice(perf_fx_, false);
+            return;
+        }
+        if (mode_ == Mode::perform) {
+            morph_ = 0;
+            Command command;
+            command.cmd = Cmd::set_morph;
+            command.u = morph_;
+            post_command(command);
+            notice("MORPH 0");
+        }
+    }
+
     // VALUE with an effect picked: its amount, two counts a click (the whole range in 64
     // clicks, as a macro); with the looper picked, its mix.
     void perf_turn(int delta) {
@@ -6564,6 +6613,7 @@ private:
     uint8_t perf_amount_ = 0;
     uint8_t loop_mix_ = 0;
     uint16_t perf_step_keys_ = 0;
+    bool value_alone_ = false;     // VALUE pushed with nothing else since: its release resets
     uint8_t frozen_seen_ = 0;                   // Status::frozen as update() last saw it
     const char *freeze_error_seen_ = nullptr;   // and Storage::freeze_error
     uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)

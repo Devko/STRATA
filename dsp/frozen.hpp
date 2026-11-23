@@ -20,8 +20,10 @@
 // began in) is that bar. On every bar line where (bar - origin) is a multiple of the loop's
 // length the read position is set back to exactly that frame, and between those bars it runs
 // free a frame a sample, wrapping at the loop's end. At a steady tempo the reset lands where the
-// read already was, so it is seamless; after a tempo change or a relocate it is where the loop
-// jumps back into time -- once per loop, never stretched. Stopped, the track fades out over one
+// read already was, so it is seamless. A read that is lost -- after a stop and start, a relocate
+// or a tempo change -- jumps back into time on the next bar line of any kind, never stretched
+// (dsp/loopsync.hpp): a stop and start puts the clock on bar 0, which may be a few bars from the
+// loop's own. Stopped, the track fades out over one
 // block and stays silent; the first tick after a start resyncs it (Engine::on_bar).
 //
 // Nothing here allocates: the loop lives in the sample pool's freeze slot for the track

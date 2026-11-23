@@ -7742,3 +7742,79 @@ TEST(ui_value_held_lights_the_step_keys_as_the_sixteen_effects) {
     pump(2);
     CHECK_EQ(int(UiProbe::step_green(app, 0)), 0);  // the grid again: an empty step
 }
+
+// --- a press of VALUE alone resets it to 0 (Roland, 2026-11-23) --------------------------------
+
+namespace {
+void value_press(Strata &app) {
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+}
+}  // namespace
+
+TEST(ui_a_press_of_value_alone_resets_the_effect_the_loop_mix_and_the_morph) {
+    Strata &app = fresh();
+    // A picked effect: back to dry, still picked.
+    value_step(app, 3);
+    app.on_encoder(4, 20);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 40);
+    value_press(app);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 0);
+    CHECK(app_engine().perf_fx() == PerfFx::echo_riser);
+    CHECK(std::strcmp(UiProbe::notice(app), "ECHO RISER 0") == 0);
+
+    // Push VALUE + a turn is swing, not a reset.
+    app.on_encoder(4, 20);
+    pump(2);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    app.on_encoder(4, 1);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 40);
+    value_step(app, 3);                              // let go
+
+    // PERFORM's morph, with nothing picked.
+    shift_key(ENAGA_KEY_F7);
+    app.on_encoder(4, 10);
+    pump(2);
+    CHECK(app_engine().morph() > 0);
+    value_press(app);
+    pump(2);
+    CHECK_EQ(int(app_engine().morph()), 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "MORPH 0") == 0);
+
+    // The tempo is never reset.
+    key(ENAGA_KEY_F4);
+    const uint32_t tempo = UiProbe::tempo_tenths(app);
+    value_press(app);
+    pump(2);
+    CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
+}
+
+TEST(ui_func_and_a_press_of_value_turns_the_dj_filter_off) {
+    Strata &app = fresh();
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(4, 10);
+    pump(2);
+    CHECK(int(app_engine().project().settings.master[int(MasterField::dj)]) != 64);
+    value_press(app);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(app_engine().project().settings.master[int(MasterField::dj)]), 64);
+    CHECK(std::strcmp(UiProbe::notice(app), "DJ OFF") == 0);
+}
+
+TEST(ui_a_press_of_value_with_a_step_held_resets_nothing) {
+    Strata &app = fresh();
+    value_step(app, 3);
+    app.on_encoder(4, 10);
+    pump(2);
+    step_down(0);
+    value_press(app);
+    step_up(0);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 20);
+    value_step(app, 3);
+}

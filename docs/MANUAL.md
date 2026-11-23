@@ -1066,7 +1066,10 @@ does not change the tempo or PERFORM's morph. Push VALUE + the same STEP again l
 
 One effect plays at a time: picking another replaces it, and the old one fades out. **Push VALUE
 + LEFT/RIGHT** moves to the previous or next slot and keeps the amount, so you can switch effects
-with the crossfader still up. **Push VALUE + CLR** turns everything off.
+with the crossfader still up. **Press VALUE on its own** (push and let go without turning) to
+snap back to 0: the effect goes dry but stays picked, and with the looper picked the mix goes back
+to live. The same press resets PERFORM's morph (`MORPH 0`), and FUNC + a press turns the DJ
+filter off. It never touches the tempo. **Push VALUE + CLR** turns everything off.
 
 **The looper (STEP 16).** Push VALUE + STEP 16 with the beat running: from the next bar line the
 whole mix is recorded for 4 bars (`LOOP 4 BAR: NEXT BAR`; set 1, 2, 4 or 8 in the FUNC menu's

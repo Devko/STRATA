@@ -1088,6 +1088,35 @@ TEST(app_unfreezing_a_freeze_on_its_way_cancels_the_take) {
     FakeHost::the().set_running(false);
 }
 
+TEST(app_a_freeze_the_engine_refuses_stops_waiting_and_says_so) {
+    // The looper armed in the same block as a freeze: the main context's check reads a status
+    // one block old and lets the freeze through, and the engine refuses its take. Before, the
+    // freeze then waited for a take that never came: FREEZE said WAIT, and every later freeze
+    // and RESAMPLE write was refused as busy until the track was unfrozen by hand.
+    Engine &engine = fresh();
+    FakeHost::the().set_running(true);
+    pump();
+    post(Cmd::looper, 0, 0, 1, 1);             // not pumped: the status still says idle
+    CHECK(storage().request_freeze(0, 1));
+    pump(2);
+    CHECK_EQ(int(engine.status().looper_state.load(std::memory_order_relaxed)), 1);
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 0);
+    CHECK_EQ(storage().freezing_track(), -1);
+    CHECK(storage().freeze_error() != nullptr);
+    CHECK(std::strcmp(storage().freeze_error(), "FREEZE REFUSED") == 0);
+    CHECK(!storage().take_busy());
+    // With the loop thrown away the buffer is free, and the next freeze goes through.
+    post(Cmd::looper, 0, 0, 2);
+    pump(2);
+    CHECK(storage().request_freeze(0, 1));
+    pump(2);
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 1);
+    CHECK(storage().freeze_error() == nullptr);
+    storage().request_unfreeze(0);
+    pump(2);
+    FakeHost::the().set_running(false);
+}
+
 TEST(app_an_input_take_with_no_input_buffer_records_silence_and_ends) {
     // The rigs pass no input. The take must still end on its frame and reach the card.
     fresh();

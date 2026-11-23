@@ -73,7 +73,7 @@ constexpr Text kValueMixer = {"VALUE FX MIXER:", {
     "PUSH VALUE+STEP  PICK",
     "  SAME STEP  LETS GO",
     "VALUE  AMOUNT 0 = DRY",
-    "ONE EFFECT AT A TIME",
+    "PRESS VALUE   RESET 0",
     "PUSH+LEFT/RIGHT  NEXT",
     "PUSH+CLR  ALL OFF",
     "  AGAIN  CLEARS LOOP",

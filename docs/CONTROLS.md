@@ -66,7 +66,10 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      cursor (delete then asks for OK twice).
    - **VALUE:** tempo (PERFORM: morph; CHAIN/PATTERN: the field under the cursor). Push + turn =
      swing, FUNC + turn = DJ filter. **Push + STEP 1-16 picks a performance effect, and while one
-     is picked VALUE is its amount on every screen** (the performance mixer, below).
+     is picked VALUE is its amount on every screen** (the performance mixer, below). **A press
+     of VALUE alone** (let go with nothing turned or pressed meanwhile) resets what it is on to 0:
+     a picked effect's amount, the looper's mix, PERFORM's morph; with FUNC, the DJ filter to
+     OFF. Never the tempo, swing or a field, and nothing while a STEP is held.
    - **STEP keys:** the sixteen of whatever the pad-row keys chose.
    - **Lower pads:** the eight tracks: select and play. FUNC + pad = mute on the next bar.
    - **Upper pads:** the seven performance tools, the same in every mode but KEYS.
@@ -168,6 +171,7 @@ slots, `dsp/masterfx.hpp` the five new effects, `dsp/looper.hpp` the looper.
 | Push VALUE + LEFT / RIGHT | The previous / next slot, round the sixteen, keeping the amount: a scene change with the crossfader left up. Reaching 16 picks the looper without recording |
 | Push VALUE + STEP 16 | The looper: records the finished mix from the next bar line for LOOP LEN bars (`LOOP 4 BAR: NEXT BAR`, `LOOP ARMED: PLAY` when stopped), then plays it. Again: a new take |
 | VALUE (looper picked) | The loop's mix, 0 live ... 127 only the loop (`LOOP MIX 64`) |
+| Press VALUE alone | The picked effect back to 0, dry (`ECHO RISER 0`), or the looper's mix to 0 (`LOOP MIX 0`); the effect stays picked |
 | Push VALUE + CLR | Every effect off and the loop's mix to 0 (`FX OFF`); again, with all of that off, throws the loop away (`LOOP CLEARED`) |
 | VALUE held | The STEP keys are the sixteen slots: dim amber; the effect that is up bright amber; the picked one bright green; STEP 16 red blinking armed, red recording, green holding a loop |
 

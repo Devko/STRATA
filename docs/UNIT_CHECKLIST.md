@@ -148,6 +148,9 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
   Turn VALUE up: the loop takes over. Mute the hats and kick (FUNC + lower pads): you only hear it
   once VALUE goes back down. Loop in time and without a click at its end? `____`
 - With the loop up, push VALUE + STEP 1 and turn: the low-pass sweeps the loop too.
+- With an effect up, press VALUE and let go without turning: `... 0`, dry at once, the effect
+  still picked (turn again: it comes back). PERFORM: turn the morph, press VALUE: `MORPH 0`.
+  FUNC + turn VALUE (DJ filter), then FUNC + press VALUE: `DJ OFF`. The tempo never resets.
 - Push VALUE + CLR: `FX OFF`. Again: `LOOP CLEARED`. MAX meanwhile: `________ %` (U11 is in 13o).
 
 **17. Samples from the SmplTrek's own folders (2 min).** Needs a card the stock firmware has used,
@@ -898,9 +901,11 @@ voices) so there is something worth freezing. Note LOAD and MAX first: LOAD `___
       it frozen `____`, MAX after PLAY `____` (expect several points lower: the six voices stop).
 - [ ] Track 7's filter (FLTR CUT), its fader, pan and send still change the sound. Its SRC knobs
       and new steps do nothing, and EDIT says `FROZEN: FUNC+HOME`.
-- [ ] Change the tempo by 10 BPM: the loop drifts for at most one loop, then jumps back into time.
-      Back to 142.
+- [ ] Change the tempo by 10 BPM: the loop jumps back into time on the next bar line (a small
+      jump each bar while the tempo is off). Back to 142.
 - [ ] STOP: track 7 fades out with the rest. PLAY: it comes back in time from bar 1.
+- [ ] Freeze a track for 4 or 8 bars, let it play past bar 5, STOP, PLAY: in time from the first
+      bar, not several bars later (fixed 2026-11-23, after #109).
 - [ ] FUNC+HOME, UP, OK: `UNFROZEN`, the live chord is back on the next step, LOAD goes back up.
 - [ ] Freeze track 8 (the SAMPLE loop) and then unfreeze it: its sample is still there
       straight away (no reload).
@@ -924,8 +929,11 @@ New 2026-11-23 (docs/CONTROLS.md, "The performance mixer"). Play A01.
       VALUE up: the loop alone, in time; leave it a minute: still in time.
 - [ ] Push VALUE + CLR once (`FX OFF`: the loop is kept at mix 0), turn VALUE: the tempo moves.
       Up 10 BPM. Push VALUE + LEFT until `LOOP MIX 0` (that picks the looper without recording),
-      turn VALUE up: the loop drifts for at most one loop, then jumps back into time.
+      turn VALUE up: it jumps back into time on the next bar line.
 - [ ] STOP: the loop fades with the rest. PLAY: it comes back in time from bar 1.
+- [ ] With the loop playing at mix 127, push VALUE + STEP 16 again: the loop plays on, in time,
+      until the bar line, then the new take starts with no click and no gap; it records the live
+      beat, not the old loop.
 - [ ] While the loop is held, FUNC+REC then OK: `LOOP HOLDS BUFFER`; FUNC menu FREEZE, OK: the
       same. Push VALUE + CLR twice: `LOOP CLEARED`, and RESAMPLE works again.
 - [ ] **U11.** A01 with 15 BUILD at 127 and a playing loop at mix 64, STOP then PLAY, 60 s:

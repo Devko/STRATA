@@ -466,6 +466,10 @@ struct Status {
     // protocol, on a counter of its own so the two swaps can never be mistaken for each other.
     std::atomic<uint8_t> frozen{0};
     std::atomic<uint8_t> freeze_epoch[8] = {};
+    // Bumped when the audio side refuses a freeze's take (Cmd::resample_arm with b 3): the main
+    // context checks before posting, but a check one block old can lose a race (a loop armed in
+    // the same block), and without this it would wait for a take that never comes.
+    std::atomic<uint8_t> freeze_refused{0};
 
     // M6. Resampling. `resample_state` is 0 idle, 1 armed (waiting for the bar line), 2
     // recording, 3 a finished take the card has not had yet; `resample_frames` is how much is in
@@ -516,6 +520,12 @@ struct Status {
     void bump_freeze_epoch(int track) {
         const uint8_t next = uint8_t(freeze_epoch[track].load(std::memory_order_relaxed) + 1);
         freeze_epoch[track].store(next, std::memory_order_relaxed);
+    }
+
+    // Audio context only, as bump_sample_epoch.
+    void bump_freeze_refused() {
+        freeze_refused.store(uint8_t(freeze_refused.load(std::memory_order_relaxed) + 1),
+                             std::memory_order_relaxed);
     }
 
     // Audio context only, so load-then-store is safe with one writer (see the note above).
