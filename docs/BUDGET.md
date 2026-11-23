@@ -1370,6 +1370,32 @@ To measure: U-row "everything on" on the unit with the MAX readout -- four POLY 
 MIN11 chords with the arp at 1/32, the kill EQ with a band killed, eight LFOs on DRV, tape stop
 held, freeze held, two streamed stems -- and E3 on the PC first.
 
+### The CPU guard (2026-11-23, host only)
+
+The 84.3% MAX above has no ceiling behind it: more chords or a denser cloud would take a block
+past 100%. `core/cpuguard.hpp` is the ceiling. Each audio block reads `enaga::audio_load()` (the
+previous block's cost) and keeps an ~11 ms average; at 70% average, or one block at 90%, it rises
+a level (at most one per 100 ms, or per 11 ms on a 90% block), and after each full second under
+55% it falls one. A level takes two voices off the shared POLY budget (12, 10, 8, 6, 4; ~2.2
+points each with cl6x) and shrinks every GRAIN pool (8, 6, 4, 3, 2 grains; a full cloud is +9.2
+points GCC-only). Level 4 therefore frees about 17 points of POLY and most of each dense GRAIN
+track. Shed POLY voices take the existing 64-frame choke, quietest first, one a block; GRAIN skips
+spawns instead of stealing, so nothing is cut mid-window.
+
+**It is a safety net, not the budget.** CLAUDE.md's order (effects and insert stages before
+voices) still governs what the worst case is designed to; the guard only acts when play goes past
+it, and it sheds voices rather than effects because dropping a reverb or a delay mid-tail is
+heard at once, while the quietest POLY voice fading over 1.3 ms mostly is not.
+
+**Cost:** a one-pole average and three compares a block, plus a scan of eight tracks' POLY
+voices only while the budget is lowered. Under 0.1 points; not measured. At level 0 the engine
+renders bit-for-bit as before (the golden renders and the bit-exact tests pass untouched).
+
+**Owed:** the thresholds (700 / 550 / 900 per mille) are provisional. Set them from the unit
+(UNIT_CHECKLIST, "The CPU guard"): A01 must never raise it, and the 84% session must stay
+under 100% with it. The scenarios never reach the guard's thresholds; nothing on the emulator
+exercises it.
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |

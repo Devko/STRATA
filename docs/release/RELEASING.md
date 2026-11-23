@@ -27,6 +27,9 @@ tools/publish_release.sh v0.1.0 --build gcc --max-a01 30.1 --max-a04 41.7 --dry-
 tools/publish_release.sh v0.1.0 --build gcc --max-a01 30.1 --max-a04 41.7             # publish
 ```
 
+Without the clean A01 and A04 readings, `--unit-load "One sentence."` puts your own sentence about the
+unit's load in their place.
+
 `--build` says which compiler built the card (`gcc`, or `cl6x` together with
 `--ti-licence-read`), and the two figures are the MAX readings on A01 and A04 from the
 walkthrough. `--draft` creates the GitHub release as a draft to look at before pressing Publish.

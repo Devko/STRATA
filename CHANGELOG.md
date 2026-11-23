@@ -4,6 +4,14 @@ All notable changes to STRATA. The format follows [Keep a Changelog](https://kee
 and versions follow [Semantic Versioning](https://semver.org/). Before 1.0, any release may change
 the project file format or the controls.
 
+## [Unreleased]
+
+### Added
+
+- **CPU guard.** When the audio load stays high, STRATA sheds VA POLY voices (two a level, the
+  quietest fading out first) and thins GRAIN clouds instead of risking an overrun. The bottom
+  line shows `GUARD1` to `GUARD4` while it is up; it steps back down once the load falls.
+
 ## [0.1.0] - {{RELEASE_DATE}}
 
 The first release: STRATA on a SmplTrek running Enaga 0.2.0. Early, and released so that people
@@ -115,8 +123,8 @@ of the panel and screenshots of every screen.
 
 ### Known limits
 
-- Tested on one SmplTrek on {{RELEASE_DATE}}, with the {{BUILD}} build: MAX read
-  {{MAX_A01}} on A01 GROOVE and {{MAX_A04}} on A04 PEAK. Every other load figure comes from the
+- Tested on one SmplTrek on {{RELEASE_DATE}}, with the {{BUILD}} build. {{UNIT_LOAD}} Every other
+  load figure comes from the
   emulator, which models no caches.
 - VA POLY is the expensive machine: all tracks together share **12 VA POLY voices**. Past that,
   the quietest sounding voice is cut with a short fade. The number is provisional.

@@ -277,6 +277,17 @@ constexpr const char *kPerformPadNames[kPerformPads] = {
     "FILL", "REPEAT", "MUTE", "SCENE A", "SCENE B", "THROW", "MUTATE",
 };
 
+// KEYS plays the two pad rows as a piano (docs/CONTROLS.md): they are the pressure-sensitive
+// ones, and the upper seven sit between the lower eight like black keys between white. Semitones
+// above the octave's C, by pad id; kPadOctaveDown / kPadOctaveUp are the two upper pads with no
+// black key under them (between E and F, and after B), which walk the octave instead.
+constexpr int kPadOctaveDown = -1;
+constexpr int kPadOctaveUp = -2;
+constexpr int kPianoPads = 15;
+constexpr int kPianoSemitone[kPianoPads] = {
+    0,  1,  2,  3,  4, kPadOctaveDown, 5, 6, 7, 8, 9, 10, 11, kPadOctaveUp, 12,
+};
+
 // What a live notice shows (Strata::echo): nothing, the selected track's length and speed, or a
 // sound parameter's value.
 enum class Echo : uint8_t { none, layout, param };
@@ -830,6 +841,17 @@ public:
             case ENAGA_KEY_OK:
                 // RESAMPLE mode first: OK is what commits a take, and there is no step to hold.
                 if (mode_ == Mode::resample) {
+                    // Not while a take is armed, recording or still going to the card: the
+                    // engine would refuse the arm anyway, but the write request below would
+                    // retarget the take in flight -- a take asked for TO FILE landed on the track
+                    // now on screen, over that track's sample, and the screen said ARMED.
+                    const uint8_t state =
+                        engine_.status().resample_state.load(std::memory_order_relaxed);
+                    if (state != 0u || storage_.take_busy()) {
+                        notice(state == 3u || storage_.take_busy() ? "TAKE STILL WRITING"
+                                                                   : "TAKE RUNNING");
+                        break;
+                    }
                     // From the input: make sure the route is the one on screen before the take.
                     if (kTakeSources[take_source_].input >= 0 && !input_applied_) apply_input();
                     post(Cmd::resample_arm, 0, 0, kTakeBars[take_bars_index_],
@@ -1082,6 +1104,7 @@ public:
         // A KEYS key held across a mode change: its release goes to the next mode, so the note
         // is let go here or it would hang on a sustaining machine.
         for (int i = 0; i < 16; i++) release_key(i);
+        for (int i = 0; i < kPianoPads; i++) release_pad(i);
         if (held_step_ >= 0) {
             release_hold();
             end_gesture();
@@ -1644,6 +1667,12 @@ public:
 
     void on_pad_press(int pad, int velocity) override {
         shift_alone_ = false;                   // FUNC + a pad: the hand knew; no help
+        // KEYS: both rows are a piano. FUNC + a pad keeps its usual job (mute on the bar, the
+        // performance moves), so a mute is still a reach away while playing.
+        if (mode_ == Mode::keys && !shift_ && pad >= 0 && pad < kPianoPads) {
+            play_pad(pad, velocity);
+            return;
+        }
         // The performance row first: it is the same seven pads in every mode, which is what
         // docs/SPEC.md means by a fixed row.
         if (is_perform_pad(pad)) {
@@ -1692,6 +1721,12 @@ public:
     }
 
     void on_pad_release(int pad) override {
+        // A piano pad lets its note go whatever the mode is by now (leave_mode already did, if
+        // the mode changed under it).
+        if (pad >= 0 && pad < kPianoPads && pad_held_note_[pad] >= 0) {
+            release_pad(pad);
+            return;
+        }
         if (is_perform_pad(pad)) {
             on_perform_pad(pad, false);
             return;
@@ -1741,12 +1776,14 @@ public:
         // Guards for the second and third of those were written here and then removed: both
         // survived mutation testing, because this line already covers them. A guard that cannot
         // fire is a claim about a situation that cannot arise.
-        const int track = track_for_pad(pad);
+        // A held piano pad in KEYS bends the selected track's macro 1 like a track pad does.
+        const bool piano = pad >= 0 && pad < kPianoPads && pad_held_note_[pad] >= 0;
+        const int track = piano ? selected_ : track_for_pad(pad);
         if (track < 0 || track >= kTracks) return;
 
         // A rolling pad's pressure is the roll's velocity instead: lean in and the roll swells.
         // Change-filtered like the macro, and never below 1, which is silence on most machines.
-        if ((rolling_pads_ >> track & 1u) != 0) {
+        if (!piano && (rolling_pads_ >> track & 1u) != 0) {
             const uint8_t velocity =
                 uint8_t(pressure < 1 ? 1 : (pressure > 127 ? 127 : pressure));
             if (velocity == roll_velocity_[track]) return;
@@ -1917,13 +1954,13 @@ public:
         mutate_track_ = selected_;
     }
 
-    // Where OK and CLR are the verdict on a pending MUTATE (on_key): not PROJECT, KIT, SAMPLES
-    // or RESAMPLE, whose own OK and CLR come first, and not while a STEP, a range or a scene pad
-    // is held. The screen only offers the verdict where the keys will give it.
+    // Where OK and CLR are the verdict on a pending MUTATE (on_key): not PROJECT, KIT, SAMPLES,
+    // RESAMPLE or the FUNC menu, whose own OK and CLR come first (in the menu OK is SAVE), and
+    // not while a STEP, a range or a scene pad is held. The screen only offers the verdict where the keys will give it.
     bool verdict_keys_free() const {
         return mutation_pending_ && held_step_ < 0 && range_first_ < 0 && scene_holding_ < 0 &&
                mode_ != Mode::project && mode_ != Mode::kit && mode_ != Mode::samples &&
-               mode_ != Mode::resample;
+               mode_ != Mode::resample && mode_ != Mode::menu;
     }
 
     // Show a live value as the notice (see Echo). GRID draws the track's length and speed on
@@ -2209,6 +2246,19 @@ public:
             cpu_max_ = load > cpu_max_ ? load : cpu_max_;
         }
 
+        // The CPU guard's level, logged when it moves: on the unit and in a scenario this is how
+        // a run says the guard rose (core/cpuguard.hpp). It moves at most ten times a second, so
+        // the sixteen-line log ring is not at risk.
+        {
+            const uint8_t guard = engine_.status().cpu_guard.load(std::memory_order_relaxed);
+            if (guard != logged_guard_) {
+                logged_guard_ = guard;
+                char text[8] = "guard 0";
+                text[6] = char('0' + (guard > 9 ? 9 : guard));
+                enaga::log(text);
+            }
+        }
+
         const Status &status = engine_.status();
         const Pattern &pattern = engine_.pattern();
         const uint8_t playhead = status.playhead[selected_].load(std::memory_order_relaxed);
@@ -2303,7 +2353,7 @@ public:
             leds_.step(i, red, green);
         }
 
-        for (int t = 0; t < kTracks; t++) {
+        for (int t = 0; t < kTracks && mode_ != Mode::keys; t++) {
             const Rgb colour = kTrackColour[t];
             const uint8_t level = muted_[t] ? 0 : (t == selected_ ? 10 : 2);
             const uint8_t scale = level == 0 ? 0 : level;
@@ -2314,7 +2364,8 @@ public:
         // The performance pads (the upper row, printed TRK 1-7 on the SmplTrek): always lit dim
         // in their own colour, so the row reads as tools rather than tracks, and bright while
         // the pad is held or its mode is on (docs/CONTROLS.md).
-        for (int i = 0; i < kPerformPads; i++) {
+        if (mode_ == Mode::keys) light_piano_pads();
+        for (int i = 0; i < kPerformPads && mode_ != Mode::keys; i++) {
             const Rgb colour = kPerformColour[i];
             const bool held = (perform_held_ >> (kPerformPadIds[i] / 2) & 1u) != 0;
             const uint8_t level =
@@ -2431,8 +2482,12 @@ public:
         append(out, " ");
         // A dropped edit takes the device's place: "V12 LOFI-12 XT DROP 99" is 22 characters,
         // one past the edge, and the drop count is the part that matters.
+        // The CPU guard takes it next (core/cpuguard.hpp): when the box is shedding voices the
+        // user should be able to see why a chord got thinner. "TRK8 MAX99.9 GUARD4" is 19.
         const uint32_t dropped = engine_.commands().dropped();
+        const uint8_t guard = status.cpu_guard.load(std::memory_order_relaxed);
         if (dropped) { append(out, "DROP "); append_number(out, dropped); }
+        else if (guard) { append(out, "GUARD"); append_number(out, guard); }
         else append(out, device_name(enaga::system::device()));
         *out = 0;
         canvas.text(0, 120, line, 7);
@@ -3124,6 +3179,67 @@ public:
         // and MIDI OUT hold it until the key comes up.
         post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity, 1);
         record_note(selected_, note, kKeyVelocity);
+    }
+
+    // The note a piano pad plays: C of the current octave plus its semitone, -1 for the two
+    // octave pads. Chromatic, as a keyboard is; the LEDs show which notes are in the scale.
+    int pad_note(int pad) const {
+        if (pad < 0 || pad >= kPianoPads || kPianoSemitone[pad] < 0) return -1;
+        return clamp_int(kPadOctaveNote + keys_octave_ * 12 + kPianoSemitone[pad], 0, 127);
+    }
+
+    void release_pad(int pad) {
+        if (pad < 0 || pad >= kPianoPads || pad_held_note_[pad] < 0) return;
+        post(Cmd::release_note, uint8_t(pad_held_track_[pad]), 0, uint8_t(pad_held_note_[pad]));
+        pad_held_note_[pad] = -1;
+        // The macro bend this pad's pressure made goes back to where the knob left it.
+        if (pressure_pad_ == pad) {
+            pressure_pad_ = -1;
+            post(Cmd::set_macro, 0, 0, 0, macro_position_[0]);
+        }
+    }
+
+    // A piano pad played: the note held until the pad comes up, at the pad's own velocity, on
+    // the selected track, recorded like a STEP key in KEYS. The two pads with no black key walk
+    // the octave.
+    void play_pad(int pad, int velocity) {
+        if (kPianoSemitone[pad] == kPadOctaveDown || kPianoSemitone[pad] == kPadOctaveUp) {
+            walk_keys_octave(kPianoSemitone[pad] == kPadOctaveDown ? -1 : +1);
+            return;
+        }
+        const uint8_t note = uint8_t(pad_note(pad));
+        const uint8_t vel = uint8_t(velocity < 1 ? 1 : (velocity > 127 ? 127 : velocity));
+        release_pad(pad);
+        pad_held_note_[pad] = int16_t(note);
+        pad_held_track_[pad] = uint8_t(selected_);
+        post(Cmd::trigger_note, uint8_t(selected_), 0, note, vel, 1);
+        record_note(selected_, note, vel);
+        char *out = notice_buffer_;
+        append(out, "T");
+        append_number(out, uint32_t(selected_) + 1);
+        append(out, " ");
+        append(out, note_name(note));
+        append_number(out, uint32_t(note_octave(note) < 0 ? 0 : note_octave(note)));
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    // KEYS lights the pads as a keyboard: the root bright, the scale's other notes dim in the
+    // selected track's colour, the rest dark, a held pad white; the two octave pads dim white.
+    void light_piano_pads() {
+        const uint8_t root = engine_.key_root();
+        const int scale = int(engine_.key_scale());
+        const Rgb colour = kTrackColour[selected_];
+        for (int pad = 0; pad < kPianoPads; pad++) {
+            const int note = pad_note(pad);
+            if (note < 0) { leds_.pad(pad, 2, 2, 2); continue; }
+            if (pad_held_note_[pad] >= 0) { leds_.pad(pad, 10, 10, 10); continue; }
+            const bool at_root = note % 12 == root;
+            const bool in_scale = scale_fold(uint8_t(note), root, scale) == uint8_t(note);
+            const uint8_t level = at_root ? 10 : (in_scale ? 2 : 0);
+            leds_.pad(pad, uint8_t(colour.r * level / 10), uint8_t(colour.g * level / 10),
+                      uint8_t(colour.b * level / 10));
+        }
     }
 
     void draw_machine(enaga::Canvas &canvas) {
@@ -5083,6 +5199,9 @@ private:
     int16_t keys_held_note_[16] = {-1, -1, -1, -1, -1, -1, -1, -1,
                                    -1, -1, -1, -1, -1, -1, -1, -1};   // KEYS: what each key holds
     uint8_t keys_held_track_[16] = {};          // and on which track
+    int16_t pad_held_note_[kPianoPads] = {-1, -1, -1, -1, -1, -1, -1, -1,
+                                          -1, -1, -1, -1, -1, -1, -1};   // KEYS: piano pads
+    uint8_t pad_held_track_[kPianoPads] = {};
     int scene_holding_ = -1;                    // a scene pad held: -1, 0 for A, 1 for B
     int macro_selected_ = 0;
 
@@ -5205,6 +5324,7 @@ private:
     const char *notice_ = nullptr;
     uint32_t notice_at_ms_ = 0;
     uint32_t last_ms_ = 0;
+    uint8_t logged_guard_ = 0;     // the CPU guard level last logged
     uint32_t cpu_max_ = 0;         // per mille, the highest block cost since the last start
 
     LedShadow leds_;

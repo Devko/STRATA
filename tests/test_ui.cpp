@@ -77,6 +77,9 @@ struct UiProbe {
     static bool note_repeat_mode(const Strata &app) { return app.note_repeat_mode_; }
     static int scene_holding(const Strata &app) { return app.scene_holding_; }
     static int keys_octave(const Strata &app) { return app.keys_octave_; }
+    static int pad_held_note(const Strata &app, int pad) { return app.pad_held_note_[pad]; }
+    static int pad_note(const Strata &app, int pad) { return app.pad_note(pad); }
+    static bool fill_held(const Strata &app) { return app.fill_held_; }
     static int keys_held_note(const Strata &app, int key) { return app.keys_held_note_[key]; }
 
     static const char *notice(const Strata &app) { return app.notice_; }
@@ -103,6 +106,8 @@ struct UiProbe {
     static int quantize(const Strata &app) { return app.quantize(); }
     static int menu_cursor(const Strata &app) { return app.menu_cursor_; }
     static bool func_help(const Strata &app) { return app.func_help_showing(); }
+    static bool verdict_free(const Strata &app) { return app.verdict_keys_free(); }
+    static bool mutation_pending(const Strata &app) { return app.mutation_pending_; }
     static uint8_t pad_r(const Strata &app, int pad) { return app.leds_.pad_r[pad]; }
     static uint8_t pad_g(const Strata &app, int pad) { return app.leds_.pad_g[pad]; }
     static uint8_t pad_b(const Strata &app, int pad) { return app.leds_.pad_b[pad]; }
@@ -1980,6 +1985,66 @@ TEST(ui_the_resample_gesture_records_and_writes_through_the_panel_alone) {
     CHECK_EQ(app_storage().last_take_name(), "STRATA_1.WAV");   // and the screen can say so
 }
 
+TEST(ui_ok_in_resample_while_a_take_is_written_keeps_the_take_where_it_was_going) {
+    // The take goes to the card a chunk per pass, so the write lasts seconds. OK pressed in that
+    // time used to post a refused arm AND a write request, which retargeted the take in flight:
+    // asked for TO FILE, it landed on the track now on screen, over that track's sample, and the
+    // screen said ARMED.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    host.set_running(true);
+    shift_key(ENAGA_KEY_F2);                             // RESAMPLE
+    CHECK_EQ(UiProbe::resample_track(app), -1);          // to the file only
+    key(ENAGA_KEY_OK);
+    pump();
+    host.deliver_tick(384, 0);
+    for (int i = 0; i < 2000; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+        if (app_storage().take_busy() && app_storage().busy_text() != nullptr) break;
+    }
+    CHECK(app_storage().take_busy());
+    pump(2);                                             // a few chunks in
+    CHECK(app_storage().take_busy());
+
+    // Now point the screen at track 1 and press OK again.
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+    CHECK_EQ(UiProbe::resample_track(app), 0);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "TAKE STILL WRITING");
+    CHECK(!app_storage().request_resample_write(0));     // and the card side refuses as well
+
+    for (int i = 0; i < 4000 && app_storage().take_busy(); i++) pump();
+    pump_until_idle();
+    CHECK(!app_storage().take_busy());
+    CHECK_EQ(app_engine().project().kit.tracks[0].sample[0], '\0');   // track 1 untouched
+    CHECK(app_storage().last_error() == nullptr);
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
+    host.set_running(false);
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_the_func_menu_never_offers_a_mutate_verdict_its_ok_would_not_give) {
+    // In the FUNC menu OK runs the row under the cursor -- SAVE when it opens -- so a MUTATE made
+    // there must not show "OK KEEPS CLR REVERTS".
+    Strata &app = fresh();
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    shift_key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+    app.on_pad_press(13, 100);
+    app.on_pad_release(13);
+    pump(2);
+    CHECK(UiProbe::mutation_pending(app));
+    CHECK(!UiProbe::verdict_free(app));
+    shift_key(ENAGA_KEY_F4);                             // close it
+    pump(2);
+}
+
 // --- machine switching ----------------------------------------------------------------------
 //
 // docs/SPEC.md's key table gives F1 + F8 to "Kit and machine select", and docs/PLAN.md deferred
@@ -2620,6 +2685,24 @@ TEST(ui_the_held_cpu_max_keeps_the_highest_block_and_restarts_on_play) {
     host.set_running(false);
     host.set_audio_load(0);
     pump();
+}
+
+// The CPU guard (core/cpuguard.hpp) says so on the bottom line, in the device's place, so a chord
+// that got thinner under load has a reason on screen. A dropped edit still wins the slot.
+TEST(ui_the_bottom_line_shows_the_cpu_guard_while_it_is_up) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    CHECK(!screen_has(app, "GUARD"));
+    host.set_audio_load(950);
+    for (int i = 0; i < 40 && app_engine().cpu_guard_level() == 0; i++) pump();
+    host.set_audio_load(600);
+    CHECK_EQ(app_engine().cpu_guard_level(), 1);
+    CHECK(screen_has(app, "GUARD1"));
+
+    post_cmd(Cmd::stop, 1);                         // a hard stop starts the guard over
+    pump();
+    host.set_audio_load(0);
+    CHECK(!screen_has(app, "GUARD"));
 }
 
 // --- the screen's layout ----------------------------------------------------------------------
@@ -5615,4 +5698,124 @@ TEST(ui_screenshots) {
     key(ENAGA_KEY_F4);
     host.set_device(0);
     host.set_audio_load(0);
+}
+
+// --- KEYS on the pads: the two pressure-sensitive rows are a piano ---------------------------
+//
+// Roland on the unit: the STEP keys are not where you play. The two pad rows are, being
+// pressure-sensitive and laid out like a keyboard, upper seven between lower eight.
+
+TEST(ui_keys_plays_the_pads_as_a_piano) {
+    Strata &app = fresh();
+    open_keys();
+    const int c = UiProbe::pad_note(app, 0);
+    CHECK_EQ(c % 12, 0);                                   // lower 1 is a C
+    // Lower row: the white keys C D E F G A B C.
+    const int white[8] = {0, 2, 4, 5, 7, 9, 11, 12};
+    for (int i = 0; i < 8; i++) CHECK_EQ(UiProbe::pad_note(app, 2 * i) - c, white[i]);
+    // Upper row, between them: C# D#, no key between E and F, F# G# A#, none after B.
+    const int black[7] = {1, 3, -1, 6, 8, 10, -1};
+    for (int i = 0; i < 7; i++) {
+        const int note = UiProbe::pad_note(app, 2 * i + 1);
+        CHECK_EQ(note < 0 ? -1 : note - c, black[i]);
+    }
+
+    // A pad holds its note until it comes up, on the selected track, and says which note.
+    key(ENAGA_KEY_DOWN);                                   // track 2
+    CHECK_EQ(UiProbe::selected(app), 1);
+    app.on_pad_press(4, 90);                               // E
+    CHECK_EQ(UiProbe::pad_held_note(app, 4), c + 4);
+    CHECK_EQ(UiProbe::selected(app), 1);                   // a pad is a note, not a track
+    CHECK(std::strncmp(UiProbe::notice(app), "T2 E", 4) == 0);
+    pump(2);
+    check_layout(app, "KEYS, a pad held");
+    app.on_pad_release(4);
+    CHECK_EQ(UiProbe::pad_held_note(app, 4), -1);
+
+    // The two upper pads with no black key walk the octave; the rest of the upper row is notes,
+    // not FILL or MUTATE.
+    const int octave = UiProbe::keys_octave(app);
+    app.on_pad_press(13, 100);
+    app.on_pad_release(13);
+    CHECK_EQ(UiProbe::keys_octave(app), octave + 1);
+    CHECK_EQ(UiProbe::pad_note(app, 0), c + 12);
+    app.on_pad_press(5, 100);
+    app.on_pad_release(5);
+    CHECK_EQ(UiProbe::keys_octave(app), octave);
+    app.on_pad_press(1, 100);                              // C#, not FILL
+    CHECK_EQ(UiProbe::pad_held_note(app, 1), c + 1);
+    CHECK(!UiProbe::fill_held(app));
+    // Leaving KEYS with a pad down lets the note go.
+    key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::pad_held_note(app, 1), -1);
+    app.on_pad_release(1);
+    pump(2);
+}
+
+TEST(ui_keys_pads_record_at_their_own_velocity) {
+    Strata &app = fresh();
+    open_keys();
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    host.set_position(96);
+    key(ENAGA_KEY_F2);                                     // REC on
+    const int note = UiProbe::pad_note(app, 8);            // G
+    app.on_pad_press(8, 57);
+    app.on_pad_release(8);
+    pump(2);
+    int trigs = 0, where = -1;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(0, s)) { trigs++; where = s; }
+    }
+    CHECK_EQ(trigs, 1);
+    CHECK(where >= 0);
+    CHECK_EQ(int(step_of(0, where).note), note);
+    CHECK_EQ(int(step_of(0, where).velocity), 57);        // the pad's, not a key's 100
+    key(ENAGA_KEY_F2);
+    host.set_running(false);
+    (void)app;
+}
+
+TEST(ui_keys_lights_the_pads_as_a_keyboard_and_func_keeps_the_pad_jobs) {
+    Strata &app = fresh();
+    open_keys();
+    pump(2);
+    // Whatever key and scale the project has: the root bright, the scale's other notes dim, the
+    // rest dark, the two octave pads dim white.
+    const uint8_t root = app_engine().key_root();
+    const int scale = int(app_engine().key_scale());
+    int dark = 0;
+    for (int pad = 0; pad < 15; pad++) {
+        const int sum = UiProbe::pad_r(app, pad) + UiProbe::pad_g(app, pad) + UiProbe::pad_b(app, pad);
+        const int note = UiProbe::pad_note(app, pad);
+        if (note < 0) {
+            CHECK_EQ(int(UiProbe::pad_r(app, pad)), 2);
+            continue;
+        }
+        const bool in_scale = scale_fold(uint8_t(note), root, scale) == uint8_t(note);
+        if (note % 12 == root) {
+            CHECK(sum > UiProbe::pad_r(app, 5) * 3);
+        } else if (in_scale) {
+            CHECK(sum > 0);
+        } else {
+            CHECK_EQ(sum, 0);
+            dark++;
+        }
+    }
+    CHECK(scale == int(Scale::chromatic) || dark > 0);
+    app.on_pad_press(2, 100);                              // held: white
+    pump(2);
+    CHECK_EQ(int(UiProbe::pad_r(app, 2)), 10);
+    CHECK_EQ(int(UiProbe::pad_b(app, 2)), 10);
+    app.on_pad_release(2);
+
+    // FUNC + a lower pad is still the mute on the next bar.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(4, 100);
+    app.on_pad_release(4);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK_EQ(UiProbe::pad_held_note(app, 4), -1);
+    CHECK(std::strstr(UiProbe::notice(app), "AT BAR") != nullptr);
+    key(ENAGA_KEY_F4);
+    pump(2);
 }

@@ -51,6 +51,11 @@ are the point of this section.
 - [ ] **Pad-row keys = which sixteen.** GRID: step page. KEYS: octave. PROJECT: the bank
       (`BANK B`). PERFORM and KIT: nothing.
 - [ ] **CHAIN:** CLR on an entry: `AGAIN TO REMOVE`; again: removed. On an empty chain CLR goes back.
+- [ ] **KEYS on the pads** (HOME twice, track 7 VA POLY): the pads light as a keyboard (root bright,
+      the scale dim, the rest dark, two dim white octave pads in the upper row). Lower pads play
+      C to C, upper pads the sharps between them; soft and hard hits sound different; a held pad
+      sustains; the upper pad between E and F is octave down, the last one octave up (`OCT n`).
+      FUNC + lower pad still mutes on the bar. Does it play like a keyboard? `____`
 - Notes on what still feels awkward: `____________________________________________`
 
 ---
@@ -219,6 +224,8 @@ The beat can keep playing. One look per screen; note any overlap or illegible te
       CLR closes it and erases nothing.
 - [ ] PERFORM: LEFT/RIGHT pick the macro, UP/DOWN walk the mutation type.
 - [ ] RESAMPLE: UP/DOWN pick the bars, LEFT/RIGHT where the take goes; CLR backs out.
+- [ ] RESAMPLE to FILE, then while the screen says WRITING pick TRK 1 and press OK: `TAKE STILL
+      WRITING`, and track 1 keeps its own sample once the write ends.
 - [ ] Notices (e.g. an octave change) appear on the second line in every mode.
 
 ## 6. Step editing: locks, clearing one lock, the note, undo/redo (6 min)
@@ -1676,6 +1683,28 @@ while every counted voice is still waiting for its frame are dropped. Twelve is 
       voices of the first two fade without a click.
 - [ ] With MAX from the line above and docs/BUDGET.md's per-voice cost on the unit, decide the
       budget: largest that keeps the worst case under 60%. New value `________`
+
+## The CPU guard (2026-11-23)
+
+When the block's load runs high, STRATA sheds the costliest sustaining work instead of letting
+the next chord overrun (`core/cpuguard.hpp`). It rises a level when the load averaged over about
+11 ms reaches 70%, or at once on one block at 90%; it falls a level after each full second under
+55%. Each level takes two voices off the shared VA POLY budget (12, 10, 8, 6, 4) and shrinks
+every GRAIN cloud's pool (8, 6, 4, 3, 2 grains). Shed POLY voices fade over 1.3 ms, quietest
+first; GRAIN skips new grains rather than cutting old ones. While it is up, the bottom line shows
+`GUARD1`-`GUARD4` where the device name was. A second STOP (cut the tails) resets it. The
+thresholds are provisional, like the voice budget.
+
+- [ ] Default beat (A01), PLAY for a minute: the bottom line never shows `GUARD`. If it does, the
+      thresholds are too low for the unit: note the MAX `________ %`.
+- [ ] Repeat the 84% session: big effects, three or four POLY tracks holding MIN11 chords, a GRAIN
+      track at DEN and SIZ high. `GUARD` appears; MAX stays under `________ %` (it was 84.3%
+      without the guard). The chords get thinner; no click, no crackle, no overrun.
+- [ ] Let go of everything with the transport running: within a few seconds `GUARD` counts down
+      and disappears, one level a second, and the chords come back full on the next hits.
+- [ ] Listen for pumping: on a pattern that sits right at the edge, the voice count should not
+      audibly swing up and down every second. Notes: `______________________________`
+- [ ] Second STOP while `GUARD` is up: it disappears at once.
 
 ## Downsampled samples are low-passed at load
 

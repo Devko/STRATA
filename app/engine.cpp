@@ -250,7 +250,7 @@ bool Engine::make_room_for_poly_voice(int track, uint8_t note) {
     for (int t = 0; t < kTracks; t++) {
         if (polys_[t] != nullptr) used += polys_[t]->budget_voices();
     }
-    if (used < kPolyVoiceBudget) return true;
+    if (used < poly_budget_) return true;
 
     // The quietest started voice anywhere, this track included. Ties go to the lowest track,
     // so the choice is deterministic.
@@ -270,6 +270,51 @@ bool Engine::make_room_for_poly_voice(int track, uint8_t note) {
     if (pick_track < 0) return false;   // everything counted is still waiting: drop this note
     polys_[pick_track]->choke(pick_slot);
     return true;
+}
+
+// --- the CPU guard ----------------------------------------------------------------------------
+
+void Engine::run_cpu_guard() {
+    // The PREVIOUS block's cost, per mille. Enaga's own unit check app reads it from audio() the
+    // same way; core/cpuguard.hpp says why it averages rather than reacting to one block.
+    const int level = cpu_guard_.update(enaga::audio_load());
+    if (level != guard_applied_) apply_cpu_guard(level);
+    shed_poly_voices();
+}
+
+void Engine::apply_cpu_guard(int level) {
+    guard_applied_ = level;
+    poly_budget_ = CpuGuard::poly_budget(level, kPolyVoiceBudget);
+    const int grains = CpuGuard::grain_limit(level, Granular::kPoolSize);
+    for (int t = 0; t < kTracks; t++) pool_[t].grain.set_grain_limit(grains);
+    status_.cpu_guard.store(uint8_t(level), std::memory_order_relaxed);
+}
+
+// While more POLY voices are counted than the budget allows -- the guard has just lowered it --
+// choke the quietest started one: the same 64-frame fade a new note past the budget uses, so a
+// shed voice is the voice least likely to be heard. One a block, so even a drop of several voices
+// spreads its fades over a few milliseconds rather than landing in one.
+void Engine::shed_poly_voices() {
+    if (poly_budget_ >= kPolyVoiceBudget) return;
+    int used = 0;
+    for (int t = 0; t < kTracks; t++) {
+        if (polys_[t] != nullptr) used += polys_[t]->budget_voices();
+    }
+    if (used <= poly_budget_) return;
+    int pick_track = -1;
+    int pick_slot = -1;
+    float quietest = 0.0f;
+    for (int t = 0; t < kTracks; t++) {
+        if (polys_[t] == nullptr) continue;
+        float level = 0.0f;
+        const int slot = polys_[t]->quietest_voice(level);
+        if (slot >= 0 && (pick_track < 0 || level < quietest)) {
+            pick_track = t;
+            pick_slot = slot;
+            quietest = level;
+        }
+    }
+    if (pick_track >= 0) polys_[pick_track]->choke(pick_slot);
 }
 
 void Engine::forget_prepared() {
@@ -338,6 +383,10 @@ void Engine::apply(const Command &command) {
                 for (int t = 0; t < kTracks; t++) {
                     silence_track(t);
                 }
+                // Nothing is sounding now, so what the guard measured says nothing about what
+                // comes next: start it over at level 0 (core/cpuguard.hpp).
+                cpu_guard_.reset();
+                apply_cpu_guard(0);
             } else {
                 for (int t = 0; t < kTracks; t++) {
                     if (machines_[t]) machines_[t]->release_all();
@@ -2244,6 +2293,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     }
 
     apply_commands();
+
+    // The CPU guard, before any trig: a lowered budget must be in force for this block's notes.
+    run_cpu_guard();
 
     // MIDI out's note-offs that fall in this block, and any a full queue refused earlier.
     // Before this block's trigs, so a note ending as the same pitch starts again is ended first.
