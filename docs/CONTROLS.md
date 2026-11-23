@@ -46,7 +46,7 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      second label.**
    - **Arrow pad:** the cursor on the screen. UP/DOWN rows, LEFT/RIGHT sideways. OK picks, CLR
      goes back (or clears, where there is something selected to clear).
-   - **Screen keys:** the screen's pages. EDIT SRC FLTR AMP FX LFO ARP; MIXER's nine; PROJECT,
+   - **Screen keys:** the screen's pages. EDIT SRC FLTR AMP FX LFO ARP ASR; MIXER's nine; PROJECT,
      CHAIN, PATTERN, SETUP, PROJECTS; the step page's field pages; SAMPLES' and KIT's pages of
      eight. On GRID and KEYS, where A-D turn the current EDIT page, they turn that page. The
      three one-page screens give them their one sideways setting: MACHINE the track, RESAMPLE the

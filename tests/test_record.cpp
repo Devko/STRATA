@@ -713,3 +713,39 @@ TEST(stamp_normalise_carries_a_fraction_that_rounds_up_to_a_whole_tick) {
     CHECK_EQ(tiny.tick, 5u);
     CHECK_EQ(tiny.fraction, 0.0f);
 }
+
+// --- held lengths ---------------------------------------------------------
+
+TEST(record_a_held_note_becomes_the_nearest_length_in_the_table) {
+    const TrackTiming t = track(16, Speed::x1, 50);       // 24 ticks a step
+    // One step held exactly, from anywhere: index 8.
+    CHECK_EQ(int(held_length_index(stamp_at(100, 0.25f), stamp_at(124, 0.25f), t)), 8);
+    // Four steps: index 12 (64 sixteenths).
+    CHECK_EQ(int(held_length_index(stamp_at(0, 0.0f), stamp_at(96, 0.0f), t)), 12);
+    // Sixteen steps, a bar: index 16.
+    CHECK_EQ(int(held_length_index(stamp_at(1000, 0.5f), stamp_at(1384, 0.5f), t)), 16);
+    // A quick tap: the shortest entries.
+    CHECK_EQ(int(held_length_index(stamp_at(10, 0.0f), stamp_at(10, 0.5f), t)), 1);
+    CHECK_EQ(int(held_length_index(stamp_at(10, 0.0f), stamp_at(10, 0.0f), t)), 1);
+    // Longer than anything: 64 steps.
+    CHECK_EQ(int(held_length_index(stamp_at(0, 0.0f), stamp_at(50000, 0.0f), t)), kLengthMax);
+    // A clock that jumped back between the two: the shortest, not a wrap to the longest.
+    CHECK_EQ(int(held_length_index(stamp_at(500, 0.0f), stamp_at(20, 0.0f), t)), 1);
+}
+
+TEST(record_held_length_rounds_by_ratio_at_the_geometric_mean) {
+    const TrackTiming t = track(16, Speed::x1, 50);
+    // Between 4 steps (64) and 6 steps (96) the boundary is sqrt(64 x 96) = 78.4 sixteenths,
+    // 117.6 ticks: 117 is 4 steps, 118 is 6.
+    CHECK_EQ(int(held_length_index(stamp_at(0, 0.0f), stamp_at(117, 0.0f), t)), 12);
+    CHECK_EQ(int(held_length_index(stamp_at(0, 0.0f), stamp_at(118, 0.0f), t)), 13);
+    // The fraction counts: 117.7 ticks is past it.
+    CHECK_EQ(int(held_length_index(stamp_at(0, 0.0f), stamp_at(117, 0.7f), t)), 13);
+}
+
+TEST(record_held_length_is_in_the_tracks_own_steps) {
+    // At 2x a step is 12 ticks, so 24 ticks held is two steps (index 10); at 1/2x it is 48
+    // ticks, so the same hold is half a step (index 6).
+    CHECK_EQ(int(held_length_index(stamp_at(0, 0.0f), stamp_at(24, 0.0f), track(16, Speed::x2, 50))), 10);
+    CHECK_EQ(int(held_length_index(stamp_at(0, 0.0f), stamp_at(24, 0.0f), track(16, Speed::x1_2, 50))), 6);
+}

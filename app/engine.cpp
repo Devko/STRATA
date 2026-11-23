@@ -44,7 +44,8 @@ static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first
 
 static_assert(kKitParams == kTrackParams && kKitSoundParams == kParams &&
                   kKitLfoParams == kLfoParams && kKitArpParams == kArpParams &&
-                  kKitLfoEnd == kArpFirst && kArpBytes == kArpParams,
+                  kKitLfoEnd == kArpFirst && kArpBytes == kArpParams &&
+                  kKitAsrParams == kAsrParams && kKitArpEnd == kAsrFirst,
               "core/project.hpp's kit record and dsp/track.hpp's TrackParams have diverged; a "
               "saved project would come back with the wrong number of parameters per track");
 
@@ -328,8 +329,12 @@ void Engine::prepare_machine(int track) {
     Machine *machine = machines_[track];
     if (machine == nullptr) return;
     const TrackParams &params = sounding(track);
+    // The sound's 16 and the ASR page's 4: a VA reads both (dsp/track.hpp). The LFO and arp bytes
+    // between them are not compared, so turning an LFO knob does not re-prepare a machine.
     if (prepare_memo_ && machine_prepared_for_[track] == machine &&
-        __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0) {
+        __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0 &&
+        __builtin_memcmp(machine_prepared_[track].v + kAsrFirst, params.v + kAsrFirst,
+                         kAsrParams) == 0) {
         return;
     }
     machine->prepare(params);
@@ -629,6 +634,16 @@ void Engine::apply(const Command &command) {
             // The step's locks are deliberately left alone. Overdubbing onto a programmed part
             // should keep the sound it was programmed with; a hit replaces the note, not the
             // step's whole character.
+            break;
+        }
+
+        case Cmd::record_length: {
+            // The key that recorded this step came up. Only if the step still holds that note:
+            // a later hit landing on the same step has replaced it, and its own key decides.
+            Step &s = live().tracks[track].steps[step];
+            if ((s.flags & kStepTrig) != 0 && s.note == command.a && length_valid(command.b)) {
+                s.length = command.b;
+            }
             break;
         }
 
@@ -1251,6 +1266,13 @@ void Engine::apply(const Command &command) {
                 trig.note = clamp_u8(command.a);
                 trig.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
                 trig.frame = 0;
+                trig.held = command.c == 1;   // a key or MIDI IN note: its release comes
+                // A pad hit (c = 0) has no release coming. On a VA whose ASR page holds notes
+                // (SUS up) it would hold for ever, so it gets one step, as its MIDI note does. At
+                // SUS 0 it keeps no gate: the envelope ends it, as it always has.
+                if (command.c != 1 && sounding(track).v[kAsrFirst + 1] > 0) {
+                    trig.gate_frames = gate_frames_for(track, kMidiDefaultLength);
+                }
                 // A pad on a POLY track counts against the shared budget like a step does.
                 if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
                 status_.bump_triggered(track);

@@ -3369,3 +3369,79 @@ TEST(engine_a_scene_captures_and_morphs_the_master_eq) {
     post(Cmd::scene_erase, 0, 0, 1);
     pump();
 }
+
+// --- the ASR page: a sequenced note held for its LEN -----------------------------------------
+
+TEST(engine_with_sus_up_a_chord_step_holds_for_its_len_and_not_its_dec) {
+    // DEC short, SUS up, LEN 16 steps (a bar): the note sounds for the bar, not for DEC. With SUS
+    // at 0 the same step is over in a fraction of that, as it always was.
+    const float spt = kRate * 60.0f / (120.0f * float(enaga::clock::ppqn));
+    const float bar = length_samples(16, ticks_per_step(Speed::x1), spt);
+    int frames[2];
+    for (int sus = 0; sus < 2; sus++) {
+        clean();
+        FakeHost::the().set_tempo(120.0f);
+        post(Cmd::set_param, kPoly, 0, kDec, 20);
+        post(Cmd::set_param, kPoly, 0, uint8_t(kAsrFirst + 1), uint8_t(sus ? 100 : 0));
+        put_trig(kPoly, 0);
+        set_length_index(kPoly, 0, 16);
+        frames[sus] = frames_until_silent();
+    }
+    CHECK(frames[0] > 0 && frames[0] < int(bar * 0.25f));
+    CHECK(float(frames[1]) > bar);
+    CHECK(float(frames[1]) < bar + kRate * 0.2f);     // LEN, then the 60 ms release
+}
+
+TEST(engine_a_lock_on_an_asr_byte_reaches_the_machine) {
+    // The VAs read the ASR page in `prepare`, and the prepare memo skips a prepare when the
+    // bytes it compares have not moved. A lock arrives with no command to clear the memo, so the
+    // memo itself has to compare the ASR bytes -- or a step locking SUS up would do nothing. A
+    // trigless step 1 locks SUS under a note step 0 started.
+    Engine &engine = clean();
+    post(Cmd::set_param, kMono, 0, kDec, 127);     // a note still ringing at step 1
+    put_trig(kMono, 0);
+    post(Cmd::toggle_trig, kMono, 1, 1);           // trigless
+    post(Cmd::lock_delta, kMono, 1, uint8_t(kAsrFirst + 1), 100);
+    pump();
+    uint8_t locked = 0;
+    CHECK(pattern_get_lock(engine.pattern(), kMono, 1, uint8_t(kAsrFirst + 1), locked));
+    CHECK(locked > 90);
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump(4);
+    CHECK_EQ(mono().sustain_level(), 0.0f);
+    FakeHost::the().deliver_tick(24, 0);
+    pump(2);
+    CHECK(mono().sustain_level() > 0.7f);
+}
+
+TEST(engine_with_sus_up_a_pad_hit_lasts_a_step_and_a_held_key_until_it_comes_up) {
+    // A performance pad hit has no release coming, so on a held-note envelope it must not hold
+    // for ever: one step, as its MIDI note gets. A KEYS key (c = 1) holds until release_note.
+    clean();
+    FakeHost::the().set_tempo(120.0f);
+    post(Cmd::set_param, kPoly, 0, kDec, 20);
+    post(Cmd::set_param, kPoly, 0, uint8_t(kAsrFirst + 1), 100);
+    pump();
+    const float spt = kRate * 60.0f / (120.0f * float(enaga::clock::ppqn));
+    const float step = length_samples(8, ticks_per_step(Speed::x1), spt);
+
+    post(Cmd::trigger_note, kPoly, 0, 60, 100);              // a pad hit
+    pump();
+    CHECK_EQ(poly().sounding_voices(), 1);
+    int blocks = 1;
+    while (poly().sounding_voices() > 0 && blocks < 4000) {
+        pump();
+        blocks++;
+    }
+    CHECK(float(blocks * kBlk) > step);
+    CHECK(float(blocks * kBlk) < step + kRate * 0.2f);
+
+    post(Cmd::trigger_note, kPoly, 0, 64, 100, 1);           // a held key
+    pump(int(kRate * 2.0f) / kBlk);                          // two seconds held
+    CHECK_EQ(poly().sounding_voices(), 1);
+    post(Cmd::release_note, kPoly, 0, 64);
+    pump(int(kRate * 0.3f) / kBlk);
+    CHECK_EQ(poly().sounding_voices(), 0);
+}

@@ -195,6 +195,19 @@ constexpr bool mixer_pages_cover_every_field() {
 static_assert(mixer_pages_cover_every_field(),
               "a send or master field has no MIXER slot, so nothing can reach it");
 
+// A time for the ASR page, at most five characters: whole milliseconds under a second ("3MS",
+// "250MS"), tenths of a second above ("1.2S", "8.0S").
+void append_seconds(char *&out, float seconds) {
+    const uint32_t ms = uint32_t(seconds * 1000.0f + 0.5f);
+    if (ms < 1000) {
+        append_number(out, ms);
+        append(out, "MS");
+    } else {
+        append_tenths(out, (ms + 50) / 100);
+        *out++ = 'S';
+    }
+}
+
 void append_padded(char *&out, uint32_t value, int width) {
     uint32_t scale = 1;
     for (int i = 1; i < width; i++) scale *= 10;
@@ -373,19 +386,25 @@ const char *page_name(Page page) {
         case Page::fx:   return "FX";
         case Page::lfo:  return "LFO";
         case Page::arp:  return "ARP";
+        case Page::asr:  return "ASR";
         default:         return "?";
     }
 }
 
-// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp) and its arpeggiator
-// (core/arp.hpp). The selection keys walk all six; everywhere else a page is still four encoders
-// over four parameters.
-constexpr int kEditPages = kPages + 2;
+// The ASR page's encoder names (dsp/va.cpp's table). Only the VAs read the page; on any other
+// machine its four slots show "---".
+constexpr const char *kAsrNames[kAsrParams] = {"ATK", "SUS", "REL", "FSU"};
+
+// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp), its arpeggiator
+// (core/arp.hpp) and the VA machines' note envelope, ASR (dsp/va.cpp). The selection keys walk
+// all seven; everywhere else a page is still four encoders over four parameters.
+constexpr int kEditPages = kPages + 3;
 
 // Encoder counts per click: one zone on the arp's MOD RAT OCT, one shape or destination on the
-// LFO's WAV and DST, one count everywhere else.
+// LFO's WAV and DST, one count everywhere else (ASR included).
 constexpr int param_click(int index) {
-    return index >= kArpFirst ? arp_click(index - kArpFirst) : lfo_click(index);
+    return index >= kAsrFirst ? 1
+                              : (index >= kArpFirst ? arp_click(index - kArpFirst) : lfo_click(index));
 }
 static_assert(page_first(Page(kEditPages - 1)) + kParamsPerPage == kTrackParams,
               "EDIT's last page is the last four track parameters");
@@ -1164,8 +1183,8 @@ public:
             case Mode::keys:
             case Mode::edit:
                 // GRID and KEYS turn A-D on the current EDIT page, so their screen pages are
-                // EDIT's: SRC .. ARP. One page set for the knobs wherever they are.
-                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. ARP
+                // EDIT's: SRC .. ASR. One page set for the knobs wherever they are.
+                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. ASR
                 if (mode_ != Mode::edit) notice(page_name(Page(param_page_)));
                 break;
             case Mode::mixer:
@@ -1723,7 +1742,7 @@ public:
         }
 
         post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity));
-        record_note(track, note, uint8_t(velocity));
+        record_note(track, note, uint8_t(velocity), false);   // a hit: nothing to let go of
     }
 
     void on_pad_release(int pad) override {
@@ -2073,6 +2092,7 @@ public:
         if (held == 0) return;                       // never started here, or already let go
         midi_in_held_[channel][note] = 0;
         post(Cmd::release_note, uint8_t(held - 1), 0, uint8_t(note));
+        record_note_up(held - 1, uint8_t(note));
     }
 
     // --- live recording ---------------------------------------------------
@@ -2083,7 +2103,9 @@ public:
     // arrived: whole ticks plus the fraction into the next. core/record.hpp explains why that is
     // a better timestamp than a sample counter would be. Everything after that is arithmetic in
     // core/, where it is host-tested -- this function only gathers the inputs.
-    void record_note(int track, uint8_t note, uint8_t velocity) {
+    // `held`: the note has a key-up still to come (a piano pad, a STEP key in KEYS, a MIDI note),
+    // so its length is measured. A performance pad hit has none and keeps the step's LEN.
+    void record_note(int track, uint8_t note, uint8_t velocity, bool held = true) {
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;          // nothing to record onto
@@ -2116,6 +2138,58 @@ public:
         post_command(command);
 
         if (landing.clamped) notice("OFF GRID");   // it could not be stored where it was played
+
+        // And remember the press, so the key coming up can give the step its length. Only on a
+        // machine that holds a note -- a drum ignores LEN, and a tap there would rewrite the
+        // step's LEN for nothing. The stamp is `now`, not `hit`: the pad latency is the same at
+        // both ends, so the hold is the difference of the raw stamps.
+        if (!held || engine_.machine_id(track) < uint8_t(MachineId::sample)) return;
+        RecHold *slot = nullptr;
+        for (RecHold &h : rec_holds_) {
+            if (h.track == track && h.note == note) slot = &h;   // the same note again: replace
+        }
+        for (RecHold &h : rec_holds_) {
+            if (slot == nullptr && h.track < 0) slot = &h;
+        }
+        if (slot == nullptr) {
+            // More held notes than slots: the oldest press gives up its length (it keeps LEN).
+            slot = &rec_holds_[rec_hold_next_];
+            rec_hold_next_ = rec_hold_next_ + 1 >= kRecHolds ? 0 : rec_hold_next_ + 1;
+        }
+        slot->track = int8_t(track);
+        slot->note = note;
+        slot->step = landing.step;
+        slot->down = now;
+    }
+
+    // A recorded note's key came up: its hold, quantized to the note-length table
+    // (core/record.hpp, held_length_index), becomes the step's LEN. Nothing if it was not
+    // recorded, if REC went off in between or the clock stopped -- there is nothing to measure.
+    void record_note_up(int track, uint8_t note) {
+        RecHold *hold = nullptr;
+        for (RecHold &h : rec_holds_) {
+            if (h.track == track && h.note == note) hold = &h;
+        }
+        if (hold == nullptr) return;
+        hold->track = -1;
+        if (!rec_) return;
+        const enaga::clock::State clock = enaga::clock::state();
+        if (!clock.running) return;
+        Stamp up;
+        up.tick = clock.position;
+        up.fraction = clock.fraction;
+
+        const TrackPattern &source = engine_.pattern().tracks[track];
+        TrackTiming timing;
+        timing.length = source.length;
+        timing.speed = Speed(source.speed);
+        Command command;
+        command.cmd = Cmd::record_length;
+        command.track = uint8_t(track);
+        command.step = hold->step;
+        command.a = note;
+        command.b = held_length_index(hold->down, up, timing);
+        post_command(command);
     }
 
     void on_transport(int what, uint32_t position) override {
@@ -2730,15 +2804,16 @@ public:
         *out = 0;
         canvas.text(0, 20, line, 14);
 
-        // Which of the six pages is showing, as a row of boxes: the spec's selection keys
+        // Which of the seven pages is showing, as a row of boxes: the spec's selection keys
         // flip between them, so showing where you are matters more than labels.
         for (int p = 0; p < kEditPages; p++) {
             const uint8_t grey = p == param_page_ ? 14 : 4;
-            canvas.rect(p * 21 + 1, 32, 19, 3, grey);
+            canvas.rect(p * 18 + 1, 32, 16, 3, grey);
         }
         const bool lfo_page = param_page_ == int(Page::lfo);
         const bool arp_page = param_page_ == int(Page::arp);
-        const bool word_page = lfo_page || arp_page;
+        const bool asr_page = param_page_ == int(Page::asr);
+        const bool word_page = lfo_page || arp_page || asr_page;
 
         // The four parameters in large type, one row per encoder: its letter, the name, the
         // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
@@ -2807,6 +2882,14 @@ public:
             }
             *out = 0;
             canvas.text(0, 96, line, 7);
+            return;
+        }
+
+        if (asr_page) {
+            // Whether the note envelope applies here, and if so what SUS makes of a note.
+            const bool va = has_asr(selected_);
+            const bool sustains = va && engine_.params(selected_).v[kAsrFirst + 1] > 0;
+            canvas.text(0, 96, !va ? "VA MONO/POLY ONLY" : (sustains ? "HOLDS: PAD OR LEN" : "SUS 0: ONE-SHOT"), 7);
             return;
         }
 
@@ -3069,6 +3152,7 @@ public:
     // LFO's destination can name a parameter from any page.
     const char *track_param_name(int index) const {
         if (index < 0 || index >= kTrackParams) return "---";
+        if (index >= kAsrFirst) return has_asr(selected_) ? kAsrNames[index - kAsrFirst] : "---";
         if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
         if (index >= kParams) return lfo_param_name(index);
         const int page = index / kParamsPerPage;
@@ -3118,6 +3202,17 @@ public:
                 return;
             case kArpFirst + 3:
                 append_number(out, uint32_t(arp_gate_percent(value)));
+                *out++ = '%';
+                return;
+            case kAsrFirst + 0:
+                append_seconds(out, va_attack_seconds(value));
+                return;
+            case kAsrFirst + 2:
+                append_seconds(out, va_release_seconds(value));
+                return;
+            case kAsrFirst + 1:
+            case kAsrFirst + 3:
+                append_number(out, uint32_t((int(value) * 100 + 63) / 127));
                 *out++ = '%';
                 return;
             default:
@@ -3171,6 +3266,7 @@ public:
         if (step < 0 || step >= 16 || keys_held_note_[step] < 0) return;
         post(Cmd::release_note, uint8_t(keys_held_track_[step]), 0,
              uint8_t(keys_held_note_[step]));
+        record_note_up(keys_held_track_[step], uint8_t(keys_held_note_[step]));
         keys_held_note_[step] = -1;
     }
 
@@ -3197,6 +3293,7 @@ public:
     void release_pad(int pad) {
         if (pad < 0 || pad >= kPianoPads || pad_held_note_[pad] < 0) return;
         post(Cmd::release_note, uint8_t(pad_held_track_[pad]), 0, uint8_t(pad_held_note_[pad]));
+        record_note_up(pad_held_track_[pad], uint8_t(pad_held_note_[pad]));
         pad_held_note_[pad] = -1;
         // The macro bend this pad's pressure made goes back to where the knob left it.
         if (pressure_pad_ == pad) {
@@ -3323,6 +3420,11 @@ public:
         return id == uint8_t(MachineId::sample) || id == uint8_t(MachineId::grain);
     }
     bool plays_files(int track) const { return is_file_machine(engine_.machine_id(track)); }
+    // Does this track's machine read the ASR page? VA MONO and VA POLY, nothing else.
+    bool has_asr(int track) const {
+        const uint8_t id = engine_.machine_id(track);
+        return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly);
+    }
 
     void open_samples() {
         samples_return_ = mode_;
@@ -5452,6 +5554,19 @@ private:
     // MIDI IN's held notes: per channel and note, the track it started on plus 1, 0 for none.
     // 2 KiB, so a note off finds its track even after the selected track has moved.
     uint8_t midi_in_held_[16][128] = {};
+
+    // Notes recorded while held, waiting for their key to come up so the step gets its LEN
+    // (record_note / record_note_up). Sixteen is more fingers than a hand has, plus a MIDI
+    // keyboard's sustain of a chord or two; past it the oldest press keeps the step's LEN.
+    struct RecHold {
+        int8_t track = -1;          // -1: a free slot
+        uint8_t note = 0;
+        uint8_t step = 0;
+        Stamp down{};
+    };
+    static constexpr int kRecHolds = 16;
+    RecHold rec_holds_[kRecHolds] = {};
+    int rec_hold_next_ = 0;
     // CC 16-31 are the track's sixteen parameters: the "General Purpose" 16-19 and the
     // undefined 20-31, which no common controller sends by default for anything else.
     static constexpr int kMidiInFirstParamCc = 16;

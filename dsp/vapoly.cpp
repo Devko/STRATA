@@ -59,11 +59,12 @@
 namespace strata {
 namespace {
 
-// The longest gate a slot will count, in frames: ten seconds at 48 kHz. The table's longest
-// entry is 64 steps, which at 20 BPM is over three minutes, and a counter that large is a note
-// nobody is waiting for -- but the clamp exists so the countdown cannot be handed something
-// absurd by a tempo read before the clock has settled.
-constexpr int kGateMax = 480000;
+// The longest gate a slot will count, in frames: five minutes at 48 kHz. The table's longest
+// entry is 64 steps, which at 20 BPM is over three minutes. It was ten seconds while nothing
+// sustained, which was harmless then; with the ASR page's SUS a pad's LEN of 16 or 64 steps is
+// the point, and at 120 BPM 64 steps is 32 s. The clamp still exists so the countdown cannot be
+// handed something absurd by a tempo read before the clock has settled. VA MONO uses the same.
+constexpr int kGateMax = 14400000;
 
 
 using enaga::dsp::clamp;
@@ -137,6 +138,7 @@ void VaPoly::init(float sample_rate) {
         Slot &s = slots_[i];
         s.voice.reset();
         s.voice.seed(kSeeds[i]);
+        s.one_shot = false;
         s.next = Trig{};
         s.wait = 0;
         s.gate = -1;
@@ -202,6 +204,7 @@ void VaPoly::release(uint8_t note) {
             s.voice.gate_off();
             s.gate = -1;
         }
+        s.one_shot = false;
     }
 }
 
@@ -283,7 +286,10 @@ void VaPoly::release_all() {
     // STOP once: every sounding voice gets its release tail, filter envelope included so no
     // bright ghost is left behind. A pending trig still starts -- it was scheduled before the
     // stop, which is dsp/sample.cpp's rule for the same situation.
-    for (Slot &s : slots_) s.voice.gate_off();
+    for (Slot &s : slots_) {
+        s.voice.gate_off();
+        s.one_shot = false;
+    }
 }
 
 void VaPoly::kill_all() {
@@ -291,6 +297,7 @@ void VaPoly::kill_all() {
         s.pending = false;
         s.wait = 0;
         s.note = -1;
+        s.one_shot = false;
         s.voice.kill();
     }
     active_ = false;
@@ -356,6 +363,11 @@ void VaPoly::render_slot(int slot, float *out, int frames) {
         // frame at a time -- sixteen times the control-rate work for an identical result.
         // tests/test_vapoly.cpp's steal test pins the audible half; this comment is the rest.
         if (!s.pending && s.gate > 0 && s.gate < n) n = s.gate;
+        // A one-shot whose SUS was raised under it: let it go now, or it would never end.
+        if (!s.pending && s.one_shot && settings_.sustain > 0.0f) {
+            s.voice.gate_off();
+            s.one_shot = false;
+        }
         s.voice.run(settings_, out + i, n, work_, env_, &filter_cache_);
         if (s.pending) s.wait -= n;
         if (!s.pending && s.gate > 0) {
@@ -398,6 +410,7 @@ void VaPoly::start(int slot) {
     s.voice.set_target(pitch);
     s.voice.set_pitch(pitch);
     s.voice.gate_on();
+    s.one_shot = s.gate < 0 && !t.held;
 }
 
 }  // namespace strata

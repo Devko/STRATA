@@ -184,4 +184,23 @@ Landing quantize_hit(Stamp hit, const TrackTiming &timing, int quantize_percent)
     return landing;
 }
 
+// --- held lengths ---------------------------------------------------------
+
+uint8_t held_length_index(Stamp down, Stamp up, const TrackTiming &timing) {
+    const Stamp a = stamp_normalise(down);
+    const Stamp b = stamp_normalise(up);
+    // In ticks, as a float: the difference of the whole ticks first, so a long session's tick
+    // count does not lose the fraction to float rounding.
+    const float held = b.tick >= a.tick ? float(b.tick - a.tick) + (b.fraction - a.fraction) : 0.0f;
+    // Sixteenths of a step, the table's unit. A float divide is fine here: this runs once per
+    // key coming up, in the main context.
+    const float sixteenths = held * 16.0f / float(timing.step_ticks());
+    const float s2 = sixteenths * sixteenths;
+    for (int i = 1; i < kLengthMax; i++) {
+        const float boundary = float(kLengthSixteenthsOfStep[i]) * float(kLengthSixteenthsOfStep[i + 1]);
+        if (s2 < boundary) return uint8_t(i);
+    }
+    return uint8_t(kLengthMax);
+}
+
 }  // namespace strata

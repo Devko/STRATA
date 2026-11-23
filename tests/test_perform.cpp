@@ -22,7 +22,7 @@ namespace {
 using namespace strata;
 
 constexpr uint32_t kSlack = 64;
-constexpr uint32_t kPerformFileBytes = 3804;   // 2424, then the scenes' LFO (12 + 640), EQ (12 + 64) and arp (12 + 640)
+constexpr uint32_t kPerformFileBytes = 4456;   // 2424, then the scenes' LFO (12 + 640), EQ (12 + 64), arp (12 + 640) and ASR (12 + 640)
 
 uint8_t g_buffer[kPerformFileBytes + kSlack];
 uint8_t g_alternate[kPerformFileBytes + kSlack];
@@ -836,11 +836,11 @@ TEST(perform_the_header_says_strata_and_the_version) {
     const uint32_t written = write_performance();
     CHECK_EQ(int(g_buffer[0]), int(kMagic0));
     CHECK_EQ(int(peek_u16(g_buffer, kVersionOffset)), int(kPerformVersion));
-    CHECK_EQ(int(peek_u16(g_buffer, 6)), 5);          // scenes, macros, the scenes' LFO, EQ, arp
+    CHECK_EQ(int(peek_u16(g_buffer, 6)), 6);          // scenes, macros, the scenes' LFO, EQ, arp, ASR
     CHECK_EQ(peek_u32(g_buffer, 8), written - kHeaderBytes);
     CHECK_EQ(peek_u32(g_buffer, kCrcOffset),
              crc32(g_buffer + kHeaderBytes, written - kHeaderBytes));
-    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 5 * kSectionEntryBytes);
+    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 6 * kSectionEntryBytes);
     CHECK(section_at(g_buffer, kSectionPerformMacros) >
           section_at(g_buffer, kSectionPerformScenes));
     CHECK(section_at(g_buffer, kSectionPerformSceneLfo) >
@@ -849,6 +849,8 @@ TEST(perform_the_header_says_strata_and_the_version) {
           section_at(g_buffer, kSectionPerformSceneLfo));
     CHECK(section_at(g_buffer, kSectionPerformSceneArp) >
           section_at(g_buffer, kSectionPerformSceneMaster));
+    CHECK(section_at(g_buffer, kSectionPerformSceneAsr) >
+          section_at(g_buffer, kSectionPerformSceneArp));
 }
 
 TEST(perform_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
@@ -1086,8 +1088,8 @@ TEST(perform_a_payload_declared_one_byte_past_the_file_is_truncated) {
 TEST(perform_a_section_one_byte_longer_than_the_payload_or_a_short_macro_table_is_malformed) {
     fill_performance();
     const uint32_t size = write_performance();
-    // The LAST section, the scenes' arp, so one byte more runs past the payload.
-    const uint32_t last = section_entry_at(g_buffer, kSectionPerformSceneArp);
+    // The LAST section, the scenes' ASR, so one byte more runs past the payload.
+    const uint32_t last = section_entry_at(g_buffer, kSectionPerformSceneAsr);
     const uint32_t last_len = peek_u32(g_buffer, last + 8);
     poke_u32(g_buffer, last + 8, last_len + 1);
     refresh_crc(g_buffer);
@@ -1328,10 +1330,11 @@ TEST(perform_a_file_from_before_the_lfo_loads_with_no_scene_storing_one) {
     fill_performance();
     for (int t = 0; t < kTracks; t++) scene_set(g_scenes.scenes[0], t, kKitSoundParams, 77);
     const uint32_t size = write_performance();
-    // Before the LFO there was no scenes' EQ or arp section either: drop all three, last first.
-    const uint32_t sizes[3] = {3152u, 3076u, 2424u};
+    // Before the LFO there was no scenes' EQ, arp or ASR section either: drop all four, last
+    // first.
+    const uint32_t sizes[4] = {3804u, 3152u, 3076u, 2424u};
     uint32_t old_size = size;
-    for (int k = 0; k < 3; k++) {
+    for (int k = 0; k < 4; k++) {
         old_size = drop_last_section(g_buffer, g_alternate);
         CHECK_EQ(old_size, sizes[k]);
         for (uint32_t i = 0; i < old_size; i++) g_buffer[i] = g_alternate[i];
@@ -1401,7 +1404,10 @@ TEST(perform_scenes_keep_their_arp_bytes_and_an_older_file_stores_none) {
         CHECK_EQ(scene_count(g_loaded_scenes.scenes[s]), scene_count(g_scenes.scenes[s]));
     }
 
-    // The file the LFO and kill EQ builds wrote: everything but the arp comes back.
+    // The file the LFO and kill EQ builds wrote: everything but the arp (and the ASR page after
+    // it) comes back.
+    drop_last_section(g_buffer, g_alternate);
+    for (uint32_t i = 0; i < 3804u; i++) g_buffer[i] = g_alternate[i];
     const uint32_t old_size = drop_last_section(g_buffer, g_alternate);
     CHECK_EQ(old_size, 3152u);
     for (int s = 0; s < kScenes; s++) scene_set(g_loaded_scenes.scenes[s], 1, kKitLfoEnd, 9);
@@ -1416,4 +1422,31 @@ TEST(perform_scenes_keep_their_arp_bytes_and_an_older_file_stores_none) {
             }
         }
     }
+}
+
+TEST(perform_scenes_keep_their_asr_bytes_and_morph_them) {
+    // The ASR page (attack, sustain, release, filter sustain) is stored per scene in its own
+    // section, in the fourth mask byte, and the morph sweeps it like any other byte -- the fourth
+    // byte of the mask must be read, or a scene storing only SUS would morph nothing.
+    fill_performance();
+    Scene &scene = g_scenes.scenes[3];
+    scene_set(scene, 6, kKitArpEnd + 1, 110);
+    scene_clear(scene, 6, kKitArpEnd + 2);
+    const uint32_t size = write_performance();
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::ok));
+    const Scene &loaded = g_loaded_scenes.scenes[3];
+    CHECK(scene_has(loaded, 6, kKitArpEnd + 1));
+    CHECK(!scene_has(loaded, 6, kKitArpEnd + 2));
+    CHECK_EQ(int(loaded.values[6][kKitArpEnd + 1]), 110);
+    for (int s = 0; s < kScenes; s++) {
+        CHECK_EQ(scene_count(g_loaded_scenes.scenes[s]), scene_count(g_scenes.scenes[s]));
+    }
+
+    perform_init(g_scenes, g_macros);
+    uint8_t out[kTracks][kKitParams] = {};
+    scene_set(g_scenes.scenes[0], 6, kKitArpEnd + 1, 0);
+    scene_set(g_scenes.scenes[1], 6, kKitArpEnd + 1, 100);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, out);
+    CHECK_EQ(int(out[6][kKitArpEnd + 1]), 50);
 }

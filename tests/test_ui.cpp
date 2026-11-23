@@ -1547,6 +1547,74 @@ TEST(ui_a_step_key_in_keys_mode_plays_and_records_the_scale_note) {
     host.set_running(false);
 }
 
+TEST(ui_a_key_held_while_recording_gives_the_step_its_length) {
+    // KEYS on VA POLY, REC on: a key held for four steps records a step whose LEN is four steps,
+    // so with SUS up the chord plays back as long as it was played. On a drum the hold is not
+    // measured: LEN stays the one step a recorded hit always had.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);    // track 7, VA POLY
+    CHECK_EQ(UiProbe::selected(app), 6);
+    open_keys();
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    host.set_position(96);
+    key(ENAGA_KEY_F2);                                  // REC on
+    CHECK(UiProbe::rec(app));
+
+    step_down(2);
+    pump(2);
+    host.set_position(96 + 4 * 24);                     // four steps later
+    step_up(2);
+    pump(2);
+
+    int where = -1;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(6, s)) where = s;
+    }
+    CHECK(where >= 0);
+    CHECK_EQ(int(step_of(6, where).length), 12);        // 4 steps (core/timing.hpp's table)
+
+    // A quick tap on the same step's note again replaces its length with the tap's.
+    host.set_position(96);
+    step_down(2);
+    pump(2);
+    host.set_position(96 + 6);                          // a quarter of a step
+    step_up(2);
+    pump(2);
+    CHECK_EQ(int(step_of(6, where).length), 4);
+
+    key(ENAGA_KEY_F2);
+    host.set_running(false);
+}
+
+TEST(ui_a_held_key_on_a_drum_track_keeps_the_one_step_length) {
+    Strata &app = fresh();
+    open_keys();
+    CHECK_EQ(UiProbe::selected(app), 0);                // track 1, KICK
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    host.set_position(96);
+    key(ENAGA_KEY_F2);
+    step_down(4);
+    pump(2);
+    host.set_position(96 + 8 * 24);
+    step_up(4);
+    pump(2);
+    int recorded = 0;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(0, s) && step_of(0, s).note == app.keys_note(4)) {
+            recorded++;
+            CHECK_EQ(int(step_of(0, s).length), 8);
+        }
+    }
+    CHECK(recorded > 0);
+    key(ENAGA_KEY_F2);
+    host.set_running(false);
+}
+
 // --- PLAY while the card is busy ------------------------------------------------------------
 
 TEST(ui_play_is_refused_while_a_project_is_loading) {
@@ -3622,6 +3690,52 @@ TEST(ui_the_arp_is_edits_sixth_page_and_keys_play_it) {
     for (int i = 0; i < kArpParams; i++) post_cmd_track_param(0, uint8_t(kArpFirst + i), 0);
     pump();
     key(ENAGA_KEY_F8);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
+    while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(int(Page::asr), kEditPages - 1);
+    check_layout(app, "EDIT ASR, a drum");
+    CHECK(screen_has(app, "VA MONO/POLY ONLY"));
+    CHECK(!screen_has(app, "ATK"));
+
+    // Track 7, VA POLY in the default kit: the four names, the old envelope's values at 0.
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::selected(app), 6);
+    CHECK_EQ(int(app_engine().machine_id(6)), int(MachineId::va_poly));
+    check_layout(app, "EDIT ASR, VA POLY");
+    CHECK(screen_has(app, "ATK"));
+    CHECK(screen_has(app, "FSU"));
+    CHECK(screen_has(app, "3MS"));                    // 2.5 ms, as the VAs always had
+    CHECK(screen_has(app, "60MS"));
+    CHECK(screen_has(app, "SUS 0: ONE-SHOT"));
+
+    // B is SUS: up, the note holds.
+    app.on_encoder(1, +100);
+    pump();
+    CHECK(app_engine().params(6).v[kAsrFirst + 1] > 0);
+    CHECK(screen_has(app, "HOLDS: PAD OR LEN"));
+
+    // The widest values the page shows: every time and percentage fits.
+    for (int b = 0; b < 128; b += 3) {
+        for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), uint8_t(b));
+        pump();
+        check_layout(app, "EDIT ASR, every value");
+    }
+    post_cmd_track_param(6, uint8_t(kAsrFirst + 0), 127);
+    post_cmd_track_param(6, uint8_t(kAsrFirst + 2), 127);
+    pump();
+    CHECK(screen_has(app, "5.0S"));
+    CHECK(screen_has(app, "8.0S"));
+
+    // Back to the old envelope and SRC for the tests after this one.
+    for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
+    pump();
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
     while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
     key(ENAGA_KEY_F4);
 }
@@ -5854,6 +5968,18 @@ TEST(ui_screenshots) {
         key(ENAGA_KEY_SELECT_RIGHT);
         write_shot(folder, page);
     }
+    // The ASR page on track 7 (VA POLY), set up as a pad; then everything back as it was, so the
+    // shots after this one draw what they always drew.
+    key(ENAGA_KEY_SELECT_RIGHT);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);
+    const uint8_t pad[kAsrParams] = {72, 89, 90, 40};    // ~400 MS, 70%, ~1.9 S, 31%
+    for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), pad[i]);
+    pump();
+    write_shot(folder, "edit_asr");
+    for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
+    pump();
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_SELECT_LEFT);
 
     mixer_page(app, 0);
     write_shot(folder, "mixer");

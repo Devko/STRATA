@@ -17,6 +17,11 @@ the project file format or the controls.
   removes `PROJECT.BIN` first. The open project cannot be deleted.
 - **LEN on streamed samples:** a file streamed from the card now stops, or loops back, where LEN
   says. START, slices and reverse stay off for streamed files (docs/FEATURES.md says why).
+- **Held notes and pads on VA MONO and VA POLY.** A seventh EDIT page, ASR: attack (to 5 s),
+  sustain, release (to 8 s) and filter sustain. With SUS up a note holds while its KEYS pad, STEP
+  key or MIDI note is held, or for its step's LEN, up to 64 steps. At 0 (and in every older
+  project) the VAs sound exactly as before.
+- **REC records how long a note was held** into its step's LEN, on SAMPLE, GRAIN, the VAs and MID.
 
 ## [0.1.0] - {{RELEASE_DATE}}
 

@@ -79,6 +79,9 @@ enum class Cmd : uint8_t {
     // A live-recorded hit, already resolved to a step and a micro-timing value by core/record in
     // the main context -- where the clock state that stamped it was read.
     record_hit,        // track, step, a: note, b: velocity, c: int8 micro
+    // And how long that note was held, when its key comes up: core/record's held_length_index,
+    // stored as the step's LEN if the step still holds that note.
+    record_length,     // track, step, a: note, b: length index
 
     // --- projects and banks, M4 --------------------------------------------
     //
