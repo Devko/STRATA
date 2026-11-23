@@ -2927,43 +2927,68 @@ TEST(ui_the_held_cpu_max_keeps_the_highest_block_and_restarts_on_play) {
     pump();
 }
 
-// The `ld <avg> <max>` log lines: half a second of polls, averaged and maxed, in ONE burst of
-// eight after a track freezes or comes back, while the transport runs. Not after PLAY or a
-// pattern change: Enaga's log ring keeps sixteen lines, and most scenarios check lines from early
-// in the run (a burst after PLAY broke six of them). tests/scenario_freeze.sh reads these.
-TEST(ui_the_load_log_gives_windowed_figures_after_a_freeze_or_unfreeze) {
+// The `ld <avg> <max>` log lines: one per BAR, averaged and maxed, in ONE burst of four after a
+// track freezes or comes back, while the transport runs, skipping the part bar the change lands
+// in and one whole bar after it. Not after PLAY or a pattern change: Enaga's log ring keeps
+// sixteen lines, and most scenarios check lines from early in the run (a burst after PLAY broke
+// six of them). tests/scenario_freeze.sh reads these.
+TEST(ui_the_load_log_gives_four_bars_after_a_freeze_or_unfreeze) {
     Strata &app = fresh();
     FakeHost &host = FakeHost::the();
     Status &status = const_cast<Status &>(UiProbe::engine(app).status());
+    const auto at_bar = [&](uint32_t bar) { host.set_position(bar * kTicksPerBar + 5); };
     host.set_running(true);
     host.set_audio_load(300);
-    pump(375 * 3);
+    at_bar(0);
+    pump(50);
+    at_bar(1);
+    pump(50);
     CHECK(!host.logged("ld 30.0 30.0"));            // PLAY alone logs nothing
 
-    status.frozen.store(64u, std::memory_order_relaxed);   // track 7 freezes
+    status.frozen.store(64u, std::memory_order_relaxed);   // track 7 freezes in bar 1
+    pump(10);
+    host.set_audio_load(650);                       // bar 2 is skipped whatever it costs
+    at_bar(2);
+    pump(50);
+    at_bar(3);
     host.set_audio_load(200);
-    pump(374);
+    pump(99);
     host.set_audio_load(500);
     pump();
-    CHECK(host.logged("ld 20.1 50.0"));             // (374 x 200 + 500) / 375 = 200.8 per mille
-
     host.set_audio_load(100);
-    pump(375 * 7);
-    CHECK(host.logged("ld 10.0 10.0"));
+    at_bar(4);
+    pump();
+    CHECK(host.logged("ld 20.3 50.0"));             // bar 3: (99 x 200 + 500) / 100 = 203 per mille
+    CHECK(!host.logged("ld 65.0 65.0"));
+    pump(49);
+    for (uint32_t bar = 5; bar <= 7; bar++) {
+        at_bar(bar);
+        pump(50);
+    }
+    CHECK(host.logged("ld 10.0 10.0"));             // bars 4-6
     const int lines = host.log_lines();
-    pump(375 * 2);
-    CHECK_EQ(host.log_lines(), lines);              // eight windows, then quiet
+    at_bar(8);
+    pump(50);
+    at_bar(9);
+    pump(50);
+    CHECK_EQ(host.log_lines(), lines);              // four bars, then quiet
 
     status.frozen.store(0u, std::memory_order_relaxed);    // and back: a new burst
     host.set_audio_load(150);
-    pump(375);
+    for (uint32_t bar = 10; bar <= 13; bar++) {     // 9 part and 10 skipped, 11 logged at 12
+        at_bar(bar);
+        pump(50);
+    }
     CHECK(host.logged("ld 15.0 15.0"));
-
     host.set_running(false);                        // a stop ends the burst
     host.set_audio_load(70);
-    pump(375 * 2);
+    at_bar(14);
+    pump(50);
+    at_bar(15);
+    pump(50);
     CHECK(!host.logged("ld 7.0 7.0"));
     host.set_audio_load(0);
+    host.set_position(0);
     pump(2);
 }
 

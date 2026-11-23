@@ -1476,11 +1476,14 @@ Memory: frozen loops use their own pool slots (8-15) out of the 64 MiB sample bu
 frame mono: 8 bars at 120 BPM is 16 s, 1.5 MiB a track.
 
 `tests/scenario_freeze.sh` freezes track 7 of the default beat (`--pad`: of A05 PAD, the held
-chord) and prints the app's `ld <avg> <max>` windows (half a second each, app/app.hpp) after the
-freeze; `--baseline` freezes and then unfreezes, and prints the windows with track 7 live again.
-The app logs those eight windows only after a freeze or unfreeze: #110 also logged them after
-PLAY and pattern changes, which pushed early lines out of Enaga's 16-line log ring and broke six
-other scenarios' log checks. The first version printed a "last block" figure that the emulator's
+chord) and prints the app's `ld <avg> <max>` lines (one a bar, app/app.hpp) after the freeze;
+`--baseline` freezes and then unfreezes, and prints the bars with track 7 live again. The app
+logs four bars, from the second whole bar after the change, and only after a freeze or unfreeze:
+four bars are one pass of A05 (a chord a bar, four or five notes each), so both runs measure the
+same chords; and the skipped bar lets an unfrozen chord track come back with its release tails.
+#110 logged half-second windows after PLAY and pattern changes too, which pushed early lines out
+of Enaga's 16-line log ring and broke six other scenarios' log checks; #114 fixed that but its
+baseline windows began right after the unfreeze, before the next chord. The first version printed a "last block" figure that the emulator's
 report does not have, so it always read 0.00%.
 
 Measured on Roland's PC at f5d66dd, cl6x, A01 (factory beat), track 7 frozen, with a temporary
@@ -1507,8 +1510,14 @@ points, close to the estimate of 12 above. Eight half-second windows a run, avg/
 | A01 live (`--baseline`) | 14.16% | 26.2% | 14.4/26.2 15.2/25.3 12.7/18.8 13.5/24.7 15.5/25.6 15.0/23.7 12.8/24.4 |
 | A01, track 7 frozen | 13.44% | 19.1% | 13.6/19.0 14.2/18.4 13.3/17.2 12.8/19.1 13.3/17.1 14.2/18.4 13.3/16.6 12.8/17.2 |
 
-These were taken with #110's baseline (no freeze, the burst after PLAY or the pattern switch); the
-A01 baseline has seven windows because the script dropped the first after PLAY. The peak
+**These figures are provisional.** They are #110's half-second windows, and the live and frozen
+runs did not cover the same bars: the live A05 windows were the first two passes of bars after
+the pattern switch, the frozen ones whichever bars followed the freeze. At #114 (0ca2bcf) the
+same `--pad` run read 10.09% / 15.7% again, but `--pad --baseline` read 17.29% / 25.0%: its
+windows began right after the unfreeze, while the chord track was silent until the next bar's
+chord and had no release tails, so that live figure is low. The bar-aligned lines (this section's
+first paragraph) are the comparison to record; they have not run yet. The A01 baseline has seven
+windows because #110's script dropped the first after PLAY. The peak
 since boot is 26-27% in every run, because it includes the bars before the freeze. GCC-only
 figures were not taken (cl6x ships).
 

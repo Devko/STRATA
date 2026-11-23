@@ -2628,35 +2628,48 @@ public:
             const uint32_t load = enaga::audio_load();
             cpu_max_ = load > cpu_max_ ? load : cpu_max_;
 
-            // Windowed figures for scenarios and unit logs: `ld <avg> <max>` in percent over
-            // kLoadWindow polls (half a second). One block is too noisy to compare (which drum
-            // hits land in it moves it by points), and the emulator's report holds only the peak
-            // since boot (tests/scenario_freeze.sh). Enaga's log ring keeps sixteen lines and
-            // most scenarios check lines from early in the run, so the windows come only in one
-            // burst of kLoadBurst after a track freezes or comes back, while the transport runs.
-            // A freeze then an unfreeze gives the live figure (scenario_freeze.sh --baseline).
+            // Windowed figures for scenarios and unit logs: `ld <avg> <max>` in percent, one
+            // line per BAR. One block is too noisy to compare (which drum hits land in it moves it
+            // by points), and the emulator's report holds only the peak since boot
+            // (tests/scenario_freeze.sh). Enaga's log ring keeps sixteen lines and most scenarios
+            // check lines from early in the run, so the bars come only in one burst of kLoadBurst
+            // after a track freezes or comes back, while the transport runs.
+            //
+            // Bars, not half seconds, so a frozen run and a live one compare the same music: four
+            // bars are one pass of a four-bar pattern (A05 changes chord every bar, and its
+            // chords hold different numbers of voices). The part bar the change lands in and one
+            // whole bar after it are skipped: an unfrozen machine starts silent and comes back on
+            // the next trigger, without the release tails a live chord track carries over.
             const uint8_t frozen = engine_.status().frozen.load(std::memory_order_relaxed);
+            const uint32_t bar = engine_.status().tick.load(std::memory_order_relaxed) / kTicksPerBar;
             if (frozen != load_frozen_) {
                 load_frozen_ = frozen;
                 load_burst_ = kLoadBurst;
-                window_sum_ = window_max_ = window_polls_ = 0;   // a window is one side only
+                load_skip_ = 2;
+                load_bar_ = bar;
             }
             if (!logged_running_) load_burst_ = 0;
-            if (load_burst_ != 0) {
-                window_sum_ += load;
-                window_max_ = load > window_max_ ? load : window_max_;
-                if (++window_polls_ >= kLoadWindow) {
+            if (load_burst_ != 0 && bar != load_bar_) {
+                load_bar_ = bar;
+                if (load_skip_ != 0) {
+                    load_skip_--;
+                } else if (window_polls_ != 0) {
                     char line[24];
                     char *out = line;
                     append(out, "ld ");
-                    append_tenths(out, (window_sum_ + kLoadWindow / 2) / kLoadWindow);
+                    append_tenths(out, (window_sum_ + window_polls_ / 2) / window_polls_);
                     append(out, " ");
                     append_tenths(out, window_max_);
                     *out = '\0';
                     enaga::log(line);
-                    window_sum_ = window_max_ = window_polls_ = 0;
                     load_burst_--;
                 }
+                window_sum_ = window_max_ = window_polls_ = 0;
+            }
+            if (load_burst_ != 0 && load_skip_ == 0) {
+                window_sum_ += load;
+                window_max_ = load > window_max_ ? load : window_max_;
+                window_polls_++;
             } else {
                 window_sum_ = window_max_ = window_polls_ = 0;
             }
@@ -6406,11 +6419,12 @@ private:
     uint32_t last_ms_ = 0;
     uint8_t logged_guard_ = 0;     // the CPU guard level last logged
     uint32_t cpu_max_ = 0;         // per mille, the highest block cost since the last start
-    static constexpr uint32_t kLoadWindow = 375;  // polls per `ld` log line, half a second
-    static constexpr uint8_t kLoadBurst = 8;       // `ld` lines after a freeze or unfreeze
+    static constexpr uint8_t kLoadBurst = 4;       // `ld` lines (bars) after a freeze or unfreeze
+    uint8_t load_skip_ = 0;        // bar lines to pass before the burst's first bar
+    uint32_t load_bar_ = 0;        // the bar the last poll was in
     uint8_t load_burst_ = 0;       // `ld` lines still to log in this burst
     uint8_t load_frozen_ = 0;      // the frozen mask, last seen
-    uint32_t window_sum_ = 0;      // per mille, summed over the current window
+    uint32_t window_sum_ = 0;      // per mille, summed over the current bar
     uint32_t window_max_ = 0;
     uint32_t window_polls_ = 0;
 
