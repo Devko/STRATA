@@ -98,6 +98,7 @@ bool mutates_kit(Cmd cmd) {
         case Cmd::set_machine:
         case Cmd::set_track_level:
         case Cmd::set_slice_mode:
+        case Cmd::set_duck:
         case Cmd::clear_sample:
         case Cmd::set_sample:
         case Cmd::set_stream:
