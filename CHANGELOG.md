@@ -11,6 +11,11 @@ the project file format or the controls.
 - **CPU guard.** When the audio load stays high, STRATA sheds VA POLY voices (two a level, the
   quietest fading out first) and thins GRAIN clouds instead of risking an overrun. The bottom
   line shows `GUARD1` to `GUARD4` while it is up; it steps back down once the load falls.
+- **Held notes and pads on VA MONO and VA POLY.** A seventh EDIT page, ASR: attack (to 5 s),
+  sustain, release (to 8 s) and filter sustain. With SUS up a note holds while its KEYS pad, STEP
+  key or MIDI note is held, or for its step's LEN, up to 64 steps. At 0 (and in every older
+  project) the VAs sound exactly as before.
+- **REC records how long a note was held** into its step's LEN, on SAMPLE, GRAIN, the VAs and MID.
 
 ## [0.1.0] - {{RELEASE_DATE}}
 

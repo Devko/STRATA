@@ -262,9 +262,9 @@ TEST(app_the_first_save_of_a_project_writes_all_ten_files) {
     project_file(path, "PROJECT.BIN");
     CHECK_EQ(host.file_bytes(path), 402);   // core/project.cpp: 305, 12 + 65 song, 12 + 8 MIDI
     project_file(path, "KIT.BIN");
-    CHECK_EQ(host.file_bytes(path), 1184);  // 1076, the LFO and arp (2 x (12 + 8 x 4)), SLC AUTO (12 + 8)
+    CHECK_EQ(host.file_bytes(path), 1228);  // 1076, the LFO and arp (2 x (12 + 8 x 4)), SLC AUTO (12 + 8), ASR (12 + 32)
     project_file(path, "PERFORM.BIN");
-    CHECK_EQ(host.file_bytes(path), 3804);  // 2424, the scenes' LFO (12 + 640), EQ (12 + 64), arp (12 + 640)
+    CHECK_EQ(host.file_bytes(path), 4456);  // 2424, the scenes' LFO (12 + 640), EQ (12 + 64), arp and ASR (12 + 640 each)
 }
 
 TEST(app_a_saved_project_reloads) {

@@ -1077,8 +1077,8 @@ TEST(vapoly_decay_knob_spans_its_range_and_lengthens_a_chord) {
 //   * dropping `!s.pending` from the slice cut -- re-slicing a voice that has already started is
 //     bit-transparent, so this costs control-rate work and changes no sample (dsp/vapoly.cpp
 //     says the same at the line).
-//   * dropping the kGateMax clamp -- it only ever LOWERS a count above ten seconds, and the
-//     longest DEC is 2.4 s, so no note survives to where the two differ. A count so large it
+//   * dropping the kGateMax clamp -- it only ever LOWERS a count above five minutes, and no
+//     test holds a note that long, so no note survives to where the two differ. A count so large it
 //     wraps the int lands negative, which this machine reads as no gate: inert either way. The
 //     clamp's magnitude IS tested (`..._is_clamped_rather_than_wrapping` fails if kGateMax
 //     drops into an audible window); its existence cannot be.
@@ -1258,8 +1258,9 @@ TEST(vapoly_an_absurd_gate_is_clamped_rather_than_wrapping) {
     // an immediate release. These four are "longer than anything this machine can still be heard
     // through", so each has to behave exactly as no gate at all over the whole capture.
     //
-    // The clamp's VALUE (kGateMax, ten seconds) is not audible and is not tested: the longest
-    // DEC is 2.4 s, so no note survives to ten. What is tested is that nothing wraps and nothing
+    // The clamp's VALUE (kGateMax, five minutes) is not audible here and is not tested: the
+    // longest DEC is 2.4 s and SUS is 0, so no note survives to it (tests/test_asr.cpp holds a
+    // sustained note past the old ten-second cap). What is tested is that nothing wraps and nothing
     // fires early -- a kGateMax small enough to land inside this window would fail here.
     const TrackParams p = patch();
     const int blocks = blocks_for(1.9f);

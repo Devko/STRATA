@@ -88,4 +88,21 @@ struct Landing {
 // Pure: the same arguments always give the same Landing. No allocation; safe from audio().
 Landing quantize_hit(Stamp hit, const TrackTiming &timing, int quantize_percent);
 
+// --- how long a note was held ---------------------------------------------
+//
+// A KEYS pad, a STEP key or a MIDI note held while recording: the step it landed on gets the
+// hold as its LEN (core/timing.hpp's note-length table), so a sustaining machine plays it back
+// for as long as it was played. `down` and `up` are the two stamps, taken the same way (the pad
+// latency is the same at both ends, so neither is moved back).
+//
+// The table entry NEAREST the hold, measured as a ratio rather than a difference -- the table
+// doubles at its long end, so "nearest" in ticks would round a 5-step hold up to 6 but a
+// 40-step hold down to 32. The boundary between two entries is their geometric mean, compared
+// squared so nothing takes a root. A hold shorter than the first entry is the first entry; one
+// longer than the last is the last (64 steps). An `up` before `down` (a clock that jumped back)
+// is the shortest entry.
+//
+// Pure, and a valid index (1..kLengthMax) whatever it is given.
+uint8_t held_length_index(Stamp down, Stamp up, const TrackTiming &timing);
+
 }  // namespace strata

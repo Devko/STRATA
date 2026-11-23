@@ -1142,6 +1142,7 @@ scene or knob really did move: those prepare as before.
 | E4 | The prepare memo's share | `scenario_m5.sh` (scenes and macros move parameters, so it prepares more) against `scenario_m3.sh` | the gap between them, before and after |
 | E6 | The master kill EQ running | `tests/scenario_killeq.sh` against `tests/scenario_m7.sh` (same beat, EQ bypassed), with cl6x and with `ENAGA_TI_CGT=none` | the difference is the EQ's cost; the proxy above says ~1.3 cl6x / ~2.2 GCC-only |
 | E7 | Eight LFOs running | `tests/scenario_lfo.sh` as it is (every LFO off: should match `scenario_factory.sh`), then again after a temporary edit to `factory_kit` in core/factory.cpp setting each track's `params[17] = 40` (RAT, about 3 Hz free), `params[18] = 127` (DEP) and `params[19] = 38` (DST = DRV), with cl6x and with `ENAGA_TI_CGT=none`; revert the edit | the difference is eight LFOs' cost; the host figures say about 1.1-1.4 points GCC, and about the same with cl6x |
+| E12 | The ASR page | `tests/scenario_asr.sh`, then the held-chord `factory_kit` edit in "The ASR page" above, `scenario_factory.sh`, both compilers; revert | off should match `scenario_factory.sh`; held is the cost of overlapping chords, at most the 12-voice cap |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
@@ -1395,6 +1396,30 @@ renders bit-for-bit as before (the golden renders and the bit-exact tests pass u
 (UNIT_CHECKLIST, "The CPU guard"): A01 must never raise it, and the 84% session must stay
 under 100% with it. The scenarios never reach the guard's thresholds; nothing on the emulator
 exercises it.
+
+### The ASR page: held notes on the VAs (2026-11-23, host only)
+
+VA MONO and VA POLY read four more bytes (ATK SUS REL FSU, params 24-27) in `VaSettings::make`,
+once a block, into the same four `EnvelopeShape::make` calls as before: the control-rate cost is
+unchanged, and **the per-sample code is untouched** -- the same oscillators, filter, envelope
+render and tail, with an envelope whose sustain level is no longer 0. VA MONO gained VA POLY's
+gate countdown (one compare and subtract per control slice while a gate counts). All four bytes
+at 0 is bit-identical to before: `golden_dense_retriggers` and every VA golden render pass
+untouched, so A01 and the factory content cost exactly what they did.
+
+What changes is **how long a voice lives**. With SUS up a chord holds for its LEN (up to 64 steps)
+or for as long as pads are held, and REL up to 8 s extends the tail, so far more notes overlap
+than DEC alone ever allowed. The ceiling is still the shared budget of 12 POLY voices
+(`Engine::kPolyVoiceBudget`, 2.16 points each with cl6x, 3.82 GCC-only: ~26 / ~46 points at the
+cap), and above it the CPU guard (PR #83) lowers the cap. Expect held pads to sit at the cap far
+more often than stabs did, so U10 (six held pads over A01) is the reading that matters.
+
+**E12, owed on Roland's PC:** `tests/scenario_asr.sh` (walks EDIT to the ASR page on a drum and on
+VA POLY; every byte 0, so it should match `scenario_factory.sh`), both compilers. Then the
+held-chord cost: temporarily set track 7's `params[25] = 100` (SUS) and `params[26] = 90` (REL,
+about 1.9 s) in `factory_kit` (core/factory.cpp), so A01's chord stabs hold and overlap, run
+`scenario_factory.sh` with cl6x and with `ENAGA_TI_CGT=none`, and revert. The difference is what
+overlapping held chords cost, bounded by the 12-voice cap.
 
 ### Later milestones
 

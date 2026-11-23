@@ -54,12 +54,15 @@ constexpr int kProjectPatterns = kBanks * kPatternsPerBank;   // 128
 // then the 4 bytes of the track's LFO (dsp/lfo.hpp). The split matters to the files: KIT.BIN and
 // PERFORM.BIN carried 16 a track before the LFO existed, so the four LFO bytes travel in sections
 // of their own that an older file simply does not have. The arpeggiator's four (core/arp.hpp)
-// follow the LFO's in the same way, and in a section of their own again.
+// follow the LFO's in the same way, and in a section of their own again, and so do the four of
+// the VA machines' ASR page (attack, sustain, release, filter sustain; dsp/va.cpp).
 constexpr int kKitSoundParams = 16;
 constexpr int kKitLfoParams = 4;
 constexpr int kKitLfoEnd = kKitSoundParams + kKitLfoParams;
 constexpr int kKitArpParams = 4;
-constexpr int kKitParams = kKitLfoEnd + kKitArpParams;
+constexpr int kKitArpEnd = kKitLfoEnd + kKitArpParams;
+constexpr int kKitAsrParams = 4;
+constexpr int kKitParams = kKitArpEnd + kKitAsrParams;
 
 // How many machines a track can host, mirroring dsp/'s machine list the same way and for the
 // same reason as kKitParams: docs/SPEC.md, "Machines (v1)" -- KICK, SNARE, HAT, PERC, SAMPLE,
@@ -358,6 +361,10 @@ constexpr uint16_t kSectionKitArp = 3;
 // SLC AUTO, one byte per track (KitTrack::slice_mode). Optional on read like the LFO and the
 // arp: a KIT.BIN from before it loads with every track slicing equally, as slicing always did.
 constexpr uint16_t kSectionKitSlices = 4;
+// The VA machines' ASR page, four bytes per track (kKitAsrParams: ATK SUS REL FSU). Optional on
+// read like the others: a KIT.BIN from before it loads with all four 0, which dsp/va.cpp reads as
+// exactly the envelope the VAs always had (2.5 ms attack, no sustain, 60 ms release).
+constexpr uint16_t kSectionKitAsr = 5;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;
