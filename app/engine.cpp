@@ -2639,6 +2639,11 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // the next trig, and sweeping VALUE between steps would do nothing at all.
     for (int t = 0; t < kTracks; t++) {
         const uint32_t locked = locked_[t];
+        // Most steps lock nothing: then it is one 32-byte copy, not 32 tested bytes.
+        if (locked == 0u) {
+            __builtin_memcpy(effective_[t].v, performed_[t], sizeof performed_[t]);
+            continue;
+        }
         for (int p = 0; p < kTrackParams; p++) {
             if ((locked >> p & 1u) != 0) continue;
             effective_[t].v[p] = performed_[t][p];
