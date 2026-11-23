@@ -117,6 +117,7 @@ screen when pressed.
 | Pad-row L/R (or LEFT/RIGHT on GRID) | Step page 1-4 (64 steps) |
 | Hold STEP + turn A-D | Lock that parameter of the current EDIT page on the step |
 | Hold STEP + push A-D | Remove that one lock (LOCK CLEARED), with or without FUNC held |
+| Push the TUN / PIT knob (EDIT, GRID, KEYS) | NOTE view on / off: TUN as a note (where it puts C-4), a semitone a click (`TUN AS NOTES`), or as 0-127, a count a click (`TUN AS NUMBERS`). `+` / `-` after a note: the byte is 5 cents or more sharp / flat of it |
 | Hold STEP + turn VALUE | Set the step's note |
 | Hold STEP + OK | Open the step page on that step |
 | Hold STEP + CLR | Clear the step |

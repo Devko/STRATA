@@ -411,6 +411,19 @@ machine, AMP's first knob is the decay and its last is LVL, the output level (sq
 the quiet end has room). Where a machine follows the trig note, note 60 (C4) plays the knob's own
 pitch and other notes transpose from there.
 
+**TUN as a note.** TUN (PIT on SAMPLE and GRAIN) shows that pitch as a note: where TUN puts C4,
+spelled as on the step page (`C-4`, `F#2`). On a drum that is the drum's pitch: KICK at 64 reads
+`A-1` (55 Hz). On a melodic machine it is the transposition: VA MONO at 64 reads `C-4` (none), an
+octave up `C-5`. In this NOTE view a knob click moves TUN one
+semitone, to the setting closest to that note, so tuning a kick or a tom to the key is a few
+clicks. TUN has 128 settings across its range, so not every note falls exactly on one: a `+` or
+`-` after the note means the setting is 5 cents or more sharp or flat of it (VA MONO's fifth,
+`G-4+`, is 12.5 cents sharp). For SAMPLE and GRAIN the name assumes the sample itself is a C.
+**Push the TUN knob** (on EDIT, GRID or KEYS) to see the number 0-127 instead and turn it a count at
+a time, for tuning between notes; push again for notes. NOTE view is on at every start and
+applies to every track. Locks follow it: hold a STEP and turn TUN in NOTE view, and the lock
+moves in semitones.
+
 The drum machines (KICK, SNARE, HAT) follow Mutable Instruments Plaits' models, reimplemented;
 docs/SOUND.md has the details.
 
@@ -583,6 +596,13 @@ SAMPLE when it is not sliced (SLC 1). Drums and sliced samples are not folded, s
 note picks a pitch or a slice rather than a melody. Scales: CHROMATIC, MINOR, MAJOR, DORIAN,
 PHRYGIAN, LYDIAN, MIXOLYDIAN, LOCRIAN, HARM MINOR, MEL MINOR, MINOR PENT, MAJOR PENT, BLUES,
 WHOLE TONE, DIMINISHED. Notes are named with sharps (D#, not Eb).
+
+TUN is applied **after** the fold: the sequencer folds each note into the key, then the machine
+transposes it by TUN. So TUN moves the whole line chromatically, and in NOTE view it steps through
+all twelve notes, not just the scale's. Moving a line by a scale step would not keep it in the key
+(A minor moved up a whole step is B minor, with C# and F#); only an octave does, which is twelve
+clicks. To keep a melodic track in key, leave TUN at `C-4` or an octave of it and write the notes;
+on drums, which are not folded, TUN is simply the drum's pitch and can go to any note of the key.
 
 ### Changing a track's machine
 

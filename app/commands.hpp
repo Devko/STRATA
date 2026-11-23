@@ -57,7 +57,7 @@ enum class Cmd : uint8_t {
     // step, cannot lose one. The cost is that the screen shows the result one block late, which
     // at 1.33 ms is not a thing a person can see.
     step_field_delta,  // track, step, a: StepField, b: int8 delta
-    lock_delta,        // track, step, a: param index, b: int8 delta
+    lock_delta,        // track, step, a: param index, b: int8 delta; c = kSemitoneFlag: semitones
 
     // The Euclidean generator (docs/SPEC.md, "Musical defaults that help creativity"): a whole
     // track's rhythm from three numbers. One edit, so it carries an undo mark like any other and
@@ -275,6 +275,12 @@ enum class Cmd : uint8_t {
 // there loses every click after the first in a block -- the reason the M3 commands are deltas.
 // An absolute value (c = 0) is still what a load, a test or a recall sends.
 constexpr uint8_t kDeltaFlag = 1;
+// `Command::c` set to this on set_param and lock_delta makes `b` a delta in SEMITONES on the
+// machine's tuning parameter (TUN or PIT): the knob moves to the byte nearest the next note
+// (core/tuning.hpp, `tune_step`). What a knob click sends in NOTE view. Worked out on the audio
+// side from the authoritative value, for the same reason as kDeltaFlag. On any other parameter
+// it is an ordinary delta.
+constexpr uint8_t kSemitoneFlag = 2;
 
 // `Cmd::set_duck`'s field, in `a`. Not on disk: KIT.BIN's duck section has its own layout.
 enum class DuckField : uint8_t { depth, source, attack, hold, release, count };

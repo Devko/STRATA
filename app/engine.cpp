@@ -4,6 +4,7 @@
 #include "factory.hpp"
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
+#include "tuning.hpp"      // a knob click in NOTE view: tune_step
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
@@ -525,7 +526,9 @@ void Engine::apply(const Command &command) {
             // currently hearing rather than from zero.
             uint8_t base = params_[track].v[param];
             pattern_get_lock(live(), track, step, param, base);
-            const uint8_t value = clamp_u8(int(base) + int(int8_t(command.b)));
+            const uint8_t value = command.c == kSemitoneFlag && tune_param(machine_id_[track]) == param
+                                      ? tune_step(machine_id_[track], base, int(int8_t(command.b)))
+                                      : clamp_u8(int(base) + int(int8_t(command.b)));
 
             if (!pattern_set_lock(live(), track, step, param, value)) {
                 // "Full" usually means slots abandoned by relocation rather than 1,024 real
@@ -1017,7 +1020,10 @@ void Engine::apply(const Command &command) {
         case Cmd::set_param:
             if (command.a < kTrackParams) {
                 uint8_t value = command.b;
-                if (command.c == kDeltaFlag) {
+                if (command.c == kSemitoneFlag && tune_param(machine_id_[track]) == command.a) {
+                    value = tune_step(machine_id_[track], params_[track].v[command.a],
+                                      int(int8_t(command.b)));
+                } else if (command.c == kDeltaFlag || command.c == kSemitoneFlag) {
                     const int next = int(params_[track].v[command.a]) + int(int8_t(command.b));
                     value = uint8_t(next < 0 ? 0 : (next > 127 ? 127 : next));
                 }
