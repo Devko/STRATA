@@ -1,14 +1,15 @@
 # STRATA features and their status
 
-Every feature STRATA has, grouped by area, with where it stands. Written 2026-11-23 from `main`
-at `436a2f8`, docs/MANUAL.md, CHEATSHEET.md, CONTROLS.md, UNIT_CHECKLIST.md, BUDGET.md, SPEC.md
-and the post-v0.1 ideas list. How to play each one is in [MANUAL.md](MANUAL.md); this file
-only says what exists and how sure we are of it. Update a row when its status changes.
+Every feature STRATA has, grouped by area, with where it stands (`main` after PR #124,
+2026-11-23). How to play each one is in [MANUAL.md](MANUAL.md); this file only says what exists
+and how sure we are of it. Update a row when its status changes.
 
 **Columns**
 
 - **Since:** `v0.1.0` = in the [v0.1.0 release](https://github.com/Devko/STRATA/releases/tag/v0.1.0);
-  `#83`, `#85` ... = merged to `main` after v0.1.0, in that PR; `WIP` = being built, not on `main`.
+  `#83` ... `#111` = merged after v0.1.0 and released in
+  [v0.2.0](https://github.com/Devko/STRATA/releases/tag/v0.2.0); `#116` and later = on `main`,
+  not released yet; `WIP` = being built, not on `main`.
 - **Unit:** what the SmplTrek itself has confirmed.
   - **✔** confirmed on the unit (recorded in BUDGET.md or ticked in UNIT_CHECKLIST.md).
   - **◐** used on the unit in the free-play session of 2026-11-22 (controls-remap build, cl6x,
@@ -42,20 +43,21 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | --- | --- | --- | --- |
 | Controls concept from the panel: one job per button group ([CONTROLS.md](CONTROLS.md)) | v0.1.0 | ◐ ("The new controls") | |
 | FUNC + function key = its printed second label (sampling, pool, system, ◀◀, ▶▶, fx, rec src) | v0.1.0 | ◐ ("The new controls") | |
-| FUNC menu (FUNC+HOME): save, save as, open, new, reload, kits, sample reload, track speed, chain, song/loop, auto-fill, quantize | v0.1.0 | ◐ ("The new controls") | |
+| FUNC menu (FUNC+HOME): save, save as, open, new, reload, kits, sample reload, track speed, chain, song/loop, auto-fill, quantize; freeze (#109), loop length (#116) | v0.1.0 | ◐ ("The new controls") | |
 | **CLEAR PATTERN** in the FUNC menu: every track in one press, OK twice, one undo | #86 | ○ ("Today's walkthrough") | Keeps sounds, lengths, speeds and swing |
 | FUNC held alone shows a help screen | v0.1.0 | ○ ("The new controls") | |
-| **Help for the screen that is up**: its knobs in words and its gestures, every screen and EDIT/MIXER page; screen keys turn its pages while FUNC is held | #107 | ○ ("Today's walkthrough", 15) | Text only; it says what the build does, so a changed gesture changes `core/help.cpp` too |
+| **Help for the screen that is up**: its knobs in words and its gestures, every screen and EDIT/MIXER page, then five shared pages (FUNC + key, FUNC + knob or pad, upper pads, the performance mixer); screen keys turn its pages while FUNC is held | #107 | ○ ("Today's walkthrough", 15) | Text only; it says what the build does, so a changed gesture changes `core/help.cpp` too |
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ ("The new controls") | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
 | Arrow-key navigation model (UP/DOWN rows, LEFT/RIGHT sideways, OK picks, CLR back) | v0.1.0 | ○ (5, "Arrow keys") | |
-| Screens: GRID, step page, EDIT (7 pages), MACHINE, KIT, KEYS, MIXER (12 pages), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
+| Screens: GRID, step page, EDIT (6 pages, 8 on the VA and WAVE machines), MACHINE, KIT, SOUNDS, KEYS, MIXER (12 pages), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
 | Fixes: the FUNC menu never shows a MUTATE verdict OK would not give; OK in RESAMPLE no longer retargets a take being written | #84 | ○ | |
 
 ## Engines (machines)
 
 Eight tracks, any machine on any track (MACHINE, FUNC+EDIT). Each track: 16 parameters on four
-pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
+pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages, and ASR and OSC pages on the VA and WAVE
+machines.
 
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
@@ -70,7 +72,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | VA POLY: up to 6 notes, 13 chord types with inversions, DET | v0.1.0 | ✔ default beat chord | At SUS 0 LEN only shortens a note; see the ASR row. No stereo spread or unison 2 (in SPEC) |
 | **Held notes on the VAs: ASR page** (ATK SUS REL FSU, seventh EDIT page); with SUS up a note holds while the key is held or for its step's LEN (up to 64 steps) | #90 | ○ (13k) | Held voices count against the 12-voice POLY budget for as long as they hold; MONO counts LEN only once SUS is up |
 | **VA sound rework: OSC page** (WAV OS2 SUB DRV, eighth EDIT page): saw or pulse width, a detuned or hard-synced OSC 2, sub level, drive into the filter; RES self-oscillates near the top, LP24 squelches like LP12 | #118 | ○ (13p, walkthrough 18) | Older projects lose the old fixed synced pulse (load `SAW OFF 102 000`). No key tracking or velocity to the filter; the filter decay is still 0.55 x DEC |
-| **WAVE MONO and WAVE POLY**: the VA voice with a wavetable (16 built-in tables of 16 frames: TBL POS, MOT envelope to position, WRP phase bend, DET second reader), 8 + 7 factory sounds | #122 | ○ (walkthrough 19) | CPU per voice is a host estimate until the emulator and the unit measure it (BUDGET "WAVE"); the tables take 2.5 MiB at init, leaving about 8.2 MiB spare. No user tables from the card |
+| **WAVE MONO and WAVE POLY**: the VA voice with a wavetable (16 built-in tables of 16 frames: TBL POS, MOT envelope to position, WRP phase bend, DET second reader), 8 + 7 factory sounds | #122 | ○ (walkthrough 19) | CPU per voice is a host estimate until the emulator and the unit measure it (BUDGET "WAVE"); the tables take 2.5 MiB, built at init. No user tables from the card |
 | MID: plays an outboard synth over MIDI; SRC/AMP knobs send CC 74/71/73/72, 70/75/76/77 | v0.1.0 | ○ (8d) | No sound or CPU of its own; no scale fold |
 | Key and scale per pattern (15 scales), fold for VAs, GRAIN and unsliced SAMPLE; sharps everywhere | v0.1.0 | ○ (7) | |
 | **NOTE view**: TUN / PIT read as a note (where TUN puts C-4) and turn a semitone a click; push the knob for 0-127 | #88 | ○ ("Today's walkthrough") | Chromatic, not by scale (TUN applies after the fold). 128 bytes per range, so many notes are a few cents off (`+`/`-`). Not saved: on at every start |
@@ -115,8 +117,9 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Note repeat on the pads, pressure as velocity | v0.1.0 | ○ (13f) | Not recordable |
 | Tape stop (FUNC + hold push D) | v0.1.0 | ○ (13g) | |
 | Delay freeze (FUNC + hold MUTATE) | v0.1.0 | ○ (13g) | |
-| **Performance mixer on VALUE**: push VALUE + STEP picks one of 15 effects (sweeps, risers, echo freeze, wash, stutter, tape stop, bass kill, pump, crush, noise, flanger, gate, build), VALUE is its amount | after v0.2.0 | ○ (16 / 13o) | One effect at a time. Not saved. CPU host-estimated only (about 2 points worst case with the looper) |
-| **Master looper** (VALUE + STEP 16): 1-8 bars of the mix from the bar line, VALUE crossfades live/loop, effects go over it | after v0.2.0 | ○ (16 / 13o) | Shares RESAMPLE's 30 s buffer: no RESAMPLE or FREEZE while a loop is held. No overdub yet. Not saved |
+| **Tap VALUE to reset**: the effect's amount, the loop's mix or the morph back to 0; FUNC + tap: DJ filter off | #121, #124 | ○ (16 / 13o) | A hold of 0.5 s or more resets nothing; never the tempo |
+| **Performance mixer on VALUE**: push VALUE + STEP picks one of 15 effects (sweeps, risers, echo freeze, wash, stutter, tape stop, bass kill, pump, crush, noise, flanger, gate, build), VALUE is its amount | #116 | ○ (16 / 13o) | One effect at a time. Not saved. CPU host-estimated only (about 2 points worst case with the looper) |
+| **Master looper** (VALUE + STEP 16): 1-8 bars of the mix from the bar line, VALUE crossfades live/loop, effects go over it | #116, #120 | ○ (16 / 13o) | Shares RESAMPLE's 30 s buffer: no RESAMPLE or FREEZE while a loop is held. No overdub yet. Not saved |
 
 ## FX and mixer
 
@@ -139,15 +142,15 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | --- | --- | --- | --- |
 | WAV 8/16/24-bit or 32-bit float, mono or stereo, any rate (converted to 48 kHz, low-passed) | v0.1.0 | ○ (13b / U5) | More than two channels refused |
 | Background loading, the beat keeps playing | v0.1.0 | ○ (13b) | |
-| Long files at 48 kHz up to 349 s, read in 4 MiB chunks | v0.1.0 | ○ (15c) | 64 MiB sample memory shared by all tracks (32 until 2026-11-23) |
-| Other rates: up to 30 s at 96 kHz | v0.1.0 | ○ (13b) | |
+| Long files at 48 kHz up to 349 s, read in 2 MiB chunks (4 MiB until #124) | v0.1.0 | ○ (15c) | 64 MiB sample memory shared by all tracks (32 until 2026-11-23) |
+| Other rates: up to 30 s at 96 kHz; longer files stream (#124) | v0.1.0 | ○ (13b) | |
 | Streaming of files too big for memory (2 s head + card stream, 4 tracks max) | v0.1.0 | ○ (15d) | Forward only, one voice: no STA, slices or reverse (not feasible, below); GRAIN plays only the head; CPU unmeasured |
 | Streamed samples honour LEN (end point, loop back to the head) | #91 | ○ (15d) | A LEN loop inside the 2 s head never touches the card |
 | Sample browser (`/SAMPLES`, `/RECORD`), load while playing | v0.1.0 | ○ (15b) | 256 entries a folder; path ≤ 111 characters; no audition before loading |
-| Sample browser reaches the stock SmplTrek folders (`POOL` = `/SmplTrek/Pool/Audio`, `SMPLTREK` = `/SmplTrek`), read-only | next | ○ (17) | shown only when the card has `/SmplTrek` |
+| Sample browser reaches the stock SmplTrek folders (`POOL` = `/SmplTrek/Pool/Audio`, `SMPLTREK` = `/SmplTrek`), read-only | #117 | ○ (17) | shown only when the card has `/SmplTrek` |
 | Resample the master, 1-8 bars, to a file or straight onto a track | v0.1.0 | ○ ("Resampling") | Takes ≤ 30 s |
 | Bounce: resample ONE track alone (B = `TRK 1`-`TRK 8`), mono, before its duck, fader, pan and sends | #109 | ○ (13m) | No emulator scenario: B is an encoder, the emulator presses keys only |
-| **Freeze**: FUNC menu FREEZE, a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. measured (cl6x): A05 held pad 21.2% to 10.1% avg; A01 peaks 7 points lower |
+| **Freeze**: FUNC menu FREEZE, a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. Measured (cl6x): A05 held pad 20.3% to 10.1% average; A01 peaks 7 points lower |
 | Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | No monitoring through STRATA; MIC needs headphones in |
 
 ## MIDI and sync
@@ -175,7 +178,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Damaged files refused, never crash | v0.1.0 | ○ (M4) | Card pulled mid-save not tried on the unit |
 | Factory project: 130 BPM C minor kit, A01-A04, chain, 3 scenes, 3 macros, 8 mute states | v0.1.0 | ✔ A01 plays; ◐ the rest (3b) | Track 8 plays a placeholder until given a sample |
 | Factory pattern A05 PAD: held VA POLY chords from the ASR page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
-| Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 45 ready-made sounds (MNO 12, PLY 7) into one drum or VA track, AS WAS puts it back | #102 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
+| Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 60 ready-made sounds (MNO 12, PLY 7, WMN 8, WPL 7) into one drum, VA or WAVE track, AS WAS puts it back | #102, #118, #122 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
 
 ---
 
@@ -194,7 +197,8 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 
 **Known limits worth building next**
 
-1. **Sustain and note length on the VAs**: built in #90; owed the unit check (13k) and E12 on the PC.
+1. **More engines:** WAVE MONO and WAVE POLY are in (#122). An FM machine is being built; its
+   row goes under "Engines" when it merges.
 2. ~~An editable sidechain duck~~: done (depth per track, source, attack/hold/release in the
    kit). Left: making the depth lockable or scene/macro-able.
 3. **MIDI:** pitch bend and aftertouch in, CC motion recording, slide as legato out; moving the
@@ -217,8 +221,8 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 - Scene morphing of locks (parked: no single sensible blend).
 - Skipping KICK's click path after its transient (a CPU win, needs a listening test).
 
-**Budgets that limit new work:** heap 109.1 of 120 MiB at init (2.9 MiB above the 8 MiB
-headroom rule), and an estimated ~63% unit load with everything on at once (BUDGET.md
+**Budgets that limit new work:** heap 97.05 of 120 MiB at init since #124 (22.95 MiB spare,
+against an 8 MiB headroom rule), and an estimated ~63% unit load with everything on at once (BUDGET.md
 "Everything at once").
 
 ## Why streamed samples play forward only
