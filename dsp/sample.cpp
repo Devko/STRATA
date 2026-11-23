@@ -221,8 +221,15 @@ void Sampler::recompute_window() {
     if (!playable_) return;
 
     if (fifo_ != nullptr) {
-        // A stream plays the whole file from its start: no window, no slices (set_stream).
-        window_len_ = int32_t(stream_total_);
+        // A stream plays from its first frame, forward: no START, no slices, no reverse, because
+        // each would need the stream to jump (set_stream, docs/FEATURES.md). LEN is an END point
+        // and needs nothing of the card: the voice stops, or loops back to the head, that far
+        // into the file. At the top it is exactly the file (a float cannot hold every length
+        // past 2^24 frames, and the last frame is not to be lost to rounding).
+        const int32_t total = int32_t(stream_total_);
+        window_len_ = length_unit_ >= 1.0f
+                          ? total
+                          : clampi(int32_t(length_unit_ * float(total) + 0.5f), 0, total);
         slice_frames_ = float(window_len_);
         play_len_ = window_len_;
         return;
@@ -665,7 +672,8 @@ void Sampler::generate_stream(Voice &v, int32_t istep, uint32_t fstep, float *ds
         if (v.pos >= v.len) {
             if (v.loop) {
                 while (v.pos >= v.len) v.pos -= v.len;
-                restart_stream();
+                // A loop shorter than the head never leaves RAM: nothing to reopen.
+                if (v.len > frames_) restart_stream();
             } else {
                 v.playing = false;
             }
