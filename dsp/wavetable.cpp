@@ -67,7 +67,7 @@ struct Arena {
     uint32_t left = 0;
     template <typename T>
     T *take(uint32_t count) {
-        if (at == nullptr) return new (std::nothrow) T[count];
+        if (at == nullptr) return new T[count];   // Enaga's new never returns null: OOM is fatal
         const uint32_t pad = uint32_t(-reinterpret_cast<uintptr_t>(at)) & uint32_t(alignof(T) - 1);
         const uint32_t bytes = uint32_t(sizeof(T)) * count;
         if (pad + bytes > left) return nullptr;
@@ -650,7 +650,9 @@ Builder g_builder;   // its scratch is taken by the one init() that builds
 
 bool WaveLibrary::init(void *scratch, uint32_t scratch_bytes) {
     if (data_ != nullptr) return true;
-    int16_t *data = new (std::nothrow) int16_t[kWaveLibraryBytes / sizeof(int16_t)];
+    // Plain new: Enaga's device runtime has no nothrow operator new[] or std::nothrow (the link
+    // fails), and its new stops the app with "out of memory" rather than returning null.
+    int16_t *data = new int16_t[kWaveLibraryBytes / sizeof(int16_t)];
     if (data == nullptr) return false;
     // Borrowed memory when it is big enough (Engine::init lends the capture buffer, idle until
     // the first take); else the heap, where it stays: Enaga's heap is never freed into.

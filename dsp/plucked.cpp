@@ -55,7 +55,7 @@ PluckSettings PluckSettings::make(const TrackParams &params, float rate, float i
 }
 
 bool PluckVoice::init() {
-    if (string_.line == nullptr) string_.line = new (std::nothrow) float[STRATA_PLUCK_LINE];
+    if (string_.line == nullptr) string_.line = new float[STRATA_PLUCK_LINE];   // plain: no nothrow new on Enaga
     if (string_.line == nullptr) return false;
     reset();
     return true;
