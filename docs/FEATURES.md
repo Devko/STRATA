@@ -127,7 +127,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Delay into reverb (D>R) routing | v0.1.0 | ○ ("The sends, the master and SETUP") | Routing page has one empty slot |
 | Master: DJ filter, glue compressor, limiter, output level | v0.1.0 | ◐ | |
 | Master **kill EQ**: 3 bands at 250 Hz / 2.5 kHz, kill switches (FUNC + push A/B/C), scene-able, macro-able | v0.1.0 | ○ (13d / U6) | |
-| MIXER: 8 faders, 12 pages (3 for the duck since Unreleased) | v0.1.0 | ◐ | |
+| MIXER: 8 faders, 12 pages (3 for the duck since #89) | v0.1.0 | ◐ | |
 
 ## Samples and resampling
 
