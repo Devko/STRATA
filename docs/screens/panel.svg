@@ -158,8 +158,8 @@
 <polyline points="286.0,226.0 286.0,226.0 542.0,346.0" fill="none" stroke="#c070e0" stroke-width="2"/>
 <circle cx="542.0" cy="346.0" r="3.5" fill="#c070e0"/>
 <text x="16.0" y="230.0" font-size="13.0" fill="#c070e0" text-anchor="start" font-weight="bold">SCREEN KEYS</text>
-<text x="16.0" y="247.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">The screen's pages: EDIT's six,</text>
-<text x="16.0" y="262.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">MIXER's nine, PROJECT's five</text>
+<text x="16.0" y="247.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">The screen's pages: EDIT's six to</text>
+<text x="16.0" y="262.0" font-size="12.0" fill="#2a2f36" text-anchor="start" font-weight="normal">eight, MIXER's twelve, PROJECT's five</text>
 <polyline points="286.0,341.0 286.0,341.0 338.0,414.0" fill="none" stroke="#40a0f0" stroke-width="2"/>
 <circle cx="338.0" cy="414.0" r="3.5" fill="#40a0f0"/>
 <text x="16.0" y="345.0" font-size="13.0" fill="#40a0f0" text-anchor="start" font-weight="bold">ARROW PAD</text>
@@ -186,7 +186,8 @@
 <text x="1204.0" y="250.0" font-size="13.0" fill="#e0a030" text-anchor="end" font-weight="bold">KNOBS A-D, VALUE</text>
 <text x="1204.0" y="267.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">A-D: the four values on screen,</text>
 <text x="1204.0" y="282.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">push = that value's switch.</text>
-<text x="1204.0" y="297.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">VALUE: tempo; push + turn = swing</text>
+<text x="1204.0" y="297.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">VALUE: tempo; push + turn = swing;</text>
+<text x="1204.0" y="312.0" font-size="12.0" fill="#2a2f36" text-anchor="end" font-weight="normal">push + STEP = performance mixer</text>
 <polyline points="934.0,376.0 934.0,376.0 877.0,396.0" fill="none" stroke="#f06070" stroke-width="2"/>
 <circle cx="877.0" cy="396.0" r="3.5" fill="#f06070"/>
 <text x="1204.0" y="380.0" font-size="13.0" fill="#f06070" text-anchor="end" font-weight="bold">OK / CLR</text>
