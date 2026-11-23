@@ -113,6 +113,8 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Note repeat on the pads, pressure as velocity | v0.1.0 | ○ (13f) | Not recordable |
 | Tape stop (FUNC + hold push D) | v0.1.0 | ○ (13g) | |
 | Delay freeze (FUNC + hold MUTATE) | v0.1.0 | ○ (13g) | |
+| **Performance mixer on VALUE**: push VALUE + STEP picks one of 15 effects (sweeps, risers, echo freeze, wash, stutter, tape stop, bass kill, pump, crush, noise, flanger, gate, build), VALUE is its amount | after v0.2.0 | ○ (16 / 13o) | One effect at a time. Not saved. CPU host-estimated only (about 2 points worst case with the looper) |
+| **Master looper** (VALUE + STEP 16): 1-8 bars of the mix from the bar line, VALUE crossfades live/loop, effects go over it | after v0.2.0 | ○ (16 / 13o) | Shares RESAMPLE's 30 s buffer: no RESAMPLE or FREEZE while a loop is held. No overdub yet. Not saved |
 
 ## FX and mixer
 

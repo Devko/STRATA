@@ -954,6 +954,48 @@ Memory: the freeze's loop is 1.46 MiB (4 s of stereo float: two 2 s delay times)
 stop's ring 0.46 MiB (1.25 s), both taken in init. `tests/test_memory.cpp` itemises them: init
 is about 104.1 MiB of the 120 MiB heap with the stream rings from main, 15.9 MiB spare.
 
+### The performance mixer and the looper (2026-11-23, host only)
+
+Push VALUE + STEP picks one of fifteen effects and VALUE turns its amount; STEP 16 is a master
+looper (`core/perffx.hpp`, `dsp/masterfx.hpp`, `dsp/looper.hpp`). **One effect plays at a time**,
+which is what bounds the cost: the worst case is the dearest single slot plus the looper, not
+the sum of sixteen. At amount 0 nothing runs and the mixer gets the project's own settings, so
+every render that never turns VALUE is unchanged to the bit (the goldens pass untouched). New
+loops in `dsp/masterfxloops.ti.c` and `dsp/looperloops.ti.c`, so both go through cl6x.
+
+Slots 1-9 are overrides on stages that already exist and are already costed above: the DJ
+filter (LP/HP SWEEP, HP RISER, BUILD), the sends (every track's send raised; the worst case
+already runs both sends on all eight tracks), the delay freeze, beat repeat, the tape stop and
+the kill EQ (BASS KILL starts it: about 1.3 points cl6x / 2.2 GCC-only, the estimate in "The
+master kill EQ"). Slots 10-14 and the looper are new code:
+
+| Measure (x86 2.1 GHz, GCC -O2, per 64-frame block) | Host time | Estimate cl6x / GCC-only |
+| --- | --- | --- |
+| Idle (no effect up): one check | ~5 ns | 0 |
+| PUMP (gain from the beat phase, stereo) | ~170 ns | 0.14 / 0.23 points |
+| GATE (same loop) | ~170 ns | 0.14 / 0.23 |
+| CRUSH (sample-and-hold, quantize) | ~90 ns | 0.07 / 0.12 |
+| NOISE RISER (xorshift, one-pole HP, add) | ~210 ns | 0.17 / 0.28 |
+| FLANGER (two interpolated taps, feedback, 8 KiB ring) | ~340 ns | 0.27 / 0.45 |
+| Looper recording (float to int16, stereo) | ~135 ns | 0.11 / 0.18 |
+| Looper playing (int16 read, crossfade, stereo) | ~850 ns | 0.7 / 1.1 |
+
+Scaled as the kill EQ's and the tape stop's were, against A01's ~23.9 us host block (19.17% cl6x,
+31.92% GCC-only on the emulator). The looper's play figure is high for what it does because the
+benchmark's 400 KiB loop streams through the host's caches; on the unit it is a sequential DDR
+read of 256 bytes a block, which is the cheap case for this DDR (sequential, as a frozen track's). **Worst case with
+the mixer: BASS KILL (~1.3) or BUILD (DJ filter + noise, ~0.6) plus a playing loop (~0.7), about
+2 points cl6x / 3.4 GCC-only**, so about 25.5% against the 60% target from the 23.49% cl6x worst
+case. The CPU guard needs no change: it sheds POLY voices and grains, and this cost is bounded.
+
+Memory: none new on the heap. The looper records into RESAMPLE's 5.76 MiB capture buffer (the
+engine keeps the two apart), and the flanger's 8 KiB ring is a member of the engine.
+
+No emulator scenario: every gesture is push VALUE held with another key, and the emulator's
+`--key` only taps (as for the tape stop). To measure on the unit: **U11** in
+`docs/UNIT_CHECKLIST.md` 13o (MAX with BUILD and a playing loop on A01, both compilers if the
+GCC card is built).
+
 ### The sends' ambient modes: LONG delay and HALL reverb (2026-11-22, host only)
 
 A second mode on each send (Roland's choice over a third send; `dsp/ambient.hpp`): send A's LONG
