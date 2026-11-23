@@ -201,6 +201,40 @@ budget sooner (the quietest note is faded to make room). The four settings lock,
 like any other parameter, and every track in a project saved before the page existed loads at 0,
 which sounds exactly as it did.
 
+### The oscillators and drive: the OSC page
+
+<p><img src="screens/edit_osc.png" width="256" alt="EDIT, the OSC page on VA POLY"></p>
+
+On **VA MONO** and **VA POLY** an eighth EDIT page, **OSC**, after ASR, picks what goes into the
+filter:
+
+- **A, WAV**: OSC 1's wave. `SAW` from 0 to 31; at 32 a square (`SQR`), hollow and woody;
+  turned further the pulse narrows (`P30` ... `P08`), thinner and more nasal.
+- **B, OS2**: the second oscillator, in two halves. **0** is off. **1-63** adds a second saw
+  **detuned** against the first, shown in cents (`D0` to `D60`): a slow chorus low down, a wide,
+  beating Reese bass at the top. The two are spread around the note, so it stays in tune.
+  **64-127** is a pulse **hard-synced** to OSC 1 and tuned up from it, `S+0` to `S+24`
+  semitones: the bright, tearing formant of a sync lead, and swept with a knob or a lock, the
+  classic sync sweep. An accented step brings the synced pulse forward.
+- **C, SUB**: the sub oscillator an octave down, from off (0) to heavy (127). The weight under a
+  bass; turn it down for leads and plucks that should stay out of the kick's way.
+- **D, DRV**: drive into the filter. The oscillators are saturated before the filter and a little
+  more after it, so the sound gets thicker and dirtier rather than louder. With RES up, a gritty
+  squelch.
+
+The line under the knobs says `OS2: DET 1-63 SYN 64+`. On any other machine the page shows
+`VA MONO/POLY ONLY`. Like every page, the four lock, scene and macro.
+
+**RES** on SRC runs over the whole knob: each turn adds about the same amount of peak, and from
+about 120 the filter whistles by itself at a steady level (self-oscillation; tune it with CUT).
+LP24 squelches as hard as LP12. **A thick bass**: OSC SUB up, OS2 about 30 (`D14`), DRV about
+40, SRC CUT low and RES under halfway. **An acid line**: SOUNDS, ACID, or by hand: MOD in LP24,
+CUT low, RES about 100, ENV up, DEC short, accents on a few steps.
+
+A project saved before the page existed loads `SAW OFF 102 000`: its VAs keep the saw and the sub
+but lose the old voice's fixed synced pulse, so they sound a little rounder and darker than they
+did. Turn OS2 to 114 (`S+19`) for something close to the old bite.
+
 ### Patterns, banks and the project
 
 <p><img src="screens/project.png" width="256" alt="PROJECT: bank A's sixteen slots"></p>
@@ -548,22 +582,26 @@ record a sweep of POS. The trig note transposes, so a cloud plays chromatically.
 
 ### MNO: VA MONO
 
-The bass: a saw, a hard-synced pulse, a sub an octave down and a little noise, through its own
-resonant filter with an envelope. One voice, with accent, slide and glide.
+The bass and lead voice: a saw or pulse, a second oscillator (detuned or hard-synced), a sub an
+octave down and a little noise, driven into its own resonant filter with an envelope. One voice,
+with accent, slide and glide.
 
 | Page | A | B | C | D |
 | --- | --- | --- | --- | --- |
 | SRC | **TUN** ±24 semitones | **MOD** voice filter: 0-63 LP24, 64-95 LP12, 96-111 BP12, 112-127 HP12 | **CUT** cutoff, 35 Hz-12 kHz | **RES** resonance |
 | AMP | **DEC** decay of both envelopes, 15 ms-2.4 s | **ENV** filter envelope amount, up to +66 semitones | **GLD** glide, 0-0.5 s | **LVL** |
 | ASR | **ATK** attack | **SUS** sustain: 0 = one-shot | **REL** release | **FSU** filter sustain |
+| OSC | **WAV** saw, square, pulse | **OS2** off, 1-63 detune, 64-127 sync | **SUB** sub level | **DRV** drive |
 
 With SUS at 0 (the default) DEC is the note's length. Turn SUS up for long, held notes: see
 [Held notes: the ASR page](#held-notes-the-asr-page).
 
 This filter is the voice's own, on SRC; the FLTR page's filter is a second, utility filter after
-it. ENV 0 is a static dub bass; ENV and RES up is the acid squelch. **Accent** (ACNT on the step
-page) brings the pulse and noise forward and opens the filter further; **slide** (SLID) glides
-into the next note.
+it. ENV 0 is a static dub bass; ENV and RES up is the acid squelch; RES at the top
+self-oscillates. **Accent** (ACNT on the step page) makes the note louder, opens the filter
+further and brings the noise (and, with OS2 in sync, the synced pulse) forward; **slide** (SLID)
+glides into the next note. The OSC page is described in
+[The oscillators and drive](#the-oscillators-and-drive-the-osc-page).
 
 ### PLY: VA POLY
 
@@ -576,6 +614,7 @@ each with inversions `/n`).
 | SRC | **TUN** | **MOD** as MNO | **CUT** | **RES** |
 | AMP | **DEC** with SUS at 0, the chord's length: short stab or long ring | **ENV** | **DET** voice detune, up to a quarter semitone | **LVL** |
 | ASR | **ATK** attack | **SUS** sustain: 0 = one-shot | **REL** release | **FSU** filter sustain |
+| OSC | **WAV** | **OS2** as MNO | **SUB** | **DRV** |
 
 For pads, turn SUS up on the ASR page: a chord then holds for its step's LEN, or for as long as you
 hold the keys ([Held notes: the ASR page](#held-notes-the-asr-page)).
@@ -661,7 +700,7 @@ trying sounds never loses yours. LEFT/RIGHT or the screen keys move to the next 
 its own AS WAS. CLR goes back.
 
 A factory sound sets the machine's SRC and AMP pages, the insert chain's FLTR page (drive and
-filter) and, on the VAs, the ASR page. It leaves the FX page (lo-fi, pan and both sends), the LFO,
+filter) and, on the VAs, the ASR and OSC pages. It leaves the FX page (lo-fi, pan and both sends), the LFO,
 the ARP, the fader and HAT's choke group alone, so the track keeps its place in the mix. The
 first entry of each list is the factory kit's own sound.
 
@@ -671,10 +710,11 @@ first entry of each list is the factory kit's own sound.
 | SNR | CLAP (the factory clap), 909SN, 808SN, CLAP4 (four bursts, wide), RIMSN (a snare rim tick), DIRTY (noisy, driven) |
 | HAT | CLOSED, OPEN (the factory pair), TIGHT, 808HH (pure squares), SHAKE (a shaker), RIDE (long, clangy), TRASH (noisy, metallic) |
 | PRC | RIM (the factory rim), TOM, COWBEL, BELL, BLIP, CONGA, METAL |
-| MNO | ROLL (the factory bass), ACID, SUB, PLUCK, GROWL (band-pass mid bass), GLIDE (portamento), DRONE (SUS up: holds each note for its LEN) |
-| PLY | STAB (the factory stab), PAD (A05's pad), STRING, KEYS, RAVE (best with 5TH OCT chords), PLUCK |
+| MNO | ROLL (the factory bass), ACID (squelching 303 line), ACIDSQ (the same on a square), FAT (detuned saws, sub and drive), REESE (wide detuned band-pass), SUB (deep, near-sine), PLUCK, GROWL (band-pass mid bass), GLIDE (portamento), SYNC (sync lead), LEAD (square lead with glide), DRONE (SUS up: holds each note for its LEN) |
+| PLY | STAB (the factory stab), PAD (A05's pad), STRING, KEYS, RAVE (best with 5TH OCT chords), PLUCK, BRASS |
 
-PAD, STRING, KEYS and DRONE sustain (the ASR page's SUS is up), so their notes last as long as
+The MNO list is longer than the screen: it scrolls as the cursor moves. PAD, STRING, KEYS, BRASS,
+FAT, REESE, ACID, SYNC, LEAD and DRONE sustain (the ASR page's SUS is up), so their notes last as long as
 each step's LEN: give the steps long LENs, or hear PAD on A05. A loaded sound is a change to the
 kit like turning knobs: it is saved with the project, and FUNC+CLR does not undo it (AS WAS does).
 
