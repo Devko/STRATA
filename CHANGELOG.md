@@ -6,7 +6,7 @@ the project file format or the controls.
 
 ## [Unreleased]
 
-## [0.3.1] - {{RELEASE_DATE}}
+## [0.3.1] - 2026-11-23
 
 An early beta: everything merged since 0.3.0, built for the same Enaga 0.2.0 firmware. The GRAIN
 overhaul and the sample and machine fixes below have not been through the unit walkthrough
@@ -44,7 +44,7 @@ Projects and kits from 0.1.0 to 0.3.0 open in 0.3.1; their GRN tracks play loude
 
 ### Known limits
 
-- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} The changes above are not yet
+- Tested on one SmplTrek, with the cl6x build. On the 0.2.0 build (2026-11-22) the load stayed under 30% on the default beat, and MAX peaked at 84.3% in long, heavy play with no clicks or dropouts; 0.3.x has not run on the unit yet. The changes above are not yet
   checked on the unit. Every other load figure comes from the emulator, which models no caches.
 - The 0.3.0 limits stand: WAVE POLY and FM4 share the **12 POLY voices** with VA POLY and that
   budget is provisional, the performance mixer and the looper are not saved, the looper borrows
