@@ -1741,6 +1741,12 @@ runs each): v0.3.0 251-304 ms, now 254-331 ms with SCN 127 and PSP in either zon
 run-to-run spread. The emulator figure is E16, owed on Roland's PC; GCC-only and cl6x should both
 match a dense v0.3.0 cloud.
 
+**E16, cl6x (2026-11-23, main `ce5fc6b`, the v0.3.1 build):** `scenario_grain` (track 8 on GRAIN,
+SHIMMR) peaks at **25.15%** against `scenario_factory`'s 24.52% on the same commit: SHIMMR costs
+about 0.6 points over the default beat. GCC-only not run yet. On the same run `scenario_wave`
+reads 28.64% (was 27.3% on v0.3.0), because a switch to WAVE now loads its default sounds (table
+CLS on the bass, HRM on the chord) instead of reading the VA kit's bytes.
+
 The level rose 6 dB (kHeadroom 0.5 to 1.0), which costs nothing but moves the worst case: a
 full-scale constant hammered every block now peaks at about 3.2 into the insert chain (was 1.6),
 and the arithmetic ceiling is 8. Real material at LVL 127 peaks well under 1
