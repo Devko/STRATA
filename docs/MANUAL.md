@@ -799,7 +799,10 @@ filter while it closes a send.
 
 1. Select a track (lower pad) and a macro (LEFT/RIGHT).
 2. Press a **STEP** key: STEP 1-4 are that track's SRC parameters, 5-8 FLTR, 9-12 AMP, 13-16 FX.
-   The screen confirms, for example `A T6 CUT`. Repeat for up to four parameters, on any tracks.
+   The screen confirms with the count, for example `A T6 CUT 2/4`. Repeat for up to four
+   parameters, on any tracks. The same STEP again takes that parameter off (`A T6 CUT OFF 1/4`).
+   A macro with four already says `A FULL: CLR CLEARS` and changes nothing: the factory macro D
+   uses all four, B and C three.
    **FUNC + STEP 1-4** assign the track's LFO settings instead, WAV RAT DEP DST: a macro on DEP
    fades a wobble in.
    **FUNC + STEP 5, 6 or 7** puts the master kill EQ's LOW, MID or HI on the macro (`A EQ LOW`):

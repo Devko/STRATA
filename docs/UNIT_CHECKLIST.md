@@ -60,6 +60,8 @@ are the point of this section.
       C to C, upper pads the sharps between them; soft and hard hits sound different; a held pad
       sustains; the upper pad between E and F is octave down, the last one octave up (`OCT n`).
       FUNC + lower pad still mutes on the bar. Does it play like a keyboard? `____`
+- [ ] **Macro assignment.** PERFORM, macro A (LEFT/RIGHT), a STEP: `A T1 ... 1/4`. The same STEP
+      again: `... OFF 0/4`. Macro D (factory, four used), a STEP: `D FULL: CLR CLEARS`. Reliable now? `____`
 - [ ] **Velocity on the STEP lights.** Four trigs, step page VEL 20, 60, 95, 120: four clearly
       different greens, dimmest to brightest? `____` A trig with PROB 50% blinks. Locks still amber.
 - [ ] **TUN as a note** (2026-11-23). Track 1 (KICK), EDIT SRC: A reads `A-1`, not `064`. Turn A

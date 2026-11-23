@@ -2381,7 +2381,7 @@ TEST(ui_func_and_step_5_to_7_put_a_master_eq_band_on_a_macro) {
     CHECK_EQ(int(macro.targets[0].track), int(kMacroMasterTrack));
     CHECK_EQ(int(macro.targets[0].param), 1);            // MID
     CHECK_EQ(int(macro.targets[0].high), 0);             // from flat, towards a kill
-    CHECK(std::strcmp(UiProbe::notice(app) + 1, " EQ MID") == 0);
+    CHECK(std::strncmp(UiProbe::notice(app) + 1, " EQ MID ", 8) == 0);
 
     post_cmd(Cmd::macro_clear, uint8_t(selected));
     pump(2);
@@ -3644,7 +3644,7 @@ TEST(ui_the_lfo_is_edits_fifth_page) {
     const MacroTarget &target = app_engine().macros().macros[0].targets[0];
     CHECK_EQ(int(target.enabled), 1);
     CHECK_EQ(int(target.param), kLfoDepth);
-    CHECK_EQ(UiProbe::notice(app), "A T1 DEP");
+    CHECK_EQ(UiProbe::notice(app), "A T1 DEP 1/4");
     post_cmd(Cmd::macro_clear, 0);
     pump();
 
@@ -6440,4 +6440,47 @@ TEST(ui_the_step_lights_show_velocity_and_blink_a_condition) {
     CHECK_EQ(lit, 2);
     CHECK_EQ(dark, 2);
     CHECK_EQ(int(UiProbe::step_red(app, 2)), 0);
+}
+
+// --- macro assignment says what it did (Roland, 2026-11-23: "a bit unreliable") -------------
+//
+// A full macro refused in the engine while the screen said "D T1 DEC" as if it had worked, and
+// macro D ships with all four slots used; pressing the same STEP again filled a second slot with
+// a copy. Now: n/4 on every assignment, the same parameter again takes it off, and a full macro
+// says so.
+
+TEST(ui_macro_assignment_counts_toggles_and_says_full) {
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F7);                               // PERFORM
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    for (int m = 0; m < kMacros; m++) post_cmd(Cmd::macro_clear, uint8_t(m));
+    pump(2);
+    while (UiProbe::macro_selected(app) != 0) key(ENAGA_KEY_LEFT);
+
+    key(ENAGA_KEY_STEP1 + 4);                              // STEP 5: an FLTR parameter
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 1);
+    CHECK(std::strstr(UiProbe::notice(app), " 1/4") != nullptr);
+    check_layout(app, "PERFORM, macro assigned");
+
+    key(ENAGA_KEY_STEP1 + 4);                              // again: off, not a copy
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 0);
+    CHECK(std::strstr(UiProbe::notice(app), " OFF 0/4") != nullptr);
+
+    for (int i = 0; i < 4; i++) {                          // a hand's pace: the engine applies
+        key(ENAGA_KEY_STEP1 + i);                          // each before the next press
+        pump(2);
+    }
+    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 4);
+    CHECK(std::strstr(UiProbe::notice(app), " 4/4") != nullptr);
+    key(ENAGA_KEY_STEP1 + 8);                              // a fifth: refused, and it says so
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 4);
+    CHECK_EQ(UiProbe::notice(app), "A FULL: CLR CLEARS");
+    check_layout(app, "PERFORM, macro full");
+    key(ENAGA_KEY_CLR);                                    // CLR clears the macro
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 0);
+    key(ENAGA_KEY_F4);
 }

@@ -4762,8 +4762,55 @@ public:
     // rather than one that does nothing. That is a guess at intent, and the point of guessing is
     // that a macro assigned in one press is usable in the next -- the ranges are stored, so a
     // richer editor can refine them later without changing the format.
+    // What a STEP key in PERFORM will do to the selected macro, read before the command goes:
+    // the same target again takes it off, a full macro refuses. On the unit a refusal used to
+    // show the same "A T6 CUT" as a success -- and macro D ships with all four slots used.
+    enum class MacroEdit : uint8_t { add, remove, full };
+
+    MacroEdit macro_edit(uint8_t track, uint8_t param) const {
+        const Macro &macro = engine_.macros().macros[macro_selected_];
+        for (int i = 0; i < kMacroTargets; i++) {
+            const MacroTarget &t = macro.targets[i];
+            if (t.enabled != 0 && t.track == track && t.param == param) return MacroEdit::remove;
+        }
+        return macro_count(macro) >= kMacroTargets ? MacroEdit::full : MacroEdit::add;
+    }
+
+    // "A T6 CUT 2/4", "A T6 CUT OFF 1/4" or "D FULL: CLR CLEARS". `name` is what was pressed.
+    void macro_notice(MacroEdit edit, const char *name) {
+        const int count = macro_count(engine_.macros().macros[macro_selected_]);
+        char *out = notice_buffer_;
+        *out++ = char('A' + macro_selected_);
+        if (edit == MacroEdit::full) {
+            append(out, " FULL: CLR CLEARS");
+            *out = 0;
+            notice(notice_buffer_);
+            return;
+        }
+        *out++ = ' ';
+        append(out, name);
+        if (edit == MacroEdit::remove) append(out, " OFF");
+        *out++ = ' ';
+        append_number(out, uint32_t(count + (edit == MacroEdit::add ? 1 : -1)));
+        append(out, "/4");
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
     void assign_macro(int param) {
         if (param < 0 || param >= kTrackParams) return;
+        char name[16];
+        {
+            char *o = name;
+            append(o, "T");
+            append_number(o, uint32_t(selected_) + 1);
+            append(o, " ");
+            append(o, track_param_name(param));
+            *o = 0;
+        }
+        const MacroEdit edit = macro_edit(uint8_t(selected_), uint8_t(param));
+        macro_notice(edit, name);
+        if (edit == MacroEdit::full) return;
         const uint8_t now = engine_.performed(selected_, param);
         const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
         Command command;
@@ -4774,21 +4821,22 @@ public:
         command.c = now;
         command.d = far;
         post_command(command);
-
-        char *out = notice_buffer_;
-        *out++ = char('A' + macro_selected_);
-        append(out, " T");
-        append_number(out, uint32_t(selected_) + 1);
-        append(out, " ");
-        append(out, track_param_name(param));
-        *out = 0;
-        notice(notice_buffer_);
     }
 
     // Assign one master kill EQ band to the selected macro, by the same "towards the far end"
     // guess: a band at flat or above heads for a kill, which is what a build wants.
     void assign_macro_master(int band) {
         if (band < 0 || band >= kMasterBands) return;
+        char name[16];
+        {
+            char *o = name;
+            append(o, "EQ ");
+            append(o, master_field_name(uint8_t(int(MasterField::eq_low) + band)));
+            *o = 0;
+        }
+        const MacroEdit edit = macro_edit(kMacroMasterTrack, uint8_t(band));
+        macro_notice(edit, name);
+        if (edit == MacroEdit::full) return;
         const uint8_t now = engine_.performed_master(band);
         const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
         Command command;
@@ -4799,13 +4847,6 @@ public:
         command.c = now;
         command.d = far;
         post_command(command);
-
-        char *out = notice_buffer_;
-        *out++ = char('A' + macro_selected_);
-        append(out, " EQ ");
-        append(out, master_field_name(uint8_t(int(MasterField::eq_low) + band)));
-        *out = 0;
-        notice(notice_buffer_);
     }
 
     void draw_perform(enaga::Canvas &canvas) {
