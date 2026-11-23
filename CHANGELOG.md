@@ -8,6 +8,12 @@ the project file format or the controls.
 
 ### Added
 
+- **Help for the screen you are on.** Holding FUNC alone now shows help for the current screen
+  rather than one page for all of them: what A-D do there, named as on the screen and in words
+  (`B FMA FM AMOUNT`, `A SRC SOURCE TRACK`), and that screen's gestures (step page, hold-and-press
+  LEN, MACRO LEARN, NOTE view, SLC AUTO, rename and delete, KEYS on the pads, the STEP lights).
+  Keep holding FUNC and the screen keys (or LEFT/RIGHT) turn its pages; the last three are the
+  old page's FUNC + each key and the upper pads, now with FUNC + a knob or pad.
 - **CPU guard.** When the audio load stays high, STRATA sheds VA POLY voices (two a level, the
   quietest fading out first) and thins GRAIN clouds instead of risking an overrun. The bottom
   line shows `GUARD1` to `GUARD4` while it is up; it steps back down once the load falls.

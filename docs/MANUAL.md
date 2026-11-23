@@ -23,13 +23,17 @@ is RESAMPLE, PROJECT "pool" is the sample browser, HOME "system" is the **FUNC m
 is PERFORM. The rare setup actions (save as, open, new, reload, kits, chain on/off, song mode,
 track speed, auto-fill, quantize) live in the FUNC menu, named on the screen. The upper pads are
 printed TRK 1-7, but in STRATA they are the performance pads: each is lit in its own colour and
-names itself on the screen when pressed. Hold FUNC alone for a moment to see a summary.
+names itself on the screen when pressed. Hold FUNC alone for a moment for help on the screen you
+are on: what the four knobs do there and the gestures it has. Keep holding FUNC and tap the screen
+keys (or LEFT/RIGHT) for more pages; the last three, the same everywhere, list FUNC + each function
+key, FUNC + a knob or pad, and the upper pads.
 
 ![The SmplTrek panel with STRATA's button groups: screen, knobs, screen keys, arrow pad, function block, OK and CLR, STEP keys, pad-row keys, performance pads and track pads](screens/panel.svg)
 
-<p><img src="screens/help.png" width="256" alt="FUNC held alone: FUNC + each function key, and the performance pads"> <img src="screens/menu.png" width="256" alt="The FUNC menu, opened with FUNC+HOME, on SAVE"></p>
+<p><img src="screens/help.png" width="256" alt="FUNC held alone on GRID: what A-D do on the EDIT page they turn, and GRID's keys"> <img src="screens/menu.png" width="256" alt="The FUNC menu, opened with FUNC+HOME, on SAVE"></p>
 
-<sub>Left: FUNC held alone shows what FUNC + each function key does and what the upper pads are.
+<sub>Left: FUNC held alone on GRID: A-D and their words, then GRID's keys; the screen keys turn to
+the steps, the STEP lights and FUNC + each key.
 Right: the FUNC menu (FUNC+HOME), which always opens on SAVE.</sub>
 
 **Contents**
