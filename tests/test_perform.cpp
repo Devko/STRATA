@@ -225,7 +225,7 @@ TEST(perform_capture_takes_the_kit) {
 
 // --- the morph ------------------------------------------------------------
 
-TEST(perform_morph_at_the_ends_is_each_scene_exactly) {
+TEST(perform_morph_at_rest_is_the_live_kit_and_at_the_top_is_scene_b_exactly) {
     fill_kit(g_kit);
     perform_init(g_scenes, g_macros);
     Scene &a = g_scenes.scenes[0];
@@ -237,10 +237,26 @@ TEST(perform_morph_at_the_ends_is_each_scene_exactly) {
         }
     }
 
+    // At rest the knobs own the sound: the morph writes nothing, so `out` keeps the live kit
+    // it came in with. It used to write scene A here, which pinned every parameter a captured
+    // scene stored -- turning that knob in EDIT moved the screen and not the sound (Roland,
+    // 2026-11-23). Scene A is still the bottom of the sweep from the first click up.
     fill_out_from_kit(g_kit);
     scene_morph(a, b, 0, g_out);
     for (int t = 0; t < kTracks; t++) {
-        for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(g_out[t][p]), int(a.values[t][p]));
+        for (int p = 0; p < kKitParams; p++) {
+            CHECK_EQ(int(g_out[t][p]), int(g_kit.tracks[t].params[p]));
+        }
+    }
+
+    // One click up and scene A has it, to within the rounding of one step in 1024.
+    fill_out_from_kit(g_kit);
+    scene_morph(a, b, 1, g_out);
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitParams; p++) {
+            const int delta = int(g_out[t][p]) - int(a.values[t][p]);
+            CHECK(delta >= -1 && delta <= 1);
+        }
     }
 
     fill_out_from_kit(g_kit);
@@ -353,8 +369,10 @@ TEST(perform_morph_is_monotonic_and_in_range) {
     scene_set(g_scenes.scenes[0], 2, 4, 120);
     scene_set(g_scenes.scenes[1], 2, 4, 10);
 
+    // From the first click up, not from 0: at rest the morph lets go and `out` keeps the live
+    // kit, which sits between the two ends and would read as a step backwards here.
     int previous_up = -1, previous_down = 999;
-    for (uint32_t at = 0; at <= kMorphScale; at += 8) {
+    for (uint32_t at = 8; at <= kMorphScale; at += 8) {
         fill_out_from_kit(g_kit);
         scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], uint16_t(at), g_out);
         const int up = int(g_out[2][3]);
@@ -394,7 +412,7 @@ TEST(perform_morph_leaves_a_parameter_neither_scene_stores_alone) {
 }
 
 TEST(perform_the_end_a_scene_does_not_store_is_the_kit_value) {
-    // The rule worth pinning. A stores a parameter, B says nothing about it: at position 0 the
+    // The rule worth pinning. A stores a parameter, B says nothing about it: just off rest the
     // result is A's value, and by the far end it has faded back to the KIT value, not stayed at
     // A's. Held instead, two scenes touching different tracks would never cross over.
     fill_kit(g_kit);
@@ -404,7 +422,11 @@ TEST(perform_the_end_a_scene_does_not_store_is_the_kit_value) {
 
     fill_out_from_kit(g_kit);
     scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], 0, g_out);
-    CHECK_EQ(int(g_out[0][0]), 20);
+    CHECK_EQ(int(g_out[0][0]), 60);                   // at rest: the live kit, not A
+
+    fill_out_from_kit(g_kit);
+    scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], 1, g_out);
+    CHECK_EQ(int(g_out[0][0]), 20);                   // one click up: A's value
 
     fill_out_from_kit(g_kit);
     scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale, g_out);

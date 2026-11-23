@@ -93,6 +93,11 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
 - Push A in PERFORM again, then HOME: learn ends the same way. Easier than the STEP keys? `____`
 - Turn macro A back to 0.
 
+**11b. A capture does not kill the knobs (#101, 1 min).** In PERFORM, VALUE fully down.
+- OK: `SCENE CAPTURED`. EDIT, turn C (CUT) on the bass: the sound moves, not just the screen.
+- FUNC+MIXER, turn VALUE up one click: the captured scene takes over again. Back to 0: the knob's
+  sound is back. Does editing feel normal again? `____`
+
 **12. CLEAR PATTERN (#86, 1 min).** Beat playing.
 - FUNC+HOME, DOWN to CLEAR PATTERN, OK: `OK AGAIN TO CLEAR`, nothing changes.
 - OK again: `CLEARED FUNC+CLR UNDO`, the menu closes, every track silent, GRID empty.

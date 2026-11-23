@@ -186,7 +186,7 @@ FUNC+STEP 5-7 the master kill EQ's LOW, MID or HI (`A EQ LOW`). OK's whole captu
 kill EQ's three knobs, so the morph can sweep them. A macro
 at 0 lets go: its parameters follow their EDIT knobs and the morph, and turning it up sweeps from
 wherever they are. A new project has B ACID (bass filter), C DUB (chord and rim sends) and D DRIVE
-(kick and hats); A is left for you, and pad pressure bends it. VALUE is the A/B morph; OK captures into scene A's slot (with a scene pad held: that scene, selected
+(kick and hats); A is left for you, and pad pressure bends it. VALUE is the A/B morph (at rest it lets go, like a macro at 0, so EDIT knobs always work); OK captures into scene A's slot (with a scene pad held: that scene, selected
 track only); scene pad + CLR erases it. Mutes, mute states and the A/B scene choice are saved with
 the project.
 **KIT:** a kit is everything KIT.BIN holds: the eight machines, their parameters, the faders and
