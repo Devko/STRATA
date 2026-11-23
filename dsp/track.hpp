@@ -52,19 +52,29 @@ constexpr int kLfoParams = 4;
 // and by nothing that renders, for the same reasons.
 constexpr int kArpParams = 4;
 constexpr int kArpFirst = kParams + kLfoParams;
-constexpr int kTrackParams = kArpFirst + kArpParams;
+// And a seventh: ASR, the sustaining machines' note envelope -- ATK SUS REL FSU (dsp/va.cpp).
+// Unlike the LFO and the arp this one IS sound, read by VA MONO and VA POLY in `prepare`, so the
+// engine's prepare memo compares these four bytes as well as the first kParams. It sits after
+// the arp rather than among the 16 because those are full: every VA slot on SRC and AMP is
+// spoken for, and FLTR and FX belong to the insert chain. All four at 0 is the envelope the VAs
+// always had, which is what an older kit loads as (core/project.hpp, kSectionKitAsr).
+constexpr int kAsrParams = 4;
+constexpr int kAsrFirst = kArpFirst + kArpParams;
+constexpr int kTrackParams = kAsrFirst + kAsrParams;
 
-enum class Page : uint8_t { src = 0, fltr = 1, amp = 2, fx = 3, lfo = 4, arp = 5 };
+enum class Page : uint8_t { src = 0, fltr = 1, amp = 2, fx = 3, lfo = 4, arp = 5, asr = 6 };
 
 constexpr int page_first(Page page) { return int(page) * kParamsPerPage; }
 static_assert(page_first(Page::lfo) == kParams, "the LFO page is the four bytes after the sound");
 static_assert(kLfoParams == kParamsPerPage, "the LFO is one page of four");
 static_assert(page_first(Page::arp) == kArpFirst, "the ARP page is the four bytes after the LFO");
 static_assert(kArpParams == kParamsPerPage, "the arp is one page of four");
+static_assert(page_first(Page::asr) == kAsrFirst, "the ASR page is the four bytes after the arp");
+static_assert(kAsrParams == kParamsPerPage, "ASR is one page of four");
 
-// All 24 of a track's parameters, as stored in a kit and overridden by locks. Values are 0-127;
+// All 28 of a track's parameters, as stored in a kit and overridden by locks. Values are 0-127;
 // each machine and the chain map them to physical units themselves, so the sequencer never
-// needs to know what a parameter means. Machines read v[0..kParams) only.
+// needs to know what a parameter means. Machines read v[0..kParams) and the ASR page only.
 struct TrackParams {
     uint8_t v[kTrackParams];
 

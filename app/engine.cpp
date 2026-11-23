@@ -44,7 +44,8 @@ static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first
 
 static_assert(kKitParams == kTrackParams && kKitSoundParams == kParams &&
                   kKitLfoParams == kLfoParams && kKitArpParams == kArpParams &&
-                  kKitLfoEnd == kArpFirst && kArpBytes == kArpParams,
+                  kKitLfoEnd == kArpFirst && kArpBytes == kArpParams &&
+                  kKitAsrParams == kAsrParams && kKitArpEnd == kAsrFirst,
               "core/project.hpp's kit record and dsp/track.hpp's TrackParams have diverged; a "
               "saved project would come back with the wrong number of parameters per track");
 
@@ -328,8 +329,12 @@ void Engine::prepare_machine(int track) {
     Machine *machine = machines_[track];
     if (machine == nullptr) return;
     const TrackParams &params = sounding(track);
+    // The sound's 16 and the ASR page's 4: a VA reads both (dsp/track.hpp). The LFO and arp bytes
+    // between them are not compared, so turning an LFO knob does not re-prepare a machine.
     if (prepare_memo_ && machine_prepared_for_[track] == machine &&
-        __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0) {
+        __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0 &&
+        __builtin_memcmp(machine_prepared_[track].v + kAsrFirst, params.v + kAsrFirst,
+                         kAsrParams) == 0) {
         return;
     }
     machine->prepare(params);
