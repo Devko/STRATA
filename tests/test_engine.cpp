@@ -3154,6 +3154,111 @@ TEST(engine_the_shared_voice_budget_caps_va_poly_across_tracks) {
     pump();
 }
 
+// --- the CPU guard (core/cpuguard.hpp) -----------------------------------------------------------
+
+namespace {
+
+const VaPoly &poly_on(int track) {
+    return *static_cast<const VaPoly *>(strata::test::engine().machine(track));
+}
+
+}  // namespace
+
+// Load near the block's end lowers the shared POLY budget and sheds the quietest voices down to
+// it, a fade at a time; new notes then meet the lower budget; and a hard stop puts it all back.
+TEST(engine_the_cpu_guard_sheds_poly_voices_under_load_and_a_hard_stop_resets_it) {
+    Engine &engine = clean();
+    FakeHost &host = FakeHost::the();
+    const uint8_t tracks[3] = {2, 3, 4};
+    uint8_t was[3];
+    for (int i = 0; i < 3; i++) {
+        was[i] = engine.project().kit.tracks[tracks[i]].machine;
+        post(Cmd::set_machine, tracks[i], 0, uint8_t(MachineId::va_poly));
+        post(Cmd::set_param, tracks[i], 0, kDec, 127);
+    }
+    pump();
+    for (int i = 0; i < 2; i++) {
+        for (int n = 0; n < VaPoly::kVoices; n++) {
+            post(Cmd::trigger_note, tracks[i], 0, uint8_t(48 + 2 * n), 100);
+        }
+    }
+    pump(4);
+    CHECK_EQ(engine.cpu_guard_level(), 0);
+    CHECK_EQ(engine.poly_budget(), Engine::kPolyVoiceBudget);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+
+    // One panic block after another until the guard rises; then an ordinary load, so it holds.
+    host.set_audio_load(CpuGuard::kPanic + 50);
+    int blocks = 0;
+    while (engine.cpu_guard_level() == 0 && blocks < 40) {
+        pump();
+        blocks++;
+    }
+    host.set_audio_load(600);
+    CHECK(blocks <= int(CpuGuard::kPanicSettle) + 1);
+    CHECK_EQ(engine.cpu_guard_level(), 1);
+    CHECK_EQ(engine.poly_budget(), Engine::kPolyVoiceBudget - 2);
+    CHECK_EQ(int(engine.status().cpu_guard.load(std::memory_order_relaxed)), 1);
+
+    // One voice a block is choked, then the fades end: ten left, and they really stopped.
+    pump(6);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget - 2);
+    int sounding = 0;
+    for (int i = 0; i < 3; i++) sounding += poly_on(tracks[i]).sounding_voices();
+    CHECK_EQ(sounding, Engine::kPolyVoiceBudget - 2);
+
+    // A new note meets the lower budget: it sounds, and something quieter makes room.
+    post(Cmd::trigger_note, tracks[2], 0, 80, 100);
+    pump(4);
+    CHECK_EQ(poly_on(tracks[2]).busy_voices(), 1);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget - 2);
+    CHECK_EQ(engine.cpu_guard_level(), 1);
+
+    // A hard stop: nothing sounds, so the guard starts over with the whole budget.
+    post(Cmd::stop, 0, 0, 1);
+    pump();
+    CHECK_EQ(engine.cpu_guard_level(), 0);
+    CHECK_EQ(engine.poly_budget(), Engine::kPolyVoiceBudget);
+    CHECK_EQ(int(engine.status().cpu_guard.load(std::memory_order_relaxed)), 0);
+
+    host.set_audio_load(0);
+    for (int i = 0; i < 3; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
+    pump();
+}
+
+// The guard's GRAIN half: every track's pool follows the level, so a GRAIN track switched in
+// while the guard is up starts with the smaller pool too, and level 0 gives the whole pool back.
+TEST(engine_the_cpu_guard_shrinks_every_grain_pool_and_gives_it_back) {
+    Engine &engine = clean();
+    FakeHost &host = FakeHost::the();
+    const uint8_t was = engine.project().kit.tracks[kPoly].machine;
+    post(Cmd::set_machine, kPoly, 0, uint8_t(MachineId::grain));
+    pump();
+    const Granular &grain = *static_cast<const Granular *>(engine.machine(kPoly));
+    CHECK_EQ(grain.grain_limit(), Granular::kGrains);
+
+    host.set_audio_load(CpuGuard::kPanic);
+    int blocks = 0;
+    while (engine.cpu_guard_level() < 2 && blocks < 80) {
+        pump();
+        blocks++;
+    }
+    host.set_audio_load(600);
+    CHECK_EQ(engine.cpu_guard_level(), 2);
+    CHECK_EQ(grain.grain_limit(), CpuGuard::grain_limit(2, Granular::kGrains));
+
+    // Cool: one level a second, down to the whole pool.
+    host.set_audio_load(100);
+    pump(int(CpuGuard::kFallBlocks) * 2 + 20);
+    CHECK_EQ(engine.cpu_guard_level(), 0);
+    CHECK_EQ(grain.grain_limit(), Granular::kGrains);
+    CHECK_EQ(engine.poly_budget(), Engine::kPolyVoiceBudget);
+
+    host.set_audio_load(0);
+    post(Cmd::set_machine, kPoly, 0, was);
+    pump();
+}
+
 // A lock lasts exactly as long as its step, and a stopped transport has no step playing. The
 // mask of locked parameters used to outlive the stop, so the performance layer stayed shut out
 // of every parameter the last step had locked: with the transport stopped, a macro (or the

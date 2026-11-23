@@ -2209,6 +2209,19 @@ public:
             cpu_max_ = load > cpu_max_ ? load : cpu_max_;
         }
 
+        // The CPU guard's level, logged when it moves: on the unit and in a scenario this is how
+        // a run says the guard rose (core/cpuguard.hpp). It moves at most ten times a second, so
+        // the sixteen-line log ring is not at risk.
+        {
+            const uint8_t guard = engine_.status().cpu_guard.load(std::memory_order_relaxed);
+            if (guard != logged_guard_) {
+                logged_guard_ = guard;
+                char text[8] = "guard 0";
+                text[6] = char('0' + (guard > 9 ? 9 : guard));
+                enaga::log(text);
+            }
+        }
+
         const Status &status = engine_.status();
         const Pattern &pattern = engine_.pattern();
         const uint8_t playhead = status.playhead[selected_].load(std::memory_order_relaxed);
@@ -2431,8 +2444,12 @@ public:
         append(out, " ");
         // A dropped edit takes the device's place: "V12 LOFI-12 XT DROP 99" is 22 characters,
         // one past the edge, and the drop count is the part that matters.
+        // The CPU guard takes it next (core/cpuguard.hpp): when the box is shedding voices the
+        // user should be able to see why a chord got thinner. "TRK8 MAX99.9 GUARD4" is 19.
         const uint32_t dropped = engine_.commands().dropped();
+        const uint8_t guard = status.cpu_guard.load(std::memory_order_relaxed);
         if (dropped) { append(out, "DROP "); append_number(out, dropped); }
+        else if (guard) { append(out, "GUARD"); append_number(out, guard); }
         else append(out, device_name(enaga::system::device()));
         *out = 0;
         canvas.text(0, 120, line, 7);
@@ -5205,6 +5222,7 @@ private:
     const char *notice_ = nullptr;
     uint32_t notice_at_ms_ = 0;
     uint32_t last_ms_ = 0;
+    uint8_t logged_guard_ = 0;     // the CPU guard level last logged
     uint32_t cpu_max_ = 0;         // per mille, the highest block cost since the last start
 
     LedShadow leds_;
