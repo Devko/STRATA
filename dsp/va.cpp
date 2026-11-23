@@ -114,7 +114,8 @@ constexpr float kStageOneK = 1.414f;
 
 // RES's curve: k = 2 x (kResFloorK / 2)^r, so the resonant peak rises by about the same number
 // of dB for every count (va_resonance_k), minus a last push that takes k just below zero over
-// the top few counts, where the filter self-oscillates at the level its band clip allows.
+// the top few counts, where the filter self-oscillates at the level the resonance limiter in
+// run() allows (kResLimitSq).
 constexpr float kResFloorK = 0.03f;
 constexpr float kResOscillate = 0.04f;
 constexpr float kResFloorOctaves = -6.0589f;   // log2(kResFloorK / 2)
@@ -493,9 +494,8 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
 
     // Not cached: `from_g` is one reciprocal and three multiplies, which is not worth a lookup,
     // and leaving it out keeps an entry to one key and two values.
-    // The resonant stage's coefficients, with g kept: its band is re-integrated after the clip
-    // (valoops.h, strata_va_filter). k may be just below zero at RES's top, so 1 + g(g + k) is
-    // floored well clear of zero.
+    // The resonant stage's coefficients. k may be just below zero at RES's top, so 1 + g(g + k)
+    // is floored well clear of zero.
     //
     // The resonance limiter: RES's top takes k just below zero, where the filter would ring up
     // without bound. Instead the resonant stage's own level, read from its two integrator

@@ -90,7 +90,8 @@ float va_osc2_detune_cents(uint8_t value);   // the spread between the two in DE
 float va_osc2_sync_semitones(uint8_t value); // OSC 2 above OSC 1 in SYN's zone
 int va_pulse_percent(uint8_t value);         // WAV's pulse width, 0 for the saw
 // RES as the resonant stage's damping k (= 1/Q): 2 at 0, about 0.24 at 64, just below 0 (it
-// self-oscillates, bounded by the band clip) over the last few counts.
+// self-oscillates, held to a level by the control-rate resonance limiter in va.cpp's run())
+// over the last few counts.
 float va_resonance_k(uint8_t value);
 
 // --- the control-rate block -----------------------------------------------
