@@ -11,7 +11,7 @@
 //
 //   MNO, PLY   TUN   (knob - 64) * 24/64 semitones (dsp/va.cpp, dsp/vapoly.cpp)
 //   SMP        PIT   (knob - 64) * 24/63 semitones (dsp/sample.cpp), "as if the sample were a C"
-//   GRN        PIT   the same, on slot 8 (dsp/grain.cpp)
+//   GRN        PIT   the same, on slot 8, rounded to the whole semitone it plays (dsp/grain.cpp)
 //   KCK SNR HAT PRC  TUN  an exponential Hz range (dsp/kick.cpp and the others), named against
 //                    12-TET with A-4 = 440 Hz
 //   MID        nothing: its notes go to another instrument
