@@ -980,13 +980,20 @@ cannot hide as well as it does in the voices' loops.
 
 Emulator: **E11**, `tests/scenario_ambient.sh` (push A on DLY+ and REV+ switches both modes on the
 default beat, whose chord and clap feed both sends), against `scenario_m3.sh`, with cl6x and
-`ENAGA_TI_CGT=none`. Not run yet: no device build in the cloud session that wrote it. Unit:
-**U9** (UNIT_CHECKLIST 13j).
+`ENAGA_TI_CGT=none`. Unit: **U9** (UNIT_CHECKLIST 13j). First measured on Roland's PC on
+2026-11-23 (main 5120347 plus the re-spaced key presses; before that fix the walk never reached
+DLY+ and REV+ and the scenario's figure was the plain beat).
 
 | Scenario | cl6x | GCC-only |
 | --- | --- | --- |
-| `scenario_m3.sh` (classic) | | |
-| `scenario_ambient.sh` (LONG + HALL, both tails at first) | | |
+| `scenario_m3.sh` (classic) | 25.42% | not measured |
+| `scenario_ambient.sh` (LONG + HALL, both tails at first) | **31.79%** | **58.94%** |
+
+**+6.4 points with cl6x, against the +1.9 estimate above**, and GCC-only is 1.06 points under the
+60% line: the heaviest scenario now, by a margin. The estimate took the host's ratio of the
+modes' cost to the voices'; the emulator says the feedback loops are much worse on the C674x
+than on the host. Still inside the target with cl6x, which is what ships; U9 on the unit decides
+whether the cuts below are needed.
 
 If the unit's MAX says it does not fit, cut in this order (CLAUDE.md: effects before voices): the
 HALL's shimmer (a two-tap read and a ring write a frame), its modulation (a phasor and the
@@ -1142,7 +1149,7 @@ scene or knob really did move: those prepare as before.
 | E4 | The prepare memo's share | `scenario_m5.sh` (scenes and macros move parameters, so it prepares more) against `scenario_m3.sh` | the gap between them, before and after |
 | E6 | The master kill EQ running | `tests/scenario_killeq.sh` against `tests/scenario_m7.sh` (same beat, EQ bypassed), with cl6x and with `ENAGA_TI_CGT=none` | the difference is the EQ's cost; the proxy above says ~1.3 cl6x / ~2.2 GCC-only |
 | E7 | Eight LFOs running | `tests/scenario_lfo.sh` as it is (every LFO off: should match `scenario_factory.sh`), then again after a temporary edit to `factory_kit` in core/factory.cpp setting each track's `params[17] = 40` (RAT, about 3 Hz free), `params[18] = 127` (DEP) and `params[19] = 38` (DST = DRV), with cl6x and with `ENAGA_TI_CGT=none`; revert the edit | the difference is eight LFOs' cost; the host figures say about 1.1-1.4 points GCC, and about the same with cl6x |
-| E12 | The ASR page | `tests/scenario_asr.sh`, then the held-chord `factory_kit` edit in "The ASR page" above, `scenario_factory.sh`, both compilers; revert | off should match `scenario_factory.sh`; held is the cost of overlapping chords, at most the 12-voice cap |
+| E12 | The ASR page | `tests/scenario_asr.sh`, then the held-chord `factory_kit` edit in "The ASR page" above, `scenario_factory.sh`, both compilers; revert | **done 2026-11-23:** off = A01 (26.15% / 49.32%); held +3.60 cl6x / +4.71 GCC (see "The ASR page") |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
@@ -1414,12 +1421,22 @@ than DEC alone ever allowed. The ceiling is still the shared budget of 12 POLY v
 cap), and above it the CPU guard (PR #83) lowers the cap. Expect held pads to sit at the cap far
 more often than stabs did, so U10 (six held pads over A01) is the reading that matters.
 
-**E12, owed on Roland's PC:** `tests/scenario_asr.sh` (walks EDIT to the ASR page on a drum and on
-VA POLY; every byte 0, so it should match `scenario_factory.sh`), both compilers. Then the
-held-chord cost: temporarily set track 7's `params[25] = 100` (SUS) and `params[26] = 90` (REL,
-about 1.9 s) in `factory_kit` (core/factory.cpp), so A01's chord stabs hold and overlap, run
-`scenario_factory.sh` with cl6x and with `ENAGA_TI_CGT=none`, and revert. The difference is what
-overlapping held chords cost, bounded by the 12-voice cap.
+**E12, measured on Roland's PC (2026-11-23, main 5120347, emulator):** `tests/scenario_asr.sh`
+walks EDIT to the ASR page on a drum and on VA POLY with every byte 0; the held-chord build sets
+track 7's `params[25] = 100` (SUS) and `params[26] = 90` (REL, about 1.9 s) in `factory_kit`
+(core/factory.cpp) for one `scenario_factory.sh` run, then reverts.
+
+| Build | cl6x | GCC only |
+| --- | --- | --- |
+| `scenario_factory.sh` (A01 as shipped) | 26.15% | 49.32% |
+| `scenario_asr.sh` (ASR page, all 0) | 26.15% | 49.32% |
+| `scenario_factory.sh`, A01's stabs held (SUS 100, REL 90) | 29.75% | 54.03% |
+| Held chords cost | **+3.60** | **+4.71** |
+
+"Off" matches A01 exactly with both compilers, as the bit-exact host renders promised. Holding
+A01's stabs costs 3.6 points with cl6x: under two extra voices' worth at 2.16 a voice, because
+A01's stabs are spaced and few overlap. Six held pads over A01 (U10 on the unit) can still reach
+the 12-voice cap; that reading is the one that matters.
 
 ### Later milestones
 

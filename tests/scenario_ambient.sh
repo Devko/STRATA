@@ -7,7 +7,9 @@
 # ENAGA_TI_CGT=none. Compare it with scenario_m3.sh, the same beat on the classic modes.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F7 = 21, SELECT_RIGHT = 9, PUSH_A = 1.
-# The first press must come LATE (tests/scenario_m1.sh).
+# The first press must come LATE (tests/scenario_m1.sh). Presses of the same key are 40 M cycles
+# apart: emulate.py releases each key 20 M cycles after it, and a press on that very cycle is
+# lost (the three DCK pages added 20 M apart once dropped half the SELECT_RIGHTs).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -41,15 +43,15 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 21@380000000 \
     --key 9@440000000 \
-    --key 9@460000000 \
     --key 9@480000000 \
-    --key 9@500000000 \
     --key 9@520000000 \
-    --key 9@540000000 \
-    --key 1@580000000 \
-    --key 9@620000000 \
-    --key 9@660000000 \
-    --key 1@720000000 \
+    --key 9@560000000 \
+    --key 9@600000000 \
+    --key 9@640000000 \
+    --key 1@680000000 \
+    --key 9@720000000 \
+    --key 9@760000000 \
+    --key 1@820000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
