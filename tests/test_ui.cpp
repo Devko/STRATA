@@ -4594,6 +4594,7 @@ TEST(ui_samples_a_pick_on_grain_leaves_its_knobs_alone) {
     set_param_now(0, 3, 60);
     set_param_now(0, 9, 40);
     pump(4);
+    shift_key(ENAGA_KEY_F8);                       // MACHINE: on GRAIN, OK in EDIT is SOUNDS
     key(ENAGA_KEY_OK);
     pump(4);
     key(ENAGA_KEY_DOWN);
@@ -7201,6 +7202,40 @@ TEST(ui_grain_pit_is_on_amp_and_switches_there) {
     key(ENAGA_KEY_SELECT_RIGHT);
     key(ENAGA_KEY_PUSH_A);
     CHECK(UiProbe::tune_notes(app));
+}
+
+TEST(ui_grain_shows_its_knobs_in_units_and_ok_on_edit_opens_its_sounds) {
+    Strata &app = fresh();
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::grain));    // loads CLOUD
+    pump(4);
+    key(ENAGA_KEY_F8);
+    pump(2);
+    // EDIT keeps the page an earlier test left it on: walk back to SRC.
+    for (int i = 0; i < 8 && UiProbe::param_page(app) != int(Page::src); i++) {
+        key(ENAGA_KEY_SELECT_LEFT);
+    }
+    CHECK_EQ(UiProbe::param_page(app), int(Page::src));
+    CHECK(screen_has(app, "151MS"));          // SIZ 84
+    CHECK(screen_has(app, "X4.3"));           // DEN 104: grains in the air
+    CHECK(screen_has(app, "OK: SOUNDS"));
+    check_layout(app, "EDIT SRC, GRN in units");
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(UiProbe::param_page(app), int(Page::amp));
+    CHECK(screen_has(app, "HOLD"));           // DEC 127
+    for (int i = 0; i < 5; i++) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(UiProbe::param_page(app), int(Page::osc));
+    CHECK(screen_has(app, "SCN"));
+    CHECK(screen_has(app, "D15"));            // PSP 24: a 15-cent detune
+    check_layout(app, "EDIT OSC, GRN");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+    CHECK(screen_has(app, "CLOUD"));
+    key(ENAGA_KEY_CLR);
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+    key(ENAGA_KEY_F4);
 }
 
 TEST(ui_layout_tun_as_a_note_on_every_pitched_machine) {
