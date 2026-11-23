@@ -214,7 +214,7 @@ Eight tools change the music live without touching the stored pattern unless you
 
 ## Panel mapping and UI
 
-The 8 lower pads are the 8 tracks, the 7 upper pads are a fixed performance row, and the function block picks the mode. Labels below are the SmplTrek's; the Lofi-12 XT and CyDrums print others at the same places, so names on screen come from `enaga::system::device()`.
+The 8 lower pads are the 8 tracks, the 7 upper pads are a fixed performance row, and the function block picks the mode. In KEYS both rows are a piano instead (lower white keys C-C, upper the sharps; see docs/CONTROLS.md). Labels below are the SmplTrek's; the Lofi-12 XT and CyDrums print others at the same places, so names on screen come from `enaga::system::device()`.
 
 **Pads**
 

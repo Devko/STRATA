@@ -51,6 +51,11 @@ are the point of this section.
 - [ ] **Pad-row keys = which sixteen.** GRID: step page. KEYS: octave. PROJECT: the bank
       (`BANK B`). PERFORM and KIT: nothing.
 - [ ] **CHAIN:** CLR on an entry: `AGAIN TO REMOVE`; again: removed. On an empty chain CLR goes back.
+- [ ] **KEYS on the pads** (HOME twice, track 7 VA POLY): the pads light as a keyboard (root bright,
+      the scale dim, the rest dark, two dim white octave pads in the upper row). Lower pads play
+      C to C, upper pads the sharps between them; soft and hard hits sound different; a held pad
+      sustains; the upper pad between E and F is octave down, the last one octave up (`OCT n`).
+      FUNC + lower pad still mutes on the bar. Does it play like a keyboard? `____`
 - Notes on what still feels awkward: `____________________________________________`
 
 ---
