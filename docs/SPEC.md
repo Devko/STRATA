@@ -275,6 +275,8 @@ OK picks, CLR goes back, and F1 + an arrow is the mode's second meaning. New lis
 - Tap STEP: toggle trig. Hold STEP + turn A-D: lock that parameter on the current page. Hold STEP + push A-D: clear that parameter's lock on the step (one undo level). Hold STEP + VALUE: note.
 - Hold STEP + OK: open the step page (note, velocity, length, micro-timing / probability, condition, ratchet, accent and slide) on A-D, selection keys switch its two pages.
 - Hold two STEP keys: set the selection range for copy, clear and mutation.
+  **[rev]** Held on a note and pressed later, the pair also sets that note's LEN up to the end of
+  the later step when the keys come up, unless the range is used first (CLR, copy, paste, a knob).
 
 **LED language**
 

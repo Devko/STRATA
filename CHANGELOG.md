@@ -21,6 +21,9 @@ the project file format or the controls.
   sustain, release (to 8 s) and filter sustain. With SUS up a note holds while its KEYS pad, STEP
   key, track pad or MIDI note is held, or for its step's LEN, up to 64 steps. At 0 (and in every older
   project) the VAs sound exactly as before.
+- **Note length from the STEP keys:** hold a note's STEP and press a later one: its LEN reaches
+  that step. The pair is still a range for CLR, copy, paste and A/B.
+- **The step page answers A-D with its STEP still held:** C is LEN there, not a lock on CUT.
 - **REC records how long a note was held** into its step's LEN, on SAMPLE, GRAIN, the VAs and MID.
 - **Editable sidechain duck.** Three new MIXER pages after the faders: DCK 1-4 and DCK 5-8 set
   how far each track ducks (OFF to 100%), DUCK sets the source track, attack, hold and release.

@@ -1339,6 +1339,97 @@ TEST(ui_a_performance_pad_pressed_during_a_hold_drops_the_hold) {
 
 // --- two steps are a range ------------------------------------------------------------------
 
+TEST(ui_hold_a_note_and_press_a_later_step_and_its_len_reaches_that_step) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_STEP1 + 0);                      // a note on step 1
+    pump(2);
+    CHECK(trig_at(0, 0));
+    const uint8_t before = step_of(0, 0).length;
+
+    // Step 1 held, step 4 pressed: four steps, set when the first key comes up.
+    step_down(0);
+    step_down(3);
+    CHECK_EQ(UiProbe::notice(app), "LEN 4 STP");
+    pump(2);
+    CHECK_EQ(int(step_of(0, 0).length), int(before));   // nothing yet, while held
+    step_up(3);
+    step_up(0);
+    pump(2);
+    CHECK_EQ(int(step_of(0, 0).length), int(length_index_within_steps(4)));
+    CHECK(trig_at(0, 0));                          // and the release toggled nothing
+    CHECK(!trig_at(0, 3));
+
+    // Five steps: the table has 4 and 6, and the note never runs past the step pressed.
+    step_down(0);
+    step_down(4);
+    step_up(4);
+    step_up(0);
+    pump(2);
+    CHECK_EQ(int(length_sixteenths(step_of(0, 0).length)), 4 * 16);
+
+    // The selection is still a selection: a copy afterwards puts the old LEN back first, so
+    // the copy is the only change.
+    const uint8_t was = step_of(0, 0).length;
+    step_down(0);
+    step_down(1);                                  // two steps
+    step_up(1);
+    step_up(0);
+    pump(2);
+    CHECK_EQ(int(step_of(0, 0).length), int(length_index_within_steps(2)));
+    app.on_key(ENAGA_KEY_F1, true);
+    key(ENAGA_KEY_UP);                             // FUNC+UP: copy
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(step_of(0, 0).length), int(was));
+
+    // Used while still held -- a knob, CLR -- it is not a length at all.
+    step_down(0);
+    step_down(7);
+    app.on_encoder(0, +1);                         // A: transpose the range
+    step_up(7);
+    step_up(0);
+    pump(2);
+    CHECK_EQ(int(step_of(0, 0).length), int(was));
+
+    // Held on an EMPTY step, or pressed earlier: only a range.
+    step_down(5);
+    step_down(9);
+    CHECK_EQ(UiProbe::notice(app), "RANGE");
+    step_up(9);
+    step_up(5);
+    step_down(8);
+    step_down(0);
+    CHECK_EQ(UiProbe::notice(app), "RANGE");
+    step_up(0);
+    step_up(8);
+    pump(2);
+    CHECK_EQ(int(step_of(0, 0).length), int(was));
+    key(ENAGA_KEY_CLR);                            // the range 1-9, and step 1 with it
+    pump(2);
+}
+
+TEST(ui_the_step_page_wins_over_the_step_key_still_held_open_it) {
+    // Hold STEP + OK opens the step page; a hand still on the STEP key turning C must change
+    // LEN, the page's third field, and not lock C (CUT on a VA) on the step.
+    Strata &app = fresh();
+    key(ENAGA_KEY_STEP1 + 2);
+    pump(2);
+    const uint8_t before = step_of(0, 2).length;
+    step_down(2);
+    key(ENAGA_KEY_OK);
+    CHECK(UiProbe::step_page(app));
+    app.on_encoder(2, +2);
+    pump(2);
+    CHECK_EQ(int(step_of(0, 2).length), int(before) + 2);
+    CHECK_EQ(int(step_of(0, 2).lock_count), 0);
+    step_up(2);
+    pump(2);
+    CHECK(trig_at(0, 2));                          // the release is not a tap
+    key(ENAGA_KEY_OK);                             // close the page
+    key(ENAGA_KEY_CLR);
+    pump(2);
+}
+
 TEST(ui_two_held_steps_make_a_range_that_survives_until_a_fresh_single_press) {
     Strata &app = fresh();
 
@@ -1351,7 +1442,9 @@ TEST(ui_two_held_steps_make_a_range_that_survives_until_a_fresh_single_press) {
     step_down(6);                                  // the second key makes the pair a selection
     CHECK_EQ(UiProbe::range_first(app), 2);
     CHECK_EQ(UiProbe::range_last(app), 6);
-    CHECK_EQ(UiProbe::notice(app), "RANGE");
+    // Held on a note and pressed later: the selection also offers that note's LEN (the test
+    // after this one); CLR below erases the step with it.
+    CHECK_EQ(UiProbe::notice(app), "LEN 4 STP");
     CHECK(UiProbe::held_used(app));                // so the first key's release is not a tap
 
     step_up(6);

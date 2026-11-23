@@ -730,6 +730,12 @@ so this is the first time it is heard. Play A01 GROOVE.
 - [ ] **KEYS on the pads** (HOME twice) on track 7: hold a chord on the pads for five seconds: it
       holds at the SUS level the whole time and fades over REL when let go. Let go of one note of
       three: only that one fades.
+- [ ] **LEN from the STEP keys.** Track 7, a chord step on step 1: hold STEP 1, press STEP 5. The
+      top line says `LEN 4 STP`; let go: the step page (hold STEP 1 + OK) shows LEN `4 STP` and,
+      with SUS up, the chord holds four steps. Hold STEP 1 + STEP 5 again and press CLR: the five
+      steps clear (RANGE CLEARED) as before. FUNC+CLR brings them back.
+- [ ] **Step page with the STEP still held.** Hold a STEP, press OK, keep holding and turn C: LEN
+      changes on the page, and no lock appears on the step (no CUT lock on a VA).
 - [ ] **The track pad.** Still on the ASR page (EDIT, not KEYS), hold track 7's own pad for five
       seconds: it holds, and fades over REL when let go. SUS back to 0: a quick tap rings on over
       DEC after the finger lifts, as before.

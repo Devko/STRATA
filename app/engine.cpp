@@ -639,6 +639,12 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_step_length: {
+            Step &s = live().tracks[track].steps[step];
+            if ((s.flags & kStepTrig) != 0 && length_valid(command.a)) s.length = command.a;
+            break;
+        }
+
         // --- projects and banks, M4 ---------------------------------------
 
         case Cmd::queue_pattern: {
