@@ -151,6 +151,7 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
 - With an effect up, press VALUE and let go without turning: `... 0`, dry at once, the effect
   still picked (turn again: it comes back). PERFORM: turn the morph, press VALUE: `MORPH 0`.
   FUNC + turn VALUE (DJ filter), then FUNC + press VALUE: `DJ OFF`. The tempo never resets.
+- With an effect up, hold VALUE down for a second and let go: nothing resets, the amount stays.
 - Push VALUE + CLR: `FX OFF`. Again: `LOOP CLEARED`. MAX meanwhile: `________ %` (U11 is in 13o).
 
 **17. Samples from the SmplTrek's own folders (2 min).** Needs a card the stock firmware has used,

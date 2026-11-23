@@ -67,7 +67,7 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
    - **VALUE:** tempo (PERFORM: morph; CHAIN/PATTERN: the field under the cursor). Push + turn =
      swing, FUNC + turn = DJ filter. **Push + STEP 1-16 picks a performance effect, and while one
      is picked VALUE is its amount on every screen** (the performance mixer, below). **A press
-     of VALUE alone** (let go with nothing turned or pressed meanwhile) resets what it is on to 0:
+     of VALUE alone** (let go within half a second, with nothing turned or pressed meanwhile) resets what it is on to 0:
      a picked effect's amount, the looper's mix, PERFORM's morph; with FUNC, the DJ filter to
      OFF. Never the tempo, swing or a field, and nothing while a STEP is held.
    - **STEP keys:** the sixteen of whatever the pad-row keys chose.
