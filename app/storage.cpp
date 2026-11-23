@@ -380,6 +380,275 @@ bool Storage::request_save_as(const char *name) {
     return true;
 }
 
+// --- renaming and deleting projects ---------------------------------------------
+//
+// app/storage.hpp (request_rename, request_delete) has the order the files go in and why a card
+// pulled at any point loses nothing. Neither touches the project in RAM, so neither waits for the
+// transport or the ring the way a load does; they are queued behind any save asked for first,
+// which is what makes renaming the open project with a save pending rename the saved state.
+
+bool Storage::named_path(char *out, uint32_t max, const char *name, const char *file) const {
+    if (max == 0) return false;
+    char *p = out;
+    const char *end = out + max - 1;
+    append_text(p, enaga::files::data_folder(), end);
+    append_text(p, "/PROJECTS/", end);
+    append_text(p, name, end);
+    if (file != nullptr) {
+        append_text(p, "/", end);
+        append_text(p, file, end);
+    }
+    if (p >= end) return false;
+    *p = '\0';
+    return true;
+}
+
+bool Storage::request_rename(const char *from, const char *to) {
+    if (!valid_name(from) || !valid_name(to) || same_name(from, to)) return false;
+    if (!card_usable_ || op_pending_ != Op::none) return false;
+    copy_name(op_from_, from, kNameBytes);
+    copy_name(op_to_, to, kNameBytes);
+    op_pending_ = Op::rename;
+    return true;
+}
+
+bool Storage::request_delete(const char *name) {
+    if (!valid_name(name) || !card_usable_ || op_pending_ != Op::none) return false;
+    // The open project, and one an open is about to make the open project.
+    if (same_name(name, name_)) return false;
+    if (open_pending_ && same_name(name, open_name_)) return false;
+    copy_name(op_from_, name, kNameBytes);
+    op_pending_ = Op::remove;
+    return true;
+}
+
+void Storage::start_op() {
+    const Op op = op_pending_;
+    op_pending_ = Op::none;
+    if (op == Op::remove) {
+        begin_delete(op_from_, false, nullptr);
+    } else {
+        begin_job(Job::project_rename);
+    }
+}
+
+void Storage::begin_delete(const char *name, bool for_rename, const char *carried) {
+    copy_name(del_name_, name, kNameBytes);
+    del_for_rename_ = for_rename;
+    del_carried_ = carried;
+    del_count_ = del_next_ = del_removed_ = 0;
+    del_overflow_ = false;
+    del_listed_ = false;
+    // begin_job, not a bare assignment, so error_ starts clear -- but a rename's tail keeps the
+    // job it continues counted as one: step_ restarts for the delete's own phases.
+    begin_job(Job::project_delete);
+}
+
+void Storage::step_rename() {
+    char from[ENAGA_FILE_PATH_MAX + 1];
+    char to[ENAGA_FILE_PATH_MAX + 1];
+    const int index = step_;
+    step_++;
+
+    if (index == 0) {
+        // The source must be a project: its PROJECT.BIN (or the .TMP an interrupted save left,
+        // which read_all falls back to) is what makes the copy worth anything.
+        if (!named_path(from, sizeof from, op_from_, "PROJECT.BIN") ||
+            !named_path(to, sizeof to, op_to_, nullptr)) {
+            finish_job("BAD PATH");
+            return;
+        }
+        const int32_t got = enaga::files::read_all(from, file_, kFileBytes);
+        if (got < 0) {
+            finish_job(got == ENAGA_FILE_NOT_FOUND ? "NOT A PROJECT"
+                                                   : enaga::files::error_name(got));
+            return;
+        }
+        // Another folder under the new name is another project, or what is left of one: never
+        // written into. (FAT compares without case, and so does files::info.)
+        enaga::files::Info info;
+        const int32_t there = enaga::files::info(to, info);
+        if (there == ENAGA_FILE_OK) {
+            finish_job("NAME TAKEN");
+            return;
+        }
+        if (there != ENAGA_FILE_NOT_FOUND) {
+            finish_job(enaga::files::error_name(there));
+            return;
+        }
+        const int32_t made = enaga::files::make_folder(to);
+        if (made < 0) {
+            finish_job(enaga::files::error_name(made));
+            return;
+        }
+        return;
+    }
+
+    // Steps 1 .. kFileCount: KIT.BIN, PERFORM.BIN and the banks, then PROJECT.BIN last.
+    if (index <= kFileCount) {
+        int file = index;                    // 1 kit, 2 perform, 3.. banks
+        if (index == kFileCount) file = kFileProject;
+        char name[12];
+        const char *leaf = nullptr;
+        if (file == kFileProject) {
+            leaf = "PROJECT.BIN";
+        } else if (file == kFileKit) {
+            leaf = "KIT.BIN";
+        } else if (file == kFilePerform) {
+            leaf = "PERFORM.BIN";
+        } else {
+            if (!bank_file_name(file - kFileFirstBank, name, int(sizeof name))) return;
+            leaf = name;
+        }
+        if (!named_path(from, sizeof from, op_from_, leaf) ||
+            !named_path(to, sizeof to, op_to_, leaf)) {
+            begin_delete(op_to_, true, "BAD PATH");
+            return;
+        }
+        const int32_t got = enaga::files::read_all(from, file_, kFileBytes);
+        if (got == ENAGA_FILE_NOT_FOUND && file != kFileProject) {
+            // A bank never written, or a project from before PERFORM.BIN: absent there, absent
+            // here, and it loads the same (step_load treats both as empty).
+            return;
+        }
+        if (got < 0) {
+            begin_delete(op_to_, true, got == ENAGA_FILE_NOT_FOUND
+                                           ? "NOT A PROJECT"
+                                           : enaga::files::error_name(got));
+            return;
+        }
+        const int32_t wrote = enaga::files::save(to, file_, uint32_t(got));
+        if (wrote < 0) {
+            begin_delete(op_to_, true, enaga::files::error_name(wrote));
+            return;
+        }
+        if (file != kFileProject) return;
+
+        // Both folders are whole now. If this was the open project it is called by the new name
+        // from here on, and the settings say so BEFORE the old folder starts to go: a card pulled
+        // after this opens the new name, and one pulled before it the old, both complete.
+        if (same_name(op_from_, name_)) {
+            copy_name(name_, op_to_, kNameBytes);
+            settings_.set(kKeyProject, name_);
+            settings_.save();
+        }
+        begin_delete(op_from_, true, nullptr);
+    }
+}
+
+void Storage::delete_entry(const enaga::files::Info &entry) {
+    // Main context, inside the listing step_delete asked for. A name too long for the table
+    // cannot be removed from it; the folder's own removal then fails, and says so.
+    if (del_count_ >= kDelEntries) {
+        del_overflow_ = true;
+        return;
+    }
+    int n = 0;
+    while (entry.name[n] != '\0' && n < kDelNameBytes - 1) n++;
+    if (entry.name[n] != '\0') {
+        del_overflow_ = true;
+        return;
+    }
+    for (int i = 0; i <= n; i++) del_names_[del_count_][i] = entry.name[i];
+    del_count_++;
+}
+
+void Storage::delete_listed(int32_t result) {
+    del_listing_ = false;
+    del_listed_ = true;
+    del_list_result_ = result;
+}
+
+void Storage::step_delete() {
+    char path[ENAGA_FILE_PATH_MAX + 1];
+    // Phases: 0 PROJECT.BIN, 1 list the folder, 2 waiting for the list, 3 one entry per pass,
+    // 4 the folder itself.
+    if (step_ == 0) {
+        // The .TMP before the file it stands in for: Enaga's reads fall back to PROJECT.BIN.TMP
+        // when PROJECT.BIN is missing, so the other order could leave a folder that still opens.
+        for (int i = 0; i < 2; i++) {
+            if (!named_path(path, sizeof path, del_name_,
+                            i == 0 ? "PROJECT.BIN.TMP" : "PROJECT.BIN")) {
+                finish_job("BAD PATH");
+                return;
+            }
+            const int32_t gone = enaga::files::remove(path);
+            if (gone < 0 && gone != ENAGA_FILE_NOT_FOUND) {
+                finish_job(enaga::files::error_name(gone));
+                return;
+            }
+        }
+        step_ = 1;
+        return;
+    }
+    if (step_ == 1) {
+        // A listing from a job the card took away may still be answering: let it finish first.
+        if (del_listing_) return;
+        if (!named_path(path, sizeof path, del_name_, nullptr)) {
+            finish_job("BAD PATH");
+            return;
+        }
+        del_count_ = del_next_ = del_removed_ = 0;
+        del_overflow_ = false;
+        del_listed_ = false;
+        del_listing_ = true;
+        const int32_t queued = enaga::files::list<&Storage::delete_entry, &Storage::delete_listed>(
+            path, this);
+        if (queued < 0) {
+            del_listing_ = false;
+            finish_job(enaga::files::error_name(queued));
+            return;
+        }
+        step_ = 2;
+        return;
+    }
+    if (step_ == 2) {
+        if (!del_listed_) return;
+        del_listed_ = false;
+        if (del_list_result_ == ENAGA_FILE_NOT_FOUND) {
+            finish_job(nullptr);             // no folder at all: nothing left to delete
+            return;
+        }
+        if (del_list_result_ < 0) {
+            finish_job(enaga::files::error_name(del_list_result_));
+            return;
+        }
+        step_ = 3;
+        return;
+    }
+    if (step_ == 3) {
+        if (del_next_ < del_count_) {
+            const char *leaf = del_names_[del_next_++];
+            if (!named_path(path, sizeof path, del_name_, leaf)) {
+                del_overflow_ = true;        // cannot name it: the folder will refuse to go
+                return;
+            }
+            // A file, or an empty folder. A folder with something in it is refused (DENIED) and
+            // left, and the folder's own removal below reports it: STRATA never made one.
+            const int32_t gone = enaga::files::remove(path);
+            if (gone == ENAGA_FILE_OK) {
+                del_removed_++;
+            } else if (gone != ENAGA_FILE_NOT_FOUND && gone != ENAGA_FILE_DENIED) {
+                finish_job(enaga::files::error_name(gone));
+            }
+            return;
+        }
+        // More than the table held: list again, for as long as a round gets somewhere.
+        step_ = del_overflow_ && del_removed_ > 0 ? 1 : 4;
+        return;
+    }
+    if (!named_path(path, sizeof path, del_name_, nullptr)) {
+        finish_job("BAD PATH");
+        return;
+    }
+    const int32_t gone = enaga::files::remove(path);
+    if (gone < 0 && gone != ENAGA_FILE_NOT_FOUND) {
+        finish_job(gone == ENAGA_FILE_DENIED ? "FOLDER NOT EMPTY" : enaga::files::error_name(gone));
+        return;
+    }
+    finish_job(nullptr);
+}
+
 void Storage::request_new() {
     // Queued, not done here. It used to run on the spot, and the UI calls this straight from a
     // key press -- with whatever edits that same press and the ones before it left in the ring.
@@ -550,6 +819,9 @@ void Storage::on_card(bool usable) {
     job_ = Job::idle;
     save_pending_ = autosave_pending_ = load_pending_ = open_pending_ = opening_ = false;
     kit_scan_pending_ = false;
+    // A rename or delete stops where it was; the order its files go in is what makes that safe.
+    // A listing it had in flight still answers, and step_delete waits for that before another.
+    op_pending_ = Op::none;
     sample_queue_ = 0;
     error_ = "NO CARD";
 }
@@ -572,7 +844,12 @@ void Storage::begin_job(Job job) {
     // Making `error_` survive a sample job instead would have broken its own documented
     // contract, "sticky until the next job starts", which three tests rightly hold it to. So the
     // project's reason gets a slot of its own, and `last_error()` prefers the newer of the two.
-    if (job == Job::save || job == Job::load) project_error_ = nullptr;
+    // A rename or a delete is a project job too: its reason is about a project, and it is what
+    // the screen should say over a stale one from before it.
+    if (job == Job::save || job == Job::load || job == Job::project_rename ||
+        job == Job::project_delete) {
+        project_error_ = nullptr;
+    }
 }
 
 void Storage::finish_job(const char *error) {
@@ -637,13 +914,31 @@ void Storage::finish_job(const char *error) {
         enaga::log(line);
     }
 
+    // A rename or a delete gets a line too: the scenarios see nothing else of it. A rename's
+    // reason travels through the delete of what it had made (del_carried_).
+    if (job_ == Job::project_rename || job_ == Job::project_delete) {
+        const bool renaming = job_ == Job::project_rename || del_for_rename_;
+        if (job_ == Job::project_delete && error == nullptr) error = del_carried_;
+        char line[40];
+        char *out = line;
+        const char *end = line + 36;
+        append_text(out, renaming ? "rename" : "delete", end);
+        append_text(out, error != nullptr ? " failed " : "d", end);
+        if (error != nullptr) append_text(out, error, end);
+        *out = '\0';
+        enaga::log(line);
+        del_for_rename_ = false;
+        del_carried_ = nullptr;
+    }
+
     // A long file read in chunks is finished with whichever way its job ended, and so is a
     // stream's head (a stream that got as far as hand_stream_over has its own plan by now).
     if (chunk_file_.is_open()) chunk_file_.close();
     chunked_ = false;
     streaming_ = false;
 
-    const bool project_job = job_ == Job::save || job_ == Job::load;
+    const bool project_job = job_ == Job::save || job_ == Job::load ||
+                             job_ == Job::project_rename || job_ == Job::project_delete;
     job_ = Job::idle;
     step_ = 0;
     if (error != nullptr) error_ = error;
@@ -668,6 +963,8 @@ const char *Storage::busy_text() const {
         case Job::kit_scan: return "READING KITS";
         case Job::kit_save: return "SAVING KIT";
         case Job::kit_load: return "LOADING KIT";
+        case Job::project_rename: return "RENAMING";
+        case Job::project_delete: return del_for_rename_ ? "RENAMING" : "DELETING";
         default: return nullptr;
     }
 }
@@ -696,6 +993,8 @@ int Storage::progress() const {
             return out_frames_ == 0 ? 0 : int(out_done_ * 100u / out_frames_);
         case Job::kit_scan:
             return step_ * 100 / kKitSlots;
+        case Job::project_rename:
+            return step_ * 100 / (kFileCount + 1);
         default:
             return 0;
     }
@@ -763,6 +1062,8 @@ void Storage::service() {
         case Job::sample_chunk: step_sample_chunk(); return;
         case Job::take_write: step_take_write(); return;
         case Job::kit_scan: step_kit_scan(); return;
+        case Job::project_rename: step_rename(); return;
+        case Job::project_delete: step_delete(); return;
         // Both run start to finish in the pass that begins them, so neither is ever found here.
         case Job::kit_save:
         case Job::kit_load:
@@ -799,6 +1100,11 @@ void Storage::service() {
         autosave_ = !save_pending_;
         save_pending_ = autosave_pending_ = false;
         begin_job(Job::save);
+        return;
+    }
+    // A rename or a delete: after a save, which belongs to the project as it was asked for.
+    if (op_pending_ != Op::none) {
+        start_op();
         return;
     }
     // The kit library. After a project save or load -- which may be about to replace the kit a

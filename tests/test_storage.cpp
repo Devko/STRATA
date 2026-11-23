@@ -4215,6 +4215,288 @@ TEST(storage_project_names_are_what_the_panel_can_type) {
     CHECK(!pump_until_idle(20));                            // nothing was queued
 }
 
+// --- renaming and deleting projects ----------------------------------------------------------
+
+namespace {
+
+// "/ENAGA/DATA/STRATA/PROJECTS/<name>" and, with `file`, a file in it.
+const char *folder_of(const char *name, const char *file = nullptr) {
+    static char path[ENAGA_FILE_PATH_MAX + 1];
+    std::strcpy(path, kDataFolder);
+    std::strcat(path, "/PROJECTS/");
+    std::strcat(path, name);
+    if (file != nullptr) {
+        std::strcat(path, "/");
+        std::strcat(path, file);
+    }
+    return path;
+}
+
+// Everything on the card in the folder, the folder's own entry included.
+int entries_in(const char *name) {
+    char folder[ENAGA_FILE_PATH_MAX + 1];
+    std::strcpy(folder, folder_of(name));
+    const size_t n = std::strlen(folder);
+    FakeHost &host = FakeHost::the();
+    int found = 0;
+    for (int i = 0; i < host.file_count(); i++) {
+        const char *p = host.file_name(i);
+        if (std::strncmp(p, folder, n) == 0 && (p[n] == '\0' || p[n] == '/')) found++;
+    }
+    return found;
+}
+
+// ALPHA with a trig on step 3, then BETA without it, open. Every file of both on the card.
+void alpha_and_beta() {
+    clean();
+    post(Cmd::toggle_trig, 0, 3);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+    CHECK(storage().request_save_as("ALPHA"));
+    CHECK(pump_until_idle());
+    post(Cmd::toggle_trig, 0, 3);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+    CHECK(storage().request_save_as("BETA"));
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(std::strcmp(storage().project_name(), "BETA"), 0);
+    for (int i = 0; i < kFileN; i++) {
+        CHECK(FakeHost::the().has_file(folder_of("ALPHA", kFiles[i])));
+        CHECK(FakeHost::the().has_file(folder_of("BETA", kFiles[i])));
+    }
+}
+
+// One file's bytes, for "the copy is the same as the original".
+uint32_t file_into(const char *path, uint8_t *out) {
+    const int32_t got = FakeHost::the().read_file(path, out, kScratchBytes);
+    return got < 0 ? 0u : uint32_t(got);
+}
+
+}  // namespace
+
+TEST(storage_rename_copies_every_file_and_the_old_folder_goes) {
+    alpha_and_beta();
+    FakeHost &host = FakeHost::the();
+    uint32_t sizes[kFileN];
+    uint32_t sums[kFileN];
+    for (int i = 0; i < kFileN; i++) {
+        sizes[i] = file_into(folder_of("ALPHA", kFiles[i]), g_scratch);
+        sums[i] = 0;
+        for (uint32_t b = 0; b < sizes[i]; b++) sums[i] = sums[i] * 31u + g_scratch[b];
+    }
+
+    CHECK(storage().request_rename("ALPHA", "GAMMA"));
+    CHECK(storage().project_op_pending());
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(!storage().project_op_pending());
+    CHECK_EQ(entries_in("ALPHA"), 0);                    // the files and the folder
+    for (int i = 0; i < kFileN; i++) {
+        const uint32_t got = file_into(folder_of("GAMMA", kFiles[i]), g_scratch);
+        uint32_t sum = 0;
+        for (uint32_t b = 0; b < got; b++) sum = sum * 31u + g_scratch[b];
+        CHECK_EQ(got, sizes[i]);
+        CHECK_EQ(sum, sums[i]);
+    }
+    CHECK(host.has_file(folder_of("GAMMA")));            // a folder of its own, made
+    // The open project is untouched, name and all.
+    CHECK_EQ(std::strcmp(storage().project_name(), "BETA"), 0);
+    CHECK(settings_say("PROJECT=BETA"));
+
+    // And GAMMA opens as what ALPHA was.
+    CHECK(storage().request_open("GAMMA"));
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(engine().pattern().tracks[0].steps[3].flags != 0);
+}
+
+TEST(storage_rename_writes_project_bin_last) {
+    // Until PROJECT.BIN is in the new folder, the new folder is not a project: a card pulled
+    // there leaves the original whole and a folder that opens as NOT FOUND.
+    alpha_and_beta();
+    FakeHost &host = FakeHost::the();
+    CHECK(storage().request_rename("ALPHA", "GAMMA"));
+    bool saw_banks_without_project = false;
+    for (int i = 0; i < 400 && !host.has_file(folder_of("GAMMA", "PROJECT.BIN")); i++) {
+        pump();
+        if (host.has_file(folder_of("GAMMA", "BANK_H.BIN")) &&
+            !host.has_file(folder_of("GAMMA", "PROJECT.BIN"))) {
+            saw_banks_without_project = true;
+        }
+        // The original stays whole until the copy is.
+        if (!host.has_file(folder_of("GAMMA", "PROJECT.BIN"))) {
+            CHECK(host.has_file(folder_of("ALPHA", "PROJECT.BIN")));
+        }
+    }
+    CHECK(saw_banks_without_project);
+    CHECK(pump_until_idle());
+    CHECK_EQ(entries_in("ALPHA"), 0);
+}
+
+TEST(storage_renaming_the_open_project_renames_it_and_the_settings) {
+    alpha_and_beta();
+    // Unsaved work stays unsaved: the rename moves what is on the card, not what is in RAM.
+    post(Cmd::toggle_trig, 0, 9);
+    pump(2);
+    storage().note_command(Cmd::toggle_trig, 0);
+    CHECK(storage().dirty());
+    CHECK(storage().request_rename("BETA", "DELTA"));
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(std::strcmp(storage().project_name(), "DELTA"), 0);
+    CHECK(settings_say("PROJECT=DELTA"));
+    CHECK(storage().dirty());
+    CHECK_EQ(entries_in("BETA"), 0);
+    CHECK(engine().pattern().tracks[0].steps[9].flags != 0);
+    // The next save goes to the new name.
+    storage().request_save();
+    CHECK(pump_until_idle());
+    CHECK(!storage().dirty());
+    CHECK_EQ(entries_in("BETA"), 0);
+    CHECK(storage().request_open("ALPHA"));
+    CHECK(settle());
+    CHECK(storage().request_open("DELTA"));
+    CHECK(settle());
+    CHECK(engine().pattern().tracks[0].steps[9].flags != 0);
+}
+
+TEST(storage_rename_refuses_a_taken_name_and_a_folder_that_is_not_a_project) {
+    alpha_and_beta();
+    FakeHost &host = FakeHost::the();
+    CHECK(storage().request_rename("ALPHA", "BETA"));
+    CHECK(pump_until_idle());
+    check_error("a rename onto another project", "NAME TAKEN");
+    CHECK(host.has_file(folder_of("ALPHA", "PROJECT.BIN")));
+    CHECK(host.has_file(folder_of("BETA", "PROJECT.BIN")));
+
+    CHECK(host.write_file(folder_of("JUNK", "NOTES.TXT"), "x", 1));
+    CHECK(storage().request_rename("JUNK", "KEEP"));
+    CHECK(pump_until_idle());
+    check_error("a rename of a folder with no PROJECT.BIN", "NOT A PROJECT");
+    CHECK_EQ(entries_in("KEEP"), 0);
+    CHECK(host.has_file(folder_of("JUNK", "NOTES.TXT")));
+
+    // Refused outright: the same name, a name the panel cannot type, and a second request
+    // while one waits.
+    CHECK(!storage().request_rename("ALPHA", "ALPHA"));
+    CHECK(!storage().request_rename("ALPHA", "alpha"));
+    CHECK(!storage().request_rename("ALPHA", "A/B"));
+    CHECK(!storage().request_rename("", "X"));
+    CHECK(storage().request_rename("ALPHA", "X1"));
+    CHECK(!storage().request_rename("BETA", "X2"));
+    CHECK(!storage().request_delete("JUNK"));
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK(host.has_file(folder_of("X1", "PROJECT.BIN")));
+}
+
+TEST(storage_a_rename_that_fails_midway_leaves_the_original_and_cleans_up) {
+    alpha_and_beta();
+    FakeHost &host = FakeHost::the();
+    CHECK(storage().request_rename("ALPHA", "GAMMA"));
+    // Into the copy: the folder made and a file or two in it.
+    for (int i = 0; i < 400 && !host.has_file(folder_of("GAMMA", "PERFORM.BIN")); i++) {
+        storage().service();
+    }
+    CHECK(host.has_file(folder_of("GAMMA", "PERFORM.BIN")));
+    host.set_full(true);
+    CHECK(pump_until_idle());
+    host.set_full(false);
+    check_error("a copy onto a full card", "CARD FULL");
+    CHECK_EQ(entries_in("GAMMA"), 0);
+    for (int i = 0; i < kFileN; i++) CHECK(host.has_file(folder_of("ALPHA", kFiles[i])));
+    CHECK_EQ(std::strcmp(storage().project_name(), "BETA"), 0);
+}
+
+TEST(storage_delete_removes_project_bin_first_then_everything) {
+    alpha_and_beta();
+    FakeHost &host = FakeHost::the();
+    // What a PC or an interrupted save may leave beside the ten.
+    CHECK(host.write_file(folder_of("ALPHA", "PROJECT.BIN.TMP"), "x", 1));
+    CHECK(host.write_file(folder_of("ALPHA", "NOTES.TXT"), "x", 1));
+    CHECK(storage().request_delete("ALPHA"));
+    for (int i = 0; i < 4 && host.has_file(folder_of("ALPHA", "PROJECT.BIN")); i++) {
+        storage().service();
+    }
+    // PROJECT.BIN and its .TMP are gone before anything else is touched.
+    CHECK(!host.has_file(folder_of("ALPHA", "PROJECT.BIN")));
+    CHECK(!host.has_file(folder_of("ALPHA", "PROJECT.BIN.TMP")));
+    CHECK(host.has_file(folder_of("ALPHA", "BANK_A.BIN")));
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(entries_in("ALPHA"), 0);
+    CHECK_EQ(entries_in("BETA"), kFileN + 1);
+    CHECK_EQ(std::strcmp(storage().project_name(), "BETA"), 0);
+}
+
+TEST(storage_delete_refuses_the_open_project) {
+    alpha_and_beta();
+    CHECK(!storage().request_delete("BETA"));
+    CHECK(!storage().request_delete("beta"));
+    CHECK(!storage().request_delete(""));
+    CHECK(!pump_until_idle(20));
+    CHECK_EQ(entries_in("BETA"), kFileN + 1);
+    // Nor one an open is about to make the open project.
+    CHECK(storage().request_open("ALPHA"));
+    CHECK(!storage().request_delete("ALPHA"));
+    CHECK(settle());
+}
+
+TEST(storage_a_card_pulled_mid_delete_leaves_no_project_and_a_second_delete_finishes) {
+    alpha_and_beta();
+    FakeHost &host = FakeHost::the();
+    CHECK(storage().request_delete("ALPHA"));
+    for (int i = 0; i < 4 && host.has_file(folder_of("ALPHA", "PROJECT.BIN")); i++) {
+        storage().service();
+    }
+    host.set_card(false);
+    storage().on_card(false);
+    pump(4);
+    host.set_card(true);
+    storage().on_card(true);
+    CHECK(settle());
+    CHECK(entries_in("ALPHA") > 0);
+    // What is left does not open: no project with its banks quietly missing.
+    CHECK(storage().request_open("ALPHA"));
+    CHECK(pump_until_idle());
+    check_error("opening a half-deleted project", "NOT FOUND");
+    CHECK_EQ(std::strcmp(storage().project_name(), "BETA"), 0);
+    CHECK(settle());
+    CHECK(storage().request_delete("ALPHA"));
+    CHECK(pump_until_idle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(entries_in("ALPHA"), 0);
+}
+
+TEST(storage_delete_empties_a_folder_bigger_than_its_table) {
+    alpha_and_beta();
+    FakeHost &host = FakeHost::the();
+    char name[16];
+    for (int i = 0; i < 45; i++) {
+        std::memcpy(name, "JUNK00.TXT", 11);
+        name[4] = char('0' + i / 10);
+        name[5] = char('0' + i % 10);
+        CHECK(host.write_file(folder_of("ALPHA", name), "x", 1));
+    }
+    CHECK(storage().request_delete("ALPHA"));
+    CHECK(pump_until_idle(4000));
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(entries_in("ALPHA"), 0);
+}
+
+TEST(storage_delete_says_so_when_a_folder_inside_will_not_go) {
+    alpha_and_beta();
+    FakeHost &host = FakeHost::the();
+    CHECK(host.write_file(folder_of("ALPHA", "STEMS/KICK.WAV"), "x", 1));
+    CHECK(storage().request_delete("ALPHA"));
+    CHECK(pump_until_idle());
+    check_error("a folder with a folder in it", "FOLDER NOT EMPTY");
+    CHECK(!host.has_file(folder_of("ALPHA", "PROJECT.BIN")));
+    CHECK(!host.has_file(folder_of("ALPHA", "BANK_A.BIN")));
+    CHECK(host.has_file(folder_of("ALPHA", "STEMS/KICK.WAV")));
+}
+
 // =============================================================================================
 // SLC AUTO: a sample's slice points are found as it loads (core/onsets.hpp)
 // =============================================================================================
