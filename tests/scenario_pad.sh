@@ -10,6 +10,11 @@
 # (F3, STEP 5) switches at the end of A01's 16-step pass, about 1.85 s at 130 BPM, and the run
 # goes on long enough for the pad to reach its second chord.
 #
+# The DOWNs are 40 M cycles apart. A press is released 20 M cycles later, and a press landing on
+# the same cycle as the last one's release is never seen as a new press: the panel scan finds the
+# key still down. At 20 M apart only the first DOWN counted, track 2 stayed selected (g1010, then
+# A05's empty clap g0000), and the scenario failed on the PC.
+#
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F8 = 28 EDIT, DOWN = 25, F3 = 20,
 # STEP n = 31 + n. The first press comes late: the panel link is not streaming in the first
 # ~200 M cycles (tests/scenario_m1.sh).
@@ -44,10 +49,10 @@ echo "running the emulator for $CYCLES cycles: play A01, select the chord, queue
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 28@340000000 \
-    --key 25@370000000 --key 25@390000000 --key 25@410000000 --key 25@430000000 \
-    --key 25@450000000 --key 25@470000000 \
-    --key 20@500000000 \
-    --key 36@540000000 \
+    --key 25@380000000 --key 25@420000000 --key 25@460000000 --key 25@500000000 \
+    --key 25@540000000 --key 25@580000000 \
+    --key 20@620000000 \
+    --key 36@660000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
