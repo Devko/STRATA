@@ -1254,8 +1254,17 @@ void Storage::run_kit_load() {
 // post `clear_sample`, WAIT for the epoch, release, load, hand over. Every other order writes
 // over memory a voice may still be reading.
 
+bool Storage::take_busy() const {
+    return job_ == Job::take_write ||
+           (take_pending_ &&
+            engine_->status().resample_state.load(std::memory_order_relaxed) == 3u);
+}
+
 bool Storage::request_resample_write(int into_track) {
     if (into_track < -1 || into_track >= kTracks) return false;
+    // A take on its way to the card keeps the destination it was asked for: the write runs over
+    // many passes, and finish_take_write reads take_track_ only at the end.
+    if (take_busy()) return false;
     take_track_ = into_track;
     take_pending_ = true;
     return true;

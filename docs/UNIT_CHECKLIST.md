@@ -219,6 +219,8 @@ The beat can keep playing. One look per screen; note any overlap or illegible te
       CLR closes it and erases nothing.
 - [ ] PERFORM: LEFT/RIGHT pick the macro, UP/DOWN walk the mutation type.
 - [ ] RESAMPLE: UP/DOWN pick the bars, LEFT/RIGHT where the take goes; CLR backs out.
+- [ ] RESAMPLE to FILE, then while the screen says WRITING pick TRK 1 and press OK: `TAKE STILL
+      WRITING`, and track 1 keeps its own sample once the write ends.
 - [ ] Notices (e.g. an octave change) appear on the second line in every mode.
 
 ## 6. Step editing: locks, clearing one lock, the note, undo/redo (6 min)
