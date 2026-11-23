@@ -280,9 +280,9 @@ OK picks, CLR goes back, and F1 + an arrow is the mode's second meaning. New lis
 
 | LED | State | Look |
 | --- | --- | --- |
-| STEP | Trig | Green 6 |
-| STEP | Trig with locks | Green 6 + red 3 (amber) |
-| STEP | Trig with condition or probability | Green 2 |
+| STEP | Trig | Green by velocity: 1 (below 40), 3 (40-79), 6 (80-109), 10 (110 up, or accent) |
+| STEP | Trig with locks | That green + red 3 (amber) |
+| STEP | Trig with condition or probability | That green, blinking 200 ms on / 200 ms off |
 | STEP | Playhead | Red 10 |
 | Lower pads | Track idle / triggered / muted | Track colour at 2 / 10 for 60 ms / off |
 | Upper pads | Function available / active | Own colour at 2 / at 10 (docs/CONTROLS.md) |

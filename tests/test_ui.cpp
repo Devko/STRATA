@@ -111,6 +111,8 @@ struct UiProbe {
     static bool verdict_free(const Strata &app) { return app.verdict_keys_free(); }
     static bool mutation_pending(const Strata &app) { return app.mutation_pending_; }
     static uint8_t pad_r(const Strata &app, int pad) { return app.leds_.pad_r[pad]; }
+    static uint8_t step_green(const Strata &app, int i) { return app.leds_.step_green[i]; }
+    static uint8_t step_red(const Strata &app, int i) { return app.leds_.step_red[i]; }
     static uint8_t pad_g(const Strata &app, int pad) { return app.leds_.pad_g[pad]; }
     static uint8_t pad_b(const Strata &app, int pad) { return app.leds_.pad_b[pad]; }
     static uint8_t key_red(const Strata &app, int code) { return app.leds_.key_red[code]; }
@@ -6384,4 +6386,58 @@ TEST(ui_the_duck_pages_set_each_tracks_depth_the_source_and_the_times) {
     pump(2);
     CHECK_EQ(int(kit.duck.source), source);
     CHECK_EQ(int(kit.duck.release), release);
+}
+
+// --- the STEP lights show velocity (Roland, 2026-11-23) -------------------------------------
+
+namespace {
+
+void step_field(int step, StepField field, int delta) {
+    Command command;
+    command.cmd = Cmd::step_field_delta;
+    command.track = 0;
+    command.step = uint8_t(step);
+    command.a = uint8_t(field);
+    command.b = uint8_t(int8_t(delta));
+    app_engine().commands().post(command);
+}
+
+}  // namespace
+
+TEST(ui_the_step_lights_show_velocity_and_blink_a_condition) {
+    Strata &app = fresh();
+    for (int i = 0; i < 5; i++) { step_down(i); step_up(i); }
+    pump(4);
+    // Velocities, from whatever a toggled trig gets: 20, 60, 95, 120, and an accented one.
+    const int targets[4] = {20, 60, 95, 120};
+    for (int i = 0; i < 4; i++) {
+        step_field(i, StepField::velocity, targets[i] - int(step_of(0, i).velocity));
+    }
+    step_field(4, StepField::accent, 1);
+    pump(4);
+    for (int i = 0; i < 4; i++) CHECK_EQ(int(step_of(0, i).velocity), targets[i]);
+    CHECK(step_of(0, 4).flags & kStepAccent);
+    g_ms += 1;
+    pump(2);
+    CHECK_EQ(int(UiProbe::step_green(app, 0)), 1);       // soft
+    CHECK_EQ(int(UiProbe::step_green(app, 1)), 3);       // medium
+    CHECK_EQ(int(UiProbe::step_green(app, 2)), 6);       // loud
+    CHECK_EQ(int(UiProbe::step_green(app, 3)), 10);      // accent by velocity
+    CHECK_EQ(int(UiProbe::step_green(app, 4)), 10);      // accent by flag
+    CHECK_EQ(int(UiProbe::step_green(app, 5)), 0);       // empty
+
+    // A probability below 100 blinks the step: lit, then dark 200 ms later, then lit again.
+    step_field(2, StepField::probability, -50);
+    pump(2);
+    CHECK(step_of(0, 2).probability < 100);
+    int lit = 0, dark = 0;
+    for (int t = 0; t < 4; t++) {
+        g_ms += 200;
+        pump(1);
+        if (UiProbe::step_green(app, 2) == 6) lit++;
+        if (UiProbe::step_green(app, 2) == 0) dark++;
+    }
+    CHECK_EQ(lit, 2);
+    CHECK_EQ(dark, 2);
+    CHECK_EQ(int(UiProbe::step_red(app, 2)), 0);
 }

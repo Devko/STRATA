@@ -304,6 +304,13 @@ constexpr int kPerformPadIds[kPerformPads] = {1, 3, 5, 7, 9, 11, 13};
 constexpr Rgb kPerformColour[kPerformPads] = {
     {8, 8, 8}, {0, 8, 8}, {10, 0, 0}, {0, 10, 0}, {0, 0, 10}, {10, 5, 0}, {8, 0, 10},
 };
+// The STEP keys' green for a trig, by velocity: four bands the eye can tell apart on the unit's
+// 0-10 LED levels (soft, medium, loud, accent). A blank kit's 100 is "loud".
+constexpr uint8_t step_velocity_level(uint8_t velocity) {
+    return velocity >= 110 ? 10 : (velocity >= 80 ? 6 : (velocity >= 40 ? 3 : 1));
+}
+constexpr uint32_t kConditionBlinkMs = 200;     // half a blink: on 200 ms, off 200 ms
+
 constexpr const char *kPerformPadNames[kPerformPads] = {
     "FILL", "REPEAT", "MUTE", "SCENE A", "SCENE B", "THROW", "MUTATE",
 };
@@ -2483,7 +2490,12 @@ public:
 
             uint8_t green = 0, red = 0;
             if (trig) {
-                green = conditional ? 2 : 6;          // the spec's LED language
+                // The green is the step's velocity in four bands, so the groove's accents read
+                // on the keys (Roland, 2026-11-23). A condition or probability blinks it, about
+                // 2.5 times a second, instead of the dim green it used to be -- dim now means soft.
+                // An accented step is an accent whatever its velocity says.
+                green = (s.flags & kStepAccent) != 0 ? 10 : step_velocity_level(s.velocity);
+                if (conditional && ((last_ms_ / kConditionBlinkMs) & 1u) != 0) green = 0;
                 if (has_locks) red = 3;               // amber: a trig with locks
             } else if (trigless) {
                 // Locks with no note: red alone, so it reads as "something happens here but it
