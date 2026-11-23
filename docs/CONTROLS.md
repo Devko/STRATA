@@ -165,13 +165,38 @@ Printed labels (above), and the moves made while playing:
 
 ## FUNC help
 
-FUNC held for 0.6 s with nothing else pressed shows FUNC + each function key and what the
-upper pads are, over the current screen. Any key, knob or pad, or letting go of FUNC, takes it
-away, so a chord never sees it.
+FUNC held for 0.6 s with nothing else pressed shows help for **the screen that is up**
+(Roland, 2026-11-23): what A-D do there, named as on the screen and said in words (`B FMA FM
+AMOUNT` on a kick's SRC, `A SRC SOURCE TRACK` on MIXER DUCK), and the gestures that work there
+(the step page, the hold-and-press LEN, MACRO LEARN, NOTE view, SLC AUTO, rename and delete,
+KEYS on the pads ...). While FUNC is still held, **the screen keys (or LEFT/RIGHT) turn the help's
+pages**, as they turn every screen's pages; the line above the bottom line says
+`SCREEN KEYS: PAGE 1/7`. The last three pages are the same everywhere: FUNC + each function key,
+FUNC + a knob or pad, and the upper pads. Every hold starts on the screen's own page.
+
+FUNC + a screen key or LEFT/RIGHT does nothing anywhere else, and the help only takes them once
+it is up, so no chord changes meaning. Any other key, knob or pad, or letting go of FUNC, takes
+the help away, so a chord never sees it. Not while a name is being typed.
+
+The screens and their pages, from `core/help.cpp`:
+
+| Screen | Its own pages |
+| --- | --- |
+| GRID | A-D (the EDIT page they turn), steps, range and track (CLEAR PATTERN), STEP lights |
+| EDIT | its page's knobs on this machine (with NOTE view, SLC AUTO, ASR notes), EDIT keys and MACRO LEARN, steps, range and track |
+| EDIT in MACRO LEARN | what a push does now, then the page's knobs |
+| KEYS | the pads as a piano, the page's knobs, the pad lights |
+| Step page | the three field pages, what each field is |
+| MIXER | the page that is up (TRK, DCK, DUCK, DLY, DLY+, REV, REV+, ROUTE, MST, EQ) |
+| PERFORM | macros, LEARN, scenes, morph, mutate |
+| PROJECT, CHAIN, PATTERN, SETUP | one page each |
+| PROJECTS | open, rename, delete, save as; typing a name |
+| MACHINE, KIT, SAMPLES, SOUNDS, RESAMPLE, FUNC menu | one page each |
 
 ## Checked by
 
 `tests/test_ui.cpp` (every gesture above, the lights, the help, and the layout check over the
-menu and the help screen) and `tests/scenario_controls.sh` (HOME twice, the screen keys on
+menu and every page of the help on every screen; `tests/test_help.cpp` holds each row to the
+font and the line; the emulator cannot hold FUNC long enough to show the help, so no scenario does) and `tests/scenario_controls.sh` (HOME twice, the screen keys on
 PROJECT, the FUNC menu, FUNC + PROJECT and the menu's save, on the C674x build). CLEAR PATTERN
 and its undo: `tests/scenario_clear.sh`.

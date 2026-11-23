@@ -5461,6 +5461,186 @@ TEST(ui_func_held_alone_shows_the_help_and_a_chord_does_not) {
     key(ENAGA_KEY_F4);
 }
 
+// The help is for the screen that is up (Roland, 2026-11-23; core/help.hpp): its own page
+// first, and the screen keys or LEFT/RIGHT, with FUNC still held, turn the pages without
+// touching the screen's own.
+namespace {
+
+void hold_func(Strata &app) {
+    app.on_key(ENAGA_KEY_F1, true);
+    pump(700);
+    CHECK(UiProbe::func_help(app));
+}
+
+void let_go_of_func(Strata &app) {
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(!UiProbe::func_help(app));
+}
+
+// Every page of the help on the screen that is up, through the layout check, turning with the
+// screen key. Ends on the page it started on, so it can be called twice in a row.
+void check_help_layout(Strata &app, const char *where) {
+    hold_func(app);
+    for (int p = 0; p < 12; p++) {
+        check_layout(app, where);
+        if (screen_has(app, "PAGE 1/") && p > 0) break;   // round again: every page seen
+        key(ENAGA_KEY_SELECT_RIGHT);
+        CHECK(UiProbe::func_help(app));
+    }
+    let_go_of_func(app);
+}
+
+}  // namespace
+
+TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);                                   // GRID, a kick on track 1
+    hold_func(app);
+    CHECK(screen_has(app, "GRID SRC KCK"));
+    CHECK(screen_has(app, "B FMA FM AMOUNT"));
+    CHECK(screen_has(app, "SCREEN KEYS: PAGE 1/7"));
+    CHECK(!screen_has(app, "FUNC + KEY:"));
+
+    // The screen keys turn the help's pages while FUNC is held, and not GRID's knob page.
+    const int knob_page = UiProbe::param_page(app);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK(UiProbe::func_help(app));
+    CHECK(screen_has(app, "STEPS:"));
+    CHECK(screen_has(app, "PAGE 2/7"));
+    CHECK_EQ(UiProbe::param_page(app), knob_page);
+    // LEFT goes back, and round: the last page is the upper pads.
+    key(ENAGA_KEY_LEFT);
+    key(ENAGA_KEY_LEFT);
+    CHECK(UiProbe::func_help(app));
+    CHECK(screen_has(app, "UPPER PADS TRK1-7:"));
+    key(ENAGA_KEY_SELECT_LEFT);
+    key(ENAGA_KEY_SELECT_LEFT);
+    CHECK(screen_has(app, "FUNC + KEY:"));
+    CHECK(screen_has(app, "MIXER  PERFORM"));
+    CHECK_EQ(UiProbe::param_page(app), knob_page);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    let_go_of_func(app);
+    // The next hold opens on the screen's own page again.
+    hold_func(app);
+    CHECK(screen_has(app, "GRID SRC KCK"));
+    let_go_of_func(app);
+
+    // FUNC + a screen key before the help is up is still a chord that does nothing to the help.
+    app.on_key(ENAGA_KEY_F1, true);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    pump(800);
+    CHECK(!UiProbe::func_help(app));
+    app.on_key(ENAGA_KEY_F1, false);
+
+    // EDIT names its page and machine; the snare's knobs are the snare's.
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::snare));
+    pump(4);
+    key(ENAGA_KEY_F8);
+    hold_func(app);
+    CHECK(screen_has(app, "EDIT SRC SNR"));
+    CHECK(screen_has(app, "B SNP SNAPPY"));
+    CHECK(screen_has(app, "PUSH A     NOTE VIEW"));
+    let_go_of_func(app);
+
+    // MIXER: the page that is up, the duck's here.
+    mixer_page(app, 4);
+    hold_func(app);
+    CHECK(screen_has(app, "MIXER DUCK:"));
+    CHECK(screen_has(app, "A SRC SOURCE TRACK"));
+    let_go_of_func(app);
+    CHECK_EQ(UiProbe::mixer_bank(app), 4);
+
+    // PERFORM, then MACRO LEARN from it: EDIT's help says what a push does now.
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    hold_func(app);
+    CHECK(screen_has(app, "PUSH A-D   LEARN"));
+    let_go_of_func(app);
+    key(ENAGA_KEY_PUSH_B);
+    CHECK_EQ(UiProbe::macro_learn(app), 1);
+    hold_func(app);
+    CHECK(screen_has(app, "MACRO LEARN:"));
+    let_go_of_func(app);
+    key(ENAGA_KEY_CLR);                                  // LEARN ends
+    CHECK_EQ(UiProbe::macro_learn(app), -1);
+
+    // The step page (hold STEP + OK).
+    key(ENAGA_KEY_F4);
+    step_down(2);
+    key(ENAGA_KEY_OK);
+    step_up(2);
+    CHECK(UiProbe::step_page(app));
+    hold_func(app);
+    CHECK(screen_has(app, "STEP PAGE:"));
+    let_go_of_func(app);
+    key(ENAGA_KEY_CLR);
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_every_page_of_the_func_help) {
+    Strata &app = fresh();
+    worst_case_content(app);
+    key(ENAGA_KEY_F4);
+    for (int page = 0; page < kEditPages; page++) {      // GRID, on each EDIT page A-D turn
+        check_help_layout(app, "help on GRID");
+        key(ENAGA_KEY_SELECT_RIGHT);
+    }
+    for (int machine = 0; machine < int(MachineId::count); machine++) {
+        post_track(Cmd::set_machine, 0, uint8_t(machine));
+        pump(4);
+        key(ENAGA_KEY_F8);
+        for (int page = 0; page < kEditPages; page++) {
+            check_help_layout(app, machine_name(uint8_t(machine)));
+            key(ENAGA_KEY_SELECT_RIGHT);
+        }
+    }
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+    for (int page = 0; page < kMixerPageCount; page++) {
+        mixer_page(app, page);
+        check_help_layout(app, "help on MIXER");
+    }
+    shift_key(ENAGA_KEY_F7);
+    check_help_layout(app, "help on PERFORM");
+    key(ENAGA_KEY_PUSH_A);                               // MACRO LEARN
+    check_help_layout(app, "help in MACRO LEARN");
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_F4);                                   // HOME twice: KEYS
+    if (UiProbe::mode(app) != int(Mode::keys)) key(ENAGA_KEY_F4);
+    check_help_layout(app, "help on KEYS");
+    key(ENAGA_KEY_F4);
+    step_down(2);
+    key(ENAGA_KEY_OK);
+    step_up(2);
+    check_help_layout(app, "help on the STEP PAGE");
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F3);
+    for (int page = 0; page < 5; page++) {               // PROJECT CHAIN PATTERN SETUP PROJECTS
+        check_help_layout(app, "help on PROJECT");
+        key(ENAGA_KEY_SELECT_RIGHT);
+    }
+    shift_key(ENAGA_KEY_F8);
+    check_help_layout(app, "help on MACHINE");
+    shift_key(ENAGA_KEY_F8);
+    check_help_layout(app, "help on KIT");
+    shift_key(ENAGA_KEY_F2);
+    check_help_layout(app, "help on RESAMPLE");
+    shift_key(ENAGA_KEY_F3);
+    check_help_layout(app, "help on SAMPLES");
+    key(ENAGA_KEY_F8);
+    key(ENAGA_KEY_OK);                                   // a kick: SOUNDS
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+    check_help_layout(app, "help on SOUNDS");
+    shift_key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+    check_help_layout(app, "help on the FUNC menu");
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_layout_the_func_menu) {
     Strata &app = fresh();
     worst_case_content(app);
@@ -6118,6 +6298,10 @@ TEST(ui_screenshots) {
     // FUNC held alone: after 0.6 s the help over the screen (docs/CONTROLS.md, FUNC help).
     app.on_key(ENAGA_KEY_F1, true);
     write_shot(folder, "help", 800);
+    CHECK(UiProbe::func_help(app));
+    // The screen keys turn it: back three pages is FUNC + each function key, on every screen.
+    for (int i = 0; i < 3; i++) key(ENAGA_KEY_SELECT_LEFT);
+    write_shot(folder, "help_keys", 1);
     CHECK(UiProbe::func_help(app));
     app.on_key(ENAGA_KEY_F1, false);
 

@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **today's walkthrough** (2026-11-23): about 20 minutes, numbered 1-14, over
+The first part is **today's walkthrough** (2026-11-23): about 20 minutes, numbered 1-15, over
 everything merged since v0.1.0. Report back by number, for example `3 fail: reads 055`. After it
 come the controls tour from 2026-11-22 (skip what the v0.1.0 card already showed), last night's
 long walkthrough, and "Reference", the full per-milestone list with the background for each check.
@@ -120,6 +120,21 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
 - SRC page, C (LEN) halfway: it stops halfway through the file and loops back to the start with
   no gap. LEN very short (under 2 s): loops with no `STREAM LATE`.
 
+**15. Help for the screen you are on (#107, 3 min).** Hold FUNC alone on each screen below
+for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above the bottom line.
+- GRID on the kick: `GRID SRC KCK`, then `A TUN TUNE` ... `D CLK CLICK`, `PUSH A     NOTE VIEW`.
+- Still holding FUNC, tap the screen key RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
+  then `RANGE AND TRACK:`, `STEP LIGHTS:`, `FUNC + KEY:`, `FUNC + KNOB OR PAD:`, `UPPER PADS`,
+  and round to page 1. LEFT goes back. GRID's own knob page did **not** change.
+- Let go of FUNC: GRID is back. Hold again: page 1 again.
+- EDIT on track 2 (snare): `EDIT SRC SNR`, `B SNP SNAPPY`. Screen key RIGHT to ASR (without FUNC),
+  hold FUNC: `ASR  ONLY ON MNO/PLY`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
+- MIXER DUCK: `A SRC SOURCE TRACK`. PERFORM: `PUSH A-D   LEARN`. Push A (LEARN), hold FUNC:
+  `MACRO LEARN:`; CLR ends it. KEYS: `LOWER PADS WHITE KEYS`. PROJECTS: `PUSH B     RENAME`.
+- Every page legible, nothing cut off or overlapping? Anything missing you looked for? `____`
+- No emulator scenario covers this: `emulate.py` releases every key 20 M cycles (about 54 ms)
+  after pressing it, so it cannot hold FUNC for 0.6 s. The host tests draw every page.
+
 **Done.** Reply with the numbers: `all pass`, or for example `3 fail: reads 055`, `9: MAX 61.2`.
 
 ---
@@ -135,8 +150,9 @@ new items (KEYS on the pads, CLEAR PATTERN, macros, velocity, TUN) moved into th
 - [ ] **Pads name themselves.** REPEAT says `REPEAT 1/16`, SCENE A `SCENE A: STEP PICKS`, THROW
       `THROW DELAY` (FUNC + THROW `THROW REVERB`), MUTATE `MUTATE T1 <type>` and stays bright
       violet until OK (`KEPT`) or CLR (`REVERTED`).
-- [ ] **FUNC help.** Hold FUNC alone for a second: the screen lists FUNC + REC ... EDIT and the
-      upper pads. Let go: the screen is back. FUNC + a pad (a mute) never shows it.
+- [ ] **FUNC help.** Hold FUNC alone for a second: help for the screen that is up (since #107,
+      walkthrough item 15); the screen keys turn to FUNC + REC ... EDIT and the upper pads. Let
+      go: the screen is back. FUNC + a pad (a mute) never shows it.
 - [ ] **FUNC lights while held**, green. **Mode keys:** HOME green on GRID, amber in KEYS, red in
       the menu; MIXER green / PERFORM red; EDIT green / MACHINE red; PROJECT green / SAMPLES red;
       REC green on RESAMPLE, red while recording.

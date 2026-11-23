@@ -28,7 +28,9 @@ The Lofi-12 XT and CyDrums print other names on the function block; this sheet u
 The F-key labels are from Enaga's `docs/hardware.md`, taken from the original firmware's test page.
 The on-screen hints use the same names (`FUNC+EDIT: MACHINE`). Each function key's second
 printed label (REC "sampling", PROJECT "pool", HOME "system" ...) is what FUNC + that key does.
-Hold FUNC alone for a moment and the screen lists them, with what the upper pads are.
+Hold FUNC alone for a moment for help on the screen that is up: its knobs and gestures first,
+then (screen keys while FUNC is held) FUNC + each function key, FUNC + a knob or pad, and the
+upper pads.
 
 ## Modes: how to get there
 
@@ -68,7 +70,8 @@ each line means.
 <tr><td align="center"><img src="screens/mixer_eq.png" width="200" alt="MIXER, EQ"><br><sub>MIXER, EQ</sub></td><td align="center"><img src="screens/perform.png" width="200" alt="PERFORM (FUNC+MIXER)"><br><sub>PERFORM (FUNC+MIXER)</sub></td><td align="center"><img src="screens/resample.png" width="200" alt="RESAMPLE (FUNC+REC)"><br><sub>RESAMPLE (FUNC+REC)</sub></td></tr>
 <tr><td align="center"><img src="screens/project.png" width="200" alt="PROJECT"><br><sub>PROJECT</sub></td><td align="center"><img src="screens/chain.png" width="200" alt="CHAIN"><br><sub>CHAIN</sub></td><td align="center"><img src="screens/pattern.png" width="200" alt="PATTERN"><br><sub>PATTERN</sub></td></tr>
 <tr><td align="center"><img src="screens/setup.png" width="200" alt="SETUP"><br><sub>SETUP</sub></td><td align="center"><img src="screens/projects.png" width="200" alt="PROJECTS"><br><sub>PROJECTS</sub></td><td align="center"><img src="screens/menu.png" width="200" alt="FUNC menu (FUNC+HOME)"><br><sub>FUNC menu (FUNC+HOME)</sub></td></tr>
-<tr><td align="center"><img src="screens/help.png" width="200" alt="FUNC held alone"><br><sub>FUNC held alone</sub></td><td align="center"><img src="screens/mutate.png" width="200" alt="MUTATE pressed"><br><sub>MUTATE pressed</sub></td><td align="center"><img src="screens/scene.png" width="200" alt="SCENE A held"><br><sub>SCENE A held</sub></td></tr>
+<tr><td align="center"><img src="screens/help.png" width="200" alt="FUNC held alone on GRID"><br><sub>FUNC held alone (GRID)</sub></td><td align="center"><img src="screens/mutate.png" width="200" alt="MUTATE pressed"><br><sub>MUTATE pressed</sub></td><td align="center"><img src="screens/scene.png" width="200" alt="SCENE A held"><br><sub>SCENE A held</sub></td></tr>
+<tr><td align="center"><img src="screens/help_keys.png" width="200" alt="FUNC held, screen keys to FUNC + KEY"><br><sub>FUNC held, screen keys: FUNC + KEY</sub></td><td></td><td></td></tr>
 </table>
 
 ## Keys that work everywhere
@@ -91,7 +94,7 @@ each line means.
 | Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn) |
 | Pad-row keys L/R | Which 16 the STEP keys mean: step page, octave (KEYS), bank (PROJECT, CHAIN) |
 | FUNC + UP / DOWN | Copy / paste while editing; in the card lists, read again / store here |
-| FUNC held alone | Help: what FUNC + each function key does, and what the upper pads are |
+| FUNC held alone | Help for this screen: what A-D do here and its gestures. Keep holding FUNC: screen keys (or LEFT/RIGHT) turn the pages; the last three are FUNC + each function key, FUNC + a knob or pad, and the upper pads |
 
 ## Pads
 
