@@ -530,7 +530,13 @@ void Storage::step_rename() {
         if (same_name(op_from_, name_)) {
             copy_name(name_, op_to_, kNameBytes);
             settings_.set(kKeyProject, name_);
-            settings_.save();
+            const int32_t saved = settings_.save();
+            if (saved < 0) {
+                // The settings still name the old folder, so it stays: two whole copies, and the
+                // next save (which writes the settings again) puts that right.
+                finish_job(enaga::files::error_name(saved));
+                return;
+            }
         }
         begin_delete(op_from_, true, nullptr);
     }
