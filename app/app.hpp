@@ -1166,6 +1166,14 @@ public:
             page_ = (page_ + delta + 4) % 4;
             return;
         }
+        if (mode_ == Mode::machine) {
+            // Sideways across the machine grid: a column of three. The arrows are the cursor on
+            // what is drawn, and MACHINE draws machines; sideways used to walk the track, and
+            // Roland (2026-11-23) turned it expecting the next machine and changed track 7. The
+            // track is on the screen keys and the pads, as in SOUNDS.
+            walk_machine(delta * 3);
+            return;
+        }
         select(delta);                          // the page, or what the screen keys walk
     }
 
@@ -1357,12 +1365,19 @@ public:
                 notice(project_page_name(project_page_));
                 break;
             }
-            case Mode::machine:
+            case Mode::machine: {
                 // The selection keys walk the TRACK, so one hand can go along the eight of them
-                // without leaving the mode -- the same thing they do in KEYS.
+                // without leaving the mode -- the same thing they do in KEYS. Said out loud: a
+                // machine change lands on whatever track this leaves selected.
                 selected_ = (selected_ + delta + kTracks) % kTracks;
                 end_gesture();
+                char *out = notice_buffer_;
+                append(out, "TRACK ");
+                append_number(out, uint32_t(selected_) + 1);
+                *out = 0;
+                notice(notice_buffer_);
                 break;
+            }
             case Mode::resample:
                 // The selection keys walk the DESTINATION: -1 is "the file only", then the eight
                 // tracks. A track that hosts no Sampler is still offered, because which machine
@@ -3761,7 +3776,7 @@ public:
                     plays_files(selected_)
                         ? "OK: PICK SAMPLE"
                         : (sound_preset_count(engine_.machine_id(selected_)) > 0 ? "OK: SOUNDS"
-                                                                                 : "ARROWS: MACHINE TRACK"),
+                                                                                 : "ARROWS: MACHINE"),
                     7);
         canvas.text(0, 112, "FUNC+EDIT AGAIN: KITS", 7);
     }

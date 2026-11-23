@@ -39,6 +39,12 @@ the project file format or the controls.
   Saved in the kit; kits and projects from before open with the old fixed duck (track 1, 35%,
   3/40/120 ms). The delay, reverb, master and EQ pages are now three screen-key presses further on.
 
+### Changed
+
+- **MACHINE: LEFT/RIGHT now move over the machine grid** (a column of three), the way UP/DOWN do.
+  They used to change the track, so turning RIGHT for the next machine changed another track's
+  machine. The track is on the pads and the screen keys, which now say `TRACK 2` and so on.
+
 ## [0.1.0] - {{RELEASE_DATE}}
 
 The first release: STRATA on a SmplTrek running Enaga 0.2.0. Early, and released so that people

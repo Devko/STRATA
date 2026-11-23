@@ -638,8 +638,10 @@ on drums, which are not folded, TUN is simply the drum's pitch and can go to any
 
 <p><img src="screens/machine.png" width="256" alt="MACHINE for track 1"></p>
 
-`FUNC+EDIT` opens MACHINE. UP/DOWN or encoder A pick the machine, and you hear the change at
-once; LEFT/RIGHT or the screen keys move to the next track. Encoder **B** sets the track's MIDI
+`FUNC+EDIT` opens MACHINE. The arrows move over the grid of machines (UP/DOWN one, LEFT/RIGHT a
+column of three) and encoder A walks it too; you hear the change at once. The title says which
+track you are changing (`MACHINE T1`). To change another track, press its pad or use the screen
+keys, which say `TRACK 2` and so on. Encoder **B** sets the track's MIDI
 OUT channel: OFF, or 1-16. `FUNC+EDIT` again opens the kit library (section 6).
 
 ### Factory sounds: one track at a time
