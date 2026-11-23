@@ -90,13 +90,13 @@ constexpr uint8_t kMacroMasterTrack = uint8_t(kTracks);
 
 // --- scenes ---------------------------------------------------------------
 
-// One scene: a value for any subset of the 8 x 28 track parameters (16 sound, then the LFO's 4,
-// the arp's 4 and the ASR page's 4).
+// One scene: a value for any subset of the 8 x 32 track parameters (16 sound, then the LFO's 4,
+// the arp's 4, the ASR page's 4 and the OSC page's 4).
 //
 // `stored` is what makes "any tracks" work -- a scene that only touches the bass line must not
 // drag every other track's sound with it when it is morphed to. One bit per parameter, four
 // bytes per track (the third holds the LFO's and the arp's four bits each, the fourth the ASR
-// page's in its low half), and zeroed memory means a scene that
+// page's in its low half and the OSC page's in its high half), and zeroed memory means a scene that
 // stores nothing, which is what an empty scene is.
 constexpr int kSceneStoredBytes = (kKitParams + 7) / 8;
 struct Scene {
@@ -341,6 +341,10 @@ constexpr uint16_t kSectionPerformSceneArp = 5;
 // per track, the four values and then a byte whose low four bits say which are stored, which
 // is the low half of the fourth mask byte. OPTIONAL on read, like the LFO's.
 constexpr uint16_t kSectionPerformSceneAsr = 6;
+// The scenes' OSC bytes (the VA machines' WAV, OS2, SUB and DRV), laid out as the ASR section is:
+// the four values, then a byte whose low four bits say which are stored -- the HIGH half of the
+// fourth mask byte. OPTIONAL on read.
+constexpr uint16_t kSectionPerformSceneOsc = 7;
 
 // Loading is value-tolerant but structure-strict, exactly as the other three file types are: a
 // macro naming a track that does not exist is dropped, while a bad magic, an unknown version, a

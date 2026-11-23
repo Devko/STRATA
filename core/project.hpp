@@ -55,14 +55,22 @@ constexpr int kProjectPatterns = kBanks * kPatternsPerBank;   // 128
 // PERFORM.BIN carried 16 a track before the LFO existed, so the four LFO bytes travel in sections
 // of their own that an older file simply does not have. The arpeggiator's four (core/arp.hpp)
 // follow the LFO's in the same way, and in a section of their own again, and so do the four of
-// the VA machines' ASR page (attack, sustain, release, filter sustain; dsp/va.cpp).
+// the VA machines' ASR page (attack, sustain, release, filter sustain; dsp/va.cpp) and the four
+// of their OSC page (wave, OSC 2, sub, drive).
 constexpr int kKitSoundParams = 16;
 constexpr int kKitLfoParams = 4;
 constexpr int kKitLfoEnd = kKitSoundParams + kKitLfoParams;
 constexpr int kKitArpParams = 4;
 constexpr int kKitArpEnd = kKitLfoEnd + kKitArpParams;
 constexpr int kKitAsrParams = 4;
-constexpr int kKitParams = kKitArpEnd + kKitAsrParams;
+constexpr int kKitAsrEnd = kKitArpEnd + kKitAsrParams;
+constexpr int kKitOscParams = 4;
+constexpr int kKitParams = kKitAsrEnd + kKitOscParams;
+
+// What a kit from before the OSC page loads as: a saw, OSC 2 off, the sub at 102 (the 0.4 it was
+// fixed at) and no drive -- the old voice without its fixed synced-pulse bite, which the OSC
+// page's SYN zone now does properly (dsp/va.cpp).
+constexpr uint8_t kKitOscLegacy[kKitOscParams] = {0, 0, 102, 0};
 
 // How many machines a track can host, mirroring dsp/'s machine list the same way and for the
 // same reason as kKitParams: docs/SPEC.md, "Machines (v1)" -- KICK, SNARE, HAT, PERC, SAMPLE,
@@ -403,6 +411,9 @@ constexpr uint16_t kSectionKitAsr = 5;
 // (KitTrack::duck, KitDuck). Optional on read: a KIT.BIN from before it loads with the duck as it
 // was fixed before, which is what KitDuck's defaults are.
 constexpr uint16_t kSectionKitDuck = 6;
+// The VA machines' OSC page, four bytes per track (kKitOscParams: WAV OS2 SUB DRV). Optional on
+// read: a KIT.BIN from before it loads kKitOscLegacy on every track.
+constexpr uint16_t kSectionKitOsc = 7;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

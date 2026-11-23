@@ -60,9 +60,14 @@ constexpr int kArpFirst = kParams + kLfoParams;
 // always had, which is what an older kit loads as (core/project.hpp, kSectionKitAsr).
 constexpr int kAsrParams = 4;
 constexpr int kAsrFirst = kArpFirst + kArpParams;
-constexpr int kTrackParams = kAsrFirst + kAsrParams;
+// And an eighth: OSC, the VAs' oscillators -- WAV OS2 SUB DRV (dsp/va.cpp). Sound, like ASR, so
+// the prepare memo compares it too. A kit from before it loads the values in
+// core/project.hpp's kKitOscLegacy: a saw with the old fixed sub under it.
+constexpr int kOscParams = 4;
+constexpr int kOscFirst = kAsrFirst + kAsrParams;
+constexpr int kTrackParams = kOscFirst + kOscParams;
 
-enum class Page : uint8_t { src = 0, fltr = 1, amp = 2, fx = 3, lfo = 4, arp = 5, asr = 6 };
+enum class Page : uint8_t { src = 0, fltr = 1, amp = 2, fx = 3, lfo = 4, arp = 5, asr = 6, osc = 7 };
 
 constexpr int page_first(Page page) { return int(page) * kParamsPerPage; }
 static_assert(page_first(Page::lfo) == kParams, "the LFO page is the four bytes after the sound");
@@ -71,10 +76,12 @@ static_assert(page_first(Page::arp) == kArpFirst, "the ARP page is the four byte
 static_assert(kArpParams == kParamsPerPage, "the arp is one page of four");
 static_assert(page_first(Page::asr) == kAsrFirst, "the ASR page is the four bytes after the arp");
 static_assert(kAsrParams == kParamsPerPage, "ASR is one page of four");
+static_assert(page_first(Page::osc) == kOscFirst, "the OSC page is the four bytes after ASR");
+static_assert(kOscParams == kParamsPerPage, "OSC is one page of four");
 
-// All 28 of a track's parameters, as stored in a kit and overridden by locks. Values are 0-127;
+// All 32 of a track's parameters, as stored in a kit and overridden by locks. Values are 0-127;
 // each machine and the chain map them to physical units themselves, so the sequencer never
-// needs to know what a parameter means. Machines read v[0..kParams) and the ASR page only.
+// needs to know what a parameter means. Machines read v[0..kParams), the ASR page and the OSC page only.
 struct TrackParams {
     uint8_t v[kTrackParams];
 
