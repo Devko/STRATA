@@ -179,7 +179,16 @@ towards it. Capture the scene again, or clear its ASR knobs.
 
 **A pad in three moves:** on the PLY track, ASR page: SUS to about 70%, ATK to about `400MS`, REL
 to about `2.0S`. Then on the step page give a chord step a LEN of `16 STP`: it holds for the whole
-bar and fades into the next. On VA MONO, LEN only counts once SUS is above 0, so every bass line
+bar and fades into the next. Or queue **A05 PAD** to hear one ready-made.
+
+A05's pad is in the pattern's **locks**, not the kit, so A01-A04's chord stab stays as it is:
+each of its four chords locks ATK `400MS`, SUS 70%, REL `2.0S`, a longer DEC, more DET, a darker
+CUT, a lower LVL and more reverb. A turned knob on a locked parameter is heard until the next
+chord; to make a change stick, clear that lock on the four chord steps (hold the step, push the
+knob), and the kit's value takes over. The reverb is in ROOM mode for the whole factory project;
+switch it to HALL (MIXER, `REV+`, A) for the bigger tail the pad was made for.
+
+On VA MONO, LEN only counts once SUS is above 0, so every bass line
 written before keeps its decays; a **slid** step carries the held note on into the next pitch
 rather than letting it go.
 
@@ -285,7 +294,7 @@ reopens whichever was open last.
 This walks through the factory project, which is what a first start and every new project
 contain. It takes about fifteen minutes.
 
-**What is in it.** Bank A holds four patterns in C minor at 130 BPM:
+**What is in it.** Bank A holds five patterns in C minor at 130 BPM:
 
 | Slot | Name | What it is |
 | --- | --- | --- |
@@ -293,6 +302,7 @@ contain. It takes about fifteen minutes.
 | A02 | GROOVE+ | The same beat developing: a kick pickup every fourth bar, a hat roll, a clap on FILL, a 12-step perc line and a 7-step loop against the 16 |
 | A03 | BREAK | Kick and bass out; long dub chords, a perc ticking at 35% probability |
 | A04 | PEAK | Everything up: ratcheted hats, an acid bass line, a rave stab, kick and clap rolls on FILL |
+| A05 | PAD | Held chords over a quiet beat: Cm9, Abmaj7, Ebmaj7 and Gm7, a bar each, swelling in and ringing into the next. The sound of the [ASR page](#held-notes-the-asr-page) |
 
 It also ships a chain (GROOVE x2, GROOVE+ x2, BREAK, PEAK x2, GROOVE+, about two minutes) that
 starts **off**, eight mute states, and scenes 2-4: **DUB** (chord, rim, loop and clap pushed into

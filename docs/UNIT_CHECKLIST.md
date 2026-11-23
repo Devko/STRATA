@@ -93,6 +93,8 @@ From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c
       Emulator peak, cl6x `________ %`
 - [ ] The same with `ENAGA_TI_CGT=none tests/scenario_factory.sh` (GCC only).
       Emulator peak, GCC `________ %`
+- [ ] `tests/scenario_pad.sh` (new: queues A05 PAD, held chords all the time) with cl6x and GCC
+      only; record both in docs/BUDGET.md, "A05 PAD". Peak `____ %` / `____ %`
 - [ ] `tests/scenario_midi.sh` (new: track 1 to MID on the running beat, both STOPs) passes with
       cl6x and GCC only. It is part of E1's `tools/scenarios.sh` too. Peak `____ %` / `____ %`
 - [ ] **E1.** `tools/scenarios.sh` (every scenario) passes, with cl6x and with GCC only, on main
@@ -652,6 +654,13 @@ so this is the first time it is heard. Play A01 GROOVE.
 - [ ] **A pad.** SUS to about 70%, ATK to about `400MS`, REL to about `2.0S`, FSU up a little. Hold
       a STEP (a chord step), step page, LEN to `16 STP`: the chord swells in, holds for the bar
       and fades into the next. Line reads `HOLDS: PAD OR LEN`. No clicks at the start or the end.
+- [ ] **A05 PAD** (a NEW project, or a card without one; an older project keeps its own bank A).
+      PROJECT + STEP 5: at the end of the bar, a soft beat under four held chords, Cm9, Abmaj7,
+      Ebmaj7, Gm7, a bar each. Each chord swells in over about half a second, holds, and rings
+      into the next; the notes two chords share carry on rather than restarting. No clicks at a
+      chord change, no note jumping to another pitch, no `GUARD`. Is the pad level right against
+      the kick? Then MIXER, `REV+`, A to HALL: better or worse? STOP, PLAY, 60 s,
+      **MAX `________ %`** (A05) `________`
 - [ ] **KEYS on the pads** (HOME twice) on track 7: hold a chord on the pads for five seconds: it
       holds at the SUS level the whole time and fades over REL when let go. Let go of one note of
       three: only that one fades.
@@ -852,6 +861,7 @@ Enaga's menu and start STRATA6.
 | U1 A01 GROOVE MAX, 60 s (3), and ratio to E1 | |
 | A03 BREAK MAX, 60 s (3b) | |
 | A04 PEAK MAX, 60 s (3b) | |
+| A05 PAD MAX, 60 s (13k) | |
 | GRAIN on track 8 MAX (8) | |
 | U3 GRAIN on the take, DEN/SPR 127: PIT 64 / PIT 127 (8b) | |
 | U5 96 kHz WAV load time, 15 s and 30 s (13b) | |
@@ -2003,6 +2013,9 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
 - [ ] **A04 PEAK**: 16th hats with ratchets, an acid line with slides and accents, the 5TH OCT rave
       stab. Hold FILL for the kick and clap rolls. The highest-load factory pattern: read LOAD
       and MAX here.
+- [ ] **A05 PAD**: four held chords, a bar each, swelling in and ringing into the next, over a soft
+      beat. The pad is the pattern's locks; the kit's chord is still A01's stab. Up to six chord
+      voices sound all the time, so read LOAD and MAX here too.
 - [ ] **The chain**: the FUNC menu's CHAIN row (FUNC+HOME) turns it on. A01 x2, A02 x2, A03, A04 x2, A02, then loops.
       It ships OFF on purpose, so PLAY on a fresh project jams on A01 rather than walking off.
 - [ ] **PERFORM, VALUE**: morphs from the kit (scene 1) to DUB (scene 2): chord, rim and blips into
