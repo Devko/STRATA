@@ -1498,28 +1498,23 @@ Freezing A01's chord track saves about **7 points at the peaks and 0.6-0.7 on av
 stabs sound for a fraction of each bar, so the saving lands where they do. Recording the take
 costs about 0.3-0.4 points while it runs.
 
-The held pad is the case freezing is for. `scenario_freeze.sh --pad` against `--pad --baseline`
-on Roland's PC (cl6x 8.5.0.LTS, PR #110 head 8d61561, all four runs OK, no overruns): freezing
-A05's chord track **halves the load, 20.3% to 10.1% average and 26.9% to 15.7% max**, about 10
-points, close to the estimate of 12 above. Eight half-second windows a run, avg/max %:
+The held pad is the case freezing is for. `scenario_freeze.sh` on Roland's PC (cl6x, PR #115 head
+da99883, 8.2 G cycles a run, all four runs OK, no overruns), four bars from the second whole bar
+after the freeze or unfreeze, one pass of A05's four chords, avg/max % a bar:
 
-| Run | avg | max | windows |
+| Run | avg | max | bars |
 | --- | --- | --- | --- |
-| A05 live (`--pad --baseline`) | 20.27% | 26.9% | 20.8/24.1 18.5/20.9 19.9/25.1 18.4/21.0 21.3/24.6 20.3/22.7 21.7/26.9 21.3/23.8 |
-| A05, track 7 frozen (`--pad`) | 10.09% | 15.7% | 10.2/12.8 9.1/11.5 10.5/15.7 10.7/14.2 11.0/14.2 9.3/12.6 9.7/12.7 10.2/15.7 |
-| A01 live (`--baseline`) | 14.16% | 26.2% | 14.4/26.2 15.2/25.3 12.7/18.8 13.5/24.7 15.5/25.6 15.0/23.7 12.8/24.4 |
-| A01, track 7 frozen | 13.44% | 19.1% | 13.6/19.0 14.2/18.4 13.3/17.2 12.8/19.1 13.3/17.1 14.2/18.4 13.3/16.6 12.8/17.2 |
+| A05 live (`--pad --baseline`) | 21.23% | 26.9% | 21.4/26.9 21.5/26.9 20.4/25.4 21.6/26.9 |
+| A05, track 7 frozen (`--pad`) | 10.10% | 15.7% | 9.9/15.7 10.1/15.7 10.3/15.7 10.1/15.7 |
+| A01 live (`--baseline`) | 14.22% | 26.4% | 14.1/25.5 14.3/25.6 14.3/26.4 14.2/26.2 |
+| A01, track 7 frozen | 13.45% | 19.1% | 13.4/18.4 13.4/18.4 13.5/19.1 13.5/19.1 |
 
-**These figures are provisional.** They are #110's half-second windows, and the live and frozen
-runs did not cover the same bars: the live A05 windows were the first two passes of bars after
-the pattern switch, the frozen ones whichever bars followed the freeze. At #114 (0ca2bcf) the
-same `--pad` run read 10.09% / 15.7% again, but `--pad --baseline` read 17.29% / 25.0%: its
-windows began right after the unfreeze, while the chord track was silent until the next bar's
-chord and had no release tails, so that live figure is low. The bar-aligned lines (this section's
-first paragraph) are the comparison to record; they have not run yet. The A01 baseline has seven
-windows because #110's script dropped the first after PLAY. The peak
-since boot is 26-27% in every run, because it includes the bars before the freeze. GCC-only
-figures were not taken (cl6x ships).
+Freezing A05's held chord **halves the load: 11.1 points off the average and 11.2 off the max**,
+close to the estimate of 12. Freezing A01's stabs saves 0.8 on average and 7.3 at the peaks. The
+bars spread by at most 1.1 points, so these compare like with like. Earlier readings with
+half-second windows (#110: A05 live 20.27%, #114: 17.29%) covered different bars in the live and
+frozen runs and are superseded. The peak since boot is 26-27% in every run, because it includes
+the bars before the freeze. GCC-only figures were not taken (cl6x ships).
 
 ### Later milestones
 
