@@ -217,6 +217,35 @@ constexpr SoundPreset kFmPresets[] = {
     {"GLASS", {56, 104, 45, 20}, FLAT, {85, 110, 70, 92}, NO_ASR, {20, 64, 50, 13}},
 };
 
+// --- GRAIN: POS SIZ DEN SPR / PIT SHP DEC LVL / ATK SUS REL --- / SCN PSP (dsp/grain.cpp) ----
+// POS and PIT are never written (sound_preset_writes): where in YOUR sample the cloud reads, and
+// the key it is tuned to, belong to the sample, not to the sound. The 0 and 64 here are only
+// placeholders. Levels: a sustained cloud of a normalised sample near the VA POLY pads.
+constexpr SoundPreset kGrainPresets[] = {
+    // The all-rounder: 100 ms grains, four in the air, 70 ms of spray, a hair of detune, held.
+    // Where to start with any sample.
+    {"CLOUD", {0, 84, 104, 48}, FLAT, {64, 0, 127, 118}, {20, 0, 40, 0}, {0, 24, 0, 0}},
+    // A pad: long grains, little spray, a slow swell that holds while the key or LEN does and
+    // fades over three seconds.
+    {"PAD", {0, 100, 104, 26}, FLAT, {64, 0, 127, 124}, {70, 127, 85, 0}, {0, 20, 0, 0}},
+    // A freeze: the moment at POS held for ever -- long grains, dense, almost no spray.
+    {"FREEZE", {0, 108, 120, 6}, FLAT, {64, 0, 127, 108}, {40, 0, 90, 0}, {0, 10, 0, 0}},
+    // A shimmer: the pad with a third of its grains an octave up, a longer release.
+    {"SHIMMR", {0, 100, 112, 30}, FLAT, {64, 10, 127, 124}, {80, 120, 100, 0}, {0, 104, 0, 0}},
+    // A drift: a slow scan through the sample (7% of real time) under a wide spray and detune.
+    // It never repeats; lock POS per bar to give it a shape.
+    {"DRIFT", {0, 96, 110, 60}, FLAT, {64, 0, 127, 112}, {60, 0, 80, 0}, {24, 30, 0, 0}},
+    // A stretch: the sample at half speed and its own pitch. A loop at half tempo, or a voice
+    // drawn out.
+    {"STRTCH", {0, 90, 96, 3}, FLAT, {64, 0, 127, 112}, {0, 0, 0, 0}, {62, 0, 0, 0}},
+    // A stutter: plucked 50 ms grains with gaps between them, half a second long. Put it on
+    // every step and lock POS.
+    {"STUTTR", {0, 70, 20, 0}, FLAT, {64, 90, 74, 116}, NO_ASR, NO_OSC},
+    // Chops: short percussive grains, a little longer than a step at 120, for rhythmic slicing
+    // with POS locks.
+    {"CHOPS", {0, 56, 40, 2}, FLAT, {64, 127, 66, 116}, NO_ASR, NO_OSC},
+};
+
 #undef FLAT
 #undef NO_ASR
 #undef NO_OSC
@@ -242,6 +271,7 @@ Bank bank_for(uint8_t machine) {
         case MachineId::wave_mono: return bank(kWaveMonoPresets);
         case MachineId::wave_poly: return bank(kWavePolyPresets);
         case MachineId::fm: return bank(kFmPresets);
+        case MachineId::grain: return bank(kGrainPresets);
         default: return {nullptr, 0};
     }
 }
@@ -250,6 +280,8 @@ constexpr uint32_t kSrcFltrAmp = 0x0FFFu;                       // params 0-11
 constexpr uint32_t kAsrBits = 0xFu << kSoundAsrFirst;           // params 24-27
 constexpr uint32_t kOscBits = 0xFu << kSoundOscFirst;           // params 28-31
 constexpr int kHatChoke = 10;
+constexpr int kGrainPos = 0;
+constexpr int kGrainPit = 8;
 
 static_assert(kSoundOscFirst + 4 == kKitParams, "the OSC page is the last four kit bytes");
 
@@ -273,6 +305,8 @@ uint32_t sound_preset_writes(uint8_t machine) {
         case MachineId::wave_mono:
         case MachineId::wave_poly:
         case MachineId::fm: return kSrcFltrAmp | kAsrBits | kOscBits;
+        case MachineId::grain:
+            return (kSrcFltrAmp | kAsrBits | kOscBits) & ~(1u << kGrainPos) & ~(1u << kGrainPit);
         default: return 0;
     }
 }

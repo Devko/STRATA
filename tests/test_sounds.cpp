@@ -44,7 +44,8 @@ TEST(sounds_every_machine_that_makes_sound_from_knobs_has_a_list_and_the_rest_no
         const bool has = id == MachineId::kick || id == MachineId::snare || id == MachineId::hat ||
                          id == MachineId::perc || id == MachineId::va_mono ||
                          id == MachineId::va_poly || id == MachineId::wave_mono ||
-                         id == MachineId::wave_poly || id == MachineId::fm;
+                         id == MachineId::wave_poly || id == MachineId::fm ||
+                         id == MachineId::grain;
         CHECK_EQ(sound_preset_count(uint8_t(m)) > 0, has);
         CHECK_EQ(sound_preset_writes(uint8_t(m)) != 0, has);
         // AS WAS and at most two pages of the SOUNDS list, which scrolls (the VAs have more).
