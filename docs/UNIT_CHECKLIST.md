@@ -175,6 +175,8 @@ From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c
       Emulator peak, GCC `________ %`
 - [ ] `tests/scenario_pad.sh` (new: queues A05 PAD, held chords all the time) with cl6x and GCC
       only; record both in docs/BUDGET.md, "A05 PAD". Peak `____ %` / `____ %`
+- [ ] `tests/scenario_sounds.sh` (new: SOUNDS on the kick track, loads 808 and PUNCH while
+      playing, then AS WAS) passes with cl6x. Peak `____ %`
 - [ ] `tests/scenario_midi.sh` (new: track 1 to MID on the running beat, both STOPs) passes with
       cl6x and GCC only. It is part of E1's `tools/scenarios.sh` too. Peak `____ %` / `____ %`
 - [ ] **E1.** `tools/scenarios.sh` (every scenario) passes, with cl6x and with GCC only, on main
@@ -917,6 +919,28 @@ New 2026-11-22: a file the sample memory cannot hold streams from the card. Put 
 - [ ] A fifth streamed track says `STREAMS FULL`.
 - [ ] Pull the card while it streams: silence and `STREAM LATE`, no crash. Card back in: it
       streams again after the reload.
+
+## 15e. Factory sounds: SOUNDS (4 min)
+
+New 2026-11-23: a short list of ready-made sounds for each machine that makes its sound from
+knobs (KICK, SNARE, HAT, PERC, VA MONO, VA POLY), loaded into one track only. Fresh project,
+A01 playing.
+
+- [ ] EDIT on track 1 (KICK), OK: `SOUNDS T1 KCK` opens, with `909  NOW` marked (the factory
+      kick is the list's first sound).
+- [ ] DOWN, OK: the kick is the 808 straight away, the rest of the beat untouched. Try each one
+      while it plays: no click or dropout at the switch? `________` Any level jump worth fixing?
+      `________`
+- [ ] Pan and sends survive: set track 1's PAN hard left in EDIT, open SOUNDS, load DEEP. Still
+      hard left.
+- [ ] UP to `AS WAS`, OK: the kick you had before opening the list is back, exactly.
+- [ ] With SOUNDS open, the screen keys L/R move to the next track: the title follows
+      (`T2` ...) and the list is that machine's.
+- [ ] Track 6 (BASS), DRONE: held for the step's LEN, then a long release. Track 7 (CHORD), PAD:
+      the same swell and tail as A05. Read LOAD with both held `________ %`.
+- [ ] MACHINE (F1+EDIT) shows `OK: SOUNDS` on a KICK track; OK there opens the list too. On a
+      SAMPLE track OK still opens the sample browser.
+- [ ] Load a sound, save, power cycle: it is still the loaded sound.
 
 ## 16. Six voices: the STRATA6 app (4 min)
 
@@ -2102,6 +2126,9 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
 - [ ] **A05 PAD**: four held chords, a bar each, swelling in and ringing into the next, over a soft
       beat. The pad is the pattern's locks; the kit's chord is still A01's stab. Up to six chord
       voices sound all the time, so read LOAD and MAX here too.
+- [ ] **SOUNDS** (new 2026-11-23): OK in EDIT on any KICK, SNARE, HAT, PERC or VA track lists
+      ready-made sounds for that machine; OK loads one into that track only, AS WAS puts back
+      what it had. Section 15e.
 - [ ] **The chain**: the FUNC menu's CHAIN row (FUNC+HOME) turns it on. A01 x2, A02 x2, A03, A04 x2, A02, then loops.
       It ships OFF on purpose, so PLAY on a fresh project jams on A01 rather than walking off.
 - [ ] **PERFORM, VALUE**: morphs from the kit (scene 1) to DUB (scene 2): chord, rim and blips into

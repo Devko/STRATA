@@ -4,6 +4,7 @@
 #include "factory.hpp"
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
+#include "sounds.hpp"      // Cmd::sound_preset: the factory sounds
 #include "tuning.hpp"      // a knob click in NOTE view: tune_step
 
 #include <enaga/app.hpp>
@@ -43,6 +44,7 @@ static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first
                   kFactoryAmp == page_first(Page::amp) && kFactoryFx == page_first(Page::fx) &&
                   kFactoryAsr == page_first(Page::asr),
               "core/factory.hpp's page layout and dsp/track.hpp's have diverged");
+static_assert(kSoundAsrFirst == kAsrFirst, "core/sounds.hpp's ASR page and dsp/track.hpp's have diverged");
 
 static_assert(kKitParams == kTrackParams && kKitSoundParams == kParams &&
                   kKitLfoParams == kLfoParams && kKitArpParams == kArpParams &&
@@ -1048,6 +1050,40 @@ void Engine::apply(const Command &command) {
                 effective_[track].v[command.a] = clamp_u8(value);
             }
             break;
+
+        case Cmd::sound_preset: {
+            // core/sounds.hpp. Main context picks, the audio side writes, as for set_param --
+            // into the kit's copy here, mirrored into effective_ so the sound changes in this
+            // block, with perform_dirty_ so the per-block copy does not put the old one back.
+            if (command.b == kSoundPresetKeep) {
+                sound_back_ = params_[track];
+                sound_back_track_ = track;
+                break;
+            }
+            const uint8_t machine = machine_id_[track];
+            uint8_t *bytes = params_[track].v;
+            if (command.b == kSoundPresetBack) {
+                if (sound_back_track_ != track) {
+                    status_.bump_refused();
+                    break;
+                }
+                const uint32_t mask = sound_preset_writes(machine);
+                for (int p = 0; p < kTrackParams; p++) {
+                    if ((mask >> p) & 1u) bytes[p] = sound_back_.v[p];
+                }
+            } else if (command.a != machine || !sound_preset_apply(machine, command.b, bytes)) {
+                // Picked for a machine the track no longer hosts, or no such preset.
+                status_.bump_refused();
+                break;
+            }
+            const uint32_t locked = locked_[track];
+            for (int p = 0; p < kTrackParams; p++) {
+                // A lock on the current step still wins until the next step, as for a knob.
+                if ((locked >> p & 1u) == 0) effective_[track].v[p] = bytes[p];
+            }
+            perform_dirty_ = true;
+            break;
+        }
 
         case Cmd::set_slice_mode: {
             const uint8_t mode = command.a == kSliceAuto ? kSliceAuto : kSliceEqual;

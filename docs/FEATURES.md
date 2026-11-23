@@ -167,6 +167,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Damaged files refused, never crash | v0.1.0 | ○ (M4) | Card pulled mid-save not tried on the unit |
 | Factory project: 130 BPM C minor kit, A01-A04, chain, 3 scenes, 3 macros, 8 mute states | v0.1.0 | ✔ A01 plays; ◐ the rest (3b) | Track 8 plays a placeholder until given a sample |
 | Factory pattern A05 PAD: held VA POLY chords from the ASR page, in the pattern's locks | unreleased | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
+| Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 39 ready-made sounds into one drum or VA track, AS WAS puts it back | unreleased | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
 
 ---
 

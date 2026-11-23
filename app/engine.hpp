@@ -493,6 +493,11 @@ private:
     // The kit: a track's parameters as stored, with no locks applied.
     TrackParams params_[kTracks] = {};
 
+    // `Cmd::sound_preset`'s memory: one track's sound as it was when the SOUNDS list opened, so
+    // its AS WAS row can put it back. -1 when nothing is remembered.
+    TrackParams sound_back_ = {};
+    int sound_back_track_ = -1;
+
     // What the machines and chains are actually prepared from: the kit with the CURRENT step's
     // parameter locks written over it.
     //

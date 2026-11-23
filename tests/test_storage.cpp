@@ -565,6 +565,11 @@ const Expect kTable[] = {
     // MIDI OUT's channel per track is PROJECT.BIN's fifth section: cabling, not a sound, so not
     // the kit (core/project.hpp).
     {Cmd::set_midi_out, kDirtyProject, "set_midi_out"},
+
+    // A factory sound writes a track's parameters (core/sounds.hpp), as a knob does. The keep
+    // form writes nothing, but one row covers the command: dirtying the kit for it costs a
+    // rewrite of KIT.BIN at most.
+    {Cmd::sound_preset, kDirtyKit, "sound_preset"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:
