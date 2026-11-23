@@ -45,7 +45,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | FUNC menu (FUNC+HOME): save, save as, open, new, reload, kits, sample reload, track speed, chain, song/loop, auto-fill, quantize | v0.1.0 | ◐ ("The new controls") | |
 | **CLEAR PATTERN** in the FUNC menu: every track in one press, OK twice, one undo | #86 | ○ ("Today's walkthrough") | Keeps sounds, lengths, speeds and swing |
 | FUNC held alone shows a help screen | v0.1.0 | ○ ("The new controls") | |
-| **Help for the screen that is up**: its knobs in words and its gestures, every screen and EDIT/MIXER page; screen keys turn its pages while FUNC is held | #106 | ○ ("Today's walkthrough", 15) | Text only; it says what the build does, so a changed gesture changes `core/help.cpp` too |
+| **Help for the screen that is up**: its knobs in words and its gestures, every screen and EDIT/MIXER page; screen keys turn its pages while FUNC is held | #107 | ○ ("Today's walkthrough", 15) | Text only; it says what the build does, so a changed gesture changes `core/help.cpp` too |
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ ("The new controls") | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
 | Arrow-key navigation model (UP/DOWN rows, LEFT/RIGHT sideways, OK picks, CLR back) | v0.1.0 | ○ (5, "Arrow keys") | |

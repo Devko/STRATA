@@ -120,7 +120,7 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
 - SRC page, C (LEN) halfway: it stops halfway through the file and loops back to the start with
   no gap. LEN very short (under 2 s): loops with no `STREAM LATE`.
 
-**15. Help for the screen you are on (#106, 3 min).** Hold FUNC alone on each screen below
+**15. Help for the screen you are on (#107, 3 min).** Hold FUNC alone on each screen below
 for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above the bottom line.
 - GRID on the kick: `GRID SRC KCK`, then `A TUN TUNE` ... `D CLK CLICK`, `PUSH A     NOTE VIEW`.
 - Still holding FUNC, tap the screen key RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
@@ -150,7 +150,7 @@ new items (KEYS on the pads, CLEAR PATTERN, macros, velocity, TUN) moved into th
 - [ ] **Pads name themselves.** REPEAT says `REPEAT 1/16`, SCENE A `SCENE A: STEP PICKS`, THROW
       `THROW DELAY` (FUNC + THROW `THROW REVERB`), MUTATE `MUTATE T1 <type>` and stays bright
       violet until OK (`KEPT`) or CLR (`REVERTED`).
-- [ ] **FUNC help.** Hold FUNC alone for a second: help for the screen that is up (since #106,
+- [ ] **FUNC help.** Hold FUNC alone for a second: help for the screen that is up (since #107,
       walkthrough item 15); the screen keys turn to FUNC + REC ... EDIT and the upper pads. Let
       go: the screen is back. FUNC + a pad (a mute) never shows it.
 - [ ] **FUNC lights while held**, green. **Mode keys:** HOME green on GRID, amber in KEYS, red in
