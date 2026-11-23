@@ -155,6 +155,10 @@ public:
     Capture &capture_for_write() { return capture_; }
     bool muted(int track) const { return muted_[track]; }
     float level(int track) const { return mix_[track].level; }
+    // The sidechain duck as the mixer runs it: each track's depth (0 for the source) and which
+    // track fires it. The kit's bytes are in project().kit.
+    float duck_depth(int track) const { return mix_[track].duck; }
+    int duck_source() const { return duck_source_; }
     const InsertChain &chain(int track) const { return mixer_.chain(track); }
 
     // The master and send settings, for the UI to draw. Edits still go through the ring.

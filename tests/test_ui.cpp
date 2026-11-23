@@ -2146,7 +2146,7 @@ TEST(ui_a_machine_id_this_build_does_not_have_is_refused) {
 void mixer_page(Strata &app, int page) {
     app.on_key(ENAGA_KEY_F7, true);
     app.on_key(ENAGA_KEY_F7, false);
-    for (int guard = 0; guard < 12 && UiProbe::mixer_bank(app) != page; guard++) {
+    for (int guard = 0; guard < 16 && UiProbe::mixer_bank(app) != page; guard++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
     }
@@ -2177,9 +2177,9 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     mixer_page(app, 0);
     CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
 
-    // The selection keys page through: two pages of faders, then DLY, DLY+, REV, REV+, ROUTE,
-    // MST and EQ.
-    CHECK_EQ(kMixerPageCount, 9);
+    // The selection keys page through: two pages of faders, two of duck depths and the duck's
+    // own page, then DLY, DLY+, REV, REV+, ROUTE, MST and EQ.
+    CHECK_EQ(kMixerPageCount, 12);
     for (int i = 1; i < kMixerPageCount; i++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
@@ -2315,7 +2315,7 @@ TEST(ui_func_and_step_5_to_7_put_a_master_eq_band_on_a_macro) {
 TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
     Strata &app = fresh();
     Engine &engine = app_engine();
-    mixer_page(app, 2);                                // DLY
+    mixer_page(app, kMixerDelayPage);  // DLY
 
     // B is the feedback. Two counts per click, so ten clicks is twenty counts.
     const int before = int(engine.project().settings.sends[int(SendField::delay_feedback)]);
@@ -2348,7 +2348,7 @@ TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
 TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
     Strata &app = fresh();
     Engine &engine = app_engine();
-    mixer_page(app, 6);                                // ROUTE
+    mixer_page(app, kMixerHallPage + 1);  // ROUTE
 
     // A is the ping-pong switch: either direction throws it, because a switch is not a knob.
     CHECK(engine.sends().delay_ping_pong);
@@ -2395,7 +2395,7 @@ bool screen_has(Strata &app, const char *wanted) {
 TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     Strata &app = fresh();
     Engine &engine = app_engine();
-    mixer_page(app, 3);                                // DLY+
+    mixer_page(app, kMixerLongPage);  // DLY+
     CHECK(!engine.sends().delay_long);
     app.on_encoder(0, +1);
     pump(2);
@@ -2431,7 +2431,7 @@ TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     pump(2);
     CHECK(engine.sends().delay_diffusion < diffusion);
 
-    mixer_page(app, 5);                                // REV+
+    mixer_page(app, kMixerHallPage);  // REV+
     CHECK(!engine.sends().reverb_hall);
     app.on_encoder(0, +1);
     pump(2);
@@ -2449,14 +2449,14 @@ TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     CHECK(!engine.sends().reverb_hall);
     CHECK(screen_has(app, "ROOM"));
 
-    mixer_page(app, 6);                                // ROUTE: the LONG delay's low cut on C
+    mixer_page(app, kMixerHallPage + 1);  // ROUTE: the LONG delay's low cut on C
     const float low_cut = engine.sends().delay_low_cut_hz;
     app.on_encoder(2, +6);
     pump(2);
     CHECK(engine.sends().delay_low_cut_hz > low_cut);
 
     // Push A on either page throws its switch too, both ways.
-    mixer_page(app, 3);
+    mixer_page(app, kMixerLongPage);
     CHECK(engine.sends().delay_long);
     app.on_key(ENAGA_KEY_PUSH_A, true);
     app.on_key(ENAGA_KEY_PUSH_A, false);
@@ -2466,7 +2466,7 @@ TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     app.on_key(ENAGA_KEY_PUSH_A, false);
     pump(2);
     CHECK(engine.sends().delay_long);
-    mixer_page(app, 5);
+    mixer_page(app, kMixerHallPage);
     app.on_key(ENAGA_KEY_PUSH_A, true);
     app.on_key(ENAGA_KEY_PUSH_A, false);
     pump(2);
@@ -2477,7 +2477,7 @@ TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     CHECK(!engine.sends().reverb_hall);
 
     // Back to classic for whoever comes next.
-    mixer_page(app, 3);
+    mixer_page(app, kMixerLongPage);
     app.on_encoder(0, -1);
     pump(2);
     CHECK(!engine.sends().delay_long);
@@ -5706,8 +5706,12 @@ TEST(ui_screenshots) {
 
     mixer_page(app, 0);
     write_shot(folder, "mixer");
-    mixer_page(app, 2);
+    mixer_page(app, kMixerDelayPage);
     write_shot(folder, "mixer_dly");
+    mixer_page(app, kMixerDuckDepthPage);
+    write_shot(folder, "mixer_dck");
+    mixer_page(app, kMixerDuckPage);
+    write_shot(folder, "mixer_duck");
     mixer_page(app, kMixerPageCount - 2);
     write_shot(folder, "mixer_mst");
     mixer_page(app, kMixerEqPage);
@@ -5887,4 +5891,52 @@ TEST(ui_keys_lights_the_pads_as_a_keyboard_and_func_keeps_the_pad_jobs) {
     CHECK(std::strstr(UiProbe::notice(app), "AT BAR") != nullptr);
     key(ENAGA_KEY_F4);
     pump(2);
+}
+
+// The sidechain duck's three MIXER pages: a depth per track, then source, attack, hold, release.
+TEST(ui_the_duck_pages_set_each_tracks_depth_the_source_and_the_times) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    const Kit &kit = engine.project().kit;
+
+    // DCK 5-8: C is track 7's depth, one percent a click.
+    mixer_page(app, kMixerDuckDepthPage + 1);
+    const int depth = int(kit.tracks[6].duck);
+    app.on_encoder(2, +5);
+    pump(2);
+    CHECK_EQ(int(kit.tracks[6].duck), depth + 5);
+    CHECK(app_storage().dirty());
+    CHECK(std::strcmp(UiProbe::notice(app), "T7 DUCK DEPTH") == 0);
+    CHECK(screen_has(app, "MIXER DCK 5-8"));
+    app.on_encoder(2, -5);
+    pump(2);
+    CHECK_EQ(int(kit.tracks[6].duck), depth);
+
+    // DUCK: A walks the source a track a click, D the release five milliseconds a click.
+    mixer_page(app, kMixerDuckPage);
+    const int source = int(kit.duck.source);
+    const int release = int(kit.duck.release);
+    app.on_encoder(0, +1);
+    app.on_encoder(3, -2);
+    pump(2);
+    CHECK_EQ(int(kit.duck.source), source + 1);
+    CHECK_EQ(engine.duck_source(), source + 1);
+    CHECK_EQ(int(kit.duck.release), release - 2);
+    CHECK(std::strcmp(UiProbe::notice(app), "DUCK RELEASE") == 0);
+    CHECK(screen_has(app, "TIMES IN MS"));
+
+    // Back on DCK 1-4 the new source says so instead of a depth.
+    mixer_page(app, kMixerDuckDepthPage);
+    CHECK(screen_has(app, "DUCKS UNDER T2"));
+    app.on_encoder(1, +1);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "T2 IS THE SOURCE") == 0);
+    app.on_encoder(1, -1);
+
+    mixer_page(app, kMixerDuckPage);
+    app.on_encoder(0, -1);
+    app.on_encoder(3, +2);
+    pump(2);
+    CHECK_EQ(int(kit.duck.source), source);
+    CHECK_EQ(int(kit.duck.release), release);
 }

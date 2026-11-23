@@ -129,6 +129,12 @@ constexpr int kMixerTrackPages = 2;
 constexpr MixerPage kMixerPages[] = {
     {"TRK 1-4", false, {-1, -1, -1, -1}},        // the faders, handled on their own
     {"TRK 5-8", false, {-1, -1, -1, -1}},
+    // The sidechain duck (core/project.hpp, KitDuck): how far each track ducks, four at a time,
+    // then which track fires it and its envelope. Kit bytes, handled on their own like the
+    // faders: `field` is unused.
+    {"DCK 1-4", false, {-1, -1, -1, -1}},
+    {"DCK 5-8", false, {-1, -1, -1, -1}},
+    {"DUCK", false, {-1, -1, -1, -1}},
     {"DLY", false, {int8_t(SendField::delay_seconds), int8_t(SendField::delay_feedback),
                     int8_t(SendField::delay_tone), int8_t(SendField::delay_level)}},
     // The ambient modes (dsp/ambient.hpp), each beside its send: TYP switches the mode, and the
@@ -155,9 +161,20 @@ constexpr int kMixerPageCount = int(sizeof(kMixerPages) / sizeof(kMixerPages[0])
 // Which MIXER page is the kill EQ's, for the plain-push kill switches.
 constexpr int kMixerEqPage = kMixerPageCount - 1;
 
+// The duck's pages: two of depths, then the source and the envelope.
+constexpr int kMixerDuckDepthPage = kMixerTrackPages;
+constexpr int kMixerDuckPage = kMixerDuckDepthPage + 2;
+static_assert(kMixerPages[kMixerDuckPage].name[0] == 'D' && kMixerPages[kMixerDuckPage].name[1] == 'U',
+              "kMixerDuckPage no longer names the duck's page");
+
+// The delay's two pages, which show the delay's time in milliseconds.
+constexpr int kMixerDelayPage = kMixerDuckPage + 1;
+
 // The ambient modes' pages, whose push A throws the mode switch (TYP) like turning it does.
-constexpr int kMixerLongPage = 3;
-constexpr int kMixerHallPage = 5;
+constexpr int kMixerLongPage = kMixerDelayPage + 1;
+constexpr int kMixerHallPage = kMixerDelayPage + 3;
+static_assert(kMixerPages[kMixerDelayPage].field[0] == int8_t(SendField::delay_seconds),
+              "kMixerDelayPage no longer names the delay's page");
 static_assert(kMixerPages[kMixerLongPage].field[0] == int8_t(SendField::delay_mode) &&
                   kMixerPages[kMixerHallPage].field[0] == int8_t(SendField::reverb_mode),
               "the ambient pages moved: push A would throw the wrong switch");
@@ -175,7 +192,7 @@ static_assert(kMixerPages[kMixerEqPage].master &&
 constexpr bool mixer_pages_cover_every_field() {
     for (int f = 0; f < int(SendField::count); f++) {
         bool found = false;
-        for (int p = kMixerTrackPages; p < kMixerPageCount; p++) {
+        for (int p = kMixerDelayPage; p < kMixerPageCount; p++) {
             if (kMixerPages[p].master) continue;
             for (int slot = 0; slot < 4; slot++) found = found || kMixerPages[p].field[slot] == f;
         }
@@ -183,7 +200,7 @@ constexpr bool mixer_pages_cover_every_field() {
     }
     for (int f = 0; f < int(MasterField::count); f++) {
         bool found = false;
-        for (int p = kMixerTrackPages; p < kMixerPageCount; p++) {
+        for (int p = kMixerDelayPage; p < kMixerPageCount; p++) {
             if (!kMixerPages[p].master) continue;
             for (int slot = 0; slot < 4; slot++) found = found || kMixerPages[p].field[slot] == f;
         }
@@ -1590,6 +1607,10 @@ public:
                 post_command(command);
                 return;
             }
+            if (mixer_bank_ < kMixerDelayPage) {
+                edit_duck(mixer_bank_, encoder, delta);
+                return;
+            }
             edit_mixer_field(mixer_bank_, encoder, delta);
             return;
         }
@@ -2863,6 +2884,102 @@ public:
         notice(master ? master_field_name(uint8_t(field)) : send_field_name(uint8_t(field)));
     }
 
+    // The duck's pages: on DCK 1-4 and DCK 5-8 an encoder is a track's depth, on DUCK the four
+    // are the source, attack, hold and release. One click is one step of each: a percent, a
+    // track, a millisecond, five milliseconds.
+    void edit_duck(int page, int slot, int delta) {
+        if (page < kMixerDuckDepthPage || page > kMixerDuckPage || slot < 0 || slot >= 4) return;
+        if (page < kMixerDuckPage) {
+            const int track = (page - kMixerDuckDepthPage) * 4 + slot;
+            post_delta(Cmd::set_duck, track, 0, uint8_t(DuckField::depth), delta);
+            char *out = notice_buffer_;
+            append(out, "T");
+            append_number(out, uint32_t(track + 1));
+            append(out, track == int(engine_.project().kit.duck.source) ? " IS THE SOURCE"
+                                                                        : " DUCK DEPTH");
+            *out = 0;
+            notice(notice_buffer_);
+            return;
+        }
+        static const DuckField fields[4] = {DuckField::source, DuckField::attack, DuckField::hold,
+                                            DuckField::release};
+        static const char *const names[4] = {"DUCK SOURCE", "DUCK ATTACK", "DUCK HOLD",
+                                             "DUCK RELEASE"};
+        post_delta(Cmd::set_duck, 0, 0, uint8_t(fields[slot]), delta);
+        notice(names[slot]);
+    }
+
+    void draw_duck(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const Kit &kit = engine_.project().kit;
+        const int source = kit.duck.source < kTracks ? int(kit.duck.source) : 0;
+
+        append(out, "MIXER ");
+        append(out, kMixerPages[mixer_bank_].name);
+        *out = 0;
+        canvas.text(0, 20, line, 14);
+
+        if (mixer_bank_ < kMixerDuckPage) {
+            for (int slot = 0; slot < 4; slot++) {
+                const int track = (mixer_bank_ - kMixerDuckDepthPage) * 4 + slot;
+                const int x = slot * 32;
+                const uint8_t depth = kit.tracks[track].duck;
+                out = line;
+                append(out, "T");
+                append_number(out, uint32_t(track + 1));
+                *out = 0;
+                canvas.text(x, 46, line, 13);
+
+                // The source never ducks under itself, whatever its own depth says.
+                out = line;
+                if (track == source) {
+                    append(out, "SRC");
+                } else if (depth == 0) {
+                    append(out, "OFF");
+                } else {
+                    append_number(out, depth);
+                    append(out, "%");
+                }
+                *out = 0;
+                canvas.text(x, 60, line, track == source ? 10 : 15);
+
+                const int bar = track == source ? 0 : int(depth) * 28 / int(kDuckDepthMax);
+                canvas.rect(x + 2, 76, 28, 6, 3);
+                if (bar > 0) canvas.rect(x + 2, 76, bar, 6, 12);
+            }
+            out = line;
+            append(out, "DUCKS UNDER T");
+            append_number(out, uint32_t(source + 1));
+            *out = 0;
+            canvas.text(0, 98, line, 10);
+        } else {
+            static const char *const names[4] = {"SRC", "ATK", "HLD", "REL"};
+            const uint32_t values[4] = {
+                uint32_t(source + 1), kit.duck.attack_ms,
+                uint32_t(kit.duck.hold) * uint32_t(kDuckTimeStepMs),
+                uint32_t(kit.duck.release) * uint32_t(kDuckTimeStepMs)};
+            const int bars[4] = {source * 28 / (kTracks - 1),
+                                 int(kit.duck.attack_ms) * 28 / int(kDuckAttackMax),
+                                 int(kit.duck.hold) * 28 / int(kDuckHoldMax),
+                                 int(kit.duck.release) * 28 / int(kDuckReleaseMax)};
+            for (int slot = 0; slot < 4; slot++) {
+                const int x = slot * 32;
+                canvas.text(x, 46, names[slot], 13);
+                out = line;
+                if (slot == 0) append(out, "T");
+                append_number(out, values[slot]);
+                *out = 0;
+                canvas.text(x, 60, line, 15);
+                canvas.rect(x + 2, 76, 28, 6, 3);
+                if (bars[slot] > 0) canvas.rect(x + 2, 76, bars[slot], 6, 12);
+            }
+            canvas.text(0, 98, "TIMES IN MS", 10);
+        }
+
+        draw_master_peak(canvas);
+    }
+
     // Throw one kill switch. The notice says what it will be once the audio side has applied it,
     // which is the opposite of what the project says now.
     void toggle_kill(int band) {
@@ -2975,7 +3092,7 @@ public:
         // What the delay is actually doing, in milliseconds, which is the one thing a division
         // does not tell you -- and the number that says whether the tempo-sync is working.
         // On the LONG page too: there it is the division times the multiplier, up to 12 s.
-        if (mixer_bank_ == 2 || mixer_bank_ == 3) {
+        if (mixer_bank_ == kMixerDelayPage || mixer_bank_ == kMixerLongPage) {
             out = line;
             append(out, "TIME ");
             append_number(out,
@@ -3003,8 +3120,12 @@ public:
     }
 
     void draw_mixer(enaga::Canvas &canvas) {
-        if (mixer_bank_ >= kMixerTrackPages) {
+        if (mixer_bank_ >= kMixerDelayPage) {
             draw_mixer_fields(canvas);
+            return;
+        }
+        if (mixer_bank_ >= kMixerDuckDepthPage) {
+            draw_duck(canvas);
             return;
         }
         char line[40];
