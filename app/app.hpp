@@ -4151,12 +4151,15 @@ public:
         samples_return_ = mode_;
         mode_ = Mode::samples;
         leave_mode();
-        // Where the track's file is, when it is somewhere the browser shows; else SAMPLES.
+        // Where the track's file is, when it is somewhere the browser shows; else SAMPLES, or
+        // the SmplTrek's sample pool on a card that has that and no /SAMPLES.
         const char *current = engine_.project().kit.tracks[selected_].sample;
         char folder[SampleList::kFolderBytes];
         if (!SampleList::in_browsable_folder(current) ||
             !SampleList::folder_of(current, folder, int(sizeof folder))) {
-            const char *top = "/SAMPLES";
+            const char *top = SampleList::root(SampleList::kSamplesRoot).path;
+            const char *pool = SampleList::root(SampleList::kPoolRoot).path;
+            if (!storage_.folder_exists(top) && storage_.folder_exists(pool)) top = pool;
             int i = 0;
             for (; top[i] != '\0'; i++) folder[i] = top[i];
             folder[i] = '\0';
@@ -4203,14 +4206,9 @@ public:
                 if (storage_.browsing() || list.count() == 0) return true;
                 if (list.is_folder(sample_cursor_)) {
                     char folder[SampleList::kFolderBytes];
-                    if (list.at_root()) {
-                        // The root's two entries are the card's top folders.
-                        char *out = folder;
-                        *out++ = '/';
-                        const char *name = list.name(sample_cursor_);
-                        while (*name != '\0' && out < folder + sizeof folder - 1) *out++ = *name++;
-                        *out = '\0';
-                    } else if (!list.path_of(sample_cursor_, folder, int(sizeof folder))) {
+                    // At the root, path_of gives the folder the entry opens (POOL is
+                    // /SmplTrek/Pool/Audio); below it, folder + "/" + name.
+                    if (!list.path_of(sample_cursor_, folder, int(sizeof folder))) {
                         notice("PATH TOO LONG");
                         return true;
                     }

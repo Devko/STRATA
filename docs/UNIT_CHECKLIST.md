@@ -150,6 +150,18 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
 - With the loop up, push VALUE + STEP 1 and turn: the low-pass sweeps the loop too.
 - Push VALUE + CLR: `FX OFF`. Again: `LOOP CLEARED`. MAX meanwhile: `________ %` (U11 is in 13o).
 
+**17. Samples from the SmplTrek's own folders (2 min).** Needs a card the stock firmware has used,
+with at least one WAV in `SmplTrek/Pool/Audio` (copy one there on a PC if it is empty).
+- Track 8, EDIT, OK, then CLR until the top: `SAMPLES/ POOL/ SMPLTREK/ RECORD/`, nothing cut off.
+- OK on `POOL/`: the second line ends in `POOL/AUDIO`, and the pool's WAVs are listed. OK on one:
+  it loads and plays, as from `/SAMPLES`.
+- CLR three times: `/SMPLTREK/POOL`, `/SMPLTREK`, then the top with the cursor on `SMPLTREK/`.
+- OK on `SMPLTREK/`, then `PROJECT/`, a stock project, `AUDIO/`: its samples are listed and load.
+- Save (FUNC+HOME, OK), power cycle: track 8 plays the SmplTrek file again, and OK in EDIT opens
+  the browser on it. Boot the stock firmware once afterwards: its projects and pool are unchanged.
+- Is `POOL` the folder you keep your samples in? Anything else under `SmplTrek` you expected at
+  the top? `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `3 fail: reads 055`, `9: MAX 61.2`.
 
 ---

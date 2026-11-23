@@ -12,9 +12,24 @@
 //
 // ## The root is not "/"
 //
-// The browser's top level is a virtual folder holding SAMPLES and RECORD, the two places on the
-// card samples come from. Listing "/" would show ENAGA and whatever else a PC left there, none
-// of it samples, and would put the system folders one OK away from a sample track.
+// The browser's top level is a virtual folder holding the places on the card samples come from
+// (kRoots, in the order shown):
+//
+// - SAMPLES   /SAMPLES               Enaga's shared sample folder (docs/SPEC.md)
+// - POOL      /SmplTrek/Pool/Audio   the stock SmplTrek firmware's sample pool: its manual (p.30)
+//                                    says "Copy WAV files to the card > SmplTrek > Pool > Audio"
+// - SMPLTREK  /SmplTrek              the stock firmware's whole tree: Pool, Preset, and Project,
+//                                    whose <name>/Audio folders hold each project's own samples
+// - RECORD    /RECORD                resampled takes
+//
+// POOL and SMPLTREK are shown only on a card that has a /SmplTrek folder (the caller checks:
+// core/ has no files), so a card the stock firmware never saw shows just SAMPLES and RECORD.
+// STRATA only reads there: Enaga lets an app read anywhere but write only in its data folder,
+// /SAMPLES and /RECORD, and nothing in the browser writes. A kit stores a sample as its full
+// path, so a file picked under /SmplTrek loads again from there like any other.
+//
+// Listing "/" would show ENAGA and whatever else a PC left there, none of it samples, and would
+// put the system folders one OK away from a sample track.
 //
 // ## What is left out, and why
 //
@@ -46,8 +61,20 @@ public:
     // the path of a file in it has to fit kSamplePathBytes as well.
     static constexpr int kFolderBytes = kSamplePathBytes;
 
-    // The virtual top level: SAMPLES and RECORD, as folders.
-    void open_root();
+    // The top level's entries, in the order shown: a label for the screen and the folder it opens.
+    struct Root {
+        const char *label;
+        const char *path;
+        bool smpltrek;                        // shown only when the card has /SmplTrek
+    };
+    static constexpr int kRoots = 4;
+    static constexpr int kSamplesRoot = 0;    // root(kSamplesRoot).path is "/SAMPLES"
+    static constexpr int kPoolRoot = 1;       // root(kPoolRoot).path is "/SmplTrek/Pool/Audio"
+    static const Root &root(int i);           // 0 <= i < kRoots
+
+    // The virtual top level, as folders: SAMPLES and RECORD, and POOL and SMPLTREK between them
+    // when `smpltrek` (the card has a /SmplTrek folder).
+    void open_root(bool smpltrek = false);
 
     // Start listing `folder` (an absolute path such as "/SAMPLES/KICKS"): empties the table and
     // remembers the folder. False, with nothing changed, when the folder does not fit
@@ -68,9 +95,10 @@ public:
     const char *name(int i) const;
     bool is_folder(int i) const;
 
-    // The full path of the i-th entry: folder + "/" + name. False when `i` is out of range or the
-    // path would not fit `max` bytes (with its terminator) -- never a cut path, which would name
-    // a different file or none.
+    // The full path of the i-th entry: folder + "/" + name, or at the root the folder the entry
+    // opens ("/SmplTrek/Pool/Audio" for POOL). False when `i` is out of range or the path would
+    // not fit `max` bytes (with its terminator) -- never a cut path, which would name a different
+    // file or none.
     bool path_of(int i, char *out, int max) const;
 
     // The entry whose name is `name`, compared without regard to case (FAT is case-insensitive),
@@ -82,7 +110,8 @@ public:
     static bool same_name(const char *a, const char *b);
 
     // The folder above this one: "/SAMPLES/KICKS" -> "/SAMPLES". A top folder ("/SAMPLES") has no
-    // parent on the card, so it writes "" -- the virtual root.
+    // parent on the card, so it writes "" -- the virtual root. POOL climbs through the card's own
+    // tree: "/SmplTrek/Pool/Audio" -> "/SmplTrek/Pool" -> "/SmplTrek" -> "".
     static void parent_of(const char *folder, char *out, int max);
 
     // The folder part of a sample path, for opening the browser where the track's file is:
@@ -96,7 +125,8 @@ public:
     // Does this name end in .WAV, in any case? The one filter on files.
     static bool is_wav(const char *name);
 
-    // Is `path` inside one of the two places the browser shows ("/SAMPLES/..." or "/RECORD/...")?
+    // Is `path` inside one of the places the browser shows ("/SAMPLES/...", "/RECORD/..." or
+    // "/SmplTrek/...", without regard to case)?
     static bool in_browsable_folder(const char *path);
 
 private:
@@ -112,6 +142,7 @@ private:
     int count_ = 0;
     int skipped_ = 0;
     char folder_[kFolderBytes] = {};
+    int8_t root_of_[kRoots] = {};             // at the root: entry -> index into root()
 };
 
 }  // namespace strata

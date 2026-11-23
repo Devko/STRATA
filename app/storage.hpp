@@ -255,7 +255,12 @@ public:
     // would be no browser. Only one listing is in flight; asking for another meanwhile queues it,
     // because the entries of the first would otherwise land in the second's table.
 
-    // Show `folder` ("" is the browser's own root: SAMPLES and RECORD). The root is filled at
+    // Is there a folder at `path` on a usable card? One immediate files::info: main context, and
+    // not in a loop.
+    bool folder_exists(const char *path) const;
+
+    // Show `folder` ("" is the browser's own root: SAMPLES, RECORD and, on a card with the stock
+    // firmware's /SmplTrek, POOL and SMPLTREK; core/browse.hpp). The root is filled at
     // once; a folder on the card is listed in the background. False for a folder too long to
     // show, with nothing changed.
     bool request_browse(const char *folder);

@@ -340,7 +340,8 @@ constexpr Text kSamples = {"SAMPLES:", {
     "LOADS AT ONCE  KEEPS",
     "PLAYING: DOWN OK",
     "TRIES THE NEXT",
-    nullptr, nullptr,
+    "POOL  SMPLTREK POOL",
+    "SMPLTREK  ALL FOLDERS",
 }};
 
 constexpr Text kSounds = {"SOUNDS:", {

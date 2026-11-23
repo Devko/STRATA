@@ -1710,6 +1710,12 @@ bool Storage::service_freeze() {
 
 // --- the sample browser ---------------------------------------------------
 
+bool Storage::folder_exists(const char *path) const {
+    if (!card_usable_) return false;
+    enaga::files::Info info;
+    return enaga::files::info(path, info) == ENAGA_FILE_OK && (info.flags & ENAGA_FILE_FOLDER) != 0;
+}
+
 bool Storage::request_browse(const char *folder) {
     if (folder == nullptr) return false;
     int n = 0;
@@ -1729,11 +1735,15 @@ bool Storage::request_browse(const char *folder) {
 void Storage::start_browse() {
     browse_pending_ = false;
     if (browse_wanted_[0] == '\0') {
-        list_.open_root();                 // the virtual root needs no card
+        // The virtual root needs no card; POOL and SMPLTREK join it when the card has the stock
+        // firmware's /SmplTrek folder (one immediate files::info, milliseconds).
+        list_.open_root(folder_exists("/SmplTrek"));
+        // For the emulator scenario: 4 on a card with /SmplTrek, else 2.
+        enaga::log(list_.count() > 2 ? "browse root 4" : "browse root 2");
         return;
     }
     if (!list_.open(browse_wanted_)) {
-        list_.open_root();
+        list_.open_root(folder_exists("/SmplTrek"));
         browse_error_ = "BAD PATH";
         return;
     }

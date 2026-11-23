@@ -1241,7 +1241,8 @@ STRATA reads WAV files: 8, 16 or 24-bit, or 32-bit float, mono or stereo, at any
 <p><img src="screens/samples.png" width="256" alt="SAMPLES on track 8, in /SAMPLES"></p>
 
 On a SMP or GRN track, press **OK** in EDIT (the page says `OK: PICK SAMPLE`) or in MACHINE. The
-browser opens in the folder of the file the track plays, with the cursor on it, or in `/SAMPLES`.
+browser opens in the folder of the file the track plays, with the cursor on it, or in `/SAMPLES`
+(in the SmplTrek's sample pool when the card has that and no `/SAMPLES`).
 
 - UP/DOWN (or A) move the cursor, LEFT/RIGHT or the screen keys turn a page of eight.
 - **OK on a file loads it into the track at once**, with the beat playing, and the cursor stays
@@ -1249,6 +1250,11 @@ browser opens in the folder of the file the track plays, with the cursor on it, 
   `CONVERTING` and so on while it loads, and the `NOW` line shows the file the track plays.
 - OK on a folder (shown with a `/`) opens it. **CLR goes up a folder**; at the top are `SAMPLES/`
   and `RECORD/` (your resampled takes), and CLR from there goes back to where you came from.
+- **The SmplTrek's own folders.** On a card the stock firmware has used, the top also shows
+  `POOL/`, the stock sample pool (`/SmplTrek/Pool/Audio`, where the SmplTrek manual says to copy
+  WAVs), and `SMPLTREK/`, the stock firmware's whole tree: `Project/<name>/Audio` holds each stock
+  project's own samples, `Preset/` the factory ones. STRATA only reads there and never changes
+  the stock folders; your kit remembers the file's full path and loads it from there next time.
 - `FUNC+UP` reads the folder again, for a card swapped or a take just written.
 
 Only WAV files and folders are listed; macOS's `._` files are hidden. A folder shows its first
