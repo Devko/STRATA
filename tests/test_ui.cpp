@@ -103,6 +103,8 @@ struct UiProbe {
     static int quantize(const Strata &app) { return app.quantize(); }
     static int menu_cursor(const Strata &app) { return app.menu_cursor_; }
     static bool func_help(const Strata &app) { return app.func_help_showing(); }
+    static bool verdict_free(const Strata &app) { return app.verdict_keys_free(); }
+    static bool mutation_pending(const Strata &app) { return app.mutation_pending_; }
     static uint8_t pad_r(const Strata &app, int pad) { return app.leds_.pad_r[pad]; }
     static uint8_t pad_g(const Strata &app, int pad) { return app.leds_.pad_g[pad]; }
     static uint8_t pad_b(const Strata &app, int pad) { return app.leds_.pad_b[pad]; }
@@ -2020,6 +2022,23 @@ TEST(ui_ok_in_resample_while_a_take_is_written_keeps_the_take_where_it_was_going
     CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
     host.set_running(false);
     key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_the_func_menu_never_offers_a_mutate_verdict_its_ok_would_not_give) {
+    // In the FUNC menu OK runs the row under the cursor -- SAVE when it opens -- so a MUTATE made
+    // there must not show "OK KEEPS CLR REVERTS".
+    Strata &app = fresh();
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    shift_key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+    app.on_pad_press(13, 100);
+    app.on_pad_release(13);
+    pump(2);
+    CHECK(UiProbe::mutation_pending(app));
+    CHECK(!UiProbe::verdict_free(app));
+    shift_key(ENAGA_KEY_F4);                             // close it
     pump(2);
 }
 

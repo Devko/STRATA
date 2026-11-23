@@ -1928,13 +1928,13 @@ public:
         mutate_track_ = selected_;
     }
 
-    // Where OK and CLR are the verdict on a pending MUTATE (on_key): not PROJECT, KIT, SAMPLES
-    // or RESAMPLE, whose own OK and CLR come first, and not while a STEP, a range or a scene pad
-    // is held. The screen only offers the verdict where the keys will give it.
+    // Where OK and CLR are the verdict on a pending MUTATE (on_key): not PROJECT, KIT, SAMPLES,
+    // RESAMPLE or the FUNC menu, whose own OK and CLR come first (in the menu OK is SAVE), and
+    // not while a STEP, a range or a scene pad is held. The screen only offers the verdict where the keys will give it.
     bool verdict_keys_free() const {
         return mutation_pending_ && held_step_ < 0 && range_first_ < 0 && scene_holding_ < 0 &&
                mode_ != Mode::project && mode_ != Mode::kit && mode_ != Mode::samples &&
-               mode_ != Mode::resample;
+               mode_ != Mode::resample && mode_ != Mode::menu;
     }
 
     // Show a live value as the notice (see Echo). GRID draws the track's length and speed on
