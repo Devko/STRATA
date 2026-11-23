@@ -1208,6 +1208,24 @@ void Engine::apply(const Command &command) {
                 // The next free target. Which of the four it lands in is not something a
                 // performer should have to think about; a macro that is full refuses, visibly.
                 Macro &macro = macros_.macros[command.a];
+                const bool to_master = command.b >= kTrackParams;
+                const uint8_t want_track = to_master ? kMacroMasterTrack : uint8_t(track);
+                const uint8_t want_param =
+                    to_master ? uint8_t(command.b - kTrackParams) : command.b;
+                // The same parameter again takes it OFF the macro: a second press undoes the
+                // first, rather than filling a second of the four slots with a copy of it.
+                bool removed = false;
+                for (int i = 0; i < kMacroTargets; i++) {
+                    MacroTarget &t = macro.targets[i];
+                    if (t.enabled != 0 && t.track == want_track && t.param == want_param) {
+                        t = MacroTarget{};
+                        removed = true;
+                    }
+                }
+                if (removed) {
+                    perform_dirty_ = true;
+                    break;
+                }
                 int slot = -1;
                 for (int i = 0; i < kMacroTargets && slot < 0; i++) {
                     if (macro.targets[i].enabled == 0) slot = i;
