@@ -136,7 +136,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
 | Long files at 48 kHz up to 349 s, read in 4 MiB chunks | v0.1.0 | ○ (15c) | 32 MiB sample memory shared by all tracks |
 | Other rates: up to 30 s at 96 kHz | v0.1.0 | ○ (13b) | |
 | Streaming of files too big for memory (2 s head + card stream, 4 tracks max) | v0.1.0 | ○ (15d) | Forward only, one voice: no STA, slices or reverse (not feasible, below); GRAIN plays only the head; CPU unmeasured |
-| Streamed samples honour LEN (end point, loop back to the head) | WIP | ○ (15d) | A LEN loop inside the 2 s head never touches the card |
+| Streamed samples honour LEN (end point, loop back to the head) | #91 | ○ (15d) | A LEN loop inside the 2 s head never touches the card |
 | Sample browser (`/SAMPLES`, `/RECORD`), load while playing | v0.1.0 | ○ (15b) | 256 entries a folder; path ≤ 111 characters; no audition before loading |
 | Resample the master, 1-8 bars, to a file or straight onto a track | v0.1.0 | ○ ("Resampling") | Takes ≤ 30 s. Resampling one track alone (SPEC) is not built |
 | Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | No monitoring through STRATA; MIC needs headphones in |
@@ -161,7 +161,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
 | Autosave on every stop and on leaving the app; reopen last project or a newer autosave | v0.1.0 | ○ (13) | |
 | Reload project, new project (factory content) | v0.1.0 | ○ (14) | Both stop the transport |
 | Project browser: open, save as with a name | v0.1.0 | ○ (14b) | |
-| Project rename (push B) and delete (push C, OK twice), safe against a pulled card | WIP | ○ (14c) | Rename is a copy then a delete (Enaga has no rename). The open project cannot be deleted |
+| Project rename (push B) and delete (push C, OK twice), safe against a pulled card | #91 | ○ (14c) | Rename is a copy then a delete (Enaga has no rename). The open project cannot be deleted |
 | Kit library: 16 kits on the card, recall while playing, store | v0.1.0 | ○ (15) | Recall is not undoable |
 | Damaged files refused, never crash | v0.1.0 | ○ (M4) | Card pulled mid-save not tried on the unit |
 | Factory project: 130 BPM C minor kit, A01-A04, chain, 3 scenes, 3 macros, 8 mute states | v0.1.0 | ✔ A01 plays; ◐ the rest (3b) | Track 8 plays a placeholder until given a sample |
