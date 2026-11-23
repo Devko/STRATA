@@ -1561,13 +1561,15 @@ void Engine::apply_duck() {
     // Clamped here as well as on read: a kit can also arrive from the factory or a test, and a
     // source past the last track would fire nothing and duck everything.
     duck_source_ = duck.source < kTracks ? int(duck.source) : 0;
-    const float step = float(kDuckTimeStepMs) * 0.001f;
-    mixer_.set_duck(float(duck.attack_ms) * 0.001f, float(duck.hold) * step,
-                    float(duck.release) * step);
+    // Divided, at control rate and through the same correctly rounded divide as the depths
+    // below: 40 / 1000 is exactly the 0.040f the duck was fixed at, where 8 x 0.005f need not
+    // be, and 35 / 100 is exactly its 0.35f. So an old project renders as it did.
+    const int hold_ms = int(duck.hold) * kDuckTimeStepMs;
+    const int release_ms = int(duck.release) * kDuckTimeStepMs;
+    mixer_.set_duck(float(duck.attack_ms) / 1000.0f, float(hold_ms) / 1000.0f,
+                    float(release_ms) / 1000.0f);
     for (int t = 0; t < kTracks; t++) {
         const uint8_t depth = project_.kit.tracks[t].duck;
-        // Divided, at control rate: 35 / 100 is exactly the 0.35f the duck was fixed at, where
-        // 35 x 0.01f is not, so an old project renders as it did.
         mix_[t].duck = t == duck_source_ ? 0.0f
                                          : float(depth > kDuckDepthMax ? kDuckDepthMax : depth) /
                                                100.0f;

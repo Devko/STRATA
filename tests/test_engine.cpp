@@ -3379,6 +3379,24 @@ TEST(engine_the_duck_starts_as_v0_1_fixed_it_and_set_duck_moves_every_field) {
     CHECK_EQ(engine.duck_source(), 0);
     CHECK_EQ(engine.duck_depth(0), 0.0f);
     for (int t = 1; t < kTracks; t++) CHECK_EQ(engine.duck_depth(t), 0.35f);
+    {
+        // And the envelope is the one v0.1.0 set with literals, sample for sample.
+        Duck now = engine.mixer().duck();
+        Duck was;
+        was.init(kRate);
+        was.set(0.003f, 0.040f, 0.120f);
+        now.trigger(0);
+        was.trigger(0);
+        constexpr int kRigBlock = strata::test::kRigBlock;
+        static float a[kRigBlock], b[kRigBlock];
+        int differ = 0;
+        for (int block = 0; block < 200; block++) {
+            now.render(a, kRigBlock);
+            was.render(b, kRigBlock);
+            for (int i = 0; i < kRigBlock; i++) differ += a[i] != b[i];
+        }
+        CHECK_EQ(differ, 0);
+    }
 
     // The source moves, and the depths follow it: track 1 now ducks at its own 35%, track 3 not.
     strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::source), 2);
