@@ -1193,7 +1193,7 @@ scene or knob really did move: those prepare as before.
 | E7 | Eight LFOs running | `tests/scenario_lfo.sh` as it is (every LFO off: should match `scenario_factory.sh`), then again after a temporary edit to `factory_kit` in core/factory.cpp setting each track's `params[17] = 40` (RAT, about 3 Hz free), `params[18] = 127` (DEP) and `params[19] = 38` (DST = DRV), with cl6x and with `ENAGA_TI_CGT=none`; revert the edit | the difference is eight LFOs' cost; the host figures say about 1.1-1.4 points GCC, and about the same with cl6x |
 | E12 | The ASR page | `tests/scenario_asr.sh`, then the held-chord `factory_kit` edit in "The ASR page" above, `scenario_factory.sh`, both compilers; revert | **done 2026-11-23:** off = A01 (26.15% / 49.32%); held +3.60 cl6x / +4.71 GCC (see "The ASR page") |
 | E13 | The OSC page and the VA rework | `tests/scenario_osc.sh` against `scenario_factory.sh` before it, then the worst-case `factory_kit` edit in "The OSC page" below, both compilers; revert | the factory beat should not rise; worst case at most ~0.1 point a voice over the old voice |
-| E14 | WAVE MONO and WAVE POLY | `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys) against `scenario_factory.sh` on the same commit, both compilers; and the boot: the cycles to `strata ready` against the same run before the WAVE commit | see "WAVE MONO and WAVE POLY" below: about 1.0-1.4x a VA voice expected; the table build is a one-off at boot |
+| E14 | WAVE MONO and WAVE POLY | `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys) against `scenario_factory.sh` on the same commit, both compilers; and the time from the switch to `wav FM1` (the first table ready) | see "WAVE MONO and WAVE POLY" below: about 1.0-1.4x a VA voice expected; a table is built on first use, a piece a pass |
 | E15 | FM4 | `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for `strata_fm_add` and `strata_fm_add_free` | see "FM4" below: about 1.6-1.8x a VA voice on the host; FBK 0 should pipeline far better on cl6x than FBK up |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
@@ -1634,18 +1634,26 @@ more, the lever is WRP's loop (`strata_wave_add_warp`, a float index and a compa
 the unit they took more than Enaga's 1 s main-loop watchdog (`WATCHDOG_MAIN_MS`), so a build in
 `Engine::init` never reached `strata ready`: APP NOT RESPONDING on every boot since #122 (the
 build thread, 2026-11-23: ready used to come at 196 M cycles, the watchdog fired at about 568 M).
-Since the fix, init only allocates (`WaveLibrary::begin`) and `App::update` builds one piece a
-pass (`Engine::step_waves`): 144 pieces, a table's recipe or two of its frames at every level,
-the largest under 10% of the whole on the host (the E-PIANO recipe). The tables are bit-for-bit
-the old build's (the same checksum on the host). Until `wav ready` is logged the WAVE machines
-play their sub alone, and RESAMPLE, freeze and the looper refuse to arm, since the build's
-scratch is their buffer. E14 now measures the time to `wav ready`.
+Since v0.3 nothing is built at boot. Init reserves 8 slots, one per track
+(`WaveLibrary::reserve`), and each `App::update` pass asks which tables the WAVE tracks are
+sounding (`Engine::step_waves`: the machine and its TBL after kit, scene, lock and LFO) and
+builds the missing ones in small pieces for at most 2 ms of the pass. A slot keeps its table while
+any track wants it; when a new one is needed and no slot is free, the least recently wanted slot
+whose table no track sounds is emptied, and rewritten only after two audio blocks, so the audio
+context never reads a half-written table. A project with no WAVE track builds nothing.
+#128 built all sixteen at boot a table's frame pair at a time, up to 10% of the build in one
+piece: on the unit a pass then outlasted a key press (the emulator holds one for 20 M cycles,
+54 ms; keys are sampled every 6 ms between passes), and 16 of 26 scenarios lost or misread their
+first presses. A table is now 99 pieces: a recipe, a quarter of a time-domain pair's samples, its
+FFT, or one mip level of two frames. On the host the largest is under 1% of a sixteen-table
+build (the PLUCK recipe) and most under 0.1%; one table is about 1.6 ms of host time. The
+tables are bit-for-bit the old build's, in any slot and order (tests/test_wavetable.cpp). Until a
+table is ready the voice plays its sub alone; `wav <TBL>` is logged when it is. RESAMPLE, freeze
+and the looper no longer wait for it: the build has its own 0.18 MiB of scratch.
 
-**Memory:** 2,626,560 bytes of tables plus 0.2 MiB of build scratch: init now asks for 111.77 MiB
-of the 120 MiB heap, 8.23 MiB spare against the 8 MiB rule (tests/test_memory.cpp itemises it).
-Since the review after #122 the scratch is borrowed from the capture buffer, idle at init, and
-zeroed again after the build: 111.59 MiB, **8.41 MiB spare**. With the loader's file buffer cut
-to one 2 MiB chunk in the same PR: **97.05 MiB, 22.95 MiB spare**.
+**Memory:** 8 slots of 164,160 bytes (1,313,280) plus 0.18 MiB of build scratch, in place of
+2.5 MiB for all sixteen tables: init asks for **95.98 MiB, 24.02 MiB spare** (tests/test_memory.cpp itemises it). User tables from the card,
+if they come, would be loaded into the same slots.
 FM and STRING, which follow, allocate under 0.1 MiB.
 
 **E14, to measure on Roland's PC (emulator):**

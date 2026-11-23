@@ -3107,6 +3107,34 @@ TEST(engine_a_note_on_a_choking_voice_counts_against_the_budget_at_once) {
 }
 
 // WAVE POLY is VA POLY with a wavetable, at the same cost a voice, so it spends the same budget:
+// The WAVE tables are built on demand: a track switched to WAVE asks for the table its TBL
+// sounds, and a new TBL asks for that one too, while the tables it left stay in their slots.
+TEST(engine_a_wave_track_asks_for_the_table_it_sounds) {
+    clean();
+    Engine &e = strata::test::engine();
+    const uint8_t was = e.project().kit.tracks[kPoly].machine;
+    auto settle = [&e] {
+        for (int i = 0; i < 4000; i++) {
+            if (!e.step_waves()) {
+                pump();   // two audio blocks free a slot taken out for reuse
+                if (!e.step_waves()) return;
+            }
+        }
+    };
+    post(Cmd::set_machine, kPoly, 0, uint8_t(MachineId::wave_poly));
+    post(Cmd::set_param, kPoly, 0, 0, uint8_t(3 * 8 + 4));     // TBL: FMT
+    pump();
+    settle();
+    CHECK(e.waves().resident(3));
+    post(Cmd::set_param, kPoly, 0, 0, uint8_t(13 * 8 + 4));    // TBL: EPN
+    pump();
+    settle();
+    CHECK(e.waves().resident(13));
+    CHECK(e.waves().resident(3));   // still in: eight slots, and nothing else needs one
+    post(Cmd::set_machine, kPoly, 0, was);
+    pump();
+}
+
 // two of each, asking for 24 voices, get twelve between them.
 TEST(engine_wave_poly_shares_the_poly_voice_budget) {
     clean();

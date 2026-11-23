@@ -183,7 +183,8 @@ with at least one WAV in `SmplTrek/Pool/Audio` (copy one there on a PC if it is 
   (against item 1's). Then FUNC+HOME, RELOAD PROJECT (OK twice) puts the beat back.
 
 **19. WAVE MONO and WAVE POLY: the wavetable machines (4 min).** Beat playing, A01.
-- Startup took about as long as before? (The 16 wavetables are built at boot.) `____`
+- Startup took about as long as before, and keys answer at once? (v0.3 builds no wavetable at boot;
+  a table is built the first time a track sounds it, so the first note may be sub only.) `____`
 - Lower pad 6, FUNC+EDIT (MACHINE): five columns, `WMN` and `WPL` in the fourth column; the
   names fit their boxes. DOWN three times from MNO: `WMN`. The bass keeps playing, now a
   wavetable.

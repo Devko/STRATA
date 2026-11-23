@@ -624,7 +624,8 @@ DEC, a long LEN with SUS up, or a long REL all mean more notes overlap.
 ### WMN and WPL: WAVE MONO and WAVE POLY
 
 The VA voice with a **wavetable** where its two oscillators were: 16 tables of 16 frames each,
-built into STRATA (no files needed), from PolyWerk's recipes. POS moves smoothly through a
+built into STRATA (no files needed), from PolyWerk's recipes. A table is computed the first
+time a track plays it, which takes a moment: until then you hear only the sub. POS moves smoothly through a
 table's frames; MOT lets the filter envelope move it, so a note's timbre changes as it plays.
 Everything else is the VA's: the sub, the 24 dB filter with its envelope, the ASR page, accent,
 slide and glide on WMN, chords and the shared 12-voice budget on WPL.

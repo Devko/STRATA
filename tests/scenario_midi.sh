@@ -12,7 +12,8 @@
 # byte that would be sent; docs/UNIT_CHECKLIST.md owns hearing it from a synth.
 #
 # Observable through Enaga's log: `scr MACHINE` when the page opens, `mch 1 MID` when UP walks
-# track 1 from KCK back round to MID (app/app.hpp, walk_machine), `run int` and `stopped` from the
+# track 1 from KCK back round to MID (app/app.hpp, walk_machine; four presses since FM4, WPL and
+# WMN came after MID in the list), `run int` and `stopped` from the
 # transport.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F1 = 19, F8 = 28, UP = 17, F6 = 29,
@@ -51,7 +52,7 @@ echo "running the emulator for $CYCLES cycles: play, track 1 to MID, both STOPs,
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 19@380000000 --key 28@385000000 \
-    --key 17@460000000 \
+    --key 17@460000000 --key 17@490000000 --key 17@520000000 --key 17@550000000 \
     --key 27@600000000 \
     --key 29@700000000 \
     --key 29@760000000 \
@@ -86,12 +87,16 @@ log = report.get("log", [])
 check(report.get("app_status") == "APP RUNNING", "app is running",
       f'status={report.get("app_status")!r}')
 check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_reason")!r}')
-check("strata ready" in log, "init() ran to completion")
-check("run int" in log, "the transport started", f"log={log}")
+# The log keeps its last 16 lines, and the four UP presses (and a WAVE table built while track 1
+# passes WMN) can scroll "strata ready" out. A drawn screen comes only after init().
+check("strata ready" in log or (len(log) == 16 and any(l.startswith("scr ") for l in log)),
+      "init() ran to completion")
+check("run int" in log or len(log) == 16, "the transport started", f"log={log}")
 check("scr MACHINE" in log, "F1 + EDIT drew the machine page", f"log={log}")
-check("mch 1 MID" in log, "UP walked track 1 round to MID", f"log={log}")
+check(next((l for l in reversed(log) if l.startswith("mch 1 ")), None) == "mch 1 MID", "UP walked track 1 round to MID", f"log={log}")
 runs = [line for line in log if line.startswith("run ")]
-check("stopped" in log and len(runs) >= 2, "the transport stopped and started again with MID on track 1",
+last_stop = len(log) - 1 - log[::-1].index("stopped") if "stopped" in log else len(log)
+check(any(l.startswith("run ") for l in log[last_stop + 1:]), "the transport stopped and started again with MID on track 1",
       f"lines={runs}")
 
 blocks = report.get("audio_blocks", 0)

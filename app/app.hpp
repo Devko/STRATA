@@ -2567,11 +2567,25 @@ public:
         // this the shadow would drift from what is actually muted.
         for (int t = 0; t < kTracks; t++) muted_[t] = engine_.muted(t);
 
-        // The WAVE tables, one piece a pass until they are built (Engine::step_waves): too long
-        // for init() under Enaga's 1 s watchdog. `wav ready` for the scenarios and a unit log.
-        if (!waves_logged_ && engine_.step_waves()) {
-            waves_logged_ = true;
-            enaga::log("wav ready");
+        // The WAVE tables the tracks sound, built on demand a few small pieces a pass
+        // (Engine::step_waves). Pieces only while the pass is under kWaveSliceMs old, so the
+        // loop comes back to poll the keys (every 6 ms; the emulator holds a press 54 ms) long
+        // before a press can come and go unseen. `wav <TBL>` for each table built, for the
+        // scenarios and a unit log.
+        {
+            const uint32_t start = enaga::ms();
+            while (engine_.step_waves() && enaga::ms() - start < kWaveSliceMs) {
+            }
+            const int built = engine_.waves().builds();
+            if (built != waves_logged_) {
+                waves_logged_ = built;
+                char line[16];
+                char *out = line;
+                append(out, "wav ");
+                append(out, WaveLibrary::short_name(engine_.waves().last_built()));
+                *out = 0;
+                enaga::log(line);
+            }
         }
 
         // One bounded slice of whatever the card side has in flight. It never blocks and never
@@ -6851,7 +6865,8 @@ private:
 
     const char *notice_ = nullptr;
     uint32_t notice_at_ms_ = 0;
-    bool waves_logged_ = false;   // `wav ready` said once (update)
+    static constexpr uint32_t kWaveSliceMs = 2;   // the WAVE build's share of a pass (update)
+    int waves_logged_ = 0;        // tables built, as last logged (update)
     uint32_t last_ms_ = 0;
     uint8_t logged_guard_ = 0;     // the CPU guard level last logged
     uint32_t cpu_max_ = 0;         // per mille, the highest block cost since the last start
