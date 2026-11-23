@@ -115,8 +115,8 @@ constexpr uint32_t kWaitMax = 65535u;
 //   1  MOD  voice filter mode in four unequal zones: LP24 0-63, LP12 64-95, BP12 96-111,
 //           HP12 112-127. Per voice, so a chord's notes each get their own filter.
 //   2  CUT  base cutoff, 35 Hz to 12 kHz exponential, about 650 Hz at 64.
-//   3  RES  resonance, 0 to 0.93 (0.84 on LP24). Six resonant filters at once is a lot of
-//           level, which is why every voice carries VA MONO's post-filter soft clip: the
+//   3  RES  resonance, va.cpp's curve, self-oscillating near 127 and held by the per-voice
+//           limiter. Six resonant filters at once is a lot of level, which is why every voice carries VA MONO's post-filter soft clip: the
 //           machine stays bounded per voice rather than relying on the master limiter.
 // AMP -- the envelopes and the output.
 //   8  DEC  decay, 15 ms to 2.4 s exponential. One knob for both envelopes, and with no
@@ -129,6 +129,8 @@ constexpr uint32_t kWaitMax = 65535u;
 //           chord is louder than one note -- as a chord should be. The track fader and the
 //           master limiter are what hold a dense pattern down, not a hidden voice scaling,
 //           which would make a chord quieter than the note it was built from.
+// ASR and OSC -- shared exactly with VA MONO (va.cpp has both tables). DET still detunes the
+// chord's voices against each other; OS2's detune is inside each voice, on top of it.
 
 void VaPoly::init(float sample_rate) {
     rate_ = sample_rate > 1.0f ? sample_rate : 48000.0f;

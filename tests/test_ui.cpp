@@ -3944,7 +3944,7 @@ TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
     Strata &app = fresh();
     key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
     while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
-    CHECK_EQ(int(Page::asr), kEditPages - 1);
+    CHECK_EQ(int(Page::asr), kEditPages - 2);
     check_layout(app, "EDIT ASR, a drum");
     CHECK(screen_has(app, "VA MONO/POLY ONLY"));
     CHECK(!screen_has(app, "ATK"));
@@ -3982,6 +3982,57 @@ TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
     for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
     pump();
     for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_osc_is_edits_eighth_page_and_names_its_waves_and_modes) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
+    while (UiProbe::param_page(app) != int(Page::osc)) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(int(Page::osc), kEditPages - 1);
+    check_layout(app, "EDIT OSC, a drum");
+    CHECK(screen_has(app, "VA MONO/POLY ONLY"));
+    CHECK(!screen_has(app, "WAV"));
+
+    // Track 6, VA MONO in the default kit: the four names and what each value means.
+    for (int i = 0; i < 5; i++) key(ENAGA_KEY_DOWN);
+    CHECK_EQ(int(app_engine().machine_id(5)), int(MachineId::va_mono));
+    const TrackParams original = app_engine().params(5);
+    check_layout(app, "EDIT OSC, VA MONO");
+    CHECK(screen_has(app, "WAV"));
+    CHECK(screen_has(app, "OS2"));
+    CHECK(screen_has(app, "SUB"));
+    CHECK(screen_has(app, "DRV"));
+    post_cmd_track_param(5, uint8_t(kOscFirst + 0), 0);
+    post_cmd_track_param(5, uint8_t(kOscFirst + 1), 0);
+    pump();
+    CHECK(screen_has(app, "SAW"));
+    CHECK(screen_has(app, "OFF"));
+    post_cmd_track_param(5, uint8_t(kOscFirst + 0), 32);    // the square
+    post_cmd_track_param(5, uint8_t(kOscFirst + 1), 30);    // a detune: D14
+    pump();
+    CHECK(screen_has(app, "SQR"));
+    CHECK(screen_has(app, "D14"));
+    post_cmd_track_param(5, uint8_t(kOscFirst + 0), 127);   // the thinnest pulse
+    post_cmd_track_param(5, uint8_t(kOscFirst + 1), 127);   // sync two octaves up
+    pump();
+    CHECK(screen_has(app, "P8"));
+    CHECK(screen_has(app, "S+24"));
+
+    // Every value of every knob fits.
+    for (int b = 0; b < 128; b++) {
+        for (int i = 0; i < kOscParams; i++) post_cmd_track_param(5, uint8_t(kOscFirst + i), uint8_t(b));
+        pump();
+        check_layout(app, "EDIT OSC, every value");
+    }
+
+    // The factory bass's page again, and SRC for the tests after this one.
+    for (int i = 0; i < kOscParams; i++) {
+        post_cmd_track_param(5, uint8_t(kOscFirst + i), original.v[kOscFirst + i]);
+    }
+    pump();
+    for (int i = 0; i < 5; i++) key(ENAGA_KEY_UP);
     while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
     key(ENAGA_KEY_F4);
 }
@@ -4409,6 +4460,102 @@ TEST(ui_samples_reopens_on_the_file_the_track_plays) {
     enaga::Canvas canvas(g_pixels);
     app.draw(canvas);
     CHECK_EQ(UiProbe::sample_cursor(app), 2);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_samples_reach_the_smpltrek_pool_and_projects) {
+    // A card laid out by the stock SmplTrek firmware, with no /SAMPLES: its manual puts samples
+    // in SmplTrek/Pool/Audio and each project's in SmplTrek/Project/<name>/Audio.
+    Strata &app = fresh();
+    // Seeded as a PC would lay it out (the fake does not refuse a write outside the app's areas,
+    // and lists only the folders made, as FatFs has them).
+    const char *const folders[] = {"/SmplTrek", "/SmplTrek/Pool", "/SmplTrek/Pool/Audio",
+                                   "/SmplTrek/Preset", "/SmplTrek/Project",
+                                   "/SmplTrek/Project/SONG1", "/SmplTrek/Project/SONG1/Audio",
+                                   "/RECORD"};
+    for (const char *f : folders) enaga::files::make_folder(f);
+    card_wav("/SmplTrek/Pool/Audio/Kick 01.wav");
+    card_wav("/SmplTrek/Pool/Audio/Snare.wav", 960);
+    card_wav("/SmplTrek/Project/SONG1/Audio/Vox.wav");
+    card_wav("/RECORD/STRATA_1.WAV");
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);                             // no /SAMPLES: straight into the pool
+    pump(4);
+    const SampleList &list = app_storage().browse_list();
+    CHECK(std::strcmp(list.folder(), "/SmplTrek/Pool/Audio") == 0);
+    CHECK_EQ(list.count(), 2);
+    key(ENAGA_KEY_OK);                             // Kick 01.wav
+    for (int i = 0; i < 4000 && app_storage().samples().slot(0).state != SampleState::ready; i++) {
+        pump();
+    }
+    CHECK(std::strcmp(app_engine().project().kit.tracks[0].sample,
+                      "/SmplTrek/Pool/Audio/Kick 01.wav") == 0);
+    CHECK_EQ(int(app_storage().samples().slot(0).state), int(SampleState::ready));
+
+    // CLR climbs the card's own tree to the root, which now offers the SmplTrek's folders.
+    key(ENAGA_KEY_CLR);
+    pump(4);
+    CHECK(std::strcmp(list.folder(), "/SmplTrek/Pool") == 0);
+    key(ENAGA_KEY_CLR);
+    pump(4);
+    CHECK(std::strcmp(list.folder(), "/SmplTrek") == 0);
+    key(ENAGA_KEY_CLR);
+    pump(4);
+    CHECK(list.at_root());
+    CHECK_EQ(list.count(), 4);
+    {
+        enaga::Canvas canvas(g_pixels);
+        app.draw(canvas);
+    }
+    CHECK_EQ(UiProbe::sample_cursor(app), 2);      // back on SMPLTREK
+    key(ENAGA_KEY_OK);                             // SMPLTREK -> Project -> SONG1 -> Audio
+    pump(4);
+    CHECK(std::strcmp(list.folder(), "/SmplTrek") == 0);
+    CHECK_EQ(list.find("Project"), 2);             // Pool, Preset, Project
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_OK);
+    pump(4);
+    CHECK(std::strcmp(list.folder(), "/SmplTrek/Project/SONG1/Audio") == 0);
+    key(ENAGA_KEY_OK);                             // Vox.wav
+    pump(20);
+    CHECK(std::strcmp(app_engine().project().kit.tracks[0].sample,
+                      "/SmplTrek/Project/SONG1/Audio/Vox.wav") == 0);
+
+    // Leave and come back: the browser opens where the track's file is, on it.
+    for (int i = 0; i < 6 && UiProbe::mode(app) == int(Mode::samples); i++) {
+        key(ENAGA_KEY_CLR);
+        pump(4);
+    }
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    key(ENAGA_KEY_OK);
+    pump(4);
+    CHECK(std::strcmp(list.folder(), "/SmplTrek/Project/SONG1/Audio") == 0);
+    {
+        enaga::Canvas canvas(g_pixels);
+        app.draw(canvas);
+    }
+    CHECK_EQ(UiProbe::sample_cursor(app), 0);
+    check_layout(app, "SAMPLES, a SmplTrek project folder");
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_samples_root_hides_the_smpltrek_folders_on_a_card_without_them) {
+    fresh();
+    seed_sample_card();
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);
+    pump(4);
+    CHECK(std::strcmp(app_storage().browse_list().folder(), "/SAMPLES") == 0);
+    key(ENAGA_KEY_CLR);
+    pump(4);
+    CHECK(app_storage().browse_list().at_root());
+    CHECK_EQ(app_storage().browse_list().count(), 2);
+    key(ENAGA_KEY_CLR);
     key(ENAGA_KEY_F4);
 }
 
@@ -6493,6 +6640,17 @@ TEST(ui_screenshots) {
     pump();
     write_shot(folder, "edit_asr");
     for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
+    // And the OSC page on the same track: a square, OSC 2 detuned, a little sub and drive.
+    key(ENAGA_KEY_SELECT_RIGHT);
+    const TrackParams before_osc = app_engine().params(6);
+    const uint8_t osc[kOscParams] = {32, 30, 40, 30};    // SQR, D14, 40, 30
+    for (int i = 0; i < kOscParams; i++) post_cmd_track_param(6, uint8_t(kOscFirst + i), osc[i]);
+    pump();
+    write_shot(folder, "edit_osc");
+    for (int i = 0; i < kOscParams; i++) {
+        post_cmd_track_param(6, uint8_t(kOscFirst + i), before_osc.v[kOscFirst + i]);
+    }
+    key(ENAGA_KEY_SELECT_LEFT);
     pump();
     for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
     key(ENAGA_KEY_SELECT_LEFT);
@@ -7184,7 +7342,7 @@ void sounds_on(Strata &app, MachineId machine) {
 }
 
 void sounds_cursor_to(int row) {
-    for (int i = 0; i < 12; i++) key(ENAGA_KEY_UP);
+    for (int i = 0; i < 16; i++) key(ENAGA_KEY_UP);
     for (int i = 0; i < row; i++) key(ENAGA_KEY_DOWN);
 }
 
@@ -7210,6 +7368,28 @@ TEST(ui_layout_sounds_on_every_machine_that_has_them) {
         key(ENAGA_KEY_CLR);
         key(ENAGA_KEY_F4);
     }
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+}
+
+TEST(ui_sounds_a_list_longer_than_the_screen_scrolls_with_the_cursor) {
+    Strata &app = fresh();
+    sounds_on(app, MachineId::va_mono);
+    const int count = sound_preset_count(uint8_t(MachineId::va_mono));
+    CHECK(count >= 8);                                 // more rows than the screen's eight
+    const char *last = sound_preset(uint8_t(MachineId::va_mono), count - 1)->name;
+    sounds_cursor_to(0);
+    CHECK(screen_has(app, "AS WAS"));
+    CHECK(!screen_has(app, last));
+    sounds_cursor_to(count);                           // the last preset
+    CHECK(screen_has(app, last));
+    CHECK(!screen_has(app, "AS WAS"));
+    check_layout(app, "SOUNDS, scrolled");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(sound_preset_matches(uint8_t(MachineId::va_mono), count - 1, app_engine().params(0).v));
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
     post_track(Cmd::set_machine, 0, 0);
     pump(4);
 }

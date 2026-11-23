@@ -39,8 +39,8 @@
 //         1  64  each chain entry's mute recall: 0 none, 1-8 that stored mute state
 //     midi (id 6), 8 bytes: each track's MIDI OUT channel, 0 off or 1-16
 //
-// KIT.BIN, six sections: the tracks (1,076 bytes alone), then the optional LFO, arp, SLC AUTO,
-// ASR and duck sections, each of which an older file may lack.
+// KIT.BIN, seven sections: the tracks (1,076 bytes alone), then the optional LFO, arp, SLC AUTO,
+// ASR, duck and OSC sections, each of which an older file may lack.
 //
 //     tracks (id 1), 8 x 131 bytes
 //         0  16  the 16 parameters, 0..127
@@ -57,6 +57,7 @@
 //         9   1  attack, ms
 //        10   1  hold, x 5 ms
 //        11   1  release, x 5 ms
+//     osc (id 7), 8 x 4 bytes: the OSC page's parameters (absent: kKitOscLegacy)
 //
 // BANK_x.BIN, one section holding 16 patterns, each one `pattern_write`'s own container back to
 // back. The patterns are the section's bytes, so the bank's CRC covers them as well as its own
@@ -352,10 +353,10 @@ static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
-constexpr uint32_t kKitSections = 6;
-// The second to sixth, the LFO, the arp, SLC AUTO, the ASR page and the duck, are optional on
-// read: see kSectionKitLfo.
-constexpr uint32_t kKitOptionalSections = 5;
+constexpr uint32_t kKitSections = 7;
+// The second to seventh, the LFO, the arp, SLC AUTO, the ASR page, the duck and the OSC page, are
+// optional on read: see kSectionKitLfo.
+constexpr uint32_t kKitOptionalSections = 6;
 constexpr uint32_t kKitTrackBytes =
     uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
@@ -371,7 +372,9 @@ constexpr uint32_t kKitAsrBytes = uint32_t(kKitAsrParams) * uint32_t(kTracks);
 constexpr uint32_t kKitAsrOffset = kKitSlicesOffset + kKitSlicesBytes;
 constexpr uint32_t kKitDuckBytes = uint32_t(kTracks) + 4;
 constexpr uint32_t kKitDuckOffset = kKitAsrOffset + kKitAsrBytes;
-constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitDuckOffset + kKitDuckBytes;
+constexpr uint32_t kKitOscBytes = uint32_t(kKitOscParams) * uint32_t(kTracks);
+constexpr uint32_t kKitOscOffset = kKitDuckOffset + kKitDuckBytes;
+constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitOscOffset + kKitOscBytes;
 static_assert(kKitSoundParams == 16, "KIT.BIN's track section has carried 16 parameters since M4");
 
 // --- BANK_x.BIN sizes -----------------------------------------------------
@@ -728,6 +731,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
         {kSectionKitSlices, kKitSlicesOffset, kKitSlicesBytes},
         {kSectionKitAsr, kKitAsrOffset, kKitAsrBytes},
         {kSectionKitDuck, kKitDuckOffset, kKitDuckBytes},
+        {kSectionKitOsc, kKitOscOffset, kKitOscBytes},
     };
 
     Writer w(buffer, capacity);
@@ -748,13 +752,16 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
     }
     for (int t = 0; t < kTracks; t++) w.u8(kit.tracks[t].slice_mode);
     for (int t = 0; t < kTracks; t++) {
-        for (int p = kKitArpEnd; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
+        for (int p = kKitArpEnd; p < kKitAsrEnd; p++) w.u8(kit.tracks[t].params[p]);
     }
     for (int t = 0; t < kTracks; t++) w.u8(kit.tracks[t].duck);
     w.u8(kit.duck.source);
     w.u8(kit.duck.attack_ms);
     w.u8(kit.duck.hold);
     w.u8(kit.duck.release);
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitAsrEnd; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
+    }
 
     if (!w.ok() || w.size() != kKitTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kKitTotalBytes, written);
@@ -767,7 +774,8 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     };
 
     const uint16_t wanted[kKitSections] = {kSectionKitTracks, kSectionKitLfo, kSectionKitArp,
-                                           kSectionKitSlices, kSectionKitAsr, kSectionKitDuck};
+                                           kSectionKitSlices, kSectionKitAsr, kSectionKitDuck,
+                                           kSectionKitOsc};
     uint32_t offset[kKitSections] = {};
     uint32_t length[kKitSections] = {};
     const SerializeResult found = find_sections(buffer, size, kKitVersion, wanted, kKitSections,
@@ -780,6 +788,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (offset[3] != 0 && length[3] < kKitSlicesBytes) return refuse(SerializeResult::malformed);
     if (offset[4] != 0 && length[4] < kKitAsrBytes) return refuse(SerializeResult::malformed);
     if (offset[5] != 0 && length[5] < kKitDuckBytes) return refuse(SerializeResult::malformed);
+    if (offset[6] != 0 && length[6] < kKitOscBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -807,7 +816,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     // because `kit` may be a buffer holding the previous kit (the kit browser's inbox, a project
     // load), and "left alone" would carry its settings into a kit that has none.
     const int firsts[3] = {kKitSoundParams, kKitLfoEnd, kKitArpEnd};
-    const int ends[3] = {kKitLfoEnd, kKitArpEnd, kKitParams};
+    const int ends[3] = {kKitLfoEnd, kKitArpEnd, kKitAsrEnd};
     const int sections[3] = {1, 2, 4};
     for (int k = 0; k < 3; k++) {
         const uint32_t at = offset[sections[k]];
@@ -852,6 +861,21 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
         kit.duck.attack_ms = clamp_u8(r.u8(), kDuckAttackMin, kDuckAttackMax);
         kit.duck.hold = clamp_u8(r.u8(), 0, kDuckHoldMax);
         kit.duck.release = clamp_u8(r.u8(), kDuckReleaseMin, kDuckReleaseMax);
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // The OSC page. Absent is a kit from before it, which gets the legacy voice (kKitOscLegacy),
+    // set explicitly for the reason above.
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitOscParams; p++) kit.tracks[t].params[kKitAsrEnd + p] = kKitOscLegacy[p];
+    }
+    if (offset[6] != 0) {
+        if (!r.seek(kHeaderBytes + offset[6])) return refuse(SerializeResult::malformed);
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = kKitAsrEnd; p < kKitParams; p++) {
+                kit.tracks[t].params[p] = clamp_u8(r.u8(), 0, kParamMax);
+            }
+        }
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
     return SerializeResult::ok;

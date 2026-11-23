@@ -149,7 +149,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | Mode | UP / DOWN | LEFT / RIGHT | Screen keys L/R | Pad-row L/R | A-D | OK / CLR | FUNC + arrow |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GRID | Track | Step page 1-4 | EDIT page (for A-D) | Step page | Current EDIT page params | — / clear | Copy / paste |
-| EDIT | Track | Page SRC FLTR AMP FX LFO ARP ASR | Page | Step page | The page's 4 params | SMP/GRN: open SAMPLES; drums and VAs: open SOUNDS / clear | Copy / paste |
+| EDIT | Track | Page SRC FLTR AMP FX LFO ARP ASR OSC | Page | Step page | The page's 4 params | SMP/GRN: open SAMPLES; drums and VAs: open SOUNDS / clear | Copy / paste |
 | KEYS | Track | Octave (OCT 0-7) | EDIT page (for A-D) | Octave | Current EDIT page params | — | Copy / paste |
 | MACHINE | Machine | Machine column (3 over) | Track | Step page | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES; drums and VAs: open SOUNDS / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | — | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
@@ -209,7 +209,8 @@ into an empty slot at once, and over a stored kit on a second press (AGAIN TO OV
 live in `/ENAGA/DATA/STRATA/KITS/KIT_01.BIN` ... `KIT_16.BIN`. A recalled kit makes the project
 UNSAVED until it is saved with FUNC+HOME, OK.
 **SAMPLES:** one OK loads the file into the track at once, the beat keeps playing and the cursor
-stays, so DOWN, OK tries the next. The top level holds `SAMPLES/` and `RECORD/`. Only WAVs and
+stays, so DOWN, OK tries the next. The top level holds `SAMPLES/` and `RECORD/`, and on a card with the stock firmware's folders also
+`POOL/` (`/SmplTrek/Pool/Audio`) and `SMPLTREK/` (the whole `/SmplTrek` tree, stock projects included). Only WAVs and
 folders are listed (no `._` files), at most 256 a folder. Picking a file makes the project UNSAVED.
 **MIDI out:** a track with a MIDI OUT channel (MACHINE, encoder B) sends every note it plays
 there: steps, chords, ratchets, arp hits, note repeat, pads, KEYS and MIDI IN. MID is the machine that plays nothing
@@ -238,6 +239,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | EDIT LFO | `NOW CUT 87`, `LFO OFF: SET DEP+DST` | The destination's value right now; DEP or DST is zero |
 | EDIT ARP | `UP 1/16 X2 75%`, `ARP OFF: TURN MOD` | Mode, rate, octaves, gate; the arp is off |
 | EDIT ASR | `HOLDS: PAD OR LEN`, `SUS 0: ONE-SHOT`, `VA MONO/POLY ONLY` | Notes hold (SUS up); notes are one-shots; not a VA track |
+| EDIT OSC | `OS2: DET 1-63 SYN 64+`, `VA MONO/POLY ONLY` | What OS2's two halves do; not a VA track |
 | PROJECT slots | `05>`, bright box | Queued slot; live slot (bright), has trigs (mid), empty (dark) |
 | PROJECT | `SMP OS.X- 12/32M` | Per track sample: O ready, S streamed from the card, . loading, X failed, - none; MiB used/budget |
 | Any | `STREAM LATE` | The card fell behind a streamed file; the gap played as silence |
@@ -256,9 +258,10 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 **Machines:** KCK kick · SNR snare · HAT hat · PRC 2-op FM percussion · SMP sampler · GRN granular ·
 MNO VA mono · PLY VA poly.
 
-**EDIT pages:** SRC source · FLTR filter (insert chain) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ASR the VAs' held notes.
+**EDIT pages:** SRC source · FLTR filter (insert chain) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ASR the VAs' held notes · OSC the VAs' oscillators and drive.
 **LFO page:** WAV shape SIN TRI RMP (rising) SAW (falling) SQR S+H · RAT rate, `0.06`-`32` Hz free on the lower half, `8B` (bars) to `1/32` synced on the upper (`.` dotted, `T` triplet) · DEP depth, 127 = about 64 either side · DST the parameter it moves, or OFF. Lockable, scene- and macro-able like any parameter.
 **ASR page (VA MONO, VA POLY):** ATK attack `3MS`-`5.0S` · SUS sustain `0%` (one-shot, DEC is the length, as before) to `100%` · REL release `60MS`-`8.0S` · FSU filter sustain (0 = the sweep closes, up = stays open). SUS up: a note holds while the pad or key is held, or for the step's LEN (MONO counts LEN only then). Pad: SUS 70%, ATK 400MS, REL 2.0S, chord step LEN 16 STP. REC records how long a held note was held as its step's LEN.
+**OSC page (VA MONO, VA POLY):** WAV `SAW` (0-31), `SQR` (32) to `P08` (127, a thin pulse) · OS2 `OFF` (0), `D0`-`D60` a detuned second saw in cents (1-63: chorus to Reese), `S+0`-`S+24` a pulse synced to OSC 1 (64-127: the sync sweep) · SUB the sub an octave down (0 = off) · DRV drive into the filter, thicker and dirtier, not louder. An older project loads `SAW OFF 102 000`. RES now self-oscillates near the top.
 
 **ARP page:** MOD OFF UP DN U/D ORD RND · RAT `1/4` to `1/32T` · OCT `X1`-`X4` · GAT note length, `50%`-`99%` of the spacing. On, a step plays a run for its length (PLY: through its chord); in KEYS, held keys are arpeggiated. Lockable and scene-able.
 

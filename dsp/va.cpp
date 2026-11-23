@@ -16,7 +16,7 @@
 //
 //   stage                expected to dominate                            flops/sample
 //   OSC 2 (sync)         enaga_oscillator_sync_add: a PolyBLEP pulse      ~16   THE LARGEST
-//                        PLUS a band-limited restart wherever OSC 1's           STAGE
+//   (OS2 64+ only)       PLUS a band-limited restart wherever OSC 1's           STAGE
 //                        phase wraps, so it carries two corrections
 //                        and runs a sample ahead of the block.
 //   OSC 1 (saw)          enaga_oscillator_add: the ramp and one            ~9
@@ -87,38 +87,53 @@ using enaga::dsp::reciprocal;
 using enaga::dsp::semitones;
 using enaga::dsp::tan_pi;
 
-// --- the voice's fixed proportions ---------------------------------------------------------
+// --- the oscillator levels ----------------------------------------------------------------
 //
-// Eight knobs is a hard budget (dsp/track.hpp: SRC plus AMP), and docs/SPEC.md's own guidance
-// for this machine is that the filter and the accent matter more than oscillator count. So the
-// oscillator mix is not a knob: these are the levels, chosen once, for a techno bass.
-//
-// They are set so the sum runs the post-filter soft clip slightly into its curve -- a typical
-// note peaks near 0.8 there, which is about 10% of gentle compression on the peaks, and with
-// resonance up it clips properly. That is deliberate: a driven bass is the sound, and it is
-// also what keeps the voice bounded (see the clip in run()).
-constexpr float kLevelOsc1 = 0.60f;        // saw: the backbone
-constexpr float kLevelOsc2 = 0.14f;        // the synced pulse's bite, small until accented
-constexpr float kLevelOsc2Accent = 0.34f;  // what an accent adds to it
-constexpr float kLevelSub = 0.40f;         // triangle, an octave down: the weight
+// The OSC page picks the waves and what OSC 2 does; these are the levels each choice runs at,
+// set so every choice is about as loud as a lone saw (two detuned saws add in power, so each
+// is 1/sqrt(2) of one), and so the sum runs the post-filter soft clip slightly into its curve.
+constexpr float kLevelOsc1 = 0.60f;        // OSC 1 alone
+constexpr float kLevelDetune = 0.43f;      // each of the two in DET's zone
+constexpr float kLevelSync1 = 0.28f;       // SYN: OSC 1 is the body underneath ...
+constexpr float kLevelSync2 = 0.46f;       // ... and the synced OSC 2 is the voice
+constexpr float kLevelSyncAccent = 0.16f;  // an accent brings the sync forward
+constexpr float kLevelSubMax = 0.50f;      // SUB at 127: triangle, an octave down
 constexpr float kLevelNoise = 0.016f;      // a trace of grit
 constexpr float kLevelNoiseAccent = 0.050f;
 
-// OSC 2 sits +19 semitones above OSC 1 and is hard synced to it. A whole number of octaves
-// would be pointless (the restart would fall where its own cycle already starts, so sync would
-// do nothing); +19 is an octave and a fifth, which gives a strong, vocal formant.
-constexpr float kOsc2Ratio = 2.99661f;     // 2^(19/12)
+// OS2's zones: 0 OFF, 1-63 DET, 64-127 SYN.
+constexpr float kDetuneMaxSemis = 0.60f;   // DET at 63: 60 cents between the two (square law)
+constexpr float kSyncMaxSemis = 24.0f;     // SYN at 127: OSC 2 two octaves above OSC 1
+// WAV: 0-31 the saw, 32-127 a pulse from square (50%) to thin (8%).
+constexpr uint8_t kPulseFirst = 32;
+constexpr float kPulseNarrowest = 0.08f;
 
-// LP24's first stage runs at a low Q so only the second stage resonates -- the reference's
-// arrangement, and the reason a 4-pole sweep stays controllable at high RES.
-constexpr float kStageOneK = 1.85f;
+// LP24's first stage is a gentle, Butterworth-damped pole pair (Q 0.71); only the second
+// resonates. That keeps the 4-pole knee sharp and the resonance one controllable peak.
+constexpr float kStageOneK = 1.414f;
+
+// RES's curve: k = 2 x (kResFloorK / 2)^r, so the resonant peak rises by about the same number
+// of dB for every count (va_resonance_k), minus a last push that takes k just below zero over
+// the top few counts, where the filter self-oscillates at the level its band clip allows.
+constexpr float kResFloorK = 0.03f;
+constexpr float kResOscillate = 0.04f;
+constexpr float kResFloorOctaves = -6.0589f;   // log2(kResFloorK / 2)
+// The resonance limiter (VaVoice::run): above this amplitude, squared, of the resonant stage,
+// k rises by kResLimitDamp per unit of excess.
+constexpr float kResLimitSq = 0.4f;
+constexpr float kResLimitDamp = 0.08f;
+
+// DRV: the gain into the filter's input clip, 0.6 at 0 (the oscillator sum stays almost clean)
+// to 6 at 127, and how much of it also lifts the post-filter clip.
+constexpr float kPreDriveLow = 0.7f;
+constexpr float kPreDriveOctaves = 3.1f;   // 0.7 x 2^3.1 = 6
+constexpr float kPostDriveFromDrv = 0.6f;
+constexpr float kDriveLevelTrim = 0.45f;   // a driven voice is denser: LVL loses up to 3 dB
 
 // --- the knob curves ------------------------------------------------------------------------
 constexpr float kTuneStep = 24.0f / 64.0f;     // +-24 semitones, exactly 0 at knob 64
 constexpr float kCutoffLowHz = 35.0f;
 constexpr float kCutoffOctaves = 8.4214f;      // log2(12000 / 35)
-constexpr float kResMax12 = 0.93f;             // one pole: squelchy, short of self-oscillation
-constexpr float kResMax24 = 0.84f;             // it compounds through the cascade
 constexpr float kEnvSemitones = 66.0f;         // 5.5 octaves of cutoff at ENV 127
 constexpr float kDecayLowS = 0.015f;
 constexpr float kDecayOctaves = 7.3219f;       // log2(2.4 / 0.015): 15 ms to 2.4 s
@@ -155,8 +170,6 @@ constexpr float kFilterReleaseRatio = kFilterReleaseS / kReleaseS;
 constexpr float kAccentGain = 1.40f;           // louder, but that is the least of it
 constexpr float kAccentCutSemis = 10.0f;       // the base cutoff opens
 constexpr float kAccentEnvScale = 1.5f;        // and the sweep above it reaches further
-constexpr float kAccentK = 0.08f;              // a touch more resonance (k = 1 / Q)
-constexpr float kMinK = 0.13f;                 // the stability floor the accent cannot cross
 constexpr float kVelocityFloor = 0.25f;        // velocity 1 is a quarter the level, not silence
 
 // A one-pole coefficient that reaches its target to within 1% in `seconds`, stepped at `rate`.
@@ -191,10 +204,14 @@ constexpr uint32_t kGateMax = 14400000u;
 //   2  CUT  base cutoff, 35 Hz to 12 kHz exponential (8.42 octaves), so about 650 Hz at 64.
 //           The filter envelope and the accent open it from there; nothing closes it, which is
 //           why the knob's bottom end has to be genuinely closed.
-//   3  RES  resonance, 0 to 0.93 as Enaga's SVF counts it (0.84 on LP24, because resonance
-//           compounds through a cascade). It also drops the oscillator level by up to 37% and
-//           raises the post-filter soft clip's drive by up to 70%, which is how the squelch
-//           gets dirty rather than just loud, and how it stays bounded.
+//   3  RES  resonance, k = 2 x (kResFloorK / 2)^r less a small term at the very top, so each
+//           count adds about the same number of dB to the peak (the old linear-in-k knob did
+//           nothing for its first three quarters). Around 124 k crosses zero and the filter
+//           self-oscillates, held at a fixed level by the control-rate limiter in run(). It
+//           also drops the oscillator level by up to 30% and raises the post-filter soft
+//           clip's drive by up to 30%, which is how the squelch gets dirty rather than just loud.
+//           LP24's first stage stays at Butterworth damping, so the resonance is the second
+//           stage's alone and LP24 squelches as hard as LP12 (it peaked at +4.6 dB before).
 // AMP -- the envelopes and the output. Slot 0 is the decay and slot 3 the level on every STRATA
 // machine, which this one keeps.
 //   8  DEC  decay, 15 ms to 2.4 s exponential (about 190 ms at 64). ONE knob for both
@@ -212,7 +229,7 @@ constexpr uint32_t kGateMax = 14400000u;
 // ASR -- the note envelope, a page of its own after the arp (dsp/track.hpp: SRC and AMP are full).
 // Every knob at 0 is EXACTLY the envelope this machine had before the page existed -- the same
 // constants, not a curve that happens to land near them -- so an older kit, which loads with
-// the four bytes at 0, renders the same bits.
+// the four bytes at 0, keeps its envelope.
 //  24  ATK  attack, 2.5 ms to 5 s exponential. The accent's attack scales with it (0.6 ms at
 //           0), and above 0 the filter envelope's attack follows it too, so a slow pad swells
 //           open as it fades in rather than arriving bright.
@@ -225,6 +242,18 @@ constexpr uint32_t kGateMax = 14400000u;
 //  27  FSU  filter sustain, 0 to 1 of the filter envelope's sweep (ENV). At 0 the sweep
 //           closes back to CUT over 0.55 x DEC, the 303 shape; up, it holds open, so a long pad
 //           does not dull while it sustains.
+//
+// OSC -- the oscillators and the drive, the eighth page. An older kit loads WAV 0, OS2 0, SUB 102,
+// DRV 0 (core/project.hpp, kKitOscLegacy): a saw and the old sub, without the old engine's
+// always-on synced pulse, which is the closest thing the new page can play.
+//  28  WAV  OSC 1's wave: 0-31 saw; 32-127 pulse, a square at 32 narrowing to 8% at 127.
+//  29  OS2  OSC 2: 0 off; 1-63 a detuned second saw, 0.6 x u^2 semitones apart, the pair split
+//           around the pitch so the note stays in tune; 64-127 a pulse hard-synced to OSC 1,
+//           +0 at 64 to +24 semitones at 127. An accent lifts the synced pulse.
+//  30  SUB  the triangle sub an octave down, level 0 to 0.5 linear. 0 skips it.
+//  31  DRV  drive: a soft clip before the filter, 0.7 x 2^(3.1 x drv) into the clip, plus up to
+//           60% more post-filter drive. The output is trimmed by 0.45 x drv^2 so turning it
+//           thickens the sound rather than just making it louder. 0 skips the pre-filter clip.
 
 float va_attack_seconds(uint8_t value) {
     return value == 0 ? kAttackS : kAttackS * exp2(kAttackOctaves * float(value) * (1.0f / 127.0f));
@@ -233,6 +262,35 @@ float va_attack_seconds(uint8_t value) {
 float va_release_seconds(uint8_t value) {
     return value == 0 ? kReleaseS
                       : kReleaseS * exp2(kReleaseOctaves * float(value) * (1.0f / 127.0f));
+}
+
+VaOsc2 va_osc2_mode(uint8_t value) {
+    if (value == 0) return VaOsc2::off;
+    return value < 64 ? VaOsc2::detune : VaOsc2::sync;
+}
+
+float va_osc2_detune_cents(uint8_t value) {
+    if (va_osc2_mode(value) != VaOsc2::detune) return 0.0f;
+    const float u = float(value) * (1.0f / 63.0f);
+    return 100.0f * kDetuneMaxSemis * u * u;
+}
+
+float va_osc2_sync_semitones(uint8_t value) {
+    if (va_osc2_mode(value) != VaOsc2::sync) return 0.0f;
+    return kSyncMaxSemis * float(value - 64) * (1.0f / 63.0f);
+}
+
+int va_pulse_percent(uint8_t value) {
+    if (value < kPulseFirst) return 0;
+    const float u = float(value - kPulseFirst) * (1.0f / float(127 - kPulseFirst));
+    return int(100.0f * (0.5f - (0.5f - kPulseNarrowest) * u) + 0.5f);
+}
+
+float va_resonance_k(uint8_t value) {
+    const float r = float(value) * (1.0f / 127.0f);
+    const float r2 = r * r;
+    const float r8 = r2 * r2 * r2 * r2;
+    return 2.0f * exp2(r * kResFloorOctaves) - kResOscillate * r8;
 }
 
 VaMode va_mode_from(uint8_t value) {
@@ -254,16 +312,43 @@ VaSettings VaSettings::make(const TrackParams &params, float rate, float inv_rat
     s.mode = va_mode_from(params.get(1));
     s.cutoff_hz = kCutoffLowHz * exp2(kCutoffOctaves * params.unit(2));
 
-    const float resonance = params.unit(3) * (s.mode == VaMode::lp24 ? kResMax24 : kResMax12);
-    s.k_res = 2.0f - 1.98f * resonance;            // the same k SvfCoefficients::make builds
-    const float makeup = 1.0f - 0.4f * resonance;  // keep the filter's input out of the clip
-    s.drive = 1.0f + 0.7f * resonance;             // and let the clip do the dirt instead
+    const float resonance = params.unit(3);
+    s.k_res = va_resonance_k(params.get(3));
+    const float makeup = 1.0f - 0.3f * resonance;  // keep the filter's input out of the clip
+    const float drv = params.unit(Page::osc, 3);
+    s.drive = (1.0f + 0.3f * resonance) * (1.0f + kPostDriveFromDrv * drv);  // the clip's dirt
+    // DRV 0 is no input stage at all (Enaga's filter alone); above it, the gain into the clip.
+    s.pre_drive = drv > 0.0f ? kPreDriveLow * exp2(kPreDriveOctaves * drv) : 0.0f;
+    s.inv_pre_drive = drv > 0.0f ? reciprocal(s.pre_drive) : 0.0f;
+
+    // The OSC page.
+    const uint8_t wav = params.get(Page::osc, 0);
+    const uint8_t os2 = params.get(Page::osc, 1);
+    s.wave = wav < kPulseFirst ? Wave::saw : Wave::pulse;
+    s.width = wav < kPulseFirst ? 0.5f : float(va_pulse_percent(wav)) * 0.01f;
+    s.osc2 = va_osc2_mode(os2);
+    float level1 = kLevelOsc1, level2 = 0.0f, accent2 = 0.0f;
+    s.ratio1 = 1.0f;
+    s.ratio2 = 1.0f;
+    if (s.osc2 == VaOsc2::detune) {
+        const float half = va_osc2_detune_cents(os2) * 0.005f;   // semitones each way
+        s.ratio1 = semitones(-half);
+        s.ratio2 = semitones(half);
+        level1 = kLevelDetune;
+        level2 = kLevelDetune;
+    } else if (s.osc2 == VaOsc2::sync) {
+        s.ratio2 = semitones(va_osc2_sync_semitones(os2));
+        level1 = kLevelSync1;
+        level2 = kLevelSync2;
+        accent2 = kLevelSyncAccent;
+    }
+    const float level_sub = kLevelSubMax * params.unit(Page::osc, 2);
 
     s.decay_s = kDecayLowS * exp2(kDecayOctaves * params.unit(8));
     s.env_semis = params.unit(9) * kEnvSemitones;
 
     const float level = params.unit(11);
-    s.out_gain = kHeadroom * level * level;
+    s.out_gain = kHeadroom * level * level * (1.0f - kDriveLevelTrim * drv * drv);
 
     // The ASR page. Each 0 takes the old constant itself rather than the curve's value at 0, so
     // a kit from before the page renders bit-identically (the table above).
@@ -288,11 +373,11 @@ VaSettings VaSettings::make(const TrackParams &params, float rate, float inv_rat
         EnvelopeShape::make(filter_attack, s.decay_s * kFilterDecayRatio * kAccentFilterRatio,
                             s.filter_sustain, filter_release, control_rate);
 
-    s.level_osc1 = kLevelOsc1 * makeup;
-    s.level_osc2 = kLevelOsc2 * makeup;
-    s.level_sub = kLevelSub * makeup;
+    s.level_osc1 = level1 * makeup;
+    s.level_osc2 = level2 * makeup;
+    s.level_sub = level_sub * makeup;
     s.level_noise = kLevelNoise * makeup;
-    s.accent_osc2 = kLevelOsc2Accent * makeup;
+    s.accent_osc2 = accent2 * makeup;
     s.accent_noise = kLevelNoiseAccent * makeup;
     return s;
 }
@@ -356,13 +441,23 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     // The oscillators' increments, recomputed only when the pitch has moved: a semitones() and
     // two reciprocals a control step per voice, for a value that is constant for the whole of a
     // held note. Same inputs, same arithmetic, so the cached bits are the computed ones.
-    if (pitch_ != osc_pitch_ || s.inv_rate != osc_inv_rate_) {
+    if (pitch_ != osc_pitch_ || s.inv_rate != osc_inv_rate_ || s.ratio1 != osc_ratio1_ ||
+        s.ratio2 != osc_ratio2_) {
         osc_pitch_ = pitch_;
         osc_inv_rate_ = s.inv_rate;
+        osc_ratio1_ = s.ratio1;
+        osc_ratio2_ = s.ratio2;
         const float hz = 440.0f * semitones(pitch_ - 69.0f);
-        dt1_ = clamp(hz * s.inv_rate, 1e-5f, 0.45f);
-        inv1_ = reciprocal(dt1_);
-        dt2_ = clamp(dt1_ * kOsc2Ratio, 1e-5f, 0.45f);
+        dt0_ = clamp(hz * s.inv_rate, 1e-5f, 0.45f);
+        inv0_ = reciprocal(dt0_);
+        if (s.ratio1 == 1.0f) {
+            dt1_ = dt0_;
+            inv1_ = inv0_;
+        } else {
+            dt1_ = clamp(dt0_ * s.ratio1, 1e-5f, 0.45f);
+            inv1_ = reciprocal(dt1_);
+        }
+        dt2_ = clamp(dt0_ * s.ratio2, 1e-5f, 0.45f);
         inv2_ = reciprocal(dt2_);
     }
     const float dt1 = dt1_;
@@ -390,13 +485,30 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
         if (accent_) semis = semis * kAccentEnvScale + kAccentCutSemis;
         const float cutoff = clamp(s.cutoff_hz * semitones(semis), 20.0f, 0.45f * s.rate);
         g = tan_pi(cutoff * s.inv_rate);
-        k = accent_ ? clamp(s.k_res - kAccentK, kMinK, s.k_res) : s.k_res;
+        // Not more resonance: with RES's new range that rang the body of an accented note on
+        // and pushed its weight back, where an accent wants it forward (tests/test_va.cpp).
+        k = s.k_res;
         if (shared != nullptr) shared->add(fenv, accent_, g, k);
     }
 
     // Not cached: `from_g` is one reciprocal and three multiplies, which is not worth a lookup,
     // and leaving it out keeps an entry to one key and two values.
-    const SvfCoefficients c2 = SvfCoefficients::from_g(g, k);
+    // The resonant stage's coefficients, with g kept: its band is re-integrated after the clip
+    // (valoops.h, strata_va_filter). k may be just below zero at RES's top, so 1 + g(g + k) is
+    // floored well clear of zero.
+    //
+    // The resonance limiter: RES's top takes k just below zero, where the filter would ring up
+    // without bound. Instead the resonant stage's own level, read from its two integrator
+    // states at the end of the last slice (band and low-pass are in quadrature at the resonant
+    // frequency, so s1^2 + s2^2 is its amplitude squared whatever the phase), adds damping
+    // above kResLimit^2. So the filter self-oscillates at that level, and a loud resonant peak
+    // compresses like an analogue one, at the cost of two multiplies a slice rather than a
+    // nonlinearity in the per-sample recurrence (docs/BUDGET.md, "VA sound pass").
+    const enaga_svf &st = svf_b_.state_;
+    const float level = st.s1 * st.s1 + st.s2 * st.s2;
+    const float over = level - kResLimitSq;
+    const float k_live = over > 0.0f ? k + kResLimitDamp * over : k;
+    const SvfCoefficients c2 = SvfCoefficients::from_g(g, k_live);
 
     // --- the slice ---------------------------------------------------------------------
     // OSC 2 is rendered first, because sync reads OSC 1's phase without moving it on: it has to
@@ -404,9 +516,12 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     const float level2 = accent_ ? s.level_osc2 + s.accent_osc2 : s.level_osc2;
     const float noise = accent_ ? s.level_noise + s.accent_noise : s.level_noise;
     enaga_clear(work, n);
-    osc2_.sync_add(work, n, osc1_, dt1, inv1, sync_carry_, Wave::pulse, dt2, inv2, level2);
-    osc1_.render_add(work, n, Wave::saw, dt1, inv1, s.level_osc1);
-    sub_.render_add(work, n, Wave::triangle, 0.5f * dt1, 2.0f * inv1, s.level_sub);
+    if (s.osc2 == VaOsc2::sync) {
+        osc2_.sync_add(work, n, osc1_, dt1, inv1, sync_carry_, s.wave, dt2, inv2, level2, s.width);
+    }
+    osc1_.render_add(work, n, s.wave, dt1, inv1, s.level_osc1, s.width);
+    if (s.osc2 == VaOsc2::detune) osc2_.render_add(work, n, s.wave, dt2, inv2, level2, s.width);
+    if (s.level_sub > 0.0f) sub_.render_add(work, n, Wave::triangle, 0.5f * dt0_, 2.0f * inv0_, s.level_sub);
     rng_.add_noise(work, n, noise);
 
     float target = s.out_gain * (kVelocityFloor + (1.0f - kVelocityFloor) * velocity_) *
@@ -432,35 +547,38 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
         ramp_n_ = n;
         inv_n_ = reciprocal(float(n));
     }
-#if STRATA_VA_FUSED
-    // The filter, the amplitude envelope and the tail in ONE loop (valoops.h): three recurrences
-    // that each kept this core's units mostly idle, overlapped. Bit-exact against the three
-    // passes below, which tests/test_va.cpp checks in every mode and envelope stage.
     // LP24's first stage only: the 12 dB modes never read c1, so they skip its reciprocal.
     const SvfCoefficients c1 =
         s.mode == VaMode::lp24 ? SvfCoefficients::from_g(g, kStageOneK) : c2;
+#if STRATA_VA_FUSED
+    // The filter, the amplitude envelope and the tail in ONE loop (valoops.h): three recurrences
+    // that each kept this core's units mostly idle, overlapped. Bit-exact against the passes
+    // below, which tests/test_va.cpp checks in every mode and envelope stage.
     strata_va_back(out, work, n, int(s.mode), &svf_a_.state_, &c1, &svf_b_.state_, &c2,
-                   &amp_.state_, accent_ ? &s.amp_shape_accent : &s.amp_shape, s.drive, gain_,
+                   s.pre_drive, s.inv_pre_drive, &amp_.state_,
+                   accent_ ? &s.amp_shape_accent : &s.amp_shape, s.drive, gain_,
                    (target - gain_) * inv_n_);
     (void)env;
 #else
-    switch (s.mode) {
-        case VaMode::lp24: {
-            const SvfCoefficients c1 = SvfCoefficients::from_g(g, kStageOneK);
-            Svf::cascade(svf_a_, c1, svf_b_, c2, work, work, n);
-            break;
+    if (s.pre_drive > 0.0f) {
+        strata_va_drive_filter(work, n, int(s.mode), &svf_a_.state_, &c1, &svf_b_.state_, &c2,
+                               s.pre_drive, s.inv_pre_drive);
+    } else {
+        switch (s.mode) {
+            case VaMode::lp24:
+                Svf::cascade(svf_a_, c1, svf_b_, c2, work, work, n);
+                break;
+            case VaMode::lp12:
+                svf_b_.process(work, work, n, c2, Svf::low_pass);
+                break;
+            case VaMode::bp12:
+                svf_b_.process(work, work, n, c2, Svf::band_pass);
+                break;
+            case VaMode::hp12:
+                svf_b_.process(work, work, n, c2, Svf::high_pass);
+                break;
         }
-        case VaMode::lp12:
-            svf_b_.process(work, work, n, c2, Svf::low_pass);
-            break;
-        case VaMode::bp12:
-            svf_b_.process(work, work, n, c2, Svf::band_pass);
-            break;
-        case VaMode::hp12:
-            svf_b_.process(work, work, n, c2, Svf::high_pass);
-            break;
     }
-
     amp_.render(env, n, accent_ ? s.amp_shape_accent : s.amp_shape);
     strata_va_tail(out, work, env, n, s.drive, gain_, (target - gain_) * inv_n_);
 #endif

@@ -59,6 +59,9 @@ TrackParams patch() {
     p.set(kEnv, 0);       // a static filter, so the waveform does not move while measured
     p.set(kGld, 0);
     p.set(kLvl, 127);
+    // The OSC page as an older kit loads it: a saw over the triangle sub an octave down. The
+    // pitch tests below measure the SUB's period, which is the note's an octave down.
+    p.set(kOscFirst + 2, 102);
     return p;
 }
 
@@ -1206,12 +1209,16 @@ TEST(va_a_choked_voice_fades_out_and_stops) {
     float work[n];
     float env[n];
     float out[n];
-    for (int slice = 0; slice < 40; slice++) {          // well into the note
+    // Well into the note; its level is the peak over the last 32 slices, more than a period of
+    // the sub (367 samples), since one 16-sample slice can land anywhere in the waveform.
+    float before = 0.0f;
+    for (int slice = 0; slice < 72; slice++) {
         clear(out, n);
         voice.run(settings, out, n, work, env, nullptr);
+        const float p = peak(out, n);
+        if (slice >= 40 && p > before) before = p;
     }
     CHECK(voice.sounding());
-    const float before = peak(out, n);
     CHECK(before > 0.05f);
 
     voice.choke();
@@ -1256,6 +1263,10 @@ TEST(va_the_fused_back_half_is_bit_exact_against_filter_envelope_and_tail) {
     const float levels[] = {0.0f, 0.9f, 0.4f, 0.03f};
 
     int compared = 0;
+    // DRV off (Enaga's filter alone) and on (strata_va_drive_filter's input clip in front).
+    const float pres[] = {0.0f, 2.2f};
+    for (const float pre : pres) {
+    const float inv_pre = pre > 0.0f ? 1.0f / pre : 0.0f;
     for (int mode = STRATA_VA_LP24; mode <= STRATA_VA_HP12; mode++) {
         for (const enaga_envelope_shape &shape : shapes) {
             for (int start : starts) {
@@ -1276,7 +1287,10 @@ TEST(va_the_fused_back_half_is_bit_exact_against_filter_envelope_and_tail) {
                         }
                         const float step = (slice % 3 == 0 ? -0.01f : 0.004f);
                         // The reference: va.cpp's three passes, through Enaga's own functions.
-                        if (mode == STRATA_VA_LP24) {
+                        if (pre > 0.0f) {
+                            strata_va_drive_filter(ref_work, n, mode, &ra, &c1, &rb, &c2, pre,
+                                                   inv_pre);
+                        } else if (mode == STRATA_VA_LP24) {
                             enaga_svf_cascade(&ra, &c1, &rb, &c2, ENAGA_SVF_LOW, ref_work, ref_work,
                                               n);
                         } else {
@@ -1286,8 +1300,8 @@ TEST(va_the_fused_back_half_is_bit_exact_against_filter_envelope_and_tail) {
                         enaga_envelope_render(&ramp, &shape, env, n);
                         strata_va_tail(rbus, ref_work, env, n, 1.3f, gain, step);
                         // The fused kernel.
-                        strata_va_back(fbus, work, n, mode, &fa, &c1, &fb, &c2, &famp, &shape,
-                                       1.3f, gain, step);
+                        strata_va_back(fbus, work, n, mode, &fa, &c1, &fb, &c2, pre, inv_pre,
+                                       &famp, &shape, 1.3f, gain, step);
                         gain += step * float(n);
 
                         CHECK(std::memcmp(rbus, fbus, sizeof rbus) == 0);
@@ -1301,5 +1315,6 @@ TEST(va_the_fused_back_half_is_bit_exact_against_filter_envelope_and_tail) {
             }
         }
     }
-    CHECK_EQ(compared, 4 * 2 * 5 * 4 * 12);
+    }
+    CHECK_EQ(compared, 2 * 4 * 2 * 5 * 4 * 12);
 }

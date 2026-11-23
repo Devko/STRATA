@@ -23,6 +23,39 @@ void strata_va_tail(float *restrict out, const float *restrict work, const float
     }
 }
 
+/* ---- the driven filter (valoops.h, strata_va_drive_filter) ---- */
+
+#define VA_DRIVE(x) (enaga_soft_clip(pre * (x)) * inv_pre)
+
+void strata_va_drive_filter(float *restrict work, int n, int mode, enaga_svf *s1,
+                            const enaga_svf_coefficients *c1, enaga_svf *s2,
+                            const enaga_svf_coefficients *c2, float pre, float inv_pre) {
+    const enaga_svf_coefficients k2 = *c2;
+    enaga_svf t2 = *s2;
+    float o[3];
+    int i;
+    if (mode == STRATA_VA_LP24) {
+        const enaga_svf_coefficients k1 = *c1;
+        enaga_svf t1 = *s1;
+        STRATA_BLOCK_LOOP
+        for (i = 0; i < n; i++) {
+            float p[3];
+            enaga_svf_step(&t1, &k1, VA_DRIVE(work[i]), &p[0], &p[1], &p[2]);
+            enaga_svf_step(&t2, &k2, p[0], &o[0], &o[1], &o[2]);
+            work[i] = o[0];
+        }
+        *s1 = t1;
+    } else {
+        const int out = mode == STRATA_VA_LP12 ? 0 : (mode == STRATA_VA_BP12 ? 1 : 2);
+        STRATA_BLOCK_LOOP
+        for (i = 0; i < n; i++) {
+            enaga_svf_step(&t2, &k2, VA_DRIVE(work[i]), &o[0], &o[1], &o[2]);
+            work[i] = o[out];
+        }
+    }
+    *s2 = t2;
+}
+
 /* ---- the fused back half (valoops.h) ---- */
 
 /* The filter, one sample: x in, y out. LP24 is Enaga's cascade body, the others its single
@@ -66,7 +99,8 @@ void strata_va_tail(float *restrict out, const float *restrict work, const float
     STRATA_BLOCK_LOOP                                                          \
     for (i = 0; i < n; i++) {                                                  \
         float y;                                                               \
-        FILTER(work[i], y);                                                    \
+        const float x_ = pre > 0.0f ? VA_DRIVE(work[i]) : work[i];             \
+        FILTER(x_, y);                                                         \
         ENV;                                                                   \
         out[i] += g * (enaga_soft_clip(drive * y) * l);                        \
         g += step;                                                             \
@@ -77,7 +111,8 @@ void strata_va_tail(float *restrict out, const float *restrict work, const float
 #define VA_BACK_FUNCTION(NAME, FILTER)                                                         \
     static void NAME(float *restrict out, const float *restrict work, int n, enaga_svf *s1,    \
                      const enaga_svf_coefficients *c1, enaga_svf *s2,                          \
-                     const enaga_svf_coefficients *c2, enaga_envelope *amp,                    \
+                     const enaga_svf_coefficients *c2, float pre, float inv_pre,               \
+                     enaga_envelope *amp,                                                      \
                      const enaga_envelope_shape *shape, float drive, float g, float step) {    \
         const enaga_svf_coefficients k1 = *c1, k2 = *c2;                                       \
         enaga_svf t1 = *s1, t2 = *s2;                                                          \
@@ -116,21 +151,21 @@ VA_BACK_FUNCTION(va_back_hp12, VA_FILTER_HP12)
 
 void strata_va_back(float *restrict out, const float *restrict work, int n, int mode, enaga_svf *s1,
                     const enaga_svf_coefficients *c1, enaga_svf *s2,
-                    const enaga_svf_coefficients *c2, enaga_envelope *amp,
+                    const enaga_svf_coefficients *c2, float pre, float inv_pre, enaga_envelope *amp,
                     const enaga_envelope_shape *shape, float drive, float gain, float step) {
     if (n <= 0) return;
     switch (mode) {
     case STRATA_VA_LP24:
-        va_back_lp24(out, work, n, s1, c1, s2, c2, amp, shape, drive, gain, step);
+        va_back_lp24(out, work, n, s1, c1, s2, c2, pre, inv_pre, amp, shape, drive, gain, step);
         break;
     case STRATA_VA_LP12:
-        va_back_lp12(out, work, n, s1, c1, s2, c2, amp, shape, drive, gain, step);
+        va_back_lp12(out, work, n, s1, c1, s2, c2, pre, inv_pre, amp, shape, drive, gain, step);
         break;
     case STRATA_VA_BP12:
-        va_back_bp12(out, work, n, s1, c1, s2, c2, amp, shape, drive, gain, step);
+        va_back_bp12(out, work, n, s1, c1, s2, c2, pre, inv_pre, amp, shape, drive, gain, step);
         break;
     default:
-        va_back_hp12(out, work, n, s1, c1, s2, c2, amp, shape, drive, gain, step);
+        va_back_hp12(out, work, n, s1, c1, s2, c2, pre, inv_pre, amp, shape, drive, gain, step);
         break;
     }
 }

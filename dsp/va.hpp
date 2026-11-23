@@ -9,19 +9,26 @@
 // What the spec asks for (docs/SPEC.md, "Sound architecture"): "2 oscillators with sync, sub,
 // noise, multimode filter, 2 envelopes, accent, slide, glide". All of it is here:
 //
-//   OSC 1   PolyBLEP saw, the backbone.
-//   OSC 2   PolyBLEP pulse, HARD SYNCED to OSC 1 and tuned +19 semitones. Synced rather than
-//           detuned because sync locks it to OSC 1's period: it adds a bright formant that
-//           cannot drift out of tune with the fundamental, which is what a bass needs. Its
-//           level is small normally and large on an accent, so the accent brings the bite.
-//   SUB     Wave::triangle an octave down. Triangle, not sine: Enaga's triangle is naive
-//           (piecewise linear, no PolyBLEP and no polynomial) and so is a third the cost of its
-//           sine, while an octave below the fundamental the difference is inaudible under the
-//           saw. This is the knob-free "weight" every techno bass needs.
+//   OSC 1   PolyBLEP saw or pulse (OSC page, WAV: 0-31 saw, 32 a square, up to 127 an 8%
+//           pulse). The backbone.
+//   OSC 2   Chosen on the OSC page's OS2: OFF; 1-63 a second saw DETUNED against OSC 1 (the
+//           pair split around the pitch, up to 0.6 semitones apart: chorus, then Reese); 64-127
+//           a PolyBLEP pulse HARD SYNCED to OSC 1, +0 to +24 semitones, the bright formant that
+//           cannot drift out of tune. In sync mode an accent lifts it, so the accent brings the
+//           bite. Off costs nothing: the old engine ran the synced pulse on every note.
+//   SUB     Wave::triangle an octave down, its level the OSC page's SUB (0 = not rendered).
+//           Triangle, not sine: Enaga's triangle is naive (piecewise linear, no PolyBLEP and
+//           no polynomial) and so is a third the cost of its sine, while an octave below the
+//           fundamental the difference is inaudible under the saw.
 //   NOISE   A trace, lifted by an accent. Mostly removed again by the low-pass; it is there as
 //           attack grit, not as a voice of its own.
+//   DRIVE   The OSC page's DRV: a soft clip BEFORE the filter (strata_va_drive_filter), so the
+//           resonance rides on a saturated, thicker source, plus more of the post-filter
+//           drive. DRV 0 skips it and runs Enaga's own block filters.
 //   FILTER  A multimode SVF in the VOICE (see below), swept by its own envelope: the acid
 //           squelch. 24 dB uses Svf::cascade, which is two poles for about the price of one.
+//           RES runs on an exponential curve to self-oscillation near 127, held in check by a
+//           control-rate limiter on the resonant stage (va.cpp, "Resonance").
 //   ENVS    Two: the amplitude envelope at the sample rate, and the filter envelope at the
 //           control rate. One DEC knob shapes both, 303-style, with the filter's sweep shorter
 //           than the amplitude's so the "wow" lands at the front of the note.
@@ -38,7 +45,8 @@
 // the reference does, because resetting any of those under a sounding note is a step in the
 // output -- a click.
 //
-// It reads the SRC page (0-3) and the AMP page (8-11); FLTR and FX belong to the insert chain.
+// It reads the SRC page (0-3), the AMP page (8-11), the ASR page and the OSC page (kOscFirst);
+// FLTR and FX belong to the insert chain.
 //
 // --- the voice is shared with VA POLY -------------------------------------------------------
 //
@@ -75,6 +83,16 @@ VaMode va_mode_from(uint8_t value);
 float va_attack_seconds(uint8_t value);    // ATK: 2.5 ms at 0, 5 s at 127
 float va_release_seconds(uint8_t value);   // REL: 60 ms at 0, 8 s at 127
 
+// The OSC page (va.cpp has the table). OS2's three zones, and the knob values the screen shows.
+enum class VaOsc2 : uint8_t { off = 0, detune, sync };
+VaOsc2 va_osc2_mode(uint8_t value);
+float va_osc2_detune_cents(uint8_t value);   // the spread between the two in DET's zone
+float va_osc2_sync_semitones(uint8_t value); // OSC 2 above OSC 1 in SYN's zone
+int va_pulse_percent(uint8_t value);         // WAV's pulse width, 0 for the saw
+// RES as the resonant stage's damping k (= 1/Q): 2 at 0, about 0.24 at 64, just below 0 (it
+// self-oscillates, bounded by the band clip) over the last few counts.
+float va_resonance_k(uint8_t value);
+
 // --- the control-rate block -----------------------------------------------
 
 // Everything the parameters decide, made once per block by `make` and read by every voice that
@@ -91,11 +109,21 @@ struct VaSettings {
     enaga::dsp::EnvelopeShape amp_shape{}, amp_shape_accent{};
     enaga::dsp::EnvelopeShape fenv_shape{}, fenv_shape_accent{};
     VaMode mode = VaMode::lp12;
+    // The OSC page: OSC 1's wave (saw, or a pulse of `width`), what OSC 2 does, and the two
+    // oscillators' frequencies as ratios of the note's (a detune splits them; sync puts OSC 2
+    // above). The sub is always an octave under the note itself.
+    enaga::dsp::Wave wave = enaga::dsp::Wave::saw;
+    float width = 0.5f;
+    VaOsc2 osc2 = VaOsc2::off;
+    float ratio1 = 1.0f;
+    float ratio2 = 1.0f;
+    float pre_drive = 0.0f;            // DRV: the gain into the filter's input clip, 0 for none
+    float inv_pre_drive = 0.0f;        // and back out of it
     float rate = 48000.0f;
     float inv_rate = 1.0f / 48000.0f;
     float tune = 0.0f;                 // TUN, semitones
     float cutoff_hz = 650.0f;          // CUT
-    float k_res = 1.0f;                // RES as the SVF's k = 1 / Q
+    float k_res = 1.0f;                // RES as the resonant stage's k = 1 / Q
     float env_semis = 0.0f;            // ENV, semitones of cutoff at envelope 1
     float decay_s = 0.2f;              // DEC
     float attack_s = 0.0025f;          // ATK
@@ -276,6 +304,8 @@ private:
     // hit is bit-exact by construction (va.cpp, run()).
     float osc_pitch_ = 0.0f;
     float osc_inv_rate_ = 0.0f;         // 0 never matches a real rate: the first step computes
+    float osc_ratio1_ = 0.0f, osc_ratio2_ = 0.0f;
+    float dt0_ = 0.0f, inv0_ = 0.0f;    // the note itself: the sub's, at half
     float dt1_ = 0.0f, inv1_ = 0.0f, dt2_ = 0.0f, inv2_ = 0.0f;
 
     // reciprocal(float(n)) for the slice length the last slice had: n is kControl on all but

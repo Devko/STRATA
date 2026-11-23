@@ -429,6 +429,7 @@ const char *page_name(Page page) {
         case Page::lfo:  return "LFO";
         case Page::arp:  return "ARP";
         case Page::asr:  return "ASR";
+        case Page::osc:  return "OSC";
         default:         return "?";
     }
 }
@@ -436,14 +437,17 @@ const char *page_name(Page page) {
 // The ASR page's encoder names (dsp/va.cpp's table). Only the VAs read the page; on any other
 // machine its four slots show "---".
 constexpr const char *kAsrNames[kAsrParams] = {"ATK", "SUS", "REL", "FSU"};
+// And their OSC page's (dsp/va.cpp): OSC 1's wave, what OSC 2 does, the sub, the drive.
+constexpr const char *kOscNames[kOscParams] = {"WAV", "OS2", "SUB", "DRV"};
 
 // EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp), its arpeggiator
-// (core/arp.hpp) and the VA machines' note envelope, ASR (dsp/va.cpp). The selection keys walk
-// all seven; everywhere else a page is still four encoders over four parameters.
-constexpr int kEditPages = kPages + 3;
+// (core/arp.hpp), the VA machines' note envelope, ASR, and their oscillators, OSC (dsp/va.cpp).
+// The selection keys walk all eight; everywhere else a page is still four encoders over four
+// parameters.
+constexpr int kEditPages = kPages + 4;
 
 // Encoder counts per click: one zone on the arp's MOD RAT OCT, one shape or destination on the
-// LFO's WAV and DST, one count everywhere else (ASR included).
+// LFO's WAV and DST, one count everywhere else (ASR and OSC included).
 constexpr int param_click(int index) {
     return index >= kAsrFirst ? 1
                               : (index >= kArpFirst ? arp_click(index - kArpFirst) : lfo_click(index));
@@ -3264,16 +3268,17 @@ public:
         *out = 0;
         canvas.text(0, 20, line, 14);
 
-        // Which of the seven pages is showing, as a row of boxes: the spec's selection keys
+        // Which of the eight pages is showing, as a row of boxes: the spec's selection keys
         // flip between them, so showing where you are matters more than labels.
         for (int p = 0; p < kEditPages; p++) {
             const uint8_t grey = p == param_page_ ? 14 : 4;
-            canvas.rect(p * 18 + 1, 32, 16, 3, grey);
+            canvas.rect(p * 16 + 1, 32, 14, 3, grey);
         }
         const bool lfo_page = param_page_ == int(Page::lfo);
         const bool arp_page = param_page_ == int(Page::arp);
         const bool asr_page = param_page_ == int(Page::asr);
-        const bool word_page = lfo_page || arp_page || asr_page;
+        const bool osc_page = param_page_ == int(Page::osc);
+        const bool word_page = lfo_page || arp_page || asr_page || osc_page;
 
         // The four parameters in large type, one row per encoder: its letter, the name, the
         // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
@@ -3358,6 +3363,11 @@ public:
             const bool va = has_asr(selected_);
             const bool sustains = va && engine_.params(selected_).v[kAsrFirst + 1] > 0;
             canvas.text(0, 96, !va ? "VA MONO/POLY ONLY" : (sustains ? "HOLDS: PAD OR LEN" : "SUS 0: ONE-SHOT"), 7);
+            return;
+        }
+
+        if (osc_page) {
+            canvas.text(0, 96, has_asr(selected_) ? "OS2: DET 1-63 SYN 64+" : "VA MONO/POLY ONLY", 7);
             return;
         }
 
@@ -3720,6 +3730,7 @@ public:
     // LFO's destination can name a parameter from any page.
     const char *track_param_name(int index) const {
         if (index < 0 || index >= kTrackParams) return "---";
+        if (index >= kOscFirst) return has_asr(selected_) ? kOscNames[index - kOscFirst] : "---";
         if (index >= kAsrFirst) return has_asr(selected_) ? kAsrNames[index - kAsrFirst] : "---";
         if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
         if (index >= kParams) return lfo_param_name(index);
@@ -3789,6 +3800,35 @@ public:
             case kAsrFirst + 3:
                 append_number(out, uint32_t((int(value) * 100 + 63) / 127));
                 *out++ = '%';
+                return;
+            case kOscFirst + 0: {
+                // "SAW", "SQR" for a 50% pulse, else the pulse's width: "P30".
+                const int width = va_pulse_percent(value);
+                if (width == 0) {
+                    append(out, "SAW");
+                } else if (width == 50) {
+                    append(out, "SQR");
+                } else {
+                    *out++ = 'P';
+                    append_number(out, uint32_t(width));
+                }
+                return;
+            }
+            case kOscFirst + 1:
+                // "OFF", a detune in cents ("D12"), or a sync interval in semitones ("S+7").
+                switch (va_osc2_mode(value)) {
+                    case VaOsc2::off:
+                        append(out, "OFF");
+                        break;
+                    case VaOsc2::detune:
+                        *out++ = 'D';
+                        append_number(out, uint32_t(va_osc2_detune_cents(value) + 0.5f));
+                        break;
+                    case VaOsc2::sync:
+                        append(out, "S+");
+                        append_number(out, uint32_t(va_osc2_sync_semitones(value) + 0.5f));
+                        break;
+                }
                 return;
             default:
                 append_padded(out, value, 3);
@@ -4070,7 +4110,7 @@ public:
                 return true;
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
-                // A page, as in SAMPLES: the list is one page, so the first row or the last.
+                // A page, as in SAMPLES: eight rows up or down, held at the ends.
                 if (!shift_) {
                     move_sound_cursor_to(sound_cursor_ +
                                          (key == ENAGA_KEY_LEFT ? -kSampleRows : kSampleRows));
@@ -4096,8 +4136,10 @@ public:
         canvas.text(0, 18, line, 15);
         canvas.text(0, 27, "INTO THIS TRACK ONLY", 10);
 
+        // The VAs' lists are longer than the screen: it scrolls to keep the cursor on it.
         const int rows = sound_rows();
-        for (int row = 0; row < rows && row < kSampleRows; row++) {
+        const int first = sound_cursor_ >= kSampleRows ? sound_cursor_ - kSampleRows + 1 : 0;
+        for (int row = first; row < rows && row < first + kSampleRows; row++) {
             out = line;
             const bool on = row == sound_cursor_;
             *out++ = on ? '>' : ' ';
@@ -4114,7 +4156,7 @@ public:
                 }
             }
             *out = 0;
-            canvas.text(0, 37 + row * 8, line, on ? 15 : 9);
+            canvas.text(0, 37 + (row - first) * 8, line, on ? 15 : 9);
         }
         if (rows == 1) canvas.text(0, 45, "NO SOUNDS HERE", 9);
 
@@ -4151,12 +4193,15 @@ public:
         samples_return_ = mode_;
         mode_ = Mode::samples;
         leave_mode();
-        // Where the track's file is, when it is somewhere the browser shows; else SAMPLES.
+        // Where the track's file is, when it is somewhere the browser shows; else SAMPLES, or
+        // the SmplTrek's sample pool on a card that has that and no /SAMPLES.
         const char *current = engine_.project().kit.tracks[selected_].sample;
         char folder[SampleList::kFolderBytes];
         if (!SampleList::in_browsable_folder(current) ||
             !SampleList::folder_of(current, folder, int(sizeof folder))) {
-            const char *top = "/SAMPLES";
+            const char *top = SampleList::root(SampleList::kSamplesRoot).path;
+            const char *pool = SampleList::root(SampleList::kPoolRoot).path;
+            if (!storage_.folder_exists(top) && storage_.folder_exists(pool)) top = pool;
             int i = 0;
             for (; top[i] != '\0'; i++) folder[i] = top[i];
             folder[i] = '\0';
@@ -4203,14 +4248,9 @@ public:
                 if (storage_.browsing() || list.count() == 0) return true;
                 if (list.is_folder(sample_cursor_)) {
                     char folder[SampleList::kFolderBytes];
-                    if (list.at_root()) {
-                        // The root's two entries are the card's top folders.
-                        char *out = folder;
-                        *out++ = '/';
-                        const char *name = list.name(sample_cursor_);
-                        while (*name != '\0' && out < folder + sizeof folder - 1) *out++ = *name++;
-                        *out = '\0';
-                    } else if (!list.path_of(sample_cursor_, folder, int(sizeof folder))) {
+                    // At the root, path_of gives the folder the entry opens (POOL is
+                    // /SmplTrek/Pool/Audio); below it, folder + "/" + name.
+                    if (!list.path_of(sample_cursor_, folder, int(sizeof folder))) {
                         notice("PATH TOO LONG");
                         return true;
                     }
