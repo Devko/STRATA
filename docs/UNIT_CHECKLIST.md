@@ -384,7 +384,7 @@ The fold test: one step plays a C#, then switch PROJECT's scale between CHROMATI
 MINOR (C# is not in C minor, so a folding track moves it). Repeat on each track below.
 
 - [ ] Select track 7. FUNC+EDIT: UP/DOWN change the track's machine at once (`MACHINE`),
-      LEFT/RIGHT walk the track. Discoverable? `________`
+      LEFT/RIGHT a column of three; the screen keys walk the track (`TRACK 8`). Discoverable? `________`
 - [ ] **VA (track 7):** set a step's NOTE to C#3. CHROMATIC vs MINOR: the pitch **changes**.
 - [ ] **Kick (track 1):** NOTE to C#3. CHROMATIC vs MINOR: the pitch does **not** change.
 - [ ] **GRAIN:** track 8 to GRN (FUNC+EDIT, UP/DOWN). It sounds (the first time GRAIN has been
@@ -1997,7 +1997,9 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
 - [ ] KEYS: LEFT and RIGHT are the octave. PERFORM: LEFT and RIGHT pick the macro; UP and DOWN
       still walk the mutation.
 - [ ] MACHINE (F1 + EDIT): the eight machines are a list; UP and DOWN change the track's machine
-      at once, LEFT and RIGHT walk the track. EDIT's screen says `FUNC+EDIT: MACHINE`.
+      at once, LEFT and RIGHT move a column of three (new 2026-11-23: they no longer change the
+      track). The screen keys walk the track and say `TRACK 2` and so on. EDIT's screen says
+      `FUNC+EDIT: MACHINE`.
 - [ ] RESAMPLE: UP and DOWN pick the length, LEFT and RIGHT where the take goes.
 - [ ] PROJECT: the arrows move a frame over the 16 slots and OK queues the framed one; a STEP key
       queues and moves the frame there. The FUNC menu toggles the chain and reloads the sample.

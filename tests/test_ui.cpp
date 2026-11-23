@@ -3947,9 +3947,21 @@ TEST(ui_arrows_in_edit_keys_perform_machine_and_resample) {
     key(ENAGA_KEY_UP);
     pump(4);
     CHECK_EQ(int(app_engine().machine_id(0)), machine);
-    key(ENAGA_KEY_RIGHT);                          // and sideways is the track
-    CHECK_EQ(UiProbe::selected(app), 1);
+    // Sideways is the next column of the machine grid, three down, and never the track:
+    // Roland turned RIGHT for the next machine and changed track 7 (2026-11-23).
+    key(ENAGA_KEY_RIGHT);
+    pump(4);
+    CHECK_EQ(int(app_engine().machine_id(0)), (machine + 3) % int(MachineId::count));
+    CHECK_EQ(UiProbe::selected(app), 0);
     key(ENAGA_KEY_LEFT);
+    pump(4);
+    CHECK_EQ(int(app_engine().machine_id(0)), machine);
+    // The track is the screen keys', and says so.
+    key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(UiProbe::selected(app), 1);
+    CHECK_EQ(UiProbe::notice(app), "TRACK 2");
+    key(ENAGA_KEY_SELECT_LEFT);
+    CHECK_EQ(UiProbe::selected(app), 0);
 
     shift_key(ENAGA_KEY_F2);                       // RESAMPLE: rows are the length, sideways
     const int bars = UiProbe::take_bars_index(app);   // where the take goes
@@ -6801,7 +6813,10 @@ TEST(ui_the_step_lights_show_velocity_and_blink_a_condition) {
     CHECK(step_of(0, 2).probability < 100);
     int lit = 0, dark = 0;
     for (int t = 0; t < 4; t++) {
-        g_ms += 200;
+        // 199 + the 1 pump adds: exactly half a blink apart. At 201 the four reads drifted 3 ms,
+        // and whenever an earlier test left g_ms within 3 ms of an edge two reads fell in one
+        // half and the count depended on test order.
+        g_ms += 199;
         pump(1);
         if (UiProbe::step_green(app, 2) == 6) lit++;
         if (UiProbe::step_green(app, 2) == 0) dark++;
