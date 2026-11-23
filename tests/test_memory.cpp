@@ -67,6 +67,12 @@ void *counted(std::size_t bytes) {
 
 void *operator new(std::size_t bytes) { return counted(bytes); }
 void *operator new[](std::size_t bytes) { return counted(bytes); }
+// The nothrow forms too: STRATA's init() uses them (dsp/wavetable.cpp), and under ASan they are
+// intercepted directly instead of reaching the plain forms above, so they would go uncounted.
+void *operator new(std::size_t bytes, const std::nothrow_t &) noexcept { return counted(bytes); }
+void *operator new[](std::size_t bytes, const std::nothrow_t &) noexcept { return counted(bytes); }
+void operator delete(void *pointer, const std::nothrow_t &) noexcept { std::free(pointer); }
+void operator delete[](void *pointer, const std::nothrow_t &) noexcept { std::free(pointer); }
 void operator delete(void *pointer) noexcept { std::free(pointer); }
 void operator delete[](void *pointer) noexcept { std::free(pointer); }
 void operator delete(void *pointer, std::size_t) noexcept { std::free(pointer); }
