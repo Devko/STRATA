@@ -20,7 +20,7 @@ constexpr float kDetuneMaxCents = 25.0f;
 constexpr float kDecayLowS = 0.015f;
 constexpr float kDecayOctaves = 9.0589f;    // log2(8 / 0.015): DEC, 15 ms to 8 s
 constexpr float kIndexDecayShare = 0.35f;   // the index envelope falls in about a third the time
-constexpr float kLevelMax = 0.5f;           // LVL 127; a carrier peaks at 1
+constexpr float kLevelMax = 0.25f;          // LVL 127: a chord sits with VA POLY's (tests/test_fm_machine.cpp)
 
 // Yamaha's eight 4-operator algorithms as link masks (m12 m13 m14 m23 m24 m34) and output
 // weights. Operator 1 is always a carrier.
@@ -65,6 +65,19 @@ uint8_t osc_byte(const uint8_t (&v)[N], int k) {
 }
 
 }  // namespace
+
+const float *fm_sine_table() {
+    static float table[STRATA_FM_SINE_SIZE + 1];
+    static bool filled = false;
+    if (!filled) {
+        for (int i = 0; i < STRATA_FM_SINE_SIZE; i++) {
+            table[i] = enaga::dsp::sin_turns(float(i) * (1.0f / float(STRATA_FM_SINE_SIZE)));
+        }
+        table[STRATA_FM_SINE_SIZE] = table[0];
+        filled = true;
+    }
+    return table;
+}
 
 int fm_algorithm(uint8_t value) { return zone(value, kFmAlgorithms); }
 float fm_ratio(uint8_t value) { return kRatios[zone(value, kFmRatios)]; }
@@ -111,6 +124,7 @@ FmSettings FmSettings::make(const TrackParams &params, float rate, float inv_rat
 }
 
 void FmVoice::reset() {
+    (void)fm_sine_table();
     amp_.kill();
     index_env_.kill();
     state_ = strata_fm_state{};
@@ -151,6 +165,7 @@ void FmVoice::run(const FmSettings &s, float *out, int n, float *env) {
     const float hz = 440.0f * semitones(note_ - 69.0f);
     const float base = hz * s.inv_rate;
     strata_fm_block b{};
+    b.sine = fm_sine_table();
     for (int op = 0; op < 4; op++) {
         float inc = base * s.ratio[op];
         inc = inc < 0.49f ? inc : 0.49f;
@@ -216,7 +231,12 @@ void FmVoice::run(const FmSettings &s, float *out, int n, float *env) {
             }
         }
     }
-    strata_fm_add(out, n, env, &state_, &b);
+    // FBK at 0 across the slice: the loop with no sample-to-sample chain (fmloops.h).
+    if (b.fb == 0.0f && b.dfb == 0.0f) {
+        strata_fm_add_free(out, n, env, &state_, &b);
+    } else {
+        strata_fm_add(out, n, env, &state_, &b);
+    }
 }
 
 }  // namespace strata
