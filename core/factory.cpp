@@ -409,7 +409,18 @@ void peak(Pattern &p) {
 // A bar: index 16 of core/timing.hpp's note-length table is 16 steps.
 constexpr uint8_t kPadLength = 16;
 
-void pad(Pattern &p) {
+// tic6x-elf-g++ 13.3 (the device build: -O2 -funroll-loops, from Enaga's build_app.py) hits an
+// internal compiler error compiling this function: "in priority, at haifa-sched.cc:1597", in the
+// C6x scheduler after the unroller. #pragma GCC unroll 1 on either loop does not avoid it; turning
+// the unroller off for this function alone does. pad() runs once, when the factory bank is built,
+// never in audio(), so the cost is nothing. Clang has no optimize attribute, hence the guard.
+#if defined(__GNUC__) && !defined(__clang__)
+#define STRATA_NO_UNROLL __attribute__((optimize("no-unroll-loops")))
+#else
+#define STRATA_NO_UNROLL
+#endif
+
+STRATA_NO_UNROLL void pad(Pattern &p) {
     begin(p, 0x9AD5EEDu, 50);
     p.master_length = 64;
 
