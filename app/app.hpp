@@ -725,6 +725,35 @@ public:
             return;
         }
 
+        // The performance mixer (core/perffx.hpp, docs/CONTROLS.md): with VALUE pushed, a STEP
+        // picks one of the sixteen effects (16 the looper), LEFT/RIGHT walk them, CLR turns them
+        // all off. In every mode but the menu, after MUTE mode, which keeps push VALUE + STEP 1-8
+        // for storing a mute state. A STEP taken here keeps its release too, even if VALUE came
+        // up first: a release reaching the grid would toggle a trig.
+        if (value_pushed_ && mode_ != Mode::menu) {
+            if (key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
+                const int index = key - ENAGA_KEY_STEP1;
+                if (down) {
+                    perf_step_keys_ = uint16_t(perf_step_keys_ | (1u << index));
+                    perf_pick(index);
+                }
+                return;
+            }
+            if ((key == ENAGA_KEY_LEFT || key == ENAGA_KEY_RIGHT) && !shift_) {
+                if (down) perf_walk(key == ENAGA_KEY_LEFT ? -1 : 1);
+                return;
+            }
+            if (key == ENAGA_KEY_CLR && !shift_) {
+                if (down) perf_clear();
+                return;
+            }
+        }
+        if (!down && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16 &&
+            (perf_step_keys_ >> (key - ENAGA_KEY_STEP1) & 1u) != 0) {
+            perf_step_keys_ = uint16_t(perf_step_keys_ & ~(1u << (key - ENAGA_KEY_STEP1)));
+            return;
+        }
+
         // A scene pad held turns the STEP keys into the sixteen scenes, in whatever mode is on
         // screen: docs/SPEC.md gives "hold + STEP picks the scene" and the performance row is
         // deliberately not modal.
@@ -1006,6 +1035,11 @@ public:
                     if (state != 0u || storage_.take_busy()) {
                         notice(state == 3u || storage_.take_busy() ? "TAKE STILL WRITING"
                                                                    : "TAKE RUNNING");
+                        break;
+                    }
+                    // The performance mixer's looper holds the same buffer (dsp/looper.hpp).
+                    if (looper_state() != 0u) {
+                        notice("LOOP HOLDS BUFFER");
                         break;
                     }
                     // From the input: make sure the route is the one on screen before the take.
@@ -1551,6 +1585,13 @@ public:
                 post_delta(Cmd::step_field_delta, selected_, held_step_,
                            uint8_t(StepField::note), delta);
                 notice("NOTE");
+                return;
+            }
+            // A picked effect owns VALUE (core/perffx.hpp): its amount, or the looper's mix, in
+            // every mode, until it is let go (push VALUE + its STEP again, or + CLR). Before the
+            // fields and the morph VALUE turns otherwise; push + turn and FUNC + turn keep theirs.
+            if (perf_picked_ != PerfFx::none && !value_pushed_ && !shift_) {
+                perf_turn(delta);
                 return;
             }
             // PROJECT's CHAIN and PATTERN pages: VALUE edits the thing under the cursor -- the
@@ -2786,6 +2827,7 @@ public:
             if (step == playhead && status.running.load(std::memory_order_relaxed)) red = 10;
             leds_.step(i, red, green);
         }
+        if (value_pushed_ && !mute_mode_ && mode_ != Mode::menu) light_perf_steps();
 
         for (int t = 0; t < kTracks && mode_ != Mode::keys; t++) {
             const Rgb colour = kTrackColour[t];
@@ -4711,7 +4753,8 @@ public:
     // over. The cursor always starts on SAVE, so FUNC + HOME, OK saves.
 
     enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
-                                    speed, chain, song, autofill, quantize, freeze, count };
+                                    speed, chain, song, autofill, quantize, freeze, loop_len,
+                                    count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 8;
 
@@ -4731,6 +4774,7 @@ public:
             case MenuItem::autofill: return "AUTO-FILL";
             case MenuItem::quantize: return "QUANTIZE";
             case MenuItem::freeze:   return "FREEZE";
+            case MenuItem::loop_len: return "LOOP LEN";
             default:                 return "?";
         }
     }
@@ -4773,6 +4817,11 @@ public:
                 }
                 break;
             }
+            case MenuItem::loop_len:
+                // How many bars push VALUE + STEP 16 records (dsp/looper.hpp).
+                append_number(out, uint32_t(kTakeBars[loop_bars_index_]));
+                append(out, " BAR");
+                break;
             default:
                 break;
         }
@@ -4796,11 +4845,171 @@ public:
             notice("MID HAS NO AUDIO");
             return;
         }
+        if (looper_state() != 0u) {             // the looper holds the take buffer
+            notice("LOOP HOLDS BUFFER");
+            return;
+        }
         if (!storage_.request_freeze(selected_, kTakeBars[freeze_bars_index_])) {
             notice("TAKE RUNNING");
             return;
         }
         notice(enaga::clock::running() ? "FREEZE ARMED" : "ARMED: PRESS PLAY");
+    }
+
+    // --- the performance mixer (core/perffx.hpp, dsp/looper.hpp) ----------------------------
+    //
+    // The UI owns the picked slot, the effect's amount and the looper's mix, as it owns the
+    // morph: the engine is told absolute values and keeps no history of them.
+
+    uint8_t looper_state() const {
+        return engine_.status().looper_state.load(std::memory_order_relaxed);
+    }
+
+    void perf_set(PerfFx fx, uint8_t amount) {
+        perf_fx_ = fx;
+        perf_amount_ = amount;
+        post(Cmd::perf_fx, 0, 0, uint8_t(fx), amount);
+    }
+
+    // "12 NOISE RISER" on a pick, "NOISE RISER 64" on a turn, "LOOP MIX 64" for the looper.
+    void perf_notice(PerfFx fx, bool picked) {
+        char *out = notice_buffer_;
+        if (fx == PerfFx::looper) {
+            const uint8_t state = looper_state();
+            if (state == 1u) {
+                append(out, enaga::clock::running() ? "LOOP WAITS FOR BAR" : "LOOP ARMED: PLAY");
+            } else if (state == 2u) {
+                append(out, "LOOP RECORDING");
+            } else {
+                append(out, "LOOP MIX ");
+                append_number(out, loop_mix_);
+            }
+        } else if (picked) {
+            append_number(out, uint32_t(fx));
+            *out++ = ' ';
+            append(out, perf_fx_name(fx));
+        } else {
+            append(out, perf_fx_name(fx));
+            *out++ = ' ';
+            append_number(out, perf_amount_);
+        }
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    // Push VALUE + STEP. A new effect replaces the last at amount 0 (the old one fades out);
+    // its own STEP again lets go and gives VALUE back. STEP 16 picks the looper and records
+    // when there is no loop yet; again, it records a new take.
+    void perf_pick(int index) {
+        const PerfFx fx = perf_fx_for_step(index);
+        if (fx == PerfFx::looper) {
+            const bool again = perf_picked_ == PerfFx::looper;
+            perf_picked_ = PerfFx::looper;
+            if (again || looper_state() == 0u) {
+                perf_record();
+                return;
+            }
+            perf_notice(fx, true);
+            return;
+        }
+        if (fx == perf_picked_) {
+            perf_set(PerfFx::none, 0);
+            perf_picked_ = PerfFx::none;
+            notice("FX OFF: VALUE TEMPO");
+            return;
+        }
+        perf_picked_ = fx;
+        perf_set(fx, 0);
+        perf_notice(fx, true);
+    }
+
+    void perf_record() {
+        // The take's buffer is RESAMPLE's (dsp/looper.hpp): refused while a take holds it.
+        if (engine_.status().resample_state.load(std::memory_order_relaxed) != 0u) {
+            notice("RESAMPLE BUSY");
+            return;
+        }
+        post(Cmd::looper, 0, 0, 1, kTakeBars[loop_bars_index_]);
+        char *out = notice_buffer_;
+        if (enaga::clock::running()) {
+            append(out, "LOOP ");
+            append_number(out, uint32_t(kTakeBars[loop_bars_index_]));
+            append(out, " BAR: NEXT BAR");
+        } else {
+            append(out, "LOOP ARMED: PLAY");
+        }
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    // Push VALUE + LEFT/RIGHT: the next or previous slot, round the sixteen, keeping the amount
+    // -- a scene change on a crossfader that stays where it is. Reaching the looper picks it
+    // without recording; only STEP 16 records.
+    void perf_walk(int delta) {
+        const int from = perf_picked_ == PerfFx::none ? (delta > 0 ? 0 : kPerfSlots + 1)
+                                                      : int(perf_picked_);
+        const int slot = (from - 1 + delta + kPerfSlots * 2) % kPerfSlots + 1;
+        const PerfFx fx = PerfFx(slot);
+        perf_picked_ = fx;
+        if (fx == PerfFx::looper) {
+            perf_notice(fx, true);
+            return;
+        }
+        perf_set(fx, perf_amount_);
+        perf_notice(fx, true);
+    }
+
+    // Push VALUE + CLR: every effect off and the loop's mix to 0, VALUE back to its own jobs.
+    // With all of that already off, it throws the loop away, which frees RESAMPLE's buffer.
+    void perf_clear() {
+        const bool anything = perf_fx_ != PerfFx::none || perf_picked_ != PerfFx::none ||
+                              loop_mix_ != 0;
+        if (anything) {
+            perf_set(PerfFx::none, 0);
+            perf_picked_ = PerfFx::none;
+            loop_mix_ = 0;
+            post(Cmd::looper, 0, 0, 0, 0);
+            notice("FX OFF");
+            return;
+        }
+        if (looper_state() != 0u) {
+            post(Cmd::looper, 0, 0, 2, 0);
+            notice("LOOP CLEARED");
+            return;
+        }
+        notice("FX OFF");
+    }
+
+    // VALUE with an effect picked: its amount, two counts a click (the whole range in 64
+    // clicks, as a macro); with the looper picked, its mix.
+    void perf_turn(int delta) {
+        if (perf_picked_ == PerfFx::looper) {
+            loop_mix_ = uint8_t(clamp_int(int(loop_mix_) + 2 * delta, 0, int(kPerfAmountMax)));
+            post(Cmd::looper, 0, 0, 0, loop_mix_);
+            perf_notice(PerfFx::looper, false);
+            return;
+        }
+        perf_set(perf_fx_,
+                 uint8_t(clamp_int(int(perf_amount_) + 2 * delta, 0, int(kPerfAmountMax))));
+        perf_notice(perf_fx_, false);
+    }
+
+    // The STEP keys while VALUE is pushed: the sixteen slots, dim amber; the effect that is up
+    // bright amber, the picked one bright green. STEP 16 also says what the looper is doing:
+    // red blinking armed, red recording, dim green holding a loop.
+    void light_perf_steps() {
+        const uint8_t state = looper_state();
+        const bool blink = ((last_ms_ / kConditionBlinkMs) & 1u) != 0;
+        for (int i = 0; i < kPerfSlots; i++) {
+            const PerfFx fx = perf_fx_for_step(i);
+            uint8_t red = 2, green = 2;
+            if (fx == perf_fx_ && perf_amount_ > 0) red = green = 10;
+            if (fx == PerfFx::looper && state == 3u) { red = 0; green = loop_mix_ > 0 ? 10 : 4; }
+            if (fx == perf_picked_) { red = 0; green = 10; }
+            if (fx == PerfFx::looper && state == 1u) { red = blink ? 10 : 0; green = 0; }
+            if (fx == PerfFx::looper && state == 2u) { red = 10; green = 0; }
+            leds_.step(i, red, green);
+        }
     }
 
     void open_menu() {
@@ -4875,6 +5084,17 @@ public:
                 char *out = notice_buffer_;
                 append(out, "FREEZE ");
                 append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
+                append(out, " BAR");
+                *out = 0;
+                notice(notice_buffer_);
+                break;
+            }
+            case MenuItem::loop_len: {
+                const int next = (loop_bars_index_ + delta + kTakeBarChoices) % kTakeBarChoices;
+                loop_bars_index_ = next;
+                char *out = notice_buffer_;
+                append(out, "LOOP ");
+                append_number(out, uint32_t(kTakeBars[loop_bars_index_]));
                 append(out, " BAR");
                 *out = 0;
                 notice(notice_buffer_);
@@ -6246,6 +6466,14 @@ private:
     uint8_t mutate_unchanged_seen_ = 0;         // Status::mutate_unchanged as last noticed
     bool freeze_held_ = false;                  // FUNC + MUTATE went down and has not come up
     int freeze_bars_index_ = 0;                 // FUNC menu FREEZE's length, into kTakeBars
+    int loop_bars_index_ = 2;                   // FUNC menu LOOP LEN, into kTakeBars: 4 bars
+    // The performance mixer (core/perffx.hpp): the slot VALUE turns, the effect that is up and
+    // its amount, the looper's mix, and the STEP keys a pick took (their releases are its too).
+    PerfFx perf_picked_ = PerfFx::none;
+    PerfFx perf_fx_ = PerfFx::none;
+    uint8_t perf_amount_ = 0;
+    uint8_t loop_mix_ = 0;
+    uint16_t perf_step_keys_ = 0;
     uint8_t frozen_seen_ = 0;                   // Status::frozen as update() last saw it
     const char *freeze_error_seen_ = nullptr;   // and Storage::freeze_error
     uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)

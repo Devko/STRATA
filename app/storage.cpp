@@ -1611,6 +1611,9 @@ bool Storage::request_freeze(int track, int bars) {
     if (take_busy() || engine_->status().resample_state.load(std::memory_order_relaxed) != 0u) {
         return false;
     }
+    // The performance mixer's looper holds the same buffer (dsp/looper.hpp): the engine would
+    // refuse the arm, and this side would wait for a take that never comes.
+    if (engine_->status().looper_state.load(std::memory_order_relaxed) != 0u) return false;
     // A write asked for a take that was then cancelled (RESAMPLE, OK then CLR) is stale: it must
     // not write this take to the card when it finishes.
     take_pending_ = false;

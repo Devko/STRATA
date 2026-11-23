@@ -87,6 +87,10 @@ each line means.
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph) |
 | VALUE push + turn | Pattern swing |
 | FUNC + VALUE | Master DJ filter (LP n / OFF / HP n) |
+| Push VALUE + STEP 1-16 | Performance mixer: pick an effect (`4 ECHO RISER`); VALUE is then its amount on every screen, 0 dry. Same STEP again lets go (`FX OFF: VALUE TEMPO`). One effect at a time. In MUTE MODE STEP 1-8 store mute states instead |
+| Push VALUE + LEFT / RIGHT | Previous / next effect, keeping the amount |
+| Push VALUE + STEP 16 | The looper: records LOOP LEN bars (FUNC menu, default 4) of the mix from the next bar line, then VALUE is the loop's mix (`LOOP MIX 64`). Again: a new take. Effects picked after it go over the loop |
+| Push VALUE + CLR | Every effect off, loop mix 0 (`FX OFF`); again: the loop thrown away (`LOOP CLEARED`), which frees RESAMPLE and FREEZE |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
 | FUNC + push D (hold) | Tape stop: the master slows to a standstill over two beats; let go and it is back (`TAPE STOP`). Not while a STEP is held: that clears the D lock |
 | FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu |
@@ -94,7 +98,7 @@ each line means.
 | Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn) |
 | Pad-row keys L/R | Which 16 the STEP keys mean: step page, octave (KEYS), bank (PROJECT, CHAIN) |
 | FUNC + UP / DOWN | Copy / paste while editing; in the card lists, read again / store here |
-| FUNC held alone | Help for this screen: what A-D do here and its gestures. Keep holding FUNC: screen keys (or LEFT/RIGHT) turn the pages; the last three are FUNC + each function key, FUNC + a knob or pad, and the upper pads |
+| FUNC held alone | Help for this screen: what A-D do here and its gestures. Keep holding FUNC: screen keys (or LEFT/RIGHT) turn the pages; the last five are FUNC + each function key, FUNC + a knob or pad, the upper pads, and the VALUE mixer's gestures and slots |
 
 ## Pads
 

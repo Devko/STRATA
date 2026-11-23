@@ -108,6 +108,9 @@ struct UiProbe {
     static int macro_selected(const Strata &app) { return app.macro_selected_; }
     static int quantize(const Strata &app) { return app.quantize(); }
     static int menu_cursor(const Strata &app) { return app.menu_cursor_; }
+    static PerfFx perf_picked(const Strata &app) { return app.perf_picked_; }
+    static uint8_t perf_amount(const Strata &app) { return app.perf_amount_; }
+    static uint8_t loop_mix(const Strata &app) { return app.loop_mix_; }
     static bool func_help(const Strata &app) { return app.func_help_showing(); }
     static bool verdict_free(const Strata &app) { return app.verdict_keys_free(); }
     static bool mutation_pending(const Strata &app) { return app.mutation_pending_; }
@@ -230,7 +233,7 @@ void open_keys() {
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuChain, kMenuSong, kMenuAutofill,
-                     kMenuQuantize, kMenuFreeze, kMenuRowCount };
+                     kMenuQuantize, kMenuFreeze, kMenuLoopLen, kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
 void menu_to(int row) {
@@ -342,6 +345,12 @@ Strata &fresh() {
     }
     if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
     UiProbe::notes_view_on(app);           // NOTE view is UI state, not saved: on at every start
+    // The performance mixer off and any loop thrown away: push VALUE + CLR, twice.
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    key(ENAGA_KEY_CLR);
+    pump();
+    key(ENAGA_KEY_CLR);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
 
     // HOME after the last test's HOME must not be a double tap (which is KEYS), and nor must the
     // test's own first HOME after this one: a second apart, as the app's clock sees it.
@@ -5628,7 +5637,7 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     hold_func(app);
     CHECK(screen_has(app, "GRID SRC KCK"));
     CHECK(screen_has(app, "B FMA FM AMOUNT"));
-    CHECK(screen_has(app, "SCREEN KEYS: PAGE 1/7"));
+    CHECK(screen_has(app, "SCREEN KEYS: PAGE 1/9"));
     CHECK(!screen_has(app, "FUNC + KEY:"));
 
     // The screen keys turn the help's pages while FUNC is held, and not GRID's knob page.
@@ -5636,12 +5645,17 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     key(ENAGA_KEY_SELECT_RIGHT);
     CHECK(UiProbe::func_help(app));
     CHECK(screen_has(app, "STEPS:"));
-    CHECK(screen_has(app, "PAGE 2/7"));
+    CHECK(screen_has(app, "PAGE 2/9"));
     CHECK_EQ(UiProbe::param_page(app), knob_page);
-    // LEFT goes back, and round: the last page is the upper pads.
+    // LEFT goes back, and round: the last page is the performance mixer's slots, the upper pads
+    // two before it.
     key(ENAGA_KEY_LEFT);
     key(ENAGA_KEY_LEFT);
     CHECK(UiProbe::func_help(app));
+    CHECK(screen_has(app, "VALUE FX STEPS:"));
+    key(ENAGA_KEY_LEFT);
+    CHECK(screen_has(app, "VALUE FX MIXER:"));
+    key(ENAGA_KEY_LEFT);
     CHECK(screen_has(app, "UPPER PADS TRK1-7:"));
     key(ENAGA_KEY_SELECT_LEFT);
     key(ENAGA_KEY_SELECT_LEFT);
@@ -7288,4 +7302,203 @@ TEST(ui_sounds_machine_ok_opens_it_and_marks_the_sound_playing_now) {
     post_track(Cmd::set_machine, 0, 0);
     pump(4);
     key(ENAGA_KEY_F4);
+}
+
+// --- the performance mixer on VALUE (core/perffx.hpp, docs/CONTROLS.md) ----------------------
+
+namespace {
+
+void value_step(Strata &app, int raw) {      // push VALUE + a STEP tap
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    step_down(raw);
+    step_up(raw);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+}
+
+void value_key(Strata &app, int code) {      // push VALUE + a key tap
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    key(code);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+}
+
+}  // namespace
+
+TEST(ui_push_value_and_a_step_picks_an_effect_and_value_turns_its_amount) {
+    Strata &app = fresh();
+    const uint32_t tempo = UiProbe::tempo_tenths(app);
+    value_step(app, 3);
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::echo_riser);
+    CHECK(app_engine().perf_fx() == PerfFx::echo_riser);
+    CHECK_EQ(int(app_engine().perf_amount()), 0);   // picked at 0: nothing changes yet
+    CHECK(std::strcmp(UiProbe::notice(app), "4 ECHO RISER") == 0);
+    CHECK(!trig_at(0, 3));                          // the STEP was the mixer's, not the grid's
+
+    // VALUE is its amount now, two counts a click, and not the tempo.
+    app.on_encoder(4, 5);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 10);
+    CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
+    CHECK(std::strcmp(UiProbe::notice(app), "ECHO RISER 10") == 0);
+    // In every mode: PERFORM's morph waits too.
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    const uint16_t morph = app_engine().morph();
+    app.on_encoder(4, 3);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 16);
+    CHECK_EQ(int(app_engine().morph()), int(morph));
+
+    // A new effect replaces it, from 0; its own STEP again lets go and VALUE is VALUE again.
+    value_step(app, 9);
+    pump(2);
+    CHECK(app_engine().perf_fx() == PerfFx::pump);
+    CHECK_EQ(int(app_engine().perf_amount()), 0);
+    value_step(app, 9);
+    pump(2);
+    CHECK(app_engine().perf_fx() == PerfFx::none);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::none);
+    CHECK(std::strcmp(UiProbe::notice(app), "FX OFF: VALUE TEMPO") == 0);
+    app.on_encoder(4, 3);
+    pump(2);
+    CHECK(app_engine().morph() != morph);           // PERFORM's VALUE is the morph again
+}
+
+TEST(ui_a_step_released_after_value_still_belongs_to_the_mixer) {
+    Strata &app = fresh();
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    step_down(5);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);        // VALUE up first
+    step_up(5);
+    pump(2);
+    CHECK(!trig_at(0, 5));
+    CHECK(app_engine().perf_fx() == PerfFx::reverb_wash);
+    // And the next plain tap is a trig, as ever.
+    step_down(5);
+    step_up(5);
+    pump(2);
+    CHECK(trig_at(0, 5));
+}
+
+TEST(ui_push_value_left_right_walks_the_effects_keeping_the_amount) {
+    Strata &app = fresh();
+    value_step(app, 1);                             // HP SWEEP
+    app.on_encoder(4, 10);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 20);
+    value_key(app, ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(app_engine().perf_fx() == PerfFx::hp_riser);
+    CHECK_EQ(int(app_engine().perf_amount()), 20);  // a scene change on a crossfader left up
+    value_key(app, ENAGA_KEY_LEFT);
+    value_key(app, ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK(app_engine().perf_fx() == PerfFx::lp_sweep);
+    // Round to 16, the looper: picked, not recording, and the effect stays on under it.
+    value_key(app, ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::looper);
+    CHECK(app_engine().perf_fx() == PerfFx::lp_sweep);
+    CHECK_EQ(int(app_engine().status().looper_state.load(std::memory_order_relaxed)), 0);
+    // The arrows still move the cursor without VALUE: GRID's LEFT is the step page's business.
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+}
+
+TEST(ui_step_16_records_a_loop_value_mixes_it_and_clr_clears_it) {
+    Strata &app = fresh();
+    post_cmd(Cmd::resample_cancel);                 // a take an earlier test left armed
+    FakeHost::the().set_running(true);
+    pump();
+    value_step(app, 15);
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::looper);
+    CHECK_EQ(int(app_engine().status().looper_state.load(std::memory_order_relaxed)), 1);
+    CHECK_EQ(int(app_engine().status().looper_bars.load(std::memory_order_relaxed)), 4);
+    CHECK(std::strcmp(UiProbe::notice(app), "LOOP 4 BAR: NEXT BAR") == 0);
+
+    // VALUE is the loop's mix.
+    app.on_encoder(4, 8);
+    pump(2);
+    CHECK_EQ(int(UiProbe::loop_mix(app)), 16);
+    CHECK_EQ(int(app_engine().looper_mix()), 16);
+
+    // RESAMPLE and FREEZE say why they cannot start while the loop holds their buffer.
+    shift_key(ENAGA_KEY_F2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "LOOP HOLDS BUFFER") == 0);
+    pump(2);
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
+    key(ENAGA_KEY_F4);
+    menu_run(kMenuFreeze);
+    CHECK(std::strcmp(UiProbe::notice(app), "LOOP HOLDS BUFFER") == 0);
+
+    // Push VALUE + CLR: everything off, the loop kept; again: the loop thrown away.
+    value_key(app, ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::none);
+    CHECK_EQ(int(app_engine().looper_mix()), 0);
+    CHECK_EQ(int(app_engine().status().looper_state.load(std::memory_order_relaxed)), 1);
+    value_key(app, ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "LOOP CLEARED") == 0);
+    CHECK_EQ(int(app_engine().status().looper_state.load(std::memory_order_relaxed)), 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(ui_the_menu_loop_len_sets_the_looper_bars) {
+    Strata &app = fresh();
+    menu_to(kMenuLoopLen);
+    CHECK(screen_has(app, "LOOP LEN"));
+    CHECK(screen_has(app, "4 BAR"));
+    key(ENAGA_KEY_RIGHT);
+    CHECK(screen_has(app, "8 BAR"));
+    key(ENAGA_KEY_CLR);                             // close the menu
+    post_cmd(Cmd::resample_cancel);                 // a take an earlier test left armed
+    FakeHost::the().set_running(true);
+    pump();
+    value_step(app, 15);
+    pump(2);
+    CHECK_EQ(int(app_engine().status().looper_bars.load(std::memory_order_relaxed)), 8);
+    value_key(app, ENAGA_KEY_CLR);
+    value_key(app, ENAGA_KEY_CLR);
+    pump(2);
+    FakeHost::the().set_running(false);
+    // Back to 4 for the tests after this one: the app is shared.
+    menu_to(kMenuLoopLen);
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);
+    CHECK(screen_has(app, "4 BAR"));
+    key(ENAGA_KEY_CLR);
+    pump();
+}
+
+TEST(ui_in_mute_mode_push_value_and_steps_1_8_still_store_mute_states) {
+    Strata &app = fresh();
+    app.on_pad_press(5, 100);                       // MUTE mode on
+    app.on_pad_release(5);
+    CHECK(UiProbe::mute_mode(app));
+    value_step(app, 0);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "STORED 1") == 0);
+    CHECK(app_engine().perf_fx() == PerfFx::none);
+}
+
+TEST(ui_value_held_lights_the_step_keys_as_the_sixteen_effects) {
+    Strata &app = fresh();
+    value_step(app, 3);
+    app.on_encoder(4, 10);
+    value_step(app, 3);                             // let go...
+    value_step(app, 6);                             // ...and pick STUTTER, still at 0
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    pump(2);
+    CHECK_EQ(int(UiProbe::step_green(app, 6)), 10); // the picked one, bright green
+    CHECK_EQ(int(UiProbe::step_red(app, 6)), 0);
+    CHECK_EQ(int(UiProbe::step_green(app, 0)), 2);  // the rest dim amber
+    CHECK_EQ(int(UiProbe::step_red(app, 0)), 2);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump(2);
+    CHECK_EQ(int(UiProbe::step_green(app, 0)), 0);  // the grid again: an empty step
 }
