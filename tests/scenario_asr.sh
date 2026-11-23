@@ -45,8 +45,8 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 28@360000000 \
     --key 9@400000000 --key 9@430000000 --key 9@460000000 --key 9@490000000 \
     --key 9@520000000 --key 9@550000000 \
-    --key 25@600000000 --key 25@620000000 --key 25@640000000 --key 25@660000000 \
-    --key 25@680000000 --key 25@700000000 \
+    --key 25@600000000 --key 25@640000000 --key 25@680000000 --key 25@720000000 \
+    --key 25@760000000 --key 25@800000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
