@@ -26,6 +26,7 @@
 #include "arp.hpp"          // the ARP page's names and clicks
 #include "engine.hpp"
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
+#include "sounds.hpp"       // SOUNDS: the factory sounds for one track
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
 #include "tuning.hpp"       // TUN and PIT as notes: the NOTE view
 
@@ -353,7 +354,7 @@ constexpr uint8_t kKeyVelocity = 100;
 // selection keys under the screen move within whichever mode is showing -- the step page in
 // GRID, the parameter page in EDIT, the bank of four tracks in MIXER.
 enum class Mode : uint8_t { grid, edit, mixer, project, perform, keys, resample, machine, kit, samples,
-                            menu };
+                            menu, sounds };
 
 // How long a take is. docs/SPEC.md: "1, 2, 4 or 8 bars", so these four and nothing between --
 // a resample is a loop and a loop is a power of two bars.
@@ -397,6 +398,7 @@ const char *mode_name(Mode mode) {
         case Mode::kit:      return "KIT";
         case Mode::samples:  return "SAMPLES";
         case Mode::menu:     return "MENU";
+        case Mode::sounds:   return "SOUNDS";
         default:             return "?";
     }
 }
@@ -780,6 +782,7 @@ public:
         if (mode_ == Mode::kit && on_kit_key(key)) return;
         if (mode_ == Mode::menu && on_menu_key(key)) return;
         if (mode_ == Mode::samples && on_samples_key(key)) return;
+        if (mode_ == Mode::sounds && on_sounds_key(key)) return;
         // A mutation waiting for its verdict takes OK and CLR first, in whatever mode: OK keeps
         // it, CLR reverts it. Only the plain keys; F1 + CLR and F1 + OK stay undo and redo. And
         // not where OK and CLR already mean something more specific: a held STEP (its page, its
@@ -1003,6 +1006,10 @@ public:
                     // OK picks, as in every Enaga list: on a SAMPLE or GRAIN track, from the
                     // sound pages or the machine list, it opens the sample browser on that track.
                     open_samples();
+                } else if ((mode_ == Mode::edit || mode_ == Mode::machine) &&
+                           sound_preset_count(engine_.machine_id(selected_)) > 0) {
+                    // And on the synths and drums, the factory sounds (core/sounds.hpp).
+                    open_sounds();
                 }
                 break;
 
@@ -1136,6 +1143,7 @@ public:
             case Mode::kit:
             case Mode::samples:
             case Mode::menu:
+            case Mode::sounds:                  // on_sounds_key has the arrows
                 break;
         }
     }
@@ -1377,6 +1385,12 @@ public:
             case Mode::samples:
                 // A page of the list, like LEFT and RIGHT.
                 move_sample_cursor_to(sample_cursor_ + delta * kSampleRows);
+                break;
+            case Mode::sounds:
+                // The track, as in MACHINE, so one hand can try a sound on each of the eight.
+                selected_ = (selected_ + delta + kTracks) % kTracks;
+                end_gesture();
+                retarget_sounds();
                 break;
             case Mode::menu:                    // one page
                 break;
@@ -1630,6 +1644,13 @@ public:
         // and must not fall through to the sound parameters of a screen that is not showing.
         if (mode_ == Mode::kit && encoder >= 0 && encoder < 4) {
             if (encoder == 0) move_kit_cursor_to(kit_cursor_ + delta);
+            return;
+        }
+
+        // SOUNDS: A walks the list, as UP and DOWN do; nothing loads until OK. B to D have
+        // nothing to set here.
+        if (mode_ == Mode::sounds && encoder >= 0 && encoder < 4) {
+            if (encoder == 0) move_sound_cursor_to(sound_cursor_ + delta);
             return;
         }
 
@@ -2193,7 +2214,7 @@ public:
     bool verdict_keys_free() const {
         return mutation_pending_ && held_step_ < 0 && range_first_ < 0 && scene_holding_ < 0 &&
                mode_ != Mode::project && mode_ != Mode::kit && mode_ != Mode::samples &&
-               mode_ != Mode::resample && mode_ != Mode::menu;
+               mode_ != Mode::resample && mode_ != Mode::menu && mode_ != Mode::sounds;
     }
 
     // Show a live value as the notice (see Echo). GRID draws the track's length and speed on
@@ -2761,6 +2782,7 @@ public:
                 case Mode::machine: draw_machine(canvas); break;
                 case Mode::kit:     draw_kit(canvas); break;
                 case Mode::samples: draw_samples(canvas); break;
+                case Mode::sounds: draw_sounds(canvas); break;
                 case Mode::menu:    draw_menu(canvas); break;
             }
         }
@@ -3735,9 +3757,145 @@ public:
                             engine_.machine_id(selected_) == uint8_t(MachineId::midi);
         canvas.text(0, 89, line, silent ? 15 : 12);
 
-        canvas.text(0, 103, plays_files(selected_) ? "OK: PICK SAMPLE" : "ARROWS: MACHINE TRACK",
+        canvas.text(0, 103,
+                    plays_files(selected_)
+                        ? "OK: PICK SAMPLE"
+                        : (sound_preset_count(engine_.machine_id(selected_)) > 0 ? "OK: SOUNDS"
+                                                                                 : "ARROWS: MACHINE TRACK"),
                     7);
         canvas.text(0, 112, "FUNC+EDIT AGAIN: KITS", 7);
+    }
+
+    // --- SOUNDS: the factory sounds (OK on a drum or VA track) ---------------
+    //
+    // core/sounds.hpp's presets for the selected track's machine, as a list: UP and DOWN (or A)
+    // move the cursor, OK loads the one under it into the track -- with the transport running,
+    // and staying in the list, so the next OK tries the next one, as the sample browser does --
+    // and CLR goes back. The first row, AS WAS, is the track as it sounded when the list opened
+    // (the engine remembers it, Cmd::sound_preset with kSoundPresetKeep), so trying sounds can
+    // never lose the one you had. The selection keys walk the track, as in MACHINE; a new track
+    // is remembered afresh. NOW marks the preset the track matches as it is.
+
+    void open_sounds() {
+        sounds_return_ = mode_;
+        mode_ = Mode::sounds;
+        leave_mode();
+        sound_track_ = -1;
+        retarget_sounds();
+        notice("SOUNDS");
+    }
+
+    // The list belongs to the selected track: remember its sound and put the cursor on the
+    // preset it matches, if any. A no-op while the track is the one already remembered.
+    void retarget_sounds() {
+        if (sound_track_ == selected_) return;
+        sound_track_ = selected_;
+        post(Cmd::sound_preset, uint8_t(selected_), 0, 0, kSoundPresetKeep);
+        sound_cursor_ = 0;
+        const uint8_t machine = engine_.machine_id(selected_);
+        for (int i = 0; i < sound_preset_count(machine); i++) {
+            if (sound_preset_matches(machine, i, engine_.params(selected_).v)) {
+                sound_cursor_ = i + 1;
+                break;
+            }
+        }
+    }
+
+    int sound_rows() const { return 1 + sound_preset_count(engine_.machine_id(selected_)); }
+
+    void move_sound_cursor_to(int row) {
+        const int last = sound_rows() - 1;
+        sound_cursor_ = row < 0 ? 0 : (row > last ? last : row);
+    }
+
+    bool on_sounds_key(int key) {
+        // A STEP held makes OK, CLR and the arrows its own chords (step page, clear, copy).
+        if (held_step_ >= 0) return false;
+        switch (key) {
+            case ENAGA_KEY_OK: {
+                if (shift_) return false;               // F1 + OK is redo, as everywhere
+                const uint8_t machine = engine_.machine_id(selected_);
+                if (sound_preset_count(machine) == 0) {
+                    notice("NO SOUNDS HERE");
+                    return true;
+                }
+                const char *name = sound_cursor_ == 0 ? "AS WAS"
+                                                      : sound_preset(machine, sound_cursor_ - 1)->name;
+                post(Cmd::sound_preset, uint8_t(selected_), 0, machine,
+                     sound_cursor_ == 0 ? kSoundPresetBack : uint8_t(sound_cursor_ - 1));
+                notice(name);
+                // Logged too: the emulator can press OK but not read the screen
+                // (tests/scenario_sounds.sh).
+                char line[16];
+                char *out = line;
+                append(out, "snd ");
+                append(out, name);
+                *out = 0;
+                enaga::log(line);
+                return true;
+            }
+            case ENAGA_KEY_CLR:
+                if (shift_) return false;               // F1 + CLR is undo
+                mode_ = sounds_return_;
+                leave_mode();
+                notice(mode_name(mode_));
+                return true;
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (shift_) return true;
+                move_sound_cursor_to(sound_cursor_ + (key == ENAGA_KEY_UP ? -1 : +1));
+                return true;
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                // A page, as in SAMPLES: the list is one page, so the first row or the last.
+                if (!shift_) {
+                    move_sound_cursor_to(sound_cursor_ +
+                                         (key == ENAGA_KEY_LEFT ? -kSampleRows : kSampleRows));
+                }
+                return true;
+            case ENAGA_KEY_OCTAVE_LEFT:                 // no steps behind this list
+            case ENAGA_KEY_OCTAVE_RIGHT:
+                return !shift_;
+            default:
+                return false;
+        }
+    }
+
+    void draw_sounds(enaga::Canvas &canvas) {
+        const uint8_t machine = engine_.machine_id(selected_);
+        char line[40];
+        char *out = line;
+        append(out, "SOUNDS T");
+        append_number(out, uint32_t(selected_) + 1);
+        append(out, " ");
+        append(out, machine_name(machine));
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+        canvas.text(0, 27, "INTO THIS TRACK ONLY", 10);
+
+        const int rows = sound_rows();
+        for (int row = 0; row < rows && row < kSampleRows; row++) {
+            out = line;
+            const bool on = row == sound_cursor_;
+            *out++ = on ? '>' : ' ';
+            if (row == 0) {
+                append(out, "AS WAS");
+            } else {
+                const SoundPreset *s = sound_preset(machine, row - 1);
+                append(out, s->name);
+                if (sound_preset_matches(machine, row - 1, engine_.params(selected_).v)) {
+                    int length = 0;
+                    while (s->name[length] != '\0') length++;
+                    for (int pad = kSoundNameChars - length; pad > 0; pad--) *out++ = ' ';
+                    append(out, "  NOW");
+                }
+            }
+            *out = 0;
+            canvas.text(0, 37 + row * 8, line, on ? 15 : 9);
+        }
+        if (rows == 1) canvas.text(0, 45, "NO SOUNDS HERE", 9);
+
+        canvas.text(0, 112, "OK LOAD  CLR BACK", 7);
     }
 
     // --- SAMPLES: the sample browser (OK on a SAMPLE or GRAIN track) -------
@@ -5945,6 +6103,9 @@ private:
     bool sample_seek_ = false;                  // put the cursor on a name once the list is in
     char sample_seek_name_[SampleList::kEntryNameBytes] = {};
     Mode samples_return_ = Mode::edit;          // where CLR at the top goes back to
+    int sound_cursor_ = 0;                      // SOUNDS: 0 is AS WAS, then the presets
+    int sound_track_ = -1;                      // the track whose sound the engine remembers
+    Mode sounds_return_ = Mode::edit;           // where CLR goes back to
     KitAction kit_armed_ = KitAction::none;     // KIT: OK or F1 + DOWN pressed once
     uint32_t kit_armed_at_ms_ = 0;
     static constexpr uint32_t kSaveArmMs = 2000;

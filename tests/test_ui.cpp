@@ -4211,7 +4211,8 @@ TEST(ui_samples_ok_on_a_sample_track_opens_the_browser_in_samples) {
 
 TEST(ui_samples_ok_does_nothing_on_a_track_that_plays_no_file) {
     Strata &app = fresh();
-    post_track(Cmd::set_machine, 0, uint8_t(MachineId::kick));
+    // MID: no file and no factory sounds (a drum or a VA would open SOUNDS instead).
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::midi));
     pump(4);
     key(ENAGA_KEY_F8);
     key(ENAGA_KEY_OK);
@@ -5528,12 +5529,12 @@ bool same(const Look &a, const Look &b) { return a.screen == b.screen && a.leds 
 
 
 enum Screen { s_grid, s_keys, s_edit, s_machine, s_kit, s_mixer, s_perform, s_project, s_chain,
-              s_pattern, s_setup, s_projects, s_resample, s_menu, s_count };
+              s_pattern, s_setup, s_projects, s_resample, s_menu, s_sounds, s_count };
 
 const char *screen_name(int s) {
     static const char *names[] = {"GRID", "KEYS", "EDIT", "MACHINE", "KIT", "MIXER", "PERFORM",
                                   "PROJECT", "CHAIN", "PATTERN", "SETUP", "PROJECTS",
-                                  "RESAMPLE", "MENU"};
+                                  "RESAMPLE", "MENU", "SOUNDS"};
     return names[s];
 }
 
@@ -5555,6 +5556,7 @@ void enter(Strata &app, int s) {
         case s_mixer: mixer_page(app, 0); break;     // the faders, whatever was open last
         case s_perform: shift_key(ENAGA_KEY_F7); break;
         case s_resample: shift_key(ENAGA_KEY_F2); break;
+        case s_sounds: key(ENAGA_KEY_F8); key(ENAGA_KEY_OK); break;   // track 1, the kick
         default:
             key(ENAGA_KEY_F3);
             // docs/CONTROLS.md: the screen keys walk PROJECT's pages, the pad-row keys the bank.
@@ -5754,8 +5756,6 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         // docs/CHEATSHEET.md marks these "--": no job in that screen.
         {s_grid, false, "OK", "no job (hold STEP + OK opens the step page)"},
         {s_keys, false, "OK", "no job"},
-        {s_edit, false, "OK", "no job on a track that plays no file"},
-        {s_machine, false, "OK", "no job on a track that plays no file"},
         {s_pattern, false, "OK", "no job"},
         {s_mixer, false, "UP", "no job"}, {s_mixer, false, "DOWN", "no job"},
         {s_mixer, false, "OK", "no job"},
@@ -5774,6 +5774,16 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_projects, false, "B+", "PROJECTS uses A"}, {s_projects, false, "C+", "ditto"},
         {s_projects, false, "D+", "ditto"}, {s_projects, true, "B+", "ditto"},
         {s_projects, true, "C+", "ditto"}, {s_projects, true, "D+", "ditto"},
+        // SOUNDS opens with the cursor on the preset the track matches, or on AS WAS, the top
+        // row, when it matches none -- as the test kit's kick does. A walks it; B to D have nothing.
+        {s_sounds, false, "UP", "the cursor is on AS WAS"}, {s_sounds, false, "LEFT", "ditto"},
+        {s_sounds, false, "A-", "ditto"}, {s_sounds, true, "A-", "ditto"},
+        {s_sounds, false, "OCT LEFT", "the STEP keys always mean the same"},
+        {s_sounds, false, "OCT RIGHT", "ditto"},
+        {s_sounds, true, "UP", "no copy / paste in a list"}, {s_sounds, true, "DOWN", "ditto"},
+        {s_sounds, false, "B+", "SOUNDS uses A"}, {s_sounds, false, "C+", "ditto"},
+        {s_sounds, false, "D+", "ditto"}, {s_sounds, true, "B+", "ditto"},
+        {s_sounds, true, "C+", "ditto"}, {s_sounds, true, "D+", "ditto"},
         // SETUP shows settings that live in the Enaga menu; only A (quantize) is STRATA's.
         {s_setup, false, "UP", "SETUP only shows"}, {s_setup, false, "DOWN", "ditto"},
         {s_setup, false, "LEFT", "ditto"}, {s_setup, false, "RIGHT", "ditto"},
@@ -6214,6 +6224,16 @@ TEST(ui_screenshots) {
     for (int i = 0; i < 400 && app_storage().browsing(); i++) pump();
     CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
     write_shot(folder, "samples");
+    key(ENAGA_KEY_CLR);
+
+    // The factory sounds on track 1, the default beat's kick: AS WAS, then 909 marked NOW.
+    key(ENAGA_KEY_F4);
+    app.on_pad_press(0, 100);
+    app.on_pad_release(0);
+    key(ENAGA_KEY_F8);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+    write_shot(folder, "sounds");
     key(ENAGA_KEY_CLR);
 
     key(ENAGA_KEY_F6);
@@ -6808,5 +6828,140 @@ TEST(ui_an_edit_knob_still_works_after_a_scene_capture) {
              int(app_engine().scenes().scenes[app_engine().scene_slot(0)].values[track][param]));
     post_cmd_morph(0);
     pump(2);
+    key(ENAGA_KEY_F4);
+}
+
+// --- SOUNDS: the factory sounds for one track (core/sounds.hpp) -------------------------------
+
+namespace {
+
+// Puts `machine` on track 1, opens EDIT and then SOUNDS with OK.
+void sounds_on(Strata &app, MachineId machine) {
+    post_track(Cmd::set_machine, 0, uint8_t(machine));
+    pump(4);
+    key(ENAGA_KEY_F8);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+}
+
+void sounds_cursor_to(int row) {
+    for (int i = 0; i < 12; i++) key(ENAGA_KEY_UP);
+    for (int i = 0; i < row; i++) key(ENAGA_KEY_DOWN);
+}
+
+bool same_params(const TrackParams &a, const TrackParams &b) {
+    return std::memcmp(a.v, b.v, sizeof a.v) == 0;
+}
+
+}  // namespace
+
+TEST(ui_layout_sounds_on_every_machine_that_has_them) {
+    Strata &app = fresh();
+    for (int machine = 0; machine < int(MachineId::count); machine++) {
+        if (sound_preset_count(uint8_t(machine)) == 0) continue;
+        sounds_on(app, MachineId(machine));
+        check_layout(app, "SOUNDS");
+        // The longest row: every preset marked as the one playing, in turn.
+        for (int row = 1; row <= sound_preset_count(uint8_t(machine)); row++) {
+            sounds_cursor_to(row);
+            key(ENAGA_KEY_OK);
+            pump(2);
+            check_layout(app, machine_name(uint8_t(machine)));
+        }
+        key(ENAGA_KEY_CLR);
+        key(ENAGA_KEY_F4);
+    }
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+}
+
+TEST(ui_sounds_ok_loads_a_preset_into_the_selected_track_only_and_keeps_its_mix) {
+    Strata &app = fresh();
+    sounds_on(app, MachineId::kick);
+    // Something of the user's own on the pages a preset must leave: pan, a send, the LFO.
+    post_cmd(Cmd::set_param, uint8_t(page_first(Page::fx) + 1), 20);
+    post_cmd(Cmd::set_param, uint8_t(page_first(Page::fx) + 3), 99);
+    post_cmd(Cmd::set_param, uint8_t(kParams + 1), 77);
+    pump(2);
+    const TrackParams before = app_engine().params(0);
+    TrackParams others[kTracks];
+    for (int t = 0; t < kTracks; t++) others[t] = app_engine().params(t);
+
+    sounds_cursor_to(2);                           // AS WAS, 909, 808
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));       // stays, for the next try
+    const TrackParams &now = app_engine().params(0);
+    CHECK(sound_preset_matches(uint8_t(MachineId::kick), 1, now.v));
+    CHECK_EQ(int(now.v[page_first(Page::fx) + 1]), 20);
+    CHECK_EQ(int(now.v[page_first(Page::fx) + 3]), 99);
+    CHECK_EQ(int(now.v[kParams + 1]), 77);
+    CHECK(!same_params(now, before));
+    for (int t = 1; t < kTracks; t++) CHECK(same_params(app_engine().params(t), others[t]));
+    // That it is what PLAYS is tests/test_sounds.cpp's, on an engine of its own.
+
+    // AS WAS puts the sound back exactly.
+    sounds_cursor_to(0);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(same_params(app_engine().params(0), before));
+
+    // CLR goes back where the list came from.
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_sounds_the_selection_keys_walk_the_track_and_as_was_follows_it) {
+    Strata &app = fresh();
+    sounds_on(app, MachineId::kick);
+    const TrackParams kick_before = app_engine().params(0);
+    sounds_cursor_to(3);
+    key(ENAGA_KEY_OK);                             // track 1 gets DEEP
+    pump(2);
+    const TrackParams kick_deep = app_engine().params(0);
+    CHECK(!same_params(kick_deep, kick_before));
+
+    key(ENAGA_KEY_SELECT_RIGHT);                   // track 2: its own list, its own AS WAS
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+    CHECK_EQ(UiProbe::selected(app), 1);
+    const uint8_t machine = app_engine().machine_id(1);
+    if (sound_preset_count(machine) > 1) {
+        const TrackParams second_before = app_engine().params(1);
+        sounds_cursor_to(2);
+        key(ENAGA_KEY_OK);
+        pump(2);
+        CHECK(sound_preset_matches(machine, 1, app_engine().params(1).v));
+        sounds_cursor_to(0);
+        key(ENAGA_KEY_OK);
+        pump(2);
+        CHECK(same_params(app_engine().params(1), second_before));
+    }
+    // Track 1 kept the sound it was given.
+    CHECK(same_params(app_engine().params(0), kick_deep));
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_sounds_machine_ok_opens_it_and_marks_the_sound_playing_now) {
+    Strata &app = fresh();
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::va_mono));
+    pump(4);
+    // Give the track ACID first, so the list opens on it.
+    post_cmd(Cmd::sound_preset, uint8_t(MachineId::va_mono), 1);
+    pump(2);
+    shift_key(ENAGA_KEY_F8);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    CHECK(screen_has(app, "OK: SOUNDS"));
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+    CHECK(screen_has(app, ">ACID    NOW"));
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
     key(ENAGA_KEY_F4);
 }
