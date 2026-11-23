@@ -984,6 +984,7 @@ public:
                     break;
                 }
                 if (held_step_ >= 0) {
+                    len_step_ = -1;
                     // Hold STEP + OK: the step page, on that step (docs/SPEC.md, "Step editing").
                     step_page_ = true;
                     page_step_ = held_step_;
@@ -1203,7 +1204,18 @@ public:
     // lock on a step nobody is touching.
     // Forget the STEP key being held, and the range it was building. Called on the release and
     // on anything that makes the hold unanswerable.
+    // A selection made by "hold a note, press a later step" set that note's LEN when the keys
+    // came up. Used afterwards for copy, transpose or nudge, it was a selection after all: the
+    // old LEN goes back before the edit, so the edit is the only change.
+    void undo_applied_length() {
+        if (len_applied_step_ < 0) return;
+        post(Cmd::set_step_length, uint8_t(len_applied_track_), uint8_t(len_applied_step_),
+             len_applied_old_);
+        len_applied_step_ = -1;
+    }
+
     void release_hold() {
+        len_step_ = -1;
         held_step_ = -1;
         held_key_ = -1;
         held_used_ = false;
@@ -1243,13 +1255,34 @@ public:
                 range_first_ = held_step_ < step ? held_step_ : step;
                 range_last_ = held_step_ < step ? step : held_step_;
                 held_used_ = true;      // the first key made a selection; it was not a tap
-                notice("RANGE");
+                len_applied_step_ = -1;
+                // Held on a note and pressed LATER: the note's length, up to the end of the step
+                // pressed, set when the first key comes up -- unless the selection is used for
+                // something first (CLR, copy, paste, a knob), which cancels it.
+                len_step_ = -1;
+                const Step &first = engine_.pattern().tracks[selected_].steps[held_step_];
+                if (held_step_ < step && (first.flags & kStepTrig) != 0) {
+                    len_step_ = held_step_;
+                    len_index_ = length_index_within_steps(step - held_step_ + 1);
+                    Step shown = first;
+                    shown.length = len_index_;
+                    char value[16];
+                    step_field_text(shown, StepField::length, value, int(sizeof value));
+                    char *out = notice_buffer_;
+                    append(out, "LEN ");
+                    append(out, value);
+                    *out = 0;
+                    notice(notice_buffer_);
+                } else {
+                    notice("RANGE");
+                }
                 return;
             }
             // A fresh single press drops any previous selection. Without this, a range made
             // minutes ago would still be what the next CLR erases, which is the sort of thing
             // that loses someone's pattern.
             range_first_ = range_last_ = -1;
+            len_applied_step_ = -1;
             held_step_ = step;
             held_key_ = raw;
             held_used_ = false;
@@ -1257,6 +1290,17 @@ public:
         }
 
         if (raw != held_key_) return;          // the second key of a range coming back up
+
+        if (len_step_ >= 0) {
+            mark(GestureKind::field, selected_, len_step_);
+            post(Cmd::set_step_length, uint8_t(selected_), uint8_t(len_step_), len_index_);
+            // Remembered while the selection lives, so using it later for something that is
+            // not a length (copy, transpose, nudge) puts the old LEN back first.
+            len_applied_step_ = len_step_;
+            len_applied_track_ = selected_;
+            len_applied_old_ = engine_.pattern().tracks[selected_].steps[len_step_].length;
+            len_step_ = -1;
+        }
 
         if (!held_used_) {
             // A tap. With F1 it toggles the trigless bit instead: a step that applies its locks
@@ -1364,6 +1408,8 @@ public:
     // reckless without undo -- it is acceptable here because F1 + CLR brings it straight back,
     // which is exactly what this milestone adds.
     void erase_selection() {
+        len_step_ = -1;                        // the selection was for this, not a length
+        len_applied_step_ = -1;                // and an erase takes the length with the step
         if (held_step_ >= 0) {
             mark(GestureKind::erase, selected_, held_step_);
             post(Cmd::range_erase, uint8_t(selected_), uint8_t(held_step_), 1);
@@ -1383,6 +1429,8 @@ public:
     }
 
     void copy_selection() {
+        len_step_ = -1;
+        undo_applied_length();
         int first = 0;
         int count = kStepsPerTrack;
         if (held_step_ >= 0) {
@@ -1398,6 +1446,8 @@ public:
     }
 
     void paste_selection() {
+        len_step_ = -1;
+        len_applied_step_ = -1;                // the paste writes over that step anyway
         const int first = held_step_ >= 0 ? held_step_ : (range_first_ >= 0 ? range_first_ : 0);
         if (held_step_ >= 0) held_used_ = true;
         mark(GestureKind::paste, selected_, first);
@@ -1678,8 +1728,21 @@ public:
             }
         }
         if (encoder < 0 || encoder > 3) return;
+        len_step_ = -1;                        // a knob turned under a selection: not a length
 
-        // 1. A held STEP key: lock this page's parameter on that step. The single most
+        // 1. The step page: A-D are four of the step's own fields. Before a held STEP key: the
+        //    page is opened by holding STEP + OK, and a hand still on that STEP key while it
+        //    turns C means LEN on the page it is looking at, not a lock on CUT.
+        if (step_page_) {
+            if (held_step_ >= 0) held_used_ = true;      // the release must not toggle the trig
+            const int field = field_page_ * 4 + encoder;
+            if (field >= kStepFields) return;
+            mark(GestureKind::field, selected_, page_step_);
+            post_delta(Cmd::step_field_delta, selected_, page_step_, uint8_t(field), delta);
+            return;
+        }
+
+        // 2. A held STEP key: lock this page's parameter on that step. The single most
         //    important gesture in the whole app (docs/SPEC.md, "Step editing") -- and the
         //    reason the step's release has to know the key was used as a modifier.
         if (held_step_ >= 0) {
@@ -1690,14 +1753,6 @@ public:
             return;
         }
 
-        // 2. The step page: A-D are four of the step's own fields.
-        if (step_page_) {
-            const int field = field_page_ * 4 + encoder;
-            if (field >= kStepFields) return;
-            mark(GestureKind::field, selected_, page_step_);
-            post_delta(Cmd::step_field_delta, selected_, page_step_, uint8_t(field), delta);
-            return;
-        }
 
         if (mode_ == Mode::mixer) {
             if (mixer_bank_ < kMixerTrackPages) {
@@ -1723,6 +1778,7 @@ public:
         // 3. A selection with no step held: A transposes it, B nudges its micro-timing. The
         //    only two edits that are genuinely about a span rather than a step.
         if (range_first_ >= 0 && encoder < 2) {
+            undo_applied_length();
             const int count = range_last_ - range_first_ + 1;
             mark(GestureKind::field, selected_, range_first_);
             post_delta(encoder == 0 ? Cmd::range_transpose : Cmd::range_nudge,
@@ -5937,6 +5993,11 @@ private:
     int held_key_ = -1;            // and the PHYSICAL key it came from, 0-15, so the release
                                    // matches even if the page moved under it
     bool held_used_ = false;       // it was used as a modifier, so its release is not a tap
+    int len_step_ = -1;            // held on a note + a later STEP: LEN to set on release
+    uint8_t len_index_ = 0;
+    int len_applied_step_ = -1;    // and the step it was set on, while the selection lives
+    uint8_t len_applied_old_ = 0;  // with the LEN it had before
+    int len_applied_track_ = 0;
     int range_first_ = -1;         // two STEP keys held: the selection, inclusive
     int range_last_ = -1;
     bool step_page_ = false;       // the step page is open

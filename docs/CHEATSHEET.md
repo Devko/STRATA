@@ -119,10 +119,11 @@ screen when pressed.
 | Hold STEP + push A-D | Remove that one lock (LOCK CLEARED), with or without FUNC held |
 | Push the TUN / PIT knob (EDIT, GRID, KEYS) | NOTE view on / off: TUN as a note (where it puts C-4), a semitone a click (`TUN AS NOTES`), or as 0-127, a count a click (`TUN AS NUMBERS`). `+` / `-` after a note: the byte is 5 cents or more sharp / flat of it |
 | Hold STEP + turn VALUE | Set the step's note |
-| Hold STEP + OK | Open the step page on that step |
+| Hold STEP + OK | Open the step page on that step (keep holding or let go: A-D are the page's fields) |
+| Hold a note's STEP + press a later STEP | LEN up to the end of that step (`LEN 4 STP`), set when you let go; CLR, copy or a knob instead uses the pair as a range |
 | Hold STEP + CLR | Clear the step |
 | Hold STEP + UP / DOWN | Copy / paste the step |
-| Hold two STEPs | Select the range between them (SEL a-b) |
+| Hold two STEPs | Select the range between them (SEL a-b). Held on a note, the later key also sets its LEN (above) |
 | Range + CLR / FUNC+UP / FUNC+DOWN | Clear / copy / paste the range |
 | Range + A / B | Transpose / nudge micro-timing of the range |
 | CLR, nothing held | Clear the whole track (FUNC+CLR brings it back) |

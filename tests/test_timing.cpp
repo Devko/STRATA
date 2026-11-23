@@ -467,3 +467,18 @@ TEST(a_stored_length_of_zero_plays_as_one_step) {
         CHECK_EQ(firings[0].loop, t / 24);
     }
 }
+
+TEST(timing_length_within_steps_never_runs_past_the_step_pressed) {
+    CHECK_EQ(int(length_index_within_steps(1)), 8);            // 1 step
+    CHECK_EQ(int(length_sixteenths(length_index_within_steps(2))), 32);
+    CHECK_EQ(int(length_sixteenths(length_index_within_steps(4))), 64);
+    CHECK_EQ(int(length_sixteenths(length_index_within_steps(5))), 64);    // 4, not 6
+    CHECK_EQ(int(length_sixteenths(length_index_within_steps(16))), 256);
+    CHECK_EQ(int(length_index_within_steps(64)), kLengthMax);
+    CHECK_EQ(int(length_index_within_steps(200)), kLengthMax);
+    CHECK_EQ(int(length_index_within_steps(0)), 8);
+    for (int n = 1; n <= 64; n++) {
+        const int got = int(length_sixteenths(length_index_within_steps(n)));
+        CHECK(got <= n * 16);
+    }
+}
