@@ -43,7 +43,7 @@ using namespace strata;
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
 // ambient modes: nine bytes on the end of the mixer section.
 constexpr uint32_t kProjectFileBytes = 402;
-constexpr uint32_t kKitFileBytes = 1252;   // 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12)
+constexpr uint32_t kKitFileBytes = 1296;   // 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -1382,11 +1382,16 @@ uint32_t fresh_kit_file() {
     return section_at(g_kit_file, kSectionKitTracks);
 }
 
-// g_kit_file as a build from before the duck wrote it: the duck's section, the last, dropped.
+// g_kit_file as a build from before the duck wrote it: the OSC page's section and then the
+// duck's, the last two, dropped.
 void drop_duck_section() {
-    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1228u);
-    for (uint32_t i = 0; i < 1228u; i++) g_kit_file[i] = g_kit_alt[i];
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1252u);
+    CHECK_EQ(drop_last_section(g_kit_alt, g_kit_file), 1228u);
 }
+
+// What a parameter loads as when its section is absent: 0, except the OSC page's, which loads
+// the legacy voice (core/project.hpp, kKitOscLegacy).
+int absent_param(int p) { return p >= kKitAsrEnd ? int(kKitOscLegacy[p - kKitAsrEnd]) : 0; }
 
 // The fader as it went down on disk, in thousandths of unity.
 uint16_t stored_level(const uint8_t *file, int track) {
@@ -1452,7 +1457,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 6);     // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 7);     // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -1498,6 +1503,8 @@ TEST(kit_the_lfo_and_arp_bytes_round_trip_and_are_clamped_on_the_way_in) {
     for (uint32_t i = 0; i < uint32_t(kKitArpParams * kTracks); i++) g_kit_file[arp + i] = 201;
     const uint32_t asr = section_at(g_kit_file, kSectionKitAsr);
     for (uint32_t i = 0; i < uint32_t(kKitAsrParams * kTracks); i++) g_kit_file[asr + i] = 202;
+    const uint32_t osc = section_at(g_kit_file, kSectionKitOsc);
+    for (uint32_t i = 0; i < uint32_t(kKitOscParams * kTracks); i++) g_kit_file[osc + i] = 203;
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
@@ -1530,7 +1537,7 @@ TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_and_arp_off) {
             CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
         }
         for (int p = kKitLfoEnd; p < kKitParams; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 0);
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), absent_param(p));
         }
     }
 
@@ -1546,7 +1553,7 @@ TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_and_arp_off) {
             CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
         }
         for (int p = kKitSoundParams; p < kKitParams; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 0);
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), absent_param(p));
         }
         CHECK_EQ(int(g_kit_loaded.tracks[t].machine), int(g_kit_source.tracks[t].machine));
     }
@@ -2471,6 +2478,8 @@ TEST(kit_the_duck_round_trips_is_clamped_and_an_older_file_ducks_as_v0_1_did) {
     // every track, track 1 the source, 3 / 40 / 120 ms -- even read into a kit that held another.
     CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
              int(SerializeResult::ok));
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1252u);    // the OSC page went on after it
+    for (uint32_t i = 0; i < 1252u; i++) g_kit_file[i] = g_kit_alt[i];
     const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
     CHECK_EQ(old_size, 1228u);
     for (int t = 0; t < kTracks; t++) g_kit_loaded.tracks[t].duck = 99;
@@ -2519,7 +2528,46 @@ TEST(kit_the_asr_page_round_trips_and_an_older_file_loads_it_at_zero) {
             CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
         }
         for (int p = kKitArpEnd; p < kKitParams; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 0);
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), absent_param(p));
         }
     }
+}
+
+TEST(kit_the_osc_page_round_trips_and_an_older_file_loads_the_legacy_voice) {
+    // The VA machines' WAV OS2 SUB DRV (kSectionKitOsc), the last section. A kit from before the
+    // page has none, and every track comes back with kKitOscLegacy -- a saw over the sub the
+    // voice had fixed -- even read into a kit whose page held something else.
+    fresh_kit_file();
+    CHECK(section_at(g_kit_file, kSectionKitOsc) > section_at(g_kit_file, kSectionKitDuck));
+    CHECK_EQ(int(g_kit_file[section_at(g_kit_file, kSectionKitOsc) + 4 * 5 + 2]),
+             int(g_kit_source.tracks[5].params[kKitAsrEnd + 2]));
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitAsrEnd; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+    }
+    const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
+    CHECK_EQ(old_size, 1252u);
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitAsrEnd; p < kKitParams; p++) g_kit_loaded.tracks[t].params[p] = 99;
+    }
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitAsrEnd; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+        CHECK_EQ(int(g_kit_loaded.tracks[t].params[kKitAsrEnd + 0]), 0);     // a saw
+        CHECK_EQ(int(g_kit_loaded.tracks[t].params[kKitAsrEnd + 1]), 0);     // OSC 2 off
+        CHECK_EQ(int(g_kit_loaded.tracks[t].params[kKitAsrEnd + 2]), 102);   // the old sub
+        CHECK_EQ(int(g_kit_loaded.tracks[t].params[kKitAsrEnd + 3]), 0);     // no drive
+    }
+
+    // Present but short is damage, not an old file.
+    fresh_kit_file();
+    const uint32_t entry = section_entry_at(g_kit_file, kSectionKitOsc);
+    poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
+             int(SerializeResult::malformed));
 }

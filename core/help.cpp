@@ -432,15 +432,16 @@ constexpr const char *kMachineWords[int(MachineId::count)][8] = {
 };
 
 // The rest are the same on every machine: the insert chain's FLTR and FX (dsp/chain.cpp), the
-// LFO (dsp/lfo.cpp), the arpeggiator (core/arp.cpp) and the VAs' ASR (app/app.hpp, kAsrNames).
+// LFO (dsp/lfo.cpp), the arpeggiator (core/arp.cpp) and the VAs' ASR and OSC (app/app.hpp).
 constexpr const char *kFltrWords[4] = {"DRIVE", "CUTOFF", "RESONANCE", "FILTER MODE"};
 constexpr const char *kFxWords[4] = {"LO-FI", "PAN", "SEND A DELAY", "SEND B REVERB"};
 constexpr const char *kLfoWords[4] = {"SHAPE", "RATE", "DEPTH", "DESTINATION"};
 constexpr const char *kArpWords[4] = {"MODE", "RATE", "OCTAVES", "GATE"};
 constexpr const char *kAsrWords[4] = {"ATTACK", "SUSTAIN", "RELEASE", "FILTER SUSTAIN"};
+constexpr const char *kOscWords[4] = {"SAW/SQR/PULSE", "OSC2 DET/SYNC", "SUB OSC", "DRIVE"};
 
 const char *const kEditPageNames[kHelpEditPages] = {"SRC", "FLTR", "AMP", "FX",
-                                                    "LFO", "ARP", "ASR"};
+                                                    "LFO", "ARP", "ASR", "OSC"};
 
 bool is_va(uint8_t machine) {
     return machine == uint8_t(MachineId::va_mono) || machine == uint8_t(MachineId::va_poly);
@@ -494,8 +495,8 @@ void knob_row(const HelpPlace &place, int slot, char row[kHelpChars + 1]) {
 void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelpChars + 1],
                int &count) {
     const int page = place.page < kHelpEditPages ? place.page : 0;
-    if (page == 6 && !is_va(place.machine)) {
-        add_row(rows, count, "ASR  ONLY ON MNO/PLY");
+    if (page >= 6 && !is_va(place.machine)) {
+        add_row(rows, count, page == 6 ? "ASR  ONLY ON MNO/PLY" : "OSC  ONLY ON MNO/PLY");
         return;
     }
     for (int slot = 0; slot < 4; slot++) knob_row(place, slot, rows[count++]);
@@ -520,6 +521,10 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
         case 6:
             add_row(rows, count, "SUS 0  ONE-SHOT");
             add_row(rows, count, "SUS UP  PAD/LEN HOLDS");
+            break;
+        case 7:
+            add_row(rows, count, "OS2 1-63 DETUNE");
+            add_row(rows, count, "OS2 64+  SYNC");
             break;
         default: break;
     }
@@ -651,7 +656,8 @@ const char *help_param_words(uint8_t machine, int index) {
         case 3: return kFxWords[slot];
         case 4: return kLfoWords[slot];
         case 5: return kArpWords[slot];
-        default: return is_va(machine) ? kAsrWords[slot] : "";
+        case 6: return is_va(machine) ? kAsrWords[slot] : "";
+        default: return is_va(machine) ? kOscWords[slot] : "";
     }
 }
 

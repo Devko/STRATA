@@ -2,7 +2,7 @@
 //
 // The kit library (app/storage.hpp) swaps all eight tracks at once, which is the wrong size for
 // "try a different kick": the rest of the beat goes with it. A sound preset is one machine's
-// worth of knobs -- SRC, the insert chain's FLTR page and AMP, and on the VAs the ASR page --
+// worth of knobs -- SRC, the insert chain's FLTR page and AMP, and on the VAs the ASR and OSC pages --
 // written into the selected track and nothing else. Opened with OK from EDIT or MACHINE on any
 // track whose machine has some (app/app.hpp, SOUNDS), the way OK opens the sample browser on a
 // SAMPLE or GRAIN track.
@@ -14,7 +14,7 @@
 //   - the LFO and ARP pages, which are performance, not timbre;
 //   - the track's fader, its machine and its sample;
 //   - HAT's CHK (slot 10), the choke group: it says which hat cuts which, a wiring choice;
-//   - the ASR page on the drums and on every machine that does not read it.
+//   - the ASR and OSC pages on the drums and on every machine that does not read them.
 //
 // `sound_preset_writes` is that list as a bit mask over a KitTrack's parameters.
 //
@@ -41,12 +41,15 @@ struct SoundPreset {
     uint8_t fltr[4];         // 4-7: DRV CUT RES MOD, the insert chain's
     uint8_t amp[4];          // 8-11
     uint8_t asr[4];          // 24-27: ATK SUS REL FSU, written on VA MONO and VA POLY only
+    uint8_t osc[4];          // 28-31: WAV OS2 SUB DRV, the same
 };
 
 constexpr int kSoundNameChars = 6;
 
 // The first parameter of the ASR page in a KitTrack, as dsp/track.hpp has it.
 constexpr int kSoundAsrFirst = kKitArpEnd;
+// And of the OSC page.
+constexpr int kSoundOscFirst = kKitAsrEnd;
 
 // How many presets `machine` has: 0 for SAMPLE, GRAIN, MID and any id this build lacks.
 int sound_preset_count(uint8_t machine);

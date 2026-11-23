@@ -3944,7 +3944,7 @@ TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
     Strata &app = fresh();
     key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
     while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
-    CHECK_EQ(int(Page::asr), kEditPages - 1);
+    CHECK_EQ(int(Page::asr), kEditPages - 2);
     check_layout(app, "EDIT ASR, a drum");
     CHECK(screen_has(app, "VA MONO/POLY ONLY"));
     CHECK(!screen_has(app, "ATK"));
@@ -3982,6 +3982,57 @@ TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
     for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
     pump();
     for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_osc_is_edits_eighth_page_and_names_its_waves_and_modes) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
+    while (UiProbe::param_page(app) != int(Page::osc)) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(int(Page::osc), kEditPages - 1);
+    check_layout(app, "EDIT OSC, a drum");
+    CHECK(screen_has(app, "VA MONO/POLY ONLY"));
+    CHECK(!screen_has(app, "WAV"));
+
+    // Track 6, VA MONO in the default kit: the four names and what each value means.
+    for (int i = 0; i < 5; i++) key(ENAGA_KEY_DOWN);
+    CHECK_EQ(int(app_engine().machine_id(5)), int(MachineId::va_mono));
+    const TrackParams original = app_engine().params(5);
+    check_layout(app, "EDIT OSC, VA MONO");
+    CHECK(screen_has(app, "WAV"));
+    CHECK(screen_has(app, "OS2"));
+    CHECK(screen_has(app, "SUB"));
+    CHECK(screen_has(app, "DRV"));
+    post_cmd_track_param(5, uint8_t(kOscFirst + 0), 0);
+    post_cmd_track_param(5, uint8_t(kOscFirst + 1), 0);
+    pump();
+    CHECK(screen_has(app, "SAW"));
+    CHECK(screen_has(app, "OFF"));
+    post_cmd_track_param(5, uint8_t(kOscFirst + 0), 32);    // the square
+    post_cmd_track_param(5, uint8_t(kOscFirst + 1), 30);    // a detune: D14
+    pump();
+    CHECK(screen_has(app, "SQR"));
+    CHECK(screen_has(app, "D14"));
+    post_cmd_track_param(5, uint8_t(kOscFirst + 0), 127);   // the thinnest pulse
+    post_cmd_track_param(5, uint8_t(kOscFirst + 1), 127);   // sync two octaves up
+    pump();
+    CHECK(screen_has(app, "P8"));
+    CHECK(screen_has(app, "S+24"));
+
+    // Every value of every knob fits.
+    for (int b = 0; b < 128; b++) {
+        for (int i = 0; i < kOscParams; i++) post_cmd_track_param(5, uint8_t(kOscFirst + i), uint8_t(b));
+        pump();
+        check_layout(app, "EDIT OSC, every value");
+    }
+
+    // The factory bass's page again, and SRC for the tests after this one.
+    for (int i = 0; i < kOscParams; i++) {
+        post_cmd_track_param(5, uint8_t(kOscFirst + i), original.v[kOscFirst + i]);
+    }
+    pump();
+    for (int i = 0; i < 5; i++) key(ENAGA_KEY_UP);
     while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
     key(ENAGA_KEY_F4);
 }
@@ -6589,6 +6640,17 @@ TEST(ui_screenshots) {
     pump();
     write_shot(folder, "edit_asr");
     for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
+    // And the OSC page on the same track: a square, OSC 2 detuned, a little sub and drive.
+    key(ENAGA_KEY_SELECT_RIGHT);
+    const TrackParams before_osc = app_engine().params(6);
+    const uint8_t osc[kOscParams] = {32, 30, 40, 30};    // SQR, D14, 40, 30
+    for (int i = 0; i < kOscParams; i++) post_cmd_track_param(6, uint8_t(kOscFirst + i), osc[i]);
+    pump();
+    write_shot(folder, "edit_osc");
+    for (int i = 0; i < kOscParams; i++) {
+        post_cmd_track_param(6, uint8_t(kOscFirst + i), before_osc.v[kOscFirst + i]);
+    }
+    key(ENAGA_KEY_SELECT_LEFT);
     pump();
     for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
     key(ENAGA_KEY_SELECT_LEFT);
@@ -7280,7 +7342,7 @@ void sounds_on(Strata &app, MachineId machine) {
 }
 
 void sounds_cursor_to(int row) {
-    for (int i = 0; i < 12; i++) key(ENAGA_KEY_UP);
+    for (int i = 0; i < 16; i++) key(ENAGA_KEY_UP);
     for (int i = 0; i < row; i++) key(ENAGA_KEY_DOWN);
 }
 
@@ -7306,6 +7368,28 @@ TEST(ui_layout_sounds_on_every_machine_that_has_them) {
         key(ENAGA_KEY_CLR);
         key(ENAGA_KEY_F4);
     }
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+}
+
+TEST(ui_sounds_a_list_longer_than_the_screen_scrolls_with_the_cursor) {
+    Strata &app = fresh();
+    sounds_on(app, MachineId::va_mono);
+    const int count = sound_preset_count(uint8_t(MachineId::va_mono));
+    CHECK(count >= 8);                                 // more rows than the screen's eight
+    const char *last = sound_preset(uint8_t(MachineId::va_mono), count - 1)->name;
+    sounds_cursor_to(0);
+    CHECK(screen_has(app, "AS WAS"));
+    CHECK(!screen_has(app, last));
+    sounds_cursor_to(count);                           // the last preset
+    CHECK(screen_has(app, last));
+    CHECK(!screen_has(app, "AS WAS"));
+    check_layout(app, "SOUNDS, scrolled");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(sound_preset_matches(uint8_t(MachineId::va_mono), count - 1, app_engine().params(0).v));
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
     post_track(Cmd::set_machine, 0, 0);
     pump(4);
 }

@@ -45,11 +45,14 @@ static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first
                   kFactoryAsr == page_first(Page::asr),
               "core/factory.hpp's page layout and dsp/track.hpp's have diverged");
 static_assert(kSoundAsrFirst == kAsrFirst, "core/sounds.hpp's ASR page and dsp/track.hpp's have diverged");
+static_assert(kSoundOscFirst == kOscFirst && kFactoryOsc == kOscFirst,
+              "core/'s OSC page and dsp/track.hpp's have diverged");
 
 static_assert(kKitParams == kTrackParams && kKitSoundParams == kParams &&
                   kKitLfoParams == kLfoParams && kKitArpParams == kArpParams &&
                   kKitLfoEnd == kArpFirst && kArpBytes == kArpParams &&
-                  kKitAsrParams == kAsrParams && kKitArpEnd == kAsrFirst,
+                  kKitAsrParams == kAsrParams && kKitArpEnd == kAsrFirst &&
+                  kKitOscParams == kOscParams && kKitAsrEnd == kOscFirst,
               "core/project.hpp's kit record and dsp/track.hpp's TrackParams have diverged; a "
               "saved project would come back with the wrong number of parameters per track");
 
@@ -328,12 +331,15 @@ void Engine::prepare_machine(int track) {
     Machine *machine = machines_[track];
     if (machine == nullptr) return;
     const TrackParams &params = sounding(track);
-    // The sound's 16 and the ASR page's 4: a VA reads both (dsp/track.hpp). The LFO and arp bytes
-    // between them are not compared, so turning an LFO knob does not re-prepare a machine.
+    // The sound's 16 and the ASR and OSC pages' 8: a VA reads all of them (dsp/track.hpp). The
+    // LFO and arp bytes between them are not compared, so turning an LFO knob does not re-prepare
+    // a machine.
+    static_assert(kOscFirst == kAsrFirst + kAsrParams && kTrackParams == kOscFirst + kOscParams,
+                  "ASR and OSC are the last eight bytes, compared as one run");
     if (prepare_memo_ && machine_prepared_for_[track] == machine &&
         __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0 &&
         __builtin_memcmp(machine_prepared_[track].v + kAsrFirst, params.v + kAsrFirst,
-                         kAsrParams) == 0) {
+                         kAsrParams + kOscParams) == 0) {
         return;
     }
     machine->prepare(params);

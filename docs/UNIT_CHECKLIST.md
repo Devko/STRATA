@@ -1,7 +1,7 @@
 # Unit checklist
 
-The first part is **today's walkthrough** (2026-11-23): about 25 minutes, numbered 1-16, over
-everything merged since v0.1.0. Report back by number, for example `3 fail: reads 055`. After it
+The first part is **today's walkthrough** (2026-11-23): about 30 minutes, numbered 1-18, over
+everything merged since v0.1.0 (18 is the VA sound rework). Report back by number, for example `3 fail: reads 055`. After it
 come the controls tour from 2026-11-22 (skip what the v0.1.0 card already showed), last night's
 long walkthrough, and "Reference", the full per-milestone list with the background for each check.
 
@@ -162,6 +162,22 @@ with at least one WAV in `SmplTrek/Pool/Audio` (copy one there on a PC if it is 
 - Is `POOL` the folder you keep your samples in? Anything else under `SmplTrek` you expected at
   the top? `____`
 
+**18. The VA sound rework: OSC page and the new SOUNDS (3 min).** Beat playing, A01.
+- Lower pad 6 (bass), EDIT, screen key RIGHT seven times: an eighth page box, `OSC`, with WAV OS2
+  SUB DRV reading `SAW OFF 090 024`, and `OS2: DET 1-63 SYN 64+` below. The eight boxes fit.
+- The bass sounds rounder than on the v0.2.0 card (no synced pulse); is it still right in the mix?
+  `____`
+- SRC page, D (RES) slowly to the top: the squelch grows over the whole knob, not just the last
+  quarter, and near the top the filter whistles at a steady level with no crackle or runaway.
+- OK (SOUNDS): try ACID with the beat running (RES high, CUT low, ENV up: it should squelch at
+  once), then FAT, REESE, SYNC and LEAD. Each is usable without touching a knob? Too loud or too
+  quiet against the kick? `____`. AS WAS.
+- Track 7 (chord), OK: STAB, PAD, STRING, BRASS. AS WAS.
+- OSC page on track 6: B (OS2) up from 0: `D0`... a slow chorus, then a wide Reese by 63 (`D60`); past 64
+  `S+0`... a bright, tearing sync sweep. D (DRV) up: thicker and dirtier, not much louder.
+- STOP, PLAY (MAX restarts), 30 s with OS2 at `S+12` and DRV half on track 6: **MAX `____ %`**
+  (against item 1's). Then FUNC+HOME, RELOAD PROJECT (OK twice) puts the beat back.
+
 **Done.** Reply with the numbers: `all pass`, or for example `3 fail: reads 055`, `9: MAX 61.2`.
 
 ---
@@ -263,6 +279,11 @@ needed for tonight's unit session; do them if the PC is free.
       compilers. Then the held-chord cost: the temporary `factory_kit` edit in `docs/BUDGET.md`
       ("The ASR page", E12), `scenario_factory.sh` both compilers, and revert the edit.
       Off: cl6x `________ %` GCC `________ %`. Held: cl6x `________ %` GCC `________ %`
+- [ ] **E13.** The OSC page: `tests/scenario_osc.sh` (walks EDIT to OSC on track 1 and track 7,
+      A01 as shipped) against `scenario_factory.sh` on the commit before it, both compilers.
+      Then the worst case: the temporary `factory_kit` edit in `docs/BUDGET.md` ("The OSC page",
+      E13), `scenario_factory.sh` both compilers, and revert the edit.
+      Shipped: cl6x `________ %` GCC `________ %`. Worst: cl6x `________ %` GCC `________ %`
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
@@ -894,6 +915,39 @@ New 2026-11-23 (docs/CONTROLS.md, "The performance mixer"). Play A01.
       MAX `________ %` (against U1's). And 9 BASS KILL at 127 with the loop: MAX `________ %`.
       Notes: `________________`
 
+## 13p. The VA sound rework: the OSC page, resonance and drive (8 min)
+
+New: VA MONO and VA POLY have an eighth EDIT page, OSC: WAV (0-31 saw, 32 square to 127 a thin
+pulse), OS2 (0 off, 1-63 a detuned second saw, 64-127 a synced pulse +0 to +24 semitones), SUB
+(the sub an octave down) and DRV (drive into the filter). RES reaches self-oscillation, LP24
+squelches as hard as LP12, and accent no longer adds resonance. Older projects load WAV 0, OS2 0,
+SUB 102, DRV 0: their VAs lose the old always-on synced pulse, so they sound a little rounder. The
+emulator only walks to the page (`tests/scenario_osc.sh`). Play A01 GROOVE.
+
+- [ ] Track 6 (MNO), EDIT, screen key RIGHT seven times: `OSC`, A-D reading `SAW OFF 090 024`, the
+      line `OS2: DET 1-63 SYN 64+`. On track 1 the page reads `---` and `VA MONO/POLY ONLY`.
+- [ ] **RES over its whole range.** SRC page, MOD in LP24 (0-63), D (RES) from 0 to 127 in steps
+      of about 16: each step adds a bit more peak, none does nothing. From about 120 the filter
+      whistles by itself at a steady level, no crackle, no growing. Same in LP12 (MOD 64-95).
+- [ ] **Acid.** SOUNDS, ACID: squelches straight away. Accented steps (ACNT) are brighter and
+      louder, not boomier. ACIDSQ: the same with a square.
+- [ ] **WAV.** 0: saw. 32: hollow square (`SQR`). Up to 127: thinner and nasal (`P08`).
+- [ ] **OS2.** 1-63: a slow beat between two saws growing to a wide Reese; no pitch drift (the
+      pair is split around the note). 64-127: sync, the formant sweeping up two octaves; an
+      accented step bites more.
+- [ ] **SUB** 0: thin; 127: heavy. **DRV**: thicker and dirtier as it rises, the level about the
+      same. DRV with RES high: the squelch gets gritty and stays bounded.
+- [ ] **SOUNDS.** MNO: ROLL, ACID, ACIDSQ, FAT, REESE, SUB, PLUCK, GROWL, GLIDE, SYNC, LEAD,
+      DRONE (12; the list scrolls). PLY: STAB, PAD, STRING, KEYS, RAVE, PLUCK, BRASS. Each loads
+      without a click, sits at a sensible level against the kick, and AS WAS puts yours back.
+      Levels off: `________________`
+- [ ] **Scenes and locks.** Lock OS2 on one step: that step changes. Capture a scene with DRV
+      up, morph towards it: DRV follows.
+- [ ] **CPU.** VA POLY chord on MIN11, OS2 sync, DRV half, SUB up on track 7, beat playing 60 s:
+      **MAX `________ %`** (**U12**), against U1. No `GUARD` unless genuinely high.
+- [ ] Save, power cycle: the OSC page comes back. Open a project saved before tonight: its VAs
+      play, OSC reads `SAW OFF 102 000`.
+
 ## 14. Reload and new: the FUNC menu's RELOAD PROJECT and NEW PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). FUNC+HOME, RELOAD PROJECT, OK once: `OK AGAIN TO RELOAD`,
@@ -1090,6 +1144,8 @@ Enaga's menu and start STRATA6.
 | E12 ASR page, `scenario_asr.sh` vs `scenario_factory.sh`; held-chord edit, cl6x / GCC (PC) | |
 | U10 MAX with six pads held on VA POLY, SUS up, over A01 (13k) | |
 | U11 A01 MAX with BUILD at 127 and a playing loop; and with BASS KILL (13o) | |
+| E13 OSC page, `scenario_osc.sh` vs `scenario_factory.sh` before it; worst-case edit, cl6x / GCC (PC) | |
+| U12 MAX with a MIN11 chord on OS2 sync, DRV and SUB up, over A01 (13p) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
 | U2 STRATA6 + tracks 5 and 6 as MIN11 POLY, capped at 12 voices (16) | |

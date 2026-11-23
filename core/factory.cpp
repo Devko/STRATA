@@ -53,6 +53,11 @@ void set(KitTrack &track, const uint8_t (&src)[4], const uint8_t (&amp)[4]) {
     }
 }
 
+// The VAs' OSC page: WAV OS2 SUB DRV (dsp/va.cpp).
+void set_osc(KitTrack &track, const uint8_t (&osc)[4]) {
+    for (int i = 0; i < 4; i++) track.params[kFactoryOsc + i] = osc[i];
+}
+
 // --- the kit --------------------------------------------------------------
 
 void factory_kit(Kit &kit) {
@@ -109,18 +114,21 @@ void factory_kit(Kit &kit) {
     kit.tracks[kPerc].params[kSnb] = 20;
 
     // BASS (VA MONO). MOD 40 is the 24 dB low-pass; CUT 46 is 35 Hz * 2^(8.42 * 46/127) = 290 Hz
-    // with real resonance, and a short envelope (DEC 46: 94 ms) sweeping about three octaves
-    // (ENV 72), so each note has a "wow" at its front. Dry and centred: the bass is the one part
+    // with some resonance (RES 56, about +8 dB of peak), and a short envelope (DEC 46: 94 ms)
+    // sweeping about three octaves (ENV 72), so each note has a "wow" at its front. OSC: a saw
+    // over the triangle sub (SUB 90) and a little drive (DRV 24) for the weight. Dry and centred: the bass is the one part
     // that must stay mono. LVL at the top and the fader at 1.25: balanced by rendering
     // (host/render.cpp), the bass sat 13 dB under the kick at 104, and wants to be 6-8 under.
-    set(kit.tracks[kBass], {64, 40, 46, 84}, {46, 72, 18, 127});
+    set(kit.tracks[kBass], {64, 40, 46, 56}, {46, 72, 18, 127});
+    set_osc(kit.tracks[kBass], {0, 0, 90, 24});
     kit.tracks[kBass].level = 1.25f;
 
     // CHORD (VA POLY): a dub stab. MOD 70 is the 12 dB low-pass, CUT 70 = 870 Hz, a short
     // decay (DEC 66: 15 ms * 2^(7.32 * 0.52) = 210 ms) with some envelope, and DET 28 to spread
     // the voices a little. Then it lives in the sends: a dotted-eighth ping-pong and the reverb,
     // which is the dub-techno chord.
-    set(kit.tracks[kChord], {64, 70, 70, 48}, {66, 56, 28, 92});
+    set(kit.tracks[kChord], {64, 70, 70, 36}, {66, 56, 28, 92});
+    set_osc(kit.tracks[kChord], {0, 0, 50, 0});   // a saw a voice, a little sub under it
     kit.tracks[kChord].params[kSna] = 72;
     kit.tracks[kChord].params[kSnb] = 64;
 

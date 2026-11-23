@@ -42,6 +42,18 @@ extern "C" {
 void strata_va_tail(float *out, const float *work, const float *env, int n, float drive,
                     float gain, float step);
 
+/* DRV: the voice filter with a drive stage in front of it, one control slice, in place:
+ *
+ *     x = soft_clip(pre * work[i]) * inv_pre
+ *     LP24: enaga_svf_cascade's two stages, low-pass out; else one stage's low, band or high
+ *
+ * The filter is exactly Enaga's (enaga_svf_step); only the input clip is added. dsp/va.cpp calls
+ * this only with DRV up: at DRV 0 it calls Enaga's own block functions, so an undriven voice
+ * costs what it always did. `s1`/`c1` are LP24's first stage and are not touched otherwise. */
+void strata_va_drive_filter(float *work, int n, int mode, enaga_svf *s1,
+                            const enaga_svf_coefficients *c1, enaga_svf *s2,
+                            const enaga_svf_coefficients *c2, float pre, float inv_pre);
+
 /* The filter's modes, as strata_va_back takes them: VaMode's order. */
 enum { STRATA_VA_LP24, STRATA_VA_LP12, STRATA_VA_BP12, STRATA_VA_HP12 };
 
@@ -66,11 +78,13 @@ enum { STRATA_VA_LP24, STRATA_VA_LP12, STRATA_VA_BP12, STRATA_VA_HP12 };
  * in every mode, every stage and across stage changes inside a slice, so a pin bump that changes
  * Enaga's envelope fails there rather than drifting.
  *
+ * `pre` > 0 puts strata_va_drive_filter's input clip in front of the filter; 0 leaves it out.
+ *
  * `work` holds the oscillators' sum and is only read. An idle envelope (not reachable:
  * VaVoice::run returns before a silent voice gets here) holds its level. */
 void strata_va_back(float *out, const float *work, int n, int mode, enaga_svf *s1,
                     const enaga_svf_coefficients *c1, enaga_svf *s2,
-                    const enaga_svf_coefficients *c2, enaga_envelope *amp,
+                    const enaga_svf_coefficients *c2, float pre, float inv_pre, enaga_envelope *amp,
                     const enaga_envelope_shape *shape, float drive, float gain, float step);
 
 #ifdef __cplusplus

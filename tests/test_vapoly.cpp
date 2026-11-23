@@ -68,6 +68,9 @@ TrackParams patch() {
     p.set(kEnv, 0);       // a static filter, so the waveform does not move while measured
     p.set(kDet, 0);       // voices exactly in tune with each other unless a test says otherwise
     p.set(kLvl, 127);
+    // The OSC page as an older kit loads it: a saw over the triangle sub an octave down. The
+    // pitch tests below measure the SUB's period, which is the note's an octave down.
+    p.set(kOscFirst + 2, 102);
     return p;
 }
 

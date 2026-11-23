@@ -1192,6 +1192,7 @@ scene or knob really did move: those prepare as before.
 | E6 | The master kill EQ running | `tests/scenario_killeq.sh` against `tests/scenario_m7.sh` (same beat, EQ bypassed), with cl6x and with `ENAGA_TI_CGT=none` | the difference is the EQ's cost; the proxy above says ~1.3 cl6x / ~2.2 GCC-only |
 | E7 | Eight LFOs running | `tests/scenario_lfo.sh` as it is (every LFO off: should match `scenario_factory.sh`), then again after a temporary edit to `factory_kit` in core/factory.cpp setting each track's `params[17] = 40` (RAT, about 3 Hz free), `params[18] = 127` (DEP) and `params[19] = 38` (DST = DRV), with cl6x and with `ENAGA_TI_CGT=none`; revert the edit | the difference is eight LFOs' cost; the host figures say about 1.1-1.4 points GCC, and about the same with cl6x |
 | E12 | The ASR page | `tests/scenario_asr.sh`, then the held-chord `factory_kit` edit in "The ASR page" above, `scenario_factory.sh`, both compilers; revert | **done 2026-11-23:** off = A01 (26.15% / 49.32%); held +3.60 cl6x / +4.71 GCC (see "The ASR page") |
+| E13 | The OSC page and the VA rework | `tests/scenario_osc.sh` against `scenario_factory.sh` before it, then the worst-case `factory_kit` edit in "The OSC page" below, both compilers; revert | the factory beat should not rise; worst case at most ~0.1 point a voice over the old voice |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
@@ -1557,6 +1558,50 @@ bars spread by at most 1.1 points, so these compare like with like. Earlier read
 half-second windows (#110: A05 live 20.27%, #114: 17.29%) covered different bars in the live and
 frozen runs and are superseded. The peak since boot is 26-27% in every run, because it includes
 the bars before the freeze. GCC-only figures were not taken (cl6x ships).
+
+### The OSC page and the VA sound rework (2026-11-23, host only)
+
+VA MONO and VA POLY got an eighth EDIT page, OSC (WAV OS2 SUB DRV, params 28-31), a new RES
+curve that reaches self-oscillation, and a pre-filter drive. What it does to the per-voice code:
+
+- **OSC 2 is no longer always on.** The old voice ran a +19-semitone pulse hard-synced to OSC 1 on
+  every note, the costliest stage in the voice (va.cpp's table). Now it runs only when OS2 is in
+  its sync half (64-127); OS2 1-63 runs a second plain saw instead (cheaper than sync), and OS2 0
+  runs nothing. OSC 1 is a saw or a PolyBLEP pulse, about the same cost.
+- **The sub is skipped at SUB 0.** It was always on.
+- **The resonance limiter is free per sample.** It reads the resonant stage's two state values at
+  the end of each 16-frame slice and raises k for the next one. (A band clip inside the SVF
+  recurrence was tried first and cost 2.3x on the host: dropped.)
+- **DRV > 0 swaps Enaga's block filter for `strata_va_drive_filter`** (dsp/valoops.ti.c): the same
+  SVF steps with one `enaga_soft_clip` per sample before them. DRV 0 keeps Enaga's own loops.
+
+Host bench (x86, GCC -O2, 64-frame blocks, ns per output sample, old voice vs new):
+
+| Patch | Old | New | Change |
+| --- | --- | --- | --- |
+| VA MONO, factory ROLL (saw, SUB, a little DRV) | 25.2 | 20.1 | -20% |
+| VA MONO, worst case (pulse, OS2 sync, SUB, DRV up, LP24) | 25.5 | 25.7 | +1% |
+| VA POLY 6 voices, factory STAB (saw + sub) | 116.2 | 77.1 | -34% |
+| VA POLY 6 voices, worst case (as above) | 126.9 | 132.7 | +5% |
+
+So the factory beat should get cheaper (its bass and chord dropped the synced pulse), and a voice
+with every OSC option turned on costs at most about 5% more than the old fixed voice: on the
+2.16-point cl6x figure, about 0.1 point a voice, 1.3 points at the 12-voice cap. The 12-voice
+budget and the CPU guard stay as they are. None of this is measured with cl6x or on the
+emulator yet:
+
+**E13, to measure on Roland's PC (emulator):** `tests/scenario_osc.sh` (walks EDIT to the OSC page
+on a drum and on VA POLY, A01 as shipped) against `scenario_factory.sh` from the commit before the
+OSC page, both compilers. Then the worst case: temporarily set tracks 6 and 7 in `factory_kit`
+(core/factory.cpp) to `params[28] = 64` (WAV, pulse), `params[29] = 100` (OS2 sync),
+`params[30] = 102` (SUB) and `params[31] = 64` (DRV), one `scenario_factory.sh` run each compiler,
+and revert.
+
+| Build | cl6x | GCC only |
+| --- | --- | --- |
+| `scenario_factory.sh`, before the OSC page | 26.15% | 49.32% |
+| `scenario_osc.sh` (A01 as shipped, new voice) | | |
+| `scenario_factory.sh`, tracks 6 and 7 at the worst case | | |
 
 ### Later milestones
 

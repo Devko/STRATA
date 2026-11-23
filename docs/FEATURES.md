@@ -66,9 +66,10 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | SAMPLE: one-shot or 1-16 equal slices by note, 4 voices, 4 play modes (fwd, loop, rev, rev loop) | v0.1.0 | ◐ default beat's loop track (placeholder sample) | Unit sample loads: 13b, 15b-15d |
 | SAMPLE **SLC AUTO**: slices at up to 15 detected hits | v0.1.0 | ○ (15c2) | Hit points are found at load, not editable |
 | GRAIN: up to 8 grains in one voice | v0.1.0 | ○ (8, 8b / U3) | Most expensive machine; outside the POLY budget (thinned by the CPU guard); no tempo sync of its own |
-| VA MONO: saw + sync pulse + sub + noise, own filter and envelope, accent, slide, glide | v0.1.0 | ✔ default beat bass | At SUS 0 (default) DEC is the note's length and LEN is not heard; see the ASR row |
+| VA MONO: saw or pulse, OSC 2 (detune or sync), sub, noise, drive, own filter and envelope, accent, slide, glide | v0.1.0 | ✔ default beat bass | At SUS 0 (default) DEC is the note's length and LEN is not heard; see the ASR row |
 | VA POLY: up to 6 notes, 13 chord types with inversions, DET | v0.1.0 | ✔ default beat chord | At SUS 0 LEN only shortens a note; see the ASR row. No stereo spread or unison 2 (in SPEC) |
 | **Held notes on the VAs: ASR page** (ATK SUS REL FSU, seventh EDIT page); with SUS up a note holds while the key is held or for its step's LEN (up to 64 steps) | #90 | ○ (13k) | Held voices count against the 12-voice POLY budget for as long as they hold; MONO counts LEN only once SUS is up |
+| **VA sound rework: OSC page** (WAV OS2 SUB DRV, eighth EDIT page): saw or pulse width, a detuned or hard-synced OSC 2, sub level, drive into the filter; RES self-oscillates near the top, LP24 squelches like LP12 | #118 | ○ (13p, walkthrough 18) | Older projects lose the old fixed synced pulse (load `SAW OFF 102 000`). No key tracking or velocity to the filter; the filter decay is still 0.55 x DEC |
 | MID: plays an outboard synth over MIDI; SRC/AMP knobs send CC 74/71/73/72, 70/75/76/77 | v0.1.0 | ○ (8d) | No sound or CPU of its own; no scale fold |
 | Key and scale per pattern (15 scales), fold for VAs, GRAIN and unsliced SAMPLE; sharps everywhere | v0.1.0 | ○ (7) | |
 | **NOTE view**: TUN / PIT read as a note (where TUN puts C-4) and turn a semitone a click; push the knob for 0-127 | #88 | ○ ("Today's walkthrough") | Chromatic, not by scale (TUN applies after the fold). 128 bytes per range, so many notes are a few cents off (`+`/`-`). Not saved: on at every start |
@@ -173,7 +174,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Damaged files refused, never crash | v0.1.0 | ○ (M4) | Card pulled mid-save not tried on the unit |
 | Factory project: 130 BPM C minor kit, A01-A04, chain, 3 scenes, 3 macros, 8 mute states | v0.1.0 | ✔ A01 plays; ◐ the rest (3b) | Track 8 plays a placeholder until given a sample |
 | Factory pattern A05 PAD: held VA POLY chords from the ASR page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
-| Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 39 ready-made sounds into one drum or VA track, AS WAS puts it back | #102 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
+| Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 45 ready-made sounds (MNO 12, PLY 7) into one drum or VA track, AS WAS puts it back | #102 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
 
 ---
 

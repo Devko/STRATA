@@ -6,6 +6,28 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Added
+
+- **The OSC page on VA MONO and VA POLY**, an eighth EDIT page: WAV (saw, square, pulse width),
+  OS2 (off, a detuned second saw for chorus and Reese basses, or a hard-synced pulse +0 to +24
+  semitones), SUB (sub level) and DRV (drive into the filter). Locks, scenes and macros work on
+  all four; kits and scenes save them.
+- **More factory sounds**: MNO adds ACIDSQ, FAT, REESE, SYNC and LEAD (12 in all), PLY adds BRASS
+  (7). The SOUNDS list scrolls.
+
+### Changed
+
+- **RES works over the whole knob** and self-oscillates near the top (held at a steady level).
+  It used to do little for its first three quarters, and LP24 barely resonated at all; LP24 now
+  squelches as hard as LP12, so ACID squelches without hunting for the spot.
+- **Accent** no longer adds resonance (it made accented notes boomy); it still opens the filter,
+  raises the level and brings the noise and (in sync mode) the synced pulse forward.
+- **Every MNO and PLY factory sound was remade** for the new voice, and the factory BASS and CHORD
+  tracks use the OSC page (saw and sub, no synced pulse): rounder, and cheaper on the CPU.
+- **Older projects change sound a little:** their VA tracks load WAV saw, OS2 off, SUB 102,
+  DRV 0, without the old always-on synced pulse, and RES's new curve gives more resonance at the
+  same knob value. OS2 at 114 (`S+19`) is close to the old bite.
+
 ## [0.2.0] - 2026-11-23
 
 An early beta: everything merged since 0.1.0, built for the same Enaga 0.2.0 firmware. It has run
