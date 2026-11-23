@@ -424,6 +424,7 @@ VaSettings VaSettings::make_wave(const TrackParams &params, float rate, float in
     s.warp.knee = knee;
     s.warp.k1 = 0.5f * reciprocal(knee);
     s.warp.k2 = 0.5f * reciprocal(1.0f - knee);
+    s.warp_speed = s.warp.k1 > s.warp.k2 ? s.warp.k1 : s.warp.k2;
 
     // DET: a second reader of the same frames, the pair split around the pitch.
     const uint8_t det = params.get(Page::osc, 1);
@@ -656,6 +657,11 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     }
 }
 
+// The fastest WRP's squeezed half is read, in turns a sample. tests/test_wave_machine.cpp: at
+// 1,760 Hz with WRP at the top, what falls between the harmonics is 32 dB down; with the mip
+// level from the note alone it was 10 dB down, and easing only to the tables' own 0.625, 18.
+constexpr float kWarpFastest = 0.2f;
+
 // The WAVE pair's oscillator: one or two readers of the same two neighbouring frames, the
 // position ramping across the slice from where the last slice left it. A position crossing a
 // frame boundary inside one slice is held at the boundary for the rest of that slice, and the
@@ -681,11 +687,29 @@ void VaVoice::render_wave(const VaSettings &s, float *work, int n, float fenv, f
     }
 
     const float dts[2] = {dt1_, dt2_};
+    const float invs[2] = {inv1_, inv2_};
     const float levels[2] = {s.level_osc1, level2};
     uint32_t *phases[2] = {&wave_phase1_, &wave_phase2_};
     const int readers = s.osc2 == VaOsc2::detune ? 2 : 1;
     for (int r = 0; r < readers; r++) {
-        const int mip = wave_mip_for(dts[r]);
+        // The mip level for the fastest the cycle is read: WRP's squeezed half, not the note
+        // alone. And the squeeze itself is eased on a high note: the bent cycle has corners at
+        // the knee, whose harmonics no table level removes, so the squeezed half is held to at
+        // most kWarpFastest of a turn a sample (its half cycle spread over 2.5 samples at least). A high
+        // note bends less rather than aliasing; below about 1 kHz WRP keeps its full range.
+        // Control rate, and only with WRP up: two reciprocals a reader.
+        strata_wave_warp warp = s.warp;
+        float speed = s.warp_speed;
+        if (s.warped) {
+            const float most = kWarpFastest * invs[r];
+            if (speed > most) {
+                speed = most > 1.0f ? most : 1.0f;
+                warp.knee = 0.5f * reciprocal(speed);
+                warp.k1 = speed;
+                warp.k2 = 0.5f * reciprocal(1.0f - warp.knee);
+            }
+        }
+        const int mip = wave_mip_for(dts[r] * speed);
         const int16_t *a = lib->frame(s.table, base, mip);
         const int16_t *b = lib->frame(s.table, base + 1, mip);
         const uint32_t inc = uint32_t(dts[r] * 4294967296.0f);
@@ -694,7 +718,7 @@ void VaVoice::render_wave(const VaSettings &s, float *work, int n, float fenv, f
         const float dga = (ga1 - ga0) * inv_n_, dgb = (gb1 - gb0) * inv_n_;
         if (s.warped) {
             strata_wave_add_warp(work, n, a, b, kWaveMipBits[mip], phases[r], inc, ga0, gb0, dga, dgb,
-                                 &s.warp);
+                                 &warp);
         } else {
             strata_wave_add(work, n, a, b, kWaveMipBits[mip], phases[r], inc, ga0, gb0, dga, dgb);
         }

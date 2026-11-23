@@ -160,6 +160,9 @@ struct VaSettings {
     float motion = 0.0f;               // MOT: frames added at filter envelope 1
     bool warped = false;               // WRP above 0
     strata_wave_warp warp{0.5f, 1.0f, 1.0f};
+    // How much faster than the note the bent cycle's steeper half plays (the larger of k1 and
+    // k2; 1 unbent): the mip level is picked for that speed, or a high note with WRP up aliases.
+    float warp_speed = 1.0f;
 
     // The pitch slew per control step, as a one-pole coefficient; 1 means arrive at once. The
     // MACHINE sets these, because glide is monophonic: VA MONO from GLD and from its slide
