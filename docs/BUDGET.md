@@ -1488,17 +1488,25 @@ windowed log of the same kind (375 polls a window):
 | max, three bars compared | 27.0 / 25.3 / 24.4% | 19.0 / 18.4 / 17.2% |
 | average | 13.96% | 13.38% |
 
-Freezing A01's chord track saves about **7-8 points at the peaks and 0.6 on average**: A01's
+Freezing A01's chord track saves about **7 points at the peaks and 0.6-0.7 on average**: A01's
 stabs sound for a fraction of each bar, so the saving lands where they do. Recording the take
-costs about 0.3-0.4 points while it runs. The held-pad case (A05, the estimate above) is
-`scenario_freeze.sh --pad` against `--pad --baseline`; it has not run yet.
+costs about 0.3-0.4 points while it runs.
 
-| Build | cl6x | GCC only |
-| --- | --- | --- |
-| A01 live (avg / max) | 13.96% / 24.4-27.0% | |
-| A01, track 7 frozen | 13.38% / 17.2-19.0% | |
-| A05 live (`--pad --baseline`) | | |
-| A05, track 7 frozen (`--pad`) | | |
+The held pad is the case freezing is for. `scenario_freeze.sh --pad` against `--pad --baseline`
+on Roland's PC (cl6x 8.5.0.LTS, PR #110 head 8d61561, all four runs OK, no overruns): freezing
+A05's chord track **halves the load, 20.3% to 10.1% average and 26.9% to 15.7% max**, about 10
+points, close to the estimate of 12 above. Eight half-second windows a run, avg/max %:
+
+| Run | avg | max | windows |
+| --- | --- | --- | --- |
+| A05 live (`--pad --baseline`) | 20.27% | 26.9% | 20.8/24.1 18.5/20.9 19.9/25.1 18.4/21.0 21.3/24.6 20.3/22.7 21.7/26.9 21.3/23.8 |
+| A05, track 7 frozen (`--pad`) | 10.09% | 15.7% | 10.2/12.8 9.1/11.5 10.5/15.7 10.7/14.2 11.0/14.2 9.3/12.6 9.7/12.7 10.2/15.7 |
+| A01 live (`--baseline`) | 14.16% | 26.2% | 14.4/26.2 15.2/25.3 12.7/18.8 13.5/24.7 15.5/25.6 15.0/23.7 12.8/24.4 |
+| A01, track 7 frozen | 13.44% | 19.1% | 13.6/19.0 14.2/18.4 13.3/17.2 12.8/19.1 13.3/17.1 14.2/18.4 13.3/16.6 12.8/17.2 |
+
+The A01 baseline has seven windows: the script drops the first after PLAY (start-up). The peak
+since boot is 26-27% in every run, because it includes the bars before the freeze. GCC-only
+figures were not taken (cl6x ships).
 
 ### Later milestones
 
