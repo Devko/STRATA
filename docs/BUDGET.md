@@ -1630,9 +1630,16 @@ VA POLY's budget of 12 voices and the CPU guard sheds its voices the same way, s
 twelve voices at the upper figure, about 9 points above twelve VA voices. If the emulator says
 more, the lever is WRP's loop (`strata_wave_add_warp`, a float index and a compare per sample).
 
-**Boot:** the 16 tables are computed in `Engine::init` (a float FFT, 256 frames, 10 mip levels):
-25.8 ms on the host. The C6748 has no x86 FPU throughput; expect 0.5-1.5 s added to the boot,
-to be measured as E14.
+**Boot:** the 16 tables (a float FFT, 256 frames, 10 mip levels) take 25.8 ms on the host. On
+the unit they took more than Enaga's 1 s main-loop watchdog (`WATCHDOG_MAIN_MS`), so a build in
+`Engine::init` never reached `strata ready`: APP NOT RESPONDING on every boot since #122 (the
+build thread, 2026-11-23: ready used to come at 196 M cycles, the watchdog fired at about 568 M).
+Since the fix, init only allocates (`WaveLibrary::begin`) and `App::update` builds one piece a
+pass (`Engine::step_waves`): 144 pieces, a table's recipe or two of its frames at every level,
+the largest under 10% of the whole on the host (the E-PIANO recipe). The tables are bit-for-bit
+the old build's (the same checksum on the host). Until `wav ready` is logged the WAVE machines
+play their sub alone, and RESAMPLE, freeze and the looper refuse to arm, since the build's
+scratch is their buffer. E14 now measures the time to `wav ready`.
 
 **Memory:** 2,626,560 bytes of tables plus 0.2 MiB of build scratch: init now asks for 111.77 MiB
 of the 120 MiB heap, 8.23 MiB spare against the 8 MiB rule (tests/test_memory.cpp itemises it).
@@ -1660,8 +1667,20 @@ integer phase: no float floor, and about 4.7x cheaper a sine on the host.
 
 There are two loops. With FBK up, operator 4 reads its own previous sample, so one sine sits in
 a loop-carried chain and cl6x cannot overlap samples; with FBK at 0 for the slice,
-`strata_fm_add_free` has no such chain and the pipeliner can overlap samples. `ti_loops.py`
-should show the difference (E15). Half the factory sounds use FBK.
+`strata_fm_add_free` has no such chain and the pipeliner can overlap samples. Half the factory
+sounds use FBK.
+
+`ti_loops.py` on Roland's PC (cl6x, 2026-11-23):
+
+| Loop | rec | res | ii | cycles a sample |
+| --- | --- | --- | --- | --- |
+| `strata_fm_add_free` (FBK 0) | 4 | 14 | 25 | 25 |
+| `strata_fm_add` (FBK up) | 34 | | 35 | 35 |
+
+FBK 0 runs at ii 25 against a resource bound of 14: most likely register pressure (four
+operators' phases, increments, indices and links live at once), so splitting the loop or
+keeping fewer values live is the next lever there. With FBK the recurrence (34) sets the pace,
+as expected. A voice is then about 1,600-2,240 cycles a 64-frame block in the loop.
 
 Host, x86 GCC -O2, a six-note held chord, nanoseconds per voice per 64-frame block (noisy; read
 the ratios):
