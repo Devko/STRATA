@@ -3415,3 +3415,33 @@ TEST(engine_a_lock_on_an_asr_byte_reaches_the_machine) {
     pump(2);
     CHECK(mono().sustain_level() > 0.7f);
 }
+
+TEST(engine_with_sus_up_a_pad_hit_lasts_a_step_and_a_held_key_until_it_comes_up) {
+    // A performance pad hit has no release coming, so on a held-note envelope it must not hold
+    // for ever: one step, as its MIDI note gets. A KEYS key (c = 1) holds until release_note.
+    clean();
+    FakeHost::the().set_tempo(120.0f);
+    post(Cmd::set_param, kPoly, 0, kDec, 20);
+    post(Cmd::set_param, kPoly, 0, uint8_t(kAsrFirst + 1), 100);
+    pump();
+    const float spt = kRate * 60.0f / (120.0f * float(enaga::clock::ppqn));
+    const float step = length_samples(8, ticks_per_step(Speed::x1), spt);
+
+    post(Cmd::trigger_note, kPoly, 0, 60, 100);              // a pad hit
+    pump();
+    CHECK_EQ(poly().sounding_voices(), 1);
+    int blocks = 1;
+    while (poly().sounding_voices() > 0 && blocks < 4000) {
+        pump();
+        blocks++;
+    }
+    CHECK(float(blocks * kBlk) > step);
+    CHECK(float(blocks * kBlk) < step + kRate * 0.2f);
+
+    post(Cmd::trigger_note, kPoly, 0, 64, 100, 1);           // a held key
+    pump(int(kRate * 2.0f) / kBlk);                          // two seconds held
+    CHECK_EQ(poly().sounding_voices(), 1);
+    post(Cmd::release_note, kPoly, 0, 64);
+    pump(int(kRate * 0.3f) / kBlk);
+    CHECK_EQ(poly().sounding_voices(), 0);
+}

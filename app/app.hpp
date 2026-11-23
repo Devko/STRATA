@@ -1736,7 +1736,7 @@ public:
         }
 
         post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity));
-        record_note(track, note, uint8_t(velocity));
+        record_note(track, note, uint8_t(velocity), false);   // a hit: nothing to let go of
     }
 
     void on_pad_release(int pad) override {
@@ -2097,7 +2097,9 @@ public:
     // arrived: whole ticks plus the fraction into the next. core/record.hpp explains why that is
     // a better timestamp than a sample counter would be. Everything after that is arithmetic in
     // core/, where it is host-tested -- this function only gathers the inputs.
-    void record_note(int track, uint8_t note, uint8_t velocity) {
+    // `held`: the note has a key-up still to come (a piano pad, a STEP key in KEYS, a MIDI note),
+    // so its length is measured. A performance pad hit has none and keeps the step's LEN.
+    void record_note(int track, uint8_t note, uint8_t velocity, bool held = true) {
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;          // nothing to record onto
@@ -2135,7 +2137,7 @@ public:
         // machine that holds a note -- a drum ignores LEN, and a tap there would rewrite the
         // step's LEN for nothing. The stamp is `now`, not `hit`: the pad latency is the same at
         // both ends, so the hold is the difference of the raw stamps.
-        if (engine_.machine_id(track) < uint8_t(MachineId::sample)) return;
+        if (!held || engine_.machine_id(track) < uint8_t(MachineId::sample)) return;
         RecHold *slot = nullptr;
         for (RecHold &h : rec_holds_) {
             if (h.track == track && h.note == note) slot = &h;   // the same note again: replace
