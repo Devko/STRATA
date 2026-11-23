@@ -80,6 +80,7 @@ struct UiProbe {
     static int pad_held_note(const Strata &app, int pad) { return app.pad_held_note_[pad]; }
     static int pad_note(const Strata &app, int pad) { return app.pad_note(pad); }
     static bool fill_held(const Strata &app) { return app.fill_held_; }
+    static int macro_learn(const Strata &app) { return app.macro_learn_; }
     static int keys_held_note(const Strata &app, int key) { return app.keys_held_note_[key]; }
 
     static const char *notice(const Strata &app) { return app.notice_; }
@@ -6571,7 +6572,7 @@ TEST(ui_macro_learn_assigns_by_pushing_knobs_in_edit) {
 
     key(ENAGA_KEY_CLR);                                    // done
     pump(2);
-    CHECK_EQ(UiProbe::notice(app), "LEARN DONE");
+    CHECK_EQ(UiProbe::notice(app), "KNOBS EDIT AGAIN");
     key(ENAGA_KEY_PUSH_C);                                 // a push is a push again
     pump(2);
     CHECK_EQ(macro_count(app_engine().macros().macros[1]), 1);
@@ -6616,5 +6617,34 @@ TEST(ui_an_edit_knob_under_a_turned_up_macro_says_which_macro_holds_it) {
     app.on_encoder(2, -127);
     post_cmd(Cmd::macro_clear, 2);
     pump(2);
+    key(ENAGA_KEY_F4);
+}
+
+// On the unit LEARN felt inescapable and the CLR meant to leave it cleared the track (Roland,
+// 2026-11-23). HOME ends it now, and a CLR right after the one that ended it clears nothing.
+TEST(ui_learn_ends_on_home_and_a_second_clr_does_not_clear_the_track) {
+    Strata &app = fresh();
+    for (int i = 0; i < 16; i += 4) { step_down(i); step_up(i); }
+    pump(2);
+    shift_key(ENAGA_KEY_F7);
+    key(ENAGA_KEY_PUSH_A);                                 // learn A
+    CHECK_EQ(UiProbe::macro_learn(app), 0);
+    key(ENAGA_KEY_F4);                                     // HOME: GRID, learn over
+    CHECK_EQ(UiProbe::macro_learn(app), -1);
+    CHECK_EQ(UiProbe::notice(app), "KNOBS EDIT AGAIN");
+
+    key(ENAGA_KEY_F8);                                     // EDIT, learn again, CLR CLR
+    shift_key(ENAGA_KEY_F7);
+    key(ENAGA_KEY_PUSH_A);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(trig_at(0, 0));                                  // the pattern is still there
+    CHECK(trig_at(0, 12));
+    // Later, CLR is CLR again.
+    g_ms += 3000;
+    pump(2);
+    CHECK_EQ(UiProbe::macro_learn(app), -1);
     key(ENAGA_KEY_F4);
 }

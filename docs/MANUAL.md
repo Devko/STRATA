@@ -816,8 +816,10 @@ filter while it closes a send.
 **Or learn it from EDIT:** in PERFORM, **push** the macro's knob (A-D). EDIT opens with
 `LEARN B 0/4` on the second line. Now **push** any knob on any EDIT page, on any track (the screen
 keys turn pages, UP/DOWN or a lower pad the track): that knob's parameter goes on the macro
-(`B T3 CUT 1/4`); pushed again, it comes off. **CLR** ends it (`LEARN DONE`), as does going to a
-screen without the EDIT knobs. FUNC + LFO, kill EQ and the STEP keys above work as before.
+(`B T3 CUT 1/4`); pushed again, it comes off. **CLR** or **HOME** ends it (`KNOBS EDIT AGAIN`),
+as does any screen other than EDIT; a second CLR straight after does nothing, so it cannot clear
+the track. A parameter on a macro that is turned up follows the macro, not its EDIT knob: turning
+that knob says `HELD BY MACRO B`; turn the macro to 0 (or CLR it in PERFORM) to edit it again. FUNC + LFO, kill EQ and the STEP keys above work as before.
 
 The target is whichever end of 0-127 is further from the parameter's value when you assign it,
 so the knob always has somewhere to go: a filter already open gets a macro that closes it. If the

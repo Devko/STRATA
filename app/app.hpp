@@ -309,7 +309,8 @@ constexpr Rgb kPerformColour[kPerformPads] = {
 constexpr uint8_t step_velocity_level(uint8_t velocity) {
     return velocity >= 110 ? 10 : (velocity >= 80 ? 6 : (velocity >= 40 ? 3 : 1));
 }
-constexpr uint32_t kConditionBlinkMs = 200;     // half a blink: on 200 ms, off 200 ms
+constexpr uint32_t kConditionBlinkMs = 200;
+constexpr uint32_t kLearnClrGuardMs = 2000;     // CLR after the CLR that ended LEARN: swallowed     // half a blink: on 200 ms, off 200 ms
 
 constexpr const char *kPerformPadNames[kPerformPads] = {
     "FILL", "REPEAT", "MUTE", "SCENE A", "SCENE B", "THROW", "MUTATE",
@@ -568,7 +569,7 @@ public:
                 return;
             }
             if (encoder >= 0 && !shift_ && macro_learn_ >= 0 && !step_page_ &&
-                (mode_ == Mode::edit || mode_ == Mode::grid || mode_ == Mode::keys)) {
+                mode_ == Mode::edit) {
                 if (!down) return;
                 macro_selected_ = macro_learn_;
                 assign_macro(page_first(Page(param_page_)) + encoder);
@@ -576,8 +577,15 @@ public:
             }
             if (key == ENAGA_KEY_CLR && down && !shift_ && macro_learn_ >= 0 &&
                 range_first_ < 0 && held_step_ < 0) {
-                macro_learn_ = -1;
-                notice("LEARN DONE");
+                end_learn();
+                return;
+            }
+            // A second CLR straight after the one that ended LEARN is the same "get me out"
+            // press, not a clear of the track: on the unit it wiped the pattern (Roland,
+            // 2026-11-23). FUNC + CLR (undo) is untouched.
+            if (key == ENAGA_KEY_CLR && down && !shift_ && learn_ended_ &&
+                last_ms_ - learn_ended_at_ms_ < kLearnClrGuardMs) {
+                notice("KNOBS EDIT AGAIN");
                 return;
             }
         }
@@ -1213,7 +1221,8 @@ public:
 
     void leave_mode() {
         step_page_ = false;
-        if (mode_ != Mode::edit && mode_ != Mode::grid && mode_ != Mode::keys) macro_learn_ = -1;
+        // LEARN is an EDIT thing: any other screen, HOME's GRID included, ends it.
+        if (mode_ != Mode::edit && macro_learn_ >= 0) end_learn();
         mutation_pending_ = false;
         // A KEYS key held across a mode change: its release goes to the next mode, so the note
         // is let go here or it would hang on a sustaining machine.
@@ -4859,6 +4868,13 @@ public:
         return macro_count(macro) >= kMacroTargets ? MacroEdit::full : MacroEdit::add;
     }
 
+    void end_learn() {
+        macro_learn_ = -1;
+        learn_ended_ = true;
+        learn_ended_at_ms_ = last_ms_;
+        notice("KNOBS EDIT AGAIN");
+    }
+
     // "LEARN A 2/4 CLR: DONE", the line LEARN keeps on screen while it is on.
     void learn_line(char *line) const {
         char *out = line;
@@ -5786,6 +5802,8 @@ private:
                                           -1, -1, -1, -1, -1, -1, -1};   // KEYS: piano pads
     uint8_t pad_held_track_[kPianoPads] = {};
     int macro_learn_ = -1;                      // MACRO LEARN: the macro EDIT's pushes assign to
+    bool learn_ended_ = false;                  // and when it ended, for the CLR guard
+    uint32_t learn_ended_at_ms_ = 0;
     int scene_holding_ = -1;                    // a scene pad held: -1, 0 for A, 1 for B
     int macro_selected_ = 0;
 
