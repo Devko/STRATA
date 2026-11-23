@@ -6,7 +6,7 @@ the project file format or the controls.
 
 ## [Unreleased]
 
-## [0.2.0] - {{RELEASE_DATE}}
+## [0.2.0] - 2026-11-23
 
 An early beta: everything merged since 0.1.0, built for the same Enaga 0.2.0 firmware. It has run
 on one unit, but the walkthrough for the new features (docs/UNIT_CHECKLIST.md) has not been done
@@ -90,7 +90,7 @@ open in 0.2.0.
 
 ### Known limits
 
-- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} The features above are not yet
+- Tested on one SmplTrek, with the cl6x build. On the 2026-11-22 build the load stayed under 30% on the default beat, and MAX peaked at 84.3% in long, heavy play with no clicks or dropouts. The features above are not yet
   checked on the unit. Every other load figure comes from the emulator, which models no caches.
 - The **CPU guard's** thresholds (70% average, 90% in one block, back below 55%) are provisional;
   nothing in the emulator reaches them.
