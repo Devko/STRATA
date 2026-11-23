@@ -34,8 +34,8 @@ C = {
 CALLOUTS = {
     "screen": ("SCREEN", ["The mode, the track, and the four", "values the knobs A-D turn"]),
     "knobs": ("KNOBS A-D, VALUE", ["A-D: the four values on screen,", "push = that value's switch.",
-                                   "VALUE: tempo; push + turn = swing"]),
-    "select": ("SCREEN KEYS", ["The screen's pages: EDIT's six,", "MIXER's nine, PROJECT's five"]),
+                                   "VALUE: tempo; push + turn = swing;", "push + STEP = performance mixer"]),
+    "select": ("SCREEN KEYS", ["The screen's pages: EDIT's six to", "eight, MIXER's twelve, PROJECT's five"]),
     "arrows": ("ARROW PAD", ["The cursor: UP/DOWN rows (tracks,", "lists), LEFT/RIGHT sideways"]),
     "func": ("FUNCTION BLOCK", ["Plain: go to that screen.", "FUNC + key: the word under it",
                                 "(its printed second label)"]),

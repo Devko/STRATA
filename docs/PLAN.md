@@ -23,11 +23,12 @@ on the unit.
 
 ---
 
-## Where it stands (2026-11-22, evening)
+## Where it stands (2026-11-23)
 
-Every figure is from the host suite, a device build or the emulator, except one: **STRATA booted
-on the unit on 2026-11-22** (Enaga 0.2.0) and plays the default beat with the on-screen LOAD at
-about 0–26%. No exit criterion involving load or feel is met until the unit confirms it.
+STRATA runs on the unit (Enaga 0.2.0) and has had two releases. The milestones below are
+code-complete; their load and feel exit criteria still wait for the unit's readings, which
+`docs/UNIT_CHECKLIST.md` collects. The milestone figures are from the emulator unless they say
+otherwise.
 
 | | State | What is actually true |
 | --- | --- | --- |
@@ -38,33 +39,16 @@ about 0–26%. No exit criterion involving load or feel is met until the unit co
 | M3 | code complete | Locks, conditions, ratchets, micro-timing, polymeter, recording, 16 undo levels; undo also in PERFORM and PROJECT |
 | M4 | code complete | Projects, banks, chains, autosave, background loading. **A kit browser** (16 kits shared by all projects), and the **factory project** (a tuned kit, A01–A04, scenes, mute states) on first boot and NEW. Samples up to 30 s of the file at up to 96 kHz |
 | M5 | code complete | Scenes, morph, macros (three shipped in the factory project; a macro sweeps from the live value, so 0 is the knob), mutes, beat repeat, throws, MUTATE (OK keeps, CLR reverts). Most of it is on pads, which the emulator cannot press, so most of it has never run outside the host tests |
-| M6 | **feature-complete, unheard** | Euclid, KEYS (a held key sustains), chords, VA POLY, GRAIN, resampling, pad pressure, machine switching. Budget exit stands **on the emulator** (worst scenario under 24% with cl6x); a shared 12-voice VA POLY budget keeps a POLY-heavy kit inside it |
+| M6 | feature-complete | Euclid, KEYS (a held key sustains), chords, VA POLY, GRAIN, resampling, pad pressure, machine switching. Budget exit stands **on the emulator** (worst scenario under 24% with cl6x); a shared 12-voice VA POLY budget keeps a POLY-heavy kit inside it |
 | M7 | **app side done** | The sync settings are the user's, in Enaga's menu; PROJECT's SETUP page shows them and VALUE refuses a tempo edit under an external clock. The rest is verification on the unit |
-| v0.1 | **in preparation** | Release notes, CHANGELOG and packaging in the thread "Prepare the v0.1 release"; a user manual in "Write the STRATA user manual". CI runs the host suite, ASan/UBSan and the repo checks on every PR. Waits for the unit's numbers (below) |
+| v0.1 | **released** 2026-11-22 | [v0.1.0](https://github.com/Devko/STRATA/releases/tag/v0.1.0), a pre-release, after the first evening on the unit: under 30% on the default beat, 84.3% MAX in heavy play, no dropouts |
+| v0.2 | **released** 2026-11-23 | [v0.2.0](https://github.com/Devko/STRATA/releases/tag/v0.2.0), an early beta: PRs #83-#111. Its new features are not yet checked on the unit |
+| after v0.2 | on `main` | The performance mixer and looper, the VA OSC page, WAVE MONO and WAVE POLY, FM4, the stock SmplTrek folders in the sample browser (CHANGELOG, Unreleased) |
 
-Also on `main` since the first boot, all host-tested and none heard yet: the arrow-key navigation
-model and a layout test over every screen; the CHAIN and PATTERN pages in PROJECT; chains that
-keep their place while edited; FUNC+STOP resetting a running chain; removing one p-lock; KEYS
-release by note; a low-pass before downsampling a loaded sample; and three bit-exact
-optimizations (a track is prepared only when its inputs move, cached VA increments, and the load-time
-anti-aliasing loop in `core/pcmloops.ti.c`).
+## What comes next
 
-## What comes next, in order
-
-`docs/HANDOFF.md` has each step in detail.
-
-1. **PR #17, the held CPU MAX readout**, merged tonight on Roland's PC after `main` is merged into
-   it and the suite and every scenario pass with cl6x and GCC-only.
-2. **The emulator runs E1–E5** and `scenario_factory.sh`, both compilers, into `docs/BUDGET.md`.
-3. **Tonight's walkthrough on the unit** (top of `docs/UNIT_CHECKLIST.md`), with STRATA and
-   STRATA6 on the card.
-4. **The first unit rows in `docs/BUDGET.md`** (U1–U5) and the ticks in UNIT_CHECKLIST.
-5. **The final VA POLY voice budget**, set from U1 and U2 (MAX on the default beat and with six
-   voices and more POLY tracks). 12 is provisional.
-6. **v0.1**, once 1–5 are done: the milestone exits below that tonight settles are recorded,
-   and the release thread's notes say plainly which are still emulator-only.
-7. **The rest of the unit checklist**: card pulls during save and load, a start with no card, the
-   M5 jam, and M7's hour on external clock.
+`docs/HANDOFF.md` has the next steps in order, and `docs/FEATURES.md` the state of every
+feature.
 
 ---
 

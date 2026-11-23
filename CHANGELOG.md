@@ -8,6 +8,29 @@ the project file format or the controls.
 
 ### Added
 
+- **The performance mixer on VALUE.** Push VALUE and tap STEP 1-15 to pick one of fifteen master
+  effects (LP and HP sweeps, HP riser, echo riser, echo freeze, reverb wash, stutter, tape stop,
+  bass kill, pump, crush, noise riser, flanger, gate, build); VALUE is then its amount on every
+  screen, 0 dry. Push VALUE + LEFT/RIGHT moves to the next effect, push VALUE + CLR turns
+  everything off. One effect at a time; nothing of it is saved.
+- **A master looper** on push VALUE + STEP 16: it records 1, 2, 4 or 8 bars of the mix (the FUNC
+  menu's new LOOP LEN row) from the next bar line, and VALUE crossfades between the live beat and
+  the loop. Effects picked afterwards play over the loop. It borrows RESAMPLE's buffer, so
+  RESAMPLE and FREEZE wait while a loop is held.
+- **A tap on VALUE resets it:** the picked effect's amount, the looper's mix or PERFORM's morph
+  goes back to 0; FUNC + tap turns the DJ filter off. A hold of half a second or more resets
+  nothing, and the tempo is never reset.
+- **WAVE MONO and WAVE POLY**, two new machines: the VA voice with a wavetable oscillator. 16
+  built-in tables of 16 frames (CLS, PWM, SYN, FMT, RSW, HRM, FLD, PHD, FM1, TIN, DGT, VOW, GRL,
+  EPN, PLK, MLT), POS and MOT (envelope to position), WRP and DET on their OSC page, the ASR
+  page, and 8 + 7 factory sounds. WAVE POLY shares the 12-voice POLY budget.
+- **FM4**, a four-operator FM machine: the eight classic algorithms, operator 4 feedback, an
+  index envelope, a detuned second pair and keytracked brightness, for e-pianos, bells, glass,
+  brass, organs and FM basses. Six voices with chords, in the shared 12-voice POLY budget, and 8
+  factory sounds (EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD, GLASS).
+- **The stock SmplTrek folders in the sample browser:** on a card the stock firmware has used,
+  the top level adds `POOL/` (`/SmplTrek/Pool/Audio`) and `SMPLTREK/` (the whole tree, stock
+  projects included). Read only.
 - **The OSC page on VA MONO and VA POLY**, an eighth EDIT page: WAV (saw, square, pulse width),
   OS2 (off, a detuned second saw for chorus and Reese basses, or a hard-synced pulse +0 to +24
   semitones), SUB (sub level) and DRV (drive into the filter). Locks, scenes and macros work on
@@ -27,6 +50,19 @@ the project file format or the controls.
 - **Older projects change sound a little:** their VA tracks load WAV saw, OS2 off, SUB 102,
   DRV 0, without the old always-on synced pulse, and RES's new curve gives more resonance at the
   same knob value. OS2 at 114 (`S+19`) is close to the old bite.
+- **Every file that cannot load whole now streams.** Files over 2 MiB are read in 2 MiB chunks
+  (which frees 14.5 MiB of heap), and the ones that cannot be held whole, such as a file at
+  another rate longer than 30 s, stream from the card instead of some showing `TOO LONG` or
+  `NO ROOM`.
+
+### Fixed
+
+- A frozen track or a playing loop could run out of time for up to seven bars after a stop and
+  start, a relocate or a tempo change; they now find their place on the next bar line.
+- Recording a new looper take no longer cuts the old loop with a click: it plays on until the
+  take starts, then fades out.
+- A freeze the engine refused could leave FREEZE stuck waiting; it now says `FREEZE REFUSED`.
+- WAVE's WRP no longer aliases on high notes.
 
 ## [0.2.0] - 2026-11-23
 

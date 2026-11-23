@@ -4,9 +4,8 @@ This manual explains how STRATA works and how to play it. It goes with
 [CHEATSHEET.md](CHEATSHEET.md), which lists every gesture, screen and abbreviation on one page:
 read this once, then keep the cheatsheet next to the unit.
 
-It describes the current build, written from the code in `app/`, `core/` and `dsp/`. STRATA is
-early (see the README's status), so where the hardware has not confirmed something yet, this
-manual says so.
+It describes the current build, written from the code. STRATA is an early beta: most of it has
+not been checked on the hardware yet, and where that matters this manual says so.
 
 **Key names.** Keys are named as printed on the SmplTrek: FUNC, REC, PROJECT, HOME, PLAY, STOP,
 MIXER, EDIT, OK, CLR, the arrow pad (UP, DOWN, LEFT, RIGHT), the **screen keys** (the pair just
@@ -25,8 +24,8 @@ track speed, auto-fill, quantize) live in the FUNC menu, named on the screen. Th
 printed TRK 1-7, but in STRATA they are the performance pads: each is lit in its own colour and
 names itself on the screen when pressed. Hold FUNC alone for a moment for help on the screen you
 are on: what the four knobs do there and the gestures it has. Keep holding FUNC and tap the screen
-keys (or LEFT/RIGHT) for more pages; the last three, the same everywhere, list FUNC + each function
-key, FUNC + a knob or pad, and the upper pads.
+keys (or LEFT/RIGHT) for more pages; the last five are the same everywhere: FUNC + each function
+key, FUNC + a knob or pad, the upper pads, and two pages on the performance mixer.
 
 ![The SmplTrek panel with STRATA's button groups: screen, knobs, screen keys, arrow pad, function block, OK and CLR, STEP keys, pad-row keys, performance pads and track pads](screens/panel.svg)
 
@@ -74,10 +73,9 @@ also walk the tracks in GRID, EDIT and KEYS.
 
 <p><img src="screens/edit.png" width="256" alt="EDIT, the kick's SRC page"> <img src="screens/edit_fltr.png" width="256" alt="EDIT, the FLTR page"></p>
 
-<sub>EDIT on the kick: the machine's SRC page and the insert chain's FLTR page. The bars above the knobs are the six pages; the screen keys turn them.</sub>
+<sub>EDIT on the kick: the machine's SRC page and the insert chain's FLTR page. The bars above the knobs are the EDIT pages; the screen keys turn them.</sub>
 
-
-A machine is one of ten sound engines, plus **MID**, which plays an outboard synth over MIDI
+A machine is one of eleven sound engines, plus **MID**, which plays an outboard synth over MIDI
 instead (section 3). Any track can host any machine (MACHINE mode, `FUNC+EDIT`). The default kit
 uses eight of them, one per track (WAVE MONO and WAVE POLY are there to switch to):
 
@@ -92,7 +90,9 @@ uses eight of them, one per track (WAVE MONO and WAVE POLY are there to switch t
 | 7 | PLY (VA POLY) | Chord stabs |
 | 8 | SMP (SAMPLE) | Loop, cut into slices |
 
-Every track has **16 parameters on four pages** of four, one parameter per encoder A-D (and a fifth and a sixth page for its LFO and its arpeggiator, below):
+Every track has **16 parameters on four pages** of four, one parameter per encoder A-D, then a
+fifth and a sixth page for its LFO and its arpeggiator (below). The VA, WAVE and FM4 machines add a
+seventh and an eighth, ASR and OSC.
 
 - **SRC** and **AMP** belong to the machine and change meaning with it (section 3).
 - **FLTR** and **FX** belong to the insert chain and are the same on every track:
@@ -160,13 +160,14 @@ in a project saved before the arp existed.
 
 <p><img src="screens/edit_asr.png" width="256" alt="EDIT, the ASR page on VA POLY"></p>
 
-On **VA MONO** and **VA POLY** a seventh EDIT page, **ASR**, after ARP, decides how a note is
-held. With it, POLY plays pads and long chords, and MONO plays long bass notes and drones:
+On the VA, WAVE and FM4 machines a seventh EDIT page, **ASR**, after ARP, decides how a note is
+held. With it, the POLY machines play pads and long chords, and the MONO ones long bass notes and
+drones:
 
-- **A, ATK**: the attack, `3MS` (snappy, as before) up to `5.0S` (a slow swell). Above 0 the
+- **A, ATK**: the attack, `3MS` (snappy) up to `5.0S` (a slow swell). Above 0 the
   filter envelope swells with it.
 - **B, SUS**: the sustain level, `0%` to `100%` of the note's peak. **At 0% a note is a one-shot**:
-  it falls over DEC and ends, as the VAs always did. **Above 0%** it falls over DEC to SUS and
+  it falls over DEC and ends. **Above 0%** it falls over DEC to SUS and
   **holds there**: for as long as you hold the pad or key in KEYS (or the MIDI note), or the
   track's own pad in any other mode, or for the step's **LEN** on the sequencer.
 - **C, REL**: the release, the tail after the key comes up or LEN ends, `60MS` to `8.0S`.
@@ -192,11 +193,11 @@ chord; to make a change stick, clear that lock on the four chord steps (hold the
 knob), and the kit's value takes over. The reverb is in ROOM mode for the whole factory project;
 switch it to HALL (MIXER, `REV+`, A) for the bigger tail the pad was made for.
 
-On VA MONO, LEN only counts once SUS is above 0, so every bass line
-written before keeps its decays; a **slid** step carries the held note on into the next pitch
+On the MONO machines, LEN only counts once SUS is above 0, so a bass line written for decays
+keeps them; a **slid** step carries the held note on into the next pitch
 rather than letting it go.
 
-Held notes cost CPU for as long as they hold: long chords on VA POLY reach the shared 12-voice
+Held notes cost CPU for as long as they hold: long chords on the POLY machines reach the shared 12-voice
 budget sooner (the quietest note is faded to make room). The four settings lock, scene and macro
 like any other parameter, and every track in a project saved before the page existed loads at 0,
 which sounds exactly as it did.
@@ -206,7 +207,7 @@ which sounds exactly as it did.
 <p><img src="screens/edit_osc.png" width="256" alt="EDIT, the OSC page on VA POLY"></p>
 
 On **VA MONO** and **VA POLY** an eighth EDIT page, **OSC**, after ASR, picks what goes into the
-filter:
+filter (WAVE and FM4 have their own OSC pages, described with them in section 3):
 
 - **A, WAV**: OSC 1's wave. `SAW` from 0 to 31; at 32 a square (`SQR`), hollow and woody;
   turned further the pulse narrows (`P30` ... `P08`), thinner and more nasal.
@@ -297,7 +298,6 @@ the selected track's pad pushes it up while you lean on it.
 
 <sub>Right after the press: what was mutated, on which track. Then `OK KEEPS CLR REVERTS` until you answer, with the MUTATE pad lit bright.</sub>
 
-
 **MUTATE** (upper pad 7) makes a seeded variation of the selected track: rotate it, add or
 remove hits, or nudge velocity, timing, probability or notes within the scale. It is one undo
 level: OK keeps it, CLR takes it back.
@@ -368,7 +368,6 @@ and lets tails ring; STOP again cuts them.
 <p><img src="screens/grid.png" width="256" alt="GRID: eight tracks, the selected one highlighted"></p>
 
 <sub>GRID: one row per track, the playhead on the top row; under it the selected track (`T1`), its step page, length and speed, and the four knobs of the current EDIT page.</sub>
-
 
 Press **HOME** for GRID: all eight tracks as rows, the selected one highlighted. Tap lower pad 2
 to select the clap. Its steps show on the STEP LEDs; tap **STEP 8** to add a clap, tap it again to
@@ -441,7 +440,6 @@ To let STRATA play the arrangement itself, press **FUNC+HOME**, scroll to CHAIN 
 <p><img src="screens/scene.png" width="256" alt="SCENE A held: STEP PICKS"></p>
 
 <sub>Every performance pad names itself when pressed: here SCENE A, held.</sub>
-
 
 Back in A01, press **FUNC+MIXER** for PERFORM. Turn **VALUE**: the bar at the top moves from
 scene A (1, empty) to scene B (2, DUB), and the groove fades into a dub version of itself. Hold
@@ -563,7 +561,7 @@ knob) on the SRC page to turn **AUTO** on: SLC then cuts at the hits STRATA foun
 when it loaded, instead of evenly. SLC still sets how many slices: at SLC 8 the window is cut at
 its 7 strongest hits, in order. The line under the knobs says `SLC AUTO: 12 HITS` (up to 15 are
 found per sample), and with fewer hits inside the STA/LEN window there are fewer slices. With no
-hit in the window (`NO HITS`, or a window between two hits), it cuts evenly as before. Push D
+hit in the window (`NO HITS`, or a window between two hits), it cuts evenly. Push D
 again for even slices (`SLICES EVEN`). AUTO is saved with the kit. A streamed file has no
 slices either way.
 
@@ -619,8 +617,8 @@ each with inversions `/n`).
 For pads, turn SUS up on the ASR page: a chord then holds for its step's LEN, or for as long as you
 hold the keys ([Held notes: the ASR page](#held-notes-the-asr-page)).
 
-Every note is a sustaining voice and costs CPU while it rings. All VA POLY tracks together share
-a budget of **12 voices**; past it, the quietest note is faded out quickly to make room. A longer
+Every note is a sustaining voice and costs CPU while it rings. All VA POLY, WAVE POLY and FM4 tracks
+together share a budget of **12 voices**; past it, the quietest note is faded out quickly to make room. A longer
 DEC, a long LEN with SUS up, or a long REL all mean more notes overlap.
 
 ### WMN and WPL: WAVE MONO and WAVE POLY
@@ -726,8 +724,8 @@ reading fills the USB queue and stops the DIN jack with it; Enaga fixed this aft
 ### The key and the scale
 
 Each pattern has a key (root) and a scale, set in PROJECT with encoders **B** (key) and **C**
-(scale). The melodic machines **fold** their notes into the scale: VA MONO, VA POLY, GRAIN, and
-SAMPLE when it is not sliced (SLC 1). Drums and sliced samples are not folded, since there the
+(scale). The melodic machines **fold** their notes into the scale: the VA, WAVE and FM4 machines, GRAIN,
+and SAMPLE when it is not sliced (SLC 1). Drums and sliced samples are not folded, since there the
 note picks a pitch or a slice rather than a melody. Scales: CHROMATIC, MINOR, MAJOR, DORIAN,
 PHRYGIAN, LYDIAN, MIXOLYDIAN, LOCRIAN, HARM MINOR, MEL MINOR, MINOR PENT, MAJOR PENT, BLUES,
 WHOLE TONE, DIMINISHED. Notes are named with sharps (D#, not Eb).
@@ -753,7 +751,7 @@ OUT channel: OFF, or 1-16. `FUNC+EDIT` again opens the kit library (section 6).
 
 <p><img src="screens/sounds.png" width="256" alt="SOUNDS on track 1, the kick"></p>
 
-Every drum machine, both VAs and both WAVE machines come with a short list of ready-made sounds.
+Every drum machine, both VAs, both WAVE machines and FM4 come with a short list of ready-made sounds.
 On a KCK, SNR, HAT, PRC, MNO, PLY, WMN, WPL or FM4 track, press **OK** in EDIT or MACHINE: **SOUNDS** lists them. UP/DOWN or A move
 the cursor, **OK loads** the one under it into this track, with the beat playing, and the list
 stays open so the next OK tries the next one. `NOW` marks the sound the track has. The first row,
@@ -762,7 +760,7 @@ trying sounds never loses yours. LEFT/RIGHT or the screen keys move to the next 
 its own AS WAS. CLR goes back.
 
 A factory sound sets the machine's SRC and AMP pages, the insert chain's FLTR page (drive and
-filter) and, on the VAs, the ASR and OSC pages. It leaves the FX page (lo-fi, pan and both sends), the LFO,
+filter) and, on the VA, WAVE and FM4 machines, the ASR and OSC pages. It leaves the FX page (lo-fi, pan and both sends), the LFO,
 the ARP, the fader and HAT's choke group alone, so the track keeps its place in the mix. The
 first entry of each list is the factory kit's own sound.
 
@@ -774,6 +772,9 @@ first entry of each list is the factory kit's own sound.
 | PRC | RIM (the factory rim), TOM, COWBEL, BELL, BLIP, CONGA, METAL |
 | MNO | ROLL (the factory bass), ACID (squelching 303 line), ACIDSQ (the same on a square), FAT (detuned saws, sub and drive), REESE (wide detuned band-pass), SUB (deep, near-sine), PLUCK, GROWL (band-pass mid bass), GLIDE (portamento), SYNC (sync lead), LEAD (square lead with glide), DRONE (SUS up: holds each note for its LEN) |
 | PLY | STAB (the factory stab), PAD (A05's pad), STRING, KEYS, RAVE (best with 5TH OCT chords), PLUCK, BRASS |
+| WMN | SWEEP, RESO (a resonant sweep), GROWL, FORMNT (formant), DIGI (digital), VOWEL, WARP, FMBASS (FM bass) |
+| WPL | PAD, EPIANO (electric piano), BELL, MALLET, PLUCK, CHOIR, PWMPAD (a PWM pad) |
+| FM4 | EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD, GLASS |
 
 The MNO list is longer than the screen: it scrolls as the cursor moves. PAD, STRING, KEYS, BRASS,
 FAT, REESE, ACID, SYNC, LEAD and DRONE sustain (the ASR page's SUS is up), so their notes last as long as
@@ -798,7 +799,7 @@ The step page's fields:
 | --- | --- | --- |
 | NOTE | 0-127 | The note (also: hold STEP + turn VALUE) |
 | VEL | 1-127 | Velocity |
-| LEN | 1/16 step ... 64 STP | Note length: how long VA POLY holds, VA MONO too once SUS is up (the ASR page), and the MIDI note-off |
+| LEN | 1/16 step ... 64 STP | Note length: how long a POLY machine holds, a MONO one too once SUS is up (the ASR page), and the MIDI note-off |
 | MICR | ±11 ticks | Micro-timing: 24 ticks is one 16th |
 | PROB | 0-100% | Chance the step plays |
 | COND | see below | Trig condition |
@@ -865,7 +866,7 @@ the entry, and the FUNC menu's CHAIN row turns the chain on or off. Chain edits 
 that stored mute state the moment the entry starts (the row reads `>02 A05 X2 M3`). Store an
 intro without the kick in state 2 and a breakdown in state 3, point entries at them, and the
 chain plays sections rather than just patterns. The FUNC menu's **CHAIN END** row switches the chain between `LOOP`
-(round and round, as before) and `SONG`: the chain plays through once, the transport stops at
+(round and round) and `SONG`: the chain plays through once, the transport stops at
 the end of the last entry (`SONG END`), and the next PLAY starts it again from entry 1. Under an
 outside clock that keeps running, STRATA goes quiet at the end and waits for PLAY or the outside
 STOP. The header shows which (`CHAIN 3/64 ON SONG`). Both are saved with the project; a project
@@ -878,7 +879,7 @@ are recorded with their timing, corrected for the pad's latency and quantized by
 page, encoder A, 0-100%; 0 keeps your timing as micro-timing). A hit that cannot be stored where it
 was played says `OFF GRID`. One recording pass is one undo level.
 
-**How long you hold a note is recorded too**, on SAMPLE, GRAIN, VA MONO, VA POLY and MID: when the
+**How long you hold a note is recorded too**, on every machine but the drums: when the
 pad, key or MIDI note comes up, its step gets the nearest LEN (from `1/16` of a step up to
 `64 STP`), so with SUS up a held chord plays back as long as you played it. A drum ignores LEN,
 so a drum hit keeps one step. Let go after REC is off, or with the transport stopped, and the step
@@ -889,7 +890,7 @@ keeps the length it had.
 MIDI IN (the DIN jack, or USB MIDI) plays STRATA like the pads:
 
 - **Notes**: channels 1-8 play tracks 1-8; other channels play the selected track. A note is held
-  until its note-off, so a pad or a chord on VA, VA POLY or SAMPLE sustains under your finger, and
+  until its note-off, so a pad or a chord on a VA, WAVE, FM4 or SAMPLE track sustains under your finger, and
   it is let go on the track it started on even if you have selected another one since. Notes are
   recorded like pad hits while REC is on.
 - **CC 16-31** set the track's sixteen parameters in page order: 16-19 SRC, 20-23 FLTR, 24-27
@@ -986,7 +987,7 @@ keys turn pages, UP/DOWN or a lower pad the track): that knob's parameter goes o
 (`B T3 CUT 1/4`); pushed again, it comes off. **CLR** or **HOME** ends it (`KNOBS EDIT AGAIN`),
 as does any screen other than EDIT; a second CLR straight after does nothing, so it cannot clear
 the track. A parameter on a macro that is turned up follows the macro, not its EDIT knob: turning
-that knob says `HELD BY MACRO B`; turn the macro to 0 (or CLR it in PERFORM) to edit it again. FUNC + LFO, kill EQ and the STEP keys above work as before.
+that knob says `HELD BY MACRO B`; turn the macro to 0 (or CLR it in PERFORM) to edit it again.
 
 The target is whichever end of 0-127 is further from the parameter's value when you assign it,
 so the knob always has somewhere to go: a filter already open gets a macro that closes it. If the
@@ -1061,8 +1062,7 @@ looper (an idea taken from modbang's Octatrack Performance Mixer template).
 
 **Pick an effect: hold VALUE pushed and tap a STEP key.** The screen names it (`4 ECHO RISER`).
 While VALUE is held, the STEP keys show the sixteen slots: dim amber, the effect that is up
-bright amber, the one VALUE is on bright green. Then **turn VALUE**: at 0 it is the dry mix,
-exactly as before, and turning up brings the effect in (`ECHO RISER 64`). This works on every
+bright amber, the one VALUE is on bright green. Then **turn VALUE**: at 0 it is the dry mix, and turning up brings the effect in (`ECHO RISER 64`). This works on every
 screen, so you can play an effect from GRID, EDIT or PERFORM; while an effect is picked VALUE
 does not change the tempo or PERFORM's morph. Push VALUE + the same STEP again lets go
 (`FX OFF: VALUE TEMPO`) and VALUE is VALUE again.
@@ -1088,8 +1088,8 @@ does not change the tempo or PERFORM's morph. Push VALUE + the same STEP again l
 
 One effect plays at a time: picking another replaces it, and the old one fades out. **Push VALUE
 + LEFT/RIGHT** moves to the previous or next slot and keeps the amount, so you can switch effects
-with the crossfader still up. **Press VALUE on its own** (push and let go without turning) to
-snap back to 0: the effect goes dry but stays picked, and with the looper picked the mix goes back
+with the crossfader still up. **Tap VALUE on its own** (push and let go within half a second,
+without turning; a longer hold resets nothing) to snap back to 0: the effect goes dry but stays picked, and with the looper picked the mix goes back
 to live. The same press resets PERFORM's morph (`MORPH 0`), and FUNC + a press turns the DJ
 filter off. It never touches the tempo. **Push VALUE + CLR** turns everything off.
 
@@ -1141,7 +1141,6 @@ macros.
 
 <sub>MIXER's first page, the faders, and the DLY page. The screen keys walk all twelve: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+, REV, REV+, ROUTE, MST, EQ.</sub>
 
-
 Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
 send, `DLY+` after `DLY` and `REV+` after `REV`. **Push A** on either page (or turn A) flips the
 mode; the old mode's echoes ring out underneath, so a switch never clicks.
@@ -1167,7 +1166,7 @@ twice the send cost), and nothing once they fall silent.
 
 CPU is the SmplTrek's tight resource and memory is not, so a track can be **frozen**: it plays
 a loop of itself from RAM instead of computing its sound. FUNC+HOME opens the menu; **FREEZE** is
-its last row (UP from SAVE). The row shows the selected track and the loop's length, `T7 1 BAR`;
+near the end (UP twice from SAVE, since the list wraps). The row shows the selected track and the loop's length, `T7 1 BAR`;
 LEFT/RIGHT or B pick 1, 2, 4 or 8 bars. OK arms it (`FREEZE ARMED`, or `ARMED: PRESS PLAY`
 when stopped): from the next bar line the track's machine is recorded for that many bars, and
 then the screen says `FROZEN` and the track plays the recording.
@@ -1314,10 +1313,10 @@ A recalled kit makes the project UNSAVED until you save it.
 
 ### Samples
 
-Samples are loaded whole into RAM in the background: the track stays silent until its sample is
+Samples load into RAM in the background: the track stays silent until its sample is
 ready, and everything else keeps playing. The PROJECT screen's `SMP` line shows each track (`O`
 loaded, `S` streamed from the card, `.` loading, `X` failed, `-` none) and the memory used out of
-the budget, `12/32M`.
+the budget, `12/64M`.
 
 STRATA reads WAV files: 8, 16 or 24-bit, or 32-bit float, mono or stereo, at any sample rate
 (other rates are converted to 48 kHz on load).
@@ -1398,6 +1397,8 @@ names one.
 - **Tape stop into the drop.** Hold FUNC + push D on the last two beats of a build and let go
   exactly on the one. Or throw the chord into the delay, then FUNC + MUTATE to keep the echo as
   a pad while the beat drops out.
+- **Loop, then rebuild underneath.** Push VALUE + STEP 16 to catch four bars, turn VALUE up to
+  hold them, then mute, switch patterns or edit live and fade back when the new part is ready.
 - **Throws on the off-beat parts.** THROW on the rim or the chord for a bar, then let it ring.
 - **Resample a moment you like.** An 8-bar take of a jam into track 8, then sliced or on GRAIN,
   turns a happy accident into material.
@@ -1414,10 +1415,11 @@ It changes every block, so it flickers. Builds with the held **MAX** readout sho
 `MAX23.5` on the bottom line: the highest block since PLAY was last pressed, so press PLAY to
 start a fresh reading.
 
-STRATA is designed to stay under 60% in its worst case. On the first unit boot the default beat
-read about 0-26%; the factory project's load on the unit is still to be measured. If the load climbs or the sound crackles:
+STRATA is designed to stay under 60% in its worst case. On the unit the default beat reads
+under 30%, and long, heavy play has peaked at 84% without a dropout. If the load climbs or the
+sound crackles:
 
-- **VA POLY** is the biggest cost: every chord note is a sustaining voice. Use shorter DEC, fewer
+- **VA POLY, WAVE POLY and FM4** are the biggest cost: every chord note is a sustaining voice. Use shorter DEC, fewer
   notes per chord (MIN rather than MIN11), or fewer POLY tracks. All POLY tracks share 12 voices.
 - **GRAIN** with high DEN is eight grains at once; lower DEN or use SAMPLE.
 - **The CPU guard** steps in on its own when the load stays high: the bottom line shows
@@ -1425,7 +1427,7 @@ read about 0-26%; the factory project's load on the unit is still to be measured
   out first) and GRAIN clouds get sparser. It steps back down one level a second once the load
   falls, and a second STOP clears it. Seeing `GUARD` often means the pattern asks for more than
   the box has: use the tips above.
-- **Freeze the dearest track.** FUNC+HOME, UP (FREEZE is the last row), OK: the selected track
+- **Freeze the dearest track.** FUNC+HOME, UP twice to FREEZE, OK: the selected track
   records its loop (1 bar; LEFT/RIGHT or B on the row for 2, 4 or 8) from the next bar line, then
   plays it from memory and stops computing. A six-voice POLY chord goes from the biggest cost
   in the project to almost nothing. See "Freeze" in section 5.
@@ -1440,7 +1442,7 @@ Shown on the PROJECT screen under the project name, and the track shows `X` on t
 | Message | Meaning | What to do |
 | --- | --- | --- |
 | `TOO LONG` | Longer than six hours | Trim it |
-| `NO ROOM` | Does not fit in the sample memory left (`SMP ... nn/32M`), not even its first two seconds to stream | Use shorter or mono samples, or free a track |
+| `NO ROOM` | Does not fit in the sample memory left (`SMP ... nn/64M`), not even its first two seconds to stream | Use shorter or mono samples, or free a track |
 | `STREAMS FULL` | Four tracks already stream | Free one of them, or use a shorter file that fits in memory |
 | `STREAM FAILED` | The card would not open the file for streaming | Check the card; pick the sample again |
 | `STREAM LATE` | The card fell behind a streamed file: a gap played as silence | Use a faster card, fewer streamed tracks, or 16-bit files |
