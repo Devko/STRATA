@@ -1475,13 +1475,30 @@ only while a bounce records, nothing otherwise.
 Memory: frozen loops use their own pool slots (8-15) out of the 64 MiB sample budget, at 2 bytes a
 frame mono: 8 bars at 120 BPM is 16 s, 1.5 MiB a track.
 
-`tests/scenario_freeze.sh` freezes track 7 of the default beat and prints the load; `--baseline`
-runs the same beat unfrozen. Neither has run (the cloud cannot build the toolchain).
+`tests/scenario_freeze.sh` freezes track 7 of the default beat (`--pad`: of A05 PAD, the held
+chord) and prints the app's `ld <avg> <max>` windows (half a second each, app/app.hpp) after the
+freeze; `--baseline` runs the same keys without the freeze. The first version printed a
+"last block" figure that the emulator's report does not have, so it always read 0.00%.
+
+Measured on Roland's PC at f5d66dd, cl6x, A01 (factory beat), track 7 frozen, with a temporary
+windowed log of the same kind (375 polls a window):
+
+| Window | Live | Frozen |
+| --- | --- | --- |
+| max, three bars compared | 27.0 / 25.3 / 24.4% | 19.0 / 18.4 / 17.2% |
+| average | 13.96% | 13.38% |
+
+Freezing A01's chord track saves about **7-8 points at the peaks and 0.6 on average**: A01's
+stabs sound for a fraction of each bar, so the saving lands where they do. Recording the take
+costs about 0.3-0.4 points while it runs. The held-pad case (A05, the estimate above) is
+`scenario_freeze.sh --pad` against `--pad --baseline`; it has not run yet.
 
 | Build | cl6x | GCC only |
 | --- | --- | --- |
-| `scenario_freeze.sh --baseline` | | |
-| `scenario_freeze.sh` (track 7 frozen) | | |
+| A01 live (avg / max) | 13.96% / 24.4-27.0% | |
+| A01, track 7 frozen | 13.38% / 17.2-19.0% | |
+| A05 live (`--pad --baseline`) | | |
+| A05, track 7 frozen (`--pad`) | | |
 
 ### Later milestones
 
