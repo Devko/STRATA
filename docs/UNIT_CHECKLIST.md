@@ -8,7 +8,7 @@ from, with the background for each check.
 
 **Time.** The whole pass is about three hours. If the evening runs short, do 0-3b, 13 and 16
 first (safety, the MAX readings, save and restore), then the sections for today's new features
-(8c, 8d, 13d-13j, 14b, 15b-15d), then the rest.
+(8c, 8d, 13d-13l, 14b, 15b-15d), then the rest.
 
 Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`), and so are
 the on-screen hints. `FUNC+X` = hold FUNC, press X.
@@ -219,7 +219,8 @@ The beat can keep playing. One look per screen; note any overlap or illegible te
 - [ ] EDIT: rows read like `A CUT 064` with a bar; hint `FUNC+EDIT: MACHINE` is legible.
 - [ ] MACHINE (FUNC+EDIT): the nine machines read as three columns of three, with `B: MIDI OUT`
       below, no overlaps.
-- [ ] MIXER: screen keys walk TRK 1-4, TRK 5-8, DLY, REV, ROUTE, MST; every page draws.
+- [ ] MIXER: screen keys walk TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+, REV, REV+,
+      ROUTE, MST, EQ; every page draws.
 - [ ] PERFORM (FUNC+MIXER): macro bars stop above the two hint lines; selected macro shows `>A`.
 - [ ] PROJECT: the KEY line sits below the 16 slots, not through the last row.
 - [ ] Dim greys (empty steps, bar backgrounds) are visible but clearly darker than text.
@@ -652,6 +653,27 @@ so this is the first time it is heard. Play A01 GROOVE.
       and is recorded with its length.
 - [ ] Save, power cycle: the ASR settings come back. Open a project saved before tonight: every
       VA sounds as it did (ASR reads all 0).
+
+## 13l. The sidechain duck, editable (5 min)
+
+New: the duck is set from three MIXER pages after the faders: DCK 1-4 and DCK 5-8 (each track's
+depth), DUCK (source, attack, hold, release). It is saved in the kit. Play A01 GROOVE.
+
+- [ ] MIXER, screen key right twice: `MIXER DCK 1-4`, T1 reads `SRC`, T2-T4 `35%`, the bottom
+      line `DUCKS UNDER T1`. Right again: DCK 5-8, all `35%`. Right again: `MIXER DUCK`,
+      `SRC T1`, `ATK 3`, `HLD 40`, `REL 120`, `TIMES IN MS`. Nothing overlaps.
+- [ ] DCK 5-8: turn the chord's and the bass's depth to `100%`: they **pump hard** on every kick,
+      no click at the dip or the return. Turn them to `OFF`: they stop pumping, the kick still
+      plays. Back to `35%`.
+- [ ] DUCK: REL (D) to about `500`: a slow breathing pump. HLD (C) to `200`: the dip lasts
+      longer before it comes back. ATK (B) to `50`: the dip comes in softer. Back to 3/40/120.
+- [ ] DUCK: SRC (A) to `T2` (the snare): the pump now follows the snare, the kick ducks under it
+      at its own depth, and DCK 1-4 shows `SRC` on T2. Back to `T1`.
+- [ ] Set T6 to `80%` and REL to `300`, save (FUNC+HOME, OK), power cycle, reload: DCK 5-8 and
+      DUCK show the same values, and it sounds the same. Store the kit in the kit library and
+      recall it into a NEW PROJECT: the duck comes with it.
+- [ ] Open a project saved with an older STRATA: the duck reads T1, 35%, 3/40/120.
+      Notes: `________________`
 
 ## 14. Reload and new: the FUNC menu's RELOAD PROJECT and NEW PROJECT (3 min)
 
@@ -1422,8 +1444,8 @@ rather than the only check there will ever be.
 - [ ] **The sidechain duck works at all.** Both arms of its depth ternary were `0.0f`, so an M2
       SPEC feature was dead while the curve was still being rendered on every kick. Now 0.35 —
       **a number to settle by ear**, since SPEC gives attack, hold and release and no depth.
-- [ ] The duck depth is not reachable from the panel: it is mixer state set in `Engine::init`
-      rather than a kit parameter. Making it editable means a kit field.
+- [ ] ~~The duck depth is not reachable from the panel.~~ It is now, with the source and the
+      times: MIXER's DCK 1-4, DCK 5-8 and DUCK pages, saved in the kit (13l).
 - [ ] **Generate a Euclidean rhythm, save, reopen.** It should still be there. `Cmd::euclid` was
       missing from `mutates_pattern`, so the bank stayed clean and an explicit save skipped the
       bank file entirely.
@@ -1651,8 +1673,8 @@ master DJ filter sat at a compile-time default for the life of the app, and PROJ
 section for them. All fourteen are now encoder bytes in the project file. `docs/REVIEW.md` 2a
 records where each gesture went and why.
 
-- [ ] F7, then the screen keys: MIXER walks TRK 1-4, TRK 5-8, DLY, REV, ROUTE, MST, EQ and back
-      round. Every page draws, with its four names, values and bars.
+- [ ] F7, then the screen keys: MIXER walks TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+,
+      REV, REV+, ROUTE, MST, EQ and back round. Every page draws, with its four names, values and bars.
 - [ ] On DLY, encoder A walks the delay's DIVISION: `1/32`, `1/16T`, `1/16`, `1/8T`, `1/8`,
       `1/8D`, `1/4`, `1/4D`, `1/2`, `1/1`. The page's `TIME nnn MS` line follows it, and the
       ends HOLD rather than wrapping.

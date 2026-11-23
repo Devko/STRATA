@@ -16,6 +16,10 @@ the project file format or the controls.
   key or MIDI note is held, or for its step's LEN, up to 64 steps. At 0 (and in every older
   project) the VAs sound exactly as before.
 - **REC records how long a note was held** into its step's LEN, on SAMPLE, GRAIN, the VAs and MID.
+- **Editable sidechain duck.** Three new MIXER pages after the faders: DCK 1-4 and DCK 5-8 set
+  how far each track ducks (OFF to 100%), DUCK sets the source track, attack, hold and release.
+  Saved in the kit; kits and projects from before open with the old fixed duck (track 1, 35%,
+  3/40/120 ms). The delay, reverb, master and EQ pages are now three screen-key presses further on.
 
 ## [0.1.0] - {{RELEASE_DATE}}
 

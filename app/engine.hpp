@@ -155,6 +155,10 @@ public:
     Capture &capture_for_write() { return capture_; }
     bool muted(int track) const { return muted_[track]; }
     float level(int track) const { return mix_[track].level; }
+    // The sidechain duck as the mixer runs it: each track's depth (0 for the source) and which
+    // track fires it. The kit's bytes are in project().kit.
+    float duck_depth(int track) const { return mix_[track].duck; }
+    int duck_source() const { return duck_source_; }
     const InsertChain &chain(int track) const { return mixer_.chain(track); }
 
     // The master and send settings, for the UI to draw. Edits still go through the ring.
@@ -324,6 +328,12 @@ private:
     // "read the floats back" to go wrong. Called by a knob move, by a tempo change (the delay is
     // tempo-synced) and by a project load.
     void apply_mixer_bytes();
+
+    // And for the sidechain duck: the kit's bytes (KitTrack::duck, KitDuck) are the truth, and
+    // this hands them to the mixer -- the envelope's times, which track fires it, and each
+    // track's depth, with the source's forced to 0 so a track never ducks under itself. Called
+    // at init, whenever a kit arrives (params_from_kit) and on every Cmd::set_duck.
+    void apply_duck();
 
     void build_placeholder_sample();
 
@@ -747,14 +757,9 @@ private:
     uint8_t resample_bars_ = 0;      // 0 = nothing armed
     bool capture_input_ = false;     // the armed or running take records the input, not the master
 
-    // Which track's trigs fire the sidechain duck. docs/SPEC.md: track 1 by default.
+    // Which track's trigs fire the sidechain duck: the kit's KitDuck::source, as apply_duck last
+    // read it. docs/SPEC.md: track 1 by default.
     int duck_source_ = 0;
-
-    // How far the other tracks duck under it: 0 bypasses, 1 ducks fully (dsp/buses.hpp). SPEC
-    // gives the duck's attack, hold and release and no depth, so this is a judgement -- enough
-    // to hear the kick come through a dense pattern, not enough to pump the whole mix. It is a
-    // number to settle by ear on the unit, and it is not editable from the panel yet.
-    static constexpr float kDuckDepth = 0.35f;
 
     Commands commands_;
     Status status_;

@@ -53,13 +53,13 @@ echo "running the emulator for $CYCLES cycles: play, then every MIXER page, then
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 21@380000000 \
-    --key 9@440000000 \
-    --key 9@490000000 \
-    --key 9@540000000 \
-    --key 9@590000000 \
-    --key 9@640000000 \
-    --key 9@690000000 \
-    --key 9@740000000 \
+    --key 8@440000000 \
+    --key 8@490000000 \
+    --key 8@540000000 \
+    --key 8@590000000 \
+    --key 8@640000000 \
+    --key 8@690000000 \
+    --key 8@740000000 \
     --key 20@800000000 \
     --key 9@860000000 \
     --key 9@910000000 \
@@ -107,9 +107,11 @@ check(bool(screens), "the screen was logged at all", f"log={log}")
 # Every MIXER page, including the four that are new, and then SETUP. Each one of these means a
 # whole screen was drawn on the C674x without faulting -- which is the claim this scenario makes
 # and the one a host test cannot make.
+# Walked LEFT from TRK 1-4, wrapping to EQ, since the duck's three pages came between the faders
+# and the sends: seven presses still reach DLY and the log ring still holds them all.
 wanted = [
     "scr MIXER TRK 1-4",
-    "scr MIXER TRK 5-8",
+    "scr MIXER EQ",
     "scr MIXER DLY",
     "scr MIXER DLY+",
     "scr MIXER REV",
