@@ -135,7 +135,8 @@ pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
 | Background loading, the beat keeps playing | v0.1.0 | ○ (13b) | |
 | Long files at 48 kHz up to 349 s, read in 4 MiB chunks | v0.1.0 | ○ (15c) | 32 MiB sample memory shared by all tracks |
 | Other rates: up to 30 s at 96 kHz | v0.1.0 | ○ (13b) | |
-| Streaming of files too big for memory (2 s head + card stream, 4 tracks max) | v0.1.0 | ○ (15d) | Forward only, one voice: no STA, LEN, slices or reverse; GRAIN plays only the head; CPU unmeasured |
+| Streaming of files too big for memory (2 s head + card stream, 4 tracks max) | v0.1.0 | ○ (15d) | Forward only, one voice: no STA, slices or reverse (not feasible, below); GRAIN plays only the head; CPU unmeasured |
+| Streamed samples honour LEN (end point, loop back to the head) | WIP | ○ (15d) | A LEN loop inside the 2 s head never touches the card |
 | Sample browser (`/SAMPLES`, `/RECORD`), load while playing | v0.1.0 | ○ (15b) | 256 entries a folder; path ≤ 111 characters; no audition before loading |
 | Resample the master, 1-8 bars, to a file or straight onto a track | v0.1.0 | ○ ("Resampling") | Takes ≤ 30 s. Resampling one track alone (SPEC) is not built |
 | Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | No monitoring through STRATA; MIC needs headphones in |
@@ -159,7 +160,8 @@ pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
 | Save (FUNC+HOME, OK), only changed files, audio keeps playing | v0.1.0 | ○ (13) | |
 | Autosave on every stop and on leaving the app; reopen last project or a newer autosave | v0.1.0 | ○ (13) | |
 | Reload project, new project (factory content) | v0.1.0 | ○ (14) | Both stop the transport |
-| Project browser: open, save as with a name | v0.1.0 | ○ (14b) | No delete or rename on the unit (Enaga has no rename) |
+| Project browser: open, save as with a name | v0.1.0 | ○ (14b) | |
+| Project rename (push B) and delete (push C, OK twice), safe against a pulled card | WIP | ○ (14c) | Rename is a copy then a delete (Enaga has no rename). The open project cannot be deleted |
 | Kit library: 16 kits on the card, recall while playing, store | v0.1.0 | ○ (15) | Recall is not undoable |
 | Damaged files refused, never crash | v0.1.0 | ○ (M4) | Card pulled mid-save not tried on the unit |
 | Factory project: 130 BPM C minor kit, A01-A04, chain, 3 scenes, 3 macros, 8 mute states | v0.1.0 | ✔ A01 plays; ◐ the rest (3b) | Track 8 plays a placeholder until given a sample |
@@ -186,13 +188,16 @@ pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
 2. **An editable sidechain duck:** depth, and maybe source and release, as kit fields.
 3. **MIDI:** pitch bend and aftertouch in, CC motion recording, slide as legato out; moving the
    Enaga pin once a release carries the DIN fix (`192f03f`).
-4. **Streamed samples** that honour STA/LEN/slices/reverse, or a per-project sample memory
-   above 32 MiB (SPEC allows up to 64).
+4. **A per-project sample memory above 32 MiB** (SPEC allows up to 64), so fewer files need to
+   stream. Streamed LEN is built; streamed STA, slices and reverse were looked at on 2026-11-23
+   and are not feasible on Enaga 0.2.0's card path ("Why streamed samples play forward only",
+   below).
 5. **Resample one track** on its own (SPEC promise).
 6. **VA POLY stereo spread and unison** (SPEC promise), and the 6-to-8 voice question once U1/U2
    are in.
 7. **Undo for chain edits and kit recall**; one-press copy of a whole pattern to another slot.
-8. **Delete and rename projects** on the unit (needs an Enaga rename or delete-folder call).
+8. ~~Delete and rename projects on the unit~~: built (push B / push C on PROJECTS), as a copy
+   and a delete since Enaga has no rename.
 
 **From the ideas list, not built**
 
@@ -204,3 +209,34 @@ pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
 **Budgets that limit new work:** heap 109.1 of 120 MiB at init (2.9 MiB above the 8 MiB
 headroom rule), and an estimated ~63% unit load with everything on at once (BUDGET.md
 "Everything at once").
+
+## Why streamed samples play forward only
+
+Looked at on 2026-11-23, against Enaga v0.2.0's file layer (`firmware/kernel/files.c` and its
+FatFs configuration). CPU is not the problem: a streamed voice costs the same whichever way it
+reads. The card is.
+
+- **An Enaga stream reads forward only**, from the offset it was opened at. Anything else is a
+  close and a reopen, or a `files::File` seek.
+- **Every reopen or seek walks the file's cluster chain from its start.** Enaga builds FatFs with
+  `FF_USE_FASTSEEK 0`, so `f_lseek` to a byte follows the FAT from the first cluster: one
+  512-byte FAT sector per 128 clusters. A 300 MB file in 32 KiB clusters is about 75 sector
+  reads, in one FatFs call that the main loop cannot slice. STRATA already pays this once per
+  restart (a trigger or a loop wrap), which UNIT_CHECKLIST 15d measures.
+- **Reverse** reads the file backwards, so it needs that walk for every block, all the time: with
+  half-second blocks, two walks a second per streamed track, eight with four tracks. The stream's
+  ring also reads ahead past each block, so a 256 KiB ring spends about 2.7 times the bandwidth a
+  forward stream does. It would also need the file's last two seconds resident as well as its
+  first, and a file only streams when the sample memory cannot take it.
+- **START and slices** are lockable per step, so any trigger may ask for any place in the file.
+  The 2 s head is what hides a reopen today; a start elsewhere would need two seconds resident at
+  every place a trigger can start (sixteen slices of a 48 kHz stereo file: 6 MiB, the memory the
+  file was streamed for want of), and a chain walk on every trigger: eight a second for 16th-note
+  slices.
+- **LEN** is an end point and needs nothing of the card: built.
+
+What would change the answer: Enaga building FatFs with fast seek (a cluster table per open
+stream makes a seek constant-time), or a unit reading for 15d showing restarts every bar with
+no `STREAM LATE` and a short walk. Then reverse, at least, is worth building: the voice and the
+fifo already count frames, so it is a second card-side reader and a resident tail.
+
