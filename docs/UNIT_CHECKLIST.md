@@ -1064,6 +1064,9 @@ New 2026-11-22. Put a few WAVs in `/SAMPLES` on the card first (the two test fil
 - [ ] Turn track 8's STA, SLC and DEC down first, then pick a file: it plays whole from its
       first frame (EDIT SRC shows STA 0, LEN 127, SLC 1; AMP shows DEC 127). PIT and LVL keep
       what they were.
+- [ ] MACHINE on track 6 (MNO): switch to SMP. EDIT SRC shows PIT 64, STA 0, LEN 127, SLC 1;
+      AMP shows DEC 127. Switch back to MNO: it sounds like the factory bass again. PAN and the
+      sends kept their values across both switches.
 - [ ] OK on a folder opens it; CLR goes up with the cursor on that folder; CLR at `/SAMPLES`
       shows `SAMPLES/` and `RECORD/`; CLR there goes back to EDIT. Same from MACHINE (OK).
 - [ ] Reopen the browser: it starts in the track's folder with the cursor on its file.

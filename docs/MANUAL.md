@@ -77,7 +77,11 @@ also walk the tracks in GRID, EDIT and KEYS.
 
 A machine is one of eleven sound engines, plus **MID**, which plays an outboard synth over MIDI
 instead (section 3). Any track can host any machine (MACHINE mode, `FUNC+EDIT`). The default kit
-uses eight of them, one per track (WAVE MONO and WAVE POLY are there to switch to):
+uses eight of them, one per track (WAVE MONO and WAVE POLY are there to switch to).
+**Switching a track to another machine loads that machine's default sound**: its SRC, FLTR and
+AMP pages (and ASR and OSC where it has them) become the first entry of its SOUNDS list, and a
+SMP track plays a sample whole from its start. The FX page (lo-fi, pan, sends), the LFO and the
+arpeggiator stay as they were, and so does a MID track's page.
 
 | Track | Machine | Default role |
 | :---: | --- | --- |

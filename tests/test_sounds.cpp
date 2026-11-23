@@ -13,6 +13,7 @@
 #include "project.hpp"
 #include "sounds.hpp"
 
+#include <cstdio>
 #include <cstring>
 
 using namespace strata;
@@ -213,4 +214,100 @@ TEST(sounds_as_was_puts_back_exactly_what_the_track_had_and_nothing_else) {
     post(Cmd::sound_preset, 5, 0, uint8_t(MachineId::va_mono), kSoundPresetBack);
     pump(2);
     CHECK_EQ(int(e.status().refused.load(std::memory_order_relaxed) - refused), 1);
+}
+
+// --- switching machines: the new machine's default sound (Roland, 2026-11-23) -----------------
+
+namespace {
+
+// The KitTrack parameters `machine` reads for its sound: SRC, FLTR and AMP, plus ASR and OSC on
+// the machines that read them. Everything machine_defaults_apply must leave no stale byte in.
+bool reads_for_sound(uint8_t machine, int p) {
+    if (p < 12) return true;
+    return machine_reads_asr(machine) && p >= kSoundAsrFirst && p < kSoundOscFirst + 4;
+}
+
+}  // namespace
+
+TEST(sounds_every_machine_but_mid_has_defaults_for_a_switch) {
+    uint8_t params[kKitParams] = {};
+    for (int m = 0; m < int(MachineId::count); m++) {
+        const bool has = machine_defaults_apply(uint8_t(m), params);
+        // MID's knobs are CCs for someone else's instrument. GRAIN gets its defaults from preset
+        // 0 of its SOUNDS list, which the "Make GRAIN easy to dial in" work adds; when it lands,
+        // GRAIN leaves this exemption.
+        const bool exempt = m == int(MachineId::midi) ||
+                            (m == int(MachineId::grain) && sound_preset_count(uint8_t(m)) == 0);
+        if (!exempt && !has) std::printf("    machine %d has no defaults\n", m);
+        CHECK(exempt || has);
+        if (m == int(MachineId::midi)) CHECK(!has);
+    }
+}
+
+TEST(sounds_a_switch_leaves_no_parameter_of_the_new_machine_stale) {
+    // Whatever the old machine left -- all 0s or all 127s here -- every byte the new machine reads
+    // for its sound comes out the same, and the mix, LFO and ARP bytes are untouched.
+    for (int m = 0; m < int(MachineId::count); m++) {
+        uint8_t low[kKitParams], high[kKitParams];
+        std::memset(low, 0, sizeof low);
+        std::memset(high, 127, sizeof high);
+        const bool a = machine_defaults_apply(uint8_t(m), low);
+        const bool b = machine_defaults_apply(uint8_t(m), high);
+        CHECK_EQ(a, b);
+        if (!a) continue;
+        for (int p = 0; p < kKitParams; p++) {
+            if (reads_for_sound(uint8_t(m), p)) {
+                if (low[p] != high[p]) std::printf("    machine %d param %d stale\n", m, p);
+                CHECK_EQ(int(low[p]), int(high[p]));
+                CHECK(low[p] <= 127);
+            } else {
+                CHECK_EQ(int(low[p]), 0);
+                CHECK_EQ(int(high[p]), 127);
+            }
+        }
+    }
+}
+
+TEST(sounds_a_switch_uses_the_first_preset_and_sample_plays_whole) {
+    for (int m = 0; m < int(MachineId::count); m++) {
+        if (sound_preset_count(uint8_t(m)) == 0) continue;
+        uint8_t params[kKitParams] = {};
+        CHECK(machine_defaults_apply(uint8_t(m), params));
+        CHECK(sound_preset_matches(uint8_t(m), 0, params));
+    }
+    // SAMPLE agrees with the browser's pick on where in the file it plays.
+    uint8_t params[kKitParams];
+    std::memset(params, 33, sizeof params);
+    CHECK(machine_defaults_apply(uint8_t(MachineId::sample), params));
+    for (const ParamReset &r : kSamplePickResets) CHECK_EQ(int(params[r.slot]), int(r.value));
+    CHECK_EQ(int(params[0]), 64);       // PIT unity
+    CHECK_EQ(int(params[4]), 0);        // DRV off
+    CHECK_EQ(int(params[5]), 127);      // CUT open
+    CHECK_EQ(int(params[7]), 0);        // MOD off
+}
+
+TEST(sounds_switching_a_track_loads_the_new_machines_defaults) {
+    using namespace strata::test;
+    Engine &e = fresh();
+    storage().request_new();
+    CHECK(settle());
+    // Track 6 is VA MONO: leave odd values everywhere, then switch it to SAMPLE.
+    for (int p = 0; p < kTrackParams; p++) post(Cmd::set_param, 5, 0, uint8_t(p), 37);
+    pump(2);
+    post(Cmd::set_machine, 5, 0, uint8_t(MachineId::sample));
+    pump(2);
+    uint8_t want[kKitParams];
+    for (int p = 0; p < kKitParams; p++) want[p] = 37;
+    CHECK(machine_defaults_apply(uint8_t(MachineId::sample), want));
+    for (int p = 0; p < kTrackParams; p++) {
+        CHECK_EQ(int(e.params(5).v[p]), int(want[p]));
+        CHECK_EQ(int(e.performed(5, p)), int(want[p]));
+    }
+    CHECK_EQ(int(e.params(5).v[1]), 0);           // STA
+    CHECK_EQ(int(e.params(5).v[kFx + 1]), 37);    // PAN stayed
+
+    // And to MID: nothing is written.
+    post(Cmd::set_machine, 5, 0, uint8_t(MachineId::midi));
+    pump(2);
+    for (int p = 0; p < kTrackParams; p++) CHECK_EQ(int(e.params(5).v[p]), int(want[p]));
 }
