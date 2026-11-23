@@ -1677,6 +1677,28 @@ while every counted voice is still waiting for its frame are dropped. Twelve is 
 - [ ] With MAX from the line above and docs/BUDGET.md's per-voice cost on the unit, decide the
       budget: largest that keeps the worst case under 60%. New value `________`
 
+## The CPU guard (2026-11-23)
+
+When the block's load runs high, STRATA sheds the costliest sustaining work instead of letting
+the next chord overrun (`core/cpuguard.hpp`). It rises a level when the load averaged over about
+11 ms reaches 70%, or at once on one block at 90%; it falls a level after each full second under
+55%. Each level takes two voices off the shared VA POLY budget (12, 10, 8, 6, 4) and shrinks
+every GRAIN cloud's pool (8, 6, 4, 3, 2 grains). Shed POLY voices fade over 1.3 ms, quietest
+first; GRAIN skips new grains rather than cutting old ones. While it is up, the bottom line shows
+`GUARD1`-`GUARD4` where the device name was. A second STOP (cut the tails) resets it. The
+thresholds are provisional, like the voice budget.
+
+- [ ] Default beat (A01), PLAY for a minute: the bottom line never shows `GUARD`. If it does, the
+      thresholds are too low for the unit: note the MAX `________ %`.
+- [ ] Repeat the 84% session: big effects, three or four POLY tracks holding MIN11 chords, a GRAIN
+      track at DEN and SIZ high. `GUARD` appears; MAX stays under `________ %` (it was 84.3%
+      without the guard). The chords get thinner; no click, no crackle, no overrun.
+- [ ] Let go of everything with the transport running: within a few seconds `GUARD` counts down
+      and disappears, one level a second, and the chords come back full on the next hits.
+- [ ] Listen for pumping: on a pattern that sits right at the edge, the voice count should not
+      audibly swing up and down every second. Notes: `______________________________`
+- [ ] Second STOP while `GUARD` is up: it disappears at once.
+
 ## Downsampled samples are low-passed at load
 
 core/pcm now filters a file above 48 kHz before resampling it, so content above 24 kHz no longer

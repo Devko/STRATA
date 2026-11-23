@@ -1023,6 +1023,11 @@ read about 0-26%; the factory project's load on the unit is still to be measured
 - **VA POLY** is the biggest cost: every chord note is a sustaining voice. Use shorter DEC, fewer
   notes per chord (MIN rather than MIN11), or fewer POLY tracks. All POLY tracks share 12 voices.
 - **GRAIN** with high DEN is eight grains at once; lower DEN or use SAMPLE.
+- **The CPU guard** steps in on its own when the load stays high: the bottom line shows
+  `GUARD1` to `GUARD4`, POLY chords get thinner (two voices fewer a step, the quietest fading
+  out first) and GRAIN clouds get sparser. It steps back down one level a second once the load
+  falls, and a second STOP clears it. Seeing `GUARD` often means the pattern asks for more than
+  the box has: use the tips above.
 - **The insert filter and lo-fi** cost nothing when off. Set FLTR MOD to OFF and LOF to 0 on the
   tracks that do not need them.
 - **Closed sends** cost nothing: keep SNA and SNB at 0 on tracks that do not use the delay or reverb.
@@ -1066,6 +1071,7 @@ new one needs the transport stopped, so stop the master first.
 | `LOADING` on PLAY | A project is still loading; PLAY works when it finishes |
 | `FULL n` on GRID | n locks refused because the pattern's 1,024-lock pool is full |
 | `DROP n` on the bottom line | n edits were lost because they came faster than the audio side applies them |
+| `GUARD n` on the bottom line | The CPU guard is shedding POLY voices and GRAIN grains to keep the load under the limit (see "The audio load") |
 | `UNREADABLE` in KIT | That kit file is damaged |
 | `PATTERN LOST` or another reason on PROJECT after a load | The card held a damaged file; STRATA refuses damaged files rather than crashing |
 

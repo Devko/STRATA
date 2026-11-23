@@ -70,6 +70,11 @@ run yet (the cloud cannot build the toolchain).
 
 Smaller open items, none urgent:
 
+- **The CPU guard's thresholds** (`core/cpuguard.hpp`, 2026-11-23) are provisional: rise at a
+  70% average or one 90% block, fall after a second under 55%. Set them from the unit
+  (UNIT_CHECKLIST, "The CPU guard"): A01 must never show `GUARD`, and the 84% session must stay
+  clear of an overrun with it.
+
 - **KICK's click path** runs for the whole note after its transient has decayed: about a quarter
   of the host profile. Skipping it is not bit-exact (the shared noise advances differently), so it
   needs a listening test first. `docs/BUDGET.md`, "Optimization review", finding 4.
