@@ -2927,6 +2927,42 @@ TEST(ui_the_held_cpu_max_keeps_the_highest_block_and_restarts_on_play) {
     pump();
 }
 
+// The `ld <avg> <max>` log lines: half a second of polls, averaged and maxed, in bursts of eight
+// after PLAY, a pattern change or a freeze, because Enaga's log ring keeps only sixteen lines.
+// tests/scenario_freeze.sh compares these windows; the emulator's own report has only the peak.
+TEST(ui_the_load_log_gives_windowed_figures_in_bursts_while_running) {
+    fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_running(false);
+    host.set_audio_load(300);
+    pump(400);
+    CHECK(!host.logged("ld 30.0 30.0"));            // stopped: no windows
+
+    host.set_running(true);                         // PLAY starts a burst
+    host.set_audio_load(200);
+    pump(374);
+    host.set_audio_load(500);
+    pump();
+    CHECK(host.logged("ld 20.1 50.0"));             // (374 x 200 + 500) / 375 = 200.8 per mille
+
+    host.set_audio_load(100);
+    pump(375 * 7);
+    CHECK(host.logged("ld 10.0 10.0"));
+    const int lines = host.log_lines();
+    pump(375 * 2);
+    CHECK_EQ(host.log_lines(), lines);              // eight windows, then quiet
+
+    host.set_running(false);                        // a stop throws the part window away
+    pump(100);
+    host.set_running(true);
+    host.set_audio_load(150);
+    pump(375);
+    CHECK(host.logged("ld 15.0 15.0"));             // and the next PLAY starts a new burst
+    host.set_running(false);
+    host.set_audio_load(0);
+    pump(2);
+}
+
 // The CPU guard (core/cpuguard.hpp) says so on the bottom line, in the device's place, so a chord
 // that got thinner under load has a reason on screen. A dropped edit still wins the slot.
 TEST(ui_the_bottom_line_shows_the_cpu_guard_while_it_is_up) {
