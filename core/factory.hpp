@@ -24,8 +24,9 @@
 //     of VA POLY's ASR page (SUS, ATK, REL) ready to hear. The pad lives in the pattern's
 //     locks, not the kit, so the CHORD track's stab -- SUS 0, part of A01-A04's sound --
 //     stays exactly what it was;
-//   - a chain over GROOVE to PEAK (PAD stays out of it), built but OFF -- STRATA is a jamming instrument, and a chain
-//     that advanced on its own the first time someone pressed PLAY would fight them;
+//   - a chain over GROOVE to PEAK (PAD stays out of it), built but OFF -- STRATA is a jamming
+//     instrument, and a chain that advanced on its own the first time someone pressed PLAY
+//     would fight them;
 //   - eight mute states, three scenes and three macros (B ACID, C DUB, D DRIVE; A is left for
 //     pad pressure), so the performance row and PERFORM do something from the first minute.
 //
