@@ -813,6 +813,12 @@ filter while it closes a send.
    from flat, the macro sweeps that band down to a kill.
 3. Turn the macro's encoder (A-D).
 
+**Or learn it from EDIT:** in PERFORM, **push** the macro's knob (A-D). EDIT opens with
+`LEARN B 0/4` on the second line. Now **push** any knob on any EDIT page, on any track (the screen
+keys turn pages, UP/DOWN or a lower pad the track): that knob's parameter goes on the macro
+(`B T3 CUT 1/4`); pushed again, it comes off. **CLR** ends it (`LEARN DONE`), as does going to a
+screen without the EDIT knobs. FUNC + LFO, kill EQ and the STEP keys above work as before.
+
 The target is whichever end of 0-127 is further from the parameter's value when you assign it,
 so the knob always has somewhere to go: a filter already open gets a macro that closes it. If the
 macro is already turned up when you assign, the parameter moves straight to where the macro puts

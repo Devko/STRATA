@@ -548,6 +548,40 @@ public:
             return;
         }
 
+        // MACRO LEARN (Roland, 2026-11-23): in PERFORM, push a macro's knob to learn it, which
+        // opens EDIT; there, pushing a knob puts that knob's parameter on the macro (again takes
+        // it off), on any page and any track. CLR, or leaving EDIT, GRID and KEYS, ends it.
+        // Before SLC AUTO and the note view, which also take a plain push.
+        {
+            const int encoder = key == ENAGA_KEY_PUSH_A   ? 0
+                                : key == ENAGA_KEY_PUSH_B ? 1
+                                : key == ENAGA_KEY_PUSH_C ? 2
+                                : key == ENAGA_KEY_PUSH_D ? 3
+                                                          : -1;
+            if (encoder >= 0 && !shift_ && mode_ == Mode::perform) {
+                if (!down) return;
+                macro_selected_ = encoder;
+                mode_ = Mode::edit;
+                leave_mode();
+                macro_learn_ = encoder;
+                learn_notice();
+                return;
+            }
+            if (encoder >= 0 && !shift_ && macro_learn_ >= 0 && !step_page_ &&
+                (mode_ == Mode::edit || mode_ == Mode::grid || mode_ == Mode::keys)) {
+                if (!down) return;
+                macro_selected_ = macro_learn_;
+                assign_macro(page_first(Page(param_page_)) + encoder);
+                return;
+            }
+            if (key == ENAGA_KEY_CLR && down && !shift_ && macro_learn_ >= 0 &&
+                range_first_ < 0 && held_step_ < 0) {
+                macro_learn_ = -1;
+                notice("LEARN DONE");
+                return;
+            }
+        }
+
         // SLC AUTO: on EDIT, a SAMPLE track, push the knob that turns SLC. Cuts at the hits found
         // in the sample (core/onsets.hpp) rather than evenly; push again for even. Before the
         // kill switches so FUNC + push stays theirs: this one is without FUNC.
@@ -1179,6 +1213,7 @@ public:
 
     void leave_mode() {
         step_page_ = false;
+        if (mode_ != Mode::edit && mode_ != Mode::grid && mode_ != Mode::keys) macro_learn_ = -1;
         mutation_pending_ = false;
         // A KEYS key held across a mode change: its release goes to the next mode, so the note
         // is let go here or it would hang on a sustaining machine.
@@ -2604,6 +2639,10 @@ public:
             append_shown(out, notice_, kLineChars);
             *out = 0;
             canvas.text(0, 9, line, 15);
+        } else if ((step_page_ || mode_ != Mode::grid) && macro_learn_ >= 0) {
+            // MACRO LEARN says so for as long as it is on: the knobs' pushes are not theirs.
+            learn_line(line);
+            canvas.text(0, 9, line, 15);
         } else if ((step_page_ || mode_ != Mode::grid) && verdict_keys_free()) {
             // A MUTATE waiting for its verdict says so for as long as it waits: the notice
             // fades after a second and a half, and the keys it is waiting on do not.
@@ -2760,6 +2799,11 @@ public:
             out = line;
             append_shown(out, notice_, kLineChars);
             *out = 0;
+            canvas.text(0, y, line, 15);
+            return;
+        }
+        if (macro_learn_ >= 0) {                         // see draw(): the same hint, in GRID
+            learn_line(line);
             canvas.text(0, y, line, 15);
             return;
         }
@@ -4791,6 +4835,30 @@ public:
         return macro_count(macro) >= kMacroTargets ? MacroEdit::full : MacroEdit::add;
     }
 
+    // "LEARN A 2/4 CLR: DONE", the line LEARN keeps on screen while it is on.
+    void learn_line(char *line) const {
+        char *out = line;
+        append(out, "LEARN ");
+        *out++ = char('A' + macro_learn_);
+        *out++ = ' ';
+        append_number(out, uint32_t(macro_count(engine_.macros().macros[macro_learn_])));
+        append(out, "/4 CLR: DONE");
+        *out = 0;
+    }
+
+    // What MACRO LEARN shows while it waits: the macro, its count, and what to do.
+    void learn_notice() {
+        if (macro_learn_ < 0) return;
+        char *out = notice_buffer_;
+        append(out, "LEARN ");
+        *out++ = char('A' + macro_learn_);
+        *out++ = ' ';
+        append_number(out, uint32_t(macro_count(engine_.macros().macros[macro_learn_])));
+        append(out, "/4 PUSH KNOB");
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
     // "A T6 CUT 2/4", "A T6 CUT OFF 1/4" or "D FULL: CLR CLEARS". `name` is what was pressed.
     void macro_notice(MacroEdit edit, const char *name) {
         const int count = macro_count(engine_.macros().macros[macro_selected_]);
@@ -5693,6 +5761,7 @@ private:
     int16_t pad_held_note_[kPianoPads] = {-1, -1, -1, -1, -1, -1, -1, -1,
                                           -1, -1, -1, -1, -1, -1, -1};   // KEYS: piano pads
     uint8_t pad_held_track_[kPianoPads] = {};
+    int macro_learn_ = -1;                      // MACRO LEARN: the macro EDIT's pushes assign to
     int scene_holding_ = -1;                    // a scene pad held: -1, 0 for A, 1 for B
     int macro_selected_ = 0;
 
