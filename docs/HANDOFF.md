@@ -1,14 +1,14 @@
-# Handoff — 2026-11-22, evening
+# Handoff — 2026-11-23
 
 **Read this first, then `CLAUDE.md`, then `docs/SPEC.md`, `docs/REVIEW.md` and `docs/PLAN.md`.**
 This file holds what exists nowhere else in the repo: the state in one table, the next steps in
 order, and the knowledge that lives in no code comment, commit message or other document. When a
 fact here becomes stale, fix it here or delete it; do not append a history.
 
-**STRATA has booted on the unit.** On 2026-11-22 Roland ran it on his SmplTrek with Enaga 0.2.0
-firmware: it starts and plays the default beat, the on-screen LOAD reading about 0–26% by eye.
-Everything else, every feature added today included, has been heard by nobody. Tonight's walkthrough
-at the top of `docs/UNIT_CHECKLIST.md` is the first pass over it.
+**STRATA runs on the unit and has two releases.** v0.1.0 (2026-11-22) and v0.2.0 (2026-11-23,
+an early beta) are on GitHub. On the unit the default beat loads under 30%, and a long, heavy
+session peaked at 84.3% MAX with no dropouts. Almost everything added since the first evening has
+been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
 ---
 
@@ -16,64 +16,45 @@ at the top of `docs/UNIT_CHECKLIST.md` is the first pass over it.
 
 | | |
 | --- | --- |
-| `make -C host test` | **1,125 tests, 594,524 checks, 0 failures** on `main` at `95c6eb1` (PR #33): `core/`, `dsp/` and all of `app/` |
-| CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
-| `tools/build.sh` | links. Last measured image: `APP.ENA` 484,160 bytes GCC-only (476,008 cl6x), bss 1,334,848; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here |
-| `tools/scenarios.sh` | **11 scenarios**: m0, m1, m3–m7, `factory`, `kits`, `killeq` (the master kill EQ running; never run yet), `lfo` (the LFO and track swing pages draw; never run yet). Worst measured: **23.49% with cl6x, 39.60% GCC-only** (`docs/BUDGET.md`), before today's afternoon PRs. `factory` and `kits` have not been run with cl6x yet |
-| unit | boots, plays, LOAD about 0–26%. **No MAX reading yet**: the readout is PR #17, still open |
-| memory | init takes **111.8 MiB of a 120 MiB heap** since the WAVE tables (2.5 MiB, `tests/test_memory.cpp`), 8.2 MiB spare against an 8 MiB headroom rule: only 0.2 MiB left for anything else that allocates in init. Never checked on the unit |
-| milestones | M0–M6 feature-complete, M7's app side done; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
-| VA POLY | 2.16 points per voice with cl6x, 3.82 GCC-only (emulator). **A shared budget of 12 voices across all tracks** (`Engine::kPolyVoiceBudget`, PR #30), provisional until the unit's MAX |
+| `make -C host test` | **1,741 tests, 3,482,744 checks, 0 failures** on `main` after PR #124: `core/`, `dsp/` and all of `app/` |
+| CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
+| `tools/build.sh` | links. Last measured image: `APP.ENA` 484,160 bytes GCC-only (476,008 cl6x), bss 1,334,848; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
+| `tools/scenarios.sh` | **25 scenarios**, run on Roland's PC only. The 24 that existed on `1914af7` (#118) passed there with cl6x, `scenario_freeze` once #119 fixed its keys. `scenario_wave` (#122) has not run yet |
+| unit | v0.2.0 on Enaga 0.2.0: boots, plays, under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been on the unit |
+| memory | init takes **97.05 MiB of a 120 MiB heap** since #124 (2 MiB loader buffer, wavetables built in the idle capture buffer): 22.95 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
+| milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
+| VA POLY | 2.16 points per voice with cl6x, 3.82 GCC-only (emulator). **A shared budget of 12 voices across all tracks** (`Engine::kPolyVoiceBudget`), WAVE POLY included, provisional until the unit's readings |
 | Enaga | pinned at release **v0.2.0 (`3da7f89`)**, the unit's firmware. `tools/enaga_check.sh` passes |
-| branches | work lands on `main` through PRs. Roland's standing rule: a thread may review and merge any PR that is ready (tests pass, review done) without asking |
+| branches | work lands on `main` through PRs; merges need Roland's go-ahead in the thread |
 
 ## What to do next, in order
 
-1. **Tonight, on Roland's PC, before building the card: land PR #17** (the held CPU MAX readout on
-   the bottom line). It was tested against `main` only up to PR #9. Merge `main` into it, run
-   `make -C host test` (the layout test must pass with the MAX text), then `tools/scenarios.sh`
-   with cl6x and with `ENAGA_TI_CGT=none`, and merge if green. Without it the unit gives no
-   number anyone can write down.
-2. **Tonight, on the PC: the emulator runs E1–E5** (`docs/BUDGET.md`, "Optimization review"),
-   plus `scenario_factory.sh` both ways. Record them in `docs/BUDGET.md`. The walkthrough's
-   "On the PC" section lists them in order.
-3. **Tonight, on the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`
-   (copy in the project files, `unit-test/tonight-walkthrough.md`). Build both STRATA and STRATA6
-   onto the card first, as its first section says. It ends with a table of readings.
-4. **Write the readings down where they belong**: U1–U5 as the first unit rows in
-   `docs/BUDGET.md`, the ticks into the reference half of `docs/UNIT_CHECKLIST.md`, and anything
+1. **On Roland's PC: the load runs still owed.** `tools/scenarios.sh` once on `main` (it has
+   `scenario_wave.sh`, never run), then E13 (the VA rework) and E14 (WAVE's cost per voice and
+   its boot time) from `docs/BUDGET.md`, with cl6x and with `ENAGA_TI_CGT=none`. BUDGET has only
+   host estimates for both so far.
+2. **On the unit: today's walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, items 1-19, on a
+   build from `main` at PR #124 or later with cl6x. It covers everything since v0.1.0, including
+   the performance mixer and looper (16), the stock sample folders (17), the VA OSC page (18) and
+   WAVE (19).
+3. **Write the readings down where they belong**: unit rows in `docs/BUDGET.md`, ticks in the
+   reference half of `docs/UNIT_CHECKLIST.md`, the Unit column of `docs/FEATURES.md`, and anything
    odd as an issue or a thread.
-5. **Set the final VA POLY voice budget** from U1 and U2. `kPolyVoiceBudget = 12` assumed the
-   emulator's 2.16 points a voice. If MAX shows the unit about 1.35x slower than the emulator
-   (finding 2 in "Optimization review"), twelve voices are ~35 points, not ~26, and the cap or the
-   six-voice chord may have to come down. Change the constant, its test, `docs/BUDGET.md` and the
-   UNIT_CHECKLIST section "The shared VA POLY voice budget" together.
-6. **Release v0.1.** The thread "Prepare the v0.1 release" is writing the CHANGELOG, release
-   notes and the packaging script, and drafting the GitHub release. It should not be published
-   before steps 1–5: a release whose load has never been read on the unit is a guess.
-7. **Then, from the reference half of `docs/UNIT_CHECKLIST.md`**, the checks that decide whether a
-   milestone stands and that tonight does not reach: a start with no card, pulling the card
-   during a save and during sample loading, swapping a sample on a sounding track, the M5
-   30-minute jam, and M7's hour locked to external MIDI clock.
+4. **Settle the provisional numbers** from those readings: `kPolyVoiceBudget = 12`, the CPU
+   guard's thresholds (`core/cpuguard.hpp`: rise at a 70% average or one 90% block, fall after a
+   second under 55%), and the performance mixer's worst case (host estimate: about +2 points).
+5. **The FM machine**, being built in its own thread. When it merges it needs its rows in
+   `docs/FEATURES.md`, `docs/MANUAL.md` (section 3), `docs/CHEATSHEET.md` (machine table and
+   abbreviations), `CHANGELOG.md` and the README's machine list. STRING is postponed.
+6. **Then, from the reference half of `docs/UNIT_CHECKLIST.md`**, the checks that decide whether a
+   milestone stands: a start with no card, pulling the card during a save and during sample
+   loading, swapping a sample on a sounding track, the M5 30-minute jam, and M7's hour locked to
+   external MIDI clock.
 
-Work running in other threads, not to be duplicated here: **the release** ("Prepare the v0.1
-release"), **a user manual** ("Write the STRATA user manual") and **engine test gaps** ("Close
-the engine test gaps"). Factory macros (PR #34) and CI (PR #33) have merged. When another
-merges, update the table and the steps above.
-
-**Controls (2026-11-22 evening).** After the first evening on the unit, the controls were rebuilt
-from the SmplTrek's panel: docs/CONTROLS.md is the reference the key handlers follow. FUNC + a
-function key is its printed second label, the setup actions are in the FUNC menu (FUNC + HOME;
-FUNC + HOME, OK saves), the screen keys turn pages and the pad-row keys pick the bank or step page.
-Its unit check is the first section of docs/UNIT_CHECKLIST.md; `tests/scenario_controls.sh` has not
-run yet (the cloud cannot build the toolchain).
+**Controls.** docs/CONTROLS.md is the reference the key handlers follow; change a gesture there
+first, then in the code, `core/help.cpp`, the cheatsheet, the manual and the unit checklist.
 
 Smaller open items, none urgent:
-
-- **The CPU guard's thresholds** (`core/cpuguard.hpp`, 2026-11-23) are provisional: rise at a
-  70% average or one 90% block, fall after a second under 55%. Set them from the unit
-  (UNIT_CHECKLIST, "The CPU guard"): A01 must never show `GUARD`, and the 84% session must stay
-  clear of an overrun with it.
 
 - **KICK's click path** runs for the whole note after its transient has decayed: about a quarter
   of the host profile. Skipping it is not bit-exact (the shared noise advances differently), so it
@@ -82,15 +63,15 @@ Smaller open items, none urgent:
   the standard below as thoroughly as `core/` and `dsp/`.
 - **Two Enaga reports to file upstream**, each with a failing case: GCC 13.3.0's internal compiler
   error on `core/project.cpp` (below), and the recurrence-bound `enaga_envelope_render` with the
-  profile from `docs/BUDGET.md` (finding 5).
+  profile from `docs/BUDGET.md` (finding 5). Roland parked upstream work on 2026-11-23 ("focus on
+  STRATA first").
 - **Try Enaga v0.2.0's prebuilt GCC toolchain** (in its SDK zip). It is the same compiler
   `tools/build_toolchain.sh` spends 30 minutes building in a cloud session.
 - `delay_ping_pong`, `delay_to_reverb` and the LONG delay's low cut share the ROUTE page with one
   empty slot, because nineteen send fields do not divide into four. Fine, but Roland may want
   them placed differently.
 - **The sends' ambient modes** (LONG delay, HALL reverb with shimmer; `dsp/ambient.hpp`) are
-  host-tested only: E11 (`tests/scenario_ambient.sh`, both compilers) and U9 (UNIT_CHECKLIST 13j)
-  are owed, and their load figures in `docs/BUDGET.md` are host estimates.
+  owed U9 on the unit (UNIT_CHECKLIST 13j).
 
 ---
 
