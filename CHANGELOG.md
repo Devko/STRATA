@@ -11,6 +11,10 @@ the project file format or the controls.
 - **CPU guard.** When the audio load stays high, STRATA sheds VA POLY voices (two a level, the
   quietest fading out first) and thins GRAIN clouds instead of risking an overrun. The bottom
   line shows `GUARD1` to `GUARD4` while it is up; it steps back down once the load falls.
+- **Editable sidechain duck.** Three new MIXER pages after the faders: DCK 1-4 and DCK 5-8 set
+  how far each track ducks (OFF to 100%), DUCK sets the source track, attack, hold and release.
+  Saved in the kit; kits and projects from before open with the old fixed duck (track 1, 35%,
+  3/40/120 ms). The delay, reverb, master and EQ pages are now three screen-key presses further on.
 
 ## [0.1.0] - {{RELEASE_DATE}}
 
