@@ -2927,18 +2927,20 @@ TEST(ui_the_held_cpu_max_keeps_the_highest_block_and_restarts_on_play) {
     pump();
 }
 
-// The `ld <avg> <max>` log lines: half a second of polls, averaged and maxed, in bursts of eight
-// after PLAY, a pattern change or a freeze, because Enaga's log ring keeps only sixteen lines.
-// tests/scenario_freeze.sh compares these windows; the emulator's own report has only the peak.
-TEST(ui_the_load_log_gives_windowed_figures_in_bursts_while_running) {
-    fresh();
+// The `ld <avg> <max>` log lines: half a second of polls, averaged and maxed, in ONE burst of
+// eight after a track freezes or comes back, while the transport runs. Not after PLAY or a
+// pattern change: Enaga's log ring keeps sixteen lines, and most scenarios check lines from early
+// in the run (a burst after PLAY broke six of them). tests/scenario_freeze.sh reads these.
+TEST(ui_the_load_log_gives_windowed_figures_after_a_freeze_or_unfreeze) {
+    Strata &app = fresh();
     FakeHost &host = FakeHost::the();
-    host.set_running(false);
+    Status &status = const_cast<Status &>(UiProbe::engine(app).status());
+    host.set_running(true);
     host.set_audio_load(300);
-    pump(400);
-    CHECK(!host.logged("ld 30.0 30.0"));            // stopped: no windows
+    pump(375 * 3);
+    CHECK(!host.logged("ld 30.0 30.0"));            // PLAY alone logs nothing
 
-    host.set_running(true);                         // PLAY starts a burst
+    status.frozen.store(64u, std::memory_order_relaxed);   // track 7 freezes
     host.set_audio_load(200);
     pump(374);
     host.set_audio_load(500);
@@ -2952,13 +2954,15 @@ TEST(ui_the_load_log_gives_windowed_figures_in_bursts_while_running) {
     pump(375 * 2);
     CHECK_EQ(host.log_lines(), lines);              // eight windows, then quiet
 
-    host.set_running(false);                        // a stop throws the part window away
-    pump(100);
-    host.set_running(true);
+    status.frozen.store(0u, std::memory_order_relaxed);    // and back: a new burst
     host.set_audio_load(150);
     pump(375);
-    CHECK(host.logged("ld 15.0 15.0"));             // and the next PLAY starts a new burst
-    host.set_running(false);
+    CHECK(host.logged("ld 15.0 15.0"));
+
+    host.set_running(false);                        // a stop ends the burst
+    host.set_audio_load(70);
+    pump(375 * 2);
+    CHECK(!host.logged("ld 7.0 7.0"));
     host.set_audio_load(0);
     pump(2);
 }

@@ -1477,8 +1477,11 @@ frame mono: 8 bars at 120 BPM is 16 s, 1.5 MiB a track.
 
 `tests/scenario_freeze.sh` freezes track 7 of the default beat (`--pad`: of A05 PAD, the held
 chord) and prints the app's `ld <avg> <max>` windows (half a second each, app/app.hpp) after the
-freeze; `--baseline` runs the same keys without the freeze. The first version printed a
-"last block" figure that the emulator's report does not have, so it always read 0.00%.
+freeze; `--baseline` freezes and then unfreezes, and prints the windows with track 7 live again.
+The app logs those eight windows only after a freeze or unfreeze: #110 also logged them after
+PLAY and pattern changes, which pushed early lines out of Enaga's 16-line log ring and broke six
+other scenarios' log checks. The first version printed a "last block" figure that the emulator's
+report does not have, so it always read 0.00%.
 
 Measured on Roland's PC at f5d66dd, cl6x, A01 (factory beat), track 7 frozen, with a temporary
 windowed log of the same kind (375 polls a window):
@@ -1504,7 +1507,8 @@ points, close to the estimate of 12 above. Eight half-second windows a run, avg/
 | A01 live (`--baseline`) | 14.16% | 26.2% | 14.4/26.2 15.2/25.3 12.7/18.8 13.5/24.7 15.5/25.6 15.0/23.7 12.8/24.4 |
 | A01, track 7 frozen | 13.44% | 19.1% | 13.6/19.0 14.2/18.4 13.3/17.2 12.8/19.1 13.3/17.1 14.2/18.4 13.3/16.6 12.8/17.2 |
 
-The A01 baseline has seven windows: the script drops the first after PLAY (start-up). The peak
+These were taken with #110's baseline (no freeze, the burst after PLAY or the pattern switch); the
+A01 baseline has seven windows because the script dropped the first after PLAY. The peak
 since boot is 26-27% in every run, because it includes the bars before the freeze. GCC-only
 figures were not taken (cl6x ships).
 
