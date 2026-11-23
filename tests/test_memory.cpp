@@ -67,8 +67,9 @@ void *counted(std::size_t bytes) {
 
 void *operator new(std::size_t bytes) { return counted(bytes); }
 void *operator new[](std::size_t bytes) { return counted(bytes); }
-// The nothrow forms too: STRATA's init() uses them (dsp/wavetable.cpp), and under ASan they are
-// intercepted directly instead of reaching the plain forms above, so they would go uncounted.
+// The nothrow forms too, which dsp/wavetable.cpp (and the STRING voice) use. Without these,
+// libstdc++'s own nothrow new calls the counted one above -- but under ASan the sanitizer
+// intercepts the nothrow forms directly, and the tables went uncounted (CI, PR #122).
 void *operator new(std::size_t bytes, const std::nothrow_t &) noexcept { return counted(bytes); }
 void *operator new[](std::size_t bytes, const std::nothrow_t &) noexcept { return counted(bytes); }
 void operator delete(void *pointer, const std::nothrow_t &) noexcept { std::free(pointer); }
