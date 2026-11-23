@@ -1622,6 +1622,53 @@ TEST(ui_a_held_key_on_a_drum_track_keeps_the_one_step_length) {
     host.set_running(false);
 }
 
+TEST(ui_with_sus_up_a_track_pad_holds_its_note_until_it_comes_up) {
+    // EDIT, ASR, SUS turned up, then the track's own pad: the note holds for as long as the
+    // finger stays, as a KEYS pad does, and is let go with it. At SUS 0 the same pad is a hit
+    // whose DEC runs on after the finger lifts, as it always was.
+    Strata &app = fresh();
+    strata::test::post(Cmd::scene_erase, 0, 0, uint8_t(app_engine().scene_slot(0)));
+    strata::test::post(Cmd::scene_erase, 0, 0, uint8_t(app_engine().scene_slot(1)));
+    pump();
+    key(ENAGA_KEY_F8);
+    while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);    // track 7, VA POLY
+    CHECK_EQ(UiProbe::selected(app), 6);
+    const int pad = 12;                                 // track 7's pad
+    const int second = 48000 / strata::test::kRigBlock;
+
+    // SUS 0: a hit. Lifting the pad straight away does not end it -- DEC does.
+    post_cmd_track_param(6, 8, 100);                    // DEC long
+    pump();
+    app.on_pad_press(pad, 100);
+    pump(2);
+    app.on_pad_release(pad);
+    pump(second / 10);
+    CHECK(pump(1) > 0.01f);                             // still ringing 0.1 s after the lift
+
+    pump(second * 4);
+    app.on_encoder(1, +127);                            // B: SUS up
+    pump();
+    CHECK(app_engine().sounding(6).v[kAsrFirst + 1] > 100);
+    app.on_pad_press(pad, 100);
+    pump(second);
+    CHECK_EQ(static_cast<const VaPoly *>(app_engine().machine(6))->sounding_voices(), 1);
+    const float early = pump(second / 4);
+    pump(second * 2);
+    const float late = pump(second / 4);                // three seconds held
+    CHECK(late > 0.1f);
+    CHECK(late > early * 0.8f);
+    app.on_pad_release(pad);
+    pump(second / 2);
+    // Let go with the finger. The voice, not the output: the sends' tails ring on.
+    CHECK_EQ(static_cast<const VaPoly *>(app_engine().machine(6))->sounding_voices(), 0);
+
+    // Back to the old envelope for the tests after this one.
+    post_cmd_track_param(6, uint8_t(kAsrFirst + 1), 0);
+    post_cmd_track_param(6, 8, 64);
+    pump();
+}
+
 // --- PLAY while the card is busy ------------------------------------------------------------
 
 TEST(ui_play_is_refused_while_a_project_is_loading) {

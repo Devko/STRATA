@@ -163,8 +163,8 @@ held. With it, POLY plays pads and long chords, and MONO plays long bass notes a
   filter envelope swells with it.
 - **B, SUS**: the sustain level, `0%` to `100%` of the note's peak. **At 0% a note is a one-shot**:
   it falls over DEC and ends, as the VAs always did. **Above 0%** it falls over DEC to SUS and
-  **holds there**: for as long as you hold the pad or key in KEYS (or the MIDI note), or for the
-  step's **LEN** on the sequencer.
+  **holds there**: for as long as you hold the pad or key in KEYS (or the MIDI note), or the
+  track's own pad in any other mode, or for the step's **LEN** on the sequencer.
 - **C, REL**: the release, the tail after the key comes up or LEN ends, `60MS` to `8.0S`.
 - **D, FSU**: filter sustain. At 0% the filter envelope sweeps up and closes again over DEC, the
   acid shape; turned up, the filter stays open while the note holds, so a long pad does not go
@@ -172,6 +172,10 @@ held. With it, POLY plays pads and long chords, and MONO plays long bass notes a
 
 The line under the knobs says `SUS 0: ONE-SHOT` or `HOLDS: PAD OR LEN`. On any other machine the
 page shows `VA MONO/POLY ONLY`.
+
+A scene captured with SCENE stores the ASR page too, like every other knob. So if a note still
+fades with SUS up, look at the morph: a scene stored at SUS 0 pulls SUS down as VALUE moves
+towards it. Capture the scene again, or clear its ASR knobs.
 
 **A pad in three moves:** on the PLY track, ASR page: SUS to about 70%, ATK to about `400MS`, REL
 to about `2.0S`. Then on the step page give a chord step a LEN of `16 STP`: it holds for the whole

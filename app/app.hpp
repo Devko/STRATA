@@ -1814,6 +1814,17 @@ public:
             return;
         }
 
+        // A VA whose ASR page holds notes (SUS up): the pad is a key, held until it comes up,
+        // exactly as a piano pad in KEYS -- so a pad sound plays as long as the finger stays.
+        // At SUS 0 it stays a hit, so a long DEC is not cut short by lifting the finger.
+        if (holds_notes(track)) {
+            release_pad(pad);
+            pad_held_note_[pad] = int16_t(note);
+            pad_held_track_[pad] = uint8_t(track);
+            post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity), 1);
+            record_note(track, note, uint8_t(velocity));
+            return;
+        }
         post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity));
         record_note(track, note, uint8_t(velocity), false);   // a hit: nothing to let go of
     }
@@ -3616,6 +3627,10 @@ public:
     bool has_asr(int track) const {
         const uint8_t id = engine_.machine_id(track);
         return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly);
+    }
+    // And is its SUS up as it sounds now (kit, scene, macro and LFO in), so a note on it holds?
+    bool holds_notes(int track) const {
+        return has_asr(track) && engine_.sounding(track).v[kAsrFirst + 1] > 0;
     }
 
     void open_samples() {

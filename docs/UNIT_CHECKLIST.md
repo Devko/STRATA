@@ -648,6 +648,9 @@ so this is the first time it is heard. Play A01 GROOVE.
 - [ ] **KEYS on the pads** (HOME twice) on track 7: hold a chord on the pads for five seconds: it
       holds at the SUS level the whole time and fades over REL when let go. Let go of one note of
       three: only that one fades.
+- [ ] **The track pad.** Still on the ASR page (EDIT, not KEYS), hold track 7's own pad for five
+      seconds: it holds, and fades over REL when let go. SUS back to 0: a quick tap rings on over
+      DEC after the finger lifts, as before.
 - [ ] **Twelve voices.** Hold six pads with the pattern's chords playing: the oldest/quietest notes
       fade out to make room, nothing clicks or hangs, no `GUARD` unless the load is genuinely high.
       MAX meanwhile: `________ %` (**U10**)
