@@ -120,10 +120,10 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PERFORM.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kPerformSections = 5;
-// The last three, the scenes' LFO bytes, their master EQ and their arp bytes, may each be absent
-// (an older file).
-constexpr uint32_t kPerformOptionalSections = 3;
+constexpr uint32_t kPerformSections = 6;
+// The last four, the scenes' LFO bytes, their master EQ, their arp bytes and their ASR bytes, may
+// each be absent (an older file).
+constexpr uint32_t kPerformOptionalSections = 4;
 constexpr uint32_t kSceneTrackBytes = uint32_t(kKitSoundParams) + 2; // values, then the bitmask
 constexpr uint32_t kSceneBytes = kSceneTrackBytes * uint32_t(kTracks);
 constexpr uint32_t kScenesBytes = kSceneBytes * uint32_t(kScenes);
@@ -147,13 +147,22 @@ constexpr uint32_t kSceneArpTrackBytes = uint32_t(kKitArpParams) + 1;
 constexpr uint32_t kSceneArpBytes =
     kSceneArpTrackBytes * uint32_t(kTracks) * uint32_t(kScenes);
 constexpr uint32_t kSceneArpOffset = kScenesMasterOffset + kScenesMasterBytes;
-constexpr uint32_t kPerformTotalBytes = kHeaderBytes + kSceneArpOffset + kSceneArpBytes;
+// The ASR page's four values and its four stored bits (the low half of the fourth mask byte).
+constexpr uint32_t kSceneAsrTrackBytes = uint32_t(kKitAsrParams) + 1;
+constexpr uint32_t kSceneAsrBytes =
+    kSceneAsrTrackBytes * uint32_t(kTracks) * uint32_t(kScenes);
+constexpr uint32_t kSceneAsrOffset = kSceneArpOffset + kSceneArpBytes;
+constexpr uint32_t kPerformTotalBytes = kHeaderBytes + kSceneAsrOffset + kSceneAsrBytes;
 constexpr uint8_t kLfoStoredMask = uint8_t((1u << kKitLfoParams) - 1u);
+constexpr uint8_t kAsrStoredMask = uint8_t((1u << kKitAsrParams) - 1u);
 
 static_assert(kKitSoundParams == 16, "section 1's stored bitmask is two bytes on the strength of "
                                      "16 sound parameters per track");
-static_assert(kKitLfoParams + kKitArpParams == 8 && kSceneStoredBytes == 3,
+static_assert(kKitLfoParams + kKitArpParams == 8 && kSceneStoredBytes == 4,
               "the LFO's stored bits are the low half of the third mask byte, the arp's the high");
+static_assert(kKitParams <= 32, "scene_morph reads a track's stored bits as one 32-bit mask");
+static_assert(kKitArpEnd == 24 && kKitAsrParams <= 8,
+              "the ASR page's stored bits are the low bits of the fourth mask byte");
 
 }  // namespace
 
@@ -222,9 +231,9 @@ void scene_morph(const Scene &a, const Scene &b, uint16_t position,
         // case in a performance -- a scene for the bass line says nothing about the drums -- and
         // skipping it whole is what keeps this cheap enough for control rate.
         const uint32_t mask_a = uint32_t(a.stored[t][0]) | uint32_t(a.stored[t][1]) << 8 |
-                                uint32_t(a.stored[t][2]) << 16;
+                                uint32_t(a.stored[t][2]) << 16 | uint32_t(a.stored[t][3]) << 24;
         const uint32_t mask_b = uint32_t(b.stored[t][0]) | uint32_t(b.stored[t][1]) << 8 |
-                                uint32_t(b.stored[t][2]) << 16;
+                                uint32_t(b.stored[t][2]) << 16 | uint32_t(b.stored[t][3]) << 24;
         const uint32_t touched = mask_a | mask_b;
         if (touched == 0) continue;
 
@@ -448,6 +457,7 @@ SerializeResult perform_write(const SceneSet &scenes, const MacroSet &macros, ui
         {kSectionPerformSceneLfo, kSceneLfoOffset, kSceneLfoBytes},
         {kSectionPerformSceneMaster, kScenesMasterOffset, kScenesMasterBytes},
         {kSectionPerformSceneArp, kSceneArpOffset, kSceneArpBytes},
+        {kSectionPerformSceneAsr, kSceneAsrOffset, kSceneAsrBytes},
     };
 
     Writer w(buffer, capacity);
@@ -493,8 +503,16 @@ SerializeResult perform_write(const SceneSet &scenes, const MacroSet &macros, ui
     for (int s = 0; s < kScenes; s++) {
         const Scene &scene = scenes.scenes[s];
         for (int t = 0; t < kTracks; t++) {
-            for (int p = kKitLfoEnd; p < kKitParams; p++) w.u8(scene.values[t][p]);
+            for (int p = kKitLfoEnd; p < kKitArpEnd; p++) w.u8(scene.values[t][p]);
             w.u8(uint8_t(scene.stored[t][2] >> kKitLfoParams));
+        }
+    }
+
+    for (int s = 0; s < kScenes; s++) {
+        const Scene &scene = scenes.scenes[s];
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = kKitArpEnd; p < kKitParams; p++) w.u8(scene.values[t][p]);
+            w.u8(uint8_t(scene.stored[t][3] & kAsrStoredMask));
         }
     }
 
@@ -514,7 +532,7 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
 
     const uint16_t wanted[kPerformSections] = {kSectionPerformScenes, kSectionPerformMacros,
                                                kSectionPerformSceneLfo, kSectionPerformSceneMaster,
-                                               kSectionPerformSceneArp};
+                                               kSectionPerformSceneArp, kSectionPerformSceneAsr};
     uint32_t offset[kPerformSections] = {};
     uint32_t length[kPerformSections] = {};
     const SerializeResult found = find_sections(buffer, size, kPerformVersion, wanted,
@@ -527,6 +545,7 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
     if (offset[2] != 0 && length[2] < kSceneLfoBytes) return refuse(SerializeResult::malformed);
     if (offset[3] != 0 && length[3] < kScenesMasterBytes) return refuse(SerializeResult::malformed);
     if (offset[4] != 0 && length[4] < kSceneArpBytes) return refuse(SerializeResult::malformed);
+    if (offset[5] != 0 && length[5] < kSceneAsrBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -625,7 +644,7 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
         for (int s = 0; s < kScenes; s++) {
             Scene &scene = scenes.scenes[s];
             for (int t = 0; t < kTracks; t++) {
-                for (int p = kKitLfoEnd; p < kKitParams; p++) scene.values[t][p] = 0;
+                for (int p = kKitLfoEnd; p < kKitArpEnd; p++) scene.values[t][p] = 0;
                 scene.stored[t][2] = uint8_t(scene.stored[t][2] & kLfoStoredMask);
             }
         }
@@ -634,12 +653,36 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
         for (int s = 0; s < kScenes; s++) {
             Scene &scene = scenes.scenes[s];
             for (int t = 0; t < kTracks; t++) {
-                for (int p = kKitLfoEnd; p < kKitParams; p++) {
+                for (int p = kKitLfoEnd; p < kKitArpEnd; p++) {
                     scene.values[t][p] = clamp_u8(r.u8(), 0, kParamMax);
                 }
                 const uint8_t bits = uint8_t(r.u8() & ((1u << kKitArpParams) - 1u));
                 scene.stored[t][2] =
                     uint8_t((scene.stored[t][2] & kLfoStoredMask) | (bits << kKitLfoParams));
+            }
+        }
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // The scenes' ASR bytes, into the fourth mask byte. Absent: no scene stores one.
+    if (offset[5] == 0) {
+        for (int s = 0; s < kScenes; s++) {
+            Scene &scene = scenes.scenes[s];
+            for (int t = 0; t < kTracks; t++) {
+                for (int p = kKitArpEnd; p < kKitParams; p++) scene.values[t][p] = 0;
+                scene.stored[t][3] = 0;
+            }
+        }
+    } else {
+        if (!r.seek(kHeaderBytes + offset[5])) return refuse(SerializeResult::malformed);
+        for (int s = 0; s < kScenes; s++) {
+            Scene &scene = scenes.scenes[s];
+            for (int t = 0; t < kTracks; t++) {
+                for (int p = kKitArpEnd; p < kKitParams; p++) {
+                    scene.values[t][p] = clamp_u8(r.u8(), 0, kParamMax);
+                }
+                // Only the low four bits name an ASR parameter; the rest are dropped.
+                scene.stored[t][3] = uint8_t(r.u8() & kAsrStoredMask);
             }
         }
         if (!r.ok()) return refuse(SerializeResult::truncated);

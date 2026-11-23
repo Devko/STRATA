@@ -8,7 +8,7 @@ from, with the background for each check.
 
 **Time.** The whole pass is about three hours. If the evening runs short, do 0-3b, 13 and 16
 first (safety, the MAX readings, save and restore), then the sections for today's new features
-(8c, 8d, 13d-13k, 14b, 15b-15d), then the rest.
+(8c, 8d, 13d-13l, 14b, 15b-15d), then the rest.
 
 Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`), and so are
 the on-screen hints. `FUNC+X` = hold FUNC, press X.
@@ -115,6 +115,11 @@ needed for tonight's unit session; do them if the PC is free.
       compilers. Host estimate +1.9 points cl6x / +2.8 GCC-only once the classic tails have
       gone, +3.6 / +5.3 while they still ring (`docs/BUDGET.md`, "The sends' ambient modes").
       cl6x `________ %` vs `________ %`, GCC `________ %` vs `________ %`
+- [ ] **E12.** The ASR page: `tests/scenario_asr.sh` (walks EDIT to ASR on track 1 and track 7;
+      every ASR byte 0, so it should match `scenario_factory.sh` to within noise), both
+      compilers. Then the held-chord cost: the temporary `factory_kit` edit in `docs/BUDGET.md`
+      ("The ASR page", E12), `scenario_factory.sh` both compilers, and revert the edit.
+      Off: cl6x `________ %` GCC `________ %`. Held: cl6x `________ %` GCC `________ %`
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
@@ -616,7 +621,40 @@ clap already feed both sends.
 - [ ] **U9.** A01 GROOVE with LONG (`X4`, DIF and WOW up) and HALL (SHM up) for 60 s:
       **MAX `________ %`** against U1's `________ %`.
 
-## 13k. The sidechain duck, editable (5 min)
+## 13k. Held notes: the ASR page, LEN and recorded lengths (8 min)
+
+New: VA MONO and VA POLY have a seventh EDIT page, ASR (ATK SUS REL FSU). SUS 0 is the old
+one-shot; SUS up holds a note while a pad is held or for the step's LEN. REC records how long a
+note was held into its step's LEN. The emulator only walks to the page (`tests/scenario_asr.sh`),
+so this is the first time it is heard. Play A01 GROOVE.
+
+- [ ] Track 7 (PLY), EDIT, screen key RIGHT six times: a seventh page box, `ASR`, with ATK SUS REL
+      FSU on A-D reading `3MS 0% 60MS 0%`, and `SUS 0: ONE-SHOT` below. The seven boxes fit. On
+      track 1 the same page reads `---` and `VA MONO/POLY ONLY`.
+- [ ] **Old sound kept.** With all four at 0 the chord stab sounds exactly as before (compare with
+      A01 on the v0.1.0 card if in doubt).
+- [ ] **A pad.** SUS to about 70%, ATK to about `400MS`, REL to about `2.0S`, FSU up a little. Hold
+      a STEP (a chord step), step page, LEN to `16 STP`: the chord swells in, holds for the bar
+      and fades into the next. Line reads `HOLDS: PAD OR LEN`. No clicks at the start or the end.
+- [ ] **KEYS on the pads** (HOME twice) on track 7: hold a chord on the pads for five seconds: it
+      holds at the SUS level the whole time and fades over REL when let go. Let go of one note of
+      three: only that one fades.
+- [ ] **Twelve voices.** Hold six pads with the pattern's chords playing: the oldest/quietest notes
+      fade out to make room, nothing clicks or hangs, no `GUARD` unless the load is genuinely high.
+      MAX meanwhile: `________ %` (**U10**)
+- [ ] **MONO.** Track 6 (MNO) ASR page: SUS 0, the bass line is unchanged. SUS up: each bass note
+      now holds for its step's LEN (one step) and REL is its tail; a slid step bends the held note
+      into the next pitch without restarting it. Set a step's LEN to `8 STP`: a long drone note.
+      Back to SUS 0: the 303 bass is back exactly.
+- [ ] **Recorded length.** REC on, KEYS on track 7, hold a pad for about a bar, let go. REC off.
+      Open that step's step page: LEN is near `16 STP`. Tap a pad quickly on another step: its
+      LEN is short (`1/4 STP` or so). On track 1 (KICK), a held key leaves LEN at `1 STP`.
+- [ ] **MIDI in**, if a keyboard is at hand: a held key on channel 7 holds the pad the same way,
+      and is recorded with its length.
+- [ ] Save, power cycle: the ASR settings come back. Open a project saved before tonight: every
+      VA sounds as it did (ASR reads all 0).
+
+## 13l. The sidechain duck, editable (5 min)
 
 New: the duck is set from three MIXER pages after the faders: DCK 1-4 and DCK 5-8 (each track's
 depth), DUCK (source, attack, hold, release). It is saved in the kit. Play A01 GROOVE.
@@ -780,6 +818,8 @@ Enaga's menu and start STRATA6.
 | U8 A01 GROOVE MAX holding a tape stop, 10 s (13g) | |
 | E11 ambient modes, `scenario_ambient.sh` vs `scenario_m3.sh`, cl6x / GCC (PC) | |
 | U9 A01 GROOVE MAX with LONG and HALL, 60 s, and the difference to U1 (13j) | |
+| E12 ASR page, `scenario_asr.sh` vs `scenario_factory.sh`; held-chord edit, cl6x / GCC (PC) | |
+| U10 MAX with six pads held on VA POLY, SUS up, over A01 (13k) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
 | U2 STRATA6 + tracks 5 and 6 as MIN11 POLY, capped at 12 voices (16) | |
@@ -1405,7 +1445,7 @@ rather than the only check there will ever be.
       SPEC feature was dead while the curve was still being rendered on every kick. Now 0.35 —
       **a number to settle by ear**, since SPEC gives attack, hold and release and no depth.
 - [ ] ~~The duck depth is not reachable from the panel.~~ It is now, with the source and the
-      times: MIXER's DCK 1-4, DCK 5-8 and DUCK pages, saved in the kit (13k).
+      times: MIXER's DCK 1-4, DCK 5-8 and DUCK pages, saved in the kit (13l).
 - [ ] **Generate a Euclidean rhythm, save, reopen.** It should still be there. `Cmd::euclid` was
       missing from `mutates_pattern`, so the bank stayed clean and an explicit save skipped the
       bank file entirely.

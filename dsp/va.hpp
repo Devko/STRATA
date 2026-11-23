@@ -70,6 +70,11 @@ enum class VaMode : uint8_t { lp24 = 0, lp12, bp12, hp12 };
 // MOD's zones. Deliberately unequal: see va.cpp.
 VaMode va_mode_from(uint8_t value);
 
+// The ASR page's knob curves (va.cpp has the table), for the screen as well as for `make`.
+// 0 on every one of them is the envelope the VAs had before the page existed.
+float va_attack_seconds(uint8_t value);    // ATK: 2.5 ms at 0, 5 s at 127
+float va_release_seconds(uint8_t value);   // REL: 60 ms at 0, 8 s at 127
+
 // --- the control-rate block -----------------------------------------------
 
 // Everything the parameters decide, made once per block by `make` and read by every voice that
@@ -78,9 +83,9 @@ VaMode va_mode_from(uint8_t value);
 // EnvelopeShape::make calls (twelve exp() between them, since accent has shapes of its own) and
 // the knob curves cost the same at six voices as at one.
 struct VaSettings {
-    // Reads SRC 0-3 (TUN, MOD, CUT, RES) and AMP 8, 9 and 11 (DEC, ENV, LVL). Slot 10 is
-    // deliberately NOT read here -- it is GLD on VA MONO and DET on VA POLY -- so each machine
-    // maps that one itself. Control rate, once per block.
+    // Reads SRC 0-3 (TUN, MOD, CUT, RES), AMP 8, 9 and 11 (DEC, ENV, LVL) and the ASR page
+    // (ATK SUS REL FSU). Slot 10 is deliberately NOT read here -- it is GLD on VA MONO and DET
+    // on VA POLY -- so each machine maps that one itself. Control rate, once per block.
     static VaSettings make(const TrackParams &params, float rate, float inv_rate);
 
     enaga::dsp::EnvelopeShape amp_shape{}, amp_shape_accent{};
@@ -93,6 +98,10 @@ struct VaSettings {
     float k_res = 1.0f;                // RES as the SVF's k = 1 / Q
     float env_semis = 0.0f;            // ENV, semitones of cutoff at envelope 1
     float decay_s = 0.2f;              // DEC
+    float attack_s = 0.0025f;          // ATK
+    float release_s = 0.060f;          // REL
+    float sustain = 0.0f;              // SUS, 0-1 of the peak: 0 is a one-shot, DEC its length
+    float filter_sustain = 0.0f;       // FSU, 0-1 of the filter envelope's sweep
     float level_osc1 = 0.0f;           // the oscillator levels, resonance makeup included
     float level_osc2 = 0.0f;
     float level_sub = 0.0f;
@@ -212,6 +221,8 @@ public:
         amp_.gate_off();
         fenv_.gate_off();   // so the filter closes as the level falls: no bright ghost
     }
+    // Let go of already: the amplitude envelope is in its release tail.
+    bool released() const { return amp_.stage() == enaga::dsp::Envelope::release; }
 
     // Is this voice making sound? The LEVEL decides, not `Envelope::active()`, which stays true
     // forever on a sustain-0 decay path (kSilent above).
@@ -307,6 +318,8 @@ public:
     float amp_level() const { return voice_.amp_level(); }
     float decay_seconds() const { return settings_.decay_s; }
     float glide_seconds() const { return glide_s_; }
+    // SUS as the envelope holds it, 0-1: what the ASR page's prepare left.
+    float sustain_level() const { return settings_.sustain; }
 
 private:
     // A slide is always audible: below this it would be a jump, not a slide. The 303's own
@@ -330,6 +343,16 @@ private:
     int wait_ = 0;
     bool pending_ = false;
     bool release_on_start_ = false;     // released before its frame: let go as soon as it starts
+
+    // Frames of gate left before the sounding note is released: `Trig::gate_frames`, the
+    // step's LEN, as VA POLY's slots count it (vapoly.hpp). -1 is no gate. Counted only when SUS
+    // is up: at SUS 0 this machine is the one-shot bass it always was, DEC its note length, and
+    // a LEN of one step cutting a long decay short would change every existing bass line.
+    int gate_ = -1;
+    // The sounding note has no gate and no release coming (Trig::held): a one-shot. At SUS 0
+    // its envelope ends it; if SUS is raised while it sounds it would hold for ever, so the
+    // render loop lets it go the moment the settings sustain.
+    bool one_shot_ = false;
 
     float work_[VaVoice::kControl] = {};    // the slice being built
     float env_[VaVoice::kControl] = {};

@@ -48,13 +48,13 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ ("The new controls") | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
 | Arrow-key navigation model (UP/DOWN rows, LEFT/RIGHT sideways, OK picks, CLR back) | v0.1.0 | ○ (5, "Arrow keys") | |
-| Screens: GRID, step page, EDIT (6 pages), MACHINE, KIT, KEYS, MIXER (12 pages), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
+| Screens: GRID, step page, EDIT (7 pages), MACHINE, KIT, KEYS, MIXER (12 pages), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
 | Fixes: the FUNC menu never shows a MUTATE verdict OK would not give; OK in RESAMPLE no longer retargets a take being written | #84 | ○ | |
 
 ## Engines (machines)
 
 Eight tracks, any machine on any track (MACHINE, FUNC+EDIT). Each track: 16 parameters on four
-pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
+pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
@@ -65,9 +65,9 @@ pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
 | SAMPLE: one-shot or 1-16 equal slices by note, 4 voices, 4 play modes (fwd, loop, rev, rev loop) | v0.1.0 | ◐ default beat's loop track (placeholder sample) | Unit sample loads: 13b, 15b-15d |
 | SAMPLE **SLC AUTO**: slices at up to 15 detected hits | v0.1.0 | ○ (15c2) | Hit points are found at load, not editable |
 | GRAIN: up to 8 grains in one voice | v0.1.0 | ○ (8, 8b / U3) | Most expensive machine; outside the POLY budget (thinned by the CPU guard); no tempo sync of its own |
-| VA MONO: saw + sync pulse + sub + noise, own filter and envelope, accent, slide, glide | v0.1.0 | ✔ default beat bass | **No sustain:** sustain-0 envelope, DEC is the note's length; step LEN is not heard; a held key only cuts it short |
-| VA POLY: up to 6 notes, 13 chord types with inversions, DET | v0.1.0 | ✔ default beat chord | **No sustain** either; step LEN shortens a note but cannot lengthen it. No stereo spread or unison 2 (in SPEC) |
-| **ADSR / ASR and note length for POLY and MONO** (ATK/SUS/REL page, step LEN as a real gate, held key length recorded) | WIP | — | Thread "Make POLY and MONO hold long notes" |
+| VA MONO: saw + sync pulse + sub + noise, own filter and envelope, accent, slide, glide | v0.1.0 | ✔ default beat bass | At SUS 0 (default) DEC is the note's length and LEN is not heard; see the ASR row |
+| VA POLY: up to 6 notes, 13 chord types with inversions, DET | v0.1.0 | ✔ default beat chord | At SUS 0 LEN only shortens a note; see the ASR row. No stereo spread or unison 2 (in SPEC) |
+| **Held notes on the VAs: ASR page** (ATK SUS REL FSU, seventh EDIT page); with SUS up a note holds while the key is held or for its step's LEN (up to 64 steps) | #90 | ○ (13k) | Held voices count against the 12-voice POLY budget for as long as they hold; MONO counts LEN only once SUS is up |
 | MID: plays an outboard synth over MIDI; SRC/AMP knobs send CC 74/71/73/72, 70/75/76/77 | v0.1.0 | ○ (8d) | No sound or CPU of its own; no scale fold |
 | Key and scale per pattern (15 scales), fold for VAs, GRAIN and unsliced SAMPLE; sharps everywhere | v0.1.0 | ○ (7) | |
 | Golden renders pin every machine's sound | v0.1.0 | — | Host only |
@@ -78,14 +78,14 @@ pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
 | --- | --- | --- | --- |
 | Up to 64 steps a track, per-track length and speed (2x ... 1/8): polymeter | v0.1.0 | ○ (M3) | |
 | Steps, trigless steps (FUNC + tap), STEP LED colours | v0.1.0 | ◐ | |
-| Step page: NOTE, VEL, LEN, MICR (±11 ticks), PROB, COND, RTCH 1-8, RAMP, ACNT, SLID, CHRD | v0.1.0 | ○ (6) | LEN only audible on VA POLY (shortening) until the WIP above |
+| Step page: NOTE, VEL, LEN, MICR (±11 ticks), PROB, COND, RTCH 1-8, RAMP, ACNT, SLID, CHRD | v0.1.0 | ○ (6) | LEN is the note length on VA POLY, on VA MONO once SUS is up, and for MIDI out; ignored by drums, SAMPLE and GRAIN |
 | Trig conditions: a:b, FILL, PRE, NEI, 1ST and their NOTs; seeded | v0.1.0 | ○ (M3) | |
 | Parameter locks: 8 a step, 1,024 a pattern; push the knob to remove one | v0.1.0 | ○ (6) | `FULL n` when the pool is full (never reached on the unit) |
 | Pattern swing and **per-track swing** (PATTERN page) | v0.1.0 | ○ (13e) | |
 | Euclidean fill (FUNC + A/B/C in GRID) | v0.1.0 | ○ (M3) | |
 | Copy/paste a step, a range or a track; range transpose and nudge | v0.1.0 | ○ (M3) | No one-press copy of a whole pattern to another slot |
 | 16 levels of undo and redo | v0.1.0 | ○ (6) | Chain edits and kit recalls are not undoable |
-| Live recording (pads, KEYS, MIDI) with latency correction and QUANTIZE 0-100% | v0.1.0 | ○ (M3) | Note-repeat rolls are not recorded |
+| Live recording (pads, KEYS, MIDI) with latency correction and QUANTIZE 0-100%; **held length recorded as LEN** (#90) | v0.1.0 | ○ (M3, 13k) | Note-repeat rolls are not recorded; a held chord on one step keeps only its last note (as before) |
 | Motion recording of knob moves as locks | v0.1.0 | ○ (M3) | MIDI CCs are not motion-recorded |
 | KEYS mode: STEP keys play the scale | v0.1.0 | ○ (9) | |
 | **KEYS on the pads: two rows as a piano**, velocity, held, octave pads | #85 | ○ ("The new controls") | |
@@ -117,7 +117,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Insert chain per track: drive, filter (LP/BP/HP 12/24), lo-fi, amp, duck, pan, level | v0.1.0 | ◐ | Off stages cost nothing |
-| **Sidechain duck**, editable: depth per track, source track, attack/hold/release | v0.1.0, editable since Unreleased | ○ (13k) | MIXER pages DCK 1-4, DCK 5-8, DUCK. Saved in the kit (KIT.BIN section 5; older kits open with the v0.1.0 duck: track 1, 35%, 3/40/120 ms). Not p-lockable, not in scenes or macros: a lock slot would change the pattern and scene file layouts |
+| **Sidechain duck**, editable: depth per track, source track, attack/hold/release | v0.1.0, editable since Unreleased | ○ (13l) | MIXER pages DCK 1-4, DCK 5-8, DUCK. Saved in the kit (KIT.BIN section 6; older kits open with the v0.1.0 duck: track 1, 35%, 3/40/120 ms). Not p-lockable, not in scenes or macros: a lock slot would change the pattern and scene file layouts |
 | Send A: tempo-synced ping-pong delay | v0.1.0 | ◐ (13c / U4) | |
 | Send A **LONG** mode: up to 12 s, wow, diffusion, low cut, true freeze | v0.1.0 | ○ (13j) | ~2x the send's CPU while it rings; load host-estimated only (E11 owed) |
 | Send B: reverb | v0.1.0 | ◐ | |
@@ -182,7 +182,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
 
 **Known limits worth building next**
 
-1. **Sustain and note length on the VAs**, in progress (ADSR/ASR page, LEN as a gate).
+1. **Sustain and note length on the VAs**: built in #90; owed the unit check (13k) and E12 on the PC.
 2. ~~An editable sidechain duck~~: done (depth per track, source, attack/hold/release in the
    kit). Left: making the depth lockable or scene/macro-able.
 3. **MIDI:** pitch bend and aftertouch in, CC motion recording, slide as legato out; moving the
