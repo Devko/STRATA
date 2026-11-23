@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **today's walkthrough** (2026-11-23): about 20 minutes, numbered 1-15, over
+The first part is **today's walkthrough** (2026-11-23): about 25 minutes, numbered 1-16, over
 everything merged since v0.1.0. Report back by number, for example `3 fail: reads 055`. After it
 come the controls tour from 2026-11-22 (skip what the v0.1.0 card already showed), last night's
 long walkthrough, and "Reference", the full per-milestone list with the background for each check.
@@ -11,7 +11,7 @@ them); the upper pads are FILL REPEAT MUTE SCENE A SCENE B THROW MUTATE.
 
 ---
 
-# Today's walkthrough (2026-11-23, about 20 min)
+# Today's walkthrough (2026-11-23, about 25 min)
 
 Build from main at `33ae688` (PR #97) or later, with cl6x. Build: `________`
 
@@ -125,7 +125,7 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
 - GRID on the kick: `GRID SRC KCK`, then `A TUN TUNE` ... `D CLK CLICK`, `PUSH A     NOTE VIEW`.
 - Still holding FUNC, tap the screen key RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
   then `RANGE AND TRACK:`, `STEP LIGHTS:`, `FUNC + KEY:`, `FUNC + KNOB OR PAD:`, `UPPER PADS`,
-  and round to page 1. LEFT goes back. GRID's own knob page did **not** change.
+  `VALUE FX MIXER:`, `VALUE FX STEPS:`, and round to page 1. LEFT goes back. GRID's own knob page did **not** change.
 - Let go of FUNC: GRID is back. Hold again: page 1 again.
 - EDIT on track 2 (snare): `EDIT SRC SNR`, `B SNP SNAPPY`. Screen key RIGHT to ASR (without FUNC),
   hold FUNC: `ASR  ONLY ON MNO/PLY`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
@@ -135,7 +135,22 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
 - No emulator scenario covers this: `emulate.py` releases every key 20 M cycles (about 54 ms)
   after pressing it, so it cannot hold FUNC for 0.6 s. The host tests draw every page.
 
-**16. Samples from the SmplTrek's own folders (2 min).** Needs a card the stock firmware has used,
+**16. The performance mixer and looper on VALUE (5 min).** A01 playing, GRID.
+- Push and hold VALUE: the STEP keys turn dim amber (the sixteen effects). Still holding, tap
+  STEP 4: `4 ECHO RISER`, STEP 4 bright green. Let go of VALUE: the grid's lights are back and no
+  trig was added on STEP 4.
+- Turn VALUE up slowly: `ECHO RISER 10` ... `127`, the echoes climb and build. The tempo did
+  **not** change. Back to 0: the dry beat, exactly as before.
+- Push VALUE + RIGHT a few times with VALUE up: the effect changes (`5 ECHO FREEZE`, `6 REVERB
+  WASH`, `7 STUTTER` ...) and keeps the amount. Try 7 STUTTER (turn up: 1/4, 1/8, 1/16, 1/32),
+  10 PUMP, 12 NOISE RISER, 15 BUILD. Any click when switching? `____`
+- Push VALUE + STEP 16: `LOOP 4 BAR: NEXT BAR`, STEP 16 red. Four bars later it is green.
+  Turn VALUE up: the loop takes over. Mute the hats and kick (FUNC + lower pads): you only hear it
+  once VALUE goes back down. Loop in time and without a click at its end? `____`
+- With the loop up, push VALUE + STEP 1 and turn: the low-pass sweeps the loop too.
+- Push VALUE + CLR: `FX OFF`. Again: `LOOP CLEARED`. MAX meanwhile: `________ %` (U11 is in 13o).
+
+**17. Samples from the SmplTrek's own folders (2 min).** Needs a card the stock firmware has used,
 with at least one WAV in `SmplTrek/Pool/Audio` (copy one there on a PC if it is empty).
 - Track 8, EDIT, OK, then CLR until the top: `SAMPLES/ POOL/ SMPLTREK/ RECORD/`, nothing cut off.
 - OK on `POOL/`: the second line ends in `POOL/AUDIO`, and the pool's WAVs are listed. OK on one:
@@ -854,6 +869,31 @@ voices) so there is something worth freezing. Note LOAD and MAX first: LOAD `___
 - [ ] Freeze a track, then RELOAD PROJECT: it comes back live.
       Notes: `________________`
 
+## 13o. The performance mixer and the looper on VALUE (8 min)
+
+New 2026-11-23 (docs/CONTROLS.md, "The performance mixer"). Play A01.
+
+- [ ] Hold VALUE pushed: STEP keys dim amber. Tap each of STEP 1-15 in turn, VALUE still held,
+      and turn VALUE up and down for each after letting go: every slot does what
+      `VALUE FX STEPS:` (FUNC help) says. At VALUE 0 each is the dry beat. Notes per slot:
+      `________________`
+- [ ] With an effect picked, VALUE does not change the tempo; in PERFORM it does not morph.
+      Push VALUE + the lit STEP: `FX OFF: VALUE TEMPO`, and VALUE is the tempo again.
+- [ ] Push VALUE + LEFT/RIGHT: the slot walks round the sixteen and keeps the amount.
+- [ ] MUTE MODE on (upper pad 3): push VALUE + STEP 1 still says `STORED 1`. MUTE MODE off.
+- [ ] FUNC+HOME, LOOP LEN (last row): `4 BAR`; RIGHT: `8 BAR`. Push VALUE + STEP 16: it records
+      8 bars from the next bar line (STEP 16 blinks red armed, steady red recording, green after).
+      VALUE up: the loop alone, in time; leave it a minute: still in time.
+- [ ] Push VALUE + CLR once (`FX OFF`: the loop is kept at mix 0), turn VALUE: the tempo moves.
+      Up 10 BPM. Push VALUE + LEFT until `LOOP MIX 0` (that picks the looper without recording),
+      turn VALUE up: the loop drifts for at most one loop, then jumps back into time.
+- [ ] STOP: the loop fades with the rest. PLAY: it comes back in time from bar 1.
+- [ ] While the loop is held, FUNC+REC then OK: `LOOP HOLDS BUFFER`; FUNC menu FREEZE, OK: the
+      same. Push VALUE + CLR twice: `LOOP CLEARED`, and RESAMPLE works again.
+- [ ] **U11.** A01 with 15 BUILD at 127 and a playing loop at mix 64, STOP then PLAY, 60 s:
+      MAX `________ %` (against U1's). And 9 BASS KILL at 127 with the loop: MAX `________ %`.
+      Notes: `________________`
+
 ## 14. Reload and new: the FUNC menu's RELOAD PROJECT and NEW PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). FUNC+HOME, RELOAD PROJECT, OK once: `OK AGAIN TO RELOAD`,
@@ -1049,6 +1089,7 @@ Enaga's menu and start STRATA6.
 | U9 A01 GROOVE MAX with LONG and HALL, 60 s, and the difference to U1 (13j) | |
 | E12 ASR page, `scenario_asr.sh` vs `scenario_factory.sh`; held-chord edit, cl6x / GCC (PC) | |
 | U10 MAX with six pads held on VA POLY, SUS up, over A01 (13k) | |
+| U11 A01 MAX with BUILD at 127 and a playing loop; and with BASS KILL (13o) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
 | U2 STRATA6 + tracks 5 and 6 as MIN11 POLY, capped at 12 voices (16) | |

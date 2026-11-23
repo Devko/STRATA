@@ -113,6 +113,8 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Note repeat on the pads, pressure as velocity | v0.1.0 | ○ (13f) | Not recordable |
 | Tape stop (FUNC + hold push D) | v0.1.0 | ○ (13g) | |
 | Delay freeze (FUNC + hold MUTATE) | v0.1.0 | ○ (13g) | |
+| **Performance mixer on VALUE**: push VALUE + STEP picks one of 15 effects (sweeps, risers, echo freeze, wash, stutter, tape stop, bass kill, pump, crush, noise, flanger, gate, build), VALUE is its amount | after v0.2.0 | ○ (16 / 13o) | One effect at a time. Not saved. CPU host-estimated only (about 2 points worst case with the looper) |
+| **Master looper** (VALUE + STEP 16): 1-8 bars of the mix from the bar line, VALUE crossfades live/loop, effects go over it | after v0.2.0 | ○ (16 / 13o) | Shares RESAMPLE's 30 s buffer: no RESAMPLE or FREEZE while a loop is held. No overdub yet. Not saved |
 
 ## FX and mixer
 
@@ -140,7 +142,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Streaming of files too big for memory (2 s head + card stream, 4 tracks max) | v0.1.0 | ○ (15d) | Forward only, one voice: no STA, slices or reverse (not feasible, below); GRAIN plays only the head; CPU unmeasured |
 | Streamed samples honour LEN (end point, loop back to the head) | #91 | ○ (15d) | A LEN loop inside the 2 s head never touches the card |
 | Sample browser (`/SAMPLES`, `/RECORD`), load while playing | v0.1.0 | ○ (15b) | 256 entries a folder; path ≤ 111 characters; no audition before loading |
-| Sample browser reaches the stock SmplTrek folders (`POOL` = `/SmplTrek/Pool/Audio`, `SMPLTREK` = `/SmplTrek`), read-only | next | ○ (16) | shown only when the card has `/SmplTrek` |
+| Sample browser reaches the stock SmplTrek folders (`POOL` = `/SmplTrek/Pool/Audio`, `SMPLTREK` = `/SmplTrek`), read-only | next | ○ (17) | shown only when the card has `/SmplTrek` |
 | Resample the master, 1-8 bars, to a file or straight onto a track | v0.1.0 | ○ ("Resampling") | Takes ≤ 30 s |
 | Bounce: resample ONE track alone (B = `TRK 1`-`TRK 8`), mono, before its duck, fader, pan and sends | #109 | ○ (13m) | No emulator scenario: B is an encoder, the emulator presses keys only |
 | **Freeze**: FUNC menu FREEZE, a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. measured (cl6x): A05 held pad 21.2% to 10.1% avg; A01 peaks 7 points lower |

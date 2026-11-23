@@ -24,7 +24,7 @@ struct Text {
     const char *rows[kHelpRows];
 };
 
-// --- the shared pages: the last three on every screen ------------------------------------------
+// --- the shared pages: the last five on every screen -------------------------------------------
 
 constexpr Text kFuncKeys = {"FUNC + KEY:", {
     "REC    RESAMPLE",
@@ -68,7 +68,35 @@ constexpr Text kUpperPads = {"UPPER PADS TRK1-7:", {
 // "LOWER PAD  BAR MUTE" is 22 characters: the table above is held to 21 by the test, so
 // rows that need the room are spelled out here instead of trimmed by eye.
 
-constexpr const Text *kShared[] = {&kFuncKeys, &kFuncKnobs, &kUpperPads};
+// The performance mixer (core/perffx.hpp): VALUE as a crossfader into one of sixteen effects.
+constexpr Text kValueMixer = {"VALUE FX MIXER:", {
+    "PUSH VALUE+STEP  PICK",
+    "  SAME STEP  LETS GO",
+    "VALUE  AMOUNT 0 = DRY",
+    "ONE EFFECT AT A TIME",
+    "PUSH+LEFT/RIGHT  NEXT",
+    "PUSH+CLR  ALL OFF",
+    "  AGAIN  CLEARS LOOP",
+    "STEP 16  LOOPER",
+    "  RECORDS  AGAIN: NEW",
+    "MENU LOOP LEN  BARS",
+}};
+
+constexpr Text kValueSlots = {"VALUE FX STEPS:", {
+    "1 LP SWEEP  9 BASS",
+    "2 HP SWEEP 10 PUMP",
+    "3 HP RISER 11 CRUSH",
+    "4 ECHO     12 NOISE",
+    "5 FREEZE   13 FLANGER",
+    "6 WASH     14 GATE",
+    "7 STUTTER  15 BUILD",
+    "8 TAPE     16 LOOPER",
+    "LOOPER: VALUE IS MIX",
+    "FX STAY ON OVER LOOP",
+}};
+
+constexpr const Text *kShared[] = {&kFuncKeys, &kFuncKnobs, &kUpperPads, &kValueMixer,
+                                   &kValueSlots};
 constexpr int kSharedPages = int(sizeof kShared / sizeof kShared[0]);
 
 // --- step editing, shared by GRID and EDIT ------------------------------------------------------
@@ -503,7 +531,7 @@ void edit_title(const char *screen, const HelpPlace &place, char title[kHelpChar
     Line(title).add(screen).add(" ").add(kEditPageNames[page]).add(" ").add(machine_name(place.machine));
 }
 
-// The screen's own pages, before the three shared ones. Indexed from 0; returns false past
+// The screen's own pages, before the five shared ones. Indexed from 0; returns false past
 // the last, so help_page_count can count them with the same code that writes them.
 bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
               char rows[kHelpRows][kHelpChars + 1], int &count) {

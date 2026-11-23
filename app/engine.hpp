@@ -38,6 +38,9 @@
 #include "queue.hpp"       // and core/project.hpp through it: the project owns the live pattern
 #include "repeat.hpp"    // beat repeat, on the master output
 #include "tapestop.hpp"  // the tape stop, after beat repeat
+#include "perffx.hpp"    // the performance mixer's slots: push VALUE + STEP
+#include "masterfx.hpp"  // its own master effects: pump, crush, noise, flanger, gate
+#include "looper.hpp"    // its slot 16: the master looper, in RESAMPLE's buffer
 #include "arp.hpp"       // the arpeggiator's notes
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
@@ -189,6 +192,14 @@ public:
     bool delay_frozen() const { return mixer_.delay_frozen(); }
     const Mixer &mixer() const { return mixer_; }
 
+    // The performance mixer (core/perffx.hpp), for the screen and the tests.
+    PerfFx perf_fx() const { return perf_fx_; }
+    uint8_t perf_amount() const { return perf_amount_; }
+    const PerfPlan &perf_plan_now() const { return perf_plan_; }
+    uint8_t looper_mix() const { return looper_mix_; }
+    const Looper &looper() const { return looper_; }
+    const MasterFx &master_fx() const { return master_fx_; }
+
     // Whether an arp is running on `track`: a sequenced step's, or held KEYS keys'.
     bool arp_running(int track) const {
         return track >= 0 && track < kTracks && (seq_arp_[track].on || held_arp_[track].on);
@@ -317,6 +328,8 @@ private:
     // Control rate, and only when something has moved -- which is why `perform_dirty_` exists
     // rather than recomputing 128 parameters every block for a morph nobody is touching.
     void apply_performance();
+    // The performance mixer's overrides on copies of the sends and the master.
+    void apply_perf_plan(SendSettings &sends, MasterSettings &master) const;
 
     // The kit the machines read (`params_`) and the kit a file holds (`project_.kit`) are
     // different structures in different layers, so they are copied across explicitly rather than
@@ -622,6 +635,25 @@ private:
 
     BeatRepeat repeat_;
     TapeStop tape_stop_;
+
+    // The performance mixer (core/perffx.hpp). The effect picked and its amount, the plan they
+    // make, and the looper's mix, which is kept apart: picking an effect leaves a loop playing.
+    PerfFx perf_fx_ = PerfFx::none;
+    uint8_t perf_amount_ = 0;
+    PerfPlan perf_plan_{};
+    uint8_t looper_mix_ = 0;
+    MasterFx master_fx_;
+    Looper looper_;
+    // Where the pump and the gate are in the beat: the clock's while it runs, free from there
+    // while it is stopped.
+    float perf_phase_ = 0.0f;
+    // The held master moves have two owners now, the FUNC chords and the mixer: these are the
+    // chords', and what was last handed to the mixer and the tape stop.
+    bool user_freeze_ = false;
+    bool freeze_applied_ = false;
+    bool user_tape_ = false;
+    // The stutter's band in force (-1 none): a new band re-presses the repeat.
+    int8_t perf_repeat_applied_ = -1;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
 
     // Note repeat, one roll per track (Cmd::note_repeat). `countdown` is frames to the next hit
