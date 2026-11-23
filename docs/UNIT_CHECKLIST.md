@@ -45,6 +45,10 @@ are the point of this section.
 - [ ] Menu rows: TRACK SPEED with LEFT/RIGHT changes the grid's `X n`; CHAIN shows ON/OFF and OK
       flips it; AUTO-FILL and QUANTIZE step with LEFT/RIGHT; NEW PROJECT needs OK twice
       (`OK AGAIN FOR NEW`); KITS opens the kit browser.
+- [ ] **CLEAR PATTERN.** On a playing beat: FUNC + HOME, DOWN to CLEAR PATTERN, OK: `OK AGAIN TO
+      CLEAR` and nothing changes. OK again: `CLEARED FUNC+CLR UNDO`, the menu closes, every track
+      goes silent and GRID is empty, but the sounds are the same when you tap a step back in.
+      FUNC + CLR: the whole beat is back at once. One OK, wait 3 s, OK: only arms again.
 - [ ] **Screen keys = pages.** EDIT and MIXER as before. On PROJECT they walk PROJECT, CHAIN,
       PATTERN, SETUP, PROJECTS. On GRID they change the EDIT page the knobs turn (the second line
       says `FLTR` etc.); LEFT/RIGHT still flip GRID's step page.

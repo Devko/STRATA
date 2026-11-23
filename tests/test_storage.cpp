@@ -436,6 +436,7 @@ const Expect kTable[] = {
     {Cmd::range_paste, kDirtyBank, "range_paste"},
     {Cmd::range_erase, kDirtyBank, "range_erase"},
     {Cmd::track_erase, kDirtyBank, "track_erase"},
+    {Cmd::pattern_erase, kDirtyBank, "pattern_erase"},
     {Cmd::range_transpose, kDirtyBank, "range_transpose"},
     {Cmd::range_nudge, kDirtyBank, "range_nudge"},
     {Cmd::record_hit, kDirtyBank, "record_hit"},

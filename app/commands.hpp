@@ -72,6 +72,7 @@ enum class Cmd : uint8_t {
     range_paste,       // track, step: the first step
     range_erase,       // track, step: the first step, a: how many
     track_erase,       // track
+    pattern_erase,     // every track's steps and locks; the layout and the sounds stay
     range_transpose,   // track, step: the first step, a: how many, b: int8 semitones
     range_nudge,       // track, step: the first step, a: how many, b: int8 ticks
 

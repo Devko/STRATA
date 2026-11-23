@@ -125,6 +125,7 @@ screen when pressed.
 | Range + CLR / FUNC+UP / FUNC+DOWN | Clear / copy / paste the range |
 | Range + A / B | Transpose / nudge micro-timing of the range |
 | CLR, nothing held | Clear the whole track (FUNC+CLR brings it back) |
+| FUNC+HOME, CLEAR PATTERN, OK twice | Clear every track of the pattern; sounds, lengths and speeds stay (FUNC+CLR brings it back) |
 | FUNC+UP / FUNC+DOWN, nothing held | Copy / paste the whole track |
 | REC on, playing, turn A-D | Motion record: locks land on the playing step |
 | FUNC + A / B / C (GRID) | Euclidean fill: hits, steps, rotation (EUC h/s Rn) |
@@ -157,9 +158,10 @@ bank. The screen keys walk the pages PROJECT, CHAIN, PATTERN, SETUP, PROJECTS; C
 them goes back to the slots. In SETUP, A sets the record quantize. Chain on/off, the sample
 reload, RELOAD PROJECT and NEW PROJECT are in the FUNC menu (FUNC+HOME); the last two throw away
 unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN FOR NEW).
-**FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, KITS,
-RELOAD SAMPLE, TRACK SPEED, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE. UP/DOWN or A scroll, OK runs
-the row (NEW and RELOAD need OK twice), LEFT/RIGHT or B change a setting row (OK steps it too),
+**FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, CLEAR
+PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE. UP/DOWN or A
+scroll, OK runs the row (NEW, RELOAD and CLEAR PATTERN need OK twice), LEFT/RIGHT or B change a
+setting row (OK steps it too),
 CLR or FUNC+HOME close it, back to the screen it opened over. It always opens on SAVE.
 **PROJECTS:** UP/DOWN or A move, LEFT/RIGHT page by 8. OK twice within 2 s opens the project
 under the cursor (AGAIN TO OPEN; it throws away unsaved work and stops the transport).
