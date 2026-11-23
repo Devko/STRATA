@@ -233,7 +233,7 @@ private:
     // handle count gets a signed name rather than a cast at each of its six comparisons.
     static constexpr int kHandles = int(ENAGA_FILES_OPEN);
 
-    static constexpr int kMaxFiles = 48;
+    static constexpr int kMaxFiles = 96;
     // 48 MiB: a project or two, and the long WAVs the chunked loader is tested with (a file
     // bigger than the loader's 16.5 MiB staging buffer, and one past Cmd::set_sample's 24 bits).
     static constexpr uint32_t kArenaBytes = 48u << 20;

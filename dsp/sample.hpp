@@ -83,11 +83,12 @@ public:
     // head and for the fifo. `source_rate` is the file's own: a streamed file is played at its
     // rate rather than resampled, because nothing converts it ahead of time.
     //
-    // A streamed sample plays forward from its first frame, on one voice: START, LEN, SLC and
-    // reverse do not apply, since each would need the stream to jump, and an Enaga stream only
-    // reads on. PIT, the trig note, the envelope, LVL and loop do. Each time playback goes back to
-    // frame 0 -- a trigger, or a loop wrapping -- the fifo is emptied and `stream_restarts()`
-    // moves, which is the engine's signal to have the stream reopened after the head.
+    // A streamed sample plays forward from its first frame, on one voice: START, SLC and reverse
+    // do not apply, since each would need the stream to jump, and an Enaga stream only
+    // reads on. PIT, the trig note, the envelope, LVL, loop and LEN (an end point) do. Each time
+    // playback goes back to frame 0 -- a trigger, or a loop wrapping past the head -- the fifo is
+    // emptied and `stream_restarts()` moves, which is the engine's signal to have the stream
+    // reopened after the head. A LEN loop inside the head never reopens it.
     // set_sample (or a nullptr head) leaves stream mode.
     void set_stream(const int16_t *head, uint32_t head_frames, uint32_t total_frames, int channels,
                     float source_rate, StreamFifo *fifo);

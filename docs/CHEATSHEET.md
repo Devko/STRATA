@@ -47,7 +47,7 @@ Hold FUNC alone for a moment and the screen lists them, with what the upper pads
 | CHAIN | PROJECT, then screen key RIGHT | The pattern chain as a list |
 | PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG) and each track's own swing of the playing pattern |
 | SETUP | PROJECT, screen key RIGHT three times | Record quantize; shows clock and MIDI settings |
-| PROJECTS | PROJECT, screen key RIGHT four times, or the menu's OPEN PROJECT | Open another project from the card, or save this one under a new name |
+| PROJECTS | PROJECT, screen key RIGHT four times, or the menu's OPEN PROJECT | Open another project from the card, save this one under a new name, rename or delete one |
 | RESAMPLE | FUNC+REC ("sampling") | Record the output, or the audio input, to a file or a track |
 | Step page | Hold STEP + OK | One step's own fields (opens over GRID) |
 | Enaga menu | FUNC+POWER | CLOCK SRC, CLOCK/SYNC OUT, MIDI CH |
@@ -168,6 +168,9 @@ CLR or FUNC+HOME close it, back to the screen it opened over. It always opens on
 under the cursor (AGAIN TO OPEN; it throws away unsaved work and stops the transport).
 FUNC+DOWN (or the menu's SAVE AS) is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the character, OK saves
 under that name (NAME TAKEN if another project has it), CLR cancels. FUNC+UP reads the card again.
+Push B renames the project under the cursor (the same entry, titled RENAME; the open one too).
+Push C deletes it: DELETE? OK TWICE, then OK twice within 2 s; CLR or any other key keeps it; the
+open project cannot be deleted (PROJECT IS OPEN).
 **CHAIN:** a STEP key puts that slot of the shown bank into the entry under the cursor (or starts
 the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playing pattern when
 empty), up to 64 entries. CLR twice within 2 s removes the entry under the cursor (`AGAIN TO REMOVE`, then `ENTRY REMOVED`; not undoable); on an empty chain CLR goes back. B recalls a mute state as the entry starts. The FUNC menu's CHAIN turns the chain on and off, and CHAIN END

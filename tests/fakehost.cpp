@@ -445,7 +445,21 @@ int32_t FakeHost::t_file_info(const char *path, enaga_file_info_t *info) {
     const int32_t bad = h.path_check(path);
     if (bad != ENAGA_FILE_OK) return bad;
     const int index = h.find(path);
-    if (index < 0) return ENAGA_FILE_NOT_FOUND;
+    if (index < 0) {
+        // A folder no one made but something was written into (write_file seeds files that
+        // way) is there all the same, as FatFs's f_stat finds it.
+        const size_t n = std::strlen(path);
+        for (int i = 0; i < h.count_; i++) {
+            if (std::strncmp(h.files_[i].path, path, n) == 0 && h.files_[i].path[n] == '/') {
+                if (info != nullptr) {
+                    *info = enaga_file_info_t{};
+                    info->flags = ENAGA_FILE_FOLDER;
+                }
+                return ENAGA_FILE_OK;
+            }
+        }
+        return ENAGA_FILE_NOT_FOUND;
+    }
     if (info != nullptr) {
         *info = enaga_file_info_t{};
         copy_path(info->name, uint32_t(sizeof(info->name)), h.files_[index].path);
@@ -461,6 +475,14 @@ int32_t FakeHost::t_file_remove(const char *path) {
     if (card != ENAGA_FILE_OK) return card;
     const int32_t bad = h.path_check(path);
     if (bad != ENAGA_FILE_OK) return bad;
+    // "A file, or an empty folder" (abi.h). FatFs's f_unlink refuses a folder with anything in it
+    // with FR_DENIED, which Enaga maps to ENAGA_FILE_DENIED (firmware/kernel/files.c).
+    const size_t n = std::strlen(path);
+    for (int i = 0; i < h.count_; i++) {
+        if (std::strncmp(h.files_[i].path, path, n) == 0 && h.files_[i].path[n] == '/') {
+            return ENAGA_FILE_DENIED;
+        }
+    }
     return h.remove_file(path) ? ENAGA_FILE_OK : ENAGA_FILE_NOT_FOUND;
 }
 

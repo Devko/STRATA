@@ -59,8 +59,9 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      = lock, push = remove the lock. TUN's switch (PIT on SAMPLE and GRAIN), on EDIT, GRID and
      KEYS, is NOTE view: the value reads as a note, where TUN puts C-4 (`G-4`, `A-1+` when the
      byte is between notes), and a click is a semitone; push again for the number and one count
-     a click.
-     On at every start, one setting for all tracks (2026-11-23, core/tuning.hpp).
+     a click. On at every start, one setting for all tracks (2026-11-23, core/tuning.hpp).
+     On PROJECTS, where only A turns, push B renames and push C deletes the project under the
+     cursor (delete then asks for OK twice).
    - **VALUE:** tempo (PERFORM: morph; CHAIN/PATTERN: the field under the cursor). Push + turn =
      swing, FUNC + turn = DJ filter.
    - **STEP keys:** the sixteen of whatever the pad-row keys chose.

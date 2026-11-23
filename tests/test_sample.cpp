@@ -1412,7 +1412,8 @@ TEST(sample_stream_stereo_matches_too) {
 }
 
 TEST(sample_stream_ignores_start_slices_and_reverse) {
-    // A stream reads on from frame 0: none of these can make it jump.
+    // A stream reads on from frame 0: none of these can make it jump (docs/FEATURES.md says
+    // why each is left out).
     constexpr uint32_t kHead = 3000;
     fill_ramp(g_mono, kSrcFrames, 1, -20000, 20000);
     TrackParams p = plain();
@@ -1431,6 +1432,60 @@ TEST(sample_stream_ignores_start_slices_and_reverse) {
     CHECK(g_out[0] < -0.1f);
     CHECK(g_out[200] > g_out[0]);
     CHECK(g_streamer.stream_position() > 256u);
+}
+
+TEST(sample_stream_len_is_an_end_point) {
+    // LEN stops the voice that far into the FILE, and a loop goes back to the head from there.
+    constexpr uint32_t kHead = 3000;
+    constexpr uint32_t kTotal = 20000;
+    fill_const(g_mono, kSrcFrames, 1, 16000);
+    TrackParams p = plain();
+    p.set(2, 64);       // LEN about half
+    g_streamer.init(kRate);
+    g_streamer.set_stream(g_mono, kHead, kTotal, 1, kRate, &g_fifo);
+    g_streamer.prepare(p);
+    const int32_t half = int32_t(p.unit(2) * float(kTotal) + 0.5f);
+    CHECK_EQ(g_streamer.play_length(), half);
+    CHECK_EQ(g_streamer.window_start(), 0);
+    g_streamer.trigger(hit());
+    clear(g_out, kCapture);
+    const int blocks = int(kTotal / kBlk) + 4;
+    render_streamed(p, g_mono, kTotal, 1, g_out, blocks, 512);
+    // Sound until LEN, silence after it: well before the file's end.
+    CHECK(g_out[half - 400] > 0.2f);
+    CHECK(all_zero(g_out + half + kBlk, kBlk * 4));
+    CHECK(!g_streamer.active());
+    CHECK_EQ(g_streamer.stream_late(), 0u);
+
+    // LEN at the top is the whole file, to the frame, however long.
+    p.set(2, 127);
+    g_streamer.prepare(p);
+    CHECK_EQ(g_streamer.play_length(), int32_t(kTotal));
+    g_streamer.set_stream(g_mono, kHead, (1u << 25) + 1u, 1, kRate, &g_fifo);
+    g_streamer.prepare(p);
+    CHECK_EQ(g_streamer.play_length(), int32_t((1u << 25) + 1u));
+}
+
+TEST(sample_stream_a_len_loop_inside_the_head_never_reopens_the_stream) {
+    constexpr uint32_t kHead = 6000;
+    constexpr uint32_t kTotal = 60000;
+    fill_sine(g_mono, kSrcFrames, 1, 200.0f, kRate, 0.5f);
+    TrackParams p = plain();
+    p.set(10, 32);      // PLY forward loop
+    p.set(2, 6);        // LEN about 4.7% of 60,000: 2,835 frames, inside the head
+    g_streamer.init(kRate);
+    g_streamer.set_stream(g_mono, kHead, kTotal, 1, kRate, &g_fifo);
+    g_streamer.prepare(p);
+    CHECK(g_streamer.play_length() < int32_t(kHead));
+    const uint32_t before = g_streamer.stream_restarts();
+    g_streamer.trigger(hit());
+    clear(g_out, kCapture);
+    render_streamed(p, g_mono, kTotal, 1, g_out, 200, 512);   // 12,800 frames: four times round
+    CHECK_EQ(g_streamer.stream_restarts(), before + 1);       // the trigger only
+    CHECK(g_streamer.active());
+    CHECK(g_streamer.stream_position() < uint32_t(g_streamer.play_length()));
+    CHECK(peak(g_out + kBlk * 150, kBlk * 40) > 0.3f);
+    CHECK_EQ(g_streamer.stream_late(), 0u);
 }
 
 TEST(sample_stream_restarts_on_a_trigger_and_on_a_loop) {

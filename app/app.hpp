@@ -498,7 +498,13 @@ public:
                 post(Cmd::tape_stop, 0, 0, 0);
             }
             const enaga::ui::Action action = name_entry_.key(key, down);
-            if (action == enaga::ui::Action::chosen) finish_save_as();
+            if (action == enaga::ui::Action::chosen) {
+                if (entry_for_ == EntryFor::rename) {
+                    finish_rename();
+                } else {
+                    finish_save_as();
+                }
+            }
             if (action == enaga::ui::Action::no) notice("NAME KEPT");
             return;
         }
@@ -3831,12 +3837,14 @@ public:
         project_cursor_ = 0;
         project_seek_ = true;
         open_armed_ = -1;
+        delete_armed_ = -1;
     }
 
     void move_project_cursor_to(int index) {
         const int count = storage_.browse_list().count();
         project_cursor_ = index < 0 ? 0 : (index >= count ? (count > 0 ? count - 1 : 0) : index);
         open_armed_ = -1;
+        delete_armed_ = -1;
     }
 
     void settle_project_cursor() {
@@ -3844,6 +3852,12 @@ public:
         if (projects_reread_ && storage_.busy_text() == nullptr && !storage_.dirty() &&
             !storage_.browsing()) {
             projects_reread_ = false;
+            list_projects();
+        }
+        // A rename or a delete changed the folders: read them again once it is done, whatever
+        // the open project's own state (a dirty project would hold the SAVE AS reread for ever).
+        if (projects_op_reread_ && !storage_.project_op_pending() && !storage_.browsing()) {
+            projects_op_reread_ = false;
             list_projects();
         }
         if (!project_seek_ || storage_.browsing()) return;
@@ -3855,7 +3869,68 @@ public:
     bool on_projects_key(int key) {
         if (held_step_ >= 0) return false;
         const SampleList &list = storage_.browse_list();
+        // A delete asked for (push C) takes OK twice within kSaveArmMs. CLR keeps the project;
+        // any other key lets the question go and does its own job.
+        if (delete_armed_ >= 0 && !shift_) {
+            if (key == ENAGA_KEY_OK) {
+                if (delete_oks_ > 0 && uint32_t(last_ms_ - delete_ok_at_ms_) < kSaveArmMs) {
+                    const char *name = list.name(delete_armed_);
+                    delete_armed_ = -1;
+                    if (!storage_.request_delete(name)) {
+                        notice("CARD BUSY");
+                        return true;
+                    }
+                    projects_op_reread_ = true;
+                    notice("DELETING");
+                    return true;
+                }
+                delete_oks_ = 1;
+                delete_ok_at_ms_ = last_ms_;
+                notice("OK AGAIN TO DELETE");
+                return true;
+            }
+            delete_armed_ = -1;
+            if (key == ENAGA_KEY_CLR) {
+                notice("DELETE OFF");
+                return true;
+            }
+        }
         switch (key) {
+            case ENAGA_KEY_PUSH_B:
+            case ENAGA_KEY_PUSH_C: {
+                // Push B renames and push C deletes the project under the cursor: the two card
+                // actions a list of projects needs, on the knobs the page leaves free.
+                if (storage_.browsing() || list.count() == 0) return true;
+                const char *name = list.name(project_cursor_);
+                const bool rename = key == ENAGA_KEY_PUSH_B;
+                if (!storage_.card_usable()) {
+                    notice("NO CARD");
+                } else if (!list.is_folder(project_cursor_)) {
+                    notice("NOT A PROJECT");
+                } else if (!Storage::valid_name(name)) {
+                    notice("NAME NOT USABLE");
+                } else if (storage_.project_op_pending()) {
+                    notice("CARD BUSY");
+                } else if (rename) {
+                    int n = 0;
+                    for (; name[n] != '\0' && n < Storage::kNameBytes - 1; n++) {
+                        rename_from_[n] = name[n];
+                    }
+                    rename_from_[n] = '\0';
+                    entry_for_ = EntryFor::rename;
+                    name_entry_.open("RENAME", name);
+                } else if (SampleList::same_name(name, storage_.project_name())) {
+                    // Deleting what is in RAM would leave a project whose files are gone, and
+                    // the next save would bring them back.
+                    notice("PROJECT IS OPEN");
+                } else {
+                    delete_armed_ = project_cursor_;
+                    delete_oks_ = 0;
+                    open_armed_ = -1;
+                    notice("DELETE? OK TWICE");
+                }
+                return true;
+            }
             case ENAGA_KEY_OK: {
                 if (shift_) return false;               // F1 + OK is redo
                 if (storage_.browsing() || list.count() == 0) return true;
@@ -3897,6 +3972,7 @@ public:
                         notice("NO CARD");
                     } else {
                         // FUNC+DOWN: SAVE AS, starting from the name it has.
+                        entry_for_ = EntryFor::save_as;
                         name_entry_.open("SAVE AS", storage_.project_name());
                     }
                     return true;
@@ -3940,6 +4016,36 @@ public:
         notice("SAVING");
     }
 
+    // OK on the name entry opened by push B.
+    void finish_rename() {
+        char name[Storage::kNameBytes];
+        const char *typed = name_entry_.text();
+        int n = 0;
+        for (; typed[n] != '\0' && n < Storage::kNameBytes - 1; n++) name[n] = typed[n];
+        name[n] = '\0';
+        if (name[0] == '\0') {
+            notice("NO NAME");
+            return;
+        }
+        if (SampleList::same_name(name, rename_from_)) {
+            notice("NAME KEPT");
+            return;
+        }
+        // The list is the card's folders: a name in it is taken. Storage checks the card again
+        // when the rename runs, so a folder made since is refused there (NAME TAKEN) too.
+        const int at = storage_.browse_list().find(name);
+        if (at >= 0) {
+            notice("NAME TAKEN");
+            return;
+        }
+        if (!storage_.request_rename(rename_from_, name)) {
+            notice(Storage::valid_name(name) ? "CARD BUSY" : "NAME NOT USABLE");
+            return;
+        }
+        projects_op_reread_ = true;
+        notice("RENAMING");
+    }
+
     // The SAVE AS entry. Enaga's TextEntry does the editing; its own draw() puts each character
     // in a box 7 px from the next, which reads as separate words beside the rest of STRATA's
     // screens, so the name is drawn here as one string with a line under each place and a bright
@@ -3947,14 +4053,23 @@ public:
     void draw_name_entry(enaga::Canvas &canvas) {
         constexpr int kChars = enaga::ui::TextEntry::max_chars;
         constexpr int kX = (128 - kChars * 6) / 2;
-        canvas.text(0, 18, "SAVE AS", 15);
+        const bool rename = entry_for_ == EntryFor::rename;
+        canvas.text(0, 18, rename ? "RENAME" : "SAVE AS", 15);
+        if (rename) {
+            char line[40];
+            char *out = line;
+            append(out, "FROM ");
+            append_shown(out, rename_from_, kLineChars - 5);
+            *out = 0;
+            canvas.text(0, 30, line, 9);
+        }
         canvas.text(kX, 48, name_entry_.text(), 15);
         for (int i = 0; i < kChars; i++) {
             canvas.rect(kX + i * 6, 57, 5, 1, i == name_entry_.cursor() ? 15 : 4);
         }
         canvas.text(0, 84, "A / LEFT RIGHT: MOVE", 6);
         canvas.text(0, 94, "B / VALUE: CHARACTER", 6);
-        canvas.text(0, 104, "OK: SAVE  CLR: CANCEL", 6);
+        canvas.text(0, 104, rename ? "OK: RENAME CLR: BACK" : "OK: SAVE  CLR: CANCEL", 6);
     }
 
     void draw_projects(enaga::Canvas &canvas) {
@@ -3969,7 +4084,9 @@ public:
 
         out = line;
         const char *busy = storage_.busy_text();
-        if (storage_.browsing()) {
+        if (delete_armed_ >= 0) {
+            append(out, delete_oks_ > 0 ? "OK AGAIN: DELETE" : "DELETE? OK TWICE");
+        } else if (storage_.browsing()) {
             append(out, "READING CARD");
         } else if (storage_.browse_error() != nullptr) {
             append_shown(out, storage_.browse_error(), kLineChars);
@@ -3996,7 +4113,10 @@ public:
                         at == project_cursor_ ? 15 : (open ? 12 : (list.is_folder(at) ? 10 : 5)));
         }
 
-        canvas.text(0, 103, storage_.dirty() ? "UNSAVED  F+DN SAVE AS" : "FUNC+DOWN: SAVE AS", 7);
+        // SAVE AS (FUNC+DOWN) is in the FUNC menu as well; the knobs' two jobs are only here.
+        canvas.text(0, 103, delete_armed_ >= 0    ? "CLR KEEPS IT"
+                            : storage_.dirty()    ? "UNSAVED  B REN C DEL"
+                                                  : "PUSH B REN  C DELETE", 7);
         out = line;
         if (count > 0) {
             append_number(out, uint32_t(project_cursor_ + 1));
@@ -4229,6 +4349,7 @@ public:
                 leave_mode();
                 project_page_ = ProjectPage::files;
                 list_projects();
+                entry_for_ = EntryFor::save_as;
                 name_entry_.open("SAVE AS", storage_.project_name());
                 break;
             case MenuItem::open:
@@ -5566,6 +5687,15 @@ private:
     int open_armed_ = -1;          // OK once on this entry; the second within kSaveArmMs opens
     uint32_t open_armed_at_ms_ = 0;
     enaga::ui::TextEntry name_entry_;
+    // What the name entry is for: SAVE AS (FUNC+DOWN, the menu) or a rename (push B), and the
+    // project the rename is of.
+    enum class EntryFor : uint8_t { save_as, rename };
+    EntryFor entry_for_ = EntryFor::save_as;
+    char rename_from_[Storage::kNameBytes] = {};
+    bool projects_op_reread_ = false;  // list again once a rename or delete is done
+    int delete_armed_ = -1;        // push C on this entry; OK twice within kSaveArmMs deletes it
+    int delete_oks_ = 0;
+    uint32_t delete_ok_at_ms_ = 0;
     int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
     Mode menu_return_ = Mode::grid;   // the screen the FUNC menu opened over
     int menu_cursor_ = 0;             // the FUNC menu's row; SAVE when it opens

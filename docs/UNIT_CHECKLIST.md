@@ -8,7 +8,7 @@ from, with the background for each check.
 
 **Time.** The whole pass is about three hours. If the evening runs short, do 0-3b, 13 and 16
 first (safety, the MAX readings, save and restore), then the sections for today's new features
-(8c, 8d, 13d-13l, 14b, 15b-15d), then the rest.
+(8c, 8d, 13d-13l, 14b, 14c, 15b-15d), then the rest.
 
 Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`), and so are
 the on-screen hints. `FUNC+X` = hold FUNC, press X.
@@ -705,6 +705,26 @@ New 2026-11-22. PROJECT, screen key RIGHT four times: `PROJECTS`.
 - [ ] Power cycle: STRATA comes back with `DEFAULT`, the one opened last.
 - [ ] SAVE AS `LIVE 1` from DEFAULT says `NAME TAKEN` and writes nothing.
 
+## 14c. Projects: rename and delete (4 min)
+
+New 2026-11-23. On PROJECTS, after 14b (`DEFAULT` and `LIVE 1` on the card, DEFAULT open).
+The second-to-last line says `PUSH B REN  C DELETE`.
+
+- [ ] Cursor on `LIVE 1`, push B: `RENAME`, `FROM LIVE 1`, the name in the entry. Make it
+      `LIVE 2`, OK: `RENAMING`, then the list shows `LIVE 2` and no `LIVE 1`. Open `LIVE 2`
+      (OK twice): it is what LIVE 1 was? `________`
+- [ ] Rename the open project the same way: `NOW` shows the new name. Power cycle: STRATA comes
+      back with it.
+- [ ] Rename onto a name in the list: `NAME TAKEN`, nothing changes.
+- [ ] Cursor on another project, push C: `DELETE? OK TWICE`. CLR: `DELETE OFF`, still there.
+      Push C, OK, wait 3 s, OK: only `OK AGAIN TO DELETE` again. Push C, OK, OK: `DELETING`,
+      and it leaves the list. On a computer its folder is gone from
+      `/ENAGA/DATA/STRATA/PROJECTS/`.
+- [ ] Push C on the open project: `PROJECT IS OPEN`, nothing else.
+- [ ] While a pattern plays, rename a project: no click, no LOAD jump? `________`
+- [ ] Pull the card during a rename (push B, OK, pull at once): card back in, both names or the
+      old one open, never a project with patterns missing. What was there: `________`
+
 ## 15. Kit browser: FUNC+EDIT twice (6 min)
 
 Kits (machines, parameters, faders, sample paths) live on the card in 16 slots shared by every
@@ -779,6 +799,12 @@ New 2026-11-22: a file the sample memory cannot hold streams from the card. Put 
 - [ ] With STA 0, PLY LOOP and one trig on step 1, it plays the whole file and loops: no gap
       at 2 s (where the head ends and the card takes over)? `________` At the loop? `________`
 - [ ] Trig it every bar for 2 minutes: every restart starts clean, no `STREAM LATE`? `________`
+      (Each restart reopens the stream, which walks the file's cluster chain on the card:
+      docs/FEATURES.md, "Why streamed samples play forward only". This reading decides whether
+      reverse streaming is worth building.)
+- [ ] LEN halfway (new 2026-11-23): it stops halfway through the file, and with PLY LOOP loops
+      back from there to the start, no gap? `________` LEN very short (under 2 s): loops inside
+      the head with no `STREAM LATE`.
 - [ ] Two more streamed tracks (copies of the file on tracks 6 and 7) at once: `STREAM LATE`
       ever? `________` LOAD range `________ %` with three streams against without `________ %`.
 - [ ] A fifth streamed track says `STREAMS FULL`.

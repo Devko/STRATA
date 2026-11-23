@@ -137,6 +137,37 @@ public:
     // project is called `name` from here on. False for a name that could not be one.
     bool request_save_as(const char *name);
 
+    // Rename a project on the card: the folder PROJECTS/`from` becomes PROJECTS/`to`. Enaga has
+    // no rename call (<enaga/files.hpp>: save, remove, make_folder), so it is a copy and a
+    // delete, ordered so that a card pulled at any moment loses nothing:
+    //
+    //   1. `to` must not exist (NAME TAKEN) and `from` must hold a PROJECT.BIN (NOT A PROJECT).
+    //   2. Every file is copied into `to`, PROJECT.BIN LAST. Until it lands, `to` is a folder
+    //      that opens as NOT FOUND and the original is untouched; from then on both are whole.
+    //   3. If `from` is the open project, the project takes the new name and the settings are
+    //      saved with it, so the next start opens `to`.
+    //   4. `from` is deleted as request_delete does it (PROJECT.BIN first).
+    //
+    // A failed copy deletes what it made of `to` and reports the reason. One rename or delete is
+    // queued at a time: false when one already is, for names that are not usable, for the same
+    // name twice and with no card.
+    bool request_rename(const char *from, const char *to);
+
+    // Delete the project folder PROJECTS/`name` and everything in it. PROJECT.BIN goes first
+    // (and the PROJECT.BIN.TMP an interrupted save may have left, which Enaga's reads fall back
+    // to), so a card pulled midway leaves a folder that is no longer a project -- it opens as
+    // NOT FOUND, never as a project with its banks missing -- and deleting it again finishes the
+    // job. Then the folder is listed and emptied a file per pass, and removed. Refused (false)
+    // for the open project: RAM would keep a project whose files are gone, and the next save
+    // would quietly bring it back.
+    bool request_delete(const char *name);
+
+    // A rename or delete asked for and not finished.
+    bool project_op_pending() const {
+        return op_pending_ != Op::none || job_ == Job::project_rename ||
+               job_ == Job::project_delete;
+    }
+
     // A name a project folder can have: 1 to kNameBytes-1 characters of the panel's text entry
     // (A-Z 0-9 space - + . # !), not starting with a space or a dot.
     static bool valid_name(const char *name);
@@ -308,6 +339,8 @@ private:
         kit_scan,          // the kit library's sixteen slots, one file per pass
         kit_save,          // one kit into its slot: started and finished in one pass
         kit_load,          // one kit out of its slot, likewise
+        project_rename,    // copying a project folder's files into its new name, one per pass
+        project_delete,    // removing a project folder's files, one per pass, then the folder
     };
 
     // --- paths ---
@@ -419,6 +452,36 @@ private:
     bool perform_dirty_ = false;   // the scenes and macro setup, in PERFORM.BIN
     bool kit_dirty_ = false;
     bool bank_dirty_[kBanks] = {};
+
+    // --- renaming and deleting projects (request_rename, request_delete) ---
+    enum class Op : uint8_t { none, rename, remove };
+    Op op_pending_ = Op::none;
+    char op_from_[kNameBytes] = {};    // the folder renamed or deleted
+    char op_to_[kNameBytes] = {};      // a rename's new name
+    void start_op();
+    void step_rename();
+    void step_delete();
+    void begin_delete(const char *name, bool for_rename, const char *carried);
+    bool named_path(char *out, uint32_t max, const char *name, const char *file) const;
+    void delete_entry(const enaga::files::Info &entry);   // files::list callbacks, main context
+    void delete_listed(int32_t result);
+    // The delete in flight: which folder, and whether it is a rename's tail (the old name, after
+    // the copy) or its cleanup (the new name, after a failed copy, carrying the copy's reason).
+    char del_name_[kNameBytes] = {};
+    bool del_for_rename_ = false;
+    const char *del_carried_ = nullptr;
+    // The folder's entries, from one files::list. A folder holding more than kDelEntries is
+    // emptied in rounds: listed, removed, listed again, for as long as a round removes something.
+    static constexpr int kDelEntries = 32;
+    static constexpr int kDelNameBytes = 64;
+    char del_names_[kDelEntries][kDelNameBytes] = {};
+    int del_count_ = 0;
+    int del_next_ = 0;
+    int del_removed_ = 0;              // files removed in this round
+    bool del_overflow_ = false;        // the listing had more than the table holds, or a long name
+    bool del_listing_ = false;         // a files::list owns the callbacks until its done()
+    bool del_listed_ = false;          // ...and it has answered, with:
+    int32_t del_list_result_ = 0;
 
     // --- the sample browser ---
     void start_browse();

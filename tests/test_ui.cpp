@@ -4598,6 +4598,151 @@ TEST(ui_layout_the_projects_page_and_save_as) {
     key(ENAGA_KEY_F4);
 }
 
+// --- PROJECTS: rename (push B) and delete (push C, then OK twice) ---------------------------
+
+namespace {
+
+void cursor_to(Strata &app, const char *name) {
+    const int at = app_storage().browse_list().find(name);
+    CHECK(at >= 0);
+    app.on_encoder(0, at - UiProbe::project_cursor(app));
+    CHECK_EQ(UiProbe::project_cursor(app), at);
+}
+
+void wait_for_list(Strata &app, const char *name, bool there) {
+    (void)app;
+    for (int i = 0; i < 800 && (app_storage().browse_list().find(name) >= 0) != there; i++) pump();
+    for (int i = 0; i < 200 && app_storage().browsing(); i++) pump();
+}
+
+}  // namespace
+
+TEST(ui_projects_push_b_renames_the_project_under_the_cursor) {
+    Strata &app = fresh();
+    two_projects();
+    to_projects_page(app);
+    cursor_to(app, "FIRST");
+    key(ENAGA_KEY_PUSH_B);
+    CHECK(UiProbe::name_entry_open(app));
+    CHECK(std::strcmp(UiProbe::name_entry_text(app), "FIRST") == 0);   // starts from its name
+    check_layout(app, "RENAME");
+    type_name(app, "THIRD");
+    key(ENAGA_KEY_OK);
+    CHECK(!UiProbe::name_entry_open(app));
+    CHECK(std::strcmp(UiProbe::notice(app), "RENAMING") == 0);
+    CHECK(pump_until_idle());
+    CHECK(app_storage().last_error() == nullptr);
+    wait_for_list(app, "THIRD", true);
+    CHECK(app_storage().browse_list().find("THIRD") >= 0);
+    CHECK(app_storage().browse_list().find("FIRST") < 0);
+    CHECK(std::strcmp(app_storage().project_name(), "SECOND") == 0);
+
+    // The open one too: the project takes the new name.
+    cursor_to(app, "SECOND");
+    key(ENAGA_KEY_PUSH_B);
+    type_name(app, "LIVE");
+    key(ENAGA_KEY_OK);
+    CHECK(pump_until_idle());
+    CHECK(std::strcmp(app_storage().project_name(), "LIVE") == 0);
+    wait_for_list(app, "SECOND", false);
+    CHECK(app_storage().browse_list().find("SECOND") < 0);
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_projects_rename_refuses_a_taken_name_and_keeps_an_unchanged_one) {
+    Strata &app = fresh();
+    two_projects();
+    to_projects_page(app);
+    cursor_to(app, "FIRST");
+    key(ENAGA_KEY_PUSH_B);
+    type_name(app, "SECOND");
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "NAME TAKEN") == 0);
+    key(ENAGA_KEY_PUSH_B);
+    key(ENAGA_KEY_OK);                               // the name as it was
+    CHECK(std::strcmp(UiProbe::notice(app), "NAME KEPT") == 0);
+    key(ENAGA_KEY_PUSH_B);
+    key(ENAGA_KEY_CLR);
+    CHECK(!UiProbe::name_entry_open(app));
+    CHECK_EQ(UiProbe::project_page(app), 4);
+    CHECK(!app_storage().project_op_pending());
+    pump(8);
+    CHECK(app_storage().browse_list().find("FIRST") >= 0);
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_projects_push_c_then_ok_twice_deletes) {
+    Strata &app = fresh();
+    two_projects();
+    to_projects_page(app);
+    cursor_to(app, "FIRST");
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(std::strcmp(UiProbe::notice(app), "DELETE? OK TWICE") == 0);
+    check_layout(app, "PROJECTS, a delete asked");
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "OK AGAIN TO DELETE") == 0);
+    check_layout(app, "PROJECTS, a delete once confirmed");
+    pump(4);
+    CHECK(!app_storage().project_op_pending());      // once is not enough
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "DELETING") == 0);
+    CHECK(pump_until_idle());
+    CHECK(app_storage().last_error() == nullptr);
+    wait_for_list(app, "FIRST", false);
+    CHECK(app_storage().browse_list().find("FIRST") < 0);
+    CHECK(app_storage().browse_list().find("SECOND") >= 0);
+    // OK now is an open again, not a delete.
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "ALREADY OPEN") == 0);
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_projects_a_delete_is_called_off_by_clr_or_another_key) {
+    Strata &app = fresh();
+    two_projects();
+    to_projects_page(app);
+    cursor_to(app, "FIRST");
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_CLR);
+    CHECK(std::strcmp(UiProbe::notice(app), "DELETE OFF") == 0);
+    CHECK_EQ(UiProbe::project_page(app), 4);         // that CLR was the question's
+    key(ENAGA_KEY_OK);
+    key(ENAGA_KEY_OK);                               // an open now, not a delete
+    CHECK(std::strcmp(UiProbe::notice(app), "OPENING") == 0);
+    CHECK(pump_until_idle());
+    CHECK(std::strcmp(app_storage().project_name(), "FIRST") == 0);
+    pump_until_idle(2000);
+    to_projects_page(app);
+    cursor_to(app, "SECOND");
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_UP);                               // moving on lets it go
+    cursor_to(app, "SECOND");
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "AGAIN TO OPEN") == 0);
+    pump(8);
+    CHECK(!app_storage().project_op_pending());
+    CHECK(app_storage().browse_list().find("SECOND") >= 0);
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_projects_the_open_project_is_not_deleted) {
+    Strata &app = fresh();
+    two_projects();
+    to_projects_page(app);
+    cursor_to(app, "SECOND");
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(std::strcmp(UiProbe::notice(app), "PROJECT IS OPEN") == 0);
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "ALREADY OPEN") == 0);
+    CHECK(!app_storage().project_op_pending());
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
 // --- SLC AUTO: push SLC's knob on a SAMPLE track ----------------------------------------------
 
 TEST(ui_pushing_slc_on_a_sample_track_turns_auto_slicing_on_and_off) {
@@ -5355,6 +5500,12 @@ bool visible(int s, const Probe &p, bool func) {
     pump(3);
     const Look after = look(app);
     if (func) app.on_key(ENAGA_KEY_F1, false);
+    // A name entry the probe opened (PROJECTS: FUNC + DOWN, push B) takes every key until it
+    // closes, and the app's UI state outlives fresh(): close it, or every later probe types.
+    if (UiProbe::name_entry_open(app)) {
+        app.on_key(ENAGA_KEY_CLR, true);
+        app.on_key(ENAGA_KEY_CLR, false);
+    }
     return !same(before, held) || !same(before, after);
 }
 

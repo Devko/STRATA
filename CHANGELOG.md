@@ -11,6 +11,12 @@ the project file format or the controls.
 - **CPU guard.** When the audio load stays high, STRATA sheds VA POLY voices (two a level, the
   quietest fading out first) and thins GRAIN clouds instead of risking an overrun. The bottom
   line shows `GUARD1` to `GUARD4` while it is up; it steps back down once the load falls.
+- **Rename and delete projects** on the PROJECTS page: push B renames the project under the
+  cursor, push C and then OK twice deletes it. Both are safe against a pulled card: a rename
+  copies the project with `PROJECT.BIN` last before it deletes the old folder, and a delete
+  removes `PROJECT.BIN` first. The open project cannot be deleted.
+- **LEN on streamed samples:** a file streamed from the card now stops, or loops back, where LEN
+  says. START, slices and reverse stay off for streamed files (docs/FEATURES.md says why).
 - **Held notes and pads on VA MONO and VA POLY.** A seventh EDIT page, ASR: attack (to 5 s),
   sustain, release (to 8 s) and filter sustain. With SUS up a note holds while its KEYS pad, STEP
   key or MIDI note is held, or for its step's LEN, up to 64 steps. At 0 (and in every older
