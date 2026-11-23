@@ -270,12 +270,13 @@ public:
     // that an offset from a damaged command cannot be followed out of the region.
     void set_sample_region(const int16_t *base, uint32_t bytes);
 
-    // Main context, from App::update: one piece of the WAVE tables' build (dsp/wavetable.hpp,
-    // WaveLibrary::step), until it is done. The C6748 needs more than Enaga's 1 s watchdog for
-    // all of it, so init() only begins it. True once the tables are playing (or there are none
-    // to build); the WAVE machines play only their sub until then.
+    // Main context, from App::update: asks for the tables the WAVE tracks sound now and does one
+    // small piece of building them (dsp/wavetable.hpp, WaveLibrary). False when there is
+    // nothing to do. A WAVE voice plays its sub alone until its table is in.
     bool step_waves();
-    bool waves_building() const { return waves_building_.load(std::memory_order_acquire); }
+    const WaveLibrary &waves() const { return waves_; }
+    // Slots for tables: one per track, so eight WAVE tracks on eight tables all play.
+    static constexpr int kWaveSlots = kTracks;
 
     // --- streaming (app/storage.hpp, "Streaming") ---
 
@@ -447,12 +448,9 @@ private:
         MidiMachine midi;   // no state at all: the vtable pointer
     };
     TrackMachines pool_[kTracks];
-    // The WAVE pair's 16 tables, 2.5 MiB, built once in init() and shared by every track
-    // (dsp/wavetable.hpp). Read through wave_library(), so a failed build plays silence.
+    // The WAVE pair's tables: kWaveSlots slots (1.25 MiB) reserved in init(), a table built into
+    // one when a track first sounds it (step_waves), shared by every track (dsp/wavetable.hpp).
     WaveLibrary waves_;
-    // True from init() until the build is done. The build's scratch is the capture buffer, so
-    // RESAMPLE, freeze and the looper refuse to arm until then (a second or two after boot).
-    std::atomic<bool> waves_building_{false};
 
     // Streaming, per track. Audio side only, apart from the inbox and the stream objects, whose
     // rules are at stream_for_load and stream() above.

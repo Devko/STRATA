@@ -82,16 +82,13 @@ bool Engine::init(float sample_rate) {
     build_placeholder_sample();
 
     // The WAVE pair's tables (dsp/wavetable.hpp): built here, from their recipes, rather than
-    // read from the card, so they need no file and cannot be missing. If the 2.5 MiB is not
-    // there the WAVE machines play their sub and noise alone, which is recoverable; refusing to
-    // boot over one machine would not be.
-    // The build's 0.18 MiB of scratch is the capture buffer, idle until the first take, so the
-    // 8 MiB headroom keeps it (tests/test_memory.cpp).
-    // Only begun here: the build runs from App::update, a piece at a time (step_waves), because
-    // the whole of it outlasts Enaga's 1 s watchdog on the C6748 and the app would never boot.
-    if (waves_.begin(capture_.lend(), capture_.capacity() * 2u * uint32_t(sizeof(int16_t)))) {
-        waves_building_.store(true, std::memory_order_release);
-    }
+    // read from the card, so they need no file and cannot be missing. If the 1.25 MiB of slots
+    // is not there the WAVE machines play their sub and noise alone, which is recoverable;
+    // refusing to boot over one machine would not be.
+    // Only the slots here: a table is built when a WAVE track first sounds it, a piece at a
+    // time from App::update (step_waves). Building all sixteen at boot outlasted Enaga's 1 s
+    // watchdog on the C6748, and cost every project 2.5 MiB whether it used WAVE or not.
+    if (waves_.reserve(kWaveSlots)) set_wave_library(&waves_);
 
     // The default techno kit of docs/SPEC.md. Every slot is filled now that VA POLY exists;
     // GRAIN has no track in the default kit and arrives with machine switching. An empty slot
@@ -144,12 +141,17 @@ bool Engine::init(float sample_rate) {
 // arrives, and that command cannot arrive before App::init has returned, so this needs no
 // synchronisation with the audio side.
 bool Engine::step_waves() {
-    if (!waves_building_.load(std::memory_order_relaxed)) return true;
-    if (!waves_.step()) return false;
-    set_wave_library(&waves_);
-    // After the library: the capture buffer is zeroed and back before anything may arm a take.
-    waves_building_.store(false, std::memory_order_release);
-    return true;
+    // The tables the WAVE tracks are sounding now: the kit's TBL with the scene, macro, lock and
+    // LFO over it, as the machines are prepared from. A lock or an LFO on TBL asks for each
+    // table it reaches while it is there; a table no longer asked for stays in its slot until
+    // the slot is needed.
+    uint32_t wanted = 0;
+    for (int t = 0; t < kTracks; t++) {
+        if (!machine_is_wave(machine_id_[t])) continue;
+        wanted |= 1u << va_wave_table(sounding(t).get(0));
+    }
+    waves_.want(wanted);
+    return waves_.step();
 }
 
 void Engine::set_sample_region(const int16_t *base, uint32_t bytes) {
@@ -1471,10 +1473,8 @@ void Engine::apply(const Command &command) {
             if (command.a == 0) {
                 looper_mix_ = command.b > kPerfAmountMax ? kPerfAmountMax : command.b;
             } else if (command.a == 1) {
-                // The buffer is RESAMPLE's: not while a take is armed, running or waiting, nor
-                // while the WAVE tables are still being built in it (step_waves).
-                if (capture_.armed() || capture_.recording() || capture_.done() ||
-                    waves_building_.load(std::memory_order_acquire)) {
+                // The buffer is RESAMPLE's: not while a take is armed, running or waiting.
+                if (capture_.armed() || capture_.recording() || capture_.done()) {
                     status_.bump_refused();
                     break;
                 }
@@ -1554,9 +1554,8 @@ void Engine::apply(const Command &command) {
                 if (freeze) status_.bump_freeze_refused();
                 break;
             }
-            // The looper holds the buffer (dsp/looper.hpp) until its loop is thrown away, and
-            // the WAVE tables' build holds it for a second or two after boot (step_waves).
-            if (looper_.holding() || waves_building_.load(std::memory_order_acquire)) {
+            // The looper holds the buffer (dsp/looper.hpp) until its loop is thrown away.
+            if (looper_.holding()) {
                 status_.bump_refused();
                 if (freeze) status_.bump_freeze_refused();
                 break;
@@ -2854,6 +2853,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     status_.tick.store(clock.position, std::memory_order_relaxed);
     status_.running.store(clock.running ? 1u : 0u, std::memory_order_relaxed);
     status_.bump_blocks();
+    waves_.audio_block();   // a WAVE slot taken out two blocks ago is no longer being read
     status_.voices.store(voices, std::memory_order_relaxed);
     status_.undo_depth.store(uint8_t(undo_.depth()), std::memory_order_relaxed);
     status_.redo_depth.store(uint8_t(undo_.redo_depth()), std::memory_order_relaxed);

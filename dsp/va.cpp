@@ -669,7 +669,10 @@ constexpr float kWarpFastest = 0.2f;
 // behind, which only the fastest LFO on POS could ever reach.
 void VaVoice::render_wave(const VaSettings &s, float *work, int n, float fenv, float level2) {
     const WaveLibrary *lib = wave_library();
-    if (lib == nullptr || !lib->ready()) return;   // no library: the sub and the noise alone
+    // No library, or the table not built yet (it is built on demand, Engine::step_waves): the
+    // sub and the noise alone. The slot is read once, so the whole slice reads one mapping.
+    const int slot = lib != nullptr ? lib->slot_of(s.table) : -1;
+    if (slot < 0) return;
 
     const float top = float(kWaveFrames - 1);
     const float end = clamp(s.position + s.motion * fenv, 0.0f, top);
@@ -680,7 +683,7 @@ void VaVoice::render_wave(const VaSettings &s, float *work, int n, float fenv, f
     base = base > kWaveFrames - 2 ? kWaveFrames - 2 : base;
     const float f0 = clamp(start - float(base), 0.0f, 1.0f);
     const float f1 = clamp(end - float(base), 0.0f, 1.0f);
-    const float sa = lib->scale(s.table, base), sb = lib->scale(s.table, base + 1);
+    const float sa = lib->scale_at(slot, base), sb = lib->scale_at(slot, base + 1);
     if (n != ramp_n_) {
         ramp_n_ = n;
         inv_n_ = reciprocal(float(n));
@@ -710,8 +713,8 @@ void VaVoice::render_wave(const VaSettings &s, float *work, int n, float fenv, f
             }
         }
         const int mip = wave_mip_for(dts[r] * speed);
-        const int16_t *a = lib->frame(s.table, base, mip);
-        const int16_t *b = lib->frame(s.table, base + 1, mip);
+        const int16_t *a = lib->frame_at(slot, base, mip);
+        const int16_t *b = lib->frame_at(slot, base + 1, mip);
         const uint32_t inc = uint32_t(dts[r] * 4294967296.0f);
         const float ga0 = levels[r] * sa * (1.0f - f0), gb0 = levels[r] * sb * f0;
         const float ga1 = levels[r] * sa * (1.0f - f1), gb1 = levels[r] * sb * f1;

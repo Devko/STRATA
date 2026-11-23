@@ -257,54 +257,72 @@ public:
     Spectrum &spec(int f) { return specs_[f]; }
     Spectrum &key(int k) { return keys_[k]; }
 
-    // Spectra of time-domain cycles, two frames per FFT.
-    void sample(Cycle cycle) {
-        for (int f = 0; f < kWaveFrames; f += 2) {
+    // Spectra of time-domain cycles, two frames per FFT. Recorded here and run by sample_piece,
+    // a pair of frames at a time (WaveLibrary::step): a recipe calls it last, so running it
+    // after the recipe returns is the same arithmetic in the same order.
+    void sample(Cycle cycle) { cycle_ = cycle; }
+    // One piece of a pair (frames f and f + 1): a quarter of the cycle evaluations, then the
+    // FFT. True when the pair is done.
+    static constexpr int kChunks = 4;
+    static constexpr int kChunk = kSampled / kChunks;
+    bool sample_piece(int f, int part) {
+        if (part < kChunks) {
             const float xa = at(f, kWaveFrames), xb = at(f + 1, kWaveFrames);
-            for (int s = 0; s < kSampled; s++) {
+            for (int s = part * kChunk; s < (part + 1) * kChunk; s++) {
                 const float t = float(s) * (1.0f / float(kSampled));
-                fft_.re[s] = cycle(xa, t);
-                fft_.im[s] = cycle(xb, t);
+                fft_.re[s] = cycle_(xa, t);
+                fft_.im[s] = cycle_(xb, t);
             }
-            analyse(kSampled, specs_[f], specs_[f + 1]);
+            return false;
         }
+        analyse(kSampled, specs_[f], specs_[f + 1]);
+        return true;
     }
 
-    // Every frame through a waveshaper: rendered at peak 1, shaped, measured again.
-    void shape(Shape fn) {
-        for (int f = 0; f < kWaveFrames; f += 2) {
+    // Every frame through a waveshaper: rendered at peak 1, shaped, measured again. Recorded and
+    // run a piece at a time by shape_piece, like sample (growl calls it last).
+    void shape(Shape fn) { shape_ = fn; }
+    // The pair rendered and measured; a quarter of it shaped, four times; the FFT.
+    bool shape_piece(int f, int part) {
+        if (part == 0) {
             synthesise(kSampled, specs_[f], specs_[f + 1], kTop);
             float pa = 0.0f, pb = 0.0f;
             for (int s = 0; s < kSampled; s++) {
                 pa = maxf(pa, absf(fft_.re[s]));
                 pb = maxf(pb, absf(fft_.im[s]));
             }
-            const float ka = pa > 1e-12f ? 1.0f / pa : 1.0f, kb = pb > 1e-12f ? 1.0f / pb : 1.0f;
-            for (int s = 0; s < kSampled; s++) {
+            shape_gain_[0] = pa > 1e-12f ? 1.0f / pa : 1.0f;
+            shape_gain_[1] = pb > 1e-12f ? 1.0f / pb : 1.0f;
+            return false;
+        }
+        if (part <= kChunks) {
+            const Shape fn = shape_;
+            const float ka = shape_gain_[0], kb = shape_gain_[1];
+            for (int s = (part - 1) * kChunk; s < part * kChunk; s++) {
                 fft_.re[s] = fn(f, fft_.re[s] * ka);
                 fft_.im[s] = fn(f + 1, fft_.im[s] * kb);
             }
-            analyse(kSampled, specs_[f], specs_[f + 1]);
+            return false;
         }
+        analyse(kSampled, specs_[f], specs_[f + 1]);
+        return true;
     }
 
     // The sixteen spectra into table `table` of `data`, every mip level, as int16 with a scale
     // per frame. `normalise`: each frame to its own level-0 peak, so frames don't jump in level
     // as the position moves. Otherwise the whole table to one peak (normalise_whole).
     //
-    // In pieces, so the build can run a little at a time (WaveLibrary::step): store_pair for
-    // f = 0, 2, ... 14, then store_end. store() is the same calls in a row.
-    void store(int16_t *data, float *scales, bool normalise) {
-        for (int f = 0; f < kWaveFrames; f += 2) store_pair(data, scales, normalise, f);
-        store_end(data, scales, normalise);
-    }
+    // In pieces, so the build can run a little at a time (WaveLibrary::step): store_level for
+    // each pair f = 0, 2, ... 14 and each level k = 0..9, then store_end.
     void store_end(const int16_t *data, float *scales, bool normalise) {
         if (!normalise) normalise_whole(data, scales);
     }
-    void store_pair(int16_t *data, float *scales, bool normalise, int f) {
+    // One mip level of frames f and f + 1; the last level also quantises the pair into `data`.
+    void store_level(int16_t *data, float *scales, bool normalise, int f, int k) {
+        if (k == 0) gain_[0] = gain_[1] = 1.0f;
+        float *gain = gain_;
         {
-            float gain[2] = {1.0f, 1.0f};
-            for (int k = 0; k < kWaveMipLevels; k++) {
+            {
                 const int n = wave_mip_length(k);
                 const int top = (kWaveHarmonics >> k) < kTop ? (kWaveHarmonics >> k) : kTop;
                 synthesise(n, specs_[f], specs_[f + 1], top);
@@ -323,9 +341,19 @@ public:
                     dst[n] = dst[0];
                 }
             }
+            if (k < kWaveMipLevels - 1) return;
             for (int i = 0; i < 2; i++)
                 quantise(f32_ + i * kWaveFrameStride, data + (f + i) * kWaveFrameStride, scales[f + i]);
         }
+    }
+
+    // What the recipe left to run after it: a time-domain cycle to sample, a shaper, or neither.
+    // Cleared by WaveLibrary::step before each recipe.
+    bool has_cycle() const { return cycle_ != nullptr; }
+    bool has_shape() const { return shape_ != nullptr; }
+    void clear_pending() {
+        cycle_ = nullptr;
+        shape_ = nullptr;
     }
 
 private:
@@ -395,6 +423,10 @@ private:
     }
 
     Fft fft_;
+    Cycle cycle_ = nullptr;
+    Shape shape_ = nullptr;
+    float gain_[2] = {1.0f, 1.0f};
+    float shape_gain_[2] = {1.0f, 1.0f};
     Spectrum *specs_ = nullptr;
     Spectrum *keys_ = nullptr;
     float *f32_ = nullptr;
@@ -655,73 +687,171 @@ constexpr Recipe kRecipes[kWaveTables] = {
 int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 std::atomic<const WaveLibrary *> g_library{nullptr};
-Builder g_builder;   // its scratch is taken by the one init() that builds
 
 }  // namespace
 
-bool WaveLibrary::init(void *scratch, uint32_t scratch_bytes) {
-    if (!begin(scratch, scratch_bytes)) return false;
-    while (!step()) {
+bool WaveLibrary::reserve(int slots) {
+    if (slots_ > 0) return true;
+    slots = clampi(slots, 1, kMaxSlots);
+    // Plain new: Enaga's device runtime has no nothrow operator new[] or std::nothrow (the link
+    // fails), and its new stops the app with "out of memory" rather than returning null.
+    int16_t *data = new int16_t[uint32_t(slots) * kWaveTableBytes / sizeof(int16_t)];
+    if (data == nullptr) return false;
+    static_assert(sizeof(Builder) <= sizeof(builder_), "WaveLibrary::builder_ is too small");
+    Arena heap;   // the builder's scratch, from the heap, kept for every build
+    Builder *builder = new (builder_) Builder;
+    if (!builder->init(heap)) return false;
+    for (std::atomic<int8_t> &s : slot_of_) s.store(-1, std::memory_order_relaxed);
+    for (int i = 0; i < kMaxSlots; i++) {
+        table_in_[i] = -1;
+        last_wanted_[i] = 0;
+        settling_[i] = false;
     }
+    data_ = data;
+    slots_ = slots;
+    building_ = -1;
+    stage_ = Stage::idle;
     return true;
 }
 
-bool WaveLibrary::begin(void *scratch, uint32_t scratch_bytes) {
-    if (data_ != nullptr || building_ != nullptr) return true;
-    // Plain new: Enaga's device runtime has no nothrow operator new[] or std::nothrow (the link
-    // fails), and its new stops the app with "out of memory" rather than returning null.
-    int16_t *data = new int16_t[kWaveLibraryBytes / sizeof(int16_t)];
-    if (data == nullptr) return false;
-    // Borrowed memory when it is big enough (Engine::init lends the capture buffer, which the
-    // engine keeps idle until step() says the build is done); else the heap, where it stays:
-    // Enaga's heap is never freed into.
-    Arena arena;
-    if (scratch != nullptr && scratch_bytes >= wave_build_scratch_bytes() + 64u) {
-        arena.at = static_cast<uint8_t *>(scratch);
-        arena.left = scratch_bytes;
+bool WaveLibrary::init() {
+    if (!reserve(kWaveTables)) return false;
+    want((1u << kWaveTables) - 1u);
+    while (step()) {
     }
-    if (!g_builder.init(arena)) return false;
-    lent_ = scratch != nullptr && arena.at != nullptr ? static_cast<uint8_t *>(scratch) : nullptr;
-    lent_end_ = lent_ != nullptr ? arena.at : nullptr;
-    building_ = data;
-    next_table_ = 0;
-    next_pair_ = -1;
+    for (int t = 0; t < kWaveTables; t++) {
+        if (!resident(t)) return false;
+    }
     return true;
 }
 
 bool WaveLibrary::step() {
-    if (data_ != nullptr) return true;
-    if (building_ == nullptr) return false;
-    Builder &builder = g_builder;
-    int16_t *table = building_ + next_table_ * kWaveFrames * kWaveFrameStride;
-    float *scales = scale_[next_table_];
-    if (next_pair_ < 0) {
-        normalise_ = kRecipes[next_table_].make(builder);   // the recipe: its sixteen spectra
-        next_pair_ = 0;
-        return false;
+    if (slots_ == 0) return false;
+    steps_++;
+    for (int i = 0; i < slots_; i++) {
+        if (table_in_[i] >= 0 && ((wanted_ >> table_in_[i]) & 1u)) last_wanted_[i] = steps_;
     }
-    builder.store_pair(table, scales, normalise_, next_pair_);   // two frames, every mip level
-    next_pair_ += 2;
-    if (next_pair_ < kWaveFrames) return false;
-    builder.store_end(table, scales, normalise_);
-    next_pair_ = -1;
-    if (++next_table_ < kWaveTables) return false;
-    // Lent memory goes back as it came: silent (the capture buffer is zeroed at its init).
-    for (uint8_t *p = lent_; p != nullptr && p < lent_end_; p++) *p = 0;
-    data_ = building_;
-    building_ = nullptr;
+    if (building_ < 0 && !start_next()) return false;
+    if (build_piece()) {
+        // The whole slot is written: publish it.
+        slot_of_[building_].store(int8_t(build_slot_), std::memory_order_release);
+        builds_++;
+        last_built_ = building_;
+        building_ = -1;
+        build_slot_ = -1;
+        stage_ = Stage::idle;
+    }
     return true;
 }
 
-const int16_t *WaveLibrary::frame(int table, int frame, int mip) const {
-    table = clampi(table, 0, kWaveTables - 1);
+// The next wanted table that is not in, and a slot for it: a free one, else the one whose table
+// was wanted least recently and is not wanted now. A slot whose table was just taken out waits
+// two audio blocks, so no render still holds the old mapping when it is written.
+bool WaveLibrary::start_next() {
+    int table = -1;
+    for (int t = 0; t < kWaveTables && table < 0; t++) {
+        if (((wanted_ >> t) & 1u) && slot_of(t) < 0) table = t;
+    }
+    if (table < 0) return false;
+    const uint32_t now = blocks_.load(std::memory_order_acquire);
+    int pick = -1;
+    for (int i = 0; i < slots_ && pick < 0; i++) {
+        if (table_in_[i] < 0 && !settling_[i]) pick = i;
+    }
+    for (int i = 0; i < slots_ && pick < 0; i++) {
+        if (settling_[i] && now - freed_at_[i] >= 2u) {
+            settling_[i] = false;
+            pick = i;
+        }
+    }
+    if (pick < 0) {
+        int victim = -1;
+        for (int i = 0; i < slots_; i++) {
+            if (table_in_[i] < 0 || ((wanted_ >> table_in_[i]) & 1u)) continue;
+            if (victim < 0 || last_wanted_[i] < last_wanted_[victim]) victim = i;
+        }
+        if (victim < 0) return false;   // every slot holds a wanted table
+        slot_of_[table_in_[victim]].store(-1, std::memory_order_release);
+        table_in_[victim] = -1;
+        settling_[victim] = true;
+        freed_at_[victim] = now;
+        return false;                   // written once two blocks have passed
+    }
+    table_in_[pick] = int8_t(table);
+    last_wanted_[pick] = steps_;
+    building_ = table;
+    build_slot_ = pick;
+    stage_ = Stage::recipe;
+    return true;
+}
+
+// One piece of the build: the recipe; a quarter of a time-domain pair's samples or their FFT;
+// or one mip level of two frames. The order and the arithmetic of building the table whole, so
+// a table is the same bit for bit whenever and in whichever slot it is built. True when done.
+bool WaveLibrary::build_piece() {
+    Builder &builder = *reinterpret_cast<Builder *>(builder_);
+    int16_t *table = data_ + uint32_t(build_slot_) * (kWaveTableBytes / sizeof(int16_t));
+    float *scales = scale_[build_slot_];
+    switch (stage_) {
+        case Stage::idle:
+            return false;
+        case Stage::recipe:
+            builder.clear_pending();
+            normalise_ = kRecipes[building_].make(builder);
+            next_pair_ = 0;
+            next_part_ = 0;
+            next_level_ = 0;
+            stage_ = builder.has_cycle() ? Stage::sample
+                     : builder.has_shape() ? Stage::shape
+                                           : Stage::store;
+            return false;
+        case Stage::sample:
+        case Stage::shape:
+            if (!(stage_ == Stage::sample ? builder.sample_piece(next_pair_, next_part_)
+                                          : builder.shape_piece(next_pair_, next_part_))) {
+                next_part_++;
+                return false;
+            }
+            next_part_ = 0;
+            next_pair_ += 2;
+            if (next_pair_ >= kWaveFrames) {
+                next_pair_ = 0;
+                stage_ = Stage::store;
+            }
+            return false;
+        case Stage::store:
+            break;
+    }
+    builder.store_level(table, scales, normalise_, next_pair_, next_level_);
+    if (++next_level_ < kWaveMipLevels) return false;
+    next_level_ = 0;
+    next_pair_ += 2;
+    if (next_pair_ < kWaveFrames) return false;
+    builder.store_end(table, scales, normalise_);
+    return true;
+}
+
+const int16_t *WaveLibrary::frame_at(int slot, int frame, int mip) const {
+    slot = clampi(slot, 0, slots_ - 1);
     frame = clampi(frame, 0, kWaveFrames - 1);
     mip = clampi(mip, 0, kWaveMipLevels - 1);
-    return data_ + (table * kWaveFrames + frame) * kWaveFrameStride + wave_mip_offset(mip);
+    return data_ + (slot * kWaveFrames + frame) * kWaveFrameStride + wave_mip_offset(mip);
+}
+
+float WaveLibrary::scale_at(int slot, int frame) const {
+    return scale_[clampi(slot, 0, kMaxSlots - 1)][clampi(frame, 0, kWaveFrames - 1)];
+}
+
+const int16_t *WaveLibrary::frame(int table, int frame, int mip) const {
+    static const int16_t silent[kWaveFrameStride] = {};
+    const int slot = slot_of(table);
+    if (slot < 0) return silent + wave_mip_offset(clampi(mip, 0, kWaveMipLevels - 1));
+    return frame_at(slot, frame, mip);
 }
 
 float WaveLibrary::scale(int table, int frame) const {
-    return scale_[clampi(table, 0, kWaveTables - 1)][clampi(frame, 0, kWaveFrames - 1)];
+    const int slot = slot_of(table);
+    return slot < 0 ? 0.0f : scale_at(slot, frame);
 }
 
 const char *WaveLibrary::short_name(int table) {
@@ -733,8 +863,7 @@ const char *WaveLibrary::long_name(int table) {
 
 uint32_t wave_build_scratch_bytes() {
     // Fft: re, im and the two twiddle halves. Builder: the frames' and the keys' spectra and the
-    // float copy of two frames. Borrowed from the capture buffer, which is idle at init
-    // (Engine::init); only taken from the heap when nothing is lent.
+    // float copy of two frames. Taken once, by reserve().
     return uint32_t(sizeof(float)) * (2u * kFftMax + kFftMax) +
            uint32_t(sizeof(Spectrum)) * (kWaveFrames + Builder::kKeys) +
            uint32_t(sizeof(float)) * 2u * kWaveFrameStride;

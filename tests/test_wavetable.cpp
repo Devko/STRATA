@@ -201,74 +201,84 @@ TEST(wave_hard_warp_never_reads_past_the_guard) {
 }
 
 namespace {
-// The capture buffer's stand-in: what Engine::init lends the build.
-uint8_t g_lent[256 * 1024 + 4096];
-}
-
-TEST(wavetable_a_build_in_lent_scratch_is_the_same_tables_and_gives_it_back_silent) {
-    static_assert(sizeof(g_lent) > 256 * 1024, "room for the scratch");
-    CHECK(wave_build_scratch_bytes() + 64u <= sizeof(g_lent));
-    for (uint8_t &x : g_lent) x = 0;
-    WaveLibrary heap, lent;
-    CHECK(heap.init());
-    CHECK(lent.init(g_lent + 2, uint32_t(sizeof(g_lent) - 2)));   // not aligned: the arena aligns
-    for (int t = 0; t < kWaveTables; t++) {
-        for (int f = 0; f < kWaveFrames; f++) {
-            CHECK_EQ(heap.scale(t, f), lent.scale(t, f));
-            const int16_t *a = heap.frame(t, f, 0);
-            const int16_t *b = lent.frame(t, f, 0);
-            bool same = true;
-            for (int i = 0; i < kWaveFrameStride; i++) same = same && a[i] == b[i];
-            CHECK(same);
-        }
-    }
-    bool silent = true;
-    for (uint8_t x : g_lent) silent = silent && x == 0;
-    CHECK(silent);
-    // Too small to hold it: the heap is used, and the build still succeeds.
-    WaveLibrary small;
-    CHECK(small.init(g_lent, 1024));
-}
-
-// The app builds the tables a piece at a time from update() (Engine::step_waves): all at once
-// they outlast Enaga's 1 s watchdog on the C6748. The pieces are init()'s work in init()'s order,
-// so the tables are the same; the library is not ready, and the lent scratch not given back,
-// until the last piece.
-TEST(wavetable_a_build_in_steps_takes_its_pieces_and_makes_the_same_tables) {
-    const WaveLibrary &whole = library();
-    for (uint8_t &x : g_lent) x = 0;
-    static WaveLibrary stepped;
-    CHECK(stepped.begin(g_lent, uint32_t(sizeof(g_lent))));
-    CHECK(!stepped.ready());
-    int steps = 0;
-    bool scratch_used = false;
-    while (!stepped.step()) {
-        steps++;
-        CHECK(!stepped.ready());
-        if (steps == 1) {
-            for (uint8_t x : g_lent) scratch_used = scratch_used || x != 0;
-        }
-        if (steps > 2 * WaveLibrary::kBuildSteps) break;
-    }
-    steps++;
-    CHECK_EQ(steps, WaveLibrary::kBuildSteps);
-    CHECK(scratch_used);   // the build really ran in the lent memory
-    CHECK(stepped.ready());
-    CHECK(stepped.step());   // done stays done
+bool same_table(const WaveLibrary &x, const WaveLibrary &y, int t) {
     bool same = true;
-    for (int t = 0; t < kWaveTables; t++) {
-        for (int f = 0; f < kWaveFrames; f++) {
-            same = same && whole.scale(t, f) == stepped.scale(t, f);
-            const int16_t *a = whole.frame(t, f, 0);
-            const int16_t *b = stepped.frame(t, f, 0);
-            for (int i = 0; i < kWaveFrameStride; i++) same = same && a[i] == b[i];
-        }
+    for (int f = 0; f < kWaveFrames; f++) {
+        same = same && x.scale(t, f) == y.scale(t, f);
+        const int16_t *a = x.frame(t, f, 0);
+        const int16_t *b = y.frame(t, f, 0);
+        for (int i = 0; i < kWaveFrameStride; i++) same = same && a[i] == b[i];
     }
-    CHECK(same);
-    bool silent = true;
-    for (uint8_t x : g_lent) silent = silent && x == 0;
-    CHECK(silent);
-    // A library never begun has nothing to step.
+    return same;
+}
+
+// Steps until the library has nothing to do; the number of pieces.
+int settle(WaveLibrary &lib) {
+    int pieces = 0;
+    while (lib.step() && pieces < 100000) pieces++;
+    return pieces;
+}
+
+}  // namespace
+
+// The app builds a table only when a WAVE track sounds it (Engine::step_waves), a small piece at
+// a time: all sixteen at boot outlasted Enaga's 1 s watchdog on the C6748, and pieces any bigger
+// left the keys unpolled long enough to lose presses. A table built alone, in any slot, in any
+// order, is the same bit for bit as the whole library's.
+TEST(wavetable_a_table_built_on_demand_is_the_same_in_any_slot_and_order) {
+    const WaveLibrary &whole = library();
+    static WaveLibrary lib;
+    CHECK(lib.reserve(3));
+    CHECK_EQ(lib.slots(), 3);
+    CHECK(!lib.step());                 // nothing wanted: nothing to do
+    for (int t = 0; t < kWaveTables; t++) CHECK(!lib.resident(t));
+    // Tables in a scrambled order, one at a time, so slots are reused (the audio side never
+    // ticks here, so a taken-out slot needs two audio_block()s before it is written).
+    const int order[kWaveTables] = {11, 2, 15, 0, 7, 12, 4, 9, 14, 1, 6, 13, 3, 8, 10, 5};
+    for (int t : order) {
+        lib.want(1u << t);
+        int pieces = settle(lib);
+        if (!lib.resident(t)) {   // waiting for a slot to settle
+            lib.audio_block();
+            lib.audio_block();
+            pieces += settle(lib);
+        }
+        CHECK(lib.resident(t));
+        CHECK(pieces >= 1 + WaveLibrary::kStoreSteps && pieces <= WaveLibrary::kMostSteps + 1);
+        CHECK(same_table(whole, lib, t));
+    }
+    CHECK_EQ(lib.builds(), kWaveTables);
+}
+
+TEST(wavetable_slots_keep_wanted_tables_and_reuse_the_least_recently_wanted) {
+    static WaveLibrary lib;
+    CHECK(lib.reserve(2));
+    lib.want((1u << 3) | (1u << 5));
+    settle(lib);
+    CHECK(lib.resident(3) && lib.resident(5));
+    // A third table while both are wanted: it waits, and the two stay.
+    lib.want((1u << 3) | (1u << 5) | (1u << 9));
+    CHECK(!lib.step());
+    CHECK(!lib.resident(9) && lib.resident(3) && lib.resident(5));
+    // 5 no longer wanted: its slot is taken out at once, and written only after two blocks.
+    lib.want((1u << 3) | (1u << 9));
+    CHECK(!lib.step());
+    CHECK(!lib.resident(5));
+    CHECK(!lib.step());               // still settling
+    lib.audio_block();
+    CHECK(!lib.step());
+    lib.audio_block();
+    settle(lib);
+    CHECK(lib.resident(9) && lib.resident(3) && !lib.resident(5));
+    CHECK_EQ(lib.slot_of(9), lib.slot_of(9));
+    CHECK(lib.slot_of(9) != lib.slot_of(3));
+    // A table not built reads as silence by table, and -1 by slot.
+    CHECK_EQ(lib.slot_of(5), -1);
+    CHECK(lib.scale(5, 0) == 0.0f);
+    CHECK_EQ(int(lib.frame(5, 0, 0)[0]), 0);
+    CHECK_EQ(lib.slot_of(-1), -1);
+    CHECK_EQ(lib.slot_of(kWaveTables), -1);
+    // A library with no slots has nothing to step.
     WaveLibrary none;
     CHECK(!none.step());
     CHECK(!none.ready());

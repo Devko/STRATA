@@ -25,6 +25,7 @@
 // it plays, so the inner loop is two lookups and no filtering.
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 
 namespace strata {
@@ -49,7 +50,7 @@ constexpr int kWaveFrameStride =
 static_assert(kWaveFrameStride == 5130, "mip layout changed: update the header comment");
 
 constexpr uint32_t kWaveLibraryBytes =
-    uint32_t(kWaveTables) * kWaveFrames * kWaveFrameStride * sizeof(int16_t);
+    uint32_t(kWaveTables) * kWaveFrames * kWaveFrameStride * sizeof(int16_t);   // all sixteen
 
 // The highest harmonic h allowed at phase increment `inc` (cycles a sample) is the one whose
 // alias folds back no lower than 18 kHz: h * inc <= (48 - 18) / 48. The top octave stays bright
@@ -63,53 +64,108 @@ inline int wave_mip_for(float inc) {
     return k;
 }
 
+constexpr uint32_t kWaveTableBytes = uint32_t(kWaveFrames) * kWaveFrameStride * sizeof(int16_t);
+
+// The tables a WAVE track can play, built on demand into a few slots reserved at init.
+//
+// Building all sixteen at boot outlasted Enaga's 1 s main-loop watchdog on the C6748, and spent
+// 2.5 MiB and seconds of CPU on projects with no WAVE track. So nothing is built until a track
+// sounds a table (Engine::step_waves asks for the tables the WAVE tracks are sounding, kit,
+// locks, scenes and LFO in): the table is built into a free slot a small piece at a time from
+// the main context, and the audio side plays the voice's sub alone until it is in. A slot whose
+// table no track wants is reused, the least recently wanted first. More tables later -- built-in
+// or the user's own from the card -- cost slots, not memory per table.
+//
+// Two contexts. The main context calls reserve() (init), want() and step(). The audio context
+// calls slot_of(), frame_at(), scale_at() and audio_block(). A table is published in slot_of_
+// only once all of its slot is written (release; acquire on the audio side), and a slot is only
+// written again two audio blocks after its table was taken out of slot_of_, so no render that
+// read the old mapping is still reading it.
 class WaveLibrary {
 public:
-    // Allocates the tables and builds all sixteen at once: begin(), then step() until it is
-    // done. Tests and tools; the app builds a little at a time.
-    bool init(void *scratch = nullptr, uint32_t scratch_bytes = 0);
+    // Reserves `slots` tables' memory and the builder's scratch. init() only.
+    bool reserve(int slots);
+    // Tests and tools: every table, built now (sixteen slots).
+    bool init();
 
-    // The build in pieces. On the C6748 all sixteen tables take longer than Enaga's 1 s
-    // main-loop watchdog, so the app cannot build them inside its init(): begin() allocates
-    // (init only), and step(), from the main context's update(), does one piece -- a table's
-    // recipe, or two of its frames at every mip level -- and returns true once the last is done.
-    // 16 x 9 = 144 pieces; the order and the arithmetic are init()'s, so the tables are bit-for-
-    // bit the same. The builder's scratch (wave_build_scratch_bytes) is carved from `scratch`
-    // when it is at least that big plus 64 bytes: memory the caller keeps idle until step()
-    // returns true, when it is zeroed and handed back. Else it is allocated.
-    bool begin(void *scratch = nullptr, uint32_t scratch_bytes = 0);
+    // --- main context ---
+    // The tables wanted now, a bit each: built in turn, kept while wanted.
+    void want(uint32_t tables) { wanted_ = tables & ((1u << kWaveTables) - 1u); }
+    // One piece of work: a piece of the build in progress, or the start of the next one. False
+    // when there is nothing to do (every wanted table is in, or waiting on a slot).
     bool step();
-    bool ready() const { return data_ != nullptr; }
-    static constexpr int kBuildSteps = kWaveTables * (1 + kWaveFrames / 2);
+    // Whether `table` is playable, for tests and the screen.
+    bool resident(int table) const { return slot_of(table) >= 0; }
+    int slots() const { return slots_; }
+    // Tables built since reserve(), for tests and the scenarios' log.
+    int builds() const { return builds_; }
+    int last_built() const { return last_built_; }
 
-    // Level `mip` of `frame` of `table`: wave_mip_length(mip) samples plus the guard sample.
-    // Arguments are clamped, so a stale byte can never read outside the library.
+    // --- audio context ---
+    // The slot holding `table`, or -1 while it is not built.
+    int slot_of(int table) const {
+        if (table < 0 || table >= kWaveTables) return -1;
+        return slot_of_[table].load(std::memory_order_acquire);
+    }
+    // Level `mip` of `frame` in `slot`: wave_mip_length(mip) samples plus the guard sample.
+    // Arguments are clamped, so a stale byte can never read outside the slots.
+    const int16_t *frame_at(int slot, int frame, int mip) const;
+    float scale_at(int slot, int frame) const;
+    // The end of every audio block (Engine::process): what lets a slot be reused safely.
+    void audio_block() { blocks_.fetch_add(1u, std::memory_order_release); }
+
+    // By table, for tests: the table's frame, or a silent one when it is not built.
     const int16_t *frame(int table, int frame, int mip) const;
-    // The frame's scale: sample * scale is the value, peak 1 over the table.
     float scale(int table, int frame) const;
+    bool ready() const { return slots_ > 0; }
 
     // The table's name for the screen: three characters ("CLS", "PWM"...) and a long one.
     static const char *short_name(int table);
     static const char *long_name(int table);
 
+    // Pieces a table: the recipe, and two frames at every mip level, plus up to six for each pair
+    // of a time-domain recipe or a shaper.
+    static constexpr int kStoreSteps = (kWaveFrames / 2) * kWaveMipLevels;
+    static constexpr int kMostSteps = 1 + kStoreSteps + 6 * (kWaveFrames / 2);
+    static constexpr int kMaxSlots = kWaveTables;
+
 private:
-    int16_t *data_ = nullptr;       // set once the build is done: the tables to read
-    int16_t *building_ = nullptr;   // the same memory while step() is filling it
-    uint8_t *lent_ = nullptr;       // the borrowed scratch, zeroed when the build is done
-    uint8_t *lent_end_ = nullptr;
-    int next_table_ = 0;
-    int next_pair_ = -1;            // -1: the table's recipe is next
+    enum class Stage : uint8_t { idle, recipe, sample, shape, store };
+    bool start_next();
+    bool build_piece();
+
+    int16_t *data_ = nullptr;                   // slots_ tables of kWaveTableBytes
+    float scale_[kMaxSlots][kWaveFrames] = {};
+    int slots_ = 0;
+    std::atomic<int8_t> slot_of_[kWaveTables] = {};   // set to -1 by reserve()
+    int8_t table_in_[kMaxSlots] = {};           // the table each slot holds or is building, -1
+    uint32_t last_wanted_[kMaxSlots] = {};      // step count when its table was last wanted
+    uint32_t freed_at_[kMaxSlots] = {};         // audio block when its table was taken out
+    bool settling_[kMaxSlots] = {};             // taken out, waiting two blocks to be written
+    std::atomic<uint32_t> blocks_{0};
+    uint32_t wanted_ = 0;
+    uint32_t steps_ = 0;
+    int builds_ = 0;
+    int last_built_ = -1;
+
+    // The build in progress.
+    int building_ = -1;                         // the table, or -1
+    int build_slot_ = -1;
+    int next_pair_ = 0;
+    int next_level_ = 0;
+    int next_part_ = 0;
+    Stage stage_ = Stage::idle;
     bool normalise_ = true;
-    float scale_[kWaveTables][kWaveFrames] = {};
+    // The builder (dsp/wavetable.cpp) lives here, one per library, so two libraries never share
+    // a half-built table's spectra. Its scratch is on the heap, from reserve().
+    alignas(8) unsigned char builder_[160] = {};
 };
 
-// The library is the same for every track and every instance, and built once: Engine::init
-// begins it, the main context's update() steps it, and the engine publishes it here when it is
-// done. The machines read it through this pointer (atomic: set by the main context, read by the
-// audio one). nullptr until then, and a machine with no library plays silence rather than
-// reading through it.
+// The library is the same for every track and every instance: Engine::init reserves it and sets
+// it here, and the machines read it through this pointer. nullptr without one, and a machine
+// with no library, or whose table is not in yet, plays its sub alone rather than reading.
 const WaveLibrary *wave_library();
-// What WaveLibrary::init takes besides the tables: the builder's scratch (tests/test_memory.cpp).
+// What reserve() takes besides the slots: the builder's scratch (tests/test_memory.cpp).
 uint32_t wave_build_scratch_bytes();
 void set_wave_library(const WaveLibrary *library);
 

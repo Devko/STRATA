@@ -194,9 +194,9 @@ TEST(memory_init_is_what_the_budget_says) {
                           4u;
     CHECK(uint64_t(g_engine.mixer().long_delay().bytes()) == long_delay);
 
-    // The WAVE pair's wavetables (dsp/wavetable.hpp), built at init. The builder's scratch is
-    // the capture buffer, idle at init, so it costs nothing here.
-    const uint64_t waves = uint64_t(kWaveLibraryBytes);
+    // The WAVE pair's table slots (dsp/wavetable.hpp), reserved at init and filled on demand,
+    // and the builder's scratch.
+    const uint64_t waves = uint64_t(Engine::kWaveSlots) * kWaveTableBytes + wave_build_scratch_bytes();
 
     const uint64_t itemised = region + raw + src + file + rings + repeat + capture + freeze + tape +
                               long_delay + hall + waves;
@@ -236,19 +236,32 @@ TEST(memory_nothing_allocates_after_init) {
     CHECK_EQ(g_allocations, 0);
 }
 
-// The WAVE tables are begun in init() and built from update() (Engine::step_waves), in the
-// memory init() took: the steps allocate nothing, and the build is done in its 144 pieces.
-TEST(memory_the_wave_build_after_init_allocates_nothing) {
+// The WAVE tables are built on demand (Engine::step_waves): a project with no WAVE track builds
+// nothing, and a WAVE track's table is built into a slot init() reserved, allocating nothing.
+TEST(memory_wave_tables_are_built_only_when_a_track_sounds_one_and_allocate_nothing) {
     const Footprint &f = footprint();
     CHECK(f.ok);
-    if (!g_engine.waves_building()) return;   // an earlier test in this run already stepped it
+    float out[2 * ENAGA_BLOCK_FRAMES];
     g_allocations = 0;
     g_counting = true;
-    int steps = 1;
-    while (!g_engine.step_waves() && steps <= WaveLibrary::kBuildSteps) steps++;
+    // The default kit has no WAVE track: nothing to do, nothing in.
+    for (int i = 0; i < 100; i++) CHECK(!g_engine.step_waves());
+    CHECK_EQ(g_engine.waves().builds(), 0);
+    for (int t = 0; t < kWaveTables; t++) CHECK(!g_engine.waves().resident(t));
+    // Track 7 to WAVE POLY: its table (TBL from the kit's byte) is built, and only that one.
+    Command command;
+    command.cmd = Cmd::set_machine;
+    command.track = 6;
+    command.a = uint8_t(MachineId::wave_poly);
+    g_engine.commands().post(command);
+    for (float &x : out) x = 0.0f;
+    g_engine.process(nullptr, out, uint32_t(ENAGA_BLOCK_FRAMES));
+    int pieces = 0;
+    while (g_engine.step_waves() && pieces <= WaveLibrary::kMostSteps) pieces++;
     g_counting = false;
     CHECK_EQ(g_allocations, 0);
-    CHECK_EQ(steps, WaveLibrary::kBuildSteps);
-    CHECK(!g_engine.waves_building());
-    CHECK(g_engine.step_waves());
+    CHECK(pieces >= 1 + WaveLibrary::kStoreSteps && pieces <= WaveLibrary::kMostSteps);
+    CHECK_EQ(g_engine.waves().builds(), 1);
+    const int table = va_wave_table(g_engine.sounding(6).get(0));
+    CHECK(g_engine.waves().resident(table));
 }
