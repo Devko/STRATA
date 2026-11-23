@@ -177,6 +177,9 @@ public:
     // docs/SPEC.md asks for the whole thing "in one action", which is why the load-back is a
     // parameter here rather than a second gesture.
     bool request_resample_write(int into_track = -1);
+    // A finished take not yet all on the card: its write is running, or waiting to start. A
+    // second request then would retarget it, so request_resample_write refuses.
+    bool take_busy() const;
 
     // The name the last take was written under, for the screen; empty before the first.
     const char *last_take_name() const { return take_name_; }

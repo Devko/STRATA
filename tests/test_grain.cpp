@@ -2029,3 +2029,103 @@ TEST(grain_a_spawn_takes_a_free_grain_and_steals_only_the_one_furthest_through) 
     CHECK(steals > 10);
     CHECK_EQ(wrong, 0);
 }
+
+// --- the CPU guard's pool (set_grain_limit, core/cpuguard.hpp) --------------------------------
+
+TEST(grain_the_guard_limit_thins_the_cloud_and_never_steals) {
+    // The deepest overlap: the full pool is in the air. Lowered to three, no new grain is born
+    // until the count is under three, and none already in the air is taken over -- every live
+    // grain's remaining count only ever goes down, which a steal (a reset to a fresh window)
+    // would break.
+    fill_sine(g_mono, kSrcFrames, 1, 200.0f, kRate, 0.8f);
+    Granular g;
+    g.init(kRate);
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    p.set(1, 127);
+    p.set(2, 127);
+    g.prepare(p);
+    g.trigger(hit());
+    clear(g_out, kCapture);
+    for (int b = 0; b < 200; b++) g.render_add(g_out, kBlk);
+    CHECK(g.live_grains() > 3);   // a cloud well past the limit about to be set
+
+    g.set_grain_limit(3);
+    CHECK_EQ(g.grain_limit(), 3);
+    int left[Granular::kGrains];
+    bool live[Granular::kGrains];
+    for (int i = 0; i < Granular::kGrains; i++) {
+        left[i] = g.grain_remaining(i);
+        live[i] = g.grain_live(i);
+    }
+    int previous = g.live_grains();
+    bool reached = false;
+    for (int b = 0; b < 2000; b++) {
+        g.render_add(g_out, kBlk);
+        const int now = g.live_grains();
+        // Never more than before until the count has come down to the limit.
+        if (!reached) CHECK(now <= previous);
+        if (now <= 3) reached = true;
+        if (reached) CHECK(now <= 3);
+        for (int i = 0; i < Granular::kGrains; i++) {
+            // A grain that was live when the limit fell keeps counting down until it ends: none
+            // of those is stolen. (One that ended may later be reborn in the same slot.)
+            if (live[i] && g.grain_live(i)) {
+                CHECK(g.grain_remaining(i) < left[i]);
+                left[i] = g.grain_remaining(i);
+            } else {
+                live[i] = false;
+            }
+        }
+        previous = now;
+    }
+    CHECK(reached);
+    // And the cloud still sounds: thinned, not stopped.
+    clear(g_out, kCapture);
+    for (int b = 0; b < 100; b++) g.render_add(g_out + b * kBlk, kBlk);
+    CHECK(g.live_grains() >= 1);
+    CHECK(finite_within(g_out, 100 * kBlk, 3.0f));
+    float energy = 0.0f;
+    for (int i = 0; i < 100 * kBlk; i++) energy += g_out[i] * g_out[i];
+    CHECK(energy > 1.0f);
+}
+
+TEST(grain_the_guard_limit_at_the_full_pool_changes_nothing) {
+    // set_grain_limit(kGrains) is level 0: bit-exact against a machine never told anything, under
+    // the steal-heavy pattern of grain_live_grains_never_exceed_the_pool.
+    fill_sine(g_mono, kSrcFrames, 1, 200.0f, kRate, 0.8f);
+    Granular a;
+    Granular b;
+    a.init(kRate);
+    b.init(kRate);
+    a.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    b.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    b.set_grain_limit(2);
+    b.set_grain_limit(Granular::kGrains);
+    TrackParams p = plain();
+    p.set(1, 127);
+    p.set(2, 127);
+    p.set(3, 127);
+    a.prepare(p);
+    b.prepare(p);
+    clear(g_out, kCapture);
+    clear(g_other, kCapture);
+    for (int k = 0; k < 400; k++) {
+        a.trigger(hit(uint8_t(48 + (k % 25))));
+        b.trigger(hit(uint8_t(48 + (k % 25))));
+        a.render_add(g_out + (k % 100) * kBlk, kBlk);
+        b.render_add(g_other + (k % 100) * kBlk, kBlk);
+    }
+    CHECK(__builtin_memcmp(g_out, g_other, sizeof(float) * 100 * kBlk) == 0);
+}
+
+TEST(grain_the_guard_limit_is_clamped_to_the_pool) {
+    Granular g;
+    g.init(kRate);
+    g.set_grain_limit(0);
+    CHECK_EQ(g.grain_limit(), 1);
+    g.set_grain_limit(-5);
+    CHECK_EQ(g.grain_limit(), 1);
+    g.set_grain_limit(99);
+    CHECK_EQ(g.grain_limit(), Granular::kGrains);
+}

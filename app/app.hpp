@@ -841,6 +841,17 @@ public:
             case ENAGA_KEY_OK:
                 // RESAMPLE mode first: OK is what commits a take, and there is no step to hold.
                 if (mode_ == Mode::resample) {
+                    // Not while a take is armed, recording or still going to the card: the
+                    // engine would refuse the arm anyway, but the write request below would
+                    // retarget the take in flight -- a take asked for TO FILE landed on the track
+                    // now on screen, over that track's sample, and the screen said ARMED.
+                    const uint8_t state =
+                        engine_.status().resample_state.load(std::memory_order_relaxed);
+                    if (state != 0u || storage_.take_busy()) {
+                        notice(state == 3u || storage_.take_busy() ? "TAKE STILL WRITING"
+                                                                   : "TAKE RUNNING");
+                        break;
+                    }
                     // From the input: make sure the route is the one on screen before the take.
                     if (kTakeSources[take_source_].input >= 0 && !input_applied_) apply_input();
                     post(Cmd::resample_arm, 0, 0, kTakeBars[take_bars_index_],
@@ -1943,13 +1954,13 @@ public:
         mutate_track_ = selected_;
     }
 
-    // Where OK and CLR are the verdict on a pending MUTATE (on_key): not PROJECT, KIT, SAMPLES
-    // or RESAMPLE, whose own OK and CLR come first, and not while a STEP, a range or a scene pad
-    // is held. The screen only offers the verdict where the keys will give it.
+    // Where OK and CLR are the verdict on a pending MUTATE (on_key): not PROJECT, KIT, SAMPLES,
+    // RESAMPLE or the FUNC menu, whose own OK and CLR come first (in the menu OK is SAVE), and
+    // not while a STEP, a range or a scene pad is held. The screen only offers the verdict where the keys will give it.
     bool verdict_keys_free() const {
         return mutation_pending_ && held_step_ < 0 && range_first_ < 0 && scene_holding_ < 0 &&
                mode_ != Mode::project && mode_ != Mode::kit && mode_ != Mode::samples &&
-               mode_ != Mode::resample;
+               mode_ != Mode::resample && mode_ != Mode::menu;
     }
 
     // Show a live value as the notice (see Echo). GRID draws the track's length and speed on
@@ -2235,6 +2246,19 @@ public:
             cpu_max_ = load > cpu_max_ ? load : cpu_max_;
         }
 
+        // The CPU guard's level, logged when it moves: on the unit and in a scenario this is how
+        // a run says the guard rose (core/cpuguard.hpp). It moves at most ten times a second, so
+        // the sixteen-line log ring is not at risk.
+        {
+            const uint8_t guard = engine_.status().cpu_guard.load(std::memory_order_relaxed);
+            if (guard != logged_guard_) {
+                logged_guard_ = guard;
+                char text[8] = "guard 0";
+                text[6] = char('0' + (guard > 9 ? 9 : guard));
+                enaga::log(text);
+            }
+        }
+
         const Status &status = engine_.status();
         const Pattern &pattern = engine_.pattern();
         const uint8_t playhead = status.playhead[selected_].load(std::memory_order_relaxed);
@@ -2458,8 +2482,12 @@ public:
         append(out, " ");
         // A dropped edit takes the device's place: "V12 LOFI-12 XT DROP 99" is 22 characters,
         // one past the edge, and the drop count is the part that matters.
+        // The CPU guard takes it next (core/cpuguard.hpp): when the box is shedding voices the
+        // user should be able to see why a chord got thinner. "TRK8 MAX99.9 GUARD4" is 19.
         const uint32_t dropped = engine_.commands().dropped();
+        const uint8_t guard = status.cpu_guard.load(std::memory_order_relaxed);
         if (dropped) { append(out, "DROP "); append_number(out, dropped); }
+        else if (guard) { append(out, "GUARD"); append_number(out, guard); }
         else append(out, device_name(enaga::system::device()));
         *out = 0;
         canvas.text(0, 120, line, 7);
@@ -5296,6 +5324,7 @@ private:
     const char *notice_ = nullptr;
     uint32_t notice_at_ms_ = 0;
     uint32_t last_ms_ = 0;
+    uint8_t logged_guard_ = 0;     // the CPU guard level last logged
     uint32_t cpu_max_ = 0;         // per mille, the highest block cost since the last start
 
     LedShadow leds_;
