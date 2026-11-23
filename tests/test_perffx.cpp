@@ -18,6 +18,7 @@
 #include "perffx.hpp"
 #include "repeat.hpp"
 
+#include <cmath>
 #include <cstring>
 
 using namespace strata;
@@ -304,9 +305,12 @@ TEST(looper_resyncs_on_its_bars_and_a_stop_fades_it_out) {
     }
     CHECK(g_looper.playing());
     CHECK_EQ(g_looper.bars(), 2u);
-    // Bar 11 is not one of the loop's own (10 + 2k): no jump.
+    // Bar 11 is not one of the loop's own (10 + 2k): a read a few frames from its place there
+    // is not moved (dsp/loopsync.hpp; a read that is lost is, in the test after this one).
+    for (int b = 0; b < 10; b++) g_looper.process(io, kBlk, 0.0f, true);
     const uint32_t before = g_looper.position();
-    g_looper.on_bar(11, 5);
+    CHECK_EQ(before, 640u);
+    g_looper.on_bar(11, 3);
     CHECK_EQ(g_looper.position(), before);
     // Bar 12 is: the bar line, 5 frames into the coming block, is loop frame 0.
     g_looper.on_bar(12, 5);
@@ -324,6 +328,92 @@ TEST(looper_resyncs_on_its_bars_and_a_stop_fades_it_out) {
     for (int i = 0; i < 2 * kBlk; i++) CHECK(io[i] == 0.0f);
     g_looper.clear();
     CHECK(!g_looper.holding());
+}
+
+TEST(looper_a_lost_read_comes_back_on_the_first_bar_after_a_start) {
+    // Two bars of 2,048 frames from bar 5. After a stop and start the clock is on bar 0, the
+    // loop's second bar: before, it played on out of time until bar 1 came round.
+    g_looper.attach(g_loop_buffer, kLoopCapacity);
+    CHECK(g_looper.arm(4096, 2));
+    g_looper.on_bar(5, 0);
+    float io[2 * kBlk];
+    for (int b = 0; b < 64; b++) {
+        test_block(io, kBlk, b * kBlk);
+        g_looper.process(io, kBlk, 0.0f, true);
+    }
+    CHECK(g_looper.playing());
+    for (int b = 0; b < 10; b++) g_looper.process(io, kBlk, 0.0f, false);
+    CHECK_EQ(g_looper.position(), 640u);
+    g_looper.on_bar(0, 0);
+    CHECK_EQ(g_looper.position(), 2048u);
+    // Its own bar puts it exactly in place; a frame or two off on the bar between is left
+    // alone.
+    g_looper.process(io, kBlk, 0.0f, true);
+    g_looper.on_bar(1, 0);                         // its own bar: exact
+    CHECK_EQ(g_looper.position(), 0u);
+    for (int b = 0; b < 32; b++) g_looper.process(io, kBlk, 0.0f, true);
+    g_looper.on_bar(2, 2);
+    CHECK_EQ(g_looper.position(), 2048u);
+    g_looper.clear();
+}
+
+TEST(looper_a_new_take_keeps_the_loop_playing_to_the_bar_and_fades_it_out) {
+    // A one-bar loop of the test saw, playing at full mix. A new take is armed: before, the loop
+    // dropped out at once (a click, and a bar of silence where the loop was). Now it plays on
+    // until the bar line, fades out over the take's first block, and the take is the live mix.
+    g_looper.attach(g_loop_buffer, kLoopCapacity);
+    CHECK(g_looper.arm(640, 1));
+    g_looper.on_bar(1, 0);
+    float io[2 * kBlk], ref[2 * kBlk];
+    for (int b = 0; b < 10; b++) {
+        test_block(io, kBlk, b * kBlk);
+        g_looper.process(io, kBlk, 1.0f, true);
+    }
+    for (float &x : io) x = 0.0f;
+    g_looper.process(io, kBlk, 1.0f, true);       // the ramp up
+    CHECK(g_looper.playing());
+
+    CHECK(g_looper.arm(1280, 2));
+    CHECK(g_looper.state() == Looper::State::armed);
+    CHECK_EQ(g_looper.bars(), 2u);                // the take's, for the screen
+    // Armed: still the loop alone on a silent input, block 1 of the old take.
+    for (float &x : io) x = 0.0f;
+    g_looper.process(io, kBlk, 1.0f, true);
+    test_block(ref, kBlk, 1 * kBlk);
+    for (int i = 0; i < 2 * kBlk; i++) CHECK(std::fabs(io[i] - ref[i]) < 1.0f / 16384.0f);
+
+    // The bar line: the take's first block fades the old loop (block 2) out over a live input
+    // of 0.25, and records the live input, not the fade.
+    g_looper.on_bar(2, 0);
+    for (float &x : io) x = 0.25f;
+    g_looper.process(io, kBlk, 1.0f, true);
+    CHECK(g_looper.state() == Looper::State::recording);
+    test_block(ref, kBlk, 2 * kBlk);
+    CHECK(std::fabs(io[0] - ref[0]) < 1.0f / 16384.0f);          // the old loop, still whole
+    CHECK(std::fabs(io[2 * kBlk - 2] - 0.25f) < 0.03f);          // almost only the live input
+    for (int i = 0; i < 2 * kBlk; i++) {
+        CHECK_EQ(g_loop_buffer[i], int16_t(0.25f * 32767.0f));
+    }
+    // The rest of the take, and then the new loop plays from its start at the mix it is given.
+    for (int b = 1; b < 20; b++) {
+        for (float &x : io) x = 0.25f;
+        g_looper.process(io, kBlk, 1.0f, true);
+        CHECK_EQ(io[5], 0.25f);                    // nothing over the live mix while recording
+    }
+    CHECK(g_looper.playing());
+    CHECK_EQ(g_looper.frames(), 1280u);
+    CHECK_EQ(g_looper.bars(), 2u);
+    g_looper.clear();
+}
+
+TEST(looper_a_take_armed_from_idle_is_silent_until_it_plays) {
+    g_looper.attach(g_loop_buffer, kLoopCapacity);
+    CHECK(g_looper.arm(640, 1));
+    float io[2 * kBlk];
+    for (float &x : io) x = 0.5f;
+    g_looper.process(io, kBlk, 1.0f, true);
+    for (int i = 0; i < 2 * kBlk; i++) CHECK_EQ(io[i], 0.5f);
+    g_looper.clear();
 }
 
 // --- app/engine: the wiring ---------------------------------------------------------------------

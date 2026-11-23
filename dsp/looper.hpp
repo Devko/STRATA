@@ -28,7 +28,8 @@
 // ## Staying in time
 //
 // As dsp/frozen.hpp: the take began on a bar line, so loop frame `lead` is that bar, and on every
-// bar where (bar - origin) is a multiple of the loop's bars the read is put back exactly there.
+// bar where (bar - origin) is a multiple of the loop's bars the read is put back exactly there,
+// and on any other bar a read that is lost is moved to where it belongs (dsp/loopsync.hpp).
 // Stopped, the loop fades out over a block and stays silent; the first bar after a start
 // brings it back in time.
 #pragma once
@@ -47,6 +48,10 @@ public:
     // Record `frames` (exactly `bars` bars, 1, 2, 4 or 8) from the next bar line. Replaces a loop
     // that is playing; refuses (false, nothing changes) no buffer, an empty or oversized take, a
     // bar count that is not a power of two up to 8, or a take already recording.
+    //
+    // A loop that is playing goes on playing, at its mix and in time, until the new take begins,
+    // and fades out over that first block: the buffer is not written before the bar line, so a
+    // new take neither drops the loop a bar early nor cuts it with a click.
     bool arm(uint32_t frames, uint32_t bars);
 
     // Throw the loop away (or the take armed or running). The buffer is free again.
@@ -68,11 +73,17 @@ public:
     uint32_t frames() const { return frames_; }
     uint32_t recorded() const { return recorded_; }
     uint32_t position() const { return pos_; }
-    uint32_t bars() const { return bars_mask_ + 1u; }
+    // The take's bars while one is armed, else the loop's.
+    uint32_t bars() const { return (state_ == State::armed ? take_bars_mask_ : bars_mask_) + 1u; }
     float mix() const { return mix_; }
 
 private:
     void advance(uint32_t frames);
+    // The playing loop crossfaded in by `mix_`, ramped to `target` over the block.
+    void play(float *interleaved, int n, float target);
+    // The loop a new take replaces, faded out over the take's first block: read before the
+    // take writes over it.
+    void fade_out_outgoing(float *interleaved, int n);
 
     int16_t *buffer_ = nullptr;
     uint32_t capacity_ = 0;
@@ -84,6 +95,13 @@ private:
     uint32_t lead_ = 0;          // the loop frame that is that bar line
     uint32_t pos_ = 0;
     float mix_ = 0.0f;           // where the crossfade is, after the transport fade
+    // The take armed: its length and bars, which become the loop's at the bar line.
+    uint32_t take_frames_ = 0;
+    uint32_t take_bars_mask_ = 0;
+    // A loop is still playing under the armed take (and, for the take's first block, fading).
+    bool outgoing_ = false;
+    uint32_t out_frames_ = 0;
+    uint32_t out_pos_ = 0;
 };
 
 }  // namespace strata

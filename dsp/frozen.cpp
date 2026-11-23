@@ -2,6 +2,7 @@
 #include "frozen.hpp"
 
 #include "frozenloops.h"
+#include "loopsync.hpp"
 
 namespace strata {
 namespace {
@@ -9,20 +10,6 @@ namespace {
 constexpr float kToFloat = 1.0f / 32768.0f;
 constexpr int kMaxBlock = 64;
 constexpr float kInvBlock = 1.0f / float(kMaxBlock);
-
-}  // namespace
-
-namespace {
-
-// `x` modulo `n`, for any sign of x. Control rate only: an integer remainder is a library call
-// on this chip, which is fine once a bar and not once a sample. 32-bit on purpose: a 64-bit
-// divide pulls __c6xabi_divull into the link, which fails it (app/storage.cpp, progress()).
-// A loop is at most 30 s, 1.44 M frames, so every value here fits an int32 with room to spare.
-uint32_t wrap(int32_t x, uint32_t n) {
-    if (x >= 0) return uint32_t(x) % n;
-    const uint32_t r = uint32_t(-x) % n;
-    return r == 0u ? 0u : n - r;
-}
 
 }  // namespace
 
@@ -34,13 +21,11 @@ bool FrozenLoop::set(const int16_t *data, uint32_t frames, uint32_t bars, uint32
     frames_ = frames;
     bars_mask_ = bars - 1u;
     origin_ = origin;
-    lead_ = wrap(lead, frames);
+    lead_ = loop_wrap(lead, frames);
     gain_ = 0.0f;                       // fades in over the first block
     // Where the clock is now: at the start of bar (bar_now - origin) mod bars of the loop, which
     // is as close as a control-rate set can get. The next bar line puts it exactly in time.
-    const uint32_t bar_frames = frames / bars;
-    const uint32_t into = (bar_now - origin) & bars_mask_;
-    pos_ = wrap(int32_t(lead_ + into * bar_frames), frames_);
+    pos_ = loop_position(frames_, bars_mask_, origin_, lead_, bar_now, 0);
     return true;
 }
 
@@ -52,10 +37,11 @@ void FrozenLoop::clear() {
 }
 
 void FrozenLoop::on_bar(uint32_t bar, int32_t frame) {
-    if (data_ == nullptr || ((bar - origin_) & bars_mask_) != 0u) return;
-    // The bar line is loop frame lead_, `frame` frames into the coming block: so the block
-    // starts `frame` frames before it, wrapping past frame 0 either way.
-    pos_ = wrap(int32_t(lead_) - frame, frames_);
+    if (data_ == nullptr) return;
+    // On the loop's own bar the bar line is loop frame lead_, `frame` frames into the coming
+    // block, so the block starts `frame` frames before it. On the others, only a read that is
+    // lost moves: after a stop and start, a relocate or a tempo change (dsp/loopsync.hpp).
+    pos_ = loop_resync(pos_, frames_, bars_mask_, origin_, lead_, bar, frame);
 }
 
 void FrozenLoop::advance(uint32_t frames) {

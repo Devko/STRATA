@@ -1624,6 +1624,7 @@ bool Storage::request_freeze(int track, int bars) {
     arm.track = uint8_t(track);
     arm.a = uint8_t(b);
     arm.b = 3;                              // before the insert chain
+    freeze_refused_seen_ = engine_->status().freeze_refused.load(std::memory_order_relaxed);
     post(arm);
     freeze_track_ = track;
     freeze_bars_ = uint8_t(b);
@@ -1669,6 +1670,16 @@ bool Storage::service_freeze() {
         }
         pool_.release(freeze_slot(t));
         unfreeze_wait_ = uint8_t(unfreeze_wait_ & ~bit);
+    }
+
+    // A take the audio side refused (the looper took the buffer in the same block, say): no
+    // take is coming, so stop waiting for one and say why, rather than showing WAIT until the
+    // track is unfrozen by hand.
+    if (freeze_track_ >= 0 &&
+        engine_->status().freeze_refused.load(std::memory_order_relaxed) != freeze_refused_seen_) {
+        freeze_track_ = -1;
+        freeze_error_ = "FREEZE REFUSED";
+        return false;
     }
 
     // A finished freeze take: into the slot, and the engine told. The copy is one pass over at
