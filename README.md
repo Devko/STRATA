@@ -263,6 +263,7 @@ Load figures are in [docs/BUDGET.md](docs/BUDGET.md), the state of each mileston
 | --- | --- |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | **Start here.** Where it stands, what exists nowhere else, next steps |
 | [docs/MANUAL.md](docs/MANUAL.md) | The user manual: concepts, a first-beat tutorial, the machines, performing, troubleshooting |
+| [docs/FEATURES.md](docs/FEATURES.md) | Every feature with its status: release, unit-tested or not, known limits |
 | [docs/CHEATSHEET.md](docs/CHEATSHEET.md) | One page of gestures, screens and abbreviations, for playing it |
 | [docs/SPEC.md](docs/SPEC.md) | What STRATA is: sound architecture, sequencer, panel mapping, data model |
 | [docs/PLAN.md](docs/PLAN.md) | The build order. Authoritative for milestones |
