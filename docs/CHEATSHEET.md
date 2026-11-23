@@ -239,8 +239,8 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | PATTERN | `>LEN 16 STEPS`, `SWG 54%`, `3 PAT`, `>5 66%` | Master length; swing; a track following SWG or with its own (`>` = field VALUE changes) |
 | EDIT LFO | `NOW CUT 87`, `LFO OFF: SET DEP+DST` | The destination's value right now; DEP or DST is zero |
 | EDIT ARP | `UP 1/16 X2 75%`, `ARP OFF: TURN MOD` | Mode, rate, octaves, gate; the arp is off |
-| EDIT ASR | `HOLDS: PAD OR LEN`, `SUS 0: ONE-SHOT`, `VA/WMN/WPL ONLY` | Notes hold (SUS up); notes are one-shots; not a VA track |
-| EDIT OSC | `OS2: DET 1-63 SYN 64+`, `WRP BENDS  DET 2 OSCS`, `VA/WMN/WPL ONLY` | What OS2's two halves do; the WAVE pair's WRP and DET; not a VA or WAVE track |
+| EDIT ASR | `HOLDS: PAD OR LEN`, `SUS 0: ONE-SHOT`, `NOT ON THIS MACHINE` | Notes hold (SUS up); notes are one-shots; a machine with no ASR page |
+| EDIT OSC | `OS2: DET 1-63 SYN 64+`, `WRP BENDS  DET 2 OSCS`, `NOT ON THIS MACHINE`, `FIN NUDGES RAT` | What OS2's two halves do; the WAVE pair's WRP and DET; a machine with no OSC page; FM4's FIN |
 | PROJECT slots | `05>`, bright box | Queued slot; live slot (bright), has trigs (mid), empty (dark) |
 | PROJECT | `SMP OS.X- 12/32M` | Per track sample: O ready, S streamed from the card, . loading, X failed, - none; MiB used/budget |
 | Any | `STREAM LATE` | The card fell behind a streamed file; the gap played as silence |
@@ -257,7 +257,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 ## Abbreviations
 
 **Machines:** KCK kick · SNR snare · HAT hat · PRC 2-op FM percussion · SMP sampler · GRN granular ·
-MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly.
+MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 four-operator FM.
 
 **EDIT pages:** SRC source · FLTR filter (insert chain) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ASR the VAs' held notes · OSC the VAs' oscillators and drive.
 **LFO page:** WAV shape SIN TRI RMP (rising) SAW (falling) SQR S+H · RAT rate, `0.06`-`32` Hz free on the lower half, `8B` (bars) to `1/32` synced on the upper (`.` dotted, `T` triplet) · DEP depth, 127 = about 64 either side · DST the parameter it moves, or OFF. Lockable, scene- and macro-able like any parameter.
@@ -265,6 +265,8 @@ MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly.
 **OSC page (VA MONO, VA POLY):** WAV `SAW` (0-31), `SQR` (32) to `P08` (127, a thin pulse) · OS2 `OFF` (0), `D0`-`D60` a detuned second saw in cents (1-63: chorus to Reese), `S+0`-`S+24` a pulse synced to OSC 1 (64-127: the sync sweep) · SUB the sub an octave down (0 = off) · DRV drive into the filter, thicker and dirtier, not louder. An older project loads `SAW OFF 102 000`. RES now self-oscillates near the top.
 
 **OSC page (WAVE MONO, WAVE POLY):** WRP phase bend, 0 none · DET `OFF` or `D1`-`D60`, a second detuned reader in cents · SUB · WMN: GLD glide; WPL: DRV drive. The ASR page is the VAs'.
+
+**FM4 pages:** ASR = ATK SUS REL ISU (index sustain). OSC = DET `OFF`/`D1`-`D25` the second pair sharp · FIN fine ratio, `0` at 64 · BRT index keytrack · CAR carrier ratio 1 0.5 2 3 4.
 
 **ARP page:** MOD OFF UP DN U/D ORD RND · RAT `1/4` to `1/32T` · OCT `X1`-`X4` · GAT note length, `50%`-`99%` of the spacing. On, a step plays a run for its length (PLY: through its chord); in KEYS, held keys are arpeggiated. Lockable and scene-able.
 
@@ -280,6 +282,7 @@ MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly.
 | PLY | TUN, MOD, CUT, RES | DEC, ENV, DET detune, LVL (ASR page: ATK SUS REL FSU) |
 | WMN | TBL table (CLS PWM SYN FMT RSW HRM FLD PHD FM1 TIN DGT VOW GRL EPN PLK MLT), POS position, CUT (LP24), RES | DEC, ENV, MOT envelope to position (`OFF` at 64, `+15`/`-15`), LVL (ASR and OSC pages) |
 | WPL | TBL, POS, CUT, RES | DEC, ENV, MOT, LVL (ASR and OSC pages; chords, shares the 12 POLY voices) |
+| FM4 | ALG algorithm `A1`-`A8`, RAT modulator ratio, IDX index, FBK feedback | DEC, IEN index envelope, VEL velocity to index, LVL (ASR and OSC pages; chords, shares the 12 POLY voices) |
 
 **Insert chain (every track):** FLTR = DRV drive, CUT cutoff, RES resonance, MOD filter mode
 (OFF LP12 LP24 BP12 BP24 HP12 HP24). FX = LOF lo-fi, PAN pan, SNA send A (delay), SNB send B (reverb).

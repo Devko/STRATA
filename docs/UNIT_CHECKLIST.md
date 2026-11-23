@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **today's walkthrough** (2026-11-23): about 30 minutes, numbered 1-19, over
+The first part is **today's walkthrough** (2026-11-23): about 30 minutes, numbered 1-20, over
 everything merged since v0.1.0 (18 is the VA sound rework, 19 the WAVE machines). Report back by number, for example `3 fail: reads 055`. After it
 come the controls tour from 2026-11-22 (skip what the v0.1.0 card already showed), last night's
 long walkthrough, and "Reference", the full per-milestone list with the background for each check.
@@ -128,7 +128,7 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
   `VALUE FX MIXER:`, `VALUE FX STEPS:`, and round to page 1. LEFT goes back. GRID's own knob page did **not** change.
 - Let go of FUNC: GRID is back. Hold again: page 1 again.
 - EDIT on track 2 (snare): `EDIT SRC SNR`, `B SNP SNAPPY`. Screen key RIGHT to ASR (without FUNC),
-  hold FUNC: `ASR  ONLY ON VA/WAVE`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
+  hold FUNC: `ASR  ON VA/WAVE/FM4`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
 - MIXER DUCK: `A SRC SOURCE TRACK`. PERFORM: `PUSH A-D   LEARN`. Push A (LEARN), hold FUNC:
   `MACRO LEARN:`; CLR ends it. KEYS: `LOWER PADS WHITE KEYS`. PROJECTS: `PUSH B     RENAME`.
 - Every page legible, nothing cut off or overlapping? Anything missing you looked for? `____`
@@ -193,6 +193,16 @@ with at least one WAV in `SmplTrek/Pool/Audio` (copy one there on a PC if it is 
 - Track 7, MACHINE, DOWN three times: `WPL`. OK: PAD, EPIANO, BELL, CHOIR. AS WAS.
 - 30 s with WPL on track 7 playing PAD and WMN on track 6 playing GROWL: **MAX `____ %`**
   (against item 1's). Then FUNC+HOME, RELOAD PROJECT puts the beat back.
+
+**20. FM4: the four-operator FM machine (3 min).** Beat playing, A01.
+- Lower pad 7, FUNC+EDIT (MACHINE): `FM4` in the fourth column, under `WPL`. DOWN four times
+  from PLY: `FM4`. The chord keeps playing, now FM.
+- OK (SOUNDS): EPIANO (bright strike, mellow ring), BELL (inharmonic, long), BRASS (swells, holds
+  for LEN), ORGAN, GLASS. Each usable without a knob, at a sensible level against the kick? `____`
+- EDIT, SRC: A reads `A1`-`A8`, B reads `0.5` ... `14`; C (IDX) brightens smoothly, no zipper.
+  ASR shows `ISU` in D. OSC: `DET FIN BRT CAR`, the hint `FIN NUDGES RAT`.
+- 30 s with FM4 on track 7 playing PAD: **MAX `____ %`** (against item 1's). Then FUNC+HOME,
+  RELOAD PROJECT puts the beat back.
 
 **Done.** Reply with the numbers: `all pass`, or for example `3 fail: reads 055`, `9: MAX 61.2`.
 
@@ -304,6 +314,9 @@ needed for tonight's unit session; do them if the PC is free.
       against `scenario_factory.sh` on the same commit, both compilers; and the cycles to
       `strata ready` before and after the WAVE commit (`docs/BUDGET.md`, "WAVE MONO and WAVE POLY").
       WAVE: cl6x `________ %` GCC `________ %`. Boot added: `________`
+- [ ] **E15.** FM4: `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against
+      `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for the
+      two FM loops (`docs/BUDGET.md`, "FM4"). FM4: cl6x `________ %` GCC `________ %`
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
@@ -814,7 +827,7 @@ so this is the first time it is heard. Play A01 GROOVE.
 
 - [ ] Track 7 (PLY), EDIT, screen key RIGHT six times: a seventh page box, `ASR`, with ATK SUS REL
       FSU on A-D reading `3MS 0% 60MS 0%`, and `SUS 0: ONE-SHOT` below. The seven boxes fit. On
-      track 1 the same page reads `---` and `VA/WMN/WPL ONLY`.
+      track 1 the same page reads `---` and `NOT ON THIS MACHINE`.
 - [ ] **Old sound kept.** With all four at 0 the chord stab sounds exactly as before (compare with
       A01 on the v0.1.0 card if in doubt).
 - [ ] **A pad.** SUS to about 70%, ATK to about `400MS`, REL to about `2.0S`, FSU up a little. Hold
@@ -950,7 +963,7 @@ SUB 102, DRV 0: their VAs lose the old always-on synced pulse, so they sound a l
 emulator only walks to the page (`tests/scenario_osc.sh`). Play A01 GROOVE.
 
 - [ ] Track 6 (MNO), EDIT, screen key RIGHT seven times: `OSC`, A-D reading `SAW OFF 090 024`, the
-      line `OS2: DET 1-63 SYN 64+`. On track 1 the page reads `---` and `VA/WMN/WPL ONLY`.
+      line `OS2: DET 1-63 SYN 64+`. On track 1 the page reads `---` and `NOT ON THIS MACHINE`.
 - [ ] **RES over its whole range.** SRC page, MOD in LP24 (0-63), D (RES) from 0 to 127 in steps
       of about 16: each step adds a bit more peak, none does nothing. From about 120 the filter
       whistles by itself at a steady level, no crackle, no growing. Same in LP12 (MOD 64-95).
@@ -1173,6 +1186,8 @@ Enaga's menu and start STRATA6.
 | U12 MAX with a MIN11 chord on OS2 sync, DRV and SUB up, over A01 (13p) | |
 | E14 WAVE, `scenario_wave.sh` vs `scenario_factory.sh`; boot cycles before/after, cl6x / GCC (PC) | |
 | U13 MAX with WMN GROWL and WPL PAD, over A01 (walkthrough 19) | |
+| E15 FM4, `scenario_fm.sh` vs `scenario_factory.sh`; `ti_loops.py` FM loops, cl6x / GCC (PC) | |
+| U14 MAX with FM4 PAD on track 7, over A01 (walkthrough 20) | |
 | MAX straight after a kit recall (15) | |
 | STRATA6 MAX, 60 s (16) | |
 | U2 STRATA6 + tracks 5 and 6 as MIN11 POLY, capped at 12 voices (16) | |
