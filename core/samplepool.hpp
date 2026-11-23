@@ -1,7 +1,8 @@
 // The sample memory budget: who owns which part of one big region, and what is still loading.
 //
 // docs/SPEC.md, "Samples": samples are "loaded whole into RAM as int16 at project open", with a
-// budget of "32 MiB by default, raisable per project to the 64 MiB the memory budget allows", and
+// budget of 64 MiB (it was "32 MiB by default, raisable per project to the 64 MiB the memory budget
+// allows" until 2026-11-23; see kSampleBudgetDefaultMib), and
 // "a track whose sample is still loading stays silent rather than glitching".
 //
 // Two jobs, both small and both easy to get quietly wrong:
@@ -41,7 +42,12 @@ namespace strata {
 
 // docs/SPEC.md's figures. Stored in MiB in the project file so a damaged byte cannot ask for 4
 // GiB (core/project.hpp).
-constexpr uint32_t kSampleBudgetDefaultMib = 32;
+// [2026-11-23] The default is the ceiling (Roland: "use the spare RAM"). The region is reserved
+// at its ceiling in init() whatever the budget says, and a budget caps what may be loaded, not
+// what is read at open, so 32 MiB saved no memory and no load time: it only made a long file
+// stream sooner. App applies a project's stored budget as a floor of this default
+// (Storage::project_budget), so a v0.1 project that stored 32 gets the 64 too.
+constexpr uint32_t kSampleBudgetDefaultMib = 64;
 constexpr uint32_t kSampleBudgetMaxMib = 64;
 
 // What a track's sample is doing. `loading` is the state that makes the spec's "stays silent

@@ -1378,7 +1378,7 @@ void Storage::step_load() {
     // old project's sample, which is a second or two of the wrong sound rather than a corrupted
     // read.
     sample_queue_ = 0xFFu;
-    wanted_budget_ = uint32_t(project.settings.sample_budget_mib) << 20;
+    wanted_budget_ = project_budget(project.settings.sample_budget_mib);
 
     finish_job(nullptr);
 }

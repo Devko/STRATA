@@ -387,7 +387,7 @@ The enum numbering is therefore not the order the UI shows the speeds in.
 
 **Samples**
 
-- Loaded whole into RAM as int16 at project open. **[rev] 32 MiB by default** (about 2.9 minutes of stereo at 48 kHz), raisable per project to the 64 MiB the memory budget allows: at the measured 7,600 KiB/s, 64 MiB costs 8.4 s to load against 4.2 s for 32 MiB. Voices convert to float as they read.
+- Loaded whole into RAM as int16 at project open. **[rev] 64 MiB for every project** (about 5.8 minutes of stereo at 48 kHz). It was 32 MiB by default, raisable per project, to keep loads short, but the budget only caps what may be loaded: a project's load time is the size of the samples it names, and the 64 MiB region is reserved at init either way. So the default became the ceiling (Roland, 2026-11-23), and a stored budget is read as a floor of it, which gives every v0.1 project (all stored 32) the whole region. Voices convert to float as they read.
 - Loaded in the background with `files::load`, whose `done` callback runs in the main context. A track whose sample is still loading stays silent rather than glitching.
 - Files not at 48 kHz are resampled once at load, in main-loop slices.
 - Streams (`files::Stream`) are used only for recording and for loops longer than 30 s.
