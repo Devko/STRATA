@@ -2631,19 +2631,13 @@ public:
             // Windowed figures for scenarios and unit logs: `ld <avg> <max>` in percent over
             // kLoadWindow polls (half a second). One block is too noisy to compare (which drum
             // hits land in it moves it by points), and the emulator's report holds only the peak
-            // since boot (tests/scenario_freeze.sh). Enaga's log ring keeps sixteen lines, so the
-            // windows come in bursts of kLoadBurst: after PLAY, after a pattern change and after a
-            // track freezes or comes back -- the moments a comparison wants -- and not otherwise.
-            const uint8_t live = uint8_t(
-                engine_.status().live_bank.load(std::memory_order_relaxed) * 16u +
-                engine_.status().live_slot.load(std::memory_order_relaxed));
+            // since boot (tests/scenario_freeze.sh). Enaga's log ring keeps sixteen lines and
+            // most scenarios check lines from early in the run, so the windows come only in one
+            // burst of kLoadBurst after a track freezes or comes back, while the transport runs.
+            // A freeze then an unfreeze gives the live figure (scenario_freeze.sh --baseline).
             const uint8_t frozen = engine_.status().frozen.load(std::memory_order_relaxed);
-            const bool changed = live != load_live_ || frozen != load_frozen_ ||
-                                 (logged_running_ && !load_started_);   // or PLAY
-            load_live_ = live;
-            load_frozen_ = frozen;
-            load_started_ = logged_running_;
-            if (changed) {
+            if (frozen != load_frozen_) {
+                load_frozen_ = frozen;
                 load_burst_ = kLoadBurst;
                 window_sum_ = window_max_ = window_polls_ = 0;   // a window is one side only
             }
@@ -6413,11 +6407,9 @@ private:
     uint8_t logged_guard_ = 0;     // the CPU guard level last logged
     uint32_t cpu_max_ = 0;         // per mille, the highest block cost since the last start
     static constexpr uint32_t kLoadWindow = 375;  // polls per `ld` log line, half a second
-    static constexpr uint8_t kLoadBurst = 8;       // `ld` lines after each PLAY, pattern, freeze
+    static constexpr uint8_t kLoadBurst = 8;       // `ld` lines after a freeze or unfreeze
     uint8_t load_burst_ = 0;       // `ld` lines still to log in this burst
-    uint8_t load_live_ = 0;        // live bank x 16 + slot, and the frozen mask, last seen
-    uint8_t load_frozen_ = 0;
-    bool load_started_ = false;    // the transport was running at the last poll
+    uint8_t load_frozen_ = 0;      // the frozen mask, last seen
     uint32_t window_sum_ = 0;      // per mille, summed over the current window
     uint32_t window_max_ = 0;
     uint32_t window_polls_ = 0;
