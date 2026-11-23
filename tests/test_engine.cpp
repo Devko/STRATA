@@ -3445,3 +3445,126 @@ TEST(engine_with_sus_up_a_pad_hit_lasts_a_step_and_a_held_key_until_it_comes_up)
     pump(int(kRate * 0.3f) / kBlk);
     CHECK_EQ(poly().sounding_voices(), 0);
 }
+
+// --- the sidechain duck, editable since it moved into the kit ------------------------------------
+
+TEST(engine_the_duck_starts_as_v0_1_fixed_it_and_set_duck_moves_every_field) {
+    Engine &engine = fresh();
+    // The factory duck: track 1 fires it, every other track ducks exactly 0.35 -- the constant it
+    // replaced, so an old project renders as it did -- and the source never ducks itself.
+    CHECK_EQ(engine.duck_source(), 0);
+    CHECK_EQ(engine.duck_depth(0), 0.0f);
+    for (int t = 1; t < kTracks; t++) CHECK_EQ(engine.duck_depth(t), 0.35f);
+    {
+        // And the envelope is the one v0.1.0 set with literals, sample for sample.
+        Duck now = engine.mixer().duck();
+        Duck was;
+        was.init(kRate);
+        was.set(0.003f, 0.040f, 0.120f);
+        now.trigger(0);
+        was.trigger(0);
+        constexpr int kRigBlock = strata::test::kRigBlock;
+        static float a[kRigBlock], b[kRigBlock];
+        int differ = 0;
+        for (int block = 0; block < 200; block++) {
+            now.render(a, kRigBlock);
+            was.render(b, kRigBlock);
+            for (int i = 0; i < kRigBlock; i++) differ += a[i] != b[i];
+        }
+        CHECK_EQ(differ, 0);
+    }
+
+    // The source moves, and the depths follow it: track 1 now ducks at its own 35%, track 3 not.
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::source), 2);
+    pump();
+    CHECK_EQ(engine.duck_source(), 2);
+    CHECK_EQ(int(engine.project().kit.duck.source), 2);
+    CHECK_EQ(engine.duck_depth(0), 0.35f);
+    CHECK_EQ(engine.duck_depth(2), 0.0f);
+    // And it stops at the last track rather than wrapping.
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::source), 20);
+    pump();
+    CHECK_EQ(engine.duck_source(), kTracks - 1);
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::source), -20);
+    pump();
+    CHECK_EQ(engine.duck_source(), 0);
+
+    // A depth per track, stopping at 0 (off) and 100%.
+    strata::test::post_delta(Cmd::set_duck, 3, 0, uint8_t(DuckField::depth), -50);
+    strata::test::post_delta(Cmd::set_duck, 4, 0, uint8_t(DuckField::depth), 100);
+    strata::test::post_delta(Cmd::set_duck, 5, 0, uint8_t(DuckField::depth), 5);
+    pump();
+    CHECK_EQ(int(engine.project().kit.tracks[3].duck), 0);
+    CHECK_EQ(engine.duck_depth(3), 0.0f);
+    CHECK_EQ(engine.duck_depth(4), 1.0f);
+    CHECK_EQ(engine.duck_depth(5), 0.4f);
+    CHECK_EQ(engine.duck_depth(6), 0.35f);                  // the others untouched
+
+    // The times, each stopping at its ends.
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::attack), -10);
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::hold), 120);
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::release), -100);
+    pump();
+    CHECK_EQ(int(engine.project().kit.duck.attack_ms), int(kDuckAttackMin));
+    CHECK_EQ(int(engine.project().kit.duck.hold), int(kDuckHoldMax));
+    CHECK_EQ(int(engine.project().kit.duck.release), int(kDuckReleaseMin));
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::release), 120);
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::release), 120);
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::attack), 120);
+    pump();
+    CHECK_EQ(int(engine.project().kit.duck.release), int(kDuckReleaseMax));
+    CHECK_EQ(int(engine.project().kit.duck.attack_ms), int(kDuckAttackMax));
+
+    fresh();
+    CHECK_EQ(engine.duck_source(), 0);                      // a new project is the factory duck
+    CHECK_EQ(engine.duck_depth(4), 0.35f);
+}
+
+TEST(engine_the_duck_fires_from_its_source_track_and_from_no_other) {
+    Engine &engine = fresh();
+    FakeHost::the().set_running(true);
+
+    // Track 1 by default: its trig fires the duck.
+    put_trig(0, 0);
+    tick_at(0);
+    pump();
+    CHECK(engine.mixer().duck().active());
+
+    // Moved to track 3, track 1's trig no longer does, and track 3's does.
+    FakeHost::the().set_running(false);
+    post(Cmd::stop, 0, 0, 1);
+    pump(400);                                              // past the 120 ms release
+    CHECK(!engine.mixer().duck().active());
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::source), 2);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    pump();
+    CHECK(!engine.mixer().duck().active());
+
+    put_trig(2, 4);
+    tick_at(4 * 24);
+    pump();
+    CHECK(engine.mixer().duck().active());
+
+    FakeHost::the().set_running(false);
+    post(Cmd::stop, 0, 0, 1);
+    pump(2);
+    CHECK(settle());
+}
+
+TEST(engine_a_recalled_kit_brings_its_duck) {
+    Engine &engine = fresh();
+    Kit &inbox = engine.kit_for_recall();
+    inbox = engine.project().kit;
+    inbox.duck.source = 4;
+    inbox.duck.release = 60;
+    inbox.tracks[1].duck = 80;
+    post(Cmd::kit_recall, 0, 0, 1);
+    pump();
+    CHECK_EQ(engine.duck_source(), 4);
+    CHECK_EQ(int(engine.project().kit.duck.release), 60);
+    CHECK_EQ(engine.duck_depth(1), 0.8f);
+    CHECK_EQ(engine.duck_depth(4), 0.0f);
+    fresh();
+}

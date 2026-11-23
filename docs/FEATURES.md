@@ -48,7 +48,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ ("The new controls") | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
 | Arrow-key navigation model (UP/DOWN rows, LEFT/RIGHT sideways, OK picks, CLR back) | v0.1.0 | ○ (5, "Arrow keys") | |
-| Screens: GRID, step page, EDIT (7 pages), MACHINE, KIT, KEYS, MIXER (9 pages), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
+| Screens: GRID, step page, EDIT (7 pages), MACHINE, KIT, KEYS, MIXER (12 pages), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
 | Fixes: the FUNC menu never shows a MUTATE verdict OK would not give; OK in RESAMPLE no longer retargets a take being written | #84 | ○ | |
 
 ## Engines (machines)
@@ -117,7 +117,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Insert chain per track: drive, filter (LP/BP/HP 12/24), lo-fi, amp, duck, pan, level | v0.1.0 | ◐ | Off stages cost nothing |
-| **Sidechain duck** from the kick | v0.1.0 | ○ (3, "Ten bugs a review of `app/` found") | **Fixed and not editable:** depth 0.35, attack/hold/release 3/40/120 ms, source is the kick, set in `Engine::init` (`app/engine.cpp`, the block before `factory_project`). Making it editable needs a kit field |
+| **Sidechain duck**, editable: depth per track, source track, attack/hold/release | v0.1.0, editable since Unreleased | ○ (13l) | MIXER pages DCK 1-4, DCK 5-8, DUCK. Saved in the kit (KIT.BIN section 6; older kits open with the v0.1.0 duck: track 1, 35%, 3/40/120 ms). Not p-lockable, not in scenes or macros: a lock slot would change the pattern and scene file layouts |
 | Send A: tempo-synced ping-pong delay | v0.1.0 | ◐ (13c / U4) | |
 | Send A **LONG** mode: up to 12 s, wow, diffusion, low cut, true freeze | v0.1.0 | ○ (13j) | ~2x the send's CPU while it rings; load host-estimated only (E11 owed) |
 | Send B: reverb | v0.1.0 | ◐ | |
@@ -125,7 +125,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Delay into reverb (D>R) routing | v0.1.0 | ○ ("The sends, the master and SETUP") | Routing page has one empty slot |
 | Master: DJ filter, glue compressor, limiter, output level | v0.1.0 | ◐ | |
 | Master **kill EQ**: 3 bands at 250 Hz / 2.5 kHz, kill switches (FUNC + push A/B/C), scene-able, macro-able | v0.1.0 | ○ (13d / U6) | |
-| MIXER: 8 faders, 9 pages | v0.1.0 | ◐ | |
+| MIXER: 8 faders, 12 pages (3 for the duck since Unreleased) | v0.1.0 | ◐ | |
 
 ## Samples and resampling
 
@@ -175,7 +175,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 1. **The unit walkthrough.** Almost every row is ○. The top of UNIT_CHECKLIST.md orders it; the
    first numbers needed are the clean A01/A04 MAX, STRATA6 (six voices), U1-U9.
 2. **Settle the provisional numbers from those readings:** `kPolyVoiceBudget = 12`, the CPU
-   guard's thresholds, the duck depth.
+   guard's thresholds, the duck's factory depth (now editable, so only the default is open).
 3. **Emulator runs on Roland's PC:** E1-E11 (BUDGET.md), `scenario_controls.sh`,
    `scenario_midi.sh`, `scenario_ambient.sh`, and the cl6x figures for the post-v0.1 features.
 4. **The fused VA loop is off** (cl6x renders it differently, BUDGET.md): ~1.7 points to win back
@@ -185,7 +185,8 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 **Known limits worth building next**
 
 1. **Sustain and note length on the VAs**: built in #90; owed the unit check (13k) and E12 on the PC.
-2. **An editable sidechain duck:** depth, and maybe source and release, as kit fields.
+2. ~~An editable sidechain duck~~: done (depth per track, source, attack/hold/release in the
+   kit). Left: making the depth lockable or scene/macro-able.
 3. **MIDI:** pitch bend and aftertouch in, CC motion recording, slide as legato out; moving the
    Enaga pin once a release carries the DIN fix (`192f03f`).
 4. **A per-project sample memory above 32 MiB** (SPEC allows up to 64), so fewer files need to

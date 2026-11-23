@@ -93,19 +93,8 @@ bool Engine::init(float sample_rate) {
     inv_rate_ = enaga::dsp::reciprocal(rate_);
     midi_out_.clear();
 
-    // The duck fires from the kick, and the kick itself must not duck.
-    //
-    // Both arms of this used to be 0.0f, which meant docs/SPEC.md's M2 sidechain duck was dead
-    // while still being paid for: `trigger_duck` fires on every kick and `begin_block` renders
-    // the curve, and not one track used it. dsp/buses.hpp documents the field as "0 bypasses the
-    // duck for this track, 1 ducks it fully".
-    //
-    // kDuckDepth is a DEFAULT and wants tuning by ear -- docs/SPEC.md gives attack, hold and
-    // release but no depth. It is not reachable from the panel either: the depth is mixer state
-    // set here rather than a kit parameter, so making it editable means a kit field, which is a
-    // later change. docs/UNIT_CHECKLIST.md carries both as boxes.
-    mixer_.set_duck(0.003f, 0.040f, 0.120f);
-    for (int t = 0; t < kTracks; t++) mix_[t].duck = t == duck_source_ ? 0.0f : kDuckDepth;
+    // The sidechain duck comes from the kit (core/project.hpp, KitDuck), by apply_duck in
+    // params_from_kit below. Its factory values are the ones it was fixed at in v0.1.0.
 
     // The factory project (core/factory.hpp): the same kit, mixer, patterns, scenes and macros
     // a NEW project gets, so the instrument with no card and a new project are one thing.
@@ -805,7 +794,9 @@ void Engine::apply(const Command &command) {
                     for (int i = 0; i < kKitParams; i++) to.params[i] = from.params[i];
                     to.machine = from.machine;
                     to.level = from.level;
+                    to.duck = from.duck;
                 }
+                project_.kit.duck = kit_inbox_.duck;
             }
             params_from_kit();
             // And the fourth member of the family tests/test_app.cpp has three tests for: the
@@ -1049,6 +1040,39 @@ void Engine::apply(const Command &command) {
             const uint8_t mode = command.a == kSliceAuto ? kSliceAuto : kSliceEqual;
             project_.kit.tracks[track].slice_mode = mode;
             pool_[track].sampler.set_auto_slices(mode == kSliceAuto);
+            break;
+        }
+
+        case Cmd::set_duck: {
+            // The sidechain duck (DuckField): an encoder delta onto the kit's byte, clamped into
+            // the domain core/project.hpp gives it, then handed to the mixer.
+            const int delta = int(int8_t(command.b));
+            const auto moved = [delta](uint8_t now, int low, int high) {
+                const int next = int(now) + delta;
+                return uint8_t(next < low ? low : (next > high ? high : next));
+            };
+            KitDuck &duck = project_.kit.duck;
+            switch (DuckField(command.a)) {
+                case DuckField::depth:
+                    project_.kit.tracks[track].duck =
+                        moved(project_.kit.tracks[track].duck, 0, kDuckDepthMax);
+                    break;
+                case DuckField::source:
+                    duck.source = moved(duck.source, 0, kTracks - 1);
+                    break;
+                case DuckField::attack:
+                    duck.attack_ms = moved(duck.attack_ms, kDuckAttackMin, kDuckAttackMax);
+                    break;
+                case DuckField::hold:
+                    duck.hold = moved(duck.hold, 0, kDuckHoldMax);
+                    break;
+                case DuckField::release:
+                    duck.release = moved(duck.release, kDuckReleaseMin, kDuckReleaseMax);
+                    break;
+                default:
+                    break;
+            }
+            apply_duck();
             break;
         }
 
@@ -1550,6 +1574,27 @@ void Engine::params_from_kit() {
         effective_[t] = params_[t];
         mix_[t].level = track.level < 0.0f ? 0.0f : (track.level > 2.0f ? 2.0f : track.level);
         pool_[t].sampler.set_auto_slices(track.slice_mode == kSliceAuto);
+    }
+    apply_duck();
+}
+
+void Engine::apply_duck() {
+    const KitDuck &duck = project_.kit.duck;
+    // Clamped here as well as on read: a kit can also arrive from the factory or a test, and a
+    // source past the last track would fire nothing and duck everything.
+    duck_source_ = duck.source < kTracks ? int(duck.source) : 0;
+    // Divided, at control rate and through the same correctly rounded divide as the depths
+    // below: 40 / 1000 is exactly the 0.040f the duck was fixed at, where 8 x 0.005f need not
+    // be, and 35 / 100 is exactly its 0.35f. So an old project renders as it did.
+    const int hold_ms = int(duck.hold) * kDuckTimeStepMs;
+    const int release_ms = int(duck.release) * kDuckTimeStepMs;
+    mixer_.set_duck(float(duck.attack_ms) / 1000.0f, float(hold_ms) / 1000.0f,
+                    float(release_ms) / 1000.0f);
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t depth = project_.kit.tracks[t].duck;
+        mix_[t].duck = t == duck_source_ ? 0.0f
+                                         : float(depth > kDuckDepthMax ? kDuckDepthMax : depth) /
+                                               100.0f;
     }
 }
 
