@@ -6,6 +6,13 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+## [0.3.0] - {{RELEASE_DATE}}
+
+An early beta: everything merged since 0.2.0, built for the same Enaga 0.2.0 firmware. The
+features below have not been through the unit walkthrough (docs/UNIT_CHECKLIST.md) yet. Release
+notes: [docs/release/v0.3.0.md](docs/release/v0.3.0.md). Projects and kits from 0.1.0 and 0.2.0
+open in 0.3.0; their VA tracks sound a little different (see Changed).
+
 ### Added
 
 - **The performance mixer on VALUE.** Push VALUE and tap STEP 1-15 to pick one of fifteen master
@@ -23,7 +30,9 @@ the project file format or the controls.
 - **WAVE MONO and WAVE POLY**, two new machines: the VA voice with a wavetable oscillator. 16
   built-in tables of 16 frames (CLS, PWM, SYN, FMT, RSW, HRM, FLD, PHD, FM1, TIN, DGT, VOW, GRL,
   EPN, PLK, MLT), POS and MOT (envelope to position), WRP and DET on their OSC page, the ASR
-  page, and 8 + 7 factory sounds. WAVE POLY shares the 12-voice POLY budget.
+  page, and 8 + 7 factory sounds. WAVE POLY shares the 12-voice POLY budget. A table is built
+  the first time a track plays it (until then the voice plays only its sub), so nothing is added
+  to the start-up.
 - **FM4**, a four-operator FM machine: the eight classic algorithms, operator 4 feedback, an
   index envelope, a detuned second pair and keytracked brightness, for e-pianos, bells, glass,
   brass, organs and FM basses. Six voices with chords, in the shared 12-voice POLY budget, and 8
@@ -63,6 +72,19 @@ the project file format or the controls.
   take starts, then fades out.
 - A freeze the engine refused could leave FREEZE stuck waiting; it now says `FREEZE REFUSED`.
 - WAVE's WRP no longer aliases on high notes.
+
+### Known limits
+
+- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} The features above are not yet
+  checked on the unit, and the CPU cost of WAVE, FM4, the mixer and the looper there is not
+  measured. Every other load figure comes from the emulator, which models no caches.
+- WAVE POLY and FM4 share the **12 POLY voices** with VA POLY, across all tracks; that budget and
+  the CPU guard's thresholds are provisional.
+- The performance mixer and the looper are not saved. The looper borrows RESAMPLE's buffer, so
+  RESAMPLE and FREEZE wait while a loop is held, and it has no overdub yet.
+- The other 0.2.0 limits stand: streamed samples play forward only, FREEZE is not saved, MIDI
+  clock, SYNC and USB MIDI are lightly tested, and on Enaga 0.2.0 unplug USB when driving gear
+  from MIDI OUT.
 
 ## [0.2.0] - 2026-11-23
 
