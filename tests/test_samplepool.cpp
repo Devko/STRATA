@@ -745,15 +745,16 @@ TEST(samplepool_set_budget_to_the_same_size_is_a_no_op) {
 // --- bad input ------------------------------------------------------------
 
 TEST(samplepool_refuses_slot_indices_outside_the_tracks) {
-    // -1 and kTracks are the two a loop or a UI off-by-one produces. Reading or writing either
-    // one is a sample offset in another struct, so every entry point checks.
+    // -1 and kPoolSlots are the two a loop or a UI off-by-one produces (slots kTracks and up are
+    // the freeze slots since 2026-11-23). Reading or writing either one is a sample offset in
+    // another struct, so every entry point checks.
     SamplePool pool;
     pool.init(32 * kMib);
     CHECK(pool.reserve(0, 4 * kMib));
     const uint32_t used = pool.used();
     const uint32_t largest = pool.largest_free();
 
-    static const int bad[] = {-1, kTracks, kTracks + 1, 1000, -1000};
+    static const int bad[] = {-1, kPoolSlots, kPoolSlots + 1, 1000, -1000};
     for (const int index : bad) {
         CHECK(!pool.reserve(index, 4 * kMib));
         CHECK(!pool.finish(index, 10, 1, 48000));
@@ -868,4 +869,23 @@ TEST(a_one_byte_range_is_given_back_like_any_other) {
     pool.release(1);
     CHECK_EQ(pool.largest_free(), 1u * kMib);
     CHECK(pool.reserve(2, 1 * kMib));
+}
+
+TEST(samplepool_a_freeze_slot_shares_the_budget_and_not_the_tracks_count) {
+    // Freeze (dsp/frozen.hpp): slot kTracks + t is track t's frozen loop, beside its sample.
+    SamplePool pool;
+    pool.init(16 * kMib);
+    CHECK_EQ(freeze_slot(0), kTracks);
+    CHECK_EQ(freeze_slot(kTracks - 1), kPoolSlots - 1);
+    CHECK(pool.reserve(3, 6 * kMib));                    // track 4's sample
+    CHECK(pool.reserve(freeze_slot(3), 6 * kMib));       // and its frozen loop, both held
+    CHECK(pool.finish(freeze_slot(3), 1000, 1, 48000));
+    CHECK_EQ(pool.used(), 12u * kMib);
+    CHECK(!pool.reserve(freeze_slot(5), 6 * kMib));      // the budget is shared
+    CHECK_EQ(pool.count_in(SampleState::loading), 1);    // the screen counts tracks only
+    CHECK_EQ(pool.count_in(SampleState::ready), 0);
+    CHECK(pool.slot(3).offset != pool.slot(freeze_slot(3)).offset);
+    pool.release(freeze_slot(3));
+    CHECK_EQ(pool.used(), 6u * kMib);
+    CHECK(sane(pool));
 }

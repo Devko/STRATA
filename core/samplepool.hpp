@@ -55,6 +55,12 @@ constexpr uint32_t kSampleBudgetMaxMib = 64;
 // why a track is silent instead of pretending nothing was asked for.
 enum class SampleState : uint8_t { empty = 0, loading, ready, failed, count };
 
+// Slots 0-7 are the tracks' samples. Slots 8-15 (2026-11-23) are the tracks' FROZEN loops
+// (app/engine.hpp, "Freeze"): a second range per track, so freezing a SAMPLE or GRAIN track
+// keeps its own sample loaded and unfreezing is instant. The budget is shared by both.
+constexpr int kPoolSlots = 2 * kTracks;
+constexpr int freeze_slot(int track) { return kTracks + track; }
+
 const char *sample_state_name(SampleState state);   // "", "LOAD", "OK", "FAIL"
 
 struct SampleSlot {
@@ -108,21 +114,21 @@ public:
     // starting a load it cannot finish.
     uint32_t largest_free() const;
 
-    // How many slots are in each state, for the screen and for tests.
+    // How many of the TRACKS' slots (0-7, not the freeze slots) are in each state.
     int count_in(SampleState state) const;
 
 private:
-    // A free range. At most kTracks + 1 can exist: eight allocations make at most nine holes.
+    // A free range. At most kPoolSlots + 1 can exist: n allocations make at most n + 1 holes.
     struct Hole {
         uint32_t offset = 0;
         uint32_t bytes = 0;
     };
-    static constexpr int kMaxHoles = kTracks + 1;
+    static constexpr int kMaxHoles = kPoolSlots + 1;
 
     void add_hole(uint32_t offset, uint32_t bytes);
     void coalesce();
 
-    SampleSlot slots_[kTracks];
+    SampleSlot slots_[kPoolSlots];
     Hole holes_[kMaxHoles];
     int hole_count_ = 0;
     uint32_t budget_ = 0;

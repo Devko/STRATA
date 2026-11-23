@@ -365,9 +365,14 @@ constexpr int kTakeBarChoices = int(sizeof kTakeBars / sizeof kTakeBars[0]);
 // Where a take comes from: the finished master, or one of the audio input's routes as Enaga
 // names them (<enaga/abi.h>, enaga_input_source). docs/SPEC.md: "Resample with a chosen input
 // source"; Enaga's `system::input` is the call, main context only.
+//
+// Or one TRACK alone (2026-11-23, a bounce: docs/SPEC.md's "Record the master or one track"):
+// the track's own sound after drive, filter and lo-fi, before its duck, fader, pan and sends,
+// mono (Engine::capture_track_). Its sample can then be sliced, reversed or put on GRAIN.
 struct TakeSource {
     const char *name;     // 7 characters at most: "FROM DYN MIC HIGH" is 17
-    int input;            // the enaga_input_source, or -1 for the master
+    int input;            // the enaga_input_source, or -1 for the master or a track
+    int track = -1;       // 0-7 for one track alone, else -1
 };
 constexpr TakeSource kTakeSources[] = {
     {"MASTER", -1},
@@ -376,6 +381,14 @@ constexpr TakeSource kTakeSources[] = {
     {"MIC", ENAGA_INPUT_MIC},
     {"DYN MIC", ENAGA_INPUT_DYNAMIC_MIC},
     {"HI-Z", ENAGA_INPUT_HIZ},
+    {"TRK 1", -1, 0},
+    {"TRK 2", -1, 1},
+    {"TRK 3", -1, 2},
+    {"TRK 4", -1, 3},
+    {"TRK 5", -1, 4},
+    {"TRK 6", -1, 5},
+    {"TRK 7", -1, 6},
+    {"TRK 8", -1, 7},
 };
 constexpr int kTakeSourceChoices = int(sizeof kTakeSources / sizeof kTakeSources[0]);
 constexpr const char *kInputLevelNames[] = {"LOW", "NORM", "HIGH"};   // enaga_input_level
@@ -997,8 +1010,12 @@ public:
                     }
                     // From the input: make sure the route is the one on screen before the take.
                     if (kTakeSources[take_source_].input >= 0 && !input_applied_) apply_input();
-                    post(Cmd::resample_arm, 0, 0, kTakeBars[take_bars_index_],
-                         kTakeSources[take_source_].input >= 0 ? 1 : 0);
+                    {
+                        const TakeSource &source = kTakeSources[take_source_];
+                        post(Cmd::resample_arm, uint8_t(source.track >= 0 ? source.track : 0), 0,
+                             kTakeBars[take_bars_index_],
+                             source.input >= 0 ? 1 : (source.track >= 0 ? 2 : 0));
+                    }
                     // And the card side, asked for now so the write happens the moment the take
                     // finishes rather than needing a second press at exactly the right time.
                     storage_.request_resample_write(resample_track_);
@@ -2495,6 +2512,29 @@ public:
         // project, and a fresh read after a SAVE AS has landed.
         if (mode_ == Mode::project && project_page_ == ProjectPage::files) settle_project_cursor();
 
+        // Freeze (dsp/frozen.hpp): a track that has just frozen or come back, on the screen and
+        // as `frz <mask>` for the emulator scenario and a unit log; and a freeze the pool had no
+        // room for, said once.
+        {
+            const uint8_t mask = engine_.status().frozen.load(std::memory_order_relaxed);
+            if (mask != frozen_seen_) {
+                const uint8_t gained = uint8_t(mask & ~frozen_seen_);
+                frozen_seen_ = mask;
+                char line[16];
+                char *out = line;
+                append(out, "frz ");
+                append_number(out, uint32_t(mask));
+                *out = 0;
+                enaga::log(line);
+                if (gained != 0) notice("FROZEN");
+            }
+            const char *why = storage_.freeze_error();
+            if (why != freeze_error_seen_) {
+                freeze_error_seen_ = why;
+                if (why != nullptr) notice(why);
+            }
+        }
+
         // A streamed file the card could not keep up with (app/storage.hpp, "streaming"): the
         // audio side played silence where frames were missing. Said once, then not again for a
         // couple of seconds, so a slow card is visible without the screen saying nothing else.
@@ -3178,6 +3218,13 @@ public:
             const int bar_x = wide ? 70 : 56;
             const int bar = int(value) * (wide ? 56 : 70) / 127;
             canvas.rect(bar_x, y + 2, bar < 1 ? 1 : bar, 4, 9);
+        }
+
+        // A frozen track plays its loop, not these knobs (dsp/frozen.hpp): say so on every page,
+        // and where to undo it.
+        if (frozen(selected_)) {
+            canvas.text(0, 96, "FROZEN: FUNC+HOME", 15);
+            return;
         }
 
         if (lfo_page) {
@@ -4618,7 +4665,7 @@ public:
     // over. The cursor always starts on SAVE, so FUNC + HOME, OK saves.
 
     enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
-                                    speed, chain, song, autofill, quantize, count };
+                                    speed, chain, song, autofill, quantize, freeze, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 8;
 
@@ -4637,6 +4684,7 @@ public:
             case MenuItem::song:     return "CHAIN END";
             case MenuItem::autofill: return "AUTO-FILL";
             case MenuItem::quantize: return "QUANTIZE";
+            case MenuItem::freeze:   return "FREEZE";
             default:                 return "?";
         }
     }
@@ -4662,10 +4710,51 @@ public:
             case MenuItem::quantize:
                 append_number(out, uint32_t(quantize()));
                 break;
+            case MenuItem::freeze: {
+                // The selected track: frozen, recording its loop, or how many bars OK records.
+                *out++ = 'T';
+                append_number(out, uint32_t(selected_) + 1);
+                *out++ = ' ';
+                if (frozen(selected_)) {
+                    append(out, "ON");
+                } else if (storage_.freezing_track() == selected_) {
+                    const uint8_t state =
+                        engine_.status().resample_state.load(std::memory_order_relaxed);
+                    append(out, state == 2u ? "REC" : "WAIT");
+                } else {
+                    append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
+                    append(out, " BAR");
+                }
+                break;
+            }
             default:
                 break;
         }
         *out = 0;
+    }
+
+    bool frozen(int track) const {
+        return (engine_.status().frozen.load(std::memory_order_relaxed) >> track & 1u) != 0;
+    }
+
+    // FREEZE's OK: freeze the selected track for the bars on the row, or give it back. A
+    // freeze is a take like a resample, so it waits for the next bar line with the transport
+    // running and refuses while any take is busy.
+    void toggle_freeze() {
+        if (frozen(selected_) || storage_.freezing_track() == selected_) {
+            storage_.request_unfreeze(selected_);
+            notice("UNFROZEN");
+            return;
+        }
+        if (engine_.machine_id(selected_) == uint8_t(MachineId::midi)) {
+            notice("MID HAS NO AUDIO");
+            return;
+        }
+        if (!storage_.request_freeze(selected_, kTakeBars[freeze_bars_index_])) {
+            notice("TAKE RUNNING");
+            return;
+        }
+        notice(enaga::clock::running() ? "FREEZE ARMED" : "ARMED: PRESS PLAY");
     }
 
     void open_menu() {
@@ -4733,6 +4822,18 @@ public:
                 if (wrap && quantize() >= 100) post_delta(Cmd::set_quantize, 0, 0, 0, -100);
                 else post_delta(Cmd::set_quantize, 0, 0, 0, delta * 5);
                 break;
+            case MenuItem::freeze: {
+                // The length, 1, 2, 4 or 8 bars, as RESAMPLE's; it wraps like AUTO-FILL.
+                const int next = (freeze_bars_index_ + delta + kTakeBarChoices) % kTakeBarChoices;
+                freeze_bars_index_ = next;
+                char *out = notice_buffer_;
+                append(out, "FREEZE ");
+                append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
+                append(out, " BAR");
+                *out = 0;
+                notice(notice_buffer_);
+                break;
+            }
             default:
                 break;
         }
@@ -4785,6 +4886,10 @@ public:
                 // has been out.
                 if (storage_.request_sample(selected_)) notice("LOADING");
                 else notice("NO SAMPLE");
+                break;
+            case MenuItem::freeze:
+                toggle_freeze();
+                close_menu(false);
                 break;
             default:
                 menu_value(+1, true);
@@ -6094,6 +6199,9 @@ private:
     int mutate_track_ = 0;                      // the track the last MUTATE went to
     uint8_t mutate_unchanged_seen_ = 0;         // Status::mutate_unchanged as last noticed
     bool freeze_held_ = false;                  // FUNC + MUTATE went down and has not come up
+    int freeze_bars_index_ = 0;                 // FUNC menu FREEZE's length, into kTakeBars
+    uint8_t frozen_seen_ = 0;                   // Status::frozen as update() last saw it
+    const char *freeze_error_seen_ = nullptr;   // and Storage::freeze_error
     uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)
     uint8_t roll_velocity_[kTracks] = {};       // the last velocity sent for each roll
     bool mutation_pending_ = false;             // a MUTATE waiting for OK (keep) or CLR (revert)

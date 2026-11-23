@@ -214,8 +214,10 @@ enum class Cmd : uint8_t {
     //
     // `b` is the SOURCE: 0 the finished master, 1 the audio input (SPEC's "Resample with a chosen
     // input source"). Which input, and at what level, is the main context's enaga::system::input
-    // call; the audio side only chooses which buffer the take is written from.
-    resample_arm,      // a: bars 1-8, b: 0 master, 1 the audio input
+    // call; the audio side only chooses which buffer the take is written from. 2 is one TRACK,
+    // `track`, alone and mono: a bounce (Engine::capture_track_). 3 is the same track BEFORE its
+    // insert chain, which is what a freeze records (dsp/frozen.hpp).
+    resample_arm,      // a: bars 1-8, b: 0 master, 1 the audio input, 2 track `track`, 3 freeze
     resample_cancel,
     resample_release,
 
@@ -272,6 +274,14 @@ enum class Cmd : uint8_t {
     // sound as it is (the list opening); b = kSoundPresetBack puts that back (its AS WAS row).
     // Only the bytes a preset writes are touched either way, so the mix stays the user's.
     sound_preset,
+
+    // Freeze (dsp/frozen.hpp). `freeze_set` starts track `track` playing its freeze slot: `u` the
+    // byte offset into the sample region, frames in c | d << 8 | e << 16 (mono int16), `a` the
+    // loop's bars. The bar it began on and where in the take that bar falls are the engine's own
+    // (the take it recorded). `freeze_clear` stops it and bumps Status::freeze_epoch; the
+    // machine, silenced at the freeze, plays the next note. Performance, not edits: no file.
+    freeze_set,
+    freeze_clear,
 
     count
 };
@@ -440,6 +450,13 @@ struct Status {
     // compares against the value it saw, it does not count.
     std::atomic<uint8_t> sample_epoch[8] = {};
 
+    // Freeze (dsp/frozen.hpp). `frozen` has bit t set while track t plays its frozen loop.
+    // `freeze_epoch[t]` is bumped when the audio side stops reading track t's freeze slot, which
+    // is what the main context waits for before it gives the slot back -- the sample epoch's
+    // protocol, on a counter of its own so the two swaps can never be mistaken for each other.
+    std::atomic<uint8_t> frozen{0};
+    std::atomic<uint8_t> freeze_epoch[8] = {};
+
     // M6. Resampling. `resample_state` is 0 idle, 1 armed (waiting for the bar line), 2
     // recording, 3 a finished take the card has not had yet; `resample_frames` is how much is in
     // it. The screen draws a progress bar from the two, and the card side watches for state 3 --
@@ -479,6 +496,12 @@ struct Status {
     void bump_sample_epoch(int track) {
         const uint8_t next = uint8_t(sample_epoch[track].load(std::memory_order_relaxed) + 1);
         sample_epoch[track].store(next, std::memory_order_relaxed);
+    }
+
+    // Audio context only, as bump_sample_epoch.
+    void bump_freeze_epoch(int track) {
+        const uint8_t next = uint8_t(freeze_epoch[track].load(std::memory_order_relaxed) + 1);
+        freeze_epoch[track].store(next, std::memory_order_relaxed);
     }
 
     // Audio context only, so load-then-store is safe with one writer (see the note above).

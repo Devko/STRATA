@@ -230,7 +230,7 @@ void open_keys() {
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuChain, kMenuSong, kMenuAutofill,
-                     kMenuQuantize, kMenuRowCount };
+                     kMenuQuantize, kMenuFreeze, kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
 void menu_to(int row) {
@@ -4450,7 +4450,7 @@ TEST(ui_resample_b_picks_the_source_and_routes_the_input) {
     FakeHost &host = FakeHost::the();
     shift_key(ENAGA_KEY_F2);
     CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
-    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);   // UI state outlives fresh(): MASTER
+    for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);   // UI state outlives fresh(): MASTER
 
     app.on_encoder(1, +1);                         // B: LINE
     CHECK_EQ(host.input_source(), int(ENAGA_INPUT_LINE_STEREO));
@@ -4463,8 +4463,8 @@ TEST(ui_resample_b_picks_the_source_and_routes_the_input) {
     CHECK_EQ(host.input_level(), int(ENAGA_INPUT_HIGH));
     app.on_encoder(2, +5);                         // and no further
     CHECK_EQ(host.input_level(), int(ENAGA_INPUT_HIGH));
-    for (int i = 0; i < 10; i++) app.on_encoder(1, +1);
-    CHECK_EQ(host.input_source(), int(ENAGA_INPUT_HIZ));    // the last one, and it stops there
+    for (int i = 0; i < 4; i++) app.on_encoder(1, +1);
+    CHECK_EQ(host.input_source(), int(ENAGA_INPUT_HIZ));    // the last input; the tracks follow
 
     // OK arms a take FROM THE INPUT: the engine is told source 1.
     const int calls = host.input_calls();
@@ -4476,7 +4476,7 @@ TEST(ui_resample_b_picks_the_source_and_routes_the_input) {
     pump(2);
 
     // Back to the master: C has nothing to set, and the route is left alone.
-    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);
+    for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);
     const int before = host.input_calls();
     app.on_encoder(2, -1);
     CHECK_EQ(host.input_calls(), before);
@@ -4492,7 +4492,7 @@ TEST(ui_resample_a_refused_route_is_shown_and_tried_again_at_the_arm) {
     Strata &app = fresh();
     FakeHost &host = FakeHost::the();
     shift_key(ENAGA_KEY_F2);
-    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);   // MASTER
+    for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);   // MASTER
     host.set_input_result(-2);                     // the codec did not answer
     app.on_encoder(1, +1);
     CHECK_EQ(UiProbe::notice(app), "INPUT REFUSED");
@@ -4510,7 +4510,7 @@ TEST(ui_layout_resample_sources) {
     Strata &app = fresh();
     FakeHost &host = FakeHost::the();
     shift_key(ENAGA_KEY_F2);
-    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);   // MASTER
+    for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);   // MASTER
     pump(400);
     check_layout(app, "RESAMPLE, master");
     app.on_encoder(2, +1);
@@ -4521,7 +4521,7 @@ TEST(ui_layout_resample_sources) {
         check_layout(app, kTakeSources[s].name);
     }
     // The mic without headphones says so; with them it does not.
-    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);
+    for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);
     app.on_encoder(1, +1);
     app.on_encoder(1, +1);
     app.on_encoder(1, +1);                         // MIC
@@ -5226,6 +5226,59 @@ TEST(ui_the_menu_scrolls_runs_and_goes_back) {
     key(ENAGA_KEY_F4);
 }
 
+TEST(ui_the_menu_freeze_row_arms_a_freeze_of_the_selected_track_and_gives_it_back) {
+    // FREEZE (dsp/frozen.hpp): the row shows the selected track and the bars OK records, B and
+    // LEFT/RIGHT set the bars, OK arms the freeze, and OK on a frozen or arming track undoes it.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                  // EDIT, track 1
+    menu_to(kMenuFreeze);
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuFreeze));
+    // B walks 1, 2, 4, 8 and round; the length outlives fresh(), so walk to 1 by the notice.
+    for (int i = 0; i < 4 && std::strcmp(UiProbe::notice(app), "FREEZE 1 BAR") != 0; i++) {
+        app.on_encoder(1, +1);
+    }
+    CHECK_EQ(UiProbe::notice(app), "FREEZE 1 BAR");
+    app.on_encoder(1, +1);
+    CHECK_EQ(UiProbe::notice(app), "FREEZE 2 BAR");
+    app.on_encoder(1, -1);
+    CHECK_EQ(UiProbe::notice(app), "FREEZE 1 BAR");
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "ARMED: PRESS PLAY");
+    CHECK_EQ(app_storage().freezing_track(), 0);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));      // the menu closed over EDIT
+    pump(2);
+    menu_run(kMenuFreeze);                              // again: the take is dropped
+    CHECK_EQ(UiProbe::notice(app), "UNFROZEN");
+    pump(2);
+    CHECK_EQ(app_storage().freezing_track(), -1);
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
+
+    // A MID track has nothing to freeze.
+    post_cmd(Cmd::set_machine, uint8_t(MachineId::midi));          // track 1
+    pump(2);
+    menu_run(kMenuFreeze);
+    CHECK_EQ(UiProbe::notice(app), "MID HAS NO AUDIO");
+    CHECK_EQ(app_storage().freezing_track(), -1);
+    post_cmd(Cmd::set_machine, uint8_t(MachineId::kick));
+    pump(2);
+}
+
+TEST(ui_layout_a_frozen_track_says_so_on_edit_and_in_the_menu) {
+    // Frozen is the audio side's word (Status::frozen); set by hand here, as the late stream is.
+    Strata &app = fresh();
+    Status &status = const_cast<Status &>(UiProbe::engine(app).status());
+    status.frozen.store(1u, std::memory_order_relaxed);
+    key(ENAGA_KEY_F8);
+    pump(400);
+    check_layout(app, "EDIT, frozen");
+    menu_to(kMenuFreeze);
+    pump(400);
+    check_layout(app, "FUNC menu, FREEZE on");
+    key(ENAGA_KEY_CLR);
+    status.frozen.store(0u, std::memory_order_relaxed);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_the_menu_setting_rows_change_with_left_right_b_and_ok) {
     Strata &app = fresh();
     const Pattern &pattern = app_engine().pattern();
@@ -5747,7 +5800,13 @@ void enter(Strata &app, int s) {
             break;
         case s_mixer: mixer_page(app, 0); break;     // the faders, whatever was open last
         case s_perform: shift_key(ENAGA_KEY_F7); break;
-        case s_resample: shift_key(ENAGA_KEY_F2); break;
+        case s_resample:
+            shift_key(ENAGA_KEY_F2);
+            // From LINE, every time: B walks the sources and the walk outlives fresh(), and on
+            // the master or a track (past HI-Z) C has nothing to set.
+            for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);
+            app.on_encoder(1, +1);
+            break;
         case s_sounds: key(ENAGA_KEY_F8); key(ENAGA_KEY_OK); break;   // track 1, the kick
         default:
             key(ENAGA_KEY_F3);

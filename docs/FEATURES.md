@@ -140,7 +140,9 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Streaming of files too big for memory (2 s head + card stream, 4 tracks max) | v0.1.0 | ○ (15d) | Forward only, one voice: no STA, slices or reverse (not feasible, below); GRAIN plays only the head; CPU unmeasured |
 | Streamed samples honour LEN (end point, loop back to the head) | #91 | ○ (15d) | A LEN loop inside the 2 s head never touches the card |
 | Sample browser (`/SAMPLES`, `/RECORD`), load while playing | v0.1.0 | ○ (15b) | 256 entries a folder; path ≤ 111 characters; no audition before loading |
-| Resample the master, 1-8 bars, to a file or straight onto a track | v0.1.0 | ○ ("Resampling") | Takes ≤ 30 s. Resampling one track alone (SPEC) is not built |
+| Resample the master, 1-8 bars, to a file or straight onto a track | v0.1.0 | ○ ("Resampling") | Takes ≤ 30 s |
+| Bounce: resample ONE track alone (B = `TRK 1`-`TRK 8`), mono, before its duck, fader, pan and sends | #109 | ○ (13m) | No emulator scenario: B is an encoder, the emulator presses keys only |
+| **Freeze**: FUNC menu FREEZE, a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. CPU saving unmeasured (estimate: a six-voice POLY chord ~13 points to ~0.5, cl6x) |
 | Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | No monitoring through STRATA; MIC needs headphones in |
 
 ## MIDI and sync
@@ -197,7 +199,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
    fewer files need to stream. Streamed LEN is built; streamed STA, slices and reverse were looked at on 2026-11-23
    and are not feasible on Enaga 0.2.0's card path ("Why streamed samples play forward only",
    below).
-5. **Resample one track** on its own (SPEC promise).
+5. ~~Resample one track~~ **Built 2026-11-23 as the bounce** (RESAMPLE, B = `TRK n`).
 6. **VA POLY stereo spread and unison** (SPEC promise), and the 6-to-8 voice question once U1/U2
    are in.
 7. **Undo for chain edits and kit recall**; one-press copy of a whole pattern to another slot.

@@ -570,6 +570,10 @@ const Expect kTable[] = {
     // form writes nothing, but one row covers the command: dirtying the kit for it costs a
     // rewrite of KIT.BIN at most.
     {Cmd::sound_preset, kDirtyKit, "sound_preset"},
+
+    // Freeze is RAM only (dsp/frozen.hpp): a loop in the pool, no file, and a reload unfreezes.
+    {Cmd::freeze_set, 0u, "freeze_set"},
+    {Cmd::freeze_clear, 0u, "freeze_clear"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:

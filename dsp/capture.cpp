@@ -49,7 +49,7 @@ bool Capture::init(float sample_rate) {
     return true;
 }
 
-bool Capture::arm(uint32_t frames) {
+bool Capture::arm(uint32_t frames, int channels) {
     // A take in flight is not interrupted. A second press on the resample key during a take
     // would otherwise throw away what had been recorded and start again from the next bar, which
     // is never what someone pressing it wants and is unrecoverable.
@@ -60,6 +60,8 @@ bool Capture::arm(uint32_t frames) {
     if (state_ == State::done) return false;
 
     if (frames == 0u || buffer_ == nullptr) return false;
+    if (channels != 1 && channels != 2) return false;
+    channels_ = uint8_t(channels);
 
     clamped_ = frames > capacity_;
     wanted_ = clamped_ ? capacity_ : frames;
@@ -89,7 +91,7 @@ void Capture::cancel() {
 }
 
 void Capture::process(const float *master, int frames) {
-    if (state_ != State::recording || master == nullptr || frames <= 0) return;
+    if (state_ != State::recording || master == nullptr || frames <= 0 || channels_ != 2) return;
 
     uint32_t room = wanted_ - written_;
     uint32_t take = uint32_t(frames);
@@ -100,6 +102,20 @@ void Capture::process(const float *master, int frames) {
         out[2u * i] = to_s16(master[2u * i]);
         out[2u * i + 1u] = to_s16(master[2u * i + 1u]);
     }
+    written_ += take;
+
+    if (written_ >= wanted_) state_ = State::done;
+}
+
+void Capture::process_mono(const float *mono, int frames) {
+    if (state_ != State::recording || mono == nullptr || frames <= 0 || channels_ != 1) return;
+
+    const uint32_t room = wanted_ - written_;
+    uint32_t take = uint32_t(frames);
+    if (take > room) take = room;
+
+    int16_t *out = buffer_ + std::size_t(written_);
+    for (uint32_t i = 0; i < take; i++) out[i] = to_s16(mono[i]);
     written_ += take;
 
     if (written_ >= wanted_) state_ = State::done;

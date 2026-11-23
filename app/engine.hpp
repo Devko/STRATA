@@ -22,6 +22,7 @@
 
 #include "buses.hpp"
 #include "capture.hpp"    // resampling's take buffer
+#include "frozen.hpp"     // freeze: a track playing a loop of itself
 #include "grain.hpp"      // GRAIN, reachable at last: a track can host any machine
 #include "commands.hpp"
 #include "cpuguard.hpp"   // sheds POLY voices and grains when the block nears its budget
@@ -136,6 +137,7 @@ public:
     // The finished take, for the card to write. Valid from the main context only while
     // `status().resample_state` reads 3, which is the same discipline a project save uses.
     const Capture &capture() const { return capture_; }
+    const FrozenLoop &frozen(int track) const { return frozen_[track]; }
 
     // Which machine a track hosts, as a core/project.hpp machine id. For the screen.
     uint8_t machine_id(int track) const {
@@ -761,6 +763,21 @@ private:
     Capture capture_;
     uint8_t resample_bars_ = 0;      // 0 = nothing armed
     bool capture_input_ = false;     // the armed or running take records the input, not the master
+    // A bounce: the track the armed or running take records on its own (Mixer::add_track_tapped),
+    // or -1 for the master or the input. The tap is cleared every block it is in use, so a muted
+    // or idle track records silence rather than the previous block.
+    int8_t capture_track_ = -1;
+    float capture_tap_[Mixer::kMaxFrames] = {};
+    // A freeze's take is the same tap taken BEFORE the insert chain (dsp/frozen.hpp), and the
+    // bar it began on and the bar tick's frame in that block are where its loop is in time.
+    bool capture_prechain_ = false;
+    uint32_t capture_bar_ = 0;
+    int32_t capture_lead_ = 0;       // the take frame of its first bar line (negative: before it)
+    uint32_t tick_now_ = 0;          // the tick resolve_tick() is resolving, for on_bar()
+    uint32_t tick_frame_ = 0;        // and its frame in the block
+
+    // Freeze: per track, the loop it plays instead of its machine while frozen.
+    FrozenLoop frozen_[kTracks];
 
     // Which track's trigs fire the sidechain duck: the kit's KitDuck::source, as apply_duck last
     // read it. docs/SPEC.md: track 1 by default.

@@ -31,7 +31,7 @@ namespace {
 constexpr uint32_t kBytesPerMib = 1024u * 1024u;
 constexpr uint32_t kBudgetCeiling = kSampleBudgetMaxMib * kBytesPerMib;
 
-bool slot_ok(int slot) { return slot >= 0 && slot < kTracks; }
+bool slot_ok(int slot) { return slot >= 0 && slot < kPoolSlots; }
 
 // The two states in which a slot owns bytes. `failed` deliberately owns none: `fail` hands the
 // range back, because a track that will never play must not hold 8 MiB hostage until the user
@@ -217,9 +217,10 @@ uint32_t SamplePool::largest_free() const {
 }
 
 int SamplePool::count_in(SampleState state) const {
+    // The tracks' samples only: a freeze slot is not a sample the screen reports on.
     int n = 0;
-    for (const SampleSlot &s : slots_) {
-        if (s.state == state) n++;
+    for (int i = 0; i < kTracks; i++) {
+        if (slots_[i].state == state) n++;
     }
     return n;
 }

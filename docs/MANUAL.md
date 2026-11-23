@@ -1007,6 +1007,30 @@ The modes and their knobs are saved with the project; a project from before they
 with both sends classic. Both cost more CPU than the classic modes while they sound (about
 twice the send cost), and nothing once they fall silent.
 
+### Freeze
+
+CPU is the SmplTrek's tight resource and memory is not, so a track can be **frozen**: it plays
+a loop of itself from RAM instead of computing its sound. FUNC+HOME opens the menu; **FREEZE** is
+its last row (UP from SAVE). The row shows the selected track and the loop's length, `T7 1 BAR`;
+LEFT/RIGHT or B pick 1, 2, 4 or 8 bars. OK arms it (`FREEZE ARMED`, or `ARMED: PRESS PLAY`
+when stopped): from the next bar line the track's machine is recorded for that many bars, and
+then the screen says `FROZEN` and the track plays the recording.
+
+A frozen track keeps its **insert filter, drive, lo-fi, fader, pan, sends and duck**: they work
+on the loop live. What stops is everything that feeds the machine: notes, steps, locks, chords
+and the knobs on its SRC/AMP pages do nothing, and EDIT says `FROZEN: FUNC+HOME`. To change the
+part, unfreeze it: the FREEZE row reads `T7 ON`, and OK gives the machine back at once
+(`UNFROZEN`). The loop keeps in time with the bar lines; after a tempo change it jumps back into
+time at the start of its next loop rather than stretching. A frozen track is silent while
+stopped. Loading a project, NEW and recalling a kit unfreeze every track, and a freeze is not
+saved: the project always opens live.
+
+A freeze is a take, so it waits while a RESAMPLE take is running, and the RESAMPLE screen waits
+for a freeze. The loop uses the sample memory (a bar at 120 BPM is about 190 KiB); if there is
+not room, the screen says `NO ROOM` and the track stays live. MID tracks have no audio to
+freeze. To keep a loop as a sample you can slice or reverse, bounce it instead (RESAMPLE, B on
+`TRK n`).
+
 ### Mutation
 
 In PERFORM, UP/DOWN pick the mutation and the screen keys the amount (0-100, in tens):
@@ -1046,6 +1070,13 @@ starts on the next bar line with the transport running, lasts 1-8 bars, and land
 a track. You do not hear the input through STRATA; listen to the source directly. Turning B or C
 makes the input quiet for about 10 ms, and Enaga puts the input back to LINE, NORM when STRATA
 stops.
+
+**Bouncing one track.** Past the inputs, B also offers `TRK 1` to `TRK 8`. The take is then that
+track alone: its machine through its drive, filter and lo-fi, before its duck, fader, pan and
+sends, so a quiet or panned track still comes out at full level, and the duck is not baked in.
+It is mono, half the size of a master take. With `TO TRK n` it lands on that track like any
+take, ready to slice, reverse or put on GRAIN; give that track SAMPLE or GRAIN to hear it. A
+muted track bounces as silence, so unmute it first.
 
 ---
 
@@ -1232,6 +1263,10 @@ read about 0-26%; the factory project's load on the unit is still to be measured
   out first) and GRAIN clouds get sparser. It steps back down one level a second once the load
   falls, and a second STOP clears it. Seeing `GUARD` often means the pattern asks for more than
   the box has: use the tips above.
+- **Freeze the dearest track.** FUNC+HOME, UP (FREEZE is the last row), OK: the selected track
+  records its loop (1 bar; LEFT/RIGHT or B on the row for 2, 4 or 8) from the next bar line, then
+  plays it from memory and stops computing. A six-voice POLY chord goes from the biggest cost
+  in the project to almost nothing. See "Freeze" in section 5.
 - **The insert filter and lo-fi** cost nothing when off. Set FLTR MOD to OFF and LOF to 0 on the
   tracks that do not need them.
 - **Closed sends** cost nothing: keep SNA and SNB at 0 on tracks that do not use the delay or reverb.

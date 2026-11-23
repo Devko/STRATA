@@ -93,6 +93,11 @@ struct ChainOut {
     float *send_a = nullptr;     // send A, mono (delay)
     float *send_b = nullptr;     // send B, mono (reverb)
     const float *duck = nullptr; // this block's duck amount, or nullptr while the duck is idle
+    // A bounce's tap (RESAMPLE from a track): the track after drive, filter and lo-fi, before the
+    // duck, the fader, the pan and the sends -- the track's own sound, which a sample of it should
+    // be. Not ducked, because the duck's source keeps playing and would duck it a second time.
+    // nullptr on every track but the one a take records.
+    float *tap = nullptr;
 };
 
 enum class FilterMode : uint8_t { off = 0, lp12, lp24, bp12, bp24, hp12, hp24, count };

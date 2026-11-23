@@ -126,6 +126,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | CHAIN END | | SONG (play once) / LOOP |
 | AUTO-FILL | | OFF 4 8 16 bars |
 | QUANTIZE | | record quantize, by 5 |
+| FREEZE | freeze the selected track (its loop from the next bar line), or unfreeze it | `T3 1 BAR` (1 2 4 8), `T3 WAIT` / `REC` while recording, `T3 ON` frozen |
 
 Moved here from: FUNC + PROJECT twice (save), PROJECT's FUNC + UP/DOWN/LEFT/RIGHT (chain,
 sample reload, reload, new), PROJECTS' FUNC + DOWN (save as, still there too), CHAIN's FUNC +
