@@ -309,8 +309,13 @@ it.
 
 <p><img src="screens/keys.png" width="256" alt="KEYS: sixteen notes of C minor"></p>
 
-Press **HOME twice quickly** for KEYS: STEP 1-16 play the scale from the root (C minor here), and
-the pad-row keys change octave. Press **REC** (it lights red) while playing and what you play is
+Press **HOME twice quickly** for KEYS. The two pad rows become a piano keyboard: the lower pads
+are the white keys C to C, the upper pads above them the black keys (C#, D#, F#, G#, A#), and the
+two upper pads with no black key are octave down (between E and F) and octave up (after B). Pads
+play at the strength you hit them and hold the note while down; the pads in the scale light in
+the track's colour, the root brightest. STEP 1-16 play the scale from the root (C minor here), in
+key whatever you press. The pad-row keys change octave, UP/DOWN the track, and FUNC + a pad still
+mutes on the bar. Press **REC** (it lights red) while playing and what you play is
 recorded onto the selected track, quantized by the SETUP page's QUANTIZE amount (100% by
 default). Pads record too, with their velocity. REC again stops. Turning A-D while recording
 writes locks onto the steps as they pass (motion recording).

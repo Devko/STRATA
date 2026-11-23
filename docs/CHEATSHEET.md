@@ -35,7 +35,7 @@ Hold FUNC alone for a moment and the screen lists them, with what the upper pads
 | Mode | Keys | What it is for |
 | --- | --- | --- |
 | GRID | HOME (from anywhere) | All 8 tracks; STEP keys edit the selected track |
-| KEYS | HOME twice quickly (double-tap) | STEP keys play 16 scale degrees on the selected track |
+| KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys 16 scale degrees, on the selected track |
 | FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, kits, sample reload, track speed, chain, song, auto-fill, quantize |
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, its LFO and its ARP |
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
@@ -151,7 +151,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | — | Macros A-D | Capture scene / clear macro | — (auto-fill: FUNC menu) |
 | FUNC menu | Row | Change a setting row | — | — | A: row, B: change | Run the row / close | — |
 
-**KEYS:** STEP 1-16 play the scale from the root and hold the note until released; the pad-row keys (or LEFT/RIGHT) change the octave. Letting go also releases that note if the sequencer is playing it on the same track.
+**KEYS:** the pads are a piano: lower 1-8 C D E F G A B C, upper C# D# (octave down) F# G# A# (octave up), at the pad's velocity, held while down, pressure bends macro A; lit as a keyboard (root bright, scale dim, held white); FUNC + pad keeps its usual job. STEP 1-16 play the scale from the root and hold the note until released; the pad-row keys (or LEFT/RIGHT) change the octave of both. Letting go also releases that note if the sequencer is playing it on the same track.
 **PROJECT:** STEP 1-16 queue that slot of the shown bank; the pad-row keys change the shown
 bank. The screen keys walk the pages PROJECT, CHAIN, PATTERN, SETUP, PROJECTS; CLR on any of
 them goes back to the slots. In SETUP, A sets the record quantize. Chain on/off, the sample

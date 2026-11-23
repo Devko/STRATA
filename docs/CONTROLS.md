@@ -61,7 +61,16 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      swing, FUNC + turn = DJ filter.
    - **STEP keys:** the sixteen of whatever the pad-row keys chose.
    - **Lower pads:** the eight tracks: select and play. FUNC + pad = mute on the next bar.
-   - **Upper pads:** the seven performance tools, the same in every mode.
+   - **Upper pads:** the seven performance tools, the same in every mode but KEYS.
+   - **KEYS is the exception: both pad rows are a piano**, being the pressure-sensitive ones and
+     laid out like a keyboard (Roland, 2026-11-23, after playing KEYS on the STEP keys). Lower
+     pads C D E F G A B C, upper pads C# D# above them, F# G# A#; the upper pad between E and F
+     is octave down and the one after B octave up. A pad plays at its own velocity, holds its
+     note while down, and its pressure bends macro A. The track is UP/DOWN, as in KEYS anyway.
+     FUNC + a pad keeps its usual job (mute on the bar, the performance moves). The pads light as
+     a keyboard: the root bright in the track's colour, the scale's other notes dim, the rest
+     dark, a held pad white, the two octave pads dim white. The STEP keys stay the 16 scale
+     degrees, so KEYS has both a chromatic piano and an in-key keyboard.
 2. **FUNC + something is either the key's printed second label or a performance move.** The
    rare setup actions are in the FUNC menu, named on the screen, not on chords that change from
    page to page.
