@@ -6,25 +6,32 @@
 #   ...one bar later                       -> `frz 64`: track 7 plays its loop from RAM
 #
 # The emulator cannot read engine memory, so this reads the app's `frz <mask>` log line
-# (app/app.hpp, update()). It also prints the LAST block's cycles, which by the end of the run
-# is a block with track 7 frozen: compare it with the same figure from a run without the menu
-# keys (--baseline). One block is a noisy figure -- which drum hits fall in it moves it by
-# points -- so the number that counts is the unit's LOAD (docs/UNIT_CHECKLIST.md, 13n).
+# (app/app.hpp, update()). For the load it reads the app's `ld <avg> <max>` lines, one per half
+# second while the transport runs, and prints the windows before the freeze and after it. The
+# emulator's report has only the peak since boot (there is no last-block figure: an earlier
+# version of this script read one and always printed 0.00%). Compare with --baseline, the same
+# run without the menu keys; the number that counts is the unit's LOAD (UNIT_CHECKLIST, 13n).
+#
+# --pad queues A05 PAD (F3, STEP 5) after PLAY, so track 7 is the held VA POLY chord (four to six
+# voices all the time) rather than A01's two stabs: the case freezing is for. The freeze is
+# armed later there, after A05 has taken over at the end of A01's pass.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F1 = 19, F4 = 27, F5 = 22, OK = 23, UP = 17,
-# DOWN = 25. A chord is FUNC pressed and the second key 5 M cycles later (tests/scenario_m6.sh).
+# DOWN = 25, F3 = 20, STEP 5 = 36. A chord is FUNC pressed and the second key 5 M cycles later (tests/scenario_m6.sh).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 # shellcheck source=tools/env.sh
 source tools/env.sh
 
-CYCLES=2400000000
+CYCLES=4800000000
 BASELINE=0
+PAD=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --cycles) CYCLES="$2"; shift 2 ;;
         --baseline) BASELINE=1; shift ;;
+        --pad) PAD=1; shift ;;
         *) echo "error: unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -45,13 +52,18 @@ LOG="$ENAGA_BUILD/scenario_freeze.log"
 KEYS=(--key 22@300000000
       --key 25@360000000 --key 25@420000000 --key 25@480000000
       --key 25@540000000 --key 25@600000000 --key 25@660000000)
+ARM=840000000
+if [ "$PAD" -eq 1 ]; then
+    KEYS+=(--key 20@700000000 --key 36@740000000)
+    ARM=1200000000
+fi
 if [ "$BASELINE" -eq 0 ]; then
-    KEYS+=(--key 19@720000000 --key 27@725000000
-           --key 17@780000000
-           --key 23@840000000)
+    KEYS+=(--key 19@$((ARM - 120000000)) --key 27@$((ARM - 115000000))
+           --key 17@$((ARM - 60000000))
+           --key 23@$ARM)
 fi
 
-echo "running the emulator for $CYCLES cycles: PLAY, track 7$([ "$BASELINE" -eq 0 ] && echo ', FUNC menu FREEZE') ..."
+echo "running the emulator for $CYCLES cycles: PLAY$([ "$PAD" -eq 1 ] && echo ', A05 PAD'), track 7$([ "$BASELINE" -eq 0 ] && echo ', FUNC menu FREEZE') ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" "${KEYS[@]}" \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
@@ -59,11 +71,12 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" "${KEYS[@]}
     exit 1
 }
 
-python3 - "$LOG" "$BASELINE" <<'PY'
+python3 - "$LOG" "$BASELINE" "$PAD" <<'PY'
 import json, re, sys
 
 CYCLES_PER_BLOCK = 496_000
 baseline = sys.argv[2] == "1"
+pad = sys.argv[3] == "1"
 
 text = open(sys.argv[1]).read()
 match = re.search(r'^\{.*?^\}', text, re.S | re.M)
@@ -97,15 +110,36 @@ check(report.get("audio_overruns", -1) == 0, "no audio overruns",
       f'overruns={report.get("audio_overruns")}')
 
 peak = report.get("audio_cycles_peak", 0)
-last = report.get("audio_cycles_last", 0)
 percent = 100.0 * peak / CYCLES_PER_BLOCK
-check(percent < 60.0, "load is inside the target", f"{percent:.2f}% peak")
+check(percent < 60.0, "load is inside the target", f"{percent:.2f}% peak since boot")
+
+# `ld <avg> <max>` windows (app/app.hpp): half a second each, in bursts of eight after PLAY, a
+# pattern change and a freeze. Enaga's log ring keeps the last sixteen lines, so what is left at
+# the end is the last burst: after `frz 64` in a freeze run, and in a baseline run the burst after
+# PLAY (A01) or after the switch to A05 (--pad).
+windows, seen = [], False
+for line in log:
+    if line.startswith("frz "):
+        seen, windows = True, []
+        continue
+    m = re.fullmatch(r"ld (\d+\.\d) (\d+\.\d)", line)
+    if m:
+        windows.append((float(m.group(1)), float(m.group(2))))
+windows = windows[-8:]
+check(len(windows) >= 4, "load windows were logged", f"ld lines={len(windows)}")
+if not baseline:
+    check(seen, "the windows are the frozen ones (after frz)")
 
 print()
-print(f"emulator peak load: {percent:.2f}% (the live bars before the freeze)")
-print(f"last block: {100.0 * last / CYCLES_PER_BLOCK:.2f}%  ({last} cycles)"
-      f"{'  -- baseline, track 7 live' if baseline else '  -- track 7 frozen'}")
-print("note: run once with --baseline and compare the last-block figures; docs/BUDGET.md, Freeze.")
+if windows:
+    if baseline and not pad:
+        windows = windows[1:]                  # the first half second after PLAY is start-up
+    avg = sum(w[0] for w in windows) / len(windows)
+    top = max(w[1] for w in windows)
+    label = "track 7 live" if baseline else "track 7 frozen"
+    print(f"{label}: avg {avg:.2f}%  max {top:.1f}%  over {len(windows)} windows (avg/max %):")
+    print("  " + "  ".join(f"{a:.1f}/{m:.1f}" for a, m in windows))
+print("note: compare with the same run and --baseline; record both in docs/BUDGET.md, Freeze.")
 
 sys.exit(1 if failures else 0)
 PY
