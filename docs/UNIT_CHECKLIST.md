@@ -1,7 +1,7 @@
 # Unit checklist
 
-The first part is **today's walkthrough** (2026-11-23): about 28 minutes, numbered 1-17, over
-everything merged since v0.1.0 (17 is the VA sound rework). Report back by number, for example `3 fail: reads 055`. After it
+The first part is **today's walkthrough** (2026-11-23): about 30 minutes, numbered 1-18, over
+everything merged since v0.1.0 (18 is the VA sound rework). Report back by number, for example `3 fail: reads 055`. After it
 come the controls tour from 2026-11-22 (skip what the v0.1.0 card already showed), last night's
 long walkthrough, and "Reference", the full per-milestone list with the background for each check.
 
@@ -150,7 +150,19 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
 - With the loop up, push VALUE + STEP 1 and turn: the low-pass sweeps the loop too.
 - Push VALUE + CLR: `FX OFF`. Again: `LOOP CLEARED`. MAX meanwhile: `________ %` (U11 is in 13o).
 
-**17. The VA sound rework: OSC page and the new SOUNDS (3 min).** Beat playing, A01.
+**17. Samples from the SmplTrek's own folders (2 min).** Needs a card the stock firmware has used,
+with at least one WAV in `SmplTrek/Pool/Audio` (copy one there on a PC if it is empty).
+- Track 8, EDIT, OK, then CLR until the top: `SAMPLES/ POOL/ SMPLTREK/ RECORD/`, nothing cut off.
+- OK on `POOL/`: the second line ends in `POOL/AUDIO`, and the pool's WAVs are listed. OK on one:
+  it loads and plays, as from `/SAMPLES`.
+- CLR three times: `/SMPLTREK/POOL`, `/SMPLTREK`, then the top with the cursor on `SMPLTREK/`.
+- OK on `SMPLTREK/`, then `PROJECT/`, a stock project, `AUDIO/`: its samples are listed and load.
+- Save (FUNC+HOME, OK), power cycle: track 8 plays the SmplTrek file again, and OK in EDIT opens
+  the browser on it. Boot the stock firmware once afterwards: its projects and pool are unchanged.
+- Is `POOL` the folder you keep your samples in? Anything else under `SmplTrek` you expected at
+  the top? `____`
+
+**18. The VA sound rework: OSC page and the new SOUNDS (3 min).** Beat playing, A01.
 - Lower pad 6 (bass), EDIT, screen key RIGHT seven times: an eighth page box, `OSC`, with WAV OS2
   SUB DRV reading `SAW OFF 090 024`, and `OS2: DET 1-63 SYN 64+` below. The eight boxes fit.
 - The bass sounds rounder than on the v0.2.0 card (no synced pulse); is it still right in the mix?

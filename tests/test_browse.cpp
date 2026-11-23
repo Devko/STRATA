@@ -19,6 +19,50 @@ TEST(browse_root_is_samples_then_record) {
     CHECK(std::strcmp(g_list.name(1), "RECORD") == 0);
     CHECK(g_list.is_folder(0));
     CHECK(g_list.is_folder(1));
+    char out[kSamplePathBytes];
+    CHECK(g_list.path_of(0, out, sizeof out));
+    CHECK(std::strcmp(out, "/SAMPLES") == 0);
+    CHECK(g_list.path_of(1, out, sizeof out));
+    CHECK(std::strcmp(out, "/RECORD") == 0);
+    CHECK(!g_list.path_of(2, out, sizeof out));
+}
+
+TEST(browse_root_adds_the_smpltrek_folders_when_the_card_has_them) {
+    // The stock firmware's manual: samples in SmplTrek > Pool > Audio, projects in
+    // SmplTrek > Project. POOL goes straight to the pool, SMPLTREK to the whole tree.
+    g_list.open_root(true);
+    CHECK(g_list.at_root());
+    CHECK_EQ(g_list.count(), 4);
+    const char *const names[] = {"SAMPLES", "POOL", "SMPLTREK", "RECORD"};
+    const char *const paths[] = {"/SAMPLES", "/SmplTrek/Pool/Audio", "/SmplTrek", "/RECORD"};
+    char out[kSamplePathBytes];
+    for (int i = 0; i < 4; i++) {
+        CHECK(std::strcmp(g_list.name(i), names[i]) == 0);
+        CHECK(g_list.is_folder(i));
+        CHECK(g_list.path_of(i, out, sizeof out));
+        CHECK(std::strcmp(out, paths[i]) == 0);
+    }
+    // The cursor comes back to SMPLTREK after climbing out of /SmplTrek (FAT ignores case).
+    CHECK_EQ(g_list.find("SmplTrek"), 2);
+    char tiny[8];
+    CHECK(!g_list.path_of(1, tiny, sizeof tiny));     // never a cut path
+    CHECK(std::strcmp(SampleList::root(SampleList::kPoolRoot).path, "/SmplTrek/Pool/Audio") == 0);
+    CHECK(std::strcmp(SampleList::root(SampleList::kSamplesRoot).path, "/SAMPLES") == 0);
+
+    // Below the root, paths are folder + name again, and POOL climbs the card's own tree.
+    CHECK(g_list.open("/SmplTrek/Pool/Audio"));
+    CHECK(g_list.add("Kick 01.wav", false));
+    CHECK(g_list.path_of(0, out, sizeof out));
+    CHECK(std::strcmp(out, "/SmplTrek/Pool/Audio/Kick 01.wav") == 0);
+    SampleList::parent_of("/SmplTrek/Pool/Audio", out, sizeof out);
+    CHECK(std::strcmp(out, "/SmplTrek/Pool") == 0);
+    SampleList::parent_of("/SmplTrek", out, sizeof out);
+    CHECK(std::strcmp(out, "") == 0);
+
+    // A track playing a SmplTrek file reopens the browser on it.
+    CHECK(SampleList::in_browsable_folder("/SmplTrek/Pool/Audio/Kick 01.wav"));
+    CHECK(SampleList::in_browsable_folder("/SMPLTREK/Project/SONG1/Audio/Vox.wav"));
+    CHECK(!SampleList::in_browsable_folder("/SmplTrekX/K1.WAV"));
 }
 
 TEST(browse_keeps_wavs_and_folders_and_drops_the_rest) {

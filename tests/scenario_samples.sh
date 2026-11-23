@@ -3,7 +3,9 @@
 # the browser, CLR climbs to its top level and OK opens SAMPLES again -- all on keys, which is all
 # the emulator can press. It proves the screen draws on the C674x with the real font and that
 # files::list answers; whether the emulator's card holds a /SAMPLES folder decides only whether
-# the log says `browse listed` or `browse failed`, and either is a pass.
+# the log says `browse listed` or `browse failed`, and either is a pass. The top level logs
+# `browse root 4` when the card has the stock firmware's /SmplTrek (POOL and SMPLTREK join SAMPLES
+# and RECORD) and `browse root 2` when not; either is a pass, the line proves files::info answered.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F8 = 28, UP = 17, OK = 23, CLR = 30.
 # The first press comes late: the panel link is not streaming in the first ~200 M cycles.
@@ -85,6 +87,13 @@ check(len(lists) >= 1, "files::list answered", f"lines={lists}")
 if any("failed" in line for line in lists):
     print("        a listing failed: no /SAMPLES on the emulator's FAT image, most likely. That is")
     print("        the card, not the browser, and the error line is what the unit would show.")
+
+roots = [line for line in log if line.startswith("browse root ")]
+check(len(roots) >= 1 and all(line in ("browse root 2", "browse root 4") for line in roots),
+      "CLR reached the top level", f"lines={roots}")
+if any(line == "browse root 4" for line in roots):
+    print("        the card has /SmplTrek: the top level shows SAMPLES POOL SMPLTREK RECORD, and the")
+    print("        last OK opened SAMPLES, still the first entry.")
 
 blocks = report.get("audio_blocks", 0)
 check(blocks > 1000, "audio ran throughout", f"blocks={blocks}")
