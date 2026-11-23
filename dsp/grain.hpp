@@ -153,6 +153,17 @@ public:
     // Passing nullptr (or frames < kMinFrames, or channels outside 1-2) leaves the track silent.
     void set_sample(const int16_t *data, uint32_t frames, int channels, float source_rate);
 
+    // The CPU guard's grain pool (core/cpuguard.hpp, applied by the engine): at most `limit`
+    // grains in the air, 1 to kGrains. Below kGrains a spawn into a pool already holding `limit`
+    // is SKIPPED rather than stealing -- a steal splices a grain mid-window, a skip only thins
+    // the cloud -- and grains already in the air past the limit live out their windows, so
+    // lowering it never cuts a sound off. At kGrains (the default) nothing changes at all.
+    static constexpr int kPoolSize = 8;   // grains in the pool; kGrains below
+    void set_grain_limit(int limit) {
+        grain_limit_ = limit < 1 ? 1 : (limit > kGrains ? kGrains : limit);
+    }
+    int grain_limit() const { return grain_limit_; }
+
     // For the UI and for tests: what the machine is currently holding.
     const int16_t *sample_data() const { return data_; }
     int sample_frames() const { return frames_; }
@@ -201,7 +212,7 @@ public:
     // own rate ratio. 1.0 plays the sample at its own pitch.
     float read_step() const { return step_; }
 
-    static constexpr int kGrains = 8;
+    static constexpr int kGrains = kPoolSize;
     // Linear interpolation needs two frames, but a buffer that small is not a sample. Four, as
     // dsp/sample.cpp uses, makes "too short to play" one testable state instead of a family of
     // degenerate ones.
@@ -299,6 +310,7 @@ private:
     float level_ = 1.0f;           // velocity and accent, latched with it
     int32_t hop_countdown_ = 0;    // samples until the next grain is spawned
     int steal_cursor_ = 0;         // rotates, so equally advanced grains are stolen in turn
+    int grain_limit_ = kGrains;    // the CPU guard's pool size, set_grain_limit
     int wait_ = 0;                 // frames until `next_` starts
     bool pending_ = false;
     bool release_on_start_ = false;   // released before its frame: let go as soon as it starts

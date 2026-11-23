@@ -432,6 +432,9 @@ void Granular::spawn() {
             pick = i;
         }
     }
+    // The CPU guard: a smaller pool skips the spawn instead of stealing (set_grain_limit). The
+    // hop countdown was reset above, so the next onset comes on time and asks again.
+    if (grain_limit_ < kGrains && in_air >= grain_limit_) return;
     if (pick < 0) {
         static_assert((kGrains & (kGrains - 1)) == 0, "the steal cursor masks instead of dividing");
         pick = steal_cursor_;
