@@ -45,8 +45,8 @@ TEST(sounds_every_machine_that_makes_sound_from_knobs_has_a_list_and_the_rest_no
                          id == MachineId::va_poly;
         CHECK_EQ(sound_preset_count(uint8_t(m)) > 0, has);
         CHECK_EQ(sound_preset_writes(uint8_t(m)) != 0, has);
-        // One page of the SOUNDS list: AS WAS and the presets in eight rows.
-        CHECK(sound_preset_count(uint8_t(m)) <= 7);
+        // AS WAS and at most two pages of the SOUNDS list, which scrolls (the VAs have more).
+        CHECK(sound_preset_count(uint8_t(m)) <= 15);
         if (has) CHECK(sound_preset_count(uint8_t(m)) >= 5);
     }
     CHECK(sound_preset(uint8_t(MachineId::kick), -1) == nullptr);

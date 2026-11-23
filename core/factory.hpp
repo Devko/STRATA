@@ -54,6 +54,8 @@ constexpr int kFactoryAmp = 8;
 constexpr int kFactoryFx = 12;
 // And the ASR page (ATK SUS REL FSU), after the LFO and the arp (dsp/track.hpp, kAsrFirst).
 constexpr int kFactoryAsr = kKitArpEnd;
+// And the OSC page (WAV OS2 SUB DRV), after ASR (dsp/track.hpp, kOscFirst).
+constexpr int kFactoryOsc = kKitAsrEnd;
 
 // How many of bank A's patterns the factory fills, and which one is the pad.
 constexpr int kFactoryPatterns = 5;
