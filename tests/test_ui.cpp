@@ -1980,6 +1980,49 @@ TEST(ui_the_resample_gesture_records_and_writes_through_the_panel_alone) {
     CHECK_EQ(app_storage().last_take_name(), "STRATA_1.WAV");   // and the screen can say so
 }
 
+TEST(ui_ok_in_resample_while_a_take_is_written_keeps_the_take_where_it_was_going) {
+    // The take goes to the card a chunk per pass, so the write lasts seconds. OK pressed in that
+    // time used to post a refused arm AND a write request, which retargeted the take in flight:
+    // asked for TO FILE, it landed on the track now on screen, over that track's sample, and the
+    // screen said ARMED.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    host.set_running(true);
+    shift_key(ENAGA_KEY_F2);                             // RESAMPLE
+    CHECK_EQ(UiProbe::resample_track(app), -1);          // to the file only
+    key(ENAGA_KEY_OK);
+    pump();
+    host.deliver_tick(384, 0);
+    for (int i = 0; i < 2000; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+        if (app_storage().take_busy() && app_storage().busy_text() != nullptr) break;
+    }
+    CHECK(app_storage().take_busy());
+    pump(2);                                             // a few chunks in
+    CHECK(app_storage().take_busy());
+
+    // Now point the screen at track 1 and press OK again.
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+    CHECK_EQ(UiProbe::resample_track(app), 0);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "TAKE STILL WRITING");
+    CHECK(!app_storage().request_resample_write(0));     // and the card side refuses as well
+
+    for (int i = 0; i < 4000 && app_storage().take_busy(); i++) pump();
+    pump_until_idle();
+    CHECK(!app_storage().take_busy());
+    CHECK_EQ(app_engine().project().kit.tracks[0].sample[0], '\0');   // track 1 untouched
+    CHECK(app_storage().last_error() == nullptr);
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
+    host.set_running(false);
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
 // --- machine switching ----------------------------------------------------------------------
 //
 // docs/SPEC.md's key table gives F1 + F8 to "Kit and machine select", and docs/PLAN.md deferred

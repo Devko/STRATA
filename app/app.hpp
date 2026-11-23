@@ -830,6 +830,17 @@ public:
             case ENAGA_KEY_OK:
                 // RESAMPLE mode first: OK is what commits a take, and there is no step to hold.
                 if (mode_ == Mode::resample) {
+                    // Not while a take is armed, recording or still going to the card: the
+                    // engine would refuse the arm anyway, but the write request below would
+                    // retarget the take in flight -- a take asked for TO FILE landed on the track
+                    // now on screen, over that track's sample, and the screen said ARMED.
+                    const uint8_t state =
+                        engine_.status().resample_state.load(std::memory_order_relaxed);
+                    if (state != 0u || storage_.take_busy()) {
+                        notice(state == 3u || storage_.take_busy() ? "TAKE STILL WRITING"
+                                                                   : "TAKE RUNNING");
+                        break;
+                    }
                     // From the input: make sure the route is the one on screen before the take.
                     if (kTakeSources[take_source_].input >= 0 && !input_applied_) apply_input();
                     post(Cmd::resample_arm, 0, 0, kTakeBars[take_bars_index_],
