@@ -65,8 +65,10 @@ inline int wave_mip_for(float inc) {
 
 class WaveLibrary {
 public:
-    // Allocates the tables and the builder's scratch, and builds all sixteen. init() only.
-    bool init();
+    // Allocates the tables and builds all sixteen. init() only. The builder's scratch
+    // (wave_build_scratch_bytes) is carved from `scratch` when it is at least that big plus 64
+    // bytes, memory idle at init that the build may scribble over; else it is allocated.
+    bool init(void *scratch = nullptr, uint32_t scratch_bytes = 0);
     bool ready() const { return data_ != nullptr; }
 
     // Level `mip` of `frame` of `table`: wave_mip_length(mip) samples plus the guard sample.

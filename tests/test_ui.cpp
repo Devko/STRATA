@@ -7806,6 +7806,29 @@ TEST(ui_func_and_a_press_of_value_turns_the_dj_filter_off) {
     CHECK(std::strcmp(UiProbe::notice(app), "DJ OFF") == 0);
 }
 
+TEST(ui_a_long_hold_of_value_let_go_alone_resets_nothing) {
+    // A tap resets; a hold of half a second or more (a chord abandoned mid-reach) does not.
+    Strata &app = fresh();
+    value_step(app, 3);
+    app.on_encoder(4, 10);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 20);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    g_ms += 600;
+    pump();
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 20);
+    // Just under the limit is still a tap.
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    g_ms += 400;
+    pump();
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 0);
+    value_step(app, 3);
+}
+
 TEST(ui_a_press_of_value_with_a_step_held_resets_nothing) {
     Strata &app = fresh();
     value_step(app, 3);

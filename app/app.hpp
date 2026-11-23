@@ -535,13 +535,17 @@ public:
         // A press of VALUE on its own, let go with nothing turned or pressed in between, resets
         // what VALUE is on to 0 (Roland, 2026-11-23; value_reset). Held, it stays the modifier
         // for swing, STEP, LEFT/RIGHT and CLR, which is why it acts on the RELEASE.
+        //
+        // Only a TAP (under kValueTapMs, Roland 2026-11-23): a long hold let go without anything
+        // else is a chord changed mid-reach, and must not throw away the amount.
         if (key == ENAGA_KEY_PUSH_VALUE) {
             value_pushed_ = down;
             if (down) {
                 value_alone_ = true;
+                value_down_ms_ = last_ms_;
             } else if (value_alone_) {
                 value_alone_ = false;
-                value_reset();
+                if (uint32_t(last_ms_ - value_down_ms_) < kValueTapMs) value_reset();
             }
             return;
         }
@@ -6614,6 +6618,8 @@ private:
     uint8_t loop_mix_ = 0;
     uint16_t perf_step_keys_ = 0;
     bool value_alone_ = false;     // VALUE pushed with nothing else since: its release resets
+    uint32_t value_down_ms_ = 0;   // when it was pushed: only a tap resets
+    static constexpr uint32_t kValueTapMs = 500;
     uint8_t frozen_seen_ = 0;                   // Status::frozen as update() last saw it
     const char *freeze_error_seen_ = nullptr;   // and Storage::freeze_error
     uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)

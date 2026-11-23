@@ -630,8 +630,8 @@ private:
     //   region_   the 64 MiB sample region the pool carves up, and the only one the audio side
     //             ever reads. The pool and the loader live here, so no pool state crosses the
     //             ring (app/engine.hpp's `sample_region_`).
-    //   raw_      one whole file as it is on the card, for files::load. docs/SPEC.md asks for
-    //             files::load by name, and it wants a buffer for the whole file.
+    //   raw_      a small file whole, for files::load (docs/SPEC.md asks for files::load by
+    //             name), or one chunk of a bigger one: kChunkBytes, 2 MiB.
     //   src_      the file converted to int16 at ITS rate, which a resample reads from. Only
     //             needed when the file is not at 48 kHz, but allocated once either way: there is
     //             no allocating later (CLAUDE.md).
@@ -654,9 +654,13 @@ private:
     static constexpr uint32_t kRegionBytes = kSampleBudgetMaxMib << 20;
     // Header and trailing chunks: a LIST or a cue is a few hundred bytes, embedded artwork in an
     // id3 chunk can be tens of KiB.
-    static constexpr uint32_t kRawSlackBytes = 64u * 1024u;
-    static constexpr uint32_t kRawBytes =
-        kMaxSampleSeconds * kMaxSampleSourceRate * 2u * 3u + kRawSlackBytes;     // stereo s24
+    //
+    // [2026-11-23, Roland] raw_ is one chunk, 2 MiB, not a whole 30 s file (16.5 MiB): every file
+    // bigger than it was already read in chunks and converted straight into the pool or src_,
+    // so the result is the same and 14.5 MiB of heap comes back. Files up to 2 MiB (about 11 s
+    // of 48 kHz stereo 16-bit) still take the one files::load docs/SPEC.md names.
+    static constexpr uint32_t kChunkBytes = 2u << 20;
+    static constexpr uint32_t kRawBytes = kChunkBytes;
     static constexpr uint32_t kSrcFrames = kMaxSampleSeconds * kMaxSampleSourceRate;
     static constexpr uint32_t kSrcBytes = kSrcFrames * 2u * sizeof(int16_t);      // stereo s16
     static constexpr uint32_t kFileBytes = kBankMaxBytes;
@@ -666,10 +670,9 @@ private:
     // file still finishes in well under a second of wall time.
     static constexpr uint32_t kSliceFrames = 48000;
 
-    // How much of a long file one read asks for. Enaga works a read in the main loop a slice per
-    // pass whatever its size, so this only sets how often a read is queued: 4 MiB is about half
-    // a second of the card at 7.6 MB/s.
-    static constexpr uint32_t kChunkBytes = 4u << 20;
+    // kChunkBytes (above, with raw_) is how much of a long file one read asks for. Enaga works a
+    // read in the main loop a slice per pass whatever its size, so it only sets how often a read
+    // is queued: 2 MiB is about a quarter of a second of the card at 7.6 MB/s.
 
     // How many passes to wait for a sample epoch before giving up. update() runs at least 750
     // times a second, so this is a fraction of a second -- long enough for any real block, short

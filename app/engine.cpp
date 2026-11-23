@@ -85,7 +85,11 @@ bool Engine::init(float sample_rate) {
     // read from the card, so they need no file and cannot be missing. If the 2.5 MiB is not
     // there the WAVE machines play their sub and noise alone, which is recoverable; refusing to
     // boot over one machine would not be.
-    if (waves_.init()) set_wave_library(&waves_);
+    // The build's 0.18 MiB of scratch is the capture buffer, idle until the first take, so the
+    // 8 MiB headroom keeps it (tests/test_memory.cpp).
+    if (waves_.init(capture_.lend(), capture_.capacity() * 2u * uint32_t(sizeof(int16_t)))) {
+        set_wave_library(&waves_);
+    }
 
     // The default techno kit of docs/SPEC.md. Every slot is filled now that VA POLY exists;
     // GRAIN has no track in the default kit and arrives with machine switching. An empty slot

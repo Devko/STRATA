@@ -1020,7 +1020,7 @@ void Storage::service() {
     if (!flush_backlog()) return;
 
     // Streams before anything else, every pass and whatever job runs: a restart has the head's
-    // two seconds to be reopened, and a 4 MiB chunk read must not stand in its way.
+    // two seconds to be reopened, and a 2 MiB chunk read must not stand in its way.
     service_streams();
 
     // Freeze next, whatever job runs and with or without a card: it is RAM only, and a loop
@@ -2477,8 +2477,9 @@ const char *Storage::begin_stream(int track, const char *whole) {
     }
     if (ring < 0) return "STREAMS FULL";
 
-    // The head comes out of the first chunk, which is 4 MiB: two seconds of even 96 kHz stereo
-    // float is 1.5 MB. Checked anyway, since a header may put its data anywhere.
+    // The head comes out of the first chunk, which is 2 MiB: two seconds of even 96 kHz stereo
+    // float is 1.5 MB. Checked anyway, since a header may put its data anywhere (and 192 kHz
+    // float would not fit: such a file loads whole or is refused, as before streaming).
     const uint32_t frame_bytes = format_.frame_bytes();
     if (format_.data_offset + head * frame_bytes > chunk_have_) return whole;
     if (!pool_.reserve(track, head * uint32_t(format_.channels) * uint32_t(sizeof(int16_t)))) {

@@ -1635,6 +1635,9 @@ to be measured as E14.
 
 **Memory:** 2,626,560 bytes of tables plus 0.2 MiB of build scratch: init now asks for 111.77 MiB
 of the 120 MiB heap, 8.23 MiB spare against the 8 MiB rule (tests/test_memory.cpp itemises it).
+Since the review after #122 the scratch is borrowed from the capture buffer, idle at init, and
+zeroed again after the build: 111.59 MiB, **8.41 MiB spare**. With the loader's file buffer cut
+to one 2 MiB chunk in the same PR: **97.05 MiB, 22.95 MiB spare**.
 FM and STRING, which follow, allocate under 0.1 MiB.
 
 **E14, to measure on Roland's PC (emulator):**
@@ -1673,7 +1676,7 @@ count the staging at all.
 | Use | Budget | Measured |
 | --- | --- | --- |
 | Samples, int16 (32 MiB default, 64 MiB ceiling) | 32-64 MiB | **64 MiB** reserved at init, from the heap. The CEILING, not the default: a project may raise its budget long after `init()` is over, and CLAUDE.md allows no allocation after it |
-| Sample loader staging (M4) | not budgeted | **27.5 MiB**, from the heap: 16.5 MiB for one whole file (`files::load` wants a buffer for all of it; 30 s of 96 kHz stereo 24-bit plus 64 KiB of chunks) and 11 MiB for a resample's int16 source (30 s of 96 kHz stereo). Sized from `docs/SPEC.md`'s own 30 s in-RAM limit counted in the FILE's length, and a FIXED cost rather than a per-sample one. Was 18 MiB when the limit was counted in 48 kHz frames. `tests/test_memory.cpp`: init is 101.2 MiB of a 120 MiB heap, 18.8 MiB spare against an 8 MiB headroom rule. **Worth checking against the heap on the unit** -- 64 + 27.5 is 91.5 MiB of the ~124 MiB |
+| Sample loader staging (M4) | not budgeted | **13 MiB since 2026-11-23** (raw_ became one 2 MiB chunk: every bigger file was already read in chunks; init 97.05 MiB, 22.95 MiB spare). Before: **27.5 MiB**, from the heap: 16.5 MiB for one whole file (`files::load` wants a buffer for all of it; 30 s of 96 kHz stereo 24-bit plus 64 KiB of chunks) and 11 MiB for a resample's int16 source (30 s of 96 kHz stereo). Sized from `docs/SPEC.md`'s own 30 s in-RAM limit counted in the FILE's length, and a FIXED cost rather than a per-sample one. Was 18 MiB when the limit was counted in 48 kHz frames. `tests/test_memory.cpp`: init is 101.2 MiB of a 120 MiB heap, 18.8 MiB spare against an 8 MiB headroom rule. **Worth checking against the heap on the unit** -- 64 + 27.5 is 91.5 MiB of the ~124 MiB |
 | Beat repeat ring (2 bars at 60 BPM, stereo float) | 2.93 MiB | **2.93 MiB** (3,072,000 bytes) reserved at init. Below 60 BPM the ring holds less than two bars, which costs nothing: the longest loop offered is a quarter note, 3 s even at 20 BPM |
 | Delay and reverb buffers | 2 MiB | **1.10 MiB** in Enaga's classic StereoDelay and Reverb, plus **4.99 MiB** for the ambient modes (2026-11-22): the LONG delay's 12 s of stereo float and its all-pass rings (4.44 MiB) and the HALL's lines (0.55 MiB). `tests/test_memory.cpp`: init is **109.1 MiB** of the heap, **10.9 MiB spare** against the 8 MiB rule |
 | Patterns, kit, scenes, 16 undo levels | 2 MiB | **~148 KiB** so far: 17 whole-pattern undo snapshots (~140 KiB) plus the live pattern and the clipboard. In bss, not the heap |

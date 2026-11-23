@@ -164,7 +164,9 @@ TEST(memory_init_is_what_the_budget_says) {
     const uint64_t region = uint64_t(kSampleBudgetMaxMib) * kMiB;
     // 30 s of the FILE at up to 96 kHz (app/storage.hpp): stereo 24-bit plus 64 KiB of header
     // and trailing chunks as read, stereo int16 as converted for the resample.
-    const uint64_t raw = uint64_t(kMaxSampleSeconds) * kMaxSampleSourceRate * 2u * 3u + 65536u;
+    // One chunk of a long file, or a small file whole: 2 MiB (2026-11-23; it was 30 s of 96 kHz
+    // stereo 24-bit, 16.5 MiB, until every bigger file was read in chunks anyway).
+    const uint64_t raw = 2u * kMiB;
     const uint64_t src = uint64_t(kMaxSampleSeconds) * kMaxSampleSourceRate * 2u * 2u;
     const uint64_t file = kBankMaxBytes;
     // Streaming (app/storage.hpp): four Enaga stream rings of 256 KiB, what docs/SPEC.md's
@@ -192,8 +194,9 @@ TEST(memory_init_is_what_the_budget_says) {
                           4u;
     CHECK(uint64_t(g_engine.mixer().long_delay().bytes()) == long_delay);
 
-    // The WAVE pair's wavetables (dsp/wavetable.hpp), built at init, and the builder's scratch.
-    const uint64_t waves = uint64_t(kWaveLibraryBytes) + wave_build_scratch_bytes();
+    // The WAVE pair's wavetables (dsp/wavetable.hpp), built at init. The builder's scratch is
+    // the capture buffer, idle at init, so it costs nothing here.
+    const uint64_t waves = uint64_t(kWaveLibraryBytes);
 
     const uint64_t itemised = region + raw + src + file + rings + repeat + capture + freeze + tape +
                               long_delay + hall + waves;
