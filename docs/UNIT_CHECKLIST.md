@@ -1,7 +1,7 @@
 # Unit checklist
 
-The first part is **today's walkthrough** (2026-11-23): about 30 minutes, numbered 1-20, over
-everything merged since v0.1.0 (18 is the VA sound rework, 19 the WAVE machines, 20 FM4). Report back by number, for example `3 fail: reads 055`. After it
+The first part is **today's walkthrough** (2026-11-23): about 35 minutes, numbered 1-21, over
+everything merged since v0.1.0 (18 is the VA sound rework, 19 the WAVE machines, 20 FM4, 21 the GRAIN rework). Report back by number, for example `3 fail: reads 055`. After it
 come the controls tour from 2026-11-22 (skip what the v0.1.0 card already showed), last night's
 long walkthrough, and "Reference", the full per-milestone list with the background for each check.
 
@@ -128,7 +128,7 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
   `VALUE FX MIXER:`, `VALUE FX STEPS:`, and round to page 1. LEFT goes back. GRID's own knob page did **not** change.
 - Let go of FUNC: GRID is back. Hold again: page 1 again.
 - EDIT on track 2 (snare): `EDIT SRC SNR`, `B SNP SNAPPY`. Screen key RIGHT to ASR (without FUNC),
-  hold FUNC: `ASR  ON VA/WAVE/FM4`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
+  hold FUNC: `ASR: VA WAVE FM GRN`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
 - MIXER DUCK: `A SRC SOURCE TRACK`. PERFORM: `PUSH A-D   LEARN`. Push A (LEARN), hold FUNC:
   `MACRO LEARN:`; CLR ends it. KEYS: `LOWER PADS WHITE KEYS`. PROJECTS: `PUSH B     RENAME`.
 - Every page legible, nothing cut off or overlapping? Anything missing you looked for? `____`
@@ -205,6 +205,21 @@ with at least one WAV in `SmplTrek/Pool/Audio` (copy one there on a PC if it is 
   ASR shows `ISU` in D. OSC: `DET FIN BRT CAR`, the hint `FIN NUDGES RAT`.
 - 30 s with FM4 on track 7 playing PAD: **MAX `____ %`** (against item 1's). Then FUNC+HOME,
   RELOAD PROJECT puts the beat back.
+
+**21. GRAIN: easy to dial in (5 min).** Beat playing, A01. Put a WAV with something sustained in
+it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA_1.WAV` will do.
+- Lower pad 8, FUNC+EDIT (MACHINE), DOWN once from `SMP`: `GRN`. OK opens the sample browser
+  there: pick the WAV. EDIT: SRC reads `0%  151MS  X4.3  71MS`, AMP `C-4 0% HOLD 118`. A cloud,
+  about as loud as the other tracks, not buried under them? `____`
+- OK on EDIT opens `SOUNDS` with the cursor on CLOUD. Try each: PAD (swells, holds for LEN, long
+  tail), FREEZE (one moment held), SHIMMR (an octave sparkles on top, steady rather than in
+  bursts), DRIFT (wanders through the file), STRTCH (the file at half speed, same pitch), STUTTR
+  and CHOPS (gapped, plucked). Each usable without a knob? `____` POS stays where you put it.
+- PIT in NOTE view, twelve clicks up: `C-5`, an exact octave (no beating against PIT 64).
+- ASR and OSC pages: `ATK SUS REL ---` with `SUS 0: DEC DECIDES`; `SCN PSP --- ---` with
+  `PSP: DET 1-63 OCT 64+`. SCN up from `OFF`: the cloud moves through the file, faster as it rises.
+- SHIMMR on track 8 for 30 s: **MAX `____ %`** (against item 1's; E16). Then FUNC+HOME, RELOAD
+  PROJECT puts the beat back.
 
 **Done.** Reply with the numbers: `all pass`, or for example `3 fail: reads 055`, `9: MAX 61.2`.
 
@@ -1051,7 +1066,7 @@ project. Back in STRATA's project from 14 (or any project), playing.
       recalled kit is what comes back.
 - [ ] Kits are shared: the menu's NEW PROJECT, OK twice, then FUNC+EDIT twice: slot 1 is still there.
 
-## 15b. Sample browser: OK on a SMP or GRN track (5 min)
+## 15b. Sample browser: OK on a SMP track, or in MACHINE on a GRN track (5 min)
 
 New 2026-11-22. Put a few WAVs in `/SAMPLES` on the card first (the two test files from
 `unit-test/` will do, plus one in a subfolder, and a file whose name has `_` in it).
@@ -1069,6 +1084,7 @@ New 2026-11-22. Put a few WAVs in `/SAMPLES` on the card first (the two test fil
       sends kept their values across both switches.
 - [ ] OK on a folder opens it; CLR goes up with the cursor on that folder; CLR at `/SAMPLES`
       shows `SAMPLES/` and `RECORD/`; CLR there goes back to EDIT. Same from MACHINE (OK).
+- [ ] On a GRN track OK in EDIT opens its SOUNDS instead (21); OK in MACHINE opens the browser.
 - [ ] Reopen the browser: it starts in the track's folder with the cursor on its file.
 - [ ] PROJECT says `UNSAVED`; save, reload (the menu's RELOAD PROJECT, OK twice): track 8 has the picked file.
 - [ ] A folder of many files: listing time `________` (about how long `READING FOLDER` shows).

@@ -1195,6 +1195,7 @@ scene or knob really did move: those prepare as before.
 | E13 | The OSC page and the VA rework | `tests/scenario_osc.sh` against `scenario_factory.sh` before it, then the worst-case `factory_kit` edit in "The OSC page" below, both compilers; revert | the factory beat should not rise; worst case at most ~0.1 point a voice over the old voice |
 | E14 | WAVE MONO and WAVE POLY | `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys) against `scenario_factory.sh` on the same commit, both compilers; and the time from the switch to `wav FM1` (the first table ready) | see "WAVE MONO and WAVE POLY" below: about 1.0-1.4x a VA voice expected; a table is built on first use, a piece a pass |
 | E15 | FM4 | `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for `strata_fm_add` and `strata_fm_add_free` | see "FM4" below: about 1.6-1.8x a VA voice on the host; FBK 0 should pipeline far better on cl6x than FBK up |
+| E16 | The GRAIN rework | `tests/scenario_grain.sh` (track 8 switched to GRAIN, SHIMMR loaded on keys) against `scenario_factory.sh` on the same commit, both compilers | see "The GRAIN rework" below: no change to the hot loop, so SHIMMR should cost what a dense v0.3.0 cloud did (a few points), and nothing at all while the track is silent |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
@@ -1719,6 +1720,31 @@ heap beyond the engine growing by 6.8 KiB.
 | --- | --- | --- |
 | `scenario_factory.sh`, same commit | | |
 | `scenario_fm.sh` (FM4 on the chord track) | | |
+
+### The GRAIN rework (2026-11-23, host only)
+
+Nothing in `dsp/grainloops.ti.c` changed, so the per-grain, per-sample cost is what it was. What
+did change is all control rate:
+
+- **SCN** adds a float multiply-add, a truncation and an integer modulo per sub-slice while the
+  voice schedules: a few cycles a block.
+- **PSP** picks each grain's own step at its onset: in the detune zone one `semitones()` (an
+  `exp2` polynomial) and one `reciprocal()` per spawn, in the octave zone one add and compare.
+  At the densest setting (DEN 127, 16 ms grains) that is about 500 spawns a second, under 10
+  spawns a block.
+- **ATK/SUS/REL** only change the shape `Envelope::render` already runs, plus a LEN countdown.
+- **Longer grains** (SIZ to 680 ms) do not cost more per sample: the grain count is DEN's, and
+  the pool is still 8.
+
+Host check (x86, GCC -O2, the machine alone, 120 s of a full 8-grain cloud of the A05 mix, three
+runs each): v0.3.0 251-304 ms, now 254-331 ms with SCN 127 and PSP in either zone, inside the
+run-to-run spread. The emulator figure is E16, owed on Roland's PC; GCC-only and cl6x should both
+match a dense v0.3.0 cloud.
+
+The level rose 6 dB (kHeadroom 0.5 to 1.0), which costs nothing but moves the worst case: a
+full-scale constant hammered every block now peaks at about 3.2 into the insert chain (was 1.6),
+and the arithmetic ceiling is 8. Real material at LVL 127 peaks well under 1
+(`/mnt/project-files/grain-renders`).
 
 ### Later milestones
 
