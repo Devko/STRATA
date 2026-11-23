@@ -142,6 +142,27 @@ constexpr bool machine_folds_note(uint8_t id, int slices) {
            id == uint8_t(MachineId::grain) || (id == uint8_t(MachineId::sample) && slices <= 1);
 }
 
+// What picking a new file in the sample browser sets on a SAMPLE track, so the file plays WHOLE
+// from its first frame: STA 0, LEN 127, SLC one slice and DEC 127 (hold, the end of the sample
+// ends the note). Without it the track kept whatever the knobs held -- the factory LOOP track's
+// eight slices, or 64s from another machine, which is STA half way in and nine slices -- so a new
+// file started at what sounded like a random point and DEC cut it short. Roland, 2026-11-23.
+// PIT, ATK, PLY and LVL are left alone: they are how the track plays, not where in the file.
+// Only a pick does this; a project or kit load keeps the values it saved. Slot numbers are
+// dsp/sample.cpp's (SRC 0-3, AMP 8-11), which core/ cannot include.
+struct ParamReset {
+    uint8_t slot;
+    uint8_t value;
+};
+inline constexpr ParamReset kSamplePickResets[] = {
+    {1, 0},      // STA: the first frame
+    {2, 127},    // LEN: all of it
+    {3, 0},      // SLC: one slice, so the trig note pitches instead of picking a slice
+    {9, 127},    // DEC: hold
+};
+inline constexpr int kSamplePickResetCount =
+    int(sizeof kSamplePickResets / sizeof kSamplePickResets[0]);
+
 // Does this machine read the ASR page (ATK SUS REL FSU) and the OSC page? The VAs, the WAVE
 // pair, which share the VA voice, and FM4, which reads both with its own meanings (FSU is its
 // index sustain; the OSC page is DET FIN BRT CAR). Everything that shows or saves those pages asks here, so a

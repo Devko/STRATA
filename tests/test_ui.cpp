@@ -4512,6 +4512,104 @@ TEST(ui_samples_ok_loads_the_file_into_the_track_while_playing) {
     key(ENAGA_KEY_F4);
 }
 
+namespace {
+
+void set_param_now(int track, uint8_t slot, uint8_t value) {
+    Command command;
+    command.cmd = Cmd::set_param;
+    command.track = uint8_t(track);
+    command.a = slot;
+    command.b = value;
+    app_engine().commands().post(command);
+}
+
+}  // namespace
+
+TEST(ui_samples_a_picked_file_plays_whole_from_its_start) {
+    // Roland, 2026-11-23: a new sample "starts at a random position" and "DEC cuts it". The
+    // knobs it inherited were the reason: STA half way in, SLC picking a slice by note, DEC
+    // fading it out. A pick sets STA, LEN, SLC and DEC so the file plays whole from frame 0, and
+    // leaves PIT, ATK, PLY and LVL as they were.
+    fresh();
+    seed_sample_card();
+    sample_track_in_edit();
+    set_param_now(0, 0, 70);       // PIT
+    set_param_now(0, 1, 64);       // STA: half way in
+    set_param_now(0, 2, 30);       // LEN
+    set_param_now(0, 3, 60);       // SLC: eight slices
+    set_param_now(0, 8, 5);        // ATK
+    set_param_now(0, 9, 40);       // DEC: short
+    set_param_now(0, 10, 40);      // PLY: forward loop
+    set_param_now(0, 11, 90);      // LVL
+    pump(4);
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_DOWN);           // A_HIT.WAV
+    key(ENAGA_KEY_OK);
+    pump(4);
+
+    const TrackParams &p = app_engine().params(0);
+    CHECK_EQ(int(p.get(1)), 0);
+    CHECK_EQ(int(p.get(2)), 127);
+    CHECK_EQ(int(p.get(3)), 0);
+    CHECK_EQ(int(p.get(9)), 127);
+    CHECK_EQ(int(p.get(0)), 70);
+    CHECK_EQ(int(p.get(8)), 5);
+    CHECK_EQ(int(p.get(10)), 40);
+    CHECK_EQ(int(p.get(11)), 90);
+    CHECK(app_storage().dirty());
+
+    // And the swap still lands with them. The Sampler reads the knobs at its next prepare,
+    // which every trig does (Engine::fire), so the window is not checked here.
+    for (int i = 0; i < 4000 && app_storage().samples().slot(0).state != SampleState::ready; i++) {
+        pump();
+    }
+    CHECK_EQ(int(app_storage().samples().slot(0).state), int(SampleState::ready));
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_samples_the_pick_resets_name_samples_own_knobs) {
+    // core/project.hpp holds slot numbers because core/ cannot see dsp/; this pins them to the
+    // names the Sampler gives those slots, so a moved knob fails here and not on the unit.
+    Sampler sampler;
+    const char *const want[kSamplePickResetCount] = {"STA", "LEN", "SLC", "DEC"};
+    for (int i = 0; i < kSamplePickResetCount; i++) {
+        CHECK(std::strcmp(sampler.param_name(kSamplePickResets[i].slot), want[i]) == 0);
+    }
+}
+
+TEST(ui_samples_a_pick_on_grain_leaves_its_knobs_alone) {
+    // GRAIN's SRC and AMP slots are POS SIZ DEN SPR and PIT SHP DEC LVL: the SAMPLE reset would
+    // move its grain size and density, so it is for SAMPLE only.
+    fresh();
+    seed_sample_card();
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::grain));
+    pump(4);
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_F8);
+    set_param_now(0, 1, 64);
+    set_param_now(0, 2, 30);
+    set_param_now(0, 3, 60);
+    set_param_now(0, 9, 40);
+    pump(4);
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_OK);
+    pump(4);
+    CHECK(std::strcmp(app_engine().project().kit.tracks[0].sample, "/SAMPLES/A_HIT.WAV") == 0);
+    const TrackParams &p = app_engine().params(0);
+    CHECK_EQ(int(p.get(1)), 64);
+    CHECK_EQ(int(p.get(2)), 30);
+    CHECK_EQ(int(p.get(3)), 60);
+    CHECK_EQ(int(p.get(9)), 40);
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_samples_clr_climbs_to_the_root_and_reaches_record) {
     Strata &app = fresh();
     seed_sample_card();
