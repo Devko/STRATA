@@ -1266,6 +1266,7 @@ void Engine::apply(const Command &command) {
                 trig.note = clamp_u8(command.a);
                 trig.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
                 trig.frame = 0;
+                trig.held = command.c == 1;   // a key or MIDI IN note: its release comes
                 // A pad hit (c = 0) has no release coming. On a VA whose ASR page holds notes
                 // (SUS up) it would hold for ever, so it gets one step, as its MIDI note does. At
                 // SUS 0 it keeps no gate: the envelope ends it, as it always has.

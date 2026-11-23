@@ -115,6 +115,12 @@ struct Trig {
     // A machine may ignore it entirely. The one-shot drums do.
     uint32_t gate_frames = 0;
 
+    // A release WILL come for this note: a held KEYS key or a MIDI IN note, which end with
+    // `Machine::release`. A trig with no gate and no release is a one-shot, and a machine whose
+    // notes can sustain (the VA ASR page) must end it by itself even if SUS is raised while it
+    // sounds -- otherwise it would hold for ever. Machines that never sustain ignore it.
+    bool held = false;
+
     // Which frame of the block this starts on: sample accuracy, and the field micro-timing and
     // ratchets are built on.
     //

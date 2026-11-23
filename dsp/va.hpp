@@ -349,6 +349,10 @@ private:
     // is up: at SUS 0 this machine is the one-shot bass it always was, DEC its note length, and
     // a LEN of one step cutting a long decay short would change every existing bass line.
     int gate_ = -1;
+    // The sounding note has no gate and no release coming (Trig::held): a one-shot. At SUS 0
+    // its envelope ends it; if SUS is raised while it sounds it would hold for ever, so the
+    // render loop lets it go the moment the settings sustain.
+    bool one_shot_ = false;
 
     float work_[VaVoice::kControl] = {};    // the slice being built
     float env_[VaVoice::kControl] = {};

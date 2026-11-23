@@ -538,6 +538,7 @@ void VaMono::release(uint8_t note) {
     if (pending_) release_on_start_ = true;
     else voice_.gate_off();
     gate_ = -1;
+    one_shot_ = false;
 }
 
 void VaMono::release_all() {
@@ -545,12 +546,14 @@ void VaMono::release_all() {
     // the level falls rather than leaving a bright ghost behind.
     voice_.gate_off();
     gate_ = -1;
+    one_shot_ = false;
 }
 
 void VaMono::kill_all() {
     pending_ = false;
     release_on_start_ = false;
     gate_ = -1;
+    one_shot_ = false;
     wait_ = 0;
     voice_.kill();
     active_ = false;
@@ -568,6 +571,11 @@ void VaMono::render_add(float *out, int frames) {
         if (n > VaVoice::kControl) n = VaVoice::kControl;
         if (pending_ && wait_ < n) n = wait_;    // cut the slice short at the trig's frame
         if (gate_ > 0 && gate_ < n) n = gate_;   // and at the gate's end: released on its frame
+        // A one-shot whose SUS was raised under it: let it go now, or it would never end.
+        if (one_shot_ && settings_.sustain > 0.0f) {
+            voice_.gate_off();
+            one_shot_ = false;
+        }
         voice_.run(settings_, out + i, n, work_, env_);
         if (pending_) wait_ -= n;
         if (gate_ > 0) {
@@ -624,11 +632,14 @@ void VaMono::start() {
     gate_ = settings_.sustain > 0.0f && t.gate_frames > 0
                 ? int(t.gate_frames > kGateMax ? kGateMax : t.gate_frames)
                 : -1;
+    one_shot_ = gate_ < 0 && !t.held;
 
     // A slid note bends the sounding one into its pitch: the envelopes and the phases carry on
     // untouched. Not one already let go, though -- a voice in its release tail has nothing held
     // to carry on, so the slide starts a note (gliding into it) rather than bending a fade.
-    if (t.slide && was_sounding && !voice_.released()) return;
+    // At SUS 0 a release tail is only ever the 60 ms after a key-up, and a slide has always
+    // bent it, so that stays as it was.
+    if (t.slide && was_sounding && (settings_.sustain <= 0.0f || !voice_.released())) return;
 
     // A voice taken while still sounding keeps its oscillator phases and its filter state, and
     // its amplitude envelope goes on from the level it is at: resetting any of them under a
@@ -639,6 +650,7 @@ void VaMono::start() {
         voice_.gate_off();
         release_on_start_ = false;
         gate_ = -1;
+        one_shot_ = false;
     }
 }
 

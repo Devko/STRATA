@@ -7,7 +7,8 @@
 //     after the key comes up;
 //   - the step's LEN, arriving as Trig::gate_frames, is the note's length on both machines once
 //     SUS is up -- and on VA MONO only then, so an existing bass line keeps its decays;
-//   - ATK is a real fade-in, and FSU keeps the filter open while the note sustains.
+//   - ATK is a real fade-in, and FSU keeps the filter open while the note sustains;
+//   - a one-shot (no gate, no release coming) still ends if SUS is raised while it sounds.
 #include "check.hpp"
 
 #include <enaga/abi.h>
@@ -55,6 +56,7 @@ Trig hit(uint8_t note, uint32_t gate_frames = 0, bool slide = false, uint32_t fr
     t.slide = slide;
     t.gate_frames = gate_frames;
     t.frame = frame;
+    t.held = gate_frames == 0;   // no LEN here models a KEYS key: its release() comes
     return t;
 }
 
@@ -281,4 +283,58 @@ TEST(asr_poly_holds_a_long_len_past_the_old_ten_second_cap) {
     }
     CHECK(peak(block, 0, kBlk) > 0.05f);
     CHECK_EQ(m.sounding_voices(), 1);
+}
+
+TEST(asr_a_one_shot_still_ends_when_sus_is_raised_under_it) {
+    // A pad hit at SUS 0: no gate and no release will ever come. Turning SUS up during its
+    // decay (knob, scene morph, macro) must not leave it sustaining for ever.
+    for (int poly = 0; poly < 2; poly++) {
+        TrackParams p = patch();
+        p.set(kDec, 127);                   // 2.4 s, so it is still sounding when SUS moves
+        VaMono mono;
+        VaPoly chord;
+        Machine &m = poly ? static_cast<Machine &>(chord) : static_cast<Machine &>(mono);
+        m.init(kRate);
+        m.prepare(p);
+        Trig t = hit(60, 0);
+        t.held = false;                     // a pad hit, not a key
+        m.trigger(t);
+        const int raise_block = blocks_for(0.05f);
+        const int blocks = blocks_for(3.0f);
+        clear(g_a, blocks * kBlk);
+        TrackParams up = p;
+        up.set(kSus, 100);
+        for (int b = 0; b < blocks; b++) {
+            m.prepare(b < raise_block ? p : up);
+            m.render_add(g_a + b * kBlk, kBlk);
+        }
+        CHECK(peak(g_a, 0, frames_at(0.04f)) > 0.1f);
+        CHECK(peak(g_a, frames_at(1.0f), blocks * kBlk) < 1e-3f);
+        CHECK(!m.active());
+    }
+}
+
+TEST(asr_at_sus_zero_a_slide_still_bends_a_released_mono_note) {
+    // The old behaviour, kept: a key let go, and a sequenced slide arriving inside its 60 ms
+    // tail bends the fading note rather than starting a new one at the peak.
+    TrackParams p = patch();
+    p.set(kDec, 127);
+    VaMono m;
+    m.init(kRate);
+    m.prepare(p);
+    m.trigger(hit(60, 0));
+    const int blocks = blocks_for(0.5f);
+    clear(g_a, blocks * kBlk);
+    const int release_block = blocks_for(0.2f);
+    const int slide_block = release_block + 2;
+    for (int b = 0; b < blocks; b++) {
+        if (b == release_block) m.release(60);
+        if (b == slide_block) m.trigger(hit(67, uint32_t(frames_at(1.0f)), true));
+        m.prepare(p);
+        m.render_add(g_a + b * kBlk, kBlk);
+    }
+    const float before = peak(g_a, frames_at(0.15f), release_block * kBlk);
+    const float after = peak(g_a, slide_block * kBlk, slide_block * kBlk + frames_at(0.05f));
+    CHECK(before > 0.05f);
+    CHECK(after < before * 0.9f);          // no retrigger back up to the peak
 }

@@ -180,6 +180,8 @@ private:
         int wait = 0;           // frames until `next` starts
         bool pending = false;
         int note = -1;          // the note this slot is committed to, -1 when it holds none
+        // No gate and no release coming (Trig::held): released as soon as SUS is up (va.hpp).
+        bool one_shot = false;
 
         // Frames of gate left before this voice is released: `Step::length`, arriving as
         // `Trig::gate_frames`. -1 means NO gate, which is what a trig carrying 0 asks for and
