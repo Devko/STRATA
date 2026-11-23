@@ -14,6 +14,7 @@
 #include "engine.hpp"
 #include "factory.hpp"
 #include "fakehost.hpp"
+#include "sounds.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -187,6 +188,33 @@ int main(int argc, char **argv) {
         write_wav(path, frames);
         std::printf("A%02d T%d %-6s peak %6.1f dBFS  rms %6.1f dBFS\n", stems + 1, t + 1, tracks[t],
                     db(s.peak), db(s.rms));
+    }
+
+    // Every factory sound (core/sounds.hpp) on its factory track, soloed in A01, two bars each:
+    // OUTDIR/SOUNDS_T<track>_<NAME>.wav, with peak and RMS against the factory sound (entry 0),
+    // which is what the presets' LVL values were balanced by. The kit is put back after each.
+    static const int sound_tracks[] = {0, 1, 2, 3, 4, 5, 6};
+    for (int t : sound_tracks) {
+        Project &p = g_engine.project_for_load();
+        KitTrack &k = p.kit.tracks[t];
+        uint8_t saved[kKitParams];
+        for (int i = 0; i < kKitParams; i++) saved[i] = k.params[i];
+        const uint8_t machine = k.machine;
+        for (int i = 0; i < sound_preset_count(machine); i++) {
+            Project &q = g_engine.project_for_load();
+            sound_preset_apply(machine, i, q.kit.tracks[t].params);
+            post(Cmd::kit_recall, 0, 0, 0);
+            int frames = 0;
+            const Stats s = render(0, 2, t, &frames);
+            const char *name = sound_preset(machine, i)->name;
+            std::snprintf(path, sizeof path, "%s/SOUNDS_T%d_%s.wav", dir, t + 1, name);
+            write_wav(path, frames);
+            std::printf("SOUND T%d %-6s peak %6.1f dBFS  rms %6.1f dBFS\n", t + 1, name, db(s.peak),
+                        db(s.rms));
+        }
+        Project &q = g_engine.project_for_load();
+        for (int i = 0; i < kKitParams; i++) q.kit.tracks[t].params[i] = saved[i];
+        post(Cmd::kit_recall, 0, 0, 0);
     }
     return 0;
 }
