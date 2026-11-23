@@ -199,3 +199,33 @@ TEST(wave_hard_warp_never_reads_past_the_guard) {
     strata_wave_add_warp(out, 64, a, a, kWaveMipBits[9], &phase, 3u, 1.0f, 0.0f, 0.0f, 0.0f, &hard);
     for (float v : out) CHECK(std::isfinite(v) && std::fabs(v) <= 32768.0f);
 }
+
+namespace {
+// The capture buffer's stand-in: what Engine::init lends the build.
+uint8_t g_lent[256 * 1024 + 4096];
+}
+
+TEST(wavetable_a_build_in_lent_scratch_is_the_same_tables_and_gives_it_back_silent) {
+    static_assert(sizeof(g_lent) > 256 * 1024, "room for the scratch");
+    CHECK(wave_build_scratch_bytes() + 64u <= sizeof(g_lent));
+    for (uint8_t &x : g_lent) x = 0;
+    WaveLibrary heap, lent;
+    CHECK(heap.init());
+    CHECK(lent.init(g_lent + 2, uint32_t(sizeof(g_lent) - 2)));   // not aligned: the arena aligns
+    for (int t = 0; t < kWaveTables; t++) {
+        for (int f = 0; f < kWaveFrames; f++) {
+            CHECK_EQ(heap.scale(t, f), lent.scale(t, f));
+            const int16_t *a = heap.frame(t, f, 0);
+            const int16_t *b = lent.frame(t, f, 0);
+            bool same = true;
+            for (int i = 0; i < kWaveFrameStride; i++) same = same && a[i] == b[i];
+            CHECK(same);
+        }
+    }
+    bool silent = true;
+    for (uint8_t x : g_lent) silent = silent && x == 0;
+    CHECK(silent);
+    // Too small to hold it: the heap is used, and the build still succeeds.
+    WaveLibrary small;
+    CHECK(small.init(g_lent, 1024));
+}

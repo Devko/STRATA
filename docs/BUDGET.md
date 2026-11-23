@@ -1635,6 +1635,8 @@ to be measured as E14.
 
 **Memory:** 2,626,560 bytes of tables plus 0.2 MiB of build scratch: init now asks for 111.77 MiB
 of the 120 MiB heap, 8.23 MiB spare against the 8 MiB rule (tests/test_memory.cpp itemises it).
+Since the review after #122 the scratch is borrowed from the capture buffer, idle at init, and
+zeroed again after the build: 111.59 MiB, **8.41 MiB spare**.
 FM and STRING, which follow, allocate under 0.1 MiB.
 
 **E14, to measure on Roland's PC (emulator):**

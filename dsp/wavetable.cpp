@@ -5,6 +5,7 @@
 // comment says otherwise.
 #include "wavetable.hpp"
 
+#include <cstdint>
 #include <new>
 
 #include <enaga/dsp.hpp>
@@ -56,6 +57,24 @@ struct Spectrum {
     float b[kWaveHarmonics];
     void clear() {
         for (int h = 0; h < kWaveHarmonics; h++) a[h] = b[h] = 0.0f;
+    }
+};
+
+// The builder's scratch, carved from memory it borrows for the build (WaveLibrary::init), or
+// from the heap when it is given none. Every piece is float-aligned; nothing is freed.
+struct Arena {
+    uint8_t *at = nullptr;
+    uint32_t left = 0;
+    template <typename T>
+    T *take(uint32_t count) {
+        if (at == nullptr) return new (std::nothrow) T[count];
+        const uint32_t pad = uint32_t(-reinterpret_cast<uintptr_t>(at)) & uint32_t(alignof(T) - 1);
+        const uint32_t bytes = uint32_t(sizeof(T)) * count;
+        if (pad + bytes > left) return nullptr;
+        T *out = new (at + pad) T[count];
+        at += pad + bytes;
+        left -= pad + bytes;
+        return out;
     }
 };
 
@@ -163,11 +182,11 @@ public:
     float *re = nullptr;
     float *im = nullptr;
 
-    bool init() {
-        re = new (std::nothrow) float[kFftMax];
-        im = new (std::nothrow) float[kFftMax];
-        wr_ = new (std::nothrow) float[kFftMax / 2];
-        wi_ = new (std::nothrow) float[kFftMax / 2];
+    bool init(Arena &arena) {
+        re = arena.take<float>(kFftMax);
+        im = arena.take<float>(kFftMax);
+        wr_ = arena.take<float>(kFftMax / 2);
+        wi_ = arena.take<float>(kFftMax / 2);
         if (!re || !im || !wr_ || !wi_) return false;
         for (int k = 0; k < kFftMax / 2; k++) {
             const float t = float(k) / float(kFftMax);
@@ -224,11 +243,11 @@ using Shape = float (*)(int f, float v);
 
 class Builder {
 public:
-    bool init() {
-        specs_ = new (std::nothrow) Spectrum[kWaveFrames];
-        keys_ = new (std::nothrow) Spectrum[kKeys];
-        f32_ = new (std::nothrow) float[2 * kWaveFrameStride];
-        return specs_ && keys_ && f32_ && fft_.init();
+    bool init(Arena &arena) {
+        specs_ = arena.take<Spectrum>(kWaveFrames);
+        keys_ = arena.take<Spectrum>(kKeys);
+        f32_ = arena.take<float>(2 * kWaveFrameStride);
+        return specs_ && keys_ && f32_ && fft_.init(arena);
     }
 
     // Frame f's spectrum, and key spectra a recipe morphs between.
@@ -625,18 +644,31 @@ constexpr Recipe kRecipes[kWaveTables] = {
 int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 const WaveLibrary *g_library = nullptr;
-Builder g_builder;   // its scratch is allocated by the one init() that builds
+Builder g_builder;   // its scratch is taken by the one init() that builds
 
 }  // namespace
 
-bool WaveLibrary::init() {
+bool WaveLibrary::init(void *scratch, uint32_t scratch_bytes) {
     if (data_ != nullptr) return true;
     int16_t *data = new (std::nothrow) int16_t[kWaveLibraryBytes / sizeof(int16_t)];
-    if (data == nullptr || !g_builder.init()) return false;
+    if (data == nullptr) return false;
+    // Borrowed memory when it is big enough (Engine::init lends the capture buffer, idle until
+    // the first take); else the heap, where it stays: Enaga's heap is never freed into.
+    Arena arena;
+    if (scratch != nullptr && scratch_bytes >= wave_build_scratch_bytes() + 64u) {
+        arena.at = static_cast<uint8_t *>(scratch);
+        arena.left = scratch_bytes;
+    }
+    if (!g_builder.init(arena)) return false;
     Builder &builder = g_builder;
     for (int t = 0; t < kWaveTables; t++) {
         const bool normalise = kRecipes[t].make(builder);
         builder.store(data + t * kWaveFrames * kWaveFrameStride, scale_[t], normalise);
+    }
+    // Lent memory goes back as it came: silent (the capture buffer is zeroed at its init).
+    if (scratch != nullptr && arena.at != nullptr) {
+        uint8_t *used = static_cast<uint8_t *>(scratch);
+        for (uint8_t *p = used; p < arena.at; p++) *p = 0;
     }
     data_ = data;
     return true;
@@ -662,8 +694,8 @@ const char *WaveLibrary::long_name(int table) {
 
 uint32_t wave_build_scratch_bytes() {
     // Fft: re, im and the two twiddle halves. Builder: the frames' and the keys' spectra and the
-    // float copy of two frames. Kept after the build: Enaga's heap is never freed into
-    // (tests/test_memory.cpp), and 0.2 MiB is not worth a hole in it.
+    // float copy of two frames. Borrowed from the capture buffer, which is idle at init
+    // (Engine::init); only taken from the heap when nothing is lent.
     return uint32_t(sizeof(float)) * (2u * kFftMax + kFftMax) +
            uint32_t(sizeof(Spectrum)) * (kWaveFrames + Builder::kKeys) +
            uint32_t(sizeof(float)) * 2u * kWaveFrameStride;
