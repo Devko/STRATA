@@ -1,28 +1,128 @@
 # Unit checklist
 
-The first part is **tonight's walkthrough** (2026-11-22): one pass, top to bottom, with the unit
-in hand. It covers everything merged today and is ordered so each mode is visited once. Tick the
-box, write the value or a word on the line, and move on; anything odd goes in the notes line and
-is chased tomorrow. The second part, "Reference", is the full per-milestone list it was drawn
-from, with the background for each check.
-
-**Time.** The whole pass is about three hours. If the evening runs short, do 0-3b, 13 and 16
-first (safety, the MAX readings, save and restore), then the sections for today's new features
-(8c, 8d, 13d-13l, 14b, 14c, 15b-15d), then the rest.
+The first part is **today's walkthrough** (2026-11-23): about 20 minutes, numbered 1-14, over
+everything merged since v0.1.0. Report back by number, for example `3 fail: reads 055`. After it
+come the controls tour from 2026-11-22 (skip what the v0.1.0 card already showed), last night's
+long walkthrough, and "Reference", the full per-milestone list with the background for each check.
 
 Keys are named as printed on the SmplTrek (see the legend in `docs/CHEATSHEET.md`), and so are
-the on-screen hints. `FUNC+X` = hold FUNC, press X.
-
-Build on the card: STRATA `________`  STRATA6 `________`  cl6x / GCC only: `________`
+the on-screen hints. `FUNC+X` = hold FUNC, press X. Lower pads 1-8 select tracks 1-8 (and play
+them); the upper pads are FILL REPEAT MUTE SCENE A SCENE B THROW MUTATE.
 
 ---
 
-# The new controls (docs/CONTROLS.md, after 2026-11-22's first evening)
+# Today's walkthrough (2026-11-23, about 20 min)
 
-Do this first next time the unit is in hand (10 min). It checks the controls concept built from
-the SmplTrek's panel: each button group has one job, FUNC + a function key is the label printed
-under it, and the setup actions are in the FUNC menu. Notes on anything that still feels wrong
-are the point of this section.
+Build from main at `33ae688` (PR #97) or later, with cl6x. Build: `________`
+
+Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-12 do not save;
+13 saves a copy, so the DEFAULT project is never overwritten.
+
+**1. CPU guard, quiet (#83, 2 min).** Start STRATA, PLAY, let A01 run 60 s.
+- The bottom line shows `TRK.. MAX.. SMPLTREK` and **never** `GUARD1`-`GUARD4`.
+- MAX after 60 s: `________ %`
+
+**2. Velocity on the STEP lights (#93, 1 min).** Stop the beat (STOP), HOME, lower pad 6 (bass).
+- STEP 3 and 15 brightest green (accents), STEP 7, 11 and 12 medium, STEP 4 dim (velocity 70).
+- Lower pad 5 (rim): STEP 16 **blinks** (50% probability), STEP 4 and 12 steady.
+- Back on track 6, hold STEP 4 + OK (step page), turn B (VEL) to `20`, OK: STEP 4 now dimmest of
+  all. Four greens easy to tell apart? `____` Put VEL back to `70`.
+
+**3. TUN as a note (#88, 2 min).** Lower pad 1 (kick), EDIT (page SRC).
+- A reads `G-1+` (the factory kick is a little sharp of G1), not `055`.
+- One click right: `G#1-`, and the kick is a semitone higher. Twelve clicks from `G-1+`: `G-2`,
+  an octave up. Back to `G-1+`.
+- Push A: `TUN AS NUMBERS`, A reads `055` and a click is one count. Push A again:
+  `TUN AS NOTES`.
+- Lower pad 7 (chord), same page: TUN to `C-4`, twelve clicks up: `C-5`, an exact octave.
+  Back to `C-4`. Is NOTE view the right default? `____`
+
+**4. The editable duck (#89, 2 min).** PLAY. MIXER, screen key RIGHT until `MIXER DCK 1-4`.
+- DCK 1-4: T1 `SRC`, T2-T4 `35%`, bottom line `DUCKS UNDER T1`. RIGHT: DCK 5-8, all `35%`.
+  RIGHT: `MIXER DUCK`: `SRC T1`, `ATK 3`, `HLD 40`, `REL 120`. Nothing overlaps.
+- DCK 5-8: T6 (bass) and T7 (chord) to `100%`: they pump hard on every kick, no click. To `OFF`:
+  no pumping. Leave T6 at `80%`, T7 at `35%` (13 checks it was saved).
+- DUCK: D (REL) to about `500`: a slow breathing pump. Back to `120`.
+
+**5. LONG + HALL: the MAX reading (13j / U9, 2 min).** Still playing.
+- MIXER, RIGHT to DLY+: push A: `DLY LONG`. B (MUL) to `X4`, C (WOW) and D (DIF) about half.
+- RIGHT to REV+: push A: `REV HALL`. D (SHM) about half.
+- STOP, PLAY (MAX restarts), 60 s: **MAX `________ %`** (against item 1's). Leave both on.
+
+**6. ASR: a pad on track 7 (#90, 2 min).** Lower pad 7, EDIT, screen key RIGHT six times: `ASR`.
+- The page reads `3MS 0% 60MS 0%` and `SUS 0: ONE-SHOT`; seven page boxes fit. The stab sounds as
+  it always did.
+- B (SUS) to about `70%`, A (ATK) about `400MS`, C (REL) about `2.0S`: line `HOLDS: PAD OR LEN`.
+  Hold STEP 4 + OK, C (LEN) to `16 STP`, OK: the chord swells in, holds the bar and fades into the
+  next. No click at either end.
+
+**7. The track pad holds (#94, 30 s).** Still on ASR, hold lower pad 7 for five seconds.
+- The note holds at the SUS level while the pad is down and fades over REL when let go.
+
+**8. KEYS on the pads (#85, 2 min).** HOME twice quickly: `KEYS`, on track 7.
+- The pads light as a keyboard: root bright, scale notes dim, the rest dark, two dim white pads in
+  the upper row (octave down / up).
+- Lower pads play C to C, upper pads the sharps between them. Soft and hard hits sound different.
+- Hold a three-note chord five seconds: it holds, and fades over REL when let go. Let go of one
+  note of three: only that one fades.
+- The upper pad between E and F: `OCT` down; the last upper pad: `OCT` up.
+- FUNC + lower pad 1: the kick mutes on the bar; again: back.
+- Plays like a keyboard? `____`
+
+**9. CPU guard under load (#83, 2 min).** Still in KEYS, LONG and HALL still on, beat playing.
+- Hold six pads at once for ten seconds, then let go. Oldest notes fade to make room, nothing
+  clicks or hangs. MAX: `________ %`
+- If `GUARD` appears: the chords get thinner with no crackle, and after you let go it counts down
+  one level a second and disappears. If it never appears, that is fine; MAX is the reading.
+- With `GUARD` up (if it came), STOP twice: it disappears at once.
+- Then tidy up: EDIT ASR on track 7, SUS back to `0%`. MIXER DLY+ and REV+: push A on each:
+  `DLY CLASSIC`, `REV ROOM`.
+
+**10. Macro STEP keys (#95, 1 min).** PLAY. FUNC+MIXER (PERFORM), lower pad 6 (bass).
+- LEFT/RIGHT to macro A, STEP 3 (the bass's own CUT): `A T6 CUT 1/4`. STEP 3 again:
+  `A T6 CUT OFF 0/4`.
+- RIGHT to macro D (factory DRIVE, four used), STEP 3: `D FULL: CLR CLEARS`, nothing changed.
+
+**11. Macro learn (#96, #97, 3 min).** In PERFORM.
+- Push knob A: EDIT opens with `LEARN A 0/4 PUSH KNOB`.
+- On the SRC page, push C (CUT): `A T6 CUT 1/4`. DOWN to track 7, push C: `A T7 CUT 2/4`.
+- CLR: `KNOBS EDIT AGAIN`, learn ends. **CLR again at once:** `KNOBS EDIT AGAIN` again, and the
+  track is **not** cleared.
+- FUNC+MIXER, turn knob A up: bass and chord open together. EDIT, SRC on track 6, turn C:
+  `HELD BY MACRO A`.
+- Push A in PERFORM again, then HOME: learn ends the same way. Easier than the STEP keys? `____`
+- Turn macro A back to 0.
+
+**12. CLEAR PATTERN (#86, 1 min).** Beat playing.
+- FUNC+HOME, DOWN to CLEAR PATTERN, OK: `OK AGAIN TO CLEAR`, nothing changes.
+- OK again: `CLEARED FUNC+CLR UNDO`, the menu closes, every track silent, GRID empty.
+- FUNC+CLR: the whole beat is back at once.
+- One OK, wait 3 s, OK: it only asks again.
+
+**13. Projects: save as, rename, delete (#91, 4 min).**
+- FUNC+HOME, SAVE AS, name `TEST` (A and VALUE), OK: `SAVING`, then `NOW TEST`.
+- PROJECT, screen key RIGHT four times (PROJECTS). Bottom hint `PUSH B REN  C DELETE`.
+- Cursor on `TEST`, push B: `RENAME`, `FROM TEST`. Make it `TEST2`, OK: `RENAMING`, the list
+  shows `TEST2` and `NOW TEST2`. No click or LOAD jump while the beat plays.
+- Power cycle: STRATA comes back with `TEST2`, and MIXER DCK 5-8 shows T6 `80%` (the duck saved).
+- PROJECTS, cursor on `DEFAULT`, OK twice: `OPENING`.
+- Cursor on `TEST2`, push C: `DELETE? OK TWICE`. OK, wait 3 s, OK: only `OK AGAIN TO DELETE`.
+  OK, OK: `DELETING`, gone from the list.
+- Push C on `DEFAULT`: `PROJECT IS OPEN`, nothing else.
+
+**14. Streamed LEN (#91, optional, 2 min).** Only if a 45-55 MB WAV (4-5 min) is in `/SAMPLES`.
+- Track 8, EDIT, OK: pick the file. AMP page, C (PLY) to LOOP; one trig on STEP 1.
+- SRC page, C (LEN) halfway: it stops halfway through the file and loops back to the start with
+  no gap. LEN very short (under 2 s): loops with no `STREAM LATE`.
+
+**Done.** Reply with the numbers: `all pass`, or for example `3 fail: reads 055`, `9: MAX 61.2`.
+
+---
+
+# The new controls (2026-11-22)
+
+From the controls remap (PR #74), on the v0.1.0 card. Skip anything already checked there; today's
+new items (KEYS on the pads, CLEAR PATTERN, macros, velocity, TUN) moved into the walkthrough above.
 
 - [ ] **Performance pads lit.** On start the seven upper pads (printed TRK 1-7) glow dim: white,
       cyan, red, green, blue, amber, violet, left to right. Hold FILL: it brightens and the
@@ -45,42 +145,17 @@ are the point of this section.
 - [ ] Menu rows: TRACK SPEED with LEFT/RIGHT changes the grid's `X n`; CHAIN shows ON/OFF and OK
       flips it; AUTO-FILL and QUANTIZE step with LEFT/RIGHT; NEW PROJECT needs OK twice
       (`OK AGAIN FOR NEW`); KITS opens the kit browser.
-- [ ] **CLEAR PATTERN.** On a playing beat: FUNC + HOME, DOWN to CLEAR PATTERN, OK: `OK AGAIN TO
-      CLEAR` and nothing changes. OK again: `CLEARED FUNC+CLR UNDO`, the menu closes, every track
-      goes silent and GRID is empty, but the sounds are the same when you tap a step back in.
-      FUNC + CLR: the whole beat is back at once. One OK, wait 3 s, OK: only arms again.
 - [ ] **Screen keys = pages.** EDIT and MIXER as before. On PROJECT they walk PROJECT, CHAIN,
       PATTERN, SETUP, PROJECTS. On GRID they change the EDIT page the knobs turn (the second line
       says `FLTR` etc.); LEFT/RIGHT still flip GRID's step page.
 - [ ] **Pad-row keys = which sixteen.** GRID: step page. KEYS: octave. PROJECT: the bank
       (`BANK B`). PERFORM and KIT: nothing.
 - [ ] **CHAIN:** CLR on an entry: `AGAIN TO REMOVE`; again: removed. On an empty chain CLR goes back.
-- [ ] **KEYS on the pads** (HOME twice, track 7 VA POLY): the pads light as a keyboard (root bright,
-      the scale dim, the rest dark, two dim white octave pads in the upper row). Lower pads play
-      C to C, upper pads the sharps between them; soft and hard hits sound different; a held pad
-      sustains; the upper pad between E and F is octave down, the last one octave up (`OCT n`).
-      FUNC + lower pad still mutes on the bar. Does it play like a keyboard? `____`
-- [ ] **Macro assignment.** PERFORM, macro A (LEFT/RIGHT), a STEP: `A T1 ... 1/4`. The same STEP
-      again: `... OFF 0/4`. Macro D (factory, four used), a STEP: `D FULL: CLR CLEARS`. Reliable now? `____`
-- [ ] **Macro learn.** PERFORM, push knob A: EDIT with `LEARN A n/4`. Push C on FLTR: `A T1 ... `
-      with the count. Another track (DOWN), push again: added. CLR: `KNOBS EDIT AGAIN`; CLR again
-      at once: the pattern stays. Learn again, HOME: ended. Turn macro A up, EDIT, turn that knob:
-      `HELD BY MACRO A`. Back to
-      PERFORM, turn A: both move. Easier than the STEP keys? `____`
-- [ ] **Velocity on the STEP lights.** Four trigs, step page VEL 20, 60, 95, 120: four clearly
-      different greens, dimmest to brightest? `____` A trig with PROB 50% blinks. Locks still amber.
-- [ ] **TUN as a note** (2026-11-23). Track 1 (KICK), EDIT SRC: A reads `A-1`, not `064`. Turn A
-      one click: `A#1+` (a few cents sharp of A#1: the `+`), and the kick is a semitone higher;
-      twelve clicks from `A-1`: `A-2-`, an octave up. Push A:
-      `TUN AS NUMBERS`, A reads a number and a click is one count. Push again: `TUN AS NOTES`. Hold
-      a STEP + push A still clears that lock (`LOCK CLEARED`), and FUNC + push A is still KILL LOW.
-      On GRID the bottom slot shows the same. Track 7 (VA): turn TUN to `C-4`, then twelve clicks
-      up: `C-5`, exactly an octave. Legible, and is NOTE view the right default? `________`
 - Notes on what still feels awkward: `____________________________________________`
 
 ---
 
-# Tonight's walkthrough
+# Last night's walkthrough (2026-11-22)
 
 ## On the PC, before building the card (15 min, plus E2-E5 if there is time)
 
