@@ -440,6 +440,7 @@ const Expect kTable[] = {
     {Cmd::range_transpose, kDirtyBank, "range_transpose"},
     {Cmd::range_nudge, kDirtyBank, "range_nudge"},
     {Cmd::record_hit, kDirtyBank, "record_hit"},
+    {Cmd::record_length, kDirtyBank, "record_length"},
 
     // --- PROJECT.BIN ------------------------------------------------------
     //

@@ -2086,6 +2086,7 @@ public:
         if (held == 0) return;                       // never started here, or already let go
         midi_in_held_[channel][note] = 0;
         post(Cmd::release_note, uint8_t(held - 1), 0, uint8_t(note));
+        record_note_up(held - 1, uint8_t(note));
     }
 
     // --- live recording ---------------------------------------------------
@@ -2129,6 +2130,58 @@ public:
         post_command(command);
 
         if (landing.clamped) notice("OFF GRID");   // it could not be stored where it was played
+
+        // And remember the press, so the key coming up can give the step its length. Only on a
+        // machine that holds a note -- a drum ignores LEN, and a tap there would rewrite the
+        // step's LEN for nothing. The stamp is `now`, not `hit`: the pad latency is the same at
+        // both ends, so the hold is the difference of the raw stamps.
+        if (engine_.machine_id(track) < uint8_t(MachineId::sample)) return;
+        RecHold *slot = nullptr;
+        for (RecHold &h : rec_holds_) {
+            if (h.track == track && h.note == note) slot = &h;   // the same note again: replace
+        }
+        for (RecHold &h : rec_holds_) {
+            if (slot == nullptr && h.track < 0) slot = &h;
+        }
+        if (slot == nullptr) {
+            // More held notes than slots: the oldest press gives up its length (it keeps LEN).
+            slot = &rec_holds_[rec_hold_next_];
+            rec_hold_next_ = rec_hold_next_ + 1 >= kRecHolds ? 0 : rec_hold_next_ + 1;
+        }
+        slot->track = int8_t(track);
+        slot->note = note;
+        slot->step = landing.step;
+        slot->down = now;
+    }
+
+    // A recorded note's key came up: its hold, quantized to the note-length table
+    // (core/record.hpp, held_length_index), becomes the step's LEN. Nothing if it was not
+    // recorded, if REC went off in between or the clock stopped -- there is nothing to measure.
+    void record_note_up(int track, uint8_t note) {
+        RecHold *hold = nullptr;
+        for (RecHold &h : rec_holds_) {
+            if (h.track == track && h.note == note) hold = &h;
+        }
+        if (hold == nullptr) return;
+        hold->track = -1;
+        if (!rec_) return;
+        const enaga::clock::State clock = enaga::clock::state();
+        if (!clock.running) return;
+        Stamp up;
+        up.tick = clock.position;
+        up.fraction = clock.fraction;
+
+        const TrackPattern &source = engine_.pattern().tracks[track];
+        TrackTiming timing;
+        timing.length = source.length;
+        timing.speed = Speed(source.speed);
+        Command command;
+        command.cmd = Cmd::record_length;
+        command.track = uint8_t(track);
+        command.step = hold->step;
+        command.a = note;
+        command.b = held_length_index(hold->down, up, timing);
+        post_command(command);
     }
 
     void on_transport(int what, uint32_t position) override {
@@ -3205,6 +3258,7 @@ public:
         if (step < 0 || step >= 16 || keys_held_note_[step] < 0) return;
         post(Cmd::release_note, uint8_t(keys_held_track_[step]), 0,
              uint8_t(keys_held_note_[step]));
+        record_note_up(keys_held_track_[step], uint8_t(keys_held_note_[step]));
         keys_held_note_[step] = -1;
     }
 
@@ -3231,6 +3285,7 @@ public:
     void release_pad(int pad) {
         if (pad < 0 || pad >= kPianoPads || pad_held_note_[pad] < 0) return;
         post(Cmd::release_note, uint8_t(pad_held_track_[pad]), 0, uint8_t(pad_held_note_[pad]));
+        record_note_up(pad_held_track_[pad], uint8_t(pad_held_note_[pad]));
         pad_held_note_[pad] = -1;
         // The macro bend this pad's pressure made goes back to where the knob left it.
         if (pressure_pad_ == pad) {
@@ -5367,6 +5422,19 @@ private:
     // MIDI IN's held notes: per channel and note, the track it started on plus 1, 0 for none.
     // 2 KiB, so a note off finds its track even after the selected track has moved.
     uint8_t midi_in_held_[16][128] = {};
+
+    // Notes recorded while held, waiting for their key to come up so the step gets its LEN
+    // (record_note / record_note_up). Sixteen is more fingers than a hand has, plus a MIDI
+    // keyboard's sustain of a chord or two; past it the oldest press keeps the step's LEN.
+    struct RecHold {
+        int8_t track = -1;          // -1: a free slot
+        uint8_t note = 0;
+        uint8_t step = 0;
+        Stamp down{};
+    };
+    static constexpr int kRecHolds = 16;
+    RecHold rec_holds_[kRecHolds] = {};
+    int rec_hold_next_ = 0;
     // CC 16-31 are the track's sixteen parameters: the "General Purpose" 16-19 and the
     // undefined 20-31, which no common controller sends by default for anything else.
     static constexpr int kMidiInFirstParamCc = 16;

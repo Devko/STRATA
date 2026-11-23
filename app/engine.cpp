@@ -637,6 +637,16 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::record_length: {
+            // The key that recorded this step came up. Only if the step still holds that note:
+            // a later hit landing on the same step has replaced it, and its own key decides.
+            Step &s = live().tracks[track].steps[step];
+            if ((s.flags & kStepTrig) != 0 && s.note == command.a && length_valid(command.b)) {
+                s.length = command.b;
+            }
+            break;
+        }
+
         // --- projects and banks, M4 ---------------------------------------
 
         case Cmd::queue_pattern: {

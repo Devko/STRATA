@@ -1547,6 +1547,74 @@ TEST(ui_a_step_key_in_keys_mode_plays_and_records_the_scale_note) {
     host.set_running(false);
 }
 
+TEST(ui_a_key_held_while_recording_gives_the_step_its_length) {
+    // KEYS on VA POLY, REC on: a key held for four steps records a step whose LEN is four steps,
+    // so with SUS up the chord plays back as long as it was played. On a drum the hold is not
+    // measured: LEN stays the one step a recorded hit always had.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);    // track 7, VA POLY
+    CHECK_EQ(UiProbe::selected(app), 6);
+    open_keys();
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    host.set_position(96);
+    key(ENAGA_KEY_F2);                                  // REC on
+    CHECK(UiProbe::rec(app));
+
+    step_down(2);
+    pump(2);
+    host.set_position(96 + 4 * 24);                     // four steps later
+    step_up(2);
+    pump(2);
+
+    int where = -1;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(6, s)) where = s;
+    }
+    CHECK(where >= 0);
+    CHECK_EQ(int(step_of(6, where).length), 12);        // 4 steps (core/timing.hpp's table)
+
+    // A quick tap on the same step's note again replaces its length with the tap's.
+    host.set_position(96);
+    step_down(2);
+    pump(2);
+    host.set_position(96 + 6);                          // a quarter of a step
+    step_up(2);
+    pump(2);
+    CHECK_EQ(int(step_of(6, where).length), 4);
+
+    key(ENAGA_KEY_F2);
+    host.set_running(false);
+}
+
+TEST(ui_a_held_key_on_a_drum_track_keeps_the_one_step_length) {
+    Strata &app = fresh();
+    open_keys();
+    CHECK_EQ(UiProbe::selected(app), 0);                // track 1, KICK
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    host.set_position(96);
+    key(ENAGA_KEY_F2);
+    step_down(4);
+    pump(2);
+    host.set_position(96 + 8 * 24);
+    step_up(4);
+    pump(2);
+    int recorded = 0;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(0, s) && step_of(0, s).note == app.keys_note(4)) {
+            recorded++;
+            CHECK_EQ(int(step_of(0, s).length), 8);
+        }
+    }
+    CHECK(recorded > 0);
+    key(ENAGA_KEY_F2);
+    host.set_running(false);
+}
+
 // --- PLAY while the card is busy ------------------------------------------------------------
 
 TEST(ui_play_is_refused_while_a_project_is_loading) {
