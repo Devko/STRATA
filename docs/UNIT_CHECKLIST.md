@@ -61,7 +61,8 @@ are the point of this section.
       sustains; the upper pad between E and F is octave down, the last one octave up (`OCT n`).
       FUNC + lower pad still mutes on the bar. Does it play like a keyboard? `____`
 - [ ] **TUN as a note** (2026-11-23). Track 1 (KICK), EDIT SRC: A reads `A-1`, not `064`. Turn A
-      one click: `A#1`, and the kick is a semitone higher; twelve clicks from `A-1`: `A-2`. Push A:
+      one click: `A#1+` (a few cents sharp of A#1: the `+`), and the kick is a semitone higher;
+      twelve clicks from `A-1`: `A-2-`, an octave up. Push A:
       `TUN AS NUMBERS`, A reads a number and a click is one count. Push again: `TUN AS NOTES`. Hold
       a STEP + push A still clears that lock (`LOCK CLEARED`), and FUNC + push A is still KILL LOW.
       On GRID the bottom slot shows the same. Track 7 (VA): turn TUN to `C-4`, then twelve clicks

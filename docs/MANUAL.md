@@ -379,14 +379,15 @@ machine, AMP's first knob is the decay and its last is LVL, the output level (sq
 the quiet end has room). Where a machine follows the trig note, note 60 (C4) plays the knob's own
 pitch and other notes transpose from there.
 
-**TUN as a note.** TUN (PIT on SAMPLE and GRAIN) shows that pitch as a note: the note a C4 step
-plays, spelled as on the step page (`C-4`, `F#2`). KICK at 64 reads `A-1` (55 Hz); VA MONO at 64
-reads `C-4`, and turned up an octave `C-5`. In this NOTE view a knob click moves TUN one
+**TUN as a note.** TUN (PIT on SAMPLE and GRAIN) shows that pitch as a note: where TUN puts C4,
+spelled as on the step page (`C-4`, `F#2`). On a drum that is the drum's pitch: KICK at 64 reads
+`A-1` (55 Hz). On a melodic machine it is the transposition: VA MONO at 64 reads `C-4` (none), an
+octave up `C-5`. In this NOTE view a knob click moves TUN one
 semitone, to the setting closest to that note, so tuning a kick or a tom to the key is a few
 clicks. TUN has 128 settings across its range, so not every note falls exactly on one: a `+` or
 `-` after the note means the setting is 5 cents or more sharp or flat of it (VA MONO's fifth,
 `G-4+`, is 12.5 cents sharp). For SAMPLE and GRAIN the name assumes the sample itself is a C.
-**Push the TUN knob** (on EDIT or GRID) to see the number 0-127 instead and turn it a count at
+**Push the TUN knob** (on EDIT, GRID or KEYS) to see the number 0-127 instead and turn it a count at
 a time, for tuning between notes; push again for notes. NOTE view is on at every start and
 applies to every track. Locks follow it: hold a STEP and turn TUN in NOTE view, and the lock
 moves in semitones.

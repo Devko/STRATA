@@ -5984,6 +5984,16 @@ TEST(ui_pushing_the_tun_knob_switches_between_note_and_number) {
     CHECK(!UiProbe::tune_notes(app));
     key(ENAGA_KEY_PUSH_A);
     CHECK(UiProbe::tune_notes(app));
+
+    // And in KEYS, where A-D turn the EDIT page too and a turn echoes the note.
+    key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+    app.on_encoder(0, +12);
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[0]), 96);
+    CHECK(screen_has(app, "TUN C-5"));
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(!UiProbe::tune_notes(app));
 }
 
 TEST(ui_a_held_step_still_takes_the_push_and_locks_tun_in_notes) {

@@ -1,8 +1,11 @@
-// TUN and PIT as notes: what pitch a machine's tuning byte puts a C-4 step at, as a name.
+// TUN and PIT as notes: where a machine's tuning byte puts C-4, as a name.
 //
 // Every pitched machine reads its tuning byte the same way at heart: "a step at note 60 (C-4)
 // sounds at TUN, and the step's note transposes from there" (dsp/kick.cpp, dsp/va.cpp, ...). So
-// one question has one answer on every machine: which note does a C-4 step play? The byte to
+// one question has one answer on every machine: where does TUN put C-4? On a drum that is the
+// drum's pitch. On a melodic track it is the transposition (C-4 none, C-5 an octave up), and it
+// is applied after the scale fold, so in a key without C the note a C-4 STEP plays is the folded
+// note moved by that much -- which is why this names TUN's place and not a step's. The byte to
 // pitch maps are the machines' own and are copied here as cents above C-4, so the UI can name
 // any byte, a lock's included, without asking the audio side:
 //
@@ -31,7 +34,8 @@
 // sample needs to be tuned to the key in the first place. Only an octave keeps a folded line
 // in key, and twelve clicks is an octave.
 //
-// core/: no Enaga headers, no libm, no allocation. Control rate only.
+// core/: no Enaga headers, no libm, no allocation, no loops: `tune_step` runs on the audio side
+// once per knob click (app/engine.cpp, kSemitoneFlag), so it is a few multiplies.
 #pragma once
 
 #include <cstdint>

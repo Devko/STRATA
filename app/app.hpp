@@ -519,11 +519,13 @@ public:
             }
         }
 
-        // NOTE view: on EDIT or GRID, push the knob that turns TUN (PIT on SAMPLE and GRAIN) to
-        // show it as the note a C-4 step plays, and turn it a semitone a click; push again for
-        // the number and counts. One setting for every track. Without FUNC, as SLC AUTO, so
-        // FUNC + push stays the kill EQ and the tape stop; a held STEP took its push above.
-        if ((mode_ == Mode::edit || mode_ == Mode::grid) && !shift_ && !step_page_ &&
+        // NOTE view: on EDIT, GRID or KEYS (wherever A-D turn the EDIT page), push the knob that
+        // turns TUN (PIT on SAMPLE and GRAIN) to show it as a note, where it puts C-4, and turn
+        // it a semitone a click; push again for the number and counts. One setting for every
+        // track. Without FUNC, as SLC AUTO, so FUNC + push stays the kill EQ and the tape stop;
+        // a held STEP took its push above.
+        if ((mode_ == Mode::edit || mode_ == Mode::grid || mode_ == Mode::keys) && !shift_ &&
+            !step_page_ &&
             (key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||
              key == ENAGA_KEY_PUSH_D)) {
             const int encoder = key == ENAGA_KEY_PUSH_A   ? 0
@@ -1695,7 +1697,8 @@ public:
     }
 
     // A knob turned into a lock on `step` of the selected track: counts, or semitones on TUN or
-    // PIT in NOTE view. The lock starts from the kit value on the audio side either way.
+    // PIT in NOTE view. The audio side starts from the step's lock, or the kit value if it has
+    // none, either way.
     void post_param_lock(int step, int index, int delta) {
         Command command;
         command.cmd = Cmd::lock_delta;
@@ -3118,7 +3121,7 @@ public:
     // is a shape, a rate (Hz free, a note length synced), a depth, and a destination. At most
     // five characters.
     void append_param_value(char *&out, int index, uint8_t value) const {
-        // TUN or PIT in NOTE view: the note a C-4 step plays ("G-4", "A-1+"), core/tuning.hpp.
+        // TUN or PIT in NOTE view: where it puts C-4 ("G-4", "A-1+"), core/tuning.hpp.
         if (shows_note(index)) {
             char text[kTuneTextMax];
             tune_text(engine_.machine_id(selected_), value, text, kTuneTextMax);
@@ -3171,7 +3174,7 @@ public:
     }
 
     // Is parameter `index` the selected track's TUN or PIT, shown as a note? NOTE view is one
-    // setting for every track (push the knob that turns TUN or PIT, on EDIT or GRID), so a track
+    // setting for every track (push the knob that turns TUN or PIT, on EDIT, GRID or KEYS), so a track
     // never reads one way and its neighbour the other.
     bool is_tune(int index) const { return index == tune_param(engine_.machine_id(selected_)); }
     bool shows_note(int index) const { return tune_notes_ && is_tune(index); }
@@ -5396,8 +5399,8 @@ private:
     int field_page_ = 0;           // four of the step's fields at a time
     uint8_t gesture_seq_ = 0;
     bool value_pushed_ = false;    // VALUE held down: swing rather than tempo
-    // NOTE view (push the TUN or PIT knob on EDIT or GRID): TUN and PIT read as the note a C-4
-    // step plays and turn a semitone a click. On by default, since STRATA plays in a key; not
+    // NOTE view (push the TUN or PIT knob on EDIT, GRID or KEYS): TUN and PIT read as the note
+    // they put C-4 at and turn a semitone a click. On by default, since STRATA plays in a key; not
     // saved, so every start shows notes.
     bool tune_notes_ = true;
 

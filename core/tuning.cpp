@@ -13,22 +13,27 @@ namespace {
 struct Map {
     float at_zero;
     float per_count;
+    float counts_per_cent;   // 1 / per_count, so a step solves with a multiply
 };
 
 constexpr float kVaStep = 2400.0f / 64.0f;       // 24/64 semitones a count
 constexpr float kSampleStep = 2400.0f / 63.0f;   // 24/63 semitones a count
 
+constexpr Map make(float at_zero, float per_count) {
+    return {at_zero, per_count, 1.0f / per_count};
+}
+
 Map map_of(uint8_t machine) {
     switch (MachineId(machine)) {
-        case MachineId::kick:  return {-4065.0042f, 21.328243f};   // 25 Hz, 2.2572390 octaves
-        case MachineId::snare: return {-1847.4079f, 21.600094f};   // 90 Hz, 2.2860100
-        case MachineId::hat:   return {-647.40794f, 22.530643f};   // 180 Hz, 2.3844930
-        case MachineId::perc:  return {-2935.6767f, 49.572000f};   // 48 Hz, 5.2463700
+        case MachineId::kick:  return make(-4065.0042f, 21.328243f);   // 25 Hz, 2.2572390 octaves
+        case MachineId::snare: return make(-1847.4079f, 21.600094f);   // 90 Hz, 2.2860100
+        case MachineId::hat:   return make(-647.40794f, 22.530643f);   // 180 Hz, 2.3844930
+        case MachineId::perc:  return make(-2935.6767f, 49.572000f);   // 48 Hz, 5.2463700
         case MachineId::va_mono:
-        case MachineId::va_poly: return {-64.0f * kVaStep, kVaStep};
+        case MachineId::va_poly: return make(-64.0f * kVaStep, kVaStep);
         case MachineId::sample:
-        case MachineId::grain:   return {-64.0f * kSampleStep, kSampleStep};
-        default:                 return {0.0f, 0.0f};
+        case MachineId::grain:   return make(-64.0f * kSampleStep, kSampleStep);
+        default:                 return {0.0f, 0.0f, 0.0f};
     }
 }
 
@@ -70,7 +75,8 @@ void tune_text(uint8_t machine, uint8_t value, char *out, int max) {
     const uint8_t note = tune_note(machine, value);
     note_name(note, out, max);
     const float off = tune_cents(machine, value) - float((int(note) - 60) * 100);
-    const char mark = off >= float(kTuneMarkCents) ? '+' : (off <= -float(kTuneMarkCents) ? '-' : 0);
+    const float limit = float(kTuneMarkCents);
+    const char mark = off >= limit ? '+' : (off <= -limit ? '-' : 0);
     if (mark == 0) return;
     int length = 0;
     while (out[length] != 0) length++;
@@ -85,16 +91,11 @@ uint8_t tune_step(uint8_t machine, uint8_t value, int semitones) {
     const int target = int(tune_note(machine, value)) + semitones;
     const float wanted = float((target - 60) * 100);
 
-    int best = 0;
-    float best_distance = -1.0f;
-    for (int v = 0; v <= 127; v++) {
-        const float d = tune_cents(machine, uint8_t(v)) - wanted;
-        const float distance = d < 0.0f ? -d : d;
-        if (best_distance < 0.0f || distance < best_distance) {
-            best = v;
-            best_distance = distance;
-        }
-    }
+    // Every map is linear in cents, so the nearest byte is solved for rather than searched: it
+    // runs on the audio side (app/engine.cpp, kSemitoneFlag), once per click.
+    const Map map = map_of(machine);
+    int best = round_int((wanted - map.at_zero) * map.counts_per_cent);
+    best = best < 0 ? 0 : (best > 127 ? 127 : best);
     // Never swallow a click: a byte between two notes could otherwise round back to itself.
     if (semitones > 0 && best <= int(value)) best = value < 127 ? int(value) + 1 : 127;
     if (semitones < 0 && best >= int(value)) best = value > 0 ? int(value) - 1 : 0;
