@@ -636,7 +636,7 @@ slide and glide on WMN, chords and the shared 12-voice budget on WPL.
 | SRC | **TBL** the table, eight counts each (shown by name) | **POS** position, frame 0-15 | **CUT** cutoff, LP24 | **RES** resonance |
 | AMP | **DEC** as MNO | **ENV** filter envelope amount | **MOT** envelope to position: 64 off, up to +15 or -15 frames | **LVL** |
 | ASR | **ATK** | **SUS** | **REL** | **FSU** as MNO |
-| OSC | **WRP** bends the cycle (0 = none) | **DET** a second, detuned copy: OFF, up to 60 cents | **SUB** sub level | WMN: **GLD** glide; WPL: **DRV** drive |
+| OSC | **WRP** bends the cycle (0 = none; high notes bend less, to stay clean) | **DET** a second, detuned copy: OFF, up to 60 cents | **SUB** sub level | WMN: **GLD** glide; WPL: **DRV** drive |
 
 The tables, from TBL 0 up:
 

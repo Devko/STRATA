@@ -283,3 +283,29 @@ TEST(wave_every_factory_preset_sounds) {
         }
     }
 }
+
+// WRP squeezes the first half of the cycle into as little as 2% of it, so that half plays up to
+// 25 times faster than the note. The mip level has to allow for it, and on a high note the bend
+// itself is eased (dsp/va.cpp, kWarpFastest), or the note aliases: 10 dB down before, 32 now.
+TEST(wave_warp_picks_a_mip_level_that_does_not_alias) {
+    library();
+    static VaMono m;
+    m.set_wave(true);
+    m.init(kRate);
+    TrackParams p = patch(0, 127);   // CLASSIC's square: every odd harmonic
+    p.set(kWrp, 127);
+    play(m, p, 93);                  // 1,760 Hz: harmonics at multiples, nothing between
+    // A periodic note has energy only at multiples of its pitch. Measure what lies between them
+    // (the aliases fold to arbitrary places) against what lies on them.
+    const float *x = g_out + kLen - 9600;   // 5 Hz bins; 1,760 is bin 352
+    double on = 0.0, off = 0.0;
+    for (int bin = 20; bin < 3600; bin++) {   // 100 Hz to 18 kHz, where the tables keep aliases out
+        const double hz = 5.0 * bin;
+        const double mag = magnitude(x, 9600, hz);
+        const double harmonic = hz / 1760.0;
+        const double nearest = std::floor(harmonic + 0.5);
+        if (std::fabs(harmonic - nearest) * 1760.0 < 15.0) on += mag * mag;
+        else off += mag * mag;
+    }
+    CHECK(off < 1e-3 * on);   // aliases at least 30 dB down
+}
