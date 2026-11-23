@@ -163,6 +163,9 @@ Engine &fresh() {
     // with --only, or first in a shard.
     if (!g_ready) {
         g_ready = g_engine.init(float(ENAGA_SAMPLE_RATE)) && g_storage.init(g_engine);
+        // The WAVE tables, as App::update would build them over the first second or two.
+        while (g_ready && !g_engine.step_waves()) {
+        }
     }
     host.reset();
 

@@ -229,3 +229,47 @@ TEST(wavetable_a_build_in_lent_scratch_is_the_same_tables_and_gives_it_back_sile
     WaveLibrary small;
     CHECK(small.init(g_lent, 1024));
 }
+
+// The app builds the tables a piece at a time from update() (Engine::step_waves): all at once
+// they outlast Enaga's 1 s watchdog on the C6748. The pieces are init()'s work in init()'s order,
+// so the tables are the same; the library is not ready, and the lent scratch not given back,
+// until the last piece.
+TEST(wavetable_a_build_in_steps_takes_its_pieces_and_makes_the_same_tables) {
+    const WaveLibrary &whole = library();
+    for (uint8_t &x : g_lent) x = 0;
+    static WaveLibrary stepped;
+    CHECK(stepped.begin(g_lent, uint32_t(sizeof(g_lent))));
+    CHECK(!stepped.ready());
+    int steps = 0;
+    bool scratch_used = false;
+    while (!stepped.step()) {
+        steps++;
+        CHECK(!stepped.ready());
+        if (steps == 1) {
+            for (uint8_t x : g_lent) scratch_used = scratch_used || x != 0;
+        }
+        if (steps > 2 * WaveLibrary::kBuildSteps) break;
+    }
+    steps++;
+    CHECK_EQ(steps, WaveLibrary::kBuildSteps);
+    CHECK(scratch_used);   // the build really ran in the lent memory
+    CHECK(stepped.ready());
+    CHECK(stepped.step());   // done stays done
+    bool same = true;
+    for (int t = 0; t < kWaveTables; t++) {
+        for (int f = 0; f < kWaveFrames; f++) {
+            same = same && whole.scale(t, f) == stepped.scale(t, f);
+            const int16_t *a = whole.frame(t, f, 0);
+            const int16_t *b = stepped.frame(t, f, 0);
+            for (int i = 0; i < kWaveFrameStride; i++) same = same && a[i] == b[i];
+        }
+    }
+    CHECK(same);
+    bool silent = true;
+    for (uint8_t x : g_lent) silent = silent && x == 0;
+    CHECK(silent);
+    // A library never begun has nothing to step.
+    WaveLibrary none;
+    CHECK(!none.step());
+    CHECK(!none.ready());
+}

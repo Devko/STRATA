@@ -235,3 +235,20 @@ TEST(memory_nothing_allocates_after_init) {
     g_counting = false;
     CHECK_EQ(g_allocations, 0);
 }
+
+// The WAVE tables are begun in init() and built from update() (Engine::step_waves), in the
+// memory init() took: the steps allocate nothing, and the build is done in its 144 pieces.
+TEST(memory_the_wave_build_after_init_allocates_nothing) {
+    const Footprint &f = footprint();
+    CHECK(f.ok);
+    if (!g_engine.waves_building()) return;   // an earlier test in this run already stepped it
+    g_allocations = 0;
+    g_counting = true;
+    int steps = 1;
+    while (!g_engine.step_waves() && steps <= WaveLibrary::kBuildSteps) steps++;
+    g_counting = false;
+    CHECK_EQ(g_allocations, 0);
+    CHECK_EQ(steps, WaveLibrary::kBuildSteps);
+    CHECK(!g_engine.waves_building());
+    CHECK(g_engine.step_waves());
+}
