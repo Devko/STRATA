@@ -27,6 +27,7 @@
 #include "commands.hpp"
 #include "cpuguard.hpp"   // sheds POLY voices and grains when the block nears its budget
 #include "editops.hpp"
+#include "fmpoly.hpp"     // FM4: four operators, six voices, in the POLY budget
 #include "extmidi.hpp"    // MID: the machine that plays nothing and sends MIDI
 #include "hat.hpp"
 #include "kick.hpp"
@@ -433,6 +434,7 @@ private:
         VaPoly poly;
         VaMono wave_mono;   // WMN: VA MONO with the wavetable (set_wave)
         VaPoly wave_poly;   // WPL: VA POLY with it, in polys_ like the other
+        FmPoly fm;          // FM4: in polys_ too
         Sampler sampler;
         Granular grain;
         MidiMachine midi;   // no state at all: the vtable pointer
@@ -484,7 +486,7 @@ private:
     // several notes on one frame, so `fire` has to know that this track can take them. A track
     // with no VaPoly plays the step's note and ignores its chord byte, which is what every
     // machine but this one does with it.
-    VaPoly *polys_[kTracks] = {};
+    PolyMachine *polys_[kTracks] = {};
 
     // The whole project, about 1.03 MiB of it, and the sequencer plays a pattern INSIDE it
     // rather than a copy: `live()` is `project_.live()`. So an edit lands in the pattern that

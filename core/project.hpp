@@ -75,10 +75,11 @@ constexpr uint8_t kKitOscLegacy[kKitOscParams] = {0, 0, 102, 0};
 // How many machines a track can host, mirroring dsp/'s machine list the same way and for the
 // same reason as kKitParams: docs/SPEC.md, "Machines (v1)" -- KICK, SNARE, HAT, PERC, SAMPLE,
 // GRAIN, VA MONO and VA POLY -- plus MID, which plays nothing here and sends MIDI (dsp/extmidi.hpp),
-// and the wavetable pair WAVE MONO and WAVE POLY (dsp/va.hpp, dsp/wavetable.hpp). The file format needs the domain of KitTrack::machine, because a
+// and the wavetable pair WAVE MONO and WAVE POLY (dsp/va.hpp, dsp/wavetable.hpp), and FM4
+// (dsp/fmpoly.hpp). The file format needs the domain of KitTrack::machine, because a
 // kit naming machine 12 has to become something this build can host rather than an index into
 // app/'s machine pool. app/ asserts that the two agree.
-constexpr int kMachines = 11;
+constexpr int kMachines = 12;
 
 // Which machine a track hosts, as the number KIT.BIN stores.
 //
@@ -102,6 +103,7 @@ enum class MachineId : uint8_t {
     midi,        // MID: no audio; the track's notes and eight CCs go to MIDI OUT
     wave_mono,   // WMN: the VA MONO voice with a wavetable oscillator (dsp/va.hpp)
     wave_poly,   // WPL: and the VA POLY machine with it, sharing the POLY voice budget
+    fm,          // FM4: four-operator FM, six voices, in the POLY voice budget too (dsp/fmpoly.hpp)
     count
 };
 static_assert(int(MachineId::count) == kMachines,
@@ -136,15 +138,18 @@ const char *machine_name(uint8_t id);
 constexpr bool machine_folds_note(uint8_t id, int slices) {
     return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly) ||
            id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly) ||
+           id == uint8_t(MachineId::fm) ||
            id == uint8_t(MachineId::grain) || (id == uint8_t(MachineId::sample) && slices <= 1);
 }
 
-// Does this machine read the ASR page (ATK SUS REL FSU) and the OSC page? The VAs and the WAVE
-// pair, which share the VA voice. Everything that shows or saves those pages asks here, so a
+// Does this machine read the ASR page (ATK SUS REL FSU) and the OSC page? The VAs, the WAVE
+// pair, which share the VA voice, and FM4, which reads both with its own meanings (FSU is its
+// index sustain; the OSC page is DET FIN BRT CAR). Everything that shows or saves those pages asks here, so a
 // machine that starts reading them is one line.
 constexpr bool machine_reads_asr(uint8_t id) {
     return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly) ||
-           id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly);
+           id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly) ||
+           id == uint8_t(MachineId::fm);
 }
 constexpr bool machine_reads_osc(uint8_t id) { return machine_reads_asr(id); }
 
@@ -152,6 +157,9 @@ constexpr bool machine_reads_osc(uint8_t id) { return machine_reads_asr(id); }
 constexpr bool machine_is_wave(uint8_t id) {
     return id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly);
 }
+
+// FM4: four sine operators in one of eight algorithms (dsp/fm.hpp).
+constexpr bool machine_is_fm(uint8_t id) { return id == uint8_t(MachineId::fm); }
 
 // A sample path, including its terminator. Enaga's paths are absolute and UTF-8
 // ("/SAMPLES/Kick 01.wav"), and long names are supported, so this has to hold a real one rather

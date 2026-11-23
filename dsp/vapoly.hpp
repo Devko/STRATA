@@ -92,16 +92,17 @@
 #include <cstdint>
 
 #include "track.hpp"
+#include "polypool.hpp"   // PolyMachine: what the shared voice budget calls
 #include "va.hpp"
 
 namespace strata {
 
-class VaPoly final : public Machine {
+class VaPoly final : public PolyMachine {
 public:
     // docs/SPEC.md's figure. Six is also what docs/BUDGET.md budgets, at 1,868 cycles each;
     // docs/REVIEW.md measured that cutting it to four saves 0.75% of the block, which is why
     // the voice count is not a knob and not the lever when the budget gets tight.
-    static constexpr int kVoices = 6;
+    // (PolyMachine::kVoices, shared with FM and STRING.)
 
     void init(float sample_rate) override;
     void prepare(const TrackParams &params) override;
@@ -154,7 +155,7 @@ public:
     // A PENDING trig counts even on a slot still choking. Its start cancels the choke (gate_on),
     // so it is a voice from the moment it takes the slot; left uncounted until its frame, a
     // later note in the same block found room that was not there and the block ended over budget.
-    int budget_voices() const {
+    int budget_voices() const override {
         int n = 0;
         for (const Slot &s : slots_) n += s.pending || (s.voice.sounding() && !s.voice.choking());
         return n;
@@ -162,11 +163,11 @@ public:
     // Whether a trig on `note` would take a voice that is not already counted: false when it
     // retriggers the voice already sounding that note, or when every slot is busy and it would
     // steal one of this machine's own (allocate(), in vapoly.cpp, decides the same way).
-    bool would_add_voice(uint8_t note) const;
+    bool would_add_voice(uint8_t note) const override;
     // The quietest voice the budget may take: sounding, started, not already choking. Its slot,
     // or -1 when there is none; `level` is its amplitude envelope's level.
-    int quietest_voice(float &level) const;
-    void choke(int slot) {
+    int quietest_voice(float &level) const override;
+    void choke(int slot) override {
         if (slot >= 0 && slot < kVoices) slots_[slot].voice.choke();
     }
 
