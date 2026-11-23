@@ -2622,6 +2622,24 @@ TEST(ui_the_held_cpu_max_keeps_the_highest_block_and_restarts_on_play) {
     pump();
 }
 
+// The CPU guard (core/cpuguard.hpp) says so on the bottom line, in the device's place, so a chord
+// that got thinner under load has a reason on screen. A dropped edit still wins the slot.
+TEST(ui_the_bottom_line_shows_the_cpu_guard_while_it_is_up) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    CHECK(!screen_has(app, "GUARD"));
+    host.set_audio_load(950);
+    for (int i = 0; i < 40 && app_engine().cpu_guard_level() == 0; i++) pump();
+    host.set_audio_load(600);
+    CHECK_EQ(app_engine().cpu_guard_level(), 1);
+    CHECK(screen_has(app, "GUARD1"));
+
+    post_cmd(Cmd::stop, 1);                         // a hard stop starts the guard over
+    pump();
+    host.set_audio_load(0);
+    CHECK(!screen_has(app, "GUARD"));
+}
+
 // --- the screen's layout ----------------------------------------------------------------------
 //
 // STRATA's first boot on a SmplTrek showed text drawn over other text and over the bars. Nothing

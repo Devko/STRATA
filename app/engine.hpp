@@ -24,6 +24,7 @@
 #include "capture.hpp"    // resampling's take buffer
 #include "grain.hpp"      // GRAIN, reachable at last: a track can host any machine
 #include "commands.hpp"
+#include "cpuguard.hpp"   // sheds POLY voices and grains when the block nears its budget
 #include "editops.hpp"
 #include "extmidi.hpp"    // MID: the machine that plays nothing and sends MIDI
 #include "hat.hpp"
@@ -102,6 +103,11 @@ public:
     // let the total grow. Twelve is two full six-voice chords: a starting point to be set from
     // the unit's MAX readings (docs/BUDGET.md, U2), not a measured limit.
     static constexpr int kPolyVoiceBudget = 12;
+
+    // The budget in force now: kPolyVoiceBudget, or less while the CPU guard is up
+    // (core/cpuguard.hpp). For tests and the screen.
+    int poly_budget() const { return poly_budget_; }
+    int cpu_guard_level() const { return cpu_guard_.level(); }
 
     // A track's MIDI OUT channel, 0 off or 1-16 (ProjectSettings::midi_out). For the screen.
     uint8_t midi_out(int track) const {
@@ -529,6 +535,16 @@ private:
     // therefore bit-exact by construction, which tests/test_engine.cpp holds it to by rendering
     // with the memo on and off.
     bool make_room_for_poly_voice(int track, uint8_t note);
+
+    // The CPU guard (core/cpuguard.hpp). Audio side only. Each block feeds it the previous
+    // block's cost; a level change resizes the POLY budget and every GRAIN pool, and
+    // shed_poly_voices() chokes one voice a block while more are counted than the budget allows.
+    void run_cpu_guard();
+    void apply_cpu_guard(int level);
+    void shed_poly_voices();
+    CpuGuard cpu_guard_;
+    int guard_applied_ = 0;
+    int poly_budget_ = kPolyVoiceBudget;
 
     void prepare_machine(int track);
     void prepare_chain(int track);

@@ -386,6 +386,9 @@ struct Status {
     // How many TRACKS rendered last block (an active machine, not muted), 0-8. Not a voice
     // count: a six-note POLY chord is one. Shown as TRK on the status line.
     std::atomic<uint8_t> voices{0};
+    // The CPU guard's level, 0-4 (core/cpuguard.hpp): 0 is off, each step sheds two POLY voices
+    // from the shared budget and shrinks every GRAIN pool. Shown on the bottom line as GUARD.
+    std::atomic<uint8_t> cpu_guard{0};
     std::atomic<uint8_t> running{0};
 
     // M3. How deep the undo history is, so the screen can say whether F1+CLR will do anything,
