@@ -27,6 +27,7 @@
 #include "engine.hpp"
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
+#include "tuning.hpp"       // TUN and PIT as notes: the NOTE view
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
@@ -514,6 +515,33 @@ public:
                 const bool on = !slices_auto(selected_);
                 post(Cmd::set_slice_mode, uint8_t(selected_), 0, on ? kSliceAuto : kSliceEqual);
                 notice(on ? "SLICES AUTO" : "SLICES EVEN");
+                return;
+            }
+        }
+
+        // NOTE view: on EDIT or GRID, push the knob that turns TUN (PIT on SAMPLE and GRAIN) to
+        // show it as the note a C-4 step plays, and turn it a semitone a click; push again for
+        // the number and counts. One setting for every track. Without FUNC, as SLC AUTO, so
+        // FUNC + push stays the kill EQ and the tape stop; a held STEP took its push above.
+        if ((mode_ == Mode::edit || mode_ == Mode::grid) && !shift_ && !step_page_ &&
+            (key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||
+             key == ENAGA_KEY_PUSH_D)) {
+            const int encoder = key == ENAGA_KEY_PUSH_A   ? 0
+                                : key == ENAGA_KEY_PUSH_B ? 1
+                                : key == ENAGA_KEY_PUSH_C ? 2
+                                                          : 3;
+            const int index = page_first(Page(param_page_)) + encoder;
+            if (is_tune(index)) {
+                if (!down) return;
+                tune_notes_ = !tune_notes_;
+                char *out = notice_buffer_;
+                append(out, param_name_for(index));
+                append(out, tune_notes_ ? " AS NOTES" : " AS NUMBERS");
+                *out = 0;
+                notice(notice_buffer_);
+                // Logged too: the emulator can push a knob but not read the screen
+                // (tests/scenario_tune.sh).
+                enaga::log(notice_buffer_);
                 return;
             }
         }
@@ -1563,8 +1591,7 @@ public:
             held_used_ = true;
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::lock, selected_, held_step_);
-            post_delta(Cmd::lock_delta, selected_, held_step_, uint8_t(index),
-                       delta * param_click(index));
+            post_param_lock(held_step_, index, delta);
             return;
         }
 
@@ -1612,7 +1639,7 @@ public:
             const int step = int(engine_.status().playhead[selected_].load(std::memory_order_relaxed));
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::motion, selected_, 0);
-            post_delta(Cmd::lock_delta, selected_, step, uint8_t(index), delta * param_click(index));
+            post_param_lock(step, index, delta);
             return;
         }
 
@@ -1658,11 +1685,26 @@ public:
         // One click is one shape or one destination on the LFO's WAV and DST (dsp/lfo.hpp,
         // `lfo_click`), and one count everywhere else.
         const int index = page_first(Page(param_page_)) + encoder;
+        // In NOTE view a click on TUN or PIT is a semitone (core/tuning.hpp, `tune_step`).
         post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index),
-             clamp_delta(delta * param_click(index)), kDeltaFlag);
+             clamp_delta(shows_note(index) ? delta : delta * param_click(index)),
+             shows_note(index) ? kSemitoneFlag : kDeltaFlag);
         // KEYS has no knob slots on screen (its sixteen notes fill it), so a turn there changed
         // the sound and showed nothing. GRID and EDIT draw the slots and need no notice.
         if (mode_ == Mode::keys) echo(Echo::param, index);
+    }
+
+    // A knob turned into a lock on `step` of the selected track: counts, or semitones on TUN or
+    // PIT in NOTE view. The lock starts from the kit value on the audio side either way.
+    void post_param_lock(int step, int index, int delta) {
+        Command command;
+        command.cmd = Cmd::lock_delta;
+        command.track = uint8_t(selected_);
+        command.step = uint8_t(step);
+        command.a = uint8_t(index);
+        command.b = clamp_delta(shows_note(index) ? delta : delta * param_click(index));
+        command.c = shows_note(index) ? kSemitoneFlag : 0;
+        post_command(command);
     }
 
     void on_pad_press(int pad, int velocity) override {
@@ -2760,9 +2802,10 @@ public:
             canvas.text(34, y, line, 15);
 
             // The LFO's values are words up to five characters long ("1/16T"), so its bars start
-            // further right.
-            const int bar_x = word_page ? 70 : 56;
-            const int bar = int(value) * (word_page ? 56 : 70) / 127;
+            // further right; so does a note ("C#4+" is four).
+            const bool wide = word_page || shows_note(index);
+            const int bar_x = wide ? 70 : 56;
+            const int bar = int(value) * (wide ? 56 : 70) / 127;
             canvas.rect(bar_x, y + 2, bar < 1 ? 1 : bar, 4, 9);
         }
 
@@ -3075,6 +3118,13 @@ public:
     // is a shape, a rate (Hz free, a note length synced), a depth, and a destination. At most
     // five characters.
     void append_param_value(char *&out, int index, uint8_t value) const {
+        // TUN or PIT in NOTE view: the note a C-4 step plays ("G-4", "A-1+"), core/tuning.hpp.
+        if (shows_note(index)) {
+            char text[kTuneTextMax];
+            tune_text(engine_.machine_id(selected_), value, text, kTuneTextMax);
+            append(out, text);
+            return;
+        }
         switch (index) {
             case kLfoWave:
                 append(out, lfo_wave_name(lfo_wave(value)));
@@ -3119,6 +3169,12 @@ public:
                 return;
         }
     }
+
+    // Is parameter `index` the selected track's TUN or PIT, shown as a note? NOTE view is one
+    // setting for every track (push the knob that turns TUN or PIT, on EDIT or GRID), so a track
+    // never reads one way and its neighbour the other.
+    bool is_tune(int index) const { return index == tune_param(engine_.machine_id(selected_)); }
+    bool shows_note(int index) const { return tune_notes_ && is_tune(index); }
 
     // The four encoder slots along the bottom: a three-letter name, the value under it and a
     // small bar, 18 pixels tall from `y`.
@@ -5340,6 +5396,10 @@ private:
     int field_page_ = 0;           // four of the step's fields at a time
     uint8_t gesture_seq_ = 0;
     bool value_pushed_ = false;    // VALUE held down: swing rather than tempo
+    // NOTE view (push the TUN or PIT knob on EDIT or GRID): TUN and PIT read as the note a C-4
+    // step plays and turn a semitone a click. On by default, since STRATA plays in a key; not
+    // saved, so every start shows notes.
+    bool tune_notes_ = true;
 
     const char *notice_ = nullptr;
     uint32_t notice_at_ms_ = 0;

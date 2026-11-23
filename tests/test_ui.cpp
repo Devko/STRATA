@@ -83,6 +83,8 @@ struct UiProbe {
     static int keys_held_note(const Strata &app, int key) { return app.keys_held_note_[key]; }
 
     static const char *notice(const Strata &app) { return app.notice_; }
+    static bool tune_notes(const Strata &app) { return app.tune_notes_; }
+    static void notes_view_on(Strata &app) { app.tune_notes_ = true; }   // as a fresh start
     static bool notice_showing(const Strata &app) { return app.notice_showing(); }
 
     static int pressure_pad(const Strata &app) { return app.pressure_pad_; }
@@ -315,6 +317,7 @@ Strata &fresh() {
         app.on_key(ENAGA_KEY_F1, false);
     }
     if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    UiProbe::notes_view_on(app);           // NOTE view is UI state, not saved: on at every start
 
     // HOME after the last test's HOME must not be a double tap (which is KEYS), and nor must the
     // test's own first HOME after this one: a second apart, as the app's clock sees it.
@@ -399,10 +402,10 @@ TEST(ui_a_step_held_with_an_encoder_locks_that_step_and_does_not_toggle_its_trig
     const int kStep = 2;
 
     step_down(kStep);
-    const int param = encoder_param(0);
+    const int param = encoder_param(1);   // B: A is TUN, which turns in notes (NOTE view)
     const uint8_t kit_before = app_engine().params(0).v[param];
 
-    app.on_encoder(0, +3);
+    app.on_encoder(1, +3);
     CHECK(UiProbe::held_used(app));                // the hold was spent as a modifier
     pump();
 
@@ -527,6 +530,8 @@ TEST(ui_the_parameter_page_decides_which_parameter_an_encoder_writes) {
     CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
     // To a known page from wherever the test before this one left it: the selection keys cycle.
     while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_PUSH_A);                         // TUN in numbers: one count a click
+    CHECK(!UiProbe::tune_notes(app));
 
     app.on_encoder(0, +1);                         // SRC: encoder A is parameter 0
     pump();
@@ -5887,4 +5892,157 @@ TEST(ui_keys_lights_the_pads_as_a_keyboard_and_func_keeps_the_pad_jobs) {
     CHECK(std::strstr(UiProbe::notice(app), "AT BAR") != nullptr);
     key(ENAGA_KEY_F4);
     pump(2);
+}
+
+// --- NOTE view: TUN and PIT as notes (core/tuning.hpp) ----------------------------------------
+
+namespace {
+
+// Track 1 as `machine`, on its EDIT page at `page`, with its tuning byte at `value`.
+void tune_track_in_edit(MachineId machine, Page page, uint8_t value) {
+    post_track(Cmd::set_machine, 0, uint8_t(machine));
+    pump(4);
+    Command command;
+    command.cmd = Cmd::set_param;
+    command.a = uint8_t(tune_param(uint8_t(machine)));
+    command.b = value;
+    app_engine().commands().post(command);
+    pump(2);
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_F8);
+    while (UiProbe::param_page(the_app()) != int(page)) key(ENAGA_KEY_SELECT_RIGHT);
+}
+
+}  // namespace
+
+TEST(ui_tun_reads_as_a_note_and_turns_a_semitone_a_click) {
+    Strata &app = fresh();
+    CHECK(UiProbe::tune_notes(app));                   // on from the start
+    tune_track_in_edit(MachineId::va_mono, Page::src, 64);
+    CHECK(screen_has(app, "C-4"));                     // TUN 64: a C-4 step plays C-4
+
+    app.on_encoder(0, +1);
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[0]), 67);    // C#4, as near as the byte gets
+    for (int i = 0; i < 6; i++) {
+        app.on_encoder(0, +1);
+        pump(2);
+    }
+    CHECK_EQ(int(app_engine().params(0).v[0]), 83);    // seven clicks: G-4, 12.5 cents sharp
+    CHECK(screen_has(app, "G-4+"));
+    app.on_encoder(0, +5);                             // a fast turn: five notes in one event
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[0]), 96);    // C-5 exactly
+    check_layout(app, "EDIT SRC, MNO, TUN as a note");
+
+    // The other knobs on the page are untouched by the view: CUT still moves one count.
+    const uint8_t cut = app_engine().params(0).v[2];
+    app.on_encoder(2, +1);
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[2]), int(cut) + 1);
+}
+
+TEST(ui_pushing_the_tun_knob_switches_between_note_and_number) {
+    Strata &app = fresh();
+    tune_track_in_edit(MachineId::va_mono, Page::src, 64);
+
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(!UiProbe::tune_notes(app));
+    CHECK(std::strcmp(UiProbe::notice(app), "TUN AS NUMBERS") == 0);
+    pump(2000);                                        // let the notice go
+    CHECK(screen_has(app, "064"));
+    CHECK(!screen_has(app, "C-4"));
+    app.on_encoder(0, +1);                             // numbers: one count a click again
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[0]), 65);
+
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(UiProbe::tune_notes(app));
+    CHECK(std::strcmp(UiProbe::notice(app), "TUN AS NOTES") == 0);
+
+    // Another knob's push does not switch it, nor does A on a page where A is not TUN.
+    key(ENAGA_KEY_PUSH_B);
+    CHECK(UiProbe::tune_notes(app));
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(UiProbe::tune_notes(app));
+    key(ENAGA_KEY_SELECT_LEFT);
+
+    // FUNC + push A is still the kill EQ.
+    shift_key(ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK(UiProbe::tune_notes(app));
+    CHECK_EQ(int(app_engine().project().settings.eq_kills), 0x1);
+    shift_key(ENAGA_KEY_PUSH_A);
+    pump(2);
+
+    // And on GRID, where the slots along the bottom show the same page.
+    key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    CHECK(screen_has(app, "C-4") || screen_has(app, "C#4"));
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(!UiProbe::tune_notes(app));
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(UiProbe::tune_notes(app));
+}
+
+TEST(ui_a_held_step_still_takes_the_push_and_locks_tun_in_notes) {
+    Strata &app = fresh();
+    tune_track_in_edit(MachineId::va_mono, Page::src, 64);
+    const int kStep = 4;
+
+    step_down(kStep);
+    app.on_encoder(0, +12);                            // an octave up, on this step only
+    pump(2);
+    uint8_t locked = 0;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, kStep, 0, locked));
+    CHECK_EQ(int(locked), 96);
+    CHECK_EQ(int(app_engine().params(0).v[0]), 64);    // the kit did not move
+
+    key(ENAGA_KEY_PUSH_A);                             // with the step held: clear the lock
+    pump(2);
+    CHECK(UiProbe::tune_notes(app));                   // not a switch of the view
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, kStep, 0, locked));
+    step_up(kStep);
+    pump(2);
+}
+
+TEST(ui_grain_pit_is_on_amp_and_switches_there) {
+    Strata &app = fresh();
+    tune_track_in_edit(MachineId::grain, Page::amp, 64);
+    CHECK(screen_has(app, "C-4"));
+    app.on_encoder(0, -12);
+    pump(2);
+    CHECK_EQ(int(tune_note(uint8_t(MachineId::grain), app_engine().params(0).v[8])), 48);
+    check_layout(app, "EDIT AMP, GRN, PIT as a note");
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(!UiProbe::tune_notes(app));
+    // On SRC, A is POS: no switch.
+    key(ENAGA_KEY_SELECT_LEFT);
+    key(ENAGA_KEY_SELECT_LEFT);
+    CHECK_EQ(UiProbe::param_page(app), int(Page::src));
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(!UiProbe::tune_notes(app));
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(UiProbe::tune_notes(app));
+}
+
+TEST(ui_layout_tun_as_a_note_on_every_pitched_machine) {
+    Strata &app = fresh();
+    const MachineId machines[] = {MachineId::kick, MachineId::snare, MachineId::hat,
+                                  MachineId::perc, MachineId::sample, MachineId::va_mono,
+                                  MachineId::va_poly};
+    for (MachineId m : machines) {
+        static const uint8_t kValues[] = {0, 37, 83, 127};
+        for (uint8_t v : kValues) {
+            tune_track_in_edit(m, Page::src, v);
+            check_layout(app, "EDIT SRC, TUN as a note");
+            key(ENAGA_KEY_F4);
+            check_layout(app, "GRID, TUN as a note");
+        }
+    }
+    CHECK_EQ(int(app_engine().params(0).v[0]), 127);
+    CHECK(screen_has(app, "C-6"));                     // PLY at 127: +23.6 from C-4
 }
