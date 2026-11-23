@@ -26,24 +26,38 @@ bool copy(char *out, int max, const char *s) {
 
 }  // namespace
 
-void SampleList::open_root() {
+namespace {
+// docs on SampleList::Root (core/browse.hpp). "SmplTrek" is spelled as the stock firmware's
+// manual spells it; FAT compares names without regard to case, so a card that says SMPLTREK is
+// the same folder.
+constexpr SampleList::Root kRootTable[SampleList::kRoots] = {
+    {"SAMPLES", "/SAMPLES", false},
+    {"POOL", "/SmplTrek/Pool/Audio", true},
+    {"SMPLTREK", "/SmplTrek", true},
+    {"RECORD", "/RECORD", false},
+};
+}  // namespace
+
+const SampleList::Root &SampleList::root(int i) {
+    return kRootTable[i < 0 ? 0 : (i >= kRoots ? kRoots - 1 : i)];
+}
+
+void SampleList::open_root(bool smpltrek) {
     folder_[0] = '\0';
     count_ = 0;
     skipped_ = 0;
-    // Folders, so they sort and open like any other. Added straight, not through add(): at the
-    // root there is no folder to join them to, and they are not names on the card at the root's
-    // level anyway.
-    const char *const tops[] = {"RECORD", "SAMPLES"};
-    for (const char *top : tops) {
+    // Folders, in the table's order rather than sorted: SAMPLES first, where a person's own
+    // sounds are, RECORD last, which holds takes. Added straight, not through add(): they are
+    // not names in one folder of the card.
+    for (int r = 0; r < kRoots; r++) {
+        if (kRootTable[r].smpltrek && !smpltrek) continue;
         Entry &e = entries_[count_];
-        copy(e.name, kEntryNameBytes, top);
+        copy(e.name, kEntryNameBytes, kRootTable[r].label);
         e.folder = true;
         order_[count_] = uint16_t(count_);
+        root_of_[count_] = int8_t(r);
         count_++;
     }
-    // SAMPLES first: it is where a person's own sounds are, and RECORD holds takes.
-    order_[0] = 1;
-    order_[1] = 0;
 }
 
 bool SampleList::open(const char *folder) {
@@ -119,6 +133,7 @@ bool SampleList::path_of(int i, char *out, int max) const {
     if (out == nullptr || max <= 0) return false;
     out[0] = '\0';
     if (i < 0 || i >= count_) return false;
+    if (at_root()) return copy(out, max, kRootTable[root_of_[i]].path);
     const char *n = name(i);
     const int fl = length(folder_), nl = length(n);
     if (fl + 1 + nl + 1 > max) return false;
@@ -184,7 +199,7 @@ const char *SampleList::name_of(const char *path) {
 
 bool SampleList::in_browsable_folder(const char *path) {
     if (path == nullptr) return false;
-    const char *const tops[] = {"/SAMPLES/", "/RECORD/"};
+    const char *const tops[] = {"/SAMPLES/", "/RECORD/", "/SMPLTREK/"};
     for (const char *top : tops) {
         int i = 0;
         while (top[i] != '\0' && upper(path[i]) == top[i]) i++;

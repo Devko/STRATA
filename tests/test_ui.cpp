@@ -4403,6 +4403,102 @@ TEST(ui_samples_reopens_on_the_file_the_track_plays) {
     key(ENAGA_KEY_F4);
 }
 
+TEST(ui_samples_reach_the_smpltrek_pool_and_projects) {
+    // A card laid out by the stock SmplTrek firmware, with no /SAMPLES: its manual puts samples
+    // in SmplTrek/Pool/Audio and each project's in SmplTrek/Project/<name>/Audio.
+    Strata &app = fresh();
+    // Seeded as a PC would lay it out (the fake does not refuse a write outside the app's areas,
+    // and lists only the folders made, as FatFs has them).
+    const char *const folders[] = {"/SmplTrek", "/SmplTrek/Pool", "/SmplTrek/Pool/Audio",
+                                   "/SmplTrek/Preset", "/SmplTrek/Project",
+                                   "/SmplTrek/Project/SONG1", "/SmplTrek/Project/SONG1/Audio",
+                                   "/RECORD"};
+    for (const char *f : folders) enaga::files::make_folder(f);
+    card_wav("/SmplTrek/Pool/Audio/Kick 01.wav");
+    card_wav("/SmplTrek/Pool/Audio/Snare.wav", 960);
+    card_wav("/SmplTrek/Project/SONG1/Audio/Vox.wav");
+    card_wav("/RECORD/STRATA_1.WAV");
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);                             // no /SAMPLES: straight into the pool
+    pump(4);
+    const SampleList &list = app_storage().browse_list();
+    CHECK(std::strcmp(list.folder(), "/SmplTrek/Pool/Audio") == 0);
+    CHECK_EQ(list.count(), 2);
+    key(ENAGA_KEY_OK);                             // Kick 01.wav
+    for (int i = 0; i < 4000 && app_storage().samples().slot(0).state != SampleState::ready; i++) {
+        pump();
+    }
+    CHECK(std::strcmp(app_engine().project().kit.tracks[0].sample,
+                      "/SmplTrek/Pool/Audio/Kick 01.wav") == 0);
+    CHECK_EQ(int(app_storage().samples().slot(0).state), int(SampleState::ready));
+
+    // CLR climbs the card's own tree to the root, which now offers the SmplTrek's folders.
+    key(ENAGA_KEY_CLR);
+    pump(4);
+    CHECK(std::strcmp(list.folder(), "/SmplTrek/Pool") == 0);
+    key(ENAGA_KEY_CLR);
+    pump(4);
+    CHECK(std::strcmp(list.folder(), "/SmplTrek") == 0);
+    key(ENAGA_KEY_CLR);
+    pump(4);
+    CHECK(list.at_root());
+    CHECK_EQ(list.count(), 4);
+    {
+        enaga::Canvas canvas(g_pixels);
+        app.draw(canvas);
+    }
+    CHECK_EQ(UiProbe::sample_cursor(app), 2);      // back on SMPLTREK
+    key(ENAGA_KEY_OK);                             // SMPLTREK -> Project -> SONG1 -> Audio
+    pump(4);
+    CHECK(std::strcmp(list.folder(), "/SmplTrek") == 0);
+    CHECK_EQ(list.find("Project"), 2);             // Pool, Preset, Project
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_OK);
+    pump(4);
+    CHECK(std::strcmp(list.folder(), "/SmplTrek/Project/SONG1/Audio") == 0);
+    key(ENAGA_KEY_OK);                             // Vox.wav
+    pump(20);
+    CHECK(std::strcmp(app_engine().project().kit.tracks[0].sample,
+                      "/SmplTrek/Project/SONG1/Audio/Vox.wav") == 0);
+
+    // Leave and come back: the browser opens where the track's file is, on it.
+    for (int i = 0; i < 6 && UiProbe::mode(app) == int(Mode::samples); i++) {
+        key(ENAGA_KEY_CLR);
+        pump(4);
+    }
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    key(ENAGA_KEY_OK);
+    pump(4);
+    CHECK(std::strcmp(list.folder(), "/SmplTrek/Project/SONG1/Audio") == 0);
+    {
+        enaga::Canvas canvas(g_pixels);
+        app.draw(canvas);
+    }
+    CHECK_EQ(UiProbe::sample_cursor(app), 0);
+    check_layout(app, "SAMPLES, a SmplTrek project folder");
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_samples_root_hides_the_smpltrek_folders_on_a_card_without_them) {
+    fresh();
+    seed_sample_card();
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);
+    pump(4);
+    CHECK(std::strcmp(app_storage().browse_list().folder(), "/SAMPLES") == 0);
+    key(ENAGA_KEY_CLR);
+    pump(4);
+    CHECK(app_storage().browse_list().at_root());
+    CHECK_EQ(app_storage().browse_list().count(), 2);
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_samples_says_why_a_folder_is_empty_or_missing) {
     Strata &app = fresh();
     sample_track_in_edit();
