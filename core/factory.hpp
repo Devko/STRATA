@@ -20,6 +20,10 @@
 //     reverb;
 //   - bank A, patterns 1-4: GROOVE, GROOVE+, BREAK and PEAK, which between them use locks,
 //     trig conditions, probability, ratchets, slides, accents, chords, swing and polymeter;
+//   - and pattern 5, PAD: a four-bar progression of held chords over a quiet beat, the sound
+//     of VA POLY's ASR page (SUS, ATK, REL) ready to hear. The pad lives in the pattern's
+//     locks, not the kit, so the CHORD track's stab -- SUS 0, part of A01-A04's sound --
+//     stays exactly what it was;
 //   - a chain over those four, built but OFF -- STRATA is a jamming instrument, and a chain
 //     that advanced on its own the first time someone pressed PLAY would fight them;
 //   - eight mute states, three scenes and three macros (B ACID, C DUB, D DRIVE; A is left for
@@ -47,9 +51,12 @@ constexpr int kFactorySrc = 0;
 constexpr int kFactoryFltr = 4;
 constexpr int kFactoryAmp = 8;
 constexpr int kFactoryFx = 12;
+// And the ASR page (ATK SUS REL FSU), after the LFO and the arp (dsp/track.hpp, kAsrFirst).
+constexpr int kFactoryAsr = kKitArpEnd;
 
-// How many of bank A's patterns the factory fills.
-constexpr int kFactoryPatterns = 4;
+// How many of bank A's patterns the factory fills, and which one is the pad.
+constexpr int kFactoryPatterns = 5;
+constexpr int kFactoryPadSlot = 4;     // A05 PAD
 
 // Everything a fresh project holds: `project_init` and `perform_init` first, then the content
 // above. Main context or init only, like `project_init`, and for the same reason: it rewrites

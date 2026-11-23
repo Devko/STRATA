@@ -40,7 +40,8 @@ uint8_t clamp_u8(int value) {
 // includes both.
 // core/factory.cpp writes the kit by index, because core/ cannot see dsp/track.hpp's pages.
 static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first(Page::fltr) &&
-                  kFactoryAmp == page_first(Page::amp) && kFactoryFx == page_first(Page::fx),
+                  kFactoryAmp == page_first(Page::amp) && kFactoryFx == page_first(Page::fx) &&
+                  kFactoryAsr == page_first(Page::asr),
               "core/factory.hpp's page layout and dsp/track.hpp's have diverged");
 
 static_assert(kKitParams == kTrackParams && kKitSoundParams == kParams &&

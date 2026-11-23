@@ -27,6 +27,7 @@ constexpr int kAmp0 = kFactoryAmp + 0, kAmp1 = kFactoryAmp + 1, kAmp2 = kFactory
               kAmp3 = kFactoryAmp + 3;
 constexpr int kDrv = kFactoryFltr + 0, kCut = kFactoryFltr + 1, kRes = kFactoryFltr + 2,
               kMod = kFactoryFltr + 3;
+constexpr int kAtk = kFactoryAsr + 0, kSus = kFactoryAsr + 1, kRel = kFactoryAsr + 2;
 constexpr int kLof = kFactoryFx + 0, kPan = kFactoryFx + 1, kSna = kFactoryFx + 2,
               kSnb = kFactoryFx + 3;
 
@@ -36,8 +37,8 @@ enum Track : int { kKick = 0, kClap, kClosed, kOpen, kPerc, kBass, kChord, kLoop
 // The key: C minor, as it always was. Notes below are written in it.
 constexpr uint8_t kRootPc = 0;                    // C, as the pattern's pitch class
 constexpr uint8_t kRootNote = 60;                 // and the project's, in an octave
-constexpr uint8_t C2 = 36, Eb2 = 39, G2 = 43, Bb2 = 46, C3 = 48, Eb3 = 51, Ab3 = 56, C4 = 60,
-                  G4 = 67, C5 = 72;
+constexpr uint8_t G1 = 31, Ab1 = 32, C2 = 36, Eb2 = 39, G2 = 43, Ab2 = 44, Bb2 = 46, C3 = 48,
+                  Eb3 = 51, G3 = 55, Ab3 = 56, C4 = 60, G4 = 67, C5 = 72;
 
 // SAMPLE's placeholder loop (app/engine.cpp, build_placeholder_sample) is eight blips a fourth
 // apart from 220 Hz: A3 D4 G4 C5 F5 Bb5 Eb6 Ab6, and note 60 + k plays slice k. Slice 0 (A) is
@@ -371,6 +372,83 @@ void peak(Pattern &p) {
     trig(p, kLoop, 13, kSliceEb6, 68);
 }
 
+// A05 PAD: VA POLY's ASR page, ready to hear. Four bars of held chords, each one a bar long,
+// fading in, holding and ringing out into the next, over a quiet beat that leaves them room.
+//
+// The pad is in the CHORD track's LOCKS, not in the kit. The kit's chord is A01-A04's dub stab,
+// SUS 0, and a pad kit would make those stabs fade in over 400 ms and vanish. A lock lasts until
+// the track's next step that fires (app/engine.cpp, `fire`), and the chord track fires only on
+// its four chords, so each chord's locks hold for its whole bar -- the release included, which
+// the next chord's identical locks keep. Turning a locked knob in EDIT is heard until the next
+// chord; to play with the pad's ASR for good, clear a lock (hold the step, press the knob).
+//
+// The values, by the curves in dsp/va.cpp:
+//   ATK 85  2.5 ms * 2^(10.97 * 85/127) = 0.40 s: a swell, and the filter opens with it
+//   SUS 89  0.70 of the peak
+//   REL 91  60 ms * 2^(7.06 * 91/127) = 2.0 s: each chord rings on under the next
+//   DEC 96  15 ms * 2^(7.32 * 96/127) = 0.69 s: the fall from the swell's peak to SUS
+//   DET 80  the six voices spread about 0.16 semitone: beating, not out of tune
+//   CUT 58  35 Hz * 2^(8.42 * 58/127) = 500 Hz: darker than the stab, so five held voices are
+//           warm rather than buzzy. The kit's ENV opens it as each chord swells and FSU 0
+//           lets it settle back while the chord holds
+//   LVL 60  (60/127)^2 = 0.22, from the stab's 0.52: five voices held at SUS are far more
+//           energy than a 210 ms stab. Balanced by rendering (host/render.cpp, A05 stems): the
+//           pad sits about 2 dB under the kick in RMS, as A01's mix has its parts
+//   SNB 104 well into the reverb; the kit's SNA 72 keeps the dotted-eighth echo
+//
+// The chords are i9, VImaj7, IIImaj7 and v7 in C minor, voiced so that each shares notes with
+// the next. VA POLY retriggers a voice already sounding a note rather than taking another
+// (dsp/vapoly.hpp, rule 1), so common tones carry on and swell again, and only the new notes
+// fade in. Every change, the loop back to the first included, needs at most six notes at once,
+// the voices one VA POLY has: nothing is stolen, so no sounding note jumps to another pitch.
+//   Cm9      C3 Eb3 G3 Bb3 D4
+//   Abmaj7   Ab2 C3 Eb3 G3              (C Eb G carry on)
+//   Ebmaj7   Eb3 G3 Bb3 D4              (Eb G carry on)
+//   Gm7      G3 Bb3 D4 F4               (G Bb D carry on; back into Cm9, which keeps them too)
+
+// A bar: index 16 of core/timing.hpp's note-length table is 16 steps.
+constexpr uint8_t kPadLength = 16;
+
+void pad(Pattern &p) {
+    begin(p, 0x9AD5EEDu, 50);
+    p.master_length = 64;
+
+    // A soft four on the floor, closed hats on the offbeat 8ths, an open hat at the end of each
+    // bar into the reverb, and a rim into the delay now and then: a deep-house bed, not a peak.
+    four_on_the_floor(p, 96);
+    for (int b = 0; b < 4; b++) trig(p, kClosed, b * 4 + 2, C4, b & 1 ? 52 : 60);
+    trig(p, kOpen, 14, C4, 54).probability = 50;
+    trig(p, kPerc, 11, C4, 70).probability = 60;
+
+    // The bass follows the chord roots, one bar each, on the 64 steps the chords use. Dry and
+    // short, as the kit has it: the pad is the long sound here.
+    struct Bar { uint8_t chord_root; ChordType type; uint8_t bass; };
+    const Bar bars[4] = {
+        {C3, ChordType::min9, C2},
+        {Ab2, ChordType::maj7, Ab1},
+        {Eb3, ChordType::maj7, Eb2},
+        {G3, ChordType::min7, G1},
+    };
+    p.tracks[kBass].length = 64;
+    p.tracks[kChord].length = 64;
+    for (int b = 0; b < 4; b++) {
+        const int at = b * 16;
+        trig(p, kBass, at + 2, bars[b].bass, 96);
+        trig(p, kBass, at + 10, bars[b].bass, 84);
+        trig(p, kBass, at + 13, bars[b].bass, 64).probability = 50;
+
+        Step &s = trig(p, kChord, at, bars[b].chord_root, 76);
+        s.chord = chord_pack(bars[b].type, 0);
+        s.length = kPadLength;
+        const struct { int param; uint8_t value; } locks[] = {
+            {kAtk, 85}, {kSus, 89}, {kRel, 91}, {kAmp3, 60},
+            {kAmp0, 96}, {kAmp2, 80}, {kSrc2, 58}, {kSnb, 104},
+        };
+        static_assert(sizeof locks / sizeof locks[0] <= kLocksPerStep, "one step's locks");
+        for (const auto &l : locks) pattern_set_lock(p, kChord, at, uint8_t(l.param), l.value);
+    }
+}
+
 // --- the performance layer ------------------------------------------------
 
 // Bit t set means track t muted, which is `mute_state_apply`'s reading.
@@ -507,7 +585,8 @@ void factory_project(Project &project, SceneSet &scenes, MacroSet &macros) {
     groove_plus(bank[1]);
     breakdown(bank[2]);
     peak(bank[3]);
-    static_assert(kFactoryPatterns == 4, "the four patterns above");
+    pad(bank[kFactoryPadSlot]);
+    static_assert(kFactoryPatterns == 5 && kFactoryPadSlot == 4, "the five patterns above");
 
     factory_chain(project);
     factory_scenes(scenes);
