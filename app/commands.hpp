@@ -266,6 +266,13 @@ enum class Cmd : uint8_t {
     // the channel they were sent on.
     set_midi_out,
 
+    // A factory sound (core/sounds.hpp) into one track: the SOUNDS list (OK from EDIT or MACHINE).
+    // track, a: the MachineId it was picked for, b: the preset's index -- refused if the track
+    // hosts another machine by the time it lands. b = kSoundPresetKeep remembers the track's
+    // sound as it is (the list opening); b = kSoundPresetBack puts that back (its AS WAS row).
+    // Only the bytes a preset writes are touched either way, so the mix stays the user's.
+    sound_preset,
+
     count
 };
 
@@ -283,6 +290,10 @@ constexpr uint8_t kDeltaFlag = 1;
 // side from the authoritative value, for the same reason as kDeltaFlag. On any other parameter
 // it is an ordinary delta.
 constexpr uint8_t kSemitoneFlag = 2;
+
+// `Cmd::sound_preset`'s two special `b` values; every other value is a preset index.
+constexpr uint8_t kSoundPresetKeep = 254;
+constexpr uint8_t kSoundPresetBack = 255;
 
 // `Cmd::set_duck`'s field, in `a`. Not on disk: KIT.BIN's duck section has its own layout.
 enum class DuckField : uint8_t { depth, source, attack, hold, release, count };
