@@ -55,8 +55,8 @@ INSTALLING
    F1 + POWER opens the Enaga menu, which lists the apps and switches between them.
    In STRATA, hold FUNC to see what every key does, and FUNC + HOME then OK saves.
 
-A first start opens the factory project: four patterns in bank A (A01 GROOVE, A02 GROOVE+,
-A03 BREAK, A04 PEAK) at 130 BPM in C minor. Press PLAY.
+A first start opens the factory project: five patterns in bank A (A01 GROOVE, A02 GROOVE+,
+A03 BREAK, A04 PEAK, A05 PAD) at 130 BPM in C minor. Press PLAY.
 
 Projects are saved on the card under /ENAGA/DATA/STRATA/.
 

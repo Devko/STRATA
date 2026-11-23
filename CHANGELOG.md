@@ -6,6 +6,13 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+## [0.3.0] - {{RELEASE_DATE}}
+
+An early beta: everything merged since 0.2.0, built for the same Enaga 0.2.0 firmware. The
+features below have not been through the unit walkthrough (docs/UNIT_CHECKLIST.md) yet. Release
+notes: [docs/release/v0.3.0.md](docs/release/v0.3.0.md). Projects and kits from 0.1.0 and 0.2.0
+open in 0.3.0; their VA tracks sound a little different (see Changed).
+
 ### Added
 
 - **The performance mixer on VALUE.** Push VALUE and tap STEP 1-15 to pick one of fifteen master
@@ -63,6 +70,19 @@ the project file format or the controls.
   take starts, then fades out.
 - A freeze the engine refused could leave FREEZE stuck waiting; it now says `FREEZE REFUSED`.
 - WAVE's WRP no longer aliases on high notes.
+
+### Known limits
+
+- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} The features above are not yet
+  checked on the unit, and the CPU cost of WAVE, FM4, the mixer and the looper there is not
+  measured. Every other load figure comes from the emulator, which models no caches.
+- WAVE POLY and FM4 share the **12 POLY voices** with VA POLY, across all tracks; that budget and
+  the CPU guard's thresholds are provisional.
+- The performance mixer and the looper are not saved. The looper borrows RESAMPLE's buffer, so
+  RESAMPLE and FREEZE wait while a loop is held, and it has no overdub yet.
+- The other 0.2.0 limits stand: streamed samples play forward only, FREEZE is not saved, MIDI
+  clock, SYNC and USB MIDI are lightly tested, and on Enaga 0.2.0 unplug USB when driving gear
+  from MIDI OUT.
 
 ## [0.2.0] - 2026-11-23
 
