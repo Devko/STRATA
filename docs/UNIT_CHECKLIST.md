@@ -148,6 +148,9 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
   Turn VALUE up: the loop takes over. Mute the hats and kick (FUNC + lower pads): you only hear it
   once VALUE goes back down. Loop in time and without a click at its end? `____`
 - With the loop up, push VALUE + STEP 1 and turn: the low-pass sweeps the loop too.
+- With an effect up, press VALUE and let go without turning: `... 0`, dry at once, the effect
+  still picked (turn again: it comes back). PERFORM: turn the morph, press VALUE: `MORPH 0`.
+  FUNC + turn VALUE (DJ filter), then FUNC + press VALUE: `DJ OFF`. The tempo never resets.
 - Push VALUE + CLR: `FX OFF`. Again: `LOOP CLEARED`. MAX meanwhile: `________ %` (U11 is in 13o).
 
 **17. Samples from the SmplTrek's own folders (2 min).** Needs a card the stock firmware has used,
