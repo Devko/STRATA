@@ -21,7 +21,7 @@ at the top of `docs/UNIT_CHECKLIST.md` is the first pass over it.
 | `tools/build.sh` | links. Last measured image: `APP.ENA` 484,160 bytes GCC-only (476,008 cl6x), bss 1,334,848; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here |
 | `tools/scenarios.sh` | **11 scenarios**: m0, m1, m3–m7, `factory`, `kits`, `killeq` (the master kill EQ running; never run yet), `lfo` (the LFO and track swing pages draw; never run yet). Worst measured: **23.49% with cl6x, 39.60% GCC-only** (`docs/BUDGET.md`), before today's afternoon PRs. `factory` and `kits` have not been run with cl6x yet |
 | unit | boots, plays, LOAD about 0–26%. **No MAX reading yet**: the readout is PR #17, still open |
-| memory | init takes **109.1 MiB of a 120 MiB heap** since the sends' ambient modes (`tests/test_memory.cpp`), 10.9 MiB spare against an 8 MiB headroom rule: only 2.9 MiB left for anything else that allocates in init. Never checked on the unit |
+| memory | init takes **111.8 MiB of a 120 MiB heap** since the WAVE tables (2.5 MiB, `tests/test_memory.cpp`), 8.2 MiB spare against an 8 MiB headroom rule: only 0.2 MiB left for anything else that allocates in init. Never checked on the unit |
 | milestones | M0–M6 feature-complete, M7's app side done; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
 | VA POLY | 2.16 points per voice with cl6x, 3.82 GCC-only (emulator). **A shared budget of 12 voices across all tracks** (`Engine::kPolyVoiceBudget`, PR #30), provisional until the unit's MAX |
 | Enaga | pinned at release **v0.2.0 (`3da7f89`)**, the unit's firmware. `tools/enaga_check.sh` passes |

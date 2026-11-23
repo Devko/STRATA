@@ -42,7 +42,8 @@ TEST(sounds_every_machine_that_makes_sound_from_knobs_has_a_list_and_the_rest_no
         const MachineId id = MachineId(m);
         const bool has = id == MachineId::kick || id == MachineId::snare || id == MachineId::hat ||
                          id == MachineId::perc || id == MachineId::va_mono ||
-                         id == MachineId::va_poly;
+                         id == MachineId::va_poly || id == MachineId::wave_mono ||
+                         id == MachineId::wave_poly;
         CHECK_EQ(sound_preset_count(uint8_t(m)) > 0, has);
         CHECK_EQ(sound_preset_writes(uint8_t(m)) != 0, has);
         // AS WAS and at most two pages of the SOUNDS list, which scrolls (the VAs have more).
@@ -70,12 +71,13 @@ TEST(sounds_every_preset_is_named_drawably_uniquely_and_holds_knob_bytes) {
                 CHECK(s->src[k] <= 127 && s->fltr[k] <= 127 && s->amp[k] <= 127 && s->asr[k] <= 127);
             }
             // The drums have no ASR page; a preset for one says so with zeroes.
-            if (m != int(MachineId::va_mono) && m != int(MachineId::va_poly)) {
+            if (!machine_reads_asr(uint8_t(m))) {
                 for (int k = 0; k < 4; k++) CHECK_EQ(int(s->asr[k]), 0);
             }
             // A held sound is loud: five held voices are far more than a 200 ms stab, so a VA
             // preset with SUS up keeps LVL down (core/sounds.cpp).
-            if (m == int(MachineId::va_poly) && s->asr[1] > 0) CHECK(s->amp[3] <= 72);
+            if ((m == int(MachineId::va_poly) || m == int(MachineId::wave_poly)) && s->asr[1] > 0)
+                CHECK(s->amp[3] <= 72);
         }
     }
 }

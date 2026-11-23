@@ -3377,12 +3377,17 @@ public:
             // Whether the note envelope applies here, and if so what SUS makes of a note.
             const bool va = has_asr(selected_);
             const bool sustains = va && engine_.params(selected_).v[kAsrFirst + 1] > 0;
-            canvas.text(0, 96, !va ? "VA MONO/POLY ONLY" : (sustains ? "HOLDS: PAD OR LEN" : "SUS 0: ONE-SHOT"), 7);
+            canvas.text(0, 96, !va ? "VA/WMN/WPL ONLY" : (sustains ? "HOLDS: PAD OR LEN" : "SUS 0: ONE-SHOT"), 7);
             return;
         }
 
         if (osc_page) {
-            canvas.text(0, 96, has_asr(selected_) ? "OS2: DET 1-63 SYN 64+" : "VA MONO/POLY ONLY", 7);
+            const uint8_t id = engine_.machine_id(selected_);
+            canvas.text(0, 96,
+                        machine_is_wave(id) ? "WRP BENDS  DET 2 OSCS"
+                        : has_asr(selected_) ? "OS2: DET 1-63 SYN 64+"
+                                             : "VA/WMN/WPL ONLY",
+                        7);
             return;
         }
 
@@ -3745,7 +3750,7 @@ public:
     // LFO's destination can name a parameter from any page.
     const char *track_param_name(int index) const {
         if (index < 0 || index >= kTrackParams) return "---";
-        if (index >= kOscFirst) return has_asr(selected_) ? kOscNames[index - kOscFirst] : "---";
+        if (index >= kOscFirst) return osc_param_name(index - kOscFirst);
         if (index >= kAsrFirst) return has_asr(selected_) ? kAsrNames[index - kAsrFirst] : "---";
         if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
         if (index >= kParams) return lfo_param_name(index);
@@ -3758,6 +3763,42 @@ public:
     // A parameter's value as the screen shows it: the byte, except on the LFO's page, where it
     // is a shape, a rate (Hz free, a note length synced), a depth, and a destination. At most
     // five characters.
+    //
+    // The WAVE pair's own knobs, where they differ from the VA's: TBL by its table's name, MOT
+    // signed (frames at the envelope's top), WRP a plain value and DET "OFF" or cents ("D12").
+    // False for every other knob, which reads as on the VAs.
+    static bool append_wave_value(char *&out, int index, uint8_t value) {
+        switch (index) {
+            case 0:
+                append(out, WaveLibrary::short_name(va_wave_table(value)));
+                return true;
+            case 10: {
+                const float frames = va_wave_motion(value);
+                const int whole = frames >= 0.0f ? int(frames + 0.5f) : -int(-frames + 0.5f);
+                if (whole == 0) {
+                    append(out, "OFF");
+                } else {
+                    *out++ = whole > 0 ? '+' : '-';
+                    append_number(out, uint32_t(whole > 0 ? whole : -whole));
+                }
+                return true;
+            }
+            case kOscFirst + 0:
+                append_padded(out, value, 3);
+                return true;
+            case kOscFirst + 1:
+                if (value == 0) {
+                    append(out, "OFF");
+                } else {
+                    *out++ = 'D';
+                    append_number(out, uint32_t(va_wave_detune_cents(value) + 0.5f));
+                }
+                return true;
+            default:
+                return false;
+        }
+    }
+
     void append_param_value(char *&out, int index, uint8_t value) const {
         // TUN or PIT in NOTE view: where it puts C-4 ("G-4", "A-1+"), core/tuning.hpp.
         if (shows_note(index)) {
@@ -3766,6 +3807,7 @@ public:
             append(out, text);
             return;
         }
+        if (machine_is_wave(engine_.machine_id(selected_)) && append_wave_value(out, index, value)) return;
         switch (index) {
             case kLfoWave:
                 append(out, lfo_wave_name(lfo_wave(value)));
@@ -4007,15 +4049,17 @@ public:
         }
 
         // The machines as a list, the selected track's lit: UP and DOWN (or A) walk it, which is
-        // the cursor the arrows move everywhere else. Three columns of three, read down: nine
-        // machines since MID, and four rows of two no longer left room for MIDI OUT below.
+        // the cursor the arrows move everywhere else. Columns of three, read down: three rows is
+        // all there is room for above MIDI OUT, so the columns narrowed to five when the WAVE
+        // pair made eleven machines (fifteen fit).
+        static_assert(int(MachineId::count) <= 15, "the MACHINE list holds five columns of three");
         const int current = int(engine_.machine_id(selected_));
         for (int m = 0; m < int(MachineId::count); m++) {
-            const int x = (m / 3) * 43;
+            const int x = (m / 3) * 25;
             const int y = 50 + (m % 3) * 12;
             const bool on = m == current;
-            canvas.rect(x + 1, y, 40, 11, on ? 10 : 2);
-            canvas.text(x + 4, y + 2, machine_name(uint8_t(m)), on ? 0 : 11);
+            canvas.rect(x + 1, y, 23, 11, on ? 10 : 2);
+            canvas.text(x + 3, y + 2, machine_name(uint8_t(m)), on ? 0 : 11);
         }
 
         // The track's MIDI OUT channel, on encoder B: OFF, or the channel its notes are sent on
@@ -4194,10 +4238,16 @@ public:
         return id == uint8_t(MachineId::sample) || id == uint8_t(MachineId::grain);
     }
     bool plays_files(int track) const { return is_file_machine(engine_.machine_id(track)); }
-    // Does this track's machine read the ASR page? VA MONO and VA POLY, nothing else.
-    bool has_asr(int track) const {
-        const uint8_t id = engine_.machine_id(track);
-        return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly);
+    // Does this track's machine read the ASR page? The VAs and the WAVE pair (core/project.hpp).
+    bool has_asr(int track) const { return machine_reads_asr(engine_.machine_id(track)); }
+    // The OSC page's names: the VAs' WAV OS2 SUB DRV, or the WAVE pair's WRP DET SUB and then
+    // GLD on WAVE MONO, DRV on WAVE POLY.
+    const char *osc_param_name(int slot) const {
+        const uint8_t id = engine_.machine_id(selected_);
+        if (!machine_reads_osc(id)) return "---";
+        if (!machine_is_wave(id)) return kOscNames[slot];
+        static const char *const wave[kOscParams] = {"WRP", "DET", "SUB", "DRV"};
+        return slot == 3 && id == uint8_t(MachineId::wave_mono) ? "GLD" : wave[slot];
     }
     // And is its SUS up as it sounds now (kit, scene, macro and LFO in), so a note on it holds?
     bool holds_notes(int track) const {

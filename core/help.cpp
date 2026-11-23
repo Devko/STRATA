@@ -429,6 +429,10 @@ constexpr const char *kMachineWords[int(MachineId::count)][8] = {
      "LEVEL"},                                                                               // PLY
     {"SENDS CC 74", "SENDS CC 71", "SENDS CC 73", "SENDS CC 72", "SENDS CC 70", "SENDS CC 75",
      "SENDS CC 76", "SENDS CC 77"},                                                          // MID
+    {"WAVETABLE", "POSITION", "CUTOFF LP24", "RESONANCE", "DECAY", "FILTER ENV", "ENV>POSITION",
+     "LEVEL"},                                                                               // WMN
+    {"WAVETABLE", "POSITION", "CUTOFF LP24", "RESONANCE", "DECAY", "FILTER ENV", "ENV>POSITION",
+     "LEVEL"},                                                                               // WPL
 };
 
 // The rest are the same on every machine: the insert chain's FLTR and FX (dsp/chain.cpp), the
@@ -439,12 +443,18 @@ constexpr const char *kLfoWords[4] = {"SHAPE", "RATE", "DEPTH", "DESTINATION"};
 constexpr const char *kArpWords[4] = {"MODE", "RATE", "OCTAVES", "GATE"};
 constexpr const char *kAsrWords[4] = {"ATTACK", "SUSTAIN", "RELEASE", "FILTER SUSTAIN"};
 constexpr const char *kOscWords[4] = {"SAW/SQR/PULSE", "OSC2 DET/SYNC", "SUB OSC", "DRIVE"};
+constexpr const char *kWaveOscWords[4] = {"PHASE WARP", "DETUNE", "SUB OSC", "DRIVE"};
 
 const char *const kEditPageNames[kHelpEditPages] = {"SRC", "FLTR", "AMP", "FX",
                                                     "LFO", "ARP", "ASR", "OSC"};
 
-bool is_va(uint8_t machine) {
-    return machine == uint8_t(MachineId::va_mono) || machine == uint8_t(MachineId::va_poly);
+bool is_va(uint8_t machine) { return machine_reads_asr(machine); }
+
+const char *osc_words(uint8_t machine, int slot) {
+    if (!machine_reads_osc(machine)) return "";
+    if (!machine_is_wave(machine)) return kOscWords[slot];
+    if (slot == 3 && machine == uint8_t(MachineId::wave_mono)) return "GLIDE";
+    return kWaveOscWords[slot];
 }
 
 // --- writing a line -----------------------------------------------------------------------------
@@ -496,7 +506,7 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
                int &count) {
     const int page = place.page < kHelpEditPages ? place.page : 0;
     if (page >= 6 && !is_va(place.machine)) {
-        add_row(rows, count, page == 6 ? "ASR  ONLY ON MNO/PLY" : "OSC  ONLY ON MNO/PLY");
+        add_row(rows, count, page == 6 ? "ASR  ONLY ON VA/WAVE" : "OSC  ONLY ON VA/WAVE");
         return;
     }
     for (int slot = 0; slot < 4; slot++) knob_row(place, slot, rows[count++]);
@@ -523,11 +533,18 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
             add_row(rows, count, "SUS UP  PAD/LEN HOLDS");
             break;
         case 7:
-            add_row(rows, count, "OS2 1-63 DETUNE");
-            add_row(rows, count, "OS2 64+  SYNC");
+            if (machine_is_wave(place.machine)) {
+                add_row(rows, count, "WRP 0  NO BEND");
+                add_row(rows, count, "DET 0  ONE OSC");
+            } else {
+                add_row(rows, count, "OS2 1-63 DETUNE");
+                add_row(rows, count, "OS2 64+  SYNC");
+            }
             break;
         default: break;
     }
+    if (page == 0 && machine_is_wave(place.machine)) add_row(rows, count, "TBL 16 TABLES  8 EACH");
+    if (page == 2 && machine_is_wave(place.machine)) add_row(rows, count, "MOT 64 OFF  +UP -DOWN");
 }
 
 // The title of a page that names the EDIT page: "EDIT SRC KCK".
@@ -657,7 +674,7 @@ const char *help_param_words(uint8_t machine, int index) {
         case 4: return kLfoWords[slot];
         case 5: return kArpWords[slot];
         case 6: return is_va(machine) ? kAsrWords[slot] : "";
-        default: return is_va(machine) ? kOscWords[slot] : "";
+        default: return osc_words(machine, slot);
     }
 }
 

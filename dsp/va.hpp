@@ -68,6 +68,7 @@
 #include <enaga/dsp.hpp>
 
 #include "track.hpp"
+#include "waveloops.h"
 
 namespace strata {
 
@@ -90,8 +91,16 @@ float va_osc2_detune_cents(uint8_t value);   // the spread between the two in DE
 float va_osc2_sync_semitones(uint8_t value); // OSC 2 above OSC 1 in SYN's zone
 int va_pulse_percent(uint8_t value);         // WAV's pulse width, 0 for the saw
 // RES as the resonant stage's damping k (= 1/Q): 2 at 0, about 0.24 at 64, just below 0 (it
-// self-oscillates, bounded by the band clip) over the last few counts.
+// self-oscillates, held to a level by the control-rate resonance limiter in va.cpp's run())
+// over the last few counts.
 float va_resonance_k(uint8_t value);
+
+// The WAVE pair (VA MONO and VA POLY with a wavetable where the two oscillators were;
+// dsp/wavetable.hpp has the tables). Their knobs, for the screen as well as for `make_wave`.
+int va_wave_table(uint8_t value);            // TBL: 0-15, eight counts each
+float va_wave_position(uint8_t value);       // POS: the frame, 0-15, fractional
+float va_wave_motion(uint8_t value);         // MOT: frames the filter envelope adds, -15 to +15
+float va_wave_detune_cents(uint8_t value);   // DET: the spread between the two readers, 0 is OFF
 
 // --- the control-rate block -----------------------------------------------
 
@@ -105,6 +114,11 @@ struct VaSettings {
     // (ATK SUS REL FSU). Slot 10 is deliberately NOT read here -- it is GLD on VA MONO and DET
     // on VA POLY -- so each machine maps that one itself. Control rate, once per block.
     static VaSettings make(const TrackParams &params, float rate, float inv_rate);
+    // The WAVE pair's: SRC TBL POS CUT RES (the filter fixed at LP24, no TUN), AMP DEC ENV MOT
+    // LVL, OSC WRP DET SUB and a fourth slot that is GLD on WAVE MONO (`mono`: the machine maps
+    // it, so it is not drive) and DRV on WAVE POLY. The filter, the envelopes, the sub and the
+    // levels are the VA's own, from `make`.
+    static VaSettings make_wave(const TrackParams &params, float rate, float inv_rate, bool mono);
 
     enaga::dsp::EnvelopeShape amp_shape{}, amp_shape_accent{};
     enaga::dsp::EnvelopeShape fenv_shape{}, fenv_shape_accent{};
@@ -138,6 +152,14 @@ struct VaSettings {
     float accent_noise = 0.0f;
     float drive = 1.0f;                // the post-filter soft clip's drive
     float out_gain = 0.25f;            // LVL
+
+    // The wavetable, on the WAVE pair: `table` -1 is the two VA oscillators instead. OSC 2's
+    // detune (osc2, ratio1, ratio2, level_osc2) is read as a second reader of the same frames.
+    int table = -1;
+    float position = 0.0f;             // POS, in frames
+    float motion = 0.0f;               // MOT: frames added at filter envelope 1
+    bool warped = false;               // WRP above 0
+    strata_wave_warp warp{0.5f, 1.0f, 1.0f};
 
     // The pitch slew per control step, as a one-pole coefficient; 1 means arrive at once. The
     // MACHINE sets these, because glide is monophonic: VA MONO from GLD and from its slide
@@ -315,6 +337,12 @@ private:
 
     int choke_left_ = 0;                // frames of the choke fade still to run, 0 when none
     float choke_step_ = 0.0f;           // the output gain it takes off per frame
+
+    // The wavetable readers' phases, and the position the last slice ended on, so a moving
+    // position ramps across the slice instead of stepping (-1: a new note, no ramp).
+    void render_wave(const VaSettings &s, float *work, int n, float fenv, float level2);
+    uint32_t wave_phase1_ = 0, wave_phase2_ = 0;
+    float wave_pos_ = -1.0f;
 };
 
 // --- the machine ----------------------------------------------------------
@@ -351,6 +379,12 @@ public:
     // SUS as the envelope holds it, 0-1: what the ASR page's prepare left.
     float sustain_level() const { return settings_.sustain; }
 
+    // WAVE MONO: the same machine with the wavetable (make_wave), GLD on the OSC page. Set
+    // before init(); the engine's pool holds one of each.
+    void set_wave(bool wave) { wave_ = wave; }
+    bool wave() const { return wave_; }
+    const VaSettings &settings() const { return settings_; }
+
 private:
     // A slide is always audible: below this it would be a jump, not a slide. The 303's own
     // slide time is fixed at about this, and GLD only ever makes a slide longer.
@@ -366,6 +400,7 @@ private:
     float control_rate_ = 3000.0f;
 
     float glide_s_ = 0.0f;              // GLD, for the accessor
+    bool wave_ = false;                 // WAVE MONO
     bool first_note_ = true;            // nothing to glide from yet
     bool active_ = false;
 

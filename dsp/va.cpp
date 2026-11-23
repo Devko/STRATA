@@ -70,6 +70,8 @@
 // docs/BUDGET.md has what it was worth. There is no hand-written loop left in this file.
 #include "va.hpp"
 
+#include "wavetable.hpp"
+
 #include "tihints.h"
 #include "valoops.h"
 
@@ -114,7 +116,8 @@ constexpr float kStageOneK = 1.414f;
 
 // RES's curve: k = 2 x (kResFloorK / 2)^r, so the resonant peak rises by about the same number
 // of dB for every count (va_resonance_k), minus a last push that takes k just below zero over
-// the top few counts, where the filter self-oscillates at the level its band clip allows.
+// the top few counts, where the filter self-oscillates at the level the resonance limiter in
+// run() allows (kResLimitSq).
 constexpr float kResFloorK = 0.03f;
 constexpr float kResOscillate = 0.04f;
 constexpr float kResFloorOctaves = -6.0589f;   // log2(kResFloorK / 2)
@@ -293,6 +296,22 @@ float va_resonance_k(uint8_t value) {
     return 2.0f * exp2(r * kResFloorOctaves) - kResOscillate * r8;
 }
 
+int va_wave_table(uint8_t value) { return int(value) >> 3; }
+
+float va_wave_position(uint8_t value) {
+    return float(value) * (float(kWaveFrames - 1) / 127.0f);
+}
+
+float va_wave_motion(uint8_t value) {
+    const float u = clamp((float(value) - 64.0f) * (1.0f / 63.0f), -1.0f, 1.0f);
+    return u * float(kWaveFrames - 1);
+}
+
+float va_wave_detune_cents(uint8_t value) {
+    const float u = float(value) * (1.0f / 127.0f);
+    return 100.0f * kDetuneMaxSemis * u * u;
+}
+
 VaMode va_mode_from(uint8_t value) {
     // Three compares, no division: the C674x has no integer divide instruction at all, so even
     // at control rate a `/` is a libgcc call rather than one cycle.
@@ -382,9 +401,50 @@ VaSettings VaSettings::make(const TrackParams &params, float rate, float inv_rat
     return s;
 }
 
+VaSettings VaSettings::make_wave(const TrackParams &params, float rate, float inv_rate, bool mono) {
+    // The VA's own mapping for everything the two share, with the slots the WAVE pair spends
+    // differently set to what makes `make` leave them out: no TUN, LP24, OSC 2 off, and on WAVE
+    // MONO no drive (its fourth OSC slot is GLD).
+    TrackParams p = params;
+    p.set(0, 64);
+    p.set(1, 0);
+    p.set(page_first(Page::osc) + 0, 0);
+    p.set(page_first(Page::osc) + 1, 0);
+    if (mono) p.set(page_first(Page::osc) + 3, 0);
+    VaSettings s = make(p, rate, inv_rate);
+
+    s.table = va_wave_table(params.get(0));
+    s.position = va_wave_position(params.get(1));
+    s.motion = va_wave_motion(params.get(10));
+
+    // WRP: the phase bend's knee moves from the middle (none) to 2% of the cycle.
+    const float wrp = params.unit(Page::osc, 0);
+    s.warped = wrp > 0.0f;
+    const float knee = 0.5f - 0.48f * wrp;
+    s.warp.knee = knee;
+    s.warp.k1 = 0.5f * reciprocal(knee);
+    s.warp.k2 = 0.5f * reciprocal(1.0f - knee);
+
+    // DET: a second reader of the same frames, the pair split around the pitch.
+    const uint8_t det = params.get(Page::osc, 1);
+    const float makeup = 1.0f - 0.3f * params.unit(3);
+    if (det > 0) {
+        const float half = va_wave_detune_cents(det) * 0.005f;
+        s.osc2 = VaOsc2::detune;
+        s.ratio1 = semitones(-half);
+        s.ratio2 = semitones(half);
+        s.level_osc1 = kLevelDetune * makeup;
+        s.level_osc2 = kLevelDetune * makeup;
+    }
+    return s;
+}
+
 // --- the voice ------------------------------------------------------------
 
 void VaVoice::reset_phases() {
+    wave_phase1_ = 0;
+    wave_phase2_ = 0;
+    wave_pos_ = -1.0f;
     osc1_.reset();
     osc2_.reset();
     sub_.reset();
@@ -493,9 +553,8 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
 
     // Not cached: `from_g` is one reciprocal and three multiplies, which is not worth a lookup,
     // and leaving it out keeps an entry to one key and two values.
-    // The resonant stage's coefficients, with g kept: its band is re-integrated after the clip
-    // (valoops.h, strata_va_filter). k may be just below zero at RES's top, so 1 + g(g + k) is
-    // floored well clear of zero.
+    // The resonant stage's coefficients. k may be just below zero at RES's top, so 1 + g(g + k)
+    // is floored well clear of zero.
     //
     // The resonance limiter: RES's top takes k just below zero, where the filter would ring up
     // without bound. Instead the resonant stage's own level, read from its two integrator
@@ -516,11 +575,15 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     const float level2 = accent_ ? s.level_osc2 + s.accent_osc2 : s.level_osc2;
     const float noise = accent_ ? s.level_noise + s.accent_noise : s.level_noise;
     enaga_clear(work, n);
-    if (s.osc2 == VaOsc2::sync) {
-        osc2_.sync_add(work, n, osc1_, dt1, inv1, sync_carry_, s.wave, dt2, inv2, level2, s.width);
+    if (s.table >= 0) {
+        render_wave(s, work, n, fenv, level2);
+    } else {
+        if (s.osc2 == VaOsc2::sync) {
+            osc2_.sync_add(work, n, osc1_, dt1, inv1, sync_carry_, s.wave, dt2, inv2, level2, s.width);
+        }
+        osc1_.render_add(work, n, s.wave, dt1, inv1, s.level_osc1, s.width);
+        if (s.osc2 == VaOsc2::detune) osc2_.render_add(work, n, s.wave, dt2, inv2, level2, s.width);
     }
-    osc1_.render_add(work, n, s.wave, dt1, inv1, s.level_osc1, s.width);
-    if (s.osc2 == VaOsc2::detune) osc2_.render_add(work, n, s.wave, dt2, inv2, level2, s.width);
     if (s.level_sub > 0.0f) sub_.render_add(work, n, Wave::triangle, 0.5f * dt0_, 2.0f * inv0_, s.level_sub);
     rng_.add_noise(work, n, noise);
 
@@ -593,6 +656,51 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     }
 }
 
+// The WAVE pair's oscillator: one or two readers of the same two neighbouring frames, the
+// position ramping across the slice from where the last slice left it. A position crossing a
+// frame boundary inside one slice is held at the boundary for the rest of that slice, and the
+// next slice carries on from the next pair: at most one control step (a third of a millisecond)
+// behind, which only the fastest LFO on POS could ever reach.
+void VaVoice::render_wave(const VaSettings &s, float *work, int n, float fenv, float level2) {
+    const WaveLibrary *lib = wave_library();
+    if (lib == nullptr || !lib->ready()) return;   // no library: the sub and the noise alone
+
+    const float top = float(kWaveFrames - 1);
+    const float end = clamp(s.position + s.motion * fenv, 0.0f, top);
+    const float start = wave_pos_ < 0.0f ? end : wave_pos_;
+    wave_pos_ = end;
+    const float low = start < end ? start : end;
+    int base = int(low);
+    base = base > kWaveFrames - 2 ? kWaveFrames - 2 : base;
+    const float f0 = clamp(start - float(base), 0.0f, 1.0f);
+    const float f1 = clamp(end - float(base), 0.0f, 1.0f);
+    const float sa = lib->scale(s.table, base), sb = lib->scale(s.table, base + 1);
+    if (n != ramp_n_) {
+        ramp_n_ = n;
+        inv_n_ = reciprocal(float(n));
+    }
+
+    const float dts[2] = {dt1_, dt2_};
+    const float levels[2] = {s.level_osc1, level2};
+    uint32_t *phases[2] = {&wave_phase1_, &wave_phase2_};
+    const int readers = s.osc2 == VaOsc2::detune ? 2 : 1;
+    for (int r = 0; r < readers; r++) {
+        const int mip = wave_mip_for(dts[r]);
+        const int16_t *a = lib->frame(s.table, base, mip);
+        const int16_t *b = lib->frame(s.table, base + 1, mip);
+        const uint32_t inc = uint32_t(dts[r] * 4294967296.0f);
+        const float ga0 = levels[r] * sa * (1.0f - f0), gb0 = levels[r] * sb * f0;
+        const float ga1 = levels[r] * sa * (1.0f - f1), gb1 = levels[r] * sb * f1;
+        const float dga = (ga1 - ga0) * inv_n_, dgb = (gb1 - gb0) * inv_n_;
+        if (s.warped) {
+            strata_wave_add_warp(work, n, a, b, kWaveMipBits[mip], phases[r], inc, ga0, gb0, dga, dgb,
+                                 &s.warp);
+        } else {
+            strata_wave_add(work, n, a, b, kWaveMipBits[mip], phases[r], inc, ga0, gb0, dga, dgb);
+        }
+    }
+}
+
 // The shared voice budget's way out (app/engine.cpp, make_room_for_poly_voice): a fade of the
 // output gain to zero over kChokeFrames, then a kill. A kill on its own would put a step the
 // size of the voice's level into the mix; a release would keep the voice -- and its cost --
@@ -624,11 +732,14 @@ void VaMono::init(float sample_rate) {
 }
 
 void VaMono::prepare(const TrackParams &params) {
-    settings_ = VaSettings::make(params, rate_, inv_rate_);
+    settings_ = wave_ ? VaSettings::make_wave(params, rate_, inv_rate_, true)
+                      : VaSettings::make(params, rate_, inv_rate_);
 
     // GLD is this machine's own: VaSettings::make leaves slot 10 alone because VA POLY spends
-    // it on DET. A slid note never jumps, so its coefficient has a floor of its own.
-    glide_s_ = kGlideScaleS * (exp2(kGlideOctaves * params.unit(10)) - 1.0f);
+    // it on DET. A slid note never jumps, so its coefficient has a floor of its own. WAVE MONO
+    // spends slot 10 on MOT and has GLD on the OSC page's fourth knob instead.
+    const float gld = wave_ ? params.unit(Page::osc, 3) : params.unit(10);
+    glide_s_ = kGlideScaleS * (exp2(kGlideOctaves * gld) - 1.0f);
     settings_.glide_coef = to_target(glide_s_, control_rate_);
     settings_.slide_coef = to_target(kSlideFloorS, control_rate_);
 }
@@ -709,6 +820,13 @@ void VaMono::render_add(float *out, int frames) {
 }
 
 const char *VaMono::param_name(int index) const {
+    static const char *const wave[kParams] = {
+        "TBL", "POS", "CUT", "RES",      // SRC: the wavetable and the filter (LP24)
+        "---", "---", "---", "---",
+        "DEC", "ENV", "MOT", "LVL",      // AMP: MOT, the filter envelope moving POS
+        "---", "---", "---", "---",
+    };
+    if (wave_) return index >= 0 && index < kParams ? wave[index] : "---";
     static const char *const names[kParams] = {
         "TUN", "MOD", "CUT", "RES",      // SRC: the voice and its filter
         "---", "---", "---", "---",      // FLTR: the insert chain's

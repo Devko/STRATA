@@ -124,6 +124,13 @@ public:
     // DET at its widest, in semitones: what slot 1 is sharp and slot 2 flat by.
     float detune_semitones() const { return detune_; }
 
+    // WAVE POLY: the same machine with the wavetable (VaSettings::make_wave). MOT takes slot
+    // 10, so there is no chord detune; the OSC page's DET detunes each voice's two readers.
+    // Set before init().
+    void set_wave(bool wave) { wave_ = wave; }
+    bool wave() const { return wave_; }
+    const VaSettings &settings() const { return settings_; }
+
     // How many voices are making sound, for the UI's voice count (docs/SPEC.md publishes one
     // every block) and for tests. Cheap: six level reads.
     int sounding_voices() const {
@@ -209,6 +216,7 @@ private:
     float inv_rate_ = 1.0f / 48000.0f;
 
     float detune_ = 0.0f;                    // DET, semitones
+    bool wave_ = false;                      // WAVE POLY
     int steal_cursor_ = 0;                   // rotates, so equal voices are stolen in turn
     bool active_ = false;
 

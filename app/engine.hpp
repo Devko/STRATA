@@ -53,6 +53,7 @@
 #include "undo.hpp"
 #include "va.hpp"
 #include "vapoly.hpp"    // the CHORD track's six voices
+#include "wavetable.hpp" // the WAVE pair's tables, built once in init()
 #include "lfo.hpp"       // one LFO per track, parameters 16-19
 
 #include <cstdint>
@@ -430,11 +431,16 @@ private:
         Perc perc;
         VaMono mono;
         VaPoly poly;
+        VaMono wave_mono;   // WMN: VA MONO with the wavetable (set_wave)
+        VaPoly wave_poly;   // WPL: VA POLY with it, in polys_ like the other
         Sampler sampler;
         Granular grain;
         MidiMachine midi;   // no state at all: the vtable pointer
     };
     TrackMachines pool_[kTracks];
+    // The WAVE pair's 16 tables, 2.5 MiB, built once in init() and shared by every track
+    // (dsp/wavetable.hpp). Read through wave_library(), so a failed build plays silence.
+    WaveLibrary waves_;
 
     // Streaming, per track. Audio side only, apart from the inbox and the stream objects, whose
     // rules are at stream_for_load and stream() above.

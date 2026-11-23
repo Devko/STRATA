@@ -74,10 +74,11 @@ constexpr uint8_t kKitOscLegacy[kKitOscParams] = {0, 0, 102, 0};
 
 // How many machines a track can host, mirroring dsp/'s machine list the same way and for the
 // same reason as kKitParams: docs/SPEC.md, "Machines (v1)" -- KICK, SNARE, HAT, PERC, SAMPLE,
-// GRAIN, VA MONO and VA POLY -- plus MID, which plays nothing here and sends MIDI (dsp/extmidi.hpp). The file format needs the domain of KitTrack::machine, because a
+// GRAIN, VA MONO and VA POLY -- plus MID, which plays nothing here and sends MIDI (dsp/extmidi.hpp),
+// and the wavetable pair WAVE MONO and WAVE POLY (dsp/va.hpp, dsp/wavetable.hpp). The file format needs the domain of KitTrack::machine, because a
 // kit naming machine 12 has to become something this build can host rather than an index into
 // app/'s machine pool. app/ asserts that the two agree.
-constexpr int kMachines = 9;
+constexpr int kMachines = 11;
 
 // Which machine a track hosts, as the number KIT.BIN stores.
 //
@@ -99,6 +100,8 @@ enum class MachineId : uint8_t {
     va_mono,
     va_poly,
     midi,        // MID: no audio; the track's notes and eight CCs go to MIDI OUT
+    wave_mono,   // WMN: the VA MONO voice with a wavetable oscillator (dsp/va.hpp)
+    wave_poly,   // WPL: and the VA POLY machine with it, sharing the POLY voice budget
     count
 };
 static_assert(int(MachineId::count) == kMachines,
@@ -132,7 +135,22 @@ const char *machine_name(uint8_t id);
 // fold -- it plays nothing anyway.
 constexpr bool machine_folds_note(uint8_t id, int slices) {
     return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly) ||
+           id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly) ||
            id == uint8_t(MachineId::grain) || (id == uint8_t(MachineId::sample) && slices <= 1);
+}
+
+// Does this machine read the ASR page (ATK SUS REL FSU) and the OSC page? The VAs and the WAVE
+// pair, which share the VA voice. Everything that shows or saves those pages asks here, so a
+// machine that starts reading them is one line.
+constexpr bool machine_reads_asr(uint8_t id) {
+    return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly) ||
+           id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly);
+}
+constexpr bool machine_reads_osc(uint8_t id) { return machine_reads_asr(id); }
+
+// The WAVE pair: the VA voice with a wavetable where its oscillators were.
+constexpr bool machine_is_wave(uint8_t id) {
+    return id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly);
 }
 
 // A sample path, including its terminator. Enaga's paths are absolute and UTF-8
