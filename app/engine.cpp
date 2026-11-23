@@ -87,8 +87,10 @@ bool Engine::init(float sample_rate) {
     // boot over one machine would not be.
     // The build's 0.18 MiB of scratch is the capture buffer, idle until the first take, so the
     // 8 MiB headroom keeps it (tests/test_memory.cpp).
-    if (waves_.init(capture_.lend(), capture_.capacity() * 2u * uint32_t(sizeof(int16_t)))) {
-        set_wave_library(&waves_);
+    // Only begun here: the build runs from App::update, a piece at a time (step_waves), because
+    // the whole of it outlasts Enaga's 1 s watchdog on the C6748 and the app would never boot.
+    if (waves_.begin(capture_.lend(), capture_.capacity() * 2u * uint32_t(sizeof(int16_t)))) {
+        waves_building_.store(true, std::memory_order_release);
     }
 
     // The default techno kit of docs/SPEC.md. Every slot is filled now that VA POLY exists;
@@ -141,6 +143,15 @@ bool Engine::init(float sample_rate) {
 // Main context, App::init only. Nothing is read through `sample_region_` until a `Cmd::set_sample`
 // arrives, and that command cannot arrive before App::init has returned, so this needs no
 // synchronisation with the audio side.
+bool Engine::step_waves() {
+    if (!waves_building_.load(std::memory_order_relaxed)) return true;
+    if (!waves_.step()) return false;
+    set_wave_library(&waves_);
+    // After the library: the capture buffer is zeroed and back before anything may arm a take.
+    waves_building_.store(false, std::memory_order_release);
+    return true;
+}
+
 void Engine::set_sample_region(const int16_t *base, uint32_t bytes) {
     sample_region_ = base;
     sample_region_bytes_ = bytes;
@@ -1460,8 +1471,10 @@ void Engine::apply(const Command &command) {
             if (command.a == 0) {
                 looper_mix_ = command.b > kPerfAmountMax ? kPerfAmountMax : command.b;
             } else if (command.a == 1) {
-                // The buffer is RESAMPLE's: not while a take is armed, running or waiting.
-                if (capture_.armed() || capture_.recording() || capture_.done()) {
+                // The buffer is RESAMPLE's: not while a take is armed, running or waiting, nor
+                // while the WAVE tables are still being built in it (step_waves).
+                if (capture_.armed() || capture_.recording() || capture_.done() ||
+                    waves_building_.load(std::memory_order_acquire)) {
                     status_.bump_refused();
                     break;
                 }
@@ -1541,8 +1554,9 @@ void Engine::apply(const Command &command) {
                 if (freeze) status_.bump_freeze_refused();
                 break;
             }
-            // The looper holds the buffer (dsp/looper.hpp) until its loop is thrown away.
-            if (looper_.holding()) {
+            // The looper holds the buffer (dsp/looper.hpp) until its loop is thrown away, and
+            // the WAVE tables' build holds it for a second or two after boot (step_waves).
+            if (looper_.holding() || waves_building_.load(std::memory_order_acquire)) {
                 status_.bump_refused();
                 if (freeze) status_.bump_freeze_refused();
                 break;

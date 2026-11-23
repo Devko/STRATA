@@ -5,6 +5,8 @@
 // comment says otherwise.
 #include "wavetable.hpp"
 
+#include <atomic>
+
 #include <cstdint>
 #include <new>
 
@@ -289,8 +291,18 @@ public:
     // The sixteen spectra into table `table` of `data`, every mip level, as int16 with a scale
     // per frame. `normalise`: each frame to its own level-0 peak, so frames don't jump in level
     // as the position moves. Otherwise the whole table to one peak (normalise_whole).
+    //
+    // In pieces, so the build can run a little at a time (WaveLibrary::step): store_pair for
+    // f = 0, 2, ... 14, then store_end. store() is the same calls in a row.
     void store(int16_t *data, float *scales, bool normalise) {
-        for (int f = 0; f < kWaveFrames; f += 2) {
+        for (int f = 0; f < kWaveFrames; f += 2) store_pair(data, scales, normalise, f);
+        store_end(data, scales, normalise);
+    }
+    void store_end(const int16_t *data, float *scales, bool normalise) {
+        if (!normalise) normalise_whole(data, scales);
+    }
+    void store_pair(int16_t *data, float *scales, bool normalise, int f) {
+        {
             float gain[2] = {1.0f, 1.0f};
             for (int k = 0; k < kWaveMipLevels; k++) {
                 const int n = wave_mip_length(k);
@@ -314,7 +326,6 @@ public:
             for (int i = 0; i < 2; i++)
                 quantise(f32_ + i * kWaveFrameStride, data + (f + i) * kWaveFrameStride, scales[f + i]);
         }
-        if (!normalise) normalise_whole(data, scales);
     }
 
 private:
@@ -643,36 +654,62 @@ constexpr Recipe kRecipes[kWaveTables] = {
 
 int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-const WaveLibrary *g_library = nullptr;
+std::atomic<const WaveLibrary *> g_library{nullptr};
 Builder g_builder;   // its scratch is taken by the one init() that builds
 
 }  // namespace
 
 bool WaveLibrary::init(void *scratch, uint32_t scratch_bytes) {
-    if (data_ != nullptr) return true;
+    if (!begin(scratch, scratch_bytes)) return false;
+    while (!step()) {
+    }
+    return true;
+}
+
+bool WaveLibrary::begin(void *scratch, uint32_t scratch_bytes) {
+    if (data_ != nullptr || building_ != nullptr) return true;
     // Plain new: Enaga's device runtime has no nothrow operator new[] or std::nothrow (the link
     // fails), and its new stops the app with "out of memory" rather than returning null.
     int16_t *data = new int16_t[kWaveLibraryBytes / sizeof(int16_t)];
     if (data == nullptr) return false;
-    // Borrowed memory when it is big enough (Engine::init lends the capture buffer, idle until
-    // the first take); else the heap, where it stays: Enaga's heap is never freed into.
+    // Borrowed memory when it is big enough (Engine::init lends the capture buffer, which the
+    // engine keeps idle until step() says the build is done); else the heap, where it stays:
+    // Enaga's heap is never freed into.
     Arena arena;
     if (scratch != nullptr && scratch_bytes >= wave_build_scratch_bytes() + 64u) {
         arena.at = static_cast<uint8_t *>(scratch);
         arena.left = scratch_bytes;
     }
     if (!g_builder.init(arena)) return false;
+    lent_ = scratch != nullptr && arena.at != nullptr ? static_cast<uint8_t *>(scratch) : nullptr;
+    lent_end_ = lent_ != nullptr ? arena.at : nullptr;
+    building_ = data;
+    next_table_ = 0;
+    next_pair_ = -1;
+    return true;
+}
+
+bool WaveLibrary::step() {
+    if (data_ != nullptr) return true;
+    if (building_ == nullptr) return false;
     Builder &builder = g_builder;
-    for (int t = 0; t < kWaveTables; t++) {
-        const bool normalise = kRecipes[t].make(builder);
-        builder.store(data + t * kWaveFrames * kWaveFrameStride, scale_[t], normalise);
+    int16_t *table = building_ + next_table_ * kWaveFrames * kWaveFrameStride;
+    float *scales = scale_[next_table_];
+    if (next_pair_ < 0) {
+        normalise_ = kRecipes[next_table_].make(builder);   // the recipe: its sixteen spectra
+        next_pair_ = 0;
+        return false;
     }
+    builder.store_pair(table, scales, normalise_, next_pair_);   // two frames, every mip level
+    next_pair_ += 2;
+    if (next_pair_ < kWaveFrames) return false;
+    builder.store_end(table, scales, normalise_);
+    next_pair_ = -1;
+    if (++next_table_ < kWaveTables) return false;
     // Lent memory goes back as it came: silent (the capture buffer is zeroed at its init).
-    if (scratch != nullptr && arena.at != nullptr) {
-        uint8_t *used = static_cast<uint8_t *>(scratch);
-        for (uint8_t *p = used; p < arena.at; p++) *p = 0;
-    }
-    data_ = data;
+    for (uint8_t *p = lent_; p != nullptr && p < lent_end_; p++) *p = 0;
+    data_ = building_;
+    building_ = nullptr;
     return true;
 }
 
@@ -703,7 +740,11 @@ uint32_t wave_build_scratch_bytes() {
            uint32_t(sizeof(float)) * 2u * kWaveFrameStride;
 }
 
-const WaveLibrary *wave_library() { return g_library; }
-void set_wave_library(const WaveLibrary *library) { g_library = library; }
+// Release and acquire: the main context publishes the library once its last step is done, and the
+// audio context must then see every sample of it.
+const WaveLibrary *wave_library() { return g_library.load(std::memory_order_acquire); }
+void set_wave_library(const WaveLibrary *library) {
+    g_library.store(library, std::memory_order_release);
+}
 
 }  // namespace strata

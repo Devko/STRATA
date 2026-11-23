@@ -2567,6 +2567,13 @@ public:
         // this the shadow would drift from what is actually muted.
         for (int t = 0; t < kTracks; t++) muted_[t] = engine_.muted(t);
 
+        // The WAVE tables, one piece a pass until they are built (Engine::step_waves): too long
+        // for init() under Enaga's 1 s watchdog. `wav ready` for the scenarios and a unit log.
+        if (!waves_logged_ && engine_.step_waves()) {
+            waves_logged_ = true;
+            enaga::log("wav ready");
+        }
+
         // One bounded slice of whatever the card side has in flight. It never blocks and never
         // waits on the audio side: a command ring that has not drained simply means "not this
         // pass" (app/storage.hpp).
@@ -6844,6 +6851,7 @@ private:
 
     const char *notice_ = nullptr;
     uint32_t notice_at_ms_ = 0;
+    bool waves_logged_ = false;   // `wav ready` said once (update)
     uint32_t last_ms_ = 0;
     uint8_t logged_guard_ = 0;     // the CPU guard level last logged
     uint32_t cpu_max_ = 0;         // per mille, the highest block cost since the last start

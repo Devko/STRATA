@@ -65,11 +65,22 @@ inline int wave_mip_for(float inc) {
 
 class WaveLibrary {
 public:
-    // Allocates the tables and builds all sixteen. init() only. The builder's scratch
-    // (wave_build_scratch_bytes) is carved from `scratch` when it is at least that big plus 64
-    // bytes, memory idle at init that the build may scribble over; else it is allocated.
+    // Allocates the tables and builds all sixteen at once: begin(), then step() until it is
+    // done. Tests and tools; the app builds a little at a time.
     bool init(void *scratch = nullptr, uint32_t scratch_bytes = 0);
+
+    // The build in pieces. On the C6748 all sixteen tables take longer than Enaga's 1 s
+    // main-loop watchdog, so the app cannot build them inside its init(): begin() allocates
+    // (init only), and step(), from the main context's update(), does one piece -- a table's
+    // recipe, or two of its frames at every mip level -- and returns true once the last is done.
+    // 16 x 9 = 144 pieces; the order and the arithmetic are init()'s, so the tables are bit-for-
+    // bit the same. The builder's scratch (wave_build_scratch_bytes) is carved from `scratch`
+    // when it is at least that big plus 64 bytes: memory the caller keeps idle until step()
+    // returns true, when it is zeroed and handed back. Else it is allocated.
+    bool begin(void *scratch = nullptr, uint32_t scratch_bytes = 0);
+    bool step();
     bool ready() const { return data_ != nullptr; }
+    static constexpr int kBuildSteps = kWaveTables * (1 + kWaveFrames / 2);
 
     // Level `mip` of `frame` of `table`: wave_mip_length(mip) samples plus the guard sample.
     // Arguments are clamped, so a stale byte can never read outside the library.
@@ -82,13 +93,21 @@ public:
     static const char *long_name(int table);
 
 private:
-    int16_t *data_ = nullptr;
+    int16_t *data_ = nullptr;       // set once the build is done: the tables to read
+    int16_t *building_ = nullptr;   // the same memory while step() is filling it
+    uint8_t *lent_ = nullptr;       // the borrowed scratch, zeroed when the build is done
+    uint8_t *lent_end_ = nullptr;
+    int next_table_ = 0;
+    int next_pair_ = -1;            // -1: the table's recipe is next
+    bool normalise_ = true;
     float scale_[kWaveTables][kWaveFrames] = {};
 };
 
 // The library is the same for every track and every instance, and built once: Engine::init
-// builds it, and the machines read it through this pointer. nullptr until then, and a machine
-// with no library plays silence rather than reading through it.
+// begins it, the main context's update() steps it, and the engine publishes it here when it is
+// done. The machines read it through this pointer (atomic: set by the main context, read by the
+// audio one). nullptr until then, and a machine with no library plays silence rather than
+// reading through it.
 const WaveLibrary *wave_library();
 // What WaveLibrary::init takes besides the tables: the builder's scratch (tests/test_memory.cpp).
 uint32_t wave_build_scratch_bytes();
