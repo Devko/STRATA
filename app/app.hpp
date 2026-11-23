@@ -195,6 +195,19 @@ constexpr bool mixer_pages_cover_every_field() {
 static_assert(mixer_pages_cover_every_field(),
               "a send or master field has no MIXER slot, so nothing can reach it");
 
+// A time for the ASR page, at most five characters: whole milliseconds under a second ("3MS",
+// "250MS"), tenths of a second above ("1.2S", "8.0S").
+void append_seconds(char *&out, float seconds) {
+    const uint32_t ms = uint32_t(seconds * 1000.0f + 0.5f);
+    if (ms < 1000) {
+        append_number(out, ms);
+        append(out, "MS");
+    } else {
+        append_tenths(out, (ms + 50) / 100);
+        *out++ = 'S';
+    }
+}
+
 void append_padded(char *&out, uint32_t value, int width) {
     uint32_t scale = 1;
     for (int i = 1; i < width; i++) scale *= 10;
@@ -373,19 +386,25 @@ const char *page_name(Page page) {
         case Page::fx:   return "FX";
         case Page::lfo:  return "LFO";
         case Page::arp:  return "ARP";
+        case Page::asr:  return "ASR";
         default:         return "?";
     }
 }
 
-// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp) and its arpeggiator
-// (core/arp.hpp). The selection keys walk all six; everywhere else a page is still four encoders
-// over four parameters.
-constexpr int kEditPages = kPages + 2;
+// The ASR page's encoder names (dsp/va.cpp's table). Only the VAs read the page; on any other
+// machine its four slots show "---".
+constexpr const char *kAsrNames[kAsrParams] = {"ATK", "SUS", "REL", "FSU"};
+
+// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp), its arpeggiator
+// (core/arp.hpp) and the VA machines' note envelope, ASR (dsp/va.cpp). The selection keys walk
+// all seven; everywhere else a page is still four encoders over four parameters.
+constexpr int kEditPages = kPages + 3;
 
 // Encoder counts per click: one zone on the arp's MOD RAT OCT, one shape or destination on the
-// LFO's WAV and DST, one count everywhere else.
+// LFO's WAV and DST, one count everywhere else (ASR included).
 constexpr int param_click(int index) {
-    return index >= kArpFirst ? arp_click(index - kArpFirst) : lfo_click(index);
+    return index >= kAsrFirst ? 1
+                              : (index >= kArpFirst ? arp_click(index - kArpFirst) : lfo_click(index));
 }
 static_assert(page_first(Page(kEditPages - 1)) + kParamsPerPage == kTrackParams,
               "EDIT's last page is the last four track parameters");
@@ -1158,8 +1177,8 @@ public:
             case Mode::keys:
             case Mode::edit:
                 // GRID and KEYS turn A-D on the current EDIT page, so their screen pages are
-                // EDIT's: SRC .. ARP. One page set for the knobs wherever they are.
-                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. ARP
+                // EDIT's: SRC .. ASR. One page set for the knobs wherever they are.
+                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. ASR
                 if (mode_ != Mode::edit) notice(page_name(Page(param_page_)));
                 break;
             case Mode::mixer:
@@ -2724,15 +2743,16 @@ public:
         *out = 0;
         canvas.text(0, 20, line, 14);
 
-        // Which of the six pages is showing, as a row of boxes: the spec's selection keys
+        // Which of the seven pages is showing, as a row of boxes: the spec's selection keys
         // flip between them, so showing where you are matters more than labels.
         for (int p = 0; p < kEditPages; p++) {
             const uint8_t grey = p == param_page_ ? 14 : 4;
-            canvas.rect(p * 21 + 1, 32, 19, 3, grey);
+            canvas.rect(p * 18 + 1, 32, 16, 3, grey);
         }
         const bool lfo_page = param_page_ == int(Page::lfo);
         const bool arp_page = param_page_ == int(Page::arp);
-        const bool word_page = lfo_page || arp_page;
+        const bool asr_page = param_page_ == int(Page::asr);
+        const bool word_page = lfo_page || arp_page || asr_page;
 
         // The four parameters in large type, one row per encoder: its letter, the name, the
         // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
@@ -2801,6 +2821,14 @@ public:
             }
             *out = 0;
             canvas.text(0, 96, line, 7);
+            return;
+        }
+
+        if (asr_page) {
+            // Whether the note envelope applies here, and if so what SUS makes of a note.
+            const bool va = has_asr(selected_);
+            const bool sustains = va && engine_.params(selected_).v[kAsrFirst + 1] > 0;
+            canvas.text(0, 96, !va ? "VA MONO/POLY ONLY" : (sustains ? "HOLDS: PAD OR LEN" : "SUS 0: ONE-SHOT"), 7);
             return;
         }
 
@@ -3063,6 +3091,7 @@ public:
     // LFO's destination can name a parameter from any page.
     const char *track_param_name(int index) const {
         if (index < 0 || index >= kTrackParams) return "---";
+        if (index >= kAsrFirst) return has_asr(selected_) ? kAsrNames[index - kAsrFirst] : "---";
         if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
         if (index >= kParams) return lfo_param_name(index);
         const int page = index / kParamsPerPage;
@@ -3112,6 +3141,17 @@ public:
                 return;
             case kArpFirst + 3:
                 append_number(out, uint32_t(arp_gate_percent(value)));
+                *out++ = '%';
+                return;
+            case kAsrFirst + 0:
+                append_seconds(out, va_attack_seconds(value));
+                return;
+            case kAsrFirst + 2:
+                append_seconds(out, va_release_seconds(value));
+                return;
+            case kAsrFirst + 1:
+            case kAsrFirst + 3:
+                append_number(out, uint32_t((int(value) * 100 + 63) / 127));
                 *out++ = '%';
                 return;
             default:
@@ -3317,6 +3357,11 @@ public:
         return id == uint8_t(MachineId::sample) || id == uint8_t(MachineId::grain);
     }
     bool plays_files(int track) const { return is_file_machine(engine_.machine_id(track)); }
+    // Does this track's machine read the ASR page? VA MONO and VA POLY, nothing else.
+    bool has_asr(int track) const {
+        const uint8_t id = engine_.machine_id(track);
+        return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly);
+    }
 
     void open_samples() {
         samples_return_ = mode_;

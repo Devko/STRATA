@@ -3626,6 +3626,52 @@ TEST(ui_the_arp_is_edits_sixth_page_and_keys_play_it) {
     key(ENAGA_KEY_F4);
 }
 
+TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
+    while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(int(Page::asr), kEditPages - 1);
+    check_layout(app, "EDIT ASR, a drum");
+    CHECK(screen_has(app, "VA MONO/POLY ONLY"));
+    CHECK(!screen_has(app, "ATK"));
+
+    // Track 7, VA POLY in the default kit: the four names, the old envelope's values at 0.
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::selected(app), 6);
+    CHECK_EQ(int(app_engine().machine_id(6)), int(MachineId::va_poly));
+    check_layout(app, "EDIT ASR, VA POLY");
+    CHECK(screen_has(app, "ATK"));
+    CHECK(screen_has(app, "FSU"));
+    CHECK(screen_has(app, "3MS"));                    // 2.5 ms, as the VAs always had
+    CHECK(screen_has(app, "60MS"));
+    CHECK(screen_has(app, "SUS 0: ONE-SHOT"));
+
+    // B is SUS: up, the note holds.
+    app.on_encoder(1, +100);
+    pump();
+    CHECK(app_engine().params(6).v[kAsrFirst + 1] > 0);
+    CHECK(screen_has(app, "HOLDS: PAD OR LEN"));
+
+    // The widest values the page shows: every time and percentage fits.
+    for (int b = 0; b < 128; b += 3) {
+        for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), uint8_t(b));
+        pump();
+        check_layout(app, "EDIT ASR, every value");
+    }
+    post_cmd_track_param(6, uint8_t(kAsrFirst + 0), 127);
+    post_cmd_track_param(6, uint8_t(kAsrFirst + 2), 127);
+    pump();
+    CHECK(screen_has(app, "5.0S"));
+    CHECK(screen_has(app, "8.0S"));
+
+    // Back to the old envelope and SRC for the tests after this one.
+    for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
+    pump();
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_arrows_in_edit_keys_perform_machine_and_resample) {
     Strata &app = fresh();
 
