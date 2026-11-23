@@ -2342,7 +2342,7 @@ TEST(the_four_file_types_agree_about_which_damage_wins) {
 
 TEST(project_a_machine_id_one_past_the_table_has_no_name) {
     CHECK_EQ(machine_name(uint8_t(MachineId::count)), "---");
-    CHECK_EQ(machine_name(uint8_t(MachineId::count) - 1), "WPL");
+    CHECK_EQ(machine_name(uint8_t(MachineId::count) - 1), "FM4");
 }
 
 TEST(project_settings_at_the_bottom_of_their_ranges_survive_a_round_trip) {

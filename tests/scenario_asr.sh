@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ASR emulator scenario: EDIT's seventh page, the VA machines' note envelope (ATK SUS REL FSU),
-# draws on the C674x with the real font, on a drum track ("VA/WMN/WPL ONLY") and on VA POLY
+# draws on the C674x with the real font, on a drum track ("NOT ON THIS MACHINE") and on VA POLY
 # (the four names and their times), and the beat keeps playing inside the load target.
 #
 # The emulator presses keys and turns no encoders (docs/HANDOFF.md, section 2), so this cannot

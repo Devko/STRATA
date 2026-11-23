@@ -3218,6 +3218,52 @@ TEST(ui_layout_edit_on_every_machine) {
 
 // The WAVE pair's pages: TBL by its table's name, MOT signed, the OSC page's own four names
 // (GLD on WAVE MONO, DRV on WAVE POLY) and DET as OFF or cents. Every value fits.
+TEST(ui_fm_pages_name_their_knobs_and_values) {
+    Strata &app = fresh();
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::fm));
+    pump(4);
+    key(ENAGA_KEY_F8);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    post_cmd_track_param(0, 0, 72);     // A5
+    post_cmd_track_param(0, 1, 72);     // 3.5
+    pump();
+    CHECK(screen_has(app, "ALG"));
+    CHECK(screen_has(app, "RAT"));
+    CHECK(screen_has(app, "A5"));
+    CHECK(screen_has(app, "3.5"));
+    post_cmd_track_param(0, 1, 120);    // 14
+    pump();
+    CHECK(screen_has(app, "14"));
+    for (int b = 0; b < 128; b++) {
+        for (int i = 0; i < 4; i++) post_cmd_track_param(0, i, uint8_t(b));
+        pump();
+        check_layout(app, "EDIT SRC, FM4, every value");
+    }
+
+    while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK(screen_has(app, "ISU"));
+    CHECK(!screen_has(app, "FSU"));
+
+    while (UiProbe::param_page(app) != int(Page::osc)) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK(screen_has(app, "FIN"));
+    CHECK(screen_has(app, "BRT"));
+    CHECK(screen_has(app, "CAR"));
+    CHECK(!screen_has(app, "OS2"));
+    CHECK(screen_has(app, "FIN NUDGES RAT"));
+    post_cmd_track_param(0, kOscFirst + 0, 127);
+    post_cmd_track_param(0, kOscFirst + 1, 70);
+    post_cmd_track_param(0, kOscFirst + 3, 38);
+    pump();
+    CHECK(screen_has(app, "D25"));
+    CHECK(screen_has(app, "+6"));
+    CHECK(screen_has(app, "0.5"));
+    for (int b = 0; b < 128; b++) {
+        for (int i = 0; i < kOscParams; i++) post_cmd_track_param(0, kOscFirst + i, uint8_t(b));
+        pump();
+        check_layout(app, "EDIT OSC, FM4, every value");
+    }
+}
+
 TEST(ui_wave_pages_name_their_knobs_and_values) {
     Strata &app = fresh();
     post_track(Cmd::set_machine, 0, uint8_t(MachineId::wave_mono));
@@ -4006,7 +4052,7 @@ TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
     while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(int(Page::asr), kEditPages - 2);
     check_layout(app, "EDIT ASR, a drum");
-    CHECK(screen_has(app, "VA/WMN/WPL ONLY"));
+    CHECK(screen_has(app, "NOT ON THIS MACHINE"));
     CHECK(!screen_has(app, "ATK"));
 
     // Track 7, VA POLY in the default kit: the four names, the old envelope's values at 0.
@@ -4052,7 +4098,7 @@ TEST(ui_osc_is_edits_eighth_page_and_names_its_waves_and_modes) {
     while (UiProbe::param_page(app) != int(Page::osc)) key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(int(Page::osc), kEditPages - 1);
     check_layout(app, "EDIT OSC, a drum");
-    CHECK(screen_has(app, "VA/WMN/WPL ONLY"));
+    CHECK(screen_has(app, "NOT ON THIS MACHINE"));
     CHECK(!screen_has(app, "WAV"));
 
     // Track 6, VA MONO in the default kit: the four names and what each value means.

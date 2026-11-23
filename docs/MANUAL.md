@@ -175,7 +175,7 @@ held. With it, POLY plays pads and long chords, and MONO plays long bass notes a
   dull.
 
 The line under the knobs says `SUS 0: ONE-SHOT` or `HOLDS: PAD OR LEN`. On any other machine the
-page shows `VA/WMN/WPL ONLY`.
+page shows `NOT ON THIS MACHINE`.
 
 A scene captured with SCENE stores the ASR page too, like every other knob. So if a note still
 fades with SUS up, look at the morph: a scene stored at SUS 0 pulls SUS down as VALUE moves
@@ -223,7 +223,7 @@ filter:
   squelch.
 
 The line under the knobs says `OS2: DET 1-63 SYN 64+`. On any other machine the page shows
-`VA/WMN/WPL ONLY`. Like every page, the four lock, scene and macro.
+`NOT ON THIS MACHINE`. Like every page, the four lock, scene and macro.
 
 **RES** on SRC runs over the whole knob: each turn adds about the same amount of peak, and from
 about 120 the filter whistles by itself at a steady level (self-oscillation; tune it with CUT).
@@ -663,6 +663,28 @@ MOT above 64 moves the position up as the filter envelope rises and back as it f
 moves it down. With PLK at POS 127 and MOT 0, each note starts bright and dulls like a string.
 The SOUNDS list (OK on MACHINE) has 8 WMN and 7 WPL starting points.
 
+### FM4: four-operator FM
+
+Four sine operators in the eight classic 4-operator algorithms: e-pianos, bells, glass, brass,
+organs and FM basses. Six voices with chords, like PLY, in the same shared 12-voice budget. The
+operators come in two pairs so it stays dialable: the carriers sit at **CAR**, the modulators at
+**RAT** (plus **FIN**), and **DET** pulls the second of each pair sharp. **IDX** is how bright
+the tone is; the index has its own envelope, faster than the volume's, so a note strikes bright
+and mellows as it rings (**IEN** says how much).
+
+| Page | A | B | C | D |
+| --- | --- | --- | --- | --- |
+| SRC | **ALG** algorithm `A1`-`A8` | **RAT** modulator ratio: 0.5 1 2 3 3.5 4 7 14 | **IDX** FM index (brightness) | **FBK** operator 4 feeding back on itself: a saw-like buzz, to noise |
+| AMP | **DEC** decay, 15 ms to 8 s | **IEN** how much of IDX the index envelope moves (0 = a fixed timbre) | **VEL** velocity to index: harder is brighter | **LVL** |
+| ASR | **ATK** | **SUS** (0 = one-shot) | **REL** | **ISU** index sustain: where the brightness settles while held |
+| OSC | **DET** second pair sharp: `OFF`, up to `D25` cents | **FIN** fine ratio, ±0.5 around RAT (`0` at 64) | **BRT** keytrack: high notes get less index, so they stay sweet | **CAR** carrier ratio: 1, 0.5, 2, 3, 4 |
+
+The algorithms: `A1` one stack 4>3>2>1 (the brightest), `A2` 3 and 4 into 2 into 1, `A3` 3>2>1
+with 4 into 1, `A4` 4>3>1 with 2 into 1, `A5` two pairs 2>1 and 4>3 (the e-piano), `A6` 4 into
+three carriers, `A7` one pair 4>3 over two plain sines, `A8` four sines (an organ: RAT sets the
+second drawbar). The SOUNDS list has EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD and GLASS.
+FBK costs a little more CPU than FBK 0.
+
 ### MID: MIDI
 
 MID makes no sound of its own. It is for a track whose sound is an outboard synth, a drum
@@ -732,7 +754,7 @@ OUT channel: OFF, or 1-16. `FUNC+EDIT` again opens the kit library (section 6).
 <p><img src="screens/sounds.png" width="256" alt="SOUNDS on track 1, the kick"></p>
 
 Every drum machine, both VAs and both WAVE machines come with a short list of ready-made sounds.
-On a KCK, SNR, HAT, PRC, MNO, PLY, WMN or WPL track, press **OK** in EDIT or MACHINE: **SOUNDS** lists them. UP/DOWN or A move
+On a KCK, SNR, HAT, PRC, MNO, PLY, WMN, WPL or FM4 track, press **OK** in EDIT or MACHINE: **SOUNDS** lists them. UP/DOWN or A move
 the cursor, **OK loads** the one under it into this track, with the beat playing, and the list
 stays open so the next OK tries the next one. `NOW` marks the sound the track has. The first row,
 **AS WAS**, is the track as it sounded when you opened the list: OK on it puts that back, so

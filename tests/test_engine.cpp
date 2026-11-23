@@ -3048,8 +3048,9 @@ int poly_voices_counted() {
     for (int t = 0; t < kTracks; t++) {
         const Machine *m = strata::test::engine().machine(t);
         const uint8_t id = strata::test::engine().project().kit.tracks[t].machine;
-        if (m != nullptr && (id == uint8_t(MachineId::va_poly) || id == uint8_t(MachineId::wave_poly))) {
-            n += static_cast<const VaPoly *>(m)->budget_voices();
+        if (m != nullptr && (id == uint8_t(MachineId::va_poly) || id == uint8_t(MachineId::wave_poly) ||
+                             id == uint8_t(MachineId::fm))) {
+            n += static_cast<const PolyMachine *>(m)->budget_voices();
         }
     }
     return n;
@@ -3122,6 +3123,31 @@ TEST(engine_wave_poly_shares_the_poly_voice_budget) {
     CHECK(!static_cast<const VaPoly *>(strata::test::engine().machine(tracks[1]))->wave());
     for (int i = 0; i < 4; i++) {
         for (int n = 0; n < VaPoly::kVoices; n++) {
+            post(Cmd::trigger_note, tracks[i], 0, uint8_t(48 + 2 * n), 100);
+        }
+    }
+    pump(8);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+    for (int i = 0; i < 4; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
+    pump();
+}
+
+// FM4 draws on the same twelve voices: two FM tracks and two VA POLY tracks, six notes each,
+// still sound twelve between them.
+TEST(engine_fm_shares_the_poly_voice_budget) {
+    clean();
+    const uint8_t tracks[4] = {2, 3, 4, kPoly};
+    uint8_t was[4];
+    for (int i = 0; i < 4; i++) {
+        was[i] = strata::test::engine().project().kit.tracks[tracks[i]].machine;
+        post(Cmd::set_machine, tracks[i], 0,
+             uint8_t(i % 2 == 0 ? MachineId::fm : MachineId::va_poly));
+        post(Cmd::set_param, tracks[i], 0, kDec, 127);
+    }
+    pump();
+    CHECK_EQ(strata::test::engine().machine(tracks[0])->param_name(0), "ALG");
+    for (int i = 0; i < 4; i++) {
+        for (int n = 0; n < PolyMachine::kVoices; n++) {
             post(Cmd::trigger_note, tracks[i], 0, uint8_t(48 + 2 * n), 100);
         }
     }

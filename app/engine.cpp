@@ -107,6 +107,7 @@ bool Engine::init(float sample_rate) {
         pool_[t].wave_mono.init(rate_);
         pool_[t].wave_poly.set_wave(true);
         pool_[t].wave_poly.init(rate_);
+        pool_[t].fm.init(rate_);
         pool_[t].sampler.init(rate_);
         pool_[t].grain.init(rate_);
         pool_[t].midi.init(rate_);
@@ -167,6 +168,10 @@ void Engine::rewire_machines() {
             case MachineId::wave_poly:
                 machines_[t] = &own.wave_poly;
                 polys_[t] = &own.wave_poly;
+                break;
+            case MachineId::fm:
+                machines_[t] = &own.fm;
+                polys_[t] = &own.fm;
                 break;
             default:
                 // Defensive only: kit_read and params_from_kit both map an id this build does
@@ -265,7 +270,7 @@ bool Engine::make_room_for_poly_voice(int track, uint8_t note) {
     // A frozen track's machine plays nothing: it is the loop that sounds (dsp/frozen.hpp). Every
     // note to a machine asks here first, so this is the one place that holds it back.
     if (frozen_[track].on()) return false;
-    VaPoly *target = polys_[track];
+    PolyMachine *target = polys_[track];
     if (target == nullptr || !target->would_add_voice(note)) return true;
 
     int used = 0;
@@ -2458,7 +2463,7 @@ void Engine::fire(const StepEvent &event) {
             const uint8_t packed = folding.tracks[track].steps[event.step].chord;
             if (polys_[track] != nullptr) {
                 count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
-                                     VaPoly::kVoices);
+                                     PolyMachine::kVoices);
             } else if (machine_id_[track] == uint8_t(MachineId::midi) &&
                        (packed & kChordTypeMask) != uint8_t(ChordType::none)) {
                 // MID sends a chord step as its chord (below), so its arp runs through the
@@ -2509,7 +2514,7 @@ void Engine::fire(const StepEvent &event) {
             // an already-folded note would be a second fold -- harmless, since folding a note
             // that is in the scale returns it, but it would hide which side owns the rule.
             const int voiced = chord_expand(event.note, packed, key_root_now, key_scale_now,
-                                            notes, VaPoly::kVoices);
+                                            notes, PolyMachine::kVoices);
             for (int i = 0; i < voiced; i++) {
                 trig.note = notes[i];
                 // The budget across every POLY track (kPolyVoiceBudget, engine.hpp).

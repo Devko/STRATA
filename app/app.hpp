@@ -3381,16 +3381,17 @@ public:
             // Whether the note envelope applies here, and if so what SUS makes of a note.
             const bool va = has_asr(selected_);
             const bool sustains = va && engine_.params(selected_).v[kAsrFirst + 1] > 0;
-            canvas.text(0, 96, !va ? "VA/WMN/WPL ONLY" : (sustains ? "HOLDS: PAD OR LEN" : "SUS 0: ONE-SHOT"), 7);
+            canvas.text(0, 96, !va ? "NOT ON THIS MACHINE" : (sustains ? "HOLDS: PAD OR LEN" : "SUS 0: ONE-SHOT"), 7);
             return;
         }
 
         if (osc_page) {
             const uint8_t id = engine_.machine_id(selected_);
             canvas.text(0, 96,
-                        machine_is_wave(id) ? "WRP BENDS  DET 2 OSCS"
+                        machine_is_fm(id)     ? "FIN NUDGES RAT"
+                        : machine_is_wave(id) ? "WRP BENDS  DET 2 OSCS"
                         : has_asr(selected_) ? "OS2: DET 1-63 SYN 64+"
-                                             : "VA/WMN/WPL ONLY",
+                                             : "NOT ON THIS MACHINE",
                         7);
             return;
         }
@@ -3755,7 +3756,12 @@ public:
     const char *track_param_name(int index) const {
         if (index < 0 || index >= kTrackParams) return "---";
         if (index >= kOscFirst) return osc_param_name(index - kOscFirst);
-        if (index >= kAsrFirst) return has_asr(selected_) ? kAsrNames[index - kAsrFirst] : "---";
+        if (index >= kAsrFirst) {
+            if (!has_asr(selected_)) return "---";
+            // FM4's fourth ASR knob holds the index envelope, not a filter's: ISU.
+            if (index == kAsrFirst + 3 && machine_is_fm(engine_.machine_id(selected_))) return "ISU";
+            return kAsrNames[index - kAsrFirst];
+        }
         if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
         if (index >= kParams) return lfo_param_name(index);
         const int page = index / kParamsPerPage;
@@ -3803,6 +3809,49 @@ public:
         }
     }
 
+    // FM4's own knobs: ALG as A1-A8, RAT and CAR as the ratio they pick, FIN signed around 64,
+    // DET "OFF" or cents. False for the rest, which read as plain bytes (dsp/fm.hpp maps them).
+    static void append_ratio(char *&out, float ratio) {
+        const uint32_t tenths = uint32_t(ratio * 10.0f + 0.5f);
+        if (tenths % 10 == 0) {
+            append_number(out, tenths / 10);
+        } else {
+            append_tenths(out, tenths);
+        }
+    }
+    static bool append_fm_value(char *&out, int index, uint8_t value) {
+        switch (index) {
+            case 0:
+                *out++ = 'A';
+                append_number(out, uint32_t(fm_algorithm(value) + 1));
+                return true;
+            case 1:
+                append_ratio(out, fm_ratio(value));
+                return true;
+            case kOscFirst + 0:
+                if (value == 0) {
+                    append(out, "OFF");
+                } else {
+                    *out++ = 'D';
+                    append_number(out, uint32_t(fm_detune_cents(value) + 0.5f));
+                }
+                return true;
+            case kOscFirst + 1:
+                if (value == 64) {
+                    append(out, "0");
+                } else {
+                    *out++ = value > 64 ? '+' : '-';
+                    append_number(out, uint32_t(value > 64 ? value - 64 : 64 - value));
+                }
+                return true;
+            case kOscFirst + 3:
+                append_ratio(out, fm_carrier_ratio(value));
+                return true;
+            default:
+                return false;
+        }
+    }
+
     void append_param_value(char *&out, int index, uint8_t value) const {
         // TUN or PIT in NOTE view: where it puts C-4 ("G-4", "A-1+"), core/tuning.hpp.
         if (shows_note(index)) {
@@ -3812,6 +3861,7 @@ public:
             return;
         }
         if (machine_is_wave(engine_.machine_id(selected_)) && append_wave_value(out, index, value)) return;
+        if (machine_is_fm(engine_.machine_id(selected_)) && append_fm_value(out, index, value)) return;
         switch (index) {
             case kLfoWave:
                 append(out, lfo_wave_name(lfo_wave(value)));
@@ -4244,11 +4294,15 @@ public:
     bool plays_files(int track) const { return is_file_machine(engine_.machine_id(track)); }
     // Does this track's machine read the ASR page? The VAs and the WAVE pair (core/project.hpp).
     bool has_asr(int track) const { return machine_reads_asr(engine_.machine_id(track)); }
-    // The OSC page's names: the VAs' WAV OS2 SUB DRV, or the WAVE pair's WRP DET SUB and then
-    // GLD on WAVE MONO, DRV on WAVE POLY.
+    // The OSC page's names: the VAs' WAV OS2 SUB DRV, the WAVE pair's WRP DET SUB and then
+    // GLD on WAVE MONO, DRV on WAVE POLY, or FM4's DET FIN BRT CAR.
     const char *osc_param_name(int slot) const {
         const uint8_t id = engine_.machine_id(selected_);
         if (!machine_reads_osc(id)) return "---";
+        if (machine_is_fm(id)) {
+            static const char *const fm[kOscParams] = {"DET", "FIN", "BRT", "CAR"};
+            return fm[slot];
+        }
         if (!machine_is_wave(id)) return kOscNames[slot];
         static const char *const wave[kOscParams] = {"WRP", "DET", "SUB", "DRV"};
         return slot == 3 && id == uint8_t(MachineId::wave_mono) ? "GLD" : wave[slot];
