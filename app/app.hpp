@@ -1782,6 +1782,30 @@ public:
         // KEYS has no knob slots on screen (its sixteen notes fill it), so a turn there changed
         // the sound and showed nothing. GRID and EDIT draw the slots and need no notice.
         if (mode_ == Mode::keys) echo(Echo::param, index);
+        // A macro turned up owns its parameters (a macro at 0 lets go): the knob moves the
+        // setting underneath, but the sound follows the macro. Say which one, or the knob
+        // looks broken (Roland, 2026-11-23: "editing of sounds does not work anymore").
+        const int owner = macro_holding(selected_, index);
+        if (owner >= 0) {
+            char *out = notice_buffer_;
+            append(out, "HELD BY MACRO ");
+            *out++ = char('A' + owner);
+            *out = 0;
+            notice(notice_buffer_);
+        }
+    }
+
+    // The macro, turned up from 0, that has `param` of `track` among its targets, or -1.
+    int macro_holding(int track, int param) const {
+        for (int m = 0; m < kMacros; m++) {
+            if (engine_.macro_position(m) == 0) continue;
+            const Macro &macro = engine_.macros().macros[m];
+            for (int i = 0; i < kMacroTargets; i++) {
+                const MacroTarget &t = macro.targets[i];
+                if (t.enabled != 0 && t.track == track && t.param == param) return m;
+            }
+        }
+        return -1;
     }
 
     // A knob turned into a lock on `step` of the selected track: counts, or semitones on TUN or

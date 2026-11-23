@@ -6587,3 +6587,34 @@ TEST(ui_macro_learn_assigns_by_pushing_knobs_in_edit) {
     CHECK_EQ(macro_count(app_engine().macros().macros[0]), 0);
     key(ENAGA_KEY_F4);
 }
+
+// --- an EDIT knob on a parameter a turned-up macro holds says so ----------------------------
+
+TEST(ui_an_edit_knob_under_a_turned_up_macro_says_which_macro_holds_it) {
+    Strata &app = fresh();
+    for (int m = 0; m < kMacros; m++) post_cmd(Cmd::macro_clear, uint8_t(m));
+    pump(2);
+    shift_key(ENAGA_KEY_F7);                               // PERFORM
+    key(ENAGA_KEY_PUSH_C);                                 // learn C, EDIT opens
+    key(ENAGA_KEY_PUSH_A);                                 // A's parameter on macro C
+    key(ENAGA_KEY_CLR);                                    // learn done
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[2]), 1);
+
+    app.on_encoder(0, +3);                                 // macro at 0: the knob is heard
+    pump(2);
+    CHECK(std::strstr(UiProbe::notice(app), "HELD BY") == nullptr);
+
+    shift_key(ENAGA_KEY_F7);                               // turn macro C up
+    app.on_encoder(2, +10);
+    pump(2);
+    key(ENAGA_KEY_F8);
+    app.on_encoder(0, +3);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "HELD BY MACRO C");
+    shift_key(ENAGA_KEY_F7);
+    app.on_encoder(2, -127);
+    post_cmd(Cmd::macro_clear, 2);
+    pump(2);
+    key(ENAGA_KEY_F4);
+}
