@@ -193,6 +193,30 @@ constexpr SoundPreset kWavePolyPresets[] = {
     {"PWMPAD", {12, 40, 80, 20}, FLAT, {96, 30, 100, 66}, {80, 95, 90, 50}, {0, 40, 0, 0}},
 };
 
+// --- FM4: ALG RAT IDX FBK / DEC IEN VEL LVL, ASR ATK SUS REL ISU, OSC DET FIN BRT CAR ----------
+// (dsp/fm.cpp). ALG is sixteen counts an algorithm: 8 is A1, 24 A2 ... 72 A5 (two pairs), 88 A6,
+// 120 A8 (the organ). RAT the same over 0.5 1 2 3 3.5 4 7 14: 24 is 1, 72 is 3.5, 104 is 7.
+// IDX is square law. FIN 64 is the ratio as RAT says it; CAR 13 is a carrier at 1, 38 at 0.5.
+// The insert filter stays open: FM's brightness is its index. Held presets keep LVL down.
+constexpr SoundPreset kFmPresets[] = {
+    // An electric piano: two pairs at 1:1, the strike brighter than the ring, a hair of detune.
+    {"EPIANO", {72, 24, 50, 0}, FLAT, {100, 100, 90, 80}, NO_ASR, {30, 64, 60, 13}},
+    // A bell: 1:3.5, inharmonic, ringing for seconds while the index falls away.
+    {"BELL", {72, 72, 60, 0}, FLAT, {115, 110, 60, 72}, NO_ASR, {40, 64, 30, 13}},
+    // A bass: the full stack with feedback, short and growling, the index snapping shut.
+    {"BASS", {8, 24, 70, 40}, FLAT, {60, 110, 70, 110}, NO_ASR, {0, 64, 0, 13}},
+    // Brass: a slow index rise to a held, half-open tone. Chords.
+    {"BRASS", {40, 24, 55, 30}, FLAT, {80, 90, 60, 72}, {40, 100, 30, 80}, {20, 64, 40, 13}},
+    // An organ: four sines at 1 and 2, detuned into a chorus, held.
+    {"ORGAN", {120, 40, 0, 0}, FLAT, {64, 0, 0, 72}, {0, 127, 20, 0}, {30, 64, 0, 13}},
+    // Mallets: 1:4, the index all in the strike.
+    {"MALLET", {72, 88, 40, 0}, FLAT, {75, 127, 80, 100}, NO_ASR, {0, 64, 40, 13}},
+    // A pad: one modulator under three carriers, a slow swell, detuned, held.
+    {"PAD", {88, 24, 30, 20}, FLAT, {90, 60, 30, 72}, {90, 110, 90, 60}, {60, 64, 30, 13}},
+    // Glass: 1:7, bright and brittle, the feedback adding a breath.
+    {"GLASS", {56, 104, 45, 20}, FLAT, {85, 110, 70, 92}, NO_ASR, {20, 64, 50, 13}},
+};
+
 #undef FLAT
 #undef NO_ASR
 #undef NO_OSC
@@ -217,6 +241,7 @@ Bank bank_for(uint8_t machine) {
         case MachineId::va_poly: return bank(kPolyPresets);
         case MachineId::wave_mono: return bank(kWaveMonoPresets);
         case MachineId::wave_poly: return bank(kWavePolyPresets);
+        case MachineId::fm: return bank(kFmPresets);
         default: return {nullptr, 0};
     }
 }
@@ -246,7 +271,8 @@ uint32_t sound_preset_writes(uint8_t machine) {
         case MachineId::va_mono:
         case MachineId::va_poly:
         case MachineId::wave_mono:
-        case MachineId::wave_poly: return kSrcFltrAmp | kAsrBits | kOscBits;
+        case MachineId::wave_poly:
+        case MachineId::fm: return kSrcFltrAmp | kAsrBits | kOscBits;
         default: return 0;
     }
 }

@@ -16,10 +16,10 @@ been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is 
 
 | | |
 | --- | --- |
-| `make -C host test` | **1,741 tests, 3,482,744 checks, 0 failures** on `main` after PR #124: `core/`, `dsp/` and all of `app/` |
+| `make -C host test` | **1,754 tests, 3,485,153 checks, 0 failures** on `main` after PR #126: `core/`, `dsp/` and all of `app/` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image: `APP.ENA` 484,160 bytes GCC-only (476,008 cl6x), bss 1,334,848; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | **25 scenarios**, run on Roland's PC only. The 24 that existed on `1914af7` (#118) passed there with cl6x, `scenario_freeze` once #119 fixed its keys. `scenario_wave` (#122) has not run yet |
+| `tools/scenarios.sh` | **26 scenarios**, run on Roland's PC only. The 24 that existed on `1914af7` (#118) passed there with cl6x, `scenario_freeze` once #119 fixed its keys. `scenario_wave` (#122) and `scenario_fm` (#126) have not run yet |
 | unit | v0.2.0 on Enaga 0.2.0: boots, plays, under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been on the unit |
 | memory | init takes **97.05 MiB of a 120 MiB heap** since #124 (2 MiB loader buffer, wavetables built in the idle capture buffer): 22.95 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -30,22 +30,22 @@ been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is 
 ## What to do next, in order
 
 1. **On Roland's PC: the load runs still owed.** `tools/scenarios.sh` once on `main` (it has
-   `scenario_wave.sh`, never run), then E13 (the VA rework) and E14 (WAVE's cost per voice and
-   its boot time) from `docs/BUDGET.md`, with cl6x and with `ENAGA_TI_CGT=none`. BUDGET has only
+   `scenario_wave.sh` and `scenario_fm.sh`, never run), then E13 (the VA rework), E14 (WAVE's cost
+   per voice and its boot time) and E15 (FM4's cost per voice) from `docs/BUDGET.md`, with cl6x and with `ENAGA_TI_CGT=none`. BUDGET has only
    host estimates for both so far.
 2. **On the unit: today's walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, items 1-19, on a
-   build from `main` at PR #124 or later with cl6x. It covers everything since v0.1.0, including
-   the performance mixer and looper (16), the stock sample folders (17), the VA OSC page (18) and
-   WAVE (19).
+   build from `main` at PR #126 or later with cl6x. It covers everything since v0.1.0, including
+   the performance mixer and looper (16), the stock sample folders (17), the VA OSC page (18),
+   WAVE (19) and FM4 (20).
 3. **Write the readings down where they belong**: unit rows in `docs/BUDGET.md`, ticks in the
    reference half of `docs/UNIT_CHECKLIST.md`, the Unit column of `docs/FEATURES.md`, and anything
    odd as an issue or a thread.
 4. **Settle the provisional numbers** from those readings: `kPolyVoiceBudget = 12`, the CPU
    guard's thresholds (`core/cpuguard.hpp`: rise at a 70% average or one 90% block, fall after a
    second under 55%), and the performance mixer's worst case (host estimate: about +2 points).
-5. **The FM machine**, being built in its own thread. When it merges it needs its rows in
-   `docs/FEATURES.md`, `docs/MANUAL.md` (section 3), `docs/CHEATSHEET.md` (machine table and
-   abbreviations), `CHANGELOG.md` and the README's machine list. STRING is postponed.
+5. **A new machine** needs its rows in `docs/FEATURES.md`, `docs/MANUAL.md` (section 3 and the
+   SOUNDS table), `docs/CHEATSHEET.md` (machine table and abbreviations), `CHANGELOG.md` and the
+   README's machine list. STRING is postponed.
 6. **Then, from the reference half of `docs/UNIT_CHECKLIST.md`**, the checks that decide whether a
    milestone stands: a start with no card, pulling the card during a save and during sample
    loading, swapping a sample on a sounding track, the M5 30-minute jam, and M7's hour locked to

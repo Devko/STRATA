@@ -157,7 +157,7 @@ TEST(help_starts_on_the_screens_own_page) {
     CHECK(!first_page_has(place_of(HelpScreen::grid, 0, int(MachineId::sample)), "SLC AUTO"));
     // ASR: what SUS does on a VA, and that it is a VA page elsewhere.
     CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::va_poly)), "SUS 0  ONE-SHOT"));
-    CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::kick)), "ONLY ON VA/WAVE"));
+    CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::kick)), "ON VA/WAVE/FM4"));
     // GRID: A-D are the EDIT page's, the screen keys turn it.
     const HelpPlace grid = place_of(HelpScreen::grid, 1, int(MachineId::snare));
     CHECK(first_page_has(grid, "GRID FLTR SNR"));
@@ -191,6 +191,17 @@ TEST(help_covers_the_gestures_added_on_2026_11_23) {
 }
 
 // 24 is the ASR page's first parameter, 28 the OSC page's (dsp/track.hpp).
+TEST(help_names_fm4s_knobs) {
+    const uint8_t fm = uint8_t(MachineId::fm);
+    CHECK(std::strcmp(help_param_words(fm, 0), "ALGORITHM 1-8") == 0);
+    CHECK(std::strcmp(help_param_words(fm, 9), "INDEX ENV") == 0);
+    CHECK(std::strcmp(help_param_words(fm, 24 + 3), "INDEX SUSTAIN") == 0);
+    CHECK(std::strcmp(help_param_words(fm, 28 + 0), "PAIR DETUNE") == 0);
+    CHECK(std::strcmp(help_param_words(fm, 28 + 3), "CARRIER RATIO") == 0);
+    // The VAs keep FSU as the filter's.
+    CHECK(std::strcmp(help_param_words(uint8_t(MachineId::va_poly), 24 + 3), "FILTER SUSTAIN") == 0);
+}
+
 TEST(help_names_the_wave_pairs_knobs) {
     const uint8_t mono = uint8_t(MachineId::wave_mono), poly = uint8_t(MachineId::wave_poly);
     CHECK(std::strcmp(help_param_words(mono, 0), "WAVETABLE") == 0);

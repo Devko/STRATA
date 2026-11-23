@@ -70,16 +70,18 @@ any machine. The factory kit:
 | 7 | **VA POLY** | Dub chord stabs, up to six notes a step |
 | 8 | **SAMPLE** | A loop cut into slices |
 
-- **Ten machines:** KICK, SNARE, HAT, PERC, SAMPLE, GRAIN, VA MONO, VA POLY, WAVE MONO and
-  WAVE POLY, plus **MID**, which plays an outboard synth over MIDI. The drums follow Mutable
+- **Eleven machines:** KICK, SNARE, HAT, PERC, SAMPLE, GRAIN, VA MONO, VA POLY, WAVE MONO,
+  WAVE POLY and FM4, plus **MID**, which plays an outboard synth over MIDI. The drums follow Mutable
   Instruments Plaits' models, reimplemented ([docs/SOUND.md](docs/SOUND.md)).
 - **VA MONO and VA POLY:** saw or pulse, a second oscillator detuned or hard-synced, sub, drive,
   a resonant filter that self-oscillates, and an attack-sustain-release page for pads and drones.
 - **WAVE MONO and WAVE POLY:** the same voice with 16 built-in wavetables (classic shapes, sync,
   formants, FM, e-piano, vowels, mallets and more), a position the envelope can sweep, and warp.
+- **FM4:** four-operator FM in eight algorithms, with feedback and an index envelope, for
+  e-pianos, bells, glass, brass, organs and FM basses; chords of up to six notes.
 - **SAMPLE and GRAIN:** slices by note, with SLC AUTO cutting a break at its hits; granular
   clouds from the same sample.
-- **Factory sounds:** 60 ready-made sounds, loaded into one track at a time while the beat plays.
+- **Factory sounds:** 68 ready-made sounds, loaded into one track at a time while the beat plays.
 - **Per track:** drive, multimode filter (LP, BP, HP, 12 or 24 dB), lo-fi, amp envelope,
   sidechain duck, pan, level, an **LFO** (six shapes, free or synced) and an **arpeggiator**.
 - **Sends and master:** a tempo-synced ping-pong delay with a LONG mode (up to 12 s, tape wow), a
@@ -233,7 +235,7 @@ collision. Contributors, human or AI, should read [CLAUDE.md](CLAUDE.md) for the
 
 **[v0.2.0](https://github.com/Devko/STRATA/releases/tag/v0.2.0)** (2026-11-23) is the current
 release, an early beta. `main` has moved on since: the performance mixer and looper, the WAVE
-machines, the VA oscillator page and the stock sample folders are in
+and FM4 machines, the VA oscillator page and the stock sample folders are in
 [CHANGELOG.md](CHANGELOG.md) under Unreleased.
 
 | | |

@@ -75,7 +75,7 @@ also walk the tracks in GRID, EDIT and KEYS.
 
 <sub>EDIT on the kick: the machine's SRC page and the insert chain's FLTR page. The bars above the knobs are the EDIT pages; the screen keys turn them.</sub>
 
-A machine is one of ten sound engines, plus **MID**, which plays an outboard synth over MIDI
+A machine is one of eleven sound engines, plus **MID**, which plays an outboard synth over MIDI
 instead (section 3). Any track can host any machine (MACHINE mode, `FUNC+EDIT`). The default kit
 uses eight of them, one per track (WAVE MONO and WAVE POLY are there to switch to):
 
@@ -91,7 +91,7 @@ uses eight of them, one per track (WAVE MONO and WAVE POLY are there to switch t
 | 8 | SMP (SAMPLE) | Loop, cut into slices |
 
 Every track has **16 parameters on four pages** of four, one parameter per encoder A-D, then a
-fifth and a sixth page for its LFO and its arpeggiator (below). The VA and WAVE machines add a
+fifth and a sixth page for its LFO and its arpeggiator (below). The VA, WAVE and FM4 machines add a
 seventh and an eighth, ASR and OSC.
 
 - **SRC** and **AMP** belong to the machine and change meaning with it (section 3).
@@ -160,7 +160,7 @@ in a project saved before the arp existed.
 
 <p><img src="screens/edit_asr.png" width="256" alt="EDIT, the ASR page on VA POLY"></p>
 
-On the VA and WAVE machines a seventh EDIT page, **ASR**, after ARP, decides how a note is
+On the VA, WAVE and FM4 machines a seventh EDIT page, **ASR**, after ARP, decides how a note is
 held. With it, the POLY machines play pads and long chords, and the MONO ones long bass notes and
 drones:
 
@@ -176,7 +176,7 @@ drones:
   dull.
 
 The line under the knobs says `SUS 0: ONE-SHOT` or `HOLDS: PAD OR LEN`. On any other machine the
-page shows `VA/WMN/WPL ONLY`.
+page shows `NOT ON THIS MACHINE`.
 
 A scene captured with SCENE stores the ASR page too, like every other knob. So if a note still
 fades with SUS up, look at the morph: a scene stored at SUS 0 pulls SUS down as VALUE moves
@@ -207,7 +207,7 @@ which sounds exactly as it did.
 <p><img src="screens/edit_osc.png" width="256" alt="EDIT, the OSC page on VA POLY"></p>
 
 On **VA MONO** and **VA POLY** an eighth EDIT page, **OSC**, after ASR, picks what goes into the
-filter (the WAVE machines have their own OSC page, described with them in section 3):
+filter (WAVE and FM4 have their own OSC pages, described with them in section 3):
 
 - **A, WAV**: OSC 1's wave. `SAW` from 0 to 31; at 32 a square (`SQR`), hollow and woody;
   turned further the pulse narrows (`P30` ... `P08`), thinner and more nasal.
@@ -224,7 +224,7 @@ filter (the WAVE machines have their own OSC page, described with them in sectio
   squelch.
 
 The line under the knobs says `OS2: DET 1-63 SYN 64+`. On any other machine the page shows
-`VA/WMN/WPL ONLY`. Like every page, the four lock, scene and macro.
+`NOT ON THIS MACHINE`. Like every page, the four lock, scene and macro.
 
 **RES** on SRC runs over the whole knob: each turn adds about the same amount of peak, and from
 about 120 the filter whistles by itself at a steady level (self-oscillation; tune it with CUT).
@@ -617,7 +617,7 @@ each with inversions `/n`).
 For pads, turn SUS up on the ASR page: a chord then holds for its step's LEN, or for as long as you
 hold the keys ([Held notes: the ASR page](#held-notes-the-asr-page)).
 
-Every note is a sustaining voice and costs CPU while it rings. All VA POLY and WAVE POLY tracks
+Every note is a sustaining voice and costs CPU while it rings. All VA POLY, WAVE POLY and FM4 tracks
 together share a budget of **12 voices**; past it, the quietest note is faded out quickly to make room. A longer
 DEC, a long LEN with SUS up, or a long REL all mean more notes overlap.
 
@@ -661,6 +661,28 @@ MOT above 64 moves the position up as the filter envelope rises and back as it f
 moves it down. With PLK at POS 127 and MOT 0, each note starts bright and dulls like a string.
 The SOUNDS list (OK on MACHINE) has 8 WMN and 7 WPL starting points.
 
+### FM4: four-operator FM
+
+Four sine operators in the eight classic 4-operator algorithms: e-pianos, bells, glass, brass,
+organs and FM basses. Six voices with chords, like PLY, in the same shared 12-voice budget. The
+operators come in two pairs so it stays dialable: the carriers sit at **CAR**, the modulators at
+**RAT** (plus **FIN**), and **DET** pulls the second of each pair sharp. **IDX** is how bright
+the tone is; the index has its own envelope, faster than the volume's, so a note strikes bright
+and mellows as it rings (**IEN** says how much).
+
+| Page | A | B | C | D |
+| --- | --- | --- | --- | --- |
+| SRC | **ALG** algorithm `A1`-`A8` | **RAT** modulator ratio: 0.5 1 2 3 3.5 4 7 14 | **IDX** FM index (brightness) | **FBK** operator 4 feeding back on itself: a saw-like buzz, to noise |
+| AMP | **DEC** decay, 15 ms to 8 s | **IEN** how much of IDX the index envelope moves (0 = a fixed timbre) | **VEL** velocity to index: harder is brighter | **LVL** |
+| ASR | **ATK** | **SUS** (0 = one-shot) | **REL** | **ISU** index sustain: where the brightness settles while held |
+| OSC | **DET** second pair sharp: `OFF`, up to `D25` cents | **FIN** fine ratio, ±0.5 around RAT (`0` at 64) | **BRT** keytrack: high notes get less index, so they stay sweet | **CAR** carrier ratio: 1, 0.5, 2, 3, 4 |
+
+The algorithms: `A1` one stack 4>3>2>1 (the brightest), `A2` 3 and 4 into 2 into 1, `A3` 3>2>1
+with 4 into 1, `A4` 4>3>1 with 2 into 1, `A5` two pairs 2>1 and 4>3 (the e-piano), `A6` 4 into
+three carriers, `A7` one pair 4>3 over two plain sines, `A8` four sines (an organ: RAT sets the
+second drawbar). The SOUNDS list has EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD and GLASS.
+FBK costs a little more CPU than FBK 0.
+
 ### MID: MIDI
 
 MID makes no sound of its own. It is for a track whose sound is an outboard synth, a drum
@@ -702,7 +724,7 @@ reading fills the USB queue and stops the DIN jack with it; Enaga fixed this aft
 ### The key and the scale
 
 Each pattern has a key (root) and a scale, set in PROJECT with encoders **B** (key) and **C**
-(scale). The melodic machines **fold** their notes into the scale: the VA and WAVE machines, GRAIN,
+(scale). The melodic machines **fold** their notes into the scale: the VA, WAVE and FM4 machines, GRAIN,
 and SAMPLE when it is not sliced (SLC 1). Drums and sliced samples are not folded, since there the
 note picks a pitch or a slice rather than a melody. Scales: CHROMATIC, MINOR, MAJOR, DORIAN,
 PHRYGIAN, LYDIAN, MIXOLYDIAN, LOCRIAN, HARM MINOR, MEL MINOR, MINOR PENT, MAJOR PENT, BLUES,
@@ -729,8 +751,8 @@ OUT channel: OFF, or 1-16. `FUNC+EDIT` again opens the kit library (section 6).
 
 <p><img src="screens/sounds.png" width="256" alt="SOUNDS on track 1, the kick"></p>
 
-Every drum machine, both VAs and both WAVE machines come with a short list of ready-made sounds.
-On a KCK, SNR, HAT, PRC, MNO, PLY, WMN or WPL track, press **OK** in EDIT or MACHINE: **SOUNDS** lists them. UP/DOWN or A move
+Every drum machine, both VAs, both WAVE machines and FM4 come with a short list of ready-made sounds.
+On a KCK, SNR, HAT, PRC, MNO, PLY, WMN, WPL or FM4 track, press **OK** in EDIT or MACHINE: **SOUNDS** lists them. UP/DOWN or A move
 the cursor, **OK loads** the one under it into this track, with the beat playing, and the list
 stays open so the next OK tries the next one. `NOW` marks the sound the track has. The first row,
 **AS WAS**, is the track as it sounded when you opened the list: OK on it puts that back, so
@@ -738,7 +760,7 @@ trying sounds never loses yours. LEFT/RIGHT or the screen keys move to the next 
 its own AS WAS. CLR goes back.
 
 A factory sound sets the machine's SRC and AMP pages, the insert chain's FLTR page (drive and
-filter) and, on the VAs, the ASR and OSC pages. It leaves the FX page (lo-fi, pan and both sends), the LFO,
+filter) and, on the VA, WAVE and FM4 machines, the ASR and OSC pages. It leaves the FX page (lo-fi, pan and both sends), the LFO,
 the ARP, the fader and HAT's choke group alone, so the track keeps its place in the mix. The
 first entry of each list is the factory kit's own sound.
 
@@ -752,6 +774,7 @@ first entry of each list is the factory kit's own sound.
 | PLY | STAB (the factory stab), PAD (A05's pad), STRING, KEYS, RAVE (best with 5TH OCT chords), PLUCK, BRASS |
 | WMN | SWEEP, RESO (a resonant sweep), GROWL, FORMNT (formant), DIGI (digital), VOWEL, WARP, FMBASS (FM bass) |
 | WPL | PAD, EPIANO (electric piano), BELL, MALLET, PLUCK, CHOIR, PWMPAD (a PWM pad) |
+| FM4 | EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD, GLASS |
 
 The MNO list is longer than the screen: it scrolls as the cursor moves. PAD, STRING, KEYS, BRASS,
 FAT, REESE, ACID, SYNC, LEAD and DRONE sustain (the ASR page's SUS is up), so their notes last as long as
@@ -867,7 +890,7 @@ keeps the length it had.
 MIDI IN (the DIN jack, or USB MIDI) plays STRATA like the pads:
 
 - **Notes**: channels 1-8 play tracks 1-8; other channels play the selected track. A note is held
-  until its note-off, so a pad or a chord on a VA, WAVE or SAMPLE track sustains under your finger, and
+  until its note-off, so a pad or a chord on a VA, WAVE, FM4 or SAMPLE track sustains under your finger, and
   it is let go on the track it started on even if you have selected another one since. Notes are
   recorded like pad hits while REC is on.
 - **CC 16-31** set the track's sixteen parameters in page order: 16-19 SRC, 20-23 FLTR, 24-27
@@ -1396,7 +1419,7 @@ STRATA is designed to stay under 60% in its worst case. On the unit the default 
 under 30%, and long, heavy play has peaked at 84% without a dropout. If the load climbs or the
 sound crackles:
 
-- **VA POLY and WAVE POLY** are the biggest cost: every chord note is a sustaining voice. Use shorter DEC, fewer
+- **VA POLY, WAVE POLY and FM4** are the biggest cost: every chord note is a sustaining voice. Use shorter DEC, fewer
   notes per chord (MIN rather than MIN11), or fewer POLY tracks. All POLY tracks share 12 voices.
 - **GRAIN** with high DEN is eight grains at once; lower DEN or use SAMPLE.
 - **The CPU guard** steps in on its own when the load stays high: the bottom line shows

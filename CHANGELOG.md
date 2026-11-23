@@ -24,6 +24,10 @@ the project file format or the controls.
   built-in tables of 16 frames (CLS, PWM, SYN, FMT, RSW, HRM, FLD, PHD, FM1, TIN, DGT, VOW, GRL,
   EPN, PLK, MLT), POS and MOT (envelope to position), WRP and DET on their OSC page, the ASR
   page, and 8 + 7 factory sounds. WAVE POLY shares the 12-voice POLY budget.
+- **FM4**, a four-operator FM machine: the eight classic algorithms, operator 4 feedback, an
+  index envelope, a detuned second pair and keytracked brightness, for e-pianos, bells, glass,
+  brass, organs and FM basses. Six voices with chords, in the shared 12-voice POLY budget, and 8
+  factory sounds (EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD, GLASS).
 - **The stock SmplTrek folders in the sample browser:** on a card the stock firmware has used,
   the top level adds `POOL/` (`/SmplTrek/Pool/Audio`) and `SMPLTREK/` (the whole tree, stock
   projects included). Read only.

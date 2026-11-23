@@ -40,8 +40,8 @@ struct SoundPreset {
     uint8_t src[4];          // params 0-3
     uint8_t fltr[4];         // 4-7: DRV CUT RES MOD, the insert chain's
     uint8_t amp[4];          // 8-11
-    uint8_t asr[4];          // 24-27: ATK SUS REL FSU, written on VA MONO and VA POLY only
-    uint8_t osc[4];          // 28-31: WAV OS2 SUB DRV, the same
+    uint8_t asr[4];          // 24-27: ATK SUS REL FSU, written on the machines that read ASR
+    uint8_t osc[4];          // 28-31: the OSC page (WAV OS2 SUB DRV on a VA), the same
 };
 
 constexpr int kSoundNameChars = 6;

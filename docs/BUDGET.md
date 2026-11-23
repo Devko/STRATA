@@ -1194,6 +1194,7 @@ scene or knob really did move: those prepare as before.
 | E12 | The ASR page | `tests/scenario_asr.sh`, then the held-chord `factory_kit` edit in "The ASR page" above, `scenario_factory.sh`, both compilers; revert | **done 2026-11-23:** off = A01 (26.15% / 49.32%); held +3.60 cl6x / +4.71 GCC (see "The ASR page") |
 | E13 | The OSC page and the VA rework | `tests/scenario_osc.sh` against `scenario_factory.sh` before it, then the worst-case `factory_kit` edit in "The OSC page" below, both compilers; revert | the factory beat should not rise; worst case at most ~0.1 point a voice over the old voice |
 | E14 | WAVE MONO and WAVE POLY | `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys) against `scenario_factory.sh` on the same commit, both compilers; and the boot: the cycles to `strata ready` against the same run before the WAVE commit | see "WAVE MONO and WAVE POLY" below: about 1.0-1.4x a VA voice expected; the table build is a one-off at boot |
+| E15 | FM4 | `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for `strata_fm_add` and `strata_fm_add_free` | see "FM4" below: about 1.6-1.8x a VA voice on the host; FBK 0 should pipeline far better on cl6x than FBK up |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
@@ -1647,6 +1648,50 @@ FM and STRING, which follow, allocate under 0.1 MiB.
 | `scenario_factory.sh`, same commit | | |
 | `scenario_wave.sh` (WMN bass, WPL chord) | | |
 | cycles to `strata ready`, before / after | | |
+
+### FM4 (2026-11-23, host only)
+
+Four sine operators a sample in one branch-free network (dsp/fmloops.ti.c). The first version
+used `enaga_sin_turns`, a polynomial with a float floor: on the host that made an FM voice about
+3.5x a VA voice, because the four sines of a sample form a chain (each modulates the next) and
+the loop waits on their latency. Each sine is now a 1024-point table read with linear
+interpolation (error under 5e-6, the polynomial's), the modulation joining the operator's
+integer phase: no float floor, and about 4.7x cheaper a sine on the host.
+
+There are two loops. With FBK up, operator 4 reads its own previous sample, so one sine sits in
+a loop-carried chain and cl6x cannot overlap samples; with FBK at 0 for the slice,
+`strata_fm_add_free` has no such chain and the pipeliner can overlap samples. `ti_loops.py`
+should show the difference (E15). Half the factory sounds use FBK.
+
+Host, x86 GCC -O2, a six-note held chord, nanoseconds per voice per 64-frame block (noisy; read
+the ratios):
+
+| Voice | ns / voice / block | vs VA saw |
+| --- | --- | --- |
+| VA POLY, saw | 795 | 1.00 |
+| FM4 A1 (stack), FBK 0 / FBK 60 | 1,269 / 1,395 | 1.60 / 1.75 |
+| FM4 A5 (two pairs), FBK 0 / 60 | 1,278 / 1,395 | 1.61 / 1.75 |
+| FM4 A8 (organ), FBK 0 / 60 | 1,269 / 1,335 | 1.60 / 1.68 |
+| FM4, the polynomial sine (before) | 2,600-3,400 | 3.3-4.3 |
+
+Scaled from VA POLY's 2.16 points a voice with cl6x (3.82 GCC-only): roughly **3.5-3.8 points a
+voice with cl6x and 6-7 GCC-only**, unmeasured, and possibly better with cl6x on the FBK 0 loop.
+FM4 counts as one voice in VA POLY's budget of 12 (the design's "half a voice" assumed a cheaper
+voice; measured on the host it is not). The worst case is twelve held FM voices: about 17 points
+above twelve VA voices on the host ratio. The CPU guard sheds FM voices the same way it sheds VA
+POLY's, so the block stays inside the budget; the cost is notes, not dropouts. If E15 says FM4 is
+too dear, the levers are the control-rate work every 16 frames (`FmVoice::run`: a `semitones`,
+three reciprocals and an `exp2`, cacheable per note) and running the voice at kControl 32.
+
+**Memory:** a 4 KiB sine table (BSS) and 856 bytes a track for the machine: nothing new on the
+heap beyond the engine growing by 6.8 KiB.
+
+**E15, to measure on Roland's PC (emulator):**
+
+| Build | cl6x | GCC only |
+| --- | --- | --- |
+| `scenario_factory.sh`, same commit | | |
+| `scenario_fm.sh` (FM4 on the chord track) | | |
 
 ### Later milestones
 

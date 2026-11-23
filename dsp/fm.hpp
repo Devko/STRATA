@@ -41,6 +41,10 @@ float fm_fine(uint8_t value);             // FIN: -0.5..+0.5 added to RAT, 0 at 
 float fm_carrier_ratio(uint8_t value);    // CAR: 1, 0.5, 2, 3, 4
 float fm_detune_cents(uint8_t value);     // DET: 0..25 cents
 
+// The operators' sine table (fmloops.h), 4 KiB in BSS, filled on the first call. FmPoly::init
+// and FmVoice::reset call it, so the fill never lands in the audio callback.
+const float *fm_sine_table();
+
 struct FmSettings {
     // Reads SRC 0-3, AMP 8-11, the ASR page and the OSC page. Control rate, once per block.
     static FmSettings make(const TrackParams &params, float rate, float inv_rate);

@@ -50,14 +50,14 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ ("The new controls") | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
 | Arrow-key navigation model (UP/DOWN rows, LEFT/RIGHT sideways, OK picks, CLR back) | v0.1.0 | ○ (5, "Arrow keys") | |
-| Screens: GRID, step page, EDIT (6 pages, 8 on the VA and WAVE machines), MACHINE, KIT, SOUNDS, KEYS, MIXER (12 pages), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
+| Screens: GRID, step page, EDIT (6 pages, 8 on the VA, WAVE and FM4 machines), MACHINE, KIT, SOUNDS, KEYS, MIXER (12 pages), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
 | Fixes: the FUNC menu never shows a MUTATE verdict OK would not give; OK in RESAMPLE no longer retargets a take being written | #84 | ○ | |
 
 ## Engines (machines)
 
 Eight tracks, any machine on any track (MACHINE, FUNC+EDIT). Each track: 16 parameters on four
-pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages, and ASR and OSC pages on the VA and WAVE
-machines.
+pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages, and ASR and OSC pages on the VA, WAVE
+and FM4 machines.
 
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
@@ -73,6 +73,7 @@ machines.
 | **Held notes on the VAs: ASR page** (ATK SUS REL FSU, seventh EDIT page); with SUS up a note holds while the key is held or for its step's LEN (up to 64 steps) | #90 | ○ (13k) | Held voices count against the 12-voice POLY budget for as long as they hold; MONO counts LEN only once SUS is up |
 | **VA sound rework: OSC page** (WAV OS2 SUB DRV, eighth EDIT page): saw or pulse width, a detuned or hard-synced OSC 2, sub level, drive into the filter; RES self-oscillates near the top, LP24 squelches like LP12 | #118 | ○ (13p, walkthrough 18) | Older projects lose the old fixed synced pulse (load `SAW OFF 102 000`). No key tracking or velocity to the filter; the filter decay is still 0.55 x DEC |
 | **WAVE MONO and WAVE POLY**: the VA voice with a wavetable (16 built-in tables of 16 frames: TBL POS, MOT envelope to position, WRP phase bend, DET second reader), 8 + 7 factory sounds | #122 | ○ (walkthrough 19) | CPU per voice is a host estimate until the emulator and the unit measure it (BUDGET "WAVE"); the tables take 2.5 MiB, built at init. No user tables from the card |
+| **FM4**: four-operator FM, eight algorithms, operator 4 feedback, an index envelope, six voices with chords in the shared 12-voice POLY budget; 8 factory sounds | #126 | ○ (walkthrough 20) | CPU per voice is a host estimate (about 1.7x a VA POLY voice) until the emulator and the unit measure it (BUDGET "FM4", E15). |
 | MID: plays an outboard synth over MIDI; SRC/AMP knobs send CC 74/71/73/72, 70/75/76/77 | v0.1.0 | ○ (8d) | No sound or CPU of its own; no scale fold |
 | Key and scale per pattern (15 scales), fold for VAs, GRAIN and unsliced SAMPLE; sharps everywhere | v0.1.0 | ○ (7) | |
 | **NOTE view**: TUN / PIT read as a note (where TUN puts C-4) and turn a semitone a click; push the knob for 0-127 | #88 | ○ ("Today's walkthrough") | Chromatic, not by scale (TUN applies after the fold). 128 bytes per range, so many notes are a few cents off (`+`/`-`). Not saved: on at every start |
@@ -178,7 +179,7 @@ machines.
 | Damaged files refused, never crash | v0.1.0 | ○ (M4) | Card pulled mid-save not tried on the unit |
 | Factory project: 130 BPM C minor kit, A01-A04, chain, 3 scenes, 3 macros, 8 mute states | v0.1.0 | ✔ A01 plays; ◐ the rest (3b) | Track 8 plays a placeholder until given a sample |
 | Factory pattern A05 PAD: held VA POLY chords from the ASR page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
-| Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 60 ready-made sounds (MNO 12, PLY 7, WMN 8, WPL 7) into one drum, VA or WAVE track, AS WAS puts it back | #102, #118, #122 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
+| Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 68 ready-made sounds (MNO 12, PLY 7, WMN 8, WPL 7, FM4 8) into one drum, VA, WAVE or FM4 track, AS WAS puts it back | #102, #118, #122, #126 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
 
 ---
 
@@ -197,8 +198,7 @@ machines.
 
 **Known limits worth building next**
 
-1. **More engines:** WAVE MONO and WAVE POLY are in (#122). An FM machine is being built; its
-   row goes under "Engines" when it merges.
+1. **More engines:** WAVE MONO and WAVE POLY (#122) and FM4 (#126) are in.
 2. ~~An editable sidechain duck~~: done (depth per track, source, attack/hold/release in the
    kit). Left: making the depth lockable or scene/macro-able.
 3. **MIDI:** pitch bend and aftertouch in, CC motion recording, slide as legato out; moving the

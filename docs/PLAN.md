@@ -43,7 +43,7 @@ otherwise.
 | M7 | **app side done** | The sync settings are the user's, in Enaga's menu; PROJECT's SETUP page shows them and VALUE refuses a tempo edit under an external clock. The rest is verification on the unit |
 | v0.1 | **released** 2026-11-22 | [v0.1.0](https://github.com/Devko/STRATA/releases/tag/v0.1.0), a pre-release, after the first evening on the unit: under 30% on the default beat, 84.3% MAX in heavy play, no dropouts |
 | v0.2 | **released** 2026-11-23 | [v0.2.0](https://github.com/Devko/STRATA/releases/tag/v0.2.0), an early beta: PRs #83-#111. Its new features are not yet checked on the unit |
-| after v0.2 | on `main` | The performance mixer and looper, the VA OSC page, WAVE MONO and WAVE POLY, the stock SmplTrek folders in the sample browser (CHANGELOG, Unreleased). FM is being built |
+| after v0.2 | on `main` | The performance mixer and looper, the VA OSC page, WAVE MONO and WAVE POLY, FM4, the stock SmplTrek folders in the sample browser (CHANGELOG, Unreleased) |
 
 ## What comes next
 
