@@ -283,6 +283,16 @@ enum class Cmd : uint8_t {
     freeze_set,
     freeze_clear,
 
+    // The performance mixer (core/perffx.hpp), push VALUE + STEP 1-15 and VALUE. a: the PerfFx
+    // (0 none, 1-15; the looper's own is refused here), b: its amount, 0-127. One effect at a
+    // time: a new one replaces the last, and the depths are smoothed on the audio side, so the
+    // change is a fade. Performance, not edits: no file, no undo.
+    perf_fx,
+    // The master looper (dsp/looper.hpp), STEP 16. a: 0 the mix (b: 0-127), 1 record from the
+    // next bar line (b: bars, 1/2/4/8; halved until the take fits the buffer), 2 throw it away.
+    // A record is refused while RESAMPLE's take holds the buffer they share.
+    looper,
+
     count
 };
 
@@ -465,6 +475,10 @@ struct Status {
     std::atomic<uint8_t> resample_state{0};
     std::atomic<uint32_t> resample_frames{0};
     std::atomic<uint8_t> resample_clamped{0};   // the take was longer than the buffer holds
+    // The master looper (dsp/looper.hpp): 0 idle, 1 armed (waiting for the bar line), 2
+    // recording, 3 playing; and the bars of the take armed, running or playing.
+    std::atomic<uint8_t> looper_state{0};
+    std::atomic<uint8_t> looper_bars{0};
     // The audio input's peak over the last block, 0-1000 (per mille of full scale), so the
     // RESAMPLE screen can show a level to set the input by before a take. 1000 means it clipped.
     std::atomic<uint16_t> input_peak{0};

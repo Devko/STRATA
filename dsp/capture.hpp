@@ -111,6 +111,11 @@ public:
     // finished with it by then and nothing else writes it.
     const int16_t *data() const { return buffer_; }
 
+    // The same memory lent to the master looper (dsp/looper.hpp), `capacity()` frames of stereo.
+    // The engine keeps the two apart: the looper records only while this is idle, and an arm is
+    // refused while the looper holds a loop. App::init only.
+    int16_t *lend() { return buffer_; }
+
     // --- writing it as a WAV, without copying it ---------------------------
     //
     // The buffer reserves `kHeaderBytes` in FRONT of the audio, so the main context can write a

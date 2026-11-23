@@ -574,6 +574,10 @@ const Expect kTable[] = {
     // Freeze is RAM only (dsp/frozen.hpp): a loop in the pool, no file, and a reload unfreezes.
     {Cmd::freeze_set, 0u, "freeze_set"},
     {Cmd::freeze_clear, 0u, "freeze_clear"},
+
+    // The performance mixer and its looper are live only (core/perffx.hpp, dsp/looper.hpp).
+    {Cmd::perf_fx, 0u, "perf_fx"},
+    {Cmd::looper, 0u, "looper"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:

@@ -120,14 +120,17 @@ TEST(help_knob_words_fit_beside_a_three_letter_name) {
     CHECK(std::strcmp(help_param_words(uint8_t(MachineId::kick), 24), "") == 0);  // no ASR
 }
 
-TEST(help_the_last_three_pages_are_the_same_everywhere) {
-    // FUNC + a function key, FUNC + a knob or pad, the upper pads: what the one page was.
+TEST(help_the_last_five_pages_are_the_same_everywhere) {
+    // FUNC + a function key, FUNC + a knob or pad, the upper pads: what the one page was. Then
+    // the performance mixer on VALUE: its gestures and its sixteen slots.
     every_page([&](const HelpPlace &place, int page, const char *title, char[][kHelpChars + 1],
                    int) {
         const int pages = help_page_count(place);
-        if (page == pages - 3) CHECK(std::strcmp(title, "FUNC + KEY:") == 0);
-        if (page == pages - 2) CHECK(std::strcmp(title, "FUNC + KNOB OR PAD:") == 0);
-        if (page == pages - 1) CHECK(std::strcmp(title, "UPPER PADS TRK1-7:") == 0);
+        if (page == pages - 5) CHECK(std::strcmp(title, "FUNC + KEY:") == 0);
+        if (page == pages - 4) CHECK(std::strcmp(title, "FUNC + KNOB OR PAD:") == 0);
+        if (page == pages - 3) CHECK(std::strcmp(title, "UPPER PADS TRK1-7:") == 0);
+        if (page == pages - 2) CHECK(std::strcmp(title, "VALUE FX MIXER:") == 0);
+        if (page == pages - 1) CHECK(std::strcmp(title, "VALUE FX STEPS:") == 0);
     });
     // And the page number wraps both ways, so the screen keys can go round.
     const HelpPlace grid = place_of(HelpScreen::grid, 0, 0);
