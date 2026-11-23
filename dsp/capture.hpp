@@ -69,7 +69,11 @@ public:
     // a second press cannot silently restart a take halfway through.
     //
     // `frames` is clamped to `capacity()`, and `clamped()` then reports it.
-    bool arm(uint32_t frames);
+    //
+    // `channels` is 2 for the master or the input, 1 for one track (a bounce: tracks are mono
+    // until the pan, so a stereo take of one would be the same samples twice). Anything else is
+    // refused. A mono take is written with `process_mono`, a stereo one with `process`.
+    bool arm(uint32_t frames, int channels = 2);
 
     // Begin the armed take. The engine calls this on a bar line. No-op unless armed.
     void begin();
@@ -83,6 +87,8 @@ public:
     // The take ends by itself at the frame it was asked for, mid-block if that is where it
     // falls: the length is exact, because a loop that is a block too long clicks.
     void process(const float *master, int frames);
+    // The same for a mono take: `frames` floats. Each does nothing for a take of the other width.
+    void process_mono(const float *mono, int frames);
 
     // --- what the engine publishes and the card reads ---------------------
 
@@ -97,9 +103,10 @@ public:
     bool clamped() const { return clamped_; }
 
     uint32_t frames() const { return written_; }       // frames captured so far, or in the take
+    int channels() const { return channels_; }         // of the take armed, running or done
     uint32_t wanted() const { return wanted_; }        // frames the take will be, once begun
 
-    // The take, as interleaved stereo int16: `2 * frames()` samples. Valid from the main context
+    // The take, as interleaved int16: `channels() * frames()` samples. Valid from the main context
     // only once `done()`, which is the same discipline a project save uses -- the audio side has
     // finished with it by then and nothing else writes it.
     const int16_t *data() const { return buffer_; }
@@ -117,8 +124,8 @@ public:
     // Where to write the header, and how many bytes the finished file is. Main context, once
     // `done()`; the audio side never touches the reserved bytes.
     uint8_t *file_base() { return base_; }
-    uint32_t file_bytes() const { return kHeaderBytes + written_ * 2u * 2u; }
-    uint32_t data_bytes() const { return written_ * 2u * 2u; }
+    uint32_t file_bytes() const { return kHeaderBytes + data_bytes(); }
+    uint32_t data_bytes() const { return written_ * uint32_t(channels_) * 2u; }
 
     // The main context has finished with the take; the buffer is free to be armed again.
     void release();
@@ -132,6 +139,7 @@ private:
     uint32_t wanted_ = 0;         // frames this take should be
     uint32_t written_ = 0;        // frames written so far
     State state_ = State::idle;
+    uint8_t channels_ = 2;
     bool clamped_ = false;
 };
 

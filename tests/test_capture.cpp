@@ -348,3 +348,50 @@ TEST(capture_records_a_one_frame_block) {
     CHECK_EQ(int(capture.data()[0]), int(int16_t(100.0f / 100000.0f * 32767.0f)));
     CHECK_EQ(int(capture.data()[4]), int(int16_t(102.0f / 100000.0f * 32767.0f)));
 }
+
+// --- a bounce: one track, mono (2026-11-23) ---------------------------------------------------
+
+TEST(capture_a_mono_take_is_one_sample_a_frame_and_ends_on_its_frame) {
+    Capture capture;
+    CHECK(capture.init(kRate));
+    const uint32_t wanted = uint32_t(kBlk + 9);
+    CHECK(capture.arm(wanted, 1));
+    CHECK_EQ(capture.channels(), 1);
+    capture.begin();
+
+    static float mono[kBlk];
+    for (int i = 0; i < kBlk; i++) mono[i] = float(i) * (1.0f / 1000.0f);
+    // A stereo block is not this take's width: nothing is written.
+    fill_block(g_block, kBlk, 0.5f, 0.5f);
+    capture.process(g_block, kBlk);
+    CHECK_EQ(int(capture.frames()), 0);
+
+    capture.process_mono(mono, kBlk);
+    capture.process_mono(mono, kBlk);
+    CHECK(capture.done());
+    CHECK_EQ(int(capture.frames()), int(wanted));
+    // One int16 a frame, packed: the WAV is mono, half a stereo take's size.
+    CHECK_EQ(int(capture.data_bytes()), int(wanted) * 2);
+    CHECK_EQ(int(capture.file_bytes()), int(Capture::kHeaderBytes) + int(wanted) * 2);
+    for (int i = 0; i < kBlk; i++) {
+        CHECK_EQ(int(capture.data()[i]), int(int16_t(float(i) * (1.0f / 1000.0f) * 32767.0f)));
+    }
+    CHECK_EQ(int(capture.data()[kBlk]), 0);               // the second block's first frame
+    CHECK_EQ(int(capture.data()[kBlk + 8]), int(int16_t(8.0f / 1000.0f * 32767.0f)));
+
+    // And the next take is stereo again, as asked.
+    capture.release();
+    CHECK(capture.arm(uint32_t(kBlk)));
+    CHECK_EQ(capture.channels(), 2);
+    capture.begin();
+    capture.process_mono(mono, kBlk);                     // the wrong width: nothing
+    CHECK_EQ(int(capture.frames()), 0);
+}
+
+TEST(capture_refuses_a_width_it_cannot_write) {
+    Capture capture;
+    CHECK(capture.init(kRate));
+    CHECK(!capture.arm(uint32_t(kBlk), 0));
+    CHECK(!capture.arm(uint32_t(kBlk), 3));
+    CHECK(!capture.armed());
+}

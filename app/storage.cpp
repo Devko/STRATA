@@ -2168,11 +2168,11 @@ void Storage::step_take_write() {
 
     // No copy. dsp/capture.hpp reserves the 44 header bytes IN FRONT of the audio for exactly
     // this: the header goes into them and the file is that one buffer from start to end,
-    // rather than a second 5.76 MiB buffer. The take is already interleaved stereo int16, so
-    // there is no conversion pass over it in the UI thread at all.
+    // rather than a second 5.76 MiB buffer. The take is already interleaved int16 (stereo, or
+    // mono for one track), so there is no conversion pass over it in the UI thread at all.
     enaga::wav::Format format{};
     format.encoding = enaga::wav::pcm;
-    format.channels = 2;
+    format.channels = uint16_t(engine_->capture().channels());
     format.rate = uint32_t(ENAGA_SAMPLE_RATE);
     format.bits = 16;
 

@@ -572,6 +572,45 @@ TEST(chain_duck_depth_zero_is_bypassed) {
     CHECK_NEAR(peak_of(out.l, kFrames), 1.0f, 1e-5);
 }
 
+TEST(chain_a_bounce_tap_is_the_track_before_the_duck_and_changes_nothing_heard) {
+    // RESAMPLE from one track (2026-11-23): the tap is the chain's block after drive, filter and
+    // lo-fi and before the duck, the fader and the pan. A fully ducked track still taps at full
+    // level, and the bus gets exactly what it would without a tap.
+    TrackParams p = neutral_params();
+    p.set(kPan, kPanLeft);
+    ChainMix mix;
+    mix.duck = 1.0f;
+    float curve[kFrames];
+    for (int i = 0; i < kFrames; i++) curve[i] = 1.0f;      // fully ducked
+
+    InsertChain plain, tapped;
+    plain.init(kRate);
+    tapped.init(kRate);
+    Buses a, b;
+    float tap[kFrames];
+    for (int block = 0; block < 3; block++) {
+        float m1[kFrames], m2[kFrames];
+        fill_sine(m1, kFrames, block * kFrames, 440.0f, 0.5f);
+        fill_sine(m2, kFrames, block * kFrames, 440.0f, 0.5f);
+        a.clear();
+        b.clear();
+        for (float &x : tap) x = 9.0f;
+        plain.prepare(p, mix);
+        tapped.prepare(p, mix);
+        plain.process(m1, kFrames, a.out(curve));
+        ChainOut o = b.out(curve);
+        o.tap = tap;
+        tapped.process(m2, kFrames, o);
+        float want[kFrames];
+        fill_sine(want, kFrames, block * kFrames, 440.0f, 0.5f);
+        for (int i = 0; i < kFrames; i++) {
+            CHECK_EQ(a.l[i], b.l[i]);                       // nothing heard changes
+            CHECK_EQ(tap[i], want[i]);                      // neutral chain: the input, unducked
+        }
+    }
+    CHECK(peak_of(a.l, kFrames) < 0.01f);                   // and the bus really was ducked
+}
+
 // --- the master ------------------------------------------------------------------------------
 
 TEST(master_limiter_keeps_an_overdriven_mix_inside_full_scale) {

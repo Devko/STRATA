@@ -807,6 +807,20 @@ depth), DUCK (source, attack, hold, release). It is saved in the kit. Play A01 G
 - [ ] Open a project saved with an older STRATA: the duck reads T1, 35%, 3/40/120.
       Notes: `________________`
 
+## 13m. Bounce one track (4 min)
+
+New: RESAMPLE's B goes past the inputs to `TRK 1`-`TRK 8`, a take of that track alone. Play A01.
+
+- [ ] FUNC+REC, turn B past HI-Z to `FROM TRK 6` (the bass), A to 2 bars, LEFT/RIGHT to `TO TRK 8`,
+      OK. `ARMED`, `REC n%` from the next bar, `WRITING`, then track 8 plays the bass loop (it
+      is a SAMPLE track). The take is the bass alone: no kick, no hats, no reverb, no pumping.
+- [ ] Turn track 6's fader down and its pan hard left, bounce it again: the take is still at full
+      level and centred. Mute track 6 and bounce: silence (unmute first).
+- [ ] On track 8: SLC AUTO, reverse and STA all work on the bounced loop, and LOAD drops with
+      track 6 muted while track 8 plays its loop. LOAD with T6 live `____`, with T6 muted and the
+      bounce on T8 `____`.
+      Notes: `________________`
+
 ## 14. Reload and new: the FUNC menu's RELOAD PROJECT and NEW PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). FUNC+HOME, RELOAD PROJECT, OK once: `OK AGAIN TO RELOAD`,

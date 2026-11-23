@@ -309,6 +309,11 @@ void InsertChain::process(float *mono, int frames, const ChainOut &out) {
                           &lofi_phase_, &lofi_hold_);
     }
 
+    // --- a bounce's tap: one copy, on one track, only while a take records it ------------------
+    if (out.tap != nullptr) {
+        for (int i = 0; i < frames; i++) out.tap[i] = mono[i];
+    }
+
     // --- duck: the mixer's one curve, this track's depth -------------------------------------
     if (duck_depth_ > 0.0f && out.duck != nullptr) {
         strata_chain_duck(mono, out.duck, frames, duck_depth_);

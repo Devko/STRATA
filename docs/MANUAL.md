@@ -1047,6 +1047,13 @@ a track. You do not hear the input through STRATA; listen to the source directly
 makes the input quiet for about 10 ms, and Enaga puts the input back to LINE, NORM when STRATA
 stops.
 
+**Bouncing one track.** Past the inputs, B also offers `TRK 1` to `TRK 8`. The take is then that
+track alone: its machine through its drive, filter and lo-fi, before its duck, fader, pan and
+sends, so a quiet or panned track still comes out at full level, and the duck is not baked in.
+It is mono, half the size of a master take. With `TO TRK n` it lands on that track like any
+take, ready to slice, reverse or put on GRAIN; give that track SAMPLE or GRAIN to hear it. A
+muted track bounces as silence, so unmute it first.
+
 ---
 
 ## 6. Saving, loading and the card

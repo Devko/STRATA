@@ -214,8 +214,9 @@ enum class Cmd : uint8_t {
     //
     // `b` is the SOURCE: 0 the finished master, 1 the audio input (SPEC's "Resample with a chosen
     // input source"). Which input, and at what level, is the main context's enaga::system::input
-    // call; the audio side only chooses which buffer the take is written from.
-    resample_arm,      // a: bars 1-8, b: 0 master, 1 the audio input
+    // call; the audio side only chooses which buffer the take is written from. 2 is one TRACK,
+    // `track`, alone and mono: a bounce (Engine::capture_track_).
+    resample_arm,      // a: bars 1-8, b: 0 master, 1 the audio input, 2 track `track`
     resample_cancel,
     resample_release,
 

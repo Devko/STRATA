@@ -272,6 +272,10 @@ public:
     void begin_block(int frames);
     // One track's mono block through its insert chain and into the buses. Consumes `mono`.
     void add_track(int track, float *mono);
+    // The same, also copying the track's own sound into `tap` (ChainOut::tap): `frames` floats,
+    // before the duck, the fader, the pan and the sends. A silent track writes nothing there, so
+    // the caller clears it first.
+    void add_track_tapped(int track, float *mono, float *tap);
     // Both sends, the master chain, and the interleaved L R L R result for audio().
     void finish_block(float *out, int frames);
 

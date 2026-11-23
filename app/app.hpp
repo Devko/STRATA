@@ -365,9 +365,14 @@ constexpr int kTakeBarChoices = int(sizeof kTakeBars / sizeof kTakeBars[0]);
 // Where a take comes from: the finished master, or one of the audio input's routes as Enaga
 // names them (<enaga/abi.h>, enaga_input_source). docs/SPEC.md: "Resample with a chosen input
 // source"; Enaga's `system::input` is the call, main context only.
+//
+// Or one TRACK alone (2026-11-23, a bounce: docs/SPEC.md's "Record the master or one track"):
+// the track's own sound after drive, filter and lo-fi, before its duck, fader, pan and sends,
+// mono (Engine::capture_track_). Its sample can then be sliced, reversed or put on GRAIN.
 struct TakeSource {
     const char *name;     // 7 characters at most: "FROM DYN MIC HIGH" is 17
-    int input;            // the enaga_input_source, or -1 for the master
+    int input;            // the enaga_input_source, or -1 for the master or a track
+    int track = -1;       // 0-7 for one track alone, else -1
 };
 constexpr TakeSource kTakeSources[] = {
     {"MASTER", -1},
@@ -376,6 +381,14 @@ constexpr TakeSource kTakeSources[] = {
     {"MIC", ENAGA_INPUT_MIC},
     {"DYN MIC", ENAGA_INPUT_DYNAMIC_MIC},
     {"HI-Z", ENAGA_INPUT_HIZ},
+    {"TRK 1", -1, 0},
+    {"TRK 2", -1, 1},
+    {"TRK 3", -1, 2},
+    {"TRK 4", -1, 3},
+    {"TRK 5", -1, 4},
+    {"TRK 6", -1, 5},
+    {"TRK 7", -1, 6},
+    {"TRK 8", -1, 7},
 };
 constexpr int kTakeSourceChoices = int(sizeof kTakeSources / sizeof kTakeSources[0]);
 constexpr const char *kInputLevelNames[] = {"LOW", "NORM", "HIGH"};   // enaga_input_level
@@ -997,8 +1010,12 @@ public:
                     }
                     // From the input: make sure the route is the one on screen before the take.
                     if (kTakeSources[take_source_].input >= 0 && !input_applied_) apply_input();
-                    post(Cmd::resample_arm, 0, 0, kTakeBars[take_bars_index_],
-                         kTakeSources[take_source_].input >= 0 ? 1 : 0);
+                    {
+                        const TakeSource &source = kTakeSources[take_source_];
+                        post(Cmd::resample_arm, uint8_t(source.track >= 0 ? source.track : 0), 0,
+                             kTakeBars[take_bars_index_],
+                             source.input >= 0 ? 1 : (source.track >= 0 ? 2 : 0));
+                    }
                     // And the card side, asked for now so the write happens the moment the take
                     // finishes rather than needing a second press at exactly the right time.
                     storage_.request_resample_write(resample_track_);

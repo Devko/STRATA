@@ -1449,7 +1449,9 @@ void Engine::apply(const Command &command) {
                 status_.bump_refused();          // the tempo has not settled yet
                 break;
             }
-            if (!capture_.arm(uint32_t(frames))) {
+            // `b` 2 is one track, `command.track`: a mono take of that track alone.
+            const bool from_track = command.b == 2;
+            if (!capture_.arm(uint32_t(frames), from_track ? 1 : 2)) {
                 status_.bump_refused();          // a take is running, or one is waiting for the card
                 break;
             }
@@ -1460,6 +1462,7 @@ void Engine::apply(const Command &command) {
             // Chosen at the arm and kept for the take: a source switched halfway would make a
             // take that is half one thing and half another.
             capture_input_ = command.b == 1;
+            capture_track_ = from_track ? int8_t(track) : int8_t(-1);
             break;
         }
 
@@ -2504,6 +2507,10 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     mixer_.prepare(sends_, master_);
     mixer_.begin_block(int(frames));
 
+    // A bounce's tap, only while its take is running: the track's own block, from the mixer.
+    const int tapped = capture_.recording() && capture_.channels() == 1 ? int(capture_track_) : -1;
+    if (tapped >= 0) enaga_clear(capture_tap_, int(frames));
+
     uint8_t voices = 0;
     for (int t = 0; t < kTracks; t++) {
         Machine *machine = machines_[t];
@@ -2518,7 +2525,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         float *mono = mixer_.scratch();
         enaga_clear(mono, int(frames));
         machine->render_add(mono, int(frames));
-        mixer_.add_track(t, mono);
+        if (t == tapped) mixer_.add_track_tapped(t, mono, capture_tap_);
+        else mixer_.add_track(t, mono);
         voices++;
     }
 
@@ -2549,7 +2557,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // the take still ends on its frame and the card side still gets a file.
     static const float kSilence[2u * ENAGA_BLOCK_FRAMES] = {};
     const float *input = in != nullptr ? in : (frames <= ENAGA_BLOCK_FRAMES ? kSilence : nullptr);
-    capture_.process(capture_input_ ? input : out, int(frames));
+    if (capture_.channels() == 1) capture_.process_mono(tapped >= 0 ? capture_tap_ : nullptr, int(frames));
+    else capture_.process(capture_input_ ? input : out, int(frames));
 
     // The input's level, every block, for the RESAMPLE screen's meter: one pass of the master's
     // own peak loop over the interleaved buffer (L and R alike, so one plane of 2n samples).

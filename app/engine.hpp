@@ -761,6 +761,11 @@ private:
     Capture capture_;
     uint8_t resample_bars_ = 0;      // 0 = nothing armed
     bool capture_input_ = false;     // the armed or running take records the input, not the master
+    // A bounce: the track the armed or running take records on its own (Mixer::add_track_tapped),
+    // or -1 for the master or the input. The tap is cleared every block it is in use, so a muted
+    // or idle track records silence rather than the previous block.
+    int8_t capture_track_ = -1;
+    float capture_tap_[Mixer::kMaxFrames] = {};
 
     // Which track's trigs fire the sidechain duck: the kit's KitDuck::source, as apply_duck last
     // read it. docs/SPEC.md: track 1 by default.

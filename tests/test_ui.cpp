@@ -4450,7 +4450,7 @@ TEST(ui_resample_b_picks_the_source_and_routes_the_input) {
     FakeHost &host = FakeHost::the();
     shift_key(ENAGA_KEY_F2);
     CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
-    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);   // UI state outlives fresh(): MASTER
+    for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);   // UI state outlives fresh(): MASTER
 
     app.on_encoder(1, +1);                         // B: LINE
     CHECK_EQ(host.input_source(), int(ENAGA_INPUT_LINE_STEREO));
@@ -4463,8 +4463,8 @@ TEST(ui_resample_b_picks_the_source_and_routes_the_input) {
     CHECK_EQ(host.input_level(), int(ENAGA_INPUT_HIGH));
     app.on_encoder(2, +5);                         // and no further
     CHECK_EQ(host.input_level(), int(ENAGA_INPUT_HIGH));
-    for (int i = 0; i < 10; i++) app.on_encoder(1, +1);
-    CHECK_EQ(host.input_source(), int(ENAGA_INPUT_HIZ));    // the last one, and it stops there
+    for (int i = 0; i < 4; i++) app.on_encoder(1, +1);
+    CHECK_EQ(host.input_source(), int(ENAGA_INPUT_HIZ));    // the last input; the tracks follow
 
     // OK arms a take FROM THE INPUT: the engine is told source 1.
     const int calls = host.input_calls();
@@ -4476,7 +4476,7 @@ TEST(ui_resample_b_picks_the_source_and_routes_the_input) {
     pump(2);
 
     // Back to the master: C has nothing to set, and the route is left alone.
-    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);
+    for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);
     const int before = host.input_calls();
     app.on_encoder(2, -1);
     CHECK_EQ(host.input_calls(), before);
@@ -4492,7 +4492,7 @@ TEST(ui_resample_a_refused_route_is_shown_and_tried_again_at_the_arm) {
     Strata &app = fresh();
     FakeHost &host = FakeHost::the();
     shift_key(ENAGA_KEY_F2);
-    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);   // MASTER
+    for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);   // MASTER
     host.set_input_result(-2);                     // the codec did not answer
     app.on_encoder(1, +1);
     CHECK_EQ(UiProbe::notice(app), "INPUT REFUSED");
@@ -4510,7 +4510,7 @@ TEST(ui_layout_resample_sources) {
     Strata &app = fresh();
     FakeHost &host = FakeHost::the();
     shift_key(ENAGA_KEY_F2);
-    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);   // MASTER
+    for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);   // MASTER
     pump(400);
     check_layout(app, "RESAMPLE, master");
     app.on_encoder(2, +1);
@@ -4521,7 +4521,7 @@ TEST(ui_layout_resample_sources) {
         check_layout(app, kTakeSources[s].name);
     }
     // The mic without headphones says so; with them it does not.
-    for (int i = 0; i < 10; i++) app.on_encoder(1, -1);
+    for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);
     app.on_encoder(1, +1);
     app.on_encoder(1, +1);
     app.on_encoder(1, +1);                         // MIC
@@ -5747,7 +5747,13 @@ void enter(Strata &app, int s) {
             break;
         case s_mixer: mixer_page(app, 0); break;     // the faders, whatever was open last
         case s_perform: shift_key(ENAGA_KEY_F7); break;
-        case s_resample: shift_key(ENAGA_KEY_F2); break;
+        case s_resample:
+            shift_key(ENAGA_KEY_F2);
+            // From LINE, every time: B walks the sources and the walk outlives fresh(), and on
+            // the master or a track (past HI-Z) C has nothing to set.
+            for (int i = 0; i < kTakeSourceChoices; i++) app.on_encoder(1, -1);
+            app.on_encoder(1, +1);
+            break;
         case s_sounds: key(ENAGA_KEY_F8); key(ENAGA_KEY_OK); break;   // track 1, the kick
         default:
             key(ENAGA_KEY_F3);
