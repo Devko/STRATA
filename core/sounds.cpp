@@ -222,7 +222,7 @@ constexpr SoundPreset kFmPresets[] = {
 // the key it is tuned to, belong to the sample, not to the sound. The 0 and 64 here are only
 // placeholders. Levels: a sustained cloud of a normalised sample near the VA POLY pads.
 constexpr SoundPreset kGrainPresets[] = {
-    // The all-rounder: 100 ms grains, four in the air, 70 ms of spray, a hair of detune, held.
+    // The all-rounder: 150 ms grains, four in the air, 70 ms of spray, a hair of detune, held.
     // Where to start with any sample.
     {"CLOUD", {0, 84, 104, 48}, FLAT, {64, 0, 127, 118}, {20, 0, 40, 0}, {0, 24, 0, 0}},
     // A pad: long grains, little spray, a slow swell that holds while the key or LEN does and
@@ -238,10 +238,10 @@ constexpr SoundPreset kGrainPresets[] = {
     // A stretch: the sample at half speed and its own pitch. A loop at half tempo, or a voice
     // drawn out.
     {"STRTCH", {0, 90, 96, 3}, FLAT, {64, 0, 127, 112}, {0, 0, 0, 0}, {62, 0, 0, 0}},
-    // A stutter: plucked 50 ms grains with gaps between them, half a second long. Put it on
+    // A stutter: plucked 90 ms grains with gaps between them, half a second long. Put it on
     // every step and lock POS.
     {"STUTTR", {0, 70, 20, 0}, FLAT, {64, 90, 74, 116}, NO_ASR, NO_OSC},
-    // Chops: short percussive grains, a little longer than a step at 120, for rhythmic slicing
+    // Chops: short percussive 60 ms grains fading over a third of a second, for rhythmic slicing
     // with POS locks.
     {"CHOPS", {0, 56, 40, 2}, FLAT, {64, 127, 66, 116}, NO_ASR, NO_OSC},
 };
