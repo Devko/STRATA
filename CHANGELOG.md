@@ -6,7 +6,7 @@ the project file format or the controls.
 
 ## [Unreleased]
 
-## [0.3.0] - {{RELEASE_DATE}}
+## [0.3.0] - 2026-11-23
 
 An early beta: everything merged since 0.2.0, built for the same Enaga 0.2.0 firmware. The
 features below have not been through the unit walkthrough (docs/UNIT_CHECKLIST.md) yet. Release
@@ -75,7 +75,7 @@ open in 0.3.0; their VA tracks sound a little different (see Changed).
 
 ### Known limits
 
-- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} The features above are not yet
+- Tested on one SmplTrek, with the cl6x build. On the 0.2.0 build (2026-11-22) the load stayed under 30% on the default beat, and MAX peaked at 84.3% in long, heavy play with no clicks or dropouts; 0.3.0 itself has not run on the unit yet. The features above are not yet
   checked on the unit, and the CPU cost of WAVE, FM4, the mixer and the looper there is not
   measured. Every other load figure comes from the emulator, which models no caches.
 - WAVE POLY and FM4 share the **12 POLY voices** with VA POLY, across all tracks; that budget and
