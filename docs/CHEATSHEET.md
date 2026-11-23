@@ -89,6 +89,7 @@ each line means.
 | FUNC + VALUE | Master DJ filter (LP n / OFF / HP n) |
 | Push VALUE + STEP 1-16 | Performance mixer: pick an effect (`4 ECHO RISER`); VALUE is then its amount on every screen, 0 dry. Same STEP again lets go (`FX OFF: VALUE TEMPO`). One effect at a time. In MUTE MODE STEP 1-8 store mute states instead |
 | Push VALUE + LEFT / RIGHT | Previous / next effect, keeping the amount |
+| Press VALUE alone | Reset to 0: the picked effect's amount (dry), the looper's mix, PERFORM's morph (`MORPH 0`). FUNC + press: DJ filter OFF. Never the tempo or swing |
 | Push VALUE + STEP 16 | The looper: records LOOP LEN bars (FUNC menu, default 4) of the mix from the next bar line, then VALUE is the loop's mix (`LOOP MIX 64`). Again: a new take. Effects picked after it go over the loop |
 | Push VALUE + CLR | Every effect off, loop mix 0 (`FX OFF`); again: the loop thrown away (`LOOP CLEARED`), which frees RESAMPLE and FREEZE |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
