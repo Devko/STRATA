@@ -3809,8 +3809,8 @@ public:
     // change a setting row, CLR or FUNC + HOME closes it and returns to the screen it opened
     // over. The cursor always starts on SAVE, so FUNC + HOME, OK saves.
 
-    enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, kits, sample, speed,
-                                    chain, song, autofill, quantize, count };
+    enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
+                                    speed, chain, song, autofill, quantize, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 8;
 
@@ -3821,6 +3821,7 @@ public:
             case MenuItem::open:     return "OPEN PROJECT";
             case MenuItem::fresh:    return "NEW PROJECT";
             case MenuItem::reload:   return "RELOAD PROJECT";
+            case MenuItem::clear:    return "CLEAR PATTERN";
             case MenuItem::kits:     return "KITS";
             case MenuItem::sample:   return "RELOAD SAMPLE";
             case MenuItem::speed:    return "TRACK SPEED";
@@ -3956,11 +3957,14 @@ public:
                 notice("OK TWICE OPENS");
                 break;
             case MenuItem::fresh:
-            case MenuItem::reload: {
-                // Both throw away what is unsaved, so each takes a second OK within kSaveArmMs.
-                const CardAction action =
-                    MenuItem(menu_cursor_) == MenuItem::reload ? CardAction::reload
-                                                               : CardAction::fresh;
+            case MenuItem::reload:
+            case MenuItem::clear: {
+                // Each throws away work, so each takes a second OK within kSaveArmMs. CLEAR
+                // PATTERN is undoable as well (FUNC + CLR), the others are not.
+                const MenuItem item = MenuItem(menu_cursor_);
+                const CardAction action = item == MenuItem::reload ? CardAction::reload
+                                          : item == MenuItem::clear ? CardAction::clear
+                                                                    : CardAction::fresh;
                 if (arm_card_action(action)) close_menu(false);
                 break;
             }
@@ -4545,7 +4549,9 @@ public:
         }
     }
 
-    enum class CardAction : uint8_t { none, reload, fresh };
+    // The FUNC menu's OK-twice rows. `clear` is not a card action -- it empties the playing
+    // pattern -- but it is armed the same way, so it shares the one arm.
+    enum class CardAction : uint8_t { none, reload, fresh, clear };
 
     // True on the second press, when the action has been asked for.
     bool arm_card_action(CardAction action) {
@@ -4554,6 +4560,8 @@ public:
             if (action == CardAction::reload) {
                 storage_.request_reload();
                 notice("RELOADING");
+            } else if (action == CardAction::clear) {
+                clear_pattern();
             } else {
                 storage_.request_new();
                 notice("NEW PROJECT");
@@ -4562,8 +4570,20 @@ public:
         }
         card_armed_ = action;
         card_armed_at_ms_ = last_ms_;
-        notice(action == CardAction::reload ? "OK AGAIN TO RELOAD" : "OK AGAIN FOR NEW");
+        notice(action == CardAction::reload  ? "OK AGAIN TO RELOAD"
+               : action == CardAction::clear ? "OK AGAIN TO CLEAR"
+                                             : "OK AGAIN FOR NEW");
         return false;
+    }
+
+    // Every track's trigs and locks in the playing pattern, as one undo level: CLR once per
+    // track was the only way before. The kit (the sounds), and each track's length, speed and
+    // swing stay, as a track CLR keeps them (core/editops.hpp, pattern_erase_steps).
+    void clear_pattern() {
+        mark(GestureKind::erase, selected_, 0);
+        post(Cmd::pattern_erase);
+        end_gesture();
+        notice("CLEARED FUNC+CLR UNDO");
     }
 
     // The cursor over PROJECT's sixteen slots, drawn four by four: LEFT and RIGHT step through
@@ -5271,7 +5291,7 @@ private:
     uint32_t shift_at_ms_ = 0;        // when FUNC went down
     int chain_remove_armed_ = -1;                 // CHAIN's F1 + LEFT, armed on this entry
     uint32_t chain_remove_armed_at_ms_ = 0;
-    CardAction card_armed_ = CardAction::none;   // F1 + LEFT / RIGHT in PROJECT, armed once
+    CardAction card_armed_ = CardAction::none;   // the FUNC menu's OK-twice rows, armed once
     uint32_t card_armed_at_ms_ = 0;
     int kit_cursor_ = 0;                        // KIT: the slot under the cursor, 0-15
     int sample_cursor_ = 0;                     // SAMPLES: the entry under the cursor

@@ -286,6 +286,11 @@ is the track's length.
 Clear the whole track with **CLR**, and get it back with **FUNC+CLR** (undo). FUNC+OK is redo.
 There are 16 levels.
 
+To start from an empty pattern, clear all eight tracks at once: **FUNC+HOME**, DOWN to **CLEAR
+PATTERN**, then **OK** twice within 2 seconds (`OK AGAIN TO CLEAR`, then `CLEARED FUNC+CLR UNDO`).
+Every trig and lock goes; the sounds, and each track's length, speed and swing, stay. FUNC+CLR
+brings the whole pattern back in one undo.
+
 ### 3. Lock a parameter
 
 Select the kick (lower pad 1) and press **EDIT**. The screen keys (or LEFT/RIGHT) flip the
@@ -590,7 +595,7 @@ reload.
 Hold two STEP keys to select the range between them (`SEL a-b`). Then CLR clears it, FUNC+UP
 copies it, FUNC+DOWN pastes it, encoder A transposes it and encoder B nudges its micro-timing.
 With nothing held, CLR clears the whole track and FUNC+UP / FUNC+DOWN copy and paste the whole
-track. Hold a STEP and press UP / DOWN to copy / paste one step. Everything goes through undo.
+track. The FUNC menu's CLEAR PATTERN (OK twice) clears every track at once. Hold a STEP and press UP / DOWN to copy / paste one step. Everything goes through undo.
 
 ### Length, speed and swing
 

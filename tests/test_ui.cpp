@@ -215,8 +215,8 @@ void open_keys() {
 }
 
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
-enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuKits,
-                     kMenuSample, kMenuSpeed, kMenuChain, kMenuSong, kMenuAutofill,
+enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
+                     kMenuKits, kMenuSample, kMenuSpeed, kMenuChain, kMenuSong, kMenuAutofill,
                      kMenuQuantize, kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
@@ -3367,6 +3367,75 @@ TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_are_in_the_menu) {
     // The factory project's first pattern (core/factory.hpp), not the edited one.
     CHECK_EQ(int(pattern.master_length), int(strata::test::factory().patterns[0][0].master_length));
     key(ENAGA_KEY_F4);
+}
+
+TEST(ui_clear_pattern_in_the_menu_empties_every_track_in_one_undo_level) {
+    // Roland, 2026-11-23: clearing a pattern took CLR once per track. FUNC menu, CLEAR PATTERN,
+    // OK twice empties every track's trigs and locks; the kit and each track's layout stay, and
+    // FUNC + CLR brings it all back in one go.
+    Strata &app = fresh();
+    const Pattern &pattern = app_engine().pattern();
+
+    // Trigs on tracks 1 and 3 and a lock on track 1.
+    key(ENAGA_KEY_STEP1 + 0);
+    key(ENAGA_KEY_STEP1 + 4);
+    step_down(2);
+    const int param = encoder_param(0);
+    const uint8_t kit_before = app_engine().params(0).v[param];
+    app.on_encoder(0, +3);
+    step_up(2);
+    app.on_pad_press(4, 100);                         // track 3
+    app.on_pad_release(4);
+    key(ENAGA_KEY_STEP1 + 8);
+    pump(2);
+    CHECK_EQ(UiProbe::selected(app), 2);
+    CHECK(trig_at(0, 0));
+    CHECK(trig_at(0, 4));
+    CHECK_EQ(locks_on_track(0), 1);
+    CHECK(trig_at(2, 8));
+    CHECK(pattern.locks_used > 0);
+    const int length_3 = int(pattern.tracks[2].length);
+    const int depth = int(undo_depth());
+
+    // One OK only arms, and says so.
+    menu_run(kMenuClear);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO CLEAR");
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+    CHECK(trig_at(0, 0));
+
+    // The second clears every track and closes the menu.
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "CLEARED FUNC+CLR UNDO");
+    CHECK(UiProbe::mode(app) != int(Mode::menu));
+    for (int t = 0; t < kTracks; t++) {
+        for (int s = 0; s < kStepsPerTrack; s++) {
+            CHECK_EQ(int(step_of(t, s).flags & (kStepTrig | kStepTrigless)), 0);
+            CHECK_EQ(int(step_of(t, s).lock_count), 0);
+        }
+    }
+    CHECK_EQ(int(pattern.locks_used), 0);
+    CHECK_EQ(int(pattern.tracks[2].length), length_3);           // the layout stays
+    CHECK_EQ(int(app_engine().params(0).v[param]), int(kit_before));   // and the sound
+    CHECK_EQ(int(undo_depth()), depth + 1);                      // one level
+
+    // FUNC + CLR: everything back at once.
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(trig_at(0, 0));
+    CHECK(trig_at(0, 4));
+    CHECK_EQ(locks_on_track(0), 1);
+    CHECK(trig_at(2, 8));
+
+    // A first OK that is not followed within the arm time does nothing.
+    menu_run(kMenuClear);
+    for (int i = 0; i < 2100; i++) pump();
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO CLEAR");
+    CHECK(trig_at(0, 0));
+    key(ENAGA_KEY_CLR);                               // close the menu
 }
 
 // --- the arrow keys ---------------------------------------------------------------------------

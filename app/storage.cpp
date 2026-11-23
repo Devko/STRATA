@@ -67,6 +67,7 @@ bool mutates_pattern(Cmd cmd) {
         case Cmd::range_transpose:
         case Cmd::range_nudge:
         case Cmd::track_erase:
+        case Cmd::pattern_erase:
         case Cmd::record_hit:
         case Cmd::mutate:
         // The Euclidean generator writes trig bits, so it is as much a pattern edit as

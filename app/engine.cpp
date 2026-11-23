@@ -602,6 +602,12 @@ void Engine::apply(const Command &command) {
             track_erase(live(), track);
             break;
 
+        case Cmd::pattern_erase:
+            // FUNC menu, CLEAR PATTERN. Lengths, speeds and swing stay (core/editops.hpp), so
+            // the scheduler's derived timing is still right and nothing needs reconfiguring.
+            pattern_erase_steps(live());
+            break;
+
         case Cmd::range_transpose:
             range_transpose(live(), track, step, int(command.a), int(int8_t(command.b)));
             break;

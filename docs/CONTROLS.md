@@ -111,6 +111,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | OPEN PROJECT | PROJECTS page; OK twice there opens | |
 | NEW PROJECT | OK twice within 2 s: a new project | |
 | RELOAD PROJECT | OK twice within 2 s: read the project back from the card | |
+| CLEAR PATTERN | OK twice within 2 s: every track's trigs and locks gone, one undo level (FUNC + CLR) | |
 | KITS | the kit browser | |
 | RELOAD SAMPLE | load the selected track's sample again | |
 | TRACK SPEED | | selected track's speed, 2 to 1/8 |
@@ -165,4 +166,5 @@ away, so a chord never sees it.
 
 `tests/test_ui.cpp` (every gesture above, the lights, the help, and the layout check over the
 menu and the help screen) and `tests/scenario_controls.sh` (HOME twice, the screen keys on
-PROJECT, the FUNC menu, FUNC + PROJECT and the menu's save, on the C674x build).
+PROJECT, the FUNC menu, FUNC + PROJECT and the menu's save, on the C674x build). CLEAR PATTERN
+and its undo: `tests/scenario_clear.sh`.
