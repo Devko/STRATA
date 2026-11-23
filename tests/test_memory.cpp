@@ -157,7 +157,9 @@ TEST(memory_init_is_what_the_budget_says) {
     const uint64_t region = uint64_t(kSampleBudgetMaxMib) * kMiB;
     // 30 s of the FILE at up to 96 kHz (app/storage.hpp): stereo 24-bit plus 64 KiB of header
     // and trailing chunks as read, stereo int16 as converted for the resample.
-    const uint64_t raw = uint64_t(kMaxSampleSeconds) * kMaxSampleSourceRate * 2u * 3u + 65536u;
+    // One chunk of a long file, or a small file whole: 2 MiB (2026-11-23; it was 30 s of 96 kHz
+    // stereo 24-bit, 16.5 MiB, until every bigger file was read in chunks anyway).
+    const uint64_t raw = 2u * kMiB;
     const uint64_t src = uint64_t(kMaxSampleSeconds) * kMaxSampleSourceRate * 2u * 2u;
     const uint64_t file = kBankMaxBytes;
     // Streaming (app/storage.hpp): four Enaga stream rings of 256 KiB, what docs/SPEC.md's

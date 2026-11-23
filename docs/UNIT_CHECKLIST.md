@@ -1422,11 +1422,13 @@ project and never needs a restart."*
 - [ ] `tests/scenario_m3.sh` still passes: `app/engine.cpp` changed underneath it.
 - [ ] The app starts with no card in the slot. A first run with nothing to open must keep the
       built-in default pattern, not fail `init()`.
-- [ ] Memory: `Storage::init` takes 64 MiB for the region plus **27.5 MiB of staging** (`raw_`
-      16.5 MiB for one whole file, `src_` 11 MiB for a resample's source, both sized from
+- [ ] Memory: `Storage::init` takes 64 MiB for the region plus **13 MiB of staging** since
+      2026-11-23 (`raw_` 2 MiB, one chunk or a small file whole; it was 16.5 MiB for one whole file, `src_` 11 MiB for a resample's source, both sized from
       `docs/SPEC.md`'s own 30 s in-RAM limit, counted at up to 96 kHz). Host total 101.2 MiB
       of a 120 MiB heap. That is a fixed cost, not per sample. Confirm it
       against the ~124 MiB app heap and record it in `docs/BUDGET.md`.
+- [ ] (2026-11-23) A 5-15 MB WAV (now read in 2 MiB chunks) loads, plays and slices as before,
+      and a 30 s 96 kHz stereo file loads in about the time it used to: `____ s`.
 
 **Projects**
 
@@ -1515,7 +1517,7 @@ PERFORM and pattern changes, with no edit screens and no underruns."*
       loop at half rate.
 - [ ] Worst case with eight tracks AND a repeat held still under 60%. If it is not, this is the
       effect to cut first -- `docs/SPEC.md` ranks cutting effects above cutting voices.
-- [ ] The 2.93 MiB ring, plus M4's 64 MiB region and 27.5 MiB of staging, against the real heap.
+- [ ] The 2.93 MiB ring, plus M4's 64 MiB region and 13 MiB of staging, against the real heap.
       About 95 MiB before anything else, and the staging was never in the spec's table.
 - [ ] Hold the pad through a tempo change: the loop length is derived from ticks, so it should
       follow without a click at the seam.

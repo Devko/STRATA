@@ -2028,12 +2028,14 @@ TEST(storage_thirty_seconds_of_a_96k_file_loads) {
     // to count 30 s of 48 kHz frames, so a 96 kHz file was refused TOO LONG past 15 s. Mono
     // 8-bit keeps the file inside the fake card; the frame count is what the limit reads.
     clean();
+    // One frame past 30 s does not fit src_ for a resample. Since raw_ became one 2 MiB chunk
+    // (2026-11-23) a file this size is read in chunks, and a chunked file that cannot load whole
+    // streams, as every long file always did (app/storage.hpp, "streaming").
     make_long_wav("/SAMPLES/LONG96.WAV", kLong96Frames + 1u);     // one frame past 30 s
     kit_sample(kLoopTrack, "/SAMPLES/LONG96.WAV");
     CHECK(load_sample(kLoopTrack));
-    CHECK(storage().last_error() != nullptr);
-    CHECK_EQ(storage().last_error(), "TOO LONG");
-    CHECK(slot_of(kLoopTrack).state != SampleState::ready);
+    CHECK(storage().last_error() == nullptr);
+    CHECK(storage().streaming(kLoopTrack));
 
     make_long_wav("/SAMPLES/LONG96.WAV", kLong96Frames);          // exactly 30 s, in place
     CHECK(load_sample(kLoopTrack));
@@ -3238,7 +3240,7 @@ TEST(storage_every_refused_sample_leaves_the_loader_idle) {
     CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
 }
 
-TEST(storage_a_file_to_resample_longer_than_the_source_buffer_is_refused) {
+TEST(storage_a_file_to_resample_longer_than_the_source_buffer_streams) {
     // A file at another rate is converted whole into src_ before it is resampled, and src_ holds
     // 30 s at kMaxSampleSourceRate (96 kHz): 2,880,000 frames. One frame more is refused with a
     // reason rather than written past the buffer; exactly that many is fine. At 44.1 kHz that is
@@ -3249,10 +3251,12 @@ TEST(storage_a_file_to_resample_longer_than_the_source_buffer_is_refused) {
     make_big_wav("/SAMPLES/LONG441.WAV", 44100, 1, kSrcFrames + 1u);
     kit_sample(kLoopTrack, "/SAMPLES/LONG441.WAV");
     CHECK(load_sample(kLoopTrack));
-    CHECK_EQ(storage().last_error(), "TOO LONG");
-    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::failed));
+    // Too long to resample whole: since raw_ is one 2 MiB chunk this file is read in chunks,
+    // and a chunked file that cannot load whole streams its head and tail instead (not written
+    // past src_ either way).
+    CHECK(storage().last_error() == nullptr);
+    CHECK(storage().streaming(kLoopTrack));
     CHECK_EQ(storage().loading_track(), -1);
-    CHECK_EQ(slot_of(kLoopTrack).bytes, 0u);
 
     make_big_wav("/SAMPLES/LONG441.WAV", 44100, 1, kSrcFrames);
     kit_sample(kLoopTrack, "/SAMPLES/LONG441.WAV");
@@ -3264,7 +3268,7 @@ TEST(storage_a_file_to_resample_longer_than_the_source_buffer_is_refused) {
     CHECK(settle());
 }
 
-TEST(storage_a_sample_the_pool_has_no_room_for_is_refused_and_the_rest_play) {
+TEST(storage_a_sample_the_pool_has_no_room_for_streams_and_the_rest_play) {
     // 5 MiB of 8-bit stereo is 10 MiB once converted, so the budget holds `fit` of them and
     // the next is refused with NO ROOM and holds nothing, while the ones before it stay loaded.
     // The budget is whatever the tests before left it at (the 64 MiB default unless one is
@@ -3284,9 +3288,10 @@ TEST(storage_a_sample_the_pool_has_no_room_for_is_refused_and_the_rest_play) {
     for (uint32_t t = 0; t < fit; t++) {
         CHECK_EQ(int(slot_of(int(t)).state), int(SampleState::ready));
     }
-    CHECK_EQ(storage().last_error(), "NO ROOM");
-    CHECK_EQ(int(slot_of(int(fit)).state), int(SampleState::failed));
-    CHECK_EQ(slot_of(int(fit)).bytes, 0u);
+    // The one over the budget does not load whole. Since raw_ is one 2 MiB chunk (2026-11-23) a
+    // 5 MiB file is read in chunks, and a chunked file with no room streams instead: its head
+    // in the pool, the rest from the card, as every long file always did.
+    CHECK(storage().streaming(int(fit)));
     CHECK_EQ(storage().loading_track(), -1);
 
     // NEW names no file for any track, so every track goes through the swap's "no file" branch:
@@ -3687,16 +3692,16 @@ TEST(storage_a_kit_save_stores_the_knob_turned_just_before_it) {
 // --- a file bigger than the loader's staging buffer, read in chunks ---------------------------
 //
 // Roland, 2026-11-22: loops over 30 s load whole, a chunk at a time, instead of streaming. A
-// file bigger than raw_ (16.5 MiB) is opened and read 4 MiB at a time into raw_, each chunk
+// file bigger than raw_ (2 MiB) is opened and read 2 MiB at a time into raw_, each chunk
 // converted straight into the pool. These files are built in place on the fake card.
 
 namespace {
 
-constexpr uint32_t kRawLimit = 30u * 96000u * 6u + 64u * 1024u;   // app/storage.hpp's kRawBytes
+constexpr uint32_t kRawLimit = 2u << 20;   // app/storage.hpp's kRawBytes, one chunk
 
 // A 48 kHz stereo 24-bit file whose frames are big_value(f) in the top 16 bits, so a frame read
 // one byte off, or a carry across a chunk lost, shows as a wrong value. 6-byte frames do not
-// divide a 4 MiB chunk, so every chunk boundary splits a frame.
+// divide a 2 MiB chunk, so every chunk boundary splits a frame.
 uint32_t make_long24(const char *path, uint32_t frames, uint32_t declared_frames = 0) {
     const uint32_t bytes = 44u + frames * 6u;
     uint8_t *p = FakeHost::the().create_file(path, bytes);
@@ -4620,10 +4625,10 @@ TEST(storage_slice_points_survive_the_resample_and_the_chunked_load) {
         CHECK_EQ(loop_sampler().point_count(), 4);
     }
 
-    // Past the staging buffer, read in 4 MiB chunks whose ends split frames: the points are the
+    // Past the staging buffer, read in 2 MiB chunks whose ends split frames: the points are the
     // same as for a small file, one hit at the end of the first chunk included.
     const uint32_t frames = 3000000;                      // 62.5 s, 24-bit stereo, 18 MB
-    const uint32_t chunk_frames = (4u << 20) / 6u;         // where the first chunk ends
+    const uint32_t chunk_frames = (2u << 20) / 6u;         // where the first chunk ends
     const uint32_t at[] = {100000, chunk_frames - 50, 2000000, 2999000};
     const int32_t peak[] = {20000, 25000, 9000, 15000};
     make_hits_wav("/SAMPLES/STEM.WAV", 48000, 2, 24, frames, at, peak, 4);
