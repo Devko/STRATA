@@ -759,7 +759,7 @@ TEST(grain_output_is_bounded_whatever_the_trigger_pattern) {
     // every block. If a later change to the compensation or the window makes the machine louder,
     // this is where it shows up rather than on the unit.
     fill_const(g_mono, kSrcFrames, 1, 32767);
-    const float hard = 4.01f;              // kGrains * kHeadroom
+    const float hard = 8.01f;              // kGrains * kHeadroom
     float worst = 0.0f;
     for (int siz = 0; siz <= 127; siz += 21) {
         for (int den = 0; den <= 127; den += 21) {
@@ -785,8 +785,8 @@ TEST(grain_output_is_bounded_whatever_the_trigger_pattern) {
             }
         }
     }
-    CHECK(worst > 1.0f);       // the sweep does reach loud settings
-    CHECK(worst < 1.75f);      // and kHeadroom holds them where it was calibrated to
+    CHECK(worst > 2.0f);       // the sweep does reach loud settings
+    CHECK(worst < 3.5f);       // and kHeadroom holds them where it was calibrated to
 
     // The same sweep at a musical trigger rate -- one every 400 blocks, about twice a second --
     // never falls silent and never gets near the hard bound either.
@@ -802,8 +802,8 @@ TEST(grain_output_is_bounded_whatever_the_trigger_pattern) {
             g.trigger(hit());
             clear(g_out, 400 * kBlk);
             const int rendered = render_blocks(g, p, g_out, 400);
-            CHECK(finite_within(g_out, rendered, 1.75f));
-            CHECK(peak(g_out, rendered) > 0.1f);
+            CHECK(finite_within(g_out, rendered, 3.5f));
+            CHECK(peak(g_out, rendered) > 0.2f);
         }
     }
 }
@@ -837,7 +837,7 @@ TEST(grain_density_controls_how_many_grains_are_in_the_air) {
 
 // --- the parameter mappings -----------------------------------------------
 
-TEST(grain_size_knob_spans_five_milliseconds_to_a_third_of_a_second) {
+TEST(grain_size_knob_spans_eight_milliseconds_to_two_thirds_of_a_second) {
     fill_sine(g_mono, kSrcFrames, 1, 300.0f, kRate, 0.5f);
     Granular g;
     g.init(kRate);
@@ -846,13 +846,19 @@ TEST(grain_size_knob_spans_five_milliseconds_to_a_third_of_a_second) {
     TrackParams p = plain();
     p.set(1, 0);
     g.prepare(p);
-    CHECK_NEAR(float(g.grain_length()), 0.005f * kRate, 1.0f);      // 5 ms
+    CHECK_NEAR(float(g.grain_length()), 0.008f * kRate, 1.0f);      // 8 ms
+
+    p.set(1, 64);
+    g.prepare(p);
+    CHECK(g.grain_length() > int(0.070f * kRate));                  // about 75 ms: a cloud
+    CHECK(g.grain_length() < int(0.080f * kRate));
 
     p.set(1, 127);
     g.prepare(p);
-    CHECK(g.grain_length() > int(0.35f * kRate));                   // about 390 ms
-    CHECK(g.grain_length() < int(0.42f * kRate));
+    CHECK(g.grain_length() > int(0.67f * kRate));                   // about 680 ms
+    CHECK(g.grain_length() < int(0.69f * kRate));
     CHECK(g.grain_length() <= Granular::kGrainMax);
+    CHECK_NEAR(grain_size_seconds(127), 0.68f, 0.002f);             // what the screen says
 
     // Monotone, and never below the floor.
     int last = 0;
@@ -1016,7 +1022,22 @@ TEST(grain_pitch_knob_is_unity_at_sixty_four) {
 
     p.set(8, 0);
     g.prepare(p);
-    CHECK_NEAR(g.read_step(), 0.2441f, 0.002);    // -24.4 semitones
+    CHECK_NEAR(g.read_step(), 0.25f, 0.002);      // -24 semitones: whole semitones only
+
+    // An octave up is exactly 2, not the 19 cents sharp or flat the old continuous knob gave at
+    // the two bytes either side of it.
+    p.set(8, 96);
+    g.prepare(p);
+    CHECK_NEAR(g.read_step(), 2.0f, 1e-4);
+    p.set(8, 95);
+    g.prepare(p);
+    CHECK_NEAR(g.read_step(), 2.0f, 1e-4);
+    // And every byte plays a whole semitone.
+    for (int knob = 0; knob <= 127; knob++) {
+        const float semis = (float(knob) - 64.0f) * (24.0f / 63.0f);
+        CHECK(grain_pitch_semitones(uint8_t(knob)) - semis <= 0.5f);
+        CHECK(semis - grain_pitch_semitones(uint8_t(knob)) <= 0.5f);
+    }
 
     int last_scaled = 0;
     for (int knob = 0; knob <= 127; knob++) {
@@ -1493,8 +1514,8 @@ TEST(grain_the_window_never_exceeds_unity) {
     clear(g_out, kCapture);
     const int n = render_blocks(g, p, g_out, 400);
 
-    // kHeadroom (0.5) times LVL 127 squared (1.0) times 32767/32768.
-    const float expected = 0.5f * (32767.0f / 32768.0f);
+    // kHeadroom (1.0) times LVL 127 squared (1.0) times 32767/32768.
+    const float expected = 1.0f * (32767.0f / 32768.0f);
     CHECK(peak(g_out, n) <= expected * 1.00005f);
     CHECK(peak(g_out, n) >= expected * 0.9999f);
 
@@ -1583,8 +1604,12 @@ TEST(grain_every_live_grain_stays_inside_the_buffer_by_arithmetic) {
     const uint8_t sizes[3] = {0, 64, 127};
     const uint8_t sprays[2] = {0, 127};
     const uint8_t pitches[8] = {0, 1, 2, 63, 64, 65, 126, 127};
+    // And the OSC page, which moves a read too: SCN's head and PSP's per-grain step. Off, a
+    // detune at its widest with the fastest scan, and half the grains an octave up with it.
+    const uint8_t osc[3][2] = {{0, 0}, {127, 63}, {127, 127}};
 
     int grains_seen = 0;
+    for (const auto &scan_spray : osc) {
     for (int frames : kTinyFrames) {
         for (uint8_t pos : positions) {
             for (uint8_t siz : sizes) {
@@ -1598,6 +1623,8 @@ TEST(grain_every_live_grain_stays_inside_the_buffer_by_arithmetic) {
                         p.set(1, siz);
                         p.set(3, spr);
                         p.set(8, pit);
+                        p.set(kOscFirst + 0, scan_spray[0]);
+                        p.set(kOscFirst + 1, scan_spray[1]);
                         g.prepare(p);
                         g.trigger(hit());
                         clear(g_out, 8 * kBlk);
@@ -1623,8 +1650,9 @@ TEST(grain_every_live_grain_stays_inside_the_buffer_by_arithmetic) {
             }
         }
     }
+    }
     // The buffers are small, so a grain is not always possible; plenty must still have been seen.
-    CHECK(grains_seen > 1000);
+    CHECK(grains_seen > 2500);
 }
 
 TEST(grain_the_last_sample_of_a_grain_is_the_windows_zero) {
@@ -1792,7 +1820,7 @@ TEST(grain_one_whole_grain_over_a_constant_source_traces_the_window) {
 
             int end = 1;
             while (end < blocks * kBlk && g_out[end] != 0.0f) end++;
-            CHECK(end > 200);                       // the shortest grain is 5 ms = 240 frames
+            CHECK(end > 300);                       // the shortest grain is 8 ms = 384 frames
             CHECK(end < blocks * kBlk);             // and it ended inside the window measured
 
             int peak = 0;
@@ -1802,13 +1830,17 @@ TEST(grain_one_whole_grain_over_a_constant_source_traces_the_window) {
             CHECK(peak > 0);
             CHECK(peak < end - 1);                  // a peak, not an edge
 
+            // Except within a few parts per million of the peak, where a Hann curve's slope is
+            // below a float's resolution: the longest grain (680 ms) holds two equal samples
+            // there however exactly it is computed, and a staircase would show far below it.
+            const float flat = g_out[peak] * (1.0f - 4e-6f);
             int plateaus = 0, wrong_way = 0;
             for (int i = 1; i <= peak; i++) {
-                if (g_out[i] == g_out[i - 1]) plateaus++;
+                if (g_out[i] == g_out[i - 1]) plateaus += g_out[i] < flat ? 1 : 0;
                 else if (g_out[i] < g_out[i - 1]) wrong_way++;
             }
             for (int i = peak + 1; i < end; i++) {
-                if (g_out[i] == g_out[i - 1]) plateaus++;
+                if (g_out[i] == g_out[i - 1]) plateaus += g_out[i] < flat ? 1 : 0;
                 else if (g_out[i] > g_out[i - 1]) wrong_way++;
             }
             CHECK_EQ(plateaus, 0);
@@ -1822,7 +1854,7 @@ TEST(grain_one_whole_grain_over_a_constant_source_traces_the_window) {
             // SHP moves where the peak sits; it does not change how loud the window gets. Every
             // (SIZ, SHP) pair peaks at the same value, which is what "a phase warp, not a second
             // table" means -- the table is always read over its whole span.
-            CHECK_NEAR(g_out[peak], 0.122071f, 1e-4);
+            CHECK_NEAR(g_out[peak], 0.244141f, 2e-4);
         }
     }
 }
@@ -2128,4 +2160,219 @@ TEST(grain_the_guard_limit_is_clamped_to_the_pool) {
     CHECK_EQ(g.grain_limit(), 1);
     g.set_grain_limit(99);
     CHECK_EQ(g.grain_limit(), Granular::kGrains);
+}
+
+// --- the ASR and OSC pages (dsp/grain.hpp, "the GRN pages beyond SRC and AMP") -----------------
+
+namespace {
+
+Trig gated(uint32_t gate_frames, bool held = false) {
+    Trig t = hit();
+    t.gate_frames = gate_frames;
+    t.held = held;
+    return t;
+}
+
+}  // namespace
+
+TEST(grain_sus_zero_ignores_len_as_it_always_did) {
+    // A kit from before GRAIN read the ASR page has zeros there: DEC at the top still holds the
+    // cloud past a step's LEN, until the next trig or STOP.
+    fill_const(g_mono, kSrcFrames, 1, 20000);
+    Granular g;
+    g.init(kRate);
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    g.prepare(p);
+    CHECK(!g.sustains());
+    g.trigger(gated(4800));                         // a 100 ms LEN
+    clear(g_out, kCapture);
+    const int n = render_blocks(g, p, g_out, 700);
+    CHECK(g.active());
+    CHECK(peak(g_out + n - 4 * kBlk, 4 * kBlk) > 0.05f);
+}
+
+TEST(grain_sus_up_holds_while_len_lasts_and_then_releases_over_rel) {
+    fill_const(g_mono, kSrcFrames, 1, 20000);
+    Granular g;
+    g.init(kRate);
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    p.set(10, 40);                                  // DEC 90 ms: the fall to SUS
+    p.set(kAsrFirst + 1, 64);                       // SUS about half
+    g.prepare(p);
+    CHECK(g.sustains());
+    g.trigger(gated(24000));                        // a half-second LEN
+    clear(g_out, kCapture);
+    render_blocks(g, p, g_out, 360);                // 0.48 s: inside LEN, long after DEC
+    // Holding at SUS, well past where DEC alone would have faded it out.
+    CHECK(g.active());
+    CHECK(peak(g_out + 300 * kBlk, 60 * kBlk) > 0.05f);
+    // After LEN, REL 0 is the old 180 ms tail: silent and finished within a second.
+    render_blocks(g, p, g_out, 700);
+    CHECK(!g.active());
+}
+
+TEST(grain_sus_up_a_held_key_holds_until_it_comes_up) {
+    fill_const(g_mono, kSrcFrames, 1, 20000);
+    Granular g;
+    g.init(kRate);
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    p.set(kAsrFirst + 1, 127);
+    p.set(kAsrFirst + 2, 30);                       // REL about 470 ms
+    g.trigger(gated(0, true));
+    clear(g_out, kCapture);
+    render_blocks(g, p, g_out, 1500);               // two seconds held
+    CHECK(g.active());
+    CHECK(peak(g_out + 1400 * kBlk, 100 * kBlk) > 0.05f);
+    g.release(Granular::kRootNote);
+    clear(g_out, kCapture);
+    render_blocks(g, p, g_out, 1500);
+    CHECK(!g.active());
+    CHECK(all_zero(g_out + 1400 * kBlk, 100 * kBlk));
+}
+
+TEST(grain_sus_up_a_one_shot_still_ends_by_itself) {
+    // No LEN and no key-up to come: with SUS up nothing else would ever end it.
+    fill_const(g_mono, kSrcFrames, 1, 20000);
+    Granular g;
+    g.init(kRate);
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    p.set(kAsrFirst + 1, 127);
+    g.trigger(hit());
+    clear(g_out, kCapture);
+    render_blocks(g, p, g_out, 1500);
+    CHECK(!g.active());
+}
+
+TEST(grain_attack_rises_and_release_knob_lengthens_the_tail) {
+    fill_const(g_mono, kSrcFrames, 1, 20000);
+    // ATK: the first 50 ms are far quieter than the cloud at a second.
+    Granular a;
+    a.init(kRate);
+    a.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    p.set(kAsrFirst + 0, 80);                       // about 300 ms
+    a.trigger(hit());
+    clear(g_out, kCapture);
+    render_blocks(a, p, g_out, 750);
+    CHECK(peak(g_out, 37 * kBlk) < 0.5f * peak(g_out + 700 * kBlk, 50 * kBlk));
+    CHECK_EQ(grain_attack_seconds(0), 0.0f);
+    CHECK_NEAR(grain_attack_seconds(127), 5.0f, 0.05f);
+    // REL: 0 is the old 180 ms, the top 10 s, and it only ever climbs.
+    CHECK_NEAR(grain_release_seconds(0), 0.18f, 1e-4f);
+    CHECK_NEAR(grain_release_seconds(127), 10.0f, 0.1f);
+    for (int v = 1; v <= 127; v++) {
+        CHECK(grain_release_seconds(uint8_t(v)) > grain_release_seconds(uint8_t(v - 1)));
+    }
+}
+
+TEST(grain_scan_moves_the_read_head_at_the_knobs_rate) {
+    fill_sine(g_mono, kSrcFrames, 1, 300.0f, kRate, 0.5f);
+    Granular g;
+    g.init(kRate);
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    p.set(kOscFirst + 0, 64);                       // about half real time
+    g.trigger(hit());
+    clear(g_out, kCapture);
+    render_blocks(g, p, g_out, 375);                // half a second
+    const float expected = grain_scan_rate(64) * 375.0f * float(kBlk);
+    CHECK_NEAR(float(g.scan_offset()), expected, expected * 0.01f);
+    CHECK_NEAR(grain_scan_rate(90), 1.0f, 0.01f);   // real time at 90
+    CHECK_EQ(grain_scan_rate(0), 0.0f);
+    // It wraps inside the sample, and every trig starts it from POS again.
+    render_blocks(g, p, g_out, 1500);
+    CHECK(g.scan_offset() >= 0);
+    CHECK(g.scan_offset() < kSrcFrames);
+    g.trigger(hit());
+    render_blocks(g, p, g_out, 1);
+    CHECK(g.scan_offset() < kBlk);
+}
+
+TEST(grain_scan_reaches_a_part_of_the_sample_pos_alone_does_not) {
+    // Silence everywhere but the second half; POS 0 with SCN off never gets there.
+    fill_band(g_mono, kSrcFrames, 1, kSrcFrames / 2, kSrcFrames, 500.0f, kRate);
+    for (int scan = 0; scan < 2; scan++) {
+        Granular g;
+        g.init(kRate);
+        g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+        TrackParams p = plain();
+        p.set(kOscFirst + 0, scan ? 90 : 0);
+        g.trigger(hit());
+        clear(g_out, kCapture);
+        const int n = render_blocks(g, p, g_out, 1400);
+        CHECK_EQ(peak(g_out, n) > 0.05f, scan == 1);
+    }
+}
+
+TEST(grain_pitch_spray_octave_sends_its_share_of_grains_up_an_octave) {
+    fill_sine(g_mono, kSrcFrames, 1, 300.0f, kRate, 0.5f);
+    const uint8_t knobs[3] = {0, 96, 127};
+    const float shares[3] = {0.0f, 0.258f, 0.5f};
+    for (int k = 0; k < 3; k++) {
+        Granular g;
+        g.init(kRate);
+        g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+        TrackParams p = plain();
+        p.set(1, 20);                               // short grains: many onsets to count
+        p.set(2, 100);
+        p.set(kOscFirst + 1, knobs[k]);
+        g.trigger(hit());
+        // Count each grain once, at the block after its onset (its remaining length is then
+        // within a block of the whole).
+        int up = 0, all = 0;
+        for (int b = 0; b < 1500; b++) {
+            g.prepare(p);
+            clear(g_out, kBlk);
+            g.render_add(g_out, kBlk);
+            for (int i = 0; i < Granular::kGrains; i++) {
+                if (!g.grain_live(i)) continue;
+                if (g.grain_remaining(i) <= g.grain_length() - kBlk) continue;
+                const strata_grain &s = g.grain_state(i);
+                CHECK(s.istep == 1 || s.istep == 2);
+                CHECK_EQ(s.fstep, 0u);              // exactly unity or exactly an octave
+                up += s.istep == 2 ? 1 : 0;
+                all++;
+            }
+        }
+        CHECK(all > 200);
+        CHECK_NEAR(float(up) / float(all), shares[k], 0.03f);
+    }
+    CHECK_NEAR(grain_octave_chance(127), 0.5f, 1e-6f);
+    CHECK(grain_pitch_spray_mode(0) == GrainSpray::off);
+    CHECK(grain_pitch_spray_mode(63) == GrainSpray::detune);
+    CHECK(grain_pitch_spray_mode(64) == GrainSpray::octave);
+}
+
+TEST(grain_pitch_spray_detune_stays_inside_its_width) {
+    fill_sine(g_mono, kSrcFrames, 1, 300.0f, kRate, 0.5f);
+    Granular g;
+    g.init(kRate);
+    g.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    p.set(1, 20);
+    p.set(2, 100);
+    p.set(kOscFirst + 1, 63);                       // a semitone either way
+    CHECK_NEAR(grain_detune_cents(63), 100.0f, 1e-3f);
+    g.trigger(hit());
+    float lo = 2.0f, hi = 0.0f;
+    for (int b = 0; b < 1000; b++) {
+        g.prepare(p);
+        clear(g_out, kBlk);
+        g.render_add(g_out, kBlk);
+        for (int i = 0; i < Granular::kGrains; i++) {
+            if (!g.grain_live(i)) continue;
+            const strata_grain &s = g.grain_state(i);
+            const float step = float(s.istep) + float(s.fstep) * (1.0f / 65536.0f);
+            lo = step < lo ? step : lo;
+            hi = step > hi ? step : hi;
+        }
+    }
+    CHECK(lo >= 0.9438f - 1e-3f);                   // 2^(-1/12)
+    CHECK(hi <= 1.0595f + 1e-3f);                   // 2^(+1/12)
+    CHECK(lo < 0.97f);                              // and it does spread
+    CHECK(hi > 1.03f);
 }
