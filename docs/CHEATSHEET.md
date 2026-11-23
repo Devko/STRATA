@@ -179,6 +179,7 @@ switches SONG (play the chain once and stop, `SONG END`) and LOOP. Chain edits a
 **PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
 (END) and the chain wait for. The eight TRACK SWING fields read `PAT` (follow SWG) or 50-75%: C
 sets the one under `>`, or the selected track's when `>` is on LEN or SWG.
+**MACRO LEARN:** in PERFORM push a macro's knob (A-D): EDIT opens with `LEARN B n/4`; push any EDIT knob to put its parameter on the macro (again: off), on any page or track; CLR ends it.
 **PERFORM:** STEP 1-16 assign that parameter of the selected track to the selected macro (`A T6 CUT 2/4`; the same STEP again removes it, a macro with four says `FULL`); FUNC + STEP 1-4 assign its LFO's WAV RAT DEP DST;
 FUNC+STEP 5-7 the master kill EQ's LOW, MID or HI (`A EQ LOW`). OK's whole capture also stores the
 kill EQ's three knobs, so the morph can sweep them. A macro

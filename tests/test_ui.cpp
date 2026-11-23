@@ -6531,3 +6531,59 @@ TEST(ui_macro_assignment_counts_toggles_and_says_full) {
     CHECK_EQ(macro_count(app_engine().macros().macros[0]), 0);
     key(ENAGA_KEY_F4);
 }
+
+// --- MACRO LEARN: push a macro's knob in PERFORM, then push parameter knobs in EDIT ----------
+
+TEST(ui_macro_learn_assigns_by_pushing_knobs_in_edit) {
+    Strata &app = fresh();
+    for (int m = 0; m < kMacros; m++) post_cmd(Cmd::macro_clear, uint8_t(m));
+    pump(2);
+    shift_key(ENAGA_KEY_F7);                               // PERFORM
+    key(ENAGA_KEY_PUSH_B);                                 // learn macro B: opens EDIT
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    CHECK(std::strncmp(UiProbe::notice(app), "LEARN B 0/4", 11) == 0);
+    check_layout(app, "EDIT, learn");
+
+    key(ENAGA_KEY_SELECT_RIGHT);                           // another page
+    const int page = UiProbe::param_page(app);
+    key(ENAGA_KEY_PUSH_C);                                 // that page's third parameter
+    pump(2);
+    const Macro &b = app_engine().macros().macros[1];
+    CHECK_EQ(macro_count(b), 1);
+    CHECK_EQ(int(b.targets[0].param), page_first(Page(page)) + 2);
+    CHECK_EQ(int(b.targets[0].track), UiProbe::selected(app));
+    CHECK(std::strstr(UiProbe::notice(app), " 1/4") != nullptr);
+
+    key(ENAGA_KEY_DOWN);                                   // another track, same knob
+    key(ENAGA_KEY_PUSH_C);
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[1]), 2);
+    key(ENAGA_KEY_PUSH_C);                                 // again: off
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[1]), 1);
+
+    // The hint stays while learning, after the notice fades.
+    g_ms += 4000;
+    pump(2);
+    CHECK(screen_has(app, "LEARN B 1/4 CLR: DONE"));
+    check_layout(app, "EDIT, learning");
+
+    key(ENAGA_KEY_CLR);                                    // done
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "LEARN DONE");
+    key(ENAGA_KEY_PUSH_C);                                 // a push is a push again
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[1]), 1);
+
+    // Leaving for a screen without the EDIT knobs ends it too.
+    shift_key(ENAGA_KEY_F7);
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    key(ENAGA_KEY_F7);                                     // MIXER
+    key(ENAGA_KEY_F8);                                     // back to EDIT
+    key(ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 0);
+    key(ENAGA_KEY_F4);
+}
