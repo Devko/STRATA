@@ -202,6 +202,11 @@ always run. On `main` the suite also runs once serially, in registration order.
 and prints one line per lane with its time; `--quick` leaves out the sanitizers, and
 `--scenarios` adds the emulator scenarios afterwards, which CI cannot run.
 
+`tools/scenarios.sh` runs the scenarios side by side (`-j 1` for one at a time), each in its own
+build folder, and builds the app once: `tools/build.sh` and the scenarios go through
+`tools/enaga_cached.py`, which reuses an Enaga app or firmware build whose inputs (every source,
+Enaga's tree, the compilers, cl6x on or off) have not changed.
+
 **What CI does not run:** the device build, the emulator scenarios and every load figure. They
 need the tic6x cross toolchain and, for the real numbers, TI cl6x, which only exists on the
 maintainer's PC (its installer needs an interactive licence click). Run `tools/build.sh` and

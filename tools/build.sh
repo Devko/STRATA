@@ -93,9 +93,17 @@ ARGS=("$STAGE" -o "$OUT" --name "$APP_NAME")
 echo "building with $(strata_cgt_label) ..."
 # build_app.py writes -o straight out without creating its parent, so make it first.
 mkdir -p "$(dirname "$OUT")"
-python3 -B "$ENAGA_ROOT/tools/build_app.py" "${ARGS[@]}"
+# Through tools/enaga_cached.py, which runs Enaga's build_app.py with the build cached by the
+# content of every input: the same sources, Enaga tree and compilers give the stored package
+# instead of a full recompile (the scenarios build the same tree fifteen times).
+python3 -B tools/enaga_cached.py build_app "${ARGS[@]}"
 
-# Copy the package back into the repo so it is reachable from Windows for the SD card.
+# Copy the package back into the repo so it is reachable from Windows for the SD card. Not from a
+# parallel scenario (tools/scenarios.sh -j), where fifteen copies of the same file would race.
+if [ -n "${STRATA_NO_COPY_BACK:-}" ]; then
+    printf 'BUILD OK  %s  %s bytes  (%s)\n' "$OUT" "$(stat -c %s "$OUT")" "$(strata_cgt_label)"
+    exit 0
+fi
 mkdir -p build
 cp "$OUT" "build/APP.ENA"
 

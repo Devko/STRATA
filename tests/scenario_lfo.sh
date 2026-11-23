@@ -40,7 +40,7 @@ mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_lfo.log"
 
 echo "running the emulator for $CYCLES cycles: play, EDIT to LFO and ARP, PROJECT to PATTERN ..."
-python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" \
+python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 28@360000000 \
     --key 9@400000000 --key 9@440000000 --key 9@480000000 --key 9@520000000 \
