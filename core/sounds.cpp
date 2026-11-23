@@ -159,26 +159,26 @@ constexpr SoundPreset kWaveMonoPresets[] = {
     // The envelope sweeps the classic table from its sine to its square: a wavetable "wow".
     {"SWEEP", {4, 0, 70, 40}, FLAT, {60, 40, 110, 120}, NO_ASR, {0, 0, 60, 0}},
     // A resonant sweep with no filter in it: the RESO SAW table's peak moves with the envelope.
-    {"RESO", {36, 10, 100, 0}, FLAT, {50, 10, 120, 110}, NO_ASR, {0, 0, 50, 0}},
+    {"RESO", {36, 10, 100, 0}, FLAT, {60, 10, 120, 127}, NO_ASR, {0, 0, 80, 0}},
     // A growl bass: the GROWL table half way, held, the envelope pulling it into the snarl.
     {"GROWL", {100, 40, 60, 50}, FLAT, {70, 50, 100, 110}, {0, 100, 20, 0}, {0, 0, 70, 0}},
     // A talking lead: FORMANT, two readers a little apart, a touch of glide.
     {"FORMNT", {28, 64, 80, 20}, FLAT, {60, 30, 90, 110}, {0, 100, 20, 40}, {0, 30, 40, 30}},
     // Early digital: the stepping DIGITAL spectra, short and bright. Bleeps and arps.
-    {"DIGI", {84, 30, 90, 30}, FLAT, {40, 40, 100, 110}, NO_ASR, {0, 0, 0, 0}},
+    {"DIGI", {84, 30, 110, 30}, FLAT, {56, 40, 100, 127}, NO_ASR, {0, 0, 0, 0}},
     // A vowel lead: VOWELS opening from "oo" as the envelope rises, glide on every note.
     {"VOWEL", {92, 20, 90, 20}, FLAT, {80, 20, 120, 100}, {0, 110, 30, 60}, {0, 40, 0, 40}},
     // A bent bass: PHASE DIST with WRP bending the cycle as well. CZ-style.
-    {"WARP", {60, 40, 70, 50}, FLAT, {50, 60, 90, 110}, NO_ASR, {60, 0, 50, 0}},
+    {"WARP", {60, 40, 70, 50}, FLAT, {60, 60, 90, 127}, NO_ASR, {60, 0, 80, 0}},
     // An FM bass: the FM RATIO table, the sub under it.
-    {"FMBASS", {68, 50, 60, 30}, FLAT, {50, 50, 40, 115}, NO_ASR, {0, 0, 80, 0}},
+    {"FMBASS", {68, 50, 70, 30}, FLAT, {60, 50, 40, 127}, NO_ASR, {0, 0, 100, 0}},
 };
 
 // --- WAVE POLY: TBL POS CUT RES / DEC ENV MOT LVL, ASR, OSC WRP DET SUB DRV (dsp/vapoly.cpp) --
 // Held presets keep LVL down, as on VA POLY. Their DET is each voice's two readers.
 constexpr SoundPreset kWavePolyPresets[] = {
     // A pad on HARMONICS: a slow swell, two readers beating, the envelope brightening it.
-    {"PAD", {44, 30, 80, 20}, FLAT, {96, 30, 90, 60}, {85, 89, 91, 40}, {0, 60, 0, 0}},
+    {"PAD", {44, 30, 80, 20}, FLAT, {96, 30, 90, 70}, {85, 89, 91, 40}, {0, 60, 0, 0}},
     // An electric piano: E-PIANO barking as it is struck and mellowing as it holds.
     {"EPIANO", {108, 20, 100, 10}, FLAT, {90, 20, 90, 70}, {0, 70, 60, 64}, {0, 20, 0, 0}},
     // A bell: FM TINE from its sine, the tine rising on the strike and ringing away.
@@ -186,11 +186,11 @@ constexpr SoundPreset kWavePolyPresets[] = {
     // Mallets: the MALLET table at marimba, struck brighter. Chords and patterns.
     {"MALLET", {124, 30, 110, 10}, FLAT, {80, 20, 100, 70}, NO_ASR, {0, 0, 0, 0}},
     // A pluck: PLUCK from its bright end to its dull one as the envelope falls.
-    {"PLUCK", {116, 127, 100, 20}, FLAT, {60, 20, 0, 80}, NO_ASR, {0, 0, 0, 0}},
+    {"PLUCK", {116, 127, 100, 20}, FLAT, {70, 20, 0, 100}, NO_ASR, {0, 0, 0, 0}},
     // A choir: VOWELS held, two readers, a slow swell.
-    {"CHOIR", {92, 50, 80, 10}, FLAT, {100, 20, 80, 55}, {90, 100, 96, 50}, {0, 50, 0, 0}},
+    {"CHOIR", {92, 50, 80, 10}, FLAT, {100, 20, 80, 64}, {90, 100, 96, 50}, {0, 50, 0, 0}},
     // A PWM pad: the PWM table's widths, two readers, held.
-    {"PWMPAD", {12, 40, 80, 20}, FLAT, {96, 30, 100, 58}, {80, 95, 90, 50}, {0, 40, 0, 0}},
+    {"PWMPAD", {12, 40, 80, 20}, FLAT, {96, 30, 100, 66}, {80, 95, 90, 50}, {0, 40, 0, 0}},
 };
 
 #undef FLAT

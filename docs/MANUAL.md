@@ -77,9 +77,9 @@ also walk the tracks in GRID, EDIT and KEYS.
 <sub>EDIT on the kick: the machine's SRC page and the insert chain's FLTR page. The bars above the knobs are the six pages; the screen keys turn them.</sub>
 
 
-A machine is one of eight sound engines, plus **MID**, which plays an outboard synth over MIDI
+A machine is one of ten sound engines, plus **MID**, which plays an outboard synth over MIDI
 instead (section 3). Any track can host any machine (MACHINE mode, `FUNC+EDIT`). The default kit
-uses the eight sound engines, one per track:
+uses eight of them, one per track (WAVE MONO and WAVE POLY are there to switch to):
 
 | Track | Machine | Default role |
 | :---: | --- | --- |
@@ -175,7 +175,7 @@ held. With it, POLY plays pads and long chords, and MONO plays long bass notes a
   dull.
 
 The line under the knobs says `SUS 0: ONE-SHOT` or `HOLDS: PAD OR LEN`. On any other machine the
-page shows `VA MONO/POLY ONLY`.
+page shows `VA/WMN/WPL ONLY`.
 
 A scene captured with SCENE stores the ASR page too, like every other knob. So if a note still
 fades with SUS up, look at the morph: a scene stored at SUS 0 pulls SUS down as VALUE moves
@@ -223,7 +223,7 @@ filter:
   squelch.
 
 The line under the knobs says `OS2: DET 1-63 SYN 64+`. On any other machine the page shows
-`VA MONO/POLY ONLY`. Like every page, the four lock, scene and macro.
+`VA/WMN/WPL ONLY`. Like every page, the four lock, scene and macro.
 
 **RES** on SRC runs over the whole knob: each turn adds about the same amount of peak, and from
 about 120 the filter whistles by itself at a steady level (self-oscillation; tune it with CUT).
@@ -623,6 +623,46 @@ Every note is a sustaining voice and costs CPU while it rings. All VA POLY track
 a budget of **12 voices**; past it, the quietest note is faded out quickly to make room. A longer
 DEC, a long LEN with SUS up, or a long REL all mean more notes overlap.
 
+### WMN and WPL: WAVE MONO and WAVE POLY
+
+The VA voice with a **wavetable** where its two oscillators were: 16 tables of 16 frames each,
+built into STRATA (no files needed), from PolyWerk's recipes. POS moves smoothly through a
+table's frames; MOT lets the filter envelope move it, so a note's timbre changes as it plays.
+Everything else is the VA's: the sub, the 24 dB filter with its envelope, the ASR page, accent,
+slide and glide on WMN, chords and the shared 12-voice budget on WPL.
+
+| Page | A | B | C | D |
+| --- | --- | --- | --- | --- |
+| SRC | **TBL** the table, eight counts each (shown by name) | **POS** position, frame 0-15 | **CUT** cutoff, LP24 | **RES** resonance |
+| AMP | **DEC** as MNO | **ENV** filter envelope amount | **MOT** envelope to position: 64 off, up to +15 or -15 frames | **LVL** |
+| ASR | **ATK** | **SUS** | **REL** | **FSU** as MNO |
+| OSC | **WRP** bends the cycle (0 = none) | **DET** a second, detuned copy: OFF, up to 60 cents | **SUB** sub level | WMN: **GLD** glide; WPL: **DRV** drive |
+
+The tables, from TBL 0 up:
+
+| TBL | Table | From frame 0 to 15 |
+| --- | --- | --- |
+| CLS | CLASSIC | sine, triangle, saw, square |
+| PWM | PWM | a square narrowing to a thin pulse |
+| SYN | SYNC | a hard-synced saw, the sync ratio rising |
+| FMT | FORMANT | a vocal formant sweeping up |
+| RSW | RESO SAW | a saw with a resonant peak sweeping up: a filter sweep with no filter |
+| HRM | HARMONICS | organ-like, more harmonics drawn in |
+| FLD | FOLD | a sine wavefolded harder and harder |
+| PHD | PHASE DIST | CZ-style phase distortion, soft to sharp |
+| FM1 | FM RATIO | two-operator FM, the index rising |
+| TIN | FM TINE | an electric piano's tine: a sine gaining its metallic partials |
+| DGT | DIGITAL | eight stepped digital spectra |
+| VOW | VOWELS | "oo" to "ah" to "ee" |
+| GRL | GROWL | a bass growl, darker to snarling |
+| EPN | E-PIANO | mellow to barking |
+| PLK | PLUCK | a plucked string, bright to dull (and quieter as it dulls) |
+| MLT | MALLET | soft mallet, marimba, vibraphone, xylophone, glockenspiel, kalimba |
+
+MOT above 64 moves the position up as the filter envelope rises and back as it falls; below 64 it
+moves it down. With PLK at POS 127 and MOT 0, each note starts bright and dulls like a string.
+The SOUNDS list (OK on MACHINE) has 8 WMN and 7 WPL starting points.
+
 ### MID: MIDI
 
 MID makes no sound of its own. It is for a track whose sound is an outboard synth, a drum
@@ -691,8 +731,8 @@ OUT channel: OFF, or 1-16. `FUNC+EDIT` again opens the kit library (section 6).
 
 <p><img src="screens/sounds.png" width="256" alt="SOUNDS on track 1, the kick"></p>
 
-Every drum machine and both VAs come with a short list of ready-made sounds. On a KCK, SNR, HAT,
-PRC, MNO or PLY track, press **OK** in EDIT or MACHINE: **SOUNDS** lists them. UP/DOWN or A move
+Every drum machine, both VAs and both WAVE machines come with a short list of ready-made sounds.
+On a KCK, SNR, HAT, PRC, MNO, PLY, WMN or WPL track, press **OK** in EDIT or MACHINE: **SOUNDS** lists them. UP/DOWN or A move
 the cursor, **OK loads** the one under it into this track, with the beat playing, and the list
 stays open so the next OK tries the next one. `NOW` marks the sound the track has. The first row,
 **AS WAS**, is the track as it sounded when you opened the list: OK on it puts that back, so

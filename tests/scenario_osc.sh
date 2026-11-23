@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # OSC emulator scenario: EDIT's eighth page, the VA machines' oscillators and drive (WAV OS2 SUB
-# DRV), draws on the C674x with the real font, on a drum track ("VA MONO/POLY ONLY") and on VA
+# DRV), draws on the C674x with the real font, on a drum track ("VA/WMN/WPL ONLY") and on VA
 # POLY, and the reworked VA voice (new resonance curve and limiter, factory BASS and CHORD on the
 # OSC page) keeps the default beat inside the load target.
 #

@@ -1193,6 +1193,7 @@ scene or knob really did move: those prepare as before.
 | E7 | Eight LFOs running | `tests/scenario_lfo.sh` as it is (every LFO off: should match `scenario_factory.sh`), then again after a temporary edit to `factory_kit` in core/factory.cpp setting each track's `params[17] = 40` (RAT, about 3 Hz free), `params[18] = 127` (DEP) and `params[19] = 38` (DST = DRV), with cl6x and with `ENAGA_TI_CGT=none`; revert the edit | the difference is eight LFOs' cost; the host figures say about 1.1-1.4 points GCC, and about the same with cl6x |
 | E12 | The ASR page | `tests/scenario_asr.sh`, then the held-chord `factory_kit` edit in "The ASR page" above, `scenario_factory.sh`, both compilers; revert | **done 2026-11-23:** off = A01 (26.15% / 49.32%); held +3.60 cl6x / +4.71 GCC (see "The ASR page") |
 | E13 | The OSC page and the VA rework | `tests/scenario_osc.sh` against `scenario_factory.sh` before it, then the worst-case `factory_kit` edit in "The OSC page" below, both compilers; revert | the factory beat should not rise; worst case at most ~0.1 point a voice over the old voice |
+| E14 | WAVE MONO and WAVE POLY | `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys) against `scenario_factory.sh` on the same commit, both compilers; and the boot: the cycles to `strata ready` against the same run before the WAVE commit | see "WAVE MONO and WAVE POLY" below: about 1.0-1.4x a VA voice expected; the table build is a one-off at boot |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
@@ -1602,6 +1603,47 @@ and revert.
 | `scenario_factory.sh`, before the OSC page | 26.15% | 49.32% |
 | `scenario_osc.sh` (A01 as shipped, new voice) | | |
 | `scenario_factory.sh`, tracks 6 and 7 at the worst case | | |
+
+### WAVE MONO and WAVE POLY (2026-11-23, host only)
+
+The wavetable voice is the VA voice with its oscillators swapped for one or two readers of two
+neighbouring int16 frames (dsp/waveloops.ti.c: two linear interpolations and a crossfade a sample,
+branch-free, ready for cl6x). The filter, the envelopes, the sub and the tail are the VA's.
+
+Host, x86 GCC -O2, a six-note held chord on one POLY machine, nanoseconds per voice per 64-frame
+block, best of two runs (noisy; the ratios are what to read):
+
+| Voice | ns / voice / block | vs VA saw |
+| --- | --- | --- |
+| VA, saw, OS2 off | 857 | 1.00 |
+| VA, saw, OS2 detune | 901 | 1.05 |
+| VA, saw, OS2 sync | 1,169 | 1.36 |
+| WAVE, one reader | 1,121 | 1.31 |
+| WAVE, DET (two readers) | 1,291 | 1.51 |
+| WAVE, DET and WRP | 1,591 | 1.86 |
+
+So a WAVE voice costs about what a synced VA voice does, and the worst knob setting (DET and WRP
+together) about 1.4x that. Scaled from VA POLY's 2.16 points a voice with cl6x (3.82 GCC-only),
+expect roughly **2.2-3.0 points a voice with cl6x and 4-5 GCC-only**, unmeasured. WAVE POLY shares
+VA POLY's budget of 12 voices and the CPU guard sheds its voices the same way, so the worst case is
+twelve voices at the upper figure, about 9 points above twelve VA voices. If the emulator says
+more, the lever is WRP's loop (`strata_wave_add_warp`, a float index and a compare per sample).
+
+**Boot:** the 16 tables are computed in `Engine::init` (a float FFT, 256 frames, 10 mip levels):
+25.8 ms on the host. The C6748 has no x86 FPU throughput; expect 0.5-1.5 s added to the boot,
+to be measured as E14.
+
+**Memory:** 2,626,560 bytes of tables plus 0.2 MiB of build scratch: init now asks for 111.77 MiB
+of the 120 MiB heap, 8.23 MiB spare against the 8 MiB rule (tests/test_memory.cpp itemises it).
+FM and STRING, which follow, allocate under 0.1 MiB.
+
+**E14, to measure on Roland's PC (emulator):**
+
+| Build | cl6x | GCC only |
+| --- | --- | --- |
+| `scenario_factory.sh`, same commit | | |
+| `scenario_wave.sh` (WMN bass, WPL chord) | | |
+| cycles to `strata ready`, before / after | | |
 
 ### Later milestones
 
