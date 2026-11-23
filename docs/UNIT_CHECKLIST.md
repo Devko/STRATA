@@ -11,9 +11,9 @@ them); the upper pads are FILL REPEAT MUTE SCENE A SCENE B THROW MUTATE.
 
 ---
 
-# Today's walkthrough (2026-11-23, about 25 min)
+# Today's walkthrough (2026-11-23, about 30 min)
 
-Build from main at `33ae688` (PR #97) or later, with cl6x. Build: `________`
+Build from main at `8525337` (PR #124) or later, with cl6x. Build: `________`
 
 Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-12 do not save;
 13 saves a copy, so the DEFAULT project is never overwritten.
@@ -1122,7 +1122,7 @@ A01 playing.
       (`T2` ...) and the list is that machine's.
 - [ ] Track 6 (BASS), DRONE: held for the step's LEN, then a long release. Track 7 (CHORD), PAD:
       the same swell and tail as A05. Read LOAD with both held `________ %`.
-- [ ] MACHINE (F1+EDIT) shows `OK: SOUNDS` on a KICK track; OK there opens the list too. On a
+- [ ] MACHINE (FUNC+EDIT) shows `OK: SOUNDS` on a KICK track; OK there opens the list too. On a
       SAMPLE track OK still opens the sample browser.
 - [ ] Load a sound, save, power cycle: it is still the loaded sound.
 
@@ -1212,7 +1212,7 @@ key dead.
 - [ ] SYSTEM INFO shows **BOOT 1.0.17**. All the recovery evidence is for that bootloader.
 - [ ] A second SD card holds an official `SmplTrek.bin`. One is already at
       `D:\DEV\smpltrek\SmplTrek v3.2.174\SmplTrek.bin`.
-- [ ] Confirm **HOME (F4) held at power-on** reaches BOOT MODE, before it is needed in anger.
+- [ ] Confirm **HOME held at power-on** reaches BOOT MODE, before it is needed in anger.
 - [ ] Run on the power adapter **without batteries**, so a hung image can be power-cycled.
 - [ ] Confirm the build writes no SPI flash and ships no BOOT or MCU sections.
 
@@ -1239,7 +1239,7 @@ key dead.
 The default kit plays a four-track beat at 130 BPM as soon as PLAY is pressed; nothing needs
 setting up first.
 
-- [ ] PLAY (F5) starts the beat; the screen's top line shows `>` and the tempo.
+- [ ] PLAY starts the beat; the screen's top line shows `>` and the tempo.
 - [ ] **The load criterion.** The emulator gives **12.02% peak with cl6x** for the four-track
       beat, against M1's bar of 15% — it passes there, after the `*.ti.c` extraction took it
       down from 20.14%. Measure it on the unit anyway: pure computation runs about 25% faster
@@ -1249,10 +1249,10 @@ setting up first.
       21.64%. The gap is the thing to confirm on hardware, because the eight-track worst case
       is 23.61% with cl6x and 44.26% without — i.e. **GCC-only misses M2's 40% bar**, and that
       is what makes the cl6x redistribution question matter.
-- [ ] STOP (F6) stops with tails; STOP twice cuts them.
+- [ ] STOP stops with tails; STOP twice cuts them.
 - [ ] VALUE changes the tempo and the beat follows it smoothly.
 - [ ] STEP 1-16 toggles trigs on the selected track and the change is heard on the next pass.
-- [ ] The lower pads 1-8 select a track and play it with velocity; F1 + pad mutes.
+- [ ] The lower pads 1-8 select a track and play it with velocity; FUNC + pad mutes.
 - [ ] Encoders A-D edit the selected track's four parameters. **Check A and B are not swapped** —
       the encoder event ids are alphabetical while the push-button codes are not, and getting
       that wrong is silent (`docs/ENAGA_API.md`).
@@ -1282,7 +1282,7 @@ standing in for CHORD, and the LOOP sampler. The default pattern plays all of th
 - [ ] LOOP on track 8 plays a **synthesised placeholder**, not a file — eight slices built in
       `Engine::init`. Check successive notes pick successive slices, and that the boundaries land
       on the blips (a slice-count mismatch puts them mid-blip).
-- [ ] EDIT (F8) and MIXER (F7): the screen keys move the parameter page and the track bank.
+- [ ] EDIT and MIXER: the screen keys move the parameter page and the track bank.
       Check the MIXER's faders and the master peak behave, and that EDIT's four values match
       what the encoders do.
 - [ ] Listen for aliasing on PERC and BASS at the top of their ranges, and for a click when a
@@ -1303,7 +1303,7 @@ standing in for CHORD, and the LOOP sampler. The default pattern plays all of th
       screen says LOCK CLEARED, the step's LED loses its red if it had no other lock, and the
       third kick goes back to the kit's long body. Check every knob, not just A -- Enaga numbers
       the pushes B, A, C, D, and a push that clears the wrong parameter is exactly what that
-      ordering invites. F1 + CLR puts the lock back.
+      ordering invites. FUNC + CLR puts the lock back.
 - [ ] While there: turn a knob on a track whose current step carries a lock on that same
       parameter. The knob should be heard at once, and the lock should win again from the next
       step.
@@ -1325,20 +1325,20 @@ the command ring and the undo stack are known to work before you touch the hardw
 - [ ] Tap STEP: the trig toggles. Hold STEP and turn A-D: that parameter is **locked on that
       step only**, and the trig does *not* toggle when the key comes up. The second half is the
       one to watch: if a held step toggles its trig on release, every lock edit also flips a trig.
-- [ ] F1 + STEP makes a step **trigless**: its locks apply and no note sounds. The LED is red
+- [ ] FUNC + STEP makes a step **trigless**: its locks apply and no note sounds. The LED is red
       alone, where a trig is green. An empty step and a trigless step must be distinguishable.
 - [ ] Hold STEP + OK opens the step page. All eleven fields reachable on three pages with the
       screen keys, and each one does what its name says. **Check the condition field
       specifically**: NONE, then the eight named conditions, then the 35 A:B pairs, clamping at
       both ends rather than wrapping.
-- [ ] Hold two STEP keys: the pair is a selection (the screen says `SEL n-m`). CLR erases it; F1 + UP
-      copies it, F1 + DOWN pastes it (plain UP and DOWN still do while a STEP is held); A transposes it and B nudges its micro-timing.
-- [ ] CLR with nothing held erases the **whole track**. Confirm F1 + CLR brings it straight back:
+- [ ] Hold two STEP keys: the pair is a selection (the screen says `SEL n-m`). CLR erases it; FUNC + UP
+      copies it, FUNC + DOWN pastes it (plain UP and DOWN still do while a STEP is held); A transposes it and B nudges its micro-timing.
+- [ ] CLR with nothing held erases the **whole track**. Confirm FUNC + CLR brings it straight back:
       that is the only thing that makes the bare gesture acceptable.
 
 **Undo**
 
-- [ ] F1 + CLR undoes, F1 + OK redoes, 16 levels deep. The CLR and OK keys light when there is
+- [ ] FUNC + CLR undoes, FUNC + OK redoes, 16 levels deep. The CLR and OK keys light when there is
       somewhere to go, so the panel says whether undo will do anything.
 - [ ] **One sweep is one level.** Hold a step and turn an encoder through forty clicks, then
       undo once: the whole sweep goes, not one click of it. If each click took a level, the
@@ -1350,8 +1350,8 @@ the command ring and the undo stack are known to work before you touch the hardw
 
 **Recording**
 
-- [ ] F2 arms REC (the key lights red). With the transport running, pad hits land on the nearest
-      step with velocity. F1 + VALUE sets the quantize amount, shown as `Q nnn`.
+- [ ] REC arms recording (the key lights red). With the transport running, pad hits land on the nearest
+      step with velocity. QUANTIZE (SETUP page, A, or the FUNC menu) sets the amount, shown as `Q nnn`.
 - [ ] **Quantize 100 vs 0.** At 100 every hit snaps dead to the step. At 0 it keeps where you
       played it, as micro-timing. Play deliberately late and listen for it.
 - [ ] **Swing and recording must agree.** Set the pattern swing to 66 and play dead on the swung
@@ -1433,7 +1433,7 @@ project and never needs a restart."*
 
 **Projects**
 
-- [ ] F3 opens PROJECT. The bank grid shows A, the live pattern is boxed, and the top line's
+- [ ] PROJECT opens the PROJECT screen. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
 - [ ] FUNC+HOME, OK saves (the menu opens on SAVE). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (277 bytes),
       `KIT.BIN` (1,076 bytes) and a `BANK_x.BIN` per touched bank.
@@ -1441,9 +1441,9 @@ project and never needs a restart."*
       `BANK_B.BIN` appears.
 - [ ] Power cycle. The project reopens on the pattern it was left on, not A01.
 - [ ] The FUNC menu's RELOAD PROJECT (OK twice) reloads from the card and discards unsaved edits
-      (it was F1 + OK, then FUNC + LEFT twice in PROJECT, until 2026-11-22).
+      (it was FUNC + OK, then FUNC + LEFT twice in PROJECT, until 2026-11-22).
 - [ ] The FUNC menu's NEW PROJECT (OK twice) starts a new project under a NEW name (`NEW1`, `NEW2`...), so
-      saving it cannot overwrite the project it came from (it was F1 + CLR).
+      saving it cannot overwrite the project it came from (it was FUNC + CLR).
 - [ ] A load with the transport RUNNING stops it first. Under CLOCK SRC = MIDI or SYNC, where
       `clock::stop()` returns false, the load is REFUSED and the screen says `EXT CLOCK` — it
       must not load anyway.
@@ -1507,8 +1507,8 @@ Also written in the cloud, so also unrun. `core/scale`, `core/mutate` and `core/
 host-tested and mutation-tested; `dsp/repeat` is host-tested for correctness but its LOAD is
 unmeasured, and that is the one figure that decides whether beat repeat ships.
 
-The exit criterion from `docs/PLAN.md`: *"a 30-minute jam using only the performance row, F7
-PERFORM and pattern changes, with no edit screens and no underruns."*
+The exit criterion from `docs/PLAN.md`: *"a 30-minute jam using only the performance row, FUNC+MIXER
+(PERFORM) and pattern changes, with no edit screens and no underruns."*
 
 **Beat repeat — the load question first**
 
@@ -1531,7 +1531,7 @@ PERFORM and pattern changes, with no edit screens and no underruns."*
 
 **Mutation**
 
-- [ ] MUTATE on a track, then F1 + CLR: the pattern comes back exactly. "OK keeps it, CLR
+- [ ] MUTATE on a track, then FUNC + CLR: the pattern comes back exactly. "OK keeps it, CLR
       reverts" is the existing undo and nothing else, so this is really a test that a mutation
       is exactly one undo level.
 - [ ] Press MUTATE twice: two different results, not the same one twice.
@@ -1543,7 +1543,7 @@ PERFORM and pattern changes, with no edit screens and no underruns."*
 
 **Key and scale**
 
-- [ ] F3 PROJECT, encoder B walks the key and C the scale; the screen reads "KEY C MINOR".
+- [ ] In PROJECT, encoder B walks the key and C the scale; the screen reads "KEY C MINOR".
 - [ ] The key wraps at B to C; the scale stops at both ends.
 - [ ] Save, power cycle, reopen: the key and scale come back. **This is also the regression test
       for the root bug** -- `app/engine.cpp` used to store 60 in a field the loader reduces to
@@ -1572,14 +1572,14 @@ PERFORM and pattern changes, with no edit screens and no underruns."*
 
 **Mutes and fill**
 
-- [ ] A lower pad mutes with F1 in any mode, and MUTE mode (upper pad 3) makes the lower pads
-      mutes outright. **With F1 the mute waits for the bar**, which is the deviation to check:
+- [ ] A lower pad mutes with FUNC in any mode, and MUTE mode (upper pad 3) makes the lower pads
+      mutes outright. **With FUNC the mute waits for the bar**, which is the deviation to check:
       the spec says "instantly or at the next bar" without saying which gesture picks.
 - [ ] A mute armed for the next bar lands on the bar, and pressing three pads before it means
       the third, not all three.
 - [ ] **The eight stored states are on STEP 1-8 while MUTE mode is on**, not the upper row.
       docs/SPEC.md says "recalled from the upper row", but that row is seven FIXED pads and
-      there are eight states, so it cannot be literal. Recall on a tap, F1 for the next bar,
+      there are eight states, so it cannot be literal. Recall on a tap, FUNC for the next bar,
       VALUE held to store. If the row is what was meant, this is the thing to change.
 - [ ] They survive a save: the states live in PROJECT.BIN.
 - [ ] Auto-fill at 4, 8 and 16 bars fires on the LAST bar of the period, and FILL conditions
@@ -1594,8 +1594,8 @@ PERFORM and pattern changes, with no edit screens and no underruns."*
 Every tool is reachable from the panel, which is worth confirming one by one: a feature with no
 gesture is the mistake this milestone made twice before it was caught.
 
-- [ ] Upper row, left to right: FILL (hold), REPEAT (hold, VALUE picks the length, F1 the
-      pitch-down), MUTE mode (toggle), scene A (hold + STEP picks), scene B, THROW (hold, F1 for
+- [ ] Upper row, left to right: FILL (hold), REPEAT (hold, VALUE picks the length, FUNC the
+      pitch-down), MUTE mode (toggle), scene A (hold + STEP picks), scene B, THROW (hold, FUNC for
       reverb), MUTATE.
 - [ ] FUNC + MIXER opens PERFORM: encoders A-D are the macros, VALUE is the morph.
 - [ ] In PERFORM: OK captures a scene (the selected track only while a scene pad is held),
@@ -1623,12 +1623,12 @@ gesture is the mistake this milestone made twice before it was caught.
 The Euclidean generator and KEYS mode so far. `core/` is host-tested and mutation-tested; the gesture is
 on encoders, which the emulator cannot drive.
 
-- [ ] F1 + A, B, C in GRID walk hits, the cycle and the rotation, and the screen reads
+- [ ] FUNC + A, B, C in GRID walk hits, the cycle and the rotation, and the screen reads
       "EUC 5/16 R2". **Encoders cannot be driven by the emulator** (`emulate.py` has `--key`
       only, and the core exposes `key_input` and nothing else), so this binding has never been
       exercised at all.
 - [ ] A sweep of any of the three is ONE undo level, not forty. They share a gesture so
-      core/undo coalesces them; F1 + CLR once should put the old rhythm back.
+      core/undo coalesces them; FUNC + CLR once should put the old rhythm back.
 - [ ] 3 hits in 8 on a 16-step track plays the figure twice. That is the point of hits and the
       cycle being two numbers.
 - [ ] Generating over a part you have shaped by hand replaces the rhythm and keeps the sound:
@@ -1720,12 +1720,12 @@ on it.
 keys with REC on and watches them land in the pattern), so these are about feel rather than
 whether it works.
 
-- [ ] F1 + F4 opens KEYS; the screen shows all sixteen notes under the keys, roots brighter.
+- [ ] HOME twice quickly opens KEYS; the screen shows all sixteen notes under the keys, roots brighter.
 - [ ] The sixteen keys are sixteen DEGREES of the project's scale, not sixteen semitones: in a
       seven-note scale they should span just over two octaves and every one should be in key.
 - [ ] The pad-row keys (and LEFT/RIGHT) move the octave; UP/DOWN change track without leaving the
       mode, and the screen keys turn the EDIT page that A-D play with.
-- [ ] Change the key or scale in F3 and the KEYS layout follows it.
+- [ ] Change the key or scale in PROJECT and the KEYS layout follows it.
 - [x] ~~A key has no release.~~ Superseded 2026-11-22: letting go of a key releases its note
       (see "KEYS: a key holds its note" at the end).
 
@@ -1902,7 +1902,7 @@ the duck's dropped trigger); the other two are here.
 
 docs/SPEC.md's eighth performance tool, end to end: record the finished master for 1, 2, 4 or 8
 bars, write it to `/RECORD/STRATA_<n>.WAV`, and load it back into a track in one action. The
-gesture is **F1 + F2**, which is where SPEC's key table puts "Resample setup": encoder A walks
+gesture is **FUNC + REC**, which is where SPEC's key table puts "Resample setup": encoder A walks
 the four lengths, the screen keys walk the destination (the file only, or one of the eight
 tracks), OK arms and CLR cancels.
 
@@ -1928,7 +1928,7 @@ test can tell you is whether a take sounds right, which is the whole point of th
 - [ ] A second arm during a take is refused and counted, because there is no undo for a lost
       take. Check the screen says something rather than quietly restarting.
 
-### Machine switching — F1 + F8, and the thing that makes GRAIN audible
+### Machine switching — FUNC + EDIT, and the thing that makes GRAIN audible
 
 Every track owns one of every machine (72.6 KiB, measured) and switching is a pointer swap.
 `KitTrack::machine` has been in KIT.BIN since M4 and nothing honoured it until now, so a project
@@ -2029,7 +2029,7 @@ master DJ filter sat at a compile-time default for the life of the app, and PROJ
 section for them. All fourteen are now encoder bytes in the project file. `docs/REVIEW.md` 2a
 records where each gesture went and why.
 
-- [ ] F7, then the screen keys: MIXER walks TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+,
+- [ ] MIXER, then the screen keys: MIXER walks TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+,
       REV, REV+, ROUTE, MST, EQ and back round. Every page draws, with its four names, values and bars.
 - [ ] On DLY, encoder A walks the delay's DIVISION: `1/32`, `1/16T`, `1/16`, `1/8T`, `1/8`,
       `1/8D`, `1/4`, `1/4D`, `1/2`, `1/1`. The page's `TIME nnn MS` line follows it, and the
@@ -2046,7 +2046,7 @@ records where each gesture went and why.
       through to the track faders underneath.
 - [ ] On MST, A is the DJ filter, B the glue compressor, C the limiter threshold, D the output
       level. A reads `OFF` at centre, `LP nn` below it and `HP nn` above.
-- [ ] **F1 + VALUE is the master DJ filter**, as `docs/SPEC.md`'s key table says, from anywhere.
+- [ ] **FUNC + VALUE is the master DJ filter**, as `docs/SPEC.md`'s key table says, from anywhere.
       The notice shows `DJ OFF`, `DJ LP nn` or `DJ HP nn`. The tempo must not move with it.
 - [ ] Save, power cycle, reopen: every one of the fourteen comes back. Before this they did not
       exist in any file.
@@ -2059,7 +2059,7 @@ records where each gesture went and why.
       master come up at the DEFAULTS rather than at the previous project's.
 - [ ] **The tempo saves.** Set 142.0, save, power cycle: it reopens at 142.0, not 130.0. The
       clock follows on the first update pass.
-- [ ] F3, then the screen key RIGHT three times: the SETUP page. It shows CLOCK SRC, the tempo and
+- [ ] PROJECT, then the screen key RIGHT three times: the SETUP page. It shows CLOCK SRC, the tempo and
       whose it is, MIDI CH and QUANTIZE, and says the first three are set in the Enaga menu. The
       screen key LEFT goes back.
 - [ ] Encoder A on SETUP is QUANTIZE, 0-100 in fives, clamped at both ends. B, C and D do
@@ -2162,16 +2162,16 @@ What it cannot judge is whether the result reads well on the OLED.
 
 The arrows follow Enaga's own menu and SETTINGS page: UP and DOWN move through the rows on
 screen, LEFT and RIGHT move sideways (the page, wherever the screen keys flip pages), OK picks
-and CLR goes back. F1 + an arrow is the mode's second meaning. The host suite pins every mapping
+and CLR goes back. FUNC + an arrow is the mode's second meaning. The host suite pins every mapping
 below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it feels natural.
 
 - [ ] GRID and EDIT: UP and DOWN walk the selected track without playing it; LEFT and RIGHT flip
-      the step page (GRID) or SRC/FLTR/AMP/FX (EDIT). F1 + UP copies, F1 + DOWN pastes.
+      the step page (GRID) or SRC/FLTR/AMP/FX (EDIT). FUNC + UP copies, FUNC + DOWN pastes.
 - [ ] Step page: LEFT and RIGHT walk to the previous and next step, wrapping at the track's
       length. CLR closes the page and erases nothing.
 - [ ] KEYS: LEFT and RIGHT are the octave. PERFORM: LEFT and RIGHT pick the macro; UP and DOWN
       still walk the mutation.
-- [ ] MACHINE (F1 + EDIT): the eight machines are a list; UP and DOWN change the track's machine
+- [ ] MACHINE (FUNC + EDIT): the machines are a grid of columns of three; UP and DOWN change the track's machine
       at once, LEFT and RIGHT move a column of three (new 2026-11-23: they no longer change the
       track). The screen keys walk the track and say `TRACK 2` and so on. EDIT's screen says
       `FUNC+EDIT: MACHINE`.
@@ -2182,11 +2182,11 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
 - [ ] Notices (an octave, a scene captured, `OK AGAIN TO RELOAD`) appear on the second line in
       every mode, not only in GRID.
 
-## F1 + F5 restart, F1 + F6 stop and reset
+## FUNC + PLAY restart, FUNC + STOP stop and reset
 
-- [ ] Playing, F1 + F5: every track jumps back to step 1 on the beat and keeps playing; held
+- [ ] Playing, FUNC + PLAY: every track jumps back to step 1 on the beat and keeps playing; held
       notes ring on. The screen says RESTART.
-- [ ] F1 + F6 while playing with a pattern change queued: it stops, the tails are cut at once
+- [ ] FUNC + STOP while playing with a pattern change queued: it stops, the tails are cut at once
       (no second press needed), the queued change is gone, and the next PLAY starts at step 1.
 - [ ] With CLOCK SRC on MIDI or SYNC both show EXT CLOCK and change nothing.
 
@@ -2199,16 +2199,16 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
 ## Hold STEP + VALUE sets the note
 
 - [ ] Hold a STEP key and turn VALUE: the step's note moves (play it to hear), the tempo does
-      not, and letting go leaves the trig as it was. F1 + CLR undoes the whole turn at once.
+      not, and letting go leaves the trig as it was. FUNC + CLR undoes the whole turn at once.
 
 ## MUTATE: OK keeps, CLR reverts; undo works in PERFORM
 
 - [ ] Press MUTATE, then CLR: the track sounds as before and the screen says REVERTED. Press it
       again, then OK: it stays (KEPT). Works the same in GRID, EDIT and PERFORM.
-- [ ] MUTATE, then F1 + CLR (undo), then plain CLR: CLR does what CLR does in that mode and does
+- [ ] MUTATE, then FUNC + CLR (undo), then plain CLR: CLR does what CLR does in that mode and does
       NOT say REVERTED or undo a second edit.
-- [ ] In PERFORM, F1 + CLR undoes and F1 + OK redoes. Plain CLR still clears the selected macro.
-- [ ] Hold scene A and press CLR: scene A's slot is erased (SCENE ERASED). This used to be F1 + OK.
+- [ ] In PERFORM, FUNC + CLR undoes and FUNC + OK redoes. Plain CLR still clears the selected macro.
+- [ ] Hold scene A and press CLR: scene A's slot is erased (SCENE ERASED). This used to be FUNC + OK.
 
 ## PROJECT: the CHAIN and PATTERN pages
 
@@ -2217,18 +2217,18 @@ were the octave keys until the controls concept, docs/CONTROLS.md).
 
 - [ ] CHAIN: OK on an empty chain adds the playing pattern. STEP 3 makes it A03, VALUE sets the
       repeats (X1 to X16), OK adds a copy below, LEFT and RIGHT step its pattern, UP and DOWN
-      move between entries, F1 + LEFT removes one. Build A01 X2, A03 X1 and turn it on with
+      move between entries, CLR twice removes one. Build A01 X2, A03 X1 and turn it on with
       the FUNC menu's CHAIN row: it plays A01 twice, A03 once, and loops. The PLAY marker follows.
 - [ ] Save and reopen: the chain comes back, and so does whether it was on. With it on, the saved
       pattern plays its pass and then the chain carries on from its first entry (it used to
       reopen off, whatever the file said).
 - [ ] While the chain plays, add an entry ABOVE the playing one (cursor up, OK): the chain carries
       on with the entry it was playing and the PLAY marker moves with it. Remove the playing
-      entry (F1 + LEFT): the pattern finishes its pass and the NEXT entry plays, none skipped.
+      entry (FUNC + LEFT): the pattern finishes its pass and the NEXT entry plays, none skipped.
 - [ ] Queue a pattern (END), then STOP and PLAY before it lands: it lands as the transport
       starts, not as many bars late as the clock had run.
 - [ ] PATTERN: LEN at 8 makes a queued change land every 8 steps; SWG moves the swing exactly as
-      VALUE pushed + turned does. F1 + CLR in GRID undoes a LEN change.
+      VALUE pushed + turned does. FUNC + CLR in GRID undoes a LEN change.
 
 ## KEYS: a key holds its note
 
@@ -2237,16 +2237,16 @@ were the octave keys until the controls concept, docs/CONTROLS.md).
 - [ ] The same on a SAMPLE track with a long sample and DEC at hold: the sample plays while the
       key is down and tails out when it comes up.
 - [ ] Hold a key, change octave, let go: the note stops (it does not hang).
-- [ ] Hold a key and press F4 to leave KEYS: the note stops.
+- [ ] Hold a key and press HOME to leave KEYS: the note stops.
 - [ ] Drum tracks behave as before: letting go changes nothing.
 - [ ] The same on a GRAIN track with DEC at 127 (hold): the cloud thins out when the key comes up
       (it used to sound until STOP).
 
 ## PROJECT: undo and redo, and where reload and new went
 
-- [ ] In PROJECT, F1 + CLR undoes and F1 + OK redoes (try a LEN change on the PATTERN page).
-- [ ] F1 + LEFT once shows AGAIN TO RELOAD and changes nothing; twice reloads the project from the
-      card. F1 + RIGHT twice starts a new project. A single press of either never loses work.
+- [ ] In PROJECT, FUNC + CLR undoes and FUNC + OK redoes (try a LEN change on the PATTERN page).
+- [ ] FUNC + LEFT once shows AGAIN TO RELOAD and changes nothing; twice reloads the project from the
+      card. FUNC + RIGHT twice starts a new project. A single press of either never loses work.
 
 ## KIT: the kit browser (FUNC+EDIT twice)
 
@@ -2293,7 +2293,7 @@ were the octave keys until the controls concept, docs/CONTROLS.md).
 
 ## Factory content: audition list (2026-11-22)
 
-A first boot with no card and a NEW project (PROJECT, F1 + RIGHT twice) now hold the same thing:
+A first boot with no card and a NEW project (PROJECT, FUNC + RIGHT twice) now hold the same thing:
 core/factory.hpp. Chosen from the references in docs/SOUND.md and balanced by rendering on the
 host (`make -C host render`, which writes the four patterns and A01's eight tracks soloed to
 `build/host/render/`), but **nobody has listened to it**. Levels measured there, A01, RMS over
