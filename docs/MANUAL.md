@@ -154,6 +154,8 @@ in a project saved before the arp existed.
 
 ### Held notes: the ASR page
 
+<p><img src="screens/edit_asr.png" width="256" alt="EDIT, the ASR page on VA POLY"></p>
+
 On **VA MONO** and **VA POLY** a seventh EDIT page, **ASR**, after ARP, decides how a note is
 held. With it, POLY plays pads and long chords, and MONO plays long bass notes and drones:
 

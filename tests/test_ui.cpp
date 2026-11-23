@@ -5817,6 +5817,18 @@ TEST(ui_screenshots) {
         key(ENAGA_KEY_SELECT_RIGHT);
         write_shot(folder, page);
     }
+    // The ASR page on track 7 (VA POLY), set up as a pad; then everything back as it was, so the
+    // shots after this one draw what they always drew.
+    key(ENAGA_KEY_SELECT_RIGHT);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);
+    const uint8_t pad[kAsrParams] = {72, 89, 90, 40};    // ~400 MS, 70%, ~1.9 S, 31%
+    for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), pad[i]);
+    pump();
+    write_shot(folder, "edit_asr");
+    for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
+    pump();
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_SELECT_LEFT);
 
     mixer_page(app, 0);
     write_shot(folder, "mixer");
