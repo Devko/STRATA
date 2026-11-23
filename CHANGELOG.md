@@ -51,7 +51,7 @@ the project file format or the controls.
   They used to change the track, so turning RIGHT for the next machine changed another track's
   machine. The track is on the pads and the screen keys, which now say `TRACK 2` and so on.
 
-## [0.1.0] - {{RELEASE_DATE}}
+## [0.1.0] - 2026-11-22
 
 The first release: STRATA on a SmplTrek running Enaga 0.2.0. Early, and released so that people
 with a unit can play it and report back. Release notes: [docs/release/v0.1.0.md](docs/release/v0.1.0.md).
@@ -162,7 +162,7 @@ of the panel and screenshots of every screen.
 
 ### Known limits
 
-- Tested on one SmplTrek on {{RELEASE_DATE}}, with the {{BUILD}} build. {{UNIT_LOAD}} Every other
+- Tested on one SmplTrek on 2026-11-22, with the cl6x build. The audio load stayed under 30% on the default beat, and MAX, the highest load since PLAY, peaked at 84.3% during long, heavy play with big effects and a lot going on, with no clicks or dropouts. Every other
   load figure comes from the
   emulator, which models no caches.
 - VA POLY is the expensive machine: all tracks together share **12 VA POLY voices**. Past that,
