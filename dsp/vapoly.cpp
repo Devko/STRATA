@@ -59,11 +59,12 @@
 namespace strata {
 namespace {
 
-// The longest gate a slot will count, in frames: ten seconds at 48 kHz. The table's longest
-// entry is 64 steps, which at 20 BPM is over three minutes, and a counter that large is a note
-// nobody is waiting for -- but the clamp exists so the countdown cannot be handed something
-// absurd by a tempo read before the clock has settled.
-constexpr int kGateMax = 480000;
+// The longest gate a slot will count, in frames: five minutes at 48 kHz. The table's longest
+// entry is 64 steps, which at 20 BPM is over three minutes. It was ten seconds while nothing
+// sustained, which was harmless then; with the ASR page's SUS a pad's LEN of 16 or 64 steps is
+// the point, and at 120 BPM 64 steps is 32 s. The clamp still exists so the countdown cannot be
+// handed something absurd by a tempo read before the clock has settled. VA MONO uses the same.
+constexpr int kGateMax = 14400000;
 
 
 using enaga::dsp::clamp;

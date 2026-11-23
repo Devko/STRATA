@@ -380,7 +380,7 @@ TEST(golden_dense_retriggers) {
         trig(67, 127, 4701, false, 0),  trig(60, 127, 5000, false, 300)};
     const int count = int(sizeof(dense) / sizeof(dense[0]));
     const int frames = 6400;
-    TrackParams patches[4];
+    TrackParams patches[4]{};   // zeroed: the ASR page (24-27) at 0 is the envelope these were recorded with
     for (int i = 0; i < kParams; i++) {
         patches[0].set(i, 127);
         patches[1].set(i, 0);

@@ -122,6 +122,8 @@ constexpr float kResMax24 = 0.84f;             // it compounds through the casca
 constexpr float kEnvSemitones = 66.0f;         // 5.5 octaves of cutoff at ENV 127
 constexpr float kDecayLowS = 0.015f;
 constexpr float kDecayOctaves = 7.3219f;       // log2(2.4 / 0.015): 15 ms to 2.4 s
+constexpr float kAttackOctaves = 10.9658f;     // log2(5 / 0.0025): ATK, 2.5 ms to 5 s
+constexpr float kReleaseOctaves = 7.0589f;     // log2(8 / 0.06): REL, 60 ms to 8 s
 constexpr float kGlideScaleS = 0.004f;
 constexpr float kGlideOctaves = 7.0f;          // 0 to 0.5 s, and 0 means 0
 // The soft clip bounds the voice to +-1, so this times the accent's gain is the machine's hard
@@ -144,6 +146,10 @@ constexpr float kFilterReleaseS = 0.040f;
 constexpr float kFilterDecayRatio = 0.55f;     // the sweep is shorter than the note: the "wow"
 constexpr float kAccentDecayRatio = 0.82f;     // an accented note is a little shorter
 constexpr float kAccentFilterRatio = 0.5f;     // and its sweep is a lot shorter
+// With ATK up, the accent's attack keeps the proportion the two fixed attacks above have, and the
+// filter's release keeps its proportion to the amplitude's, so it closes as the note fades.
+constexpr float kAccentAttackRatio = kAttackAccentS / kAttackS;
+constexpr float kFilterReleaseRatio = kFilterReleaseS / kReleaseS;
 
 // --- accent ---------------------------------------------------------------------------------
 constexpr float kAccentGain = 1.40f;           // louder, but that is the least of it
@@ -160,6 +166,10 @@ float to_target(float seconds, float rate) {
     const float steps = seconds * rate;
     return steps < 1.0f ? 1.0f : 1.0f - exp(-EnvelopeShape::kSpan * reciprocal(steps));
 }
+
+// The longest gate a note may carry, in frames: five minutes at 48 kHz, the same cap as VA
+// POLY's (vapoly.cpp says why).
+constexpr uint32_t kGateMax = 14400000u;
 
 }  // namespace
 
@@ -189,8 +199,8 @@ float to_target(float seconds, float rate) {
 // machine, which this one keeps.
 //   8  DEC  decay, 15 ms to 2.4 s exponential (about 190 ms at 64). ONE knob for both
 //           envelopes, 303-style: the amplitude falls over DEC and the filter over 0.55 x DEC,
-//           so the sweep always lands at the front of the note. The Machine interface has no
-//           note-off, so this is also the note's length.
+//           so the sweep always lands at the front of the note. With SUS (the ASR page) at 0
+//           this is also the note's length; with SUS up it is the fall to the sustain level.
 //   9  ENV  how much of the filter envelope reaches the cutoff, 0 to +66 semitones (5.5
 //           octaves). At 0 the filter is static -- a dub bass; wide open with RES up it is the
 //           acid squelch. The only knob an accent multiplies rather than replaces.
@@ -198,6 +208,32 @@ float to_target(float seconds, float rate) {
 //           usable 42 ms. Portamento on every note; a slid step glides too, but never faster
 //           than 55 ms (see start()). MONO's own knob: VA POLY spends this slot on DET.
 //  11  LVL  output level, square law. Square gives usable control over the quiet end.
+
+// ASR -- the note envelope, a page of its own after the arp (dsp/track.hpp: SRC and AMP are full).
+// Every knob at 0 is EXACTLY the envelope this machine had before the page existed -- the same
+// constants, not a curve that happens to land near them -- so an older kit, which loads with
+// the four bytes at 0, renders the same bits.
+//  24  ATK  attack, 2.5 ms to 5 s exponential. The accent's attack scales with it (0.6 ms at
+//           0), and above 0 the filter envelope's attack follows it too, so a slow pad swells
+//           open as it fades in rather than arriving bright.
+//  25  SUS  sustain, 0 to 1 of the peak, linear. At 0 the note is a one-shot whose length is
+//           DEC, as it always was. Above 0 the note holds at SUS for as long as the KEYS pad is
+//           held, or for the step's LEN; DEC becomes the fall from the peak to it. On VA MONO the
+//           step's LEN only counts once SUS is up (va.hpp, gate_).
+//  26  REL  release, 60 ms to 8 s exponential: the tail after the key comes up or LEN ends.
+//           The filter's release keeps its old 2:3 proportion to it.
+//  27  FSU  filter sustain, 0 to 1 of the filter envelope's sweep (ENV). At 0 the sweep
+//           closes back to CUT over 0.55 x DEC, the 303 shape; up, it holds open, so a long pad
+//           does not dull while it sustains.
+
+float va_attack_seconds(uint8_t value) {
+    return value == 0 ? kAttackS : kAttackS * exp2(kAttackOctaves * float(value) * (1.0f / 127.0f));
+}
+
+float va_release_seconds(uint8_t value) {
+    return value == 0 ? kReleaseS
+                      : kReleaseS * exp2(kReleaseOctaves * float(value) * (1.0f / 127.0f));
+}
 
 VaMode va_mode_from(uint8_t value) {
     // Three compares, no division: the C674x has no integer divide instruction at all, so even
@@ -229,16 +265,28 @@ VaSettings VaSettings::make(const TrackParams &params, float rate, float inv_rat
     const float level = params.unit(11);
     s.out_gain = kHeadroom * level * level;
 
+    // The ASR page. Each 0 takes the old constant itself rather than the curve's value at 0, so
+    // a kit from before the page renders bit-identically (the table above).
+    const uint8_t atk = params.get(Page::asr, 0);
+    const uint8_t rel = params.get(Page::asr, 2);
+    s.attack_s = va_attack_seconds(atk);
+    s.release_s = va_release_seconds(rel);
+    s.sustain = params.unit(Page::asr, 1);
+    s.filter_sustain = params.unit(Page::asr, 3);
+    const float attack_accent = atk == 0 ? kAttackAccentS : s.attack_s * kAccentAttackRatio;
+    const float filter_attack = atk == 0 ? kFilterAttackS : s.attack_s;
+    const float filter_release = rel == 0 ? kFilterReleaseS : s.release_s * kFilterReleaseRatio;
+
     // Accent has shapes of its own rather than scaling a shape, because an envelope shape is a
     // set of one-pole coefficients: there is nothing linear to scale.
-    s.amp_shape = EnvelopeShape::make(kAttackS, s.decay_s, 0.0f, kReleaseS, rate);
-    s.amp_shape_accent = EnvelopeShape::make(kAttackAccentS, s.decay_s * kAccentDecayRatio, 0.0f,
-                                             kReleaseS, rate);
-    s.fenv_shape = EnvelopeShape::make(kFilterAttackS, s.decay_s * kFilterDecayRatio, 0.0f,
-                                       kFilterReleaseS, control_rate);
+    s.amp_shape = EnvelopeShape::make(s.attack_s, s.decay_s, s.sustain, s.release_s, rate);
+    s.amp_shape_accent = EnvelopeShape::make(attack_accent, s.decay_s * kAccentDecayRatio,
+                                             s.sustain, s.release_s, rate);
+    s.fenv_shape = EnvelopeShape::make(filter_attack, s.decay_s * kFilterDecayRatio,
+                                       s.filter_sustain, filter_release, control_rate);
     s.fenv_shape_accent =
-        EnvelopeShape::make(kFilterAttackS, s.decay_s * kFilterDecayRatio * kAccentFilterRatio,
-                            0.0f, kFilterReleaseS, control_rate);
+        EnvelopeShape::make(filter_attack, s.decay_s * kFilterDecayRatio * kAccentFilterRatio,
+                            s.filter_sustain, filter_release, control_rate);
 
     s.level_osc1 = kLevelOsc1 * makeup;
     s.level_osc2 = kLevelOsc2 * makeup;
@@ -478,6 +526,9 @@ void VaMono::trigger(const Trig &trig) {
     pending_ = true;
     release_on_start_ = false;
     active_ = true;
+    // A slid note is the previous one carrying on, so the previous one's gate must not let it go
+    // before the slide arrives: its own LEN takes over from its start.
+    if (trig.slide) gate_ = -1;
 }
 
 void VaMono::release(uint8_t note) {
@@ -486,17 +537,20 @@ void VaMono::release(uint8_t note) {
     if (next_.note != note) return;
     if (pending_) release_on_start_ = true;
     else voice_.gate_off();
+    gate_ = -1;
 }
 
 void VaMono::release_all() {
     // STOP once: let the note go with its release tail. Both envelopes, so the filter closes as
     // the level falls rather than leaving a bright ghost behind.
     voice_.gate_off();
+    gate_ = -1;
 }
 
 void VaMono::kill_all() {
     pending_ = false;
     release_on_start_ = false;
+    gate_ = -1;
     wait_ = 0;
     voice_.kill();
     active_ = false;
@@ -513,8 +567,16 @@ void VaMono::render_add(float *out, int frames) {
         int n = frames - i;
         if (n > VaVoice::kControl) n = VaVoice::kControl;
         if (pending_ && wait_ < n) n = wait_;    // cut the slice short at the trig's frame
+        if (gate_ > 0 && gate_ < n) n = gate_;   // and at the gate's end: released on its frame
         voice_.run(settings_, out + i, n, work_, env_);
         if (pending_) wait_ -= n;
+        if (gate_ > 0) {
+            gate_ -= n;
+            if (gate_ <= 0) {
+                voice_.gate_off();               // LEN is over: into the release, no click
+                gate_ = -1;
+            }
+        }
         i += n;
     }
     active_ = pending_ || voice_.sounding();
@@ -556,7 +618,17 @@ void VaMono::start() {
     if (first_note_ || (!t.slide && settings_.glide_coef >= 1.0f)) voice_.set_pitch(target);
     first_note_ = false;
 
-    if (t.slide && was_sounding) return;   // the envelopes and the phases carry on untouched
+    // This note's own LEN, counted from now (va.hpp, gate_). Only with SUS up: at SUS 0 the
+    // envelope ends the note by itself, as it always has. Long enough to outlast any pattern
+    // (vapoly.cpp's kGateMax), so a held LEN rings across the pattern's end like a tie.
+    gate_ = settings_.sustain > 0.0f && t.gate_frames > 0
+                ? int(t.gate_frames > kGateMax ? kGateMax : t.gate_frames)
+                : -1;
+
+    // A slid note bends the sounding one into its pitch: the envelopes and the phases carry on
+    // untouched. Not one already let go, though -- a voice in its release tail has nothing held
+    // to carry on, so the slide starts a note (gliding into it) rather than bending a fade.
+    if (t.slide && was_sounding && !voice_.released()) return;
 
     // A voice taken while still sounding keeps its oscillator phases and its filter state, and
     // its amplitude envelope goes on from the level it is at: resetting any of them under a
@@ -566,6 +638,7 @@ void VaMono::start() {
     if (release_on_start_) {
         voice_.gate_off();
         release_on_start_ = false;
+        gate_ = -1;
     }
 }
 
