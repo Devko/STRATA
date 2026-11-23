@@ -6803,6 +6803,7 @@ TEST(ui_an_edit_knob_still_works_after_a_scene_capture) {
         post_cmd(Cmd::macro_clear, uint8_t(m));
         post_cmd(Cmd::set_macro, uint8_t(m), 0);
     }
+    post_cmd_morph(0);                                 // at rest: an earlier test left it up
     pump(2);
 
     shift_key(ENAGA_KEY_F7);                           // PERFORM
