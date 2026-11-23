@@ -233,9 +233,9 @@ collision. Contributors, human or AI, should read [CLAUDE.md](CLAUDE.md) for the
 
 ## Status
 
-**[v0.2.0](https://github.com/Devko/STRATA/releases/tag/v0.2.0)** (2026-11-23) is the current
-release, an early beta. `main` has moved on since: the performance mixer and looper, the WAVE
-and FM4 machines, the VA oscillator page and the stock sample folders are in
+**[v0.3.1](https://github.com/Devko/STRATA/releases/tag/v0.3.1)** (2026-11-23) is the current
+release, an early beta: the GRAIN overhaul on top of 0.3.0's performance mixer, looper, WAVE and
+FM4. Nothing in 0.3.x has run on the unit yet. What `main` adds after it is in
 [CHANGELOG.md](CHANGELOG.md) under Unreleased.
 
 | | |

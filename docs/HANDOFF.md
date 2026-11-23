@@ -5,8 +5,8 @@ This file holds what exists nowhere else in the repo: the state in one table, th
 order, and the knowledge that lives in no code comment, commit message or other document. When a
 fact here becomes stale, fix it here or delete it; do not append a history.
 
-**STRATA runs on the unit and has two releases.** v0.1.0 (2026-11-22) and v0.2.0 (2026-11-23,
-an early beta) are on GitHub. On the unit the default beat loads under 30%, and a long, heavy
+**STRATA runs on the unit and has four releases.** v0.1.0 (2026-11-22), v0.2.0, v0.3.0 and v0.3.1 (2026-11-23,
+early betas) are on GitHub; nothing in 0.3.x has run on the unit yet. On the unit the default beat loads under 30%, and a long, heavy
 session peaked at 84.3% MAX with no dropouts. Almost everything added since the first evening has
 been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
