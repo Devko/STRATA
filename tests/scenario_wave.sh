@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # WAVE emulator scenario: no wavetable is built at init; switching a track to WAVE builds its
-# table on demand on the C674x (logged as "wav FM1"), and the WAVE pair plays the default beat in place of the VAs:
+# table on demand on the C674x (logged as "wav CLS" and "wav HRM"), and the WAVE pair plays the default beat in place of the VAs:
 # track 6 (the bass) is switched to WAVE MONO and track 7 (the chord) to WAVE POLY, on keys alone,
 # and the beat keeps running inside the load target with no overruns.
 #
-# The emulator presses keys and turns no encoders (docs/HANDOFF.md, section 2), so the tracks keep
-# the VA kit's bytes: on WAVE those read as TBL 64 (FM RATIO) and the bass's MOD as POS. That is a
-# fair load case: the wavetable reader costs the same on every table and position. Compare the
-# peak with scenario_factory.sh on the same commit (docs/BUDGET.md, "WAVE").
+# Switching a machine loads its default sound (#133), so the bass plays WAVE MONO's first sound
+# (table CLS) and the chord WAVE POLY's (table HRM). That is a fair load case: the wavetable
+# reader costs the same on every table and position. Compare the peak with scenario_factory.sh on
+# the same commit (docs/BUDGET.md, "WAVE").
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F8 = 28 EDIT, F1 = 19 FUNC,
 # DOWN = 25. EDIT's DOWN walks the track; F1+F8 opens MACHINE, whose DOWN walks the machine list
@@ -92,7 +92,8 @@ check("strata ready" in log or (len(log) == 16 and any(l.startswith("scr ") for 
 # "run int" comes first and can scroll out of the 16 lines too; a sounding beat proves it as well
 # (checked below from the peak load).
 check("run int" in log or len(log) == 16, "the transport started", f"log={log}")
-check("wav FM1" in log, "the bass's table was built on demand", f"log={log}")
+check("wav CLS" in log, "the bass's table was built on demand", f"log={log}")
+check("wav HRM" in log, "the chord's table was built on demand", f"log={log}")
 check("scr MACHINE" in screens, "F1+F8 opened MACHINE", f"screens={screens}")
 # The log keeps its last 16 lines; the second switch and the screens after it are the newest.
 check("mch 7 WPL" in log, "track 7 reached WAVE POLY", f"log={log}")

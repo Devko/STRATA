@@ -19,7 +19,7 @@ been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is 
 | `make -C host test` | **1,754 tests, 3,485,153 checks, 0 failures** on `main` after PR #126: `core/`, `dsp/` and all of `app/` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image: `APP.ENA` 484,160 bytes GCC-only (476,008 cl6x), bss 1,334,848; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | **26 scenarios**, run on Roland's PC only. The 24 that existed on `1914af7` (#118) passed there with cl6x, `scenario_freeze` once #119 fixed its keys. `scenario_wave` (#122) and `scenario_fm` (#126) have not run yet |
+| `tools/scenarios.sh` | **27 scenarios**, run on Roland's PC only. All 27 pass with cl6x on `ce5fc6b` (the v0.3.1 build, 2026-11-23), `scenario_wave` once its table check followed #133 |
 | unit | v0.2.0 on Enaga 0.2.0: boots, plays, under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been on the unit |
 | memory | init takes **97.05 MiB of a 120 MiB heap** since #124 (2 MiB loader buffer, wavetables built in the idle capture buffer): 22.95 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |

@@ -6,14 +6,12 @@ the project file format or the controls.
 
 ## [Unreleased]
 
-### Changed
+## [0.3.1] - {{RELEASE_DATE}}
 
-- **GRAIN is easy to dial in.** About 6 dB louder at the same LVL (a cloud used to sit 11 dB
-  under its own sample). PIT plays whole semitones (an octave up was 19 cents off). SIZ reaches
-  680 ms (was 390 ms), from 8 ms. Every GRN knob shows its unit: `151MS`, `X4.3` grains in the
-  air, `HOLD`, `D15`, `OCT25`. On a GRN track OK in EDIT opens its SOUNDS list and OK in MACHINE
-  the sample browser. Older projects open; their GRN tracks play louder, with SIZ a little
-  longer at the same knob and PIT on the nearest semitone.
+An early beta: everything merged since 0.3.0, built for the same Enaga 0.2.0 firmware. The GRAIN
+overhaul and the sample and machine fixes below have not been through the unit walkthrough
+(docs/UNIT_CHECKLIST.md) yet. Release notes: [docs/release/v0.3.1.md](docs/release/v0.3.1.md).
+Projects and kits from 0.1.0 to 0.3.0 open in 0.3.1; their GRN tracks play louder (see Changed).
 
 ### Added
 
@@ -25,18 +23,33 @@ the project file format or the controls.
 - **Eight GRN factory sounds:** CLOUD, PAD, FREEZE, SHIMMR, DRIFT, STRTCH, STUTTR, CHOPS. They
   leave POS and PIT alone. Switching a track to GRN loads CLOUD.
 
+### Changed
+
+- **GRAIN is easy to dial in.** About 6 dB louder at the same LVL (a cloud used to sit 11 dB
+  under its own sample). PIT plays whole semitones (an octave up was 19 cents off). SIZ reaches
+  680 ms (was 390 ms), from 8 ms. Every GRN knob shows its unit: `151MS`, `X4.3` grains in the
+  air, `HOLD`, `D15`, `OCT25`. On a GRN track OK in EDIT opens its SOUNDS list and OK in MACHINE
+  the sample browser. Older projects open; their GRN tracks play louder, with SIZ a little
+  longer at the same knob and PIT on the nearest semitone.
+- **Switching a track's machine loads that machine's default sound** (the first entry of its
+  SOUNDS list; on SMP, the whole sample from its start). The knobs used to keep their positions,
+  so the old machine's values leaked into the new one. FX (lo-fi, pan, sends), LFO and ARP stay;
+  MID is untouched.
+
 ### Fixed
 
 - A sample picked in the browser on a SMP track plays whole from its first frame. It used to
   keep the track's STA, SLC and DEC, so it started part way in (or on a slice chosen by the
   note) and DEC faded it out early. The pick now sets STA 0, LEN 127, SLC 1 and DEC 127 (hold).
 
-### Changed
+### Known limits
 
-- Switching a track's machine loads that machine's default sound (the first entry of its SOUNDS
-  list; on SMP, the whole sample from its start). The knobs used to keep their positions, so the
-  old machine's values leaked into the new one. FX (lo-fi, pan, sends), LFO and ARP stay; MID is
-  untouched.
+- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} The changes above are not yet
+  checked on the unit. Every other load figure comes from the emulator, which models no caches.
+- The 0.3.0 limits stand: WAVE POLY and FM4 share the **12 POLY voices** with VA POLY and that
+  budget is provisional, the performance mixer and the looper are not saved, the looper borrows
+  RESAMPLE's buffer, streamed samples play forward only, FREEZE is not saved, MIDI clock, SYNC and
+  USB MIDI are lightly tested, and on Enaga 0.2.0 unplug USB when driving gear from MIDI OUT.
 
 ## [0.3.0] - 2026-11-23
 
