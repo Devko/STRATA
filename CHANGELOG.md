@@ -30,7 +30,9 @@ open in 0.3.0; their VA tracks sound a little different (see Changed).
 - **WAVE MONO and WAVE POLY**, two new machines: the VA voice with a wavetable oscillator. 16
   built-in tables of 16 frames (CLS, PWM, SYN, FMT, RSW, HRM, FLD, PHD, FM1, TIN, DGT, VOW, GRL,
   EPN, PLK, MLT), POS and MOT (envelope to position), WRP and DET on their OSC page, the ASR
-  page, and 8 + 7 factory sounds. WAVE POLY shares the 12-voice POLY budget.
+  page, and 8 + 7 factory sounds. WAVE POLY shares the 12-voice POLY budget. A table is built
+  the first time a track plays it (until then the voice plays only its sub), so nothing is added
+  to the start-up.
 - **FM4**, a four-operator FM machine: the eight classic algorithms, operator 4 feedback, an
   index envelope, a detuned second pair and keytracked brightness, for e-pianos, bells, glass,
   brass, organs and FM basses. Six voices with chords, in the shared 12-voice POLY budget, and 8
