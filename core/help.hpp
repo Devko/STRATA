@@ -5,8 +5,9 @@
 // Roland (2026-11-23): "if I am in a specific module I get the help for this module". So the
 // help now starts on the screen's own page -- which knob does what there and the gestures that
 // work there -- and the screen keys (or LEFT/RIGHT), pressed while FUNC is still held, turn to
-// its further pages. The last three pages are the same on every screen: FUNC + a function key,
-// FUNC + a knob or pad, and the upper pads, which is what the one page used to be.
+// its further pages. The last five pages are the same on every screen: FUNC + a function key,
+// FUNC + a knob or pad, and the upper pads, which is what the one page used to be, then the
+// performance mixer on VALUE (core/perffx.hpp): its gestures and its sixteen slots.
 //
 // Plain text and plain data, so it lives in core/ and is tested on the host without the app:
 // tests/test_help.cpp holds every row of every page of every screen to the font and the line
@@ -57,7 +58,7 @@ struct HelpPlace {
     const char *knob[4] = {nullptr, nullptr, nullptr, nullptr};
 };
 
-// How many pages the help has on this screen: its own, then the three shared ones.
+// How many pages the help has on this screen: its own, then the five shared ones.
 int help_page_count(const HelpPlace &place);
 
 // Page `page` (0 = the screen's own; wraps): its title into `title`, its rows into `rows`.

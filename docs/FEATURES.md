@@ -69,7 +69,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | VA MONO: saw or pulse, OSC 2 (detune or sync), sub, noise, drive, own filter and envelope, accent, slide, glide | v0.1.0 | ✔ default beat bass | At SUS 0 (default) DEC is the note's length and LEN is not heard; see the ASR row |
 | VA POLY: up to 6 notes, 13 chord types with inversions, DET | v0.1.0 | ✔ default beat chord | At SUS 0 LEN only shortens a note; see the ASR row. No stereo spread or unison 2 (in SPEC) |
 | **Held notes on the VAs: ASR page** (ATK SUS REL FSU, seventh EDIT page); with SUS up a note holds while the key is held or for its step's LEN (up to 64 steps) | #90 | ○ (13k) | Held voices count against the 12-voice POLY budget for as long as they hold; MONO counts LEN only once SUS is up |
-| **VA sound rework: OSC page** (WAV OS2 SUB DRV, eighth EDIT page): saw or pulse width, a detuned or hard-synced OSC 2, sub level, drive into the filter; RES self-oscillates near the top, LP24 squelches like LP12 | #118 | ○ (13o, walkthrough 16) | Older projects lose the old fixed synced pulse (load `SAW OFF 102 000`). No key tracking or velocity to the filter; the filter decay is still 0.55 x DEC |
+| **VA sound rework: OSC page** (WAV OS2 SUB DRV, eighth EDIT page): saw or pulse width, a detuned or hard-synced OSC 2, sub level, drive into the filter; RES self-oscillates near the top, LP24 squelches like LP12 | #118 | ○ (13p, walkthrough 17) | Older projects lose the old fixed synced pulse (load `SAW OFF 102 000`). No key tracking or velocity to the filter; the filter decay is still 0.55 x DEC |
 | MID: plays an outboard synth over MIDI; SRC/AMP knobs send CC 74/71/73/72, 70/75/76/77 | v0.1.0 | ○ (8d) | No sound or CPU of its own; no scale fold |
 | Key and scale per pattern (15 scales), fold for VAs, GRAIN and unsliced SAMPLE; sharps everywhere | v0.1.0 | ○ (7) | |
 | **NOTE view**: TUN / PIT read as a note (where TUN puts C-4) and turn a semitone a click; push the knob for 0-127 | #88 | ○ ("Today's walkthrough") | Chromatic, not by scale (TUN applies after the fold). 128 bytes per range, so many notes are a few cents off (`+`/`-`). Not saved: on at every start |
@@ -114,6 +114,8 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Note repeat on the pads, pressure as velocity | v0.1.0 | ○ (13f) | Not recordable |
 | Tape stop (FUNC + hold push D) | v0.1.0 | ○ (13g) | |
 | Delay freeze (FUNC + hold MUTATE) | v0.1.0 | ○ (13g) | |
+| **Performance mixer on VALUE**: push VALUE + STEP picks one of 15 effects (sweeps, risers, echo freeze, wash, stutter, tape stop, bass kill, pump, crush, noise, flanger, gate, build), VALUE is its amount | after v0.2.0 | ○ (16 / 13o) | One effect at a time. Not saved. CPU host-estimated only (about 2 points worst case with the looper) |
+| **Master looper** (VALUE + STEP 16): 1-8 bars of the mix from the bar line, VALUE crossfades live/loop, effects go over it | after v0.2.0 | ○ (16 / 13o) | Shares RESAMPLE's 30 s buffer: no RESAMPLE or FREEZE while a loop is held. No overdub yet. Not saved |
 
 ## FX and mixer
 
@@ -143,7 +145,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Sample browser (`/SAMPLES`, `/RECORD`), load while playing | v0.1.0 | ○ (15b) | 256 entries a folder; path ≤ 111 characters; no audition before loading |
 | Resample the master, 1-8 bars, to a file or straight onto a track | v0.1.0 | ○ ("Resampling") | Takes ≤ 30 s |
 | Bounce: resample ONE track alone (B = `TRK 1`-`TRK 8`), mono, before its duck, fader, pan and sends | #109 | ○ (13m) | No emulator scenario: B is an encoder, the emulator presses keys only |
-| **Freeze**: FUNC menu FREEZE, a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. measured (cl6x): A05 held pad 20.3% to 10.1% avg; A01 peaks 7 points lower |
+| **Freeze**: FUNC menu FREEZE, a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. measured (cl6x): A05 held pad 21.2% to 10.1% avg; A01 peaks 7 points lower |
 | Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | No monitoring through STRATA; MIC needs headphones in |
 
 ## MIDI and sync

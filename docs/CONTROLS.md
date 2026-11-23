@@ -65,7 +65,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      On PROJECTS, where only A turns, push B renames and push C deletes the project under the
      cursor (delete then asks for OK twice).
    - **VALUE:** tempo (PERFORM: morph; CHAIN/PATTERN: the field under the cursor). Push + turn =
-     swing, FUNC + turn = DJ filter.
+     swing, FUNC + turn = DJ filter. **Push + STEP 1-16 picks a performance effect, and while one
+     is picked VALUE is its amount on every screen** (the performance mixer, below).
    - **STEP keys:** the sixteen of whatever the pad-row keys chose.
    - **Lower pads:** the eight tracks: select and play. FUNC + pad = mute on the next bar.
    - **Upper pads:** the seven performance tools, the same in every mode but KEYS.
@@ -127,6 +128,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | AUTO-FILL | | OFF 4 8 16 bars |
 | QUANTIZE | | record quantize, by 5 |
 | FREEZE | freeze the selected track (its loop from the next bar line), or unfreeze it | `T3 1 BAR` (1 2 4 8), `T3 WAIT` / `REC` while recording, `T3 ON` frozen |
+| LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
 
 Moved here from: FUNC + PROJECT twice (save), PROJECT's FUNC + UP/DOWN/LEFT/RIGHT (chain,
 sample reload, reload, new), PROJECTS' FUNC + DOWN (save as, still there too), CHAIN's FUNC +
@@ -152,6 +154,42 @@ Printed labels (above), and the moves made while playing:
 | FUNC + STEP | trigless step (PERFORM: assign the LFO or kill EQ to the macro) |
 | FUNC + A / B / C on GRID | Euclidean fill |
 
+## The performance mixer (push VALUE + STEP)
+
+Roland, 2026-11-23, after modbang's Octatrack Performance Mixer: VALUE as a crossfader from the
+dry mix into one of sixteen effects, the sixteenth a master looper. `core/perffx.hpp` has the
+slots, `dsp/masterfx.hpp` the five new effects, `dsp/looper.hpp` the looper.
+
+| Gesture | Does |
+| --- | --- |
+| Push VALUE + STEP n | Pick effect n (`4 ECHO RISER`), at amount 0. It replaces the effect that was up, which fades out |
+| Push VALUE + the same STEP | Let go (`FX OFF: VALUE TEMPO`): VALUE goes back to tempo / morph / its field |
+| VALUE (an effect picked) | Its amount, 0 dry ... 127 the whole effect, on every screen (`ECHO RISER 64`). At 0 it is the dry mix to the bit, the rest rule of the morph and the macros |
+| Push VALUE + LEFT / RIGHT | The previous / next slot, round the sixteen, keeping the amount: a scene change with the crossfader left up. Reaching 16 picks the looper without recording |
+| Push VALUE + STEP 16 | The looper: records the finished mix from the next bar line for LOOP LEN bars (`LOOP 4 BAR: NEXT BAR`, `LOOP ARMED: PLAY` when stopped), then plays it. Again: a new take |
+| VALUE (looper picked) | The loop's mix, 0 live ... 127 only the loop (`LOOP MIX 64`) |
+| Push VALUE + CLR | Every effect off and the loop's mix to 0 (`FX OFF`); again, with all of that off, throws the loop away (`LOOP CLEARED`) |
+| VALUE held | The STEP keys are the sixteen slots: dim amber; the effect that is up bright amber; the picked one bright green; STEP 16 red blinking armed, red recording, green holding a loop |
+
+The slots: 1 LP SWEEP and 2 HP SWEEP (the DJ filter), 3 HP RISER (high-pass, resonance climbing,
+the whole mix into a longer reverb), 4 ECHO RISER (every track into the delay, feedback
+climbing), 5 ECHO FREEZE (into the delay, frozen from 112 up), 6 REVERB WASH (every track into a
+longer reverb), 7 STUTTER (beat repeat from 16 up: 1/4, 1/8, 1/16, 1/32 as it turns, each a
+shorter slice of the same past), 8 TAPE STOP (from 16 up), 9 BASS KILL (the kill EQ's LOW),
+10 PUMP (a dip on every beat), 11 CRUSH (bits and rate), 12 NOISE RISER, 13 FLANGER, 14 GATE
+(sixteenths), 15 BUILD (high-pass, echo and noise), 16 LOOPER.
+
+- **One effect at a time**, plus the looper: picking an effect leaves a loop playing at its mix,
+  and the effect goes over the loop. That also bounds the CPU (docs/BUDGET.md).
+- **Nothing is saved or undone.** The project's settings are untouched; amount 0 is exactly what
+  was there. The FUNC chords for the same moves (FUNC + VALUE, FUNC + push A-D, FUNC + MUTATE, the
+  REPEAT pad) keep working beside it; the pad and the chords win over the mixer's stutter, freeze
+  and tape stop, and a picked LP/HP sweep overrides FUNC + VALUE's DJ filter while it is up.
+- **MUTE mode keeps push VALUE + STEP 1-8** (store a mute state); 9-16 still pick effects there.
+- **The looper uses RESAMPLE's 30 s buffer** (8 bars down to 64 BPM; LOOP LEN halves until it
+  fits): no RESAMPLE or FREEZE while a loop is held (`LOOP HOLDS BUFFER`; push VALUE + CLR twice frees it), and no loop while a take is running (`RESAMPLE BUSY`), and a
+  stop during the take throws it away. Not saved with the project.
+
 ## The performance pads (upper row, printed TRK 1-7)
 
 | Print | STRATA | Colour | Bright while | Says |
@@ -172,8 +210,9 @@ AMOUNT` on a kick's SRC, `A SRC SOURCE TRACK` on MIXER DUCK), and the gestures t
 (the step page, the hold-and-press LEN, MACRO LEARN, NOTE view, SLC AUTO, rename and delete,
 KEYS on the pads ...). While FUNC is still held, **the screen keys (or LEFT/RIGHT) turn the help's
 pages**, as they turn every screen's pages; the line above the bottom line says
-`SCREEN KEYS: PAGE 1/7`. The last three pages are the same everywhere: FUNC + each function key,
-FUNC + a knob or pad, and the upper pads. Every hold starts on the screen's own page.
+`SCREEN KEYS: PAGE 1/9`. The last five pages are the same everywhere: FUNC + each function key,
+FUNC + a knob or pad, the upper pads, and the performance mixer's gestures and slots
+(`VALUE FX MIXER:`, `VALUE FX STEPS:`). Every hold starts on the screen's own page.
 
 FUNC + a screen key or LEFT/RIGHT does nothing anywhere else, and the help only takes them once
 it is up, so no chord changes meaning. Any other key, knob or pad, or letting go of FUNC, takes

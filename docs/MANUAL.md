@@ -992,6 +992,57 @@ Neither is saved or undone; both cost nothing until pressed. With the delay in i
 (below) the freeze is the LONG delay's own: the whole wash holds exactly as it is, whatever its
 length, from the moment you press.
 
+### The performance mixer: VALUE as a crossfader
+
+VALUE can be a crossfader from the dry mix into one of sixteen effects, the last of them a
+looper (an idea taken from modbang's Octatrack Performance Mixer template).
+
+**Pick an effect: hold VALUE pushed and tap a STEP key.** The screen names it (`4 ECHO RISER`).
+While VALUE is held, the STEP keys show the sixteen slots: dim amber, the effect that is up
+bright amber, the one VALUE is on bright green. Then **turn VALUE**: at 0 it is the dry mix,
+exactly as before, and turning up brings the effect in (`ECHO RISER 64`). This works on every
+screen, so you can play an effect from GRID, EDIT or PERFORM; while an effect is picked VALUE
+does not change the tempo or PERFORM's morph. Push VALUE + the same STEP again lets go
+(`FX OFF: VALUE TEMPO`) and VALUE is VALUE again.
+
+| STEP | Effect | What VALUE does |
+| --- | --- | --- |
+| 1 | LP SWEEP | the DJ filter's low-pass, closing |
+| 2 | HP SWEEP | the DJ filter's high-pass, rising |
+| 3 | HP RISER | high-pass with rising resonance, the whole mix into a longer reverb |
+| 4 | ECHO RISER | every track into the delay, feedback climbing |
+| 5 | ECHO FREEZE | into the delay; near the top (112) the echoes freeze |
+| 6 | REVERB WASH | every track into a longer and longer reverb |
+| 7 | STUTTER | beat repeat: from 16 up, 1/4, then 1/8, 1/16, 1/32, each a shorter slice of the same moment |
+| 8 | TAPE STOP | from 16 up the tape stops; back under 16 and it is back |
+| 9 | BASS KILL | the kill EQ's LOW band down to nothing |
+| 10 | PUMP | a sidechain-style dip on every beat |
+| 11 | CRUSH | fewer bits and a lower sample rate |
+| 12 | NOISE RISER | white noise, louder and brighter |
+| 13 | FLANGER | a slow jet sweep |
+| 14 | GATE | sixteenth-note chopping |
+| 15 | BUILD | high-pass, echo and a noise riser together |
+| 16 | LOOPER | the loop's mix (below) |
+
+One effect plays at a time: picking another replaces it, and the old one fades out. **Push VALUE
++ LEFT/RIGHT** moves to the previous or next slot and keeps the amount, so you can switch effects
+with the crossfader still up. **Push VALUE + CLR** turns everything off.
+
+**The looper (STEP 16).** Push VALUE + STEP 16 with the beat running: from the next bar line the
+whole mix is recorded for 4 bars (`LOOP 4 BAR: NEXT BAR`; set 1, 2, 4 or 8 in the FUNC menu's
+**LOOP LEN** row). Then the loop plays, in time, and VALUE is its **mix**: 0 is the live beat,
+127 only the loop, and in between both. Now change things underneath (mute tracks, switch
+patterns, edit) and fade back when you are ready. Pick an effect after the looper and the loop
+keeps playing at its mix with the effect over it, so you can filter or stutter the loop itself.
+Push VALUE + STEP 16 again for a new take. With everything off, push VALUE + CLR a second time
+throws the loop away (`LOOP CLEARED`).
+
+The looper borrows RESAMPLE's memory, so while a loop is held RESAMPLE and FREEZE say
+`LOOP HOLDS BUFFER`; clear the loop first. 8 bars fit down to 64 BPM (below that the take is
+shortened to 4 bars). A STOP during the take throws it away, and the loop fades out while the
+transport is stopped. Nothing of the mixer is saved or undone, and in MUTE MODE push VALUE +
+STEP 1-8 still stores a mute state.
+
 ### The sidechain duck
 
 <p><img src="screens/mixer_dck.png" width="256" alt="MIXER's DCK 1-4 page"> <img src="screens/mixer_duck.png" width="256" alt="MIXER's DUCK page"></p>

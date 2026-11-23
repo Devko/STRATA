@@ -6,9 +6,10 @@
 #   ...one bar later                       -> `frz 64`: track 7 plays its loop from RAM
 #
 # The emulator cannot read engine memory, so this reads the app's `frz <mask>` log line
-# (app/app.hpp, update()). For the load it reads the app's `ld <avg> <max>` lines: eight
-# half-second windows, logged only after a track freezes or comes back (Enaga's log ring keeps
-# sixteen lines and the other scenarios check early ones). The emulator's report has only the
+# (app/app.hpp, update()). For the load it reads the app's `ld <avg> <max>` lines: four bars,
+# one line each, logged only after a track freezes or comes back, from the second whole bar on
+# (Enaga's log ring keeps sixteen lines and the other scenarios check early ones). Four bars are
+# one pass of A05, so the frozen and the live run cover the same four chords. The emulator's report has only the
 # peak since boot (an earlier version read a last-block figure it does not have: 0.00%).
 #
 # --baseline does the same freeze and then UNFREEZES the track (the same menu keys again), so its
@@ -27,7 +28,7 @@ cd "$(dirname "$0")/.."
 # shellcheck source=tools/env.sh
 source tools/env.sh
 
-CYCLES=5600000000
+CYCLES=8200000000
 BASELINE=0
 PAD=0
 while [ $# -gt 0 ]; do
@@ -125,8 +126,8 @@ peak = report.get("audio_cycles_peak", 0)
 percent = 100.0 * peak / CYCLES_PER_BLOCK
 check(percent < 60.0, "load is inside the target", f"{percent:.2f}% peak since boot")
 
-# `ld <avg> <max>` windows (app/app.hpp): half a second each, eight after each freeze or
-# unfreeze. The ones that count follow the last `frz` line: frozen, or live again (--baseline).
+# `ld <avg> <max>` lines (app/app.hpp): one a bar, four after each freeze or unfreeze. The ones
+# that count follow the last `frz` line: frozen, or live again (--baseline).
 windows, seen = [], False
 for line in log:
     if line.startswith("frz "):
@@ -135,8 +136,8 @@ for line in log:
     m = re.fullmatch(r"ld (\d+\.\d) (\d+\.\d)", line)
     if m:
         windows.append((float(m.group(1)), float(m.group(2))))
-windows = windows[-8:]
-check(seen and len(windows) == 8, "eight load windows after the last frz",
+windows = windows[-4:]
+check(seen and len(windows) == 4, "four bars of load after the last frz",
       f"ld lines={len(windows)}")
 
 print()
@@ -144,7 +145,7 @@ if windows:
     avg = sum(w[0] for w in windows) / len(windows)
     top = max(w[1] for w in windows)
     label = "track 7 live" if baseline else "track 7 frozen"
-    print(f"{label}: avg {avg:.2f}%  max {top:.1f}%  over {len(windows)} windows (avg/max %):")
+    print(f"{label}: avg {avg:.2f}%  max {top:.1f}%  over {len(windows)} bars (avg/max %):")
     print("  " + "  ".join(f"{a:.1f}/{m:.1f}" for a, m in windows))
 print("note: compare with the same keys and --baseline; record both in docs/BUDGET.md, Freeze.")
 

@@ -67,6 +67,9 @@ bool Engine::init(float sample_rate) {
     if (!repeat_.init(rate_)) return false;
     if (!tape_stop_.init(rate_)) return false;
     if (!capture_.init(rate_)) return false;
+    // The looper records into RESAMPLE's buffer (dsp/looper.hpp): no RAM of its own.
+    looper_.attach(capture_.lend(), capture_.capacity());
+    master_fx_.init(rate_);
 
     perform_init(scenes_, macros_);
 
@@ -1407,11 +1410,53 @@ void Engine::apply(const Command &command) {
         }
 
         case Cmd::delay_freeze:
-            mixer_.freeze_delay(command.a != 0);
+            // Held by the chord or by the mixer's ECHO FREEZE: process() hands the mixer either.
+            user_freeze_ = command.a != 0;
             break;
 
         case Cmd::tape_stop:
-            tape_stop_.hold(command.a != 0);
+            user_tape_ = command.a != 0;
+            break;
+
+        case Cmd::perf_fx: {
+            // One effect at a time (core/perffx.hpp). The looper is not an effect: its mix is
+            // Cmd::looper's, so an a naming it, or past the end, is refused.
+            if (command.a >= uint8_t(PerfFx::looper)) {
+                status_.bump_refused();
+                break;
+            }
+            perf_fx_ = PerfFx(command.a);
+            perf_amount_ = command.b > kPerfAmountMax ? kPerfAmountMax : command.b;
+            perf_plan_ = perf_plan(perf_fx_, perf_amount_);
+            perform_dirty_ = true;          // the sends' raise is in apply_performance
+            break;
+        }
+
+        case Cmd::looper:
+            if (command.a == 0) {
+                looper_mix_ = command.b > kPerfAmountMax ? kPerfAmountMax : command.b;
+            } else if (command.a == 1) {
+                // The buffer is RESAMPLE's: not while a take is armed, running or waiting.
+                if (capture_.armed() || capture_.recording() || capture_.done()) {
+                    status_.bump_refused();
+                    break;
+                }
+                // Bars into frames, as resample_arm does; halved until the take fits (8 bars
+                // fit down to 64 BPM, 4 to 32).
+                uint32_t bars = command.b >= 8 ? 8u : (command.b >= 4 ? 4u : (command.b >= 2 ? 2u : 1u));
+                float frames = float(bars) * float(kTicksPerBar) * samples_per_tick_;
+                while (bars > 1u && frames > float(looper_.capacity())) {
+                    bars >>= 1;
+                    frames *= 0.5f;
+                }
+                if (frames < 1.0f || !looper_.arm(uint32_t(frames), bars)) {
+                    status_.bump_refused();
+                }
+            } else if (command.a == 2) {
+                looper_.clear();
+            } else {
+                status_.bump_refused();
+            }
             break;
 
         case Cmd::release_note: {
@@ -1464,6 +1509,11 @@ void Engine::apply(const Command &command) {
             // refused, as the UI's FROZEN row already is.
             const bool from_track = command.b == 2 || command.b == 3;
             if (command.b == 3 && frozen_[track].on()) {
+                status_.bump_refused();
+                break;
+            }
+            // The looper holds the buffer (dsp/looper.hpp) until its loop is thrown away.
+            if (looper_.holding()) {
                 status_.bump_refused();
                 break;
             }
@@ -1800,6 +1850,28 @@ void Engine::apply_performance() {
         const int param = page_first(Page::fx) + (throw_bus_ == 1 ? 2 : 3);
         performed_[throw_track_][param] = 127;
     }
+
+    // The performance mixer's sends (core/perffx.hpp): every track into the delay or the reverb,
+    // raised to at least the plan's byte. Raised, never lowered, so a track already sending more
+    // keeps it, and amount 0 raises nothing.
+    if (perf_plan_.send_delay > 0 || perf_plan_.send_reverb > 0) {
+        const int delay = page_first(Page::fx) + 2;
+        const int reverb = page_first(Page::fx) + 3;
+        for (int t = 0; t < kTracks; t++) {
+            if (performed_[t][delay] < perf_plan_.send_delay) performed_[t][delay] = perf_plan_.send_delay;
+            if (performed_[t][reverb] < perf_plan_.send_reverb) performed_[t][reverb] = perf_plan_.send_reverb;
+        }
+    }
+}
+
+// The plan's overrides on copies of the sends and the master (core/perffx.hpp): the DJ filter
+// replaced, the feedback and the decay raised, the kill EQ's LOW lowered.
+void Engine::apply_perf_plan(SendSettings &sends, MasterSettings &master) const {
+    const PerfPlan &plan = perf_plan_;
+    if (plan.dj_on) master.dj = plan.dj;
+    if (plan.eq_low < master.eq_low) master.eq_low = plan.eq_low;
+    if (plan.delay_feedback > sends.delay_feedback) sends.delay_feedback = plan.delay_feedback;
+    if (plan.reverb_decay_s > sends.reverb_decay_s) sends.reverb_decay_s = plan.reverb_decay_s;
 }
 
 // --- pattern changes ------------------------------------------------------
@@ -1880,8 +1952,10 @@ void Engine::on_bar() {
         capture_lead_ = bar_line;        // the take records this whole block, from frame 0
     }
 
-    // Frozen tracks come back into time on their own bars (dsp/frozen.hpp).
+    // Frozen tracks come back into time on their own bars (dsp/frozen.hpp), and so does the
+    // master looper, which also starts an armed take here.
     for (int t = 0; t < kTracks; t++) frozen_[t].on_bar(bar_, bar_line);
+    looper_.on_bar(bar_, bar_line);
 }
 
 void Engine::cross_boundary(uint32_t boundary) {
@@ -2573,7 +2647,24 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // A streamed sample's next frames, before anything renders from them.
     top_up_streams();
 
-    mixer_.prepare(sends_, master_);
+    // The performance mixer's plan over the sends and the master (core/perffx.hpp): copies, so
+    // the project's settings are untouched and amount 0 hands the mixer exactly what it had.
+    // The tracks' send raise is in apply_performance, with the rest of the performance layer.
+    if (perf_plan_ == PerfPlan{}) {
+        mixer_.prepare(sends_, master_);
+    } else {
+        SendSettings sends = sends_;
+        MasterSettings master = master_;
+        apply_perf_plan(sends, master);
+        mixer_.prepare(sends, master);
+    }
+    // The held master moves, from their chords or from the mixer.
+    const bool freeze = user_freeze_ || perf_plan_.delay_freeze;
+    if (freeze != freeze_applied_) {
+        mixer_.freeze_delay(freeze);
+        freeze_applied_ = freeze;
+    }
+    tape_stop_.hold(user_tape_ || perf_plan_.tape_stop);
     mixer_.begin_block(int(frames));
 
     // A bounce's tap, only while its take is running: the track's own block, from the mixer.
@@ -2627,12 +2718,44 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // A stream voice that went back to frame 0 in this block needs its stream reopened.
     watch_streams();
 
+    // The master looper, on the finished mix and before the performance effects, so a loop is
+    // the kit as it played and whatever is turned on next goes over it (dsp/looper.hpp). A take
+    // the transport stops under is thrown away: it would no longer be in time.
+    if (!running && looper_.state() == Looper::State::recording) looper_.clear();
+    looper_.process(out, int(frames), float(looper_mix_) * (1.0f / float(kPerfAmountMax)), running);
+
+    // The mixer's own effects (dsp/masterfx.hpp), in time with the beat: the clock's place while
+    // it runs, carried on from there while it is stopped.
+    const float phase_step = inv_samples_per_tick_ * (1.0f / float(enaga::clock::ppqn));
+    if (running) {
+        const uint32_t into_beat = clock_now.position % uint32_t(enaga::clock::ppqn);
+        perf_phase_ = (float(into_beat) + clock_now.fraction) * (1.0f / float(enaga::clock::ppqn));
+    }
+    MasterFxSettings fx;
+    fx.pump = perf_plan_.pump;
+    fx.crush = perf_plan_.crush;
+    fx.noise = perf_plan_.noise;
+    fx.flanger = perf_plan_.flanger;
+    fx.gate = perf_plan_.gate;
+    master_fx_.set(fx);
+    master_fx_.process(out, int(frames), perf_phase_, phase_step);
+    perf_phase_ += phase_step * float(frames);
+    perf_phase_ -= perf_phase_ >= 1.0f ? float(int(perf_phase_)) : 0.0f;
+
     // Beat repeat is LAST, on the finished master: that is what "the master output" means, and
     // it is why it captures the limiter and the master filter too (dsp/repeat.hpp). The length
-    // is a note value, so the frames follow the tempo.
-    repeat_.set(uint32_t(float(repeat_length_ticks(repeat_length_)) * samples_per_tick_),
-                repeat_pitch_);
-    repeat_.hold(repeat_held_);
+    // is a note value, so the frames follow the tempo. The pad wins over the mixer's STUTTER;
+    // a new stutter band lets go and presses again, which loops a shorter slice of the same
+    // past (the ring is not written while held): the build of a stutter riser.
+    const bool stutter = !repeat_held_ && perf_plan_.repeat >= 0;
+    const RepeatLength length = stutter ? RepeatLength(perf_plan_.repeat) : repeat_length_;
+    if (stutter && perf_repeat_applied_ >= 0 && perf_repeat_applied_ != perf_plan_.repeat) {
+        repeat_.hold(false);
+    }
+    repeat_.set(uint32_t(float(repeat_length_ticks(length)) * samples_per_tick_),
+                stutter ? false : repeat_pitch_);
+    repeat_.hold(repeat_held_ || stutter);
+    perf_repeat_applied_ = stutter ? perf_plan_.repeat : int8_t(-1);
     repeat_.process(out, int(frames));
 
     // The tape stop, after beat repeat: it stops whatever is coming out, a repeat included. Two
@@ -2667,6 +2790,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
                                  std::memory_order_relaxed);
     status_.resample_frames.store(capture_.frames(), std::memory_order_relaxed);
     status_.resample_clamped.store(capture_.clamped() ? 1u : 0u, std::memory_order_relaxed);
+    status_.looper_state.store(uint8_t(looper_.state()), std::memory_order_relaxed);
+    status_.looper_bars.store(looper_.holding() ? uint8_t(looper_.bars()) : 0u,
+                              std::memory_order_relaxed);
 
     publish_playheads();
 
