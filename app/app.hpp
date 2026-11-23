@@ -25,6 +25,7 @@
 
 #include "arp.hpp"          // the ARP page's names and clicks
 #include "engine.hpp"
+#include "help.hpp"         // the FUNC help's pages, one set per screen
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "sounds.hpp"       // SOUNDS: the factory sounds for one track
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
@@ -436,6 +437,10 @@ constexpr int param_click(int index) {
 }
 static_assert(page_first(Page(kEditPages - 1)) + kParamsPerPage == kTrackParams,
               "EDIT's last page is the last four track parameters");
+// The FUNC help (core/help.hpp) has a knob page for each EDIT page and a page for each MIXER
+// page, in these orders.
+static_assert(kEditPages == kHelpEditPages, "an EDIT page the help knows nothing about");
+static_assert(kMixerPageCount == kHelpMixerPages, "a MIXER page the help knows nothing about");
 
 class Strata : public enaga::App {
     friend struct strata::test::UiProbe;    // tests/test_ui.cpp only; see the note above
@@ -492,6 +497,20 @@ public:
             if (down) {
                 shift_at_ms_ = last_ms_;
                 shift_alone_ = true;
+                help_page_ = 0;                 // the help opens on the screen's own page
+            }
+            return;
+        }
+        // While the help shows, the screen keys (or LEFT/RIGHT) turn its pages, as they turn the
+        // screen's own. FUNC + these four does nothing anywhere else (docs/CONTROLS.md), and
+        // only once the help is up, so no chord changes meaning.
+        if (func_help_showing() &&
+            (key == ENAGA_KEY_SELECT_LEFT || key == ENAGA_KEY_SELECT_RIGHT ||
+             key == ENAGA_KEY_LEFT || key == ENAGA_KEY_RIGHT)) {
+            if (down) {
+                const int pages = help_page_count(help_place());
+                const int delta = key == ENAGA_KEY_SELECT_LEFT || key == ENAGA_KEY_LEFT ? -1 : 1;
+                help_page_ = (help_page_ + delta + pages) % pages;
             }
             return;
         }
@@ -2741,7 +2760,9 @@ public:
         *out = 0;
         canvas.text(0, 0, line, 14);
 
-        if ((step_page_ || mode_ != Mode::grid) && notice_showing()) {
+        if (func_help_showing()) {
+            // The help's title takes this line (draw_func_help).
+        } else if ((step_page_ || mode_ != Mode::grid) && notice_showing()) {
             // What just happened, on the second line. GRID shows it in its edit-state line; every
             // other screen had nowhere for it, so a gesture there (F1 + F3's "again to save", an
             // octave, a scene captured) answered with nothing at all.
@@ -2814,10 +2835,11 @@ public:
 
     // --- the FUNC help: FUNC held on its own ------------------------------
     //
-    // docs/CONTROLS.md: FUNC + a function key is the label printed UNDER that key, and the upper
-    // pads are printed TRK 1-7 but are STRATA's performance pads. Holding FUNC for a moment with
-    // nothing else shows both, over whatever screen is up; the next key, knob or pad (or letting
-    // go of FUNC) takes it away, so it never sits in the way of a chord.
+    // docs/CONTROLS.md, "FUNC help". Holding FUNC for a moment with nothing else shows help for
+    // the screen that is up: its knobs and its gestures first (core/help.hpp), then, a screen key
+    // at a time, FUNC + each function key, FUNC + a knob or pad, and the upper pads. The next
+    // other key, knob or pad (or letting go of FUNC) takes it away, so it never sits in the way
+    // of a chord.
 
     static constexpr uint32_t kFuncHelpMs = 600;
 
@@ -2826,21 +2848,72 @@ public:
                uint32_t(last_ms_ - shift_at_ms_) >= kFuncHelpMs;
     }
 
+    // Where the help is: the screen, the EDIT or MIXER page, and the knobs as the screen names
+    // them, so the help says "B FMA FM AMOUNT" on a kick and "B SNP SNAPPY" on a snare.
+    HelpPlace help_place() const {
+        HelpPlace place;
+        place.machine = engine_.machine_id(selected_);
+        place.page = uint8_t(param_page_);
+        const int base = page_first(Page(param_page_));
+        for (int i = 0; i < 4; i++) place.knob[i] = track_param_name(base + i);
+        if (step_page_) {
+            place.screen = HelpScreen::step;
+            return place;
+        }
+        switch (mode_) {
+            case Mode::grid:     place.screen = HelpScreen::grid; break;
+            case Mode::edit:
+                place.screen = macro_learn_ >= 0 ? HelpScreen::learn : HelpScreen::edit;
+                break;
+            case Mode::keys:     place.screen = HelpScreen::keys; break;
+            case Mode::mixer:
+                place.screen = HelpScreen::mixer;
+                place.page = uint8_t(mixer_bank_);
+                break;
+            case Mode::perform:  place.screen = HelpScreen::perform; break;
+            case Mode::project:
+                switch (project_page_) {
+                    case ProjectPage::chain:   place.screen = HelpScreen::chain; break;
+                    case ProjectPage::pattern: place.screen = HelpScreen::pattern; break;
+                    case ProjectPage::setup:   place.screen = HelpScreen::setup; break;
+                    case ProjectPage::files:   place.screen = HelpScreen::projects; break;
+                    default:                   place.screen = HelpScreen::project; break;
+                }
+                break;
+            case Mode::resample: place.screen = HelpScreen::resample; break;
+            case Mode::machine:  place.screen = HelpScreen::machine; break;
+            case Mode::kit:      place.screen = HelpScreen::kit; break;
+            case Mode::samples:  place.screen = HelpScreen::samples; break;
+            case Mode::sounds:   place.screen = HelpScreen::sounds; break;
+            case Mode::menu:     place.screen = HelpScreen::menu; break;
+        }
+        return place;
+    }
+
+    // Title on the second line, ten rows, and the page line: "SCREEN KEYS: PAGE 1/7", which is
+    // also how anyone finds out there is more than one page.
     void draw_func_help(enaga::Canvas &canvas) {
         canvas.rect(0, 9, 128, 110, 0);
-        canvas.text(0, 9, "FUNC + KEY:", 15);
-        static const char *const kLines[] = {
-            "REC   RESAMPLE", "PROJ  SAMPLES", "HOME  MENU", "PLAY  RESTART", "STOP  RESET",
-            "MIXER PERFORM", "EDIT  MACHINE", "OK/CLR REDO/UNDO",
-        };
-        int y = 18;
-        for (const char *line : kLines) {
-            canvas.text(0, y, line, 12);
-            y += 9;
+        const HelpPlace place = help_place();
+        char title[kHelpChars + 1];
+        char rows[kHelpRows][kHelpChars + 1];
+        const int pages = help_page_count(place);
+        const int count = help_page(place, help_page_, title, rows);
+        canvas.text(0, 9, title, 15);
+        for (int r = 0; r < count; r++) {
+            int length = 0;
+            while (rows[r][length] != 0) length++;
+            const bool heading = length > 0 && rows[r][length - 1] == ':';
+            canvas.text(0, 18 + r * 9, rows[r], heading ? 15 : 12);
         }
-        canvas.text(0, y, "UPPER PADS TRK1-7:", 15);
-        canvas.text(0, y + 9, "FILL RPT MUTE SC-A", 12);
-        canvas.text(0, y + 18, "SC-B THROW MUTATE", 12);
+        char line[40];
+        char *out = line;
+        append(out, pages < 10 ? "SCREEN KEYS: PAGE " : "PAGE ");
+        append_number(out, uint32_t(help_page_ % pages + 1));
+        *out++ = '/';
+        append_number(out, uint32_t(pages));
+        *out = 0;
+        canvas.text(0, 108, line, 7);
     }
 
     // --- GRID: all eight tracks at a glance ------------------------------
@@ -6093,6 +6166,7 @@ private:
     Mode menu_return_ = Mode::grid;   // the screen the FUNC menu opened over
     int menu_cursor_ = 0;             // the FUNC menu's row; SAVE when it opens
     bool shift_alone_ = false;        // FUNC down and nothing else pressed since
+    int help_page_ = 0;               // the FUNC help's page: 0 = the screen's own
     uint32_t shift_at_ms_ = 0;        // when FUNC went down
     int chain_remove_armed_ = -1;                 // CHAIN's F1 + LEFT, armed on this entry
     uint32_t chain_remove_armed_at_ms_ = 0;
