@@ -1835,8 +1835,12 @@ TEST(engine_a_morph_between_two_scenes_moves_the_parameters) {
 
     post_u(Cmd::set_morph, 0);
     pump();
-    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 0);
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 127);  // at rest the knob owns it, not scene A
     CHECK_EQ(int(kit_value(kPoly, kLvl)), 127);    // the kit is untouched by the morph
+
+    post_u(Cmd::set_morph, 1);                     // one click off rest: scene A has it
+    pump();
+    CHECK_EQ(int(engine.performed(kPoly, kLvl)), 0);
 
     post_u(Cmd::set_morph, kMorphScale);
     pump();
@@ -1870,7 +1874,9 @@ TEST(engine_a_morph_is_heard_between_steps_and_not_only_at_the_next_trig) {
     post(Cmd::set_param, kPoly, 0, kDec, 127);     // a note that rings for seconds
     pump();
     two_scenes_differing_in(kPoly, kLvl, 0, 127);
-    post_u(Cmd::set_morph, 0);
+    post_u(Cmd::set_morph, 1);                     // one click off rest, where scene A owns it:
+                                                   // at rest the morph hands the level back to
+                                                   // the knob (core/perform.cpp)
     put_trig(kPoly, 0);
     CHECK_EQ(int(engine.performed(kPoly, kLvl)), 0);
     CHECK_EQ(pump(), 0.0f);

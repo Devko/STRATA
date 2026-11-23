@@ -225,6 +225,13 @@ int scene_count(const Scene &scene) {
 void scene_morph(const Scene &a, const Scene &b, uint16_t position,
                  uint8_t out[kTracks][kKitParams]) {
     const int at = clamp_int(int(position), 0, int(kMorphScale));
+    // At rest the EDIT knobs own the sound: `out` comes in holding the live kit, so writing
+    // nothing leaves it alone. macro_apply does the same at 0 and core/perform.hpp says why --
+    // a performance control parked at its resting end must not hold a parameter. Here it also
+    // means the morph no longer recalls scene A by sitting at 0: capturing a scene used to pin
+    // every parameter it stored, and turning that knob in EDIT moved the screen and not the
+    // sound (Roland, 2026-11-23).
+    if (at == 0) return;
 
     for (int t = 0; t < kTracks; t++) {
         // Both bitmasks for this track, read once. A track neither scene touches is the common
@@ -265,6 +272,7 @@ void scene_morph(const Scene &a, const Scene &b, uint16_t position,
 void scene_morph_master(const Scene &a, const Scene &b, uint16_t position,
                         uint8_t out[kMasterBands]) {
     const int at = clamp_int(int(position), 0, int(kMorphScale));
+    if (at == 0) return;                // the knobs own it at rest, as in scene_morph
     const unsigned touched = unsigned(a.master_stored | b.master_stored);
     if (touched == 0) return;
     for (int band = 0; band < kMasterBands; band++) {

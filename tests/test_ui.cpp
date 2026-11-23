@@ -201,6 +201,14 @@ void post_cmd(Cmd cmd, uint8_t a = 0, uint8_t b = 0, uint8_t c = 0) {
     app_engine().commands().post(command);
 }
 
+// The morph position, which is a `u` field rather than the a/b/c bytes above.
+void post_cmd_morph(uint32_t at) {
+    Command command;
+    command.cmd = Cmd::set_morph;
+    command.u = at;
+    app_engine().commands().post(command);
+}
+
 void key(int code) {                       // a tap: press and release
     the_app().on_key(code, true);
     the_app().on_key(code, false);
@@ -275,6 +283,19 @@ uint8_t undo_depth() {
 // that a test does not depend on which parameter page a test before it left open.
 int encoder_param(int encoder) {
     return page_first(Page(UiProbe::param_page(the_app()))) + encoder;
+}
+
+// What a knob click leaves behind: `base` plus `delta`, unless the parameter is the machine's
+// TUN or PIT, where a click is a SEMITONE and the engine steps to the nearest note (core/
+// tuning.hpp, Cmd::lock_delta and Cmd::param_delta). A test that hard-codes "base + delta" on
+// encoder A passes only while a test before it happens to leave a page open whose first
+// parameter is not the tuning one -- which is how two tests here passed in the suite's order
+// and failed alone, and in a 64-shard run on Roland's PC (2026-11-23).
+int knob_result(int track, int param, int base, int delta) {
+    const uint8_t machine = app_engine().machine_id(track);
+    if (tune_param(machine) == param) return int(tune_step(machine, uint8_t(base), delta));
+    const int value = base + delta;
+    return value < 0 ? 0 : (value > 127 ? 127 : value);
 }
 
 // Back to a known state, by the keys and pads that do it rather than by writing the fields: F4 is
@@ -738,14 +759,16 @@ TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {
     CHECK(!trig_at(0, 16));
 
     // A hold on this page locks the step the page names, not the key's number.
+    const int param = encoder_param(0);
+    pump(2);
+    const int live = int(app_engine().params(0).v[param]);
     step_down(1);
     app.on_encoder(0, +5);
     step_up(1);
     pump();
-    const int param = encoder_param(0);
     uint8_t value = 0;
     CHECK(pattern_get_lock(app_engine().pattern(), 0, 33, uint8_t(param), value));
-    CHECK_EQ(int(value), 69);
+    CHECK_EQ(int(value), knob_result(0, param, live, +5));
     CHECK_EQ(int(step_of(0, 1).lock_count), 0);
     CHECK(!trig_at(0, 33));                        // the hold was spent on the lock
 
@@ -1232,10 +1255,11 @@ TEST(ui_a_hold_that_crosses_a_page_change_resolves_to_the_step_it_started_on) {
     // And the hold is not stranded: the next encoder move is a kit edit, not a lock on a step
     // nobody is touching.
     const int param = encoder_param(0);
+    pump(2);
     const uint8_t before = app_engine().params(0).v[param];
     app.on_encoder(0, +7);
     pump();
-    CHECK_EQ(int(app_engine().params(0).v[param]), int(before) + 7);
+    CHECK_EQ(int(app_engine().params(0).v[param]), knob_result(0, param, int(before), +7));
     CHECK_EQ(locks_on_track(0), 0);
     CHECK_EQ(int(undo_depth()), 1);                // the toggle only; no lock was recorded
 }
@@ -6649,5 +6673,47 @@ TEST(ui_learn_ends_on_home_and_a_second_clr_does_not_clear_the_track) {
     g_ms += 3000;
     pump(2);
     CHECK_EQ(UiProbe::macro_learn(app), -1);
+    key(ENAGA_KEY_F4);
+}
+
+// --- a captured scene does not hold the EDIT knobs -----------------------------------------
+
+TEST(ui_an_edit_knob_still_works_after_a_scene_capture) {
+    // Roland, 2026-11-23: "the editing of sounds does not work anymore", and a p-lock on a held
+    // step moved the sound while the knob alone did not. Pressing OK in PERFORM captures every
+    // parameter into scene A, and the morph -- parked at 0, where it starts -- used to write
+    // that capture over the kit on every rebuild. So the knob moved the kit and the screen, and
+    // the sound stayed where the capture had left it. The morph now lets go at rest, as a macro
+    // at 0 does (core/perform.cpp).
+    Strata &app = fresh();
+    for (int m = 0; m < kMacros; m++) {
+        post_cmd(Cmd::macro_clear, uint8_t(m));
+        post_cmd(Cmd::set_macro, uint8_t(m), 0);
+    }
+    pump(2);
+
+    shift_key(ENAGA_KEY_F7);                           // PERFORM
+    key(ENAGA_KEY_OK);                                 // capture the whole kit into scene A
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "SCENE CAPTURED");
+
+    key(ENAGA_KEY_F8);                                 // EDIT
+    const int track = UiProbe::selected(app);
+    const int param = encoder_param(0);
+    pump(2);
+    const int before = int(app_engine().performed(track, param));
+    app.on_encoder(0, +6);
+    pump(2);
+    CHECK(int(app_engine().performed(track, param)) != before);          // the sound moved
+    CHECK_EQ(int(app_engine().performed(track, param)),
+             int(app_engine().params(track).v[param]));                  // and follows the kit
+
+    // Off the rest position the scene has it again, which is what the morph is for.
+    post_cmd_morph(1);
+    pump(2);
+    CHECK_EQ(int(app_engine().performed(track, param)),
+             int(app_engine().scenes().scenes[app_engine().scene_slot(0)].values[track][param]));
+    post_cmd_morph(0);
+    pump(2);
     key(ENAGA_KEY_F4);
 }

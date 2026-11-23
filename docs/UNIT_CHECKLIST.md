@@ -67,6 +67,9 @@ are the point of this section.
       at once: the pattern stays. Learn again, HOME: ended. Turn macro A up, EDIT, turn that knob:
       `HELD BY MACRO A`. Back to
       PERFORM, turn A: both move. Easier than the STEP keys? `____`
+- [ ] **A capture does not kill the knobs** (2026-11-23). PERFORM, OK (`SCENE CAPTURED`), EDIT,
+      turn A: the sound moves, not just the screen. Turn VALUE up in PERFORM: the captured scene
+      takes over again; back at 0 the knobs own it. Does editing still feel normal? `____`
 - [ ] **Velocity on the STEP lights.** Four trigs, step page VEL 20, 60, 95, 120: four clearly
       different greens, dimmest to brightest? `____` A trig with PROB 50% blinks. Locks still amber.
 - [ ] **TUN as a note** (2026-11-23). Track 1 (KICK), EDIT SRC: A reads `A-1`, not `064`. Turn A

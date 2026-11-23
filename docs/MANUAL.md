@@ -232,6 +232,10 @@ B. A parameter that only one side stores fades between that side's value and the
 a scene that touches only the bass leaves the drums alone. Scenes change the kit values only;
 a step's locks still win over the morph.
 
+With VALUE at rest the morph **lets go**, the way a macro at 0 does: the EDIT knobs own the
+sound, and scene A takes over from the first click up. So capturing a scene never leaves a knob
+dead -- but parking the morph at 0 is not a way to recall scene A either.
+
 ### Macros
 
 A **macro** is one knob that moves up to 4 parameters at once, each towards its own target value.
@@ -776,6 +780,9 @@ Because a whole capture holds the kill EQ's knobs, a scene captured with LOW tur
 
 A useful habit: leave side A on an empty scene, build a sound, capture it into a scene on side B,
 then undo your knob moves and morph back and forth. The morph position itself is not saved.
+
+At rest (VALUE fully down) the morph hands every parameter back to its EDIT knob, so a capture
+cannot leave the sound stuck. One click up and side A has it.
 
 ### Macros
 

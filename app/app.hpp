@@ -309,8 +309,8 @@ constexpr Rgb kPerformColour[kPerformPads] = {
 constexpr uint8_t step_velocity_level(uint8_t velocity) {
     return velocity >= 110 ? 10 : (velocity >= 80 ? 6 : (velocity >= 40 ? 3 : 1));
 }
-constexpr uint32_t kConditionBlinkMs = 200;
-constexpr uint32_t kLearnClrGuardMs = 2000;     // CLR after the CLR that ended LEARN: swallowed     // half a blink: on 200 ms, off 200 ms
+constexpr uint32_t kConditionBlinkMs = 200;     // half a blink: on 200 ms, off 200 ms
+constexpr uint32_t kLearnClrGuardMs = 2000;     // CLR after the CLR that ended LEARN: swallowed
 
 constexpr const char *kPerformPadNames[kPerformPads] = {
     "FILL", "REPEAT", "MUTE", "SCENE A", "SCENE B", "THROW", "MUTATE",
