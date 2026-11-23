@@ -973,7 +973,7 @@ In the FUNC menu (FUNC+HOME), each with OK twice within 2 s:
 
 Both stop the transport.
 
-### Projects: open and save as
+### Projects: open, save as, rename and delete
 
 <p><img src="screens/projects.png" width="256" alt="The PROJECTS page"></p>
 
@@ -989,10 +989,24 @@ of eight at a time.
   `- + . # !`, up to 16), OK saves, CLR cancels (`NAME KEPT`). The project is written whole into
   a new folder and carries on under the new name; the old folder stays as it was saved. A name
   another project already has is refused (`NAME TAKEN`): open that one instead.
+- **Rename:** push B on a project opens the same name entry, titled RENAME and starting from
+  that project's name. OK renames it (`RENAMING`), CLR leaves it (`NAME KEPT`); a name another
+  project has is refused (`NAME TAKEN`). The open project can be renamed too: it carries on under
+  the new name, and STRATA starts with it. Unsaved work stays unsaved; the rename moves what is
+  on the card.
+- **Delete:** push C on a project asks `DELETE? OK TWICE`; OK, then OK again within 2 s
+  (`OK AGAIN TO DELETE`), deletes its folder and everything in it (`DELETING`). CLR, or any other
+  key, keeps it. The open project cannot be deleted (`PROJECT IS OPEN`): open another one first.
+  A delete cannot be undone.
 - `FUNC+UP` reads the card again. CLR goes back to the slots.
 
-There is no delete or rename on the unit: remove or rename a folder in
-`/ENAGA/DATA/STRATA/PROJECTS/` on a computer.
+Both are safe if the card is pulled or the power goes in the middle. The unit's file system has
+no rename, so a rename copies the project into the new folder, its `PROJECT.BIN` last, and only
+then deletes the old one: at any moment there is at least one whole copy, and at worst two. A
+delete removes `PROJECT.BIN` first, so a folder it did not finish is no longer a project
+(opening it says `NOT FOUND`, never a project with patterns missing); delete it again to finish.
+A delete that finds a folder inside the project's folder (put there from a computer) removes
+everything else and says `FOLDER NOT EMPTY`.
 
 ### The kit library
 
@@ -1031,8 +1045,11 @@ STRATA reads WAV files: 8, 16 or 24-bit, or 32-bit float, mono or stereo, at any
   memory left, longer than 349 s, or at another rate and longer than the above. Its first two
   seconds load into memory and the rest is read while it plays; the SMP line shows `S` for the
   track. A streamed file plays from its start, forward, on one voice: pitch, the note, ATK, DEC,
-  LVL and loop work, but START, LEN, slices and reverse do not, and on GRN only the first two
-  seconds play. Up to four tracks can stream at once. If the card cannot keep up, the gap plays
+  LVL, loop and LEN (where it stops, or loops back from) work, but START, slices and reverse do
+  not, and on GRN only the first two seconds play. The card can only be read forward from where
+  a stream was opened, and every jump costs a search through the file system that grows with the
+  file, so a start anywhere but the beginning or playing backwards would need the card to jump
+  all the time; docs/FEATURES.md has the numbers. Up to four tracks can stream at once. If the card cannot keep up, the gap plays
   as silence, the loop stays in time and the screen says `STREAM LATE`; a fast card (class 10 or
   better) avoids it.
 
