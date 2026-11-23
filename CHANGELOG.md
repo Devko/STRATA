@@ -21,6 +21,10 @@ the project file format or the controls.
   sustain, release (to 8 s) and filter sustain. With SUS up a note holds while its KEYS pad, STEP
   key, track pad or MIDI note is held, or for its step's LEN, up to 64 steps. At 0 (and in every older
   project) the VAs sound exactly as before.
+- **A05 PAD**, a fifth factory pattern: four bars of held VA POLY chords (Cm9, Abmaj7, Ebmaj7,
+  Gm7) that swell in and ring into each other, so the ASR page can be heard straight away. The
+  pad is in the pattern's locks; the kit and A01-A04 are unchanged. New projects get it; an
+  existing project keeps its own bank A.
 - **Note length from the STEP keys:** hold a note's STEP and press a later one: its LEN reaches
   that step. The pair is still a range for CLR, copy, paste and A/B.
 - **The step page answers A-D with its STEP still held:** C is LEN there, not a lock on CUT.

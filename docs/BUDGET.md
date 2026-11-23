@@ -1438,6 +1438,27 @@ A01's stabs costs 3.6 points with cl6x: under two extra voices' worth at 2.16 a 
 A01's stabs are spaced and few overlap. Six held pads over A01 (U10 on the unit) can still reach
 the 12-voice cap; that reading is the one that matters.
 
+### A05 PAD: held chords as factory content (2026-11-23, host only)
+
+A05 (core/factory.cpp, `pad`) holds a VA POLY chord through every bar with REL 2 s, so the chord
+track never goes idle: four or five voices hold, and six for the moment after each change. The
+voicings share notes, so a change never needs a seventh voice and nothing is stolen
+(tests/test_factory.cpp checks the union of each pair). The rest of the pattern is lighter than
+A01: four kicks, four closed hats, an occasional open hat and rim, a three-note bass a bar, no
+clap or loop.
+
+Estimate, from E12 and the per-voice figure: six held voices are 6 x 2.16 = 13 points cl6x (23
+GCC-only) for the chord track, against A01's stabs at a few voices for a fraction of the bar. A01
+measures 26.15% / 49.32%, and holding its stabs added 3.60 / 4.71, so A05 should land near **30%
+cl6x and 52-55% GCC-only**: under 60% either way, the GCC figure closest to it. Host render
+(`make -C host render`): the mix peaks at -1.2 dBFS, RMS -16.7 (A01: -17.0), the chord stem 2 dB
+under the kick. `tests/scenario_pad.sh` measures it; it has not run (the cloud cannot build the
+toolchain).
+
+| Build | cl6x | GCC only |
+| --- | --- | --- |
+| `scenario_pad.sh` (A05 PAD) | | |
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |

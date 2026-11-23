@@ -6,9 +6,9 @@
 //
 //   make -C host render                     # every factory pattern, 8 bars each
 //   make -C host render BARS=4
-//   build/host/strata-render OUTDIR [BARS] [STEMS]   # STEMS 1-4: whose tracks to solo
+//   build/host/strata-render OUTDIR [BARS] [STEMS]   # STEMS 1-5: whose tracks to solo
 //
-// Writes OUTDIR/A01.wav .. A04.wav (the mix), OUTDIR/A01_T1.wav .. _T8.wav (each track of A01
+// Writes OUTDIR/A01.wav .. A05.wav (the mix), OUTDIR/A01_T1.wav .. _T8.wav (each track of A01
 // soloed, so levels can be compared), and prints peak and RMS for each, which is what the
 // factory kit's levels were balanced against.
 #include "engine.hpp"
@@ -117,10 +117,10 @@ float db(float x) { return x > 0.0f ? 20.0f * std::log10(x) : -999.0f; }
 }  // namespace
 
 int main(int argc, char **argv) {
-    if (argc < 2) { std::fprintf(stderr, "usage: %s OUTDIR [BARS 1-24] [STEMS 1-4]\n", argv[0]); return 2; }
+    if (argc < 2) { std::fprintf(stderr, "usage: %s OUTDIR [BARS 1-24] [STEMS 1-5]\n", argv[0]); return 2; }
     const char *dir = argv[1];
     const int bars = argc > 2 && argv[2][0] ? std::atoi(argv[2]) : 8;
-    // The pattern whose tracks are soloed one by one, 1-4.
+    // The pattern whose tracks are soloed one by one, 1-5.
     const int stems = argc > 3 ? std::atoi(argv[3]) - 1 : 0;
     if (stems < 0 || stems >= kFactoryPatterns || bars < 1 || bars > 24) {
         std::fprintf(stderr, "usage: %s OUTDIR [BARS 1-24] [STEMS 1-%d]\n", argv[0], kFactoryPatterns);
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
     if (!g_engine.init(kRate)) { std::fprintf(stderr, "engine init failed\n"); return 1; }
 
     char path[512];
-    static const char *names[kFactoryPatterns] = {"GROOVE", "GROOVE+", "BREAK", "PEAK"};
+    static const char *names[kFactoryPatterns] = {"GROOVE", "GROOVE+", "BREAK", "PEAK", "PAD"};
     for (int slot = 0; slot < kFactoryPatterns; slot++) {
         int frames = 0;
         const Stats s = render(slot, bars, -1, &frames);
@@ -163,6 +163,20 @@ int main(int argc, char **argv) {
         std::printf("A01 AMBIENT  peak %6.1f dBFS  rms %6.1f dBFS  %s\n", db(s.peak), db(s.rms), path);
         Project &q = g_engine.project_for_load();
         for (int i = 0; i < kSendFields; i++) q.settings.sends[i] = saved[i];
+    }
+
+    // A05 PAD again with the reverb in HALL mode -- a project setting (MIXER, REV+), so the
+    // factory leaves it at ROOM for A01-A04's sake, but the pad is what HALL is for.
+    {
+        Project &p = g_engine.project_for_load();
+        const uint8_t saved = p.settings.sends[int(SendField::reverb_mode)];
+        p.settings.sends[int(SendField::reverb_mode)] = 127;
+        int frames = 0;
+        const Stats s = render(kFactoryPadSlot, bars, -1, &frames, 2);
+        std::snprintf(path, sizeof path, "%s/A05_HALL.wav", dir);
+        write_wav(path, frames);
+        std::printf("A05 HALL     peak %6.1f dBFS  rms %6.1f dBFS  %s\n", db(s.peak), db(s.rms), path);
+        g_engine.project_for_load().settings.sends[int(SendField::reverb_mode)] = saved;
     }
 
     static const char *tracks[kTracks] = {"KICK", "CLAP", "HAT C", "HAT O", "PERC", "BASS", "CHORD", "LOOP"};

@@ -15,10 +15,12 @@
 #include "perform.hpp"
 #include "project.hpp"
 #include "scale.hpp"
+#include "vapoly.hpp"
 
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 
 using namespace strata;
 using strata::test::FakeHost;
@@ -34,6 +36,8 @@ uint8_t g_buffer[kBankMaxBytes];
 void make() { factory_project(g_made, g_scenes, g_macros); }
 
 constexpr int kLvl = kFactoryAmp + 3;
+constexpr int kChordTrack = 6;
+constexpr int kAtkParam = kFactoryAsr + 0, kSusParam = kFactoryAsr + 1, kRelParam = kFactoryAsr + 2;
 
 bool steps_equal(const Step &a, const Step &b) {
     return a.flags == b.flags && a.note == b.note && a.velocity == b.velocity &&
@@ -66,7 +70,7 @@ TEST(factory_the_kit_is_the_spec_kit_and_every_track_can_be_heard) {
     }
 }
 
-TEST(factory_bank_a_has_four_patterns_that_play_and_the_rest_are_empty) {
+TEST(factory_bank_a_has_five_patterns_that_play_and_the_rest_are_empty) {
     make();
     for (int slot = 0; slot < kPatternsPerBank; slot++) {
         const Pattern &p = g_made.patterns[0][slot];
@@ -379,4 +383,125 @@ TEST(factory_new_keeps_the_loop_track_playing_the_placeholder) {
     CHECK_EQ(int(engine().machine_id(kLoopTrack)), int(MachineId::sample));
     const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
     CHECK(loop->has_sample());
+}
+
+// --- A05 PAD ----------------------------------------------------------------
+
+TEST(factory_the_pad_is_in_a05s_locks_and_the_kit_chord_is_still_a_stab) {
+    make();
+    // The kit's chord keeps SUS 0 and the rest of its ASR page at 0: A01-A04's stab.
+    for (int i = 0; i < 4; i++) CHECK_EQ(int(g_made.kit.tracks[kChordTrack].params[kFactoryAsr + i]), 0);
+    // And none of A01-A04 locks the ASR page anywhere on the chord track.
+    for (int slot = 0; slot < kFactoryPatterns; slot++) {
+        if (slot == kFactoryPadSlot) continue;
+        const Pattern &p = g_made.patterns[0][slot];
+        for (int s = 0; s < kStepsPerTrack; s++) {
+            uint8_t v = 0;
+            CHECK(!pattern_get_lock(p, kChordTrack, s, uint8_t(kSusParam), v));
+        }
+    }
+
+    // A05: four chords a bar apart, each held for its bar, each carrying the pad's ASR.
+    const Pattern &pad = g_made.patterns[0][kFactoryPadSlot];
+    CHECK_EQ(int(pad.master_length), 64);
+    CHECK_EQ(int(pad.tracks[kChordTrack].length), 64);
+    CHECK_EQ(trigs_on(pad, kChordTrack), 4);
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        const Step &step = pad.tracks[kChordTrack].steps[s];
+        const bool trig = (step.flags & kStepTrig) != 0;
+        CHECK(trig == ((s & 15) == 0));
+        if (!trig) continue;
+        CHECK(chord_type(step.chord) != ChordType::none);
+        CHECK_EQ(int(length_sixteenths(step.length)), 16 * 16);     // a bar
+        uint8_t atk = 0, sus = 0, rel = 0;
+        CHECK(pattern_get_lock(pad, kChordTrack, s, uint8_t(kAtkParam), atk));
+        CHECK(pattern_get_lock(pad, kChordTrack, s, uint8_t(kSusParam), sus));
+        CHECK(pattern_get_lock(pad, kChordTrack, s, uint8_t(kRelParam), rel));
+        CHECK(atk > 0 && sus > 0 && rel > 0);
+    }
+}
+
+TEST(factory_the_pads_chord_changes_never_need_more_than_six_voices) {
+    // VA POLY retriggers a voice already sounding a note (dsp/vapoly.hpp, rule 1), so a change
+    // needs the union of the two chords. Six or fewer and nothing is stolen -- the loop back to
+    // the first chord included, since REL rings the last one on into it.
+    make();
+    const Pattern &pad = g_made.patterns[0][kFactoryPadSlot];
+    uint8_t notes[4][kChordMaxNotes];
+    int counts[4] = {};
+    for (int b = 0; b < 4; b++) {
+        const Step &step = pad.tracks[kChordTrack].steps[b * 16];
+        counts[b] = chord_expand(step.note, step.chord, pad.root, pad.scale, notes[b]);
+        CHECK(counts[b] >= 4);
+    }
+    for (int b = 0; b < 4; b++) {
+        const int next = (b + 1) & 3;
+        int both = counts[next];
+        for (int i = 0; i < counts[b]; i++) {
+            bool shared = false;
+            for (int j = 0; j < counts[next]; j++) shared = shared || notes[b][i] == notes[next][j];
+            both += shared ? 0 : 1;
+        }
+        CHECK(both <= VaPoly::kVoices);
+        CHECK(both < counts[b] + counts[next]);             // something carries on
+    }
+}
+
+namespace {
+
+// Plays the transport at 130 BPM for `blocks` blocks, delivering each tick on its own frame as
+// the clock would. Returns the tick reached.
+uint32_t play_130(uint32_t tick, double &frame, int blocks) {
+    using namespace strata::test;
+    const double frames_per_tick = 48000.0 * 60.0 / (130.0 * 96.0);
+    for (int b = 0; b < blocks; b++) {
+        while (double(tick) * frames_per_tick < frame + kRigBlock) {
+            FakeHost::the().deliver_tick(tick, uint32_t(double(tick) * frames_per_tick - frame));
+            tick++;
+        }
+        pump(1);
+        frame += kRigBlock;
+    }
+    return tick;
+}
+
+}  // namespace
+
+TEST(factory_a05_holds_each_chord_through_its_bar_and_a01_still_stabs) {
+    using namespace strata::test;
+    constexpr int kBlocksPerStep = int(48000.0 * 60.0 / 130.0 / 4.0) / kRigBlock;   // ~1.8
+
+    for (int slot : {0, kFactoryPadSlot}) {
+        Engine &e = fresh();
+        storage().request_new();
+        CHECK(settle());
+        e.project_for_load().slot = uint8_t(slot);
+        post(Cmd::project_loaded);
+        CHECK(settle());
+        const VaPoly *poly = static_cast<const VaPoly *>(e.machine(kChordTrack));
+        CHECK_EQ(int(e.machine_id(kChordTrack)), int(MachineId::va_poly));
+
+        FakeHost::the().set_running(true);
+        uint32_t tick = 0;
+        double frame = 0.0;
+        // Into the last quarter of bar 1: A01's stabs (steps 3 and 10, DEC 210 ms) have died away
+        // by step 14, A05's Cm9 is still holding at SUS.
+        tick = play_130(tick, frame, 14 * kBlocksPerStep);
+        if (slot == kFactoryPadSlot) {
+            CHECK_EQ(poly->sounding_voices(), 5);
+            CHECK(poly->decay_seconds() > 0.6f);        // DEC's lock (0.69 s) has lasted the bar
+        } else {
+            CHECK_EQ(poly->sounding_voices(), 0);
+            CHECK(poly->decay_seconds() < 0.3f);        // the kit's stab, 0.21 s
+        }
+        // Through all four bars and back into the first: never more than six voices, so the
+        // chord track never steals from itself.
+        int most = 0;
+        for (int i = 0; i < 4 * 16 * 2; i++) {
+            tick = play_130(tick, frame, 1);
+            most = poly->busy_voices() > most ? poly->busy_voices() : most;
+        }
+        CHECK(most <= VaPoly::kVoices);
+        FakeHost::the().set_running(false);
+    }
 }
