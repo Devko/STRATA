@@ -237,6 +237,9 @@ void Engine::apply_commands() {
 
 // Before a VA POLY trig on `track`: true if it may go ahead. See kPolyVoiceBudget (engine.hpp).
 bool Engine::make_room_for_poly_voice(int track, uint8_t note) {
+    // A frozen track's machine plays nothing: it is the loop that sounds (dsp/frozen.hpp). Every
+    // note to a machine asks here first, so this is the one place that holds it back.
+    if (frozen_[track].on()) return false;
     VaPoly *target = polys_[track];
     if (target == nullptr || !target->would_add_voice(note)) return true;
 
@@ -1449,8 +1452,15 @@ void Engine::apply(const Command &command) {
                 status_.bump_refused();          // the tempo has not settled yet
                 break;
             }
-            // `b` 2 is one track, `command.track`: a mono take of that track alone.
-            const bool from_track = command.b == 2;
+            // `b` 2 is one track, `command.track`: a mono take of that track alone. 3 is the
+            // same before the track's insert chain: a freeze (dsp/frozen.hpp). A frozen track
+            // is not running its machine, so freezing it again would record the loop it plays:
+            // refused, as the UI's FROZEN row already is.
+            const bool from_track = command.b == 2 || command.b == 3;
+            if (command.b == 3 && frozen_[track].on()) {
+                status_.bump_refused();
+                break;
+            }
             if (!capture_.arm(uint32_t(frames), from_track ? 1 : 2)) {
                 status_.bump_refused();          // a take is running, or one is waiting for the card
                 break;
@@ -1463,6 +1473,7 @@ void Engine::apply(const Command &command) {
             // take that is half one thing and half another.
             capture_input_ = command.b == 1;
             capture_track_ = from_track ? int8_t(track) : int8_t(-1);
+            capture_prechain_ = command.b == 3;
             break;
         }
 
@@ -1558,6 +1569,41 @@ void Engine::apply(const Command &command) {
             perform_dirty_ = true;
             break;
         }
+
+        case Cmd::freeze_set: {
+            const uint32_t frames = uint32_t(command.c) | uint32_t(command.d) << 8 |
+                                    uint32_t(command.e) << 16;
+            const uint32_t bytes = frames * uint32_t(sizeof(int16_t));      // mono
+            // Checked against the region before a pointer is formed, as set_sample is.
+            const bool usable = sample_region_ != nullptr && frames != 0 &&
+                                command.u % sizeof(int16_t) == 0 &&
+                                command.u <= sample_region_bytes_ &&
+                                bytes <= sample_region_bytes_ - command.u;
+            const int16_t *data =
+                usable ? sample_region_ + command.u / sizeof(int16_t) : nullptr;
+            if (data == nullptr || !frozen_[track].set(data, frames, command.a, capture_bar_,
+                                                       capture_lead_, bar_)) {
+                status_.bump_refused();
+                break;
+            }
+            // The machine stops here: its voices would otherwise sit unrendered in it (and in
+            // VA POLY's shared budget) until the unfreeze.
+            if (machines_[track] != nullptr) machines_[track]->kill_all();
+            status_.frozen.store(uint8_t(status_.frozen.load(std::memory_order_relaxed) |
+                                         (1u << track)),
+                                 std::memory_order_relaxed);
+            break;
+        }
+
+        case Cmd::freeze_clear:
+            frozen_[track].clear();
+            status_.frozen.store(uint8_t(status_.frozen.load(std::memory_order_relaxed) &
+                                         ~(1u << track)),
+                                 std::memory_order_relaxed);
+            // Always bumped, frozen or not: the main context waits for it before giving the
+            // slot back, and a clear for a track that never froze must not leave it waiting.
+            status_.bump_freeze_epoch(track);
+            break;
 
         case Cmd::resample_cancel:
             capture_.cancel();
@@ -1814,7 +1860,22 @@ void Engine::on_bar() {
     // round number of bars is what makes it a loop. dsp/capture.hpp keeps the bar out of the
     // buffer deliberately -- it only knows how to be armed and then to run for exactly as long
     // as it was told -- so this is the one place that decides when.
+    //
+    // Where the bar line is, in frames from this block's start: the tick's frame, less however
+    // far into the bar the tick is. That is 0 ticks on an ordinary bar line; the first tick after
+    // a start or a relocate may land mid-bar, and then the bar line was before this block.
+    const uint32_t into = tick_now_ - bar_ * kTicksPerBar;
+    const int32_t bar_line = int32_t(tick_frame_) - int32_t(float(into) * samples_per_tick_);
+
+    const bool was_armed = capture_.armed();
     capture_.begin();
+    if (was_armed && capture_.recording()) {
+        capture_bar_ = bar_;
+        capture_lead_ = bar_line;        // the take records this whole block, from frame 0
+    }
+
+    // Frozen tracks come back into time on their own bars (dsp/frozen.hpp).
+    for (int t = 0; t < kTracks; t++) frozen_[t].on_bar(bar_, bar_line);
 }
 
 void Engine::cross_boundary(uint32_t boundary) {
@@ -1877,6 +1938,8 @@ void Engine::reconfigure() {
 // --- the tick -------------------------------------------------------------
 
 void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
+    tick_now_ = tick;            // for on_bar(): where this bar line is, in frames
+    tick_frame_ = frame;
     // The transport jumped BACK (a stop and start, F1 + F5, or an outside clock relocating). A
     // change still queued was armed for a boundary measured on the old position: left alone it
     // waited until the clock caught up with that tick again -- a change queued at bar 40 and
@@ -2366,7 +2429,7 @@ void Engine::fire(const StepEvent &event) {
             }
             send_midi_notes(track, notes, count, midi_velocity, trig.frame, midi_gate_frames);
         } else {
-            machines_[track]->trigger(trig);
+            if (!frozen_[track].on()) machines_[track]->trigger(trig);
             send_midi_notes(track, &note, 1, midi_velocity, trig.frame, midi_gate_frames);
         }
 
@@ -2512,8 +2575,27 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     if (tapped >= 0) enaga_clear(capture_tap_, int(frames));
 
     uint8_t voices = 0;
+    const bool running = clock_now.running;
     for (int t = 0; t < kTracks; t++) {
         Machine *machine = machines_[t];
+
+        // A frozen track plays its loop instead of its machine (dsp/frozen.hpp): through its
+        // chain, fader, pan, sends and duck as ever. Muted, it only keeps its place.
+        if (frozen_[t].on()) {
+            if (muted_[t]) {
+                frozen_[t].skip(int(frames));
+                continue;
+            }
+            prepare_chain(t);
+            float *mono = mixer_.scratch();
+            enaga_clear(mono, int(frames));
+            frozen_[t].render_add(mono, int(frames), running);
+            // A bounce of a frozen track is its loop through its chain, as it is heard.
+            if (t == tapped && !capture_prechain_) mixer_.add_track_tapped(t, mono, capture_tap_);
+            else mixer_.add_track(t, mono);
+            continue;
+        }
+
         if (machine == nullptr || muted_[t] || !machine->active()) continue;
 
         // From effective_, not params_: this is where a parameter lock has to be honoured, for
@@ -2525,7 +2607,11 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         float *mono = mixer_.scratch();
         enaga_clear(mono, int(frames));
         machine->render_add(mono, int(frames));
-        if (t == tapped) mixer_.add_track_tapped(t, mono, capture_tap_);
+        // A freeze records the machine alone, before the chain it will go on running through.
+        if (t == tapped && capture_prechain_) {
+            for (uint32_t i = 0; i < frames; i++) capture_tap_[i] = mono[i];
+        }
+        if (t == tapped && !capture_prechain_) mixer_.add_track_tapped(t, mono, capture_tap_);
         else mixer_.add_track(t, mono);
         voices++;
     }

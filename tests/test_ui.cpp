@@ -230,7 +230,7 @@ void open_keys() {
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuChain, kMenuSong, kMenuAutofill,
-                     kMenuQuantize, kMenuRowCount };
+                     kMenuQuantize, kMenuFreeze, kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
 void menu_to(int row) {
@@ -5223,6 +5223,59 @@ TEST(ui_the_menu_scrolls_runs_and_goes_back) {
     CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuSave));
     key(ENAGA_KEY_F7);                                  // a mode key leaves it too
     CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_the_menu_freeze_row_arms_a_freeze_of_the_selected_track_and_gives_it_back) {
+    // FREEZE (dsp/frozen.hpp): the row shows the selected track and the bars OK records, B and
+    // LEFT/RIGHT set the bars, OK arms the freeze, and OK on a frozen or arming track undoes it.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                  // EDIT, track 1
+    menu_to(kMenuFreeze);
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuFreeze));
+    // B walks 1, 2, 4, 8 and round; the length outlives fresh(), so walk to 1 by the notice.
+    for (int i = 0; i < 4 && std::strcmp(UiProbe::notice(app), "FREEZE 1 BAR") != 0; i++) {
+        app.on_encoder(1, +1);
+    }
+    CHECK_EQ(UiProbe::notice(app), "FREEZE 1 BAR");
+    app.on_encoder(1, +1);
+    CHECK_EQ(UiProbe::notice(app), "FREEZE 2 BAR");
+    app.on_encoder(1, -1);
+    CHECK_EQ(UiProbe::notice(app), "FREEZE 1 BAR");
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "ARMED: PRESS PLAY");
+    CHECK_EQ(app_storage().freezing_track(), 0);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));      // the menu closed over EDIT
+    pump(2);
+    menu_run(kMenuFreeze);                              // again: the take is dropped
+    CHECK_EQ(UiProbe::notice(app), "UNFROZEN");
+    pump(2);
+    CHECK_EQ(app_storage().freezing_track(), -1);
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
+
+    // A MID track has nothing to freeze.
+    post_cmd(Cmd::set_machine, uint8_t(MachineId::midi));          // track 1
+    pump(2);
+    menu_run(kMenuFreeze);
+    CHECK_EQ(UiProbe::notice(app), "MID HAS NO AUDIO");
+    CHECK_EQ(app_storage().freezing_track(), -1);
+    post_cmd(Cmd::set_machine, uint8_t(MachineId::kick));
+    pump(2);
+}
+
+TEST(ui_layout_a_frozen_track_says_so_on_edit_and_in_the_menu) {
+    // Frozen is the audio side's word (Status::frozen); set by hand here, as the late stream is.
+    Strata &app = fresh();
+    Status &status = const_cast<Status &>(UiProbe::engine(app).status());
+    status.frozen.store(1u, std::memory_order_relaxed);
+    key(ENAGA_KEY_F8);
+    pump(400);
+    check_layout(app, "EDIT, frozen");
+    menu_to(kMenuFreeze);
+    pump(400);
+    check_layout(app, "FUNC menu, FREEZE on");
+    key(ENAGA_KEY_CLR);
+    status.frozen.store(0u, std::memory_order_relaxed);
     key(ENAGA_KEY_F4);
 }
 

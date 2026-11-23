@@ -821,6 +821,27 @@ New: RESAMPLE's B goes past the inputs to `TRK 1`-`TRK 8`, a take of that track 
       bounce on T8 `____`.
       Notes: `________________`
 
+## 13n. Freeze (6 min)
+
+New: the FUNC menu's last row, FREEZE. Play A01 with the CHORD track's chord on MIN11 (six
+voices) so there is something worth freezing. Note LOAD and MAX first: LOAD `____` MAX `____`.
+
+- [ ] Select track 7 (GRID, DOWN). FUNC+HOME, UP: `FREEZE  T7 1 BAR`. B: 2, 4, 8, 1. OK:
+      `FREEZE ARMED`, the menu closes. On the next bar line the row (FUNC+HOME, UP) reads `T7 REC`,
+      a bar later `FROZEN` on the screen and the row reads `T7 ON`.
+- [ ] The chord sounds the same as before, in time, with no click at the loop point. LOAD with
+      it frozen `____`, MAX after PLAY `____` (expect several points lower: the six voices stop).
+- [ ] Track 7's filter (FLTR CUT), its fader, pan and send still change the sound. Its SRC knobs
+      and new steps do nothing, and EDIT says `FROZEN: FUNC+HOME`.
+- [ ] Change the tempo by 10 BPM: the loop drifts for at most one loop, then jumps back into time.
+      Back to 142.
+- [ ] STOP: track 7 fades out with the rest. PLAY: it comes back in time from bar 1.
+- [ ] FUNC+HOME, UP, OK: `UNFROZEN`, the live chord is back on the next step, LOAD goes back up.
+- [ ] Freeze track 8 (the SAMPLE loop) and then unfreeze it: its sample is still there
+      straight away (no reload).
+- [ ] Freeze a track, then RELOAD PROJECT: it comes back live.
+      Notes: `________________`
+
 ## 14. Reload and new: the FUNC menu's RELOAD PROJECT and NEW PROJECT (3 min)
 
 - [ ] Change the tempo (unsaved). FUNC+HOME, RELOAD PROJECT, OK once: `OK AGAIN TO RELOAD`,

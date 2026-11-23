@@ -167,7 +167,9 @@ them goes back to the slots. In SETUP, A sets the record quantize. Chain on/off,
 reload, RELOAD PROJECT and NEW PROJECT are in the FUNC menu (FUNC+HOME); the last two throw away
 unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN FOR NEW).
 **FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, CLEAR
-PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE. UP/DOWN or A
+PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, FREEZE (the
+selected track plays a 1-8 bar loop of itself from RAM and stops computing; OK again unfreezes;
+UP from SAVE gets there). UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD and CLEAR PATTERN need OK twice), LEFT/RIGHT or B change a
 setting row (OK steps it too),
 CLR or FUNC+HOME close it, back to the screen it opened over. It always opens on SAVE.

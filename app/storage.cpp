@@ -182,7 +182,8 @@ void Storage::post(const Command &command) {
         backlog_[backlog_n_++] = command;
         return;
     }
-    // Unreachable: no pass posts more than two, and a backlog holds every pass back. Counted on
+    // Unreachable: no pass posts more than a dozen (unfreeze_all's ten and a load's own), and a
+    // backlog holds every pass back. Counted on
     // the ring's own drop counter if it ever happens, so it is visible rather than silent.
     engine_->commands().post(command);
 }
@@ -717,6 +718,7 @@ void Storage::start_new() {
         // Every track goes through the swap, so the previous project's samples come off their
         // tracks without anything writing over memory a voice is reading. Not pool_.reset(),
         // for the reason step_load gives.
+        unfreeze_all();         // a frozen loop is the old project's sound
         sample_queue_ = 0xFFu;
         wanted_budget_ = uint32_t(kSampleBudgetDefaultMib) << 20;
         project_dirty_ = kit_dirty_ = perform_dirty_ = true;
@@ -1020,6 +1022,10 @@ void Storage::service() {
     // Streams before anything else, every pass and whatever job runs: a restart has the head's
     // two seconds to be reopened, and a 4 MiB chunk read must not stand in its way.
     service_streams();
+
+    // Freeze next, whatever job runs and with or without a card: it is RAM only, and a loop
+    // whose slot is waiting to be given back should not wait behind a save.
+    if (service_freeze()) return;
 
     // A new project first, and before the card check: it is RAM only, so it needs no card. It
     // waits for an idle loader and an empty ring like a load, and for a save asked for before
@@ -1377,6 +1383,7 @@ void Storage::step_load() {
     // whose new kit names no file simply stops there. Until its turn comes it keeps playing the
     // old project's sample, which is a second or two of the wrong sound rather than a corrupted
     // read.
+    unfreeze_all();         // a frozen loop is the old project's sound
     sample_queue_ = 0xFFu;
     wanted_budget_ = project_budget(project.settings.sample_budget_mib);
 
@@ -1553,6 +1560,9 @@ void Storage::run_kit_load() {
         sample_queue_ = uint8_t(sample_queue_ | (1u << t));
     }
 
+    // A frozen loop is the old kit's sound.
+    unfreeze_all();
+
     Command command;
     command.cmd = Cmd::kit_recall;
     command.a = 1;
@@ -1573,7 +1583,7 @@ void Storage::run_kit_load() {
 // over memory a voice may still be reading.
 
 bool Storage::take_busy() const {
-    return job_ == Job::take_write ||
+    return job_ == Job::take_write || freeze_track_ >= 0 ||
            (take_pending_ &&
             engine_->status().resample_state.load(std::memory_order_relaxed) == 3u);
 }
@@ -1585,6 +1595,113 @@ bool Storage::request_resample_write(int into_track) {
     if (take_busy()) return false;
     take_track_ = into_track;
     take_pending_ = true;
+    return true;
+}
+
+// --- freeze (dsp/frozen.hpp) ------------------------------------------------
+
+bool Storage::request_freeze(int track, int bars) {
+    if (track < 0 || track >= kTracks) return false;
+    freeze_error_ = nullptr;
+    const uint8_t bit = uint8_t(1u << track);
+    const bool frozen = (engine_->status().frozen.load(std::memory_order_relaxed) & bit) != 0;
+    if (frozen || (unfreeze_wait_ & bit) != 0) return false;
+    if (engine_->machine_id(track) == uint8_t(MachineId::midi)) return false;
+    // Any take armed, running or waiting for the card: one capture buffer, one take at a time.
+    if (take_busy() || engine_->status().resample_state.load(std::memory_order_relaxed) != 0u) {
+        return false;
+    }
+    // A write asked for a take that was then cancelled (RESAMPLE, OK then CLR) is stale: it must
+    // not write this take to the card when it finishes.
+    take_pending_ = false;
+    take_track_ = -1;
+    const int b = bars <= 1 ? 1 : bars <= 2 ? 2 : bars <= 4 ? 4 : 8;
+    Command arm;
+    arm.cmd = Cmd::resample_arm;
+    arm.track = uint8_t(track);
+    arm.a = uint8_t(b);
+    arm.b = 3;                              // before the insert chain
+    post(arm);
+    freeze_track_ = track;
+    freeze_bars_ = uint8_t(b);
+    return true;
+}
+
+bool Storage::request_unfreeze(int track) {
+    if (track < 0 || track >= kTracks) return false;
+    const uint8_t bit = uint8_t(1u << track);
+    if (freeze_track_ == track) {
+        // Its take, still on its way: thrown away, and the buffer given back either way.
+        post(Cmd::resample_cancel);
+        post(Cmd::resample_release);
+        freeze_track_ = -1;
+    }
+    if ((engine_->status().frozen.load(std::memory_order_relaxed) & bit) == 0 &&
+        pool_.slot(freeze_slot(track)).state == SampleState::empty) {
+        return false;
+    }
+    if ((unfreeze_wait_ & bit) != 0) return true;           // already on its way back
+    unfreeze_epoch_[track] = engine_->status().freeze_epoch[track].load(std::memory_order_relaxed);
+    unfreeze_wait_ = uint8_t(unfreeze_wait_ | bit);
+    Command clear;
+    clear.cmd = Cmd::freeze_clear;
+    clear.track = uint8_t(track);
+    post(clear);
+    return true;
+}
+
+void Storage::unfreeze_all() {
+    if (freeze_track_ >= 0) request_unfreeze(freeze_track_);
+    for (int t = 0; t < kTracks; t++) request_unfreeze(t);
+}
+
+bool Storage::service_freeze() {
+    // A slot whose loop the audio side has let go of goes back to the pool.
+    for (int t = 0; t < kTracks && unfreeze_wait_ != 0; t++) {
+        const uint8_t bit = uint8_t(1u << t);
+        if ((unfreeze_wait_ & bit) == 0) continue;
+        if (engine_->status().freeze_epoch[t].load(std::memory_order_relaxed) ==
+            unfreeze_epoch_[t]) {
+            continue;
+        }
+        pool_.release(freeze_slot(t));
+        unfreeze_wait_ = uint8_t(unfreeze_wait_ & ~bit);
+    }
+
+    // A finished freeze take: into the slot, and the engine told. The copy is one pass over at
+    // most 2.9 MiB (30 s of mono int16), a few milliseconds of DDR, done once per freeze.
+    if (freeze_track_ < 0 ||
+        engine_->status().resample_state.load(std::memory_order_relaxed) != 3u) {
+        return false;
+    }
+    const int track = freeze_track_;
+    freeze_track_ = -1;
+    const Capture &take = engine_->capture();
+    const uint32_t frames = take.frames();
+    const uint32_t bytes = frames * uint32_t(sizeof(int16_t));
+    const int slot = freeze_slot(track);
+    if (take.channels() != 1 || frames == 0u || frames > 0xFFFFFFu ||
+        !pool_.reserve(slot, bytes)) {
+        freeze_error_ = "NO ROOM";
+        post(Cmd::resample_release);
+        return true;
+    }
+    const SampleSlot &where = pool_.slot(slot);
+    int16_t *to = region_ + where.offset / sizeof(int16_t);
+    const int16_t *from = take.data();
+    for (uint32_t i = 0; i < frames; i++) to[i] = from[i];
+    pool_.finish(slot, frames, 1, uint32_t(ENAGA_SAMPLE_RATE));
+
+    Command set;
+    set.cmd = Cmd::freeze_set;
+    set.track = uint8_t(track);
+    set.a = freeze_bars_;
+    set.c = uint8_t(frames);
+    set.d = uint8_t(frames >> 8);
+    set.e = uint8_t(frames >> 16);
+    set.u = where.offset;
+    post(set);
+    post(Cmd::resample_release);
     return true;
 }
 

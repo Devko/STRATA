@@ -967,6 +967,127 @@ TEST(app_a_bounce_records_one_track_alone_as_a_mono_wav) {
     host.set_running(false);
 }
 
+// --- freeze (dsp/frozen.hpp) -----------------------------------------------------------------
+
+namespace {
+
+bool is_frozen(int track) {
+    return (strata::test::engine().status().frozen.load(std::memory_order_relaxed) >> track & 1u) !=
+           0;
+}
+
+}  // namespace
+
+TEST(app_a_freeze_plays_the_track_from_ram_and_unfreeze_gives_the_machine_back) {
+    // The rig's pattern plays from tick 0 (a restart), so the take's bar line is tick 0, the kick
+    // hits there and at tick 96, and the take then runs to its length by frames alone.
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+    put_trig(0, 0);
+    put_trig(0, 4);
+    post(Cmd::set_param, 0, 0, 11, 127);
+    pump();
+    host.set_running(true);
+
+    CHECK(storage().request_freeze(0, 1));
+    CHECK_EQ(storage().freezing_track(), 0);
+    CHECK(!storage().request_freeze(1, 1));               // one take at a time
+    pump();
+    const uint8_t before = engine.status().triggered[0].load(std::memory_order_relaxed);
+    host.deliver_tick(0, 0);
+    for (int i = 0; i < 5000 && !is_frozen(0); i++) {
+        if (i == 300) host.deliver_tick(96, 0);
+        pump();
+    }
+    CHECK(is_frozen(0));
+    CHECK_EQ(int(uint8_t(engine.status().triggered[0].load(std::memory_order_relaxed) - before)),
+             2);                                          // both hits went into the take
+    CHECK_EQ(storage().freezing_track(), -1);
+    CHECK(storage().freeze_error() == nullptr);
+    // Its loop is in the track's freeze slot, a bar of mono, and the capture buffer is free.
+    const SampleSlot &slot = storage().samples().slot(freeze_slot(0));
+    CHECK_EQ(int(slot.state), int(SampleState::ready));
+    CHECK_EQ(int(slot.channels), 1);
+    CHECK(slot.frames > 1000u);
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 0);
+    CHECK(engine.frozen(0).on());
+    CHECK_EQ(engine.frozen(0).frames(), slot.frames);
+
+    // The machine is silent and stays so through a trig, and the track still sounds: the loop,
+    // through the chain, for a whole bar. Freezing a frozen track is refused.
+    host.deliver_tick(96, 0);
+    float loudest = 0.0f;
+    for (int i = 0; i < 1500; i++) {
+        const float peak = pump();
+        loudest = peak > loudest ? peak : loudest;
+        CHECK(!engine.machine(0)->active());
+    }
+    CHECK(loudest > 0.01f);
+    CHECK(!storage().request_freeze(0, 1));
+
+    // Stopped, the loop fades out and stays silent (the reverb's tail aside, the bus is quiet).
+    host.set_running(false);
+    CHECK(strata::test::settle());
+    host.set_running(true);
+
+    // UNFREEZE: the loop stops at once, the slot comes back, and the machine plays again.
+    CHECK(storage().request_unfreeze(0));
+    pump(4);
+    CHECK(!is_frozen(0));
+    CHECK(!engine.frozen(0).on());
+    CHECK_EQ(int(storage().samples().slot(freeze_slot(0)).state), int(SampleState::empty));
+    CHECK(!storage().request_unfreeze(0));                // nothing left to give back
+    host.deliver_tick(0, 0);
+    pump();
+    CHECK(engine.machine(0)->active());
+    host.set_running(false);
+}
+
+TEST(app_a_freeze_is_refused_on_a_mid_track_and_undone_by_a_reload) {
+    Engine &engine = fresh();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::set_machine, 2, 0, uint8_t(MachineId::midi));
+    pump(2);
+    CHECK(!storage().request_freeze(2, 1));
+    CHECK_EQ(storage().freezing_track(), -1);
+
+    put_trig(0, 0);
+    post(Cmd::set_param, 0, 0, 11, 127);
+    pump();
+    host.set_running(true);
+    CHECK(storage().request_freeze(0, 2));
+    pump();
+    host.deliver_tick(0, 0);
+    for (int i = 0; i < 8000 && !is_frozen(0); i++) pump();
+    CHECK(is_frozen(0));
+
+    // A reload, NEW or kit recall puts the live machine back: a frozen loop is the old sound.
+    storage().request_save();
+    CHECK(pump_until_idle());
+    storage().request_reload();
+    CHECK(strata::test::settle());
+    CHECK(!is_frozen(0));
+    CHECK(!engine.frozen(0).on());
+    CHECK_EQ(int(storage().samples().slot(freeze_slot(0)).state), int(SampleState::empty));
+    host.set_running(false);
+}
+
+TEST(app_unfreezing_a_freeze_on_its_way_cancels_the_take) {
+    Engine &engine = fresh();
+    FakeHost::the().set_running(true);
+    CHECK(storage().request_freeze(0, 1));
+    pump(2);
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 1);   // armed
+    CHECK(!storage().request_unfreeze(0));     // nothing frozen yet, but the take is dropped
+    pump(2);
+    CHECK_EQ(storage().freezing_track(), -1);
+    CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 0);
+    CHECK(storage().request_freeze(0, 1));     // and the buffer is free for the next
+    storage().request_unfreeze(0);
+    pump(2);
+    FakeHost::the().set_running(false);
+}
+
 TEST(app_an_input_take_with_no_input_buffer_records_silence_and_ends) {
     // The rigs pass no input. The take must still end on its frame and reach the card.
     fresh();

@@ -1459,6 +1459,30 @@ toolchain).
 | --- | --- | --- |
 | `scenario_pad.sh` (A05 PAD) | | |
 
+### Freeze and bounce (2026-11-23, host only)
+
+FREEZE (FUNC menu) records one track's machine output, before its chain, for 1/2/4/8 bars and
+then plays that loop from RAM (dsp/frozenloops.ti.c: one int16-to-float multiply-add a frame,
+branch-free, with a gain ramp at freeze and unfreeze). The machine is killed and skipped while
+the track is frozen; the chain, sends and duck stay live. Estimate: a six-voice VA POLY track is
+6 x 2.16 = 13 points cl6x (23 GCC-only); its frozen loop is one sequential 2-byte read a frame,
+about 0.5 points either way, so freezing a held pad saves about 12 points cl6x (22 GCC-only).
+While the take records the track costs what it did plus one copy of the block.
+
+Bounce (RESAMPLE source TRK 1-8) taps one track after its chain, before the duck: one block copy
+only while a bounce records, nothing otherwise.
+
+Memory: frozen loops use their own pool slots (8-15) out of the 64 MiB sample budget, at 2 bytes a
+frame mono: 8 bars at 120 BPM is 16 s, 1.5 MiB a track.
+
+`tests/scenario_freeze.sh` freezes track 7 of the default beat and prints the load; `--baseline`
+runs the same beat unfrozen. Neither has run (the cloud cannot build the toolchain).
+
+| Build | cl6x | GCC only |
+| --- | --- | --- |
+| `scenario_freeze.sh --baseline` | | |
+| `scenario_freeze.sh` (track 7 frozen) | | |
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |

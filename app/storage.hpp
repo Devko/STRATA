@@ -224,6 +224,25 @@ public:
     // The name the last take was written under, for the screen; empty before the first.
     const char *last_take_name() const { return take_name_; }
 
+    // --- freeze (dsp/frozen.hpp), RAM only: no card needed, nothing written ---
+    //
+    // `request_freeze` arms a take of `track` alone, before its insert chain, for `bars` bars
+    // (1, 2, 4 or 8) from the next bar line. When the take is done it is copied into the track's
+    // freeze slot of the sample pool (core/samplepool.hpp) and the engine plays it in place of
+    // the machine. False, changing nothing, while any take is armed, running or unwritten, while
+    // the track is frozen or still giving its last loop back, or for a MID track (no audio).
+    bool request_freeze(int track, int bars);
+    // Stop playing the loop; the slot is given back once the audio side has let go of it. False
+    // for a track that is not frozen. Cancels a freeze take still on its way for that track.
+    bool request_unfreeze(int track);
+    // Every frozen track, and any freeze take on its way. A project load, NEW and a kit recall
+    // do this: a frozen loop is the old sound.
+    void unfreeze_all();
+    // A freeze take is armed, recording or waiting to be copied, and for which track (-1: none).
+    int freezing_track() const { return freeze_track_; }
+    // Why the last freeze failed ("NO ROOM"), or nullptr. Cleared by the next request.
+    const char *freeze_error() const { return freeze_error_; }
+
     // Queue every track whose kit names a file. What a project open does.
     void request_all_samples();
 
@@ -414,6 +433,14 @@ private:
     bool take_write_in_flight_ = false;
     bool take_write_done_ = false;
     int32_t take_write_result_ = 0;
+    // Freeze: the take on its way (-1 none), the bars it was asked for, the tracks whose slot
+    // waits for the audio side to bump freeze_epoch (and the epoch each saw at the clear).
+    int freeze_track_ = -1;
+    uint8_t freeze_bars_ = 1;
+    uint8_t unfreeze_wait_ = 0;
+    uint8_t unfreeze_epoch_[kTracks] = {};
+    const char *freeze_error_ = nullptr;
+    bool service_freeze();             // true if it posted, which ends the pass
     void take_chunk_written(int32_t result);   // the File::write callback, main context
     bool write_next_take_chunk();
     void end_take_write(const char *error);
@@ -430,7 +457,8 @@ private:
     bool load_pending_ = false;
     bool load_autosave_ = false;   // which folder the pending load reads; copied into autosave_
                                    // only when it starts, so a running save keeps its own
-    static constexpr int kBacklog = 4;
+    // 16: unfreeze_all posts up to ten (a cancel, a release and eight clears) beside a load's own.
+    static constexpr int kBacklog = 16;
     Command backlog_[kBacklog] = {};   // posts that met a full ring, sent first by service()
     int backlog_n_ = 0;
     bool new_pending_ = false;     // request_new, waiting for the ring like a load
