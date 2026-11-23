@@ -660,6 +660,15 @@ const char *WaveLibrary::long_name(int table) {
     return table >= 0 && table < kWaveTables ? kRecipes[table].long_name : "---";
 }
 
+uint32_t wave_build_scratch_bytes() {
+    // Fft: re, im and the two twiddle halves. Builder: the frames' and the keys' spectra and the
+    // float copy of two frames. Kept after the build: Enaga's heap is never freed into
+    // (tests/test_memory.cpp), and 0.2 MiB is not worth a hole in it.
+    return uint32_t(sizeof(float)) * (2u * kFftMax + kFftMax) +
+           uint32_t(sizeof(Spectrum)) * (kWaveFrames + Builder::kKeys) +
+           uint32_t(sizeof(float)) * 2u * kWaveFrameStride;
+}
+
 const WaveLibrary *wave_library() { return g_library; }
 void set_wave_library(const WaveLibrary *library) { g_library = library; }
 

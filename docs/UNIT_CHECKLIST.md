@@ -128,7 +128,7 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
   `VALUE FX MIXER:`, `VALUE FX STEPS:`, and round to page 1. LEFT goes back. GRID's own knob page did **not** change.
 - Let go of FUNC: GRID is back. Hold again: page 1 again.
 - EDIT on track 2 (snare): `EDIT SRC SNR`, `B SNP SNAPPY`. Screen key RIGHT to ASR (without FUNC),
-  hold FUNC: `ASR  ONLY ON MNO/PLY`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
+  hold FUNC: `ASR  ONLY ON VA/WAVE`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
 - MIXER DUCK: `A SRC SOURCE TRACK`. PERFORM: `PUSH A-D   LEARN`. Push A (LEARN), hold FUNC:
   `MACRO LEARN:`; CLR ends it. KEYS: `LOWER PADS WHITE KEYS`. PROJECTS: `PUSH B     RENAME`.
 - Every page legible, nothing cut off or overlapping? Anything missing you looked for? `____`

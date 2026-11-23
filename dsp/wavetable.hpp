@@ -88,6 +88,8 @@ private:
 // builds it, and the machines read it through this pointer. nullptr until then, and a machine
 // with no library plays silence rather than reading through it.
 const WaveLibrary *wave_library();
+// What WaveLibrary::init takes besides the tables: the builder's scratch (tests/test_memory.cpp).
+uint32_t wave_build_scratch_bytes();
 void set_wave_library(const WaveLibrary *library);
 
 }  // namespace strata

@@ -81,6 +81,12 @@ bool Engine::init(float sample_rate) {
 
     build_placeholder_sample();
 
+    // The WAVE pair's tables (dsp/wavetable.hpp): built here, from their recipes, rather than
+    // read from the card, so they need no file and cannot be missing. If the 2.5 MiB is not
+    // there the WAVE machines play their sub and noise alone, which is recoverable; refusing to
+    // boot over one machine would not be.
+    if (waves_.init()) set_wave_library(&waves_);
+
     // The default techno kit of docs/SPEC.md. Every slot is filled now that VA POLY exists;
     // GRAIN has no track in the default kit and arrives with machine switching. An empty slot
     // would be silent, not a crash.
@@ -93,6 +99,10 @@ bool Engine::init(float sample_rate) {
         pool_[t].perc.init(rate_);
         pool_[t].mono.init(rate_);
         pool_[t].poly.init(rate_);
+        pool_[t].wave_mono.set_wave(true);
+        pool_[t].wave_mono.init(rate_);
+        pool_[t].wave_poly.set_wave(true);
+        pool_[t].wave_poly.init(rate_);
         pool_[t].sampler.init(rate_);
         pool_[t].grain.init(rate_);
         pool_[t].midi.init(rate_);
@@ -148,6 +158,11 @@ void Engine::rewire_machines() {
             case MachineId::va_poly:
                 machines_[t] = &own.poly;
                 polys_[t] = &own.poly;
+                break;
+            case MachineId::wave_mono: machines_[t] = &own.wave_mono; break;
+            case MachineId::wave_poly:
+                machines_[t] = &own.wave_poly;
+                polys_[t] = &own.wave_poly;
                 break;
             default:
                 // Defensive only: kit_read and params_from_kit both map an id this build does

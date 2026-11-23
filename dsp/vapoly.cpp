@@ -160,7 +160,8 @@ void VaPoly::init(float sample_rate) {
 void VaPoly::prepare(const TrackParams &params) {
     // Once a block for all six voices, which is the whole reason the control-rate values are a
     // struct and not a set of members (va.hpp).
-    settings_ = VaSettings::make(params, rate_, inv_rate_);
+    settings_ = wave_ ? VaSettings::make_wave(params, rate_, inv_rate_, false)
+                      : VaSettings::make(params, rate_, inv_rate_);
 
     // Everything in the filter cache was derived from the settings that have just been replaced,
     // so it goes with them. This is the ONE thing that has to happen for a stale coefficient to
@@ -170,7 +171,7 @@ void VaPoly::prepare(const TrackParams &params) {
 
     // Slot 10 is DET here, so VaSettings::make leaves it alone. The glide coefficients stay at
     // their default of 1 -- arrive at once -- which is what a machine with no glide wants.
-    detune_ = kDetuneSemis * params.unit(10);
+    detune_ = wave_ ? 0.0f : kDetuneSemis * params.unit(10);
 }
 
 void VaPoly::trigger(const Trig &trig) {
@@ -325,6 +326,13 @@ void VaPoly::render_add(float *out, int frames) {
 }
 
 const char *VaPoly::param_name(int index) const {
+    static const char *const wave[kParams] = {
+        "TBL", "POS", "CUT", "RES",      // SRC: the wavetable and the filter (LP24)
+        "---", "---", "---", "---",
+        "DEC", "ENV", "MOT", "LVL",      // AMP: MOT, the filter envelope moving POS
+        "---", "---", "---", "---",
+    };
+    if (wave_) return index >= 0 && index < kParams ? wave[index] : "---";
     static const char *const names[kParams] = {
         "TUN", "MOD", "CUT", "RES",      // SRC: the voice and its filter
         "---", "---", "---", "---",      // FLTR: the insert chain's

@@ -98,8 +98,8 @@ const char *machine_name(uint8_t id) {
     // Upper case and three characters, because that is what the device font draws and what every
     // other name in this project is (docs/ENAGA_API.md). Indexed by MachineId, so the order here
     // is the order on disk.
-    static const char *const names[] = {"KCK", "SNR", "HAT", "PRC", "SMP",
-                                        "GRN", "MNO", "PLY", "MID"};
+    static const char *const names[] = {"KCK", "SNR", "HAT", "PRC", "SMP", "GRN",
+                                        "MNO", "PLY", "MID", "WMN", "WPL"};
     static_assert(int(sizeof(names) / sizeof(names[0])) == int(MachineId::count),
                   "a machine with no name draws as the next machine's");
     return id < uint8_t(MachineId::count) ? names[id] : "---";

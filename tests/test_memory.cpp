@@ -185,8 +185,11 @@ TEST(memory_init_is_what_the_budget_says) {
                           4u;
     CHECK(uint64_t(g_engine.mixer().long_delay().bytes()) == long_delay);
 
+    // The WAVE pair's wavetables (dsp/wavetable.hpp), built at init, and the builder's scratch.
+    const uint64_t waves = uint64_t(kWaveLibraryBytes) + wave_build_scratch_bytes();
+
     const uint64_t itemised = region + raw + src + file + rings + repeat + capture + freeze + tape +
-                              long_delay + hall;
+                              long_delay + hall + waves;
     CHECK(f.requested >= itemised);
 
     // The rest is Enaga's master delay and reverb lines, sized inside Enaga. docs/SPEC.md budgets
@@ -194,13 +197,13 @@ TEST(memory_init_is_what_the_budget_says) {
     const uint64_t buses = f.requested - itemised;
     std::printf("    region %.2f, loader staging %.2f, file %.2f, stream rings %.2f, repeat %.2f, "
                 "capture %.2f, freeze %.2f, tape stop %.2f, long delay %.2f, hall %.2f, "
-                "delay+reverb %.2f MiB\n",
+                "wavetables %.2f, delay+reverb %.2f MiB\n",
                 double(region) / double(kMiB), double(raw + src) / double(kMiB),
                 double(file) / double(kMiB), double(rings) / double(kMiB),
                 double(repeat) / double(kMiB), double(capture) / double(kMiB),
                 double(freeze) / double(kMiB), double(tape) / double(kMiB),
                 double(long_delay) / double(kMiB), double(hall) / double(kMiB),
-                double(buses) / double(kMiB));
+                double(waves) / double(kMiB), double(buses) / double(kMiB));
     CHECK(buses > 0);
     CHECK(buses <= 2u * kMiB);
 }

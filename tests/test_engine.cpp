@@ -3047,8 +3047,8 @@ int poly_voices_counted() {
     int n = 0;
     for (int t = 0; t < kTracks; t++) {
         const Machine *m = strata::test::engine().machine(t);
-        if (m != nullptr && strata::test::engine().project().kit.tracks[t].machine ==
-                                uint8_t(MachineId::va_poly)) {
+        const uint8_t id = strata::test::engine().project().kit.tracks[t].machine;
+        if (m != nullptr && (id == uint8_t(MachineId::va_poly) || id == uint8_t(MachineId::wave_poly))) {
             n += static_cast<const VaPoly *>(m)->budget_voices();
         }
     }
@@ -3102,6 +3102,32 @@ TEST(engine_a_note_on_a_choking_voice_counts_against_the_budget_at_once) {
     CHECK_EQ(poly_voices_counted(), sounding);
 
     for (int i = 0; i < 3; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
+    pump();
+}
+
+// WAVE POLY is VA POLY with a wavetable, at the same cost a voice, so it spends the same budget:
+// two of each, asking for 24 voices, get twelve between them.
+TEST(engine_wave_poly_shares_the_poly_voice_budget) {
+    clean();
+    const uint8_t tracks[4] = {2, 3, 4, kPoly};
+    uint8_t was[4];
+    for (int i = 0; i < 4; i++) {
+        was[i] = strata::test::engine().project().kit.tracks[tracks[i]].machine;
+        post(Cmd::set_machine, tracks[i], 0,
+             uint8_t(i % 2 == 0 ? MachineId::wave_poly : MachineId::va_poly));
+        post(Cmd::set_param, tracks[i], 0, kDec, 127);
+    }
+    pump();
+    CHECK(static_cast<const VaPoly *>(strata::test::engine().machine(tracks[0]))->wave());
+    CHECK(!static_cast<const VaPoly *>(strata::test::engine().machine(tracks[1]))->wave());
+    for (int i = 0; i < 4; i++) {
+        for (int n = 0; n < VaPoly::kVoices; n++) {
+            post(Cmd::trigger_note, tracks[i], 0, uint8_t(48 + 2 * n), 100);
+        }
+    }
+    pump(8);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+    for (int i = 0; i < 4; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
     pump();
 }
 
