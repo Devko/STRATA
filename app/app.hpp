@@ -1092,6 +1092,11 @@ public:
                     notice("REDO");
                 } else if (step_page_) {
                     step_page_ = false;                // OK again closes it
+                } else if (mode_ == Mode::edit && machine_is_grain(engine_.machine_id(selected_))) {
+                    // GRAIN has a sample AND factory sounds, so the two screens split them: OK on
+                    // EDIT opens its SOUNDS, as on every synth, and OK on MACHINE (below) the
+                    // sample browser, which keeps "pick the machine, then its sample" in order.
+                    open_sounds();
                 } else if ((mode_ == Mode::edit || mode_ == Mode::machine) &&
                            plays_files(selected_)) {
                     // OK picks, as in every Enaga list: on a SAMPLE or GRAIN track, from the
@@ -3346,8 +3351,10 @@ public:
             canvas.text(34, y, line, 15);
 
             // The LFO's values are words up to five characters long ("1/16T"), so its bars start
-            // further right; so does a note ("C#4+" is four).
-            const bool wide = word_page || shows_note(index);
+            // further right; so does a note ("C#4+" is four), and every GRAIN value, which reads
+            // in its unit ("127MS", "X1.4", "HOLD").
+            const bool wide = word_page || shows_note(index) ||
+                              machine_is_grain(engine_.machine_id(selected_));
             const int bar_x = wide ? 70 : 56;
             const int bar = int(value) * (wide ? 56 : 70) / 127;
             canvas.rect(bar_x, y + 2, bar < 1 ? 1 : bar, 4, 9);
@@ -3402,7 +3409,14 @@ public:
             // Whether the note envelope applies here, and if so what SUS makes of a note.
             const bool va = has_asr(selected_);
             const bool sustains = va && engine_.params(selected_).v[kAsrFirst + 1] > 0;
-            canvas.text(0, 96, !va ? "NOT ON THIS MACHINE" : (sustains ? "HOLDS: PAD OR LEN" : "SUS 0: ONE-SHOT"), 7);
+            // On GRAIN, SUS 0 leaves DEC in charge, and DEC at the top holds (dsp/grain.cpp).
+            const bool grain = machine_is_grain(engine_.machine_id(selected_));
+            canvas.text(0, 96,
+                        !va        ? "NOT ON THIS MACHINE"
+                        : sustains ? "HOLDS: PAD OR LEN"
+                        : grain    ? "SUS 0: DEC DECIDES"
+                                   : "SUS 0: ONE-SHOT",
+                        7);
             return;
         }
 
@@ -3411,6 +3425,7 @@ public:
             canvas.text(0, 96,
                         machine_is_fm(id)     ? "FIN NUDGES RAT"
                         : machine_is_wave(id) ? "WRP BENDS  DET 2 OSCS"
+                        : machine_is_grain(id) ? "PSP: DET 1-63 OCT 64+"
                         : has_asr(selected_) ? "OS2: DET 1-63 SYN 64+"
                                              : "NOT ON THIS MACHINE",
                         7);
@@ -3419,8 +3434,13 @@ public:
 
         // The machine is changed somewhere else, and nothing said where.
         canvas.text(0, 96, "FUNC+EDIT: MACHINE", 7);
-        // And a sample track's file is picked from here.
-        if (plays_files(selected_)) canvas.text(0, 105, "OK: PICK SAMPLE", 7);
+        // And a sample track's file is picked from here -- on GRAIN from MACHINE, because here
+        // OK opens its SOUNDS.
+        if (machine_is_grain(engine_.machine_id(selected_))) {
+            canvas.text(0, 105, "OK: SOUNDS", 7);
+        } else if (plays_files(selected_)) {
+            canvas.text(0, 105, "OK: PICK SAMPLE", 7);
+        }
         // And how SAMPLE's SLC cuts, on the page SLC is on.
         if (engine_.machine_id(selected_) == uint8_t(MachineId::sample) &&
             base <= kSlcParam && kSlcParam < base + 4) {
@@ -3779,8 +3799,10 @@ public:
         if (index >= kOscFirst) return osc_param_name(index - kOscFirst);
         if (index >= kAsrFirst) {
             if (!has_asr(selected_)) return "---";
-            // FM4's fourth ASR knob holds the index envelope, not a filter's: ISU.
+            // FM4's fourth ASR knob holds the index envelope, not a filter's: ISU. GRAIN has no
+            // filter envelope, so it has no fourth.
             if (index == kAsrFirst + 3 && machine_is_fm(engine_.machine_id(selected_))) return "ISU";
+            if (index == kAsrFirst + 3 && machine_is_grain(engine_.machine_id(selected_))) return "---";
             return kAsrNames[index - kAsrFirst];
         }
         if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
@@ -3840,6 +3862,76 @@ public:
             append_tenths(out, tenths);
         }
     }
+    // GRAIN's knobs in their units (dsp/grain.cpp has the curves): POS as a share of the sample,
+    // SIZ and SPR in milliseconds, DEN as grains in the air ("X2.5"), SHP as a share, DEC as a
+    // time or HOLD, ATK and REL as times, SCN as a share of real time, PSP as "OFF", a detune
+    // ("D12", cents either way) or an octave share ("OCT25"). PIT and LVL read as numbers (PIT
+    // as a note in NOTE view, above). False for every other knob.
+    static bool append_grain_value(char *&out, int index, uint8_t value) {
+        switch (index) {
+            case 0:
+            case 9:
+                append_number(out, uint32_t((int(value) * 100 + 63) / 127));
+                *out++ = '%';
+                return true;
+            case 1:
+                append_seconds(out, grain_size_seconds(value));
+                return true;
+            case 2: {
+                // Tenths below 10: "X0.3" to "X8.0".
+                *out++ = 'X';
+                append_tenths(out, uint32_t(grain_overlap(value) * 10.0f + 0.5f));
+                return true;
+            }
+            case 3:
+                append_seconds(out, grain_spray_seconds(value));
+                return true;
+            case 10:
+                if (value >= kGrainDecayHold) {
+                    append(out, "HOLD");
+                } else {
+                    append_seconds(out, grain_decay_seconds(value));
+                }
+                return true;
+            case kAsrFirst + 0:
+                append_seconds(out, grain_attack_seconds(value));
+                return true;
+            case kAsrFirst + 2:
+                append_seconds(out, grain_release_seconds(value));
+                return true;
+            case kAsrFirst + 3:
+            case kOscFirst + 2:
+            case kOscFirst + 3:
+                append(out, "---");
+                return true;
+            case kOscFirst + 0:
+                if (value == 0) {
+                    append(out, "OFF");
+                } else {
+                    append_number(out, uint32_t(grain_scan_rate(value) * 100.0f + 0.5f));
+                    *out++ = '%';
+                }
+                return true;
+            case kOscFirst + 1:
+                switch (grain_pitch_spray_mode(value)) {
+                    case GrainSpray::off:
+                        append(out, "OFF");
+                        break;
+                    case GrainSpray::detune:
+                        *out++ = 'D';
+                        append_number(out, uint32_t(grain_detune_cents(value) + 0.5f));
+                        break;
+                    case GrainSpray::octave:
+                        append(out, "OCT");
+                        append_number(out, uint32_t(grain_octave_chance(value) * 100.0f + 0.5f));
+                        break;
+                }
+                return true;
+            default:
+                return false;
+        }
+    }
+
     static bool append_fm_value(char *&out, int index, uint8_t value) {
         switch (index) {
             case 0:
@@ -3883,6 +3975,7 @@ public:
         }
         if (machine_is_wave(engine_.machine_id(selected_)) && append_wave_value(out, index, value)) return;
         if (machine_is_fm(engine_.machine_id(selected_)) && append_fm_value(out, index, value)) return;
+        if (machine_is_grain(engine_.machine_id(selected_)) && append_grain_value(out, index, value)) return;
         switch (index) {
             case kLfoWave:
                 append(out, lfo_wave_name(lfo_wave(value)));
@@ -4163,7 +4256,7 @@ public:
         canvas.text(0, 112, "FUNC+EDIT AGAIN: KITS", 7);
     }
 
-    // --- SOUNDS: the factory sounds (OK on a drum or VA track) ---------------
+    // --- SOUNDS: the factory sounds (OK on a drum, synth or GRAIN track) ---
     //
     // core/sounds.hpp's presets for the selected track's machine, as a list: UP and DOWN (or A)
     // move the cursor, OK loads the one under it into the track -- with the transport running,
@@ -4313,16 +4406,22 @@ public:
         return id == uint8_t(MachineId::sample) || id == uint8_t(MachineId::grain);
     }
     bool plays_files(int track) const { return is_file_machine(engine_.machine_id(track)); }
-    // Does this track's machine read the ASR page? The VAs and the WAVE pair (core/project.hpp).
+    // Does this track's machine read the ASR page? The VAs, the WAVE pair, FM4 and GRAIN
+    // (core/project.hpp).
     bool has_asr(int track) const { return machine_reads_asr(engine_.machine_id(track)); }
     // The OSC page's names: the VAs' WAV OS2 SUB DRV, the WAVE pair's WRP DET SUB and then
-    // GLD on WAVE MONO, DRV on WAVE POLY, or FM4's DET FIN BRT CAR.
+    // GLD on WAVE MONO, DRV on WAVE POLY, FM4's DET FIN BRT CAR, or GRAIN's SCN PSP.
     const char *osc_param_name(int slot) const {
         const uint8_t id = engine_.machine_id(selected_);
         if (!machine_reads_osc(id)) return "---";
         if (machine_is_fm(id)) {
             static const char *const fm[kOscParams] = {"DET", "FIN", "BRT", "CAR"};
             return fm[slot];
+        }
+        if (machine_is_grain(id)) {
+            // Scan and pitch spray (dsp/grain.hpp); the last two are free.
+            static const char *const grain[kOscParams] = {"SCN", "PSP", "---", "---"};
+            return grain[slot];
         }
         if (!machine_is_wave(id)) return kOscNames[slot];
         static const char *const wave[kOscParams] = {"WRP", "DET", "SUB", "DRV"};

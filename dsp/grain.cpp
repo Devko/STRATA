@@ -77,21 +77,37 @@ using enaga::dsp::exp2;
 using enaga::dsp::reciprocal;
 using enaga::dsp::semitones;
 
-// The output trim, calibrated on the LOUDEST case the way dsp/va.cpp's kHeadroom is, because a
-// machine that sums eight copies of a signal needs calibrating somewhere. The loudest material
-// there is, is a full-scale constant: eight grains all reading the same maximum value with nothing
-// anywhere to cancel. Swept over SIZ, DEN and SPR and hammered with a trigger every block, that
-// material peaked at 3.23 before this trim, so 0.5 puts the measured worst case at about 1.6 and a
-// sustained cloud at ordinary settings nearer 0.5 -- a loop track sitting under the drums, which is
-// where a loop track belongs, and MIXER mode has the fader for the rest. The HARD ceiling, which
-// no material and no trigger pattern can pass, is kGrains * kHeadroom = 4: eight windows of at most
+// The output trim. Calibrated first on the LOUDEST case, the way dsp/va.cpp's kHeadroom is: a
+// full-scale constant, eight grains all reading the same maximum value with nothing anywhere to
+// cancel, swept over SIZ, DEN and SPR and hammered with a trigger every block, peaks at 3.23
+// before this trim. At 0.5 that put a cloud of real material about 11 dB under its own sample
+// at LVL 127 and 14 dB under it at LVL 100 -- far under every other melodic machine, so the
+// first thing anyone did with GRAIN was look for a louder setting that was not there (the
+// 2026-11-23 audit, /mnt/project-files/grain-renders). At 1.0 a sustained cloud sits about 5 dB
+// under its sample at LVL 127, a little under SAMPLE at the same LVL, which is where a bed
+// belongs. The pathological constant now peaks at about 3.2, and the HARD ceiling, which no
+// material and no trigger pattern can pass, is kGrains * kHeadroom = 8: eight windows of at most
 // 1 with latched gains of at most 1. tests/test_grain.cpp pins both numbers.
-constexpr float kHeadroom = 0.5f;
+constexpr float kHeadroom = 1.0f;
 
-// Long enough that STOP once leaves a granular tail rather than a click: the cloud thins out
-// while the grains already in the air finish through their own windows. Six times SAMPLE's
-// release, because a grain's tail is NOT the sample's own -- it is this envelope.
+// REL at 0, which is the tail the machine always had: long enough that STOP once leaves a
+// granular tail rather than a click, the cloud thinning out while the grains already in the air
+// finish through their own windows. REL climbs from here, so the knob never gets shorter than
+// the setting an older kit loads with.
 constexpr float kReleaseS = 0.18f;
+constexpr float kReleaseOctaves = 5.7959f;   // log2(10 / 0.18): REL, 180 ms to 10 s
+// ATK, as the VAs have it: 2.5 ms to 5 s, exponential. 0 is no attack at all, as it always was.
+constexpr float kAttackS = 0.0025f;
+constexpr float kAttackOctaves = 10.9658f;   // log2(5 / 0.0025)
+// SIZ: 8 ms to 680 ms. The top is the longest grain strata_grain_advance stays exact for
+// (kGrainMax, 682 ms at 48 kHz).
+constexpr float kSizeLowS = 0.008f;
+constexpr float kSizeOctaves = 6.4094f;      // log2(0.68 / 0.008)
+// DEC below the top: 5 ms * 2^(11.6 * knob), 5 ms to about 16 s.
+constexpr float kDecayLowS = 0.005f;
+constexpr float kDecayOctaves = 11.6f;
+// LEN's longest gate, as the VAs (dsp/va.cpp): a held LEN rings across a pattern's end.
+constexpr uint32_t kGateMax = 14400000u;
 
 inline int32_t clampi(int32_t x, int32_t lo, int32_t hi) { return x < lo ? lo : (x > hi ? hi : x); }
 
@@ -100,43 +116,115 @@ inline int32_t clampi(int32_t x, int32_t lo, int32_t hi) { return x < lo ? lo : 
 
 // --- parameters -----------------------------------------------------------
 //
-// Eight of them: the SRC page and the AMP page. docs/SPEC.md's GRAIN row names five (position,
-// size, density, spray, pitch) and the AMP page owes a level and an envelope, which is seven; the
-// eighth is SHP, and dsp/grain.hpp explains why it is not a scan rate.
+// Thirteen of them: the SRC page, the AMP page, and five on ASR and OSC. docs/SPEC.md's GRAIN row
+// names five (position, size, density, spray, pitch) and the AMP page owes a level and an
+// envelope; SHP shapes the grain; ASR and OSC give the cloud a real envelope, a moving read head
+// and a pitch spray (dsp/grain.hpp, "the GRN pages beyond SRC and AMP").
+//
+// The screen shows each in its unit (app/app.hpp, append_grain_value), from the functions below.
 //
 // SRC
 //   0  POS  position, linear over the whole sample: 0 is frame 0 and 127 the last frame. The grain
 //           START slides back from here when a whole grain would not fit, so POS at the top plays
 //           the last grain of the sample rather than falling silent. **This is the parameter to
 //           lock per step or to drive from a tempo-synced LFO** -- that is how a granular stretch
-//           gets its tempo lock in STRATA, and why this machine needs no tempo of its own.
-//   1  SIZ  grain size, 5 ms to about 390 ms, exponential, because size is heard as a ratio: at
-//           the bottom the grain is shorter than a cycle of a bass note and the cloud is a buzz,
-//           at the top each grain is a recognisable fragment.
+//           gets its tempo lock in STRATA.
+//   1  SIZ  grain size, 8 ms to 680 ms, exponential, because size is heard as a ratio: at the
+//           bottom the grain is shorter than a cycle of a bass note and the cloud is a buzz, around
+//           64 (75 ms) it is the classic cloud, and at the top each grain is a recognisable
+//           fragment and a dense cloud is a smooth smear of the sample. The top was 390 ms
+//           until the 2026-11-23 audit; long grains are what a pad and a freeze want, and they
+//           cost nothing more per sample.
 //   2  DEN  density, as the OVERLAP: 0.25 (gaps between grains, a stutter) to 8 (the pool full, a
 //           smooth cloud). The hop between onsets follows from SIZ and DEN together, so neither
-//           knob is a rate and changing SIZ does not change how dense the cloud sounds.
+//           knob is a rate and changing SIZ does not change how dense the cloud sounds. Below 1
+//           there are gaps; 2 and up is continuous.
 //   3  SPR  spray, square law, up to half a second of position jitter, and the same amount as a
 //           fraction of the hop jittering the onsets. Square law because the useful part is the
 //           bottom: a few milliseconds is a chorus, 100 ms is a cloud, half a second is a wash.
 //           The onset jitter rides along because a perfectly regular hop comb-filters -- the
 //           regularity, not the grain, is what makes an unsprayed cloud sound metallic.
 // AMP
-//   8  PIT  pitch, (knob - 64) * 24/63 semitones: exactly unity at 64, +24 at 127, -24.4 at 0.
+//   8  PIT  pitch in WHOLE semitones: round((knob - 64) * 24/63), so 64 is unity, 127 is +24 and
+//           0 is -24. It was continuous until the audit, which put most of the knob between two
+//           notes (an octave up landed 19 cents sharp or flat), and a cloud is played in a key.
 //           The step is then PIT x the trig note's ratio x source_rate/48 kHz, clamped to 1/64..32
-//           so the fixed-point step and the bounds arithmetic both stay inside their words. The
-//           trig note transposes from note 60, so a cloud plays chromatically across the pads.
+//           so the fixed-point step and the bounds arithmetic both stay inside their words.
 //   9  SHP  grain shape: 0 is a symmetric Hann grain (the smoothest, and the classic granular
 //           pad), 127 puts the peak 2% in, which is an instant attack with a long decay -- a
 //           plucked grain, and what makes a dense cloud read as a texture of events rather than a
 //           pad. It is one window table read either way; dsp/grainloops.ti.c has the trick.
-//  10  DEC  decay to silence, 5 ms * 2^(11.6 * knob): 5 ms to about 16 s, and **127 means hold**
-//           (sustain 1.0), which is the setting a loop track wants -- the cloud runs until the
-//           sequencer stops it. There is no ATK: a grain's own window already ramps every onset,
-//           so an attack knob would soften what is already soft, and the slot is SHP's.
-//  11  LVL  output level, square law, times kHeadroom. Square gives usable control over the quiet
-//           end; the trim is calibrated on the loudest case, as dsp/va.cpp's is, and the comment
-//           on kHeadroom has the measurement.
+//  10  DEC  decay, 5 ms * 2^(11.6 * knob): 5 ms to about 16 s, and **127 means hold**, which is
+//           the setting a loop track wants -- the cloud runs until the sequencer stops it. With
+//           SUS up, DEC is the fall from the peak to SUS instead.
+//  11  LVL  output level, square law, times kHeadroom.
+// ASR
+//  24  ATK  attack, 2.5 ms to 5 s; 0 is none (a grain's own window already ramps every onset).
+//  25  SUS  sustain, 0 to 1. 0 leaves DEC in charge, as it always was. Above 0 the cloud holds at
+//           SUS (at the peak with DEC at the top) while a KEYS pad is held or the step's LEN
+//           lasts, and then fades over REL: the pad envelope.
+//  26  REL  release, 180 ms at 0 (the old fixed tail) to 10 s: what STOP, a key-up or LEN's end
+//           leaves. The scheduler keeps running through it, so a release is a thinning cloud.
+// OSC
+//  28  SCN  scan, 2 x (knob/127)^2 times real time: 0 still, 13% at 32, 51% at 64, 100% at 90,
+//           200% at 127. The read head moves from POS while the note sounds and wraps at the end
+//           of the sample; each trig starts it from POS again.
+//  29  PSP  pitch spray: 1-63 detunes each grain at random by up to (knob/63)^2 semitones either
+//           way, a chorus at the bottom and a smear at the top; 64-127 sends a share of the
+//           grains an octave up, (knob - 63)/128 of them, up to one in two -- the shimmer. The
+//           share is spread evenly over the grains (spawn), not drawn per grain.
+
+float grain_size_seconds(uint8_t value) {
+    return kSizeLowS * exp2(kSizeOctaves * float(value) * (1.0f / 127.0f));
+}
+
+float grain_overlap(uint8_t value) {
+    return 0.25f * exp2(5.0f * float(value) * (1.0f / 127.0f));
+}
+
+float grain_spray_seconds(uint8_t value) {
+    const float u = float(value) * (1.0f / 127.0f);
+    return u * u * 0.5f;
+}
+
+int grain_pitch_semitones(uint8_t value) {
+    // Whole semitones, rounded half away from zero; the products are exact in float.
+    const float semis = (float(value) - 64.0f) * (24.0f / 63.0f);
+    return semis >= 0.0f ? int(semis + 0.5f) : -int(-semis + 0.5f);
+}
+
+float grain_decay_seconds(uint8_t value) {
+    return kDecayLowS * exp2(kDecayOctaves * float(value) * (1.0f / 127.0f));
+}
+
+float grain_attack_seconds(uint8_t value) {
+    return value == 0 ? 0.0f
+                      : kAttackS * exp2(kAttackOctaves * float(value) * (1.0f / 127.0f));
+}
+
+float grain_release_seconds(uint8_t value) {
+    return kReleaseS * exp2(kReleaseOctaves * float(value) * (1.0f / 127.0f));
+}
+
+float grain_scan_rate(uint8_t value) {
+    const float u = float(value) * (1.0f / 127.0f);
+    return 2.0f * u * u;
+}
+
+GrainSpray grain_pitch_spray_mode(uint8_t value) {
+    return value == 0 ? GrainSpray::off : (value < 64 ? GrainSpray::detune : GrainSpray::octave);
+}
+
+float grain_detune_cents(uint8_t value) {
+    if (grain_pitch_spray_mode(value) != GrainSpray::detune) return 0.0f;
+    const float u = float(value) * (1.0f / 63.0f);
+    return 100.0f * u * u;
+}
+
+float grain_octave_chance(uint8_t value) {
+    if (grain_pitch_spray_mode(value) != GrainSpray::octave) return 0.0f;
+    return float(value - 63) * (1.0f / 128.0f);
+}
 
 void Granular::init(float sample_rate) {
     rate_ = sample_rate > 1.0f ? sample_rate : 48000.0f;
@@ -178,20 +266,19 @@ void Granular::prepare(const TrackParams &params) {
     position_unit_ = params.unit(0);
     recompute_position();
 
-    const float size_s = 0.005f * exp2(6.3f * params.unit(1));      // 5 ms to ~390 ms
-    grain_len_ = clampi(int32_t(size_s * rate_), kMinGrain, kGrainMax);
+    grain_len_ = clampi(int32_t(grain_size_seconds(params.get(1)) * rate_), kMinGrain, kGrainMax);
 
     // The hop follows from SIZ and the overlap, so DEN is an overlap and not a rate. The floor is
     // what bounds how many grains one block can spawn, and what keeps render_slice terminating.
-    const float overlap = 0.25f * exp2(5.0f * params.unit(2));      // 0.25 to 8
-    hop_ = clampi(int32_t(float(grain_len_) * reciprocal(overlap)), kHopMin, kGrainMax);
+    hop_ = clampi(int32_t(float(grain_len_) * reciprocal(grain_overlap(params.get(2)))), kHopMin,
+                  kHopMax);
 
     spray_unit_ = params.unit(3);
-    spray_ = int32_t(spray_unit_ * spray_unit_ * 0.5f * rate_);     // up to half a second
+    spray_ = int32_t(grain_spray_seconds(params.get(3)) * rate_);
     if (playable_) spray_ = clampi(spray_, 0, frames_);
 
     // 64 is exactly unity, so a pattern written at the centre reads the sample at its own pitch.
-    pitch_ratio_ = semitones((float(params.get(8)) - 64.0f) * (24.0f / 63.0f));
+    pitch_ratio_ = semitones(float(grain_pitch_semitones(params.get(8))));
     recompute_step();
 
     // The window's peak, from the middle to 2% in. It stops at 2% rather than 0 because rise_ is
@@ -200,15 +287,31 @@ void Granular::prepare(const TrackParams &params) {
     rise_ = 0.5f * reciprocal(peak_);
     fall_ = 0.5f * reciprocal(1.0f - peak_);
 
-    // DEC at the top is hold. The attack is zero on purpose: a shape whose attack time is under
-    // one step gets coefficient 1.0, which is a genuine zero-length attack (docs/ENAGA_API.md).
-    // The times below are already times-to-1%, which is what EnvelopeShape::make wants.
-    const float decay = 0.005f * exp2(11.6f * params.unit(10));     // 5 ms to ~16 s
-    const float sustain = params.get(10) >= 127 ? 1.0f : 0.0f;
-    amp_shape_ = EnvelopeShape::make(0.0f, decay, sustain, kReleaseS, rate_);
+    // DEC at the top holds; SUS up holds at SUS while gated. With every ASR byte at 0 this is the
+    // envelope the machine always had: no attack, DEC, the 180 ms release. A shape whose attack
+    // time is under one step gets coefficient 1.0, a genuine zero-length attack
+    // (docs/ENAGA_API.md); the times are already times-to-1%, which is what make wants.
+    const uint8_t dec = params.get(10);
+    const uint8_t atk = params.get(Page::asr, 0);
+    const uint8_t sus = params.get(Page::asr, 1);
+    const bool hold = dec >= kGrainDecayHold;
+    sustains_ = sus > 0;
+    soft_attack_ = atk > 0;
+    const float sustain = hold ? 1.0f : params.unit(Page::asr, 1);
+    const float decay = grain_decay_seconds(hold ? uint8_t(kGrainDecayHold - 1) : dec);
+    amp_shape_ = EnvelopeShape::make(grain_attack_seconds(atk), decay, sustain,
+                                     grain_release_seconds(params.get(Page::asr, 2)), rate_);
 
     const float level = params.unit(11);
     out_gain_ = kHeadroom * level * level;
+
+    // SCN in source frames per output sample, so it is real time whatever the source's rate.
+    scan_speed_ = grain_scan_rate(params.get(Page::osc, 0));
+    scan_rate_ = scan_speed_ * rate_ratio_;
+    const uint8_t psp = params.get(Page::osc, 1);
+    spray_mode_ = grain_pitch_spray_mode(psp);
+    detune_semis_ = grain_detune_cents(psp) * 0.01f;
+    octave_chance_ = grain_octave_chance(psp);
 }
 
 // POS against the resident sample. Called from prepare() and from set_sample(), because the
@@ -244,7 +347,8 @@ void Granular::recompute_step() {
 // position and its linear partner one frame later -- stays inside [0, frames_). See "how a grain
 // is bounded" in dsp/grain.hpp: the float estimate chooses where to start checking and the exact
 // integer walk decides the answer.
-int32_t Granular::fit_length(int32_t start, int32_t want) const {
+int32_t Granular::fit_length(int32_t start, int32_t want, int32_t istep, uint32_t fstep,
+                             float inv_step) const {
     const int32_t max_adv = frames_ - 2 - start;   // the position AND its partner must be in range
     if (max_adv < 0) return 0;
 
@@ -253,13 +357,13 @@ int32_t Granular::fit_length(int32_t start, int32_t want) const {
     // so this picks the candidate and never the answer. The estimate is clamped to kGrainMax
     // BEFORE the integer cast, because max_adv * inv_step_ can exceed what an int32 holds on a
     // long sample at the bottom of the pitch range.
-    const float estimate = float(max_adv) * inv_step_ + 1.0f;
+    const float estimate = float(max_adv) * inv_step + 1.0f;
     const int32_t cap = estimate >= float(kGrainMax) ? kGrainMax
                                                      : (estimate >= 1.0f ? int32_t(estimate) : 0);
     if (cap < len) len = cap;
     // The fixed-point step is at most the float step it came from (its fraction is truncated), so
     // the estimate can only be high by rounding: this walks down one or two steps, never scans.
-    while (len > 0 && strata_grain_advance(len - 1, istep_, fstep_) > max_adv) len--;
+    while (len > 0 && strata_grain_advance(len - 1, istep, fstep) > max_adv) len--;
     return len;
 }
 
@@ -277,6 +381,9 @@ void Granular::set_sample(const int16_t *data, uint32_t frames, int channels, fl
 
     source_rate_ = source_rate > 1.0f ? source_rate : rate_;
     rate_ratio_ = source_rate_ * inv_rate_;
+    scan_rate_ = scan_speed_ * rate_ratio_;
+    scan_whole_ = 0;
+    scan_frac_ = 0.0f;
     // int16 to float, with the stereo sum's halving folded in: the tap adds L and R, so a stereo
     // source is summed to mono for free (machines are mono; pan lives in the insert chain).
     src_scale_ = (channels_ == 2 ? 0.5f : 1.0f) * (1.0f / 32768.0f);
@@ -308,6 +415,7 @@ void Granular::release(uint8_t note) {
     if (next_.note != note) return;
     if (pending_) release_on_start_ = true;
     else if (voice_on_) amp_.gate_off();
+    gate_ = -1;
 }
 
 void Granular::release_all() {
@@ -315,6 +423,8 @@ void Granular::release_all() {
     // out over kReleaseS instead of stopping dead. That tail is the point of a granular release.
     // A pending trig still starts -- it was scheduled before the stop.
     if (voice_on_) amp_.gate_off();
+    gate_ = -1;
+    one_shot_ = false;
 }
 
 void Granular::kill_all() {
@@ -328,6 +438,8 @@ void Granular::kill_all() {
     wait_ = 0;
     voice_on_ = false;
     hop_countdown_ = 0;
+    gate_ = -1;
+    one_shot_ = false;
     active_ = false;
 }
 
@@ -356,6 +468,8 @@ const char *Granular::param_name(int index) const {
         "PIT", "SHP", "DEC", "LVL",      // AMP
         "---", "---", "---", "---",      // FX: the insert chain's
     };
+    // ATK SUS REL and SCN PSP are named by the screen (app/app.hpp), which names the ASR and OSC
+    // pages for every machine that reads them; `param_name` covers the sixteen sound slots.
     return index >= 0 && index < kParams ? names[index] : "---";
 }
 
@@ -373,13 +487,35 @@ void Granular::start_voice() {
     recompute_step();
     const float velocity = float(t.velocity) * (1.0f / 127.0f);
     level_ = clamp(velocity * (t.accent ? 1.25f : 1.0f), 0.0f, 1.0f);
-    amp_.gate_on(true);
+    // From zero, as it always was -- unless ATK is up, where a retrigger rising from zero under
+    // a sounding pad would be a dip and a click; it rises from where the cloud is instead.
+    amp_.gate_on(!soft_attack_);
     voice_on_ = true;
     hop_countdown_ = 0;    // the first grain starts on the trig's own frame: sample accurate
+    scan_whole_ = 0;       // SCN starts from POS on every note
+    scan_frac_ = 0.0f;
+    // This note's LEN, counted from now, only with SUS up: at SUS 0 DEC ends the note, or holds
+    // it until the next trig, as it always has. A note with neither a LEN nor a key-up to come is
+    // a one-shot, which with SUS up must let go by itself (render_slice) or it would never end.
+    gate_ = sustains_ && t.gate_frames > 0
+                ? int32_t(t.gate_frames > kGateMax ? kGateMax : t.gate_frames)
+                : -1;
+    one_shot_ = gate_ < 0 && !t.held;
     if (release_on_start_) {
         amp_.gate_off();
         release_on_start_ = false;
+        gate_ = -1;
+        one_shot_ = false;
     }
+}
+
+// SCN: the read head moves on by n output samples' worth. Control rate, once per sub-slice; the
+// modulo is an integer division at control rate, never in the loop.
+void Granular::advance_scan(int n) {
+    scan_frac_ += scan_rate_ * float(n);
+    const int32_t whole = int32_t(scan_frac_);
+    scan_frac_ -= float(whole);
+    scan_whole_ = (scan_whole_ + whole) % (frames_ > 0 ? frames_ : 1);
 }
 
 // One grain onset. Control rate, at most a handful of times a block (the hop floor is what bounds
@@ -392,23 +528,53 @@ void Granular::spawn() {
     // The jitter is SPR's: a perfectly regular hop comb-filters, and the regularity rather than
     // the grain is what makes an unsprayed cloud sound metallic.
     const float jitter = spray_unit_ * 0.5f * float(hop_) * random_.bipolar();
-    hop_countdown_ = clampi(hop_ + int32_t(jitter), 2, kGrainMax);
+    hop_countdown_ = clampi(hop_ + int32_t(jitter), 2, kHopMax);
 
     if (!playable_) return;
 
     const int32_t offset = spray_ > 0 ? int32_t(float(spray_) * random_.bipolar()) : 0;
-    int32_t start = position_ + offset;
+    // SCN's head is inside [0, frames_) and so is POS, so one subtraction wraps the sum.
+    int32_t head = position_ + scan_whole_;
+    if (head >= frames_) head -= frames_;
+    int32_t start = head + offset;
+
+    // This grain's own step: the voice's, or PSP's detune or octave of it. Picked here, at the
+    // onset, so the loop and the bounds below see one fixed step per grain as they always did.
+    int32_t istep = istep_;
+    uint32_t fstep = fstep_;
+    float inv_step = inv_step_;
+    if (spray_mode_ != GrainSpray::off) {
+        float ratio = 1.0f;
+        if (spray_mode_ == GrainSpray::detune) {
+            ratio = semitones(detune_semis_ * random_.bipolar());
+        } else {
+            // Spread evenly rather than drawn at random: a coin per grain left stretches of a
+            // third of a second with no octave in the air and then three at once, and the top
+            // of the cloud came and went in 20 dB bursts. Error diffusion keeps the share
+            // steady; SPR's jitter is what keeps it from sounding regular.
+            octave_acc_ += octave_chance_;
+            if (octave_acc_ >= 1.0f) {
+                octave_acc_ -= 1.0f;
+                ratio = 2.0f;
+            }
+        }
+        const float step = clamp(step_ * ratio, kStepMin, kStepMax);
+        istep = int32_t(step);
+        const float fraction = (step - float(istep)) * float(STRATA_GRAIN_FRAC_ONE);
+        fstep = uint32_t(int32_t(clamp(fraction, 0.0f, float(STRATA_GRAIN_FRAC_MASK))));
+        inv_step = reciprocal(step);
+    }
 
     // The span a full-length grain needs, exactly. If the buffer can hold one anywhere, the start
     // slides back until it fits; only a buffer too short for a whole grain has its length cut.
     int32_t len = clampi(grain_len_, kMinGrain, kGrainMax);
-    const int32_t span = strata_grain_advance(len - 1, istep_, fstep_);
+    const int32_t span = strata_grain_advance(len - 1, istep, fstep);
     const int32_t room = frames_ - 2 - span;
     if (room >= 0) {
         start = clampi(start, 0, room);
     } else {
         start = 0;
-        len = fit_length(0, len);
+        len = fit_length(0, len, istep, fstep, inv_step);
     }
     // Fewer frames than a grain is worth: silence rather than a click. A 1-frame sample, a 2-frame
     // sample and a POS at the very end of a tiny buffer all land here.
@@ -452,8 +618,8 @@ void Granular::spawn() {
     Grain &g = grains_[pick];
     g.s.pos = start;
     g.s.frac = 0;          // on a whole frame: that is what keeps the onset's bound exact
-    g.s.istep = istep_;
-    g.s.fstep = fstep_;
+    g.s.istep = istep;
+    g.s.fstep = fstep;
     g.s.q = 0.0f;
     g.s.dq = reciprocal(float(len));
     g.s.peak = peak_;
@@ -486,12 +652,29 @@ void Granular::render_slice(float *out, int n) {
             spawn();           // and spawn() always moves the countdown on, so this terminates
             continue;
         }
+        // A one-shot with SUS up: nothing will end it, so it lets go now (dsp/va.cpp does the
+        // same), and SUS raised under a sounding one-shot does too.
+        if (voice_on_ && one_shot_ && sustains_) {
+            amp_.gate_off();
+            one_shot_ = false;
+        }
         int k = n - i;
         if (pending_ && wait_ < k) k = wait_;
         if (scheduling() && hop_countdown_ < k) k = hop_countdown_;
+        if (gate_ > 0 && gate_ < k) k = int(gate_);   // and at LEN's end: released on its frame
         run(out + i, k);
         if (pending_) wait_ -= k;
-        if (scheduling()) hop_countdown_ -= k;
+        if (scheduling()) {
+            hop_countdown_ -= k;
+            if (scan_rate_ > 0.0f) advance_scan(k);
+        }
+        if (gate_ > 0) {
+            gate_ -= k;
+            if (gate_ <= 0) {
+                amp_.gate_off();                      // LEN is over: into REL, no click
+                gate_ = -1;
+            }
+        }
         i += k;
     }
 }

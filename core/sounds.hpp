@@ -2,10 +2,11 @@
 //
 // The kit library (app/storage.hpp) swaps all eight tracks at once, which is the wrong size for
 // "try a different kick": the rest of the beat goes with it. A sound preset is one machine's
-// worth of knobs -- SRC, the insert chain's FLTR page and AMP, and on the VAs the ASR and OSC pages --
+// worth of knobs -- SRC, the insert chain's FLTR page and AMP, and on the VAs, FM4 and GRAIN the ASR and OSC pages --
 // written into the selected track and nothing else. Opened with OK from EDIT or MACHINE on any
 // track whose machine has some (app/app.hpp, SOUNDS), the way OK opens the sample browser on a
-// SAMPLE or GRAIN track.
+// SAMPLE track. GRAIN has both, so on a GRAIN track OK opens SOUNDS from EDIT and the sample
+// browser from MACHINE.
 //
 // ## What a preset leaves alone
 //
@@ -14,6 +15,8 @@
 //   - the LFO and ARP pages, which are performance, not timbre;
 //   - the track's fader, its machine and its sample;
 //   - HAT's CHK (slot 10), the choke group: it says which hat cuts which, a wiring choice;
+//   - GRAIN's POS and PIT (slots 0 and 8): where in the track's own sample the cloud reads, and
+//     the key it is tuned to, belong to the sample rather than to the sound;
 //   - the ASR and OSC pages on the drums and on every machine that does not read them.
 //
 // `sound_preset_writes` is that list as a bit mask over a KitTrack's parameters.
@@ -51,7 +54,7 @@ constexpr int kSoundAsrFirst = kKitArpEnd;
 // And of the OSC page.
 constexpr int kSoundOscFirst = kKitAsrEnd;
 
-// How many presets `machine` has: 0 for SAMPLE, GRAIN, MID and any id this build lacks.
+// How many presets `machine` has: 0 for SAMPLE, MID and any id this build lacks.
 int sound_preset_count(uint8_t machine);
 
 // Preset `index` of `machine`, or nullptr outside 0 .. count - 1.

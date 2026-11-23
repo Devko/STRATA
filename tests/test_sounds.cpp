@@ -44,7 +44,8 @@ TEST(sounds_every_machine_that_makes_sound_from_knobs_has_a_list_and_the_rest_no
         const bool has = id == MachineId::kick || id == MachineId::snare || id == MachineId::hat ||
                          id == MachineId::perc || id == MachineId::va_mono ||
                          id == MachineId::va_poly || id == MachineId::wave_mono ||
-                         id == MachineId::wave_poly || id == MachineId::fm;
+                         id == MachineId::wave_poly || id == MachineId::fm ||
+                         id == MachineId::grain;
         CHECK_EQ(sound_preset_count(uint8_t(m)) > 0, has);
         CHECK_EQ(sound_preset_writes(uint8_t(m)) != 0, has);
         // AS WAS and at most two pages of the SOUNDS list, which scrolls (the VAs have more).
@@ -233,11 +234,9 @@ TEST(sounds_every_machine_but_mid_has_defaults_for_a_switch) {
     uint8_t params[kKitParams] = {};
     for (int m = 0; m < int(MachineId::count); m++) {
         const bool has = machine_defaults_apply(uint8_t(m), params);
-        // MID's knobs are CCs for someone else's instrument. GRAIN gets its defaults from preset
-        // 0 of its SOUNDS list, which the "Make GRAIN easy to dial in" work adds; when it lands,
-        // GRAIN leaves this exemption.
-        const bool exempt = m == int(MachineId::midi) ||
-                            (m == int(MachineId::grain) && sound_preset_count(uint8_t(m)) == 0);
+        // MID's knobs are CCs for someone else's instrument. GRAIN's defaults are CLOUD, preset 0
+        // of its SOUNDS list.
+        const bool exempt = m == int(MachineId::midi);
         if (!exempt && !has) std::printf("    machine %d has no defaults\n", m);
         CHECK(exempt || has);
         if (m == int(MachineId::midi)) CHECK(!has);
@@ -310,4 +309,16 @@ TEST(sounds_switching_a_track_loads_the_new_machines_defaults) {
     post(Cmd::set_machine, 5, 0, uint8_t(MachineId::midi));
     pump(2);
     for (int p = 0; p < kTrackParams; p++) CHECK_EQ(int(e.params(5).v[p]), int(want[p]));
+}
+
+TEST(sounds_a_switch_to_grain_loads_cloud_from_the_start_of_the_sample_at_its_pitch) {
+    // The SOUNDS list never moves POS or PIT; a switch to GRN sets them too, so a cloud starts at
+    // the sample's first frame and its own pitch rather than wherever the old machine left them.
+    uint8_t params[kKitParams];
+    for (int p = 0; p < kKitParams; p++) params[p] = 99;
+    CHECK(machine_defaults_apply(uint8_t(MachineId::grain), params));
+    CHECK_EQ(int(params[0]), 0);
+    CHECK_EQ(int(params[8]), 64);
+    CHECK(sound_preset_matches(uint8_t(MachineId::grain), 0, params));
+    CHECK_EQ(std::strcmp(sound_preset(uint8_t(MachineId::grain), 0)->name, "CLOUD"), 0);
 }

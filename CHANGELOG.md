@@ -6,6 +6,25 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Changed
+
+- **GRAIN is easy to dial in.** About 6 dB louder at the same LVL (a cloud used to sit 11 dB
+  under its own sample). PIT plays whole semitones (an octave up was 19 cents off). SIZ reaches
+  680 ms (was 390 ms), from 8 ms. Every GRN knob shows its unit: `151MS`, `X4.3` grains in the
+  air, `HOLD`, `D15`, `OCT25`. On a GRN track OK in EDIT opens its SOUNDS list and OK in MACHINE
+  the sample browser. Older projects open; their GRN tracks play louder, with SIZ a little
+  longer at the same knob and PIT on the nearest semitone.
+
+### Added
+
+- **GRAIN's ASR and OSC pages.** ATK, SUS and REL give a cloud a real envelope: with SUS up it
+  swells, holds for the step's LEN or while a pad is held, and fades over REL. SCN moves the read
+  head through the sample while the note sounds (up to twice real time; a time-stretch at any
+  pitch), and PSP sprays each grain's pitch: a detune of up to a semitone, or up to half the
+  grains an octave up for a shimmer. All at 0 is the machine as it was.
+- **Eight GRN factory sounds:** CLOUD, PAD, FREEZE, SHIMMR, DRIFT, STRTCH, STUTTR, CHOPS. They
+  leave POS and PIT alone. Switching a track to GRN loads CLOUD.
+
 ### Fixed
 
 - A sample picked in the browser on a SMP track plays whole from its first frame. It used to

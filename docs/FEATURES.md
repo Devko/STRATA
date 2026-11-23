@@ -57,8 +57,8 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 ## Engines (machines)
 
 Eight tracks, any machine on any track (MACHINE, FUNC+EDIT). Each track: 16 parameters on four
-pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages, and ASR and OSC pages on the VA, WAVE
-and FM4 machines.
+pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages, and ASR and OSC pages on the VA, WAVE,
+FM4 and GRAIN machines.
 
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
@@ -69,6 +69,7 @@ and FM4 machines.
 | SAMPLE: one-shot or 1-16 equal slices by note, 4 voices, 4 play modes (fwd, loop, rev, rev loop) | v0.1.0 | ◐ default beat's loop track (placeholder sample) | Unit sample loads: 13b, 15b-15d |
 | SAMPLE **SLC AUTO**: slices at up to 15 detected hits | v0.1.0 | ○ (15c2) | Hit points are found at load, not editable |
 | GRAIN: up to 8 grains in one voice | v0.1.0 | ○ (8, 8b / U3) | Most expensive machine; outside the POLY budget (thinned by the CPU guard); no tempo sync of its own |
+| **GRAIN rework**: +6 dB, PIT in whole semitones, SIZ 8-680 ms, ASR page (ATK SUS REL: pads that hold for LEN), OSC page (SCN scan/time-stretch, PSP detune or octave shimmer), values in units, 8 SOUNDS (OK in EDIT), a switch to GRN loads CLOUD | #134 | ○ (21) | SCN is free-running, not tempo-locked; older projects' GRN tracks play 6 dB louder with slightly different SIZ and PIT snapped to the nearest semitone |
 | VA MONO: saw or pulse, OSC 2 (detune or sync), sub, noise, drive, own filter and envelope, accent, slide, glide | v0.1.0 | ✔ default beat bass | At SUS 0 (default) DEC is the note's length and LEN is not heard; see the ASR row |
 | VA POLY: up to 6 notes, 13 chord types with inversions, DET | v0.1.0 | ✔ default beat chord | At SUS 0 LEN only shortens a note; see the ASR row. No stereo spread or unison 2 (in SPEC) |
 | **Held notes on the VAs: ASR page** (ATK SUS REL FSU, seventh EDIT page); with SUS up a note holds while the key is held or for its step's LEN (up to 64 steps) | #90 | ○ (13k) | Held voices count against the 12-voice POLY budget for as long as they hold; MONO counts LEN only once SUS is up |

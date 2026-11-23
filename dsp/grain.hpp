@@ -107,15 +107,31 @@
 // dsp/va.cpp's is, which puts that hard bound at 4 and the measured worst case -- a full-scale
 // constant sample, swept and hammered -- at about 1.6. tests/test_grain.cpp pins both.
 //
-// --- what is deliberately NOT here ------------------------------------------------------------
+// --- the GRN pages beyond SRC and AMP -----------------------------------------------------------
 //
-// **No scan rate, and so no tempo.** docs/SPEC.md asks for tempo-locked stretch, and `Machine`
-// (dsp/track.hpp) hands a machine nothing but its 16 parameters and a `Trig` -- no tempo, no tick.
-// That is not an omission to work around: STRATA already has a tempo-locked way to move a read
-// head, which is POS under a per-step parameter lock or a tempo-synced LFO (docs/SPEC.md,
-// "Parameters"). Both are tempo-locked by construction, both are one byte a step, and neither
-// needs this machine to know what the tempo is or whether the clock is external. A SCN parameter
-// would duplicate them and would need the one free parameter slot that SHP holds.
+// GRAIN reads the ASR page and the OSC page as well, with its own meanings (core/project.hpp,
+// machine_reads_asr), the way FM4 does. Every one of them at 0 is the machine as it was before
+// it read them, which is what a kit from before then loads as:
+//
+//   ASR  ATK SUS REL ---   the cloud's envelope. ATK 0 is no attack, SUS 0 leaves DEC in charge
+//                          (127 holds, anything less fades), REL 0 is the old fixed 180 ms tail.
+//                          With SUS up the cloud holds at SUS while a KEYS pad is down or the
+//                          step's LEN lasts, then fades over REL: a pad.
+//   OSC  SCN PSP --- ---   SCN moves the read head through the sample while the note sounds, from
+//                          still (0, the old machine) to twice real time: a time-stretch, at any
+//                          PIT. Each trig starts it again from POS. PSP sprays the pitch of each
+//                          grain: 1-63 a random detune of up to a semitone either way, 64-127 up
+//                          to one grain in two playing an octave up (a shimmer).
+//
+// SCN is not tempo-locked, and does not need to be: a tempo-locked read head is still POS under a
+// per-step lock or a synced LFO (docs/SPEC.md, "Parameters"). SCN is the free one, for textures
+// that drift through a sample, and for a stretched loop whose length is set by ear.
+//
+// Neither costs anything in the inner loop. SCN is one add per slice; PSP picks each grain's own
+// step at its onset, and a grain already carries its own step (strata_grain), so the loop is
+// unchanged and the bounds argument above holds grain by grain.
+//
+// --- what is deliberately NOT here ------------------------------------------------------------
 //
 // **No reverse grains.** Not in the SPEC's GRAIN row, and a negative stride doubles every case in
 // the bounds argument above for a sound that SPR and SIZ already reach past recognition.
@@ -123,9 +139,8 @@
 // **Machines are MONO** (dsp/track.hpp): pan and stereo spread are the insert chain's, which is
 // what lets this machine sum a stereo source to mono for free in the tap gather.
 //
-// It reads the SRC page (0-3) and the AMP page (8-11); FLTR and FX belong to the insert chain.
-// That is 8 parameters, which is what `Machine::used_params()` already returns, so this machine
-// does not override it.
+// It reads the SRC page (0-3), the AMP page (8-11), ATK SUS REL on the ASR page and SCN PSP on
+// the OSC page; FLTR and FX belong to the insert chain.
 #pragma once
 
 #include <cstdint>
@@ -136,6 +151,23 @@
 #include "track.hpp"
 
 namespace strata {
+
+// GRAIN's knob curves, for the screen (app/app.hpp) as well as for `prepare`, and pinned by
+// tests/test_grain.cpp. dsp/grain.cpp has the table that says why each one is shaped as it is.
+float grain_size_seconds(uint8_t value);     // SIZ: 8 ms at 0, 680 ms at 127, exponential
+float grain_overlap(uint8_t value);          // DEN: grains in the air, 0.25 at 0 to 8 at 127
+float grain_spray_seconds(uint8_t value);    // SPR: position jitter, square law, 0 to 0.5 s
+int grain_pitch_semitones(uint8_t value);    // PIT: whole semitones, 0 at 64, -24 to +24
+constexpr uint8_t kGrainDecayHold = 127;     // DEC at the top holds
+float grain_decay_seconds(uint8_t value);    // DEC: 5 ms to about 16 s below the top
+float grain_attack_seconds(uint8_t value);   // ATK: 0 none, then 2.5 ms to 5 s
+float grain_release_seconds(uint8_t value);  // REL: 180 ms at 0 (the old fixed tail) to 10 s
+float grain_scan_rate(uint8_t value);        // SCN: x real time, 0 still, 1 at 90, 2 at 127
+// PSP's two zones: off at 0, a random detune 1-63, an octave-up chance 64-127.
+enum class GrainSpray : uint8_t { off = 0, detune, octave };
+GrainSpray grain_pitch_spray_mode(uint8_t value);
+float grain_detune_cents(uint8_t value);     // in DET's zone: the widest detune either way
+float grain_octave_chance(uint8_t value);    // in OCT's zone: the share of grains an octave up
 
 class Granular final : public Machine {
 public:
@@ -211,6 +243,12 @@ public:
     // The read step at the root note, in source frames per output sample: PIT times the source's
     // own rate ratio. 1.0 plays the sample at its own pitch.
     float read_step() const { return step_; }
+    // SCN: how far the read head has moved from POS since the note began, in frames, and the
+    // rate it moves at, in source frames per output sample.
+    int scan_offset() const { return scan_whole_; }
+    float scan_step() const { return scan_rate_; }
+    // ASR, as the last prepare() resolved it: whether the cloud holds at SUS while gated.
+    bool sustains() const { return sustains_; }
 
     static constexpr int kGrains = kPoolSize;
     // Linear interpolation needs two frames, but a buffer that small is not a sample. Four, as
@@ -241,6 +279,8 @@ private:
     // bounds the control-rate work the sub-slicing in render_slice can be asked to do, and it is
     // what guarantees render_slice makes progress: a hop of zero would not terminate.
     static constexpr int kHopMin = 8;
+    // And its ceiling: four longest grains, so DEN's lowest overlap (0.25) holds at every SIZ.
+    static constexpr int kHopMax = 4 * STRATA_GRAIN_LEN_MAX;
     // The fixed-point step's limits: six octaves down, five up. Clamping here is what keeps the
     // step inside its word and keeps strata_grain_advance's products inside 32 bits.
     static constexpr float kStepMin = 1.0f / 64.0f;
@@ -256,12 +296,14 @@ private:
     void recompute_step();
     void start_voice();
     void spawn();
+    void advance_scan(int n);
     void render_slice(float *out, int n);
     void run(float *out, int n);
     bool scheduling() const { return voice_on_ && playable_; }
     // The largest length, in output samples, whose every read from `start` stays inside the
     // buffer. Exact: see "how a grain is bounded" above.
-    int32_t fit_length(int32_t start, int32_t want) const;
+    int32_t fit_length(int32_t start, int32_t want, int32_t istep, uint32_t fstep,
+                       float inv_step) const;
 
     // An Envelope with sustain 0 parks in the `sustain` stage rather than reaching `idle`
     // (docs/ENAGA_API.md, "Gotchas"), so the level is what says the voice has finished. The
@@ -300,6 +342,16 @@ private:
     float rise_ = 1.0f;            // 0.5 / peak_, hoisted so the loop never divides
     float fall_ = 1.0f;            // 0.5 / (1 - peak_)
     float out_gain_ = 0.25f;       // LVL
+    float scan_speed_ = 0.0f;      // SCN, times real time
+    float scan_rate_ = 0.0f;       // and in source frames per output sample
+    float scan_frac_ = 0.0f;       // the read head's offset from POS: its fraction of a frame
+    int32_t scan_whole_ = 0;       // and its whole frames, kept inside [0, frames_)
+    GrainSpray spray_mode_ = GrainSpray::off;   // PSP
+    float detune_semis_ = 0.0f;    // PSP's detune zone: the widest detune, in semitones
+    float octave_chance_ = 0.0f;   // PSP's octave zone: the share of grains an octave up
+    float octave_acc_ = 0.0f;      // and its error-diffusion accumulator
+    bool sustains_ = false;        // SUS up: hold at SUS while gated, release at LEN's end
+    bool soft_attack_ = false;     // ATK up: a retrigger rises from where the cloud is
 
     float step_ = 1.0f;            // the read step, and its fixed-point and reciprocal forms
     int32_t istep_ = 1;
@@ -315,6 +367,8 @@ private:
     bool pending_ = false;
     bool release_on_start_ = false;   // released before its frame: let go as soon as it starts
     bool voice_on_ = false;        // the scheduler is running: gate on, or releasing
+    int32_t gate_ = -1;            // frames left of this note's LEN with SUS up, -1 for none
+    bool one_shot_ = false;        // a note no LEN or key-up will end
     bool active_ = false;
     Trig next_{};
 

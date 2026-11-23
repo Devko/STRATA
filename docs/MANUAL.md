@@ -572,15 +572,23 @@ slices either way.
 ### GRN: GRAIN
 
 Granular playback of the track's sample: up to 8 overlapping grains in one voice. The most
-expensive machine (section 7).
+expensive machine (section 7). Every knob shows its unit on screen: milliseconds, `X2.5` for
+grains in the air, `HOLD`, a share in `%`.
 
 | Page | A | B | C | D |
 | --- | --- | --- | --- | --- |
-| SRC | **POS** position in the sample | **SIZ** grain size, 5-390 ms | **DEN** overlap: stutter (low) to smooth cloud (high) | **SPR** spray: chorus, cloud, wash |
-| AMP | **PIT** ±24 semitones | **SHP** grain shape: smooth to plucked | **DEC** 5 ms-16 s; 127 = hold | **LVL** |
+| SRC | **POS** position in the sample | **SIZ** grain size, 8-680 ms | **DEN** grains in the air, X0.3-X8.0: under X1 leaves gaps (a stutter), X2 and up is a smooth cloud | **SPR** spray, 0-500 ms: chorus, cloud, wash |
+| AMP | **PIT** ±24 whole semitones | **SHP** grain shape: smooth to plucked | **DEC** 5 ms-15 s; 127 = `HOLD` | **LVL** |
+| ASR | **ATK** attack, 0 (none) to 5 s | **SUS** sustain: 0 leaves DEC in charge; up holds the cloud while a KEYS pad or the step's LEN lasts | **REL** release, 180 ms-10 s | |
+| OSC | **SCN** scan: the read head moves from POS while the note sounds, `OFF` to 200% of real time (100% at 90) | **PSP** pitch spray: 1-63 detunes each grain by up to a semitone (`D25`), 64-127 sends up to half the grains an octave up (`OCT25`, a shimmer) | | |
 
-GRAIN has no tempo of its own. To make a cloud move in time, **lock POS on steps**, or motion
-record a sweep of POS. The trig note transposes, so a cloud plays chromatically.
+**Where to start:** press **OK** in EDIT for the GRN SOUNDS list (below), or switch a track to GRN,
+which loads CLOUD. Then turn POS to the part of the sample you want. Rough guide: SIZ around 75 ms
+and DEN X3 or more for a cloud, SIZ 250 ms and up with little SPR for a pad or a freeze, DEN under
+X1 with SHP up for stutters and chops, SCN for a stretch.
+
+SCN is free-running, not tempo-locked. To make a cloud move in time, **lock POS on steps**, or
+motion record a sweep of POS. The trig note transposes, so a cloud plays chromatically.
 
 ### MNO: VA MONO
 
@@ -756,8 +764,9 @@ OUT channel: OFF, or 1-16. `FUNC+EDIT` again opens the kit library (section 6).
 
 <p><img src="screens/sounds.png" width="256" alt="SOUNDS on track 1, the kick"></p>
 
-Every drum machine, both VAs, both WAVE machines and FM4 come with a short list of ready-made sounds.
-On a KCK, SNR, HAT, PRC, MNO, PLY, WMN, WPL or FM4 track, press **OK** in EDIT or MACHINE: **SOUNDS** lists them. UP/DOWN or A move
+Every drum machine, both VAs, both WAVE machines, FM4 and GRAIN come with a short list of ready-made sounds.
+On a KCK, SNR, HAT, PRC, MNO, PLY, WMN, WPL or FM4 track, press **OK** in EDIT or MACHINE: **SOUNDS** lists them.
+On a GRN track it is **OK in EDIT** (OK in MACHINE opens the sample browser). UP/DOWN or A move
 the cursor, **OK loads** the one under it into this track, with the beat playing, and the list
 stays open so the next OK tries the next one. `NOW` marks the sound the track has. The first row,
 **AS WAS**, is the track as it sounded when you opened the list: OK on it puts that back, so
@@ -765,8 +774,9 @@ trying sounds never loses yours. LEFT/RIGHT or the screen keys move to the next 
 its own AS WAS. CLR goes back.
 
 A factory sound sets the machine's SRC and AMP pages, the insert chain's FLTR page (drive and
-filter) and, on the VA, WAVE and FM4 machines, the ASR and OSC pages. It leaves the FX page (lo-fi, pan and both sends), the LFO,
-the ARP, the fader and HAT's choke group alone, so the track keeps its place in the mix. The
+filter) and, on the VA, WAVE, FM4 and GRAIN machines, the ASR and OSC pages. It leaves the FX page (lo-fi, pan and both sends), the LFO,
+the ARP, the fader, HAT's choke group and GRAIN's POS and PIT alone, so the track keeps its place in the mix and a cloud keeps
+reading the part of the sample you chose. The
 first entry of each list is the factory kit's own sound.
 
 | Machine | Sounds |
@@ -780,6 +790,7 @@ first entry of each list is the factory kit's own sound.
 | WMN | SWEEP, RESO (a resonant sweep), GROWL, FORMNT (formant), DIGI (digital), VOWEL, WARP, FMBASS (FM bass) |
 | WPL | PAD, EPIANO (electric piano), BELL, MALLET, PLUCK, CHOIR, PWMPAD (a PWM pad) |
 | FM4 | EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD, GLASS |
+| GRN | CLOUD (where to start), PAD (swells, holds for LEN), FREEZE (one moment held), SHIMMR (a third of the grains an octave up), DRIFT (a slow scan), STRTCH (half speed, own pitch), STUTTR (gapped plucked grains), CHOPS (short percussive grains for POS locks) |
 
 The MNO list is longer than the screen: it scrolls as the cursor moves. PAD, STRING, KEYS, BRASS,
 FAT, REESE, ACID, SYNC, LEAD and DRONE sustain (the ASR page's SUS is up), so their notes last as long as
@@ -1349,7 +1360,8 @@ STRATA reads WAV files: 8, 16 or 24-bit, or 32-bit float, mono or stereo, at any
 
 <p><img src="screens/samples.png" width="256" alt="SAMPLES on track 8, in /SAMPLES"></p>
 
-On a SMP or GRN track, press **OK** in EDIT (the page says `OK: PICK SAMPLE`) or in MACHINE. The
+On a SMP track, press **OK** in EDIT (the page says `OK: PICK SAMPLE`) or in MACHINE; on a GRN
+track, OK in MACHINE (OK in EDIT opens its SOUNDS). The
 browser opens in the folder of the file the track plays, with the cursor on it, or in `/SAMPLES`
 (in the SmplTrek's sample pool when the card has that and no `/SAMPLES`).
 

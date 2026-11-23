@@ -164,14 +164,18 @@ inline constexpr int kSamplePickResetCount =
     int(sizeof kSamplePickResets / sizeof kSamplePickResets[0]);
 
 // Does this machine read the ASR page (ATK SUS REL FSU) and the OSC page? The VAs, the WAVE
-// pair, which share the VA voice, and FM4, which reads both with its own meanings (FSU is its
-// index sustain; the OSC page is DET FIN BRT CAR). Everything that shows or saves those pages asks here, so a
+// pair, which share the VA voice, FM4, which reads both with its own meanings (FSU is its
+// index sustain; the OSC page is DET FIN BRT CAR), and GRAIN (ATK SUS REL, then SCN PSP on the
+// OSC page; dsp/grain.hpp). Everything that shows or saves those pages asks here, so a
 // machine that starts reading them is one line.
 constexpr bool machine_reads_asr(uint8_t id) {
     return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly) ||
            id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly) ||
-           id == uint8_t(MachineId::fm);
+           id == uint8_t(MachineId::fm) || id == uint8_t(MachineId::grain);
 }
+
+// GRAIN: the granular player, whose ASR and OSC pages mean something of their own.
+constexpr bool machine_is_grain(uint8_t id) { return id == uint8_t(MachineId::grain); }
 constexpr bool machine_reads_osc(uint8_t id) { return machine_reads_asr(id); }
 
 // The WAVE pair: the VA voice with a wavetable where its oscillators were.

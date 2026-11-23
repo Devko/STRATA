@@ -63,7 +63,11 @@ int tune_param(uint8_t machine) {
 
 float tune_cents(uint8_t machine, uint8_t value) {
     const Map map = map_of(machine);
-    return map.at_zero + float(value > 127 ? 127 : value) * map.per_count;
+    const float cents = map.at_zero + float(value > 127 ? 127 : value) * map.per_count;
+    // GRAIN plays its PIT in whole semitones (dsp/grain.cpp, grain_pitch_semitones), so the
+    // name is the semitone it plays, never one between two.
+    if (machine == uint8_t(MachineId::grain)) return float(round_int(cents * 0.01f) * 100);
+    return cents;
 }
 
 uint8_t tune_note(uint8_t machine, uint8_t value) {
