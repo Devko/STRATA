@@ -28,7 +28,8 @@
 // ## Staying in time
 //
 // As dsp/frozen.hpp: the take began on a bar line, so loop frame `lead` is that bar, and on every
-// bar where (bar - origin) is a multiple of the loop's bars the read is put back exactly there.
+// bar where (bar - origin) is a multiple of the loop's bars the read is put back exactly there,
+// and on any other bar a read that is lost is moved to where it belongs (dsp/loopsync.hpp).
 // Stopped, the loop fades out over a block and stays silent; the first bar after a start
 // brings it back in time.
 #pragma once

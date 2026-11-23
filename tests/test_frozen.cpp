@@ -95,6 +95,34 @@ TEST(frozen_resyncs_on_its_own_bars_to_the_bar_lines_frame) {
     CHECK_EQ(loop.position(), 120u);
 }
 
+TEST(frozen_a_lost_read_comes_back_on_the_first_bar_after_a_start) {
+    // A four-bar loop of 10,000-frame bars that began on bar 5 at loop frame 100. Only the read
+    // position is checked, so nothing renders and the short test buffer stands in for it.
+    fill_loop();
+    FrozenLoop loop;
+    constexpr uint32_t kBig = 40000;
+    CHECK(loop.set(g_loop, kBig, 4, 5, 100, 5));
+    loop.skip(12345);                             // played a while, then stopped and started
+    CHECK_EQ(loop.position(), 12445u);
+    // The start puts the clock back on bar 0, the loop's fourth bar ((0 - 5) mod 4 = 3), not
+    // one of its own: before, it ran on out of time until bar 1. Now the read goes to where
+    // bar 0 belongs, 3 x 10,000 past the lead.
+    loop.on_bar(0, 0);
+    CHECK_EQ(loop.position(), 30100u);
+    // Bar 1 is the loop's own: exact, as always (the bar line 3 frames into the block).
+    loop.skip(10000);
+    loop.on_bar(1, 3);
+    CHECK_EQ(loop.position(), 97u);
+    // A few frames of rounding or clock jitter on a bar between is left alone: no jump.
+    loop.skip(10000);
+    loop.on_bar(2, 0);
+    CHECK_EQ(loop.position(), 10097u);
+    // A relocate mid-loop (bar 7 is its third bar) that leaves the read far off moves it.
+    loop.skip(2000);
+    loop.on_bar(7, -40);
+    CHECK_EQ(loop.position(), 100u + 20000u + 40u);
+}
+
 TEST(frozen_a_lead_outside_the_loop_wraps_and_set_starts_where_the_clock_is) {
     fill_loop();
     FrozenLoop loop;

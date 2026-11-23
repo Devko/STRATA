@@ -2,20 +2,13 @@
 #include "looper.hpp"
 
 #include "looperloops.h"
+#include "loopsync.hpp"
 
 namespace strata {
 namespace {
 
 constexpr int kMaxBlock = 64;
 constexpr float kInvBlock = 1.0f / float(kMaxBlock);
-
-// `x` modulo `n`, for any sign of x. Control rate only (an integer remainder is a library call
-// on this chip), and 32-bit, as dsp/frozen.cpp explains.
-uint32_t wrap(int32_t x, uint32_t n) {
-    if (x >= 0) return uint32_t(x) % n;
-    const uint32_t r = uint32_t(-x) % n;
-    return r == 0u ? 0u : n - r;
-}
 
 }  // namespace
 
@@ -52,12 +45,12 @@ void Looper::on_bar(uint32_t bar, int32_t frame) {
         // `frame` (dsp/frozen.hpp's `lead`; negative after a start that landed mid-bar).
         state_ = State::recording;
         origin_ = bar;
-        lead_ = wrap(frame, frames_);
+        lead_ = loop_wrap(frame, frames_);
         recorded_ = 0;
         return;
     }
-    if (state_ != State::playing || ((bar - origin_) & bars_mask_) != 0u) return;
-    pos_ = wrap(int32_t(lead_) - frame, frames_);
+    if (state_ != State::playing) return;
+    pos_ = loop_resync(pos_, frames_, bars_mask_, origin_, lead_, bar, frame);
 }
 
 void Looper::advance(uint32_t frames) {

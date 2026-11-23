@@ -304,9 +304,12 @@ TEST(looper_resyncs_on_its_bars_and_a_stop_fades_it_out) {
     }
     CHECK(g_looper.playing());
     CHECK_EQ(g_looper.bars(), 2u);
-    // Bar 11 is not one of the loop's own (10 + 2k): no jump.
+    // Bar 11 is not one of the loop's own (10 + 2k): a read a few frames from its place there
+    // is not moved (dsp/loopsync.hpp; a read that is lost is, in the test after this one).
+    for (int b = 0; b < 10; b++) g_looper.process(io, kBlk, 0.0f, true);
     const uint32_t before = g_looper.position();
-    g_looper.on_bar(11, 5);
+    CHECK_EQ(before, 640u);
+    g_looper.on_bar(11, 3);
     CHECK_EQ(g_looper.position(), before);
     // Bar 12 is: the bar line, 5 frames into the coming block, is loop frame 0.
     g_looper.on_bar(12, 5);
@@ -324,6 +327,33 @@ TEST(looper_resyncs_on_its_bars_and_a_stop_fades_it_out) {
     for (int i = 0; i < 2 * kBlk; i++) CHECK(io[i] == 0.0f);
     g_looper.clear();
     CHECK(!g_looper.holding());
+}
+
+TEST(looper_a_lost_read_comes_back_on_the_first_bar_after_a_start) {
+    // Two bars of 2,048 frames from bar 5. After a stop and start the clock is on bar 0, the
+    // loop's second bar: before, it played on out of time until bar 1 came round.
+    g_looper.attach(g_loop_buffer, kLoopCapacity);
+    CHECK(g_looper.arm(4096, 2));
+    g_looper.on_bar(5, 0);
+    float io[2 * kBlk];
+    for (int b = 0; b < 64; b++) {
+        test_block(io, kBlk, b * kBlk);
+        g_looper.process(io, kBlk, 0.0f, true);
+    }
+    CHECK(g_looper.playing());
+    for (int b = 0; b < 10; b++) g_looper.process(io, kBlk, 0.0f, false);
+    CHECK_EQ(g_looper.position(), 640u);
+    g_looper.on_bar(0, 0);
+    CHECK_EQ(g_looper.position(), 2048u);
+    // Its own bar puts it exactly in place; a frame or two off on the bar between is left
+    // alone.
+    g_looper.process(io, kBlk, 0.0f, true);
+    g_looper.on_bar(1, 0);                         // its own bar: exact
+    CHECK_EQ(g_looper.position(), 0u);
+    for (int b = 0; b < 32; b++) g_looper.process(io, kBlk, 0.0f, true);
+    g_looper.on_bar(2, 2);
+    CHECK_EQ(g_looper.position(), 2048u);
+    g_looper.clear();
 }
 
 // --- app/engine: the wiring ---------------------------------------------------------------------
