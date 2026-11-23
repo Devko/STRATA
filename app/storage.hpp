@@ -445,6 +445,7 @@ private:
     uint8_t unfreeze_wait_ = 0;
     uint8_t unfreeze_epoch_[kTracks] = {};
     const char *freeze_error_ = nullptr;
+    uint8_t freeze_refused_seen_ = 0;  // Status::freeze_refused when the take was asked for
     bool service_freeze();             // true if it posted, which ends the pass
     void take_chunk_written(int32_t result);   // the File::write callback, main context
     bool write_next_take_chunk();

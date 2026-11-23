@@ -1499,8 +1499,12 @@ void Engine::apply(const Command &command) {
             // TIME, not a number of passes, so a 7-step pattern still gives bars you can loop.
             const int bars = command.a < 1 ? 1 : (command.a > 8 ? 8 : int(command.a));
             const float frames = float(bars) * float(kTicksPerBar) * samples_per_tick_;
+            // A freeze's take (b 3) refused says so on a counter of its own, which the main
+            // context watches rather than waiting for the take (Status::freeze_refused).
+            const bool freeze = command.b == 3;
             if (frames < 1.0f) {
                 status_.bump_refused();          // the tempo has not settled yet
+                if (freeze) status_.bump_freeze_refused();
                 break;
             }
             // `b` 2 is one track, `command.track`: a mono take of that track alone. 3 is the
@@ -1508,17 +1512,20 @@ void Engine::apply(const Command &command) {
             // is not running its machine, so freezing it again would record the loop it plays:
             // refused, as the UI's FROZEN row already is.
             const bool from_track = command.b == 2 || command.b == 3;
-            if (command.b == 3 && frozen_[track].on()) {
+            if (freeze && frozen_[track].on()) {
                 status_.bump_refused();
+                if (freeze) status_.bump_freeze_refused();
                 break;
             }
             // The looper holds the buffer (dsp/looper.hpp) until its loop is thrown away.
             if (looper_.holding()) {
                 status_.bump_refused();
+                if (freeze) status_.bump_freeze_refused();
                 break;
             }
             if (!capture_.arm(uint32_t(frames), from_track ? 1 : 2)) {
                 status_.bump_refused();          // a take is running, or one is waiting for the card
+                if (freeze) status_.bump_freeze_refused();
                 break;
             }
             // Written and cleared, but nothing reads it: the take's length is the `frames`
