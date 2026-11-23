@@ -4411,6 +4411,14 @@ public:
                 } else if (!storage_.card_usable()) {
                     notice("NO CARD");
                 } else if (storage_.request_sample_file(selected_, path)) {
+                    // A new file on a SAMPLE track plays whole (core/project.hpp,
+                    // kSamplePickResets). Posted after the request, so the knobs and the file
+                    // change together; the old sample's voices are stopped by the swap anyway.
+                    if (engine_.machine_id(selected_) == uint8_t(MachineId::sample)) {
+                        for (const ParamReset &r : kSamplePickResets) {
+                            post(Cmd::set_param, uint8_t(selected_), 0, r.slot, r.value);
+                        }
+                    }
                     notice("LOADING");
                 } else {
                     notice("PATH TOO LONG");

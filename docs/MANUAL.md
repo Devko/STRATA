@@ -77,7 +77,11 @@ also walk the tracks in GRID, EDIT and KEYS.
 
 A machine is one of eleven sound engines, plus **MID**, which plays an outboard synth over MIDI
 instead (section 3). Any track can host any machine (MACHINE mode, `FUNC+EDIT`). The default kit
-uses eight of them, one per track (WAVE MONO and WAVE POLY are there to switch to):
+uses eight of them, one per track (WAVE MONO and WAVE POLY are there to switch to).
+**Switching a track to another machine loads that machine's default sound**: its SRC, FLTR and
+AMP pages (and ASR and OSC where it has them) become the first entry of its SOUNDS list, and a
+SMP track plays a sample whole from its start. The FX page (lo-fi, pan, sends), the LFO and the
+arpeggiator stay as they were, and so does a MID track's page.
 
 | Track | Machine | Default role |
 | :---: | --- | --- |
@@ -1353,6 +1357,10 @@ browser opens in the folder of the file the track plays, with the cursor on it, 
 - **OK on a file loads it into the track at once**, with the beat playing, and the cursor stays
   put: press DOWN and OK again to try the next one. The line under the title says `READING`,
   `CONVERTING` and so on while it loads, and the `NOW` line shows the file the track plays.
+- **On a SMP track a picked file plays whole, from its start**: the pick sets STA 0, LEN 127,
+  SLC 1 and DEC 127 (hold). PIT, ATK, PLY and LVL stay as they were. Turn SLC up afterwards to
+  chop it. A project or kit you open keeps the values it was saved with, and a GRN track's knobs
+  are left alone.
 - OK on a folder (shown with a `/`) opens it. **CLR goes up a folder**; at the top are `SAMPLES/`
   and `RECORD/` (your resampled takes), and CLR from there goes back to where you came from.
 - **The SmplTrek's own folders.** On a card the stock firmware has used, the top also shows

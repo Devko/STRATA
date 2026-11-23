@@ -1658,9 +1658,19 @@ void Engine::apply(const Command &command) {
 
             // The new machine reads this track's parameters, which mean different things to it:
             // slot 10 is GLD on VA MONO and DET on VA POLY, and the FLTR page is the insert
-            // chain's on both. Nothing is translated -- docs/SPEC.md gives each machine the same
-            // sixteen slots on purpose, so the knobs keep their positions and the sound changes,
-            // which is what switching a machine is for.
+            // chain's on both. Until 2026-11-23 the knobs kept their positions across a switch.
+            //
+            // Since then (Roland) a switch loads the new machine's default sound
+            // (core/sounds.hpp, machine_defaults_apply) into its sound pages, so nothing the old
+            // machine left there leaks into the new one: a VA's knobs made a new SAMPLE start
+            // half way into the file, sliced, and fade early. The mix, LFO and ARP stay. A lock on
+            // the current step still wins until the next step, as for a knob or a preset.
+            if (machine_defaults_apply(command.a, params_[track].v)) {
+                const uint32_t locked = locked_[track];
+                for (int p = 0; p < kTrackParams; p++) {
+                    if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
+                }
+            }
             if (machines_[track] != nullptr) machines_[track]->prepare(effective_[track]);
 
             // And the sample, if the new machine plays one. The loader's path is in the kit; a

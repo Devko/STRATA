@@ -6,6 +6,19 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Fixed
+
+- A sample picked in the browser on a SMP track plays whole from its first frame. It used to
+  keep the track's STA, SLC and DEC, so it started part way in (or on a slice chosen by the
+  note) and DEC faded it out early. The pick now sets STA 0, LEN 127, SLC 1 and DEC 127 (hold).
+
+### Changed
+
+- Switching a track's machine loads that machine's default sound (the first entry of its SOUNDS
+  list; on SMP, the whole sample from its start). The knobs used to keep their positions, so the
+  old machine's values leaked into the new one. FX (lo-fi, pan, sends), LFO and ARP stay; MID is
+  untouched.
+
 ## [0.3.0] - 2026-11-23
 
 An early beta: everything merged since 0.2.0, built for the same Enaga 0.2.0 firmware. The

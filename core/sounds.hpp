@@ -68,4 +68,21 @@ bool sound_preset_apply(uint8_t machine, int index, uint8_t *params);
 // marks the sound a track has now.
 bool sound_preset_matches(uint8_t machine, int index, const uint8_t *params);
 
+// What switching a track TO `machine` writes (Roland, 2026-11-23: "switching a track's machine
+// loads that machine's default sound"). Before, the knobs kept their positions across a switch,
+// so a track switched to SAMPLE inherited STA half way in, nine slices and a short DEC from
+// whatever it hosted before, and the new sample "started at a random position".
+//
+// Every parameter the machine reads for its SOUND is written: SRC, FLTR and AMP, and ASR and OSC
+// on a machine that reads them. That is MORE than a preset writes (sound_preset_writes): a preset
+// leaves HAT's choke group and GRAIN's POS and PIT alone because they say how the track sits in
+// the kit or the sample, but values left there by another machine mean nothing, so a switch sets
+// them too. The values are preset 0 of the machine's SOUNDS list, the factory kit's sound; SAMPLE,
+// which has no list, plays the whole file from its start (kSamplePickResets) with the filter open.
+// FX (lo-fi, pan, sends), LFO and ARP are not written: they are the track's mix and performance.
+//
+// False, and nothing written, for a machine with no defaults: MID (its knobs are CCs for someone
+// else's instrument) and any machine without a SOUNDS list.
+bool machine_defaults_apply(uint8_t machine, uint8_t *params);
+
 }  // namespace strata

@@ -311,4 +311,24 @@ bool sound_preset_matches(uint8_t machine, int index, const uint8_t *params) {
     return true;
 }
 
+bool machine_defaults_apply(uint8_t machine, uint8_t *params) {
+    if (params == nullptr) return false;
+    if (machine == uint8_t(MachineId::sample)) {
+        // PIT unity, STA 0, LEN all, SLC 1; drive off, filter open, no resonance, mode OFF;
+        // no attack, DEC hold, forward one-shot, the factory LOOP track's level. STA, LEN, SLC
+        // and DEC agree with the browser's pick (kSamplePickResets; tests/test_sounds.cpp).
+        static constexpr uint8_t kSample[12] = {64, 0, 127, 0, 0, 127, 0, 0, 0, 127, 0, 100};
+        for (int p = 0; p < 12; p++) params[p] = kSample[p];
+        return true;
+    }
+    const SoundPreset *s = sound_preset(machine, 0);
+    if (s == nullptr) return false;
+    for (int p = 0; p < 12; p++) params[p] = value_of(*s, p);
+    if (machine_reads_asr(machine)) {
+        for (int p = 0; p < 4; p++) params[kSoundAsrFirst + p] = s->asr[p];
+        for (int p = 0; p < 4; p++) params[kSoundOscFirst + p] = s->osc[p];
+    }
+    return true;
+}
+
 }  // namespace strata
