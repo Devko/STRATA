@@ -70,6 +70,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages.
 | **ADSR / ASR and note length for POLY and MONO** (ATK/SUS/REL page, step LEN as a real gate, held key length recorded) | WIP | — | Thread "Make POLY and MONO hold long notes" |
 | MID: plays an outboard synth over MIDI; SRC/AMP knobs send CC 74/71/73/72, 70/75/76/77 | v0.1.0 | ○ (8d) | No sound or CPU of its own; no scale fold |
 | Key and scale per pattern (15 scales), fold for VAs, GRAIN and unsliced SAMPLE; sharps everywhere | v0.1.0 | ○ (7) | |
+| **NOTE view**: TUN / PIT read as a note (where TUN puts C-4) and turn a semitone a click; push the knob for 0-127 | #88 | ○ ("The new controls") | Chromatic, not by scale (TUN applies after the fold). 128 bytes per range, so many notes are a few cents off (`+`/`-`). Not saved: on at every start |
 | Golden renders pin every machine's sound | v0.1.0 | — | Host only |
 
 ## Sequencer
