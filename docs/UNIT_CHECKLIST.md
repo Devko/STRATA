@@ -60,6 +60,12 @@ are the point of this section.
       C to C, upper pads the sharps between them; soft and hard hits sound different; a held pad
       sustains; the upper pad between E and F is octave down, the last one octave up (`OCT n`).
       FUNC + lower pad still mutes on the bar. Does it play like a keyboard? `____`
+- [ ] **TUN as a note** (2026-11-23). Track 1 (KICK), EDIT SRC: A reads `A-1`, not `064`. Turn A
+      one click: `A#1`, and the kick is a semitone higher; twelve clicks from `A-1`: `A-2`. Push A:
+      `TUN AS NUMBERS`, A reads a number and a click is one count. Push again: `TUN AS NOTES`. Hold
+      a STEP + push A still clears that lock (`LOCK CLEARED`), and FUNC + push A is still KILL LOW.
+      On GRID the bottom slot shows the same. Track 7 (VA): turn TUN to `C-4`, then twelve clicks
+      up: `C-5`, exactly an octave. Legible, and is NOTE view the right default? `________`
 - Notes on what still feels awkward: `____________________________________________`
 
 ---
