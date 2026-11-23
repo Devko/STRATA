@@ -49,11 +49,12 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
    - **Screen keys:** the screen's pages. EDIT SRC FLTR AMP FX LFO ARP ASR; MIXER's twelve; PROJECT,
      CHAIN, PATTERN, SETUP, PROJECTS; the step page's field pages; SAMPLES' and KIT's pages of
      eight. On GRID and KEYS, where A-D turn the current EDIT page, they turn that page. The
-     three one-page screens give them their one sideways setting: MACHINE the track, RESAMPLE the
-     destination, PERFORM the mutate amount.
+     one-page screens give them their one sideways setting: MACHINE and SOUNDS the track,
+     RESAMPLE the destination, PERFORM the mutate amount.
    - **Pad-row keys:** which sixteen the STEP keys mean. Step page 1-4 (GRID, EDIT, MIXER,
      MACHINE, RESAMPLE), the octave in KEYS, the bank A-H in PROJECT and CHAIN. Where the STEP
-     keys always mean the same sixteen things (PERFORM, KIT, SAMPLES, the menu) they do nothing.
+     keys always mean the same sixteen things (PERFORM, KIT, SAMPLES, SOUNDS, the menu) they do
+     nothing.
      FUNC + pad-row key = the selected track's length, on every screen but the menu.
    - **Knobs A-D:** the four values on screen. Push = that value's switch. With a STEP held, turn
      = lock, push = remove the lock. In PERFORM, push = MACRO LEARN for that macro: EDIT opens,

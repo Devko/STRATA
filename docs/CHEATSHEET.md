@@ -41,6 +41,7 @@ Hold FUNC alone for a moment and the screen lists them, with what the upper pads
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
 | SAMPLES | FUNC+PROJECT ("pool"), or OK in EDIT or MACHINE on a SMP or GRN track | Pick the track's WAV from `/SAMPLES` or `/RECORD` |
+| SOUNDS | OK in EDIT or MACHINE on a drum, VA MONO or VA POLY track | Load a factory sound into that track only; AS WAS puts yours back |
 | MIXER | MIXER | Levels, delay, reverb, routing, master |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
 | PROJECT | PROJECT | Banks and patterns, key and scale, the card |
@@ -141,12 +142,13 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | Mode | UP / DOWN | LEFT / RIGHT | Screen keys L/R | Pad-row L/R | A-D | OK / CLR | FUNC + arrow |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GRID | Track | Step page 1-4 | EDIT page (for A-D) | Step page | Current EDIT page params | — / clear | Copy / paste |
-| EDIT | Track | Page SRC FLTR AMP FX LFO ARP ASR | Page | Step page | The page's 4 params | SMP/GRN: open SAMPLES / clear | Copy / paste |
+| EDIT | Track | Page SRC FLTR AMP FX LFO ARP ASR | Page | Step page | The page's 4 params | SMP/GRN: open SAMPLES; drums and VAs: open SOUNDS / clear | Copy / paste |
 | KEYS | Track | Octave (OCT 0-7) | EDIT page (for A-D) | Octave | Current EDIT page params | — | Copy / paste |
-| MACHINE | Machine | Track | Track | Step page | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES / — | Copy / paste |
+| MACHINE | Machine | Track | Track | Step page | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES; drums and VAs: open SOUNDS / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | — | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
 | MIXER | — | Page (9) | Page | Step page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode | — / clear | Copy / paste |
 | SAMPLES | Entry | Page of 8 | Page of 8 | — | A: entry | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
+| SOUNDS | Entry | First / last entry | Track | — | A: entry | Load into the track (AS WAS: put yours back) / back | — |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | Step page | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Page: PROJECT CHAIN PATTERN SETUP PROJECTS | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | — (FUNC menu) |
 | CHAIN | Entry | Entry's pattern -/+ | Page | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8 | Add entry / remove entry (twice; empty: back) | — (FUNC menu) |

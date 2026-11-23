@@ -271,6 +271,10 @@ parameters each, the faders, the sidechain duck and the sample paths. Besides th
 **kit library** of 16 slots on the card, shared by every project, so a sound you built in one
 project can be recalled in another (KIT mode, `FUNC+EDIT` twice).
 
+For one track rather than eight there are the **factory sounds**: OK in EDIT or MACHINE on a drum
+or VA track lists ready-made sounds for its machine and loads one into that track only (section 3,
+[Factory sounds](#factory-sounds-one-track-at-a-time)).
+
 ### On the card
 
 Everything STRATA keeps is on the SD card, never in the unit's flash:
@@ -637,6 +641,36 @@ on drums, which are not folded, TUN is simply the drum's pitch and can go to any
 `FUNC+EDIT` opens MACHINE. UP/DOWN or encoder A pick the machine, and you hear the change at
 once; LEFT/RIGHT or the screen keys move to the next track. Encoder **B** sets the track's MIDI
 OUT channel: OFF, or 1-16. `FUNC+EDIT` again opens the kit library (section 6).
+
+### Factory sounds: one track at a time
+
+<p><img src="screens/sounds.png" width="256" alt="SOUNDS on track 1, the kick"></p>
+
+Every drum machine and both VAs come with a short list of ready-made sounds. On a KCK, SNR, HAT,
+PRC, MNO or PLY track, press **OK** in EDIT or MACHINE: **SOUNDS** lists them. UP/DOWN or A move
+the cursor, **OK loads** the one under it into this track, with the beat playing, and the list
+stays open so the next OK tries the next one. `NOW` marks the sound the track has. The first row,
+**AS WAS**, is the track as it sounded when you opened the list: OK on it puts that back, so
+trying sounds never loses yours. LEFT/RIGHT or the screen keys move to the next track, which gets
+its own AS WAS. CLR goes back.
+
+A factory sound sets the machine's SRC and AMP pages, the insert chain's FLTR page (drive and
+filter) and, on the VAs, the ASR page. It leaves the FX page (lo-fi, pan and both sends), the LFO,
+the ARP, the fader and HAT's choke group alone, so the track keeps its place in the mix. The
+first entry of each list is the factory kit's own sound.
+
+| Machine | Sounds |
+| --- | --- |
+| KCK | 909 (the factory kick), 808 (long boom), DEEP (rounder, darker), PUNCH (short, hard, driven), DIST (industrial, distorted), SOFT (dub, no click) |
+| SNR | CLAP (the factory clap), 909SN, 808SN, CLAP4 (four bursts, wide), RIMSN (a snare rim tick), DIRTY (noisy, driven) |
+| HAT | CLOSED, OPEN (the factory pair), TIGHT, 808HH (pure squares), SHAKE (a shaker), RIDE (long, clangy), TRASH (noisy, metallic) |
+| PRC | RIM (the factory rim), TOM, COWBEL, BELL, BLIP, CONGA, METAL |
+| MNO | ROLL (the factory bass), ACID, SUB, PLUCK, GROWL (band-pass mid bass), GLIDE (portamento), DRONE (SUS up: holds each note for its LEN) |
+| PLY | STAB (the factory stab), PAD (A05's pad), STRING, KEYS, RAVE (best with 5TH OCT chords), PLUCK |
+
+PAD, STRING, KEYS and DRONE sustain (the ASR page's SUS is up), so their notes last as long as
+each step's LEN: give the steps long LENs, or hear PAD on A05. A loaded sound is a change to the
+kit like turning knobs: it is saved with the project, and FUNC+CLR does not undo it (AS WAS does).
 
 ---
 

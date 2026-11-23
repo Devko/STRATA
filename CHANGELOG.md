@@ -21,6 +21,11 @@ the project file format or the controls.
   sustain, release (to 8 s) and filter sustain. With SUS up a note holds while its KEYS pad, STEP
   key, track pad or MIDI note is held, or for its step's LEN, up to 64 steps. At 0 (and in every older
   project) the VAs sound exactly as before.
+- **Factory sounds for one track.** OK in EDIT or MACHINE on a drum, VA MONO or VA POLY track
+  opens SOUNDS: 6-7 ready-made sounds per machine (KCK 909, 808, DEEP, PUNCH, DIST, SOFT; MNO
+  ROLL, ACID, SUB, PLUCK, GROWL, GLIDE, DRONE; and lists for SNR, HAT, PRC and PLY). OK loads one
+  into that track only, with the beat running; AS WAS puts the track's own sound back. Pan, sends,
+  lo-fi, LFO, ARP and the fader stay as they were.
 - **A05 PAD**, a fifth factory pattern: four bars of held VA POLY chords (Cm9, Abmaj7, Ebmaj7,
   Gm7) that swell in and ring into each other, so the ASR page can be heard straight away. The
   pad is in the pattern's locks; the kit and A01-A04 are unchanged. New projects get it; an
