@@ -318,6 +318,8 @@ public:
     float amp_level() const { return voice_.amp_level(); }
     float decay_seconds() const { return settings_.decay_s; }
     float glide_seconds() const { return glide_s_; }
+    // SUS as the envelope holds it, 0-1: what the ASR page's prepare left.
+    float sustain_level() const { return settings_.sustain; }
 
 private:
     // A slide is always audible: below this it would be a jump, not a slide. The 303's own
