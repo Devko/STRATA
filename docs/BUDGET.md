@@ -980,13 +980,20 @@ cannot hide as well as it does in the voices' loops.
 
 Emulator: **E11**, `tests/scenario_ambient.sh` (push A on DLY+ and REV+ switches both modes on the
 default beat, whose chord and clap feed both sends), against `scenario_m3.sh`, with cl6x and
-`ENAGA_TI_CGT=none`. Not run yet: no device build in the cloud session that wrote it. Unit:
-**U9** (UNIT_CHECKLIST 13j).
+`ENAGA_TI_CGT=none`. Unit: **U9** (UNIT_CHECKLIST 13j). First measured on Roland's PC on
+2026-11-23 (main 5120347 plus the re-spaced key presses; before that fix the walk never reached
+DLY+ and REV+ and the scenario's figure was the plain beat).
 
 | Scenario | cl6x | GCC-only |
 | --- | --- | --- |
-| `scenario_m3.sh` (classic) | | |
-| `scenario_ambient.sh` (LONG + HALL, both tails at first) | | |
+| `scenario_m3.sh` (classic) | 25.42% | not measured |
+| `scenario_ambient.sh` (LONG + HALL, both tails at first) | **31.79%** | **58.94%** |
+
+**+6.4 points with cl6x, against the +1.9 estimate above**, and GCC-only is 1.06 points under the
+60% line: the heaviest scenario now, by a margin. The estimate took the host's ratio of the
+modes' cost to the voices'; the emulator says the feedback loops are much worse on the C674x
+than on the host. Still inside the target with cl6x, which is what ships; U9 on the unit decides
+whether the cuts below are needed.
 
 If the unit's MAX says it does not fit, cut in this order (CLAUDE.md: effects before voices): the
 HALL's shimmer (a two-tap read and a ring write a frame), its modulation (a phasor and the
