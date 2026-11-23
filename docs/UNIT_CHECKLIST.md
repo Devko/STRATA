@@ -897,8 +897,9 @@ New 2026-11-22: files over the old 30 s limit load whole, in chunks. Put a 48 kH
 - [ ] It plays from the start, all the way through (STA 0, LEN 127, PLY LOOP); on GRN, POS
       sweeps the whole file. Clicks at 4 MiB boundaries (every ~22 s of stereo 24-bit, ~44 s of
       16-bit)? `________`
-- [ ] PROJECT's SMP line shows the memory used, about `27/32M`. A second one on another track:
-      `NO ROOM`, and the first keeps playing.
+- [ ] PROJECT's SMP line shows the memory used, about `27/64M` (64 MiB for every project since
+      2026-11-23, older projects included). A second one on another track loads too; a third:
+      `NO ROOM`, and the first two keep playing.
 
 ## 15c2. SLC AUTO on a played break (4 min)
 

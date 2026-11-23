@@ -93,6 +93,15 @@ public:
     // room to spare, so this is the binding limit rather than the file system's.
     static constexpr int kNameBytes = 24;
 
+    // The sample budget a project gets, in bytes: what it stored, but never less than
+    // kSampleBudgetDefaultMib. Every v0.1 project stored the old default of 32 MiB and nothing in
+    // the UI sets another value, so the stored byte is read as a floor (2026-11-23, the default
+    // became the 64 MiB ceiling). The region is reserved whole in init(), so this costs nothing.
+    static constexpr uint32_t project_budget(uint8_t stored_mib) {
+        return (stored_mib > kSampleBudgetDefaultMib ? uint32_t(stored_mib)
+                                                     : kSampleBudgetDefaultMib) << 20;
+    }
+
     // App::init() only. Takes the sample region and the staging buffers from the heap -- every
     // allocation in this file happens here, as CLAUDE.md requires -- and hands the region's base
     // to the engine. False when the heap cannot provide them, which `App::init` reports.

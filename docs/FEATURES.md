@@ -135,7 +135,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | --- | --- | --- | --- |
 | WAV 8/16/24-bit or 32-bit float, mono or stereo, any rate (converted to 48 kHz, low-passed) | v0.1.0 | ○ (13b / U5) | More than two channels refused |
 | Background loading, the beat keeps playing | v0.1.0 | ○ (13b) | |
-| Long files at 48 kHz up to 349 s, read in 4 MiB chunks | v0.1.0 | ○ (15c) | 32 MiB sample memory shared by all tracks |
+| Long files at 48 kHz up to 349 s, read in 4 MiB chunks | v0.1.0 | ○ (15c) | 64 MiB sample memory shared by all tracks (32 until 2026-11-23) |
 | Other rates: up to 30 s at 96 kHz | v0.1.0 | ○ (13b) | |
 | Streaming of files too big for memory (2 s head + card stream, 4 tracks max) | v0.1.0 | ○ (15d) | Forward only, one voice: no STA, slices or reverse (not feasible, below); GRAIN plays only the head; CPU unmeasured |
 | Streamed samples honour LEN (end point, loop back to the head) | #91 | ○ (15d) | A LEN loop inside the 2 s head never touches the card |
@@ -193,8 +193,8 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
    kit). Left: making the depth lockable or scene/macro-able.
 3. **MIDI:** pitch bend and aftertouch in, CC motion recording, slide as legato out; moving the
    Enaga pin once a release carries the DIN fix (`192f03f`).
-4. **A per-project sample memory above 32 MiB** (SPEC allows up to 64), so fewer files need to
-   stream. Streamed LEN is built; streamed STA, slices and reverse were looked at on 2026-11-23
+4. ~~A per-project sample memory above 32 MiB~~ **Done 2026-11-23: every project gets 64 MiB**, so
+   fewer files need to stream. Streamed LEN is built; streamed STA, slices and reverse were looked at on 2026-11-23
    and are not feasible on Enaga 0.2.0's card path ("Why streamed samples play forward only",
    below).
 5. **Resample one track** on its own (SPEC promise).

@@ -1135,8 +1135,8 @@ the budget, `12/32M`.
 STRATA reads WAV files: 8, 16 or 24-bit, or 32-bit float, mono or stereo, at any sample rate
 (other rates are converted to 48 kHz on load).
 
-- **At 48 kHz a file may be any length that fits the sample memory.** With the project's 32 MiB
-  that is about 2.9 minutes of stereo, or 5.8 of mono, shared by all tracks; the hard limit is
+- **At 48 kHz a file may be any length that fits the sample memory.** With the project's 64 MiB
+  that is about 5.8 minutes of stereo, or 11.6 of mono, shared by all tracks; the hard limit is
   349 s. A long file is read in pieces (`LOADING LONG` and a percentage), about 7 s for a 50 MB
   stem, while everything keeps playing, and then plays like any other sample: pitch, slices,
   GRAIN.

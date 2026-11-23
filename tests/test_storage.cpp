@@ -2638,17 +2638,16 @@ TEST(storage_a_project_load_takes_every_track_through_the_swap) {
 }
 
 TEST(storage_a_loaded_project_applies_its_sample_budget) {
-    // docs/SPEC.md: 32 MiB by default, "raisable per project to the 64 MiB the memory budget
-    // allows". The new budget cannot be applied while the load is running --
+    // The budget a project stored is applied once every track has been through the swap --
     // `SamplePool::set_budget` refuses to shrink below what is already reserved rather than
-    // stranding a loaded sample -- so it waits until every track has been through the swap above.
+    // stranding a loaded sample. Since 2026-11-23 the default is the 64 MiB ceiling and the
+    // stored byte is a floor of it (Storage::project_budget), so every v0.1 project, which
+    // stored the old default of 32, now gets the whole region.
     clean();
-    // Whatever it is now, rather than the default: the pool is not reset between tests, and a
-    // budget this test did not choose is not this test's business.
     const uint32_t before = storage().samples().budget();
 
     Project &p = engine().project_for_load();
-    p.settings.sample_budget_mib = 48;
+    p.settings.sample_budget_mib = 32;      // what every v0.1 PROJECT.BIN holds
     post(Cmd::project_loaded);
     pump(2);
     storage().request_save();
@@ -2658,20 +2657,16 @@ TEST(storage_a_loaded_project_applies_its_sample_budget) {
     storage().request_reload();
     CHECK(settle());
     CHECK(storage().last_error() == nullptr);
-    CHECK_EQ(int(engine().project().settings.sample_budget_mib), 48);
-    CHECK_EQ(storage().samples().budget(), 48u << 20);
+    CHECK_EQ(int(engine().project().settings.sample_budget_mib), 32);   // the file is untouched
+    CHECK_EQ(storage().samples().budget(), kSampleBudgetMaxMib << 20);  // but the pool is whole
+}
 
-    // And down again, because the swap released everything before the budget was applied. (Any
-    // PROJECT.BIN command marks the file dirty; the table at the top of this file is what pins
-    // which ones they are.)
-    Project &back = engine().project_for_load();
-    back.settings.sample_budget_mib = uint8_t(kSampleBudgetDefaultMib);
-    storage().note_command(Cmd::mute_store, 0);
-    storage().request_save();
-    CHECK(pump_until_idle());
-    storage().request_reload();
-    CHECK(settle());
-    CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);
+TEST(storage_the_project_budget_is_a_floor_of_the_default) {
+    CHECK_EQ(kSampleBudgetDefaultMib, kSampleBudgetMaxMib);
+    CHECK_EQ(Storage::project_budget(1), kSampleBudgetDefaultMib << 20);
+    CHECK_EQ(Storage::project_budget(32), kSampleBudgetDefaultMib << 20);
+    CHECK_EQ(Storage::project_budget(64), 64u << 20);
+    CHECK_EQ(int(ProjectSettings{}.sample_budget_mib), int(kSampleBudgetDefaultMib));
 }
 
 // =============================================================================================
@@ -3068,7 +3063,7 @@ TEST(storage_request_new_takes_everything_of_the_old_project_away) {
     storage().request_reload();
     CHECK(settle());
     CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
-    CHECK_EQ(storage().samples().budget(), 48u << 20);
+    CHECK_EQ(storage().samples().budget(), kSampleBudgetDefaultMib << 20);
 
     // A scene and a macro, which live in PERFORM.BIN and not in the project.
     post(Cmd::kit_store);
@@ -3186,9 +3181,9 @@ namespace {
 
 // A WAV bigger than g_scratch: 8-bit PCM, which is one byte a sample, so the converted int16 is
 // twice the file -- the cheapest way to ask the pool for a lot of room.
-// 3.5 MiB: the fake card's arena is 4 MiB (tests/fakehost.hpp), and the settings and the project
-// files have to fit next to it.
-uint8_t g_big[7u << 19];
+// 5 MiB, so that 10 MiB once converted leaves a track over even at the 64 MiB default budget
+// (six fit, the seventh is refused). The fake card's arena is 48 MiB (tests/fakehost.hpp).
+uint8_t g_big[5u << 20];
 
 uint32_t make_big_wav(const char *path, uint32_t rate, int channels, uint32_t frames) {
     enaga::wav::Format format;
@@ -3262,10 +3257,10 @@ TEST(storage_a_file_to_resample_longer_than_the_source_buffer_is_refused) {
 }
 
 TEST(storage_a_sample_the_pool_has_no_room_for_is_refused_and_the_rest_play) {
-    // 3.5 MiB of 8-bit stereo is 7 MiB once converted, so the budget holds `fit` of them and
+    // 5 MiB of 8-bit stereo is 10 MiB once converted, so the budget holds `fit` of them and
     // the next is refused with NO ROOM and holds nothing, while the ones before it stay loaded.
-    // The budget is whatever the tests before left it at (32 MiB unless one is mid-change), so
-    // the count is worked out rather than assumed; anything up to 56 MiB leaves a track over.
+    // The budget is whatever the tests before left it at (the 64 MiB default unless one is
+    // mid-change), so the count is worked out rather than assumed; up to 70 MiB leaves a track over.
     clean();
     const uint32_t frames = (uint32_t(sizeof g_big) - 44u) / 2u;
     make_big_wav("/SAMPLES/BIG.WAV", 48000, 2, frames);

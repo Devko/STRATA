@@ -251,9 +251,10 @@ struct ProjectSettings {
     uint8_t quantize = 100;              // the live-record quantize amount, 0-100
     uint8_t mute_states[8] = {};         // 8 stored mute states, one bit per track
 
-    // docs/SPEC.md: 32 MiB by default, raisable per project to the 64 MiB the budget allows.
-    // Stored in MiB rather than bytes: a byte count would let a file ask for 4 GiB.
-    uint8_t sample_budget_mib = 32;
+    // docs/SPEC.md: 64 MiB by default since 2026-11-23 (it was 32, raisable per project to 64).
+    // Stored in MiB rather than bytes: a byte count would let a file ask for 4 GiB. The app
+    // applies it as a floor of the default (app/storage.cpp), so a stored 32 means 64 today.
+    uint8_t sample_budget_mib = 64;
 
     uint8_t chain_length = 0;            // how many chain entries are in use
     bool chain_enabled = false;
