@@ -13,7 +13,6 @@ constexpr float kInvBlock = 1.0f / float(kMaxBlock);
 
 }  // namespace
 
-
 bool FrozenLoop::set(const int16_t *data, uint32_t frames, uint32_t bars, uint32_t origin,
                      int32_t lead, uint32_t bar_now) {
     const bool bars_ok = bars == 1u || bars == 2u || bars == 4u || bars == 8u;
@@ -26,9 +25,7 @@ bool FrozenLoop::set(const int16_t *data, uint32_t frames, uint32_t bars, uint32
     gain_ = 0.0f;                       // fades in over the first block
     // Where the clock is now: at the start of bar (bar_now - origin) mod bars of the loop, which
     // is as close as a control-rate set can get. The next bar line puts it exactly in time.
-    const uint32_t bar_frames = frames / bars;
-    const uint32_t into = (bar_now - origin) & bars_mask_;
-    pos_ = loop_wrap(int32_t(lead_ + into * bar_frames), frames_);
+    pos_ = loop_position(frames_, bars_mask_, origin_, lead_, bar_now, 0);
     return true;
 }
 
