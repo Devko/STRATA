@@ -6,6 +6,13 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+## [0.2.0] - {{RELEASE_DATE}}
+
+An early beta: everything merged since 0.1.0, built for the same Enaga 0.2.0 firmware. It has run
+on one unit, but the walkthrough for the new features (docs/UNIT_CHECKLIST.md) has not been done
+yet. Release notes: [docs/release/v0.2.0.md](docs/release/v0.2.0.md). Projects and kits from 0.1.0
+open in 0.2.0.
+
 ### Added
 
 - **Help for the screen you are on.** Holding FUNC alone now shows help for the current screen
@@ -44,14 +51,58 @@ the project file format or the controls.
   how far each track ducks (OFF to 100%), DUCK sets the source track, attack, hold and release.
   Saved in the kit; kits and projects from before open with the old fixed duck (track 1, 35%,
   3/40/120 ms). The delay, reverb, master and EQ pages are now three screen-key presses further on.
+- **FREEZE a track** (FUNC menu, FREEZE): the track plays a 1-8 bar loop of its own machine from
+  RAM, so a held pad or a dense GRAIN costs almost nothing while its insert chain, mix and sends
+  stay live. Unfreeze is instant. Not saved: a reload, NEW or kit recall unfreezes.
+- **Bounce one track:** in RESAMPLE, B picks `TRK 1`-`TRK 8` as the source, and the take is that
+  track alone, mono, before its duck, fader, pan and sends.
+- **64 MiB of sample memory for every project**, older ones included (was 32 MiB), so fewer files
+  need to stream from the card.
+- **KEYS on the pads:** the two pad rows play as a piano keyboard, with velocity, held notes and
+  octave pads.
+- **CLEAR PATTERN** in the FUNC menu: every track of the pattern in one press (OK twice), one
+  undo. Sounds, lengths, speeds and swing stay.
+- **NOTE view:** TUN and PIT read as a note name and turn a semitone a click; push the knob for
+  the plain 0-127 value.
+- **MACRO LEARN:** assign a parameter to a macro by pushing its knob in EDIT. The macro page says
+  `FULL` and `n/4`, pressing the same STEP again removes a parameter, and EDIT shows
+  `HELD BY MACRO` on a parameter a macro is holding.
+- **STEP lights:** a trig's green shows its velocity, and a step with a condition blinks.
+- **Track pads hold their note** while pressed when a VA's SUS is up.
 
 ### Changed
 
 - **MACHINE: LEFT/RIGHT now move over the machine grid** (a column of three), the way UP/DOWN do.
   They used to change the track, so turning RIGHT for the next machine changed another track's
   machine. The track is on the pads and the screen keys, which now say `TRACK 2` and so on.
+- **Morph at rest leaves the sound to the EDIT knobs.** After OK captured a scene, the morph held
+  the capture over the kit even at position 0, so an EDIT knob moved the screen but not the
+  sound. Now position 0 writes nothing, which also means parking the morph at 0 no longer
+  recalls scene A.
+- **The VA voice runs its three passes unfused** for now: cl6x rendered the fused loop slightly
+  differently from GCC, so it is off until that is understood. It costs about 1.7 points of load.
 
-## [0.1.0] - {{RELEASE_DATE}}
+### Fixed
+
+- OK in RESAMPLE no longer retargets a take that is still being written.
+- The FUNC menu no longer shows a MUTATE verdict that OK would not give.
+- MACRO LEARN is easy to leave, and leaving it never clears the track.
+
+### Known limits
+
+- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} The features above are not yet
+  checked on the unit. Every other load figure comes from the emulator, which models no caches.
+- The **CPU guard's** thresholds (70% average, 90% in one block, back below 55%) are provisional;
+  nothing in the emulator reaches them.
+- **12 VA POLY voices** are still shared by all tracks, and held ASR notes count against them for as
+  long as they hold.
+- A streamed sample honours LEN, but still plays forward only: no START, slices or reverse
+  (docs/FEATURES.md, "Why streamed samples play forward only").
+- FREEZE is not saved with the project.
+- The other 0.1.0 limits stand: MIDI clock, SYNC and USB MIDI are lightly tested, and on Enaga 0.2.0
+  unplug USB when driving gear from MIDI OUT.
+
+## [0.1.0] - 2026-11-22
 
 The first release: STRATA on a SmplTrek running Enaga 0.2.0. Early, and released so that people
 with a unit can play it and report back. Release notes: [docs/release/v0.1.0.md](docs/release/v0.1.0.md).
@@ -162,7 +213,7 @@ of the panel and screenshots of every screen.
 
 ### Known limits
 
-- Tested on one SmplTrek on {{RELEASE_DATE}}, with the {{BUILD}} build. {{UNIT_LOAD}} Every other
+- Tested on one SmplTrek on 2026-11-22, with the cl6x build. The audio load stayed under 30% on the default beat, and MAX, the highest load since PLAY, peaked at 84.3% during long, heavy play with big effects and a lot going on, with no clicks or dropouts. Every other
   load figure comes from the
   emulator, which models no caches.
 - VA POLY is the expensive machine: all tracks together share **12 VA POLY voices**. Past that,
