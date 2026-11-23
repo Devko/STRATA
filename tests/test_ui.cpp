@@ -6593,7 +6593,10 @@ TEST(ui_macro_learn_assigns_by_pushing_knobs_in_edit) {
 
 TEST(ui_an_edit_knob_under_a_turned_up_macro_says_which_macro_holds_it) {
     Strata &app = fresh();
-    for (int m = 0; m < kMacros; m++) post_cmd(Cmd::macro_clear, uint8_t(m));
+    for (int m = 0; m < kMacros; m++) {                    // empty and at 0, whatever ran before
+        post_cmd(Cmd::macro_clear, uint8_t(m));
+        post_cmd(Cmd::set_macro, uint8_t(m), 0);
+    }
     pump(2);
     shift_key(ENAGA_KEY_F7);                               // PERFORM
     key(ENAGA_KEY_PUSH_C);                                 // learn C, EDIT opens
