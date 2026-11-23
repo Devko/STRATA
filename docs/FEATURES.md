@@ -43,7 +43,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | Controls concept from the panel: one job per button group ([CONTROLS.md](CONTROLS.md)) | v0.1.0 | ◐ ("The new controls") | |
 | FUNC + function key = its printed second label (sampling, pool, system, ◀◀, ▶▶, fx, rec src) | v0.1.0 | ◐ ("The new controls") | |
 | FUNC menu (FUNC+HOME): save, save as, open, new, reload, kits, sample reload, track speed, chain, song/loop, auto-fill, quantize | v0.1.0 | ◐ ("The new controls") | |
-| **CLEAR PATTERN** in the FUNC menu: every track in one press, OK twice, one undo | #86 | ○ ("The new controls") | Keeps sounds, lengths, speeds and swing |
+| **CLEAR PATTERN** in the FUNC menu: every track in one press, OK twice, one undo | #86 | ○ ("Today's walkthrough") | Keeps sounds, lengths, speeds and swing |
 | FUNC held alone shows a help screen | v0.1.0 | ○ ("The new controls") | |
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ ("The new controls") | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
@@ -70,7 +70,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | **Held notes on the VAs: ASR page** (ATK SUS REL FSU, seventh EDIT page); with SUS up a note holds while the key is held or for its step's LEN (up to 64 steps) | #90 | ○ (13k) | Held voices count against the 12-voice POLY budget for as long as they hold; MONO counts LEN only once SUS is up |
 | MID: plays an outboard synth over MIDI; SRC/AMP knobs send CC 74/71/73/72, 70/75/76/77 | v0.1.0 | ○ (8d) | No sound or CPU of its own; no scale fold |
 | Key and scale per pattern (15 scales), fold for VAs, GRAIN and unsliced SAMPLE; sharps everywhere | v0.1.0 | ○ (7) | |
-| **NOTE view**: TUN / PIT read as a note (where TUN puts C-4) and turn a semitone a click; push the knob for 0-127 | #88 | ○ ("The new controls") | Chromatic, not by scale (TUN applies after the fold). 128 bytes per range, so many notes are a few cents off (`+`/`-`). Not saved: on at every start |
+| **NOTE view**: TUN / PIT read as a note (where TUN puts C-4) and turn a semitone a click; push the knob for 0-127 | #88 | ○ ("Today's walkthrough") | Chromatic, not by scale (TUN applies after the fold). 128 bytes per range, so many notes are a few cents off (`+`/`-`). Not saved: on at every start |
 | Golden renders pin every machine's sound | v0.1.0 | — | Host only |
 
 ## Sequencer
@@ -89,7 +89,7 @@ pages (SRC, FLTR, AMP, FX), plus LFO, ARP and (VAs) ASR pages.
 | Live recording (pads, KEYS, MIDI) with latency correction and QUANTIZE 0-100%; **held length recorded as LEN** (#90) | v0.1.0 | ○ (M3, 13k) | Note-repeat rolls are not recorded; a held chord on one step keeps only its last note (as before) |
 | Motion recording of knob moves as locks | v0.1.0 | ○ (M3) | MIDI CCs are not motion-recorded |
 | KEYS mode: STEP keys play the scale | v0.1.0 | ○ (9) | |
-| **KEYS on the pads: two rows as a piano**, velocity, held, octave pads | #85 | ○ ("The new controls") | |
+| **KEYS on the pads: two rows as a piano**, velocity, held, octave pads | #85 | ○ ("Today's walkthrough") | |
 | Per-track LFO: 6 shapes, free 0.06-32 Hz or synced 8 bars-1/32, any of the 16 params; lockable, scene-able, macro-able | v0.1.0 | ○ (13e) | Steps at about 750 Hz: a slow deep pitch sweep can be heard stepping |
 | Per-track arpeggiator: UP, DN, U/D, ORD, RND, 1/4-1/32T, 1-4 octaves, gate | v0.1.0 | ○ (13h) | On POLY it uses the shared voice budget |
 | Banks A-H x 16 patterns, queued changes (END, 16, 32, NOW) | v0.1.0 | ◐ (3b) | |

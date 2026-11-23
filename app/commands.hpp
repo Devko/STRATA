@@ -82,6 +82,8 @@ enum class Cmd : uint8_t {
     // And how long that note was held, when its key comes up: core/record's held_length_index,
     // stored as the step's LEN if the step still holds that note.
     record_length,     // track, step, a: note, b: length index
+    // A step's LEN set outright: hold a step and press a later one. Only on a step with a trig.
+    set_step_length,   // track, step, a: length index
 
     // --- projects and banks, M4 --------------------------------------------
     //

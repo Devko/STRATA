@@ -354,7 +354,15 @@ Select the bass (pad 6). Hold a STEP that has a note and turn **VALUE**: that ch
 note. Hold the STEP and press **OK** to open the **step page**: A-D edit NOTE, VEL, LEN, MICR;
 the screen keys flip to PROB, COND, RTCH, RAMP and then ACNT, SLID, CHRD. LEFT/RIGHT walk to
 the neighbouring steps. Turn SLID on for a 303-style slide into the next note. OK or CLR closes
-it.
+it. The page answers A-D whether or not you are still holding the STEP.
+
+**A note's length from the STEP keys:** hold the STEP with the note and press a later STEP. The
+screen says `LEN 4 STP` (or whatever reaches that far), and when you let go the note lasts up to
+the end of the step you pressed. The table has 1, 1.5, 2, 3, 4, 6, 8, 12, 16 ... 64 steps, so a
+span between two of them takes the shorter one: the note never runs past the key you pressed. The
+pair is still a range (`SEL 1-5`): press CLR, copy or turn A/B while holding and it is only a
+range, with no length set; copy or transpose it later and the old LEN goes back first. With SUS up
+on a VA this is how a held pad is written in.
 
 ### 5. Play it in
 

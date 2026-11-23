@@ -157,6 +157,18 @@ constexpr bool length_valid(uint8_t index) {
     return index >= 1 && index <= kLengthMax;
 }
 
+// The longest LEN that does not run past `steps` whole steps, for "hold a step, press a later
+// one": the note lasts up to the end of the step pressed, or as close below as the table gets
+// (5 steps gives 4, 7 gives 6). Below one step, one step; past the table, its longest entry.
+constexpr uint8_t length_index_within_steps(int steps) {
+    const int sixteenths = steps < 1 ? 16 : steps * 16;
+    uint8_t best = 1;
+    for (int i = 1; i <= kLengthMax; i++) {
+        if (int(kLengthSixteenthsOfStep[i]) <= sixteenths) best = uint8_t(i);
+    }
+    return best;
+}
+
 // Sixteenths of a step for a length index; 0 for an invalid index, so a caller that ignores
 // length_valid() gets a silent note rather than an out-of-bounds read.
 constexpr uint16_t length_sixteenths(uint8_t index) {

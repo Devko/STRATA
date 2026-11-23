@@ -25,6 +25,9 @@ the project file format or the controls.
   Gm7) that swell in and ring into each other, so the ASR page can be heard straight away. The
   pad is in the pattern's locks; the kit and A01-A04 are unchanged. New projects get it; an
   existing project keeps its own bank A.
+- **Note length from the STEP keys:** hold a note's STEP and press a later one: its LEN reaches
+  that step. The pair is still a range for CLR, copy, paste and A/B.
+- **The step page answers A-D with its STEP still held:** C is LEN there, not a lock on CUT.
 - **REC records how long a note was held** into its step's LEN, on SAMPLE, GRAIN, the VAs and MID.
 - **Editable sidechain duck.** Three new MIXER pages after the faders: DCK 1-4 and DCK 5-8 set
   how far each track ducks (OFF to 100%), DUCK sets the source track, attack, hold and release.
