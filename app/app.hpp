@@ -130,6 +130,12 @@ constexpr int kMixerTrackPages = 2;
 constexpr MixerPage kMixerPages[] = {
     {"TRK 1-4", false, {-1, -1, -1, -1}},        // the faders, handled on their own
     {"TRK 5-8", false, {-1, -1, -1, -1}},
+    // The sidechain duck (core/project.hpp, KitDuck): how far each track ducks, four at a time,
+    // then which track fires it and its envelope. Kit bytes, handled on their own like the
+    // faders: `field` is unused.
+    {"DCK 1-4", false, {-1, -1, -1, -1}},
+    {"DCK 5-8", false, {-1, -1, -1, -1}},
+    {"DUCK", false, {-1, -1, -1, -1}},
     {"DLY", false, {int8_t(SendField::delay_seconds), int8_t(SendField::delay_feedback),
                     int8_t(SendField::delay_tone), int8_t(SendField::delay_level)}},
     // The ambient modes (dsp/ambient.hpp), each beside its send: TYP switches the mode, and the
@@ -156,9 +162,20 @@ constexpr int kMixerPageCount = int(sizeof(kMixerPages) / sizeof(kMixerPages[0])
 // Which MIXER page is the kill EQ's, for the plain-push kill switches.
 constexpr int kMixerEqPage = kMixerPageCount - 1;
 
+// The duck's pages: two of depths, then the source and the envelope.
+constexpr int kMixerDuckDepthPage = kMixerTrackPages;
+constexpr int kMixerDuckPage = kMixerDuckDepthPage + 2;
+static_assert(kMixerPages[kMixerDuckPage].name[0] == 'D' && kMixerPages[kMixerDuckPage].name[1] == 'U',
+              "kMixerDuckPage no longer names the duck's page");
+
+// The delay's two pages, which show the delay's time in milliseconds.
+constexpr int kMixerDelayPage = kMixerDuckPage + 1;
+
 // The ambient modes' pages, whose push A throws the mode switch (TYP) like turning it does.
-constexpr int kMixerLongPage = 3;
-constexpr int kMixerHallPage = 5;
+constexpr int kMixerLongPage = kMixerDelayPage + 1;
+constexpr int kMixerHallPage = kMixerDelayPage + 3;
+static_assert(kMixerPages[kMixerDelayPage].field[0] == int8_t(SendField::delay_seconds),
+              "kMixerDelayPage no longer names the delay's page");
 static_assert(kMixerPages[kMixerLongPage].field[0] == int8_t(SendField::delay_mode) &&
                   kMixerPages[kMixerHallPage].field[0] == int8_t(SendField::reverb_mode),
               "the ambient pages moved: push A would throw the wrong switch");
@@ -176,7 +193,7 @@ static_assert(kMixerPages[kMixerEqPage].master &&
 constexpr bool mixer_pages_cover_every_field() {
     for (int f = 0; f < int(SendField::count); f++) {
         bool found = false;
-        for (int p = kMixerTrackPages; p < kMixerPageCount; p++) {
+        for (int p = kMixerDelayPage; p < kMixerPageCount; p++) {
             if (kMixerPages[p].master) continue;
             for (int slot = 0; slot < 4; slot++) found = found || kMixerPages[p].field[slot] == f;
         }
@@ -184,7 +201,7 @@ constexpr bool mixer_pages_cover_every_field() {
     }
     for (int f = 0; f < int(MasterField::count); f++) {
         bool found = false;
-        for (int p = kMixerTrackPages; p < kMixerPageCount; p++) {
+        for (int p = kMixerDelayPage; p < kMixerPageCount; p++) {
             if (!kMixerPages[p].master) continue;
             for (int slot = 0; slot < 4; slot++) found = found || kMixerPages[p].field[slot] == f;
         }
@@ -195,6 +212,19 @@ constexpr bool mixer_pages_cover_every_field() {
 
 static_assert(mixer_pages_cover_every_field(),
               "a send or master field has no MIXER slot, so nothing can reach it");
+
+// A time for the ASR page, at most five characters: whole milliseconds under a second ("3MS",
+// "250MS"), tenths of a second above ("1.2S", "8.0S").
+void append_seconds(char *&out, float seconds) {
+    const uint32_t ms = uint32_t(seconds * 1000.0f + 0.5f);
+    if (ms < 1000) {
+        append_number(out, ms);
+        append(out, "MS");
+    } else {
+        append_tenths(out, (ms + 50) / 100);
+        *out++ = 'S';
+    }
+}
 
 void append_padded(char *&out, uint32_t value, int width) {
     uint32_t scale = 1;
@@ -374,19 +404,25 @@ const char *page_name(Page page) {
         case Page::fx:   return "FX";
         case Page::lfo:  return "LFO";
         case Page::arp:  return "ARP";
+        case Page::asr:  return "ASR";
         default:         return "?";
     }
 }
 
-// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp) and its arpeggiator
-// (core/arp.hpp). The selection keys walk all six; everywhere else a page is still four encoders
-// over four parameters.
-constexpr int kEditPages = kPages + 2;
+// The ASR page's encoder names (dsp/va.cpp's table). Only the VAs read the page; on any other
+// machine its four slots show "---".
+constexpr const char *kAsrNames[kAsrParams] = {"ATK", "SUS", "REL", "FSU"};
+
+// EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp), its arpeggiator
+// (core/arp.hpp) and the VA machines' note envelope, ASR (dsp/va.cpp). The selection keys walk
+// all seven; everywhere else a page is still four encoders over four parameters.
+constexpr int kEditPages = kPages + 3;
 
 // Encoder counts per click: one zone on the arp's MOD RAT OCT, one shape or destination on the
-// LFO's WAV and DST, one count everywhere else.
+// LFO's WAV and DST, one count everywhere else (ASR included).
 constexpr int param_click(int index) {
-    return index >= kArpFirst ? arp_click(index - kArpFirst) : lfo_click(index);
+    return index >= kAsrFirst ? 1
+                              : (index >= kArpFirst ? arp_click(index - kArpFirst) : lfo_click(index));
 }
 static_assert(page_first(Page(kEditPages - 1)) + kParamsPerPage == kTrackParams,
               "EDIT's last page is the last four track parameters");
@@ -1188,8 +1224,8 @@ public:
             case Mode::keys:
             case Mode::edit:
                 // GRID and KEYS turn A-D on the current EDIT page, so their screen pages are
-                // EDIT's: SRC .. ARP. One page set for the knobs wherever they are.
-                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. ARP
+                // EDIT's: SRC .. ASR. One page set for the knobs wherever they are.
+                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. ASR
                 if (mode_ != Mode::edit) notice(page_name(Page(param_page_)));
                 break;
             case Mode::mixer:
@@ -1619,6 +1655,10 @@ public:
                 post_command(command);
                 return;
             }
+            if (mixer_bank_ < kMixerDelayPage) {
+                edit_duck(mixer_bank_, encoder, delta);
+                return;
+            }
             edit_mixer_field(mixer_bank_, encoder, delta);
             return;
         }
@@ -1762,7 +1802,7 @@ public:
         }
 
         post(Cmd::trigger_note, uint8_t(track), 0, note, uint8_t(velocity));
-        record_note(track, note, uint8_t(velocity));
+        record_note(track, note, uint8_t(velocity), false);   // a hit: nothing to let go of
     }
 
     void on_pad_release(int pad) override {
@@ -2112,6 +2152,7 @@ public:
         if (held == 0) return;                       // never started here, or already let go
         midi_in_held_[channel][note] = 0;
         post(Cmd::release_note, uint8_t(held - 1), 0, uint8_t(note));
+        record_note_up(held - 1, uint8_t(note));
     }
 
     // --- live recording ---------------------------------------------------
@@ -2122,7 +2163,9 @@ public:
     // arrived: whole ticks plus the fraction into the next. core/record.hpp explains why that is
     // a better timestamp than a sample counter would be. Everything after that is arithmetic in
     // core/, where it is host-tested -- this function only gathers the inputs.
-    void record_note(int track, uint8_t note, uint8_t velocity) {
+    // `held`: the note has a key-up still to come (a piano pad, a STEP key in KEYS, a MIDI note),
+    // so its length is measured. A performance pad hit has none and keeps the step's LEN.
+    void record_note(int track, uint8_t note, uint8_t velocity, bool held = true) {
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;          // nothing to record onto
@@ -2155,6 +2198,58 @@ public:
         post_command(command);
 
         if (landing.clamped) notice("OFF GRID");   // it could not be stored where it was played
+
+        // And remember the press, so the key coming up can give the step its length. Only on a
+        // machine that holds a note -- a drum ignores LEN, and a tap there would rewrite the
+        // step's LEN for nothing. The stamp is `now`, not `hit`: the pad latency is the same at
+        // both ends, so the hold is the difference of the raw stamps.
+        if (!held || engine_.machine_id(track) < uint8_t(MachineId::sample)) return;
+        RecHold *slot = nullptr;
+        for (RecHold &h : rec_holds_) {
+            if (h.track == track && h.note == note) slot = &h;   // the same note again: replace
+        }
+        for (RecHold &h : rec_holds_) {
+            if (slot == nullptr && h.track < 0) slot = &h;
+        }
+        if (slot == nullptr) {
+            // More held notes than slots: the oldest press gives up its length (it keeps LEN).
+            slot = &rec_holds_[rec_hold_next_];
+            rec_hold_next_ = rec_hold_next_ + 1 >= kRecHolds ? 0 : rec_hold_next_ + 1;
+        }
+        slot->track = int8_t(track);
+        slot->note = note;
+        slot->step = landing.step;
+        slot->down = now;
+    }
+
+    // A recorded note's key came up: its hold, quantized to the note-length table
+    // (core/record.hpp, held_length_index), becomes the step's LEN. Nothing if it was not
+    // recorded, if REC went off in between or the clock stopped -- there is nothing to measure.
+    void record_note_up(int track, uint8_t note) {
+        RecHold *hold = nullptr;
+        for (RecHold &h : rec_holds_) {
+            if (h.track == track && h.note == note) hold = &h;
+        }
+        if (hold == nullptr) return;
+        hold->track = -1;
+        if (!rec_) return;
+        const enaga::clock::State clock = enaga::clock::state();
+        if (!clock.running) return;
+        Stamp up;
+        up.tick = clock.position;
+        up.fraction = clock.fraction;
+
+        const TrackPattern &source = engine_.pattern().tracks[track];
+        TrackTiming timing;
+        timing.length = source.length;
+        timing.speed = Speed(source.speed);
+        Command command;
+        command.cmd = Cmd::record_length;
+        command.track = uint8_t(track);
+        command.step = hold->step;
+        command.a = note;
+        command.b = held_length_index(hold->down, up, timing);
+        post_command(command);
     }
 
     void on_transport(int what, uint32_t position) override {
@@ -2769,15 +2864,16 @@ public:
         *out = 0;
         canvas.text(0, 20, line, 14);
 
-        // Which of the six pages is showing, as a row of boxes: the spec's selection keys
+        // Which of the seven pages is showing, as a row of boxes: the spec's selection keys
         // flip between them, so showing where you are matters more than labels.
         for (int p = 0; p < kEditPages; p++) {
             const uint8_t grey = p == param_page_ ? 14 : 4;
-            canvas.rect(p * 21 + 1, 32, 19, 3, grey);
+            canvas.rect(p * 18 + 1, 32, 16, 3, grey);
         }
         const bool lfo_page = param_page_ == int(Page::lfo);
         const bool arp_page = param_page_ == int(Page::arp);
-        const bool word_page = lfo_page || arp_page;
+        const bool asr_page = param_page_ == int(Page::asr);
+        const bool word_page = lfo_page || arp_page || asr_page;
 
         // The four parameters in large type, one row per encoder: its letter, the name, the
         // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
@@ -2850,6 +2946,14 @@ public:
             return;
         }
 
+        if (asr_page) {
+            // Whether the note envelope applies here, and if so what SUS makes of a note.
+            const bool va = has_asr(selected_);
+            const bool sustains = va && engine_.params(selected_).v[kAsrFirst + 1] > 0;
+            canvas.text(0, 96, !va ? "VA MONO/POLY ONLY" : (sustains ? "HOLDS: PAD OR LEN" : "SUS 0: ONE-SHOT"), 7);
+            return;
+        }
+
         // The machine is changed somewhere else, and nothing said where.
         canvas.text(0, 96, "FUNC+EDIT: MACHINE", 7);
         // And a sample track's file is picked from here.
@@ -2907,6 +3011,102 @@ public:
         const int scaled = delta * (master ? kMasterFieldClick : send_field_click(uint8_t(field)));
         post_delta(master ? Cmd::set_master : Cmd::set_sends, 0, 0, uint8_t(field), scaled);
         notice(master ? master_field_name(uint8_t(field)) : send_field_name(uint8_t(field)));
+    }
+
+    // The duck's pages: on DCK 1-4 and DCK 5-8 an encoder is a track's depth, on DUCK the four
+    // are the source, attack, hold and release. One click is one step of each: a percent, a
+    // track, a millisecond, five milliseconds.
+    void edit_duck(int page, int slot, int delta) {
+        if (page < kMixerDuckDepthPage || page > kMixerDuckPage || slot < 0 || slot >= 4) return;
+        if (page < kMixerDuckPage) {
+            const int track = (page - kMixerDuckDepthPage) * 4 + slot;
+            post_delta(Cmd::set_duck, track, 0, uint8_t(DuckField::depth), delta);
+            char *out = notice_buffer_;
+            append(out, "T");
+            append_number(out, uint32_t(track + 1));
+            append(out, track == int(engine_.project().kit.duck.source) ? " IS THE SOURCE"
+                                                                        : " DUCK DEPTH");
+            *out = 0;
+            notice(notice_buffer_);
+            return;
+        }
+        static const DuckField fields[4] = {DuckField::source, DuckField::attack, DuckField::hold,
+                                            DuckField::release};
+        static const char *const names[4] = {"DUCK SOURCE", "DUCK ATTACK", "DUCK HOLD",
+                                             "DUCK RELEASE"};
+        post_delta(Cmd::set_duck, 0, 0, uint8_t(fields[slot]), delta);
+        notice(names[slot]);
+    }
+
+    void draw_duck(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const Kit &kit = engine_.project().kit;
+        const int source = kit.duck.source < kTracks ? int(kit.duck.source) : 0;
+
+        append(out, "MIXER ");
+        append(out, kMixerPages[mixer_bank_].name);
+        *out = 0;
+        canvas.text(0, 20, line, 14);
+
+        if (mixer_bank_ < kMixerDuckPage) {
+            for (int slot = 0; slot < 4; slot++) {
+                const int track = (mixer_bank_ - kMixerDuckDepthPage) * 4 + slot;
+                const int x = slot * 32;
+                const uint8_t depth = kit.tracks[track].duck;
+                out = line;
+                append(out, "T");
+                append_number(out, uint32_t(track + 1));
+                *out = 0;
+                canvas.text(x, 46, line, 13);
+
+                // The source never ducks under itself, whatever its own depth says.
+                out = line;
+                if (track == source) {
+                    append(out, "SRC");
+                } else if (depth == 0) {
+                    append(out, "OFF");
+                } else {
+                    append_number(out, depth);
+                    append(out, "%");
+                }
+                *out = 0;
+                canvas.text(x, 60, line, track == source ? 10 : 15);
+
+                const int bar = track == source ? 0 : int(depth) * 28 / int(kDuckDepthMax);
+                canvas.rect(x + 2, 76, 28, 6, 3);
+                if (bar > 0) canvas.rect(x + 2, 76, bar, 6, 12);
+            }
+            out = line;
+            append(out, "DUCKS UNDER T");
+            append_number(out, uint32_t(source + 1));
+            *out = 0;
+            canvas.text(0, 98, line, 10);
+        } else {
+            static const char *const names[4] = {"SRC", "ATK", "HLD", "REL"};
+            const uint32_t values[4] = {
+                uint32_t(source + 1), kit.duck.attack_ms,
+                uint32_t(kit.duck.hold) * uint32_t(kDuckTimeStepMs),
+                uint32_t(kit.duck.release) * uint32_t(kDuckTimeStepMs)};
+            const int bars[4] = {source * 28 / (kTracks - 1),
+                                 int(kit.duck.attack_ms) * 28 / int(kDuckAttackMax),
+                                 int(kit.duck.hold) * 28 / int(kDuckHoldMax),
+                                 int(kit.duck.release) * 28 / int(kDuckReleaseMax)};
+            for (int slot = 0; slot < 4; slot++) {
+                const int x = slot * 32;
+                canvas.text(x, 46, names[slot], 13);
+                out = line;
+                if (slot == 0) append(out, "T");
+                append_number(out, values[slot]);
+                *out = 0;
+                canvas.text(x, 60, line, 15);
+                canvas.rect(x + 2, 76, 28, 6, 3);
+                if (bars[slot] > 0) canvas.rect(x + 2, 76, bars[slot], 6, 12);
+            }
+            canvas.text(0, 98, "TIMES IN MS", 10);
+        }
+
+        draw_master_peak(canvas);
     }
 
     // Throw one kill switch. The notice says what it will be once the audio side has applied it,
@@ -3021,7 +3221,7 @@ public:
         // What the delay is actually doing, in milliseconds, which is the one thing a division
         // does not tell you -- and the number that says whether the tempo-sync is working.
         // On the LONG page too: there it is the division times the multiplier, up to 12 s.
-        if (mixer_bank_ == 2 || mixer_bank_ == 3) {
+        if (mixer_bank_ == kMixerDelayPage || mixer_bank_ == kMixerLongPage) {
             out = line;
             append(out, "TIME ");
             append_number(out,
@@ -3049,8 +3249,12 @@ public:
     }
 
     void draw_mixer(enaga::Canvas &canvas) {
-        if (mixer_bank_ >= kMixerTrackPages) {
+        if (mixer_bank_ >= kMixerDelayPage) {
             draw_mixer_fields(canvas);
+            return;
+        }
+        if (mixer_bank_ >= kMixerDuckDepthPage) {
+            draw_duck(canvas);
             return;
         }
         char line[40];
@@ -3109,6 +3313,7 @@ public:
     // LFO's destination can name a parameter from any page.
     const char *track_param_name(int index) const {
         if (index < 0 || index >= kTrackParams) return "---";
+        if (index >= kAsrFirst) return has_asr(selected_) ? kAsrNames[index - kAsrFirst] : "---";
         if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
         if (index >= kParams) return lfo_param_name(index);
         const int page = index / kParamsPerPage;
@@ -3165,6 +3370,17 @@ public:
                 return;
             case kArpFirst + 3:
                 append_number(out, uint32_t(arp_gate_percent(value)));
+                *out++ = '%';
+                return;
+            case kAsrFirst + 0:
+                append_seconds(out, va_attack_seconds(value));
+                return;
+            case kAsrFirst + 2:
+                append_seconds(out, va_release_seconds(value));
+                return;
+            case kAsrFirst + 1:
+            case kAsrFirst + 3:
+                append_number(out, uint32_t((int(value) * 100 + 63) / 127));
                 *out++ = '%';
                 return;
             default:
@@ -3224,6 +3440,7 @@ public:
         if (step < 0 || step >= 16 || keys_held_note_[step] < 0) return;
         post(Cmd::release_note, uint8_t(keys_held_track_[step]), 0,
              uint8_t(keys_held_note_[step]));
+        record_note_up(keys_held_track_[step], uint8_t(keys_held_note_[step]));
         keys_held_note_[step] = -1;
     }
 
@@ -3250,6 +3467,7 @@ public:
     void release_pad(int pad) {
         if (pad < 0 || pad >= kPianoPads || pad_held_note_[pad] < 0) return;
         post(Cmd::release_note, uint8_t(pad_held_track_[pad]), 0, uint8_t(pad_held_note_[pad]));
+        record_note_up(pad_held_track_[pad], uint8_t(pad_held_note_[pad]));
         pad_held_note_[pad] = -1;
         // The macro bend this pad's pressure made goes back to where the knob left it.
         if (pressure_pad_ == pad) {
@@ -3376,6 +3594,11 @@ public:
         return id == uint8_t(MachineId::sample) || id == uint8_t(MachineId::grain);
     }
     bool plays_files(int track) const { return is_file_machine(engine_.machine_id(track)); }
+    // Does this track's machine read the ASR page? VA MONO and VA POLY, nothing else.
+    bool has_asr(int track) const {
+        const uint8_t id = engine_.machine_id(track);
+        return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly);
+    }
 
     void open_samples() {
         samples_return_ = mode_;
@@ -5381,6 +5604,19 @@ private:
     // MIDI IN's held notes: per channel and note, the track it started on plus 1, 0 for none.
     // 2 KiB, so a note off finds its track even after the selected track has moved.
     uint8_t midi_in_held_[16][128] = {};
+
+    // Notes recorded while held, waiting for their key to come up so the step gets its LEN
+    // (record_note / record_note_up). Sixteen is more fingers than a hand has, plus a MIDI
+    // keyboard's sustain of a chord or two; past it the oldest press keeps the step's LEN.
+    struct RecHold {
+        int8_t track = -1;          // -1: a free slot
+        uint8_t note = 0;
+        uint8_t step = 0;
+        Stamp down{};
+    };
+    static constexpr int kRecHolds = 16;
+    RecHold rec_holds_[kRecHolds] = {};
+    int rec_hold_next_ = 0;
     // CC 16-31 are the track's sixteen parameters: the "General Purpose" 16-19 and the
     // undefined 20-31, which no common controller sends by default for anything else.
     static constexpr int kMidiInFirstParamCc = 16;

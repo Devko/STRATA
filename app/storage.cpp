@@ -69,6 +69,7 @@ bool mutates_pattern(Cmd cmd) {
         case Cmd::track_erase:
         case Cmd::pattern_erase:
         case Cmd::record_hit:
+        case Cmd::record_length:
         case Cmd::mutate:
         // The Euclidean generator writes trig bits, so it is as much a pattern edit as
         // `toggle_trig` is. It was missing here, which meant a generated rhythm left its bank
@@ -98,6 +99,7 @@ bool mutates_kit(Cmd cmd) {
         case Cmd::set_machine:
         case Cmd::set_track_level:
         case Cmd::set_slice_mode:
+        case Cmd::set_duck:
         case Cmd::clear_sample:
         case Cmd::set_sample:
         case Cmd::set_stream:

@@ -3369,3 +3369,202 @@ TEST(engine_a_scene_captures_and_morphs_the_master_eq) {
     post(Cmd::scene_erase, 0, 0, 1);
     pump();
 }
+
+// --- the ASR page: a sequenced note held for its LEN -----------------------------------------
+
+TEST(engine_with_sus_up_a_chord_step_holds_for_its_len_and_not_its_dec) {
+    // DEC short, SUS up, LEN 16 steps (a bar): the note sounds for the bar, not for DEC. With SUS
+    // at 0 the same step is over in a fraction of that, as it always was.
+    const float spt = kRate * 60.0f / (120.0f * float(enaga::clock::ppqn));
+    const float bar = length_samples(16, ticks_per_step(Speed::x1), spt);
+    int frames[2];
+    for (int sus = 0; sus < 2; sus++) {
+        clean();
+        FakeHost::the().set_tempo(120.0f);
+        post(Cmd::set_param, kPoly, 0, kDec, 20);
+        post(Cmd::set_param, kPoly, 0, uint8_t(kAsrFirst + 1), uint8_t(sus ? 100 : 0));
+        put_trig(kPoly, 0);
+        set_length_index(kPoly, 0, 16);
+        frames[sus] = frames_until_silent();
+    }
+    CHECK(frames[0] > 0 && frames[0] < int(bar * 0.25f));
+    CHECK(float(frames[1]) > bar);
+    CHECK(float(frames[1]) < bar + kRate * 0.2f);     // LEN, then the 60 ms release
+}
+
+TEST(engine_a_lock_on_an_asr_byte_reaches_the_machine) {
+    // The VAs read the ASR page in `prepare`, and the prepare memo skips a prepare when the
+    // bytes it compares have not moved. A lock arrives with no command to clear the memo, so the
+    // memo itself has to compare the ASR bytes -- or a step locking SUS up would do nothing. A
+    // trigless step 1 locks SUS under a note step 0 started.
+    Engine &engine = clean();
+    post(Cmd::set_param, kMono, 0, kDec, 127);     // a note still ringing at step 1
+    put_trig(kMono, 0);
+    post(Cmd::toggle_trig, kMono, 1, 1);           // trigless
+    post(Cmd::lock_delta, kMono, 1, uint8_t(kAsrFirst + 1), 100);
+    pump();
+    uint8_t locked = 0;
+    CHECK(pattern_get_lock(engine.pattern(), kMono, 1, uint8_t(kAsrFirst + 1), locked));
+    CHECK(locked > 90);
+
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump(4);
+    CHECK_EQ(mono().sustain_level(), 0.0f);
+    FakeHost::the().deliver_tick(24, 0);
+    pump(2);
+    CHECK(mono().sustain_level() > 0.7f);
+}
+
+TEST(engine_with_sus_up_a_pad_hit_lasts_a_step_and_a_held_key_until_it_comes_up) {
+    // A performance pad hit has no release coming, so on a held-note envelope it must not hold
+    // for ever: one step, as its MIDI note gets. A KEYS key (c = 1) holds until release_note.
+    clean();
+    FakeHost::the().set_tempo(120.0f);
+    post(Cmd::set_param, kPoly, 0, kDec, 20);
+    post(Cmd::set_param, kPoly, 0, uint8_t(kAsrFirst + 1), 100);
+    pump();
+    const float spt = kRate * 60.0f / (120.0f * float(enaga::clock::ppqn));
+    const float step = length_samples(8, ticks_per_step(Speed::x1), spt);
+
+    post(Cmd::trigger_note, kPoly, 0, 60, 100);              // a pad hit
+    pump();
+    CHECK_EQ(poly().sounding_voices(), 1);
+    int blocks = 1;
+    while (poly().sounding_voices() > 0 && blocks < 4000) {
+        pump();
+        blocks++;
+    }
+    CHECK(float(blocks * kBlk) > step);
+    CHECK(float(blocks * kBlk) < step + kRate * 0.2f);
+
+    post(Cmd::trigger_note, kPoly, 0, 64, 100, 1);           // a held key
+    pump(int(kRate * 2.0f) / kBlk);                          // two seconds held
+    CHECK_EQ(poly().sounding_voices(), 1);
+    post(Cmd::release_note, kPoly, 0, 64);
+    pump(int(kRate * 0.3f) / kBlk);
+    CHECK_EQ(poly().sounding_voices(), 0);
+}
+
+// --- the sidechain duck, editable since it moved into the kit ------------------------------------
+
+TEST(engine_the_duck_starts_as_v0_1_fixed_it_and_set_duck_moves_every_field) {
+    Engine &engine = fresh();
+    // The factory duck: track 1 fires it, every other track ducks exactly 0.35 -- the constant it
+    // replaced, so an old project renders as it did -- and the source never ducks itself.
+    CHECK_EQ(engine.duck_source(), 0);
+    CHECK_EQ(engine.duck_depth(0), 0.0f);
+    for (int t = 1; t < kTracks; t++) CHECK_EQ(engine.duck_depth(t), 0.35f);
+    {
+        // And the envelope is the one v0.1.0 set with literals, sample for sample.
+        Duck now = engine.mixer().duck();
+        Duck was;
+        was.init(kRate);
+        was.set(0.003f, 0.040f, 0.120f);
+        now.trigger(0);
+        was.trigger(0);
+        constexpr int kRigBlock = strata::test::kRigBlock;
+        static float a[kRigBlock], b[kRigBlock];
+        int differ = 0;
+        for (int block = 0; block < 200; block++) {
+            now.render(a, kRigBlock);
+            was.render(b, kRigBlock);
+            for (int i = 0; i < kRigBlock; i++) differ += a[i] != b[i];
+        }
+        CHECK_EQ(differ, 0);
+    }
+
+    // The source moves, and the depths follow it: track 1 now ducks at its own 35%, track 3 not.
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::source), 2);
+    pump();
+    CHECK_EQ(engine.duck_source(), 2);
+    CHECK_EQ(int(engine.project().kit.duck.source), 2);
+    CHECK_EQ(engine.duck_depth(0), 0.35f);
+    CHECK_EQ(engine.duck_depth(2), 0.0f);
+    // And it stops at the last track rather than wrapping.
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::source), 20);
+    pump();
+    CHECK_EQ(engine.duck_source(), kTracks - 1);
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::source), -20);
+    pump();
+    CHECK_EQ(engine.duck_source(), 0);
+
+    // A depth per track, stopping at 0 (off) and 100%.
+    strata::test::post_delta(Cmd::set_duck, 3, 0, uint8_t(DuckField::depth), -50);
+    strata::test::post_delta(Cmd::set_duck, 4, 0, uint8_t(DuckField::depth), 100);
+    strata::test::post_delta(Cmd::set_duck, 5, 0, uint8_t(DuckField::depth), 5);
+    pump();
+    CHECK_EQ(int(engine.project().kit.tracks[3].duck), 0);
+    CHECK_EQ(engine.duck_depth(3), 0.0f);
+    CHECK_EQ(engine.duck_depth(4), 1.0f);
+    CHECK_EQ(engine.duck_depth(5), 0.4f);
+    CHECK_EQ(engine.duck_depth(6), 0.35f);                  // the others untouched
+
+    // The times, each stopping at its ends.
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::attack), -10);
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::hold), 120);
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::release), -100);
+    pump();
+    CHECK_EQ(int(engine.project().kit.duck.attack_ms), int(kDuckAttackMin));
+    CHECK_EQ(int(engine.project().kit.duck.hold), int(kDuckHoldMax));
+    CHECK_EQ(int(engine.project().kit.duck.release), int(kDuckReleaseMin));
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::release), 120);
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::release), 120);
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::attack), 120);
+    pump();
+    CHECK_EQ(int(engine.project().kit.duck.release), int(kDuckReleaseMax));
+    CHECK_EQ(int(engine.project().kit.duck.attack_ms), int(kDuckAttackMax));
+
+    fresh();
+    CHECK_EQ(engine.duck_source(), 0);                      // a new project is the factory duck
+    CHECK_EQ(engine.duck_depth(4), 0.35f);
+}
+
+TEST(engine_the_duck_fires_from_its_source_track_and_from_no_other) {
+    Engine &engine = fresh();
+    FakeHost::the().set_running(true);
+
+    // Track 1 by default: its trig fires the duck.
+    put_trig(0, 0);
+    tick_at(0);
+    pump();
+    CHECK(engine.mixer().duck().active());
+
+    // Moved to track 3, track 1's trig no longer does, and track 3's does.
+    FakeHost::the().set_running(false);
+    post(Cmd::stop, 0, 0, 1);
+    pump(400);                                              // past the 120 ms release
+    CHECK(!engine.mixer().duck().active());
+    strata::test::post_delta(Cmd::set_duck, 0, 0, uint8_t(DuckField::source), 2);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    pump();
+    CHECK(!engine.mixer().duck().active());
+
+    put_trig(2, 4);
+    tick_at(4 * 24);
+    pump();
+    CHECK(engine.mixer().duck().active());
+
+    FakeHost::the().set_running(false);
+    post(Cmd::stop, 0, 0, 1);
+    pump(2);
+    CHECK(settle());
+}
+
+TEST(engine_a_recalled_kit_brings_its_duck) {
+    Engine &engine = fresh();
+    Kit &inbox = engine.kit_for_recall();
+    inbox = engine.project().kit;
+    inbox.duck.source = 4;
+    inbox.duck.release = 60;
+    inbox.tracks[1].duck = 80;
+    post(Cmd::kit_recall, 0, 0, 1);
+    pump();
+    CHECK_EQ(engine.duck_source(), 4);
+    CHECK_EQ(int(engine.project().kit.duck.release), 60);
+    CHECK_EQ(engine.duck_depth(1), 0.8f);
+    CHECK_EQ(engine.duck_depth(4), 0.0f);
+    fresh();
+}

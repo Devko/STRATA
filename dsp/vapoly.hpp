@@ -81,11 +81,10 @@
 // mono bus; stereo spread and unison both want the interface change and a voice-pool decision
 // first, and belong with whoever makes it.
 //
-// **It does not sustain.** Every STRATA machine is a one-shot built on a sustain-0 envelope, so
-// DEC is the note's length and `Step::length` is still inaudible (docs/UNIT_CHECKLIST.md says
-// so, and names VA POLY as where that changes). A sustaining VA POLY needs a per-note release
-// in the `Machine` interface -- there is no note-off in it at all -- so it is the same
-// track.hpp change and not something to fake here.
+// **It sustains when SUS says so.** The ASR page (dsp/va.cpp: ATK SUS REL FSU, params 24-27) is
+// read into the shared VaSettings. At SUS 0 -- every older kit -- the voice is the one-shot it
+// always was and DEC is the note's length, cut short by the step's LEN (the gate below). With SUS
+// up a note holds until its gate ends or `release(note)` lets it go: a KEYS pad coming up.
 //
 // It reads the SRC page (0-3) and the AMP page (8-11); FLTR and FX belong to the insert chain.
 #pragma once
@@ -181,6 +180,8 @@ private:
         int wait = 0;           // frames until `next` starts
         bool pending = false;
         int note = -1;          // the note this slot is committed to, -1 when it holds none
+        // No gate and no release coming (Trig::held): released as soon as SUS is up (va.hpp).
+        bool one_shot = false;
 
         // Frames of gate left before this voice is released: `Step::length`, arriving as
         // `Trig::gate_frames`. -1 means NO gate, which is what a trig carrying 0 asks for and

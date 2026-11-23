@@ -45,7 +45,8 @@ static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first
 
 static_assert(kKitParams == kTrackParams && kKitSoundParams == kParams &&
                   kKitLfoParams == kLfoParams && kKitArpParams == kArpParams &&
-                  kKitLfoEnd == kArpFirst && kArpBytes == kArpParams,
+                  kKitLfoEnd == kArpFirst && kArpBytes == kArpParams &&
+                  kKitAsrParams == kAsrParams && kKitArpEnd == kAsrFirst,
               "core/project.hpp's kit record and dsp/track.hpp's TrackParams have diverged; a "
               "saved project would come back with the wrong number of parameters per track");
 
@@ -93,19 +94,8 @@ bool Engine::init(float sample_rate) {
     inv_rate_ = enaga::dsp::reciprocal(rate_);
     midi_out_.clear();
 
-    // The duck fires from the kick, and the kick itself must not duck.
-    //
-    // Both arms of this used to be 0.0f, which meant docs/SPEC.md's M2 sidechain duck was dead
-    // while still being paid for: `trigger_duck` fires on every kick and `begin_block` renders
-    // the curve, and not one track used it. dsp/buses.hpp documents the field as "0 bypasses the
-    // duck for this track, 1 ducks it fully".
-    //
-    // kDuckDepth is a DEFAULT and wants tuning by ear -- docs/SPEC.md gives attack, hold and
-    // release but no depth. It is not reachable from the panel either: the depth is mixer state
-    // set here rather than a kit parameter, so making it editable means a kit field, which is a
-    // later change. docs/UNIT_CHECKLIST.md carries both as boxes.
-    mixer_.set_duck(0.003f, 0.040f, 0.120f);
-    for (int t = 0; t < kTracks; t++) mix_[t].duck = t == duck_source_ ? 0.0f : kDuckDepth;
+    // The sidechain duck comes from the kit (core/project.hpp, KitDuck), by apply_duck in
+    // params_from_kit below. Its factory values are the ones it was fixed at in v0.1.0.
 
     // The factory project (core/factory.hpp): the same kit, mixer, patterns, scenes and macros
     // a NEW project gets, so the instrument with no card and a new project are one thing.
@@ -329,8 +319,12 @@ void Engine::prepare_machine(int track) {
     Machine *machine = machines_[track];
     if (machine == nullptr) return;
     const TrackParams &params = sounding(track);
+    // The sound's 16 and the ASR page's 4: a VA reads both (dsp/track.hpp). The LFO and arp bytes
+    // between them are not compared, so turning an LFO knob does not re-prepare a machine.
     if (prepare_memo_ && machine_prepared_for_[track] == machine &&
-        __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0) {
+        __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0 &&
+        __builtin_memcmp(machine_prepared_[track].v + kAsrFirst, params.v + kAsrFirst,
+                         kAsrParams) == 0) {
         return;
     }
     machine->prepare(params);
@@ -635,6 +629,16 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::record_length: {
+            // The key that recorded this step came up. Only if the step still holds that note:
+            // a later hit landing on the same step has replaced it, and its own key decides.
+            Step &s = live().tracks[track].steps[step];
+            if ((s.flags & kStepTrig) != 0 && s.note == command.a && length_valid(command.b)) {
+                s.length = command.b;
+            }
+            break;
+        }
+
         // --- projects and banks, M4 ---------------------------------------
 
         case Cmd::queue_pattern: {
@@ -793,7 +797,9 @@ void Engine::apply(const Command &command) {
                     for (int i = 0; i < kKitParams; i++) to.params[i] = from.params[i];
                     to.machine = from.machine;
                     to.level = from.level;
+                    to.duck = from.duck;
                 }
+                project_.kit.duck = kit_inbox_.duck;
             }
             params_from_kit();
             // And the fourth member of the family tests/test_app.cpp has three tests for: the
@@ -1043,6 +1049,39 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_duck: {
+            // The sidechain duck (DuckField): an encoder delta onto the kit's byte, clamped into
+            // the domain core/project.hpp gives it, then handed to the mixer.
+            const int delta = int(int8_t(command.b));
+            const auto moved = [delta](uint8_t now, int low, int high) {
+                const int next = int(now) + delta;
+                return uint8_t(next < low ? low : (next > high ? high : next));
+            };
+            KitDuck &duck = project_.kit.duck;
+            switch (DuckField(command.a)) {
+                case DuckField::depth:
+                    project_.kit.tracks[track].duck =
+                        moved(project_.kit.tracks[track].duck, 0, kDuckDepthMax);
+                    break;
+                case DuckField::source:
+                    duck.source = moved(duck.source, 0, kTracks - 1);
+                    break;
+                case DuckField::attack:
+                    duck.attack_ms = moved(duck.attack_ms, kDuckAttackMin, kDuckAttackMax);
+                    break;
+                case DuckField::hold:
+                    duck.hold = moved(duck.hold, 0, kDuckHoldMax);
+                    break;
+                case DuckField::release:
+                    duck.release = moved(duck.release, kDuckReleaseMin, kDuckReleaseMax);
+                    break;
+                default:
+                    break;
+            }
+            apply_duck();
+            break;
+        }
+
         case Cmd::set_track_level: {
             // A NaN fails both comparisons and would pass straight through, so it is caught first.
             const float f = command.f == command.f ? command.f : 0.0f;
@@ -1257,6 +1296,13 @@ void Engine::apply(const Command &command) {
                 trig.note = clamp_u8(command.a);
                 trig.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
                 trig.frame = 0;
+                trig.held = command.c == 1;   // a key or MIDI IN note: its release comes
+                // A pad hit (c = 0) has no release coming. On a VA whose ASR page holds notes
+                // (SUS up) it would hold for ever, so it gets one step, as its MIDI note does. At
+                // SUS 0 it keeps no gate: the envelope ends it, as it always has.
+                if (command.c != 1 && sounding(track).v[kAsrFirst + 1] > 0) {
+                    trig.gate_frames = gate_frames_for(track, kMidiDefaultLength);
+                }
                 // A pad on a POLY track counts against the shared budget like a step does.
                 if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
                 status_.bump_triggered(track);
@@ -1534,6 +1580,27 @@ void Engine::params_from_kit() {
         effective_[t] = params_[t];
         mix_[t].level = track.level < 0.0f ? 0.0f : (track.level > 2.0f ? 2.0f : track.level);
         pool_[t].sampler.set_auto_slices(track.slice_mode == kSliceAuto);
+    }
+    apply_duck();
+}
+
+void Engine::apply_duck() {
+    const KitDuck &duck = project_.kit.duck;
+    // Clamped here as well as on read: a kit can also arrive from the factory or a test, and a
+    // source past the last track would fire nothing and duck everything.
+    duck_source_ = duck.source < kTracks ? int(duck.source) : 0;
+    // Divided, at control rate and through the same correctly rounded divide as the depths
+    // below: 40 / 1000 is exactly the 0.040f the duck was fixed at, where 8 x 0.005f need not
+    // be, and 35 / 100 is exactly its 0.35f. So an old project renders as it did.
+    const int hold_ms = int(duck.hold) * kDuckTimeStepMs;
+    const int release_ms = int(duck.release) * kDuckTimeStepMs;
+    mixer_.set_duck(float(duck.attack_ms) / 1000.0f, float(hold_ms) / 1000.0f,
+                    float(release_ms) / 1000.0f);
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t depth = project_.kit.tracks[t].duck;
+        mix_[t].duck = t == duck_source_ ? 0.0f
+                                         : float(depth > kDuckDepthMax ? kDuckDepthMax : depth) /
+                                               100.0f;
     }
 }
 

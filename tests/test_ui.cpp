@@ -1552,6 +1552,74 @@ TEST(ui_a_step_key_in_keys_mode_plays_and_records_the_scale_note) {
     host.set_running(false);
 }
 
+TEST(ui_a_key_held_while_recording_gives_the_step_its_length) {
+    // KEYS on VA POLY, REC on: a key held for four steps records a step whose LEN is four steps,
+    // so with SUS up the chord plays back as long as it was played. On a drum the hold is not
+    // measured: LEN stays the one step a recorded hit always had.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);    // track 7, VA POLY
+    CHECK_EQ(UiProbe::selected(app), 6);
+    open_keys();
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    host.set_position(96);
+    key(ENAGA_KEY_F2);                                  // REC on
+    CHECK(UiProbe::rec(app));
+
+    step_down(2);
+    pump(2);
+    host.set_position(96 + 4 * 24);                     // four steps later
+    step_up(2);
+    pump(2);
+
+    int where = -1;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(6, s)) where = s;
+    }
+    CHECK(where >= 0);
+    CHECK_EQ(int(step_of(6, where).length), 12);        // 4 steps (core/timing.hpp's table)
+
+    // A quick tap on the same step's note again replaces its length with the tap's.
+    host.set_position(96);
+    step_down(2);
+    pump(2);
+    host.set_position(96 + 6);                          // a quarter of a step
+    step_up(2);
+    pump(2);
+    CHECK_EQ(int(step_of(6, where).length), 4);
+
+    key(ENAGA_KEY_F2);
+    host.set_running(false);
+}
+
+TEST(ui_a_held_key_on_a_drum_track_keeps_the_one_step_length) {
+    Strata &app = fresh();
+    open_keys();
+    CHECK_EQ(UiProbe::selected(app), 0);                // track 1, KICK
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    host.set_position(96);
+    key(ENAGA_KEY_F2);
+    step_down(4);
+    pump(2);
+    host.set_position(96 + 8 * 24);
+    step_up(4);
+    pump(2);
+    int recorded = 0;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(0, s) && step_of(0, s).note == app.keys_note(4)) {
+            recorded++;
+            CHECK_EQ(int(step_of(0, s).length), 8);
+        }
+    }
+    CHECK(recorded > 0);
+    key(ENAGA_KEY_F2);
+    host.set_running(false);
+}
+
 // --- PLAY while the card is busy ------------------------------------------------------------
 
 TEST(ui_play_is_refused_while_a_project_is_loading) {
@@ -2151,7 +2219,7 @@ TEST(ui_a_machine_id_this_build_does_not_have_is_refused) {
 void mixer_page(Strata &app, int page) {
     app.on_key(ENAGA_KEY_F7, true);
     app.on_key(ENAGA_KEY_F7, false);
-    for (int guard = 0; guard < 12 && UiProbe::mixer_bank(app) != page; guard++) {
+    for (int guard = 0; guard < 16 && UiProbe::mixer_bank(app) != page; guard++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
     }
@@ -2182,9 +2250,9 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     mixer_page(app, 0);
     CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
 
-    // The selection keys page through: two pages of faders, then DLY, DLY+, REV, REV+, ROUTE,
-    // MST and EQ.
-    CHECK_EQ(kMixerPageCount, 9);
+    // The selection keys page through: two pages of faders, two of duck depths and the duck's
+    // own page, then DLY, DLY+, REV, REV+, ROUTE, MST and EQ.
+    CHECK_EQ(kMixerPageCount, 12);
     for (int i = 1; i < kMixerPageCount; i++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
@@ -2320,7 +2388,7 @@ TEST(ui_func_and_step_5_to_7_put_a_master_eq_band_on_a_macro) {
 TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
     Strata &app = fresh();
     Engine &engine = app_engine();
-    mixer_page(app, 2);                                // DLY
+    mixer_page(app, kMixerDelayPage);  // DLY
 
     // B is the feedback. Two counts per click, so ten clicks is twenty counts.
     const int before = int(engine.project().settings.sends[int(SendField::delay_feedback)]);
@@ -2353,7 +2421,7 @@ TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
 TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
     Strata &app = fresh();
     Engine &engine = app_engine();
-    mixer_page(app, 6);                                // ROUTE
+    mixer_page(app, kMixerHallPage + 1);  // ROUTE
 
     // A is the ping-pong switch: either direction throws it, because a switch is not a knob.
     CHECK(engine.sends().delay_ping_pong);
@@ -2400,7 +2468,7 @@ bool screen_has(Strata &app, const char *wanted) {
 TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     Strata &app = fresh();
     Engine &engine = app_engine();
-    mixer_page(app, 3);                                // DLY+
+    mixer_page(app, kMixerLongPage);  // DLY+
     CHECK(!engine.sends().delay_long);
     app.on_encoder(0, +1);
     pump(2);
@@ -2436,7 +2504,7 @@ TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     pump(2);
     CHECK(engine.sends().delay_diffusion < diffusion);
 
-    mixer_page(app, 5);                                // REV+
+    mixer_page(app, kMixerHallPage);  // REV+
     CHECK(!engine.sends().reverb_hall);
     app.on_encoder(0, +1);
     pump(2);
@@ -2454,14 +2522,14 @@ TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     CHECK(!engine.sends().reverb_hall);
     CHECK(screen_has(app, "ROOM"));
 
-    mixer_page(app, 6);                                // ROUTE: the LONG delay's low cut on C
+    mixer_page(app, kMixerHallPage + 1);  // ROUTE: the LONG delay's low cut on C
     const float low_cut = engine.sends().delay_low_cut_hz;
     app.on_encoder(2, +6);
     pump(2);
     CHECK(engine.sends().delay_low_cut_hz > low_cut);
 
     // Push A on either page throws its switch too, both ways.
-    mixer_page(app, 3);
+    mixer_page(app, kMixerLongPage);
     CHECK(engine.sends().delay_long);
     app.on_key(ENAGA_KEY_PUSH_A, true);
     app.on_key(ENAGA_KEY_PUSH_A, false);
@@ -2471,7 +2539,7 @@ TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     app.on_key(ENAGA_KEY_PUSH_A, false);
     pump(2);
     CHECK(engine.sends().delay_long);
-    mixer_page(app, 5);
+    mixer_page(app, kMixerHallPage);
     app.on_key(ENAGA_KEY_PUSH_A, true);
     app.on_key(ENAGA_KEY_PUSH_A, false);
     pump(2);
@@ -2482,7 +2550,7 @@ TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     CHECK(!engine.sends().reverb_hall);
 
     // Back to classic for whoever comes next.
-    mixer_page(app, 3);
+    mixer_page(app, kMixerLongPage);
     app.on_encoder(0, -1);
     pump(2);
     CHECK(!engine.sends().delay_long);
@@ -3627,6 +3695,52 @@ TEST(ui_the_arp_is_edits_sixth_page_and_keys_play_it) {
     for (int i = 0; i < kArpParams; i++) post_cmd_track_param(0, uint8_t(kArpFirst + i), 0);
     pump();
     key(ENAGA_KEY_F8);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
+    while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(int(Page::asr), kEditPages - 1);
+    check_layout(app, "EDIT ASR, a drum");
+    CHECK(screen_has(app, "VA MONO/POLY ONLY"));
+    CHECK(!screen_has(app, "ATK"));
+
+    // Track 7, VA POLY in the default kit: the four names, the old envelope's values at 0.
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::selected(app), 6);
+    CHECK_EQ(int(app_engine().machine_id(6)), int(MachineId::va_poly));
+    check_layout(app, "EDIT ASR, VA POLY");
+    CHECK(screen_has(app, "ATK"));
+    CHECK(screen_has(app, "FSU"));
+    CHECK(screen_has(app, "3MS"));                    // 2.5 ms, as the VAs always had
+    CHECK(screen_has(app, "60MS"));
+    CHECK(screen_has(app, "SUS 0: ONE-SHOT"));
+
+    // B is SUS: up, the note holds.
+    app.on_encoder(1, +100);
+    pump();
+    CHECK(app_engine().params(6).v[kAsrFirst + 1] > 0);
+    CHECK(screen_has(app, "HOLDS: PAD OR LEN"));
+
+    // The widest values the page shows: every time and percentage fits.
+    for (int b = 0; b < 128; b += 3) {
+        for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), uint8_t(b));
+        pump();
+        check_layout(app, "EDIT ASR, every value");
+    }
+    post_cmd_track_param(6, uint8_t(kAsrFirst + 0), 127);
+    post_cmd_track_param(6, uint8_t(kAsrFirst + 2), 127);
+    pump();
+    CHECK(screen_has(app, "5.0S"));
+    CHECK(screen_has(app, "8.0S"));
+
+    // Back to the old envelope and SRC for the tests after this one.
+    for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
+    pump();
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
     while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
     key(ENAGA_KEY_F4);
 }
@@ -5708,11 +5822,27 @@ TEST(ui_screenshots) {
         key(ENAGA_KEY_SELECT_RIGHT);
         write_shot(folder, page);
     }
+    // The ASR page on track 7 (VA POLY), set up as a pad; then everything back as it was, so the
+    // shots after this one draw what they always drew.
+    key(ENAGA_KEY_SELECT_RIGHT);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);
+    const uint8_t pad[kAsrParams] = {72, 89, 90, 40};    // ~400 MS, 70%, ~1.9 S, 31%
+    for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), pad[i]);
+    pump();
+    write_shot(folder, "edit_asr");
+    for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
+    pump();
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_SELECT_LEFT);
 
     mixer_page(app, 0);
     write_shot(folder, "mixer");
-    mixer_page(app, 2);
+    mixer_page(app, kMixerDelayPage);
     write_shot(folder, "mixer_dly");
+    mixer_page(app, kMixerDuckDepthPage);
+    write_shot(folder, "mixer_dck");
+    mixer_page(app, kMixerDuckPage);
+    write_shot(folder, "mixer_duck");
     mixer_page(app, kMixerPageCount - 2);
     write_shot(folder, "mixer_mst");
     mixer_page(app, kMixerEqPage);
@@ -6055,4 +6185,52 @@ TEST(ui_layout_tun_as_a_note_on_every_pitched_machine) {
     }
     CHECK_EQ(int(app_engine().params(0).v[0]), 127);
     CHECK(screen_has(app, "C-6"));                     // PLY at 127: +23.6 from C-4
+}
+
+// The sidechain duck's three MIXER pages: a depth per track, then source, attack, hold, release.
+TEST(ui_the_duck_pages_set_each_tracks_depth_the_source_and_the_times) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    const Kit &kit = engine.project().kit;
+
+    // DCK 5-8: C is track 7's depth, one percent a click.
+    mixer_page(app, kMixerDuckDepthPage + 1);
+    const int depth = int(kit.tracks[6].duck);
+    app.on_encoder(2, +5);
+    pump(2);
+    CHECK_EQ(int(kit.tracks[6].duck), depth + 5);
+    CHECK(app_storage().dirty());
+    CHECK(std::strcmp(UiProbe::notice(app), "T7 DUCK DEPTH") == 0);
+    CHECK(screen_has(app, "MIXER DCK 5-8"));
+    app.on_encoder(2, -5);
+    pump(2);
+    CHECK_EQ(int(kit.tracks[6].duck), depth);
+
+    // DUCK: A walks the source a track a click, D the release five milliseconds a click.
+    mixer_page(app, kMixerDuckPage);
+    const int source = int(kit.duck.source);
+    const int release = int(kit.duck.release);
+    app.on_encoder(0, +1);
+    app.on_encoder(3, -2);
+    pump(2);
+    CHECK_EQ(int(kit.duck.source), source + 1);
+    CHECK_EQ(engine.duck_source(), source + 1);
+    CHECK_EQ(int(kit.duck.release), release - 2);
+    CHECK(std::strcmp(UiProbe::notice(app), "DUCK RELEASE") == 0);
+    CHECK(screen_has(app, "TIMES IN MS"));
+
+    // Back on DCK 1-4 the new source says so instead of a depth.
+    mixer_page(app, kMixerDuckDepthPage);
+    CHECK(screen_has(app, "DUCKS UNDER T2"));
+    app.on_encoder(1, +1);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "T2 IS THE SOURCE") == 0);
+    app.on_encoder(1, -1);
+
+    mixer_page(app, kMixerDuckPage);
+    app.on_encoder(0, -1);
+    app.on_encoder(3, +2);
+    pump(2);
+    CHECK_EQ(int(kit.duck.source), source);
+    CHECK_EQ(int(kit.duck.release), release);
 }

@@ -54,12 +54,15 @@ constexpr int kProjectPatterns = kBanks * kPatternsPerBank;   // 128
 // then the 4 bytes of the track's LFO (dsp/lfo.hpp). The split matters to the files: KIT.BIN and
 // PERFORM.BIN carried 16 a track before the LFO existed, so the four LFO bytes travel in sections
 // of their own that an older file simply does not have. The arpeggiator's four (core/arp.hpp)
-// follow the LFO's in the same way, and in a section of their own again.
+// follow the LFO's in the same way, and in a section of their own again, and so do the four of
+// the VA machines' ASR page (attack, sustain, release, filter sustain; dsp/va.cpp).
 constexpr int kKitSoundParams = 16;
 constexpr int kKitLfoParams = 4;
 constexpr int kKitLfoEnd = kKitSoundParams + kKitLfoParams;
 constexpr int kKitArpParams = 4;
-constexpr int kKitParams = kKitLfoEnd + kKitArpParams;
+constexpr int kKitArpEnd = kKitLfoEnd + kKitArpParams;
+constexpr int kKitAsrParams = 4;
+constexpr int kKitParams = kKitArpEnd + kKitAsrParams;
 
 // How many machines a track can host, mirroring dsp/'s machine list the same way and for the
 // same reason as kKitParams: docs/SPEC.md, "Machines (v1)" -- KICK, SNARE, HAT, PERC, SAMPLE,
@@ -137,6 +140,35 @@ constexpr int kChainRepeatsMax = 16;
 
 // --- the kit --------------------------------------------------------------
 
+// The sidechain duck's settings (dsp/chain.hpp's Duck), as bytes the kit stores. The factory
+// values are the ones the duck was fixed at before it became editable (v0.1.0): every track but
+// track 1 ducks 35% under track 1's trigs, 3 ms in, 40 ms held, 120 ms out. A KIT.BIN written
+// before the duck section existed reads back as exactly these.
+//
+// Depth is a percentage so that the default is exactly 0.35 and the screen shows what the file
+// holds. The times are in steps the encoder can walk: 1 ms for the attack, 5 ms for hold and
+// release. The source track's own depth is kept but ignored -- a track never ducks under itself --
+// so moving the source and moving it back loses nothing.
+constexpr uint8_t kDuckDepthMax = 100;           // percent
+constexpr uint8_t kDuckDepthDefault = 35;
+constexpr uint8_t kDuckAttackMin = 1;            // ms; dsp/chain.cpp clamps at 0.5 ms anyway
+constexpr uint8_t kDuckAttackMax = 50;
+constexpr uint8_t kDuckAttackDefault = 3;
+constexpr uint8_t kDuckHoldMax = 100;            // x 5 ms: 0-500 ms
+constexpr uint8_t kDuckHoldDefault = 8;          // 40 ms
+constexpr uint8_t kDuckReleaseMin = 2;           // x 5 ms: 10 ms-1 s
+constexpr uint8_t kDuckReleaseMax = 200;
+constexpr uint8_t kDuckReleaseDefault = 24;      // 120 ms
+constexpr int kDuckTimeStepMs = 5;
+
+// The duck's settings that are one per kit rather than one per track.
+struct KitDuck {
+    uint8_t source = 0;                          // the track whose trigs fire it, 0-7
+    uint8_t attack_ms = kDuckAttackDefault;
+    uint8_t hold = kDuckHoldDefault;             // x kDuckTimeStepMs
+    uint8_t release = kDuckReleaseDefault;       // x kDuckTimeStepMs
+};
+
 // One track's sound, as the project stores it.
 struct KitTrack {
     uint8_t params[kKitParams] = {};
@@ -147,6 +179,9 @@ struct KitTrack {
     // (core/onsets.hpp), 0 into equal slices. Not a parameter, so no lock, scene or LFO moves
     // it: it says what kind of sample this is, like the path beside it.
     uint8_t slice_mode = 0;
+    // How far this track ducks under the sidechain duck, in percent: 0 never, 100 fully. Not a
+    // parameter either -- like the fader beside it, it is the mixer's, and no lock moves it.
+    uint8_t duck = kDuckDepthDefault;
 };
 
 constexpr uint8_t kSliceEqual = 0;
@@ -154,6 +189,7 @@ constexpr uint8_t kSliceAuto = 1;
 
 struct Kit {
     KitTrack tracks[kTracks];
+    KitDuck duck;
 };
 
 // --- chains ---------------------------------------------------------------
@@ -358,6 +394,14 @@ constexpr uint16_t kSectionKitArp = 3;
 // SLC AUTO, one byte per track (KitTrack::slice_mode). Optional on read like the LFO and the
 // arp: a KIT.BIN from before it loads with every track slicing equally, as slicing always did.
 constexpr uint16_t kSectionKitSlices = 4;
+// The VA machines' ASR page, four bytes per track (kKitAsrParams: ATK SUS REL FSU). Optional on
+// read like the others: a KIT.BIN from before it loads with all four 0, which dsp/va.cpp reads as
+// exactly the envelope the VAs always had (2.5 ms attack, no sustain, 60 ms release).
+constexpr uint16_t kSectionKitAsr = 5;
+// The sidechain duck: each track's depth, then the kit's source, attack, hold and release
+// (KitTrack::duck, KitDuck). Optional on read: a KIT.BIN from before it loads with the duck as it
+// was fixed before, which is what KitDuck's defaults are.
+constexpr uint16_t kSectionKitDuck = 6;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

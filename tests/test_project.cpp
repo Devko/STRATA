@@ -43,7 +43,7 @@ using namespace strata;
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
 // ambient modes: nine bytes on the end of the mixer section.
 constexpr uint32_t kProjectFileBytes = 402;
-constexpr uint32_t kKitFileBytes = 1184;   // 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8)
+constexpr uint32_t kKitFileBytes = 1252;   // 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -1382,6 +1382,12 @@ uint32_t fresh_kit_file() {
     return section_at(g_kit_file, kSectionKitTracks);
 }
 
+// g_kit_file as a build from before the duck wrote it: the duck's section, the last, dropped.
+void drop_duck_section() {
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1228u);
+    for (uint32_t i = 0; i < 1228u; i++) g_kit_file[i] = g_kit_alt[i];
+}
+
 // The fader as it went down on disk, in thousandths of unity.
 uint16_t stored_level(const uint8_t *file, int track) {
     return peek_u16(file, kit_track_at(file, track) + kKitSoundParams + 1);
@@ -1446,7 +1452,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 4);     // the tracks, the LFO, the arp, SLC AUTO
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 6);     // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -1483,9 +1489,15 @@ TEST(kit_the_lfo_and_arp_bytes_round_trip_and_are_clamped_on_the_way_in) {
     CHECK_EQ(int(g_kit_file[lfo + 4 * 3 + 2]), int(g_kit_source.tracks[3].params[kKitSoundParams + 2]));
     const uint32_t arp = section_at(g_kit_file, kSectionKitArp);
     CHECK_EQ(int(g_kit_file[arp + 4 * 5 + 1]), int(g_kit_source.tracks[5].params[kKitLfoEnd + 1]));
+    // The ASR page after SLC AUTO, laid out the same way.
+    CHECK(section_at(g_kit_file, kSectionKitAsr) > section_at(g_kit_file, kSectionKitSlices));
+    CHECK_EQ(int(g_kit_file[section_at(g_kit_file, kSectionKitAsr) + 4 * 6 + 3]),
+             int(g_kit_source.tracks[6].params[kKitArpEnd + 3]));
 
     for (uint32_t i = 0; i < uint32_t(kKitLfoParams * kTracks); i++) g_kit_file[lfo + i] = 200;
     for (uint32_t i = 0; i < uint32_t(kKitArpParams * kTracks); i++) g_kit_file[arp + i] = 201;
+    const uint32_t asr = section_at(g_kit_file, kSectionKitAsr);
+    for (uint32_t i = 0; i < uint32_t(kKitAsrParams * kTracks); i++) g_kit_file[asr + i] = 202;
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
@@ -1500,8 +1512,10 @@ TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_and_arp_off) {
     // the LFO wrote -- still loads, keeps its sound, and turns every LFO and arp OFF rather than
     // leaving whatever the kit it is read into held.
     fresh_kit_file();
+    drop_duck_section();
     static uint8_t with_arp[kKitFileBytes];
-    CHECK_EQ(drop_last_section(g_kit_file, with_arp), 1164u);     // SLC AUTO's section first
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1184u);    // the ASR page's section first
+    CHECK_EQ(drop_last_section(g_kit_alt, with_arp), 1164u);      // then SLC AUTO's
     const uint32_t lfo_size = drop_last_section(with_arp, g_kit_alt);
     CHECK_EQ(lfo_size, 1120u);                    // what the LFO's build wrote
     for (uint32_t i = 0; i < lfo_size; i++) g_kit_file[i] = g_kit_alt[i];
@@ -1537,8 +1551,8 @@ TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_and_arp_off) {
         CHECK_EQ(int(g_kit_loaded.tracks[t].machine), int(g_kit_source.tracks[t].machine));
     }
 
-    // Present but short is damage, not an old file -- for either section.
-    for (uint16_t id : {kSectionKitLfo, kSectionKitArp}) {
+    // Present but short is damage, not an old file -- for any of the sections.
+    for (uint16_t id : {kSectionKitLfo, kSectionKitArp, kSectionKitAsr}) {
         fresh_kit_file();
         const uint32_t entry = section_entry_at(g_kit_file, id);
         poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
@@ -2396,16 +2410,116 @@ TEST(kit_slc_auto_round_trips_and_an_older_file_slices_equally) {
     // even read into a kit that had AUTO on.
     CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
              int(SerializeResult::ok));
+    drop_duck_section();
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1184u);   // the ASR page went on after it
+    for (uint32_t i = 0; i < 1184u; i++) g_kit_file[i] = g_kit_alt[i];
     const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
     CHECK_EQ(old_size, 1164u);
     for (int t = 0; t < kTracks; t++) g_kit_loaded.tracks[t].slice_mode = kSliceAuto;
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
         CHECK_EQ(int(g_kit_loaded.tracks[t].slice_mode), 0);
-        for (int p = kKitSoundParams; p < kKitParams; p++) {
+        for (int p = kKitSoundParams; p < kKitArpEnd; p++) {
             CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
         }
     }
     g_kit_source.tracks[2].slice_mode = kSliceEqual;
     g_kit_source.tracks[7].slice_mode = kSliceEqual;
+}
+
+TEST(kit_the_duck_round_trips_is_clamped_and_an_older_file_ducks_as_v0_1_did) {
+    // The sidechain duck (kSectionKitDuck): each track's depth, then the source and the times.
+    fresh_kit_file();
+    for (int t = 0; t < kTracks; t++) g_kit_source.tracks[t].duck = uint8_t(t * 10);
+    g_kit_source.duck.source = 5;
+    g_kit_source.duck.attack_ms = 12;
+    g_kit_source.duck.hold = 0;
+    g_kit_source.duck.release = 200;
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(g_kit_loaded.tracks[t].duck), t * 10);
+    CHECK_EQ(int(g_kit_loaded.duck.source), 5);
+    CHECK_EQ(int(g_kit_loaded.duck.attack_ms), 12);
+    CHECK_EQ(int(g_kit_loaded.duck.hold), 0);
+    CHECK_EQ(int(g_kit_loaded.duck.release), 200);
+
+    // Laid out as core/project.cpp says: eight depths, then source, attack, hold, release.
+    const uint32_t duck = section_at(g_kit_file, kSectionKitDuck);
+    CHECK_EQ(int(g_kit_file[duck + 3]), 30);
+    CHECK_EQ(int(g_kit_file[duck + 8]), 5);
+    CHECK_EQ(int(g_kit_file[duck + 11]), 200);
+
+    // Damaged bytes land inside the domains: a depth over 100%, a source past track 8, an
+    // attack and release of 0 (which the envelope would turn into a step of infinity) and a
+    // hold past its end.
+    for (int t = 0; t < kTracks; t++) g_kit_file[duck + uint32_t(t)] = 250;
+    g_kit_file[duck + 8] = 9;
+    g_kit_file[duck + 9] = 0;
+    g_kit_file[duck + 10] = 255;
+    g_kit_file[duck + 11] = 0;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(g_kit_loaded.tracks[t].duck), int(kDuckDepthMax));
+    CHECK_EQ(int(g_kit_loaded.duck.source), 0);
+    CHECK_EQ(int(g_kit_loaded.duck.attack_ms), int(kDuckAttackMin));
+    CHECK_EQ(int(g_kit_loaded.duck.hold), int(kDuckHoldMax));
+    CHECK_EQ(int(g_kit_loaded.duck.release), int(kDuckReleaseMin));
+
+    // A KIT.BIN from before the duck was editable loads with the duck it was fixed at -- 35% on
+    // every track, track 1 the source, 3 / 40 / 120 ms -- even read into a kit that held another.
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
+    CHECK_EQ(old_size, 1228u);
+    for (int t = 0; t < kTracks; t++) g_kit_loaded.tracks[t].duck = 99;
+    g_kit_loaded.duck.source = 6;
+    g_kit_loaded.duck.release = 3;
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(g_kit_loaded.tracks[t].duck), 35);
+    CHECK_EQ(int(g_kit_loaded.duck.source), 0);
+    CHECK_EQ(int(g_kit_loaded.duck.attack_ms), 3);
+    CHECK_EQ(int(g_kit_loaded.duck.hold) * kDuckTimeStepMs, 40);
+    CHECK_EQ(int(g_kit_loaded.duck.release) * kDuckTimeStepMs, 120);
+
+    // Present but short is damage, not an old file.
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    const uint32_t entry = section_entry_at(g_kit_file, kSectionKitDuck);
+    poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
+             int(SerializeResult::malformed));
+
+    for (int t = 0; t < kTracks; t++) g_kit_source.tracks[t].duck = kDuckDepthDefault;
+    g_kit_source.duck = KitDuck{};
+}
+
+TEST(kit_the_asr_page_round_trips_and_an_older_file_loads_it_at_zero) {
+    // The VA machines' ATK SUS REL FSU (kSectionKitAsr). A kit from before the page has no such
+    // section, and every byte comes back 0 -- which dsp/va.cpp reads as the envelope the VAs had
+    // -- even read into a kit whose page was up.
+    fresh_kit_file();
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitArpEnd; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+    }
+    drop_duck_section();
+    const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
+    CHECK_EQ(old_size, 1184u);
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitArpEnd; p < kKitParams; p++) g_kit_loaded.tracks[t].params[p] = 99;
+    }
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitArpEnd; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+        for (int p = kKitArpEnd; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 0);
+        }
+    }
 }

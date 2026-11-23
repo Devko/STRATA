@@ -440,6 +440,7 @@ const Expect kTable[] = {
     {Cmd::range_transpose, kDirtyBank, "range_transpose"},
     {Cmd::range_nudge, kDirtyBank, "range_nudge"},
     {Cmd::record_hit, kDirtyBank, "record_hit"},
+    {Cmd::record_length, kDirtyBank, "record_length"},
 
     // --- PROJECT.BIN ------------------------------------------------------
     //
@@ -499,6 +500,7 @@ const Expect kTable[] = {
     // from, so both dirty the project.
     {Cmd::set_sends, kDirtyProject, "set_sends"},
     {Cmd::set_master, kDirtyProject, "set_master"},
+    {Cmd::set_duck, kDirtyKit, "set_duck"},
     // The kill EQ's switches, in the same section as the master bytes.
     {Cmd::eq_kill, kDirtyProject, "eq_kill"},
     // The live-record quantize amount. PROJECT.BIN has had a field for it since M4 and nothing
@@ -746,10 +748,10 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     // card protocol: a file that came out a different size means the two have drifted apart.
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 402);
     CHECK_EQ(project_bytes(), 402u);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1184);
-    CHECK_EQ(kit_bytes(), 1184u);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 3804);
-    CHECK_EQ(perform_bytes(), 3804u);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1252);
+    CHECK_EQ(kit_bytes(), 1252u);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 4456);
+    CHECK_EQ(perform_bytes(), 4456u);
     for (int b = 0; b < kBanks; b++) {
         char name[12];
         CHECK(bank_file_name(b, name, int(sizeof name)));
@@ -1035,7 +1037,7 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     CHECK(pump_until_idle());
     CHECK(storage().last_error() == nullptr);
     keep_pristine(kit);
-    CHECK_EQ(g_pristine_bytes, 1184u);
+    CHECK_EQ(g_pristine_bytes, 1252u);
 
     // A sanity pass first: the pristine file loads.
     CHECK(reload_now());
@@ -1620,8 +1622,8 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 402);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1184);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 3804);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1252);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 4456);
 
     // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.
     CHECK_EQ(host.saves() - saves_before, kFileN + 1);

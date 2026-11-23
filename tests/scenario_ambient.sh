@@ -41,8 +41,11 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 21@380000000 \
     --key 9@440000000 \
+    --key 9@460000000 \
     --key 9@480000000 \
+    --key 9@500000000 \
     --key 9@520000000 \
+    --key 9@540000000 \
     --key 1@580000000 \
     --key 9@620000000 \
     --key 9@660000000 \

@@ -9,6 +9,8 @@
 # below includes it -- the figure docs/BUDGET.md asks for ("The master kill EQ"), with cl6x and
 # with ENAGA_TI_CGT=none. Compare it with scenario_m7.sh, the same beat with the EQ bypassed.
 #
+# EQ is the twelfth MIXER page (eleven SELECT_RIGHTs) since the duck's three pages.
+#
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F7 = 21, SELECT_RIGHT = 9,
 # PUSH_A = 1, PUSH_B = 0, PUSH_C = 2. The first press must come LATE (tests/scenario_m1.sh).
 set -euo pipefail
@@ -17,7 +19,7 @@ cd "$(dirname "$0")/.."
 # shellcheck source=tools/env.sh
 source tools/env.sh
 
-CYCLES=1200000000
+CYCLES=1300000000
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -51,9 +53,12 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 9@640000000 \
     --key 9@680000000 \
     --key 9@720000000 \
-    --key 1@780000000 \
-    --key 0@820000000 \
-    --key 2@860000000 \
+    --key 9@760000000 \
+    --key 9@800000000 \
+    --key 9@840000000 \
+    --key 1@900000000 \
+    --key 0@940000000 \
+    --key 2@980000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2

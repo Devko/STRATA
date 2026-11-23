@@ -152,6 +152,38 @@ The four settings are parameters like any other: hold a STEP and turn MOD to arp
 step, or store two scenes with different arps. A new track's arp is off, and so is every track
 in a project saved before the arp existed.
 
+### Held notes: the ASR page
+
+<p><img src="screens/edit_asr.png" width="256" alt="EDIT, the ASR page on VA POLY"></p>
+
+On **VA MONO** and **VA POLY** a seventh EDIT page, **ASR**, after ARP, decides how a note is
+held. With it, POLY plays pads and long chords, and MONO plays long bass notes and drones:
+
+- **A, ATK**: the attack, `3MS` (snappy, as before) up to `5.0S` (a slow swell). Above 0 the
+  filter envelope swells with it.
+- **B, SUS**: the sustain level, `0%` to `100%` of the note's peak. **At 0% a note is a one-shot**:
+  it falls over DEC and ends, as the VAs always did. **Above 0%** it falls over DEC to SUS and
+  **holds there**: for as long as you hold the pad or key in KEYS (or the MIDI note), or for the
+  step's **LEN** on the sequencer.
+- **C, REL**: the release, the tail after the key comes up or LEN ends, `60MS` to `8.0S`.
+- **D, FSU**: filter sustain. At 0% the filter envelope sweeps up and closes again over DEC, the
+  acid shape; turned up, the filter stays open while the note holds, so a long pad does not go
+  dull.
+
+The line under the knobs says `SUS 0: ONE-SHOT` or `HOLDS: PAD OR LEN`. On any other machine the
+page shows `VA MONO/POLY ONLY`.
+
+**A pad in three moves:** on the PLY track, ASR page: SUS to about 70%, ATK to about `400MS`, REL
+to about `2.0S`. Then on the step page give a chord step a LEN of `16 STP`: it holds for the whole
+bar and fades into the next. On VA MONO, LEN only counts once SUS is above 0, so every bass line
+written before keeps its decays; a **slid** step carries the held note on into the next pitch
+rather than letting it go.
+
+Held notes cost CPU for as long as they hold: long chords on VA POLY reach the shared 12-voice
+budget sooner (the quietest note is faded to make room). The four settings lock, scene and macro
+like any other parameter, and every track in a project saved before the page existed loads at 0,
+which sounds exactly as it did.
+
 ### Patterns, banks and the project
 
 <p><img src="screens/project.png" width="256" alt="PROJECT: bank A's sixteen slots"></p>
@@ -218,7 +250,7 @@ level: OK keeps it, CLR takes it back.
 ### Kits
 
 A **kit** is the sound side of a project without the patterns: the eight machines, their 16
-parameters each, the faders and the sample paths. Besides the project's own kit there is a
+parameters each, the faders, the sidechain duck and the sample paths. Besides the project's own kit there is a
 **kit library** of 16 slots on the card, shared by every project, so a sound you built in one
 project can be recalled in another (KIT mode, `FUNC+EDIT` twice).
 
@@ -489,6 +521,10 @@ resonant filter with an envelope. One voice, with accent, slide and glide.
 | --- | --- | --- | --- | --- |
 | SRC | **TUN** ±24 semitones | **MOD** voice filter: 0-63 LP24, 64-95 LP12, 96-111 BP12, 112-127 HP12 | **CUT** cutoff, 35 Hz-12 kHz | **RES** resonance |
 | AMP | **DEC** decay of both envelopes, 15 ms-2.4 s | **ENV** filter envelope amount, up to +66 semitones | **GLD** glide, 0-0.5 s | **LVL** |
+| ASR | **ATK** attack | **SUS** sustain: 0 = one-shot | **REL** release | **FSU** filter sustain |
+
+With SUS at 0 (the default) DEC is the note's length. Turn SUS up for long, held notes: see
+[Held notes: the ASR page](#held-notes-the-asr-page).
 
 This filter is the voice's own, on SRC; the FLTR page's filter is a second, utility filter after
 it. ENV 0 is a static dub bass; ENV and RES up is the acid squelch. **Accent** (ACNT on the step
@@ -504,11 +540,15 @@ each with inversions `/n`).
 | Page | A | B | C | D |
 | --- | --- | --- | --- | --- |
 | SRC | **TUN** | **MOD** as MNO | **CUT** | **RES** |
-| AMP | **DEC** also the chord's length: short stab or long pad | **ENV** | **DET** voice detune, up to a quarter semitone | **LVL** |
+| AMP | **DEC** with SUS at 0, the chord's length: short stab or long ring | **ENV** | **DET** voice detune, up to a quarter semitone | **LVL** |
+| ASR | **ATK** attack | **SUS** sustain: 0 = one-shot | **REL** release | **FSU** filter sustain |
+
+For pads, turn SUS up on the ASR page: a chord then holds for its step's LEN, or for as long as you
+hold the keys ([Held notes: the ASR page](#held-notes-the-asr-page)).
 
 Every note is a sustaining voice and costs CPU while it rings. All VA POLY tracks together share
 a budget of **12 voices**; past it, the quietest note is faded out quickly to make room. A longer
-DEC means more notes overlap.
+DEC, a long LEN with SUS up, or a long REL all mean more notes overlap.
 
 ### MID: MIDI
 
@@ -589,7 +629,7 @@ The step page's fields:
 | --- | --- | --- |
 | NOTE | 0-127 | The note (also: hold STEP + turn VALUE) |
 | VEL | 1-127 | Velocity |
-| LEN | 1/16 step ... 64 STP | Note length |
+| LEN | 1/16 step ... 64 STP | Note length: how long VA POLY holds, VA MONO too once SUS is up (the ASR page), and the MIDI note-off |
 | MICR | ±11 ticks | Micro-timing: 24 ticks is one 16th |
 | PROB | 0-100% | Chance the step plays |
 | COND | see below | Trig condition |
@@ -668,6 +708,12 @@ REC toggles live and motion recording. With the transport running, pad hits, KEY
 are recorded with their timing, corrected for the pad's latency and quantized by QUANTIZE (SETUP
 page, encoder A, 0-100%; 0 keeps your timing as micro-timing). A hit that cannot be stored where it
 was played says `OFF GRID`. One recording pass is one undo level.
+
+**How long you hold a note is recorded too**, on SAMPLE, GRAIN, VA MONO, VA POLY and MID: when the
+pad, key or MIDI note comes up, its step gets the nearest LEN (from `1/16` of a step up to
+`64 STP`), so with SUS up a held chord plays back as long as you played it. A drum ignores LEN,
+so a drum hit keeps one step. Let go after REC is off, or with the transport stopped, and the step
+keeps the length it had.
 
 ### MIDI in
 
@@ -825,11 +871,38 @@ Neither is saved or undone; both cost nothing until pressed. With the delay in i
 (below) the freeze is the LONG delay's own: the whole wash holds exactly as it is, whatever its
 length, from the moment you press.
 
+### The sidechain duck
+
+<p><img src="screens/mixer_dck.png" width="256" alt="MIXER's DCK 1-4 page"> <img src="screens/mixer_duck.png" width="256" alt="MIXER's DUCK page"></p>
+
+Every time the **source track** plays a step, the other tracks dip in level for a moment and come
+back: the classic pump that lets the kick through a dense bass and pad. It is fired by the
+source's steps, not by listening to the audio, so it is tight and costs almost nothing. By
+default the source is track 1 (the kick) and every other track ducks 35%.
+
+It has three MIXER pages, right after the faders:
+
+- **DCK 1-4** and **DCK 5-8**: knobs A-D are how far each track ducks, `OFF` (0) to `100%`. The
+  source track shows `SRC`: a track never ducks under itself. The bottom line says which track
+  they duck under.
+- **DUCK**: **SRC** (A) the source track, T1-T8. **ATK** (B) how fast the dip comes in, 1-50 ms.
+  **HLD** (C) how long it stays down, 0-500 ms. **REL** (D) how long it takes to come back,
+  10 ms to 1 s. Times are in milliseconds.
+
+Short HLD and REL (0-40 ms, 60-120 ms) keep the groove tight; a long REL (300 ms and up) on
+pads and the bass is the breathing house pump. To duck to a hat or a perc instead of the kick,
+set SRC to that track. To turn the duck off, set every track's depth to `OFF`.
+
+The duck is part of the **kit**: it is saved with the project and in the kit library, and a kit
+recall brings its duck. A project or kit from before it was editable opens with the duck it
+always had (track 1, 35%, 3/40/120 ms). Its settings are not p-lockable and not in scenes or
+macros.
+
 ### Ambient delay and reverb: LONG and HALL
 
 <p><img src="screens/mixer.png" width="256" alt="MIXER: the faders of tracks 1-4"> <img src="screens/mixer_dly.png" width="256" alt="MIXER's DLY page"></p>
 
-<sub>MIXER's first page, the faders, and the DLY page. The screen keys walk all nine: TRK 1-4, TRK 5-8, DLY, DLY+, REV, REV+, ROUTE, MST, EQ.</sub>
+<sub>MIXER's first page, the faders, and the DLY page. The screen keys walk all twelve: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+, REV, REV+, ROUTE, MST, EQ.</sub>
 
 
 Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
@@ -1024,6 +1097,9 @@ names one.
   0 is always exactly where you started.
 - **Mutate, then decide.** MUTATE is free to try: CLR takes it back, and FUNC+CLR undoes even a
   kept one later.
+- **Pump the pads, not the hats.** Set the chord and pad tracks' duck to 60-80% with a long REL
+  on the DUCK page and the hats to OFF: the pads breathe with the kick and the top end stays
+  steady.
 - **Kill the lows for the build.** FUNC+A takes the kick and bass out; push it again exactly on
   the one of the drop. FUNC+C on its own thins a busy top end for a breakdown.
 - **Snare rolls into the drop.** FUNC+FILL, then hold the snare's pad and press harder over the

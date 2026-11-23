@@ -79,6 +79,9 @@ enum class Cmd : uint8_t {
     // A live-recorded hit, already resolved to a step and a micro-timing value by core/record in
     // the main context -- where the clock state that stamped it was read.
     record_hit,        // track, step, a: note, b: velocity, c: int8 micro
+    // And how long that note was held, when its key comes up: core/record's held_length_index,
+    // stored as the step's LEN if the step still holds that note.
+    record_length,     // track, step, a: note, b: length index
 
     // --- projects and banks, M4 --------------------------------------------
     //
@@ -145,6 +148,9 @@ enum class Cmd : uint8_t {
     // the value the mixer runs on, and for the delay's time it needs the tempo to do it.
     set_sends,         // a: SendField, b: int8 delta
     set_master,        // a: MasterField, b: int8 delta
+    // The sidechain duck (core/project.hpp, KitDuck): a: DuckField, b: int8 delta; track is the
+    // track whose depth moves for DuckField::depth. Kit bytes, so a kit save keeps them.
+    set_duck,
 
     // --- performance, M5 ---------------------------------------------------
     //
@@ -275,6 +281,9 @@ constexpr uint8_t kDeltaFlag = 1;
 // side from the authoritative value, for the same reason as kDeltaFlag. On any other parameter
 // it is an ordinary delta.
 constexpr uint8_t kSemitoneFlag = 2;
+
+// `Cmd::set_duck`'s field, in `a`. Not on disk: KIT.BIN's duck section has its own layout.
+enum class DuckField : uint8_t { depth, source, attack, hold, release, count };
 
 // `Cmd::chain_edit`'s operation, in `a`.
 // set, insert and remove carry the entry whole (bank b, slot c, repeats d, mute recall e);
