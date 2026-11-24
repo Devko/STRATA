@@ -54,9 +54,9 @@ What it does, refusing at the first thing that is wrong:
 
 ## After
 
-- [ ] Merge the `release/v0.1.0` PR.
-- [ ] Update README.md's "Installing on a SmplTrek" (it says there is no prebuilt release yet)
-      and the status badge.
+- [ ] Merge the release PR.
+- [ ] Update the README's "Status" section (current release and date) and, if the release changes
+      the install steps or the Enaga version, the README's "Try it" and `docs/INSTALL.md`.
 - [ ] Optional, and worth it: download the zip from the release page, unzip it onto a freshly
       formatted card, install, and play A01.
 

@@ -1,4 +1,4 @@
-# Handoff — 2026-11-23
+# Handoff — 2026-11-24
 
 **Read this first, then `CLAUDE.md`, then `docs/SPEC.md`, `docs/REVIEW.md` and `docs/PLAN.md`.**
 This file holds what exists nowhere else in the repo: the state in one table, the next steps in
@@ -6,7 +6,7 @@ order, and the knowledge that lives in no code comment, commit message or other 
 fact here becomes stale, fix it here or delete it; do not append a history.
 
 **STRATA runs on the unit and has four releases.** v0.1.0 (2026-11-22), v0.2.0, v0.3.0 and v0.3.1 (2026-11-23,
-early betas) are on GitHub; nothing in 0.3.x has run on the unit yet. On the unit the default beat loads under 30%, and a long, heavy
+early betas) are on GitHub; v0.3.1 boots and plays on the unit (2026-11-24), but nothing from 0.3.x has been measured or walked through there yet. On the unit the default beat loads under 30%, and a long, heavy
 session peaked at 84.3% MAX with no dropouts. Almost everything added since the first evening has
 been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
@@ -20,7 +20,7 @@ been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is 
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image: `APP.ENA` 484,160 bytes GCC-only (476,008 cl6x), bss 1,334,848; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
 | `tools/scenarios.sh` | **27 scenarios**, run on Roland's PC only. All 27 pass with cl6x on `ce5fc6b` (the v0.3.1 build, 2026-11-23), `scenario_wave` once its table check followed #133 |
-| unit | v0.2.0 on Enaga 0.2.0: boots, plays, under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been on the unit |
+| unit | v0.3.1 on Enaga 0.2.0 boots and plays (2026-11-24). Load figures are from the v0.2.0-era build: under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been measured or walked through on the unit |
 | memory | init takes **97.05 MiB of a 120 MiB heap** since #124 (2 MiB loader buffer, wavetables built in the idle capture buffer): 22.95 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
 | VA POLY | 2.16 points per voice with cl6x, 3.82 GCC-only (emulator). **A shared budget of 12 voices across all tracks** (`Engine::kPolyVoiceBudget`), WAVE POLY included, provisional until the unit's readings |
@@ -45,7 +45,7 @@ been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is 
    second under 55%), and the performance mixer's worst case (host estimate: about +2 points).
 5. **A new machine** needs its rows in `docs/FEATURES.md`, `docs/MANUAL.md` (section 3 and the
    SOUNDS table), `docs/CHEATSHEET.md` (machine table and abbreviations), `CHANGELOG.md` and the
-   README's machine list. STRING is postponed.
+   machine list in `docs/OVERVIEW.md` and the README highlights. STRING is postponed.
 6. **Then, from the reference half of `docs/UNIT_CHECKLIST.md`**, the checks that decide whether a
    milestone stands: a start with no card, pulling the card during a save and during sample
    loading, swapping a sample on a sounding track, the M5 30-minute jam, and M7's hour locked to
