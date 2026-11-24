@@ -1,7 +1,6 @@
 # STRATA features and their status
 
-Every feature STRATA has, grouped by area, with where it stands (`main` after PR #124,
-2026-11-23). How to play each one is in [MANUAL.md](MANUAL.md); this file only says what exists
+Every feature STRATA has, grouped by area, with where it stands (v0.3.1, 2026-11-24). How to play each one is in [MANUAL.md](MANUAL.md); this file only says what exists
 and how sure we are of it. Update a row when its status changes.
 
 **Columns**
@@ -9,8 +8,9 @@ and how sure we are of it. Update a row when its status changes.
 - **Since:** `v0.1.0` = in the [v0.1.0 release](https://github.com/Devko/STRATA/releases/tag/v0.1.0);
   `#83` ... `#111` = merged after v0.1.0 and released in
   [v0.2.0](https://github.com/Devko/STRATA/releases/tag/v0.2.0); `#116` ... `#129` = released in
-  [v0.3.0](https://github.com/Devko/STRATA/releases/tag/v0.3.0); `#130` and later = on `main`,
-  not released yet; `WIP` = being built, not on `main`.
+  [v0.3.0](https://github.com/Devko/STRATA/releases/tag/v0.3.0); `#133` ... `#134` = released in
+  [v0.3.1](https://github.com/Devko/STRATA/releases/tag/v0.3.1); later numbers = on `main`, not
+  released yet; `WIP` = being built, not on `main`.
 - **Unit:** what the SmplTrek itself has confirmed.
   - **✔** confirmed on the unit (recorded in BUDGET.md or ticked in UNIT_CHECKLIST.md).
   - **◐** used on the unit in the free-play session of 2026-11-22 (controls-remap build, cl6x,
@@ -30,7 +30,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
-| Runs as an Enaga app on the SmplTrek (Enaga 0.2.0, ABI 0, BOOT 1.0.17) | v0.1.0 | ✔ booted 2026-11-22 | Loader checks only the ABI number: another Enaga release may load and misbehave. Lofi-12 XT / CyDrums untried |
+| Runs as an Enaga app on the SmplTrek (Enaga 0.2.0, ABI 0, BOOT 1.0.17) | v0.1.0 | ✔ booted 2026-11-22; v0.3.1 runs on the unit (2026-11-24) | Loader checks only the ABI number: another Enaga release may load and misbehave. Lofi-12 XT / CyDrums untried |
 | Everything on the SD card under `/ENAGA/DATA/STRATA/`; never writes the SPI flash | v0.1.0 | ○ (13) | |
 | Audio load on the top line | v0.1.0 | ✔ about 0–26% on the default beat | Flickers every block |
 | Held MAX readout on the bottom line (since PLAY) | v0.1.0 | ✔ top line under 30% default beat; MAX 84.3% in heavy play | Clean A01 and A04 MAX figures (60 s each) still to record |
@@ -68,6 +68,8 @@ FM4 and GRAIN machines.
 | PERC, 2-operator FM (2 voices) | v0.1.0 | ✔ default beat | One-shot |
 | SAMPLE: one-shot or 1-16 equal slices by note, 4 voices, 4 play modes (fwd, loop, rev, rev loop) | v0.1.0 | ◐ default beat's loop track (placeholder sample) | Unit sample loads: 13b, 15b-15d |
 | SAMPLE **SLC AUTO**: slices at up to 15 detected hits | v0.1.0 | ○ (15c2) | Hit points are found at load, not editable |
+| A file picked on a SMP track plays whole from its start (STA 0, LEN 127, one slice, DEC 127) | #133 | ○ | Only a pick; a project or kit load keeps its saved values |
+| Switching a track's machine loads that machine's default sound (a switch to GRN loads CLOUD) | #133 | ○ | |
 | GRAIN: up to 8 grains in one voice | v0.1.0 | ○ (8, 8b / U3) | Most expensive machine; outside the POLY budget (thinned by the CPU guard); no tempo sync of its own |
 | **GRAIN rework**: +6 dB, PIT in whole semitones, SIZ 8-680 ms, ASR page (ATK SUS REL: pads that hold for LEN), OSC page (SCN scan/time-stretch, PSP detune or octave shimmer), values in units, 8 SOUNDS (OK in EDIT), a switch to GRN loads CLOUD | #134 | ○ (21) | SCN is free-running, not tempo-locked; older projects' GRN tracks play 6 dB louder with slightly different SIZ and PIT snapped to the nearest semitone |
 | VA MONO: saw or pulse, OSC 2 (detune or sync), sub, noise, drive, own filter and envelope, accent, slide, glide | v0.1.0 | ✔ default beat bass | At SUS 0 (default) DEC is the note's length and LEN is not heard; see the ASR row |
@@ -77,7 +79,7 @@ FM4 and GRAIN machines.
 | **WAVE MONO and WAVE POLY**: the VA voice with a wavetable (16 built-in tables of 16 frames: TBL POS, MOT envelope to position, WRP phase bend, DET second reader), 8 + 7 factory sounds | #122 | ○ (walkthrough 19) | CPU per voice is a host estimate until the emulator and the unit measure it (BUDGET "WAVE"); a table is built when a track first sounds it (8 slots, 1.25 MiB; the sub plays alone for a moment). No user tables from the card yet, though the slots leave room for them |
 | **FM4**: four-operator FM, eight algorithms, operator 4 feedback, an index envelope, six voices with chords in the shared 12-voice POLY budget; 8 factory sounds | #126 | ○ (walkthrough 20) | CPU per voice is a host estimate (about 1.7x a VA POLY voice) until the emulator and the unit measure it (BUDGET "FM4", E15). |
 | MID: plays an outboard synth over MIDI; SRC/AMP knobs send CC 74/71/73/72, 70/75/76/77 | v0.1.0 | ○ (8d) | No sound or CPU of its own; no scale fold |
-| Key and scale per pattern (15 scales), fold for VAs, GRAIN and unsliced SAMPLE; sharps everywhere | v0.1.0 | ○ (7) | |
+| Key and scale per pattern (15 scales), fold for the VA, WAVE and FM4 machines, GRAIN and unsliced SAMPLE; sharps everywhere | v0.1.0 | ○ (7) | |
 | **NOTE view**: TUN / PIT read as a note (where TUN puts C-4) and turn a semitone a click; push the knob for 0-127 | #88 | ○ ("Today's walkthrough") | Chromatic, not by scale (TUN applies after the fold). 128 bytes per range, so many notes are a few cents off (`+`/`-`). Not saved: on at every start |
 | Golden renders pin every machine's sound | v0.1.0 | — | Host only |
 
@@ -181,7 +183,7 @@ FM4 and GRAIN machines.
 | Damaged files refused, never crash | v0.1.0 | ○ (M4) | Card pulled mid-save not tried on the unit |
 | Factory project: 130 BPM C minor kit, A01-A04, chain, 3 scenes, 3 macros, 8 mute states | v0.1.0 | ✔ A01 plays; ◐ the rest (3b) | Track 8 plays a placeholder until given a sample |
 | Factory pattern A05 PAD: held VA POLY chords from the ASR page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
-| Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 68 ready-made sounds (MNO 12, PLY 7, WMN 8, WPL 7, FM4 8) into one drum, VA, WAVE or FM4 track, AS WAS puts it back | #102, #118, #122, #126 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
+| Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 76 ready-made sounds (KCK 6, SNR 6, HAT 7, PRC 7, MNO 12, PLY 7, WMN 8, WPL 7, FM4 8, GRN 8) into one track, AS WAS puts it back | #102, #118, #122, #126, #134 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
 
 ---
 

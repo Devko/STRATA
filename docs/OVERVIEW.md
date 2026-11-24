@@ -1,0 +1,91 @@
+# STRATA at a glance
+
+What STRATA can do, in one page. How to play each part is in [MANUAL.md](MANUAL.md); which
+parts have been checked on the unit is in [FEATURES.md](FEATURES.md).
+
+## Design principles
+
+From [SPEC.md](SPEC.md):
+
+- **Performance first.** Every edit works while the transport runs and lands on the beat.
+- **Two keys at most.** The common actions take one key, or FUNC plus one key.
+- **Timing is sacred.** Steps are scheduled inside the audio callback against Enaga's clock and
+  land on an exact sample. Screen or card activity never moves a note.
+- **Controlled accidents.** Randomness is seeded, bounded and undoable.
+- **Always restorable.** STRATA never writes the SPI flash. Everything lives on the SD card, so
+  one official update restores the unit.
+
+## Sound
+
+Eight tracks. Each holds one machine followed by the same insert chain, and any track can host
+any machine. The factory kit:
+
+| Track | Machine | Role |
+| :---: | --- | --- |
+| 1 | **KICK** | 909-style kick, tuned to the key |
+| 2 | **SNARE** | Clap (the snare's clap mode) |
+| 3 | **HAT** | Closed hat; it chokes track 4 |
+| 4 | **HAT** | Open hat |
+| 5 | **PERC** | Rimshot (2-operator FM) |
+| 6 | **VA MONO** | Rolling bass, with accent and slide |
+| 7 | **VA POLY** | Dub chord stabs, up to six notes a step |
+| 8 | **SAMPLE** | A loop cut into slices |
+
+- **Eleven machines:** KICK, SNARE, HAT, PERC, SAMPLE, GRAIN, VA MONO, VA POLY, WAVE MONO,
+  WAVE POLY and FM4, plus **MID**, which plays an outboard synth over MIDI. The drums follow
+  Mutable Instruments Plaits' models, reimplemented ([SOUND.md](SOUND.md)). Switching a track's
+  machine loads that machine's default sound.
+- **VA MONO and VA POLY:** saw or pulse, a second oscillator detuned or hard-synced, sub, drive,
+  a resonant filter that self-oscillates, and an attack-sustain-release page for pads and drones.
+- **WAVE MONO and WAVE POLY:** the same voice with 16 built-in wavetables (classic shapes, sync,
+  formants, FM, e-piano, vowels, mallets and more), a position the envelope can sweep, and warp.
+- **FM4:** four-operator FM in eight algorithms, with feedback and an index envelope, for
+  e-pianos, bells, glass, brass, organs and FM basses; chords of up to six notes.
+- **SAMPLE:** one-shot or slices by note, with SLC AUTO cutting a break at its hits.
+- **GRAIN:** granular clouds from a sample, with its own envelope, a scan that time-stretches,
+  and a pitch spray up to an octave shimmer.
+- **Factory sounds:** 76 ready-made sounds for the drums, the VAs, WAVE, FM4 and GRAIN, loaded
+  into one track at a time while the beat plays.
+- **Per track:** drive, multimode filter (LP, BP, HP, 12 or 24 dB), lo-fi, amp envelope,
+  sidechain duck, pan, level, an **LFO** (six shapes, free or synced) and an **arpeggiator**.
+- **Sends and master:** a tempo-synced ping-pong delay with a LONG mode (up to 12 s, tape wow), a
+  reverb with a HALL mode (shimmer), a DJ filter, a three-band kill EQ, a glue compressor and a
+  limiter.
+
+## Sequencer
+
+- Up to 64 steps per track, with per-track length, speed and swing (polymeter), and micro-timing
+- Parameter locks, trig conditions, probability, ratchets, accents, slides and chords
+- Key and scale per pattern (15 scales); notes on the VA, WAVE, FM4, GRAIN and unsliced SAMPLE
+  tracks fold into the scale
+- Live and motion recording, a Euclidean generator, and KEYS: the two lower pad rows as a
+  pressure-sensitive keyboard, with the pattern's scale lit
+- 8 banks of 16 patterns with queued changes, and a chain that becomes a song: each entry can
+  recall a mute state, and SONG mode stops at the end
+- 16 levels of undo
+
+## Performance
+
+- Seven performance pads on the upper row: **FILL**, **REPEAT**, **MUTE**, **SCENE A**,
+  **SCENE B**, **THROW** and **MUTATE**
+- **A performance mixer on VALUE:** push VALUE and tap a STEP key to pick one of fifteen effects
+  (filter sweeps, risers, echo freeze, reverb wash, stutter, tape stop, bass kill, pump, crush,
+  noise riser, flanger, gate, build), then turn VALUE to bring it in. STEP 16 is a **looper**
+  that records 1 to 8 bars of the mix and crossfades it against the live beat.
+- Scenes with an A/B morph, four macros (B, C and D set up in every new project) and stored mute
+  states
+- Beat repeat, note repeat, delay and reverb throws, tape stop, delay freeze, kill-EQ switches, and
+  seeded mutation you keep or revert
+- **Freeze** a track to a loop in memory to save CPU, **resample** the master or an input, or
+  **bounce** one track to a file or another track
+
+## Samples, projects and MIDI
+
+- A sample browser on the unit that also reaches the stock firmware's sample pool and project
+  folders; WAVs at any rate and depth; long files loaded in the background, and files too big
+  for memory streamed from the card
+- Projects with autosave, a project browser (open, save as, rename, delete), and a kit library
+  shared by all projects
+- MIDI out per track; MIDI in for notes, CCs and program changes; follows the unit's clock
+  (internal, MIDI clock or SYNC IN)
+- **Help on every screen:** hold FUNC for what the knobs and keys do where you are
