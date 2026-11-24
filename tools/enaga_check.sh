@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Is STRATA where it says it is on Enaga and the emulator, and has upstream moved?
 #
-#   tools/enaga_check.sh              local checks only; no network
+#   tools/enaga_check.sh              local checks (lists upstream's tags if the clone has none)
 #   tools/enaga_check.sh --upstream   also fetch both upstreams and report what is new
 #
 # Local checks (exit 1 if any fails):
@@ -57,8 +57,22 @@ else
     fail "enaga is at $(git -C "$SUB" rev-parse --short=7 HEAD), the pin is $short: git submodule update"
 fi
 
-[ -n "$(git -C "$SUB" tag -l 'v*')" ] || git -C "$SUB" fetch --quiet --tags origin 2>/dev/null
 tag=$(git -C "$SUB" tag --points-at "$pin" -l 'v*' | sort -V | tail -1)
+if [ -z "$tag" ]; then
+    # A shallow clone (CI's --depth=1 submodule) holds only the tags its clone happened to
+    # follow: since Enaga v0.3.0 that is v0.3.0 alone, not the pin's v0.2.0, so "fetch the
+    # tags if there are none" never fetched them (PR #137). Ask upstream which tags point at
+    # the pin instead: ls-remote downloads no objects. The http.*extraheader resets drop the STRATA token that
+    # actions/checkout leaves in the submodule's config, which is not for this repository.
+    url=$(git -C "$SUB" remote get-url origin)
+    if remote=$(git -C "$SUB" -c http.extraheader= -c http.https://github.com/.extraheader= \
+            ls-remote --tags "$url" 'v*'); then
+        tag=$(awk -v p="$pin" '$1 == p { t = $2; sub("^refs/tags/", "", t); sub("\\^\\{\\}$", "", t); print t }' \
+            <<<"$remote" | sort -uV | tail -1)
+    else
+        echo "--    could not list Enaga's tags at $url"
+    fi
+fi
 if [ -n "$tag" ]; then
     ok "the pin is release $tag"
 else
