@@ -8,6 +8,11 @@ the project file format or the controls.
 
 ### Added
 
+- **Bounce to track.** A RESAMPLE take to FILE is offered to a track once it is on the card
+  (`PUT ON TRK 3 GRN`): one OK makes it that track's sample (`T3 GRN: TAKE ON`), LEFT/RIGHT pick
+  another track, CLR keeps it a file. It offers a SAMPLE or GRAIN track other than the one you
+  bounced first, so layering two tracks into a GRAIN or a sliced SAMPLE is B to `TRK n`, OK,
+  PLAY, OK.
 - **Hold STEP + THROW (D6's last pad).** STEP first edits: with a STEP held, THROW locks that
   step's delay send at full (`STEP 5 DLY FULL`), and again takes the lock off; FUNC + THROW does
   the same with the reverb send. A throw written into the pattern, saved and undone like any lock.

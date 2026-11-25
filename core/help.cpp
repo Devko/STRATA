@@ -382,7 +382,8 @@ constexpr Text kResample = {"RESAMPLE:", {
     "CLR        CANCEL",
     "STARTS ON THE BAR",
     "MIC NEEDS HEADPHONES",
-    nullptr, nullptr,
+    "DONE: OK PUTS ON TRK",
+    "DONE: CLR KEEPS FILE",
 }};
 
 constexpr Text kMenu = {"FUNC MENU:", {

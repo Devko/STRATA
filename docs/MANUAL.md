@@ -1322,6 +1322,12 @@ track as the destination, the take also becomes that track's sample and loads st
 an 8-bar jam can become the loop on track 8 for SAMPLE or GRAIN. A take is at most 30 s
 (`SHORTENED TO 30S`). CLR cancels.
 
+**Put it on a track afterwards.** A take that went `TO FILE` is offered to a track as soon as it
+is written: `PUT ON TRK 3 GRN`, `OK PUTS  CLR KEEPS`. OK makes it that track's sample at once
+(`T3 GRN: TAKE ON`); LEFT/RIGHT pick another track first; CLR leaves it a file. The first track
+offered is a SAMPLE or GRAIN track other than the one you bounced, so the usual case is one OK.
+A track playing a synth is refused (`T1 NOT SAMPLE/GRAIN`): give it SAMPLE or GRAIN first.
+
 **Sampling from the input.** B picks where the take comes from: `MASTER` (the default) or one of
 the inputs, `LINE` (INPUT L and R), `LINE L` (INPUT L alone, on both sides), `MIC` (the built-in
 microphone, which Enaga keeps silent unless headphones are in: the screen says

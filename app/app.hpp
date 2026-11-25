@@ -497,6 +497,8 @@ public:
         // Every file handle opened before a removal is already dead; Storage abandons whatever
         // was in flight and writes nothing until a card is back.
         storage_.on_card(usable);
+        // The take on offer is a file on the card that went: nothing left to put on a track.
+        if (!usable) take_offer_ = -1;
         notice(usable ? "CARD IN" : "CARD OUT");
     }
 
@@ -1040,6 +1042,10 @@ public:
 
             case ENAGA_KEY_OK:
                 // RESAMPLE mode first: OK is what commits a take, and there is no step to hold.
+                if (mode_ == Mode::resample && take_offer_ >= 0) {
+                    put_take_on_track();
+                    break;
+                }
                 if (mode_ == Mode::resample) {
                     // Not while a take is armed, recording or still going to the card: the
                     // engine would refuse the arm anyway, but the write request below would
@@ -1059,8 +1065,11 @@ public:
                     }
                     // From the input: make sure the route is the one on screen before the take.
                     if (kTakeSources[take_source_].input >= 0 && !input_applied_) apply_input();
+                    // A take on offer is put on a track with OK (above) or let go with CLR first;
+                    // here there is none, so this is a new take.
                     {
                         const TakeSource &source = kTakeSources[take_source_];
+                        take_from_track_ = source.track;
                         post(Cmd::resample_arm, uint8_t(source.track >= 0 ? source.track : 0), 0,
                              kTakeBars[take_bars_index_],
                              source.input >= 0 ? 1 : (source.track >= 0 ? 2 : 0));
@@ -1117,6 +1126,10 @@ public:
                     // It used to fall through to erase_selection, which with nothing selected
                     // erases the WHOLE TRACK -- from a screen showing one step.
                     step_page_ = false;
+                } else if (mode_ == Mode::resample && take_offer_ >= 0) {
+                    // A take on offer: CLR leaves it a file, and the next OK arms a new take.
+                    take_offer_ = -1;
+                    notice("TAKE STAYS A FILE");
                 } else if (mode_ == Mode::resample) {
                     // In RESAMPLE, CLR cancels the take rather than erasing a step: there is no
                     // selection in this mode and a take is the only thing there is to cancel.
@@ -1469,6 +1482,11 @@ public:
                 break;
             }
             case Mode::resample:
+                // With a take on offer they walk the track it would go on, the eight round.
+                if (take_offer_ >= 0) {
+                    take_offer_ = (take_offer_ + delta % kTracks + kTracks) % kTracks;
+                    break;
+                }
                 // The selection keys walk the DESTINATION: -1 is "the file only", then the eight
                 // tracks. A track that hosts no Sampler is still offered, because which machine
                 // a track hosts becomes switchable in M6/M7 and the kit's path is what the
@@ -2723,6 +2741,19 @@ public:
         // waits on the audio side: a command ring that has not drained simply means "not this
         // pass" (app/storage.hpp).
         storage_.service();
+
+        // A take asked for TO FILE is whole on the card: offer it to a track (bounce to track).
+        if (storage_.file_takes() != file_takes_seen_) {
+            file_takes_seen_ = storage_.file_takes();
+            take_offer_ = offer_track(take_from_track_);
+            char line[16];
+            char *out = line;
+            append(out, "offer T");
+            append_number(out, uint32_t(take_offer_) + 1);
+            *out = 0;
+            enaga::log(line);
+            if (mode_ == Mode::resample) notice("TAKE ON CARD");
+        }
 
         // The PROJECTS page's list, once the card has answered: the cursor onto the open
         // project, and a fresh read after a SAVE AS has landed.
@@ -6276,6 +6307,53 @@ public:
         }
     }
 
+    // Where a finished take is offered first: a track that plays files (SAMPLE or GRAIN) other
+    // than the one it was bounced from -- the selected one if it does, else the lowest -- so the
+    // usual case is one OK. The bounced track itself next (re-bouncing a GRAIN onto itself is a
+    // way to stack it), and the selected track when no track plays files: OK then says so.
+    int offer_track(int from) const {
+        if (plays_files(selected_) && selected_ != from) return selected_;
+        for (int t = 0; t < kTracks; t++) {
+            if (plays_files(t) && t != from) return t;
+        }
+        if (from >= 0 && plays_files(from)) return from;
+        return selected_;
+    }
+
+    // OK with a take on offer: its file into the track's kit, loaded by the ordinary sample swap
+    // (Storage::request_sample_file), as TO TRK does before a take. Only on a SAMPLE or GRAIN
+    // track: anything else would keep a path it never plays.
+    void put_take_on_track() {
+        const int track = take_offer_;
+        char *out = notice_buffer_;
+        append(out, "T");
+        append_number(out, uint32_t(track) + 1);
+        if (!plays_files(track)) {
+            append(out, " NOT SAMPLE/GRAIN");
+            *out = 0;
+            notice(notice_buffer_);
+            return;
+        }
+        if (!storage_.request_sample_file(track, storage_.last_take_path())) {
+            append(out, " REFUSED");
+            *out = 0;
+            notice(notice_buffer_);
+            return;
+        }
+        take_offer_ = -1;
+        append(out, " ");
+        append(out, machine_name(engine_.machine_id(track)));
+        append(out, ": TAKE ON");
+        *out = 0;
+        notice(notice_buffer_);
+        char line[16];
+        char *log_out = line;
+        append(log_out, "take T");
+        append_number(log_out, uint32_t(track) + 1);
+        *log_out = 0;
+        enaga::log(line);
+    }
+
     void draw_resample(enaga::Canvas &canvas) {
         char line[40];
         char *out = line;
@@ -6288,11 +6366,16 @@ public:
         canvas.text(0, 18, line, 15);
 
         out = line;
-        append(out, "TO ");
-        if (resample_track_ < 0) {
-            append(out, "FILE");
+        if (take_offer_ >= 0 && state == 0u) {
+            append(out, "PUT ON TRK ");
+            append_number(out, uint32_t(take_offer_) + 1);
+            append(out, " ");
+            append(out, plays_files(take_offer_) ? machine_name(engine_.machine_id(take_offer_))
+                                                 : "-");
+        } else if (resample_track_ < 0) {
+            append(out, "TO FILE");
         } else {
-            append(out, "TRK ");
+            append(out, "TO TRK ");
             append_number(out, uint32_t(resample_track_) + 1);
         }
         *out = 0;
@@ -6315,7 +6398,9 @@ public:
                 break;
             }
             case 3u: append(out, "WRITING"); break;
-            default: append(out, "OK ARMS  CLR CANCELS"); break;
+            default:
+                append(out, take_offer_ >= 0 ? "OK PUTS  CLR KEEPS" : "OK ARMS  CLR CANCELS");
+                break;
         }
         *out = 0;
         canvas.text(0, 40, line, state == 2u ? 15 : 10);
@@ -7822,6 +7907,12 @@ private:
     // Resampling's two settings: how many bars, and where the take lands (-1 = the file only).
     int take_bars_index_ = 0;
     int resample_track_ = -1;
+    // Bounce to track: once a take asked for TO FILE is whole on the card, the screen offers to
+    // put it on a track with one OK (take_offer_, -1 when nothing is offered). The track the take
+    // came from (-1: the master or the input), so the offer can prefer another track.
+    int take_offer_ = -1;
+    int take_from_track_ = -1;
+    uint32_t file_takes_seen_ = 0;
     // And where it comes from: an index into kTakeSources (0, the master, by default), the input
     // level (enaga_input_level, NORMAL as Enaga starts), and whether the route on screen has been
     // applied. Not saved: Enaga puts the input back to LINE, NORMAL when the app stops anyway.

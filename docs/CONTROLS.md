@@ -264,6 +264,22 @@ and not in KEYS, where the upper pads are the piano. `core/stepedit.hpp` has the
 Pad first is unchanged: FILL held + tap STEP writes a FILL trig, a scene pad held + STEP picks
 the scene, MUTE MODE on makes STEP 1-8 the mute states.
 
+## Bounce to track: one OK after a take (RESAMPLE)
+
+A take asked for `TO FILE` (the default) is offered to a track once it is all on the card: the
+screen says `TAKE ON CARD`, `PUT ON TRK 3 GRN` and `OK PUTS  CLR KEEPS`.
+
+| Key | Does |
+| --- | --- |
+| OK | The take becomes that track's sample and loads at once (`T3 GRN: TAKE ON`), as `TO TRK n` would have done before the take. Only on a SAMPLE or GRAIN track: anything else says `T1 NOT SAMPLE/GRAIN` and stays offered |
+| LEFT / RIGHT (and the screen keys) | Walk the offered track round the eight; `TO FILE`/`TO TRK` is untouched |
+| CLR | Leaves it a file (`TAKE STAYS A FILE`); the next OK arms a new take |
+
+The first track offered is a SAMPLE or GRAIN track other than the one the take was bounced from
+(the selected track if it is one, else the lowest), then the bounced track itself, then the
+selected track. So bouncing two layered tracks into the GRAIN or sliced SAMPLE next to them is
+B to `TRK n`, OK, PLAY, then OK. Pulling the card drops the offer; it is not saved.
+
 ## The performance pads (upper row, printed TRK 1-7)
 
 | Print | STRATA | Colour | Bright while | Says |

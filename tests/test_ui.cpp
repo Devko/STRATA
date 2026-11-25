@@ -90,6 +90,8 @@ struct UiProbe {
     static int pressure_pad(const Strata &app) { return app.pressure_pad_; }
     static int take_bars_index(const Strata &app) { return app.take_bars_index_; }
     static int resample_track(const Strata &app) { return app.resample_track_; }
+    static int take_offer(const Strata &app) { return app.take_offer_; }
+    static void set_take_source(Strata &app, int index) { app.take_source_ = index; }
     static uint8_t macro_knob(const Strata &app, int macro) {
         return app.macro_position_[macro];
     }
@@ -8940,3 +8942,141 @@ TEST(ui_hold_step_and_throw_locks_the_send_full_then_off) {
     CHECK_EQ(app_engine().throwing(), 0);
 }
 
+// --- bounce to track: a take to the file, then one OK puts it on a track ---------------------
+
+namespace {
+
+// RESAMPLE from kTakeSources[source], one bar armed TO FILE and played until it is on the card.
+bool take_to_file(Strata &app, int source) {
+    FakeHost &host = FakeHost::the();
+    shift_key(ENAGA_KEY_F2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+    UiProbe::set_take_source(app, source);
+    while (UiProbe::resample_track(app) != -1) {
+        app.on_key(ENAGA_KEY_SELECT_LEFT, true);
+        app.on_key(ENAGA_KEY_SELECT_LEFT, false);
+    }
+    const uint32_t before = app_storage().file_takes();
+    host.set_running(true);
+    key(ENAGA_KEY_OK);
+    pump();
+    host.deliver_tick(384, 0);
+    for (int i = 0; i < 8000 && app_storage().file_takes() == before; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+    }
+    pump(2);
+    host.set_running(false);
+    return app_storage().file_takes() != before;
+}
+
+constexpr int kSourceMaster = 0;
+constexpr int kSourceTrack2 = 7;   // kTakeSources: MASTER, five inputs, then TRK 1..8
+
+bool same_text(const char *a, const char *b) {
+    for (int i = 0;; i++) {
+        if (a[i] != b[i]) return false;
+        if (a[i] == 0) return true;
+    }
+}
+
+}  // namespace
+
+TEST(ui_a_take_to_file_is_offered_to_a_track_and_one_ok_puts_it_there) {
+    Strata &app = fresh();
+    CHECK(same_text(kTakeSources[kSourceTrack2].name, "TRK 2"));
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    post_track(Cmd::set_machine, 2, uint8_t(MachineId::grain));   // track 3 plays files
+    pump(4);
+    CHECK_EQ(UiProbe::take_offer(app), -1);
+
+    CHECK(take_to_file(app, kSourceMaster));
+    // Track 1 is selected and plays no file, so the offer is track 3, the one that does.
+    CHECK_EQ(UiProbe::take_offer(app), 2);
+    CHECK_EQ(app_engine().project().kit.tracks[2].sample[0], '\0');
+
+    key(ENAGA_KEY_OK);                                     // one OK
+    CHECK_EQ(UiProbe::take_offer(app), -1);
+    CHECK_EQ(UiProbe::notice(app), "T3 GRN: TAKE ON");
+    CHECK(same_text(app_engine().project().kit.tracks[2].sample, app_storage().last_take_path()));
+    pump_until_idle();
+    CHECK(app_storage().last_error() == nullptr);
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
+
+    // And the next OK arms a new take, as before.
+    key(ENAGA_KEY_OK);
+    pump();
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 1);
+    key(ENAGA_KEY_CLR);
+    pump();
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_the_take_offer_walks_refuses_a_synth_and_clr_keeps_the_file) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    post_track(Cmd::set_machine, 1, uint8_t(MachineId::sample));  // track 2: SAMPLE
+    pump(4);
+
+    // A bounce of track 2 offers another file track before its own: the test kit's track 8.
+    CHECK(app_engine().machine_id(7) == uint8_t(MachineId::sample) ||
+          app_engine().machine_id(7) == uint8_t(MachineId::grain));
+    CHECK(take_to_file(app, kSourceTrack2));
+    CHECK_EQ(UiProbe::take_offer(app), 7);
+
+    // The selection keys walk it, round the eight; a track that plays no file is refused and
+    // stays offered.
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+    CHECK_EQ(UiProbe::take_offer(app), 0);
+    CHECK_EQ(UiProbe::resample_track(app), -1);            // the TO setting is untouched
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "T1 NOT SAMPLE/GRAIN");
+    CHECK_EQ(UiProbe::take_offer(app), 0);
+    CHECK_EQ(app_engine().project().kit.tracks[0].sample[0], '\0');
+    for (int i = 0; i < 8; i++) {                          // round the eight, back to track 1
+        app.on_key(ENAGA_KEY_SELECT_LEFT, true);
+        app.on_key(ENAGA_KEY_SELECT_LEFT, false);
+    }
+    CHECK_EQ(UiProbe::take_offer(app), 0);
+
+    // CLR keeps it a file: nothing armed, nothing cancelled, nothing loaded.
+    key(ENAGA_KEY_CLR);
+    pump();
+    CHECK_EQ(UiProbe::take_offer(app), -1);
+    CHECK_EQ(UiProbe::notice(app), "TAKE STAYS A FILE");
+    CHECK_EQ(app_engine().project().kit.tracks[1].sample[0], '\0');
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
+
+    // A take put on a track before it is taken (TO TRK) is not offered again afterwards.
+    // And a card pulled with a take on offer takes the offer with it.
+    CHECK(take_to_file(app, kSourceMaster));
+    CHECK(UiProbe::take_offer(app) >= 0);
+    app.on_card(false);
+    CHECK_EQ(UiProbe::take_offer(app), -1);
+    app.on_card(true);
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_layout_resample_with_a_take_on_offer) {
+    Strata &app = fresh();
+    post_track(Cmd::set_machine, 2, uint8_t(MachineId::sample));
+    pump(4);
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    CHECK(take_to_file(app, kSourceMaster));
+    CHECK_EQ(UiProbe::take_offer(app), 2);
+    check_layout(app, "RESAMPLE, offer");
+    for (int t = 0; t < kTracks; t++) {                    // every track, file or not
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+        check_layout(app, "RESAMPLE, offer");
+    }
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+    pump(2);
+}

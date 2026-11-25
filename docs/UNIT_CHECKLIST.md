@@ -542,6 +542,10 @@ The beat can keep playing. One look per screen; note any overlap or illegible te
 - [ ] RESAMPLE: UP/DOWN pick the bars, LEFT/RIGHT where the take goes; CLR backs out.
 - [ ] RESAMPLE to FILE, then while the screen says WRITING pick TRK 1 and press OK: `TAKE STILL
       WRITING`, and track 1 keeps its own sample once the write ends.
+- [ ] **Bounce to track.** Track 8 on GRAIN. RESAMPLE, B to `TRK 2`, `TO FILE`, OK, PLAY: after
+      `WRITING` the screen says `PUT ON TRK 8 GRN` and `OK PUTS  CLR KEEPS`. OK: `T8 GRN: TAKE ON`,
+      and track 8 plays the bounce within a second. Again with CLR: `TAKE STAYS A FILE`, and the
+      next OK arms. RIGHT onto a synth track, OK: `Tn NOT SAMPLE/GRAIN`.
 - [ ] Notices (e.g. an octave change) appear on the second line in every mode.
 
 ## 6. Step editing: locks, clearing one lock, the note, undo/redo (6 min)

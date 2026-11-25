@@ -277,6 +277,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | MIXER EQ | `0`, `-20`, `+12`, `KILL` | Band flat, cut, boosted; killed by its switch or a knob at the bottom |
 | SAMPLES | `/SAMPLES/KICKS`, `>K1.WAV`, `LOOPS/`, `NOW K1.WAV`, `3/40 +2` | Folder (or `READING FOLDER`, `NOT FOUND`, `NO CARD`, the load's progress); cursor; a folder; the track's file; position, count, entries left out |
 | RESAMPLE | `TO FILE`, `ARMED`, `REC 40%`, `WRITING`, `LAST name` | Destination and take state |
+| RESAMPLE | `PUT ON TRK 3 GRN`, `OK PUTS  CLR KEEPS`, `T3 GRN: TAKE ON`, `TAKE STAYS A FILE` | A take to FILE is written: OK puts it on that track (LEFT/RIGHT walk it, SAMPLE or GRAIN only), CLR keeps it a file |
 | RESAMPLE | `FROM MASTER`, `FROM LINE NORM`, `IN` / `CLIP` + bar, `MIC NEEDS HEADPHONES`, `INPUT REFUSED` | Take source (MASTER LINE, LINE L, MIC, DYN MIC, HI-Z) and input level (LOW NORM HIGH); the input meter; the mic is silent without headphones; Enaga refused the route |
 
 ## Abbreviations

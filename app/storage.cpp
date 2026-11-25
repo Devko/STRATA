@@ -2410,6 +2410,8 @@ void Storage::finish_take_write() {
         request_sample(track);
         return;
     }
+    // To the file alone: the RESAMPLE screen offers to put it on a track now that it is whole.
+    file_takes_++;
     take_track_ = -1;
     finish_job(nullptr);
 }
