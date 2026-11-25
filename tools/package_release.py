@@ -3,23 +3,19 @@
 
     python3 -B tools/package_release.py v0.1.0                      # build/card -> build/release/
     python3 -B tools/package_release.py v0.1.0 --card D:/sd --out /tmp/rel
-    python3 -B tools/package_release.py v0.1.0 --no-firmware        # APP.ENA only, link to Enaga
     python3 -B tools/package_release.py v0.1.0 --draft              # a trial zip before the notes are final
 
-The card folder is what goes on the SD card for a unit test:
+The card folder is what went on the SD card for the unit test. Only one file is taken from it:
 
-    <card>/SmplTrek.bin                     Enaga's SmplTrek update file
     <card>/ENAGA/APPS/STRATA/APP.ENA        the STRATA app
 
-Only those two files are taken. Anything else on the card (STRATA6, test samples, projects) is
-listed and left out. Both files are checked before anything is written, and the script refuses:
-
-- an APP.ENA that is not an Enaga package, is not named STRATA, was built against another
-  ENAGA_ABI_VERSION than the pinned Enaga's, or whose payload CRC is wrong;
-- a SmplTrek.bin that is not exactly one SYSTEM image from Enaga at the pinned version, for the
-  SmplTrek, with both CRCs right. An official Sonicware update file fails this (its version is
-  3.x and it carries more than one section), and Sonicware's firmware must never be redistributed.
-  So does any file with BOOT or MCU sections.
+The zip never carries firmware. Enaga's SmplTrek.bin (and anything else on the card: STRATA6,
+test samples, projects) is listed and left out; the zip's README.txt links Enaga's own release
+of the pinned version instead, so users install Enaga from its authors and not from a copy of
+ours. The app is checked before anything is written, and the script refuses an APP.ENA that is
+not an Enaga package, is not named STRATA, was built against another ENAGA_ABI_VERSION than the
+pinned Enaga's, or whose payload CRC is wrong. As a last check it reads the finished zip back and
+refuses if any firmware file (*.bin) is in it.
 
 It also refuses while CHANGELOG.md still has a TODO(release), an unfilled {{FIELD}}, or no date,
 unless --draft is given; a draft zip is named ...-draft.zip so it cannot be mistaken for the real one.
@@ -40,12 +36,10 @@ ROOT = Path(__file__).resolve().parents[1]
 ENAGA = ROOT / "third_party" / "enaga"
 APP_NAME = "STRATA"
 APP_PATH = ("ENAGA", "APPS", APP_NAME, "APP.ENA")
-FIRMWARE_NAME = "SmplTrek.bin"
+ENAGA_RELEASES = "https://github.com/seawaffle/enaga/releases/tag/v{e}"
 ZIP_DATE = (2026, 1, 1, 0, 0, 0)
 
 PACKAGE_MAGIC = 0x41474E45          # "ENGA", ENAGA_PACKAGE_MAGIC in <enaga/abi.h>
-SYSTEM_KIND = 3                     # the cmtd descriptor kind for a SYSTEM image
-SMPLTREK_FAMILY = 5                 # tools/sysimage.py DEVICES["smpltrek"]["family"]
 
 
 class Refused(Exception):
@@ -68,15 +62,6 @@ def pinned_firmware_version():
     if not m:
         raise Refused("cannot read VERSION from third_party/enaga/firmware/build.py")
     return tuple(int(n) for n in m.groups())
-
-
-def sysimage():
-    sys.path.insert(0, str(ENAGA / "tools"))
-    try:
-        import sysimage as module      # Enaga's own reader: the CRC seeds live there
-    finally:
-        sys.path.pop(0)
-    return module
 
 
 # --- checks --------------------------------------------------------------------------------
@@ -102,44 +87,13 @@ def check_app(data, abi_version):
     return app_version, name
 
 
-def check_firmware(data, version, si):
-    """Raise Refused unless `data` is one SmplTrek SYSTEM image made by Enaga at `version`."""
-    if len(data) < 84 or data[:4] != b"cmtd" or data[48:52] != b"mmtd":
-        raise Refused(f"{FIRMWARE_NAME} is not a SmplTrek update file")
-    family, descriptors = struct.unpack_from("<II", data, 16)
-    kind = struct.unpack_from("<I", data, 24)[0]
-    file_version = struct.unpack_from("<3I", data, 28)
-    image_version = struct.unpack_from("<3I", data, 48 + 16)
-    if family != SMPLTREK_FAMILY:
-        raise Refused(f"{FIRMWARE_NAME} is for device family {family}, not the SmplTrek")
-    if descriptors != 1 or kind != SYSTEM_KIND:
-        raise Refused(f"{FIRMWARE_NAME} holds {descriptors} image(s), the first of kind {kind}: only one SYSTEM "
-                      "image is allowed (no BOOT or MCU sections; an official Sonicware update is refused here)")
-    if file_version != version or image_version != version:
-        found = ".".join(map(str, file_version))
-        raise Refused(f"{FIRMWARE_NAME} is version {found}, the pinned Enaga is {'.'.join(map(str, version))}"
-                      " (an official Sonicware update file must never be redistributed)")
-    if not si.verify(data, "smpltrek"):
-        raise Refused(f"{FIRMWARE_NAME}'s CRCs are wrong or its size does not match: the file is damaged")
-
-
 # --- the zip -------------------------------------------------------------------------------
 
-def readme_text(release, app_version, firmware, enaga_version):
+def readme_text(release, app_version, enaga_version):
     template = (ROOT / "docs" / "release" / "README.txt").read_text(encoding="utf-8")
-    if firmware:
-        contents = ("  SD-CARD/SmplTrek.bin                   Enaga v{e}, the SmplTrek update file\n"
-                    "  SD-CARD/ENAGA/APPS/STRATA/APP.ENA      the STRATA app").format(e=enaga_version)
-        step1 = ("Copy SD-CARD/SmplTrek.bin to the ROOT of the SD card. Hold HOME (F4) while\n"
-                 "   switching on to reach BOOT MODE, and choose SYSTEM UPDATE.")
-    else:
-        contents = "  SD-CARD/ENAGA/APPS/STRATA/APP.ENA      the STRATA app"
-        step1 = ("Download the SmplTrek zip from Enaga's v{e} release:\n"
-                 "     https://github.com/seawaffle/enaga/releases/tag/v{e}\n"
-                 "   Copy its SmplTrek.bin to the ROOT of the SD card. Hold HOME (F4) while\n"
-                 "   switching on to reach BOOT MODE, and choose SYSTEM UPDATE.").format(e=enaga_version)
     text = (template.replace("{RELEASE}", release).replace("{APP_VERSION}", str(app_version))
-            .replace("{ENAGA}", enaga_version).replace("{CONTENTS}", contents).replace("{STEP1}", step1))
+            .replace("{ENAGA_URL}", ENAGA_RELEASES.format(e=enaga_version))
+            .replace("{ENAGA}", enaga_version))
     left = re.findall(r"\{[A-Z_0-9]+\}", text)
     if left:
         raise Refused(f"docs/release/README.txt has unfilled placeholders: {', '.join(sorted(set(left)))}")
@@ -156,6 +110,11 @@ def build_zip(out_zip, top, files):
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
             z.writestr(info, data)
+    with zipfile.ZipFile(tmp) as z:
+        firmware = [n for n in z.namelist() if n.lower().endswith(".bin")]
+    if firmware:
+        tmp.unlink()
+        raise Refused(f"the zip would carry firmware ({', '.join(firmware)}): STRATA releases never do")
     tmp.replace(out_zip)
 
 
@@ -173,7 +132,7 @@ def check_notes(release, changelog):
     return reasons
 
 
-def package(release, card, out_dir, with_firmware, draft=False, log=print):
+def package(release, card, out_dir, draft=False, log=print):
     if not re.fullmatch(r"v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?", release):
         raise Refused(f"release {release!r} should look like v0.1.0 or v0.1.0-rc1")
     changelog = (ROOT / "CHANGELOG.md").read_bytes()
@@ -187,8 +146,7 @@ def package(release, card, out_dir, with_firmware, draft=False, log=print):
         raise Refused(f"no card folder at {card}")
 
     abi = pinned_abi_version()
-    version = pinned_firmware_version()
-    enaga_version = ".".join(map(str, version))
+    enaga_version = ".".join(map(str, pinned_firmware_version()))
 
     app_file = card.joinpath(*APP_PATH)
     if not app_file.is_file():
@@ -197,27 +155,14 @@ def package(release, card, out_dir, with_firmware, draft=False, log=print):
     app_version, _ = check_app(app, abi)
     log(f"APP.ENA        {len(app):>9} bytes  app version {app_version}, ENAGA_ABI_VERSION {abi}, CRC ok")
 
-    firmware = None
-    if with_firmware:
-        fw_file = card / FIRMWARE_NAME
-        if not fw_file.is_file():
-            raise Refused(f"no {FIRMWARE_NAME} in {card} (or pass --no-firmware)")
-        firmware = fw_file.read_bytes()
-        check_firmware(firmware, version, sysimage())
-        log(f"{FIRMWARE_NAME}   {len(firmware):>9} bytes  Enaga {enaga_version}, one SYSTEM image, CRCs ok")
-
-    taken = {app_file.resolve()} | ({(card / FIRMWARE_NAME).resolve()} if firmware else set())
-    for path in sorted(p for p in card.rglob("*") if p.is_file() and p.resolve() not in taken):
+    for path in sorted(p for p in card.rglob("*") if p.is_file() and p.resolve() != app_file.resolve()):
         log(f"left out      {path.relative_to(card).as_posix()}")
 
     top = f"STRATA-{release}"
-    payload = []
-    if firmware:
-        payload.append((f"SD-CARD/{FIRMWARE_NAME}", firmware))
-    payload.append(("SD-CARD/" + "/".join(APP_PATH), app))
+    payload = [("SD-CARD/" + "/".join(APP_PATH), app)]
     sums = "".join(f"{hashlib.sha256(data).hexdigest()}  {name}\n" for name, data in payload)
 
-    files = [("README.txt", readme_text(release, app_version, firmware is not None, enaga_version).encode())]
+    files = [("README.txt", readme_text(release, app_version, enaga_version).encode())]
     files += payload
     files += [
         ("CHANGELOG.md", changelog),
@@ -225,12 +170,13 @@ def package(release, card, out_dir, with_firmware, draft=False, log=print):
         ("THIRD_PARTY_NOTICES.md", (ROOT / "THIRD_PARTY_NOTICES.md").read_bytes()),
         ("SHA256SUMS.txt", sums.encode()),
     ]
-    suffix = ("" if firmware else "-app-only") + ("-draft" if draft else "")
+    suffix = "-draft" if draft else ""
     out_zip = Path(out_dir) / f"{top}-smpltrek{suffix}.zip"
     build_zip(out_zip, top, files)
     digest = hashlib.sha256(out_zip.read_bytes()).hexdigest()
     (out_zip.parent / (out_zip.name + ".sha256")).write_text(f"{digest}  {out_zip.name}\n")
     log(sums.rstrip())
+    log(f"Enaga          not in the zip: README.txt links {ENAGA_RELEASES.format(e=enaga_version)}")
     log(f"RELEASE OK  {out_zip}  {out_zip.stat().st_size} bytes  sha256 {digest}")
     return out_zip
 
@@ -240,11 +186,10 @@ def main(argv=None):
     ap.add_argument("release", help="the release tag, e.g. v0.1.0")
     ap.add_argument("--card", default=str(ROOT / "build" / "card"), help="the SD-card folder (default build/card)")
     ap.add_argument("--out", default=str(ROOT / "build" / "release"), help="where the zip goes (default build/release)")
-    ap.add_argument("--no-firmware", action="store_true", help="ship APP.ENA only and point to Enaga's release")
     ap.add_argument("--draft", action="store_true", help="package although the changelog is not final")
     args = ap.parse_args(argv)
     try:
-        package(args.release, args.card, args.out, not args.no_firmware, args.draft)
+        package(args.release, args.card, args.out, args.draft)
     except Refused as e:
         print(f"package_release: refused: {e}", file=sys.stderr)
         return 1

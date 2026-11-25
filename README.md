@@ -38,14 +38,19 @@ can keep evolving without stopping.
 
 ## Try it
 
-1. Download the latest zip from [Releases](https://github.com/Devko/STRATA/releases). It holds
-   Enaga 0.2.0's firmware and the STRATA app, laid out for the SD card.
-2. **Install Enaga v0.2.0 once:** copy `SD-CARD/SmplTrek.bin` to the root of the SD card, hold
-   **HOME** while switching on, and choose **SYSTEM UPDATE**.
+1. **Install Enaga once, from Enaga's own release.** Each STRATA release needs one Enaga version,
+   named in its notes and its README.txt: Enaga 0.2.0 for v0.3.1 (the current release), Enaga
+   0.3.0 for the next one. Download the SmplTrek zip from that
+   [Enaga release](https://github.com/seawaffle/enaga/releases), copy its `SmplTrek.bin` to the
+   root of the SD card, hold **HOME** while switching on, and choose **SYSTEM UPDATE**.
+2. Download the STRATA zip from [Releases](https://github.com/Devko/STRATA/releases).
 3. **Copy the app** `SD-CARD/ENAGA/APPS/STRATA/APP.ENA` to `/ENAGA/APPS/STRATA/APP.ENA` on the
    card, and switch on. The factory project plays on PLAY.
 
-Updating STRATA later is step 3 only; your projects stay on the card. An official SmplTrek update
+From the next release on, the STRATA zip holds only the app: Enaga comes from its authors, never
+from us. (v0.1.0 to v0.3.1 also carried a copy of Enaga 0.2.0's `SmplTrek.bin`.)
+
+Updating STRATA later is step 3 only, while the Enaga version stays the same; your projects stay on the card. An official SmplTrek update
 restores the unit completely, because neither Enaga nor STRATA writes the SPI flash.
 [docs/INSTALL.md](docs/INSTALL.md) has the safety checks, switching apps and going back.
 
@@ -99,7 +104,7 @@ default beat loaded the CPU under 30%, and long, heavy play peaked at 84.3% with
 Most of the [unit checklist](docs/UNIT_CHECKLIST.md) is still to be run on the hardware.
 
 `main` has moved on to **Enaga 0.3.0**: a build from it needs the 0.3.0 firmware on the unit, and
-the next release will ship it. [CHANGELOG.md](CHANGELOG.md) lists what is new since v0.3.1.
+the next release will need it (installed from Enaga's own release, as above). [CHANGELOG.md](CHANGELOG.md) lists what is new since v0.3.1.
 
 ## Disclaimer
 

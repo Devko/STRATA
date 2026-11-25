@@ -6,10 +6,12 @@
 > official update file at hand so you can restore the unit.
 
 STRATA runs on [Enaga](https://github.com/seawaffle/enaga), so the unit needs Enaga's firmware
-first and then the STRATA app on the SD card. **The easy way is a release zip** from
-[Releases](https://github.com/Devko/STRATA/releases): it holds both, laid out for the card
-(the matching Enaga `SmplTrek.bin` and `ENAGA/APPS/STRATA/APP.ENA`), with these steps in its
-README.txt. Releases are pre-releases until 1.0. To build `APP.ENA` yourself, see
+first and then the STRATA app on the SD card. Enaga comes from **Enaga's own release**; the
+STRATA release zip from [Releases](https://github.com/Devko/STRATA/releases) holds the app
+(`ENAGA/APPS/STRATA/APP.ENA`, laid out for the card), with these steps in its README.txt. It
+does not carry Enaga's firmware: install that from its authors, not from a copy of ours. (v0.1.0
+to v0.3.1 did include Enaga 0.2.0's `SmplTrek.bin`; the next release no longer does.) Releases
+are pre-releases until 1.0. To build `APP.ENA` yourself, see
 [BUILDING.md](BUILDING.md).
 
 ## Before you install
@@ -33,8 +35,8 @@ Enaga's loader checks only an ABI number, so a mismatch loads and then misbehave
 | v0.1.0 to v0.3.1 (the current release) | [v0.2.0](https://github.com/seawaffle/enaga/releases/tag/v0.2.0) |
 | a build from `main`, and the next release | [v0.3.0](https://github.com/seawaffle/enaga/releases/tag/v0.3.0) |
 
-1. Take `SD-CARD/SmplTrek.bin` from the STRATA release zip (byte for byte the file in Enaga's
-   own zip), or download the SmplTrek zip from the Enaga release in the table.
+1. Download the SmplTrek zip from the Enaga release in the table (`enaga-v0.3.0-smpltrek.zip`
+   for v0.3.0), and take `SmplTrek.bin` from it.
 2. Copy it to the **root** of the SD card as `SmplTrek.bin` (Enaga's README, "Installing", has
    the details).
 3. Hold **HOME** while switching on to reach BOOT MODE, and choose **SYSTEM UPDATE**.

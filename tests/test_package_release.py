@@ -3,8 +3,8 @@
 
     python3 -B tests/test_package_release.py
 
-Builds fake card folders in a temporary directory: a firmware file made by Enaga's own
-sysimage.wrap(), and an APP.ENA with a real package header and CRC.
+Builds fake card folders in a temporary directory: an APP.ENA with a real package header and
+CRC, and, as the unit-test card has one, an Enaga SmplTrek.bin that must never reach the zip.
 """
 import hashlib
 import struct
@@ -19,8 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import package_release as pr  # noqa: E402
 
-SI = pr.sysimage()
 VERSION = pr.pinned_firmware_version()
+FIRMWARE = b"cmtd" + b"\0" * 8188      # stands in for Enaga's SmplTrek.bin; never read, only left out
 ABI = pr.pinned_abi_version()
 
 
@@ -28,10 +28,6 @@ def make_app(name="STRATA", abi=ABI, payload=b"\x01\x02\x03\x04" * 64, app_versi
     header = struct.pack("<10I", pr.PACKAGE_MAGIC, 64, abi, 0xC1000000, len(payload), 128, 0,
                          zlib.crc32(payload) if crc is None else crc, app_version, 0)
     return header + name.encode().ljust(24, b"\0") + payload
-
-
-def make_firmware(version=VERSION, device="smpltrek"):
-    return SI.wrap(version, 0xC0000000, [(0xC0000000, b"\0" * 8192)], device)
 
 
 def silent(*_):
@@ -54,12 +50,12 @@ class PackageRelease(unittest.TestCase):
         path.write_bytes(data)
 
     def good_card(self):
-        self.put("SmplTrek.bin", make_firmware())
+        self.put("SmplTrek.bin", FIRMWARE)
         self.put("ENAGA/APPS/STRATA/APP.ENA", make_app())
 
     def package(self, **kw):
         kw.setdefault("draft", True)
-        return pr.package("v0.1.0", self.card, self.out, kw.pop("with_firmware", True), log=silent, **kw)
+        return pr.package("v0.1.0", self.card, self.out, log=kw.pop("log", silent), **kw)
 
     def refused(self, text, **kw):
         with self.assertRaises(pr.Refused) as cm:
@@ -76,21 +72,21 @@ class PackageRelease(unittest.TestCase):
             names = z.namelist()
             self.assertEqual(names, [
                 "STRATA-v0.1.0/README.txt",
-                "STRATA-v0.1.0/SD-CARD/SmplTrek.bin",
                 "STRATA-v0.1.0/SD-CARD/ENAGA/APPS/STRATA/APP.ENA",
                 "STRATA-v0.1.0/CHANGELOG.md",
                 "STRATA-v0.1.0/LICENSE.txt",
                 "STRATA-v0.1.0/THIRD_PARTY_NOTICES.md",
                 "STRATA-v0.1.0/SHA256SUMS.txt",
             ])
-            self.assertEqual(z.read(names[1]), make_firmware())
-            self.assertEqual(z.read(names[2]), make_app())
+            self.assertEqual(z.read(names[1]), make_app())
             readme = z.read(names[0]).decode()
             self.assertIn("STRATA v0.1.0", readme)
             self.assertIn("Enaga " + ".".join(map(str, VERSION)), readme)
+            self.assertIn("https://github.com/seawaffle/enaga/releases/tag/v" + ".".join(map(str, VERSION)), readme)
             self.assertNotIn("{", readme)
             self.assertIn("\r\n", readme)
-            sums = z.read(names[6]).decode()
+            sums = z.read(names[5]).decode()
+            self.assertEqual(sums.count("\n"), 1)
             self.assertIn(hashlib.sha256(make_app()).hexdigest() + "  SD-CARD/ENAGA/APPS/STRATA/APP.ENA", sums)
         self.assertTrue((self.out / (out.name + ".sha256")).is_file())
 
@@ -107,53 +103,30 @@ class PackageRelease(unittest.TestCase):
         with zipfile.ZipFile(self.package()) as z:
             self.assertFalse(any("STRATA6" in n or "DATA" in n for n in z.namelist()))
 
-    def test_app_only_needs_no_firmware(self):
-        self.put("ENAGA/APPS/STRATA/APP.ENA", make_app())
-        out = self.package(with_firmware=False)
-        self.assertEqual(out.name, "STRATA-v0.1.0-smpltrek-app-only-draft.zip")
-        with zipfile.ZipFile(out) as z:
-            self.assertFalse(any(n.endswith(".bin") for n in z.namelist()))
-            self.assertIn("releases/tag/v", z.read("STRATA-v0.1.0/README.txt").decode())
+    def test_the_firmware_on_the_card_is_left_out(self):
+        self.good_card()
+        logged = []
+        with zipfile.ZipFile(self.package(log=logged.append)) as z:
+            self.assertFalse(any(n.lower().endswith(".bin") for n in z.namelist()))
+            self.assertFalse(any(FIRMWARE == z.read(n) for n in z.namelist()))
+        self.assertIn("left out      SmplTrek.bin", logged)
+
+    def test_a_card_without_firmware_packages_the_same(self):
+        self.good_card()
+        with_bin = self.package().read_bytes()
+        (self.card / "SmplTrek.bin").unlink()
+        self.assertEqual(self.package().read_bytes(), with_bin)
+
+    def test_a_zip_that_would_carry_firmware_is_refused(self):
+        with self.assertRaises(pr.Refused) as cm:
+            pr.build_zip(self.out / "x.zip", "STRATA-v0.1.0", [("SD-CARD/SmplTrek.bin", FIRMWARE)])
+        self.assertIn("never", str(cm.exception))
+        self.assertFalse(any(self.out.iterdir()))
 
     # --- refused ----------------------------------------------------------------------------
 
-    def test_an_official_sonicware_version_is_refused(self):
-        self.good_card()
-        self.put("SmplTrek.bin", make_firmware(version=(3, 2, 174)))
-        self.refused("must never be redistributed")
-
-    def test_a_file_with_more_than_one_image_is_refused(self):
-        self.good_card()
-        fw = bytearray(make_firmware())
-        struct.pack_into("<I", fw, 20, 2)                  # descriptor count
-        self.put("SmplTrek.bin", bytes(fw))
-        self.refused("no BOOT or MCU")
-
-    def test_a_non_system_image_is_refused(self):
-        self.good_card()
-        fw = bytearray(make_firmware())
-        struct.pack_into("<I", fw, 24, 1)                  # descriptor kind
-        self.put("SmplTrek.bin", bytes(fw))
-        self.refused("no BOOT or MCU")
-
-    def test_another_devices_update_is_refused(self):
-        self.good_card()
-        self.put("SmplTrek.bin", make_firmware(device="lofi12xt"))
-        self.refused("not the SmplTrek")
-
-    def test_a_damaged_firmware_is_refused(self):
-        self.good_card()
-        fw = bytearray(make_firmware())
-        fw[200] ^= 0xFF
-        self.put("SmplTrek.bin", bytes(fw))
-        self.refused("CRCs are wrong")
-
-    def test_a_missing_firmware_is_refused(self):
-        self.put("ENAGA/APPS/STRATA/APP.ENA", make_app())
-        self.refused("no SmplTrek.bin")
-
     def test_a_missing_app_is_refused(self):
-        self.put("SmplTrek.bin", make_firmware())
+        self.put("SmplTrek.bin", FIRMWARE)
         self.refused("no ENAGA/APPS/STRATA/APP.ENA")
 
     def test_a_test_build_under_strata_is_refused(self):
@@ -184,7 +157,7 @@ class PackageRelease(unittest.TestCase):
     def test_a_bad_release_name_is_refused(self):
         self.good_card()
         with self.assertRaises(pr.Refused):
-            pr.package("0.1", self.card, self.out, True, draft=True, log=silent)
+            pr.package("0.1", self.card, self.out, draft=True, log=silent)
 
     # --- the notes gate ---------------------------------------------------------------------
 
