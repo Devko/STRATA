@@ -16,6 +16,15 @@ the project file format or the controls.
 
 ### Added
 
+- **Hear a sample before you load it.** In the sample browser (SAMPLES), **push A** plays the
+  file under the cursor, whole and from its start, straight to the output at about -6 dB; push A
+  again stops it. While one plays, UP/DOWN (or turning A) hears the next file the cursor lands
+  on, so a folder can be listened through before anything changes in the track. OK still loads,
+  and stops the audition; CLR, another folder or leaving SAMPLES stops it too. The file is
+  streamed from the card, so a long stem starts as quickly as a hi-hat and takes no sample
+  memory; it plays at its own rate (44.1 kHz stays in tune), is never recorded by RESAMPLE, the
+  looper or beat repeat, and works with the beat playing or stopped. The line under the title
+  says `HEARING 3/12S`, and a line under the file grows as it plays. 0.28 MiB of RAM.
 - **LIVE RND (P1, the live half).** In PERFORM, FUNC + turn D shuffles every armed track's steps
   in random blocks of 1, 2, 4, 8 or 16, a new pick every pass (`LIVE RND4 8 TRK`); FUNC + push D
   takes the selected track out or back in, so the kick can hold while the rest jumps. The same

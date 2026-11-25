@@ -176,7 +176,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | MACHINE | Machine | Machine column (3 over) | Track | Step page | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES; drums and synths: open SOUNDS / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | — | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
 | MIXER | — | Page (12) | Page | Step page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode | — / clear | Copy / paste |
-| SAMPLES | Entry | Page of 8 | Page of 8 | — | A: entry | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
+| SAMPLES | Entry | Page of 8 | Page of 8 | — | A: entry; push A: hear the file / stop | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
 | SOUNDS | Entry | First / last entry | Track | — | A: entry | Load into the track (AS WAS: put yours back) / back | — |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | Step page | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Page: PROJECT CHAIN PATTERN SETUP PROJECTS | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | — (FUNC menu) |
@@ -241,7 +241,8 @@ into an empty slot at once, and over a stored kit on a second press (AGAIN TO OV
 live in `/ENAGA/DATA/STRATA/KITS/KIT_01.BIN` ... `KIT_16.BIN`. A recalled kit makes the project
 UNSAVED until it is saved with FUNC+HOME, OK.
 **SAMPLES:** one OK loads the file into the track at once, the beat keeps playing and the cursor
-stays, so DOWN, OK tries the next. The top level holds `SAMPLES/` and `RECORD/`, and on a card with the stock firmware's folders also
+stays, so DOWN, OK tries the next. **Push A hears the file first** without loading it, whole
+from its start (`HEARING 3/12S`); while it plays, UP/DOWN hears the next; push A again stops. The top level holds `SAMPLES/` and `RECORD/`, and on a card with the stock firmware's folders also
 `POOL/` (`/SmplTrek/Pool/Audio`) and `SMPLTREK/` (the whole `/SmplTrek` tree, stock projects included). Only WAVs and
 folders are listed (no `._` files), at most 256 a folder. Picking a file makes the project UNSAVED.
 **MIDI out:** a track with a MIDI OUT channel (MACHINE, encoder B) sends every note it plays

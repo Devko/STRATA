@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W36, about 100 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W37, about 104 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -429,6 +429,22 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 - RND4 on, hold FUNC + MUTATE (a lock), turn it OFF, tap FUNC + MUTATE: the shuffle is back; tap
   again: OFF again. `____`
 - MAX with RND1 on all eight against the default beat alone: `________ %`
+
+**W37. Hear a sample before loading it (4 min).** Put a few WAVs in `/SAMPLES` first: a short
+hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
+- Lower pad 8 (SAMPLE), EDIT, OK: SAMPLES. DOWN to the hit, **push A**: `HEARING`, and the hit
+  plays at once, whole. The line under the title says `HEARING 0/0S`, then the folder again. The
+  `NOW` line and the track did not change. `____`
+- DOWN to the 44.1 kHz loop, push A: it plays in tune and at its tempo, a line growing under its
+  name. While it plays press DOWN: the next file plays instead, no click, no gap worth a note.
+  Push A: `STOPPED`, a short fade. `____`
+- The long stem, push A: how long before it sounds? `________` (it should be as quick as the
+  hit). Let it run 20 s: no dropouts, `HEARING 20/..S`. `____`
+- PLAY the beat, and hear files over it: the audition sits about 6 dB under full scale, not
+  through the master effects or beat repeat. Too loud or too quiet against A01? `________`
+- While one plays: OK loads it into track 8 (`LOADING`) and the audition stops; CLR, a folder,
+  or HOME stop it too. FUNC + push A is still the kill EQ. `____`
+- MAX while hearing the long stem over A01: `________ %` (it should add about 2 points at most).
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
@@ -1294,6 +1310,8 @@ New 2026-11-22. Put a few WAVs in `/SAMPLES` on the card first (the two test fil
 - [ ] Reopen the browser: it starts in the track's folder with the cursor on its file.
 - [ ] PROJECT says `UNSAVED`; save, reload (the menu's RELOAD PROJECT, OK twice): track 8 has the picked file.
 - [ ] A folder of many files: listing time `________` (about how long `READING FOLDER` shows).
+- [ ] Push A on a file: it is heard without loading (W37). On a folder: `A HEARS FILES`. On a
+      file that is not a WAV: `NOT A WAV`. Pull the card while one plays: it stops, nothing hangs.
 
 ## 15c. A long stem (4 min)
 
