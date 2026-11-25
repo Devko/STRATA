@@ -3445,7 +3445,9 @@ TEST(storage_the_later_of_new_and_reload_is_the_one_that_happens) {
 }
 
 TEST(storage_a_take_the_card_cannot_hold_is_reported_and_its_buffer_given_back) {
-    // Two places a take write can fail: making /RECORD, and the save into it. Both report the
+    // Two cases of a take write failing: with no /RECORD yet (the open makes it), and with the
+    // folder there. Never make_folder("/RECORD") itself: Enaga refuses the area's own folder
+    // (tests/fakehost.cpp, write_check), which failed every take. Both report the
     // card's reason, and both give the buffer back to the audio side -- nothing else can, and a
     // take wedged in it would refuse every resample after it (dsp/capture.hpp). A failed save
     // must not land the take in a track either: the kit would name a file that is not there.
@@ -3463,7 +3465,7 @@ TEST(storage_a_take_the_card_cannot_hold_is_reported_and_its_buffer_given_back) 
     };
     host.set_running(true);
 
-    // No /RECORD and a full card: the folder cannot be made.
+    // No /RECORD and a full card: the open cannot make it.
     record_a_bar(384);
     host.set_full(true);
     CHECK(storage().request_resample_write());
@@ -3473,7 +3475,8 @@ TEST(storage_a_take_the_card_cannot_hold_is_reported_and_its_buffer_given_back) 
 
     // /RECORD exists and the card is full: the save itself fails.
     host.set_full(false);
-    CHECK(enaga::files::make_folder("/RECORD") >= 0);
+    CHECK(enaga::files::make_folder("/RECORD") == ENAGA_FILE_DENIED);   // as on the unit
+    CHECK(host.seed_folder("/RECORD"));
     host.set_full(true);
     const char before = e.project().kit.tracks[kLoopTrack].sample[0];
     record_a_bar(768);

@@ -4850,13 +4850,13 @@ TEST(ui_samples_reach_the_smpltrek_pool_and_projects) {
     // A card laid out by the stock SmplTrek firmware, with no /SAMPLES: its manual puts samples
     // in SmplTrek/Pool/Audio and each project's in SmplTrek/Project/<name>/Audio.
     Strata &app = fresh();
-    // Seeded as a PC would lay it out (the fake does not refuse a write outside the app's areas,
-    // and lists only the folders made, as FatFs has them).
+    // Seeded as a PC would lay it out: outside the app's write areas, so past the fake's write
+    // rule (seed_folder), and it lists only the folders made, as FatFs has them.
     const char *const folders[] = {"/SmplTrek", "/SmplTrek/Pool", "/SmplTrek/Pool/Audio",
                                    "/SmplTrek/Preset", "/SmplTrek/Project",
                                    "/SmplTrek/Project/SONG1", "/SmplTrek/Project/SONG1/Audio",
                                    "/RECORD"};
-    for (const char *f : folders) enaga::files::make_folder(f);
+    for (const char *f : folders) FakeHost::the().seed_folder(f);
     card_wav("/SmplTrek/Pool/Audio/Kick 01.wav");
     card_wav("/SmplTrek/Pool/Audio/Snare.wav", 960);
     card_wav("/SmplTrek/Project/SONG1/Audio/Vox.wav");

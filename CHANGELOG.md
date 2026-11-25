@@ -34,6 +34,13 @@ the project file format or the controls.
   over FX GLIDE while the STEP is held and rides out on release. A quick tap still picks; the
   picked slot's own STEP now lets go on the release.
 
+### Fixed
+
+- **RESAMPLE takes reach the card.** Every take failed with `DENIED` before it was written: STRATA
+  made the folder `/RECORD` first, and Enaga only allows writes strictly inside it. The file's
+  own open makes the folder now. Found by the new bounce scenario in the emulator; the host tests'
+  fake card had allowed it.
+
 ### Gestures that moved
 
 One home per job (backlog D1, D2, D5). Old projects open unchanged: no file holds a mixer slot.

@@ -933,6 +933,17 @@ void Storage::finish_job(const char *error) {
         }
     }
 
+    // A RESAMPLE take's write, the same: `take written` or `take failed <why>`.
+    if (job_ == Job::take_write) {
+        char line[40];
+        char *out = line;
+        const char *end = line + 36;
+        append_text(out, error != nullptr ? "take failed " : "take written", end);
+        if (error != nullptr) append_text(out, error, end);
+        *out = '\0';
+        enaga::log(line);
+    }
+
     // The kit library's two writes and reads get a line too, for the same reason: a scenario can
     // see nothing else of them. The scan does not -- sixteen passes of it would be noise.
     if (job_ == Job::kit_save || job_ == Job::kit_load) {
@@ -2321,11 +2332,9 @@ void Storage::step_take_write() {
         *out = '\0';
     }
 
-    const int32_t made = enaga::files::make_folder("/RECORD");
-    if (made < 0) {
-        end_take_write(enaga::files::error_name(made));
-        return;
-    }
+    // No make_folder("/RECORD"): Enaga writes only strictly INSIDE /RECORD, so naming the folder
+    // alone is DENIED (firmware/kernel/files.c, check_write): every take failed in the emulator,
+    // and would on the unit. The open below makes its parents, as the firmware's files_open does.
 
     // No copy. dsp/capture.hpp reserves the 44 header bytes IN FRONT of the audio for exactly
     // this: the header goes into them and the file is that one buffer from start to end,
