@@ -276,6 +276,12 @@
     // samples by ear is what this is for, so the cursor stays where it is and the next OK tries
     // the next file. Nothing is lost that cannot be picked again, which is why it takes one
     // press and the kit browser's recall takes two.
+    //
+    // Push A HEARS the file under the cursor without loading it (dsp/audition.hpp): streamed
+    // from the card, whole, from its start, straight to the output. Push A again stops it.
+    // While one is heard, UP/DOWN, A and the pages hear the next file the cursor lands on, so a
+    // folder can be listened through before anything changes in the track. OK, CLR, another
+    // folder or leaving SAMPLES stops it.
 
     static constexpr int kSampleRows = 8;
     // SAMPLES shows one fewer: the waveform of what the track plays sits under the list.
@@ -336,6 +342,7 @@
     // List `folder` and put the cursor on `select` once the list is in ("" for the top, or for
     // the track's own file when the folder is the one it lives in).
     void browse_to(const char *folder) {
+        stop_audition();
         storage_.request_browse(folder);
         sample_cursor_ = 0;
         sample_seek_ = true;
@@ -345,7 +352,34 @@
 
     void move_sample_cursor_to(int index) {
         const int count = storage_.browse_list().count();
+        const int was = sample_cursor_;
         sample_cursor_ = index < 0 ? 0 : (index >= count ? (count > 0 ? count - 1 : 0) : index);
+        // Listening through a folder: the next entry is heard as the cursor lands on it.
+        if (sample_cursor_ != was && storage_.auditioning()) audition_cursor();
+    }
+
+    // Hear the entry under the cursor: a file is streamed (Storage::request_audition), a folder
+    // stops whatever plays. False when there is nothing to hear there.
+    bool audition_cursor() {
+        const SampleList &list = storage_.browse_list();
+        if (storage_.browsing() || list.count() == 0 || list.is_folder(sample_cursor_)) {
+            stop_audition();
+            return false;
+        }
+        char path[kSamplePathBytes];
+        if (!list.path_of(sample_cursor_, path, int(sizeof path)) ||
+            !storage_.request_audition(path)) {
+            stop_audition();
+            notice("PATH TOO LONG");
+            return false;
+        }
+        audition_row_ = sample_cursor_;
+        return true;
+    }
+
+    void stop_audition() {
+        storage_.stop_audition();
+        audition_row_ = -1;
     }
 
     // Once a listing is in, the cursor goes to what we were looking for: the folder we came up
@@ -385,6 +419,8 @@
                     notice("PATH TOO LONG");
                     return true;
                 }
+                // The track has it now: the audition makes way.
+                stop_audition();
                 if (!plays_files(selected_)) {
                     notice("SMP OR GRN ONLY");
                 } else if (!storage_.card_usable()) {
@@ -407,6 +443,7 @@
 
             case ENAGA_KEY_CLR: {
                 if (shift_) return false;               // F1 + CLR is undo
+                stop_audition();
                 if (list.at_root()) {
                     mode_ = samples_return_;            // back, where the browser came from
                     leave_mode();
@@ -460,6 +497,24 @@
             case ENAGA_KEY_OCTAVE_RIGHT:
                 return !shift_;                         // FUNC: the track's length, as anywhere
 
+            // Push A: hear the file under the cursor, or stop hearing it. FUNC + push A is the
+            // kill EQ's, taken before this (ui_input.hpp).
+            case ENAGA_KEY_PUSH_A:
+                if (shift_) return false;
+                if (storage_.auditioning()) {
+                    stop_audition();
+                    notice("STOPPED");
+                } else if (storage_.browsing() || list.count() == 0) {
+                    // Nothing listed yet.
+                } else if (list.is_folder(sample_cursor_)) {
+                    notice("A HEARS FILES");
+                } else if (!storage_.card_usable()) {
+                    notice("NO CARD");
+                } else if (audition_cursor()) {
+                    notice("HEARING");
+                }
+                return true;
+
             default:
                 return false;
         }
@@ -487,6 +542,17 @@
             append_shown(out, storage_.browse_error(), kLineChars);
         } else if (busy != nullptr && storage_.loading_track() == selected_) {
             append(out, busy);
+        } else if (storage_.auditioning()) {
+            // What is heard, in whole seconds: `HEARING 3/12S`, or `OPENING` until it sounds.
+            if (storage_.audition_sounding()) {
+                append(out, "HEARING ");
+                append_number(out, storage_.audition_elapsed());
+                *out++ = '/';
+                append_number(out, storage_.audition_seconds());
+                *out++ = 'S';
+            } else {
+                append(out, "OPENING");
+            }
         } else if (list.at_root()) {
             append(out, "CARD");
         } else {
@@ -513,6 +579,13 @@
             if (folder) *out++ = '/';
             *out = 0;
             canvas.text(0, 37 + i * 8, line, at == sample_cursor_ ? 15 : (folder ? 11 : 9));
+            // The entry being heard: a line under its name, as long as the part already heard.
+            if (at == audition_row_ && storage_.audition_sounding()) {
+                const uint32_t total = storage_.audition_frames();
+                const uint32_t now = engine_.status().audition_frame.load(std::memory_order_relaxed);
+                const int width = total == 0u ? 0 : int(uint64_t(now > total ? total : now) * 122u / total);
+                canvas.rect(6, 37 + i * 8 + 7, width < 1 ? 1 : width, 1, 13);
+            }
         }
 
         // What the track plays now, as a strip of its waveform (rows 93-101), then by name.
@@ -535,9 +608,9 @@
                 append(out, " +");
                 append_number(out, uint32_t(list.skipped()));
             }
-            append(out, "  ");
+            append(out, " ");
         }
-        append(out, "OK LOAD CLR UP");
+        append(out, storage_.auditioning() ? "A STOP OK LOAD" : "A HEAR OK LOAD");
         *out = 0;
         canvas.text(0, 112, line, 7);
     }
