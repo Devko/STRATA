@@ -244,6 +244,38 @@
         notice_logged(notice_buffer_);
     }
 
+    // LIVE RND's notice, logged so a scenario can follow it: `LIVE RND4 8 TRK` (the unit and how
+    // many tracks it moves), `LIVE RND OFF` at rest.
+    void live_rnd_notice() {
+        char *out = notice_buffer_;
+        append(out, "LIVE ");
+        if (rnd_unit_ == kLiveRndOff) {
+            append(out, "RND OFF");
+        } else {
+            append(out, live_rnd_name(rnd_unit_));
+            *out++ = ' ';
+            append_number(out, uint32_t(live_rnd_count(rnd_armed_)));
+            append(out, " TRK");
+        }
+        *out = 0;
+        notice_logged(notice_buffer_);
+    }
+
+    // FUNC + push D in PERFORM: track `track` in or out of LIVE RND (`T3 RND OUT 7 TRK`).
+    void live_rnd_arm(int track) {
+        rnd_armed_ = uint8_t(rnd_armed_ ^ (1u << track));
+        post(Cmd::set_live_rnd, 0, 0, rnd_unit_, rnd_armed_);
+        const bool in = ((rnd_armed_ >> track) & 1u) != 0;
+        char *out = notice_buffer_;
+        *out++ = 'T';
+        append_number(out, uint32_t(track) + 1);
+        append(out, in ? " RND IN " : " RND OUT ");
+        append_number(out, uint32_t(live_rnd_count(rnd_armed_)));
+        append(out, " TRK");
+        *out = 0;
+        notice_logged(notice_buffer_);
+    }
+
     // What MACRO LEARN shows while it waits: the macro, its count, and what to do.
     void learn_notice() {
         if (macro_learn_ < 0) return;
@@ -319,7 +351,9 @@
                        int(macro_position_[m]), targets != 0);
         }
 
-        // REL ALL and LEN ALL where they are, or the gesture while both are at rest.
+        // REL ALL, LEN ALL and LIVE RND where they are, or the gesture while all are at rest.
+        // At most "REL -64 LEN 400% R16", 20 characters.
+        const uint8_t rnd = engine_.live_rnd_unit();
         if (engine_.rel_all() != 0 || engine_.len_all() != 0) {
             out = line;
             append(out, "REL ");
@@ -327,14 +361,28 @@
             append(out, " LEN ");
             append_number(out, uint32_t(len_all_percent(engine_.len_all())));
             *out++ = '%';
+            if (rnd != kLiveRndOff) {
+                append(out, " R");
+                append(out, live_rnd_name(rnd) + 3);           // "RND4" -> "4"
+            }
+            *out = 0;
+            canvas.text(0, 78, line, 12);
+        } else if (rnd != kLiveRndOff) {
+            out = line;
+            append(out, "LIVE ");
+            append(out, live_rnd_name(rnd));
+            append(out, " FUNC+D");
             *out = 0;
             canvas.text(0, 78, line, 12);
         } else {
             canvas.text(0, 78, "FUNC+A/B REL/LEN ALL", 7);
         }
         // Every track's level while the beat plays; stopped, where AUTO-FILL lives.
-        if (running) draw_track_meters(canvas, 86);
-        else canvas.text(0, 87, "AUTOFILL: FUNC MENU", 7);
+        if (running) {
+            draw_track_meters(canvas, 86, rnd != kLiveRndOff ? engine_.live_rnd_armed() : 0);
+        } else {
+            canvas.text(0, 87, "AUTOFILL: FUNC MENU", 7);
+        }
 
         // What MUTATE will do, and to which track.
         out = line;

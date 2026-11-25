@@ -283,6 +283,14 @@
         // notes. Two letters, so they cannot be read as the repeat rate's R1/16.
         if (engine_.rel_all() != 0) add(engine_.rel_all() < 0 ? "RL-" : "RL+");
         if (engine_.len_all() != 0) add(engine_.len_all() < 0 ? "LN-" : "LN+");
+        // LIVE RND on: its unit, "RN4". Not "R4", which the repeat rate could be read as.
+        if (engine_.live_rnd_unit() != kLiveRndOff) {
+            p = part;
+            append(p, "RN");
+            append(p, live_rnd_name(engine_.live_rnd_unit()) + 3);
+            *p = 0;
+            add(part);
+        }
         if (engine_.status().looper_state.load(std::memory_order_relaxed) != 0) add("LP");
         *out = 0;
         return out != line;

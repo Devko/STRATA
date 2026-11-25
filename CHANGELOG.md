@@ -23,6 +23,12 @@ the project file format or the controls.
   `/` on the lock line). A plain push with the STEP held still clears the parameter, range and
   slide included. Both are stored in the lock itself, so patterns keep their format; an older
   build ignores a range and a sliding lock.
+- **LIVE RND (P1, the live half).** In PERFORM, FUNC + turn D shuffles every armed track's steps
+  in random blocks of 1, 2, 4, 8 or 16, a new pick every pass (`LIVE RND4 8 TRK`); FUNC + push D
+  takes the selected track out or back in, so the kick can hold while the rest jumps. The same
+  draw as TRACK PLAY's RND modes, over each track's own mode while on; the pattern is never
+  written, so OFF is the programmed beat again at once. Not saved, held by a LOCK, shown as
+  `LIVE RND4 FUNC+D` on PERFORM, a dot under each armed track's meter and `RN4` on line 2.
 - **Live screens, part 4: the LFO page shows its LFO.** While an LFO runs, EDIT's LFO page draws
   one cycle of its shape with a dot riding it at the LFO's phase, and a strip of what it put out
   over the last two seconds. Under every envelope (AMP, ASR, FLTR) a dim fill, lit under the part

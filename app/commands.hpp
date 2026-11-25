@@ -326,6 +326,11 @@ enum class Cmd : uint8_t {
     // 1 LEN ALL; b: the amount as an int8, -64 .. 64, absolute (the UI keeps the position, as it
     // does a macro's). Performance, not edits: no file, no undo; a LOCK holds both.
     set_move_all,
+    // LIVE RND (core/liverand.hpp), PERFORM's FUNC + turn D (the unit) and FUNC + push D (the
+    // armed set). a: the unit, 0 OFF .. 5 RND16; b: the armed tracks, bit t = track t. Both
+    // absolute; the UI keeps them, as it does REL ALL. Performance, not edits: no file, no undo;
+    // a LOCK holds both.
+    set_live_rnd,
 
     count
 };

@@ -1137,6 +1137,30 @@ While either is away from rest, PERFORM's line under the macros shows both (`REL
 and line 2 says `RL-` / `RL+` and `LN-` / `LN+`. Neither is saved or undone, like a macro's position;
 a LOCK holds them, so a jump puts them back where they were.
 
+### LIVE RND: shuffle the beat from PERFORM
+
+**FUNC + turn D in PERFORM is LIVE RND**: OFF, then RND 1, 2, 4, 8 and 16, a click each, stopping
+at both ends (`LIVE RND4 8 TRK`). While it is on, every armed track plays its pattern in random
+blocks of that many steps, picked afresh every pass: RND 1 scatters single hits, RND 4 shuffles
+the beats of a bar, RND 16 shuffles whole bars of a long track. Inside a block the steps keep their
+order, so the groove stays on the grid and a hat still sits on its offbeat.
+
+**FUNC + push D takes the selected track out of LIVE RND**, or puts it back (`T1 RND OUT 7 TRK`).
+All eight are in at the start. The usual move: select the kick (lower pad 1), FUNC + push D, and
+the four-on-the-floor holds while everything else jumps around it.
+
+It is the same shuffle as the FUNC menu's TRACK PLAY row (RND1-RND16), but for many tracks at
+once and only while it is on: the pattern is never changed, so **turning back to OFF puts every
+track on its own steps at once**, exactly as programmed, in time. A track's own TRACK PLAY mode
+comes back with it. The shuffle is seeded from the pattern, so the same pattern shuffles the same
+way every time you play it.
+
+While it is on, PERFORM's line under the macros reads `LIVE RND4 FUNC+D` (or ends `R4` beside
+REL ALL and LEN ALL), the track meters mark the armed tracks with a dot, and line 2 says `RN4`.
+LIVE RND is not saved or undone; a LOCK holds the unit and which tracks are in, so a jump brings
+back the shuffle you stored, and the swap-back the one you had. A hit recorded while it is on goes
+on the step that was sounding.
+
 ### Beat repeat, throws and auto-fill
 
 REPEAT loops the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the finished master while held;
@@ -1221,7 +1245,7 @@ over the old one.
 
 A lock holds the pattern whole (steps, locks, conditions, lengths, swing), every track's sound
 (all eight EDIT pages) and fader, the sends and the master, the mutes, and where the morph and
-the four macros are, and REL ALL and LEN ALL (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
+the four macros are, REL ALL and LEN ALL, and LIVE RND (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
 switch brings back the parameters only), the tempo, the kill EQ's switches, the scenes or the
 macro setup, the stored mute states or the chain. The performance mixer is not in it either: a
 jump rides the picked effect back to 0 over FX GLIDE and leaves a loop playing.

@@ -595,6 +595,8 @@ const Expect kTable[] = {
     {Cmd::set_pattern_feel, kDirtyBank, "set_pattern_feel"},
     // REL ALL and LEN ALL are where the hands are, like a macro's position: no file.
     {Cmd::set_move_all, 0u, "set_move_all"},
+    // LIVE RND is a performance move: no file (core/liverand.hpp).
+    {Cmd::set_live_rnd, 0u, "set_live_rnd"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:

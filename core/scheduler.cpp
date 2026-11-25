@@ -48,6 +48,7 @@
 #include "scheduler.hpp"
 
 #include "clamp.hpp"
+#include "liverand.hpp"
 
 namespace strata {
 
@@ -363,8 +364,8 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
 
         // The play mode and its seed are read fresh too, for the same reason: an undo or a
         // mutation that changes them must be heard on the next step, configure() or not.
-        state.timing.play =
-            source.play < uint8_t(PlayMode::count) ? PlayMode(source.play) : PlayMode::fwd;
+        // LIVE RND (core/liverand.hpp), PERFORM's FUNC + D, overrides it on an armed track.
+        state.timing.play = live_play_mode(source.play, perform.rnd_unit, perform.rnd_armed, t);
         // Only the RND modes draw, so only they pay for the hash.
         state.timing.play_seed =
             state.timing.play >= PlayMode::rnd1 ? play_seed(pattern_seed_, t) : 0u;
