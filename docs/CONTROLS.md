@@ -261,14 +261,35 @@ and not in KEYS, where the upper pads are the piano. `core/stepedit.hpp` has the
 | SCENE A / B, THROW | nothing yet: they perform (and drop the hold), as before | |
 
 Pad first is unchanged: FILL held + tap STEP writes a FILL trig, a scene pad held + STEP picks
-the scene, MUTE MODE on makes STEP 1-8 the mute states.
+the scene, MUTE MODE on makes STEP 1-8 the mute states, REPEAT held + STEP stutters (below).
+
+## REPEAT: beat repeat, step stutter and the rate
+
+CyDrums' P2 and P3 (2026-11-25). One rate serves three things: beat repeat (the audio), note
+repeat (a rolling lower pad) and step stutter (the sequencer). It is 1/16 at boot and not saved.
+
+| Gesture | Does |
+| --- | --- |
+| Hold REPEAT | Beat repeat: the last 1/16 (the rate) of the finished master loops while held. FUNC at the press: pitched down |
+| Hold REPEAT, then hold STEP n | **Step stutter**: every track retriggers its step n at the rate, from the press and then on the beat grid (`STUTTER 5 1/16`). The beat repeat gives way for the rest of the hold: the stutter plays live sound, so filters, LFOs, sends and tails keep moving. A step past a short track's length wraps into it; an empty step is silence for that track. The sequencer runs on silently underneath, so letting go lands back in the beat (`STUTTER OFF`). Played, not recorded; nothing is toggled or undone |
+| ... FUNC + STEP n | The same on the selected track alone (`T3 STUTTER 5 1/16`); the other tracks play on |
+| ... a second STEP | The stutter moves to it; let it go and it goes back to the one still held |
+| Let go of REPEAT | Ends the stutter, STEP held or not; the STEP's release toggles nothing |
+| REPEAT + LEFT / RIGHT | **The rate**, one slower / faster: 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T, 1/32, stopping at both ends (`REPEAT 1/8T`, `STUTTER 1/32`). Heard at once by the repeat, the stutter and any roll |
+| A rolling pad + LEFT / RIGHT | The same, while NOTE RPT is on and a lower pad rolls (`ROLL 1/32`) |
+| REPEAT + VALUE | The rate too, in the order the list names them (as before) |
+
+The step plays as written, its locks included; its condition, probability and ratchet are not
+drawn (the stutter is the ratchet now). While a stutter or the rate is under the hand, the live
+strip starts with `ST5` and `R1/16`. STEP first still edits: hold STEP, then REPEAT, and the
+ratchet steps (D6). VALUE pushed first keeps the mixer's STEP keys.
 
 ## The performance pads (upper row, printed TRK 1-7)
 
 | Print | STRATA | Colour | Bright while | Says |
 | --- | --- | --- | --- | --- |
 | TRK 1 | FILL | white | held, or NOTE RPT on | `FILL`; held + tap STEP writes a FILL trig (COND FILL), `FILL TRIG` / `FILL TRIG OFF` |
-| TRK 2 | REPEAT | cyan | held | `REPEAT 1/16` |
+| TRK 2 | REPEAT | cyan | held | `REPEAT 1/16`; held + STEP stutters, held + LEFT/RIGHT the rate (below) |
 | TRK 3 | MUTE | red | MUTE MODE on | `MUTE MODE` |
 | TRK 4 | SCENE A | green | held | `SCENE A: STEP PICKS` |
 | TRK 5 | SCENE B | blue | held | `SCENE B: STEP PICKS` |
@@ -290,7 +311,8 @@ strip first, pictures per page later). A screen draws only inside it.
 | x 126-127, rows 10-117 | **Master meter**: the level (falling about 20 dB in a third of a second), a bright dot at the highest reading of the last second, the top pixel lit for a second after the limiter worked | |
 
 The live strip lists only what is **off rest**, most telling first, and leaves out whole what does
-not fit in 17 characters: `K:LMH` kill EQ bands thrown, `FX4` the performance effect up (its STEP
+not fit in 17 characters: `ST5` a step stutter on STEP 5 and `R1/16` the rate while REPEAT is
+held or a pad rolls (where the hand is, so first), `K:LMH` kill EQ bands thrown, `FX4` the performance effect up (its STEP
 number), `S40` the scene morph at 40%, `M:AB` macros away from zero, `LP` the master looper
 armed, recording or playing. At rest it is empty. x 114-124 on that line is the LOCK mark: `L`
 while the playing pattern has a lock, `L+` once the live set differs from it.

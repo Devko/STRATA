@@ -730,6 +730,31 @@ public:
             return;
         }
 
+        // Hold REPEAT, then a STEP: step stutter (CyDrums' P2, docs/CONTROLS.md "REPEAT"). Pad
+        // first performs, so this comes before MUTE mode's, the mixer's and the scenes' STEP
+        // keys; VALUE pushed first keeps the mixer's. A STEP taken here keeps its release even
+        // if REPEAT came up first: a release reaching the grid would toggle a trig.
+        if (key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
+            const int raw = key - ENAGA_KEY_STEP1;
+            if (down && repeat_held_ && !value_pushed_) {
+                stutter_press(raw);
+                return;
+            }
+            if (!down && (stutter_keys_ >> raw & 1u) != 0) {
+                stutter_release(raw);
+                return;
+            }
+            // A press that is not a stutter owns its own release, whatever came before.
+            if (down) stutter_keys_ = uint16_t(stutter_keys_ & ~(1u << raw));
+        }
+        // REPEAT held, or a pad rolling: LEFT/RIGHT walk the rate (CyDrums' P3), which beat
+        // repeat, the roll and the stutter share. The release is swallowed with the press.
+        if ((key == ENAGA_KEY_LEFT || key == ENAGA_KEY_RIGHT) && !shift_ && !value_pushed_ &&
+            (repeat_held_ || rolling_pads_ != 0)) {
+            if (down) step_repeat_rate(key == ENAGA_KEY_LEFT ? -1 : +1);
+            return;
+        }
+
         // MUTE mode turns STEP 1-8 into the eight stored mute states: recall on a tap, store
         // with VALUE pushed (F1 is taken: it makes a recall wait for the bar). docs/SPEC.md says they are "recalled from the upper row", but the upper row is
         // seven FIXED performance pads and there are eight states, so that cannot be taken
@@ -1613,7 +1638,8 @@ public:
                     next < 0 ? 0
                              : (next >= int(RepeatLength::count) ? int(RepeatLength::count) - 1
                                                                  : next));
-                post(Cmd::set_repeat, 0, 0, uint8_t(repeat_length_), 1, shift_ ? 1 : 0);
+                post(Cmd::set_repeat, 0, 0, uint8_t(repeat_length_), repeat_audio_ ? 1 : 0,
+                     shift_ ? 1 : 0);
                 notice(repeat_length_name(repeat_length_));
                 return;
             }
@@ -2196,6 +2222,69 @@ public:
     // press further round its cycle, said as `STEP 5 PROB 50%`. False for a pad with no cycle
     // (the scenes, THROW), which then performs as usual. The release counts as a use, so the
     // STEP does not toggle its trig when it comes up.
+    // Step stutter (Cmd::step_stutter): REPEAT held, then STEP n. Every track loops its step n
+    // at the rate; FUNC + STEP only the selected track. The audio repeat the pad started gives
+    // way for the rest of the hold: the stutter replays live sound, so filters, LFOs and tails
+    // keep moving. A second STEP moves the stutter there; letting it go goes back to the one
+    // still held, if any.
+    void stutter_press(int raw) {
+        stutter_keys_ = uint16_t(stutter_keys_ | (1u << raw));
+        stutter_raw_ = raw;
+        stutter_tracks_ = shift_ ? uint8_t(1u << selected_) : uint8_t(0xFF);
+        if (repeat_audio_) {
+            repeat_audio_ = false;
+            post(Cmd::set_repeat, 0, 0, uint8_t(repeat_length_), 0, repeat_pitch_ ? 1 : 0);
+        }
+        stutter_post();
+    }
+
+    void stutter_release(int raw) {
+        stutter_keys_ = uint16_t(stutter_keys_ & ~(1u << raw));
+        if (raw != stutter_raw_) return;       // an earlier STEP coming up: the latest plays on
+        if (stutter_keys_ != 0) {
+            int next = 0;
+            while ((stutter_keys_ >> next & 1u) == 0) next++;
+            stutter_raw_ = next;
+            stutter_post();
+            return;
+        }
+        stutter_raw_ = -1;
+        post(Cmd::step_stutter, 0, 0, 0, 0, 0);
+        notice(repeat_held_ ? "STUTTER OFF" : "PADS PLAY");
+    }
+
+    void stutter_post() {
+        const int step = stutter_raw_ + page_ * 16;
+        stutter_step_ = step;
+        post(Cmd::step_stutter, 0, 0, uint8_t(step), 1, stutter_tracks_);
+        char *out = notice_buffer_;
+        if (stutter_tracks_ != 0xFF) {
+            append(out, "T");
+            append_number(out, uint32_t(selected_) + 1);
+            *out++ = ' ';
+        }
+        append(out, "STUTTER ");
+        append_number(out, uint32_t(step) + 1);
+        *out++ = ' ';
+        append(out, repeat_length_name(repeat_length_));
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    // REPEAT + LEFT/RIGHT, or LEFT/RIGHT under a rolling pad: the rate one step slower or
+    // faster (dsp/repeat.hpp's repeat_length_step), heard at once by the repeat, the roll and
+    // the stutter alike, and said on screen.
+    void step_repeat_rate(int direction) {
+        repeat_length_ = repeat_length_step(repeat_length_, direction);
+        post(Cmd::set_repeat, 0, 0, uint8_t(repeat_length_), repeat_audio_ ? 1 : 0,
+             repeat_pitch_ ? 1 : 0);
+        char *out = notice_buffer_;
+        append(out, stutter_raw_ >= 0 ? "STUTTER " : (repeat_held_ ? "REPEAT " : "ROLL "));
+        append(out, repeat_length_name(repeat_length_));
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
     bool edit_held_step(int pad) {
         StepCycle cycle;
         switch (PerformPad(pad)) {
@@ -2255,8 +2344,16 @@ public:
                 // VALUE picks the length while it is held (docs/SPEC.md), which on_encoder
                 // handles; F1 is the pitch-down.
                 repeat_held_ = down;
+                repeat_audio_ = down;
+                if (down) repeat_pitch_ = shift_;
                 post(Cmd::set_repeat, 0, 0, uint8_t(repeat_length_), down ? 1 : 0,
                      shift_ ? 1 : 0);
+                // A stutter is REPEAT's gesture: it ends with the pad, held STEP or not. The
+                // STEP keys' releases are still swallowed (stutter_keys_).
+                if (!down && stutter_raw_ >= 0) {
+                    stutter_raw_ = -1;
+                    post(Cmd::step_stutter, 0, 0, 0, 0, 0);
+                }
                 if (down) {
                     char *out = notice_buffer_;
                     append(out, "REPEAT ");
@@ -3200,6 +3297,21 @@ public:
             append(out, text);
         };
 
+        // Where the hand is now, first: the stutter's step and the rate under REPEAT or a roll.
+        if (stutter_raw_ >= 0) {
+            p = part;
+            append(p, "ST");
+            append_number(p, uint32_t(stutter_step_) + 1);
+            *p = 0;
+            add(part);
+        }
+        if (repeat_held_ || rolling_pads_ != 0) {
+            p = part;
+            *p++ = 'R';
+            append(p, repeat_length_name(repeat_length_));
+            *p = 0;
+            add(part);
+        }
         const uint8_t kills = engine_.project().settings.eq_kills;
         if (kills & 7u) {
             p = part;
@@ -8168,6 +8280,14 @@ private:
     uint16_t morph_ = 0;
     bool repeat_held_ = false;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
+    bool repeat_audio_ = false;      // the audio repeat is on: REPEAT held and no stutter yet
+    bool repeat_pitch_ = false;      // FUNC was down when REPEAT went down: pitched down
+    // Step stutter: the STEP keys taken by it (their releases are its), the one playing, or -1,
+    // and its tracks (0xFF all; FUNC + STEP the selected one).
+    uint16_t stutter_keys_ = 0;
+    int stutter_raw_ = -1;
+    int stutter_step_ = 0;           // the step it plays, the STEP page included
+    uint8_t stutter_tracks_ = 0xFF;
     AutoFill auto_fill_ = AutoFill::off;
     Mutation mutation_ = Mutation::velocity;
     int mutate_amount_ = 50;

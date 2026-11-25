@@ -552,6 +552,7 @@ const Expect kTable[] = {
     {Cmd::trigger_note, 0u, "trigger_note"},
     {Cmd::release_note, 0u, "release_note"},
     {Cmd::note_repeat, 0u, "note_repeat"},   // a roll is played, not written
+    {Cmd::step_stutter, 0u, "step_stutter"}, // a stutter too
 
     // Resampling dirties no project file. The take goes to /RECORD as its own WAV -- which is
     // not one of a project's eleven files -- and the arm, the cancel and the release only move

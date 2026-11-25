@@ -78,6 +78,12 @@ constexpr int repeat_length_ticks(RepeatLength length) {
     }
 }
 
+// One step faster (`direction` > 0) or slower (< 0) along the lengths sorted by their ticks:
+// 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T, 1/32. This is the walk REPEAT + LEFT/RIGHT makes (the
+// roll rate on the arrows, CyDrums' P3), where the enum's own order -- the plain values, then
+// the triplets -- would jump from 1/32 back to 1/4T. Stops at both ends.
+RepeatLength repeat_length_step(RepeatLength length, int direction);
+
 // How long the ring is, in seconds. Two bars of 4/4 at 60 BPM.
 constexpr float kRepeatSeconds = 8.0f;
 

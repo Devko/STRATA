@@ -121,6 +121,8 @@ FM4 and GRAIN machines.
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |
 | Note repeat on the pads, pressure as velocity | v0.1.0 | ○ (13f) | Not recordable |
+| Step stutter: hold REPEAT + STEP loops that step on every track (FUNC: one track) | Unreleased | ○ (8) | Sequencer, not audio: sounds stay live. Host-tested; the emulator cannot press pads |
+| Roll rate on LEFT/RIGHT under REPEAT or a rolling pad, on the live strip | Unreleased | ○ (8) | |
 | Tape stop (FUNC + hold push D) | v0.1.0 | ○ (13g) | |
 | Delay freeze (FUNC + hold MUTATE) | v0.1.0 | ○ (13g) | |
 | **Tap VALUE to reset**: the effect's amount, the loop's mix or the morph back to 0; FUNC + tap: DJ filter off | #121, #124 | ○ (16 / 13o) | A hold of 0.5 s or more resets nothing; never the tempo |
