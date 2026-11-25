@@ -157,6 +157,13 @@ enum class Cmd : uint8_t {
     set_slice_mode,    // track, a: 0 equal, 1 AUTO
     // LFO TRIG on a track (KitTrack::lfo_trig, dsp/lfo.hpp): a: kLfoTrigFree, Retrig or OneShot.
     set_lfo_trig,      // track, a: 0 FREE, 1 RETRIG, 2 ONE-SHOT
+    // One mod slot (KitTrack::mod, core/modslot.hpp), whole: a: the slot (0, 1), b: the source
+    // (kModSrcOff..kModSrcRnd), c: the destination parameter, d: the depth as an int8. Sanitized as a
+    // file's slot is, so a bad one lands OFF.
+    set_mod_slot,      // track, a: slot, b: source, c: dest, d: int8 depth
+    // A track pad's pressure, for a mod slot on PRS: a: 0-127, 0 when the pad is let go. Played,
+    // not stored.
+    set_pressure,      // track, a: pressure
     // One send or master setting. `a` is the field -- dsp/buses.hpp's SendField or MasterField,
     // whose numbers are permanent because they reach PROJECT.BIN -- and `b` is an encoder DELTA,
     // as a signed byte, exactly like `set_param` and the step fields and for the same reason.
@@ -606,6 +613,9 @@ struct Status {
     std::atomic<uint8_t> heard_pos[8] = {};
     std::atomic<uint8_t> heard_sus[8] = {};
     std::atomic<uint8_t> lfo_shown[8] = {};
+    // Each MOD slot's destination as heard (the byte the slots and the LFO left), kNotHeard for
+    // a slot that is off: the dot on EDIT's bar (app/ui_modslots.hpp).
+    std::atomic<uint8_t> mod_heard[8][2] = {};
     // LOCK (Cmd::lock_store, lock_tap). `lock_state`: bit 0 the playing pattern has a lock, bit 1 the live set
     // differs from it (the screen's L+), bit 2 the next tap swaps back. `lock_event` is bumped
     // once per store or tap the audio side applied, with `lock_last` saying what it did: a
