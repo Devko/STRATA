@@ -23,7 +23,7 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 | `make -C host test` | **1,870 tests, 3,665,834 checks, 0 failures** on `main` at PR #151: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image (cl6x, 2026-11-25, LFO TRIG on REL/LEN ALL and FEEL): payload 1,148,432 bytes, bss 1,565,896 (with bounce to track, step stutter, EDIT's pictures, LOCK and play modes); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | **36 scenarios**, run on Roland's PC only. All 36 pass with cl6x with live visuals part 1 (`scenario_visuals` new: draw() 0.57 ms a frame on GRID; worst 30.93%, ambient), and with part 2's audio taps (worst **31.16%**, ambient; GCC-only 56.48%), and with part 3's GRID and PERFORM views (`scenario_visuals` logs draw() on PERFORM: 1.34 ms), and with part 4's LFO picture (`scenario_visuals` walks on to EDIT's LFO page and turns DEP and DST with `--turn`). All 35 pass with cl6x with LFO TRIG, TUN glide and the cutoff floor merged onto #152 (`scenario_lfo` now pushes TRIG; worst 30.93%, ambient). **All 35 pass with cl6x with REL ALL, LEN ALL and FEEL merged onto `main` after #154** (2026-11-25; worst 30.75%, ambient; 34 passed on `main` after #153 at 30.55%). Added on 2026-11-25, each with the PR that brought it: `scenario_stepkeys` (D12), `scenario_plock`, `scenario_slots`, `scenario_glide`, `scenario_playmode`, `scenario_pictures`, `scenario_bounce` (the only run of a take through Enaga's real file layer), `scenario_feel` (FEEL walked on the PATTERN page). The pad and knob gestures (stutter, LOCK, D6, REL ALL and LEN ALL) have none: the emulator cannot press pads or turn knobs. The worst case moved from 30.16% to 30.75% over the day. GCC-only figures for that day's work are not taken |
+| `tools/scenarios.sh` | **36 scenarios**, run on Roland's PC only. All 36 pass with cl6x with live visuals part 1 (`scenario_visuals` new: draw() 0.57 ms a frame on GRID; worst 30.93%, ambient), and with part 2's audio taps (worst **31.16%**, ambient; GCC-only 56.48%), and with part 3's GRID and PERFORM views (`scenario_visuals` logs draw() on PERFORM: 1.34 ms), and with part 4's LFO picture (`scenario_visuals` walks on to EDIT's LFO page and turns DEP and DST with `--turn`). All 35 pass with cl6x with LFO TRIG, TUN glide and the cutoff floor merged onto #152 (`scenario_lfo` now pushes TRIG; worst 30.93%, ambient). **All 35 pass with cl6x with REL ALL, LEN ALL and FEEL merged onto `main` after #154** (2026-11-25; worst 30.75%, ambient; 34 passed on `main` after #153 at 30.55%). Added on 2026-11-25, each with the PR that brought it: `scenario_stepkeys` (D12), `scenario_plock`, `scenario_slots`, `scenario_glide`, `scenario_playmode`, `scenario_pictures`, `scenario_bounce` (the only run of a take through Enaga's real file layer), `scenario_feel` (FEEL walked on the PATTERN page). `scenario_moveall` turns REL ALL and LEN ALL with `--turn` (the review PR after #163). The pad gestures (stutter, LOCK, D6) have none: the emulator cannot press pads. The worst case moved from 30.16% to 30.75% over the day. GCC-only figures for that day's work are not taken |
 | unit | v0.3.1 on Enaga 0.2.0 boots and plays (2026-11-24). Load figures are from the v0.2.0-era build: under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been measured or walked through on the unit |
 | memory | init takes **97.04 MiB of a 120 MiB heap** (LOCK's 1.06 MiB included): 22.96 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -78,9 +78,9 @@ unit yet: UNIT_CHECKLIST's resample items are the first real test.
 
 **Phase 5 item 5** (CyDrums P4 and P8): REL ALL and LEN ALL on FUNC + turn A / B in PERFORM
 (`core/moveall.hpp`; live, rest 0 with a detent, in a LOCK, `RL`/`LN` in the live strip) and FEEL
-on the PATTERN page (`core/timing.hpp` feel_offset, pattern file section 5, D turns it). The
-emulator cannot turn a knob, so REL/LEN ALL are host-tested only; `scenario_feel` walks FEEL.
-UNIT_CHECKLIST W29 walks both.
+on the PATTERN page (`core/timing.hpp` feel_offset, pattern file section 5, D turns it).
+`scenario_moveall` turns REL/LEN ALL in the emulator (`move_all_notice` logs each click);
+`scenario_feel` walks FEEL. UNIT_CHECKLIST W29 walks both.
 
 **Phase 5, sound-design depth** (same doc, CyDrums S2/S3). Done: LFO TRIG (FREE, RETRIG,
 ONE-SHOT), TUN gliding on the synths, and D9's leftover (the ~100 Hz floor for the morph and the
@@ -171,17 +171,20 @@ bare `git clone`; run `tools/fetch_emulator.sh` after it, which checks out
 `tools/fetch_toolchain_sources.sh` exists because GCC's `contrib/download_prerequisites` fetches
 GMP, MPFR, MPC and ISL over plain HTTP, which the HTTPS-only proxy does not serve.
 
-### 2. The emulator can press keys and nothing else
+### 2. The emulator presses keys and turns encoders, and has no pads
 
-(Stale in part since Enaga v0.3.0: its `tools/emulate.py` takes `--turn ENC:DETENTS@CYCLE` for
-encoders A-D and VALUE, and `--card-mib`. No scenario uses `--turn` yet; pads are still out.)
-
-`emulate.py` has `--key` and nothing more, and `emulator/core/core.h` has no pad or encoder entry
-point at all. So no scenario can drive a pad (seven of M5's eight performance tools, pad pressure)
-or turn an encoder (every send, master and EDIT setting). Scenarios prove what keys reach: that
-every page **draws** on the C674x with the real font, which matters because a draw off the canvas
-is a hard fault on the unit and a silent pass on the host. `app/app.hpp` logs `scr <MODE> <PAGE>`
-on each screen change for this; on the unit it tells "wedged" from "on a page I did not expect".
+Since Enaga v0.3.0, `tools/emulate.py` takes `--key`, `--turn ENC:DETENTS@CYCLE` (encoders A-D
+are 0-3, VALUE 4; a detent takes 12 ms) and `--card-mib`. `scenario_plock`, `scenario_visuals`
+and `scenario_moveall` turn encoders; the older scenarios were written before and turn none,
+which their headers say. A key is held 20 M cycles, so a turn 2 M cycles after a FUNC press
+lands inside the hold (FUNC + turn). There is still no pad entry point, so no scenario can drive
+a pad (seven of M5's eight performance tools, pad pressure, LOCK, the stutter, D6), and the
+emulator cannot read the screen: a scenario sees only the log. Scenarios prove what keys and
+turns reach: that every page **draws** on the C674x with the real font, which matters because a
+draw off the canvas is a hard fault on the unit and a silent pass on the host. `app/ui_lights.hpp`
+logs `scr <MODE> <PAGE>` on each screen change for this, and `notice_logged` puts a notice in the
+log; on the unit the first tells "wedged" from "on a page I did not expect". Enaga's log ring
+keeps 16 lines, so a scenario that logs more loses its first lines.
 
 ### 3. Why the unit may read higher than the emulator
 
