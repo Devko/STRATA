@@ -209,6 +209,31 @@ shorter slice of the same past), 8 TAPE STOP (from 16 up), 9 BASS KILL (the kill
 | TRK 6 | THROW | amber | held | `THROW DELAY` / `THROW REVERB` |
 | TRK 7 | MUTATE | violet | a mutation waiting for OK/CLR, or frozen | `MUTATE T1 DENSITY +` |
 
+## The screen frame
+
+Every screen keeps the same frame, so the eye learns where to look (D7: the frame and the live
+strip first, pictures per page later). A screen draws only inside it.
+
+| Rows | What | Example |
+| --- | --- | --- |
+| 0-6 | Top line: live pattern, **bar.beat** in its pass, tempo, `>` playing / `.` stopped, load in whole percent | `A01 3.2 130.0 > 24%` |
+| 8 | Progress: one pixel across the pattern's pass (its master length), on a dim track; empty while stopped | |
+| 10-16 | Second line: a notice, LEARN or the MUTATE verdict while there is one; else the **live strip**; else `EXT MIDI` / `EXT SYNC` / `CLOCK REFUSED` | `K:L FX4 S40 M:AB` |
+| 18-117 | The screen's own content | |
+| 120 | Bottom line: tracks sounding, MAX, device, DROP, GUARD | `TRK3 MAX23.5 SMPLTREK` |
+| x 126-127, rows 10-117 | **Master meter**: the level (falling about 20 dB in a third of a second), a bright dot at the highest reading of the last second, the top pixel lit for a second after the limiter worked | |
+
+The live strip lists only what is **off rest**, most telling first, and leaves out whole what does
+not fit in 17 characters: `K:LMH` kill EQ bands thrown, `FX4` the performance effect up (its STEP
+number), `S40` the scene morph at 40%, `M:AB` macros away from zero, `LP` the master looper
+armed, recording or playing. At rest it is empty. x 114-124 on that line is kept for the LOCK
+mark (`L` / `L*`), which a later change adds.
+
+Two rules keep the frame cheap and whole. It is drawn only from words the audio side publishes
+once a block (`Status`): nothing in `draw()` walks a pattern or a buffer. And no text may reach
+x 126: the layout check holds every string to the screen, GRID's cells are five pixels wide, and
+right-aligned values end at x 124.
+
 ## FUNC help
 
 FUNC held for 0.6 s with nothing else pressed shows help for **the screen that is up**

@@ -241,6 +241,17 @@ it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA_1.WAV` will 
 - SHIMMR on track 8 for 30 s: **MAX `____ %`** (against item 1's; E16). Then FUNC+HOME, RELOAD
   PROJECT puts the beat back.
 
+**22. The screen frame (3 min).** Beat playing, A01.
+- Top line `A01 1.1 130.0 > ..%`: the bar.beat counts `1.1` ... `1.4`, `2.1` ... in time, and the
+  thin line under it fills left to right once per pass, empty again on STOP. `____`
+- The right edge's column moves with the beat, a bright dot hangs at the top of each hit for
+  about a second; turn the master up until it limits: the column's top pixel lights. `____`
+- PERFORM: move the morph, a macro, push VALUE + STEP 4 (an effect), throw a kill: line 2
+  shows `S..`, `M:A`, `FX4`, `K:L`; each goes away as it comes back to rest. `____`
+- Step through every screen (HOME, EDIT, MIXER, PROJECT, KEYS, FUNC menu, SOUNDS): nothing of
+  the screen's own runs into the meter column or the strip. Screen updates smoothly with all 8
+  tracks playing? `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `3 fail: reads 055`, `9: MAX 61.2`.
 
 ---

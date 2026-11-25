@@ -245,8 +245,11 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 
 | Where | Example | Meaning |
 | --- | --- | --- |
-| Top line | `A01 130.0 > 23.4%` | Live bank+slot, tempo, `>` playing / `.` stopped, audio load |
-| Line 2 | `EXT MIDI` `EXT SYNC` `CLOCK REFUSED` | Outside clock source; a transport call was refused |
+| Top line | `A01 3.2 130.0 > 24%` | Live bank+slot, bar.beat, tempo, `>` playing / `.` stopped, audio load |
+| Under it | a 1 px line | How far the pattern is through its pass |
+| Line 2 | `K:L FX4 S40 M:AB LP` | Live strip: what is off rest (kills, perf effect, morph %, macros, looper); empty at rest |
+| Line 2 | `EXT MIDI` `EXT SYNC` `CLOCK REFUSED` | Outside clock source; a transport call was refused (when the strip is empty) |
+| Right edge | 2 px column | Master meter: level, held peak dot, top pixel = limiter |
 | Bottom line | `TRK3 MAX23.5 SMPLTREK` / `TRK3 DROP 2` | Tracks sounding, the highest audio load since PLAY (held; PLAY starts it again), device; DROP = edits lost to a full command ring |
 | GRID | `T1 MUTE PG1 L16 X1` | Track, muted, step page, length, speed |
 | GRID edit line | `REC Q50 SEL 1-8 FULL 2 U3/R1` | Recording + quantize, selection, refused edits (lock pool full), undo/redo depth |
