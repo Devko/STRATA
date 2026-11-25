@@ -8,9 +8,12 @@ Publishing is one command, `tools/publish_release.sh`, and it refuses rather tha
 
 - [ ] The card was built from `main` as it is now (`tools/build.sh`, no `--name`) and the
       walkthrough at the top of `docs/UNIT_CHECKLIST.md` passed on it.
-- [ ] `SmplTrek.bin` on it is the file from Enaga's own v0.2.0 release zip,
-      `enaga-v0.2.0-smpltrek.zip` (<https://github.com/seawaffle/enaga/releases/tag/v0.2.0>),
-      not a local firmware build. The script checks this.
+- [ ] `SmplTrek.bin` on it is the file from Enaga's own release zip **of the pinned version**
+      (v0.3.0 since 2026-11-25: `enaga-v0.3.0-smpltrek.zip`,
+      <https://github.com/seawaffle/enaga/releases/tag/v0.3.0>; v0.1.0 to v0.3.1 shipped
+      v0.2.0's), not a local firmware build. The script reads the pin and checks this. The
+      release notes must say the firmware changed, since updating then needs step 1 of
+      docs/INSTALL.md again.
 - [ ] If the `APP.ENA` was built with cl6x: read the licence text in
       `~/ti/ti-cgt-c6000_8.5.0.LTS` (a `LICENSE`, `*manifest*` or `license` directory) for a
       condition on distributing the compiler's **output**, and record what it says in
