@@ -86,6 +86,7 @@
         if (picture != EditPicture::none) {
             if (!readout) draw_picture_line(canvas, picture);
             if (picture == EditPicture::wave) draw_wave(canvas);
+            else if (picture == EditPicture::table) draw_table_picture(canvas);
             else draw_envelope(canvas, envelope_for(picture), picture == EditPicture::amp);
             return;
         }
@@ -175,7 +176,7 @@
     // the audio side's WaveView in Status, the envelopes from the knobs alone. One pass of at
     // most kWaveColumns columns a frame.
 
-    enum class EditPicture : uint8_t { none, wave, amp, filter };
+    enum class EditPicture : uint8_t { none, wave, amp, filter, table };
 
     static constexpr int kPictureTop = 96;
     static constexpr int kPictureRows = 22;              // rows 96-117: the bottom line is 120
@@ -186,6 +187,7 @@
         if (page == Page::src && (id == uint8_t(MachineId::sample) || machine_is_grain(id))) {
             return EditPicture::wave;
         }
+        if (page == Page::src && machine_is_wave(id)) return EditPicture::table;
         if (page == Page::amp && id != uint8_t(MachineId::midi)) return EditPicture::amp;
         if (page == Page::asr && has_asr(selected_)) return EditPicture::amp;
         if (page == Page::fltr && machine_has_voice_filter(id)) return EditPicture::filter;
@@ -283,6 +285,7 @@
                 canvas.rect(x1, top, 1, 3, 13);
                 canvas.rect(x1, bottom - 2, 1, 3, 13);
             }
+            draw_grain_sparks(canvas, view, middle);        // app/ui_live.hpp
             for (int i = 0; i < WaveView::kMarks; i++) {
                 if (view.mark[i] >= kWaveColumns || view.glow[i] == 0) continue;
                 canvas.rect(view.mark[i], middle - 6, 1, 13, view.glow[i] > 15 ? 15 : view.glow[i]);

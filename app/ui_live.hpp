@@ -218,3 +218,70 @@
             prev_y = y;
         }
     }
+
+    // --- WAVE's SRC page: the table as a waterfall ---------------------------------------------
+    //
+    // The track's table, its sixteen frames stacked back to front up and to the right, each a
+    // line of 40 points from the table's smoothest level (one harmonic cycle of 256 samples), the
+    // frame POS plays brightest and its neighbours brighter than the rest. Each frame blacks out
+    // what is behind it under its curve, so the stack reads as a surface (CyDrums' OSC page).
+    // The frames come from the WaveLibrary the main context itself built (read-only once a table
+    // is resident); until it is, the page says so.
+    static constexpr int kTablePoints = 40;
+
+    void draw_table_picture(enaga::Canvas &canvas) {
+        uint8_t *px = canvas.data();
+        const TrackParams &heard = engine_.sounding(selected_);
+        const int table = va_wave_table(heard.get(0));
+        const WaveLibrary &waves = engine_.waves();
+        if (!waves.resident(table)) {
+            canvas.text(30, kPictureTop + 7, "BUILDING", 7);
+            return;
+        }
+        const int pos = int(heard.get(1)) * (kWaveFrames - 1) * 16 / 127;   // in 1/16 frames
+        const int mip = kWaveMipLevels - 1;
+        const int length = wave_mip_length(mip);
+        const int amp = 3;
+        const int base_y = kPictureTop + kPictureRows - 1 - amp;
+        for (int f = kWaveFrames - 1; f >= 0; f--) {
+            const int16_t *samples = waves.frame(table, f, mip);
+            const int ox = 4 + f * 3;                     // back frames to the right ...
+            const int oy = base_y - f;                    // ... and up
+            int16_t xs[kTablePoints];
+            int16_t ys[kTablePoints];
+            for (int i = 0; i < kTablePoints; i++) {
+                const int v = samples[i * length / kTablePoints];
+                xs[i] = int16_t(paint::q4(ox) + i * 3 * paint::kSub / 2);   // 1.5 px a point
+                ys[i] = int16_t(paint::q4(oy) - v * amp * paint::kSub / 32768);
+                // Hidden lines: black from just under this curve to the floor of this frame.
+                const int x = ox + i * 3 / 2;
+                const int top = (ys[i] >> 4) + 1;
+                for (int y = top; y <= oy + amp + 1; y++) {
+                    paint::plot(px, x, y, 0);
+                    paint::plot(px, x + 1, y, 0);
+                }
+            }
+            const int distance = f * 16 - pos < 0 ? pos - f * 16 : f * 16 - pos;
+            const int grey = distance < 8 ? 15 : (distance < 24 ? 9 : 4);
+            paint::polyline(px, xs, ys, kTablePoints, grey);
+        }
+    }
+
+    // --- GRAIN's SRC page: the grains as sparks with a tail ------------------------------------
+    //
+    // Each grain in the air (Status::wave's marks, as bright as the grain is loud) also drops a
+    // soft spark into an afterglow patch over the waveform, at a height of its own, so the cloud
+    // reads as particles drifting through the sample rather than ticks. Kept in the middle rows,
+    // clear of the bracket's corners.
+    void draw_grain_sparks(enaga::Canvas &canvas, const WaveView &view, int middle) {
+        grain_glow_.fade(180);
+        for (int i = 0; i < WaveView::kMarks; i++) {
+            if (view.mark[i] >= kWaveColumns || view.glow[i] == 0) continue;
+            const int g = view.glow[i] > 15 ? 15 : view.glow[i];
+            const int y = 6 + ((i * 5) % 11) - 5;         // -5..+5 about the middle, per grain
+            grain_glow_.plot(view.mark[i], y, g);
+            grain_glow_.plot(view.mark[i], y - 1, g / 2);
+            grain_glow_.plot(view.mark[i], y + 1, g / 2);
+        }
+        grain_glow_.blit(canvas.data(), 0, middle - 6);
+    }
