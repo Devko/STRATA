@@ -581,6 +581,7 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
             add_row(rows, count, "ON WITH DEP AND DST");
             add_row(rows, count, "PUSH B     TRIG MODE");
             add_row(rows, count, "FREE RETRIG ONE-SHOT");
+            add_row(rows, count, "PUSH C D   MOD SLOTS");
             break;
         case 5: add_row(rows, count, "MOD OFF  NO ARP"); break;
         case 6:

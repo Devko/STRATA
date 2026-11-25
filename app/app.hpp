@@ -535,6 +535,8 @@ public:
 
 #include "ui_perform.hpp"
 
+#include "ui_modslots.hpp"
+
 #include "ui_live.hpp"
 
 #include "ui_project.hpp"
