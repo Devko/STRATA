@@ -55,9 +55,9 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ### Sample audition (2026-11-25, emulator)
 
-Push A in SAMPLES streams a WAV to the output (dsp/audition.hpp). All 40 scenarios pass with
-cl6x merged onto `main` after #167 (`scenario_audition` new); worst **31.68%** (`scenario_ambient`),
-`scenario_m3` 25.28%. Nothing runs while no audition plays but one flag test a block. What one costs, measured on
+Push A in SAMPLES streams a WAV to the output (dsp/audition.hpp). All 41 scenarios pass with
+cl6x merged onto `main` after #168 (`scenario_audition` new); worst **31.82%** (`scenario_ambient`, as on
+main), `scenario_m3` 25.42%. Nothing runs while no audition plays but one flag test a block. What one costs, measured on
 `scenario_audition`'s walk with the beat stopped, with and without the push:
 
 | | cl6x | GCC-only |
