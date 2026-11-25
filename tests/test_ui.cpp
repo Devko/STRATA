@@ -3014,10 +3014,10 @@ TEST(ui_perform_shows_track_levels_while_playing_and_the_hint_when_stopped) {
     pump(4);
     CHECK(!screen_has(app, "AUTOFILL: FUNC MENU"));
     int lit = 0;
-    for (int x = 0; x < 12; x++) lit += at(x, 86) > 2;     // track 1's level bar
-    CHECK(lit >= 6);
+    for (int y = 90; y < 104; y++) lit += at(5, y) > 2;     // track 1's level column
+    CHECK(lit >= 3);
     int other = 0;
-    for (int x = 15; x < 27; x++) other += at(x, 86) > 2;  // track 2 is silent
+    for (int y = 90; y < 104; y++) other += at(20, y) > 2; // track 2 is silent
     CHECK_EQ(other, 0);
 
     host.set_running(false);

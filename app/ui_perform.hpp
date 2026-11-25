@@ -259,11 +259,15 @@
     void draw_perform(enaga::Canvas &canvas) {
         char line[40];
         char *out = line;
+        uint8_t *px = canvas.data();
+        const bool running = enaga::clock::state().running != 0;
 
-        // The two scenes and where the morph sits between them. The bar is the one thing in this
-        // mode that has to be readable at a glance from across a room.
-        // "A16 128P": the scene and how many parameters it holds. Short, because both have to fit
-        // on one line at any count -- "B16  12 PRM" at x = 72 ran three pixels off the screen.
+        // PERFORM as the mockup draws it (tools/visuals_mockup.py, docs/CONTROLS.md "PERFORM"):
+        // rows 18-22 the scenes and the morph between them, 25-57 four macro gauges with their
+        // letters, 59-88 the output's scope in an afterglow, 90-110 every track's level, 112 what
+        // MUTATE will do. Stopped, the scope's rows hold the lines a hand needs before it plays.
+
+        // The two scenes in the small font, the morph bar between them.
         for (int side = 0; side < 2; side++) {
             out = line;
             *out++ = side == 0 ? 'A' : 'B';
@@ -273,34 +277,28 @@
                                    engine_.scenes().scenes[engine_.scene_slot(side)])));
             *out++ = 'P';
             *out = 0;
-            canvas.text(side == 0 ? 0 : 72, 18, line, scene_holding_ == side ? 15 : 11);
+            const int w = paint::small_width(line);
+            paint::small_text(px, side == 0 ? 0 : 123 - w, 18, line,
+                              scene_holding_ == side ? 15 : 9);
         }
+        const int filled = int(uint32_t(engine_.morph()) * 66u / kMorphScale);
+        canvas.rect(29, 19, 66, 3, 3);
+        if (filled > 0) canvas.rect(29, 19, filled, 3, 12);
+        canvas.rect(29 + (filled > 65 ? 65 : filled), 18, 1, 5, 15);      // where it sits
 
-        const int filled = int(uint32_t(engine_.morph()) * 124u / kMorphScale);
-        canvas.rect(2, 28, 124, 5, 3);
-        canvas.rect(2, 28, filled < 1 ? 1 : filled, 5, 12);
-
-        // The output's scope, dim, behind the four gauges, while the transport runs.
-        const bool running = enaga::clock::state().running != 0;
-        draw_scope(canvas, 0, 57, 7, running);
-
-        // The four macros, with how many parameters each drives. An empty macro says so rather
-        // than looking like one set to zero.
+        // The four macros: a gauge each, the value inside, the letter as a badge under it (the
+        // selected one lit) and how many parameters it drives. An empty macro's gauge is dim.
         for (int m = 0; m < kMacros; m++) {
-            const int x = m * 32;
-            // The selected macro is marked with '>' before its letter. The font has no '*', so
-            // "A*" drew as "A?" on the unit.
-            out = line;
-            if (m == macro_selected_) *out++ = '>';
-            *out++ = char('A' + m);
-            *out = 0;
-            canvas.text(x + 2, 40, line, m == macro_selected_ ? 15 : 10);
-
+            const int x = m * 31;
+            const int cx = x + 15;
             const int targets = macro_count(engine_.macros().macros[m]);
+            draw_gauge(canvas, cx, 37, 11, int(engine_.macro_position(m)),
+                       int(macro_position_[m]), targets != 0);
+            const bool picked = m == macro_selected_;
+            canvas.rect(cx - 11, 51, 7, 7, picked ? 15 : 4);
+            const char letter[2] = {char('A' + m), 0};
+            paint::small_text(px, cx - 9, 52, letter, picked ? 0 : 13);
             out = line;
-            // "3P", as the scenes above count theirs. "3 PRM" was 29 px in a 32 px slot, so
-            // four of them ran together as "3 PRM3 PRM4 PRM" (the layout test's kMinGap now
-            // catches that).
             if (targets == 0) {
                 append(out, "---");
             } else {
@@ -308,32 +306,78 @@
                 *out++ = 'P';
             }
             *out = 0;
-            canvas.text(x + 2, 49, line, targets == 0 ? 6 : 11);
-
-            // A gauge (app/ui_live.hpp) between the count and the hints, rows 58-75 as the bar
-            // it replaced. The arc is where the macro is -- what you hear, a pad's pressure
-            // included. When that is not where the knob left it, a bright dot outside the ring
-            // marks the knob. An empty macro's gauge is dim.
-            draw_gauge(canvas, x + 16, 66, 8, int(engine_.macro_position(m)),
-                       int(macro_position_[m]), targets != 0);
+            paint::small_text(px, cx - 2, 52, line, targets == 0 ? 5 : 10);
         }
 
-        // REL ALL and LEN ALL where they are, or the gesture while both are at rest.
-        if (engine_.rel_all() != 0 || engine_.len_all() != 0) {
+        // The output, bright, in an afterglow, while the beat plays; and the little that changes
+        // while it does, in the small font over its corner.
+        if (running) {
+            draw_scope(canvas, 0, 59, 13, running);
             out = line;
-            append(out, "REL ");
-            append_signed(out, engine_.rel_all());
-            append(out, " LEN ");
-            append_number(out, uint32_t(len_all_percent(engine_.len_all())));
-            *out++ = '%';
+            append(out, "BAR ");
+            append_number(out, engine_.bar() % 1000u + 1u);
+            if (engine_.fill()) append(out, " FILL");
+            if (engine_.repeat().active()) {
+                *out++ = ' ';
+                append(out, repeat_length_name(repeat_length_));
+            }
+            const int throwing = engine_.throwing();
+            if (throwing == 1) append(out, " DLY");
+            if (throwing == 2) append(out, " REV");
+            if (note_repeat_mode_) append(out, " NRPT");
+            if (engine_.delay_frozen()) append(out, " FRZ");
             *out = 0;
-            canvas.text(0, 78, line, 12);
+            paint::small_text(px, 0, 60, line, 8);
+            if (engine_.rel_all() != 0 || engine_.len_all() != 0) {
+                out = line;
+                append(out, "REL ");
+                append_signed(out, engine_.rel_all());
+                append(out, " LEN ");
+                append_number(out, uint32_t(len_all_percent(engine_.len_all())));
+                *out++ = '%';
+                *out = 0;
+                paint::small_text(px, 123 - paint::small_width(line), 60, line, 12);
+            }
         } else {
-            canvas.text(0, 78, "FUNC+A/B REL/LEN ALL", 7);
+            draw_scope(canvas, 0, 59, 13, running);           // clears the glow
+            // REL ALL and LEN ALL where they are, or the gesture while both are at rest.
+            if (engine_.rel_all() != 0 || engine_.len_all() != 0) {
+                out = line;
+                append(out, "REL ");
+                append_signed(out, engine_.rel_all());
+                append(out, " LEN ");
+                append_number(out, uint32_t(len_all_percent(engine_.len_all())));
+                *out++ = '%';
+                *out = 0;
+                canvas.text(0, 61, line, 12);
+            } else {
+                canvas.text(0, 61, "FUNC+A/B REL/LEN ALL", 7);
+            }
+            // The fill and AUTO-FILL where they are on, or where AUTO-FILL lives.
+            if (engine_.fill() || engine_.auto_fill() != AutoFill::off) {
+                out = line;
+                if (engine_.fill()) append(out, "FILL ");
+                if (engine_.auto_fill() != AutoFill::off) {
+                    append(out, "AF");
+                    append(out, auto_fill_name(engine_.auto_fill()));
+                }
+                *out = 0;
+                canvas.text(0, 70, line, 9);
+            } else {
+                canvas.text(0, 70, "AUTOFILL: FUNC MENU", 7);
+            }
+            // The bar and the held modes: "BAR 1000 NRPT FRZ" is 17 characters.
+            out = line;
+            append(out, "BAR ");
+            append_number(out, engine_.bar() % 1000u + 1u);
+            if (note_repeat_mode_) append(out, " NRPT");
+            if (engine_.delay_frozen()) append(out, " FRZ");
+            *out = 0;
+            canvas.text(0, 79, line, 9);
         }
-        // Every track's level while the beat plays; stopped, where AUTO-FILL lives.
-        if (running) draw_track_meters(canvas, 86);
-        else canvas.text(0, 87, "AUTOFILL: FUNC MENU", 7);
+
+        // Every track's level: eight bars, its machine's name under each.
+        draw_track_columns(canvas, 90, 14);
 
         // What MUTATE will do, and to which track.
         out = line;
@@ -344,33 +388,5 @@
         append(out, " ");
         append_number(out, uint32_t(mutate_amount_));
         *out = 0;
-        canvas.text(0, 96, line, 11);
-
-        // The live performance state: fill, the repeat and its length, a throw, the bar.
-        out = line;
-        if (engine_.fill()) append(out, "FILL ");
-        if (engine_.auto_fill() != AutoFill::off) {
-            append(out, "AF");
-            append(out, auto_fill_name(engine_.auto_fill()));
-            append(out, " ");
-        }
-        if (engine_.repeat().active()) {
-            append(out, repeat_length_name(repeat_length_));
-            append(out, engine_.repeat().pitch_down() ? "- " : " ");
-        }
-        const int throwing = engine_.throwing();
-        if (throwing == 1) append(out, "DLY");
-        if (throwing == 2) append(out, "REV");
-        *out = 0;
-        canvas.text(0, 104, line, 9);
-
-        // The bar on a line of its own: with everything above on, "FILL AF16 1/16T- DLY BAR
-        // 1000" is 29 characters. The held modes ride on it: "BAR 1000 NRPT FRZ" is 17.
-        out = line;
-        append(out, "BAR ");
-        append_number(out, engine_.bar() % 1000u + 1u);
-        if (note_repeat_mode_) append(out, " NRPT");
-        if (engine_.delay_frozen()) append(out, " FRZ");
-        *out = 0;
-        canvas.text(0, 112, line, 9);
+        canvas.text(0, 112, line, 11);
     }

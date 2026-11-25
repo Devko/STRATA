@@ -64,7 +64,7 @@
     // that fades a little every frame like a phosphor screen. `grey` is the trace's brightness:
     // dim when it sits behind something, as on PERFORM.
     static constexpr int kScopeWidth = 124;
-    static constexpr int kScopeRows = 20;
+    static constexpr int kScopeRows = 28;
     static constexpr uint32_t kScopeStride = 3;
     static constexpr uint32_t kScopeSpan = uint32_t(kScopeWidth) * kScopeStride;
     static constexpr uint32_t kScopeSearch = 600;          // how far back to look for a crossing
@@ -126,25 +126,30 @@
         paint::small_text(px, cx - 5, cy + r - 3, digits, live ? 13 : 6);
     }
 
-    // --- every track's level in a row --------------------------------------------------------
+    // --- every track's level as a column ------------------------------------------------------
     //
-    // Eight short bars, 13 pixels a track, from Status::track_milli in decibels (the top 36),
-    // the selected track's number bright, a muted track's bar dim. Three rows of bar and the
-    // track number under it in the small font.
-    void draw_track_meters(enaga::Canvas &canvas, int y) {
+    // Eight bars, 15 pixels a track, `rows` tall from `y`, in segments: Status::track_milli in
+    // decibels (the top 36), the top quarter brightest; a muted track's bar dim. Under each its
+    // machine's short name in the small font, the selected track's bright. The bars only while
+    // the beat plays (a stopped screen holds still); the names always.
+    void draw_track_columns(enaga::Canvas &canvas, int y, int rows) {
         uint8_t *px = canvas.data();
         const Status &status = engine_.status();
+        const bool running = enaga::clock::state().running != 0;
+        const int base = y + rows - 1;
         for (int t = 0; t < kTracks; t++) {
-            const int x = t * 15;
-            const uint32_t level = status.track_milli[t].load(std::memory_order_relaxed);
-            const int lit = paint::level_rows(level, 12, 36);
-            canvas.rect(x, y, 12, 3, 2);
-            for (int k = 0; k < lit; k++) {
-                const uint8_t g = muted_[t] ? 5 : (k >= 10 ? 15 : (k >= 6 ? 12 : 9));
-                canvas.rect(x + k, y, 1, 3, g);
+            const int x = t * 15 + 1;
+            canvas.rect(x, base + 1, 11, 1, 3);
+            if (running) {
+                const uint32_t level = status.track_milli[t].load(std::memory_order_relaxed);
+                const int lit = paint::level_rows(level, rows, 36);
+                for (int r = 0; r < lit; r += 2) {
+                    const uint8_t g = muted_[t] ? 4 : (r >= rows - rows / 4 ? 15 : 9);
+                    canvas.rect(x, base - r, 11, 1, g);
+                }
             }
-            char digit[2] = {char('1' + t), '\0'};
-            paint::small_text(px, x + 4, y + 4, digit, t == selected_ ? 15 : 6);
+            paint::small_text(px, x, base + 3, machine_name(engine_.machine_id(t)),
+                              muted_[t] ? 4 : (t == selected_ ? 15 : 8));
         }
     }
 
