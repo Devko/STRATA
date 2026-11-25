@@ -65,6 +65,10 @@
             // MACRO LEARN says so for as long as it is on: the knobs' pushes are not theirs.
             learn_line(line);
             canvas.text(0, y2, line, 15);
+        } else if (mode_ == Mode::edit && mod_learn_ >= 0) {
+            // And a MOD slot's learn, with the knob and depth so far.
+            mod_learn_line(line);
+            canvas.text(0, y2, line, 15);
         } else if ((step_page_ || mode_ != Mode::grid) && verdict_keys_free()) {
             // A MUTATE waiting for its verdict says so for as long as it waits: the notice
             // fades after a second and a half, and the keys it is waiting on do not.

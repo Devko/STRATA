@@ -16,6 +16,7 @@
     void release_pad(int pad) {
         if (pad < 0 || pad >= kPianoPads || pad_held_note_[pad] < 0) return;
         post(Cmd::release_note, uint8_t(pad_held_track_[pad]), 0, uint8_t(pad_held_note_[pad]));
+        mod_pressure_release(pad_held_track_[pad]);
         record_note_up(pad_held_track_[pad], uint8_t(pad_held_note_[pad]));
         pad_held_note_[pad] = -1;
         // The macro bend this pad's pressure made goes back to where the knob left it.

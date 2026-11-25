@@ -36,6 +36,7 @@
 #pragma once
 
 #include "midiout.hpp"     // kMidiOutOff and kMidiChannels: ProjectSettings::midi_out's domain
+#include "modslot.hpp"     // KitModSlot
 #include "pattern.hpp"
 #include "serialize.hpp"
 
@@ -326,6 +327,9 @@ struct KitTrack {
     // OneShot. A kit setting on the LFO page (push RAT), not a parameter: there is no 33rd byte
     // for a lock to name, and the 32 a track has are all spoken for.
     uint8_t lfo_trig = 0;
+    // The two mod slots (core/modslot.hpp): a source, a destination and a depth each, learnt on
+    // the LFO page. Kit settings for the same reason as TRIG; KIT.BIN's optional section 10.
+    KitModSlot mod[kModSlots];
 };
 
 // LFO TRIG's values, as KIT.BIN stores them: PERMANENT. dsp/lfo.hpp's LfoTrig mirrors them and
@@ -565,6 +569,9 @@ constexpr uint8_t kKitFilterLayout = 1;
 // LFO TRIG, one byte per track (KitTrack::lfo_trig). Optional on read: a KIT.BIN from before it
 // loads every LFO as FREE, which is how every LFO ran before.
 constexpr uint16_t kSectionKitLfoTrig = 9;
+// The mod slots, 3 bytes a slot, two slots a track (KitTrack::mod). Optional on read: a KIT.BIN
+// from before them loads every slot OFF, which changes no sound.
+constexpr uint16_t kSectionKitMod = 10;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

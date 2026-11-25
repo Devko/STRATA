@@ -174,6 +174,12 @@
                 end_learn();
                 return;
             }
+            // And a MOD slot's learn the same way (app/ui_modslots.hpp).
+            if ((key == ENAGA_KEY_CLR || key == ENAGA_KEY_OK) && down && !shift_ &&
+                mod_learn_ >= 0 && range_first_ < 0 && held_step_ < 0) {
+                end_mod_learn();
+                return;
+            }
             // A second CLR straight after the one that ended LEARN is the same "get me out"
             // press, not a clear of the track: on the unit it wiped the pattern (Roland,
             // 2026-11-23). FUNC + CLR (undo) is untouched.
@@ -215,6 +221,12 @@
                                 : key == ENAGA_KEY_PUSH_B ? 1
                                 : key == ENAGA_KEY_PUSH_C ? 2
                                                           : 3;
+            // MOD slots (core/modslot.hpp): push DEP for slot 1, DST for slot 2, again for
+            // the next source; then turn the knob the slot should move (app/ui_modslots.hpp).
+            if (edit_index(encoder) == kLfoDepth || edit_index(encoder) == kLfoDest) {
+                if (down) mod_push(edit_index(encoder) == kLfoDepth ? 0 : 1);
+                return;
+            }
             if (edit_index(encoder) == kLfoRate) {
                 if (!down) return;
                 const uint8_t next = uint8_t((int(lfo_trig_of(selected_)) + 1) % kLfoTrigs);
@@ -920,6 +932,8 @@
         // LEARN is an EDIT thing, and MIXER's for the kill EQ's bands: any other screen, HOME's
         // GRID included, ends it.
         if (mode_ != Mode::edit && mode_ != Mode::mixer && macro_learn_ >= 0) end_learn();
+        // A MOD slot learns from EDIT's knobs only.
+        if (mode_ != Mode::edit && mod_learn_ >= 0) end_mod_learn();
         mutation_pending_ = false;
         // A KEYS pad held across a mode change: its release goes to the next mode, so the note
         // is let go here or it would hang on a sustaining machine.

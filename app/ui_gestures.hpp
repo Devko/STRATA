@@ -481,6 +481,7 @@
         // the sound and showed nothing. GRID and EDIT draw the slots and need no notice.
         if (mode_ == Mode::keys) echo(Echo::param, index);
         if (macro_learn_ >= 0 && mode_ == Mode::edit) learn_touch(uint8_t(selected_), uint8_t(index));
+        if (mod_learn_ >= 0 && mode_ == Mode::edit) mod_learn_touch(index);
         // A macro turned up owns its parameters (a macro at 0 lets go): the knob moves the
         // setting underneath, but the sound follows the macro. Say which one, or the knob
         // looks broken (Roland, 2026-11-23: "editing of sounds does not work anymore").
@@ -621,6 +622,7 @@
         // A rolling pad stops on its own release, whatever the mode is by now: NOTE RPT turned
         // off under a held pad must not leave the roll running.
         const int track = track_for_pad(pad);
+        mod_pressure_release(track);           // PRS back to 0 (app/ui_modslots.hpp)
         if (track >= 0 && track < kTracks && (rolling_pads_ >> track & 1u) != 0) {
             rolling_pads_ = uint16_t(rolling_pads_ & ~(1u << track));
             post(Cmd::note_repeat, uint8_t(track), 0, 0, 0, 0);
@@ -666,6 +668,8 @@
         const bool piano = pad >= 0 && pad < kPianoPads && pad_held_note_[pad] >= 0;
         const int track = piano ? selected_ : track_for_pad(pad);
         if (track < 0 || track >= kTracks) return;
+        // A slot on PRS hears every pad of its track, rolling or not, selected or not.
+        mod_pressure(track, pressure);
 
         // A rolling pad's pressure is the roll's velocity instead: lean in and the roll swells.
         // Change-filtered like the macro, and never below 1, which is silence on most machines.

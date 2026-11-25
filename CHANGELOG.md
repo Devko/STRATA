@@ -16,6 +16,14 @@ the project file format or the controls.
 
 ### Added
 
+- **Two MOD slots per track.** Each track has two slots, each a source moving one parameter by a
+  depth: **LFO** (the track's LFO, which can stay at DEP 0 and move only the slots), **ENV** (the
+  LFO's shape and RAT once per note), **VEL**, **PRS** (the pad's pressure) and **RND** (a new
+  value per note). Learnt like the macros: on the LFO page push C (slot 1) or D (slot 2), push
+  again for the next source, turn the knob you want moved by as much as you want it moved, OK.
+  The knob goes back and the slot keeps the difference. The LFO page lists the slots; on EDIT a
+  dim line under a bar shows a slot's range. A cutoff stops at the ~100 Hz floor. Stored in the
+  kit (KIT.BIN grows to 1,389 bytes); older projects load with both slots off.
 - **Random lock ranges and parameter slide.** Hold a STEP and FUNC and turn a knob: that
   parameter gets a random range on the step, and each pass plays a new value within it (`R20` on
   the lock line, a dim line under the bar). Hold a STEP and FUNC and push a knob: the step's lock

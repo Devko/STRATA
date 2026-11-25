@@ -43,7 +43,7 @@ using namespace strata;
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
 // ambient modes: nine bytes on the end of the mixer section.
 constexpr uint32_t kProjectFileBytes = 402;
-constexpr uint32_t kKitFileBytes = 1329;   // 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
+constexpr uint32_t kKitFileBytes = 1389;   // 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -1386,8 +1386,15 @@ uint32_t fresh_kit_file() {
 
 // g_kit_file as a build from before the duck wrote it: the OSC page's section and then the
 // duck's, the last two, dropped.
-// g_kit_file as a build from before LFO TRIG wrote it: its section, the last, dropped.
+// g_kit_file as a build from before the mod slots wrote it: their section, the last, dropped.
+void drop_mod_section() {
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1329u);
+    for (uint32_t i = 0; i < 1329u; i++) g_kit_file[i] = g_kit_alt[i];
+}
+
+// g_kit_file as a build from before LFO TRIG wrote it: its section and the mod slots' dropped.
 void drop_lfo_trig_section() {
+    drop_mod_section();
     CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1309u);
     for (uint32_t i = 0; i < 1309u; i++) g_kit_file[i] = g_kit_alt[i];
 }
@@ -1483,7 +1490,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 9);     // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout, LFO TRIG
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 10);    // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout, LFO TRIG, the mod slots
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -2507,6 +2514,75 @@ TEST(kit_lfo_trig_round_trips_and_an_older_file_runs_every_lfo_free) {
 
     g_kit_source.tracks[1].lfo_trig = kLfoTrigFree;
     g_kit_source.tracks[6].lfo_trig = kLfoTrigFree;
+}
+
+TEST(kit_mod_slots_round_trip_and_an_older_file_loads_every_slot_off) {
+    fresh_kit_file();
+    g_kit_source.tracks[2].mod[0] = {kModSrcVel, 5, 40};       // VEL on slot 5 (FLTR CUT), +40
+    g_kit_source.tracks[2].mod[1] = {kModSrcRnd, 13, -127};    // RND on PAN, the deepest down
+    g_kit_source.tracks[7].mod[1] = {kModSrcEnv, 30, 1};       // ENV on OSC's SUB
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(written, kKitFileBytes);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int s = 0; s < kModSlots; s++) {
+            const KitModSlot &want = g_kit_source.tracks[t].mod[s];
+            const KitModSlot &got = g_kit_loaded.tracks[t].mod[s];
+            CHECK_EQ(int(got.source), int(want.source));
+            CHECK_EQ(int(got.dest), int(want.dest));
+            CHECK_EQ(int(got.depth), int(want.depth));
+        }
+    }
+    // Byte by byte: track 2's slot 1 is source, dest, depth as a two's-complement byte.
+    const uint32_t at = section_at(g_kit_file, kSectionKitMod);
+    CHECK_EQ(int(g_kit_file[at + 2 * 6 + 3]), int(kModSrcRnd));
+    CHECK_EQ(int(g_kit_file[at + 2 * 6 + 4]), 13);
+    CHECK_EQ(int(g_kit_file[at + 2 * 6 + 5]), 0x81);
+
+    // A damaged slot is OFF: an unknown source, a destination no slot can have (the LFO's DST);
+    // and -128 is -127.
+    g_kit_file[at + 2 * 6 + 0] = 6;
+    g_kit_file[at + 2 * 6 + 3 + 1] = 19;
+    g_kit_file[at + 7 * 6 + 3 + 2] = 0x80;
+    g_kit_file[at + 7 * 6 + 3 + 0] = kModSrcPrs;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_kit_loaded.tracks[2].mod[0].source), int(kModSrcOff));
+    CHECK_EQ(int(g_kit_loaded.tracks[2].mod[1].source), int(kModSrcOff));
+    CHECK_EQ(int(g_kit_loaded.tracks[7].mod[1].source), int(kModSrcPrs));
+    CHECK_EQ(int(g_kit_loaded.tracks[7].mod[1].depth), -127);
+
+    // A KIT.BIN from before the slots loads every slot OFF -- even read into a kit that had one
+    // -- and everything else as it was.
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    drop_mod_section();
+    g_kit_loaded.tracks[4].mod[0] = {kModSrcLfo, 1, 9};
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, 1329u)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int s = 0; s < kModSlots; s++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].mod[s].source), int(kModSrcOff));
+            CHECK(!g_kit_loaded.tracks[t].mod[s].on());
+        }
+        for (int p = 0; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+        CHECK_EQ(int(g_kit_loaded.tracks[t].lfo_trig), int(g_kit_source.tracks[t].lfo_trig));
+    }
+
+    // Present but short is damage, not an old file.
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    const uint32_t entry = section_entry_at(g_kit_file, kSectionKitMod);
+    poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
+    refresh_crc(g_kit_file);
+    CHECK(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes) != SerializeResult::ok);
+
+    for (int t = 0; t < kTracks; t++) {
+        for (int s = 0; s < kModSlots; s++) g_kit_source.tracks[t].mod[s] = KitModSlot{};
+    }
 }
 
 TEST(kit_the_duck_round_trips_is_clamped_and_an_older_file_ducks_as_v0_1_did) {
