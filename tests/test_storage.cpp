@@ -580,6 +580,11 @@ const Expect kTable[] = {
     // The performance mixer and its looper are live only (core/perffx.hpp, dsp/looper.hpp).
     {Cmd::perf_fx, 0u, "perf_fx"},
     {Cmd::looper, 0u, "looper"},
+
+    // LOCK (core/lockstore.hpp): the locks are RAM only, so a store dirties nothing; a tap puts
+    // a pattern, the sound bytes and faders, and the send, master and mute bytes back.
+    {Cmd::lock_store, 0u, "lock_store"},
+    {Cmd::lock_tap, kDirtyBank | kDirtyKit | kDirtyProject, "lock_tap"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:

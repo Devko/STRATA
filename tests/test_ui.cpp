@@ -113,6 +113,19 @@ struct UiProbe {
     static bool func_help(const Strata &app) { return app.func_help_showing(); }
     static bool verdict_free(const Strata &app) { return app.verdict_keys_free(); }
     static bool mutation_pending(const Strata &app) { return app.mutation_pending_; }
+    static PerfGlide glide(const Strata &app) { return app.perf_glide_; }
+    static void set_glide(Strata &app, PerfGlide glide) {
+        app.perf_glide_ = glide;
+        app.perf_riding_ = false;
+        app.loop_riding_ = false;
+        app.perf_hold_step_ = -1;
+        app.perf_hold_on_ = false;
+        app.perf_release_lets_go_ = false;
+        app.lock_press_ = false;
+    }
+    static bool perf_riding(const Strata &app) { return app.perf_riding_; }
+    static uint16_t morph_knob(const Strata &app) { return app.morph_; }
+    static const char *lock_mark(const Strata &app) { return app.lock_mark(); }
     static uint8_t pad_r(const Strata &app, int pad) { return app.leds_.pad_r[pad]; }
     static uint8_t step_green(const Strata &app, int i) { return app.leds_.step_green[i]; }
     static uint8_t step_red(const Strata &app, int i) { return app.leds_.step_red[i]; }
@@ -232,7 +245,8 @@ void open_keys() {
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuChain, kMenuSong, kMenuAutofill,
-                     kMenuQuantize, kMenuFreeze, kMenuLoopLen, kMenuDemo, kMenuRowCount };
+                     kMenuQuantize, kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo,
+                     kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
 void menu_to(int row) {
@@ -344,6 +358,9 @@ Strata &fresh() {
     }
     if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
     UiProbe::notes_view_on(app);           // NOTE view is UI state, not saved: on at every start
+    // FX GLIDE off, so a mixer change lands at once as it did before the glide: a test of the
+    // glide turns it on itself (UiProbe::set_glide). And no ride or held STEP left running.
+    UiProbe::set_glide(app, PerfGlide::off);
     // The performance mixer off and any loop thrown away: push VALUE + CLR, twice.
     app.on_key(ENAGA_KEY_PUSH_VALUE, true);
     key(ENAGA_KEY_CLR);
@@ -824,13 +841,15 @@ TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     CHECK_EQ(UiProbe::notice(app), "TAPE STOP: SLOT 8");
     app.on_key(ENAGA_KEY_PUSH_D, false);
 
+    // FUNC + MUTATE is LOCK now (core/lockstore.hpp): a tap with no lock stored says so and
+    // freezes nothing.
     app.on_pad_press(13, 100);
     pump(2);
     CHECK(!app_engine().delay_freeze().held());
-    CHECK_EQ(UiProbe::notice(app), "FREEZE: SLOT 5");
     app.on_pad_release(13);
     app.on_key(ENAGA_KEY_F1, false);
     pump(2);
+    CHECK_EQ(UiProbe::notice(app), "NO LOCK: HOLD STORES");
     CHECK(!app_engine().delay_freeze().held());
     CHECK_EQ(int(undo_depth()), int(undo_before));
 
@@ -8883,4 +8902,253 @@ TEST(ui_samples_the_browser_shows_the_waveform_of_what_the_track_plays) {
     check_layout(app, "SAMPLES with the waveform strip");
     key(ENAGA_KEY_CLR);
     back_to_a_kick();
+}
+
+// --- FX GLIDE: the mixer's button jumps ride (core/perffx.hpp) ---------------------------------
+
+namespace {
+
+void value_tap(Strata &app) {
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+}
+
+// FX GLIDE's 1 BEAT at the clock's tempo, in ms.
+uint32_t beat_ms() { return perf_glide_ms(PerfGlide::beat, enaga::clock::state().tempo); }
+
+Pattern g_before_jump;                               // ~8 KiB: file scope, never a local
+
+void func_mutate_tap(Strata &app) {
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(13, 100);
+    app.on_pad_release(13);
+    app.on_key(ENAGA_KEY_F1, false);
+}
+
+void func_mutate_hold(Strata &app) {
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(13, 100);
+    pump();
+    g_ms += 600;                                     // held past half a second
+    pump(2);
+    app.on_pad_release(13);
+    app.on_key(ENAGA_KEY_F1, false);
+}
+
+}  // namespace
+
+TEST(ui_the_menu_fx_glide_row_walks_off_sixteenth_beat_bar) {
+    Strata &app = fresh();
+    CHECK(UiProbe::glide(app) == PerfGlide::off);   // fresh() turns it off for the other tests
+    menu_to(kMenuGlide);
+    CHECK(screen_has(app, "FX GLIDE"));
+    CHECK(screen_has(app, "OFF"));
+    key(ENAGA_KEY_RIGHT);
+    CHECK(screen_has(app, "1/16"));
+    key(ENAGA_KEY_RIGHT);
+    CHECK(screen_has(app, "1 BEAT"));
+    CHECK(UiProbe::glide(app) == PerfGlide::beat);
+    key(ENAGA_KEY_RIGHT);
+    CHECK(screen_has(app, "1 BAR"));
+    key(ENAGA_KEY_RIGHT);                           // it wraps
+    CHECK(screen_has(app, "OFF"));
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "FX GLIDE 1/16") == 0);
+    key(ENAGA_KEY_CLR);
+    UiProbe::set_glide(app, PerfGlide::off);
+}
+
+TEST(ui_a_tap_on_value_rides_the_effect_out_over_a_beat_and_func_tap_cuts) {
+    Strata &app = fresh();
+    UiProbe::set_glide(app, PerfGlide::beat);
+    value_step(app, 3);                             // ECHO RISER
+    app.on_encoder(4, 50);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 100);
+
+    value_tap(app);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "ECHO RISER 0") == 0);
+    CHECK(app_engine().perf_amount() > 90);         // still up: riding, not cut
+    g_ms += beat_ms() / 2;
+    pump(2);
+    CHECK(app_engine().perf_amount() > 40 && app_engine().perf_amount() < 60);
+    g_ms += beat_ms() / 2 + 10;
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 0);
+    CHECK(app_engine().perf_fx() == PerfFx::echo_riser);   // still picked, at rest
+    CHECK(!UiProbe::perf_riding(app));
+
+    // FUNC + tap: the hard cut, for a drop.
+    app.on_encoder(4, 50);
+    pump(2);
+    app.on_key(ENAGA_KEY_F1, true);
+    value_tap(app);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 0);
+    UiProbe::set_glide(app, PerfGlide::off);
+}
+
+TEST(ui_a_slot_change_rides_the_old_effect_out_before_the_new_one_comes_in) {
+    Strata &app = fresh();
+    UiProbe::set_glide(app, PerfGlide::beat);
+    value_step(app, 10);                            // CRUSH
+    app.on_encoder(4, 50);
+    pump(2);
+    value_step(app, 9);                             // PUMP, picked at 0
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::pump);
+    CHECK(app_engine().perf_fx() == PerfFx::crush); // the old one still riding out
+    CHECK(app_engine().perf_amount() > 90);
+    g_ms += beat_ms() + 10;
+    pump(2);
+    CHECK(app_engine().perf_fx() == PerfFx::pump);
+    CHECK_EQ(int(app_engine().perf_amount()), 0);
+
+    // VALUE turned during a ride takes over at once, on the effect it was heading for.
+    app.on_encoder(4, 30);
+    pump(2);
+    value_step(app, 10);                            // back to CRUSH: PUMP rides out...
+    pump(2);
+    CHECK(app_engine().perf_fx() == PerfFx::pump);
+    app.on_encoder(4, 5);                           // ...until VALUE moves
+    pump(2);
+    CHECK(app_engine().perf_fx() == PerfFx::crush);
+    CHECK_EQ(int(app_engine().perf_amount()), 10);
+    CHECK(!UiProbe::perf_riding(app));
+    UiProbe::set_glide(app, PerfGlide::off);
+}
+
+TEST(ui_push_value_and_clr_rides_everything_out) {
+    Strata &app = fresh();
+    UiProbe::set_glide(app, PerfGlide::sixteenth);   // 115 ms at 130 BPM
+    value_step(app, 13);                             // GATE
+    app.on_encoder(4, 40);
+    pump(2);
+    value_key(app, ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::none);
+    CHECK(app_engine().perf_amount() > 60);
+    g_ms += 130;
+    pump(2);
+    CHECK(app_engine().perf_fx() == PerfFx::none);
+    CHECK_EQ(int(app_engine().perf_amount()), 0);
+    UiProbe::set_glide(app, PerfGlide::off);
+}
+
+TEST(ui_hold_value_and_a_step_pushes_its_effect_in_while_held) {
+    Strata &app = fresh();
+    UiProbe::set_glide(app, PerfGlide::beat);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    step_down(5);                                    // WASH, picked on the press
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::reverb_wash);
+    CHECK_EQ(int(app_engine().perf_amount()), 0);
+    g_ms += 350;                                     // held: the momentary push
+    pump(2);
+    CHECK(app_engine().perf_amount() < 30);          // rising over the glide, not a jump
+    g_ms += beat_ms();
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 127);
+    step_up(5);                                      // let go: it rides out, still picked
+    pump(2);
+    CHECK(app_engine().perf_amount() > 100);
+    g_ms += beat_ms() + 10;
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 0);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::reverb_wash);
+    CHECK(!trig_at(0, 5));
+
+    // Held again on the picked slot: pushes again, and does NOT let go on release.
+    step_down(5);
+    g_ms += 350;
+    pump(2);
+    g_ms += beat_ms();
+    pump(2);
+    CHECK_EQ(int(app_engine().perf_amount()), 127);
+    step_up(5);
+    g_ms += beat_ms() + 10;
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::reverb_wash);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+
+    // A quick tap on the picked slot still lets it go.
+    value_step(app, 5);
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::none);
+    CHECK(std::strcmp(UiProbe::notice(app), "FX OFF: VALUE TEMPO") == 0);
+    UiProbe::set_glide(app, PerfGlide::off);
+}
+
+// --- LOCK: FUNC + MUTATE (core/lockstore.hpp) ---------------------------------------------------
+
+TEST(ui_func_mutate_held_stores_a_lock_tapped_jumps_and_again_swaps_back) {
+    Strata &app = fresh();
+    CHECK(UiProbe::lock_mark(app) == nullptr);
+    step_down(2);
+    step_up(2);                                      // a trig on step 3: the state to keep
+    pump(2);
+
+    func_mutate_hold(app);
+    pump(Engine::kLockCheckBlocks + 2);
+    CHECK(std::strcmp(UiProbe::notice(app), "LOCK A01 STORED") == 0);
+    CHECK_EQ(std::strcmp(UiProbe::lock_mark(app), "L"), 0);
+    CHECK(UiProbe::pad_b(app, 13) > 2);              // MUTATE glows brighter than its dim
+
+    // Change it, and MUTATE it: L+, and a verdict pending.
+    step_down(6);
+    step_up(6);
+    pump(2);
+    app.on_pad_press(13, 100);
+    app.on_pad_release(13);
+    pump(Engine::kLockCheckBlocks + 2);
+    CHECK(UiProbe::mutation_pending(app));
+    CHECK_EQ(std::strcmp(UiProbe::lock_mark(app), "L+"), 0);
+
+    // An effect up, so the jump rides it to rest.
+    value_step(app, 10);
+    app.on_encoder(4, 40);
+    pump(2);
+
+    // A tap: back to the lock at once, the MUTATE verdict discarded, the mixer to rest.
+    __builtin_memcpy(&g_before_jump, &app_engine().pattern(), sizeof g_before_jump);
+    func_mutate_tap(app);
+    pump(Engine::kLockCheckBlocks + 2);
+    CHECK(std::strcmp(UiProbe::notice(app), "BACK TO LOCK A01") == 0);
+    CHECK(trig_at(0, 2));
+    CHECK(!trig_at(0, 6));
+    CHECK(!UiProbe::mutation_pending(app));
+    CHECK_EQ(int(app_engine().perf_amount()), 0);    // glide OFF in the tests: at once
+    CHECK_EQ(std::strcmp(UiProbe::lock_mark(app), "L"), 0);
+
+    // Again: swapped back to what the jump replaced.
+    func_mutate_tap(app);
+    pump(Engine::kLockCheckBlocks + 2);
+    CHECK(std::strcmp(UiProbe::notice(app), "SWAPPED BACK A01") == 0);
+    // The mutated pattern, whatever MUTATE did to it.
+    CHECK(__builtin_memcmp(&app_engine().pattern(), &g_before_jump, sizeof g_before_jump) == 0);
+    CHECK_EQ(std::strcmp(UiProbe::lock_mark(app), "L+"), 0);
+}
+
+TEST(ui_func_mutate_tapped_with_no_lock_says_how_to_store_one) {
+    Strata &app = fresh();
+    func_mutate_tap(app);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "NO LOCK: HOLD STORES") == 0);
+    CHECK(UiProbe::lock_mark(app) == nullptr);
+    CHECK(!UiProbe::mutation_pending(app));
+}
+
+TEST(ui_a_lock_jump_takes_the_morph_knob_back) {
+    Strata &app = fresh();
+    func_mutate_hold(app);
+    pump(2);
+    post_cmd_morph(600);
+    pump(2);
+    CHECK_EQ(int(app_engine().morph()), 600);
+    func_mutate_tap(app);
+    pump(2);
+    CHECK_EQ(int(app_engine().morph()), 0);
+    CHECK_EQ(int(UiProbe::morph_knob(app)), 0);
 }

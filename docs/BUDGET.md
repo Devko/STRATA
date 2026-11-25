@@ -1819,6 +1819,16 @@ Memory, cl6x image against main at `595ae0d`: payload 1,068,928 -> 1,104,992 byt
 the drawing code), bss 1,562,472 -> 1,565,120 (+2,648: eight 250-byte overviews and the
 placeholder's in Storage, `Status::wave` and the envelope bytes). No heap.
 
+### LOCK and FX GLIDE (2026-11-25, emulator)
+
+LOCK adds no DSP. While the playing pattern has a lock, the engine captures the live set and
+compares it with the lock once every 16 blocks (`Engine::kLockCheckBlocks`), about 9 KiB of
+memcpy and memcmp; a jump or swap is two such copies on the block it lands. FX GLIDE runs in the
+main context and posts one `perf_fx` per amount step. All 31 scenarios pass with cl6x on the
+branch, loads unchanged against main: default beat 24.68%, worst 30.34% (`scenario_ambient`).
+GCC-only not run for this change: nothing it adds is in a hot loop. Memory: the locks are 1.06
+MiB from the heap (128 locks, the swap-back and the compare's scratch), init 97.04 MiB of 120.
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |

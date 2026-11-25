@@ -585,3 +585,107 @@ TEST(perffx_engine_the_looper_records_a_bar_and_plays_it_under_its_mix) {
     post(Cmd::looper, 0, 0, 0, 0);
     pump();
 }
+
+// --- FX GLIDE: a button's jump rides (core/perffx.hpp) -----------------------------------------
+
+TEST(perffx_glide_lengths_follow_the_tempo) {
+    CHECK_EQ(int(perf_glide_ms(PerfGlide::off, 120.0f)), 0);
+    CHECK_EQ(int(perf_glide_ms(PerfGlide::sixteenth, 120.0f)), 125);
+    CHECK_EQ(int(perf_glide_ms(PerfGlide::beat, 120.0f)), 500);
+    CHECK_EQ(int(perf_glide_ms(PerfGlide::bar, 120.0f)), 2000);
+    CHECK_EQ(int(perf_glide_ms(PerfGlide::beat, 60.0f)), 1000);
+    CHECK_EQ(int(perf_glide_ms(PerfGlide::beat, 1000.0f)), 200);     // clamped to 300 BPM
+    CHECK_EQ(int(perf_glide_ms(PerfGlide::beat, 0.0f)), 3000);       // and to 20
+    CHECK(kPerfGlideDefault == PerfGlide::beat);
+    for (int g = 0; g < int(PerfGlide::count); g++) CHECK(in_font(perf_glide_name(PerfGlide(g))));
+    CHECK(std::strcmp(perf_glide_name(PerfGlide::beat), "1 BEAT") == 0);
+}
+
+TEST(perffx_a_ride_to_zero_takes_the_whole_length_then_sets_the_target) {
+    PerfRide ride;
+    ride.from_fx = PerfFx::crush;
+    ride.from_amount = 100;
+    ride.to_fx = PerfFx::pump;                       // a new slot, picked at 0
+    ride.to_amount = 0;
+    ride.length_ms = 400;
+    PerfFx fx = PerfFx::none;
+    uint8_t amount = 0;
+    perf_ride_at(ride, 0, fx, amount);
+    CHECK(fx == PerfFx::crush);
+    CHECK_EQ(int(amount), 100);
+    perf_ride_at(ride, 200, fx, amount);
+    CHECK(fx == PerfFx::crush);
+    CHECK_EQ(int(amount), 50);
+    perf_ride_at(ride, 399, fx, amount);
+    CHECK(fx == PerfFx::crush);
+    CHECK(amount <= 1);
+    perf_ride_at(ride, 400, fx, amount);
+    CHECK(fx == PerfFx::pump);
+    CHECK_EQ(int(amount), 0);
+    perf_ride_at(ride, 5000, fx, amount);
+    CHECK(fx == PerfFx::pump);
+}
+
+TEST(perffx_a_ride_up_and_a_ride_on_one_effect_are_straight_lines) {
+    PerfRide ride;
+    ride.from_fx = PerfFx::none;
+    ride.to_fx = PerfFx::gate;
+    ride.to_amount = 127;
+    ride.length_ms = 100;
+    PerfFx fx = PerfFx::none;
+    uint8_t amount = 0;
+    perf_ride_at(ride, 0, fx, amount);
+    CHECK(fx == PerfFx::gate);                        // up at once, from 0
+    CHECK_EQ(int(amount), 0);
+    perf_ride_at(ride, 50, fx, amount);
+    CHECK_EQ(int(amount), 63);
+    ride.from_fx = PerfFx::gate;
+    ride.from_amount = 27;
+    perf_ride_at(ride, 50, fx, amount);
+    CHECK(fx == PerfFx::gate);
+    CHECK_EQ(int(amount), 77);
+    // Never past the target, never back below where it started.
+    uint8_t last = 27;
+    for (uint32_t t = 0; t <= 100; t++) {
+        perf_ride_at(ride, t, fx, amount);
+        CHECK(amount >= last);
+        CHECK(amount <= 127);
+        last = amount;
+    }
+    CHECK_EQ(int(last), 127);
+}
+
+TEST(perffx_a_ride_between_two_effects_up_is_one_at_a_time) {
+    PerfRide ride;
+    ride.from_fx = PerfFx::lp_sweep;
+    ride.from_amount = 80;
+    ride.to_fx = PerfFx::hp_sweep;
+    ride.to_amount = 80;
+    ride.length_ms = 200;
+    PerfFx fx = PerfFx::none;
+    uint8_t amount = 0;
+    perf_ride_at(ride, 50, fx, amount);
+    CHECK(fx == PerfFx::lp_sweep);
+    CHECK_EQ(int(amount), 40);
+    perf_ride_at(ride, 100, fx, amount);
+    CHECK(fx == PerfFx::hp_sweep);
+    CHECK_EQ(int(amount), 0);
+    perf_ride_at(ride, 150, fx, amount);
+    CHECK(fx == PerfFx::hp_sweep);
+    CHECK_EQ(int(amount), 40);
+    perf_ride_at(ride, 200, fx, amount);
+    CHECK_EQ(int(amount), 80);
+}
+
+TEST(perffx_a_ride_of_length_zero_is_the_target) {
+    PerfRide ride;
+    ride.from_fx = PerfFx::crush;
+    ride.from_amount = 90;
+    ride.to_fx = PerfFx::none;
+    ride.length_ms = 0;
+    PerfFx fx = PerfFx::crush;
+    uint8_t amount = 90;
+    perf_ride_at(ride, 0, fx, amount);
+    CHECK(fx == PerfFx::none);
+    CHECK_EQ(int(amount), 0);
+}

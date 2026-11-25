@@ -130,3 +130,67 @@ PerfPlan perf_plan(PerfFx fx, uint8_t amount) {
 }
 
 }  // namespace strata
+
+namespace strata {
+
+const char *perf_glide_name(PerfGlide glide) {
+    switch (glide) {
+        case PerfGlide::off:       return "OFF";
+        case PerfGlide::sixteenth: return "1/16";
+        case PerfGlide::beat:      return "1 BEAT";
+        case PerfGlide::bar:       return "1 BAR";
+        default:                   return "?";
+    }
+}
+
+uint32_t perf_glide_ms(PerfGlide glide, float bpm) {
+    const float tempo = bpm < 20.0f ? 20.0f : (bpm > 300.0f ? 300.0f : bpm);
+    float beats = 0.0f;
+    switch (glide) {
+        case PerfGlide::sixteenth: beats = 0.25f; break;
+        case PerfGlide::beat:      beats = 1.0f; break;
+        case PerfGlide::bar:       beats = 4.0f; break;
+        default:                   return 0;
+    }
+    // Control rate, once per button press: the one divide is fine here.
+    return uint32_t(60000.0f * beats / tempo + 0.5f);
+}
+
+namespace {
+
+uint8_t lerp_amount(uint8_t from, uint8_t to, uint32_t at, uint32_t length) {
+    const int span = int(to) - int(from);
+    return uint8_t(int(from) + span * int(at) / int(length));
+}
+
+}  // namespace
+
+void perf_ride_at(const PerfRide &ride, uint32_t elapsed_ms, PerfFx &fx, uint8_t &amount) {
+    const uint32_t length = ride.length_ms;
+    if (elapsed_ms >= length) {
+        fx = ride.to_fx;
+        amount = ride.to_amount;
+        return;
+    }
+    if (ride.to_amount == 0 || ride.to_fx == PerfFx::none) {
+        fx = ride.from_fx;
+        amount = lerp_amount(ride.from_amount, 0, elapsed_ms, length);
+        return;
+    }
+    if (ride.from_amount == 0 || ride.from_fx == PerfFx::none || ride.from_fx == ride.to_fx) {
+        fx = ride.to_fx;
+        const uint8_t from = ride.from_fx == ride.to_fx ? ride.from_amount : 0;
+        amount = lerp_amount(from, ride.to_amount, elapsed_ms, length);
+        return;
+    }
+    const uint32_t half = length / 2u;
+    if (elapsed_ms < half) {
+        fx = ride.from_fx;
+        amount = lerp_amount(ride.from_amount, 0, elapsed_ms, half);
+    } else {
+        fx = ride.to_fx;
+        amount = lerp_amount(0, ride.to_amount, elapsed_ms - half, length - half);
+    }
+}
+
+}  // namespace strata

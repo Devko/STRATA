@@ -137,6 +137,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | CHAIN END | | SONG (play once) / LOOP |
 | AUTO-FILL | | OFF 4 8 16 bars |
 | QUANTIZE | | record quantize, by 5 |
+| FX GLIDE | | how long a button's jump in the performance mixer rides: `OFF`, `1/16`, `1 BEAT` (default), `1 BAR`, at the tempo. Not saved |
 | FREEZE | freeze the selected track (its loop from the next bar line), or unfreeze it | `T3 1 BAR` (1 2 4 8), `T3 WAIT` / `REC` while recording, `T3 ON` frozen |
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
 | LOAD DEMO | OK twice within 2 s: the factory demo project (the boot beat), under a new name | |
@@ -161,12 +162,40 @@ Printed labels (above), and the moves made while playing:
 | FUNC + pad-row key | selected track's length; held, it repeats (after 0.4 s, 20 steps a second) |
 | FUNC + STEP | trigless step (PERFORM: STEP 5-7 put the kill EQ on the macro) |
 | FUNC + A / B / C on GRID | Euclidean fill |
+| FUNC + MUTATE, held half a second | **LOCK**: store the live set as the playing pattern's lock (`LOCK A01 STORED`); again later overwrites it |
+| FUNC + MUTATE, tapped | Jump to that lock at once (`BACK TO LOCK A01`); tapped again, swap back to the state from just before the jump (`SWAPPED BACK A01`). No lock: `NO LOCK: HOLD STORES` |
 
 Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VALUE (DJ filter,
 now slots 1-2), FUNC + hold push D (tape stop, slot 8) and FUNC + hold MUTATE (delay freeze,
 slot 5). Each now only names its slot (`DJ FILTER: SLOT 1/2`, `TAPE STOP: SLOT 8`,
-`FREEZE: SLOT 5`). FUNC + MUTATE is kept free for LOCK; FUNC + push D with a STEP held still
-clears that step's D lock.
+`FREEZE: SLOT 5`), apart from FUNC + MUTATE, which is LOCK since the next change (below); FUNC +
+push D with a STEP held still clears that step's D lock.
+
+## LOCK (FUNC + MUTATE)
+
+Backlog D3, D4, D13, D14 (2026-11-25), `core/lockstore.hpp`. Store a moment you like, change a
+lot, and jump back in one tap; tap again to compare with where you were.
+
+| Holds | Does not hold |
+| --- | --- |
+| The playing pattern whole: steps, p-locks, conditions, lengths, swing | Other patterns, the bank, the chain |
+| Every track's sound bytes (all eight EDIT pages) and fader | The samples, the machines: a lock taken before a machine switch restores the parameters only |
+| The send and master bytes | The kill EQ's switches, the tempo (not STRATA's under an outside clock) |
+| The mutes (D4) | The eight stored mute states |
+| The morph position and the four macro positions | The scenes and the macro setup |
+
+- **One lock per pattern (D14), in RAM only**: not saved, and a project load or NEW clears them.
+- **At once (D3)**, on the next audio block. The performance mixer is not in a lock: the jump
+  rides the picked effect to 0 over FX GLIDE (it stays picked) and a loop plays on.
+- **A second tap swaps back (D13)** to the state captured at the jump, sound included: undo
+  covers only patterns (R1), so it could not. Any later tap jumps to the lock again. A pattern
+  change, or a new store, ends the swap-back.
+- **The kit is shared by every pattern (R2)**: jumping to A01's lock puts A01's sound back for
+  every pattern. The steps are per pattern; the sound comes from whichever lock you jumped to.
+- **A MUTATE waiting for OK or CLR is discarded** by a jump or swap: its pattern is gone.
+- On screen, at the right end of line 2: `L` while the playing pattern has a lock, `L+` once
+  anything it holds has changed (the font has no `*`). The MUTATE pad glows half bright while
+  the playing pattern has a lock.
 
 ## The performance mixer (push VALUE + STEP)
 
@@ -176,15 +205,16 @@ slots, `dsp/masterfx.hpp` the five new effects, `dsp/looper.hpp` the looper.
 
 | Gesture | Does |
 | --- | --- |
-| Push VALUE + STEP n | Pick effect n (`4 ECHO RISER`), at amount 0. It replaces the effect that was up, which fades out |
-| Push VALUE + the same STEP | Let go (`FX OFF: VALUE TEMPO`): VALUE goes back to tempo / morph / its field |
+| Push VALUE + STEP n | Pick effect n (`4 ECHO RISER`), at amount 0. It replaces the effect that was up, which rides out over FX GLIDE |
+| Push VALUE + the same STEP | Let go, on the release (`FX OFF: VALUE TEMPO`): VALUE goes back to tempo / morph / its field; the effect rides out |
+| Push VALUE + hold a STEP | **The momentary push**: held 0.3 s, the picked effect rises to 127 over FX GLIDE while the STEP is held (`ECHO RISER 127`), and rides out to 0 on release, still picked. A quick tap still just picks |
 | VALUE (an effect picked) | Its amount, 0 dry ... 127 the whole effect, on every screen (`ECHO RISER 64`). At 0 it is the dry mix to the bit, the rest rule of the morph and the macros |
-| Push VALUE + LEFT / RIGHT | The previous / next slot, round the sixteen, keeping the amount: a scene change with the crossfader left up. Reaching 16 picks the looper without recording |
+| Push VALUE + LEFT / RIGHT | The previous / next slot, round the sixteen, keeping the amount: a scene change with the crossfader left up, crossfaded over FX GLIDE (the old one out in the first half, the new one in over the second). Reaching 16 picks the looper without recording |
 | Push VALUE + STEP 13 | The morph (D2): the same A/B morph PERFORM's VALUE turns, on every screen (`MORPH 0`, then `MORPH 64` as it turns). A control, not an effect: the effect that was up stays as it is. Again: let go, the morph stays where it is (`MORPH KEPT: VALUE TEMPO`) |
 | Push VALUE + STEP 16 | The looper: records the finished mix from the next bar line for LOOP LEN bars (`LOOP 4 BAR: NEXT BAR`, `LOOP ARMED: PLAY` when stopped), then plays it. Again: leaves the looper, VALUE back to the tempo (`LOOP OFF: VALUE TEMPO`); the loop is kept silent, STEP 16 picks it up, VALUE + CLR throws it away. Again while armed or recording: `LOOP CANCELLED` |
 | VALUE (looper picked) | The loop's mix, 0 live ... 127 only the loop (`LOOP MIX 64`) |
-| Press VALUE alone | The picked effect back to 0, dry (`ECHO RISER 0`), or the looper's mix to 0 (`LOOP MIX 0`); the effect stays picked |
-| Push VALUE + CLR | Every effect off and the loop's mix to 0 (`FX OFF`); again, with all of that off, throws the loop away (`LOOP CLEARED`) |
+| Press VALUE alone | The picked effect rides back to 0 over FX GLIDE (`ECHO RISER 0`), or the looper's mix (`LOOP MIX 0`); the effect stays picked. **FUNC + press VALUE** cuts at once, for a drop |
+| Push VALUE + CLR | Every effect off and the loop's mix to 0, riding (`FX OFF`); again, with all of that off, throws the loop away (`LOOP CLEARED`) |
 | VALUE held | The STEP keys are the sixteen slots: dim amber; the effect that is up bright amber; the picked one bright green; STEP 16 red blinking armed, red recording, green holding a loop |
 
 The slots: 1 LP SWEEP and 2 HP SWEEP (the DJ filter), 3 HP RISER (high-pass, resonance climbing,
@@ -197,6 +227,11 @@ up), 9 BASS KILL (the kill EQ's LOW), 10 PUMP (a dip on every beat), 11 CRUSH (b
 echo and noise), 16 LOOPER. Until 2026-11-25 slot 7 was STUTTER (the REPEAT pad keeps it) and
 13 FLANGER.
 
+- **FX GLIDE** (FUNC menu): a jump that comes from a button (press VALUE, push VALUE + CLR, a
+  slot change, leaving a playing loop, a LOCK jump) rides to its target over OFF, 1/16, 1 BEAT
+  (the default) or 1 BAR at the tempo. Turning VALUE is already a ride your hand makes and never
+  glides; a turn during a ride takes over from where it got to. FUNC held makes any of them a cut.
+  Every depth is also smoothed over about 11 ms on the audio side, so OFF is a click-free cut.
 - **One effect at a time**, plus the looper and the morph: picking an effect leaves a loop
   playing at its mix and the morph where it is, and the effect goes over both. That also bounds
   the CPU (docs/BUDGET.md).
@@ -256,8 +291,8 @@ strip first, pictures per page later). A screen draws only inside it.
 The live strip lists only what is **off rest**, most telling first, and leaves out whole what does
 not fit in 17 characters: `K:LMH` kill EQ bands thrown, `FX4` the performance effect up (its STEP
 number), `S40` the scene morph at 40%, `M:AB` macros away from zero, `LP` the master looper
-armed, recording or playing. At rest it is empty. x 114-124 on that line is kept for the LOCK
-mark (`L` / `L*`), which a later change adds.
+armed, recording or playing. At rest it is empty. x 114-124 on that line is the LOCK mark: `L`
+while the playing pattern has a lock, `L+` once the live set differs from it.
 
 Two rules keep the frame cheap and whole. It is drawn only from words the audio side publishes
 once a block (`Status`): nothing in `draw()` walks a pattern or a buffer. And no text may reach
