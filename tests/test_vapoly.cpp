@@ -1459,3 +1459,24 @@ TEST(vapoly_a_note_released_before_its_frame_still_starts_and_is_let_go) {
     CHECK(peak(g_b, n) > 0.0f);
     CHECK(!tapped.active());
 }
+
+// The LFO on TUN (Machine::set_pitch_mod): every voice of a held chord follows it.
+TEST(vapoly_a_pitch_mod_moves_every_held_voice) {
+    const TrackParams p = patch();
+    VaPoly va;
+    va.init(kRate);
+    va.prepare(p);
+    va.trigger(hit(60));
+    static float out[48000];
+    const int blocks = 300;
+    const int from = 2400;
+    const int window = 12000;
+    for (int i = 0; i < blocks * kBlk; i++) out[i] = 0.0f;
+    render(va, p, out, blocks);
+    CHECK(periodicity(out + from, window, period_of(72)) < 0.7f);   // the note, not its octave
+    va.set_pitch_mod(12.0f);
+    for (int i = 0; i < blocks * kBlk; i++) out[i] = 0.0f;
+    render(va, p, out, blocks);
+    CHECK_EQ(va.settings().pitch_mod, 12.0f);
+    CHECK(periodicity(out + from, window, period_of(72)) > 0.85f);
+}

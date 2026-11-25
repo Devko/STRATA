@@ -184,6 +184,12 @@ public:
     // doubling the part.
     virtual void release(uint8_t note) { (void)note; }
 
+    // The LFO on TUN as a float (dsp/lfo.hpp, "Block rate"): semitones added to the pitch of
+    // every voice, sounding or not, at control rate. Set once a block by the engine, and 0 when
+    // the track's LFO is elsewhere. Only the synth machines (VA and WAVE, MONO and POLY) take it;
+    // the engine moves the TUN byte of every other machine instead, so the default ignores it.
+    virtual void set_pitch_mod(float semis) { (void)semis; }
+
     // Add this block's mono output into out[0..frames).
     virtual void render_add(float *out, int frames) = 0;
 
