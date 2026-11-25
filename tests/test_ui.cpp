@@ -4106,15 +4106,25 @@ TEST(ui_the_lfo_is_edits_fifth_page) {
     pump();
     CHECK(!pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(kLfoDepth), value));
 
-    // PERFORM: FUNC + STEP 3 hands the LFO's depth to the selected macro.
+    // LEARN by turning on the LFO page: the depth goes on macro A, and the knob goes back.
+    post_cmd(Cmd::macro_clear, 0);
+    pump();
+    const int depth = int(app_engine().params(0).v[kLfoDepth]);
     shift_key(ENAGA_KEY_F7);
     CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
-    shift_key(ENAGA_KEY_STEP1 + 2);
+    key(ENAGA_KEY_PUSH_A);                           // learn A: EDIT, on the LFO page still
+    CHECK_EQ(UiProbe::param_page(app), int(Page::lfo));
+    app.on_encoder(2, +20);
     pump();
+    key(ENAGA_KEY_OK);                               // done
+    pump(2);
     const MacroTarget &target = app_engine().macros().macros[0].targets[0];
     CHECK_EQ(int(target.enabled), 1);
     CHECK_EQ(int(target.param), kLfoDepth);
-    CHECK_EQ(UiProbe::notice(app), "A T1 DEP 1/4");
+    CHECK_EQ(int(target.low), depth);
+    CHECK_EQ(int(target.high), depth + 20);
+    CHECK_EQ(int(app_engine().params(0).v[kLfoDepth]), depth);
+    CHECK_EQ(UiProbe::notice(app), "A: 1 PARAM");
     post_cmd(Cmd::macro_clear, 0);
     pump();
 
@@ -7514,45 +7524,7 @@ TEST(ui_the_step_lights_show_velocity_and_blink_a_condition) {
 // a copy. Now: n/4 on every assignment, the same parameter again takes it off, and a full macro
 // says so.
 
-TEST(ui_macro_assignment_counts_toggles_and_says_full) {
-    Strata &app = fresh();
-    shift_key(ENAGA_KEY_F7);                               // PERFORM
-    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
-    for (int m = 0; m < kMacros; m++) post_cmd(Cmd::macro_clear, uint8_t(m));
-    pump(2);
-    while (UiProbe::macro_selected(app) != 0) key(ENAGA_KEY_LEFT);
-
-    key(ENAGA_KEY_STEP1 + 4);                              // STEP 5: an FLTR parameter
-    pump(2);
-    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 1);
-    CHECK(std::strstr(UiProbe::notice(app), " 1/4") != nullptr);
-    check_layout(app, "PERFORM, macro assigned");
-
-    key(ENAGA_KEY_STEP1 + 4);                              // again: off, not a copy
-    pump(2);
-    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 0);
-    CHECK(std::strstr(UiProbe::notice(app), " OFF 0/4") != nullptr);
-
-    for (int i = 0; i < 4; i++) {                          // a hand's pace: the engine applies
-        key(ENAGA_KEY_STEP1 + i);                          // each before the next press
-        pump(2);
-    }
-    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 4);
-    CHECK(std::strstr(UiProbe::notice(app), " 4/4") != nullptr);
-    key(ENAGA_KEY_STEP1 + 8);                              // a fifth: refused, and it says so
-    pump(2);
-    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 4);
-    CHECK_EQ(UiProbe::notice(app), "A FULL: CLR CLEARS");
-    check_layout(app, "PERFORM, macro full");
-    key(ENAGA_KEY_CLR);                                    // CLR clears the macro
-    pump(2);
-    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 0);
-    key(ENAGA_KEY_F4);
-}
-
-// --- MACRO LEARN: push a macro's knob in PERFORM, then push parameter knobs in EDIT ----------
-
-TEST(ui_macro_learn_assigns_by_pushing_knobs_in_edit) {
+TEST(ui_macro_learn_by_turning_sets_the_range_and_puts_the_knobs_back) {
     Strata &app = fresh();
     for (int m = 0; m < kMacros; m++) post_cmd(Cmd::macro_clear, uint8_t(m));
     pump(2);
@@ -7562,49 +7534,101 @@ TEST(ui_macro_learn_assigns_by_pushing_knobs_in_edit) {
     CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
     CHECK(std::strncmp(UiProbe::notice(app), "LEARN B 0/4", 11) == 0);
     check_layout(app, "EDIT, learn");
-
-    key(ENAGA_KEY_SELECT_RIGHT);                           // another page
     const int page = UiProbe::param_page(app);
-    key(ENAGA_KEY_PUSH_C);                                 // that page's third parameter
+    const int a = page_first(Page(page));
+    const int c = a + 2;
+    const int start_a = int(app_engine().params(0).v[a]);
+    const int start_c = int(app_engine().params(0).v[c]);
+    app.on_encoder(0, start_a > 63 ? -30 : +30);
     pump(2);
-    const Macro &b = app_engine().macros().macros[1];
-    CHECK_EQ(macro_count(b), 1);
-    CHECK_EQ(int(b.targets[0].param), page_first(Page(page)) + 2);
-    CHECK_EQ(int(b.targets[0].track), UiProbe::selected(app));
-    CHECK(std::strstr(UiProbe::notice(app), " 1/4") != nullptr);
-
-    key(ENAGA_KEY_DOWN);                                   // another track, same knob
-    key(ENAGA_KEY_PUSH_C);
+    const int turned_a = int(app_engine().params(0).v[a]);
+    CHECK(turned_a != start_a);
+    app.on_encoder(2, start_c > 63 ? -10 : +10);
     pump(2);
-    CHECK_EQ(macro_count(app_engine().macros().macros[1]), 2);
-    key(ENAGA_KEY_PUSH_C);                                 // again: off
-    pump(2);
-    CHECK_EQ(macro_count(app_engine().macros().macros[1]), 1);
-
-    // The hint stays while learning, after the notice fades.
-    g_ms += 4000;
-    pump(2);
-    CHECK(screen_has(app, "LEARN B 1/4 CLR: DONE"));
-    check_layout(app, "EDIT, learning");
-
+    key(ENAGA_KEY_PUSH_D);                                 // a push does not learn
+    CHECK_EQ(UiProbe::notice(app), "TURN A KNOB TO LEARN");
     key(ENAGA_KEY_CLR);                                    // done
     pump(2);
-    CHECK_EQ(UiProbe::notice(app), "KNOBS EDIT AGAIN");
-    key(ENAGA_KEY_PUSH_C);                                 // a push is a push again
+    CHECK_EQ(UiProbe::notice(app), "B: 2 PARAMS");
+    const Macro &b = app_engine().macros().macros[1];
+    CHECK_EQ(macro_count(b), 2);
+    bool found_a = false;
+    for (int i = 0; i < kMacroTargets; i++) {
+        const MacroTarget &t = b.targets[i];
+        if (t.enabled == 0 || t.param != a) continue;
+        found_a = true;
+        CHECK_EQ(int(t.low), start_a);
+        CHECK_EQ(int(t.high), turned_a);
+    }
+    CHECK(found_a);
+    // The knobs are back where they were: B at 0 is the old sound.
+    CHECK_EQ(int(app_engine().params(0).v[a]), start_a);
+    CHECK_EQ(int(app_engine().params(0).v[c]), start_c);
+
+    // Learning the same knob again changes its range rather than adding a copy, and a push
+    // while learning takes a held parameter off.
+    shift_key(ENAGA_KEY_F7);
+    key(ENAGA_KEY_PUSH_B);
+    app.on_encoder(0, start_a > 63 ? -5 : +5);
+    pump(2);
+    const int again_a = int(app_engine().params(0).v[a]);
+    key(ENAGA_KEY_PUSH_C);                                 // C's parameter is on B: off
+    pump(2);
+    key(ENAGA_KEY_OK);
     pump(2);
     CHECK_EQ(macro_count(app_engine().macros().macros[1]), 1);
-
-    // Leaving for a screen without the EDIT knobs ends it too.
-    shift_key(ENAGA_KEY_F7);
-    key(ENAGA_KEY_PUSH_A);
-    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
-    key(ENAGA_KEY_F7);                                     // MIXER
-    key(ENAGA_KEY_F8);                                     // back to EDIT
-    key(ENAGA_KEY_PUSH_A);
+    for (int i = 0; i < kMacroTargets; i++) {
+        const MacroTarget &t = app_engine().macros().macros[1].targets[i];
+        if (t.enabled != 0) CHECK_EQ(int(t.high), again_a);
+    }
+    post_cmd(Cmd::macro_clear, 1);
     pump(2);
-    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 0);
     key(ENAGA_KEY_F4);
 }
+
+TEST(ui_macro_learn_refuses_a_fifth_knob_and_ends_on_leaving_edit) {
+    Strata &app = fresh();
+    for (int m = 0; m < kMacros; m++) post_cmd(Cmd::macro_clear, uint8_t(m));
+    pump(2);
+    shift_key(ENAGA_KEY_F7);
+    key(ENAGA_KEY_PUSH_A);
+    for (int e = 0; e < 4; e++) {
+        app.on_encoder(e, +3);
+        pump(2);
+    }
+    key(ENAGA_KEY_SELECT_RIGHT);                           // a fifth parameter, on another page
+    app.on_encoder(0, +3);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "A FULL: KNOB NOT LEARNT");
+    // Leaving EDIT ends it as CLR does: four learnt.
+    key(ENAGA_KEY_F7);                                     // MIXER
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 4);
+    post_cmd(Cmd::macro_clear, 0);
+    pump(2);
+    key(ENAGA_KEY_F4);
+}
+
+// --- STEP keys in PERFORM no longer assign: FUNC + STEP 5-7 still put the kill EQ on -------
+
+TEST(ui_perform_func_step_5_still_assigns_the_kill_eq) {
+    Strata &app = fresh();
+    for (int m = 0; m < kMacros; m++) post_cmd(Cmd::macro_clear, uint8_t(m));
+    pump(2);
+    shift_key(ENAGA_KEY_F7);
+    while (UiProbe::macro_selected(app) != 0) key(ENAGA_KEY_LEFT);
+    key(ENAGA_KEY_STEP1 + 4);                              // a plain STEP: no assignment
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 0);
+    shift_key(ENAGA_KEY_STEP1 + 4);                        // FUNC + STEP 5: the LOW band
+    pump(2);
+    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 1);
+    post_cmd(Cmd::macro_clear, 0);
+    pump(2);
+    key(ENAGA_KEY_F4);
+}
+
+// --- MACRO LEARN: push a macro's knob in PERFORM, then push parameter knobs in EDIT ----------
 
 // --- an EDIT knob on a parameter a turned-up macro holds says so ----------------------------
 
@@ -7617,7 +7641,8 @@ TEST(ui_an_edit_knob_under_a_turned_up_macro_says_which_macro_holds_it) {
     pump(2);
     shift_key(ENAGA_KEY_F7);                               // PERFORM
     key(ENAGA_KEY_PUSH_C);                                 // learn C, EDIT opens
-    key(ENAGA_KEY_PUSH_A);                                 // A's parameter on macro C
+    app.on_encoder(0, +20);                                // A's parameter on macro C
+    pump(2);
     key(ENAGA_KEY_CLR);                                    // learn done
     pump(2);
     CHECK_EQ(macro_count(app_engine().macros().macros[2]), 1);

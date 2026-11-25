@@ -178,14 +178,14 @@ constexpr Text kStepFields = {"STEP FIELDS:", {
 }};
 
 constexpr Text kLearn = {"MACRO LEARN:", {
-    "PUSH A KNOB  PUT ITS",
-    "PARAM ON THE MACRO",
-    "PUSH AGAIN  OFF",
+    "TURN KNOBS TO WHERE",
+    "THE MACRO TOP GOES",
+    "PUSH  TAKES ONE OFF",
     "ANY PAGE OR TRACK",
     "LEFT/RIGHT PAGE",
     "UP/DOWN    TRACK",
     "4 PARAMS A MACRO",
-    "CLR OR HOME  END",
+    "OK/CLR END KNOBS BACK",
     "START  PERFORM PUSH",
     "THE MACRO KNOB A-D",
 }};
@@ -219,12 +219,12 @@ constexpr Text kPerform = {"PERFORM:", {
     "PUSH A-D   LEARN",
     "VALUE      A/B MORPH",
     "LEFT/RIGHT MACRO",
-    "STEP  PARAM TO MACRO",
-    "FUNC+STEP 1-4  LFO",
+    "LEARN  TURN THE KNOBS",
     "FUNC+STEP 5-7 KILL EQ",
     "OK         CAPTURE A",
     "CLR       CLEAR MACRO",
     "UP/DOWN   MUTATE TYPE",
+    nullptr,
 }};
 
 constexpr Text kPerform2 = {"PERFORM MORE:", {

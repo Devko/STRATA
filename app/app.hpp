@@ -633,12 +633,19 @@ public:
             if (encoder >= 0 && !shift_ && macro_learn_ >= 0 && !step_page_ &&
                 mode_ == Mode::edit) {
                 if (!down) return;
+                // Learning is by turning (D11). A push takes a parameter the macro already holds
+                // off it, which is the one thing turning cannot say.
                 macro_selected_ = macro_learn_;
-                assign_macro(page_first(Page(param_page_)) + encoder);
+                const int param = page_first(Page(param_page_)) + encoder;
+                if (macro_edit(uint8_t(selected_), uint8_t(param)) == MacroEdit::remove) {
+                    assign_macro(param);
+                } else {
+                    notice("TURN A KNOB TO LEARN");
+                }
                 return;
             }
-            if (key == ENAGA_KEY_CLR && down && !shift_ && macro_learn_ >= 0 &&
-                range_first_ < 0 && held_step_ < 0) {
+            if ((key == ENAGA_KEY_CLR || key == ENAGA_KEY_OK) && down && !shift_ &&
+                macro_learn_ >= 0 && range_first_ < 0 && held_step_ < 0) {
                 end_learn();
                 return;
             }
@@ -835,22 +842,12 @@ public:
             return;
         }
 
-        // And in PERFORM they are the sixteen parameters of the selected track, assigned to the
-        // selected macro. The STEP keys are already a sixteen-wide selector in the step page, so
-        // this is the gesture they have; without it a macro could never be set up at all, and
-        // "4 macros driving up to 4 parameters" would be a feature with no way in.
-        // With FUNC held, STEP 1-4 are the LFO's four bytes instead (WAV RAT DEP DST), so a macro
-        // can sweep an LFO's depth or rate too.
-        if (mode_ == Mode::perform && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
-            // FUNC + STEP 5-7 are the master kill EQ's LOW, MID and HI: a macro can sweep the lows
-            // out over a build. STEP 8-16 with FUNC do nothing rather than assign a track
-            // parameter the hand did not mean.
-            const int step = key - ENAGA_KEY_STEP1;
-            if (down && !shift_) assign_macro(step);
-            if (down && shift_ && step < kLfoParams) assign_macro(kParams + step);
-            if (down && shift_ && step >= kMacroEqFirstStep && step < kMacroEqFirstStep + kMasterBands) {
-                assign_macro_master(step - kMacroEqFirstStep);
-            }
+        // In PERFORM, FUNC + STEP 5-7 put the master kill EQ's LOW, MID and HI on the selected
+        // macro, until the EQ can be learnt by turning too. The STEP-key assignment of track
+        // parameters retired with learn by turning (D11): the STEP keys are steps here (D12).
+        if (mode_ == Mode::perform && shift_ && key >= ENAGA_KEY_STEP1 + kMacroEqFirstStep &&
+            key < ENAGA_KEY_STEP1 + kMacroEqFirstStep + kMasterBands) {
+            if (down) assign_macro_master(key - ENAGA_KEY_STEP1 - kMacroEqFirstStep);
             return;
         }
 
@@ -2000,6 +1997,7 @@ public:
         // KEYS has no knob slots on screen (its sixteen notes fill it), so a turn there changed
         // the sound and showed nothing. GRID and EDIT draw the slots and need no notice.
         if (mode_ == Mode::keys) echo(Echo::param, index);
+        if (macro_learn_ >= 0 && mode_ == Mode::edit) learn_touch(index);
         // A macro turned up owns its parameters (a macro at 0 lets go): the knob moves the
         // setting underneath, but the sound follows the macro. Say which one, or the knob
         // looks broken (Roland, 2026-11-23: "editing of sounds does not work anymore").
@@ -5917,11 +5915,104 @@ public:
         return macro_count(macro) >= kMacroTargets ? MacroEdit::full : MacroEdit::add;
     }
 
+    // LEARN BY TURNING (Roland, 2026-11-25, D11): while LEARN is on, every knob turned in EDIT
+    // is remembered with the value it started from. When LEARN ends, each goes on the macro
+    // with that start as its 0 and where the knob was left as its 127, and the knob goes back
+    // to its start -- so the macro at 0 is the old sound and at 127 the sound just dialled.
+    struct LearnTouch {
+        uint8_t track;
+        uint8_t param;
+        uint8_t start;
+    };
+    LearnTouch learn_touches_[kMacroTargets] = {};
+    int learn_touch_count_ = 0;
+
+    void learn_touch(int param) {
+        for (int i = 0; i < learn_touch_count_; i++) {
+            if (learn_touches_[i].track == selected_ && learn_touches_[i].param == param) return;
+        }
+        const Macro &macro = engine_.macros().macros[macro_learn_];
+        bool already = false;
+        for (int i = 0; i < kMacroTargets; i++) {
+            const MacroTarget &t = macro.targets[i];
+            if (t.enabled != 0 && t.track == selected_ && t.param == param) already = true;
+        }
+        if (learn_touch_count_ >= kMacroTargets ||
+            (!already && macro_count(macro) + learn_new_targets() >= kMacroTargets)) {
+            char *out = notice_buffer_;
+            *out++ = char('A' + macro_learn_);
+            append(out, " FULL: KNOB NOT LEARNT");
+            *out = 0;
+            notice(notice_buffer_);
+            return;
+        }
+        // The value before this turn: the delta is still in the ring, so the kit shows it.
+        learn_touches_[learn_touch_count_++] = {uint8_t(selected_), uint8_t(param),
+                                                engine_.params(selected_).v[param]};
+    }
+
+    // Touched parameters the macro does not hold yet: the slots the commit will take.
+    int learn_new_targets() const {
+        const Macro &macro = engine_.macros().macros[macro_learn_];
+        int count = 0;
+        for (int i = 0; i < learn_touch_count_; i++) {
+            bool held = false;
+            for (int k = 0; k < kMacroTargets; k++) {
+                const MacroTarget &t = macro.targets[k];
+                if (t.enabled != 0 && t.track == learn_touches_[i].track &&
+                    t.param == learn_touches_[i].param) {
+                    held = true;
+                }
+            }
+            if (!held) count++;
+        }
+        return count;
+    }
+
+    void commit_learn() {
+        const Macro &macro = engine_.macros().macros[macro_learn_];
+        for (int i = 0; i < learn_touch_count_; i++) {
+            const LearnTouch &touch = learn_touches_[i];
+            const uint8_t end = engine_.params(touch.track).v[touch.param];
+            // Already on the macro: macro_assign takes it off, and the second puts it back with
+            // the new range.
+            for (int k = 0; k < kMacroTargets; k++) {
+                const MacroTarget &t = macro.targets[k];
+                if (t.enabled != 0 && t.track == touch.track && t.param == touch.param) {
+                    post(Cmd::macro_assign, touch.track, 0, uint8_t(macro_learn_), touch.param);
+                }
+            }
+            if (end != touch.start) {
+                Command command;
+                command.cmd = Cmd::macro_assign;
+                command.track = touch.track;
+                command.a = uint8_t(macro_learn_);
+                command.b = touch.param;
+                command.c = touch.start;
+                command.d = end;
+                post_command(command);
+            }
+            post(Cmd::set_param, touch.track, 0, touch.param, touch.start, 0);   // back
+        }
+    }
+
     void end_learn() {
+        if (learn_touch_count_ > 0) {
+            commit_learn();
+            char *out = notice_buffer_;
+            *out++ = char('A' + macro_learn_);
+            append(out, ": ");
+            append_number(out, uint32_t(learn_touch_count_));
+            append(out, learn_touch_count_ == 1 ? " PARAM" : " PARAMS");
+            *out = 0;
+            notice(notice_buffer_);
+        } else {
+            notice("KNOBS EDIT AGAIN");
+        }
+        learn_touch_count_ = 0;
         macro_learn_ = -1;
         learn_ended_ = true;
         learn_ended_at_ms_ = last_ms_;
-        notice("KNOBS EDIT AGAIN");
     }
 
     // "LEARN A 2/4 CLR: DONE", the line LEARN keeps on screen while it is on.
@@ -5943,7 +6034,7 @@ public:
         *out++ = char('A' + macro_learn_);
         *out++ = ' ';
         append_number(out, uint32_t(macro_count(engine_.macros().macros[macro_learn_])));
-        append(out, "/4 PUSH KNOB");
+        append(out, "/4 TURN KNOBS");
         *out = 0;
         notice(notice_buffer_);
     }
