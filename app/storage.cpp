@@ -108,6 +108,7 @@ bool mutates_kit(Cmd cmd) {
         case Cmd::sound_preset:
         case Cmd::set_track_level:
         case Cmd::set_slice_mode:
+        case Cmd::set_lfo_trig:
         case Cmd::set_duck:
         case Cmd::clear_sample:
         case Cmd::set_sample:

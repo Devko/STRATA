@@ -29,6 +29,26 @@
 // destination moves in 0-127 steps at about 750 updates a second, which is fine for a filter
 // sweep or a pan and audible as steps on a slow, deep pitch sweep.
 //
+// ## TRIG: when a cycle starts
+//
+// Not a fifth byte -- the page has four encoders and the 32 bytes a track has are all spoken for
+// -- but a kit setting beside the bytes (KitTrack::lfo_trig, KIT.BIN's optional section 9), put
+// on a push of RAT's knob. No lock, scene or macro moves it, like SLC AUTO. Three values:
+//
+//     FREE      as it always was: the cycle runs on its own (or on the clock), notes or not
+//     RETRIG    every note on the track restarts the cycle at phase 0 (S+H draws a new value)
+//     ONE-SHOT  every note runs ONE cycle from phase 0 and then the LFO stops. This is the
+//               second assignable envelope: the shapes become envelopes that start and end at
+//               the knob's value -- SIN one wobble, TRI an attack and decay (up for half the
+//               cycle, down for the other), RMP a rise that holds, SAW a decay from DEP down,
+//               SQR a gate for half the cycle, S+H a random value per note, held. RAT is the
+//               time: a free RAT is 1/Hz seconds (16 s down to 31 ms), a synced one the note
+//               length. Before the first note, and after a cycle, it rests at 0 (RMP at its top
+//               once it has risen; S+H on its value).
+//
+// A synced LFO in RETRIG or ONE-SHOT counts its cycle from the note at the tempo, not from the
+// bar: that is what a retrigger means. A kit from before TRIG loads as FREE.
+//
 // ## Phase
 //
 // A free LFO runs on its own and never resets. A synced one takes its phase from the clock's
@@ -54,6 +74,15 @@ constexpr int kLfoDest = kParams + 3;
 // Shapes, in the order the WAV byte walks them.
 enum class LfoWave : uint8_t { sine = 0, triangle, ramp, saw, square, sample_hold, count };
 constexpr int kLfoWaves = int(LfoWave::count);
+
+// TRIG (KitTrack::lfo_trig): the numbers KIT.BIN stores, so PERMANENT. app/ asserts they match
+// core/project.hpp's kLfoTrig* constants.
+enum class LfoTrig : uint8_t { free = 0, retrig, one_shot, count };
+// A damaged byte is FREE, as an absent one is.
+constexpr LfoTrig lfo_trig(uint8_t byte) {
+    return byte < uint8_t(LfoTrig::count) ? LfoTrig(byte) : LfoTrig::free;
+}
+const char *lfo_trig_name(LfoTrig trig);       // "FREE" "RETRIG" "ONE-SHOT"
 
 // The RAT byte below this is free running; at or above it, synced.
 constexpr uint8_t kLfoSyncFirst = 64;
@@ -94,10 +123,24 @@ const char *lfo_param_name(int index);          // "WAV" "RAT" "DEP" "DST" for 1
 // The rate in hundredths of a hertz, rounded, for the screen to print.
 uint32_t lfo_free_centi_hz(uint8_t rate);
 
-// The destination byte moved by the LFO: `base` plus `value` (-1..1) times DEP's share of 64
+// How far DEP 127 swings the destination, in counts either side. 64 everywhere but a cutoff,
+// where 64 counts was about five octaves each way (D9 leftover): there DEP 127 is about three
+// octaves either side, on each curve --
+//   FLTR CUT (9.8138 octaves over 127 counts): 39 counts = 3.01 octaves
+//   the VAs' and WAVEs' CUT (8.4214 over 127): 45 counts = 2.98 octaves
+constexpr float kLfoSpan = 64.0f;
+constexpr float kLfoInsertCutoffSpan = 39.0f;
+constexpr float kLfoVaCutoffSpan = 45.0f;
+
+// The destination byte moved by the LFO: `base` plus `value` (-1..1) times DEP's share of `span`
 // counts, rounded to nearest and clamped into 0-127. It never goes below `floor`, or below
 // `base` where the knob itself sits under the floor: the floor limits the LFO, not the knob.
-uint8_t lfo_apply(uint8_t base, float value, uint8_t depth, uint8_t floor = 0);
+uint8_t lfo_apply(uint8_t base, float value, uint8_t depth, uint8_t floor = 0,
+                  float span = kLfoSpan);
+
+// The same offset unrounded, in semitones of TUN (24/64 a count): what a synth machine's voices
+// add to their pitch when the LFO is on TUN, so a slow sweep glides instead of stepping.
+float lfo_pitch_semis(float value, uint8_t depth);
 
 // The cutoff floor: an LFO on a cutoff stops at about 100 Hz, so a deep sweep dips the sound
 // instead of shutting it off (backlog D9). The bytes follow the two cutoff curves:
@@ -106,8 +149,15 @@ uint8_t lfo_apply(uint8_t base, float value, uint8_t depth, uint8_t floor = 0);
 constexpr uint8_t kLfoInsertCutoffFloor = 30;
 constexpr uint8_t kLfoVaCutoffFloor = 23;
 // The floor for an LFO on `dest`: FLTR's cutoff on a track with an insert chain, SRC's third
-// byte on a VA or WAVE machine, and 0 (no floor) for everything else.
+// byte on a VA or WAVE machine, and 0 (no floor) for everything else. The macros and the scene
+// morph stop at the same floor (app/engine.cpp, apply_performance): only the knob, a lock and the
+// kit itself close a filter all the way.
 uint8_t lfo_cutoff_floor(int dest, bool va_filter, bool insert_chain);
+// And the span for an LFO on `dest`, on the same terms: a cutoff's, or kLfoSpan.
+float lfo_span(int dest, bool va_filter, bool insert_chain);
+// Which parameter a track's cutoff is, on those terms: SRC's third byte on a synth machine,
+// FLTR's second on a machine with the insert filter, and -1 for MID, which has neither.
+int lfo_cutoff_param(bool va_filter, bool insert_chain);
 
 // The four bytes resolved, at control rate, only when they change.
 struct LfoSettings {
@@ -139,12 +189,39 @@ public:
 
     float phase() const { return lfo_.phase(); }
 
+    // RETRIG and ONE-SHOT: a note on the track. Back to phase 0, S+H drawing a new value as a
+    // wrap would, and a one-shot armed for one cycle.
+    void restart();
+
+    // ONE-SHOT: advance the one cycle by `cycles` and return its envelope value (see TRIG
+    // above). Once the cycle is through it stays at its rest value until restart().
+    float one_shot(LfoWave wave, float cycles);
+    bool one_shot_done() const { return done_; }
+    // ONE-SHOT back to waiting for a first note, at rest (a TRIG change, a project load). The
+    // free cycle is untouched, so a FREE LFO is not moved by it.
+    void rest() {
+        shot_ = 1.0f;
+        done_ = true;
+        fired_ = false;
+        shot_held_ = 0.0f;
+    }
+
+    // The one-shot shapes at `u` (0..1 through the cycle) with S+H holding `held`; at u = 1 (and
+    // past it) the rest value. Exposed for the tests.
+    static float one_shot_value(LfoWave wave, float u, float held);
+
 private:
     float shaped(LfoWave wave, float raw) const;
     static enaga::dsp::LfoShape enaga_shape(LfoWave wave);
 
     enaga::dsp::Lfo lfo_;
     enaga::dsp::Random random_;
+    // ONE-SHOT's own cycle: where it is, whether it has run out, whether any note has started
+    // one (before the first, every shape rests at 0), and S+H's value for this note.
+    float shot_ = 1.0f;
+    bool done_ = true;
+    bool fired_ = false;
+    float shot_held_ = 0.0f;
 };
 
 }  // namespace strata

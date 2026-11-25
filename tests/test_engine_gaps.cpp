@@ -766,7 +766,8 @@ TEST(gaps_a_load_with_no_chain_running_stops_the_one_playing_and_its_first_pass_
 TEST(gaps_capturing_or_selecting_a_scene_is_heard_without_anything_else_moving) {
     fresh();
     pump();
-    constexpr int kP = 5;
+    // FLTR RES: not the cutoff, which a morph cannot take under its ~100 Hz floor (D9).
+    constexpr int kP = 6;
     // Scene 2 holds 20, scene 3 holds 100, and the morph sits at the B end.
     post(Cmd::set_param, 0, 0, kP, 20);
     post_full(Cmd::scene_capture, 0, 0, 2, 0, 0, 0);

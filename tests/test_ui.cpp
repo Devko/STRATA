@@ -5527,6 +5527,52 @@ TEST(ui_projects_the_open_project_is_not_deleted) {
     key(ENAGA_KEY_F4);
 }
 
+// --- LFO TRIG: push RAT's knob on the LFO page ------------------------------------------------
+
+TEST(ui_pushing_rat_on_the_lfo_page_walks_lfo_trig) {
+    Strata &app = fresh();
+    const KitTrack &kit = app_engine().project().kit.tracks[0];
+    key(ENAGA_KEY_F8);                                // EDIT, track 1
+    while (UiProbe::param_page(app) != int(Page::lfo)) key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(int(kit.lfo_trig), int(kLfoTrigFree));
+
+    // RAT is the second knob: push B. FREE, RETRIG, ONE-SHOT and round.
+    key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(kit.lfo_trig), int(kLfoTrigRetrig));
+    CHECK(std::strcmp(UiProbe::notice(app), "LFO TRIG RETRIG") == 0);
+    CHECK(app_storage().dirty());
+    key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(kit.lfo_trig), int(kLfoTrigOneShot));
+    CHECK(std::strcmp(UiProbe::notice(app), "LFO TRIG ONE-SHOT") == 0);
+
+    // The page's last line says so while the LFO runs, in the widest case.
+    post_cmd_track_param(0, kLfoDepth, 127);
+    post_cmd_track_param(0, kLfoDest, lfo_dest_byte(page_first(Page::fltr) + 1));
+    pump(3);
+    CHECK(app_engine().lfo_on(0));
+    CHECK(screen_has(app, "ONE-SHOT"));
+    check_layout(app, "EDIT LFO, ONE-SHOT");
+
+    key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(kit.lfo_trig), int(kLfoTrigFree));
+    CHECK(!screen_has(app, "ONE-SHOT"));
+
+    // Another knob, or RAT's knob on another page, does not touch it.
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(kit.lfo_trig), int(kLfoTrigFree));
+
+    post_cmd_track_param(0, kLfoDepth, 0);
+    post_cmd_track_param(0, kLfoDest, 0);
+    pump(2);
+    key(ENAGA_KEY_F4);
+}
+
 // --- SLC AUTO: push SLC's knob on a SAMPLE track ----------------------------------------------
 
 TEST(ui_pushing_slc_on_a_sample_track_turns_auto_slicing_on_and_off) {

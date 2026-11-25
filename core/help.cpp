@@ -529,7 +529,7 @@ void knob_row(const HelpPlace &place, int slot, char row[kHelpChars + 1]) {
 }
 
 // The four knobs of the EDIT page A-D turn, and what is special about the page: the pushes
-// (NOTE view on TUN or PIT, SLC AUTO on SAMPLE's SLC) and how the page switches itself on.
+// (NOTE view on TUN or PIT, SLC AUTO on SAMPLE's SLC, LFO TRIG on RAT) and how the page switches itself on.
 void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelpChars + 1],
                int &count) {
     const int page = place.page < kHelpEditPages ? place.page : 0;
@@ -554,7 +554,11 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
     switch (page) {
         case 1: add_row(rows, count, "MOD  OFF LP BP HP"); break;
         case 3: add_row(rows, count, "SENDS  MIXER DLY/REV"); break;
-        case 4: add_row(rows, count, "ON WITH DEP AND DST"); break;
+        case 4:
+            add_row(rows, count, "ON WITH DEP AND DST");
+            add_row(rows, count, "PUSH B     TRIG MODE");
+            add_row(rows, count, "FREE RETRIG ONE-SHOT");
+            break;
         case 5: add_row(rows, count, "MOD OFF  NO ARP"); break;
         case 6:
             add_row(rows, count, machine_is_grain(place.machine) ? "SUS 0  DEC DECIDES"

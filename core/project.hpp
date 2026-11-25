@@ -322,7 +322,18 @@ struct KitTrack {
     // How far this track ducks under the sidechain duck, in percent: 0 never, 100 fully. Not a
     // parameter either -- like the fader beside it, it is the mixer's, and no lock moves it.
     uint8_t duck = kDuckDepthDefault;
+    // LFO TRIG (dsp/lfo.hpp): when the track's LFO starts a cycle -- kLfoTrigFree, Retrig or
+    // OneShot. A kit setting on the LFO page (push RAT), not a parameter: there is no 33rd byte
+    // for a lock to name, and the 32 a track has are all spoken for.
+    uint8_t lfo_trig = 0;
 };
+
+// LFO TRIG's values, as KIT.BIN stores them: PERMANENT. dsp/lfo.hpp's LfoTrig mirrors them and
+// app/ asserts the two agree. Anything else reads as FREE.
+constexpr uint8_t kLfoTrigFree = 0;
+constexpr uint8_t kLfoTrigRetrig = 1;
+constexpr uint8_t kLfoTrigOneShot = 2;
+constexpr uint8_t kLfoTrigs = 3;
 
 constexpr uint8_t kSliceEqual = 0;
 constexpr uint8_t kSliceAuto = 1;
@@ -551,6 +562,9 @@ constexpr uint16_t kSectionKitOsc = 7;
 // insert filter there, which loads mapped onto TON.
 constexpr uint16_t kSectionKitFilter = 8;
 constexpr uint8_t kKitFilterLayout = 1;
+// LFO TRIG, one byte per track (KitTrack::lfo_trig). Optional on read: a KIT.BIN from before it
+// loads every LFO as FREE, which is how every LFO ran before.
+constexpr uint16_t kSectionKitLfoTrig = 9;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

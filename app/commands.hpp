@@ -149,6 +149,8 @@ enum class Cmd : uint8_t {
     // SLC AUTO on a track (KitTrack::slice_mode): a: kSliceAuto or kSliceEqual. The points it
     // cuts at came with the sample (Engine::slices_for_load).
     set_slice_mode,    // track, a: 0 equal, 1 AUTO
+    // LFO TRIG on a track (KitTrack::lfo_trig, dsp/lfo.hpp): a: kLfoTrigFree, Retrig or OneShot.
+    set_lfo_trig,      // track, a: 0 FREE, 1 RETRIG, 2 ONE-SHOT
     // One send or master setting. `a` is the field -- dsp/buses.hpp's SendField or MasterField,
     // whose numbers are permanent because they reach PROJECT.BIN -- and `b` is an encoder DELTA,
     // as a signed byte, exactly like `set_param` and the step fields and for the same reason.
