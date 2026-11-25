@@ -17,7 +17,7 @@ of it.
 ## Enaga
 
 The app platform STRATA runs on. Vendored as a git submodule at `third_party/enaga`, pinned at
-release `v0.2.0` (commit `3da7f89`), and **never modified** (`CLAUDE.md`). Its headers and its DSP library are
+release `v0.3.0` (commit `4878b7c`), and **never modified** (`CLAUDE.md`). Its headers and its DSP library are
 compiled into a released `APP.ENA`, so a release distributes Enaga's code as well as STRATA's.
 
 <https://github.com/seawaffle/enaga>
@@ -49,7 +49,7 @@ SOFTWARE.
 ### Enaga's firmware, in a release zip
 
 A STRATA release zip (`tools/package_release.py`) also carries Enaga's SmplTrek update file,
-`SmplTrek.bin` at v0.2.0, so a user installs the exact firmware STRATA was built and tested
+`SmplTrek.bin` at v0.3.0, so a user installs the exact firmware STRATA was built and tested
 against. That is permitted: checked 2026-11-22 against the pinned source, the image is built
 only from code under these licences, and Enaga's README states it "contains no Sonicware code".
 
