@@ -104,7 +104,9 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 | FUNC + hold MUTATE: delay freeze | Slot 5, ECHO FREEZE. FUNC + MUTATE is LOCK now (above) |
 | Slot 7: STUTTER | **MUTE BUS**: every track fades out while the delay and reverb ring on. The stutter is the REPEAT pad's |
 | Slot 13: FLANGER | **MORPH**: the A/B scene morph on any screen, beside an effect left up. PERFORM's VALUE still morphs too |
-| PERFORM: STEP 1-16 (and FUNC + STEP 1-4) put a parameter on a macro; push a knob in LEARN to add it | **Learn by turning** (above). A push in LEARN only takes a parameter off. FUNC + STEP 5-7 still put the kill EQ's bands on a macro |
+| PERFORM: STEP 1-16 (and FUNC + STEP 1-4) put a parameter on a macro; push a knob in LEARN to add it | **Learn by turning** (above). A push in LEARN only takes a parameter off. FUNC + STEP 5-7 then put the kill EQ's bands on a macro |
+| PERFORM: FUNC + STEP 5-7 put the kill EQ's LOW, MID or HI on the macro | **Learn by turning on MIXER's EQ page**: LEARN stays on in MIXER, and turning LOW, MID or HI is learnt like an EDIT knob; a push on a band the macro holds takes it off. FUNC + STEP 5-7 are trigless steps, like the rest |
+| Pad-row keys: the step page stopped at 1 and 4 | They go round, as LEFT/RIGHT on GRID and the bank keys in PROJECT already did |
 | KEYS: STEP 1-16 play the scale; the pad-row keys change the octave | The STEP keys are steps and the pad-row keys the step page; the pads are the keyboard, the octave is LEFT/RIGHT or the two octave pads |
 | NEW PROJECT: the factory demo | An empty project (the factory sounds and mixer, every pan centred, no steps, scenes or macros). The demo is LOAD DEMO |
 

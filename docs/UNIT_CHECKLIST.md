@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W28, about 75 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W29, about 78 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -348,6 +348,15 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   grains come and go, brighter when louder. Turn A (POS) and B (SIZ): the bracket follows. `____`
 - Screen still smooth at 20 fps with all eight tracks playing and a 30 s file loaded? Keys never
   dropped while a long file loads? `____`
+
+**W29. The kill EQ learnt by turning; the pad-row keys go round (#156, 3 min).** Beat playing, A01.
+- PERFORM, push A: `LEARN A 0/4`. MIXER, screen keys to the EQ page: line 2 still says
+  `LEARN A`. Turn LOW down to `KILL`: the lows go. OK: `A: 1 PARAM`, and the lows are back
+  (LOW `0`). PERFORM: turn A up over a bar: the lows fade to nothing; A back to 0, they return. `____`
+- Push A again, MIXER EQ page, push A: `A EQ LOW OFF 0/4`, no kill. Push B: `KILL MID` as
+  always; again: `MID BACK`. CLR ends LEARN. `____`
+- PERFORM, FUNC + STEP 6: a trigless step on page 1's step 6, no macro change. `____`
+- GRID, pad-row right four times: pages 2, 3, 4, then 1 again; pad-row left from 1: page 4. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
@@ -810,8 +819,8 @@ New after the walkthrough was written: a DJ isolator on the master, LOW / MID / 
       U1's figure (the EQ switches itself off).
 - [ ] **Kills are not saved (changed tonight).** Kill HI, save (FUNC+HOME, OK), power
       cycle: it reopens with every band back (no `KILL` on the EQ page). The EQ knobs are kept.
-- [ ] **A macro on the EQ.** PERFORM, select macro A (LEFT/RIGHT), FUNC + STEP 5: `A EQ LOW`.
-      Turn A up slowly over a few bars: the lows fade down to nothing; back to 0 and they are
+- [ ] **A macro on the EQ.** PERFORM, push A (LEARN A), MIXER, EQ page, turn LOW down to
+      `KILL`, OK: `A: 1 PARAM`, LOW back at `0`. PERFORM: turn A up slowly over a few bars: the lows fade down to nothing; back to 0 and they are
       exactly back. CLR clears macro A.
 - [ ] **A scene with the EQ.** In PERFORM put empty scene 9 on side A (hold SCENE A + STEP 9).
       MIXER EQ: LOW to `KILL`. PERFORM: OK captures the sound, EQ knobs included, into scene 9.
