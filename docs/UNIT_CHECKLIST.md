@@ -74,6 +74,10 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
   `50%`; the STEP 5 light blinks; let go: the trig did not toggle. Hold STEP 5 + REPEAT four
   times: `RTCH 2`, `3`, `4`, `OFF` (hear the ratchet). + FILL: `COND FILL`, the step plays only
   with FILL held. + MUTE: `COND 1:2`. Now FILL first, then STEP 9: a FILL trig, as before.
+- **Hold STEP + THROW.** Track with a short hit on STEP 5, delay send 0. Hold STEP 5 + THROW:
+  `STEP 5 DLY FULL`, and from the next pass only that hit echoes; again: `STEP 5 DLY OFF`, dry.
+  Hold FUNC too: `STEP 5 REV FULL`, that hit alone in the reverb. FUNC + CLR takes it back. THROW
+  alone still throws the whole track while held.
 - **STEP keys are steps in PERFORM and KEYS (D12).** In KEYS tap STEP 5: a trig, as on GRID, and
   the screen still shows the piano and `STEP KEYS 1-16`; pad-row right: `17-32`. LEFT/RIGHT:
   `OCT`. Play a chord on the pads while tapping STEP keys: both work at once. In PERFORM tap

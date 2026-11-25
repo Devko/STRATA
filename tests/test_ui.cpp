@@ -8857,3 +8857,86 @@ TEST(ui_a_lock_jump_takes_the_morph_knob_back) {
     CHECK_EQ(int(app_engine().morph()), 0);
     CHECK_EQ(int(UiProbe::morph_knob(app)), 0);
 }
+
+// --- hold STEP + THROW: the delay-send lock (D6's last pad) ---------------------------------
+
+TEST(ui_hold_step_and_throw_locks_the_send_full_then_off) {
+    // STEP first edits: with STEP 3 held, THROW writes a lock of the delay send at full on that
+    // step instead of throwing; again takes it off. FUNC makes it the reverb send. The STEP's
+    // release toggles nothing, and no throw is ever performed.
+    Strata &app = fresh();
+    const uint8_t delay = uint8_t(page_first(Page::fx) + 2);
+    const uint8_t reverb = uint8_t(page_first(Page::fx) + 3);
+    const bool had = trig_at(0, 2);
+    uint8_t value = 0;
+
+    step_down(2);
+    app.on_pad_press(11, 100);
+    pump(2);
+    CHECK_EQ(app_engine().throwing(), 0);                  // not thrown
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 2, delay, value));
+    CHECK_EQ(int(value), 127);
+    CHECK_EQ(UiProbe::notice(app), "STEP 3 DLY FULL");
+    app.on_pad_release(11);
+    pump(2);
+    CHECK_EQ(app_engine().throwing(), 0);
+
+    app.on_pad_press(11, 100);                             // again: off
+    app.on_pad_release(11);
+    pump(2);
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 2, delay, value));
+    CHECK_EQ(UiProbe::notice(app), "STEP 3 DLY OFF");
+
+    app.on_key(ENAGA_KEY_F1, true);                        // FUNC: the reverb send
+    app.on_pad_press(11, 100);
+    app.on_pad_release(11);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 2, reverb, value));
+    CHECK_EQ(int(value), 127);
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 2, delay, value));
+    CHECK_EQ(UiProbe::notice(app), "STEP 3 REV FULL");
+    CHECK_EQ(app_engine().throwing(), 0);
+
+    step_up(2);
+    pump(2);
+    CHECK_EQ(trig_at(0, 2), had);                          // the hold was used: no toggle
+    CHECK_EQ(UiProbe::held_step(app), -1);
+
+    // A lock at another level (turned on the FX page) goes to full first, not off.
+    {
+        Command command;                                   // to the app's engine, not the rig's
+        command.cmd = Cmd::lock_delta;
+        command.track = 0;
+        command.step = 5;
+        command.a = delay;
+        command.b = 40;
+        app_engine().commands().post(command);
+    }
+    pump(2);
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 5, delay, value));
+    CHECK(value < 127u);
+    step_down(5);
+    app.on_pad_press(11, 100);
+    app.on_pad_release(11);
+    pump(2);
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 5, delay, value));
+    CHECK_EQ(int(value), 127);
+    step_up(5);
+    pump(2);
+
+    // It is an edit: FUNC + CLR takes it back to where it was.
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 5, delay, value));
+    CHECK(value < 127u);
+
+    // Pad first still performs: THROW alone is the held throw.
+    app.on_pad_press(11, 100);
+    pump(2);
+    CHECK_EQ(app_engine().throwing(), 1);
+    app.on_pad_release(11);
+    pump(2);
+    CHECK_EQ(app_engine().throwing(), 0);
+}
+

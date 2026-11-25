@@ -249,7 +249,7 @@ echo and noise), 16 LOOPER. Until 2026-11-25 slot 7 was STUTTER (the REPEAT pad 
 **STEP first edits, pad first performs** (2026-11-25). With a STEP held, four of the upper pads
 step one field of that step round a short cycle instead of performing, and the bottom line says
 where it landed (`STEP 5 PROB 50%`). The STEP's release then toggles nothing. A value outside
-the cycle (set on the step page) goes to the cycle's first. Not with FUNC (the pad chords stay)
+the cycle (set on the step page) goes to the cycle's first. Not with FUNC (the pad chords stay; FUNC + THROW is the reverb lock)
 and not in KEYS, where the upper pads are the piano. `core/stepedit.hpp` has the cycles.
 
 | Pad | Sets on the held step | Cycle |
@@ -258,7 +258,8 @@ and not in KEYS, where the upper pads are the piano. `core/stepedit.hpp` has the
 | REPEAT | the ratchet | 2, 3, 4, off |
 | MUTE | an A:B condition | 1:2, 2:2, 1:4, 4:4, none |
 | MUTATE | probability | 75, 50, 25, 100% |
-| SCENE A / B, THROW | nothing yet: they perform (and drop the hold), as before | |
+| THROW | a lock of the delay send (FUNC: the reverb send) | full, off (`STEP 5 DLY FULL`) |
+| SCENE A / B | nothing yet: they perform (and drop the hold), as before | |
 
 Pad first is unchanged: FILL held + tap STEP writes a FILL trig, a scene pad held + STEP picks
 the scene, MUTE MODE on makes STEP 1-8 the mute states.

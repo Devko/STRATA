@@ -2033,9 +2033,13 @@ public:
         }
         // D6, "STEP first edits, pad first performs": with a STEP held, FILL, REPEAT, MUTE and
         // MUTATE step one field of that step through a short cycle instead of performing
-        // (core/stepedit.hpp). Not with FUNC, whose pad chords stay, and not in KEYS (above),
-        // where the upper pads are the piano's black keys.
-        if (held_step_ >= 0 && !shift_ && is_perform_pad(pad) && edit_held_step(pad)) return;
+        // (core/stepedit.hpp); THROW locks the step's delay send, or with FUNC its reverb send.
+        // Otherwise not with FUNC, whose pad chords stay, and not in KEYS (above), where the
+        // upper pads are the piano's black keys.
+        if (held_step_ >= 0 && is_perform_pad(pad) &&
+            (!shift_ || PerformPad(pad) == PerformPad::throw_fx) && edit_held_step(pad)) {
+            return;
+        }
         // The performance row first: it is the same seven pads in every mode, which is what
         // docs/SPEC.md means by a fixed row.
         if (is_perform_pad(pad)) {
@@ -2197,6 +2201,7 @@ public:
     // (the scenes, THROW), which then performs as usual. The release counts as a use, so the
     // STEP does not toggle its trig when it comes up.
     bool edit_held_step(int pad) {
+        if (PerformPad(pad) == PerformPad::throw_fx) return throw_lock_held_step(pad);
         StepCycle cycle;
         switch (PerformPad(pad)) {
             case PerformPad::fill:   cycle = StepCycle::fill; break;
@@ -2227,6 +2232,38 @@ public:
         append(out, step_field_name(field));
         *out++ = ' ';
         append(out, value);
+        *out = 0;
+        notice(notice_buffer_);
+        return true;
+    }
+
+    // Hold STEP + THROW: the throw written into the step, as a lock on the selected track's
+    // delay send (FUNC: reverb send) at full; again takes the lock off. The cycle is "full,
+    // off", as the concept's table has it; a lock at some other level (turned on the FX page)
+    // goes to full first. Unlike the held throw it is part of the pattern: saved and undone.
+    bool throw_lock_held_step(int pad) {
+        const int param = page_first(Page::fx) + (shift_ ? 3 : 2);
+        uint8_t value = 0;
+        const bool full = pattern_get_lock(engine_.pattern(), selected_, held_step_, param, value) &&
+                          value == 127u;
+        held_used_ = true;
+        step_edit_pads_ = uint8_t(step_edit_pads_ | (1u << (pad / 2)));
+        if (full) {
+            mark(GestureKind::erase, selected_, held_step_);
+            post(Cmd::clear_lock, uint8_t(selected_), uint8_t(held_step_), uint8_t(param));
+        } else {
+            mark(GestureKind::field, selected_, held_step_);
+            // +127 from any base lands on 127 (the audio side clamps); post_delta would cap
+            // the delta at 120 and leave a lock from 0 at 120.
+            post(Cmd::lock_delta, uint8_t(selected_), uint8_t(held_step_), uint8_t(param),
+                 uint8_t(127));
+        }
+        end_gesture();
+        char *out = notice_buffer_;
+        append(out, "STEP ");
+        append_number(out, uint32_t(held_step_) + 1);
+        append(out, shift_ ? " REV " : " DLY ");
+        append(out, full ? "OFF" : "FULL");
         *out = 0;
         notice(notice_buffer_);
         return true;

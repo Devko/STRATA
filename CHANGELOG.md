@@ -8,6 +8,10 @@ the project file format or the controls.
 
 ### Added
 
+- **Hold STEP + THROW (D6's last pad).** STEP first edits: with a STEP held, THROW locks that
+  step's delay send at full (`STEP 5 DLY FULL`), and again takes the lock off; FUNC + THROW does
+  the same with the reverb send. A throw written into the pattern, saved and undone like any lock.
+  THROW pressed first still throws the whole track while held.
 - **Play modes per track (P1).** The FUNC menu's new TRACK PLAY row, under TRACK SPEED, sets how
   the selected track walks its steps: FWD, REV, PING, or RND1-RND16 (a random step, or a random
   block of 2-16 steps, in each place). The pattern itself never changes, so FWD gives it back at

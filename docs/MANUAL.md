@@ -857,8 +857,10 @@ reload.
 
 **Without the step page:** hold a STEP and press an upper pad. FILL steps the condition through
 FILL, NOT FILL and none; MUTE through 1:2, 2:2, 1:4, 4:4 and none; REPEAT the ratchet through 2, 3,
-4 and off; MUTATE the probability through 75, 50, 25 and 100%. The bottom line says where it
-landed (`STEP 5 PROB 50%`). The order is the rule: STEP first edits the step, pad first performs
+4 and off; MUTATE the probability through 75, 50, 25 and 100%. THROW locks the step's delay send
+at full, and again takes the lock off (FUNC + THROW: the reverb send): a throw written into the
+pattern, saved and undone like any lock. The bottom line says where it landed (`STEP 5 PROB 50%`,
+`STEP 5 DLY FULL`). The order is the rule: STEP first edits the step, pad first performs
 (FILL held, then a STEP, writes a FILL trig). The step page still has every value.
 
 ### Ranges, copy and paste
