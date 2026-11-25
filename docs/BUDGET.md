@@ -53,6 +53,17 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### Play modes per track (P1; 2026-11-25)
+
+Emulator, cl6x, all 30 scenarios pass (`scenario_playmode` new). Against `main` at `4f67ad6` in
+the same session: `scenario_ambient` 30.36% -> **30.56%**, `scenario_m3` 24.00% -> **24.20%**
+(+0.2 points, the run to run noise noted below). The first version cost the all-FWD default beat
+0.7 points (31.03%, 24.73%): every candidate step called `play_step` and every tick hashed eight
+seeds. FWD now skips both. `scenario_playmode` (track 1 walked to RND4 while the beat plays)
+peaks at 24.85%, the same as its neighbours, so an RND track costs no measurable load: per tick
+it is two `mix32` rounds per candidate step, a handful a track. GCC-only not re-run (no hot loop
+moved).
+
 ### One filter on the synths, FDE, velocity to cutoff (D8, D15; 2026-11-25)
 
 Emulator, cl6x, all 28 scenarios pass. Against `main` at `1efc0e3` in the same session:
