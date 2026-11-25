@@ -124,7 +124,8 @@ constexpr Text kStepPads = {"HOLD STEP + PAD:", {
     "PAD FIRST  PERFORMS:",
     "FILL+STEP  FILL TRIG",
     "SCENE+STEP PICK",
-    nullptr, nullptr,
+    "REPEAT+STEP STUTTER",
+    "REPEAT+LEFT/RT RATE",
 }};
 
 constexpr Text kRange = {"RANGE AND TRACK:", {
