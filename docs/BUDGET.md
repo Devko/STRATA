@@ -90,6 +90,8 @@ draw() now times itself over 64 frames (app/ui_screen.hpp, `count_draw_time`): S
 | GRID with the beat playing, the decibel meter and beat marks (#160) | **0.57 ms** | emulator, cl6x, no caches |
 | PERFORM with the beat playing: four gauges over the scope's afterglow, eight track meters (part 3) | **1.34 ms** (1.40 in part 4's run) | emulator, cl6x, no caches |
 | MIXER MST with the beat playing: a 256-point FFT, 24 bands, the vectorscope (part 6) | **1.21 ms** | emulator, cl6x, no caches |
+| PERFORM rebuilt to the mockup: gauges, 35-row scope, tall columns, the new frame | **1.59 ms** | emulator, cl6x, no caches |
+| MIXER MST rebuilt: the big spectrum, vectorscope, CMP and LIM | **1.10 ms** | emulator, cl6x, no caches |
 
 `scenario_visuals` runs the emulator twice from part 6 on, once ending on PERFORM and the LFO page
 and once on MST, because the draw log comes once a run.

@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W37, about 102 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W38, about 107 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -431,6 +431,15 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   right with a trace (a vertical line for a mono sound, wider for stereo). `____`
 - On to EQ, kill LOW (push A): the left of the spectrum drops. Stop: both go blank. `____`
 - SETUP's `DRW` with MST up while playing: `____ MS`. `____`
+
+**W38. The screens rebuilt to the mockups (5 min).** Beat playing, A01.
+- Top: `A01` and `T1` as white badges, bar.beat, the tempo and load small. A notice (turn a
+  macro on PERFORM) pops up as a white bar and fades. Bottom: tabs, the screen's page lit. `____`
+- PERFORM: four round gauges named by what they move, a big OUT scope with a glow, eight tall
+  track columns. GRID: the playhead's column lit, trigs flashing. EDIT AMP / FLT / LFO / OSC on a
+  WAVE track / SRC on GRAIN: big graphs. MIXER, screen keys to MST: a big spectrum, the
+  vectorscope, CMP and LIM bars. Readable at arm's length? `____`
+- SETUP: `TRK MAX ... SMPLTREK` and `DRW ____ MS` with PERFORM up while playing. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

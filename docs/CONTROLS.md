@@ -362,11 +362,11 @@ strip first, pictures per page later). A screen draws only inside it.
 
 | Rows | What | Example |
 | --- | --- | --- |
-| 0-6 | Top line: live pattern, **bar.beat** in its pass, tempo, `>` playing / `.` stopped, load in whole percent | `A01 3.2 130.0 > 24%` |
+| 0-7 | Top bar (the mockups' since the live-visuals rebuild): the live pattern as a lit badge, **bar.beat**, then in the small font the tempo (`MIDI` or `SYNC` under an outside clock) with `>` while playing, the load in whole percent and the LOCK mark (`L`, `L+`); the selected track as a lit badge at the right | `[A01] 3.2 130.0 > 24% L [T1]` |
 | 8 | Progress: one pixel across the pattern's pass (its master length), its head brightest, on a dim track with the beats (dim) and bars (brighter) still to come marked; empty while stopped | |
-| 10-16 | Second line: a notice, LEARN or the MUTATE verdict while there is one; else the **live strip**; else `EXT MIDI` / `EXT SYNC` / `CLOCK REFUSED` | `K:L FX4 S40 M:AB` |
+| 9-17 | A notice, LEARN or the MUTATE verdict as a lit **toast** while there is one; else, only while something is off rest, the **live strip** in the small font; else nothing (`CLOCK REFUSED` the same way) | `K:L FX4 S40 M:AB` |
 | 18-117 | The screen's own content | |
-| 120 | Bottom line: tracks sounding, MAX, device, DROP, GUARD | `TRK3 MAX23.5 SMPLTREK` |
+| 121-127 | **Tabs**: the screen's pages in the small font, the one showing lit (EDIT's eight pages, three of MIXER's around the one showing, GRID's pattern pages, PERFORM with what is live); `DROP n` or `GUARDn` takes the right end when there is one. The tracks sounding, the held MAX and the device are on SETUP | `SRC FLT [AMP] FX LFO ...` |
 | x 126-127, rows 10-117 | **Master meter**, in decibels (the top 48 dB, about 2 rows a dB) and in segments: the top 6 dB brightest, the next 12 dB bright, the rest dim. The level falls about 20 dB in a third of a second; a bright dot marks the highest reading of the last second; the top pixel is lit for a second after the limiter worked | |
 
 The live strip lists only what is **off rest**, most telling first, and leaves out whole what does
