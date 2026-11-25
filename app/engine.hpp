@@ -40,8 +40,9 @@
 #include "repeat.hpp"    // beat repeat, on the master output
 #include "tapestop.hpp"  // the tape stop, after beat repeat
 #include "perffx.hpp"    // the performance mixer's slots: push VALUE + STEP
-#include "masterfx.hpp"  // its own master effects: pump, crush, noise, flanger, gate
+#include "masterfx.hpp"  // its own master effects: pump, crush, noise, gate
 #include "looper.hpp"    // its slot 16: the master looper, in RESAMPLE's buffer
+#include "lockstore.hpp" // LOCK: FUNC + MUTATE stores, jumps and swaps back
 #include "arp.hpp"       // the arpeggiator's notes
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
@@ -199,6 +200,11 @@ public:
     uint8_t perf_amount() const { return perf_amount_; }
     const PerfPlan &perf_plan_now() const { return perf_plan_; }
     uint8_t looper_mix() const { return looper_mix_; }
+
+    // LOCK (core/lockstore.hpp), for the tests: whether pattern `index` (bank * 16 + slot) has one.
+    bool has_lock(int index) const { return locks_.has(index); }
+    // How often the "changed since the lock" compare runs, in blocks (publish_lock_state).
+    static constexpr int kLockCheckBlocks = 16;
     const Looper &looper() const { return looper_; }
     const MasterFx &master_fx() const { return master_fx_; }
 
@@ -662,19 +668,27 @@ private:
     PerfFx perf_fx_ = PerfFx::none;
     uint8_t perf_amount_ = 0;
     PerfPlan perf_plan_{};
+
+    // LOCK. The states (128 locks, the swap-back and one scratch for the "changed" compare)
+    // are taken in init(), about 1.2 MiB. The compare runs every kLockCheckBlocks blocks while
+    // the playing pattern has a lock: a ~9 KiB capture and memcmp, a few thousand cycles.
+    void lock_command(uint8_t action);
+    void capture_live(LiveState &state) const;
+    void apply_live(const LiveState &state);
+    void publish_lock_state();
+    LockStore locks_;
+    LiveState *lock_memory_ = nullptr;     // LockStore::kStates, then the scratch
+    int lock_check_countdown_ = 0;
+    bool lock_changed_ = false;
+    int live_index() const { return int(project_.bank) * kPatternsPerBank + int(project_.slot); }
     uint8_t looper_mix_ = 0;
     MasterFx master_fx_;
     Looper looper_;
     // Where the pump and the gate are in the beat: the clock's while it runs, free from there
     // while it is stopped.
     float perf_phase_ = 0.0f;
-    // The held master moves have two owners now, the FUNC chords and the mixer: these are the
-    // chords', and what was last handed to the mixer and the tape stop.
-    bool user_freeze_ = false;
+    // The delay freeze last handed to the mixer: the mixer's ECHO FREEZE is its only owner.
     bool freeze_applied_ = false;
-    bool user_tape_ = false;
-    // The stutter's band in force (-1 none): a new band re-presses the repeat.
-    int8_t perf_repeat_applied_ = -1;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
 
     // Note repeat, one roll per track (Cmd::note_repeat). `countdown` is frames to the next hit

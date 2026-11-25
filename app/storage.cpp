@@ -88,6 +88,8 @@ bool mutates_pattern(Cmd cmd) {
         // the bank's untouched copy won on the next load -- so the key appeared to revert.
         case Cmd::set_root:
         case Cmd::set_scale:
+        // A LOCK jump or swap-back puts a whole pattern back (core/lockstore.hpp).
+        case Cmd::lock_tap:
             return true;
         default:
             return false;
@@ -111,6 +113,8 @@ bool mutates_kit(Cmd cmd) {
         case Cmd::set_sample:
         case Cmd::set_stream:
         case Cmd::kit_store:
+        // And a LOCK tap puts every track's sound bytes and fader back.
+        case Cmd::lock_tap:
             return true;
         default:
             return false;
@@ -146,6 +150,8 @@ bool mutates_project(Cmd cmd) {
         case Cmd::set_quantize:
         // Each track's MIDI OUT channel, PROJECT.BIN's fifth section.
         case Cmd::set_midi_out:
+        // A LOCK tap puts the send and master bytes and the live mutes back.
+        case Cmd::lock_tap:
             return true;
         default:
             return false;

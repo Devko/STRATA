@@ -37,50 +37,6 @@ void strata_fx_crush(float *restrict io, int n, float rate, float step, float in
     held[1] = hr;
 }
 
-static float triangle(float p) { return p < 0.5f ? 2.0f * p : 2.0f - 2.0f * p; }
-
-static float tap(const float *ring, int mask, int write, float delay, int channel) {
-    const int whole = (int)delay;
-    const float frac = delay - (float)whole;
-    const int a = (write - whole) & mask;
-    const int b = (write - whole - 1) & mask;
-    return ring[2 * a + channel] * (1.0f - frac) + ring[2 * b + channel] * frac;
-}
-
-void strata_fx_flanger(float *restrict io, int n, float *restrict ring, int mask, int *write,
-                       float *lfo, float lfo_step, float base, float span, float feedback,
-                       float dry, float wet) {
-    int w = *write;
-    float p = *lfo;
-    int i;
-    if (n <= 0) return;
-    STRATA_BLOCK_LOOP
-    for (i = 0; i < n; i++) {
-        const float l = io[2 * i];
-        const float r = io[2 * i + 1];
-        float pr;
-        float dl;
-        float dr;
-        float el;
-        float er;
-        p += lfo_step;
-        p -= p >= 1.0f ? 1.0f : 0.0f;
-        pr = p + 0.25f;
-        pr -= pr >= 1.0f ? 1.0f : 0.0f;
-        dl = base + span * triangle(p);
-        dr = base + span * triangle(pr);
-        el = tap(ring, mask, w, dl, 0);
-        er = tap(ring, mask, w, dr, 1);
-        ring[2 * w] = l + feedback * el;
-        ring[2 * w + 1] = r + feedback * er;
-        w = (w + 1) & mask;
-        io[2 * i] = dry * l + wet * el;
-        io[2 * i + 1] = dry * r + wet * er;
-    }
-    *write = w;
-    *lfo = p;
-}
-
 void strata_fx_gain(float *restrict io, int n, float *phase, float step, float pump, float gate,
                     float smooth, float *gate_state) {
     float p = *phase;

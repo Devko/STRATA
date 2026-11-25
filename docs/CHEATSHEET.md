@@ -86,10 +86,8 @@ each line means.
 | FUNC+CLR / FUNC+OK | Undo / redo, in every mode and page |
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph). With a performance effect picked: its amount (below) |
 | VALUE push + turn | Pattern swing |
-| FUNC + VALUE | Master DJ filter (LP n / OFF / HP n) |
 | Push VALUE + STEP, CLR, LEFT/RIGHT | The performance mixer (below) |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
-| FUNC + push D (hold) | Tape stop: the master slows to a standstill over two beats; let go and it is back (`TAPE STOP`). Not while a STEP is held: that clears the D lock |
 | FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu; hold to repeat |
 | Arrow pad | UP/DOWN move through rows, LEFT/RIGHT sideways, OK picks, CLR goes back |
 | Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn) |
@@ -112,7 +110,7 @@ screen when pressed.
 | Upper 3 MUTE (TRK 3) | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B (TRK 4/5) | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
 | Upper 6 THROW (TRK 6) | Delay throw while held | FUNC: reverb throw |
-| Upper 7 MUTATE (TRK 7) | Mutates the selected track (type and amount set in PERFORM): `MUTATE T1 VELOCITY`, then `OK KEEPS CLR REVERTS` with the pad bright until OK keeps it or CLR reverts it. Any other edit also keeps it. `T1 NOTHING TO MUTATE`: nothing changed (empty track, amount 0). VELOCITY, the default, is subtle on drums; ROT or DENSITY show on the grid | FUNC (hold): delay freeze, the echoes loop and nothing new goes in (`FREEZE`, `FRZ` on PERFORM's bar line) |
+| Upper 7 MUTATE (TRK 7) | Mutates the selected track (type and amount set in PERFORM): `MUTATE T1 VELOCITY`, then `OK KEEPS CLR REVERTS` with the pad bright until OK keeps it or CLR reverts it. Any other edit also keeps it. `T1 NOTHING TO MUTATE`: nothing changed (empty track, amount 0). VELOCITY, the default, is subtle on drums; ROT or DENSITY show on the grid | FUNC, held 0.5 s: **LOCK** the playing pattern (`LOCK A01 STORED`). FUNC, tapped: jump to its lock at once (`BACK TO LOCK A01`), again to swap back (`SWAPPED BACK A01`). Pattern, sound, faders, sends, master, mutes, morph and macro positions; not the machines, samples, tempo or mixer. RAM only. Line 2 ends `L`, or `L+` once changed |
 
 OK and CLR answer a mutation in any mode but PROJECT, KIT, SAMPLES and RESAMPLE, and not while
 a STEP, a range or a scene pad is held: there they keep their own jobs.
@@ -124,15 +122,18 @@ a time; nothing of it is saved or undone.
 
 | Gesture | Action |
 | --- | --- |
-| Push VALUE + STEP 1-15 | Pick that effect (`4 ECHO RISER`); VALUE is now its amount, 0 dry. The same STEP again lets go (`FX OFF: VALUE TEMPO`) |
+| Push VALUE + STEP 1-15 | Pick that effect (`4 ECHO RISER`); VALUE is now its amount, 0 dry. The same STEP again lets go, on the release (`FX OFF: VALUE TEMPO`) |
+| Push VALUE + hold the picked STEP | Held 0.3 s: the effect rises to 127 over FX GLIDE while held and rides out to 0 on release |
+| Push VALUE + STEP 13 | The A/B morph on any screen (`MORPH 64`), the effect that was up left as it is. Again: let go, the morph stays (`MORPH KEPT: VALUE TEMPO`) |
 | Push VALUE + STEP 16 | The looper: records LOOP LEN bars (FUNC menu, 1/2/4/8, default 4) of the mix from the next bar line; then VALUE is the loop's mix, 0 live, 127 loop only (`LOOP MIX 64`). Again: leaves the looper (`LOOP OFF`; the loop is kept, silent, and VALUE + CLR throws it away for a new take; during the count-in or the take, `LOOP CANCELLED`). Effects picked after it play over the loop |
-| Push VALUE + LEFT / RIGHT | Previous / next effect, keeping the amount |
-| Tap VALUE (let go within 0.5 s) | Back to 0: the effect's amount, the loop's mix, or PERFORM's morph (`MORPH 0`). FUNC + tap: DJ filter OFF. Never the tempo or swing |
-| Push VALUE + CLR | Everything off, loop mix 0 (`FX OFF`); again: the loop is thrown away (`LOOP CLEARED`) |
+| Push VALUE + LEFT / RIGHT | Previous / next effect, keeping the amount (crossfaded over FX GLIDE) |
+| Tap VALUE (let go within 0.5 s) | Back to 0, riding over FX GLIDE: the effect's amount, the loop's mix; or the morph (`MORPH 0`, in PERFORM or with slot 13 picked). Never the tempo or swing. FUNC + tap: a cut |
+| Push VALUE + CLR | Everything off, loop mix 0, riding (`FX OFF`); again: the loop is thrown away (`LOOP CLEARED`) |
+| FUNC menu FX GLIDE | How long those button jumps (and a slot change, leaving a playing loop, a LOCK jump) ride: OFF, 1/16, 1 BEAT (default), 1 BAR. Turning VALUE never glides |
 | VALUE held | The STEP keys show the slots: dim amber, the picked one bright amber, VALUE's bright green |
 
 Slots: 1 LP SWEEP · 2 HP SWEEP · 3 HP RISER · 4 ECHO RISER · 5 ECHO FREEZE · 6 REVERB WASH ·
-7 STUTTER · 8 TAPE STOP · 9 BASS KILL · 10 PUMP · 11 CRUSH · 12 NOISE RISER · 13 FLANGER ·
+7 MUTE BUS · 8 TAPE STOP · 9 BASS KILL · 10 PUMP · 11 CRUSH · 12 NOISE RISER · 13 MORPH ·
 14 GATE · 15 BUILD · 16 LOOPER. While a loop is held, RESAMPLE and FREEZE say
 `LOOP HOLDS BUFFER`. In MUTE MODE, push VALUE + STEP 1-8 stores a mute state instead.
 
@@ -191,8 +192,8 @@ them goes back to the slots. In SETUP, A sets the record quantize. Chain on/off,
 reload, RELOAD PROJECT and NEW PROJECT are in the FUNC menu (FUNC+HOME); the last two throw away
 unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN FOR NEW).
 **FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, CLEAR
-PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, TRACK PLAY, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, FREEZE, LOOP
-LEN, LOAD DEMO. It always opens on SAVE, and the list wraps: UP once is LOAD DEMO, twice LOOP LEN, three times FREEZE. UP/DOWN or A
+PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, TRACK PLAY, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, FX GLIDE, FREEZE, LOOP
+LEN, LOAD DEMO. It always opens on SAVE, and the list wraps: UP once is LOAD DEMO, twice LOOP LEN, three times FREEZE, four times FX GLIDE. UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
 setting row (OK steps it too), CLR or FUNC+HOME close it. FREEZE: the selected track plays a 1-8
 bar loop of itself from RAM and stops computing; OK again unfreezes.

@@ -15,6 +15,33 @@ the project file format or the controls.
   their step. The random order is seeded from the pattern, so it repeats after a STOP or a reload.
   Stored per track in each pattern; older projects load with every track FWD, and older builds
   open new projects and play them forward.
+- **LOCK on FUNC + MUTATE (D3, D4, D13, D14).** Hold it half a second to store the playing
+  pattern's lock (`LOCK A01 STORED`): the pattern whole, every track's sound and fader, the sends,
+  the master, the mutes, and the morph and macro positions. Tap it to jump back at once
+  (`BACK TO LOCK A01`); tap again to swap back to where you were (`SWAPPED BACK A01`), sound
+  included. One lock per pattern, in memory only. Line 2 ends `L`, or `L+` once anything in the
+  lock has changed. The sound is one kit for every pattern, so a jump brings that lock's sound
+  back everywhere. A MUTATE waiting for OK/CLR is dropped by a jump.
+- **FX GLIDE (FUNC menu).** The performance mixer's button jumps ride instead of cutting: tapping
+  VALUE, push VALUE + CLR, a slot change (the old effect rides out first), push VALUE +
+  LEFT/RIGHT (a crossfade), leaving a playing loop and a LOCK jump. OFF, 1/16, 1 BEAT (default)
+  or 1 BAR at the tempo. FUNC + tap VALUE is a hard cut. Turning VALUE never glides.
+- **Hold push VALUE + a STEP: the momentary push.** Held 0.3 s, the picked effect rises to full
+  over FX GLIDE while the STEP is held and rides out on release. A quick tap still picks; the
+  picked slot's own STEP now lets go on the release.
+
+### Gestures that moved
+
+One home per job (backlog D1, D2, D5). Old projects open unchanged: no file holds a mixer slot.
+
+| Was | Now |
+| --- | --- |
+| FUNC + VALUE: master DJ filter | Performance mixer slots 1 (LP SWEEP) and 2 (HP SWEEP); the saved setting stays on MIXER's MST page. FUNC + VALUE says `DJ FILTER: SLOT 1/2` |
+| FUNC + press VALUE: DJ filter off | Gone with it |
+| FUNC + hold push D: tape stop | Slot 8, TAPE STOP. FUNC + push D says `TAPE STOP: SLOT 8` (with a STEP held it still clears the D lock) |
+| FUNC + hold MUTATE: delay freeze | Slot 5, ECHO FREEZE. FUNC + MUTATE is LOCK now (above) |
+| Slot 7: STUTTER | **MUTE BUS**: every track fades out while the delay and reverb ring on. The stutter is the REPEAT pad's |
+| Slot 13: FLANGER | **MORPH**: the A/B scene morph on any screen, beside an effect left up. PERFORM's VALUE still morphs too |
 
 ### Changed
 
@@ -26,6 +53,10 @@ the project file format or the controls.
 - **Velocity opens the synths' filter (D15).** Around the default velocity 100 (which sounds as
   before): harder is brighter, softer darker, by a per-machine amount. The GROWL preset lost
   its chain drive with the one filter and is quieter.
+
+### Removed
+
+- The performance mixer's flanger (its DSP and 8 KiB ring), with slot 13.
 
 ## [0.3.1] - 2026-11-23
 

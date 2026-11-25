@@ -999,7 +999,7 @@ master kill EQ"). Slots 10-14 and the looper are new code:
 | GATE (same loop) | ~170 ns | 0.14 / 0.23 |
 | CRUSH (sample-and-hold, quantize) | ~90 ns | 0.07 / 0.12 |
 | NOISE RISER (xorshift, one-pole HP, add) | ~210 ns | 0.17 / 0.28 |
-| FLANGER (two interpolated taps, feedback, 8 KiB ring) | ~340 ns | 0.27 / 0.45 |
+| FLANGER (removed 2026-11-25 with slot 13, now the morph) | ~340 ns | was 0.27 / 0.45 |
 | Looper recording (float to int16, stereo) | ~135 ns | 0.11 / 0.18 |
 | Looper playing (int16 read, crossfade, stereo) | ~850 ns | 0.7 / 1.1 |
 
@@ -1012,7 +1012,12 @@ the mixer: BASS KILL (~1.3) or BUILD (DJ filter + noise, ~0.6) plus a playing lo
 case. The CPU guard needs no change: it sheds POLY voices and grains, and this cost is bounded.
 
 Memory: none new on the heap. The looper records into RESAMPLE's 5.76 MiB capture buffer (the
-engine keeps the two apart), and the flanger's 8 KiB ring is a member of the engine.
+engine keeps the two apart). The flanger's 8 KiB ring went with the flanger (2026-11-25).
+
+2026-11-25 (backlog D2, slot 7): slot 7 is MUTE BUS, a control-rate scale of the eight faders
+that costs nothing per sample (the chains already ramp their gains), and slot 13 the scene
+morph, which the morph already paid for. STUTTER's beat repeat stays the REPEAT pad's. So the
+mixer only got cheaper, and the worst case above stands.
 
 No emulator scenario: every gesture is push VALUE held with another key, and the emulator's
 `--key` only taps (as for the tape stop). To measure on the unit: **U11** in
@@ -1810,6 +1815,16 @@ The level rose 6 dB (kHeadroom 0.5 to 1.0), which costs nothing but moves the wo
 full-scale constant hammered every block now peaks at about 3.2 into the insert chain (was 1.6),
 and the arithmetic ceiling is 8. Real material at LVL 127 peaks well under 1
 (`/mnt/project-files/grain-renders`).
+
+### LOCK and FX GLIDE (2026-11-25, emulator)
+
+LOCK adds no DSP. While the playing pattern has a lock, the engine captures the live set and
+compares it with the lock once every 16 blocks (`Engine::kLockCheckBlocks`), about 9 KiB of
+memcpy and memcmp; a jump or swap is two such copies on the block it lands. FX GLIDE runs in the
+main context and posts one `perf_fx` per amount step. All 31 scenarios pass with cl6x on the
+branch, loads unchanged against main: default beat 24.68%, worst 30.34% (`scenario_ambient`).
+GCC-only not run for this change: nothing it adds is in a hot loop. Memory: the locks are 1.06
+MiB from the heap (128 locks, the swap-back and the compare's scratch), init 97.04 MiB of 120.
 
 ### Later milestones
 

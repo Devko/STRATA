@@ -263,12 +263,6 @@ enum class Cmd : uint8_t {
     // 2 new velocity from the pad's pressure. Played, not recorded: the pattern is untouched.
     note_repeat,
 
-    // Held master moves (FUNC + MUTATE, FUNC + push D), a: 1 held, 0 let go. The delay freeze loops
-    // what is echoing and cuts the delay's feed (dsp/freeze.hpp); the tape stop slows the finished
-    // master to a standstill over two beats (dsp/tapestop.hpp). Performance, not edits: no file.
-    delay_freeze,
-    tape_stop,
-
     // A track's MIDI OUT channel (core/midiout.hpp): 0 off, 1-16. track, a: channel; or c = 1:
     // b is an int8 delta, stopping at OFF and 16. A change ends the track's sounding notes on
     // the channel they were sent on.
@@ -290,7 +284,7 @@ enum class Cmd : uint8_t {
     freeze_clear,
 
     // The performance mixer (core/perffx.hpp), push VALUE + STEP 1-15 and VALUE. a: the PerfFx
-    // (0 none, 1-15; the looper's own is refused here), b: its amount, 0-127. One effect at a
+    // (0 none, 1-15; the looper's and the morph's own are refused here), b: its amount, 0-127. One effect at a
     // time: a new one replaces the last, and the depths are smoothed on the audio side, so the
     // change is a fade. Performance, not edits: no file, no undo.
     perf_fx,
@@ -298,6 +292,13 @@ enum class Cmd : uint8_t {
     // next bar line (b: bars, 1/2/4/8; halved until the take fits the buffer), 2 throw it away.
     // A record is refused while RESAMPLE's take holds the buffer they share.
     looper,
+    // LOCK (core/lockstore.hpp), FUNC + MUTATE. `lock_store` (a hold) keeps the live set as the
+    // playing pattern's lock; `lock_tap` jumps to it, or swaps back when the last tap jumped.
+    // What happened comes back as Status::lock_event / lock_last, the state as
+    // Status::lock_state. The locks are RAM only, but a tap changes the pattern, the kit and the
+    // mixer bytes, so it dirties all three files (app/storage.cpp).
+    lock_store,
+    lock_tap,
 
     count
 };
@@ -512,6 +513,15 @@ struct Status {
     std::atomic<uint16_t> stream_want[8] = {};
     std::atomic<uint32_t> stream_late{0};
 
+    // LOCK (Cmd::lock_store, lock_tap). `lock_state`: bit 0 the playing pattern has a lock, bit 1 the live set
+    // differs from it (the screen's L+), bit 2 the next tap swaps back. `lock_event` is bumped
+    // once per store or tap the audio side applied, with `lock_last` saying what it did: a
+    // LockTap, or kLockStored. The UI watches the event for its notice and to take the morph and
+    // macro positions back from the engine after a jump.
+    std::atomic<uint8_t> lock_state{0};
+    std::atomic<uint8_t> lock_event{0};
+    std::atomic<uint8_t> lock_last{0};
+
     // Which pattern is live, so the UI can draw it without reaching into the project.
     std::atomic<uint8_t> live_bank{0};
     std::atomic<uint8_t> live_slot{0};
@@ -553,6 +563,14 @@ struct Status {
     void bump_limit_seen() {
         limit_seen.store(uint8_t(limit_seen.load(std::memory_order_relaxed) + 1),
                          std::memory_order_relaxed);
+    }
+
+    // Audio context only, one writer: `last` first, so a reader that sees the new event (with
+    // acquire) sees what it was.
+    void bump_lock_event(uint8_t last) {
+        lock_last.store(last, std::memory_order_relaxed);
+        lock_event.store(uint8_t(lock_event.load(std::memory_order_relaxed) + 1),
+                         std::memory_order_release);
     }
 
     // Audio context only, one writer, as bump_song_end.

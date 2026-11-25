@@ -1,7 +1,8 @@
-// The performance mixer's own master effects: pump, crush, noise riser, flanger and gate.
+// The performance mixer's own master effects: pump, crush, noise riser and gate.
+// (The flanger was a fifth until slot 13 became the morph, 2026-11-25.)
 //
 // The other slots of the mixer (core/perffx.hpp) are overrides on things the engine already has
-// -- the DJ filter, the sends, the kill EQ, beat repeat, the tape stop. These five had nothing
+// -- the DJ filter, the sends, the kill EQ, the faders, the tape stop. These four had nothing
 // to borrow, so they are here, on audio()'s interleaved stereo buffer after the mixer and the
 // looper and before beat repeat: a stutter or a tape stop then takes the effect with it, and an
 // effect goes over a playing loop, as on the Octatrack template the mixer copies.
@@ -16,28 +17,25 @@
 // ## Staying under the limiter
 //
 // The master's soft limiter is before this, so nothing here may add level: the pump and gate
-// only take away, the crush holds samples it was given, the flanger keeps dry + wet at unity,
-// and the noise scales the program down by as much as it adds.
+// only take away, the crush holds samples it was given, and the noise scales the program down by as much as it adds.
 //
-// No allocation: the flanger's ring is a member, 8 KiB.
+// No allocation, and no buffer: every effect here is a gain or a held sample.
 #pragma once
 
 #include <cstdint>
 
 namespace strata {
 
-// The five depths, 0 off ... 1 the whole effect. What core/perffx.hpp's plan carries.
+// The four depths, 0 off ... 1 the whole effect. What core/perffx.hpp's plan carries.
 struct MasterFxSettings {
     float pump = 0.0f;
     float crush = 0.0f;
     float noise = 0.0f;
-    float flanger = 0.0f;
     float gate = 0.0f;
 };
 
 class MasterFx {
 public:
-    static constexpr int kRingFrames = 1024;          // 21 ms at 48 kHz, a power of two
     // How far a depth moves towards its target each block: about 10 ms to settle.
     static constexpr float kSmooth = 0.12f;
 
@@ -63,12 +61,6 @@ private:
     // The crush.
     float crush_phase_ = 0.0f;
     float crush_held_[2] = {};
-    // The flanger.
-    float ring_[2 * kRingFrames] = {};
-    int write_ = 0;
-    float lfo_ = 0.0f;
-    float lfo_step_ = 0.0f;
-    bool ring_dirty_ = false;
     // The gain moves.
     float gate_state_ = 1.0f;
     float gate_smooth_ = 0.0f;

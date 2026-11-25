@@ -19,15 +19,6 @@ extern "C" {
 void strata_fx_crush(float *io, int n, float rate, float step, float inv_step, float wet,
                      float *phase, float *held);
 
-/* A flanger: a short delay swept by a triangle LFO, fed back. `ring` is 2 * `mask + 1` floats of
- * interleaved history (mask + 1 a power of two), `*write` the next frame to write. The delay is
- * `base + span * tri` frames, the LFO advancing `lfo_step` a frame from `*lfo` (0-1), the right
- * channel a quarter cycle on. `feedback` goes back into the ring, `wet` into the output, and
- * `dry` is what is kept of the input. */
-void strata_fx_flanger(float *io, int n, float *ring, int mask, int *write, float *lfo,
-                       float lfo_step, float base, float span, float feedback, float dry,
-                       float wet);
-
 /* The gain moves: a dip at every beat (`pump` 0-1 deep, recovering over the beat) times a
  * sixteenth-note chopper (`gate` 0-1 deep), its edges smoothed by a one-pole of coefficient
  * `smooth` carried in `*gate_state`. `*phase` is the place in the beat (0-1), advancing `step`

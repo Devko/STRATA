@@ -70,6 +70,9 @@ bool Engine::init(float sample_rate) {
     // The looper records into RESAMPLE's buffer (dsp/looper.hpp): no RAM of its own.
     looper_.attach(capture_.lend(), capture_.capacity());
     master_fx_.init(rate_);
+    // LOCK's states: one per pattern, the swap-back and the compare's scratch.
+    if (lock_memory_ == nullptr) lock_memory_ = new LiveState[LockStore::kStates + 1];
+    locks_.attach(lock_memory_);
 
     perform_init(scenes_, macros_);
 
@@ -386,7 +389,10 @@ void Engine::prepare_machine(int track) {
 
 void Engine::prepare_chain(int track) {
     const TrackParams &params = sounding(track);
-    const ChainMix &mix = mix_[track];
+    // The mixer's MUTE BUS scales every fader (core/perffx.hpp); 1 leaves the fader as set, so
+    // a dry plan prepares exactly what it did before.
+    ChainMix mix = mix_[track];
+    mix.level *= perf_plan_.tracks;
     // A VA or WAVE track's chain is TON alone (D8): its FLTR page is the machine's filter.
     const bool tone = machine_has_voice_filter(machine_id(track));
     if (prepare_memo_ && chain_prepared_valid_[track] && chain_prepared_tone_[track] == tone &&
@@ -902,6 +908,14 @@ void Engine::apply(const Command &command) {
             kit_from_params();
             break;
 
+        case Cmd::lock_store:
+            lock_command(0);
+            break;
+
+        case Cmd::lock_tap:
+            lock_command(1);
+            break;
+
         case Cmd::kit_recall:
             // The kit browser (FUNC+EDIT twice, app/app.hpp). With `a` = 1 the kit comes from the
             // inbox the main context filled while the ring was empty (`kit_for_recall`); with
@@ -961,6 +975,8 @@ void Engine::apply(const Command &command) {
             // loaded. The screen would show the new kit and the machines would sound the old.
             perform_dirty_ = true;
             undo_.clear();
+            // Locks are RAM only and belong to the project they were taken in.
+            locks_.clear();
             queue_clear(queue_);
             chain_.active = false;
             // A project saved with its chain running reopens with it running. The flag was
@@ -1511,19 +1527,11 @@ void Engine::apply(const Command &command) {
             break;
         }
 
-        case Cmd::delay_freeze:
-            // Held by the chord or by the mixer's ECHO FREEZE: process() hands the mixer either.
-            user_freeze_ = command.a != 0;
-            break;
-
-        case Cmd::tape_stop:
-            user_tape_ = command.a != 0;
-            break;
-
         case Cmd::perf_fx: {
-            // One effect at a time (core/perffx.hpp). The looper is not an effect: its mix is
-            // Cmd::looper's, so an a naming it, or past the end, is refused.
-            if (command.a >= uint8_t(PerfFx::looper)) {
+            // One effect at a time (core/perffx.hpp). The looper and the morph are not effects:
+            // the looper's mix is Cmd::looper's and the morph Cmd::set_morph's, so an a naming
+            // either, or past the end, is refused.
+            if (command.a >= uint8_t(PerfFx::count) || perf_fx_is_control(PerfFx(command.a))) {
                 status_.bump_refused();
                 break;
             }
@@ -2014,6 +2022,8 @@ void Engine::switch_pattern(int bank, int slot) {
     // overwrite a different pattern with another's steps, which core/undo.hpp's clear() exists
     // to prevent -- its own header asks for exactly this call.
     undo_.clear();
+    // And LOCK's swap-back, for the same reason: it holds the pattern just left.
+    locks_.pattern_changed();
 
     // A pattern change is what the 1ST condition tests for, and the scheduler's PRE/NEI chain
     // was resolved against a pattern that is no longer playing.
@@ -2797,13 +2807,13 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         apply_perf_plan(sends, master);
         mixer_.prepare(sends, master);
     }
-    // The held master moves, from their chords or from the mixer.
-    const bool freeze = user_freeze_ || perf_plan_.delay_freeze;
-    if (freeze != freeze_applied_) {
-        mixer_.freeze_delay(freeze);
-        freeze_applied_ = freeze;
+    // The held master moves, from the mixer's ECHO FREEZE and TAPE STOP (their FUNC chords
+    // retired 2026-11-25, backlog D5).
+    if (perf_plan_.delay_freeze != freeze_applied_) {
+        mixer_.freeze_delay(perf_plan_.delay_freeze);
+        freeze_applied_ = perf_plan_.delay_freeze;
     }
-    tape_stop_.hold(user_tape_ || perf_plan_.tape_stop);
+    tape_stop_.hold(perf_plan_.tape_stop);
     mixer_.begin_block(int(frames));
 
     // A bounce's tap, only while its take is running: the track's own block, from the mixer.
@@ -2874,7 +2884,6 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     fx.pump = perf_plan_.pump;
     fx.crush = perf_plan_.crush;
     fx.noise = perf_plan_.noise;
-    fx.flanger = perf_plan_.flanger;
     fx.gate = perf_plan_.gate;
     master_fx_.set(fx);
     master_fx_.process(out, int(frames), perf_phase_, phase_step);
@@ -2883,18 +2892,11 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // Beat repeat is LAST, on the finished master: that is what "the master output" means, and
     // it is why it captures the limiter and the master filter too (dsp/repeat.hpp). The length
-    // is a note value, so the frames follow the tempo. The pad wins over the mixer's STUTTER;
-    // a new stutter band lets go and presses again, which loops a shorter slice of the same
-    // past (the ring is not written while held): the build of a stutter riser.
-    const bool stutter = !repeat_held_ && perf_plan_.repeat >= 0;
-    const RepeatLength length = stutter ? RepeatLength(perf_plan_.repeat) : repeat_length_;
-    if (stutter && perf_repeat_applied_ >= 0 && perf_repeat_applied_ != perf_plan_.repeat) {
-        repeat_.hold(false);
-    }
-    repeat_.set(uint32_t(float(repeat_length_ticks(length)) * samples_per_tick_),
-                stutter ? false : repeat_pitch_);
-    repeat_.hold(repeat_held_ || stutter);
-    perf_repeat_applied_ = stutter ? perf_plan_.repeat : int8_t(-1);
+    // is a note value, so the frames follow the tempo. The REPEAT pad is its only owner since
+    // the mixer's slot 7 became the MUTE BUS (2026-11-25).
+    repeat_.set(uint32_t(float(repeat_length_ticks(repeat_length_)) * samples_per_tick_),
+                repeat_pitch_);
+    repeat_.hold(repeat_held_);
     repeat_.process(out, int(frames));
 
     // The tape stop, after beat repeat: it stops whatever is coming out, a repeat included. Two
@@ -2952,6 +2954,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // moves it without going through that function, and two stores a block cost nothing.
     status_.live_bank.store(project_.bank, std::memory_order_relaxed);
     status_.live_slot.store(project_.slot, std::memory_order_relaxed);
+    publish_lock_state();
 
     const float peak = mixer_.peak();
     const float scaled = peak * 1000.0f;
@@ -3125,6 +3128,96 @@ void Engine::watch_streams() {
         status_.stream_want[t].store(st.want, std::memory_order_release);
     }
     status_.stream_late.store(stream_late_, std::memory_order_relaxed);
+}
+
+// --- LOCK (core/lockstore.hpp) ----------------------------------------------
+//
+// The live set is spread over the engine (the pattern in the project, the sound in `params_`,
+// the faders in `mix_`, the send and master bytes in the settings, the mutes, the morph and the
+// macro positions); these two gather it into one LiveState and put one back.
+
+void Engine::capture_live(LiveState &state) const {
+    __builtin_memcpy(&state.pattern, &live(), sizeof state.pattern);
+    static_assert(kKitParams == kTrackParams, "a lock holds the kit's bytes as the engine has them");
+    for (int t = 0; t < kTracks; t++) {
+        __builtin_memcpy(state.params[t], params_[t].v, kKitParams);
+        state.level[t] = mix_[t].level;
+    }
+    __builtin_memcpy(state.sends, project_.settings.sends, sizeof state.sends);
+    __builtin_memcpy(state.master, project_.settings.master, sizeof state.master);
+    state.mutes = mute_state_capture(muted_);
+    for (int m = 0; m < kMacros; m++) state.macros[m] = macro_position_[m];
+    state.morph = morph_;
+}
+
+// At once (D3): the next step plays from the restored pattern, and the sound is heard in this
+// block. Like an undo, not a pattern change: the scheduler's timing is rebuilt (lengths, speeds
+// and swing may differ) but its PRE/NEI chain is not reset. The machines are not switched: a
+// lock taken before a machine switch restores the parameters only (docs/MANUAL.md).
+void Engine::apply_live(const LiveState &state) {
+    __builtin_memcpy(&live(), &state.pattern, sizeof state.pattern);
+    deferred_count_ = 0;                 // ratchet hits of the steps just replaced
+    for (int t = 0; t < kTracks; t++) {
+        __builtin_memcpy(params_[t].v, state.params[t], kKitParams);
+        const uint32_t locked = locked_[t];
+        for (int p = 0; p < kTrackParams; p++) {
+            // A p-lock on the step playing now still wins until the next step, as for a knob.
+            if ((locked >> p & 1u) == 0) effective_[t].v[p] = params_[t].v[p];
+        }
+        mix_[t].level = state.level[t];
+    }
+    __builtin_memcpy(project_.settings.sends, state.sends, sizeof state.sends);
+    __builtin_memcpy(project_.settings.master, state.master, sizeof state.master);
+    apply_mixer_bytes();
+    apply_mutes(state.mutes);
+    for (int m = 0; m < kMacros; m++) macro_position_[m] = state.macros[m];
+    morph_ = state.morph;
+    perform_dirty_ = true;
+    reconfigure();
+}
+
+void Engine::lock_command(uint8_t action) {
+    const int index = live_index();
+    if (lock_memory_ == nullptr) {
+        status_.bump_refused();
+        return;
+    }
+    if (action == 0) {
+        capture_live(locks_.slot(index));
+        locks_.stored(index);
+        lock_changed_ = false;
+        status_.bump_lock_event(kLockStored);
+        return;
+    }
+    const LockTap tap = locks_.tap(index);
+    if (tap == LockTap::jumped) {
+        capture_live(locks_.back());
+        apply_live(locks_.slot(index));
+        lock_changed_ = false;
+    } else if (tap == LockTap::swapped) {
+        apply_live(locks_.back());
+        lock_changed_ = true;            // checked again within kLockCheckBlocks
+    }
+    lock_check_countdown_ = 0;
+    status_.bump_lock_event(uint8_t(tap));
+}
+
+void Engine::publish_lock_state() {
+    const int index = live_index();
+    if (!locks_.has(index)) {
+        lock_changed_ = false;
+        status_.lock_state.store(0, std::memory_order_relaxed);
+        return;
+    }
+    if (--lock_check_countdown_ <= 0) {
+        lock_check_countdown_ = kLockCheckBlocks;
+        LiveState &scratch = lock_memory_[LockStore::kStates];
+        capture_live(scratch);
+        lock_changed_ = !live_state_same(scratch, locks_.slot(index));
+    }
+    status_.lock_state.store(uint8_t(kLockHas | (lock_changed_ ? kLockChanged : 0u) |
+                                     (locks_.jumped(index) ? kLockSwapReady : 0u)),
+                             std::memory_order_relaxed);
 }
 
 }  // namespace strata
