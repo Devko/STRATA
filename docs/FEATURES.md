@@ -94,6 +94,7 @@ FM4 and GRAIN machines.
 | **Play modes per track**: FWD, REV, PING, RND1-RND16 (FUNC menu TRACK PLAY); seeded, the pattern untouched | unreleased | ○ (8, play modes) | Not on PERFORM yet (the backlog's arm-and-knob idea) |
 | Parameter locks: 8 a step, 1,024 a pattern; push the knob to remove one | v0.1.0 | ○ (6) | `FULL n` when the pool is full (never reached on the unit) |
 | Pattern swing and **per-track swing** (PATTERN page) | v0.1.0 | ○ (13e) | |
+| **FEEL**: DRIFT 1-6 (each track its own curve) or WAVE 1-6 (one four-bar curve), over swing and micro (PATTERN page, D) | unreleased | ○ (8, FEEL) | Up to 6 ticks of 96 PPQN; seeded |
 | Euclidean fill (FUNC + A/B/C in GRID) | v0.1.0 | ○ (M3) | |
 | Copy/paste a step, a range or a track; range transpose and nudge | v0.1.0 | ○ (M3) | No one-press copy of a whole pattern to another slot |
 | 16 levels of undo and redo | v0.1.0 | ○ (6) | Chain edits and kit recalls are not undoable |
@@ -117,6 +118,7 @@ FM4 and GRAIN machines.
 | Mutes on the bar (FUNC + track pad), MUTE MODE, 8 stored mute states | v0.1.0 | ○ (3b) | |
 | 16 scenes, A/B morph on VALUE, capture whole or one track | v0.1.0 | ◐ (3b) | Morph position is not saved; locks are not morphed (parked) |
 | 4 macros of up to 4 targets, sweep from the live value; factory B ACID, C DUB, D DRIVE | v0.1.0 | ○ (3b) | |
+| **REL ALL / LEN ALL**: every track's release (FUNC + A) and every note's length (FUNC + B) in PERFORM | unreleased | ○ (8, REL ALL) | Live only; LEN ALL leaves gateless notes (drums, arp) alone |
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |

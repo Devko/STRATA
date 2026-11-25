@@ -892,6 +892,16 @@ track. The FUNC menu's CLEAR PATTERN (OK twice) clears every track at once. Hold
   fields, `PAT` (follow SWG) or 50-75%. LEFT/RIGHT walk the fields, and C (or VALUE) changes the
   one under `>`; with `>` on LEN or SWG, C sets the selected track's. Hats at 66 over a straight
   kick and bass is the classic use. It is saved with the pattern and undoable.
+- **FEEL**, on the same page between SWG and the track swings (D turns it from anywhere on the
+  page): a timing drift over the swing and micro-timing, so the pattern stops sitting dead on the
+  grid. **DRIFT 1-6** moves each track along its own smooth random curve, a new aim every two
+  thirds of a beat, so the parts loosen against each other like players; **WAVE 1-6** moves every
+  track together along one slow four-bar curve: on the grid at bar 1, laid back by the end of it,
+  on the grid at bar 3, pushed ahead by the end of that, so the groove breathes. The number is the
+  most a step moves, in 96ths of a beat (6 is about 29 ms at 130 BPM); it follows the tempo. The
+  steps themselves never change, so OFF gives back the grid exactly. The curve comes from the
+  pattern's seed and the bar, so it plays the same after STOP and PLAY or a reload. Saved with the
+  pattern, undoable, and held by a LOCK.
 
 A 12-step perc against a 16-step kick lands somewhere new each bar for three bars; GROOVE+ does
 exactly this.
@@ -1050,6 +1060,25 @@ it. **CLR** clears the selected macro. Macro setups are saved with the project (
 where its knob is, and lets go back to the knob's setting. This is why A ships empty: assign it
 to the selected track's sound and the pads become expressive.
 
+### REL ALL and LEN ALL: every track's release and note length at once
+
+Two more hands in PERFORM, beside the macros: **FUNC + turn A is REL ALL** and **FUNC + turn B is
+LEN ALL**. Each starts at rest, where the sound is exactly what you programmed, and turning back
+always stops on rest for one click (a detent), so you can find it without looking.
+
+- **REL ALL** shortens or lengthens every track's tail at once, by the same amount on each one's
+  own release: DEC on the AMP page of every machine, and REL on the ASR page where the machine has
+  one (the VAs, WAVE, FM4, GRAIN). Each track keeps its own length relative to the others: turn
+  it down and the whole kit goes tight and dry, up and it all rings. A step's lock on DEC moves
+  with it. `REL ALL -12`.
+- **LEN ALL** scales every sequenced note's length (the step's LEN): down to a quarter, up to four
+  times, an octave of length every 16 clicks. `LEN ALL 71%`. A note with no length of its own (a
+  drum hit, an arpeggio, a held key) is untouched; REL ALL is the drums' control.
+
+While either is away from rest, PERFORM's line under the macros shows both (`REL -12 LEN 71%`)
+and line 2 says `R-` / `R+` and `G-` / `G+`. Neither is saved or undone, like a macro's position;
+a LOCK holds them, so a jump puts them back where they were.
+
 ### Beat repeat, throws and auto-fill
 
 REPEAT loops the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the finished master while held;
@@ -1121,7 +1150,7 @@ over the old one.
 
 A lock holds the pattern whole (steps, locks, conditions, lengths, swing), every track's sound
 (all eight EDIT pages) and fader, the sends and the master, the mutes, and where the morph and
-the four macros are. It does not hold the samples or the machines (a lock taken before a machine
+the four macros are, and REL ALL and LEN ALL (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
 switch brings back the parameters only), the tempo, the kill EQ's switches, the scenes or the
 macro setup, the stored mute states or the chain. The performance mixer is not in it either: a
 jump rides the picked effect back to 0 over FX GLIDE and leaves a loop playing.

@@ -8,6 +8,16 @@ the project file format or the controls.
 
 ### Added
 
+- **REL ALL and LEN ALL (P4).** In PERFORM, FUNC + turn A moves every track's release at once
+  (DEC on every machine, REL on the ASR page where there is one, and a step's lock on them),
+  -64..+64 (`REL ALL -12`); FUNC + turn B scales every sequenced note's length, 25-400%
+  (`LEN ALL 71%`). Rest is 0, a detent, and the programmed sound exactly. Live like the macros:
+  not saved, held by a LOCK, shown in the live strip as `R-`/`R+` and `G-`/`G+`.
+- **FEEL (P8).** A timing drift over swing and micro-timing, on the PATTERN page after SWG (D
+  turns it): DRIFT 1-6, each track on its own smooth random curve, or WAVE 1-6, the whole groove
+  along one four-bar curve, laid back then pushed. Up to 6/96 of a beat, following the tempo,
+  seeded so it repeats after a reload. Saved per pattern in a new optional section; older
+  projects load with FEEL OFF, and older builds open new ones and play them straight.
 - **Play modes per track (P1).** The FUNC menu's new TRACK PLAY row, under TRACK SPEED, sets how
   the selected track walks its steps: FWD, REV, PING, or RND1-RND16 (a random step, or a random
   block of 2-16 steps, in each place). The pattern itself never changes, so FWD gives it back at

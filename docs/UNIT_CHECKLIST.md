@@ -103,6 +103,18 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
   STOP, PLAY: the same RND bars come back in the same order (seeded). FUNC+CLR: back one mode.
   FILL still plays FILL steps, ratchets still roll. LEFT down to `FWD`: the pattern is exactly as
   written. Save, reopen: the mode stays. Sounds musical in a jam? `____`
+- **FEEL (Phase 5, P8).** PLAY A01, PROJECT, screen key RIGHT twice (PATTERN): `FEEL OFF` under
+  SWG. Turn D one click: `FEEL DRIFT 1`; on to `DRIFT 4`: the parts loosen against each other,
+  still in time. On to `WAVE 6`: over four bars the whole beat lays back, then rushes, then
+  settles. Too much, too little, the right range? `____` STOP, PLAY: the same drift comes back.
+  FUNC + CLR: one step back. Back to `OFF`: dead on the grid again. Save, reopen: it stays.
+- **REL ALL and LEN ALL (Phase 5, P4).** PERFORM (FUNC + MIXER), A01 playing; the line under the
+  macros reads `FUNC+A/B REL/LEN ALL`. FUNC + turn A left: `REL ALL -2` .. `-40`, every track's
+  tail shortens together, kick, hats and the chord's release; line 2 shows `R-`. Turn it back
+  quickly: it stops on `REL ALL 0` and the kit sounds exactly as before. Right: everything rings
+  longer. FUNC + turn B: `LEN ALL 50%` the bass and chord notes halve, `200%` they hold twice as
+  long; the drums do not change. Away from rest the line reads `REL -12 LEN 71%`. Hold FUNC +
+  MUTATE to store a lock, move both, tap FUNC + MUTATE: both jump back. Useful ranges? `____`
 - Plays like a keyboard? `____`
 
 **9. CPU guard under load (#83, 2 min).** Still in KEYS, LONG and HALL still on, beat playing.

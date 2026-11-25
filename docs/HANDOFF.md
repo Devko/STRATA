@@ -62,6 +62,12 @@ slots 7 MUTE BUS / 13 MORPH (D1, D2, D5), LOCK on FUNC + MUTATE (D3, D4, D13, D1
 order:** bounce-to-track ("put on track n" after a RESAMPLE bounce, one OK); then hold STEP +
 THROW (the delay-send lock D6 left out).
 
+**Phase 5 item 5** (CyDrums P4 and P8): REL ALL and LEN ALL on FUNC + turn A / B in PERFORM
+(`core/moveall.hpp`; live, rest 0 with a detent, in a LOCK, `R`/`G` in the live strip) and FEEL
+on the PATTERN page (`core/timing.hpp` feel_offset, pattern file section 5, D turns it). The
+emulator cannot turn a knob, so REL/LEN ALL are host-tested only; `scenario_feel` walks FEEL.
+UNIT_CHECKLIST, top half, has both.
+
 LOCK, for whoever touches it next: the audio side keeps the 128 locks and the swap-back and does
 the copies (`Engine::capture_live` / `apply_live`); the UI only times the hold (500 ms), posts
 `lock_store` / `lock_tap`, and acts on `Status::lock_event` (notice, a pending MUTATE dropped,
