@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W32, about 88 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W33, about 90 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -392,6 +392,13 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   always; again: `MID BACK`. CLR ends LEARN. `____`
 - PERFORM, FUNC + STEP 6: a trigless step on page 1's step 6, no macro change. `____`
 - GRID, pad-row right four times: pages 2, 3, 4, then 1 again; pad-row left from 1: page 4. `____`
+
+**W33. The livelier frame and the draw time (2 min).** Beat playing, A01.
+- The meter at the right edge moves with the beat over most of its height, in segments, the top
+  few bright only on the loudest hits (it used to sit low). `____`
+- The progress line under the top line shows dim beat marks ahead of a bright head. `____`
+- PROJECT, screen keys right to SETUP: `DRW` and a figure in ms at the top right. Write it down:
+  `DRW ____ MS` (under 5 is fine). `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
