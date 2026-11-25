@@ -2072,9 +2072,9 @@ TEST(ui_the_grid_draws_a_trig_where_the_trig_is) {
     CHECK(trig_at(0, 0));
     app.draw(canvas);
 
-    CHECK_EQ(at(1, top + 1), 11);                  // the cell is filled now, 6 x 6 from (1, 21)
-    CHECK_EQ(at(6, top + 6), 11);
-    CHECK_EQ(at(7, top + 1), 0);                   // and it stops before the next step's cell
+    CHECK_EQ(at(1, top + 1), 11);                  // the cell is filled now, 5 x 6 from (1, 21):
+    CHECK_EQ(at(5, top + 6), 11);                  // five wide, so step 16 ends at x 125 and
+    CHECK_EQ(at(6, top + 1), 0);                   // the frame's meter keeps x 126-127
     CHECK_EQ(at(9, top + 3), 2);                   // step 2 is still a dash
     CHECK_EQ(at(9, top + 1), 0);
 
@@ -2761,6 +2761,37 @@ bool screen_has(Strata &app, const char *wanted) {
 }
 
 }  // namespace
+
+// The frame (docs/CONTROLS.md, "The screen frame"): bar.beat on the top line, the progress line
+// under it, the live strip saying what is off rest, and the meter's columns left to the meter.
+TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    for (int b = 0; b < kKillBands; b++) post_cmd(Cmd::eq_kill, uint8_t(b), 0);
+    pump(2);
+    CHECK(!screen_has(app, "K:"));                 // at rest the strip says nothing
+
+    // Bar 2, beat 2: one bar and one beat of ticks into the pass.
+    host.set_running(true);
+    for (uint32_t t = 0; t <= kTicksPerBar + uint32_t(kPpqn) + 4u; t++) {
+        host.deliver_tick(t, 0);
+        pump(1);
+    }
+    CHECK(screen_has(app, " 2.2 "));
+    // The progress line, row 8: lit from the left while running, the track dim past it.
+    CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 0]), 11);
+    CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 127]), 2);
+
+    // A kill is off rest, so the strip names it; let go, it is gone again.
+    post_cmd(Cmd::eq_kill, 0, 1);
+    pump(2);
+    CHECK(screen_has(app, "K:L"));
+    post_cmd(Cmd::eq_kill, 0, 0);
+    pump(2);
+    CHECK(!screen_has(app, "K:"));
+    host.set_running(false);
+    pump(2);
+}
 
 // The ambient modes' pages (dsp/ambient.hpp): DLY+ beside DLY, REV+ beside REV. Their TYP knob is
 // a switch, MUL steps by one multiplier, and the delay's TIME line counts the multiplier in LONG.
@@ -6334,6 +6365,12 @@ Look look(Strata &app) {
     enaga::Canvas canvas(g_pixels);
     host.clear_text();
     app.draw(canvas);
+    // The frame's master meter (x 126-127, rows 10-117) is a live reading, like a clock: a
+    // level falling or a held peak running out is not an answer to the input, so it is left out.
+    for (int y = 10; y <= 117; y++) {
+        g_pixels[y * enaga::Canvas::width + 126] = 0;
+        g_pixels[y * enaga::Canvas::width + 127] = 0;
+    }
     Look out{2166136261u, 2166136261u};
     out.screen = fnv(out.screen, g_pixels, sizeof g_pixels);
     for (int i = 0; i < host.text_count(); i++) {

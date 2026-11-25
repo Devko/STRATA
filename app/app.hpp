@@ -3010,20 +3010,41 @@ public:
         const enaga::clock::State clock = enaga::clock::state();
         const bool running = clock.running != 0;
 
-        // Top line on every screen: the live pattern, tempo, play state, audio load. The pattern
-        // comes from the status rather than from the project, because a chain or a queued change
-        // moves it on the audio side.
+        // --- the frame (docs/CONTROLS.md, "The screen frame") ---------------------------------
+        // The same four things in the same place on every screen, drawn from words the audio
+        // side published: nothing here walks a pattern or a buffer.
+        //
+        // Top line: the live pattern, where it is (bar.beat), tempo, play state, audio load.
+        // "A01 4.4 300.0 > 100%" is 20 characters at its longest. The pattern comes from the
+        // status rather than from the project, because a chain or a queued change moves it on
+        // the audio side. Load in whole percent: the bottom line's MAX keeps the tenth.
+        const uint32_t into = status.pattern_into.load(std::memory_order_relaxed);
+        const uint32_t loop = status.pattern_loop.load(std::memory_order_relaxed);
         out = line;
         *out++ = bank_letter(int(status.live_bank.load(std::memory_order_relaxed)));
         append_padded(out, uint32_t(status.live_slot.load(std::memory_order_relaxed)) + 1, 2);
         *out++ = ' ';
+        append_number(out, into / kTicksPerBar % 10u + 1u);
+        *out++ = '.';
+        append_number(out, into % kTicksPerBar / uint32_t(kPpqn) + 1u);
+        *out++ = ' ';
         append_tenths(out, uint32_t(clock.tempo * 10.0f + 0.5f));
         append(out, running ? " > " : " . ");
-        append_tenths(out, enaga::audio_load());
+        append_number(out, (enaga::audio_load() + 5u) / 10u);
         *out++ = '%';
         *out = 0;
         canvas.text(0, 0, line, 14);
 
+        // The progress line under it: one pixel across the pattern's pass, on a dim track.
+        canvas.rect(0, kFrameProgressY, 128, 1, 2);
+        const uint32_t progress = loop > 0 ? (into + 1u) * 128u / loop : 0u;
+        if (running && progress > 0) {
+            canvas.rect(0, kFrameProgressY, int(progress > 128u ? 128u : progress), 1, 11);
+        }
+
+        // The second line: a notice or a held mode while there is one, else the live strip
+        // (what is off rest), else the clock's state.
+        const int y2 = kFrameStripY;
         if (func_help_showing()) {
             // The help's title takes this line (draw_func_help).
         } else if ((step_page_ || mode_ != Mode::grid) && notice_showing()) {
@@ -3031,24 +3052,31 @@ public:
             // other screen had nowhere for it, so a gesture there (F1 + F3's "again to save", an
             // octave, a scene captured) answered with nothing at all.
             out = line;
-            append_shown(out, notice_, kLineChars);
+            append_shown(out, notice_, lock_mark() != nullptr ? kFrameStripChars : kLineChars);
             *out = 0;
-            canvas.text(0, 9, line, 15);
+            canvas.text(0, y2, line, 15);
         } else if ((step_page_ || mode_ != Mode::grid) && macro_learn_ >= 0) {
             // MACRO LEARN says so for as long as it is on: the knobs' pushes are not theirs.
             learn_line(line);
-            canvas.text(0, 9, line, 15);
+            canvas.text(0, y2, line, 15);
         } else if ((step_page_ || mode_ != Mode::grid) && verdict_keys_free()) {
             // A MUTATE waiting for its verdict says so for as long as it waits: the notice
             // fades after a second and a half, and the keys it is waiting on do not.
-            canvas.text(0, 9, kVerdictHint, 15);
+            canvas.text(0, y2, kVerdictHint, 15);
+        } else if (live_strip(line)) {
+            canvas.text(0, y2, line, 12);
         } else if (int(clock.source) != ENAGA_CLOCK_INTERNAL) {
             // The tempo is not ours to set under an external source, so say so rather than
             // showing a number the user cannot change.
-            canvas.text(0, 9, int(clock.source) == ENAGA_CLOCK_MIDI ? "EXT MIDI" : "EXT SYNC", 10);
+            canvas.text(0, y2, int(clock.source) == ENAGA_CLOCK_MIDI ? "EXT MIDI" : "EXT SYNC", 10);
         } else if (clock_refused_) {
             // Internal source and still refused: worth seeing rather than silently ignoring.
-            canvas.text(0, 9, "CLOCK REFUSED", 10);
+            canvas.text(0, y2, "CLOCK REFUSED", 10);
+        }
+        // The LOCK mark's place, right-aligned on the strip's line (kFrameLockX). Nothing sets
+        // it yet: the LOCK thread fills lock_mark().
+        if (!func_help_showing() && lock_mark() != nullptr) {
+            canvas.text(kFrameLockX, y2, lock_mark(), 15);
         }
 
         if (func_help_showing()) {
@@ -3095,6 +3123,116 @@ public:
         else append(out, device_name(enaga::system::device()));
         *out = 0;
         canvas.text(0, 120, line, 7);
+
+        draw_frame_meter(canvas);
+    }
+
+    // --- the frame's master meter and live strip ------------------------------------------
+    //
+    // Rows: top line 0-6, progress 8, second line (strip) 10-16, the screen's own 18-117,
+    // bottom line 120. The meter is the two columns no text reaches: 21 characters end at x
+    // 124 (the layout check holds every string to the screen), so x 126-127 is the frame's.
+    static constexpr int kFrameProgressY = 8;
+    static constexpr int kFrameStripY = 10;
+    static constexpr int kFrameMeterX = 126;
+    static constexpr int kFrameMeterTop = 10;
+    static constexpr int kFrameMeterRows = 108;          // rows 10-117
+    static constexpr int kFrameStripChars = 17;          // the strip stops at x 100 ...
+    static constexpr int kFrameLockX = 114;              // ... and "L" or "L*" sits at 114-124
+    static constexpr uint32_t kMeterHoldMs = 1000;
+
+    // The LOCK indicator: "L" while the playing pattern has a lock, "L*" once it has changed
+    // since. Not built yet (a later thread); nullptr draws nothing.
+    const char *lock_mark() const { return nullptr; }
+
+    // What is off rest, shortest first-read first: kills, the performance effect, the morph,
+    // the macros away from zero, the looper. "K:LMH FX12 S100 M:ABCD LP" is 25 characters, so
+    // whatever does not fit in kFrameStripChars is left out whole. False when all is at rest.
+    bool live_strip(char *line) {
+        char *out = line;
+        char part[12];
+        char *p;
+        const auto add = [&](const char *text) {
+            const int used = int(out - line);
+            int extra = 0;
+            while (text[extra] != '\0') extra++;
+            const int gap = used > 0 ? 1 : 0;
+            if (used + gap + extra > kFrameStripChars) return;
+            if (gap) *out++ = ' ';
+            append(out, text);
+        };
+
+        const uint8_t kills = engine_.project().settings.eq_kills;
+        if (kills & 7u) {
+            p = part;
+            append(p, "K:");
+            if (kills & 1u) *p++ = 'L';
+            if (kills & 2u) *p++ = 'M';
+            if (kills & 4u) *p++ = 'H';
+            *p = 0;
+            add(part);
+        }
+        if (engine_.perf_fx() != PerfFx::none) {
+            p = part;
+            append(p, "FX");
+            append_number(p, uint32_t(engine_.perf_fx()));
+            *p = 0;
+            add(part);
+        }
+        const uint32_t morph = engine_.morph();
+        if (morph != 0) {
+            p = part;
+            *p++ = 'S';
+            append_number(p, (morph * 100u + kMorphScale / 2) / kMorphScale);
+            *p = 0;
+            add(part);
+        }
+        p = part;
+        append(p, "M:");
+        for (int m = 0; m < kMacros; m++) {
+            if (engine_.macro_position(m) != 0) *p++ = char('A' + m);
+        }
+        *p = 0;
+        if (p - part > 2) add(part);
+        if (engine_.status().looper_state.load(std::memory_order_relaxed) != 0) add("LP");
+        *out = 0;
+        return out != line;
+    }
+
+    // Two columns down the right edge: the master level (the audio side's falling peak), a
+    // bright dot at the highest reading of the last second, and the top pixel lit for a second
+    // after any block that reached full scale.
+    void draw_frame_meter(enaga::Canvas &canvas) {
+        const Status &status = engine_.status();
+        const uint32_t level = status.meter_milli.load(std::memory_order_relaxed);
+        if (level >= meter_hold_ || uint32_t(last_ms_ - meter_hold_ms_) >= kMeterHoldMs) {
+            meter_hold_ = level;
+            meter_hold_ms_ = last_ms_;
+        }
+        const uint8_t limits = status.limit_seen.load(std::memory_order_relaxed);
+        if (limits != limit_seen_) {
+            limit_seen_ = limits;
+            limit_ms_ = last_ms_;
+            limit_lit_ = true;
+        }
+        if (limit_lit_ && uint32_t(last_ms_ - limit_ms_) >= kMeterHoldMs) limit_lit_ = false;
+
+        canvas.rect(kFrameMeterX, kFrameMeterTop, 2, kFrameMeterRows, 0);
+        const int bar = meter_rows(level);
+        if (bar > 0) {
+            canvas.rect(kFrameMeterX, kFrameMeterTop + kFrameMeterRows - bar, 2, bar, 8);
+        }
+        const int held = meter_rows(meter_hold_);
+        if (held > 0) {
+            canvas.rect(kFrameMeterX, kFrameMeterTop + kFrameMeterRows - held, 2, 1, 15);
+        }
+        if (limit_lit_) canvas.rect(kFrameMeterX, kFrameMeterTop, 2, 1, 15);
+    }
+
+    // Milli of full scale to rows, linear and capped at the column.
+    static int meter_rows(uint32_t milli) {
+        const uint32_t rows = milli * uint32_t(kFrameMeterRows) / 1000u;
+        return int(rows > uint32_t(kFrameMeterRows) ? uint32_t(kFrameMeterRows) : rows);
     }
 
     // --- the FUNC help: FUNC held on its own ------------------------------
@@ -3202,9 +3340,9 @@ public:
                 if (on_head) grey = uint8_t(grey < 8 ? 7 : 15);
 
                 if (trig || on_head) {
-                    canvas.rect(i * 8 + 1, y + 1, 6, 6, grey);
+                    canvas.rect(i * 8 + 1, y + 1, 5, 6, grey);   // 5 wide: x 126-127 is the meter's
                 } else {
-                    canvas.rect(i * 8 + 1, y + 3, 6, 2, grey);   // an empty step: a thin dash
+                    canvas.rect(i * 8 + 1, y + 3, 5, 2, grey);   // an empty step: a thin dash
                 }
             }
             if (t == selected_) canvas.rect(0, y, 1, 8, 12);     // the selected track's marker
@@ -5585,7 +5723,7 @@ public:
             menu_item_value(MenuItem(i), value);
             int length = 0;
             while (value[length] != '\0') length++;
-            if (length > 0) canvas.text(128 - length * 6, y, value, here ? 15 : 9);
+            if (length > 0) canvas.text(kFrameMeterX - length * 6, y, value, here ? 15 : 9);
         }
         canvas.text(0, 103, "OK: RUN   CLR: BACK", 7);
         canvas.text(0, 111, "LEFT/RIGHT: CHANGE", 7);
@@ -7360,6 +7498,12 @@ private:
     static constexpr uint32_t kWaveSliceMs = 2;   // the WAVE build's share of a pass (update)
     int waves_logged_ = 0;        // tables built, as last logged (update)
     uint32_t last_ms_ = 0;
+    // The frame's meter: the held reading and when it was taken, and the limiter's last count.
+    uint32_t meter_hold_ = 0;
+    uint32_t meter_hold_ms_ = 0;
+    uint8_t limit_seen_ = 0;
+    uint32_t limit_ms_ = 0;
+    bool limit_lit_ = false;
     uint8_t logged_guard_ = 0;     // the CPU guard level last logged
     uint32_t cpu_max_ = 0;         // per mille, the highest block cost since the last start
     static constexpr uint8_t kLoadBurst = 4;       // `ld` lines (bars) after a freeze or unfreeze

@@ -363,8 +363,9 @@ short blips until you give it a sample (section 6).
 
 ### 1. Play it
 
-Press **PLAY**. A01 starts; the top line reads `A01 130.0 > 20.0%` (pattern, tempo, `>` playing,
-audio load). Turn **VALUE** to change the tempo; push and turn VALUE for swing. **STOP** stops
+Press **PLAY**. A01 starts; the top line reads `A01 1.1 130.0 > 20%` (pattern, bar.beat, tempo, `>`
+playing, audio load), a thin line under it runs across the pattern, and the column at the right
+edge is the master level. Turn **VALUE** to change the tempo; push and turn VALUE for swing. **STOP** stops
 and lets tails ring; STOP again cuts them.
 
 ### 2. Edit steps
@@ -1440,7 +1441,7 @@ names one.
 
 ### The audio load: LOAD and MAX
 
-The top line's last figure, `23.4%`, is how much of each audio block the DSP used: the **load**.
+The top line's last figure, `23%`, is how much of each audio block the DSP used: the **load**.
 It changes every block, so it flickers. Builds with the held **MAX** readout show
 `MAX23.5` on the bottom line: the highest block since PLAY was last pressed, so press PLAY to
 start a fresh reading.
