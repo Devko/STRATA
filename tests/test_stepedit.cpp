@@ -1077,3 +1077,75 @@ TEST(a_field_index_past_the_table_changes_nothing) {
     step_field_apply(step, StepField(-1), 5);
     CHECK(std::memcmp(&step, &before, sizeof(Step)) == 0);
 }
+
+// --- hold STEP + upper pad (D6) -------------------------------------------------------------
+
+namespace {
+
+// Press `cycle` on `step` once, through the same delta the app posts.
+void press(Step &step, StepCycle cycle) {
+    const StepField field = step_cycle_field(cycle);
+    step_field_apply(step, field, step_cycle_next(step, cycle) - step_field_value(step, field));
+}
+
+}  // namespace
+
+TEST(hold_step_and_fill_cycles_fill_not_fill_none) {
+    Step step;
+    press(step, StepCycle::fill);
+    CHECK_EQ(int(condition_kind(step.condition)), int(Condition::FILL));
+    press(step, StepCycle::fill);
+    CHECK_EQ(int(condition_kind(step.condition)), int(Condition::NOT_FILL));
+    press(step, StepCycle::fill);
+    CHECK_EQ(int(step.condition), int(condition_pack(Condition::NONE)));
+    // A condition the cycle does not hold goes to its start.
+    step.condition = condition_pack(Condition::PRE);
+    press(step, StepCycle::fill);
+    CHECK_EQ(int(condition_kind(step.condition)), int(Condition::FILL));
+}
+
+TEST(hold_step_and_mute_cycles_the_a_b_conditions) {
+    Step step;
+    const uint8_t expected[] = {condition_pack_a_b(1, 2), condition_pack_a_b(2, 2),
+                                condition_pack_a_b(1, 4), condition_pack_a_b(4, 4),
+                                condition_pack(Condition::NONE), condition_pack_a_b(1, 2)};
+    for (uint8_t want : expected) {
+        press(step, StepCycle::a_b);
+        CHECK_EQ(int(step.condition), int(want));
+    }
+    step.condition = condition_pack_a_b(1, 3);           // set on the step page
+    press(step, StepCycle::a_b);
+    CHECK_EQ(int(step.condition), int(condition_pack_a_b(1, 2)));
+    char text[kStepFieldTextMax];
+    step_field_text(step, StepField::condition, text, int(sizeof text));
+    CHECK(std::strcmp(text, "1:2") == 0);
+}
+
+TEST(hold_step_and_repeat_cycles_the_ratchet_and_keeps_its_ramp) {
+    Step step;
+    step.ratchet = uint8_t(0x10u | 1u);                  // a ramp set on the step page
+    const int expected[] = {2, 3, 4, 1, 2};
+    for (int want : expected) {
+        press(step, StepCycle::ratchet);
+        CHECK_EQ(int(ratchet_count(step.ratchet)), want);
+        CHECK_EQ(int(step.ratchet >> 4), 1);             // the ramp is untouched
+    }
+    step.ratchet = 7;
+    press(step, StepCycle::ratchet);
+    CHECK_EQ(int(ratchet_count(step.ratchet)), 2);
+}
+
+TEST(hold_step_and_mutate_cycles_probability) {
+    Step step;
+    const int expected[] = {75, 50, 25, 100, 75};
+    for (int want : expected) {
+        press(step, StepCycle::probability);
+        CHECK_EQ(int(step.probability), want);
+    }
+    step.probability = 60;
+    press(step, StepCycle::probability);
+    CHECK_EQ(int(step.probability), 75);
+    char text[kStepFieldTextMax];
+    step_field_text(step, StepField::probability, text, int(sizeof text));
+    CHECK(std::strcmp(text, "75%") == 0);
+}

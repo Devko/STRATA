@@ -2034,6 +2034,11 @@ public:
             play_pad(pad, velocity);
             return;
         }
+        // D6, "STEP first edits, pad first performs": with a STEP held, FILL, REPEAT, MUTE and
+        // MUTATE step one field of that step through a short cycle instead of performing
+        // (core/stepedit.hpp). Not with FUNC, whose pad chords stay, and not in KEYS (above),
+        // where the upper pads are the piano's black keys.
+        if (held_step_ >= 0 && !shift_ && is_perform_pad(pad) && edit_held_step(pad)) return;
         // The performance row first: it is the same seven pads in every mode, which is what
         // docs/SPEC.md means by a fixed row.
         if (is_perform_pad(pad)) {
@@ -2101,6 +2106,11 @@ public:
         // the mode changed under it).
         if (pad >= 0 && pad < kPianoPads && pad_held_note_[pad] >= 0) {
             release_pad(pad);
+            return;
+        }
+        // A pad that edited a held step comes up with nothing to let go.
+        if (is_perform_pad(pad) && (step_edit_pads_ >> (pad / 2) & 1u) != 0) {
+            step_edit_pads_ = uint8_t(step_edit_pads_ & ~(1u << (pad / 2)));
             return;
         }
         if (is_perform_pad(pad)) {
@@ -2185,6 +2195,46 @@ public:
 
     // The seven upper pads. Four of them are HELD rather than toggled -- fill, repeat, throw and
     // the two scene selectors -- so each one's release matters as much as its press.
+    // Hold STEP + an upper pad (D6): the held step's condition, ratchet or probability one
+    // press further round its cycle, said as `STEP 5 PROB 50%`. False for a pad with no cycle
+    // (the scenes, THROW), which then performs as usual. The release counts as a use, so the
+    // STEP does not toggle its trig when it comes up.
+    bool edit_held_step(int pad) {
+        StepCycle cycle;
+        switch (PerformPad(pad)) {
+            case PerformPad::fill:   cycle = StepCycle::fill; break;
+            case PerformPad::repeat: cycle = StepCycle::ratchet; break;
+            case PerformPad::mute:   cycle = StepCycle::a_b; break;
+            case PerformPad::mutate: cycle = StepCycle::probability; break;
+            default:                 return false;
+        }
+        const StepField field = step_cycle_field(cycle);
+        Step shown = engine_.pattern().tracks[selected_].steps[held_step_];
+        const int delta = step_cycle_next(shown, cycle) - step_field_value(shown, field);
+        step_field_apply(shown, field, delta);
+        held_used_ = true;
+        step_edit_pads_ = uint8_t(step_edit_pads_ | (1u << (pad / 2)));
+        mark(GestureKind::field, selected_, held_step_);
+        post_delta(Cmd::step_field_delta, selected_, held_step_, uint8_t(field), delta);
+
+        char value[kStepFieldTextMax];
+        if (field == StepField::ratchet_count && ratchet_count(shown.ratchet) == 1) {
+            value[0] = 'O'; value[1] = 'F'; value[2] = 'F'; value[3] = 0;
+        } else {
+            step_field_text(shown, field, value, int(sizeof value));
+        }
+        char *out = notice_buffer_;
+        append(out, "STEP ");
+        append_number(out, uint32_t(held_step_) + 1);
+        *out++ = ' ';
+        append(out, step_field_name(field));
+        *out++ = ' ';
+        append(out, value);
+        *out = 0;
+        notice(notice_buffer_);
+        return true;
+    }
+
     void on_perform_pad(int pad, bool down) {
         // Which of the row is held, for its LED. Every pad, toggles too: a held pad is lit
         // while the finger is on it, which is the first sign the press arrived at all.
@@ -7134,6 +7184,7 @@ private:
     uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)
     uint8_t roll_velocity_[kTracks] = {};       // the last velocity sent for each roll
     bool mutation_pending_ = false;             // a MUTATE waiting for OK (keep) or CLR (revert)
+    uint8_t step_edit_pads_ = 0;                // upper pads (by pad / 2) that edited a held step
     int16_t pad_held_note_[kPianoPads] = {-1, -1, -1, -1, -1, -1, -1, -1,
                                           -1, -1, -1, -1, -1, -1, -1};   // KEYS: piano pads
     uint8_t pad_held_track_[kPianoPads] = {};

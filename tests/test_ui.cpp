@@ -1420,19 +1420,21 @@ TEST(ui_a_performance_pad_pressed_during_a_hold_drops_the_hold) {
     // `held_step_` set with no key down, and the next encoder turn wrote a parameter lock onto a
     // step nobody was touching. The other two routes were a page change and a mode change.
     {
+        // MUTE pressed AFTER the STEP edits that step (D6), so MUTE mode is reached pad first.
         Strata &app = fresh();
-        step_down(0);
-        app.on_pad_press(5, 100);                  // MUTE mode on, with STEP 1 still down
+        app.on_pad_press(5, 100);                  // MUTE mode on
         CHECK(UiProbe::mute_mode(app));
-        CHECK_EQ(UiProbe::held_step(app), -1);     // the hold went with it
+        step_down(0);                              // swallowed by the MUTE branch
         app.on_pad_release(5);
-        step_up(0);                                // swallowed by the MUTE branch, harmlessly
+        step_up(0);
 
         CHECK_EQ(UiProbe::held_step(app), -1);
         app.on_encoder(0, +4);
         pump();
         CHECK_EQ(locks_on_track(0), 0);            // no phantom lock
         CHECK_EQ(int(step_of(0, 0).lock_count), 0);
+        app.on_pad_press(5, 100);                  // MUTE mode off again
+        app.on_pad_release(5);
     }
     {
         Strata &app = fresh();
@@ -1646,6 +1648,87 @@ TEST(ui_every_mode_key_closes_the_step_page) {
         CHECK_EQ(UiProbe::mode(app), int(c.expected));
         CHECK(!UiProbe::step_page(app));
     }
+}
+
+TEST(ui_hold_step_and_an_upper_pad_edits_the_step) {
+    // D6, "STEP first edits, pad first performs": with STEP 5 held, FILL, REPEAT, MUTE and MUTATE
+    // step the condition, ratchet, A:B and probability round their cycles (core/stepedit.hpp),
+    // say so on the bottom line, and perform nothing. The STEP coming up toggles nothing.
+    Strata &app = fresh();
+    const bool had = trig_at(0, 4);
+    step_down(4);
+    app.on_pad_press(13, 100);                             // MUTATE: probability
+    pump(2);
+    CHECK_EQ(int(step_of(0, 4).probability), 75);
+    CHECK_EQ(UiProbe::notice(app), "STEP 5 PROB 75%");
+    CHECK(!UiProbe::mutation_pending(app));                // no mutation ran
+    app.on_pad_release(13);
+    app.on_pad_press(13, 100);
+    app.on_pad_release(13);
+    pump(2);
+    CHECK_EQ(int(step_of(0, 4).probability), 50);
+    CHECK_EQ(UiProbe::notice(app), "STEP 5 PROB 50%");
+
+    app.on_pad_press(1, 100);                              // FILL: the fill condition
+    pump(2);
+    CHECK_EQ(int(condition_kind(step_of(0, 4).condition)), int(Condition::FILL));
+    CHECK(!UiProbe::fill_held(app));                       // the fill is not played
+    CHECK_EQ(UiProbe::notice(app), "STEP 5 COND FILL");
+    app.on_pad_release(1);
+
+    app.on_pad_press(5, 100);                              // MUTE: A:B, not MUTE mode
+    pump(2);
+    CHECK_EQ(int(step_of(0, 4).condition), int(condition_pack_a_b(1, 2)));
+    CHECK(!UiProbe::mute_mode(app));
+    app.on_pad_release(5);
+
+    app.on_pad_press(3, 100);                              // REPEAT: the ratchet
+    pump(2);
+    CHECK_EQ(int(ratchet_count(step_of(0, 4).ratchet)), 2);
+    CHECK_EQ(UiProbe::notice(app), "STEP 5 RTCH 2");
+    app.on_pad_release(3);
+    for (int i = 0; i < 3; i++) {                          // 3, 4, then off
+        app.on_pad_press(3, 100);
+        app.on_pad_release(3);
+        pump(2);                                           // a hand is slower than a block
+    }
+    pump(2);
+    CHECK_EQ(int(ratchet_count(step_of(0, 4).ratchet)), 1);
+    CHECK_EQ(UiProbe::notice(app), "STEP 5 RTCH OFF");
+
+    step_up(4);
+    pump(2);
+    CHECK_EQ(trig_at(0, 4), had);                          // the hold was used: no toggle
+    CHECK_EQ(UiProbe::held_step(app), -1);
+
+    // Pad first performs: FILL held, then STEP 9, is the fill trig (backlog 5), as before.
+    app.on_pad_press(1, 100);
+    CHECK(UiProbe::fill_held(app));
+    step_down(8);
+    step_up(8);
+    app.on_pad_release(1);
+    pump(2);
+    CHECK(trig_at(0, 8));
+    CHECK_EQ(int(condition_kind(step_of(0, 8).condition)), int(Condition::FILL));
+
+    // A pad with no cycle performs (and drops the hold, as it always did); FUNC + a pad keeps
+    // its chord.
+    step_down(4);
+    app.on_pad_press(7, 100);                              // SCENE A
+    CHECK_EQ(UiProbe::scene_holding(app), 0);
+    CHECK_EQ(UiProbe::held_step(app), -1);
+    app.on_pad_release(7);
+    step_up(4);
+    step_down(4);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(1, 100);                              // FUNC + FILL: NOTE RPT
+    CHECK_EQ(UiProbe::notice(app), "NOTE RPT");
+    app.on_pad_release(1);
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    step_up(4);
+    pump(2);
 }
 
 TEST(ui_f1_picks_keys_over_grid_and_perform_over_mixer) {
@@ -6054,7 +6137,7 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     hold_func(app);
     CHECK(screen_has(app, "GRID SRC KCK"));
     CHECK(screen_has(app, "B FMA FM AMOUNT"));
-    CHECK(screen_has(app, "SCREEN KEYS: PAGE 1/9"));
+    CHECK(screen_has(app, "PAGE 1/10"));
     CHECK(!screen_has(app, "FUNC + KEY:"));
 
     // The screen keys turn the help's pages while FUNC is held, and not GRID's knob page.
@@ -6062,7 +6145,7 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     key(ENAGA_KEY_SELECT_RIGHT);
     CHECK(UiProbe::func_help(app));
     CHECK(screen_has(app, "STEPS:"));
-    CHECK(screen_has(app, "PAGE 2/9"));
+    CHECK(screen_has(app, "PAGE 2/10"));
     CHECK_EQ(UiProbe::param_page(app), knob_page);
     // LEFT goes back, and round: the last page is the performance mixer's slots, the upper pads
     // two before it.

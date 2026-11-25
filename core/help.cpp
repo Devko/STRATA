@@ -114,6 +114,19 @@ constexpr Text kSteps = {"STEPS:", {
     "PAD-ROW KEYS STEP PG",
 }};
 
+// D6: STEP first edits the step, pad first performs (core/stepedit.hpp's cycles).
+constexpr Text kStepPads = {"HOLD STEP + PAD:", {
+    "FILL  FILL/NOT/NONE",
+    "REPEAT RATCHET 2 3 4",
+    "MUTE  1:2 2:2 1:4 4:4",
+    "MUTATE PROB 75 50 25",
+    "AGAIN  NEXT THEN OFF",
+    "PAD FIRST  PERFORMS:",
+    "FILL+STEP  FILL TRIG",
+    "SCENE+STEP PICK",
+    nullptr, nullptr,
+}};
+
 constexpr Text kRange = {"RANGE AND TRACK:", {
     "RANGE+CLR  CLEAR",
     "RANGE+A    TRANSPOSE",
@@ -586,6 +599,7 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
         case HelpScreen::grid:
             knobs = true;
             list[listed++] = &kSteps;
+            list[listed++] = &kStepPads;
             list[listed++] = &kRange;
             list[listed++] = &kLights;
             break;
@@ -593,6 +607,7 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
             knobs = true;
             list[listed++] = &kEditKeys;
             list[listed++] = &kSteps;
+            list[listed++] = &kStepPads;
             list[listed++] = &kRange;
             break;
         case HelpScreen::learn:

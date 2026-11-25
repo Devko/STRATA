@@ -837,6 +837,12 @@ The step page's fields:
 Conditions and probability are seeded from the pattern, so a pattern plays the same way after a
 reload.
 
+**Without the step page:** hold a STEP and press an upper pad. FILL steps the condition through
+FILL, NOT FILL and none; MUTE through 1:2, 2:2, 1:4, 4:4 and none; REPEAT the ratchet through 2, 3,
+4 and off; MUTATE the probability through 75, 50, 25 and 100%. The bottom line says where it
+landed (`STEP 5 PROB 50%`). The order is the rule: STEP first edits the step, pad first performs
+(FILL held, then a STEP, writes a FILL trig). The step page still has every value.
+
 ### Ranges, copy and paste
 
 Hold two STEP keys to select the range between them (`SEL a-b`). Then CLR clears it, FUNC+UP

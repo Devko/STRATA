@@ -200,6 +200,25 @@ shorter slice of the same past), 8 TAPE STOP (from 16 up), 9 BASS KILL (the kill
   fits): no RESAMPLE or FREEZE while a loop is held (`LOOP HOLDS BUFFER`; push VALUE + CLR twice frees it), and no loop while a take is running (`RESAMPLE BUSY`), and a
   stop during the take throws it away. Not saved with the project.
 
+## Hold STEP + an upper pad: edit the step (D6)
+
+**STEP first edits, pad first performs** (2026-11-25). With a STEP held, four of the upper pads
+step one field of that step round a short cycle instead of performing, and the bottom line says
+where it landed (`STEP 5 PROB 50%`). The STEP's release then toggles nothing. A value outside
+the cycle (set on the step page) goes to the cycle's first. Not with FUNC (the pad chords stay)
+and not in KEYS, where the upper pads are the piano. `core/stepedit.hpp` has the cycles.
+
+| Pad | Sets on the held step | Cycle |
+| --- | --- | --- |
+| FILL | the condition | FILL, NOT FILL, none |
+| REPEAT | the ratchet | 2, 3, 4, off |
+| MUTE | an A:B condition | 1:2, 2:2, 1:4, 4:4, none |
+| MUTATE | probability | 75, 50, 25, 100% |
+| SCENE A / B, THROW | nothing yet: they perform (and drop the hold), as before | |
+
+Pad first is unchanged: FILL held + tap STEP writes a FILL trig, a scene pad held + STEP picks
+the scene, MUTE MODE on makes STEP 1-8 the mute states.
+
 ## The performance pads (upper row, printed TRK 1-7)
 
 | Print | STRATA | Colour | Bright while | Says |
@@ -220,7 +239,7 @@ AMOUNT` on a kick's SRC, `A SRC SOURCE TRACK` on MIXER DUCK), and the gestures t
 (the step page, the hold-and-press LEN, MACRO LEARN, NOTE view, SLC AUTO, rename and delete,
 KEYS on the pads ...). While FUNC is still held, **the screen keys (or LEFT/RIGHT) turn the help's
 pages**, as they turn every screen's pages; the line above the bottom line says
-`SCREEN KEYS: PAGE 1/9`. The last five pages are the same everywhere: FUNC + each function key,
+`PAGE 1/10` (`SCREEN KEYS: PAGE 1/n` under ten pages). The last five pages are the same everywhere: FUNC + each function key,
 FUNC + a knob or pad, the upper pads, and the performance mixer's gestures and slots
 (`VALUE FX MIXER:`, `VALUE FX STEPS:`). Every hold starts on the screen's own page.
 

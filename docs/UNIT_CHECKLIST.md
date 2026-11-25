@@ -70,6 +70,10 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
 - **Macro learn by turning (Phase 2).** PERFORM, push B: EDIT opens, `LEARN B 0/4 TURN KNOBS`.
   Turn CUT down and RES up, then OK: `B: 2 PARAMS`, and the sound is back as it was. In
   PERFORM turn B up: it goes to the sound you dialled. STEP keys in PERFORM assign nothing.
+- **Hold STEP + upper pad (D6).** GRID, hold STEP 5, press MUTATE: `STEP 5 PROB 75%`, again
+  `50%`; the STEP 5 light blinks; let go: the trig did not toggle. Hold STEP 5 + REPEAT four
+  times: `RTCH 2`, `3`, `4`, `OFF` (hear the ratchet). + FILL: `COND FILL`, the step plays only
+  with FILL held. + MUTE: `COND 1:2`. Now FILL first, then STEP 9: a FILL trig, as before.
 - **STEP keys are steps in PERFORM and KEYS (D12).** In KEYS tap STEP 5: a trig, as on GRID, and
   the screen still shows the piano and `STEP KEYS 1-16`; pad-row right: `17-32`. LEFT/RIGHT:
   `OCT`. Play a chord on the pads while tapping STEP keys: both work at once. In PERFORM tap

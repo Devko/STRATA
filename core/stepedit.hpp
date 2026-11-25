@@ -97,6 +97,25 @@ constexpr int kChordWalkPositions = 43;
 int chord_walk_position(uint8_t packed);
 uint8_t chord_at_walk_position(int position);
 
+// --- hold STEP + upper pad: the cycles (D6, "STEP first edits") ---------
+//
+// An upper pad pressed while a STEP key is held steps one field of that step through a short
+// cycle, so a condition, a ratchet or a probability is one press away (docs/CONTROLS.md):
+//
+//     FILL     the condition   FILL, NOT FILL, none
+//     REPEAT   the ratchet     2, 3, 4, off (1)
+//     MUTE     the condition   1:2, 2:2, 1:4, 4:4, none
+//     MUTATE   probability     75, 50, 25, 100 %
+//
+// A value outside the cycle (a 1:3 set on the step page, a 60 %) goes to the cycle's first.
+enum class StepCycle : uint8_t { fill, ratchet, a_b, probability };
+
+StepField step_cycle_field(StepCycle cycle);
+
+// The field's value after one press, in `step_field_value`'s terms (the condition as a walk
+// position), from the step as it is.
+int step_cycle_next(const Step &step, StepCycle cycle);
+
 // --- text -----------------------------------------------------------------
 
 // The buffer size `step_field_text` and `note_name` never need more than, terminator included:
