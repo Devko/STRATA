@@ -54,6 +54,11 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
    loading, swapping a sample on a sounding track, the M5 30-minute jam, and M7's hour locked to
    external MIDI clock.
 
+**The UI class is split over files** (2026-11-25): `app/app.hpp` holds the helpers, `init`, the
+private helpers and all the state, and includes ten `app/ui_*.hpp` fragments inside the class body
+(input, gestures, lights, screen, edit, mixer, browsers, perfmix, perform, project). They are not
+headers of their own. `tools/audit_commands.sh` reads all of them.
+
 **Controls.** docs/CONTROLS.md is the reference the key handlers follow; change a gesture there
 first, then in the code, `core/help.cpp`, the cheatsheet, the manual and the unit checklist.
 

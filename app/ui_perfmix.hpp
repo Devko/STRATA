@@ -1,0 +1,1087 @@
+// The FUNC menu, LOCK, the performance mixer and FX GLIDE, KIT keys, RESAMPLE and KEYS drawn.
+//
+// Part of class Strata. app/app.hpp includes this file INSIDE the class body, in the public
+// section, so it is not a header of its own: no #pragma once and no includes, and it sees
+// every member the class has. Split out of app/app.hpp without changing a line of it.
+
+    // --- the FUNC menu (FUNC + HOME) -----------------------------------------
+    //
+    // docs/CONTROLS.md: the rare setup actions live here, named on the screen, instead of on
+    // FUNC + arrow chords that changed from page to page. HOME's second printed label is
+    // "system", which is what this is. UP/DOWN (or A) move, OK runs the row, LEFT/RIGHT (or B)
+    // change a setting row, CLR or FUNC + HOME closes it and returns to the screen it opened
+    // over. The cursor always starts on SAVE, so FUNC + HOME, OK saves.
+
+    enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
+                                    speed, play, chain, song, autofill, quantize, glide, freeze,
+                                    loop_len, demo, count };
+    static constexpr int kMenuItems = int(MenuItem::count);
+    static constexpr int kMenuRows = 8;
+
+    static const char *menu_item_name(MenuItem item) {
+        switch (item) {
+            case MenuItem::save:     return "SAVE";
+            case MenuItem::save_as:  return "SAVE AS";
+            case MenuItem::open:     return "OPEN PROJECT";
+            case MenuItem::fresh:    return "NEW PROJECT";
+            case MenuItem::reload:   return "RELOAD PROJECT";
+            case MenuItem::clear:    return "CLEAR PATTERN";
+            case MenuItem::kits:     return "KITS";
+            case MenuItem::sample:   return "RELOAD SAMPLE";
+            case MenuItem::speed:    return "TRACK SPEED";
+            case MenuItem::play:     return "TRACK PLAY";
+            case MenuItem::chain:    return "CHAIN";
+            case MenuItem::song:     return "CHAIN END";
+            case MenuItem::autofill: return "AUTO-FILL";
+            case MenuItem::quantize: return "QUANTIZE";
+            case MenuItem::freeze:   return "FREEZE";
+            case MenuItem::loop_len: return "LOOP LEN";
+            case MenuItem::glide:    return "FX GLIDE";
+            case MenuItem::demo:     return "LOAD DEMO";
+            default:                 return "?";
+        }
+    }
+
+    // A setting row's value as the row shows it, or "" for an action row.
+    void menu_item_value(MenuItem item, char *out) {
+        switch (item) {
+            case MenuItem::speed:
+                *out++ = 'T';
+                append_number(out, uint32_t(selected_) + 1);
+                *out++ = ' ';
+                append(out, speed_name(Speed(engine_.pattern().tracks[selected_].speed)));
+                break;
+            case MenuItem::play:
+                *out++ = 'T';
+                append_number(out, uint32_t(selected_) + 1);
+                *out++ = ' ';
+                append(out, play_mode_name(PlayMode(engine_.pattern().tracks[selected_].play)));
+                break;
+            case MenuItem::chain:
+                append(out, engine_.chain().active ? "ON" : "OFF");
+                break;
+            case MenuItem::song:
+                append(out, engine_.project().settings.chain_song ? "SONG" : "LOOP");
+                break;
+            case MenuItem::autofill:
+                append(out, auto_fill_name(engine_.auto_fill()));
+                break;
+            case MenuItem::quantize:
+                append_number(out, uint32_t(quantize()));
+                break;
+            case MenuItem::freeze: {
+                // The selected track: frozen, recording its loop, or how many bars OK records.
+                *out++ = 'T';
+                append_number(out, uint32_t(selected_) + 1);
+                *out++ = ' ';
+                if (frozen(selected_)) {
+                    append(out, "ON");
+                } else if (storage_.freezing_track() == selected_) {
+                    const uint8_t state =
+                        engine_.status().resample_state.load(std::memory_order_relaxed);
+                    append(out, state == 2u ? "REC" : "WAIT");
+                } else {
+                    append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
+                    append(out, " BAR");
+                }
+                break;
+            }
+            case MenuItem::loop_len:
+                // How many bars push VALUE + STEP 16 records (dsp/looper.hpp).
+                append_number(out, uint32_t(kTakeBars[loop_bars_index_]));
+                append(out, " BAR");
+                break;
+            case MenuItem::glide:
+                // How long a button's jump in the performance mixer rides (core/perffx.hpp).
+                append(out, perf_glide_name(perf_glide_));
+                break;
+            default:
+                break;
+        }
+        *out = 0;
+    }
+
+    bool frozen(int track) const {
+        return (engine_.status().frozen.load(std::memory_order_relaxed) >> track & 1u) != 0;
+    }
+
+    // FREEZE's OK: freeze the selected track for the bars on the row, or give it back. A
+    // freeze is a take like a resample, so it waits for the next bar line with the transport
+    // running and refuses while any take is busy.
+    void toggle_freeze() {
+        if (frozen(selected_) || storage_.freezing_track() == selected_) {
+            storage_.request_unfreeze(selected_);
+            notice("UNFROZEN");
+            return;
+        }
+        if (engine_.machine_id(selected_) == uint8_t(MachineId::midi)) {
+            notice("MID HAS NO AUDIO");
+            return;
+        }
+        if (looper_state() != 0u) {             // the looper holds the take buffer
+            notice("LOOP HOLDS BUFFER");
+            return;
+        }
+        if (!storage_.request_freeze(selected_, kTakeBars[freeze_bars_index_])) {
+            notice("TAKE RUNNING");
+            return;
+        }
+        notice(enaga::clock::running() ? "FREEZE ARMED" : "ARMED: PRESS PLAY");
+    }
+
+    // --- LOCK (core/lockstore.hpp): FUNC + MUTATE ---------------------------------------------
+    //
+    // The audio side keeps the locks and does the jump; the UI times the hold, says what
+    // happened and puts its own copies (the morph, the macro knobs, the mixer) where a jump
+    // leaves them.
+
+    // A tap. A pending MUTATE, the mixer and the knobs are dealt with once the engine has said
+    // what the tap did (service_lock_event): with no lock it does nothing at all.
+    void lock_tap() { post(Cmd::lock_tap); }
+
+    void service_lock_event() {
+        const Status &status = engine_.status();
+        const uint8_t event = status.lock_event.load(std::memory_order_acquire);
+        if (event == lock_event_seen_) return;
+        lock_event_seen_ = event;
+        const uint8_t last = status.lock_last.load(std::memory_order_relaxed);
+        char name[4];
+        name[0] = bank_letter(int(status.live_bank.load(std::memory_order_relaxed)));
+        {
+            char *p = name + 1;
+            append_padded(p, uint32_t(status.live_slot.load(std::memory_order_relaxed)) + 1, 2);
+            *p = 0;
+        }
+        char *out = notice_buffer_;
+        if (last == kLockStored) {
+            append(out, "LOCK ");
+            append(out, name);
+            append(out, " STORED");
+        } else if (last == uint8_t(LockTap::empty)) {
+            append(out, "NO LOCK: HOLD STORES");
+        } else {
+            append(out, last == uint8_t(LockTap::jumped) ? "BACK TO LOCK " : "SWAPPED BACK ");
+            append(out, name);
+            // The pattern under a pending MUTATE is gone: OK and CLR have nothing to answer,
+            // and CLR's undo would put the mutated steps back over the jump.
+            mutation_pending_ = false;
+            // The knobs the UI shadows, where the jump left them.
+            morph_ = engine_.morph();
+            for (int m = 0; m < kMacros; m++) macro_position_[m] = engine_.macro_position(m);
+            rel_all_ = engine_.rel_all();
+            len_all_ = engine_.len_all();
+            // The mixer to rest over FX GLIDE (a lock holds no effect); a loop plays on.
+            if (perf_target_fx() != PerfFx::none) perf_ride_to(perf_target_fx(), 0, false);
+        }
+        *out = 0;
+        notice_logged(notice_buffer_);
+    }
+
+    // --- the performance mixer (core/perffx.hpp, dsp/looper.hpp) ----------------------------
+    //
+    // The UI owns the picked slot, the effect's amount and the looper's mix, as it owns the
+    // morph: the engine is told absolute values and keeps no history of them.
+
+    uint8_t looper_state() const {
+        return engine_.status().looper_state.load(std::memory_order_relaxed);
+    }
+
+    void perf_set(PerfFx fx, uint8_t amount) {
+        perf_fx_ = fx;
+        perf_amount_ = amount;
+        post(Cmd::perf_fx, 0, 0, uint8_t(fx), amount);
+    }
+
+    // --- FX GLIDE (core/perffx.hpp) --------------------------------------------------------
+    //
+    // A button's jump rides to its target over the FUNC menu's FX GLIDE, a beat by default,
+    // and back to rest (amount 0) over at most a 1/16 (perf_release_ms); `hard` (FUNC held)
+    // cuts as before. `perf_fx_` / `perf_amount_` and `loop_mix_` stay what
+    // the engine has NOW, so the lights and the strip show the ride; `perf_ride_` holds where it
+    // is going. Turning VALUE takes over from wherever a ride has got to.
+
+    uint32_t glide_ms(bool hard, uint8_t to_amount) const {
+        if (hard) return 0;
+        const float tempo = enaga::clock::state().tempo;
+        return to_amount == 0 ? perf_release_ms(perf_glide_, tempo)
+                              : perf_glide_ms(perf_glide_, tempo);
+    }
+
+    void perf_ride_to(PerfFx fx, uint8_t amount, bool hard) {
+        PerfRide ride;
+        ride.from_fx = perf_fx_;
+        ride.from_amount = perf_amount_;
+        ride.to_fx = fx;
+        ride.to_amount = amount;
+        // From 0 to 0 (a slot picked over nothing) there is nothing to ride: set at once.
+        ride.length_ms = perf_amount_ == 0 && amount == 0 ? 0u : glide_ms(hard, amount);
+        perf_riding_ = false;
+        if (ride.length_ms == 0) {
+            if (fx != perf_fx_ || amount != perf_amount_) perf_set(fx, amount);
+            return;
+        }
+        perf_ride_ = ride;
+        perf_ride_ms_ = last_ms_;
+        perf_riding_ = true;
+        perf_ride_step(last_ms_);
+    }
+
+    void perf_ride_step(uint32_t ms) {
+        const uint32_t elapsed = ms - perf_ride_ms_;
+        PerfFx fx = PerfFx::none;
+        uint8_t amount = 0;
+        perf_ride_at(perf_ride_, elapsed, fx, amount);
+        if (fx != perf_fx_ || amount != perf_amount_) perf_set(fx, amount);
+        if (elapsed >= perf_ride_.length_ms) perf_riding_ = false;
+    }
+
+    // Where the effect is heading: the ride's target while one runs.
+    PerfFx perf_target_fx() const { return perf_riding_ ? perf_ride_.to_fx : perf_fx_; }
+    uint8_t perf_target_amount() const {
+        return perf_riding_ ? perf_ride_.to_amount : perf_amount_;
+    }
+
+    // VALUE turned while a ride runs: it stops where it is, on the effect it was heading for.
+    void perf_ride_stop() {
+        if (!perf_riding_) return;
+        perf_riding_ = false;
+        if (perf_ride_.to_fx != perf_fx_) perf_set(perf_ride_.to_fx, 0);
+    }
+
+    void loop_ride_to(uint8_t mix, bool hard) {
+        loop_riding_ = false;
+        const uint32_t length = glide_ms(hard, mix);
+        if (length == 0 || loop_mix_ == mix) {
+            loop_mix_ = mix;
+            post(Cmd::looper, 0, 0, 0, loop_mix_);
+            return;
+        }
+        loop_ride_.from_fx = PerfFx::looper;
+        loop_ride_.to_fx = PerfFx::looper;
+        loop_ride_.from_amount = loop_mix_;
+        loop_ride_.to_amount = mix;
+        loop_ride_.length_ms = length;
+        loop_ride_ms_ = last_ms_;
+        loop_riding_ = true;
+    }
+
+    // update(): the rides, and the momentary push (hold VALUE pushed + hold a STEP).
+    void service_perf(uint32_t ms) {
+        if (perf_riding_) perf_ride_step(ms);
+        if (loop_riding_) {
+            const uint32_t elapsed = ms - loop_ride_ms_;
+            PerfFx fx = PerfFx::none;
+            uint8_t mix = 0;
+            perf_ride_at(loop_ride_, elapsed, fx, mix);
+            if (mix != loop_mix_) {
+                loop_mix_ = mix;
+                post(Cmd::looper, 0, 0, 0, loop_mix_);
+            }
+            if (elapsed >= loop_ride_.length_ms) loop_riding_ = false;
+        }
+        if (perf_hold_step_ >= 0 && !perf_hold_on_ &&
+            uint32_t(ms - perf_hold_ms_) >= kPerfHoldMs) {
+            const PerfFx fx = perf_fx_for_step(perf_hold_step_);
+            if (fx == perf_picked_) {
+                perf_hold_on_ = true;
+                perf_ride_to(fx, kPerfAmountMax, shift_);
+                perf_notice(fx, false, kPerfAmountMax);
+            }
+        }
+    }
+
+    // Push VALUE + a STEP pressed. A new effect is picked on the press, as ever. The picked
+    // effect's own STEP lets go on the RELEASE instead, because held it is the momentary push.
+    void perf_step_press(int index) {
+        const PerfFx fx = perf_fx_for_step(index);
+        const bool effect = fx != PerfFx::none && !perf_fx_is_control(fx);
+        perf_hold_step_ = -1;
+        perf_hold_on_ = false;
+        perf_release_lets_go_ = false;
+        if (effect && fx == perf_picked_) {
+            perf_release_lets_go_ = true;
+        } else {
+            perf_pick(index);
+        }
+        if (effect && fx == perf_picked_) {
+            perf_hold_step_ = index;
+            perf_hold_ms_ = last_ms_;
+        }
+    }
+
+    // And let go: a push rides out (the slot stays picked, at 0); a tap on the picked effect's
+    // STEP lets it go.
+    void perf_step_release(int index) {
+        if (index != perf_hold_step_) return;
+        const PerfFx fx = perf_fx_for_step(index);
+        perf_hold_step_ = -1;
+        if (perf_hold_on_) {
+            perf_hold_on_ = false;
+            perf_ride_to(fx, 0, shift_);
+            perf_notice(fx, false, 0);
+            return;
+        }
+        if (perf_release_lets_go_ && fx == perf_picked_) {
+            perf_release_lets_go_ = false;
+            perf_ride_to(PerfFx::none, 0, shift_);
+            perf_picked_ = PerfFx::none;
+            notice_logged("FX OFF: VALUE TEMPO");   // tests/scenario_glide.sh reads it
+        }
+    }
+
+    // The morph as a 0-127 amount, for the notice: the slot reads like every other.
+    uint32_t morph_amount() const {
+        return uint32_t(morph_) * kPerfAmountMax / kMorphScale;
+    }
+
+    // The morph from the mixer's slot 13 or PERFORM's VALUE: the same control seen from two
+    // places (backlog D2, R6), so both move `morph_` and neither keeps a copy.
+    void morph_set(int next) {
+        morph_ = uint16_t(next < 0 ? 0 : (next > int(kMorphScale) ? int(kMorphScale) : next));
+        Command command;
+        command.cmd = Cmd::set_morph;
+        command.u = morph_;
+        post_command(command);
+    }
+
+    // "12 NOISE RISER" on a pick, "NOISE RISER 64" on a turn, "LOOP MIX 64" for the looper,
+    // "MORPH 64" for the morph, picked or turned: it has no zero to start from.
+    void perf_notice(PerfFx fx, bool picked, int amount = -1) {
+        char *out = notice_buffer_;
+        if (fx == PerfFx::morph) {
+            append(out, "MORPH ");
+            append_number(out, morph_amount());
+        } else if (fx == PerfFx::looper) {
+            const uint8_t state = looper_state();
+            if (state == 1u) {
+                append(out, enaga::clock::running() ? "LOOP WAITS FOR BAR" : "LOOP ARMED: PLAY");
+            } else if (state == 2u) {
+                append(out, "LOOP RECORDING");
+            } else {
+                append(out, "LOOP MIX ");
+                append_number(out, loop_mix_);
+            }
+        } else if (picked) {
+            append_number(out, uint32_t(fx));
+            *out++ = ' ';
+            append(out, perf_fx_name(fx));
+        } else {
+            append(out, perf_fx_name(fx));
+            *out++ = ' ';
+            append_number(out, uint32_t(amount >= 0 ? amount : int(perf_amount_)));
+        }
+        *out = 0;
+        notice(notice_buffer_);
+        // A pick is logged too: the emulator can press push VALUE + STEP but not read the
+        // screen (tests/scenario_slots.sh). Turns are not, or the log would be nothing else.
+        if (picked) enaga::log(notice_buffer_);
+    }
+
+    // Push VALUE + STEP. A new effect replaces the last at amount 0 (the old one fades out);
+    // its own STEP again lets go and gives VALUE back. STEP 16 picks the looper and records
+    // when there is no loop yet; again, it leaves the looper like any other effect (backlog
+    // D10): a finished loop falls silent (mix 0) but is kept, so STEP 16 picks it back up and
+    // VALUE + CLR throws it away for a new take; a take still armed or recording is dropped.
+    void perf_pick(int index) {
+        const PerfFx fx = perf_fx_for_step(index);
+        if (fx == PerfFx::looper) {
+            const uint8_t state = looper_state();
+            if (perf_picked_ == PerfFx::looper && state != 0u) {
+                const bool taking = state != 3u;
+                // A playing loop rides out over FX GLIDE; a take still to come has no sound.
+                if (taking) {
+                    loop_riding_ = false;
+                    loop_mix_ = 0;
+                    post(Cmd::looper, 0, 0, 0, 0);
+                    post(Cmd::looper, 0, 0, 2, 0);
+                } else {
+                    loop_ride_to(0, shift_);
+                }
+                perf_picked_ = PerfFx::none;
+                notice(taking ? "LOOP CANCELLED" : "LOOP OFF: VALUE TEMPO");
+                return;
+            }
+            perf_picked_ = PerfFx::looper;
+            if (state == 0u) {
+                perf_record();
+                return;
+            }
+            perf_notice(fx, true);
+            return;
+        }
+        if (fx == PerfFx::morph) {
+            // The morph is a control, not an effect: picking it leaves the effect that was up
+            // where it is (the A/B switch no longer waits for the mixer to be let go), and
+            // letting go leaves the morph where it is, as leaving PERFORM does.
+            if (perf_picked_ == PerfFx::morph) {
+                perf_picked_ = PerfFx::none;
+                notice_logged("MORPH KEPT: VALUE TEMPO");
+                return;
+            }
+            perf_picked_ = PerfFx::morph;
+            perf_notice(fx, true);
+            return;
+        }
+        if (fx == perf_picked_) {
+            perf_ride_to(PerfFx::none, 0, shift_);
+            perf_picked_ = PerfFx::none;
+            notice("FX OFF: VALUE TEMPO");
+            return;
+        }
+        // The new effect replaces the last from 0: the old one rides out over FX GLIDE.
+        perf_picked_ = fx;
+        perf_ride_to(fx, 0, shift_);
+        perf_notice(fx, true);
+    }
+
+    void perf_record() {
+        // The take's buffer is RESAMPLE's (dsp/looper.hpp): refused while a take holds it.
+        if (engine_.status().resample_state.load(std::memory_order_relaxed) != 0u) {
+            notice("RESAMPLE BUSY");
+            return;
+        }
+        post(Cmd::looper, 0, 0, 1, kTakeBars[loop_bars_index_]);
+        char *out = notice_buffer_;
+        if (enaga::clock::running()) {
+            append(out, "LOOP ");
+            append_number(out, uint32_t(kTakeBars[loop_bars_index_]));
+            append(out, " BAR: NEXT BAR");
+        } else {
+            append(out, "LOOP ARMED: PLAY");
+        }
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    // Push VALUE + LEFT/RIGHT: the next or previous slot, round the sixteen, keeping the amount
+    // -- a scene change on a crossfader that stays where it is. Reaching the looper picks it
+    // without recording; only STEP 16 records. The morph and the looper are passed through
+    // like the others, but being controls they leave the effect that was up as it is.
+    void perf_walk(int delta) {
+        const int from = perf_picked_ == PerfFx::none ? (delta > 0 ? 0 : kPerfSlots + 1)
+                                                      : int(perf_picked_);
+        const int slot = (from - 1 + delta + kPerfSlots * 2) % kPerfSlots + 1;
+        const PerfFx fx = PerfFx(slot);
+        perf_picked_ = fx;
+        if (perf_fx_is_control(fx)) {
+            perf_notice(fx, true);
+            return;
+        }
+        // A crossfade at the amount the last was heading for, over FX GLIDE.
+        perf_ride_to(fx, perf_target_amount(), shift_);
+        perf_notice(fx, true);
+    }
+
+    // Push VALUE + CLR: every effect off and the loop's mix to 0, VALUE back to its own jobs.
+    // With all of that already off, it throws the loop away, which frees RESAMPLE's buffer.
+    void perf_clear() {
+        // Counting where a ride is heading, so a second press during a ride-out clears the loop.
+        const bool anything = perf_target_fx() != PerfFx::none || perf_picked_ != PerfFx::none ||
+                              (loop_riding_ ? loop_ride_.to_amount : loop_mix_) != 0;
+        if (anything) {
+            perf_ride_to(PerfFx::none, 0, shift_);
+            perf_picked_ = PerfFx::none;
+            loop_ride_to(0, shift_);
+            notice("FX OFF");
+            return;
+        }
+        if (looper_state() != 0u) {
+            loop_riding_ = false;
+            loop_mix_ = 0;
+            post(Cmd::looper, 0, 0, 2, 0);
+            notice("LOOP CLEARED");
+            return;
+        }
+        notice("FX OFF");
+    }
+
+    // A press of VALUE alone (on_key): what VALUE is on, back to 0. A picked effect's amount
+    // (dry), the looper's mix (live), the morph, picked or on PERFORM (at rest: the knobs own
+    // the sound). Not the tempo, swing or a field: 0 is no tempo, and a reset
+    // there would be a trap rather than a shortcut. Not with a STEP held (VALUE is that step's
+    // note, and hold STEP + push is a lock's removal on A-D) or while a name is typed.
+    // The effect and the loop's mix ride to 0 over FX GLIDE; with FUNC held they cut. (FUNC +
+    // VALUE reset the DJ filter until that left for the mixer's slots, backlog D1.)
+    void value_reset() {
+        if (held_step_ >= 0 || name_entry_.active() || mode_ == Mode::menu) return;
+        if (perf_picked_ == PerfFx::looper) {
+            loop_ride_to(0, shift_);
+            notice("LOOP MIX 0");
+            return;
+        }
+        if (perf_picked_ != PerfFx::none && perf_picked_ != PerfFx::morph) {
+            perf_ride_to(perf_picked_, 0, shift_);
+            perf_notice(perf_picked_, false, 0);
+            return;
+        }
+        if (shift_) return;
+        if (mode_ == Mode::perform || perf_picked_ == PerfFx::morph) {
+            morph_set(0);
+            notice("MORPH 0");
+        }
+    }
+
+    // VALUE with an effect picked: its amount, two counts a click (the whole range in 64
+    // clicks, as a macro); with the looper picked, its mix; with the morph, the morph, at
+    // PERFORM's rate.
+    void perf_turn(int delta) {
+        if (perf_picked_ == PerfFx::morph) {
+            morph_set(int(morph_) + delta * (int(kMorphScale) / 64));
+            perf_notice(PerfFx::morph, false);
+            return;
+        }
+        if (perf_picked_ == PerfFx::looper) {
+            loop_riding_ = false;
+            loop_mix_ = uint8_t(clamp_int(int(loop_mix_) + 2 * delta, 0, int(kPerfAmountMax)));
+            post(Cmd::looper, 0, 0, 0, loop_mix_);
+            perf_notice(PerfFx::looper, false);
+            return;
+        }
+        perf_ride_stop();
+        perf_set(perf_fx_,
+                 uint8_t(clamp_int(int(perf_amount_) + 2 * delta, 0, int(kPerfAmountMax))));
+        perf_notice(perf_fx_, false);
+    }
+
+    // The STEP keys while VALUE is pushed: the sixteen slots, dim amber; the effect that is up
+    // bright amber, the picked one bright green. STEP 16 also says what the looper is doing:
+    // red blinking armed, red recording, dim green holding a loop.
+    void light_perf_steps() {
+        const uint8_t state = looper_state();
+        const bool blink = ((last_ms_ / kConditionBlinkMs) & 1u) != 0;
+        for (int i = 0; i < kPerfSlots; i++) {
+            const PerfFx fx = perf_fx_for_step(i);
+            uint8_t red = 2, green = 2;
+            if (fx == perf_fx_ && perf_amount_ > 0) red = green = 10;
+            if (fx == PerfFx::morph && morph_ > 0) red = green = 10;
+            if (fx == PerfFx::looper && state == 3u) { red = 0; green = loop_mix_ > 0 ? 10 : 4; }
+            if (fx == perf_picked_) { red = 0; green = 10; }
+            if (fx == PerfFx::looper && state == 1u) { red = blink ? 10 : 0; green = 0; }
+            if (fx == PerfFx::looper && state == 2u) { red = 10; green = 0; }
+            leds_.step(i, red, green);
+        }
+    }
+
+    void open_menu() {
+        if (mode_ == Mode::menu) return;
+        menu_return_ = mode_;
+        mode_ = Mode::menu;
+        leave_mode();
+        menu_cursor_ = 0;
+        card_armed_ = CardAction::none;
+        notice("MENU");
+    }
+
+    // `announce`: say where it went back to. Not after an action that has its own notice.
+    void close_menu(bool announce = true) {
+        if (mode_ != Mode::menu) return;
+        mode_ = menu_return_;
+        leave_mode();
+        if (announce) notice(mode_name(mode_));
+    }
+
+    void move_menu_cursor(int delta) {
+        menu_cursor_ = (menu_cursor_ + delta + kMenuItems * 4) % kMenuItems;
+        card_armed_ = CardAction::none;                   // an arm is for one row
+    }
+
+    // Change a setting row by one, LEFT/RIGHT or B. `wrap` is OK's forward step, which goes round
+    // so one key reaches every value; the arrows stop at the ends where the list has ends.
+    void menu_value(int delta, bool wrap) {
+        switch (MenuItem(menu_cursor_)) {
+            case MenuItem::speed: {
+                const uint8_t current = engine_.pattern().tracks[selected_].speed;
+                const bool slowest =
+                    uint8_t(kSpeedDisplayOrder[int(Speed::count) - 1]) == current;
+                if (wrap && slowest) walk_speed(-int(Speed::count));
+                else walk_speed(delta);
+                break;
+            }
+            case MenuItem::play:
+                walk_play(delta, wrap);
+                break;
+            case MenuItem::chain: {
+                const bool on = engine_.chain().active;
+                post(Cmd::set_chain, 0, 0, on ? 0 : 1);
+                notice(on ? "CHAIN OFF" : "CHAIN ON");
+                break;
+            }
+            case MenuItem::song: {
+                const bool song = !engine_.project().settings.chain_song;
+                post_chain(ChainEdit::song, 0, song ? 1 : 0);
+                notice(song ? "SONG: PLAY ONCE" : "LOOP CHAIN");
+                break;
+            }
+            case MenuItem::autofill: {
+                // Off, 4, 8 or 16 bars. It wraps, since "off" is one of the four rather than an
+                // end stop.
+                const int next = (int(auto_fill_) + delta + int(AutoFill::count)) %
+                                 int(AutoFill::count);
+                auto_fill_ = AutoFill(next);
+                post(Cmd::set_auto_fill, 0, 0, uint8_t(auto_fill_));
+                char *out = notice_buffer_;
+                append(out, "AUTOFILL ");
+                append(out, auto_fill_name(auto_fill_));
+                *out = 0;
+                notice(notice_buffer_);
+                break;
+            }
+            case MenuItem::quantize:
+                if (wrap && quantize() >= 100) post_delta(Cmd::set_quantize, 0, 0, 0, -100);
+                else post_delta(Cmd::set_quantize, 0, 0, 0, delta * 5);
+                break;
+            case MenuItem::freeze: {
+                // The length, 1, 2, 4 or 8 bars, as RESAMPLE's; it wraps like AUTO-FILL.
+                const int next = (freeze_bars_index_ + delta + kTakeBarChoices) % kTakeBarChoices;
+                freeze_bars_index_ = next;
+                char *out = notice_buffer_;
+                append(out, "FREEZE ");
+                append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
+                append(out, " BAR");
+                *out = 0;
+                notice(notice_buffer_);
+                break;
+            }
+            case MenuItem::loop_len: {
+                const int next = (loop_bars_index_ + delta + kTakeBarChoices) % kTakeBarChoices;
+                loop_bars_index_ = next;
+                char *out = notice_buffer_;
+                append(out, "LOOP ");
+                append_number(out, uint32_t(kTakeBars[loop_bars_index_]));
+                append(out, " BAR");
+                *out = 0;
+                notice(notice_buffer_);
+                break;
+            }
+            case MenuItem::glide: {
+                // OFF, 1/16, 1 BEAT, 1 BAR; it wraps like AUTO-FILL.
+                const int count = int(PerfGlide::count);
+                perf_glide_ = PerfGlide((int(perf_glide_) + delta + count) % count);
+                char *out = notice_buffer_;
+                append(out, "FX GLIDE ");
+                append(out, perf_glide_name(perf_glide_));
+                *out = 0;
+                notice_logged(notice_buffer_);       // tests/scenario_glide.sh reads it
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    void run_menu_item() {
+        switch (MenuItem(menu_cursor_)) {
+            case MenuItem::save:
+                storage_.request_save();
+                close_menu(false);
+                notice("SAVING");
+                break;
+            case MenuItem::save_as:
+                if (!storage_.card_usable()) {
+                    notice("NO CARD");
+                    break;
+                }
+                // On PROJECTS, so the list the new name is checked against is the card's.
+                mode_ = Mode::project;
+                leave_mode();
+                project_page_ = ProjectPage::files;
+                list_projects();
+                entry_for_ = EntryFor::save_as;
+                name_entry_.open("SAVE AS", storage_.project_name());
+                break;
+            case MenuItem::open:
+                mode_ = Mode::project;
+                leave_mode();
+                project_page_ = ProjectPage::files;
+                list_projects();
+                notice("OK TWICE OPENS");
+                break;
+            case MenuItem::fresh:
+            case MenuItem::demo:
+            case MenuItem::reload:
+            case MenuItem::clear: {
+                // Each throws away work, so each takes a second OK within kSaveArmMs. CLEAR
+                // PATTERN is undoable as well (FUNC + CLR), the others are not.
+                const MenuItem item = MenuItem(menu_cursor_);
+                const CardAction action = item == MenuItem::reload ? CardAction::reload
+                                          : item == MenuItem::clear ? CardAction::clear
+                                          : item == MenuItem::demo  ? CardAction::demo
+                                                                    : CardAction::fresh;
+                if (arm_card_action(action)) close_menu(false);
+                break;
+            }
+            case MenuItem::kits:
+                open_kits();
+                break;
+            case MenuItem::sample:
+                // The one thing a user can do about a FAIL, and the only way back after a card
+                // has been out.
+                if (storage_.request_sample(selected_)) notice("LOADING");
+                else notice("NO SAMPLE");
+                break;
+            case MenuItem::freeze:
+                toggle_freeze();
+                close_menu(false);
+                break;
+            default:
+                menu_value(+1, true);
+                break;
+        }
+    }
+
+    bool on_menu_key(int key) {
+        switch (key) {
+            case ENAGA_KEY_OK:
+                if (shift_) return false;               // F1 + OK is redo, as everywhere
+                run_menu_item();
+                return true;
+            case ENAGA_KEY_CLR:
+                if (shift_) return false;               // F1 + CLR is undo
+                close_menu();
+                return true;
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (!shift_) move_menu_cursor(key == ENAGA_KEY_UP ? -1 : +1);
+                return true;
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                if (!shift_) menu_value(key == ENAGA_KEY_LEFT ? -1 : +1, false);
+                return true;
+            case ENAGA_KEY_SELECT_LEFT:
+            case ENAGA_KEY_SELECT_RIGHT:
+            case ENAGA_KEY_OCTAVE_LEFT:
+            case ENAGA_KEY_OCTAVE_RIGHT:
+                return true;                            // one page; no steps behind it
+            default:
+                return false;
+        }
+    }
+
+    void draw_menu(enaga::Canvas &canvas) {
+        char line[40];
+        char value[24];
+        canvas.text(0, 18, "FUNC MENU", 14);
+        int first = menu_cursor_ - kMenuRows / 2;
+        if (first > kMenuItems - kMenuRows) first = kMenuItems - kMenuRows;
+        if (first < 0) first = 0;
+        for (int row = 0; row < kMenuRows && first + row < kMenuItems; row++) {
+            const int i = first + row;
+            const bool here = i == menu_cursor_;
+            char *out = line;
+            *out++ = here ? '>' : ' ';
+            append(out, menu_item_name(MenuItem(i)));
+            *out = 0;
+            const int y = 29 + row * 9;
+            canvas.text(0, y, line, here ? 15 : 9);
+            menu_item_value(MenuItem(i), value);
+            int length = 0;
+            while (value[length] != '\0') length++;
+            if (length > 0) canvas.text(kFrameMeterX - length * 6, y, value, here ? 15 : 9);
+        }
+        canvas.text(0, 103, "OK: RUN   CLR: BACK", 7);
+        canvas.text(0, 111, "LEFT/RIGHT: CHANGE", 7);
+    }
+
+    void open_kits() {
+        mode_ = Mode::kit;
+        leave_mode();
+        kit_armed_ = KitAction::none;
+        storage_.request_kit_scan();
+        notice(storage_.card_usable() ? "KITS" : "NO CARD");
+    }
+
+    void move_kit_cursor_to(int slot) {
+        const int next = slot < 0 ? 0 : (slot >= Storage::kKitSlots ? Storage::kKitSlots - 1 : slot);
+        if (next != kit_cursor_) kit_armed_ = KitAction::none;   // an arm is for one slot
+        kit_cursor_ = next;
+    }
+
+    enum class KitAction : uint8_t { none, load, save };
+
+    // A second press of the same key on the same slot within kSaveArmMs, as a project save,
+    // reload and NEW take. True when this press is that second one.
+    bool kit_second_press(KitAction action) {
+        if (kit_armed_ == action && uint32_t(last_ms_ - kit_armed_at_ms_) < kSaveArmMs) {
+            kit_armed_ = KitAction::none;
+            return true;
+        }
+        kit_armed_ = action;
+        kit_armed_at_ms_ = last_ms_;
+        return false;
+    }
+
+    bool on_kit_key(int key) {
+        switch (key) {
+            case ENAGA_KEY_OK: {
+                if (shift_) return false;               // F1 + OK is redo, as everywhere
+                const Storage::SlotState state = storage_.kit_slot(kit_cursor_).state;
+                if (state == Storage::SlotState::empty) {
+                    kit_armed_ = KitAction::none;
+                    notice("EMPTY SLOT");
+                } else if (!storage_.card_usable()) {
+                    notice("NO CARD");
+                } else if (kit_second_press(KitAction::load)) {
+                    storage_.request_kit_load(kit_cursor_);
+                    notice("LOADING KIT");
+                } else {
+                    notice("OK AGAIN TO LOAD");
+                }
+                return true;
+            }
+
+            case ENAGA_KEY_CLR:
+                if (shift_) return false;               // F1 + CLR is undo
+                mode_ = Mode::machine;                  // back, where the browser came from
+                leave_mode();
+                notice("MACHINE");
+                return true;
+
+            case ENAGA_KEY_UP:
+            case ENAGA_KEY_DOWN:
+                if (!shift_) {
+                    move_kit_cursor_to(kit_cursor_ + (key == ENAGA_KEY_UP ? -1 : +1));
+                } else if (key == ENAGA_KEY_UP) {
+                    storage_.request_kit_scan();
+                    notice(storage_.card_usable() ? "READING KITS" : "NO CARD");
+                } else {
+                    // Straight into an empty slot; over a kit, or a slot not yet read, only on
+                    // the second press -- the kit already there is not undoable either.
+                    const bool empty =
+                        storage_.kit_slot(kit_cursor_).state == Storage::SlotState::empty;
+                    if (!storage_.card_usable()) {
+                        notice("NO CARD");
+                    } else if (empty || kit_second_press(KitAction::save)) {
+                        kit_armed_ = KitAction::none;
+                        storage_.request_kit_save(kit_cursor_);
+                        notice("SAVING KIT");
+                    } else {
+                        notice("AGAIN TO OVERWRITE");
+                    }
+                }
+                return true;
+
+            case ENAGA_KEY_LEFT:
+            case ENAGA_KEY_RIGHT:
+                // The page of eight; F1 + LEFT / RIGHT are free here, and kept free.
+                if (!shift_) move_kit_cursor_to(kit_cursor_ + (key == ENAGA_KEY_LEFT ? -8 : +8));
+                return true;
+
+            // The STEP keys are always the sixteen slots here, so the pad-row keys, which pick
+            // which sixteen they mean, have nothing to do (docs/CONTROLS.md). With FUNC they are
+            // the selected track's length, as on every screen.
+            case ENAGA_KEY_OCTAVE_LEFT:
+            case ENAGA_KEY_OCTAVE_RIGHT:
+                return !shift_;
+
+            default:
+                return false;
+        }
+    }
+
+    // Where a finished take is offered first: a track that plays files (SAMPLE or GRAIN) other
+    // than the one it was bounced from -- the selected one if it does, else the lowest -- so the
+    // usual case is one OK. The bounced track itself next (re-bouncing a GRAIN onto itself is a
+    // way to stack it), and the selected track when no track plays files: OK then says so.
+    int offer_track(int from) const {
+        if (plays_files(selected_) && selected_ != from) return selected_;
+        for (int t = 0; t < kTracks; t++) {
+            if (plays_files(t) && t != from) return t;
+        }
+        if (from >= 0 && plays_files(from)) return from;
+        return selected_;
+    }
+
+    // OK with a take on offer: its file into the track's kit, loaded by the ordinary sample swap
+    // (Storage::request_sample_file), as TO TRK does before a take. Only on a SAMPLE or GRAIN
+    // track: anything else would keep a path it never plays.
+    void put_take_on_track() {
+        const int track = take_offer_;
+        char *out = notice_buffer_;
+        append(out, "T");
+        append_number(out, uint32_t(track) + 1);
+        if (!plays_files(track)) {
+            append(out, " NOT SAMPLE/GRAIN");
+            *out = 0;
+            notice(notice_buffer_);
+            return;
+        }
+        if (!storage_.request_sample_file(track, storage_.last_take_path())) {
+            append(out, " REFUSED");
+            *out = 0;
+            notice(notice_buffer_);
+            return;
+        }
+        take_offer_ = -1;
+        append(out, " ");
+        append(out, machine_name(engine_.machine_id(track)));
+        append(out, ": TAKE ON");
+        *out = 0;
+        notice(notice_buffer_);
+        char line[16];
+        char *log_out = line;
+        append(log_out, "take T");
+        append_number(log_out, uint32_t(track) + 1);
+        *log_out = 0;
+        enaga::log(line);
+    }
+
+    void draw_resample(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const uint8_t state = engine_.status().resample_state.load(std::memory_order_relaxed);
+
+        append(out, "RESAMPLE ");
+        append_number(out, uint32_t(kTakeBars[take_bars_index_]));
+        append(out, state == 1u ? " BAR  WAIT" : " BAR");
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        out = line;
+        if (take_offer_ >= 0 && state == 0u) {
+            append(out, "PUT ON TRK ");
+            append_number(out, uint32_t(take_offer_) + 1);
+            append(out, " ");
+            append(out, plays_files(take_offer_) ? machine_name(engine_.machine_id(take_offer_))
+                                                 : "-");
+        } else if (resample_track_ < 0) {
+            append(out, "TO FILE");
+        } else {
+            append(out, "TO TRK ");
+            append_number(out, uint32_t(resample_track_) + 1);
+        }
+        *out = 0;
+        canvas.text(0, 28, line, 10);
+
+        // What the take is doing, from the two words the audio side publishes. A bar at 130 BPM
+        // is 88,615 frames, so a percentage is the only figure that fits and the only one anyone
+        // reads while recording.
+        out = line;
+        const uint32_t frames = engine_.status().resample_frames.load(std::memory_order_relaxed);
+        switch (state) {
+            case 1u: append(out, "ARMED"); break;
+            case 2u: {
+                append(out, "REC ");
+                const uint32_t bar_frames =
+                    uint32_t(float(kTakeBars[take_bars_index_]) * float(kTicksPerBar) * 230.77f);
+                const uint32_t percent = bar_frames == 0u ? 0u : frames * 100u / bar_frames;
+                append_number(out, percent > 100u ? 100u : percent);
+                *out++ = '%';
+                break;
+            }
+            case 3u: append(out, "WRITING"); break;
+            default:
+                append(out, take_offer_ >= 0 ? "OK PUTS  CLR KEEPS" : "OK ARMS  CLR CANCELS");
+                break;
+        }
+        *out = 0;
+        canvas.text(0, 40, line, state == 2u ? 15 : 10);
+
+        if (engine_.status().resample_clamped.load(std::memory_order_relaxed) != 0u) {
+            canvas.text(0, 50, "SHORTENED TO 30S", 10);
+        } else if (storage_.last_take_name()[0] != 0) {
+            out = line;
+            append(out, "LAST ");
+            append_shown(out, storage_.last_take_name(), kLineChars - 5);
+            *out = 0;
+            canvas.text(0, 50, line, 10);
+        }
+
+        // Where the take comes from, and for an input its level and a meter to set it by.
+        const TakeSource &source = kTakeSources[take_source_];
+        out = line;
+        append(out, "FROM ");
+        append(out, source.name);
+        if (source.input >= 0) {
+            append(out, " ");
+            append(out, kInputLevelNames[take_level_]);
+        }
+        *out = 0;
+        canvas.text(0, 62, line, 12);
+        if (source.input >= 0) {
+            const uint32_t peak = engine_.status().input_peak.load(std::memory_order_relaxed);
+            canvas.text(0, 72, peak >= 990u ? "CLIP" : "IN", peak >= 990u ? 15 : 9);
+            const int bar = int(peak > 1000u ? 1000u : peak) * 96 / 1000;
+            canvas.rect(28, 73, 96, 5, 2);
+            if (bar > 0) canvas.rect(28, 73, bar, 5, peak >= 990u ? 15 : 10);
+            if (input_result_ != 0) {
+                canvas.text(0, 82, "INPUT REFUSED", 15);
+            } else if (source.input == ENAGA_INPUT_MIC && !enaga::system::headphones()) {
+                // Enaga keeps the built-in mic silent without headphones, against feedback.
+                canvas.text(0, 82, "MIC NEEDS HEADPHONES", 10);
+            }
+        }
+
+        canvas.text(0, 94, "B: FROM  C: LEVEL", 7);
+        canvas.text(0, 103, "UP DOWN OR A: BARS", 7);
+        canvas.text(0, 112, "LEFT RIGHT: WHERE TO", 7);
+    }
+
+    // Route the input as the screen says. Enaga answers 0, -1 for a source or level it does not
+    // know, -2 when the codec did not answer; the screen keeps the refusal until the next try.
+    // The input is quiet for about 10 ms around the change, which is why this runs on a turn of
+    // B or C and not on every arm.
+    void apply_input() {
+        const int source = kTakeSources[take_source_].input;
+        if (source < 0) return;
+        input_result_ = enaga::system::input(source, take_level_);
+        input_applied_ = input_result_ == 0;
+        notice(input_result_ == 0 ? kTakeSources[take_source_].name : "INPUT REFUSED");
+    }
+
+    void draw_keys(enaga::Canvas &canvas) {
+        char line[40];
+        char *out = line;
+        const uint8_t root = engine_.key_root();
+        const int scale = int(engine_.key_scale());
+
+        out = line;
+        append(out, "KEYS T");
+        append_number(out, uint32_t(selected_) + 1);
+        append(out, " ");                    // one space: "KEYS T1 C# MIXOLYDIAN" is exactly 21
+        append(out, note_name(root));
+        *out++ = ' ';
+        append(out, scale_name(scale));
+        *out = 0;
+        canvas.text(0, 18, line, 15);
+
+        out = line;
+        append(out, "OCT ");
+        append_number(out, uint32_t(keys_octave_ + 3));
+        append(out, "   ");
+        append_number(out, uint32_t(scale_size(scale)));
+        append(out, " PER OCTAVE");
+        *out = 0;
+        canvas.text(0, 27, line, 11);
+
+        // The pads as the keyboard they are, in the current octave: the upper row's black keys
+        // between the lower row's white ones, the two octave pads as - and +. The root
+        // brightest and the scale's other notes bright, as the pads light, and a held pad
+        // filled. The STEP keys are steps here (D12), so the screen says which sixteen.
+        for (int pad = 0; pad < kPianoPads; pad++) {
+            const bool upper = (pad & 1) != 0;
+            const int x = (pad / 2) * 16 + (upper ? 8 : 0);
+            const int y = upper ? 40 : 58;
+            const int note = pad_note(pad);
+            out = line;
+            if (note < 0) {
+                append(out, kPianoSemitone[pad] == kPadOctaveDown ? "-" : "+");
+            } else {
+                append(out, note_name(uint8_t(note)));
+            }
+            *out = 0;
+            const bool at_root = note >= 0 && note % 12 == root;
+            const bool in_scale =
+                note >= 0 && scale_fold(uint8_t(note), root, scale) == uint8_t(note);
+            const bool held = pad_held_note_[pad] >= 0;
+            canvas.rect(x + 1, y, 14, 14, held ? 12 : (at_root ? 6 : (in_scale ? 3 : 1)));
+            canvas.text(x + 3, y + 4, line, held ? 0 : (in_scale ? 15 : 8));
+        }
+
+        out = line;
+        append(out, "STEP KEYS ");
+        append_number(out, uint32_t(page_ * 16 + 1));
+        *out++ = '-';
+        append_number(out, uint32_t(page_ * 16 + 16));
+        *out = 0;
+        canvas.text(0, 80, line, 11);
+    }
