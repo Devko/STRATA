@@ -1203,8 +1203,6 @@ public:
                 break;
             }
 
-            // The selection keys move within the current mode; with F1 they walk the selected
-            // track's speed, the other half of polymeter.
             // The screen keys turn the screen's pages, in every mode (docs/CONTROLS.md). The
             // track's speed, which FUNC + these used to walk, is in the FUNC menu.
             case ENAGA_KEY_SELECT_LEFT:
