@@ -80,13 +80,17 @@ quickly: `KEYS`, on track 7.
 - FUNC + lower pad 1: the kick mutes on the bar; again: back.
 - Plays like a keyboard? `____`
 
-**W9. Hold STEP + an upper pad edits the step (D6, #140, 2 min).** GRID, track 2 (clap).
+**W9. Hold STEP + an upper pad edits the step (D6, #140, #153, 3 min).** GRID, track 2 (clap).
 - Hold STEP 5, press MUTATE: `STEP 5 PROB 75%`, again `50%`; the STEP 5 light blinks; let go:
   the trig did not toggle.
 - Hold STEP 5 + REPEAT four times: `RTCH 2`, `3`, `4`, `OFF` (hear the ratchet). + FILL:
   `COND FILL`, the step plays only with FILL held. + MUTE: `COND 1:2`.
 - Pad first: hold FILL, tap STEP 15: `FILL TRIG`, and the clap plays on 15 only while FILL is held
   (the step page shows COND FILL). Tap it again with FILL held: `FILL TRIG OFF`.
+- **Hold STEP + THROW (#153).** A track with a short hit on STEP 5, delay send 0. Hold STEP 5 +
+  THROW: `STEP 5 DLY FULL`, and from the next pass only that hit echoes; again: `STEP 5 DLY OFF`,
+  dry. Hold FUNC too: `STEP 5 REV FULL`, that hit alone in the reverb. FUNC + CLR takes it back.
+  THROW alone still throws the whole track while held.
 - In PERFORM (FUNC+MIXER) tap STEP 5: a trig; hold STEP 5 + turn VALUE: the note, no toggle.
   MUTE pad on: STEP 1-8 still recall mute states. MUTE off.
 
@@ -546,6 +550,10 @@ The beat can keep playing. One look per screen; note any overlap or illegible te
 - [ ] RESAMPLE: UP/DOWN pick the bars, LEFT/RIGHT where the take goes; CLR backs out.
 - [ ] RESAMPLE to FILE, then while the screen says WRITING pick TRK 1 and press OK: `TAKE STILL
       WRITING`, and track 1 keeps its own sample once the write ends.
+- [ ] **Bounce to track.** Track 8 on GRAIN. RESAMPLE, B to `TRK 2`, `TO FILE`, OK, PLAY: after
+      `WRITING` the screen says `PUT ON TRK 8 GRN` and `OK PUTS  CLR KEEPS`. OK: `T8 GRN: TAKE ON`,
+      and track 8 plays the bounce within a second. Again with CLR: `TAKE STAYS A FILE`, and the
+      next OK arms. RIGHT onto a synth track, OK: `Tn NOT SAMPLE/GRAIN`.
 - [ ] Notices (e.g. an octave change) appear on the second line in every mode.
 
 ## 6. Step editing: locks, clearing one lock, the note, undo/redo (6 min)

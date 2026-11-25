@@ -23,7 +23,7 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 | `make -C host test` | **1,870 tests, 3,665,834 checks, 0 failures** on `main` at PR #151: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image (cl6x, 2026-11-25, EDIT's pictures): payload 1,117,368 bytes, bss 1,565,352 (with LOCK and play modes); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | **33 scenarios**, run on Roland's PC only. **All 33 pass with cl6x on `main` at PR #151** (2026-11-25; worst 30.55%, ambient). Added today, each with the PR that brought it: `scenario_stepkeys` (D12), `scenario_plock`, `scenario_slots`, `scenario_glide`, `scenario_playmode`, `scenario_pictures`. The pad gestures (stutter, LOCK, D6) have none: the emulator cannot press pads. The worst case has moved from 30.16% to 30.55% over the day. GCC-only figures for today's work are not taken |
+| `tools/scenarios.sh` | **34 scenarios**, run on Roland's PC only. **All 34 pass with cl6x on `main` after #153** (bounce to track and hold STEP + THROW; 2026-11-25; worst 30.55%, ambient). Added on 2026-11-25, each with the PR that brought it: `scenario_stepkeys` (D12), `scenario_plock`, `scenario_slots`, `scenario_glide`, `scenario_playmode`, `scenario_pictures`, `scenario_bounce` (the only run of a take through Enaga's real file layer). The pad gestures (stutter, LOCK, D6) have none: the emulator cannot press pads. The worst case moved from 30.16% to 30.55% over the day. GCC-only figures for that day's work are not taken |
 | unit | v0.3.1 on Enaga 0.2.0 boots and plays (2026-11-24). Load figures are from the v0.2.0-era build: under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been measured or walked through on the unit |
 | memory | init takes **97.04 MiB of a 120 MiB heap** (LOCK's 1.06 MiB included): 22.96 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -61,10 +61,15 @@ first, then in the code, `core/help.cpp`, the cheatsheet, the manual and the uni
 Roland accepted all 15 decisions as recommended, 2026-11-25). Done: macro learn by turning
 (D11), STEP keys as steps (D12), hold STEP + pad edits the step (D6), the retired chords and
 slots 7 MUTE BUS / 13 MORPH (D1, D2, D5), LOCK on FUNC + MUTATE (D3, D4, D13, D14;
-`core/lockstore.hpp`, docs/CONTROLS.md "LOCK") with FX GLIDE and the momentary push. **Next, in
-order:** bounce-to-track ("put on track n" after a RESAMPLE bounce, one OK); then hold STEP +
-THROW (the delay-send lock D6 left out). Both are being built, with LFO trigger modes and
-"release and length for all + FEEL", in their own threads as of 2026-11-25.
+`core/lockstore.hpp`, docs/CONTROLS.md "LOCK") with FX GLIDE and the momentary push, bounce to
+track (a take to FILE offered to a SAMPLE or GRAIN track, one OK; docs/CONTROLS.md "Bounce to
+track") and hold STEP + THROW (the delay-send lock). **Phase 2 is complete.**
+
+**RESAMPLE had never written a take on Enaga** until 2026-11-25: Storage made `/RECORD` first, and
+Enaga writes only strictly inside `/RECORD`, so every take failed `DENIED`. Fixed, and
+`tests/fakehost.cpp` now refuses writes outside the data folder, `/SAMPLES` and `/RECORD` as the
+firmware does (`write_check`; `seed_folder` lays out a PC-made card). No take has been heard on the
+unit yet: UNIT_CHECKLIST's resample items are the first real test.
 
 LOCK, for whoever touches it next: the audio side keeps the 128 locks and the swap-back and does
 the copies (`Engine::capture_live` / `apply_live`); the UI only times the hold (500 ms), posts
@@ -134,6 +139,9 @@ bare `git clone`; run `tools/fetch_emulator.sh` after it, which checks out
 GMP, MPFR, MPC and ISL over plain HTTP, which the HTTPS-only proxy does not serve.
 
 ### 2. The emulator can press keys and nothing else
+
+(Stale in part since Enaga v0.3.0: its `tools/emulate.py` takes `--turn ENC:DETENTS@CYCLE` for
+encoders A-D and VALUE, and `--card-mib`. No scenario uses `--turn` yet; pads are still out.)
 
 `emulate.py` has `--key` and nothing more, and `emulator/core/core.h` has no pad or encoder entry
 point at all. So no scenario can drive a pad (seven of M5's eight performance tools, pad pressure)

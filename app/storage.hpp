@@ -228,6 +228,11 @@ public:
 
     // The name the last take was written under, for the screen; empty before the first.
     const char *last_take_name() const { return take_name_; }
+    // Its whole path on the card (/RECORD/STRATA_<n>.WAV), for putting it on a track later.
+    const char *last_take_path() const { return take_path_; }
+    // Bumped each time a take asked for TO FILE alone is all on the card. The RESAMPLE screen
+    // watches it to offer "put on track n" (one OK) once the write has finished.
+    uint32_t file_takes() const { return file_takes_; }
 
     // --- freeze (dsp/frozen.hpp), RAM only: no card needed, nothing written ---
     //
@@ -446,6 +451,7 @@ private:
     static constexpr uint32_t kTakeNameBytes = 24;
     char take_name_[kTakeNameBytes] = {};
     char take_path_[ENAGA_FILE_PATH_MAX + 1] = {};
+    uint32_t file_takes_ = 0;
     // The take goes to the card a chunk per pass, one write in flight at a time (Roland,
     // 2026-11-22): one files::save of 5.76 MiB held the main loop ~3 s, so the UI froze and
     // streamed tracks, which Enaga refills only between main-loop file slices, ran dry.
