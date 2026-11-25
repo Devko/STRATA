@@ -47,6 +47,8 @@
 // in tests/test_scheduler.cpp against the built-in operators.
 #include "scheduler.hpp"
 
+#include "clamp.hpp"
+
 namespace strata {
 
 namespace {
@@ -115,17 +117,13 @@ inline uint32_t mix32(uint32_t h) {
 
 // --- clamping -------------------------------------------------------------
 
-inline uint8_t clamp_u8(uint32_t value, uint8_t low, uint8_t high) {
+inline uint8_t clamp_wide_u8(uint32_t value, uint8_t low, uint8_t high) {
     if (value < low) return low;
     return value > high ? high : uint8_t(value);
 }
 
-inline int clamp_int(int value, int low, int high) {
-    return value < low ? low : (value > high ? high : value);
-}
-
 inline uint8_t ratchet_hits(uint8_t packed) {
-    return clamp_u8(ratchet_count(packed), kRatchetMin, kRatchetMax);
+    return clamp_wide_u8(ratchet_count(packed), kRatchetMin, kRatchetMax);
 }
 
 inline RatchetRamp ratchet_shape(uint8_t packed) {
@@ -196,9 +194,9 @@ bool condition_passes(uint8_t packed, uint32_t loop, bool fill, bool previous, b
 }
 
 uint8_t ratchet_velocity(uint8_t velocity, uint8_t index, uint8_t count, RatchetRamp ramp) {
-    const uint32_t hits = clamp_u8(count, kRatchetMin, kRatchetMax);
+    const uint32_t hits = clamp_wide_u8(count, kRatchetMin, kRatchetMax);
     const uint32_t hit = index >= hits ? hits - 1u : uint32_t(index);
-    const uint32_t full = clamp_u8(velocity, 1, 127);
+    const uint32_t full = clamp_wide_u8(velocity, 1, 127);
 
     uint32_t numerator;
     switch (ramp) {
@@ -213,7 +211,7 @@ uint8_t ratchet_velocity(uint8_t velocity, uint8_t index, uint8_t count, Ratchet
             return uint8_t(full);
     }
     // numerator <= 127 * 8, so div_round_small stays far inside its exact range.
-    return clamp_u8(div_round_small(numerator, hits), 1, 127);
+    return clamp_wide_u8(div_round_small(numerator, hits), 1, 127);
 }
 
 uint32_t ratchet_frame(uint32_t index, uint32_t count, float step_samples) {
@@ -354,7 +352,7 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                 event.track = uint8_t(t);
                 event.step = firing.step;
                 event.note = note;
-                event.velocity = clamp_u8(step.velocity, 1, 127);
+                event.velocity = clamp_wide_u8(step.velocity, 1, 127);
                 event.length_index = step.length;
                 event.accent = accent;
                 event.slide = slide;
@@ -406,7 +404,7 @@ bool stutter_event(const Pattern &pattern, int track, int step, uint32_t frame, 
     out.track = uint8_t(track);
     out.step = uint8_t(index);
     out.note = uint8_t(played.note & 0x7Fu);
-    out.velocity = clamp_u8(played.velocity, 1, 127);
+    out.velocity = clamp_wide_u8(played.velocity, 1, 127);
     out.length_index = played.length;
     out.accent = (played.flags & kStepAccent) != 0;
     out.slide = (played.flags & kStepSlide) != 0;

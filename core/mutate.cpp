@@ -1,6 +1,7 @@
 // Mutation. core/mutate.hpp has the design and the bounds.
 #include "mutate.hpp"
 
+#include "clamp.hpp"
 #include "scale.hpp"
 
 namespace strata {
@@ -17,10 +18,6 @@ inline uint32_t mix32(uint32_t h) {
     h *= 0x846CA68Bu;
     h ^= h >> 16;
     return h;
-}
-
-int clamp_int(int value, int low, int high) {
-    return value < low ? low : (value > high ? high : value);
 }
 
 // Is a step on at all? A trigless step applies its locks without a note, and docs/SPEC.md makes

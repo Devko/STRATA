@@ -129,6 +129,10 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Changed
 
+- **Code quality round (no change in sound or controls).** One set of integer clamps in core/,
+  the project file names spelled once, CI checks CLAUDE.md's source rules
+  (`tools/check_rules.sh`), the scenarios print their log path on a failed check, and the unit
+  checklist's file sizes are the real ones (PROJECT.BIN 402 bytes, KIT.BIN 1,329).
 - **The performance mixer goes back to rest faster.** A button that sends an effect or the
   loop's mix to 0 (tap VALUE, push VALUE + CLR, a new slot over the old one, letting go of a
   momentary push, leaving a loop, a LOCK jump) now rides out over at most a 1/16 at the tempo

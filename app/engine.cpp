@@ -29,8 +29,15 @@ constexpr float kFaderDeltaMax = 1.5f;
 // MIDI out's gate for a note with none of its own: core/timing.hpp's index 8, one step.
 constexpr uint8_t kMidiDefaultLength = 8;
 
-uint8_t clamp_u8(int value) {
+// A MIDI data byte, 0-127. (Not core/clamp.hpp's clamp_u8, which takes its limits.)
+uint8_t clamp_7bit(int value) {
     return uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value));
+}
+
+// A level for Status in thousandths, saturating at what a uint16_t holds (the meters' unit).
+uint16_t to_milli(float level) {
+    const float scaled = level * 1000.0f;
+    return uint16_t(scaled > 65535.0f ? 65535.0f : scaled);
 }
 
 }  // namespace
@@ -144,9 +151,7 @@ bool Engine::init(float sample_rate) {
     return true;
 }
 
-// Main context, App::init only. Nothing is read through `sample_region_` until a `Cmd::set_sample`
-// arrives, and that command cannot arrive before App::init has returned, so this needs no
-// synchronisation with the audio side.
+// Main context, from App::update (engine.hpp).
 bool Engine::step_waves() {
     // The tables the WAVE tracks are sounding now: the kit's TBL with the scene, macro, lock and
     // LFO over it, as the machines are prepared from. A lock or an LFO on TBL asks for each
@@ -161,6 +166,9 @@ bool Engine::step_waves() {
     return waves_.step();
 }
 
+// Main context, App::init only. Nothing is read through `sample_region_` until a `Cmd::set_sample`
+// arrives, and that command cannot arrive before App::init has returned, so this needs no
+// synchronisation with the audio side.
 void Engine::set_sample_region(const int16_t *base, uint32_t bytes) {
     sample_region_ = base;
     sample_region_bytes_ = bytes;
@@ -623,7 +631,7 @@ void Engine::apply(const Command &command) {
             pattern_get_lock(live(), track, step, param, base);
             const uint8_t value = command.c == kSemitoneFlag && tune_param(machine_id_[track]) == param
                                       ? tune_step(machine_id_[track], base, int(int8_t(command.b)))
-                                      : clamp_u8(int(base) + int(int8_t(command.b)));
+                                      : clamp_7bit(int(base) + int(int8_t(command.b)));
 
             if (!pattern_set_lock(live(), track, step, param, value)) {
                 // "Full" usually means slots abandoned by relocation rather than 1,024 real
@@ -752,7 +760,7 @@ void Engine::apply(const Command &command) {
             Step &s = live().tracks[track].steps[step];
             const int flags = (int(s.flags) | int(kStepTrig)) & ~int(kStepTrigless);
             s.flags = uint8_t(flags);
-            s.note = clamp_u8(command.a);
+            s.note = clamp_7bit(command.a);
             s.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
             s.micro = int8_t(command.c);
             if (!length_valid(s.length)) s.length = 8;
@@ -1179,7 +1187,7 @@ void Engine::apply(const Command &command) {
                     const int next = int(params_[track].v[command.a]) + int(int8_t(command.b));
                     value = uint8_t(next < 0 ? 0 : (next > 127 ? 127 : next));
                 }
-                params_[track].v[command.a] = clamp_u8(value);
+                params_[track].v[command.a] = clamp_7bit(value);
                 // `performed_` is built FROM `params_`, and the per-block copy in process()
                 // writes it over every unlocked parameter of `effective_`. So a kit change that
                 // does not set this flag is reverted within the same block: `apply_performance`
@@ -1190,7 +1198,7 @@ void Engine::apply(const Command &command) {
                 // Mirror into the effective set as well, so the turn is heard in THIS block even
                 // before the copy runs. The next step rebuilds effective_ from the kit anyway,
                 // so a lock on this parameter still wins from then on.
-                effective_[track].v[command.a] = clamp_u8(value);
+                effective_[track].v[command.a] = clamp_7bit(value);
             }
             break;
 
@@ -1503,7 +1511,7 @@ void Engine::apply(const Command &command) {
             // A held KEYS key on a track whose arp is on joins the held notes instead: the arp
             // plays them (core/arp.hpp). A pad or MIDI note has no release to end a hold.
             if (command.c == 1 && arp_settings(track).on()) {
-                const uint8_t note = clamp_u8(command.a);
+                const uint8_t note = clamp_7bit(command.a);
                 uint8_t &count = held_count_[track];
                 bool have = false;
                 for (int i = 0; i < count; i++) have = have || held_notes_[track][i] == note;
@@ -1519,7 +1527,7 @@ void Engine::apply(const Command &command) {
             // machine and sound the moment the track was unmuted.
             if (machines_[track] && !muted_[track]) {
                 Trig trig;
-                trig.note = clamp_u8(command.a);
+                trig.note = clamp_7bit(command.a);
                 trig.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
                 trig.frame = 0;
                 trig.held = command.c == 1;   // a key or MIDI IN note: its release comes
@@ -1549,7 +1557,7 @@ void Engine::apply(const Command &command) {
                 roll.on = false;
             } else if (command.c == 1) {
                 roll.on = true;
-                roll.note = clamp_u8(command.a);
+                roll.note = clamp_7bit(command.a);
                 roll.velocity = velocity;
                 roll.last_tick = tick_;
                 roll.countdown = roll_period_frames();
@@ -1624,10 +1632,10 @@ void Engine::apply(const Command &command) {
             // A KEYS key coming up. Not refused on a muted track or with nothing holding the
             // note: a release with nothing to let go is the second half of a gesture whose
             // first half was swallowed, and it changes nothing (dsp/track.hpp, `release`).
-            if (machines_[track]) machines_[track]->release(clamp_u8(command.a));
-            midi_out_.release(midi_sink_, track, clamp_u8(command.a));
+            if (machines_[track]) machines_[track]->release(clamp_7bit(command.a));
+            midi_out_.release(midi_sink_, track, clamp_7bit(command.a));
             // And out of the arp's held notes, if it was one.
-            const uint8_t note = clamp_u8(command.a);
+            const uint8_t note = clamp_7bit(command.a);
             uint8_t &count = held_count_[track];
             for (int i = 0; i < count; i++) {
                 if (held_notes_[track][i] != note) continue;
@@ -3128,7 +3136,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     if (in != nullptr) {
         const float peak = strata_master_peak(in, in, int(2u * frames));
         const float clipped = peak > 1.0f ? 1.0f : peak;
-        status_.input_peak.store(uint16_t(clipped * 1000.0f), std::memory_order_relaxed);
+        status_.input_peak.store(to_milli(clipped), std::memory_order_relaxed);
     }
 
     status_.resample_state.store(capture_.done()        ? 3u
@@ -3165,17 +3173,13 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     publish_lock_state();
 
     const float peak = mixer_.peak();
-    const float scaled = peak * 1000.0f;
-    status_.peak_milli.store(uint16_t(scaled > 65535.0f ? 65535.0f : scaled),
-                             std::memory_order_relaxed);
+    status_.peak_milli.store(to_milli(peak), std::memory_order_relaxed);
 
     // The screen frame's master meter: the block's peak, or the last reading falling by about
     // 0.09 dB a block (20 dB in a third of a second), whichever is higher. One multiply a block.
     const float fallen = meter_ * kMeterFall;
     meter_ = peak > fallen ? peak : fallen;
-    const float meter_scaled = meter_ * 1000.0f;
-    status_.meter_milli.store(uint16_t(meter_scaled > 65535.0f ? 65535.0f : meter_scaled),
-                              std::memory_order_relaxed);
+    status_.meter_milli.store(to_milli(meter_), std::memory_order_relaxed);
     if (peak >= 1.0f) status_.bump_limit_seen();
 
     // And where the pattern is in its pass: a subtraction from the boundary resolve_tick keeps,

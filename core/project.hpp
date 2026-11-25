@@ -579,7 +579,7 @@ constexpr uint16_t kSectionBankPatterns = 1;
 
 // PROJECT.BIN: settings, the chain, and which pattern was live. `project_read` touches nothing
 // else -- the patterns come from the bank files, and app/ reads this file first, so a damaged
-// 277 bytes must not cost 128 patterns that are about to load.
+// PROJECT.BIN (a few hundred bytes) must not cost 128 patterns that are about to load.
 uint32_t project_bytes();
 SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t capacity,
                               uint32_t *written = nullptr);

@@ -24,10 +24,10 @@ constexpr const char *kKeyTakeSeq = "TAKESEQ";
 
 constexpr const char *kDefaultName = "DEFAULT";
 
-// The ten files a project is. The order is the order they are written and read in, and
+// The eleven files a project is. The order is the order they are written and read in, and
 // PROJECT.BIN is first on purpose: it is the one that says which pattern was live, and
-// core/project.cpp's `project_read` deliberately does not touch a pattern, so a damaged 292
-// bytes cannot cost the banks that follow it.
+// core/project.cpp's `project_read` deliberately does not touch a pattern, so a damaged
+// PROJECT.BIN (a few hundred bytes, `project_bytes()`) cannot cost the banks that follow it.
 constexpr int kFileProject = 0;
 constexpr int kFileKit = 1;
 // PERFORM.BIN (M5): the scenes and the macros. Last of the fixed-size files and read last, so
@@ -36,6 +36,13 @@ constexpr int kFileKit = 1;
 constexpr int kFilePerform = 2;
 constexpr int kFileFirstBank = 3;
 constexpr int kFileCount = kFileFirstBank + kBanks;
+
+// The fixed files' names, one spelling each (the banks' come from core/project.cpp's
+// bank_file_name). files::save writes NAME.TMP beside NAME and Enaga's reads fall back to it.
+constexpr const char *kProjectFile = "PROJECT.BIN";
+constexpr const char *kProjectTmpFile = "PROJECT.BIN.TMP";
+constexpr const char *kKitFile = "KIT.BIN";
+constexpr const char *kPerformFile = "PERFORM.BIN";
 
 void append_text(char *&out, const char *text, const char *end) {
     while (*text != '\0' && out < end) *out++ = *text++;
@@ -478,7 +485,7 @@ void Storage::step_rename() {
     if (index == 0) {
         // The source must be a project: its PROJECT.BIN (or the .TMP an interrupted save left,
         // which read_all falls back to) is what makes the copy worth anything.
-        if (!named_path(from, sizeof from, op_from_, "PROJECT.BIN") ||
+        if (!named_path(from, sizeof from, op_from_, kProjectFile) ||
             !named_path(to, sizeof to, op_to_, nullptr)) {
             finish_job("BAD PATH");
             return;
@@ -516,11 +523,11 @@ void Storage::step_rename() {
         char name[12];
         const char *leaf = nullptr;
         if (file == kFileProject) {
-            leaf = "PROJECT.BIN";
+            leaf = kProjectFile;
         } else if (file == kFileKit) {
-            leaf = "KIT.BIN";
+            leaf = kKitFile;
         } else if (file == kFilePerform) {
-            leaf = "PERFORM.BIN";
+            leaf = kPerformFile;
         } else {
             if (!bank_file_name(file - kFileFirstBank, name, int(sizeof name))) return;
             leaf = name;
@@ -599,7 +606,7 @@ void Storage::step_delete() {
         // when PROJECT.BIN is missing, so the other order could leave a folder that still opens.
         for (int i = 0; i < 2; i++) {
             if (!named_path(path, sizeof path, del_name_,
-                            i == 0 ? "PROJECT.BIN.TMP" : "PROJECT.BIN")) {
+                            i == 0 ? kProjectTmpFile : kProjectFile)) {
                 finish_job("BAD PATH");
                 return;
             }
@@ -767,7 +774,7 @@ bool Storage::open_last() {
     // they are written from one `save_seq_` that every save bumps first. Both 0 is a card with
     // neither, where the choice does not matter.
     const bool prefer_auto = auto_seq > project_seq;
-    if (prefer_auto && project_path(path, sizeof path, true, "PROJECT.BIN")) {
+    if (prefer_auto && project_path(path, sizeof path, true, kProjectFile)) {
         enaga::files::Info info;
         if (enaga::files::info(path, info) == ENAGA_FILE_OK) {
             load_autosave_ = true;
@@ -775,7 +782,7 @@ bool Storage::open_last() {
             return true;
         }
     }
-    if (project_path(path, sizeof path, false, "PROJECT.BIN")) {
+    if (project_path(path, sizeof path, false, kProjectFile)) {
         enaga::files::Info info;
         if (enaga::files::info(path, info) == ENAGA_FILE_OK) {
             load_autosave_ = false;
@@ -1237,7 +1244,7 @@ void Storage::step_save() {
     // And so does the FIRST save of a project, for the same reason turned around: there is no
     // file on the card for a flag to differ from, so "only what changed" is every file. Without
     // this, a first save wrote KIT.BIN alone -- `request_save` is what marks the kit -- and the
-    // nine others never existed, so reloading the project failed with NOT FOUND.
+    // ten others never existed, so reloading the project failed with NOT FOUND.
     const bool all = autosave_ || !project_complete_;
     uint32_t bytes = 0;
     const char *file = nullptr;
@@ -1246,15 +1253,15 @@ void Storage::step_save() {
 
     if (index == kFileProject) {
         if (!all && !project_dirty_) return;
-        file = "PROJECT.BIN";
+        file = kProjectFile;
         res = project_write(project, file_, kFileBytes, &bytes);
     } else if (index == kFileKit) {
         if (!all && !kit_dirty_) return;
-        file = "KIT.BIN";
+        file = kKitFile;
         res = kit_write(project.kit, file_, kFileBytes, &bytes);
     } else if (index == kFilePerform) {
         if (!all && !perform_dirty_) return;
-        file = "PERFORM.BIN";
+        file = kPerformFile;
         res = perform_write(engine_->scenes(), engine_->macros(), file_, kFileBytes, &bytes);
     } else if (index < kFileCount) {
         // (`<=` survives: index kFileCount names bank kBanks, bank_file_name refuses it, and the
@@ -1330,7 +1337,7 @@ void Storage::step_load() {
     Project &project = engine_->project_for_load();
 
     if (index == kFileProject) {
-        if (!project_path(path, sizeof path, autosave_, "PROJECT.BIN")) {
+        if (!project_path(path, sizeof path, autosave_, kProjectFile)) {
             finish_job("BAD PATH");
             return;
         }
@@ -1342,13 +1349,13 @@ void Storage::step_load() {
         const SerializeResult res = project_read(project, file_, uint32_t(got));
         // A refused PROJECT.BIN is reported but does not stop the load: core/project.cpp leaves
         // the settings at their defaults and deliberately does not touch a pattern, so the banks
-        // that follow still load. One damaged 292-byte file must not cost 128 patterns.
+        // that follow still load. One damaged PROJECT.BIN must not cost 128 patterns.
         if (res != SerializeResult::ok) error_ = serialize_result_name(res);
         return;
     }
 
     if (index == kFileKit) {
-        if (!project_path(path, sizeof path, autosave_, "KIT.BIN")) return;
+        if (!project_path(path, sizeof path, autosave_, kKitFile)) return;
         const int32_t got = enaga::files::read_all(path, file_, kFileBytes);
         if (got < 0) {
             error_ = enaga::files::error_name(got);
@@ -1360,7 +1367,7 @@ void Storage::step_load() {
     }
 
     if (index == kFilePerform) {
-        if (!project_path(path, sizeof path, autosave_, "PERFORM.BIN")) return;
+        if (!project_path(path, sizeof path, autosave_, kPerformFile)) return;
         const int32_t got = enaga::files::read_all(path, file_, kFileBytes);
         if (got < 0) {
             // A project saved by an M4 build has no PERFORM.BIN. That is not damage: it means no

@@ -12,6 +12,8 @@
 //      unknown version or a bad CRC "never crashes the app".
 #include "serialize.hpp"
 
+#include "clamp.hpp"
+
 namespace strata {
 
 // --- CRC-32 ---------------------------------------------------------------
@@ -164,12 +166,6 @@ constexpr uint32_t kFeelSectionOffset = kPlayModesSectionOffset + kPlayModesSect
 constexpr uint32_t kLocksSectionOffset = kFeelSectionOffset + kFeelSectionBytes;
 static_assert(kHeaderBytes + kLocksSectionOffset == kPatternFixedBytes,
               "the fixed part of a pattern file is not the sum of its sections");
-
-uint8_t clamp_u8(uint8_t value, uint8_t low, uint8_t high) {
-    if (value < low) return low;
-    if (value > high) return high;
-    return value;
-}
 
 // How many of a step's locks a save will emit. Both passes of the writer and `pattern_bytes`
 // apply this same rule to the same steps in the same order, so the lock indices the first pass

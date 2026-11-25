@@ -42,7 +42,8 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" > "$LOG" 2>
 # emulate.py writes a JSON report; assert on its VALUES. Grepping the log for words like
 # "overrun" matches the field name whether the count is 0 or 500, which is worse than no
 # check at all -- it fails on a healthy run and would be silenced by loosening it.
-python3 - "$LOG" <<'PY'
+rc=0
+python3 - "$LOG" <<'PY' || rc=$?
 import json, re, sys
 
 text = open(sys.argv[1]).read()
@@ -100,7 +101,6 @@ print("note: the emulator models no caches or bus latency -- compare versions, n
 
 sys.exit(1 if failures else 0)
 PY
-rc=$?
 
 echo
 if [ "$rc" -ne 0 ]; then

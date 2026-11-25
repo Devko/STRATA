@@ -1,12 +1,10 @@
 #include "timing.hpp"
 
+#include "clamp.hpp"
+
 namespace strata {
 
 namespace {
-
-int clamp_int(int value, int low, int high) {
-    return value < low ? low : (value > high ? high : value);
-}
 
 int micro_of(const int8_t *micro, int step_index) {
     if (micro == nullptr) return 0;

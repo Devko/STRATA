@@ -1626,10 +1626,11 @@ project and never needs a restart."*
 
 - [ ] PROJECT opens the PROJECT screen. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
-- [ ] FUNC+HOME, OK saves (the menu opens on SAVE). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (277 bytes),
-      `KIT.BIN` (1,076 bytes) and a `BANK_x.BIN` per touched bank.
-- [ ] Only dirty banks are written. Edit one pattern in bank A, save, and confirm no
-      `BANK_B.BIN` appears.
+- [ ] FUNC+HOME, OK saves (the menu opens on SAVE). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (402 bytes),
+      `KIT.BIN` (1,329 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
+      save writes every file (the sizes tests/test_storage.cpp pins).
+      After that first save only dirty banks are written; the card cannot show it, since all
+      eight exist from then on, so tests/test_storage.cpp checks which files each save touches.
 - [ ] Power cycle. The project reopens on the pattern it was left on, not A01.
 - [ ] The FUNC menu's RELOAD PROJECT (OK twice) reloads from the card and discards unsaved edits
       (it was FUNC + OK, then FUNC + LEFT twice in PROJECT, until 2026-11-22).
