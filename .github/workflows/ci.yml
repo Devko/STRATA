@@ -110,6 +110,9 @@ jobs:
       - name: Every command is posted and handled
         run: tools/audit_commands.sh
 
+      - name: CLAUDE.md source rules (core/ without Enaga, no libm or STL, unique filenames)
+        run: tools/check_rules.sh
+
       - name: Enaga pin (local checks, no upstream)
         run: tools/enaga_check.sh
 
@@ -129,3 +132,5 @@ jobs:
           bash -n tools/ci_changes.sh
           bash -n tools/scenarios.sh
           bash -n tools/build.sh
+          bash -n tools/check_rules.sh
+          for f in tests/scenario_*.sh; do bash -n "$f"; done
