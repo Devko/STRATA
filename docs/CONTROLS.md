@@ -51,10 +51,9 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      eight. On GRID and KEYS, where A-D turn the current EDIT page, they turn that page. The
      one-page screens give them their one sideways setting: MACHINE and SOUNDS the track,
      RESAMPLE the destination, PERFORM the mutate amount.
-   - **Pad-row keys:** which sixteen the STEP keys mean. Step page 1-4 (GRID, EDIT, MIXER,
-     MACHINE, RESAMPLE), the octave in KEYS, the bank A-H in PROJECT and CHAIN. Where the STEP
-     keys always mean the same sixteen things (PERFORM, KIT, SAMPLES, SOUNDS, the menu) they do
-     nothing.
+   - **Pad-row keys:** which sixteen the STEP keys mean. Step page 1-4 (GRID, KEYS, PERFORM,
+     EDIT, MIXER, MACHINE, RESAMPLE), the bank A-H in PROJECT and CHAIN. Where the STEP keys
+     always mean the same sixteen things (KIT, SAMPLES, SOUNDS, the menu) they do nothing.
      FUNC + pad-row key = the selected track's length, on every screen but the menu.
    - **Knobs A-D:** the four values on screen. Push = that value's switch. With a STEP held, turn
      = lock, push = remove the lock. In PERFORM, push = MACRO LEARN for that macro: EDIT opens,
@@ -72,7 +71,11 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      of VALUE alone** (let go within half a second, with nothing turned or pressed meanwhile) resets what it is on to 0:
      a picked effect's amount, the looper's mix, PERFORM's morph; with FUNC, the DJ filter to
      OFF. Never the tempo, swing or a field, and nothing while a STEP is held.
-   - **STEP keys:** the sixteen of whatever the pad-row keys chose.
+   - **STEP keys:** the sixteen of whatever the pad-row keys chose. **On every playing screen,
+     PERFORM and KEYS included, they are steps** (D12, 2026-11-25): tap, hold + knob, hold + OK
+     work as on GRID. MUTE MODE (STEP 1-8 the mute states), a held scene pad, push VALUE (the
+     performance mixer) and the list screens (PROJECT, CHAIN, KIT, SAMPLES, SOUNDS, the menu)
+     keep theirs.
    - **Lower pads:** the eight tracks: select and play. FUNC + pad = mute on the next bar.
    - **Upper pads:** the seven performance tools, the same in every mode but KEYS.
    - **KEYS is the exception: both pad rows are a piano**, being the pressure-sensitive ones and
@@ -82,8 +85,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      note while down, and its pressure bends macro A. The track is UP/DOWN, as in KEYS anyway.
      FUNC + a pad keeps its usual job (mute on the bar, the performance moves). The pads light as
      a keyboard: the root bright in the track's colour, the scale's other notes dim, the rest
-     dark, a held pad white, the two octave pads dim white. The STEP keys stay the 16 scale
-     degrees, so KEYS has both a chromatic piano and an in-key keyboard.
+     dark, a held pad white, the two octave pads dim white. The octave is LEFT/RIGHT and the two
+     octave pads; the STEP keys are steps (D12), so you play on the pads and edit at once.
 2. **FUNC + something is either the key's printed second label or a performance move.** The
    rare setup actions are in the FUNC menu, named on the screen, not on chords that change from
    page to page.
