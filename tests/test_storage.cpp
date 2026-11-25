@@ -412,9 +412,10 @@ const Expect kTable[] = {
     // --- the live pattern, and therefore its bank's file -------------------
     {Cmd::toggle_trig, kDirtyBank, "toggle_trig"},
     {Cmd::clear_lock, kDirtyBank, "clear_lock"},
-    // Length, speed and swing are all TrackPattern/Pattern fields, written by `pattern_write`.
+    // Length, speed, play mode and swing are all TrackPattern/Pattern fields, written by `pattern_write`.
     {Cmd::set_track_length, kDirtyBank, "set_track_length"},
     {Cmd::set_track_speed, kDirtyBank, "set_track_speed"},
+    {Cmd::set_track_play, kDirtyBank, "set_track_play"},
     {Cmd::set_pattern_swing, kDirtyBank, "set_pattern_swing"},
     {Cmd::set_track_swing, kDirtyBank, "set_track_swing"},
     {Cmd::set_master_length, kDirtyBank, "set_master_length"},
