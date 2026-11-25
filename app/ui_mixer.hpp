@@ -238,6 +238,11 @@
             if (bar > 0) canvas.rect(x + 2, 76, bar, 6, 12);
         }
 
+        // MST and EQ: what the master is putting out, while the beat plays (app/ui_live.hpp).
+        if (kMixerPages[mixer_bank_].master) {
+            draw_master_live(canvas, enaga::clock::state().running != 0);
+        }
+
         // What the delay is actually doing, in milliseconds, which is the one thing a division
         // does not tell you -- and the number that says whether the tempo-sync is working.
         // On the LONG page too: there it is the division times the multiplier, up to 12 s.
@@ -279,6 +284,7 @@
         }
         char line[40];
         char *out = line;
+        const bool running = enaga::clock::state().running != 0;
 
         out = line;
         append(out, "MIXER TRK ");
@@ -309,6 +315,8 @@
             if (filled > 0) {
                 canvas.rect(x + 2, 46 + (48 - filled), 10, filled, muted_[track] ? 5 : 12);
             }
+            // What the track is playing, beside its fader (app/ui_live.hpp).
+            draw_fader_meter(canvas, track, x + 12, running);
 
             // The machine driving it, so the mixer says what it is mixing.
             const Machine *machine = engine_.machine(track);

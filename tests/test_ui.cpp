@@ -3102,6 +3102,46 @@ TEST(ui_perform_shows_track_levels_while_playing_and_the_hint_when_stopped) {
     key(ENAGA_KEY_F4);
 }
 
+// MIXER (app/ui_live.hpp): while the beat plays, the MST page draws the output's spectrum and a
+// vectorscope under its bars, and the fader page a live meter beside each fader; stopped, none.
+TEST(ui_mixer_master_page_shows_the_spectrum_while_playing) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    enaga::Canvas canvas(g_pixels);
+    const auto lit_in = [](int x0, int x1, int y0, int y1) {
+        int n = 0;
+        for (int y = y0; y <= y1; y++) {
+            for (int x = x0; x <= x1; x++) n += g_pixels[y * enaga::Canvas::width + x] > 2;
+        }
+        return n;
+    };
+    mixer_page(app, kMixerEqPage - 1);                     // MST
+    app.draw(canvas);
+    CHECK_EQ(lit_in(0, 123, 86, 107), 0);                  // stopped: nothing there
+
+    toggle_trig_0_0();
+    pump(2);
+    host.set_running(true);
+    host.deliver_tick(0, 0);
+    pump(6);
+    for (int i = 0; i < 3; i++) app.draw(canvas);
+    CHECK(lit_in(0, 95, 86, 107) >= 10);                   // the kick's bands
+    CHECK(lit_in(101, 122, 86, 107) >= 3);                 // the vectorscope's trace
+
+    mixer_page(app, 0);                                    // the faders
+    app.draw(canvas);
+    CHECK(lit_in(12, 12, 46, 93) >= 4);                    // track 1's live meter
+    CHECK_EQ(lit_in(44, 44, 46, 93), 0);                   // track 2 is silent
+
+    host.set_running(false);
+    pump(2);
+    app.draw(canvas);
+    CHECK_EQ(lit_in(12, 12, 46, 93), 0);
+    toggle_trig_0_0();
+    pump(2);
+    key(ENAGA_KEY_F4);
+}
+
 // Hold REPEAT, then a STEP: step stutter (CyDrums' P2). REPEAT first, so the STEP performs: it
 // toggles nothing, writes nothing to undo, and its release is the stutter's even after REPEAT.
 TEST(ui_hold_repeat_and_a_step_stutters_until_it_comes_up) {

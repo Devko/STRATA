@@ -46,6 +46,9 @@ the project file format or the controls.
   draw as TRACK PLAY's RND modes, over each track's own mode while on; the pattern is never
   written, so OFF is the programmed beat again at once. Not saved, held by a LOCK, shown as
   `LIVE RND4 FUNC+D` on PERFORM, a dot under each armed track's meter and `RN4` on line 2.
+- **Live screens, part 6: the master's spectrum and a vectorscope.** On MIXER's MST and EQ pages,
+  while the beat plays, the output's spectrum in 24 bands with peak dots and a small vectorscope;
+  on the fader pages a live meter beside each fader.
 - **Live screens, part 5: WAVE's table as a waterfall, GRAIN's grains as sparks.** On WAVE's
   SRC page the table's sixteen frames are stacked like CyDrums' OSC page, the frame POS plays
   brightest. On GRAIN's SRC page each grain also leaves a fading spark over the sample.

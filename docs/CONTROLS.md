@@ -430,6 +430,11 @@ screen holds still:
   with the output's **scope** glowing dim behind them, and under the REL/LEN line **every
   track's level** in a row of eight short meters (decibels, a muted track dim). Stopped, that row
   shows the `AUTOFILL: FUNC MENU` hint again and the scope is gone.
+- **MIXER**: on the fader pages a thin live meter beside each fader; on MST and EQ, under the
+  bars, the output's **spectrum** in 24 bands (94 Hz to 12 kHz, peak dots held half a second;
+  `app/spectrum.hpp`, a 256-point FFT a frame) and a **vectorscope** (mid up, side across, in an
+  afterglow: a mono mix is a vertical line, a wide one a cloud). On EQ a thrown kill sinks its
+  bands as you watch.
 
 ## Random ranges and slides (hold STEP + FUNC + A-D)
 
