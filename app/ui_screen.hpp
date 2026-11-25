@@ -8,6 +8,7 @@
     // --- screen -----------------------------------------------------------
 
     void draw(enaga::Canvas &canvas) override {
+        const uint32_t draw_start = enaga::ms();
         char line[40];
         char *out = line;
 
@@ -43,12 +44,7 @@
         *out = 0;
         canvas.text(0, 0, line, 14);
 
-        // The progress line under it: one pixel across the pattern's pass, on a dim track.
-        canvas.rect(0, kFrameProgressY, 128, 1, 2);
-        const uint32_t progress = loop > 0 ? (into + 1u) * 128u / loop : 0u;
-        if (running && progress > 0) {
-            canvas.rect(0, kFrameProgressY, int(progress > 128u ? 128u : progress), 1, 11);
-        }
+        draw_progress(canvas, into, loop, running);
 
         // The second line: a notice or a held mode while there is one, else the live strip
         // (what is off rest), else the clock's state.
@@ -132,6 +128,63 @@
         canvas.text(0, 120, line, 7);
 
         draw_frame_meter(canvas);
+        count_draw_time(draw_start);
+    }
+
+    // The progress line under the top line: one pixel across the pattern's pass, lit from the
+    // left on a dim track, its head brightest, and the beats (dim) and bars (brighter) marked on
+    // the part still to come, so the line reads as the pattern's shape and not only a fraction.
+    void draw_progress(enaga::Canvas &canvas, uint32_t into, uint32_t loop, bool running) {
+        canvas.rect(0, kFrameProgressY, 128, 1, 2);
+        const uint32_t progress = loop > 0 ? (into + 1u) * 128u / loop : 0u;
+        const int lit = running ? int(progress > 128u ? 128u : progress) : 0;
+        if (lit > 0) canvas.rect(0, kFrameProgressY, lit, 1, 11);
+        if (loop > 0) {
+            // Beats only when they are at least three pixels apart, bars at least two.
+            const bool beats = uint32_t(kPpqn) * 128u >= 3u * loop;
+            const bool bars = kTicksPerBar * 128u >= 2u * loop;
+            for (uint32_t t = uint32_t(kPpqn); t < loop; t += uint32_t(kPpqn)) {
+                const bool bar = t % kTicksPerBar == 0;
+                if (!(bar ? bars : beats)) continue;
+                const int x = int(t * 128u / loop);
+                if (x >= lit) canvas.pixel(x, kFrameProgressY, bar ? 7 : 4);
+            }
+        }
+        if (lit > 0) canvas.pixel(lit - 1, kFrameProgressY, 15);
+    }
+
+    // How long draw() takes, averaged over kDrawWindow frames: enaga::ms() has a millisecond's
+    // resolution and a frame takes about one, so a single reading says little and the sum of
+    // many says it to a hundredth. Shown on SETUP, and logged once for the first window that
+    // ends past kDrawLogMs, so the emulator's scenario_visuals and the unit both report it
+    // (docs/BUDGET.md, "The screen"). Once only: Enaga's log keeps 16 lines and other
+    // scenarios read theirs.
+    static constexpr uint32_t kDrawWindow = 64;
+    static constexpr uint32_t kDrawLogMs = 5000;
+    void count_draw_time(uint32_t start) {
+        draw_ms_sum_ += enaga::ms() - start;
+        if (++draw_count_ < kDrawWindow) return;
+        const uint32_t hundredths = draw_ms_sum_ * 100u / kDrawWindow;
+        draw_hundredths_ = hundredths > 999u ? 999u : hundredths;
+        draw_ms_sum_ = 0;
+        draw_count_ = 0;
+        if (!draw_logged_ && enaga::ms() >= kDrawLogMs) {
+            draw_logged_ = true;
+            char text[24];
+            char *out = text;
+            append(out, "draw ");
+            append_hundredths(out, draw_hundredths_);
+            append(out, " ms");
+            *out = 0;
+            enaga::log(text);
+        }
+    }
+
+    static void append_hundredths(char *&out, uint32_t hundredths) {
+        append_number(out, hundredths / 100u);
+        *out++ = '.';
+        *out++ = char('0' + hundredths / 10u % 10u);
+        *out++ = char('0' + hundredths % 10u);
     }
 
     // --- the frame's master meter and live strip ------------------------------------------
@@ -252,9 +305,14 @@
         if (limit_lit_ && uint32_t(last_ms_ - limit_ms_) >= kMeterHoldMs) limit_lit_ = false;
 
         canvas.rect(kFrameMeterX, kFrameMeterTop, 2, kFrameMeterRows, 0);
+        // Lit every other row, so it reads as segments: the top 6 dB brightest, the next 12 dB
+        // bright, the rest dim, as on a desk.
         const int bar = meter_rows(level);
-        if (bar > 0) {
-            canvas.rect(kFrameMeterX, kFrameMeterTop + kFrameMeterRows - bar, 2, bar, 8);
+        const int bottom = kFrameMeterTop + kFrameMeterRows - 1;
+        for (int r = 0; r < bar; r += 2) {
+            const uint8_t grey = r >= kFrameMeterRows - kMeterRowsPer6Db ? 15
+                               : (r >= kFrameMeterRows - 3 * kMeterRowsPer6Db ? 11 : 7);
+            canvas.rect(kFrameMeterX, bottom - r, 2, 1, grey);
         }
         const int held = meter_rows(meter_hold_);
         if (held > 0) {
@@ -263,10 +321,12 @@
         if (limit_lit_) canvas.rect(kFrameMeterX, kFrameMeterTop, 2, 1, 15);
     }
 
-    // Milli of full scale to rows, linear and capped at the column.
+    // Milli of full scale to rows, in decibels: the column shows the top kMeterRangeDb, so a
+    // quiet mix moves the meter instead of sitting in its bottom rows as a linear scale left it.
+    static constexpr int kMeterRangeDb = 48;
+    static constexpr int kMeterRowsPer6Db = kFrameMeterRows * 6 / kMeterRangeDb;
     static int meter_rows(uint32_t milli) {
-        const uint32_t rows = milli * uint32_t(kFrameMeterRows) / 1000u;
-        return int(rows > uint32_t(kFrameMeterRows) ? uint32_t(kFrameMeterRows) : rows);
+        return paint::level_rows(milli, kFrameMeterRows, kMeterRangeDb);
     }
 
     // --- the FUNC help: FUNC held on its own ------------------------------

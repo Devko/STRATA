@@ -2882,6 +2882,18 @@ TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
     // The progress line, row 8: lit from the left while running, the track dim past it.
     CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 0]), 11);
     CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 127]), 2);
+    // Its head is the brightest pixel, and the beats still to come are marked on the track: a
+    // one-bar pass has beats at x 32, 64 and 96, and the head is just past the first.
+    if (app_engine().status().pattern_loop.load(std::memory_order_relaxed) == kTicksPerBar) {
+        int head = -1;
+        for (int x = 0; x < 128; x++) {
+            if (g_pixels[8 * enaga::Canvas::width + x] == 15) head = x;
+        }
+        CHECK(head >= 32 && head < 40);
+        CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 64]), 4);
+        CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 96]), 4);
+        CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 80]), 2);
+    }
 
     // A kill is off rest, so the strip names it; let go, it is gone again.
     post_cmd(Cmd::eq_kill, 0, 1);
@@ -2892,6 +2904,47 @@ TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
     CHECK(!screen_has(app, "K:"));
     host.set_running(false);
     pump(2);
+}
+
+// The frame's meter reads in decibels, in segments: full scale fills the column, -24 dB half
+// of it (the column shows 48 dB), and the brightest segments are only the top 6 dB.
+TEST(ui_the_frame_meter_reads_in_decibels) {
+    Strata &app = fresh();
+    pump(2);
+    auto &meter = const_cast<std::atomic<uint16_t> &>(app_engine().status().meter_milli);
+    const auto column = [](int y) { return int(g_pixels[y * enaga::Canvas::width + 126]); };
+    enaga::Canvas canvas(g_pixels);
+
+    meter.store(1000, std::memory_order_relaxed);
+    app.draw(canvas);
+    CHECK_EQ(column(117), 7);                      // the bottom segment, dim
+    CHECK_EQ(column(116), 0);                      // the gap between segments
+    CHECK_EQ(column(13), 15);                      // the top 6 dB, bright
+    CHECK_EQ(column(45), 11);                      // -12 dB or so: the middle grey
+    CHECK_EQ(column(51), 7);                       // past -18 dB: dim
+
+    // -24 dB (63 thousandths): half the column, and nothing lit far above it but the hold.
+    meter.store(63, std::memory_order_relaxed);
+    app.draw(canvas);
+    int top = 118;
+    for (int y = 10; y <= 117; y++) {
+        if (column(y) == 7 || column(y) == 11) { top = y; break; }
+    }
+    CHECK(top >= 60 && top <= 68);
+    CHECK_EQ(column(30), 0);
+    meter.store(0, std::memory_order_relaxed);
+    pump(2);
+}
+
+// SETUP shows what a frame costs to draw, averaged over 64 frames (count_draw_time).
+TEST(ui_setup_shows_the_draw_time) {
+    Strata &app = fresh();
+    pump(2);
+    setup_page(app, true);
+    enaga::Canvas canvas(g_pixels);
+    for (int i = 0; i < 70; i++) app.draw(canvas);
+    CHECK(screen_has(app, "DRW "));
+    setup_page(app, false);
 }
 
 // Hold REPEAT, then a STEP: step stutter (CyDrums' P2). REPEAT first, so the STEP performs: it
@@ -6629,6 +6682,8 @@ Look look(Strata &app) {
     out.screen = fnv(out.screen, g_pixels, sizeof g_pixels);
     for (int i = 0; i < host.text_count(); i++) {
         const auto &d = host.text_draw(i);
+        // SETUP's draw time is a live reading too (count_draw_time).
+        if (std::strncmp(d.text, "DRW ", 4) == 0) continue;
         out.screen = fnv(out.screen, d.text, std::strlen(d.text));
         out.screen = fnv(out.screen, &d.x, sizeof d.x);
         out.screen = fnv(out.screen, &d.y, sizeof d.y);
