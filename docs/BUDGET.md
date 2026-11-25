@@ -55,8 +55,8 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ### REL ALL, LEN ALL and FEEL (P4, P8; 2026-11-25)
 
-Emulator, cl6x, all 34 scenarios pass (`scenario_feel` new), on the merge with `main` at
-`3c9dd34` (step stutter). Worst case **30.75%** (`scenario_ambient`; 30.55% recorded for main, so
+Emulator, cl6x, all 35 scenarios pass (`scenario_feel` new), on the merge with `main` at
+`0ea6add` (bounce to track). Worst case **30.75%** (`scenario_ambient`; 30.55% recorded for main, so
 +0.2 points, the run to run noise noted below; main was not re-run in this session).
 `scenario_m3` 24.39%. No DSP loop moved. REL ALL is a byte add per release parameter, at control rate and only
 when the performance layer is rebuilt or a step with a locked release fires; LEN ALL one Q16
