@@ -1,6 +1,8 @@
 // Scenes, the morph and the macros. core/perform.hpp has the design.
 #include "perform.hpp"
 
+#include "clamp.hpp"
+
 namespace strata {
 namespace {
 
@@ -8,16 +10,6 @@ namespace {
 // states it, and for the same reason: a parameter reaches dsp/ as a table index or an x(1/127)
 // scale, so a 255 out of a damaged file is an out-of-range read down in a machine.
 constexpr uint8_t kParamMax = 127;
-
-uint8_t clamp_u8(uint8_t value, uint8_t low, uint8_t high) {
-    if (value < low) return low;
-    if (value > high) return high;
-    return value;
-}
-
-int clamp_int(int value, int low, int high) {
-    return value < low ? low : (value > high ? high : value);
-}
 
 // --- the container --------------------------------------------------------
 //

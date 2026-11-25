@@ -25,17 +25,13 @@
 // length left there, and "clear the track" means the track.
 #include "editops.hpp"
 
+#include "clamp.hpp"
+
 namespace strata {
 
 namespace {
 
 bool track_ok(int track) { return track >= 0 && track < kTracks; }
-
-int clamp_int(int value, int low, int high) {
-    if (value < low) return low;
-    if (value > high) return high;
-    return value;
-}
 
 // How many steps of `track` a request for `count` steps from `first` actually names, after
 // clipping to the track's stored length. Zero for anything out of range, which every caller

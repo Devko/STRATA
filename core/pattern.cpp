@@ -13,6 +13,8 @@
 // files -- can waste pool space but cannot make this file read outside `Pattern::locks`.
 #include "pattern.hpp"
 
+#include "clamp.hpp"
+
 namespace strata {
 
 namespace {
@@ -33,12 +35,6 @@ bool run_ok(const Pattern &pattern, const Step &step) {
 // The index of (a, b) in the order 1:2 2:2 1:3 2:3 3:3 1:4 .. 8:8. `b` rows start at
 // (b - 1) * b / 2 - 1, which is 0 for b = 2 and 27 for b = 8.
 uint8_t ab_row(uint8_t b) { return uint8_t((b - 1) * b / 2 - 1); }
-
-uint8_t clamp_u8(uint8_t value, uint8_t low, uint8_t high) {
-    if (value < low) return low;
-    if (value > high) return high;
-    return value;
-}
 
 }  // namespace
 

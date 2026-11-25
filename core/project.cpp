@@ -94,6 +94,7 @@
 // not something to slip in here.
 #include "project.hpp"
 
+#include "clamp.hpp"
 
 namespace strata {
 const char *machine_name(uint8_t id) {
@@ -110,18 +111,6 @@ const char *machine_name(uint8_t id) {
 namespace {
 
 // --- clamps ---------------------------------------------------------------
-
-uint8_t clamp_u8(uint8_t value, uint8_t low, uint8_t high) {
-    if (value < low) return low;
-    if (value > high) return high;
-    return value;
-}
-
-uint16_t clamp_u16(uint16_t value, uint16_t low, uint16_t high) {
-    if (value < low) return low;
-    if (value > high) return high;
-    return value;
-}
 
 // docs/SPEC.md's figures, which core/samplepool.hpp states again as kSampleBudgetMaxMib. Stated
 // here rather than included from there so that this module builds on its own; app/ is where the

@@ -18,6 +18,8 @@
 // `the_swing_hoist_matches_core_timing` in tests/test_record.cpp holds them together.
 #include "record.hpp"
 
+#include "clamp.hpp"
+
 namespace strata {
 
 namespace {
@@ -51,10 +53,6 @@ int32_t round_to_int(float value) {
 }
 
 float absolute(float value) { return value < 0.0f ? -value : value; }
-
-int clamp_int(int value, int low, int high) {
-    return value < low ? low : (value > high ? high : value);
-}
 
 }  // namespace
 
