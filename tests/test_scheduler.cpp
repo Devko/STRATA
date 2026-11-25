@@ -2103,3 +2103,76 @@ TEST(random_play_repeats_exactly_for_one_seed_and_differs_for_another) {
     }
     CHECK(moved);
 }
+
+// --- step stutter ---------------------------------------------------------
+
+// The stutter's hit is the step as written: note, velocity, length, accent and slide, one hit,
+// with nothing drawn -- a step whose condition fails, whose probability is 0 or whose ratchet is
+// 4 still hits once, because the stutter is the loop and the ratchet now.
+TEST(stutter_event_plays_the_step_as_written_without_drawing) {
+    static Pattern pattern;
+    blank(pattern, 16);
+    Step &s = put_trig(pattern, 2, 5);
+    s.note = 50;
+    s.velocity = 77;
+    s.length = 11;
+    s.flags = uint8_t(kStepTrig | kStepAccent | kStepSlide);
+    s.condition = condition_pack(Condition::FILL);
+    s.probability = 0;
+    s.ratchet = ratchet_pack(4, RatchetRamp::up);
+
+    StepEvent event;
+    CHECK(stutter_event(pattern, 2, 5, 123, event));
+    CHECK_EQ(int(event.track), 2);
+    CHECK_EQ(int(event.step), 5);
+    CHECK_EQ(int(event.note), 50);
+    CHECK_EQ(int(event.velocity), 77);
+    CHECK_EQ(int(event.length_index), 11);
+    CHECK(event.accent);
+    CHECK(event.slide);
+    CHECK(!event.trigless);
+    CHECK_EQ(event.frame, 123u);
+    CHECK_EQ(int(event.ratchet_count), 1);
+    CHECK_EQ(int(event.ratchet_index), 0);
+}
+
+// An empty step stutters as silence; a trigless one applies its locks and starts nothing.
+TEST(stutter_event_is_silent_on_an_empty_step_and_trigless_on_a_trigless_one) {
+    static Pattern pattern;
+    blank(pattern, 16);
+    StepEvent event;
+    event.track = 99;
+    CHECK(!stutter_event(pattern, 0, 3, 0, event));
+    CHECK_EQ(int(event.track), 99);                 // nothing written
+    pattern.tracks[0].steps[3].flags = kStepTrigless;
+    CHECK(stutter_event(pattern, 0, 3, 0, event));
+    CHECK(event.trigless);
+    // Out of range asks for nothing.
+    CHECK(!stutter_event(pattern, -1, 3, 0, event));
+    CHECK(!stutter_event(pattern, kTracks, 3, 0, event));
+    CHECK(!stutter_event(pattern, 0, -1, 0, event));
+}
+
+// A STEP past a short track's length wraps into it, so every track stutters at the same place
+// in its own loop: step 13 of an 8-step track is its step 5, of a 3-step track its step 1.
+TEST(stutter_event_wraps_a_step_into_a_short_track) {
+    static Pattern pattern;
+    blank(pattern, 16);
+    pattern.tracks[1].length = 8;
+    put_trig(pattern, 1, 4).note = 61;
+    StepEvent event;
+    CHECK(stutter_event(pattern, 1, 12, 0, event));
+    CHECK_EQ(int(event.step), 4);
+    CHECK_EQ(int(event.note), 61);
+    pattern.tracks[1].length = 3;
+    put_trig(pattern, 1, 0).note = 62;
+    CHECK(stutter_event(pattern, 1, 12, 0, event));   // 12 = 4 x 3
+    CHECK_EQ(int(event.step), 0);
+    CHECK_EQ(int(event.note), 62);
+    pattern.tracks[1].length = 1;
+    CHECK(stutter_event(pattern, 1, 63, 0, event));
+    CHECK_EQ(int(event.step), 0);
+    pattern.tracks[1].length = 0;                       // clamped to 1, never a hang
+    CHECK(stutter_event(pattern, 1, 40, 0, event));
+    CHECK_EQ(int(event.step), 0);
+}

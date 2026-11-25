@@ -105,6 +105,27 @@ TEST(repeat_length_names_fit_the_font) {
     CHECK_EQ(repeat_length_name(RepeatLength(99)), "?");
 }
 
+// REPEAT + RIGHT is faster: every step shortens the length, the walk visits every length once,
+// and it stops at both ends rather than wrapping from 1/32 to 1/4 under a held finger.
+TEST(repeat_length_step_walks_by_ticks_and_stops_at_the_ends) {
+    RepeatLength at = RepeatLength::quarter;
+    int seen = 1;
+    for (int i = 0; i < int(RepeatLength::count) - 1; i++) {
+        const RepeatLength next = repeat_length_step(at, +1);
+        CHECK(repeat_length_ticks(next) < repeat_length_ticks(at));
+        CHECK(repeat_length_step(next, -1) == at);
+        at = next;
+        seen++;
+    }
+    CHECK_EQ(seen, int(RepeatLength::count));
+    CHECK(at == RepeatLength::thirty_second);
+    CHECK(repeat_length_step(RepeatLength::thirty_second, +1) == RepeatLength::thirty_second);
+    CHECK(repeat_length_step(RepeatLength::quarter, -1) == RepeatLength::quarter);
+    CHECK(repeat_length_step(RepeatLength::sixteenth, +1) == RepeatLength::sixteenth_triplet);
+    CHECK(repeat_length_step(RepeatLength::sixteenth, -1) == RepeatLength::eighth_triplet);
+    CHECK(repeat_length_step(RepeatLength::eighth, 0) == RepeatLength::eighth);
+}
+
 // --- the ring -------------------------------------------------------------
 
 TEST(repeat_the_ring_is_two_bars_at_sixty_bpm) {

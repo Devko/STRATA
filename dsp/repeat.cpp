@@ -34,6 +34,20 @@ const char *repeat_length_name(RepeatLength length) {
     }
 }
 
+RepeatLength repeat_length_step(RepeatLength length, int direction) {
+    static const RepeatLength kByTicks[] = {
+        RepeatLength::quarter,         RepeatLength::quarter_triplet, RepeatLength::eighth,
+        RepeatLength::eighth_triplet,  RepeatLength::sixteenth,       RepeatLength::sixteenth_triplet,
+        RepeatLength::thirty_second,
+    };
+    constexpr int kCount = int(sizeof kByTicks / sizeof kByTicks[0]);
+    static_assert(kCount == int(RepeatLength::count), "every length has a place in the walk");
+    int at = 0;
+    for (int i = 0; i < kCount; i++) at = kByTicks[i] == length ? i : at;
+    const int next = at + (direction > 0 ? 1 : (direction < 0 ? -1 : 0));
+    return kByTicks[next < 0 ? 0 : (next >= kCount ? kCount - 1 : next)];
+}
+
 bool BeatRepeat::init(float sample_rate) {
     const float rate = sample_rate > 1.0f ? sample_rate : 48000.0f;
     ring_frames_ = int(rate * kRepeatSeconds);

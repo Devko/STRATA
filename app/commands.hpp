@@ -267,6 +267,14 @@ enum class Cmd : uint8_t {
     // 2 new velocity from the pad's pressure. Played, not recorded: the pattern is untouched.
     note_repeat,
 
+    // Step stutter (hold REPEAT, then a STEP: docs/CONTROLS.md). a: the step, 0-63, the STEP
+    // page included; b: 1 on (the first hit sounds now), 0 let go; c: which tracks, one bit
+    // each (0xFF all of them; FUNC + STEP the selected one). While on, those tracks retrigger
+    // that step at beat repeat's length and their own steps are silent, while the sequencer
+    // runs on underneath: let go, and the beat is where it would have been. Played, not
+    // recorded. A second `on` moves the stutter to its step.
+    step_stutter,
+
     // A track's MIDI OUT channel (core/midiout.hpp): 0 off, 1-16. track, a: channel; or c = 1:
     // b is an int8 delta, stopping at OFF and 16. A change ends the track's sounding notes on
     // the channel they were sent on.
