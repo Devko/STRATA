@@ -4,8 +4,8 @@
 # POLY, and the reworked VA voice (new resonance curve and limiter, factory BASS and CHORD on the
 # OSC page) keeps the default beat inside the load target.
 #
-# The emulator presses keys and turns no encoders (docs/HANDOFF.md, section 2), so this cannot
-# turn OS2 to sync or DRV up: the worst-case voice is measured by the temporary factory edit in
+# This scenario presses keys only (docs/HANDOFF.md, section 2, on what --turn could add), so it does
+# not turn OS2 to sync or DRV up: the worst-case voice is measured by the temporary factory edit in
 # docs/BUDGET.md ("The OSC page", E13). Compare this run's peak with scenario_factory.sh from
 # before the change: the factory sounds no longer run the synced pulse, so it should not rise.
 #

@@ -238,9 +238,10 @@ public:
                    : 0;
     }
 
-    // The LFO, for the screen: is it moving a parameter on `track`, its last value (-1..1), and
-    // what the machines are prepared from -- the kit, performed, locked and LFO'd. Audio-side
-    // single words and bytes, read as `performed` is.
+    // The LFO: is it moving a parameter on `track`, its last value (-1..1), and what the
+    // machines are prepared from -- the kit, performed, locked and LFO'd. Audio side and the
+    // tests (the rig runs both contexts on one thread): `modulated_` is rewritten every block,
+    // so the screen and step_waves read Status's heard_* and lfo_shown (publish_heard) instead.
     bool lfo_on(int track) const { return track >= 0 && track < kTracks && modulating_[track]; }
     float lfo_value(int track) const {
         return track >= 0 && track < kTracks ? lfo_value_[track] : 0.0f;
@@ -362,6 +363,9 @@ private:
     void publish_playheads();
     // Each SAMPLE and GRAIN track's WaveView into Status::wave, every kWaveEveryBlocks blocks.
     void publish_waves();
+    // What each track sounds, the bytes the main context needs of it, into Status (heard_table
+    // and the rest), every block and once from init.
+    void publish_heard();
     void fire(const StepEvent &event);
 
     // `Step::length` as a frame count for `Trig::gate_frames`; 0 for "no gate".

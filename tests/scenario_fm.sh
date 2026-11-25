@@ -2,7 +2,7 @@
 # FM4 emulator scenario: the default beat with track 7 (the chord) switched to FM4 on keys
 # alone, so six FM voices a chord play inside the load target with no overruns.
 #
-# The emulator presses keys and turns no encoders (docs/HANDOFF.md, section 2), so the track
+# This scenario presses keys only (docs/HANDOFF.md, section 2, on what --turn could add), so the track
 # keeps VA POLY's kit bytes: on FM4 those read as ALG, RAT, IDX and FBK from TUN, MOD, CUT and
 # RES. That is a fair load case: an FM voice costs the same on every algorithm and ratio. Compare
 # the peak with scenario_factory.sh on the same commit (docs/BUDGET.md, "FM4").

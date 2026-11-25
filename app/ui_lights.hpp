@@ -504,8 +504,8 @@
         // Which SCREEN is up, logged on a change for the same reason as the two above: in an
         // emulator run or a unit log it is the difference between "the app is wedged" and "the
         // app is on a page I did not expect", and it is what lets a scenario reach a screen
-        // that the emulator cannot otherwise observe -- it exposes key input and no encoders,
-        // so a page walked with the selection keys is all it can see of MIXER and SETUP.
+        // that the emulator cannot otherwise observe: it cannot read the screen, so a page walked
+        // with the selection keys is all it can see of MIXER and SETUP.
         {
             const int screen = int(mode_) * 16 + (mode_ == Mode::mixer ? mixer_bank_
                                                   : mode_ == Mode::project ? int(project_page_)

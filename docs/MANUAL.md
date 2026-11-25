@@ -1447,6 +1447,25 @@ It is mono, half the size of a master take. With `TO TRK n` it lands on that tra
 take, ready to slice, reverse or put on GRAIN; give that track SAMPLE or GRAIN to hear it. A
 muted track bounces as silence, so unmute it first.
 
+### What moves on screen while it plays
+
+While the transport runs, the screens move with the music; stopped, they hold still, so a
+change on screen always means a key or knob did something.
+
+- **GRID**: each trig that plays lights an outline round its cell that fades in about a third
+  of a second, a trail behind the playhead.
+- **PERFORM**: the four macros are round gauges, bright up to where each macro is, with a needle
+  and the value under it (a dot outside the ring marks the knob while a pad's pressure moves the
+  macro). Behind them glows a dim scope of what comes out, and under the REL/LEN line a row of
+  eight meters shows each track's level, a muted track dim.
+- **EDIT's LFO page**: while the LFO runs, one cycle of its shape with a dot riding it at the
+  LFO's phase, and beside it a strip of what the LFO put out over the last two seconds.
+- **EDIT's envelopes** (AMP, ASR, FLTR): a dim fill under the curve, lit under the part the
+  playing note has travelled.
+
+SETUP shows what a frame of the screen costs to draw (`DRW 0.85MS`); docs/CONTROLS.md, "The
+screen frame", has the details.
+
 ---
 
 ## 6. Saving, loading and the card

@@ -240,7 +240,8 @@
             *out++ = '%';
         }
         *out = 0;
-        notice(notice_buffer_);
+        // Logged too: tests/scenario_moveall.sh reads each click's amount off the log.
+        notice_logged(notice_buffer_);
     }
 
     // LIVE RND's notice, logged so a scenario can follow it: `LIVE RND4 8 TRK` (the unit and how

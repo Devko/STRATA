@@ -3254,6 +3254,40 @@ TEST(engine_a_wave_track_asks_for_the_table_it_sounds) {
     pump();
 }
 
+// The main context reads what a track sounds from Status (Engine::publish_heard), never from the
+// audio side's `effective_` and `modulated_`: step_waves builds from heard_table, and a KEYS note
+// holds on heard_sus. Every block's Status has to agree with `sounding`.
+TEST(engine_status_carries_what_each_track_sounds) {
+    clean();
+    Engine &e = strata::test::engine();
+    const Status &status = e.status();
+    const uint8_t was = e.project().kit.tracks[kPoly].machine;
+    auto agrees = [&e, &status] {
+        for (int t = 0; t < kTracks; t++) {
+            const TrackParams &heard = e.sounding(t);
+            const int table = status.heard_table[t].load();
+            if (machine_is_wave(e.machine_id(t))) CHECK_EQ(table, va_wave_table(heard.get(0)));
+            else CHECK_EQ(table, int(Status::kNotHeard));
+            CHECK_EQ(int(status.heard_pos[t].load()), int(heard.get(1)));
+            CHECK_EQ(int(status.heard_sus[t].load()), int(heard.v[kAsrFirst + 1]));
+            CHECK_EQ(int(status.lfo_shown[t].load()),
+                     e.lfo_on(t) ? int(e.lfo_shown(t)) : int(Status::kNotHeard));
+        }
+    };
+    pump();
+    agrees();
+    CHECK_EQ(int(status.heard_table[kPoly].load()), int(Status::kNotHeard));
+    post(Cmd::set_machine, kPoly, 0, uint8_t(MachineId::wave_poly));
+    post(Cmd::set_param, kPoly, 0, 0, uint8_t(13 * 8 + 4));    // TBL: EPN
+    pump();
+    agrees();
+    CHECK_EQ(int(status.heard_table[kPoly].load()), 13);
+    post(Cmd::set_machine, kPoly, 0, was);
+    pump();
+    agrees();
+    CHECK_EQ(int(status.heard_table[kPoly].load()), int(Status::kNotHeard));
+}
+
 // two of each, asking for 24 voices, get twelve between them.
 TEST(engine_wave_poly_shares_the_poly_voice_budget) {
     clean();
