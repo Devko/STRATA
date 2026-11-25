@@ -919,6 +919,9 @@ private:
     paint::Glow<124, 20> scope_glow_;
     uint8_t grid_glow_[kTracks][16] = {};
     uint8_t grid_seen_[kTracks] = {};
+    // EDIT's LFO page: the last 40 frames of the LFO's output, and how many have arrived.
+    uint8_t lfo_strip_[40] = {};
+    uint32_t lfo_strip_at_ = 0;
     // draw()'s own cost (count_draw_time): the window's sum, its frames, the last average.
     uint32_t draw_ms_sum_ = 0;
     uint32_t draw_count_ = 0;

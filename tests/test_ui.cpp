@@ -9249,6 +9249,56 @@ TEST(ui_envelope_a_dot_rides_the_amp_curve_while_a_note_plays) {
     back_to_a_kick();
 }
 
+// EDIT's LFO page (app/ui_live.hpp): off, the hint at y 96 and no picture; on, the NOW line moves
+// up to y 87 over the shape with a dot riding it and a strip of what the LFO put out.
+TEST(ui_the_lfo_page_draws_its_shape_with_the_phase_riding_it) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_F8);
+    edit_page_to(Page::lfo);
+    draw_now();
+    CHECK(screen_has(app, "LFO OFF: SET DEP+DST"));
+    int lit = 0;
+    for (int y = 96; y < 118; y++) {
+        for (int x = 0; x < 124; x++) lit += pixel_at(x, y) != 0;
+    }
+    CHECK_EQ(lit, 0);
+
+    post_cmd_track_param(0, kLfoWave, lfo_wave_byte(LfoWave::triangle));
+    post_cmd_track_param(0, kLfoRate, 40);
+    post_cmd_track_param(0, kLfoDepth, 100);
+    post_cmd_track_param(0, kLfoDest, lfo_dest_byte(2));
+    pump(4);
+    CHECK(app_engine().lfo_on(0));
+    for (int i = 0; i < 30; i++) {                         // frames for the strip, blocks between
+        pump(40);
+        draw_now();
+    }
+    bool now_at_87 = false;
+    for (int i = 0; i < FakeHost::the().text_count(); i++) {
+        const FakeHost::TextDraw &d = FakeHost::the().text_draw(i);
+        if (std::strncmp(d.text, "NOW ", 4) == 0) now_at_87 = d.y == 87;
+    }
+    CHECK(now_at_87);
+    int dot = 0, shape = 0, strip = 0;
+    for (int y = 96; y < 118; y++) {
+        for (int x = 0; x < 80; x++) {
+            dot += pixel_at(x, y) == 15;
+            shape += pixel_at(x, y) >= 4;
+        }
+        for (int x = 84; x < 124; x++) strip += pixel_at(x, y) >= 6;
+    }
+    CHECK(dot >= 1);
+    CHECK(shape >= 60);
+    CHECK(strip >= 25);
+    check_layout(app, "EDIT LFO, running");
+
+    post_cmd_track_param(0, kLfoDepth, 0);
+    post_cmd_track_param(0, kLfoDest, 0);
+    pump(4);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_samples_the_browser_shows_the_waveform_of_what_the_track_plays) {
     Strata &app = fresh();
     track_with_break(MachineId::sample);

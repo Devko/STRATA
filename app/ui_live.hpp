@@ -147,3 +147,74 @@
             paint::small_text(px, x + 4, y + 4, digit, t == selected_ ? 15 : 6);
         }
     }
+
+    // --- EDIT's LFO page: the shape, where the LFO is on it, and what it has been doing -------
+    //
+    // Under the knobs, rows 96-117 like EDIT's other pictures: one cycle of the selected shape
+    // (x 0-79) with a dot riding it at the phase the audio side publishes (Status::lfo_phase)
+    // and a dotted line down through it, and beside it a strip of what the LFO put out over the
+    // last 40 frames (two seconds), newest at the right. The shapes here are drawn for reading,
+    // from the table sine and straight lines; the sound's own are dsp/lfo.hpp's.
+    static constexpr int kLfoShapeWidth = 80;
+    static constexpr int kLfoStripX = 84;
+    static constexpr int kLfoStrip = 40;
+
+    // The shape at `phase` (0-255 a cycle) in Q12, -4096..4096.
+    static int lfo_shape_q12(LfoWave wave, int phase) {
+        phase &= 255;
+        switch (wave) {
+            case LfoWave::sine:     return paint::sin_q12(phase);
+            case LfoWave::triangle: return phase < 64 ? phase * 64
+                                         : (phase < 192 ? (128 - phase) * 64 : (phase - 256) * 64);
+            case LfoWave::ramp:     return -4096 + phase * 32;
+            case LfoWave::saw:      return 4096 - phase * 32;
+            case LfoWave::square:   return phase < 128 ? 4096 : -4096;
+            default: {
+                // S+H: eight held steps, the same every cycle so the picture holds still.
+                static constexpr int16_t kSteps[8] = {2600, -1400, 3900, -3300, 600, -2600, 1800, -400};
+                return kSteps[phase >> 5];
+            }
+        }
+    }
+
+    void draw_lfo_picture(enaga::Canvas &canvas) {
+        uint8_t *px = canvas.data();
+        const int top = kPictureTop;
+        const int mid = kPictureTop + kPictureRows / 2;
+        const int amp = kPictureRows / 2 - 2;
+        const LfoWave wave = lfo_wave(engine_.params(selected_).v[kLfoWave]);
+
+        paint::dotted_h(px, 0, kLfoShapeWidth - 1, mid, 3, 3);
+        int16_t xs[kLfoShapeWidth / 2 + 1];
+        int16_t ys[kLfoShapeWidth / 2 + 1];
+        int n = 0;
+        for (int x = 0; x <= kLfoShapeWidth - 2; x += 2) {
+            const int v = lfo_shape_q12(wave, x * 256 / kLfoShapeWidth);
+            xs[n] = int16_t(paint::q4(x));
+            ys[n] = int16_t(paint::q4(mid) - v * amp * paint::kSub / 4096);
+            n++;
+        }
+        // A square or a held step jumps: join it straight down, as the scope would.
+        paint::polyline(px, xs, ys, n, 9);
+
+        const int phase = engine_.status().lfo_phase[selected_].load(std::memory_order_relaxed);
+        const int dot_x = phase * kLfoShapeWidth / 256;
+        const int dot_y = mid - lfo_shape_q12(wave, phase) * amp / 4096;
+        paint::dotted_v(px, dot_x, top, top + kPictureRows - 1, 5, 2);
+        paint::dot(px, dot_x, dot_y, 15);
+
+        // The strip: this frame's output joins the history (UI side; one byte a frame).
+        lfo_strip_[lfo_strip_at_ % uint32_t(kLfoStrip)] = engine_.lfo_shown(selected_);
+        lfo_strip_at_++;
+        canvas.rect(kLfoStripX - 2, top, 1, kPictureRows, 3);
+        int prev_y = -1;
+        for (int i = 0; i < kLfoStrip; i++) {
+            if (uint32_t(i) >= lfo_strip_at_) break;
+            const uint8_t v = lfo_strip_[(lfo_strip_at_ - 1u - uint32_t(i)) % uint32_t(kLfoStrip)];
+            const int x = kLfoStripX + kLfoStrip - 1 - i;
+            const int y = top + kPictureRows - 1 - int(v) * (kPictureRows - 1) / 127;
+            if (prev_y < 0) paint::plot_max(px, x, y, 15);
+            else paint::line(px, paint::q4(x + 1), paint::q4(prev_y), paint::q4(x), paint::q4(y), 12);
+            prev_y = y;
+        }
+    }

@@ -7,18 +7,22 @@
 #
 #   PLAY                      -> the default beat, on GRID (its glowing trigs)
 #   FUNC + F7                 -> PERFORM: the macro gauges over the output's scope and the
-#                                track meters, where it stays for the logged average
+#                                track meters, where it stays for the logged average (5 s)
+#   EDIT, SELECT_RIGHT x4     -> track 1's LFO page (scr EDIT LFO)
+#   turn C +20, D +4          -> DEP and DST up: the LFO runs, so its shape, the dot riding
+#                                it and the output strip draw
 #
-# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F1 = 19 FUNC, F7 = 21. The first
-# press comes late: the panel link is not streaming in the first ~200 M cycles. 2.6 G cycles is
-# about 7 s at 372 MHz, past the 5 s the log waits for.
+# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F1 = 19 FUNC, F7 = 21, F8 = 28
+# EDIT, SELECT_RIGHT = 9; encoders 0-3 are A-D. The first press comes late: the panel link is not
+# streaming in the first ~200 M cycles. EDIT comes at 2.7 G cycles (about 7.3 s), after the
+# logged average; 3.7 G is about 10 s.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 # shellcheck source=tools/env.sh
 source tools/env.sh
 
-CYCLES=2600000000
+CYCLES=3700000000
 while [ $# -gt 0 ]; do
     case "$1" in
         --cycles) CYCLES="$2"; shift 2 ;;
@@ -43,6 +47,9 @@ echo "running the emulator for $CYCLES cycles: the live screens and draw()'s cos
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 19@700000000 --key 21@705000000 \
+    --key 28@2700000000 \
+    --key 9@2750000000 --key 9@2790000000 --key 9@2830000000 --key 9@2870000000 \
+    --turn 2:20@2950000000 --turn 3:4@3200000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
@@ -77,7 +84,8 @@ check(report.get("app_status") == "APP RUNNING", "app is running",
 check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_reason")!r}')
 
 screens = [line for line in log if line.startswith("scr ")]
-check(bool(screens) and screens[-1].startswith("scr PERF"), "the walk ended on PERFORM",
+check("scr PERFORM" in screens, "the walk reached PERFORM", f"screens={screens}")
+check(bool(screens) and screens[-1] == "scr EDIT LFO", "and ended on the LFO page",
       f"screens={screens}")
 
 draws = [line for line in log if line.startswith("draw ")]

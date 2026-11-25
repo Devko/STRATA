@@ -91,7 +91,9 @@
         }
 
         if (lfo_page) {
-            // What the LFO is doing to its destination right now, so a moving number says it runs.
+            // What the LFO is doing to its destination right now, so a moving number says it runs;
+            // while it runs, over its picture (app/ui_live.hpp) at y 87, as the other pictures'.
+            const bool lfo_running = engine_.lfo_on(selected_);
             out = line;
             if (engine_.lfo_on(selected_)) {
                 const int dest = lfo_dest(engine_.params(selected_).v[kLfoDest]);
@@ -109,7 +111,8 @@
                 append(out, "LFO OFF: SET DEP+DST");
             }
             *out = 0;
-            canvas.text(0, 96, line, 7);
+            canvas.text(0, lfo_running ? 87 : 96, line, 7);
+            if (lfo_running) draw_lfo_picture(canvas);
             return;
         }
 
@@ -449,6 +452,7 @@
             }
             curve[x] = level;
             const int y = bottom - int(level * top * float(span) + 0.5f);
+            for (int fy = y + 2; fy < bottom; fy += 2) canvas.pixel(x, fy, 2);   // a dim fill
             const int from = y < last ? y : last;
             const int to = y < last ? last : y;
             canvas.rect(x, from, 1, to - from + 1, 13);
@@ -534,6 +538,13 @@
         (void)settle;
         if (x < 0 || x >= kWaveColumns) return;
         const int bottom = kPictureTop + kPictureRows - 1;
+        // The part of the curve the note has travelled, its fill lit (app/ui_live.hpp's views
+        // move the same way): where the sound has been, brighter than where it is going.
+        for (int i = 0; i < x; i++) {
+            const int cy = bottom - int(curve[i] * float(e.peak) * (1.0f / 127.0f) *
+                                        float(kPictureRows - 1) + 0.5f);
+            for (int fy = cy + 2; fy < bottom; fy += 2) canvas.pixel(i, fy, 5);
+        }
         const int y = bottom - int(curve[x] * float(e.peak) * (1.0f / 127.0f) *
                                    float(kPictureRows - 1) + 0.5f);
         const int x0 = x - 1 < 0 ? 0 : x - 1;
