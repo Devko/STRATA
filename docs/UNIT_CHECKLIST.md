@@ -964,9 +964,10 @@ New 2026-11-23 (docs/CONTROLS.md, "The performance mixer"). Play A01.
       Up 10 BPM. Push VALUE + LEFT until `LOOP MIX 0` (that picks the looper without recording),
       turn VALUE up: it jumps back into time on the next bar line.
 - [ ] STOP: the loop fades with the rest. PLAY: it comes back in time from bar 1.
-- [ ] With the loop playing at mix 127, push VALUE + STEP 16 again: the loop plays on, in time,
-      until the bar line, then the new take starts with no click and no gap; it records the live
-      beat, not the old loop.
+- [ ] **Looper exit (0.4.0).** With the loop playing at mix 127, push VALUE + STEP 16 again:
+      `LOOP OFF: VALUE TEMPO`, the live beat comes back at once, VALUE turns the tempo. VALUE +
+      STEP 16: the loop is picked again (`LOOP MIX 0`), turn VALUE up and it is back in time.
+      Push VALUE + STEP 16 during `LOOP 4 BAR: NEXT BAR`: `LOOP CANCELLED`, STEP 16 dark.
 - [ ] While the loop is held, FUNC+REC then OK: `LOOP HOLDS BUFFER`; FUNC menu FREEZE, OK: the
       same. Push VALUE + CLR twice: `LOOP CLEARED`, and RESAMPLE works again.
 - [ ] **U11.** A01 with 15 BUILD at 127 and a playing loop at mix 64, STOP then PLAY, 60 s:

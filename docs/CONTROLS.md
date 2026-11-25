@@ -169,7 +169,7 @@ slots, `dsp/masterfx.hpp` the five new effects, `dsp/looper.hpp` the looper.
 | Push VALUE + the same STEP | Let go (`FX OFF: VALUE TEMPO`): VALUE goes back to tempo / morph / its field |
 | VALUE (an effect picked) | Its amount, 0 dry ... 127 the whole effect, on every screen (`ECHO RISER 64`). At 0 it is the dry mix to the bit, the rest rule of the morph and the macros |
 | Push VALUE + LEFT / RIGHT | The previous / next slot, round the sixteen, keeping the amount: a scene change with the crossfader left up. Reaching 16 picks the looper without recording |
-| Push VALUE + STEP 16 | The looper: records the finished mix from the next bar line for LOOP LEN bars (`LOOP 4 BAR: NEXT BAR`, `LOOP ARMED: PLAY` when stopped), then plays it. Again: a new take |
+| Push VALUE + STEP 16 | The looper: records the finished mix from the next bar line for LOOP LEN bars (`LOOP 4 BAR: NEXT BAR`, `LOOP ARMED: PLAY` when stopped), then plays it. Again: leaves the looper, VALUE back to the tempo (`LOOP OFF: VALUE TEMPO`); the loop is kept silent, STEP 16 picks it up, VALUE + CLR throws it away. Again while armed or recording: `LOOP CANCELLED` |
 | VALUE (looper picked) | The loop's mix, 0 live ... 127 only the loop (`LOOP MIX 64`) |
 | Press VALUE alone | The picked effect back to 0, dry (`ECHO RISER 0`), or the looper's mix to 0 (`LOOP MIX 0`); the effect stays picked |
 | Push VALUE + CLR | Every effect off and the loop's mix to 0 (`FX OFF`); again, with all of that off, throws the loop away (`LOOP CLEARED`) |

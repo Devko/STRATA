@@ -125,7 +125,7 @@ a time; nothing of it is saved or undone.
 | Gesture | Action |
 | --- | --- |
 | Push VALUE + STEP 1-15 | Pick that effect (`4 ECHO RISER`); VALUE is now its amount, 0 dry. The same STEP again lets go (`FX OFF: VALUE TEMPO`) |
-| Push VALUE + STEP 16 | The looper: records LOOP LEN bars (FUNC menu, 1/2/4/8, default 4) of the mix from the next bar line; then VALUE is the loop's mix, 0 live, 127 loop only (`LOOP MIX 64`). Again: a new take. Effects picked after it play over the loop |
+| Push VALUE + STEP 16 | The looper: records LOOP LEN bars (FUNC menu, 1/2/4/8, default 4) of the mix from the next bar line; then VALUE is the loop's mix, 0 live, 127 loop only (`LOOP MIX 64`). Again: leaves the looper (`LOOP OFF`; the loop is kept, silent, and VALUE + CLR throws it away for a new take; during the count-in or the take, `LOOP CANCELLED`). Effects picked after it play over the loop |
 | Push VALUE + LEFT / RIGHT | Previous / next effect, keeping the amount |
 | Tap VALUE (let go within 0.5 s) | Back to 0: the effect's amount, the loop's mix, or PERFORM's morph (`MORPH 0`). FUNC + tap: DJ filter OFF. Never the tempo or swing |
 | Push VALUE + CLR | Everything off, loop mix 0 (`FX OFF`); again: the loop is thrown away (`LOOP CLEARED`) |

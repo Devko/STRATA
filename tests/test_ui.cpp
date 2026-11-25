@@ -7866,6 +7866,35 @@ TEST(ui_step_16_records_a_loop_value_mixes_it_and_clr_clears_it) {
     pump();
 }
 
+TEST(ui_step_16_again_leaves_the_looper) {
+    Strata &app = fresh();
+    post_cmd(Cmd::resample_cancel);
+    value_key(app, ENAGA_KEY_CLR);                  // nothing on, and no loop an earlier test left
+    pump(2);
+    value_key(app, ENAGA_KEY_CLR);
+    FakeHost::the().set_running(true);
+    pump(2);
+    // Armed, then STEP 16 again: the take is dropped and VALUE is the tempo's again.
+    value_step(app, 15);
+    pump(2);
+    CHECK_EQ(int(app_engine().status().looper_state.load(std::memory_order_relaxed)), 1);
+    value_step(app, 15);
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::none);
+    CHECK(std::strcmp(UiProbe::notice(app), "LOOP CANCELLED") == 0);
+    CHECK_EQ(int(app_engine().status().looper_state.load(std::memory_order_relaxed)), 0);
+    // Once more from nothing: it records again, as the first press always did.
+    value_step(app, 15);
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::looper);
+    CHECK_EQ(int(app_engine().status().looper_state.load(std::memory_order_relaxed)), 1);
+    value_key(app, ENAGA_KEY_CLR);
+    pump(2);
+    value_key(app, ENAGA_KEY_CLR);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
 TEST(ui_the_menu_loop_len_sets_the_looper_bars) {
     Strata &app = fresh();
     menu_to(kMenuLoopLen);
