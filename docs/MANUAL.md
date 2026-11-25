@@ -1074,7 +1074,7 @@ filter while it closes a send.
 with `LEARN B 0/4 TURN KNOBS` on the second line. Now **turn** any knob on any EDIT page (the
 LFO's included), on any track (the screen keys turn pages, UP/DOWN or a lower pad the track), to
 where the top of the macro should be: the screen counts what it has learnt (`B T6 CUT 1/4`), up
-to four parameters. **OK**, **CLR** or **HOME** ends it, as does leaving EDIT: `B: 2 PARAMS`,
+to four parameters. **OK**, **CLR** or **HOME** ends it, as does any screen but EDIT and MIXER: `B: 2 PARAMS`,
 and every knob you turned snaps back to where it was. So the macro at 0 is the sound you started
 from and at 127 the sound you dialled. Turning a parameter the macro already holds learns its
 range again; **pushing** its knob while learning takes it off the macro. A fifth parameter is
@@ -1085,10 +1085,12 @@ A parameter on a macro that is turned up follows the macro, not its EDIT knob: t
 says `HELD BY MACRO B`; turn the macro to 0 (or CLR it in PERFORM) to edit it again. **CLR** in
 PERFORM clears the selected macro. Macro setups are saved with the project (PERFORM.BIN).
 
-**The master kill EQ on a macro:** in PERFORM, **FUNC + STEP 5, 6 or 7** puts the kill EQ's LOW,
-MID or HI on the selected macro (`A EQ LOW`), heading for whichever end is further from the band
-now: from flat, the macro sweeps that band down to a kill. (Until 2026-11-25 the STEP keys in
-PERFORM put any track parameter on a macro; learn by turning replaced that.)
+**The master kill EQ on a macro:** while learning, press **MIXER** and go to the EQ page (the
+screen keys): LEARN stays on there. **Turn** LOW, MID or HI to where the macro's top should be,
+for example LOW down to `KILL`, and end LEARN as usual: the band snaps back, and the macro sweeps
+it from there to `KILL`. Pushing a band the macro holds takes it off; any other push on the EQ
+page is still that band's kill switch. (Until 2026-11-25 the STEP keys in PERFORM put parameters
+and, with FUNC + STEP 5-7, the EQ's bands on a macro; learn by turning replaced both.)
 
 **Pad pressure** pushes **macro A** up while you lean on the selected track's pad, never below
 where its knob is, and lets go back to the knob's setting. This is why A ships empty: learn it

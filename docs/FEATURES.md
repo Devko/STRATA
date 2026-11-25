@@ -126,7 +126,8 @@ FM4 and GRAIN machines.
 | Mutes on the bar (FUNC + track pad; several pads in one bar since #139), MUTE MODE, 8 stored mute states | v0.1.0 | ○ (3b, W12) | |
 | 16 scenes, A/B morph on VALUE, capture whole or one track | v0.1.0 | ◐ (3b) | Morph position is not saved; locks are not morphed (parked) |
 | 4 macros of up to 4 targets, sweep from the live value; demo B ACID, C DUB, D DRIVE | v0.1.0 | ○ (3b) | |
-| **Macro learn by turning (D11)**: push a macro's knob in PERFORM, turn EDIT knobs, OK | #141 | ○ (W10) | The kill EQ's bands still go on a macro by FUNC + STEP 5-7 in PERFORM |
+| **Macro learn by turning (D11)**: push a macro's knob in PERFORM, turn EDIT knobs, OK | #141 | ○ (W10) | |
+| The kill EQ's bands learnt by turning on MIXER's EQ page during MACRO LEARN (FUNC + STEP 5-7 retired) | #156 | ○ (W32) | |
 | **LOCK** (FUNC + MUTATE: hold stores, tap jumps, tap again swaps back), one per pattern, RAM only | #149 | ○ (W20c) | Not saved; the kit is shared, so a jump brings that lock's sound to every pattern |
 | **REL ALL / LEN ALL**: every track's release (FUNC + A) and every note's length (FUNC + B) in PERFORM | #152 | ○ (W29) | Live only; LEN ALL leaves gateless notes (drums, arp) alone |
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |

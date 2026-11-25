@@ -142,7 +142,7 @@ Slots: 1 LP SWEEP · 2 HP SWEEP · 3 HP RISER · 4 ECHO RISER · 5 ECHO FREEZE �
 | Gesture | Action |
 | --- | --- |
 | Tap STEP | Toggle trig. FUNC + tap: toggle trigless (locks, no note) |
-| Pad-row L/R (or LEFT/RIGHT on GRID) | Step page 1-4 (64 steps) |
+| Pad-row L/R (or LEFT/RIGHT on GRID) | Step page 1-4 (64 steps), round from 4 to 1 |
 | Hold STEP + turn A-D | Lock that parameter of the current EDIT page on the step |
 | Hold STEP + push A-D | Remove that one lock (LOCK CLEARED), with or without FUNC held |
 | Push the TUN / PIT knob (EDIT, GRID, KEYS) | NOTE view on / off: TUN as a note (where it puts C-4), a semitone a click (`TUN AS NOTES`), or as 0-127, a count a click (`TUN AS NUMBERS`). `+` / `-` after a note: the byte is 5 cents or more sharp / flat of it |
@@ -220,9 +220,9 @@ whole groove along one four-bar curve; the number is the most a step moves, in 9
 **REL ALL / LEN ALL:** in PERFORM, FUNC + turn A moves every track's release (DEC, and REL on
 the ASR page) by the same count (`REL ALL -12`, -64..+64); FUNC + turn B scales every sequenced
 note's length (`LEN ALL 71%`, 25-400%). 0 is rest and a detent; not saved; a LOCK holds both.
-**MACRO LEARN:** in PERFORM push a macro's knob (A-D): EDIT opens with `LEARN B n/4`; **turn** any EDIT knob (any page, the LFO's included, any track) to where the macro's top should be; OK, CLR or HOME ends it (`B: 3 PARAMS`) and the knobs snap back, so the macro at 0 is the old sound and at 127 the one you dialled. A push takes a parameter the macro holds off it; a fifth knob says `FULL`. An EDIT knob on a parameter a turned-up macro holds says `HELD BY MACRO x`.
+**MACRO LEARN:** in PERFORM push a macro's knob (A-D): EDIT opens with `LEARN B n/4`; **turn** any EDIT knob (any page, the LFO's included, any track), or LOW, MID and HI on MIXER's EQ page (the kill EQ), to where the macro's top should be; OK, CLR, HOME or any screen but EDIT and MIXER ends it (`B: 3 PARAMS`) and the knobs snap back, so the macro at 0 is the old sound and at 127 the one you dialled. A push takes a parameter the macro holds off it; a fifth knob says `FULL`. An EDIT knob on a parameter a turned-up macro holds says `HELD BY MACRO x`.
 **PERFORM:** macros are set by MACRO LEARN (above); the STEP keys are steps, as in GRID;
-FUNC+STEP 5-7 the master kill EQ's LOW, MID or HI (`A EQ LOW`). OK's whole capture also stores the
+FUNC+STEP a trigless step, as in GRID. OK's whole capture also stores the
 kill EQ's three knobs, so the morph can sweep them. A macro
 at 0 lets go: its parameters follow their EDIT knobs and the morph, and turning it up sweeps from
 wherever they are. The demo project has B ACID (bass filter), C DUB (chord and rim sends) and D DRIVE
