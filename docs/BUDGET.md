@@ -56,15 +56,15 @@ changes a platform constant fails the host tests rather than drifting silently.
 ### REL ALL, LEN ALL and FEEL (P4, P8; 2026-11-25)
 
 Emulator, cl6x, all 34 scenarios pass (`scenario_feel` new), on the merge with `main` at
-`ede071c`. Worst case **30.74%** (`scenario_ambient`; 30.55% recorded for `ede071c`, so +0.2
-points, the run to run noise noted below; main was not re-run in this session). `scenario_m3`
-24.38%. No DSP loop moved. REL ALL is a byte add per release parameter, at control rate and only
+`3c9dd34` (step stutter). Worst case **30.75%** (`scenario_ambient`; 30.55% recorded for main, so
++0.2 points, the run to run noise noted below; main was not re-run in this session).
+`scenario_m3` 24.39%. No DSP loop moved. REL ALL is a byte add per release parameter, at control rate and only
 when the performance layer is rebuilt or a step with a locked release fires; LEN ALL one Q16
 multiply per sequenced trig. FEEL adds, per candidate step a tick and only while it is on, one
 offset: two `mix32` rounds and a lerp (DRIFT) or a multiply by 1/3 (WAVE); OFF skips it, and the
 scan window widens by the depth. `scenario_feel` (WAVE 2 on the default beat) peaks at 25.12%
 against 25.02% for its neighbours: about 0.1 point. GCC-only not re-run (no hot loop moved).
-Image +8,424 bytes payload, +72 bss.
+Image about +8.4 KB payload, under 100 bytes of bss.
 
 ### Play modes per track (P1; 2026-11-25)
 
