@@ -93,14 +93,16 @@
         if (lfo_page) {
             // What the LFO is doing to its destination right now, so a moving number says it runs;
             // while it runs, over its picture (app/ui_live.hpp) at y 87, as the other pictures'.
-            const bool lfo_running = engine_.lfo_on(selected_);
+            const uint8_t shown =
+                engine_.status().lfo_shown[selected_].load(std::memory_order_relaxed);
+            const bool lfo_running = shown != Status::kNotHeard;
             out = line;
-            if (engine_.lfo_on(selected_)) {
+            if (lfo_running) {
                 const int dest = lfo_dest(engine_.params(selected_).v[kLfoDest]);
                 append(out, "NOW ");
                 append(out, track_param_name(dest));
                 *out++ = ' ';
-                append_padded(out, engine_.lfo_shown(selected_), 3);
+                append_padded(out, shown, 3);
                 // TRIG, when it is not FREE: "NOW CUT 064 ONE-SHOT" is 20 characters.
                 const LfoTrig trig = lfo_trig_of(selected_);
                 if (trig != LfoTrig::free) {
@@ -112,7 +114,7 @@
             }
             *out = 0;
             canvas.text(0, lfo_running ? 87 : 96, line, 7);
-            if (lfo_running) draw_lfo_picture(canvas);
+            if (lfo_running) draw_lfo_picture(canvas, shown);
             return;
         }
 

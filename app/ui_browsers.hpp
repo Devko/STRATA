@@ -308,7 +308,8 @@
     }
     // And is its SUS up as it sounds now (kit, scene, macro and LFO in), so a note on it holds?
     bool holds_notes(int track) const {
-        return has_asr(track) && engine_.sounding(track).v[kAsrFirst + 1] > 0;
+        return has_asr(track) &&
+               engine_.status().heard_sus[track].load(std::memory_order_relaxed) > 0;
     }
 
     void open_samples() {

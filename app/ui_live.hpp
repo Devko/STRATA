@@ -177,7 +177,8 @@
         }
     }
 
-    void draw_lfo_picture(enaga::Canvas &canvas) {
+    // `shown` is Status::lfo_shown as the caller read it, so the line and the strip agree.
+    void draw_lfo_picture(enaga::Canvas &canvas, uint8_t shown) {
         uint8_t *px = canvas.data();
         const int top = kPictureTop;
         const int mid = kPictureTop + kPictureRows / 2;
@@ -204,7 +205,7 @@
         paint::dot(px, dot_x, dot_y, 15);
 
         // The strip: this frame's output joins the history (UI side; one byte a frame).
-        lfo_strip_[lfo_strip_at_ % uint32_t(kLfoStrip)] = engine_.lfo_shown(selected_);
+        lfo_strip_[lfo_strip_at_ % uint32_t(kLfoStrip)] = shown;
         lfo_strip_at_++;
         canvas.rect(kLfoStripX - 2, top, 1, kPictureRows, 3);
         int prev_y = -1;

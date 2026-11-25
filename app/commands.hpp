@@ -582,6 +582,19 @@ struct Status {
     // the dot riding the LFO page's shape.
     std::atomic<uint16_t> track_milli[8] = {};
     std::atomic<uint8_t> lfo_phase[8] = {};
+    // What each track sounds now (Engine::sounding: the kit with the performance layer, the
+    // step's locks and the LFO over it), the few bytes of it the main context acts on or draws,
+    // so it never reads `effective_` or `modulated_`, which the audio side rewrites every block
+    // (Engine::publish_heard). `heard_table` is the table a WAVE track's TBL plays, kNotHeard on
+    // any other machine: Engine::step_waves builds from it. `heard_pos` is that track's POS byte.
+    // `heard_sus` is the ASR's SUS byte (a KEYS note holds on it). `lfo_shown` is where the LFO
+    // has its destination (Engine::lfo_shown), kNotHeard while the LFO moves nothing.
+    // Engine::init publishes them once, so they are right before the first block.
+    static constexpr uint8_t kNotHeard = 0xFF;
+    std::atomic<uint8_t> heard_table[8] = {};
+    std::atomic<uint8_t> heard_pos[8] = {};
+    std::atomic<uint8_t> heard_sus[8] = {};
+    std::atomic<uint8_t> lfo_shown[8] = {};
     // LOCK (Cmd::lock_store, lock_tap). `lock_state`: bit 0 the playing pattern has a lock, bit 1 the live set
     // differs from it (the screen's L+), bit 2 the next tap swaps back. `lock_event` is bumped
     // once per store or tap the audio side applied, with `lock_last` saying what it did: a
