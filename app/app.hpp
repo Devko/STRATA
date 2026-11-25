@@ -509,8 +509,11 @@ public:
     void on_key(int key, bool down) override {
         // FUNC held on its own for a moment shows what FUNC does (draw_func_help). Any other
         // key, knob or pad while it is down means the hand knew, and the help stays away.
+        // A held LEN key repeats until it, or FUNC, comes up (update).
+        if (!down && key == len_repeat_key_) len_repeat_key_ = -1;
         if (key == ENAGA_KEY_F1) {
             shift_ = down;
+            if (!down) len_repeat_key_ = -1;
             if (down) {
                 shift_at_ms_ = last_ms_;
                 shift_alone_ = true;
@@ -1179,14 +1182,9 @@ public:
                 }
                 if (mode_ == Mode::menu) break;
                 if (shift_) {
-                    // A delta, applied by the audio side (app/commands.hpp, kDeltaFlag).
-                    mark(GestureKind::length, selected_, 0);
-                    post(Cmd::set_track_length, uint8_t(selected_), 0, 0, clamp_delta(delta),
-                         kDeltaFlag);
-                    end_gesture();
-                    // Only GRID drew the length, so in EDIT or MACHINE the press changed the
-                    // pattern and nothing on screen.
-                    echo(Echo::layout);
+                    step_track_length(delta);
+                    len_repeat_key_ = key;
+                    len_repeat_due_ms_ = last_ms_ + kLenRepeatDelayMs;
                 } else {
                     const int next = page_ + delta;
                     page_ = next < 0 ? 0 : (next > 3 ? 3 : next);
@@ -2575,10 +2573,28 @@ public:
         if (what == ENAGA_TRANSPORT_STOP) storage_.request_autosave();
     }
 
+    // FUNC + LEN- / LEN+: one step of the selected track's length, as a delta the audio side
+    // applies (app/commands.hpp, kDeltaFlag).
+    void step_track_length(int delta) {
+        mark(GestureKind::length, selected_, 0);
+        post(Cmd::set_track_length, uint8_t(selected_), 0, 0, clamp_delta(delta), kDeltaFlag);
+        end_gesture();
+        // Only GRID drew the length, so in EDIT or MACHINE the press changed the pattern and
+        // nothing on screen.
+        echo(Echo::layout);
+    }
+
     // --- LEDs -------------------------------------------------------------
 
     void update(uint32_t ms) override {
         last_ms_ = ms;
+
+        // A LEN key held with FUNC repeats. Late passes catch up one step at a time, never in
+        // a burst: a 900 ms stall in a save is one step, not eighteen.
+        if (len_repeat_key_ >= 0 && int32_t(ms - len_repeat_due_ms_) >= 0) {
+            step_track_length(len_repeat_key_ == ENAGA_KEY_OCTAVE_LEFT ? -1 : +1);
+            len_repeat_due_ms_ = ms + kLenRepeatMs;
+        }
 
         // The mutes, read back from the engine. The UI keeps a shadow so a press shows at once,
         // but a recall or a mute that landed on the bar happened on the audio side, and without
@@ -6826,6 +6842,12 @@ private:
     bool value_alone_ = false;     // VALUE pushed with nothing else since: its release resets
     uint32_t value_down_ms_ = 0;   // when it was pushed: only a tap resets
     static constexpr uint32_t kValueTapMs = 500;
+    // FUNC + LEN- / LEN+ held repeats (backlog [4]): after kLenRepeatDelayMs, a step every
+    // kLenRepeatMs, so 16 to 64 is about two seconds rather than 48 presses.
+    static constexpr uint32_t kLenRepeatDelayMs = 400;
+    static constexpr uint32_t kLenRepeatMs = 50;
+    int len_repeat_key_ = -1;      // the octave key held with FUNC, or -1
+    uint32_t len_repeat_due_ms_ = 0;
     uint8_t frozen_seen_ = 0;                   // Status::frozen as update() last saw it
     const char *freeze_error_seen_ = nullptr;   // and Storage::freeze_error
     uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)

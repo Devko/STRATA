@@ -153,7 +153,7 @@ Printed labels (above), and the moves made while playing:
 | FUNC + VALUE | DJ filter |
 | FUNC + push A / B / C | kill LOW / MID / HI |
 | FUNC + push D (hold) | tape stop |
-| FUNC + pad-row key | selected track's length |
+| FUNC + pad-row key | selected track's length; held, it repeats (after 0.4 s, 20 steps a second) |
 | FUNC + STEP | trigless step (PERFORM: assign the LFO or kill EQ to the macro) |
 | FUNC + A / B / C on GRID | Euclidean fill |
 

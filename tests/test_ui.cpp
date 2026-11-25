@@ -644,6 +644,31 @@ TEST(ui_a_lower_pad_selects_its_track_and_everything_else_follows) {
     CHECK_EQ(UiProbe::selected(app), 2);
 }
 
+TEST(ui_func_len_held_repeats_until_a_key_comes_up) {
+    Strata &app = fresh();
+    pump(2);
+    const int length = int(app_engine().pattern().tracks[0].length);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_OCTAVE_LEFT, true);
+    pump(300);                                       // inside the 400 ms delay: one step
+    CHECK_EQ(int(app_engine().pattern().tracks[0].length), length - 1);
+    pump(300);                                       // past it: a step every 50 ms
+    app.on_key(ENAGA_KEY_OCTAVE_LEFT, false);
+    pump(2);                                         // the last step lands
+    const int held = int(app_engine().pattern().tracks[0].length);
+    CHECK(held <= length - 4 && held >= length - 7);
+    pump(200);                                       // up: no more
+    CHECK_EQ(int(app_engine().pattern().tracks[0].length), held);
+    // FUNC coming up first stops it too.
+    app.on_key(ENAGA_KEY_OCTAVE_RIGHT, true);
+    pump(2);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(600);
+    app.on_key(ENAGA_KEY_OCTAVE_RIGHT, false);
+    pump(2);
+    CHECK_EQ(int(app_engine().pattern().tracks[0].length), held + 1);
+}
+
 TEST(ui_hold_fill_and_tap_a_step_writes_a_fill_trig) {
     Strata &app = fresh();
     const int t = UiProbe::selected(app);
