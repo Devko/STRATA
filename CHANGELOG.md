@@ -16,6 +16,10 @@ the project file format or the controls.
 
 ### Added
 
+- **Live screens, part 3: GRID and PERFORM move with the music.** On GRID each trig that
+  plays glows round its cell and fades, a trail behind the playhead. On PERFORM the macros are
+  round gauges over a dim, glowing scope of the output, and a row of eight track meters runs
+  under them while the beat plays. Stopped, both screens hold still.
 - **Live screens, part 2: the audio taps (nothing new on screen yet).** Every block the audio
   side now publishes each track's level, each LFO's phase and the finished output (every second
   frame, into a ring the screen drains) for the scopes, meters and moving dots of the next parts.

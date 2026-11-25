@@ -387,6 +387,17 @@ arcs, soft dots, an afterglow for scopes, and a 3 x 5 font for labels on graphs
 (`paint::kSmallLabels` puts them back on Enaga's 5 x 7 if the small one is hard to read on the
 OLED). SETUP shows what a frame costs to draw, `DRW 0.85MS`, averaged over 64 frames.
 
+What moves with the music (`app/ui_live.hpp`), only while the transport runs, so a stopped
+screen holds still:
+
+- **GRID**: a trig that plays lights an outline round its cell, in the gap round it, which fades
+  over about a third of a second, so the beat leaves a trail behind the playhead.
+- **PERFORM**: the four macros are **gauges** (an arc from bottom-left round to bottom-right,
+  bright up to where the macro is, a needle, the value under it; an empty macro's gauge dim),
+  with the output's **scope** glowing dim behind them, and under the REL/LEN line **every
+  track's level** in a row of eight short meters (decibels, a muted track dim). Stopped, that row
+  shows the `AUTOFILL: FUNC MENU` hint again and the scope is gone.
+
 ## Locks on screen
 
 While a STEP is held, every parameter shows what **that step plays**, and the kit value it moves
@@ -400,8 +411,8 @@ away from (Phase 3 items 2-3):
   parameter, the kit value and then the lock, live while the STEP is down. `S5 CUT 64 KIT` once the
   lock is cleared. It takes GRID's edit line and EDIT's line under the rows; a notice still wins
   on GRID.
-- **Macro bars** (PERFORM): the solid bar is where the macro is, a pad's pressure included; when
-  that differs from the knob, a hollow tick across the bar marks the knob.
+- **Macro gauges** (PERFORM): the arc is where the macro is, a pad's pressure included; when
+  that differs from the knob, a bright dot just outside the ring marks the knob.
 - **GRID cells.** A trig's 5 x 6 cell carries marks cut dark into it: a dot in the middle for
   locks, the top-left corner for a condition (FILL, A:B, PRE ...), the top-right corner for a
   probability under 100%, two teeth in the bottom edge for a ratchet. A trigless step (locks, no
