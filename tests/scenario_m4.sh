@@ -72,7 +72,8 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     exit 1
 }
 
-python3 - "$LOG" <<'PY'
+rc=0
+python3 - "$LOG" <<'PY' || rc=$?
 import json, re, sys
 
 CYCLES_PER_BLOCK = 496_000
@@ -149,7 +150,6 @@ print("      targets. docs/BUDGET.md records cl6x as worth about 2.2x. The unit 
 
 sys.exit(1 if failures else 0)
 PY
-rc=$?
 
 echo
 if [ "$rc" -ne 0 ]; then

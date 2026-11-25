@@ -55,7 +55,8 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" "${keys[@]}
     exit 1
 }
 
-python3 - "$LOG" <<'PY'
+rc=0
+python3 - "$LOG" <<'PY' || rc=$?
 import json, re, sys
 
 CYCLES_PER_BLOCK = 496_000
@@ -109,7 +110,6 @@ print("      target depends on it. The unit decides.")
 
 sys.exit(1 if failures else 0)
 PY
-rc=$?
 
 if [ "$rc" -ne 0 ]; then
     echo "SCENARIO FAILED; full log: $LOG" >&2
