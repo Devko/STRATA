@@ -53,6 +53,18 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### One filter on the synths, FDE, velocity to cutoff (D8, D15; 2026-11-25)
+
+Emulator, cl6x, all 28 scenarios pass. Against `main` at `1efc0e3` in the same session:
+`scenario_m3` 23.82% -> **24.00%**, `scenario_m1` 24.55% -> **24.69%** (+0.2 points, within run
+to run noise for this PC). Worst case **30.36%** (`scenario_ambient`, 30.16% at the pin bump).
+The voice's hot loop is unchanged: FDE is one control-rate envelope time, velocity one add per
+control slice and one more float compare in VA POLY's filter cache, so **VA POLY's per-voice cost
+(2.16 points cl6x, 3.82 GCC-only) stands**; it was not re-measured by chord swap. TON costs
+nothing at 64 (the default and every migrated OFF filter) and an LP12/HP12 pass when turned,
+the same as the insert filter it replaces, minus the drive. GCC-only figures not re-run for this
+change (the hot loops did not move).
+
 ### First boot on the unit (2026-11-22)
 
 | Configuration | LOAD on screen | Where | Date |

@@ -99,9 +99,14 @@ fifth and a sixth page for its LFO and its arpeggiator (below). The VA, WAVE and
 seventh and an eighth, ASR and OSC.
 
 - **SRC** and **AMP** belong to the machine and change meaning with it (section 3).
-- **FLTR** and **FX** belong to the insert chain and are the same on every track:
-  FLTR = DRV drive, CUT cutoff, RES resonance, MOD filter mode (OFF, LP12, LP24, BP12, BP24,
-  HP12, HP24); FX = LOF lo-fi, PAN, SNA send A (delay), SNB send B (reverb).
+- **FLTR** and **FX** belong to the insert chain: FLTR = DRV drive, CUT cutoff, RES resonance,
+  MOD filter mode (OFF, LP12, LP24, BP12, BP24, HP12, HP24); FX = LOF lo-fi, PAN, SNA send A
+  (delay), SNB send B (reverb).
+- **The synth machines (MNO, PLY, WMN, WPL) have one filter, their own.** On them FLTR shows the
+  voice's filter: CUT, RES, ENV and FDE (its decay). The insert filter shrinks to one knob,
+  **TON** on SRC: 64 is flat, lower darkens (a low-pass down to 250 Hz), higher thins (a
+  high-pass up to 1.5 kHz). An older project's insert filter on these tracks loads as the
+  nearest TON.
 
 Parameters run 0-127. Every change is smoothed over one audio block, so turning a knob or
 playing a locked step never clicks.
@@ -607,18 +612,21 @@ with accent, slide and glide.
 
 | Page | A | B | C | D |
 | --- | --- | --- | --- | --- |
-| SRC | **TUN** ±24 semitones | **MOD** voice filter: 0-63 LP24, 64-95 LP12, 96-111 BP12, 112-127 HP12 | **CUT** cutoff, 35 Hz-12 kHz | **RES** resonance |
-| AMP | **DEC** decay of both envelopes, 15 ms-2.4 s | **ENV** filter envelope amount, up to +66 semitones | **GLD** glide, 0-0.5 s | **LVL** |
+| SRC | **TUN** ±24 semitones | **MOD** voice filter: 0-63 LP24, 64-95 LP12, 96-111 BP12, 112-127 HP12 | **TON** tone: 64 flat, lower darker, higher thinner | |
+| FLTR | **CUT** cutoff, 35 Hz-12 kHz | **RES** resonance | **ENV** filter envelope amount, up to +66 semitones | **FDE** filter decay: 0 follows DEC (0.55 x DEC), 1-127 its own, 15 ms-2.4 s |
+| AMP | **DEC** decay, 15 ms-2.4 s | | **GLD** glide, 0-0.5 s | **LVL** |
 | ASR | **ATK** attack | **SUS** sustain: 0 = one-shot | **REL** release | **FSU** filter sustain |
 | OSC | **WAV** saw, square, pulse | **OS2** off, 1-63 detune, 64-127 sync | **SUB** sub level | **DRV** drive |
 
 With SUS at 0 (the default) DEC is the note's length. Turn SUS up for long, held notes: see
 [Held notes: the ASR page](#held-notes-the-asr-page).
 
-This filter is the voice's own, on SRC; the FLTR page's filter is a second, utility filter after
-it. ENV 0 is a static dub bass; ENV and RES up is the acid squelch; RES at the top
-self-oscillates. **Accent** (ACNT on the step page) makes the note louder, opens the filter
-further and brings the noise (and, with OS2 in sync, the synced pulse) forward; **slide** (SLID)
+FLTR is the voice's own filter, the only one on the track (TON on SRC is a tone knob after
+it). ENV 0 is a static dub bass; ENV and RES up is the acid squelch; RES at the top
+self-oscillates. FDE at 0 keeps the classic tie, the sweep 0.55 x DEC long; turn it up for a
+short squelch on a long note or a slow bloom on a pluck. **Velocity** opens the filter: around
+the default 100, harder is brighter and softer darker. **Accent** (ACNT on the step page) makes
+the note louder, opens the filter further and brings the noise (and, with OS2 in sync, the synced pulse) forward; **slide** (SLID)
 glides into the next note. The OSC page is described in
 [The oscillators and drive](#the-oscillators-and-drive-the-osc-page).
 
@@ -630,8 +638,9 @@ each with inversions `/n`).
 
 | Page | A | B | C | D |
 | --- | --- | --- | --- | --- |
-| SRC | **TUN** | **MOD** as MNO | **CUT** | **RES** |
-| AMP | **DEC** with SUS at 0, the chord's length: short stab or long ring | **ENV** | **DET** voice detune, up to a quarter semitone | **LVL** |
+| SRC | **TUN** | **MOD** as MNO | **TON** as MNO | |
+| FLTR | **CUT** | **RES** | **ENV** | **FDE** as MNO |
+| AMP | **DEC** with SUS at 0, the chord's length: short stab or long ring | | **DET** voice detune, up to a quarter semitone | **LVL** |
 | ASR | **ATK** attack | **SUS** sustain: 0 = one-shot | **REL** release | **FSU** filter sustain |
 | OSC | **WAV** | **OS2** as MNO | **SUB** | **DRV** |
 
@@ -653,8 +662,9 @@ slide and glide on WMN, chords and the shared 12-voice budget on WPL.
 
 | Page | A | B | C | D |
 | --- | --- | --- | --- | --- |
-| SRC | **TBL** the table, eight counts each (shown by name) | **POS** position, frame 0-15 | **CUT** cutoff, LP24 | **RES** resonance |
-| AMP | **DEC** as MNO | **ENV** filter envelope amount | **MOT** envelope to position: 64 off, up to +15 or -15 frames | **LVL** |
+| SRC | **TBL** the table, eight counts each (shown by name) | **POS** position, frame 0-15 | **TON** as MNO | |
+| FLTR | **CUT** cutoff, LP24 | **RES** resonance | **ENV** filter envelope amount | **FDE** as MNO |
+| AMP | **DEC** as MNO | | **MOT** envelope to position: 64 off, up to +15 or -15 frames | **LVL** |
 | ASR | **ATK** | **SUS** | **REL** | **FSU** as MNO |
 | OSC | **WRP** bends the cycle (0 = none; high notes bend less, to stay clean) | **DET** a second, detuned copy: OFF, up to 60 cents | **SUB** sub level | WMN: **GLD** glide; WPL: **DRV** drive |
 

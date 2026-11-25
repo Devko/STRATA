@@ -603,6 +603,7 @@ private:
     TrackParams chain_prepared_[kTracks] = {};
     ChainMix chain_prepared_mix_[kTracks] = {};
     bool chain_prepared_valid_[kTracks] = {};
+    bool chain_prepared_tone_[kTracks] = {};     // prepared as TON (D8): the machine's own filter
     bool prepare_memo_ = true;
 
     Scheduler scheduler_;

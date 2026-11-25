@@ -301,14 +301,15 @@ MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 fo
 | PRC | TUN, RAT ratio, IDX FM index, IDD index decay | DEC, SWP pitch sweep, SWT sweep time, LVL |
 | SMP | PIT pitch, STA start, LEN length, SLC slices (1 = one-shot; push D: AUTO cuts at the hits) | ATK attack, DEC, PLY play mode (fwd/loop/rev/rev loop), LVL |
 | GRN | POS position, SIZ grain size, DEN density, SPR spray | PIT pitch, SHP grain shape, DEC (127 HOLD), LVL; ASR: ATK SUS REL; OSC: SCN scan, PSP pitch spray |
-| MNO | TUN, MOD filter mode, CUT cutoff, RES resonance | DEC, ENV filter env amount, GLD glide, LVL (ASR page: ATK SUS REL FSU) |
-| PLY | TUN, MOD, CUT, RES | DEC, ENV, DET detune, LVL (ASR page: ATK SUS REL FSU) |
-| WMN | TBL table (CLS PWM SYN FMT RSW HRM FLD PHD FM1 TIN DGT VOW GRL EPN PLK MLT), POS position, CUT (LP24), RES | DEC, ENV, MOT envelope to position (`OFF` at 64, `+15`/`-15`), LVL (ASR and OSC pages) |
-| WPL | TBL, POS, CUT, RES | DEC, ENV, MOT, LVL (ASR and OSC pages; chords, shares the 12 POLY voices) |
+| MNO | TUN, MOD filter mode, TON tone; FLTR: CUT cutoff, RES resonance, ENV filter env amount, FDE filter decay | DEC, -, GLD glide, LVL (ASR page: ATK SUS REL FSU) |
+| PLY | TUN, MOD, TON; FLTR: CUT, RES, ENV, FDE | DEC, -, DET detune, LVL (ASR page: ATK SUS REL FSU) |
+| WMN | TBL table (CLS PWM SYN FMT RSW HRM FLD PHD FM1 TIN DGT VOW GRL EPN PLK MLT), POS position, TON; FLTR: CUT (LP24), RES, ENV, FDE | DEC, -, MOT envelope to position (`OFF` at 64, `+15`/`-15`), LVL (ASR and OSC pages) |
+| WPL | TBL, POS, TON; FLTR: CUT, RES, ENV, FDE | DEC, -, MOT, LVL (ASR and OSC pages; chords, shares the 12 POLY voices) |
 | FM4 | ALG algorithm `A1`-`A8`, RAT modulator ratio, IDX index, FBK feedback | DEC, IEN index envelope, VEL velocity to index, LVL (ASR and OSC pages; chords, shares the 12 POLY voices) |
 
 **Insert chain (every track):** FLTR = DRV drive, CUT cutoff, RES resonance, MOD filter mode
-(OFF LP12 LP24 BP12 BP24 HP12 HP24). FX = LOF lo-fi, PAN pan, SNA send A (delay), SNB send B (reverb).
+(OFF LP12 LP24 BP12 BP24 HP12 HP24). On MNO, PLY, WMN and WPL it is one knob, TON on SRC (64 flat,
+lower darker, higher thinner), and FLTR is the synth's own filter. Velocity opens the synths' filter. FX = LOF lo-fi, PAN pan, SNA send A (delay), SNB send B (reverb).
 
 **Step fields:** NOTE · VEL velocity · LEN length (`1/16 STP` ... `64 STP`) · MICR micro-timing (±) ·
 PROB probability % · COND condition · RTCH ratchet count · RAMP ratchet ramp (FLAT UP DOWN) ·
