@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W31, about 88 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W32, about 88 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -241,8 +241,8 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
   does not bring the mutation back.
 - A02 (PROJECT, STEP 2): no `L` there; tapping says `NO LOCK: HOLD STORES`. Back on A01, `L` again.
 - Push VALUE + STEP 4, turn ECHO RISER to about 100, then tap VALUE: `ECHO RISER 0`, and it rides
-  out over one beat instead of cutting. FUNC + tap VALUE on another try: a hard cut. Musical? `____`
-- With ECHO up, push VALUE + STEP 10: the echo rides out over the beat, then PUMP is picked.
+  out within a 1/16 instead of cutting. FUNC + tap VALUE on another try: a hard cut. Musical? `____`
+- With ECHO up, push VALUE + STEP 10: the echo rides out over a 1/16, then PUMP is picked.
   Push VALUE + RIGHT with PUMP up: a crossfade to CRUSH over a beat.
 - Hold VALUE pushed and **hold** STEP 6 (WASH): after a moment the wash swells to full while held,
   and rides out when you let go of the STEP; WASH stays picked. A quick tap of STEP 6 lets it go.
@@ -378,7 +378,13 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 - Save, reload: TRIG is still what you left. Open a 0.3.x project: every LFO FREE. `____`
 - MAX with four tracks in ONE-SHOT against the default beat alone: `________ %`
 
-**W31. The kill EQ learnt by turning; the pad-row keys go round (#156, 3 min).** Beat playing, A01.
+**W31. The mixer back to rest in a 1/16 (5 s each).** Beat playing, A01, FX GLIDE `1 BEAT`.
+- Push VALUE + STEP 4, turn ECHO RISER to about 100, tap VALUE: the echo is gone within a 1/16,
+  smoothly, no click. Before, it took the whole beat. `____`
+- Hold VALUE pushed and hold STEP 6 (WASH): it still swells in over the beat; let go of the STEP:
+  out within a 1/16. Same with VALUE + CLR. Short enough, and still click-free? `____`
+
+**W32. The kill EQ learnt by turning; the pad-row keys go round (#156, 3 min).** Beat playing, A01.
 - PERFORM, push A: `LEARN A 0/4`. MIXER, screen keys to the EQ page: line 2 still says
   `LEARN A`. Turn LOW down to `KILL`: the lows go. OK: `A: 1 PARAM`, and the lows are back
   (LOW `0`). PERFORM: turn A up over a bar: the lows fade to nothing; A back to 0, they return. `____`

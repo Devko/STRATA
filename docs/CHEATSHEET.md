@@ -123,13 +123,13 @@ a time; nothing of it is saved or undone.
 | Gesture | Action |
 | --- | --- |
 | Push VALUE + STEP 1-15 | Pick that effect (`4 ECHO RISER`); VALUE is now its amount, 0 dry. The same STEP again lets go, on the release (`FX OFF: VALUE TEMPO`) |
-| Push VALUE + hold the picked STEP | Held 0.3 s: the effect rises to 127 over FX GLIDE while held and rides out to 0 on release |
+| Push VALUE + hold the picked STEP | Held 0.3 s: the effect rises to 127 over FX GLIDE while held and rides out to 0 over a 1/16 on release |
 | Push VALUE + STEP 13 | The A/B morph on any screen (`MORPH 64`), the effect that was up left as it is. Again: let go, the morph stays (`MORPH KEPT: VALUE TEMPO`) |
 | Push VALUE + STEP 16 | The looper: records LOOP LEN bars (FUNC menu, 1/2/4/8, default 4) of the mix from the next bar line; then VALUE is the loop's mix, 0 live, 127 loop only (`LOOP MIX 64`). Again: leaves the looper (`LOOP OFF`; the loop is kept, silent, and VALUE + CLR throws it away for a new take; during the count-in or the take, `LOOP CANCELLED`). Effects picked after it play over the loop |
 | Push VALUE + LEFT / RIGHT | Previous / next effect, keeping the amount (crossfaded over FX GLIDE) |
-| Tap VALUE (let go within 0.5 s) | Back to 0, riding over FX GLIDE: the effect's amount, the loop's mix; or the morph (`MORPH 0`, in PERFORM or with slot 13 picked). Never the tempo or swing. FUNC + tap: a cut |
+| Tap VALUE (let go within 0.5 s) | Back to 0, riding out over at most a 1/16: the effect's amount, the loop's mix; or the morph (`MORPH 0`, in PERFORM or with slot 13 picked). Never the tempo or swing. FUNC + tap: a cut |
 | Push VALUE + CLR | Everything off, loop mix 0, riding (`FX OFF`); again: the loop is thrown away (`LOOP CLEARED`) |
-| FUNC menu FX GLIDE | How long those button jumps (and a slot change, leaving a playing loop, a LOCK jump) ride: OFF, 1/16, 1 BEAT (default), 1 BAR. Turning VALUE never glides |
+| FUNC menu FX GLIDE | How long those button jumps (and a slot change, leaving a playing loop, a LOCK jump) ride: OFF, 1/16, 1 BEAT (default), 1 BAR; back to 0 they take at most a 1/16. Turning VALUE never glides |
 | VALUE held | The STEP keys show the slots: dim amber, the effect that is up bright amber, the one VALUE is on bright green; STEP 16 red blinking armed, red recording, green holding a loop |
 
 Slots: 1 LP SWEEP · 2 HP SWEEP · 3 HP RISER · 4 ECHO RISER · 5 ECHO FREEZE · 6 REVERB WASH ·

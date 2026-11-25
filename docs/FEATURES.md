@@ -127,7 +127,7 @@ FM4 and GRAIN machines.
 | 16 scenes, A/B morph on VALUE, capture whole or one track | v0.1.0 | ◐ (3b) | Morph position is not saved; locks are not morphed (parked) |
 | 4 macros of up to 4 targets, sweep from the live value; demo B ACID, C DUB, D DRIVE | v0.1.0 | ○ (3b) | |
 | **Macro learn by turning (D11)**: push a macro's knob in PERFORM, turn EDIT knobs, OK | #141 | ○ (W10) | |
-| The kill EQ's bands learnt by turning on MIXER's EQ page during MACRO LEARN (FUNC + STEP 5-7 retired) | #156 | ○ (W31) | |
+| The kill EQ's bands learnt by turning on MIXER's EQ page during MACRO LEARN (FUNC + STEP 5-7 retired) | #156 | ○ (W32) | |
 | **LOCK** (FUNC + MUTATE: hold stores, tap jumps, tap again swaps back), one per pattern, RAM only | #149 | ○ (W20c) | Not saved; the kit is shared, so a jump brings that lock's sound to every pattern |
 | **REL ALL / LEN ALL**: every track's release (FUNC + A) and every note's length (FUNC + B) in PERFORM | #152 | ○ (W29) | Live only; LEN ALL leaves gateless notes (drums, arp) alone |
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
@@ -140,7 +140,7 @@ FM4 and GRAIN machines.
 | Delay freeze (performance mixer slot 5, ECHO FREEZE; FUNC + hold MUTATE until #145) | v0.1.0 | ○ (13g) | |
 | **Tap VALUE to reset**: the effect's amount, the loop's mix or the morph back to 0, riding over FX GLIDE; FUNC + tap: a cut | #121, #124, #149 | ○ (W20, 13o) | A hold of 0.5 s or more resets nothing; never the tempo |
 | **Performance mixer on VALUE**: push VALUE + STEP picks one of 14 effects (sweeps, risers, echo freeze, wash, mute bus, tape stop, bass kill, pump, crush, noise, gate, build) or the morph (13), VALUE is its amount; hold the STEP to push an effect in | #116, #145, #149 | ○ (W20, W20b, 13o) | One effect at a time. Not saved. CPU host-estimated only (about 2 points worst case with the looper) |
-| **FX GLIDE** (FUNC menu): the performance mixer's button jumps ride over OFF, 1/16, 1 BEAT or 1 BAR | #149 | ○ (W20c) | Not saved |
+| **FX GLIDE** (FUNC menu): the performance mixer's button jumps ride over OFF, 1/16, 1 BEAT or 1 BAR; back to rest in at most a 1/16 | #149, #157 | ○ (W20c, W31) | Not saved |
 | **Master looper** (VALUE + STEP 16): 1-8 bars of the mix from the bar line, VALUE crossfades live/loop, effects go over it; STEP 16 again leaves it and keeps the loop | #116, #120, #139 | ○ (W20, 13o) | Shares RESAMPLE's 30 s buffer: no RESAMPLE or FREEZE while a loop is held. No overdub yet. Not saved |
 
 ## FX and mixer

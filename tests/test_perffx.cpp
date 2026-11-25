@@ -601,6 +601,15 @@ TEST(perffx_glide_lengths_follow_the_tempo) {
     CHECK(std::strcmp(perf_glide_name(PerfGlide::beat), "1 BEAT") == 0);
 }
 
+TEST(perffx_the_ride_back_to_rest_is_at_most_a_sixteenth) {
+    CHECK_EQ(int(perf_release_ms(PerfGlide::off, 120.0f)), 0);        // OFF still cuts
+    CHECK_EQ(int(perf_release_ms(PerfGlide::sixteenth, 120.0f)), 125);
+    CHECK_EQ(int(perf_release_ms(PerfGlide::beat, 120.0f)), 125);
+    CHECK_EQ(int(perf_release_ms(PerfGlide::bar, 120.0f)), 125);
+    CHECK_EQ(int(perf_release_ms(PerfGlide::bar, 130.0f)), 115);
+    CHECK_EQ(int(perf_release_ms(PerfGlide::beat, 1000.0f)), 50);     // clamped to 300 BPM
+}
+
 TEST(perffx_a_ride_to_zero_takes_the_whole_length_then_sets_the_target) {
     PerfRide ride;
     ride.from_fx = PerfFx::crush;
