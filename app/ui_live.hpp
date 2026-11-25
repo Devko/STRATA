@@ -36,7 +36,10 @@
     }
 
     // After the cells: grid_top is the first track's row, rows eight pixels apart, cells at
-    // (i * 8 + 1, row + 1).
+    // (kGridX + i * kGridPitch, row + 1). A glow above 10 is a solid ring, so a trig that has
+    // just played swells by a pixel all round before it fades (the mockup's "pop").
+    static constexpr int kGridX = 9;
+    static constexpr int kGridPitch = 7;
     void draw_grid_glow(enaga::Canvas &canvas, int grid_top) {
         uint8_t *px = canvas.data();
         for (int t = 0; t < kTracks; t++) {
@@ -44,7 +47,7 @@
             for (int i = 0; i < 16; i++) {
                 const int g = grid_glow_[t][i];
                 if (g < 2) continue;
-                const int x = i * 8;
+                const int x = kGridX + i * kGridPitch - 1;
                 for (int k = 0; k < 7; k++) {
                     paint::plot_max(px, x + k, y, g);              // above the cell
                     paint::plot_max(px, x + k, y + 7, g);          // below it

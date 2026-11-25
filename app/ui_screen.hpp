@@ -420,10 +420,28 @@
         char *out = line;
         const Status &status = engine_.status();
 
+        // The mockup's grid (tools/visuals_mockup.py): a gutter with each track's number and
+        // live level, then sixteen 5 x 6 cells seven pixels apart from x 9 (kGridX), the playhead's
+        // column lit behind them while the beat plays, and the trigs that just played glowing
+        // (app/ui_live.hpp).
         const int grid_top = 20;
+        uint8_t *px = canvas.data();
+        if (running) {
+            const int head = status.playhead[selected_].load(std::memory_order_relaxed);
+            if (head / 16 == page_) {
+                canvas.rect(kGridX + (head % 16) * kGridPitch - 1, grid_top, 7, kTracks * 8, 2);
+            }
+        }
         for (int t = 0; t < kTracks; t++) {
             const int y = grid_top + t * 8;
             const uint8_t head = status.playhead[t].load(std::memory_order_relaxed);
+            const char number[2] = {char('1' + t), 0};
+            paint::small_text(px, 2, y + 2, number, t == selected_ ? 15 : (muted_[t] ? 3 : 7));
+            if (running) {
+                const uint32_t level = status.track_milli[t].load(std::memory_order_relaxed);
+                const int lit = paint::level_rows(level, 6, 36);
+                if (lit > 0) canvas.rect(6, y + 7 - lit, 2, lit, muted_[t] ? 4 : 10);
+            }
             for (int i = 0; i < 16; i++) {
                 const int step = i + page_ * 16;
                 const Step &s = engine_.pattern().tracks[t].steps[step];
@@ -434,13 +452,15 @@
                 if (trig) grey = (s.flags & kStepAccent) ? 15 : 11;
                 if (on_head) grey = uint8_t(grey < 8 ? 7 : 15);
 
+                const int x = kGridX + i * kGridPitch;           // step 16 ends at x 118
                 if (trig || on_head) {
-                    canvas.rect(i * 8 + 1, y + 1, 5, 6, grey);   // 5 wide: x 126-127 is the meter's
-                    if (trig) draw_step_glyph(canvas, i * 8 + 1, y + 1, s);
+                    canvas.rect(x, y + 1, 5, 6, grey);
+                    if (trig) draw_step_glyph(canvas, x, y + 1, s);
                 } else if ((s.flags & kStepTrigless) != 0) {
-                    draw_trigless_cell(canvas, i * 8 + 1, y + 1);
+                    draw_trigless_cell(canvas, x, y + 1);
                 } else {
-                    canvas.rect(i * 8 + 1, y + 3, 5, 2, grey);   // an empty step: a thin dash
+                    // An empty step: a dot, a beat's first a little brighter.
+                    canvas.rect(x + 2, y + 3, 1, 2, i % 4 == 0 ? 5 : 3);
                 }
             }
             if (t == selected_) canvas.rect(0, y, 1, 8, 12);     // the selected track's marker

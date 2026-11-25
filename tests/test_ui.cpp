@@ -2097,7 +2097,8 @@ TEST(ui_the_grid_draws_a_trig_where_the_trig_is) {
     // `FakeHost::t_text` draws nothing, so text cannot be read back -- but `Canvas::rect` writes
     // real pixels, and the grid is rects. This pins the mapping docs/SPEC.md gives: "an 8 x 16
     // mini-grid of all tracks (8 px per step), the selected track highlighted", a filled cell for
-    // a trig and a thin dash for an empty step.
+    // a trig and a dot for an empty step. Cells are 5 x 6, seven pixels apart from x 9, after
+    // a gutter with the track's number and level.
     Strata &app = fresh();
     enaga::Canvas canvas(g_pixels);
 
@@ -2106,8 +2107,8 @@ TEST(ui_the_grid_draws_a_trig_where_the_trig_is) {
     const auto at = [px](int x, int y) { return int(px[y * enaga::Canvas::width + x]); };
 
     app.draw(canvas);
-    CHECK_EQ(at(1, top + 3), 2);                   // an empty step: the dash, two rows high
-    CHECK_EQ(at(1, top + 1), 0);                   // and nothing above it
+    CHECK_EQ(at(11, top + 3), 5);                  // an empty step: a dot, a beat's first brighter
+    CHECK_EQ(at(11, top + 1), 0);                  // and nothing above it
     CHECK_EQ(at(0, top), 12);                      // the selected track's marker, at x = 0
 
     key(ENAGA_KEY_STEP1);                          // a trig on step 1 of track 1
@@ -2115,15 +2116,15 @@ TEST(ui_the_grid_draws_a_trig_where_the_trig_is) {
     CHECK(trig_at(0, 0));
     app.draw(canvas);
 
-    CHECK_EQ(at(1, top + 1), 11);                  // the cell is filled now, 5 x 6 from (1, 21):
-    CHECK_EQ(at(5, top + 6), 11);                  // five wide, so step 16 ends at x 125 and
-    CHECK_EQ(at(6, top + 1), 0);                   // the frame's meter keeps x 126-127
-    CHECK_EQ(at(9, top + 3), 2);                   // step 2 is still a dash
-    CHECK_EQ(at(9, top + 1), 0);
+    CHECK_EQ(at(9, top + 1), 11);                  // the cell is filled now, 5 x 6 from (9, 21):
+    CHECK_EQ(at(13, top + 6), 11);                 // five wide, so step 16 ends at x 118 and
+    CHECK_EQ(at(14, top + 1), 0);                  // the frame's meter keeps x 126-127
+    CHECK_EQ(at(18, top + 3), 3);                  // step 2 is still a dot
+    CHECK_EQ(at(18, top + 1), 0);
 
     // Track 2's row is eight pixels lower and has no trig, so the mapping is per track as well.
-    CHECK_EQ(at(1, top + 8 + 3), 2);
-    CHECK_EQ(at(1, top + 8 + 1), 0);
+    CHECK_EQ(at(11, top + 8 + 3), 5);
+    CHECK_EQ(at(11, top + 8 + 1), 0);
 }
 
 // --- pad pressure ---------------------------------------------------------------------------
@@ -2960,25 +2961,25 @@ TEST(ui_the_grid_glows_round_a_trig_that_just_played) {
     pump(2);
     CHECK(trig_at(0, 0));
     app.draw(canvas);
-    CHECK_EQ(at(3, top), 0);                               // nothing yet
+    CHECK_EQ(at(11, top), 0);                              // nothing yet
 
     host.set_running(true);
     host.deliver_tick(0, 0);                               // step 1 plays
     pump(1);
     app.draw(canvas);
-    CHECK(at(3, top) >= 12);                               // above the cell
-    CHECK(at(3, top + 7) >= 12);                           // below it
-    CHECK(at(6, top + 3) >= 12);                           // right of it
-    CHECK_EQ(at(3, top + 1), 15);                          // the cell: lit under the playhead
-    CHECK_EQ(at(11, top), 0);                              // step 2 did not play
-    int last = at(3, top);
+    CHECK(at(11, top) >= 12);                               // above the cell
+    CHECK(at(11, top + 7) >= 12);                           // below it
+    CHECK(at(14, top + 3) >= 12);                           // right of it
+    CHECK_EQ(at(11, top + 1), 15);                          // the cell: lit under the playhead
+    CHECK_EQ(at(18, top), 0);                              // step 2 did not play
+    int last = at(11, top);
     for (int i = 0; i < 4; i++) {                          // fading
         app.draw(canvas);
-        CHECK(at(3, top) < last);
-        last = at(3, top);
+        CHECK(at(11, top) < last);
+        last = at(11, top);
     }
     for (int i = 0; i < 20; i++) app.draw(canvas);
-    CHECK_EQ(at(3, top), 0);
+    CHECK_EQ(at(11, top), 2);                              // the playhead column, faded
 
     host.set_running(false);
     pump(2);
@@ -8931,26 +8932,26 @@ TEST(ui_the_grid_marks_what_a_trig_carries) {
     CHECK_EQ(int(ratchet_count(step_of(0, 3).ratchet)), 2);
 
     app.draw(canvas);
-    const int grey = at(1, top + 1);                       // an unmarked corner of step 1
+    const int grey = at(9, top + 1);                       // an unmarked corner of step 1
     CHECK(grey >= 11);
     // Step 1: the lock's dot, two pixels tall in the middle; the corners and bottom are whole.
-    CHECK_EQ(at(3, top + 2), 0);
-    CHECK_EQ(at(3, top + 3), 0);
-    CHECK_EQ(at(3, top + 1), grey);
-    CHECK_EQ(at(5, top), grey);
-    CHECK_EQ(at(2, top + 5), grey);
+    CHECK_EQ(at(11, top + 2), 0);
+    CHECK_EQ(at(11, top + 3), 0);
+    CHECK_EQ(at(11, top + 1), grey);
+    CHECK_EQ(at(13, top), grey);
+    CHECK_EQ(at(10, top + 5), grey);
     // Step 2: the condition cuts the top-left corner, and nothing else.
-    CHECK_EQ(at(9, top), 0);
-    CHECK(at(13, top) != 0);
-    CHECK(at(11, top + 2) != 0);
+    CHECK_EQ(at(16, top), 0);
+    CHECK(at(20, top) != 0);
+    CHECK(at(18, top + 2) != 0);
     // Step 3: probability cuts the top-right corner.
-    CHECK_EQ(at(21, top), 0);
-    CHECK(at(17, top) != 0);
+    CHECK_EQ(at(27, top), 0);
+    CHECK(at(23, top) != 0);
     // Step 4: the ratchet's two teeth in the bottom edge.
-    CHECK_EQ(at(26, top + 5), 0);
-    CHECK_EQ(at(28, top + 5), 0);
-    CHECK(at(27, top + 5) != 0);
-    CHECK(at(25, top) != 0);
+    CHECK_EQ(at(31, top + 5), 0);
+    CHECK_EQ(at(33, top + 5), 0);
+    CHECK(at(32, top + 5) != 0);
+    CHECK(at(30, top) != 0);
 }
 
 TEST(ui_a_held_step_shows_its_lock_against_the_kit_value) {
@@ -9015,7 +9016,7 @@ TEST(ui_a_trigless_step_draws_as_an_outline_on_the_grid) {
     pump(2);
     CHECK((step_of(0, 5).flags & kStepTrigless) != 0);
     app.draw(canvas);
-    const int x = 5 * 8 + 1, y = 21;
+    const int x = 9 + 5 * 7, y = 21;
     CHECK(at(x, y) != 0);
     CHECK(at(x + 4, y + 5) != 0);
     CHECK_EQ(at(x + 2, y + 2), 0);                         // hollow
