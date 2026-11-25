@@ -109,7 +109,7 @@ MOD slots, for whoever touches them next (core/modslot.hpp has the rules):
   (its own source) and not the arp's (read when a note is scheduled, from `effective_`).
 - **The learn** is `app/ui_modslots.hpp`, MACRO LEARN's gesture for one knob: push C / D on the
   LFO page. The last knob turned that moved is the slot's; every touched knob goes back.
-- The emulator turns knobs now (`--turn`): `scenario_modslots` learns a slot by the gesture. A
+- `scenario_modslots` learns a slot by the gesture. A
   `--key` landing while a `--turn` is still clicking was not seen by the app in one run; leave a
   turn of 20 detents about 300 M cycles before the next key.
 

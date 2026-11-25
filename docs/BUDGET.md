@@ -125,10 +125,10 @@ before.
 
 ### MOD slots (Phase 5; 2026-11-25)
 
-Emulator, all 37 scenarios pass with cl6x (`scenario_modslots` new: slot 1 learnt as VEL on the
+Emulator, all 39 scenarios pass with cl6x on `main` after #166 (`scenario_modslots` new: slot 1 learnt as VEL on the
 kick's third SRC knob by the gesture, so the kick re-prepares on each of its notes). Worst case
-**31.59%** (`scenario_ambient`, about 31.5% before: run to run noise); `scenario_modslots`
-25.79%, the same as its neighbours. GCC-only: `scenario_ambient` **57.25%**, `scenario_modslots`
+**31.78%** (`scenario_ambient`, 31.59% before the slots: run to run noise); `scenario_modslots`
+25.98%, the same as its neighbours. GCC-only (on the branch before the rebase): `scenario_ambient` **57.25%**, `scenario_modslots`
 47.61%, `scenario_m3` 42.54%. No hot loop moved. A slot that is off costs two compares a block
 per track; one that is on copies the track's 32 bytes into `modulated_` and moves one byte, at
 control rate, and the machine re-prepares only when that byte changes (VEL and RND once a note;
