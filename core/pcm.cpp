@@ -289,6 +289,91 @@ uint32_t Resampler::output_frames(uint32_t source_frames) const {
     return count > 0xFFFFFFFFu ? 0xFFFFFFFFu : uint32_t(count);
 }
 
+// --- the windowed-sinc kernel -------------------------------------------------------------------
+
+namespace {
+
+constexpr uint32_t kSincTaps = STRATA_SINC_TAPS;
+constexpr uint32_t kSincPhases = STRATA_SINC_PHASES;
+constexpr uint32_t kSincBefore = kSincTaps / 2 - 1;     // taps before the frame the cursor is in
+constexpr uint32_t kSincAfter = kSincTaps / 2;          // taps after it
+// The Kaiser window's beta. 7 puts the sidelobes near -70 dB, under what int16 rounding leaves
+// of a 5 kHz tone, while keeping the transition band narrow enough that 18 kHz still passes.
+constexpr double kSincBeta = 7.0;
+constexpr double kPiD = 3.14159265358979323846;
+
+// sin(pi x) for any x, with core/'s own series (sin_cos, below, takes 0 <= x <= pi/2).
+void sin_cos(double x, double &s, double &c);
+double sin_pi(double x) {
+    const double half = x * 0.5;
+    const int64_t whole = int64_t(half >= 0.0 ? half + 0.5 : half - 0.5);
+    double r = x - 2.0 * double(whole);                 // -1 <= r <= 1
+    if (r > 0.5) r = 1.0 - r;
+    if (r < -0.5) r = -1.0 - r;
+    const double sign = r < 0.0 ? -1.0 : 1.0;
+    double s = 0.0, c = 1.0;
+    sin_cos(kPiD * r * sign, s, c);
+    return s * sign;
+}
+
+// sqrt for 0 <= v <= 1 by Newton's method from 1, which converges from above. Forty steps are far
+// more than double precision needs even for small v; this runs once, for the table.
+double sqrt_newton(double v) {
+    if (v <= 0.0) return 0.0;
+    double r = 1.0;
+    for (int i = 0; i < 40; i++) r = 0.5 * (r + v / r);
+    return r;
+}
+
+// The zeroth-order modified Bessel function, by its series. Thirty terms are past double
+// precision for the arguments the window uses (up to beta).
+double bessel_i0(double x) {
+    double sum = 1.0, term = 1.0;
+    const double q = x * x * 0.25;
+    for (int k = 1; k < 30; k++) {
+        term *= q / double(k * k);
+        sum += term;
+    }
+    return sum;
+}
+
+// The table, built once on first use. Row p is the kernel for a fraction of p / kSincPhases: tap
+// k weights the source frame k - kSincBefore away, at x = (k - kSincBefore) - p / kSincPhases.
+// Cut-off at the source's Nyquist, so the kernel is zero at every whole x but 0: a position on a
+// source frame gives that frame exactly, which keeps a same-rate load a copy and 96-to-48 kHz
+// (after Antialias) every other frame. Each row is normalized to a sum of 1 so that a constant
+// stays exactly that constant.
+float g_sinc[(kSincPhases + 1) * kSincTaps];
+bool g_sinc_built = false;
+
+const float *sinc_table() {
+    if (g_sinc_built) return g_sinc;
+    const double half = double(kSincAfter);
+    const double norm = 1.0 / bessel_i0(kSincBeta);
+    for (uint32_t p = 0; p <= kSincPhases; p++) {
+        double row[kSincTaps];
+        double sum = 0.0;
+        for (uint32_t k = 0; k < kSincTaps; k++) {
+            const double x = double(int32_t(k) - int32_t(kSincBefore)) - double(p) / kSincPhases;
+            double h = 0.0;
+            if (p % kSincPhases == 0) {
+                h = x == 0.0 ? 1.0 : 0.0;               // exact, not a series' near-zero
+            } else if (x > -half && x < half) {
+                const double u = x / half;
+                const double window = bessel_i0(kSincBeta * sqrt_newton(1.0 - u * u)) * norm;
+                h = window * sin_pi(x) / (kPiD * x);
+            }
+            row[k] = h;
+            sum += h;
+        }
+        for (uint32_t k = 0; k < kSincTaps; k++) g_sinc[p * kSincTaps + k] = float(row[k] / sum);
+    }
+    g_sinc_built = true;
+    return g_sinc;
+}
+
+}  // namespace
+
 uint32_t pcm_resample(const int16_t *in, uint32_t in_frames, int channels, Resampler &cursor,
                       int16_t *out, uint32_t max_out) {
     if (in == nullptr || out == nullptr || channels <= 0 || in_frames == 0 || max_out == 0) return 0;
@@ -297,6 +382,7 @@ uint32_t pcm_resample(const int16_t *in, uint32_t in_frames, int channels, Resam
     // copy. Written back, so that a caller slicing a file sees one step for the whole run.
     if (cursor.step == 0) cursor.step = kOne;
 
+    const float *table = sinc_table();
     const uint64_t step = cursor.step;
     const int lanes = channels;
     uint64_t position = cursor.position;
@@ -306,29 +392,44 @@ uint32_t pcm_resample(const int16_t *in, uint32_t in_frames, int channels, Resam
     while (written < max_out) {
         const uint64_t frame = position >> 32;
         if (frame >= uint64_t(in_frames)) break;        // the cursor has left the source
-        const uint32_t index = uint32_t(frame);
-        const uint32_t fraction = uint32_t(position);   // the low 32 bits: 0 <= fraction < 1
+        const uint32_t room = max_out - written;
 
-        const int16_t *a = in + size_t(index) * size_t(lanes);
-        // The frame after the last one is the last one: the final output frame is the file's own
-        // last sample instead of a step towards whatever follows the buffer in RAM. A select, so
-        // the common case does not pay for a branch.
-        const int16_t *b = a + (index + 1u < in_frames ? lanes : 0);
-
-        for (int c = 0; c < lanes; c++) {
-            // Linear, with the whole 32-bit fraction: a 32x32 multiply into 64 bits, which this
-            // core does in one instruction, then the high word. Half a step is added so the
-            // weight rounds rather than truncating.
-            //
-            // The result is always between a[c] and b[c], so it cannot leave int16 and needs no
-            // clamp: the exact product is under |b - a| and rounding can only reach it.
-            const int64_t delta =
-                (int64_t(b[c] - a[c]) * int64_t(fraction) + (int64_t(1) << 31)) >> 32;
-            write[c] = int16_t(int32_t(a[c]) + int32_t(delta));
+        if (frame >= uint64_t(kSincBefore) && frame + kSincAfter < uint64_t(in_frames)) {
+            // The interior: every tap is inside the file, so the loop reads the source directly.
+            // The run ends at the first position whose window would pass the last frame. One
+            // 64-bit divide per call, not per frame.
+            const uint64_t end = uint64_t(in_frames - kSincAfter) << 32;
+            const uint64_t run64 = (end - position + step - 1) / step;
+            const uint32_t run = run64 < room ? uint32_t(run64) : room;
+            if (lanes == 2) {
+                strata_sinc_resample_stereo(in, position, step, table, write, run);
+            } else {
+                for (int c = 0; c < lanes; c++)
+                    strata_sinc_resample(in + c, lanes, position, step, table, write + c, run);
+            }
+            position += step * run;
+            write += size_t(run) * size_t(lanes);
+            written += run;
+            continue;
         }
 
-        write += lanes;
+        // Within half a kernel of either end: gather the window with the index clamped, so the
+        // frames before the first are the first and those past the last are the last. The file's
+        // own first and last samples are held instead of reading whatever lies around the buffer
+        // in RAM. One frame at a time; there are at most kSincTaps of these per file.
+        int16_t window[kSincTaps];
+        const uint64_t local = (uint64_t(kSincBefore) << 32) | uint32_t(position);
+        for (int c = 0; c < lanes; c++) {
+            for (uint32_t k = 0; k < kSincTaps; k++) {
+                const int64_t at = int64_t(frame) - int64_t(kSincBefore) + int64_t(k);
+                const uint32_t index = at < 0 ? 0u
+                                       : (at >= int64_t(in_frames) ? in_frames - 1u : uint32_t(at));
+                window[k] = in[size_t(index) * size_t(lanes) + size_t(c)];
+            }
+            strata_sinc_resample(window, 1, local, step, table, write + c, 1);
+        }
         position += step;
+        write += lanes;
         written++;
     }
 

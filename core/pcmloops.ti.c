@@ -89,3 +89,57 @@ void strata_antialias_stereo(int16_t *samples, uint32_t frames, const float *b0,
     z1r[0] = r10; z1r[1] = r11; z1r[2] = r12; z1r[3] = r13;
     z2r[0] = r20; z2r[1] = r21; z2r[2] = r22; z2r[3] = r23;
 }
+
+/* The windowed-sinc resampler (pcmloops.h). The fraction's top bits pick a row of the table, the
+ * rest weight the row after it; the kernel is interpolated tap by tap and applied in the same
+ * pass, so every tap is one multiply-add for the kernel and one per channel for the sum. */
+#define STRATA_SINC_PHASE_SHIFT 25          /* 32 - log2(STRATA_SINC_PHASES) */
+#define STRATA_SINC_BEFORE (STRATA_SINC_TAPS / 2 - 1)
+
+uint64_t strata_sinc_resample(const int16_t *in, int stride, uint64_t position, uint64_t step,
+                              const float *table, int16_t *out, uint32_t count) {
+    const float scale = 1.0f / (float)(1u << STRATA_SINC_PHASE_SHIFT);
+    uint32_t n;
+    for (n = 0; n < count; n++) {
+        const uint32_t frame = (uint32_t)(position >> 32);
+        const uint32_t fraction = (uint32_t)position;
+        const float *r0 = table + (fraction >> STRATA_SINC_PHASE_SHIFT) * STRATA_SINC_TAPS;
+        const float *r1 = r0 + STRATA_SINC_TAPS;
+        const float t = (float)(fraction & ((1u << STRATA_SINC_PHASE_SHIFT) - 1u)) * scale;
+        const int16_t *src = in + (int32_t)(frame - STRATA_SINC_BEFORE) * stride;
+        float acc = 0.0f;
+        int k;
+        for (k = 0; k < STRATA_SINC_TAPS; k++) {
+            const float c = r0[k] + t * (r1[k] - r0[k]);
+            acc += c * (float)src[k * stride];
+        }
+        out[n * stride] = strata_aa_round(acc);
+        position += step;
+    }
+    return position;
+}
+
+uint64_t strata_sinc_resample_stereo(const int16_t *in, uint64_t position, uint64_t step,
+                                     const float *table, int16_t *out, uint32_t count) {
+    const float scale = 1.0f / (float)(1u << STRATA_SINC_PHASE_SHIFT);
+    uint32_t n;
+    for (n = 0; n < count; n++) {
+        const uint32_t frame = (uint32_t)(position >> 32);
+        const uint32_t fraction = (uint32_t)position;
+        const float *r0 = table + (fraction >> STRATA_SINC_PHASE_SHIFT) * STRATA_SINC_TAPS;
+        const float *r1 = r0 + STRATA_SINC_TAPS;
+        const float t = (float)(fraction & ((1u << STRATA_SINC_PHASE_SHIFT) - 1u)) * scale;
+        const int16_t *src = in + (int32_t)(frame - STRATA_SINC_BEFORE) * 2;
+        float left = 0.0f, right = 0.0f;
+        int k;
+        for (k = 0; k < STRATA_SINC_TAPS; k++) {
+            const float c = r0[k] + t * (r1[k] - r0[k]);
+            left += c * (float)src[2 * k];
+            right += c * (float)src[2 * k + 1];
+        }
+        out[2 * n] = strata_aa_round(left);
+        out[2 * n + 1] = strata_aa_round(right);
+        position += step;
+    }
+    return position;
+}
