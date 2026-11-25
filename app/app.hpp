@@ -924,7 +924,7 @@ private:
     uint8_t lfo_strip_[40] = {};
     uint32_t lfo_strip_at_ = 0;
     // GRAIN's SRC page: the sparks' afterglow, the middle 13 rows of the picture.
-    paint::Glow<124, 13> grain_glow_;
+    paint::Glow<124, 30> grain_glow_;
     // MIXER's master pages: the FFT's scratch, each band's shown rows, its peak dot and how long
     // the dot holds, and the vectorscope's afterglow.
     spectrum::Work spectrum_work_;

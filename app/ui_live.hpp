@@ -169,7 +169,7 @@
 
     // --- EDIT's LFO page: the shape, where the LFO is on it, and what it has been doing -------
     //
-    // Under the knobs, rows 77-117 like EDIT's other pictures: one cycle of the selected shape
+    // Under the knobs, rows 50-117 like EDIT's other pictures: one cycle of the selected shape
     // (x 0-79) with a dot riding it at the phase the audio side publishes (Status::lfo_phase)
     // and a dotted line down through it, and beside it a strip of what the LFO put out over the
     // last 40 frames (two seconds), newest at the right. The shapes here are drawn for reading,
@@ -220,6 +220,12 @@
         const int dot_x = phase * kLfoShapeWidth / 256;
         const int dot_y = mid - lfo_shape_q12(wave, phase) * amp / 4096;
         paint::dotted_v(px, dot_x, top, top + kPictureRows - 1, 5, 2);
+        for (int j = 8; j >= 1; j--) {
+            const int behind = phase - j * 5;
+            const int bx = ((behind + 256) & 255) * kLfoShapeWidth / 256;
+            const int by = mid - lfo_shape_q12(wave, behind & 255) * amp / 4096;
+            paint::dot(px, bx, by, 12 - j);
+        }
         paint::dot(px, dot_x, dot_y, 15);
 
         // The strip: this frame's output joins the history (UI side; one byte a frame).
@@ -260,8 +266,9 @@
         const int pos = int(heard.get(1)) * (kWaveFrames - 1) * 16 / 127;   // in 1/16 frames
         const int mip = kWaveMipLevels - 1;
         const int length = wave_mip_length(mip);
-        const int amp = 5;
-        const int base_y = kPictureTop + kPictureRows - 1 - amp;
+        const int amp = 7;
+        const int live_rows = 18;                         // the LIVE frame under the stack
+        const int base_y = kPictureTop + kPictureRows - 1 - live_rows - amp;
         for (int f = kWaveFrames - 1; f >= 0; f--) {
             const int16_t *samples = waves.frame(table, f, mip);
             const int ox = 4 + f * 3;                     // back frames to the right ...
@@ -284,6 +291,27 @@
             const int grey = distance < 8 ? 15 : (distance < 24 ? 9 : 4);
             paint::polyline(px, xs, ys, kTablePoints, grey);
         }
+
+        // LIVE: the frame POS plays, between its two neighbours as the oscillator reads it,
+        // across the width under the stack.
+        const int top = kPictureTop + kPictureRows - live_rows;
+        canvas.rect(0, top, 124, 1, 3);
+        paint::small_text(px, 0, top + 2, "LIVE", 6);
+        const int f0 = pos / 16;
+        const int f1 = f0 + 1 < kWaveFrames ? f0 + 1 : f0;
+        const int mix = pos % 16;                          // sixteenths of the way to f1
+        const int16_t *a = waves.frame(table, f0, mip);
+        const int16_t *b = waves.frame(table, f1, mip);
+        const int mid = top + live_rows / 2 + 1;
+        int16_t lx[64];
+        int16_t ly[64];
+        for (int i = 0; i < 64; i++) {
+            const int at = i * length / 64;
+            const int v = (int(a[at]) * (16 - mix) + int(b[at]) * mix) / 16;
+            lx[i] = int16_t(paint::q4(18) + i * 105 * paint::kSub / 64);
+            ly[i] = int16_t(paint::q4(mid) - v * (live_rows / 2 - 2) * paint::kSub / 32768);
+        }
+        paint::polyline(px, lx, ly, 64, 13);
     }
 
     // --- GRAIN's SRC page: the grains as sparks with a tail ------------------------------------
@@ -292,17 +320,28 @@
     // soft spark into an afterglow patch over the waveform, at a height of its own, so the cloud
     // reads as particles drifting through the sample rather than ticks. Kept in the middle rows,
     // clear of the bracket's corners.
+    // GRAIN's sample takes rows 50-85; under it, rows 88-117, the grain cloud as the mockup
+    // draws it: each grain in the air a soft spark at its read position, at a height of its own
+    // (the grain's slot, so a grain keeps its row while it lives), fading with a tail.
+    static constexpr int kGrainWaveRows = 36;
+    static constexpr int kGrainCloudTop = 88;
+
     void draw_grain_sparks(enaga::Canvas &canvas, const WaveView &view, int middle) {
-        grain_glow_.fade(180);
+        (void)middle;
+        grain_glow_.fade(190);
         for (int i = 0; i < WaveView::kMarks; i++) {
             if (view.mark[i] >= kWaveColumns || view.glow[i] == 0) continue;
             const int g = view.glow[i] > 15 ? 15 : view.glow[i];
-            const int y = 6 + ((i * 5) % 11) - 5;         // -5..+5 about the middle, per grain
+            const int y = 3 + (i * 7) % 24;
             grain_glow_.plot(view.mark[i], y, g);
+            grain_glow_.plot(view.mark[i] - 1, y, g * 2 / 3);
+            grain_glow_.plot(view.mark[i] + 1, y, g * 2 / 3);
             grain_glow_.plot(view.mark[i], y - 1, g / 2);
             grain_glow_.plot(view.mark[i], y + 1, g / 2);
         }
-        grain_glow_.blit(canvas.data(), 0, middle - 6);
+        canvas.rect(0, kGrainCloudTop - 2, 124, 1, 2);
+        paint::small_text(canvas.data(), 0, kGrainCloudTop, "GRAINS", 5);
+        grain_glow_.blit(canvas.data(), 0, kGrainCloudTop);
     }
 
     // --- MIXER's master pages (MST, EQ): the spectrum and a vectorscope -------------------------
@@ -379,7 +418,7 @@
     //
     // The chain's filter (dsp/chain.hpp: CUT 20 Hz-18 kHz exponential, RES 0-0.95, MOD OFF, LP,
     // BP, HP in 12 or 24 dB) as a curve on a log-frequency axis, 30 Hz to 15 kHz across the
-    // picture, +12 dB at the top to -36 dB at the bottom, with a dim fill under it; behind it,
+    // picture, +18 dB at the top to -36 dB at the bottom, with a dim fill under it; behind it,
     // dim, the output's spectrum (app/spectrum.hpp) while the beat plays, so a sweep is seen
     // carving it; a line at the cutoff with knob B's badge; the mode in the small font. The
     // magnitudes are the textbook state-variable ones, worked in decibels from log2, no root.
@@ -396,8 +435,8 @@
         const int rows = kPictureRows - 1;
         const int bottom = top + rows;
         const auto row_of_db = [&](float db) {
-            const float clamped = db > 12.0f ? 12.0f : (db < -36.0f ? -36.0f : db);
-            return top + int((12.0f - clamped) * float(rows) * (1.0f / 48.0f) + 0.5f);
+            const float clamped = db > 18.0f ? 18.0f : (db < -36.0f ? -36.0f : db);
+            return top + int((18.0f - clamped) * float(rows) * (1.0f / 54.0f) + 0.5f);
         };
         // Frequency of column x: 30 Hz x 500^(x / 123).
         const auto hz_of = [](int x) { return 30.0f * ed::exp2(float(x) * (8.9658f / 123.0f)); };
@@ -419,9 +458,10 @@
             for (int b = 0; b < spectrum::kBands; b++) {
                 const int x0 = x_of(float(spectrum::kEdges[b]) * 93.75f);
                 const int x1 = x_of(float(spectrum::kEdges[b + 1]) * 93.75f);
-                const int lit = paint::level_rows(uint32_t(milli[b]) * 4u, rows, 48);
-                for (int x = x0 < 0 ? 0 : x0; x < x1 && x < 124; x++) {
-                    canvas.rect(x, bottom - lit + 1, 1, lit, 2);
+                const int lit = paint::level_rows(uint32_t(milli[b]) * 2u, rows * 3 / 4, 48);
+                // Thin dim bars every other column, as the mockup draws the spectrum behind.
+                for (int x = (x0 < 0 ? 0 : x0) | 1; x < x1 && x < 124; x += 2) {
+                    canvas.rect(x, bottom - lit + 1, 1, lit, 4);
                 }
             }
         }
@@ -443,7 +483,7 @@
                 if (mode % 2 == 0) db *= 2.0f;                    // the 24 dB modes: two stages
             }
             const int y = row_of_db(db);
-            for (int fy = y + 2; fy < bottom; fy += 2) canvas.pixel(x, fy, 3);
+            for (int fy = y + 3; fy < bottom; fy += 3) canvas.pixel(x, fy, 2);
             xs[n] = int16_t(paint::q4(x));
             ys[n] = int16_t(paint::q4(y));
             n++;
@@ -544,4 +584,102 @@
             paint::small_text(canvas.data(), slot * 31 + 13, y, line, 15);
             draw_value_bar(canvas, slot * 31, y + 7, 28, 2, shown, 8);
         }
+    }
+
+    // --- MIXER's master pages, as the mockup draws them ---------------------------------------
+    //
+    // The page's knobs two to a line at the top (name and value, a bar under each), then while
+    // the beat plays the output's spectrum large (rows 41-80, peak dots, 100 / 1K / 10K under it),
+    // and under that a vectorscope (30 x 30, afterglow), the glue compressor's gain reduction
+    // and the limiter as two bars falling from the top, the reduction in decibels and the peak.
+    // Stopped, the analysers' rows say so and hold still.
+    void draw_master_page(enaga::Canvas &canvas) {
+        char line[24];
+        uint8_t *px = canvas.data();
+        const bool running = enaga::clock::state().running != 0;
+        for (int slot = 0; slot < 4; slot++) {
+            const int8_t field = kMixerPages[mixer_bank_].field[slot];
+            const int x = (slot % 2) * 62;
+            const int y = 18 + (slot / 2) * 11;
+            char *out = line;
+            if (field < 0) {
+                append(out, "---");
+            } else {
+                append(out, master_field_name(uint8_t(field)));
+                *out++ = ' ';
+                append_mixer_value(out, mixer_bank_, slot);
+            }
+            *out = 0;
+            canvas.text(x, y, line, field < 0 ? 4 : 15);
+            if (field >= 0) {
+                const int bar = int(mixer_byte(mixer_bank_, slot)) * 58 / 127;
+                canvas.rect(x, y + 8, 58, 1, 3);
+                if (bar > 0) canvas.rect(x, y + 8, bar, 1, 12);
+            }
+        }
+        if (!running) {
+            vector_glow_.clear();
+            for (int b = 0; b < spectrum::kBands; b++) band_rows_[b] = band_peak_[b] = 0;
+            paint::small_text(px, 0, 60, "PLAY: SPECTRUM AND SCOPE", 5);
+            return;
+        }
+
+        // The spectrum, 24 bands of 5 pixels (4 lit), 40 rows, read 12 dB hot over 48 dB.
+        uint16_t milli[spectrum::kBands];
+        spectrum::analyse(scope_history_, spectrum_work_, milli);
+        const int rows = 40, bottom = 41 + rows - 1;
+        for (int b = 0; b < spectrum::kBands; b++) {
+            const int lit = paint::level_rows(uint32_t(milli[b]) * 4u, rows, 48);
+            band_rows_[b] = uint8_t(lit > band_rows_[b] - 3 ? lit : band_rows_[b] - 3);
+            if (lit >= band_peak_[b]) { band_peak_[b] = uint8_t(lit); band_hold_[b] = 12; }
+            else if (band_hold_[b] > 0) band_hold_[b]--;
+            else if (band_peak_[b] > 0) band_peak_[b]--;
+            const int x = b * 5;
+            for (int r = 0; r < band_rows_[b]; r += 2) {
+                const uint8_t g = r >= rows - 10 ? 15 : (r >= rows - 22 ? 11 : 7);
+                canvas.rect(x, bottom - r, 4, 1, g);
+            }
+            if (band_peak_[b] > 0) canvas.rect(x, bottom - band_peak_[b], 4, 1, 15);
+        }
+        canvas.rect(0, bottom + 1, 120, 1, 4);
+        paint::small_text(px, 9, bottom + 3, "100", 5);
+        paint::small_text(px, 52, bottom + 3, "1K", 5);
+        paint::small_text(px, 98, bottom + 3, "10K", 5);
+
+        // The vectorscope, 30 x 30 at (0, 88), in a frame with its axes dotted.
+        vector_glow_.fade(130);
+        for (uint32_t ago = 0; ago < 400; ago += 2) {
+            const int l = scope_history_.left(ago);
+            const int r = scope_history_.right(ago);
+            vector_glow_.plot(11 + (l - r) * 30 / 65536, 11 - (l + r) * 30 / 65536, 13);
+        }
+        canvas.rect(0, 89, 30, 1, 3);
+        canvas.rect(0, 116, 30, 1, 3);
+        paint::dotted_v(px, 15, 90, 115, 3, 3);
+        paint::dotted_h(px, 1, 29, 102, 3, 3);
+        vector_glow_.blit(px, 4, 91);
+
+        // The compressor's reduction and the limiter, falling from the top of two bars.
+        const uint32_t gain = engine_.status().comp_gain_milli.load(std::memory_order_relaxed);
+        const int reduction_db = -paint::level_db_q8(gain) / 256;              // 0..60
+        const int cmp = reduction_db * 2 > 25 ? 25 : reduction_db * 2;           // 2 rows a dB
+        canvas.rect(36, 89, 8, 25, 2);
+        if (cmp > 0) canvas.rect(36, 89, 8, cmp, 13);
+        canvas.rect(48, 89, 8, 25, 2);
+        if (limit_lit_) canvas.rect(48, 89, 8, 25, 13);
+        paint::small_text(px, 34, 116, "CMP", 6);
+        paint::small_text(px, 48, 116, "LIM", 6);
+        paint::small_text(px, 64, 90, "GR", 6);
+        char *out = line;
+        if (reduction_db > 0) *out++ = '-';
+        append_number(out, uint32_t(reduction_db));
+        append(out, " DB");
+        *out = 0;
+        canvas.text(64, 97, line, 15);
+        out = line;
+        const int peak_milli = int(engine_.status().peak_milli.load(std::memory_order_relaxed));
+        append(out, "PEAK ");
+        append_tenths(out, uint32_t(peak_milli > 9999 ? 9999 : peak_milli));
+        *out = 0;
+        paint::small_text(px, 64, 113, line, peak_milli >= 1000 ? 15 : 9);
     }

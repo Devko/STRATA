@@ -208,6 +208,11 @@
     void draw_mixer_fields(enaga::Canvas &canvas) {
         char line[40];
         char *out = line;
+        // MST and EQ are the mockup's master page (app/ui_live.hpp).
+        if (kMixerPages[mixer_bank_].master) {
+            draw_master_page(canvas);
+            return;
+        }
 
         append(out, "MIXER ");
         append(out, kMixerPages[mixer_bank_].name);

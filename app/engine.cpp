@@ -3198,6 +3198,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     const float fallen = meter_ * kMeterFall;
     meter_ = peak > fallen ? peak : fallen;
     status_.meter_milli.store(to_milli(meter_), std::memory_order_relaxed);
+    status_.comp_gain_milli.store(to_milli(mixer_.compressor_gain()), std::memory_order_relaxed);
     if (peak >= 1.0f) status_.bump_limit_seen();
 
     // And where the pattern is in its pass: a subtraction from the boundary resolve_tick keeps,

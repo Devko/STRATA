@@ -11,60 +11,29 @@
         char line[40];
         char *out = line;
 
-        out = line;
-        append(out, "EDIT T");
-        append_number(out, uint32_t(selected_ + 1));
-        append(out, " ");
-        append(out, machine_name(engine_.machine_id(selected_)));
-        append(out, "  ");
-        append(out, page_name(Page(param_page_)));
-        *out = 0;
-        canvas.text(0, 18, line, 14);
-
-        // Which of the eight pages is showing, as a row of boxes: the spec's selection keys
-        // flip between them, so showing where you are matters more than labels.
-        for (int p = 0; p < kEditPages; p++) {
-            const uint8_t grey = p == param_page_ ? 14 : 4;
-            canvas.rect(p * 16 + 1, 27, 14, 2, grey);
-        }
+        // As the mockups draw EDIT: the page is a tab and the track a badge in the frame, so the
+        // four knobs take two lines, two to a line (letter, name and value, and the heard value's
+        // bar with a lock's tick under it), and the picture gets the rest of the screen.
         const bool lfo_page = param_page_ == int(Page::lfo);
         const bool arp_page = param_page_ == int(Page::arp);
         const bool asr_page = param_page_ == int(Page::asr);
         const bool osc_page = param_page_ == int(Page::osc);
-        const bool word_page = lfo_page || arp_page || asr_page || osc_page;
+        uint8_t *px = canvas.data();
 
-        // The four parameters in large type, one row per encoder: its letter, the name, the
-        // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
-        // the bottom would only repeat these four, and with names and values side by side it
-        // did not fit four to a line (7 characters is 41 pixels, in a 32-pixel slot).
         for (int slot = 0; slot < 4; slot++) {
             const int index = edit_index(slot);
-            const int y = kEditRowsY + slot * 9;
+            const int x = (slot % 2) * 62;
+            const int y = kEditRowsY + (slot / 2) * 11;
             const ShownParam shown = shown_param(index);
-            const uint8_t value = shown.heard;         // the held step's lock, if it has one
-
-            out = line;
-            *out++ = char('A' + slot);
-            *out = 0;
-            canvas.text(0, y, line, 7);
-
+            const char letter[2] = {char('A' + slot), 0};
+            paint::small_text(px, x, y + 1, letter, 7);
             out = line;
             append(out, param_name_for(index));
+            *out++ = ' ';
+            append_param_value(out, index, shown.heard);   // the held step's lock, if it has one
             *out = 0;
-            canvas.text(10, y, line, 13);
-
-            out = line;
-            append_param_value(out, index, value);
-            *out = 0;
-            canvas.text(34, y, line, 15);
-
-            // The LFO's values are words up to five characters long ("1/16T"), so its bars start
-            // further right; so does a note ("C#4+" is four), and every GRAIN value, which reads
-            // in its unit ("127MS", "X1.4", "HOLD").
-            const bool wide = word_page || shows_note(index) ||
-                              machine_is_grain(engine_.machine_id(selected_));
-            const int bar_x = wide ? 70 : 56;
-            draw_value_bar(canvas, bar_x, y + 2, wide ? 56 : 70, 4, shown, 9);
+            canvas.text(x + 5, y, line, 15);
+            draw_value_bar(canvas, x + 5, y + 8, 54, 1, shown, 9);
         }
 
         // A waveform or an envelope under the knobs (docs/CONTROLS.md, "Waveforms and
@@ -170,7 +139,7 @@
 
     // --- EDIT's pictures: the waveform and the envelopes -------------------
     //
-    // docs/CONTROLS.md, "Waveforms and envelopes". Under the four knobs, rows 77-117, x 0-123
+    // docs/CONTROLS.md, "Waveforms and envelopes". Under the four knobs, rows 50-117, x 0-123
     // (the frame's meter has 126-127): SAMPLE's and GRAIN's sample on their SRC page, and the
     // envelope a page's knobs shape on AMP, ASR and a synth's FLTR. Nothing here walks sample
     // memory: the waveform comes from the loader's overview (core/overview.hpp, 250 bytes) and
@@ -180,14 +149,13 @@
     enum class EditPicture : uint8_t { none, wave, amp, filter, table, response };
 
     // EDIT's rows since the live visuals' rebuild (the mockups give the graph the screen): the
-    // title at 18, the page boxes at 27, the four knobs 9 pixels apart from 31, a picture's line
-    // at 68 and the picture under it, rows 77-117, twice what it was; a page with no picture puts
-    // its lines at 77 and 86.
-    static constexpr int kEditRowsY = 31;
-    static constexpr int kEditLineY = 68;
-    static constexpr int kEditTextY = 77;
-    static constexpr int kPictureTop = 77;
-    static constexpr int kPictureRows = 41;              // rows 77-117: the bottom line is 120
+    // four knobs two to a line at 18 and 29, a picture's line at 41 and the picture under it,
+    // rows 50-117, three times what it was; a page with no picture puts its lines at 50 and 59.
+    static constexpr int kEditRowsY = 18;
+    static constexpr int kEditLineY = 41;
+    static constexpr int kEditTextY = 50;
+    static constexpr int kPictureTop = 50;
+    static constexpr int kPictureRows = 68;              // rows 50-117: the tabs are at 121
 
     EditPicture edit_picture() const {
         const uint8_t id = engine_.machine_id(selected_);
@@ -256,7 +224,9 @@
         const WaveOverview &overview = storage_.overview(selected_);
         const WaveView view = engine_.status().wave[selected_].read();
         const bool grain = machine_is_grain(engine_.machine_id(selected_));
-        const int half = (kPictureRows - 2) / 2;              // 10 rows each way
+        // GRAIN's sample takes the top 36 rows: the grain cloud has the rest (app/ui_live.hpp).
+        const int picture_rows = grain ? kGrainWaveRows : kPictureRows;
+        const int half = (picture_rows - 2) / 2;
         const int middle = kPictureTop + 1 + half;
         const int filled = overview.filled > kWaveColumns ? kWaveColumns : int(overview.filled);
 
@@ -286,7 +256,7 @@
                 const int x0 = view.lo;
                 const int x1 = view.hi > view.lo ? int(view.hi) : x0 + 1;
                 const int top = kPictureTop;
-                const int bottom = kPictureTop + kPictureRows - 1;
+                const int bottom = kPictureTop + picture_rows - 1;
                 canvas.rect(x0, top, x1 - x0 + 1, 1, 13);
                 canvas.rect(x0, bottom, x1 - x0 + 1, 1, 13);
                 canvas.rect(x0, top, 1, 3, 13);
