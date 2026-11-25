@@ -97,6 +97,7 @@ void track_init(TrackPattern &track) {
     track.length = uint8_t(kStepsPerTrack);
     track.speed = uint8_t(Speed::x1);
     track.swing = kSwingInherit;
+    track.play = uint8_t(PlayMode::fwd);
     for (int i = 0; i < kStepsPerTrack; i++) step_clear(track.steps[i]);
 }
 

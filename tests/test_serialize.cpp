@@ -373,9 +373,11 @@ TEST(the_format_constants_are_the_documented_ones) {
     CHECK_EQ(int(kLockBytes), 2);
     CHECK_EQ(int(kTrackBytes), 3 + 64 * 12);
     CHECK_EQ(int(kTracksSectionBytes), 8 * (3 + 64 * 12));
-    // 16 header + 36 table + 12 pattern header + 6168 tracks + 2048 locks.
-    CHECK_EQ(int(kPatternMaxBytes), 8280);
-    CHECK_EQ(int(kPatternFixedBytes), 8280 - 2048);
+    CHECK_EQ(int(kSectionPlayModes), 4);
+    CHECK_EQ(int(kPlayModesSectionBytes), 8);
+    // 16 header + 48 table + 12 pattern header + 6168 tracks + 8 play modes + 2048 locks.
+    CHECK_EQ(int(kPatternMaxBytes), 8300);
+    CHECK_EQ(int(kPatternFixedBytes), 8300 - 2048);
 }
 
 TEST(a_written_pattern_starts_with_the_documented_header) {
@@ -394,14 +396,16 @@ TEST(a_written_pattern_starts_with_the_documented_header) {
     CHECK_EQ(peek_u32(g_buffer, kCrcOffset),
              crc32(g_buffer + kHeaderBytes, written - kHeaderBytes));
 
-    // The section table: three sections, back to back, starting right after the table.
+    // The section table: four sections, back to back, starting right after the table.
     CHECK_EQ(int(peek_u16(g_buffer, 16)), int(kSectionPatternHeader));
     CHECK_EQ(peek_u32(g_buffer, 16 + 4), kPatternSections * kSectionEntryBytes);
     CHECK_EQ(peek_u32(g_buffer, 16 + 8), kPatternHeaderSectionBytes);
     CHECK_EQ(int(peek_u16(g_buffer, 28)), int(kSectionTracks));
     CHECK_EQ(peek_u32(g_buffer, 28 + 8), kTracksSectionBytes);
-    CHECK_EQ(int(peek_u16(g_buffer, 40)), int(kSectionLocks));
-    CHECK_EQ(peek_u32(g_buffer, 40 + 8), 0u);      // an empty pattern has no locks
+    CHECK_EQ(int(peek_u16(g_buffer, 40)), int(kSectionPlayModes));
+    CHECK_EQ(peek_u32(g_buffer, 40 + 8), kPlayModesSectionBytes);
+    CHECK_EQ(int(peek_u16(g_buffer, 52)), int(kSectionLocks));
+    CHECK_EQ(peek_u32(g_buffer, 52 + 8), 0u);      // an empty pattern has no locks
 
     // An empty pattern is the fixed part and nothing more.
     CHECK_EQ(written, kPatternFixedBytes);
@@ -770,10 +774,10 @@ TEST(a_damaged_section_table_is_refused) {
                  int(SerializeResult::malformed));
     }
 
-    // A section that claims more bytes than the payload holds.
+    // A section that claims more bytes than the payload holds: the last one, the locks.
     CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
              int(SerializeResult::ok));
-    poke_u32(g_buffer, 28 + 8, kTracksSectionBytes + 1);
+    poke_u32(g_buffer, 52 + 8, 1);
     refresh_crc(g_buffer);
     CHECK_EQ(int(pattern_read(g_loaded, g_buffer, written)), int(SerializeResult::malformed));
 
@@ -1034,4 +1038,55 @@ TEST(a_speed_byte_one_past_the_table_loads_as_normal_speed) {
     uint32_t consumed = 0;
     CHECK_EQ(int(pattern_read(g_loaded, g_buffer, size, &consumed)), int(SerializeResult::ok));
     CHECK_EQ(int(g_loaded.tracks[0].speed), int(Speed::x1));
+}
+
+// --- play modes (section 4) -----------------------------------------------
+
+TEST(every_tracks_play_mode_survives_a_round_trip) {
+    make_busy_pattern(g_source);
+    for (int t = 0; t < kTracks; t++) g_source.tracks[t].play = uint8_t(t % int(PlayMode::count));
+    uint32_t written = 0;
+    CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, written)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_loaded.tracks[t].play), t % int(PlayMode::count));
+    }
+    // One byte a track, in track order, in its own section.
+    const uint32_t at = section_at(g_buffer, kSectionPlayModes);
+    CHECK(at != 0u);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(g_buffer[at + uint32_t(t)]), t % 8);
+}
+
+// A pattern from before play modes: no section 4. Renaming the id is what an older file looks
+// like to this reader -- the section is simply not found -- and every track must play forward,
+// with the rest of the pattern intact.
+TEST(a_pattern_without_the_play_mode_section_loads_every_track_forward) {
+    make_busy_pattern(g_source);
+    for (int t = 0; t < kTracks; t++) g_source.tracks[t].play = uint8_t(PlayMode::rnd4);
+    uint32_t written = 0;
+    CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
+             int(SerializeResult::ok));
+    poke_u16(g_buffer, entry_of(g_buffer, kSectionPlayModes), 999);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, written)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_loaded.tracks[t].play), int(PlayMode::fwd));
+        CHECK_EQ(int(g_loaded.tracks[t].length), int(g_source.tracks[t].length));
+    }
+    CHECK_EQ(int(g_loaded.locks_used), int(pattern_locks_reachable(g_source)));
+}
+
+TEST(an_unknown_play_mode_loads_as_forward_and_a_short_section_is_malformed) {
+    uint32_t size = write_busy();
+    g_buffer[section_at(g_buffer, kSectionPlayModes) + 3] = uint8_t(PlayMode::count);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, size)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.tracks[3].play), int(PlayMode::fwd));
+
+    size = write_busy();
+    const uint32_t entry = entry_of(g_buffer, kSectionPlayModes);
+    poke_u32(g_buffer, entry + 8, kPlayModesSectionBytes - 1);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, size)), int(SerializeResult::malformed));
 }

@@ -133,6 +133,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | KITS | the kit browser | |
 | RELOAD SAMPLE | load the selected track's sample again | |
 | TRACK SPEED | | selected track's speed, 2 to 1/8 |
+| TRACK PLAY | | selected track's play mode: FWD, REV, PING, RND1, RND2, RND4, RND8, RND16 (`T3 PLAY RND4`). Which step sounds in each slot; the pattern is not changed. One undo level a change |
 | CHAIN | | ON / OFF |
 | CHAIN END | | SONG (play once) / LOOP |
 | AUTO-FILL | | OFF 4 8 16 bars |

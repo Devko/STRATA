@@ -91,6 +91,7 @@ FM4 and GRAIN machines.
 | Steps, trigless steps (FUNC + tap), STEP LED colours | v0.1.0 | ◐ | |
 | Step page: NOTE, VEL, LEN, MICR (±11 ticks), PROB, COND, RTCH 1-8, RAMP, ACNT, SLID, CHRD | v0.1.0 | ○ (6) | LEN is the note length on VA POLY, on VA MONO once SUS is up, and for MIDI out; ignored by drums, SAMPLE and GRAIN |
 | Trig conditions: a:b, FILL, PRE, NEI, 1ST and their NOTs; seeded | v0.1.0 | ○ (M3) | |
+| **Play modes per track**: FWD, REV, PING, RND1-RND16 (FUNC menu TRACK PLAY); seeded, the pattern untouched | unreleased | ○ (8, play modes) | Not on PERFORM yet (the backlog's arm-and-knob idea) |
 | Parameter locks: 8 a step, 1,024 a pattern; push the knob to remove one | v0.1.0 | ○ (6) | `FULL n` when the pool is full (never reached on the unit) |
 | Pattern swing and **per-track swing** (PATTERN page) | v0.1.0 | ○ (13e) | |
 | Euclidean fill (FUNC + A/B/C in GRID) | v0.1.0 | ○ (M3) | |

@@ -289,6 +289,14 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
         int8_t micro[kStepsPerTrack];
         for (int i = 0; i < kStepsPerTrack; i++) micro[i] = source.steps[i].micro;
 
+        // The play mode and its seed are read fresh too, for the same reason: an undo or a
+        // mutation that changes them must be heard on the next step, configure() or not.
+        state.timing.play =
+            source.play < uint8_t(PlayMode::count) ? PlayMode(source.play) : PlayMode::fwd;
+        // Only the RND modes draw, so only they pay for the hash.
+        state.timing.play_seed =
+            state.timing.play >= PlayMode::rnd1 ? play_seed(pattern_seed_, t) : 0u;
+
         Firing firings[kMaxFiringsPerTick];
         const int found =
             steps_firing_at(tick_number, state.timing, micro, firings, kMaxFiringsPerTick);
@@ -297,7 +305,8 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
             const Firing &firing = firings[f];
             if (firing.step >= state.timing.length) continue;    // cannot happen; cheap to deny
 
-            // 1. trig state. The playhead follows time, so it moves over an off step too.
+            // 1. trig state. The playhead follows time, so it moves over an off step too. It is
+            // the step that plays, not the slot: under REV or RND the light jumps with the sound.
             state.playhead = firing.step;
 
             const Step &step = source.steps[firing.step];

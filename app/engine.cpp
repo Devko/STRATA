@@ -548,6 +548,11 @@ void Engine::apply(const Command &command) {
             }
             break;
 
+        case Cmd::set_track_play:
+            // The scheduler reads the mode fresh every tick, so the next step already follows it.
+            if (command.a < uint8_t(PlayMode::count)) live().tracks[track].play = command.a;
+            break;
+
         case Cmd::set_pattern_swing: {
             const int wanted = command.c == kDeltaFlag
                                    ? int(live().swing) + int(int8_t(command.b))
