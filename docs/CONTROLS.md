@@ -433,7 +433,8 @@ and the picture draws the lock.
 | Page | Machine | Picture |
 | --- | --- | --- |
 | SRC | SAMPLE | The sample, each column's range about the middle, scaled so the loudest column fills the height. The START..END window bright, the rest dim; START and END as bright full-height lines; each slice start (SLC above 1, equal or AUTO) a dotted line; each playing voice a full-height column, as bright as its envelope. A streamed file shows its resident head and a dotted line for the rest |
-| SRC | GRAIN | The sample, all bright; a bracket where the next grain starts (POS plus SCN's travel, one grain's span wide); a tick for each grain in the air, as bright as its window times the cloud's envelope, so the cloud breathes |
+| SRC | GRAIN | The sample, all bright; a bracket where the next grain starts (POS plus SCN's travel, one grain's span wide); a tick for each grain in the air, as bright as its window times the cloud's envelope, so the cloud breathes; and each grain a soft spark at a height of its own, leaving a fading trail |
+| SRC | WAVE MONO, WAVE POLY | The table as a waterfall: its sixteen frames stacked back to front, up and to the right, each hiding what is behind it, the frame POS plays brightest and its neighbours brighter than the rest. `BUILDING` while the table is still being made |
 | AMP | every machine but MID | The amplitude envelope: ATK and DEC on SAMPLE (DEC at the top holds), DEC alone on the drums, ATK DEC SUS REL on the synths, FM4 and GRAIN |
 | ASR | VA, WAVE, FM4, GRAIN | The same envelope |
 | FLTR | VA and WAVE | The filter's: ATK, FDE (or 0.55 x DEC while FDE is 0), FSU, REL, and ENV as its height |

@@ -39,6 +39,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | Shared budget of 12 VA POLY voices across all tracks; quietest voice choked with a 64-frame fade | v0.1.0 | ○ ("The shared VA POLY voice budget") | 12 is provisional until U1/U2 on the unit |
 | Every screen fits Enaga's 5x7 font (layout test over every screen) | v0.1.0 | ◐ (overlaps seen at first boot, fixed in PR #7) | |
 | **Screen frame**: top line with bar.beat, progress line, live strip of what is off rest, master meter with held peak and limiter light | #144 | ○ (W26) | The meter is 2 px wide; nothing may draw past x 124 |
+| **Live screens 5**: WAVE's SRC page draws the table as a waterfall (POS brightest); GRAIN's grains spark with a fading trail | this PR | ○ (W36) | |
 | **Live screens 4**: the LFO page's shape with the phase riding it and an output strip; envelope fills lit as a note travels | this PR | ○ (W35) | |
 | **Live screens 3**: GRID trigs glow and fade; PERFORM macro gauges over a scope, eight track meters (while running) | this PR | ○ (W34) | draw() 1.34 ms a frame on PERFORM (emulator, cl6x) |
 | **Live screens 2**: audio taps for the screens: each track's level, each LFO's phase, the output into a ring for scopes and spectra (`core/scope.hpp`) | #161 | - | About +0.3 points of load, fixed |

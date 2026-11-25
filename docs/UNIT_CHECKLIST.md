@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W35, about 96 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W36, about 99 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -416,6 +416,13 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 - DEP back to 0: the picture goes, `LFO OFF: SET DEP+DST`. `____`
 - Lower pad 8 (SAMPLE), AMP page: as each note plays, the area under the curve lights up behind
   the riding square. `____`
+
+**W36. WAVE's waterfall, GRAIN's sparks (3 min).** Beat playing, A01.
+- Lower pad 7 (the chord), FUNC + EDIT, DOWN to `WPL` (WAVE POLY), EDIT, SRC page: under the
+  knobs the table as a stack of waves. Turn B (POS) up: the bright wave moves back through the
+  stack (up and right). Turn A through the tables: the stack changes shape. `____`
+- Lower pad 8, FUNC + EDIT to GRAIN, EDIT, SRC: the grains drift as sparks with tails over the
+  sample while the beat plays. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
