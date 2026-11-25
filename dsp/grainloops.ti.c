@@ -1,5 +1,5 @@
 /* GRAIN's per-sample loops (grainloops.h). Built by cl6x when it is installed, else GCC --
- * build_app.py routes *.ti.c to TI's compiler (docs/BUDGET.md, M2).
+ * build_app.py routes *.ti.c to TI's compiler (docs/archive/BUDGET_MILESTONES.md, M2).
  *
  * Four things happen per sample per grain, and the shape of each one is a decision dsp/grain.hpp
  * argues for. In short:

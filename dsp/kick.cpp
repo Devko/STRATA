@@ -4,7 +4,7 @@
 // --- what is expected to dominate -----------------------------------------------------------
 //
 // Two voices, so this is per voice per 64-frame block, counting multiplies and adds in the hot
-// loops only. These are the figures the central measurement (docs/BUDGET.md, PLAN.md M0.5)
+// loops only. These are the figures the central measurement (docs/archive/BUDGET_MILESTONES.md, PLAN.md M0.5)
 // should be compared against.
 //
 //   stage              expected to dominate                            flops/sample
@@ -31,7 +31,7 @@
 //
 // The two loops that dominate -- the body shaper and the click's gate and slew -- now live in
 // dsp/drumloops.ti.c, which build_app.py sends to cl6x while this file goes through GCC
-// (CLAUDE.md's *.ti.c rule; docs/BUDGET.md, M2, has what that bought). The arithmetic moved
+// (CLAUDE.md's *.ti.c rule; docs/archive/BUDGET_MILESTONES.md, M2, has what that bought). The arithmetic moved
 // unchanged; what is left here is control rate, the Enaga block functions and the voice logic.
 #include "kick.hpp"
 

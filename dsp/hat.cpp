@@ -4,7 +4,7 @@
 // --- what is expected to dominate -----------------------------------------------------------
 //
 // Two voices, so this is per voice per 64-frame block, counting multiplies and adds in the hot
-// loops only. These are the figures the central measurement (docs/BUDGET.md, PLAN.md M0.5)
+// loops only. These are the figures the central measurement (docs/archive/BUDGET_MILESTONES.md, PLAN.md M0.5)
 // should be compared against.
 //
 //   stage              expected to dominate                            flops/sample
@@ -32,7 +32,7 @@
 // that follows makes their PolyBLEP correction pointless anyway. The two SVFs are Enaga's own
 // C block functions, which cl6x pipelines, so CLAUDE.md's *.ti.c rule bit only on the square
 // and VCA loops here -- and both now live in dsp/drumloops.ti.c, which build_app.py sends to
-// cl6x while this file goes through GCC (docs/BUDGET.md, M2, has what that bought). The
+// cl6x while this file goes through GCC (docs/archive/BUDGET_MILESTONES.md, M2, has what that bought). The
 // arithmetic moved unchanged, the clocked noise included: the RNG still advances only on a
 // sample-and-hold clock edge, so the noise stream is the one this machine always had.
 #include "hat.hpp"

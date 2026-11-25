@@ -2,7 +2,7 @@
  *
  * The one per-sample loop in the sampler that ran on every voice of every SAMPLE track was C++
  * in dsp/sample.cpp, so the cl6x build compiled it with GCC: the same position M1 was in before
- * the drum loops moved (docs/BUDGET.md, M2, where cl6x bought 1.11x until they did and 1.80x
+ * the drum loops moved (docs/archive/BUDGET_MILESTONES.md, M2, where cl6x bought 1.11x until they did and 1.80x
  * after). This is that move for the sampler -- the same expressions in the same order, so the
  * read is bit-identical (tests/test_sample.cpp pins it against the loop it replaced, and the
  * golden renders pin every SAMPLE sound).

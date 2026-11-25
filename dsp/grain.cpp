@@ -4,7 +4,7 @@
 // --- what is expected to dominate -----------------------------------------------------------
 //
 // Per grain per 64-frame block, counting the hot loop only (dsp/grainloops.ti.c). These are the
-// figures the central measurement (docs/BUDGET.md, PLAN.md M0.5) should be compared against, and
+// figures the central measurement (docs/archive/BUDGET_MILESTONES.md, PLAN.md M0.5) should be compared against, and
 // they are an ESTIMATE: nothing in this file has been measured on a unit.
 //
 //   stage              expected to dominate                  flops/sample  bytes/sample

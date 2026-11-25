@@ -6,6 +6,14 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Requires
+
+- **Enaga 0.3.0 firmware.** STRATA is now built against Enaga v0.3.0, whose host table has one
+  more entry than 0.2.0's, so install the 0.3.0 firmware with this build. Enaga's loader checks
+  only the ABI number, which did not change, so an older firmware would load it and misbehave.
+  With 0.3.0, MIDI OUT on the DIN jack no longer stalls while USB goes to a computer that is not
+  reading.
+
 ### Added
 
 - **LFO TRIG (S2).** Push RAT's knob (B) on the LFO page for **FREE** (as before), **RETRIG**
@@ -15,6 +23,31 @@ the project file format or the controls.
   and holds, SQR is a gate for half the cycle, SIN one wobble, S+H a new random value per note.
   RAT is the time (free) or the note length (synced). The page's last line ends `RETRIG` or
   `ONE-SHOT`. Stored in the kit; older projects load every LFO as FREE.
+- **Macro learn by turning (D11).** In PERFORM push a macro's knob: EDIT opens in LEARN
+  (`LEARN B 0/4 TURN KNOBS`). Every knob you turn there, on any page and any track, goes on the
+  macro, from where it was (the macro's 0) to where you leave it (its 127). OK, CLR, HOME or
+  leaving EDIT ends it (`B: 2 PARAMS`) and the knobs snap back. A push takes a parameter off.
+- **The STEP keys are steps in PERFORM and KEYS (D12)**, as on GRID: tap, hold + knob, hold + OK.
+  KEYS plays on the pads, so you can play and place steps at once.
+- **Hold STEP + an upper pad edits that step (D6):** FILL steps its FILL condition, REPEAT its
+  ratchet, MUTE an A:B condition, MUTATE its probability (`STEP 5 PROB 50%`). STEP first edits,
+  pad first performs.
+- **Hold FILL + tap STEP** writes a FILL trig on the selected track (`FILL TRIG`); again takes it
+  off.
+- **Hold OK on a PROJECT slot: the pattern menu.** COPY, PASTE, CLEAR and DOUBLE for the pattern
+  under the cursor; DOUBLE doubles every track up to 64 steps and copies the steps and locks into
+  the new half. A tap on OK still queues the slot. Shortcuts on the slots: FUNC + UP copies,
+  FUNC + DOWN twice pastes, FUNC + LEFT twice clears.
+- **LOAD DEMO in the FUNC menu** (OK twice): the factory demo, the beat a first start plays.
+- **FUNC + pad-row key held repeats** the length change: after 0.4 s, 20 steps a second.
+- **The screen frame.** Every screen has the same top line, `A01 3.2 130.0 > 24%` (pattern,
+  bar.beat, tempo, transport, load), a one-pixel progress line under it, a live strip on line 2
+  listing what is off rest (`K:L FX4 S40 M:AB LP`), and a master meter down the right edge with a
+  held peak and a limiter light.
+- **Locks on screen.** While a STEP is held, GRID's and EDIT's bars show what that step plays,
+  with a hollow tick at the kit value, and a line reads `S5 CUT 64>90`. GRID's cells show what
+  each trig carries: a dot for locks, cut corners for a condition or a probability, two teeth
+  for a ratchet, an outline for a trigless step. PERFORM's macro bars include pad pressure.
 - **Bounce to track.** A RESAMPLE take to FILE is offered to a track once it is on the card
   (`PUT ON TRK 3 GRN`): one OK makes it that track's sample (`T3 GRN: TAKE ON`), LEFT/RIGHT pick
   another track, CLR keeps it a file. It offers a SAMPLE or GRAIN track other than the one you
@@ -78,6 +111,9 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 | FUNC + hold MUTATE: delay freeze | Slot 5, ECHO FREEZE. FUNC + MUTATE is LOCK now (above) |
 | Slot 7: STUTTER | **MUTE BUS**: every track fades out while the delay and reverb ring on. The stutter is the REPEAT pad's |
 | Slot 13: FLANGER | **MORPH**: the A/B scene morph on any screen, beside an effect left up. PERFORM's VALUE still morphs too |
+| PERFORM: STEP 1-16 (and FUNC + STEP 1-4) put a parameter on a macro; push a knob in LEARN to add it | **Learn by turning** (above). A push in LEARN only takes a parameter off. FUNC + STEP 5-7 still put the kill EQ's bands on a macro |
+| KEYS: STEP 1-16 play the scale; the pad-row keys change the octave | The STEP keys are steps and the pad-row keys the step page; the pads are the keyboard, the octave is LEFT/RIGHT or the two octave pads |
+| NEW PROJECT: the factory demo | An empty project (the factory sounds and mixer, every pan centred, no steps, scenes or macros). The demo is LOAD DEMO |
 
 ### Changed
 
@@ -86,6 +122,16 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 - **Cutoff movement stops at about 100 Hz everywhere (D9).** A scene morph or a macro that takes
   a cutoff down now stops where the LFO already did; only the knob (and a lock) closes the filter
   all the way. LFO depth on a cutoff is about 3 octaves either side at DEP 127, not 5.
+- **FUNC + lower pad mutes every pad you press before the bar**, not only the last one; the same
+  pad twice takes it back. Stopped, it mutes at once.
+- **A cutoff stops at about 100 Hz (D9)** when an LFO or a lock sweeps it down, instead of
+  shutting the sound off. A knob already set lower stays where it is.
+- **Push VALUE + STEP 16 leaves the looper** like any other effect (D10): a finished loop falls
+  silent but is kept, a count-in or a take is cancelled. Push VALUE + CLR, then STEP 16, for a
+  new take.
+- **44.1 kHz files load through a windowed-sinc resampler** instead of linear interpolation:
+  the error at 10 kHz falls from -15 dB to -82 dB. Converting a 30 s stereo file takes about
+  0.4 s on the unit (reading it from the card, 1.4 s); 48 and 96 kHz files load as before.
 - **One filter on the synth machines (D8).** On VA MONO, VA POLY, WAVE MONO and WAVE POLY the FLTR
   page is now the synth's own filter, CUT RES ENV and the new **FDE** (filter decay: 0 keeps the
   old 0.55 x DEC, 1-127 its own time). The insert filter there is one knob, **TON** on SRC: 64
