@@ -10,7 +10,8 @@
 //
 // Writes OUTDIR/A01.wav .. A05.wav (the mix), OUTDIR/A01_T1.wav .. _T8.wav (each track of A01
 // soloed, so levels can be compared), and prints peak and RMS for each, which is what the
-// factory kit's levels were balanced against.
+// factory kit's levels were balanced against, and each mix's L-R balance: a mix more than
+// 3 dB off centre fails the render (exit 1).
 #include "engine.hpp"
 #include "factory.hpp"
 #include "fakehost.hpp"
@@ -67,7 +68,7 @@ void settle() {
     for (int i = 0; i < 3000; i++) g_engine.process(nullptr, g_block, uint32_t(kBlock));
 }
 
-struct Stats { float peak; float rms; };
+struct Stats { float peak; float rms; float balance_db; };   // balance: L over R RMS, dB
 
 // Play pattern `slot` of bank A from its first tick for `bars` bars, with `solo` (or -1 for all).
 Stats render(int slot, int bars, int solo, int *frames_out, int tail_bars = 1) {
@@ -89,7 +90,7 @@ Stats render(int slot, int bars, int solo, int *frames_out, int tail_bars = 1) {
                        int(kRate * 60.0f / kBpm * 4.0f * float(tail_bars));
     int done = 0;
     uint32_t next_tick = 0;
-    double peak = 0.0, sum = 0.0;
+    double peak = 0.0, sum = 0.0, sum_l = 0.0, sum_r = 0.0;
     while (done + kBlock <= frames && done + kBlock <= kMaxFrames) {
         while (next_tick < ticks) {
             const double at = double(next_tick) * frames_per_tick;
@@ -103,6 +104,7 @@ Stats render(int slot, int bars, int solo, int *frames_out, int tail_bars = 1) {
             const float x = g_block[i];
             peak = std::fmax(peak, std::fabs(double(x)));
             sum += double(x) * double(x);
+            ((i & 1) ? sum_r : sum_l) += double(x) * double(x);
             const float c = x > 1.0f ? 1.0f : (x < -1.0f ? -1.0f : x);
             g_pcm[2 * done + i] = int16_t(std::lround(c * 32767.0f));
         }
@@ -110,10 +112,26 @@ Stats render(int slot, int bars, int solo, int *frames_out, int tail_bars = 1) {
     }
     host.set_running(false);
     *frames_out = done;
-    return {float(peak), float(std::sqrt(sum / double(2 * done)))};
+    const double balance = sum_l > 0.0 && sum_r > 0.0 ? 10.0 * std::log10(sum_l / sum_r) : 0.0;
+    return {float(peak), float(std::sqrt(sum / double(2 * done))), float(balance)};
 }
 
 float db(float x) { return x > 0.0f ? 20.0f * std::log10(x) : -999.0f; }
+
+// A full mix sits in the middle. More than 3 dB between L and R means something is panned
+// that should not be -- the TECHNO showcase shipped with its kick, clap and bass at PAN 0, hard
+// left, because its kit started from zeroed bytes. A mix off centre fails the render; a soloed
+// track may lean (a panned hat is meant to), so stems only print it.
+constexpr float kMaxBalanceDb = 3.0f;
+int g_off_centre = 0;
+void check_balance(const char *what, const Stats &s) {
+    const bool ok = std::fabs(s.balance_db) <= kMaxBalanceDb;
+    std::printf("    balance L-R %+5.2f dB  %s\n", double(s.balance_db), ok ? "ok" : "OFF CENTRE");
+    if (!ok) {
+        std::fprintf(stderr, "%s: the mix is off centre by %+.2f dB\n", what, double(s.balance_db));
+        g_off_centre++;
+    }
+}
 
 }  // namespace
 
@@ -139,6 +157,7 @@ int main(int argc, char **argv) {
         write_wav(path, frames);
         std::printf("A%02d %-8s peak %6.1f dBFS  rms %6.1f dBFS  %s\n", slot + 1, names[slot],
                     db(s.peak), db(s.rms), path);
+        check_balance(names[slot], s);
     }
     // A01 again through the sends' ambient modes (dsp/ambient.hpp), for a pre-listen: the LONG
     // delay at dotted 1/8 x4 with wow and diffusion, into a HALL with some shimmer, and four bars
@@ -162,6 +181,7 @@ int main(int argc, char **argv) {
         std::snprintf(path, sizeof path, "%s/A01_AMBIENT.wav", dir);
         write_wav(path, frames);
         std::printf("A01 AMBIENT  peak %6.1f dBFS  rms %6.1f dBFS  %s\n", db(s.peak), db(s.rms), path);
+        check_balance("A01 AMBIENT", s);
         Project &q = g_engine.project_for_load();
         for (int i = 0; i < kSendFields; i++) q.settings.sends[i] = saved[i];
     }
@@ -177,6 +197,7 @@ int main(int argc, char **argv) {
         std::snprintf(path, sizeof path, "%s/A05_HALL.wav", dir);
         write_wav(path, frames);
         std::printf("A05 HALL     peak %6.1f dBFS  rms %6.1f dBFS  %s\n", db(s.peak), db(s.rms), path);
+        check_balance("A05 HALL", s);
         g_engine.project_for_load().settings.sends[int(SendField::reverb_mode)] = saved;
     }
 
@@ -186,8 +207,8 @@ int main(int argc, char **argv) {
         const Stats s = render(stems, bars, t, &frames);
         std::snprintf(path, sizeof path, "%s/A%02d_T%d.wav", dir, stems + 1, t + 1);
         write_wav(path, frames);
-        std::printf("A%02d T%d %-6s peak %6.1f dBFS  rms %6.1f dBFS\n", stems + 1, t + 1, tracks[t],
-                    db(s.peak), db(s.rms));
+        std::printf("A%02d T%d %-6s peak %6.1f dBFS  rms %6.1f dBFS  balance %+5.2f dB\n", stems + 1,
+                    t + 1, tracks[t], db(s.peak), db(s.rms), double(s.balance_db));
     }
 
     // Every factory sound (core/sounds.hpp) on its factory track, soloed in A01, two bars each:
@@ -216,5 +237,5 @@ int main(int argc, char **argv) {
         for (int i = 0; i < kKitParams; i++) q.kit.tracks[t].params[i] = saved[i];
         post(Cmd::kit_recall, 0, 0, 0);
     }
-    return 0;
+    return g_off_centre == 0 ? 0 : 1;
 }
