@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
-# M6 emulator scenario: KEYS mode plays, and what it plays records.
+# M6 emulator scenario: KEYS mode, with REC on, keeps the STEP keys as steps.
 #
 # M6's other pieces cannot be driven from here. The Euclidean generator is on encoders and the
 # emulator core exposes `key_input` and nothing else -- no pads, no encoders (checked: there is
-# no pad or encoder entry point in emulator/core/core.h at all). KEYS mode is the one M6 feature
-# that is entirely on KEYS, so it is the one that gets a scenario.
-#
-# What it proves, and why it is worth a scenario rather than a host test: KEYS crosses every
-# layer at once. A STEP key becomes a note through core/scale's degree stepping, that note goes
-# through the command ring as a trigger, the live-record path stamps it with the clock state and
-# posts an edit, and the edit lands in pattern memory on the audio side. None of that is
-# reachable from `make -C host test`, because app/ is the one folder that includes Enaga headers.
+# no pad or encoder entry point in emulator/core/core.h at all). KEYS plays on the pads since
+# 2026-11-23, so playing and recording in KEYS are host tests now (tests/test_ui.cpp,
+# ui_keys_pads_record_at_their_own_velocity). What is left on keys is D12: in KEYS, REC on and
+# the transport running, the STEP keys are the track's steps, not notes to record.
 #
 # The observable effect is app/app.cpp's `g<16 trig bits in hex> u<undo depth>` line, which it
 # logs whenever the selected track's current page changes. The default pattern has the kick on
-# steps 1, 5, 9 and 13 of track 1 -- g1111 -- so a recorded note must ADD a bit. The exact bit
-# depends on where the playhead was when the key was pressed, which is a timing the emulator does
-# not make predictable, so the assertion is that the mask GREW and that the undo depth rose --
-# not that it reached a particular value. An assertion that pretended to know the step would be
-# a flaky test dressed up as a precise one.
+# steps 1, 5, 9 and 13 of track 1 -- g1111. STEP 1, 3 and 5 toggle bits 0, 2 and 4, whatever
+# the playhead does: g1104 and three undo levels. A recorded note would land wherever the
+# playhead was, so an exact mask also proves nothing was recorded.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F2 = 26, F1 = 19, F4 = 27,
 # STEP n = 31 + n. A press is released 20 M cycles later. HOME twice within 400 ms (149 M cycles)
@@ -99,27 +93,16 @@ grids = [line for line in log if re.fullmatch(r"g[0-9A-F]{4} u\d+", line)]
 check(bool(grids), "the grid signature was logged at all", f"grids={grids}")
 check(grids and grids[0] == "g1111 u0", "it started on the default beat", f"first={grids[:1]}")
 
-# A key played in KEYS mode, with REC on, must land a note in the pattern -- so the mask gains a
-# bit and the undo depth rises. Counted rather than matched: see the header on why the exact step
-# is not knowable here.
-def bits(line):
-    return bin(int(line[1:5], 16)).count("1")
-
-def depth(line):
-    return int(line.split("u")[1])
-
+# STEP 1, 3 and 5 in KEYS toggled those three steps and recorded nothing (D12): exactly g1104,
+# three undo levels. See the header.
 if len(grids) >= 2:
-    check(bits(grids[-1]) > bits(grids[0]),
-          "a key played in KEYS recorded a note",
-          f"{grids[0]} -> {grids[-1]}")
-    check(depth(grids[-1]) > depth(grids[0]),
-          "and it cost an undo level, so it was a real edit",
+    check(grids[-1] == "g1104 u3",
+          "STEP 1, 3 and 5 in KEYS toggled their steps (D12)",
           f"{grids[0]} -> {grids[-1]}")
 else:
-    check(False, "a key played in KEYS recorded a note", f"only {grids}")
-    print("        nothing was recorded. Either KEYS did not play (HOME twice never took, or the")
-    print("        STEP keys are still going to the editing path), or REC was not on, or")
-    print("        core/record refused the hit. The log above says which.")
+    check(False, "STEP 1, 3 and 5 in KEYS toggled their steps (D12)", f"only {grids}")
+    print("        nothing changed. Either KEYS was not reached (HOME twice never took, or the")
+    print("        STEP keys are swallowed in KEYS again). The log above says which.")
 
 blocks = report.get("audio_blocks", 0)
 check(blocks > 1000, "audio ran throughout", f"blocks={blocks}")
