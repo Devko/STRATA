@@ -145,6 +145,8 @@ public:
     // the START..END window, a bit for each slice start, and each playing voice with its
     // envelope's level. Audio context, called by the engine every few blocks; a few multiplies.
     void wave_view(WaveView &view) const;
+    // The loudest playing voice's envelope.
+    bool envelope_now(uint8_t &stage, float &level) const override;
 
     static constexpr int kVoices = 4;
     static constexpr int kSlicesMax = 16;

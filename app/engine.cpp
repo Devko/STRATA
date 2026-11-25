@@ -2250,6 +2250,15 @@ void Engine::publish_waves() {
     if (++wave_block_ < kWaveEveryBlocks) return;
     wave_block_ = 0;
     for (int t = 0; t < kTracks; t++) {
+        uint8_t stage = 0;
+        float level = 0.0f;
+        if (machines_[t] == nullptr || !machines_[t]->envelope_now(stage, level)) stage = 0;
+        const float scaled = level * 255.0f + 0.5f;
+        status_.env_stage[t].store(stage, std::memory_order_relaxed);
+        status_.env_level[t].store(stage == 0 ? 0u : uint8_t(scaled > 255.0f ? 255.0f
+                                                             : (scaled < 0.0f ? 0.0f : scaled)),
+                                   std::memory_order_relaxed);
+
         const uint8_t id = machine_id_[t];
         if (id != uint8_t(MachineId::sample) && id != uint8_t(MachineId::grain)) continue;
         // An idle machine was last prepared when it last played, so its window would lag the

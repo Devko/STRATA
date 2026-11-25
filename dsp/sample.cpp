@@ -297,6 +297,17 @@ void Sampler::wave_view(WaveView &view) const {
     }
 }
 
+bool Sampler::envelope_now(uint8_t &stage, float &level) const {
+    const Voice *loudest = nullptr;
+    for (const Voice &v : voices_) {
+        if (v.playing && (loudest == nullptr || v.amp.level() > loudest->amp.level())) loudest = &v;
+    }
+    if (loudest == nullptr) return false;
+    stage = uint8_t(loudest->amp.stage());
+    level = loudest->amp.level();
+    return true;
+}
+
 void Sampler::set_sample(const int16_t *data, uint32_t frames, int channels, float source_rate) {
     // The voices are reading the buffer that is being taken away, so they stop. A crossfade
     // between two samples belongs to the app, which has both buffers; the machine has one.

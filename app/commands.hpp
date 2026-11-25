@@ -543,6 +543,11 @@ struct Status {
         }
     };
     WaveStatus wave[8];
+    // And each track's amplitude envelope, for the dot on EDIT's AMP and ASR curve
+    // (Machine::envelope_now): the stage (0 idle, 1 attack, 2 decay, 3 sustain, 4 release) and
+    // the level, 0-255. Written with `wave`, for every track whose machine says.
+    std::atomic<uint8_t> env_stage[8] = {};
+    std::atomic<uint8_t> env_level[8] = {};
 
     // Which pattern is live, so the UI can draw it without reaching into the project.
     std::atomic<uint8_t> live_bank{0};

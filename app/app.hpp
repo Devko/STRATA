@@ -1485,7 +1485,7 @@ public:
                 break;
             case Mode::samples:
                 // A page of the list, like LEFT and RIGHT.
-                move_sample_cursor_to(sample_cursor_ + delta * kSampleRows);
+                move_sample_cursor_to(sample_cursor_ + delta * kSampleListRows);
                 break;
             case Mode::sounds:
                 // The track, as in MACHINE, so one hand can try a sound on each of the eight.
@@ -3591,7 +3591,7 @@ public:
         if (picture != EditPicture::none) {
             if (!readout) draw_picture_line(canvas, picture);
             if (picture == EditPicture::wave) draw_wave(canvas);
-            else draw_envelope(canvas, envelope_for(picture));
+            else draw_envelope(canvas, envelope_for(picture), picture == EditPicture::amp);
             return;
         }
 
@@ -3810,6 +3810,29 @@ public:
         }
     }
 
+    // An overview as a plain strip, `rows` tall from `top`: each column's range about the middle,
+    // the loudest filling the height. The sample browser's picture of what the track plays.
+    static void draw_overview_strip(enaga::Canvas &canvas, const WaveOverview &overview, int top,
+                                    int rows) {
+        const int half = (rows - 1) / 2;
+        const int middle = top + half;
+        const int filled = overview.filled > kWaveColumns ? kWaveColumns : int(overview.filled);
+        int peak = 8;
+        for (int x = 0; x < filled; x++) {
+            peak = -int(overview.lo[x]) > peak ? -int(overview.lo[x]) : peak;
+            peak = int(overview.hi[x]) > peak ? int(overview.hi[x]) : peak;
+        }
+        for (int x = 0; x < kWaveColumns; x++) {
+            if (x >= filled) {
+                if (x % 3 == 0) canvas.pixel(x, middle, 3);
+                continue;
+            }
+            const int up = int(overview.hi[x]) > 0 ? int(overview.hi[x]) * half / peak : 0;
+            const int down = int(overview.lo[x]) < 0 ? -int(overview.lo[x]) * half / peak : 0;
+            canvas.rect(x, middle - up, 1, up + down + 1, 6);
+        }
+    }
+
     // An envelope as the knobs shape it. Widths go by the knob, not the time it makes: every
     // time curve here is exponential in its knob, so this is a log-time drawing, which is what
     // lets 2 ms and 5 s share 124 pixels.
@@ -3887,7 +3910,9 @@ public:
         return 0;
     }
 
-    void draw_envelope(enaga::Canvas &canvas, const EnvelopePicture &e) {
+    // `ride`: also the dot where the track's last note is on the curve (Status::env_stage),
+    // on AMP and ASR, which draw the amplitude envelope the dot belongs to.
+    void draw_envelope(enaga::Canvas &canvas, const EnvelopePicture &e, bool ride) {
         const int bottom = kPictureTop + kPictureRows - 1;
         const int span = kPictureRows - 1;
         // Segment ends: attack up to 26 px, decay 2-40, a 14 px plateau and a 2-40 px release
@@ -3904,6 +3929,7 @@ public:
 
         // The curve as a function of x, each column joined to the last so a steep fall has no
         // gaps. An exponential fall to 1% is drawn as (1 - t)^3, near enough to read.
+        float curve[kWaveColumns] = {};
         int last = bottom;
         for (int x = 0; x <= xr; x++) {
             float level;
@@ -3920,12 +3946,15 @@ public:
                 const float u = 1.0f - float(x - xs) / float(xr - xs);
                 level = settle * u * u * u;
             }
+            curve[x] = level;
             const int y = bottom - int(level * top * float(span) + 0.5f);
             const int from = y < last ? y : last;
             const int to = y < last ? last : y;
             canvas.rect(x, from, 1, to - from + 1, 13);
             last = y;
         }
+
+        if (ride) draw_envelope_dot(canvas, e, curve, xa, xd, xs, xr, settle);
 
         // The handles a knob on this page moves, with its letter, as CyDrums draws them.
         const int sus_y = bottom - int(settle * top * float(span) + 0.5f);
@@ -3968,6 +3997,48 @@ public:
             placed_y[placed] = ly;
             placed++;
         }
+    }
+
+    // Where the track's last note is on its envelope: a hollow square on the curve, found by its
+    // stage and then, along that stage's columns, the first whose level is at or below the
+    // note's. Nothing when the machine does not say or the note is over.
+    void draw_envelope_dot(enaga::Canvas &canvas, const EnvelopePicture &e, const float *curve,
+                           int xa, int xd, int xs, int xr, float settle) {
+        const Status &status = engine_.status();
+        const uint8_t stage = status.env_stage[selected_].load(std::memory_order_relaxed);
+        const float level =
+            float(status.env_level[selected_].load(std::memory_order_relaxed)) * (1.0f / 255.0f);
+        if (stage == 0 || level < 0.004f) return;
+        int x = -1;
+        const auto find_falling = [&](int from, int to) {
+            for (int i = from; i <= to && i < kWaveColumns; i++) {
+                if (curve[i] <= level) return i;
+            }
+            return to;
+        };
+        switch (stage) {
+            case 1:                                       // attack: rising to the peak
+                x = 1 + int(float(xa - 1) * level + 0.5f);
+                break;
+            case 2:                                       // decay
+                x = e.hold ? (xa + xd) / 2 : find_falling(xa, xd);
+                break;
+            case 3:                                       // sustain: the plateau, or a parked 0
+                x = e.holds ? (xd + xs) / 2 : (e.hold ? (xa + xd) / 2 : find_falling(xa, xd));
+                break;
+            default:                                      // release
+                x = e.holds ? find_falling(xs, xr) : find_falling(xa, xd);
+                break;
+        }
+        (void)settle;
+        if (x < 0 || x >= kWaveColumns) return;
+        const int bottom = kPictureTop + kPictureRows - 1;
+        const int y = bottom - int(curve[x] * float(e.peak) * (1.0f / 127.0f) *
+                                   float(kPictureRows - 1) + 0.5f);
+        const int x0 = x - 1 < 0 ? 0 : x - 1;
+        const int y0 = y - 1 < kPictureTop ? kPictureTop : (y + 1 > bottom ? bottom - 2 : y - 1);
+        canvas.rect(x0, y0, 3, 3, 15);
+        canvas.pixel(x0 + 1, y0 + 1, 0);
     }
 
     // SLC AUTO on this track: the kit's byte, which only the audio side writes, by command.
@@ -4960,6 +5031,8 @@ public:
     // press and the kit browser's recall takes two.
 
     static constexpr int kSampleRows = 8;
+    // SAMPLES shows one fewer: the waveform of what the track plays sits under the list.
+    static constexpr int kSampleListRows = 7;
 
     static bool is_file_machine(uint8_t id) {
         return id == uint8_t(MachineId::sample) || id == uint8_t(MachineId::grain);
@@ -5129,8 +5202,9 @@ public:
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
                 if (!shift_) {
-                    move_sample_cursor_to(sample_cursor_ +
-                                          (key == ENAGA_KEY_LEFT ? -kSampleRows : kSampleRows));
+                    move_sample_cursor_to(sample_cursor_ + (key == ENAGA_KEY_LEFT
+                                                                ? -kSampleListRows
+                                                                : kSampleListRows));
                 }
                 return true;
 
@@ -5177,11 +5251,11 @@ public:
         canvas.text(0, 27, line, 10);
 
         const int count = list.count();
-        const int first = (sample_cursor_ / kSampleRows) * kSampleRows;
+        const int first = (sample_cursor_ / kSampleListRows) * kSampleListRows;
         if (count == 0 && !storage_.browsing()) {
             canvas.text(0, 37, list.skipped() > 0 ? "NOTHING THAT FITS" : "NO WAV FILES HERE", 9);
         }
-        for (int i = 0; i < kSampleRows && first + i < count; i++) {
+        for (int i = 0; i < kSampleListRows && first + i < count; i++) {
             const int at = first + i;
             out = line;
             *out++ = at == sample_cursor_ ? '>' : ' ';
@@ -5192,6 +5266,9 @@ public:
             *out = 0;
             canvas.text(0, 37 + i * 8, line, at == sample_cursor_ ? 15 : (folder ? 11 : 9));
         }
+
+        // What the track plays now, as a strip of its waveform (rows 93-101), then by name.
+        draw_overview_strip(canvas, storage_.overview(selected_), 93, 9);
 
         // What the track plays now, and where in the list we are.
         out = line;

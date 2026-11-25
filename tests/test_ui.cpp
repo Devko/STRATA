@@ -8837,3 +8837,50 @@ TEST(ui_envelope_on_asr_holds_when_sus_is_up) {
     CHECK(screen_has(app, "NOT ON THIS MACHINE"));
     key(ENAGA_KEY_F4);
 }
+
+TEST(ui_envelope_a_dot_rides_the_amp_curve_while_a_note_plays) {
+    Strata &app = fresh();
+    track_with_break(MachineId::sample);
+    edit_page_to(Page::amp);
+    post_cmd_track_param(0, 8, 40);                 // ATK
+    post_cmd_track_param(0, 9, 90);                 // DEC: a long fall
+    pump(8);
+    const auto bright = [] {
+        int n = 0;
+        for (int y = 96; y < 118; y++) {
+            for (int x = 0; x < kWaveColumns; x++) n += pixel_at(x, y) == 15 ? 1 : 0;
+        }
+        return n;
+    };
+    draw_now();
+    const int idle = bright();
+    CHECK_EQ(int(app_engine().status().env_stage[0].load()), 0);
+    note_on_track_1();
+    pump(450);                                       // 0.6 s: well down the fall, past handle A
+    const uint8_t stage = app_engine().status().env_stage[0].load();
+    CHECK(stage >= 1 && stage <= 3);
+    CHECK(app_engine().status().env_level[0].load() > 0);
+    draw_now();
+    CHECK(bright() > idle);                          // the dot: a hollow square on the curve
+    check_layout(app, "EDIT AMP, SAMPLE, a note playing");
+    // FLTR on a synth draws the filter's envelope: no amplitude dot on it.
+    back_to_a_kick();
+}
+
+TEST(ui_samples_the_browser_shows_the_waveform_of_what_the_track_plays) {
+    Strata &app = fresh();
+    track_with_break(MachineId::sample);
+    seed_sample_card();
+    key(ENAGA_KEY_OK);                              // SAMPLES on track 1
+    for (int i = 0; i < 400 && app_storage().browsing(); i++) pump();
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+    draw_now();
+    int lit = 0;
+    for (int y = 93; y < 102; y++) {
+        for (int x = 0; x < kWaveColumns; x++) lit += pixel_at(x, y) == 6 ? 1 : 0;
+    }
+    CHECK(lit > 100);
+    check_layout(app, "SAMPLES with the waveform strip");
+    key(ENAGA_KEY_CLR);
+    back_to_a_kick();
+}

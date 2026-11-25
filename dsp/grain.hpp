@@ -256,6 +256,13 @@ public:
     // each live grain with its window times the cloud's envelope as its brightness. Audio
     // context, called by the engine every few blocks.
     void wave_view(WaveView &view) const;
+    // The cloud's envelope.
+    bool envelope_now(uint8_t &stage, float &level) const override {
+        if (!active_) return false;
+        stage = uint8_t(amp_.stage());
+        level = amp_.level();
+        return true;
+    }
 
     static constexpr int kGrains = kPoolSize;
     // Linear interpolation needs two frames, but a buffer that small is not a sample. Four, as
