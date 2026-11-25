@@ -8329,3 +8329,138 @@ TEST(ui_hold_ok_on_a_slot_opens_the_pattern_menu_and_double_doubles) {
     key(ENAGA_KEY_F4);
     pump(2);
 }
+
+// --- locks on screen (docs/CONTROLS.md, "Locks on screen") ------------------------------------
+
+TEST(ui_the_grid_marks_what_a_trig_carries) {
+    // Steps 1-4 of track 1 each carry one thing, set with the gestures a hand uses: a lock (hold
+    // STEP + turn), the FILL condition, a probability and a ratchet (hold STEP + an upper pad).
+    // Each is a dark cut in its own place in the 5 x 6 cell, so any mix of them reads.
+    Strata &app = fresh();
+    enaga::Canvas canvas(g_pixels);
+    const uint8_t *px = g_pixels;
+    const auto at = [px](int x, int y) { return int(px[y * enaga::Canvas::width + x]); };
+    const int top = 21;                                    // track 1's cells start at y 21
+    // `fresh()` lets no modifier stay down, but a STEP key an earlier test left held would
+    // turn the taps below into a range; let them all go first.
+    for (int k = 0; k < 16; k++) step_up(k);
+    CHECK_EQ(UiProbe::held_step(app), -1);
+
+    for (int s = 0; s < 4; s++) {
+        if (!trig_at(0, s)) key(ENAGA_KEY_STEP1 + s);
+        pump(2);                                           // a hand is slower than a block
+    }
+    for (int s = 0; s < 4; s++) CHECK(trig_at(0, s));
+
+    step_down(0);
+    app.on_encoder(0, +6);
+    pump(2);
+    step_up(0);
+    step_down(1);
+    app.on_pad_press(1, 100);                              // FILL: the fill condition
+    app.on_pad_release(1);
+    step_up(1);
+    step_down(2);
+    app.on_pad_press(13, 100);                             // MUTATE: probability 75%
+    app.on_pad_release(13);
+    step_up(2);
+    step_down(3);
+    app.on_pad_press(3, 100);                              // REPEAT: a ratchet of 2
+    app.on_pad_release(3);
+    step_up(3);
+    pump(2);
+    CHECK(step_of(0, 0).lock_count > 0);
+    CHECK_EQ(int(condition_kind(step_of(0, 1).condition)), int(Condition::FILL));
+    CHECK_EQ(int(step_of(0, 2).probability), 75);
+    CHECK_EQ(int(ratchet_count(step_of(0, 3).ratchet)), 2);
+
+    app.draw(canvas);
+    const int grey = at(1, top + 1);                       // an unmarked corner of step 1
+    CHECK(grey >= 11);
+    // Step 1: the lock's dot, two pixels tall in the middle; the corners and bottom are whole.
+    CHECK_EQ(at(3, top + 2), 0);
+    CHECK_EQ(at(3, top + 3), 0);
+    CHECK_EQ(at(3, top + 1), grey);
+    CHECK_EQ(at(5, top), grey);
+    CHECK_EQ(at(2, top + 5), grey);
+    // Step 2: the condition cuts the top-left corner, and nothing else.
+    CHECK_EQ(at(9, top), 0);
+    CHECK(at(13, top) != 0);
+    CHECK(at(11, top + 2) != 0);
+    // Step 3: probability cuts the top-right corner.
+    CHECK_EQ(at(21, top), 0);
+    CHECK(at(17, top) != 0);
+    // Step 4: the ratchet's two teeth in the bottom edge.
+    CHECK_EQ(at(26, top + 5), 0);
+    CHECK_EQ(at(28, top + 5), 0);
+    CHECK(at(27, top + 5) != 0);
+    CHECK(at(25, top) != 0);
+}
+
+TEST(ui_a_held_step_shows_its_lock_against_the_kit_value) {
+    // Hold STEP + turn A: the bottom line says "S1 <name> <kit>><lock>", the slot's value and bar
+    // follow the lock, and a hollow tick stays at the kit value. Let go and all of it goes back
+    // to the kit value -- the lock is still there, but nothing is held.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    enaga::Canvas canvas(g_pixels);
+    const uint8_t *px = g_pixels;
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+
+    const int index = page_first(Page(UiProbe::param_page(app)));
+    const int base = app_engine().params(0).v[index];
+    step_down(0);
+    app.on_encoder(0, base < 64 ? +20 : -20);
+    pump(2);
+    uint8_t locked = 0;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 0, uint8_t(index), locked));
+    CHECK(int(locked) != base);
+    CHECK_EQ(int(app_engine().params(0).v[index]), base);  // the kit value did not move
+
+    host.clear_text();
+    app.draw(canvas);
+    bool readout = false;
+    for (int i = 0; i < host.text_count(); i++) {
+        const char *text = host.text_draw(i).text;
+        if (std::strncmp(text, "S1 ", 3) == 0 && std::strchr(text, '>') != nullptr) readout = true;
+    }
+    CHECK(readout);
+
+    // GRID's slot A: the bar at y 117-118, the tick's caps one row above and below it.
+    const auto bright_in_row = [px](int y) {
+        int n = 0;
+        for (int x = 0; x < 28; x++) n += px[y * enaga::Canvas::width + x] == 15 ? 1 : 0;
+        return n;
+    };
+    CHECK_EQ(bright_in_row(116), 1);
+    CHECK_EQ(bright_in_row(119), 1);
+    const int tick = base * 27 / 127;
+    CHECK_EQ(int(px[116 * enaga::Canvas::width + tick]), 15);
+
+    step_up(0);
+    pump(2);
+    CHECK(!screen_has(app, "S1 "));
+    app.draw(canvas);
+    CHECK_EQ(bright_in_row(116), 0);
+}
+
+TEST(ui_a_trigless_step_draws_as_an_outline_on_the_grid) {
+    Strata &app = fresh();
+    enaga::Canvas canvas(g_pixels);
+    const uint8_t *px = g_pixels;
+    const auto at = [px](int x, int y) { return int(px[y * enaga::Canvas::width + x]); };
+    Command command;
+    command.cmd = Cmd::toggle_trig;
+    command.track = 0;
+    command.step = 5;
+    command.a = 1;                                         // the trigless bit
+    app_engine().commands().post(command);
+    pump(2);
+    CHECK((step_of(0, 5).flags & kStepTrigless) != 0);
+    app.draw(canvas);
+    const int x = 5 * 8 + 1, y = 21;
+    CHECK(at(x, y) != 0);
+    CHECK(at(x + 4, y + 5) != 0);
+    CHECK_EQ(at(x + 2, y + 2), 0);                         // hollow
+}

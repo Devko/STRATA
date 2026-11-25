@@ -607,6 +607,7 @@ public:
             mark(GestureKind::erase, selected_, held_step_);
             post(Cmd::clear_lock, uint8_t(selected_), uint8_t(held_step_), uint8_t(index));
             end_gesture();
+            show_lock_readout(index);
             notice("LOCK CLEARED");
             return;
         }
@@ -1887,6 +1888,7 @@ public:
             const int index = page_first(Page(param_page_)) + encoder;
             mark(GestureKind::lock, selected_, held_step_);
             post_param_lock(held_step_, index, delta);
+            show_lock_readout(index);
             return;
         }
 
@@ -3341,6 +3343,9 @@ public:
 
                 if (trig || on_head) {
                     canvas.rect(i * 8 + 1, y + 1, 5, 6, grey);   // 5 wide: x 126-127 is the meter's
+                    if (trig) draw_step_glyph(canvas, i * 8 + 1, y + 1, s);
+                } else if ((s.flags & kStepTrigless) != 0) {
+                    draw_trigless_cell(canvas, i * 8 + 1, y + 1);
                 } else {
                     canvas.rect(i * 8 + 1, y + 3, 5, 2, grey);   // an empty step: a thin dash
                 }
@@ -3371,6 +3376,36 @@ public:
         draw_param_slots(canvas, 101);
     }
 
+    // What a trig carries, cut dark into its 5 x 6 cell (docs/CONTROLS.md, "Locks on screen"):
+    //
+    //     C . . . P      C  a condition (FILL, A:B, PRE ...): the top-left corner is cut
+    //     . . . . .      P  a probability under 100%: the top-right corner is cut
+    //     . . L . .      L  parameter locks: a dot in the middle, two pixels tall
+    //     . . L . .      R  a ratchet of two hits or more: two teeth cut in the bottom edge
+    //     . . . . .
+    //     . R . R .
+    //
+    // Four marks that never overlap, so any mix of them reads. Cheap: the fields are already in
+    // the step the cell was drawn from, and each mark is one or two pixels.
+    static void draw_step_glyph(enaga::Canvas &canvas, int x, int y, const Step &s) {
+        if (condition_kind(s.condition) != Condition::NONE) canvas.pixel(x, y, 0);
+        if (s.probability < 100) canvas.pixel(x + 4, y, 0);
+        if (s.lock_count > 0) canvas.rect(x + 2, y + 2, 1, 2, 0);
+        if (ratchet_count(s.ratchet) > 1) {
+            canvas.pixel(x + 1, y + 5, 0);
+            canvas.pixel(x + 3, y + 5, 0);
+        }
+    }
+
+    // A trigless step -- locks with no note -- as the outline of a cell: something happens here,
+    // but nothing hits. It used to draw as an empty step on GRID.
+    static void draw_trigless_cell(enaga::Canvas &canvas, int x, int y) {
+        canvas.rect(x, y, 5, 1, 6);
+        canvas.rect(x, y + 5, 5, 1, 6);
+        canvas.rect(x, y + 1, 1, 4, 6);
+        canvas.rect(x + 4, y + 1, 1, 4, 6);
+    }
+
     // The line that says what editing mode you are in: recording, the quantize amount, the
     // selection, and how much undo there is. Without it, REC and a held selection are invisible
     // states that change what every other key does.
@@ -3388,6 +3423,7 @@ public:
             canvas.text(0, y, line, 15);
             return;
         }
+        if (draw_lock_readout(canvas, y)) return;
         if (macro_learn_ >= 0) {                         // see draw(): the same hint, in GRID
             learn_line(line);
             canvas.text(0, y, line, 15);
@@ -3543,7 +3579,8 @@ public:
         for (int slot = 0; slot < 4; slot++) {
             const int index = base + slot;
             const int y = 42 + slot * 12;
-            const uint8_t value = engine_.params(selected_).v[index];
+            const ShownParam shown = shown_param(index);
+            const uint8_t value = shown.heard;         // the held step's lock, if it has one
 
             out = line;
             *out++ = char('A' + slot);
@@ -3566,9 +3603,11 @@ public:
             const bool wide = word_page || shows_note(index) ||
                               machine_is_grain(engine_.machine_id(selected_));
             const int bar_x = wide ? 70 : 56;
-            const int bar = int(value) * (wide ? 56 : 70) / 127;
-            canvas.rect(bar_x, y + 2, bar < 1 ? 1 : bar, 4, 9);
+            draw_value_bar(canvas, bar_x, y + 2, wide ? 56 : 70, 4, shown, 9);
         }
+
+        // Turning a lock: "S5 CUT 64>90" where the page's own line goes, until the STEP is let go.
+        if (draw_lock_readout(canvas, 96)) return;
 
         // A frozen track plays its loop, not these knobs (dsp/frozen.hpp): say so on every page,
         // and where to undo it.
@@ -4291,14 +4330,91 @@ public:
             *out = 0;
             canvas.text(slot * 32, y, line, 12);
 
+            // The value you hear: the held step's lock when it has one, else the kit's.
+            const ShownParam shown = shown_param(index);
             out = line;
-            append_param_value(out, index, engine_.params(selected_).v[index]);
+            append_param_value(out, index, shown.heard);
             *out = 0;
             canvas.text(slot * 32, y + 8, line, 15);
 
-            const int bar = int(engine_.params(selected_).v[index]) * 28 / 127;
-            canvas.rect(slot * 32, y + 16, bar < 1 ? 1 : bar, 2, 8);
+            draw_value_bar(canvas, slot * 32, y + 16, 28, 2, shown, 8);
         }
+    }
+
+    // --- what a parameter is, and what plays ------------------------------
+
+    // A parameter as the screen shows it: `base` is the kit value (the knob), `heard` what the
+    // held step plays -- its lock if it has one. Without a held step the two are the same. Read
+    // from the pattern the grid already reads; one walk of at most eight locks per slot.
+    struct ShownParam {
+        uint8_t base = 0;
+        uint8_t heard = 0;
+        bool locked = false;
+    };
+
+    ShownParam shown_param(int index) const {
+        ShownParam shown;
+        shown.base = engine_.params(selected_).v[index];
+        shown.heard = shown.base;
+        if (held_step_ >= 0 && index >= 0 && index < kTrackParams) {
+            shown.locked = pattern_get_lock(engine_.pattern(), selected_, held_step_,
+                                            uint8_t(index), shown.heard);
+        }
+        return shown;
+    }
+
+    // A value bar: solid up to what plays. When a lock moves that away from the kit value, a
+    // hollow tick marks the kit value: one bright pixel above and one below the bar, dark
+    // between them inside the solid part and dim outside it, so the gap between the two values
+    // reads at a glance (docs/CONTROLS.md, "Locks on screen").
+    static void draw_value_bar(enaga::Canvas &canvas, int x, int y, int width, int height,
+                               const ShownParam &shown, uint8_t grey) {
+        const int bar = int(shown.heard) * width / 127;
+        canvas.rect(x, y, bar < 1 ? 1 : bar, height, grey);
+        if (!shown.locked || shown.heard == shown.base) return;
+        const int tick = x + int(shown.base) * (width - 1) / 127;
+        canvas.pixel(tick, y - 1, 15);
+        canvas.pixel(tick, y + height, 15);
+        canvas.rect(tick, y, 1, height, tick < x + bar ? 0 : 3);
+    }
+
+    void show_lock_readout(int index) {
+        lock_readout_index_ = index;
+        lock_readout_step_ = held_step_;
+        lock_readout_track_ = selected_;
+    }
+
+    // While a STEP is held and a knob has locked (or cleared) a parameter on it, one line that
+    // says what changed: "S5 CUT 64>90", the kit value and then the lock, read live from the
+    // pattern so the second number follows the knob. "S5 CUT 64 KIT" once the lock is gone.
+    // False when there is nothing to say, and the caller draws its usual line.
+    bool draw_lock_readout(enaga::Canvas &canvas, int y) const {
+        if (held_step_ < 0 || lock_readout_index_ < 0 || lock_readout_step_ != held_step_ ||
+            lock_readout_track_ != selected_) {
+            return false;
+        }
+        const ShownParam shown = shown_param(lock_readout_index_);
+        char part[48];
+        char *p = part;
+        *p++ = 'S';
+        append_number(p, uint32_t(held_step_) + 1);
+        *p++ = ' ';
+        append(p, param_name_for(lock_readout_index_));
+        *p++ = ' ';
+        append_param_value(p, lock_readout_index_, shown.base);
+        if (shown.locked) {
+            *p++ = '>';
+            append_param_value(p, lock_readout_index_, shown.heard);
+        } else {
+            append(p, " KIT");
+        }
+        *p = 0;
+        char line[kLineChars + 1];
+        char *out = line;
+        append_shown(out, part, kLineChars);
+        *out = 0;
+        canvas.text(0, y, line, 15);
+        return true;
     }
 
     // --- KEYS: the pads as a piano ---------------------------------------
@@ -6315,10 +6431,20 @@ public:
 
             // 18 pixels tall, ending above the hints. At 40 the bars ran down through both
             // hint lines.
+            // The solid bar is where the macro is -- what you hear, a pad's pressure included.
+            // When that is not where the knob left it, a hollow tick marks the knob: a bright
+            // pixel either side of the bar, dark across it inside the solid part.
             const int height = int(engine_.macro_position(m)) * kMacroBar / 127;
             canvas.rect(x + 2, 58, 12, kMacroBar, 2);
             canvas.rect(x + 2, 58 + (kMacroBar - height), 12, height < 1 ? 1 : height,
                         targets == 0 ? 5 : 12);
+            if (macro_position_[m] != engine_.macro_position(m)) {
+                const int knob = int(macro_position_[m]) * (kMacroBar - 1) / 127;
+                const int ty = 58 + (kMacroBar - 1) - knob;
+                canvas.pixel(x + 1, ty, 15);
+                canvas.pixel(x + 14, ty, 15);
+                canvas.rect(x + 2, ty, 12, 1, ty >= 58 + (kMacroBar - height) ? 0 : 6);
+            }
         }
 
         // The gesture that is not otherwise discoverable.
@@ -7473,6 +7599,11 @@ private:
     // to be settable and unsaveable. The engine owns the write, through `Cmd::set_quantize`.
     int quantize() const { return int(engine_.project().settings.quantize); }
     int held_step_ = -1;           // the STEP key being held, absolute 0-63; -1 for none
+    // The parameter last locked (or cleared) on the held step, for the "S5 CUT 64>90" line.
+    // Shown only while that same step of that same track is still held.
+    int lock_readout_index_ = -1;
+    int lock_readout_step_ = -1;
+    int lock_readout_track_ = -1;
     int held_key_ = -1;            // and the PHYSICAL key it came from, 0-15, so the release
                                    // matches even if the page moved under it
     bool held_used_ = false;       // it was used as a modifier, so its release is not a tap
