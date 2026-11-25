@@ -3377,12 +3377,13 @@ void Engine::stop_stream(int track) {
 }
 
 void Engine::fill_fifo(enaga::files::Stream &stream, StreamFifo &fifo, uint32_t total,
-                       uint8_t frame_bytes, uint8_t encoding, uint8_t &carry, uint8_t *carry_bytes) {
+                       uint8_t frame_bytes, uint8_t encoding, uint8_t &carry, uint8_t *carry_bytes,
+                       uint32_t most) {
     const uint32_t next = fifo.next_frame();
     if (next >= total) return;                        // the whole file is in
     uint32_t room = 0;
     int16_t *span = fifo.write_span(&room);
-    uint32_t n = room < kStreamReadFrames ? room : kStreamReadFrames;
+    uint32_t n = room < most ? room : most;
     if (n > total - next) n = total - next;
     if (n == 0) return;
 
@@ -3407,7 +3408,7 @@ void Engine::top_up_streams() {
         StreamState &st = stream_state_[t];
         if (!st.on || !st.attached) continue;
         fill_fifo(streams_[t], fifos_[t], st.total, st.frame_bytes, st.encoding, st.carry,
-                  st.carry_bytes);
+                  st.carry_bytes, kStreamReadFrames);
     }
 }
 
@@ -3421,7 +3422,7 @@ void Engine::top_up_streams() {
 void Engine::top_up_audition() {
     if (!audition_on_ || !audition_.wants_frames()) return;
     fill_fifo(audition_stream_, audition_.fifo(), audition_.total(), audition_frame_bytes_,
-              audition_encoding_, audition_carry_, audition_carry_bytes_);
+              audition_encoding_, audition_carry_, audition_carry_bytes_, kAuditionReadFrames);
 }
 
 void Engine::end_audition() {

@@ -540,7 +540,11 @@ private:
     // One stream's next bytes into `fifo`, converted on the way: top_up_streams' read, shared
     // with the audition's. `carry` and `carry_bytes` keep a frame split across two reads.
     void fill_fifo(enaga::files::Stream &stream, StreamFifo &fifo, uint32_t total,
-                   uint8_t frame_bytes, uint8_t encoding, uint8_t &carry, uint8_t *carry_bytes);
+                   uint8_t frame_bytes, uint8_t encoding, uint8_t &carry, uint8_t *carry_bytes,
+                   uint32_t most);
+    // The audition reads at most 256 frames a block: twice what a 96 kHz file uses, so its fifo
+    // still fills ahead, at half a track stream's peak cost (docs/BUDGET.md, "Sample audition").
+    static constexpr uint32_t kAuditionReadFrames = 256;
 
     // Sample audition. Audio side only, apart from the inbox and the stream (rules above).
     void top_up_audition();           // before rendering
