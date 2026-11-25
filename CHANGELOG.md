@@ -8,6 +8,14 @@ the project file format or the controls.
 
 ### Added
 
+- **Step stutter: hold REPEAT, then a STEP (P2).** Every track loops that step at the repeat
+  rate, on the beat grid, until you let go (`STUTTER 5 1/16`); FUNC + STEP stutters only the
+  selected track. It replays the sequencer, not the audio, so filters, LFOs and tails keep
+  moving, and the beat comes back exactly in time. A second STEP moves it. Played, not written.
+- **The repeat rate on the arrows (P3).** REPEAT + LEFT/RIGHT, or LEFT/RIGHT while a NOTE RPT
+  pad rolls, step the rate through 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T and 1/32 (`REPEAT 1/8T`,
+  `ROLL 1/32`). Beat repeat, the rolls and the stutter all follow it at once; line 2 shows it
+  (`R1/16`) while your hand is on it.
 - **Play modes per track (P1).** The FUNC menu's new TRACK PLAY row, under TRACK SPEED, sets how
   the selected track walks its steps: FWD, REV, PING, or RND1-RND16 (a random step, or a random
   block of 2-16 steps, in each place). The pattern itself never changes, so FWD gives it back at
