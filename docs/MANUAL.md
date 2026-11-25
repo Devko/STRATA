@@ -17,7 +17,7 @@ these to the F1-F8 names used in the code and in docs/SPEC.md.
 **How the controls are laid out** ([CONTROLS.md](CONTROLS.md)). Each group of buttons does one
 kind of thing everywhere: the arrow pad moves the cursor (OK picks, CLR goes back), the screen
 keys turn the screen's pages, and the pad-row keys choose which sixteen the STEP keys mean (step
-page, octave, bank). FUNC + a function key does what is printed under that key: REC "sampling"
+page or bank). FUNC + a function key does what is printed under that key: REC "sampling"
 is RESAMPLE, PROJECT "pool" is the sample browser, HOME "system" is the **FUNC menu**, MIXER "fx"
 is PERFORM. The rare setup actions (save as, open, new, reload, kits, chain on/off, song mode,
 track speed, auto-fill, quantize) live in the FUNC menu, named on the screen. The upper pads are
@@ -353,8 +353,8 @@ reopens whichever was open last.
 
 ## 2. Your first beat
 
-This walks through the factory project, which is what a first start and every new project
-contain. It takes about fifteen minutes.
+This walks through the factory demo project, which is what a first start plays and what the
+FUNC menu's LOAD DEMO brings back (a NEW PROJECT starts empty). It takes about fifteen minutes.
 
 **What is in it.** Bank A holds five patterns in C minor at 130 BPM:
 
@@ -771,9 +771,10 @@ machine, recalling a kit and STOP end its notes at once. The **second STOP** and
 send All Notes Off on every channel a track uses, for a synth that missed something. Notes leave
 within one audio block (1.3 ms) of their step. The channels are saved with the project.
 
-**With Enaga 0.2.0 firmware, unplug USB while driving gear from the MIDI OUT jack**, or keep a
-program on the computer reading the SmplTrek's USB MIDI port. On 0.2.0 a computer that is not
-reading fills the USB queue and stops the DIN jack with it; Enaga fixed this after the release.
+**On Enaga 0.2.0 firmware (STRATA v0.1.0 to v0.3.1), unplug USB while driving gear from the
+MIDI OUT jack**, or keep a program on the computer reading the SmplTrek's USB MIDI port: a
+computer that is not reading fills the USB queue and stops the DIN jack with it. Enaga 0.3.0,
+which builds after v0.3.1 need, fixes this.
 
 ### The key and the scale
 
@@ -984,7 +985,7 @@ The seven upper pads are the same in every mode:
 
 | Pad | Plain | With FUNC |
 | --- | --- | --- |
-| 1 FILL | FILL conditions on while held | NOTE RPT on/off |
+| 1 FILL | FILL conditions on while held; + tap a STEP: a FILL trig on the selected track | NOTE RPT on/off |
 | 2 REPEAT | Beat repeat of the master while held; VALUE or LEFT/RIGHT pick the rate; + hold a STEP: step stutter | Pitch drops as it repeats; FUNC + STEP stutters one track |
 | 3 MUTE | MUTE MODE on/off: lower pads mute at once | |
 | 4 SCENE A | Hold + STEP 1-16 puts that scene on side A | |
@@ -1034,45 +1035,38 @@ never a jump, even after you have turned the knob in EDIT or moved the morph. Ba
 sound is exactly as it was. A target can lie below the starting value, so one macro can open a
 filter while it closes a send.
 
-**The factory macros**, in every new project:
+**The factory macros**, in the demo project (a NEW PROJECT has none):
 
 | Macro | Name | What it drives |
 | --- | --- | --- |
-| A | (free) | Nothing: yours to assign, and the one pad pressure bends |
+| A | (free) | Nothing: yours to learn, and the one pad pressure bends |
 | B | ACID | Bass (track 6) CUT, RES and ENV up: the 303 move |
 | C | DUB | Chord (track 7) SNA and SNB, rim (track 5) SNA: into the delay and reverb |
 | D | DRIVE | Kick (track 1) DEC and DRV up, closed and open hat DEC longer |
 
-**Assigning your own:**
+**Setting one up: learn by turning.** In PERFORM, **push** the macro's knob (A-D). EDIT opens
+with `LEARN B 0/4 TURN KNOBS` on the second line. Now **turn** any knob on any EDIT page (the
+LFO's included), on any track (the screen keys turn pages, UP/DOWN or a lower pad the track), to
+where the top of the macro should be: the screen counts what it has learnt (`B T6 CUT 1/4`), up
+to four parameters. **OK**, **CLR** or **HOME** ends it, as does leaving EDIT: `B: 2 PARAMS`,
+and every knob you turned snaps back to where it was. So the macro at 0 is the sound you started
+from and at 127 the sound you dialled. Turning a parameter the macro already holds learns its
+range again; **pushing** its knob while learning takes it off the macro. A fifth parameter is
+refused (`B FULL: KNOB NOT LEARNT`). A second CLR straight after the one that ended LEARN does
+nothing, so it cannot clear the track.
 
-1. Select a track (lower pad) and a macro (LEFT/RIGHT).
-2. Press a **STEP** key: STEP 1-4 are that track's SRC parameters, 5-8 FLTR, 9-12 AMP, 13-16 FX.
-   The screen confirms with the count, for example `A T6 CUT 2/4`. Repeat for up to four
-   parameters, on any tracks. The same STEP again takes that parameter off (`A T6 CUT OFF 1/4`).
-   A macro with four already says `A FULL: CLR CLEARS` and changes nothing: the factory macro D
-   uses all four, B and C three.
-   **FUNC + STEP 1-4** assign the track's LFO settings instead, WAV RAT DEP DST: a macro on DEP
-   fades a wobble in.
-   **FUNC + STEP 5, 6 or 7** puts the master kill EQ's LOW, MID or HI on the macro (`A EQ LOW`):
-   from flat, the macro sweeps that band down to a kill.
-3. Turn the macro's encoder (A-D).
+A parameter on a macro that is turned up follows the macro, not its EDIT knob: turning that knob
+says `HELD BY MACRO B`; turn the macro to 0 (or CLR it in PERFORM) to edit it again. **CLR** in
+PERFORM clears the selected macro. Macro setups are saved with the project (PERFORM.BIN).
 
-**Or learn it from EDIT:** in PERFORM, **push** the macro's knob (A-D). EDIT opens with
-`LEARN B 0/4` on the second line. Now **push** any knob on any EDIT page, on any track (the screen
-keys turn pages, UP/DOWN or a lower pad the track): that knob's parameter goes on the macro
-(`B T3 CUT 1/4`); pushed again, it comes off. **CLR** or **HOME** ends it (`KNOBS EDIT AGAIN`),
-as does any screen other than EDIT; a second CLR straight after does nothing, so it cannot clear
-the track. A parameter on a macro that is turned up follows the macro, not its EDIT knob: turning
-that knob says `HELD BY MACRO B`; turn the macro to 0 (or CLR it in PERFORM) to edit it again.
-
-The target is whichever end of 0-127 is further from the parameter's value when you assign it,
-so the knob always has somewhere to go: a filter already open gets a macro that closes it. If the
-macro is already turned up when you assign, the parameter moves straight to where the macro puts
-it. **CLR** clears the selected macro. Macro setups are saved with the project (PERFORM.BIN).
+**The master kill EQ on a macro:** in PERFORM, **FUNC + STEP 5, 6 or 7** puts the kill EQ's LOW,
+MID or HI on the selected macro (`A EQ LOW`), heading for whichever end is further from the band
+now: from flat, the macro sweeps that band down to a kill. (Until 2026-11-25 the STEP keys in
+PERFORM put any track parameter on a macro; learn by turning replaced that.)
 
 **Pad pressure** pushes **macro A** up while you lean on the selected track's pad, never below
-where its knob is, and lets go back to the knob's setting. This is why A ships empty: assign it
-to the selected track's sound and the pads become expressive.
+where its knob is, and lets go back to the knob's setting. This is why A ships empty: learn it
+on the selected track's sound and the pads become expressive.
 
 ### Beat repeat, throws and auto-fill
 
@@ -1128,7 +1122,7 @@ look for `KILL` on the EQ page.
 
 ### Tape stop and delay freeze
 
-Two held master moves, both in the performance mixer (below) since 0.5.0, in **any mode**:
+Two held master moves, both in the performance mixer (below) since backlog D1 (#145), in **any mode**:
 
 - **Tape stop: slot 8** (push VALUE + STEP 8, then turn VALUE past 16). The whole output slows
   to a standstill over two beats, its pitch and level falling together, and stays silent while
@@ -1404,10 +1398,13 @@ In the FUNC menu (FUNC+HOME), each with OK twice within 2 s:
 
 - RELOAD PROJECT (`OK AGAIN TO RELOAD`): read the project back from its last save, throwing away
   what is unsaved.
-- NEW PROJECT (`OK AGAIN FOR NEW`): a new project with the factory content, named `NEWn`.
-  Nothing is written until you save it, so the old project is untouched.
+- NEW PROJECT (`OK AGAIN FOR NEW`): a new, empty project named `NEWn`: the factory sounds and
+  mixer with every pan centred, but no steps, chain, scenes, macros or mute states. Nothing is
+  written until you save it, so the old project is untouched.
+- LOAD DEMO (`OK AGAIN FOR DEMO`): the factory demo project, the beat a first start plays, under
+  a new name. Again nothing is written until you save.
 
-Both stop the transport.
+All three stop the transport.
 
 ### Projects: open, save as, rename and delete
 

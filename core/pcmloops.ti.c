@@ -1,5 +1,5 @@
 /* The load-time anti-aliasing low-pass (pcmloops.h). Built by cl6x when it is installed, else
- * GCC -- build_app.py routes *.ti.c to TI's compiler (docs/BUDGET.md, M2).
+ * GCC -- build_app.py routes *.ti.c to TI's compiler (docs/archive/BUDGET_MILESTONES.md, M2).
  *
  * The coefficients and the state live in locals for the whole call, so the cascade is registers
  * and multiply-adds with one load and one store a sample. Nothing branches (?: throughout) and

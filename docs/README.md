@@ -26,5 +26,5 @@
 | [ENAGA_API.md](ENAGA_API.md) | The verified Enaga signatures STRATA uses |
 | [SOUND.md](SOUND.md) | Where the drum synthesis comes from |
 | [MUTATION.md](MUTATION.md) | Mutation testing of the test suite |
-| [REVIEW.md](REVIEW.md) | The platform review the spec was corrected against |
 | [release/RELEASING.md](release/RELEASING.md) | How a release zip is made and published |
+| [archive/](archive/) | Retired material kept for the record: the platform review the spec was corrected against ([REVIEW.md](archive/REVIEW.md), whose decisions still stand), BUDGET's milestone measurements, the 2026-11-22 controls tour and the v0.1.0 release steps |

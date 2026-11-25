@@ -100,7 +100,7 @@ namespace strata {
 class VaPoly final : public PolyMachine {
 public:
     // docs/SPEC.md's figure. Six is also what docs/BUDGET.md budgets, at 1,868 cycles each;
-    // docs/REVIEW.md measured that cutting it to four saves 0.75% of the block, which is why
+    // docs/archive/REVIEW.md measured that cutting it to four saves 0.75% of the block, which is why
     // the voice count is not a knob and not the lever when the budget gets tight.
     // (PolyMachine::kVoices, shared with FM and STRING.)
 

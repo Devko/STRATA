@@ -1,5 +1,5 @@
 /* The master bus's per-sample loops (masterloops.h). Built by cl6x when it is installed, else
- * GCC -- build_app.py routes *.ti.c to TI's compiler (docs/BUDGET.md, M2).
+ * GCC -- build_app.py routes *.ti.c to TI's compiler (docs/archive/BUDGET_MILESTONES.md, M2).
  *
  * The arithmetic is buses.cpp's, unchanged: same expressions, same order, same inline enaga
  * math, so the limiter still cannot be driven past full scale and a quiet master is still

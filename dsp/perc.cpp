@@ -6,7 +6,7 @@
 // --- what is expected to dominate -----------------------------------------------------------
 //
 // Two voices, so this is per voice per 64-frame block, counting multiplies and adds in the hot
-// loop only. These are the figures the central measurement (docs/BUDGET.md, PLAN.md M0.5) should
+// loop only. These are the figures the central measurement (docs/archive/BUDGET_MILESTONES.md, PLAN.md M0.5) should
 // be compared against.
 //
 //   stage              expected to dominate                            flops/sample

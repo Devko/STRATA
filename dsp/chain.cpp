@@ -3,7 +3,7 @@
 // --- what is expected to dominate, per stage -------------------------------------------------
 //
 // Eight of these run every block, so this file is written for cycles first. The figures below
-// are what the central measurement (docs/BUDGET.md, PLAN.md M0.5) should be compared against;
+// are what the central measurement (docs/archive/BUDGET_MILESTONES.md, PLAN.md M0.5) should be compared against;
 // they are per track, per 64-frame block, counting multiplies and adds in the hot loops only.
 //
 //   stage    expected to dominate                                flops/sample  neutral cost
@@ -37,7 +37,7 @@
 // costs one compare. The buffer and filter work is all in Enaga's C block functions, which cl6x
 // compiles and pipelines - CLAUDE.md's *.ti.c rule bit only on the three hand-written loops
 // here (drive, lo-fi, duck), and all three now live in dsp/chainloops.ti.c, which build_app.py
-// sends to cl6x while this file goes through GCC (docs/BUDGET.md, M2, has the figures). The
+// sends to cl6x while this file goes through GCC (docs/archive/BUDGET_MILESTONES.md, M2, has the figures). The
 // arithmetic moved unchanged, so a bypassed stage is still bit-identical.
 //
 // Duck::render below is deliberately NOT in that file: it is a sequential state machine run
