@@ -117,6 +117,7 @@ FM4 and GRAIN machines.
 | Per-track LFO: 6 shapes, free 0.06-32 Hz or synced 8 bars-1/32, any of the 16 params; lockable, scene-able, macro-able | v0.1.0 | ○ (13e) | Steps at about 750 Hz; on VA and WAVE an LFO on TUN glides instead (S3) |
 | LFO TRIG: FREE, RETRIG, ONE-SHOT (push RAT); ONE-SHOT shapes are envelopes | S2 | ○ (W30) | A kit setting, not lockable; no new shapes (see the PR) |
 | Cutoff floor (~100 Hz) for LFO, morph and macros; LFO depth on a cutoff about +-3 octaves | D9 | ○ (W30) | The knob and locks still close a filter fully |
+| **Two MOD slots per track**: LFO, ENV (the LFO's shape once per note), VEL, PRS (pad pressure), RND (per note) to any sound, ASR or OSC parameter, signed depth; learnt by push C / D on the LFO page and a turn | #168 | ○ (W38) | A kit setting, not lockable; not on LFO or ARP knobs; on MID the slots reach the CCs |
 | Per-track arpeggiator: UP, DN, U/D, ORD, RND, 1/4-1/32T, 1-4 octaves, gate | v0.1.0 | ○ (13h) | On POLY it uses the shared voice budget |
 | Banks A-H x 16 patterns, queued changes (END, 16, 32, NOW) | v0.1.0 | ◐ (3b) | |
 | Chain of up to 64 entries, repeats X1-X16 | v0.1.0 | ○ (3b, 12) | |
