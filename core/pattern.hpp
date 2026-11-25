@@ -181,6 +181,9 @@ struct TrackPattern {
     uint8_t length = uint8_t(kStepsPerTrack);   // 1-64 steps (polymeter)
     uint8_t speed = uint8_t(Speed::x1);
     uint8_t swing = kSwingInherit;
+    // PlayMode (core/timing.hpp): which step each time slot plays. It took the byte that was
+    // padding before `steps`, so TrackPattern did not grow. 0 is FWD.
+    uint8_t play = uint8_t(PlayMode::fwd);
     Step steps[kStepsPerTrack];
 };
 

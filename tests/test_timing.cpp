@@ -482,3 +482,146 @@ TEST(timing_length_within_steps_never_runs_past_the_step_pressed) {
         CHECK(got <= n * 16);
     }
 }
+
+// --- play modes -------------------------------------------------------------
+
+TEST(play_mode_values_are_stable_and_forward_is_zero) {
+    // Serialized in a pattern (core/serialize.hpp, section 4): never renumbered.
+    CHECK_EQ(int(PlayMode::fwd), 0);
+    CHECK_EQ(int(PlayMode::rev), 1);
+    CHECK_EQ(int(PlayMode::ping), 2);
+    CHECK_EQ(int(PlayMode::rnd1), 3);
+    CHECK_EQ(int(PlayMode::rnd16), 7);
+    CHECK_EQ(int(PlayMode::count), 8);
+    CHECK(PlayMode(0) == PlayMode::fwd);       // a zeroed byte plays forward
+    CHECK(TrackTiming{}.play == PlayMode::fwd);
+    for (int m = 0; m < int(PlayMode::count); m++) {
+        const char *name = play_mode_name(PlayMode(m));
+        CHECK(std::strlen(name) >= 3 && std::strlen(name) <= 5);
+    }
+}
+
+TEST(forward_reverse_and_ping_pong_map_slots_to_steps) {
+    TrackTiming timing;
+    timing.length = 12;
+    for (int s = 0; s < 12; s++) {
+        timing.play = PlayMode::fwd;
+        CHECK_EQ(int(play_step(s, 0, timing)), s);
+        CHECK_EQ(int(play_step(s, 5, timing)), s);
+        timing.play = PlayMode::rev;
+        CHECK_EQ(int(play_step(s, 0, timing)), 11 - s);
+        CHECK_EQ(int(play_step(s, 5, timing)), 11 - s);
+        timing.play = PlayMode::ping;
+        CHECK_EQ(int(play_step(s, 0, timing)), s);         // even passes forward
+        CHECK_EQ(int(play_step(s, 1, timing)), 11 - s);    // odd passes back
+        CHECK_EQ(int(play_step(s, 6, timing)), s);
+    }
+}
+
+TEST(every_play_mode_stays_inside_the_track_for_every_length) {
+    TrackTiming timing;
+    timing.play_seed = 0xDEADBEEFu;
+    for (int m = 0; m < int(PlayMode::count); m++) {
+        timing.play = PlayMode(m);
+        for (int length = 1; length <= kMaxSteps; length++) {
+            timing.length = uint8_t(length);
+            for (uint32_t loop = 0; loop < 9; loop++) {
+                for (int s = 0; s < length; s++) {
+                    CHECK(int(play_step(s, loop, timing)) < length);
+                }
+            }
+        }
+    }
+    // Degenerate input is clamped, not trusted: a slot past the end and a length of 0.
+    timing.play = PlayMode::rev;
+    timing.length = 16;
+    CHECK_EQ(int(play_step(40, 0, timing)), 0);
+    CHECK_EQ(int(play_step(-3, 0, timing)), 15);
+    timing.length = 0;
+    CHECK_EQ(int(play_step(0, 0, timing)), 0);
+}
+
+TEST(random_blocks_keep_their_steps_in_order_and_the_tail_in_place) {
+    TrackTiming timing;
+    timing.play_seed = play_seed(1, 2);
+    timing.length = 14;     // three whole blocks of 4, then slots 12 and 13
+    timing.play = PlayMode::rnd4;
+    for (uint32_t loop = 0; loop < 64; loop++) {
+        for (int block = 0; block < 3; block++) {
+            const int first = int(play_step(block * 4, loop, timing));
+            CHECK_EQ(first % 4, 0);                        // a whole block, from its start
+            CHECK(first < 12);                             // never the partial tail
+            for (int o = 1; o < 4; o++) CHECK_EQ(int(play_step(block * 4 + o, loop, timing)), first + o);
+        }
+        CHECK_EQ(int(play_step(12, loop, timing)), 12);
+        CHECK_EQ(int(play_step(13, loop, timing)), 13);
+    }
+    // A block as long as the track, or longer, leaves it playing forward.
+    timing.length = 16;
+    timing.play = PlayMode::rnd16;
+    for (int s = 0; s < 16; s++) CHECK_EQ(int(play_step(s, 3, timing)), s);
+    timing.length = 12;
+    for (int s = 0; s < 12; s++) CHECK_EQ(int(play_step(s, 3, timing)), s);
+}
+
+TEST(random_play_is_deterministic_varies_by_pass_and_seed_and_reaches_every_block) {
+    TrackTiming a;
+    a.length = 16;
+    a.play = PlayMode::rnd1;
+    a.play_seed = play_seed(1, 0);
+    TrackTiming b = a;
+    b.play_seed = play_seed(1, 1);       // another track of the same pattern
+
+    int hits[16] = {};
+    int differs_by_pass = 0, differs_by_track = 0;
+    for (uint32_t loop = 0; loop < 400; loop++) {
+        for (int s = 0; s < 16; s++) {
+            const int step = int(play_step(s, loop, a));
+            CHECK_EQ(int(play_step(s, loop, a)), step);    // the same arguments, the same step
+            hits[step]++;
+            if (step != int(play_step(s, loop + 1, a))) differs_by_pass++;
+            if (step != int(play_step(s, loop, b))) differs_by_track++;
+        }
+    }
+    // 6,400 draws over 16 steps: 400 each on average. Every step is reached and none dominates.
+    for (int i = 0; i < 16; i++) CHECK(hits[i] > 300 && hits[i] < 500);
+    CHECK(differs_by_pass > 5000);
+    CHECK(differs_by_track > 5000);
+}
+
+// Under a play mode each pass still fires exactly `length` times, once per slot, and the step a
+// slot fires is play_step's. Swing stays on the slot; micro-timing comes with the step.
+TEST(a_play_mode_fires_once_per_slot_with_swing_on_the_slot_and_micro_on_the_step) {
+    for (int m = 0; m < int(PlayMode::count); m++) {
+        TrackTiming timing;
+        timing.length = 16;
+        timing.swing = 66;
+        timing.play = PlayMode(m);
+        timing.play_seed = play_seed(7, 3);
+        int8_t micro[kMaxSteps] = {};
+        micro[0] = 5;
+        micro[5] = -4;
+
+        const int loops = 6;
+        int per_loop[loops] = {};
+        for (int tick = 0; tick < timing.loop_ticks() * (loops + 1); tick++) {
+            Firing firings[kMaxFiringsPerTick];
+            const int n = steps_firing_at(uint32_t(tick), timing, micro, firings, kMaxFiringsPerTick);
+            for (int i = 0; i < n; i++) {
+                const int loop = int(firings[i].loop);
+                if (loop >= loops) continue;
+                per_loop[loop]++;
+                // Which slot of this pass fires this tick? The one whose step and position agree.
+                bool found = false;
+                for (int s = 0; s < 16; s++) {
+                    const int step = int(play_step(s, uint32_t(loop), timing));
+                    const int at = loop * timing.loop_ticks() + s * 24 +
+                                   swing_offset(s, 66, 24) + int(micro[step]);
+                    if (step == int(firings[i].step) && (at < 0 ? 0 : at) == tick) found = true;
+                }
+                CHECK(found);
+            }
+        }
+        for (int loop = 0; loop < loops; loop++) CHECK_EQ(per_loop[loop], 16);
+    }
+}
