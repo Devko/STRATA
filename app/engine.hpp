@@ -729,6 +729,10 @@ private:
     const int16_t *sample_region_ = nullptr;
     uint32_t sample_region_bytes_ = 0;
 
+    // The master meter's reading, audio context only (Status::meter_milli).
+    static constexpr float kMeterFall = 0.99f;
+    float meter_ = 0.0f;
+
     // The tick at which the live pattern's current pass ends. Kept rather than derived so that
     // detecting the boundary is a comparison instead of a division per tick.
     uint32_t next_boundary_ = 0;

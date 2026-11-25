@@ -431,6 +431,16 @@ struct Status {
     // SLICES line. Written when the audio side applies a set_sample or set_stream.
     std::atomic<uint8_t> slice_points[8] = {};
     std::atomic<uint16_t> peak_milli{0};       // master peak x 1000
+    // The screen frame (docs/CONTROLS.md, "The screen frame"). `meter_milli` is the master peak
+    // with a meter's fall already applied on the audio side, so a 20 fps draw that samples one
+    // block in forty still sees every hit. `limit_seen` is bumped on each block whose peak
+    // reached full scale (the limiter working): the UI compares, a wrap is harmless.
+    std::atomic<uint16_t> meter_milli{0};
+    std::atomic<uint8_t> limit_seen{0};
+    // Where the playing pattern is: ticks into its current pass, and the pass's length in ticks
+    // (master length x 24). For the top line's bar.beat and the progress line under it.
+    std::atomic<uint16_t> pattern_into{0};
+    std::atomic<uint16_t> pattern_loop{0};
     // How many TRACKS rendered last block (an active machine, not muted), 0-8. Not a voice
     // count: a six-note POLY chord is one. Shown as TRK on the status line.
     std::atomic<uint8_t> voices{0};
@@ -530,6 +540,12 @@ struct Status {
     // Audio context only, so load-then-store is safe with one writer (see the note above).
     void bump_refused() {
         refused.store(refused.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+    }
+
+    // Audio context only, one writer, as bump_song_end.
+    void bump_limit_seen() {
+        limit_seen.store(uint8_t(limit_seen.load(std::memory_order_relaxed) + 1),
+                         std::memory_order_relaxed);
     }
 
     // Audio context only, one writer, as bump_song_end.

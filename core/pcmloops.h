@@ -36,6 +36,26 @@ void strata_antialias_stereo(int16_t *samples, uint32_t frames, const float *b0,
                              const float *b2, const float *a1, const float *a2, float *z1l,
                              float *z2l, float *z1r, float *z2r);
 
+/* --- the load-time resampler's interpolation (core/pcm.cpp, pcm_resample) ---------------------
+ *
+ * A Kaiser-windowed sinc, STRATA_SINC_TAPS taps, from a table of STRATA_SINC_PHASES + 1 rows of
+ * STRATA_SINC_TAPS floats (core/pcm.cpp builds it). Row p holds the kernel for a fraction of
+ * p / STRATA_SINC_PHASES; a fraction between two rows interpolates the two linearly, tap by tap.
+ * Output frame n reads source frames i - (STRATA_SINC_TAPS / 2 - 1) .. i + STRATA_SINC_TAPS / 2
+ * around i = position >> 32: the caller guarantees they all exist (pcm_resample gathers a
+ * clamped window at the file's two ends). Rounded to the nearest int16, halves away from zero,
+ * and clamped, because a sinc overshoots a full-scale edge. Returns the advanced position. */
+#define STRATA_SINC_TAPS 32
+#define STRATA_SINC_PHASES 128
+
+/* One channel, `stride` int16 between frames in both `in` and `out`. */
+uint64_t strata_sinc_resample(const int16_t *in, int stride, uint64_t position, uint64_t step,
+                              const float *table, int16_t *out, uint32_t count);
+
+/* Interleaved stereo, both channels per pass with the kernel interpolated once. */
+uint64_t strata_sinc_resample_stereo(const int16_t *in, uint64_t position, uint64_t step,
+                                     const float *table, int16_t *out, uint32_t count);
+
 #ifdef __cplusplus
 }
 #endif

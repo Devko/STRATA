@@ -2935,6 +2935,24 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     const float scaled = peak * 1000.0f;
     status_.peak_milli.store(uint16_t(scaled > 65535.0f ? 65535.0f : scaled),
                              std::memory_order_relaxed);
+
+    // The screen frame's master meter: the block's peak, or the last reading falling by about
+    // 0.09 dB a block (20 dB in a third of a second), whichever is higher. One multiply a block.
+    const float fallen = meter_ * kMeterFall;
+    meter_ = peak > fallen ? peak : fallen;
+    const float meter_scaled = meter_ * 1000.0f;
+    status_.meter_milli.store(uint16_t(meter_scaled > 65535.0f ? 65535.0f : meter_scaled),
+                              std::memory_order_relaxed);
+    if (peak >= 1.0f) status_.bump_limit_seen();
+
+    // And where the pattern is in its pass: a subtraction from the boundary resolve_tick keeps,
+    // no divide. Before the first tick, or a master length changed in mid-pass, it reads 0.
+    const uint32_t loop = uint32_t(master_loop_ticks(live()));
+    const uint32_t left = next_boundary_ - tick_;
+    const uint32_t into = boundary_known_ && next_boundary_ >= tick_ && left <= loop
+                              ? loop - left : 0u;
+    status_.pattern_into.store(uint16_t(into), std::memory_order_relaxed);
+    status_.pattern_loop.store(uint16_t(loop), std::memory_order_relaxed);
 }
 
 // --- MIDI out ---------------------------------------------------------------

@@ -239,6 +239,54 @@ the scene, MUTE MODE on makes STEP 1-8 the mute states.
 | TRK 6 | THROW | amber | held | `THROW DELAY` / `THROW REVERB` |
 | TRK 7 | MUTATE | violet | a mutation waiting for OK/CLR, or frozen | `MUTATE T1 DENSITY +` |
 
+## The screen frame
+
+Every screen keeps the same frame, so the eye learns where to look (D7: the frame and the live
+strip first, pictures per page later). A screen draws only inside it.
+
+| Rows | What | Example |
+| --- | --- | --- |
+| 0-6 | Top line: live pattern, **bar.beat** in its pass, tempo, `>` playing / `.` stopped, load in whole percent | `A01 3.2 130.0 > 24%` |
+| 8 | Progress: one pixel across the pattern's pass (its master length), on a dim track; empty while stopped | |
+| 10-16 | Second line: a notice, LEARN or the MUTATE verdict while there is one; else the **live strip**; else `EXT MIDI` / `EXT SYNC` / `CLOCK REFUSED` | `K:L FX4 S40 M:AB` |
+| 18-117 | The screen's own content | |
+| 120 | Bottom line: tracks sounding, MAX, device, DROP, GUARD | `TRK3 MAX23.5 SMPLTREK` |
+| x 126-127, rows 10-117 | **Master meter**: the level (falling about 20 dB in a third of a second), a bright dot at the highest reading of the last second, the top pixel lit for a second after the limiter worked | |
+
+The live strip lists only what is **off rest**, most telling first, and leaves out whole what does
+not fit in 17 characters: `K:LMH` kill EQ bands thrown, `FX4` the performance effect up (its STEP
+number), `S40` the scene morph at 40%, `M:AB` macros away from zero, `LP` the master looper
+armed, recording or playing. At rest it is empty. x 114-124 on that line is kept for the LOCK
+mark (`L` / `L*`), which a later change adds.
+
+Two rules keep the frame cheap and whole. It is drawn only from words the audio side publishes
+once a block (`Status`): nothing in `draw()` walks a pattern or a buffer. And no text may reach
+x 126: the layout check holds every string to the screen, GRID's cells are five pixels wide, and
+right-aligned values end at x 124.
+
+## Locks on screen
+
+While a STEP is held, every parameter shows what **that step plays**, and the kit value it moves
+away from (Phase 3 items 2-3):
+
+- **Bars.** On GRID's four slots and EDIT's four rows the solid bar is what you hear: the held
+  step's lock if it has one, else the kit value. A **hollow tick** marks the kit value (the knob):
+  a bright pixel above and below the bar, dark across it inside the solid part. No lock, no tick.
+  The value text above or beside the bar is the heard value too.
+- **The lock line.** Hold STEP + turn A-D (or push it to clear): `S5 CUT 64>90`, the step, the
+  parameter, the kit value and then the lock, live while the STEP is down. `S5 CUT 64 KIT` once the
+  lock is cleared. It takes GRID's edit line and EDIT's line under the rows; a notice still wins
+  on GRID.
+- **Macro bars** (PERFORM): the solid bar is where the macro is, a pad's pressure included; when
+  that differs from the knob, a hollow tick across the bar marks the knob.
+- **GRID cells.** A trig's 5 x 6 cell carries marks cut dark into it: a dot in the middle for
+  locks, the top-left corner for a condition (FILL, A:B, PRE ...), the top-right corner for a
+  probability under 100%, two teeth in the bottom edge for a ratchet. A trigless step (locks, no
+  note) is an outline. The marks never overlap, so any mix reads.
+
+All of it reads values the screen already has: the kit values, the cell's own step, and at most
+eight locks of the one held step per slot. Nothing walks the lock pool.
+
 ## FUNC help
 
 FUNC held for 0.6 s with nothing else pressed shows help for **the screen that is up**

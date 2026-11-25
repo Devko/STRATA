@@ -81,11 +81,14 @@ uint32_t pcm_to_s16(const uint8_t *in, uint32_t in_bytes, PcmFormat format, int 
 
 // A resampling cursor over a source already converted to int16.
 //
-// Linear interpolation, deliberately: this runs once at load over a whole file, and the
-// alternative worth having (a windowed sinc) costs a design decision about its window and a
-// great deal more arithmetic for a difference that a 44.1-to-48 conversion of a drum loop will
-// not show. dsp/sample.cpp interpolates with Catmull-Rom at PLAY time, where pitch changes make
-// it audible; this is the one-off rate match.
+// A Kaiser-windowed sinc (beta 7), 32 taps, from a 128-phase table interpolated between phases
+// (core/pcmloops.h). It replaced linear interpolation, whose images were audible: a 5 kHz tone
+// at 44.1 kHz came back with its error only 27 dB down, against 86 dB now, and 15 kHz went from
+// 8 dB to 79 dB (docs/BUDGET.md, "Load time: the windowed-sinc resampler"). The cut-off is the
+// source's Nyquist, so a position on a whole source frame returns that frame exactly: a
+// same-rate load is still a copy, and 96 to 48 kHz still takes every other (Antialias-filtered)
+// frame. It runs once at load in main-loop slices; dsp/sample.cpp's Catmull-Rom is the PLAY-time
+// interpolation and is separate.
 struct Resampler {
     uint64_t position = 0;     // 32.32 into the source, in frames
     uint64_t step = 0;         // source frames per output frame, 32.32
@@ -102,9 +105,8 @@ struct Resampler {
 // into `out`, advancing `cursor`. Returns the output frames written, which is 0 once the cursor
 // has passed the end of the source.
 //
-// The last source frame is held rather than interpolated against memory past the end, so the
-// final output frame is the file's own last sample instead of a step towards whatever followed
-// it in RAM.
+// Within half a kernel of either end the first and last source frames are held (the window is
+// gathered with its index clamped), so nothing outside `in` is ever read.
 uint32_t pcm_resample(const int16_t *in, uint32_t in_frames, int channels, Resampler &cursor,
                       int16_t *out, uint32_t max_out);
 
@@ -112,8 +114,8 @@ uint32_t pcm_resample(const int16_t *in, uint32_t in_frames, int channels, Resam
 
 // The low-pass a DOWNSAMPLE needs before pcm_resample reads the source.
 //
-// Linear interpolation at a lower rate keeps everything above the new Nyquist and folds it back
-// down: a 96 kHz file with energy at 30 kHz plays it at 18 kHz. So when the source rate is above
+// The resampler's kernel cuts off at the SOURCE's Nyquist, so at a lower rate it keeps everything
+// above the new Nyquist and folds it back down: a 96 kHz file with energy at 30 kHz plays it at 18 kHz. So when the source rate is above
 // the output rate, the converted source is filtered in place first. An upsample (44.1 to 48 kHz,
 // the common case) has nothing above the new Nyquist to fold, and gets no filter.
 //

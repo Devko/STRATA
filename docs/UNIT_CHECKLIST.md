@@ -261,6 +261,25 @@ it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA_1.WAV` will 
 - SHIMMR on track 8 for 30 s: **MAX `____ %`** (against item 1's; E16). Then FUNC+HOME, RELOAD
   PROJECT puts the beat back.
 
+**22. The screen frame (3 min).** Beat playing, A01.
+- Top line `A01 1.1 130.0 > ..%`: the bar.beat counts `1.1` ... `1.4`, `2.1` ... in time, and the
+  thin line under it fills left to right once per pass, empty again on STOP. `____`
+- The right edge's column moves with the beat, a bright dot hangs at the top of each hit for
+  about a second; turn the master up until it limits: the column's top pixel lights. `____`
+- PERFORM: move the morph, a macro, push VALUE + STEP 4 (an effect), throw a kill: line 2
+  shows `S..`, `M:A`, `FX4`, `K:L`; each goes away as it comes back to rest. `____`
+- Step through every screen (HOME, EDIT, MIXER, PROJECT, KEYS, FUNC menu, SOUNDS): nothing of
+  the screen's own runs into the meter column or the strip. Screen updates smoothly with all 8
+  tracks playing? `____`
+
+**23. Locks on screen (3 min).** Beat playing, A01, HOME, lower pad 1 (kick).
+- Hold STEP 5 and turn A: the line `S5 ... ..>..` counts the lock while the kit value stays;
+  slot A's bar follows the lock and a hollow tick stays at the kit value. Push A: `S5 ... .. KIT`,
+  tick gone. Same in EDIT (EDIT key). Readable at arm's length? `____`
+- GRID: STEP 5's cell has a dot (lock). Hold STEP 6 + FILL: top-left corner cut; + MUTATE:
+  top-right cut; + REPEAT: two teeth along the bottom. The four told apart at a glance? `____`
+- PERFORM: press a pad hard: macro A's bar rises, a tick stays at the knob. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `3 fail: reads 055`, `9: MAX 61.2`.
 
 ---
@@ -707,6 +726,12 @@ Roland's OK). It used to be 30 s of 48 kHz frames, which refused the 30 s file `
 - [ ] Copy `SWEEP_30S_96K.WAV` over the same name instead and reload. It LOADS (no `TOO LONG`),
       in about twice the 15 s file's time: `________ s`. The sweep now rises for about 16 s to
       24 kHz and the second half stays silent, as above.
+- [ ] **44.1 kHz (windowed-sinc resampler, 2026-11-25).** Copy `SWEEP_30S_44K.WAV` (the card
+      build's folder; 30 s stereo 16-bit 44.1 kHz, 20 Hz to 20 kHz logarithmic) over the same
+      name and reload. Time it as above: `________ s` (estimated card read 1.4 s plus about 0.4 s
+      of resampling with cl6x). The screen and keys keep answering during `RESAMPLING`. Play it on
+      SMP: one clean rising tone to the top, with no second tone moving against it (the linear
+      resampler's images were a faint falling whistle under high notes).
 
 ## 13c. U4: the delay tail (5 min, a good break)
 

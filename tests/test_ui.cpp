@@ -2077,9 +2077,9 @@ TEST(ui_the_grid_draws_a_trig_where_the_trig_is) {
     CHECK(trig_at(0, 0));
     app.draw(canvas);
 
-    CHECK_EQ(at(1, top + 1), 11);                  // the cell is filled now, 6 x 6 from (1, 21)
-    CHECK_EQ(at(6, top + 6), 11);
-    CHECK_EQ(at(7, top + 1), 0);                   // and it stops before the next step's cell
+    CHECK_EQ(at(1, top + 1), 11);                  // the cell is filled now, 5 x 6 from (1, 21):
+    CHECK_EQ(at(5, top + 6), 11);                  // five wide, so step 16 ends at x 125 and
+    CHECK_EQ(at(6, top + 1), 0);                   // the frame's meter keeps x 126-127
     CHECK_EQ(at(9, top + 3), 2);                   // step 2 is still a dash
     CHECK_EQ(at(9, top + 1), 0);
 
@@ -2766,6 +2766,37 @@ bool screen_has(Strata &app, const char *wanted) {
 }
 
 }  // namespace
+
+// The frame (docs/CONTROLS.md, "The screen frame"): bar.beat on the top line, the progress line
+// under it, the live strip saying what is off rest, and the meter's columns left to the meter.
+TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    for (int b = 0; b < kKillBands; b++) post_cmd(Cmd::eq_kill, uint8_t(b), 0);
+    pump(2);
+    CHECK(!screen_has(app, "K:"));                 // at rest the strip says nothing
+
+    // Bar 2, beat 2: one bar and one beat of ticks into the pass.
+    host.set_running(true);
+    for (uint32_t t = 0; t <= kTicksPerBar + uint32_t(kPpqn) + 4u; t++) {
+        host.deliver_tick(t, 0);
+        pump(1);
+    }
+    CHECK(screen_has(app, " 2.2 "));
+    // The progress line, row 8: lit from the left while running, the track dim past it.
+    CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 0]), 11);
+    CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 127]), 2);
+
+    // A kill is off rest, so the strip names it; let go, it is gone again.
+    post_cmd(Cmd::eq_kill, 0, 1);
+    pump(2);
+    CHECK(screen_has(app, "K:L"));
+    post_cmd(Cmd::eq_kill, 0, 0);
+    pump(2);
+    CHECK(!screen_has(app, "K:"));
+    host.set_running(false);
+    pump(2);
+}
 
 // The ambient modes' pages (dsp/ambient.hpp): DLY+ beside DLY, REV+ beside REV. Their TYP knob is
 // a switch, MUL steps by one multiplier, and the delay's TIME line counts the multiplier in LONG.
@@ -6316,6 +6347,12 @@ Look look(Strata &app) {
     enaga::Canvas canvas(g_pixels);
     host.clear_text();
     app.draw(canvas);
+    // The frame's master meter (x 126-127, rows 10-117) is a live reading, like a clock: a
+    // level falling or a held peak running out is not an answer to the input, so it is left out.
+    for (int y = 10; y <= 117; y++) {
+        g_pixels[y * enaga::Canvas::width + 126] = 0;
+        g_pixels[y * enaga::Canvas::width + 127] = 0;
+    }
     Look out{2166136261u, 2166136261u};
     out.screen = fnv(out.screen, g_pixels, sizeof g_pixels);
     for (int i = 0; i < host.text_count(); i++) {
@@ -8319,4 +8356,139 @@ TEST(ui_hold_ok_on_a_slot_opens_the_pattern_menu_and_double_doubles) {
     CHECK_EQ(int(project.patterns[0][0].tracks[0].length), 32);
     key(ENAGA_KEY_F4);
     pump(2);
+}
+
+// --- locks on screen (docs/CONTROLS.md, "Locks on screen") ------------------------------------
+
+TEST(ui_the_grid_marks_what_a_trig_carries) {
+    // Steps 1-4 of track 1 each carry one thing, set with the gestures a hand uses: a lock (hold
+    // STEP + turn), the FILL condition, a probability and a ratchet (hold STEP + an upper pad).
+    // Each is a dark cut in its own place in the 5 x 6 cell, so any mix of them reads.
+    Strata &app = fresh();
+    enaga::Canvas canvas(g_pixels);
+    const uint8_t *px = g_pixels;
+    const auto at = [px](int x, int y) { return int(px[y * enaga::Canvas::width + x]); };
+    const int top = 21;                                    // track 1's cells start at y 21
+    // `fresh()` lets no modifier stay down, but a STEP key an earlier test left held would
+    // turn the taps below into a range; let them all go first.
+    for (int k = 0; k < 16; k++) step_up(k);
+    CHECK_EQ(UiProbe::held_step(app), -1);
+
+    for (int s = 0; s < 4; s++) {
+        if (!trig_at(0, s)) key(ENAGA_KEY_STEP1 + s);
+        pump(2);                                           // a hand is slower than a block
+    }
+    for (int s = 0; s < 4; s++) CHECK(trig_at(0, s));
+
+    step_down(0);
+    app.on_encoder(0, +6);
+    pump(2);
+    step_up(0);
+    step_down(1);
+    app.on_pad_press(1, 100);                              // FILL: the fill condition
+    app.on_pad_release(1);
+    step_up(1);
+    step_down(2);
+    app.on_pad_press(13, 100);                             // MUTATE: probability 75%
+    app.on_pad_release(13);
+    step_up(2);
+    step_down(3);
+    app.on_pad_press(3, 100);                              // REPEAT: a ratchet of 2
+    app.on_pad_release(3);
+    step_up(3);
+    pump(2);
+    CHECK(step_of(0, 0).lock_count > 0);
+    CHECK_EQ(int(condition_kind(step_of(0, 1).condition)), int(Condition::FILL));
+    CHECK_EQ(int(step_of(0, 2).probability), 75);
+    CHECK_EQ(int(ratchet_count(step_of(0, 3).ratchet)), 2);
+
+    app.draw(canvas);
+    const int grey = at(1, top + 1);                       // an unmarked corner of step 1
+    CHECK(grey >= 11);
+    // Step 1: the lock's dot, two pixels tall in the middle; the corners and bottom are whole.
+    CHECK_EQ(at(3, top + 2), 0);
+    CHECK_EQ(at(3, top + 3), 0);
+    CHECK_EQ(at(3, top + 1), grey);
+    CHECK_EQ(at(5, top), grey);
+    CHECK_EQ(at(2, top + 5), grey);
+    // Step 2: the condition cuts the top-left corner, and nothing else.
+    CHECK_EQ(at(9, top), 0);
+    CHECK(at(13, top) != 0);
+    CHECK(at(11, top + 2) != 0);
+    // Step 3: probability cuts the top-right corner.
+    CHECK_EQ(at(21, top), 0);
+    CHECK(at(17, top) != 0);
+    // Step 4: the ratchet's two teeth in the bottom edge.
+    CHECK_EQ(at(26, top + 5), 0);
+    CHECK_EQ(at(28, top + 5), 0);
+    CHECK(at(27, top + 5) != 0);
+    CHECK(at(25, top) != 0);
+}
+
+TEST(ui_a_held_step_shows_its_lock_against_the_kit_value) {
+    // Hold STEP + turn A: the bottom line says "S1 <name> <kit>><lock>", the slot's value and bar
+    // follow the lock, and a hollow tick stays at the kit value. Let go and all of it goes back
+    // to the kit value -- the lock is still there, but nothing is held.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    enaga::Canvas canvas(g_pixels);
+    const uint8_t *px = g_pixels;
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+
+    const int index = page_first(Page(UiProbe::param_page(app)));
+    const int base = app_engine().params(0).v[index];
+    step_down(0);
+    app.on_encoder(0, base < 64 ? +20 : -20);
+    pump(2);
+    uint8_t locked = 0;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 0, uint8_t(index), locked));
+    CHECK(int(locked) != base);
+    CHECK_EQ(int(app_engine().params(0).v[index]), base);  // the kit value did not move
+
+    host.clear_text();
+    app.draw(canvas);
+    bool readout = false;
+    for (int i = 0; i < host.text_count(); i++) {
+        const char *text = host.text_draw(i).text;
+        if (std::strncmp(text, "S1 ", 3) == 0 && std::strchr(text, '>') != nullptr) readout = true;
+    }
+    CHECK(readout);
+
+    // GRID's slot A: the bar at y 117-118, the tick's caps one row above and below it.
+    const auto bright_in_row = [px](int y) {
+        int n = 0;
+        for (int x = 0; x < 28; x++) n += px[y * enaga::Canvas::width + x] == 15 ? 1 : 0;
+        return n;
+    };
+    CHECK_EQ(bright_in_row(116), 1);
+    CHECK_EQ(bright_in_row(119), 1);
+    const int tick = base * 27 / 127;
+    CHECK_EQ(int(px[116 * enaga::Canvas::width + tick]), 15);
+
+    step_up(0);
+    pump(2);
+    CHECK(!screen_has(app, "S1 "));
+    app.draw(canvas);
+    CHECK_EQ(bright_in_row(116), 0);
+}
+
+TEST(ui_a_trigless_step_draws_as_an_outline_on_the_grid) {
+    Strata &app = fresh();
+    enaga::Canvas canvas(g_pixels);
+    const uint8_t *px = g_pixels;
+    const auto at = [px](int x, int y) { return int(px[y * enaga::Canvas::width + x]); };
+    Command command;
+    command.cmd = Cmd::toggle_trig;
+    command.track = 0;
+    command.step = 5;
+    command.a = 1;                                         // the trigless bit
+    app_engine().commands().post(command);
+    pump(2);
+    CHECK((step_of(0, 5).flags & kStepTrigless) != 0);
+    app.draw(canvas);
+    const int x = 5 * 8 + 1, y = 21;
+    CHECK(at(x, y) != 0);
+    CHECK(at(x + 4, y + 5) != 0);
+    CHECK_EQ(at(x + 2, y + 2), 0);                         // hollow
 }

@@ -147,7 +147,11 @@ constexpr Text kLights = {"STEP LIGHTS:", {
     "AMBER      HAS LOCKS",
     "RED        TRIGLESS",
     "BRIGHT RED PLAYHEAD",
-    nullptr, nullptr, nullptr, nullptr,
+    // GRID's cells (docs/CONTROLS.md, "Locks on screen"): what a trig carries, cut into it.
+    "CELL DOT   LOCKS",
+    "CUT TOP-L  CONDITION",
+    "CUT TOP-R  PROB",
+    "CUT TEETH  RATCHET",
 }};
 
 // --- the screens' own pages --------------------------------------------------------------------

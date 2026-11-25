@@ -1103,6 +1103,38 @@ slice grows by an estimated 10-26 ms, which is main-loop time (screen and keys),
 measured on the unit: docs/UNIT_CHECKLIST.md has the line. If a slice turns out to stall the
 screen, the fix is a smaller slice for downsampled files, not dropping the filter.
 
+### Load time: the windowed-sinc resampler (2026-11-25)
+
+The load-time resample (`pcm_resample`, core/pcm) is now a Kaiser-windowed sinc, beta 7, 32 taps,
+from a 128-phase table (16.5 KiB, built once) interpolated between phases. Linear interpolation
+before it left images an ear can hear. **Not an audio-block cost**: it runs in the main loop's
+48,000-frame resample slices, once per file not at 48 kHz. Whole-frame positions return the source
+frame exactly, so 48 kHz files (copied) and 96 kHz files (every other frame after `Antialias`) are
+unchanged.
+
+Error of a 44.1 kHz tone resampled to 48 kHz against the ideal sine (host, tests/test_pcm.cpp
+asserts the sinc column):
+
+| Tone | Linear (before) | Sinc (after) |
+| --- | --- | --- |
+| 1 kHz | -54.7 dB | -77.6 dB |
+| 5 kHz | -26.8 dB | -85.5 dB |
+| 10 kHz | -15.0 dB | -81.6 dB |
+| 15 kHz | -8.5 dB | -78.8 dB |
+| 18 kHz | -5.7 dB | -72.5 dB |
+| 20 kHz | -4.2 dB | -26.9 dB (inside the kernel's roll-off at 22.05 kHz) |
+
+| Measure | Figure | Where |
+| --- | --- | --- |
+| 30 s stereo 44.1 kHz, linear | 2.6 ms | host, x86, GCC -O2 |
+| Same, sinc | 70 ms | same |
+| cl6x schedule, stereo tap loop | ii 8 for 4 taps unrolled: 2 cycles a tap, about 95 cycles a frame | cl6x 8.5 -O3 -mv6740, from its listing |
+| Same on the unit, estimated | about 0.4 s for 30 s stereo, 12 ms a slice (cl6x); GCC-only perhaps 3-4x | 372 MHz |
+| Card read of that file, for comparison | 1.4 s at 7,600 KiB/s | measured earlier |
+
+No emulator scenario loads a 44.1 kHz file, so the unit figure is docs/UNIT_CHECKLIST.md 13b's
+44.1 kHz line. The audio-block load is untouched; all scenarios were re-run on this change.
+
 ### Optimization review (2026-11-22, host only)
 
 A review of the audio path for cycles, after the first unit boot. Everything here was measured in a
