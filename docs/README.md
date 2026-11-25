@@ -28,3 +28,4 @@
 | [MUTATION.md](MUTATION.md) | Mutation testing of the test suite |
 | [REVIEW.md](REVIEW.md) | The platform review the spec was corrected against |
 | [release/RELEASING.md](release/RELEASING.md) | How a release zip is made and published |
+| [archive/](archive/) | Retired material kept for the record: the 2026-11-22 controls tour and the v0.1.0 release steps |
