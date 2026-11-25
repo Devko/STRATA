@@ -127,6 +127,16 @@ running, so the release lands in time. It is all tracks by default, FUNC + STEP 
 beat repeat off for the rest of that REPEAT hold. Not built: a two-STEP loop (two steps held
 alternate) and recording a roll as RTCH. Host-tested only: the emulator cannot press pads.
 
+Random lock ranges and parameter slide (Phase 5, CyDrums; docs/CONTROLS.md "Random ranges and
+slides"), for whoever touches them next: both live in the lock's param byte (bit 6 range, bit 7
+slide; `core/pattern.hpp`), and every lock function matches by `lock_key`, so a slide never makes a
+second lock. A range is its own entry (one of the step's 8 slots), drawn by `lock_spread` from the
+seed, track, step, pass and parameter. The scheduler looks ahead for a slid step only
+(`StepEvent::glide_*`, in play order); `Engine::start_slides` / `run_slides` glide at control rate
+before the LFOs. Hold STEP + FUNC + push no longer clears a lock: it toggles the slide.
+`scenario_locks` walks both gestures (2026-11-25: 37 scenarios pass with cl6x, worst 31.57%
+ambient, within the emulator's +-0.5 point placement noise of 30.93%).
+
 Smaller open items, none urgent:
 
 - **KICK's click path** runs for the whole note after its transient has decayed: about a quarter

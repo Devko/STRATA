@@ -57,7 +57,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      always mean the same sixteen things (KIT, SAMPLES, SOUNDS, the menu) they do nothing.
      FUNC + pad-row key = the selected track's length, on every screen but the menu.
    - **Knobs A-D:** the four values on screen. Push = that value's switch. With a STEP held, turn
-     = lock, push = remove the lock. In PERFORM, push = MACRO LEARN for that macro: EDIT opens,
+     = lock, push = remove the lock; with FUNC too, turn = the lock's random range, push = its
+     slide (below, "Random ranges and slides"). In PERFORM, push = MACRO LEARN for that macro: EDIT opens,
      and every knob turned there goes on the macro, its start as the macro's 0 and where it was
      left as its 127 (learn by turning, D11). LEARN goes on onto MIXER, where LOW, MID and HI
      on the EQ page are learnt the same way: the kill EQ's bands. OK, CLR, HOME or any screen
@@ -176,7 +177,7 @@ Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VAL
 now slots 1-2), FUNC + hold push D (tape stop, slot 8) and FUNC + hold MUTATE (delay freeze,
 slot 5). Each now only names its slot (`DJ FILTER: SLOT 1/2`, `TAPE STOP: SLOT 8`,
 `FREEZE: SLOT 5`), apart from FUNC + MUTATE, which is LOCK since the next change (below); FUNC +
-push D with a STEP held still clears that step's D lock.
+push D with a STEP held toggles the slide of that step's D lock, as FUNC + push A-C do theirs.
 
 ## LOCK (FUNC + MUTATE)
 
@@ -398,6 +399,30 @@ screen holds still:
   track's level** in a row of eight short meters (decibels, a muted track dim). Stopped, that row
   shows the `AUTOFILL: FUNC MENU` hint again and the scope is gone.
 
+## Random ranges and slides (hold STEP + FUNC + A-D)
+
+Backlog Phase 5 (CyDrums), 2026-11-25. Two kinds of lock beside the value, both in the lock's
+param byte (core/pattern.hpp: bit 6 range, bit 7 slide), so no file layout changed and an older
+build simply ignores them.
+
+| Gesture | What it does | Shown |
+| --- | --- | --- |
+| Hold STEP + FUNC + turn A-D | The parameter's **random range** on the step, 0-127 counts either side. Each pass the step plays its lock (or the kit value with no lock) moved by a draw within the range. 0 removes it | `S5 CUT 64>90 R20`; a dim line under the bar over the reachable values |
+| Hold STEP + FUNC + push A-D | The lock **slides**: from the step it glides to what the next step that plays holds for that parameter, arriving as that step starts. Again: off. No lock yet: the kit value is locked first | `SLIDE ON` / `SLIDE OFF`; `/` at the end of the lock line |
+| Hold STEP + push A-D | Takes the whole parameter off the step: value, range and slide | `LOCK CLEARED` |
+
+- **The draw** is a hash of the pattern's seed, the track, the step, the pass and the parameter
+  (core/scheduler.hpp `lock_spread`), like probability: no running random number, so a pass
+  plays the same after a reload and each pass differs. A ratchet's hits share their step's draw;
+  a step stutter draws once.
+- **The glide's target** is the next slot in play order (REV, PING and RND look ahead the way
+  they will play) whose step has a trig or a trigless, at most a whole pass ahead: its lock and
+  range, or the sound the track starts from. Its condition and probability are not drawn. The
+  glide lasts the slots in between, swing, micro-timing and FEEL left out, and moves once an audio
+  block at control rate. A ratchet glides across its own hits. Not on a step stutter.
+- A range takes one of the step's 8 lock slots; a slide takes none (a bit on the value lock).
+- Not the SLID step flag (the step page, VA MONO): that bends the note into the next one.
+
 ## Locks on screen
 
 While a STEP is held, every parameter shows what **that step plays**, and the kit value it moves
@@ -409,7 +434,8 @@ away from (Phase 3 items 2-3):
   The value text above or beside the bar is the heard value too.
 - **The lock line.** Hold STEP + turn A-D (or push it to clear): `S5 CUT 64>90`, the step, the
   parameter, the kit value and then the lock, live while the STEP is down. `S5 CUT 64 KIT` once the
-  lock is cleared. It takes GRID's edit line and EDIT's line under the rows; a notice still wins
+  lock is cleared. A random range adds ` R` and its width (`S5 CUT 64>90 R20`, or `S5 CUT 64 R20`
+  with no value lock), and a slide a closing `/`. It takes GRID's edit line and EDIT's line under the rows; a notice still wins
   on GRID.
 - **Macro gauges** (PERFORM): the arc is where the macro is, a pad's pressure included; when
   that differs from the knob, a bright dot just outside the ring marks the knob.

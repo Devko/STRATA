@@ -102,6 +102,8 @@ FM4 and GRAIN machines.
 | Trig conditions: a:b, FILL, PRE, NEI, 1ST and their NOTs; seeded | v0.1.0 | ○ (M3) | |
 | **Play modes per track**: FWD, REV, PING, RND1-RND16 (FUNC menu TRACK PLAY); seeded, the pattern untouched | #148 | ○ (W13) | Not on PERFORM yet (the backlog's arm-and-knob idea) |
 | Parameter locks: 8 a step, 1,024 a pattern; push the knob to remove one | v0.1.0 | ○ (6) | `FULL n` when the pool is full (never reached on the unit) |
+| **Random lock ranges** (hold STEP + FUNC + turn): each pass a new value within the range, drawn from the pattern's seed | P-locks phase 5 | ○ (W36) | Takes one of the step's 8 lock slots |
+| **Parameter slide** (hold STEP + FUNC + push): a lock glides to the next step that plays, in play order | P-locks phase 5 | ○ (W36) | Ignores the target step's condition and probability, swing and micro-timing; not on a step stutter |
 | Pattern swing and **per-track swing** (PATTERN page) | v0.1.0 | ○ (13e) | |
 | **FEEL**: DRIFT 1-6 (each track its own curve) or WAVE 1-6 (one four-bar curve), over swing and micro (PATTERN page, D) | #152 | ○ (W29) | Up to 6 ticks of 96 PPQN; seeded |
 | Euclidean fill (FUNC + A/B/C in GRID) | v0.1.0 | ○ (M3) | |

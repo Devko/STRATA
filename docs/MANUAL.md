@@ -293,6 +293,27 @@ On GRID a trig with locks has a dot in the middle of its cell; a cut top-left co
 condition, top-right a probability, two teeth along the bottom a ratchet, and an outline a
 trigless step.
 
+Push the knob with the STEP held to take that parameter off the step again (`LOCK CLEARED`): its
+lock, its random range and its slide all go.
+
+**Random ranges.** Hold a STEP and **FUNC** and turn A-D: that parameter gets a random range on
+the step instead of a fixed value. Each time the step plays, the parameter lands somewhere within
+the range either side of the step's lock, or of the track's value when the step has no lock. A
+hat whose decay wanders by 20, a snare that never hits the same filter twice. The draw comes from
+the pattern's seed and the pass, like probability: the same pass plays the same way after a
+reload, and each pass differs from the last. Turned back to 0, the range is gone. The lock line
+shows it as `R` and the width (`S5 CUT 64>90 R20`), and a dim line under the bar spans the values
+the step can land on. A range takes one of the step's 8 lock slots.
+
+**Parameter slide.** Hold a STEP and **FUNC** and push A-D: that parameter's lock on the step
+slides (`SLIDE ON`; again for `SLIDE OFF`). From the step it glides to what the next step that
+plays holds for it (that step's lock, or the track's value), arriving as that step starts, so a
+filter can sweep between two locked steps with empty steps between them. With no lock yet, the
+push locks the track's value first. The lock line ends in `/` while the lock slides. The glide
+follows the play mode (REV, PING, RND) and ignores the next step's condition and probability; it
+does not glide on a step stutter. It is not the SLID step flag, which bends a VA MONO note into
+the next.
+
 ### The chain
 
 <p><img src="screens/chain.png" width="256" alt="PROJECT's CHAIN page"></p>
@@ -420,7 +441,8 @@ brings the whole pattern back in one undo.
 Select the kick (lower pad 1) and press **EDIT**. The screen keys (or LEFT/RIGHT) flip the
 pages SRC, FLTR, AMP, FX; go to **AMP**. Now hold **STEP 13** and turn **A** (DEC) down: the last
 kick of the bar is shorter. That is a lock. GROOVE already has one on step 9; hold STEP 9 and push
-**A** to remove it (`LOCK CLEARED`).
+**A** to remove it (`LOCK CLEARED`). Hold STEP 13 and **FUNC** and turn **A** up a little: now
+that kick's decay is different every bar, a random range (`R` on the lock line).
 
 The encoders work the same way in GRID: they edit the current EDIT page of the selected track.
 

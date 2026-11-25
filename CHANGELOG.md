@@ -16,6 +16,13 @@ the project file format or the controls.
 
 ### Added
 
+- **Random lock ranges and parameter slide.** Hold a STEP and FUNC and turn a knob: that
+  parameter gets a random range on the step, and each pass plays a new value within it (`R20` on
+  the lock line, a dim line under the bar). Hold a STEP and FUNC and push a knob: the step's lock
+  glides to whatever the next step that plays holds, arriving as that step starts (`SLIDE ON`,
+  `/` on the lock line). A plain push with the STEP held still clears the parameter, range and
+  slide included. Both are stored in the lock itself, so patterns keep their format; an older
+  build ignores a range and a sliding lock.
 - **Live screens, part 4: the LFO page shows its LFO.** While an LFO runs, EDIT's LFO page draws
   one cycle of its shape with a dot riding it at the LFO's phase, and a strip of what it put out
   over the last two seconds. Under every envelope (AMP, ASR, FLTR) a dim fill, lit under the part
