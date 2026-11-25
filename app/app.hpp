@@ -182,9 +182,6 @@ static_assert(kMixerPages[kMixerLongPage].field[0] == int8_t(SendField::delay_mo
                   kMixerPages[kMixerHallPage].field[0] == int8_t(SendField::reverb_mode),
               "the ambient pages moved: push A would throw the wrong switch");
 
-// PERFORM: FUNC + STEP 1-4 hand a macro the LFO's bytes, FUNC + STEP 5-7 the master EQ's bands.
-constexpr int kMacroEqFirstStep = kLfoParams;
-static_assert(kMacroEqFirstStep + kMasterBands <= 16, "the EQ's bands fit on the STEP keys");
 static_assert(kMixerPages[kMixerEqPage].master &&
                   kMixerPages[kMixerEqPage].field[0] == int8_t(MasterField::eq_low),
               "kMixerEqPage no longer names the kill EQ's page");
@@ -607,10 +604,11 @@ public:
             return;
         }
 
-        // MACRO LEARN (Roland, 2026-11-23): in PERFORM, push a macro's knob to learn it, which
-        // opens EDIT; there, pushing a knob puts that knob's parameter on the macro (again takes
-        // it off), on any page and any track. CLR, or leaving EDIT, GRID and KEYS, ends it.
-        // Before SLC AUTO and the note view, which also take a plain push.
+        // MACRO LEARN (Roland, 2026-11-23; by turning since D11): in PERFORM, push a macro's
+        // knob to learn it, which opens EDIT; there, every knob turned goes on the macro, on any
+        // page and any track, and so do the kill EQ's bands turned on MIXER's EQ page. OK, CLR,
+        // or leaving for any screen but EDIT and MIXER ends it. Before SLC AUTO and the note
+        // view, which also take a plain push.
         {
             const int encoder = key == ENAGA_KEY_PUSH_A   ? 0
                                 : key == ENAGA_KEY_PUSH_B ? 1
@@ -631,13 +629,21 @@ public:
                 if (!down) return;
                 // Learning is by turning (D11). A push takes a parameter the macro already holds
                 // off it, which is the one thing turning cannot say.
-                macro_selected_ = macro_learn_;
-                const int param = edit_index(encoder);
-                if (macro_edit(uint8_t(selected_), uint8_t(param)) == MacroEdit::remove) {
-                    assign_macro(param);
+                const uint8_t param = uint8_t(edit_index(encoder));
+                if (macro_holds(macro_learn_, uint8_t(selected_), param)) {
+                    take_off_macro(macro_learn_, uint8_t(selected_), param);
                 } else {
                     notice("TURN A KNOB TO LEARN");
                 }
+                return;
+            }
+            // LEARN goes on onto MIXER's EQ page, where LOW, MID and HI are learnt by turning
+            // like any EDIT knob. A push there on a band the macro holds takes it off; any
+            // other push throws the kill switch, below, as it always does.
+            if (encoder >= 0 && encoder < kMasterBands && !shift_ && macro_learn_ >= 0 &&
+                mode_ == Mode::mixer && mixer_bank_ == kMixerEqPage &&
+                macro_holds(macro_learn_, kMacroMasterTrack, uint8_t(encoder))) {
+                if (down) take_off_macro(macro_learn_, kMacroMasterTrack, uint8_t(encoder));
                 return;
             }
             if ((key == ENAGA_KEY_CLR || key == ENAGA_KEY_OK) && down && !shift_ &&
@@ -857,17 +863,10 @@ public:
             return;
         }
 
-        // In PERFORM, FUNC + STEP 5-7 put the master kill EQ's LOW, MID and HI on the selected
-        // macro, until the EQ can be learnt by turning too. The STEP-key assignment of track
-        // parameters retired with learn by turning (D11). Otherwise the STEP keys are steps on
-        // every playing screen, PERFORM and KEYS included (D12): KEYS plays on the pads, so the
-        // hands can play and edit at once. MUTE MODE and the list screens, above, keep theirs.
-        if (mode_ == Mode::perform && shift_ && key >= ENAGA_KEY_STEP1 + kMacroEqFirstStep &&
-            key < ENAGA_KEY_STEP1 + kMacroEqFirstStep + kMasterBands) {
-            if (down) assign_macro_master(key - ENAGA_KEY_STEP1 - kMacroEqFirstStep);
-            return;
-        }
-
+        // The STEP keys are steps on every playing screen, PERFORM and KEYS included (D12):
+        // KEYS plays on the pads, so the hands can play and edit at once. MUTE MODE and the list
+        // screens, above, keep theirs. Macros are set by learning (D11), the kill EQ's bands
+        // included, so no STEP key assigns one any more.
         // A STEP key needs its release as well as its press. Holding one is a modifier -- it
         // locks a parameter, opens the step page or starts a range -- and a step held as a
         // modifier must NOT toggle its trig when it comes up. That can only be decided on the
@@ -1369,8 +1368,9 @@ public:
         step_page_ = false;
         slot_menu_ = false;
         slot_ok_held_ = false;
-        // LEARN is an EDIT thing: any other screen, HOME's GRID included, ends it.
-        if (mode_ != Mode::edit && macro_learn_ >= 0) end_learn();
+        // LEARN is an EDIT thing, and MIXER's for the kill EQ's bands: any other screen, HOME's
+        // GRID included, ends it.
+        if (mode_ != Mode::edit && mode_ != Mode::mixer && macro_learn_ >= 0) end_learn();
         mutation_pending_ = false;
         // A KEYS pad held across a mode change: its release goes to the next mode, so the note
         // is let go here or it would hang on a sustaining machine.
@@ -1949,6 +1949,11 @@ public:
                 edit_duck(mixer_bank_, encoder, delta);
                 return;
             }
+            // LEARN takes the kill EQ's bands here (D11): before the delta is posted, so the
+            // touch keeps the band's value from before the turn.
+            if (macro_learn_ >= 0 && mixer_bank_ == kMixerEqPage && encoder < kMasterBands) {
+                learn_touch(kMacroMasterTrack, uint8_t(encoder));
+            }
             edit_mixer_field(mixer_bank_, encoder, delta);
             return;
         }
@@ -2025,7 +2030,7 @@ public:
         // KEYS has no knob slots on screen (its sixteen notes fill it), so a turn there changed
         // the sound and showed nothing. GRID and EDIT draw the slots and need no notice.
         if (mode_ == Mode::keys) echo(Echo::param, index);
-        if (macro_learn_ >= 0 && mode_ == Mode::edit) learn_touch(index);
+        if (macro_learn_ >= 0 && mode_ == Mode::edit) learn_touch(uint8_t(selected_), uint8_t(index));
         // A macro turned up owns its parameters (a macro at 0 lets go): the knob moves the
         // setting underneath, but the sound follows the macro. Say which one, or the knob
         // looks broken (Roland, 2026-11-23: "editing of sounds does not work anymore").
@@ -7062,51 +7067,89 @@ public:
         }
     }
 
-    // Assign one parameter of the selected track to the selected macro.
-    //
-    // The range runs from where the parameter is NOW to whichever end is further away, so the
-    // knob always has somewhere to go: a cutoff already wide open gets a macro that closes it
-    // rather than one that does nothing. That is a guess at intent, and the point of guessing is
-    // that a macro assigned in one press is usable in the next -- the ranges are stored, so a
-    // richer editor can refine them later without changing the format.
-    // What a STEP key in PERFORM will do to the selected macro, read before the command goes:
-    // the same target again takes it off, a full macro refuses. On the unit a refusal used to
-    // show the same "A T6 CUT" as a success -- and macro D ships with all four slots used.
-    enum class MacroEdit : uint8_t { add, remove, full };
-
-    MacroEdit macro_edit(uint8_t track, uint8_t param) const {
-        const Macro &macro = engine_.macros().macros[macro_selected_];
+    // Does macro `m` hold this target? `track` is a track, or kMacroMasterTrack for a kill EQ
+    // band, whose `param` is then the band (core/perform.hpp).
+    bool macro_holds(int m, uint8_t track, uint8_t param) const {
+        const Macro &macro = engine_.macros().macros[m];
         for (int i = 0; i < kMacroTargets; i++) {
             const MacroTarget &t = macro.targets[i];
-            if (t.enabled != 0 && t.track == track && t.param == param) return MacroEdit::remove;
+            if (t.enabled != 0 && t.track == track && t.param == param) return true;
         }
-        return macro_count(macro) >= kMacroTargets ? MacroEdit::full : MacroEdit::add;
+        return false;
+    }
+
+    // One Cmd::macro_assign. A target the macro holds comes off (`low` and `high` unread); any
+    // other goes on from `low` to `high`. A kill EQ band travels past the track parameters in
+    // `b`, because the engine refuses every command that names track 8.
+    void post_macro_assign(int m, uint8_t track, uint8_t param, uint8_t low, uint8_t high) {
+        const bool master = track == kMacroMasterTrack;
+        Command command;
+        command.cmd = Cmd::macro_assign;
+        command.track = master ? uint8_t(0) : track;
+        command.a = uint8_t(m);
+        command.b = master ? uint8_t(kTrackParams + param) : param;
+        command.c = low;
+        command.d = high;
+        post_command(command);
+    }
+
+    // "T6 CUT" or "EQ LOW": a target as the notices name it.
+    void append_target(char *&out, uint8_t track, uint8_t param) const {
+        if (track == kMacroMasterTrack) {
+            append(out, "EQ ");
+            append(out, master_field_name(uint8_t(kMasterEqFirst + param)));
+            return;
+        }
+        *out++ = 'T';
+        append_number(out, uint32_t(track) + 1);
+        *out++ = ' ';
+        append(out, track_param_name(param));
+    }
+
+    // A push while learning, on a target the macro holds: take it off ("B T6 CUT OFF 1/4").
+    // Adding is by turning only (D11), so this is the one assignment a push still makes.
+    void take_off_macro(int m, uint8_t track, uint8_t param) {
+        char *out = notice_buffer_;
+        *out++ = char('A' + m);
+        *out++ = ' ';
+        append_target(out, track, param);
+        append(out, " OFF ");
+        append_number(out, uint32_t(macro_count(engine_.macros().macros[m]) - 1));
+        append(out, "/4");
+        *out = 0;
+        notice(notice_buffer_);
+        post_macro_assign(m, track, param, 0, 0);
     }
 
     // LEARN BY TURNING (Roland, 2026-11-25, D11): while LEARN is on, every knob turned in EDIT
-    // is remembered with the value it started from. When LEARN ends, each goes on the macro
-    // with that start as its 0 and where the knob was left as its 127, and the knob goes back
-    // to its start -- so the macro at 0 is the old sound and at 127 the sound just dialled.
+    // -- and LOW, MID and HI on MIXER's EQ page, the kill EQ's bands -- is remembered with the
+    // value it started from. When LEARN ends, each goes on the macro with that start as its 0
+    // and where the knob was left as its 127, and the knob goes back to its start -- so the
+    // macro at 0 is the old sound and at 127 the sound just dialled.
     struct LearnTouch {
-        uint8_t track;
+        uint8_t track;                          // a track, or kMacroMasterTrack: an EQ band
         uint8_t param;
         uint8_t start;
     };
     LearnTouch learn_touches_[kMacroTargets] = {};
     int learn_touch_count_ = 0;
 
-    void learn_touch(int param) {
+    // The byte a learnt target reads now: the kit's, or the master EQ band's in the project.
+    uint8_t learn_byte(uint8_t track, uint8_t param) const {
+        return track == kMacroMasterTrack
+                   ? engine_.project().settings.master[kMasterEqFirst + param]
+                   : engine_.params(track).v[param];
+    }
+
+    // Called with the turn's delta still in the ring, so learn_byte reads the value before it.
+    void learn_touch(uint8_t track, uint8_t param) {
         for (int i = 0; i < learn_touch_count_; i++) {
-            if (learn_touches_[i].track == selected_ && learn_touches_[i].param == param) return;
+            if (learn_touches_[i].track == track && learn_touches_[i].param == param) return;
         }
-        const Macro &macro = engine_.macros().macros[macro_learn_];
-        bool already = false;
-        for (int i = 0; i < kMacroTargets; i++) {
-            const MacroTarget &t = macro.targets[i];
-            if (t.enabled != 0 && t.track == selected_ && t.param == param) already = true;
-        }
+        const bool already = macro_holds(macro_learn_, track, param);
         if (learn_touch_count_ >= kMacroTargets ||
-            (!already && macro_count(macro) + learn_new_targets() >= kMacroTargets)) {
+            (!already && macro_count(engine_.macros().macros[macro_learn_]) +
+                                 learn_new_targets() >= kMacroTargets)) {
             char *out = notice_buffer_;
             *out++ = char('A' + macro_learn_);
             append(out, " FULL: KNOB NOT LEARNT");
@@ -7114,53 +7157,40 @@ public:
             notice(notice_buffer_);
             return;
         }
-        // The value before this turn: the delta is still in the ring, so the kit shows it.
-        learn_touches_[learn_touch_count_++] = {uint8_t(selected_), uint8_t(param),
-                                                engine_.params(selected_).v[param]};
+        learn_touches_[learn_touch_count_++] = {track, param, learn_byte(track, param)};
     }
 
     // Touched parameters the macro does not hold yet: the slots the commit will take.
     int learn_new_targets() const {
-        const Macro &macro = engine_.macros().macros[macro_learn_];
         int count = 0;
         for (int i = 0; i < learn_touch_count_; i++) {
-            bool held = false;
-            for (int k = 0; k < kMacroTargets; k++) {
-                const MacroTarget &t = macro.targets[k];
-                if (t.enabled != 0 && t.track == learn_touches_[i].track &&
-                    t.param == learn_touches_[i].param) {
-                    held = true;
-                }
+            if (!macro_holds(macro_learn_, learn_touches_[i].track, learn_touches_[i].param)) {
+                count++;
             }
-            if (!held) count++;
         }
         return count;
     }
 
     void commit_learn() {
-        const Macro &macro = engine_.macros().macros[macro_learn_];
         for (int i = 0; i < learn_touch_count_; i++) {
             const LearnTouch &touch = learn_touches_[i];
-            const uint8_t end = engine_.params(touch.track).v[touch.param];
-            // Already on the macro: macro_assign takes it off, and the second puts it back with
-            // the new range.
-            for (int k = 0; k < kMacroTargets; k++) {
-                const MacroTarget &t = macro.targets[k];
-                if (t.enabled != 0 && t.track == touch.track && t.param == touch.param) {
-                    post(Cmd::macro_assign, touch.track, 0, uint8_t(macro_learn_), touch.param);
-                }
+            const uint8_t end = learn_byte(touch.track, touch.param);
+            // Already on the macro: the first macro_assign takes it off, and the second puts it
+            // back with the new range.
+            if (macro_holds(macro_learn_, touch.track, touch.param)) {
+                post_macro_assign(macro_learn_, touch.track, touch.param, 0, 0);
             }
             if (end != touch.start) {
-                Command command;
-                command.cmd = Cmd::macro_assign;
-                command.track = touch.track;
-                command.a = uint8_t(macro_learn_);
-                command.b = touch.param;
-                command.c = touch.start;
-                command.d = end;
-                post_command(command);
+                post_macro_assign(macro_learn_, touch.track, touch.param, touch.start, end);
             }
-            post(Cmd::set_param, touch.track, 0, touch.param, touch.start, 0);   // back
+            // Back to the start. A master byte is commanded by a delta (HANDOFF, section 6);
+            // two bytes of 0-127 apart always fit in its signed byte.
+            if (touch.track == kMacroMasterTrack) {
+                post(Cmd::set_master, 0, 0, uint8_t(kMasterEqFirst + touch.param),
+                     uint8_t(int8_t(int(touch.start) - int(end))));
+            } else {
+                post(Cmd::set_param, touch.track, 0, touch.param, touch.start, 0);
+            }
         }
     }
 
@@ -7205,79 +7235,6 @@ public:
         append(out, "/4 TURN KNOBS");
         *out = 0;
         notice(notice_buffer_);
-    }
-
-    // "A T6 CUT 2/4", "A T6 CUT OFF 1/4" or "D FULL: CLR CLEARS". `name` is what was pressed.
-    void macro_notice(MacroEdit edit, const char *name) {
-        const int count = macro_count(engine_.macros().macros[macro_selected_]);
-        char *out = notice_buffer_;
-        *out++ = char('A' + macro_selected_);
-        if (edit == MacroEdit::full) {
-            append(out, " FULL: CLR CLEARS");
-            *out = 0;
-            notice(notice_buffer_);
-            return;
-        }
-        *out++ = ' ';
-        append(out, name);
-        if (edit == MacroEdit::remove) append(out, " OFF");
-        *out++ = ' ';
-        append_number(out, uint32_t(count + (edit == MacroEdit::add ? 1 : -1)));
-        append(out, "/4");
-        *out = 0;
-        notice(notice_buffer_);
-    }
-
-    void assign_macro(int param) {
-        if (param < 0 || param >= kTrackParams) return;
-        char name[16];
-        {
-            char *o = name;
-            append(o, "T");
-            append_number(o, uint32_t(selected_) + 1);
-            append(o, " ");
-            append(o, track_param_name(param));
-            *o = 0;
-        }
-        const MacroEdit edit = macro_edit(uint8_t(selected_), uint8_t(param));
-        macro_notice(edit, name);
-        if (edit == MacroEdit::full) return;
-        const uint8_t now = engine_.performed(selected_, param);
-        const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
-        Command command;
-        command.cmd = Cmd::macro_assign;
-        command.track = uint8_t(selected_);
-        command.a = uint8_t(macro_selected_);
-        command.b = uint8_t(param);
-        command.c = now;
-        command.d = far;
-        post_command(command);
-    }
-
-    // Assign one master kill EQ band to the selected macro, by the same "towards the far end"
-    // guess: a band at flat or above heads for a kill, which is what a build wants.
-    void assign_macro_master(int band) {
-        if (band < 0 || band >= kMasterBands) return;
-        char name[16];
-        {
-            char *o = name;
-            append(o, "EQ ");
-            append(o, master_field_name(uint8_t(int(MasterField::eq_low) + band)));
-            *o = 0;
-        }
-        const MacroEdit edit = macro_edit(kMacroMasterTrack, uint8_t(band));
-        macro_notice(edit, name);
-        if (edit == MacroEdit::full) return;
-        const uint8_t now = engine_.performed_master(band);
-        const uint8_t far = now > 63 ? uint8_t(0) : uint8_t(127);
-        Command command;
-        command.cmd = Cmd::macro_assign;
-        command.track = 0;
-        command.a = uint8_t(macro_selected_);
-        command.b = uint8_t(kTrackParams + band);          // past the track parameters: the EQ
-        command.c = now;
-        command.d = far;
-        post_command(command);
     }
 
     void draw_perform(enaga::Canvas &canvas) {

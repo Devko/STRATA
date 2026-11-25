@@ -58,8 +58,10 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
    - **Knobs A-D:** the four values on screen. Push = that value's switch. With a STEP held, turn
      = lock, push = remove the lock. In PERFORM, push = MACRO LEARN for that macro: EDIT opens,
      and every knob turned there goes on the macro, its start as the macro's 0 and where it was
-     left as its 127 (learn by turning, D11). OK, CLR, HOME or leaving EDIT ends it (`B: 3
-     PARAMS`) and the knobs snap back. A push there takes a parameter the macro holds off it. TUN's switch (PIT on SAMPLE and GRAIN), on EDIT, GRID and
+     left as its 127 (learn by turning, D11). LEARN goes on onto MIXER, where LOW, MID and HI
+     on the EQ page are learnt the same way: the kill EQ's bands. OK, CLR, HOME or any screen
+     but EDIT and MIXER ends it (`B: 3 PARAMS`) and the knobs snap back. A push there takes a
+     parameter the macro holds off it (on the EQ page; any other push there is the kill). TUN's switch (PIT on SAMPLE and GRAIN), on EDIT, GRID and
      KEYS, is NOTE view: the value reads as a note, where TUN puts C-4 (`G-4`, `A-1+` when the
      byte is between notes), and a click is a semitone; push again for the number and one count
      a click. On at every start, one setting for all tracks (2026-11-23, core/tuning.hpp).
@@ -161,7 +163,7 @@ Printed labels (above), and the moves made while playing:
 | FUNC + FILL / REPEAT / THROW | note repeat on/off / pitched-down repeat / reverb throw |
 | FUNC + push A / B / C | kill LOW / MID / HI |
 | FUNC + pad-row key | selected track's length; held, it repeats (after 0.4 s, 20 steps a second) |
-| FUNC + STEP | trigless step (PERFORM: STEP 5-7 put the kill EQ on the macro) |
+| FUNC + STEP | trigless step, on every playing screen, PERFORM included |
 | FUNC + A / B / C on GRID | Euclidean fill |
 | FUNC + MUTATE, held half a second | **LOCK**: store the live set as the playing pattern's lock (`LOCK A01 STORED`); again later overwrites it |
 | FUNC + MUTATE, tapped | Jump to that lock at once (`BACK TO LOCK A01`); tapped again, swap back to the state from just before the jump (`SWAPPED BACK A01`). No lock: `NO LOCK: HOLD STORES` |

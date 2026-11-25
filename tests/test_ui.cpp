@@ -2682,34 +2682,92 @@ TEST(ui_an_eq_kill_for_a_band_that_does_not_exist_is_refused) {
     CHECK_EQ(int(engine.project().settings.eq_kills), 0);
 }
 
-// In PERFORM, FUNC + STEP 5-7 puts the master EQ's LOW, MID or HI on the selected macro (1-4 are
-// the LFO's); FUNC + STEP 8-16 assign nothing.
-TEST(ui_func_and_step_5_to_7_put_a_master_eq_band_on_a_macro) {
+// In PERFORM, FUNC + STEP 5-7 put a kill EQ band on the macro until the EQ could be learnt by
+// turning. They are steps now, like the other thirteen: FUNC + STEP is a trigless step there.
+TEST(ui_func_and_step_5_to_7_in_perform_assign_nothing) {
     Strata &app = fresh();
-    Engine &engine = app_engine();
+    for (int m = 0; m < kMacros; m++) post_cmd(Cmd::macro_clear, uint8_t(m));
+    pump(2);
     shift_key(ENAGA_KEY_F7);
     CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
-    // Whichever macro is selected, emptied first.
-    const int selected = UiProbe::macro_selected(app);
-    post_cmd(Cmd::macro_clear, uint8_t(selected));
+    for (int s = 4; s < 7; s++) shift_key(ENAGA_KEY_STEP1 + s);
     pump(2);
+    for (int m = 0; m < kMacros; m++) CHECK_EQ(macro_count(app_engine().macros().macros[m]), 0);
+    CHECK(UiProbe::mode(app) == int(Mode::perform));
+    key(ENAGA_KEY_F4);
+}
 
-    app.on_key(ENAGA_KEY_F1, true);
-    app.on_key(ENAGA_KEY_STEP1 + 5, true);              // STEP 6: MID
-    app.on_key(ENAGA_KEY_STEP1 + 5, false);
-    app.on_key(ENAGA_KEY_STEP1 + 9, true);              // nothing: not a band
-    app.on_key(ENAGA_KEY_STEP1 + 9, false);
-    app.on_key(ENAGA_KEY_F1, false);
+// LEARN goes on onto MIXER's EQ page, where LOW, MID and HI are learnt by turning like an EDIT
+// knob, and a push takes a band the macro holds off it -- any other push is still the kill.
+TEST(ui_macro_learn_takes_the_kill_eq_by_turning_on_the_mixer_eq_page) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    for (int m = 0; m < kMacros; m++) post_cmd(Cmd::macro_clear, uint8_t(m));
     pump(2);
-    const Macro &macro = engine.macros().macros[selected];
-    CHECK_EQ(macro_count(macro), 1);
-    CHECK_EQ(int(macro.targets[0].track), int(kMacroMasterTrack));
-    CHECK_EQ(int(macro.targets[0].param), 1);            // MID
-    CHECK_EQ(int(macro.targets[0].high), 0);             // from flat, towards a kill
-    CHECK(std::strncmp(UiProbe::notice(app) + 1, " EQ MID ", 8) == 0);
+    const uint8_t *master = engine.project().settings.master;
+    const int start = int(master[kMasterEqFirst]);           // LOW
+    shift_key(ENAGA_KEY_F7);                                  // PERFORM
+    key(ENAGA_KEY_PUSH_B);                                    // learn B: EDIT
+    mixer_page(app, kMixerEqPage);                            // MIXER keeps LEARN on
+    CHECK_EQ(UiProbe::macro_learn(app), 1);
+    app.on_encoder(0, start > 63 ? -20 : +20);                // LOW, forty counts
+    pump(2);
+    const int turned = int(master[kMasterEqFirst]);
+    CHECK(turned != start);
+    app.on_encoder(3, +5);                                    // the EQ page's empty slot
+    pump(2);
+    key(ENAGA_KEY_CLR);                                       // done
+    pump(2);
+    CHECK_EQ(UiProbe::macro_learn(app), -1);
+    CHECK_EQ(UiProbe::notice(app), "B: 1 PARAM");
+    const Macro &b = engine.macros().macros[1];
+    CHECK_EQ(macro_count(b), 1);
+    bool found = false;
+    for (int i = 0; i < kMacroTargets; i++) {
+        const MacroTarget &t = b.targets[i];
+        if (t.enabled == 0) continue;
+        found = true;
+        CHECK_EQ(int(t.track), int(kMacroMasterTrack));
+        CHECK_EQ(int(t.param), 0);
+        CHECK_EQ(int(t.low), start);
+        CHECK_EQ(int(t.high), turned);
+    }
+    CHECK(found);
+    CHECK_EQ(int(master[kMasterEqFirst]), start);             // the band is back: B at 0 is flat
 
-    post_cmd(Cmd::macro_clear, uint8_t(selected));
+    // Learn again: a push on LOW, which B holds, takes it off and throws no kill; a push on
+    // MID, which it does not hold, is the kill switch as ever.
+    const uint8_t kills = engine.project().settings.eq_kills;
+    shift_key(ENAGA_KEY_F7);
+    key(ENAGA_KEY_PUSH_B);
+    mixer_page(app, kMixerEqPage);
+    key(ENAGA_KEY_PUSH_A);
     pump(2);
+    CHECK_EQ(UiProbe::notice(app), "B EQ LOW OFF 0/4");
+    CHECK_EQ(macro_count(engine.macros().macros[1]), 0);
+    CHECK_EQ(int(engine.project().settings.eq_kills), int(kills));
+    key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), int(kills ^ 2u));
+    key(ENAGA_KEY_PUSH_B);                                    // MID back
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.eq_kills), int(kills));
+    CHECK_EQ(UiProbe::macro_learn(app), 1);                   // the pushes did not end LEARN
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::macro_learn(app), -1);
+    CHECK_EQ(UiProbe::notice(app), "KNOBS EDIT AGAIN");
+
+    // And any screen but EDIT and MIXER still ends it.
+    shift_key(ENAGA_KEY_F7);
+    key(ENAGA_KEY_PUSH_B);
+    key(ENAGA_KEY_F7);                                        // MIXER: still on
+    CHECK_EQ(UiProbe::macro_learn(app), 1);
+    key(ENAGA_KEY_F8);                                        // EDIT: still on
+    CHECK_EQ(UiProbe::macro_learn(app), 1);
+    key(ENAGA_KEY_F3);                                        // PROJECT: over
+    CHECK_EQ(UiProbe::macro_learn(app), -1);
+    key(ENAGA_KEY_F4);
 }
 
 TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
@@ -7894,29 +7952,11 @@ TEST(ui_macro_learn_refuses_a_fifth_knob_and_ends_on_leaving_edit) {
     app.on_encoder(0, +3);
     pump(2);
     CHECK_EQ(UiProbe::notice(app), "A FULL: KNOB NOT LEARNT");
-    // Leaving EDIT ends it as CLR does: four learnt.
-    key(ENAGA_KEY_F7);                                     // MIXER
+    // Leaving EDIT ends it as CLR does: four learnt. Not for MIXER, which LEARN goes on onto
+    // for the kill EQ's bands; PROJECT will do.
+    key(ENAGA_KEY_F3);                                     // PROJECT
     pump(2);
     CHECK_EQ(macro_count(app_engine().macros().macros[0]), 4);
-    post_cmd(Cmd::macro_clear, 0);
-    pump(2);
-    key(ENAGA_KEY_F4);
-}
-
-// --- STEP keys in PERFORM no longer assign: FUNC + STEP 5-7 still put the kill EQ on -------
-
-TEST(ui_perform_func_step_5_still_assigns_the_kill_eq) {
-    Strata &app = fresh();
-    for (int m = 0; m < kMacros; m++) post_cmd(Cmd::macro_clear, uint8_t(m));
-    pump(2);
-    shift_key(ENAGA_KEY_F7);
-    while (UiProbe::macro_selected(app) != 0) key(ENAGA_KEY_LEFT);
-    key(ENAGA_KEY_STEP1 + 4);                              // a plain STEP: no assignment
-    pump(2);
-    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 0);
-    shift_key(ENAGA_KEY_STEP1 + 4);                        // FUNC + STEP 5: the LOW band
-    pump(2);
-    CHECK_EQ(macro_count(app_engine().macros().macros[0]), 1);
     post_cmd(Cmd::macro_clear, 0);
     pump(2);
     key(ENAGA_KEY_F4);
