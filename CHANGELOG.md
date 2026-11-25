@@ -6,6 +6,17 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Changed
+
+- **One filter on the synth machines (D8).** On VA MONO, VA POLY, WAVE MONO and WAVE POLY the FLTR
+  page is now the synth's own filter, CUT RES ENV and the new **FDE** (filter decay: 0 keeps the
+  old 0.55 x DEC, 1-127 its own time). The insert filter there is one knob, **TON** on SRC: 64
+  flat, lower a low-pass, higher a high-pass. Older projects load their insert filter on these
+  tracks as the nearest TON; its drive and resonance are dropped. Other machines are unchanged.
+- **Velocity opens the synths' filter (D15).** Around the default velocity 100 (which sounds as
+  before): harder is brighter, softer darker, by a per-machine amount. The GROWL preset lost
+  its chain drive with the one filter and is quieter.
+
 ## [0.3.1] - 2026-11-23
 
 An early beta: everything merged since 0.3.0, built for the same Enaga 0.2.0 firmware. The GRAIN

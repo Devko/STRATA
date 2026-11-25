@@ -1020,6 +1020,17 @@ New 2026-11-23 (docs/CONTROLS.md, "The performance mixer"). Play A01.
       MAX `________ %` (against U1's). And 9 BASS KILL at 127 with the loop: MAX `________ %`.
       Notes: `________________`
 
+## 13q. One filter on the synths, FDE and velocity (D8, D15) (6 min)
+
+On BASS (MNO) and CHORD (PLY): EDIT FLTR shows CUT RES ENV FDE and turns the voice's filter;
+SRC's third knob is TON. [ ] TON 64 is flat, 0 is dark, 127 is thin, and nothing clicks
+through 64. [ ] FDE 0 sounds as before; FDE 20 on a long DEC gives a short squelch, FDE 110 a
+slow bloom. [ ] Step VEL 127 against VEL 40 on the bass: the loud one is clearly brighter, and
+VEL 100 notes sound as in 0.3.x. [ ] Open a project saved by 0.3.x with an insert LP on a synth
+track: it loads with TON darkened to about the same cutoff. [ ] Help
+names FDE and TON. The emulator walks the pages only (`scenario_osc.sh`, `scenario_wave.sh`).
+Note MAX on A01 against item 3.
+
 ## 13p. The VA sound rework: the OSC page, resonance and drive (8 min)
 
 New: VA MONO and VA POLY have an eighth EDIT page, OSC: WAV (0-31 saw, 32 square to 127 a thin

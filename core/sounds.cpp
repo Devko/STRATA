@@ -117,9 +117,10 @@ constexpr SoundPreset kMonoPresets[] = {
     {"SUB", {64, 70, 22, 0}, VOICE, {90, 10, 0, 112}, NO_ASR, {0, 0, 127, 0}},
     // A pluck: a 33% pulse, brighter, short, a fast sweep with some bite. Lines and arps.
     {"PLUCK", {64, 40, 52, 64}, VOICE, {30, 90, 0, 118}, NO_ASR, {64, 0, 0, 20}},
-    // A growl: the band-pass, nasal and hollow, driven hard in the voice (the chain's drive it
-    // also had went with D8's one filter, so DRV rose to make up for it). Mid bass.
-    {"GROWL", {64, 100, 46, 40}, VOICE, {84, 60, 10, 124}, NO_ASR, {0, 20, 60, 100}},
+    // A growl: the band-pass, nasal and hollow, driven in the voice. It was driven in the chain
+    // too until D8 gave the synths one filter and no chain drive; LVL went to the top to make up
+    // part of the level that took (about 9 dB at peak; it is still the quieter for it). Mid bass.
+    {"GROWL", {64, 100, 46, 40}, VOICE, {84, 60, 10, 127}, NO_ASR, {0, 20, 60, 80}},
     // A glide bass: portamento on every note (GLD 64, about 40 ms), a rounder filter, the sub.
     {"GLIDE", {64, 40, 56, 50}, VOICE, {60, 70, 64, 122}, NO_ASR, {0, 0, 80, 16}},
     // A sync lead: OSC 2 synced an octave and a bit above (S+14), held, a little glide. Play it
