@@ -706,8 +706,9 @@ private:
     PerfPlan perf_plan_{};
 
     // LOCK. The states (128 locks, the swap-back and one scratch for the "changed" compare)
-    // are taken in init(), about 1.2 MiB. The compare runs every kLockCheckBlocks blocks while
-    // the playing pattern has a lock: a ~9 KiB capture and memcmp, a few thousand cycles.
+    // are taken in init(), 1.06 MiB (tests/test_memory.cpp). The compare runs every
+    // kLockCheckBlocks blocks while the playing pattern has a lock: a ~8.5 KiB capture and memcmp,
+    // a few thousand cycles.
     void lock_command(uint8_t action);
     void capture_live(LiveState &state) const;
     void apply_live(const LiveState &state);
