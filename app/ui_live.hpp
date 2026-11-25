@@ -90,11 +90,12 @@
         for (int c = 0; c < kScopeWidth; c++) {
             const uint32_t ago = start - uint32_t(c) * kScopeStride;
             const int v = scope_history_.left(ago) + scope_history_.right(ago);   // -65536..65534
-            int row = mid - (v * (kScopeRows / 2 - 1)) / 65536;
+            int row = mid - (v * (kScopeRows / 2 - 1)) / 32768;   // +6 dB: a mix fills it
             row = row < 0 ? 0 : (row >= kScopeRows ? kScopeRows - 1 : row);
             scope_glow_.span(c, c == 0 ? row : prev, row, grey);
             prev = row;
         }
+        paint::dotted_h(canvas.data(), x, x + kScopeWidth - 1, y + mid, 3, 4);
         scope_glow_.blit(canvas.data(), x, y);
     }
 
@@ -126,7 +127,7 @@
         char *out = digits;
         append_padded(out, uint32_t(value), 3);
         *out = 0;
-        paint::small_text(px, cx - 5, cy + r - 3, digits, live ? 13 : 6);
+        paint::small_text(px, cx - 5, cy + r / 2 + 1, digits, live ? 15 : 6);
     }
 
     // --- every track's level as a column ------------------------------------------------------
@@ -158,7 +159,7 @@
 
     // --- EDIT's LFO page: the shape, where the LFO is on it, and what it has been doing -------
     //
-    // Under the knobs, rows 96-117 like EDIT's other pictures: one cycle of the selected shape
+    // Under the knobs, rows 77-117 like EDIT's other pictures: one cycle of the selected shape
     // (x 0-79) with a dot riding it at the phase the audio side publishes (Status::lfo_phase)
     // and a dotted line down through it, and beside it a strip of what the LFO put out over the
     // last 40 frames (two seconds), newest at the right. The shapes here are drawn for reading,
@@ -249,20 +250,20 @@
         const int pos = int(heard.get(1)) * (kWaveFrames - 1) * 16 / 127;   // in 1/16 frames
         const int mip = kWaveMipLevels - 1;
         const int length = wave_mip_length(mip);
-        const int amp = 3;
+        const int amp = 5;
         const int base_y = kPictureTop + kPictureRows - 1 - amp;
         for (int f = kWaveFrames - 1; f >= 0; f--) {
             const int16_t *samples = waves.frame(table, f, mip);
             const int ox = 4 + f * 3;                     // back frames to the right ...
-            const int oy = base_y - f;                    // ... and up
+            const int oy = base_y - f * 2;                // ... and up
             int16_t xs[kTablePoints];
             int16_t ys[kTablePoints];
             for (int i = 0; i < kTablePoints; i++) {
                 const int v = samples[i * length / kTablePoints];
-                xs[i] = int16_t(paint::q4(ox) + i * 3 * paint::kSub / 2);   // 1.5 px a point
+                xs[i] = int16_t(paint::q4(ox) + i * 7 * paint::kSub / 4);   // 1.75 px a point
                 ys[i] = int16_t(paint::q4(oy) - v * amp * paint::kSub / 32768);
                 // Hidden lines: black from just under this curve to the floor of this frame.
-                const int x = ox + i * 3 / 2;
+                const int x = ox + i * 7 / 4;
                 const int top = (ys[i] >> 4) + 1;
                 for (int y = top; y <= oy + amp + 1; y++) {
                     paint::plot(px, x, y, 0);
@@ -362,4 +363,91 @@
         for (int r = 0; r < lit; r += 2) {
             canvas.rect(x, 46 + 47 - r, 1, 1, r >= 40 ? 15 : 9);
         }
+    }
+
+    // --- FLTR on the drums and SAMPLE: the insert filter's response over the output's spectrum ---
+    //
+    // The chain's filter (dsp/chain.hpp: CUT 20 Hz-18 kHz exponential, RES 0-0.95, MOD OFF, LP,
+    // BP, HP in 12 or 24 dB) as a curve on a log-frequency axis, 30 Hz to 15 kHz across the
+    // picture, +12 dB at the top to -36 dB at the bottom, with a dim fill under it; behind it,
+    // dim, the output's spectrum (app/spectrum.hpp) while the beat plays, so a sweep is seen
+    // carving it; a line at the cutoff with knob B's badge; the mode in the small font. The
+    // magnitudes are the textbook state-variable ones, worked in decibels from log2, no root.
+    void draw_response_picture(enaga::Canvas &canvas) {
+        namespace ed = enaga::dsp;
+        uint8_t *px = canvas.data();
+        const TrackParams &heard = engine_.sounding(selected_);
+        const int mode = int(heard.get(7)) * 7 / 128;           // 0 OFF, 1-2 LP, 3-4 BP, 5-6 HP
+        const float cut_hz = 20.0f * ed::exp2(float(heard.get(5)) * (9.814f / 127.0f));  // x900
+        const float res = float(heard.get(6)) * (0.95f / 127.0f);
+        const float q = 0.5f + res * 8.0f;
+        const float inv_q = 1.0f / q;
+        const int top = kPictureTop;
+        const int rows = kPictureRows - 1;
+        const int bottom = top + rows;
+        const auto row_of_db = [&](float db) {
+            const float clamped = db > 12.0f ? 12.0f : (db < -36.0f ? -36.0f : db);
+            return top + int((12.0f - clamped) * float(rows) * (1.0f / 48.0f) + 0.5f);
+        };
+        // Frequency of column x: 30 Hz x 500^(x / 123).
+        const auto hz_of = [](int x) { return 30.0f * ed::exp2(float(x) * (8.9658f / 123.0f)); };
+        const auto x_of = [](float hz) { return int(ed::log2(hz * (1.0f / 30.0f)) * (123.0f / 8.9658f)); };
+
+        // The grid: 100 Hz, 1 kHz, 10 kHz, and the 0 dB line.
+        paint::dotted_v(px, x_of(100.0f), top, bottom, 3, 2);
+        paint::dotted_v(px, x_of(1000.0f), top, bottom, 3, 2);
+        paint::dotted_v(px, x_of(10000.0f), top, bottom, 3, 2);
+        paint::dotted_h(px, 0, 123, row_of_db(0.0f), 3, 4);
+        paint::small_text(px, x_of(100.0f) - 5, bottom - 5, "100", 4);
+        paint::small_text(px, x_of(1000.0f) - 3, bottom - 5, "1K", 4);
+        paint::small_text(px, x_of(10000.0f) - 9, bottom - 5, "10K", 4);
+
+        // The output's spectrum behind, dim: each band a column across its bins' frequencies.
+        if (enaga::clock::state().running != 0) {
+            uint16_t milli[spectrum::kBands];
+            spectrum::analyse(scope_history_, spectrum_work_, milli);
+            for (int b = 0; b < spectrum::kBands; b++) {
+                const int x0 = x_of(float(spectrum::kEdges[b]) * 93.75f);
+                const int x1 = x_of(float(spectrum::kEdges[b + 1]) * 93.75f);
+                const int lit = paint::level_rows(uint32_t(milli[b]) * 4u, rows, 48);
+                for (int x = x0 < 0 ? 0 : x0; x < x1 && x < 124; x++) {
+                    canvas.rect(x, bottom - lit + 1, 1, lit, 2);
+                }
+            }
+        }
+
+        // The response, column by column, joined as an anti-aliased line.
+        int16_t xs[62];
+        int16_t ys[62];
+        int n = 0;
+        for (int x = 0; x < 124; x += 2) {
+            float db = 0.0f;
+            if (mode != 0) {
+                const float w = hz_of(x) / cut_hz;
+                const float w2 = w * w;
+                const float a = 1.0f - w2;
+                const float b = w * inv_q;
+                const float den = a * a + b * b;                  // |H|^2 = num / den
+                const float num = mode <= 2 ? 1.0f : (mode <= 4 ? b * b : w2 * w2);
+                db = 3.0103f * ed::log2((num + 1e-9f) / (den + 1e-9f));
+                if (mode % 2 == 0) db *= 2.0f;                    // the 24 dB modes: two stages
+            }
+            const int y = row_of_db(db);
+            for (int fy = y + 2; fy < bottom; fy += 2) canvas.pixel(x, fy, 3);
+            xs[n] = int16_t(paint::q4(x));
+            ys[n] = int16_t(paint::q4(y));
+            n++;
+        }
+        paint::polyline(px, xs, ys, n, mode == 0 ? 6 : 15);
+
+        if (mode != 0) {
+            const int cx = x_of(cut_hz);
+            if (cx >= 0 && cx < 124) {
+                canvas.rect(cx, top, 1, rows + 1, 6);
+                canvas.rect(cx - 3 < 0 ? 0 : cx - 3, bottom - 7, 7, 7, 15);
+                paint::small_text(px, (cx - 3 < 0 ? 0 : cx - 3) + 2, bottom - 6, "B", 0);
+            }
+        }
+        static const char *const kModes[7] = {"OFF", "LP12", "LP24", "BP12", "BP24", "HP12", "HP24"};
+        paint::small_text(px, 123 - paint::small_width(kModes[mode]), top + 1, kModes[mode], 9);
     }

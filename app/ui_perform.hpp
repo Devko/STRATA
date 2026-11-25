@@ -298,24 +298,29 @@
             canvas.rect(cx - 11, 51, 7, 7, picked ? 15 : 4);
             const char letter[2] = {char('A' + m), 0};
             paint::small_text(px, cx - 9, 52, letter, picked ? 0 : 13);
-            out = line;
-            if (targets == 0) {
-                append(out, "---");
-            } else {
-                append_number(out, uint32_t(targets));
-                *out++ = 'P';
+            // What it moves: its first target's parameter, on that target's own track, and a
+            // '+' when it moves more than one.
+            const char *what = "---";
+            for (int k = 0; k < kMacroTargets; k++) {
+                const MacroTarget &target = engine_.macros().macros[m].targets[k];
+                if (!macro_target_usable(target)) continue;
+                what = track_param_name_on(target.track, target.param);
+                break;
             }
+            out = line;
+            append(out, what);
+            if (targets > 1) *out++ = '+';
             *out = 0;
-            paint::small_text(px, cx - 2, 52, line, targets == 0 ? 5 : 10);
+            paint::small_text(px, cx - 2, 52, line, targets == 0 ? 5 : 11);
         }
 
         // The output, bright, in an afterglow, while the beat plays; and the little that changes
         // while it does, in the small font over its corner.
         if (running) {
             draw_scope(canvas, 0, 59, 13, running);
+            paint::small_text(px, 0, 60, "OUT", 7);
             out = line;
-            append(out, "BAR ");
-            append_number(out, engine_.bar() % 1000u + 1u);
+            *out = 0;
             if (engine_.fill()) append(out, " FILL");
             if (engine_.repeat().active()) {
                 *out++ = ' ';
@@ -327,7 +332,7 @@
             if (note_repeat_mode_) append(out, " NRPT");
             if (engine_.delay_frozen()) append(out, " FRZ");
             *out = 0;
-            paint::small_text(px, 0, 60, line, 8);
+            paint::small_text(px, 16, 60, line, 9);
             if (engine_.rel_all() != 0 || engine_.len_all() != 0) {
                 out = line;
                 append(out, "REL ");

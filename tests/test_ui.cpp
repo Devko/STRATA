@@ -9052,11 +9052,11 @@ TEST(ui_wave_sample_draws_its_window_slices_and_playhead) {
     draw_now();
     check_layout(app, "EDIT SRC, SAMPLE with a file");
     // The window's start is a full-height bright column.
-    for (int y = 96; y < 118; y++) CHECK_EQ(int(pixel_at(view.lo, y)), 15);
+    for (int y = 77; y < 118; y++) CHECK_EQ(int(pixel_at(view.lo, y)), 15);
     // The sample inside the window is drawn brighter than before it: a hit starts at column 0
     // (dim, outside) and the second near STA, so look one column on from each.
-    CHECK_EQ(int(pixel_at(1, 107)), 3);
-    CHECK_EQ(int(pixel_at(view.lo + 1, 107)), 9);
+    CHECK_EQ(int(pixel_at(1, 97)), 3);
+    CHECK_EQ(int(pixel_at(view.lo + 1, 97)), 9);
     // A slice tick is dotted: every other row.
     int tick = -1;
     for (int x = view.lo + 1; x < kWaveColumns && tick < 0; x++) {
@@ -9064,8 +9064,8 @@ TEST(ui_wave_sample_draws_its_window_slices_and_playhead) {
     }
     CHECK(tick > 0);
     if (tick > 0) {
-        CHECK_EQ(int(pixel_at(tick, 96)), 12);
-        CHECK(pixel_at(tick, 97) != 12);
+        CHECK_EQ(int(pixel_at(tick, 77)), 12);
+        CHECK(pixel_at(tick, 78) != 12);
     }
     CHECK(!screen_has(app, "NO FILE"));
 
@@ -9084,7 +9084,7 @@ TEST(ui_wave_sample_draws_its_window_slices_and_playhead) {
     CHECK(later.mark[0] > playing.mark[0]);
     draw_now();
     if (later.mark[0] < kWaveColumns) {
-        CHECK(pixel_at(later.mark[0], 96) > 0);
+        CHECK(pixel_at(later.mark[0], 77) > 0);
         CHECK(pixel_at(later.mark[0], 117) > 0);
     }
     back_to_a_kick();
@@ -9149,7 +9149,7 @@ TEST(ui_wave_grain_draws_its_bracket_and_the_grains_in_the_air) {
     check_layout(app, "EDIT SRC, GRAIN with a file");
     CHECK(screen_has(app, "OK: SOUNDS"));
     draw_now();
-    CHECK_EQ(int(pixel_at(view.lo, 96)), 13);       // the bracket's corners
+    CHECK_EQ(int(pixel_at(view.lo, 77)), 13);       // the bracket's corners
     CHECK_EQ(int(pixel_at(view.lo, 117)), 13);
     back_to_a_kick();
 }
@@ -9165,18 +9165,18 @@ TEST(ui_envelope_on_amp_follows_the_knobs_and_letters_its_handles) {
     CHECK(screen_has(app, "OK: PICK SAMPLE"));
     check_layout(app, "EDIT AMP, SAMPLE");
     draw_now();
-    CHECK(pixel_at(0, 96) != 0);                    // the peak, at the top at once
+    CHECK(pixel_at(0, 77) != 0);                    // the peak, at the top at once
     int letters = 0;
     for (int i = 0; i < FakeHost::the().text_count(); i++) {
         const FakeHost::TextDraw &d = FakeHost::the().text_draw(i);
-        if (d.y >= 96 && d.y < 118 && d.length == 1) letters++;
+        if (d.y >= 77 && d.y < 118 && d.length == 1) letters++;
     }
     CHECK_EQ(letters, 2);
     // A longer decay reaches further right: the curve leaves the floor later.
     const auto reach = [] {
         int last = 0;
         for (int x = 0; x < kWaveColumns; x++) {
-            for (int y = 96; y < 117; y++) {
+            for (int y = 77; y < 117; y++) {
                 if (pixel_at(x, y) == 13) last = x;
             }
         }
@@ -9199,7 +9199,7 @@ TEST(ui_envelope_on_a_synths_fltr_is_the_filters_with_env_as_its_height) {
     edit_page_to(Page::fltr);
     // The curve is grey 13 and a lettered handle on it 15.
     const auto top_row = [](int grey) {
-        for (int y = 96; y < 118; y++) {
+        for (int y = 77; y < 118; y++) {
             for (int x = 0; x < kWaveColumns; x++) {
                 if (pixel_at(x, y) >= grey) return y;
             }
@@ -9210,14 +9210,14 @@ TEST(ui_envelope_on_a_synths_fltr_is_the_filters_with_env_as_its_height) {
     pump(4);
     draw_now();
     int curve_top = 118;
-    for (int y = 96; y < 118 && curve_top == 118; y++) {
+    for (int y = 77; y < 118 && curve_top == 118; y++) {
         for (int x = 0; x < kWaveColumns; x++) curve_top = pixel_at(x, y) == 13 ? y : curve_top;
     }
     CHECK_EQ(curve_top, 117);
     post_cmd_track_param(0, 9, 127);                // ENV full: the sweep to the top
     pump(4);
     draw_now();
-    CHECK_EQ(top_row(13), 96);
+    CHECK_EQ(top_row(13), 77);
     check_layout(app, "EDIT FLTR, VA MONO");
     // FDE 0 is tied to DEC, and the line says so.
     post_cmd_track_param(0, kSlotFdec, 0);
@@ -9227,7 +9227,7 @@ TEST(ui_envelope_on_a_synths_fltr_is_the_filters_with_env_as_its_height) {
     bool c = false, d = false;
     for (int i = 0; i < FakeHost::the().text_count(); i++) {
         const FakeHost::TextDraw &t = FakeHost::the().text_draw(i);
-        if (t.y < 96) continue;
+        if (t.y < 77) continue;
         c = c || std::strcmp(t.text, "C") == 0;
         d = d || std::strcmp(t.text, "D") == 0;
     }
@@ -9251,7 +9251,7 @@ TEST(ui_envelope_on_asr_holds_when_sus_is_up) {
     CHECK(screen_has(app, "HOLDS: PAD OR LEN"));
     draw_now();
     int plateau = 0;
-    for (int x = 0; x < kWaveColumns; x++) plateau += pixel_at(x, 106) == 13 ? 1 : 0;
+    for (int x = 0; x < kWaveColumns; x++) plateau += pixel_at(x, 97) == 13 ? 1 : 0;
     CHECK(plateau >= 15);
     check_layout(app, "EDIT ASR, VA POLY holding");
     // A drum has no ASR: the page says so and draws nothing.
@@ -9270,7 +9270,7 @@ TEST(ui_envelope_a_dot_rides_the_amp_curve_while_a_note_plays) {
     pump(8);
     const auto bright = [] {
         int n = 0;
-        for (int y = 96; y < 118; y++) {
+        for (int y = 77; y < 118; y++) {
             for (int x = 0; x < kWaveColumns; x++) n += pixel_at(x, y) == 15 ? 1 : 0;
         }
         return n;
@@ -9311,7 +9311,7 @@ TEST(ui_wave_src_draws_the_table_as_a_waterfall) {
     check_layout(app, "EDIT SRC, WAVE MONO, the waterfall");
     const auto count = [](int grey) {
         int n = 0;
-        for (int y = 96; y < 118; y++) {
+        for (int y = 77; y < 118; y++) {
             for (int x = 0; x < 124; x++) n += pixel_at(x, y) >= grey;
         }
         return n;
@@ -9321,7 +9321,7 @@ TEST(ui_wave_src_draws_the_table_as_a_waterfall) {
     // POS to the back: the brightest frame moves up and right.
     const auto bright_x = [] {
         int sum = 0, n = 0;
-        for (int y = 96; y < 118; y++) {
+        for (int y = 77; y < 118; y++) {
             for (int x = 0; x < 124; x++) {
                 if (pixel_at(x, y) >= 10) { sum += x; n++; }
             }
@@ -9339,7 +9339,7 @@ TEST(ui_wave_src_draws_the_table_as_a_waterfall) {
     key(ENAGA_KEY_F4);
 }
 
-// EDIT's LFO page (app/ui_live.hpp): off, the hint at y 96 and no picture; on, the NOW line moves
+// EDIT's LFO page (app/ui_live.hpp): off, the hint at y 77 and no picture; on, the NOW line moves
 // up to y 87 over the shape with a dot riding it and a strip of what the LFO put out.
 TEST(ui_the_lfo_page_draws_its_shape_with_the_phase_riding_it) {
     Strata &app = fresh();
@@ -9349,7 +9349,7 @@ TEST(ui_the_lfo_page_draws_its_shape_with_the_phase_riding_it) {
     draw_now();
     CHECK(screen_has(app, "LFO OFF: SET DEP+DST"));
     int lit = 0;
-    for (int y = 96; y < 118; y++) {
+    for (int y = 77; y < 118; y++) {
         for (int x = 0; x < 124; x++) lit += pixel_at(x, y) != 0;
     }
     CHECK_EQ(lit, 0);
@@ -9364,14 +9364,14 @@ TEST(ui_the_lfo_page_draws_its_shape_with_the_phase_riding_it) {
         pump(40);
         draw_now();
     }
-    bool now_at_87 = false;
+    bool now_at_68 = false;
     for (int i = 0; i < FakeHost::the().text_count(); i++) {
         const FakeHost::TextDraw &d = FakeHost::the().text_draw(i);
-        if (std::strncmp(d.text, "NOW ", 4) == 0) now_at_87 = d.y == 87;
+        if (std::strncmp(d.text, "NOW ", 4) == 0) now_at_68 = d.y == 68;
     }
-    CHECK(now_at_87);
+    CHECK(now_at_68);
     int dot = 0, shape = 0, strip = 0;
-    for (int y = 96; y < 118; y++) {
+    for (int y = 77; y < 118; y++) {
         for (int x = 0; x < 80; x++) {
             dot += pixel_at(x, y) == 15;
             shape += pixel_at(x, y) >= 4;

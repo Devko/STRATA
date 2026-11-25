@@ -19,13 +19,13 @@
         append(out, "  ");
         append(out, page_name(Page(param_page_)));
         *out = 0;
-        canvas.text(0, 20, line, 14);
+        canvas.text(0, 18, line, 14);
 
         // Which of the eight pages is showing, as a row of boxes: the spec's selection keys
         // flip between them, so showing where you are matters more than labels.
         for (int p = 0; p < kEditPages; p++) {
             const uint8_t grey = p == param_page_ ? 14 : 4;
-            canvas.rect(p * 16 + 1, 32, 14, 3, grey);
+            canvas.rect(p * 16 + 1, 27, 14, 2, grey);
         }
         const bool lfo_page = param_page_ == int(Page::lfo);
         const bool arp_page = param_page_ == int(Page::arp);
@@ -39,7 +39,7 @@
         // did not fit four to a line (7 characters is 41 pixels, in a 32-pixel slot).
         for (int slot = 0; slot < 4; slot++) {
             const int index = edit_index(slot);
-            const int y = 42 + slot * 12;
+            const int y = kEditRowsY + slot * 9;
             const ShownParam shown = shown_param(index);
             const uint8_t value = shown.heard;         // the held step's lock, if it has one
 
@@ -68,18 +68,18 @@
         }
 
         // A waveform or an envelope under the knobs (docs/CONTROLS.md, "Waveforms and
-        // envelopes"), with one line of text above it at y 87 instead of the two at 96 and 105.
+        // envelopes"), with one line of text above it at kEditLineY instead of the two at kEditTextY.
         const EditPicture picture = edit_picture();
 
         // Turning a lock: "S5 CUT 64>90" where the page's own line goes, until the STEP is let go.
         // Over a picture it takes the line above it, and the picture draws the lock it is turning.
-        const bool readout = draw_lock_readout(canvas, picture != EditPicture::none ? 87 : 96);
+        const bool readout = draw_lock_readout(canvas, picture != EditPicture::none ? kEditLineY : kEditTextY);
         if (readout && picture == EditPicture::none) return;
 
         // A frozen track plays its loop, not these knobs (dsp/frozen.hpp): say so on every page,
         // and where to undo it.
         if (frozen(selected_)) {
-            if (!readout) canvas.text(0, 96, "FROZEN: FUNC+HOME", 15);
+            if (!readout) canvas.text(0, kEditTextY, "FROZEN: FUNC+HOME", 15);
             return;
         }
 
@@ -87,13 +87,14 @@
             if (!readout) draw_picture_line(canvas, picture);
             if (picture == EditPicture::wave) draw_wave(canvas);
             else if (picture == EditPicture::table) draw_table_picture(canvas);
+            else if (picture == EditPicture::response) draw_response_picture(canvas);
             else draw_envelope(canvas, envelope_for(picture), picture == EditPicture::amp);
             return;
         }
 
         if (lfo_page) {
             // What the LFO is doing to its destination right now, so a moving number says it runs;
-            // while it runs, over its picture (app/ui_live.hpp) at y 87, as the other pictures'.
+            // while it runs, over its picture (app/ui_live.hpp) at kEditLineY, as the other pictures'.
             const bool lfo_running = engine_.lfo_on(selected_);
             out = line;
             if (engine_.lfo_on(selected_)) {
@@ -112,7 +113,7 @@
                 append(out, "LFO OFF: SET DEP+DST");
             }
             *out = 0;
-            canvas.text(0, lfo_running ? 87 : 96, line, 7);
+            canvas.text(0, lfo_running ? kEditLineY : kEditTextY, line, 7);
             if (lfo_running) draw_lfo_picture(canvas);
             return;
         }
@@ -134,19 +135,19 @@
                 *out++ = '%';
             }
             *out = 0;
-            canvas.text(0, 96, line, 7);
+            canvas.text(0, kEditTextY, line, 7);
             return;
         }
 
         if (asr_page) {
             // A machine that reads ASR draws its envelope (edit_picture); here it does nothing.
-            canvas.text(0, 96, "NOT ON THIS MACHINE", 7);
+            canvas.text(0, kEditTextY, "NOT ON THIS MACHINE", 7);
             return;
         }
 
         if (osc_page) {
             const uint8_t id = engine_.machine_id(selected_);
-            canvas.text(0, 96,
+            canvas.text(0, kEditTextY,
                         machine_is_fm(id)     ? "FIN NUDGES RAT"
                         : machine_is_wave(id) ? "WRP BENDS  DET 2 OSCS"
                         : machine_is_grain(id) ? "PSP: DET 1-63 OCT 64+"
@@ -157,29 +158,36 @@
         }
 
         // The machine is changed somewhere else, and nothing said where.
-        canvas.text(0, 96, "FUNC+EDIT: MACHINE", 7);
+        canvas.text(0, kEditTextY, "FUNC+EDIT: MACHINE", 7);
         // And a sample track's file is picked from here -- on GRAIN from MACHINE, because here
         // OK opens its SOUNDS.
         if (machine_is_grain(engine_.machine_id(selected_))) {
-            canvas.text(0, 105, "OK: SOUNDS", 7);
+            canvas.text(0, kEditTextY + 9, "OK: SOUNDS", 7);
         } else if (plays_files(selected_)) {
-            canvas.text(0, 105, "OK: PICK SAMPLE", 7);
+            canvas.text(0, kEditTextY + 9, "OK: PICK SAMPLE", 7);
         }
     }
 
     // --- EDIT's pictures: the waveform and the envelopes -------------------
     //
-    // docs/CONTROLS.md, "Waveforms and envelopes". Under the four knobs, rows 96-117, x 0-123
+    // docs/CONTROLS.md, "Waveforms and envelopes". Under the four knobs, rows 77-117, x 0-123
     // (the frame's meter has 126-127): SAMPLE's and GRAIN's sample on their SRC page, and the
     // envelope a page's knobs shape on AMP, ASR and a synth's FLTR. Nothing here walks sample
     // memory: the waveform comes from the loader's overview (core/overview.hpp, 250 bytes) and
     // the audio side's WaveView in Status, the envelopes from the knobs alone. One pass of at
     // most kWaveColumns columns a frame.
 
-    enum class EditPicture : uint8_t { none, wave, amp, filter, table };
+    enum class EditPicture : uint8_t { none, wave, amp, filter, table, response };
 
-    static constexpr int kPictureTop = 96;
-    static constexpr int kPictureRows = 22;              // rows 96-117: the bottom line is 120
+    // EDIT's rows since the live visuals' rebuild (the mockups give the graph the screen): the
+    // title at 18, the page boxes at 27, the four knobs 9 pixels apart from 31, a picture's line
+    // at 68 and the picture under it, rows 77-117, twice what it was; a page with no picture puts
+    // its lines at 77 and 86.
+    static constexpr int kEditRowsY = 31;
+    static constexpr int kEditLineY = 68;
+    static constexpr int kEditTextY = 77;
+    static constexpr int kPictureTop = 77;
+    static constexpr int kPictureRows = 41;              // rows 77-117: the bottom line is 120
 
     EditPicture edit_picture() const {
         const uint8_t id = engine_.machine_id(selected_);
@@ -191,10 +199,11 @@
         if (page == Page::amp && id != uint8_t(MachineId::midi)) return EditPicture::amp;
         if (page == Page::asr && has_asr(selected_)) return EditPicture::amp;
         if (page == Page::fltr && machine_has_voice_filter(id)) return EditPicture::filter;
+        if (page == Page::fltr && id != uint8_t(MachineId::midi)) return EditPicture::response;
         return EditPicture::none;
     }
 
-    // The one line over a picture, at y 87: what used to sit at 96 and 105 on these pages,
+    // The one line over a picture, at kEditLineY: what used to sit at kEditTextY on these pages,
     // shortened to the part that is not already drawn.
     void draw_picture_line(enaga::Canvas &canvas, EditPicture picture) {
         char line[40];
@@ -235,7 +244,7 @@
             append(out, "FUNC+EDIT: MACHINE");
         }
         *out = 0;
-        canvas.text(0, 87, line, 7);
+        canvas.text(0, kEditLineY, line, 7);
     }
 
     // SAMPLE's or GRAIN's sample: each column's range as a bar about the middle row, scaled so
