@@ -11,7 +11,7 @@
 // <enaga/abi.h>: the image is linked at ENAGA_APP_BASE and the heap runs from the end of the
 // image (payload plus bss, rounded up to 4 KiB) to ENAGA_APP_LIMIT. That is 124 MiB less the
 // image. The image is a device-build figure this suite cannot produce, so it is a stated
-// allowance here, checked against the last measured build (docs/HANDOFF.md: payload 1,187,016 +
+// allowance here, checked against the last measured build (docs/HANDOFF.md: payload 1,189,936 +
 // bss 1,597,712 bytes, cl6x). The App object, and the Engine and Storage in it, live in that bss:
 // ENAGA_APP makes the app a function-local static.
 //
@@ -89,7 +89,7 @@ constexpr uint64_t kMiB = 1u << 20;
 constexpr uint64_t kAppSpan = uint64_t(ENAGA_APP_LIMIT) - uint64_t(ENAGA_APP_BASE);
 
 // The last measured device image (docs/HANDOFF.md, tools/build.sh), payload plus bss.
-constexpr uint64_t kImageMeasured = 1187016u + 1597712u;
+constexpr uint64_t kImageMeasured = 1189936u + 1597712u;
 
 // What this file lets the image grow to before it fails. Twice the measured image: generous
 // enough that ordinary work never trips it, small enough that a doubling -- a pattern bank
