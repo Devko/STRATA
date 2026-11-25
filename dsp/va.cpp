@@ -174,6 +174,16 @@ constexpr float kAccentGain = 1.40f;           // louder, but that is the least 
 constexpr float kAccentCutSemis = 10.0f;       // the base cutoff opens
 constexpr float kAccentEnvScale = 1.5f;        // and the sweep above it reaches further
 constexpr float kVelocityFloor = 0.25f;        // velocity 1 is a quarter the level, not silence
+// Velocity to cutoff (D15), per machine: semitones per unit of velocity (0-1) away from 100.
+// VA MONO the most, because velocity is how a line breathes; at 24, velocity 127 opens a bass
+// by 5 semitones and velocity 40 closes it by 11. The polys less, since a chord's voices share
+// it; WAVE POLY least, its tables carry their own brightness.
+constexpr float kVelocityRef = 100.0f * (1.0f / 127.0f);
+constexpr float kVelCutVaMono = 24.0f;
+constexpr float kVelCutWaveMono = 18.0f;
+// (VA POLY 18 and WAVE POLY 14 are in dsp/vapoly.cpp.)
+// FDE's slot (core/project.hpp, kSlotFdec: dsp/ reads the slot number, not the header).
+constexpr int kSlotFilterDecay = 4;
 
 // A one-pole coefficient that reaches its target to within 1% in `seconds`, stepped at `rate`.
 // The same arithmetic EnvelopeShape::make uses, which is why glide and the envelopes agree
@@ -364,6 +374,11 @@ VaSettings VaSettings::make(const TrackParams &params, float rate, float inv_rat
     const float level_sub = kLevelSubMax * params.unit(Page::osc, 2);
 
     s.decay_s = kDecayLowS * exp2(kDecayOctaves * params.unit(8));
+    // FDE (D8): 0 keeps the 303 tie, a sweep 0.55 x DEC long; above it the sweep has its own
+    // time on DEC's curve, so a short squelch can sit on a long note and a slow bloom on a pluck.
+    const uint8_t fde = params.get(kSlotFilterDecay);
+    s.filter_decay_s = fde == 0 ? s.decay_s * kFilterDecayRatio
+                                : kDecayLowS * exp2(kDecayOctaves * params.unit(kSlotFilterDecay));
     s.env_semis = params.unit(9) * kEnvSemitones;
 
     const float level = params.unit(11);
@@ -386,10 +401,10 @@ VaSettings VaSettings::make(const TrackParams &params, float rate, float inv_rat
     s.amp_shape = EnvelopeShape::make(s.attack_s, s.decay_s, s.sustain, s.release_s, rate);
     s.amp_shape_accent = EnvelopeShape::make(attack_accent, s.decay_s * kAccentDecayRatio,
                                              s.sustain, s.release_s, rate);
-    s.fenv_shape = EnvelopeShape::make(filter_attack, s.decay_s * kFilterDecayRatio,
+    s.fenv_shape = EnvelopeShape::make(filter_attack, s.filter_decay_s,
                                        s.filter_sustain, filter_release, control_rate);
     s.fenv_shape_accent =
-        EnvelopeShape::make(filter_attack, s.decay_s * kFilterDecayRatio * kAccentFilterRatio,
+        EnvelopeShape::make(filter_attack, s.filter_decay_s * kAccentFilterRatio,
                             s.filter_sustain, filter_release, control_rate);
 
     s.level_osc1 = level1 * makeup;
@@ -537,19 +552,23 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
     // construction: same inputs, same outputs.
     float g;
     float k;
-    const int hit = shared != nullptr ? shared->find(fenv, accent_) : -1;
+    // Velocity opens the filter (D15), around 100 so the default note is bit-exact: there the
+    // offset is exactly 0, and adding 0 changes no float.
+    const float vel = s.vel_cut_semis * (velocity_ - kVelocityRef);
+    const int hit = shared != nullptr ? shared->find(fenv, accent_, vel) : -1;
     if (hit >= 0) {
         g = shared->entries[hit].g;
         k = shared->entries[hit].k;
     } else {
         float semis = s.env_semis * fenv;
         if (accent_) semis = semis * kAccentEnvScale + kAccentCutSemis;
+        semis += vel;
         const float cutoff = clamp(s.cutoff_hz * semitones(semis), 20.0f, 0.45f * s.rate);
         g = tan_pi(cutoff * s.inv_rate);
         // Not more resonance: with RES's new range that rang the body of an accented note on
         // and pushed its weight back, where an accent wants it forward (tests/test_va.cpp).
         k = s.k_res;
-        if (shared != nullptr) shared->add(fenv, accent_, g, k);
+        if (shared != nullptr) shared->add(fenv, accent_, vel, g, k);
     }
 
     // Not cached: `from_g` is one reciprocal and three multiplies, which is not worth a lookup,
@@ -761,6 +780,7 @@ void VaMono::init(float sample_rate) {
 void VaMono::prepare(const TrackParams &params) {
     settings_ = wave_ ? VaSettings::make_wave(params, rate_, inv_rate_, true)
                       : VaSettings::make(params, rate_, inv_rate_);
+    settings_.vel_cut_semis = wave_ ? kVelCutWaveMono : kVelCutVaMono;
 
     // GLD is this machine's own: VaSettings::make leaves slot 10 alone because VA POLY spends
     // it on DET. A slid note never jumps, so its coefficient has a floor of its own. WAVE MONO
@@ -849,14 +869,14 @@ void VaMono::render_add(float *out, int frames) {
 const char *VaMono::param_name(int index) const {
     static const char *const wave[kParams] = {
         "TBL", "POS", "CUT", "RES",      // SRC: the wavetable and the filter (LP24)
-        "---", "---", "---", "---",
+        "FDE", "TON", "---", "---",      // filter decay, and the chain's TON (D8)
         "DEC", "ENV", "MOT", "LVL",      // AMP: MOT, the filter envelope moving POS
         "---", "---", "---", "---",
     };
     if (wave_) return index >= 0 && index < kParams ? wave[index] : "---";
     static const char *const names[kParams] = {
         "TUN", "MOD", "CUT", "RES",      // SRC: the voice and its filter
-        "---", "---", "---", "---",      // FLTR: the insert chain's
+        "FDE", "TON", "---", "---",      // filter decay, and the chain's TON (D8)
         "DEC", "ENV", "GLD", "LVL",      // AMP: the envelopes and the output
         "---", "---", "---", "---",      // FX: the insert chain's
     };

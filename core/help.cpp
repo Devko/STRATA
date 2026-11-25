@@ -453,6 +453,7 @@ constexpr const char *kMachineWords[int(MachineId::count)][8] = {
 // The rest are the same on every machine: the insert chain's FLTR and FX (dsp/chain.cpp), the
 // LFO (dsp/lfo.cpp), the arpeggiator (core/arp.cpp) and the VAs' ASR and OSC (app/app.hpp).
 constexpr const char *kFltrWords[4] = {"DRIVE", "CUTOFF", "RESONANCE", "FILTER MODE"};
+constexpr const char *kVoiceFilterWords[4] = {"FILTER DECAY", "TONE LP-HP", "", ""};
 constexpr const char *kFxWords[4] = {"LO-FI", "PAN", "SEND A DELAY", "SEND B REVERB"};
 constexpr const char *kLfoWords[4] = {"SHAPE", "RATE", "DEPTH", "DESTINATION"};
 constexpr const char *kArpWords[4] = {"MODE", "RATE", "OCTAVES", "GATE"};
@@ -520,7 +521,7 @@ void knob_row(const HelpPlace &place, int slot, char row[kHelpChars + 1]) {
     const char letter[2] = {char('A' + slot), 0};
     line.add(letter).add(" ").add(name);
     if (name[0] == '-') return;          // an empty slot: nothing to say
-    line.pad_to(5).add(" ").add(help_param_words(place.machine, int(place.page) * kParamsPerHelpPage + slot));
+    line.pad_to(5).add(" ").add(help_param_words(place.machine, edit_slot(place.machine, int(place.page), slot)));
 }
 
 // The four knobs of the EDIT page A-D turn, and what is special about the page: the pushes
@@ -705,7 +706,11 @@ const char *help_param_words(uint8_t machine, int index) {
         case 2:
             if (machine >= uint8_t(MachineId::count)) return "";
             return kMachineWords[machine][(page == 0 ? 0 : 4) + slot];
-        case 1: return kFltrWords[slot];
+        case 1:
+            // A VA's or WAVE's slots 4-7 are FDE and TON (D8); its FLTR page shows them with
+            // CUT RES ENV (edit_slot), and the words follow the slot, not the page.
+            if (machine_has_voice_filter(machine)) return kVoiceFilterWords[slot];
+            return kFltrWords[slot];
         case 3: return kFxWords[slot];
         case 4: return kLfoWords[slot];
         case 5: return kArpWords[slot];

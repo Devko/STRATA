@@ -186,6 +186,87 @@ constexpr bool machine_is_wave(uint8_t id) {
 // FM4: four sine operators in one of eight algorithms (dsp/fm.hpp).
 constexpr bool machine_is_fm(uint8_t id) { return id == uint8_t(MachineId::fm); }
 
+// --- one filter on the synth machines (D8) --------------------------------------------------
+//
+// The VAs and the WAVE pair have a filter of their own (CUT RES on SRC, ENV on AMP), and they
+// used to have the insert chain's whole filter on top of it: two cutoffs on one track, which
+// confused on the unit. On these machines the insert filter shrinks to ONE byte, TON, and the
+// byte that frees takes the filter envelope's own decay, FDE. No byte is added or moved:
+//
+//     slot 4  FDE  filter decay. 0 is the old tie, 0.55 x DEC (and what every kit from before
+//                  this loads as); 1-127 is its own time, DEC's curve, 15 ms to 2.4 s
+//     slot 5  TON  one tone knob in the insert chain: 64 flat (the filter is skipped), below it
+//                  a 12 dB low-pass closing from 18 kHz to 250 Hz, above it a 12 dB high-pass
+//                  rising from 20 Hz to 1.5 kHz
+//     slot 6, 7    unused: the insert's RES and MOD have nothing to do here
+//
+// The insert's DRV is off on these machines too (the OSC page has the voice's own DRV). FM4 has
+// no filter of its own, so it keeps the insert filter.
+constexpr bool machine_has_voice_filter(uint8_t id) {
+    return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly) ||
+           id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly);
+}
+constexpr int kSlotFdec = 4;
+constexpr int kSlotTone = 5;
+constexpr uint8_t kToneFlat = 64;
+// TON's two curves, which dsp/chain.cpp maps and kit_tone_from_insert inverts. 6.1699 octaves is
+// 18 kHz down to 250 Hz; 6.2288 is 20 Hz up to 1.5 kHz.
+constexpr float kToneLpTopHz = 18000.0f;
+constexpr float kToneLpOctaves = 6.1699f;
+constexpr float kToneHpLowHz = 20.0f;
+constexpr float kToneHpOctaves = 6.2288f;
+
+// The EDIT pages of such a machine show the filter section together, so FLTR is that machine's
+// filter: CUT RES ENV FDE. SRC keeps the voice (TUN MOD, or TBL POS) and TON; AMP keeps DEC GLD
+// LVL (or DEC MOT LVL). Only the order on screen changes -- the bytes, the locks, the macros and
+// the files keep their slots -- so this map is the whole of it. Every other machine, and every
+// page from LFO on, is page x 4 + knob.
+constexpr int edit_slot(uint8_t machine, int page, int knob) {
+    constexpr int8_t kVoiceFilter[3][4] = {{0, 1, 5, 6}, {2, 3, 9, 4}, {8, 7, 10, 11}};
+    if (!machine_has_voice_filter(machine) || page < 0 || page > 2 || knob < 0 || knob > 3) {
+        return page * 4 + knob;
+    }
+    return kVoiceFilter[page][knob];
+}
+
+// The page a slot shows on: edit_slot's inverse.
+constexpr int edit_page_of(uint8_t machine, int slot) {
+    for (int page = 0; page < 3; page++) {
+        for (int knob = 0; knob < 4; knob++) {
+            if (edit_slot(machine, page, knob) == slot) return page;
+        }
+    }
+    return slot / 4;
+}
+
+// What an older kit's insert filter becomes on such a machine: the nearest TON, from its CUT
+// (slot 5) and MOD (slot 7) bytes as dsp/chain.cpp mapped them (20 Hz to 18 kHz; OFF LP12 LP24
+// BP12 BP24 HP12 HP24 in seven equal zones). OFF is flat; a low-pass, and a band-pass, whose top
+// cut is the part you hear most, become TON's low-pass at the same cutoff; a high-pass becomes
+// its high-pass. RES and DRV have no TON equivalent and are dropped. Pure arithmetic: core/ has
+// no libm, and both curves are linear in octaves.
+constexpr uint8_t kit_tone_from_insert(uint8_t cut, uint8_t mod) {
+    const int zone = (int(mod) * 7) / 128;
+    if (zone == 0) return kToneFlat;
+    const float octaves = 9.8138f * float(cut > 127 ? 127 : cut) * (1.0f / 127.0f);  // over 20 Hz
+    if (zone >= 5) {
+        const int v = int(64.0f + 63.0f * octaves * (1.0f / kToneHpOctaves) + 0.5f);
+        return uint8_t(v > 127 ? 127 : (v < 65 && cut > 0 ? 65 : v));
+    }
+    const float below = 9.8138f - octaves;             // octaves under 18 kHz
+    const int v = int(64.0f - 64.0f * below * (1.0f / kToneLpOctaves) + 0.5f);
+    return uint8_t(v < 0 ? 0 : (v > 63 && cut < 127 ? 63 : v));
+}
+
+// An older kit track's slots 4-7 rewritten for one filter: FDE tied, TON from the insert filter.
+inline void kit_track_to_voice_filter(uint8_t *params) {
+    const uint8_t tone = kit_tone_from_insert(params[5], params[7]);
+    params[kSlotFdec] = 0;
+    params[kSlotTone] = tone;
+    params[6] = 0;
+    params[7] = 0;
+}
+
 // A sample path, including its terminator. Enaga's paths are absolute and UTF-8
 // ("/SAMPLES/Kick 01.wav"), and long names are supported, so this has to hold a real one rather
 // than an 8.3 name.
@@ -465,6 +546,11 @@ constexpr uint16_t kSectionKitDuck = 6;
 // The VA machines' OSC page, four bytes per track (kKitOscParams: WAV OS2 SUB DRV). Optional on
 // read: a KIT.BIN from before it loads kKitOscLegacy on every track.
 constexpr uint16_t kSectionKitOsc = 7;
+// The filter layout, one byte: kKitFilterLayout when the VA and WAVE tracks' slots 4-7 are FDE
+// and TON (D8, machine_has_voice_filter). Optional on read: a KIT.BIN from before it holds the
+// insert filter there, which loads mapped onto TON.
+constexpr uint16_t kSectionKitFilter = 8;
+constexpr uint8_t kKitFilterLayout = 1;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

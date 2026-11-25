@@ -140,6 +140,10 @@ struct VaSettings {
     float k_res = 1.0f;                // RES as the resonant stage's k = 1 / Q
     float env_semis = 0.0f;            // ENV, semitones of cutoff at envelope 1
     float decay_s = 0.2f;              // DEC
+    float filter_decay_s = 0.11f;      // FDE: 0.55 x DEC while FDE is 0 (D8)
+    // Velocity to cutoff (D15): semitones per unit of velocity away from 100, the sequencer's
+    // default, so a note at 100 is exactly the note it always was. Each machine sets its own.
+    float vel_cut_semis = 0.0f;
     float attack_s = 0.0025f;          // ATK
     float release_s = 0.060f;          // REL
     float sustain = 0.0f;              // SUS, 0-1 of the peak: 0 is a one-shot, DEC its length
@@ -212,6 +216,7 @@ struct VaFilterCache {
 
     struct Entry {
         float fenv;
+        float vel;        // the note's velocity offset in semitones (D15): a key, like accent
         float g;
         float k;
         bool accent;
@@ -224,16 +229,19 @@ struct VaFilterCache {
 
     // The entry for this envelope value and accent, or -1. A linear scan of at most eight float
     // compares against an exp2 and a tangent, so the scan is the cheap side by a wide margin.
-    int find(float fenv, bool accent) const {
+    int find(float fenv, bool accent, float vel) const {
         for (int i = 0; i < count; i++) {
-            if (entries[i].fenv == fenv && entries[i].accent == accent) return i;
+            if (entries[i].fenv == fenv && entries[i].accent == accent && entries[i].vel == vel) {
+                return i;
+            }
         }
         return -1;
     }
 
-    void add(float fenv, bool accent, float g, float k) {
+    void add(float fenv, bool accent, float vel, float g, float k) {
         if (count >= kEntries) return;
         entries[count].fenv = fenv;
+        entries[count].vel = vel;
         entries[count].accent = accent;
         entries[count].g = g;
         entries[count].k = k;

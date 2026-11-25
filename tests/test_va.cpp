@@ -5,6 +5,7 @@
 // slews and slide does not retrigger, that an accent changes more than the volume -- because a
 // test that pins a property is what survives a later tidy-up, while a test that pins a sample
 // only pins the compiler.
+#include "project.hpp"
 #include "check.hpp"
 
 #include <cstring>
@@ -616,6 +617,82 @@ TEST(va_accent_changes_more_than_volume) {
     CHECK(share_accent > share_plain);
 }
 
+// --- FDE and velocity to cutoff (D8, D15) ----------------------------------------------------
+
+TEST(va_fde_0_keeps_the_old_tie_and_above_it_the_sweep_has_its_own_time) {
+    TrackParams p = patch();
+    p.set(kDec, 70);
+    p.set(kSlotFdec, 0);
+    VaSettings tied = VaSettings::make(p, kRate, 1.0f / kRate);
+    CHECK_NEAR(tied.filter_decay_s, tied.decay_s * 0.55f, 1e-7f);
+
+    // Its own time on DEC's curve: FDE 70 is DEC 70's time, whatever DEC is.
+    p.set(kSlotFdec, 70);
+    VaSettings own = VaSettings::make(p, kRate, 1.0f / kRate);
+    CHECK_NEAR(own.filter_decay_s, own.decay_s, 1e-6f);
+    p.set(kDec, 120);
+    VaSettings longer = VaSettings::make(p, kRate, 1.0f / kRate);
+    CHECK_NEAR(longer.filter_decay_s, own.filter_decay_s, 1e-7f);
+    CHECK(longer.decay_s > own.decay_s * 4.0f);
+
+    // Audible: a short sweep on a long note puts the brightness at the front.
+    TrackParams q = patch();
+    q.set(kMod, kLp24);
+    q.set(kCut, 20);
+    q.set(kEnv, 100);
+    q.set(kDec, 110);
+    const int blocks = blocks_for(0.5f);
+    const int n = blocks * kBlk;
+    VaMono slow, fast;
+    slow.init(kRate);
+    fast.init(kRate);
+    TrackParams qs = q, qf = q;
+    qs.set(kSlotFdec, 120);
+    qf.set(kSlotFdec, 20);
+    slow.prepare(qs);
+    fast.prepare(qf);
+    slow.trigger(hit());
+    fast.trigger(hit());
+    clear(g_a, n);
+    clear(g_b, n);
+    render(slow, qs, g_a, blocks);
+    render(fast, qf, g_b, blocks);
+    const int tail = n / 2;
+    CHECK(sign_changes(g_a + tail, n - tail) > sign_changes(g_b + tail, n - tail) * 5 / 4);
+}
+
+TEST(va_velocity_opens_the_filter_and_100_is_the_note_it_always_was) {
+    TrackParams p = patch();
+    p.set(kMod, kLp24);
+    p.set(kCut, 30);
+    p.set(kEnv, 40);
+    p.set(kDec, 70);
+    const int blocks = blocks_for(0.2f);
+    const int n = blocks * kBlk;
+
+    // At 100 the offset is exactly zero (dsp/va.cpp, kVelocityRef), which is why the goldens of
+    // every note at velocity 100 did not move.
+
+    VaMono soft, loud;
+    soft.init(kRate);
+    loud.init(kRate);
+    soft.prepare(p);
+    loud.prepare(p);
+    soft.trigger(hit(60, 40));
+    loud.trigger(hit(60, 127));
+    clear(g_a, n);
+    clear(g_b, n);
+    render(soft, p, g_a, blocks);
+    render(loud, p, g_b, blocks);
+    // The loud note is the brighter one, level aside: more of its energy is in the slope.
+    const auto brightness = [n](const float *x) {
+        float slope = 0.0f;
+        for (int i = 1; i < n; i++) slope += (x[i] - x[i - 1]) * (x[i] - x[i - 1]);
+        return slope / energy(x, n);
+    };
+    CHECK(brightness(g_b) > brightness(g_a) * 1.5f);
+}
+
 // --- monophony ------------------------------------------------------------------------------
 
 TEST(va_second_trigger_steals_the_voice_instead_of_layering) {
@@ -799,7 +876,7 @@ TEST(va_parameter_names_are_three_upper_case_letters) {
     CHECK_EQ(va.used_params(), 8);
 
     const char *const expected[kParams] = {
-        "TUN", "MOD", "CUT", "RES", "---", "---", "---", "---",
+        "TUN", "MOD", "CUT", "RES", "FDE", "TON", "---", "---",
         "DEC", "ENV", "GLD", "LVL", "---", "---", "---", "---",
     };
     for (int i = 0; i < kParams; i++) {
@@ -983,34 +1060,34 @@ TEST(va_the_fused_tail_leaves_its_input_alone) {
 TEST(va_the_filter_cache_finds_only_an_exact_match) {
     VaFilterCache cache;
     CHECK_EQ(cache.count, 0);
-    CHECK_EQ(cache.find(0.5f, false), -1);
+    CHECK_EQ(cache.find(0.5f, false, 0.0f), -1);
 
-    cache.add(0.5f, false, 0.25f, 1.5f);
-    cache.add(0.5f, true, 0.40f, 1.1f);          // the same envelope, accented: a DIFFERENT entry
+    cache.add(0.5f, false, 0.0f, 0.25f, 1.5f);
+    cache.add(0.5f, true, 0.0f, 0.40f, 1.1f);          // the same envelope, accented: a DIFFERENT entry
     CHECK_EQ(cache.count, 2);
-    CHECK_EQ(cache.find(0.5f, false), 0);
-    CHECK_EQ(cache.find(0.5f, true), 1);
+    CHECK_EQ(cache.find(0.5f, false, 0.0f), 0);
+    CHECK_EQ(cache.find(0.5f, true, 0.0f), 1);
 
     // By exact equality, which is the point: a key that is one ulp away is a different filter
     // setting and must miss rather than hand back a coefficient nobody computed.
     const float nearly = 0.5f + 6e-8f;
     CHECK(nearly != 0.5f);
-    CHECK_EQ(cache.find(nearly, false), -1);
-    CHECK_EQ(cache.find(0.4999999f, false), -1);
+    CHECK_EQ(cache.find(nearly, false, 0.0f), -1);
+    CHECK_EQ(cache.find(0.4999999f, false, 0.0f), -1);
 
-    CHECK_NEAR(cache.entries[cache.find(0.5f, false)].g, 0.25f, 1e-9);
-    CHECK_NEAR(cache.entries[cache.find(0.5f, true)].k, 1.1f, 1e-9);
+    CHECK_NEAR(cache.entries[cache.find(0.5f, false, 0.0f)].g, 0.25f, 1e-9);
+    CHECK_NEAR(cache.entries[cache.find(0.5f, true, 0.0f)].k, 1.1f, 1e-9);
 
     // A full cache stops storing rather than evicting or running off the end: a miss then costs
     // what it always cost.
-    for (int i = 0; i < 20; i++) cache.add(float(i) + 10.0f, false, 1.0f, 1.0f);
+    for (int i = 0; i < 20; i++) cache.add(float(i) + 10.0f, false, 0.0f, 1.0f, 1.0f);
     CHECK_EQ(cache.count, VaFilterCache::kEntries);
-    CHECK_EQ(cache.find(10.0f, false), 2);                   // the first few did get in
-    CHECK_EQ(cache.find(19.0f, false), -1);                  // and the rest did not
+    CHECK_EQ(cache.find(10.0f, false, 0.0f), 2);                   // the first few did get in
+    CHECK_EQ(cache.find(19.0f, false, 0.0f), -1);                  // and the rest did not
 
     cache.clear();
     CHECK_EQ(cache.count, 0);
-    CHECK_EQ(cache.find(0.5f, false), -1);
+    CHECK_EQ(cache.find(0.5f, false, 0.0f), -1);
 }
 
 TEST(va_a_cached_coefficient_is_bit_identical_to_a_computed_one) {

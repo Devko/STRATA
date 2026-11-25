@@ -43,7 +43,7 @@ using namespace strata;
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
 // ambient modes: nine bytes on the end of the mixer section.
 constexpr uint32_t kProjectFileBytes = 402;
-constexpr uint32_t kKitFileBytes = 1296;   // 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
+constexpr uint32_t kKitFileBytes = 1309;   // 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -448,7 +448,9 @@ TEST(project_init_empties_everything_and_lives_on_a01) {
     int kit_set = 0;
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
-            if (g_source.kit.tracks[t].params[p] != 0) kit_set++;
+            // TON's flat is 64, not 0 (D8): a blank synth track starts with its tone flat.
+            const bool tone = p == kSlotTone && machine_has_voice_filter(g_source.kit.tracks[t].machine);
+            if (g_source.kit.tracks[t].params[p] != (tone ? kToneFlat : 0)) kit_set++;
         }
         if (g_source.kit.tracks[t].sample[0] != '\0') kit_set++;
         // The fader's default is unity, not zero: a project that opened silent would look broken.
@@ -1384,7 +1386,24 @@ uint32_t fresh_kit_file() {
 
 // g_kit_file as a build from before the duck wrote it: the OSC page's section and then the
 // duck's, the last two, dropped.
+// g_kit_file as a build from before one filter on the synth machines (D8) wrote it: the filter
+// layout's section, the last, dropped. Its VA and WAVE tracks then load mapped (migrated()).
+void drop_filter_section() {
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1296u);
+    for (uint32_t i = 0; i < 1296u; i++) g_kit_file[i] = g_kit_alt[i];
+}
+
+// What g_kit_source's parameter p of track t loads as from a file without the filter layout:
+// itself, except slots 4-7 of a VA or WAVE track, which become FDE 0 and the nearest TON.
+int migrated(int t, int p) {
+    uint8_t params[kKitParams];
+    for (int i = 0; i < kKitParams; i++) params[i] = g_kit_source.tracks[t].params[i];
+    if (machine_has_voice_filter(g_kit_source.tracks[t].machine)) kit_track_to_voice_filter(params);
+    return int(params[p]);
+}
+
 void drop_duck_section() {
+    drop_filter_section();
     CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1252u);
     CHECK_EQ(drop_last_section(g_kit_alt, g_kit_file), 1228u);
 }
@@ -1457,7 +1476,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 7);     // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 8);     // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -1550,7 +1569,7 @@ TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_and_arp_off) {
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitSoundParams; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), migrated(t, p));
         }
         for (int p = kKitSoundParams; p < kKitParams; p++) {
             CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), absent_param(p));
@@ -1747,7 +1766,9 @@ TEST(kit_read_refuses_a_damaged_container_and_clears_the_kit) {
     for (int t = 0; t < kTracks; t++) {
         const KitTrack &track = g_kit_loaded.tracks[t];
         for (int p = 0; p < kKitSoundParams; p++) {
-            if (track.params[p] != 0) set++;
+            // TON's flat is 64 (D8), which is what kit_clear gives a synth track.
+            const bool tone = p == kSlotTone && machine_has_voice_filter(track.machine);
+            if (track.params[p] != (tone ? kToneFlat : 0)) set++;
         }
         if (track.sample[0] != '\0') set++;
         if (!(track.level == fresh.level)) set++;
@@ -2478,6 +2499,7 @@ TEST(kit_the_duck_round_trips_is_clamped_and_an_older_file_ducks_as_v0_1_did) {
     // every track, track 1 the source, 3 / 40 / 120 ms -- even read into a kit that held another.
     CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
              int(SerializeResult::ok));
+    drop_filter_section();
     CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1252u);    // the OSC page went on after it
     for (uint32_t i = 0; i < 1252u; i++) g_kit_file[i] = g_kit_alt[i];
     const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
@@ -2525,7 +2547,7 @@ TEST(kit_the_asr_page_round_trips_and_an_older_file_loads_it_at_zero) {
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitArpEnd; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), migrated(t, p));
         }
         for (int p = kKitArpEnd; p < kKitParams; p++) {
             CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), absent_param(p));
@@ -2547,6 +2569,7 @@ TEST(kit_the_osc_page_round_trips_and_an_older_file_loads_the_legacy_voice) {
             CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
         }
     }
+    drop_filter_section();
     const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
     CHECK_EQ(old_size, 1252u);
     for (int t = 0; t < kTracks; t++) {
@@ -2555,7 +2578,7 @@ TEST(kit_the_osc_page_round_trips_and_an_older_file_loads_the_legacy_voice) {
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitAsrEnd; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), migrated(t, p));
         }
         CHECK_EQ(int(g_kit_loaded.tracks[t].params[kKitAsrEnd + 0]), 0);     // a saw
         CHECK_EQ(int(g_kit_loaded.tracks[t].params[kKitAsrEnd + 1]), 0);     // OSC 2 off
@@ -2570,4 +2593,94 @@ TEST(kit_the_osc_page_round_trips_and_an_older_file_loads_the_legacy_voice) {
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
              int(SerializeResult::malformed));
+}
+
+// --- one filter on the synth machines (D8) ---------------------------------------------------
+
+TEST(kit_an_older_kit_maps_its_insert_filter_onto_ton_on_the_synth_machines) {
+    // Off is flat; a low-pass keeps its cutoff as TON's low-pass; fully open is flat; a high-pass
+    // becomes TON's high-pass; a band-pass counts as its top cut. FDE comes back tied (0).
+    CHECK_EQ(int(kit_tone_from_insert(127, 0)), int(kToneFlat));     // OFF
+    CHECK_EQ(int(kit_tone_from_insert(40, 0)), int(kToneFlat));      // OFF, wherever CUT is
+    CHECK_EQ(int(kit_tone_from_insert(127, 20)), int(kToneFlat));    // LP12 wide open
+    CHECK_EQ(int(kit_tone_from_insert(126, 20)), 63);                // just closed: not flat
+    CHECK_EQ(int(kit_tone_from_insert(100, 20)), 42);                // about 6 kHz
+    CHECK_EQ(int(kit_tone_from_insert(0, 20)), 0);                   // as dark as TON goes
+    CHECK_EQ(int(kit_tone_from_insert(100, 60)), 42);                // BP12: its top cut
+    CHECK_EQ(int(kit_tone_from_insert(0, 110)), int(kToneFlat));     // HP at 20 Hz is flat
+    CHECK_EQ(int(kit_tone_from_insert(1, 110)), 65);                 // but any more is not
+    CHECK_EQ(int(kit_tone_from_insert(50, 110)), 103);               // about 140 Hz
+    CHECK_EQ(int(kit_tone_from_insert(127, 127)), 127);              // HP24 at the top
+    // The low-pass keeps its cutoff: TON 42 is 18 kHz x 2^(-6.17 x 22/64) = 4.8 kHz, the old
+    // CUT 100 was 20 x 2^(9.81 x 100/127) = 4.7 kHz. Within a count.
+
+    fill_kit(g_kit_source);
+    for (int t = 0; t < kTracks; t++) {
+        g_kit_source.tracks[t].machine = uint8_t(t < 4 ? MachineId::va_mono : MachineId::kick);
+        g_kit_source.tracks[t].params[4] = 50;     // DRV
+        g_kit_source.tracks[t].params[5] = 100;    // CUT
+        g_kit_source.tracks[t].params[6] = 90;     // RES
+        g_kit_source.tracks[t].params[7] = 20;     // LP12
+    }
+    g_kit_source.tracks[1].machine = uint8_t(MachineId::va_poly);
+    g_kit_source.tracks[2].machine = uint8_t(MachineId::wave_mono);
+    g_kit_source.tracks[3].machine = uint8_t(MachineId::wave_poly);
+    g_kit_source.tracks[4].machine = uint8_t(MachineId::fm);    // no filter of its own: kept
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)), int(SerializeResult::ok));
+
+    // This build's file: no mapping, every byte as written.
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 4; p < 8; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+    }
+
+    // An older one: the four synth tracks map, the others keep their insert filter.
+    drop_filter_section();
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, 1296u)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        const bool synth = t < 4;
+        CHECK_EQ(int(g_kit_loaded.tracks[t].params[4]), synth ? 0 : 50);
+        CHECK_EQ(int(g_kit_loaded.tracks[t].params[5]), synth ? 42 : 100);
+        CHECK_EQ(int(g_kit_loaded.tracks[t].params[6]), synth ? 0 : 90);
+        CHECK_EQ(int(g_kit_loaded.tracks[t].params[7]), synth ? 0 : 20);
+    }
+
+    // Present but short is damage, like every other section.
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)), int(SerializeResult::ok));
+    const uint32_t entry = section_entry_at(g_kit_file, kSectionKitFilter);
+    poke_u32(g_kit_file, entry + 8, 0);
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::malformed));
+}
+
+TEST(edit_pages_put_a_synth_filter_on_fltr_and_cover_every_slot_once) {
+    // CUT RES ENV FDE on FLTR for the four synth machines; page x 4 + knob for everyone else.
+    for (int m = 0; m < kMachines; m++) {
+        const uint8_t id = uint8_t(m);
+        int seen[12] = {};
+        for (int page = 0; page < 3; page++) {
+            for (int knob = 0; knob < 4; knob++) {
+                const int slot = edit_slot(id, page, knob);
+                CHECK(slot >= 0 && slot < 12);
+                seen[slot]++;
+                CHECK_EQ(edit_page_of(id, slot), page);
+                if (!machine_has_voice_filter(id)) CHECK_EQ(slot, page * 4 + knob);
+            }
+        }
+        for (int slot = 0; slot < 12; slot++) CHECK_EQ(seen[slot], 1);
+        // Pages from FX on never move.
+        for (int page = 3; page < 8; page++) CHECK_EQ(edit_slot(id, page, 2), page * 4 + 2);
+    }
+    const uint8_t va = uint8_t(MachineId::va_mono);
+    CHECK_EQ(edit_slot(va, 1, 0), 2);            // CUT
+    CHECK_EQ(edit_slot(va, 1, 1), 3);            // RES
+    CHECK_EQ(edit_slot(va, 1, 2), 9);            // ENV
+    CHECK_EQ(edit_slot(va, 1, 3), kSlotFdec);    // FDE
+    CHECK_EQ(edit_slot(va, 0, 2), kSlotTone);    // TON on SRC
+    CHECK_EQ(edit_slot(va, 2, 0), 8);            // DEC stays AMP's first
+    CHECK_EQ(edit_slot(va, 2, 3), 11);           // and LVL its last
+    CHECK(!machine_has_voice_filter(uint8_t(MachineId::fm)));
 }
