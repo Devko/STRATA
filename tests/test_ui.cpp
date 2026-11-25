@@ -58,6 +58,14 @@ struct UiProbe {
     static Storage &storage(Strata &app) { return app.storage_; }
 
     static int mode(const Strata &app) { return int(app.mode_); }
+    // REL ALL and LEN ALL back to rest, the UI's knob positions and the engine's both: a test that
+    // turns FUNC + A or B in PERFORM (the input audit does) would leave them for the next.
+    static void moves_to_rest(Strata &app) {
+        app.rel_all_ = 0;
+        app.len_all_ = 0;
+        app.post(Cmd::set_move_all, 0, 0, 0, 0);
+        app.post(Cmd::set_move_all, 0, 0, 1, 0);
+    }
     static int selected(const Strata &app) { return app.selected_; }
     static int page(const Strata &app) { return app.page_; }
     static int param_page(const Strata &app) { return app.param_page_; }
@@ -365,6 +373,7 @@ Strata &fresh() {
     // FX GLIDE off, so a mixer change lands at once as it did before the glide: a test of the
     // glide turns it on itself (UiProbe::set_glide). And no ride or held STEP left running.
     UiProbe::set_glide(app, PerfGlide::off);
+    UiProbe::moves_to_rest(app);
     // The performance mixer off and any loop thrown away: push VALUE + CLR, twice.
     app.on_key(ENAGA_KEY_PUSH_VALUE, true);
     key(ENAGA_KEY_CLR);
@@ -3974,11 +3983,12 @@ TEST(ui_the_pattern_page_sets_each_tracks_own_swing) {
     CHECK_EQ(UiProbe::project_page(app), 2);
     for (int t = 0; t < kTracks; t++) CHECK_EQ(int(pattern.tracks[t].swing), int(kSwingInherit));
 
-    // RIGHT walks LEN, SWG, then the tracks; it stops at track 8.
+    // RIGHT walks LEN, SWG, FEEL, then the tracks; it stops at track 8.
+    key(ENAGA_KEY_RIGHT);
     key(ENAGA_KEY_RIGHT);
     key(ENAGA_KEY_RIGHT);
     key(ENAGA_KEY_RIGHT);                             // track 2
-    CHECK_EQ(UiProbe::pattern_field(app), 3);
+    CHECK_EQ(UiProbe::pattern_field(app), 4);
     key(ENAGA_KEY_UP);                                // PAT -> 50
     pump(2);
     CHECK_EQ(int(pattern.tracks[1].swing), kSwingMin);
@@ -3988,7 +3998,7 @@ TEST(ui_the_pattern_page_sets_each_tracks_own_swing) {
     CHECK_EQ(int(pattern.tracks[0].swing), int(kSwingInherit));
     check_layout(app, "PATTERN, a track swing set");
     for (int i = 0; i < 20; i++) key(ENAGA_KEY_RIGHT);
-    CHECK_EQ(UiProbe::pattern_field(app), 9);
+    CHECK_EQ(UiProbe::pattern_field(app), 10);
     check_layout(app, "PATTERN, cursor on track 8");
 
     // Encoder C edits the track under the cursor.
@@ -4001,7 +4011,7 @@ TEST(ui_the_pattern_page_sets_each_tracks_own_swing) {
     CHECK_EQ(UiProbe::pattern_field(app), 0);
     app.on_encoder(2, +1);
     pump(2);
-    CHECK_EQ(UiProbe::pattern_field(app), 2);
+    CHECK_EQ(UiProbe::pattern_field(app), 3);
     CHECK_EQ(int(pattern.tracks[0].swing), kSwingMin);
     // And down again to PAT.
     app.on_encoder(2, -3);
@@ -6812,7 +6822,6 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_project, false, "D+", "PROJECT uses A to C"}, {s_project, true, "D+", "ditto"},
         {s_chain, false, "C+", "CHAIN uses A and B"}, {s_chain, false, "D+", "ditto"},
         {s_chain, true, "C+", "ditto"}, {s_chain, true, "D+", "ditto"},
-        {s_pattern, false, "D+", "PATTERN uses A to C"}, {s_pattern, true, "D+", "ditto"},
         {s_resample, false, "D+", "RESAMPLE uses A to C"}, {s_resample, true, "D+", "ditto"},
         {s_kit, false, "B+", "KIT uses A"}, {s_kit, false, "C+", "ditto"},
         {s_kit, false, "D+", "ditto"}, {s_kit, true, "B+", "ditto"},
@@ -9426,6 +9435,110 @@ TEST(ui_a_lock_jump_takes_the_morph_knob_back) {
     pump(2);
     CHECK_EQ(int(app_engine().morph()), 0);
     CHECK_EQ(int(UiProbe::morph_knob(app)), 0);
+}
+
+// --- REL ALL, LEN ALL and FEEL (backlog Phase 5 item 5) ----------------------------------------
+
+// FUNC + turn A / B in PERFORM: REL ALL and LEN ALL, with a detent at rest, a notice, the values
+// on PERFORM's line and R / G in the live strip while they are away from rest. Without FUNC, A is
+// the macro, as before.
+TEST(ui_func_turn_a_and_b_in_perform_are_rel_all_and_len_all) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    pump(1600);                                       // past the screen's own notice
+    CHECK(screen_has(app, "FUNC+A/B REL/LEN ALL"));
+    const uint8_t macro_a = engine.macro_position(0);
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(0, -3);
+    pump(2);
+    CHECK_EQ(int(engine.rel_all()), -6);
+    CHECK(std::strcmp(UiProbe::notice(app), "REL ALL -6") == 0);
+    CHECK_EQ(int(engine.macro_position(0)), int(macro_a));   // not the macro
+    app.on_encoder(1, +16);
+    pump(2);
+    CHECK_EQ(int(engine.len_all()), 32);
+    CHECK(std::strcmp(UiProbe::notice(app), "LEN ALL 200%") == 0);
+
+    // The detent: a fast turn through rest stops on it.
+    app.on_encoder(0, +5);
+    pump(2);
+    CHECK_EQ(int(engine.rel_all()), 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "REL ALL 0") == 0);
+    app.on_encoder(0, -2);
+    pump(2);
+    CHECK_EQ(int(engine.rel_all()), -4);
+    app.on_key(ENAGA_KEY_F1, false);
+
+    pump(1600);                                       // the notice gone: the strip is on line 2
+    CHECK(screen_has(app, "REL -4 LEN 200%"));
+    CHECK(screen_has(app, "RL- LN+"));
+    check_layout(app, "PERFORM, REL ALL and LEN ALL off rest");
+
+    // Without FUNC, A is the macro again.
+    app.on_encoder(0, +1);
+    pump(2);
+    CHECK_EQ(int(engine.rel_all()), -4);
+    CHECK(engine.macro_position(0) != macro_a);
+    app.on_encoder(0, -1);
+    pump(2);
+    CHECK_EQ(int(engine.macro_position(0)), int(macro_a));
+
+    // Back to rest, both: the hint returns and the strip is empty of them.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(0, +2);
+    app.on_encoder(1, -16);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(1600);
+    CHECK_EQ(int(engine.rel_all()), 0);
+    CHECK_EQ(int(engine.len_all()), 0);
+    CHECK(screen_has(app, "FUNC+A/B REL/LEN ALL"));
+    CHECK(!screen_has(app, "RL-"));
+    CHECK(!screen_has(app, "LN+"));
+}
+
+// FEEL on the PATTERN page: D turns it from anywhere on the page, the row is the field after
+// SWG, and UP / DOWN walk it there.
+TEST(ui_the_pattern_page_sets_feel_on_d_and_on_its_row) {
+    Strata &app = fresh();
+    const Pattern &pattern = app_engine().pattern();
+    key(ENAGA_KEY_F3);
+    // PROJECT's page survives fresh(), so walk to PATTERN by name rather than counting presses.
+    for (int i = 0; i < 8 && UiProbe::project_page(app) != 2; i++) {
+        key(UiProbe::project_page(app) < 2 ? ENAGA_KEY_SELECT_RIGHT : ENAGA_KEY_SELECT_LEFT);
+    }
+    CHECK_EQ(UiProbe::project_page(app), 2);
+    for (int i = 0; i < 12; i++) key(ENAGA_KEY_LEFT);  // the field cursor survives too
+    CHECK(screen_has(app, "FEEL OFF"));
+
+    app.on_encoder(3, +3);
+    pump(2);
+    CHECK_EQ(int(pattern.feel), 3);
+    CHECK_EQ(UiProbe::pattern_field(app), 2);
+    CHECK(screen_has(app, ">FEEL DRIFT 3"));
+    check_layout(app, "PATTERN, FEEL DRIFT 3");
+
+    key(ENAGA_KEY_UP);
+    pump(2);
+    CHECK_EQ(int(pattern.feel), 4);
+    app.on_encoder(3, +5);
+    pump(2);
+    CHECK_EQ(int(pattern.feel), 9);
+    CHECK(screen_has(app, "FEEL WAVE 3"));
+    check_layout(app, "PATTERN, FEEL WAVE 3");
+
+    // LEFT from FEEL is SWG, RIGHT is the first track's swing.
+    key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::pattern_field(app), 1);
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::pattern_field(app), 3);
+
+    app.on_encoder(3, -20);
+    pump(2);
+    CHECK_EQ(int(pattern.feel), 0);
 }
 
 // --- hold STEP + THROW: the delay-send lock (D6's last pad) ---------------------------------

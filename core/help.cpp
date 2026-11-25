@@ -262,7 +262,7 @@ constexpr Text kPerform2 = {"PERFORM MORE:", {
     "MUTATE PAD  TRY IT",
     "OK KEEPS CLR REVERTS",
     "AUTO-FILL  FUNC MENU",
-    nullptr,
+    "FUNC+A/B REL/LEN ALL",
 }};
 
 constexpr Text kProject = {"PROJECT:", {
@@ -299,8 +299,9 @@ constexpr Text kPattern = {"PATTERN:", {
     "B  SWG  SWING",
     "C  TRACK SWING",
     "PAT  FOLLOWS SWG",
+    "D  FEEL DRIFT/WAVE",
     "CLR        BACK",
-    nullptr, nullptr,
+    nullptr,
 }};
 
 constexpr Text kSetup = {"SETUP:", {

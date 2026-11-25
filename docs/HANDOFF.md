@@ -22,8 +22,8 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 | --- | --- |
 | `make -C host test` | **1,870 tests, 3,665,834 checks, 0 failures** on `main` at PR #151: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
-| `tools/build.sh` | links. Last measured image (cl6x, 2026-11-25, LFO TRIG merged onto bounce to track): payload 1,140,864 bytes, bss 1,565,832 (EDIT's pictures, LOCK and play modes in); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | **34 scenarios**, run on Roland's PC only. All 34 pass with cl6x with LFO TRIG, TUN glide and the cutoff floor merged onto #153 (`scenario_lfo` now pushes TRIG; worst 30.73%, ambient). **All 34 pass with cl6x on `main` after #153** (bounce to track and hold STEP + THROW; 2026-11-25; worst 30.55%, ambient). Added on 2026-11-25, each with the PR that brought it: `scenario_stepkeys` (D12), `scenario_plock`, `scenario_slots`, `scenario_glide`, `scenario_playmode`, `scenario_pictures`, `scenario_bounce` (the only run of a take through Enaga's real file layer). The pad gestures (stutter, LOCK, D6) have none: the emulator cannot press pads. The worst case moved from 30.16% to 30.55% over the day. GCC-only figures for that day's work are not taken |
+| `tools/build.sh` | links. Last measured image (cl6x, 2026-11-25, REL/LEN ALL and FEEL): payload 1,142,248 bytes, bss 1,565,464 (with bounce to track, step stutter, EDIT's pictures, LOCK and play modes); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
+| `tools/scenarios.sh` | **35 scenarios**, run on Roland's PC only. All 35 pass with cl6x with LFO TRIG, TUN glide and the cutoff floor merged onto #152 (`scenario_lfo` now pushes TRIG; worst WORST, ambient). **All 35 pass with cl6x with REL ALL, LEN ALL and FEEL merged onto `main` after #154** (2026-11-25; worst 30.75%, ambient; 34 passed on `main` after #153 at 30.55%). Added on 2026-11-25, each with the PR that brought it: `scenario_stepkeys` (D12), `scenario_plock`, `scenario_slots`, `scenario_glide`, `scenario_playmode`, `scenario_pictures`, `scenario_bounce` (the only run of a take through Enaga's real file layer), `scenario_feel` (FEEL walked on the PATTERN page). The pad and knob gestures (stutter, LOCK, D6, REL ALL and LEN ALL) have none: the emulator cannot press pads or turn knobs. The worst case moved from 30.16% to 30.75% over the day. GCC-only figures for that day's work are not taken |
 | unit | v0.3.1 on Enaga 0.2.0 boots and plays (2026-11-24). Load figures are from the v0.2.0-era build: under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been measured or walked through on the unit |
 | memory | init takes **97.04 MiB of a 120 MiB heap** (LOCK's 1.06 MiB included): 22.96 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -70,6 +70,12 @@ Enaga writes only strictly inside `/RECORD`, so every take failed `DENIED`. Fixe
 `tests/fakehost.cpp` now refuses writes outside the data folder, `/SAMPLES` and `/RECORD` as the
 firmware does (`write_check`; `seed_folder` lays out a PC-made card). No take has been heard on the
 unit yet: UNIT_CHECKLIST's resample items are the first real test.
+
+**Phase 5 item 5** (CyDrums P4 and P8): REL ALL and LEN ALL on FUNC + turn A / B in PERFORM
+(`core/moveall.hpp`; live, rest 0 with a detent, in a LOCK, `RL`/`LN` in the live strip) and FEEL
+on the PATTERN page (`core/timing.hpp` feel_offset, pattern file section 5, D turns it). The
+emulator cannot turn a knob, so REL/LEN ALL are host-tested only; `scenario_feel` walks FEEL.
+UNIT_CHECKLIST W29 walks both.
 
 **Phase 5, sound-design depth** (same doc, CyDrums S2/S3). Done: LFO TRIG (FREE, RETRIG,
 ONE-SHOT), TUN gliding on the synths, and D9's leftover (the ~100 Hz floor for the morph and the

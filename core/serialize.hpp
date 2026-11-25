@@ -139,6 +139,9 @@ constexpr uint16_t kSectionLocks = 3;
 // existed has three sections and plays every track forward. No version bump, because no existing
 // byte changed meaning, and an older build skips a section id it does not know.
 constexpr uint16_t kSectionPlayModes = 4;
+// One byte, the pattern's FEEL (core/timing.hpp). Optional on read in the same way: absent is a
+// pattern from before FEEL, and plays straight.
+constexpr uint16_t kSectionFeel = 5;
 
 enum class SerializeResult : uint8_t {
     ok = 0,
@@ -156,9 +159,10 @@ const char *serialize_result_name(SerializeResult result);
 
 // --- pattern round trip ---------------------------------------------------
 
-constexpr uint32_t kPatternSections = 4;      // written; a reader needs only the first three
+constexpr uint32_t kPatternSections = 5;      // written; a reader needs only the first three
 constexpr uint32_t kPatternHeaderSectionBytes = 12;
 constexpr uint32_t kPlayModesSectionBytes = uint32_t(kTracks);
+constexpr uint32_t kFeelSectionBytes = 1;
 
 // On-disk sizes, stated separately from the structs. They agree with sizeof today and the
 // asserts below say so, but the file format is not allowed to follow a struct that changes.
@@ -171,10 +175,10 @@ constexpr uint32_t kTrackBytes = 3 + uint32_t(kStepsPerTrack) * kStepBytes;
 constexpr uint32_t kTracksSectionBytes = kTrackBytes * uint32_t(kTracks);
 constexpr uint32_t kPatternFixedBytes =
     kHeaderBytes + kPatternSections * kSectionEntryBytes + kPatternHeaderSectionBytes +
-    kTracksSectionBytes + kPlayModesSectionBytes;
+    kTracksSectionBytes + kPlayModesSectionBytes + kFeelSectionBytes;
 
 // The most a pattern can ever take: size a static buffer with this and `pattern_write` can
-// never refuse it. 8,300 bytes as the format stands.
+// never refuse it. 8,313 bytes as the format stands.
 constexpr uint32_t kPatternMaxBytes = kPatternFixedBytes + uint32_t(kLockPool) * kLockBytes;
 
 // Exactly what `pattern_write` will produce for this pattern. Smaller than kPatternMaxBytes by
