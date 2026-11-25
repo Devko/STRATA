@@ -1774,7 +1774,8 @@ TEST(engine_a_mute_armed_for_the_bar_waits_for_the_bar) {
     tick_at(1152);
     CHECK(engine.muted(3));
 
-    // A performer pressing two pads before the bar means the second one, not a queue of two.
+    // Two pads before the bar mute both: each flips its track in what is already armed. (It
+    // used to keep only the second, which on the unit read as FUNC + pad being unreliable.)
     post(Cmd::set_mute, 4, 0, 1, 1);
     post(Cmd::set_mute, 5, 0, 1, 1);
     pump();
@@ -1782,8 +1783,16 @@ TEST(engine_a_mute_armed_for_the_bar_waits_for_the_bar) {
     CHECK(!engine.muted(5));
     tick_at(4u * kTicksPerBar);
     CHECK(engine.muted(3));
-    CHECK(!engine.muted(4));
+    CHECK(engine.muted(4));
     CHECK(engine.muted(5));
+
+    // The same pad twice before the bar takes its change back.
+    post(Cmd::set_mute, 6, 0, 1, 1);
+    post(Cmd::set_mute, 6, 0, 1, 1);
+    pump();
+    tick_at(5u * kTicksPerBar);
+    CHECK(!engine.muted(6));
+    CHECK(engine.muted(4));
 }
 
 TEST(engine_the_eight_stored_mute_states_round_trip) {

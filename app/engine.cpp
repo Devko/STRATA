@@ -1189,9 +1189,11 @@ void Engine::apply(const Command &command) {
         case Cmd::set_mute:
             if (command.b != 0) {
                 // At the next bar. The latch holds a whole STATE rather than one toggle, so the
-                // state to arm is what the mutes are NOW with this track flipped -- which only
-                // this side can know.
-                uint8_t state = mute_state_capture(muted_);
+                // state to arm is this track flipped in what the bar will bring: the state
+                // already armed if there is one, else the mutes as they are NOW -- which only
+                // this side can know. From NOW alone, a second FUNC + pad in the same bar threw
+                // the first one away (backlog [6]: "FUNC + pad mutes are unreliable").
+                uint8_t state = mute_latch_.pending ? mute_latch_.state : mute_state_capture(muted_);
                 state = uint8_t(state ^ uint8_t(1u << track));
                 mute_latch_arm(mute_latch_, state);
             } else {

@@ -6665,7 +6665,22 @@ TEST(ui_inputs_that_worked_unseen_now_say_what_they_did) {
     pump(2);
     CHECK(screen_has(app, "T1 LEN 64 X1"));
 
-    // FUNC + a lower pad: the mute waits for the bar, so say it is armed.
+    // FUNC + a lower pad on a stopped box: no bar is coming, so it mutes at once.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(2, 100);
+    app.on_pad_release(2);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK(app_engine().muted(1));
+    {
+        Command unmute;                                // track 2 back on, at once
+        unmute.cmd = Cmd::set_mute;
+        unmute.track = 1;
+        app_engine().commands().post(unmute);
+    }
+    pump(2);
+    // Running: the mute waits for the bar, so say it is armed.
+    FakeHost::the().set_running(true);
     app.on_key(ENAGA_KEY_F1, true);
     app.on_pad_press(2, 100);
     app.on_pad_release(2);
@@ -6673,6 +6688,14 @@ TEST(ui_inputs_that_worked_unseen_now_say_what_they_did) {
     pump(2);
     CHECK(screen_has(app, "T2 MUTE AT BAR"));
     check_layout(app, "EDIT, mute at bar");
+    FakeHost::the().set_running(false);
+    {
+        Command unmute;                                // track 2 back on, at once
+        unmute.cmd = Cmd::set_mute;
+        unmute.track = 1;
+        app_engine().commands().post(unmute);
+    }
+    pump(2);
 
     // KEYS has no knob slots: a turn says which knob and where it is now.
     open_keys();
@@ -7048,13 +7071,13 @@ TEST(ui_keys_lights_the_pads_as_a_keyboard_and_func_keeps_the_pad_jobs) {
     CHECK_EQ(int(UiProbe::pad_b(app, 2)), 10);
     app.on_pad_release(2);
 
-    // FUNC + a lower pad is still the mute on the next bar.
+    // FUNC + a lower pad is still the mute (at once here: the box is stopped).
     app.on_key(ENAGA_KEY_F1, true);
     app.on_pad_press(4, 100);
     app.on_pad_release(4);
     app.on_key(ENAGA_KEY_F1, false);
     CHECK_EQ(UiProbe::pad_held_note(app, 4), -1);
-    CHECK(std::strstr(UiProbe::notice(app), "AT BAR") != nullptr);
+    CHECK(std::strstr(UiProbe::notice(app), "MUTE") != nullptr);
     key(ENAGA_KEY_F4);
     pump(2);
 }
