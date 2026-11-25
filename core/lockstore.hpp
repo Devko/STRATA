@@ -8,9 +8,10 @@
 //
 // `LiveState`: the playing pattern whole (steps, p-locks, conditions, lengths, swing), every
 // track's sound bytes and fader, the send and master bytes, the mutes, the morph position and
-// the four macro positions, REL ALL and LEN ALL (core/moveall.hpp). Not the tempo (STRATA may not own it under external sync), not the
-// samples, the machines or the chain, and not the performance mixer: a jump rides the picked
-// effect to rest instead (app/), and a loop keeps playing.
+// the four macro positions, REL ALL and LEN ALL (core/moveall.hpp). Not the tempo (STRATA may
+// not own it under external sync), not the samples, the machines or the chain, and not the
+// performance mixer: a jump rides the picked effect to rest instead (app/), and a loop keeps
+// playing.
 //
 // ## Why the swap-back exists (R1)
 //
@@ -28,7 +29,7 @@
 //
 // Audio context (app/engine.cpp), like undo: the live pattern is the audio side's, and the copies
 // happen at a block boundary. RAM only, never saved; a project load or NEW clears every lock.
-// The store is about 1.2 MiB, so it is allocated once in Engine::init and never a local.
+// The store is about 1.06 MiB, so it is allocated once in Engine::init and never a local.
 //
 // This file decides; the engine copies. `tap` says whether to jump or swap back and keeps the
 // bookkeeping, and the engine moves state between the live project and `slot()` / `back()`.

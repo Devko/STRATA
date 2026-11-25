@@ -536,7 +536,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // Every refusal goes through here, so a refused load leaves the defaults rather than half a
     // file -- but only of what PROJECT.BIN owns. The patterns are deliberately untouched: they
     // come from the bank files, and app/ reads PROJECT.BIN first, so emptying them here would
-    // let one damaged 277-byte file cost 128 patterns that are about to load perfectly well.
+    // let one damaged PROJECT.BIN cost 128 patterns that are about to load perfectly well.
     const auto refuse = [&project](SerializeResult why) {
         project.settings = ProjectSettings{};
         for (int i = 0; i < kChainEntries; i++) project.chain[i] = ChainEntry{};
@@ -545,7 +545,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         return why;
     };
 
-    // The mixer section is LAST and OPTIONAL: see `kProjectOptionalSections`.
+    // The four optional sections (mixer, live, song, MIDI) come LAST: kProjectOptionalSections.
     const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain,
                                                kSectionProjectMixer, kSectionProjectLive,
                                                kSectionProjectSong, kSectionProjectMidi};
