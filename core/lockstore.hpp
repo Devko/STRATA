@@ -57,6 +57,8 @@ struct LiveState {
     uint16_t morph;
     int8_t rel_all;                // REL ALL and LEN ALL (core/moveall.hpp), 0 at rest
     int8_t len_all;
+    uint8_t rnd_unit;              // LIVE RND (core/liverand.hpp): the unit, 0 OFF
+    uint8_t rnd_armed;             // and the armed tracks, bit t = track t
 };
 
 // Byte for byte, except the faders, which are compared as floats (a fader is never NaN: the

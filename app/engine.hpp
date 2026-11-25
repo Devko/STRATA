@@ -189,6 +189,9 @@ public:
     // REL ALL and LEN ALL (core/moveall.hpp): 0 is rest.
     int8_t rel_all() const { return rel_all_; }
     int8_t len_all() const { return len_all_; }
+    // LIVE RND (core/liverand.hpp): the unit (0 OFF) and the armed tracks.
+    uint8_t live_rnd_unit() const { return perform_.rnd_unit; }
+    uint8_t live_rnd_armed() const { return perform_.rnd_armed; }
     AutoFill auto_fill() const { return auto_fill_; }
     uint32_t bar() const { return bar_; }
     bool fill() const { return perform_.fill; }
