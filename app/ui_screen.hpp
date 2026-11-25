@@ -439,16 +439,16 @@
         // live level, then sixteen 5 x 6 cells seven pixels apart from x 9 (kGridX), the playhead's
         // column lit behind them while the beat plays, and the trigs that just played glowing
         // (app/ui_live.hpp).
-        const int grid_top = 20;
+        const int grid_top = kGridTop;
         uint8_t *px = canvas.data();
         if (running) {
             const int head = status.playhead[selected_].load(std::memory_order_relaxed);
             if (head / 16 == page_) {
-                canvas.rect(kGridX + (head % 16) * kGridPitch - 1, grid_top, 7, kTracks * 8, 2);
+                canvas.rect(kGridX + (head % 16) * kGridPitch - 1, grid_top, 7, kTracks * kGridRow, 2);
             }
         }
         for (int t = 0; t < kTracks; t++) {
-            const int y = grid_top + t * 8;
+            const int y = grid_top + t * kGridRow;
             const uint8_t head = status.playhead[t].load(std::memory_order_relaxed);
             const char number[2] = {char('1' + t), 0};
             paint::small_text(px, 2, y + 2, number, t == selected_ ? 15 : (muted_[t] ? 3 : 7));
@@ -478,7 +478,7 @@
                     canvas.rect(x + 2, y + 3, 1, 2, i % 4 == 0 ? 5 : 3);
                 }
             }
-            if (t == selected_) canvas.rect(0, y, 1, 8, 12);     // the selected track's marker
+            if (t == selected_) canvas.rect(0, y, 1, kGridRow - 1, 12);   // the selected track's marker
             if (muted_[t]) canvas.rect(0, y + 3, 128, 1, 4);     // a muted track is struck out
         }
         update_grid_glow(running);
@@ -500,10 +500,19 @@
         append(out, " X");
         append(out, speed_name(Speed(track.speed)));
         *out = 0;
-        canvas.text(0, 84, line, 10);
+        // In the small font under the grid, as the mockup has it, with the track's machine.
+        {
+            char info[48];
+            char *o = info;
+            append(o, line);
+            append(o, "  ");
+            append(o, machine_name(engine_.machine_id(selected_)));
+            *o = 0;
+            paint::small_text(px, 0, 92, info, 10);
+        }
 
-        draw_edit_state(canvas, 92);
-        draw_param_slots(canvas, 101);
+        draw_edit_state(canvas, 100);
+        draw_small_slots(canvas, 109);
     }
 
     // What a trig carries, cut dark into its 5 x 6 cell (docs/CONTROLS.md, "Locks on screen"):

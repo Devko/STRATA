@@ -40,10 +40,12 @@
     // just played swells by a pixel all round before it fades (the mockup's "pop").
     static constexpr int kGridX = 9;
     static constexpr int kGridPitch = 7;
+    static constexpr int kGridTop = 18;
+    static constexpr int kGridRow = 9;           // rows 18-89: a pixel more each than before
     void draw_grid_glow(enaga::Canvas &canvas, int grid_top) {
         uint8_t *px = canvas.data();
         for (int t = 0; t < kTracks; t++) {
-            const int y = grid_top + t * 8;
+            const int y = grid_top + t * kGridRow;
             for (int i = 0; i < 16; i++) {
                 const int g = grid_glow_[t][i];
                 if (g < 2) continue;
@@ -519,5 +521,27 @@
             default:
                 x = draw_tab(canvas, x, mode_name(mode_), true);
                 break;
+        }
+    }
+
+    // --- GRID's four knobs, compact --------------------------------------------------------
+    //
+    // The four parameters encoders A-D turn on GRID, in the small font as name and value
+    // ("TUN" dim, "G-1+" bright), the heard value with a lock's hollow tick on a bar under each (the same
+    // ShownParam and draw_value_bar as EDIT), four slots of 31 pixels at `y`.
+    void draw_small_slots(enaga::Canvas &canvas, int y) {
+        char line[24];
+        for (int slot = 0; slot < 4; slot++) {
+            const int index = edit_index(slot);
+            const ShownParam shown = shown_param(index);
+            char *out = line;
+            append(out, param_name_for(index));
+            *out = 0;
+            paint::small_text(canvas.data(), slot * 31, y, line, 7);
+            out = line;
+            append_param_value(out, index, shown.heard);
+            *out = 0;
+            paint::small_text(canvas.data(), slot * 31 + 13, y, line, 15);
+            draw_value_bar(canvas, slot * 31, y + 7, 28, 2, shown, 8);
         }
     }

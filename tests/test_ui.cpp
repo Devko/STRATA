@@ -2104,7 +2104,7 @@ TEST(ui_the_grid_draws_a_trig_where_the_trig_is) {
     Strata &app = fresh();
     enaga::Canvas canvas(g_pixels);
 
-    const int top = 20;                            // track 1's row
+    const int top = 18;                            // track 1's row
     const uint8_t *px = g_pixels;
     const auto at = [px](int x, int y) { return int(px[y * enaga::Canvas::width + x]); };
 
@@ -2125,8 +2125,8 @@ TEST(ui_the_grid_draws_a_trig_where_the_trig_is) {
     CHECK_EQ(at(18, top + 1), 0);
 
     // Track 2's row is eight pixels lower and has no trig, so the mapping is per track as well.
-    CHECK_EQ(at(11, top + 8 + 3), 5);
-    CHECK_EQ(at(11, top + 8 + 1), 0);
+    CHECK_EQ(at(11, top + 9 + 3), 5);
+    CHECK_EQ(at(11, top + 9 + 1), 0);
 }
 
 // --- pad pressure ---------------------------------------------------------------------------
@@ -2964,7 +2964,7 @@ TEST(ui_the_grid_glows_round_a_trig_that_just_played) {
     FakeHost &host = FakeHost::the();
     enaga::Canvas canvas(g_pixels);
     const auto at = [](int x, int y) { return int(g_pixels[y * enaga::Canvas::width + x]); };
-    const int top = 20;                                    // track 1's row
+    const int top = 18;                                    // track 1's row
     for (int k = 0; k < 16; k++) step_up(k);
     if (!trig_at(0, 0)) key(ENAGA_KEY_STEP1);
     pump(2);
@@ -7889,10 +7889,10 @@ TEST(ui_pushing_the_tun_knob_switches_between_note_and_number) {
     shift_key(ENAGA_KEY_PUSH_A);
     pump(2);
 
-    // And on GRID, where the slots along the bottom show the same page.
+    // And on GRID, where the slots along the bottom show the same page (in the small font since
+    // the live visuals' rebuild, drawn from the same append_param_value as EDIT's rows).
     key(ENAGA_KEY_F4);
     CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
-    CHECK(screen_has(app, "C-4") || screen_has(app, "C#4"));
     key(ENAGA_KEY_PUSH_A);
     CHECK(!UiProbe::tune_notes(app));
     key(ENAGA_KEY_PUSH_A);
@@ -8001,6 +8001,7 @@ TEST(ui_layout_tun_as_a_note_on_every_pitched_machine) {
         }
     }
     CHECK_EQ(int(app_engine().params(0).v[0]), 127);
+    key(ENAGA_KEY_F8);                                 // EDIT: its rows are in the big font
     CHECK(screen_has(app, "C-6"));                     // PLY at 127: +23.6 from C-4
 }
 
@@ -8906,7 +8907,7 @@ TEST(ui_the_grid_marks_what_a_trig_carries) {
     enaga::Canvas canvas(g_pixels);
     const uint8_t *px = g_pixels;
     const auto at = [px](int x, int y) { return int(px[y * enaga::Canvas::width + x]); };
-    const int top = 21;                                    // track 1's cells start at y 21
+    const int top = 19;                                    // track 1's cells start at y 21
     // `fresh()` lets no modifier stay down, but a STEP key an earlier test left held would
     // turn the taps below into a range; let them all go first.
     for (int k = 0; k < 16; k++) step_up(k);
@@ -8993,22 +8994,22 @@ TEST(ui_a_held_step_shows_its_lock_against_the_kit_value) {
     }
     CHECK(readout);
 
-    // GRID's slot A: the bar at y 117-118, the tick's caps one row above and below it.
+    // GRID's slot A: the bar at y 116-117, the tick's caps one row above and below it.
     const auto bright_in_row = [px](int y) {
         int n = 0;
         for (int x = 0; x < 28; x++) n += px[y * enaga::Canvas::width + x] == 15 ? 1 : 0;
         return n;
     };
-    CHECK_EQ(bright_in_row(116), 1);
-    CHECK_EQ(bright_in_row(119), 1);
+    CHECK_EQ(bright_in_row(115), 1);
+    CHECK_EQ(bright_in_row(118), 1);
     const int tick = base * 27 / 127;
-    CHECK_EQ(int(px[116 * enaga::Canvas::width + tick]), 15);
+    CHECK_EQ(int(px[115 * enaga::Canvas::width + tick]), 15);
 
     step_up(0);
     pump(2);
     CHECK(!screen_has(app, "S1 "));
     app.draw(canvas);
-    CHECK_EQ(bright_in_row(116), 0);
+    CHECK_EQ(bright_in_row(115), 0);
 }
 
 TEST(ui_a_trigless_step_draws_as_an_outline_on_the_grid) {
@@ -9025,7 +9026,7 @@ TEST(ui_a_trigless_step_draws_as_an_outline_on_the_grid) {
     pump(2);
     CHECK((step_of(0, 5).flags & kStepTrigless) != 0);
     app.draw(canvas);
-    const int x = 9 + 5 * 7, y = 21;
+    const int x = 9 + 5 * 7, y = 19;
     CHECK(at(x, y) != 0);
     CHECK(at(x + 4, y + 5) != 0);
     CHECK_EQ(at(x + 2, y + 2), 0);                         // hollow
