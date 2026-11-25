@@ -147,6 +147,10 @@ bool Engine::init(float sample_rate) {
     scheduler_.configure(live());
     scheduler_.reset(true);
 
+    // Status's view of what each track sounds, before the first block: step_waves reads it, and
+    // an all-zero Status would ask every track for table 0.
+    publish_heard();
+
     ready_ = true;
     return true;
 }
@@ -156,14 +160,30 @@ bool Engine::step_waves() {
     // The tables the WAVE tracks are sounding now: the kit's TBL with the scene, macro, lock and
     // LFO over it, as the machines are prepared from. A lock or an LFO on TBL asks for each
     // table it reaches while it is there; a table no longer asked for stays in its slot until
-    // the slot is needed.
+    // the slot is needed. From Status (publish_heard), never from `machine_id_` or `sounding`:
+    // those are the audio side's, rewritten every block.
     uint32_t wanted = 0;
     for (int t = 0; t < kTracks; t++) {
-        if (!machine_is_wave(machine_id_[t])) continue;
-        wanted |= 1u << va_wave_table(sounding(t).get(0));
+        const uint8_t table = status_.heard_table[t].load(std::memory_order_relaxed);
+        if (table != Status::kNotHeard) wanted |= 1u << (table & (kWaveTables - 1));
     }
     waves_.want(wanted);
     return waves_.step();
+}
+
+// Audio context, every block (process), and once from init.
+void Engine::publish_heard() {
+    // Some 32 relaxed byte stores: the UI wants the newest, and each byte stands alone.
+    for (int t = 0; t < kTracks; t++) {
+        const TrackParams &heard = sounding(t);
+        const bool wave = machine_is_wave(machine_id_[t]);
+        status_.heard_table[t].store(wave ? uint8_t(va_wave_table(heard.get(0))) : Status::kNotHeard,
+                                     std::memory_order_relaxed);
+        status_.heard_pos[t].store(heard.get(1), std::memory_order_relaxed);
+        status_.heard_sus[t].store(heard.v[kAsrFirst + 1], std::memory_order_relaxed);
+        status_.lfo_shown[t].store(modulating_[t] ? lfo_shown_[t] : Status::kNotHeard,
+                                   std::memory_order_relaxed);
+    }
 }
 
 // Main context, App::init only. Nothing is read through `sample_region_` until a `Cmd::set_sample`
@@ -3170,6 +3190,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     publish_playheads();
     publish_waves();
+    publish_heard();
 
     // Every MIDI gate is a block nearer its end.
     midi_out_.end_block(frames);

@@ -636,6 +636,8 @@ TEST(lfo_on_tune_glides_on_a_synth_and_steps_the_byte_elsewhere) {
     CHECK_EQ(va->settings().pitch_mod, mod);
     // What the screen shows is the byte it would have been.
     CHECK_EQ(int(engine.lfo_shown(kVa)), int(lfo_apply(64, engine.lfo_value(kVa), 100)));
+    // And the screen reads it from Status (Engine::publish_heard), the same byte.
+    CHECK_EQ(int(engine.status().lfo_shown[kVa].load()), int(engine.lfo_shown(kVa)));
 
     // Off: the machine is handed 0.
     post(Cmd::set_param, kVa, 0, uint8_t(kLfoDepth), 0);
