@@ -55,6 +55,8 @@ namespace strata::test {
 
 struct UiProbe {
     static Engine &engine(Strata &app) { return app.engine_; }
+    // The live strip's words: drawn in the small font, which the fake host does not record.
+    static bool live_strip(Strata &app, char *line) { return app.live_strip(line); }
     static Storage &storage(Strata &app) { return app.storage_; }
 
     static int mode(const Strata &app) { return int(app.mode_); }
@@ -2850,6 +2852,13 @@ TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
 
 namespace {
 
+// Does the live strip (in the small font under the progress line) hold this text?
+bool strip_has(Strata &app, const char *wanted) {
+    char line[48];
+    if (!UiProbe::live_strip(app, line)) return false;
+    return std::strstr(line, wanted) != nullptr;
+}
+
 // Does the drawn screen hold this text, as a whole string or inside one?
 bool screen_has(Strata &app, const char *wanted) {
     FakeHost &host = FakeHost::the();
@@ -2871,7 +2880,7 @@ TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
     FakeHost &host = FakeHost::the();
     for (int b = 0; b < kKillBands; b++) post_cmd(Cmd::eq_kill, uint8_t(b), 0);
     pump(2);
-    CHECK(!screen_has(app, "K:"));                 // at rest the strip says nothing
+    CHECK(!strip_has(app, "K:"));                 // at rest the strip says nothing
 
     // Bar 2, beat 2: one bar and one beat of ticks into the pass.
     host.set_running(true);
@@ -2879,7 +2888,7 @@ TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
         host.deliver_tick(t, 0);
         pump(1);
     }
-    CHECK(screen_has(app, " 2.2 "));
+    CHECK(screen_has(app, "2.2"));
     // The progress line, row 8: lit from the left while running, the track dim past it.
     CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 0]), 11);
     CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 127]), 2);
@@ -2899,10 +2908,10 @@ TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
     // A kill is off rest, so the strip names it; let go, it is gone again.
     post_cmd(Cmd::eq_kill, 0, 1);
     pump(2);
-    CHECK(screen_has(app, "K:L"));
+    CHECK(strip_has(app, "K:L"));
     post_cmd(Cmd::eq_kill, 0, 0);
     pump(2);
-    CHECK(!screen_has(app, "K:"));
+    CHECK(!strip_has(app, "K:"));
     host.set_running(false);
     pump(2);
 }
@@ -3084,8 +3093,8 @@ TEST(ui_hold_repeat_and_a_step_stutters_until_it_comes_up) {
     pump(2);
     CHECK_EQ(app_engine().stutter_step(), 4);
     CHECK(std::strcmp(UiProbe::notice(app), "STUTTER 5 1/16") == 0);
-    CHECK(screen_has(app, "ST5"));
-    CHECK(screen_has(app, "R1/16"));
+    CHECK(strip_has(app, "ST5"));
+    CHECK(strip_has(app, "R1/16"));
 
     // A second STEP moves it; letting that go goes back to the one still held.
     step_down(8);
@@ -3154,7 +3163,7 @@ TEST(ui_repeat_and_the_arrows_walk_the_roll_rate) {
     pump(2);
     CHECK(app_engine().repeat_length() == RepeatLength::sixteenth_triplet);
     CHECK(std::strcmp(UiProbe::notice(app), "REPEAT 1/16T") == 0);
-    CHECK(screen_has(app, "R1/16T"));
+    CHECK(strip_has(app, "R1/16T"));
     key(ENAGA_KEY_RIGHT);
     key(ENAGA_KEY_RIGHT);                  // stops at 1/32
     pump(2);
@@ -9792,7 +9801,7 @@ TEST(ui_func_turn_a_and_b_in_perform_are_rel_all_and_len_all) {
 
     pump(1600);                                       // the notice gone: the strip is on line 2
     CHECK(screen_has(app, "REL -4 LEN 200%"));
-    CHECK(screen_has(app, "RL- LN+"));
+    CHECK(strip_has(app, "RL- LN+"));
     check_layout(app, "PERFORM, REL ALL and LEN ALL off rest");
 
     // Without FUNC, A is the macro again.
@@ -9813,8 +9822,8 @@ TEST(ui_func_turn_a_and_b_in_perform_are_rel_all_and_len_all) {
     CHECK_EQ(int(engine.rel_all()), 0);
     CHECK_EQ(int(engine.len_all()), 0);
     CHECK(screen_has(app, "FUNC+A/B REL/LEN ALL"));
-    CHECK(!screen_has(app, "RL-"));
-    CHECK(!screen_has(app, "LN+"));
+    CHECK(!strip_has(app, "RL-"));
+    CHECK(!strip_has(app, "LN+"));
 }
 
 // FEEL on the PATTERN page: D turns it from anywhere on the page, the row is the field after

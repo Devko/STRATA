@@ -67,7 +67,7 @@
     // that fades a little every frame like a phosphor screen. `grey` is the trace's brightness:
     // dim when it sits behind something, as on PERFORM.
     static constexpr int kScopeWidth = 124;
-    static constexpr int kScopeRows = 28;
+    static constexpr int kScopeRows = 35;
     static constexpr uint32_t kScopeStride = 3;
     static constexpr uint32_t kScopeSpan = uint32_t(kScopeWidth) * kScopeStride;
     static constexpr uint32_t kScopeSearch = 600;          // how far back to look for a crossing
@@ -87,10 +87,18 @@
         }
         const int mid = kScopeRows / 2;
         int prev = mid;
+        // Each column the mean of its three frames, then smoothed into the last column by half:
+        // a picture of the waveform's shape, not of every hat's grain, as the mockup draws it.
+        int smooth = 0;
         for (int c = 0; c < kScopeWidth; c++) {
             const uint32_t ago = start - uint32_t(c) * kScopeStride;
-            const int v = scope_history_.left(ago) + scope_history_.right(ago);   // -65536..65534
-            int row = mid - (v * (kScopeRows / 2 - 1)) / 32768;   // +6 dB: a mix fills it
+            int sum = 0;
+            for (uint32_t k = 0; k < kScopeStride; k++) {
+                sum += scope_history_.left(ago - k) + scope_history_.right(ago - k);
+            }
+            const int v = sum / int(kScopeStride);                // -65536..65534
+            smooth = c == 0 ? v : (smooth + v) / 2;
+            int row = mid - (smooth * (kScopeRows / 2 - 1)) / 32768;   // +6 dB: a mix fills it
             row = row < 0 ? 0 : (row >= kScopeRows ? kScopeRows - 1 : row);
             scope_glow_.span(c, c == 0 ? row : prev, row, grey);
             prev = row;
@@ -450,4 +458,66 @@
         }
         static const char *const kModes[7] = {"OFF", "LP12", "LP24", "BP12", "BP24", "HP12", "HP24"};
         paint::small_text(px, 123 - paint::small_width(kModes[mode]), top + 1, kModes[mode], 9);
+    }
+
+    // --- the bottom line: the screen's pages as tabs ----------------------------------------
+    //
+    // As the mockups draw it: each page of the screen that is up in the small font, the one
+    // showing lit (a white tab, black letters), at y 121-127. EDIT's eight pages, three of
+    // MIXER's twelve around the one showing, GRID's pattern pages, PERFORM with what is live
+    // beside it (it has no pages), and every other screen its own name.
+    int draw_tab(enaga::Canvas &canvas, int x, const char *text, bool on) {
+        const int w = paint::small_width(text);
+        if (on) canvas.rect(x, 121, w + 4, 7, 15);
+        paint::small_text(canvas.data(), x + 2, 122, text, on ? 0 : 6);
+        return x + w + 6;
+    }
+
+    void draw_tabs(enaga::Canvas &canvas) {
+        int x = 0;
+        if (func_help_showing()) {
+            x = draw_tab(canvas, x, "HELP", true);
+            return;
+        }
+        if (step_page_) {
+            draw_tab(canvas, x, "STEP", true);
+            return;
+        }
+        switch (mode_) {
+            case Mode::grid: {
+                const int length = engine_.pattern().tracks[selected_].length;
+                const int pages = length > 16 ? (length + 15) / 16 : 1;
+                for (int p = 0; p < pages || p <= page_; p++) {
+                    const char name[4] = {'P', 'G', char('1' + p), 0};
+                    x = draw_tab(canvas, x, name, p == page_);
+                }
+                break;
+            }
+            case Mode::edit:
+                for (int p = 0; p < kEditPages; p++) {
+                    const Page page = Page(p);
+                    x = draw_tab(canvas, x, page == Page::fltr ? "FLT" : page_name(page),
+                                 p == param_page_);
+                }
+                break;
+            case Mode::mixer: {
+                const int first = mixer_bank_ > 0 ? mixer_bank_ - 1 : 0;
+                for (int p = first; p < kMixerPageCount && p <= first + 2; p++) {
+                    x = draw_tab(canvas, x, kMixerPages[p].name, p == mixer_bank_);
+                }
+                break;
+            }
+            case Mode::perform:
+                x = draw_tab(canvas, x, "PERF", true);
+                if (engine_.fill()) x = draw_tab(canvas, x, "FILL", false);
+                if (engine_.status().looper_state.load(std::memory_order_relaxed) != 0) {
+                    x = draw_tab(canvas, x, "LOOP", false);
+                }
+                if (engine_.delay_frozen()) x = draw_tab(canvas, x, "FRZ", false);
+                if (note_repeat_mode_) x = draw_tab(canvas, x, "NRPT", false);
+                break;
+            default:
+                x = draw_tab(canvas, x, mode_name(mode_), true);
+                break;
+        }
     }

@@ -25,63 +25,83 @@
         // The same four things in the same place on every screen, drawn from words the audio
         // side published: nothing here walks a pattern or a buffer.
         //
-        // Top line: the live pattern, where it is (bar.beat), tempo, play state, audio load.
-        // "A01 4.4 300.0 > 100%" is 20 characters at its longest. The pattern comes from the
-        // status rather than from the project, because a chain or a queued change moves it on
-        // the audio side. Load in whole percent: the bottom line's MAX keeps the tenth.
+        // The top bar, as the mockups draw it (tools/visuals_mockup.py): the live pattern as a lit
+        // badge, bar.beat beside it, then the tempo (or EXT under an outside clock), the play state
+        // and the load in the small font, the LOCK mark, and the selected track as a lit badge at
+        // the right. The pattern comes from the status rather than from the project, because a
+        // chain or a queued change moves it on the audio side. Load in whole percent; SETUP keeps
+        // the held MAX.
         const uint32_t into = status.pattern_into.load(std::memory_order_relaxed);
         const uint32_t loop = status.pattern_loop.load(std::memory_order_relaxed);
+        uint8_t *px = canvas.data();
         out = line;
         *out++ = bank_letter(int(status.live_bank.load(std::memory_order_relaxed)));
         append_padded(out, uint32_t(status.live_slot.load(std::memory_order_relaxed)) + 1, 2);
-        *out++ = ' ';
+        *out = 0;
+        canvas.rect(0, 0, 21, 8, 15);
+        canvas.text(2, 0, line, 0);
+        out = line;
         append_number(out, into / kTicksPerBar % 10u + 1u);
         *out++ = '.';
         append_number(out, into % kTicksPerBar / uint32_t(kPpqn) + 1u);
-        *out++ = ' ';
-        append_tenths(out, uint32_t(clock.tempo * 10.0f + 0.5f));
-        append(out, running ? " > " : " . ");
+        *out = 0;
+        canvas.text(24, 0, line, 15);
+        out = line;
+        if (int(clock.source) != ENAGA_CLOCK_INTERNAL) {
+            // Not ours to set under an outside source: say whose it is.
+            append(out, int(clock.source) == ENAGA_CLOCK_MIDI ? "MIDI" : "SYNC");
+        } else {
+            append_tenths(out, uint32_t(clock.tempo * 10.0f + 0.5f));
+        }
+        append(out, running ? " >" : "");
+        *out = 0;
+        paint::small_text(px, 44, 2, line, 10);
+        out = line;
         append_number(out, (enaga::audio_load() + 5u) / 10u);
         *out++ = '%';
         *out = 0;
-        canvas.text(0, 0, line, 14);
+        paint::small_text(px, 80, 2, line, 6);
+        if (lock_mark() != nullptr) paint::small_text(px, 96, 2, lock_mark(), 15);
+        out = line;
+        *out++ = 'T';
+        append_number(out, uint32_t(selected_) + 1);
+        *out = 0;
+        canvas.rect(106, 0, 20, 8, 15);
+        canvas.text(108, 0, line, 0);
 
         draw_progress(canvas, into, loop, running);
 
-        // The second line: a notice or a held mode while there is one, else the live strip
-        // (what is off rest), else the clock's state.
+        // Under the progress line: a notice, LEARN or the MUTATE verdict as a lit toast while
+        // there is one; else, only while something is off rest, the live strip in the small font;
+        // else nothing (clock trouble the same way). GRID shows its notice in its own line.
         const int y2 = kFrameStripY;
+        const auto toast = [&](const char *text) {
+            canvas.rect(0, y2 - 1, 124, 9, 15);
+            canvas.text(1, y2, text, 0);
+        };
         if (func_help_showing()) {
             // The help's title takes this line (draw_func_help).
         } else if ((step_page_ || mode_ != Mode::grid) && notice_showing()) {
-            // What just happened, on the second line. GRID shows it in its edit-state line; every
-            // other screen had nowhere for it, so a gesture there (F1 + F3's "again to save", an
-            // octave, a scene captured) answered with nothing at all.
+            // What just happened. GRID shows it in its edit-state line; every other screen had
+            // nowhere for it, so a gesture there (F1 + F3's "again to save", an octave, a scene
+            // captured) answered with nothing at all.
             out = line;
-            append_shown(out, notice_, lock_mark() != nullptr ? kFrameStripChars : kLineChars);
+            append_shown(out, notice_, kLineChars - 1);
             *out = 0;
-            canvas.text(0, y2, line, 15);
+            toast(line);
         } else if ((step_page_ || mode_ != Mode::grid) && macro_learn_ >= 0) {
             // MACRO LEARN says so for as long as it is on: the knobs' pushes are not theirs.
             learn_line(line);
-            canvas.text(0, y2, line, 15);
+            toast(line);
         } else if ((step_page_ || mode_ != Mode::grid) && verdict_keys_free()) {
             // A MUTATE waiting for its verdict says so for as long as it waits: the notice
             // fades after a second and a half, and the keys it is waiting on do not.
-            canvas.text(0, y2, kVerdictHint, 15);
+            toast(kVerdictHint);
         } else if (live_strip(line)) {
-            canvas.text(0, y2, line, 12);
-        } else if (int(clock.source) != ENAGA_CLOCK_INTERNAL) {
-            // The tempo is not ours to set under an external source, so say so rather than
-            // showing a number the user cannot change.
-            canvas.text(0, y2, int(clock.source) == ENAGA_CLOCK_MIDI ? "EXT MIDI" : "EXT SYNC", 10);
-        } else if (clock_refused_) {
+            paint::small_text(px, 0, y2 + 1, line, 12);
+        } else if (clock_refused_ && int(clock.source) == ENAGA_CLOCK_INTERNAL) {
             // Internal source and still refused: worth seeing rather than silently ignoring.
-            canvas.text(0, y2, "CLOCK REFUSED", 10);
-        }
-        // The LOCK mark, at the right end of the strip's line (kFrameLockX).
-        if (!func_help_showing() && lock_mark() != nullptr) {
-            canvas.text(kFrameLockX, y2, lock_mark(), 15);
+            paint::small_text(px, 0, y2 + 1, "CLOCK REFUSED", 10);
         }
 
         if (func_help_showing()) {
@@ -105,29 +125,24 @@
             }
         }
 
-        // The bottom line on every mode: tracks sounding, the device, and any dropped edits. A
-        // dropped command should be visible rather than mysterious (app/commands.hpp). It said
-        // "V" for voices, but the count is of tracks (Status::voices), so a chord read as one.
-        out = line;
-        append(out, "TRK");
-        append_number(out, status.voices.load(std::memory_order_relaxed));
-        // The held CPU maximum, percent like the top line but without the sign and the space:
-        // "TRK8 MAX99.9 SMPLTREK" is 21 characters, 125 pixels, and the screen is 128. A longer
-        // line (100.0, LOFI-12 XT, DROP) is clipped by Enaga's pixel writer, never overrun.
-        append(out, " MAX");
-        append_tenths(out, cpu_max_);
-        append(out, " ");
-        // A dropped edit takes the device's place: "V12 LOFI-12 XT DROP 99" is 22 characters,
-        // one past the edge, and the drop count is the part that matters.
-        // The CPU guard takes it next (core/cpuguard.hpp): when the box is shedding voices the
-        // user should be able to see why a chord got thinner. "TRK8 MAX99.9 GUARD4" is 19.
+        // The bottom line: tabs for the screen's pages, as the mockups draw them, the one showing
+        // lit (draw_tabs). A dropped edit or the CPU guard takes the right end, because both are
+        // things the user must see (app/commands.hpp: a dropped command should be visible rather
+        // than mysterious; core/cpuguard.hpp: why a chord got thinner). The tracks sounding, the
+        // held MAX and the device moved to SETUP.
+        draw_tabs(canvas);
         const uint32_t dropped = engine_.commands().dropped();
         const uint8_t guard = status.cpu_guard.load(std::memory_order_relaxed);
-        if (dropped) { append(out, "DROP "); append_number(out, dropped); }
-        else if (guard) { append(out, "GUARD"); append_number(out, guard); }
-        else append(out, device_name(enaga::system::device()));
-        *out = 0;
-        canvas.text(0, 120, line, 7);
+        if (dropped || guard) {
+            out = line;
+            if (dropped) { append(out, "DROP "); append_number(out, dropped); }
+            else { append(out, "GUARD"); append_number(out, guard); }
+            *out = 0;
+            int width = 0;
+            while (line[width] != 0) width++;
+            canvas.rect(124 - width * 6 - 2, 119, width * 6 + 2, 9, 0);
+            canvas.text(124 - width * 6, 120, line, 15);
+        }
 
         draw_frame_meter(canvas);
         count_draw_time(draw_start);

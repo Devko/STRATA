@@ -263,28 +263,11 @@
         const bool running = enaga::clock::state().running != 0;
 
         // PERFORM as the mockup draws it (tools/visuals_mockup.py, docs/CONTROLS.md "PERFORM"):
-        // rows 18-22 the scenes and the morph between them, 25-57 four macro gauges with their
-        // letters, 59-88 the output's scope in an afterglow, 90-110 every track's level, 112 what
-        // MUTATE will do. Stopped, the scope's rows hold the lines a hand needs before it plays.
-
-        // The two scenes in the small font, the morph bar between them.
-        for (int side = 0; side < 2; side++) {
-            out = line;
-            *out++ = side == 0 ? 'A' : 'B';
-            append_number(out, uint32_t(engine_.scene_slot(side)) + 1);
-            *out++ = ' ';
-            append_number(out, uint32_t(scene_count(
-                                   engine_.scenes().scenes[engine_.scene_slot(side)])));
-            *out++ = 'P';
-            *out = 0;
-            const int w = paint::small_width(line);
-            paint::small_text(px, side == 0 ? 0 : 123 - w, 18, line,
-                              scene_holding_ == side ? 15 : 9);
-        }
-        const int filled = int(uint32_t(engine_.morph()) * 66u / kMorphScale);
-        canvas.rect(29, 19, 66, 3, 3);
-        if (filled > 0) canvas.rect(29, 19, filled, 3, 12);
-        canvas.rect(29 + (filled > 65 ? 65 : filled), 18, 1, 5, 15);      // where it sits
+        // rows 19-41 four macro gauges, 43-49 their letters and what they move, 52 OUT, 55-89 the
+        // output's scope in an afterglow, 92-118 every track's level with its machine's name. The
+        // morph is in the live strip (S40), a scene and MUTATE say themselves in a toast when
+        // pressed, and the FUNC help has the gestures. Stopped, the scope's rows hold the lines a
+        // hand needs before it plays.
 
         // The four macros: a gauge each, the value inside, the letter as a badge under it (the
         // selected one lit) and how many parameters it drives. An empty macro's gauge is dim.
@@ -292,12 +275,12 @@
             const int x = m * 31;
             const int cx = x + 15;
             const int targets = macro_count(engine_.macros().macros[m]);
-            draw_gauge(canvas, cx, 37, 11, int(engine_.macro_position(m)),
+            draw_gauge(canvas, cx, 30, 11, int(engine_.macro_position(m)),
                        int(macro_position_[m]), targets != 0);
             const bool picked = m == macro_selected_;
-            canvas.rect(cx - 11, 51, 7, 7, picked ? 15 : 4);
+            canvas.rect(cx - 11, 43, 7, 7, picked ? 15 : 4);
             const char letter[2] = {char('A' + m), 0};
-            paint::small_text(px, cx - 9, 52, letter, picked ? 0 : 13);
+            paint::small_text(px, cx - 9, 44, letter, picked ? 0 : 13);
             // What it moves: its first target's parameter, on that target's own track, and a
             // '+' when it moves more than one.
             const char *what = "---";
@@ -311,14 +294,14 @@
             append(out, what);
             if (targets > 1) *out++ = '+';
             *out = 0;
-            paint::small_text(px, cx - 2, 52, line, targets == 0 ? 5 : 11);
+            paint::small_text(px, cx - 2, 44, line, targets == 0 ? 5 : 11);
         }
 
         // The output, bright, in an afterglow, while the beat plays; and the little that changes
         // while it does, in the small font over its corner.
         if (running) {
-            draw_scope(canvas, 0, 59, 13, running);
-            paint::small_text(px, 0, 60, "OUT", 7);
+            draw_scope(canvas, 0, 55, 15, running);
+            paint::small_text(px, 0, 52, "OUT", 7);
             out = line;
             *out = 0;
             if (engine_.fill()) append(out, " FILL");
@@ -332,7 +315,7 @@
             if (note_repeat_mode_) append(out, " NRPT");
             if (engine_.delay_frozen()) append(out, " FRZ");
             *out = 0;
-            paint::small_text(px, 16, 60, line, 9);
+            paint::small_text(px, 16, 52, line, 9);
             if (engine_.rel_all() != 0 || engine_.len_all() != 0) {
                 out = line;
                 append(out, "REL ");
@@ -341,10 +324,10 @@
                 append_number(out, uint32_t(len_all_percent(engine_.len_all())));
                 *out++ = '%';
                 *out = 0;
-                paint::small_text(px, 123 - paint::small_width(line), 60, line, 12);
+                paint::small_text(px, 123 - paint::small_width(line), 52, line, 12);
             }
         } else {
-            draw_scope(canvas, 0, 59, 13, running);           // clears the glow
+            draw_scope(canvas, 0, 55, 15, running);           // clears the glow
             // REL ALL and LEN ALL where they are, or the gesture while both are at rest.
             if (engine_.rel_all() != 0 || engine_.len_all() != 0) {
                 out = line;
@@ -354,9 +337,9 @@
                 append_number(out, uint32_t(len_all_percent(engine_.len_all())));
                 *out++ = '%';
                 *out = 0;
-                canvas.text(0, 61, line, 12);
+                canvas.text(0, 57, line, 12);
             } else {
-                canvas.text(0, 61, "FUNC+A/B REL/LEN ALL", 7);
+                canvas.text(0, 57, "FUNC+A/B REL/LEN ALL", 7);
             }
             // The fill and AUTO-FILL where they are on, or where AUTO-FILL lives.
             if (engine_.fill() || engine_.auto_fill() != AutoFill::off) {
@@ -367,9 +350,9 @@
                     append(out, auto_fill_name(engine_.auto_fill()));
                 }
                 *out = 0;
-                canvas.text(0, 70, line, 9);
+                canvas.text(0, 66, line, 9);
             } else {
-                canvas.text(0, 70, "AUTOFILL: FUNC MENU", 7);
+                canvas.text(0, 66, "AUTOFILL: FUNC MENU", 7);
             }
             // The bar and the held modes: "BAR 1000 NRPT FRZ" is 17 characters.
             out = line;
@@ -378,20 +361,9 @@
             if (note_repeat_mode_) append(out, " NRPT");
             if (engine_.delay_frozen()) append(out, " FRZ");
             *out = 0;
-            canvas.text(0, 79, line, 9);
+            canvas.text(0, 75, line, 9);
         }
 
         // Every track's level: eight bars, its machine's name under each.
-        draw_track_columns(canvas, 90, 14);
-
-        // What MUTATE will do, and to which track.
-        out = line;
-        append(out, "MUT ");
-        append(out, mutation_name(mutation_));
-        append(out, " T");
-        append_number(out, uint32_t(selected_) + 1);
-        append(out, " ");
-        append_number(out, uint32_t(mutate_amount_));
-        *out = 0;
-        canvas.text(0, 112, line, 11);
+        draw_track_columns(canvas, 92, 20);
     }

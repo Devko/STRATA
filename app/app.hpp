@@ -917,7 +917,7 @@ private:
     // The live views (app/ui_live.hpp): the newest output, drained from the engine's ring every
     // frame; the scope's afterglow; GRID's fading outlines and the trigger counts they follow.
     ScopeHistory scope_history_;
-    paint::Glow<124, 28> scope_glow_;
+    paint::Glow<124, 35> scope_glow_;
     uint8_t grid_glow_[kTracks][16] = {};
     uint8_t grid_seen_[kTracks] = {};
     // EDIT's LFO page: the last 40 frames of the LFO's output, and how many have arrived.
