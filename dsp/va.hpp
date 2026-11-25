@@ -173,6 +173,11 @@ struct VaSettings {
     // floor, VA POLY not at all -- a chord has nothing to glide from, so 1 is what it wants.
     float glide_coef = 1.0f;
     float slide_coef = 1.0f;
+
+    // The LFO on TUN, in semitones (Machine::set_pitch_mod): added to the glide's pitch where the
+    // oscillators are tuned, so it moves a held note too. 0 adds exactly nothing, bit for bit.
+    // The MACHINE sets it, after make, for the same reason as the glide.
+    float pitch_mod = 0.0f;
 };
 
 // --- one voice ------------------------------------------------------------
@@ -373,6 +378,10 @@ public:
     void render_add(float *out, int frames) override;
     bool active() const override { return active_; }
     const char *param_name(int index) const override;
+    void set_pitch_mod(float semis) override {
+        pitch_mod_ = semis;
+        settings_.pitch_mod = semis;
+    }
 
     // --- for the UI, and for tests that need to pin a mapping rather than guess at it -------
 
@@ -419,6 +428,7 @@ private:
     float control_rate_ = 3000.0f;
 
     float glide_s_ = 0.0f;              // GLD, for the accessor
+    float pitch_mod_ = 0.0f;            // the LFO on TUN, kept across prepare
     bool wave_ = false;                 // WAVE MONO
     bool first_note_ = true;            // nothing to glide from yet
     bool active_ = false;

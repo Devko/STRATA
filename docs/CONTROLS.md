@@ -66,6 +66,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      KEYS, is NOTE view: the value reads as a note, where TUN puts C-4 (`G-4`, `A-1+` when the
      byte is between notes), and a click is a semitone; push again for the number and one count
      a click. On at every start, one setting for all tracks (2026-11-23, core/tuning.hpp).
+     On the LFO page, RAT's switch (push B, on EDIT, GRID and KEYS) is LFO TRIG: FREE, RETRIG,
+     ONE-SHOT and round (`LFO TRIG RETRIG`); the kit's, per track (S2, 2026-11-25).
      On PROJECTS, where only A turns, push B renames and push C deletes the project under the
      cursor (delete then asks for OK twice).
    - **VALUE is the crossfader.** Push VALUE + STEP picks what it fades: an effect, the morph
@@ -167,6 +169,7 @@ Printed labels (above), and the moves made while playing:
 | FUNC + STEP | trigless step, on every playing screen, PERFORM included |
 | FUNC + A / B / C on GRID | Euclidean fill |
 | FUNC + MUTATE, held half a second | **LOCK**: store the live set as the playing pattern's lock (`LOCK A01 STORED`); again later overwrites it |
+| FUNC + turn A / B in PERFORM | **REL ALL** / **LEN ALL** (below) |
 | FUNC + MUTATE, tapped | Jump to that lock at once (`BACK TO LOCK A01`); tapped again, swap back to the state from just before the jump (`SWAPPED BACK A01`). No lock: `NO LOCK: HOLD STORES` |
 
 Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VALUE (DJ filter,
@@ -186,7 +189,7 @@ lot, and jump back in one tap; tap again to compare with where you were.
 | Every track's sound bytes (all eight EDIT pages) and fader | The samples, the machines: a lock taken before a machine switch restores the parameters only |
 | The send and master bytes | The kill EQ's switches, the tempo (not STRATA's under an outside clock) |
 | The mutes (D4) | The eight stored mute states |
-| The morph position and the four macro positions | The scenes and the macro setup |
+| The morph position, the four macro positions, REL ALL and LEN ALL | The scenes and the macro setup |
 
 - **One lock per pattern (D14), in RAM only**: not saved, and a project load or NEW clears them.
 - **At once (D3)**, on the next audio block. The performance mixer is not in a lock: the jump
@@ -200,6 +203,40 @@ lot, and jump back in one tap; tap again to compare with where you were.
 - On screen, at the right end of line 2: `L` while the playing pattern has a lock, `L+` once
   anything it holds has changed (the font has no `*`). The MUTATE pad glows half bright while
   the playing pattern has a lock.
+
+## REL ALL and LEN ALL (FUNC + turn A / B in PERFORM)
+
+CyDrums' P4 (backlog Phase 5 item 5, 2026-11-25), `core/moveall.hpp`. Two global controls in
+the Moves layer, beside the macros and the morph, on the one screen that is that layer's home.
+FUNC + turn on PERFORM's A and B only duplicated the plain turn (the macro) before, so no gesture
+changed meaning; C and D with FUNC still turn their macros.
+
+| Control | Moves | Range | Says |
+| --- | --- | --- | --- |
+| REL ALL, FUNC + A | Every track's release bytes by the same count: AMP's DEC on every machine, and ASR's REL on the machines that read it. A step's lock on them too | -64 .. +64 counts | `REL ALL -12` |
+| LEN ALL, FUNC + B | Every sequenced note's gate, x 2^(n / 32) | 25% .. 400% | `LEN ALL 71%` |
+
+- **Rest is 0, and 0 is a detent**: a turn that would cross it stops on it. At rest the sound is
+  the programmed one to the bit (the rule the macros and the morph keep).
+- **Two counts a click**, like the macros. Not saved, not undone; a LOCK holds both (D4), and a
+  jump or swap puts them where the lock had them.
+- **On screen**: PERFORM's line under the macros reads `FUNC+A/B REL/LEN ALL` at rest and
+  `REL -12 LEN 71%` away from it; the live strip adds `RL-` / `RL+` and `LN-` / `LN+`.
+- **LEN ALL leaves a note with no gate alone** (a drum, a pad hit, a held key, the arpeggiator's
+  own GATE): REL ALL is what shortens drums.
+
+## FEEL (the PATTERN page)
+
+CyDrums' P8, `core/timing.hpp`. A pattern setting like swing, so its home is the PATTERN page
+(PROJECT, screen key RIGHT twice), the row after SWG; **D** turns it from anywhere on the page,
+and UP/DOWN or VALUE when `>` is on it. One line: `OFF`, `DRIFT 1-6`, `WAVE 1-6`.
+
+- **DRIFT n**: each track on its own smooth random curve (a new aim every 64 ticks), at most n
+  ticks of 96 PPQN early or late. **WAVE n**: one four-bar triangle for every track, 0 at bar 1,
+  +n (late) at the end of bar 1, 0 at bar 3, -n at the end of bar 3.
+- On top of swing and micro-timing; the steps never change, so OFF is the grid exactly. Seeded
+  from the pattern and the bar position, so a pass plays the same after a reload.
+- Saved in the pattern (an optional section; older files load OFF), undoable, held by a LOCK.
 
 ## The performance mixer (push VALUE + STEP)
 
@@ -333,7 +370,8 @@ strip first, pictures per page later). A screen draws only inside it.
 The live strip lists only what is **off rest**, most telling first, and leaves out whole what does
 not fit in 17 characters: `ST5` a step stutter on STEP 5 and `R1/16` the rate while REPEAT is
 held or a pad rolls (where the hand is, so first), `K:LMH` kill EQ bands thrown, `FX4` the performance effect up (its STEP
-number), `S40` the scene morph at 40%, `M:AB` macros away from zero, `LP` the master looper
+number), `S40` the scene morph at 40%, `M:AB` macros away from zero, `RL-` / `RL+` REL ALL and
+`LN-` / `LN+` LEN ALL away from rest, `LP` the master looper
 armed, recording or playing. At rest it is empty. x 114-124 on that line is the LOCK mark: `L`
 while the playing pattern has a lock, `L+` once the live set differs from it.
 

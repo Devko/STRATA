@@ -127,15 +127,31 @@ screen keys or LEFT/RIGHT). It moves one of the track's 16 parameters up and dow
 - **C, DEP**: how far. At 127 the parameter swings about 64 either side of where its knob is.
 - **D, DST**: which parameter, by name, or `OFF`. One click is one parameter.
 
-The line under the knobs shows where the destination is right now (`NOW CUT 87`), or `LFO OFF:
-SET DEP+DST` until both are up. A new track's LFO is off, and so is every track in a project
-saved before the LFO existed.
+On a cutoff, DEP 127 swings about three octaves either side, and the LFO never takes the filter
+below about 100 Hz (unless the knob itself is already lower): a deep sweep dips the sound rather
+than shutting it off.
+
+**Push B (RAT's knob) for TRIG**, when the cycle starts: **FREE** runs on its own as above;
+**RETRIG** starts the cycle again on every note the track plays (a step, a chord, an arp or roll
+hit, a pad or a key); **ONE-SHOT** runs one cycle from each note and then stops, which makes the
+LFO a second envelope you can point at any parameter. In ONE-SHOT the shapes are envelopes that
+start and end where the knob is: TRI rises to DEP and falls back (attack and decay), SAW jumps to
+DEP and decays, RMP rises and stays up until the next note, SQR holds DEP for half the cycle, SIN
+is one wobble and S+H picks a new value for each note and keeps it. RAT is its length: free, one
+over the rate (`2.0` Hz is half a second); synced, the note length. A synced LFO in RETRIG or
+ONE-SHOT counts from the note, not from the bar.
+
+The line under the knobs shows where the destination is right now (`NOW CUT 87`), with `RETRIG`
+or `ONE-SHOT` after it, or `LFO OFF: SET DEP+DST` until both are up. A new track's LFO is off and
+FREE, and so is every track in a project saved before it existed.
 
 The four LFO settings are parameters like any other: hold a STEP and turn one to lock it on that
 step (a deeper sweep on one step, a different shape for a fill), store them in a scene and morph
-between two LFO settings, or put DEP on a macro to fade the movement in. The LFO moves the
-parameter in its 0-127 steps about 750 times a second: smooth on a filter or a pan, but a slow,
-deep sweep of a pitch can be heard stepping.
+between two LFO settings, or put DEP on a macro to fade the movement in. TRIG is the kit's, like
+SLC AUTO: no lock or scene changes it. The LFO moves the parameter in its 0-127 steps about 750
+times a second, smooth on a filter or a pan. Pitch is the exception on VA and WAVE (MONO and
+POLY): there the LFO on TUN bends the voices directly, so a slow sweep glides and a held note
+follows it. On the other machines TUN still moves in its steps, and only from the next note.
 
 ### The arpeggiator
 
@@ -917,6 +933,16 @@ track. The FUNC menu's CLEAR PATTERN (OK twice) clears every track at once. Hold
   fields, `PAT` (follow SWG) or 50-75%. LEFT/RIGHT walk the fields, and C (or VALUE) changes the
   one under `>`; with `>` on LEN or SWG, C sets the selected track's. Hats at 66 over a straight
   kick and bass is the classic use. It is saved with the pattern and undoable.
+- **FEEL**, on the same page between SWG and the track swings (D turns it from anywhere on the
+  page): a timing drift over the swing and micro-timing, so the pattern stops sitting dead on the
+  grid. **DRIFT 1-6** moves each track along its own smooth random curve, a new aim every two
+  thirds of a beat, so the parts loosen against each other like players; **WAVE 1-6** moves every
+  track together along one slow four-bar curve: on the grid at bar 1, laid back by the end of it,
+  on the grid at bar 3, pushed ahead by the end of that, so the groove breathes. The number is the
+  most a step moves, in 96ths of a beat (6 is about 29 ms at 130 BPM); it follows the tempo. The
+  steps themselves never change, so OFF gives back the grid exactly. The curve comes from the
+  pattern's seed and the bar, so it plays the same after STOP and PLAY or a reload. Saved with the
+  pattern, undoable, and held by a LOCK.
 
 A 12-step perc against a 16-step kick lands somewhere new each bar for three bars; GROOVE+ does
 exactly this.
@@ -1070,6 +1096,25 @@ and, with FUNC + STEP 5-7, the EQ's bands on a macro; learn by turning replaced 
 where its knob is, and lets go back to the knob's setting. This is why A ships empty: learn it
 on the selected track's sound and the pads become expressive.
 
+### REL ALL and LEN ALL: every track's release and note length at once
+
+Two more hands in PERFORM, beside the macros: **FUNC + turn A is REL ALL** and **FUNC + turn B is
+LEN ALL**. Each starts at rest, where the sound is exactly what you programmed, and turning back
+always stops on rest for one click (a detent), so you can find it without looking.
+
+- **REL ALL** shortens or lengthens every track's tail at once, by the same amount on each one's
+  own release: DEC on the AMP page of every machine, and REL on the ASR page where the machine has
+  one (the VAs, WAVE, FM4, GRAIN). Each track keeps its own length relative to the others: turn
+  it down and the whole kit goes tight and dry, up and it all rings. A step's lock on DEC moves
+  with it. `REL ALL -12`.
+- **LEN ALL** scales every sequenced note's length (the step's LEN): down to a quarter, up to four
+  times, an octave of length every 16 clicks. `LEN ALL 71%`. A note with no length of its own (a
+  drum hit, an arpeggio, a held key) is untouched; REL ALL is the drums' control.
+
+While either is away from rest, PERFORM's line under the macros shows both (`REL -12 LEN 71%`)
+and line 2 says `RL-` / `RL+` and `LN-` / `LN+`. Neither is saved or undone, like a macro's position;
+a LOCK holds them, so a jump puts them back where they were.
+
 ### Beat repeat, throws and auto-fill
 
 REPEAT loops the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the finished master while held;
@@ -1154,7 +1199,7 @@ over the old one.
 
 A lock holds the pattern whole (steps, locks, conditions, lengths, swing), every track's sound
 (all eight EDIT pages) and fader, the sends and the master, the mutes, and where the morph and
-the four macros are. It does not hold the samples or the machines (a lock taken before a machine
+the four macros are, and REL ALL and LEN ALL (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
 switch brings back the parameters only), the tempo, the kill EQ's switches, the scenes or the
 macro setup, the stored mute states or the chain. The performance mixer is not in it either: a
 jump rides the picked effect back to 0 over FX GLIDE and leaves a loop playing.

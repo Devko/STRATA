@@ -48,6 +48,10 @@ static_assert(kSoundAsrFirst == kAsrFirst, "core/sounds.hpp's ASR page and dsp/t
 static_assert(kSoundOscFirst == kOscFirst && kFactoryOsc == kOscFirst,
               "core/'s OSC page and dsp/track.hpp's have diverged");
 
+static_assert(kLfoTrigFree == uint8_t(LfoTrig::free) && kLfoTrigRetrig == uint8_t(LfoTrig::retrig) &&
+                  kLfoTrigOneShot == uint8_t(LfoTrig::one_shot) &&
+                  kLfoTrigs == uint8_t(LfoTrig::count),
+              "core/project.hpp's LFO TRIG values and dsp/lfo.hpp's have diverged");
 static_assert(kKitParams == kTrackParams && kKitSoundParams == kParams &&
                   kKitLfoParams == kLfoParams && kKitArpParams == kArpParams &&
                   kKitLfoEnd == kArpFirst && kArpBytes == kArpParams &&
@@ -563,6 +567,14 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_pattern_feel: {
+            // The scheduler reads the byte fresh every tick, so the next step already follows it.
+            live().feel = command.c == kDeltaFlag ? feel_step(live().feel, int(int8_t(command.b)))
+                          : command.a <= kFeelMax ? command.a
+                                                  : uint8_t(0);
+            break;
+        }
+
         case Cmd::set_track_swing: {
             // A delta walks PAT, 50 .. 75; an absolute value is taken if it is PAT or in range
             // and clamped otherwise, so a damaged command cannot store a swing the scheduler
@@ -994,6 +1006,9 @@ void Engine::apply(const Command &command) {
                 seq_arp_[t].on = false;
                 held_arp_[t].on = false;
                 held_count_[t] = 0;
+                // A one-shot LFO waits for this project's first note, at rest.
+                lfo_[t].rest();
+                lfo_restart_[t] = false;
             }
             song_over_ = false;
             // The lock mask of a step of a pattern that no longer exists (Cmd::stop says why).
@@ -1213,6 +1228,15 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_lfo_trig: {
+            // LFO TRIG (KitTrack::lfo_trig): the next note starts the cycle; a change to FREE
+            // carries on from wherever the cycle is.
+            project_.kit.tracks[track].lfo_trig =
+                command.a < kLfoTrigs ? command.a : kLfoTrigFree;
+            lfo_[track].rest();          // a new ONE-SHOT waits for its first note, at rest
+            break;
+        }
+
         case Cmd::set_slice_mode: {
             const uint8_t mode = command.a == kSliceAuto ? kSliceAuto : kSliceEqual;
             project_.kit.tracks[track].slice_mode = mode;
@@ -1361,6 +1385,17 @@ void Engine::apply(const Command &command) {
             perform_dirty_ = true;
             break;
 
+        case Cmd::set_move_all: {
+            const int8_t amount = all_turn(int8_t(command.b), 0);   // held to the range
+            if (command.a == 0) {
+                rel_all_ = amount;
+                perform_dirty_ = true;
+            } else if (command.a == 1) {
+                len_all_ = amount;                                 // read by fire(), per trig
+            }
+            break;
+        }
+
         case Cmd::set_macro:
             if (command.a < kMacros) {
                 macro_position_[command.a] = command.b > 127 ? uint8_t(127) : command.b;
@@ -1496,7 +1531,7 @@ void Engine::apply(const Command &command) {
                 }
                 // A pad on a POLY track counts against the shared budget like a step does.
                 if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
-                status_.bump_triggered(track);
+                note_started(track);
                 // And to MIDI OUT. A key or a MIDI IN note (c = 1) is held until its release; a
                 // pad has none, so it lasts one step, as a step with no gate does.
                 send_midi_notes(track, &trig.note, 1, trig.velocity, 0,
@@ -1970,6 +2005,22 @@ void Engine::apply_performance() {
         macro_apply(macros_.macros[m], macro_position_[m], performed_);
     }
 
+    // A cutoff that the morph or a macro takes down stops at about 100 Hz, the LFO's floor
+    // (dsp/lfo.hpp, D9), so a sweep dips the sound and never shuts it off. Only the knob closes
+    // a filter all the way: a kit value already under the floor is where the floor sits for
+    // that track, so the layers can never lift it, only stop going lower. A step's lock comes
+    // later (`fire`) and is the knob's, so it is not floored either.
+    for (int t = 0; t < kTracks; t++) {
+        const auto id = MachineId(machine_id_[t]);
+        const bool va_filter = machine_has_voice_filter(uint8_t(id));
+        const int cut = lfo_cutoff_param(va_filter, id != MachineId::midi && !va_filter);
+        if (cut < 0) continue;
+        const uint8_t floor = lfo_cutoff_floor(cut, va_filter, !va_filter);
+        const uint8_t knob = params_[t].v[cut];
+        const uint8_t lowest = knob < floor ? knob : floor;
+        if (performed_[t][cut] < lowest) performed_[t][cut] = lowest;
+    }
+
     // The master kill EQ's bands, by the same layering: the knobs, the morph, the macros. Into
     // the mixer's settings here, because nothing else rebuilds them when only a macro moves.
     for (int b = 0; b < kMasterBands; b++) {
@@ -1985,6 +2036,18 @@ void Engine::apply_performance() {
     for (int b = 0; b < kMasterBands; b++) {
         const uint8_t field = uint8_t(int(MasterField::eq_low) + b);
         master_field_set(master_, field, master_value_from_byte(field, performed_master_[b]));
+    }
+
+    // REL ALL (core/moveall.hpp), over the macros: every track's release bytes moved by the same
+    // count. At 0 nothing is touched, so rest is the kit, the morph and the macros to the bit.
+    if (rel_all_ != 0) {
+        for (int t = 0; t < kTracks; t++) {
+            uint8_t release[2];
+            const int n = machine_release_params(machine_id_[t], release);
+            for (int i = 0; i < n; i++) {
+                performed_[t][release[i]] = rel_all_byte(performed_[t][release[i]], rel_all_);
+            }
+        }
     }
 
     // The throw, over everything: it is the most immediate thing on the panel and should not be
@@ -2359,7 +2422,7 @@ void Engine::roll_fire(int track, uint32_t frame) {
     trig.frame = frame;
     trig.gate_frames = roll_gate_frames();
     if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
-    status_.bump_triggered(track);
+    note_started(track);
     send_midi_notes(track, &trig.note, 1, trig.velocity, frame, midi_gate(track, trig.gate_frames));
 }
 
@@ -2459,7 +2522,7 @@ void Engine::arp_hit(int track, ArpRun &run, uint32_t frame) {
     const float gate = spacing * float(run.gate_percent) * 0.01f;
     trig.gate_frames = gate < 1.0f ? 1u : uint32_t(gate);
     if (make_room_for_poly_voice(track, note)) machines_[track]->trigger(trig);
-    status_.bump_triggered(track);              // each hit lights the track, as a step does
+    note_started(track);              // each hit lights the track, as a step does
     // Each hit to MIDI OUT too, with its own gate; a MID track's CCs go ahead of the note.
     if (machine_id_[track] == uint8_t(MachineId::midi)) send_midi_ccs(track);
     send_midi_notes(track, &trig.note, 1, trig.accent ? uint8_t(127) : trig.velocity, frame,
@@ -2599,6 +2662,16 @@ void Engine::fire(const StepEvent &event) {
     // Which parameters this step has locked, so the performance layer leaves them alone until
     // the next step. A lock always wins over a morph.
     locked_[track] = locked;
+    // REL ALL moves a locked release too: it is relative to what the step plays, and a lock is
+    // that (core/moveall.hpp). An unlocked one came moved from `performed_`.
+    if (rel_all_ != 0 && locked != 0u) {
+        uint8_t release[2];
+        const int n = machine_release_params(machine_id_[track], release);
+        for (int i = 0; i < n; i++) {
+            if ((locked >> release[i] & 1u) == 0) continue;
+            effective_[track].v[release[i]] = rel_all_byte(effective_[track].v[release[i]], rel_all_);
+        }
+    }
 
     if (!event.trigless && machines_[track] != nullptr && !muted_[track]) {
         // This prepare is REDUNDANT today, and kept on purpose. It used to be justified as
@@ -2646,7 +2719,8 @@ void Engine::fire(const StepEvent &event) {
         trig.accent = event.accent;
         trig.slide = event.slide;
         trig.frame = event.frame;
-        trig.gate_frames = gate_frames_for(track, event.length_index);
+        // LEN ALL (core/moveall.hpp) on the step's gate; 0 and "no gate" come back unchanged.
+        trig.gate_frames = len_all_frames(gate_frames_for(track, event.length_index), len_all_);
 
         // MIDI out's copy of the trig. An accent is the top velocity, the nearest thing MIDI
         // has, and a step with no gate lasts a step, because a note-on needs a note-off.
@@ -2747,7 +2821,7 @@ void Engine::fire(const StepEvent &event) {
         // Once per step, not once per note: a chord is one trig as far as the screen is
         // concerned, and eight LEDs flashing six times would be a worse display, not a better
         // one.
-        status_.bump_triggered(track);
+        note_started(track);
 
         if (track == duck_source_) mixer_.trigger_duck(event.frame);
     }
@@ -2768,42 +2842,79 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
             lfo_settings_[t] = LfoSettings::make(bytes);
         }
         const LfoSettings &s = lfo_settings_[t];
+        // A note since the last block (note_started): taken whether or not the LFO is on now,
+        // so a flag cannot linger and restart a cycle on a later block with no note in it.
+        const bool restart = lfo_restart_[t];
+        lfo_restart_[t] = false;
+
+        float pitch_mod = 0.0f;
         if (!s.on()) {
             modulating_[t] = false;
-            continue;
-        }
-
-        float value;
-        if (s.sync_ticks == 0) {
-            value = lfo_[t].advance(s.wave, s.hz * float(frames) * inv_rate_);
-        } else if (running) {
-            // On the clock's own position, so a synced LFO sits on the bar wherever the song is
-            // and follows an external clock. A multiply and a floor rather than `%`: this chip
-            // has no integer divide. A float holds the position to well under a tick for the
-            // first 2^24 ticks, about 22 hours at 130 BPM.
-            const float fraction = fraction_in < 0.0f ? 0.0f
-                                   : (fraction_in > 1.0f ? 1.0f : fraction_in);
-            float phase = (float(position) + fraction) * s.inv_sync_ticks;
-            phase -= float(enaga::dsp::floor_int(phase));
-            value = lfo_[t].seek(s.wave, phase >= 1.0f || phase < 0.0f ? 0.0f : phase);
         } else {
-            // Stopped: keep moving at the tempo, so the sound does not freeze between takes.
-            const float ticks = float(frames) * inv_samples_per_tick_;
-            value = lfo_[t].advance(s.wave, ticks * s.inv_sync_ticks);
-        }
-        lfo_value_[t] = value;
+            const auto id = MachineId(machine_id_[t]);
+            const bool va_filter = machine_has_voice_filter(uint8_t(id));
+            const LfoTrig trig = lfo_trig(project_.kit.tracks[t].lfo_trig);
+            // The cycle's advance this block: Hz x seconds free, ticks / cycle synced. RETRIG and
+            // ONE-SHOT count from the note, so they always advance by the block; FREE synced to a
+            // running clock seeks the clock's own position instead.
+            const float cycles = s.sync_ticks == 0
+                                     ? s.hz * float(frames) * inv_rate_
+                                     : float(frames) * inv_samples_per_tick_ * s.inv_sync_ticks;
+            float value;
+            if (trig != LfoTrig::free) {
+                // The note starts the cycle on this block's value at phase 0; it moves on from
+                // the next block. A block is 1.3 ms, well inside a note's attack.
+                if (restart) lfo_[t].restart();
+                const float step = restart ? 0.0f : cycles;
+                value = trig == LfoTrig::one_shot ? lfo_[t].one_shot(s.wave, step)
+                                                  : lfo_[t].advance(s.wave, step);
+            } else if (s.sync_ticks == 0) {
+                value = lfo_[t].advance(s.wave, cycles);
+            } else if (running) {
+                // On the clock's own position, so a synced LFO sits on the bar wherever the song
+                // is and follows an external clock. A multiply and a floor rather than `%`: this
+                // chip has no integer divide. A float holds the position to well under a tick for
+                // the first 2^24 ticks, about 22 hours at 130 BPM.
+                const float fraction = fraction_in < 0.0f ? 0.0f
+                                       : (fraction_in > 1.0f ? 1.0f : fraction_in);
+                float phase = (float(position) + fraction) * s.inv_sync_ticks;
+                phase -= float(enaga::dsp::floor_int(phase));
+                value = lfo_[t].seek(s.wave, phase >= 1.0f || phase < 0.0f ? 0.0f : phase);
+            } else {
+                // Stopped: keep moving at the tempo, so the sound does not freeze between takes.
+                value = lfo_[t].advance(s.wave, cycles);
+            }
+            lfo_value_[t] = value;
 
-        modulated_[t] = effective_[t];
-        uint8_t &target = modulated_[t].v[s.dest];
-        // A cutoff stops at about 100 Hz (dsp/lfo.hpp). Worked out every block: the machine
-        // can change under an unchanged LFO. MID has no audio, so its bytes go out unfloored.
-        const auto id = MachineId(machine_id(t));
-        const bool va_filter = machine_has_voice_filter(uint8_t(id));
-        // A VA or WAVE track's slot 5 is TON (D8), not the insert's cutoff: no floor there.
-        const uint8_t floor =
-            lfo_cutoff_floor(s.dest, va_filter, id != MachineId::midi && !va_filter);
-        target = lfo_apply(target, value, s.depth, floor);
-        modulating_[t] = true;
+            modulated_[t] = effective_[t];
+            uint8_t &target = modulated_[t].v[s.dest];
+            // A cutoff stops at about 100 Hz and swings about three octaves at most
+            // (dsp/lfo.hpp). Worked out every block: the machine can change under an unchanged
+            // LFO. MID has no audio, so its bytes go out unfloored and unscaled. A VA or WAVE
+            // track's slot 5 is TON (D8), not the insert's cutoff: no floor there.
+            const bool insert_chain = id != MachineId::midi && !va_filter;
+            const uint8_t floor = lfo_cutoff_floor(s.dest, va_filter, insert_chain);
+            const float span = lfo_span(s.dest, va_filter, insert_chain);
+            const uint8_t moved = lfo_apply(target, value, s.depth, floor, span);
+            lfo_shown_[t] = moved;
+            if (va_filter && s.dest == page_first(Page::src)) {
+                // TUN on a synth machine glides: a float to the voices, the byte left alone, so
+                // a slow sweep does not step and a held note follows (dsp/lfo.hpp, "Block rate").
+                pitch_mod = lfo_pitch_semis(value, s.depth);
+            } else {
+                target = moved;
+            }
+            modulating_[t] = true;
+        }
+
+        // To the machine only when it changes, or when the track has a new machine: with the
+        // LFO off and nothing sent before, two compares.
+        Machine *machine = machines_[t];
+        if (pitch_mod != pitch_mod_[t] || machine != pitch_mod_machine_[t]) {
+            if (machine != nullptr) machine->set_pitch_mod(pitch_mod);
+            pitch_mod_machine_[t] = machine;
+            pitch_mod_[t] = pitch_mod;
+        }
     }
 }
 
@@ -3245,6 +3356,8 @@ void Engine::capture_live(LiveState &state) const {
     state.mutes = mute_state_capture(muted_);
     for (int m = 0; m < kMacros; m++) state.macros[m] = macro_position_[m];
     state.morph = morph_;
+    state.rel_all = rel_all_;
+    state.len_all = len_all_;
 }
 
 // At once (D3): the next step plays from the restored pattern, and the sound is heard in this
@@ -3269,6 +3382,8 @@ void Engine::apply_live(const LiveState &state) {
     apply_mutes(state.mutes);
     for (int m = 0; m < kMacros; m++) macro_position_[m] = state.macros[m];
     morph_ = state.morph;
+    rel_all_ = state.rel_all;
+    len_all_ = state.len_all;
     perform_dirty_ = true;
     reconfigure();
 }

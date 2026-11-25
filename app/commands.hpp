@@ -149,6 +149,8 @@ enum class Cmd : uint8_t {
     // SLC AUTO on a track (KitTrack::slice_mode): a: kSliceAuto or kSliceEqual. The points it
     // cuts at came with the sample (Engine::slices_for_load).
     set_slice_mode,    // track, a: 0 equal, 1 AUTO
+    // LFO TRIG on a track (KitTrack::lfo_trig, dsp/lfo.hpp): a: kLfoTrigFree, Retrig or OneShot.
+    set_lfo_trig,      // track, a: 0 FREE, 1 RETRIG, 2 ONE-SHOT
     // One send or master setting. `a` is the field -- dsp/buses.hpp's SendField or MasterField,
     // whose numbers are permanent because they reach PROJECT.BIN -- and `b` is an encoder DELTA,
     // as a signed byte, exactly like `set_param` and the step fields and for the same reason.
@@ -309,6 +311,15 @@ enum class Cmd : uint8_t {
     // mixer bytes, so it dirties all three files (app/storage.cpp).
     lock_store,
     lock_tap,
+
+    // FEEL (core/timing.hpp), the PATTERN page's FEEL row: a: the byte, 0 OFF .. kFeelMax; or
+    // c = 1: b is an int8 delta along OFF, DRIFT 1-6, WAVE 1-6. A pattern setting, like swing:
+    // saved, undone and held by a LOCK.
+    set_pattern_feel,
+    // REL ALL and LEN ALL (core/moveall.hpp), FUNC + turn A / B in PERFORM. a: 0 REL ALL,
+    // 1 LEN ALL; b: the amount as an int8, -64 .. 64, absolute (the UI keeps the position, as it
+    // does a macro's). Performance, not edits: no file, no undo; a LOCK holds both.
+    set_move_all,
 
     count
 };

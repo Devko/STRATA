@@ -109,6 +109,7 @@ void pattern_init(Pattern &pattern) {
     pattern.swing = kSwingMin;
     pattern.root = 0;
     pattern.scale = 0;
+    pattern.feel = 0;
     pattern.seed = 1;
 }
 

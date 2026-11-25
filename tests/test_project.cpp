@@ -43,7 +43,7 @@ using namespace strata;
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
 // ambient modes: nine bytes on the end of the mixer section.
 constexpr uint32_t kProjectFileBytes = 402;
-constexpr uint32_t kKitFileBytes = 1309;   // 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
+constexpr uint32_t kKitFileBytes = 1329;   // 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -1386,9 +1386,16 @@ uint32_t fresh_kit_file() {
 
 // g_kit_file as a build from before the duck wrote it: the OSC page's section and then the
 // duck's, the last two, dropped.
+// g_kit_file as a build from before LFO TRIG wrote it: its section, the last, dropped.
+void drop_lfo_trig_section() {
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1309u);
+    for (uint32_t i = 0; i < 1309u; i++) g_kit_file[i] = g_kit_alt[i];
+}
+
 // g_kit_file as a build from before one filter on the synth machines (D8) wrote it: the filter
 // layout's section, the last, dropped. Its VA and WAVE tracks then load mapped (migrated()).
 void drop_filter_section() {
+    drop_lfo_trig_section();
     CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1296u);
     for (uint32_t i = 0; i < 1296u; i++) g_kit_file[i] = g_kit_alt[i];
 }
@@ -1476,7 +1483,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 8);     // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 9);     // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout, LFO TRIG
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -2453,6 +2460,53 @@ TEST(kit_slc_auto_round_trips_and_an_older_file_slices_equally) {
     }
     g_kit_source.tracks[2].slice_mode = kSliceEqual;
     g_kit_source.tracks[7].slice_mode = kSliceEqual;
+}
+
+TEST(kit_lfo_trig_round_trips_and_an_older_file_runs_every_lfo_free) {
+    fresh_kit_file();
+    g_kit_source.tracks[1].lfo_trig = kLfoTrigRetrig;
+    g_kit_source.tracks[6].lfo_trig = kLfoTrigOneShot;
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_kit_loaded.tracks[t].lfo_trig), t == 1 ? 1 : (t == 6 ? 2 : 0));
+    }
+    const uint32_t at = section_at(g_kit_file, kSectionKitLfoTrig);
+    CHECK_EQ(int(g_kit_file[at + 6]), 2);
+
+    // A damaged byte runs FREE rather than as anything else.
+    g_kit_file[at + 1] = 9;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_kit_loaded.tracks[1].lfo_trig), int(kLfoTrigFree));
+    CHECK_EQ(int(g_kit_loaded.tracks[6].lfo_trig), int(kLfoTrigOneShot));
+
+    // A KIT.BIN from before LFO TRIG loads every LFO FREE -- even read into a kit that had
+    // RETRIG on -- and everything else as it was.
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    drop_lfo_trig_section();
+    for (int t = 0; t < kTracks; t++) g_kit_loaded.tracks[t].lfo_trig = kLfoTrigRetrig;
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, 1309u)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_kit_loaded.tracks[t].lfo_trig), int(kLfoTrigFree));
+        for (int p = 0; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+    }
+
+    // Present but short is damage, not an old file.
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    const uint32_t entry = section_entry_at(g_kit_file, kSectionKitLfoTrig);
+    poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
+    refresh_crc(g_kit_file);
+    CHECK(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes) != SerializeResult::ok);
+
+    g_kit_source.tracks[1].lfo_trig = kLfoTrigFree;
+    g_kit_source.tracks[6].lfo_trig = kLfoTrigFree;
 }
 
 TEST(kit_the_duck_round_trips_is_clamped_and_an_older_file_ducks_as_v0_1_did) {

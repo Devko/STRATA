@@ -57,6 +57,7 @@ bool mutates_pattern(Cmd cmd) {
         case Cmd::set_track_speed:
         case Cmd::set_track_play:
         case Cmd::set_pattern_swing:
+        case Cmd::set_pattern_feel:
         case Cmd::set_track_swing:
         case Cmd::set_master_length:
         case Cmd::step_field_delta:
@@ -108,6 +109,7 @@ bool mutates_kit(Cmd cmd) {
         case Cmd::sound_preset:
         case Cmd::set_track_level:
         case Cmd::set_slice_mode:
+        case Cmd::set_lfo_trig:
         case Cmd::set_duck:
         case Cmd::clear_sample:
         case Cmd::set_sample:

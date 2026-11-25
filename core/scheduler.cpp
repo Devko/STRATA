@@ -297,6 +297,12 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
         state.timing.play_seed =
             state.timing.play >= PlayMode::rnd1 ? play_seed(pattern_seed_, t) : 0u;
 
+        // FEEL, fresh as well: a pattern setting an undo or a LOCK jump can change.
+        state.timing.feel = pattern.feel <= kFeelMax ? pattern.feel : uint8_t(0);
+        state.timing.feel_seed = feel_mode(state.timing.feel) == FeelMode::drift
+                                     ? feel_seed(pattern_seed_, t)
+                                     : 0u;
+
         Firing firings[kMaxFiringsPerTick];
         const int found =
             steps_firing_at(tick_number, state.timing, micro, firings, kMaxFiringsPerTick);
