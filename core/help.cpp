@@ -265,6 +265,19 @@ constexpr Text kPerform2 = {"PERFORM MORE:", {
     "FUNC+A/B REL/LEN ALL",
 }};
 
+constexpr Text kPerform3 = {"PERFORM LIVE:", {
+    "FUNC+A     REL ALL",
+    "FUNC+B     LEN ALL",
+    "FUNC+D     LIVE RND",
+    "  OFF 1 2 4 8 16",
+    "FUNC+PUSH D  TRACK",
+    "  IN OR OUT OF RND",
+    "OFF  BACK TO THE GRID",
+    "PATTERN NOT CHANGED",
+    "LOCK HOLDS ALL THREE",
+    nullptr,
+}};
+
 constexpr Text kProject = {"PROJECT:", {
     "STEP 1-16  QUEUE SLOT",
     "ARROWS SLOT  OK QUEUE",
@@ -654,7 +667,11 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
             list[listed++] = &kStepFields;
             break;
         case HelpScreen::mixer:     knobs = true; break;
-        case HelpScreen::perform:   list[listed++] = &kPerform; list[listed++] = &kPerform2; break;
+        case HelpScreen::perform:
+            list[listed++] = &kPerform;
+            list[listed++] = &kPerform2;
+            list[listed++] = &kPerform3;
+            break;
         case HelpScreen::project:   list[listed++] = &kProject; break;
         case HelpScreen::chain:     list[listed++] = &kChain; break;
         case HelpScreen::pattern:   list[listed++] = &kPattern; break;

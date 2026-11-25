@@ -35,6 +35,7 @@
 #include "arp.hpp"          // the ARP page's names and clicks
 #include "engine.hpp"
 #include "help.hpp"         // the FUNC help's pages, one set per screen
+#include "liverand.hpp"     // LIVE RND: FUNC + D in PERFORM
 #include "paint.hpp"        // the drawing kit: lines, arcs, the small font, afterglow
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "sounds.hpp"       // SOUNDS: the factory sounds for one track
@@ -744,6 +745,10 @@ private:
     // macro, and read back from the engine after a LOCK jump.
     int8_t rel_all_ = 0;
     int8_t len_all_ = 0;
+    // LIVE RND (core/liverand.hpp): the unit FUNC + D left (0 OFF) and the tracks FUNC + push D
+    // armed. Posted absolute, like REL ALL, and read back from the engine after a LOCK jump.
+    uint8_t rnd_unit_ = kLiveRndOff;
+    uint8_t rnd_armed_ = kLiveRndAllTracks;
     uint16_t morph_ = 0;
     bool repeat_held_ = false;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;

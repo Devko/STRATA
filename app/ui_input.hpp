@@ -80,6 +80,13 @@
         // falling through to a page's push, which would do something nobody meant. Not while a
         // STEP is held: then FUNC + push D clears that step's D lock, as FUNC + push A-C clear
         // theirs -- every push with a step held is the step's.
+        //
+        // In PERFORM it is LIVE RND's other half (core/liverand.hpp): the selected track in or out
+        // of the armed set, heard at once while a unit is on.
+        if (key == ENAGA_KEY_PUSH_D && shift_ && held_step_ < 0 && mode_ == Mode::perform) {
+            if (down) live_rnd_arm(selected_);
+            return;
+        }
         if (key == ENAGA_KEY_PUSH_D && shift_ && held_step_ < 0) {
             if (down) notice_logged("TAPE STOP: SLOT 8");
             return;

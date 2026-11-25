@@ -131,7 +131,8 @@
     // Eight short bars, 13 pixels a track, from Status::track_milli in decibels (the top 36),
     // the selected track's number bright, a muted track's bar dim. Three rows of bar and the
     // track number under it in the small font.
-    void draw_track_meters(enaga::Canvas &canvas, int y) {
+    // `rnd_marked`: the tracks LIVE RND moves (bit t), each marked by a dot after its number.
+    void draw_track_meters(enaga::Canvas &canvas, int y, uint8_t rnd_marked = 0) {
         uint8_t *px = canvas.data();
         const Status &status = engine_.status();
         for (int t = 0; t < kTracks; t++) {
@@ -145,6 +146,7 @@
             }
             char digit[2] = {char('1' + t), '\0'};
             paint::small_text(px, x + 4, y + 4, digit, t == selected_ ? 15 : 6);
+            if (((rnd_marked >> t) & 1u) != 0) canvas.rect(x + 9, y + 7, 2, 2, 13);
         }
     }
 

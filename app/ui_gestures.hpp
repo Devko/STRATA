@@ -177,6 +177,15 @@
             return;
         }
 
+        // FUNC + turn D in PERFORM: LIVE RND (core/liverand.hpp), the unit for every armed track,
+        // OFF 1 2 4 8 16 and stopping at both ends. C with FUNC is still its macro.
+        if (mode_ == Mode::perform && shift_ && encoder == 3) {
+            rnd_unit_ = live_rnd_turn(rnd_unit_, delta);
+            post(Cmd::set_live_rnd, 0, 0, rnd_unit_, rnd_armed_);
+            live_rnd_notice();
+            return;
+        }
+
         // A to D are the four macros in PERFORM mode, which is what they are for.
         if (mode_ == Mode::perform && encoder >= 0 && encoder < kMacros) {
             const int next = int(macro_position_[encoder]) + delta * 2;
