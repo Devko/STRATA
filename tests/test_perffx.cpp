@@ -112,7 +112,6 @@ TEST(perffx_each_slot_moves_what_its_name_says) {
     CHECK_NEAR(perf_plan(PerfFx::pump, 127).pump, 1.0f, 1e-6f);
     CHECK_NEAR(perf_plan(PerfFx::crush, 127).crush, 1.0f, 1e-6f);
     CHECK_NEAR(perf_plan(PerfFx::noise_riser, 127).noise, 1.0f, 1e-6f);
-    CHECK_NEAR(perf_plan(PerfFx::flanger, 127).flanger, 1.0f, 1e-6f);
     CHECK_NEAR(perf_plan(PerfFx::gate, 127).gate, 1.0f, 1e-6f);
 
     const PerfPlan build = perf_plan(PerfFx::build, 127);
@@ -121,23 +120,38 @@ TEST(perffx_each_slot_moves_what_its_name_says) {
 
     // A slot moves nothing it does not name: the LP sweep has no sends and no master effect.
     CHECK_EQ(int(lp.send_delay) + int(lp.send_reverb), 0);
-    CHECK(lp.noise == 0.0f && lp.pump == 0.0f && lp.repeat == -1 && !lp.tape_stop);
+    CHECK(lp.noise == 0.0f && lp.pump == 0.0f && lp.tracks == 1.0f && !lp.tape_stop);
 }
 
-TEST(perffx_the_stutter_gets_shorter_as_value_turns) {
-    CHECK_EQ(perf_stutter_band(0), -1);
-    CHECK_EQ(perf_stutter_band(kPerfHoldThreshold - 1), -1);
-    CHECK_EQ(perf_stutter_band(kPerfHoldThreshold), 0);
-    CHECK_EQ(perf_stutter_band(127), 3);
-    int last = -1;
-    for (int a = 0; a <= 127; a++) {
-        const int band = perf_stutter_band(uint8_t(a));
-        CHECK(band >= last);                  // never longer again on the way up
-        last = band;
+TEST(perffx_the_mute_bus_fades_every_track_and_nothing_else) {
+    // Slot 7 since 2026-11-25 (CyDrums' P5): every fader down, the sends' feeds with them (they
+    // are post-fader), the delay and reverb left to ring. It raises no send and holds nothing.
+    CHECK_EQ(perf_plan(PerfFx::mute_bus, 0).tracks, 1.0f);
+    CHECK_EQ(perf_plan(PerfFx::mute_bus, 127).tracks, 0.0f);
+    float last = 1.0f;
+    for (int a = 1; a <= 127; a++) {
+        const PerfPlan plan = perf_plan(PerfFx::mute_bus, uint8_t(a));
+        CHECK(plan.tracks < last);              // always further down as VALUE turns
+        last = plan.tracks;
+        CHECK_EQ(int(plan.send_delay) + int(plan.send_reverb), 0);
+        CHECK(!plan.delay_freeze && !plan.tape_stop && !plan.dj_on);
     }
-    // The bands are beat repeat's four plain lengths, longest first.
-    CHECK_EQ(int(perf_plan(PerfFx::stutter, kPerfHoldThreshold).repeat), int(RepeatLength::quarter));
-    CHECK_EQ(int(perf_plan(PerfFx::stutter, 127).repeat), int(RepeatLength::thirty_second));
+    // Half way is a quarter of the level: squared, so the fade is even to the ear.
+    CHECK_NEAR(perf_plan(PerfFx::mute_bus, 64).tracks, 0.2464f, 0.001f);
+}
+
+TEST(perffx_the_morph_and_the_looper_are_controls_not_effects) {
+    // Slot 13 since 2026-11-25 (backlog D2): the app turns the scene morph with it, so it plans
+    // nothing here at any amount, like the looper.
+    CHECK(perf_plan(PerfFx::morph, 127) == PerfPlan{});
+    CHECK(perf_fx_is_control(PerfFx::morph));
+    CHECK(perf_fx_is_control(PerfFx::looper));
+    CHECK(perf_fx_for_step(12) == PerfFx::morph);
+    CHECK(perf_fx_for_step(6) == PerfFx::mute_bus);
+    for (int f = 0; f < int(PerfFx::count); f++) {
+        const PerfFx fx = PerfFx(f);
+        CHECK_EQ(perf_fx_is_control(fx), fx == PerfFx::morph || fx == PerfFx::looper);
+    }
 }
 
 // --- dsp/masterfx: the five master effects ----------------------------------------------------
@@ -158,8 +172,7 @@ TEST(masterfx_idle_leaves_the_output_alone_to_the_bit) {
 
 TEST(masterfx_each_effect_changes_the_sound_and_stays_inside_the_ceiling) {
     float MasterFxSettings::*const fields[] = {&MasterFxSettings::pump, &MasterFxSettings::crush,
-                                               &MasterFxSettings::noise, &MasterFxSettings::flanger,
-                                               &MasterFxSettings::gate};
+                                               &MasterFxSettings::noise, &MasterFxSettings::gate};
     for (const auto field : fields) {
         g_fx.init(kRate);
         MasterFxSettings s;
@@ -189,7 +202,7 @@ TEST(masterfx_each_effect_changes_the_sound_and_stays_inside_the_ceiling) {
 TEST(masterfx_a_depth_turned_back_to_zero_settles_and_goes_bit_exact_again) {
     g_fx.init(kRate);
     MasterFxSettings s;
-    s.flanger = 1.0f;
+    s.crush = 1.0f;
     s.noise = 0.5f;
     g_fx.set(s);
     float io[2 * kBlk];
@@ -435,13 +448,20 @@ TEST(perffx_engine_amount_zero_hands_the_mixer_nothing) {
     pump();
 }
 
-TEST(perffx_engine_applies_the_plan_and_refuses_the_looper_as_an_effect) {
+TEST(perffx_engine_applies_the_plan_and_refuses_the_looper_and_the_morph_as_effects) {
     Engine &engine = fresh();
     const uint32_t refused = engine.status().refused.load(std::memory_order_relaxed);
     post(Cmd::perf_fx, 0, 0, uint8_t(PerfFx::looper), 100);
     pump();
     CHECK_EQ(engine.status().refused.load(std::memory_order_relaxed), refused + 1);
     CHECK(engine.perf_fx() == PerfFx::none);
+    post(Cmd::perf_fx, 0, 0, uint8_t(PerfFx::morph), 100);
+    pump();
+    CHECK_EQ(engine.status().refused.load(std::memory_order_relaxed), refused + 2);
+    CHECK(engine.perf_fx() == PerfFx::none);
+    post(Cmd::perf_fx, 0, 0, uint8_t(PerfFx::count), 100);
+    pump();
+    CHECK_EQ(engine.status().refused.load(std::memory_order_relaxed), refused + 3);
 
     post(Cmd::perf_fx, 0, 0, uint8_t(PerfFx::echo_freeze), 127);
     pump(2);
@@ -449,7 +469,7 @@ TEST(perffx_engine_applies_the_plan_and_refuses_the_looper_as_an_effect) {
     CHECK_EQ(int(engine.perf_amount()), 127);
     CHECK(engine.delay_frozen());                 // the plan holds the freeze
 
-    // The tape stop and the stutter are the same held moves the chords hold.
+    // The tape stop is held by its slot alone since its chord retired (backlog D5).
     post(Cmd::perf_fx, 0, 0, uint8_t(PerfFx::tape_stop), 127);
     pump(2);
     CHECK(!engine.delay_frozen());                // a new effect let the last one go
@@ -463,20 +483,37 @@ TEST(perffx_engine_applies_the_plan_and_refuses_the_looper_as_an_effect) {
     CHECK(!engine.master_fx().active());
 }
 
-TEST(perffx_engine_the_chord_freeze_still_works_beside_the_mixer) {
+TEST(perffx_engine_the_mute_bus_scales_the_faders_and_so_the_sends_feeds) {
+    // The faders and the post-fader sends are one gain in the chain (dsp/chain.cpp), so the
+    // send gains say what the MUTE BUS did: half way a quarter, at the top nothing fed, and at 0
+    // exactly what the kit set -- the faders were scaled, never written.
     Engine &engine = fresh();
-    post(Cmd::delay_freeze, 0, 0, 1);
+    FakeHost::the().set_running(true);
+    for (int s = 0; s < 16; s++) put_trig(0, s);
+    for (int b = 0; b < 40; b++) {
+        FakeHost::the().deliver_tick(uint32_t(b), 0);
+        pump();
+    }
+    const float send_a = engine.mixer().chain(0).send_a_gain();
+    const float send_b = engine.mixer().chain(0).send_b_gain();
+    CHECK(send_a > 0.1f && send_b > 0.1f);             // the test kit sends half to each
+
+    post(Cmd::perf_fx, 0, 0, uint8_t(PerfFx::mute_bus), 64);
     pump(2);
-    CHECK(engine.delay_frozen());
-    // The mixer's freeze coming and going does not let go of the chord's.
-    post(Cmd::perf_fx, 0, 0, uint8_t(PerfFx::echo_freeze), 127);
+    CHECK_NEAR(engine.mixer().chain(0).send_a_gain(), send_a * 0.2464f, 0.001f);
+    post(Cmd::perf_fx, 0, 0, uint8_t(PerfFx::mute_bus), 127);
     pump(2);
+    CHECK_EQ(engine.mixer().chain(0).send_a_gain(), 0.0f);
+    CHECK_EQ(engine.mixer().chain(0).send_b_gain(), 0.0f);
+    CHECK(engine.perf_plan_now().send_delay == 0);      // and nothing raised to make up for it
+
+    post(Cmd::perf_fx, 0, 0, uint8_t(PerfFx::mute_bus), 0);
+    pump(2);
+    CHECK_EQ(engine.mixer().chain(0).send_a_gain(), send_a);
+    CHECK_EQ(engine.mixer().chain(0).send_b_gain(), send_b);
     post(Cmd::perf_fx, 0, 0, 0, 0);
-    pump(2);
-    CHECK(engine.delay_frozen());
-    post(Cmd::delay_freeze, 0, 0, 0);
-    pump(2);
-    CHECK(!engine.delay_frozen());
+    FakeHost::the().set_running(false);
+    pump();
 }
 
 TEST(perffx_engine_the_looper_and_resample_share_the_buffer_and_never_both) {

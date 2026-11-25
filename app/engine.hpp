@@ -667,13 +667,8 @@ private:
     // Where the pump and the gate are in the beat: the clock's while it runs, free from there
     // while it is stopped.
     float perf_phase_ = 0.0f;
-    // The held master moves have two owners now, the FUNC chords and the mixer: these are the
-    // chords', and what was last handed to the mixer and the tape stop.
-    bool user_freeze_ = false;
+    // The delay freeze last handed to the mixer: the mixer's ECHO FREEZE is its only owner.
     bool freeze_applied_ = false;
-    bool user_tape_ = false;
-    // The stutter's band in force (-1 none): a new band re-presses the repeat.
-    int8_t perf_repeat_applied_ = -1;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
 
     // Note repeat, one roll per track (Cmd::note_repeat). `countdown` is frames to the next hit

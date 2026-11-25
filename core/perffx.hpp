@@ -8,8 +8,9 @@
 //
 // This file is the pure half: which effect a slot is, its name, and what an amount means as a
 // set of overrides on things the engine already has (the DJ filter, the sends, the kill EQ,
-// beat repeat, the tape stop, the delay freeze) plus the depths of the master effects
-// dsp/masterfx.hpp adds. The engine applies the plan at control rate, over the kit and under
+// the track faders, the tape stop, the delay freeze) plus the depths of the master effects
+// dsp/masterfx.hpp adds. Slot 13, the scene morph, is no effect at all: the app turns the morph
+// with it, the one PERFORM's VALUE turns (backlog D2), so it plans nothing here. The engine applies the plan at control rate, over the kit and under
 // nothing: none of it touches the project, so letting go needs no memory of what was there.
 //
 // ## At rest it lets go
@@ -24,8 +25,10 @@
 
 namespace strata {
 
-// The sixteen slots, as STEP 1-16. Serialized nowhere (the mixer is live state), so free to
-// renumber, but docs/CONTROLS.md and the help list them in this order.
+// The sixteen slots, as STEP 1-16. Serialized nowhere (the mixer is live state, and no project
+// file holds a slot or an amount), so free to renumber and an old project loads the same; but
+// docs/CONTROLS.md and the help list them in this order. Slot 7 was STUTTER (the REPEAT pad
+// keeps it) and 13 FLANGER until 2026-11-25 (backlog D2, CHANGELOG "Gestures that moved").
 enum class PerfFx : uint8_t {
     none = 0,
     lp_sweep,       //  1 the DJ filter's low-pass side
@@ -34,13 +37,13 @@ enum class PerfFx : uint8_t {
     echo_riser,     //  4 every track into the delay, feedback climbing
     echo_freeze,    //  5 into the delay, which freezes near the top
     reverb_wash,    //  6 every track into a longer reverb
-    stutter,        //  7 beat repeat, shorter as VALUE turns
+    mute_bus,       //  7 every track faded out, the delay and reverb ringing on
     tape_stop,      //  8 the tape stop, past a quarter of the way
     bass_kill,      //  9 the kill EQ's LOW band
     pump,           // 10 a sidechain-style dip on every beat
     crush,          // 11 bit and rate reduction
     noise_riser,    // 12 white noise, rising in level and pitch
-    flanger,        // 13 a short swept delay
+    morph,          // 13 the scene morph (the app's, not a plan)
     gate,           // 14 a sixteenth-note chopper
     build,          // 15 high-pass, echo and noise together
     looper,         // 16 the master looper (dsp/looper.hpp)
@@ -76,34 +79,37 @@ struct PerfPlan {
     float delay_feedback = 0.0f;
     // The reverb's decay raised to at least this, in seconds; 0 leaves it.
     float reverb_decay_s = 0.0f;
-    // Held, as FUNC + MUTATE holds it.
+    // The delay freeze held (dsp/freeze.hpp).
     bool delay_freeze = false;
-    // Beat repeat held with this length (a RepeatLength, dsp/repeat.hpp), or -1 for none.
-    int8_t repeat = -1;
-    // The tape stop held, as FUNC + push D holds it.
+    // The tape stop held (dsp/tapestop.hpp).
     bool tape_stop = false;
+    // Every track's fader scaled by this (1 as set ... 0 silent). The sends are post-fader, so
+    // their feeds fade with it and the delay and reverb ring out what they already hold: the
+    // MUTE BUS (CyDrums' P5).
+    float tracks = 1.0f;
     // The kill EQ's LOW band lowered to at most this gain (1 flat ... 0 a kill).
     float eq_low = 1.0f;
     // The master effects (dsp/masterfx.hpp), each 0 off ... 1 the whole effect.
     float pump = 0.0f;
     float crush = 0.0f;
     float noise = 0.0f;
-    float flanger = 0.0f;
     float gate = 0.0f;
 
     bool operator==(const PerfPlan &) const = default;
 };
 
-// The plan for `fx` at `amount` (0-127). The looper and none give the dry plan: the looper's mix
-// is not an override, it is the looper's own.
+// The plan for `fx` at `amount` (0-127). The looper, the morph and none give the dry plan: the
+// looper's mix and the morph's position are not overrides, they are their own.
 PerfPlan perf_plan(PerfFx fx, uint8_t amount);
 
-// Beat repeat's band for the stutter at `amount`: 0 quarter, 1 eighth, 2 sixteenth, 3 thirty-
-// second (RepeatLength's first four), or -1 below the threshold where it starts.
-int perf_stutter_band(uint8_t amount);
+// A slot VALUE turns that is not an effect: the looper (its mix) and the morph (its position).
+// Picking one leaves the effect that was up where it is.
+constexpr bool perf_fx_is_control(PerfFx fx) {
+    return fx == PerfFx::looper || fx == PerfFx::morph;
+}
 
-// The amount the stutter and the tape stop start at: under it they are not held, so a VALUE
-// turned back down lets go before it reaches 0.
+// The amount the tape stop starts at: under it it is not held, so a VALUE turned back down lets
+// go before it reaches 0.
 constexpr uint8_t kPerfHoldThreshold = 16;
 // The echo freeze holds from here up.
 constexpr uint8_t kPerfFreezeThreshold = 112;
