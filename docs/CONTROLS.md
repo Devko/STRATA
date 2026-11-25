@@ -105,7 +105,7 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
 | STOP | stop; again cuts the tails | reset: back to step 1, queue dropped, chain to its start ("▶▶") | red stopped |
 | MIXER | MIXER | PERFORM ("fx") | green MIXER, red PERFORM |
 | EDIT | EDIT | MACHINE; again KIT ("rec src" is the nearest: the sound's source) | green EDIT, red MACHINE/KIT |
-| OK | pick / confirm | redo | lit when redo has somewhere to go |
+| OK | pick / confirm. On PROJECT's slots a tap queues, a hold (0.5 s) opens the pattern menu: COPY, PASTE, CLEAR, DOUBLE (doubles every track up to 64 steps, copying the steps) | redo | lit when redo has somewhere to go |
 | CLR | back / clear | undo | lit when undo has somewhere to go |
 
 ## The FUNC menu (FUNC + HOME)

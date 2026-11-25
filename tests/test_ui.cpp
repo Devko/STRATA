@@ -659,7 +659,7 @@ TEST(ui_project_slots_copy_paste_and_clear_a_pattern) {
     CHECK_EQ(UiProbe::mode(app), int(Mode::project));
     for (int i = 0; i < 16; i++) key(ENAGA_KEY_LEFT);  // the cursor on A01
     shift_key(ENAGA_KEY_DOWN);                       // nothing copied yet
-    CHECK_EQ(UiProbe::notice(app), "FUNC+UP COPIES FIRST");
+    CHECK_EQ(UiProbe::notice(app), "COPY A PATTERN FIRST");
     shift_key(ENAGA_KEY_UP);
     CHECK_EQ(UiProbe::notice(app), "A01 COPIED");
     key(ENAGA_KEY_RIGHT);
@@ -8194,4 +8194,59 @@ TEST(ui_a_press_of_value_with_a_step_held_resets_nothing) {
     pump(2);
     CHECK_EQ(int(app_engine().perf_amount()), 20);
     value_step(app, 3);
+}
+
+TEST(ui_hold_ok_on_a_slot_opens_the_pattern_menu_and_double_doubles) {
+    Strata &app = fresh();
+    Project &project = app_engine().project_for_load();
+    step_down(2);                                    // a trig on step 3 of A01's track 1
+    step_up(2);
+    pump(2);
+    // Track 1 at 16 steps, as FUNC + LEN would leave it.
+    app.on_key(ENAGA_KEY_F1, true);
+    for (int i = 0; i < 48; i++) {
+        app.on_key(ENAGA_KEY_OCTAVE_LEFT, true);
+        app.on_key(ENAGA_KEY_OCTAVE_LEFT, false);
+    }
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(project.patterns[0][0].tracks[0].length), 16);
+
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_CLR);
+    for (int i = 0; i < 16; i++) key(ENAGA_KEY_LEFT);
+    // A tap still queues (here, stopped: at once) and opens nothing.
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!screen_has(app, "OK: RUN"));
+    // A hold opens the menu on COPY.
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(2);
+    CHECK(screen_has(app, "PATTERN A01"));
+    CHECK(screen_has(app, ">COPY"));
+    // DOWN to DOUBLE, which takes OK twice.
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN: DOUBLE A01");
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "A01 DOUBLED");
+    pump(2);
+    CHECK_EQ(int(project.patterns[0][0].tracks[0].length), 32);
+    CHECK(trig_at(0, 2));
+    CHECK(trig_at(0, 18));
+    CHECK(!screen_has(app, "OK: RUN"));               // the menu closed
+    // CLR closes it without doing anything.
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(!screen_has(app, "OK: RUN"));
+    CHECK_EQ(int(project.patterns[0][0].tracks[0].length), 32);
+    key(ENAGA_KEY_F4);
+    pump(2);
 }

@@ -77,6 +77,7 @@ enum class Cmd : uint8_t {
     // project's empty one. track: the destination bank, step: its slot; copy: a, b the source.
     pattern_copy,
     pattern_clear,
+    pattern_double,    // track: bank, step: slot. Every track twice as long, copied (core/editops)
     range_transpose,   // track, step: the first step, a: how many, b: int8 semitones
     range_nudge,       // track, step: the first step, a: how many, b: int8 ticks
 

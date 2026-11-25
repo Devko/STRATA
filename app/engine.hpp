@@ -619,6 +619,7 @@ private:
     // static, not a stack frame -- but it is the reason nothing here may be passed by value.
     UndoStack undo_;
     RangeClip clip_;
+    RangeClip double_clip_;        // pattern_double's scratch, so the user's clipboard survives
 
     // --- the performance layer (M5) ---
     //

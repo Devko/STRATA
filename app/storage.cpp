@@ -70,6 +70,7 @@ bool mutates_pattern(Cmd cmd) {
         case Cmd::pattern_erase:
         case Cmd::pattern_copy:      // the destination's bank (note_command's target_bank)
         case Cmd::pattern_clear:
+        case Cmd::pattern_double:
         case Cmd::record_hit:
         case Cmd::record_length:
         case Cmd::set_step_length:
@@ -772,7 +773,8 @@ bool Storage::open_last() {
 
 void Storage::note_command(Cmd cmd, int live_bank, int target_bank) {
     // PROJECT's slot copy and clear write the bank under the cursor, not the live one.
-    const bool slot_edit = cmd == Cmd::pattern_copy || cmd == Cmd::pattern_clear;
+    const bool slot_edit =
+        cmd == Cmd::pattern_copy || cmd == Cmd::pattern_clear || cmd == Cmd::pattern_double;
     const int bank = slot_edit && target_bank >= 0 ? target_bank : live_bank;
     if (mutates_pattern(cmd) && project_index_valid(bank, 0)) {
         bank_dirty_[bank] = true;

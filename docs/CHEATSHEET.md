@@ -46,7 +46,7 @@ pads and the performance mixer.
 | SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound into that track only; AS WAS puts yours back |
 | MIXER | MIXER | Levels, the sidechain duck, delay, reverb, routing, master, kill EQ |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
-| PROJECT | PROJECT | Banks and patterns, key and scale, the card. On the slots: FUNC+UP copies the pattern under the cursor, FUNC+DOWN twice pastes over it, FUNC+LEFT twice clears it |
+| PROJECT | PROJECT | Banks and patterns, key and scale, the card. On the slots: **hold OK** for the pattern menu (COPY, PASTE, CLEAR, DOUBLE; OK runs, PASTE/CLEAR/DOUBLE twice). Shortcuts: FUNC+UP copies, FUNC+DOWN twice pastes, FUNC+LEFT twice clears |
 | CHAIN | PROJECT, then screen key RIGHT | The pattern chain as a list |
 | PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG) and each track's own swing of the playing pattern |
 | SETUP | PROJECT, screen key RIGHT three times | Record quantize; shows clock and MIDI settings |

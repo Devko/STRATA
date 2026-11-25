@@ -67,6 +67,9 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
   note of three: only that one fades.
 - The upper pad between E and F: `OCT` down; the last upper pad: `OCT` up.
 - FUNC + lower pad 1: the kick mutes on the bar; again: back.
+- **Pattern menu (0.4.0).** PROJECT, cursor on a 16-step pattern, hold OK: `PATTERN A01` and
+  the list COPY PASTE CLEAR DOUBLE. DOWN to DOUBLE, OK, OK: `A01 DOUBLED`, GRID shows 32 steps,
+  the second half a copy of the first. A short OK tap still queues the slot. CLR closes the list.
 - **Pattern copy, paste, clear (0.4.0).** PROJECT, cursor on A01, FUNC+UP: `A01 COPIED`.
   RIGHT to A06, FUNC+DOWN: `AGAIN: PASTE TO A06`, again: `A01 PASTED TO A06`; OK plays A06,
   the same beat. FUNC+LEFT twice on A06: `A06 CLEARED`, A06 is empty. Save, reopen: both stay.

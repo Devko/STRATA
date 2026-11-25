@@ -440,6 +440,7 @@ const Expect kTable[] = {
     // The destination's bank; driven here with no target, they fall back to the live one.
     {Cmd::pattern_copy, kDirtyBank, "pattern_copy"},
     {Cmd::pattern_clear, kDirtyBank, "pattern_clear"},
+    {Cmd::pattern_double, kDirtyBank, "pattern_double"},
     {Cmd::range_transpose, kDirtyBank, "range_transpose"},
     {Cmd::range_nudge, kDirtyBank, "range_nudge"},
     {Cmd::record_hit, kDirtyBank, "record_hit"},

@@ -711,3 +711,33 @@ TEST(a_pasted_step_with_no_locks_names_no_run) {
     CHECK_EQ(int(g_pattern.tracks[0].steps[8].lock_first), int(kNoLock));
     CHECK_EQ(int(g_pattern.locks_used), 2);
 }
+
+TEST(double_copies_each_track_into_its_new_half_with_its_locks) {
+    pattern_init(g_pattern);
+    g_pattern.tracks[0].length = 16;
+    g_pattern.tracks[1].length = 12;
+    g_pattern.tracks[2].length = 40;      // doubles to 64, the cap
+    g_pattern.master_length = 16;
+    fill_track(g_pattern, 0);
+    add_locks(g_pattern, 0, 3, 20, 2);
+    fill_track(g_pattern, 1);
+
+    CHECK(pattern_double(g_pattern, g_clip));
+    CHECK_EQ(int(g_pattern.tracks[0].length), 32);
+    CHECK_EQ(int(g_pattern.tracks[1].length), 24);
+    CHECK_EQ(int(g_pattern.tracks[2].length), 64);
+    CHECK_EQ(int(g_pattern.tracks[3].length), int(kStepsPerTrack));   // already 64: untouched
+    CHECK_EQ(int(g_pattern.master_length), 32);
+    for (int i = 0; i < 16; i++) {
+        CHECK(same_step_content(g_pattern.tracks[0].steps[i], g_pattern.tracks[0].steps[16 + i]));
+    }
+    for (int i = 0; i < 12; i++) {
+        CHECK(same_step_content(g_pattern.tracks[1].steps[i], g_pattern.tracks[1].steps[12 + i]));
+    }
+    // The copy has locks of its own, not a share of the original's run.
+    const LockView a = pattern_step_locks(g_pattern, 0, 3);
+    const LockView b = pattern_step_locks(g_pattern, 0, 19);
+    CHECK_EQ(int(b.count), 2);
+    CHECK(a.locks != b.locks);
+    for (int k = 0; k < 2; k++) CHECK_EQ(int(b.locks[k].value), int(a.locks[k].value));
+}

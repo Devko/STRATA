@@ -682,6 +682,19 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::pattern_double: {
+            const int bank = int(command.track), slot = int(command.step);
+            if (!project_index_valid(bank, slot)) {
+                status_.bump_refused();
+                break;
+            }
+            if (!pattern_double(project_.patterns[bank][slot], double_clip_)) {
+                status_.bump_refused();
+            }
+            pattern_replaced(bank, slot);
+            break;
+        }
+
         case Cmd::pattern_clear: {
             const int bank = int(command.track), slot = int(command.step);
             if (!project_index_valid(bank, slot)) {
