@@ -3916,3 +3916,90 @@ TEST(engine_feel_walks_its_line_and_is_undone_like_swing) {
     pump();
     CHECK_EQ(int(engine.pattern().feel), 0);
 }
+
+// --- random lock ranges and parameter slide (core/pattern.hpp, kLockRange and kLockSlide) ------
+
+// A random range moves the step's lock by a draw within the width, a new draw each pass, the
+// same draw the core function makes (so a pass plays the same way after a reload).
+TEST(engine_a_random_range_spreads_the_lock_each_pass_within_its_width) {
+    Engine &engine = clean();
+    post(Cmd::set_track_length, kPoly, 0, 1);         // one step: every 24 ticks is a new pass
+    put_trig(kPoly, 0);
+    Pattern &pattern = engine.project_for_load().live();
+    CHECK(pattern_set_lock(pattern, kPoly, 0, kDec, 64));
+    CHECK(pattern_set_range(pattern, kPoly, 0, kDec, 20));
+    pump();
+    FakeHost::the().set_running(true);
+    int lowest = 127, highest = 0;
+    for (uint32_t pass = 0; pass < 24; pass++) {
+        FakeHost::the().deliver_tick(pass * 24u, 0);
+        pump();
+        const int heard = engine.sounding(kPoly).v[kDec];
+        CHECK(heard >= 44 && heard <= 84);
+        CHECK_EQ(heard, int(lock_spread(64, 20, pattern.seed, kPoly, 0, pass, kDec)));
+        lowest = heard < lowest ? heard : lowest;
+        highest = heard > highest ? heard : highest;
+    }
+    CHECK(highest - lowest >= 10);                      // it does move
+}
+
+// With no value lock the range spreads what the step starts from: the kit value.
+TEST(engine_a_random_range_with_no_lock_spreads_the_kit_value) {
+    Engine &engine = clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 30);
+    post(Cmd::set_track_length, kPoly, 0, 1);
+    put_trig(kPoly, 0);
+    Pattern &pattern = engine.project_for_load().live();
+    CHECK(pattern_set_range(pattern, kPoly, 0, kDec, 10));
+    pump();
+    FakeHost::the().set_running(true);
+    for (uint32_t pass = 0; pass < 8; pass++) {
+        FakeHost::the().deliver_tick(pass * 24u, 0);
+        pump();
+        CHECK_EQ(int(engine.sounding(kPoly).v[kDec]),
+                 int(lock_spread(30, 10, pattern.seed, kPoly, 0, pass, kDec)));
+    }
+}
+
+// A slid lock glides from its value to the next playing step's, arriving as that step starts;
+// an unslid one holds its value for the whole step.
+TEST(engine_a_slid_lock_glides_to_the_next_playing_step) {
+    Engine &engine = clean();
+    post(Cmd::set_track_length, kPoly, 0, 4);
+    put_trig(kPoly, 0);
+    put_trig(kPoly, 2);                                 // step 1 is empty: the glide spans two
+    Pattern &pattern = engine.project_for_load().live();
+    CHECK(pattern_set_lock(pattern, kPoly, 0, kDec, 20));
+    CHECK(pattern_set_slide(pattern, kPoly, 0, kDec, true));
+    CHECK(pattern_set_lock(pattern, kPoly, 2, kDec, 100));
+    pump();
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    int last = engine.sounding(kPoly).v[kDec];
+    CHECK(last >= 20 && last < 30);                    // starts at the lock
+    bool moved = false;
+    for (int block = 0; block < 2000; block++) {
+        pump();
+        const int now = engine.sounding(kPoly).v[kDec];
+        CHECK(now >= last);                            // only up, never past the target
+        CHECK(now <= 100);
+        moved = moved || now > last;
+        last = now;
+    }
+    CHECK(moved);
+    CHECK_EQ(last, 100);                               // arrived and held there
+    FakeHost::the().deliver_tick(48, 0);
+    pump();
+    CHECK_EQ(int(engine.sounding(kPoly).v[kDec]), 100);
+
+    // Without the slide the step holds its lock until the next step.
+    FakeHost::the().set_running(false);
+    pump();
+    CHECK(pattern_set_slide(pattern, kPoly, 0, kDec, false));
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(96, 0);               // the next pass's step 0
+    pump();
+    for (int block = 0; block < 20; block++) pump();
+    CHECK_EQ(int(engine.sounding(kPoly).v[kDec]), 20);
+}

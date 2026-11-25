@@ -877,11 +877,16 @@ TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     CHECK(!app_engine().tape_stop().held());
 }
 
-TEST(ui_func_push_d_with_a_step_held_clears_its_lock_not_a_tape_stop) {
-    // Roland, 2026-11-22: every push with a STEP held is the step's. FUNC + push A-C already
-    // cleared that step's lock there; FUNC + push D was a tape stop instead.
+namespace {
+bool screen_has(Strata &app, const char *wanted);   // defined with the frame's tests
+}  // namespace
+
+TEST(ui_func_push_d_with_a_step_held_slides_its_lock_not_a_tape_stop) {
+    // Roland, 2026-11-22: every push with a STEP held is the step's. FUNC + push D was a tape
+    // stop there once, then cleared the lock; since parameter slide, FUNC + push A-D toggles the
+    // lock's slide (docs/CONTROLS.md, "Random ranges and slides"), and a plain push clears.
     Strata &app = fresh();
-    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_F8);                               // EDIT: its lock line outranks a notice
     pump(2);
     step_down(5);
     app.on_encoder(3, +6);                           // lock D on step 6
@@ -893,13 +898,79 @@ TEST(ui_func_push_d_with_a_step_held_clears_its_lock_not_a_tape_stop) {
     app.on_key(ENAGA_KEY_PUSH_D, true);
     pump(2);
     CHECK(!app_engine().tape_stop().held());
-    CHECK_EQ(UiProbe::notice(app), "LOCK CLEARED");
+    CHECK_EQ(UiProbe::notice(app), "SLIDE ON");
+    CHECK(pattern_get_slide(app_engine().pattern(), 0, 5, uint8_t(param)));
     app.on_key(ENAGA_KEY_PUSH_D, false);
     app.on_key(ENAGA_KEY_F1, false);
+    CHECK(screen_has(app, "/"));                     // the lock line marks the slide
+    app.on_key(ENAGA_KEY_PUSH_D, true);              // a plain push takes it all off
+    app.on_key(ENAGA_KEY_PUSH_D, false);
     step_up(5);
     pump(2);
     CHECK(!pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(param), value));
+    CHECK(!pattern_get_slide(app_engine().pattern(), 0, 5, uint8_t(param)));
     CHECK(!app_engine().tape_stop().held());
+}
+
+TEST(ui_func_push_with_a_step_held_and_no_lock_locks_the_kit_value_and_slides_it) {
+    // A slide needs a value to glide from: on an unlocked parameter the push locks the kit value.
+    Strata &app = fresh();
+    const int param = page_first(Page(UiProbe::param_page(app)));
+    const uint8_t kit = app_engine().params(0).v[param];
+    step_down(2);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_A, true);
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 2, uint8_t(param), value));
+    CHECK_EQ(int(value), int(kit));
+    CHECK(pattern_get_slide(app_engine().pattern(), 0, 2, uint8_t(param)));
+    app.on_key(ENAGA_KEY_PUSH_A, true);              // again: the slide goes, the lock stays
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "SLIDE OFF");
+    CHECK(!pattern_get_slide(app_engine().pattern(), 0, 2, uint8_t(param)));
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 2, uint8_t(param), value));
+    app.on_key(ENAGA_KEY_F1, false);
+    step_up(2);
+    pump(2);
+    CHECK((step_of(0, 2).flags & kStepTrig) == 0);   // used as a modifier: no trig toggled
+}
+
+TEST(ui_func_turn_with_a_step_held_sets_the_random_range_not_the_lock) {
+    // Hold STEP + FUNC + turn: the parameter's random range on the step. The lock line says
+    // "R<width>", the bar gets a dim line under it over the range, and the value lock is not
+    // touched. Turned back to 0 the range is gone.
+    Strata &app = fresh();
+    enaga::Canvas canvas(g_pixels);
+    const uint8_t *px = g_pixels;
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    const int index = page_first(Page(UiProbe::param_page(app)));
+    step_down(0);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(0, +10);
+    pump(2);
+    const uint8_t width = pattern_get_range(app_engine().pattern(), 0, 0, uint8_t(index));
+    CHECK(width > 0);
+    uint8_t value = 0;
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 0, uint8_t(index), value));
+    char wanted[8] = {' ', 'R', 0};
+    char *w = wanted + 2;
+    append_number(w, width);
+    *w = 0;
+    CHECK(screen_has(app, wanted));
+    app.draw(canvas);
+    int dim = 0;                                     // the range line under GRID's slot A bar
+    for (int x = 0; x < 28; x++) dim += px[119 * enaga::Canvas::width + x] == 7 ? 1 : 0;
+    CHECK(dim > 0);
+    app.on_encoder(0, -120);
+    pump(2);
+    CHECK_EQ(int(pattern_get_range(app_engine().pattern(), 0, 0, uint8_t(index))), 0);
+    app.on_key(ENAGA_KEY_F1, false);
+    step_up(0);
+    pump(2);
 }
 
 TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {

@@ -157,7 +157,8 @@ bool pattern_set_lock(Pattern &pattern, int track, int step, uint8_t param, uint
 
     // Already locked? Then this is an edit, not an allocation.
     for (uint8_t i = 0; i < s.lock_count; i++) {
-        if (pattern.locks[s.lock_first + i].param == param) {
+        // By key: an edit keeps the slide bit the lock already has.
+        if (lock_key(pattern.locks[s.lock_first + i].param) == lock_key(param)) {
             pattern.locks[s.lock_first + i].value = value;
             return true;
         }
@@ -195,7 +196,7 @@ bool pattern_get_lock(const Pattern &pattern, int track, int step, uint8_t param
                       uint8_t &value) {
     const LockView view = pattern_step_locks(pattern, track, step);
     for (const Lock &lock : view) {
-        if (lock.param != param) continue;
+        if (lock_key(lock.param) != lock_key(param)) continue;
         value = lock.value;
         return true;
     }
@@ -208,7 +209,7 @@ bool pattern_clear_lock(Pattern &pattern, int track, int step, uint8_t param) {
     if (!run_ok(pattern, s)) return false;
 
     for (uint8_t i = 0; i < s.lock_count; i++) {
-        if (pattern.locks[s.lock_first + i].param != param) continue;
+        if (lock_key(pattern.locks[s.lock_first + i].param) != lock_key(param)) continue;
         for (uint8_t j = uint8_t(i + 1); j < s.lock_count; j++) {
             pattern.locks[s.lock_first + j - 1] = pattern.locks[s.lock_first + j];
         }
@@ -231,6 +232,57 @@ void pattern_clear_step_locks(Pattern &pattern, int track, int step) {
     }
     s.lock_count = 0;
     s.lock_first = kNoLock;
+}
+
+bool pattern_clear_param(Pattern &pattern, int track, int step, uint8_t param) {
+    const uint8_t p = lock_param(param);
+    const bool value = pattern_clear_lock(pattern, track, step, p);
+    const bool range = pattern_clear_lock(pattern, track, step, lock_range_key(p));
+    return value || range;
+}
+
+uint8_t pattern_get_range(const Pattern &pattern, int track, int step, uint8_t param) {
+    uint8_t width = 0;
+    pattern_get_lock(pattern, track, step, lock_range_key(param), width);
+    return width;
+}
+
+bool pattern_set_range(Pattern &pattern, int track, int step, uint8_t param, uint8_t width) {
+    if (width == 0) {
+        pattern_clear_lock(pattern, track, step, lock_range_key(param));
+        return true;
+    }
+    return pattern_set_lock(pattern, track, step, lock_range_key(param),
+                            uint8_t(width > 127u ? 127u : width));
+}
+
+bool pattern_get_slide(const Pattern &pattern, int track, int step, uint8_t param) {
+    const LockView view = pattern_step_locks(pattern, track, step);
+    for (const Lock &lock : view) {
+        if (lock_key(lock.param) == lock_param(param)) return lock_slides(lock.param);
+    }
+    return false;
+}
+
+bool pattern_set_slide(Pattern &pattern, int track, int step, uint8_t param, bool on) {
+    if (!indices_ok(track, step)) return false;
+    Step &s = pattern.tracks[track].steps[step];
+    if (!run_ok(pattern, s)) return false;
+    for (uint8_t i = 0; i < s.lock_count; i++) {
+        Lock &lock = pattern.locks[s.lock_first + i];
+        if (lock_key(lock.param) != lock_param(param)) continue;
+        lock.param = uint8_t(on ? (lock.param | kLockSlide) : (lock.param & ~kLockSlide));
+        return true;
+    }
+    return false;
+}
+
+bool pattern_step_slides(const Pattern &pattern, int track, int step) {
+    const LockView view = pattern_step_locks(pattern, track, step);
+    for (const Lock &lock : view) {
+        if (lock_slides(lock.param)) return true;
+    }
+    return false;
 }
 
 uint16_t pattern_locks_reachable(const Pattern &pattern) {

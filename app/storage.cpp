@@ -69,6 +69,8 @@ bool mutates_pattern(Cmd cmd) {
         case Cmd::set_master_length:
         case Cmd::step_field_delta:
         case Cmd::lock_delta:
+        case Cmd::lock_range_delta:
+        case Cmd::lock_slide:
         case Cmd::undo:
         case Cmd::redo:
         case Cmd::range_paste:

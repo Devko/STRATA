@@ -144,7 +144,9 @@ Slots: 1 LP SWEEP · 2 HP SWEEP · 3 HP RISER · 4 ECHO RISER · 5 ECHO FREEZE �
 | Tap STEP | Toggle trig. FUNC + tap: toggle trigless (locks, no note) |
 | Pad-row L/R (or LEFT/RIGHT on GRID) | Step page 1-4 (64 steps), round from 4 to 1 |
 | Hold STEP + turn A-D | Lock that parameter of the current EDIT page on the step |
-| Hold STEP + push A-D | Remove that one lock (LOCK CLEARED), with or without FUNC held |
+| Hold STEP + push A-D | Remove that parameter from the step: its lock, range and slide (LOCK CLEARED) |
+| Hold STEP + FUNC + turn A-D | That parameter's random range on the step: each pass a new value within it (`R20` on the lock line); 0 removes it |
+| Hold STEP + FUNC + push A-D | Slide that lock to the next step that plays (`SLIDE ON` / `SLIDE OFF`; `/` on the lock line). No lock yet: locks the track's value first |
 | Push the TUN / PIT knob (EDIT, GRID, KEYS) | NOTE view on / off: TUN as a note (where it puts C-4), a semitone a click (`TUN AS NOTES`), or as 0-127, a count a click (`TUN AS NUMBERS`). `+` / `-` after a note: the byte is 5 cents or more sharp / flat of it |
 | Hold STEP + turn VALUE | Set the step's note |
 | Hold STEP + OK | Open the step page on that step (keep holding or let go: A-D are the page's fields) |

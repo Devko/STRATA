@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W36, about 100 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W37, about 104 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -429,6 +429,17 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 - RND4 on, hold FUNC + MUTATE (a lock), turn it OFF, tap FUNC + MUTATE: the shuffle is back; tap
   again: OFF again. `____`
 - MAX with RND1 on all eight against the default beat alone: `________ %`
+
+**W37. Random lock ranges and parameter slide (4 min).** Beat playing, A01, GRID.
+- Lower pad 2 (snare), EDIT, FLTR page. Hold STEP 5 and FUNC and turn the CUT knob up to about 30: the
+  line under the rows reads `S5 CUT 64 R30` (your numbers), and a dim line sits under CUT's bar.
+  Let go: the snare's brightness changes from bar to bar. `____`
+- Hold STEP 5 (no FUNC) and push the CUT knob: `LOCK CLEARED`, and the snare plays the same every bar. `____`
+- Lower pad 6 (bass). Hold STEP 1 and turn CUT well down; hold STEP 9 and turn CUT well up.
+  Hold STEP 1 and FUNC and push CUT: `SLIDE ON`, the lock line ends in `/`. Let go: the filter now
+  sweeps open from step 1 to step 9, smoothly, no zipper steps, then falls back. `____`
+- Hold STEP 1 and FUNC and push CUT again: `SLIDE OFF`, the filter jumps on step 9 again. `____`
+- Save, NEW, load the project back: the range and the slide are still there. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

@@ -54,6 +54,14 @@ struct StepEvent {
     uint32_t frame = 0;          // frame within the audio block: sample accuracy
     uint8_t ratchet_index = 0;   // 0 for the first hit of a step, then 1, 2, ...
     uint8_t ratchet_count = 1;   // how many hits this step produces in total
+    // The pass the step plays in: what a random lock range draws from (lock_spread).
+    uint32_t loop = 0;
+    // Parameter slide. Filled only when one of the step's locks slides (kLockSlide): the next
+    // step this track plays that has a trig or a trigless (`glide_step`, in pass `glide_loop`),
+    // and how long until it starts, in frames. 0 frames: nothing to glide to.
+    uint8_t glide_step = 0;
+    uint32_t glide_loop = 0;
+    uint32_t glide_frames = 0;
 };
 
 // How many events one tick can produce across all 8 tracks.
@@ -176,6 +184,19 @@ uint32_t probability_roll(uint32_t seed, int track, int step, uint32_t loop);
 // An invalid condition byte reads as NONE, which always passes.
 bool condition_passes(uint8_t packed, uint32_t loop, bool fill, bool previous, bool neighbour,
                       bool first_loop);
+
+// A random lock range's draw (core/pattern.hpp, kLockRange): `base` moved by -width..+width and
+// clamped to 0-127. Like the probability roll, it is a hash of the pattern's seed, the track, the
+// step, the pass and the parameter, so a pass plays the same way after a reload and each pass
+// differs from the last; two parameters on one step draw apart. Width 0 returns `base`.
+uint8_t lock_spread(uint8_t base, uint8_t width, uint32_t seed, int track, int step,
+                    uint32_t loop, int param);
+
+// What a step plays for `param` once its locks are read: its value lock, or `fallback` (the
+// sound the step starts from) without one, then its random range drawn over that. The engine
+// fires steps through it, and a slide asks it what the step it glides to will play.
+uint8_t lock_resolve(const Pattern &pattern, int track, int step, uint32_t loop, int param,
+                     uint8_t fallback);
 
 // The velocity of hit `index` of `count`, given the step's velocity and ramp direction.
 // Always returns 1-127.

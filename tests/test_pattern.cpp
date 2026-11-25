@@ -752,3 +752,64 @@ TEST(a_track_swing_walks_pat_then_fifty_to_seventy_five) {
     CHECK_EQ(int(track_swing_step(200, 0)), kSwingMax);
     CHECK_EQ(int(track_swing_step(200, -1)), kSwingMax - 1);
 }
+
+// --- random ranges and slides in the lock byte ----------------------------
+
+namespace {
+using namespace strata;
+}
+
+TEST(pattern_a_range_is_its_own_entry_and_a_slide_is_a_bit_on_the_value) {
+    static Pattern pattern;
+    pattern_init(pattern);
+    CHECK(pattern_set_lock(pattern, 0, 3, 7, 50));
+    CHECK(pattern_set_range(pattern, 0, 3, 7, 20));
+    CHECK_EQ(int(pattern_step_locks(pattern, 0, 3).count), 2);
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(pattern, 0, 3, 7, value));
+    CHECK_EQ(int(value), 50);                            // the value is not the range
+    CHECK_EQ(int(pattern_get_range(pattern, 0, 3, 7)), 20);
+    CHECK_EQ(int(pattern_get_range(pattern, 0, 3, 8)), 0);
+
+    CHECK(!pattern_step_slides(pattern, 0, 3));
+    CHECK(pattern_set_slide(pattern, 0, 3, 7, true));
+    CHECK(pattern_get_slide(pattern, 0, 3, 7));
+    CHECK(pattern_step_slides(pattern, 0, 3));
+    CHECK(!pattern_set_slide(pattern, 0, 3, 8, true));    // no value lock to slide
+    // An edit of the value keeps its slide and does not add an entry.
+    CHECK(pattern_set_lock(pattern, 0, 3, 7, 60));
+    CHECK(pattern_get_slide(pattern, 0, 3, 7));
+    CHECK_EQ(int(pattern_step_locks(pattern, 0, 3).count), 2);
+    CHECK(pattern_get_lock(pattern, 0, 3, 7, value));
+    CHECK_EQ(int(value), 60);
+
+    // Range 0 takes the range off; the value stays.
+    CHECK(pattern_set_range(pattern, 0, 3, 7, 0));
+    CHECK_EQ(int(pattern_step_locks(pattern, 0, 3).count), 1);
+    CHECK(pattern_set_range(pattern, 0, 3, 7, 200));      // clamped
+    CHECK_EQ(int(pattern_get_range(pattern, 0, 3, 7)), 127);
+
+    // Clearing the parameter takes everything.
+    CHECK(pattern_clear_param(pattern, 0, 3, 7));
+    CHECK_EQ(int(pattern_step_locks(pattern, 0, 3).count), 0);
+    CHECK(!pattern_clear_param(pattern, 0, 3, 7));
+}
+
+TEST(pattern_a_range_alone_clears_with_its_parameter) {
+    static Pattern pattern;
+    pattern_init(pattern);
+    CHECK(pattern_set_range(pattern, 1, 0, 2, 9));
+    uint8_t value = 0;
+    CHECK(!pattern_get_lock(pattern, 1, 0, 2, value));
+    CHECK(pattern_clear_param(pattern, 1, 0, 2));
+    CHECK_EQ(int(pattern_get_range(pattern, 1, 0, 2)), 0);
+}
+
+TEST(pattern_the_lock_byte_helpers_split_the_parameter_from_its_kind) {
+    CHECK_EQ(int(lock_param(uint8_t(kLockSlide | 9))), 9);
+    CHECK_EQ(int(lock_param(lock_range_key(9))), 9);
+    CHECK(lock_is_range(lock_range_key(9)));
+    CHECK(lock_slides(uint8_t(kLockSlide | 9)));
+    CHECK(!lock_slides(uint8_t(kLockSlide | kLockRange | 9)));   // a range never slides
+    CHECK_EQ(int(lock_key(uint8_t(kLockSlide | 9))), 9);
+}

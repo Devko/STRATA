@@ -499,6 +499,27 @@ TEST(a_lock_value_past_127_in_a_file_loads_as_127) {
     CHECK_EQ(int(value), 90);                          // in range: untouched
 }
 
+TEST(a_random_range_and_a_slide_survive_a_save_and_load) {
+    // Both live in the lock's param byte (core/pattern.hpp), so the file carries them as it
+    // carries any lock, with no section of their own.
+    pattern_init(g_source);
+    CHECK(pattern_set_lock(g_source, 1, 4, 6, 40));
+    CHECK(pattern_set_slide(g_source, 1, 4, 6, true));
+    CHECK(pattern_set_range(g_source, 1, 4, 6, 25));
+    CHECK(pattern_set_range(g_source, 3, 0, 2, 9));
+    uint32_t written = 0;
+    CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, written)), int(SerializeResult::ok));
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(g_loaded, 1, 4, 6, value));
+    CHECK_EQ(int(value), 40);
+    CHECK(pattern_get_slide(g_loaded, 1, 4, 6));
+    CHECK_EQ(int(pattern_get_range(g_loaded, 1, 4, 6)), 25);
+    CHECK_EQ(int(pattern_get_range(g_loaded, 3, 0, 2)), 9);
+    CHECK(!pattern_get_lock(g_loaded, 3, 0, 2, value));
+}
+
 TEST(saving_compacts_the_lock_pool_without_touching_the_pattern) {
     const uint16_t locks = make_busy_pattern(g_source);
     const uint16_t used_before = g_source.locks_used;

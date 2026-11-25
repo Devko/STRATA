@@ -16,6 +16,13 @@ the project file format or the controls.
 
 ### Added
 
+- **Random lock ranges and parameter slide.** Hold a STEP and FUNC and turn a knob: that
+  parameter gets a random range on the step, and each pass plays a new value within it (`R20` on
+  the lock line, a dim line under the bar). Hold a STEP and FUNC and push a knob: the step's lock
+  glides to whatever the next step that plays holds, arriving as that step starts (`SLIDE ON`,
+  `/` on the lock line). A plain push with the STEP held still clears the parameter, range and
+  slide included. Both are stored in the lock itself, so patterns keep their format; an older
+  build ignores a range and a sliding lock.
 - **LIVE RND (P1, the live half).** In PERFORM, FUNC + turn D shuffles every armed track's steps
   in random blocks of 1, 2, 4, 8 or 16, a new pick every pass (`LIVE RND4 8 TRK`); FUNC + push D
   takes the selected track out or back in, so the kick can hold while the rest jumps. The same

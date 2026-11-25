@@ -161,6 +161,7 @@ int steps_firing_at(uint32_t tick, const TrackTiming &timing, const int8_t *micr
         if (effective == absolute) {
             out[found].step = plays;
             out[found].loop = uint32_t(loop);
+            out[found].slot = uint8_t(step_index);
             found++;
             if (found >= max) break;
         }

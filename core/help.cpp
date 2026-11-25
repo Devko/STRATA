@@ -103,8 +103,8 @@ constexpr int kSharedPages = int(sizeof kShared / sizeof kShared[0]);
 
 constexpr Text kSteps = {"STEPS:", {
     "TAP STEP  TRIG ON/OFF",
-    "STEP+KNOB  LOCK",
-    "STEP+PUSH  UNLOCK",
+    "STEP+KNB/PSH LOCK/OFF",
+    "  +FUNC RANDOM/SLIDE",
     "STEP+VALUE NOTE",
     "STEP+OK    STEP PAGE",
     "STEP+LATER STEP  LEN",

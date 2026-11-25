@@ -280,7 +280,7 @@ OK picks, CLR goes back, and F1 + an arrow is the mode's second meaning. New lis
 
 **Step editing**
 
-- Tap STEP: toggle trig. Hold STEP + turn A-D: lock that parameter on the current page. Hold STEP + push A-D: clear that parameter's lock on the step (one undo level). Hold STEP + VALUE: note.
+- Tap STEP: toggle trig. Hold STEP + turn A-D: lock that parameter on the current page. Hold STEP + push A-D: clear that parameter's lock on the step (one undo level). Hold STEP + FUNC + turn A-D: that parameter's random range on the step; hold STEP + FUNC + push A-D: its lock slides to the next step that plays (docs/CONTROLS.md, "Random ranges and slides"). Hold STEP + VALUE: note.
 - Hold STEP + OK: open the step page (note, velocity, length, micro-timing / probability, condition, ratchet, accent and slide) on A-D, selection keys switch its two pages.
 - Hold two STEP keys: set the selection range for copy, clear and mutation.
   **[rev]** Held on a note and pressed later, the pair also sets that note's LEN up to the end of
