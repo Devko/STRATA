@@ -80,6 +80,8 @@ struct UiProbe {
     static int pad_held_note(const Strata &app, int pad) { return app.pad_held_note_[pad]; }
     static int pad_note(const Strata &app, int pad) { return app.pad_note(pad); }
     static bool fill_held(const Strata &app) { return app.fill_held_; }
+    static int stutter_raw(const Strata &app) { return app.stutter_raw_; }
+    static RepeatLength repeat_length(const Strata &app) { return app.repeat_length_; }
     static int macro_learn(const Strata &app) { return app.macro_learn_; }
 
     static const char *notice(const Strata &app) { return app.notice_; }
@@ -2815,6 +2817,135 @@ TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
     CHECK(!screen_has(app, "K:"));
     host.set_running(false);
     pump(2);
+}
+
+// Hold REPEAT, then a STEP: step stutter (CyDrums' P2). REPEAT first, so the STEP performs: it
+// toggles nothing, writes nothing to undo, and its release is the stutter's even after REPEAT.
+TEST(ui_hold_repeat_and_a_step_stutters_until_it_comes_up) {
+    Strata &app = fresh();
+    pump(2);
+    const bool trig4 = trig_at(0, 4), trig8 = trig_at(0, 8);
+    const uint8_t undo_before = undo_depth();
+
+    app.on_pad_press(3, 100);              // REPEAT: the audio repeat, as before
+    pump(2);
+    CHECK(app_engine().repeat_length() == RepeatLength::sixteenth);
+    step_down(4);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), 4);
+    CHECK(std::strcmp(UiProbe::notice(app), "STUTTER 5 1/16") == 0);
+    CHECK(screen_has(app, "ST5"));
+    CHECK(screen_has(app, "R1/16"));
+
+    // A second STEP moves it; letting that go goes back to the one still held.
+    step_down(8);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), 8);
+    step_up(8);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), 4);
+    step_up(4);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), -1);
+    CHECK(std::strcmp(UiProbe::notice(app), "STUTTER OFF") == 0);
+
+    // FUNC + STEP stutters the selected track alone.
+    app.on_key(ENAGA_KEY_F1, true);
+    step_down(2);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), 2);
+    CHECK(std::strcmp(UiProbe::notice(app), "T1 STUTTER 3 1/16") == 0);
+
+    // REPEAT up ends the stutter with the STEP still down, and that STEP's release is swallowed.
+    app.on_pad_release(3);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), -1);
+    CHECK_EQ(UiProbe::stutter_raw(app), -1);
+    step_up(2);
+    pump(2);
+
+    CHECK(trig_at(0, 4) == trig4);
+    CHECK(trig_at(0, 8) == trig8);
+    CHECK_EQ(int(undo_depth()), int(undo_before));
+    CHECK_EQ(UiProbe::held_step(app), -1);
+
+    // And with REPEAT up, a STEP is a step again.
+    const bool trig2 = trig_at(0, 2);
+    step_down(2);
+    step_up(2);
+    pump(2);
+    CHECK(trig_at(0, 2) != trig2);
+}
+
+// STEP first edits, pad first performs: a STEP held before REPEAT edits the step's ratchet
+// (D6), and no stutter starts.
+TEST(ui_step_first_then_repeat_still_edits_the_ratchet) {
+    Strata &app = fresh();
+    pump(2);
+    step_down(5);
+    app.on_pad_press(3, 100);
+    app.on_pad_release(3);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), -1);
+    CHECK(std::strncmp(UiProbe::notice(app), "STEP 6 ", 7) == 0);
+    step_up(5);
+    pump(2);
+}
+
+// REPEAT + LEFT/RIGHT walk the rate by its length (CyDrums' P3), heard by the engine at once and
+// shown on screen; under a rolling pad too. The arrows do not reach the page underneath.
+TEST(ui_repeat_and_the_arrows_walk_the_roll_rate) {
+    Strata &app = fresh();
+    pump(2);
+    const int page = UiProbe::page(app);
+    app.on_pad_press(3, 100);
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(app_engine().repeat_length() == RepeatLength::sixteenth_triplet);
+    CHECK(std::strcmp(UiProbe::notice(app), "REPEAT 1/16T") == 0);
+    CHECK(screen_has(app, "R1/16T"));
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);                  // stops at 1/32
+    pump(2);
+    CHECK(app_engine().repeat_length() == RepeatLength::thirty_second);
+    for (int i = 0; i < 9; i++) key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK(app_engine().repeat_length() == RepeatLength::quarter);
+    CHECK_EQ(UiProbe::page(app), page);
+
+    // Stuttering, the rate says so; and the stutter keeps the audio repeat off.
+    step_down(0);
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "STUTTER 1/4T") == 0);
+    CHECK(!app_engine().repeat().active());
+    step_up(0);
+    app.on_pad_release(3);
+    pump(2);
+
+    // A rolling pad takes the arrows too, and the roll follows.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    app.on_pad_press(4, 100);
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(app_engine().rolling(2));
+    CHECK(app_engine().repeat_length() == RepeatLength::eighth);
+    CHECK(std::strcmp(UiProbe::notice(app), "ROLL 1/8") == 0);
+    app.on_pad_release(4);
+    pump(2);
+
+    // Back to 1/16 for the tests after: the rate is the UI's, and fresh() keeps it.
+    app.on_pad_press(3, 100);
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);
+    app.on_pad_release(3);
+    pump(2);
+    CHECK(UiProbe::repeat_length(app) == RepeatLength::sixteenth);
+    CHECK(app_engine().repeat_length() == RepeatLength::sixteenth);
 }
 
 // The ambient modes' pages (dsp/ambient.hpp): DLY+ beside DLY, REV+ beside REV. Their TYP knob is
