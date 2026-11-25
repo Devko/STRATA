@@ -81,7 +81,6 @@ struct UiProbe {
     static int pad_note(const Strata &app, int pad) { return app.pad_note(pad); }
     static bool fill_held(const Strata &app) { return app.fill_held_; }
     static int macro_learn(const Strata &app) { return app.macro_learn_; }
-    static int keys_held_note(const Strata &app, int key) { return app.keys_held_note_[key]; }
 
     static const char *notice(const Strata &app) { return app.notice_; }
     static bool tune_notes(const Strata &app) { return app.tune_notes_; }
@@ -1284,19 +1283,19 @@ TEST(ui_a_pending_mutation_leaves_a_held_step_its_own_ok_and_clr) {
 }
 
 TEST(ui_leaving_the_app_ends_a_held_midi_note) {
-    // App::stop, the switch to another app or a power-off: a KEYS key still down with MIDI OUT
+    // App::stop, the switch to another app or a power-off: a KEYS pad still down with MIDI OUT
     // on sent a note nobody could stop once STRATA was gone.
     Strata &app = fresh();
     post_cmd(Cmd::set_midi_out, 7);                 // track 1 to channel 7
     pump(2);
     open_keys();                                     // KEYS
     FakeHost::the().clear_midi();
-    step_down(0);
+    app.on_pad_press(0, 100);                        // the piano's C
     pump(2);
     CHECK_EQ(FakeHost::the().midi_messages(0x90, 7), 1);
     app.stop();
     CHECK_EQ(FakeHost::the().midi_messages(0x80, 7), 1);
-    step_up(0);
+    app.on_pad_release(0);
     post_cmd(Cmd::set_midi_out, 0);
     key(ENAGA_KEY_F4);
     pump(2);
@@ -1329,26 +1328,6 @@ TEST(ui_an_undo_settles_a_pending_mutation) {
     shift_key(ENAGA_KEY_CLR);                        // and that erase undoes back to the trig
     pump(2);
     CHECK_EQ((app_engine().pattern().tracks[0].steps[1].flags & kStepTrig) != 0, had_trig);
-}
-
-TEST(ui_a_keys_key_holds_its_note_until_it_comes_up) {
-    // KEYS: the press plays, the release lets that same note go -- even after an octave change
-    // while it was down -- and a mode change lets go of whatever is still held.
-    Strata &app = fresh();
-    open_keys();                                      // KEYS
-    step_down(0);
-    const int note = UiProbe::keys_held_note(app, 0);
-    CHECK(note >= 0);
-    key(ENAGA_KEY_OCTAVE_RIGHT);
-    step_up(0);
-    CHECK_EQ(UiProbe::keys_held_note(app, 0), -1);
-
-    step_down(2);
-    CHECK(UiProbe::keys_held_note(app, 2) >= 0);
-    key(ENAGA_KEY_F4);                                // away, with the key still down
-    CHECK_EQ(UiProbe::keys_held_note(app, 2), -1);
-    step_up(2);
-    pump(2);
 }
 
 TEST(ui_a_hold_that_crosses_a_page_change_resolves_to_the_step_it_started_on) {
@@ -1386,8 +1365,8 @@ TEST(ui_a_hold_that_crosses_a_page_change_resolves_to_the_step_it_started_on) {
 }
 
 TEST(ui_a_hold_that_crosses_a_mode_change_is_dropped_rather_than_stranded) {
-    // KEYS and PERFORM take the STEP keys ahead of `on_step_key`, so a key held across the change
-    // never delivers its release. The mode change therefore has to drop the hold itself, and the
+    // The menu and the list screens take the STEP keys ahead of `on_step_key`, so a key held
+    // across the change never delivers its release. The mode change therefore has to drop the hold itself, and the
     // step must NOT toggle: nothing resolved it, so nothing happened to it.
     struct Case {
         const char *name;
@@ -1692,109 +1671,58 @@ TEST(ui_f1_picks_keys_over_grid_and_perform_over_mixer) {
 
 // --- KEYS mode ------------------------------------------------------------------------------
 
-TEST(ui_keys_mode_plays_sixteen_degrees_of_the_scale_and_not_semitones) {
-    // docs/SPEC.md: "KEYS mode: STEP keys play notes in scale". By DEGREES, which is the whole
-    // reason core/scale exists -- sixteen keys then span two octaves of a seven-note scale and
-    // stay in the key. Checked against core/scale itself rather than against a table copied out
-    // of it, plus the semitones of natural minor written out, so that a change to either side has
-    // to be deliberate.
-    Strata &app = fresh();
+TEST(ui_the_step_keys_are_steps_in_keys_and_perform) {
+    // D12: KEYS plays on the pads, so its STEP keys went back to being steps, and PERFORM's are
+    // steps too since learn by turning retired their macro assignment. A tap toggles the trig,
+    // a hold + OK opens the step page, and the pad-row keys pick which sixteen, as on GRID.
+    // KEYS keeps its octave on LEFT/RIGHT and on the two octave pads.
+    struct Case {
+        const char *name;
+        bool keys;
+    };
+    const Case cases[] = {{"KEYS", true}, {"PERFORM", false}};
+    for (const Case &c : cases) {
+        Strata &app = fresh();
+        if (c.keys) open_keys(); else shift_key(ENAGA_KEY_F7);
+        const int mode = UiProbe::mode(app);
+        const bool had = trig_at(0, 5);
+        step_down(5);
+        step_up(5);
+        pump(2);
+        CHECK_EQ(trig_at(0, 5), !had);                     // a tap is a trig
+        CHECK_EQ(UiProbe::mode(app), mode);                // and the screen stays
 
-    // The key and the scale, through PROJECT's own encoders B and C (the global key is what every
-    // melodic track and every mutation folds into).
-    key(ENAGA_KEY_F3);
-    app.on_encoder(1, +2);                         // root: C -> D
-    app.on_encoder(2, +1);                         // scale: chromatic -> minor
-    pump(2);
-    CHECK_EQ(int(app_engine().pattern().root), 2);
-    CHECK_EQ(int(app_engine().pattern().scale), int(Scale::minor));
-    CHECK_EQ(app_engine().pattern().root, app_engine().project().settings.root % 12);
+        key(ENAGA_KEY_OCTAVE_RIGHT);                       // the step page, not the octave
+        CHECK_EQ(UiProbe::page(app), 1);
+        const bool had_page_2 = trig_at(0, 16 + 2);
+        step_down(2);
+        step_up(2);
+        pump(2);
+        CHECK_EQ(trig_at(0, 18), !had_page_2);
+        key(ENAGA_KEY_OCTAVE_LEFT);
+        CHECK_EQ(UiProbe::page(app), 0);
 
-    open_keys();
-    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+        // Hold + VALUE is the step's note, so the release does not toggle.
+        const bool before = trig_at(0, 5);
+        step_down(5);
+        app.on_encoder(4, +1);
+        step_up(5);
+        pump(2);
+        CHECK_EQ(trig_at(0, 5), before);
+        CHECK_EQ(UiProbe::mode(app), mode);
 
-    const uint8_t root = 2;
-    const int scale = int(Scale::minor);
-    const uint8_t base = app.keys_note(0);
-    CHECK_EQ(int(base % 12), int(root));           // key 1 is the root of the current octave
-    CHECK_EQ(scale_size(scale), 7);
-
-    for (int i = 0; i < 16; i++) {
-        CHECK_EQ(int(app.keys_note(i)), int(scale_step(base, root, scale, i)));
-    }
-
-    // Natural minor is 0 2 3 5 7 8 10, so sixteen degrees are these semitones and not 0..15.
-    const int semitones[16] = {0, 2, 3, 5, 7, 8, 10, 12, 14, 15, 17, 19, 20, 22, 24, 26};
-    for (int i = 0; i < 16; i++) {
-        CHECK_EQ(int(app.keys_note(i)) - int(base), semitones[i]);
-    }
-    CHECK_EQ(int(app.keys_note(7)) - int(base), 12);      // seven degrees is an octave
-    CHECK(int(app.keys_note(15)) - int(base) != 15);      // and sixteen keys are not sixteen frets
-
-    // The octave keys move the whole lot by twelve, and they are the octave in KEYS rather than
-    // the step page (docs/SPEC.md's key table).
-    const int octave_before = UiProbe::keys_octave(app);
-    key(ENAGA_KEY_OCTAVE_RIGHT);
-    CHECK_EQ(UiProbe::keys_octave(app), octave_before + 1);
-    CHECK_EQ(UiProbe::page(app), 0);                      // not the step page
-    for (int i = 0; i < 16; i++) {
-        CHECK_EQ(int(app.keys_note(i)), int(scale_step(base, root, scale, i)) + 12);
-    }
-    key(ENAGA_KEY_OCTAVE_LEFT);
-    CHECK_EQ(UiProbe::keys_octave(app), octave_before);
-
-    // Every scale this build has, through the same encoder: the note a key plays is always in the
-    // scale, which is the property that makes the mode playable at all.
-    key(ENAGA_KEY_F3);
-    for (int s = int(Scale::minor) + 1; s < kScaleCount; s++) {
-        app.on_encoder(2, +1);
-        pump();
-        CHECK_EQ(int(app_engine().pattern().scale), s);
-        open_keys();
-        for (int i = 0; i < 16; i++) CHECK(scale_contains(app.keys_note(i), root, s));
-        key(ENAGA_KEY_F3);
+        if (c.keys) {
+            const int octave = UiProbe::keys_octave(app);
+            key(ENAGA_KEY_RIGHT);                          // the octave stays on the arrows
+            CHECK_EQ(UiProbe::keys_octave(app), octave + 1);
+            key(ENAGA_KEY_LEFT);
+        }
+        key(ENAGA_KEY_F4);
     }
 }
 
-TEST(ui_a_step_key_in_keys_mode_plays_and_records_the_scale_note) {
-    // The wiring, rather than the arithmetic: the note `keys_note` worked out is the note that
-    // reaches the engine. A recorded hit is the one place a played note becomes something a test
-    // can read back, which is why this is recorded rather than listened to.
-    Strata &app = fresh();
-
-    key(ENAGA_KEY_F3);
-    app.on_encoder(2, +1);                         // minor, so a degree is not a semitone
-    pump();
-    open_keys();
-
-    FakeHost &host = FakeHost::the();
-    host.set_running(true);
-    host.set_position(96);                         // a bar in, so the pad-latency correction has
-                                                   // somewhere to go
-    key(ENAGA_KEY_F2);                             // REC on
-    CHECK(UiProbe::rec(app));
-
-    const uint8_t expected = app.keys_note(4);
-    step_down(4);                                  // KEYS takes the press and ignores the release
-    step_up(4);
-    pump(2);
-
-    int trigs = 0;
-    int where = -1;
-    for (int s = 0; s < kStepsPerTrack; s++) {
-        if (trig_at(0, s)) { trigs++; where = s; }
-    }
-    CHECK_EQ(trigs, 1);                            // one key, one step
-    CHECK(where >= 0);
-    CHECK_EQ(int(step_of(0, where).note), int(expected));
-    CHECK_EQ(int(step_of(0, where).velocity), 100);     // a key has no velocity of its own
-
-    key(ENAGA_KEY_F2);
-    host.set_running(false);
-}
-
-TEST(ui_a_key_held_while_recording_gives_the_step_its_length) {
-    // KEYS on VA POLY, REC on: a key held for four steps records a step whose LEN is four steps,
+TEST(ui_a_keys_pad_held_while_recording_gives_the_step_its_length) {
+    // KEYS on VA POLY, REC on: a pad held for four steps records a step whose LEN is four steps,
     // so with SUS up the chord plays back as long as it was played. On a drum the hold is not
     // measured: LEN stays the one step a recorded hit always had.
     Strata &app = fresh();
@@ -1810,10 +1738,10 @@ TEST(ui_a_key_held_while_recording_gives_the_step_its_length) {
     key(ENAGA_KEY_F2);                                  // REC on
     CHECK(UiProbe::rec(app));
 
-    step_down(2);
+    app.on_pad_press(4, 100);
     pump(2);
     host.set_position(96 + 4 * 24);                     // four steps later
-    step_up(2);
+    app.on_pad_release(4);
     pump(2);
 
     int where = -1;
@@ -1825,10 +1753,10 @@ TEST(ui_a_key_held_while_recording_gives_the_step_its_length) {
 
     // A quick tap on the same step's note again replaces its length with the tap's.
     host.set_position(96);
-    step_down(2);
+    app.on_pad_press(4, 100);
     pump(2);
     host.set_position(96 + 6);                          // a quarter of a step
-    step_up(2);
+    app.on_pad_release(4);
     pump(2);
     CHECK_EQ(int(step_of(6, where).length), 4);
 
@@ -1836,7 +1764,7 @@ TEST(ui_a_key_held_while_recording_gives_the_step_its_length) {
     host.set_running(false);
 }
 
-TEST(ui_a_held_key_on_a_drum_track_keeps_the_one_step_length) {
+TEST(ui_a_held_keys_pad_on_a_drum_track_keeps_the_one_step_length) {
     Strata &app = fresh();
     open_keys();
     CHECK_EQ(UiProbe::selected(app), 0);                // track 1, KICK
@@ -1844,14 +1772,14 @@ TEST(ui_a_held_key_on_a_drum_track_keeps_the_one_step_length) {
     host.set_running(true);
     host.set_position(96);
     key(ENAGA_KEY_F2);
-    step_down(4);
+    app.on_pad_press(4, 100);
     pump(2);
     host.set_position(96 + 8 * 24);
-    step_up(4);
+    app.on_pad_release(4);
     pump(2);
     int recorded = 0;
     for (int s = 0; s < kStepsPerTrack; s++) {
-        if (trig_at(0, s) && step_of(0, s).note == app.keys_note(4)) {
+        if (trig_at(0, s) && step_of(0, s).note == UiProbe::pad_note(app, 4)) {
             recorded++;
             CHECK_EQ(int(step_of(0, s).length), 8);
         }
@@ -4161,15 +4089,15 @@ TEST(ui_the_arp_is_edits_sixth_page_and_keys_play_it) {
         check_layout(app, "EDIT ARP, every value");
     }
 
-    // KEYS: a key held on a track whose arp is on starts it; the key coming up stops it.
+    // KEYS: a pad held on a track whose arp is on starts it; the pad coming up stops it.
     post_cmd_track_param(0, uint8_t(kArpFirst + 0), 22);      // UP
     pump();
     open_keys();
     CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
-    app.on_key(ENAGA_KEY_STEP1, true);
+    app.on_pad_press(0, 100);
     pump(2);
     CHECK(app_engine().arp_running(0));
-    app.on_key(ENAGA_KEY_STEP1, false);
+    app.on_pad_release(0);
     pump(2);
     CHECK(!app_engine().arp_running(0));
 
@@ -5964,12 +5892,14 @@ TEST(ui_pad_row_keys_do_nothing_where_the_step_keys_never_change) {
     key(ENAGA_KEY_F4);
 }
 
-TEST(ui_perform_pad_row_keys_do_nothing_and_arrows_pick_the_macro) {
+TEST(ui_perform_pad_row_keys_are_the_step_page_and_arrows_pick_the_macro) {
     Strata &app = fresh();
     shift_key(ENAGA_KEY_F7);
     const int macro = UiProbe::macro_selected(app);
     key(ENAGA_KEY_OCTAVE_RIGHT);
     CHECK_EQ(UiProbe::macro_selected(app), macro);
+    CHECK_EQ(UiProbe::page(app), 1);                       // the STEP keys are steps (D12)
+    key(ENAGA_KEY_OCTAVE_LEFT);
     key(ENAGA_KEY_RIGHT);
     CHECK_EQ(UiProbe::macro_selected(app), (macro + 1) % 4);
     key(ENAGA_KEY_LEFT);
@@ -6538,14 +6468,15 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_grid, false, "OCT LEFT", "already step page 1"},
         {s_edit, false, "OCT LEFT", "already step page 1"},
         {s_machine, false, "OCT LEFT", "already step page 1"},
+        {s_keys, false, "OCT LEFT", "already step page 1"},
+        {s_perform, false, "OCT LEFT", "already step page 1"},
         {s_kit, false, "SEL LEFT", "the cursor is on slot 1"},
         {s_kit, false, "LEFT", "ditto"}, {s_kit, false, "UP", "ditto"},
         {s_kit, false, "A-", "ditto"}, {s_kit, true, "A-", "ditto"},
         // docs/CONTROLS.md: the pad-row keys choose which sixteen the STEP keys mean, and in
-        // KIT, SAMPLES, PERFORM and the menu those sixteen never change.
+        // KIT, SAMPLES and the menu those sixteen never change.
         {s_kit, false, "OCT LEFT", "the STEP keys always mean the same"},
         {s_kit, false, "OCT RIGHT", "ditto"},
-        {s_perform, false, "OCT LEFT", "ditto"}, {s_perform, false, "OCT RIGHT", "ditto"},
         // The cursor starts on SAVE, which has no value for LEFT / RIGHT or B to change.
         {s_menu, false, "LEFT", "SAVE has no value"}, {s_menu, false, "RIGHT", "ditto"},
         {s_menu, false, "B+", "ditto"}, {s_menu, true, "B+", "ditto"},
@@ -7105,6 +7036,9 @@ TEST(ui_keys_plays_the_pads_as_a_piano) {
     open_keys();
     const int c = UiProbe::pad_note(app, 0);
     CHECK_EQ(c % 12, 0);                                   // lower 1 is a C
+    pump(2);
+    check_layout(app, "KEYS, the piano and the step page");
+    CHECK(screen_has(app, "STEP KEYS 1-16"));             // the STEP keys are steps (D12)
     // Lower row: the white keys C D E F G A B C.
     const int white[8] = {0, 2, 4, 5, 7, 9, 11, 12};
     for (int i = 0; i < 8; i++) CHECK_EQ(UiProbe::pad_note(app, 2 * i) - c, white[i]);

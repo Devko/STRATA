@@ -195,7 +195,7 @@ constexpr Text kKeysPads = {"KEYS: PADS = PIANO", {
     "UPPER PADS BLACK KEYS",
     "UPPER 3/7  OCTAVE -/+",
     "PRESSURE   MACRO A",
-    "STEP 1-16  SCALE",
+    "STEP KEYS  STEPS",
     "LEFT/RIGHT OCTAVE",
     "UP/DOWN    TRACK",
     "SCREEN KEYS EDIT PAGE",
@@ -224,7 +224,7 @@ constexpr Text kPerform = {"PERFORM:", {
     "OK         CAPTURE A",
     "CLR       CLEAR MACRO",
     "UP/DOWN   MUTATE TYPE",
-    nullptr,
+    "STEP KEYS  STEPS",
 }};
 
 constexpr Text kPerform2 = {"PERFORM MORE:", {

@@ -190,6 +190,9 @@ TEST(help_covers_the_gestures_added_on_2026_11_23) {
     CHECK(page_has(place_of(HelpScreen::edit, 0, 0), "MACRO LEARN"));
     CHECK(page_has(place_of(HelpScreen::keys, 0, 0), "UPPER 3/7  OCTAVE -/+"));
     CHECK(page_has(place_of(HelpScreen::keys, 0, 0), "ROOT       BRIGHT"));
+    // D12: the STEP keys are steps in KEYS and PERFORM too.
+    CHECK(page_has(place_of(HelpScreen::keys, 0, 0), "STEP KEYS  STEPS"));
+    CHECK(page_has(place_of(HelpScreen::perform, 0, 0), "STEP KEYS  STEPS"));
 }
 
 // 24 is the ASR page's first parameter, 28 the OSC page's (dsp/track.hpp).
