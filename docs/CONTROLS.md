@@ -52,7 +52,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      one-page screens give them their one sideways setting: MACHINE and SOUNDS the track,
      RESAMPLE the destination, PERFORM the mutate amount.
    - **Pad-row keys:** which sixteen the STEP keys mean. Step page 1-4 (GRID, KEYS, PERFORM,
-     EDIT, MIXER, MACHINE, RESAMPLE), the bank A-H in PROJECT and CHAIN. Where the STEP keys
+     EDIT, MIXER, MACHINE, RESAMPLE), the bank A-H in PROJECT and CHAIN. Both go round: past
+     page 4 is page 1, as LEFT/RIGHT walk the step page on GRID. Where the STEP keys
      always mean the same sixteen things (KIT, SAMPLES, SOUNDS, the menu) they do nothing.
      FUNC + pad-row key = the selected track's length, on every screen but the menu.
    - **Knobs A-D:** the four values on screen. Push = that value's switch. With a STEP held, turn

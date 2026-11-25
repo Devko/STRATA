@@ -1209,8 +1209,9 @@ public:
                     len_repeat_key_ = key;
                     len_repeat_due_ms_ = last_ms_ + kLenRepeatDelayMs;
                 } else {
-                    const int next = page_ + delta;
-                    page_ = next < 0 ? 0 : (next > 3 ? 3 : next);
+                    // Round the four, as LEFT/RIGHT walk the same page on GRID and the pad-row
+                    // keys walk PROJECT's banks: page 4 to 1 is one press, not three.
+                    page_ = (page_ + delta + 4) % 4;
                 }
                 break;
             }

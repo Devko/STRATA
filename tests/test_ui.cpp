@@ -379,7 +379,8 @@ Strata &fresh() {
     key(ENAGA_KEY_F4);                     // GRID: closes the step page and drops any hold
     g_ms += 1000;
     pump();
-    for (int i = 0; i < 4; i++) key(ENAGA_KEY_OCTAVE_LEFT);   // step page 1 of 4, clamped at 0
+    // Step page 1 of 4. The pad-row keys go round the four, so walk until it is there.
+    for (int i = 0; i < 4 && UiProbe::page(app) != 0; i++) key(ENAGA_KEY_OCTAVE_LEFT);
     step_down(0);                          // a fresh single press drops any selection...
     step_up(0);                            // ...and its release toggles a trig, wiped below
     app.on_pad_press(0, 100);              // track 1 selected
@@ -920,14 +921,19 @@ TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {
     CHECK_EQ(int(step_of(0, 1).lock_count), 0);
     CHECK(!trig_at(0, 33));                        // the hold was spent on the lock
 
-    // The octave keys CLAMP at both ends: four pages, and walking off either end stays there.
-    for (int i = 0; i < 4; i++) key(ENAGA_KEY_OCTAVE_RIGHT);
+    // The pad-row keys go ROUND the four pages, as LEFT/RIGHT do (below): from page 3, two
+    // presses come round to page 1, and one back from page 1 is page 4.
+    key(ENAGA_KEY_OCTAVE_RIGHT);
     CHECK_EQ(UiProbe::page(app), 3);
-    for (int i = 0; i < 6; i++) key(ENAGA_KEY_OCTAVE_LEFT);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
+    CHECK_EQ(UiProbe::page(app), 0);
+    key(ENAGA_KEY_OCTAVE_LEFT);
+    CHECK_EQ(UiProbe::page(app), 3);
+    key(ENAGA_KEY_OCTAVE_RIGHT);
     CHECK_EQ(UiProbe::page(app), 0);
 
-    // LEFT and RIGHT move the step page in GRID as well, and those WRAP. The screen keys do
-    // not: on GRID they turn the EDIT page that A-D work on (docs/CONTROLS.md).
+    // LEFT and RIGHT move the step page in GRID as well, and wrap the same way. The screen keys
+    // do not: on GRID they turn the EDIT page that A-D work on (docs/CONTROLS.md).
     key(ENAGA_KEY_LEFT);
     CHECK_EQ(UiProbe::page(app), 3);
     key(ENAGA_KEY_RIGHT);
@@ -6777,11 +6783,6 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
 
     static const struct { int screen; bool func; const char *name; const char *why; } kQuiet[] = {
         // At the end of a range, from where every probe starts.
-        {s_grid, false, "OCT LEFT", "already step page 1"},
-        {s_edit, false, "OCT LEFT", "already step page 1"},
-        {s_machine, false, "OCT LEFT", "already step page 1"},
-        {s_keys, false, "OCT LEFT", "already step page 1"},
-        {s_perform, false, "OCT LEFT", "already step page 1"},
         {s_kit, false, "SEL LEFT", "the cursor is on slot 1"},
         {s_kit, false, "LEFT", "ditto"}, {s_kit, false, "UP", "ditto"},
         {s_kit, false, "A-", "ditto"}, {s_kit, true, "A-", "ditto"},
@@ -6801,12 +6802,10 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_pattern, true, "UP", "ditto"}, {s_pattern, true, "DOWN", "ditto"},
         {s_setup, true, "UP", "SETUP only shows"}, {s_setup, true, "DOWN", "ditto"},
         {s_menu, true, "UP", "no copy / paste in a list"}, {s_menu, true, "DOWN", "ditto"},
-        {s_mixer, false, "OCT LEFT", "already step page 1"},
         {s_projects, false, "DOWN", "the cursor is on the last project"},
         {s_projects, false, "RIGHT", "ditto"},
         {s_projects, false, "A+", "ditto"},
         {s_projects, true, "A+", "ditto"},
-        {s_resample, false, "OCT LEFT", "already step page 1"},
         {s_project, false, "UP", "the slot cursor is on the top row"},
         {s_pattern, false, "LEFT", "the cursor is on the first field"},
         {s_chain, false, "UP", "an empty chain has no entry to move to"},
