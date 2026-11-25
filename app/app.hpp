@@ -36,6 +36,7 @@
 #include "engine.hpp"
 #include "help.hpp"         // the FUNC help's pages, one set per screen
 #include "paint.hpp"        // the drawing kit: lines, arcs, the small font, afterglow
+#include "spectrum.hpp"     // the output's spectrum for MIXER's master pages
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "sounds.hpp"       // SOUNDS: the factory sounds for one track
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
@@ -924,6 +925,13 @@ private:
     uint32_t lfo_strip_at_ = 0;
     // GRAIN's SRC page: the sparks' afterglow, the middle 13 rows of the picture.
     paint::Glow<124, 13> grain_glow_;
+    // MIXER's master pages: the FFT's scratch, each band's shown rows, its peak dot and how long
+    // the dot holds, and the vectorscope's afterglow.
+    spectrum::Work spectrum_work_;
+    uint8_t band_rows_[spectrum::kBands] = {};
+    uint8_t band_peak_[spectrum::kBands] = {};
+    uint8_t band_hold_[spectrum::kBands] = {};
+    paint::Glow<22, 22> vector_glow_;
     // draw()'s own cost (count_draw_time): the window's sum, its frames, the last average.
     uint32_t draw_ms_sum_ = 0;
     uint32_t draw_count_ = 0;
