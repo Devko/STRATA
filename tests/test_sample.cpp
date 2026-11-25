@@ -13,6 +13,7 @@
 // out-of-bounds read on the device does not fault, it silently returns garbage.
 #include "check.hpp"
 
+#include <cstdlib>
 #include <cstring>
 
 #include <enaga/abi.h>
@@ -1786,4 +1787,84 @@ TEST(sample_the_cl6x_read_loop_is_bit_exact_against_the_loop_it_replaced) {
         }
     }
     CHECK_EQ(compared, 2 * 2 * 7 * 4);
+}
+
+// --- the screen's view (core/overview.hpp, WaveView) ----------------------------------------
+//
+// EDIT's waveform draws where the machine is, in the overview's columns. The window, the slice
+// starts and the playheads have to land on the columns the overview builder put those frames in,
+// or a STA line sits beside the hit it starts on.
+
+TEST(sample_wave_view_shows_the_window_and_the_slices) {
+    Sampler s;
+    s.init(kRate);
+    s.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    p.set(1, 32);                                  // STA a quarter in
+    p.set(2, 64);                                  // LEN about half of the rest
+    p.set(3, 25);                                  // SLC 4
+    s.prepare(p);
+    CHECK_EQ(s.slices(), 4);
+    WaveView view;
+    s.wave_view(view);
+    const auto column = [](int frame) {
+        return int(int64_t(frame) * kWaveColumns / kSrcFrames);
+    };
+    CHECK(std::abs(int(view.lo) - column(s.window_start())) <= 1);
+    CHECK(std::abs(int(view.hi) - column(s.window_start() + s.window_length() - 1)) <= 1);
+    int cuts = 0;
+    for (int x = 0; x < kWaveColumns; x++) cuts += wave_has_cut(view.cuts, x) ? 1 : 0;
+    CHECK_EQ(cuts, 3);
+    for (int i = 1; i < 4; i++) {
+        const int c = column(s.slice_start(i));
+        CHECK(wave_has_cut(view.cuts, c) || wave_has_cut(view.cuts, c - 1) ||
+              wave_has_cut(view.cuts, c + 1));
+    }
+    // Nothing playing: no marks.
+    for (int i = 0; i < WaveView::kMarks; i++) CHECK_EQ(int(view.mark[i]), int(WaveView::kNone));
+}
+
+TEST(sample_wave_view_puts_a_playhead_on_each_voice_and_follows_reverse) {
+    Sampler s;
+    s.init(kRate);
+    s.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams p = plain();
+    s.prepare(p);
+    s.trigger(hit());
+    clear(g_out, kCapture);
+    render_blocks(s, p, g_out, 375);               // half a second: half way through
+    WaveView view;
+    s.wave_view(view);
+    CHECK(std::abs(int(view.mark[0]) - kWaveColumns / 2) <= 1);
+    CHECK(view.glow[0] >= 14);                     // DEC holds: the voice is at full level
+    CHECK_EQ(int(view.mark[1]), int(WaveView::kNone));
+
+    // Reversed, the same time in is the same distance from the END.
+    Sampler r;
+    r.init(kRate);
+    r.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    TrackParams rev = plain();
+    rev.set(10, 64);                               // PLY: reverse one-shot
+    r.prepare(rev);
+    r.trigger(hit());
+    render_blocks(r, rev, g_out, 94);              // an eighth of a second
+    r.wave_view(view);
+    CHECK(std::abs(int(view.mark[0]) - (kWaveColumns - 1 - kWaveColumns / 8)) <= 1);
+
+    // Two notes, two playheads.
+    s.trigger(hit());
+    render_blocks(s, p, g_out, 2);
+    s.wave_view(view);
+    CHECK(view.mark[0] < kWaveColumns);
+    CHECK(view.mark[1] < kWaveColumns);
+}
+
+TEST(sample_wave_view_of_no_sample_is_empty) {
+    Sampler s;
+    s.init(kRate);
+    WaveView view;
+    view.lo = 3;
+    s.wave_view(view);
+    CHECK_EQ(int(view.lo), int(WaveView::kNone));
+    CHECK_EQ(int(view.hi), int(WaveView::kNone));
 }

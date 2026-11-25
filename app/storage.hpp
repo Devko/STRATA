@@ -55,6 +55,7 @@
 #include "browse.hpp"
 #include "commands.hpp"
 #include "onsets.hpp"
+#include "overview.hpp"
 #include "pcm.hpp"
 #include "perform.hpp"
 #include "project.hpp"
@@ -359,6 +360,19 @@ public:
     // Which track the loader is working on, or -1.
     int loading_track() const;
 
+    // The picture of what a track plays, for EDIT's waveform (core/overview.hpp): its file's,
+    // made while the loader wrote it into the pool, or -- while there is none, a load is on its
+    // way or a load failed -- the placeholder's, which is what Cmd::clear_sample leaves playing.
+    // A streamed file's covers only its head (`filled` columns). Main context.
+    const WaveOverview &overview(int track) const {
+        if (track >= 0 && track < kTracks && overviews_[track].ready) return overviews_[track];
+        return placeholder_overview_;
+    }
+    // Whether that picture is the track's own file rather than the placeholder.
+    bool has_overview(int track) const {
+        return track >= 0 && track < kTracks && overviews_[track].ready;
+    }
+
     // True while a PROJECT load is in flight -- the job that rewrites pattern memory a pass at a
     // time. The transport must not be started under one: the audio side would play a pattern
     // half of which belongs to the project being replaced. A SAMPLE load is deliberately NOT
@@ -635,6 +649,11 @@ private:
     Resampler cursor_;
     Antialias antialias_;          // a downsample's low-pass, carried across slices
     OnsetFinder onsets_;           // the slice points of the sample being loaded, as it lands
+    // And its picture for the screen, the same way: 250 bytes a track, built beside onsets_ from
+    // the same slices, so a load reads nothing twice.
+    OverviewBuilder overview_builder_;
+    WaveOverview overviews_[kTracks];
+    WaveOverview placeholder_overview_;   // built once in init(), from the engine's placeholder
 
     // The buffers, all taken in init().
     //

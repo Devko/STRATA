@@ -80,6 +80,8 @@ struct UiProbe {
     static int pad_held_note(const Strata &app, int pad) { return app.pad_held_note_[pad]; }
     static int pad_note(const Strata &app, int pad) { return app.pad_note(pad); }
     static bool fill_held(const Strata &app) { return app.fill_held_; }
+    static int stutter_raw(const Strata &app) { return app.stutter_raw_; }
+    static RepeatLength repeat_length(const Strata &app) { return app.repeat_length_; }
     static int macro_learn(const Strata &app) { return app.macro_learn_; }
 
     static const char *notice(const Strata &app) { return app.notice_; }
@@ -2817,6 +2819,135 @@ TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
     CHECK(!screen_has(app, "K:"));
     host.set_running(false);
     pump(2);
+}
+
+// Hold REPEAT, then a STEP: step stutter (CyDrums' P2). REPEAT first, so the STEP performs: it
+// toggles nothing, writes nothing to undo, and its release is the stutter's even after REPEAT.
+TEST(ui_hold_repeat_and_a_step_stutters_until_it_comes_up) {
+    Strata &app = fresh();
+    pump(2);
+    const bool trig4 = trig_at(0, 4), trig8 = trig_at(0, 8);
+    const uint8_t undo_before = undo_depth();
+
+    app.on_pad_press(3, 100);              // REPEAT: the audio repeat, as before
+    pump(2);
+    CHECK(app_engine().repeat_length() == RepeatLength::sixteenth);
+    step_down(4);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), 4);
+    CHECK(std::strcmp(UiProbe::notice(app), "STUTTER 5 1/16") == 0);
+    CHECK(screen_has(app, "ST5"));
+    CHECK(screen_has(app, "R1/16"));
+
+    // A second STEP moves it; letting that go goes back to the one still held.
+    step_down(8);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), 8);
+    step_up(8);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), 4);
+    step_up(4);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), -1);
+    CHECK(std::strcmp(UiProbe::notice(app), "STUTTER OFF") == 0);
+
+    // FUNC + STEP stutters the selected track alone.
+    app.on_key(ENAGA_KEY_F1, true);
+    step_down(2);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), 2);
+    CHECK(std::strcmp(UiProbe::notice(app), "T1 STUTTER 3 1/16") == 0);
+
+    // REPEAT up ends the stutter with the STEP still down, and that STEP's release is swallowed.
+    app.on_pad_release(3);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), -1);
+    CHECK_EQ(UiProbe::stutter_raw(app), -1);
+    step_up(2);
+    pump(2);
+
+    CHECK(trig_at(0, 4) == trig4);
+    CHECK(trig_at(0, 8) == trig8);
+    CHECK_EQ(int(undo_depth()), int(undo_before));
+    CHECK_EQ(UiProbe::held_step(app), -1);
+
+    // And with REPEAT up, a STEP is a step again.
+    const bool trig2 = trig_at(0, 2);
+    step_down(2);
+    step_up(2);
+    pump(2);
+    CHECK(trig_at(0, 2) != trig2);
+}
+
+// STEP first edits, pad first performs: a STEP held before REPEAT edits the step's ratchet
+// (D6), and no stutter starts.
+TEST(ui_step_first_then_repeat_still_edits_the_ratchet) {
+    Strata &app = fresh();
+    pump(2);
+    step_down(5);
+    app.on_pad_press(3, 100);
+    app.on_pad_release(3);
+    pump(2);
+    CHECK_EQ(app_engine().stutter_step(), -1);
+    CHECK(std::strncmp(UiProbe::notice(app), "STEP 6 ", 7) == 0);
+    step_up(5);
+    pump(2);
+}
+
+// REPEAT + LEFT/RIGHT walk the rate by its length (CyDrums' P3), heard by the engine at once and
+// shown on screen; under a rolling pad too. The arrows do not reach the page underneath.
+TEST(ui_repeat_and_the_arrows_walk_the_roll_rate) {
+    Strata &app = fresh();
+    pump(2);
+    const int page = UiProbe::page(app);
+    app.on_pad_press(3, 100);
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(app_engine().repeat_length() == RepeatLength::sixteenth_triplet);
+    CHECK(std::strcmp(UiProbe::notice(app), "REPEAT 1/16T") == 0);
+    CHECK(screen_has(app, "R1/16T"));
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);                  // stops at 1/32
+    pump(2);
+    CHECK(app_engine().repeat_length() == RepeatLength::thirty_second);
+    for (int i = 0; i < 9; i++) key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK(app_engine().repeat_length() == RepeatLength::quarter);
+    CHECK_EQ(UiProbe::page(app), page);
+
+    // Stuttering, the rate says so; and the stutter keeps the audio repeat off.
+    step_down(0);
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "STUTTER 1/4T") == 0);
+    CHECK(!app_engine().repeat().active());
+    step_up(0);
+    app.on_pad_release(3);
+    pump(2);
+
+    // A rolling pad takes the arrows too, and the roll follows.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    app.on_pad_press(4, 100);
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(app_engine().rolling(2));
+    CHECK(app_engine().repeat_length() == RepeatLength::eighth);
+    CHECK(std::strcmp(UiProbe::notice(app), "ROLL 1/8") == 0);
+    app.on_pad_release(4);
+    pump(2);
+
+    // Back to 1/16 for the tests after: the rate is the UI's, and fresh() keeps it.
+    app.on_pad_press(3, 100);
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);
+    app.on_pad_release(3);
+    pump(2);
+    CHECK(UiProbe::repeat_length(app) == RepeatLength::sixteenth);
+    CHECK(app_engine().repeat_length() == RepeatLength::sixteenth);
 }
 
 // The ambient modes' pages (dsp/ambient.hpp): DLY+ beside DLY, REV+ beside REV. Their TYP knob is
@@ -6171,7 +6302,7 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     hold_func(app);
     CHECK(screen_has(app, "GRID SRC KCK"));
     CHECK(screen_has(app, "B FMA FM AMOUNT"));
-    CHECK(screen_has(app, "PAGE 1/10"));
+    CHECK(screen_has(app, "PAGE 1/11"));
     CHECK(!screen_has(app, "FUNC + KEY:"));
 
     // The screen keys turn the help's pages while FUNC is held, and not GRID's knob page.
@@ -6179,7 +6310,7 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     key(ENAGA_KEY_SELECT_RIGHT);
     CHECK(UiProbe::func_help(app));
     CHECK(screen_has(app, "STEPS:"));
-    CHECK(screen_has(app, "PAGE 2/10"));
+    CHECK(screen_has(app, "PAGE 2/11"));
     CHECK_EQ(UiProbe::param_page(app), knob_page);
     // LEFT goes back, and round: the last page is the performance mixer's slots, the upper pads
     // two before it.
@@ -6987,6 +7118,76 @@ void write_shot(const char *folder, const char *name, int settle = 1600) {
 
 }  // namespace
 
+// EDIT's pictures: helpers for the screenshots below and the tests at the end of the file.
+namespace {
+
+// A 48 kHz mono "break" on the fake card: four hits, each a loud burst that decays, a quarter
+// of the file apart, so the picture has peaks to find and slices between them.
+void card_break(const char *path, uint32_t frames = 48000) {
+    static uint8_t bytes[44 + 2 * 96000];
+    if (frames > 96000) frames = 96000;
+    enaga::wav::Format format;
+    format.channels = 1;
+    format.rate = 48000;
+    format.bits = 16;
+    enaga::wav::header(bytes, format, frames * 2u);
+    for (uint32_t f = 0; f < frames; f++) {
+        const uint32_t into = f % (frames / 4u);
+        const int32_t level = into < 6000u ? 30000 - int32_t(into) * 5 : 0;
+        const int32_t v = (f / 24u) % 2u == 0u ? level : -level;
+        bytes[44 + 2 * f] = uint8_t(uint16_t(int16_t(v)) & 0xFFu);
+        bytes[45 + 2 * f] = uint8_t(uint16_t(int16_t(v)) >> 8);
+    }
+    FakeHost::the().write_file(path, bytes, 44u + frames * 2u);
+}
+
+void edit_page_to(Page page) {
+    for (int i = 0; i < 8 && UiProbe::param_page(the_app()) != int(page); i++) {
+        key(ENAGA_KEY_SELECT_RIGHT);
+    }
+    CHECK_EQ(UiProbe::param_page(the_app()), int(page));
+}
+
+uint8_t pixel_at(int x, int y) { return g_pixels[y * enaga::Canvas::width + x]; }
+
+void draw_now() {
+    enaga::Canvas canvas(g_pixels);
+    FakeHost::the().clear_text();
+    the_app().draw(canvas);
+}
+
+// A note on track 1, as a pad plays one.
+void note_on_track_1() {
+    Command command;
+    command.cmd = Cmd::trigger_note;
+    command.track = 0;
+    command.a = 60;
+    command.b = 100;
+    app_engine().commands().post(command);
+}
+
+// Track 1 as `machine` with the break loaded, on EDIT's SRC page.
+void track_with_break(MachineId machine) {
+    card_break("/SAMPLES/BREAK.WAV");
+    post_track(Cmd::set_machine, 0, uint8_t(machine));
+    pump(4);
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_F8);
+    CHECK(app_storage().request_sample_file(0, "/SAMPLES/BREAK.WAV"));
+    CHECK(pump_until_idle());
+    pump(8);
+    edit_page_to(Page::src);
+}
+
+void back_to_a_kick() {
+    post_cmd(Cmd::stop, 1);
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+    key(ENAGA_KEY_F4);
+}
+
+}  // namespace
+
 TEST(ui_screenshots) {
     const char *folder = std::getenv("STRATA_SHOTS");
     if (folder == nullptr || folder[0] == '\0') return;
@@ -7142,6 +7343,41 @@ TEST(ui_screenshots) {
     CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
     write_shot(folder, "sounds");
     key(ENAGA_KEY_CLR);
+
+    // EDIT's pictures (docs/CONTROLS.md, "Waveforms and envelopes"), on track 1 so the default
+    // beat's own tracks are left alone: a break with its window, slices and a playhead; the same
+    // break as GRAIN, its grains in the air; SAMPLE's AMP envelope; a synth's filter envelope.
+    track_with_break(MachineId::sample);
+    post_cmd_track_param(0, 1, 20);                 // STA
+    post_cmd_track_param(0, 2, 110);                // LEN
+    post_cmd_track_param(0, 3, 25);                 // SLC 4
+    post_cmd_track_param(0, 9, 127);                // DEC: hold
+    play_blocks(1600);                              // past the notices the keys left
+    note_on_track_1();
+    write_shot(folder, "edit_wave", 50);
+    edit_page_to(Page::amp);
+    post_cmd_track_param(0, 8, 30);                 // ATK
+    post_cmd_track_param(0, 9, 70);                 // DEC
+    write_shot(folder, "edit_wave_amp");
+    back_to_a_kick();
+    track_with_break(MachineId::grain);
+    post_cmd_track_param(0, 0, 40);                 // POS
+    post_cmd_track_param(0, 3, 30);                 // SPR
+    play_blocks(1600);
+    note_on_track_1();
+    write_shot(folder, "edit_grain", 120);
+    back_to_a_kick();
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::va_mono));
+    pump(4);
+    key(ENAGA_KEY_F8);
+    edit_page_to(Page::fltr);
+    post_cmd_track_param(0, 9, 90);                 // ENV
+    post_cmd_track_param(0, kSlotFdec, 50);         // FDE
+    post_cmd_track_param(0, kAsrFirst + 3, 30);     // FSU
+    post_cmd_track_param(0, kAsrFirst + 1, 80);     // SUS: the note holds
+    write_shot(folder, "edit_vfltr");
+    for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(0, uint8_t(kAsrFirst + i), 0);
+    back_to_a_kick();
 
     key(ENAGA_KEY_F6);
     key(ENAGA_KEY_F4);
@@ -8513,6 +8749,292 @@ TEST(ui_a_trigless_step_draws_as_an_outline_on_the_grid) {
     CHECK(at(x, y) != 0);
     CHECK(at(x + 4, y + 5) != 0);
     CHECK_EQ(at(x + 2, y + 2), 0);                         // hollow
+}
+
+// --- EDIT's pictures: the waveform and the envelopes ------------------------------------------
+//
+// docs/CONTROLS.md, "Waveforms and envelopes". SAMPLE's and GRAIN's SRC page draw the sample from
+// the loader's overview (core/overview.hpp) with what the audio side publishes in Status::wave;
+// AMP, ASR and a synth's FLTR draw the envelope their knobs shape, with the knob letters on the
+// handles.
+
+TEST(ui_wave_sample_draws_its_window_slices_and_playhead) {
+    Strata &app = fresh();
+    track_with_break(MachineId::sample);
+    CHECK(app_storage().has_overview(0));
+    CHECK_EQ(int(app_storage().overview(0).filled), kWaveColumns);
+
+    // STA a quarter in, LEN to the end, SLC 4: the window starts about column 31 and three dotted
+    // slice ticks follow.
+    post_cmd_track_param(0, 1, 32);                 // STA
+    post_cmd_track_param(0, 2, 127);                // LEN
+    post_cmd_track_param(0, 3, 25);                 // SLC 4
+    pump(8);
+    const WaveView view = app_engine().status().wave[0].read();
+    const int start = int(int64_t(32) * (48000 - 1) / 127 * kWaveColumns / 48000);
+    CHECK(int(view.lo) >= start - 1 && int(view.lo) <= start + 1);
+    CHECK_EQ(int(view.hi), kWaveColumns - 1);
+    int cuts = 0;
+    for (int x = 0; x < kWaveColumns; x++) cuts += wave_has_cut(view.cuts, x) ? 1 : 0;
+    CHECK_EQ(cuts, 3);
+
+    draw_now();
+    check_layout(app, "EDIT SRC, SAMPLE with a file");
+    // The window's start is a full-height bright column.
+    for (int y = 96; y < 118; y++) CHECK_EQ(int(pixel_at(view.lo, y)), 15);
+    // The sample inside the window is drawn brighter than before it: a hit starts at column 0
+    // (dim, outside) and the second near STA, so look one column on from each.
+    CHECK_EQ(int(pixel_at(1, 107)), 3);
+    CHECK_EQ(int(pixel_at(view.lo + 1, 107)), 9);
+    // A slice tick is dotted: every other row.
+    int tick = -1;
+    for (int x = view.lo + 1; x < kWaveColumns && tick < 0; x++) {
+        if (wave_has_cut(view.cuts, x)) tick = x;
+    }
+    CHECK(tick > 0);
+    if (tick > 0) {
+        CHECK_EQ(int(pixel_at(tick, 96)), 12);
+        CHECK(pixel_at(tick, 97) != 12);
+    }
+    CHECK(!screen_has(app, "NO FILE"));
+
+    // A note: a playhead appears inside the window and moves on.
+    post_cmd_track_param(0, 3, 0);                  // SLC 1: the whole window
+    pump(4);
+    note_on_track_1();
+    pump(12);
+    const WaveView playing = app_engine().status().wave[0].read();
+    CHECK(playing.mark[0] < kWaveColumns);
+    CHECK(playing.glow[0] > 0);
+    CHECK(playing.mark[0] >= playing.lo);
+    pump(200);
+    const WaveView later = app_engine().status().wave[0].read();
+    CHECK(later.mark[0] < kWaveColumns);
+    CHECK(later.mark[0] > playing.mark[0]);
+    draw_now();
+    if (later.mark[0] < kWaveColumns) {
+        CHECK(pixel_at(later.mark[0], 96) > 0);
+        CHECK(pixel_at(later.mark[0], 117) > 0);
+    }
+    back_to_a_kick();
+}
+
+TEST(ui_wave_sample_with_no_file_draws_the_placeholder_and_says_so) {
+    Strata &app = fresh();
+    sample_track_in_edit();
+    edit_page_to(Page::src);
+    pump(8);
+    CHECK(!app_storage().has_overview(0));
+    CHECK(app_storage().overview(0).ready);            // the placeholder's own picture
+    draw_now();
+    CHECK(screen_has(app, "NO FILE"));
+    int lit = 0;
+    for (int x = 0; x < kWaveColumns; x++) lit += pixel_at(x, 104) != 0 ? 1 : 0;
+    CHECK(lit > 10);
+    check_layout(app, "EDIT SRC, SAMPLE with no file");
+    back_to_a_kick();
+}
+
+TEST(ui_wave_a_new_load_takes_the_old_picture_away_first) {
+    fresh();
+    track_with_break(MachineId::sample);
+    CHECK(app_storage().has_overview(0));
+    // While the next file loads, the track plays the placeholder and the picture is its.
+    card_wav("/SAMPLES/A_HIT.WAV", 4800);
+    CHECK(app_storage().request_sample_file(0, "/SAMPLES/A_HIT.WAV"));
+    bool gone = false;
+    for (int i = 0; i < 400 && !gone; i++) {
+        pump();
+        gone = !app_storage().has_overview(0);
+    }
+    CHECK(gone);
+    CHECK(pump_until_idle());
+    CHECK(app_storage().has_overview(0));
+    // A square at 9000: every column of the new picture reaches 9000 >> 8.
+    CHECK_EQ(int(app_storage().overview(0).hi[60]), 9000 >> 8);
+    CHECK_EQ(int(app_storage().overview(0).lo[60]), -9000 >> 8);
+    back_to_a_kick();
+}
+
+TEST(ui_wave_grain_draws_its_bracket_and_the_grains_in_the_air) {
+    Strata &app = fresh();
+    track_with_break(MachineId::grain);
+    post_cmd_track_param(0, 0, 64);                 // POS: the middle
+    pump(4);
+    note_on_track_1();
+    pump(60);
+    const WaveView view = app_engine().status().wave[0].read();
+    CHECK(view.lo >= 60 && view.lo <= 63);          // 64/127 of the way along
+    CHECK(view.hi >= view.lo && view.hi < kWaveColumns);
+    int grains = 0;
+    for (int i = 0; i < WaveView::kMarks; i++) {
+        if (view.mark[i] < kWaveColumns) {
+            grains++;
+            CHECK(view.glow[i] >= 1 && view.glow[i] <= 15);
+        }
+    }
+    CHECK(grains > 0);
+    draw_now();
+    check_layout(app, "EDIT SRC, GRAIN with a file");
+    CHECK(screen_has(app, "OK: SOUNDS"));
+    draw_now();
+    CHECK_EQ(int(pixel_at(view.lo, 96)), 13);       // the bracket's corners
+    CHECK_EQ(int(pixel_at(view.lo, 117)), 13);
+    back_to_a_kick();
+}
+
+TEST(ui_envelope_on_amp_follows_the_knobs_and_letters_its_handles) {
+    Strata &app = fresh();
+    sample_track_in_edit();
+    edit_page_to(Page::amp);
+    // ATK 0, DEC 60: an instant rise, then a fall. A at the peak, B where the fall ends.
+    post_cmd_track_param(0, 8, 0);
+    post_cmd_track_param(0, 9, 60);
+    pump(4);
+    CHECK(screen_has(app, "OK: PICK SAMPLE"));
+    check_layout(app, "EDIT AMP, SAMPLE");
+    draw_now();
+    CHECK(pixel_at(0, 96) != 0);                    // the peak, at the top at once
+    int letters = 0;
+    for (int i = 0; i < FakeHost::the().text_count(); i++) {
+        const FakeHost::TextDraw &d = FakeHost::the().text_draw(i);
+        if (d.y >= 96 && d.y < 118 && d.length == 1) letters++;
+    }
+    CHECK_EQ(letters, 2);
+    // A longer decay reaches further right: the curve leaves the floor later.
+    const auto reach = [] {
+        int last = 0;
+        for (int x = 0; x < kWaveColumns; x++) {
+            for (int y = 96; y < 117; y++) {
+                if (pixel_at(x, y) == 13) last = x;
+            }
+        }
+        return last;
+    };
+    const int short_reach = reach();
+    post_cmd_track_param(0, 9, 120);
+    pump(4);
+    draw_now();
+    CHECK(reach() > short_reach + 10);
+    back_to_a_kick();
+}
+
+TEST(ui_envelope_on_a_synths_fltr_is_the_filters_with_env_as_its_height) {
+    Strata &app = fresh();
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::va_mono));
+    pump(4);
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_F8);
+    edit_page_to(Page::fltr);
+    // The curve is grey 13 and a lettered handle on it 15.
+    const auto top_row = [](int grey) {
+        for (int y = 96; y < 118; y++) {
+            for (int x = 0; x < kWaveColumns; x++) {
+                if (pixel_at(x, y) >= grey) return y;
+            }
+        }
+        return 118;
+    };
+    post_cmd_track_param(0, 9, 0);                  // ENV 0: a static filter, a flat line
+    pump(4);
+    draw_now();
+    int curve_top = 118;
+    for (int y = 96; y < 118 && curve_top == 118; y++) {
+        for (int x = 0; x < kWaveColumns; x++) curve_top = pixel_at(x, y) == 13 ? y : curve_top;
+    }
+    CHECK_EQ(curve_top, 117);
+    post_cmd_track_param(0, 9, 127);                // ENV full: the sweep to the top
+    pump(4);
+    draw_now();
+    CHECK_EQ(top_row(13), 96);
+    check_layout(app, "EDIT FLTR, VA MONO");
+    // FDE 0 is tied to DEC, and the line says so.
+    post_cmd_track_param(0, kSlotFdec, 0);
+    pump(4);
+    CHECK(screen_has(app, "FDE 0: 0.55 X DEC"));
+    // ENV is knob C on this page, FDE knob D: both lettered.
+    bool c = false, d = false;
+    for (int i = 0; i < FakeHost::the().text_count(); i++) {
+        const FakeHost::TextDraw &t = FakeHost::the().text_draw(i);
+        if (t.y < 96) continue;
+        c = c || std::strcmp(t.text, "C") == 0;
+        d = d || std::strcmp(t.text, "D") == 0;
+    }
+    CHECK(c);
+    CHECK(d);
+    back_to_a_kick();
+}
+
+TEST(ui_envelope_on_asr_holds_when_sus_is_up) {
+    Strata &app = fresh();
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::va_poly));
+    pump(4);
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_F8);
+    edit_page_to(Page::asr);
+    post_cmd_track_param(0, kAsrFirst + 1, 0);      // SUS 0: a one-shot, no plateau
+    pump(4);
+    CHECK(screen_has(app, "SUS 0: ONE-SHOT"));
+    post_cmd_track_param(0, kAsrFirst + 1, 64);     // SUS half: a plateau at half height
+    pump(4);
+    CHECK(screen_has(app, "HOLDS: PAD OR LEN"));
+    draw_now();
+    int plateau = 0;
+    for (int x = 0; x < kWaveColumns; x++) plateau += pixel_at(x, 106) == 13 ? 1 : 0;
+    CHECK(plateau >= 15);
+    check_layout(app, "EDIT ASR, VA POLY holding");
+    // A drum has no ASR: the page says so and draws nothing.
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+    CHECK(screen_has(app, "NOT ON THIS MACHINE"));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_envelope_a_dot_rides_the_amp_curve_while_a_note_plays) {
+    Strata &app = fresh();
+    track_with_break(MachineId::sample);
+    edit_page_to(Page::amp);
+    post_cmd_track_param(0, 8, 40);                 // ATK
+    post_cmd_track_param(0, 9, 90);                 // DEC: a long fall
+    pump(8);
+    const auto bright = [] {
+        int n = 0;
+        for (int y = 96; y < 118; y++) {
+            for (int x = 0; x < kWaveColumns; x++) n += pixel_at(x, y) == 15 ? 1 : 0;
+        }
+        return n;
+    };
+    draw_now();
+    const int idle = bright();
+    CHECK_EQ(int(app_engine().status().env_stage[0].load()), 0);
+    note_on_track_1();
+    pump(450);                                       // 0.6 s: well down the fall, past handle A
+    const uint8_t stage = app_engine().status().env_stage[0].load();
+    CHECK(stage >= 1 && stage <= 3);
+    CHECK(app_engine().status().env_level[0].load() > 0);
+    draw_now();
+    CHECK(bright() > idle);                          // the dot: a hollow square on the curve
+    check_layout(app, "EDIT AMP, SAMPLE, a note playing");
+    // FLTR on a synth draws the filter's envelope: no amplitude dot on it.
+    back_to_a_kick();
+}
+
+TEST(ui_samples_the_browser_shows_the_waveform_of_what_the_track_plays) {
+    Strata &app = fresh();
+    track_with_break(MachineId::sample);
+    seed_sample_card();
+    key(ENAGA_KEY_OK);                              // SAMPLES on track 1
+    for (int i = 0; i < 400 && app_storage().browsing(); i++) pump();
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+    draw_now();
+    int lit = 0;
+    for (int y = 93; y < 102; y++) {
+        for (int x = 0; x < kWaveColumns; x++) lit += pixel_at(x, y) == 6 ? 1 : 0;
+    }
+    CHECK(lit > 100);
+    check_layout(app, "SAMPLES with the waveform strip");
+    key(ENAGA_KEY_CLR);
+    back_to_a_kick();
 }
 
 // --- play modes -------------------------------------------------------------

@@ -78,6 +78,16 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
   `STEP 5 DLY FULL`, and from the next pass only that hit echoes; again: `STEP 5 DLY OFF`, dry.
   Hold FUNC too: `STEP 5 REV FULL`, that hit alone in the reverb. FUNC + CLR takes it back. THROW
   alone still throws the whole track while held.
+- **Step stutter and the rate (Phase 5, P2 P3).** PLAY A01 on GRID. Hold REPEAT, then hold
+  STEP 1: `STUTTER 1 1/16`, the whole kit hammers step 1, the beat repeat stops; line 2 shows
+  `ST1 R1/16`. Still holding, RIGHT twice: `STUTTER 1/32`, faster; LEFT back. Hold STEP 5 too:
+  the stutter jumps to the backbeat; let STEP 5 go: back to step 1. Let go of STEP 1:
+  `STUTTER OFF`, and the beat comes back **in time**, as if it had played on. No trig toggled.
+  FUNC + STEP 3 under REPEAT: only the selected track stutters, the rest plays. Let go of
+  REPEAT with a STEP still down: the stutter stops, the STEP's release toggles nothing. Turn a
+  filter knob during a stutter: you hear it move (it is not audio repeat). FUNC + FILL (NOTE
+  RPT), hold lower pad 2, RIGHT: `ROLL 1/16T`, the roll speeds up; let go: LEFT/RIGHT are
+  GRID's again. Feels like a stutter, in time? `____`
 - **STEP keys are steps in PERFORM and KEYS (D12).** In KEYS tap STEP 5: a trig, as on GRID, and
   the screen still shows the piano and `STEP KEYS 1-16`; pad-row right: `17-32`. LEFT/RIGHT:
   `OCT`. Play a chord on the pads while tapping STEP keys: both work at once. In PERFORM tap
@@ -312,6 +322,20 @@ it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA_1.WAV` will 
 - GRID: STEP 5's cell has a dot (lock). Hold STEP 6 + FILL: top-left corner cut; + MUTATE:
   top-right cut; + REPEAT: two teeth along the bottom. The four told apart at a glance? `____`
 - PERFORM: press a pad hard: macro A's bar rises, a tick stays at the knob. `____`
+
+**24. Waveforms and envelopes in EDIT (4 min).** Beat playing, A01. Needs a drum break in
+`/SAMPLES`.
+- HOME, lower pad 8 (the loop track, SMP), EDIT, SRC page: the placeholder's waveform under the
+  knobs with `NO FILE` over it. OK, pick the break: `LOADING`, then its waveform. `____`
+- Turn B (STA) and C (LEN): the bright lines move and the part outside them dims. D (SLC) to
+  about 4: dotted lines at the slices; push D (SLC AUTO): they jump to the hits. `____`
+- The loop playing: a bright column runs through the window in time, one per voice. `____`
+- AMP: the envelope's corner moves with A (ATK) and B (DEC), letters A and B on it. Track 7
+  (CHORD) ASR, then FLTR: SUS lifts the plateau, ENV lifts the filter curve. `____`
+- MACHINE: track 8 to GRN, back to EDIT SRC: a bracket at POS, ticks flickering inside it as
+  grains come and go, brighter when louder. Turn A (POS) and B (SIZ): the bracket follows. `____`
+- Screen still smooth at 20 fps with all eight tracks playing and a 30 s file loaded? Keys never
+  dropped while a long file loads? `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `3 fail: reads 055`, `9: MAX 61.2`.
 

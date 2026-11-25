@@ -215,6 +215,8 @@ public:
 
     // Whether a note repeat is rolling on `track` (Cmd::note_repeat).
     bool rolling(int track) const { return track >= 0 && track < kTracks && rolls_[track].on; }
+    // The step the stutter is retriggering (Cmd::step_stutter), or -1.
+    int stutter_step() const { return stutter_step_; }
 
     // The performance layer writes over the kit without changing it, so the UI has to be able to
     // draw what is actually being heard as well as what is stored. `params` is the kit; this is
@@ -338,6 +340,8 @@ private:
     // The eight playheads into Status, every block. See the implementation on why not only on a
     // tick.
     void publish_playheads();
+    // Each SAMPLE and GRAIN track's WaveView into Status::wave, every kWaveEveryBlocks blocks.
+    void publish_waves();
     void fire(const StepEvent &event);
 
     // `Step::length` as a frame count for `Trig::gate_frames`; 0 for "no gate".
@@ -413,6 +417,7 @@ private:
 public:
     // For tests: the PCM a track with no file plays.
     const int16_t *placeholder() const { return placeholder_; }
+    uint32_t placeholder_frames() const { return placeholder_frames_; }
 private:
     uint32_t placeholder_frames_ = 0;
 
@@ -703,6 +708,16 @@ private:
     };
     Roll rolls_[kTracks];
 
+    // Step stutter (Cmd::step_stutter): which step, on which tracks, and the roll's own grid
+    // state -- the tick of the press, and frames to the next hit while the transport is stopped.
+    int stutter_step_ = -1;
+    uint8_t stutter_tracks_ = 0;
+    uint32_t stutter_last_tick_ = 0;
+    float stutter_countdown_ = 0.0f;
+    void stutter_fire(uint32_t frame);
+    void stutter_tick(uint32_t tick, uint32_t frame);
+    void stutter_free(uint32_t frames);
+
     // The arpeggiator (core/arp.hpp). One run per track for a sequenced step -- started by
     // `fire`, ending with the step's length or at the next step -- and one for held KEYS keys,
     // which runs while any is down. Both hit on the clock's ticks while it runs; the held one
@@ -752,6 +767,11 @@ private:
     // The master meter's reading, audio context only (Status::meter_milli).
     static constexpr float kMeterFall = 0.99f;
     float meter_ = 0.0f;
+
+    // The waveform's playheads and grains (Status::wave): every fourth block is 5.3 ms, four
+    // times finer than the screen's 50 ms frame, and a quarter of the stores.
+    static constexpr uint32_t kWaveEveryBlocks = 4;
+    uint32_t wave_block_ = 0;
 
     // The tick at which the live pattern's current pass ends. Kept rather than derived so that
     // detecting the boundary is a comparison instead of a division per tick.

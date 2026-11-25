@@ -583,6 +583,16 @@ hit in the window (`NO HITS`, or a window between two hits), it cuts evenly. Pus
 again for even slices (`SLICES EVEN`). AUTO is saved with the kit. A streamed file has no
 slices either way.
 
+**The waveform.** The SRC page draws the sample under the knobs: the STA..LEN window bright with
+a line at each end, the rest dim, a dotted line at each slice (even or AUTO), and a column
+running through it for each voice that plays. A track with no file shows the placeholder it plays
+and says `NO FILE`. A streamed file shows the part that is in memory, then a dotted line. The
+AMP page draws the envelope ATK and DEC make, with the letters A and B on its corners and a
+hollow square riding it while a note plays. The sample browser (SAMPLES) shows the waveform of
+what the track plays above its `NOW` line.
+
+<p><img src="screens/edit_wave.png" width="256" alt="EDIT, SAMPLE's SRC page: the waveform"> <img src="screens/edit_wave_amp.png" width="256" alt="EDIT, SAMPLE's AMP page: the envelope"></p>
+
 ### GRN: GRAIN
 
 Granular playback of the track's sample: up to 8 overlapping grains in one voice. The most
@@ -603,6 +613,12 @@ X1 with SHP up for stutters and chops, SCN for a stretch.
 
 SCN is free-running, not tempo-locked. To make a cloud move in time, **lock POS on steps**, or
 motion record a sweep of POS. The trig note transposes, so a cloud plays chromatically.
+
+**The cloud on screen.** The SRC page draws the sample with a bracket where the next grain
+starts (POS, moving with SCN, as wide as one grain) and a tick for every grain in the air, as
+bright as that grain is loud. AMP and ASR draw the cloud's envelope.
+
+<p><img src="screens/edit_grain.png" width="256" alt="EDIT, GRAIN's SRC page: the grains"></p>
 
 ### MNO: VA MONO
 
@@ -629,6 +645,12 @@ the default 100, harder is brighter and softer darker. **Accent** (ACNT on the s
 the note louder, opens the filter further and brings the noise (and, with OS2 in sync, the synced pulse) forward; **slide** (SLID)
 glides into the next note. The OSC page is described in
 [The oscillators and drive](#the-oscillators-and-drive-the-osc-page).
+
+FLTR, AMP and ASR draw their envelopes under the knobs: on FLTR the filter's, as high as ENV
+takes it, with C (ENV) and D (FDE) on its corners; on AMP and ASR the note's. A segment's width
+follows its knob, so a long and a short decay both fit the screen.
+
+<p><img src="screens/edit_vfltr.png" width="256" alt="EDIT, VA MONO's FLTR page: the filter envelope"></p>
 
 ### PLY: VA POLY
 
@@ -963,7 +985,7 @@ The seven upper pads are the same in every mode:
 | Pad | Plain | With FUNC |
 | --- | --- | --- |
 | 1 FILL | FILL conditions on while held | NOTE RPT on/off |
-| 2 REPEAT | Beat repeat of the master while held; VALUE picks the length | Pitch drops as it repeats |
+| 2 REPEAT | Beat repeat of the master while held; VALUE or LEFT/RIGHT pick the rate; + hold a STEP: step stutter | Pitch drops as it repeats; FUNC + STEP stutters one track |
 | 3 MUTE | MUTE MODE on/off: lower pads mute at once | |
 | 4 SCENE A | Hold + STEP 1-16 puts that scene on side A | |
 | 5 SCENE B | The same for side B | |
@@ -1055,7 +1077,19 @@ to the selected track's sound and the pads become expressive.
 ### Beat repeat, throws and auto-fill
 
 REPEAT loops the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the finished master while held;
-release and the music is where it would have been. The FUNC menu's **AUTO-FILL** row sets
+release and the music is where it would have been. While it is held, LEFT/RIGHT step the rate
+slower or faster through 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T and 1/32 (`REPEAT 1/8T`); VALUE still
+picks it too. The rate is shared with note repeat and step stutter.
+
+**Step stutter.** Hold REPEAT, then hold a STEP: every track loops that step at the rate
+(`STUTTER 5 1/16`), on the beat grid. Unlike beat repeat this replays the sequencer, not the
+audio, so filters, LFOs and tails keep moving under it; the beat repeat stops while you stutter.
+Hold a second STEP to jump the stutter there. FUNC + STEP stutters only the selected track and
+leaves the rest playing. Let go of the STEP (or REPEAT) and the beat is exactly where it would
+have been: the sequencer kept counting underneath. Nothing is written, and the STEP toggles
+nothing. The order matters: REPEAT first performs, STEP first edits the step's ratchet.
+
+The FUNC menu's **AUTO-FILL** row sets
 **auto-fill**: OFF, or FILL on the last bar of every 4, 8 or 16. PERFORM's lower lines show what
 is active: `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n`.
 
@@ -1063,7 +1097,8 @@ is active: `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n`.
 
 **FUNC + FILL** turns **NOTE RPT** on (`NOTE RPT`, and `NRPT` after the bar number in PERFORM);
 again turns it off (`PADS PLAY`). While it is on, holding a lower pad rolls that track's note at
-beat repeat's length: 1/16 until you pick another with REPEAT + VALUE. With the transport running
+beat repeat's rate: 1/16 until you pick another with REPEAT + VALUE, or LEFT/RIGHT while the pad
+is rolling (`ROLL 1/32`; the arrows do nothing else until you let go). With the transport running
 the hits land on the beat grid, so a roll is always in time; stopped, it rolls from the moment you
 press. Leaning on the pad sets each hit's velocity, so pressure swells and fades the roll (macro A
 is left alone while a pad rolls). Hold two pads for two rolls. Rolls are played, not written: REC

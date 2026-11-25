@@ -387,9 +387,35 @@ void Granular::set_sample(const int16_t *data, uint32_t frames, int channels, fl
     // int16 to float, with the stereo sum's halving folded in: the tap adds L and R, so a stereo
     // source is summed to mono for free (machines are mono; pan lives in the insert chain).
     src_scale_ = (channels_ == 2 ? 0.5f : 1.0f) * (1.0f / 32768.0f);
+    view_scale_ = ok ? float(kWaveColumns) * reciprocal(float(frames_)) : 0.0f;
     recompute_position();
     recompute_step();
     if (playable_) spray_ = clampi(spray_, 0, frames_);
+}
+
+void Granular::wave_view(WaveView &view) const {
+    view = WaveView{};
+    if (!playable_) return;
+    const float scale = view_scale_;
+    // Where spawn() starts the next grain before SPR's jitter: POS plus SCN's travel, wrapped.
+    int32_t head = position_ + scan_whole_;
+    if (head >= frames_) head -= frames_;
+    const float span = float(grain_len_) * step_;
+    view.lo = wave_column(float(head), scale);
+    view.hi = wave_column(float(head) + span, scale);
+    // Each grain as bright as its window is now (the Hann's warped triangle is close enough to
+    // see by) times the cloud's envelope, so a cloud breathes on screen as it does in the ear.
+    const float cloud = amp_.level();
+    int m = 0;
+    for (const Grain &g : grains_) {
+        if (!g.live || m >= WaveView::kMarks) continue;
+        const float q = g.s.q;
+        const float window = q < g.s.peak ? 2.0f * q * g.s.rise : 2.0f * (1.0f - q) * g.s.fall;
+        const float level = clamp(window * cloud, 0.0f, 1.0f);
+        view.mark[m] = wave_column(float(g.s.pos), scale);
+        view.glow[m] = uint8_t(1 + int(level * 14.0f + 0.5f));
+        m++;
+    }
 }
 
 void Granular::trigger(const Trig &trig) {
