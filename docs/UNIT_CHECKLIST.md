@@ -261,6 +261,14 @@ it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA_1.WAV` will 
   the screen's own runs into the meter column or the strip. Screen updates smoothly with all 8
   tracks playing? `____`
 
+**23. Locks on screen (3 min).** Beat playing, A01, HOME, lower pad 1 (kick).
+- Hold STEP 5 and turn A: the line `S5 ... ..>..` counts the lock while the kit value stays;
+  slot A's bar follows the lock and a hollow tick stays at the kit value. Push A: `S5 ... .. KIT`,
+  tick gone. Same in EDIT (EDIT key). Readable at arm's length? `____`
+- GRID: STEP 5's cell has a dot (lock). Hold STEP 6 + FILL: top-left corner cut; + MUTATE:
+  top-right cut; + REPEAT: two teeth along the bottom. The four told apart at a glance? `____`
+- PERFORM: press a pad hard: macro A's bar rises, a tick stays at the knob. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `3 fail: reads 055`, `9: MAX 61.2`.
 
 ---

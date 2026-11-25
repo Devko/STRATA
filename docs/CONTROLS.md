@@ -256,6 +256,29 @@ once a block (`Status`): nothing in `draw()` walks a pattern or a buffer. And no
 x 126: the layout check holds every string to the screen, GRID's cells are five pixels wide, and
 right-aligned values end at x 124.
 
+## Locks on screen
+
+While a STEP is held, every parameter shows what **that step plays**, and the kit value it moves
+away from (Phase 3 items 2-3):
+
+- **Bars.** On GRID's four slots and EDIT's four rows the solid bar is what you hear: the held
+  step's lock if it has one, else the kit value. A **hollow tick** marks the kit value (the knob):
+  a bright pixel above and below the bar, dark across it inside the solid part. No lock, no tick.
+  The value text above or beside the bar is the heard value too.
+- **The lock line.** Hold STEP + turn A-D (or push it to clear): `S5 CUT 64>90`, the step, the
+  parameter, the kit value and then the lock, live while the STEP is down. `S5 CUT 64 KIT` once the
+  lock is cleared. It takes GRID's edit line and EDIT's line under the rows; a notice still wins
+  on GRID.
+- **Macro bars** (PERFORM): the solid bar is where the macro is, a pad's pressure included; when
+  that differs from the knob, a hollow tick across the bar marks the knob.
+- **GRID cells.** A trig's 5 x 6 cell carries marks cut dark into it: a dot in the middle for
+  locks, the top-left corner for a condition (FILL, A:B, PRE ...), the top-right corner for a
+  probability under 100%, two teeth in the bottom edge for a ratchet. A trigless step (locks, no
+  note) is an outline. The marks never overlap, so any mix reads.
+
+All of it reads values the screen already has: the kit values, the cell's own step, and at most
+eight locks of the one held step per slot. Nothing walks the lock pool.
+
 ## FUNC help
 
 FUNC held for 0.6 s with nothing else pressed shows help for **the screen that is up**
