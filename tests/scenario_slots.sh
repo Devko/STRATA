@@ -92,7 +92,8 @@ check(morph > bus, "push VALUE + STEP 13 picked MORPH after it", f"log={log}")
 check(kept > morph, "STEP 13 again let the morph go and kept it", f"log={log}")
 check(tape > kept, "FUNC + push D named the tape stop's slot", f"log={log}")
 check("TAPE STOP" not in log, "and held no tape stop", f"log={log}")
-check(not any(re.match(r"g[0-9a-f]+ u", l) for l in log),
+# The boot logs the pattern once at u0; a STEP that reached it would log u1.
+check(not any(re.match(r"g[0-9a-f]+ u[1-9]", l) for l in log),
       "no STEP under VALUE reached the pattern", f"log={log}")
 
 blocks = report.get("audio_blocks", 0)
