@@ -160,7 +160,8 @@ constexpr uint32_t kTableBytes = kPatternSections * kSectionEntryBytes;
 constexpr uint32_t kHeaderSectionOffset = kTableBytes;
 constexpr uint32_t kTracksSectionOffset = kHeaderSectionOffset + kPatternHeaderSectionBytes;
 constexpr uint32_t kPlayModesSectionOffset = kTracksSectionOffset + kTracksSectionBytes;
-constexpr uint32_t kLocksSectionOffset = kPlayModesSectionOffset + kPlayModesSectionBytes;
+constexpr uint32_t kFeelSectionOffset = kPlayModesSectionOffset + kPlayModesSectionBytes;
+constexpr uint32_t kLocksSectionOffset = kFeelSectionOffset + kFeelSectionBytes;
 static_assert(kHeaderBytes + kLocksSectionOffset == kPatternFixedBytes,
               "the fixed part of a pattern file is not the sum of its sections");
 
@@ -229,6 +230,11 @@ SerializeResult pattern_write(const Pattern &pattern, uint8_t *buffer, uint32_t 
     w.u32(kPlayModesSectionOffset);
     w.u32(kPlayModesSectionBytes);
 
+    w.u16(kSectionFeel);
+    w.u16(0);
+    w.u32(kFeelSectionOffset);
+    w.u32(kFeelSectionBytes);
+
     w.u16(kSectionLocks);
     w.u16(0);
     w.u32(kLocksSectionOffset);
@@ -272,6 +278,7 @@ SerializeResult pattern_write(const Pattern &pattern, uint8_t *buffer, uint32_t 
 
     // The play modes, between the tracks and the variable-length lock pool.
     for (int t = 0; t < kTracks; t++) w.u8(pattern.tracks[t].play);
+    w.u8(pattern.feel);
 
     // Pass two: the pool itself, in the same order.
     running = 0;
@@ -333,13 +340,14 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
     const uint32_t table = sections * kSectionEntryBytes;
     if (table > payload) return refuse(SerializeResult::malformed);
 
-    // The three sections a pattern needs, then the optional play modes; ids this build does not
-    // know are skipped, which is what the offsets in the table are for.
-    const uint16_t wanted[4] = {kSectionPatternHeader, kSectionTracks, kSectionLocks,
-                                kSectionPlayModes};
-    uint32_t offset[4] = {0, 0, 0, 0};
-    uint32_t length[4] = {0, 0, 0, 0};
-    bool found[4] = {false, false, false, false};
+    // The three sections a pattern needs, then the optional play modes and FEEL; ids this build
+    // does not know are skipped, which is what the offsets in the table are for.
+    constexpr int kWanted = 5;
+    const uint16_t wanted[kWanted] = {kSectionPatternHeader, kSectionTracks, kSectionLocks,
+                                      kSectionPlayModes, kSectionFeel};
+    uint32_t offset[kWanted] = {0, 0, 0, 0, 0};
+    uint32_t length[kWanted] = {0, 0, 0, 0, 0};
+    bool found[kWanted] = {false, false, false, false, false};
 
     for (uint32_t i = 0; i < sections; i++) {
         if (!r.seek(kHeaderBytes + i * kSectionEntryBytes)) {
@@ -355,7 +363,7 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
         if (at < table || at > payload || len > payload - at) {
             return refuse(SerializeResult::malformed);
         }
-        for (int k = 0; k < 4; k++) {
+        for (int k = 0; k < kWanted; k++) {
             if (id != wanted[k]) continue;
             if (found[k]) return refuse(SerializeResult::malformed);   // the same id twice
             offset[k] = at;
@@ -369,6 +377,7 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
     if (length[1] < kTracksSectionBytes) return refuse(SerializeResult::malformed);
     // Present but short is damage, not an old file: a writer that declared it declared 8 bytes.
     if (found[3] && length[3] < kPlayModesSectionBytes) return refuse(SerializeResult::malformed);
+    if (found[4] && length[4] < kFeelSectionBytes) return refuse(SerializeResult::malformed);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
 
     const uint8_t tracks = r.u8();
@@ -459,6 +468,15 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
             pattern.tracks[t].play = play < uint8_t(PlayMode::count) ? play : uint8_t(PlayMode::fwd);
         }
         if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // Absent: a pattern from before FEEL, which pattern_init left OFF. A byte this build does not
+    // know (a newer build's mode) is OFF too, rather than guessed at.
+    if (found[4]) {
+        if (!r.seek(kHeaderBytes + offset[4])) return refuse(SerializeResult::malformed);
+        const uint8_t feel = r.u8();
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+        pattern.feel = feel <= kFeelMax ? feel : uint8_t(0);
     }
 
     if (consumed != nullptr) *consumed = kHeaderBytes + payload;

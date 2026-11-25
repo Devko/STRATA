@@ -2103,3 +2103,71 @@ TEST(random_play_repeats_exactly_for_one_seed_and_differs_for_another) {
     }
     CHECK(moved);
 }
+
+// --- FEEL (core/timing.hpp) -------------------------------------------------
+
+// The scheduler reads the pattern's FEEL byte fresh every tick, as it reads the play mode: WAVE
+// moves every track's steps by the same curve, DRIFT each track by its own, every step still
+// fires once a pass, and OFF is the stream from before FEEL existed.
+TEST(feel_moves_the_scheduled_steps_and_off_is_the_old_stream) {
+    static Pattern pattern;
+    blank(pattern, 16);
+    for (int step = 0; step < 16; step++) {
+        put_trig(pattern, 0, step);
+        put_trig(pattern, 1, step);
+    }
+    PerformState perform;
+    const uint32_t loop_ticks = 16u * kStepTicks;
+
+    static Log plain;
+    plain.clear();
+    Scheduler sched;
+    sched.configure(pattern, kSamplesPerTick);
+    sched.reset();
+    run(sched, pattern, perform, 0, loop_ticks * 4u, plain);
+    CHECK_EQ(plain.count, 2 * 16 * 4);
+    for (int i = 0; i < plain.count; i++) CHECK_EQ(plain.hits[i].tick % kStepTicks, 0u);
+
+    // WAVE 6: the same tick for both tracks, the curve's own.
+    pattern.feel = uint8_t(kFeelDepthMax + 6);
+    static Log wave;
+    wave.clear();
+    sched.reset();
+    run(sched, pattern, perform, 0, loop_ticks * 4u, wave);
+    CHECK_EQ(wave.count, 2 * 16 * 4);
+    int moved = 0;
+    for (int i = 0; i < wave.count; i++) {
+        const Hit &hit = wave.hits[i];
+        // Which pass: the hit's tick is within FEEL's depth of its grid tick.
+        const int32_t grid = int32_t((hit.tick + 8u) / kStepTicks * kStepTicks);
+        CHECK_EQ(int32_t(hit.tick), grid + feel_offset(pattern.feel, 0u, grid));
+        if (int32_t(hit.tick) != grid) moved++;
+    }
+    CHECK(moved > 32);
+
+    // DRIFT 4: the two tracks part company somewhere in four bars.
+    pattern.feel = 4;
+    static Log drift;
+    drift.clear();
+    sched.reset();
+    run(sched, pattern, perform, 0, loop_ticks * 4u, drift);
+    CHECK(drift.on_track(0) >= 16 * 4 && drift.on_track(0) <= 16 * 4 + 1);
+    CHECK(drift.on_track(1) >= 16 * 4 && drift.on_track(1) <= 16 * 4 + 1);
+    uint32_t first[2][64] = {};
+    int seen[2] = {};
+    for (int i = 0; i < drift.count; i++) {
+        const int t = int(drift.hits[i].event.track);
+        if (seen[t] < 64) first[t][seen[t]++] = drift.hits[i].tick;
+    }
+    int apart = 0;
+    for (int i = 0; i < 64; i++) apart += first[0][i] != first[1][i] ? 1 : 0;
+    CHECK(apart > 8);
+
+    // Back OFF: tick for tick the stream from the start.
+    pattern.feel = 0;
+    static Log again;
+    again.clear();
+    sched.reset();
+    run(sched, pattern, perform, 0, loop_ticks * 4u, again);
+    CHECK(same_stream(plain, again));
+}

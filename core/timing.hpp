@@ -232,6 +232,74 @@ constexpr const char *play_mode_name(PlayMode mode) {
     }
 }
 
+// --- FEEL: a timing drift over swing and micro-timing ---------------------
+//
+// CyDrums' P8 (backlog Phase 5 item 5). A pattern setting, like swing: it moves every step's tick
+// by a few ticks of 96 PPQN along a curve, so it follows the tempo by construction. Swing and
+// micro-timing come first; FEEL goes on top and never changes the pattern's steps.
+//
+//   DRIFT  each track on its own smooth random curve: a new target every 64 ticks (two thirds of
+//          a beat), straight lines between them. The tracks loosen against each other, the way
+//          a band does.
+//   WAVE   one slow curve for every track, four bars long: on the grid at the downbeat of bar 1,
+//          laid back most at the end of bar 1, on the grid again at bar 3, pushed most at the end
+//          of bar 3. The whole groove breathes against the clock.
+//
+// The depth is the most the curve moves a step, 1 to kFeelDepthMax ticks (6 ticks is 29 ms at
+// 130 BPM). Both curves are pure functions of where the step's slot sits on the grid since the
+// pattern started (and, for DRIFT, the pattern's seed and the track), so a pass plays the same way
+// in every emulator run and after a reload, like the RND play modes and the probability roll.
+//
+// One byte in the pattern (core/serialize.hpp, section 5): 0 OFF, 1..6 DRIFT 1..6, 7..12 WAVE
+// 1..6. 0 is OFF so zeroed memory and every pattern written before FEEL existed play straight.
+enum class FeelMode : uint8_t { off = 0, drift = 1, wave = 2 };
+
+constexpr int kFeelDepthMax = 6;
+constexpr uint8_t kFeelMax = uint8_t(2 * kFeelDepthMax);   // the highest valid byte: WAVE 6
+constexpr int kFeelDriftSegmentShift = 6;                   // 64 ticks between DRIFT targets
+constexpr int kFeelWavePeriod = 1536;                       // four bars of 384 ticks
+
+constexpr FeelMode feel_mode(uint8_t feel) {
+    return feel == 0 || feel > kFeelMax ? FeelMode::off
+           : feel <= kFeelDepthMax      ? FeelMode::drift
+                                        : FeelMode::wave;
+}
+
+// 0 for OFF and for a byte this build does not know.
+constexpr int feel_depth(uint8_t feel) {
+    return feel == 0 || feel > kFeelMax ? 0
+           : feel <= kFeelDepthMax      ? int(feel)
+                                        : int(feel) - kFeelDepthMax;
+}
+
+// The byte `delta` encoder clicks or arrow presses along the one line the PATTERN page shows:
+// OFF, DRIFT 1..6, WAVE 1..6, stopping at both ends. A damaged byte counts as OFF.
+constexpr uint8_t feel_step(uint8_t current, int delta) {
+    const int at = current > kFeelMax ? 0 : int(current);
+    const int next = at + delta;
+    return uint8_t(next < 0 ? 0 : (next > int(kFeelMax) ? int(kFeelMax) : next));
+}
+
+// "OFF", "DRIFT" or "WAVE", for the screen.
+constexpr const char *feel_mode_name(uint8_t feel) {
+    switch (feel_mode(feel)) {
+        case FeelMode::drift: return "DRIFT";
+        case FeelMode::wave:  return "WAVE";
+        case FeelMode::off:
+        default:              return "OFF";
+    }
+}
+
+// How many ticks FEEL moves the slot whose grid tick (slot x step ticks, counted from the
+// pattern's start, before swing and micro) is `grid`: -depth .. +depth, positive is later. 0 when
+// FEEL is off. `seed` is the track's draw (`feel_seed`), read by DRIFT only. No division: a shift
+// and a mask for DRIFT, a multiply by the inverse of 3 for WAVE's period.
+int feel_offset(uint8_t feel, uint32_t seed, int32_t grid);
+
+// The seed DRIFT draws from for one track: the pattern's seed mixed with the track, and kept
+// apart from the RND play modes' draw so a track in RND does not drift in step with its jumps.
+uint32_t feel_seed(uint32_t pattern_seed, int track);
+
 // --- a track's timing -----------------------------------------------------
 
 struct TrackTiming {
@@ -240,6 +308,8 @@ struct TrackTiming {
     uint8_t swing = kSwingMin;      // 50..75
     PlayMode play = PlayMode::fwd;  // which step each slot plays; see above
     uint32_t play_seed = 0;         // the pattern's seed mixed with the track, for the RND modes
+    uint8_t feel = 0;               // the pattern's FEEL byte; see above
+    uint32_t feel_seed = 0;         // feel_seed(pattern seed, track), for DRIFT
 
     int step_ticks() const { return ticks_per_step(speed); }
 
@@ -274,7 +344,8 @@ constexpr int kMaxFiringsPerTick = 4;   // at 2x, a 23-tick window can hold at m
 //
 // Under a play mode other than FWD, swing belongs to the slot (the groove stays on the grid) and
 // micro-timing to the step (a pushed hat stays pushed wherever it plays): slot s fires at
-// s * step_ticks + swing(s) + micro[play_step(s)].
+// s * step_ticks + swing(s) + micro[play_step(s)]. FEEL belongs to the slot too, added last:
+// + feel_offset(the slot's grid tick since the pattern started).
 //
 // Returns how many firings were written to `out` (at most `max`). The scan is a bounded loop
 // over the few candidate steps near the tick, with no division in the inner path.
@@ -282,7 +353,7 @@ int steps_firing_at(uint32_t tick, const TrackTiming &timing, const int8_t *micr
                     Firing *out, int max);
 
 // The effective tick of one step within its loop pass, after swing and micro-timing, playing
-// forward. Exposed for tests and for the UI, which draws where a step actually sits.
+// forward. FEEL is left out: it moves a step differently on every pass. Exposed for tests and for the UI, which draws where a step actually sits.
 int effective_tick(int step_index, const TrackTiming &timing, const int8_t *micro);
 
 }  // namespace strata
