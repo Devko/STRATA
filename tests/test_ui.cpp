@@ -58,6 +58,14 @@ struct UiProbe {
     static Storage &storage(Strata &app) { return app.storage_; }
 
     static int mode(const Strata &app) { return int(app.mode_); }
+    // REL ALL and LEN ALL back to rest, the UI's knob positions and the engine's both: a test that
+    // turns FUNC + A or B in PERFORM (the input audit does) would leave them for the next.
+    static void moves_to_rest(Strata &app) {
+        app.rel_all_ = 0;
+        app.len_all_ = 0;
+        app.post(Cmd::set_move_all, 0, 0, 0, 0);
+        app.post(Cmd::set_move_all, 0, 0, 1, 0);
+    }
     static int selected(const Strata &app) { return app.selected_; }
     static int page(const Strata &app) { return app.page_; }
     static int param_page(const Strata &app) { return app.param_page_; }
@@ -363,6 +371,7 @@ Strata &fresh() {
     // FX GLIDE off, so a mixer change lands at once as it did before the glide: a test of the
     // glide turns it on itself (UiProbe::set_glide). And no ride or held STEP left running.
     UiProbe::set_glide(app, PerfGlide::off);
+    UiProbe::moves_to_rest(app);
     // The performance mixer off and any loop thrown away: push VALUE + CLR, twice.
     app.on_key(ENAGA_KEY_PUSH_VALUE, true);
     key(ENAGA_KEY_CLR);
@@ -9448,9 +9457,12 @@ TEST(ui_the_pattern_page_sets_feel_on_d_and_on_its_row) {
     Strata &app = fresh();
     const Pattern &pattern = app_engine().pattern();
     key(ENAGA_KEY_F3);
-    key(ENAGA_KEY_SELECT_RIGHT);
-    key(ENAGA_KEY_SELECT_RIGHT);
+    // PROJECT's page survives fresh(), so walk to PATTERN by name rather than counting presses.
+    for (int i = 0; i < 8 && UiProbe::project_page(app) != 2; i++) {
+        key(UiProbe::project_page(app) < 2 ? ENAGA_KEY_SELECT_RIGHT : ENAGA_KEY_SELECT_LEFT);
+    }
     CHECK_EQ(UiProbe::project_page(app), 2);
+    for (int i = 0; i < 12; i++) key(ENAGA_KEY_LEFT);  // the field cursor survives too
     CHECK(screen_has(app, "FEEL OFF"));
 
     app.on_encoder(3, +3);
