@@ -833,18 +833,11 @@ public:
             return;
         }
 
-        // In KEYS the STEP keys are an instrument: sixteen degrees of the project's scale from
-        // the root up, which is what docs/SPEC.md means by "STEP keys play notes in scale".
-        // The press plays the note and the release lets it go (play_key, below).
-        if (mode_ == Mode::keys && key >= ENAGA_KEY_STEP1 && key < ENAGA_KEY_STEP1 + 16) {
-            if (down) play_key(key - ENAGA_KEY_STEP1);
-            else release_key(key - ENAGA_KEY_STEP1);
-            return;
-        }
-
         // In PERFORM, FUNC + STEP 5-7 put the master kill EQ's LOW, MID and HI on the selected
         // macro, until the EQ can be learnt by turning too. The STEP-key assignment of track
-        // parameters retired with learn by turning (D11): the STEP keys are steps here (D12).
+        // parameters retired with learn by turning (D11). Otherwise the STEP keys are steps on
+        // every playing screen, PERFORM and KEYS included (D12): KEYS plays on the pads, so the
+        // hands can play and edit at once. MUTE MODE and the list screens, above, keep theirs.
         if (mode_ == Mode::perform && shift_ && key >= ENAGA_KEY_STEP1 + kMacroEqFirstStep &&
             key < ENAGA_KEY_STEP1 + kMacroEqFirstStep + kMasterBands) {
             if (down) assign_macro_master(key - ENAGA_KEY_STEP1 - kMacroEqFirstStep);
@@ -1163,11 +1156,6 @@ public:
             case ENAGA_KEY_OCTAVE_LEFT:
             case ENAGA_KEY_OCTAVE_RIGHT: {
                 const int delta = key == ENAGA_KEY_OCTAVE_LEFT ? -1 : +1;
-                if (mode_ == Mode::keys && !shift_) {
-                    // "Step page 1-4 in GRID; octave in KEYS" (docs/SPEC.md's key table).
-                    walk_keys_octave(delta);
-                    break;
-                }
                 if (mode_ == Mode::project && !shift_) {
                     // The pad-row keys say which sixteen the STEP keys mean (docs/CONTROLS.md):
                     // in PROJECT and CHAIN the STEP keys are a bank's sixteen slots, so these
@@ -1349,9 +1337,8 @@ public:
         // LEARN is an EDIT thing: any other screen, HOME's GRID included, ends it.
         if (mode_ != Mode::edit && macro_learn_ >= 0) end_learn();
         mutation_pending_ = false;
-        // A KEYS key held across a mode change: its release goes to the next mode, so the note
+        // A KEYS pad held across a mode change: its release goes to the next mode, so the note
         // is let go here or it would hang on a sustaining machine.
-        for (int i = 0; i < 16; i++) release_key(i);
         for (int i = 0; i < kPianoPads; i++) release_pad(i);
         if (held_step_ >= 0) {
             release_hold();
@@ -2047,6 +2034,11 @@ public:
             play_pad(pad, velocity);
             return;
         }
+        // D6, "STEP first edits, pad first performs": with a STEP held, FILL, REPEAT, MUTE and
+        // MUTATE step one field of that step through a short cycle instead of performing
+        // (core/stepedit.hpp). Not with FUNC, whose pad chords stay, and not in KEYS (above),
+        // where the upper pads are the piano's black keys.
+        if (held_step_ >= 0 && !shift_ && is_perform_pad(pad) && edit_held_step(pad)) return;
         // The performance row first: it is the same seven pads in every mode, which is what
         // docs/SPEC.md means by a fixed row.
         if (is_perform_pad(pad)) {
@@ -2114,6 +2106,11 @@ public:
         // the mode changed under it).
         if (pad >= 0 && pad < kPianoPads && pad_held_note_[pad] >= 0) {
             release_pad(pad);
+            return;
+        }
+        // A pad that edited a held step comes up with nothing to let go.
+        if (is_perform_pad(pad) && (step_edit_pads_ >> (pad / 2) & 1u) != 0) {
+            step_edit_pads_ = uint8_t(step_edit_pads_ & ~(1u << (pad / 2)));
             return;
         }
         if (is_perform_pad(pad)) {
@@ -2198,6 +2195,46 @@ public:
 
     // The seven upper pads. Four of them are HELD rather than toggled -- fill, repeat, throw and
     // the two scene selectors -- so each one's release matters as much as its press.
+    // Hold STEP + an upper pad (D6): the held step's condition, ratchet or probability one
+    // press further round its cycle, said as `STEP 5 PROB 50%`. False for a pad with no cycle
+    // (the scenes, THROW), which then performs as usual. The release counts as a use, so the
+    // STEP does not toggle its trig when it comes up.
+    bool edit_held_step(int pad) {
+        StepCycle cycle;
+        switch (PerformPad(pad)) {
+            case PerformPad::fill:   cycle = StepCycle::fill; break;
+            case PerformPad::repeat: cycle = StepCycle::ratchet; break;
+            case PerformPad::mute:   cycle = StepCycle::a_b; break;
+            case PerformPad::mutate: cycle = StepCycle::probability; break;
+            default:                 return false;
+        }
+        const StepField field = step_cycle_field(cycle);
+        Step shown = engine_.pattern().tracks[selected_].steps[held_step_];
+        const int delta = step_cycle_next(shown, cycle) - step_field_value(shown, field);
+        step_field_apply(shown, field, delta);
+        held_used_ = true;
+        step_edit_pads_ = uint8_t(step_edit_pads_ | (1u << (pad / 2)));
+        mark(GestureKind::field, selected_, held_step_);
+        post_delta(Cmd::step_field_delta, selected_, held_step_, uint8_t(field), delta);
+
+        char value[kStepFieldTextMax];
+        if (field == StepField::ratchet_count && ratchet_count(shown.ratchet) == 1) {
+            value[0] = 'O'; value[1] = 'F'; value[2] = 'F'; value[3] = 0;
+        } else {
+            step_field_text(shown, field, value, int(sizeof value));
+        }
+        char *out = notice_buffer_;
+        append(out, "STEP ");
+        append_number(out, uint32_t(held_step_) + 1);
+        *out++ = ' ';
+        append(out, step_field_name(field));
+        *out++ = ' ';
+        append(out, value);
+        *out = 0;
+        notice(notice_buffer_);
+        return true;
+    }
+
     void on_perform_pad(int pad, bool down) {
         // Which of the row is held, for its LED. Every pad, toggles too: a held pad is lit
         // while the finger is on it, which is the first sign the press arrived at all.
@@ -4126,43 +4163,7 @@ public:
         }
     }
 
-    // --- KEYS: the STEP keys as an instrument ----------------------------
-
-    // The note STEP `step` plays: `step` degrees of the project's scale above the root, in the
-    // current octave. By DEGREES rather than semitones, which is the whole reason core/scale
-    // exists -- sixteen keys then span two octaves of a seven-note scale and stay in the key.
-    uint8_t keys_note(int step) const {
-        const uint8_t root = engine_.key_root();
-        const int scale = int(engine_.key_scale());
-        const int base = clamp_int(kPadOctaveNote + keys_octave_ * 12 + int(root), 0, 127);
-        return scale_step(scale_fold(uint8_t(base), root, scale), root, scale, step);
-    }
-
-    // A STEP key played, and its release. The note is held while the key is down: the press
-    // triggers with no gate and the release lets that note go (dsp/track.hpp, `release`), so a
-    // pad or a chord on VA, VA POLY or SAMPLE sustains for as long as it is held. The note is
-    // remembered per key, so an octave change while a key is down still releases what it
-    // started rather than a note it never played.
-    void release_key(int step) {
-        if (step < 0 || step >= 16 || keys_held_note_[step] < 0) return;
-        post(Cmd::release_note, uint8_t(keys_held_track_[step]), 0,
-             uint8_t(keys_held_note_[step]));
-        record_note_up(keys_held_track_[step], uint8_t(keys_held_note_[step]));
-        keys_held_note_[step] = -1;
-    }
-
-    void play_key(int step) {
-        const uint8_t note = keys_note(step);
-        release_key(step);                       // a press without its release: let that go first
-        keys_held_note_[step] = int16_t(note);
-        keys_held_track_[step] = uint8_t(selected_);
-        // A key has no velocity. 100 is what the default kit's own trigs use, so a part played
-        // in and a part programmed in sound the same.
-        // c = 1: a held key, whose release follows -- what lets the arp hold it (core/arp.hpp),
-        // and MIDI OUT hold it until the key comes up.
-        post(Cmd::trigger_note, uint8_t(selected_), 0, note, kKeyVelocity, 1);
-        record_note(selected_, note, kKeyVelocity);
-    }
+    // --- KEYS: the pads as a piano ---------------------------------------
 
     // The note a piano pad plays: C of the current octave plus its semitone, -1 for the two
     // octave pads. Chromatic, as a keyboard is; the LEDs show which notes are in the scale.
@@ -5807,21 +5808,37 @@ public:
         *out = 0;
         canvas.text(0, 27, line, 11);
 
-        // What each of the sixteen keys will play. The point of the screen in this mode: a
-        // performer needs to see the notes under their fingers, not work them out.
-        for (int i = 0; i < 16; i++) {
-            const int x = (i % 4) * 32;
-            const int y = (i / 4) * 16 + 44;
-            const uint8_t note = keys_note(i);
+        // The pads as the keyboard they are, in the current octave: the upper row's black keys
+        // between the lower row's white ones, the two octave pads as - and +. The root
+        // brightest and the scale's other notes bright, as the pads light, and a held pad
+        // filled. The STEP keys are steps here (D12), so the screen says which sixteen.
+        for (int pad = 0; pad < kPianoPads; pad++) {
+            const bool upper = (pad & 1) != 0;
+            const int x = (pad / 2) * 16 + (upper ? 8 : 0);
+            const int y = upper ? 40 : 58;
+            const int note = pad_note(pad);
             out = line;
-            append(out, note_name(note));
-            append_number(out, uint32_t(note_octave(note) < 0 ? 0 : note_octave(note)));
+            if (note < 0) {
+                append(out, kPianoSemitone[pad] == kPadOctaveDown ? "-" : "+");
+            } else {
+                append(out, note_name(uint8_t(note)));
+            }
             *out = 0;
-            // The root of each octave brighter, so the shape of the scale is readable.
-            const bool at_root = (note % 12) == root;
-            canvas.rect(x + 1, y, 29, 13, at_root ? 6 : 3);
-            canvas.text(x + 3, y + 3, line, at_root ? 15 : 11);
+            const bool at_root = note >= 0 && note % 12 == root;
+            const bool in_scale =
+                note >= 0 && scale_fold(uint8_t(note), root, scale) == uint8_t(note);
+            const bool held = pad_held_note_[pad] >= 0;
+            canvas.rect(x + 1, y, 14, 14, held ? 12 : (at_root ? 6 : (in_scale ? 3 : 1)));
+            canvas.text(x + 3, y + 4, line, held ? 0 : (in_scale ? 15 : 8));
         }
+
+        out = line;
+        append(out, "STEP KEYS ");
+        append_number(out, uint32_t(page_ * 16 + 1));
+        *out++ = '-';
+        append_number(out, uint32_t(page_ * 16 + 16));
+        *out = 0;
+        canvas.text(0, 80, line, 11);
     }
 
     // --- PERFORM: scenes, the morph, macros and mutation -----------------
@@ -5873,12 +5890,8 @@ public:
                 return true;
             }
 
-            // The pad-row keys pick which sixteen the STEP keys mean; in PERFORM the STEP keys
-            // are always the selected track's sixteen parameters, so they have nothing to do.
-            // With FUNC they are the selected track's length, as on every screen.
-            case ENAGA_KEY_OCTAVE_LEFT:
-            case ENAGA_KEY_OCTAVE_RIGHT:
-                return !shift_;
+            // The pad-row keys are the step page here too, as on GRID: the STEP keys are steps
+            // in PERFORM (D12). They fall through to the common handler.
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT: {
                 // Which macro CLR clears and a STEP key assigns to: the macros are the row of
@@ -7171,9 +7184,7 @@ private:
     uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)
     uint8_t roll_velocity_[kTracks] = {};       // the last velocity sent for each roll
     bool mutation_pending_ = false;             // a MUTATE waiting for OK (keep) or CLR (revert)
-    int16_t keys_held_note_[16] = {-1, -1, -1, -1, -1, -1, -1, -1,
-                                   -1, -1, -1, -1, -1, -1, -1, -1};   // KEYS: what each key holds
-    uint8_t keys_held_track_[16] = {};          // and on which track
+    uint8_t step_edit_pads_ = 0;                // upper pads (by pad / 2) that edited a held step
     int16_t pad_held_note_[kPianoPads] = {-1, -1, -1, -1, -1, -1, -1, -1,
                                           -1, -1, -1, -1, -1, -1, -1};   // KEYS: piano pads
     uint8_t pad_held_track_[kPianoPads] = {};

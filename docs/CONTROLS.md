@@ -51,10 +51,9 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      eight. On GRID and KEYS, where A-D turn the current EDIT page, they turn that page. The
      one-page screens give them their one sideways setting: MACHINE and SOUNDS the track,
      RESAMPLE the destination, PERFORM the mutate amount.
-   - **Pad-row keys:** which sixteen the STEP keys mean. Step page 1-4 (GRID, EDIT, MIXER,
-     MACHINE, RESAMPLE), the octave in KEYS, the bank A-H in PROJECT and CHAIN. Where the STEP
-     keys always mean the same sixteen things (PERFORM, KIT, SAMPLES, SOUNDS, the menu) they do
-     nothing.
+   - **Pad-row keys:** which sixteen the STEP keys mean. Step page 1-4 (GRID, KEYS, PERFORM,
+     EDIT, MIXER, MACHINE, RESAMPLE), the bank A-H in PROJECT and CHAIN. Where the STEP keys
+     always mean the same sixteen things (KIT, SAMPLES, SOUNDS, the menu) they do nothing.
      FUNC + pad-row key = the selected track's length, on every screen but the menu.
    - **Knobs A-D:** the four values on screen. Push = that value's switch. With a STEP held, turn
      = lock, push = remove the lock. In PERFORM, push = MACRO LEARN for that macro: EDIT opens,
@@ -72,7 +71,11 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      of VALUE alone** (let go within half a second, with nothing turned or pressed meanwhile) resets what it is on to 0:
      a picked effect's amount, the looper's mix, PERFORM's morph; with FUNC, the DJ filter to
      OFF. Never the tempo, swing or a field, and nothing while a STEP is held.
-   - **STEP keys:** the sixteen of whatever the pad-row keys chose.
+   - **STEP keys:** the sixteen of whatever the pad-row keys chose. **On every playing screen,
+     PERFORM and KEYS included, they are steps** (D12, 2026-11-25): tap, hold + knob, hold + OK
+     work as on GRID. MUTE MODE (STEP 1-8 the mute states), a held scene pad, push VALUE (the
+     performance mixer) and the list screens (PROJECT, CHAIN, KIT, SAMPLES, SOUNDS, the menu)
+     keep theirs.
    - **Lower pads:** the eight tracks: select and play. FUNC + pad = mute on the next bar.
    - **Upper pads:** the seven performance tools, the same in every mode but KEYS.
    - **KEYS is the exception: both pad rows are a piano**, being the pressure-sensitive ones and
@@ -82,8 +85,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      note while down, and its pressure bends macro A. The track is UP/DOWN, as in KEYS anyway.
      FUNC + a pad keeps its usual job (mute on the bar, the performance moves). The pads light as
      a keyboard: the root bright in the track's colour, the scale's other notes dim, the rest
-     dark, a held pad white, the two octave pads dim white. The STEP keys stay the 16 scale
-     degrees, so KEYS has both a chromatic piano and an in-key keyboard.
+     dark, a held pad white, the two octave pads dim white. The octave is LEFT/RIGHT and the two
+     octave pads; the STEP keys are steps (D12), so you play on the pads and edit at once.
 2. **FUNC + something is either the key's printed second label or a performance move.** The
    rare setup actions are in the FUNC menu, named on the screen, not on chords that change from
    page to page.
@@ -197,6 +200,25 @@ shorter slice of the same past), 8 TAPE STOP (from 16 up), 9 BASS KILL (the kill
   fits): no RESAMPLE or FREEZE while a loop is held (`LOOP HOLDS BUFFER`; push VALUE + CLR twice frees it), and no loop while a take is running (`RESAMPLE BUSY`), and a
   stop during the take throws it away. Not saved with the project.
 
+## Hold STEP + an upper pad: edit the step (D6)
+
+**STEP first edits, pad first performs** (2026-11-25). With a STEP held, four of the upper pads
+step one field of that step round a short cycle instead of performing, and the bottom line says
+where it landed (`STEP 5 PROB 50%`). The STEP's release then toggles nothing. A value outside
+the cycle (set on the step page) goes to the cycle's first. Not with FUNC (the pad chords stay)
+and not in KEYS, where the upper pads are the piano. `core/stepedit.hpp` has the cycles.
+
+| Pad | Sets on the held step | Cycle |
+| --- | --- | --- |
+| FILL | the condition | FILL, NOT FILL, none |
+| REPEAT | the ratchet | 2, 3, 4, off |
+| MUTE | an A:B condition | 1:2, 2:2, 1:4, 4:4, none |
+| MUTATE | probability | 75, 50, 25, 100% |
+| SCENE A / B, THROW | nothing yet: they perform (and drop the hold), as before | |
+
+Pad first is unchanged: FILL held + tap STEP writes a FILL trig, a scene pad held + STEP picks
+the scene, MUTE MODE on makes STEP 1-8 the mute states.
+
 ## The performance pads (upper row, printed TRK 1-7)
 
 | Print | STRATA | Colour | Bright while | Says |
@@ -217,7 +239,7 @@ AMOUNT` on a kick's SRC, `A SRC SOURCE TRACK` on MIXER DUCK), and the gestures t
 (the step page, the hold-and-press LEN, MACRO LEARN, NOTE view, SLC AUTO, rename and delete,
 KEYS on the pads ...). While FUNC is still held, **the screen keys (or LEFT/RIGHT) turn the help's
 pages**, as they turn every screen's pages; the line above the bottom line says
-`SCREEN KEYS: PAGE 1/9`. The last five pages are the same everywhere: FUNC + each function key,
+`PAGE 1/10` (`SCREEN KEYS: PAGE 1/n` under ten pages). The last five pages are the same everywhere: FUNC + each function key,
 FUNC + a knob or pad, the upper pads, and the performance mixer's gestures and slots
 (`VALUE FX MIXER:`, `VALUE FX STEPS:`). Every hold starts on the screen's own page.
 

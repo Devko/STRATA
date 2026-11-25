@@ -510,6 +510,62 @@ void note_name(uint8_t note, char *out, int max) {
 }
 
 uint8_t chord_at_walk_position(int position) { return chord_at(position); }
+
+// --- hold STEP + upper pad -----------------------------------------------------
+
+StepField step_cycle_field(StepCycle cycle) {
+    switch (cycle) {
+        case StepCycle::ratchet:     return StepField::ratchet_count;
+        case StepCycle::probability: return StepField::probability;
+        case StepCycle::fill:
+        case StepCycle::a_b:
+        default:                     return StepField::condition;
+    }
+}
+
+namespace {
+
+// The value after `now` in `cycle`, or the cycle's first when `now` is not in it.
+int next_in(const int *cycle, int count, int now) {
+    for (int i = 0; i < count; i++) {
+        if (cycle[i] == now) return cycle[(i + 1) % count];
+    }
+    return cycle[0];
+}
+
+}  // namespace
+
+int step_cycle_next(const Step &step, StepCycle cycle) {
+    switch (cycle) {
+        case StepCycle::fill: {
+            const int cycle_positions[] = {
+                condition_position(condition_pack(Condition::FILL)),
+                condition_position(condition_pack(Condition::NOT_FILL)),
+                condition_position(condition_pack(Condition::NONE)),
+            };
+            return next_in(cycle_positions, 3, condition_position(step.condition));
+        }
+        case StepCycle::a_b: {
+            const int cycle_positions[] = {
+                condition_position(condition_pack_a_b(1, 2)),
+                condition_position(condition_pack_a_b(2, 2)),
+                condition_position(condition_pack_a_b(1, 4)),
+                condition_position(condition_pack_a_b(4, 4)),
+                condition_position(condition_pack(Condition::NONE)),
+            };
+            return next_in(cycle_positions, 5, condition_position(step.condition));
+        }
+        case StepCycle::ratchet: {
+            const int counts[] = {2, 3, 4, 1};
+            return next_in(counts, 4, int(ratchet_count(step.ratchet)));
+        }
+        case StepCycle::probability:
+        default: {
+            const int percents[] = {75, 50, 25, 100};
+            return next_in(percents, 4, int(step.probability));
+        }
+    }
+}
 int chord_walk_position(uint8_t packed) { return chord_position_of(packed); }
 
 }  // namespace strata

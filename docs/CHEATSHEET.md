@@ -37,7 +37,7 @@ pads and the performance mixer.
 | Mode | Keys | What it is for |
 | --- | --- | --- |
 | GRID | HOME (from anywhere) | All 8 tracks; STEP keys edit the selected track |
-| KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys 16 scale degrees, on the selected track |
+| KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys steps, on the selected track |
 | FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, chain, song, auto-fill, quantize, freeze, loop length, load demo |
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE and FM4 machines ASR and OSC |
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
@@ -93,7 +93,7 @@ each line means.
 | FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu; hold to repeat |
 | Arrow pad | UP/DOWN move through rows, LEFT/RIGHT sideways, OK picks, CLR goes back |
 | Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn) |
-| Pad-row keys L/R | Which 16 the STEP keys mean: step page, octave (KEYS), bank (PROJECT, CHAIN) |
+| Pad-row keys L/R | Which 16 the STEP keys mean: step page (also KEYS, PERFORM), bank (PROJECT, CHAIN) |
 | FUNC + UP / DOWN | Copy / paste while editing; in the card lists, read again / store here |
 | FUNC held alone | Help for this screen: what A-D do here and its gestures. Keep holding FUNC: screen keys (or LEFT/RIGHT) turn the pages; the last five are FUNC + each function key, FUNC + a knob or pad, the upper pads, and the VALUE mixer's gestures and slots |
 
@@ -147,6 +147,7 @@ Slots: 1 LP SWEEP · 2 HP SWEEP · 3 HP RISER · 4 ECHO RISER · 5 ECHO FREEZE �
 | Push the TUN / PIT knob (EDIT, GRID, KEYS) | NOTE view on / off: TUN as a note (where it puts C-4), a semitone a click (`TUN AS NOTES`), or as 0-127, a count a click (`TUN AS NUMBERS`). `+` / `-` after a note: the byte is 5 cents or more sharp / flat of it |
 | Hold STEP + turn VALUE | Set the step's note |
 | Hold STEP + OK | Open the step page on that step (keep holding or let go: A-D are the page's fields) |
+| Hold STEP + FILL / REPEAT / MUTE / MUTATE | That step's condition FILL > NOT FILL > none / ratchet 2 > 3 > 4 > off / A:B 1:2 > 2:2 > 1:4 > 4:4 > none / probability 75 > 50 > 25 > 100% (`STEP 5 PROB 50%`). Pad first performs instead |
 | Hold a note's STEP + press a later STEP | LEN up to the end of that step (`LEN 4 STP`), set when you let go; CLR, copy or a knob instead uses the pair as a range |
 | Hold STEP + CLR | Clear the step |
 | Hold STEP + UP / DOWN | Copy / paste the step |
@@ -210,7 +211,7 @@ switches SONG (play the chain once and stop, `SONG END`) and LOOP. Chain edits a
 (END) and the chain wait for. The eight TRACK SWING fields read `PAT` (follow SWG) or 50-75%: C
 sets the one under `>`, or the selected track's when `>` is on LEN or SWG.
 **MACRO LEARN:** in PERFORM push a macro's knob (A-D): EDIT opens with `LEARN B n/4`; **turn** any EDIT knob (any page, the LFO's included, any track) to where the macro's top should be; OK, CLR or HOME ends it (`B: 3 PARAMS`) and the knobs snap back, so the macro at 0 is the old sound and at 127 the one you dialled. A push takes a parameter the macro holds off it; a fifth knob says `FULL`. An EDIT knob on a parameter a turned-up macro holds says `HELD BY MACRO x`.
-**PERFORM:** macros are set by MACRO LEARN (above); the STEP keys no longer assign;
+**PERFORM:** macros are set by MACRO LEARN (above); the STEP keys are steps, as in GRID;
 FUNC+STEP 5-7 the master kill EQ's LOW, MID or HI (`A EQ LOW`). OK's whole capture also stores the
 kill EQ's three knobs, so the morph can sweep them. A macro
 at 0 lets go: its parameters follow their EDIT knobs and the morph, and turning it up sweeps from

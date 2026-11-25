@@ -70,6 +70,15 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
 - **Macro learn by turning (Phase 2).** PERFORM, push B: EDIT opens, `LEARN B 0/4 TURN KNOBS`.
   Turn CUT down and RES up, then OK: `B: 2 PARAMS`, and the sound is back as it was. In
   PERFORM turn B up: it goes to the sound you dialled. STEP keys in PERFORM assign nothing.
+- **Hold STEP + upper pad (D6).** GRID, hold STEP 5, press MUTATE: `STEP 5 PROB 75%`, again
+  `50%`; the STEP 5 light blinks; let go: the trig did not toggle. Hold STEP 5 + REPEAT four
+  times: `RTCH 2`, `3`, `4`, `OFF` (hear the ratchet). + FILL: `COND FILL`, the step plays only
+  with FILL held. + MUTE: `COND 1:2`. Now FILL first, then STEP 9: a FILL trig, as before.
+- **STEP keys are steps in PERFORM and KEYS (D12).** In KEYS tap STEP 5: a trig, as on GRID, and
+  the screen still shows the piano and `STEP KEYS 1-16`; pad-row right: `17-32`. LEFT/RIGHT:
+  `OCT`. Play a chord on the pads while tapping STEP keys: both work at once. In PERFORM tap
+  STEP 5: a trig; hold STEP 5 + turn VALUE: the note, no toggle. MUTE pad on: STEP 1-8 still
+  recall mute states.
 - **Pattern menu (0.4.0).** PROJECT, cursor on a 16-step pattern, hold OK: `PATTERN A01` and
   the list COPY PASTE CLEAR DOUBLE. DOWN to DOUBLE, OK, OK: `A01 DOUBLED`, GRID shows 32 steps,
   the second half a copy of the first. A short OK tap still queues the slot. CLR closes the list.
@@ -275,8 +284,8 @@ new items (KEYS on the pads, CLEAR PATTERN, macros, velocity, TUN) moved into th
 - [ ] **Screen keys = pages.** EDIT and MIXER as before. On PROJECT they walk PROJECT, CHAIN,
       PATTERN, SETUP, PROJECTS. On GRID they change the EDIT page the knobs turn (the second line
       says `FLTR` etc.); LEFT/RIGHT still flip GRID's step page.
-- [ ] **Pad-row keys = which sixteen.** GRID: step page. KEYS: octave. PROJECT: the bank
-      (`BANK B`). PERFORM and KIT: nothing.
+- [ ] **Pad-row keys = which sixteen.** GRID, KEYS and PERFORM: step page. PROJECT: the bank
+      (`BANK B`). KIT: nothing.
 - [ ] **CHAIN:** CLR on an entry: `AGAIN TO REMOVE`; again: removed. On an empty chain CLR goes back.
 - Notes on what still feels awkward: `____________________________________________`
 

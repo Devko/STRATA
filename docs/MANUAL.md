@@ -152,7 +152,7 @@ length: set a step's length to 4 steps and a 1/16 arp plays four notes. On the P
 walks the step's chord, one note at a time. The track's next step starts a new run. RND plays the
 same notes on every pass of the pattern, so a random arp is still a part you can keep.
 
-**In KEYS**, hold keys and the arp plays them, adding each key you press to the run and dropping
+**In KEYS**, hold pads and the arp plays them, adding each pad you press to the run and dropping
 each one you let go; it stops when the last key comes up. With the transport running the notes
 land on the beat; stopped, the run starts the moment you press. A pad hit plays one note.
 
@@ -172,7 +172,7 @@ drones:
   filter envelope swells with it.
 - **B, SUS**: the sustain level, `0%` to `100%` of the note's peak. **At 0% a note is a one-shot**:
   it falls over DEC and ends. **Above 0%** it falls over DEC to SUS and
-  **holds there**: for as long as you hold the pad or key in KEYS (or the MIDI note), or the
+  **holds there**: for as long as you hold the pad in KEYS (or the MIDI note), or the
   track's own pad in any other mode, or for the step's **LEN** on the sequencer.
 - **C, REL**: the release, the tail after the key comes up or LEN ends, `60MS` to `8.0S`.
 - **D, FSU**: filter sustain. At 0% the filter envelope sweeps up and closes again over DEC, the
@@ -415,15 +415,16 @@ on a VA this is how a held pad is written in.
 
 ### 5. Play it in
 
-<p><img src="screens/keys.png" width="256" alt="KEYS: sixteen notes of C minor"></p>
+<p><img src="screens/keys.png" width="256" alt="KEYS: the pads as a keyboard"></p>
 
 Press **HOME twice quickly** for KEYS. The two pad rows become a piano keyboard: the lower pads
 are the white keys C to C, the upper pads above them the black keys (C#, D#, F#, G#, A#), and the
 two upper pads with no black key are octave down (between E and F) and octave up (after B). Pads
 play at the strength you hit them and hold the note while down; the pads in the scale light in
-the track's colour, the root brightest. STEP 1-16 play the scale from the root (C minor here), in
-key whatever you press. The pad-row keys change octave, UP/DOWN the track, and FUNC + a pad still
-mutes on the bar. Press **REC** (it lights red) while playing and what you play is
+the track's colour, the root brightest; the screen draws the same keyboard. LEFT/RIGHT change
+octave, UP/DOWN the track, and FUNC + a pad still mutes on the bar. The STEP keys are the track's
+steps, as on GRID, with the pad-row keys for the step page, so you can play a line on the pads and
+place or fix steps at the same time. Press **REC** (it lights red) while playing and what you play is
 recorded onto the selected track, quantized by the SETUP page's QUANTIZE amount (100% by
 default). Pads record too, with their velocity. REC again stops. Turning A-D while recording
 writes locks onto the steps as they pass (motion recording).
@@ -725,7 +726,7 @@ OUT as well as sounding, to double a part on a synth. A track sends every note i
 hits, KEYS and MIDI IN notes.
 
 Every note gets its note-off. A step ends after its LEN (one step if it has none, and so does a
-pad hit); a KEYS key or a MIDI IN note when you let go. Muting the track, changing its channel or
+pad hit); a KEYS pad or a MIDI IN note when you let go. Muting the track, changing its channel or
 machine, recalling a kit and STOP end its notes at once. The **second STOP** and **FUNC+STOP** also
 send All Notes Off on every channel a track uses, for a synth that missed something. Notes leave
 within one audio block (1.3 ms) of their step. The channels are saved with the project.
@@ -835,6 +836,12 @@ The step page's fields:
 
 Conditions and probability are seeded from the pattern, so a pattern plays the same way after a
 reload.
+
+**Without the step page:** hold a STEP and press an upper pad. FILL steps the condition through
+FILL, NOT FILL and none; MUTE through 1:2, 2:2, 1:4, 4:4 and none; REPEAT the ratchet through 2, 3,
+4 and off; MUTATE the probability through 75, 50, 25 and 100%. The bottom line says where it
+landed (`STEP 5 PROB 50%`). The order is the rule: STEP first edits the step, pad first performs
+(FILL held, then a STEP, writes a FILL trig). The step page still has every value.
 
 ### Ranges, copy and paste
 
