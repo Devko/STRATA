@@ -1185,6 +1185,31 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::audition_start: {
+            // A start while one plays replaces it; the card side only posts one after the last
+            // has ended (its epoch), so this is belt and braces.
+            const AuditionInfo &info = audition_inbox_;
+            if (audition_on_) end_audition();
+            const bool ok = info.frame_bytes != 0 && info.frame_bytes <= 8 &&
+                            audition_.start(info.total_frames, int(info.channels), info.step);
+            if (!ok) {
+                // Refused: the card side is waiting for an epoch before it closes the stream.
+                end_audition();
+                status_.bump_refused();
+                break;
+            }
+            audition_encoding_ = info.encoding;
+            audition_frame_bytes_ = info.frame_bytes;
+            audition_carry_ = 0;
+            audition_on_ = true;
+            break;
+        }
+
+        case Cmd::audition_stop:
+            // Faded over the next block; the epoch moves when the fade is done (process).
+            audition_.stop();
+            break;
+
         // --- kit and sound ---
 
         case Cmd::euclid:
@@ -3041,6 +3066,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // A streamed sample's next frames, before anything renders from them.
     top_up_streams();
+    top_up_audition();
 
     // The performance mixer's plan over the sends and the master (core/perffx.hpp): copies, so
     // the project's settings are untouched and amount 0 hands the mixer exactly what it had.
@@ -3183,6 +3209,18 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         const float peak = strata_master_peak(in, in, int(2u * frames));
         const float clipped = peak > 1.0f ? 1.0f : peak;
         status_.input_peak.store(to_milli(clipped), std::memory_order_relaxed);
+    }
+
+    // The sample browser's audition, last and outside everything: after the take's tap, so it
+    // is never recorded, and after the master effects, beat repeat and the tape stop, so it is
+    // the file as it is (dsp/audition.hpp).
+    if (audition_on_) {
+        audition_.render_add(out, int(frames));
+        if (audition_.take_finished()) {
+            end_audition();
+        } else {
+            status_.audition_frame.store(audition_.position(), std::memory_order_relaxed);
+        }
     }
 
     status_.resample_state.store(capture_.done()        ? 3u
@@ -3338,34 +3376,62 @@ void Engine::stop_stream(int track) {
     st.carry = 0;
 }
 
+void Engine::fill_fifo(enaga::files::Stream &stream, StreamFifo &fifo, uint32_t total,
+                       uint8_t frame_bytes, uint8_t encoding, uint8_t &carry, uint8_t *carry_bytes) {
+    const uint32_t next = fifo.next_frame();
+    if (next >= total) return;                        // the whole file is in
+    uint32_t room = 0;
+    int16_t *span = fifo.write_span(&room);
+    uint32_t n = room < kStreamReadFrames ? room : kStreamReadFrames;
+    if (n > total - next) n = total - next;
+    if (n == 0) return;
+
+    const uint32_t fb = frame_bytes;
+    for (uint32_t i = 0; i < carry; i++) stream_bytes_[i] = carry_bytes[i];
+    const uint32_t want = n * fb - carry;
+    const uint32_t got = stream.read(stream_bytes_ + carry, want);
+    const uint32_t have = carry + (got > want ? want : got);
+    const uint32_t frames = stream_frames_in(have, fb);
+    if (frames != 0) {
+        const uint32_t did = pcm_to_s16(stream_bytes_, frames * fb, PcmFormat(encoding),
+                                        fifo.channels(), span, frames);
+        fifo.commit(did);
+    }
+    const uint32_t used = frames * fb;
+    carry = uint8_t(have - used);
+    for (uint32_t i = 0; i < carry; i++) carry_bytes[i] = stream_bytes_[used + i];
+}
+
 void Engine::top_up_streams() {
     for (int t = 0; t < kTracks; t++) {
         StreamState &st = stream_state_[t];
         if (!st.on || !st.attached) continue;
-        StreamFifo &fifo = fifos_[t];
-        const uint32_t next = fifo.next_frame();
-        if (next >= st.total) continue;               // the whole file is in
-        uint32_t room = 0;
-        int16_t *span = fifo.write_span(&room);
-        uint32_t n = room < kStreamReadFrames ? room : kStreamReadFrames;
-        if (n > st.total - next) n = st.total - next;
-        if (n == 0) continue;
-
-        const uint32_t fb = st.frame_bytes;
-        for (uint32_t i = 0; i < st.carry; i++) stream_bytes_[i] = st.carry_bytes[i];
-        const uint32_t want = n * fb - st.carry;
-        const uint32_t got = streams_[t].read(stream_bytes_ + st.carry, want);
-        const uint32_t have = st.carry + (got > want ? want : got);
-        const uint32_t frames = stream_frames_in(have, fb);
-        if (frames != 0) {
-            const uint32_t did = pcm_to_s16(stream_bytes_, frames * fb, PcmFormat(st.encoding),
-                                            fifo.channels(), span, frames);
-            fifo.commit(did);
-        }
-        const uint32_t used = frames * fb;
-        st.carry = uint8_t(have - used);
-        for (uint32_t i = 0; i < st.carry; i++) st.carry_bytes[i] = stream_bytes_[used + i];
+        fill_fifo(streams_[t], fifos_[t], st.total, st.frame_bytes, st.encoding, st.carry,
+                  st.carry_bytes);
     }
+}
+
+// --- sample audition (dsp/audition.hpp) -------------------------------------------
+//
+// The card side opens the file's stream at its data and, once it is filled, posts
+// Cmd::audition_start; this side reads it into the player's fifo each block and plays it, until
+// its last frame or a Cmd::audition_stop's fade. Then it stops reading and bumps
+// Status::audition_epoch, after which the stream is the card side's to close.
+
+void Engine::top_up_audition() {
+    if (!audition_on_ || !audition_.wants_frames()) return;
+    fill_fifo(audition_stream_, audition_.fifo(), audition_.total(), audition_frame_bytes_,
+              audition_encoding_, audition_carry_, audition_carry_bytes_);
+}
+
+void Engine::end_audition() {
+    // Stop reading FIRST, then say so, as watch_streams does: the card side may close the stream
+    // the moment it sees the new value.
+    audition_on_ = false;
+    audition_carry_ = 0;
+    audition_epoch_ = uint8_t(audition_epoch_ + 1u);
+    status_.audition_frame.store(0, std::memory_order_relaxed);
+    status_.audition_epoch.store(audition_epoch_, std::memory_order_release);
 }
 
 void Engine::watch_streams() {

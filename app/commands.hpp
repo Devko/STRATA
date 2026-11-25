@@ -326,6 +326,14 @@ enum class Cmd : uint8_t {
     // a LOCK holds both.
     set_live_rnd,
 
+    // Sample audition (dsp/audition.hpp), push A in SAMPLES. `audition_start` is posted by the
+    // card side once the file's stream is open and filled; what to play is in
+    // Engine::audition_for_load(), written just before the post. `audition_stop` fades it out.
+    // Either way, once the audio side has stopped reading the stream it bumps
+    // Status::audition_epoch, and only then may the card side close it.
+    audition_start,
+    audition_stop,
+
     count
 };
 
@@ -538,6 +546,13 @@ struct Status {
     // did (dsp/sample.hpp), summed over the tracks, for the screen's STREAM LATE.
     std::atomic<uint16_t> stream_want[8] = {};
     std::atomic<uint32_t> stream_late{0};
+
+    // Sample audition (dsp/audition.hpp). `audition_epoch` is bumped (with release) each time an
+    // audition ends -- its last frame, or a stop -- after the audio side stopped reading its
+    // stream, so the card side may close the stream the moment it sees the change.
+    // `audition_frame` is where it is, in file frames, for the screen (0 when none plays).
+    std::atomic<uint8_t> audition_epoch{0};
+    std::atomic<uint32_t> audition_frame{0};
 
     // Where a SAMPLE or GRAIN track is in its sample, for EDIT's waveform (core/overview.hpp,
     // WaveView): the window or the grain bracket, the slice starts, and up to eight playheads or

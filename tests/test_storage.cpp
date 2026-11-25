@@ -595,6 +595,9 @@ const Expect kTable[] = {
     {Cmd::set_move_all, 0u, "set_move_all"},
     // LIVE RND is a performance move: no file (core/liverand.hpp).
     {Cmd::set_live_rnd, 0u, "set_live_rnd"},
+    // An audition is heard, not kept: the track and the project are untouched.
+    {Cmd::audition_start, 0u, "audition_start"},
+    {Cmd::audition_stop, 0u, "audition_stop"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:
@@ -4695,4 +4698,214 @@ TEST(storage_slice_points_survive_the_resample_and_the_chunked_load) {
     CHECK_EQ(int(points.rank[1]), 0);
     storage().request_new();
     CHECK(settle_long());
+}
+
+// --- sample audition (dsp/audition.hpp, app/storage.hpp "sample audition") ------------------------
+
+namespace {
+
+// Pump until `done()` or `limit` blocks; the loudest sample seen in the meantime.
+template <typename Done>
+float pump_while_not(Done done, int limit, bool *reached = nullptr) {
+    float peak = 0.0f;
+    bool ok = false;
+    for (int i = 0; i < limit; i++) {
+        if (done()) {
+            ok = true;
+            break;
+        }
+        const float p = pump();
+        if (p > peak) peak = p;
+    }
+    if (reached != nullptr) *reached = ok;
+    return peak;
+}
+
+// The square wave make_wav writes, +-12000, at the audition's -6 dB.
+constexpr float kHeardPeak = 12000.0f * Audition::kGain / 32768.0f;
+
+}  // namespace
+
+TEST(storage_an_audition_plays_the_file_whole_to_the_output_and_closes_its_stream) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    // 0.5 s of 48 kHz mono: 375 blocks.
+    make_wav("/SAMPLES/AUD.WAV", 48000, 1, 16, 24000);
+    const bool dirty = storage().dirty();
+    CHECK(storage().request_audition("/SAMPLES/AUD.WAV"));
+    CHECK(storage().auditioning());
+    bool reached = false;
+    pump_while_not([] { return engine().audition_attached(); }, 200, &reached);
+    CHECK(reached);
+    CHECK(storage().audition_sounding());
+    CHECK_EQ(host.streams_open(), 1);
+    CHECK_EQ(storage().audition_frames(), 24000u);
+    CHECK_EQ(storage().audition_seconds(), 0u);
+    // Heard, on a project with nothing playing: the file at -6 dB, the same on both sides.
+    int blocks = 0;
+    float peak = 0.0f;
+    int lopsided = 0;
+    while (storage().auditioning() && blocks < 1000) {
+        const float p = pump();
+        peak = p > peak ? p : peak;
+        const float *block = strata::test::last_block();
+        for (int i = 0; i < kBlk; i++) lopsided += block[2 * i] != block[2 * i + 1] ? 1 : 0;
+        blocks++;
+    }
+    CHECK(std::fabs(peak - kHeardPeak) < 1e-3f);
+    CHECK_EQ(lopsided, 0);
+    CHECK(blocks >= 370 && blocks <= 390);
+    CHECK(!storage().auditioning());
+    CHECK(!engine().audition_attached());
+    CHECK_EQ(host.streams_open(), 0);
+    // After it, quiet; and nothing about the project changed.
+    CHECK(pump(20) == 0.0f);
+    CHECK_EQ(storage().dirty(), dirty);
+    CHECK_EQ(engine().project().kit.tracks[kLoopTrack].sample[0], '\0');
+    host.remove_file("/SAMPLES/AUD.WAV");
+}
+
+TEST(storage_an_audition_at_another_rate_plays_in_the_files_own_time) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    // 0.25 s at 24 kHz, stereo 24-bit: 6000 frames, and 0.25 s of 48 kHz output, 188 blocks.
+    make_wav("/SAMPLES/AUD24.WAV", 24000, 2, 24, 6000);
+    CHECK(storage().request_audition("/SAMPLES/AUD24.WAV"));
+    bool reached = false;
+    pump_while_not([] { return engine().audition_attached(); }, 200, &reached);
+    CHECK(reached);
+    int blocks = 0;
+    float peak = 0.0f;
+    while (storage().auditioning() && blocks < 1000) {
+        const float p = pump();
+        peak = p > peak ? p : peak;
+        blocks++;
+    }
+    CHECK(blocks >= 185 && blocks <= 200);
+    // Catmull-Rom between the square's corners rings a little over, never much.
+    CHECK(peak > kHeardPeak * 0.99f && peak < kHeardPeak * 1.2f);
+    CHECK_EQ(host.streams_open(), 0);
+    host.remove_file("/SAMPLES/AUD24.WAV");
+}
+
+TEST(storage_an_audition_stopped_fades_and_lets_the_stream_go) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    make_wav("/SAMPLES/LONG.WAV", 48000, 2, 16, 30000);
+    CHECK(storage().request_audition("/SAMPLES/LONG.WAV"));
+    pump_while_not([] { return engine().audition_attached(); }, 200);
+    CHECK(pump(50) > 0.1f);
+    storage().stop_audition();
+    CHECK(storage().auditioning());          // fading: the stream is still the audio side's
+    bool reached = false;
+    pump_while_not([] { return !storage().auditioning(); }, 20, &reached);
+    CHECK(reached);
+    CHECK_EQ(host.streams_open(), 0);
+    CHECK(pump(20) == 0.0f);
+    host.remove_file("/SAMPLES/LONG.WAV");
+}
+
+TEST(storage_a_second_audition_replaces_the_first) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    make_wav("/SAMPLES/ONE.WAV", 48000, 1, 16, 60000);
+    make_wav("/SAMPLES/TWO.WAV", 48000, 1, 16, 4800);
+    CHECK(storage().request_audition("/SAMPLES/ONE.WAV"));
+    pump_while_not([] { return engine().audition_attached(); }, 200);
+    pump(10);
+    CHECK(storage().request_audition("/SAMPLES/TWO.WAV"));
+    CHECK(std::strcmp(storage().audition_path(), "/SAMPLES/TWO.WAV") == 0);
+    // ONE fades and its stream closes before TWO opens: never two at once.
+    int most = 0;
+    bool reached = false;
+    for (int i = 0; i < 300 && !reached; i++) {
+        pump();
+        most = host.streams_open() > most ? host.streams_open() : most;
+        reached = storage().audition_sounding() && storage().audition_frames() == 4800u;
+    }
+    CHECK(reached);
+    CHECK_EQ(most, 1);
+    CHECK(std::strcmp(storage().audition_path(), "/SAMPLES/TWO.WAV") == 0);
+    pump_while_not([] { return !storage().auditioning(); }, 300);
+    CHECK_EQ(host.streams_open(), 0);
+    host.remove_file("/SAMPLES/ONE.WAV");
+    host.remove_file("/SAMPLES/TWO.WAV");
+}
+
+TEST(storage_an_audition_of_a_file_it_cannot_play_says_why_once) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    uint8_t *p = host.create_file("/SAMPLES/JUNK.WAV", 400);
+    CHECK(p != nullptr);
+    if (p != nullptr) {
+        for (int i = 0; i < 400; i++) p[i] = uint8_t(i);
+    }
+    CHECK(storage().request_audition("/SAMPLES/JUNK.WAV"));
+    pump_while_not([] { return !storage().auditioning(); }, 100);
+    CHECK(!storage().auditioning());
+    const char *why = storage().take_audition_error();
+    CHECK(why != nullptr && std::strcmp(why, "NOT A WAV") == 0);
+    CHECK(storage().take_audition_error() == nullptr);
+    CHECK_EQ(host.streams_open(), 0);
+
+    CHECK(storage().request_audition("/SAMPLES/NOPE.WAV"));
+    pump(3);
+    CHECK(!storage().auditioning());
+    why = storage().take_audition_error();
+    CHECK(why != nullptr && std::strcmp(why, "NOT FOUND") == 0);
+
+    // Refused outright: nothing to name, or a name too long for a kit.
+    CHECK(!storage().request_audition(""));
+    char long_path[kSamplePathBytes + 8];
+    std::memset(long_path, 'A', sizeof long_path);
+    long_path[0] = '/';
+    long_path[sizeof long_path - 1] = '\0';
+    CHECK(!storage().request_audition(long_path));
+    CHECK(!storage().auditioning());
+    host.remove_file("/SAMPLES/JUNK.WAV");
+}
+
+TEST(storage_an_audition_stops_with_the_card) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    make_wav("/SAMPLES/LONG.WAV", 48000, 1, 16, 60000);
+    CHECK(storage().request_audition("/SAMPLES/LONG.WAV"));
+    pump_while_not([] { return engine().audition_attached(); }, 200);
+    host.set_card(false);
+    storage().on_card(false);
+    pump_while_not([] { return !storage().auditioning(); }, 20);
+    CHECK(!storage().auditioning());
+    CHECK_EQ(host.streams_open(), 0);
+    // And with no card, a press says so.
+    CHECK(storage().request_audition("/SAMPLES/LONG.WAV"));
+    pump(3);
+    const char *why = storage().take_audition_error();
+    CHECK(why != nullptr && std::strcmp(why, "NO CARD") == 0);
+    host.set_card(true);
+    storage().on_card(true);
+    settle_long();
+    host.remove_file("/SAMPLES/LONG.WAV");
+}
+
+TEST(storage_an_audition_plays_while_a_sample_loads_into_a_track) {
+    // Beside the job machine: a load does not hold it up, nor it the load.
+    clean();
+    FakeHost &host = FakeHost::the();
+    make_wav("/SAMPLES/AUD.WAV", 48000, 1, 16, 24000);
+    make_wav("/SAMPLES/LOADED.WAV", 48000, 2, 16, 30000);
+    kit_sample(kLoopTrack, "/SAMPLES/LOADED.WAV");
+    CHECK(storage().request_sample(kLoopTrack));
+    CHECK(storage().request_audition("/SAMPLES/AUD.WAV"));
+    bool reached = false;
+    pump_while_not([] { return engine().audition_attached(); }, 200, &reached);
+    CHECK(reached);
+    CHECK(settle_long());
+    CHECK_EQ(int(slot_of(kLoopTrack).state), int(SampleState::ready));
+    pump_while_not([] { return !storage().auditioning(); }, 1000);
+    CHECK_EQ(host.streams_open(), 0);
+    kit_sample(kLoopTrack, "");
+    storage().request_new();
+    CHECK(settle_long());
+    host.remove_file("/SAMPLES/AUD.WAV");
+    host.remove_file("/SAMPLES/LOADED.WAV");
 }

@@ -52,6 +52,7 @@
 #include "snare.hpp"
 #include "stepedit.hpp"
 #include "streamfifo.hpp"  // a streamed sample's read-ahead, per track
+#include "audition.hpp"    // the sample browser's audition (push A in SAMPLES)
 #include "track.hpp"
 #include "chord.hpp"     // a POLY step's chord byte, expanded in fire()
 #include "undo.hpp"
@@ -337,6 +338,25 @@ public:
     bool stream_attached(int track) const { return stream_state_[track].attached; }
     const StreamFifo &stream_fifo(int track) const { return fifos_[track]; }
 
+    // --- sample audition (dsp/audition.hpp) ---
+
+    // What Cmd::audition_start hands over: written by the main context just before the post and
+    // read by the audio side only while applying it, as stream_for_load.
+    struct AuditionInfo {
+        uint32_t total_frames = 0;  // the file's
+        uint32_t step = 0;          // Q8.24, Audition::step_for(the file's rate, 48 kHz)
+        uint8_t channels = 1;
+        uint8_t encoding = 0;       // a PcmFormat
+        uint8_t frame_bytes = 0;    // in the file
+    };
+    AuditionInfo &audition_for_load() { return audition_inbox_; }
+    // The audition's stream: the main context opens it and posts audition_start, the audio side
+    // reads it until it bumps Status::audition_epoch, and only then does the main context close it.
+    enaga::files::Stream &audition_stream() { return audition_stream_; }
+    // For tests.
+    const Audition &audition() const { return audition_; }
+    bool audition_attached() const { return audition_on_; }
+
 private:
     void apply_commands();
     void apply(const Command &command);
@@ -517,6 +537,23 @@ private:
     enaga::files::Stream streams_[kTracks];
     uint8_t stream_bytes_[kStreamReadFrames * 8u + 8u] = {};
     uint32_t stream_late_ = 0;        // Status::stream_late: only ever grows
+    // One stream's next bytes into `fifo`, converted on the way: top_up_streams' read, shared
+    // with the audition's. `carry` and `carry_bytes` keep a frame split across two reads.
+    void fill_fifo(enaga::files::Stream &stream, StreamFifo &fifo, uint32_t total,
+                   uint8_t frame_bytes, uint8_t encoding, uint8_t &carry, uint8_t *carry_bytes);
+
+    // Sample audition. Audio side only, apart from the inbox and the stream (rules above).
+    void top_up_audition();           // before rendering
+    void end_audition();              // stop reading, then bump Status::audition_epoch
+    Audition audition_;
+    AuditionInfo audition_inbox_{};
+    enaga::files::Stream audition_stream_;
+    bool audition_on_ = false;        // reading audition_stream_ into audition_.fifo()
+    uint8_t audition_encoding_ = 0;
+    uint8_t audition_frame_bytes_ = 0;
+    uint8_t audition_carry_ = 0;
+    uint8_t audition_carry_bytes_[8] = {};
+    uint8_t audition_epoch_ = 0;      // what Status::audition_epoch holds
 
     // The hat choke is a pair, and the pair is tracks 3 and 4 of the DEFAULT kit. Machine
     // switching makes that an assumption rather than a fact, so it is re-derived on every
