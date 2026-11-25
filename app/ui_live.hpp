@@ -292,3 +292,73 @@
         }
         grain_glow_.blit(canvas.data(), 0, middle - 6);
     }
+
+    // --- MIXER's master pages (MST, EQ): the spectrum and a vectorscope -------------------------
+    //
+    // While the beat plays, in the rows between the bars and the PEAK line (86-107): the output's
+    // spectrum in 24 bands (app/spectrum.hpp; 94 Hz to 12 kHz, 48 dB tall, read 12 dB hot), falling
+    // two rows a frame with a peak dot held for half a second; and beside it a vectorscope, 22 x
+    // 22, mid up and side across (a third of full scale reaches the edge), in an afterglow, so a
+    // mono mix is a vertical line and a wide one a cloud. On the EQ page the bands a kill takes
+    // out sink as it is thrown.
+    static constexpr int kSpectrumTop = 86;
+    static constexpr int kSpectrumRows = 22;
+    static constexpr int kVectorX = 101;
+
+    void draw_master_live(enaga::Canvas &canvas, bool running) {
+        uint8_t *px = canvas.data();
+        if (!running) {
+            vector_glow_.clear();
+            for (int b = 0; b < spectrum::kBands; b++) band_rows_[b] = band_peak_[b] = 0;
+            return;
+        }
+        uint16_t milli[spectrum::kBands];
+        spectrum::analyse(scope_history_, spectrum_work_, milli);
+        const int bottom = kSpectrumTop + kSpectrumRows - 1;
+        for (int b = 0; b < spectrum::kBands; b++) {
+            // +12 dB: a band of a mix sits well under full scale; the top 48 dB from there.
+            const uint32_t boosted = uint32_t(milli[b]) * 4u;
+            const int rows = paint::level_rows(boosted, kSpectrumRows, 48);
+            band_rows_[b] = uint8_t(rows > band_rows_[b] - 2 ? rows : band_rows_[b] - 2);
+            if (rows >= band_peak_[b]) {
+                band_peak_[b] = uint8_t(rows);
+                band_hold_[b] = 10;
+            } else if (band_hold_[b] > 0) {
+                band_hold_[b]--;
+            } else if (band_peak_[b] > 0) {
+                band_peak_[b]--;
+            }
+            const int x = b * 4;
+            for (int r = 0; r < band_rows_[b]; r += 2) {
+                const uint8_t g = r >= kSpectrumRows - 6 ? 15 : (r >= kSpectrumRows - 12 ? 11 : 7);
+                canvas.rect(x, bottom - r, 3, 1, g);
+            }
+            if (band_peak_[b] > 0) canvas.rect(x, bottom - band_peak_[b], 3, 1, 15);
+        }
+        canvas.rect(0, bottom + 1, 96, 1, 3);
+
+        // The vectorscope: the newest 400 frames, every second one, mid = L + R up, side = L - R
+        // across, scaled so full scale reaches the edge.
+        vector_glow_.fade(140);
+        for (uint32_t ago = 0; ago < 400; ago += 2) {
+            const int l = scope_history_.left(ago);
+            const int r = scope_history_.right(ago);
+            const int mid = (l + r) * 30 / 65536;          // a third of full scale fills it
+            const int side = (l - r) * 30 / 65536;
+            vector_glow_.plot(11 + side, 11 - mid, 12);
+        }
+        paint::dotted_v(px, kVectorX + 11, kSpectrumTop, bottom, 3, 3);
+        paint::dotted_h(px, kVectorX, kVectorX + 21, kSpectrumTop + 11, 3, 3);
+        vector_glow_.blit(px, kVectorX, kSpectrumTop);
+    }
+
+    // MIXER's fader pages: each track's live level, a thin column beside its fader, while the
+    // beat plays (Status::track_milli in decibels, the fader's 48 rows showing the top 48 dB).
+    void draw_fader_meter(enaga::Canvas &canvas, int track, int x, bool running) {
+        if (!running) return;
+        const uint32_t level = engine_.status().track_milli[track].load(std::memory_order_relaxed);
+        const int lit = paint::level_rows(level, 48, 48);
+        for (int r = 0; r < lit; r += 2) {
+            canvas.rect(x, 46 + 47 - r, 1, 1, r >= 40 ? 15 : 9);
+        }
+    }
