@@ -246,10 +246,10 @@ echo and noise), 16 LOOPER. Until 2026-11-25 slot 7 was STUTTER (the REPEAT pad 
 
 ## Hold STEP + an upper pad: edit the step (D6)
 
-**STEP first edits, pad first performs** (2026-11-25). With a STEP held, four of the upper pads
+**STEP first edits, pad first performs** (2026-11-25). With a STEP held, five of the upper pads
 step one field of that step round a short cycle instead of performing, and the bottom line says
 where it landed (`STEP 5 PROB 50%`). The STEP's release then toggles nothing. A value outside
-the cycle (set on the step page) goes to the cycle's first. Not with FUNC (the pad chords stay)
+the cycle (set on the step page) goes to the cycle's first. Not with FUNC (the pad chords stay; FUNC + THROW is the reverb lock)
 and not in KEYS, where the upper pads are the piano. `core/stepedit.hpp` has the cycles.
 
 | Pad | Sets on the held step | Cycle |
@@ -258,7 +258,8 @@ and not in KEYS, where the upper pads are the piano. `core/stepedit.hpp` has the
 | REPEAT | the ratchet | 2, 3, 4, off |
 | MUTE | an A:B condition | 1:2, 2:2, 1:4, 4:4, none |
 | MUTATE | probability | 75, 50, 25, 100% |
-| SCENE A / B, THROW | nothing yet: they perform (and drop the hold), as before | |
+| THROW | a lock of the delay send (FUNC: the reverb send) | full, off (`STEP 5 DLY FULL`) |
+| SCENE A / B | nothing yet: they perform (and drop the hold), as before | |
 
 Pad first is unchanged: FILL held + tap STEP writes a FILL trig, a scene pad held + STEP picks
 the scene, MUTE MODE on makes STEP 1-8 the mute states, REPEAT held + STEP stutters (below).
@@ -283,6 +284,22 @@ The step plays as written, its locks included; its condition, probability and ra
 drawn (the stutter is the ratchet now). While a stutter or the rate is under the hand, the live
 strip starts with `ST5` and `R1/16`. STEP first still edits: hold STEP, then REPEAT, and the
 ratchet steps (D6). VALUE pushed first keeps the mixer's STEP keys.
+
+## Bounce to track: one OK after a take (RESAMPLE)
+
+A take asked for `TO FILE` (the default) is offered to a track once it is all on the card: the
+screen says `TAKE ON CARD`, `PUT ON TRK 3 GRN` and `OK PUTS  CLR KEEPS`.
+
+| Key | Does |
+| --- | --- |
+| OK | The take becomes that track's sample and loads at once (`T3 GRN: TAKE ON`), as `TO TRK n` would have done before the take. Only on a SAMPLE or GRAIN track: anything else says `T1 NOT SAMPLE/GRAIN` and stays offered |
+| LEFT / RIGHT (and the screen keys) | Walk the offered track round the eight; `TO FILE`/`TO TRK` is untouched |
+| CLR | Leaves it a file (`TAKE STAYS A FILE`); the next OK arms a new take |
+
+The first track offered is a SAMPLE or GRAIN track other than the one the take was bounced from
+(the selected track if it is one, else the lowest), then the bounced track itself, then the
+selected track. So bouncing two layered tracks into the GRAIN or sliced SAMPLE next to them is
+B to `TRK n`, OK, PLAY, then OK. Pulling the card drops the offer; it is not saved.
 
 ## The performance pads (upper row, printed TRK 1-7)
 

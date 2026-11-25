@@ -19,7 +19,7 @@ been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is 
 | `make -C host test` | **1,754 tests, 3,485,153 checks, 0 failures** on `main` after PR #126: `core/`, `dsp/` and all of `app/` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image (cl6x, 2026-11-25, EDIT's pictures): payload 1,117,368 bytes, bss 1,565,352 (with LOCK and play modes); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | **33 scenarios**, run on Roland's PC only. All 33 pass with cl6x with step stutter and the repeat rate merged onto EDIT's pictures (no new scenario: both are pad gestures, host-tested; worst 30.55%, ambient). All 33 pass with cl6x with EDIT's waveforms and envelopes merged onto play modes, LOCK and FX GLIDE (`scenario_pictures` new: every picture page walked while the beat plays; worst 30.55%, ambient). All 32 passed with cl6x after play modes merged onto LOCK and FX GLIDE (`scenario_playmode` new: FUNC menu TRACK PLAY walked to RND4 while the beat plays, then a save; worst 30.54%, ambient). All 31 passed with cl6x with LOCK and FX GLIDE (`scenario_glide` new; worst 30.34%, ambient). All 30 pass with cl6x after backlog D1/D2/D5 merged onto locks on screen (`scenario_slots` new: mixer slots 7 and 13 and a retired chord). All 29 passed with cl6x after locks on screen (`scenario_plock` new: hold STEP + turn on GRID and EDIT; worst 30.18%, ambient). All 27 pass with cl6x on `ce5fc6b` (the v0.3.1 build, 2026-11-23), `scenario_wave` once its table check followed #133; all 27 again with cl6x on Enaga v0.3.0 (2026-11-25), loads unchanged (worst 30.16%, ambient); all 28 with cl6x after D12 (`scenario_stepkeys` new, `scenario_m6` now checks KEYS' STEP keys toggle steps, since the emulator cannot press pads) |
+| `tools/scenarios.sh` | **34 scenarios**, run on Roland's PC only. All 34 pass with cl6x after bounce to track and hold STEP + THROW merged onto step stutter (`scenario_bounce` new: PLAY, FUNC + REC, OK, then OK puts the written take on track 8; the only run of a take through Enaga's real file layer). All 33 pass with cl6x with step stutter and the repeat rate merged onto EDIT's pictures (no new scenario: both are pad gestures, host-tested; worst 30.55%, ambient). All 33 pass with cl6x with EDIT's waveforms and envelopes merged onto play modes, LOCK and FX GLIDE (`scenario_pictures` new: every picture page walked while the beat plays; worst 30.55%, ambient). All 32 passed with cl6x after play modes merged onto LOCK and FX GLIDE (`scenario_playmode` new: FUNC menu TRACK PLAY walked to RND4 while the beat plays, then a save; worst 30.54%, ambient). All 31 passed with cl6x with LOCK and FX GLIDE (`scenario_glide` new; worst 30.34%, ambient). All 30 pass with cl6x after backlog D1/D2/D5 merged onto locks on screen (`scenario_slots` new: mixer slots 7 and 13 and a retired chord). All 29 passed with cl6x after locks on screen (`scenario_plock` new: hold STEP + turn on GRID and EDIT; worst 30.18%, ambient). All 27 pass with cl6x on `ce5fc6b` (the v0.3.1 build, 2026-11-23), `scenario_wave` once its table check followed #133; all 27 again with cl6x on Enaga v0.3.0 (2026-11-25), loads unchanged (worst 30.16%, ambient); all 28 with cl6x after D12 (`scenario_stepkeys` new, `scenario_m6` now checks KEYS' STEP keys toggle steps, since the emulator cannot press pads) |
 | unit | v0.3.1 on Enaga 0.2.0 boots and plays (2026-11-24). Load figures are from the v0.2.0-era build: under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been measured or walked through on the unit |
 | memory | init takes **97.04 MiB of a 120 MiB heap** (LOCK's 1.06 MiB included): 22.96 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -58,9 +58,15 @@ first, then in the code, `core/help.cpp`, the cheatsheet, the manual and the uni
 Roland accepted all 15 decisions as recommended, 2026-11-25). Done: macro learn by turning
 (D11), STEP keys as steps (D12), hold STEP + pad edits the step (D6), the retired chords and
 slots 7 MUTE BUS / 13 MORPH (D1, D2, D5), LOCK on FUNC + MUTATE (D3, D4, D13, D14;
-`core/lockstore.hpp`, docs/CONTROLS.md "LOCK") with FX GLIDE and the momentary push. **Next, in
-order:** bounce-to-track ("put on track n" after a RESAMPLE bounce, one OK); then hold STEP +
-THROW (the delay-send lock D6 left out).
+`core/lockstore.hpp`, docs/CONTROLS.md "LOCK") with FX GLIDE and the momentary push, bounce to
+track (a take to FILE offered to a SAMPLE or GRAIN track, one OK; docs/CONTROLS.md "Bounce to
+track") and hold STEP + THROW (the delay-send lock). **Phase 2 is complete.**
+
+**RESAMPLE had never written a take on Enaga** until 2026-11-25: Storage made `/RECORD` first, and
+Enaga writes only strictly inside `/RECORD`, so every take failed `DENIED`. Fixed, and
+`tests/fakehost.cpp` now refuses writes outside the data folder, `/SAMPLES` and `/RECORD` as the
+firmware does (`write_check`; `seed_folder` lays out a PC-made card). No take has been heard on the
+unit yet: UNIT_CHECKLIST's resample items are the first real test.
 
 LOCK, for whoever touches it next: the audio side keeps the 128 locks and the swap-back and does
 the copies (`Engine::capture_live` / `apply_live`); the UI only times the hold (500 ms), posts
@@ -130,6 +136,9 @@ bare `git clone`; run `tools/fetch_emulator.sh` after it, which checks out
 GMP, MPFR, MPC and ISL over plain HTTP, which the HTTPS-only proxy does not serve.
 
 ### 2. The emulator can press keys and nothing else
+
+(Stale in part since Enaga v0.3.0: its `tools/emulate.py` takes `--turn ENC:DETENTS@CYCLE` for
+encoders A-D and VALUE, and `--card-mib`. No scenario uses `--turn` yet; pads are still out.)
 
 `emulate.py` has `--key` and nothing more, and `emulator/core/core.h` has no pad or encoder entry
 point at all. So no scenario can drive a pad (seven of M5's eight performance tools, pad pressure)

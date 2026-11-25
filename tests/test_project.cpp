@@ -249,7 +249,7 @@ void make_busy_pattern(Pattern &pattern, int salt) {
         for (int t = 0; t < kTracks; t++) {
             for (int i = 0; i < 8; i++) {
                 pattern_set_lock(pattern, t, i * 7, uint8_t(round * 2),
-                                 uint8_t(t * 16 + i * 2 + round + salt));
+                                 uint8_t((t * 16 + i * 2 + round + salt) & 127));   // 0-127
             }
         }
     }

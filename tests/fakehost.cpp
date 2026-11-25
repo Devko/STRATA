@@ -192,6 +192,32 @@ const char *FakeHost::file_name(int index) const {
 
 // The ABI's path rules, kept because a fake that accepts more than the real host tests nothing:
 // "not absolute, '..' or '.' in it, an empty part, too long" is ENAGA_FILE_BAD_PATH.
+// Enaga's write rule (firmware/kernel/files.c, check_write): a path strictly INSIDE the app's
+// data folder, /SAMPLES or /RECORD. "Inside" means a part below the area, so the area's own
+// folder is not writable: make_folder("/RECORD") is DENIED on the unit, which is why a take's
+// write leaves the folder to the open (which makes its parents) and never names it alone.
+namespace {
+bool inside_area(const char *path, const char *area) {
+    int i = 0;
+    for (; area[i] != '\0'; i++) {
+        const char a = area[i];
+        const char p = path[i];
+        const char up = p >= 'a' && p <= 'z' ? char(p - 32) : p;
+        const char ua = a >= 'a' && a <= 'z' ? char(a - 32) : a;
+        if (up != ua) return false;
+    }
+    return path[i] == '/' && path[i + 1] != '\0';
+}
+}  // namespace
+
+int32_t FakeHost::write_check(const char *path) const {
+    if (inside_area(path, t_file_data_folder()) || inside_area(path, "/SAMPLES") ||
+        inside_area(path, "/RECORD")) {
+        return ENAGA_FILE_OK;
+    }
+    return ENAGA_FILE_DENIED;
+}
+
 int32_t FakeHost::path_check(const char *path) const {
     if (path == nullptr || path[0] != '/') return ENAGA_FILE_BAD_PATH;
     const uint32_t n = uint32_t(std::strlen(path));
@@ -401,6 +427,8 @@ int32_t FakeHost::t_file_open(const char *path, uint32_t mode) {
 
     int index = h.find(path);
     if (mode == ENAGA_FILE_WRITE) {
+        const int32_t denied = h.write_check(path);
+        if (denied != ENAGA_FILE_OK) return denied;
         if (h.full_) return ENAGA_FILE_FULL;
         if (index < 0) index = h.add(path, 0, false);
         else h.files_[index].bytes = 0;          // "created, or emptied if it exists"
@@ -486,12 +514,20 @@ int32_t FakeHost::t_file_remove(const char *path) {
     return h.remove_file(path) ? ENAGA_FILE_OK : ENAGA_FILE_NOT_FOUND;
 }
 
+bool FakeHost::seed_folder(const char *path) {
+    if (path_check(path) != ENAGA_FILE_OK) return false;
+    if (find(path) >= 0) return true;
+    return add(path, 0, true) >= 0;
+}
+
 int32_t FakeHost::t_file_make_folder(const char *path) {
     FakeHost &h = the();
     const int32_t card = h.card_check();
     if (card != ENAGA_FILE_OK) return card;
     const int32_t bad = h.path_check(path);
     if (bad != ENAGA_FILE_OK) return bad;
+    const int32_t denied = h.write_check(path);
+    if (denied != ENAGA_FILE_OK) return denied;
     h.folders_made_++;
     if (h.find(path) >= 0) return ENAGA_FILE_OK;   // "parents too; OK if it exists"
     if (h.full_) return ENAGA_FILE_FULL;
