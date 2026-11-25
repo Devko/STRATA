@@ -255,6 +255,8 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | GRID | `T1 MUTE PG1 L16 X1` | Track, muted, step page, length, speed |
 | GRID edit line | `REC Q50 SEL 1-8 FULL 2 U3/R1` | Recording + quantize, selection, refused edits (lock pool full), undo/redo depth |
 | Step page | `TRIG` `TRIGLESS` `OFF`, `LOCKS n` | What the step is and how many locks it holds |
+| Hold STEP | `S5 CUT 64>90` / `S5 CUT 64 KIT` | The step's lock against the kit value; bars show the lock, a hollow tick the kit value |
+| GRID cells | dot / cut corner / teeth / outline | Locks / top-left condition, top-right probability / ratchet / trigless |
 | PROJECT | `BANK A   END CHAIN` | Shown bank, queue mode, chain running |
 | CHAIN | `CHAIN 3/64 ON SONG`, `>02 A05 X2 M3 PLAY` | Entries used, chain on/off, plays once (SONG) or loops; cursor, entry, pattern, repeats, mute state recalled at its start, playing now |
 | PATTERN | `>LEN 16 STEPS`, `SWG 54%`, `3 PAT`, `>5 66%` | Master length; swing; a track following SWG or with its own (`>` = field VALUE changes) |

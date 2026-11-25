@@ -265,6 +265,13 @@ the next. A step can hold up to 8 locks, from a pool of 1,024 per pattern. Locks
 gets one short hit in a bar, or a bass opens its filter on one accented note. STEP LEDs with
 locks glow amber.
 
+While you hold the STEP, the screen shows that step: each parameter's value and bar are what the
+step plays, and a hollow tick on the bar marks the track's own value, so you see how far the lock
+moves it. Turning a knob also writes the change in words, `S5 CUT 64>90`: track value, then lock.
+On GRID a trig with locks has a dot in the middle of its cell; a cut top-left corner is a
+condition, top-right a probability, two teeth along the bottom a ratchet, and an outline a
+trigless step.
+
 ### The chain
 
 <p><img src="screens/chain.png" width="256" alt="PROJECT's CHAIN page"></p>
