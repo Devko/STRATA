@@ -47,6 +47,7 @@
 #include "arp.hpp"       // the arpeggiator's notes
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
+#include "scope.hpp"       // the master output for the screen's scopes and spectra
 #include "scheduler.hpp"
 #include "snare.hpp"
 #include "stepedit.hpp"
@@ -78,6 +79,9 @@ public:
     // Both are safe to touch from the main context: the ring is lock-free and Status is
     // single-writer words.
     Commands &commands() { return commands_; }
+    // The master output for the screen (core/scope.hpp): the audio side pushes, the main
+    // context takes.
+    ScopeRing &scope() { return scope_; }
     const Status &status() const { return status_; }
 
     // Read-only views for the UI to draw from. The UI must not write through these: every edit
@@ -799,6 +803,9 @@ private:
     // The master meter's reading, audio context only (Status::meter_milli).
     static constexpr float kMeterFall = 0.99f;
     float meter_ = 0.0f;
+    // Each track's meter (Status::track_milli), falling as the master's does.
+    float track_meter_[8] = {};
+    ScopeRing scope_;
 
     // The waveform's playheads and grains (Status::wave): every fourth block is 5.3 ms, four
     // times finer than the screen's 50 ms frame, and a quarter of the stores.

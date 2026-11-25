@@ -2893,6 +2893,9 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
                 value = lfo_[t].advance(s.wave, cycles);
             }
             lfo_value_[t] = value;
+            const float phase = lfo_[t].phase();
+            status_.lfo_phase[t].store(uint8_t(phase <= 0.0f ? 0.0f : (phase >= 1.0f ? 255.0f : phase * 255.0f)),
+                                       std::memory_order_relaxed);
 
             modulated_[t] = effective_[t];
             uint8_t &target = modulated_[t].v[s.dest];
@@ -3037,6 +3040,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     uint8_t voices = 0;
     const bool running = clock_now.running;
+    // Each track's block peak for its meter (Status::track_milli): the master's peak loop over
+    // the machine's own block, before the chain consumes it. 0 for a track that did not render.
+    float track_peak[kTracks] = {};
     for (int t = 0; t < kTracks; t++) {
         Machine *machine = machines_[t];
 
@@ -3051,6 +3057,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
             float *mono = mixer_.scratch();
             enaga_clear(mono, int(frames));
             frozen_[t].render_add(mono, int(frames), running);
+            track_peak[t] = strata_master_peak(mono, mono, int(frames));
             // A bounce of a frozen track is its loop through its chain, as it is heard.
             if (t == tapped && !capture_prechain_) mixer_.add_track_tapped(t, mono, capture_tap_);
             else mixer_.add_track(t, mono);
@@ -3068,6 +3075,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         float *mono = mixer_.scratch();
         enaga_clear(mono, int(frames));
         machine->render_add(mono, int(frames));
+        track_peak[t] = strata_master_peak(mono, mono, int(frames));
         // A freeze records the machine alone, before the chain it will go on running through.
         if (t == tapped && capture_prechain_) {
             for (uint32_t i = 0; i < frames; i++) capture_tap_[i] = mono[i];
@@ -3078,6 +3086,13 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     }
 
     mixer_.finish_block(out, int(frames));
+
+    for (int t = 0; t < kTracks; t++) {
+        const float fallen = track_meter_[t] * kMeterFall;
+        track_meter_[t] = track_peak[t] > fallen ? track_peak[t] : fallen;
+        status_.track_milli[t].store(to_milli(track_meter_[t] > 1.0f ? 1.0f : track_meter_[t]),
+                                     std::memory_order_relaxed);
+    }
 
     // A stream voice that went back to frame 0 in this block needs its stream reopened.
     watch_streams();
@@ -3118,6 +3133,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // beats from full speed to a standstill, so it lands with the music.
     tape_stop_.set(2.0f * float(enaga::clock::ppqn) * samples_per_tick_);
     tape_stop_.process(out, int(frames));
+
+    // What comes out, for the screen's scopes and spectra (core/scope.hpp): every second frame.
+    scope_.push(out, frames);
 
     // The take, from the FINISHED master: after the mixer, the limiter and beat repeat, which is
     // what comes out of the box (dsp/capture.hpp). A tap, so `out` is not modified.
