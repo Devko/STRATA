@@ -46,12 +46,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### Enaga's firmware, in a release zip
+### Enaga's firmware is not in a release zip
 
-A STRATA release zip (`tools/package_release.py`) also carries Enaga's SmplTrek update file,
-`SmplTrek.bin` at v0.3.0, so a user installs the exact firmware STRATA was built and tested
-against. That is permitted: checked 2026-11-22 against the pinned source, the image is built
-only from code under these licences, and Enaga's README states it "contains no Sonicware code".
+From the release after v0.3.1 on, a STRATA release zip (`tools/package_release.py`) carries only
+the STRATA app. Users install Enaga's SmplTrek update file from Enaga's own release, which the
+zip's README.txt links; the packaging script refuses a zip with any `.bin` in it.
+
+v0.1.0 to v0.3.1 did carry Enaga 0.2.0's `SmplTrek.bin`. That was permitted: checked 2026-11-22
+against the source, the image is built only from code under these licences, and Enaga's README
+states it "contains no Sonicware code". For those zips:
 
 | In `SmplTrek.bin` | Licence | What redistributing a binary asks |
 | --- | --- | --- |
@@ -60,9 +63,8 @@ only from code under these licences, and Enaga's README states it "contains no S
 | TinyUSB, a subset (`firmware/third_party/tinyusb`), © hathach and contributors | MIT | include the notice: below |
 | `libgcc` | GPL-3 with the GCC Runtime Library Exception | nothing: the exception permits it |
 
-`tools/package_release.py` refuses any `SmplTrek.bin` that is not exactly one SYSTEM image at
-Enaga's pinned version for the SmplTrek, so an official Sonicware update file, whose firmware
-must never be redistributed, cannot end up in a zip by mistake.
+An official Sonicware update file, whose firmware must never be redistributed, cannot end up
+in a zip either: the script takes `APP.ENA` alone.
 
 #### TinyUSB
 

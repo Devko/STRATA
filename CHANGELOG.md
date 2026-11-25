@@ -13,6 +13,10 @@ the project file format or the controls.
   only the ABI number, which did not change, so an older firmware would load it and misbehave.
   With 0.3.0, MIDI OUT on the DIN jack no longer stalls while USB goes to a computer that is not
   reading.
+- **Enaga is no longer in the release zip.** The zip holds the STRATA app only. Install Enaga
+  0.3.0 from Enaga's own release, <https://github.com/seawaffle/enaga/releases/tag/v0.3.0>
+  (the SmplTrek zip, `SmplTrek.bin`, HOME held at power-on, SYSTEM UPDATE); the zip's
+  README.txt has the steps. Earlier zips carried a copy of Enaga 0.2.0's firmware.
 
 ### Added
 
