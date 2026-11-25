@@ -443,9 +443,13 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
     if (running != lock_total) return refuse(SerializeResult::malformed);
 
     if (!r.seek(kHeaderBytes + offset[2])) return refuse(SerializeResult::malformed);
+    // A lock's value is a track parameter, 0-127 like every kit byte; a file says otherwise only
+    // if it is damaged or was made by hand, and the screen draws some of them as positions on a
+    // fixed-size picture (EDIT's envelopes), so an out-of-range byte is clamped here, once, as
+    // the kit's are. The param byte is left alone: an unknown one survives a round trip.
     for (uint16_t i = 0; i < lock_total; i++) {
         pattern.locks[i].param = r.u8();
-        pattern.locks[i].value = r.u8();
+        pattern.locks[i].value = clamp_u8(r.u8(), 0, 127);
     }
     if (!r.ok()) return refuse(SerializeResult::truncated);
     pattern.locks_used = lock_total;

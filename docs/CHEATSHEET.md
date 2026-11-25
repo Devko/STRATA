@@ -149,6 +149,7 @@ Slots: 1 LP SWEEP · 2 HP SWEEP · 3 HP RISER · 4 ECHO RISER · 5 ECHO FREEZE �
 | Hold STEP + turn VALUE | Set the step's note |
 | Hold STEP + OK | Open the step page on that step (keep holding or let go: A-D are the page's fields) |
 | Hold STEP + FILL / REPEAT / MUTE / MUTATE | That step's condition FILL > NOT FILL > none / ratchet 2 > 3 > 4 > off / A:B 1:2 > 2:2 > 1:4 > 4:4 > none / probability 75 > 50 > 25 > 100% (`STEP 5 PROB 50%`). Pad first performs instead |
+| Hold STEP + THROW / FUNC + THROW | A lock of that step's delay / reverb send at full, again off (`STEP 5 DLY FULL`): a throw written into the pattern |
 | Hold a note's STEP + press a later STEP | LEN up to the end of that step (`LEN 4 STP`), set when you let go; CLR, copy or a knob instead uses the pair as a range |
 | Hold STEP + CLR | Clear the step |
 | Hold STEP + UP / DOWN | Copy / paste the step |
@@ -277,6 +278,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | MIXER EQ | `0`, `-20`, `+12`, `KILL` | Band flat, cut, boosted; killed by its switch or a knob at the bottom |
 | SAMPLES | `/SAMPLES/KICKS`, `>K1.WAV`, `LOOPS/`, `NOW K1.WAV`, `3/40 +2` | Folder (or `READING FOLDER`, `NOT FOUND`, `NO CARD`, the load's progress); cursor; a folder; the track's file; position, count, entries left out |
 | RESAMPLE | `TO FILE`, `ARMED`, `REC 40%`, `WRITING`, `LAST name` | Destination and take state |
+| RESAMPLE | `PUT ON TRK 3 GRN`, `OK PUTS  CLR KEEPS`, `T3 GRN: TAKE ON`, `TAKE STAYS A FILE` | A take to FILE is written: OK puts it on that track (LEFT/RIGHT walk it, SAMPLE or GRAIN only), CLR keeps it a file |
 | RESAMPLE | `FROM MASTER`, `FROM LINE NORM`, `IN` / `CLIP` + bar, `MIC NEEDS HEADPHONES`, `INPUT REFUSED` | Take source (MASTER LINE, LINE L, MIC, DYN MIC, HI-Z) and input level (LOW NORM HIGH); the input meter; the mic is silent without headphones; Enaga refused the route |
 
 ## Abbreviations
