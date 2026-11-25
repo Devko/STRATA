@@ -280,6 +280,10 @@
         canvas.rect(2, 28, 124, 5, 3);
         canvas.rect(2, 28, filled < 1 ? 1 : filled, 5, 12);
 
+        // The output's scope, dim, behind the four gauges, while the transport runs.
+        const bool running = enaga::clock::state().running != 0;
+        draw_scope(canvas, 0, 57, 7, running);
+
         // The four macros, with how many parameters each drives. An empty macro says so rather
         // than looking like one set to zero.
         for (int m = 0; m < kMacros; m++) {
@@ -306,22 +310,12 @@
             *out = 0;
             canvas.text(x + 2, 49, line, targets == 0 ? 6 : 11);
 
-            // 18 pixels tall, ending above the hints. At 40 the bars ran down through both
-            // hint lines.
-            // The solid bar is where the macro is -- what you hear, a pad's pressure included.
-            // When that is not where the knob left it, a hollow tick marks the knob: a bright
-            // pixel either side of the bar, dark across it inside the solid part.
-            const int height = int(engine_.macro_position(m)) * kMacroBar / 127;
-            canvas.rect(x + 2, 58, 12, kMacroBar, 2);
-            canvas.rect(x + 2, 58 + (kMacroBar - height), 12, height < 1 ? 1 : height,
-                        targets == 0 ? 5 : 12);
-            if (macro_position_[m] != engine_.macro_position(m)) {
-                const int knob = int(macro_position_[m]) * (kMacroBar - 1) / 127;
-                const int ty = 58 + (kMacroBar - 1) - knob;
-                canvas.pixel(x + 1, ty, 15);
-                canvas.pixel(x + 14, ty, 15);
-                canvas.rect(x + 2, ty, 12, 1, ty >= 58 + (kMacroBar - height) ? 0 : 6);
-            }
+            // A gauge (app/ui_live.hpp) between the count and the hints, rows 58-75 as the bar
+            // it replaced. The arc is where the macro is -- what you hear, a pad's pressure
+            // included. When that is not where the knob left it, a bright dot outside the ring
+            // marks the knob. An empty macro's gauge is dim.
+            draw_gauge(canvas, x + 16, 66, 8, int(engine_.macro_position(m)),
+                       int(macro_position_[m]), targets != 0);
         }
 
         // REL ALL and LEN ALL where they are, or the gesture while both are at rest.
@@ -337,7 +331,9 @@
         } else {
             canvas.text(0, 78, "FUNC+A/B REL/LEN ALL", 7);
         }
-        canvas.text(0, 87, "AUTOFILL: FUNC MENU", 7);
+        // Every track's level while the beat plays; stopped, where AUTO-FILL lives.
+        if (running) draw_track_meters(canvas, 86);
+        else canvas.text(0, 87, "AUTOFILL: FUNC MENU", 7);
 
         // What MUTATE will do, and to which track.
         out = line;

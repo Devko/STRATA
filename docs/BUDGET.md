@@ -87,7 +87,12 @@ draw() now times itself over 64 frames (app/ui_screen.hpp, `count_draw_time`): S
 
 | Screen | draw() a frame | Where |
 | --- | --- | --- |
-| GRID with the beat playing, the decibel meter and beat marks (this PR) | **0.57 ms** | emulator, cl6x, no caches |
+| GRID with the beat playing, the decibel meter and beat marks (#160) | **0.57 ms** | emulator, cl6x, no caches |
+| PERFORM with the beat playing: four gauges over the scope's afterglow, eight track meters (part 3) | **1.34 ms** | emulator, cl6x, no caches |
+
+Part 3 is draw-side only: all 36 scenarios pass with cl6x, `ambient` read 31.54% against
+31.16% for part 2 in an earlier run of the same session, the usual +-0.5 of where the peak
+block falls (nothing in it touches audio()).
 
 All 36 scenarios pass with cl6x (worst **30.93%**, `scenario_ambient`, as on `main`): the frame
 changes are draw-side only. The mockups that picked the direction estimated 20-35k pixel writes

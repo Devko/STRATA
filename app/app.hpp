@@ -357,9 +357,6 @@ int clamp_int(int value, int low, int high) {
 // so it needs one to become a note.
 constexpr uint8_t kPadOctaveNote = 60;
 
-// PERFORM's macro bars, in pixels: tall enough to read, short enough to end above the hints.
-constexpr int kMacroBar = 18;
-
 // The velocity a STEP key plays at. Keys have none of their own, and 100 is what the default
 // kit's trigs use, so a part played in sounds like a part programmed in.
 constexpr uint8_t kKeyVelocity = 100;
@@ -536,6 +533,8 @@ public:
 #include "ui_perfmix.hpp"
 
 #include "ui_perform.hpp"
+
+#include "ui_live.hpp"
 
 #include "ui_project.hpp"
 
@@ -914,6 +913,12 @@ private:
     uint8_t limit_seen_ = 0;
     uint32_t limit_ms_ = 0;
     bool limit_lit_ = false;
+    // The live views (app/ui_live.hpp): the newest output, drained from the engine's ring every
+    // frame; the scope's afterglow; GRID's fading outlines and the trigger counts they follow.
+    ScopeHistory scope_history_;
+    paint::Glow<124, 20> scope_glow_;
+    uint8_t grid_glow_[kTracks][16] = {};
+    uint8_t grid_seen_[kTracks] = {};
     // draw()'s own cost (count_draw_time): the window's sum, its frames, the last average.
     uint32_t draw_ms_sum_ = 0;
     uint32_t draw_count_ = 0;

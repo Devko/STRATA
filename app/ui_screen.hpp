@@ -13,6 +13,8 @@
         char *out = line;
 
         canvas.clear();
+        // Every frame on every screen, so the ring never fills while a scope is not up.
+        scope_history_.drain(engine_.scope());
         if (echo_ != Echo::none && notice_ == echo_buffer_) refresh_echo();
 
         const Status &status = engine_.status();
@@ -444,6 +446,8 @@
             if (t == selected_) canvas.rect(0, y, 1, 8, 12);     // the selected track's marker
             if (muted_[t]) canvas.rect(0, y + 3, 128, 1, 4);     // a muted track is struck out
         }
+        update_grid_glow(running);
+        draw_grid_glow(canvas, grid_top);
 
         // The track's own layout: length and speed are per track (polymeter), so they belong on
         // screen next to the track number rather than behind a menu.

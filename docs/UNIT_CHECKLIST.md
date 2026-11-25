@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W33, about 90 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W34, about 93 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -400,6 +400,15 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 - PROJECT, screen keys right to SETUP: `DRW` and a figure in ms at the top right. Write it down:
   `DRW ____ MS` (under 5 is fine). `____`
 
+**W34. GRID glows, PERFORM's gauges and meters (3 min).** Beat playing, A01.
+- GRID: each trig that plays gets a bright outline that fades behind the playhead, a trail
+  following the beat. Stop: nothing glows. `____`
+- PERFORM (FUNC + MIXER): four round gauges for the macros with their values under them, a dim
+  scope of the output moving behind them, and under the REL/LEN line eight short meters, one per
+  track, jumping with each sound. Turn A: gauge A's arc and needle follow. Stop: the meters give
+  way to `AUTOFILL: FUNC MENU`. `____`
+- Still smooth? Keys answer at once while PERFORM moves? `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
@@ -585,7 +594,7 @@ The beat can keep playing. One look per screen; note any overlap or illegible te
       below, no overlaps.
 - [ ] MIXER: screen keys walk TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+, REV, REV+,
       ROUTE, MST, EQ; every page draws.
-- [ ] PERFORM (FUNC+MIXER): macro bars stop above the two hint lines; selected macro shows `>A`.
+- [ ] PERFORM (FUNC+MIXER): macro gauges stop above the hint lines; selected macro shows `>A`.
 - [ ] PROJECT: the KEY line sits below the 16 slots, not through the last row.
 - [ ] Dim greys (empty steps, bar backgrounds) are visible but clearly darker than text.
       Notes: `________________`
@@ -2350,7 +2359,7 @@ What it cannot judge is whether the result reads well on the OLED.
       columns, the fourth fully on screen. The track line ("T1 ... X3/4") ends inside the screen.
 - [ ] EDIT: each row reads "A CUT 064" with its bar; the title names the machine; the hint
       "FUNC+EDIT: MACHINE" is legible.
-- [ ] PERFORM: the macro bars stop above the two hint lines; the selected macro shows as ">A".
+- [ ] PERFORM: the macro gauges stop above the hint lines; the selected macro shows as ">A".
 - [ ] PROJECT: the KEY line sits below the 16 pattern slots, not through the last row; an
       unsaved project says UNSAVED on the second line.
 - [ ] MACHINE: the kit reads as two lines of four; SETUP's three hint lines have no '?' in them.
