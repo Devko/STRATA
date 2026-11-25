@@ -16,6 +16,10 @@ the project file format or the controls.
 
 ### Added
 
+- **Live screens, part 2: the audio taps (nothing new on screen yet).** Every block the audio
+  side now publishes each track's level, each LFO's phase and the finished output (every second
+  frame, into a ring the screen drains) for the scopes, meters and moving dots of the next parts.
+  About +0.3 points of load (docs/BUDGET.md).
 - **Live screens, part 1: the drawing kit and a livelier frame.** The master meter reads in
   decibels (the top 48 dB) and in segments, brightest in the top 6 dB, so a quiet mix moves it;
   the progress line marks the beats and bars still to come and lights its head. SETUP shows what

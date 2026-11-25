@@ -53,6 +53,27 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### The audio taps for the live screens: visuals part 2 (2026-11-25, emulator)
+
+What the live screens will draw from, published by the audio side every block: each track's
+level (`Status::track_milli`, the block peak of the machine's output through the master's own
+peak loop, `strata_master_peak`, falling like the master meter), each LFO's phase
+(`Status::lfo_phase`), and every second frame of the finished output as int16 L/R into an SPSC
+ring (`core/scope.hpp`, `strata_scope_decimate` in `core/scopeloops.ti.c`) that the main context
+drains. A full ring drops and counts; the audio side never waits.
+
+Against `main` at `390d0a3` in the same session:
+
+| Scenario | cl6x before | cl6x after | GCC-only before | GCC-only after |
+| --- | --- | --- | --- | --- |
+| `scenario_m0` (skeleton) | 4.04% | 4.42% | 4.53% | 4.87% |
+| `scenario_m1` (default beat) | 25.12% | 25.40% | 46.55% | 46.90% |
+| `scenario_ambient` (the worst case) | 30.93% | **31.16%** | 56.20% | 56.48% |
+
+So **+0.23 to +0.38 points**, a fixed cost whatever plays (eight peak passes over 64 frames, 32
+frames decimated, a few stores), as the mockup estimated (0.3-0.5). All 36 scenarios pass with
+cl6x. GCC-only `ambient` is 56.48%, still inside 60% but the closest figure to it; cl6x ships.
+
 ### The screen: live visuals part 1 (2026-11-25, emulator, cl6x)
 
 draw() runs in Enaga's main loop at most every 50 ms (20 fps, fixed by Enaga), and only once the

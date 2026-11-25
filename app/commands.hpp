@@ -575,6 +575,13 @@ struct Status {
     // the level, 0-255. Written with `wave`, for every track whose machine says.
     std::atomic<uint8_t> env_stage[8] = {};
     std::atomic<uint8_t> env_level[8] = {};
+    // Live visuals (core/scope.hpp has the master's samples). Each track's level as the meter
+    // reads it: the block's peak of the machine's output, before the chain and the fader, or
+    // the last reading falling as the master meter falls; thousandths of full scale. 0 for a
+    // muted or silent track once it has fallen. And each track's LFO phase, 0-255 a cycle, for
+    // the dot riding the LFO page's shape.
+    std::atomic<uint16_t> track_milli[8] = {};
+    std::atomic<uint8_t> lfo_phase[8] = {};
     // LOCK (Cmd::lock_store, lock_tap). `lock_state`: bit 0 the playing pattern has a lock, bit 1 the live set
     // differs from it (the screen's L+), bit 2 the next tap swaps back. `lock_event` is bumped
     // once per store or tap the audio side applied, with `lock_last` saying what it did: a
