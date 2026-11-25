@@ -1357,7 +1357,7 @@ TEST(vapoly_parameter_names_are_three_upper_case_letters) {
     CHECK_EQ(va.used_params(), 8);
 
     const char *const expected[kParams] = {
-        "TUN", "MOD", "CUT", "RES", "---", "---", "---", "---",
+        "TUN", "MOD", "CUT", "RES", "FDE", "TON", "---", "---",
         "DEC", "ENV", "DET", "LVL", "---", "---", "---", "---",
     };
     for (int i = 0; i < kParams; i++) {

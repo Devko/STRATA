@@ -5,6 +5,7 @@
 // bypassed stage is bit-exact, that the limiter cannot be driven past full scale, and that
 // nothing goes non-finite at the parameter extremes. A block or two of warm-up runs first
 // wherever it matters, because every gain in the chain ramps across its first block on purpose.
+#include "project.hpp"
 #include "check.hpp"
 
 #include <enaga/abi.h>
@@ -146,14 +147,14 @@ void fill_signal(Signal signal, float *out, int n, int block, float level) {
 
 // Runs `blocks` blocks of `signal` through a fresh chain; `buses` holds the last block only.
 void run_chain(const TrackParams &params, const ChainMix &mix, Signal signal, float level,
-               int blocks, Buses &buses, const float *duck = nullptr) {
+               int blocks, Buses &buses, const float *duck = nullptr, bool tone = false) {
     InsertChain chain;
     chain.init(kRate);
     float mono[kFrames];
     for (int b = 0; b < blocks; b++) {
         fill_signal(signal, mono, kFrames, b, level);
         buses.clear();
-        chain.prepare(params, mix);
+        chain.prepare(params, mix, tone);
         chain.process(mono, kFrames, buses.out(duck));
     }
 }
@@ -1685,4 +1686,68 @@ TEST(chain_a_one_frame_block_is_processed) {
     CHECK_NEAR(buses.l[0], 0.5f * 0.7071f, 0.002);
     CHECK(buses.a[0] > 0.1f);
     CHECK_EQ(buses.l[1], 0.0f);
+}
+
+// --- TON: the one knob a VA or WAVE track's chain has (D8) ----------------------------------
+
+TEST(chain_ton_is_flat_at_64_a_low_pass_below_and_a_high_pass_above) {
+    // On a synth track the chain reads slot 5 alone. The insert's own bytes are set to things
+    // that would be loud if read -- drive up, a closed band-pass -- to show they are not.
+    TrackParams p = neutral_params();
+    p.set(4, 127);              // DRV, ignored
+    p.set(6, 127);              // RES, ignored
+    p.set(7, kModBp24);         // MOD, ignored
+    p.set(5, kToneFlat);
+
+    InsertChain chain;
+    chain.init(kRate);
+    ChainMix mix;
+    chain.prepare(p, mix, true);
+    CHECK(chain.mode() == FilterMode::off);           // flat costs nothing
+
+    // Flat passes both ends untouched, as the plain chain with everything off does.
+    Buses flat, plain;
+    run_chain(p, mix, Signal::nyquist, 0.5f, 4, flat, nullptr, true);
+    run_chain(neutral_params(), mix, Signal::nyquist, 0.5f, 4, plain);
+    CHECK_NEAR(peak_of(flat.l, kFrames), peak_of(plain.l, kFrames), 1e-6f);
+
+    // Below 64 a low-pass: 0 is 250 Hz, which takes Nyquist out.
+    p.set(5, 0);
+    chain.prepare(p, mix, true);
+    CHECK(chain.mode() == FilterMode::lp12);
+    CHECK_NEAR(chain.cutoff_hz(), 250.0f, 1.0f);
+    Buses dark;
+    run_chain(p, mix, Signal::nyquist, 0.5f, 4, dark, nullptr, true);
+    CHECK(peak_of(dark.l, kFrames) < 0.05f * peak_of(plain.l, kFrames));
+
+    // Above 64 a high-pass: 127 is 1.5 kHz, which takes DC out.
+    p.set(5, 127);
+    chain.prepare(p, mix, true);
+    CHECK(chain.mode() == FilterMode::hp12);
+    CHECK_NEAR(chain.cutoff_hz(), 1500.0f, 2.0f);
+    Buses thin;
+    run_chain(p, mix, Signal::dc, 0.5f, 20, thin, nullptr, true);
+    CHECK(peak_of(thin.l, kFrames) < 0.01f);
+
+    // Monotonic either side: one count further is further.
+    p.set(5, 40);
+    chain.prepare(p, mix, true);
+    const float lp40 = chain.cutoff_hz();
+    p.set(5, 41);
+    chain.prepare(p, mix, true);
+    CHECK(chain.cutoff_hz() > lp40);
+    p.set(5, 63);
+    chain.prepare(p, mix, true);
+    CHECK(chain.cutoff_hz() < 18000.0f && chain.cutoff_hz() > 16000.0f);
+
+    // And the old CUT a migrated kit kept is the same cutoff, within a count: TON 42 for CUT 100.
+    TrackParams old = neutral_params();
+    old.set(kMod, kModLp12);
+    old.set(kCut, 100);
+    chain.prepare(old, mix);
+    const float before = chain.cutoff_hz();
+    p.set(5, kit_tone_from_insert(100, kModLp12));
+    chain.prepare(p, mix, true);
+    const float ratio = chain.cutoff_hz() / before;
+    CHECK(ratio > 0.93f && ratio < 1.07f);
 }

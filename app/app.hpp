@@ -595,7 +595,7 @@ public:
                                 : key == ENAGA_KEY_PUSH_B ? 1
                                 : key == ENAGA_KEY_PUSH_C ? 2
                                                           : 3;
-            const int index = page_first(Page(param_page_)) + encoder;
+            const int index = edit_index(encoder);
             held_used_ = true;
             mark(GestureKind::erase, selected_, held_step_);
             post(Cmd::clear_lock, uint8_t(selected_), uint8_t(held_step_), uint8_t(index));
@@ -630,7 +630,7 @@ public:
                 // Learning is by turning (D11). A push takes a parameter the macro already holds
                 // off it, which is the one thing turning cannot say.
                 macro_selected_ = macro_learn_;
-                const int param = page_first(Page(param_page_)) + encoder;
+                const int param = edit_index(encoder);
                 if (macro_edit(uint8_t(selected_), uint8_t(param)) == MacroEdit::remove) {
                     assign_macro(param);
                 } else {
@@ -664,7 +664,7 @@ public:
                                 : key == ENAGA_KEY_PUSH_B ? 1
                                 : key == ENAGA_KEY_PUSH_C ? 2
                                                           : 3;
-            if (page_first(Page(param_page_)) + encoder == kSlcParam) {
+            if (edit_index(encoder) == kSlcParam) {
                 if (!down) return;
                 const bool on = !slices_auto(selected_);
                 post(Cmd::set_slice_mode, uint8_t(selected_), 0, on ? kSliceAuto : kSliceEqual);
@@ -686,7 +686,7 @@ public:
                                 : key == ENAGA_KEY_PUSH_B ? 1
                                 : key == ENAGA_KEY_PUSH_C ? 2
                                                           : 3;
-            const int index = page_first(Page(param_page_)) + encoder;
+            const int index = edit_index(encoder);
             if (is_tune(index)) {
                 if (!down) return;
                 tune_notes_ = !tune_notes_;
@@ -1854,7 +1854,7 @@ public:
         //    reason the step's release has to know the key was used as a modifier.
         if (held_step_ >= 0) {
             held_used_ = true;
-            const int index = page_first(Page(param_page_)) + encoder;
+            const int index = edit_index(encoder);
             mark(GestureKind::lock, selected_, held_step_);
             post_param_lock(held_step_, index, delta);
             show_lock_readout(index);
@@ -1900,7 +1900,7 @@ public:
         //    playhead so that the whole pass is ONE undo level instead of one per step.
         if (rec_ && engine_.status().running.load(std::memory_order_relaxed)) {
             const int step = int(engine_.status().playhead[selected_].load(std::memory_order_relaxed));
-            const int index = page_first(Page(param_page_)) + encoder;
+            const int index = edit_index(encoder);
             mark(GestureKind::motion, selected_, 0);
             post_param_lock(step, index, delta);
             return;
@@ -1947,7 +1947,7 @@ public:
         // 5. Otherwise A-D edit the four parameters of the current page on the selected track.
         // One click is one shape or one destination on the LFO's WAV and DST (dsp/lfo.hpp,
         // `lfo_click`), and one count everywhere else.
-        const int index = page_first(Page(param_page_)) + encoder;
+        const int index = edit_index(encoder);
         // In NOTE view a click on TUN or PIT is a semitone (core/tuning.hpp, `tune_step`).
         post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index),
              clamp_delta(shows_note(index) ? delta : delta * param_click(index)),
@@ -3226,8 +3226,7 @@ public:
         HelpPlace place;
         place.machine = engine_.machine_id(selected_);
         place.page = uint8_t(param_page_);
-        const int base = page_first(Page(param_page_));
-        for (int i = 0; i < 4; i++) place.knob[i] = track_param_name(base + i);
+        for (int i = 0; i < 4; i++) place.knob[i] = track_param_name(edit_index(i));
         if (step_page_) {
             place.screen = HelpScreen::step;
             return place;
@@ -3543,9 +3542,8 @@ public:
         // value and a bar. The letter is on the row because the encoder-slot strip GRID has at
         // the bottom would only repeat these four, and with names and values side by side it
         // did not fit four to a line (7 characters is 41 pixels, in a 32-pixel slot).
-        const int base = page_first(Page(param_page_));
         for (int slot = 0; slot < 4; slot++) {
-            const int index = base + slot;
+            const int index = edit_index(slot);
             const int y = 42 + slot * 12;
             const ShownParam shown = shown_param(index);
             const uint8_t value = shown.heard;         // the held step's lock, if it has one
@@ -3660,7 +3658,7 @@ public:
         }
         // And how SAMPLE's SLC cuts, on the page SLC is on.
         if (engine_.machine_id(selected_) == uint8_t(MachineId::sample) &&
-            base <= kSlcParam && kSlcParam < base + 4) {
+            param_page_ == int(Page::src)) {
             out = line;
             if (!slices_auto(selected_)) {
                 append(out, "PUSH SLC: AUTO SLICE");
@@ -4009,6 +4007,13 @@ public:
     // The machine names SRC and AMP; the insert chain names FLTR and FX; the LFO its own page.
     const char *param_name_for(int index) const { return track_param_name(index); }
 
+    // The parameter behind encoder `knob` on the page on screen. A VA or WAVE track shows its
+    // filter section on FLTR (CUT RES ENV FDE), so its first three pages are a different order
+    // over the same slots (core/project.hpp, edit_slot, D8).
+    int edit_index(int knob) const {
+        return edit_slot(engine_.machine_id(selected_), param_page_, knob);
+    }
+
     // By the parameter's own page rather than the page on screen, so a macro assignment or the
     // LFO's destination can name a parameter from any page.
     const char *track_param_name(int index) const {
@@ -4025,7 +4030,12 @@ public:
         if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
         if (index >= kParams) return lfo_param_name(index);
         const int page = index / kParamsPerPage;
-        if (page == int(Page::fltr) || page == int(Page::fx)) return InsertChain::param_name(index);
+        // A VA's or WAVE's slots 4-7 are FDE and TON, its own names (D8); the FX page is the
+        // chain's everywhere.
+        const bool voice_filter = machine_has_voice_filter(engine_.machine_id(selected_));
+        if (page == int(Page::fx) || (page == int(Page::fltr) && !voice_filter)) {
+            return InsertChain::param_name(index);
+        }
         const Machine *machine = engine_.machine(selected_);
         return machine ? machine->param_name(index) : "---";
     }
@@ -4288,9 +4298,8 @@ public:
     // small bar, 18 pixels tall from `y`.
     void draw_param_slots(enaga::Canvas &canvas, int y) {
         char line[40];
-        const int base = page_first(Page(param_page_));
         for (int slot = 0; slot < 4; slot++) {
-            const int index = base + slot;
+            const int index = edit_index(slot);
             // Name over value: "CUT 064" on one line is 41 pixels and a slot is 32, so each
             // slot ran into the next one (and the fourth off the screen).
             char *out = line;

@@ -45,6 +45,7 @@
 #include "chain.hpp"
 
 #include "chainloops.h"
+#include "project.hpp"
 #include "filterloops.h"
 
 namespace strata {
@@ -64,6 +65,10 @@ constexpr float kCutoffOctaves = 9.8138f;
 
 constexpr float kResonanceMax12 = 0.95f;
 constexpr float kResonanceMax24 = 0.85f;    // it compounds through the cascade
+
+// TON's resonance: a touch, no more, for a tone control. Its curves are core/project.hpp's, the
+// same constants kit_tone_from_insert inverts.
+constexpr float kToneResonance = 0.1f;
 
 // Lo-fi: 2^15 quantisation steps (transparent) down to 2^2 (four), and the sample rate down to
 // a thirty-second of itself.
@@ -218,12 +223,12 @@ bool InsertChain::silent() const {
            send_a_gain_ == 0.0f && send_b_gain_ == 0.0f;
 }
 
-void InsertChain::prepare(const TrackParams &params, const ChainMix &mix) {
+void InsertChain::prepare(const TrackParams &params, const ChainMix &mix, bool tone) {
     const int fltr = page_first(Page::fltr);
     const int fx = page_first(Page::fx);
 
     // --- drive: 0 is a true bypass, not unity gain through the clip -------------------------
-    const uint8_t drive = params.get(fltr + 0);
+    const uint8_t drive = tone ? uint8_t(0) : params.get(fltr + 0);
     drive_on_ = drive != 0;
     if (drive_on_) {
         drive_pos_ = ed::exp2(float(drive) * (1.0f / 127.0f) * kDriveOctaves);
@@ -231,8 +236,21 @@ void InsertChain::prepare(const TrackParams &params, const ChainMix &mix) {
     }
 
     // --- filter ------------------------------------------------------------------------------
-    mode_ = mode_from(params.get(fltr + 3));
-    if (mode_ != FilterMode::off) {
+    if (tone) {
+        // TON (D8): one knob, flat in the middle, and flat costs nothing.
+        const int t = int(params.get(fltr + 1));
+        mode_ = t < 64 ? FilterMode::lp12 : (t > 64 ? FilterMode::hp12 : FilterMode::off);
+        if (mode_ != FilterMode::off) {
+            filter_24_ = false;
+            svf_output_ = output_of(mode_);
+            cutoff_hz_ = t < 64 ? kToneLpTopHz * ed::exp2(-kToneLpOctaves * float(64 - t) * (1.0f / 64.0f))
+                                : kToneHpLowHz * ed::exp2(kToneHpOctaves * float(t - 64) * (1.0f / 63.0f));
+            coefficients_ = ed::SvfCoefficients::make(cutoff_hz_, kToneResonance, rate_);
+        }
+    } else {
+        mode_ = mode_from(params.get(fltr + 3));
+    }
+    if (!tone && mode_ != FilterMode::off) {
         filter_24_ = is_24_db(mode_);
         svf_output_ = output_of(mode_);
         cutoff_hz_ = kCutoffLowHz * ed::exp2(params.unit(fltr + 1) * kCutoffOctaves);

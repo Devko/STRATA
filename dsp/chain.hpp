@@ -14,6 +14,8 @@
 // and AMP, and neither needs the other's.
 //
 //     FLTR  4 DRV  drive       0 bypasses; else +0 to +24 dB into an asymmetric soft clip
+//           (on a VA or WAVE track, FLTR is the machine's and this chain reads TON, slot 5, alone:
+//           see prepare)
 //           5 CUT  cutoff      20 Hz to 18 kHz, exponential
 //           6 RES  resonance   0 to 0.95 (0.85 in the 24 dB modes, where it compounds)
 //           7 MOD  mode        OFF | LP12 | LP24 | BP12 | BP24 | HP12 | HP24
@@ -109,7 +111,13 @@ public:
 
     // Control rate, once per block, before process(). Every coefficient, gain and reciprocal
     // this chain needs is computed here; the hot loops below only multiply and add.
-    void prepare(const TrackParams &params, const ChainMix &mix);
+    //
+    // `tone`: the track's machine has a filter of its own (the VAs and the WAVE pair, D8), so
+    // the FLTR page is not this chain's. Then drive is off and the filter is TON alone, slot 5:
+    // 64 skips it, below 64 a 12 dB low-pass from 18 kHz down to 250 Hz, above it a 12 dB
+    // high-pass from 20 Hz up to 1.5 kHz (core/project.hpp has the curves). Slots 4, 6 and 7
+    // are not read.
+    void prepare(const TrackParams &params, const ChainMix &mix, bool tone = false);
 
     // Runs the chain over the machine's mono block IN PLACE (the caller's buffer is scratch) and
     // adds the result into `out`. Call prepare() first.

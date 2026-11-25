@@ -140,6 +140,18 @@ void factory_kit(Kit &kit) {
     kit.tracks[kLoop].params[kPan] = 84;
     kit.tracks[kLoop].params[kSna] = 48;
     kit.tracks[kLoop].params[kSnb] = 32;
+
+    // The two synth tracks have one filter (D8): their slots 4-7 are FDE and TON, set to the
+    // filter decay tied to DEC and TON flat, which is exactly the sound they had.
+    for (int t = 0; t < kTracks; t++) {
+        if (machine_has_voice_filter(kit.tracks[t].machine)) {
+            uint8_t *p = kit.tracks[t].params;
+            p[kSlotFdec] = 0;
+            p[kSlotTone] = kToneFlat;
+            p[6] = 0;
+            p[7] = 0;
+        }
+    }
 }
 
 // --- the sends and the master ---------------------------------------------

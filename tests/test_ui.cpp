@@ -7292,11 +7292,12 @@ TEST(ui_tun_reads_as_a_note_and_turns_a_semitone_a_click) {
     CHECK_EQ(int(app_engine().params(0).v[0]), 96);    // C-5 exactly
     check_layout(app, "EDIT SRC, MNO, TUN as a note");
 
-    // The other knobs on the page are untouched by the view: CUT still moves one count.
-    const uint8_t cut = app_engine().params(0).v[2];
+    // The other knobs on the page are untouched by the view: TON (knob C on a VA's SRC since
+    // D8; CUT moved to FLTR) still moves one count.
+    const uint8_t tone = app_engine().params(0).v[kSlotTone];
     app.on_encoder(2, +1);
     pump(2);
-    CHECK_EQ(int(app_engine().params(0).v[2]), int(cut) + 1);
+    CHECK_EQ(int(app_engine().params(0).v[kSlotTone]), int(tone) + 1);
 }
 
 TEST(ui_pushing_the_tun_knob_switches_between_note_and_number) {

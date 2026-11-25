@@ -162,6 +162,9 @@ void VaPoly::prepare(const TrackParams &params) {
     // struct and not a set of members (va.hpp).
     settings_ = wave_ ? VaSettings::make_wave(params, rate_, inv_rate_, false)
                       : VaSettings::make(params, rate_, inv_rate_);
+    // Velocity to cutoff (D15; dsp/va.cpp has VA MONO's and the reasoning): a chord's voices
+    // share it, so less than the mono, and WAVE POLY's tables carry their own brightness.
+    settings_.vel_cut_semis = wave_ ? 14.0f : 18.0f;
 
     // Everything in the filter cache was derived from the settings that have just been replaced,
     // so it goes with them. This is the ONE thing that has to happen for a stale coefficient to
@@ -328,14 +331,14 @@ void VaPoly::render_add(float *out, int frames) {
 const char *VaPoly::param_name(int index) const {
     static const char *const wave[kParams] = {
         "TBL", "POS", "CUT", "RES",      // SRC: the wavetable and the filter (LP24)
-        "---", "---", "---", "---",
+        "FDE", "TON", "---", "---",      // filter decay, and the chain's TON (D8)
         "DEC", "ENV", "MOT", "LVL",      // AMP: MOT, the filter envelope moving POS
         "---", "---", "---", "---",
     };
     if (wave_) return index >= 0 && index < kParams ? wave[index] : "---";
     static const char *const names[kParams] = {
         "TUN", "MOD", "CUT", "RES",      // SRC: the voice and its filter
-        "---", "---", "---", "---",      // FLTR: the insert chain's
+        "FDE", "TON", "---", "---",      // filter decay, and the chain's TON (D8)
         "DEC", "ENV", "DET", "LVL",      // AMP: the envelopes, the detune and the output
         "---", "---", "---", "---",      // FX: the insert chain's
     };

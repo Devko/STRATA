@@ -390,16 +390,19 @@ void Engine::prepare_chain(int track) {
     // a dry plan prepares exactly what it did before.
     ChainMix mix = mix_[track];
     mix.level *= perf_plan_.tracks;
-    if (prepare_memo_ && chain_prepared_valid_[track] &&
+    // A VA or WAVE track's chain is TON alone (D8): its FLTR page is the machine's filter.
+    const bool tone = machine_has_voice_filter(machine_id(track));
+    if (prepare_memo_ && chain_prepared_valid_[track] && chain_prepared_tone_[track] == tone &&
         chain_prepared_mix_[track].level == mix.level &&
         chain_prepared_mix_[track].duck == mix.duck &&
         __builtin_memcmp(chain_prepared_[track].v, params.v, kParams) == 0) {
         return;
     }
-    mixer_.chain(track).prepare(params, mix);
+    mixer_.chain(track).prepare(params, mix, tone);
     chain_prepared_[track] = params;
     chain_prepared_mix_[track] = mix;
     chain_prepared_valid_[track] = true;
+    chain_prepared_tone_[track] = tone;
 }
 
 void Engine::apply(const Command &command) {
@@ -2681,9 +2684,10 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
         // A cutoff stops at about 100 Hz (dsp/lfo.hpp). Worked out every block: the machine
         // can change under an unchanged LFO. MID has no audio, so its bytes go out unfloored.
         const auto id = MachineId(machine_id(t));
-        const bool va_filter = id == MachineId::va_mono || id == MachineId::va_poly ||
-                               id == MachineId::wave_mono || id == MachineId::wave_poly;
-        const uint8_t floor = lfo_cutoff_floor(s.dest, va_filter, id != MachineId::midi);
+        const bool va_filter = machine_has_voice_filter(uint8_t(id));
+        // A VA or WAVE track's slot 5 is TON (D8), not the insert's cutoff: no floor there.
+        const uint8_t floor =
+            lfo_cutoff_floor(s.dest, va_filter, id != MachineId::midi && !va_filter);
         target = lfo_apply(target, value, s.depth, floor);
         modulating_[t] = true;
     }

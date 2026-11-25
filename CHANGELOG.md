@@ -19,6 +19,17 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 | Slot 7: STUTTER | **MUTE BUS**: every track fades out while the delay and reverb ring on. The stutter is the REPEAT pad's |
 | Slot 13: FLANGER | **MORPH**: the A/B scene morph on any screen, beside an effect left up. PERFORM's VALUE still morphs too |
 
+### Changed
+
+- **One filter on the synth machines (D8).** On VA MONO, VA POLY, WAVE MONO and WAVE POLY the FLTR
+  page is now the synth's own filter, CUT RES ENV and the new **FDE** (filter decay: 0 keeps the
+  old 0.55 x DEC, 1-127 its own time). The insert filter there is one knob, **TON** on SRC: 64
+  flat, lower a low-pass, higher a high-pass. Older projects load their insert filter on these
+  tracks as the nearest TON; its drive and resonance are dropped. Other machines are unchanged.
+- **Velocity opens the synths' filter (D15).** Around the default velocity 100 (which sounds as
+  before): harder is brighter, softer darker, by a per-machine amount. The GROWL preset lost
+  its chain drive with the one filter and is quieter.
+
 ### Removed
 
 - The performance mixer's flanger (its DSP and 8 KiB ring), with slot 13.
