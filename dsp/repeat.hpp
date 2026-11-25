@@ -24,7 +24,7 @@
 //
 // ## The ring is two bars at 60 BPM, and why that is enough
 //
-// docs/REVIEW.md sized it: "Beat-repeat ring 2 bars @ 60 BPM stereo float = 2.93 MiB". Enaga's
+// docs/archive/REVIEW.md sized it: "Beat-repeat ring 2 bars @ 60 BPM stereo float = 2.93 MiB". Enaga's
 // clock goes down to 20 BPM, where two bars would be 24 s and 8.8 MiB, so below 60 BPM the ring
 // holds less than two bars. That costs nothing: the LONGEST loop this offers is a quarter note,
 // which even at 20 BPM is 3 s against the ring's 8. Two bars was always headroom rather than a

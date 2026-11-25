@@ -4,7 +4,7 @@
 // --- what is expected to dominate -----------------------------------------------------------
 //
 // Four voices, so this is per voice per 64-frame block, counting the hot loops only. These are
-// the figures the central measurement (docs/BUDGET.md, PLAN.md M0.5) should be compared against.
+// the figures the central measurement (docs/archive/BUDGET_MILESTONES.md, PLAN.md M0.5) should be compared against.
 //
 //   stage              expected to dominate                  flops/sample  bytes/sample
 //   tap gather         4 int16 loads and 4 int-to-float      4 converts    8 (mono)

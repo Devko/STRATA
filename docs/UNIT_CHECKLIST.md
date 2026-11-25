@@ -2165,7 +2165,7 @@ case; never patch `third_party/enaga` in this repo.
 These were the last settings in the app that nothing could change: `Cmd::set_sends` and
 `Cmd::set_master` had no handler and no caller, so every delay and reverb setting and the spec's
 master DJ filter sat at a compile-time default for the life of the app, and PROJECT.BIN had no
-section for them. All fourteen are now encoder bytes in the project file. `docs/REVIEW.md` 2a
+section for them. All fourteen are now encoder bytes in the project file. `docs/archive/REVIEW.md` 2a
 records where each gesture went and why.
 
 - [ ] MIXER, then the screen keys: MIXER walks TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+,

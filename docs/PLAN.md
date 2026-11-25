@@ -1,6 +1,6 @@
 # STRATA implementation plan
 
-Revised from `docs/SPEC.md` after validating it against Enaga (`docs/REVIEW.md` has the evidence
+Revised from `docs/SPEC.md` after validating it against Enaga (`docs/archive/REVIEW.md` has the evidence
 behind each change). This plan supersedes the spec's "Milestones" and "Instructions for Claude
 Code" sections; everything else in the spec stands. `docs/HANDOFF.md` holds the next steps in
 detail, `docs/BUDGET.md` every measured figure, `docs/UNIT_CHECKLIST.md` what is left to check
@@ -73,7 +73,7 @@ Everything here is setup; none of it is STRATA's design. Do it once, in WSL.
    and record the answer in `docs/BUDGET.md` — the 60% target depends on shipping cl6x-built
    code.
 5. **Repo layout** as the spec describes: `core/ dsp/ app/ host/ tests/ tools/ docs/`,
-   plus `docs/SPEC.md` (move the concept doc there), `docs/REVIEW.md`, `docs/PLAN.md`,
+   plus `docs/SPEC.md` (move the concept doc there), `docs/archive/REVIEW.md`, `docs/PLAN.md`,
    `docs/BUDGET.md`, `docs/UNIT_CHECKLIST.md`, and `CLAUDE.md` (below).
 6. **`tools/build.sh`.** Stages `core/`, `dsp/`, `app/` flat into `build/stage/` and runs
    `build_app.py`. It **must fail loudly on a duplicate basename** across the three folders —

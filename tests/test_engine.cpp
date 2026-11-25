@@ -2009,7 +2009,7 @@ TEST(engine_a_macro_with_four_targets_refuses_a_fifth) {
 }
 
 TEST(engine_a_lock_always_wins_over_the_performance_layer) {
-    // docs/REVIEW.md settled "base kit values only" for scenes. From this side that means a
+    // docs/archive/REVIEW.md settled "base kit values only" for scenes. From this side that means a
     // step's lock beats whatever the morph, the macros and a throw produced -- and for the WHOLE
     // step rather than only the block that triggered it, which is what `locked_` is for.
     Engine &engine = clean();

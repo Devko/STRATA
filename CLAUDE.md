@@ -1,8 +1,9 @@
 # STRATA: rules for Claude Code
 
-- Read docs/HANDOFF.md (the current state and next steps), then docs/SPEC.md,
-  docs/REVIEW.md and docs/PLAN.md before any change, and follow the milestone order in
-  PLAN.md. Ask before changing a decision they record.
+- Read docs/HANDOFF.md (the current state and next steps), then docs/SPEC.md and
+  docs/PLAN.md before any change, and follow the milestone order in PLAN.md. Ask before changing
+  a decision they record, or one in docs/archive/REVIEW.md (the platform review the spec was
+  corrected against; code comments cite it by section).
 - Target: an Enaga app on the Sonicware SmplTrek (TI C6748, 372 MHz). Enaga is pinned at
   release v0.3.0 (4878b7c), to match the firmware on the unit. Move it only by docs/HANDOFF.md
   "Moving the Enaga pin", and keep tools/enaga_check.sh passing. **docs/ENAGA_API.md has

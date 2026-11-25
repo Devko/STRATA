@@ -1,5 +1,5 @@
 /* The VA voice's output tail (valoops.h). Built by cl6x when it is installed, else GCC --
- * build_app.py routes *.ti.c to TI's compiler (docs/BUDGET.md, M2).
+ * build_app.py routes *.ti.c to TI's compiler (docs/archive/BUDGET_MILESTONES.md, M2).
  *
  * The arithmetic is va.cpp's, unchanged: same expressions, same order, same associations, same
  * inline enaga math, so the voice is bit-exact against the three Enaga passes this replaces. */

@@ -3859,7 +3859,7 @@ TEST(ui_the_chain_page_sets_mute_recalls_and_song_mode) {
 }
 
 TEST(ui_the_chain_page_builds_a_chain_that_plays) {
-    // docs/REVIEW.md: no gesture wrote a chain entry, so CHAIN ON always refused.
+    // docs/archive/REVIEW.md: no gesture wrote a chain entry, so CHAIN ON always refused.
     Strata &app = fresh();
     const Project &project = app_engine().project();
     key(ENAGA_KEY_F3);

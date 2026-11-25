@@ -1,6 +1,7 @@
 # Handoff — 2026-11-25
 
-**Read this first, then `CLAUDE.md`, then `docs/SPEC.md`, `docs/REVIEW.md` and `docs/PLAN.md`.**
+**Read this first, then `CLAUDE.md`, then `docs/SPEC.md` and `docs/PLAN.md`.** The platform review
+the spec was corrected against is `docs/archive/REVIEW.md`: history, but its decisions stand.
 This file holds what exists nowhere else in the repo: the state in one table, the next steps in
 order, and the knowledge that lives in no code comment, commit message or other document. When a
 fact here becomes stale, fix it here or delete it; do not append a history.

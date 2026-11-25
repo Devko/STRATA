@@ -22,7 +22,7 @@
 // The master's four hand-written loops -- the peak detector, the gain ramp, the limiter and the
 // interleave -- are the fixed tax that runs on every block however few tracks sound, so they
 // live in dsp/masterloops.ti.c, which build_app.py sends to cl6x while this file goes through
-// GCC (CLAUDE.md's *.ti.c rule; docs/BUDGET.md, M2, has the figures). The arithmetic moved
+// GCC (CLAUDE.md's *.ti.c rule; docs/archive/BUDGET_MILESTONES.md, M2, has the figures). The arithmetic moved
 // unchanged.
 #include "buses.hpp"
 

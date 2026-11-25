@@ -10,7 +10,7 @@
 //
 // ## Base kit values only
 //
-// docs/REVIEW.md decided this and it is not to be re-litigated here: *"Should scenes morph
+// docs/archive/REVIEW.md decided this and it is not to be re-litigated here: *"Should scenes morph
 // locks? Base kit values only in v1. A lock is a per-step override and a morph is continuous, so
 // crossfading the two has no single sensible meaning."* So a scene holds the same 16 values per
 // track that `KitTrack::params` does, and a step's locks still win over whatever the morph
