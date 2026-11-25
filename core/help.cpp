@@ -78,7 +78,7 @@ constexpr Text kValueMixer = {"VALUE FX MIXER:", {
     "PUSH+CLR  ALL OFF",
     "  AGAIN  CLEARS LOOP",
     "STEP 16  LOOPER",
-    "  RECORDS  AGAIN: NEW",
+    "  RECORDS  AGAIN: OFF",
     "MENU LOOP LEN  BARS",
 }};
 

@@ -2,7 +2,7 @@
 # Freeze (FUNC menu FREEZE, dsp/frozen.hpp) in the emulator, on the factory beat while it plays:
 #
 #   PLAY, DOWN x6                          -> track 7 selected (the CHORD, VA POLY: the dearest)
-#   FUNC + HOME, UP, UP, OK                -> FREEZE is second from the bottom, above LOOP LEN
+#   FUNC + HOME, UP, UP, UP, OK            -> FREEZE is third from the bottom, above LOOP LEN and LOAD DEMO
 #                                             (#116): 1 bar armed
 #   ...one bar later                       -> `frz 64`: track 7 plays its loop from RAM
 #
@@ -66,10 +66,10 @@ if [ "$PAD" -eq 1 ]; then
     ARM=1200000000
     UNF=3400000000
 fi
-menu_ok() {   # FUNC + HOME opens the menu on its first row, UP wraps to LOOP LEN (the last row,
-              # #116), a second UP is FREEZE, OK at $1. Each key is released 20 M after it.
-    KEYS+=(--key 19@$(($1 - 120000000)) --key 27@$(($1 - 115000000))
-           --key 17@$(($1 - 80000000)) --key 17@$(($1 - 40000000))
+menu_ok() {   # FUNC + HOME opens the menu on its first row, UP wraps to LOAD DEMO (the last row),
+              # then LOOP LEN, then FREEZE; OK at $1. Each key is released 20 M after it.
+    KEYS+=(--key 19@$(($1 - 150000000)) --key 27@$(($1 - 145000000))
+           --key 17@$(($1 - 110000000)) --key 17@$(($1 - 75000000)) --key 17@$(($1 - 40000000))
            --key 23@$1)
 }
 menu_ok "$ARM"

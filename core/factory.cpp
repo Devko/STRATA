@@ -615,4 +615,17 @@ void factory_project(Project &project, SceneSet &scenes, MacroSet &macros) {
     project.slot = 0;
 }
 
+void blank_project(Project &project, SceneSet &scenes, MacroSet &macros) {
+    project_init(project);
+    perform_init(scenes, macros);
+    factory_kit(project.kit);
+    for (int t = 0; t < kTracks; t++) project.kit.tracks[t].params[kPan] = 64;
+    ProjectSettings &s = project.settings;
+    s.root = kRootNote;
+    s.scale = uint8_t(Scale::minor);
+    factory_mixer(s);
+    project.bank = 0;
+    project.slot = 0;
+}
+
 }  // namespace strata

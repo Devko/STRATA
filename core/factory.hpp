@@ -66,4 +66,9 @@ constexpr int kFactoryPadSlot = 4;     // A05 PAD
 // about a megabyte of pattern memory.
 void factory_project(Project &project, SceneSet &scenes, MacroSet &macros);
 
+// NEW PROJECT (backlog [1]): the factory kit's sounds and mixer, so every pad plays, but every
+// pan centred and nothing else -- no steps, chain, scenes, macros or stored mutes. The factory
+// project above stays the boot beat and LOAD DEMO. Main context or init only, as above.
+void blank_project(Project &project, SceneSet &scenes, MacroSet &macros);
+
 }  // namespace strata

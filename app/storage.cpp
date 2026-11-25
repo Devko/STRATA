@@ -661,7 +661,7 @@ void Storage::step_delete() {
     finish_job(nullptr);
 }
 
-void Storage::request_new() {
+void Storage::request_new(bool blank) {
     // Queued, not done here. It used to run on the spot, and the UI calls this straight from a
     // key press -- with whatever edits that same press and the ones before it left in the ring.
     // `project_init` rewrites 1.03 MiB of pattern memory from the main context, and the audio
@@ -671,6 +671,7 @@ void Storage::request_new() {
     //
     // The latest of a new project and a reload is the one the user meant.
     new_pending_ = true;
+    new_blank_ = blank;
     load_pending_ = false;
     open_pending_ = false;
 }
@@ -687,8 +688,13 @@ void Storage::start_new() {
         //
         // The FACTORY project, not a blank one (core/factory.hpp): `project_init` alone leaves
         // LVL 0 on every track, so NEW used to give a silent instrument with nothing in it.
-        factory_project(engine_->project_for_load(), engine_->scenes_for_load(),
-                        engine_->macros_for_load());
+        if (new_blank_) {
+            blank_project(engine_->project_for_load(), engine_->scenes_for_load(),
+                          engine_->macros_for_load());
+        } else {
+            factory_project(engine_->project_for_load(), engine_->scenes_for_load(),
+                            engine_->macros_for_load());
+        }
         post(Cmd::project_loaded);
 
         // A new project takes a NEW NAME. Keeping the old one would make the next save overwrite

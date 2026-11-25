@@ -5074,7 +5074,7 @@ public:
 
     enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
                                     speed, chain, song, autofill, quantize, freeze, loop_len,
-                                    count };
+                                    demo, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 8;
 
@@ -5095,6 +5095,7 @@ public:
             case MenuItem::quantize: return "QUANTIZE";
             case MenuItem::freeze:   return "FREEZE";
             case MenuItem::loop_len: return "LOOP LEN";
+            case MenuItem::demo:     return "LOAD DEMO";
             default:                 return "?";
         }
     }
@@ -5498,6 +5499,7 @@ public:
                 notice("OK TWICE OPENS");
                 break;
             case MenuItem::fresh:
+            case MenuItem::demo:
             case MenuItem::reload:
             case MenuItem::clear: {
                 // Each throws away work, so each takes a second OK within kSaveArmMs. CLEAR
@@ -5505,6 +5507,7 @@ public:
                 const MenuItem item = MenuItem(menu_cursor_);
                 const CardAction action = item == MenuItem::reload ? CardAction::reload
                                           : item == MenuItem::clear ? CardAction::clear
+                                          : item == MenuItem::demo  ? CardAction::demo
                                                                     : CardAction::fresh;
                 if (arm_card_action(action)) close_menu(false);
                 break;
@@ -6168,7 +6171,7 @@ public:
 
     // The FUNC menu's OK-twice rows. `clear` is not a card action -- it empties the playing
     // pattern -- but it is armed the same way, so it shares the one arm.
-    enum class CardAction : uint8_t { none, reload, fresh, clear };
+    enum class CardAction : uint8_t { none, reload, fresh, clear, demo };
 
     // True on the second press, when the action has been asked for.
     bool arm_card_action(CardAction action) {
@@ -6179,8 +6182,11 @@ public:
                 notice("RELOADING");
             } else if (action == CardAction::clear) {
                 clear_pattern();
+            } else if (action == CardAction::demo) {
+                storage_.request_new(false);
+                notice("DEMO PROJECT");
             } else {
-                storage_.request_new();
+                storage_.request_new(true);
                 notice("NEW PROJECT");
             }
             return true;
@@ -6189,6 +6195,7 @@ public:
         card_armed_at_ms_ = last_ms_;
         notice(action == CardAction::reload  ? "OK AGAIN TO RELOAD"
                : action == CardAction::clear ? "OK AGAIN TO CLEAR"
+               : action == CardAction::demo  ? "OK AGAIN FOR DEMO"
                                              : "OK AGAIN FOR NEW");
         return false;
     }

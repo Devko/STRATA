@@ -122,10 +122,12 @@ public:
     // reason on screen, under an external clock that will not stop.
     void request_reload();
 
-    // An empty project, in RAM only: nothing is written until a save. Queued like a load, and
+    // A new project, in RAM only: nothing is written until a save. Queued like a load, and
     // for the same reason: it rewrites all of pattern memory from the main context, so it waits
-    // for the command ring to drain. It needs no card, so it runs without one.
-    void request_new();
+    // for the command ring to drain. It needs no card, so it runs without one. `blank`: NEW
+    // PROJECT's empty one (core/factory.hpp, blank_project); otherwise LOAD DEMO, the factory
+    // project.
+    void request_new(bool blank = false);
 
     // App::init: the last project named in the settings, or the autosave if it is newer. False
     // when there was nothing to open, which is not an error -- it means a first run, and the
@@ -468,6 +470,7 @@ private:
     Command backlog_[kBacklog] = {};   // posts that met a full ring, sent first by service()
     int backlog_n_ = 0;
     bool new_pending_ = false;     // request_new, waiting for the ring like a load
+    bool new_blank_ = false;       // and which project it makes
     uint32_t save_seq_ = 0;        // monotonic, so a start can tell which of the two is newer
 
     bool project_dirty_ = false;

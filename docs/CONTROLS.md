@@ -120,7 +120,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | SAVE | saves the project, closes the menu | |
 | SAVE AS | PROJECTS page with the name entry open | |
 | OPEN PROJECT | PROJECTS page; OK twice there opens | |
-| NEW PROJECT | OK twice within 2 s: a new project | |
+| NEW PROJECT | OK twice within 2 s: a new, empty project (the factory sounds, every pan centred, no steps, scenes or macros) | |
 | RELOAD PROJECT | OK twice within 2 s: read the project back from the card | |
 | CLEAR PATTERN | OK twice within 2 s: every track's trigs and locks gone, one undo level (FUNC + CLR) | |
 | KITS | the kit browser | |
@@ -132,6 +132,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | QUANTIZE | | record quantize, by 5 |
 | FREEZE | freeze the selected track (its loop from the next bar line), or unfreeze it | `T3 1 BAR` (1 2 4 8), `T3 WAIT` / `REC` while recording, `T3 ON` frozen |
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
+| LOAD DEMO | OK twice within 2 s: the factory demo project (the boot beat), under a new name | |
 
 Moved here from: FUNC + PROJECT twice (save), PROJECT's FUNC + UP/DOWN/LEFT/RIGHT (chain,
 sample reload, reload, new), PROJECTS' FUNC + DOWN (save as, still there too), CHAIN's FUNC +

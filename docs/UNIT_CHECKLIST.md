@@ -67,6 +67,9 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
   note of three: only that one fades.
 - The upper pad between E and F: `OCT` down; the last upper pad: `OCT` up.
 - FUNC + lower pad 1: the kick mutes on the bar; again: back.
+- **NEW is empty, LOAD DEMO (0.4.0).** FUNC+HOME, NEW PROJECT, OK, OK: GRID shows no steps,
+  every pad still plays its sound, centred (headphones: kick, hats and perc all in the middle).
+  FUNC+HOME, UP (`LOAD DEMO`), OK, OK: `DEMO PROJECT`, and the factory beat is back.
 - **LEN repeat (0.4.0).** GRID, hold FUNC + pad-row LEFT: the length drops one, then after a
   moment runs down steadily (16 to 1 in about a second). Let go of either key: it stops at once.
 - **FILL + STEP (0.4.0).** Hold FILL, tap STEP 15 on the clap track: `FILL TRIG`, and the

@@ -233,7 +233,7 @@ void open_keys() {
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuChain, kMenuSong, kMenuAutofill,
-                     kMenuQuantize, kMenuFreeze, kMenuLoopLen, kMenuRowCount };
+                     kMenuQuantize, kMenuFreeze, kMenuLoopLen, kMenuDemo, kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
 void menu_to(int row) {
@@ -3846,7 +3846,20 @@ TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_are_in_the_menu) {
     CHECK_EQ(UiProbe::mode(app), int(Mode::project));  // the menu closed, back on PROJECT
     CHECK(pump_until_idle());
     pump(4);
-    // The factory project's first pattern (core/factory.hpp), not the edited one.
+    // An empty project (core/factory.hpp, blank_project), not the edited one and not the demo.
+    CHECK_EQ(int(pattern.master_length), int(kStepsPerTrack));
+    for (int t = 0; t < kTracks; t++) {
+        for (int st = 0; st < kStepsPerTrack; st++) CHECK(!trig_at(t, st));
+    }
+    CHECK_EQ(int(app_engine().project_for_load().kit.tracks[2].params[13]), 64);   // PAN (FX page, second byte)
+
+    // LOAD DEMO, the last row (UP from SAVE), brings the factory project back, two OKs too.
+    menu_run(kMenuDemo);
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN FOR DEMO");
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "DEMO PROJECT");
+    CHECK(pump_until_idle());
+    pump(4);
     CHECK_EQ(int(pattern.master_length), int(strata::test::factory().patterns[0][0].master_length));
     key(ENAGA_KEY_F4);
 }
