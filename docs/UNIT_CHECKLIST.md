@@ -67,6 +67,9 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
   note of three: only that one fades.
 - The upper pad between E and F: `OCT` down; the last upper pad: `OCT` up.
 - FUNC + lower pad 1: the kick mutes on the bar; again: back.
+- **FILL + STEP (0.4.0).** Hold FILL, tap STEP 15 on the clap track: `FILL TRIG`, and the
+  clap plays on 15 only while FILL is held (the step page shows COND FILL). Tap it again with
+  FILL held: `FILL TRIG OFF`.
 - **FUNC + pad mutes (0.4.0).** Playing, within one bar: FUNC + lower pads 1, 3 and 5. **All
   three** mute on the bar line (before, only the last one did). Stopped: FUNC + pad 2 mutes at
   once (`T2 MUTE`), PLAY: the snare stays muted.

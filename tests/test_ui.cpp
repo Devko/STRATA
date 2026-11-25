@@ -644,6 +644,43 @@ TEST(ui_a_lower_pad_selects_its_track_and_everything_else_follows) {
     CHECK_EQ(UiProbe::selected(app), 2);
 }
 
+TEST(ui_hold_fill_and_tap_a_step_writes_a_fill_trig) {
+    Strata &app = fresh();
+    const int t = UiProbe::selected(app);
+    const int step = 13;
+    app.on_pad_press(1, 100);                        // hold FILL: empty or not, the step
+                                                     // becomes a FILL trig
+    step_down(step);
+    step_up(step);
+    pump(2);
+    {
+        const Step &s = app_engine().pattern().tracks[t].steps[step];
+        CHECK((s.flags & kStepTrig) != 0);
+        CHECK(condition_kind(s.condition) == Condition::FILL);
+        CHECK(std::strcmp(UiProbe::notice(app), "FILL TRIG") == 0);
+    }
+    // Again, still holding: it comes off.
+    step_down(step);
+    step_up(step);
+    pump(2);
+    {
+        const Step &s = app_engine().pattern().tracks[t].steps[step];
+        CHECK((s.flags & kStepTrig) == 0);
+        CHECK(condition_kind(s.condition) == Condition::NONE);
+    }
+    app.on_pad_release(1);
+    pump(2);
+    // Without FILL a tap is an ordinary trig, no condition.
+    step_down(step);
+    step_up(step);
+    pump(2);
+    {
+        const Step &s = app_engine().pattern().tracks[t].steps[step];
+        CHECK((s.flags & kStepTrig) != 0);
+        CHECK(condition_kind(s.condition) == Condition::NONE);
+    }
+}
+
 TEST(ui_func_fill_turns_note_repeat_on_and_a_held_pad_rolls) {
     Strata &app = fresh();
     // FUNC + FILL toggles the mode and does not start a fill.

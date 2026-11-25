@@ -38,7 +38,7 @@ enum class Cmd : uint8_t {
     set_tempo,         // f: BPM
 
     // --- pattern editing ---
-    toggle_trig,       // track, step, a: 1 = the trigless bit instead of the trig
+    toggle_trig,       // track, step, a: 1 = the trigless bit instead of the trig, 2 = a FILL trig
     clear_lock,        // track, step, a: param
     set_track_length,  // track, a: length; or c = 1: b is an int8 delta (kDeltaFlag below)
     set_track_speed,   // track, a: speed

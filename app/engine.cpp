@@ -488,6 +488,23 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::toggle_trig: {
+            // a = 2: hold FILL + tap a STEP (backlog [5]). A trig whose condition is FILL comes
+            // off; anything else becomes a trig with COND FILL, so a fill is one tap to write.
+            if (command.a == 2) {
+                Step &s = live().tracks[track].steps[step];
+                const bool is_fill = (s.flags & kStepTrig) != 0 &&
+                                     condition_kind(s.condition) == Condition::FILL;
+                if (is_fill) {
+                    s.flags = uint8_t(s.flags & ~kStepTrig);
+                    s.condition = condition_pack(Condition::NONE);
+                } else {
+                    s.flags = uint8_t((s.flags | kStepTrig) & ~kStepTrigless);
+                    s.condition = condition_pack(Condition::FILL);
+                    if (s.velocity == 0) s.velocity = 100;
+                    if (!length_valid(s.length)) s.length = 8;
+                }
+                break;
+            }
             // a selects which bit: the trig, or the trigless bit that applies a step's locks
             // without sounding a note. They are mutually exclusive -- a step that is both would
             // be a trig, so letting both bits stand would make the trigless flag look broken.

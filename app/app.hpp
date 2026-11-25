@@ -1418,8 +1418,17 @@ public:
             // A tap. With F1 it toggles the trigless bit instead: a step that applies its locks
             // without sounding a note.
             mark(GestureKind::trig, selected_, step);
-            // On the step the hold STARTED on, not on what this key would mean now.
-            post(Cmd::toggle_trig, uint8_t(selected_), uint8_t(held_step_), shift_ ? 1 : 0);
+            // On the step the hold STARTED on, not on what this key would mean now. With FILL
+            // held, a FILL trig (COND FILL) goes on or comes off.
+            if (fill_held_ && !shift_) {
+                const Step &was = engine_.pattern().tracks[selected_].steps[held_step_];
+                const bool is_fill = (was.flags & kStepTrig) != 0 &&
+                                     condition_kind(was.condition) == Condition::FILL;
+                post(Cmd::toggle_trig, uint8_t(selected_), uint8_t(held_step_), 2);
+                notice(is_fill ? "FILL TRIG OFF" : "FILL TRIG");
+            } else {
+                post(Cmd::toggle_trig, uint8_t(selected_), uint8_t(held_step_), shift_ ? 1 : 0);
+            }
         }
         release_hold();
         end_gesture();

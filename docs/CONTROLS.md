@@ -198,7 +198,7 @@ shorter slice of the same past), 8 TAPE STOP (from 16 up), 9 BASS KILL (the kill
 
 | Print | STRATA | Colour | Bright while | Says |
 | --- | --- | --- | --- | --- |
-| TRK 1 | FILL | white | held, or NOTE RPT on | `FILL` |
+| TRK 1 | FILL | white | held, or NOTE RPT on | `FILL`; held + tap STEP writes a FILL trig (COND FILL), `FILL TRIG` / `FILL TRIG OFF` |
 | TRK 2 | REPEAT | cyan | held | `REPEAT 1/16` |
 | TRK 3 | MUTE | red | MUTE MODE on | `MUTE MODE` |
 | TRK 4 | SCENE A | green | held | `SCENE A: STEP PICKS` |
