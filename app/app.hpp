@@ -5345,8 +5345,8 @@ public:
     // over. The cursor always starts on SAVE, so FUNC + HOME, OK saves.
 
     enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
-                                    speed, chain, song, autofill, quantize, freeze, loop_len,
-                                    glide, demo, count };
+                                    speed, chain, song, autofill, quantize, glide, freeze,
+                                    loop_len, demo, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 8;
 
@@ -5645,7 +5645,7 @@ public:
             perf_release_lets_go_ = false;
             perf_ride_to(PerfFx::none, 0, shift_);
             perf_picked_ = PerfFx::none;
-            notice("FX OFF: VALUE TEMPO");
+            notice_logged("FX OFF: VALUE TEMPO");   // tests/scenario_glide.sh reads it
         }
     }
 
@@ -5978,7 +5978,7 @@ public:
                 append(out, "FX GLIDE ");
                 append(out, perf_glide_name(perf_glide_));
                 *out = 0;
-                notice(notice_buffer_);
+                notice_logged(notice_buffer_);       // tests/scenario_glide.sh reads it
                 break;
             }
             default:

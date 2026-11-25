@@ -245,7 +245,7 @@ void open_keys() {
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuChain, kMenuSong, kMenuAutofill,
-                     kMenuQuantize, kMenuFreeze, kMenuLoopLen, kMenuGlide, kMenuDemo,
+                     kMenuQuantize, kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo,
                      kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.

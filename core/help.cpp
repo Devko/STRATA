@@ -59,10 +59,10 @@ constexpr Text kUpperPads = {"UPPER PADS TRK1-7:", {
     "4 SCENE A +STEP PICKS",
     "5 SCENE B +STEP PICKS",
     "6 THROW  FUNC REVERB",
-    "7 MUTATE",
-    "  OK KEEP CLR REVERT",
-    "IN KEYS  ALL PADS ARE",
-    "A PIANO",
+    "7 MUTATE  OK/CLR",
+    "FUNC+7 HOLD  LOCK",
+    "FUNC+7 TAP JUMP/BACK",
+    "KEYS: PADS = PIANO",
 }};
 
 // "LOWER PAD  BAR MUTE" is 22 characters: the table above is held to 21 by the test, so
@@ -72,14 +72,14 @@ constexpr Text kUpperPads = {"UPPER PADS TRK1-7:", {
 constexpr Text kValueMixer = {"VALUE FX MIXER:", {
     "PUSH VALUE+STEP  PICK",
     "  SAME STEP  LETS GO",
+    "  HOLD STEP  PUSH IN",
     "VALUE  AMOUNT 0 = DRY",
-    "PRESS VALUE   RESET 0",
+    "TAP VALUE  RIDE TO 0",
+    "FUNC+TAP VALUE  CUT",
     "PUSH+LEFT/RIGHT  NEXT",
     "PUSH+CLR  ALL OFF",
     "  AGAIN  CLEARS LOOP",
-    "STEP 16  LOOPER",
-    "  RECORDS  AGAIN: OFF",
-    "MENU LOOP LEN  BARS",
+    "MENU FX GLIDE  RIDE",
 }};
 
 constexpr Text kValueSlots = {"VALUE FX STEPS:", {
@@ -91,8 +91,8 @@ constexpr Text kValueSlots = {"VALUE FX STEPS:", {
     "6 WASH     14 GATE",
     "7 MUTE BUS 15 BUILD",
     "8 TAPE     16 LOOPER",
-    "LOOPER: VALUE IS MIX",
-    "FX STAY ON OVER LOOP",
+    "16 RECORDS AGAIN OFF",
+    "MENU LOOP LEN  BARS",
 }};
 
 constexpr const Text *kShared[] = {&kFuncKeys, &kFuncKnobs, &kUpperPads, &kValueMixer,
