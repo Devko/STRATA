@@ -293,7 +293,9 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
         // mutation that changes them must be heard on the next step, configure() or not.
         state.timing.play =
             source.play < uint8_t(PlayMode::count) ? PlayMode(source.play) : PlayMode::fwd;
-        state.timing.play_seed = play_seed(pattern_seed_, t);
+        // Only the RND modes draw, so only they pay for the hash.
+        state.timing.play_seed =
+            state.timing.play >= PlayMode::rnd1 ? play_seed(pattern_seed_, t) : 0u;
 
         Firing firings[kMaxFiringsPerTick];
         const int found =

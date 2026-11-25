@@ -109,14 +109,17 @@ int steps_firing_at(uint32_t tick, const TrackTiming &timing, const int8_t *micr
     int32_t loop = candidate / length;            // the only division in the setup
     int32_t step_index = candidate - loop * length;
     int32_t loop_start = loop * loop_ticks;
+    const bool forward = timing.play == PlayMode::fwd;
 
     for (; candidate <= last_candidate; candidate++) {
         // A step pulled before tick 0 -- step 1 with negative micro-timing on the very first pass
         // after PLAY or a pattern start -- has no tick to land on, so it lands on tick 0. It used
         // to be skipped, and the first downbeat of a pattern with a pushed kick was silent.
         //
-        // `step_index` is the time slot; the play mode says which step sounds in it.
-        const uint8_t plays = play_step(int(step_index), uint32_t(loop), timing);
+        // `step_index` is the time slot; the play mode says which step sounds in it. FWD, every
+        // track of the default beat, skips the call: it measured 0.7 points on the emulator.
+        const uint8_t plays = forward ? uint8_t(step_index)
+                                      : play_step(int(step_index), uint32_t(loop), timing);
         const int32_t nominal = loop_start + slot_tick(int(step_index), plays, timing, micro);
         const int32_t effective = nominal < 0 ? 0 : nominal;
         if (effective == absolute) {
