@@ -1,6 +1,6 @@
 # STRATA implementation plan
 
-Revised from `docs/SPEC.md` after validating it against Enaga (`docs/REVIEW.md` has the evidence
+Revised from `docs/SPEC.md` after validating it against Enaga (`docs/archive/REVIEW.md` has the evidence
 behind each change). This plan supersedes the spec's "Milestones" and "Instructions for Claude
 Code" sections; everything else in the spec stands. `docs/HANDOFF.md` holds the next steps in
 detail, `docs/BUDGET.md` every measured figure, `docs/UNIT_CHECKLIST.md` what is left to check
@@ -10,7 +10,7 @@ on the unit.
 
 | | Spec | This plan |
 | --- | --- | --- |
-| Enaga pin | `269c015` | **release `v0.2.0` (`3da7f89`)**, the firmware on the unit; only release tags are pinned (`docs/HANDOFF.md`, "Moving the Enaga pin") |
+| Enaga pin | `269c015` | **release `v0.3.0` (`4878b7c`)** since 2026-11-25 (`v0.2.0` before), the firmware on the unit; only release tags are pinned (`docs/HANDOFF.md`, "Moving the Enaga pin") |
 | Master clock | `core/clock`, 96 PPQN, 32.32 fixed point, drift tests | **Deleted.** Enaga owns it; `core/scheduler` sits on `clock::ticks()` |
 | MIDI / SYNC | M7: implement in an Enaga fork, upstream as PRs | **Already in Enaga.** M7 shrinks to verifying it on the unit |
 | External sync | deferred to M7 | **M1.** It changes transport and tempo behaviour that M1 builds |
@@ -23,9 +23,10 @@ on the unit.
 
 ---
 
-## Where it stands (2026-11-23)
+## Where it stands (2026-11-25)
 
-STRATA runs on the unit (Enaga 0.2.0) and has had two releases. The milestones below are
+STRATA runs on the unit and has had four releases (v0.1.0 to v0.3.1, on Enaga 0.2.0); `main`
+is on Enaga 0.3.0, which the unit now runs. The milestones below are
 code-complete; their load and feel exit criteria still wait for the unit's readings, which
 `docs/UNIT_CHECKLIST.md` collects. The milestone figures are from the emulator unless they say
 otherwise.
@@ -43,7 +44,8 @@ otherwise.
 | M7 | **app side done** | The sync settings are the user's, in Enaga's menu; PROJECT's SETUP page shows them and VALUE refuses a tempo edit under an external clock. The rest is verification on the unit |
 | v0.1 | **released** 2026-11-22 | [v0.1.0](https://github.com/Devko/STRATA/releases/tag/v0.1.0), a pre-release, after the first evening on the unit: under 30% on the default beat, 84.3% MAX in heavy play, no dropouts |
 | v0.2 | **released** 2026-11-23 | [v0.2.0](https://github.com/Devko/STRATA/releases/tag/v0.2.0), an early beta: PRs #83-#111. Its new features are not yet checked on the unit |
-| after v0.2 | on `main` | The performance mixer and looper, the VA OSC page, WAVE MONO and WAVE POLY, FM4, the stock SmplTrek folders in the sample browser (CHANGELOG, Unreleased) |
+| v0.3 | **released** 2026-11-23 | [v0.3.0](https://github.com/Devko/STRATA/releases/tag/v0.3.0) (the performance mixer and looper, the VA OSC page, WAVE, FM4, the stock SmplTrek folders) and [v0.3.1](https://github.com/Devko/STRATA/releases/tag/v0.3.1) (the GRAIN rework). v0.3.1 boots and plays on the unit |
+| after v0.3.1 | on `main` | The backlog's Phases 1-5 so far: Enaga 0.3.0, LOCK, macro learn by turning, the screen frame, locks and waveforms on screen, one synth filter, play modes, step stutter (CHANGELOG, Unreleased) |
 
 ## What comes next
 
@@ -71,7 +73,7 @@ Everything here is setup; none of it is STRATA's design. Do it once, in WSL.
    and record the answer in `docs/BUDGET.md` — the 60% target depends on shipping cl6x-built
    code.
 5. **Repo layout** as the spec describes: `core/ dsp/ app/ host/ tests/ tools/ docs/`,
-   plus `docs/SPEC.md` (move the concept doc there), `docs/REVIEW.md`, `docs/PLAN.md`,
+   plus `docs/SPEC.md` (move the concept doc there), `docs/archive/REVIEW.md`, `docs/PLAN.md`,
    `docs/BUDGET.md`, `docs/UNIT_CHECKLIST.md`, and `CLAUDE.md` (below).
 6. **`tools/build.sh`.** Stages `core/`, `dsp/`, `app/` flat into `build/stage/` and runs
    `build_app.py`. It **must fail loudly on a duplicate basename** across the three folders —

@@ -5,7 +5,7 @@ Nov 21, 2026 · @Roland
 > **Revised 2026-11-21** against the real Enaga platform at commit `1b41111`. The platform
 > turned out to be further along than this document assumed: MIDI DIN, SYNC, USB MIDI, input
 > selection, pad pressure and a 96-PPQN clock with transport all exist. Corrections are folded
-> in below and marked **[rev]** where they change a decision. `docs/REVIEW.md` holds the
+> in below and marked **[rev]** where they change a decision. `docs/archive/REVIEW.md` holds the
 > evidence; `docs/PLAN.md` holds the build order and supersedes the Milestones and
 > Instructions sections at the end of this document.
 
@@ -606,7 +606,7 @@ Every feature is proven three times: by host tests on your PC, by a scripted run
 strata/
   CLAUDE.md               rules for Claude Code
   docs/SPEC.md            this document
-  docs/REVIEW.md          the platform review this revision came from
+  docs/archive/REVIEW.md          the platform review this revision came from
   docs/PLAN.md            authoritative build order
   docs/BUDGET.md          measured CPU load per component, updated at every milestone
   docs/UNIT_CHECKLIST.md  what to check at the next session on the unit

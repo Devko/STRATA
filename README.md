@@ -54,13 +54,15 @@ restores the unit completely, because neither Enaga nor STRATA writes the SPI fl
 - **Eleven machines on eight tracks, any machine on any track:** KICK, SNARE, HAT, PERC, SAMPLE,
   GRAIN, VA MONO, VA POLY, WAVE MONO, WAVE POLY and FM4, plus MID for an outboard synth.
   76 factory sounds load into one track at a time while the beat plays.
-- **A sequencer built for techno:** up to 64 steps per track with their own length, speed and
-  swing, parameter locks, trig conditions, ratchets, accents, slides, chords, micro-timing, a
-  Euclidean generator, live and motion recording, and 16 levels of undo.
+- **A sequencer built for techno:** up to 64 steps per track with their own length, speed,
+  swing and play mode (forward, reverse, ping-pong, random), parameter locks, trig conditions,
+  ratchets, accents, slides, chords, micro-timing, a Euclidean generator, live and motion
+  recording, and 16 levels of undo.
 - **KEYS:** both lower pad rows become a pressure-sensitive keyboard with the pattern's scale lit.
-- **Performance:** fill, beat and note repeat, mutes, scenes with an A/B morph, macros, throws,
-  seeded mutation you keep or revert, and a performance mixer on VALUE with fifteen effects and a
-  looper.
+- **Performance:** fill, beat and note repeat, step stutter, mutes, scenes with an A/B morph,
+  macros you learn by turning knobs, throws, seeded mutation you keep or revert, LOCK (store the
+  moment, jump back in one tap), and a performance mixer on VALUE with fourteen effects, the
+  morph and a looper.
 - **Samples and projects:** a sample browser that also reaches the stock SmplTrek folders,
   slicing (SLC AUTO cuts a break at its hits), streaming for long files, resampling, freeze and
   bounce, and projects with autosave.
@@ -95,6 +97,9 @@ The full tour, with the factory kit and every effect, is in
 release, an early beta for Enaga 0.2.0. It boots and plays on the unit. On an earlier build the
 default beat loaded the CPU under 30%, and long, heavy play peaked at 84.3% with no dropouts.
 Most of the [unit checklist](docs/UNIT_CHECKLIST.md) is still to be run on the hardware.
+
+`main` has moved on to **Enaga 0.3.0**: a build from it needs the 0.3.0 firmware on the unit, and
+the next release will ship it. [CHANGELOG.md](CHANGELOG.md) lists what is new since v0.3.1.
 
 ## Disclaimer
 

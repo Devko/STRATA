@@ -1,5 +1,5 @@
 /* The insert chain's hand-written per-sample loops (chainloops.h). Built by cl6x when it is
- * installed, else GCC -- build_app.py routes *.ti.c to TI's compiler (docs/BUDGET.md, M2).
+ * installed, else GCC -- build_app.py routes *.ti.c to TI's compiler (docs/archive/BUDGET_MILESTONES.md, M2).
  *
  * The arithmetic is chain.cpp's, unchanged: same expressions, same order, same inline enaga
  * math, so a bypassed stage stays bit-identical and lo-fi quantises to the same levels. */

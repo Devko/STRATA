@@ -28,7 +28,7 @@ static_assert(kCyclesPerBlock == 496'000u, "the cycle budget per block changed")
 // 24 ticks to a 16th note, which is what bounds micro-timing at +/-11.
 static_assert(ENAGA_CLOCK_PPQN / 4u == 24u, "a 16th note is no longer 24 ticks");
 
-// --- measured per-voice costs (docs/REVIEW.md 1.5) ------------------------
+// --- measured per-voice costs (docs/archive/REVIEW.md 1.5) ------------------------
 // Measured on a unit with caches on. Kept here so the budget maths is testable rather than
 // living only in prose, and so the 8-track worst case is recomputed on every test run.
 

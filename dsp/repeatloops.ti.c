@@ -1,5 +1,5 @@
 /* Beat repeat's per-sample loops (repeatloops.h). Built by cl6x when it is installed, else GCC
- * -- build_app.py routes *.ti.c to TI's compiler (docs/BUDGET.md, M2).
+ * -- build_app.py routes *.ti.c to TI's compiler (docs/archive/BUDGET_MILESTONES.md, M2).
  *
  * Nothing here branches or divides; every wrap is a compare-and-subtract through ?:. */
 #include "repeatloops.h"
