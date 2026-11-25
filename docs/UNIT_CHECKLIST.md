@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W38, about 108 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W39, about 113 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -441,7 +441,24 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 - Hold STEP 1 and FUNC and push CUT again: `SLIDE OFF`, the filter jumps on step 9 again. `____`
 - Save, NEW, load the project back: the range and the slide are still there. `____`
 
-**W38. Hear a sample before loading it (4 min).** Put a few WAVs in `/SAMPLES` first: a short
+**W38. Two MOD slots per track (5 min).** Beat playing, A01.
+- HOME, lower pad 6 (bass, MNO), EDIT, LFO page: the last line says `PUSH C D: MOD SLOTS`. Push
+  C: line 2 `MOD1 LFO: TURN A KNOB`; push C twice more: `MOD1 VEL: TURN A KNOB`. Screen keys to
+  SRC, turn CUT up by about 40: line 2 `MOD1 VEL>CUT +40`. OK: `M1 VEL>CUT +40`, and CUT is back
+  where it was. Play pad 6 soft and hard: hard notes are brighter. `____`
+- On SRC, CUT's bar has a dim line under it from the knob up 40, and a bright dot on it that
+  jumps with each note. The LFO page lists `M1 VEL>CUT +40` and `M2 OFF`. `____`
+- Push D, push it until `MOD2 PRS`, turn RES (beside CUT) up about 30, OK. Hold pad 6 and lean on it: the
+  resonance rises with the pressure and drops when you let go. `____`
+- Push C, push again (`MOD1 PRS`), OK with no knob turned: slot 1 is now PRS on CUT, +40. Push C
+  until `MOD1 OFF: OK CLEARS`, OK: `M1 OFF`. `____`
+- Slot 1 to RND on PAN (FX page), about +50: each bass note lands somewhere else in the stereo
+  field. Slot 1 to ENV on CUT with the LFO on SAW, RAT about `4.0`, DEP 0: a quick squelch per
+  note while the LFO itself moves nothing. `____`
+- Save, reload: both slots as you left them. Open a 0.3.x project: every slot off. `____`
+- MAX with both slots on, on four tracks, against the default beat alone: `________ %`
+
+**W39. Hear a sample before loading it (4 min).** Put a few WAVs in `/SAMPLES` first: a short
 hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - Lower pad 8 (SAMPLE), EDIT, OK: SAMPLES. DOWN to the hit, **push A**: `HEARING`, and the hit
   plays at once, whole. The line under the title says `HEARING 0/0S`, then the folder again. The
@@ -1321,7 +1338,7 @@ New 2026-11-22. Put a few WAVs in `/SAMPLES` on the card first (the two test fil
 - [ ] Reopen the browser: it starts in the track's folder with the cursor on its file.
 - [ ] PROJECT says `UNSAVED`; save, reload (the menu's RELOAD PROJECT, OK twice): track 8 has the picked file.
 - [ ] A folder of many files: listing time `________` (about how long `READING FOLDER` shows).
-- [ ] Push A on a file: it is heard without loading (W38). On a folder: `A HEARS FILES`. On a
+- [ ] Push A on a file: it is heard without loading (W39). On a folder: `A HEARS FILES`. On a
       file that is not a WAV: `NOT A WAV`. Pull the card while one plays: it stops, nothing hangs.
 
 ## 15c. A long stem (4 min)
@@ -1693,7 +1710,7 @@ project and never needs a restart."*
 - [ ] PROJECT opens the PROJECT screen. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
 - [ ] FUNC+HOME, OK saves (the menu opens on SAVE). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (402 bytes),
-      `KIT.BIN` (1,329 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
+      `KIT.BIN` (1,389 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
       save writes every file (the sizes tests/test_storage.cpp pins).
       After that first save only dirty banks are written; the card cannot show it, since all
       eight exist from then on, so tests/test_storage.cpp checks which files each save touches.

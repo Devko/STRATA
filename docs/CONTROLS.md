@@ -69,6 +69,14 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      a click. On at every start, one setting for all tracks (2026-11-23, core/tuning.hpp).
      On the LFO page, RAT's switch (push B, on EDIT, GRID and KEYS) is LFO TRIG: FREE, RETRIG,
      ONE-SHOT and round (`LFO TRIG RETRIG`); the kit's, per track (S2, 2026-11-25).
+     **MOD slots** (two per track, the kit's; backlog Phase 5): on the LFO page push C (DEP) for
+     slot 1 or D (DST) for slot 2 (EDIT opens from GRID or KEYS), push it again to walk the
+     source LFO ENV VEL PRS RND OFF, then turn the knob the slot should move on any EDIT page of
+     the track: where it is left, less where it started, is the depth, and it snaps back (learn
+     by turning, as D11). OK, CLR or leaving EDIT ends it (`M1 VEL>CUT +40`); no knob turned keeps
+     the slot's knob and depth with the new source, OFF clears it. Not on the LFO's or the
+     arp's own knobs (`MOD: NOT LFO OR ARP`). No routing screen: the LFO page lists the two
+     slots and every EDIT bar a slot moves has its range drawn under it (the font has no `~`).
      On PROJECTS, where only A turns, push B renames and push C deletes the project under the
      cursor (delete then asks for OK twice).
    - **VALUE is the crossfader.** Push VALUE + STEP picks what it fades: an effect, the morph

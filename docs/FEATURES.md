@@ -117,6 +117,7 @@ FM4 and GRAIN machines.
 | Per-track LFO: 6 shapes, free 0.06-32 Hz or synced 8 bars-1/32, any of the 16 params; lockable, scene-able, macro-able | v0.1.0 | ○ (13e) | Steps at about 750 Hz; on VA and WAVE an LFO on TUN glides instead (S3) |
 | LFO TRIG: FREE, RETRIG, ONE-SHOT (push RAT); ONE-SHOT shapes are envelopes | S2 | ○ (W30) | A kit setting, not lockable; no new shapes (see the PR) |
 | Cutoff floor (~100 Hz) for LFO, morph and macros; LFO depth on a cutoff about +-3 octaves | D9 | ○ (W30) | The knob and locks still close a filter fully |
+| **Two MOD slots per track**: LFO, ENV (the LFO's shape once per note), VEL, PRS (pad pressure), RND (per note) to any sound, ASR or OSC parameter, signed depth; learnt by push C / D on the LFO page and a turn | #168 | ○ (W38) | A kit setting, not lockable; not on LFO or ARP knobs; on MID the slots reach the CCs |
 | Per-track arpeggiator: UP, DN, U/D, ORD, RND, 1/4-1/32T, 1-4 octaves, gate | v0.1.0 | ○ (13h) | On POLY it uses the shared voice budget |
 | Banks A-H x 16 patterns, queued changes (END, 16, 32, NOW) | v0.1.0 | ◐ (3b) | |
 | Chain of up to 64 entries, repeats X1-X16 | v0.1.0 | ○ (3b, 12) | |
@@ -176,7 +177,7 @@ FM4 and GRAIN machines.
 | Streaming of files too big for memory (2 s head + card stream, 4 tracks max) | v0.1.0 | ○ (15d) | Forward only, one voice: no STA, slices or reverse (not feasible, below); GRAIN plays only the head; CPU unmeasured |
 | Streamed samples honour LEN (end point, loop back to the head) | #91 | ○ (15d) | A LEN loop inside the 2 s head never touches the card |
 | Sample browser (`/SAMPLES`, `/RECORD`), load while playing | v0.1.0 | ○ (15b) | 256 entries a folder; path ≤ 111 characters |
-| Sample audition: push A in SAMPLES hears a file, whole, without loading it | #169 | ○ (W38) | Streamed from the card at the file's own rate, -6 dB, after every effect; 8-96 kHz WAVs; one at a time |
+| Sample audition: push A in SAMPLES hears a file, whole, without loading it | #169 | ○ (W39) | Streamed from the card at the file's own rate, -6 dB, after every effect; 8-96 kHz WAVs; one at a time |
 | Sample browser reaches the stock SmplTrek folders (`POOL` = `/SmplTrek/Pool/Audio`, `SMPLTREK` = `/SmplTrek`), read-only | #117 | ○ (W21) | shown only when the card has `/SmplTrek` |
 | Resample the master, 1-8 bars, to a file or straight onto a track | v0.1.0 | ○ ("Resampling") | Takes ≤ 30 s |
 | Bounce: resample ONE track alone (B = `TRK 1`-`TRK 8`), mono, before its duck, fader, pan and sends | #109 | ○ (13m) | No emulator scenario: B is an encoder, the emulator presses keys only |

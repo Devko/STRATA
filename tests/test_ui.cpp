@@ -10274,3 +10274,176 @@ TEST(ui_layout_resample_with_a_take_on_offer) {
     key(ENAGA_KEY_F4);
     pump(2);
 }
+
+// --- MOD slots: push DEP or DST on the LFO page, then turn a knob (app/ui_modslots.hpp) ------
+
+namespace {
+
+void to_edit_page(Strata &app, Page page) {
+    for (int i = 0; i < kEditPages && UiProbe::param_page(app) != int(page); i++) {
+        key(ENAGA_KEY_SELECT_RIGHT);
+    }
+}
+
+bool notice_is(Strata &app, const char *text) {
+    return UiProbe::notice(app) != nullptr && std::strcmp(UiProbe::notice(app), text) == 0;
+}
+
+void post_cmd_track_mod_off(int track) {
+    for (int s = 0; s < kModSlots; s++) {
+        Command command;
+        command.cmd = Cmd::set_mod_slot;
+        command.track = uint8_t(track);
+        command.a = uint8_t(s);
+        app_engine().commands().post(command);
+    }
+    pump(2);
+}
+
+}  // namespace
+
+TEST(ui_mod_slot_is_learnt_by_pushing_dep_and_turning_a_knob) {
+    Strata &app = fresh();
+    const KitModSlot *const mod = app_engine().project().kit.tracks[0].mod;
+    key(ENAGA_KEY_F8);                                     // EDIT, track 1
+    to_edit_page(app, Page::lfo);
+    CHECK(screen_has(app, "PUSH C D: MOD SLOTS"));         // nothing set: how to set one
+    check_layout(app, "EDIT LFO, no slots");
+
+    // DEP is the third knob: push C for slot 1. It starts on LFO; again walks the source.
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(notice_is(app, "MOD1 LFO: TURN A KNOB"));
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(notice_is(app, "MOD1 ENV: TURN A KNOB"));
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(notice_is(app, "MOD1 VEL: TURN A KNOB"));
+
+    // An LFO knob cannot be a slot's.
+    app.on_encoder(0, +3);
+    pump(2);
+    CHECK(notice_is(app, "MOD: NOT LFO OR ARP"));
+    app.on_encoder(0, -3);
+    pump(2);
+
+    // Over to SRC, and turn C by 20: the slot takes it, and the line says so as it goes.
+    to_edit_page(app, Page::src);
+    const int param = page_first(Page::src) + 2;
+    const int start = int(app_engine().params(0).v[param]);
+    const int turn = start > 63 ? -20 : +20;
+    app.on_encoder(2, turn);
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[param]), start + turn);
+    CHECK(screen_has(app, "MOD1 VEL>"));
+    check_layout(app, "EDIT, learning a MOD slot");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(mod[0].on());
+    CHECK_EQ(int(mod[0].source), int(kModSrcVel));
+    CHECK_EQ(int(mod[0].dest), param);
+    CHECK_EQ(int(mod[0].depth), turn);
+    CHECK(!mod[1].on());
+    // The knob is back where it was: the slot is the move.
+    CHECK_EQ(int(app_engine().params(0).v[param]), start);
+    CHECK(std::strncmp(UiProbe::notice(app), "M1 VEL>", 7) == 0);
+    CHECK(app_storage().dirty());
+    check_layout(app, "EDIT, a bar with a MOD slot's range");
+
+    // The LFO page lists both slots now.
+    to_edit_page(app, Page::lfo);
+    CHECK(screen_has(app, "M1 VEL>"));
+    CHECK(screen_has(app, "M2 OFF"));
+    check_layout(app, "EDIT LFO, a slot set");
+
+    // A push on a slot that is set starts from its source; with no knob turned, the end keeps
+    // its knob and depth and takes the new source.
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(notice_is(app, "MOD1 VEL: TURN A KNOB"));
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(int(mod[0].source), int(kModSrcPrs));
+    CHECK_EQ(int(mod[0].dest), param);
+    CHECK_EQ(int(mod[0].depth), turn);
+
+    // Slot 2 on DST's push; ended with no knob turned it stays off.
+    key(ENAGA_KEY_PUSH_D);
+    CHECK(notice_is(app, "MOD2 LFO: TURN A KNOB"));
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(notice_is(app, "NO KNOB: M2 STAYS OFF"));
+    CHECK(!mod[1].on());
+    // The CLR straight after is the same "get me out", as after MACRO LEARN.
+    key(ENAGA_KEY_CLR);
+    CHECK(notice_is(app, "KNOBS EDIT AGAIN"));
+
+    // Walking the source to OFF clears the slot: PRS, RND, OFF.
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(notice_is(app, "MOD1 OFF: OK CLEARS"));
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!mod[0].on());
+    CHECK(notice_is(app, "M1 OFF"));
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_mod_slot_learn_ends_on_leaving_edit_and_opens_edit_from_grid) {
+    Strata &app = fresh();
+    const KitModSlot *const mod = app_engine().project().kit.tracks[0].mod;
+    key(ENAGA_KEY_F8);
+    to_edit_page(app, Page::lfo);
+    key(ENAGA_KEY_F4);                                     // GRID, on the LFO page
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    CHECK_EQ(UiProbe::param_page(app), int(Page::lfo));
+    key(ENAGA_KEY_PUSH_D);                                 // slot 2: EDIT opens
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    key(ENAGA_KEY_PUSH_D);                                 // ENV
+    to_edit_page(app, Page::amp);
+    const int param = page_first(Page::amp);
+    const int start = int(app_engine().params(0).v[param]);
+    app.on_encoder(0, start > 63 ? -9 : +9);
+    pump(2);
+    key(ENAGA_KEY_F4);                                     // leaving EDIT ends it, learnt
+    pump(2);
+    CHECK(mod[1].on());
+    CHECK_EQ(int(mod[1].source), int(kModSrcEnv));
+    CHECK_EQ(int(mod[1].dest), param);
+    CHECK_EQ(int(mod[1].depth), start > 63 ? -9 : 9);
+    CHECK_EQ(int(app_engine().params(0).v[param]), start);
+    post_cmd_track_mod_off(0);
+}
+
+TEST(ui_mod_slot_prs_hears_the_tracks_pad_and_lets_go) {
+    Strata &app = fresh();
+    Command command;
+    command.cmd = Cmd::set_mod_slot;
+    command.track = 0;
+    command.a = 0;
+    command.b = kModSrcPrs;
+    command.c = 2;
+    command.d = 40;
+    app_engine().commands().post(command);
+    pump(2);
+    app.on_pad_press(0, 100);
+    pump();
+    app.on_pad_pressure(0, 127);
+    pump(2);
+    CHECK_EQ(app_engine().mod_value(0, 0), 1.0f);
+    CHECK_EQ(int(app_engine().sounding(0).v[2]), int(app_engine().params(0).v[2]) + 40 > 127
+                                                       ? 127
+                                                       : int(app_engine().params(0).v[2]) + 40);
+    app.on_pad_release(0);
+    pump(2);
+    CHECK_EQ(app_engine().mod_value(0, 0), 0.0f);
+    CHECK_EQ(int(app_engine().sounding(0).v[2]), int(app_engine().params(0).v[2]));
+    // Another track's pad is its own: track 1's slot hears nothing of it.
+    app.on_pad_press(2, 100);
+    app.on_pad_pressure(2, 90);
+    pump(2);
+    CHECK_EQ(app_engine().mod_value(0, 0), 0.0f);
+    app.on_pad_release(2);
+    pump(2);
+    post_cmd_track_mod_off(0);
+}

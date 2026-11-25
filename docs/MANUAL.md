@@ -153,6 +153,44 @@ times a second, smooth on a filter or a pan. Pitch is the exception on VA and WA
 POLY): there the LFO on TUN bends the voices directly, so a slow sweep glides and a held note
 follows it. On the other machines TUN still moves in its steps, and only from the next note.
 
+### MOD slots: two per track
+
+Every track has **two mod slots**. A slot is a source that moves one parameter by a depth:
+
+- **LFO**: the track's LFO as it runs. Its own DEP can stay at 0, so it moves only what the slots
+  say, and one LFO can then move two things at once, each by its own amount.
+- **ENV**: the LFO page's shape and RAT, run once from each note whatever TRIG says. SAW is a
+  decay, TRI an attack and decay, RMP a rise (see ONE-SHOT above). The LFO itself can run FREE
+  at the same time.
+- **VEL**: each note's velocity. The full depth at 127.
+- **PRS**: the pressure on the track's pad while you hold it (in KEYS, any piano pad, on the
+  selected track). Back to nothing when you let go.
+- **RND**: a random value for each note, either side of the knob, held for the note.
+
+**You set a slot by learning it**, the way MACRO LEARN works. On the LFO page **push C** (DEP's
+knob) for slot 1 or **push D** (DST's) for slot 2. Line 2 says `MOD1 LFO: TURN A KNOB`. Push the
+same knob again to walk the source: LFO, ENV, VEL, PRS, RND, OFF. Then go to any page of the same
+track with the screen keys and **turn the knob you want moved**, as far as you want the source to
+take it: line 2 follows (`MOD1 VEL>CUT +40`). **OK** or **CLR** ends it (leaving EDIT does too):
+the knob goes back to where it was and the slot keeps the difference as its depth, so the knob
+is the sound at rest and the source moves it from there. Turn down for a negative depth: loud
+notes then close the filter instead of opening it. Pushing C or D from GRID or KEYS opens EDIT.
+
+Ended with no knob turned, a slot that is already set keeps its knob and depth and takes the new
+source, so a push or two and OK changes only the source. Walk the source to **OFF** and press OK
+to clear the slot (`M1 OFF`). Ended with nothing set, it says `NO KNOB: M1 STAYS OFF`.
+
+A slot can move the 16 sound parameters and, on the machines that have them, ASR and OSC. Not
+the LFO's own knobs or the arp's (`MOD: NOT LFO OR ARP`). The two slots and the LFO add up. On a
+cutoff a slot stops at the same ~100 Hz floor as the LFO, and on VA and WAVE a slot on TUN bends
+the voices smoothly, as the LFO does.
+
+**On screen:** the LFO page lists both slots (`M1 VEL>CUT +40`, `M2 OFF`) in place of the LFO's
+picture. On every EDIT page a parameter with a slot on it has a dim line under its bar across the
+range the slot can move it, and a bright dot on that line where it is now. The slots are the
+kit's, saved with it, like LFO TRIG: no lock, scene or macro changes them. A project saved before
+they existed loads with both slots off.
+
 ### The arpeggiator
 
 <p><img src="screens/edit_arp.png" width="256" alt="EDIT, the ARP page"></p>

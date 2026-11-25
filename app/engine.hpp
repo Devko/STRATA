@@ -243,7 +243,15 @@ public:
     // machines are prepared from -- the kit, performed, locked and LFO'd. Audio side and the
     // tests (the rig runs both contexts on one thread): `modulated_` is rewritten every block,
     // so the screen and step_waves read Status's heard_* and lfo_shown (publish_heard) instead.
-    bool lfo_on(int track) const { return track >= 0 && track < kTracks && modulating_[track]; }
+    // The LFO's own DEP and DST: a mod slot alone also keeps `modulating_` on.
+    bool lfo_on(int track) const { return track >= 0 && track < kTracks && lfo_running_[track]; }
+    // A mod slot's source value this block (-1..1 or 0..1, core/modslot.hpp), 0 for a slot that
+    // is off. Audio side and the tests; the screen reads Status::mod_heard.
+    float mod_value(int track, int slot) const {
+        return track >= 0 && track < kTracks && slot >= 0 && slot < kModSlots
+                   ? mod_value_[track][slot]
+                   : 0.0f;
+    }
     float lfo_value(int track) const {
         return track >= 0 && track < kTracks ? lfo_value_[track] : 0.0f;
     }
@@ -672,6 +680,21 @@ private:
     uint8_t lfo_shown_[kTracks] = {};
     // LFO TRIG: a note started on the track since the last run_lfos (note_started).
     bool lfo_restart_[kTracks] = {};
+    // The track's own LFO is on (DEP and DST): `modulating_` is also set by a mod slot alone.
+    bool lfo_running_[kTracks] = {};
+
+    // The mod slots (core/modslot.hpp, KitTrack::mod), applied in run_lfos after the LFO. Per
+    // track: the last note's velocity (VEL), the pad's pressure (PRS, Cmd::set_pressure), the
+    // note's random value (RND, drawn when a note starts), ENV's own one-shot cycle -- the LFO's
+    // shape and RAT, run from each note whatever TRIG says -- and each slot's value this block.
+    void run_mod_slots(int track, const LfoSettings &lfo, float lfo_value, float cycles,
+                       bool restart, bool va_filter, bool insert_chain, float &pitch_mod);
+    uint8_t mod_velocity_[kTracks] = {};
+    float mod_pressure_[kTracks] = {};
+    float mod_random_[kTracks] = {};
+    TrackLfo mod_env_[kTracks];
+    enaga::dsp::Random mod_dice_[kTracks];
+    float mod_value_[kTracks][kModSlots] = {};
     // The LFO on TUN as a float, and the machine it was last handed to: a track that changes
     // machine hands the new one the current value, so none keeps a stale offset.
     float pitch_mod_[kTracks] = {};
@@ -679,9 +702,10 @@ private:
 
     // Every note-on a track's machine takes -- a step, a chord, an arp or roll hit, a pad or a
     // key -- goes through here: the screen's trig light, and LFO TRIG's restart.
-    void note_started(int track) {
+    void note_started(int track, uint8_t velocity) {
         status_.bump_triggered(track);
         lfo_restart_[track] = true;
+        mod_velocity_[track] = velocity;
     }
 
     ChainMix mix_[kTracks] = {};
