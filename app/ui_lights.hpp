@@ -108,8 +108,9 @@
         timing.length = source.length;
         timing.speed = Speed(source.speed);
         timing.swing = source.swing == kSwingInherit ? pattern.swing : source.swing;
-        timing.play = source.play < uint8_t(PlayMode::count) ? PlayMode(source.play)
-                                                             : PlayMode::fwd;
+        // LIVE RND too (core/liverand.hpp): a hit goes to the step that was sounding.
+        timing.play = live_play_mode(source.play, engine_.live_rnd_unit(),
+                                     engine_.live_rnd_armed(), track);
         timing.play_seed = play_seed(pattern.seed, track);
 
         // quantize_hit finds the time SLOT the hit belongs to; under REV, PING or RND the note

@@ -2,6 +2,7 @@
 
 #include "arp.hpp"       // the arpeggiator's notes; the engine schedules them
 #include "factory.hpp"
+#include "liverand.hpp"    // LIVE RND: the unit held to its range
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
 #include "sounds.hpp"      // Cmd::sound_preset: the factory sounds
@@ -1423,6 +1424,13 @@ void Engine::apply(const Command &command) {
             }
             break;
         }
+
+        case Cmd::set_live_rnd:
+            // Read by the scheduler on the next tick: an armed track jumps to its random block
+            // at the next slot, and OFF puts every slot back on its own step.
+            perform_.rnd_unit = live_rnd_turn(command.a, 0);          // held to OFF .. RND16
+            perform_.rnd_armed = command.b;
+            break;
 
         case Cmd::set_macro:
             if (command.a < kMacros) {
@@ -3401,6 +3409,8 @@ void Engine::capture_live(LiveState &state) const {
     state.morph = morph_;
     state.rel_all = rel_all_;
     state.len_all = len_all_;
+    state.rnd_unit = perform_.rnd_unit;
+    state.rnd_armed = perform_.rnd_armed;
 }
 
 // At once (D3): the next step plays from the restored pattern, and the sound is heard in this
@@ -3427,6 +3437,8 @@ void Engine::apply_live(const LiveState &state) {
     morph_ = state.morph;
     rel_all_ = state.rel_all;
     len_all_ = state.len_all;
+    perform_.rnd_unit = state.rnd_unit;
+    perform_.rnd_armed = state.rnd_armed;
     perform_dirty_ = true;
     reconfigure();
 }

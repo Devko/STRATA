@@ -170,6 +170,8 @@
             for (int m = 0; m < kMacros; m++) macro_position_[m] = engine_.macro_position(m);
             rel_all_ = engine_.rel_all();
             len_all_ = engine_.len_all();
+            rnd_unit_ = engine_.live_rnd_unit();
+            rnd_armed_ = engine_.live_rnd_armed();
             // The mixer to rest over FX GLIDE (a lock holds no effect); a loop plays on.
             if (perf_target_fx() != PerfFx::none) perf_ride_to(perf_target_fx(), 0, false);
         }

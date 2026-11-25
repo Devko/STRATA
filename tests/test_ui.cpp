@@ -65,6 +65,9 @@ struct UiProbe {
         app.len_all_ = 0;
         app.post(Cmd::set_move_all, 0, 0, 0, 0);
         app.post(Cmd::set_move_all, 0, 0, 1, 0);
+        app.rnd_unit_ = kLiveRndOff;                 // LIVE RND off, every track armed
+        app.rnd_armed_ = kLiveRndAllTracks;
+        app.post(Cmd::set_live_rnd, 0, 0, kLiveRndOff, kLiveRndAllTracks);
     }
     static int selected(const Strata &app) { return app.selected_; }
     static int page(const Strata &app) { return app.page_; }
@@ -9725,6 +9728,124 @@ TEST(ui_func_turn_a_and_b_in_perform_are_rel_all_and_len_all) {
     CHECK(screen_has(app, "FUNC+A/B REL/LEN ALL"));
     CHECK(!screen_has(app, "RL-"));
     CHECK(!screen_has(app, "LN+"));
+}
+
+// --- LIVE RND (core/liverand.hpp) -------------------------------------------------------------
+
+// FUNC + turn D in PERFORM sets LIVE RND's unit for the armed tracks (all eight at start), FUNC +
+// push D takes the selected track out or puts it back. The screen line, the live strip and the
+// help say so; without FUNC, D is still its macro. Nothing is saved or undone.
+TEST(ui_func_d_in_perform_is_live_rnd_and_func_push_d_arms_the_selected_track) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    pump(1600);
+    CHECK_EQ(int(engine.live_rnd_unit()), 0);
+    CHECK_EQ(int(engine.live_rnd_armed()), int(kLiveRndAllTracks));
+    const uint8_t macro_d = engine.macro_position(3);
+    const uint8_t undo_before = undo_depth();
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(3, +3);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 3);
+    CHECK(std::strcmp(UiProbe::notice(app), "LIVE RND4 8 TRK") == 0);
+    CHECK_EQ(int(engine.macro_position(3)), int(macro_d));   // not the macro
+    app.on_encoder(3, +9);                                    // stops at RND16
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), int(kLiveRndMax));
+    CHECK(std::strcmp(UiProbe::notice(app), "LIVE RND16 8 TRK") == 0);
+    app.on_encoder(3, -3);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 2);
+
+    // FUNC + push D: the selected track (track 1 after fresh()) out, then in again.
+    app.on_key(ENAGA_KEY_PUSH_D, true);
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_armed()), 0xFE);
+    CHECK(std::strcmp(UiProbe::notice(app), "T1 RND OUT 7 TRK") == 0);
+    CHECK(!engine.tape_stop().held());                        // not the old tape stop hint
+    app.on_key(ENAGA_KEY_F1, false);
+
+    pump(1600);
+    CHECK(screen_has(app, "LIVE RND2 FUNC+D"));
+    CHECK(screen_has(app, "RN2"));
+    check_layout(app, "PERFORM, LIVE RND on");
+    // With REL ALL away from rest the two share the line.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(0, -32);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(1600);
+    CHECK(screen_has(app, "REL -64 LEN 100% R2"));
+    check_layout(app, "PERFORM, REL ALL and LIVE RND");
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(0, +32);
+    app.on_key(ENAGA_KEY_F1, false);
+
+    // Without FUNC, D is the macro again, and nothing went on the undo history.
+    app.on_encoder(3, +1);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 2);
+    CHECK(engine.macro_position(3) != macro_d);
+    app.on_encoder(3, -1);
+    CHECK_EQ(int(undo_depth()), int(undo_before));
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_D, true);
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_armed()), int(kLiveRndAllTracks));
+    CHECK(std::strcmp(UiProbe::notice(app), "T1 RND IN 8 TRK") == 0);
+    app.on_encoder(3, -9);                                    // back to OFF, and it stops there
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "LIVE RND OFF") == 0);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(1600);
+    CHECK(screen_has(app, "FUNC+A/B REL/LEN ALL"));
+    CHECK(!screen_has(app, "RN"));
+}
+
+// LIVE RND is in a LOCK (D4): a jump puts the unit and the armed set back, and the UI's knob
+// follows, so the next click goes on from where the lock had it.
+TEST(ui_a_lock_jump_puts_live_rnd_back_and_the_knob_follows) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(3, +4);                                    // RND8
+    app.on_key(ENAGA_KEY_PUSH_D, true);                       // track 1 out
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    func_mutate_hold(app);                                    // store
+    pump(2);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(3, -4);                                    // OFF
+    app.on_key(ENAGA_KEY_PUSH_D, true);                       // track 1 in
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 0);
+    func_mutate_tap(app);                                     // jump
+    pump(4);
+    CHECK_EQ(int(engine.live_rnd_unit()), 4);
+    CHECK_EQ(int(engine.live_rnd_armed()), 0xFE);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(3, -1);                                    // from the lock's RND8 to RND4
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 3);
+    CHECK_EQ(int(engine.live_rnd_armed()), 0xFE);
+    func_mutate_tap(app);                                     // swap back (D13)
+    pump(4);
+    CHECK_EQ(int(engine.live_rnd_unit()), 0);
+    CHECK_EQ(int(engine.live_rnd_armed()), int(kLiveRndAllTracks));
+    func_mutate_tap(app);                                     // and to the lock again
+    pump(4);
+    CHECK_EQ(int(engine.live_rnd_unit()), 4);
 }
 
 // FEEL on the PATTERN page: D turns it from anywhere on the page, the row is the field after

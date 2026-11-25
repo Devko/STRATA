@@ -170,6 +170,7 @@ Printed labels (above), and the moves made while playing:
 | FUNC + A / B / C on GRID | Euclidean fill |
 | FUNC + MUTATE, held half a second | **LOCK**: store the live set as the playing pattern's lock (`LOCK A01 STORED`); again later overwrites it |
 | FUNC + turn A / B in PERFORM | **REL ALL** / **LEN ALL** (below) |
+| FUNC + turn D / push D in PERFORM | **LIVE RND**: the unit / the selected track in or out (below) |
 | FUNC + MUTATE, tapped | Jump to that lock at once (`BACK TO LOCK A01`); tapped again, swap back to the state from just before the jump (`SWAPPED BACK A01`). No lock: `NO LOCK: HOLD STORES` |
 
 Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VALUE (DJ filter,
@@ -189,7 +190,7 @@ lot, and jump back in one tap; tap again to compare with where you were.
 | Every track's sound bytes (all eight EDIT pages) and fader | The samples, the machines: a lock taken before a machine switch restores the parameters only |
 | The send and master bytes | The kill EQ's switches, the tempo (not STRATA's under an outside clock) |
 | The mutes (D4) | The eight stored mute states |
-| The morph position, the four macro positions, REL ALL and LEN ALL | The scenes and the macro setup |
+| The morph position, the four macro positions, REL ALL, LEN ALL and LIVE RND | The scenes and the macro setup |
 
 - **One lock per pattern (D14), in RAM only**: not saved, and a project load or NEW clears them.
 - **At once (D3)**, on the next audio block. The performance mixer is not in a lock: the jump
@@ -224,6 +225,29 @@ changed meaning; C and D with FUNC still turn their macros.
   `REL -12 LEN 71%` away from it; the live strip adds `RL-` / `RL+` and `LN-` / `LN+`.
 - **LEN ALL leaves a note with no gate alone** (a drum, a pad hit, a held key, the arpeggiator's
   own GATE): REL ALL is what shortens drums.
+
+## LIVE RND (FUNC + D in PERFORM)
+
+CyDrums' P1, the live half (backlog Phase 5; the controls concept: "the PATTERN page plus one
+PERFORM knob gesture"), `core/liverand.hpp`. The pattern half is the FUNC menu's TRACK PLAY. FUNC
++ D in PERFORM was a duplicate of the macro (turn) and the tape stop's hint (push), so no gesture
+that did something changed meaning; FUNC + push D still names slot 8 on every other screen.
+
+| Gesture | Does | Says |
+| --- | --- | --- |
+| FUNC + turn D | The unit for every armed track: OFF, 1, 2, 4, 8, 16, one a click, stopping at both ends | `LIVE RND4 8 TRK`, `LIVE RND OFF` |
+| FUNC + push D | The selected track out of the armed set, or back in. All eight at start | `T1 RND OUT 7 TRK`, `T1 RND IN 8 TRK` |
+
+- **What it plays**: exactly TRACK PLAY's RND mode of that size, from the same seeded draw (the
+  pattern's seed, the track, the block, the pass), over the track's own mode while it is on.
+  Blocks keep their steps in order and their place in the bar.
+- **Recoverable**: the pattern is never written. OFF is the programmed order from the next slot;
+  a track's own mode (REV, PING ...) comes back with it.
+- **Not saved, not undone**, like REL ALL. A LOCK holds the unit and the armed set (D4); a jump
+  or swap puts both back. Live recording lands a hit on the step that was sounding.
+- **On screen**: PERFORM's line under the macros reads `LIVE RND4 FUNC+D`, or `REL -12 LEN 71% R4`
+  with REL/LEN ALL away from rest; the track meters mark the armed tracks with a dot; the live
+  strip adds `RN4`. The FUNC help's third PERFORM page lists both gestures.
 
 ## FEEL (the PATTERN page)
 

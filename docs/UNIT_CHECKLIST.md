@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W35, about 96 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W36, about 100 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -416,6 +416,19 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 - DEP back to 0: the picture goes, `LFO OFF: SET DEP+DST`. `____`
 - Lower pad 8 (SAMPLE), AMP page: as each note plays, the area under the curve lights up behind
   the riding square. `____`
+
+**W36. LIVE RND in PERFORM (4 min).** Beat playing, A01.
+- PERFORM (FUNC + MIXER). FUNC + turn D one click at a time: `LIVE RND1 8 TRK` .. `RND16`, and
+  it stops there; the line under the macros reads `LIVE RND16 FUNC+D` and line 2 `RN16`. RND 1:
+  every part scatters; RND 4: the beats of each bar trade places, still on the grid. Musical at
+  which units, for techno and for ambient? `____`
+- Lower pad 1 (kick), FUNC + push D: `T1 RND OUT 7 TRK`, the kick goes straight while the rest
+  keeps jumping; the dot under meter 1 goes. Again: `T1 RND IN 8 TRK`. `____`
+- FUNC + turn D all the way back: `LIVE RND OFF`, and the beat is exactly A01 again from the next
+  step, no stumble. GRID: no step changed, CLR's undo has nothing new. `____`
+- RND4 on, hold FUNC + MUTATE (a lock), turn it OFF, tap FUNC + MUTATE: the shuffle is back; tap
+  again: OFF again. `____`
+- MAX with RND1 on all eight against the default beat alone: `________ %`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

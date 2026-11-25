@@ -2104,6 +2104,77 @@ TEST(random_play_repeats_exactly_for_one_seed_and_differs_for_another) {
     CHECK(moved);
 }
 
+// --- LIVE RND (core/liverand.hpp) --------------------------------------------
+
+// LIVE RND on an armed track plays exactly what TRACK PLAY's RND mode of the same size would,
+// from the same draw; an unarmed track plays its own mode; the pattern is never written.
+TEST(live_rnd_plays_what_track_play_would_on_armed_tracks_only_and_writes_nothing) {
+    static Pattern live, programmed, before;
+    blank(live, 16);
+    for (int t = 0; t < 2; t++) {
+        for (int s = 0; s < 16; s++) put_trig(live, t, s).note = uint8_t(30 + s);
+    }
+    live.seed = 0x5EEDu;
+    __builtin_memcpy(&programmed, &live, sizeof live);
+    programmed.tracks[0].play = uint8_t(PlayMode::rnd4);
+    __builtin_memcpy(&before, &live, sizeof live);
+
+    static Log heard, wanted;
+    PerformState rnd;
+    rnd.rnd_unit = 3;                               // RND4
+    rnd.rnd_armed = 0x01;                           // track 1 only
+    PerformState plain;
+    Scheduler a, b;
+    a.configure(live);
+    a.reset();
+    b.configure(programmed);
+    b.reset();
+    heard.clear();
+    wanted.clear();
+    run(a, live, rnd, 0, 4u * 16u * kStepTicks, heard);
+    run(b, programmed, plain, 0, 4u * 16u * kStepTicks, wanted);
+    CHECK_EQ(heard.count, 2 * 16 * 4);
+    CHECK(same_stream(heard, wanted));
+    CHECK_EQ(__builtin_memcmp(&live, &before, sizeof live), 0);
+    bool moved = false;
+    for (int i = 0; i < heard.count; i++) {
+        const Hit &h = heard.hits[i];
+        const uint8_t slot = uint8_t((h.tick / kStepTicks) % 16u);
+        if (h.event.track == 1) CHECK_EQ(int(h.event.step), int(slot));   // not armed
+        if (h.event.track == 0 && h.event.step != slot) moved = true;
+        // RND4 moves whole beats: a step keeps its place inside the beat.
+        CHECK_EQ(int(h.event.step) & 3, int(slot) & 3);
+    }
+    CHECK(moved);
+}
+
+// OFF is the programmed order at once, from the next slot; a track's own mode comes back with it.
+TEST(live_rnd_off_puts_every_slot_back_on_its_own_step_at_once) {
+    static Pattern pattern;
+    blank(pattern, 16);
+    for (int s = 0; s < 16; s++) put_trig(pattern, 0, s).note = uint8_t(30 + s);
+    for (int s = 0; s < 16; s++) put_trig(pattern, 1, s).note = uint8_t(60 + s);
+    pattern.tracks[1].play = uint8_t(PlayMode::rev);
+    pattern.seed = 0x1234u;
+    Scheduler sched;
+    sched.configure(pattern);
+    sched.reset();
+    PerformState perform;
+    perform.rnd_unit = 1;                           // RND1, every track armed
+    static Log log;
+    log.clear();
+    run(sched, pattern, perform, 0, 2u * 16u * kStepTicks + 5u * kStepTicks, log);
+    perform.rnd_unit = 0;
+    const int from = log.count;
+    run(sched, pattern, perform, 37u * kStepTicks, 48u * kStepTicks, log);
+    CHECK_EQ(log.count - from, 2 * 11);
+    for (int i = from; i < log.count; i++) {
+        const Hit &h = log.hits[i];
+        const int slot = int((h.tick / kStepTicks) % 16u);
+        CHECK_EQ(int(h.event.step), h.event.track == 0 ? slot : 15 - slot);
+    }
+}
+
 // --- FEEL (core/timing.hpp) -------------------------------------------------
 
 // The scheduler reads the pattern's FEEL byte fresh every tick, as it reads the play mode: WAVE
