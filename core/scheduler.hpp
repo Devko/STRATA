@@ -144,6 +144,21 @@ private:
     uint32_t pattern_seed_ = 0;
 };
 
+// --- step stutter ---------------------------------------------------------
+
+// Step stutter (hold REPEAT, then a STEP: docs/CONTROLS.md): the one hit track `track` makes
+// each time the stutter retriggers step `step`. The engine calls it on the roll's grid while
+// the scheduler runs on silently underneath, so on release every track is exactly where it
+// would have been.
+//
+// A step past a short track's length wraps into it (step 13 of an 8-step track is its step 5),
+// so the whole beat stutters at the same place in its loop. The step plays as written -- trig,
+// note, velocity, length, accent, slide, and its locks, which a trigless step applies alone --
+// but its condition, probability and ratchet are not drawn: the stutter IS the ratchet now, and
+// a loop that skipped its own step would not loop. False, writing nothing, when that step has
+// neither a trig nor a trigless.
+bool stutter_event(const Pattern &pattern, int track, int step, uint32_t frame, StepEvent &out);
+
 // --- the pieces, exposed for testing --------------------------------------
 
 // A deterministic draw in 0..99 from the pattern seed and a step's identity. Pure: the same
