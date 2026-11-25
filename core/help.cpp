@@ -584,6 +584,15 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
     if (page == 2 && machine_is_fm(place.machine)) add_row(rows, count, "IEN 0  STEADY INDEX");
     if (page == 2 && machine_is_grain(place.machine)) add_row(rows, count, "DEC 127  HOLDS");
     if (page == 0 && machine_is_grain(place.machine)) add_row(rows, count, "DEN UNDER X1  GAPS");
+    // EDIT's pictures (docs/CONTROLS.md, "Waveforms and envelopes"): what the marks are.
+    if (page == 0 && place.machine == uint8_t(MachineId::sample)) {
+        add_row(rows, count, "LINE STA END  DOT SLC");
+    }
+    if (page == 0 && machine_is_grain(place.machine)) add_row(rows, count, "BRACKET POS  TICK GRN");
+    const bool curve = (page == 2 && place.machine != uint8_t(MachineId::midi)) ||
+                       (page == 6 && is_va(place.machine)) ||
+                       (page == 1 && machine_has_voice_filter(place.machine));
+    if (curve) add_row(rows, count, "CURVE  LETTER = KNOB");
 }
 
 // The title of a page that names the EDIT page: "EDIT SRC KCK".

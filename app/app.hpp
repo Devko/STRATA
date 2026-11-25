@@ -3572,13 +3572,26 @@ public:
             draw_value_bar(canvas, bar_x, y + 2, wide ? 56 : 70, 4, shown, 9);
         }
 
+        // A waveform or an envelope under the knobs (docs/CONTROLS.md, "Waveforms and
+        // envelopes"), with one line of text above it at y 87 instead of the two at 96 and 105.
+        const EditPicture picture = edit_picture();
+
         // Turning a lock: "S5 CUT 64>90" where the page's own line goes, until the STEP is let go.
-        if (draw_lock_readout(canvas, 96)) return;
+        // Over a picture it takes the line above it, and the picture draws the lock it is turning.
+        const bool readout = draw_lock_readout(canvas, picture != EditPicture::none ? 87 : 96);
+        if (readout && picture == EditPicture::none) return;
 
         // A frozen track plays its loop, not these knobs (dsp/frozen.hpp): say so on every page,
         // and where to undo it.
         if (frozen(selected_)) {
-            canvas.text(0, 96, "FROZEN: FUNC+HOME", 15);
+            if (!readout) canvas.text(0, 96, "FROZEN: FUNC+HOME", 15);
+            return;
+        }
+
+        if (picture != EditPicture::none) {
+            if (!readout) draw_picture_line(canvas, picture);
+            if (picture == EditPicture::wave) draw_wave(canvas);
+            else draw_envelope(canvas, envelope_for(picture));
             return;
         }
 
@@ -3621,17 +3634,8 @@ public:
         }
 
         if (asr_page) {
-            // Whether the note envelope applies here, and if so what SUS makes of a note.
-            const bool va = has_asr(selected_);
-            const bool sustains = va && engine_.params(selected_).v[kAsrFirst + 1] > 0;
-            // On GRAIN, SUS 0 leaves DEC in charge, and DEC at the top holds (dsp/grain.cpp).
-            const bool grain = machine_is_grain(engine_.machine_id(selected_));
-            canvas.text(0, 96,
-                        !va        ? "NOT ON THIS MACHINE"
-                        : sustains ? "HOLDS: PAD OR LEN"
-                        : grain    ? "SUS 0: DEC DECIDES"
-                                   : "SUS 0: ONE-SHOT",
-                        7);
+            // A machine that reads ASR draws its envelope (edit_picture); here it does nothing.
+            canvas.text(0, 96, "NOT ON THIS MACHINE", 7);
             return;
         }
 
@@ -3656,10 +3660,43 @@ public:
         } else if (plays_files(selected_)) {
             canvas.text(0, 105, "OK: PICK SAMPLE", 7);
         }
-        // And how SAMPLE's SLC cuts, on the page SLC is on.
-        if (engine_.machine_id(selected_) == uint8_t(MachineId::sample) &&
-            param_page_ == int(Page::src)) {
-            out = line;
+    }
+
+    // --- EDIT's pictures: the waveform and the envelopes -------------------
+    //
+    // docs/CONTROLS.md, "Waveforms and envelopes". Under the four knobs, rows 96-117, x 0-123
+    // (the frame's meter has 126-127): SAMPLE's and GRAIN's sample on their SRC page, and the
+    // envelope a page's knobs shape on AMP, ASR and a synth's FLTR. Nothing here walks sample
+    // memory: the waveform comes from the loader's overview (core/overview.hpp, 250 bytes) and
+    // the audio side's WaveView in Status, the envelopes from the knobs alone. One pass of at
+    // most kWaveColumns columns a frame.
+
+    enum class EditPicture : uint8_t { none, wave, amp, filter };
+
+    static constexpr int kPictureTop = 96;
+    static constexpr int kPictureRows = 22;              // rows 96-117: the bottom line is 120
+
+    EditPicture edit_picture() const {
+        const uint8_t id = engine_.machine_id(selected_);
+        const Page page = Page(param_page_);
+        if (page == Page::src && (id == uint8_t(MachineId::sample) || machine_is_grain(id))) {
+            return EditPicture::wave;
+        }
+        if (page == Page::amp && id != uint8_t(MachineId::midi)) return EditPicture::amp;
+        if (page == Page::asr && has_asr(selected_)) return EditPicture::amp;
+        if (page == Page::fltr && machine_has_voice_filter(id)) return EditPicture::filter;
+        return EditPicture::none;
+    }
+
+    // The one line over a picture, at y 87: what used to sit at 96 and 105 on these pages,
+    // shortened to the part that is not already drawn.
+    void draw_picture_line(enaga::Canvas &canvas, EditPicture picture) {
+        char line[40];
+        char *out = line;
+        const uint8_t id = engine_.machine_id(selected_);
+        const TrackParams &kit = engine_.params(selected_);
+        if (picture == EditPicture::wave && id == uint8_t(MachineId::sample)) {
+            // How SAMPLE's SLC cuts, on the page SLC is on.
             if (!slices_auto(selected_)) {
                 append(out, "PUSH SLC: AUTO SLICE");
             } else {
@@ -3673,8 +3710,263 @@ public:
                     append(out, hits == 1 ? " HIT" : " HITS");
                 }
             }
-            *out = 0;
-            canvas.text(0, 87, line, 7);          // between the knobs and the hints below
+        } else if (picture == EditPicture::wave) {
+            append(out, "OK: SOUNDS");                    // GRAIN: OK here opens its SOUNDS
+        } else if (Page(param_page_) == Page::asr) {
+            // Whether the note envelope holds, and if not what decides its length.
+            const bool sustains = kit.v[kAsrFirst + 1] > 0;
+            append(out, sustains          ? "HOLDS: PAD OR LEN"
+                        : machine_is_grain(id) ? "SUS 0: DEC DECIDES"
+                                               : "SUS 0: ONE-SHOT");
+        } else if (picture == EditPicture::filter) {
+            // FDE at 0 is tied to DEC, which the envelope then draws from.
+            append(out, kit.v[kSlotFdec] == 0 ? "FDE 0: 0.55 X DEC" : "FUNC+EDIT: MACHINE");
+        } else if (id == uint8_t(MachineId::sample)) {
+            append(out, "OK: PICK SAMPLE");
+        } else if (machine_is_grain(id)) {
+            append(out, "OK: SOUNDS");
+        } else {
+            append(out, "FUNC+EDIT: MACHINE");
+        }
+        *out = 0;
+        canvas.text(0, 87, line, 7);
+    }
+
+    // SAMPLE's or GRAIN's sample: each column's range as a bar about the middle row, scaled so
+    // the loudest column fills the height. SAMPLE adds its START..END window (bright, the rest
+    // dim), the window's two ends, a dotted tick at each slice start, and a column for each
+    // playing voice; GRAIN the bracket its next grain starts in and a tick for each grain in the
+    // air, each as bright as that grain is loud.
+    void draw_wave(enaga::Canvas &canvas) {
+        const WaveOverview &overview = storage_.overview(selected_);
+        const WaveView view = engine_.status().wave[selected_].read();
+        const bool grain = machine_is_grain(engine_.machine_id(selected_));
+        const int half = (kPictureRows - 2) / 2;              // 10 rows each way
+        const int middle = kPictureTop + 1 + half;
+        const int filled = overview.filled > kWaveColumns ? kWaveColumns : int(overview.filled);
+
+        int peak = 8;            // at least this, so near-silence is not blown up into noise
+        for (int x = 0; x < filled; x++) {
+            const int lo = -int(overview.lo[x]);
+            const int hi = int(overview.hi[x]);
+            peak = lo > peak ? lo : peak;
+            peak = hi > peak ? hi : peak;
+        }
+        const bool windowed = !grain && view.lo < kWaveColumns && view.hi < kWaveColumns;
+        for (int x = 0; x < kWaveColumns; x++) {
+            if (x >= filled) {
+                // A streamed file past its head: never read at load, so a dotted line.
+                if (x % 3 == 0) canvas.pixel(x, middle, 3);
+                continue;
+            }
+            const int up = int(overview.hi[x]) > 0 ? int(overview.hi[x]) * half / peak : 0;
+            const int down = int(overview.lo[x]) < 0 ? -int(overview.lo[x]) * half / peak : 0;
+            const bool inside = !windowed || (x >= view.lo && x <= view.hi);
+            canvas.rect(x, middle - up, 1, up + down + 1, inside ? 9 : 3);
+        }
+
+        if (grain) {
+            if (view.lo < kWaveColumns && view.hi < kWaveColumns) {
+                // The bracket the next grain starts in: corners top and bottom, SIZ wide.
+                const int x0 = view.lo;
+                const int x1 = view.hi > view.lo ? int(view.hi) : x0 + 1;
+                const int top = kPictureTop;
+                const int bottom = kPictureTop + kPictureRows - 1;
+                canvas.rect(x0, top, x1 - x0 + 1, 1, 13);
+                canvas.rect(x0, bottom, x1 - x0 + 1, 1, 13);
+                canvas.rect(x0, top, 1, 3, 13);
+                canvas.rect(x0, bottom - 2, 1, 3, 13);
+                canvas.rect(x1, top, 1, 3, 13);
+                canvas.rect(x1, bottom - 2, 1, 3, 13);
+            }
+            for (int i = 0; i < WaveView::kMarks; i++) {
+                if (view.mark[i] >= kWaveColumns || view.glow[i] == 0) continue;
+                canvas.rect(view.mark[i], middle - 6, 1, 13, view.glow[i] > 15 ? 15 : view.glow[i]);
+            }
+        } else {
+            for (int x = 0; x < kWaveColumns; x++) {
+                if (!wave_has_cut(view.cuts, x)) continue;
+                for (int y = kPictureTop; y < kPictureTop + kPictureRows; y += 2) {
+                    canvas.pixel(x, y, 12);
+                }
+            }
+            if (windowed) {
+                canvas.rect(view.lo, kPictureTop, 1, kPictureRows, 15);
+                canvas.rect(view.hi, kPictureTop, 1, kPictureRows, 15);
+            }
+            for (int i = 0; i < WaveView::kMarks; i++) {
+                if (view.mark[i] >= kWaveColumns || view.glow[i] == 0) continue;
+                canvas.rect(view.mark[i], kPictureTop, 1, kPictureRows,
+                            view.glow[i] > 15 ? 15 : view.glow[i]);
+            }
+        }
+
+        // No file of its own: it plays the placeholder, and says why.
+        if (!storage_.has_overview(selected_)) {
+            const char *why = storage_.loading_track() == selected_ ? "LOADING" : "NO FILE";
+            const int x = (kWaveColumns - 6 * 7) / 2;
+            canvas.rect(x - 2, middle - 4, 6 * 7 + 3, 9, 0);
+            canvas.text(x, middle - 3, why, 15);
+        }
+    }
+
+    // An envelope as the knobs shape it. Widths go by the knob, not the time it makes: every
+    // time curve here is exponential in its knob, so this is a log-time drawing, which is what
+    // lets 2 ms and 5 s share 124 pixels.
+    struct EnvelopePicture {
+        int atk = 0;             // knob bytes, 0-127: the segments' widths
+        int dec = 0;
+        int rel = 0;
+        int sus = 0;             // 0-127: the level the decay falls to, when the note holds
+        int peak = 127;          // 0-127: the top (ENV, on the filter's)
+        bool hold = false;       // the decay does not fall: DEC at its top (SAMPLE, GRAIN)
+        bool holds = false;      // a plateau, then a release: the note sustains
+        // The parameter behind each handle, -1 for none: its knob's letter is drawn there.
+        int atk_param = -1, dec_param = -1, sus_param = -1, rel_param = -1, peak_param = -1;
+    };
+
+    uint8_t heard(int index) const { return shown_param(index).heard; }
+
+    EnvelopePicture envelope_for(EditPicture picture) const {
+        EnvelopePicture e;
+        const uint8_t id = engine_.machine_id(selected_);
+        constexpr int kAtk = kAsrFirst, kSus = kAsrFirst + 1, kRel = kAsrFirst + 2;
+        constexpr int kFsu = kAsrFirst + 3;
+        if (id == uint8_t(MachineId::sample)) {
+            // ATK DEC on AMP; DEC at the top holds (dsp/sample.cpp).
+            e.atk = heard(8);
+            e.dec = heard(9);
+            e.hold = e.dec >= 127;
+            e.atk_param = 8;
+            e.dec_param = 9;
+            return e;
+        }
+        if (!has_asr(selected_)) {
+            // The drums: no attack, DEC to silence.
+            e.dec = heard(8);
+            e.dec_param = 8;
+            return e;
+        }
+        e.atk = heard(kAtk);
+        e.sus = heard(kSus);
+        e.rel = heard(kRel);
+        e.holds = e.sus > 0;
+        e.atk_param = kAtk;
+        e.sus_param = kSus;
+        e.rel_param = kRel;
+        if (machine_is_grain(id)) {
+            // GRAIN's DEC is on AMP's third knob; at the top it holds (dsp/grain.cpp), and the
+            // cloud then fades over REL when the note ends.
+            e.dec = heard(10);
+            e.dec_param = 10;
+            e.hold = e.dec >= kGrainDecayHold && !e.holds;
+            e.holds = e.holds || e.hold;
+            return e;
+        }
+        e.dec = heard(8);                                 // DEC, slot 8 on the VAs and FM4
+        e.dec_param = 8;
+        if (picture == EditPicture::filter) {
+            // The filter's: ATK shared, FDE (or 0.55 x DEC, tied), FSU, ENV as its height.
+            const int fde = heard(kSlotFdec);
+            e.dec = fde == 0 ? e.dec * 55 / 100 : fde;
+            e.dec_param = kSlotFdec;
+            e.sus = heard(kFsu);
+            e.sus_param = kFsu;
+            e.peak = heard(9);
+            e.peak_param = 9;
+        }
+        return e;
+    }
+
+    // The knob letter for a parameter on the page on screen, or 0 when no knob here turns it.
+    char knob_letter(int param) const {
+        if (param < 0) return 0;
+        for (int slot = 0; slot < 4; slot++) {
+            if (edit_index(slot) == param) return char('A' + slot);
+        }
+        return 0;
+    }
+
+    void draw_envelope(enaga::Canvas &canvas, const EnvelopePicture &e) {
+        const int bottom = kPictureTop + kPictureRows - 1;
+        const int span = kPictureRows - 1;
+        // Segment ends: attack up to 26 px, decay 2-40, a 14 px plateau and a 2-40 px release
+        // when the note holds. 1 + 26 + 40 + 14 + 40 = 121 < kWaveColumns.
+        const int xa = 1 + e.atk * 26 / 127;
+        const int xd = xa + 2 + e.dec * 38 / 127;
+        const int xs = xd + (e.holds ? 14 : 0);
+        const int xr = xs + (e.holds ? 2 + e.rel * 38 / 127 : 0);
+        const float settle = e.hold ? 1.0f : (e.holds ? float(e.sus) * (1.0f / 127.0f) : 0.0f);
+        const float top = float(e.peak) * (1.0f / 127.0f);
+
+        // The floor, dim, across the width.
+        canvas.rect(0, bottom, kWaveColumns, 1, 2);
+
+        // The curve as a function of x, each column joined to the last so a steep fall has no
+        // gaps. An exponential fall to 1% is drawn as (1 - t)^3, near enough to read.
+        int last = bottom;
+        for (int x = 0; x <= xr; x++) {
+            float level;
+            if (x <= 1) {
+                level = xa == 1 ? 1.0f : 0.0f;
+            } else if (x <= xa) {
+                level = float(x - 1) / float(xa - 1);
+            } else if (x <= xd) {
+                const float u = 1.0f - float(x - xa) / float(xd - xa);
+                level = e.hold ? 1.0f : settle + (1.0f - settle) * u * u * u;
+            } else if (x <= xs) {
+                level = settle;
+            } else {
+                const float u = 1.0f - float(x - xs) / float(xr - xs);
+                level = settle * u * u * u;
+            }
+            const int y = bottom - int(level * top * float(span) + 0.5f);
+            const int from = y < last ? y : last;
+            const int to = y < last ? last : y;
+            canvas.rect(x, from, 1, to - from + 1, 13);
+            last = y;
+        }
+
+        // The handles a knob on this page moves, with its letter, as CyDrums draws them.
+        const int sus_y = bottom - int(settle * top * float(span) + 0.5f);
+        const int top_y = bottom - int(top * float(span) + 0.5f);
+        struct Handle { int x, y, param; };
+        const Handle handles[] = {
+            {xa, top_y, e.atk_param},  {xa, top_y, e.peak_param}, {xd, sus_y, e.dec_param},
+            {(xd + xs) / 2, sus_y, e.sus_param}, {xr, bottom, e.rel_param},
+        };
+        int placed_x[5];
+        int placed_y[5];
+        int placed = 0;
+        for (const Handle &h : handles) {
+            const char letter = knob_letter(h.param);
+            if (letter == 0) continue;
+            const int hy = h.y - 1 < kPictureTop ? kPictureTop
+                           : (h.y + 1 > bottom ? bottom - 2 : h.y - 1);
+            canvas.rect(h.x - 1 < 0 ? 0 : h.x - 1, hy, 3, 3, 15);
+            // Above the handle when there is room, else beside it; never on another letter.
+            int ly = h.y - 10 >= kPictureTop ? h.y - 10 : kPictureTop;
+            const auto clashes = [&](int lx) {
+                for (int i = 0; i < placed; i++) {
+                    // A glyph is 5 x 7 and the layout check wants 4 px between strings.
+                    if (lx < placed_x[i] + 9 && placed_x[i] < lx + 9 && ly < placed_y[i] + 11 &&
+                        placed_y[i] < ly + 11) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            const int right = kWaveColumns - 6;
+            int lx = h.x + 3 > right ? right : h.x + 3;
+            while (lx < right && clashes(lx)) lx = lx + 9 > right ? right : lx + 9;
+            for (int left = h.x + 3 - 9; clashes(lx) && left >= 1; left -= 9) lx = left;
+            if (clashes(lx)) continue;                    // no room: the handle alone
+            const char text[2] = {letter, 0};
+            canvas.rect(lx - 1, ly - 1, 7, 9, 0);
+            canvas.text(lx, ly, text, 11);
+            placed_x[placed] = lx;
+            placed_y[placed] = ly;
+            placed++;
         }
     }
 
