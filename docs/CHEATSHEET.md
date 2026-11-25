@@ -38,8 +38,8 @@ pads and the performance mixer.
 | --- | --- | --- |
 | GRID | HOME (from anywhere) | All 8 tracks; STEP keys edit the selected track |
 | KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys steps, on the selected track |
-| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, chain, song, auto-fill, quantize, freeze, loop length, load demo |
-| EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE and FM4 machines ASR and OSC |
+| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, track play, chain, song, auto-fill, quantize, FX glide, freeze, loop length, load demo |
+| EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE, FM4 and GRAIN machines ASR and OSC |
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
 | SAMPLES | FUNC+PROJECT ("pool"), or OK in EDIT or MACHINE on a SMP track, OK in MACHINE on a GRN track | Pick the track's WAV from `/SAMPLES` or `/RECORD` |
@@ -91,7 +91,7 @@ each line means.
 | FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu; hold to repeat |
 | Arrow pad | UP/DOWN move through rows, LEFT/RIGHT sideways, OK picks, CLR goes back |
 | Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn) |
-| Pad-row keys L/R | Which 16 the STEP keys mean: step page (also KEYS, PERFORM), bank (PROJECT, CHAIN) |
+| Pad-row keys L/R | Which 16 the STEP keys mean: step page (GRID, KEYS, PERFORM, EDIT and the other editing screens), bank (PROJECT, CHAIN) |
 | FUNC + UP / DOWN | Copy / paste while editing; in the card lists, read again / store here |
 | FUNC held alone | Help for this screen: what A-D do here and its gestures. Keep holding FUNC: screen keys (or LEFT/RIGHT) turn the pages; the last five are FUNC + each function key, FUNC + a knob or pad, the upper pads, and the VALUE mixer's gestures and slots |
 
@@ -130,14 +130,14 @@ a time; nothing of it is saved or undone.
 | Tap VALUE (let go within 0.5 s) | Back to 0, riding over FX GLIDE: the effect's amount, the loop's mix; or the morph (`MORPH 0`, in PERFORM or with slot 13 picked). Never the tempo or swing. FUNC + tap: a cut |
 | Push VALUE + CLR | Everything off, loop mix 0, riding (`FX OFF`); again: the loop is thrown away (`LOOP CLEARED`) |
 | FUNC menu FX GLIDE | How long those button jumps (and a slot change, leaving a playing loop, a LOCK jump) ride: OFF, 1/16, 1 BEAT (default), 1 BAR. Turning VALUE never glides |
-| VALUE held | The STEP keys show the slots: dim amber, the picked one bright amber, VALUE's bright green |
+| VALUE held | The STEP keys show the slots: dim amber, the effect that is up bright amber, the one VALUE is on bright green; STEP 16 red blinking armed, red recording, green holding a loop |
 
 Slots: 1 LP SWEEP · 2 HP SWEEP · 3 HP RISER · 4 ECHO RISER · 5 ECHO FREEZE · 6 REVERB WASH ·
 7 MUTE BUS · 8 TAPE STOP · 9 BASS KILL · 10 PUMP · 11 CRUSH · 12 NOISE RISER · 13 MORPH ·
 14 GATE · 15 BUILD · 16 LOOPER. While a loop is held, RESAMPLE and FREEZE say
 `LOOP HOLDS BUFFER`. In MUTE MODE, push VALUE + STEP 1-8 stores a mute state instead.
 
-## Step editing (GRID, EDIT, MIXER, MACHINE, RESAMPLE)
+## Step editing (GRID, KEYS, PERFORM, EDIT, MIXER, MACHINE, RESAMPLE)
 
 | Gesture | Action |
 | --- | --- |
@@ -171,7 +171,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GRID | Track | Step page 1-4 | EDIT page (for A-D) | Step page | Current EDIT page params | — / clear | Copy / paste |
 | EDIT | Track | Page SRC FLTR AMP FX LFO ARP ASR OSC | Page | Step page | The page's 4 params | SMP: open SAMPLES; drums, synths and GRN: open SOUNDS / clear | Copy / paste |
-| KEYS | Track | Octave (OCT 0-7) | EDIT page (for A-D) | Octave | Current EDIT page params | — | Copy / paste |
+| KEYS | Track | Octave (OCT 0-7) | EDIT page (for A-D) | Step page | Current EDIT page params | — | Copy / paste |
 | MACHINE | Machine | Machine column (3 over) | Track | Step page | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES; drums and synths: open SOUNDS / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | — | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
 | MIXER | — | Page (12) | Page | Step page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode | — / clear | Copy / paste |
@@ -181,16 +181,19 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | PROJECT | Slot cursor by row | Slot cursor | Page: PROJECT CHAIN PATTERN SETUP PROJECTS | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | — (FUNC menu) |
 | CHAIN | Entry | Entry's pattern -/+ | Page | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8 | Add entry / remove entry (twice; empty: back) | — (FUNC menu) |
 | PATTERN | Change field -/+ | Field LEN / SWG / track 1-8 swing | Page | Bank A-H | A: LEN 1-64, B: SWG, C: track swing (PAT, 50-75) | — / back | — |
-| PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | — | Macros A-D | Capture scene / clear macro | — (auto-fill: FUNC menu) |
+| PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Step page | Macros A-D (push: MACRO LEARN) | Capture scene / clear macro | — (auto-fill: FUNC menu) |
 | FUNC menu | Row | Change a setting row | — | — | A: row, B: change | Run the row / close | — |
 
 **STEP lights:** a trig is green as bright as its velocity (soft, medium, loud, accent), blinks with a condition or probability, is amber with locks; red = trigless, bright red = the playhead.
-**KEYS:** the pads are a piano: lower 1-8 C D E F G A B C, upper C# D# (octave down) F# G# A# (octave up), at the pad's velocity, held while down, pressure bends macro A; lit as a keyboard (root bright, scale dim, held white); FUNC + pad keeps its usual job. STEP 1-16 play the scale from the root and hold the note until released; the pad-row keys (or LEFT/RIGHT) change the octave of both. Letting go also releases that note if the sequencer is playing it on the same track.
+**KEYS:** the pads are a piano: lower 1-8 C D E F G A B C, upper C# D# (octave down) F# G# A# (octave up), at the pad's velocity, held while down, pressure bends macro A; lit as a keyboard (root bright, scale dim, held white); FUNC + pad keeps its usual job. The STEP keys are the track's steps, as on GRID, and the pad-row keys their step page; LEFT/RIGHT or the two octave pads change the octave. Letting go of a pad also releases that note if the sequencer is playing it on the same track.
 **PROJECT:** STEP 1-16 queue that slot of the shown bank; the pad-row keys change the shown
-bank. The screen keys walk the pages PROJECT, CHAIN, PATTERN, SETUP, PROJECTS; CLR on any of
+bank. On the slots a tap on OK queues the one under the cursor and a hold (0.5 s) opens the
+pattern menu: COPY, PASTE, CLEAR, DOUBLE (doubles every track up to 64 steps, copying the steps).
+The screen keys walk the pages PROJECT, CHAIN, PATTERN, SETUP, PROJECTS; CLR on any of
 them goes back to the slots. In SETUP, A sets the record quantize. Chain on/off, the sample
-reload, RELOAD PROJECT and NEW PROJECT are in the FUNC menu (FUNC+HOME); the last two throw away
-unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN FOR NEW).
+reload, RELOAD PROJECT, NEW PROJECT and LOAD DEMO are in the FUNC menu (FUNC+HOME); the last
+three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN
+FOR NEW, OK AGAIN FOR DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
 **FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, CLEAR
 PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, TRACK PLAY, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, FX GLIDE, FREEZE, LOOP
 LEN, LOAD DEMO. It always opens on SAVE, and the list wraps: UP once is LOAD DEMO, twice LOOP LEN, three times FREEZE, four times FX GLIDE. UP/DOWN or A
@@ -216,8 +219,8 @@ sets the one under `>`, or the selected track's when `>` is on LEN or SWG.
 FUNC+STEP 5-7 the master kill EQ's LOW, MID or HI (`A EQ LOW`). OK's whole capture also stores the
 kill EQ's three knobs, so the morph can sweep them. A macro
 at 0 lets go: its parameters follow their EDIT knobs and the morph, and turning it up sweeps from
-wherever they are. A new project has B ACID (bass filter), C DUB (chord and rim sends) and D DRIVE
-(kick and hats); A is left for you, and pad pressure bends it. VALUE is the A/B morph (at rest it lets go, like a macro at 0, so EDIT knobs always work); OK captures into scene A's slot (with a scene pad held: that scene, selected
+wherever they are. The demo project has B ACID (bass filter), C DUB (chord and rim sends) and D DRIVE
+(kick and hats), a NEW PROJECT none; A is left for you, and pad pressure bends it. VALUE is the A/B morph (at rest it lets go, like a macro at 0, so EDIT knobs always work); OK captures into scene A's slot (with a scene pad held: that scene, selected
 track only); scene pad + CLR erases it. Mutes, mute states and the A/B scene choice are saved with
 the project.
 **KIT:** a kit is everything KIT.BIN holds: the eight machines, their parameters, the faders and
@@ -237,8 +240,8 @@ there: steps, chords, ratchets, arp hits, note repeat, pads, KEYS and MIDI IN. M
 itself; its SRC and AMP knobs send CC 74 71 73 72 and 70 75 76 77 when they move (locks too), and
 its LFO sends its destination's CC as it moves, at most every 20 ms.
 Notes end with their step length, a key or note let go, a mute, STOP; the second STOP and
-FUNC+STOP also send All Notes Off. Enaga 0.2.0: unplug USB (or keep its MIDI port open on the
-computer) when driving gear from the DIN jack.
+FUNC+STOP also send All Notes Off. On Enaga 0.2.0 (STRATA v0.1.0-v0.3.1): unplug USB (or keep its
+MIDI port open on the computer) when driving gear from the DIN jack; Enaga 0.3.0 fixes it.
 **MIDI in:** channels 1-8 play tracks 1-8, other channels play the selected track. Notes are
 held until their note-off. CC 16-31 set the track's 16 parameters (SRC, FLTR, AMP, FX in order);
 CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pattern A01-H16.
@@ -283,7 +286,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 **Machines:** KCK kick · SNR snare · HAT hat · PRC 2-op FM percussion · SMP sampler · GRN granular ·
 MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 four-operator FM.
 
-**EDIT pages:** SRC source · FLTR filter (insert chain) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ASR held notes and OSC oscillators (VA, WAVE and FM4 machines).
+**EDIT pages:** SRC source · FLTR filter (the insert chain's; on the VA and WAVE machines the voice's own) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ASR held notes and OSC oscillators (VA, WAVE, FM4 and GRAIN machines).
 **LFO page:** WAV shape SIN TRI RMP (rising) SAW (falling) SQR S+H · RAT rate, `0.06`-`32` Hz free on the lower half, `8B` (bars) to `1/32` synced on the upper (`.` dotted, `T` triplet) · DEP depth, 127 = about 64 either side · DST the parameter it moves, or OFF. Lockable, scene- and macro-able like any parameter.
 **ASR page (VA and WAVE machines; FM4's is below):** ATK attack `3MS`-`5.0S` · SUS sustain `0%` (one-shot: DEC is the length) to `100%` · REL release `60MS`-`8.0S` · FSU filter sustain (0 = the sweep closes, up = stays open). SUS up: a note holds while the pad or key is held, or for the step's LEN (MONO counts LEN only then). Pad: SUS 70%, ATK 400MS, REL 2.0S, chord step LEN 16 STP. REC records how long a held note was held as its step's LEN.
 **OSC page (VA MONO, VA POLY):** WAV `SAW` (0-31), `SQR` (32) to `P08` (127, a thin pulse) · OS2 `OFF` (0), `D0`-`D60` a detuned second saw in cents (1-63: chorus to Reese), `S+0`-`S+24` a pulse synced to OSC 1 (64-127: the sync sweep) · SUB the sub an octave down (0 = off) · DRV drive into the filter, thicker and dirtier, not louder. RES (SRC) self-oscillates near the top.
