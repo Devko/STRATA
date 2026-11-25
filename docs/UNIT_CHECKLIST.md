@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W28, about 75 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W29, about 75 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -241,8 +241,8 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
   does not bring the mutation back.
 - A02 (PROJECT, STEP 2): no `L` there; tapping says `NO LOCK: HOLD STORES`. Back on A01, `L` again.
 - Push VALUE + STEP 4, turn ECHO RISER to about 100, then tap VALUE: `ECHO RISER 0`, and it rides
-  out over one beat instead of cutting. FUNC + tap VALUE on another try: a hard cut. Musical? `____`
-- With ECHO up, push VALUE + STEP 10: the echo rides out over the beat, then PUMP is picked.
+  out within a 1/16 instead of cutting. FUNC + tap VALUE on another try: a hard cut. Musical? `____`
+- With ECHO up, push VALUE + STEP 10: the echo rides out over a 1/16, then PUMP is picked.
   Push VALUE + RIGHT with PUMP up: a crossfade to CRUSH over a beat.
 - Hold VALUE pushed and **hold** STEP 6 (WASH): after a moment the wash swells to full while held,
   and rides out when you let go of the STEP; WASH stays picked. A quick tap of STEP 6 lets it go.
@@ -348,6 +348,12 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   grains come and go, brighter when louder. Turn A (POS) and B (SIZ): the bracket follows. `____`
 - Screen still smooth at 20 fps with all eight tracks playing and a 30 s file loaded? Keys never
   dropped while a long file loads? `____`
+
+**W29. The mixer back to rest in a 1/16 (5 s each).** Beat playing, A01, FX GLIDE `1 BEAT`.
+- Push VALUE + STEP 4, turn ECHO RISER to about 100, tap VALUE: the echo is gone within a 1/16,
+  smoothly, no click. Before, it took the whole beat. `____`
+- Hold VALUE pushed and hold STEP 6 (WASH): it still swells in over the beat; let go of the STEP:
+  out within a 1/16. Same with VALUE + CLR. Short enough, and still click-free? `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

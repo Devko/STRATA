@@ -125,6 +125,11 @@ const char *perf_glide_name(PerfGlide glide);
 // The glide's length in ms at `bpm` (clamped to 20-300). 0 for OFF.
 uint32_t perf_glide_ms(PerfGlide glide, float bpm);
 
+// A ride back to rest (to amount 0: a let-go, a reset, a new slot over the old one) is shorter:
+// FX GLIDE but at most a 1/16 at `bpm`, so a release clears in time for the next beat while a
+// ride in keeps its length (Roland on the unit, 2026-11-25). 0 for OFF, as above.
+uint32_t perf_release_ms(PerfGlide glide, float bpm);
+
 // One ride, from the effect and amount the engine has now to a target. Rides run in the UI
 // (it owns the amount, as it owns the morph), which posts each new value as it comes.
 struct PerfRide {

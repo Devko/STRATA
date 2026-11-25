@@ -110,6 +110,10 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Changed
 
+- **The performance mixer goes back to rest faster.** A button that sends an effect or the
+  loop's mix to 0 (tap VALUE, push VALUE + CLR, a new slot over the old one, letting go of a
+  momentary push, leaving a loop, a LOCK jump) now rides out over at most a 1/16 at the tempo
+  instead of the whole FX GLIDE; rides in keep FX GLIDE's length. OFF still cuts.
 - **FUNC + lower pad mutes every pad you press before the bar**, not only the last one; the same
   pad twice takes it back. Stopped, it mutes at once.
 - **A cutoff stops at about 100 Hz (D9)** when an LFO or a lock sweeps it down, instead of

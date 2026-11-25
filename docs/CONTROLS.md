@@ -208,13 +208,13 @@ slots, `dsp/masterfx.hpp` the five new effects, `dsp/looper.hpp` the looper.
 | --- | --- |
 | Push VALUE + STEP n | Pick effect n (`4 ECHO RISER`), at amount 0. It replaces the effect that was up, which rides out over FX GLIDE |
 | Push VALUE + the same STEP | Let go, on the release (`FX OFF: VALUE TEMPO`): VALUE goes back to tempo / morph / its field; the effect rides out |
-| Push VALUE + hold a STEP | **The momentary push**: held 0.3 s, the picked effect rises to 127 over FX GLIDE while the STEP is held (`ECHO RISER 127`), and rides out to 0 on release, still picked. A quick tap still just picks |
+| Push VALUE + hold a STEP | **The momentary push**: held 0.3 s, the picked effect rises to 127 over FX GLIDE while the STEP is held (`ECHO RISER 127`), and rides out to 0 over a 1/16 on release, still picked. A quick tap still just picks |
 | VALUE (an effect picked) | Its amount, 0 dry ... 127 the whole effect, on every screen (`ECHO RISER 64`). At 0 it is the dry mix to the bit, the rest rule of the morph and the macros |
 | Push VALUE + LEFT / RIGHT | The previous / next slot, round the sixteen, keeping the amount: a scene change with the crossfader left up, crossfaded over FX GLIDE (the old one out in the first half, the new one in over the second). Reaching 16 picks the looper without recording |
 | Push VALUE + STEP 13 | The morph (D2): the same A/B morph PERFORM's VALUE turns, on every screen (`MORPH 0`, then `MORPH 64` as it turns). A control, not an effect: the effect that was up stays as it is. Again: let go, the morph stays where it is (`MORPH KEPT: VALUE TEMPO`) |
 | Push VALUE + STEP 16 | The looper: records the finished mix from the next bar line for LOOP LEN bars (`LOOP 4 BAR: NEXT BAR`, `LOOP ARMED: PLAY` when stopped), then plays it. Again: leaves the looper, VALUE back to the tempo (`LOOP OFF: VALUE TEMPO`); the loop is kept silent, STEP 16 picks it up, VALUE + CLR throws it away. Again while armed or recording: `LOOP CANCELLED` |
 | VALUE (looper picked) | The loop's mix, 0 live ... 127 only the loop (`LOOP MIX 64`) |
-| Press VALUE alone | The picked effect rides back to 0 over FX GLIDE (`ECHO RISER 0`), or the looper's mix (`LOOP MIX 0`); the effect stays picked. **FUNC + press VALUE** cuts at once, for a drop |
+| Press VALUE alone | The picked effect rides back to 0 over at most a 1/16 (`ECHO RISER 0`), or the looper's mix (`LOOP MIX 0`); the effect stays picked. **FUNC + press VALUE** cuts at once, for a drop |
 | Push VALUE + CLR | Every effect off and the loop's mix to 0, riding (`FX OFF`); again, with all of that off, throws the loop away (`LOOP CLEARED`) |
 | VALUE held | The STEP keys are the sixteen slots: dim amber; the effect that is up bright amber; the picked one bright green; STEP 16 red blinking armed, red recording, green holding a loop |
 
@@ -230,7 +230,9 @@ echo and noise), 16 LOOPER. Until 2026-11-25 slot 7 was STUTTER (the REPEAT pad 
 
 - **FX GLIDE** (FUNC menu): a jump that comes from a button (press VALUE, push VALUE + CLR, a
   slot change, leaving a playing loop, a LOCK jump) rides to its target over OFF, 1/16, 1 BEAT
-  (the default) or 1 BAR at the tempo. Turning VALUE is already a ride your hand makes and never
+  (the default) or 1 BAR at the tempo. A ride back to rest (to 0: a VALUE tap, VALUE + CLR, the
+  old effect on a slot change, a momentary push let go, a LOCK jump) is shorter: at most a 1/16,
+  so the dry sound is back for the next beat. Turning VALUE is already a ride your hand makes and never
   glides; a turn during a ride takes over from where it got to. FUNC held makes any of them a cut.
   Every depth is also smoothed over about 11 ms on the audio side, so OFF is a click-free cut.
 - **One effect at a time**, plus the looper and the morph: picking an effect leaves a loop
