@@ -244,8 +244,8 @@ void open_keys() {
 
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
-                     kMenuKits, kMenuSample, kMenuSpeed, kMenuChain, kMenuSong, kMenuAutofill,
-                     kMenuQuantize, kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo,
+                     kMenuKits, kMenuSample, kMenuSpeed, kMenuPlay, kMenuChain, kMenuSong,
+                     kMenuAutofill, kMenuQuantize, kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo,
                      kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
@@ -8902,6 +8902,102 @@ TEST(ui_samples_the_browser_shows_the_waveform_of_what_the_track_plays) {
     check_layout(app, "SAMPLES with the waveform strip");
     key(ENAGA_KEY_CLR);
     back_to_a_kick();
+}
+
+// --- play modes -------------------------------------------------------------
+
+// The FUNC menu's TRACK PLAY row, next to TRACK SPEED: the selected track's play mode, LEFT and
+// RIGHT along FWD .. RND16 with stops at the ends, OK round. One undo level a change.
+TEST(ui_the_menu_track_play_row_walks_the_play_modes_and_undoes) {
+    Strata &app = fresh();
+    const Pattern &pattern = app_engine().pattern();
+    CHECK_EQ(int(pattern.tracks[0].play), int(PlayMode::fwd));
+
+    menu_to(kMenuPlay);
+    CHECK(screen_has(app, "TRACK PLAY"));
+    CHECK(screen_has(app, "T1 FWD"));
+    key(ENAGA_KEY_LEFT);                                 // FWD is an end
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].play), int(PlayMode::fwd));
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].play), int(PlayMode::rev));
+    CHECK_EQ(UiProbe::notice(app), "T1 PLAY REV");
+    CHECK(screen_has(app, "T1 REV"));
+    for (int i = 0; i < 10; i++) {                       // stops on RND16
+        key(ENAGA_KEY_RIGHT);
+        pump(2);
+    }
+    CHECK_EQ(int(pattern.tracks[0].play), int(PlayMode::rnd16));
+    check_layout(app, "FUNC menu, TRACK PLAY");
+    key(ENAGA_KEY_OK);                                   // OK goes round
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].play), int(PlayMode::fwd));
+    CHECK_EQ(int(pattern.tracks[1].play), int(PlayMode::fwd));   // the selected track only
+
+    shift_key(ENAGA_KEY_CLR);                            // undo: back to RND16
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].play), int(PlayMode::rnd16));
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+    post_track(Cmd::set_track_play, 0, uint8_t(PlayMode::fwd));
+    pump(2);
+}
+
+// Under REV, a note recorded in a time slot goes to the step that plays in that slot, so it
+// plays back where it was played: slot s of a 16-step track is step 15 - s.
+TEST(ui_a_note_recorded_under_reverse_lands_on_the_step_playing_in_that_slot) {
+    Strata &app = fresh();
+    post_track(Cmd::set_track_length, 0, 16);
+    pump(2);
+    open_keys();
+    FakeHost &host = FakeHost::the();
+
+    int slot = -1;
+    for (int pass = 0; pass < 2; pass++) {
+        post_track(Cmd::track_erase, 0, 0);
+        post_track(Cmd::set_track_play, 0, uint8_t(pass == 0 ? PlayMode::fwd : PlayMode::rev));
+        pump(2);
+        host.set_running(true);
+        host.set_position(96);
+        key(ENAGA_KEY_F2);                                 // REC on
+        app.on_pad_press(8, 90);
+        app.on_pad_release(8);
+        pump(2);
+        key(ENAGA_KEY_F2);
+        host.set_running(false);
+        int where = -1, trigs = 0;
+        for (int s = 0; s < kStepsPerTrack; s++) {
+            if (trig_at(0, s)) { trigs++; where = s; }
+        }
+        CHECK_EQ(trigs, 1);
+        if (pass == 0) slot = where;                       // forward: the slot is the step
+        else CHECK_EQ(where, 15 - slot);
+    }
+    CHECK(slot >= 0);
+    post_track(Cmd::set_track_play, 0, uint8_t(PlayMode::fwd));
+    pump(2);
+}
+
+// The layout echo names the play mode when it is not FWD, and stays inside 21 characters.
+TEST(ui_the_length_echo_names_a_play_mode_other_than_forward) {
+    Strata &app = fresh();
+    post_track(Cmd::set_track_length, 0, 64);
+    post_track(Cmd::set_track_speed, 0, uint8_t(Speed::x3_4));
+    post_track(Cmd::set_track_play, 0, uint8_t(PlayMode::rnd16));
+    pump(2);
+    key(ENAGA_KEY_F8);                                     // EDIT, where nothing else shows it
+    shift_key(ENAGA_KEY_OCTAVE_LEFT);                      // FUNC + LEN-: 63, and the echo
+    pump(2);
+    CHECK(screen_has(app, "T1 LEN 63 X3/4 RND16"));
+    check_layout(app, "EDIT, length with a play mode");
+    post_track(Cmd::set_track_play, 0, uint8_t(PlayMode::fwd));
+    shift_key(ENAGA_KEY_OCTAVE_RIGHT);
+    pump(2);
+    CHECK(screen_has(app, "T1 LEN 64 X3/4"));
+    CHECK(!screen_has(app, "FWD"));
+    post_track(Cmd::set_track_speed, 0, uint8_t(Speed::x1));
+    pump(2);
 }
 
 // --- FX GLIDE: the mixer's button jumps ride (core/perffx.hpp) ---------------------------------

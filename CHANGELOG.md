@@ -13,6 +13,13 @@ the project file format or the controls.
   the sample with a bracket at POS and a tick for each grain in the air. AMP, ASR and the synths'
   FLTR draw the envelope their knobs shape, with the knob letters on its handles. The picture of
   a sample is made once while it loads (250 bytes a track), so drawing costs nothing.
+- **Play modes per track (P1).** The FUNC menu's new TRACK PLAY row, under TRACK SPEED, sets how
+  the selected track walks its steps: FWD, REV, PING, or RND1-RND16 (a random step, or a random
+  block of 2-16 steps, in each place). The pattern itself never changes, so FWD gives it back at
+  once. Swing stays on the grid; micro-timing, conditions, probability, ratchets and locks go with
+  their step. The random order is seeded from the pattern, so it repeats after a STOP or a reload.
+  Stored per track in each pattern; older projects load with every track FWD, and older builds
+  open new projects and play them forward.
 - **LOCK on FUNC + MUTATE (D3, D4, D13, D14).** Hold it half a second to store the playing
   pattern's lock (`LOCK A01 STORED`): the pattern whole, every track's sound and fader, the sends,
   the master, the mutes, and the morph and macro positions. Tap it to jump back at once

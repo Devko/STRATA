@@ -896,6 +896,17 @@ track. The FUNC menu's CLEAR PATTERN (OK twice) clears every track at once. Hold
 
 - `FUNC + pad-row keys`: the selected track's length, 1-64 steps.
 - The FUNC menu's TRACK SPEED row: its speed, 2x, 1x, 3/4, 1/2, 1/4, 1/8 (LEFT/RIGHT).
+- The FUNC menu's TRACK PLAY row, under it: the order the track plays its steps in, without
+  changing them. **FWD** as written; **REV** backwards; **PING** forward one pass and backward
+  the next (the two end steps sound twice at the turn, so a 16-step track still turns every
+  bar); **RND1** a random step in every slot; **RND2, RND4, RND8, RND16** cut the track into
+  blocks of that many steps and play a random block in each block's place, its steps in order
+  (RND4 swaps beats, RND16 on a 64-step track swaps bars; steps past the last whole block play
+  in place). Swing stays on the grid; everything else a step holds (micro-timing, condition,
+  probability, ratchet, locks) goes with it. The random order comes from the pattern's seed, so
+  the same pattern plays the same bars after STOP and PLAY or a reload, and differs bar to bar.
+  Recording under a play mode puts the note on the step playing at that moment. FWD gives the
+  pattern back exactly as it was.
 - `VALUE push + turn`: the pattern's swing, 50-75%, on the even 16ths.
 - PROJECT, screen key RIGHT twice: the **PATTERN** page, where A sets the master length (LEN) and B
   the swing (SWG).

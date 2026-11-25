@@ -159,7 +159,8 @@ namespace {
 constexpr uint32_t kTableBytes = kPatternSections * kSectionEntryBytes;
 constexpr uint32_t kHeaderSectionOffset = kTableBytes;
 constexpr uint32_t kTracksSectionOffset = kHeaderSectionOffset + kPatternHeaderSectionBytes;
-constexpr uint32_t kLocksSectionOffset = kTracksSectionOffset + kTracksSectionBytes;
+constexpr uint32_t kPlayModesSectionOffset = kTracksSectionOffset + kTracksSectionBytes;
+constexpr uint32_t kLocksSectionOffset = kPlayModesSectionOffset + kPlayModesSectionBytes;
 static_assert(kHeaderBytes + kLocksSectionOffset == kPatternFixedBytes,
               "the fixed part of a pattern file is not the sum of its sections");
 
@@ -223,6 +224,11 @@ SerializeResult pattern_write(const Pattern &pattern, uint8_t *buffer, uint32_t 
     w.u32(kTracksSectionOffset);
     w.u32(kTracksSectionBytes);
 
+    w.u16(kSectionPlayModes);
+    w.u16(0);
+    w.u32(kPlayModesSectionOffset);
+    w.u32(kPlayModesSectionBytes);
+
     w.u16(kSectionLocks);
     w.u16(0);
     w.u32(kLocksSectionOffset);
@@ -263,6 +269,9 @@ SerializeResult pattern_write(const Pattern &pattern, uint8_t *buffer, uint32_t 
             running += count;
         }
     }
+
+    // The play modes, between the tracks and the variable-length lock pool.
+    for (int t = 0; t < kTracks; t++) w.u8(pattern.tracks[t].play);
 
     // Pass two: the pool itself, in the same order.
     running = 0;
@@ -324,12 +333,13 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
     const uint32_t table = sections * kSectionEntryBytes;
     if (table > payload) return refuse(SerializeResult::malformed);
 
-    // The three sections a pattern needs; ids this build does not know are skipped, which is
-    // what the offsets in the table are for.
-    const uint16_t wanted[3] = {kSectionPatternHeader, kSectionTracks, kSectionLocks};
-    uint32_t offset[3] = {0, 0, 0};
-    uint32_t length[3] = {0, 0, 0};
-    bool found[3] = {false, false, false};
+    // The three sections a pattern needs, then the optional play modes; ids this build does not
+    // know are skipped, which is what the offsets in the table are for.
+    const uint16_t wanted[4] = {kSectionPatternHeader, kSectionTracks, kSectionLocks,
+                                kSectionPlayModes};
+    uint32_t offset[4] = {0, 0, 0, 0};
+    uint32_t length[4] = {0, 0, 0, 0};
+    bool found[4] = {false, false, false, false};
 
     for (uint32_t i = 0; i < sections; i++) {
         if (!r.seek(kHeaderBytes + i * kSectionEntryBytes)) {
@@ -345,7 +355,7 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
         if (at < table || at > payload || len > payload - at) {
             return refuse(SerializeResult::malformed);
         }
-        for (int k = 0; k < 3; k++) {
+        for (int k = 0; k < 4; k++) {
             if (id != wanted[k]) continue;
             if (found[k]) return refuse(SerializeResult::malformed);   // the same id twice
             offset[k] = at;
@@ -357,6 +367,8 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
 
     if (length[0] < kPatternHeaderSectionBytes) return refuse(SerializeResult::malformed);
     if (length[1] < kTracksSectionBytes) return refuse(SerializeResult::malformed);
+    // Present but short is damage, not an old file: a writer that declared it declared 8 bytes.
+    if (found[3] && length[3] < kPlayModesSectionBytes) return refuse(SerializeResult::malformed);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
 
     const uint8_t tracks = r.u8();
@@ -437,6 +449,17 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
     }
     if (!r.ok()) return refuse(SerializeResult::truncated);
     pattern.locks_used = lock_total;
+
+    // Absent: a pattern from before play modes, and pattern_init left every track FWD. An
+    // unknown mode (a newer build's) plays forward too, rather than being guessed at.
+    if (found[3]) {
+        if (!r.seek(kHeaderBytes + offset[3])) return refuse(SerializeResult::malformed);
+        for (int t = 0; t < kTracks; t++) {
+            const uint8_t play = r.u8();
+            pattern.tracks[t].play = play < uint8_t(PlayMode::count) ? play : uint8_t(PlayMode::fwd);
+        }
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
 
     if (consumed != nullptr) *consumed = kHeaderBytes + payload;
     return SerializeResult::ok;

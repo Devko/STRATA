@@ -1957,3 +1957,149 @@ TEST(a_trigless_event_carries_its_track_step_note_and_flags) {
         CHECK_EQ(events[0].frame, 7u);
     }
 }
+
+// --- play modes -------------------------------------------------------------
+
+namespace {
+
+// Four trigs, notes 40..43, so the order they sound in names the steps.
+void four_named_steps(Pattern &pattern, PlayMode mode) {
+    blank(pattern, 4);
+    for (int s = 0; s < 4; s++) put_trig(pattern, 0, s).note = uint8_t(40 + s);
+    pattern.tracks[0].play = uint8_t(mode);
+}
+
+}  // namespace
+
+TEST(reverse_and_ping_pong_play_the_steps_in_their_order_and_the_playhead_follows) {
+    static Pattern pattern;
+    four_named_steps(pattern, PlayMode::rev);
+    Scheduler sched;
+    sched.configure(pattern);
+    sched.reset();
+    PerformState perform;
+    static Log log;
+    log.clear();
+    for (uint32_t slot = 0; slot < 4; slot++) {
+        run(sched, pattern, perform, slot * kStepTicks, (slot + 1) * kStepTicks, log);
+        CHECK_EQ(int(sched.playhead(0)), 3 - int(slot));    // the light is on the step heard
+    }
+    CHECK_EQ(log.count, 4);
+    for (int i = 0; i < 4; i++) {
+        CHECK_EQ(int(log.hits[i].event.note), 43 - i);
+        CHECK_EQ(int(log.hits[i].event.step), 3 - i);
+        CHECK_EQ(log.hits[i].tick, uint32_t(i) * kStepTicks);   // on the grid, as before
+    }
+
+    four_named_steps(pattern, PlayMode::ping);
+    sched.configure(pattern);
+    sched.reset();
+    log.clear();
+    run(sched, pattern, perform, 0, 8u * kStepTicks, log);
+    const int ping[8] = {40, 41, 42, 43, 43, 42, 41, 40};
+    CHECK_EQ(log.count, 8);
+    for (int i = 0; i < 8; i++) CHECK_EQ(int(log.hits[i].event.note), ping[i]);
+}
+
+// A step under a play mode brings its condition, its ratchet and its probability with it.
+TEST(a_step_played_out_of_order_keeps_its_condition_and_ratchet) {
+    static Pattern pattern;
+    blank(pattern, 4);
+    Step &fill = put_trig(pattern, 0, 0);          // sounds in slot 3 under REV
+    fill.condition = condition_pack(Condition::FILL);
+    fill.ratchet = ratchet_pack(3, RatchetRamp::none);
+    pattern.tracks[0].play = uint8_t(PlayMode::rev);
+
+    Scheduler sched;
+    sched.configure(pattern, kSamplesPerTick);
+    sched.reset();
+    PerformState perform;
+    static Log log;
+    log.clear();
+    run(sched, pattern, perform, 0, 4u * kStepTicks, log);
+    CHECK_EQ(log.count, 0);                         // no FILL, no hit
+
+    perform.fill = true;
+    run(sched, pattern, perform, 4u * kStepTicks, 8u * kStepTicks, log);
+    CHECK_EQ(log.count, 3);                         // the ratchet, in slot 3 of the pass
+    for (int i = 0; i < 3; i++) {
+        CHECK_EQ(log.hits[i].tick, 7u * kStepTicks);
+        CHECK_EQ(int(log.hits[i].event.step), 0);
+        CHECK_EQ(int(log.hits[i].event.ratchet_count), 3);
+    }
+}
+
+// PRE reads the step that sounded before it, in time. Forward, step 1's PRE follows step 0
+// (passes); reversed, it follows step 2 (a FILL that fails without the pad).
+TEST(pre_chains_in_the_order_the_steps_sound) {
+    static Pattern pattern;
+    blank(pattern, 4);
+    put_trig(pattern, 0, 0);
+    put_trig(pattern, 0, 1).condition = condition_pack(Condition::PRE);
+    put_trig(pattern, 0, 2).condition = condition_pack(Condition::FILL);
+    PerformState perform;
+    static Log log;
+
+    for (int mode = 0; mode < 2; mode++) {
+        pattern.tracks[0].play = uint8_t(mode == 0 ? PlayMode::fwd : PlayMode::rev);
+        Scheduler sched;
+        sched.configure(pattern);
+        sched.reset();
+        log.clear();
+        run(sched, pattern, perform, 0, 4u * kStepTicks, log);
+        bool step1 = false;
+        for (int i = 0; i < log.count; i++) step1 = step1 || log.hits[i].event.step == 1;
+        CHECK_EQ(step1, mode == 0);
+    }
+}
+
+// The mode is read on every tick, like micro-timing: an edit (or an undo) is heard on the next
+// step with no configure().
+TEST(a_play_mode_change_is_heard_on_the_next_step_without_a_configure) {
+    static Pattern pattern;
+    four_named_steps(pattern, PlayMode::fwd);
+    Scheduler sched;
+    sched.configure(pattern);
+    sched.reset();
+    PerformState perform;
+    static Log log;
+    log.clear();
+    run(sched, pattern, perform, 0, 2u * kStepTicks, log);
+    pattern.tracks[0].play = uint8_t(PlayMode::rev);
+    run(sched, pattern, perform, 2u * kStepTicks, 4u * kStepTicks, log);
+    CHECK_EQ(log.count, 4);
+    CHECK_EQ(int(log.hits[2].event.note), 41);     // slot 2 reversed is step 1
+    CHECK_EQ(int(log.hits[3].event.note), 40);
+}
+
+// RND is seeded by the pattern: the same pattern plays the same stream every time it is
+// played (an emulator scenario can count on it), another seed plays another one.
+TEST(random_play_repeats_exactly_for_one_seed_and_differs_for_another) {
+    static Pattern pattern;
+    blank(pattern, 16);
+    for (int t = 0; t < 3; t++) {
+        for (int s = 0; s < 16; s++) put_trig(pattern, t, s).note = uint8_t(30 + s);
+        pattern.tracks[t].play = uint8_t(int(PlayMode::rnd1) + t);
+    }
+    PerformState perform;
+    static Log first, again, other;
+    Log *const logs[3] = {&first, &again, &other};
+    for (Log *log : logs) {
+        pattern.seed = log == &other ? 0x1234u : 0x5EEDu;
+        Scheduler sched;
+        sched.configure(pattern);
+        sched.reset();
+        log->clear();
+        run(sched, pattern, perform, 0, 8u * 16u * kStepTicks, *log);
+    }
+    CHECK_EQ(first.count, 3 * 16 * 8);
+    CHECK(same_stream(first, again));
+    CHECK(!same_stream(first, other));
+    // And it is not forward: some slot of the first track plays another step.
+    bool moved = false;
+    for (int i = 0; i < first.count; i++) {
+        const Hit &h = first.hits[i];
+        if (h.event.track == 0 && h.event.step != uint8_t((h.tick / kStepTicks) % 16u)) moved = true;
+    }
+    CHECK(moved);
+}

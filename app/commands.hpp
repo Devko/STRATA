@@ -44,6 +44,7 @@ enum class Cmd : uint8_t {
     clear_lock,        // track, step, a: param
     set_track_length,  // track, a: length; or c = 1: b is an int8 delta (kDeltaFlag below)
     set_track_speed,   // track, a: speed
+    set_track_play,    // track, a: PlayMode (core/timing.hpp): FWD, REV, PING, RND1..RND16
     set_pattern_swing, // a: swing; or c = 1: b is an int8 delta
     // A track's own swing over the pattern's: a = 0 (kSwingInherit, follow the pattern) or
     // 50-75; or c = 1: b is an int8 delta walked along PAT, 50 .. 75 (core/pattern.hpp,

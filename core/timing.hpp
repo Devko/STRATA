@@ -181,12 +181,65 @@ inline float length_samples(uint8_t index, int step_ticks, float samples_per_tic
     return float(length_sixteenths(index)) * (1.0f / 16.0f) * float(step_ticks) * samples_per_tick;
 }
 
+// --- play order -----------------------------------------------------------
+//
+// Which step a track plays in each of its time slots. The slots are the grid -- slot s of a pass
+// sits at s * step_ticks plus the swing of slot s, exactly as before play modes existed -- and
+// the play mode picks the step that sounds there. The pattern is never rewritten, so leaving a
+// mode is instant and the steps come back exactly as written.
+//
+// Serialized in a pattern (core/serialize.hpp, section 4), so never renumber once released.
+// FWD is 0 so zeroed memory, and every pattern written before the section existed, plays forward.
+//
+//   FWD    slot s plays step s.
+//   REV    slot s plays step L-1-s.
+//   PING   forward on even passes, backward on odd ones. A pass is still L slots, so the two
+//          end steps sound twice in a row at the turn, and the track keeps its bar alignment:
+//          a 16-step track in PING still turns round every bar, which is what polymeter wants.
+//   RND n  the pass is cut into blocks of n slots; each block plays a block of n steps picked
+//          at random among the L/n whole blocks, its steps in order. RND 1 is a random step per
+//          slot; RND 4 at 1x shuffles beats; RND 16 on a 64-step track shuffles bars. Slots past
+//          the last whole block (L not a multiple of n) play in place, and an n longer than the
+//          track leaves it playing forward. A block can be picked twice in one pass.
+//
+// The random draw is a hash of (the pattern's seed, the track, the block, the pass), like the
+// probability roll in core/scheduler: no running RNG, so the same pass plays the same way after a
+// reload and in every emulator run, and each pass differs from the last.
+enum class PlayMode : uint8_t {
+    fwd = 0,
+    rev = 1,
+    ping = 2,
+    rnd1 = 3,
+    rnd2 = 4,
+    rnd4 = 5,
+    rnd8 = 6,
+    rnd16 = 7,
+    count = 8
+};
+
+// For the screen: at most five characters, upper case.
+constexpr const char *play_mode_name(PlayMode mode) {
+    switch (mode) {
+        case PlayMode::fwd:   return "FWD";
+        case PlayMode::rev:   return "REV";
+        case PlayMode::ping:  return "PING";
+        case PlayMode::rnd1:  return "RND1";
+        case PlayMode::rnd2:  return "RND2";
+        case PlayMode::rnd4:  return "RND4";
+        case PlayMode::rnd8:  return "RND8";
+        case PlayMode::rnd16: return "RND16";
+        default:              return "?";
+    }
+}
+
 // --- a track's timing -----------------------------------------------------
 
 struct TrackTiming {
     uint8_t length = 16;            // 1..64 steps, for polymeter
     Speed speed = Speed::x1;
     uint8_t swing = kSwingMin;      // 50..75
+    PlayMode play = PlayMode::fwd;  // which step each slot plays; see above
+    uint32_t play_seed = 0;         // the pattern's seed mixed with the track, for the RND modes
 
     int step_ticks() const { return ticks_per_step(speed); }
 
@@ -198,9 +251,17 @@ struct TrackTiming {
     }
 };
 
+// The step that time slot `slot` (0..length-1) of pass `loop` plays under `timing.play`. Always
+// a valid step index below the track's length. No division: blocks are powers of two.
+uint8_t play_step(int slot, uint32_t loop, const TrackTiming &timing);
+
+// The seed the RND modes draw from: the pattern's seed mixed with the track, so two tracks in
+// the same mode do not jump together.
+uint32_t play_seed(uint32_t pattern_seed, int track);
+
 // A step that fires on the tick being examined.
 struct Firing {
-    uint8_t step = 0;      // which step index of the track
+    uint8_t step = 0;      // which step of the track sounds: the play mode already applied
     uint32_t loop = 0;     // which pass of the loop, for A:B conditions
 };
 
@@ -211,13 +272,17 @@ constexpr int kMaxFiringsPerTick = 4;   // at 2x, a 23-tick window can hold at m
 // `micro` is the per-step micro-timing in ticks, indexed by step, or nullptr for none. Only
 // entries below `timing.length` are read.
 //
+// Under a play mode other than FWD, swing belongs to the slot (the groove stays on the grid) and
+// micro-timing to the step (a pushed hat stays pushed wherever it plays): slot s fires at
+// s * step_ticks + swing(s) + micro[play_step(s)].
+//
 // Returns how many firings were written to `out` (at most `max`). The scan is a bounded loop
 // over the few candidate steps near the tick, with no division in the inner path.
 int steps_firing_at(uint32_t tick, const TrackTiming &timing, const int8_t *micro,
                     Firing *out, int max);
 
-// The effective tick of one step within its loop pass, after swing and micro-timing. Exposed
-// for tests and for the UI, which draws where a step actually sits.
+// The effective tick of one step within its loop pass, after swing and micro-timing, playing
+// forward. Exposed for tests and for the UI, which draws where a step actually sits.
 int effective_tick(int step_index, const TrackTiming &timing, const int8_t *micro);
 
 }  // namespace strata

@@ -1520,6 +1520,28 @@ public:
         echo(Echo::layout);                    // as the length: GRID was the only screen with it
     }
 
+    // The play mode (core/timing.hpp): FWD, REV, PING, RND1 .. RND16, in the enum's own order,
+    // which is the order the menu walks. The arrows stop at the ends; OK's step wraps.
+    void walk_play(int delta, bool wrap) {
+        const int count = int(PlayMode::count);
+        int next = int(engine_.pattern().tracks[selected_].play) + delta;
+        if (wrap) next = (next + count) % count;
+        next = clamp_int(next, 0, count - 1);
+        mark(GestureKind::length, selected_, 0);
+        post(Cmd::set_track_play, uint8_t(selected_), 0, uint8_t(next));
+        end_gesture();
+        char *out = notice_buffer_;
+        append(out, "T");
+        append_number(out, uint32_t(selected_ + 1));
+        append(out, " PLAY ");
+        append(out, play_mode_name(PlayMode(next)));
+        *out = 0;
+        notice(notice_buffer_);
+        // Logged too, one line a press: the emulator can press keys but not read the screen
+        // (tests/scenario_playmode.sh).
+        enaga::log(notice_buffer_);
+    }
+
     // --- CLR, copy and paste ---------------------------------------------
 
     // What CLR erases is the narrowest thing selected: a held step, then a range, then the whole
@@ -2392,6 +2414,11 @@ public:
             append_number(out, track.length);
             append(out, " X");
             append(out, speed_name(Speed(track.speed)));
+            // And the play mode, only when it is not FWD: "T1 LEN 64 X3/4 RND16" is 20 wide.
+            if (track.play != uint8_t(PlayMode::fwd) && track.play < uint8_t(PlayMode::count)) {
+                *out++ = ' ';
+                append(out, play_mode_name(PlayMode(track.play)));
+            }
         } else if (echo_ == Echo::param) {
             // "T1 CUT 064": the knob's name and where it is now.
             append(out, "T");
@@ -2508,8 +2535,15 @@ public:
         timing.length = source.length;
         timing.speed = Speed(source.speed);
         timing.swing = source.swing == kSwingInherit ? pattern.swing : source.swing;
+        timing.play = source.play < uint8_t(PlayMode::count) ? PlayMode(source.play)
+                                                             : PlayMode::fwd;
+        timing.play_seed = play_seed(pattern.seed, track);
 
-        const Landing landing = quantize_hit(hit, timing, quantize());
+        // quantize_hit finds the time SLOT the hit belongs to; under REV, PING or RND the note
+        // goes to the step that plays in that slot on that pass, so it plays back where it was
+        // played. Its micro is relative to the slot, which is where that step sounds then.
+        Landing landing = quantize_hit(hit, timing, quantize());
+        landing.step = play_step(int(landing.step), landing.loop, timing);
 
         mark(GestureKind::record, track, 0);     // step 0: one undo level for the whole pass
         Command command;
@@ -5714,7 +5748,7 @@ public:
     // over. The cursor always starts on SAVE, so FUNC + HOME, OK saves.
 
     enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
-                                    speed, chain, song, autofill, quantize, glide, freeze,
+                                    speed, play, chain, song, autofill, quantize, glide, freeze,
                                     loop_len, demo, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 8;
@@ -5730,6 +5764,7 @@ public:
             case MenuItem::kits:     return "KITS";
             case MenuItem::sample:   return "RELOAD SAMPLE";
             case MenuItem::speed:    return "TRACK SPEED";
+            case MenuItem::play:     return "TRACK PLAY";
             case MenuItem::chain:    return "CHAIN";
             case MenuItem::song:     return "CHAIN END";
             case MenuItem::autofill: return "AUTO-FILL";
@@ -5750,6 +5785,12 @@ public:
                 append_number(out, uint32_t(selected_) + 1);
                 *out++ = ' ';
                 append(out, speed_name(Speed(engine_.pattern().tracks[selected_].speed)));
+                break;
+            case MenuItem::play:
+                *out++ = 'T';
+                append_number(out, uint32_t(selected_) + 1);
+                *out++ = ' ';
+                append(out, play_mode_name(PlayMode(engine_.pattern().tracks[selected_].play)));
                 break;
             case MenuItem::chain:
                 append(out, engine_.chain().active ? "ON" : "OFF");
@@ -6286,6 +6327,9 @@ public:
                 else walk_speed(delta);
                 break;
             }
+            case MenuItem::play:
+                walk_play(delta, wrap);
+                break;
             case MenuItem::chain: {
                 const bool on = engine_.chain().active;
                 post(Cmd::set_chain, 0, 0, on ? 0 : 1);

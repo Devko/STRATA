@@ -192,7 +192,7 @@ them goes back to the slots. In SETUP, A sets the record quantize. Chain on/off,
 reload, RELOAD PROJECT and NEW PROJECT are in the FUNC menu (FUNC+HOME); the last two throw away
 unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN FOR NEW).
 **FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, CLEAR
-PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, FX GLIDE, FREEZE, LOOP
+PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, TRACK PLAY, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, FX GLIDE, FREEZE, LOOP
 LEN, LOAD DEMO. It always opens on SAVE, and the list wraps: UP once is LOAD DEMO, twice LOOP LEN, three times FREEZE, four times FX GLIDE. UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
 setting row (OK steps it too), CLR or FUNC+HOME close it. FREEZE: the selected track plays a 1-8

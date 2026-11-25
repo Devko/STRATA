@@ -388,12 +388,12 @@ constexpr Text kMenu = {"FUNC MENU:", {
     "UP/DOWN/A  ROW",
     "OK         RUN",
     "LEFT/RIGHT/B CHANGE",
-    "CLR        CLOSE",
-    "FUNC+HOME  CLOSE",
+    "CLR/FUNC+HOME CLOSE",
     "OPENS ON SAVE:",
     "FUNC+HOME OK  SAVES",
     "NEW RELOAD CLEAR",
     "PATTERN  OK TWICE",
+    "TRACK PLAY FWD-RND16",
     nullptr,
 }};
 
