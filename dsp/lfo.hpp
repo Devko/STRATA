@@ -152,12 +152,23 @@ constexpr uint8_t kLfoVaCutoffFloor = 23;
 // byte on a VA or WAVE machine, and 0 (no floor) for everything else. The macros and the scene
 // morph stop at the same floor (app/engine.cpp, apply_performance): only the knob, a lock and the
 // kit itself close a filter all the way.
-uint8_t lfo_cutoff_floor(int dest, bool va_filter, bool insert_chain);
+// Inline, because the morph's floor asks it for every track whenever the performance layer moves.
+constexpr uint8_t lfo_cutoff_floor(int dest, bool va_filter, bool insert_chain) {
+    return insert_chain && dest == page_first(Page::fltr) + 1 ? kLfoInsertCutoffFloor
+           : va_filter && dest == page_first(Page::src) + 2  ? kLfoVaCutoffFloor
+                                                              : uint8_t(0);
+}
 // And the span for an LFO on `dest`, on the same terms: a cutoff's, or kLfoSpan.
-float lfo_span(int dest, bool va_filter, bool insert_chain);
+constexpr float lfo_span(int dest, bool va_filter, bool insert_chain) {
+    return insert_chain && !va_filter && dest == page_first(Page::fltr) + 1 ? kLfoInsertCutoffSpan
+           : va_filter && dest == page_first(Page::src) + 2                 ? kLfoVaCutoffSpan
+                                                                             : kLfoSpan;
+}
 // Which parameter a track's cutoff is, on those terms: SRC's third byte on a synth machine,
 // FLTR's second on a machine with the insert filter, and -1 for MID, which has neither.
-int lfo_cutoff_param(bool va_filter, bool insert_chain);
+constexpr int lfo_cutoff_param(bool va_filter, bool insert_chain) {
+    return va_filter ? page_first(Page::src) + 2 : (insert_chain ? page_first(Page::fltr) + 1 : -1);
+}
 
 // The four bytes resolved, at control rate, only when they change.
 struct LfoSettings {

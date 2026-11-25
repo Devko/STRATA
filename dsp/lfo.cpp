@@ -91,28 +91,10 @@ uint8_t lfo_apply(uint8_t base, float value, uint8_t depth, uint8_t floor, float
     return uint8_t(next < lowest ? lowest : (next > 127 ? 127 : next));
 }
 
-uint8_t lfo_cutoff_floor(int dest, bool va_filter, bool insert_chain) {
-    if (insert_chain && dest == page_first(Page::fltr) + 1) return kLfoInsertCutoffFloor;
-    if (va_filter && dest == page_first(Page::src) + 2) return kLfoVaCutoffFloor;
-    return 0;
-}
-
 float lfo_pitch_semis(float value, uint8_t depth) {
     // The same counts lfo_apply would move TUN by, unrounded, times TUN's 24/64 semitone a count.
     const float counts = value * float(depth > 127 ? 127 : depth) * (kLfoSpan * (1.0f / 127.0f));
     return counts * (24.0f / 64.0f);
-}
-
-int lfo_cutoff_param(bool va_filter, bool insert_chain) {
-    if (va_filter) return page_first(Page::src) + 2;
-    if (insert_chain) return page_first(Page::fltr) + 1;
-    return -1;
-}
-
-float lfo_span(int dest, bool va_filter, bool insert_chain) {
-    if (insert_chain && !va_filter && dest == page_first(Page::fltr) + 1) return kLfoInsertCutoffSpan;
-    if (va_filter && dest == page_first(Page::src) + 2) return kLfoVaCutoffSpan;
-    return kLfoSpan;
 }
 
 LfoSettings LfoSettings::make(const uint8_t bytes[kLfoParams]) {
