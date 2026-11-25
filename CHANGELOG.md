@@ -8,6 +8,13 @@ the project file format or the controls.
 
 ### Added
 
+- **LFO TRIG (S2).** Push RAT's knob (B) on the LFO page for **FREE** (as before), **RETRIG**
+  (every note on the track starts the cycle again) or **ONE-SHOT** (every note runs one cycle and
+  the LFO stops: a second envelope you can point at any parameter). In ONE-SHOT the shapes are
+  envelopes that start and end at the knob: TRI rises and falls, SAW decays from DEP, RMP rises
+  and holds, SQR is a gate for half the cycle, SIN one wobble, S+H a new random value per note.
+  RAT is the time (free) or the note length (synced). The page's last line ends `RETRIG` or
+  `ONE-SHOT`. Stored in the kit; older projects load every LFO as FREE.
 - **Waveforms and envelopes in EDIT.** SAMPLE's SRC page draws the sample under the knobs, with
   its START..END window bright, the slices dotted and a moving playhead per voice; GRAIN's draws
   the sample with a bracket at POS and a tick for each grain in the air. AMP, ASR and the synths'
@@ -50,6 +57,11 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Changed
 
+- **An LFO on TUN glides on VA and WAVE.** The pitch moves smoothly instead of in TUN's 0.375
+  semitone steps, and a held note follows it (vibrato on a pad). Other machines step as before.
+- **Cutoff movement stops at about 100 Hz everywhere (D9).** A scene morph or a macro that takes
+  a cutoff down now stops where the LFO already did; only the knob (and a lock) closes the filter
+  all the way. LFO depth on a cutoff is about 3 octaves either side at DEP 127, not 5.
 - **One filter on the synth machines (D8).** On VA MONO, VA POLY, WAVE MONO and WAVE POLY the FLTR
   page is now the synth's own filter, CUT RES ENV and the new **FDE** (filter decay: 0 keeps the
   old 0.55 x DEC, 1-127 its own time). The insert filter there is one knob, **TON** on SRC: 64

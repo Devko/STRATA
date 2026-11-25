@@ -127,15 +127,31 @@ screen keys or LEFT/RIGHT). It moves one of the track's 16 parameters up and dow
 - **C, DEP**: how far. At 127 the parameter swings about 64 either side of where its knob is.
 - **D, DST**: which parameter, by name, or `OFF`. One click is one parameter.
 
-The line under the knobs shows where the destination is right now (`NOW CUT 87`), or `LFO OFF:
-SET DEP+DST` until both are up. A new track's LFO is off, and so is every track in a project
-saved before the LFO existed.
+On a cutoff, DEP 127 swings about three octaves either side, and the LFO never takes the filter
+below about 100 Hz (unless the knob itself is already lower): a deep sweep dips the sound rather
+than shutting it off.
+
+**Push B (RAT's knob) for TRIG**, when the cycle starts: **FREE** runs on its own as above;
+**RETRIG** starts the cycle again on every note the track plays (a step, a chord, an arp or roll
+hit, a pad or a key); **ONE-SHOT** runs one cycle from each note and then stops, which makes the
+LFO a second envelope you can point at any parameter. In ONE-SHOT the shapes are envelopes that
+start and end where the knob is: TRI rises to DEP and falls back (attack and decay), SAW jumps to
+DEP and decays, RMP rises and stays up until the next note, SQR holds DEP for half the cycle, SIN
+is one wobble and S+H picks a new value for each note and keeps it. RAT is its length: free, one
+over the rate (`2.0` Hz is half a second); synced, the note length. A synced LFO in RETRIG or
+ONE-SHOT counts from the note, not from the bar.
+
+The line under the knobs shows where the destination is right now (`NOW CUT 87`), with `RETRIG`
+or `ONE-SHOT` after it, or `LFO OFF: SET DEP+DST` until both are up. A new track's LFO is off and
+FREE, and so is every track in a project saved before it existed.
 
 The four LFO settings are parameters like any other: hold a STEP and turn one to lock it on that
 step (a deeper sweep on one step, a different shape for a fill), store them in a scene and morph
-between two LFO settings, or put DEP on a macro to fade the movement in. The LFO moves the
-parameter in its 0-127 steps about 750 times a second: smooth on a filter or a pan, but a slow,
-deep sweep of a pitch can be heard stepping.
+between two LFO settings, or put DEP on a macro to fade the movement in. TRIG is the kit's, like
+SLC AUTO: no lock or scene changes it. The LFO moves the parameter in its 0-127 steps about 750
+times a second, smooth on a filter or a pan. Pitch is the exception on VA and WAVE (MONO and
+POLY): there the LFO on TUN bends the voices directly, so a slow sweep glides and a held note
+follows it. On the other machines TUN still moves in its steps, and only from the next note.
 
 ### The arpeggiator
 

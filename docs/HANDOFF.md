@@ -62,6 +62,28 @@ slots 7 MUTE BUS / 13 MORPH (D1, D2, D5), LOCK on FUNC + MUTATE (D3, D4, D13, D1
 order:** bounce-to-track ("put on track n" after a RESAMPLE bounce, one OK); then hold STEP +
 THROW (the delay-send lock D6 left out).
 
+**Phase 5, sound-design depth** (same doc, CyDrums S2/S3). Done: LFO TRIG (FREE, RETRIG,
+ONE-SHOT), TUN gliding on the synths, and D9's leftover (the ~100 Hz floor for the morph and the
+macros, LFO depth on a cutoff about +-3 octaves). **Next:** two knob-learned mod slots per track.
+
+LFO, for whoever touches it next (dsp/lfo.hpp has the detail):
+- **TRIG is not a parameter.** All 32 bytes a track has are spoken for and `locked_` is a 32-bit
+  mask, so TRIG is `KitTrack::lfo_trig` in KIT.BIN's optional section 9, set by
+  `Cmd::set_lfo_trig` (push B on the LFO page). A 33rd parameter means widening the lock mask,
+  every scene section and the lock pool; a mod-slot feature will hit the same wall.
+- **Every note goes through `Engine::note_started`** (the trig light and TRIG's restart). A new
+  way to start a note must call it, not `status_.bump_triggered`.
+- **No new shapes.** WAV's six bands fill 0-127 and the byte is stored in kits, scenes and locks,
+  so a seventh shape re-reads every stored WAV byte. Adding shapes needs a migration of all
+  three (kit section 8's layout byte is the precedent) or a second byte; ONE-SHOT's envelope
+  shapes covered what S3 wanted most.
+- **TUN on VA and WAVE is a float** (`Machine::set_pitch_mod`, added where the voice caches its
+  oscillator increments); every other machine and every other destination still moves the byte.
+  FM4 and GRAIN could take it the same way.
+- **The cutoff floor** lives in `apply_performance` for the morph and the macros and in
+  `run_lfos` for the LFO, both through `lfo_cutoff_param` / `lfo_cutoff_floor`. A step lock and
+  the kit are the knob's and are not floored.
+
 LOCK, for whoever touches it next: the audio side keeps the 128 locks and the swap-back and does
 the copies (`Engine::capture_live` / `apply_live`); the UI only times the hold (500 ms), posts
 `lock_store` / `lock_tap`, and acts on `Status::lock_event` (notice, a pending MUTATE dropped,
