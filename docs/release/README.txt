@@ -7,6 +7,7 @@ firmware for the SmplTrek. This is an early release: read "Before you install" f
 https://github.com/Devko/STRATA
 
 Requires Enaga {ENAGA} on the unit, exactly. STRATA app version {APP_VERSION}.
+Enaga is not in this zip: get it from Enaga's own release (step 1 below).
 
 
 AT YOUR OWN RISK
@@ -22,7 +23,7 @@ which hardware STRATA runs on.
 
 WHAT IS IN THIS ZIP
 -------------------
-{CONTENTS}
+  SD-CARD/ENAGA/APPS/STRATA/APP.ENA      the STRATA app
   README.txt, CHANGELOG.md, LICENSE.txt, THIRD_PARTY_NOTICES.md
   SHA256SUMS.txt                         checksums of the files under SD-CARD/
 
@@ -44,8 +45,13 @@ STRATA has not run on either.
 
 INSTALLING
 ----------
-1. Install Enaga {ENAGA}.
-   {STEP1}
+1. Install Enaga {ENAGA}, from Enaga's own release:
+
+     {ENAGA_URL}
+
+   Download the SmplTrek zip there and follow Enaga's install steps: copy its
+   SmplTrek.bin to the ROOT of the SD card, hold HOME (F4) while switching on to reach
+   BOOT MODE, and choose SYSTEM UPDATE. Already on Enaga {ENAGA}? Skip this step.
 
 2. Copy STRATA to the card, keeping the folders:
 

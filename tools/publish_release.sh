@@ -16,10 +16,14 @@
 #   1. the tree is clean and HEAD is origin/main; the tag and the release do not exist yet;
 #   2. the card's APP.ENA is byte for byte a fresh build of HEAD with the same compiler
 #      (tools/build.sh), so the release is the code it says it is;
-#   3. the card's SmplTrek.bin is byte for byte the one in Enaga's own release zip of the pinned
-#      version (enaga-vX.Y.Z-smpltrek.zip, X.Y.Z read from the pin), downloaded with gh;
+#   3. Enaga's own release of the pinned version (X.Y.Z read from the pin) is on GitHub with its
+#      SmplTrek zip, since the release links it instead of shipping firmware; and when the card
+#      still has the SmplTrek.bin the unit was updated from, that file is byte for byte the one in
+#      Enaga's zip, so the unit test ran on Enaga's own build;
 #   4. the {{FIELDS}} in CHANGELOG.md and docs/release/v<version>.md are filled, the packaging
 #      script's tests pass, and tools/package_release.py builds the zip.
+#
+# The zip never carries firmware: tools/package_release.py takes only APP.ENA from the card.
 #
 # Then (5) it commits the filled notes on a branch release/<tag>, tags that commit, pushes both, creates
 # the GitHub release (a pre-release, the zip and its .sha256 attached, the notes as its body) and
@@ -84,7 +88,6 @@ fi
 
 NOTES="docs/release/$TAG.md"
 [ -f "$NOTES" ] || die "no $NOTES"
-[ -f "$CARD/SmplTrek.bin" ] || die "no SmplTrek.bin in $CARD"
 [ -f "$CARD/ENAGA/APPS/STRATA/APP.ENA" ] || die "no ENAGA/APPS/STRATA/APP.ENA in $CARD"
 
 # --- 1. the repository ---------------------------------------------------------------------
@@ -118,40 +121,42 @@ else
     echo "identical"
 fi
 
-# --- 3. the firmware is Enaga's own file -----------------------------------------------------
+# --- 3. Enaga's release, which the zip links instead of shipping -------------------------------
 ENAGA_VERSION=$(python3 -B -c 'import sys; sys.path.insert(0, "tools"); import package_release as p; print(".".join(map(str, p.pinned_firmware_version())))')
-say "3. the card's SmplTrek.bin is the one in Enaga's v$ENAGA_VERSION release"
+say "3. Enaga's v$ENAGA_VERSION release is up (the zip links it, and does not carry firmware)"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 if [ "$SKIP_ENAGA" -eq 1 ]; then
     echo "SKIPPED (--skip-enaga-check)"
 elif [ "$HAVE_GH" -ne 1 ]; then
-    die "checking the firmware needs gh (or --skip-enaga-check after comparing SHA-256 by hand)"
+    die "checking Enaga's release needs gh (or --skip-enaga-check after opening
+    https://github.com/seawaffle/enaga/releases/tag/v$ENAGA_VERSION by hand)"
 else
     gh release download "v$ENAGA_VERSION" --repo seawaffle/enaga --dir "$WORK/enaga" \
-        --pattern "enaga-v$ENAGA_VERSION-smpltrek.zip" --pattern "SmplTrek.bin" >/dev/null \
-        || die "could not download enaga-v$ENAGA_VERSION-smpltrek.zip from seawaffle/enaga's releases"
-    WANT=$(sha256sum "$CARD/SmplTrek.bin" | cut -d' ' -f1)
-    FOUND=$(python3 -B - "$WORK/enaga" "$WANT" <<'PY'
+        --pattern "enaga-v$ENAGA_VERSION-smpltrek.zip" >/dev/null \
+        || die "Enaga's v$ENAGA_VERSION release has no enaga-v$ENAGA_VERSION-smpltrek.zip: the README.txt
+    would send users to a release they cannot install from"
+    echo "https://github.com/seawaffle/enaga/releases/tag/v$ENAGA_VERSION has enaga-v$ENAGA_VERSION-smpltrek.zip"
+    if [ -f "$CARD/SmplTrek.bin" ]; then
+        WANT=$(sha256sum "$CARD/SmplTrek.bin" | cut -d' ' -f1)
+        FOUND=$(python3 -B - "$WORK/enaga" "$WANT" <<'PY'
 import hashlib, sys, zipfile
 from pathlib import Path
 root, want = Path(sys.argv[1]), sys.argv[2]
 for f in sorted(root.iterdir()):
-    blobs = []
-    if f.name == "SmplTrek.bin":
-        blobs.append((f.name, f.read_bytes()))
-    elif zipfile.is_zipfile(f):
+    if zipfile.is_zipfile(f):
         with zipfile.ZipFile(f) as z:
-            blobs += [(f"{f.name}:{n}", z.read(n)) for n in z.namelist() if n.endswith("SmplTrek.bin")]
-    for name, data in blobs:
-        if hashlib.sha256(data).hexdigest() == want:
-            print(name)
-            sys.exit(0)
+            for n in z.namelist():
+                if n.endswith("SmplTrek.bin") and hashlib.sha256(z.read(n)).hexdigest() == want:
+                    print(f"{f.name}:{n}")
+                    sys.exit(0)
 PY
 )
-    [ -n "$FOUND" ] || die "the card's SmplTrek.bin ($WANT) is not the file in Enaga's v$ENAGA_VERSION
-    release. Copy the release's SmplTrek.bin onto the card, install it, and test again."
-    echo "identical to $FOUND"
+        [ -n "$FOUND" ] || die "the card's SmplTrek.bin ($WANT) is not the file in Enaga's v$ENAGA_VERSION
+    release, so the unit test did not run on Enaga's own build. Install the release's
+    SmplTrek.bin and test again."
+        echo "the card's SmplTrek.bin, which stays out of the zip, is identical to $FOUND"
+    fi
 fi
 
 # --- 4. fill the notes, test, package ----------------------------------------------------------
