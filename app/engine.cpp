@@ -2739,8 +2739,6 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
             lfo_settings_[t] = LfoSettings::make(bytes);
         }
         const LfoSettings &s = lfo_settings_[t];
-        const auto id = MachineId(machine_id(t));
-        const bool va_filter = machine_has_voice_filter(uint8_t(id));
         // A note since the last block (note_started): taken whether or not the LFO is on now,
         // so a flag cannot linger and restart a cycle on a later block with no note in it.
         const bool restart = lfo_restart_[t];
@@ -2750,6 +2748,8 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
         if (!s.on()) {
             modulating_[t] = false;
         } else {
+            const auto id = MachineId(machine_id_[t]);
+            const bool va_filter = machine_has_voice_filter(uint8_t(id));
             const LfoTrig trig = lfo_trig(project_.kit.tracks[t].lfo_trig);
             // The cycle's advance this block: Hz x seconds free, ticks / cycle synced. RETRIG and
             // ONE-SHOT count from the note, so they always advance by the block; FREE synced to a
@@ -2804,13 +2804,14 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
             modulating_[t] = true;
         }
 
-        // To the machine only when it changes, or when the track has a new machine.
+        // To the machine only when it changes, or when the track has a new machine: with the
+        // LFO off and nothing sent before, two compares.
         Machine *machine = machines_[t];
-        if (machine != nullptr && (pitch_mod != pitch_mod_[t] || machine != pitch_mod_machine_[t])) {
-            machine->set_pitch_mod(pitch_mod);
+        if (pitch_mod != pitch_mod_[t] || machine != pitch_mod_machine_[t]) {
+            if (machine != nullptr) machine->set_pitch_mod(pitch_mod);
             pitch_mod_machine_[t] = machine;
+            pitch_mod_[t] = pitch_mod;
         }
-        pitch_mod_[t] = pitch_mod;
     }
 }
 
