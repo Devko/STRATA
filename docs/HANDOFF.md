@@ -19,7 +19,7 @@ been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is 
 | `make -C host test` | **1,754 tests, 3,485,153 checks, 0 failures** on `main` after PR #126: `core/`, `dsp/` and all of `app/` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image: `APP.ENA` 484,160 bytes GCC-only (476,008 cl6x), bss 1,334,848; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | **28 scenarios**, run on Roland's PC only. All 27 pass with cl6x on `ce5fc6b` (the v0.3.1 build, 2026-11-23), `scenario_wave` once its table check followed #133; all 27 again with cl6x on Enaga v0.3.0 (2026-11-25), loads unchanged (worst 30.16%, ambient); all 28 with cl6x after D12 (`scenario_stepkeys` new, `scenario_m6` now checks KEYS' STEP keys toggle steps, since the emulator cannot press pads) |
+| `tools/scenarios.sh` | **29 scenarios**, run on Roland's PC only. All 29 pass with cl6x after backlog D1/D2/D5 (2026-11-25, `scenario_slots` new; loads unchanged, worst 30.13% ambient). All 27 pass with cl6x on `ce5fc6b` (the v0.3.1 build, 2026-11-23), `scenario_wave` once its table check followed #133; all 27 again with cl6x on Enaga v0.3.0 (2026-11-25), loads unchanged (worst 30.16%, ambient); all 28 with cl6x after D12 (`scenario_stepkeys` new, `scenario_m6` now checks KEYS' STEP keys toggle steps, since the emulator cannot press pads) |
 | unit | v0.3.1 on Enaga 0.2.0 boots and plays (2026-11-24). Load figures are from the v0.2.0-era build: under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been measured or walked through on the unit |
 | memory | init takes **97.05 MiB of a 120 MiB heap** since #124 (2 MiB loader buffer, wavetables built in the idle capture buffer): 22.95 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -53,6 +53,18 @@ been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is 
 
 **Controls.** docs/CONTROLS.md is the reference the key handlers follow; change a gesture there
 first, then in the code, `core/help.cpp`, the cheatsheet, the manual and the unit checklist.
+
+**Phase 2 of the backlog** (Claude Doc "STRATA new approach: review, overlay and backlog";
+Roland accepted all 15 decisions as recommended, 2026-11-25). Done: macro learn by turning
+(D11), STEP keys as steps (D12), hold STEP + pad edits the step (D6), the retired chords and
+slots 7 MUTE BUS / 13 MORPH (D1, D2, D5). **Next, in order:** LOCK on FUNC + MUTATE (hold stores,
+tap jumps at once, tap again swaps back, sound and mutes included; D3, D4, D13, D14 per
+pattern) with FX GLIDE (mixer button jumps ride over a beat; hold VALUE + STEP brings an effect
+in only while held); then bounce-to-track ("put on track n" after a RESAMPLE bounce, one OK);
+then hold STEP + THROW (the delay-send lock D6 left out). FUNC + MUTATE, FUNC + push D and
+FUNC + VALUE only show a hint now (`notice_logged` in app/app.hpp), so LOCK can take FUNC +
+MUTATE outright. The master DJ byte stayed on MIXER's MST page on purpose: an old project saved
+with it set must be able to put it back.
 
 Smaller open items, none urgent:
 

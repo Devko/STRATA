@@ -68,10 +68,11 @@ any machine. The factory kit:
 
 - Seven performance pads on the upper row: **FILL**, **REPEAT**, **MUTE**, **SCENE A**,
   **SCENE B**, **THROW** and **MUTATE**
-- **A performance mixer on VALUE:** push VALUE and tap a STEP key to pick one of fifteen effects
-  (filter sweeps, risers, echo freeze, reverb wash, stutter, tape stop, bass kill, pump, crush,
-  noise riser, flanger, gate, build), then turn VALUE to bring it in. STEP 16 is a **looper**
-  that records 1 to 8 bars of the mix and crossfades it against the live beat.
+- **A performance mixer on VALUE:** push VALUE and tap a STEP key to pick one of fourteen
+  effects (filter sweeps, risers, echo freeze, reverb wash, mute bus, tape stop, bass kill, pump,
+  crush, noise riser, gate, build), then turn VALUE to bring it in. STEP 13 puts the A/B scene
+  morph on VALUE from any screen, and STEP 16 is a **looper** that records 1 to 8 bars of the
+  mix and crossfades it against the live beat.
 - Scenes with an A/B morph, four macros (B, C and D set up in every new project) and stored mute
   states
 - Beat repeat, note repeat, delay and reverb throws, tape stop, delay freeze, kill-EQ switches, and

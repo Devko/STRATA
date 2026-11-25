@@ -6,6 +6,23 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Gestures that moved
+
+One home per job (backlog D1, D2, D5). Old projects open unchanged: no file holds a mixer slot.
+
+| Was | Now |
+| --- | --- |
+| FUNC + VALUE: master DJ filter | Performance mixer slots 1 (LP SWEEP) and 2 (HP SWEEP); the saved setting stays on MIXER's MST page. FUNC + VALUE says `DJ FILTER: SLOT 1/2` |
+| FUNC + press VALUE: DJ filter off | Gone with it |
+| FUNC + hold push D: tape stop | Slot 8, TAPE STOP. FUNC + push D says `TAPE STOP: SLOT 8` (with a STEP held it still clears the D lock) |
+| FUNC + hold MUTATE: delay freeze | Slot 5, ECHO FREEZE. FUNC + MUTATE says `FREEZE: SLOT 5`; it is kept free for LOCK |
+| Slot 7: STUTTER | **MUTE BUS**: every track fades out while the delay and reverb ring on. The stutter is the REPEAT pad's |
+| Slot 13: FLANGER | **MORPH**: the A/B scene morph on any screen, beside an effect left up. PERFORM's VALUE still morphs too |
+
+### Removed
+
+- The performance mixer's flanger (its DSP and 8 KiB ring), with slot 13.
+
 ## [0.3.1] - 2026-11-23
 
 An early beta: everything merged since 0.3.0, built for the same Enaga 0.2.0 firmware. The GRAIN

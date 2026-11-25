@@ -976,7 +976,7 @@ master kill EQ"). Slots 10-14 and the looper are new code:
 | GATE (same loop) | ~170 ns | 0.14 / 0.23 |
 | CRUSH (sample-and-hold, quantize) | ~90 ns | 0.07 / 0.12 |
 | NOISE RISER (xorshift, one-pole HP, add) | ~210 ns | 0.17 / 0.28 |
-| FLANGER (two interpolated taps, feedback, 8 KiB ring) | ~340 ns | 0.27 / 0.45 |
+| FLANGER (removed 2026-11-25 with slot 13, now the morph) | ~340 ns | was 0.27 / 0.45 |
 | Looper recording (float to int16, stereo) | ~135 ns | 0.11 / 0.18 |
 | Looper playing (int16 read, crossfade, stereo) | ~850 ns | 0.7 / 1.1 |
 
@@ -989,7 +989,12 @@ the mixer: BASS KILL (~1.3) or BUILD (DJ filter + noise, ~0.6) plus a playing lo
 case. The CPU guard needs no change: it sheds POLY voices and grains, and this cost is bounded.
 
 Memory: none new on the heap. The looper records into RESAMPLE's 5.76 MiB capture buffer (the
-engine keeps the two apart), and the flanger's 8 KiB ring is a member of the engine.
+engine keeps the two apart). The flanger's 8 KiB ring went with the flanger (2026-11-25).
+
+2026-11-25 (backlog D2, slot 7): slot 7 is MUTE BUS, a control-rate scale of the eight faders
+that costs nothing per sample (the chains already ramp their gains), and slot 13 the scene
+morph, which the morph already paid for. STUTTER's beat repeat stays the REPEAT pad's. So the
+mixer only got cheaper, and the worst case above stands.
 
 No emulator scenario: every gesture is push VALUE held with another key, and the emulator's
 `--key` only taps (as for the tape stop). To measure on the unit: **U11** in

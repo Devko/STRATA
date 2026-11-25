@@ -40,7 +40,7 @@
 #include "repeat.hpp"    // beat repeat, on the master output
 #include "tapestop.hpp"  // the tape stop, after beat repeat
 #include "perffx.hpp"    // the performance mixer's slots: push VALUE + STEP
-#include "masterfx.hpp"  // its own master effects: pump, crush, noise, flanger, gate
+#include "masterfx.hpp"  // its own master effects: pump, crush, noise, gate
 #include "looper.hpp"    // its slot 16: the master looper, in RESAMPLE's buffer
 #include "arp.hpp"       // the arpeggiator's notes
 #include "sample.hpp"

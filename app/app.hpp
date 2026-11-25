@@ -702,8 +702,7 @@ public:
         }
 
         // The master kill EQ's kill switches: push A, B or C on the MIXER's EQ page, or FUNC +
-        // push A, B or C from anywhere -- next to FUNC + VALUE, the DJ filter, so both master
-        // moves are under one hand in every mode, PERFORM included. A switch latches: push to
+        // push A, B or C from anywhere, PERFORM included, so the cut is under one hand. A switch latches: push to
         // take the lows out for the build, push again on the one.
         if (key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C) {
             const bool on_eq_page = mode_ == Mode::mixer && mixer_bank_ == kMixerEqPage;

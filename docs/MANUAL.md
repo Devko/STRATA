@@ -937,7 +937,7 @@ The seven upper pads are the same in every mode:
 | 4 SCENE A | Hold + STEP 1-16 puts that scene on side A | |
 | 5 SCENE B | The same for side B | |
 | 6 THROW | Selected track's delay send to full while held | Reverb instead |
-| 7 MUTATE | Mutate the selected track; OK keeps, CLR reverts | Held: delay freeze |
+| 7 MUTATE | Mutate the selected track; OK keeps, CLR reverts | Free (kept for LOCK) |
 
 ### Mutes
 
@@ -1062,21 +1062,21 @@ look for `KILL` on the EQ page.
 
 ### Tape stop and delay freeze
 
-Two held master moves, in **any mode**:
+Two held master moves, both in the performance mixer (below) since 0.5.0, in **any mode**:
 
-- **Tape stop: hold FUNC, then hold push D** (`TAPE STOP`). The whole output slows to a standstill
-  over two beats, its pitch and level falling together, and stays silent while you hold. Let go
-  of push D (FUNC may already be up) and the music is straight back, in time: the pattern kept
-  playing underneath. Let go half way and it comes back from wherever the slow-down had got to.
-- **Delay freeze: hold FUNC, then hold MUTATE** (`FREEZE`, and `FRZ` after the bar number in
-  PERFORM). Whatever is echoing in the delay loops for as long as you hold, and nothing new
-  goes into the delay, so you can play over a frozen echo. It loops one delay time (two with
-  ping-pong); the first loop starts one echo period after the press. Let go and it fades back to
-  the delay's own tail. FUNC + MUTATE never mutates.
+- **Tape stop: slot 8** (push VALUE + STEP 8, then turn VALUE past 16). The whole output slows
+  to a standstill over two beats, its pitch and level falling together, and stays silent while
+  VALUE stays up. Turn back under 16 (or tap VALUE) and the music is straight back, in time: the
+  pattern kept playing underneath.
+- **Delay freeze: slot 5** (ECHO FREEZE, frozen from 112 up; `FRZ` after the bar number in
+  PERFORM). Whatever is echoing in the delay loops, and nothing new goes into the delay, so you
+  can play over a frozen echo. It loops one delay time (two with ping-pong). Turn down and it
+  fades back to the delay's own tail.
 
-Neither is saved or undone; both cost nothing until pressed. With the delay in its LONG mode
+Neither is saved or undone; both cost nothing until used. With the delay in its LONG mode
 (below) the freeze is the LONG delay's own: the whole wash holds exactly as it is, whatever its
-length, from the moment you press.
+length. The old chords, FUNC + hold push D and FUNC + hold MUTATE, now only say where the move
+went (`TAPE STOP: SLOT 8`, `FREEZE: SLOT 5`); see "Gestures that moved" in CHANGELOG.md.
 
 ### The performance mixer: VALUE as a crossfader
 
@@ -1087,7 +1087,7 @@ looper (an idea taken from modbang's Octatrack Performance Mixer template).
 While VALUE is held, the STEP keys show the sixteen slots: dim amber, the effect that is up
 bright amber, the one VALUE is on bright green. Then **turn VALUE**: at 0 it is the dry mix, and turning up brings the effect in (`ECHO RISER 64`). This works on every
 screen, so you can play an effect from GRID, EDIT or PERFORM; while an effect is picked VALUE
-does not change the tempo or PERFORM's morph. Push VALUE + the same STEP again lets go
+does not change the tempo. Push VALUE + the same STEP again lets go
 (`FX OFF: VALUE TEMPO`) and VALUE is VALUE again.
 
 | STEP | Effect | What VALUE does |
@@ -1098,13 +1098,13 @@ does not change the tempo or PERFORM's morph. Push VALUE + the same STEP again l
 | 4 | ECHO RISER | every track into the delay, feedback climbing |
 | 5 | ECHO FREEZE | into the delay; near the top (112) the echoes freeze |
 | 6 | REVERB WASH | every track into a longer and longer reverb |
-| 7 | STUTTER | beat repeat: from 16 up, 1/4, then 1/8, 1/16, 1/32, each a shorter slice of the same moment |
+| 7 | MUTE BUS | every track fades out while the delay and reverb ring on: the drop to the tails |
 | 8 | TAPE STOP | from 16 up the tape stops; back under 16 and it is back |
 | 9 | BASS KILL | the kill EQ's LOW band down to nothing |
 | 10 | PUMP | a sidechain-style dip on every beat |
 | 11 | CRUSH | fewer bits and a lower sample rate |
 | 12 | NOISE RISER | white noise, louder and brighter |
-| 13 | FLANGER | a slow jet sweep |
+| 13 | MORPH | the A/B scene morph, from any screen (below) |
 | 14 | GATE | sixteenth-note chopping |
 | 15 | BUILD | high-pass, echo and a noise riser together |
 | 16 | LOOPER | the loop's mix (below) |
@@ -1113,15 +1113,23 @@ One effect plays at a time: picking another replaces it, and the old one fades o
 + LEFT/RIGHT** moves to the previous or next slot and keeps the amount, so you can switch effects
 with the crossfader still up. **Tap VALUE on its own** (push and let go within half a second,
 without turning; a longer hold resets nothing) to snap back to 0: the effect goes dry but stays picked, and with the looper picked the mix goes back
-to live. The same press resets PERFORM's morph (`MORPH 0`), and FUNC + a press turns the DJ
-filter off. It never touches the tempo. **Push VALUE + CLR** turns everything off.
+to live. The same press resets the morph (`MORPH 0`) in PERFORM or with slot 13 picked. It
+never touches the tempo. **Push VALUE + CLR** turns everything off.
+
+**The morph (STEP 13)** is not an effect but the same A/B morph PERFORM's VALUE turns, there on
+every screen. Picking it leaves the effect that was up where it is, so you can morph with an
+effect still in (`MORPH 64` as you turn). Push VALUE + STEP 13 again lets go and leaves the
+morph where it is (`MORPH KEPT: VALUE TEMPO`). The looper (16) is the other slot like it.
+
+The stutter that slot 7 used to be is the REPEAT pad's, and the master DJ filter is slots 1 and
+2 (its saved setting is MIXER's MST page): FUNC + VALUE only says `DJ FILTER: SLOT 1/2` now.
 
 **The looper (STEP 16).** Push VALUE + STEP 16 with the beat running: from the next bar line the
 whole mix is recorded for 4 bars (`LOOP 4 BAR: NEXT BAR`; set 1, 2, 4 or 8 in the FUNC menu's
 **LOOP LEN** row). Then the loop plays, in time, and VALUE is its **mix**: 0 is the live beat,
 127 only the loop, and in between both. Now change things underneath (mute tracks, switch
 patterns, edit) and fade back when you are ready. Pick an effect after the looper and the loop
-keeps playing at its mix with the effect over it, so you can filter or stutter the loop itself.
+keeps playing at its mix with the effect over it, so you can filter or crush the loop itself.
 Push VALUE + STEP 16 again to leave the looper, as with any effect (`LOOP OFF: VALUE TEMPO`):
 the loop falls silent but is kept, and VALUE + STEP 16 picks it back up. Pressed during the
 count-in or the take, it cancels it (`LOOP CANCELLED`). With everything off, push VALUE + CLR
@@ -1424,9 +1432,9 @@ names one.
   the one of the drop. FUNC+C on its own thins a busy top end for a breakdown.
 - **Snare rolls into the drop.** FUNC+FILL, then hold the snare's pad and press harder over the
   last bar; REPEAT + VALUE to 1/32 for the final beat.
-- **Tape stop into the drop.** Hold FUNC + push D on the last two beats of a build and let go
-  exactly on the one. Or throw the chord into the delay, then FUNC + MUTATE to keep the echo as
-  a pad while the beat drops out.
+- **Tape stop into the drop.** Push VALUE + STEP 8 and turn VALUE up on the last two beats of a
+  build, then tap VALUE exactly on the one. Or throw the chord into the delay, then slot 5 near
+  the top to keep the echo as a pad, or slot 7 (MUTE BUS) to drop the beat out under its tails.
 - **Loop, then rebuild underneath.** Push VALUE + STEP 16 to catch four bars, turn VALUE up to
   hold them, then mute, switch patterns or edit live and fade back when the new part is ready.
 - **Throws on the off-beat parts.** THROW on the rim or the chord for a bar, then let it ring.

@@ -171,17 +171,28 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
 - Turn VALUE up slowly: `ECHO RISER 10` ... `127`, the echoes climb and build. The tempo did
   **not** change. Back to 0: the dry beat, exactly as before.
 - Push VALUE + RIGHT a few times with VALUE up: the effect changes (`5 ECHO FREEZE`, `6 REVERB
-  WASH`, `7 STUTTER` ...) and keeps the amount. Try 7 STUTTER (turn up: 1/4, 1/8, 1/16, 1/32),
-  10 PUMP, 12 NOISE RISER, 15 BUILD. Any click when switching? `____`
+  WASH`, `7 MUTE BUS` ...) and keeps the amount. Try 7 MUTE BUS (17 below), 10 PUMP,
+  12 NOISE RISER, 15 BUILD. Any click when switching? `____`
 - Push VALUE + STEP 16: `LOOP 4 BAR: NEXT BAR`, STEP 16 red. Four bars later it is green.
   Turn VALUE up: the loop takes over. Mute the hats and kick (FUNC + lower pads): you only hear it
   once VALUE goes back down. Loop in time and without a click at its end? `____`
 - With the loop up, push VALUE + STEP 1 and turn: the low-pass sweeps the loop too.
 - With an effect up, press VALUE and let go without turning: `... 0`, dry at once, the effect
   still picked (turn again: it comes back). PERFORM: turn the morph, press VALUE: `MORPH 0`.
-  FUNC + turn VALUE (DJ filter), then FUNC + press VALUE: `DJ OFF`. The tempo never resets.
+  The tempo never resets.
 - With an effect up, hold VALUE down for a second and let go: nothing resets, the amount stays.
 - Push VALUE + CLR: `FX OFF`. Again: `LOOP CLEARED`. MAX meanwhile: `________ %` (U11 is in 13o).
+
+**16b. Gestures that moved, MUTE BUS and MORPH (3 min, 0.5.0).** A01 playing, the chord's SnA up.
+- FUNC + turn VALUE: `DJ FILTER: SLOT 1/2`, the tempo and the sound unchanged. FUNC + push D:
+  `TAPE STOP: SLOT 8`. FUNC + MUTATE: `FREEZE: SLOT 5`, no mutation.
+- Push VALUE + STEP 7 (`7 MUTE BUS`), turn VALUE up slowly: every track fades out evenly and the
+  delay and reverb ring on. At the top only the tails. Back to 0: the beat at its own level,
+  no click? `____`
+- Store two scenes on A and B (PERFORM). On GRID, push VALUE + STEP 4 and turn ECHO RISER up a
+  little, then push VALUE + STEP 13 (`MORPH 0`): the echo stays. Turn VALUE: `MORPH 64`, the
+  sound moves towards B. Push VALUE + STEP 13 again (`MORPH KEPT: VALUE TEMPO`), go to PERFORM:
+  the morph bar is where you left it, and VALUE carries on from there.
 
 **17. Samples from the SmplTrek's own folders (2 min).** Needs a card the stock firmware has used,
 with at least one WAV in `SmplTrek/Pool/Audio` (copy one there on a PC if it is empty).
@@ -784,20 +795,19 @@ it runs anywhere but the host tests.
 
 ## 13g. Tape stop and delay freeze (4 min)
 
-New after the walkthrough was written. Both are held key combinations, which the emulator
-cannot press, so this is their first run outside the host tests. Play A01 GROOVE.
+Since 0.5.0 both live only in the performance mixer (slots 8 and 5); their FUNC chords retired
+(backlog D5). Play A01 GROOVE.
 
-- [ ] **Hold FUNC, then hold push D**: `TAPE STOP`. The beat slows and drops in pitch to silence
-      over about two beats, no click at the start. Let go of FUNC first, keep holding D: still
-      stopped. Let go of D: the beat is back at once, in time, **no click**.
-- [ ] Let go of D half way through a stop: it comes straight back from the slowed sound.
+- [ ] **Push VALUE + STEP 8, turn VALUE past 16**: the beat slows and drops in pitch to silence
+      over about two beats, no click at the start. Tap VALUE: the beat is back at once, in time,
+      **no click**.
 - [ ] **U8.** Hold a tape stop for 10 s: **MAX `________ %`** against U1's `________ %`.
-- [ ] **Changed tonight.** Lock D on a step (hold STEP, turn D). Hold that STEP, then FUNC, push
-      D: `LOCK CLEARED`, and **no** tape stop. Without a STEP held, FUNC + push D is still the stop.
-- [ ] Turn the chord's SnA (delay send) up and play a few chord stabs. **Hold FUNC, then hold
-      MUTATE**: `FREEZE`, `FRZ` on PERFORM's bar line. The echo keeps looping at the same level;
-      new stabs play dry and are not echoed. Let go: the loop fades into the delay's tail, then
-      new stabs echo again. FUNC + MUTATE mutated nothing (no `KEPT`/`REVERTED` prompt).
+- [ ] Lock D on a step (hold STEP, turn D). Hold that STEP, then FUNC, push D: `LOCK CLEARED`.
+      Without a STEP held, FUNC + push D only says `TAPE STOP: SLOT 8` and stops nothing.
+- [ ] Turn the chord's SnA (delay send) up and play a few chord stabs. **Push VALUE + STEP 5,
+      turn VALUE to the top**: `FRZ` on PERFORM's bar line. The echo keeps looping at the same
+      level; new stabs are not echoed. Turn down: the loop fades into the delay's tail.
+- [ ] FUNC + MUTATE: `FREEZE: SLOT 5`, nothing frozen and nothing mutated.
 
 ## 13h. The arpeggiator (5 min)
 
@@ -2117,8 +2127,8 @@ records where each gesture went and why.
       through to the track faders underneath.
 - [ ] On MST, A is the DJ filter, B the glue compressor, C the limiter threshold, D the output
       level. A reads `OFF` at centre, `LP nn` below it and `HP nn` above.
-- [ ] **FUNC + VALUE is the master DJ filter**, as `docs/SPEC.md`'s key table says, from anywhere.
-      The notice shows `DJ OFF`, `DJ LP nn` or `DJ HP nn`. The tempo must not move with it.
+- [ ] FUNC + VALUE is no longer the DJ filter (since 0.5.0, backlog D1): it says
+      `DJ FILTER: SLOT 1/2` and moves nothing. The tempo must not move with it.
 - [ ] Save, power cycle, reopen: every one of the fourteen comes back. Before this they did not
       exist in any file.
 - [ ] **The kill EQ** (added 2026-11-22): MIXER's seventh page, `EQ`, LOW MID HI on A B C, flat at
