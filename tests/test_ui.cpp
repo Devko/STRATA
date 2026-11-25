@@ -233,7 +233,7 @@ void open_keys() {
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuChain, kMenuSong, kMenuAutofill,
-                     kMenuQuantize, kMenuFreeze, kMenuLoopLen, kMenuRowCount };
+                     kMenuQuantize, kMenuFreeze, kMenuLoopLen, kMenuDemo, kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
 void menu_to(int row) {
@@ -642,6 +642,118 @@ TEST(ui_a_lower_pad_selects_its_track_and_everything_else_follows) {
     pump(2);
     CHECK(app_engine().muted(2));
     CHECK_EQ(UiProbe::selected(app), 2);
+}
+
+TEST(ui_project_slots_copy_paste_and_clear_a_pattern) {
+    Strata &app = fresh();
+    Project &project = app_engine().project_for_load();
+    // A trig on A01 (the playing pattern), placed as a tap would.
+    step_down(0);
+    step_up(0);
+    pump(2);
+    CHECK(project.patterns[0][0].tracks[0].steps[0].flags & kStepTrig);
+    CHECK(!(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig));
+
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_CLR);                              // the slots page
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+    for (int i = 0; i < 16; i++) key(ENAGA_KEY_LEFT);  // the cursor on A01
+    shift_key(ENAGA_KEY_DOWN);                       // nothing copied yet
+    CHECK_EQ(UiProbe::notice(app), "COPY A PATTERN FIRST");
+    shift_key(ENAGA_KEY_UP);
+    CHECK_EQ(UiProbe::notice(app), "A01 COPIED");
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);                            // A03
+    shift_key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN: PASTE TO A03");
+    pump(2);
+    CHECK(!(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig));   // armed only
+    shift_key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::notice(app), "A01 PASTED TO A03");
+    pump(2);
+    CHECK(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig);
+    CHECK(project.patterns[0][0].tracks[0].steps[0].flags & kStepTrig);      // the source stays
+
+    // FUNC + LEFT twice clears it; once only arms.
+    shift_key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN: CLEAR A03");
+    pump(2);
+    CHECK(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig);
+    shift_key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::notice(app), "A03 CLEARED");
+    pump(2);
+    CHECK(!(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig));
+
+    // Clearing the playing pattern empties what plays.
+    for (int i = 0; i < 16; i++) key(ENAGA_KEY_LEFT);
+    shift_key(ENAGA_KEY_LEFT);
+    shift_key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK(!trig_at(0, 0));
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_func_len_held_repeats_until_a_key_comes_up) {
+    Strata &app = fresh();
+    pump(2);
+    const int length = int(app_engine().pattern().tracks[0].length);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_OCTAVE_LEFT, true);
+    pump(300);                                       // inside the 400 ms delay: one step
+    CHECK_EQ(int(app_engine().pattern().tracks[0].length), length - 1);
+    pump(300);                                       // past it: a step every 50 ms
+    app.on_key(ENAGA_KEY_OCTAVE_LEFT, false);
+    pump(2);                                         // the last step lands
+    const int held = int(app_engine().pattern().tracks[0].length);
+    CHECK(held <= length - 4 && held >= length - 7);
+    pump(200);                                       // up: no more
+    CHECK_EQ(int(app_engine().pattern().tracks[0].length), held);
+    // FUNC coming up first stops it too.
+    app.on_key(ENAGA_KEY_OCTAVE_RIGHT, true);
+    pump(2);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(600);
+    app.on_key(ENAGA_KEY_OCTAVE_RIGHT, false);
+    pump(2);
+    CHECK_EQ(int(app_engine().pattern().tracks[0].length), held + 1);
+}
+
+TEST(ui_hold_fill_and_tap_a_step_writes_a_fill_trig) {
+    Strata &app = fresh();
+    const int t = UiProbe::selected(app);
+    const int step = 13;
+    app.on_pad_press(1, 100);                        // hold FILL: empty or not, the step
+                                                     // becomes a FILL trig
+    step_down(step);
+    step_up(step);
+    pump(2);
+    {
+        const Step &s = app_engine().pattern().tracks[t].steps[step];
+        CHECK((s.flags & kStepTrig) != 0);
+        CHECK(condition_kind(s.condition) == Condition::FILL);
+        CHECK(std::strcmp(UiProbe::notice(app), "FILL TRIG") == 0);
+    }
+    // Again, still holding: it comes off.
+    step_down(step);
+    step_up(step);
+    pump(2);
+    {
+        const Step &s = app_engine().pattern().tracks[t].steps[step];
+        CHECK((s.flags & kStepTrig) == 0);
+        CHECK(condition_kind(s.condition) == Condition::NONE);
+    }
+    app.on_pad_release(1);
+    pump(2);
+    // Without FILL a tap is an ordinary trig, no condition.
+    step_down(step);
+    step_up(step);
+    pump(2);
+    {
+        const Step &s = app_engine().pattern().tracks[t].steps[step];
+        CHECK((s.flags & kStepTrig) != 0);
+        CHECK(condition_kind(s.condition) == Condition::NONE);
+    }
 }
 
 TEST(ui_func_fill_turns_note_repeat_on_and_a_held_pad_rolls) {
@@ -3784,7 +3896,20 @@ TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_are_in_the_menu) {
     CHECK_EQ(UiProbe::mode(app), int(Mode::project));  // the menu closed, back on PROJECT
     CHECK(pump_until_idle());
     pump(4);
-    // The factory project's first pattern (core/factory.hpp), not the edited one.
+    // An empty project (core/factory.hpp, blank_project), not the edited one and not the demo.
+    CHECK_EQ(int(pattern.master_length), int(kStepsPerTrack));
+    for (int t = 0; t < kTracks; t++) {
+        for (int st = 0; st < kStepsPerTrack; st++) CHECK(!trig_at(t, st));
+    }
+    CHECK_EQ(int(app_engine().project_for_load().kit.tracks[2].params[13]), 64);   // PAN (FX page, second byte)
+
+    // LOAD DEMO, the last row (UP from SAVE), brings the factory project back, two OKs too.
+    menu_run(kMenuDemo);
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN FOR DEMO");
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "DEMO PROJECT");
+    CHECK(pump_until_idle());
+    pump(4);
     CHECK_EQ(int(pattern.master_length), int(strata::test::factory().patterns[0][0].master_length));
     key(ENAGA_KEY_F4);
 }
@@ -6418,8 +6543,6 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         // lists. PERFORM's auto-fill and PROJECT's chain and sample reload moved to the menu.
         {s_perform, true, "UP", "auto-fill is in the FUNC menu"},
         {s_perform, true, "DOWN", "ditto"},
-        {s_project, true, "UP", "chain and sample reload are in the FUNC menu"},
-        {s_project, true, "DOWN", "ditto"},
         {s_chain, true, "UP", "CHAIN on / off is in the FUNC menu"},
         {s_chain, true, "DOWN", "ditto"},
         {s_pattern, true, "UP", "ditto"}, {s_pattern, true, "DOWN", "ditto"},
@@ -8071,4 +8194,59 @@ TEST(ui_a_press_of_value_with_a_step_held_resets_nothing) {
     pump(2);
     CHECK_EQ(int(app_engine().perf_amount()), 20);
     value_step(app, 3);
+}
+
+TEST(ui_hold_ok_on_a_slot_opens_the_pattern_menu_and_double_doubles) {
+    Strata &app = fresh();
+    Project &project = app_engine().project_for_load();
+    step_down(2);                                    // a trig on step 3 of A01's track 1
+    step_up(2);
+    pump(2);
+    // Track 1 at 16 steps, as FUNC + LEN would leave it.
+    app.on_key(ENAGA_KEY_F1, true);
+    for (int i = 0; i < 48; i++) {
+        app.on_key(ENAGA_KEY_OCTAVE_LEFT, true);
+        app.on_key(ENAGA_KEY_OCTAVE_LEFT, false);
+    }
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(project.patterns[0][0].tracks[0].length), 16);
+
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_CLR);
+    for (int i = 0; i < 16; i++) key(ENAGA_KEY_LEFT);
+    // A tap still queues (here, stopped: at once) and opens nothing.
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!screen_has(app, "OK: RUN"));
+    // A hold opens the menu on COPY.
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(2);
+    CHECK(screen_has(app, "PATTERN A01"));
+    CHECK(screen_has(app, ">COPY"));
+    // DOWN to DOUBLE, which takes OK twice.
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN: DOUBLE A01");
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "A01 DOUBLED");
+    pump(2);
+    CHECK_EQ(int(project.patterns[0][0].tracks[0].length), 32);
+    CHECK(trig_at(0, 2));
+    CHECK(trig_at(0, 18));
+    CHECK(!screen_has(app, "OK: RUN"));               // the menu closed
+    // CLR closes it without doing anything.
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(!screen_has(app, "OK: RUN"));
+    CHECK_EQ(int(project.patterns[0][0].tracks[0].length), 32);
+    key(ENAGA_KEY_F4);
+    pump(2);
 }

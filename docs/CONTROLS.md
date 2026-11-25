@@ -105,7 +105,7 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
 | STOP | stop; again cuts the tails | reset: back to step 1, queue dropped, chain to its start ("▶▶") | red stopped |
 | MIXER | MIXER | PERFORM ("fx") | green MIXER, red PERFORM |
 | EDIT | EDIT | MACHINE; again KIT ("rec src" is the nearest: the sound's source) | green EDIT, red MACHINE/KIT |
-| OK | pick / confirm | redo | lit when redo has somewhere to go |
+| OK | pick / confirm. On PROJECT's slots a tap queues, a hold (0.5 s) opens the pattern menu: COPY, PASTE, CLEAR, DOUBLE (doubles every track up to 64 steps, copying the steps) | redo | lit when redo has somewhere to go |
 | CLR | back / clear | undo | lit when undo has somewhere to go |
 
 ## The FUNC menu (FUNC + HOME)
@@ -120,7 +120,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | SAVE | saves the project, closes the menu | |
 | SAVE AS | PROJECTS page with the name entry open | |
 | OPEN PROJECT | PROJECTS page; OK twice there opens | |
-| NEW PROJECT | OK twice within 2 s: a new project | |
+| NEW PROJECT | OK twice within 2 s: a new, empty project (the factory sounds, every pan centred, no steps, scenes or macros) | |
 | RELOAD PROJECT | OK twice within 2 s: read the project back from the card | |
 | CLEAR PATTERN | OK twice within 2 s: every track's trigs and locks gone, one undo level (FUNC + CLR) | |
 | KITS | the kit browser | |
@@ -132,6 +132,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | QUANTIZE | | record quantize, by 5 |
 | FREEZE | freeze the selected track (its loop from the next bar line), or unfreeze it | `T3 1 BAR` (1 2 4 8), `T3 WAIT` / `REC` while recording, `T3 ON` frozen |
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
+| LOAD DEMO | OK twice within 2 s: the factory demo project (the boot beat), under a new name | |
 
 Moved here from: FUNC + PROJECT twice (save), PROJECT's FUNC + UP/DOWN/LEFT/RIGHT (chain,
 sample reload, reload, new), PROJECTS' FUNC + DOWN (save as, still there too), CHAIN's FUNC +
@@ -146,14 +147,14 @@ Printed labels (above), and the moves made while playing:
 | Chord | Does |
 | --- | --- |
 | FUNC + CLR / OK | undo / redo |
-| FUNC + UP / DOWN | copy / paste (editing screens). Card lists: read again / store here (KIT save, PROJECTS save as) |
+| FUNC + UP / DOWN | copy / paste (editing screens; on PROJECT's slots a whole pattern, the paste twice). Card lists: read again / store here (KIT save, PROJECTS save as). FUNC + LEFT twice on PROJECT's slots clears the pattern under the cursor |
 | FUNC + lower pad | mute that track on the next bar (at once while stopped). Several pads before the bar all land; the same pad twice takes it back |
 | FUNC + FILL / REPEAT / THROW | note repeat on/off / pitched-down repeat / reverb throw |
 | FUNC + MUTATE (hold) | delay freeze |
 | FUNC + VALUE | DJ filter |
 | FUNC + push A / B / C | kill LOW / MID / HI |
 | FUNC + push D (hold) | tape stop |
-| FUNC + pad-row key | selected track's length |
+| FUNC + pad-row key | selected track's length; held, it repeats (after 0.4 s, 20 steps a second) |
 | FUNC + STEP | trigless step (PERFORM: assign the LFO or kill EQ to the macro) |
 | FUNC + A / B / C on GRID | Euclidean fill |
 
@@ -198,7 +199,7 @@ shorter slice of the same past), 8 TAPE STOP (from 16 up), 9 BASS KILL (the kill
 
 | Print | STRATA | Colour | Bright while | Says |
 | --- | --- | --- | --- | --- |
-| TRK 1 | FILL | white | held, or NOTE RPT on | `FILL` |
+| TRK 1 | FILL | white | held, or NOTE RPT on | `FILL`; held + tap STEP writes a FILL trig (COND FILL), `FILL TRIG` / `FILL TRIG OFF` |
 | TRK 2 | REPEAT | cyan | held | `REPEAT 1/16` |
 | TRK 3 | MUTE | red | MUTE MODE on | `MUTE MODE` |
 | TRK 4 | SCENE A | green | held | `SCENE A: STEP PICKS` |

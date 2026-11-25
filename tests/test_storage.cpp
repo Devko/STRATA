@@ -437,6 +437,10 @@ const Expect kTable[] = {
     {Cmd::range_erase, kDirtyBank, "range_erase"},
     {Cmd::track_erase, kDirtyBank, "track_erase"},
     {Cmd::pattern_erase, kDirtyBank, "pattern_erase"},
+    // The destination's bank; driven here with no target, they fall back to the live one.
+    {Cmd::pattern_copy, kDirtyBank, "pattern_copy"},
+    {Cmd::pattern_clear, kDirtyBank, "pattern_clear"},
+    {Cmd::pattern_double, kDirtyBank, "pattern_double"},
     {Cmd::range_transpose, kDirtyBank, "range_transpose"},
     {Cmd::range_nudge, kDirtyBank, "range_nudge"},
     {Cmd::record_hit, kDirtyBank, "record_hit"},
@@ -662,6 +666,13 @@ TEST(storage_the_bank_a_command_dirties_is_the_live_one) {
     storage().request_save();
     CHECK(pump_until_idle());
     check_file_set("toggle_trig in bank D", kDirtyKit | kDirtyBank, 3);
+
+    // A pattern pasted into bank C from the PROJECT slots, with bank A live: bank C is written.
+    mark_files();
+    storage().note_command(Cmd::pattern_copy, 0, 2);
+    storage().request_save();
+    CHECK(pump_until_idle());
+    check_file_set("pattern_copy into bank C", kDirtyKit | kDirtyBank, 2);
 
     mark_files();
     CHECK(!storage().dirty());

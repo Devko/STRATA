@@ -78,7 +78,7 @@ constexpr Text kValueMixer = {"VALUE FX MIXER:", {
     "PUSH+CLR  ALL OFF",
     "  AGAIN  CLEARS LOOP",
     "STEP 16  LOOPER",
-    "  RECORDS  AGAIN: NEW",
+    "  RECORDS  AGAIN: OFF",
     "MENU LOOP LEN  BARS",
 }};
 
@@ -242,8 +242,8 @@ constexpr Text kPerform2 = {"PERFORM MORE:", {
 
 constexpr Text kProject = {"PROJECT:", {
     "STEP 1-16  QUEUE SLOT",
-    "ARROWS     SLOT",
-    "OK         QUEUE IT",
+    "ARROWS SLOT  OK QUEUE",
+    "HOLD OK  PATTERN MENU",
     "CLR        CANCEL",
     "PAD-ROW KEYS  BANK",
     "A  QUEUE MODE",

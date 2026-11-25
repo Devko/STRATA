@@ -182,6 +182,24 @@ void pattern_erase_steps(Pattern &pattern) {
     pattern.locks_used = 0;
 }
 
+bool pattern_double(Pattern &pattern, RangeClip &scratch) {
+    for (int t = 0; t < kTracks; t++) {
+        TrackPattern &track = pattern.tracks[t];
+        const int length = int(track.length);
+        if (length >= kStepsPerTrack || length < 1) continue;
+        const int doubled = length * 2 > kStepsPerTrack ? kStepsPerTrack : length * 2;
+        range_copy(pattern, t, 0, length, scratch);
+        track.length = uint8_t(doubled);
+        if (!range_paste(pattern, t, length, scratch)) {
+            track.length = uint8_t(length);
+            return false;
+        }
+    }
+    const int master = int(pattern.master_length) * 2;
+    pattern.master_length = uint8_t(master > kStepsPerTrack ? kStepsPerTrack : master);
+    return true;
+}
+
 // --- small edits the UI needs ---------------------------------------------
 
 void range_transpose(Pattern &pattern, int track, int first, int count, int semitones) {

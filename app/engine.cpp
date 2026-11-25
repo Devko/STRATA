@@ -488,6 +488,23 @@ void Engine::apply(const Command &command) {
             break;
 
         case Cmd::toggle_trig: {
+            // a = 2: hold FILL + tap a STEP (backlog [5]). A trig whose condition is FILL comes
+            // off; anything else becomes a trig with COND FILL, so a fill is one tap to write.
+            if (command.a == 2) {
+                Step &s = live().tracks[track].steps[step];
+                const bool is_fill = (s.flags & kStepTrig) != 0 &&
+                                     condition_kind(s.condition) == Condition::FILL;
+                if (is_fill) {
+                    s.flags = uint8_t(s.flags & ~kStepTrig);
+                    s.condition = condition_pack(Condition::NONE);
+                } else {
+                    s.flags = uint8_t((s.flags | kStepTrig) & ~kStepTrigless);
+                    s.condition = condition_pack(Condition::FILL);
+                    if (s.velocity == 0) s.velocity = 100;
+                    if (!length_valid(s.length)) s.length = 8;
+                }
+                break;
+            }
             // a selects which bit: the trig, or the trigless bit that applies a step's locks
             // without sounding a note. They are mutually exclusive -- a step that is both would
             // be a trig, so letting both bits stand would make the trigless flag look broken.
@@ -650,6 +667,44 @@ void Engine::apply(const Command &command) {
         case Cmd::track_erase:
             track_erase(live(), track);
             break;
+
+        case Cmd::pattern_copy: {
+            // About 8 KiB copied here, on the audio side, which owns pattern memory: a few
+            // microseconds, once, on a key press.
+            const int bank = int(command.track), slot = int(command.step);
+            if (!project_index_valid(bank, slot) || !project_index_valid(command.a, command.b) ||
+                (bank == int(command.a) && slot == int(command.b))) {
+                status_.bump_refused();
+                break;
+            }
+            project_.patterns[bank][slot] = project_.patterns[command.a][command.b];
+            pattern_replaced(bank, slot);
+            break;
+        }
+
+        case Cmd::pattern_double: {
+            const int bank = int(command.track), slot = int(command.step);
+            if (!project_index_valid(bank, slot)) {
+                status_.bump_refused();
+                break;
+            }
+            if (!pattern_double(project_.patterns[bank][slot], double_clip_)) {
+                status_.bump_refused();
+            }
+            pattern_replaced(bank, slot);
+            break;
+        }
+
+        case Cmd::pattern_clear: {
+            const int bank = int(command.track), slot = int(command.step);
+            if (!project_index_valid(bank, slot)) {
+                status_.bump_refused();
+                break;
+            }
+            pattern_init(project_.patterns[bank][slot]);
+            pattern_replaced(bank, slot);
+            break;
+        }
 
         case Cmd::pattern_erase:
             // FUNC menu, CLEAR PATTERN. Lengths, speeds and swing stay (core/editops.hpp), so
@@ -1931,6 +1986,14 @@ void Engine::apply_perf_plan(SendSettings &sends, MasterSettings &master) const 
 }
 
 // --- pattern changes ------------------------------------------------------
+
+void Engine::pattern_replaced(int bank, int slot) {
+    if (bank != int(project_.bank) || slot != int(project_.slot)) return;
+    undo_.clear();               // the history belonged to the steps just replaced
+    scheduler_.reset(true);
+    reconfigure();
+    deferred_count_ = 0;
+}
 
 void Engine::switch_pattern(int bank, int slot) {
     if (!project_index_valid(bank, slot)) return;

@@ -319,6 +319,27 @@ TEST(factory_is_what_a_new_project_holds_and_it_plays) {
     CHECK(loudest <= 1.0f);
 }
 
+TEST(factory_new_project_is_empty_with_the_kit_and_centred_pans) {
+    using namespace strata::test;
+    Engine &e = fresh();
+    storage().request_new(true);
+    CHECK(settle());
+    make();
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(e.project_for_load().kit.tracks[t].machine), int(g_made.kit.tracks[t].machine));
+        CHECK_EQ(int(kit_value(t, kFactoryFx + 1)), 64);        // PAN, centred on every track
+        // The sound is the factory's, so a pad plays it.
+        for (int i = 0; i < kFactoryFx; i++) CHECK_EQ(int(kit_value(t, i)), int(g_made.kit.tracks[t].params[i]));
+        for (int s = 0; s < kStepsPerTrack; s++) CHECK((e.pattern().tracks[t].steps[s].flags & kStepTrig) == 0);
+    }
+    for (int i = 0; i < kScenes; i++) CHECK_EQ(scene_count(e.scenes().scenes[i]), 0);
+    CHECK_EQ(int(e.project_for_load().settings.chain_length), 0);
+    // And LOAD DEMO (request_new's default) is still the factory beat.
+    storage().request_new();
+    CHECK(settle());
+    CHECK(std::memcmp(e.pattern().tracks, g_made.patterns[0][0].tracks, sizeof g_made.patterns[0][0].tracks) == 0);
+}
+
 TEST(factory_macros_at_rest_leave_every_knob_heard) {
     // The reason the factory once shipped no macros: a resting macro held its parameters. Now
     // a macro at 0 writes nothing (core/perform.hpp), so on a NEW project every parameter a

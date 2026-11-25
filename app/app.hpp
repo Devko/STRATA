@@ -509,8 +509,12 @@ public:
     void on_key(int key, bool down) override {
         // FUNC held on its own for a moment shows what FUNC does (draw_func_help). Any other
         // key, knob or pad while it is down means the hand knew, and the help stays away.
+        // A held LEN key repeats until it, or FUNC, comes up (update).
+        if (!down && key == len_repeat_key_) len_repeat_key_ = -1;
         if (key == ENAGA_KEY_F1) {
             shift_ = down;
+            if (!down) len_repeat_key_ = -1;
+            if (down) slot_ok_held_ = false;    // FUNC + OK is redo, never a queue
             if (down) {
                 shift_at_ms_ = last_ms_;
                 shift_alone_ = true;
@@ -571,6 +575,9 @@ public:
             if (action == enaga::ui::Action::no) notice("NAME KEPT");
             return;
         }
+
+        // PROJECT's slots: a held OK opens the pattern menu, which then takes its keys.
+        if (on_slot_menu_key(key, down)) return;
 
         // FUNC + push D, HELD: the tape stop, in every mode -- beside FUNC + push A-C, the kill
         // EQ, so the master moves are under one hand. Its release ends it whether or not FUNC is
@@ -1179,14 +1186,9 @@ public:
                 }
                 if (mode_ == Mode::menu) break;
                 if (shift_) {
-                    // A delta, applied by the audio side (app/commands.hpp, kDeltaFlag).
-                    mark(GestureKind::length, selected_, 0);
-                    post(Cmd::set_track_length, uint8_t(selected_), 0, 0, clamp_delta(delta),
-                         kDeltaFlag);
-                    end_gesture();
-                    // Only GRID drew the length, so in EDIT or MACHINE the press changed the
-                    // pattern and nothing on screen.
-                    echo(Echo::layout);
+                    step_track_length(delta);
+                    len_repeat_key_ = key;
+                    len_repeat_due_ms_ = last_ms_ + kLenRepeatDelayMs;
                 } else {
                     const int next = page_ + delta;
                     page_ = next < 0 ? 0 : (next > 3 ? 3 : next);
@@ -1345,6 +1347,8 @@ public:
 
     void leave_mode() {
         step_page_ = false;
+        slot_menu_ = false;
+        slot_ok_held_ = false;
         // LEARN is an EDIT thing: any other screen, HOME's GRID included, ends it.
         if (mode_ != Mode::edit && macro_learn_ >= 0) end_learn();
         mutation_pending_ = false;
@@ -1418,8 +1422,17 @@ public:
             // A tap. With F1 it toggles the trigless bit instead: a step that applies its locks
             // without sounding a note.
             mark(GestureKind::trig, selected_, step);
-            // On the step the hold STARTED on, not on what this key would mean now.
-            post(Cmd::toggle_trig, uint8_t(selected_), uint8_t(held_step_), shift_ ? 1 : 0);
+            // On the step the hold STARTED on, not on what this key would mean now. With FILL
+            // held, a FILL trig (COND FILL) goes on or comes off.
+            if (fill_held_ && !shift_) {
+                const Step &was = engine_.pattern().tracks[selected_].steps[held_step_];
+                const bool is_fill = (was.flags & kStepTrig) != 0 &&
+                                     condition_kind(was.condition) == Condition::FILL;
+                post(Cmd::toggle_trig, uint8_t(selected_), uint8_t(held_step_), 2);
+                notice(is_fill ? "FILL TRIG OFF" : "FILL TRIG");
+            } else {
+                post(Cmd::toggle_trig, uint8_t(selected_), uint8_t(held_step_), shift_ ? 1 : 0);
+            }
         }
         release_hold();
         end_gesture();
@@ -2566,10 +2579,30 @@ public:
         if (what == ENAGA_TRANSPORT_STOP) storage_.request_autosave();
     }
 
+    // FUNC + LEN- / LEN+: one step of the selected track's length, as a delta the audio side
+    // applies (app/commands.hpp, kDeltaFlag).
+    void step_track_length(int delta) {
+        mark(GestureKind::length, selected_, 0);
+        post(Cmd::set_track_length, uint8_t(selected_), 0, 0, clamp_delta(delta), kDeltaFlag);
+        end_gesture();
+        // Only GRID drew the length, so in EDIT or MACHINE the press changed the pattern and
+        // nothing on screen.
+        echo(Echo::layout);
+    }
+
     // --- LEDs -------------------------------------------------------------
 
     void update(uint32_t ms) override {
         last_ms_ = ms;
+
+        service_slot_menu();
+
+        // A LEN key held with FUNC repeats. Late passes catch up one step at a time, never in
+        // a burst: a 900 ms stall in a save is one step, not eighteen.
+        if (len_repeat_key_ >= 0 && int32_t(ms - len_repeat_due_ms_) >= 0) {
+            step_track_length(len_repeat_key_ == ENAGA_KEY_OCTAVE_LEFT ? -1 : +1);
+            len_repeat_due_ms_ = ms + kLenRepeatMs;
+        }
 
         // The mutes, read back from the engine. The UI keeps a shadow so a press shows at once,
         // but a recall or a mute that landed on the bar happened on the audio side, and without
@@ -5049,7 +5082,7 @@ public:
 
     enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
                                     speed, chain, song, autofill, quantize, freeze, loop_len,
-                                    count };
+                                    demo, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 8;
 
@@ -5070,6 +5103,7 @@ public:
             case MenuItem::quantize: return "QUANTIZE";
             case MenuItem::freeze:   return "FREEZE";
             case MenuItem::loop_len: return "LOOP LEN";
+            case MenuItem::demo:     return "LOAD DEMO";
             default:                 return "?";
         }
     }
@@ -5473,6 +5507,7 @@ public:
                 notice("OK TWICE OPENS");
                 break;
             case MenuItem::fresh:
+            case MenuItem::demo:
             case MenuItem::reload:
             case MenuItem::clear: {
                 // Each throws away work, so each takes a second OK within kSaveArmMs. CLEAR
@@ -5480,6 +5515,7 @@ public:
                 const MenuItem item = MenuItem(menu_cursor_);
                 const CardAction action = item == MenuItem::reload ? CardAction::reload
                                           : item == MenuItem::clear ? CardAction::clear
+                                          : item == MenuItem::demo  ? CardAction::demo
                                                                     : CardAction::fresh;
                 if (arm_card_action(action)) close_menu(false);
                 break;
@@ -6104,11 +6140,8 @@ public:
             case ENAGA_KEY_OK:
                 // F1 + OK is redo here as everywhere (docs/SPEC.md); the shared handler has it.
                 if (shift_) return false;
-                if (project_page_ == ProjectPage::slots) {
-                    // OK picks the slot under the cursor, as OK picks in every Enaga list.
-                    // Saving is F1 + F3 twice (docs/SPEC.md's key table).
-                    queue_shown_pattern(slot_cursor_);
-                }
+                // On the slots OK is on_slot_menu_key's: a tap queues the slot under the cursor
+                // on its release, as OK picks in every Enaga list; a hold opens the pattern menu.
                 return true;
 
             case ENAGA_KEY_CLR:
@@ -6123,17 +6156,27 @@ public:
                 }
                 return true;
 
-            // The arrows move the slot cursor. With FUNC they do nothing here: chain on/off, the
-            // sample reload, RELOAD PROJECT and NEW PROJECT are in the FUNC menu (FUNC + HOME),
-            // where they are named rather than remembered (docs/CONTROLS.md).
+            // The arrows move the slot cursor. With FUNC, on the slots, they are the pattern
+            // under the cursor (backlog [2]), as FUNC + UP / DOWN copy and paste on the editing
+            // screens: UP copies it, DOWN pastes over it, LEFT clears it. Paste and clear throw
+            // a pattern away, so each takes its key twice. Chain on/off, the sample reload,
+            // RELOAD and NEW are in the FUNC menu (docs/CONTROLS.md).
             case ENAGA_KEY_UP:
             case ENAGA_KEY_DOWN:
-                if (!shift_) move_slot_cursor(key == ENAGA_KEY_UP ? -4 : +4);
+                if (!shift_) {
+                    move_slot_cursor(key == ENAGA_KEY_UP ? -4 : +4);
+                } else if (project_page_ == ProjectPage::slots) {
+                    if (key == ENAGA_KEY_UP) slot_copy(); else slot_paste();
+                }
                 return true;
 
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
-                if (!shift_) move_slot_cursor(key == ENAGA_KEY_LEFT ? -1 : +1);
+                if (!shift_) {
+                    move_slot_cursor(key == ENAGA_KEY_LEFT ? -1 : +1);
+                } else if (key == ENAGA_KEY_LEFT && project_page_ == ProjectPage::slots) {
+                    slot_clear();
+                }
                 return true;
 
             default:
@@ -6143,7 +6186,7 @@ public:
 
     // The FUNC menu's OK-twice rows. `clear` is not a card action -- it empties the playing
     // pattern -- but it is armed the same way, so it shares the one arm.
-    enum class CardAction : uint8_t { none, reload, fresh, clear };
+    enum class CardAction : uint8_t { none, reload, fresh, clear, demo };
 
     // True on the second press, when the action has been asked for.
     bool arm_card_action(CardAction action) {
@@ -6154,8 +6197,11 @@ public:
                 notice("RELOADING");
             } else if (action == CardAction::clear) {
                 clear_pattern();
+            } else if (action == CardAction::demo) {
+                storage_.request_new(false);
+                notice("DEMO PROJECT");
             } else {
-                storage_.request_new();
+                storage_.request_new(true);
                 notice("NEW PROJECT");
             }
             return true;
@@ -6164,6 +6210,7 @@ public:
         card_armed_at_ms_ = last_ms_;
         notice(action == CardAction::reload  ? "OK AGAIN TO RELOAD"
                : action == CardAction::clear ? "OK AGAIN TO CLEAR"
+               : action == CardAction::demo  ? "OK AGAIN FOR DEMO"
                                              : "OK AGAIN FOR NEW");
         return false;
     }
@@ -6176,6 +6223,206 @@ public:
         post(Cmd::pattern_erase);
         end_gesture();
         notice("CLEARED FUNC+CLR UNDO");
+    }
+
+    // --- PROJECT's slots: copy, paste and clear a whole pattern -----------------------------
+
+    enum class SlotAction : uint8_t { none, paste, clear, twice };
+
+    // "A03" for the slot under the cursor in the shown bank.
+    void append_slot_name(char *&out, int bank, int slot) {
+        *out++ = bank_letter(bank);
+        append_padded(out, uint32_t(slot) + 1, 2);
+    }
+
+    // The second press of the same action on the same slot within kSaveArmMs.
+    bool arm_slot_action(SlotAction action) {
+        const bool again = slot_armed_ == action && slot_armed_bank_ == shown_bank_ &&
+                           slot_armed_slot_ == slot_cursor_ &&
+                           uint32_t(last_ms_ - slot_armed_at_ms_) < kSaveArmMs;
+        slot_armed_ = again ? SlotAction::none : action;
+        slot_armed_bank_ = shown_bank_;
+        slot_armed_slot_ = slot_cursor_;
+        slot_armed_at_ms_ = last_ms_;
+        return again;
+    }
+
+    void slot_copy() {
+        clip_bank_ = shown_bank_;
+        clip_slot_ = slot_cursor_;
+        char *out = notice_buffer_;
+        append_slot_name(out, clip_bank_, clip_slot_);
+        append(out, " COPIED");
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    // True when it is finished (the second press, or nothing to do), so the menu can close.
+    bool slot_paste() {
+        if (clip_slot_ < 0) {
+            notice("COPY A PATTERN FIRST");
+            return true;
+        }
+        if (clip_bank_ == shown_bank_ && clip_slot_ == slot_cursor_) {
+            notice("SAME PATTERN");
+            return true;
+        }
+        char *out = notice_buffer_;
+        const bool run = arm_slot_action(SlotAction::paste);
+        if (!run) {
+            append(out, "AGAIN: PASTE TO ");
+            append_slot_name(out, shown_bank_, slot_cursor_);
+        } else {
+            Command command;
+            command.cmd = Cmd::pattern_copy;
+            command.track = uint8_t(shown_bank_);
+            command.step = uint8_t(slot_cursor_);
+            command.a = uint8_t(clip_bank_);
+            command.b = uint8_t(clip_slot_);
+            post_command(command);
+            append_slot_name(out, clip_bank_, clip_slot_);
+            append(out, " PASTED TO ");
+            append_slot_name(out, shown_bank_, slot_cursor_);
+        }
+        *out = 0;
+        notice(notice_buffer_);
+        return run;
+    }
+
+    bool slot_clear() {
+        char *out = notice_buffer_;
+        const bool run = arm_slot_action(SlotAction::clear);
+        if (!run) {
+            append(out, "AGAIN: CLEAR ");
+            append_slot_name(out, shown_bank_, slot_cursor_);
+        } else {
+            post(Cmd::pattern_clear, uint8_t(shown_bank_), uint8_t(slot_cursor_));
+            append_slot_name(out, shown_bank_, slot_cursor_);
+            append(out, " CLEARED");
+        }
+        *out = 0;
+        notice(notice_buffer_);
+        return run;
+    }
+
+    // DOUBLE: every track twice as long (up to 64), its steps copied into the new half.
+    bool slot_double() {
+        char *out = notice_buffer_;
+        const bool run = arm_slot_action(SlotAction::twice);
+        if (!run) {
+            append(out, "AGAIN: DOUBLE ");
+            append_slot_name(out, shown_bank_, slot_cursor_);
+        } else {
+            post(Cmd::pattern_double, uint8_t(shown_bank_), uint8_t(slot_cursor_));
+            append_slot_name(out, shown_bank_, slot_cursor_);
+            append(out, " DOUBLED");
+        }
+        *out = 0;
+        notice(notice_buffer_);
+        return run;
+    }
+
+    // --- the pattern menu: hold OK on a slot ------------------------------------------------
+    //
+    // A short list for the pattern under the cursor (Roland, 2026-11-25): COPY, PASTE, CLEAR,
+    // DOUBLE. UP/DOWN pick, OK runs (PASTE, CLEAR and DOUBLE take OK twice), CLR closes. A tap
+    // on OK still queues the pattern: the list waits for a hold of kSlotMenuHoldMs, and a tap
+    // queues on its release. FUNC + UP / DOWN / LEFT stay as the shortcuts.
+    static constexpr uint32_t kSlotMenuHoldMs = 500;
+    static constexpr int kSlotMenuRows = 4;
+    static const char *slot_menu_name(int row) {
+        switch (row) {
+            case 0: return "COPY";
+            case 1: return "PASTE";
+            case 2: return "CLEAR";
+            default: return "DOUBLE";
+        }
+    }
+
+    bool slot_ok_target() const {
+        return mode_ == Mode::project && project_page_ == ProjectPage::slots && !shift_;
+    }
+
+    // True when the key was the menu's, or the OK hold's.
+    bool on_slot_menu_key(int key, bool down) {
+        if (slot_menu_) {
+            const bool mine = key == ENAGA_KEY_OK || key == ENAGA_KEY_UP ||
+                              key == ENAGA_KEY_DOWN || key == ENAGA_KEY_CLR;
+            if (!down || !mine) return mine;
+            if (key == ENAGA_KEY_CLR) {
+                slot_menu_ = false;
+                notice("PROJECT");
+                return true;
+            }
+            if (key != ENAGA_KEY_OK) {
+                slot_menu_cursor_ = (slot_menu_cursor_ + (key == ENAGA_KEY_UP ? -1 : 1) +
+                                     kSlotMenuRows) % kSlotMenuRows;
+                slot_armed_ = SlotAction::none;
+                return true;
+            }
+            bool done = true;
+            switch (slot_menu_cursor_) {
+                case 0: slot_copy(); break;
+                case 1: done = slot_paste(); break;
+                case 2: done = slot_clear(); break;
+                default: done = slot_double(); break;
+            }
+            if (done) slot_menu_ = false;
+            return true;
+        }
+        if (key != ENAGA_KEY_OK || !slot_ok_target()) return false;
+        if (down) {
+            slot_ok_held_ = true;
+            slot_ok_down_ms_ = last_ms_;
+        } else if (slot_ok_held_) {
+            slot_ok_held_ = false;
+            queue_shown_pattern(slot_cursor_);   // a tap: what OK always did here
+        }
+        return true;
+    }
+
+    // update(): a held OK opens the menu.
+    void service_slot_menu() {
+        if (slot_menu_ && (mode_ != Mode::project || project_page_ != ProjectPage::slots)) {
+            slot_menu_ = false;
+        }
+        if (!slot_ok_held_) return;
+        if (!slot_ok_target()) {
+            slot_ok_held_ = false;
+            return;
+        }
+        if (uint32_t(last_ms_ - slot_ok_down_ms_) < kSlotMenuHoldMs) return;
+        slot_ok_held_ = false;
+        slot_menu_ = true;
+        slot_menu_cursor_ = 0;
+        slot_armed_ = SlotAction::none;
+        char *out = notice_buffer_;
+        append(out, "PATTERN ");
+        append_slot_name(out, shown_bank_, slot_cursor_);
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    void draw_slot_menu(enaga::Canvas &canvas) {
+        char line[24];
+        char *out = line;
+        append(out, "PATTERN ");
+        append_slot_name(out, shown_bank_, slot_cursor_);
+        *out = 0;
+        canvas.text(0, 18, line, 14);
+        for (int row = 0; row < kSlotMenuRows; row++) {
+            const bool here = row == slot_menu_cursor_;
+            out = line;
+            *out++ = here ? '>' : ' ';
+            append(out, slot_menu_name(row));
+            if (row == 1 && clip_slot_ >= 0) {
+                append(out, " ");
+                append_slot_name(out, clip_bank_, clip_slot_);
+            }
+            *out = 0;
+            canvas.text(0, 29 + row * 9, line, here ? 15 : 9);
+        }
+        canvas.text(0, 103, "OK: RUN   CLR: BACK", 7);
     }
 
     // The cursor over PROJECT's sixteen slots, drawn four by four: LEFT and RIGHT step through
@@ -6565,6 +6812,10 @@ public:
             draw_projects(canvas);
             return;
         }
+        if (slot_menu_) {
+            draw_slot_menu(canvas);
+            return;
+        }
         char line[40];
         char *out = line;
         const Status &status = engine_.status();
@@ -6711,7 +6962,8 @@ private:
         // the status rather than assumed, because a chain may have moved the live pattern without
         // the UI asking (app/storage.hpp says why the flags live on this side).
         storage_.note_command(
-            command.cmd, int(engine_.status().live_bank.load(std::memory_order_relaxed)));
+            command.cmd, int(engine_.status().live_bank.load(std::memory_order_relaxed)),
+            int(command.track));
     }
 
     // The tempo, as the engine wants it: BPM in `f` (app/commands.hpp). The engine stores it in
@@ -6817,6 +7069,12 @@ private:
     bool value_alone_ = false;     // VALUE pushed with nothing else since: its release resets
     uint32_t value_down_ms_ = 0;   // when it was pushed: only a tap resets
     static constexpr uint32_t kValueTapMs = 500;
+    // FUNC + LEN- / LEN+ held repeats (backlog [4]): after kLenRepeatDelayMs, a step every
+    // kLenRepeatMs, so 16 to 64 is about two seconds rather than 48 presses.
+    static constexpr uint32_t kLenRepeatDelayMs = 400;
+    static constexpr uint32_t kLenRepeatMs = 50;
+    int len_repeat_key_ = -1;      // the octave key held with FUNC, or -1
+    uint32_t len_repeat_due_ms_ = 0;
     uint8_t frozen_seen_ = 0;                   // Status::frozen as update() last saw it
     const char *freeze_error_seen_ = nullptr;   // and Storage::freeze_error
     uint16_t rolling_pads_ = 0;                 // per track: its pad is rolling (Cmd::note_repeat)
@@ -6903,6 +7161,16 @@ private:
     int delete_oks_ = 0;
     uint32_t delete_ok_at_ms_ = 0;
     int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
+    bool slot_menu_ = false;       // the pattern menu (hold OK on a slot) is open
+    int slot_menu_cursor_ = 0;
+    bool slot_ok_held_ = false;    // OK down on a slot: a tap queues, a hold opens the menu
+    uint32_t slot_ok_down_ms_ = 0;
+    int clip_bank_ = 0;            // COPY on the slots: the pattern copied, slot -1 for none
+    int clip_slot_ = -1;
+    SlotAction slot_armed_ = SlotAction::none;   // a paste or clear waiting for its second press
+    int slot_armed_bank_ = 0;
+    int slot_armed_slot_ = 0;
+    uint32_t slot_armed_at_ms_ = 0;
     Mode menu_return_ = Mode::grid;   // the screen the FUNC menu opened over
     int menu_cursor_ = 0;             // the FUNC menu's row; SAVE when it opens
     bool shift_alone_ = false;        // FUNC down and nothing else pressed since

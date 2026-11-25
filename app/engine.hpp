@@ -316,6 +316,9 @@ private:
     // Make `bank`/`slot` the live pattern. Clears the undo history (it belonged to the pattern
     // being left) and re-derives the scheduler's timing and the pass boundary.
     void switch_pattern(int bank, int slot);
+    // A whole pattern in memory was replaced (pattern_copy, pattern_clear): when it is the one
+    // playing, what was derived from it is stale, as after a switch.
+    void pattern_replaced(int bank, int slot);
 
     // The pass boundary passed: let a chain move on if one is playing.
     void cross_boundary(uint32_t boundary);
@@ -616,6 +619,7 @@ private:
     // static, not a stack frame -- but it is the reason nothing here may be passed by value.
     UndoStack undo_;
     RangeClip clip_;
+    RangeClip double_clip_;        // pattern_double's scratch, so the user's clipboard survives
 
     // --- the performance layer (M5) ---
     //

@@ -79,6 +79,13 @@ void track_erase(Pattern &pattern, int track);
 // per-track layout, for the same reason.
 void pattern_erase_steps(Pattern &pattern);
 
+// DOUBLE (PROJECT's pattern menu, backlog [4]/CyDrums P10): every track twice as long, up to
+// 64 steps, its steps and locks copied into the new half, and the master length with it. A
+// track already at 64 is left alone. `scratch` is the caller's (about 1.9 KiB). False when the
+// lock pool ran out part-way: the tracks before it are doubled, that one and the rest keep
+// their length and steps.
+bool pattern_double(Pattern &pattern, RangeClip &scratch);
+
 // --- small edits the UI needs ---------------------------------------------
 
 // Transpose a range by `semitones`, clamped to 0..127 per step rather than wrapping: a note

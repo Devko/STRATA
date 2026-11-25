@@ -38,7 +38,7 @@ pads and the performance mixer.
 | --- | --- | --- |
 | GRID | HOME (from anywhere) | All 8 tracks; STEP keys edit the selected track |
 | KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys 16 scale degrees, on the selected track |
-| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, chain, song, auto-fill, quantize, freeze, loop length |
+| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, chain, song, auto-fill, quantize, freeze, loop length, load demo |
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE and FM4 machines ASR and OSC |
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
@@ -46,7 +46,7 @@ pads and the performance mixer.
 | SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound into that track only; AS WAS puts yours back |
 | MIXER | MIXER | Levels, the sidechain duck, delay, reverb, routing, master, kill EQ |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
-| PROJECT | PROJECT | Banks and patterns, key and scale, the card |
+| PROJECT | PROJECT | Banks and patterns, key and scale, the card. On the slots: **hold OK** for the pattern menu (COPY, PASTE, CLEAR, DOUBLE; OK runs, PASTE/CLEAR/DOUBLE twice). Shortcuts: FUNC+UP copies, FUNC+DOWN twice pastes, FUNC+LEFT twice clears |
 | CHAIN | PROJECT, then screen key RIGHT | The pattern chain as a list |
 | PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG) and each track's own swing of the playing pattern |
 | SETUP | PROJECT, screen key RIGHT three times | Record quantize; shows clock and MIDI settings |
@@ -90,7 +90,7 @@ each line means.
 | Push VALUE + STEP, CLR, LEFT/RIGHT | The performance mixer (below) |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
 | FUNC + push D (hold) | Tape stop: the master slows to a standstill over two beats; let go and it is back (`TAPE STOP`). Not while a STEP is held: that clears the D lock |
-| FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu |
+| FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu; hold to repeat |
 | Arrow pad | UP/DOWN move through rows, LEFT/RIGHT sideways, OK picks, CLR goes back |
 | Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn) |
 | Pad-row keys L/R | Which 16 the STEP keys mean: step page, octave (KEYS), bank (PROJECT, CHAIN) |
@@ -107,7 +107,7 @@ screen when pressed.
 | Pad | Plain | With FUNC / held |
 | --- | --- | --- |
 | Lower 1-8 | Select the track and play its root note; pressure bends macro A up | FUNC: mute or unmute on the next bar. In NOTE RPT: rolls while held at REPEAT's length, pressure is the velocity |
-| Upper 1 FILL (printed TRK 1) | Fill while held | FUNC: NOTE RPT on/off (`NOTE RPT`, `PADS PLAY`; `NRPT` on PERFORM's bar line) |
+| Upper 1 FILL (printed TRK 1) | Fill while held. Held + tap STEP: a FILL trig on the selected track (`FILL TRIG`; again: `FILL TRIG OFF`) | FUNC: NOTE RPT on/off (`NOTE RPT`, `PADS PLAY`; `NRPT` on PERFORM's bar line) |
 | Upper 2 REPEAT (TRK 2) | Beat repeat while held; VALUE picks 1/4 ... 1/16T | FUNC at the press: pitch drops |
 | Upper 3 MUTE (TRK 3) | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B (TRK 4/5) | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
@@ -191,8 +191,8 @@ reload, RELOAD PROJECT and NEW PROJECT are in the FUNC menu (FUNC+HOME); the las
 unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN FOR NEW).
 **FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, CLEAR
 PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, FREEZE, LOOP
-LEN. It always opens on SAVE, and the list wraps: UP once is LOOP LEN, twice FREEZE. UP/DOWN or A
-scroll, OK runs the row (NEW, RELOAD and CLEAR PATTERN need OK twice), LEFT/RIGHT or B change a
+LEN, LOAD DEMO. It always opens on SAVE, and the list wraps: UP once is LOAD DEMO, twice LOOP LEN, three times FREEZE. UP/DOWN or A
+scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
 setting row (OK steps it too), CLR or FUNC+HOME close it. FREEZE: the selected track plays a 1-8
 bar loop of itself from RAM and stops computing; OK again unfreezes.
 **PROJECTS:** UP/DOWN or A move, LEFT/RIGHT page by 8. OK twice within 2 s opens the project
