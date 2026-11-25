@@ -31,7 +31,40 @@ int slot_tick(int slot, int step, const TrackTiming &timing, const int8_t *micro
     return slot * step_ticks + swing_offset(slot, timing.swing, step_ticks) + micro_of(micro, step);
 }
 
+// One DRIFT target, -1024 .. 1023: the top 11 bits of the hash, centred.
+int32_t feel_point(uint32_t seed, uint32_t index) {
+    return int32_t(mix32(seed ^ (index * 0x9E3779B1u + 0x632BE5ABu)) >> 21) - 1024;
+}
+
 }  // namespace
+
+int feel_offset(uint8_t feel, uint32_t seed, int32_t grid) {
+    const int depth = feel_depth(feel);
+    if (depth == 0 || grid < 0) return 0;
+    const uint32_t n = uint32_t(grid);
+    if (feel_mode(feel) == FeelMode::wave) {
+        // n / 1536 as (n / 512) / 3, the divide by 3 a multiply: exact for every 32-bit value.
+        static_assert(kFeelWavePeriod == 3 * 512, "WAVE's period is divided as 512 x 3");
+        const uint32_t periods = uint32_t((uint64_t(n >> 9) * 0xAAAAAAABull) >> 33);
+        const int32_t r = int32_t(n - periods * uint32_t(kFeelWavePeriod));
+        // A triangle through 0 at the period's start and middle: +384 a quarter in, -384 three
+        // quarters in.
+        const int32_t s = r < 384 ? r : (r < 1152 ? 768 - r : r - 1536);
+        // s x depth / 384, rounded: 683 / 2^18 is 1 / 383.8, so the ends reach exactly +-depth.
+        return int((s * depth * 683 + (1 << 17)) >> 18);
+    }
+    const uint32_t index = n >> kFeelDriftSegmentShift;
+    const int32_t span = 1 << kFeelDriftSegmentShift;
+    const int32_t at = int32_t(n & uint32_t(span - 1));
+    const int32_t a = feel_point(seed, index);
+    const int32_t b = feel_point(seed, index + 1u);
+    // (a (64 - at) + b at) / 64 is -1024 .. 1023; times depth / 1024, rounded.
+    return int(((a * (span - at) + b * at) * depth + (1 << 15)) >> 16);
+}
+
+uint32_t feel_seed(uint32_t pattern_seed, int track) {
+    return mix32(pattern_seed ^ (uint32_t(track) * 0x27D4EB2Fu + 0x165667B1u));
+}
 
 uint32_t play_seed(uint32_t pattern_seed, int track) {
     return mix32(pattern_seed ^ (uint32_t(track) * 0x85EBCA77u + 0x7F4A7C15u));
@@ -80,7 +113,9 @@ int steps_firing_at(uint32_t tick, const TrackTiming &timing, const int8_t *micr
     const int length = clamp_int(int(timing.length), 1, kMaxSteps);
     const int step_ticks = timing.step_ticks();
     const int loop_ticks = length * step_ticks;
-    const int window = max_shift(step_ticks);
+    // FEEL widens the window by its depth, and only while it is on.
+    const int feel_ticks = feel_depth(timing.feel);
+    const int window = max_shift(step_ticks) + feel_ticks;
 
     int found = 0;
 
@@ -109,6 +144,7 @@ int steps_firing_at(uint32_t tick, const TrackTiming &timing, const int8_t *micr
     int32_t loop = candidate / length;            // the only division in the setup
     int32_t step_index = candidate - loop * length;
     int32_t loop_start = loop * loop_ticks;
+    int32_t grid = candidate * step_ticks;        // the slot's tick before swing, micro and FEEL
     const bool forward = timing.play == PlayMode::fwd;
 
     for (; candidate <= last_candidate; candidate++) {
@@ -120,7 +156,9 @@ int steps_firing_at(uint32_t tick, const TrackTiming &timing, const int8_t *micr
         // track of the default beat, skips the call: it measured 0.7 points on the emulator.
         const uint8_t plays = forward ? uint8_t(step_index)
                                       : play_step(int(step_index), uint32_t(loop), timing);
-        const int32_t nominal = loop_start + slot_tick(int(step_index), plays, timing, micro);
+        const int32_t nominal =
+            loop_start + slot_tick(int(step_index), plays, timing, micro) +
+            (feel_ticks != 0 ? feel_offset(timing.feel, timing.feel_seed, grid) : 0);
         const int32_t effective = nominal < 0 ? 0 : nominal;
         if (effective == absolute) {
             out[found].step = plays;
@@ -130,6 +168,7 @@ int steps_firing_at(uint32_t tick, const TrackTiming &timing, const int8_t *micr
         }
 
         // Advance without dividing.
+        grid += step_ticks;
         step_index++;
         if (step_index >= length) {
             step_index = 0;

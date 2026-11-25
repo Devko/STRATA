@@ -99,6 +99,7 @@ FM4 and GRAIN machines.
 | **Play modes per track**: FWD, REV, PING, RND1-RND16 (FUNC menu TRACK PLAY); seeded, the pattern untouched | #148 | ○ (W13) | Not on PERFORM yet (the backlog's arm-and-knob idea) |
 | Parameter locks: 8 a step, 1,024 a pattern; push the knob to remove one | v0.1.0 | ○ (6) | `FULL n` when the pool is full (never reached on the unit) |
 | Pattern swing and **per-track swing** (PATTERN page) | v0.1.0 | ○ (13e) | |
+| **FEEL**: DRIFT 1-6 (each track its own curve) or WAVE 1-6 (one four-bar curve), over swing and micro (PATTERN page, D) | #152 | ○ (W29) | Up to 6 ticks of 96 PPQN; seeded |
 | Euclidean fill (FUNC + A/B/C in GRID) | v0.1.0 | ○ (M3) | |
 | Copy/paste a step, a range or a track; range transpose and nudge | v0.1.0 | ○ (M3) | |
 | **Pattern menu** (hold OK on a PROJECT slot): COPY, PASTE, CLEAR, DOUBLE; FUNC + UP / DOWN / LEFT on the slots | #140 | ○ (W12) | DOUBLE stops at 64 steps |
@@ -125,6 +126,7 @@ FM4 and GRAIN machines.
 | 4 macros of up to 4 targets, sweep from the live value; demo B ACID, C DUB, D DRIVE | v0.1.0 | ○ (3b) | |
 | **Macro learn by turning (D11)**: push a macro's knob in PERFORM, turn EDIT knobs, OK | #141 | ○ (W10) | The kill EQ's bands still go on a macro by FUNC + STEP 5-7 in PERFORM |
 | **LOCK** (FUNC + MUTATE: hold stores, tap jumps, tap again swaps back), one per pattern, RAM only | #149 | ○ (W20c) | Not saved; the kit is shared, so a jump brings that lock's sound to every pattern |
+| **REL ALL / LEN ALL**: every track's release (FUNC + A) and every note's length (FUNC + B) in PERFORM | #152 | ○ (W29) | Live only; LEN ALL leaves gateless notes (drums, arp) alone |
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |

@@ -625,3 +625,139 @@ TEST(a_play_mode_fires_once_per_slot_with_swing_on_the_slot_and_micro_on_the_ste
         for (int loop = 0; loop < loops; loop++) CHECK_EQ(per_loop[loop], 16);
     }
 }
+
+// --- FEEL -----------------------------------------------------------------
+
+TEST(feel_bytes_name_their_mode_and_depth_and_walk_one_line) {
+    CHECK(feel_mode(0) == FeelMode::off);
+    CHECK_EQ(feel_depth(0), 0);
+    for (int d = 1; d <= kFeelDepthMax; d++) {
+        CHECK(feel_mode(uint8_t(d)) == FeelMode::drift);
+        CHECK_EQ(feel_depth(uint8_t(d)), d);
+        CHECK(feel_mode(uint8_t(kFeelDepthMax + d)) == FeelMode::wave);
+        CHECK_EQ(feel_depth(uint8_t(kFeelDepthMax + d)), d);
+    }
+    // A byte this build does not know is OFF, never a deeper drift.
+    CHECK(feel_mode(uint8_t(kFeelMax + 1)) == FeelMode::off);
+    CHECK_EQ(feel_depth(255), 0);
+    CHECK(std::strcmp(feel_mode_name(0), "OFF") == 0);
+    CHECK(std::strcmp(feel_mode_name(3), "DRIFT") == 0);
+    CHECK(std::strcmp(feel_mode_name(9), "WAVE") == 0);
+
+    CHECK_EQ(int(feel_step(0, -1)), 0);
+    CHECK_EQ(int(feel_step(0, 1)), 1);
+    CHECK_EQ(int(feel_step(6, 1)), 7);               // DRIFT 6, then WAVE 1
+    CHECK_EQ(int(feel_step(kFeelMax, 3)), int(kFeelMax));
+    CHECK_EQ(int(feel_step(200, 1)), 1);             // damaged counts as OFF
+}
+
+TEST(feel_offsets_stay_within_the_depth_and_reach_it) {
+    for (int feel = 1; feel <= int(kFeelMax); feel++) {
+        const int depth = feel_depth(uint8_t(feel));
+        int low = 0;
+        int high = 0;
+        for (int32_t grid = 0; grid < 40000; grid += 3) {
+            const int off = feel_offset(uint8_t(feel), 0x1234567u, grid);
+            CHECK(off >= -depth && off <= depth);
+            if (off < low) low = off;
+            if (off > high) high = off;
+        }
+        CHECK_EQ(low, -depth);
+        CHECK_EQ(high, depth);
+    }
+    // OFF, and a byte this build does not know, move nothing.
+    for (int32_t grid = 0; grid < 5000; grid += 7) {
+        CHECK_EQ(feel_offset(0, 99u, grid), 0);
+        CHECK_EQ(feel_offset(uint8_t(kFeelMax + 1), 99u, grid), 0);
+    }
+}
+
+TEST(feel_wave_is_a_four_bar_triangle_through_the_downbeat_of_bar_one) {
+    const uint8_t wave6 = uint8_t(kFeelDepthMax + 6);
+    CHECK_EQ(feel_offset(wave6, 0u, 0), 0);
+    CHECK_EQ(feel_offset(wave6, 0u, 384), 6);         // laid back most at the end of bar 1
+    CHECK_EQ(feel_offset(wave6, 0u, 768), 0);         // on the grid at bar 3
+    CHECK_EQ(feel_offset(wave6, 0u, 1152), -6);       // pushed most at the end of bar 3
+    CHECK_EQ(feel_offset(wave6, 0u, 1536), 0);
+    // Periodic, the same for every seed (one curve for every track), and the divide-free period
+    // agrees with a plain modulo far out.
+    for (int32_t grid = 0; grid < 3000000; grid += 997) {
+        CHECK_EQ(feel_offset(wave6, 0u, grid), feel_offset(wave6, 0u, grid % kFeelWavePeriod));
+        CHECK_EQ(feel_offset(wave6, 0u, grid), feel_offset(wave6, 0xDEADBEEFu, grid));
+    }
+    // Smooth: neighbouring sixteenths never sit more than a tick apart.
+    for (int32_t grid = 0; grid < 4000; grid += 24) {
+        const int step = feel_offset(wave6, 0u, grid + 24) - feel_offset(wave6, 0u, grid);
+        CHECK(step >= -1 && step <= 1);
+    }
+}
+
+TEST(feel_drift_is_seeded_smooth_and_differs_between_tracks) {
+    const uint8_t drift6 = 6;
+    const uint32_t a = feel_seed(1, 0);
+    const uint32_t b = feel_seed(1, 1);
+    CHECK(a != b);
+    CHECK(feel_seed(1, 0) != play_seed(1, 0));
+    int differ = 0;
+    for (int32_t grid = 0; grid < 4096; grid += 24) {
+        CHECK_EQ(feel_offset(drift6, a, grid), feel_offset(drift6, a, grid));
+        if (feel_offset(drift6, a, grid) != feel_offset(drift6, b, grid)) differ++;
+        // Straight lines between targets 64 ticks apart: a sixteenth moves at most 5 ticks.
+        const int step = feel_offset(drift6, a, grid + 24) - feel_offset(drift6, a, grid);
+        CHECK(step >= -5 && step <= 5);
+    }
+    CHECK(differ > 50);
+}
+
+// The invariant the rest of this file holds swing and micro to: with FEEL on, every step still
+// fires exactly once a pass, at every speed, swing and micro included.
+TEST(feel_fires_every_step_once_per_pass_at_every_speed) {
+    for (int feel = 1; feel <= int(kFeelMax); feel += 5) {
+        for (int s = 0; s < int(Speed::count); s++) {
+            TrackTiming timing;
+            timing.length = 16;
+            timing.speed = Speed(s);
+            timing.swing = 75;
+            timing.feel = uint8_t(feel);
+            timing.feel_seed = feel_seed(42, 2);
+            int8_t micro[kMaxSteps] = {};
+            for (int i = 0; i < 16; i++) micro[i] = int8_t((i * 7) % 23 - 11);
+            check_every_step_once_per_loop(timing, micro, 5);
+        }
+    }
+}
+
+TEST(feel_moves_each_slot_by_its_offset_and_off_moves_nothing) {
+    TrackTiming timing;
+    timing.length = 16;
+    timing.swing = 60;
+    timing.feel = 3;                                  // DRIFT 3
+    timing.feel_seed = feel_seed(9, 4);
+    const int loops = 4;
+    int fired = 0;
+    for (int tick = 0; tick < timing.loop_ticks() * (loops + 1); tick++) {
+        Firing firings[kMaxFiringsPerTick];
+        const int n = steps_firing_at(uint32_t(tick), timing, nullptr, firings, kMaxFiringsPerTick);
+        for (int i = 0; i < n; i++) {
+            const int slot = int(firings[i].step);
+            const int grid = int(firings[i].loop) * timing.loop_ticks() + slot * 24;
+            const int at = grid + swing_offset(slot, 60, 24) +
+                           feel_offset(timing.feel, timing.feel_seed, grid);
+            CHECK_EQ(at < 0 ? 0 : at, tick);
+            fired++;
+        }
+    }
+    CHECK(fired >= loops * 16);
+    // At OFF the mapping is the one before FEEL existed, tick for tick.
+    TrackTiming plain = timing;
+    plain.feel = 0;
+    for (int tick = 0; tick < plain.loop_ticks() * 2; tick++) {
+        Firing firings[kMaxFiringsPerTick];
+        const int n = steps_firing_at(uint32_t(tick), plain, nullptr, firings, kMaxFiringsPerTick);
+        for (int i = 0; i < n; i++) {
+            CHECK_EQ(effective_tick(int(firings[i].step), plain, nullptr) +
+                         int(firings[i].loop) * plain.loop_ticks(),
+                     tick);
+        }
+    }
+}

@@ -16,6 +16,16 @@ the project file format or the controls.
 
 ### Added
 
+- **REL ALL and LEN ALL (P4).** In PERFORM, FUNC + turn A moves every track's release at once
+  (DEC on every machine, REL on the ASR page where there is one, and a step's lock on them),
+  -64..+64 (`REL ALL -12`); FUNC + turn B scales every sequenced note's length, 25-400%
+  (`LEN ALL 71%`). Rest is 0, a detent, and the programmed sound exactly. Live like the macros:
+  not saved, held by a LOCK, shown in the live strip as `RL-`/`RL+` and `LN-`/`LN+`.
+- **FEEL (P8).** A timing drift over swing and micro-timing, on the PATTERN page after SWG (D
+  turns it): DRIFT 1-6, each track on its own smooth random curve, or WAVE 1-6, the whole groove
+  along one four-bar curve, laid back then pushed. Up to 6/96 of a beat, following the tempo,
+  seeded so it repeats after a reload. Saved per pattern in a new optional section; older
+  projects load with FEEL OFF, and older builds open new ones and play them straight.
 - **Macro learn by turning (D11).** In PERFORM push a macro's knob: EDIT opens in LEARN
   (`LEARN B 0/4 TURN KNOBS`). Every knob you turn there, on any page and any track, goes on the
   macro, from where it was (the macro's 0) to where you leave it (its 127). OK, CLR, HOME or

@@ -43,6 +43,7 @@
 #include "masterfx.hpp"  // its own master effects: pump, crush, noise, gate
 #include "looper.hpp"    // its slot 16: the master looper, in RESAMPLE's buffer
 #include "lockstore.hpp" // LOCK: FUNC + MUTATE stores, jumps and swaps back
+#include "moveall.hpp"   // REL ALL and LEN ALL: every track's release and note length
 #include "arp.hpp"       // the arpeggiator's notes
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
@@ -181,6 +182,9 @@ public:
     uint8_t macro_position(int macro) const {
         return macro >= 0 && macro < kMacros ? macro_position_[macro] : 0;
     }
+    // REL ALL and LEN ALL (core/moveall.hpp): 0 is rest.
+    int8_t rel_all() const { return rel_all_; }
+    int8_t len_all() const { return len_all_; }
     AutoFill auto_fill() const { return auto_fill_; }
     uint32_t bar() const { return bar_; }
     bool fill() const { return perform_.fill; }
@@ -644,6 +648,10 @@ private:
     uint8_t scene_b_ = 1;
     uint16_t morph_ = 0;
     uint8_t macro_position_[kMacros] = {};
+    // REL ALL and LEN ALL (Cmd::set_move_all). REL ALL goes on in apply_performance and on a
+    // step's locked release byte in fire(); LEN ALL on every sequenced gate in fire().
+    int8_t rel_all_ = 0;
+    int8_t len_all_ = 0;
 
     MuteLatch mute_latch_;
 

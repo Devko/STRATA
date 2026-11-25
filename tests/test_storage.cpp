@@ -587,6 +587,11 @@ const Expect kTable[] = {
     // a pattern, the sound bytes and faders, and the send, master and mute bytes back.
     {Cmd::lock_store, 0u, "lock_store"},
     {Cmd::lock_tap, kDirtyBank | kDirtyKit | kDirtyProject, "lock_tap"},
+
+    // FEEL is a pattern setting, saved in the bank like swing (core/serialize.hpp, section 5).
+    {Cmd::set_pattern_feel, kDirtyBank, "set_pattern_feel"},
+    // REL ALL and LEN ALL are where the hands are, like a macro's position: no file.
+    {Cmd::set_move_all, 0u, "set_move_all"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:

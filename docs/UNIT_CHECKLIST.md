@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W28, about 75 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W29, about 80 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -348,6 +348,20 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   grains come and go, brighter when louder. Turn A (POS) and B (SIZ): the bracket follows. `____`
 - Screen still smooth at 20 fps with all eight tracks playing and a 30 s file loaded? Keys never
   dropped while a long file loads? `____`
+
+**W29. FEEL, REL ALL and LEN ALL (#152, 4 min).** PLAY A01.
+- PROJECT, screen key RIGHT twice (PATTERN): `FEEL OFF` under SWG. Turn D one click:
+  `FEEL DRIFT 1`; on to `DRIFT 4`: the parts loosen against each other, still in time. On to
+  `WAVE 6`: over four bars the whole beat lays back, then rushes, then settles. Too much, too
+  little, the right range? `____` STOP, PLAY: the same drift comes back. FUNC + CLR: one step
+  back. Back to `OFF`: dead on the grid again.
+- PERFORM: the line under the macros reads `FUNC+A/B REL/LEN ALL`. FUNC + turn A left:
+  `REL ALL -2` .. `-40`, every track's tail shortens together, kick, hats and the chord's
+  release; line 2 shows `RL-`. Turn it back quickly: it stops on `REL ALL 0` and the kit sounds
+  exactly as before. Right: everything rings longer.
+- FUNC + turn B: `LEN ALL 50%`, the bass and chord notes halve; `200%`, they hold twice as long;
+  the drums do not change. Away from rest the line reads `REL -12 LEN 71%`.
+- Hold FUNC + MUTATE (a lock), move both, tap FUNC + MUTATE: both jump back. Useful ranges? `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
