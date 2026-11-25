@@ -1,6 +1,6 @@
 /* The drum machines' per-sample loops (drumloops.h). Built by cl6x when it is installed, else
  * GCC -- build_app.py routes *.ti.c to TI's compiler, whose software pipelining is what makes
- * these loops worth moving out of C++ at all (docs/BUDGET.md, M2).
+ * these loops worth moving out of C++ at all (docs/archive/BUDGET_MILESTONES.md, M2).
  *
  * Every loop here is a loop that used to sit in kick.cpp, snare.cpp or hat.cpp, moved with its
  * arithmetic untouched: the same expressions in the same order, through the same inline enaga

@@ -121,7 +121,7 @@ void append_hex4(char *&out, uint32_t value) {
 //
 // Two pages of track faders and then the sends and the master, four encoders at a time.
 // docs/SPEC.md gives the sends no gesture of their own and the master only F1 + VALUE for the DJ
-// filter, so this is a DEVIATION, recorded in docs/REVIEW.md: fourteen settings that reach a
+// filter, so this is a DEVIATION, recorded in docs/archive/REVIEW.md: fourteen settings that reach a
 // file have to be reachable from the panel, and MIXER is the mode that is already about the
 // buses. The DJ filter is on F1 + VALUE as well, as the spec requires.
 //
@@ -1222,8 +1222,6 @@ public:
                 break;
             }
 
-            // The selection keys move within the current mode; with F1 they walk the selected
-            // track's speed, the other half of polymeter.
             // The screen keys turn the screen's pages, in every mode (docs/CONTROLS.md). The
             // track's speed, which FUNC + these used to walk, is in the FUNC menu.
             case ENAGA_KEY_SELECT_LEFT:
@@ -2608,7 +2606,7 @@ public:
     // MIDI notes take exactly the same path as pad hits, which is the point: `on_midi` is main
     // context and carries no timestamp of its own, so it has nothing better to be stamped with
     // than the clock state read the moment it arrives -- the same thing a pad hit gets
-    // (docs/REVIEW.md). One mechanism, one set of bugs.
+    // (docs/archive/REVIEW.md). One mechanism, one set of bugs.
     //
     // The channel picks the track, 1-8 for tracks 1-8, anything else playing the selected one.
     // docs/SPEC.md does not map this; MIDI channel is the obvious choice and a note-for-note

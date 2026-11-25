@@ -1,6 +1,6 @@
 // Tick-to-step mapping: swing, per-track speed and length, and micro-timing.
 //
-// Enaga owns the clock (docs/REVIEW.md 1.3), so STRATA never counts time. What it does own is
+// Enaga owns the clock (docs/archive/REVIEW.md 1.3), so STRATA never counts time. What it does own is
 // deciding, for a tick that has arrived, which steps of which tracks fire on it. That decision
 // is pure integer arithmetic on the 96 PPQN grid, which is why it lives here in core/: no Enaga
 // headers, no floats, fully host-testable.

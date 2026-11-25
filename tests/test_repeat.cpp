@@ -130,7 +130,7 @@ TEST(repeat_length_step_walks_by_ticks_and_stops_at_the_ends) {
 
 TEST(repeat_the_ring_is_two_bars_at_sixty_bpm) {
     ensure_init();
-    // 8 seconds, which is what docs/REVIEW.md sized at 2.93 MiB stereo float.
+    // 8 seconds, which is what docs/archive/REVIEW.md sized at 2.93 MiB stereo float.
     CHECK_EQ(g_repeat.ring_frames(), uint32_t(kRate * kRepeatSeconds));
     const uint32_t bytes = g_repeat.ring_frames() * 2u * uint32_t(sizeof(float));
     CHECK_EQ(bytes, 3072000u);

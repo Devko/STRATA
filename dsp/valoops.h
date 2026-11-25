@@ -8,7 +8,7 @@
  * times a block, four slices each.
  *
  * Why a *.ti.c file rather than a loop in va.cpp: CLAUDE.md's rule, and the reason behind it --
- * cl6x pipelines a branch-free C loop about 2.2x better than GCC does (docs/BUDGET.md, M2), and
+ * cl6x pipelines a branch-free C loop about 2.2x better than GCC does (docs/archive/BUDGET_MILESTONES.md, M2), and
  * the 60% target depends on it. Everything else in the slice is already an Enaga block function
  * and so already goes through cl6x inside Enaga's own library; this was the one hand-written
  * part of the voice.

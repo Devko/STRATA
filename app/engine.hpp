@@ -571,7 +571,7 @@ private:
     bool perform_dirty_ = true;
 
     // Which of a track's parameters the CURRENT step has locked, one bit each. The performance
-    // layer skips them, so a lock always wins over a morph -- which is what docs/REVIEW.md's
+    // layer skips them, so a lock always wins over a morph -- which is what docs/archive/REVIEW.md's
     // "base kit values only" means from the other side. Set by `fire` and therefore lasting
     // exactly as long as the step does.
     uint32_t locked_[kTracks] = {};

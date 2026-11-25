@@ -8,7 +8,7 @@
 STRATA runs on [Enaga](https://github.com/seawaffle/enaga), so the unit needs Enaga's firmware
 first and then the STRATA app on the SD card. **The easy way is a release zip** from
 [Releases](https://github.com/Devko/STRATA/releases): it holds both, laid out for the card
-(Enaga 0.2.0's `SmplTrek.bin` and `ENAGA/APPS/STRATA/APP.ENA`), with these steps in its
+(the matching Enaga `SmplTrek.bin` and `ENAGA/APPS/STRATA/APP.ENA`), with these steps in its
 README.txt. Releases are pre-releases until 1.0. To build `APP.ENA` yourself, see
 [BUILDING.md](BUILDING.md).
 
@@ -23,13 +23,18 @@ image leaves the power key dead.
 - [ ] The unit runs on the power adapter **without batteries**, so a hung image can be
       power-cycled.
 
-## 1. Install Enaga v0.2.0
+## 1. Install the matching Enaga
 
-STRATA is built against Enaga **v0.2.0**, and the firmware on the unit must match.
+Each STRATA build is made against one Enaga release, and the firmware on the unit must match it:
+Enaga's loader checks only an ABI number, so a mismatch loads and then misbehaves.
+
+| STRATA | Enaga firmware |
+| --- | --- |
+| v0.1.0 to v0.3.1 (the current release) | [v0.2.0](https://github.com/seawaffle/enaga/releases/tag/v0.2.0) |
+| a build from `main`, and the next release | [v0.3.0](https://github.com/seawaffle/enaga/releases/tag/v0.3.0) |
 
 1. Take `SD-CARD/SmplTrek.bin` from the STRATA release zip (byte for byte the file in Enaga's
-   own zip), or download the SmplTrek zip from
-   [Enaga's v0.2.0 release](https://github.com/seawaffle/enaga/releases/tag/v0.2.0).
+   own zip), or download the SmplTrek zip from the Enaga release in the table.
 2. Copy it to the **root** of the SD card as `SmplTrek.bin` (Enaga's README, "Installing", has
    the details).
 3. Hold **HOME** while switching on to reach BOOT MODE, and choose **SYSTEM UPDATE**.
@@ -47,8 +52,9 @@ menu, which lists the apps and switches between them.
 
 ## Updating
 
-Updating from an earlier STRATA release is step 2 only: the firmware stays Enaga 0.2.0, and your
-projects stay on the card. Before 1.0 a release may change the project format; the
+Updating from an earlier STRATA release is step 2 only while the Enaga version in the table
+above stays the same; when it changes (v0.3.1 to the next release: 0.2.0 to 0.3.0), do step 1
+first. Your projects stay on the card. Before 1.0 a release may change the project format; the
 [changelog](../CHANGELOG.md) says when older projects play differently.
 
 ## Where STRATA keeps its files

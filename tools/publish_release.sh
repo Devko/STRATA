@@ -17,7 +17,7 @@
 #   2. the card's APP.ENA is byte for byte a fresh build of HEAD with the same compiler
 #      (tools/build.sh), so the release is the code it says it is;
 #   3. the card's SmplTrek.bin is byte for byte the one in Enaga's own release zip of the pinned
-#      version (enaga-v0.2.0-smpltrek.zip), downloaded with gh;
+#      version (enaga-vX.Y.Z-smpltrek.zip, X.Y.Z read from the pin), downloaded with gh;
 #   4. the {{FIELDS}} in CHANGELOG.md and docs/release/v<version>.md are filled, the packaging
 #      script's tests pass, and tools/package_release.py builds the zip.
 #
