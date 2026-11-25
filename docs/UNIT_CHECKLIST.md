@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W39, about 113 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W40, about 116 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -473,6 +473,13 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - While one plays: OK loads it into track 8 (`LOADING`) and the audition stops; CLR, a folder,
   or HOME stop it too. FUNC + push A is still the kill EQ. `____`
 - MAX while hearing the long stem over A01: `________ %` (it should add about 2 points at most).
+
+**W40. WAVE's waterfall, GRAIN's sparks (3 min).** Beat playing, A01.
+- Lower pad 7 (the chord), FUNC + EDIT, DOWN to `WPL` (WAVE POLY), EDIT, SRC page: under the
+  knobs the table as a stack of waves. Turn B (POS) up: the bright wave moves back through the
+  stack (up and right). Turn A through the tables: the stack changes shape. `____`
+- Lower pad 8, FUNC + EDIT to GRAIN, EDIT, SRC: the grains drift as sparks with tails over the
+  sample while the beat plays. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

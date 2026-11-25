@@ -9416,6 +9416,55 @@ TEST(ui_envelope_a_dot_rides_the_amp_curve_while_a_note_plays) {
     back_to_a_kick();
 }
 
+// WAVE's SRC page draws the table as a waterfall (app/ui_live.hpp): BUILDING until the table is
+// in, then sixteen frames stacked, the one POS plays brightest.
+TEST(ui_wave_src_draws_the_table_as_a_waterfall) {
+    Strata &app = fresh();
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::wave_mono));
+    pump(4);
+    key(ENAGA_KEY_F8);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    post_cmd_track_param(0, 0, 4);                         // CLASSIC, table 0
+    post_cmd_track_param(0, 1, 0);                         // POS at the front frame
+    pump(4);
+    for (int i = 0; i < 4000 && !app_engine().waves().resident(0); i++) {
+        app.update(uint32_t(i));
+        pump();
+    }
+    CHECK(app_engine().waves().resident(0));
+    draw_now();
+    CHECK(!screen_has(app, "BUILDING"));
+    check_layout(app, "EDIT SRC, WAVE MONO, the waterfall");
+    const auto count = [](int grey) {
+        int n = 0;
+        for (int y = 96; y < 118; y++) {
+            for (int x = 0; x < 124; x++) n += pixel_at(x, y) >= grey;
+        }
+        return n;
+    };
+    CHECK(count(10) >= 30);                                // the front frame, bright
+    CHECK(count(3) >= 200);                                // and the stack behind it
+    // POS to the back: the brightest frame moves up and right.
+    const auto bright_x = [] {
+        int sum = 0, n = 0;
+        for (int y = 96; y < 118; y++) {
+            for (int x = 0; x < 124; x++) {
+                if (pixel_at(x, y) >= 10) { sum += x; n++; }
+            }
+        }
+        return n > 0 ? sum / n : -1;
+    };
+    const int front = bright_x();
+    post_cmd_track_param(0, 1, 127);
+    pump(4);
+    draw_now();
+    CHECK(bright_x() > front + 20);
+
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+    key(ENAGA_KEY_F4);
+}
+
 // EDIT's LFO page (app/ui_live.hpp): off, the hint at y 96 and no picture; on, the NOW line moves
 // up to y 87 over the shape with a dot riding it and a strip of what the LFO put out.
 TEST(ui_the_lfo_page_draws_its_shape_with_the_phase_riding_it) {
