@@ -16,6 +16,10 @@ the project file format or the controls.
 
 ### Added
 
+- **Live screens, part 4: the LFO page shows its LFO.** While an LFO runs, EDIT's LFO page draws
+  one cycle of its shape with a dot riding it at the LFO's phase, and a strip of what it put out
+  over the last two seconds. Under every envelope (AMP, ASR, FLTR) a dim fill, lit under the part
+  the playing note has travelled.
 - **Live screens, part 3: GRID and PERFORM move with the music.** On GRID each trig that
   plays glows round its cell and fades, a trail behind the playhead. On PERFORM the macros are
   round gauges over a dim, glowing scope of the output, and a row of eight track meters runs

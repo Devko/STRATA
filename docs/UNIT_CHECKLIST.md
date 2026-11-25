@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W34, about 93 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W35, about 96 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -408,6 +408,14 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   track, jumping with each sound. Turn A: gauge A's arc and needle follow. Stop: the meters give
   way to `AUTOFILL: FUNC MENU`. `____`
 - Still smooth? Keys answer at once while PERFORM moves? `____`
+
+**W35. The LFO page draws its LFO; envelopes light up as a note runs (3 min).** Beat playing, A01.
+- Lower pad 1 (kick), EDIT, screen keys to LFO. Turn C (DEP) and D (DST) up: the `NOW` line moves
+  up and under it a wave with a bright dot running along it; at the right a line drawing what the
+  LFO did. Turn A through the shapes: the drawing follows. B up: the dot runs faster. `____`
+- DEP back to 0: the picture goes, `LFO OFF: SET DEP+DST`. `____`
+- Lower pad 8 (SAMPLE), AMP page: as each note plays, the area under the curve lights up behind
+  the riding square. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

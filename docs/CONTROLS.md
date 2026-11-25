@@ -437,13 +437,15 @@ and the picture draws the lock.
 | AMP | every machine but MID | The amplitude envelope: ATK and DEC on SAMPLE (DEC at the top holds), DEC alone on the drums, ATK DEC SUS REL on the synths, FM4 and GRAIN |
 | ASR | VA, WAVE, FM4, GRAIN | The same envelope |
 | FLTR | VA and WAVE | The filter's: ATK, FDE (or 0.55 x DEC while FDE is 0), FSU, REL, and ENV as its height |
+| LFO | every machine, while the LFO runs (DEP and DST set) | One cycle of the shape (x 0-79) with a dot riding it at the LFO's phase and a dotted line through it; beside it a strip of the last two seconds of output, newest at the right. The `NOW CUT 064` line sits over it at y 87. Off, the page keeps `LFO OFF: SET DEP+DST` at y 96 and draws nothing |
 
 On an envelope, a segment's width follows its **knob**, not its time: every time curve is
 exponential in its knob, so this is a log-time drawing, and 2 ms and 5 s share the width. A
 handle that a knob **on this page** moves is a bright square with the knob's letter by it, as
 CyDrums draws them; a handle moved from another page has no letter. On AMP and ASR a **hollow
 square rides the curve** where the track's last note is (SAMPLE's loudest voice, GRAIN's cloud,
-VA MONO and WAVE MONO; the POLY machines, FM4 and the drums draw no dot).
+VA MONO and WAVE MONO; the POLY machines, FM4 and the drums draw no dot). Under every envelope a
+dim fill; under the part the note has already travelled, a brighter one.
 
 SAMPLES (the sample browser) lists seven rows and draws what the track plays under them, from the
 same picture, over the `NOW` line.
