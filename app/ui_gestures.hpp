@@ -177,6 +177,15 @@
             return;
         }
 
+        // FUNC + turn D in PERFORM: LIVE RND (core/liverand.hpp), the unit for every armed track,
+        // OFF 1 2 4 8 16 and stopping at both ends. C with FUNC is still its macro.
+        if (mode_ == Mode::perform && shift_ && encoder == 3) {
+            rnd_unit_ = live_rnd_turn(rnd_unit_, delta);
+            post(Cmd::set_live_rnd, 0, 0, rnd_unit_, rnd_armed_);
+            live_rnd_notice();
+            return;
+        }
+
         // A to D are the four macros in PERFORM mode, which is what they are for.
         if (mode_ == Mode::perform && encoder >= 0 && encoder < kMacros) {
             const int next = int(macro_position_[encoder]) + delta * 2;
@@ -356,11 +365,18 @@
         // 2. A held STEP key: lock this page's parameter on that step. The single most
         //    important gesture in the whole app (docs/SPEC.md, "Step editing") -- and the
         //    reason the step's release has to know the key was used as a modifier.
+        //    With FUNC it is the parameter's RANDOM RANGE on the step instead (Phase 5): each
+        //    pass the step plays the lock, or the kit value, moved by a draw within the width.
         if (held_step_ >= 0) {
             held_used_ = true;
             const int index = edit_index(encoder);
             mark(GestureKind::lock, selected_, held_step_);
-            post_param_lock(held_step_, index, delta);
+            if (shift_) {
+                post_delta(Cmd::lock_range_delta, selected_, held_step_, uint8_t(index),
+                           delta * param_click(index));
+            } else {
+                post_param_lock(held_step_, index, delta);
+            }
             show_lock_readout(index);
             return;
         }
@@ -465,6 +481,7 @@
         // the sound and showed nothing. GRID and EDIT draw the slots and need no notice.
         if (mode_ == Mode::keys) echo(Echo::param, index);
         if (macro_learn_ >= 0 && mode_ == Mode::edit) learn_touch(uint8_t(selected_), uint8_t(index));
+        if (mod_learn_ >= 0 && mode_ == Mode::edit) mod_learn_touch(index);
         // A macro turned up owns its parameters (a macro at 0 lets go): the knob moves the
         // setting underneath, but the sound follows the macro. Say which one, or the knob
         // looks broken (Roland, 2026-11-23: "editing of sounds does not work anymore").
@@ -605,6 +622,7 @@
         // A rolling pad stops on its own release, whatever the mode is by now: NOTE RPT turned
         // off under a held pad must not leave the roll running.
         const int track = track_for_pad(pad);
+        mod_pressure_release(track);           // PRS back to 0 (app/ui_modslots.hpp)
         if (track >= 0 && track < kTracks && (rolling_pads_ >> track & 1u) != 0) {
             rolling_pads_ = uint16_t(rolling_pads_ & ~(1u << track));
             post(Cmd::note_repeat, uint8_t(track), 0, 0, 0, 0);
@@ -650,6 +668,8 @@
         const bool piano = pad >= 0 && pad < kPianoPads && pad_held_note_[pad] >= 0;
         const int track = piano ? selected_ : track_for_pad(pad);
         if (track < 0 || track >= kTracks) return;
+        // A slot on PRS hears every pad of its track, rolling or not, selected or not.
+        mod_pressure(track, pressure);
 
         // A rolling pad's pressure is the roll's velocity instead: lean in and the roll swells.
         // Change-filtered like the macro, and never below 1, which is silence on most machines.

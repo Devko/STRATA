@@ -39,9 +39,9 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | Shared budget of 12 VA POLY voices across all tracks; quietest voice choked with a 64-frame fade | v0.1.0 | ○ ("The shared VA POLY voice budget") | 12 is provisional until U1/U2 on the unit |
 | Every screen fits Enaga's 5x7 font (layout test over every screen) | v0.1.0 | ◐ (overlaps seen at first boot, fixed in PR #7) | |
 | **Screen frame**: top line with bar.beat, progress line, live strip of what is off rest, master meter with held peak and limiter light | #144 | ○ (W26) | The meter is 2 px wide; nothing may draw past x 124 |
-| **Live screens 5**: WAVE's SRC page draws the table as a waterfall (POS brightest); GRAIN's grains spark with a fading trail | this PR | ○ (W36) | |
-| **Live screens 4**: the LFO page's shape with the phase riding it and an output strip; envelope fills lit as a note travels | this PR | ○ (W35) | |
-| **Live screens 3**: GRID trigs glow and fade; PERFORM macro gauges over a scope, eight track meters (while running) | this PR | ○ (W34) | draw() 1.34 ms a frame on PERFORM (emulator, cl6x) |
+| **Live screens 5**: WAVE's SRC page draws the table as a waterfall (POS brightest); GRAIN's grains spark with a fading trail | #164 | ○ (W40) | |
+| **Live screens 4**: the LFO page's shape with the phase riding it and an output strip; envelope fills lit as a note travels | #163 | ○ (W35) | |
+| **Live screens 3**: GRID trigs glow and fade; PERFORM macro gauges over a scope, eight track meters (while running) | #162 | ○ (W34) | draw() 1.34 ms a frame on PERFORM (emulator, cl6x) |
 | **Live screens 2**: audio taps for the screens: each track's level, each LFO's phase, the output into a ring for scopes and spectra (`core/scope.hpp`) | #161 | - | About +0.3 points of load, fixed |
 | **Live screens 1**: the meter in decibels and segments, beat and bar marks on the progress line, draw time on SETUP; the drawing kit (`app/paint.hpp`: AA lines, arcs, dots, afterglow, 3 x 5 font) | #160 | ○ (W33) | Is the 3 x 5 font readable on the OLED? `paint::kSmallLabels` |
 | **Locks on screen**: heard value + kit tick on GRID and EDIT bars, `S5 CUT 64>90`, GRID cell marks (locks, condition, probability, ratchet, trigless) | #146 | ○ (W27) | |
@@ -101,8 +101,10 @@ FM4 and GRAIN machines.
 | Steps, trigless steps (FUNC + tap), STEP LED colours | v0.1.0 | ◐ | |
 | Step page: NOTE, VEL, LEN, MICR (±11 ticks), PROB, COND, RTCH 1-8, RAMP, ACNT, SLID, CHRD | v0.1.0 | ○ (6) | LEN is the note length on VA POLY, on VA MONO once SUS is up, and for MIDI out; ignored by drums, SAMPLE and GRAIN |
 | Trig conditions: a:b, FILL, PRE, NEI, 1ST and their NOTs; seeded | v0.1.0 | ○ (M3) | |
-| **Play modes per track**: FWD, REV, PING, RND1-RND16 (FUNC menu TRACK PLAY); seeded, the pattern untouched | #148 | ○ (W13) | Not on PERFORM yet (the backlog's arm-and-knob idea) |
+| **Play modes per track**: FWD, REV, PING, RND1-RND16 (FUNC menu TRACK PLAY); seeded, the pattern untouched | #148 | ○ (W13) | Live on PERFORM too: LIVE RND, below |
 | Parameter locks: 8 a step, 1,024 a pattern; push the knob to remove one | v0.1.0 | ○ (6) | `FULL n` when the pool is full (never reached on the unit) |
+| **Random lock ranges** (hold STEP + FUNC + turn): each pass a new value within the range, drawn from the pattern's seed | #167 | ○ (W37) | Takes one of the step's 8 lock slots |
+| **Parameter slide** (hold STEP + FUNC + push): a lock glides to the next step that plays, in play order | #167 | ○ (W37) | Ignores the target step's condition and probability, swing and micro-timing; not on a step stutter |
 | Pattern swing and **per-track swing** (PATTERN page) | v0.1.0 | ○ (13e) | |
 | **FEEL**: DRIFT 1-6 (each track its own curve) or WAVE 1-6 (one four-bar curve), over swing and micro (PATTERN page, D) | #152 | ○ (W29) | Up to 6 ticks of 96 PPQN; seeded |
 | Euclidean fill (FUNC + A/B/C in GRID) | v0.1.0 | ○ (M3) | |
@@ -116,6 +118,7 @@ FM4 and GRAIN machines.
 | Per-track LFO: 6 shapes, free 0.06-32 Hz or synced 8 bars-1/32, any of the 16 params; lockable, scene-able, macro-able | v0.1.0 | ○ (13e) | Steps at about 750 Hz; on VA and WAVE an LFO on TUN glides instead (S3) |
 | LFO TRIG: FREE, RETRIG, ONE-SHOT (push RAT); ONE-SHOT shapes are envelopes | S2 | ○ (W30) | A kit setting, not lockable; no new shapes (see the PR) |
 | Cutoff floor (~100 Hz) for LFO, morph and macros; LFO depth on a cutoff about +-3 octaves | D9 | ○ (W30) | The knob and locks still close a filter fully |
+| **Two MOD slots per track**: LFO, ENV (the LFO's shape once per note), VEL, PRS (pad pressure), RND (per note) to any sound, ASR or OSC parameter, signed depth; learnt by push C / D on the LFO page and a turn | #168 | ○ (W38) | A kit setting, not lockable; not on LFO or ARP knobs; on MID the slots reach the CCs |
 | Per-track arpeggiator: UP, DN, U/D, ORD, RND, 1/4-1/32T, 1-4 octaves, gate | v0.1.0 | ○ (13h) | On POLY it uses the shared voice budget |
 | Banks A-H x 16 patterns, queued changes (END, 16, 32, NOW) | v0.1.0 | ◐ (3b) | |
 | Chain of up to 64 entries, repeats X1-X16 | v0.1.0 | ○ (3b, 12) | |
@@ -135,6 +138,7 @@ FM4 and GRAIN machines.
 | The kill EQ's bands learnt by turning on MIXER's EQ page during MACRO LEARN (FUNC + STEP 5-7 retired) | #156 | ○ (W32) | |
 | **LOCK** (FUNC + MUTATE: hold stores, tap jumps, tap again swaps back), one per pattern, RAM only | #149 | ○ (W20c) | Not saved; the kit is shared, so a jump brings that lock's sound to every pattern |
 | **REL ALL / LEN ALL**: every track's release (FUNC + A) and every note's length (FUNC + B) in PERFORM | #152 | ○ (W29) | Live only; LEN ALL leaves gateless notes (drums, arp) alone |
+| **LIVE RND**: FUNC + turn D in PERFORM shuffles every armed track in blocks of 1-16 steps, FUNC + push D arms the selected track; OFF is the grid at once | #166 | ○ (W36) | Live only, in a LOCK; the pattern is never written |
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |
@@ -173,7 +177,8 @@ FM4 and GRAIN machines.
 | Other rates: up to 30 s at 96 kHz; longer files stream (#124) | v0.1.0 | ○ (13b) | |
 | Streaming of files too big for memory (2 s head + card stream, 4 tracks max) | v0.1.0 | ○ (15d) | Forward only, one voice: no STA, slices or reverse (not feasible, below); GRAIN plays only the head; CPU unmeasured |
 | Streamed samples honour LEN (end point, loop back to the head) | #91 | ○ (15d) | A LEN loop inside the 2 s head never touches the card |
-| Sample browser (`/SAMPLES`, `/RECORD`), load while playing | v0.1.0 | ○ (15b) | 256 entries a folder; path ≤ 111 characters; no audition before loading |
+| Sample browser (`/SAMPLES`, `/RECORD`), load while playing | v0.1.0 | ○ (15b) | 256 entries a folder; path ≤ 111 characters |
+| Sample audition: push A in SAMPLES hears a file, whole, without loading it | #169 | ○ (W39) | Streamed from the card at the file's own rate, -6 dB, after every effect; 8-96 kHz WAVs; one at a time |
 | Sample browser reaches the stock SmplTrek folders (`POOL` = `/SmplTrek/Pool/Audio`, `SMPLTREK` = `/SmplTrek`), read-only | #117 | ○ (W21) | shown only when the card has `/SmplTrek` |
 | Resample the master, 1-8 bars, to a file or straight onto a track | v0.1.0 | ○ ("Resampling") | Takes ≤ 30 s |
 | Bounce: resample ONE track alone (B = `TRK 1`-`TRK 8`), mono, before its duck, fader, pan and sends | #109 | ○ (13m) | No emulator scenario: B is an encoder, the emulator presses keys only |

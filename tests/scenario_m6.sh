@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # M6 emulator scenario: KEYS mode, with REC on, keeps the STEP keys as steps.
 #
-# M6's other pieces cannot be driven from here. The Euclidean generator is on encoders and the
-# emulator core exposes `key_input` and nothing else -- no pads, no encoders (checked: there is
-# no pad or encoder entry point in emulator/core/core.h at all). KEYS plays on the pads since
+# M6's other pieces are not driven from here. The Euclidean generator is on encoders, which this
+# scenario predates (Enaga 0.3.0's emulate.py has `--turn`), and the emulator has no pads. KEYS plays on the pads since
 # 2026-11-23, so playing and recording in KEYS are host tests now (tests/test_ui.cpp,
 # ui_keys_pads_record_at_their_own_velocity). What is left on keys is D12: in KEYS, REC on and
 # the transport running, the STEP keys are the track's steps, not notes to record.

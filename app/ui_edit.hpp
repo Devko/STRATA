@@ -65,6 +65,8 @@
                               machine_is_grain(engine_.machine_id(selected_));
             const int bar_x = wide ? 70 : 56;
             draw_value_bar(canvas, bar_x, y + 2, wide ? 56 : 70, 4, shown, 9);
+            // A MOD slot on this parameter: its range under the bar (app/ui_modslots.hpp).
+            draw_mod_marks(canvas, index, bar_x, y + 7, wide ? 56 : 70, value);
         }
 
         // A waveform or an envelope under the knobs (docs/CONTROLS.md, "Waveforms and
@@ -94,14 +96,19 @@
         if (lfo_page) {
             // What the LFO is doing to its destination right now, so a moving number says it runs;
             // while it runs, over its picture (app/ui_live.hpp) at y 87, as the other pictures'.
-            const bool lfo_running = engine_.lfo_on(selected_);
+            // With a MOD slot set, the two slots take the picture's place, a line each, and the
+            // LFO's line goes to 87 whether it runs or not.
+            const bool slots = mod_slot_of(selected_, 0).on() || mod_slot_of(selected_, 1).on();
+            const uint8_t shown =
+                engine_.status().lfo_shown[selected_].load(std::memory_order_relaxed);
+            const bool lfo_running = shown != Status::kNotHeard;
             out = line;
-            if (engine_.lfo_on(selected_)) {
+            if (lfo_running) {
                 const int dest = lfo_dest(engine_.params(selected_).v[kLfoDest]);
                 append(out, "NOW ");
                 append(out, track_param_name(dest));
                 *out++ = ' ';
-                append_padded(out, engine_.lfo_shown(selected_), 3);
+                append_padded(out, shown, 3);
                 // TRIG, when it is not FREE: "NOW CUT 064 ONE-SHOT" is 20 characters.
                 const LfoTrig trig = lfo_trig_of(selected_);
                 if (trig != LfoTrig::free) {
@@ -112,8 +119,21 @@
                 append(out, "LFO OFF: SET DEP+DST");
             }
             *out = 0;
-            canvas.text(0, lfo_running ? 87 : 96, line, 7);
-            if (lfo_running) draw_lfo_picture(canvas);
+            canvas.text(0, lfo_running || slots ? 87 : 96, line, 7);
+            if (slots) {
+                for (int s = 0; s < kModSlots; s++) {
+                    const KitModSlot &slot = mod_slot_of(selected_, s);
+                    out = line;
+                    append_mod_slot(out, s, slot.on() ? slot.source : kModSrcOff, slot.dest,
+                                    slot.on() ? slot.depth : 0);
+                    *out = 0;
+                    canvas.text(0, 96 + s * 9, line, 7);
+                }
+            } else if (lfo_running) {
+                draw_lfo_picture(canvas, shown);
+            } else {
+                canvas.text(0, 105, "PUSH C D: MOD SLOTS", 7);
+            }
             return;
         }
 

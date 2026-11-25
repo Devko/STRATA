@@ -153,6 +153,44 @@ times a second, smooth on a filter or a pan. Pitch is the exception on VA and WA
 POLY): there the LFO on TUN bends the voices directly, so a slow sweep glides and a held note
 follows it. On the other machines TUN still moves in its steps, and only from the next note.
 
+### MOD slots: two per track
+
+Every track has **two mod slots**. A slot is a source that moves one parameter by a depth:
+
+- **LFO**: the track's LFO as it runs. Its own DEP can stay at 0, so it moves only what the slots
+  say, and one LFO can then move two things at once, each by its own amount.
+- **ENV**: the LFO page's shape and RAT, run once from each note whatever TRIG says. SAW is a
+  decay, TRI an attack and decay, RMP a rise (see ONE-SHOT above). The LFO itself can run FREE
+  at the same time.
+- **VEL**: each note's velocity. The full depth at 127.
+- **PRS**: the pressure on the track's pad while you hold it (in KEYS, any piano pad, on the
+  selected track). Back to nothing when you let go.
+- **RND**: a random value for each note, either side of the knob, held for the note.
+
+**You set a slot by learning it**, the way MACRO LEARN works. On the LFO page **push C** (DEP's
+knob) for slot 1 or **push D** (DST's) for slot 2. Line 2 says `MOD1 LFO: TURN A KNOB`. Push the
+same knob again to walk the source: LFO, ENV, VEL, PRS, RND, OFF. Then go to any page of the same
+track with the screen keys and **turn the knob you want moved**, as far as you want the source to
+take it: line 2 follows (`MOD1 VEL>CUT +40`). **OK** or **CLR** ends it (leaving EDIT does too):
+the knob goes back to where it was and the slot keeps the difference as its depth, so the knob
+is the sound at rest and the source moves it from there. Turn down for a negative depth: loud
+notes then close the filter instead of opening it. Pushing C or D from GRID or KEYS opens EDIT.
+
+Ended with no knob turned, a slot that is already set keeps its knob and depth and takes the new
+source, so a push or two and OK changes only the source. Walk the source to **OFF** and press OK
+to clear the slot (`M1 OFF`). Ended with nothing set, it says `NO KNOB: M1 STAYS OFF`.
+
+A slot can move the 16 sound parameters and, on the machines that have them, ASR and OSC. Not
+the LFO's own knobs or the arp's (`MOD: NOT LFO OR ARP`). The two slots and the LFO add up. On a
+cutoff a slot stops at the same ~100 Hz floor as the LFO, and on VA and WAVE a slot on TUN bends
+the voices smoothly, as the LFO does.
+
+**On screen:** the LFO page lists both slots (`M1 VEL>CUT +40`, `M2 OFF`) in place of the LFO's
+picture. On every EDIT page a parameter with a slot on it has a dim line under its bar across the
+range the slot can move it, and a bright dot on that line where it is now. The slots are the
+kit's, saved with it, like LFO TRIG: no lock, scene or macro changes them. A project saved before
+they existed loads with both slots off.
+
 ### The arpeggiator
 
 <p><img src="screens/edit_arp.png" width="256" alt="EDIT, the ARP page"></p>
@@ -293,6 +331,27 @@ On GRID a trig with locks has a dot in the middle of its cell; a cut top-left co
 condition, top-right a probability, two teeth along the bottom a ratchet, and an outline a
 trigless step.
 
+Push the knob with the STEP held to take that parameter off the step again (`LOCK CLEARED`): its
+lock, its random range and its slide all go.
+
+**Random ranges.** Hold a STEP and **FUNC** and turn A-D: that parameter gets a random range on
+the step instead of a fixed value. Each time the step plays, the parameter lands somewhere within
+the range either side of the step's lock, or of the track's value when the step has no lock. A
+hat whose decay wanders by 20, a snare that never hits the same filter twice. The draw comes from
+the pattern's seed and the pass, like probability: the same pass plays the same way after a
+reload, and each pass differs from the last. Turned back to 0, the range is gone. The lock line
+shows it as `R` and the width (`S5 CUT 64>90 R20`), and a dim line under the bar spans the values
+the step can land on. A range takes one of the step's 8 lock slots.
+
+**Parameter slide.** Hold a STEP and **FUNC** and push A-D: that parameter's lock on the step
+slides (`SLIDE ON`; again for `SLIDE OFF`). From the step it glides to what the next step that
+plays holds for it (that step's lock, or the track's value), arriving as that step starts, so a
+filter can sweep between two locked steps with empty steps between them. With no lock yet, the
+push locks the track's value first. The lock line ends in `/` while the lock slides. The glide
+follows the play mode (REV, PING, RND) and ignores the next step's condition and probability; it
+does not glide on a step stutter. It is not the SLID step flag, which bends a VA MONO note into
+the next.
+
 ### The chain
 
 <p><img src="screens/chain.png" width="256" alt="PROJECT's CHAIN page"></p>
@@ -420,7 +479,8 @@ brings the whole pattern back in one undo.
 Select the kick (lower pad 1) and press **EDIT**. The screen keys (or LEFT/RIGHT) flip the
 pages SRC, FLTR, AMP, FX; go to **AMP**. Now hold **STEP 13** and turn **A** (DEC) down: the last
 kick of the bar is shorter. That is a lock. GROOVE already has one on step 9; hold STEP 9 and push
-**A** to remove it (`LOCK CLEARED`).
+**A** to remove it (`LOCK CLEARED`). Hold STEP 13 and **FUNC** and turn **A** up a little: now
+that kick's decay is different every bar, a random range (`R` on the lock line).
 
 The encoders work the same way in GRID: they edit the current EDIT page of the selected track.
 
@@ -1115,6 +1175,30 @@ While either is away from rest, PERFORM's line under the macros shows both (`REL
 and line 2 says `RL-` / `RL+` and `LN-` / `LN+`. Neither is saved or undone, like a macro's position;
 a LOCK holds them, so a jump puts them back where they were.
 
+### LIVE RND: shuffle the beat from PERFORM
+
+**FUNC + turn D in PERFORM is LIVE RND**: OFF, then RND 1, 2, 4, 8 and 16, a click each, stopping
+at both ends (`LIVE RND4 8 TRK`). While it is on, every armed track plays its pattern in random
+blocks of that many steps, picked afresh every pass: RND 1 scatters single hits, RND 4 shuffles
+the beats of a bar, RND 16 shuffles whole bars of a long track. Inside a block the steps keep their
+order, so the groove stays on the grid and a hat still sits on its offbeat.
+
+**FUNC + push D takes the selected track out of LIVE RND**, or puts it back (`T1 RND OUT 7 TRK`).
+All eight are in at the start. The usual move: select the kick (lower pad 1), FUNC + push D, and
+the four-on-the-floor holds while everything else jumps around it.
+
+It is the same shuffle as the FUNC menu's TRACK PLAY row (RND1-RND16), but for many tracks at
+once and only while it is on: the pattern is never changed, so **turning back to OFF puts every
+track on its own steps at once**, exactly as programmed, in time. A track's own TRACK PLAY mode
+comes back with it. The shuffle is seeded from the pattern, so the same pattern shuffles the same
+way every time you play it.
+
+While it is on, PERFORM's line under the macros reads `LIVE RND4 FUNC+D` (or ends `R4` beside
+REL ALL and LEN ALL), the track meters mark the armed tracks with a dot, and line 2 says `RN4`.
+LIVE RND is not saved or undone; a LOCK holds the unit and which tracks are in, so a jump brings
+back the shuffle you stored, and the swap-back the one you had. A hit recorded while it is on goes
+on the step that was sounding.
+
 ### Beat repeat, throws and auto-fill
 
 REPEAT loops the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the finished master while held;
@@ -1199,7 +1283,7 @@ over the old one.
 
 A lock holds the pattern whole (steps, locks, conditions, lengths, swing), every track's sound
 (all eight EDIT pages) and fader, the sends and the master, the mutes, and where the morph and
-the four macros are, and REL ALL and LEN ALL (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
+the four macros are, REL ALL and LEN ALL, and LIVE RND (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
 switch brings back the parameters only), the tempo, the kill EQ's switches, the scenes or the
 macro setup, the stored mute states or the chain. The performance mixer is not in it either: a
 jump rides the picked effect back to 0 over FX GLIDE and leaves a loop playing.
@@ -1423,6 +1507,25 @@ It is mono, half the size of a master take. With `TO TRK n` it lands on that tra
 take, ready to slice, reverse or put on GRAIN; give that track SAMPLE or GRAIN to hear it. A
 muted track bounces as silence, so unmute it first.
 
+### What moves on screen while it plays
+
+While the transport runs, the screens move with the music; stopped, they hold still, so a
+change on screen always means a key or knob did something.
+
+- **GRID**: each trig that plays lights an outline round its cell that fades in about a third
+  of a second, a trail behind the playhead.
+- **PERFORM**: the four macros are round gauges, bright up to where each macro is, with a needle
+  and the value under it (a dot outside the ring marks the knob while a pad's pressure moves the
+  macro). Behind them glows a dim scope of what comes out, and under the REL/LEN line a row of
+  eight meters shows each track's level, a muted track dim.
+- **EDIT's LFO page**: while the LFO runs, one cycle of its shape with a dot riding it at the
+  LFO's phase, and beside it a strip of what the LFO put out over the last two seconds.
+- **EDIT's envelopes** (AMP, ASR, FLTR): a dim fill under the curve, lit under the part the
+  playing note has travelled.
+
+SETUP shows what a frame of the screen costs to draw (`DRW 0.85MS`); docs/CONTROLS.md, "The
+screen frame", has the details.
+
 ---
 
 ## 6. Saving, loading and the card
@@ -1550,6 +1653,17 @@ browser opens in the folder of the file the track plays, with the cursor on it, 
   SLC 1 and DEC 127 (hold). PIT, ATK, PLY and LVL stay as they were. Turn SLC up afterwards to
   chop it. A project or kit you open keeps the values it was saved with, and a GRN track's knobs
   are left alone.
+- **Push A to hear a file first.** It plays the file under the cursor, whole and from its
+  start, straight to the output at about -6 dB, without loading it: the track and the kit stay
+  as they were. Push A again to stop. While a file is heard, UP/DOWN (or turning A, or a page)
+  hears the next file the cursor lands on, so you can listen down a folder and press OK on the
+  one you want. The line under the title says `HEARING 3/12S` (seconds heard of the file's
+  length, `OPENING` for the moment before it sounds), and a line under the file's name grows as
+  it plays. It works with the beat playing or stopped; it is streamed from the card, so a long
+  stem starts as quickly as a short hit, plays at its own rate and takes no sample memory. It is
+  not recorded by RESAMPLE or the looper and goes round no effect. OK (which loads it), CLR,
+  another folder, a folder under the cursor or leaving SAMPLES stops it. A file that cannot be
+  heard says why (`NOT A WAV`, `BAD RATE` for rates outside 8-96 kHz, `NOT FOUND`).
 - OK on a folder (shown with a `/`) opens it. **CLR goes up a folder**; at the top are `SAMPLES/`
   and `RECORD/` (your resampled takes), and CLR from there goes back to where you came from.
 - **The SmplTrek's own folders.** On a card the stock firmware has used, the top also shows

@@ -2,6 +2,7 @@
 
 #include "arp.hpp"       // the arpeggiator's notes; the engine schedules them
 #include "factory.hpp"
+#include "liverand.hpp"    // LIVE RND: the unit held to its range
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
 #include "sounds.hpp"      // Cmd::sound_preset: the factory sounds
@@ -127,6 +128,9 @@ bool Engine::init(float sample_rate) {
         // A seed per track, so eight S&H LFOs do not move together. Fixed, so a render is
         // repeatable.
         lfo_[t].init(0x9E3779B9u * uint32_t(t + 1));
+        // ENV and RND, seeded apart from the LFO so a slot's S+H shape and RND do not follow it.
+        mod_env_[t].init(0x85EBCA6Bu * uint32_t(t + 1));
+        mod_dice_[t] = enaga::dsp::Random(0xC2B2AE35u * uint32_t(t + 1));
     }
     inv_rate_ = enaga::dsp::reciprocal(rate_);
     midi_out_.clear();
@@ -147,6 +151,10 @@ bool Engine::init(float sample_rate) {
     scheduler_.configure(live());
     scheduler_.reset(true);
 
+    // Status's view of what each track sounds, before the first block: step_waves reads it, and
+    // an all-zero Status would ask every track for table 0.
+    publish_heard();
+
     ready_ = true;
     return true;
 }
@@ -156,14 +164,35 @@ bool Engine::step_waves() {
     // The tables the WAVE tracks are sounding now: the kit's TBL with the scene, macro, lock and
     // LFO over it, as the machines are prepared from. A lock or an LFO on TBL asks for each
     // table it reaches while it is there; a table no longer asked for stays in its slot until
-    // the slot is needed.
+    // the slot is needed. From Status (publish_heard), never from `machine_id_` or `sounding`:
+    // those are the audio side's, rewritten every block.
     uint32_t wanted = 0;
     for (int t = 0; t < kTracks; t++) {
-        if (!machine_is_wave(machine_id_[t])) continue;
-        wanted |= 1u << va_wave_table(sounding(t).get(0));
+        const uint8_t table = status_.heard_table[t].load(std::memory_order_relaxed);
+        if (table != Status::kNotHeard) wanted |= 1u << (table & (kWaveTables - 1));
     }
     waves_.want(wanted);
     return waves_.step();
+}
+
+// Audio context, every block (process), and once from init.
+void Engine::publish_heard() {
+    // Some 32 relaxed byte stores: the UI wants the newest, and each byte stands alone.
+    for (int t = 0; t < kTracks; t++) {
+        const TrackParams &heard = sounding(t);
+        const bool wave = machine_is_wave(machine_id_[t]);
+        status_.heard_table[t].store(wave ? uint8_t(va_wave_table(heard.get(0))) : Status::kNotHeard,
+                                     std::memory_order_relaxed);
+        status_.heard_pos[t].store(heard.get(1), std::memory_order_relaxed);
+        status_.heard_sus[t].store(heard.v[kAsrFirst + 1], std::memory_order_relaxed);
+        status_.lfo_shown[t].store(lfo_running_[t] ? lfo_shown_[t] : Status::kNotHeard,
+                                   std::memory_order_relaxed);
+        for (int s = 0; s < kModSlots; s++) {
+            const KitModSlot &slot = project_.kit.tracks[t].mod[s];
+            status_.mod_heard[t][s].store(slot.on() ? heard.v[slot.dest] : Status::kNotHeard,
+                                          std::memory_order_relaxed);
+        }
+    }
 }
 
 // Main context, App::init only. Nothing is read through `sample_region_` until a `Cmd::set_sample`
@@ -480,6 +509,7 @@ void Engine::apply(const Command &command) {
             // did nothing and a pad played the dead step's value. The per-block copy in
             // process() puts the performed values back in this same block.
             for (int t = 0; t < kTracks; t++) locked_[t] = 0;
+            clear_slides();
             break;
 
         case Cmd::set_tempo:
@@ -540,8 +570,42 @@ void Engine::apply(const Command &command) {
         }
 
         case Cmd::clear_lock:
-            pattern_clear_lock(live(), track, step, command.a);
+            // The whole parameter: its value, its slide and its random range (hold STEP + push).
+            pattern_clear_param(live(), track, step, command.a);
             break;
+
+        case Cmd::lock_range_delta: {
+            if (command.a >= kTrackParams) break;
+            const int width =
+                int(pattern_get_range(live(), track, step, command.a)) + int(int8_t(command.b));
+            const uint8_t wanted = uint8_t(width < 0 ? 0 : (width > 127 ? 127 : width));
+            if (!pattern_set_range(live(), track, step, command.a, wanted)) {
+                pattern_compact_locks(live());   // as lock_delta: abandoned slots first
+                if (!pattern_set_range(live(), track, step, command.a, wanted)) {
+                    status_.bump_refused();
+                }
+            }
+            break;
+        }
+
+        case Cmd::lock_slide: {
+            if (command.a >= kTrackParams) break;
+            const uint8_t param = command.a;
+            uint8_t value = 0;
+            if (!pattern_get_lock(live(), track, step, param, value)) {
+                // Nothing to glide from yet: lock the kit value, which is what the step plays.
+                if (!pattern_set_lock(live(), track, step, param, params_[track].v[param])) {
+                    pattern_compact_locks(live());
+                    if (!pattern_set_lock(live(), track, step, param, params_[track].v[param])) {
+                        status_.bump_refused();
+                        break;
+                    }
+                }
+            }
+            pattern_set_slide(live(), track, step, param,
+                              !pattern_get_slide(live(), track, step, param));
+            break;
+        }
 
         case Cmd::set_track_length: {
             const int wanted = command.c == kDeltaFlag
@@ -1016,11 +1080,13 @@ void Engine::apply(const Command &command) {
                 held_count_[t] = 0;
                 // A one-shot LFO waits for this project's first note, at rest.
                 lfo_[t].rest();
+                mod_env_[t].rest();
                 lfo_restart_[t] = false;
             }
             song_over_ = false;
             // The lock mask of a step of a pattern that no longer exists (Cmd::stop says why).
             for (int t = 0; t < kTracks; t++) locked_[t] = 0;
+            clear_slides();
             reconfigure();
             // The sends and the master, which arrived with the file as fourteen bytes. Without
             // this the mixer would keep running the PREVIOUS project's delay and reverb while
@@ -1164,6 +1230,31 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::audition_start: {
+            // A start while one plays replaces it; the card side only posts one after the last
+            // has ended (its epoch), so this is belt and braces.
+            const AuditionInfo &info = audition_inbox_;
+            if (audition_on_) end_audition();
+            const bool ok = info.frame_bytes != 0 && info.frame_bytes <= 8 &&
+                            audition_.start(info.total_frames, int(info.channels), info.step);
+            if (!ok) {
+                // Refused: the card side is waiting for an epoch before it closes the stream.
+                end_audition();
+                status_.bump_refused();
+                break;
+            }
+            audition_encoding_ = info.encoding;
+            audition_frame_bytes_ = info.frame_bytes;
+            audition_carry_ = 0;
+            audition_on_ = true;
+            break;
+        }
+
+        case Cmd::audition_stop:
+            // Faded over the next block; the epoch moves when the fade is done (process).
+            audition_.stop();
+            break;
+
         // --- kit and sound ---
 
         case Cmd::euclid:
@@ -1244,6 +1335,17 @@ void Engine::apply(const Command &command) {
             lfo_[track].rest();          // a new ONE-SHOT waits for its first note, at rest
             break;
         }
+
+        case Cmd::set_mod_slot: {
+            if (command.a >= kModSlots) break;
+            project_.kit.tracks[track].mod[command.a] =
+                mod_slot_sanitized(command.b, command.c, command.d);
+            break;
+        }
+
+        case Cmd::set_pressure:
+            mod_pressure_[track] = float(command.a > 127 ? 127 : command.a) * (1.0f / 127.0f);
+            break;
 
         case Cmd::set_slice_mode: {
             const uint8_t mode = command.a == kSliceAuto ? kSliceAuto : kSliceEqual;
@@ -1404,6 +1506,13 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_live_rnd:
+            // Read by the scheduler on the next tick: an armed track jumps to its random block
+            // at the next slot, and OFF puts every slot back on its own step.
+            perform_.rnd_unit = live_rnd_turn(command.a, 0);          // held to OFF .. RND16
+            perform_.rnd_armed = command.b;
+            break;
+
         case Cmd::set_macro:
             if (command.a < kMacros) {
                 macro_position_[command.a] = command.b > 127 ? uint8_t(127) : command.b;
@@ -1539,7 +1648,7 @@ void Engine::apply(const Command &command) {
                 }
                 // A pad on a POLY track counts against the shared budget like a step does.
                 if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
-                note_started(track);
+                note_started(track, trig.velocity);
                 // And to MIDI OUT. A key or a MIDI IN note (c = 1) is held until its release; a
                 // pad has none, so it lasts one step, as a step with no gate does.
                 send_midi_notes(track, &trig.note, 1, trig.velocity, 0,
@@ -2116,6 +2225,7 @@ void Engine::switch_pattern(int bank, int slot) {
     // was resolved against a pattern that is no longer playing.
     scheduler_.reset(true);
     reconfigure();
+    clear_slides();
 
     // Ratchet hits still waiting belong to a step of the pattern just left. Fired later, they
     // would read THIS pattern's locks and chord at that step index (`fire` reads the live
@@ -2430,7 +2540,7 @@ void Engine::roll_fire(int track, uint32_t frame) {
     trig.frame = frame;
     trig.gate_frames = roll_gate_frames();
     if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
-    note_started(track);
+    note_started(track, trig.velocity);
     send_midi_notes(track, &trig.note, 1, trig.velocity, frame, midi_gate(track, trig.gate_frames));
 }
 
@@ -2530,7 +2640,7 @@ void Engine::arp_hit(int track, ArpRun &run, uint32_t frame) {
     const float gate = spacing * float(run.gate_percent) * 0.01f;
     trig.gate_frames = gate < 1.0f ? 1u : uint32_t(gate);
     if (make_room_for_poly_voice(track, note)) machines_[track]->trigger(trig);
-    note_started(track);              // each hit lights the track, as a step does
+    note_started(track, trig.velocity);   // each hit lights the track, as a step does
     // Each hit to MIDI OUT too, with its own gate; a MID track's CCs go ahead of the note.
     if (machine_id_[track] == uint8_t(MachineId::midi)) send_midi_ccs(track);
     send_midi_notes(track, &trig.note, 1, trig.accent ? uint8_t(127) : trig.velocity, frame,
@@ -2628,6 +2738,61 @@ void Engine::arp_held_changed(int track) {
     run.countdown = float(r) * samples_per_tick_;
 }
 
+void Engine::start_slides(int track, const StepEvent &event) {
+    slide_count_[track] = 0;
+    if (event.glide_frames == 0u) return;
+    const Pattern &pattern = live();
+    const LockView locks = pattern_step_locks(pattern, track, int(event.step));
+    // One reciprocal per step at control rate; the per-block move is a multiply.
+    const float step = enaga::dsp::reciprocal(float(event.glide_frames));
+    uint8_t release[2];
+    const int releases = rel_all_ != 0 ? machine_release_params(machine_id_[track], release) : 0;
+    for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
+        if (!lock_slides(lock->param)) continue;
+        const uint8_t param = lock_param(lock->param);
+        if (param >= kTrackParams || slide_count_[track] >= kLocksPerStep) continue;
+        // What the step glided to will play: its lock and range, or the sound it starts from.
+        uint8_t to = lock_resolve(pattern, track, int(event.glide_step), event.glide_loop,
+                                  int(param), performed_[track][param]);
+        // REL ALL moves a locked release (fire, above), so the target's too.
+        uint8_t ignored = 0;
+        for (int i = 0; i < releases; i++) {
+            if (release[i] == param &&
+                pattern_get_lock(pattern, track, int(event.glide_step), param, ignored)) {
+                to = rel_all_byte(to, rel_all_);
+            }
+        }
+        const uint8_t from = effective_[track].v[param];
+        if (to == from) continue;
+        ParamSlide &slide = slides_[track][slide_count_[track]++];
+        slide.param = param;
+        slide.from = from;
+        slide.to = to;
+        slide.position = 0.0f;
+        slide.step = step;
+    }
+}
+
+void Engine::run_slides(uint32_t frames) {
+    for (int t = 0; t < kTracks; t++) {
+        const int count = slide_count_[t];
+        if (count == 0) continue;
+        int keep = 0;
+        for (int i = 0; i < count; i++) {
+            ParamSlide slide = slides_[t][i];
+            // Only while the step still has it locked: a stop or a pattern change unmasks it.
+            if ((locked_[t] >> slide.param & 1u) == 0u) continue;
+            slide.position += float(frames) * slide.step;
+            const bool arrived = slide.position >= 1.0f;
+            const float at = arrived ? 1.0f : slide.position;
+            const float value = float(slide.from) + (float(slide.to) - float(slide.from)) * at;
+            effective_[t].v[slide.param] = uint8_t(value + 0.5f);
+            if (!arrived) slides_[t][keep++] = slide;
+        }
+        slide_count_[t] = uint8_t(keep);
+    }
+}
+
 void Engine::deliver_deferred(uint32_t frames) {
     // Oldest first, and compacted in one pass: an event that fires is removed and the rest keep
     // their order, so a ratchet's hits stay in the order the scheduler produced them.
@@ -2661,11 +2826,31 @@ void Engine::fire(const StepEvent &event) {
     const LockView locks = pattern_step_locks(live(), track, int(event.step));
     int applied = 0;
     uint32_t locked = 0;
+    // The values first, then the random ranges over them (core/pattern.hpp's lock byte): a range
+    // spreads the step's lock, or the sound the step starts from when it has none. The slide bit
+    // is read by start_slides below.
+    uint32_t ranged = 0;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
-        if (lock->param >= kTrackParams || applied >= kMaxLocksApplied) continue;
-        effective_[track].v[lock->param] = lock->value;
-        locked = locked | (1u << lock->param);
+        const uint8_t param = lock_param(lock->param);
+        if (param >= kTrackParams || applied >= kMaxLocksApplied) continue;
         applied++;
+        if (lock_is_range(lock->param)) {
+            ranged = ranged | (1u << param);
+            continue;
+        }
+        effective_[track].v[param] = lock->value;
+        locked = locked | (1u << param);
+    }
+    if (ranged != 0u) {
+        const uint32_t seed = live().seed;
+        for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
+            const uint8_t param = lock_param(lock->param);
+            if (!lock_is_range(lock->param) || param >= kTrackParams) continue;
+            effective_[track].v[param] =
+                lock_spread(effective_[track].v[param], lock->value, seed, track,
+                            int(event.step), event.loop, int(param));
+        }
+        locked = locked | ranged;
     }
     // Which parameters this step has locked, so the performance layer leaves them alone until
     // the next step. A lock always wins over a morph.
@@ -2680,6 +2865,10 @@ void Engine::fire(const StepEvent &event) {
             effective_[track].v[release[i]] = rel_all_byte(effective_[track].v[release[i]], rel_all_);
         }
     }
+
+    // Parameter slide: the first hit of a step (re)starts its track's glides; a ratchet's later
+    // hits leave them running, so a slid step glides across its own ratchet.
+    if (event.ratchet_index == 0) start_slides(track, event);
 
     if (!event.trigless && machines_[track] != nullptr && !muted_[track]) {
         // This prepare is REDUNDANT today, and kept on purpose. It used to be justified as
@@ -2829,7 +3018,7 @@ void Engine::fire(const StepEvent &event) {
         // Once per step, not once per note: a chord is one trig as far as the screen is
         // concerned, and eight LEDs flashing six times would be a worse display, not a better
         // one.
-        note_started(track);
+        note_started(track, trig.velocity);
 
         if (track == duck_source_) mixer_.trigger_duck(event.frame);
     }
@@ -2856,7 +3045,14 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
         lfo_restart_[t] = false;
 
         float pitch_mod = 0.0f;
-        if (!s.on()) {
+        // The mod slots (core/modslot.hpp): either on keeps `modulated_`, and one on LFO keeps
+        // the LFO running though its own DEP or DST is off. With neither, as before.
+        const KitModSlot *const mod = project_.kit.tracks[t].mod;
+        const bool slots = mod[0].on() || mod[1].on();
+        const bool lfo_wanted = s.on() || (mod[0].on() && mod[0].source == kModSrcLfo) ||
+                                (mod[1].on() && mod[1].source == kModSrcLfo);
+        lfo_running_[t] = s.on();
+        if (!lfo_wanted && !slots) {
             modulating_[t] = false;
         } else {
             const auto id = MachineId(machine_id_[t]);
@@ -2868,54 +3064,67 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
             const float cycles = s.sync_ticks == 0
                                      ? s.hz * float(frames) * inv_rate_
                                      : float(frames) * inv_samples_per_tick_ * s.inv_sync_ticks;
-            float value;
-            if (trig != LfoTrig::free) {
-                // The note starts the cycle on this block's value at phase 0; it moves on from
-                // the next block. A block is 1.3 ms, well inside a note's attack.
-                if (restart) lfo_[t].restart();
-                const float step = restart ? 0.0f : cycles;
-                value = trig == LfoTrig::one_shot ? lfo_[t].one_shot(s.wave, step)
-                                                  : lfo_[t].advance(s.wave, step);
-            } else if (s.sync_ticks == 0) {
-                value = lfo_[t].advance(s.wave, cycles);
-            } else if (running) {
-                // On the clock's own position, so a synced LFO sits on the bar wherever the song
-                // is and follows an external clock. A multiply and a floor rather than `%`: this
-                // chip has no integer divide. A float holds the position to well under a tick for
-                // the first 2^24 ticks, about 22 hours at 130 BPM.
-                const float fraction = fraction_in < 0.0f ? 0.0f
-                                       : (fraction_in > 1.0f ? 1.0f : fraction_in);
-                float phase = (float(position) + fraction) * s.inv_sync_ticks;
-                phase -= float(enaga::dsp::floor_int(phase));
-                value = lfo_[t].seek(s.wave, phase >= 1.0f || phase < 0.0f ? 0.0f : phase);
-            } else {
-                // Stopped: keep moving at the tempo, so the sound does not freeze between takes.
-                value = lfo_[t].advance(s.wave, cycles);
+            float value = 0.0f;
+            if (lfo_wanted) {
+                if (trig != LfoTrig::free) {
+                    // The note starts the cycle on this block's value at phase 0; it moves on from
+                    // the next block. A block is 1.3 ms, well inside a note's attack.
+                    if (restart) lfo_[t].restart();
+                    const float step = restart ? 0.0f : cycles;
+                    value = trig == LfoTrig::one_shot ? lfo_[t].one_shot(s.wave, step)
+                                                      : lfo_[t].advance(s.wave, step);
+                } else if (s.sync_ticks == 0) {
+                    value = lfo_[t].advance(s.wave, cycles);
+                } else if (running) {
+                    // On the clock's own position, so a synced LFO sits on the bar wherever the
+                    // song is and follows an external clock. A multiply and a floor rather than
+                    // `%`: this chip has no integer divide. A float holds the position to well
+                    // under a tick for the first 2^24 ticks, about 22 hours at 130 BPM.
+                    const float fraction = fraction_in < 0.0f ? 0.0f
+                                           : (fraction_in > 1.0f ? 1.0f : fraction_in);
+                    float phase = (float(position) + fraction) * s.inv_sync_ticks;
+                    phase -= float(enaga::dsp::floor_int(phase));
+                    value = lfo_[t].seek(s.wave, phase >= 1.0f || phase < 0.0f ? 0.0f : phase);
+                } else {
+                    // Stopped: keep moving at the tempo, so the sound does not freeze between
+                    // takes.
+                    value = lfo_[t].advance(s.wave, cycles);
+                }
+                lfo_value_[t] = value;
+                const float phase = lfo_[t].phase();
+                status_.lfo_phase[t].store(
+                    uint8_t(phase <= 0.0f ? 0.0f : (phase >= 1.0f ? 255.0f : phase * 255.0f)),
+                    std::memory_order_relaxed);
             }
-            lfo_value_[t] = value;
-            const float phase = lfo_[t].phase();
-            status_.lfo_phase[t].store(uint8_t(phase <= 0.0f ? 0.0f : (phase >= 1.0f ? 255.0f : phase * 255.0f)),
-                                       std::memory_order_relaxed);
 
             modulated_[t] = effective_[t];
-            uint8_t &target = modulated_[t].v[s.dest];
-            // A cutoff stops at about 100 Hz and swings about three octaves at most
-            // (dsp/lfo.hpp). Worked out every block: the machine can change under an unchanged
-            // LFO. MID has no audio, so its bytes go out unfloored and unscaled. A VA or WAVE
-            // track's slot 5 is TON (D8), not the insert's cutoff: no floor there.
             const bool insert_chain = id != MachineId::midi && !va_filter;
-            const uint8_t floor = lfo_cutoff_floor(s.dest, va_filter, insert_chain);
-            const float span = lfo_span(s.dest, va_filter, insert_chain);
-            const uint8_t moved = lfo_apply(target, value, s.depth, floor, span);
-            lfo_shown_[t] = moved;
-            if (va_filter && s.dest == page_first(Page::src)) {
-                // TUN on a synth machine glides: a float to the voices, the byte left alone, so
-                // a slow sweep does not step and a held note follows (dsp/lfo.hpp, "Block rate").
-                pitch_mod = lfo_pitch_semis(value, s.depth);
-            } else {
-                target = moved;
+            if (s.on()) {
+                uint8_t &target = modulated_[t].v[s.dest];
+                // A cutoff stops at about 100 Hz and swings about three octaves at most
+                // (dsp/lfo.hpp). Worked out every block: the machine can change under an
+                // unchanged LFO. MID has no audio, so its bytes go out unfloored and unscaled. A
+                // VA or WAVE track's slot 5 is TON (D8), not the insert's cutoff: no floor there.
+                const uint8_t floor = lfo_cutoff_floor(s.dest, va_filter, insert_chain);
+                const float span = lfo_span(s.dest, va_filter, insert_chain);
+                const uint8_t moved = lfo_apply(target, value, s.depth, floor, span);
+                lfo_shown_[t] = moved;
+                if (va_filter && s.dest == page_first(Page::src)) {
+                    // TUN on a synth machine glides: a float to the voices, the byte left alone,
+                    // so a slow sweep does not step and a held note follows (dsp/lfo.hpp, "Block
+                    // rate").
+                    pitch_mod = lfo_pitch_semis(value, s.depth);
+                } else {
+                    target = moved;
+                }
             }
+            // After the LFO, so a slot moves the byte from where the LFO left it.
+            run_mod_slots(t, s, value, cycles, restart, va_filter, insert_chain, pitch_mod);
             modulating_[t] = true;
+        }
+        if (!slots) {
+            mod_value_[t][0] = 0.0f;
+            mod_value_[t][1] = 0.0f;
         }
 
         // To the machine only when it changes, or when the track has a new machine: with the
@@ -2926,6 +3135,51 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
             pitch_mod_machine_[t] = machine;
             pitch_mod_[t] = pitch_mod;
         }
+    }
+}
+
+// The two mod slots, over `modulated_` after the LFO (core/modslot.hpp). `lfo` and `cycles` are
+// the LFO's settings and this block's advance, which ENV runs its own one-shot on; `restart` is
+// a note since the last block. A slot that is off costs one test.
+void Engine::run_mod_slots(int t, const LfoSettings &lfo, float lfo_value, float cycles,
+                           bool restart, bool va_filter, bool insert_chain, float &pitch_mod) {
+    const KitModSlot *const mod = project_.kit.tracks[t].mod;
+    // Each note: ENV from its start, a new RND. Only for a slot that reads them, so an unused
+    // source costs nothing.
+    bool env = false;
+    bool rnd = false;
+    for (int i = 0; i < kModSlots; i++) {
+        env = env || (mod[i].on() && mod[i].source == kModSrcEnv);
+        rnd = rnd || (mod[i].on() && mod[i].source == kModSrcRnd);
+    }
+    float env_value = 0.0f;
+    if (env) {
+        if (restart) mod_env_[t].restart();
+        env_value = mod_env_[t].one_shot(lfo.wave, restart ? 0.0f : cycles);
+    }
+    if (rnd && restart) mod_random_[t] = mod_dice_[t].bipolar();
+
+    for (int i = 0; i < kModSlots; i++) {
+        const KitModSlot &slot = mod[i];
+        if (!slot.on()) {
+            mod_value_[t][i] = 0.0f;
+            continue;
+        }
+        const float value = slot.source == kModSrcLfo   ? lfo_value
+                            : slot.source == kModSrcEnv ? env_value
+                            : slot.source == kModSrcVel ? mod_velocity_value(mod_velocity_[t])
+                            : slot.source == kModSrcPrs ? mod_pressure_[t]
+                                                     : mod_random_[t];
+        mod_value_[t][i] = value;
+        // TUN on a synth glides by a float, as the LFO's does; every other byte moves, and a
+        // cutoff stops at the floor the LFO, the macros and the morph stop at (D9).
+        if (va_filter && slot.dest == page_first(Page::src)) {
+            pitch_mod += mod_pitch_semis(value, slot.depth);
+            continue;
+        }
+        uint8_t &target = modulated_[t].v[slot.dest];
+        target = mod_apply(target, value, slot.depth,
+                           lfo_cutoff_floor(slot.dest, va_filter, insert_chain));
     }
 }
 
@@ -3005,6 +3259,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         }
     }
 
+    // Parameter slides, over the step's locks they glide from.
+    run_slides(frames);
+
     // The LFOs, last, over everything: the kit, the morph, the macros and the step's locks all
     // decide where the destination sits, and the LFO moves it about there (dsp/lfo.hpp).
     run_lfos(frames, clock_now.running, clock_now.position, clock_now.fraction);
@@ -3013,6 +3270,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // A streamed sample's next frames, before anything renders from them.
     top_up_streams();
+    top_up_audition();
 
     // The performance mixer's plan over the sends and the master (core/perffx.hpp): copies, so
     // the project's settings are untouched and amount 0 hands the mixer exactly what it had.
@@ -3157,6 +3415,18 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         status_.input_peak.store(to_milli(clipped), std::memory_order_relaxed);
     }
 
+    // The sample browser's audition, last and outside everything: after the take's tap, so it
+    // is never recorded, and after the master effects, beat repeat and the tape stop, so it is
+    // the file as it is (dsp/audition.hpp).
+    if (audition_on_) {
+        audition_.render_add(out, int(frames));
+        if (audition_.take_finished()) {
+            end_audition();
+        } else {
+            status_.audition_frame.store(audition_.position(), std::memory_order_relaxed);
+        }
+    }
+
     status_.resample_state.store(capture_.done()        ? 3u
                                  : capture_.recording() ? 2u
                                  : capture_.armed()     ? 1u
@@ -3170,6 +3440,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     publish_playheads();
     publish_waves();
+    publish_heard();
 
     // Every MIDI gate is a block nearer its end.
     midi_out_.end_block(frames);
@@ -3258,8 +3529,15 @@ void Engine::send_midi_ccs(int t, bool throttle) {
     for (int p = 0; p < kParams; p++) {
         const uint8_t cc = MidiMachine::cc_for(p);
         uint8_t value = effective_[t].v[p];
-        const bool moved_by_lfo = p == lfo_dest;
+        bool moved_by_lfo = p == lfo_dest;
         if (moved_by_lfo) value = lfo_apply(value, lfo_value_[t], lfo.depth);
+        // And the mod slots, on this block's values, throttled as the LFO is.
+        for (int i = 0; i < kModSlots; i++) {
+            const KitModSlot &slot = project_.kit.tracks[t].mod[i];
+            if (!slot.on() || slot.dest != p) continue;
+            value = mod_apply(value, mod_value_[t][i], slot.depth);
+            moved_by_lfo = true;
+        }
         if (cc == 0 || value == cc_sent_[t][p]) continue;
         if (moved_by_lfo && throttle && lfo_cc_wait_[t] > 0) continue;
         uint8_t bytes[3];
@@ -3309,34 +3587,63 @@ void Engine::stop_stream(int track) {
     st.carry = 0;
 }
 
+void Engine::fill_fifo(enaga::files::Stream &stream, StreamFifo &fifo, uint32_t total,
+                       uint8_t frame_bytes, uint8_t encoding, uint8_t &carry, uint8_t *carry_bytes,
+                       uint32_t most) {
+    const uint32_t next = fifo.next_frame();
+    if (next >= total) return;                        // the whole file is in
+    uint32_t room = 0;
+    int16_t *span = fifo.write_span(&room);
+    uint32_t n = room < most ? room : most;
+    if (n > total - next) n = total - next;
+    if (n == 0) return;
+
+    const uint32_t fb = frame_bytes;
+    for (uint32_t i = 0; i < carry; i++) stream_bytes_[i] = carry_bytes[i];
+    const uint32_t want = n * fb - carry;
+    const uint32_t got = stream.read(stream_bytes_ + carry, want);
+    const uint32_t have = carry + (got > want ? want : got);
+    const uint32_t frames = stream_frames_in(have, fb);
+    if (frames != 0) {
+        const uint32_t did = pcm_to_s16(stream_bytes_, frames * fb, PcmFormat(encoding),
+                                        fifo.channels(), span, frames);
+        fifo.commit(did);
+    }
+    const uint32_t used = frames * fb;
+    carry = uint8_t(have - used);
+    for (uint32_t i = 0; i < carry; i++) carry_bytes[i] = stream_bytes_[used + i];
+}
+
 void Engine::top_up_streams() {
     for (int t = 0; t < kTracks; t++) {
         StreamState &st = stream_state_[t];
         if (!st.on || !st.attached) continue;
-        StreamFifo &fifo = fifos_[t];
-        const uint32_t next = fifo.next_frame();
-        if (next >= st.total) continue;               // the whole file is in
-        uint32_t room = 0;
-        int16_t *span = fifo.write_span(&room);
-        uint32_t n = room < kStreamReadFrames ? room : kStreamReadFrames;
-        if (n > st.total - next) n = st.total - next;
-        if (n == 0) continue;
-
-        const uint32_t fb = st.frame_bytes;
-        for (uint32_t i = 0; i < st.carry; i++) stream_bytes_[i] = st.carry_bytes[i];
-        const uint32_t want = n * fb - st.carry;
-        const uint32_t got = streams_[t].read(stream_bytes_ + st.carry, want);
-        const uint32_t have = st.carry + (got > want ? want : got);
-        const uint32_t frames = stream_frames_in(have, fb);
-        if (frames != 0) {
-            const uint32_t did = pcm_to_s16(stream_bytes_, frames * fb, PcmFormat(st.encoding),
-                                            fifo.channels(), span, frames);
-            fifo.commit(did);
-        }
-        const uint32_t used = frames * fb;
-        st.carry = uint8_t(have - used);
-        for (uint32_t i = 0; i < st.carry; i++) st.carry_bytes[i] = stream_bytes_[used + i];
+        fill_fifo(streams_[t], fifos_[t], st.total, st.frame_bytes, st.encoding, st.carry,
+                  st.carry_bytes, kStreamReadFrames);
     }
+}
+
+// --- sample audition (dsp/audition.hpp) -------------------------------------------
+//
+// The card side opens the file's stream at its data and, once it is filled, posts
+// Cmd::audition_start; this side reads it into the player's fifo each block and plays it, until
+// its last frame or a Cmd::audition_stop's fade. Then it stops reading and bumps
+// Status::audition_epoch, after which the stream is the card side's to close.
+
+void Engine::top_up_audition() {
+    if (!audition_on_ || !audition_.wants_frames()) return;
+    fill_fifo(audition_stream_, audition_.fifo(), audition_.total(), audition_frame_bytes_,
+              audition_encoding_, audition_carry_, audition_carry_bytes_, kAuditionReadFrames);
+}
+
+void Engine::end_audition() {
+    // Stop reading FIRST, then say so, as watch_streams does: the card side may close the stream
+    // the moment it sees the new value.
+    audition_on_ = false;
+    audition_carry_ = 0;
+    audition_epoch_ = uint8_t(audition_epoch_ + 1u);
+    status_.audition_frame.store(0, std::memory_order_relaxed);
+    status_.audition_epoch.store(audition_epoch_, std::memory_order_release);
 }
 
 void Engine::watch_streams() {
@@ -3380,6 +3687,8 @@ void Engine::capture_live(LiveState &state) const {
     state.morph = morph_;
     state.rel_all = rel_all_;
     state.len_all = len_all_;
+    state.rnd_unit = perform_.rnd_unit;
+    state.rnd_armed = perform_.rnd_armed;
 }
 
 // At once (D3): the next step plays from the restored pattern, and the sound is heard in this
@@ -3406,6 +3715,8 @@ void Engine::apply_live(const LiveState &state) {
     morph_ = state.morph;
     rel_all_ = state.rel_all;
     len_all_ = state.len_all;
+    perform_.rnd_unit = state.rnd_unit;
+    perform_.rnd_armed = state.rnd_armed;
     perform_dirty_ = true;
     reconfigure();
 }

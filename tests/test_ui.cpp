@@ -65,6 +65,9 @@ struct UiProbe {
         app.len_all_ = 0;
         app.post(Cmd::set_move_all, 0, 0, 0, 0);
         app.post(Cmd::set_move_all, 0, 0, 1, 0);
+        app.rnd_unit_ = kLiveRndOff;                 // LIVE RND off, every track armed
+        app.rnd_armed_ = kLiveRndAllTracks;
+        app.post(Cmd::set_live_rnd, 0, 0, kLiveRndOff, kLiveRndAllTracks);
     }
     static int selected(const Strata &app) { return app.selected_; }
     static int page(const Strata &app) { return app.page_; }
@@ -874,11 +877,16 @@ TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     CHECK(!app_engine().tape_stop().held());
 }
 
-TEST(ui_func_push_d_with_a_step_held_clears_its_lock_not_a_tape_stop) {
-    // Roland, 2026-11-22: every push with a STEP held is the step's. FUNC + push A-C already
-    // cleared that step's lock there; FUNC + push D was a tape stop instead.
+namespace {
+bool screen_has(Strata &app, const char *wanted);   // defined with the frame's tests
+}  // namespace
+
+TEST(ui_func_push_d_with_a_step_held_slides_its_lock_not_a_tape_stop) {
+    // Roland, 2026-11-22: every push with a STEP held is the step's. FUNC + push D was a tape
+    // stop there once, then cleared the lock; since parameter slide, FUNC + push A-D toggles the
+    // lock's slide (docs/CONTROLS.md, "Random ranges and slides"), and a plain push clears.
     Strata &app = fresh();
-    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_F8);                               // EDIT: its lock line outranks a notice
     pump(2);
     step_down(5);
     app.on_encoder(3, +6);                           // lock D on step 6
@@ -890,13 +898,79 @@ TEST(ui_func_push_d_with_a_step_held_clears_its_lock_not_a_tape_stop) {
     app.on_key(ENAGA_KEY_PUSH_D, true);
     pump(2);
     CHECK(!app_engine().tape_stop().held());
-    CHECK_EQ(UiProbe::notice(app), "LOCK CLEARED");
+    CHECK_EQ(UiProbe::notice(app), "SLIDE ON");
+    CHECK(pattern_get_slide(app_engine().pattern(), 0, 5, uint8_t(param)));
     app.on_key(ENAGA_KEY_PUSH_D, false);
     app.on_key(ENAGA_KEY_F1, false);
+    CHECK(screen_has(app, "/"));                     // the lock line marks the slide
+    app.on_key(ENAGA_KEY_PUSH_D, true);              // a plain push takes it all off
+    app.on_key(ENAGA_KEY_PUSH_D, false);
     step_up(5);
     pump(2);
     CHECK(!pattern_get_lock(app_engine().pattern(), 0, 5, uint8_t(param), value));
+    CHECK(!pattern_get_slide(app_engine().pattern(), 0, 5, uint8_t(param)));
     CHECK(!app_engine().tape_stop().held());
+}
+
+TEST(ui_func_push_with_a_step_held_and_no_lock_locks_the_kit_value_and_slides_it) {
+    // A slide needs a value to glide from: on an unlocked parameter the push locks the kit value.
+    Strata &app = fresh();
+    const int param = page_first(Page(UiProbe::param_page(app)));
+    const uint8_t kit = app_engine().params(0).v[param];
+    step_down(2);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_A, true);
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 2, uint8_t(param), value));
+    CHECK_EQ(int(value), int(kit));
+    CHECK(pattern_get_slide(app_engine().pattern(), 0, 2, uint8_t(param)));
+    app.on_key(ENAGA_KEY_PUSH_A, true);              // again: the slide goes, the lock stays
+    app.on_key(ENAGA_KEY_PUSH_A, false);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "SLIDE OFF");
+    CHECK(!pattern_get_slide(app_engine().pattern(), 0, 2, uint8_t(param)));
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 2, uint8_t(param), value));
+    app.on_key(ENAGA_KEY_F1, false);
+    step_up(2);
+    pump(2);
+    CHECK((step_of(0, 2).flags & kStepTrig) == 0);   // used as a modifier: no trig toggled
+}
+
+TEST(ui_func_turn_with_a_step_held_sets_the_random_range_not_the_lock) {
+    // Hold STEP + FUNC + turn: the parameter's random range on the step. The lock line says
+    // "R<width>", the bar gets a dim line under it over the range, and the value lock is not
+    // touched. Turned back to 0 the range is gone.
+    Strata &app = fresh();
+    enaga::Canvas canvas(g_pixels);
+    const uint8_t *px = g_pixels;
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    const int index = page_first(Page(UiProbe::param_page(app)));
+    step_down(0);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(0, +10);
+    pump(2);
+    const uint8_t width = pattern_get_range(app_engine().pattern(), 0, 0, uint8_t(index));
+    CHECK(width > 0);
+    uint8_t value = 0;
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 0, uint8_t(index), value));
+    char wanted[8] = {' ', 'R', 0};
+    char *w = wanted + 2;
+    append_number(w, width);
+    *w = 0;
+    CHECK(screen_has(app, wanted));
+    app.draw(canvas);
+    int dim = 0;                                     // the range line under GRID's slot A bar
+    for (int x = 0; x < 28; x++) dim += px[119 * enaga::Canvas::width + x] == 7 ? 1 : 0;
+    CHECK(dim > 0);
+    app.on_encoder(0, -120);
+    pump(2);
+    CHECK_EQ(int(pattern_get_range(app_engine().pattern(), 0, 0, uint8_t(index))), 0);
+    app.on_key(ENAGA_KEY_F1, false);
+    step_up(0);
+    pump(2);
 }
 
 TEST(ui_the_step_page_maps_sixteen_keys_onto_sixty_four_steps) {
@@ -5031,6 +5105,94 @@ TEST(ui_samples_ok_loads_the_file_into_the_track_while_playing) {
     key(ENAGA_KEY_F4);
 }
 
+// Push A in SAMPLES hears the file under the cursor without loading it (dsp/audition.hpp).
+TEST(ui_samples_push_a_hears_the_file_without_loading_it) {
+    Strata &app = fresh();
+    seed_sample_card();
+    card_wav("/SAMPLES/A_HIT.WAV", 4800);          // 100 ms each, long enough to catch playing
+    card_wav("/SAMPLES/b loop.wav", 4800);
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_DOWN);                           // A_HIT.WAV
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "HEARING");
+    CHECK(app_storage().auditioning());
+    CHECK(std::strcmp(app_storage().audition_path(), "/SAMPLES/A_HIT.WAV") == 0);
+    for (int i = 0; i < 100 && !app_engine().audition_attached(); i++) pump();
+    CHECK(app_engine().audition_attached());
+    CHECK(pump(4) > 0.1f);                         // heard
+    // ...and only heard: the track has no file, the kit is as it was.
+    CHECK_EQ(app_engine().project().kit.tracks[0].sample[0], '\0');
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+
+    // While one is heard, the cursor hears the next.
+    key(ENAGA_KEY_DOWN);                           // b loop.wav
+    CHECK(std::strcmp(app_storage().audition_path(), "/SAMPLES/b loop.wav") == 0);
+    for (int i = 0; i < 100 && !(app_storage().audition_sounding() &&
+                                 std::strcmp(app_storage().audition_path(), "/SAMPLES/b loop.wav") == 0);
+         i++) {
+        pump();
+    }
+    CHECK(app_storage().audition_sounding());
+
+    // Push A again stops it.
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "STOPPED");
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+    CHECK_EQ(FakeHost::the().streams_open(), 0);
+
+    // A folder has nothing to hear, and the cursor landing on one stops what plays.
+    key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_UP);                             // KICKS
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "A HEARS FILES");
+    CHECK(!app_storage().auditioning());
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_PUSH_A);                         // A_HIT.WAV again
+    CHECK(app_storage().auditioning());
+    key(ENAGA_KEY_UP);                             // onto KICKS: stops
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+
+    // OK loads, and the audition makes way for it.
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_PUSH_A);
+    for (int i = 0; i < 100 && !app_storage().audition_sounding(); i++) pump();
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "LOADING");
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+    CHECK(std::strcmp(app_engine().project().kit.tracks[0].sample, "/SAMPLES/A_HIT.WAV") == 0);
+
+    // Leaving SAMPLES stops it too.
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(app_storage().auditioning());
+    key(ENAGA_KEY_F4);
+    CHECK(UiProbe::mode(app) != int(Mode::samples));
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+    pump_until_idle();
+}
+
+// A file that cannot be heard says why, and the screen shows what is heard.
+TEST(ui_samples_push_a_says_why_a_file_cannot_be_heard) {
+    Strata &app = fresh();
+    seed_sample_card();
+    const char junk[] = "RIFF....WAVEnot really";
+    FakeHost::the().write_file("/SAMPLES/A_HIT.WAV", junk, sizeof junk);
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_DOWN);                           // A_HIT.WAV
+    key(ENAGA_KEY_PUSH_A);
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+    CHECK_EQ(UiProbe::notice(app), "NOT A WAV");
+    key(ENAGA_KEY_F4);
+}
+
 namespace {
 
 void set_param_now(int track, uint8_t slot, uint8_t value) {
@@ -5327,6 +5489,11 @@ TEST(ui_layout_samples) {
     pump_until_idle();
     pump(400);
     check_layout(app, "SAMPLES, loaded");
+    key(ENAGA_KEY_PUSH_A);
+    for (int i = 0; i < 100 && !app_storage().audition_sounding(); i++) pump();
+    check_layout(app, "SAMPLES, hearing");
+    key(ENAGA_KEY_PUSH_A);
+    pump(4);
     key(ENAGA_KEY_CLR);
     pump(2);
     check_layout(app, "SAMPLES, root");
@@ -9776,6 +9943,124 @@ TEST(ui_func_turn_a_and_b_in_perform_are_rel_all_and_len_all) {
     CHECK(!screen_has(app, "LN+"));
 }
 
+// --- LIVE RND (core/liverand.hpp) -------------------------------------------------------------
+
+// FUNC + turn D in PERFORM sets LIVE RND's unit for the armed tracks (all eight at start), FUNC +
+// push D takes the selected track out or puts it back. The screen line, the live strip and the
+// help say so; without FUNC, D is still its macro. Nothing is saved or undone.
+TEST(ui_func_d_in_perform_is_live_rnd_and_func_push_d_arms_the_selected_track) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    pump(1600);
+    CHECK_EQ(int(engine.live_rnd_unit()), 0);
+    CHECK_EQ(int(engine.live_rnd_armed()), int(kLiveRndAllTracks));
+    const uint8_t macro_d = engine.macro_position(3);
+    const uint8_t undo_before = undo_depth();
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(3, +3);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 3);
+    CHECK(std::strcmp(UiProbe::notice(app), "LIVE RND4 8 TRK") == 0);
+    CHECK_EQ(int(engine.macro_position(3)), int(macro_d));   // not the macro
+    app.on_encoder(3, +9);                                    // stops at RND16
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), int(kLiveRndMax));
+    CHECK(std::strcmp(UiProbe::notice(app), "LIVE RND16 8 TRK") == 0);
+    app.on_encoder(3, -3);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 2);
+
+    // FUNC + push D: the selected track (track 1 after fresh()) out, then in again.
+    app.on_key(ENAGA_KEY_PUSH_D, true);
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_armed()), 0xFE);
+    CHECK(std::strcmp(UiProbe::notice(app), "T1 RND OUT 7 TRK") == 0);
+    CHECK(!engine.tape_stop().held());                        // not the old tape stop hint
+    app.on_key(ENAGA_KEY_F1, false);
+
+    pump(1600);
+    CHECK(screen_has(app, "LIVE RND2 FUNC+D"));
+    CHECK(screen_has(app, "RN2"));
+    check_layout(app, "PERFORM, LIVE RND on");
+    // With REL ALL away from rest the two share the line.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(0, -32);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(1600);
+    CHECK(screen_has(app, "REL -64 LEN 100% R2"));
+    check_layout(app, "PERFORM, REL ALL and LIVE RND");
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(0, +32);
+    app.on_key(ENAGA_KEY_F1, false);
+
+    // Without FUNC, D is the macro again, and nothing went on the undo history.
+    app.on_encoder(3, +1);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 2);
+    CHECK(engine.macro_position(3) != macro_d);
+    app.on_encoder(3, -1);
+    CHECK_EQ(int(undo_depth()), int(undo_before));
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_D, true);
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_armed()), int(kLiveRndAllTracks));
+    CHECK(std::strcmp(UiProbe::notice(app), "T1 RND IN 8 TRK") == 0);
+    app.on_encoder(3, -9);                                    // back to OFF, and it stops there
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "LIVE RND OFF") == 0);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(1600);
+    CHECK(screen_has(app, "FUNC+A/B REL/LEN ALL"));
+    CHECK(!screen_has(app, "RN"));
+}
+
+// LIVE RND is in a LOCK (D4): a jump puts the unit and the armed set back, and the UI's knob
+// follows, so the next click goes on from where the lock had it.
+TEST(ui_a_lock_jump_puts_live_rnd_back_and_the_knob_follows) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(3, +4);                                    // RND8
+    app.on_key(ENAGA_KEY_PUSH_D, true);                       // track 1 out
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    func_mutate_hold(app);                                    // store
+    pump(2);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(3, -4);                                    // OFF
+    app.on_key(ENAGA_KEY_PUSH_D, true);                       // track 1 in
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 0);
+    func_mutate_tap(app);                                     // jump
+    pump(4);
+    CHECK_EQ(int(engine.live_rnd_unit()), 4);
+    CHECK_EQ(int(engine.live_rnd_armed()), 0xFE);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(3, -1);                                    // from the lock's RND8 to RND4
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_unit()), 3);
+    CHECK_EQ(int(engine.live_rnd_armed()), 0xFE);
+    func_mutate_tap(app);                                     // swap back (D13)
+    pump(4);
+    CHECK_EQ(int(engine.live_rnd_unit()), 0);
+    CHECK_EQ(int(engine.live_rnd_armed()), int(kLiveRndAllTracks));
+    func_mutate_tap(app);                                     // and to the lock again
+    pump(4);
+    CHECK_EQ(int(engine.live_rnd_unit()), 4);
+}
+
 // FEEL on the PATTERN page: D turns it from anywhere on the page, the row is the field after
 // SWG, and UP / DOWN walk it there.
 TEST(ui_the_pattern_page_sets_feel_on_d_and_on_its_row) {
@@ -10037,4 +10322,177 @@ TEST(ui_layout_resample_with_a_take_on_offer) {
     key(ENAGA_KEY_CLR);
     key(ENAGA_KEY_F4);
     pump(2);
+}
+
+// --- MOD slots: push DEP or DST on the LFO page, then turn a knob (app/ui_modslots.hpp) ------
+
+namespace {
+
+void to_edit_page(Strata &app, Page page) {
+    for (int i = 0; i < kEditPages && UiProbe::param_page(app) != int(page); i++) {
+        key(ENAGA_KEY_SELECT_RIGHT);
+    }
+}
+
+bool notice_is(Strata &app, const char *text) {
+    return UiProbe::notice(app) != nullptr && std::strcmp(UiProbe::notice(app), text) == 0;
+}
+
+void post_cmd_track_mod_off(int track) {
+    for (int s = 0; s < kModSlots; s++) {
+        Command command;
+        command.cmd = Cmd::set_mod_slot;
+        command.track = uint8_t(track);
+        command.a = uint8_t(s);
+        app_engine().commands().post(command);
+    }
+    pump(2);
+}
+
+}  // namespace
+
+TEST(ui_mod_slot_is_learnt_by_pushing_dep_and_turning_a_knob) {
+    Strata &app = fresh();
+    const KitModSlot *const mod = app_engine().project().kit.tracks[0].mod;
+    key(ENAGA_KEY_F8);                                     // EDIT, track 1
+    to_edit_page(app, Page::lfo);
+    CHECK(screen_has(app, "PUSH C D: MOD SLOTS"));         // nothing set: how to set one
+    check_layout(app, "EDIT LFO, no slots");
+
+    // DEP is the third knob: push C for slot 1. It starts on LFO; again walks the source.
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(notice_is(app, "MOD1 LFO: TURN A KNOB"));
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(notice_is(app, "MOD1 ENV: TURN A KNOB"));
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(notice_is(app, "MOD1 VEL: TURN A KNOB"));
+
+    // An LFO knob cannot be a slot's.
+    app.on_encoder(0, +3);
+    pump(2);
+    CHECK(notice_is(app, "MOD: NOT LFO OR ARP"));
+    app.on_encoder(0, -3);
+    pump(2);
+
+    // Over to SRC, and turn C by 20: the slot takes it, and the line says so as it goes.
+    to_edit_page(app, Page::src);
+    const int param = page_first(Page::src) + 2;
+    const int start = int(app_engine().params(0).v[param]);
+    const int turn = start > 63 ? -20 : +20;
+    app.on_encoder(2, turn);
+    pump(2);
+    CHECK_EQ(int(app_engine().params(0).v[param]), start + turn);
+    CHECK(screen_has(app, "MOD1 VEL>"));
+    check_layout(app, "EDIT, learning a MOD slot");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(mod[0].on());
+    CHECK_EQ(int(mod[0].source), int(kModSrcVel));
+    CHECK_EQ(int(mod[0].dest), param);
+    CHECK_EQ(int(mod[0].depth), turn);
+    CHECK(!mod[1].on());
+    // The knob is back where it was: the slot is the move.
+    CHECK_EQ(int(app_engine().params(0).v[param]), start);
+    CHECK(std::strncmp(UiProbe::notice(app), "M1 VEL>", 7) == 0);
+    CHECK(app_storage().dirty());
+    check_layout(app, "EDIT, a bar with a MOD slot's range");
+
+    // The LFO page lists both slots now.
+    to_edit_page(app, Page::lfo);
+    CHECK(screen_has(app, "M1 VEL>"));
+    CHECK(screen_has(app, "M2 OFF"));
+    check_layout(app, "EDIT LFO, a slot set");
+
+    // A push on a slot that is set starts from its source; with no knob turned, the end keeps
+    // its knob and depth and takes the new source.
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(notice_is(app, "MOD1 VEL: TURN A KNOB"));
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(int(mod[0].source), int(kModSrcPrs));
+    CHECK_EQ(int(mod[0].dest), param);
+    CHECK_EQ(int(mod[0].depth), turn);
+
+    // Slot 2 on DST's push; ended with no knob turned it stays off.
+    key(ENAGA_KEY_PUSH_D);
+    CHECK(notice_is(app, "MOD2 LFO: TURN A KNOB"));
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(notice_is(app, "NO KNOB: M2 STAYS OFF"));
+    CHECK(!mod[1].on());
+    // The CLR straight after is the same "get me out", as after MACRO LEARN.
+    key(ENAGA_KEY_CLR);
+    CHECK(notice_is(app, "KNOBS EDIT AGAIN"));
+
+    // Walking the source to OFF clears the slot: PRS, RND, OFF.
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(notice_is(app, "MOD1 OFF: OK CLEARS"));
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!mod[0].on());
+    CHECK(notice_is(app, "M1 OFF"));
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_mod_slot_learn_ends_on_leaving_edit_and_opens_edit_from_grid) {
+    Strata &app = fresh();
+    const KitModSlot *const mod = app_engine().project().kit.tracks[0].mod;
+    key(ENAGA_KEY_F8);
+    to_edit_page(app, Page::lfo);
+    key(ENAGA_KEY_F4);                                     // GRID, on the LFO page
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    CHECK_EQ(UiProbe::param_page(app), int(Page::lfo));
+    key(ENAGA_KEY_PUSH_D);                                 // slot 2: EDIT opens
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    key(ENAGA_KEY_PUSH_D);                                 // ENV
+    to_edit_page(app, Page::amp);
+    const int param = page_first(Page::amp);
+    const int start = int(app_engine().params(0).v[param]);
+    app.on_encoder(0, start > 63 ? -9 : +9);
+    pump(2);
+    key(ENAGA_KEY_F4);                                     // leaving EDIT ends it, learnt
+    pump(2);
+    CHECK(mod[1].on());
+    CHECK_EQ(int(mod[1].source), int(kModSrcEnv));
+    CHECK_EQ(int(mod[1].dest), param);
+    CHECK_EQ(int(mod[1].depth), start > 63 ? -9 : 9);
+    CHECK_EQ(int(app_engine().params(0).v[param]), start);
+    post_cmd_track_mod_off(0);
+}
+
+TEST(ui_mod_slot_prs_hears_the_tracks_pad_and_lets_go) {
+    Strata &app = fresh();
+    Command command;
+    command.cmd = Cmd::set_mod_slot;
+    command.track = 0;
+    command.a = 0;
+    command.b = kModSrcPrs;
+    command.c = 2;
+    command.d = 40;
+    app_engine().commands().post(command);
+    pump(2);
+    app.on_pad_press(0, 100);
+    pump();
+    app.on_pad_pressure(0, 127);
+    pump(2);
+    CHECK_EQ(app_engine().mod_value(0, 0), 1.0f);
+    CHECK_EQ(int(app_engine().sounding(0).v[2]), int(app_engine().params(0).v[2]) + 40 > 127
+                                                       ? 127
+                                                       : int(app_engine().params(0).v[2]) + 40);
+    app.on_pad_release(0);
+    pump(2);
+    CHECK_EQ(app_engine().mod_value(0, 0), 0.0f);
+    CHECK_EQ(int(app_engine().sounding(0).v[2]), int(app_engine().params(0).v[2]));
+    // Another track's pad is its own: track 1's slot hears nothing of it.
+    app.on_pad_press(2, 100);
+    app.on_pad_pressure(2, 90);
+    pump(2);
+    CHECK_EQ(app_engine().mod_value(0, 0), 0.0f);
+    app.on_pad_release(2);
+    pump(2);
+    post_cmd_track_mod_off(0);
 }

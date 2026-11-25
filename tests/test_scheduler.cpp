@@ -2104,6 +2104,77 @@ TEST(random_play_repeats_exactly_for_one_seed_and_differs_for_another) {
     CHECK(moved);
 }
 
+// --- LIVE RND (core/liverand.hpp) --------------------------------------------
+
+// LIVE RND on an armed track plays exactly what TRACK PLAY's RND mode of the same size would,
+// from the same draw; an unarmed track plays its own mode; the pattern is never written.
+TEST(live_rnd_plays_what_track_play_would_on_armed_tracks_only_and_writes_nothing) {
+    static Pattern live, programmed, before;
+    blank(live, 16);
+    for (int t = 0; t < 2; t++) {
+        for (int s = 0; s < 16; s++) put_trig(live, t, s).note = uint8_t(30 + s);
+    }
+    live.seed = 0x5EEDu;
+    __builtin_memcpy(&programmed, &live, sizeof live);
+    programmed.tracks[0].play = uint8_t(PlayMode::rnd4);
+    __builtin_memcpy(&before, &live, sizeof live);
+
+    static Log heard, wanted;
+    PerformState rnd;
+    rnd.rnd_unit = 3;                               // RND4
+    rnd.rnd_armed = 0x01;                           // track 1 only
+    PerformState plain;
+    Scheduler a, b;
+    a.configure(live);
+    a.reset();
+    b.configure(programmed);
+    b.reset();
+    heard.clear();
+    wanted.clear();
+    run(a, live, rnd, 0, 4u * 16u * kStepTicks, heard);
+    run(b, programmed, plain, 0, 4u * 16u * kStepTicks, wanted);
+    CHECK_EQ(heard.count, 2 * 16 * 4);
+    CHECK(same_stream(heard, wanted));
+    CHECK_EQ(__builtin_memcmp(&live, &before, sizeof live), 0);
+    bool moved = false;
+    for (int i = 0; i < heard.count; i++) {
+        const Hit &h = heard.hits[i];
+        const uint8_t slot = uint8_t((h.tick / kStepTicks) % 16u);
+        if (h.event.track == 1) CHECK_EQ(int(h.event.step), int(slot));   // not armed
+        if (h.event.track == 0 && h.event.step != slot) moved = true;
+        // RND4 moves whole beats: a step keeps its place inside the beat.
+        CHECK_EQ(int(h.event.step) & 3, int(slot) & 3);
+    }
+    CHECK(moved);
+}
+
+// OFF is the programmed order at once, from the next slot; a track's own mode comes back with it.
+TEST(live_rnd_off_puts_every_slot_back_on_its_own_step_at_once) {
+    static Pattern pattern;
+    blank(pattern, 16);
+    for (int s = 0; s < 16; s++) put_trig(pattern, 0, s).note = uint8_t(30 + s);
+    for (int s = 0; s < 16; s++) put_trig(pattern, 1, s).note = uint8_t(60 + s);
+    pattern.tracks[1].play = uint8_t(PlayMode::rev);
+    pattern.seed = 0x1234u;
+    Scheduler sched;
+    sched.configure(pattern);
+    sched.reset();
+    PerformState perform;
+    perform.rnd_unit = 1;                           // RND1, every track armed
+    static Log log;
+    log.clear();
+    run(sched, pattern, perform, 0, 2u * 16u * kStepTicks + 5u * kStepTicks, log);
+    perform.rnd_unit = 0;
+    const int from = log.count;
+    run(sched, pattern, perform, 37u * kStepTicks, 48u * kStepTicks, log);
+    CHECK_EQ(log.count - from, 2 * 11);
+    for (int i = from; i < log.count; i++) {
+        const Hit &h = log.hits[i];
+        const int slot = int((h.tick / kStepTicks) % 16u);
+        CHECK_EQ(int(h.event.step), h.event.track == 0 ? slot : 15 - slot);
+    }
+}
+
 // --- FEEL (core/timing.hpp) -------------------------------------------------
 
 // The scheduler reads the pattern's FEEL byte fresh every tick, as it reads the play mode: WAVE
@@ -2243,4 +2314,95 @@ TEST(stutter_event_wraps_a_step_into_a_short_track) {
     pattern.tracks[1].length = 0;                       // clamped to 1, never a hang
     CHECK(stutter_event(pattern, 1, 40, 0, event));
     CHECK_EQ(int(event.step), 0);
+}
+
+// --- random lock ranges and parameter slide -------------------------------
+
+TEST(scheduler_lock_spread_stays_within_its_width_and_is_a_pure_draw) {
+    int lowest = 127, highest = 0;
+    for (uint32_t loop = 0; loop < 400; loop++) {
+        const int v = lock_spread(64, 10, 0x5EEDu, 2, 3, loop, 5);
+        CHECK(v >= 54 && v <= 74);
+        CHECK_EQ(v, int(lock_spread(64, 10, 0x5EEDu, 2, 3, loop, 5)));
+        lowest = v < lowest ? v : lowest;
+        highest = v > highest ? v : highest;
+    }
+    CHECK_EQ(lowest, 54);                               // both ends are reachable
+    CHECK_EQ(highest, 74);
+    CHECK_EQ(int(lock_spread(64, 0, 1u, 0, 0, 0, 0)), 64);   // width 0: the value as it is
+    for (uint32_t loop = 0; loop < 64; loop++) {        // clamped at the ends, never wrapped
+        CHECK(int(lock_spread(5, 127, 1u, 0, 0, loop, 0)) <= 127);
+        CHECK(int(lock_spread(120, 127, 1u, 0, 0, loop, 0)) >= 0);
+    }
+    // Two parameters on one step draw apart.
+    int same = 0;
+    for (uint32_t loop = 0; loop < 64; loop++) {
+        same += lock_spread(64, 60, 1u, 0, 0, loop, 1) == lock_spread(64, 60, 1u, 0, 0, loop, 2);
+    }
+    CHECK(same < 8);
+}
+
+TEST(scheduler_lock_resolve_reads_the_value_then_the_range) {
+    static Pattern pattern;
+    blank(pattern);
+    CHECK_EQ(int(lock_resolve(pattern, 0, 0, 0, 4, 33)), 33);      // nothing: the fallback
+    CHECK(pattern_set_lock(pattern, 0, 0, 4, 90));
+    CHECK_EQ(int(lock_resolve(pattern, 0, 0, 0, 4, 33)), 90);
+    CHECK(pattern_set_range(pattern, 0, 0, 4, 12));
+    for (uint32_t loop = 0; loop < 16; loop++) {
+        CHECK_EQ(int(lock_resolve(pattern, 0, 0, loop, 4, 33)),
+                 int(lock_spread(90, 12, pattern.seed, 0, 0, loop, 4)));
+    }
+    CHECK_EQ(int(lock_resolve(pattern, 0, 0, 0, 5, 33)), 33);      // another parameter
+}
+
+// A step with a slid lock carries where it glides to: the next step that plays, in play order,
+// and the time until it, in frames. Without a slide nothing is looked up.
+TEST(scheduler_a_slid_step_looks_ahead_to_the_next_step_that_plays) {
+    static Pattern pattern;
+    blank(pattern, 8);
+    put_trig(pattern, 0, 1);
+    put_trig(pattern, 0, 4);
+    pattern.tracks[0].steps[6].flags = kStepTrigless;
+    CHECK(pattern_set_lock(pattern, 0, 1, 3, 10));
+    CHECK(pattern_set_slide(pattern, 0, 1, 3, true));
+    CHECK(pattern_set_lock(pattern, 0, 6, 3, 10));
+    CHECK(pattern_set_slide(pattern, 0, 6, 3, true));
+    put_trig(pattern, 0, 4);                            // step 4 slides nothing
+
+    Scheduler sched;
+    sched.reset();
+    sched.configure(pattern, kSamplesPerTick);
+    const PerformState perform;
+    StepEvent events[kMaxEventsPerTick];
+    const float step = float(kStepTicks) * kSamplesPerTick;
+
+    int n = sched.tick(1 * kStepTicks, 0, pattern, perform, events, kMaxEventsPerTick);
+    CHECK_EQ(n, 1);
+    CHECK_EQ(int(events[0].glide_step), 4);
+    CHECK_EQ(events[0].glide_loop, 0u);
+    CHECK_EQ(events[0].glide_frames, uint32_t(3.0f * step + 0.5f));
+
+    n = sched.tick(4 * kStepTicks, 0, pattern, perform, events, kMaxEventsPerTick);
+    CHECK_EQ(n, 1);
+    CHECK_EQ(events[0].glide_frames, 0u);
+
+    // Step 6's next is step 1 of the next pass: across the loop's end.
+    n = sched.tick(6 * kStepTicks, 0, pattern, perform, events, kMaxEventsPerTick);
+    CHECK_EQ(n, 1);
+    CHECK(events[0].trigless);
+    CHECK_EQ(int(events[0].glide_step), 1);
+    CHECK_EQ(events[0].glide_loop, 1u);
+    CHECK_EQ(events[0].glide_frames, uint32_t(3.0f * step + 0.5f));
+    CHECK_EQ(events[0].loop, 0u);
+
+    // Under REV the look-ahead walks backwards: step 1's next is step 6 (slot 1 is step 6).
+    pattern.tracks[0].play = uint8_t(PlayMode::rev);
+    sched.reset();
+    n = sched.tick(6 * kStepTicks, 0, pattern, perform, events, kMaxEventsPerTick);   // slot 6
+    CHECK_EQ(n, 1);
+    CHECK_EQ(int(events[0].step), 1);
+    CHECK_EQ(int(events[0].glide_step), 6);
+    CHECK_EQ(events[0].glide_loop, 1u);
+    CHECK_EQ(events[0].glide_frames, uint32_t(3.0f * step + 0.5f));
 }

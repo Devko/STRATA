@@ -10,6 +10,7 @@
 #include "check.hpp"
 
 #include "apprig.hpp"
+#include "liverand.hpp"
 #include "lockstore.hpp"
 
 using namespace strata;
@@ -135,6 +136,18 @@ TEST(lockstore_two_states_compare_by_every_field) {
     __builtin_memcpy(&b, &a, sizeof a);
     b.morph = 1;
     CHECK(!live_state_same(a, b));
+    __builtin_memcpy(&b, &a, sizeof a);
+    b.rel_all = -2;
+    CHECK(!live_state_same(a, b));
+    __builtin_memcpy(&b, &a, sizeof a);
+    b.len_all = 2;
+    CHECK(!live_state_same(a, b));
+    __builtin_memcpy(&b, &a, sizeof a);
+    b.rnd_unit = 3;
+    CHECK(!live_state_same(a, b));
+    __builtin_memcpy(&b, &a, sizeof a);
+    b.rnd_armed = 0x7F;
+    CHECK(!live_state_same(a, b));
 }
 
 // --- the engine -------------------------------------------------------------------------------
@@ -149,6 +162,7 @@ TEST(lock_engine_a_jump_brings_back_steps_sound_mixer_mutes_and_moves) {
     post(Cmd::set_mute, 3, 0, 1);
     post(Cmd::set_macro, 0, 0, 2, 70);
     set_morph(1000);
+    post(Cmd::set_live_rnd, 0, 0, 3, 0x0F);              // LIVE RND4 on tracks 1-4
     pump();
     const uint8_t send = engine.project().settings.sends[1];
     const uint8_t master = engine.project().settings.master[1];
@@ -170,6 +184,7 @@ TEST(lock_engine_a_jump_brings_back_steps_sound_mixer_mutes_and_moves) {
     post(Cmd::set_mute, 3, 0, 0);
     post(Cmd::set_macro, 0, 0, 2, 0);
     set_morph(0);
+    post(Cmd::set_live_rnd, 0, 0, 0, kLiveRndAllTracks);
     settle_mark();
     CHECK_EQ(int(lock_state()), int(kLockHas | kLockChanged));   // "L+"
 
@@ -186,6 +201,8 @@ TEST(lock_engine_a_jump_brings_back_steps_sound_mixer_mutes_and_moves) {
     CHECK(engine.muted(3));
     CHECK_EQ(int(engine.macro_position(2)), 70);
     CHECK_EQ(int(engine.morph()), int(morph));
+    CHECK_EQ(int(engine.live_rnd_unit()), 3);
+    CHECK_EQ(int(engine.live_rnd_armed()), 0x0F);
     settle_mark();
     CHECK_EQ(int(lock_state()), int(kLockHas | kLockSwapReady));
 
@@ -200,6 +217,8 @@ TEST(lock_engine_a_jump_brings_back_steps_sound_mixer_mutes_and_moves) {
     CHECK(!engine.muted(3));
     CHECK_EQ(int(engine.macro_position(2)), 0);
     CHECK_EQ(int(engine.morph()), 0);
+    CHECK_EQ(int(engine.live_rnd_unit()), 0);
+    CHECK_EQ(int(engine.live_rnd_armed()), int(kLiveRndAllTracks));
     settle_mark();
     CHECK_EQ(int(lock_state()), int(kLockHas | kLockChanged));
     post(Cmd::set_mute, 3, 0, 0);

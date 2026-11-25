@@ -281,6 +281,45 @@ public:
     // Why the last listing failed (NOT FOUND, NO CARD...), or nullptr.
     const char *browse_error() const { return browse_error_; }
 
+    // --- sample audition (dsp/audition.hpp): push A in SAMPLES ---
+    //
+    // Hear a file without loading it: it is streamed from the card, whole and from its start,
+    // straight to the output. Beside the job machine, like the browser's listing and the tracks'
+    // streams, so a sample loading or a project saving does not hold it up, and it touches none of
+    // the loader's buffers. One at a time: a second request stops the first and plays the new one.
+    //
+    // The protocol, all in service_audition():
+    //   1. The file's first kAuditionHeadBytes are read (a files::File read) and its WAV header
+    //      parsed, for its format and where its data starts.
+    //   2. An Enaga files::Stream (Engine::audition_stream) is opened at the data, into
+    //      `audition_ring_`. Once it says it is filled, Engine::audition_for_load is written and
+    //      Cmd::audition_start posted.
+    //   3. The audio side reads and plays it to its end, or until Cmd::audition_stop's fade, and
+    //      then bumps Status::audition_epoch. Only after seeing that is the stream closed.
+
+    // Play the WAV at `path`. False, changing nothing, for an empty path or one too long. Queued:
+    // a request while another plays stops that one first.
+    bool request_audition(const char *path);
+    // Stop the audition, or the one on its way.
+    void stop_audition();
+    // An audition asked for and not yet over: opening, playing or fading out.
+    bool auditioning() const { return audition_want_ || audition_state_ != AuditionState::idle; }
+    // The file it is, or is about to be ("" when none).
+    const char *audition_path() const { return audition_want_ ? audition_next_ : audition_path_; }
+    // Opened and sounding (step 3), rather than still on its way.
+    bool audition_sounding() const { return audition_state_ == AuditionState::playing; }
+    // The file's length in seconds and where it is, for the screen: rounded down.
+    uint32_t audition_seconds() const;
+    uint32_t audition_elapsed() const;
+    // Its length in file frames (Status::audition_frame counts the same), 0 before it is known.
+    uint32_t audition_frames() const { return audition_total_; }
+    // Why the last audition did not play (NOT A WAV, NOT FOUND ...), once: it reads and clears.
+    const char *take_audition_error() {
+        const char *e = audition_error_;
+        audition_error_ = nullptr;
+        return e;
+    }
+
     // --- streaming (below, "streaming: a file too big for the pool") ---
 
     // Does this track play a streamed file? For the screen's sample line and for tests.
@@ -587,6 +626,35 @@ private:
     uint32_t chunk_have_ = 0;      // valid bytes in raw_
     uint32_t chunk_pos_ = 0;       // the next unconverted byte in raw_
     uint32_t chunk_carry_ = 0;     // part of a frame kept at raw_'s start for the next read
+
+    // --- sample audition ---
+    enum class AuditionState : uint8_t { idle, header, filling, playing, closing };
+    void service_audition();
+    void begin_audition();               // idle -> header, for audition_next_
+    void audition_header_read();         // header -> filling, or idle with a reason
+    void audition_read(int32_t result);  // the File::read callback, main context
+    void fail_audition(const char *why);
+    AuditionState audition_state_ = AuditionState::idle;
+    bool audition_want_ = false;         // audition_next_ is asked for and not yet begun
+    char audition_next_[kSamplePathBytes] = {};
+    char audition_path_[kSamplePathBytes] = {};
+    enaga::files::File audition_file_;
+    bool audition_read_in_flight_ = false;   // a read owns audition_head_ until its callback
+    bool audition_read_done_ = false;
+    bool audition_cancelled_ = false;    // stopped while the header was on its way
+    int32_t audition_read_result_ = 0;
+    uint32_t audition_file_bytes_ = 0;
+    uint32_t audition_total_ = 0;        // frames
+    uint32_t audition_rate_ = 0;
+    uint8_t audition_epoch_ = 0;         // Status::audition_epoch when the start was posted
+    const char *audition_error_ = nullptr;
+    // A WAV's header and the chunks before its data: fmt, and often LIST, bext, iXML or JUNK,
+    // which run to a few KiB. 32 KiB leaves room for a big one without reading audio for nothing.
+    static constexpr uint32_t kAuditionHeadBytes = 32u << 10;
+    // The stream's ring: as a track's (kStreamRingBytes), 1.36 s of 48 kHz stereo 16-bit.
+    static constexpr uint32_t kAuditionRingBytes = 256u << 10;
+    uint8_t *audition_head_ = nullptr;   // both taken in init()
+    uint8_t *audition_ring_ = nullptr;
 
     // --- streaming: a file too big for the pool ---
     //

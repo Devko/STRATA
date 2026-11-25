@@ -48,6 +48,7 @@
 #include "scheduler.hpp"
 
 #include "clamp.hpp"
+#include "liverand.hpp"
 
 namespace strata {
 
@@ -160,6 +161,37 @@ uint32_t probability_roll(uint32_t seed, int track, int step, uint32_t loop) {
     return uint32_t((uint64_t(h) * 100ull) >> 32);
 }
 
+uint8_t lock_spread(uint8_t base, uint8_t width, uint32_t seed, int track, int step,
+                    uint32_t loop, int param) {
+    if (width == 0) return base;
+    uint32_t h = mix32(seed ^ 0x2545F491u);
+    h = mix32(h ^ (uint32_t(track) * 0x85EBCA77u + 0x165667B1u));
+    h = mix32(h ^ (uint32_t(step) * 0xC2B2AE3Du + 0x27D4EB2Fu));
+    h = mix32(h ^ (loop * 0x9E3779B1u + 0x85EBCA6Bu));
+    h = mix32(h ^ (uint32_t(param) * 0x27D4EB2Fu + 0x9E3779B9u));
+    // 0 .. 2 * width by multiply-shift (no modulo), then centred.
+    const uint32_t w = width > 127u ? 127u : width;
+    const int32_t offset = int32_t((uint64_t(h) * (2u * w + 1u)) >> 32) - int32_t(w);
+    const int32_t value = int32_t(base) + offset;
+    return uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value));
+}
+
+uint8_t lock_resolve(const Pattern &pattern, int track, int step, uint32_t loop, int param,
+                     uint8_t fallback) {
+    uint8_t value = fallback;
+    uint8_t width = 0;
+    const LockView view = pattern_step_locks(pattern, track, step);
+    for (const Lock &lock : view) {
+        if (lock_param(lock.param) != uint8_t(param)) continue;
+        if (lock_is_range(lock.param)) {
+            width = lock.value;
+        } else {
+            value = lock.value;
+        }
+    }
+    return lock_spread(value, width, pattern.seed, track, step, loop, param);
+}
+
 bool condition_passes(uint8_t packed, uint32_t loop, bool fill, bool previous, bool neighbour,
                       bool first_loop) {
     switch (condition_kind(packed)) {
@@ -230,6 +262,49 @@ uint32_t ratchet_frame(uint32_t index, uint32_t count, float step_samples) {
     return uint32_t(offset);
 }
 
+// --- parameter slide -----------------------------------------------------
+
+namespace {
+
+struct Glide {
+    uint8_t step = 0;
+    uint32_t loop = 0;
+    uint32_t frames = 0;
+};
+
+// The next step after `firing` that this track plays with a trig or a trigless, walking the
+// slots in play order (so REV, PING and the RND modes look ahead the way they will play), at
+// most one whole pass -- which comes back to the step itself when it is the only one that plays.
+// Its condition and probability are not drawn: a slide aims at what the step holds. The glide
+// lasts from this step to that one's slot, swing, micro-timing and FEEL left out.
+Glide glide_target(const TrackPattern &source, const TrackTiming &timing, float step_samples,
+                   const Firing &firing) {
+    Glide glide;
+    const int length = clamp_int(int(timing.length), 1, kMaxSteps);
+    int slot = int(firing.slot);
+    uint32_t loop = firing.loop;
+    for (int distance = 1; distance <= length; distance++) {
+        slot++;
+        if (slot >= length) {
+            slot = 0;
+            loop++;
+        }
+        const uint8_t step =
+            timing.play == PlayMode::fwd ? uint8_t(slot) : play_step(slot, loop, timing);
+        if ((source.steps[step].flags & (kStepTrig | kStepTrigless)) == 0) continue;
+        const float frames = float(distance) * step_samples + 0.5f;
+        glide.step = step;
+        glide.loop = loop;
+        glide.frames = !(frames > 0.0f) ? 0u
+                       : frames >= kFrameCeiling ? uint32_t(kFrameCeiling)
+                                                 : uint32_t(frames);
+        return glide;
+    }
+    return glide;
+}
+
+}  // namespace
+
 // --- the scheduler --------------------------------------------------------
 
 void Scheduler::reset(bool first_loop) {
@@ -289,8 +364,8 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
 
         // The play mode and its seed are read fresh too, for the same reason: an undo or a
         // mutation that changes them must be heard on the next step, configure() or not.
-        state.timing.play =
-            source.play < uint8_t(PlayMode::count) ? PlayMode(source.play) : PlayMode::fwd;
+        // LIVE RND (core/liverand.hpp), PERFORM's FUNC + D, overrides it on an armed track.
+        state.timing.play = live_play_mode(source.play, perform.rnd_unit, perform.rnd_armed, t);
         // Only the RND modes draw, so only they pay for the hash.
         state.timing.play_seed =
             state.timing.play >= PlayMode::rnd1 ? play_seed(pattern_seed_, t) : 0u;
@@ -345,6 +420,12 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
             const bool accent = (step.flags & kStepAccent) != 0;
             const bool slide = (step.flags & kStepSlide) != 0;
 
+            // Parameter slide: where the slid locks glide to, read only when one slides.
+            Glide glide;
+            if (step.lock_count != 0 && pattern_step_slides(pattern, t, firing.step)) {
+                glide = glide_target(source, state.timing, state.step_samples, firing);
+            }
+
             if (!has_trig) {
                 // Trigless: the locks apply, no note starts, and there is nothing to ratchet.
                 if (written >= limit) continue;
@@ -360,6 +441,10 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                 event.frame = frame;
                 event.ratchet_index = 0;
                 event.ratchet_count = 1;
+                event.loop = firing.loop;
+                event.glide_step = glide.step;
+                event.glide_loop = glide.loop;
+                event.glide_frames = glide.frames;
                 continue;
             }
 
@@ -380,6 +465,10 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                 event.frame = frame + ratchet_frame(hit, hits, state.step_samples);
                 event.ratchet_index = hit;
                 event.ratchet_count = hits;
+                event.loop = firing.loop;
+                event.glide_step = glide.step;
+                event.glide_loop = glide.loop;
+                event.glide_frames = glide.frames;
             }
         }
     }
@@ -412,6 +501,11 @@ bool stutter_event(const Pattern &pattern, int track, int step, uint32_t frame, 
     out.frame = frame;
     out.ratchet_index = 0;
     out.ratchet_count = 1;
+    // A stutter plays one moment over and over: its random ranges draw once, and nothing slides.
+    out.loop = 0;
+    out.glide_step = 0;
+    out.glide_loop = 0;
+    out.glide_frames = 0;
     return true;
 }
 

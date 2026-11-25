@@ -52,6 +52,7 @@
 #include "snare.hpp"
 #include "stepedit.hpp"
 #include "streamfifo.hpp"  // a streamed sample's read-ahead, per track
+#include "audition.hpp"    // the sample browser's audition (push A in SAMPLES)
 #include "track.hpp"
 #include "chord.hpp"     // a POLY step's chord byte, expanded in fire()
 #include "undo.hpp"
@@ -189,6 +190,9 @@ public:
     // REL ALL and LEN ALL (core/moveall.hpp): 0 is rest.
     int8_t rel_all() const { return rel_all_; }
     int8_t len_all() const { return len_all_; }
+    // LIVE RND (core/liverand.hpp): the unit (0 OFF) and the armed tracks.
+    uint8_t live_rnd_unit() const { return perform_.rnd_unit; }
+    uint8_t live_rnd_armed() const { return perform_.rnd_armed; }
     AutoFill auto_fill() const { return auto_fill_; }
     uint32_t bar() const { return bar_; }
     bool fill() const { return perform_.fill; }
@@ -235,10 +239,19 @@ public:
                    : 0;
     }
 
-    // The LFO, for the screen: is it moving a parameter on `track`, its last value (-1..1), and
-    // what the machines are prepared from -- the kit, performed, locked and LFO'd. Audio-side
-    // single words and bytes, read as `performed` is.
-    bool lfo_on(int track) const { return track >= 0 && track < kTracks && modulating_[track]; }
+    // The LFO: is it moving a parameter on `track`, its last value (-1..1), and what the
+    // machines are prepared from -- the kit, performed, locked and LFO'd. Audio side and the
+    // tests (the rig runs both contexts on one thread): `modulated_` is rewritten every block,
+    // so the screen and step_waves read Status's heard_* and lfo_shown (publish_heard) instead.
+    // The LFO's own DEP and DST: a mod slot alone also keeps `modulating_` on.
+    bool lfo_on(int track) const { return track >= 0 && track < kTracks && lfo_running_[track]; }
+    // A mod slot's source value this block (-1..1 or 0..1, core/modslot.hpp), 0 for a slot that
+    // is off. Audio side and the tests; the screen reads Status::mod_heard.
+    float mod_value(int track, int slot) const {
+        return track >= 0 && track < kTracks && slot >= 0 && slot < kModSlots
+                   ? mod_value_[track][slot]
+                   : 0.0f;
+    }
     float lfo_value(int track) const {
         return track >= 0 && track < kTracks ? lfo_value_[track] : 0.0f;
     }
@@ -333,6 +346,25 @@ public:
     bool stream_attached(int track) const { return stream_state_[track].attached; }
     const StreamFifo &stream_fifo(int track) const { return fifos_[track]; }
 
+    // --- sample audition (dsp/audition.hpp) ---
+
+    // What Cmd::audition_start hands over: written by the main context just before the post and
+    // read by the audio side only while applying it, as stream_for_load.
+    struct AuditionInfo {
+        uint32_t total_frames = 0;  // the file's
+        uint32_t step = 0;          // Q8.24, Audition::step_for(the file's rate, 48 kHz)
+        uint8_t channels = 1;
+        uint8_t encoding = 0;       // a PcmFormat
+        uint8_t frame_bytes = 0;    // in the file
+    };
+    AuditionInfo &audition_for_load() { return audition_inbox_; }
+    // The audition's stream: the main context opens it and posts audition_start, the audio side
+    // reads it until it bumps Status::audition_epoch, and only then does the main context close it.
+    enaga::files::Stream &audition_stream() { return audition_stream_; }
+    // For tests.
+    const Audition &audition() const { return audition_; }
+    bool audition_attached() const { return audition_on_; }
+
 private:
     void apply_commands();
     void apply(const Command &command);
@@ -359,6 +391,9 @@ private:
     void publish_playheads();
     // Each SAMPLE and GRAIN track's WaveView into Status::wave, every kWaveEveryBlocks blocks.
     void publish_waves();
+    // What each track sounds, the bytes the main context needs of it, into Status (heard_table
+    // and the rest), every block and once from init.
+    void publish_heard();
     void fire(const StepEvent &event);
 
     // `Step::length` as a frame count for `Trig::gate_frames`; 0 for "no gate".
@@ -510,6 +545,27 @@ private:
     enaga::files::Stream streams_[kTracks];
     uint8_t stream_bytes_[kStreamReadFrames * 8u + 8u] = {};
     uint32_t stream_late_ = 0;        // Status::stream_late: only ever grows
+    // One stream's next bytes into `fifo`, converted on the way: top_up_streams' read, shared
+    // with the audition's. `carry` and `carry_bytes` keep a frame split across two reads.
+    void fill_fifo(enaga::files::Stream &stream, StreamFifo &fifo, uint32_t total,
+                   uint8_t frame_bytes, uint8_t encoding, uint8_t &carry, uint8_t *carry_bytes,
+                   uint32_t most);
+    // The audition reads at most 256 frames a block: twice what a 96 kHz file uses, so its fifo
+    // still fills ahead, at half a track stream's peak cost (docs/BUDGET.md, "Sample audition").
+    static constexpr uint32_t kAuditionReadFrames = 256;
+
+    // Sample audition. Audio side only, apart from the inbox and the stream (rules above).
+    void top_up_audition();           // before rendering
+    void end_audition();              // stop reading, then bump Status::audition_epoch
+    Audition audition_;
+    AuditionInfo audition_inbox_{};
+    enaga::files::Stream audition_stream_;
+    bool audition_on_ = false;        // reading audition_stream_ into audition_.fifo()
+    uint8_t audition_encoding_ = 0;
+    uint8_t audition_frame_bytes_ = 0;
+    uint8_t audition_carry_ = 0;
+    uint8_t audition_carry_bytes_[8] = {};
+    uint8_t audition_epoch_ = 0;      // what Status::audition_epoch holds
 
     // The hat choke is a pair, and the pair is tracks 3 and 4 of the DEFAULT kit. Machine
     // switching makes that an assumption rather than a fact, so it is re-derived on every
@@ -590,6 +646,27 @@ private:
     uint32_t locked_[kTracks] = {};
     static_assert(kTrackParams <= 32, "locked_ holds one bit per parameter");
 
+    // Parameter slide (core/pattern.hpp, kLockSlide): a slid lock's parameter gliding from the
+    // step's value to what the next step that plays holds, over the time until that step.
+    // Started by `fire` on a step's first hit, moved once a block by `run_slides`, ended by the
+    // next step's `fire` (which rebuilds the track) or when the glide arrives. The parameter is
+    // in `locked_` for as long as its step plays, so the per-block copy leaves the glide alone.
+    struct ParamSlide {
+        uint8_t param = 0;
+        uint8_t from = 0;
+        uint8_t to = 0;
+        float position = 0.0f;   // 0 .. 1 of the way
+        float step = 0.0f;       // added per frame: 1 / the glide's frames, at control rate
+    };
+    ParamSlide slides_[kTracks][kLocksPerStep] = {};
+    uint8_t slide_count_[kTracks] = {};
+    void run_slides(uint32_t frames);
+    void clear_slides() {
+        for (int t = 0; t < kTracks; t++) slide_count_[t] = 0;
+    }
+    // The slides a step starts (fire, on its first hit): `event` carries where they glide to.
+    void start_slides(int track, const StepEvent &event);
+
     // The LFOs (dsp/lfo.hpp). `lfo_bytes_` is what `lfo_settings_` was made from, so the
     // settings are rebuilt only when a byte moves; `modulated_` is `effective_` with the
     // destination moved, valid while `modulating_` says so.
@@ -603,6 +680,21 @@ private:
     uint8_t lfo_shown_[kTracks] = {};
     // LFO TRIG: a note started on the track since the last run_lfos (note_started).
     bool lfo_restart_[kTracks] = {};
+    // The track's own LFO is on (DEP and DST): `modulating_` is also set by a mod slot alone.
+    bool lfo_running_[kTracks] = {};
+
+    // The mod slots (core/modslot.hpp, KitTrack::mod), applied in run_lfos after the LFO. Per
+    // track: the last note's velocity (VEL), the pad's pressure (PRS, Cmd::set_pressure), the
+    // note's random value (RND, drawn when a note starts), ENV's own one-shot cycle -- the LFO's
+    // shape and RAT, run from each note whatever TRIG says -- and each slot's value this block.
+    void run_mod_slots(int track, const LfoSettings &lfo, float lfo_value, float cycles,
+                       bool restart, bool va_filter, bool insert_chain, float &pitch_mod);
+    uint8_t mod_velocity_[kTracks] = {};
+    float mod_pressure_[kTracks] = {};
+    float mod_random_[kTracks] = {};
+    TrackLfo mod_env_[kTracks];
+    enaga::dsp::Random mod_dice_[kTracks];
+    float mod_value_[kTracks][kModSlots] = {};
     // The LFO on TUN as a float, and the machine it was last handed to: a track that changes
     // machine hands the new one the current value, so none keeps a stale offset.
     float pitch_mod_[kTracks] = {};
@@ -610,9 +702,10 @@ private:
 
     // Every note-on a track's machine takes -- a step, a chord, an arp or roll hit, a pad or a
     // key -- goes through here: the screen's trig light, and LFO TRIG's restart.
-    void note_started(int track) {
+    void note_started(int track, uint8_t velocity) {
         status_.bump_triggered(track);
         lfo_restart_[track] = true;
+        mod_velocity_[track] = velocity;
     }
 
     ChainMix mix_[kTracks] = {};

@@ -35,6 +35,7 @@
 #include "arp.hpp"          // the ARP page's names and clicks
 #include "engine.hpp"
 #include "help.hpp"         // the FUNC help's pages, one set per screen
+#include "liverand.hpp"     // LIVE RND: FUNC + D in PERFORM
 #include "paint.hpp"        // the drawing kit: lines, arcs, the small font, afterglow
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "sounds.hpp"       // SOUNDS: the factory sounds for one track
@@ -534,6 +535,8 @@ public:
 
 #include "ui_perform.hpp"
 
+#include "ui_modslots.hpp"
+
 #include "ui_live.hpp"
 
 #include "ui_project.hpp"
@@ -744,6 +747,10 @@ private:
     // macro, and read back from the engine after a LOCK jump.
     int8_t rel_all_ = 0;
     int8_t len_all_ = 0;
+    // LIVE RND (core/liverand.hpp): the unit FUNC + D left (0 OFF) and the tracks FUNC + push D
+    // armed. Posted absolute, like REL ALL, and read back from the engine after a LOCK jump.
+    uint8_t rnd_unit_ = kLiveRndOff;
+    uint8_t rnd_armed_ = kLiveRndAllTracks;
     uint16_t morph_ = 0;
     bool repeat_held_ = false;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
@@ -829,6 +836,8 @@ private:
     bool sample_seek_ = false;                  // put the cursor on a name once the list is in
     char sample_seek_name_[SampleList::kEntryNameBytes] = {};
     Mode samples_return_ = Mode::edit;          // where CLR at the top goes back to
+    int audition_row_ = -1;                     // SAMPLES: the entry being heard (push A), or -1
+    bool audition_sounding_seen_ = false;       // Storage::audition_sounding() as update() saw it
     int sound_cursor_ = 0;                      // SOUNDS: 0 is AS WAS, then the presets
     int sound_track_ = -1;                      // the track whose sound the engine remembers
     Mode sounds_return_ = Mode::edit;           // where CLR goes back to

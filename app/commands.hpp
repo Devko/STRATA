@@ -41,7 +41,7 @@ enum class Cmd : uint8_t {
 
     // --- pattern editing ---
     toggle_trig,       // track, step, a: 1 = the trigless bit instead of the trig, 2 = a FILL trig
-    clear_lock,        // track, step, a: param
+    clear_lock,        // track, step, a: param: its value lock, its slide and its random range
     set_track_length,  // track, a: length; or c = 1: b is an int8 delta (kDeltaFlag below)
     set_track_speed,   // track, a: speed
     set_track_play,    // track, a: PlayMode (core/timing.hpp): FWD, REV, PING, RND1..RND16
@@ -61,6 +61,12 @@ enum class Cmd : uint8_t {
     // at 1.33 ms is not a thing a person can see.
     step_field_delta,  // track, step, a: StepField, b: int8 delta
     lock_delta,        // track, step, a: param index, b: int8 delta; c = kSemitoneFlag: semitones
+    // A parameter's random range on a step (core/pattern.hpp, kLockRange): the width moved by
+    // the delta, 0-127; 0 takes the range off. Hold STEP + FUNC + turn A-D.
+    lock_range_delta,  // track, step, a: param index, b: int8 delta
+    // A parameter's slide on a step (kLockSlide), toggled. With no value lock the step gets one
+    // at the kit value first, so the slide has something to glide from. Hold STEP + FUNC + push.
+    lock_slide,        // track, step, a: param index
 
     // The Euclidean generator (docs/SPEC.md, "Musical defaults that help creativity"): a whole
     // track's rhythm from three numbers. One edit, so it carries an undo mark like any other and
@@ -151,6 +157,13 @@ enum class Cmd : uint8_t {
     set_slice_mode,    // track, a: 0 equal, 1 AUTO
     // LFO TRIG on a track (KitTrack::lfo_trig, dsp/lfo.hpp): a: kLfoTrigFree, Retrig or OneShot.
     set_lfo_trig,      // track, a: 0 FREE, 1 RETRIG, 2 ONE-SHOT
+    // One mod slot (KitTrack::mod, core/modslot.hpp), whole: a: the slot (0, 1), b: the source
+    // (kModSrcOff..kModSrcRnd), c: the destination parameter, d: the depth as an int8. Sanitized as a
+    // file's slot is, so a bad one lands OFF.
+    set_mod_slot,      // track, a: slot, b: source, c: dest, d: int8 depth
+    // A track pad's pressure, for a mod slot on PRS: a: 0-127, 0 when the pad is let go. Played,
+    // not stored.
+    set_pressure,      // track, a: pressure
     // One send or master setting. `a` is the field -- dsp/buses.hpp's SendField or MasterField,
     // whose numbers are permanent because they reach PROJECT.BIN -- and `b` is an encoder DELTA,
     // as a signed byte, exactly like `set_param` and the step fields and for the same reason.
@@ -320,6 +333,19 @@ enum class Cmd : uint8_t {
     // 1 LEN ALL; b: the amount as an int8, -64 .. 64, absolute (the UI keeps the position, as it
     // does a macro's). Performance, not edits: no file, no undo; a LOCK holds both.
     set_move_all,
+    // LIVE RND (core/liverand.hpp), PERFORM's FUNC + turn D (the unit) and FUNC + push D (the
+    // armed set). a: the unit, 0 OFF .. 5 RND16; b: the armed tracks, bit t = track t. Both
+    // absolute; the UI keeps them, as it does REL ALL. Performance, not edits: no file, no undo;
+    // a LOCK holds both.
+    set_live_rnd,
+
+    // Sample audition (dsp/audition.hpp), push A in SAMPLES. `audition_start` is posted by the
+    // card side once the file's stream is open and filled; what to play is in
+    // Engine::audition_for_load(), written just before the post. `audition_stop` fades it out.
+    // Either way, once the audio side has stopped reading the stream it bumps
+    // Status::audition_epoch, and only then may the card side close it.
+    audition_start,
+    audition_stop,
 
     count
 };
@@ -534,6 +560,13 @@ struct Status {
     std::atomic<uint16_t> stream_want[8] = {};
     std::atomic<uint32_t> stream_late{0};
 
+    // Sample audition (dsp/audition.hpp). `audition_epoch` is bumped (with release) each time an
+    // audition ends -- its last frame, or a stop -- after the audio side stopped reading its
+    // stream, so the card side may close the stream the moment it sees the change.
+    // `audition_frame` is where it is, in file frames, for the screen (0 when none plays).
+    std::atomic<uint8_t> audition_epoch{0};
+    std::atomic<uint32_t> audition_frame{0};
+
     // Where a SAMPLE or GRAIN track is in its sample, for EDIT's waveform (core/overview.hpp,
     // WaveView): the window or the grain bracket, the slice starts, and up to eight playheads or
     // grains with a brightness each, all in the overview's columns. Written every
@@ -582,6 +615,22 @@ struct Status {
     // the dot riding the LFO page's shape.
     std::atomic<uint16_t> track_milli[8] = {};
     std::atomic<uint8_t> lfo_phase[8] = {};
+    // What each track sounds now (Engine::sounding: the kit with the performance layer, the
+    // step's locks and the LFO over it), the few bytes of it the main context acts on or draws,
+    // so it never reads `effective_` or `modulated_`, which the audio side rewrites every block
+    // (Engine::publish_heard). `heard_table` is the table a WAVE track's TBL plays, kNotHeard on
+    // any other machine: Engine::step_waves builds from it. `heard_pos` is that track's POS byte.
+    // `heard_sus` is the ASR's SUS byte (a KEYS note holds on it). `lfo_shown` is where the LFO
+    // has its destination (Engine::lfo_shown), kNotHeard while the LFO moves nothing.
+    // Engine::init publishes them once, so they are right before the first block.
+    static constexpr uint8_t kNotHeard = 0xFF;
+    std::atomic<uint8_t> heard_table[8] = {};
+    std::atomic<uint8_t> heard_pos[8] = {};
+    std::atomic<uint8_t> heard_sus[8] = {};
+    std::atomic<uint8_t> lfo_shown[8] = {};
+    // Each MOD slot's destination as heard (the byte the slots and the LFO left), kNotHeard for
+    // a slot that is off: the dot on EDIT's bar (app/ui_modslots.hpp).
+    std::atomic<uint8_t> mod_heard[8][2] = {};
     // LOCK (Cmd::lock_store, lock_tap). `lock_state`: bit 0 the playing pattern has a lock, bit 1 the live set
     // differs from it (the screen's L+), bit 2 the next tap swaps back. `lock_event` is bumped
     // once per store or tap the audio side applied, with `lock_last` saying what it did: a

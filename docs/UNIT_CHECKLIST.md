@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W36, about 99 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W40, about 116 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -417,7 +417,64 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 - Lower pad 8 (SAMPLE), AMP page: as each note plays, the area under the curve lights up behind
   the riding square. `____`
 
-**W36. WAVE's waterfall, GRAIN's sparks (3 min).** Beat playing, A01.
+**W36. LIVE RND in PERFORM (4 min).** Beat playing, A01.
+- PERFORM (FUNC + MIXER). FUNC + turn D one click at a time: `LIVE RND1 8 TRK` .. `RND16`, and
+  it stops there; the line under the macros reads `LIVE RND16 FUNC+D` and line 2 `RN16`. RND 1:
+  every part scatters; RND 4: the beats of each bar trade places, still on the grid. Musical at
+  which units, for techno and for ambient? `____`
+- Lower pad 1 (kick), FUNC + push D: `T1 RND OUT 7 TRK`, the kick goes straight while the rest
+  keeps jumping; the dot under meter 1 goes. Again: `T1 RND IN 8 TRK`. `____`
+- FUNC + turn D all the way back: `LIVE RND OFF`, and the beat is exactly A01 again from the next
+  step, no stumble. GRID: no step changed, CLR's undo has nothing new. `____`
+- RND4 on, hold FUNC + MUTATE (a lock), turn it OFF, tap FUNC + MUTATE: the shuffle is back; tap
+  again: OFF again. `____`
+- MAX with RND1 on all eight against the default beat alone: `________ %`
+
+**W37. Random lock ranges and parameter slide (4 min).** Beat playing, A01, GRID.
+- Lower pad 2 (snare), EDIT, FLTR page. Hold STEP 5 and FUNC and turn the CUT knob up to about 30: the
+  line under the rows reads `S5 CUT 64 R30` (your numbers), and a dim line sits under CUT's bar.
+  Let go: the snare's brightness changes from bar to bar. `____`
+- Hold STEP 5 (no FUNC) and push the CUT knob: `LOCK CLEARED`, and the snare plays the same every bar. `____`
+- Lower pad 6 (bass). Hold STEP 1 and turn CUT well down; hold STEP 9 and turn CUT well up.
+  Hold STEP 1 and FUNC and push CUT: `SLIDE ON`, the lock line ends in `/`. Let go: the filter now
+  sweeps open from step 1 to step 9, smoothly, no zipper steps, then falls back. `____`
+- Hold STEP 1 and FUNC and push CUT again: `SLIDE OFF`, the filter jumps on step 9 again. `____`
+- Save, NEW, load the project back: the range and the slide are still there. `____`
+
+**W38. Two MOD slots per track (5 min).** Beat playing, A01.
+- HOME, lower pad 6 (bass, MNO), EDIT, LFO page: the last line says `PUSH C D: MOD SLOTS`. Push
+  C: line 2 `MOD1 LFO: TURN A KNOB`; push C twice more: `MOD1 VEL: TURN A KNOB`. Screen keys to
+  SRC, turn CUT up by about 40: line 2 `MOD1 VEL>CUT +40`. OK: `M1 VEL>CUT +40`, and CUT is back
+  where it was. Play pad 6 soft and hard: hard notes are brighter. `____`
+- On SRC, CUT's bar has a dim line under it from the knob up 40, and a bright dot on it that
+  jumps with each note. The LFO page lists `M1 VEL>CUT +40` and `M2 OFF`. `____`
+- Push D, push it until `MOD2 PRS`, turn RES (beside CUT) up about 30, OK. Hold pad 6 and lean on it: the
+  resonance rises with the pressure and drops when you let go. `____`
+- Push C, push again (`MOD1 PRS`), OK with no knob turned: slot 1 is now PRS on CUT, +40. Push C
+  until `MOD1 OFF: OK CLEARS`, OK: `M1 OFF`. `____`
+- Slot 1 to RND on PAN (FX page), about +50: each bass note lands somewhere else in the stereo
+  field. Slot 1 to ENV on CUT with the LFO on SAW, RAT about `4.0`, DEP 0: a quick squelch per
+  note while the LFO itself moves nothing. `____`
+- Save, reload: both slots as you left them. Open a 0.3.x project: every slot off. `____`
+- MAX with both slots on, on four tracks, against the default beat alone: `________ %`
+
+**W39. Hear a sample before loading it (4 min).** Put a few WAVs in `/SAMPLES` first: a short
+hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
+- Lower pad 8 (SAMPLE), EDIT, OK: SAMPLES. DOWN to the hit, **push A**: `HEARING`, and the hit
+  plays at once, whole. The line under the title says `HEARING 0/0S`, then the folder again. The
+  `NOW` line and the track did not change. `____`
+- DOWN to the 44.1 kHz loop, push A: it plays in tune and at its tempo, a line growing under its
+  name. While it plays press DOWN: the next file plays instead, no click, no gap worth a note.
+  Push A: `STOPPED`, a short fade. `____`
+- The long stem, push A: how long before it sounds? `________` (it should be as quick as the
+  hit). Let it run 20 s: no dropouts, `HEARING 20/..S`. `____`
+- PLAY the beat, and hear files over it: the audition sits about 6 dB under full scale, not
+  through the master effects or beat repeat. Too loud or too quiet against A01? `________`
+- While one plays: OK loads it into track 8 (`LOADING`) and the audition stops; CLR, a folder,
+  or HOME stop it too. FUNC + push A is still the kill EQ. `____`
+- MAX while hearing the long stem over A01: `________ %` (it should add about 2 points at most).
+
+**W40. WAVE's waterfall, GRAIN's sparks (3 min).** Beat playing, A01.
 - Lower pad 7 (the chord), FUNC + EDIT, DOWN to `WPL` (WAVE POLY), EDIT, SRC page: under the
   knobs the table as a stack of waves. Turn B (POS) up: the bright wave moves back through the
   stack (up and right). Turn A through the tables: the stack changes shape. `____`
@@ -1288,6 +1345,8 @@ New 2026-11-22. Put a few WAVs in `/SAMPLES` on the card first (the two test fil
 - [ ] Reopen the browser: it starts in the track's folder with the cursor on its file.
 - [ ] PROJECT says `UNSAVED`; save, reload (the menu's RELOAD PROJECT, OK twice): track 8 has the picked file.
 - [ ] A folder of many files: listing time `________` (about how long `READING FOLDER` shows).
+- [ ] Push A on a file: it is heard without loading (W39). On a folder: `A HEARS FILES`. On a
+      file that is not a WAV: `NOT A WAV`. Pull the card while one plays: it stops, nothing hangs.
 
 ## 15c. A long stem (4 min)
 
@@ -1658,7 +1717,7 @@ project and never needs a restart."*
 - [ ] PROJECT opens the PROJECT screen. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
 - [ ] FUNC+HOME, OK saves (the menu opens on SAVE). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (402 bytes),
-      `KIT.BIN` (1,329 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
+      `KIT.BIN` (1,389 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
       save writes every file (the sizes tests/test_storage.cpp pins).
       After that first save only dirty banks are written; the card cannot show it, since all
       eight exist from then on, so tests/test_storage.cpp checks which files each save touches.

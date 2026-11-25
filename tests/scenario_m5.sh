@@ -3,13 +3,13 @@
 #
 # ## Read this before trusting it: most of M5 is NOT reachable from here
 #
-# `emulate.py` can press KEYS and nothing else -- it has one `--key` option and no pad support
-# (third_party/enaga/tools/emulate.py). docs/SPEC.md puts seven of M5's eight tools on the upper
+# `emulate.py` presses keys and (since Enaga 0.3.0, `--turn`) turns encoders, and has no pad
+# support (third_party/enaga/tools/emulate.py). docs/SPEC.md puts seven of M5's eight tools on the upper
 # PADS: FILL, REPEAT, MUTE mode, scene A and B select, THROW and MUTATE. **None of them can be
 # driven by this harness at all.** Of what is left on keys, a scene capture and a macro
 # assignment are both inaudible by themselves -- a macro at position 0 writes nothing and leaves
 # the parameter to its knob (core/perform.hpp) -- and moving a macro or the morph needs an
-# encoder, which `emulate.py` also cannot drive.
+# encoder, which this scenario predates (scenario_moveall.sh turns them).
 #
 # So this scenario cannot show the performance layer performing. Verifying that needs either pad
 # and encoder support in Enaga's emulator (upstream) or the unit, and

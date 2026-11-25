@@ -78,8 +78,15 @@
         // FUNC + push D was the held tape stop until 2026-11-25 (backlog D5): one home per job,
         // and the tape stop's is the mixer's slot 8. The chord says where it went rather than
         // falling through to a page's push, which would do something nobody meant. Not while a
-        // STEP is held: then FUNC + push D clears that step's D lock, as FUNC + push A-C clear
-        // theirs -- every push with a step held is the step's.
+        // STEP is held: then FUNC + push D toggles the slide of that step's D lock, as FUNC +
+        // push A-C do theirs -- every push with a step held is the step's.
+        //
+        // In PERFORM it is LIVE RND's other half (core/liverand.hpp): the selected track in or out
+        // of the armed set, heard at once while a unit is on.
+        if (key == ENAGA_KEY_PUSH_D && shift_ && held_step_ < 0 && mode_ == Mode::perform) {
+            if (down) live_rnd_arm(selected_);
+            return;
+        }
         if (key == ENAGA_KEY_PUSH_D && shift_ && held_step_ < 0) {
             if (down) notice_logged("TAPE STOP: SLOT 8");
             return;
@@ -98,6 +105,20 @@
                                                           : 3;
             const int index = edit_index(encoder);
             held_used_ = true;
+            // With FUNC: the parameter's SLIDE on the step (Phase 5), toggled. It glides from the
+            // step's lock to what the next step that plays holds. The screen reads the pattern a
+            // block late, so the notice says what the toggle is about to make it.
+            if (shift_) {
+                const bool slides = pattern_get_slide(engine_.pattern(), selected_, held_step_,
+                                                      uint8_t(index));
+                mark(GestureKind::field, selected_, held_step_);
+                post(Cmd::lock_slide, uint8_t(selected_), uint8_t(held_step_), uint8_t(index));
+                end_gesture();
+                show_lock_readout(index);
+                notice(slides ? "SLIDE OFF" : "SLIDE ON");
+                return;
+            }
+            // The whole parameter goes: its value, its slide and its random range.
             mark(GestureKind::erase, selected_, held_step_);
             post(Cmd::clear_lock, uint8_t(selected_), uint8_t(held_step_), uint8_t(index));
             end_gesture();
@@ -153,6 +174,12 @@
                 end_learn();
                 return;
             }
+            // And a MOD slot's learn the same way (app/ui_modslots.hpp).
+            if ((key == ENAGA_KEY_CLR || key == ENAGA_KEY_OK) && down && !shift_ &&
+                mod_learn_ >= 0 && range_first_ < 0 && held_step_ < 0) {
+                end_mod_learn();
+                return;
+            }
             // A second CLR straight after the one that ended LEARN is the same "get me out"
             // press, not a clear of the track: on the unit it wiped the pattern (Roland,
             // 2026-11-23). FUNC + CLR (undo) is untouched.
@@ -194,6 +221,12 @@
                                 : key == ENAGA_KEY_PUSH_B ? 1
                                 : key == ENAGA_KEY_PUSH_C ? 2
                                                           : 3;
+            // MOD slots (core/modslot.hpp): push DEP for slot 1, DST for slot 2, again for
+            // the next source; then turn the knob the slot should move (app/ui_modslots.hpp).
+            if (edit_index(encoder) == kLfoDepth || edit_index(encoder) == kLfoDest) {
+                if (down) mod_push(edit_index(encoder) == kLfoDepth ? 0 : 1);
+                return;
+            }
             if (edit_index(encoder) == kLfoRate) {
                 if (!down) return;
                 const uint8_t next = uint8_t((int(lfo_trig_of(selected_)) + 1) % kLfoTrigs);
@@ -896,9 +929,13 @@
         step_page_ = false;
         slot_menu_ = false;
         slot_ok_held_ = false;
+        // An audition belongs to SAMPLES (dsp/audition.hpp).
+        if (mode_ != Mode::samples) stop_audition();
         // LEARN is an EDIT thing, and MIXER's for the kill EQ's bands: any other screen, HOME's
         // GRID included, ends it.
         if (mode_ != Mode::edit && mode_ != Mode::mixer && macro_learn_ >= 0) end_learn();
+        // A MOD slot learns from EDIT's knobs only.
+        if (mode_ != Mode::edit && mod_learn_ >= 0) end_mod_learn();
         mutation_pending_ = false;
         // A KEYS pad held across a mode change: its release goes to the next mode, so the note
         // is let go here or it would hang on a sustaining machine.

@@ -2,8 +2,8 @@
 # LFO, ARP and per-track swing emulator scenario: the new screens draw on the C674x with the real
 # font, and the beat keeps playing inside the load target while they are up.
 #
-# The emulator presses keys and turns no encoders (docs/HANDOFF.md, section 2), so this cannot
-# switch an LFO on: it walks EDIT to its fifth page (scr EDIT LFO), pushes B there once (LFO TRIG
+# This scenario presses keys only (scenario_visuals turns DEP and DST with --turn; docs/HANDOFF.md,
+# section 2), so it does not switch an LFO on: it walks EDIT to its fifth page (scr EDIT LFO), pushes B there once (LFO TRIG
 # RETRIG, logged: the push reaches the handler on the C674x), one more to the ARP page (scr EDIT ARP), and PROJECT to its PATTERN page
 # (scr PROJECT PATTERN, where the eight track swings are), which is what proves both draw without
 # a fault. The LOAD of eight running LFOs is measured separately, by the temporary factory edit in

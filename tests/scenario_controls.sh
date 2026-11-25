@@ -8,7 +8,7 @@
 #   FUNC + PROJECT ("pool")                      -> SAMPLES
 #   FUNC + HOME, OK                              -> a save (the menu opens on SAVE)
 #
-# The emulator presses keys and nothing else (no pads, no encoders), so the pad lights, the
+# The emulator presses keys and turns encoders but has no pads, so the pad lights, the
 # performance-pad names and the FUNC help are tests/test_ui.cpp's. A chord is FUNC pressed and the
 # second key 5 M cycles later, inside FUNC's 20 M-cycle press (tests/scenario_m6.sh).
 #

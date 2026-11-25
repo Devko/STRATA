@@ -57,7 +57,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      always mean the same sixteen things (KIT, SAMPLES, SOUNDS, the menu) they do nothing.
      FUNC + pad-row key = the selected track's length, on every screen but the menu.
    - **Knobs A-D:** the four values on screen. Push = that value's switch. With a STEP held, turn
-     = lock, push = remove the lock. In PERFORM, push = MACRO LEARN for that macro: EDIT opens,
+     = lock, push = remove the lock; with FUNC too, turn = the lock's random range, push = its
+     slide (below, "Random ranges and slides"). In PERFORM, push = MACRO LEARN for that macro: EDIT opens,
      and every knob turned there goes on the macro, its start as the macro's 0 and where it was
      left as its 127 (learn by turning, D11). LEARN goes on onto MIXER, where LOW, MID and HI
      on the EQ page are learnt the same way: the kill EQ's bands. OK, CLR, HOME or any screen
@@ -68,6 +69,14 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      a click. On at every start, one setting for all tracks (2026-11-23, core/tuning.hpp).
      On the LFO page, RAT's switch (push B, on EDIT, GRID and KEYS) is LFO TRIG: FREE, RETRIG,
      ONE-SHOT and round (`LFO TRIG RETRIG`); the kit's, per track (S2, 2026-11-25).
+     **MOD slots** (two per track, the kit's; backlog Phase 5): on the LFO page push C (DEP) for
+     slot 1 or D (DST) for slot 2 (EDIT opens from GRID or KEYS), push it again to walk the
+     source LFO ENV VEL PRS RND OFF, then turn the knob the slot should move on any EDIT page of
+     the track: where it is left, less where it started, is the depth, and it snaps back (learn
+     by turning, as D11). OK, CLR or leaving EDIT ends it (`M1 VEL>CUT +40`); no knob turned keeps
+     the slot's knob and depth with the new source, OFF clears it. Not on the LFO's or the
+     arp's own knobs (`MOD: NOT LFO OR ARP`). No routing screen: the LFO page lists the two
+     slots and every EDIT bar a slot moves has its range drawn under it (the font has no `~`).
      On PROJECTS, where only A turns, push B renames and push C deletes the project under the
      cursor (delete then asks for OK twice).
    - **VALUE is the crossfader.** Push VALUE + STEP picks what it fades: an effect, the morph
@@ -170,13 +179,14 @@ Printed labels (above), and the moves made while playing:
 | FUNC + A / B / C on GRID | Euclidean fill |
 | FUNC + MUTATE, held half a second | **LOCK**: store the live set as the playing pattern's lock (`LOCK A01 STORED`); again later overwrites it |
 | FUNC + turn A / B in PERFORM | **REL ALL** / **LEN ALL** (below) |
+| FUNC + turn D / push D in PERFORM | **LIVE RND**: the unit / the selected track in or out (below) |
 | FUNC + MUTATE, tapped | Jump to that lock at once (`BACK TO LOCK A01`); tapped again, swap back to the state from just before the jump (`SWAPPED BACK A01`). No lock: `NO LOCK: HOLD STORES` |
 
 Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VALUE (DJ filter,
 now slots 1-2), FUNC + hold push D (tape stop, slot 8) and FUNC + hold MUTATE (delay freeze,
 slot 5). Each now only names its slot (`DJ FILTER: SLOT 1/2`, `TAPE STOP: SLOT 8`,
 `FREEZE: SLOT 5`), apart from FUNC + MUTATE, which is LOCK since the next change (below); FUNC +
-push D with a STEP held still clears that step's D lock.
+push D with a STEP held toggles the slide of that step's D lock, as FUNC + push A-C do theirs.
 
 ## LOCK (FUNC + MUTATE)
 
@@ -189,7 +199,7 @@ lot, and jump back in one tap; tap again to compare with where you were.
 | Every track's sound bytes (all eight EDIT pages) and fader | The samples, the machines: a lock taken before a machine switch restores the parameters only |
 | The send and master bytes | The kill EQ's switches, the tempo (not STRATA's under an outside clock) |
 | The mutes (D4) | The eight stored mute states |
-| The morph position, the four macro positions, REL ALL and LEN ALL | The scenes and the macro setup |
+| The morph position, the four macro positions, REL ALL, LEN ALL and LIVE RND | The scenes and the macro setup |
 
 - **One lock per pattern (D14), in RAM only**: not saved, and a project load or NEW clears them.
 - **At once (D3)**, on the next audio block. The performance mixer is not in a lock: the jump
@@ -224,6 +234,29 @@ changed meaning; C and D with FUNC still turn their macros.
   `REL -12 LEN 71%` away from it; the live strip adds `RL-` / `RL+` and `LN-` / `LN+`.
 - **LEN ALL leaves a note with no gate alone** (a drum, a pad hit, a held key, the arpeggiator's
   own GATE): REL ALL is what shortens drums.
+
+## LIVE RND (FUNC + D in PERFORM)
+
+CyDrums' P1, the live half (backlog Phase 5; the controls concept: "the PATTERN page plus one
+PERFORM knob gesture"), `core/liverand.hpp`. The pattern half is the FUNC menu's TRACK PLAY. FUNC
++ D in PERFORM was a duplicate of the macro (turn) and the tape stop's hint (push), so no gesture
+that did something changed meaning; FUNC + push D still names slot 8 on every other screen.
+
+| Gesture | Does | Says |
+| --- | --- | --- |
+| FUNC + turn D | The unit for every armed track: OFF, 1, 2, 4, 8, 16, one a click, stopping at both ends | `LIVE RND4 8 TRK`, `LIVE RND OFF` |
+| FUNC + push D | The selected track out of the armed set, or back in. All eight at start | `T1 RND OUT 7 TRK`, `T1 RND IN 8 TRK` |
+
+- **What it plays**: exactly TRACK PLAY's RND mode of that size, from the same seeded draw (the
+  pattern's seed, the track, the block, the pass), over the track's own mode while it is on.
+  Blocks keep their steps in order and their place in the bar.
+- **Recoverable**: the pattern is never written. OFF is the programmed order from the next slot;
+  a track's own mode (REV, PING ...) comes back with it.
+- **Not saved, not undone**, like REL ALL. A LOCK holds the unit and the armed set (D4); a jump
+  or swap puts both back. Live recording lands a hit on the step that was sounding.
+- **On screen**: PERFORM's line under the macros reads `LIVE RND4 FUNC+D`, or `REL -12 LEN 71% R4`
+  with REL/LEN ALL away from rest; the track meters mark the armed tracks with a dot; the live
+  strip adds `RN4`. The FUNC help's third PERFORM page lists both gestures.
 
 ## FEEL (the PATTERN page)
 
@@ -398,6 +431,30 @@ screen holds still:
   track's level** in a row of eight short meters (decibels, a muted track dim). Stopped, that row
   shows the `AUTOFILL: FUNC MENU` hint again and the scope is gone.
 
+## Random ranges and slides (hold STEP + FUNC + A-D)
+
+Backlog Phase 5 (CyDrums), 2026-11-25. Two kinds of lock beside the value, both in the lock's
+param byte (core/pattern.hpp: bit 6 range, bit 7 slide), so no file layout changed and an older
+build simply ignores them.
+
+| Gesture | What it does | Shown |
+| --- | --- | --- |
+| Hold STEP + FUNC + turn A-D | The parameter's **random range** on the step, 0-127 counts either side. Each pass the step plays its lock (or the kit value with no lock) moved by a draw within the range. 0 removes it | `S5 CUT 64>90 R20`; a dim line under the bar over the reachable values |
+| Hold STEP + FUNC + push A-D | The lock **slides**: from the step it glides to what the next step that plays holds for that parameter, arriving as that step starts. Again: off. No lock yet: the kit value is locked first | `SLIDE ON` / `SLIDE OFF`; `/` at the end of the lock line |
+| Hold STEP + push A-D | Takes the whole parameter off the step: value, range and slide | `LOCK CLEARED` |
+
+- **The draw** is a hash of the pattern's seed, the track, the step, the pass and the parameter
+  (core/scheduler.hpp `lock_spread`), like probability: no running random number, so a pass
+  plays the same after a reload and each pass differs. A ratchet's hits share their step's draw;
+  a step stutter draws once.
+- **The glide's target** is the next slot in play order (REV, PING and RND look ahead the way
+  they will play) whose step has a trig or a trigless, at most a whole pass ahead: its lock and
+  range, or the sound the track starts from. Its condition and probability are not drawn. The
+  glide lasts the slots in between, swing, micro-timing and FEEL left out, and moves once an audio
+  block at control rate. A ratchet glides across its own hits. Not on a step stutter.
+- A range takes one of the step's 8 lock slots; a slide takes none (a bit on the value lock).
+- Not the SLID step flag (the step page, VA MONO): that bends the note into the next one.
+
 ## Locks on screen
 
 While a STEP is held, every parameter shows what **that step plays**, and the kit value it moves
@@ -409,7 +466,8 @@ away from (Phase 3 items 2-3):
   The value text above or beside the bar is the heard value too.
 - **The lock line.** Hold STEP + turn A-D (or push it to clear): `S5 CUT 64>90`, the step, the
   parameter, the kit value and then the lock, live while the STEP is down. `S5 CUT 64 KIT` once the
-  lock is cleared. It takes GRID's edit line and EDIT's line under the rows; a notice still wins
+  lock is cleared. A random range adds ` R` and its width (`S5 CUT 64>90 R20`, or `S5 CUT 64 R20`
+  with no value lock), and a slide a closing `/`. It takes GRID's edit line and EDIT's line under the rows; a notice still wins
   on GRID.
 - **Macro gauges** (PERFORM): the arc is where the macro is, a pad's pressure included; when
   that differs from the knob, a bright dot just outside the ring marks the knob.
@@ -449,7 +507,11 @@ VA MONO and WAVE MONO; the POLY machines, FM4 and the drums draw no dot). Under 
 dim fill; under the part the note has already travelled, a brighter one.
 
 SAMPLES (the sample browser) lists seven rows and draws what the track plays under them, from the
-same picture, over the `NOW` line.
+same picture, over the `NOW` line. **Push A hears the file under the cursor** without loading it
+(dsp/audition.hpp): streamed whole from its start, straight to the output, after every effect.
+Push A again stops it; while one plays, UP/DOWN, turning A and the pages hear the file the cursor
+lands on; OK, CLR, another folder or leaving SAMPLES stops it. A one-pixel line under the heard
+file's name grows as it plays, and line 2 reads `HEARING 3/12S` (`OPENING` until it sounds).
 
 A SAMPLE or GRAIN track with no file plays the placeholder, and its picture is the placeholder's,
 with `NO FILE` (or `LOADING` while its file loads) over it.

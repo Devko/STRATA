@@ -108,8 +108,9 @@
         timing.length = source.length;
         timing.speed = Speed(source.speed);
         timing.swing = source.swing == kSwingInherit ? pattern.swing : source.swing;
-        timing.play = source.play < uint8_t(PlayMode::count) ? PlayMode(source.play)
-                                                             : PlayMode::fwd;
+        // LIVE RND too (core/liverand.hpp): a hit goes to the step that was sounding.
+        timing.play = live_play_mode(source.play, engine_.live_rnd_unit(),
+                                     engine_.live_rnd_armed(), track);
         timing.play_seed = play_seed(pattern.seed, track);
 
         // quantize_hit finds the time SLOT the hit belongs to; under REV, PING or RND the note
@@ -259,6 +260,25 @@
         // waits on the audio side: a command ring that has not drained simply means "not this
         // pass" (app/storage.hpp).
         storage_.service();
+
+        // The sample browser's audition (push A in SAMPLES): only while SAMPLES is up, whatever
+        // took the screen away; why one did not play, said once; and `aud play` / `aud end` in
+        // the log, for the emulator scenario (tests/scenario_audition.sh) and a unit log.
+        if (mode_ != Mode::samples && storage_.auditioning()) storage_.stop_audition();
+        if (!storage_.auditioning()) audition_row_ = -1;
+        if (const char *why = storage_.take_audition_error()) {
+            notice(why);
+            char line[24];
+            char *out = line;
+            append(out, "aud ");
+            append_shown(out, why, 16);
+            *out = 0;
+            enaga::log(line);
+        }
+        if (storage_.audition_sounding() != audition_sounding_seen_) {
+            audition_sounding_seen_ = storage_.audition_sounding();
+            enaga::log(audition_sounding_seen_ ? "aud play" : "aud end");
+        }
 
         // A take asked for TO FILE is whole on the card: offer it to a track (bounce to track).
         if (storage_.file_takes() != file_takes_seen_) {
@@ -503,8 +523,8 @@
         // Which SCREEN is up, logged on a change for the same reason as the two above: in an
         // emulator run or a unit log it is the difference between "the app is wedged" and "the
         // app is on a page I did not expect", and it is what lets a scenario reach a screen
-        // that the emulator cannot otherwise observe -- it exposes key input and no encoders,
-        // so a page walked with the selection keys is all it can see of MIXER and SETUP.
+        // that the emulator cannot otherwise observe: it cannot read the screen, so a page walked
+        // with the selection keys is all it can see of MIXER and SETUP.
         {
             const int screen = int(mode_) * 16 + (mode_ == Mode::mixer ? mixer_bank_
                                                   : mode_ == Mode::project ? int(project_page_)

@@ -131,7 +131,8 @@
     // Eight short bars, 13 pixels a track, from Status::track_milli in decibels (the top 36),
     // the selected track's number bright, a muted track's bar dim. Three rows of bar and the
     // track number under it in the small font.
-    void draw_track_meters(enaga::Canvas &canvas, int y) {
+    // `rnd_marked`: the tracks LIVE RND moves (bit t), each marked by a dot after its number.
+    void draw_track_meters(enaga::Canvas &canvas, int y, uint8_t rnd_marked = 0) {
         uint8_t *px = canvas.data();
         const Status &status = engine_.status();
         for (int t = 0; t < kTracks; t++) {
@@ -145,6 +146,7 @@
             }
             char digit[2] = {char('1' + t), '\0'};
             paint::small_text(px, x + 4, y + 4, digit, t == selected_ ? 15 : 6);
+            if (((rnd_marked >> t) & 1u) != 0) canvas.rect(x + 9, y + 7, 2, 2, 13);
         }
     }
 
@@ -177,7 +179,8 @@
         }
     }
 
-    void draw_lfo_picture(enaga::Canvas &canvas) {
+    // `shown` is Status::lfo_shown as the caller read it, so the line and the strip agree.
+    void draw_lfo_picture(enaga::Canvas &canvas, uint8_t shown) {
         uint8_t *px = canvas.data();
         const int top = kPictureTop;
         const int mid = kPictureTop + kPictureRows / 2;
@@ -204,7 +207,7 @@
         paint::dot(px, dot_x, dot_y, 15);
 
         // The strip: this frame's output joins the history (UI side; one byte a frame).
-        lfo_strip_[lfo_strip_at_ % uint32_t(kLfoStrip)] = engine_.lfo_shown(selected_);
+        lfo_strip_[lfo_strip_at_ % uint32_t(kLfoStrip)] = shown;
         lfo_strip_at_++;
         canvas.rect(kLfoStripX - 2, top, 1, kPictureRows, 3);
         int prev_y = -1;
@@ -231,14 +234,18 @@
 
     void draw_table_picture(enaga::Canvas &canvas) {
         uint8_t *px = canvas.data();
-        const TrackParams &heard = engine_.sounding(selected_);
-        const int table = va_wave_table(heard.get(0));
+        // What the track plays, from Status (Engine::publish_heard), never the audio side's
+        // arrays: the table TBL plays and its POS byte.
+        const Status &status = engine_.status();
+        const uint8_t heard_table = status.heard_table[selected_].load(std::memory_order_relaxed);
+        const int table = heard_table == Status::kNotHeard ? -1 : int(heard_table);
         const WaveLibrary &waves = engine_.waves();
-        if (!waves.resident(table)) {
+        if (table < 0 || !waves.resident(table)) {
             canvas.text(30, kPictureTop + 7, "BUILDING", 7);
             return;
         }
-        const int pos = int(heard.get(1)) * (kWaveFrames - 1) * 16 / 127;   // in 1/16 frames
+        const int pos = int(status.heard_pos[selected_].load(std::memory_order_relaxed)) *
+                        (kWaveFrames - 1) * 16 / 127;                       // in 1/16 frames
         const int mip = kWaveMipLevels - 1;
         const int length = wave_mip_length(mip);
         const int amp = 3;

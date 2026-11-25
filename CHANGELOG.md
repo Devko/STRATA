@@ -16,6 +16,36 @@ the project file format or the controls.
 
 ### Added
 
+- **Hear a sample before you load it.** In the sample browser (SAMPLES), **push A** plays the
+  file under the cursor, whole and from its start, straight to the output at about -6 dB; push A
+  again stops it. While one plays, UP/DOWN (or turning A) hears the next file the cursor lands
+  on, so a folder can be listened through before anything changes in the track. OK still loads,
+  and stops the audition; CLR, another folder or leaving SAMPLES stops it too. The file is
+  streamed from the card, so a long stem starts as quickly as a hi-hat and takes no sample
+  memory; it plays at its own rate (44.1 kHz stays in tune), is never recorded by RESAMPLE, the
+  looper or beat repeat, and works with the beat playing or stopped. The line under the title
+  says `HEARING 3/12S`, and a line under the file grows as it plays. 0.28 MiB of RAM.
+- **Two MOD slots per track.** Each track has two slots, each a source moving one parameter by a
+  depth: **LFO** (the track's LFO, which can stay at DEP 0 and move only the slots), **ENV** (the
+  LFO's shape and RAT once per note), **VEL**, **PRS** (the pad's pressure) and **RND** (a new
+  value per note). Learnt like the macros: on the LFO page push C (slot 1) or D (slot 2), push
+  again for the next source, turn the knob you want moved by as much as you want it moved, OK.
+  The knob goes back and the slot keeps the difference. The LFO page lists the slots; on EDIT a
+  dim line under a bar shows a slot's range. A cutoff stops at the ~100 Hz floor. Stored in the
+  kit (KIT.BIN grows to 1,389 bytes); older projects load with both slots off.
+- **Random lock ranges and parameter slide.** Hold a STEP and FUNC and turn a knob: that
+  parameter gets a random range on the step, and each pass plays a new value within it (`R20` on
+  the lock line, a dim line under the bar). Hold a STEP and FUNC and push a knob: the step's lock
+  glides to whatever the next step that plays holds, arriving as that step starts (`SLIDE ON`,
+  `/` on the lock line). A plain push with the STEP held still clears the parameter, range and
+  slide included. Both are stored in the lock itself, so patterns keep their format; an older
+  build ignores a range and a sliding lock.
+- **LIVE RND (P1, the live half).** In PERFORM, FUNC + turn D shuffles every armed track's steps
+  in random blocks of 1, 2, 4, 8 or 16, a new pick every pass (`LIVE RND4 8 TRK`); FUNC + push D
+  takes the selected track out or back in, so the kick can hold while the rest jumps. The same
+  draw as TRACK PLAY's RND modes, over each track's own mode while on; the pattern is never
+  written, so OFF is the programmed beat again at once. Not saved, held by a LOCK, shown as
+  `LIVE RND4 FUNC+D` on PERFORM, a dot under each armed track's meter and `RN4` on line 2.
 - **Live screens, part 5: WAVE's table as a waterfall, GRAIN's grains as sparks.** On WAVE's
   SRC page the table's sixteen frames are stacked like CyDrums' OSC page, the frame POS plays
   brightest. On GRAIN's SRC page each grain also leaves a fading spark over the sample.
@@ -125,6 +155,11 @@ the project file format or the controls.
 
 ### Fixed
 
+- **The main loop no longer reads the audio side's working copies.** Building WAVE tables,
+  KEYS' sustain hold and the LFO page's number and strip read what each track sounds straight
+  from the audio side's arrays, which it rewrites every block. The audio side now publishes those
+  few bytes each block (`Engine::publish_heard`), and the main loop reads only those. Nothing
+  sounds or looks different.
 - **RESAMPLE takes reach the card.** Every take failed with `DENIED` before it was written: STRATA
   made the folder `/RECORD` first, and Enaga only allows writes strictly inside it. The file's
   own open makes the folder now. Found by the new bounce scenario in the emulator; the host tests'
@@ -150,6 +185,8 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Changed
 
+- **REL ALL and LEN ALL are tested on the DSP** (`scenario_moveall`): the emulator turns encoders
+  since Enaga 0.3.0. Each click's amount is logged, as the other notices the scenarios read are.
 - **Code quality round (no change in sound or controls).** One set of integer clamps in core/,
   the project file names spelled once, CI checks CLAUDE.md's source rules
   (`tools/check_rules.sh`), the scenarios print their log path on a failed check, and the unit

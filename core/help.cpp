@@ -103,8 +103,8 @@ constexpr int kSharedPages = int(sizeof kShared / sizeof kShared[0]);
 
 constexpr Text kSteps = {"STEPS:", {
     "TAP STEP  TRIG ON/OFF",
-    "STEP+KNOB  LOCK",
-    "STEP+PUSH  UNLOCK",
+    "STEP+KNB/PSH LOCK/OFF",
+    "  +FUNC RANDOM/SLIDE",
     "STEP+VALUE NOTE",
     "STEP+OK    STEP PAGE",
     "STEP+LATER STEP  LEN",
@@ -265,6 +265,19 @@ constexpr Text kPerform2 = {"PERFORM MORE:", {
     "FUNC+A/B REL/LEN ALL",
 }};
 
+constexpr Text kPerform3 = {"PERFORM LIVE:", {
+    "FUNC+A     REL ALL",
+    "FUNC+B     LEN ALL",
+    "FUNC+D     LIVE RND",
+    "  OFF 1 2 4 8 16",
+    "FUNC+PUSH D  TRACK",
+    "  IN OR OUT OF RND",
+    "OFF  BACK TO THE GRID",
+    "PATTERN NOT CHANGED",
+    "LOCK HOLDS ALL THREE",
+    nullptr,
+}};
+
 constexpr Text kProject = {"PROJECT:", {
     "STEP 1-16  QUEUE SLOT",
     "ARROWS SLOT  OK QUEUE",
@@ -361,11 +374,11 @@ constexpr Text kSamples = {"SAMPLES:", {
     "UP/DOWN/A  ENTRY",
     "LEFT/RIGHT 8 ENTRIES",
     "OK  LOAD OR OPEN",
+    "PUSH A  HEAR FIRST",
+    "WHILE HEARD: UP/DOWN",
+    "HEARS THE NEXT",
     "CLR       UP A FOLDER",
     "FUNC+UP    READ AGAIN",
-    "LOADS AT ONCE  KEEPS",
-    "PLAYING: DOWN OK",
-    "TRIES THE NEXT",
     "POOL  SMPLTREK POOL",
     "SMPLTREK  ALL FOLDERS",
 }};
@@ -568,6 +581,7 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
             add_row(rows, count, "ON WITH DEP AND DST");
             add_row(rows, count, "PUSH B     TRIG MODE");
             add_row(rows, count, "FREE RETRIG ONE-SHOT");
+            add_row(rows, count, "PUSH C D   MOD SLOTS");
             break;
         case 5: add_row(rows, count, "MOD OFF  NO ARP"); break;
         case 6:
@@ -654,7 +668,11 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
             list[listed++] = &kStepFields;
             break;
         case HelpScreen::mixer:     knobs = true; break;
-        case HelpScreen::perform:   list[listed++] = &kPerform; list[listed++] = &kPerform2; break;
+        case HelpScreen::perform:
+            list[listed++] = &kPerform;
+            list[listed++] = &kPerform2;
+            list[listed++] = &kPerform3;
+            break;
         case HelpScreen::project:   list[listed++] = &kProject; break;
         case HelpScreen::chain:     list[listed++] = &kChain; break;
         case HelpScreen::pattern:   list[listed++] = &kPattern; break;

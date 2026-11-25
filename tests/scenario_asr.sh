@@ -3,8 +3,8 @@
 # draws on the C674x with the real font, on a drum track ("NOT ON THIS MACHINE") and on VA POLY
 # (the four names and their times), and the beat keeps playing inside the load target.
 #
-# The emulator presses keys and turns no encoders (docs/HANDOFF.md, section 2), so this cannot
-# raise SUS: what a sustaining chord COSTS is measured separately, by the temporary factory edit
+# This scenario presses keys only (the emulator turns encoders since Enaga 0.3.0, but cannot
+# hold a sustaining chord on pads; docs/HANDOFF.md, section 2), so it does not raise SUS: what a sustaining chord COSTS is measured separately, by the temporary factory edit
 # in docs/BUDGET.md ("The ASR page", E12). Per voice it is the same code as before; what changes
 # is how long a voice lives, which the shared 12-voice budget already bounds.
 #
