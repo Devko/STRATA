@@ -177,15 +177,16 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
   Turn VALUE up: the loop takes over. Mute the hats and kick (FUNC + lower pads): you only hear it
   once VALUE goes back down. Loop in time and without a click at its end? `____`
 - With the loop up, push VALUE + STEP 1 and turn: the low-pass sweeps the loop too.
-- With an effect up, press VALUE and let go without turning: `... 0`, dry at once, the effect
-  still picked (turn again: it comes back). PERFORM: turn the morph, press VALUE: `MORPH 0`.
+- With an effect up, press VALUE and let go without turning: `... 0`, the effect rides out over
+  a beat (FX GLIDE, 16c), still picked (turn again: it comes back). PERFORM: turn the morph, press VALUE: `MORPH 0`.
   The tempo never resets.
 - With an effect up, hold VALUE down for a second and let go: nothing resets, the amount stays.
 - Push VALUE + CLR: `FX OFF`. Again: `LOOP CLEARED`. MAX meanwhile: `________ %` (U11 is in 13o).
 
 **16b. Gestures that moved, MUTE BUS and MORPH (3 min, 0.5.0).** A01 playing, the chord's SnA up.
 - FUNC + turn VALUE: `DJ FILTER: SLOT 1/2`, the tempo and the sound unchanged. FUNC + push D:
-  `TAPE STOP: SLOT 8`. FUNC + MUTATE: `FREEZE: SLOT 5`, no mutation.
+  `TAPE STOP: SLOT 8`. FUNC + MUTATE is LOCK now (16c): tapped with no lock it says
+  `NO LOCK: HOLD STORES` and freezes or mutates nothing.
 - Push VALUE + STEP 7 (`7 MUTE BUS`), turn VALUE up slowly: every track fades out evenly and the
   delay and reverb ring on. At the top only the tails. Back to 0: the beat at its own level,
   no click? `____`
@@ -193,6 +194,27 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
   little, then push VALUE + STEP 13 (`MORPH 0`): the echo stays. Turn VALUE: `MORPH 64`, the
   sound moves towards B. Push VALUE + STEP 13 again (`MORPH KEPT: VALUE TEMPO`), go to PERFORM:
   the morph bar is where you left it, and VALUE carries on from there.
+
+**16c. LOCK and FX GLIDE (5 min, 0.5.0).** A01 playing.
+- Hold FUNC + MUTATE for half a second: `LOCK A01 STORED`, line 2 ends with `L`, the MUTATE pad
+  half bright. Tap a few steps on track 1, turn the bass's CUT, mute the hats (FUNC + pad 3), turn
+  a macro: within a moment the mark reads `L+`.
+- Tap FUNC + MUTATE: `BACK TO LOCK A01`, at once and in time: the steps, the bass's cutoff, the
+  hats and the macro all back, `L`. Any click or stumble at the jump? `____`
+- Tap again: `SWAPPED BACK A01`, the changed version back, sound included. Tap a few times:
+  a clean A/B? `____`
+- MUTATE (no FUNC), then before OK/CLR tap FUNC + MUTATE: the verdict hint goes, CLR afterwards
+  does not bring the mutation back.
+- A02 (PROJECT, STEP 2): no `L` there; tapping says `NO LOCK: HOLD STORES`. Back on A01, `L` again.
+- Push VALUE + STEP 4, turn ECHO RISER to about 100, then tap VALUE: `ECHO RISER 0`, and it rides
+  out over one beat instead of cutting. FUNC + tap VALUE on another try: a hard cut. Musical? `____`
+- With ECHO up, push VALUE + STEP 10: the echo rides out over the beat, then CRUSH is picked.
+  Push VALUE + RIGHT with CRUSH up: a crossfade to NOISE over a beat.
+- Hold VALUE pushed and **hold** STEP 6 (WASH): after a moment the wash swells to full while held,
+  and rides out when you let go of the STEP; WASH stays picked. A quick tap of STEP 6 lets it go.
+- FUNC menu, FX GLIDE: `1 BEAT`; try `1 BAR` and `1/16` on the VALUE tap. Which default? `____`
+- With an effect up, hold FUNC + MUTATE's tap on the lock: the effect rides to 0 over the glide.
+  MAX after all of this: `________ %`
 
 **17. Samples from the SmplTrek's own folders (2 min).** Needs a card the stock firmware has used,
 with at least one WAV in `SmplTrek/Pool/Audio` (copy one there on a PC if it is empty).
@@ -832,7 +854,8 @@ Since 0.5.0 both live only in the performance mixer (slots 8 and 5); their FUNC 
 - [ ] Turn the chord's SnA (delay send) up and play a few chord stabs. **Push VALUE + STEP 5,
       turn VALUE to the top**: `FRZ` on PERFORM's bar line. The echo keeps looping at the same
       level; new stabs are not echoed. Turn down: the loop fades into the delay's tail.
-- [ ] FUNC + MUTATE: `FREEZE: SLOT 5`, nothing frozen and nothing mutated.
+- [ ] FUNC + MUTATE tapped with no lock stored: `NO LOCK: HOLD STORES`, nothing frozen and
+      nothing mutated (FUNC + MUTATE is LOCK, 16c).
 
 ## 13h. The arpeggiator (5 min)
 
