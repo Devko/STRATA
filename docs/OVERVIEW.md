@@ -36,7 +36,8 @@ any machine. The factory kit:
   Mutable Instruments Plaits' models, reimplemented ([SOUND.md](SOUND.md)). Switching a track's
   machine loads that machine's default sound.
 - **VA MONO and VA POLY:** saw or pulse, a second oscillator detuned or hard-synced, sub, drive,
-  a resonant filter that self-oscillates, and an attack-sustain-release page for pads and drones.
+  a resonant filter that self-oscillates, with its own envelope decay and opened by velocity, and
+  an attack-sustain-release page for pads and drones.
 - **WAVE MONO and WAVE POLY:** the same voice with 16 built-in wavetables (classic shapes, sync,
   formants, FM, e-piano, vowels, mallets and more), a position the envelope can sweep, and warp.
 - **FM4:** four-operator FM in eight algorithms, with feedback and an index envelope, for
@@ -46,22 +47,24 @@ any machine. The factory kit:
   and a pitch spray up to an octave shimmer.
 - **Factory sounds:** 76 ready-made sounds for the drums, the VAs, WAVE, FM4 and GRAIN, loaded
   into one track at a time while the beat plays.
-- **Per track:** drive, multimode filter (LP, BP, HP, 12 or 24 dB), lo-fi, amp envelope,
-  sidechain duck, pan, level, an **LFO** (six shapes, free or synced) and an **arpeggiator**.
+- **Per track:** drive, multimode filter (LP, BP, HP, 12 or 24 dB; one TON knob on the VA and
+  WAVE machines, which have a filter of their own), lo-fi, amp envelope, sidechain duck, pan,
+  level, an **LFO** (six shapes, free or synced) and an **arpeggiator**.
 - **Sends and master:** a tempo-synced ping-pong delay with a LONG mode (up to 12 s, tape wow), a
   reverb with a HALL mode (shimmer), a DJ filter, a three-band kill EQ, a glue compressor and a
   limiter.
 
 ## Sequencer
 
-- Up to 64 steps per track, with per-track length, speed and swing (polymeter), and micro-timing
+- Up to 64 steps per track, with per-track length, speed, swing (polymeter) and play mode
+  (forward, reverse, ping-pong, or random steps or blocks, seeded), and micro-timing
 - Parameter locks, trig conditions, probability, ratchets, accents, slides and chords
 - Key and scale per pattern (15 scales); notes on the VA, WAVE, FM4, GRAIN and unsliced SAMPLE
   tracks fold into the scale
-- Live and motion recording, a Euclidean generator, and KEYS: the two lower pad rows as a
-  pressure-sensitive keyboard, with the pattern's scale lit
-- 8 banks of 16 patterns with queued changes, and a chain that becomes a song: each entry can
-  recall a mute state, and SONG mode stops at the end
+- Live and motion recording, a Euclidean generator, and KEYS: both pad rows as a
+  pressure-sensitive keyboard, with the pattern's scale lit, while the STEP keys stay steps
+- 8 banks of 16 patterns with queued changes, a pattern menu (copy, paste, clear, double), and
+  a chain that becomes a song: each entry can recall a mute state, and SONG mode stops at the end
 - 16 levels of undo
 
 ## Performance
@@ -73,10 +76,12 @@ any machine. The factory kit:
   crush, noise riser, gate, build), then turn VALUE to bring it in. STEP 13 puts the A/B scene
   morph on VALUE from any screen, and STEP 16 is a **looper** that records 1 to 8 bars of the
   mix and crossfades it against the live beat.
-- Scenes with an A/B morph, four macros (B, C and D set up in every new project) and stored mute
-  states
-- Beat repeat, note repeat, delay and reverb throws, tape stop, delay freeze, kill-EQ switches, and
-  seeded mutation you keep or revert
+- Scenes with an A/B morph, four macros you set up by turning knobs (B, C and D ready in the
+  demo project) and stored mute states
+- Beat repeat, note repeat, **step stutter** (hold REPEAT and a STEP), delay and reverb throws,
+  kill-EQ switches, and seeded mutation you keep or revert
+- **LOCK:** store the live set of a pattern, change everything, and jump back in one tap; tap
+  again to swap back
 - **Freeze** a track to a loop in memory to save CPU, **resample** the master or an input, or
   **bounce** one track to a file or another track
 
@@ -90,3 +95,6 @@ any machine. The factory kit:
 - MIDI out per track; MIDI in for notes, CCs and program changes; follows the unit's clock
   (internal, MIDI clock or SYNC IN)
 - **Help on every screen:** hold FUNC for what the knobs and keys do where you are
+- **A screen that shows the music:** bar.beat and a progress line on every screen, a strip of
+  what is off rest, a master meter, the sample and its playheads under SAMPLE's and GRAIN's knobs,
+  the envelopes their knobs shape, and every lock drawn against the kit value

@@ -1,14 +1,17 @@
-# Handoff — 2026-11-24
+# Handoff — 2026-11-25
 
 **Read this first, then `CLAUDE.md`, then `docs/SPEC.md`, `docs/REVIEW.md` and `docs/PLAN.md`.**
 This file holds what exists nowhere else in the repo: the state in one table, the next steps in
 order, and the knowledge that lives in no code comment, commit message or other document. When a
 fact here becomes stale, fix it here or delete it; do not append a history.
 
-**STRATA runs on the unit and has four releases.** v0.1.0 (2026-11-22), v0.2.0, v0.3.0 and v0.3.1 (2026-11-23,
-early betas) are on GitHub; v0.3.1 boots and plays on the unit (2026-11-24), but nothing from 0.3.x has been measured or walked through there yet. On the unit the default beat loads under 30%, and a long, heavy
-session peaked at 84.3% MAX with no dropouts. Almost everything added since the first evening has
-been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
+**STRATA runs on the unit and has four releases.** v0.1.0 (2026-11-22), v0.2.0, v0.3.0 and
+v0.3.1 (2026-11-23, early betas, all for Enaga 0.2.0) are on GitHub; v0.3.1 boots and plays on
+the unit (2026-11-24). `main` is on Enaga 0.3.0 since #139, and a build from it boots on the
+unit's 0.3.0 firmware (2026-11-25). Nothing from 0.3.x on has been measured or walked through
+there yet. On the unit the default beat loads under 30%, and a long, heavy session peaked at
+84.3% MAX with no dropouts. Almost everything added since the first evening has been heard by
+nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
 ---
 
@@ -16,10 +19,10 @@ been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is 
 
 | | |
 | --- | --- |
-| `make -C host test` | **1,754 tests, 3,485,153 checks, 0 failures** on `main` after PR #126: `core/`, `dsp/` and all of `app/` |
+| `make -C host test` | **1,870 tests, 3,665,834 checks, 0 failures** on `main` at PR #151: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image (cl6x, 2026-11-25, EDIT's pictures): payload 1,117,368 bytes, bss 1,565,352 (with LOCK and play modes); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | **33 scenarios**, run on Roland's PC only. All 33 pass with cl6x with step stutter and the repeat rate merged onto EDIT's pictures (no new scenario: both are pad gestures, host-tested; worst 30.55%, ambient). All 33 pass with cl6x with EDIT's waveforms and envelopes merged onto play modes, LOCK and FX GLIDE (`scenario_pictures` new: every picture page walked while the beat plays; worst 30.55%, ambient). All 32 passed with cl6x after play modes merged onto LOCK and FX GLIDE (`scenario_playmode` new: FUNC menu TRACK PLAY walked to RND4 while the beat plays, then a save; worst 30.54%, ambient). All 31 passed with cl6x with LOCK and FX GLIDE (`scenario_glide` new; worst 30.34%, ambient). All 30 pass with cl6x after backlog D1/D2/D5 merged onto locks on screen (`scenario_slots` new: mixer slots 7 and 13 and a retired chord). All 29 passed with cl6x after locks on screen (`scenario_plock` new: hold STEP + turn on GRID and EDIT; worst 30.18%, ambient). All 27 pass with cl6x on `ce5fc6b` (the v0.3.1 build, 2026-11-23), `scenario_wave` once its table check followed #133; all 27 again with cl6x on Enaga v0.3.0 (2026-11-25), loads unchanged (worst 30.16%, ambient); all 28 with cl6x after D12 (`scenario_stepkeys` new, `scenario_m6` now checks KEYS' STEP keys toggle steps, since the emulator cannot press pads) |
+| `tools/scenarios.sh` | **33 scenarios**, run on Roland's PC only. **All 33 pass with cl6x on `main` at PR #151** (2026-11-25; worst 30.55%, ambient). Added today, each with the PR that brought it: `scenario_stepkeys` (D12), `scenario_plock`, `scenario_slots`, `scenario_glide`, `scenario_playmode`, `scenario_pictures`. The pad gestures (stutter, LOCK, D6) have none: the emulator cannot press pads. The worst case has moved from 30.16% to 30.55% over the day. GCC-only figures for today's work are not taken |
 | unit | v0.3.1 on Enaga 0.2.0 boots and plays (2026-11-24). Load figures are from the v0.2.0-era build: under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been measured or walked through on the unit |
 | memory | init takes **97.04 MiB of a 120 MiB heap** (LOCK's 1.06 MiB included): 22.96 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -33,10 +36,9 @@ been heard by nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is 
    `scenario_wave.sh` and `scenario_fm.sh`, never run), then E13 (the VA rework), E14 (WAVE's cost
    per voice and its boot time) and E15 (FM4's cost per voice) from `docs/BUDGET.md`, with cl6x and with `ENAGA_TI_CGT=none`. BUDGET has only
    host estimates for both so far.
-2. **On the unit: today's walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, items 1-19, on a
-   build from `main` at PR #126 or later with cl6x. It covers everything since v0.1.0, including
-   the performance mixer and looper (16), the stock sample folders (17), the VA OSC page (18),
-   WAVE (19) and FM4 (20).
+2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, items 1-28, on a
+   build from `main` with cl6x and Enaga 0.3.0 firmware. It covers everything since v0.1.0, from
+   the CPU guard to today's LOCK, step stutter, play modes, screen frame and EDIT's pictures.
 3. **Write the readings down where they belong**: unit rows in `docs/BUDGET.md`, ticks in the
    reference half of `docs/UNIT_CHECKLIST.md`, the Unit column of `docs/FEATURES.md`, and anything
    odd as an issue or a thread.
@@ -60,7 +62,8 @@ Roland accepted all 15 decisions as recommended, 2026-11-25). Done: macro learn 
 slots 7 MUTE BUS / 13 MORPH (D1, D2, D5), LOCK on FUNC + MUTATE (D3, D4, D13, D14;
 `core/lockstore.hpp`, docs/CONTROLS.md "LOCK") with FX GLIDE and the momentary push. **Next, in
 order:** bounce-to-track ("put on track n" after a RESAMPLE bounce, one OK); then hold STEP +
-THROW (the delay-send lock D6 left out).
+THROW (the delay-send lock D6 left out). Both are being built, with LFO trigger modes and
+"release and length for all + FEEL", in their own threads as of 2026-11-25.
 
 LOCK, for whoever touches it next: the audio side keeps the 128 locks and the swap-back and does
 the copies (`Engine::capture_live` / `apply_live`); the UI only times the hold (500 ms), posts
@@ -69,7 +72,7 @@ morph and macro shadows re-read, the mixer ridden to rest). The concept's "no lo
 to the pattern as last saved" is NOT built: it needs a copy of every pattern as loaded; a tap
 with no lock says `NO LOCK: HOLD STORES`. Undo is untouched by a jump. The emulator cannot press
 pads, so LOCK is host-tested only (tests/test_lockstore.cpp, tests/test_ui.cpp); UNIT_CHECKLIST
-16c walks it. FX GLIDE lives in the UI (`perf_ride_to`, `core/perffx.hpp` `perf_ride_at`); the
+20c walks it. FX GLIDE lives in the UI (`perf_ride_to`, `core/perffx.hpp` `perf_ride_at`); the
 UI tests run with it OFF (`fresh()`), and its own tests turn it on. FUNC + MUTATE, FUNC + push D and
 FUNC + VALUE only show a hint now (`notice_logged` in app/app.hpp), so LOCK can take FUNC +
 MUTATE outright. The master DJ byte stayed on MIXER's MST page on purpose: an old project saved
