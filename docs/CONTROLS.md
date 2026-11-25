@@ -363,11 +363,11 @@ strip first, pictures per page later). A screen draws only inside it.
 | Rows | What | Example |
 | --- | --- | --- |
 | 0-6 | Top line: live pattern, **bar.beat** in its pass, tempo, `>` playing / `.` stopped, load in whole percent | `A01 3.2 130.0 > 24%` |
-| 8 | Progress: one pixel across the pattern's pass (its master length), on a dim track; empty while stopped | |
+| 8 | Progress: one pixel across the pattern's pass (its master length), its head brightest, on a dim track with the beats (dim) and bars (brighter) still to come marked; empty while stopped | |
 | 10-16 | Second line: a notice, LEARN or the MUTATE verdict while there is one; else the **live strip**; else `EXT MIDI` / `EXT SYNC` / `CLOCK REFUSED` | `K:L FX4 S40 M:AB` |
 | 18-117 | The screen's own content | |
 | 120 | Bottom line: tracks sounding, MAX, device, DROP, GUARD | `TRK3 MAX23.5 SMPLTREK` |
-| x 126-127, rows 10-117 | **Master meter**: the level (falling about 20 dB in a third of a second), a bright dot at the highest reading of the last second, the top pixel lit for a second after the limiter worked | |
+| x 126-127, rows 10-117 | **Master meter**, in decibels (the top 48 dB, about 2 rows a dB) and in segments: the top 6 dB brightest, the next 12 dB bright, the rest dim. The level falls about 20 dB in a third of a second; a bright dot marks the highest reading of the last second; the top pixel is lit for a second after the limiter worked | |
 
 The live strip lists only what is **off rest**, most telling first, and leaves out whole what does
 not fit in 17 characters: `ST5` a step stutter on STEP 5 and `R1/16` the rate while REPEAT is
@@ -381,6 +381,11 @@ Two rules keep the frame cheap and whole. It is drawn only from words the audio 
 once a block (`Status`): nothing in `draw()` walks a pattern or a buffer. And no text may reach
 x 126: the layout check holds every string to the screen, GRID's cells are five pixels wide, and
 right-aligned values end at x 124.
+
+The live screens draw with STRATA's own kit (`app/paint.hpp`): anti-aliased lines between pixels,
+arcs, soft dots, an afterglow for scopes, and a 3 x 5 font for labels on graphs
+(`paint::kSmallLabels` puts them back on Enaga's 5 x 7 if the small one is hard to read on the
+OLED). SETUP shows what a frame costs to draw, `DRW 0.85MS`, averaged over 64 frames.
 
 ## Locks on screen
 

@@ -47,7 +47,7 @@ TEST_SRC  := $(wildcard $(ROOT)/tests/*.cpp)
 # App class itself moved to app/app.hpp, so the modes and the gestures ARE in this suite --
 # tests/test_ui.cpp includes that header and drives the same class the unit runs. There is
 # nothing left to add to APP_SRC: a header needs no translation unit of its own.
-APP_SRC   := $(ROOT)/app/engine.cpp $(ROOT)/app/storage.cpp
+APP_SRC   := $(ROOT)/app/engine.cpp $(ROOT)/app/storage.cpp $(ROOT)/app/paint.cpp
 
 SRC       := $(CORE_SRC) $(DSP_SRC) $(APP_SRC) $(TEST_SRC)
 

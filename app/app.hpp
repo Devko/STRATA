@@ -35,6 +35,7 @@
 #include "arp.hpp"          // the ARP page's names and clicks
 #include "engine.hpp"
 #include "help.hpp"         // the FUNC help's pages, one set per screen
+#include "paint.hpp"        // the drawing kit: lines, arcs, the small font, afterglow
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "sounds.hpp"       // SOUNDS: the factory sounds for one track
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
@@ -913,6 +914,11 @@ private:
     uint8_t limit_seen_ = 0;
     uint32_t limit_ms_ = 0;
     bool limit_lit_ = false;
+    // draw()'s own cost (count_draw_time): the window's sum, its frames, the last average.
+    uint32_t draw_ms_sum_ = 0;
+    uint32_t draw_count_ = 0;
+    uint32_t draw_hundredths_ = 0;
+    bool draw_logged_ = false;
     uint8_t logged_guard_ = 0;     // the CPU guard level last logged
     uint32_t cpu_max_ = 0;         // per mille, the highest block cost since the last start
     static constexpr uint8_t kLoadBurst = 4;       // `ld` lines (bars) after a freeze or unfreeze

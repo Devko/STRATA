@@ -16,6 +16,12 @@ the project file format or the controls.
 
 ### Added
 
+- **Live screens, part 1: the drawing kit and a livelier frame.** The master meter reads in
+  decibels (the top 48 dB) and in segments, brightest in the top 6 dB, so a quiet mix moves it;
+  the progress line marks the beats and bars still to come and lights its head. SETUP shows what
+  a frame costs to draw (`DRW 0.85MS`). Underneath, `app/paint.hpp`: anti-aliased lines, arcs,
+  soft dots, an afterglow and a 3 x 5 font, which the next parts use for scopes, spectra and
+  moving envelopes.
 - **LFO TRIG (S2).** Push RAT's knob (B) on the LFO page for **FREE** (as before), **RETRIG**
   (every note on the track starts the cycle again) or **ONE-SHOT** (every note runs one cycle and
   the LFO stops: a second envelope you can point at any parameter). In ONE-SHOT the shapes are

@@ -662,6 +662,13 @@
         const enaga::clock::State clock = enaga::clock::state();
 
         canvas.text(0, 20, "SETUP", 14);
+        // What a frame costs to draw, averaged (count_draw_time): "DRW 0.85MS" ends at x 123.
+        out = line;
+        append(out, "DRW ");
+        append_hundredths(out, draw_hundredths_);
+        append(out, "MS");
+        *out = 0;
+        canvas.text(64, 20, line, 7);
 
         // CLOCK SRC, read from the clock itself rather than from anything STRATA remembers: it
         // is the user's setting and it can change under us at any moment.

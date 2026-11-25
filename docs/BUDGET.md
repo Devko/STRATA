@@ -53,6 +53,26 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### The screen: live visuals part 1 (2026-11-25, emulator, cl6x)
+
+draw() runs in Enaga's main loop at most every 50 ms (20 fps, fixed by Enaga), and only once the
+previous frame's 8,192-byte EDMA transfer (about 7 ms) has finished
+(third_party/enaga/firmware/kernel/main.c). It is not in the audio interrupt, so drawing costs
+the audio load nothing directly; a slow draw would only delay key polling (the panel UART ring
+holds 80 ms). The limit STRATA sets itself: **5 ms a frame**, a tenth of the frame time.
+
+draw() now times itself over 64 frames (app/ui_screen.hpp, `count_draw_time`): SETUP shows
+`DRW n.nnMS`, and `tests/scenario_visuals.sh` checks the one log line against the 5 ms limit.
+
+| Screen | draw() a frame | Where |
+| --- | --- | --- |
+| GRID with the beat playing, the decibel meter and beat marks (this PR) | **0.57 ms** | emulator, cl6x, no caches |
+
+All 36 scenarios pass with cl6x (worst **30.93%**, `scenario_ambient`, as on `main`): the frame
+changes are draw-side only. The mockups that picked the direction estimated 20-35k pixel writes
+a frame for the busiest live screens (16k of them the clear), about 1-1.5 ms; each later part
+adds its screen to `scenario_visuals` and its figure here.
+
 ### LFO TRIG, TUN glide and the cutoff floor (S2, S3, D9; 2026-11-25)
 
 Emulator, all 33 scenarios pass with cl6x (worst **31.05%** before the merge, `scenario_ambient`). Against `main`

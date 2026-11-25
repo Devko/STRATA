@@ -39,6 +39,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | Shared budget of 12 VA POLY voices across all tracks; quietest voice choked with a 64-frame fade | v0.1.0 | ○ ("The shared VA POLY voice budget") | 12 is provisional until U1/U2 on the unit |
 | Every screen fits Enaga's 5x7 font (layout test over every screen) | v0.1.0 | ◐ (overlaps seen at first boot, fixed in PR #7) | |
 | **Screen frame**: top line with bar.beat, progress line, live strip of what is off rest, master meter with held peak and limiter light | #144 | ○ (W26) | The meter is 2 px wide; nothing may draw past x 124 |
+| **Live screens 1**: the meter in decibels and segments, beat and bar marks on the progress line, draw time on SETUP; the drawing kit (`app/paint.hpp`: AA lines, arcs, dots, afterglow, 3 x 5 font) | this PR | ○ (W33) | Is the 3 x 5 font readable on the OLED? `paint::kSmallLabels` |
 | **Locks on screen**: heard value + kit tick on GRID and EDIT bars, `S5 CUT 64>90`, GRID cell marks (locks, condition, probability, ratchet, trigless) | #146 | ○ (W27) | |
 | **Waveforms and envelopes in EDIT**: SAMPLE and GRAIN draw the sample with window, slices and playheads or grains; AMP, ASR and the synths' FLTR draw the envelope | #150 | ○ (W28) | The picture is made at load (250 bytes a track); a streamed file shows its resident head |
 
