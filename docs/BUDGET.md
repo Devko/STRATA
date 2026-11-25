@@ -1043,6 +1043,10 @@ fractional reads), then the LONG delay's diffusion to two all-passes a side.
 
 ### Per-track LFO (2026-11-22, host only)
 
+**Cutoff floor (2026-11-25, D9).** An LFO on a cutoff now stops at about 100 Hz
+(`lfo_cutoff_floor`, a compare and a clamp per modulating track per block). No measurable change:
+`scenario_lfo` 24.53% and `scenario_m3` 23.80% with cl6x, 45.52% and 40.61% GCC-only.
+
 One LFO per track, parameters 16-19 (dsp/lfo.hpp). It runs once per **block**, not per sample,
 and moves its destination's byte. The cost is the LFO step itself (a few dozen instructions)
 plus one `prepare` of the modulated track in each block where that byte actually changed. There

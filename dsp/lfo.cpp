@@ -70,13 +70,20 @@ const char *lfo_param_name(int index) {
     }
 }
 
-uint8_t lfo_apply(uint8_t base, float value, uint8_t depth) {
+uint8_t lfo_apply(uint8_t base, float value, uint8_t depth, uint8_t floor) {
     // 64 counts at DEP 127: 64/127 per count of depth. Rounded half away from zero, so a
     // symmetrical wave moves the byte symmetrically.
     const float offset = value * float(depth > 127 ? 127 : depth) * (64.0f / 127.0f);
     const int rounded = offset >= 0.0f ? int(offset + 0.5f) : -int(-offset + 0.5f);
     const int next = int(base) + rounded;
-    return uint8_t(next < 0 ? 0 : (next > 127 ? 127 : next));
+    const int lowest = base < floor ? int(base) : int(floor);
+    return uint8_t(next < lowest ? lowest : (next > 127 ? 127 : next));
+}
+
+uint8_t lfo_cutoff_floor(int dest, bool va_filter, bool insert_chain) {
+    if (insert_chain && dest == page_first(Page::fltr) + 1) return kLfoInsertCutoffFloor;
+    if (va_filter && dest == page_first(Page::src) + 2) return kLfoVaCutoffFloor;
+    return 0;
 }
 
 LfoSettings LfoSettings::make(const uint8_t bytes[kLfoParams]) {

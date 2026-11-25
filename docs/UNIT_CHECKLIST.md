@@ -722,6 +722,9 @@ New after the walkthrough was written. Play A01 GROOVE, select track 7 (the chor
 - [ ] B (RAT): below the middle reads Hz (`0.06` up to `32`), above it note lengths (`8B`
       down to `1/32`, `.` dotted, `T` triplet). Set `1B`: the sweep repeats once a bar, **in time
       with the beat**, and FUNC+PLAY restarts it on the one.
+- [ ] **Cutoff floor (0.4.0).** DST CUT, DEP 127, SQR at a slow rate, cutoff knob at 64: the
+      low half **dips but never goes silent** (the LFO stops at about 100 Hz). Same on a VA's own
+      CUT (SRC page). With the cutoff knob itself turned fully down, the sound is as dark as before.
 - [ ] Hold a STEP + turn C on the LFO page: a DEP lock on that step only (the sweep deepens on
       that step). Clearing it works as for any lock.
 - [ ] PERFORM: hold FUNC + STEP 3 assigns DEP to the selected macro (the notice names `DEP`).

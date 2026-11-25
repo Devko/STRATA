@@ -2618,7 +2618,13 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
 
         modulated_[t] = effective_[t];
         uint8_t &target = modulated_[t].v[s.dest];
-        target = lfo_apply(target, value, s.depth);
+        // A cutoff stops at about 100 Hz (dsp/lfo.hpp). Worked out every block: the machine
+        // can change under an unchanged LFO. MID has no audio, so its bytes go out unfloored.
+        const auto id = MachineId(machine_id(t));
+        const bool va_filter = id == MachineId::va_mono || id == MachineId::va_poly ||
+                               id == MachineId::wave_mono || id == MachineId::wave_poly;
+        const uint8_t floor = lfo_cutoff_floor(s.dest, va_filter, id != MachineId::midi);
+        target = lfo_apply(target, value, s.depth, floor);
         modulating_[t] = true;
     }
 }

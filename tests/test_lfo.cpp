@@ -126,6 +126,31 @@ TEST(lfo_apply_moves_the_byte_by_depth_and_clamps) {
     CHECK_EQ(int(lfo_apply(64, 1.0f, 200)), 127);    // a damaged depth is 127
 }
 
+TEST(lfo_apply_stops_at_the_floor_but_never_lifts_the_knob) {
+    // Full depth down from 64 would reach 0; the floor holds it at 30.
+    CHECK_EQ(int(lfo_apply(64, -1.0f, 127, 30)), 30);
+    CHECK_EQ(int(lfo_apply(64, 1.0f, 127, 30)), 127);    // upwards is untouched
+    CHECK_EQ(int(lfo_apply(64, -0.25f, 127, 30)), 48);   // above the floor: as before
+    // A knob already under the floor stays where it is; the LFO cannot push it lower.
+    CHECK_EQ(int(lfo_apply(10, -1.0f, 127, 30)), 10);
+    CHECK_EQ(int(lfo_apply(10, 0.0f, 127, 30)), 10);
+    CHECK_EQ(int(lfo_apply(10, 1.0f, 127, 30)), 74);
+}
+
+TEST(lfo_cutoff_floor_is_about_100_hz_on_each_cutoff) {
+    const int fltr_cut = page_first(Page::fltr) + 1;
+    const int src_cut = page_first(Page::src) + 2;
+    CHECK_EQ(int(lfo_cutoff_floor(fltr_cut, false, true)), int(kLfoInsertCutoffFloor));
+    CHECK_EQ(int(lfo_cutoff_floor(fltr_cut, true, true)), int(kLfoInsertCutoffFloor));
+    CHECK_EQ(int(lfo_cutoff_floor(fltr_cut, false, false)), 0);     // MID
+    CHECK_EQ(int(lfo_cutoff_floor(src_cut, true, true)), int(kLfoVaCutoffFloor));
+    CHECK_EQ(int(lfo_cutoff_floor(src_cut, false, true)), 0);       // a drum's third byte
+    CHECK_EQ(int(lfo_cutoff_floor(page_first(Page::fltr) + 2, true, true)), 0);
+    // The bytes sit on 100 Hz of each curve, within a few hertz.
+    CHECK_NEAR(20.0f * enaga::dsp::exp2(9.8138f * kLfoInsertCutoffFloor / 127.0f), 100.0f, 3.0f);
+    CHECK_NEAR(35.0f * enaga::dsp::exp2(8.4214f * kLfoVaCutoffFloor / 127.0f), 100.0f, 3.0f);
+}
+
 TEST(lfo_settings_are_off_unless_both_depth_and_dest_are_set) {
     uint8_t bytes[kLfoParams] = {};
     CHECK(!LfoSettings::make(bytes).on());           // zeroed bytes are OFF
@@ -226,6 +251,24 @@ TEST(lfo_moves_its_destination_about_the_value_and_leaves_the_kit_alone) {
     lfo(LfoWave::square, 63, 0, kDest);              // off again: the kit value
     CHECK(!engine.lfo_on(kTrack));
     CHECK_EQ(int(sounding()), 64);
+}
+
+TEST(lfo_on_a_cutoff_stops_at_the_floor) {
+    Engine &engine = fresh();
+    const int cut = page_first(Page::fltr) + 1;
+    set(cut, 64);
+    lfo(LfoWave::square, 63, 127, cut);
+    bool high = false;
+    bool low = false;
+    for (int i = 0; i < 60; i++) {
+        pump();
+        const int v = engine.sounding(kTrack).v[cut];
+        CHECK(v == 127 || v == int(kLfoInsertCutoffFloor));
+        high = high || v == 127;
+        low = low || v == int(kLfoInsertCutoffFloor);
+    }
+    CHECK(high && low);
+    // The snare's third SRC byte is TONE, not a cutoff: it still swings to 0 (the test above).
 }
 
 TEST(lfo_centres_on_a_locked_value_and_a_step_can_lock_the_lfo_itself) {
