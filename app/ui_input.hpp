@@ -1090,6 +1090,16 @@
                 // its own, all four being macros.
                 mutate_amount_ = (mutate_amount_ + delta * 10 + 110) % 110;
                 if (mutate_amount_ > 100) mutate_amount_ = 100;
+                {
+                    // Said in a toast: PERFORM's screen has no MUT line since the rebuild.
+                    char *out = notice_buffer_;
+                    append(out, "MUT ");
+                    append(out, mutation_name(mutation_));
+                    *out++ = ' ';
+                    append_number(out, uint32_t(mutate_amount_));
+                    *out = 0;
+                    notice(notice_buffer_);
+                }
                 break;
             case Mode::kit:
                 // The selection keys flip the browser's two pages of eight, like LEFT and RIGHT.

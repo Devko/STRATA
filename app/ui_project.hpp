@@ -705,6 +705,18 @@
         canvas.rect(0, 80, 60, 5, 3);
         if (bar > 0) canvas.rect(0, 80, bar, 5, 12);
 
+        // What the frame's bottom line said before the tabs took it: the tracks sounding, the
+        // held CPU maximum (since the last PLAY) and the device.
+        out = line;
+        append(out, "TRK");
+        append_number(out, engine_.status().voices.load(std::memory_order_relaxed));
+        append(out, " MAX");
+        append_tenths(out, cpu_max_);
+        append(out, " ");
+        append(out, device_name(enaga::system::device()));
+        *out = 0;
+        canvas.text(0, 86, line, 9);
+
         // And where the three settings above are changed, because they are not changed here.
         // CLOCK OUT and SYNC OUT are in the same menu and Enaga exposes no way to read them,
         // so they are named rather than shown with a state this screen would be guessing at.

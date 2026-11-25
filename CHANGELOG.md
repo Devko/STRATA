@@ -46,6 +46,16 @@ the project file format or the controls.
   draw as TRACK PLAY's RND modes, over each track's own mode while on; the pattern is never
   written, so OFF is the programmed beat again at once. Not saved, held by a LOCK, shown as
   `LIVE RND4 FUNC+D` on PERFORM, a dot under each armed track's meter and `RN4` on line 2.
+- **The screens rebuilt to the mockups.** The frame: a lit pattern badge and track badge, the
+  tempo, load and LOCK in the small font, notices as a lit toast, the live strip only while
+  something is off rest, and page tabs along the bottom (TRK, MAX and the device moved to SETUP;
+  DROP and GUARD still show at the right). PERFORM: four gauges named by what they move, a big
+  OUT scope in an afterglow, tall track columns (scenes and MUT say themselves in toasts). GRID:
+  taller rows with each track's number and level, the playhead's column lit, the knobs in the
+  small font. EDIT: the knobs two to a line so the graph gets the screen; the drums' FLTR draws
+  the filter's response over the output's spectrum, the LFO's dot leaves a trail, WAVE shows a
+  LIVE frame under its waterfall, GRAIN a cloud panel. MIXER MST and EQ: a big spectrum, a
+  vectorscope, the compressor and limiter as bars.
 - **Live screens, part 6: the master's spectrum and a vectorscope.** On MIXER's MST and EQ pages,
   while the beat plays, the output's spectrum in 24 bands with peak dots and a small vectorscope;
   on the fader pages a live meter beside each fader.

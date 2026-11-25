@@ -926,14 +926,14 @@ private:
     // The live views (app/ui_live.hpp): the newest output, drained from the engine's ring every
     // frame; the scope's afterglow; GRID's fading outlines and the trigger counts they follow.
     ScopeHistory scope_history_;
-    paint::Glow<124, 20> scope_glow_;
+    paint::Glow<124, 35> scope_glow_;
     uint8_t grid_glow_[kTracks][16] = {};
     uint8_t grid_seen_[kTracks] = {};
     // EDIT's LFO page: the last 40 frames of the LFO's output, and how many have arrived.
     uint8_t lfo_strip_[40] = {};
     uint32_t lfo_strip_at_ = 0;
     // GRAIN's SRC page: the sparks' afterglow, the middle 13 rows of the picture.
-    paint::Glow<124, 13> grain_glow_;
+    paint::Glow<124, 30> grain_glow_;
     // MIXER's master pages: the FFT's scratch, each band's shown rows, its peak dot and how long
     // the dot holds, and the vectorscope's afterglow.
     spectrum::Work spectrum_work_;

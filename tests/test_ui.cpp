@@ -55,6 +55,8 @@ namespace strata::test {
 
 struct UiProbe {
     static Engine &engine(Strata &app) { return app.engine_; }
+    // The live strip's words: drawn in the small font, which the fake host does not record.
+    static bool live_strip(Strata &app, char *line) { return app.live_strip(line); }
     static Storage &storage(Strata &app) { return app.storage_; }
 
     static int mode(const Strata &app) { return int(app.mode_); }
@@ -963,7 +965,7 @@ TEST(ui_func_turn_with_a_step_held_sets_the_random_range_not_the_lock) {
     CHECK(screen_has(app, wanted));
     app.draw(canvas);
     int dim = 0;                                     // the range line under GRID's slot A bar
-    for (int x = 0; x < 28; x++) dim += px[119 * enaga::Canvas::width + x] == 7 ? 1 : 0;
+    for (int x = 0; x < 28; x++) dim += px[118 * enaga::Canvas::width + x] == 7 ? 1 : 0;
     CHECK(dim > 0);
     app.on_encoder(0, -120);
     pump(2);
@@ -2171,17 +2173,18 @@ TEST(ui_the_grid_draws_a_trig_where_the_trig_is) {
     // `FakeHost::t_text` draws nothing, so text cannot be read back -- but `Canvas::rect` writes
     // real pixels, and the grid is rects. This pins the mapping docs/SPEC.md gives: "an 8 x 16
     // mini-grid of all tracks (8 px per step), the selected track highlighted", a filled cell for
-    // a trig and a thin dash for an empty step.
+    // a trig and a dot for an empty step. Cells are 5 x 6, seven pixels apart from x 9, after
+    // a gutter with the track's number and level.
     Strata &app = fresh();
     enaga::Canvas canvas(g_pixels);
 
-    const int top = 20;                            // track 1's row
+    const int top = 18;                            // track 1's row
     const uint8_t *px = g_pixels;
     const auto at = [px](int x, int y) { return int(px[y * enaga::Canvas::width + x]); };
 
     app.draw(canvas);
-    CHECK_EQ(at(1, top + 3), 2);                   // an empty step: the dash, two rows high
-    CHECK_EQ(at(1, top + 1), 0);                   // and nothing above it
+    CHECK_EQ(at(11, top + 3), 5);                  // an empty step: a dot, a beat's first brighter
+    CHECK_EQ(at(11, top + 1), 0);                  // and nothing above it
     CHECK_EQ(at(0, top), 12);                      // the selected track's marker, at x = 0
 
     key(ENAGA_KEY_STEP1);                          // a trig on step 1 of track 1
@@ -2189,15 +2192,15 @@ TEST(ui_the_grid_draws_a_trig_where_the_trig_is) {
     CHECK(trig_at(0, 0));
     app.draw(canvas);
 
-    CHECK_EQ(at(1, top + 1), 11);                  // the cell is filled now, 5 x 6 from (1, 21):
-    CHECK_EQ(at(5, top + 6), 11);                  // five wide, so step 16 ends at x 125 and
-    CHECK_EQ(at(6, top + 1), 0);                   // the frame's meter keeps x 126-127
-    CHECK_EQ(at(9, top + 3), 2);                   // step 2 is still a dash
-    CHECK_EQ(at(9, top + 1), 0);
+    CHECK_EQ(at(9, top + 1), 11);                  // the cell is filled now, 5 x 6 from (9, 21):
+    CHECK_EQ(at(13, top + 6), 11);                 // five wide, so step 16 ends at x 118 and
+    CHECK_EQ(at(14, top + 1), 0);                  // the frame's meter keeps x 126-127
+    CHECK_EQ(at(18, top + 3), 3);                  // step 2 is still a dot
+    CHECK_EQ(at(18, top + 1), 0);
 
     // Track 2's row is eight pixels lower and has no trig, so the mapping is per track as well.
-    CHECK_EQ(at(1, top + 8 + 3), 2);
-    CHECK_EQ(at(1, top + 8 + 1), 0);
+    CHECK_EQ(at(11, top + 9 + 3), 5);
+    CHECK_EQ(at(11, top + 9 + 1), 0);
 }
 
 // --- pad pressure ---------------------------------------------------------------------------
@@ -2923,6 +2926,13 @@ TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
 
 namespace {
 
+// Does the live strip (in the small font under the progress line) hold this text?
+bool strip_has(Strata &app, const char *wanted) {
+    char line[48];
+    if (!UiProbe::live_strip(app, line)) return false;
+    return std::strstr(line, wanted) != nullptr;
+}
+
 // Does the drawn screen hold this text, as a whole string or inside one?
 bool screen_has(Strata &app, const char *wanted) {
     FakeHost &host = FakeHost::the();
@@ -2944,7 +2954,7 @@ TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
     FakeHost &host = FakeHost::the();
     for (int b = 0; b < kKillBands; b++) post_cmd(Cmd::eq_kill, uint8_t(b), 0);
     pump(2);
-    CHECK(!screen_has(app, "K:"));                 // at rest the strip says nothing
+    CHECK(!strip_has(app, "K:"));                 // at rest the strip says nothing
 
     // Bar 2, beat 2: one bar and one beat of ticks into the pass.
     host.set_running(true);
@@ -2952,7 +2962,7 @@ TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
         host.deliver_tick(t, 0);
         pump(1);
     }
-    CHECK(screen_has(app, " 2.2 "));
+    CHECK(screen_has(app, "2.2"));
     // The progress line, row 8: lit from the left while running, the track dim past it.
     CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 0]), 11);
     CHECK_EQ(int(g_pixels[8 * enaga::Canvas::width + 127]), 2);
@@ -2972,10 +2982,10 @@ TEST(ui_the_frame_shows_where_the_pattern_is_and_what_is_off_rest) {
     // A kill is off rest, so the strip names it; let go, it is gone again.
     post_cmd(Cmd::eq_kill, 0, 1);
     pump(2);
-    CHECK(screen_has(app, "K:L"));
+    CHECK(strip_has(app, "K:L"));
     post_cmd(Cmd::eq_kill, 0, 0);
     pump(2);
-    CHECK(!screen_has(app, "K:"));
+    CHECK(!strip_has(app, "K:"));
     host.set_running(false);
     pump(2);
 }
@@ -3028,31 +3038,31 @@ TEST(ui_the_grid_glows_round_a_trig_that_just_played) {
     FakeHost &host = FakeHost::the();
     enaga::Canvas canvas(g_pixels);
     const auto at = [](int x, int y) { return int(g_pixels[y * enaga::Canvas::width + x]); };
-    const int top = 20;                                    // track 1's row
+    const int top = 18;                                    // track 1's row
     for (int k = 0; k < 16; k++) step_up(k);
     if (!trig_at(0, 0)) key(ENAGA_KEY_STEP1);
     pump(2);
     CHECK(trig_at(0, 0));
     app.draw(canvas);
-    CHECK_EQ(at(3, top), 0);                               // nothing yet
+    CHECK_EQ(at(11, top), 0);                              // nothing yet
 
     host.set_running(true);
     host.deliver_tick(0, 0);                               // step 1 plays
     pump(1);
     app.draw(canvas);
-    CHECK(at(3, top) >= 12);                               // above the cell
-    CHECK(at(3, top + 7) >= 12);                           // below it
-    CHECK(at(6, top + 3) >= 12);                           // right of it
-    CHECK_EQ(at(3, top + 1), 15);                          // the cell: lit under the playhead
-    CHECK_EQ(at(11, top), 0);                              // step 2 did not play
-    int last = at(3, top);
+    CHECK(at(11, top) >= 12);                               // above the cell
+    CHECK(at(11, top + 7) >= 12);                           // below it
+    CHECK(at(14, top + 3) >= 12);                           // right of it
+    CHECK_EQ(at(11, top + 1), 15);                          // the cell: lit under the playhead
+    CHECK_EQ(at(18, top), 0);                              // step 2 did not play
+    int last = at(11, top);
     for (int i = 0; i < 4; i++) {                          // fading
         app.draw(canvas);
-        CHECK(at(3, top) < last);
-        last = at(3, top);
+        CHECK(at(11, top) < last);
+        last = at(11, top);
     }
     for (int i = 0; i < 20; i++) app.draw(canvas);
-    CHECK_EQ(at(3, top), 0);
+    CHECK_EQ(at(11, top), 2);                              // the playhead column, faded
 
     host.set_running(false);
     pump(2);
@@ -3088,10 +3098,10 @@ TEST(ui_perform_shows_track_levels_while_playing_and_the_hint_when_stopped) {
     pump(4);
     CHECK(!screen_has(app, "AUTOFILL: FUNC MENU"));
     int lit = 0;
-    for (int x = 0; x < 12; x++) lit += at(x, 86) > 2;     // track 1's level bar
-    CHECK(lit >= 6);
+    for (int y = 90; y < 104; y++) lit += at(5, y) > 2;     // track 1's level column
+    CHECK(lit >= 3);
     int other = 0;
-    for (int x = 15; x < 27; x++) other += at(x, 86) > 2;  // track 2 is silent
+    for (int y = 90; y < 104; y++) other += at(20, y) > 2; // track 2 is silent
     CHECK_EQ(other, 0);
 
     host.set_running(false);
@@ -3157,8 +3167,8 @@ TEST(ui_hold_repeat_and_a_step_stutters_until_it_comes_up) {
     pump(2);
     CHECK_EQ(app_engine().stutter_step(), 4);
     CHECK(std::strcmp(UiProbe::notice(app), "STUTTER 5 1/16") == 0);
-    CHECK(screen_has(app, "ST5"));
-    CHECK(screen_has(app, "R1/16"));
+    CHECK(strip_has(app, "ST5"));
+    CHECK(strip_has(app, "R1/16"));
 
     // A second STEP moves it; letting that go goes back to the one still held.
     step_down(8);
@@ -3227,7 +3237,7 @@ TEST(ui_repeat_and_the_arrows_walk_the_roll_rate) {
     pump(2);
     CHECK(app_engine().repeat_length() == RepeatLength::sixteenth_triplet);
     CHECK(std::strcmp(UiProbe::notice(app), "REPEAT 1/16T") == 0);
-    CHECK(screen_has(app, "R1/16T"));
+    CHECK(strip_has(app, "R1/16T"));
     key(ENAGA_KEY_RIGHT);
     key(ENAGA_KEY_RIGHT);                  // stops at 1/32
     pump(2);
@@ -8046,10 +8056,10 @@ TEST(ui_pushing_the_tun_knob_switches_between_note_and_number) {
     shift_key(ENAGA_KEY_PUSH_A);
     pump(2);
 
-    // And on GRID, where the slots along the bottom show the same page.
+    // And on GRID, where the slots along the bottom show the same page (in the small font since
+    // the live visuals' rebuild, drawn from the same append_param_value as EDIT's rows).
     key(ENAGA_KEY_F4);
     CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
-    CHECK(screen_has(app, "C-4") || screen_has(app, "C#4"));
     key(ENAGA_KEY_PUSH_A);
     CHECK(!UiProbe::tune_notes(app));
     key(ENAGA_KEY_PUSH_A);
@@ -8158,6 +8168,7 @@ TEST(ui_layout_tun_as_a_note_on_every_pitched_machine) {
         }
     }
     CHECK_EQ(int(app_engine().params(0).v[0]), 127);
+    key(ENAGA_KEY_F8);                                 // EDIT: its rows are in the big font
     CHECK(screen_has(app, "C-6"));                     // PLY at 127: +23.6 from C-4
 }
 
@@ -9063,7 +9074,7 @@ TEST(ui_the_grid_marks_what_a_trig_carries) {
     enaga::Canvas canvas(g_pixels);
     const uint8_t *px = g_pixels;
     const auto at = [px](int x, int y) { return int(px[y * enaga::Canvas::width + x]); };
-    const int top = 21;                                    // track 1's cells start at y 21
+    const int top = 19;                                    // track 1's cells start at y 21
     // `fresh()` lets no modifier stay down, but a STEP key an earlier test left held would
     // turn the taps below into a range; let them all go first.
     for (int k = 0; k < 16; k++) step_up(k);
@@ -9098,26 +9109,26 @@ TEST(ui_the_grid_marks_what_a_trig_carries) {
     CHECK_EQ(int(ratchet_count(step_of(0, 3).ratchet)), 2);
 
     app.draw(canvas);
-    const int grey = at(1, top + 1);                       // an unmarked corner of step 1
+    const int grey = at(9, top + 1);                       // an unmarked corner of step 1
     CHECK(grey >= 11);
     // Step 1: the lock's dot, two pixels tall in the middle; the corners and bottom are whole.
-    CHECK_EQ(at(3, top + 2), 0);
-    CHECK_EQ(at(3, top + 3), 0);
-    CHECK_EQ(at(3, top + 1), grey);
-    CHECK_EQ(at(5, top), grey);
-    CHECK_EQ(at(2, top + 5), grey);
+    CHECK_EQ(at(11, top + 2), 0);
+    CHECK_EQ(at(11, top + 3), 0);
+    CHECK_EQ(at(11, top + 1), grey);
+    CHECK_EQ(at(13, top), grey);
+    CHECK_EQ(at(10, top + 5), grey);
     // Step 2: the condition cuts the top-left corner, and nothing else.
-    CHECK_EQ(at(9, top), 0);
-    CHECK(at(13, top) != 0);
-    CHECK(at(11, top + 2) != 0);
+    CHECK_EQ(at(16, top), 0);
+    CHECK(at(20, top) != 0);
+    CHECK(at(18, top + 2) != 0);
     // Step 3: probability cuts the top-right corner.
-    CHECK_EQ(at(21, top), 0);
-    CHECK(at(17, top) != 0);
+    CHECK_EQ(at(27, top), 0);
+    CHECK(at(23, top) != 0);
     // Step 4: the ratchet's two teeth in the bottom edge.
-    CHECK_EQ(at(26, top + 5), 0);
-    CHECK_EQ(at(28, top + 5), 0);
-    CHECK(at(27, top + 5) != 0);
-    CHECK(at(25, top) != 0);
+    CHECK_EQ(at(31, top + 5), 0);
+    CHECK_EQ(at(33, top + 5), 0);
+    CHECK(at(32, top + 5) != 0);
+    CHECK(at(30, top) != 0);
 }
 
 TEST(ui_a_held_step_shows_its_lock_against_the_kit_value) {
@@ -9150,22 +9161,22 @@ TEST(ui_a_held_step_shows_its_lock_against_the_kit_value) {
     }
     CHECK(readout);
 
-    // GRID's slot A: the bar at y 117-118, the tick's caps one row above and below it.
+    // GRID's slot A: the bar at y 116-117, the tick's caps one row above and below it.
     const auto bright_in_row = [px](int y) {
         int n = 0;
         for (int x = 0; x < 28; x++) n += px[y * enaga::Canvas::width + x] == 15 ? 1 : 0;
         return n;
     };
-    CHECK_EQ(bright_in_row(116), 1);
-    CHECK_EQ(bright_in_row(119), 1);
+    CHECK_EQ(bright_in_row(115), 1);
+    CHECK_EQ(bright_in_row(118), 1);
     const int tick = base * 27 / 127;
-    CHECK_EQ(int(px[116 * enaga::Canvas::width + tick]), 15);
+    CHECK_EQ(int(px[115 * enaga::Canvas::width + tick]), 15);
 
     step_up(0);
     pump(2);
     CHECK(!screen_has(app, "S1 "));
     app.draw(canvas);
-    CHECK_EQ(bright_in_row(116), 0);
+    CHECK_EQ(bright_in_row(115), 0);
 }
 
 TEST(ui_a_trigless_step_draws_as_an_outline_on_the_grid) {
@@ -9182,7 +9193,7 @@ TEST(ui_a_trigless_step_draws_as_an_outline_on_the_grid) {
     pump(2);
     CHECK((step_of(0, 5).flags & kStepTrigless) != 0);
     app.draw(canvas);
-    const int x = 5 * 8 + 1, y = 21;
+    const int x = 9 + 5 * 7, y = 19;
     CHECK(at(x, y) != 0);
     CHECK(at(x + 4, y + 5) != 0);
     CHECK_EQ(at(x + 2, y + 2), 0);                         // hollow
@@ -9218,11 +9229,11 @@ TEST(ui_wave_sample_draws_its_window_slices_and_playhead) {
     draw_now();
     check_layout(app, "EDIT SRC, SAMPLE with a file");
     // The window's start is a full-height bright column.
-    for (int y = 96; y < 118; y++) CHECK_EQ(int(pixel_at(view.lo, y)), 15);
+    for (int y = 50; y < 118; y++) CHECK_EQ(int(pixel_at(view.lo, y)), 15);
     // The sample inside the window is drawn brighter than before it: a hit starts at column 0
     // (dim, outside) and the second near STA, so look one column on from each.
-    CHECK_EQ(int(pixel_at(1, 107)), 3);
-    CHECK_EQ(int(pixel_at(view.lo + 1, 107)), 9);
+    CHECK_EQ(int(pixel_at(1, 84)), 3);
+    CHECK_EQ(int(pixel_at(view.lo + 1, 84)), 9);
     // A slice tick is dotted: every other row.
     int tick = -1;
     for (int x = view.lo + 1; x < kWaveColumns && tick < 0; x++) {
@@ -9230,8 +9241,8 @@ TEST(ui_wave_sample_draws_its_window_slices_and_playhead) {
     }
     CHECK(tick > 0);
     if (tick > 0) {
-        CHECK_EQ(int(pixel_at(tick, 96)), 12);
-        CHECK(pixel_at(tick, 97) != 12);
+        CHECK_EQ(int(pixel_at(tick, 50)), 12);
+        CHECK(pixel_at(tick, 51) != 12);
     }
     CHECK(!screen_has(app, "NO FILE"));
 
@@ -9250,7 +9261,7 @@ TEST(ui_wave_sample_draws_its_window_slices_and_playhead) {
     CHECK(later.mark[0] > playing.mark[0]);
     draw_now();
     if (later.mark[0] < kWaveColumns) {
-        CHECK(pixel_at(later.mark[0], 96) > 0);
+        CHECK(pixel_at(later.mark[0], 50) > 0);
         CHECK(pixel_at(later.mark[0], 117) > 0);
     }
     back_to_a_kick();
@@ -9315,8 +9326,8 @@ TEST(ui_wave_grain_draws_its_bracket_and_the_grains_in_the_air) {
     check_layout(app, "EDIT SRC, GRAIN with a file");
     CHECK(screen_has(app, "OK: SOUNDS"));
     draw_now();
-    CHECK_EQ(int(pixel_at(view.lo, 96)), 13);       // the bracket's corners
-    CHECK_EQ(int(pixel_at(view.lo, 117)), 13);
+    CHECK_EQ(int(pixel_at(view.lo, 50)), 13);       // the bracket's corners
+    CHECK_EQ(int(pixel_at(view.lo, 85)), 13);      // the sample's rows end at 85 on GRAIN
     back_to_a_kick();
 }
 
@@ -9331,18 +9342,18 @@ TEST(ui_envelope_on_amp_follows_the_knobs_and_letters_its_handles) {
     CHECK(screen_has(app, "OK: PICK SAMPLE"));
     check_layout(app, "EDIT AMP, SAMPLE");
     draw_now();
-    CHECK(pixel_at(0, 96) != 0);                    // the peak, at the top at once
+    CHECK(pixel_at(0, 50) != 0);                    // the peak, at the top at once
     int letters = 0;
     for (int i = 0; i < FakeHost::the().text_count(); i++) {
         const FakeHost::TextDraw &d = FakeHost::the().text_draw(i);
-        if (d.y >= 96 && d.y < 118 && d.length == 1) letters++;
+        if (d.y >= 50 && d.y < 118 && d.length == 1) letters++;
     }
     CHECK_EQ(letters, 2);
     // A longer decay reaches further right: the curve leaves the floor later.
     const auto reach = [] {
         int last = 0;
         for (int x = 0; x < kWaveColumns; x++) {
-            for (int y = 96; y < 117; y++) {
+            for (int y = 50; y < 117; y++) {
                 if (pixel_at(x, y) == 13) last = x;
             }
         }
@@ -9365,7 +9376,7 @@ TEST(ui_envelope_on_a_synths_fltr_is_the_filters_with_env_as_its_height) {
     edit_page_to(Page::fltr);
     // The curve is grey 13 and a lettered handle on it 15.
     const auto top_row = [](int grey) {
-        for (int y = 96; y < 118; y++) {
+        for (int y = 50; y < 118; y++) {
             for (int x = 0; x < kWaveColumns; x++) {
                 if (pixel_at(x, y) >= grey) return y;
             }
@@ -9376,14 +9387,14 @@ TEST(ui_envelope_on_a_synths_fltr_is_the_filters_with_env_as_its_height) {
     pump(4);
     draw_now();
     int curve_top = 118;
-    for (int y = 96; y < 118 && curve_top == 118; y++) {
+    for (int y = 50; y < 118 && curve_top == 118; y++) {
         for (int x = 0; x < kWaveColumns; x++) curve_top = pixel_at(x, y) == 13 ? y : curve_top;
     }
     CHECK_EQ(curve_top, 117);
     post_cmd_track_param(0, 9, 127);                // ENV full: the sweep to the top
     pump(4);
     draw_now();
-    CHECK_EQ(top_row(13), 96);
+    CHECK_EQ(top_row(13), 50);
     check_layout(app, "EDIT FLTR, VA MONO");
     // FDE 0 is tied to DEC, and the line says so.
     post_cmd_track_param(0, kSlotFdec, 0);
@@ -9393,7 +9404,7 @@ TEST(ui_envelope_on_a_synths_fltr_is_the_filters_with_env_as_its_height) {
     bool c = false, d = false;
     for (int i = 0; i < FakeHost::the().text_count(); i++) {
         const FakeHost::TextDraw &t = FakeHost::the().text_draw(i);
-        if (t.y < 96) continue;
+        if (t.y < 50) continue;
         c = c || std::strcmp(t.text, "C") == 0;
         d = d || std::strcmp(t.text, "D") == 0;
     }
@@ -9417,7 +9428,7 @@ TEST(ui_envelope_on_asr_holds_when_sus_is_up) {
     CHECK(screen_has(app, "HOLDS: PAD OR LEN"));
     draw_now();
     int plateau = 0;
-    for (int x = 0; x < kWaveColumns; x++) plateau += pixel_at(x, 106) == 13 ? 1 : 0;
+    for (int x = 0; x < kWaveColumns; x++) plateau += pixel_at(x, 83) == 13 ? 1 : 0;
     CHECK(plateau >= 15);
     check_layout(app, "EDIT ASR, VA POLY holding");
     // A drum has no ASR: the page says so and draws nothing.
@@ -9436,7 +9447,7 @@ TEST(ui_envelope_a_dot_rides_the_amp_curve_while_a_note_plays) {
     pump(8);
     const auto bright = [] {
         int n = 0;
-        for (int y = 96; y < 118; y++) {
+        for (int y = 50; y < 118; y++) {
             for (int x = 0; x < kWaveColumns; x++) n += pixel_at(x, y) == 15 ? 1 : 0;
         }
         return n;
@@ -9477,7 +9488,7 @@ TEST(ui_wave_src_draws_the_table_as_a_waterfall) {
     check_layout(app, "EDIT SRC, WAVE MONO, the waterfall");
     const auto count = [](int grey) {
         int n = 0;
-        for (int y = 96; y < 118; y++) {
+        for (int y = 50; y < 118; y++) {
             for (int x = 0; x < 124; x++) n += pixel_at(x, y) >= grey;
         }
         return n;
@@ -9487,7 +9498,7 @@ TEST(ui_wave_src_draws_the_table_as_a_waterfall) {
     // POS to the back: the brightest frame moves up and right.
     const auto bright_x = [] {
         int sum = 0, n = 0;
-        for (int y = 96; y < 118; y++) {
+        for (int y = 50; y < 100; y++) {                    // the stack, not LIVE
             for (int x = 0; x < 124; x++) {
                 if (pixel_at(x, y) >= 10) { sum += x; n++; }
             }
@@ -9505,7 +9516,7 @@ TEST(ui_wave_src_draws_the_table_as_a_waterfall) {
     key(ENAGA_KEY_F4);
 }
 
-// EDIT's LFO page (app/ui_live.hpp): off, the hint at y 96 and no picture; on, the NOW line moves
+// EDIT's LFO page (app/ui_live.hpp): off, the hint at y 50 and no picture; on, the NOW line moves
 // up to y 87 over the shape with a dot riding it and a strip of what the LFO put out.
 TEST(ui_the_lfo_page_draws_its_shape_with_the_phase_riding_it) {
     Strata &app = fresh();
@@ -9515,7 +9526,7 @@ TEST(ui_the_lfo_page_draws_its_shape_with_the_phase_riding_it) {
     draw_now();
     CHECK(screen_has(app, "LFO OFF: SET DEP+DST"));
     int lit = 0;
-    for (int y = 96; y < 118; y++) {
+    for (int y = 50; y < 118; y++) {
         for (int x = 0; x < 124; x++) lit += pixel_at(x, y) != 0;
     }
     CHECK_EQ(lit, 0);
@@ -9530,14 +9541,14 @@ TEST(ui_the_lfo_page_draws_its_shape_with_the_phase_riding_it) {
         pump(40);
         draw_now();
     }
-    bool now_at_87 = false;
+    bool now_at_41 = false;
     for (int i = 0; i < FakeHost::the().text_count(); i++) {
         const FakeHost::TextDraw &d = FakeHost::the().text_draw(i);
-        if (std::strncmp(d.text, "NOW ", 4) == 0) now_at_87 = d.y == 87;
+        if (std::strncmp(d.text, "NOW ", 4) == 0) now_at_41 = d.y == 41;
     }
-    CHECK(now_at_87);
+    CHECK(now_at_41);
     int dot = 0, shape = 0, strip = 0;
-    for (int y = 96; y < 118; y++) {
+    for (int y = 50; y < 118; y++) {
         for (int x = 0; x < 80; x++) {
             dot += pixel_at(x, y) == 15;
             shape += pixel_at(x, y) >= 4;
@@ -9958,7 +9969,7 @@ TEST(ui_func_turn_a_and_b_in_perform_are_rel_all_and_len_all) {
 
     pump(1600);                                       // the notice gone: the strip is on line 2
     CHECK(screen_has(app, "REL -4 LEN 200%"));
-    CHECK(screen_has(app, "RL- LN+"));
+    CHECK(strip_has(app, "RL- LN+"));
     check_layout(app, "PERFORM, REL ALL and LEN ALL off rest");
 
     // Without FUNC, A is the macro again.
@@ -9979,8 +9990,8 @@ TEST(ui_func_turn_a_and_b_in_perform_are_rel_all_and_len_all) {
     CHECK_EQ(int(engine.rel_all()), 0);
     CHECK_EQ(int(engine.len_all()), 0);
     CHECK(screen_has(app, "FUNC+A/B REL/LEN ALL"));
-    CHECK(!screen_has(app, "RL-"));
-    CHECK(!screen_has(app, "LN+"));
+    CHECK(!strip_has(app, "RL-"));
+    CHECK(!strip_has(app, "LN+"));
 }
 
 // --- LIVE RND (core/liverand.hpp) -------------------------------------------------------------
@@ -10024,7 +10035,7 @@ TEST(ui_func_d_in_perform_is_live_rnd_and_func_push_d_arms_the_selected_track) {
 
     pump(1600);
     CHECK(screen_has(app, "LIVE RND2 FUNC+D"));
-    CHECK(screen_has(app, "RN2"));
+    CHECK(strip_has(app, "RN2"));
     check_layout(app, "PERFORM, LIVE RND on");
     // With REL ALL away from rest the two share the line.
     app.on_key(ENAGA_KEY_F1, true);
@@ -10058,7 +10069,7 @@ TEST(ui_func_d_in_perform_is_live_rnd_and_func_push_d_arms_the_selected_track) {
     app.on_key(ENAGA_KEY_F1, false);
     pump(1600);
     CHECK(screen_has(app, "FUNC+A/B REL/LEN ALL"));
-    CHECK(!screen_has(app, "RN"));
+    CHECK(!strip_has(app, "RN"));
 }
 
 // LIVE RND is in a LOCK (D4): a jump puts the unit and the armed set back, and the UI's knob

@@ -185,6 +185,9 @@ void Engine::publish_heard() {
                                      std::memory_order_relaxed);
         status_.heard_pos[t].store(heard.get(1), std::memory_order_relaxed);
         status_.heard_sus[t].store(heard.v[kAsrFirst + 1], std::memory_order_relaxed);
+        for (int k = 0; k < 3; k++) {
+            status_.heard_filter[t][k].store(heard.get(5 + k), std::memory_order_relaxed);
+        }
         status_.lfo_shown[t].store(lfo_running_[t] ? lfo_shown_[t] : Status::kNotHeard,
                                    std::memory_order_relaxed);
         for (int s = 0; s < kModSlots; s++) {
@@ -3469,6 +3472,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     const float fallen = meter_ * kMeterFall;
     meter_ = peak > fallen ? peak : fallen;
     status_.meter_milli.store(to_milli(meter_), std::memory_order_relaxed);
+    status_.comp_gain_milli.store(to_milli(mixer_.compressor_gain()), std::memory_order_relaxed);
     if (peak >= 1.0f) status_.bump_limit_seen();
 
     // And where the pattern is in its pass: a subtraction from the boundary resolve_tick keeps,
