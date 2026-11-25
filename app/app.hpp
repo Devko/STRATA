@@ -836,6 +836,8 @@ private:
     bool sample_seek_ = false;                  // put the cursor on a name once the list is in
     char sample_seek_name_[SampleList::kEntryNameBytes] = {};
     Mode samples_return_ = Mode::edit;          // where CLR at the top goes back to
+    int audition_row_ = -1;                     // SAMPLES: the entry being heard (push A), or -1
+    bool audition_sounding_seen_ = false;       // Storage::audition_sounding() as update() saw it
     int sound_cursor_ = 0;                      // SOUNDS: 0 is AS WAS, then the presets
     int sound_track_ = -1;                      // the track whose sound the engine remembers
     Mode sounds_return_ = Mode::edit;           // where CLR goes back to

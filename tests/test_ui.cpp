@@ -5105,6 +5105,94 @@ TEST(ui_samples_ok_loads_the_file_into_the_track_while_playing) {
     key(ENAGA_KEY_F4);
 }
 
+// Push A in SAMPLES hears the file under the cursor without loading it (dsp/audition.hpp).
+TEST(ui_samples_push_a_hears_the_file_without_loading_it) {
+    Strata &app = fresh();
+    seed_sample_card();
+    card_wav("/SAMPLES/A_HIT.WAV", 4800);          // 100 ms each, long enough to catch playing
+    card_wav("/SAMPLES/b loop.wav", 4800);
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_DOWN);                           // A_HIT.WAV
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "HEARING");
+    CHECK(app_storage().auditioning());
+    CHECK(std::strcmp(app_storage().audition_path(), "/SAMPLES/A_HIT.WAV") == 0);
+    for (int i = 0; i < 100 && !app_engine().audition_attached(); i++) pump();
+    CHECK(app_engine().audition_attached());
+    CHECK(pump(4) > 0.1f);                         // heard
+    // ...and only heard: the track has no file, the kit is as it was.
+    CHECK_EQ(app_engine().project().kit.tracks[0].sample[0], '\0');
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+
+    // While one is heard, the cursor hears the next.
+    key(ENAGA_KEY_DOWN);                           // b loop.wav
+    CHECK(std::strcmp(app_storage().audition_path(), "/SAMPLES/b loop.wav") == 0);
+    for (int i = 0; i < 100 && !(app_storage().audition_sounding() &&
+                                 std::strcmp(app_storage().audition_path(), "/SAMPLES/b loop.wav") == 0);
+         i++) {
+        pump();
+    }
+    CHECK(app_storage().audition_sounding());
+
+    // Push A again stops it.
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "STOPPED");
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+    CHECK_EQ(FakeHost::the().streams_open(), 0);
+
+    // A folder has nothing to hear, and the cursor landing on one stops what plays.
+    key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_UP);                             // KICKS
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "A HEARS FILES");
+    CHECK(!app_storage().auditioning());
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_PUSH_A);                         // A_HIT.WAV again
+    CHECK(app_storage().auditioning());
+    key(ENAGA_KEY_UP);                             // onto KICKS: stops
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+
+    // OK loads, and the audition makes way for it.
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_PUSH_A);
+    for (int i = 0; i < 100 && !app_storage().audition_sounding(); i++) pump();
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "LOADING");
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+    CHECK(std::strcmp(app_engine().project().kit.tracks[0].sample, "/SAMPLES/A_HIT.WAV") == 0);
+
+    // Leaving SAMPLES stops it too.
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(app_storage().auditioning());
+    key(ENAGA_KEY_F4);
+    CHECK(UiProbe::mode(app) != int(Mode::samples));
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+    pump_until_idle();
+}
+
+// A file that cannot be heard says why, and the screen shows what is heard.
+TEST(ui_samples_push_a_says_why_a_file_cannot_be_heard) {
+    Strata &app = fresh();
+    seed_sample_card();
+    const char junk[] = "RIFF....WAVEnot really";
+    FakeHost::the().write_file("/SAMPLES/A_HIT.WAV", junk, sizeof junk);
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_DOWN);                           // A_HIT.WAV
+    key(ENAGA_KEY_PUSH_A);
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+    CHECK_EQ(UiProbe::notice(app), "NOT A WAV");
+    key(ENAGA_KEY_F4);
+}
+
 namespace {
 
 void set_param_now(int track, uint8_t slot, uint8_t value) {
@@ -5401,6 +5489,11 @@ TEST(ui_layout_samples) {
     pump_until_idle();
     pump(400);
     check_layout(app, "SAMPLES, loaded");
+    key(ENAGA_KEY_PUSH_A);
+    for (int i = 0; i < 100 && !app_storage().audition_sounding(); i++) pump();
+    check_layout(app, "SAMPLES, hearing");
+    key(ENAGA_KEY_PUSH_A);
+    pump(4);
     key(ENAGA_KEY_CLR);
     pump(2);
     check_layout(app, "SAMPLES, root");

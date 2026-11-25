@@ -929,6 +929,8 @@
         step_page_ = false;
         slot_menu_ = false;
         slot_ok_held_ = false;
+        // An audition belongs to SAMPLES (dsp/audition.hpp).
+        if (mode_ != Mode::samples) stop_audition();
         // LEARN is an EDIT thing, and MIXER's for the kill EQ's bands: any other screen, HOME's
         // GRID included, ends it.
         if (mode_ != Mode::edit && mode_ != Mode::mixer && macro_learn_ >= 0) end_learn();

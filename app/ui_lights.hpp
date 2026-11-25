@@ -261,6 +261,25 @@
         // pass" (app/storage.hpp).
         storage_.service();
 
+        // The sample browser's audition (push A in SAMPLES): only while SAMPLES is up, whatever
+        // took the screen away; why one did not play, said once; and `aud play` / `aud end` in
+        // the log, for the emulator scenario (tests/scenario_audition.sh) and a unit log.
+        if (mode_ != Mode::samples && storage_.auditioning()) storage_.stop_audition();
+        if (!storage_.auditioning()) audition_row_ = -1;
+        if (const char *why = storage_.take_audition_error()) {
+            notice(why);
+            char line[24];
+            char *out = line;
+            append(out, "aud ");
+            append_shown(out, why, 16);
+            *out = 0;
+            enaga::log(line);
+        }
+        if (storage_.audition_sounding() != audition_sounding_seen_) {
+            audition_sounding_seen_ = storage_.audition_sounding();
+            enaga::log(audition_sounding_seen_ ? "aud play" : "aud end");
+        }
+
         // A take asked for TO FILE is whole on the card: offer it to a track (bounce to track).
         if (storage_.file_takes() != file_takes_seen_) {
             file_takes_seen_ = storage_.file_takes();

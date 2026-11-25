@@ -11,8 +11,8 @@
 // <enaga/abi.h>: the image is linked at ENAGA_APP_BASE and the heap runs from the end of the
 // image (payload plus bss, rounded up to 4 KiB) to ENAGA_APP_LIMIT. That is 124 MiB less the
 // image. The image is a device-build figure this suite cannot produce, so it is a stated
-// allowance here, checked against the last measured build (docs/HANDOFF.md: payload 1,148,432 +
-// bss 1,565,896 bytes, cl6x). The App object, and the Engine and Storage in it, live in that bss:
+// allowance here, checked against the last measured build (docs/HANDOFF.md: payload 1,224,160 +
+// bss 1,605,248 bytes, cl6x). The App object, and the Engine and Storage in it, live in that bss:
 // ENAGA_APP makes the app a function-local static.
 //
 // ## How an allocation is costed
@@ -89,7 +89,7 @@ constexpr uint64_t kMiB = 1u << 20;
 constexpr uint64_t kAppSpan = uint64_t(ENAGA_APP_LIMIT) - uint64_t(ENAGA_APP_BASE);
 
 // The last measured device image (docs/HANDOFF.md, tools/build.sh), payload plus bss.
-constexpr uint64_t kImageMeasured = 1148432u + 1565896u;
+constexpr uint64_t kImageMeasured = 1224160u + 1605248u;
 
 // What this file lets the image grow to before it fails. Twice the measured image: generous
 // enough that ordinary work never trips it, small enough that a doubling -- a pattern bank
@@ -173,6 +173,9 @@ TEST(memory_init_is_what_the_budget_says) {
     // "recording ring and stream buffers" line budgeted. (The engine's per-track fifos are
     // members, not allocations.)
     const uint64_t rings = 4u * 256u * 1024u;
+    // The sample browser's audition (dsp/audition.hpp): a WAV header's 32 KiB and its own stream
+    // ring of 256 KiB, so it never takes one of the four tracks'.
+    const uint64_t audition = 32u * 1024u + 256u * 1024u;
 
     // app/engine: the beat-repeat ring (stereo float) and the resample take (stereo int16 plus
     // a WAV header, dsp/capture.hpp).
@@ -202,7 +205,7 @@ TEST(memory_init_is_what_the_budget_says) {
     // as one array.
     const uint64_t locks = uint64_t(LockStore::kStates + 1) * sizeof(LiveState);
 
-    const uint64_t itemised = region + raw + src + file + rings + repeat + capture + freeze + tape +
+    const uint64_t itemised = region + raw + src + file + rings + audition + repeat + capture + freeze + tape +
                               long_delay + hall + waves + locks;
     CHECK(f.requested >= itemised);
 
@@ -210,11 +213,13 @@ TEST(memory_init_is_what_the_budget_says) {
     // them at 2 MiB, which is the bound here.
     const uint64_t buses = f.requested - itemised;
     std::printf("    region %.2f, loader staging %.2f, file %.2f, stream rings %.2f, repeat %.2f, "
-                "capture %.2f, freeze %.2f, tape stop %.2f, long delay %.2f, hall %.2f, "
+                "audition %.2f, capture %.2f, freeze %.2f, tape stop %.2f, long delay %.2f, "
+                "hall %.2f, "
                 "wavetables %.2f, locks %.2f, delay+reverb %.2f MiB\n",
                 double(region) / double(kMiB), double(raw + src) / double(kMiB),
                 double(file) / double(kMiB), double(rings) / double(kMiB),
-                double(repeat) / double(kMiB), double(capture) / double(kMiB),
+                double(repeat) / double(kMiB), double(audition) / double(kMiB),
+                double(capture) / double(kMiB),
                 double(freeze) / double(kMiB), double(tape) / double(kMiB),
                 double(long_delay) / double(kMiB), double(hall) / double(kMiB),
                 double(waves) / double(kMiB), double(locks) / double(kMiB),

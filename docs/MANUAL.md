@@ -1653,6 +1653,17 @@ browser opens in the folder of the file the track plays, with the cursor on it, 
   SLC 1 and DEC 127 (hold). PIT, ATK, PLY and LVL stay as they were. Turn SLC up afterwards to
   chop it. A project or kit you open keeps the values it was saved with, and a GRN track's knobs
   are left alone.
+- **Push A to hear a file first.** It plays the file under the cursor, whole and from its
+  start, straight to the output at about -6 dB, without loading it: the track and the kit stay
+  as they were. Push A again to stop. While a file is heard, UP/DOWN (or turning A, or a page)
+  hears the next file the cursor lands on, so you can listen down a folder and press OK on the
+  one you want. The line under the title says `HEARING 3/12S` (seconds heard of the file's
+  length, `OPENING` for the moment before it sounds), and a line under the file's name grows as
+  it plays. It works with the beat playing or stopped; it is streamed from the card, so a long
+  stem starts as quickly as a short hit, plays at its own rate and takes no sample memory. It is
+  not recorded by RESAMPLE or the looper and goes round no effect. OK (which loads it), CLR,
+  another folder, a folder under the cursor or leaving SAMPLES stops it. A file that cannot be
+  heard says why (`NOT A WAV`, `BAD RATE` for rates outside 8-96 kHz, `NOT FOUND`).
 - OK on a folder (shown with a `/`) opens it. **CLR goes up a folder**; at the top are `SAMPLES/`
   and `RECORD/` (your resampled takes), and CLR from there goes back to where you came from.
 - **The SmplTrek's own folders.** On a card the stock firmware has used, the top also shows

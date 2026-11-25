@@ -53,6 +53,26 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### Sample audition (2026-11-25, emulator)
+
+Push A in SAMPLES streams a WAV to the output (dsp/audition.hpp). All 41 scenarios pass with
+cl6x merged onto `main` after #168 (`scenario_audition` new); worst **31.82%** (`scenario_ambient`, as on
+main), `scenario_m3` 25.42%. Nothing runs while no audition plays but one flag test a block. What one costs, measured on
+`scenario_audition`'s walk with the beat stopped, with and without the push:
+
+| | cl6x | GCC-only |
+| --- | --- | --- |
+| SAMPLES open, nothing heard | 4.42% | 4.87% |
+| hearing a 44.1 kHz mono file | **6.36%** (+1.94) | **6.63%** (+1.76) |
+
+The peak is the fifo filling at the start: the stream's bytes converted to int16, then the
+Catmull-Rom read of 64 frames. A first cut read 512 frames a block, as a track's stream does, and
+peaked at +3.4 points; the audition now reads 256 (`Engine::kAuditionReadFrames`), twice what a
+96 kHz file uses a block, which halved it. With the 512-frame cut, the beat with four auditions started and stopped over it
+peaks where the beat alone does (25.73% cl6x, 47.19% GCC-only against 47.14%): the fill is short,
+and its block seldom meets the beat's worst. Stacked worst on worst it is about +2 points, inside
+the 60% target. RAM: 0.28 MiB (a 32 KiB header buffer, a 256 KiB stream ring).
+
 ### The audio taps for the live screens: visuals part 2 (2026-11-25, emulator)
 
 What the live screens will draw from, published by the audio side every block: each track's

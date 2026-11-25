@@ -506,7 +506,11 @@ VA MONO and WAVE MONO; the POLY machines, FM4 and the drums draw no dot). Under 
 dim fill; under the part the note has already travelled, a brighter one.
 
 SAMPLES (the sample browser) lists seven rows and draws what the track plays under them, from the
-same picture, over the `NOW` line.
+same picture, over the `NOW` line. **Push A hears the file under the cursor** without loading it
+(dsp/audition.hpp): streamed whole from its start, straight to the output, after every effect.
+Push A again stops it; while one plays, UP/DOWN, turning A and the pages hear the file the cursor
+lands on; OK, CLR, another folder or leaving SAMPLES stops it. A one-pixel line under the heard
+file's name grows as it plays, and line 2 reads `HEARING 3/12S` (`OPENING` until it sounds).
 
 A SAMPLE or GRAIN track with no file plays the placeholder, and its picture is the placeholder's,
 with `NO FILE` (or `LOADING` while its file loads) over it.

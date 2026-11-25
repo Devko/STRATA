@@ -235,6 +235,9 @@ bool Storage::init(Engine &engine) {
         rings_[r] = new uint8_t[kStreamRingBytes];
         if (rings_[r] == nullptr) return false;
     }
+    audition_head_ = new uint8_t[kAuditionHeadBytes];
+    audition_ring_ = new uint8_t[kAuditionRingBytes];
+    if (audition_head_ == nullptr || audition_ring_ == nullptr) return false;
 
     pool_.init(kSampleBudgetDefaultMib << 20);
     engine_->set_sample_region(region_, kRegionBytes);
@@ -852,6 +855,8 @@ void Storage::on_card(bool usable) {
     // (`sample_track_` is -1 whenever no sample job runs, so the job test is belt and braces, and
     // the `sample_queue_ = 0` below is re-filled by the request_all_samples a returning card
     // makes. Both survive mutation for that reason.)
+    // An audition stops: its read or its stream is dead with the card.
+    stop_audition();
     // A long file's handle is dead with the card; closing it ends its pending read CANCELLED.
     chunk_file_.close();
     chunked_ = false;
@@ -1072,6 +1077,8 @@ void Storage::service() {
     // Streams before anything else, every pass and whatever job runs: a restart has the head's
     // two seconds to be reopened, and a 2 MiB chunk read must not stand in its way.
     service_streams();
+    // The audition likewise: a press should be heard at once, not after a save.
+    service_audition();
 
     // Freeze next, whatever job runs and with or without a card: it is RAM only, and a loop
     // whose slot is waiting to be given back should not wait behind a save.
@@ -2520,6 +2527,222 @@ void Storage::hand_sample_over() {
     post(command);
 
     finish_job(nullptr);
+}
+
+// --- sample audition --------------------------------------------------------------
+//
+// app/storage.hpp, "sample audition", has the protocol.
+
+bool Storage::request_audition(const char *path) {
+    if (path == nullptr || path[0] == '\0') return false;
+    int n = 0;
+    while (path[n] != '\0') n++;
+    if (n + 1 > kSamplePathBytes) return false;
+    for (int i = 0; i <= n; i++) audition_next_[i] = path[i];
+    audition_want_ = true;
+    audition_error_ = nullptr;
+    // Whatever is on its way makes room: a playing one fades, a filling stream is closed, a
+    // header read is let finish (its buffer is Enaga's until then) and thrown away.
+    switch (audition_state_) {
+        case AuditionState::playing:
+            post(Cmd::audition_stop);
+            audition_state_ = AuditionState::closing;
+            break;
+        case AuditionState::filling:
+            engine_->audition_stream().close();
+            audition_state_ = AuditionState::idle;
+            break;
+        case AuditionState::header:
+            audition_cancelled_ = true;
+            break;
+        case AuditionState::idle:
+        case AuditionState::closing:
+            break;
+    }
+    return true;
+}
+
+void Storage::stop_audition() {
+    audition_want_ = false;
+    switch (audition_state_) {
+        case AuditionState::playing:
+            post(Cmd::audition_stop);
+            audition_state_ = AuditionState::closing;
+            break;
+        case AuditionState::filling:
+            engine_->audition_stream().close();
+            audition_state_ = AuditionState::idle;
+            audition_path_[0] = '\0';
+            break;
+        case AuditionState::header:
+            // Closing the file ends its read CANCELLED; the callback still comes.
+            audition_cancelled_ = true;
+            audition_file_.close();
+            break;
+        case AuditionState::idle:
+        case AuditionState::closing:
+            break;
+    }
+}
+
+uint32_t Storage::audition_seconds() const {
+    return audition_rate_ != 0u ? audition_total_ / audition_rate_ : 0u;
+}
+
+uint32_t Storage::audition_elapsed() const {
+    if (audition_state_ != AuditionState::playing || audition_rate_ == 0u) return 0u;
+    return engine_->status().audition_frame.load(std::memory_order_relaxed) / audition_rate_;
+}
+
+void Storage::fail_audition(const char *why) {
+    if (audition_file_.is_open()) audition_file_.close();
+    engine_->audition_stream().close();
+    audition_state_ = AuditionState::idle;
+    audition_path_[0] = '\0';
+    audition_error_ = why;
+}
+
+void Storage::audition_read(int32_t result) {
+    audition_read_in_flight_ = false;
+    audition_read_result_ = result;
+    audition_read_done_ = true;
+}
+
+void Storage::begin_audition() {
+    audition_want_ = false;
+    audition_cancelled_ = false;
+    for (int i = 0; i < kSamplePathBytes; i++) {
+        audition_path_[i] = audition_next_[i];
+        if (audition_next_[i] == '\0') break;
+    }
+    audition_path_[kSamplePathBytes - 1] = '\0';
+    if (!card_usable_) {
+        fail_audition("NO CARD");
+        return;
+    }
+    enaga::files::Info info{};
+    const int32_t found = enaga::files::info(audition_path_, info);
+    if (found < 0) {
+        fail_audition(enaga::files::error_name(found));
+        return;
+    }
+    audition_file_bytes_ = info.size;
+    const int32_t opened = audition_file_.open(audition_path_, ENAGA_FILE_READ);
+    if (opened < 0) {
+        fail_audition(enaga::files::error_name(opened));
+        return;
+    }
+    const uint32_t want = info.size < kAuditionHeadBytes ? info.size : kAuditionHeadBytes;
+    audition_read_in_flight_ = true;
+    audition_read_done_ = false;
+    const int32_t queued =
+        audition_file_.read<&Storage::audition_read>(audition_head_, want, this);
+    if (queued < 0) {
+        audition_read_in_flight_ = false;
+        fail_audition(enaga::files::error_name(queued));
+        return;
+    }
+    audition_state_ = AuditionState::header;
+}
+
+void Storage::audition_header_read() {
+    audition_read_done_ = false;
+    if (audition_file_.is_open()) audition_file_.close();
+    if (audition_cancelled_) {
+        audition_cancelled_ = false;
+        audition_state_ = AuditionState::idle;
+        audition_path_[0] = '\0';
+        return;
+    }
+    if (audition_read_result_ < 0) {
+        fail_audition(enaga::files::error_name(audition_read_result_));
+        return;
+    }
+    // The same checks a load makes (step_sample_convert), on the header alone.
+    const uint32_t got = uint32_t(audition_read_result_);
+    enaga::wav::Format format{};
+    if (!enaga::wav::parse(audition_head_, got, format)) {
+        fail_audition("NOT A WAV");
+        return;
+    }
+    const PcmFormat encoding = pcm_format_of(format.encoding, format.bits);
+    const uint32_t frame_bytes = format.frame_bytes();
+    if (encoding == PcmFormat::unknown || frame_bytes == 0 || frame_bytes > 8 ||
+        format.data_offset >= audition_file_bytes_) {
+        fail_audition("BAD FORMAT");
+        return;
+    }
+    if (format.channels > 2) {
+        fail_audition("TOO MANY CH");
+        return;
+    }
+    const uint32_t step = Audition::step_for(format.rate, uint32_t(ENAGA_SAMPLE_RATE));
+    if (step == 0) {
+        fail_audition("BAD RATE");
+        return;
+    }
+    // The data chunk's own length, or the rest of the file when the header says 0 or more than
+    // is there: the rule a load follows.
+    const uint32_t rest = audition_file_bytes_ - format.data_offset;
+    const uint32_t data_bytes =
+        (format.data_bytes == 0 || format.data_bytes > rest) ? rest : format.data_bytes;
+    const uint32_t total = data_bytes / frame_bytes;
+    if (total == 0) {
+        fail_audition("EMPTY");
+        return;
+    }
+    const int32_t opened = engine_->audition_stream().open(audition_path_, format.data_offset,
+                                                          audition_ring_, kAuditionRingBytes);
+    if (opened < 0) {
+        fail_audition(enaga::files::error_name(opened));
+        return;
+    }
+    Engine::AuditionInfo &info = engine_->audition_for_load();
+    info.total_frames = total;
+    info.step = step;
+    info.channels = uint8_t(format.channels);
+    info.encoding = uint8_t(encoding);
+    info.frame_bytes = uint8_t(frame_bytes);
+    audition_total_ = total;
+    audition_rate_ = format.rate;
+    audition_state_ = AuditionState::filling;
+}
+
+void Storage::service_audition() {
+    switch (audition_state_) {
+        case AuditionState::playing:
+        case AuditionState::closing: {
+            // The audio side has stopped reading once the epoch moves: the stream is ours.
+            const uint8_t now = engine_->status().audition_epoch.load(std::memory_order_acquire);
+            if (now == audition_epoch_) return;
+            engine_->audition_stream().close();
+            audition_state_ = AuditionState::idle;
+            audition_path_[0] = '\0';
+            break;
+        }
+        case AuditionState::header:
+            if (!audition_read_done_) return;
+            audition_header_read();
+            return;
+        case AuditionState::filling: {
+            enaga::files::Stream &stream = engine_->audition_stream();
+            const enaga::files::Stream::Status status = stream.status();
+            if (status.state < 0) {
+                fail_audition("STREAM FAILED");
+                return;
+            }
+            if (status.state < ENAGA_STREAM_RUNNING) return;     // still filling
+            // The epoch BEFORE the post: the bump that ends this audition is a change from it.
+            audition_epoch_ = engine_->status().audition_epoch.load(std::memory_order_acquire);
+            post(Cmd::audition_start);
+            audition_state_ = AuditionState::playing;
+            return;
+        }
+        case AuditionState::idle:
+            break;
+    }
+    // Idle: the next one, once nothing still owns the header buffer.
+    if (audition_want_ && !audition_read_in_flight_) begin_audition();
 }
 
 // --- streaming ----------------------------------------------------------------
