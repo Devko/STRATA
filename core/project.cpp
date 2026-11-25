@@ -39,8 +39,8 @@
 //         1  64  each chain entry's mute recall: 0 none, 1-8 that stored mute state
 //     midi (id 6), 8 bytes: each track's MIDI OUT channel, 0 off or 1-16
 //
-// KIT.BIN, eight sections: the tracks (1,076 bytes alone), then the optional LFO, arp, SLC AUTO,
-// ASR, duck, OSC and filter-layout sections, each of which an older file may lack.
+// KIT.BIN, nine sections: the tracks (1,076 bytes alone), then the optional LFO, arp, SLC AUTO,
+// ASR, duck, OSC, filter-layout and LFO TRIG sections, each of which an older file may lack.
 //
 //     tracks (id 1), 8 x 131 bytes
 //         0  16  the 16 parameters, 0..127
@@ -59,6 +59,7 @@
 //        11   1  release, x 5 ms
 //     osc (id 7), 8 x 4 bytes: the OSC page's parameters (absent: kKitOscLegacy)
 //     filter (id 8), 1 byte: kKitFilterLayout (absent: the VA and WAVE tracks are mapped, D8)
+//     lfo trig (id 9), 8 x 1 byte: KitTrack::lfo_trig, 0 FREE, 1 RETRIG, 2 ONE-SHOT
 //
 // BANK_x.BIN, one section holding 16 patterns, each one `pattern_write`'s own container back to
 // back. The patterns are the section's bytes, so the bank's CRC covers them as well as its own
@@ -354,10 +355,10 @@ static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
-constexpr uint32_t kKitSections = 8;
-// The second to eighth, the LFO, the arp, SLC AUTO, the ASR page, the duck, the OSC page and the
-// filter layout, are optional on read: see kSectionKitLfo.
-constexpr uint32_t kKitOptionalSections = 7;
+constexpr uint32_t kKitSections = 9;
+// The second to ninth, the LFO, the arp, SLC AUTO, the ASR page, the duck, the OSC page, the
+// filter layout and LFO TRIG, are optional on read: see kSectionKitLfo.
+constexpr uint32_t kKitOptionalSections = 8;
 constexpr uint32_t kKitTrackBytes =
     uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
@@ -377,7 +378,9 @@ constexpr uint32_t kKitOscBytes = uint32_t(kKitOscParams) * uint32_t(kTracks);
 constexpr uint32_t kKitOscOffset = kKitDuckOffset + kKitDuckBytes;
 constexpr uint32_t kKitFilterBytes = 1;
 constexpr uint32_t kKitFilterOffset = kKitOscOffset + kKitOscBytes;
-constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitFilterOffset + kKitFilterBytes;
+constexpr uint32_t kKitLfoTrigBytes = uint32_t(kTracks);
+constexpr uint32_t kKitLfoTrigOffset = kKitFilterOffset + kKitFilterBytes;
+constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitLfoTrigOffset + kKitLfoTrigBytes;
 static_assert(kKitSoundParams == 16, "KIT.BIN's track section has carried 16 parameters since M4");
 
 // --- BANK_x.BIN sizes -----------------------------------------------------
@@ -740,6 +743,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
         {kSectionKitDuck, kKitDuckOffset, kKitDuckBytes},
         {kSectionKitOsc, kKitOscOffset, kKitOscBytes},
         {kSectionKitFilter, kKitFilterOffset, kKitFilterBytes},
+        {kSectionKitLfoTrig, kKitLfoTrigOffset, kKitLfoTrigBytes},
     };
 
     Writer w(buffer, capacity);
@@ -771,6 +775,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
         for (int p = kKitAsrEnd; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
     }
     w.u8(kKitFilterLayout);
+    for (int t = 0; t < kTracks; t++) w.u8(kit.tracks[t].lfo_trig);
 
     if (!w.ok() || w.size() != kKitTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kKitTotalBytes, written);
@@ -784,7 +789,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
 
     const uint16_t wanted[kKitSections] = {kSectionKitTracks, kSectionKitLfo, kSectionKitArp,
                                            kSectionKitSlices, kSectionKitAsr, kSectionKitDuck,
-                                           kSectionKitOsc, kSectionKitFilter};
+                                           kSectionKitOsc, kSectionKitFilter, kSectionKitLfoTrig};
     uint32_t offset[kKitSections] = {};
     uint32_t length[kKitSections] = {};
     const SerializeResult found = find_sections(buffer, size, kKitVersion, wanted, kKitSections,
@@ -799,6 +804,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (offset[5] != 0 && length[5] < kKitDuckBytes) return refuse(SerializeResult::malformed);
     if (offset[6] != 0 && length[6] < kKitOscBytes) return refuse(SerializeResult::malformed);
     if (offset[7] != 0 && length[7] < kKitFilterBytes) return refuse(SerializeResult::malformed);
+    if (offset[8] != 0 && length[8] < kKitLfoTrigBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -905,6 +911,18 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
                 kit_track_to_voice_filter(kit.tracks[t].params);
             }
         }
+    }
+
+    // LFO TRIG. Absent is a kit from before it: every LFO FREE, set explicitly for the reason
+    // the LFO's section gives. A byte past ONE-SHOT is damage and runs FREE.
+    for (int t = 0; t < kTracks; t++) kit.tracks[t].lfo_trig = kLfoTrigFree;
+    if (offset[8] != 0) {
+        if (!r.seek(kHeaderBytes + offset[8])) return refuse(SerializeResult::malformed);
+        for (int t = 0; t < kTracks; t++) {
+            const uint8_t trig = r.u8();
+            kit.tracks[t].lfo_trig = trig < kLfoTrigs ? trig : kLfoTrigFree;
+        }
+        if (!r.ok()) return refuse(SerializeResult::truncated);
     }
     return SerializeResult::ok;
 }

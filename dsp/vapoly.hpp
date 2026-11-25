@@ -114,6 +114,11 @@ public:
     bool active() const override { return active_; }
     int used_params() const override { return 8; }   // all of SRC and all of AMP
     const char *param_name(int index) const override;
+    // The LFO on TUN (Machine::set_pitch_mod): every voice, held ones too.
+    void set_pitch_mod(float semis) override {
+        pitch_mod_ = semis;
+        settings_.pitch_mod = semis;
+    }
 
     // --- for the UI, and for tests that need to pin a mapping rather than guess at it -------
 
@@ -217,6 +222,7 @@ private:
     float inv_rate_ = 1.0f / 48000.0f;
 
     float detune_ = 0.0f;                    // DET, semitones
+    float pitch_mod_ = 0.0f;                 // the LFO on TUN, kept across prepare
     bool wave_ = false;                      // WAVE POLY
     int steal_cursor_ = 0;                   // rotates, so equal voices are stolen in turn
     bool active_ = false;

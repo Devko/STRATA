@@ -516,14 +516,17 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
 
     // The oscillators' increments, recomputed only when the pitch has moved: a semitones() and
     // two reciprocals a control step per voice, for a value that is constant for the whole of a
-    // held note. Same inputs, same arithmetic, so the cached bits are the computed ones.
-    if (pitch_ != osc_pitch_ || s.inv_rate != osc_inv_rate_ || s.ratio1 != osc_ratio1_ ||
+    // held note. Same inputs, same arithmetic, so the cached bits are the computed ones. The
+    // LFO on TUN (s.pitch_mod) is added here, so a held note follows it; at 0 the sum is
+    // pitch_ exactly and nothing is recomputed that was not before.
+    const float pitch = pitch_ + s.pitch_mod;
+    if (pitch != osc_pitch_ || s.inv_rate != osc_inv_rate_ || s.ratio1 != osc_ratio1_ ||
         s.ratio2 != osc_ratio2_) {
-        osc_pitch_ = pitch_;
+        osc_pitch_ = pitch;
         osc_inv_rate_ = s.inv_rate;
         osc_ratio1_ = s.ratio1;
         osc_ratio2_ = s.ratio2;
-        const float hz = 440.0f * semitones(pitch_ - 69.0f);
+        const float hz = 440.0f * semitones(pitch - 69.0f);
         dt0_ = clamp(hz * s.inv_rate, 1e-5f, 0.45f);
         inv0_ = reciprocal(dt0_);
         if (s.ratio1 == 1.0f) {
@@ -781,6 +784,7 @@ void VaMono::prepare(const TrackParams &params) {
     settings_ = wave_ ? VaSettings::make_wave(params, rate_, inv_rate_, true)
                       : VaSettings::make(params, rate_, inv_rate_);
     settings_.vel_cut_semis = wave_ ? kVelCutWaveMono : kVelCutVaMono;
+    settings_.pitch_mod = pitch_mod_;
 
     // GLD is this machine's own: VaSettings::make leaves slot 10 alone because VA POLY spends
     // it on DET. A slid note never jumps, so its coefficient has a floor of its own. WAVE MONO

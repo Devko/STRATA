@@ -681,6 +681,33 @@ public:
             }
         }
 
+        // LFO TRIG: on the LFO page, push RAT's knob for FREE, RETRIG, ONE-SHOT and round again
+        // (dsp/lfo.hpp, "TRIG"). A kit setting, like SLC AUTO, and without FUNC for the same
+        // reason; a held STEP took its push above.
+        if ((mode_ == Mode::edit || mode_ == Mode::grid || mode_ == Mode::keys) && !shift_ &&
+            !step_page_ && param_page_ == int(Page::lfo) &&
+            (key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||
+             key == ENAGA_KEY_PUSH_D)) {
+            const int encoder = key == ENAGA_KEY_PUSH_A   ? 0
+                                : key == ENAGA_KEY_PUSH_B ? 1
+                                : key == ENAGA_KEY_PUSH_C ? 2
+                                                          : 3;
+            if (edit_index(encoder) == kLfoRate) {
+                if (!down) return;
+                const uint8_t next = uint8_t((int(lfo_trig_of(selected_)) + 1) % kLfoTrigs);
+                post(Cmd::set_lfo_trig, uint8_t(selected_), 0, next);
+                char *out = notice_buffer_;
+                append(out, "LFO TRIG ");
+                append(out, lfo_trig_name(LfoTrig(next)));
+                *out = 0;
+                notice(notice_buffer_);
+                // Logged too: the emulator can push a knob but not read the screen
+                // (tests/scenario_lfo.sh).
+                enaga::log(notice_buffer_);
+                return;
+            }
+        }
+
         // NOTE view: on EDIT, GRID or KEYS (wherever A-D turn the EDIT page), push the knob that
         // turns TUN (PIT on SAMPLE and GRAIN) to show it as a note, where it puts C-4, and turn
         // it a semitone a click; push again for the number and counts. One setting for every
@@ -3873,7 +3900,13 @@ public:
                 append(out, "NOW ");
                 append(out, track_param_name(dest));
                 *out++ = ' ';
-                append_padded(out, engine_.sounding(selected_).v[dest], 3);
+                append_padded(out, engine_.lfo_shown(selected_), 3);
+                // TRIG, when it is not FREE: "NOW CUT 064 ONE-SHOT" is 20 characters.
+                const LfoTrig trig = lfo_trig_of(selected_);
+                if (trig != LfoTrig::free) {
+                    *out++ = ' ';
+                    append(out, lfo_trig_name(trig));
+                }
             } else {
                 append(out, "LFO OFF: SET DEP+DST");
             }
@@ -4309,6 +4342,11 @@ public:
         const int y0 = y - 1 < kPictureTop ? kPictureTop : (y + 1 > bottom ? bottom - 2 : y - 1);
         canvas.rect(x0, y0, 3, 3, 15);
         canvas.pixel(x0 + 1, y0 + 1, 0);
+    }
+
+    // LFO TRIG on this track: the kit's byte, which only the audio side writes, by command.
+    LfoTrig lfo_trig_of(int track) const {
+        return lfo_trig(engine_.project().kit.tracks[track].lfo_trig);
     }
 
     // SLC AUTO on this track: the kit's byte, which only the audio side writes, by command.

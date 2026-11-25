@@ -53,6 +53,30 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### LFO TRIG, TUN glide and the cutoff floor (S2, S3, D9; 2026-11-25)
+
+Emulator, all 33 scenarios pass with cl6x (worst **31.05%** before the merge, `scenario_ambient`). Against `main`
+at `ede071c` in the same session, every LFO off:
+
+| Scenario | main cl6x | this cl6x | main GCC-only | this GCC-only |
+| --- | --- | --- | --- | --- |
+| `scenario_m3` (default beat) | 24.19% | **24.69%** | 41.05% | **41.13%** |
+| `scenario_ambient` | 30.55% | **31.05%** | | 55.80% |
+| `scenario_lfo` | 24.84% | **25.34%** | | 45.99% |
+
+The cl6x peak moved +0.5 points (about 2,500 cycles) on every scenario, GCC-only +0.1. None of
+the new code runs per sample: an LFO that is off costs a flag and two compares a block, the morph
+floor eight inline compares when the performance layer moves, and the voice one float add a
+control step. Taking out either the morph floor or the note flag alone brought m3 back to 24.2%,
+which points at where the peak block falls rather than at one cost. Confirmed on the merge with
+`main` at `3c9dd34` (step stutter): all 33 pass, `scenario_m3` **24.28%**, worst **30.64%**
+(`scenario_ambient`), so the +0.5 was placement, not cost.
+**E17, eight LFOs on TUN** (the E7 edit to `factory_kit` with DST = TUN, odd tracks RETRIG and
+even ONE-SHOT, `scenario_lfo`): cl6x 25.34% -> **26.39%** (+1.05), GCC-only 45.99% -> **48.39%**
+(+2.4), the same as E7's eight on DRV. On the synth tracks a TUN LFO is cheaper than before (no
+re-prepare a block, one increment recompute per voice a block); on the drums it is the byte as
+before.
+
 ### REL ALL, LEN ALL and FEEL (P4, P8; 2026-11-25)
 
 Emulator, cl6x, all 35 scenarios pass (`scenario_feel` new), on the merge with `main` at

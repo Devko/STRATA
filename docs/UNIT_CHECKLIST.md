@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W29, about 80 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W30, about 85 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -362,6 +362,21 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 - FUNC + turn B: `LEN ALL 50%`, the bass and chord notes halve; `200%`, they hold twice as long;
   the drums do not change. Away from rest the line reads `REL -12 LEN 71%`.
 - Hold FUNC + MUTATE (a lock), move both, tap FUNC + MUTATE: both jump back. Useful ranges? `____`
+
+**W30. LFO TRIG, a gliding TUN and the cutoff floor (5 min).** Beat playing, A01.
+- HOME, lower pad 6 (bass, MNO), EDIT, LFO page. A = SAW, B = about `8.0` Hz, C (DEP) 127,
+  D = CUT. Push B: `LFO TRIG RETRIG`, the last line ends `RETRIG`: every bass note now starts
+  bright and closes the same way. Push B again: `ONE-SHOT`: each note a quick squelch, then the
+  knob's own sound until the next note. A = TRI: a swell in and out per note. `____`
+- B to about `0.5`, still ONE-SHOT, A = RMP: each note rises slowly and stays up. `____`
+- Push B back to `FREE`. D = TUN, B about `0.25` Hz, C about 20: a slow pitch drift with no
+  audible steps; on track 7 (CHORD, PLY) with D = TUN, B about `5.0`, C about 4, a held pad
+  (KEYS) has vibrato. On a drum track TUN still steps (expected). `____`
+- D = CUT, C 127, FREE, B about `1.0`: the sweep never shuts the bass off; it bottoms out around
+  100 Hz. Then a scene: CUT 0 in scene B, PERFORM, VALUE to B: the bass stays faintly audible.
+  Turn CUT itself to 0 in EDIT: the filter closes all the way (the knob may). `____`
+- Save, reload: TRIG is still what you left. Open a 0.3.x project: every LFO FREE. `____`
+- MAX with four tracks in ONE-SHOT against the default beat alone: `________ %`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
