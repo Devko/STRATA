@@ -358,6 +358,44 @@ away from (Phase 3 items 2-3):
 All of it reads values the screen already has: the kit values, the cell's own step, and at most
 eight locks of the one held step per slot. Nothing walks the lock pool.
 
+## Waveforms and envelopes
+
+EDIT draws a picture under its four rows, rows 96-117 and x 0-123, on the pages where one says
+more than numbers (Phase 3 item 4: CyDrums ideas V2, V3, V5). The page's one line of words moves
+to y 87, over the picture: SLC on SAMPLE, `OK: SOUNDS` on GRAIN, `OK: PICK SAMPLE` or
+`FUNC+EDIT: MACHINE`, what SUS does on ASR, `FDE 0: 0.55 X DEC` when the filter's decay is tied.
+While a STEP is held and a knob turned, the lock line (`S5 CUT 64>90`) takes that line instead,
+and the picture draws the lock.
+
+| Page | Machine | Picture |
+| --- | --- | --- |
+| SRC | SAMPLE | The sample, each column's range about the middle, scaled so the loudest column fills the height. The START..END window bright, the rest dim; START and END as bright full-height lines; each slice start (SLC above 1, equal or AUTO) a dotted line; each playing voice a full-height column, as bright as its envelope. A streamed file shows its resident head and a dotted line for the rest |
+| SRC | GRAIN | The sample, all bright; a bracket where the next grain starts (POS plus SCN's travel, one grain's span wide); a tick for each grain in the air, as bright as its window times the cloud's envelope, so the cloud breathes |
+| AMP | every machine but MID | The amplitude envelope: ATK and DEC on SAMPLE (DEC at the top holds), DEC alone on the drums, ATK DEC SUS REL on the synths, FM4 and GRAIN |
+| ASR | VA, WAVE, FM4, GRAIN | The same envelope |
+| FLTR | VA and WAVE | The filter's: ATK, FDE (or 0.55 x DEC while FDE is 0), FSU, REL, and ENV as its height |
+
+On an envelope, a segment's width follows its **knob**, not its time: every time curve is
+exponential in its knob, so this is a log-time drawing, and 2 ms and 5 s share the width. A
+handle that a knob **on this page** moves is a bright square with the knob's letter by it, as
+CyDrums draws them; a handle moved from another page has no letter. On AMP and ASR a **hollow
+square rides the curve** where the track's last note is (SAMPLE's loudest voice, GRAIN's cloud,
+VA MONO and WAVE MONO; the POLY machines, FM4 and the drums draw no dot).
+
+SAMPLES (the sample browser) lists seven rows and draws what the track plays under them, from the
+same picture, over the `NOW` line.
+
+A SAMPLE or GRAIN track with no file plays the placeholder, and its picture is the placeholder's,
+with `NO FILE` (or `LOADING` while its file loads) over it.
+
+Nothing is computed in `draw()` that walks memory. The loader makes each sample's picture once,
+as it writes the PCM into the pool (`core/overview.hpp`: the lowest and highest value of each of
+124 columns, 250 bytes a track), in the slices it already works in, beside the slice-point
+finder. The audio side publishes where each SAMPLE and GRAIN track is, in the same columns, every
+fourth block (`Status::wave`: the window, the slice starts, up to eight playheads or grains with
+a brightness each, and the amplitude envelope's stage and level for the dot). An envelope is
+drawn from the knobs alone.
+
 ## FUNC help
 
 FUNC held for 0.6 s with nothing else pressed shows help for **the screen that is up**
@@ -395,4 +433,5 @@ The screens and their pages, from `core/help.cpp`:
 menu and every page of the help on every screen; `tests/test_help.cpp` holds each row to the
 font and the line; the emulator cannot hold FUNC long enough to show the help, so no scenario does) and `tests/scenario_controls.sh` (HOME twice, the screen keys on
 PROJECT, the FUNC menu, FUNC + PROJECT and the menu's save, on the C674x build). CLEAR PATTERN
-and its undo: `tests/scenario_clear.sh`.
+and its undo: `tests/scenario_clear.sh`. EDIT's pictures: `tests/test_ui.cpp` (`ui_wave_*`,
+`ui_envelope_*`), `tests/test_overview.cpp`, and `tests/scenario_pictures.sh` on the C674x build.

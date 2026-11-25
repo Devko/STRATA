@@ -294,6 +294,7 @@ public:
     }
 
     float amp_level() const { return amp_.level(); }
+    uint8_t amp_stage() const { return uint8_t(amp_.stage()); }
 
     // Fade out over kChokeFrames and stop: how the shared voice budget takes a voice from
     // another track (va.cpp says why not a kill or a release). A no-op on a silent voice or one
@@ -385,6 +386,13 @@ public:
     float target_pitch() const { return voice_.target_pitch(); }
     // The amplitude envelope's level: what a slide must not reset.
     float amp_level() const { return voice_.amp_level(); }
+    // The voice's envelope, for EDIT's dot (Machine::envelope_now).
+    bool envelope_now(uint8_t &stage, float &level) const override {
+        if (!active_) return false;
+        stage = voice_.amp_stage();
+        level = voice_.amp_level();
+        return true;
+    }
     float decay_seconds() const { return settings_.decay_s; }
     float glide_seconds() const { return glide_s_; }
     // SUS as the envelope holds it, 0-1: what the ASR page's prepare left.
