@@ -4,7 +4,7 @@
   docs/REVIEW.md and docs/PLAN.md before any change, and follow the milestone order in
   PLAN.md. Ask before changing a decision they record.
 - Target: an Enaga app on the Sonicware SmplTrek (TI C6748, 372 MHz). Enaga is pinned at
-  release v0.2.0 (3da7f89), to match the firmware on the unit. Move it only by docs/HANDOFF.md
+  release v0.3.0 (4878b7c), to match the firmware on the unit. Move it only by docs/HANDOFF.md
   "Moving the Enaga pin", and keep tools/enaga_check.sh passing. **docs/ENAGA_API.md has
   the verified signatures STRATA uses — read it first.**
   For anything not in it, read the header in third_party/enaga/include/enaga/. Never invent

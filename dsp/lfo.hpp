@@ -95,8 +95,19 @@ const char *lfo_param_name(int index);          // "WAV" "RAT" "DEP" "DST" for 1
 uint32_t lfo_free_centi_hz(uint8_t rate);
 
 // The destination byte moved by the LFO: `base` plus `value` (-1..1) times DEP's share of 64
-// counts, rounded to nearest and clamped into 0-127.
-uint8_t lfo_apply(uint8_t base, float value, uint8_t depth);
+// counts, rounded to nearest and clamped into 0-127. It never goes below `floor`, or below
+// `base` where the knob itself sits under the floor: the floor limits the LFO, not the knob.
+uint8_t lfo_apply(uint8_t base, float value, uint8_t depth, uint8_t floor = 0);
+
+// The cutoff floor: an LFO on a cutoff stops at about 100 Hz, so a deep sweep dips the sound
+// instead of shutting it off (backlog D9). The bytes follow the two cutoff curves:
+//   FLTR CUT (dsp/chain.cpp):        20 Hz * 2^(9.8138 * 30 / 127) =  99.7 Hz
+//   the VAs' and WAVEs' CUT (va.cpp): 35 Hz * 2^(8.4214 * 23 / 127) = 100.7 Hz
+constexpr uint8_t kLfoInsertCutoffFloor = 30;
+constexpr uint8_t kLfoVaCutoffFloor = 23;
+// The floor for an LFO on `dest`: FLTR's cutoff on a track with an insert chain, SRC's third
+// byte on a VA or WAVE machine, and 0 (no floor) for everything else.
+uint8_t lfo_cutoff_floor(int dest, bool va_filter, bool insert_chain);
 
 // The four bytes resolved, at control rate, only when they change.
 struct LfoSettings {

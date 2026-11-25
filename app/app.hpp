@@ -2050,15 +2050,19 @@ public:
         // F1 the mute waits for the bar: a held F1 is the performer asking for it to land in
         // time rather than under their finger.
         if (shift_ || mute_mode_) {
+            // On a stopped box the bar is not coming: FUNC + pad mutes at once there, as the
+            // performer would otherwise press and hear nothing happen until PLAY.
+            const bool at_bar = shift_ && enaga::clock::running();
             post(Cmd::set_mute, uint8_t(track), 0, engine_.muted(track) ? 0 : 1,
-                 shift_ ? 1 : 0);
-            // The bar-quantized one waits, so until the bar nothing on screen moved -- and on a
-            // stopped box the bar is not coming. Say what is armed.
+                 at_bar ? 1 : 0);
+            // The bar-quantized one waits, so until the bar nothing on screen moved. Say what
+            // is armed, or on a stopped box what was done (KEYS shows no mutes of its own).
             if (shift_) {
                 char *out = notice_buffer_;
                 append(out, "T");
                 append_number(out, uint32_t(track + 1));
-                append(out, engine_.muted(track) ? " UNMUTE AT BAR" : " MUTE AT BAR");
+                append(out, engine_.muted(track) ? " UNMUTE" : " MUTE");
+                if (at_bar) append(out, " AT BAR");
                 *out = 0;
                 notice(notice_buffer_);
             }
@@ -5190,13 +5194,24 @@ public:
 
     // Push VALUE + STEP. A new effect replaces the last at amount 0 (the old one fades out);
     // its own STEP again lets go and gives VALUE back. STEP 16 picks the looper and records
-    // when there is no loop yet; again, it records a new take.
+    // when there is no loop yet; again, it leaves the looper like any other effect (backlog
+    // D10): a finished loop falls silent (mix 0) but is kept, so STEP 16 picks it back up and
+    // VALUE + CLR throws it away for a new take; a take still armed or recording is dropped.
     void perf_pick(int index) {
         const PerfFx fx = perf_fx_for_step(index);
         if (fx == PerfFx::looper) {
-            const bool again = perf_picked_ == PerfFx::looper;
+            const uint8_t state = looper_state();
+            if (perf_picked_ == PerfFx::looper && state != 0u) {
+                const bool taking = state != 3u;
+                loop_mix_ = 0;
+                post(Cmd::looper, 0, 0, 0, 0);
+                if (taking) post(Cmd::looper, 0, 0, 2, 0);
+                perf_picked_ = PerfFx::none;
+                notice(taking ? "LOOP CANCELLED" : "LOOP OFF: VALUE TEMPO");
+                return;
+            }
             perf_picked_ = PerfFx::looper;
-            if (again || looper_state() == 0u) {
+            if (state == 0u) {
                 perf_record();
                 return;
             }

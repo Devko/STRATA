@@ -67,6 +67,9 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
   note of three: only that one fades.
 - The upper pad between E and F: `OCT` down; the last upper pad: `OCT` up.
 - FUNC + lower pad 1: the kick mutes on the bar; again: back.
+- **FUNC + pad mutes (0.4.0).** Playing, within one bar: FUNC + lower pads 1, 3 and 5. **All
+  three** mute on the bar line (before, only the last one did). Stopped: FUNC + pad 2 mutes at
+  once (`T2 MUTE`), PLAY: the snare stays muted.
 - Plays like a keyboard? `____`
 
 **9. CPU guard under load (#83, 2 min).** Still in KEYS, LONG and HALL still on, beat playing.
@@ -722,6 +725,9 @@ New after the walkthrough was written. Play A01 GROOVE, select track 7 (the chor
 - [ ] B (RAT): below the middle reads Hz (`0.06` up to `32`), above it note lengths (`8B`
       down to `1/32`, `.` dotted, `T` triplet). Set `1B`: the sweep repeats once a bar, **in time
       with the beat**, and FUNC+PLAY restarts it on the one.
+- [ ] **Cutoff floor (0.4.0).** DST CUT, DEP 127, SQR at a slow rate, cutoff knob at 64: the
+      low half **dips but never goes silent** (the LFO stops at about 100 Hz). Same on a VA's own
+      CUT (SRC page). With the cutoff knob itself turned fully down, the sound is as dark as before.
 - [ ] Hold a STEP + turn C on the LFO page: a DEP lock on that step only (the sweep deepens on
       that step). Clearing it works as for any lock.
 - [ ] PERFORM: hold FUNC + STEP 3 assigns DEP to the selected macro (the notice names `DEP`).
@@ -961,9 +967,10 @@ New 2026-11-23 (docs/CONTROLS.md, "The performance mixer"). Play A01.
       Up 10 BPM. Push VALUE + LEFT until `LOOP MIX 0` (that picks the looper without recording),
       turn VALUE up: it jumps back into time on the next bar line.
 - [ ] STOP: the loop fades with the rest. PLAY: it comes back in time from bar 1.
-- [ ] With the loop playing at mix 127, push VALUE + STEP 16 again: the loop plays on, in time,
-      until the bar line, then the new take starts with no click and no gap; it records the live
-      beat, not the old loop.
+- [ ] **Looper exit (0.4.0).** With the loop playing at mix 127, push VALUE + STEP 16 again:
+      `LOOP OFF: VALUE TEMPO`, the live beat comes back at once, VALUE turns the tempo. VALUE +
+      STEP 16: the loop is picked again (`LOOP MIX 0`), turn VALUE up and it is back in time.
+      Push VALUE + STEP 16 during `LOOP 4 BAR: NEXT BAR`: `LOOP CANCELLED`, STEP 16 dark.
 - [ ] While the loop is held, FUNC+REC then OK: `LOOP HOLDS BUFFER`; FUNC menu FREEZE, OK: the
       same. Push VALUE + CLR twice: `LOOP CLEARED`, and RESAMPLE works again.
 - [ ] **U11.** A01 with 15 BUILD at 127 and a playing loop at mix 64, STOP then PLAY, 60 s:

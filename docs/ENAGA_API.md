@@ -1,9 +1,12 @@
 # Enaga API cheat sheet
 
 **Every signature here was read out of the headers at the pinned commit `1b41111` and compiled,
-and re-checked against release `v0.2.0` (`3da7f89`), the current pin.** Between the two, nothing
-STRATA uses changed: `midi.hpp` gained a comment and `abi.h` an optional package icon flag.
-`<enaga/ui.hpp>` and `<enaga/bytes.hpp>` are new in v0.2.0 and STRATA uses neither.
+and re-checked against release `v0.2.0` (`3da7f89`) and release `v0.3.0` (`4878b7c`), the current
+pin.** Between them, nothing STRATA uses changed: `midi.hpp` gained comments, `abi.h` an optional
+package icon flag (v0.2.0), `ENAGA_INPUT_USB` and a `battery` entry appended to `enaga_host_t`
+(v0.3.0, `enaga::system::battery()`), and `<enaga/string.h>` is new. `<enaga/ui.hpp>` (much larger
+in v0.3.0) and `<enaga/bytes.hpp>` are not used by STRATA. `ENAGA_ABI_VERSION` is still 0, but the
+host table grew: an app built at v0.3.0 needs v0.3.0 firmware on the unit.
 Nothing is from memory. If something you need is missing, read the header — do not guess a name,
 because the plausible guesses are mostly wrong (`Oscillator::set`, `SvfCoefficients::set`,
 `Envelope::gate`, `--version` on cl6x: all invented, all wrong).
@@ -123,7 +126,7 @@ STRATA pretends to own.
 
 ## MIDI (`<enaga/midi.hpp>`, namespace `enaga::midi`)
 
-Read from the header at v0.2.0 and compiled (app/engine.cpp, app/app.hpp, tests/test_midi.cpp).
+Read from the header at v0.2.0, re-checked at v0.3.0, and compiled (app/engine.cpp, app/app.hpp, tests/test_midi.cpp).
 
 ```cpp
 int channel();                                     // the user's MIDI CH, 0-15
@@ -147,8 +150,8 @@ Enaga's (it sends CC 123 on every channel when it stops). `MidiMessage`: `.type(
 `note_off`, `control_change`, `program_change`, ...), `.channel()` 0-15, `.note()`, `.velocity()`,
 `.controller()`, `.value()`, `.program()`, `.port` (`ENAGA_MIDI_DIN` or `_USB`).
 
-**v0.2.0 couples DIN and USB out**: a computer on USB that stops reading fills the USB queue and
-every send fails, DIN included. Fixed upstream in `192f03f` (2026-11-21), not yet in a release.
+v0.2.0 coupled DIN and USB out (a computer on USB that stopped reading made every send fail, DIN
+included). Fixed in v0.3.0 (`192f03f`): a USB host that has stopped reading is skipped.
 
 ## DSP (`<enaga/dsp.hpp>`, namespace `enaga::dsp`)
 

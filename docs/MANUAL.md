@@ -1115,8 +1115,10 @@ whole mix is recorded for 4 bars (`LOOP 4 BAR: NEXT BAR`; set 1, 2, 4 or 8 in th
 127 only the loop, and in between both. Now change things underneath (mute tracks, switch
 patterns, edit) and fade back when you are ready. Pick an effect after the looper and the loop
 keeps playing at its mix with the effect over it, so you can filter or stutter the loop itself.
-Push VALUE + STEP 16 again for a new take. With everything off, push VALUE + CLR a second time
-throws the loop away (`LOOP CLEARED`).
+Push VALUE + STEP 16 again to leave the looper, as with any effect (`LOOP OFF: VALUE TEMPO`):
+the loop falls silent but is kept, and VALUE + STEP 16 picks it back up. Pressed during the
+count-in or the take, it cancels it (`LOOP CANCELLED`). With everything off, push VALUE + CLR
+throws the loop away (`LOOP CLEARED`); then VALUE + STEP 16 records a new take.
 
 The looper borrows RESAMPLE's memory, so while a loop is held RESAMPLE and FREEZE say
 `LOOP HOLDS BUFFER`; clear the loop first. 8 bars fit down to 64 BPM (below that the take is
