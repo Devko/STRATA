@@ -57,6 +57,7 @@ bool mutates_pattern(Cmd cmd) {
         case Cmd::set_track_speed:
         case Cmd::set_track_play:
         case Cmd::set_pattern_swing:
+        case Cmd::set_pattern_feel:
         case Cmd::set_track_swing:
         case Cmd::set_master_length:
         case Cmd::step_field_delta:

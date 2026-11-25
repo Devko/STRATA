@@ -563,6 +563,14 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_pattern_feel: {
+            // The scheduler reads the byte fresh every tick, so the next step already follows it.
+            live().feel = command.c == kDeltaFlag ? feel_step(live().feel, int(int8_t(command.b)))
+                          : command.a <= kFeelMax ? command.a
+                                                  : uint8_t(0);
+            break;
+        }
+
         case Cmd::set_track_swing: {
             // A delta walks PAT, 50 .. 75; an absolute value is taken if it is PAT or in range
             // and clamped otherwise, so a damaged command cannot store a swing the scheduler
@@ -1361,6 +1369,17 @@ void Engine::apply(const Command &command) {
             perform_dirty_ = true;
             break;
 
+        case Cmd::set_move_all: {
+            const int8_t amount = all_turn(int8_t(command.b), 0);   // held to the range
+            if (command.a == 0) {
+                rel_all_ = amount;
+                perform_dirty_ = true;
+            } else if (command.a == 1) {
+                len_all_ = amount;                                 // read by fire(), per trig
+            }
+            break;
+        }
+
         case Cmd::set_macro:
             if (command.a < kMacros) {
                 macro_position_[command.a] = command.b > 127 ? uint8_t(127) : command.b;
@@ -1971,6 +1990,18 @@ void Engine::apply_performance() {
         master_field_set(master_, field, master_value_from_byte(field, performed_master_[b]));
     }
 
+    // REL ALL (core/moveall.hpp), over the macros: every track's release bytes moved by the same
+    // count. At 0 nothing is touched, so rest is the kit, the morph and the macros to the bit.
+    if (rel_all_ != 0) {
+        for (int t = 0; t < kTracks; t++) {
+            uint8_t release[2];
+            const int n = machine_release_params(machine_id_[t], release);
+            for (int i = 0; i < n; i++) {
+                performed_[t][release[i]] = rel_all_byte(performed_[t][release[i]], rel_all_);
+            }
+        }
+    }
+
     // The throw, over everything: it is the most immediate thing on the panel and should not be
     // argued with by a macro. Send A is the delay and send B the reverb (dsp/chain.hpp).
     if (throw_bus_ != 0 && throw_track_ >= 0 && throw_track_ < kTracks) {
@@ -2505,6 +2536,16 @@ void Engine::fire(const StepEvent &event) {
     // Which parameters this step has locked, so the performance layer leaves them alone until
     // the next step. A lock always wins over a morph.
     locked_[track] = locked;
+    // REL ALL moves a locked release too: it is relative to what the step plays, and a lock is
+    // that (core/moveall.hpp). An unlocked one came moved from `performed_`.
+    if (rel_all_ != 0 && locked != 0u) {
+        uint8_t release[2];
+        const int n = machine_release_params(machine_id_[track], release);
+        for (int i = 0; i < n; i++) {
+            if ((locked >> release[i] & 1u) == 0) continue;
+            effective_[track].v[release[i]] = rel_all_byte(effective_[track].v[release[i]], rel_all_);
+        }
+    }
 
     if (!event.trigless && machines_[track] != nullptr && !muted_[track]) {
         // This prepare is REDUNDANT today, and kept on purpose. It used to be justified as
@@ -2552,7 +2593,8 @@ void Engine::fire(const StepEvent &event) {
         trig.accent = event.accent;
         trig.slide = event.slide;
         trig.frame = event.frame;
-        trig.gate_frames = gate_frames_for(track, event.length_index);
+        // LEN ALL (core/moveall.hpp) on the step's gate; 0 and "no gate" come back unchanged.
+        trig.gate_frames = len_all_frames(gate_frames_for(track, event.length_index), len_all_);
 
         // MIDI out's copy of the trig. An accent is the top velocity, the nearest thing MIDI
         // has, and a step with no gate lasts a step, because a note-on needs a note-off.
@@ -3148,6 +3190,8 @@ void Engine::capture_live(LiveState &state) const {
     state.mutes = mute_state_capture(muted_);
     for (int m = 0; m < kMacros; m++) state.macros[m] = macro_position_[m];
     state.morph = morph_;
+    state.rel_all = rel_all_;
+    state.len_all = len_all_;
 }
 
 // At once (D3): the next step plays from the restored pattern, and the sound is heard in this
@@ -3172,6 +3216,8 @@ void Engine::apply_live(const LiveState &state) {
     apply_mutes(state.mutes);
     for (int m = 0; m < kMacros; m++) macro_position_[m] = state.macros[m];
     morph_ = state.morph;
+    rel_all_ = state.rel_all;
+    len_all_ = state.len_all;
     perform_dirty_ = true;
     reconfigure();
 }

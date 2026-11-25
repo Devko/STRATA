@@ -300,6 +300,15 @@ enum class Cmd : uint8_t {
     lock_store,
     lock_tap,
 
+    // FEEL (core/timing.hpp), the PATTERN page's FEEL row: a: the byte, 0 OFF .. kFeelMax; or
+    // c = 1: b is an int8 delta along OFF, DRIFT 1-6, WAVE 1-6. A pattern setting, like swing:
+    // saved, undone and held by a LOCK.
+    set_pattern_feel,
+    // REL ALL and LEN ALL (core/moveall.hpp), FUNC + turn A / B in PERFORM. a: 0 REL ALL,
+    // 1 LEN ALL; b: the amount as an int8, -64 .. 64, absolute (the UI keeps the position, as it
+    // does a macro's). Performance, not edits: no file, no undo; a LOCK holds both.
+    set_move_all,
+
     count
 };
 

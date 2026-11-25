@@ -8,7 +8,7 @@
 //
 // `LiveState`: the playing pattern whole (steps, p-locks, conditions, lengths, swing), every
 // track's sound bytes and fader, the send and master bytes, the mutes, the morph position and
-// the four macro positions. Not the tempo (STRATA may not own it under external sync), not the
+// the four macro positions, REL ALL and LEN ALL (core/moveall.hpp). Not the tempo (STRATA may not own it under external sync), not the
 // samples, the machines or the chain, and not the performance mixer: a jump rides the picked
 // effect to rest instead (app/), and a loop keeps playing.
 //
@@ -54,6 +54,8 @@ struct LiveState {
     uint8_t mutes;                 // bit t = track t muted
     uint8_t macros[kMacros];
     uint16_t morph;
+    int8_t rel_all;                // REL ALL and LEN ALL (core/moveall.hpp), 0 at rest
+    int8_t len_all;
 };
 
 // Byte for byte, except the faders, which are compared as floats (a fader is never NaN: the

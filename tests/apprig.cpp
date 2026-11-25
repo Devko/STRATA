@@ -218,6 +218,8 @@ Engine &fresh() {
     for (int m = 0; m < kMacros; m++) post(Cmd::macro_clear, 0, 0, uint8_t(m));
     post(Cmd::set_morph);
     post(Cmd::set_auto_fill);
+    post(Cmd::set_move_all, 0, 0, 0, 0);                    // REL ALL to rest
+    post(Cmd::set_move_all, 0, 0, 1, 0);                    // LEN ALL to rest
 
     // The SEND and MASTER settings come back with `Cmd::project_loaded` above, because
     // `project_init` reset the fourteen bytes they are derived from and the engine re-derives
