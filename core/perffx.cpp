@@ -21,13 +21,13 @@ const char *perf_fx_name(PerfFx fx) {
         case PerfFx::echo_riser:  return "ECHO RISER";
         case PerfFx::echo_freeze: return "ECHO FREEZE";
         case PerfFx::reverb_wash: return "REVERB WASH";
-        case PerfFx::stutter:     return "STUTTER";
+        case PerfFx::mute_bus:    return "MUTE BUS";
         case PerfFx::tape_stop:   return "TAPE STOP";
         case PerfFx::bass_kill:   return "BASS KILL";
         case PerfFx::pump:        return "PUMP";
         case PerfFx::crush:       return "CRUSH";
         case PerfFx::noise_riser: return "NOISE RISER";
-        case PerfFx::flanger:     return "FLANGER";
+        case PerfFx::morph:       return "MORPH";
         case PerfFx::gate:        return "GATE";
         case PerfFx::build:       return "BUILD";
         case PerfFx::looper:      return "LOOPER";
@@ -43,27 +43,18 @@ const char *perf_fx_short(PerfFx fx) {
         case PerfFx::echo_riser:  return "ECHO";
         case PerfFx::echo_freeze: return "FREEZ";
         case PerfFx::reverb_wash: return "WASH";
-        case PerfFx::stutter:     return "STUTT";
+        case PerfFx::mute_bus:    return "MUTE";
         case PerfFx::tape_stop:   return "TAPE";
         case PerfFx::bass_kill:   return "BASS";
         case PerfFx::pump:        return "PUMP";
         case PerfFx::crush:       return "CRUSH";
         case PerfFx::noise_riser: return "NOISE";
-        case PerfFx::flanger:     return "FLANG";
+        case PerfFx::morph:       return "MORPH";
         case PerfFx::gate:        return "GATE";
         case PerfFx::build:       return "BUILD";
         case PerfFx::looper:      return "LOOP";
         default:                  return "OFF";
     }
-}
-
-int perf_stutter_band(uint8_t amount) {
-    if (amount < kPerfHoldThreshold) return -1;
-    // Four equal bands over the rest of the knob, longest first: the build gets faster as it
-    // turns, which is what a stutter riser is.
-    const int span = int(kPerfAmountMax) + 1 - int(kPerfHoldThreshold);   // 112
-    const int band = (int(amount) - int(kPerfHoldThreshold)) * 4 / span;
-    return band > 3 ? 3 : band;
 }
 
 PerfPlan perf_plan(PerfFx fx, uint8_t amount) {
@@ -102,8 +93,10 @@ PerfPlan perf_plan(PerfFx fx, uint8_t amount) {
             plan.send_reverb = byte_of(a);
             plan.reverb_decay_s = 2.0f + 8.0f * a;
             break;
-        case PerfFx::stutter:
-            plan.repeat = int8_t(perf_stutter_band(clamped));
+        case PerfFx::mute_bus:
+            // Squared, so the fade sounds even rather than all at the bottom of the knob, and
+            // 127 is silence exactly.
+            plan.tracks = (1.0f - a) * (1.0f - a);
             break;
         case PerfFx::tape_stop:
             plan.tape_stop = clamped >= kPerfHoldThreshold;
@@ -119,9 +112,6 @@ PerfPlan perf_plan(PerfFx fx, uint8_t amount) {
             break;
         case PerfFx::noise_riser:
             plan.noise = a;
-            break;
-        case PerfFx::flanger:
-            plan.flanger = a;
             break;
         case PerfFx::gate:
             plan.gate = a;

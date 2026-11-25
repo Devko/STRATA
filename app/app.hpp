@@ -559,11 +559,6 @@ public:
         // or CLR closes it (<enaga/ui.hpp>). F1 and VALUE's push are tracked above, so a FUNC
         // still held from opening it is let go of properly.
         if (name_entry_.active()) {
-            // A tape stop held from before the entry opened still ends with its key.
-            if (!down && key == ENAGA_KEY_PUSH_D && tape_held_) {
-                tape_held_ = false;
-                post(Cmd::tape_stop, 0, 0, 0);
-            }
             const enaga::ui::Action action = name_entry_.key(key, down);
             if (action == enaga::ui::Action::chosen) {
                 if (entry_for_ == EntryFor::rename) {
@@ -579,15 +574,13 @@ public:
         // PROJECT's slots: a held OK opens the pattern menu, which then takes its keys.
         if (on_slot_menu_key(key, down)) return;
 
-        // FUNC + push D, HELD: the tape stop, in every mode -- beside FUNC + push A-C, the kill
-        // EQ, so the master moves are under one hand. Its release ends it whether or not FUNC is
-        // still down, and before the held-step gesture below can take the key. Not while a STEP is
-        // held: then FUNC + push D clears that step's D lock, as FUNC + push A-C clear theirs
-        // (Roland, 2026-11-22) -- every push with a step held is the step's.
-        if (key == ENAGA_KEY_PUSH_D && (down ? shift_ && held_step_ < 0 : tape_held_)) {
-            tape_held_ = down;
-            post(Cmd::tape_stop, 0, 0, down ? 1 : 0);
-            if (down) notice("TAPE STOP");
+        // FUNC + push D was the held tape stop until 2026-11-25 (backlog D5): one home per job,
+        // and the tape stop's is the mixer's slot 8. The chord says where it went rather than
+        // falling through to a page's push, which would do something nobody meant. Not while a
+        // STEP is held: then FUNC + push D clears that step's D lock, as FUNC + push A-C clear
+        // theirs -- every push with a step held is the step's.
+        if (key == ENAGA_KEY_PUSH_D && shift_ && held_step_ < 0) {
+            if (down) notice_logged("TAPE STOP: SLOT 8");
             return;
         }
 
@@ -710,8 +703,7 @@ public:
         }
 
         // The master kill EQ's kill switches: push A, B or C on the MIXER's EQ page, or FUNC +
-        // push A, B or C from anywhere -- next to FUNC + VALUE, the DJ filter, so both master
-        // moves are under one hand in every mode, PERFORM included. A switch latches: push to
+        // push A, B or C from anywhere, PERFORM included, so the cut is under one hand. A switch latches: push to
         // take the lows out for the build, push again on the one.
         if (key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C) {
             const bool on_eq_page = mode_ == Mode::mixer && mixer_bank_ == kMixerEqPage;
@@ -1612,16 +1604,16 @@ public:
                 notice("NOTE");
                 return;
             }
-            // A picked effect owns VALUE (core/perffx.hpp): its amount, or the looper's mix, in
-            // every mode, until it is let go (push VALUE + its STEP again, or + CLR). Before the
-            // fields and the morph VALUE turns otherwise; push + turn and FUNC + turn keep theirs.
+            // A picked effect owns VALUE (core/perffx.hpp): its amount, the looper's mix or the
+            // morph, in every mode, until it is let go (push VALUE + its STEP again, or + CLR).
+            // Before the fields and the morph VALUE turns otherwise; push + turn keeps its own.
             if (perf_picked_ != PerfFx::none && !value_pushed_ && !shift_) {
                 perf_turn(delta);
                 return;
             }
             // PROJECT's CHAIN and PATTERN pages: VALUE edits the thing under the cursor -- the
-            // entry's repeat count, or the highlighted field. Not with VALUE pushed (swing) or F1
-            // (the DJ filter), which keep their meanings everywhere.
+            // entry's repeat count, or the highlighted field. Not with VALUE pushed (swing), which
+            // keeps its meaning everywhere, or with F1 (below).
             if (mode_ == Mode::project && !value_pushed_ && !shift_) {
                 if (project_page_ == ProjectPage::chain) {
                     chain_delta(ChainEdit::repeats_delta, delta);
@@ -1634,13 +1626,7 @@ public:
             }
             // In PERFORM, VALUE is the morph: the one continuous control the layer has.
             if (mode_ == Mode::perform && !value_pushed_ && !shift_) {
-                const int next = int(morph_) + delta * (int(kMorphScale) / 64);
-                morph_ = uint16_t(next < 0 ? 0 : (next > int(kMorphScale) ? int(kMorphScale)
-                                                                         : next));
-                Command command;
-                command.cmd = Cmd::set_morph;
-                command.u = morph_;
-                post_command(command);
+                morph_set(int(morph_) + delta * (int(kMorphScale) / 64));
                 return;
             }
             if (value_pushed_) {
@@ -1650,28 +1636,11 @@ public:
                 return;
             }
             if (shift_) {
-                // The MASTER DJ FILTER, which is what docs/SPEC.md's key table gives to
-                // F1 + VALUE. It held the record quantize amount until the master had any
-                // settable field at all; quantize moved to PROJECT mode's SETUP page, where
-                // the rest of the unit's preferences are.
-                //
-                // A delta, for the same reason as every other encoder gesture. The notice shows
-                // the byte BEFORE this click, because the one after it does not exist on this
-                // side until the audio side has applied the command -- about 1.3 ms.
-                post_delta(Cmd::set_master, 0, 0, uint8_t(MasterField::dj),
-                           delta * kMasterFieldClick);
-                char *out = notice_buffer_;
-                append(out, "DJ ");
-                const int signed_value =
-                    int(engine_.project().settings.master[int(MasterField::dj)]) - 64;
-                if (signed_value == 0) {
-                    append(out, "OFF");
-                } else {
-                    append(out, signed_value < 0 ? "LP" : "HP");
-                    append_number(out, uint32_t(signed_value < 0 ? -signed_value : signed_value));
-                }
-                *out = 0;
-                notice(notice_buffer_);
+                // FUNC + VALUE was the master DJ filter until 2026-11-25 (backlog D1): the
+                // filter's live home is the mixer's slots 1 and 2, and its setting MIXER's MST
+                // page, where a project saved with it set can still put it back. Free for now,
+                // so it says where the filter went rather than turning the tempo.
+                notice_logged("DJ FILTER: SLOT 1/2");
                 return;
             }
             // REFUSED under an external clock, rather than moved and then ignored. docs/SPEC.md:
@@ -2309,12 +2278,11 @@ public:
                 break;
 
             case PerformPad::mutate:
-                // FUNC + MUTATE, held: the delay freeze. The release ends it whether or not FUNC
-                // is still down, and a freeze press is not a mutation.
-                if (down ? shift_ : freeze_held_) {
-                    freeze_held_ = down;
-                    post(Cmd::delay_freeze, 0, 0, down ? 1 : 0);
-                    if (down) notice("FREEZE");
+                // FUNC + MUTATE was the held delay freeze until 2026-11-25 (backlog D5): the
+                // freeze's home is the mixer's slot 5, and the chord is kept free for LOCK. It
+                // says where the freeze went, and is not a mutation.
+                if (shift_) {
+                    if (down) notice_logged("FREEZE: SLOT 5");
                     break;
                 }
                 if (!down) break;
@@ -2353,7 +2321,7 @@ public:
             case PerformPad::scene_a:  return scene_holding_ == 0;
             case PerformPad::scene_b:  return scene_holding_ == 1;
             case PerformPad::throw_fx: return throw_held_;
-            case PerformPad::mutate:   return mutation_pending_ || freeze_held_;
+            case PerformPad::mutate:   return mutation_pending_;
             default:                   return false;
         }
     }
@@ -5462,10 +5430,29 @@ public:
         post(Cmd::perf_fx, 0, 0, uint8_t(fx), amount);
     }
 
-    // "12 NOISE RISER" on a pick, "NOISE RISER 64" on a turn, "LOOP MIX 64" for the looper.
+    // The morph as a 0-127 amount, for the notice: the slot reads like every other.
+    uint32_t morph_amount() const {
+        return uint32_t(morph_) * kPerfAmountMax / kMorphScale;
+    }
+
+    // The morph from the mixer's slot 13 or PERFORM's VALUE: the same control seen from two
+    // places (backlog D2, R6), so both move `morph_` and neither keeps a copy.
+    void morph_set(int next) {
+        morph_ = uint16_t(next < 0 ? 0 : (next > int(kMorphScale) ? int(kMorphScale) : next));
+        Command command;
+        command.cmd = Cmd::set_morph;
+        command.u = morph_;
+        post_command(command);
+    }
+
+    // "12 NOISE RISER" on a pick, "NOISE RISER 64" on a turn, "LOOP MIX 64" for the looper,
+    // "MORPH 64" for the morph, picked or turned: it has no zero to start from.
     void perf_notice(PerfFx fx, bool picked) {
         char *out = notice_buffer_;
-        if (fx == PerfFx::looper) {
+        if (fx == PerfFx::morph) {
+            append(out, "MORPH ");
+            append_number(out, morph_amount());
+        } else if (fx == PerfFx::looper) {
             const uint8_t state = looper_state();
             if (state == 1u) {
                 append(out, enaga::clock::running() ? "LOOP WAITS FOR BAR" : "LOOP ARMED: PLAY");
@@ -5486,6 +5473,9 @@ public:
         }
         *out = 0;
         notice(notice_buffer_);
+        // A pick is logged too: the emulator can press push VALUE + STEP but not read the
+        // screen (tests/scenario_slots.sh). Turns are not, or the log would be nothing else.
+        if (picked) enaga::log(notice_buffer_);
     }
 
     // Push VALUE + STEP. A new effect replaces the last at amount 0 (the old one fades out);
@@ -5511,6 +5501,19 @@ public:
                 perf_record();
                 return;
             }
+            perf_notice(fx, true);
+            return;
+        }
+        if (fx == PerfFx::morph) {
+            // The morph is a control, not an effect: picking it leaves the effect that was up
+            // where it is (the A/B switch no longer waits for the mixer to be let go), and
+            // letting go leaves the morph where it is, as leaving PERFORM does.
+            if (perf_picked_ == PerfFx::morph) {
+                perf_picked_ = PerfFx::none;
+                notice_logged("MORPH KEPT: VALUE TEMPO");
+                return;
+            }
+            perf_picked_ = PerfFx::morph;
             perf_notice(fx, true);
             return;
         }
@@ -5546,14 +5549,15 @@ public:
 
     // Push VALUE + LEFT/RIGHT: the next or previous slot, round the sixteen, keeping the amount
     // -- a scene change on a crossfader that stays where it is. Reaching the looper picks it
-    // without recording; only STEP 16 records.
+    // without recording; only STEP 16 records. The morph and the looper are passed through
+    // like the others, but being controls they leave the effect that was up as it is.
     void perf_walk(int delta) {
         const int from = perf_picked_ == PerfFx::none ? (delta > 0 ? 0 : kPerfSlots + 1)
                                                       : int(perf_picked_);
         const int slot = (from - 1 + delta + kPerfSlots * 2) % kPerfSlots + 1;
         const PerfFx fx = PerfFx(slot);
         perf_picked_ = fx;
-        if (fx == PerfFx::looper) {
+        if (perf_fx_is_control(fx)) {
             perf_notice(fx, true);
             return;
         }
@@ -5583,42 +5587,40 @@ public:
     }
 
     // A press of VALUE alone (on_key): what VALUE is on, back to 0. A picked effect's amount
-    // (dry), the looper's mix (live), PERFORM's morph (at rest: the knobs own the sound), and
-    // with FUNC the DJ filter (OFF). Not the tempo, swing or a field: 0 is no tempo, and a reset
+    // (dry), the looper's mix (live), the morph, picked or on PERFORM (at rest: the knobs own
+    // the sound). Not the tempo, swing or a field: 0 is no tempo, and a reset
     // there would be a trap rather than a shortcut. Not with a STEP held (VALUE is that step's
     // note, and hold STEP + push is a lock's removal on A-D) or while a name is typed.
     void value_reset() {
         if (held_step_ >= 0 || name_entry_.active() || mode_ == Mode::menu) return;
-        if (shift_) {
-            const int dj = int(engine_.project().settings.master[int(MasterField::dj)]);
-            if (dj != 64) post_delta(Cmd::set_master, 0, 0, uint8_t(MasterField::dj), 64 - dj);
-            notice("DJ OFF");
-            return;
-        }
+        // With FUNC it reset the DJ filter, until that left FUNC + VALUE (backlog D1).
+        if (shift_) return;
         if (perf_picked_ == PerfFx::looper) {
             loop_mix_ = 0;
             post(Cmd::looper, 0, 0, 0, 0);
             perf_notice(PerfFx::looper, false);
             return;
         }
-        if (perf_picked_ != PerfFx::none) {
+        if (perf_picked_ != PerfFx::none && perf_picked_ != PerfFx::morph) {
             perf_set(perf_fx_, 0);
             perf_notice(perf_fx_, false);
             return;
         }
-        if (mode_ == Mode::perform) {
-            morph_ = 0;
-            Command command;
-            command.cmd = Cmd::set_morph;
-            command.u = morph_;
-            post_command(command);
+        if (mode_ == Mode::perform || perf_picked_ == PerfFx::morph) {
+            morph_set(0);
             notice("MORPH 0");
         }
     }
 
     // VALUE with an effect picked: its amount, two counts a click (the whole range in 64
-    // clicks, as a macro); with the looper picked, its mix.
+    // clicks, as a macro); with the looper picked, its mix; with the morph, the morph, at
+    // PERFORM's rate.
     void perf_turn(int delta) {
+        if (perf_picked_ == PerfFx::morph) {
+            morph_set(int(morph_) + delta * (int(kMorphScale) / 64));
+            perf_notice(PerfFx::morph, false);
+            return;
+        }
         if (perf_picked_ == PerfFx::looper) {
             loop_mix_ = uint8_t(clamp_int(int(loop_mix_) + 2 * delta, 0, int(kPerfAmountMax)));
             post(Cmd::looper, 0, 0, 0, loop_mix_);
@@ -5640,6 +5642,7 @@ public:
             const PerfFx fx = perf_fx_for_step(i);
             uint8_t red = 2, green = 2;
             if (fx == perf_fx_ && perf_amount_ > 0) red = green = 10;
+            if (fx == PerfFx::morph && morph_ > 0) red = green = 10;
             if (fx == PerfFx::looper && state == 3u) { red = 0; green = loop_mix_ > 0 ? 10 : 4; }
             if (fx == perf_picked_) { red = 0; green = 10; }
             if (fx == PerfFx::looper && state == 1u) { red = blink ? 10 : 0; green = 0; }
@@ -7394,6 +7397,12 @@ private:
         notice_at_ms_ = last_ms_;
     }
 
+    // A notice the emulator's scenarios look for in the log, since they cannot read the screen.
+    void notice_logged(const char *text) {
+        notice(text);
+        enaga::log(text);
+    }
+
     bool notice_showing() const {
         return notice_ != nullptr && uint32_t(last_ms_ - notice_at_ms_) < 1500u;
     }
@@ -7422,7 +7431,6 @@ private:
     bool throw_held_ = false;                   // THROW held (its LED)
     bool mute_mode_ = false;                    // the upper MUTE pad: lower pads become mutes
     bool note_repeat_mode_ = false;             // FUNC + FILL: a held lower pad rolls
-    bool tape_held_ = false;                    // FUNC + push D went down and has not come up
     // A notice whose text is the LIVE value rather than the one at the press: a delta the audio
     // side applies (a track's length, a knob) does not exist on this side until the command has
     // been drained, so the text is rebuilt on every draw from what the engine now holds. Any
@@ -7433,7 +7441,6 @@ private:
     uint8_t perform_held_ = 0;                  // upper pads down, bit = pad id / 2
     int mutate_track_ = 0;                      // the track the last MUTATE went to
     uint8_t mutate_unchanged_seen_ = 0;         // Status::mutate_unchanged as last noticed
-    bool freeze_held_ = false;                  // FUNC + MUTATE went down and has not come up
     int freeze_bars_index_ = 0;                 // FUNC menu FREEZE's length, into kTakeBars
     int loop_bars_index_ = 2;                   // FUNC menu LOOP LEN, into kTakeBars: 4 bars
     // The performance mixer (core/perffx.hpp): the slot VALUE turns, the effect that is up and

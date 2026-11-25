@@ -386,7 +386,10 @@ void Engine::prepare_machine(int track) {
 
 void Engine::prepare_chain(int track) {
     const TrackParams &params = sounding(track);
-    const ChainMix &mix = mix_[track];
+    // The mixer's MUTE BUS scales every fader (core/perffx.hpp); 1 leaves the fader as set, so
+    // a dry plan prepares exactly what it did before.
+    ChainMix mix = mix_[track];
+    mix.level *= perf_plan_.tracks;
     // A VA or WAVE track's chain is TON alone (D8): its FLTR page is the machine's filter.
     const bool tone = machine_has_voice_filter(machine_id(track));
     if (prepare_memo_ && chain_prepared_valid_[track] && chain_prepared_tone_[track] == tone &&
@@ -1506,19 +1509,11 @@ void Engine::apply(const Command &command) {
             break;
         }
 
-        case Cmd::delay_freeze:
-            // Held by the chord or by the mixer's ECHO FREEZE: process() hands the mixer either.
-            user_freeze_ = command.a != 0;
-            break;
-
-        case Cmd::tape_stop:
-            user_tape_ = command.a != 0;
-            break;
-
         case Cmd::perf_fx: {
-            // One effect at a time (core/perffx.hpp). The looper is not an effect: its mix is
-            // Cmd::looper's, so an a naming it, or past the end, is refused.
-            if (command.a >= uint8_t(PerfFx::looper)) {
+            // One effect at a time (core/perffx.hpp). The looper and the morph are not effects:
+            // the looper's mix is Cmd::looper's and the morph Cmd::set_morph's, so an a naming
+            // either, or past the end, is refused.
+            if (command.a >= uint8_t(PerfFx::count) || perf_fx_is_control(PerfFx(command.a))) {
                 status_.bump_refused();
                 break;
             }
@@ -2792,13 +2787,13 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         apply_perf_plan(sends, master);
         mixer_.prepare(sends, master);
     }
-    // The held master moves, from their chords or from the mixer.
-    const bool freeze = user_freeze_ || perf_plan_.delay_freeze;
-    if (freeze != freeze_applied_) {
-        mixer_.freeze_delay(freeze);
-        freeze_applied_ = freeze;
+    // The held master moves, from the mixer's ECHO FREEZE and TAPE STOP (their FUNC chords
+    // retired 2026-11-25, backlog D5).
+    if (perf_plan_.delay_freeze != freeze_applied_) {
+        mixer_.freeze_delay(perf_plan_.delay_freeze);
+        freeze_applied_ = perf_plan_.delay_freeze;
     }
-    tape_stop_.hold(user_tape_ || perf_plan_.tape_stop);
+    tape_stop_.hold(perf_plan_.tape_stop);
     mixer_.begin_block(int(frames));
 
     // A bounce's tap, only while its take is running: the track's own block, from the mixer.
@@ -2869,7 +2864,6 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     fx.pump = perf_plan_.pump;
     fx.crush = perf_plan_.crush;
     fx.noise = perf_plan_.noise;
-    fx.flanger = perf_plan_.flanger;
     fx.gate = perf_plan_.gate;
     master_fx_.set(fx);
     master_fx_.process(out, int(frames), perf_phase_, phase_step);
@@ -2878,18 +2872,11 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // Beat repeat is LAST, on the finished master: that is what "the master output" means, and
     // it is why it captures the limiter and the master filter too (dsp/repeat.hpp). The length
-    // is a note value, so the frames follow the tempo. The pad wins over the mixer's STUTTER;
-    // a new stutter band lets go and presses again, which loops a shorter slice of the same
-    // past (the ring is not written while held): the build of a stutter riser.
-    const bool stutter = !repeat_held_ && perf_plan_.repeat >= 0;
-    const RepeatLength length = stutter ? RepeatLength(perf_plan_.repeat) : repeat_length_;
-    if (stutter && perf_repeat_applied_ >= 0 && perf_repeat_applied_ != perf_plan_.repeat) {
-        repeat_.hold(false);
-    }
-    repeat_.set(uint32_t(float(repeat_length_ticks(length)) * samples_per_tick_),
-                stutter ? false : repeat_pitch_);
-    repeat_.hold(repeat_held_ || stutter);
-    perf_repeat_applied_ = stutter ? perf_plan_.repeat : int8_t(-1);
+    // is a note value, so the frames follow the tempo. The REPEAT pad is its only owner since
+    // the mixer's slot 7 became the MUTE BUS (2026-11-25).
+    repeat_.set(uint32_t(float(repeat_length_ticks(repeat_length_)) * samples_per_tick_),
+                repeat_pitch_);
+    repeat_.hold(repeat_held_);
     repeat_.process(out, int(frames));
 
     // The tape stop, after beat repeat: it stops whatever is coming out, a repeat included. Two

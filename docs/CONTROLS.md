@@ -65,12 +65,14 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      a click. On at every start, one setting for all tracks (2026-11-23, core/tuning.hpp).
      On PROJECTS, where only A turns, push B renames and push C deletes the project under the
      cursor (delete then asks for OK twice).
-   - **VALUE:** tempo (PERFORM: morph; CHAIN/PATTERN: the field under the cursor). Push + turn =
-     swing, FUNC + turn = DJ filter. **Push + STEP 1-16 picks a performance effect, and while one
-     is picked VALUE is its amount on every screen** (the performance mixer, below). **A press
-     of VALUE alone** (let go within half a second, with nothing turned or pressed meanwhile) resets what it is on to 0:
-     a picked effect's amount, the looper's mix, PERFORM's morph; with FUNC, the DJ filter to
-     OFF. Never the tempo, swing or a field, and nothing while a STEP is held.
+   - **VALUE is the crossfader.** Push VALUE + STEP picks what it fades: an effect, the morph
+     (13) or the looper (16), on every screen (the performance mixer, below). With nothing
+     picked it is the tempo (PERFORM: the morph; CHAIN/PATTERN: the field under the cursor).
+     Push + turn = swing. FUNC + turn is free (D1, 2026-11-25: it says `DJ FILTER: SLOT 1/2`).
+     **A press of VALUE alone** (let go within half a second, with nothing turned or pressed
+     meanwhile) resets what it is on to 0: a picked effect's amount, the looper's mix, the morph
+     (PERFORM, or slot 13 picked). Never the tempo, swing or a field, and nothing while a STEP
+     is held.
    - **STEP keys:** the sixteen of whatever the pad-row keys chose. **On every playing screen,
      PERFORM and KEYS included, they are steps** (D12, 2026-11-25): tap, hold + knob, hold + OK
      work as on GRID. MUTE MODE (STEP 1-8 the mute states), a held scene pad, push VALUE (the
@@ -155,13 +157,16 @@ Printed labels (above), and the moves made while playing:
 | FUNC + UP / DOWN | copy / paste (editing screens; on PROJECT's slots a whole pattern, the paste twice). Card lists: read again / store here (KIT save, PROJECTS save as). FUNC + LEFT twice on PROJECT's slots clears the pattern under the cursor |
 | FUNC + lower pad | mute that track on the next bar (at once while stopped). Several pads before the bar all land; the same pad twice takes it back |
 | FUNC + FILL / REPEAT / THROW | note repeat on/off / pitched-down repeat / reverb throw |
-| FUNC + MUTATE (hold) | delay freeze |
-| FUNC + VALUE | DJ filter |
 | FUNC + push A / B / C | kill LOW / MID / HI |
-| FUNC + push D (hold) | tape stop |
 | FUNC + pad-row key | selected track's length; held, it repeats (after 0.4 s, 20 steps a second) |
 | FUNC + STEP | trigless step (PERFORM: STEP 5-7 put the kill EQ on the macro) |
 | FUNC + A / B / C on GRID | Euclidean fill |
+
+Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VALUE (DJ filter,
+now slots 1-2), FUNC + hold push D (tape stop, slot 8) and FUNC + hold MUTATE (delay freeze,
+slot 5). Each now only names its slot (`DJ FILTER: SLOT 1/2`, `TAPE STOP: SLOT 8`,
+`FREEZE: SLOT 5`). FUNC + MUTATE is kept free for LOCK; FUNC + push D with a STEP held still
+clears that step's D lock.
 
 ## The performance mixer (push VALUE + STEP)
 
@@ -175,6 +180,7 @@ slots, `dsp/masterfx.hpp` the five new effects, `dsp/looper.hpp` the looper.
 | Push VALUE + the same STEP | Let go (`FX OFF: VALUE TEMPO`): VALUE goes back to tempo / morph / its field |
 | VALUE (an effect picked) | Its amount, 0 dry ... 127 the whole effect, on every screen (`ECHO RISER 64`). At 0 it is the dry mix to the bit, the rest rule of the morph and the macros |
 | Push VALUE + LEFT / RIGHT | The previous / next slot, round the sixteen, keeping the amount: a scene change with the crossfader left up. Reaching 16 picks the looper without recording |
+| Push VALUE + STEP 13 | The morph (D2): the same A/B morph PERFORM's VALUE turns, on every screen (`MORPH 0`, then `MORPH 64` as it turns). A control, not an effect: the effect that was up stays as it is. Again: let go, the morph stays where it is (`MORPH KEPT: VALUE TEMPO`) |
 | Push VALUE + STEP 16 | The looper: records the finished mix from the next bar line for LOOP LEN bars (`LOOP 4 BAR: NEXT BAR`, `LOOP ARMED: PLAY` when stopped), then plays it. Again: leaves the looper, VALUE back to the tempo (`LOOP OFF: VALUE TEMPO`); the loop is kept silent, STEP 16 picks it up, VALUE + CLR throws it away. Again while armed or recording: `LOOP CANCELLED` |
 | VALUE (looper picked) | The loop's mix, 0 live ... 127 only the loop (`LOOP MIX 64`) |
 | Press VALUE alone | The picked effect back to 0, dry (`ECHO RISER 0`), or the looper's mix to 0 (`LOOP MIX 0`); the effect stays picked |
@@ -184,17 +190,19 @@ slots, `dsp/masterfx.hpp` the five new effects, `dsp/looper.hpp` the looper.
 The slots: 1 LP SWEEP and 2 HP SWEEP (the DJ filter), 3 HP RISER (high-pass, resonance climbing,
 the whole mix into a longer reverb), 4 ECHO RISER (every track into the delay, feedback
 climbing), 5 ECHO FREEZE (into the delay, frozen from 112 up), 6 REVERB WASH (every track into a
-longer reverb), 7 STUTTER (beat repeat from 16 up: 1/4, 1/8, 1/16, 1/32 as it turns, each a
-shorter slice of the same past), 8 TAPE STOP (from 16 up), 9 BASS KILL (the kill EQ's LOW),
-10 PUMP (a dip on every beat), 11 CRUSH (bits and rate), 12 NOISE RISER, 13 FLANGER, 14 GATE
-(sixteenths), 15 BUILD (high-pass, echo and noise), 16 LOOPER.
+longer reverb), 7 MUTE BUS (every fader down, (1 - amount) squared; the sends are post-fader,
+so their feeds fade too and the delay and reverb ring out: CyDrums' P5), 8 TAPE STOP (from 16
+up), 9 BASS KILL (the kill EQ's LOW), 10 PUMP (a dip on every beat), 11 CRUSH (bits and rate),
+12 NOISE RISER, 13 MORPH (the scene morph, above), 14 GATE (sixteenths), 15 BUILD (high-pass,
+echo and noise), 16 LOOPER. Until 2026-11-25 slot 7 was STUTTER (the REPEAT pad keeps it) and
+13 FLANGER.
 
-- **One effect at a time**, plus the looper: picking an effect leaves a loop playing at its mix,
-  and the effect goes over the loop. That also bounds the CPU (docs/BUDGET.md).
+- **One effect at a time**, plus the looper and the morph: picking an effect leaves a loop
+  playing at its mix and the morph where it is, and the effect goes over both. That also bounds
+  the CPU (docs/BUDGET.md).
 - **Nothing is saved or undone.** The project's settings are untouched; amount 0 is exactly what
-  was there. The FUNC chords for the same moves (FUNC + VALUE, FUNC + push A-D, FUNC + MUTATE, the
-  REPEAT pad) keep working beside it; the pad and the chords win over the mixer's stutter, freeze
-  and tape stop, and a picked LP/HP sweep overrides FUNC + VALUE's DJ filter while it is up.
+  was there. The kill EQ's FUNC + push A-C and the REPEAT pad keep working beside it; a picked
+  LP/HP sweep overrides the MST page's saved DJ filter while it is up.
 - **MUTE mode keeps push VALUE + STEP 1-8** (store a mute state); 9-16 still pick effects there.
 - **The looper uses RESAMPLE's 30 s buffer** (8 bars down to 64 BPM; LOOP LEN halves until it
   fits): no RESAMPLE or FREEZE while a loop is held (`LOOP HOLDS BUFFER`; push VALUE + CLR twice frees it), and no loop while a take is running (`RESAMPLE BUSY`), and a

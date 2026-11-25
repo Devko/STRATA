@@ -802,38 +802,43 @@ TEST(ui_func_fill_turns_note_repeat_on_and_a_held_pad_rolls) {
     app.on_pad_release(6);
 }
 
-TEST(ui_func_push_d_holds_a_tape_stop_and_func_mutate_a_delay_freeze) {
+TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
+    // Backlog D1 and D5 (2026-11-25): FUNC + VALUE (the DJ filter), FUNC + push D (the tape
+    // stop) and FUNC + MUTATE (the delay freeze) retired for the mixer's slots 1-2, 8 and 5.
+    // Each names the slot, and none falls through to the tempo, a page's push or a mutation.
     Strata &app = fresh();
     pump(2);
     const uint8_t undo_before = undo_depth();
+    const uint32_t tempo = UiProbe::tempo_tenths(app);
 
-    // FUNC + push D: the tape stop, for as long as push D is held -- even after FUNC comes up.
     app.on_key(ENAGA_KEY_F1, true);
-    app.on_key(ENAGA_KEY_PUSH_D, true);
-    app.on_key(ENAGA_KEY_F1, false);
+    app.on_encoder(4, 10);
     pump(2);
-    CHECK(app_engine().tape_stop().held());
-    CHECK(std::strcmp(UiProbe::notice(app), "TAPE STOP") == 0);
-    app.on_key(ENAGA_KEY_PUSH_D, false);
+    CHECK_EQ(int(app_engine().project().settings.master[int(MasterField::dj)]), 64);
+    CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
+    CHECK_EQ(UiProbe::notice(app), "DJ FILTER: SLOT 1/2");
+
+    app.on_key(ENAGA_KEY_PUSH_D, true);
     pump(2);
     CHECK(!app_engine().tape_stop().held());
-    // A plain push D is not a tape stop.
-    app.on_key(ENAGA_KEY_PUSH_D, true);
+    CHECK_EQ(UiProbe::notice(app), "TAPE STOP: SLOT 8");
     app.on_key(ENAGA_KEY_PUSH_D, false);
-    pump(2);
-    CHECK(!app_engine().tape_stop().held());
 
-    // FUNC + MUTATE: the delay freeze, held, and no mutation (no undo level).
-    app.on_key(ENAGA_KEY_F1, true);
     app.on_pad_press(13, 100);
-    app.on_key(ENAGA_KEY_F1, false);
     pump(2);
-    CHECK(app_engine().delay_freeze().held());
-    CHECK(std::strcmp(UiProbe::notice(app), "FREEZE") == 0);
+    CHECK(!app_engine().delay_freeze().held());
+    CHECK_EQ(UiProbe::notice(app), "FREEZE: SLOT 5");
     app.on_pad_release(13);
+    app.on_key(ENAGA_KEY_F1, false);
     pump(2);
     CHECK(!app_engine().delay_freeze().held());
     CHECK_EQ(int(undo_depth()), int(undo_before));
+
+    // A plain push D is not a tape stop either.
+    app.on_key(ENAGA_KEY_PUSH_D, true);
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    pump(2);
+    CHECK(!app_engine().tape_stop().held());
 }
 
 TEST(ui_func_push_d_with_a_step_held_clears_its_lock_not_a_tape_stop) {
@@ -2886,29 +2891,6 @@ TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     CHECK(!engine.sends().delay_long);
 }
 
-TEST(ui_f1_and_value_is_the_master_dj_filter) {
-    // docs/SPEC.md's key table: VALUE with F1 is the "Master DJ filter". It held the record
-    // quantize amount until the master had any settable field at all.
-    Strata &app = fresh();
-    Engine &engine = app_engine();
-
-    CHECK_NEAR(engine.master().dj, 0.0f, 1e-6);        // the flat, bypassed centre
-
-    app.on_key(ENAGA_KEY_F1, true);
-    app.on_encoder(4, +16);
-    pump(2);
-    CHECK_NEAR(engine.master().dj, 32.0f / 63.0f, 1e-6);   // above centre: a high-pass
-    CHECK_EQ(int(engine.project().settings.master[int(MasterField::dj)]), 96);
-
-    app.on_encoder(4, -60);
-    pump(2);
-    CHECK_NEAR(engine.master().dj, -1.0f, 1e-6);           // and it clamps at full low-pass
-    app.on_key(ENAGA_KEY_F1, false);
-
-    // The TEMPO did not move with it, which is the whole point of the modifier.
-    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1300);
-}
-
 TEST(ui_the_tempo_is_posted_to_the_project_and_refused_under_an_external_clock) {
     Strata &app = fresh();
     Engine &engine = app_engine();
@@ -3527,8 +3509,8 @@ TEST(ui_layout_mixer_perform_keys_machine_resample) {
     app.on_pad_release(1);
     app.on_pad_press(3, 100);                   // REPEAT, pitched down
     app.on_encoder(4, +10);                     // to the last length, 1/16T
-    app.on_pad_press(13, 100);                  // FUNC + MUTATE: freeze
     app.on_key(ENAGA_KEY_F1, false);
+    post_cmd(Cmd::perf_fx, uint8_t(PerfFx::echo_freeze), 127);   // the mixer's freeze
     app.on_pad_press(1, 100);                   // FILL
     app.on_pad_press(11, 100);                  // THROW, delay
     post_cmd(Cmd::set_auto_fill, uint8_t(AutoFill::every_16));
@@ -3537,7 +3519,7 @@ TEST(ui_layout_mixer_perform_keys_machine_resample) {
     check_layout(app, "PERFORM, everything live");
     app.on_pad_release(11);
     app.on_pad_release(1);
-    app.on_pad_release(13);
+    post_cmd(Cmd::perf_fx, 0, 0);
     app.on_pad_release(3);
     app.on_key(ENAGA_KEY_F1, true);
     app.on_pad_press(1, 100);                   // NOTE RPT off again
@@ -8165,7 +8147,7 @@ TEST(ui_value_held_lights_the_step_keys_as_the_sixteen_effects) {
     value_step(app, 3);
     app.on_encoder(4, 10);
     value_step(app, 3);                             // let go...
-    value_step(app, 6);                             // ...and pick STUTTER, still at 0
+    value_step(app, 6);                             // ...and pick MUTE BUS, still at 0
     app.on_key(ENAGA_KEY_PUSH_VALUE, true);
     pump(2);
     CHECK_EQ(int(UiProbe::step_green(app, 6)), 10); // the picked one, bright green
@@ -8227,17 +8209,63 @@ TEST(ui_a_press_of_value_alone_resets_the_effect_the_loop_mix_and_the_morph) {
     CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
 }
 
-TEST(ui_func_and_a_press_of_value_turns_the_dj_filter_off) {
+TEST(ui_slot_13_is_the_morph_beside_an_effect_left_up) {
+    // Backlog D2 (2026-11-25): the morph took FLANGER's slot, so the A/B switch no longer waits
+    // for the mixer to be let go. It is a control like the looper: picking it leaves the effect
+    // that was up, and it is the same morph PERFORM's VALUE turns (R6).
     Strata &app = fresh();
-    app.on_key(ENAGA_KEY_F1, true);
-    app.on_encoder(4, 10);
+    value_step(app, 3);                             // ECHO RISER...
+    app.on_encoder(4, 10);                          // ...at 20
+    value_step(app, 12);                            // then MORPH
     pump(2);
-    CHECK(int(app_engine().project().settings.master[int(MasterField::dj)]) != 64);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::morph);
+    CHECK(app_engine().perf_fx() == PerfFx::echo_riser);
+    CHECK_EQ(int(app_engine().perf_amount()), 20);  // the effect stays where it was
+    CHECK_EQ(UiProbe::notice(app), "MORPH 0");
+
+    app.on_encoder(4, 32);                          // half way, on any screen
+    pump(2);
+    CHECK_EQ(int(app_engine().morph()), int(kMorphScale) / 2);
+    CHECK_EQ(UiProbe::notice(app), "MORPH 63");
+    CHECK_EQ(int(app_engine().perf_amount()), 20);
+
+    // VALUE held lights STEP 13 as up while the morph is off A (amber: it is no longer the
+    // picked one once its STEP lets go). Let go with VALUE still held, so it is no tap.
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    pump(2);
+    CHECK_EQ(int(UiProbe::step_green(app, 12)), 10);
+    step_down(12);
+    step_up(12);
+    pump(2);
+    CHECK_EQ(int(UiProbe::step_green(app, 12)), 10);
+    CHECK_EQ(int(UiProbe::step_red(app, 12)), 10);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+
+    // Let go: the morph stays where it is, as leaving PERFORM leaves it.
+    CHECK(UiProbe::perf_picked(app) == PerfFx::none);
+    CHECK_EQ(int(app_engine().morph()), int(kMorphScale) / 2);
+
+    // PERFORM's VALUE carries on from there: one morph, two places to turn it.
+    shift_key(ENAGA_KEY_F7);                        // nothing picked: VALUE is the morph
+    app.on_encoder(4, 16);
+    pump(2);
+    CHECK_EQ(int(app_engine().morph()), int(kMorphScale) * 3 / 4);
+
+    // A press of VALUE alone with the morph picked puts it back on A.
+    value_step(app, 12);
     value_press(app);
-    app.on_key(ENAGA_KEY_F1, false);
     pump(2);
-    CHECK_EQ(int(app_engine().project().settings.master[int(MasterField::dj)]), 64);
-    CHECK(std::strcmp(UiProbe::notice(app), "DJ OFF") == 0);
+    CHECK_EQ(int(app_engine().morph()), 0);
+    CHECK_EQ(UiProbe::notice(app), "MORPH 0");
+
+    // Walking onto 13 is the morph too, with the walked effect left up.
+    value_step(app, 12);                            // let go
+    value_step(app, 11);                            // NOISE RISER
+    app.on_encoder(4, 5);
+    value_key(app, ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(UiProbe::perf_picked(app) == PerfFx::morph);
+    CHECK(app_engine().perf_fx() == PerfFx::noise_riser);
 }
 
 TEST(ui_a_long_hold_of_value_let_go_alone_resets_nothing) {

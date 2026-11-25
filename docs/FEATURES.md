@@ -123,7 +123,7 @@ FM4 and GRAIN machines.
 | Tape stop (FUNC + hold push D) | v0.1.0 | ○ (13g) | |
 | Delay freeze (FUNC + hold MUTATE) | v0.1.0 | ○ (13g) | |
 | **Tap VALUE to reset**: the effect's amount, the loop's mix or the morph back to 0; FUNC + tap: DJ filter off | #121, #124 | ○ (16 / 13o) | A hold of 0.5 s or more resets nothing; never the tempo |
-| **Performance mixer on VALUE**: push VALUE + STEP picks one of 15 effects (sweeps, risers, echo freeze, wash, stutter, tape stop, bass kill, pump, crush, noise, flanger, gate, build), VALUE is its amount | #116 | ○ (16 / 13o) | One effect at a time. Not saved. CPU host-estimated only (about 2 points worst case with the looper) |
+| **Performance mixer on VALUE**: push VALUE + STEP picks one of 14 effects (sweeps, risers, echo freeze, wash, mute bus, tape stop, bass kill, pump, crush, noise, gate, build) or the morph (13), VALUE is its amount | #116, slots 7/13 2026-11-25 | ○ (16 / 13o) | One effect at a time. Not saved. CPU host-estimated only (about 2 points worst case with the looper) |
 | **Master looper** (VALUE + STEP 16): 1-8 bars of the mix from the bar line, VALUE crossfades live/loop, effects go over it | #116, #120 | ○ (16 / 13o) | Shares RESAMPLE's 30 s buffer: no RESAMPLE or FREEZE while a loop is held. No overdub yet. Not saved |
 
 ## FX and mixer
