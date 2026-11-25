@@ -8607,6 +8607,8 @@ TEST(ui_the_length_echo_names_a_play_mode_other_than_forward) {
     CHECK(!screen_has(app, "FWD"));
     post_track(Cmd::set_track_speed, 0, uint8_t(Speed::x1));
     pump(2);
+}
+
 // --- FX GLIDE: the mixer's button jumps ride (core/perffx.hpp) ---------------------------------
 
 namespace {
