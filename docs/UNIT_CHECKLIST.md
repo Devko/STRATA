@@ -707,6 +707,12 @@ Roland's OK). It used to be 30 s of 48 kHz frames, which refused the 30 s file `
 - [ ] Copy `SWEEP_30S_96K.WAV` over the same name instead and reload. It LOADS (no `TOO LONG`),
       in about twice the 15 s file's time: `________ s`. The sweep now rises for about 16 s to
       24 kHz and the second half stays silent, as above.
+- [ ] **44.1 kHz (windowed-sinc resampler, 2026-11-25).** Copy `SWEEP_30S_44K.WAV` (the card
+      build's folder; 30 s stereo 16-bit 44.1 kHz, 20 Hz to 20 kHz logarithmic) over the same
+      name and reload. Time it as above: `________ s` (estimated card read 1.4 s plus about 0.4 s
+      of resampling with cl6x). The screen and keys keep answering during `RESAMPLING`. Play it on
+      SMP: one clean rising tone to the top, with no second tone moving against it (the linear
+      resampler's images were a faint falling whistle under high notes).
 
 ## 13c. U4: the delay tail (5 min, a good break)
 

@@ -735,46 +735,85 @@ TEST(halving_the_rate_takes_every_other_frame) {
     for (uint32_t i = 0; i < n; i++) CHECK_EQ(g_one_call[i], g_source[i * 2]);
 }
 
-TEST(doubling_the_rate_interpolates_the_midpoints_and_holds_the_last_frame) {
-    // The step is exactly 0.5, so every other output frame sits halfway between two source
-    // frames and the arithmetic mean is the whole answer. The last one has nothing to its right,
-    // so it holds instead of interpolating.
-    const int16_t source[3] = {0, 1000, 2000};
-    const int16_t want[6] = {0, 500, 1000, 1500, 2000, 2000};
-    int16_t got[8] = {};
-
+TEST(doubling_the_rate_keeps_every_source_frame_exactly) {
+    // The step is exactly 0.5, so every other output frame sits on a source frame, where the
+    // kernel is 1 at its centre and 0 everywhere else: those frames are the source, unchanged.
+    constexpr uint32_t frames = 64;
+    lcg_reset(0xD0B1Eu);
+    for (uint32_t i = 0; i < frames; i++) g_source[i] = lcg_s16();
     Resampler cursor = Resampler::make(24000, 48000);
-    CHECK_EQ(pcm_resample(source, 3, 1, cursor, got, 8), 6u);
-    for (int i = 0; i < 6; i++) CHECK_EQ(got[i], want[i]);
-    CHECK_EQ(got[6], 0);        // nothing written past what it reported
+    CHECK_EQ(pcm_resample(g_source, frames, 1, cursor, g_one_call, kScratchSamples), 2 * frames);
+    for (uint32_t i = 0; i < frames; i++) CHECK_EQ(g_one_call[2 * i], g_source[i]);
 }
 
-TEST(the_last_output_frame_holds_the_last_sample_instead_of_reading_past_it) {
-    // The source is a window inside a bigger buffer with a canary in the frames that follow it.
-    // Interpolating against whatever lies past the end of a sample is invisible in a test unless
-    // something loud is planted there to be seen.
-    constexpr uint32_t frames = 8;
-    int16_t buffer[frames * 2 + 16];
-    for (uint32_t i = 0; i < frames * 2 + 16; i++) buffer[i] = 30000;      // the canary
+TEST(the_ends_hold_the_first_and_last_sample_instead_of_reading_past_them) {
+    // The source is a window inside a bigger buffer with a canary on both sides. A tap on either
+    // canary would put something far outside the source's own range in the output.
+    constexpr uint32_t frames = 40;
+    constexpr uint32_t pad = 40;
+    static int16_t buffer[(frames + 2 * pad) * 2];
+    for (uint32_t i = 0; i < (frames + 2 * pad) * 2; i++) buffer[i] = 30000;
+    int16_t *source = buffer + pad * 2;
     for (uint32_t i = 0; i < frames; i++) {
-        buffer[i * 2] = int16_t(100 + i * 100);          // left: 100 .. 800
-        buffer[i * 2 + 1] = int16_t(-100 - int32_t(i) * 100);
+        source[i * 2] = 800;            // a constant, so the held ends are the same constant
+        source[i * 2 + 1] = -800;
     }
-
     const uint32_t pairs[][2] = {{44100, 48000}, {32000, 48000}, {24000, 48000}, {48000, 44100}};
     for (const auto &pair : pairs) {
         Resampler cursor = Resampler::make(pair[0], pair[1]);
-        const uint32_t n = pcm_resample(buffer, frames, 2, cursor, g_one_call, kScratchSamples / 2);
-        CHECK(n > 0u);
-        // A tap on the canary would put something far outside the source's own range here.
-        for (uint32_t i = 0; i < n * 2; i++) CHECK(g_one_call[i] >= -800 && g_one_call[i] <= 800);
-        // The source is exhausted, and the final frame is the file's own last sample.
-        CHECK_EQ(pcm_resample(buffer, frames, 2, cursor, g_one_call + n * 2, 8), 0u);
-        if (pair[1] > pair[0]) {
-            CHECK_EQ(g_one_call[(n - 1) * 2], 800);
-            CHECK_EQ(g_one_call[(n - 1) * 2 + 1], -800);
+        const uint32_t n = pcm_resample(source, frames, 2, cursor, g_one_call, kScratchSamples / 2);
+        CHECK_EQ(n, Resampler::make(pair[0], pair[1]).output_frames(frames));
+        for (uint32_t i = 0; i < n; i++) {
+            CHECK_EQ(g_one_call[i * 2], 800);
+            CHECK_EQ(g_one_call[i * 2 + 1], -800);
         }
+        CHECK_EQ(pcm_resample(source, frames, 2, cursor, g_one_call + n * 2, 8), 0u);
     }
+}
+
+TEST(a_tone_at_44_1_khz_resamples_with_its_error_far_below_it) {
+    // The reason the resampler is a sinc: linear interpolation left a 5 kHz tone's error 27 dB
+    // under it and 15 kHz's only 8 dB. Each tone is compared with the ideal sine at the cursor's
+    // own positions, over the middle of the output, past both ends' held frames.
+    struct Case { double hz; double max_db; };
+    const Case cases[] = {{1000, -75}, {5000, -80}, {10000, -78}, {15000, -75}, {18000, -68}};
+    constexpr uint32_t frames = 8000;
+    constexpr double amplitude = 16000.0;
+    for (const Case &tone : cases) {
+        for (uint32_t i = 0; i < frames; i++)
+            g_source[i] = int16_t(std::lround(amplitude * std::sin(2.0 * M_PI * tone.hz * i / 44100.0)));
+        Resampler cursor = Resampler::make(44100, 48000);
+        const uint64_t step = cursor.step;
+        const uint32_t n = pcm_resample(g_source, frames, 1, cursor, g_one_call, kScratchSamples);
+        double error = 0.0, power = 0.0;
+        for (uint32_t k = n / 4; k < n * 3 / 4; k++) {
+            const double at = double(k) * double(step) / 4294967296.0;
+            const double ideal = amplitude * std::sin(2.0 * M_PI * tone.hz * at / 44100.0);
+            error += (g_one_call[k] - ideal) * (g_one_call[k] - ideal);
+            power += ideal * ideal;
+        }
+        CHECK(10.0 * std::log10(error / power) < tone.max_db);
+    }
+}
+
+TEST(a_sinc_overshoot_clamps_instead_of_wrapping) {
+    // A full-scale square rings past the rails between samples. A wrap would show as a sample of
+    // the opposite sign beside the edge.
+    constexpr uint32_t frames = 400;
+    for (uint32_t i = 0; i < frames; i++) g_source[i] = (i / 50) % 2 ? int16_t(-32768) : int16_t(32767);
+    Resampler cursor = Resampler::make(44100, 48000);
+    const uint32_t n = pcm_resample(g_source, frames, 1, cursor, g_one_call, kScratchSamples);
+    bool clamped = false;
+    for (uint32_t k = 0; k < n; k++) {
+        const uint32_t i = uint32_t(double(k) * 44100.0 / 48000.0);
+        const uint32_t into = i % 50;
+        if (into >= 5 && into < 45) {
+            const bool high = (i / 50) % 2 == 0;
+            CHECK(high ? g_one_call[k] > 30000 : g_one_call[k] < -30000);
+        }
+        if (g_one_call[k] == 32767 || g_one_call[k] == -32768) clamped = true;
+    }
+    CHECK(clamped);
 }
 
 TEST(resampling_in_slices_matches_one_call) {
@@ -1079,13 +1118,14 @@ TEST(the_rate_limits_themselves_are_believable_rates) {
 }
 
 TEST(an_interpolated_frame_rounds_to_nearest) {
-    // Halfway between 0 and 1 is 0.5, which rounds to 1; truncating would give 0.
+    // A step from 0 to 1, read three quarters of the way across: the kernel puts well over half
+    // its weight on the 1, which rounds to 1; truncating would give 0.
     const int16_t in[2] = {0, 1};
-    int16_t out[4] = {};
+    int16_t out[8] = {};
     Resampler cursor;
-    cursor.step = kOne / 2;
-    CHECK(pcm_resample(in, 2, 1, cursor, out, 4) >= 2);
-    CHECK_EQ(int(out[1]), 1);
+    cursor.step = kOne / 4;
+    CHECK(pcm_resample(in, 2, 1, cursor, out, 8) >= 4);
+    CHECK_EQ(int(out[3]), 1);
 }
 
 TEST(the_antialias_coefficients_are_the_butterworth_the_header_describes) {
