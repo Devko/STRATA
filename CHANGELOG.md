@@ -16,6 +16,11 @@ the project file format or the controls.
   pad rolls, step the rate through 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T and 1/32 (`REPEAT 1/8T`,
   `ROLL 1/32`). Beat repeat, the rolls and the stutter all follow it at once; line 2 shows it
   (`R1/16`) while your hand is on it.
+- **Waveforms and envelopes in EDIT.** SAMPLE's SRC page draws the sample under the knobs, with
+  its START..END window bright, the slices dotted and a moving playhead per voice; GRAIN's draws
+  the sample with a bracket at POS and a tick for each grain in the air. AMP, ASR and the synths'
+  FLTR draw the envelope their knobs shape, with the knob letters on its handles. The picture of
+  a sample is made once while it loads (250 bytes a track), so drawing costs nothing.
 - **Play modes per track (P1).** The FUNC menu's new TRACK PLAY row, under TRACK SPEED, sets how
   the selected track walks its steps: FWD, REV, PING, or RND1-RND16 (a random step, or a random
   block of 2-16 steps, in each place). The pattern itself never changes, so FWD gives it back at

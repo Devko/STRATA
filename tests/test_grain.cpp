@@ -17,6 +17,8 @@
 // never playing anything would fail the second.
 #include "check.hpp"
 
+#include <cstdlib>
+
 #include <enaga/abi.h>
 #include <enaga/dsp.hpp>
 
@@ -2375,4 +2377,42 @@ TEST(grain_pitch_spray_detune_stays_inside_its_width) {
     CHECK(hi <= 1.0595f + 1e-3f);                   // 2^(+1/12)
     CHECK(lo < 0.97f);                              // and it does spread
     CHECK(hi > 1.03f);
+}
+
+// --- the screen's view (core/overview.hpp, WaveView) ----------------------------------------
+
+TEST(grain_wave_view_brackets_pos_and_marks_each_grain_in_the_air) {
+    static int16_t pcm[ENAGA_SAMPLE_RATE];
+    fill_sine(pcm, ENAGA_SAMPLE_RATE, 1, 220.0f, kRate, 0.5f);
+    Granular g;
+    g.init(kRate);
+    g.set_sample(pcm, uint32_t(ENAGA_SAMPLE_RATE), 1, kRate);
+    TrackParams p = plain();
+    p.set(0, 64);                                  // POS: half way
+    p.set(2, 127);                                 // DEN: the most grains in the air
+    g.prepare(p);
+    WaveView view;
+    g.wave_view(view);
+    // Before a note: the bracket where the first grain will start, one grain's span wide.
+    const int pos = int(int64_t(g.position_frames()) * kWaveColumns / ENAGA_SAMPLE_RATE);
+    CHECK(std::abs(int(view.lo) - pos) <= 1);
+    const int span = int(float(g.grain_length()) * g.read_step() * float(kWaveColumns) /
+                         float(ENAGA_SAMPLE_RATE));
+    CHECK(std::abs(int(view.hi) - (pos + span)) <= 1);
+    for (int i = 0; i < WaveView::kMarks; i++) CHECK_EQ(int(view.mark[i]), int(WaveView::kNone));
+
+    g.trigger(hit());
+    clear(g_out, kCapture);
+    render_blocks(g, p, g_out, 40);
+    g.wave_view(view);
+    int marks = 0;
+    for (int i = 0; i < WaveView::kMarks; i++) {
+        if (view.mark[i] == WaveView::kNone) continue;
+        marks++;
+        CHECK(view.glow[i] >= 1 && view.glow[i] <= 15);
+        // No spray: every grain reads at or after POS, within a grain's span of it.
+        CHECK(int(view.mark[i]) >= pos - 1 && int(view.mark[i]) <= pos + span + 1);
+    }
+    CHECK_EQ(marks, g.live_grains());
+    CHECK(marks > 1);
 }

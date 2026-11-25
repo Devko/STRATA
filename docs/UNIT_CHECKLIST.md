@@ -319,6 +319,20 @@ it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA_1.WAV` will 
   top-right cut; + REPEAT: two teeth along the bottom. The four told apart at a glance? `____`
 - PERFORM: press a pad hard: macro A's bar rises, a tick stays at the knob. `____`
 
+**24. Waveforms and envelopes in EDIT (4 min).** Beat playing, A01. Needs a drum break in
+`/SAMPLES`.
+- HOME, lower pad 8 (the loop track, SMP), EDIT, SRC page: the placeholder's waveform under the
+  knobs with `NO FILE` over it. OK, pick the break: `LOADING`, then its waveform. `____`
+- Turn B (STA) and C (LEN): the bright lines move and the part outside them dims. D (SLC) to
+  about 4: dotted lines at the slices; push D (SLC AUTO): they jump to the hits. `____`
+- The loop playing: a bright column runs through the window in time, one per voice. `____`
+- AMP: the envelope's corner moves with A (ATK) and B (DEC), letters A and B on it. Track 7
+  (CHORD) ASR, then FLTR: SUS lifts the plateau, ENV lifts the filter curve. `____`
+- MACHINE: track 8 to GRN, back to EDIT SRC: a bracket at POS, ticks flickering inside it as
+  grains come and go, brighter when louder. Turn A (POS) and B (SIZ): the bracket follows. `____`
+- Screen still smooth at 20 fps with all eight tracks playing and a 30 s file loaded? Keys never
+  dropped while a long file loads? `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `3 fail: reads 055`, `9: MAX 61.2`.
 
 ---
