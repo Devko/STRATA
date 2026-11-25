@@ -1541,6 +1541,9 @@ public:
         append(out, play_mode_name(PlayMode(next)));
         *out = 0;
         notice(notice_buffer_);
+        // Logged too, one line a press: the emulator can press keys but not read the screen
+        // (tests/scenario_playmode.sh).
+        enaga::log(notice_buffer_);
     }
 
     // --- CLR, copy and paste ---------------------------------------------
