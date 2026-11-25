@@ -148,6 +148,7 @@
 #include <enaga/dsp.hpp>
 
 #include "grainloops.h"
+#include "overview.hpp"
 #include "track.hpp"
 
 namespace strata {
@@ -250,6 +251,12 @@ public:
     // ASR, as the last prepare() resolved it: whether the cloud holds at SUS while gated.
     bool sustains() const { return sustains_; }
 
+    // Where this machine is in its sample, in the screen overview's columns (core/overview.hpp):
+    // the bracket the next grain starts in (POS plus SCN's travel, one grain's span wide), and
+    // each live grain with its window times the cloud's envelope as its brightness. Audio
+    // context, called by the engine every few blocks.
+    void wave_view(WaveView &view) const;
+
     static constexpr int kGrains = kPoolSize;
     // Linear interpolation needs two frames, but a buffer that small is not a sample. Four, as
     // dsp/sample.cpp uses, makes "too short to play" one testable state instead of a family of
@@ -327,6 +334,7 @@ private:
     float source_rate_ = 48000.0f;
     float rate_ratio_ = 1.0f;      // source_rate / sample_rate: the step at PIT 64 and note 60
     float src_scale_ = 1.0f / 32768.0f;   // int16 to float, with the mono/stereo sum folded in
+    float view_scale_ = 0.0f;      // kWaveColumns / frames_: wave_view
 
     float rate_ = 48000.0f;
     float inv_rate_ = 1.0f / 48000.0f;

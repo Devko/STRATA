@@ -56,6 +56,7 @@
 #include <enaga/dsp.hpp>
 
 #include "onsets.hpp"
+#include "overview.hpp"
 #include "streamfifo.hpp"
 #include "track.hpp"
 
@@ -139,6 +140,11 @@ public:
     int window_length() const { return window_len_; }
     int slices() const { return slices_; }
     int play_length() const { return play_len_; }
+
+    // Where this machine is in its sample, in the screen overview's columns (core/overview.hpp):
+    // the START..END window, a bit for each slice start, and each playing voice with its
+    // envelope's level. Audio context, called by the engine every few blocks; a few multiplies.
+    void wave_view(WaveView &view) const;
 
     static constexpr int kVoices = 4;
     static constexpr int kSlicesMax = 16;
@@ -229,6 +235,7 @@ private:
     float source_rate_ = 48000.0f;
     float rate_ratio_ = 1.0f;      // source_rate / sample_rate: the step at pitch 0
     float src_scale_ = 1.0f / 32768.0f;   // int16 to float, with the mono/stereo sum folded in
+    float view_scale_ = 0.0f;      // kWaveColumns / frames (the whole file's, streamed): wave_view
 
     float rate_ = 48000.0f;
     float inv_rate_ = 1.0f / 48000.0f;

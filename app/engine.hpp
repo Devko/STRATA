@@ -332,6 +332,8 @@ private:
     // The eight playheads into Status, every block. See the implementation on why not only on a
     // tick.
     void publish_playheads();
+    // Each SAMPLE and GRAIN track's WaveView into Status::wave, every kWaveEveryBlocks blocks.
+    void publish_waves();
     void fire(const StepEvent &event);
 
     // `Step::length` as a frame count for `Trig::gate_frames`; 0 for "no gate".
@@ -407,6 +409,7 @@ private:
 public:
     // For tests: the PCM a track with no file plays.
     const int16_t *placeholder() const { return placeholder_; }
+    uint32_t placeholder_frames() const { return placeholder_frames_; }
 private:
     uint32_t placeholder_frames_ = 0;
 
@@ -733,6 +736,11 @@ private:
     // The master meter's reading, audio context only (Status::meter_milli).
     static constexpr float kMeterFall = 0.99f;
     float meter_ = 0.0f;
+
+    // The waveform's playheads and grains (Status::wave): every fourth block is 5.3 ms, four
+    // times finer than the screen's 50 ms frame, and a quarter of the stores.
+    static constexpr uint32_t kWaveEveryBlocks = 4;
+    uint32_t wave_block_ = 0;
 
     // The tick at which the live pattern's current pass ends. Kept rather than derived so that
     // detecting the boundary is a comparison instead of a division per tick.

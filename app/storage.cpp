@@ -220,6 +220,13 @@ bool Storage::init(Engine &engine) {
     pool_.init(kSampleBudgetDefaultMib << 20);
     engine_->set_sample_region(region_, kRegionBytes);
 
+    // The placeholder's picture: the static PCM the engine built in its own init, one pass, once.
+    if (engine_->placeholder() != nullptr) {
+        overview_builder_.begin(placeholder_overview_, engine_->placeholder_frames());
+        overview_builder_.feed(engine_->placeholder(), 0, engine_->placeholder_frames(), 1);
+        overview_builder_.finish(engine_->placeholder_frames());
+    }
+
     // A missing settings file is empty settings, not an error: that is a first run.
     settings_.load();
     const char *last = settings_.text(kKeyProject, kDefaultName);
@@ -1828,6 +1835,9 @@ void Storage::start_next_sample() {
         if ((sample_queue_ & (1u << t)) == 0) continue;
         sample_queue_ = uint8_t(sample_queue_ & ~(1u << t));
         sample_track_ = t;
+        // From the clear on the track plays the placeholder, and its picture says so until the
+        // new file's is complete.
+        overviews_[t].ready = false;
 
         // Step one: take the sample away from the track and remember the epoch we are waiting to
         // see change. Reading it before the post is what makes the wait meaningful -- the audio
@@ -2023,6 +2033,7 @@ void Storage::step_sample_convert() {
             finish_job("MISALIGNED");
             return;
         }
+        overview_builder_.begin(overviews_[track], out_frames_);
     }
 
     const int channels = int(format_.channels);
@@ -2046,6 +2057,8 @@ void Storage::step_sample_convert() {
     // At 48 kHz this IS the sample, so its slice points are found as it lands (core/onsets.hpp).
     if (!resampling) {
         onsets_.feed(destination + size_t(src_done_) * size_t(channels), src_done_, did, channels);
+        overview_builder_.feed(destination + size_t(src_done_) * size_t(channels), src_done_, did,
+                               channels);
     }
     src_done_ += did;
 
@@ -2193,6 +2206,9 @@ void Storage::step_sample_chunk() {
             return;
         }
         chunk_pos_ = format_.data_offset;
+        // A stream's picture is on the whole file's scale, so its playhead lines up; only the
+        // head is read now, so only the head is drawn (OverviewBuilder::finish_head).
+        overview_builder_.begin(overviews_[track], streaming_ ? stream_total_ : out_frames_);
     }
 
     const int channels = int(format_.channels);
@@ -2216,6 +2232,10 @@ void Storage::step_sample_chunk() {
     }
     if (!resampling && !streaming_) {
         onsets_.feed(destination + size_t(src_done_) * size_t(channels), src_done_, did, channels);
+    }
+    if (!resampling) {
+        overview_builder_.feed(destination + size_t(src_done_) * size_t(channels), src_done_, did,
+                               channels);
     }
     src_done_ += did;
     chunk_pos_ += did * frame_bytes;
@@ -2415,6 +2435,8 @@ void Storage::step_sample_resample() {
                                                   destination + size_t(out_done_) * size_t(channels),
                                                   want);
     onsets_.feed(destination + size_t(out_done_) * size_t(channels), out_done_, did, channels);
+    overview_builder_.feed(destination + size_t(out_done_) * size_t(channels), out_done_, did,
+                           channels);
     out_done_ += did;
     // 0 means the cursor has passed the end of the source, which is the end of the job as well as
     // the end of the slice.
@@ -2452,6 +2474,8 @@ void Storage::hand_sample_over() {
     // Its slice points, for SLC AUTO, through the inbox the command's apply reads. A detector
     // that did not see exactly these frames, in order, gives none rather than wrong ones.
     onsets_.finish(out_done_, engine_->slices_for_load(track));
+    // And its picture, which the screen may draw from now on.
+    overview_builder_.finish(out_done_);
 
     // The handover: an offset, a frame count and a channel count, and nothing else crosses. The
     // audio side checks all three against the region before it forms a pointer.
@@ -2520,6 +2544,7 @@ void Storage::hand_stream_over() {
         finish_job("POOL REFUSED");
         return;
     }
+    overview_builder_.finish_head();
 
     // The inbox first, then the plan, then the post: the audio side reads the inbox when it
     // applies the command, and the plan starts from the stream_want value BEFORE that apply, so

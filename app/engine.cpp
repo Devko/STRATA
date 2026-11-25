@@ -2244,6 +2244,30 @@ void Engine::publish_playheads() {
     for (int t = 0; t < kTracks; t++) status_.publish_playhead(t, scheduler_.playhead(t));
 }
 
+void Engine::publish_waves() {
+    // A few multiplies per track that plays a sample, and nothing for any other: the screen
+    // draws the selected track's, and which that is belongs to the main context.
+    if (++wave_block_ < kWaveEveryBlocks) return;
+    wave_block_ = 0;
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t id = machine_id_[t];
+        if (id != uint8_t(MachineId::sample) && id != uint8_t(MachineId::grain)) continue;
+        // An idle machine was last prepared when it last played, so its window would lag the
+        // knobs. Through the memo: nothing is recomputed unless a byte it reads has moved, and
+        // a prepare is a pure function of those bytes, so what plays is unchanged.
+        if (!frozen_[t].on()) prepare_machine(t);
+        WaveView view;
+        if (id == uint8_t(MachineId::sample)) {
+            pool_[t].sampler.wave_view(view);
+        } else if (id == uint8_t(MachineId::grain)) {
+            pool_[t].grain.wave_view(view);
+        } else {
+            continue;
+        }
+        status_.wave[t].publish(view);
+    }
+}
+
 void Engine::dispatch(const StepEvent &event, uint32_t frames) {
     // In this block: fire it, and `fire` hands the machine a frame it can schedule on.
     if (event.frame < frames) {
@@ -2916,6 +2940,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
                               std::memory_order_relaxed);
 
     publish_playheads();
+    publish_waves();
 
     // Every MIDI gate is a block nearer its end.
     midi_out_.end_block(frames);

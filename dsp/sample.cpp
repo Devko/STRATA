@@ -273,6 +273,30 @@ int32_t Sampler::slice_start(int i) const {
     return window_start_ + int32_t(float(clampi(i, 0, slices_ - 1)) * slice_frames_);
 }
 
+void Sampler::wave_view(WaveView &view) const {
+    view = WaveView{};
+    if (!playable_) return;
+    const float scale = view_scale_;
+    if (window_len_ > 0) {
+        view.lo = wave_column(float(window_start_), scale);
+        view.hi = wave_column(float(window_start_ + window_len_ - 1), scale);
+    }
+    // The slice starts after the first (which is the window's own start, drawn as STA).
+    const int count = fifo_ != nullptr ? 1 : slice_count();
+    for (int i = 1; i < count; i++) wave_set_cut(view, wave_column(float(slice_start(i)), scale));
+    int m = 0;
+    for (const Voice &v : voices_) {
+        if (!v.playing || m >= WaveView::kMarks) continue;
+        // pos counts up from the window's start whichever way the voice plays (sample.hpp).
+        const int32_t frame = v.read0 + (v.dir > 0 ? v.pos : -v.pos);
+        const float level = v.amp.level() * v.gain;
+        const int glow = 1 + int(level * 14.0f + 0.5f);
+        view.mark[m] = wave_column(float(frame), scale);
+        view.glow[m] = uint8_t(glow > 15 ? 15 : glow);
+        m++;
+    }
+}
+
 void Sampler::set_sample(const int16_t *data, uint32_t frames, int channels, float source_rate) {
     // The voices are reading the buffer that is being taken away, so they stop. A crossfade
     // between two samples belongs to the app, which has both buffers; the machine has one.
@@ -293,6 +317,7 @@ void Sampler::set_sample(const int16_t *data, uint32_t frames, int channels, flo
     // int16 to float, with the stereo sum's halving folded in: the tap adds L and R, so a stereo
     // source is summed to mono for free (machines are mono; pan lives in the insert chain).
     src_scale_ = (channels_ == 2 ? 0.5f : 1.0f) * (1.0f / 32768.0f);
+    view_scale_ = ok ? float(kWaveColumns) * reciprocal(float(frames_)) : 0.0f;
     recompute_window();
 }
 
@@ -307,6 +332,7 @@ void Sampler::set_stream(const int16_t *head, uint32_t head_frames, uint32_t tot
     }
     fifo_ = fifo;
     stream_total_ = total_frames;
+    view_scale_ = float(kWaveColumns) * reciprocal(float(total_frames));   // the whole file's
     fifo_->reset(channels_, uint32_t(frames_));
     recompute_window();
 }
