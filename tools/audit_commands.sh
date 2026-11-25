@@ -32,7 +32,7 @@ unexpected=0
 printf '%-18s %6s %6s %6s\n' command ui card engine
 for n in $names; do
     # A `case` label is a reader, not a poster: app/storage.cpp switches on some commands too.
-    ui=$(code app/app.hpp | grep -E "Cmd::$n\b" | grep -cvE "case Cmd::$n\b" || true)
+    ui=$(code app/app.hpp app/ui_*.hpp | grep -E "Cmd::$n\b" | grep -cvE "case Cmd::$n\b" || true)
     card=$(code app/storage.cpp | grep -E "Cmd::$n\b" | grep -cvE "case Cmd::$n\b" || true)
     engine=$(code app/engine.cpp | grep -cE "case Cmd::$n\b" || true)
     if [ "$((ui + card))" -gt 0 ] && [ "$engine" -gt 0 ]; then

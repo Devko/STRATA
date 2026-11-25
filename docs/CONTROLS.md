@@ -1,6 +1,6 @@
 # STRATA controls concept
 
-The reference the key handlers in `app/app.hpp` follow. It starts from the SmplTrek's panel as
+The reference the key handlers in `app/app.hpp` (and its `app/ui_*.hpp` parts) follow. It starts from the SmplTrek's panel as
 it is printed and laid out, not from a list of features, so that each button does the same
 kind of thing in every mode. [CHEATSHEET.md](CHEATSHEET.md) lists every gesture;
 this file says why they are where they are. Agreed with Roland on 2026-11-22, after the first
