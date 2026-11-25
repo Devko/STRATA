@@ -6,6 +6,14 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Added
+
+- **Waveforms and envelopes in EDIT.** SAMPLE's SRC page draws the sample under the knobs, with
+  its START..END window bright, the slices dotted and a moving playhead per voice; GRAIN's draws
+  the sample with a bracket at POS and a tick for each grain in the air. AMP, ASR and the synths'
+  FLTR draw the envelope their knobs shape, with the knob letters on its handles. The picture of
+  a sample is made once while it loads (250 bytes a track), so drawing costs nothing.
+
 ### Gestures that moved
 
 One home per job (backlog D1, D2, D5). Old projects open unchanged: no file holds a mixer slot.

@@ -583,6 +583,14 @@ hit in the window (`NO HITS`, or a window between two hits), it cuts evenly. Pus
 again for even slices (`SLICES EVEN`). AUTO is saved with the kit. A streamed file has no
 slices either way.
 
+**The waveform.** The SRC page draws the sample under the knobs: the STA..LEN window bright with
+a line at each end, the rest dim, a dotted line at each slice (even or AUTO), and a column
+running through it for each voice that plays. A track with no file shows the placeholder it plays
+and says `NO FILE`. A streamed file shows the part that is in memory, then a dotted line. The
+AMP page draws the envelope ATK and DEC make, with the letters A and B on its corners.
+
+<p><img src="screens/edit_wave.png" width="256" alt="EDIT, SAMPLE's SRC page: the waveform"> <img src="screens/edit_wave_amp.png" width="256" alt="EDIT, SAMPLE's AMP page: the envelope"></p>
+
 ### GRN: GRAIN
 
 Granular playback of the track's sample: up to 8 overlapping grains in one voice. The most
@@ -603,6 +611,12 @@ X1 with SHP up for stutters and chops, SCN for a stretch.
 
 SCN is free-running, not tempo-locked. To make a cloud move in time, **lock POS on steps**, or
 motion record a sweep of POS. The trig note transposes, so a cloud plays chromatically.
+
+**The cloud on screen.** The SRC page draws the sample with a bracket where the next grain
+starts (POS, moving with SCN, as wide as one grain) and a tick for every grain in the air, as
+bright as that grain is loud. AMP and ASR draw the cloud's envelope.
+
+<p><img src="screens/edit_grain.png" width="256" alt="EDIT, GRAIN's SRC page: the grains"></p>
 
 ### MNO: VA MONO
 
@@ -629,6 +643,12 @@ the default 100, harder is brighter and softer darker. **Accent** (ACNT on the s
 the note louder, opens the filter further and brings the noise (and, with OS2 in sync, the synced pulse) forward; **slide** (SLID)
 glides into the next note. The OSC page is described in
 [The oscillators and drive](#the-oscillators-and-drive-the-osc-page).
+
+FLTR, AMP and ASR draw their envelopes under the knobs: on FLTR the filter's, as high as ENV
+takes it, with C (ENV) and D (FDE) on its corners; on AMP and ASR the note's. A segment's width
+follows its knob, so a long and a short decay both fit the screen.
+
+<p><img src="screens/edit_vfltr.png" width="256" alt="EDIT, VA MONO's FLTR page: the filter envelope"></p>
 
 ### PLY: VA POLY
 
