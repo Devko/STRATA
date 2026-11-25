@@ -74,6 +74,10 @@ constexpr int kMaxEventsPerTick = kTracks * kMaxFiringsPerTick * kRatchetMax;
 // Live performance state the sequencer reads but does not own. The app fills this each block.
 struct PerformState {
     bool fill = false;           // the FILL pad is held (or auto-fill is in its bar)
+    // LIVE RND (core/liverand.hpp): the unit, 0 OFF .. 5 RND16, and the armed tracks. While the
+    // unit is on, an armed track plays that RND mode over its own; the pattern is not touched.
+    uint8_t rnd_unit = 0;
+    uint8_t rnd_armed = 0xFF;
 };
 
 // --- the scheduler --------------------------------------------------------
