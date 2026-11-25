@@ -2,7 +2,7 @@
 # Backlog D1, D2 and D5 in the emulator (2026-11-25): the performance mixer's slot 7 is MUTE BUS
 # and slot 13 the scene morph, and the retired FUNC chords say where their moves went instead
 # of doing them. The picks and the chords' hints are logged (app/app.hpp, notice_logged), since
-# the emulator cannot read the screen; it cannot turn VALUE either, so the amounts are
+# the emulator cannot read the screen; it turns no VALUE here, so the amounts are
 # tests/test_perffx.cpp's and tests/test_ui.cpp's.
 #
 #   PLAY

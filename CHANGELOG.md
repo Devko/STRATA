@@ -129,6 +129,11 @@ the project file format or the controls.
 
 ### Fixed
 
+- **The main loop no longer reads the audio side's working copies.** Building WAVE tables,
+  KEYS' sustain hold and the LFO page's number and strip read what each track sounds straight
+  from the audio side's arrays, which it rewrites every block. The audio side now publishes those
+  few bytes each block (`Engine::publish_heard`), and the main loop reads only those. Nothing
+  sounds or looks different.
 - **RESAMPLE takes reach the card.** Every take failed with `DENIED` before it was written: STRATA
   made the folder `/RECORD` first, and Enaga only allows writes strictly inside it. The file's
   own open makes the folder now. Found by the new bounce scenario in the emulator; the host tests'
@@ -154,6 +159,8 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Changed
 
+- **REL ALL and LEN ALL are tested on the DSP** (`scenario_moveall`): the emulator turns encoders
+  since Enaga 0.3.0. Each click's amount is logged, as the other notices the scenarios read are.
 - **Code quality round (no change in sound or controls).** One set of integer clamps in core/,
   the project file names spelled once, CI checks CLAUDE.md's source rules
   (`tools/check_rules.sh`), the scenarios print their log path on a failed check, and the unit

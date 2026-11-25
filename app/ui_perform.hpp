@@ -240,7 +240,8 @@
             *out++ = '%';
         }
         *out = 0;
-        notice(notice_buffer_);
+        // Logged too: tests/scenario_moveall.sh reads each click's amount off the log.
+        notice_logged(notice_buffer_);
     }
 
     // What MACRO LEARN shows while it waits: the macro, its count, and what to do.

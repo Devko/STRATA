@@ -3,8 +3,8 @@
 # nine machines and the MIDI OUT line, and both STOPs run MIDI out's note-off and All Notes Off
 # paths -- on the C674x, in the real build.
 #
-# What this can and cannot reach. The emulator presses keys and nothing else (scenario_m7.sh):
-# no encoder, so no MIDI OUT channel can be SET from here, and no MIDI IN. So MID plays with its
+# What this can and cannot reach. It presses keys only (scenario_m7.sh), so no MIDI OUT channel
+# is SET here, and the emulator has no MIDI IN. So MID plays with its
 # channel OFF and sends nothing. What it proves is what the host cannot: the MACHINE page's new
 # 3 x 3 grid and its MIDI OUT line draw on the device with the real font, the MID machine's
 # empty render path and the engine's MIDI bookkeeping run inside audio() with the beat playing,

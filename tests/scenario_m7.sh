@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # M7 emulator scenario: the new screens render on the DSP.
 #
-# What this can and cannot reach. The emulator core exposes `key_input` and NOTHING else -- no
-# pads and no encoders (checked: there is no pad or encoder entry point in emulator/core/core.h).
-# Every send and master setting is on an encoder, so none of them can be CHANGED from here;
+# What this can and cannot reach. It was written when the emulator pressed keys and nothing else;
+# Enaga 0.3.0's emulate.py turns encoders too (`--turn`), but this scenario still turns none.
+# Every send and master setting is on an encoder, so none of them is CHANGED here;
 # tests/test_ui.cpp and tests/test_engine.cpp own that, against the fake host.
 #
 # What is reachable with keys alone is the thing a host test cannot prove: that the four new
