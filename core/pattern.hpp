@@ -177,6 +177,38 @@ struct Lock {
     uint8_t value = 0;
 };
 
+// --- what a lock's param byte holds ---------------------------------------
+//
+// A track has 32 parameters, so the param byte's top two bits were always zero, and they carry
+// the two lock kinds added in Phase 5 (random lock ranges and parameter slide). Neither needed a
+// file change: every save writes the byte as it is, and a build from before them skips the
+// entries, because its engine ignores any param at or past kTrackParams.
+//
+//   bits 0-5   the parameter
+//   bit 6      kLockRange: this entry is the parameter's RANDOM RANGE on the step, not a value.
+//              Its value is the width, 1-127: each time the step plays, the parameter is the
+//              step's lock (or the kit value, with no lock) moved by a draw in -width..+width.
+//   bit 7      kLockSlide: on a value lock, the parameter GLIDES from this lock to what the next
+//              step that plays holds for it, arriving as that step starts.
+//
+// So one parameter can take two entries on a step: its value (with or without the slide bit)
+// and its range. The lock functions below match a lock by its KEY -- the parameter plus the
+// range bit -- so the slide bit is a property of the value lock and never makes it a second one.
+constexpr uint8_t kLockParamMask = 0x3Fu;
+constexpr uint8_t kLockRange = 0x40u;
+constexpr uint8_t kLockSlide = 0x80u;
+
+constexpr uint8_t lock_key(uint8_t param_byte) { return uint8_t(param_byte & ~kLockSlide); }
+constexpr uint8_t lock_param(uint8_t param_byte) { return uint8_t(param_byte & kLockParamMask); }
+constexpr bool lock_is_range(uint8_t param_byte) { return (param_byte & kLockRange) != 0; }
+constexpr bool lock_slides(uint8_t param_byte) {
+    return (param_byte & (kLockSlide | kLockRange)) == kLockSlide;
+}
+// The key a parameter's random range is stored under.
+constexpr uint8_t lock_range_key(uint8_t param) {
+    return uint8_t((param & kLockParamMask) | kLockRange);
+}
+
 struct TrackPattern {
     uint8_t length = uint8_t(kStepsPerTrack);   // 1-64 steps (polymeter)
     uint8_t speed = uint8_t(Speed::x1);
@@ -249,6 +281,9 @@ LockView pattern_step_locks(const Pattern &pattern, int track, int step);
 // Sets `param` on a step: updates the existing lock for that parameter if there is one, and
 // otherwise adds a lock. False, with the pattern unchanged, when the step already holds
 // kLocksPerStep locks or the pool has no room. Never allocates and never overflows.
+//
+// These three match by `lock_key` (above): `param` with the range bit addresses the range
+// entry, and the slide bit is ignored on both sides, so an edit keeps a lock's slide.
 bool pattern_set_lock(Pattern &pattern, int track, int step, uint8_t param, uint8_t value);
 
 // Reads one parameter's lock. False if the step has no lock for it; `value` is untouched then.
@@ -260,6 +295,25 @@ bool pattern_clear_lock(Pattern &pattern, int track, int step, uint8_t param);
 
 // Removes all of a step's locks.
 void pattern_clear_step_locks(Pattern &pattern, int track, int step);
+
+// `param` (0-63) as one parameter: its value lock, its slide and its random range all go. What
+// hold STEP + push a knob does. False if the step had none of them.
+bool pattern_clear_param(Pattern &pattern, int track, int step, uint8_t param);
+
+// A parameter's random range on a step (kLockRange): 0 when it has none. Setting 0 removes it.
+// False, with the pattern unchanged, when a new range needs a slot the step or pool lacks.
+uint8_t pattern_get_range(const Pattern &pattern, int track, int step, uint8_t param);
+bool pattern_set_range(Pattern &pattern, int track, int step, uint8_t param, uint8_t width);
+
+// Whether a parameter's value lock on a step slides (kLockSlide). False with no value lock.
+bool pattern_get_slide(const Pattern &pattern, int track, int step, uint8_t param);
+
+// Sets or clears the slide bit on the step's value lock for `param`. False, changing nothing,
+// when the step has no value lock for it.
+bool pattern_set_slide(Pattern &pattern, int track, int step, uint8_t param, bool on);
+
+// Whether any of a step's locks slides: what makes the sequencer look ahead for the target.
+bool pattern_step_slides(const Pattern &pattern, int track, int step);
 
 // How many locks are reachable from a step -- what a save writes, as against `locks_used`,
 // which also counts the slots abandoned by relocation.

@@ -422,6 +422,8 @@ const Expect kTable[] = {
     {Cmd::step_field_delta, kDirtyBank, "step_field_delta"},
     // A lock lands in the pattern's shared pool, which the bank file carries.
     {Cmd::lock_delta, kDirtyBank, "lock_delta"},
+    {Cmd::lock_range_delta, kDirtyBank, "lock_range_delta"},
+    {Cmd::lock_slide, kDirtyBank, "lock_slide"},
     // The Euclidean generator writes trig bits. It was MISSING from the pattern list, so a
     // generated rhythm left its bank clean and an explicit save skipped the bank file entirely.
     {Cmd::euclid, kDirtyBank, "euclid"},

@@ -41,7 +41,7 @@ enum class Cmd : uint8_t {
 
     // --- pattern editing ---
     toggle_trig,       // track, step, a: 1 = the trigless bit instead of the trig, 2 = a FILL trig
-    clear_lock,        // track, step, a: param
+    clear_lock,        // track, step, a: param: its value lock, its slide and its random range
     set_track_length,  // track, a: length; or c = 1: b is an int8 delta (kDeltaFlag below)
     set_track_speed,   // track, a: speed
     set_track_play,    // track, a: PlayMode (core/timing.hpp): FWD, REV, PING, RND1..RND16
@@ -61,6 +61,12 @@ enum class Cmd : uint8_t {
     // at 1.33 ms is not a thing a person can see.
     step_field_delta,  // track, step, a: StepField, b: int8 delta
     lock_delta,        // track, step, a: param index, b: int8 delta; c = kSemitoneFlag: semitones
+    // A parameter's random range on a step (core/pattern.hpp, kLockRange): the width moved by
+    // the delta, 0-127; 0 takes the range off. Hold STEP + FUNC + turn A-D.
+    lock_range_delta,  // track, step, a: param index, b: int8 delta
+    // A parameter's slide on a step (kLockSlide), toggled. With no value lock the step gets one
+    // at the kit value first, so the slide has something to glide from. Hold STEP + FUNC + push.
+    lock_slide,        // track, step, a: param index
 
     // The Euclidean generator (docs/SPEC.md, "Musical defaults that help creativity"): a whole
     // track's rhythm from three numbers. One edit, so it carries an undo mark like any other and

@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W37, about 104 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W38, about 108 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -430,7 +430,18 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   again: OFF again. `____`
 - MAX with RND1 on all eight against the default beat alone: `________ %`
 
-**W37. Hear a sample before loading it (4 min).** Put a few WAVs in `/SAMPLES` first: a short
+**W37. Random lock ranges and parameter slide (4 min).** Beat playing, A01, GRID.
+- Lower pad 2 (snare), EDIT, FLTR page. Hold STEP 5 and FUNC and turn the CUT knob up to about 30: the
+  line under the rows reads `S5 CUT 64 R30` (your numbers), and a dim line sits under CUT's bar.
+  Let go: the snare's brightness changes from bar to bar. `____`
+- Hold STEP 5 (no FUNC) and push the CUT knob: `LOCK CLEARED`, and the snare plays the same every bar. `____`
+- Lower pad 6 (bass). Hold STEP 1 and turn CUT well down; hold STEP 9 and turn CUT well up.
+  Hold STEP 1 and FUNC and push CUT: `SLIDE ON`, the lock line ends in `/`. Let go: the filter now
+  sweeps open from step 1 to step 9, smoothly, no zipper steps, then falls back. `____`
+- Hold STEP 1 and FUNC and push CUT again: `SLIDE OFF`, the filter jumps on step 9 again. `____`
+- Save, NEW, load the project back: the range and the slide are still there. `____`
+
+**W38. Hear a sample before loading it (4 min).** Put a few WAVs in `/SAMPLES` first: a short
 hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - Lower pad 8 (SAMPLE), EDIT, OK: SAMPLES. DOWN to the hit, **push A**: `HEARING`, and the hit
   plays at once, whole. The line under the title says `HEARING 0/0S`, then the folder again. The
@@ -1310,7 +1321,7 @@ New 2026-11-22. Put a few WAVs in `/SAMPLES` on the card first (the two test fil
 - [ ] Reopen the browser: it starts in the track's folder with the cursor on its file.
 - [ ] PROJECT says `UNSAVED`; save, reload (the menu's RELOAD PROJECT, OK twice): track 8 has the picked file.
 - [ ] A folder of many files: listing time `________` (about how long `READING FOLDER` shows).
-- [ ] Push A on a file: it is heard without loading (W37). On a folder: `A HEARS FILES`. On a
+- [ ] Push A on a file: it is heard without loading (W38). On a folder: `A HEARS FILES`. On a
       file that is not a WAV: `NOT A WAV`. Pull the card while one plays: it stops, nothing hangs.
 
 ## 15c. A long stem (4 min)

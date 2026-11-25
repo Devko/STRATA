@@ -333,6 +333,7 @@ uint32_t play_seed(uint32_t pattern_seed, int track);
 struct Firing {
     uint8_t step = 0;      // which step of the track sounds: the play mode already applied
     uint32_t loop = 0;     // which pass of the loop, for A:B conditions
+    uint8_t slot = 0;      // which time slot of the pass: where a parameter slide looks ahead from
 };
 
 constexpr int kMaxFiringsPerTick = 4;   // at 2x, a 23-tick window can hold at most 4 steps
