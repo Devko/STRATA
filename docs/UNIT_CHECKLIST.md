@@ -74,6 +74,16 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
   `50%`; the STEP 5 light blinks; let go: the trig did not toggle. Hold STEP 5 + REPEAT four
   times: `RTCH 2`, `3`, `4`, `OFF` (hear the ratchet). + FILL: `COND FILL`, the step plays only
   with FILL held. + MUTE: `COND 1:2`. Now FILL first, then STEP 9: a FILL trig, as before.
+- **Step stutter and the rate (Phase 5, P2 P3).** PLAY A01 on GRID. Hold REPEAT, then hold
+  STEP 1: `STUTTER 1 1/16`, the whole kit hammers step 1, the beat repeat stops; line 2 shows
+  `ST1 R1/16`. Still holding, RIGHT twice: `STUTTER 1/32`, faster; LEFT back. Hold STEP 5 too:
+  the stutter jumps to the backbeat; let STEP 5 go: back to step 1. Let go of STEP 1:
+  `STUTTER OFF`, and the beat comes back **in time**, as if it had played on. No trig toggled.
+  FUNC + STEP 3 under REPEAT: only the selected track stutters, the rest plays. Let go of
+  REPEAT with a STEP still down: the stutter stops, the STEP's release toggles nothing. Turn a
+  filter knob during a stutter: you hear it move (it is not audio repeat). FUNC + FILL (NOTE
+  RPT), hold lower pad 2, RIGHT: `ROLL 1/16T`, the roll speeds up; let go: LEFT/RIGHT are
+  GRID's again. Feels like a stutter, in time? `____`
 - **STEP keys are steps in PERFORM and KEYS (D12).** In KEYS tap STEP 5: a trig, as on GRID, and
   the screen still shows the piano and `STEP KEYS 1-16`; pad-row right: `17-32`. LEFT/RIGHT:
   `OCT`. Play a chord on the pads while tapping STEP keys: both work at once. In PERFORM tap
@@ -110,7 +120,7 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
   FUNC + CLR: one step back. Back to `OFF`: dead on the grid again. Save, reopen: it stays.
 - **REL ALL and LEN ALL (Phase 5, P4).** PERFORM (FUNC + MIXER), A01 playing; the line under the
   macros reads `FUNC+A/B REL/LEN ALL`. FUNC + turn A left: `REL ALL -2` .. `-40`, every track's
-  tail shortens together, kick, hats and the chord's release; line 2 shows `R-`. Turn it back
+  tail shortens together, kick, hats and the chord's release; line 2 shows `RL-`. Turn it back
   quickly: it stops on `REL ALL 0` and the kit sounds exactly as before. Right: everything rings
   longer. FUNC + turn B: `LEN ALL 50%` the bass and chord notes halve, `200%` they hold twice as
   long; the drums do not change. Away from rest the line reads `REL -12 LEN 71%`. Hold FUNC +

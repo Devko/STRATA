@@ -389,6 +389,34 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
     return written;
 }
 
+bool stutter_event(const Pattern &pattern, int track, int step, uint32_t frame, StepEvent &out) {
+    if (track < 0 || track >= kTracks || step < 0) return false;
+    const TrackPattern &source = pattern.tracks[track];
+    const int length = clamp_int(int(source.length), 1, kMaxSteps);
+    // Subtraction, not a modulo: this chip has no integer divide, and step < 64 needs at most
+    // 63 rounds even on a one-step track.
+    int index = step;
+    while (index >= length) index -= length;
+
+    const Step &played = source.steps[index];
+    const bool has_trig = (played.flags & kStepTrig) != 0;
+    const bool has_trigless = (played.flags & kStepTrigless) != 0;
+    if (!has_trig && !has_trigless) return false;
+
+    out.track = uint8_t(track);
+    out.step = uint8_t(index);
+    out.note = uint8_t(played.note & 0x7Fu);
+    out.velocity = clamp_u8(played.velocity, 1, 127);
+    out.length_index = played.length;
+    out.accent = (played.flags & kStepAccent) != 0;
+    out.slide = (played.flags & kStepSlide) != 0;
+    out.trigless = !has_trig;
+    out.frame = frame;
+    out.ratchet_index = 0;
+    out.ratchet_count = 1;
+    return true;
+}
+
 uint8_t Scheduler::playhead(int track) const {
     if (track < 0 || track >= kTracks) return 0;
     return tracks_[track].playhead;

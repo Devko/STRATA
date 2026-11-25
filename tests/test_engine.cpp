@@ -238,6 +238,7 @@ Engine &clean() {
     post(Cmd::set_throw, 0, 0, 0);
     post(Cmd::set_repeat, 0, 0, uint8_t(RepeatLength::sixteenth), 0, 0);
     for (uint8_t t = 0; t < kTracks; t++) post(Cmd::note_repeat, t, 0, 0, 0, 0);
+    post(Cmd::step_stutter, 0, 0, 0, 0, 0);
     post_u(Cmd::set_morph, 0);
     for (uint8_t m = 0; m < kMacros; m++) {
         post(Cmd::macro_clear, 0, 0, m);
@@ -2440,6 +2441,113 @@ TEST(engine_note_repeat_velocity_mute_and_refusal) {
     pump();
     CHECK_EQ(refused(), refusals + 1);
     CHECK(!engine.rolling(kPoly));
+}
+
+// --- step stutter ----------------------------------------------------------------------------
+
+// `track` with a trig on every step, or on `step` alone.
+void trig_every_step(Engine &engine, int track) {
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        engine.project_for_load().live().tracks[track].steps[s].flags = kStepTrig;
+    }
+}
+
+void trig_only(Engine &engine, int track, int step) {
+    empty_track(engine, track);
+    engine.project_for_load().live().tracks[track].steps[step].flags = kStepTrig;
+}
+
+constexpr uint8_t bit(int track) { return uint8_t(1u << track); }
+
+TEST(engine_step_stutter_retriggers_its_step_on_the_grid_and_silences_the_track) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    trig_only(engine, kPoly, 9);        // only step 10 sounds on POLY: the stutter's hits are it
+    trig_every_step(engine, kMono);     // MONO plays every step, and its step 10 is empty below
+    engine.project_for_load().live().tracks[kMono].steps[9].flags = 0;
+    tick_at(100);
+
+    post(Cmd::step_stutter, 0, 0, 9, 1, uint8_t(bit(kPoly) | bit(kMono)));
+    CHECK_EQ(fired_on(kPoly, 101), 1);  // the press hits at once
+    CHECK_EQ(engine.stutter_step(), 9);
+    const int playhead_before = playhead(kMono);
+    int poly = 0, mono = 0;
+    for (uint32_t t = 102; t <= 200; t++) {
+        const uint8_t m = triggers(kMono);
+        poly += fired_on(kPoly, t);
+        mono += int(uint8_t(triggers(kMono) - m));
+    }
+    CHECK_EQ(poly, 4);                  // 120, 144, 168, 192: beat repeat's 1/16
+    CHECK_EQ(mono, 0);                  // its own steps are silent, and its step 10 is empty
+    // The sequencer ran on underneath: the playhead moved (at the track's own speed).
+    CHECK(playhead(kMono) != playhead_before);
+
+    // The rate is beat repeat's length, live: a thirty-second hits every 12 ticks.
+    post(Cmd::set_repeat, 0, 0, uint8_t(RepeatLength::thirty_second), 0, 0);
+    poly = 0;
+    for (uint32_t t = 201; t <= 260; t++) poly += fired_on(kPoly, t);
+    CHECK_EQ(poly, 5);                  // 204, 216, 228, 240, 252
+
+    // Let go: MONO is back on its own steps, POLY's stutter stops.
+    post(Cmd::step_stutter, 0, 0, 0, 0, 0);
+    post(Cmd::set_repeat, 0, 0, uint8_t(RepeatLength::sixteenth), 0, 0);
+    pump();
+    CHECK_EQ(engine.stutter_step(), -1);
+    poly = mono = 0;
+    for (uint32_t t = 261; t <= 360; t++) {
+        const uint8_t m = triggers(kMono);
+        poly += fired_on(kPoly, t);
+        mono += int(uint8_t(triggers(kMono) - m));
+    }
+    CHECK(mono >= 3);
+    CHECK(poly <= 1);                   // step 10 at most once, in its own place
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+// A track left out of the mask plays its own steps through the stutter.
+TEST(engine_step_stutter_leaves_other_tracks_playing) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(true);
+    trig_every_step(engine, kMono);
+    trig_only(engine, kPoly, 2);
+    tick_at(100);
+    post(Cmd::step_stutter, 0, 0, 2, 1, bit(kPoly));
+    pump();
+    int mono = 0;
+    for (uint32_t t = 102; t <= 200; t++) mono += fired_on(kMono, t);
+    CHECK(mono >= 3);
+    post(Cmd::step_stutter, 0, 0, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_step_stutter_stopped_runs_free_and_refuses_nonsense) {
+    Engine &engine = clean();
+    FakeHost::the().set_running(false);
+    FakeHost::the().set_tempo(120.0f);
+    trig_only(engine, kPoly, 0);
+    pump();
+    const float period = 24.0f * kRate * 60.0f / (120.0f * 96.0f);
+    const uint8_t before = triggers(kPoly);
+    post(Cmd::step_stutter, 0, 0, 0, 1, bit(kPoly));
+    pump();
+    CHECK_EQ(int(uint8_t(triggers(kPoly) - before)), 1);
+    const int blocks = int(4.0f * period / float(kBlk)) + 1;
+    for (int b = 1; b < blocks; b++) pump();
+    CHECK_EQ(int(uint8_t(triggers(kPoly) - before)), 5);
+    post(Cmd::step_stutter, 0, 0, 0, 0, 0);
+    const uint8_t at_release = triggers(kPoly);
+    for (int b = 0; b < blocks; b++) pump();
+    CHECK_EQ(int(triggers(kPoly)), int(at_release));
+
+    // A step past 64 or no tracks at all is refused and starts nothing.
+    const uint32_t refusals = refused();
+    post(Cmd::step_stutter, 0, 0, uint8_t(kStepsPerTrack), 1, bit(kPoly));
+    post(Cmd::step_stutter, 0, 0, 0, 1, 0);
+    pump();
+    CHECK_EQ(refused(), refusals + 2);
+    CHECK_EQ(engine.stutter_step(), -1);
 }
 
 // --- the arpeggiator --------------------------------------------------------------------------

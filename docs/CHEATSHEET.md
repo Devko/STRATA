@@ -104,9 +104,9 @@ screen when pressed.
 
 | Pad | Plain | With FUNC / held |
 | --- | --- | --- |
-| Lower 1-8 | Select the track and play its root note; pressure bends macro A up | FUNC: mute or unmute on the next bar. In NOTE RPT: rolls while held at REPEAT's length, pressure is the velocity |
+| Lower 1-8 | Select the track and play its root note; pressure bends macro A up | FUNC: mute or unmute on the next bar. In NOTE RPT: rolls while held at REPEAT's rate, pressure is the velocity, LEFT/RIGHT change the rate (`ROLL 1/32`) |
 | Upper 1 FILL (printed TRK 1) | Fill while held. Held + tap STEP: a FILL trig on the selected track (`FILL TRIG`; again: `FILL TRIG OFF`) | FUNC: NOTE RPT on/off (`NOTE RPT`, `PADS PLAY`; `NRPT` on PERFORM's bar line) |
-| Upper 2 REPEAT (TRK 2) | Beat repeat while held; VALUE picks 1/4 ... 1/16T | FUNC at the press: pitch drops |
+| Upper 2 REPEAT (TRK 2) | Beat repeat while held; VALUE or LEFT/RIGHT pick the rate 1/4 ... 1/32 (`REPEAT 1/8T`). Held + hold STEP n: step stutter, every track loops its step n at the rate (`STUTTER 5 1/16`) until the STEP or REPEAT comes up | FUNC at the press: pitch drops. FUNC + STEP under REPEAT: stutter the selected track only |
 | Upper 3 MUTE (TRK 3) | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B (TRK 4/5) | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
 | Upper 6 THROW (TRK 6) | Delay throw while held | FUNC: reverb throw |
@@ -254,7 +254,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | --- | --- | --- |
 | Top line | `A01 3.2 130.0 > 24%` | Live bank+slot, bar.beat, tempo, `>` playing / `.` stopped, audio load |
 | Under it | a 1 px line | How far the pattern is through its pass |
-| Line 2 | `K:L FX4 S40 M:AB R- G+ LP` | Live strip: what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, looper); empty at rest |
+| Line 2 | `K:L FX4 S40 M:AB RL- LP` | Live strip: what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, looper); empty at rest |
 | Line 2 | `EXT MIDI` `EXT SYNC` `CLOCK REFUSED` | Outside clock source; a transport call was refused (when the strip is empty) |
 | Right edge | 2 px column | Master meter: level, held peak dot, top pixel = limiter |
 | Bottom line | `TRK3 MAX23.5 SMPLTREK` / `TRK3 DROP 2` | Tracks sounding, the highest audio load since PLAY (held; PLAY starts it again), device; DROP = edits lost to a full command ring |

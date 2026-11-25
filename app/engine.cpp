@@ -1546,6 +1546,22 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::step_stutter:
+            if (command.b == 0) {
+                stutter_step_ = -1;           // the last hits keep their gates
+                break;
+            }
+            if (command.a >= kStepsPerTrack || command.c == 0) {
+                status_.bump_refused();
+                break;
+            }
+            stutter_step_ = int(command.a);
+            stutter_tracks_ = command.c;
+            stutter_last_tick_ = tick_;
+            stutter_countdown_ = roll_period_frames();
+            stutter_fire(0);
+            break;
+
         case Cmd::perf_fx: {
             // One effect at a time (core/perffx.hpp). The looper and the morph are not effects:
             // the looper's mix is Cmd::looper's and the morph Cmd::set_morph's, so an a naming
@@ -2281,7 +2297,13 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // The pattern's own tick: steps, passes and conditions all count from where it started.
     const int count =
         scheduler_.tick(tick - origin_, frame, live(), perform_, events_, kMaxEventsPerTick);
-    for (int i = 0; i < count; i++) dispatch(events_[i], block_frames_);
+    // A stuttering track's own steps are silent: the scheduler still resolved them, so its
+    // playhead, conditions and passes run on and the release lands back in the beat.
+    const uint32_t silenced = stutter_step_ >= 0 ? uint32_t(stutter_tracks_) : 0u;
+    for (int i = 0; i < count; i++) {
+        if ((silenced >> events_[i].track & 1u) != 0) continue;
+        dispatch(events_[i], block_frames_);
+    }
 
     for (int t = 0; t < kTracks; t++) status_.publish_playhead(t, scheduler_.playhead(t));
 }
@@ -2407,6 +2429,45 @@ void Engine::roll_free(uint32_t frames) {
         }
         roll.countdown -= float(frames);
     }
+}
+
+// --- step stutter -------------------------------------------------------
+
+// One hit of the stuttered step on every stuttering track: the step as written
+// (core/scheduler.hpp's stutter_event), through `dispatch`, so its locks apply and a muted
+// track stays silent exactly as for a sequenced step.
+void Engine::stutter_fire(uint32_t frame) {
+    for (int t = 0; t < kTracks; t++) {
+        if ((stutter_tracks_ >> t & 1u) == 0) continue;
+        StepEvent event;
+        if (stutter_event(live(), t, stutter_step_, frame, event)) dispatch(event, block_frames_);
+    }
+}
+
+// The transport is running: on the grid of beat repeat's length, as a note repeat hits, and
+// with the same guard against a flam just after the press.
+void Engine::stutter_tick(uint32_t tick, uint32_t frame) {
+    if (stutter_step_ < 0) return;
+    const uint32_t length = uint32_t(repeat_length_ticks(repeat_length_));
+    if (tick % length != 0) return;
+    if (tick >= stutter_last_tick_ && tick - stutter_last_tick_ < (length >> 1)) return;
+    stutter_last_tick_ = tick;
+    stutter_fire(frame);
+    stutter_countdown_ = roll_period_frames();
+}
+
+// The transport is stopped: free from the press, at the tempo's length in frames.
+void Engine::stutter_free(uint32_t frames) {
+    if (stutter_step_ < 0) return;
+    const float period = roll_period_frames();
+    if (period < 1.0f) return;
+    if (stutter_countdown_ > period) stutter_countdown_ = period;
+    while (stutter_countdown_ < float(frames)) {
+        const float at = stutter_countdown_ < 0.0f ? 0.0f : stutter_countdown_;
+        stutter_fire(uint32_t(at));
+        stutter_countdown_ += period;
+    }
+    stutter_countdown_ -= float(frames);
 }
 
 // --- the arpeggiator ------------------------------------------------------
@@ -2833,6 +2894,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // Note repeat and held arps with the transport stopped: no ticks arrive, so they count frames.
     if (!enaga::clock::running()) {
         roll_free(frames);
+        stutter_free(frames);
         arp_free(frames);
     }
 
@@ -2843,6 +2905,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     for (uint32_t i = 0; i < tick_count; i++) {
         resolve_tick(ticks[i].tick, ticks[i].frame);
         roll_tick(ticks[i].tick, ticks[i].frame);
+        stutter_tick(ticks[i].tick, ticks[i].frame);
         arp_tick(ticks[i].tick, ticks[i].frame);
     }
 

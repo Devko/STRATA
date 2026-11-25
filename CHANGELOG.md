@@ -12,12 +12,20 @@ the project file format or the controls.
   (DEC on every machine, REL on the ASR page where there is one, and a step's lock on them),
   -64..+64 (`REL ALL -12`); FUNC + turn B scales every sequenced note's length, 25-400%
   (`LEN ALL 71%`). Rest is 0, a detent, and the programmed sound exactly. Live like the macros:
-  not saved, held by a LOCK, shown in the live strip as `R-`/`R+` and `G-`/`G+`.
+  not saved, held by a LOCK, shown in the live strip as `RL-`/`RL+` and `LN-`/`LN+`.
 - **FEEL (P8).** A timing drift over swing and micro-timing, on the PATTERN page after SWG (D
   turns it): DRIFT 1-6, each track on its own smooth random curve, or WAVE 1-6, the whole groove
   along one four-bar curve, laid back then pushed. Up to 6/96 of a beat, following the tempo,
   seeded so it repeats after a reload. Saved per pattern in a new optional section; older
   projects load with FEEL OFF, and older builds open new ones and play them straight.
+- **Step stutter: hold REPEAT, then a STEP (P2).** Every track loops that step at the repeat
+  rate, on the beat grid, until you let go (`STUTTER 5 1/16`); FUNC + STEP stutters only the
+  selected track. It replays the sequencer, not the audio, so filters, LFOs and tails keep
+  moving, and the beat comes back exactly in time. A second STEP moves it. Played, not written.
+- **The repeat rate on the arrows (P3).** REPEAT + LEFT/RIGHT, or LEFT/RIGHT while a NOTE RPT
+  pad rolls, step the rate through 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T and 1/32 (`REPEAT 1/8T`,
+  `ROLL 1/32`). Beat repeat, the rolls and the stutter all follow it at once; line 2 shows it
+  (`R1/16`) while your hand is on it.
 - **Waveforms and envelopes in EDIT.** SAMPLE's SRC page draws the sample under the knobs, with
   its START..END window bright, the slices dotted and a moving playhead per voice; GRAIN's draws
   the sample with a bracket at POS and a tick for each grain in the air. AMP, ASR and the synths'

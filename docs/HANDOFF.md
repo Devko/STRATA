@@ -81,6 +81,16 @@ FUNC + VALUE only show a hint now (`notice_logged` in app/app.hpp), so LOCK can 
 MUTATE outright. The master DJ byte stayed on MIXER's MST page on purpose: an old project saved
 with it set must be able to put it back.
 
+Step stutter and the rate (Phase 5, CyDrums P2 P3; docs/CONTROLS.md "REPEAT"), for whoever
+touches them next: one rate (`RepeatLength`, UI-owned, posted by `Cmd::set_repeat`) serves beat
+repeat, the rolls and the stutter; LEFT/RIGHT walk it by ticks (`repeat_length_step`), VALUE in
+the enum's order. The stutter is `Cmd::step_stutter`: the engine silences the masked tracks'
+scheduled events and fires `stutter_event` on the roll's grid, while `Scheduler::tick` keeps
+running, so the release lands in time. It is all tracks by default, FUNC + STEP the selected one
+(the backlog proposed the opposite; Roland may want it flipped). The first STEP turns the audio
+beat repeat off for the rest of that REPEAT hold. Not built: a two-STEP loop (two steps held
+alternate) and recording a roll as RTCH. Host-tested only: the emulator cannot press pads.
+
 Smaller open items, none urgent:
 
 - **KICK's click path** runs for the whole note after its transient has decayed: about a quarter
