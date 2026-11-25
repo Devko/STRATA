@@ -129,7 +129,7 @@ uint16_t make_busy_pattern(Pattern &pattern) {
         for (int t = 0; t < kTracks; t++) {
             for (int i = 0; i < 8; i++) {
                 pattern_set_lock(pattern, t, i * 7, uint8_t(round * 2),
-                                 uint8_t(t * 16 + i * 2 + round));
+                                 uint8_t((t * 16 + i * 2 + round) & 127));   // a parameter: 0-127
             }
         }
     }
@@ -478,6 +478,27 @@ TEST(a_full_pattern_survives_a_round_trip_field_by_field) {
     CHECK(ab_steps > 0);
 }
 
+TEST(a_lock_value_past_127_in_a_file_loads_as_127) {
+    // A damaged or hand-made file: lock values are parameters, 0-127, and EDIT draws attack,
+    // decay and release locks as x positions on a 124-column picture, so a 255 must not survive
+    // the load. The param byte is kept as it was, whatever it is.
+    pattern_init(g_source);
+    CHECK(pattern_set_lock(g_source, 0, 3, 9, 200));
+    CHECK(pattern_set_lock(g_source, 0, 3, 200, 255));
+    CHECK(pattern_set_lock(g_source, 2, 7, 4, 90));
+    uint32_t written = 0;
+    CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, written)), int(SerializeResult::ok));
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(g_loaded, 0, 3, 9, value));
+    CHECK_EQ(int(value), 127);
+    CHECK(pattern_get_lock(g_loaded, 0, 3, 200, value));
+    CHECK_EQ(int(value), 127);
+    CHECK(pattern_get_lock(g_loaded, 2, 7, 4, value));
+    CHECK_EQ(int(value), 90);                          // in range: untouched
+}
+
 TEST(saving_compacts_the_lock_pool_without_touching_the_pattern) {
     const uint16_t locks = make_busy_pattern(g_source);
     const uint16_t used_before = g_source.locks_used;
@@ -533,7 +554,7 @@ TEST(a_full_lock_pool_still_fits_the_maximum_buffer) {
     for (int step = 0; step < 128; step++) {
         for (uint8_t param = 0; param < kLocksPerStep; param++) {
             if (!pattern_set_lock(g_source, step / kStepsPerTrack, step % kStepsPerTrack, param,
-                                  uint8_t(param * 3 + step))) {
+                                  uint8_t((param * 3 + step) & 127))) {
                 break;
             }
             added++;

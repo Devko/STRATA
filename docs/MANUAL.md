@@ -879,8 +879,10 @@ reload.
 
 **Without the step page:** hold a STEP and press an upper pad. FILL steps the condition through
 FILL, NOT FILL and none; MUTE through 1:2, 2:2, 1:4, 4:4 and none; REPEAT the ratchet through 2, 3,
-4 and off; MUTATE the probability through 75, 50, 25 and 100%. The bottom line says where it
-landed (`STEP 5 PROB 50%`). The order is the rule: STEP first edits the step, pad first performs
+4 and off; MUTATE the probability through 75, 50, 25 and 100%. THROW locks the step's delay send
+at full, and again takes the lock off (FUNC + THROW: the reverb send): a throw written into the
+pattern, saved and undone like any lock. The bottom line says where it landed (`STEP 5 PROB 50%`,
+`STEP 5 DLY FULL`). The order is the rule: STEP first edits the step, pad first performs
 (FILL held, then a STEP, writes a FILL trig). The step page still has every value.
 
 ### Ranges, copy and paste
@@ -1383,6 +1385,12 @@ effects, and is written to `/RECORD/STRATA_<n>.WAV` (`WRITING`, then `LAST STRAT
 track as the destination, the take also becomes that track's sample and loads straight away, so
 an 8-bar jam can become the loop on track 8 for SAMPLE or GRAIN. A take is at most 30 s
 (`SHORTENED TO 30S`). CLR cancels.
+
+**Put it on a track afterwards.** A take that went `TO FILE` is offered to a track as soon as it
+is written: `PUT ON TRK 3 GRN`, `OK PUTS  CLR KEEPS`. OK makes it that track's sample at once
+(`T3 GRN: TAKE ON`); LEFT/RIGHT pick another track first; CLR leaves it a file. The first track
+offered is a SAMPLE or GRAIN track other than the one you bounced, so the usual case is one OK.
+A track playing a synth is refused (`T1 NOT SAMPLE/GRAIN`): give it SAMPLE or GRAIN first.
 
 **Sampling from the input.** B picks where the take comes from: `MASTER` (the default) or one of
 the inputs, `LINE` (INPUT L and R), `LINE L` (INPUT L alone, on both sides), `MIC` (the built-in

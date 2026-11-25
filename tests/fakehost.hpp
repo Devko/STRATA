@@ -110,6 +110,8 @@ public:
 
     // Seed or inspect the card directly, without going through the app.
     bool write_file(const char *path, const void *data, uint32_t bytes);
+    // A folder put on the card as a PC would, anywhere: not through the app's write rule.
+    bool seed_folder(const char *path);
     // A file of `bytes`, to be filled in place through the pointer returned (nullptr when the
     // card has no room). For files too big for any buffer a test could hold.
     uint8_t *create_file(const char *path, uint32_t bytes);
@@ -278,6 +280,7 @@ private:
     int find(const char *path) const;
     int add(const char *path, uint32_t bytes, bool folder);
     int32_t path_check(const char *path) const;   // ENAGA_FILE_OK or the ABI's refusal
+    int32_t write_check(const char *path) const;  // inside the data folder, /SAMPLES or /RECORD
     int32_t card_check() const;                   // no card, wrong context
 
     // --- the trampolines the ABI needs ---

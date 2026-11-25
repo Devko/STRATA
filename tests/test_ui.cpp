@@ -100,6 +100,8 @@ struct UiProbe {
     static int pressure_pad(const Strata &app) { return app.pressure_pad_; }
     static int take_bars_index(const Strata &app) { return app.take_bars_index_; }
     static int resample_track(const Strata &app) { return app.resample_track_; }
+    static int take_offer(const Strata &app) { return app.take_offer_; }
+    static void set_take_source(Strata &app, int index) { app.take_source_ = index; }
     static uint8_t macro_knob(const Strata &app, int macro) {
         return app.macro_position_[macro];
     }
@@ -4991,13 +4993,13 @@ TEST(ui_samples_reach_the_smpltrek_pool_and_projects) {
     // A card laid out by the stock SmplTrek firmware, with no /SAMPLES: its manual puts samples
     // in SmplTrek/Pool/Audio and each project's in SmplTrek/Project/<name>/Audio.
     Strata &app = fresh();
-    // Seeded as a PC would lay it out (the fake does not refuse a write outside the app's areas,
-    // and lists only the folders made, as FatFs has them).
+    // Seeded as a PC would lay it out: outside the app's write areas, so past the fake's write
+    // rule (seed_folder), and it lists only the folders made, as FatFs has them.
     const char *const folders[] = {"/SmplTrek", "/SmplTrek/Pool", "/SmplTrek/Pool/Audio",
                                    "/SmplTrek/Preset", "/SmplTrek/Project",
                                    "/SmplTrek/Project/SONG1", "/SmplTrek/Project/SONG1/Audio",
                                    "/RECORD"};
-    for (const char *f : folders) enaga::files::make_folder(f);
+    for (const char *f : folders) FakeHost::the().seed_folder(f);
     card_wav("/SmplTrek/Pool/Audio/Kick 01.wav");
     card_wav("/SmplTrek/Pool/Audio/Snare.wav", 960);
     card_wav("/SmplTrek/Project/SONG1/Audio/Vox.wav");
@@ -6310,7 +6312,7 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     hold_func(app);
     CHECK(screen_has(app, "GRID SRC KCK"));
     CHECK(screen_has(app, "B FMA FM AMOUNT"));
-    CHECK(screen_has(app, "PAGE 1/10"));
+    CHECK(screen_has(app, "PAGE 1/11"));
     CHECK(!screen_has(app, "FUNC + KEY:"));
 
     // The screen keys turn the help's pages while FUNC is held, and not GRID's knob page.
@@ -6318,7 +6320,7 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     key(ENAGA_KEY_SELECT_RIGHT);
     CHECK(UiProbe::func_help(app));
     CHECK(screen_has(app, "STEPS:"));
-    CHECK(screen_has(app, "PAGE 2/10"));
+    CHECK(screen_has(app, "PAGE 2/11"));
     CHECK_EQ(UiProbe::param_page(app), knob_page);
     // LEFT goes back, and round: the last page is the performance mixer's slots, the upper pads
     // two before it.
@@ -9491,4 +9493,225 @@ TEST(ui_the_pattern_page_sets_feel_on_d_and_on_its_row) {
     app.on_encoder(3, -20);
     pump(2);
     CHECK_EQ(int(pattern.feel), 0);
+}
+
+// --- hold STEP + THROW: the delay-send lock (D6's last pad) ---------------------------------
+
+TEST(ui_hold_step_and_throw_locks_the_send_full_then_off) {
+    // STEP first edits: with STEP 3 held, THROW writes a lock of the delay send at full on that
+    // step instead of throwing; again takes it off. FUNC makes it the reverb send. The STEP's
+    // release toggles nothing, and no throw is ever performed.
+    Strata &app = fresh();
+    const uint8_t delay = uint8_t(page_first(Page::fx) + 2);
+    const uint8_t reverb = uint8_t(page_first(Page::fx) + 3);
+    const bool had = trig_at(0, 2);
+    uint8_t value = 0;
+
+    step_down(2);
+    app.on_pad_press(11, 100);
+    pump(2);
+    CHECK_EQ(app_engine().throwing(), 0);                  // not thrown
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 2, delay, value));
+    CHECK_EQ(int(value), 127);
+    CHECK_EQ(UiProbe::notice(app), "STEP 3 DLY FULL");
+    app.on_pad_release(11);
+    pump(2);
+    CHECK_EQ(app_engine().throwing(), 0);
+
+    app.on_pad_press(11, 100);                             // again: off
+    app.on_pad_release(11);
+    pump(2);
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 2, delay, value));
+    CHECK_EQ(UiProbe::notice(app), "STEP 3 DLY OFF");
+
+    app.on_key(ENAGA_KEY_F1, true);                        // FUNC: the reverb send
+    app.on_pad_press(11, 100);
+    app.on_pad_release(11);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 2, reverb, value));
+    CHECK_EQ(int(value), 127);
+    CHECK(!pattern_get_lock(app_engine().pattern(), 0, 2, delay, value));
+    CHECK_EQ(UiProbe::notice(app), "STEP 3 REV FULL");
+    CHECK_EQ(app_engine().throwing(), 0);
+
+    step_up(2);
+    pump(2);
+    CHECK_EQ(trig_at(0, 2), had);                          // the hold was used: no toggle
+    CHECK_EQ(UiProbe::held_step(app), -1);
+
+    // A lock at another level (turned on the FX page) goes to full first, not off.
+    {
+        Command command;                                   // to the app's engine, not the rig's
+        command.cmd = Cmd::lock_delta;
+        command.track = 0;
+        command.step = 5;
+        command.a = delay;
+        command.b = 40;
+        app_engine().commands().post(command);
+    }
+    pump(2);
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 5, delay, value));
+    CHECK(value < 127u);
+    step_down(5);
+    app.on_pad_press(11, 100);
+    app.on_pad_release(11);
+    pump(2);
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 5, delay, value));
+    CHECK_EQ(int(value), 127);
+    step_up(5);
+    pump(2);
+
+    // It is an edit: FUNC + CLR takes it back to where it was.
+    shift_key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(pattern_get_lock(app_engine().pattern(), 0, 5, delay, value));
+    CHECK(value < 127u);
+
+    // Pad first still performs: THROW alone is the held throw.
+    app.on_pad_press(11, 100);
+    pump(2);
+    CHECK_EQ(app_engine().throwing(), 1);
+    app.on_pad_release(11);
+    pump(2);
+    CHECK_EQ(app_engine().throwing(), 0);
+}
+
+// --- bounce to track: a take to the file, then one OK puts it on a track ---------------------
+
+namespace {
+
+// RESAMPLE from kTakeSources[source], one bar armed TO FILE and played until it is on the card.
+bool take_to_file(Strata &app, int source) {
+    FakeHost &host = FakeHost::the();
+    shift_key(ENAGA_KEY_F2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+    UiProbe::set_take_source(app, source);
+    while (UiProbe::resample_track(app) != -1) {
+        app.on_key(ENAGA_KEY_SELECT_LEFT, true);
+        app.on_key(ENAGA_KEY_SELECT_LEFT, false);
+    }
+    const uint32_t before = app_storage().file_takes();
+    host.set_running(true);
+    key(ENAGA_KEY_OK);
+    pump();
+    host.deliver_tick(384, 0);
+    for (int i = 0; i < 8000 && app_storage().file_takes() == before; i++) {
+        if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
+        pump();
+    }
+    pump(2);
+    host.set_running(false);
+    return app_storage().file_takes() != before;
+}
+
+constexpr int kSourceMaster = 0;
+constexpr int kSourceTrack2 = 7;   // kTakeSources: MASTER, five inputs, then TRK 1..8
+
+bool same_text(const char *a, const char *b) {
+    for (int i = 0;; i++) {
+        if (a[i] != b[i]) return false;
+        if (a[i] == 0) return true;
+    }
+}
+
+}  // namespace
+
+TEST(ui_a_take_to_file_is_offered_to_a_track_and_one_ok_puts_it_there) {
+    Strata &app = fresh();
+    CHECK(same_text(kTakeSources[kSourceTrack2].name, "TRK 2"));
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    post_track(Cmd::set_machine, 2, uint8_t(MachineId::grain));   // track 3 plays files
+    pump(4);
+    CHECK_EQ(UiProbe::take_offer(app), -1);
+
+    CHECK(take_to_file(app, kSourceMaster));
+    // Track 1 is selected and plays no file, so the offer is track 3, the one that does.
+    CHECK_EQ(UiProbe::take_offer(app), 2);
+    CHECK_EQ(app_engine().project().kit.tracks[2].sample[0], '\0');
+
+    key(ENAGA_KEY_OK);                                     // one OK
+    CHECK_EQ(UiProbe::take_offer(app), -1);
+    CHECK_EQ(UiProbe::notice(app), "T3 GRN: TAKE ON");
+    CHECK(same_text(app_engine().project().kit.tracks[2].sample, app_storage().last_take_path()));
+    pump_until_idle();
+    CHECK(app_storage().last_error() == nullptr);
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
+
+    // And the next OK arms a new take, as before.
+    key(ENAGA_KEY_OK);
+    pump();
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 1);
+    key(ENAGA_KEY_CLR);
+    pump();
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_the_take_offer_walks_refuses_a_synth_and_clr_keeps_the_file) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    post_track(Cmd::set_machine, 1, uint8_t(MachineId::sample));  // track 2: SAMPLE
+    pump(4);
+
+    // A bounce of track 2 offers another file track before its own: the test kit's track 8.
+    CHECK(app_engine().machine_id(7) == uint8_t(MachineId::sample) ||
+          app_engine().machine_id(7) == uint8_t(MachineId::grain));
+    CHECK(take_to_file(app, kSourceTrack2));
+    CHECK_EQ(UiProbe::take_offer(app), 7);
+
+    // The selection keys walk it, round the eight; a track that plays no file is refused and
+    // stays offered.
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+    CHECK_EQ(UiProbe::take_offer(app), 0);
+    CHECK_EQ(UiProbe::resample_track(app), -1);            // the TO setting is untouched
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "T1 NOT SAMPLE/GRAIN");
+    CHECK_EQ(UiProbe::take_offer(app), 0);
+    CHECK_EQ(app_engine().project().kit.tracks[0].sample[0], '\0');
+    for (int i = 0; i < 8; i++) {                          // round the eight, back to track 1
+        app.on_key(ENAGA_KEY_SELECT_LEFT, true);
+        app.on_key(ENAGA_KEY_SELECT_LEFT, false);
+    }
+    CHECK_EQ(UiProbe::take_offer(app), 0);
+
+    // CLR keeps it a file: nothing armed, nothing cancelled, nothing loaded.
+    key(ENAGA_KEY_CLR);
+    pump();
+    CHECK_EQ(UiProbe::take_offer(app), -1);
+    CHECK_EQ(UiProbe::notice(app), "TAKE STAYS A FILE");
+    CHECK_EQ(app_engine().project().kit.tracks[1].sample[0], '\0');
+    CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
+
+    // A take put on a track before it is taken (TO TRK) is not offered again afterwards.
+    // And a card pulled with a take on offer takes the offer with it.
+    CHECK(take_to_file(app, kSourceMaster));
+    CHECK(UiProbe::take_offer(app) >= 0);
+    app.on_card(false);
+    CHECK_EQ(UiProbe::take_offer(app), -1);
+    app.on_card(true);
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+TEST(ui_layout_resample_with_a_take_on_offer) {
+    Strata &app = fresh();
+    post_track(Cmd::set_machine, 2, uint8_t(MachineId::sample));
+    pump(4);
+    key(ENAGA_KEY_STEP1);
+    pump(2);
+    CHECK(take_to_file(app, kSourceMaster));
+    CHECK_EQ(UiProbe::take_offer(app), 2);
+    check_layout(app, "RESAMPLE, offer");
+    for (int t = 0; t < kTracks; t++) {                    // every track, file or not
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+        check_layout(app, "RESAMPLE, offer");
+    }
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+    pump(2);
 }
