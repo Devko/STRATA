@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # The live screens in the emulator (docs/CONTROLS.md, "The screen frame"; docs/BUDGET.md, "The
-# screen"): the beat plays on GRID long enough for draw()'s own timer to log its average
-# ("draw 0.85 ms", app/app.hpp count_draw_time), with the frame's decibel meter, the progress
-# line's beat marks and every later live view drawing on the C674x with the real font. The
-# figure is the emulator's (no caches), so it compares versions; the unit shows the same reading
-# on SETUP.
+# screen"): the beat plays long enough for draw()'s own timer to log its average ("draw 0.85
+# ms", app/ui_screen.hpp count_draw_time), on the busiest live screen, with the frame's decibel
+# meter and every live view drawing on the C674x with the real font. The figure is the
+# emulator's (no caches), so it compares versions; the unit shows the same reading on SETUP.
 #
-#   PLAY                      -> the default beat, on GRID
+#   PLAY                      -> the default beat, on GRID (its glowing trigs)
+#   FUNC + F7                 -> PERFORM: the macro gauges over the output's scope and the
+#                                track meters, where it stays for the logged average
 #
-# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY. The first press comes late: the
-# panel link is not streaming in the first ~200 M cycles. 2.6 G cycles is about 7 s at 372 MHz,
-# past the 5 s the log waits for.
+# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F1 = 19 FUNC, F7 = 21. The first
+# press comes late: the panel link is not streaming in the first ~200 M cycles. 2.6 G cycles is
+# about 7 s at 372 MHz, past the 5 s the log waits for.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -41,6 +42,7 @@ LOG="$ENAGA_BUILD/scenario_visuals.log"
 echo "running the emulator for $CYCLES cycles: the live screens and draw()'s cost ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
+    --key 19@700000000 --key 21@705000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
@@ -73,6 +75,10 @@ log = report.get("log", [])
 check(report.get("app_status") == "APP RUNNING", "app is running",
       f'status={report.get("app_status")!r}')
 check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_reason")!r}')
+
+screens = [line for line in log if line.startswith("scr ")]
+check(bool(screens) and screens[-1].startswith("scr PERF"), "the walk ended on PERFORM",
+      f"screens={screens}")
 
 draws = [line for line in log if line.startswith("draw ")]
 check(len(draws) == 1, "draw() logged its average once", f"log={log}")

@@ -2947,6 +2947,87 @@ TEST(ui_setup_shows_the_draw_time) {
     setup_page(app, false);
 }
 
+// GRID (app/ui_live.hpp): a trig that plays lights an outline round its cell, in the gap
+// round it, which fades over a few frames; stopped, nothing glows.
+TEST(ui_the_grid_glows_round_a_trig_that_just_played) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    enaga::Canvas canvas(g_pixels);
+    const auto at = [](int x, int y) { return int(g_pixels[y * enaga::Canvas::width + x]); };
+    const int top = 20;                                    // track 1's row
+    for (int k = 0; k < 16; k++) step_up(k);
+    if (!trig_at(0, 0)) key(ENAGA_KEY_STEP1);
+    pump(2);
+    CHECK(trig_at(0, 0));
+    app.draw(canvas);
+    CHECK_EQ(at(3, top), 0);                               // nothing yet
+
+    host.set_running(true);
+    host.deliver_tick(0, 0);                               // step 1 plays
+    pump(1);
+    app.draw(canvas);
+    CHECK(at(3, top) >= 12);                               // above the cell
+    CHECK(at(3, top + 7) >= 12);                           // below it
+    CHECK(at(6, top + 3) >= 12);                           // right of it
+    CHECK_EQ(at(3, top + 1), 15);                          // the cell: lit under the playhead
+    CHECK_EQ(at(11, top), 0);                              // step 2 did not play
+    int last = at(3, top);
+    for (int i = 0; i < 4; i++) {                          // fading
+        app.draw(canvas);
+        CHECK(at(3, top) < last);
+        last = at(3, top);
+    }
+    for (int i = 0; i < 20; i++) app.draw(canvas);
+    CHECK_EQ(at(3, top), 0);
+
+    host.set_running(false);
+    pump(2);
+}
+
+namespace {
+void toggle_trig_0_0() {
+    Command command;
+    command.cmd = Cmd::toggle_trig;
+    command.track = 0;
+    command.step = 0;
+    app_engine().commands().post(command);
+}
+}  // namespace
+
+// PERFORM (app/ui_live.hpp): the macros are gauges, and while the beat plays every track's
+// level runs along the row the AUTO-FILL hint takes when stopped.
+TEST(ui_perform_shows_track_levels_while_playing_and_the_hint_when_stopped) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    enaga::Canvas canvas(g_pixels);
+    const auto at = [](int x, int y) { return int(g_pixels[y * enaga::Canvas::width + x]); };
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    pump(1600);                                            // past the screen's own notice
+    CHECK(screen_has(app, "AUTOFILL: FUNC MENU"));
+
+    // A trig on track 1, and the clock running over it.
+    toggle_trig_0_0();
+    pump(2);
+    host.set_running(true);
+    host.deliver_tick(0, 0);
+    pump(4);
+    CHECK(!screen_has(app, "AUTOFILL: FUNC MENU"));
+    int lit = 0;
+    for (int x = 0; x < 12; x++) lit += at(x, 86) > 2;     // track 1's level bar
+    CHECK(lit >= 6);
+    int other = 0;
+    for (int x = 15; x < 27; x++) other += at(x, 86) > 2;  // track 2 is silent
+    CHECK_EQ(other, 0);
+
+    host.set_running(false);
+    pump(2);
+    CHECK(screen_has(app, "AUTOFILL: FUNC MENU"));
+    toggle_trig_0_0();
+    pump(2);
+    key(ENAGA_KEY_F4);
+}
+
 // Hold REPEAT, then a STEP: step stutter (CyDrums' P2). REPEAT first, so the STEP performs: it
 // toggles nothing, writes nothing to undo, and its release is the stutter's even after REPEAT.
 TEST(ui_hold_repeat_and_a_step_stutters_until_it_comes_up) {
