@@ -43,6 +43,8 @@
 #include <enaga/abi.h>
 #include <enaga/clock.hpp>
 
+#include <cstring>
+
 using namespace strata;
 using strata::test::FakeHost;
 
@@ -3770,4 +3772,113 @@ TEST(engine_a_recalled_kit_brings_its_duck) {
     CHECK_EQ(engine.duck_depth(1), 0.8f);
     CHECK_EQ(engine.duck_depth(4), 0.0f);
     fresh();
+}
+
+// --- REL ALL and LEN ALL (core/moveall.hpp) ----------------------------------------------------
+
+// Every machine's release bytes, as core/moveall.cpp names them, are the machine's own DEC (and
+// REL on the ASR page where it reads it); REL ALL moves exactly those, on every track, and 0 puts
+// back what the knobs say.
+TEST(engine_rel_all_moves_each_machines_dec_and_rel_and_rest_is_the_knob) {
+    Engine &engine = clean();
+    const uint8_t was = engine.machine_id(kMono);
+    for (int id = 0; id < int(MachineId::count); id++) {
+        post(Cmd::set_machine, kMono, 0, uint8_t(id));
+        pump(2);
+        uint8_t release[2] = {};
+        const int n = machine_release_params(uint8_t(id), release);
+        if (id == int(MachineId::midi)) {
+            CHECK_EQ(n, 0);
+            continue;
+        }
+        CHECK(std::strcmp(engine.machine(kMono)->param_name(release[0]), "DEC") == 0);
+        post(Cmd::set_param, kMono, 0, release[0], 60);
+        if (n == 2) post(Cmd::set_param, kMono, 0, release[1], 30);
+        post(Cmd::set_param, kMono, 0, kLvl, 77);
+        pump();
+        CHECK_EQ(int(engine.sounding(kMono).v[release[0]]), 60);
+
+        post(Cmd::set_move_all, 0, 0, 0, uint8_t(int8_t(-20)));
+        pump();
+        CHECK_EQ(int(engine.rel_all()), -20);
+        CHECK_EQ(int(engine.sounding(kMono).v[release[0]]), 40);
+        if (n == 2) CHECK_EQ(int(engine.sounding(kMono).v[release[1]]), 10);
+        CHECK_EQ(int(engine.sounding(kMono).v[kLvl]), 77);    // nothing else moves
+        CHECK_EQ(int(engine.params(kMono).v[release[0]]), 60); // and the kit is untouched
+
+        post(Cmd::set_move_all, 0, 0, 0, uint8_t(int8_t(100)));   // held to +64
+        pump();
+        CHECK_EQ(int(engine.rel_all()), kAllRange);
+        CHECK_EQ(int(engine.sounding(kMono).v[release[0]]), 124);
+        if (n == 2) CHECK_EQ(int(engine.sounding(kMono).v[release[1]]), 94);
+
+        post(Cmd::set_move_all, 0, 0, 0, 0);
+        pump();
+        CHECK_EQ(int(engine.sounding(kMono).v[release[0]]), 60);
+        if (n == 2) CHECK_EQ(int(engine.sounding(kMono).v[release[1]]), 30);
+    }
+    post(Cmd::set_machine, kMono, 0, was);
+    pump(2);
+}
+
+// A step's lock on DEC is the value that step plays, so REL ALL moves it too.
+TEST(engine_rel_all_moves_a_locked_release_too) {
+    Engine &engine = clean();
+    post(Cmd::set_param, kPoly, 0, kDec, 90);
+    put_trig(kPoly, 0);
+    CHECK(pattern_set_lock(engine.project_for_load().live(), kPoly, 0, kDec, 50));
+    post(Cmd::set_move_all, 0, 0, 0, uint8_t(int8_t(-10)));
+    pump();
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    CHECK_EQ(int(engine.sounding(kPoly).v[kDec]), 40);
+    // And the unlocked tracks follow the knob, moved.
+    CHECK_EQ(int(engine.sounding(kMono).v[kDec]),
+             int(rel_all_byte(engine.params(kMono).v[kDec], -10)));
+}
+
+// LEN ALL scales a sequenced gate: -32 is half the length, so a one-step note at -32 lasts as
+// long as a half-step note at rest, to the block.
+TEST(engine_len_all_scales_every_sequenced_gate_and_rest_is_the_programmed_length) {
+    arm_a_gated_chord_note(6, Speed::x1, 130.0f);
+    const int half_step = frames_until_silent();
+    arm_a_gated_chord_note(8, Speed::x1, 130.0f);
+    const int one_step = frames_until_silent();
+    CHECK(one_step - half_step > 2000);
+
+    arm_a_gated_chord_note(8, Speed::x1, 130.0f);
+    post(Cmd::set_move_all, 0, 0, 1, uint8_t(int8_t(-32)));
+    pump();
+    CHECK_EQ(int(strata::test::engine().len_all()), -32);
+    const int halved = frames_until_silent();
+    CHECK(halved >= half_step - kBlk && halved <= half_step + kBlk);
+
+    // And back at rest it is the step's own length again.
+    arm_a_gated_chord_note(8, Speed::x1, 130.0f);
+    post(Cmd::set_move_all, 0, 0, 1, 0);
+    pump();
+    CHECK_EQ(frames_until_silent(), one_step);
+}
+
+// FEEL is a pattern setting: walked by a delta, refused past its ends, undone like swing.
+TEST(engine_feel_walks_its_line_and_is_undone_like_swing) {
+    Engine &engine = clean();
+    CHECK_EQ(int(engine.pattern().feel), 0);
+    post(Cmd::undo_mark, 0, 0, uint8_t(GestureKind::length), 1);
+    post(Cmd::set_pattern_feel, 0, 0, 0, 3, kDeltaFlag);
+    pump();
+    CHECK_EQ(int(engine.pattern().feel), 3);
+    post(Cmd::set_pattern_feel, 0, 0, 0, 40, kDeltaFlag);
+    pump();
+    CHECK_EQ(int(engine.pattern().feel), int(kFeelMax));
+    post(Cmd::set_pattern_feel, 0, 0, 200);          // an absolute byte this build does not know
+    pump();
+    CHECK_EQ(int(engine.pattern().feel), 0);
+    post(Cmd::set_pattern_feel, 0, 0, 8);
+    pump();
+    CHECK_EQ(int(engine.pattern().feel), 8);
+    post(Cmd::undo);
+    pump();
+    CHECK_EQ(int(engine.pattern().feel), 0);
 }

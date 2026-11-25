@@ -60,6 +60,14 @@ const char *lfo_wave_name(LfoWave wave) {
     }
 }
 
+const char *lfo_trig_name(LfoTrig trig) {
+    switch (trig) {
+        case LfoTrig::retrig:   return "RETRIG";
+        case LfoTrig::one_shot: return "ONE-SHOT";
+        default:                return "FREE";
+    }
+}
+
 const char *lfo_param_name(int index) {
     switch (index) {
         case kLfoWave:  return "WAV";
@@ -70,20 +78,23 @@ const char *lfo_param_name(int index) {
     }
 }
 
-uint8_t lfo_apply(uint8_t base, float value, uint8_t depth, uint8_t floor) {
-    // 64 counts at DEP 127: 64/127 per count of depth. Rounded half away from zero, so a
-    // symmetrical wave moves the byte symmetrically.
-    const float offset = value * float(depth > 127 ? 127 : depth) * (64.0f / 127.0f);
+uint8_t lfo_apply(uint8_t base, float value, uint8_t depth, uint8_t floor, float span) {
+    // `span` counts at DEP 127: span/127 per count of depth. Rounded half away from zero, so a
+    // symmetrical wave moves the byte symmetrically. span x (1/127) is exactly the 64/127 this
+    // used to multiply by when span is 64 (a power of two scales a float exactly), so every
+    // destination but a cutoff moves bit for bit as it did.
+    const float per_count = span * (1.0f / 127.0f);
+    const float offset = value * float(depth > 127 ? 127 : depth) * per_count;
     const int rounded = offset >= 0.0f ? int(offset + 0.5f) : -int(-offset + 0.5f);
     const int next = int(base) + rounded;
     const int lowest = base < floor ? int(base) : int(floor);
     return uint8_t(next < lowest ? lowest : (next > 127 ? 127 : next));
 }
 
-uint8_t lfo_cutoff_floor(int dest, bool va_filter, bool insert_chain) {
-    if (insert_chain && dest == page_first(Page::fltr) + 1) return kLfoInsertCutoffFloor;
-    if (va_filter && dest == page_first(Page::src) + 2) return kLfoVaCutoffFloor;
-    return 0;
+float lfo_pitch_semis(float value, uint8_t depth) {
+    // The same counts lfo_apply would move TUN by, unrounded, times TUN's 24/64 semitone a count.
+    const float counts = value * float(depth > 127 ? 127 : depth) * (kLfoSpan * (1.0f / 127.0f));
+    return counts * (24.0f / 64.0f);
 }
 
 LfoSettings LfoSettings::make(const uint8_t bytes[kLfoParams]) {
@@ -100,6 +111,10 @@ LfoSettings LfoSettings::make(const uint8_t bytes[kLfoParams]) {
 void TrackLfo::init(uint32_t seed) {
     lfo_.reset(0.0f);
     random_ = enaga::dsp::Random(seed);
+    shot_ = 1.0f;
+    done_ = true;
+    fired_ = false;
+    shot_held_ = 0.0f;
 }
 
 enaga::dsp::LfoShape TrackLfo::enaga_shape(LfoWave wave) {
@@ -116,6 +131,43 @@ enaga::dsp::LfoShape TrackLfo::enaga_shape(LfoWave wave) {
 float TrackLfo::shaped(LfoWave wave, float raw) const {
     // Enaga's saw rises; SAW is the falling one.
     return wave == LfoWave::saw ? -raw : raw;
+}
+
+void TrackLfo::restart() {
+    // A whole cycle from phase 0 lands on phase 0 again and counts as a wrap, which is how
+    // Enaga's S+H draws: so the note gets a new value through the same API a free cycle uses.
+    lfo_.reset(0.0f);
+    lfo_.step(enaga::dsp::LfoShape::sample_hold, 1.0f, random_);
+    shot_ = 0.0f;
+    done_ = false;
+    fired_ = true;
+    shot_held_ = random_.bipolar();
+}
+
+float TrackLfo::one_shot_value(LfoWave wave, float u, float held) {
+    const bool rest = u >= 1.0f;
+    const float x = u < 0.0f ? 0.0f : u;
+    switch (wave) {
+        case LfoWave::sine:     return rest ? 0.0f : enaga::dsp::sin_turns(x);
+        case LfoWave::triangle: return rest ? 0.0f : (x < 0.5f ? 2.0f * x : 2.0f - 2.0f * x);
+        case LfoWave::ramp:     return rest ? 1.0f : x;
+        case LfoWave::saw:      return rest ? 0.0f : 1.0f - x;
+        case LfoWave::square:   return rest ? 0.0f : (x < 0.5f ? 1.0f : 0.0f);
+        case LfoWave::sample_hold: return held;
+        default:                return 0.0f;
+    }
+}
+
+float TrackLfo::one_shot(LfoWave wave, float cycles) {
+    if (!fired_) return 0.0f;
+    if (!done_) {
+        shot_ += cycles;
+        if (shot_ >= 1.0f) {
+            shot_ = 1.0f;
+            done_ = true;
+        }
+    }
+    return one_shot_value(wave, shot_, shot_held_);
 }
 
 float TrackLfo::advance(LfoWave wave, float cycles) {

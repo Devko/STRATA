@@ -287,6 +287,56 @@ TEST(va_pitch_follows_the_tuning_knob) {
     CHECK(periodicity(g_a + from, window, lag60) < 0.7f);
 }
 
+// --- the LFO on TUN as a float (Machine::set_pitch_mod, dsp/lfo.hpp) -----------------------
+
+TEST(va_a_pitch_mod_moves_a_held_note_and_zero_is_bit_exact) {
+    const TrackParams p = patch();
+    const int blocks = blocks_for(0.4f);
+    const int from = int(0.05f * kRate);
+    const int window = int(0.25f * kRate);
+
+    // Untouched, and handed 0 every block: the same bits, the guarantee every kit leans on.
+    VaMono a, b;
+    a.init(kRate);
+    b.init(kRate);
+    a.prepare(p);
+    b.prepare(p);
+    a.trigger(hit(60));
+    b.trigger(hit(60));
+    clear(g_a, blocks * kBlk);
+    clear(g_b, blocks * kBlk);
+    for (int k = 0; k < blocks; k++) {
+        a.prepare(p);
+        a.render_add(g_a + k * kBlk, kBlk);
+        b.set_pitch_mod(0.0f);
+        b.prepare(p);
+        b.render_add(g_b + k * kBlk, kBlk);
+    }
+    CHECK(std::memcmp(g_a, g_b, sizeof(float) * size_t(blocks * kBlk)) == 0);
+
+    // +12 semitones on a note already sounding: it plays an octave up, and the glide's own pitch
+    // (what a slide or GLD moves) is untouched. It survives prepare, as the engine calls it.
+    VaMono c;
+    c.init(kRate);
+    c.prepare(p);
+    c.trigger(hit(60));
+    clear(g_a, blocks * kBlk);
+    render(c, p, g_a, blocks);
+    CHECK(periodicity(g_a + from, window, period_of(72)) < 0.7f);   // the note, not its octave
+    c.set_pitch_mod(12.0f);
+    clear(g_a, blocks * kBlk);
+    render(c, p, g_a, blocks);
+    CHECK_NEAR(c.pitch(), 60.0f, 0.01f);
+    CHECK(periodicity(g_a + from, window, period_of(72)) > 0.85f);
+
+    // A fraction of a semitone is a fraction: what TUN's byte, 0.375 semitones a count, cannot be.
+    c.set_pitch_mod(0.1f);
+    clear(g_a, blocks * kBlk);
+    render(c, p, g_a, blocks);
+    CHECK(periodicity(g_a + from, window, period_of(60)) > 0.85f);
+    CHECK_EQ(c.settings().pitch_mod, 0.1f);
+}
+
 // --- the voice filter -----------------------------------------------------------------------
 
 TEST(va_each_filter_mode_filters) {

@@ -263,3 +263,51 @@ TEST(lock_engine_a_project_load_clears_every_lock) {
     pump();
     CHECK_EQ(int(lock_last()), int(LockTap::empty));
 }
+
+// REL ALL and LEN ALL are live state like the macro positions, and FEEL is in the pattern: a
+// lock holds all three, a change to any of them marks "L+", and the swap-back restores them.
+TEST(lock_engine_holds_rel_all_len_all_and_feel) {
+    Engine &engine = fresh();
+    post(Cmd::set_move_all, 0, 0, 0, uint8_t(int8_t(-10)));
+    post(Cmd::set_move_all, 0, 0, 1, uint8_t(int8_t(20)));
+    post(Cmd::set_pattern_feel, 0, 0, 3);
+    pump();
+    post(Cmd::lock_store);
+    pump();
+    settle_mark();
+    CHECK_EQ(int(lock_state()), int(kLockHas));
+
+    post(Cmd::set_move_all, 0, 0, 0, 0);
+    settle_mark();
+    CHECK_EQ(int(lock_state()), int(kLockHas | kLockChanged));
+    post(Cmd::set_move_all, 0, 0, 1, 0);
+    post(Cmd::set_pattern_feel, 0, 0, 9);
+    pump();
+
+    post(Cmd::lock_tap);
+    pump();
+    CHECK_EQ(int(lock_last()), int(LockTap::jumped));
+    CHECK_EQ(int(engine.rel_all()), -10);
+    CHECK_EQ(int(engine.len_all()), 20);
+    CHECK_EQ(int(engine.pattern().feel), 3);
+
+    post(Cmd::lock_tap);
+    pump();
+    CHECK_EQ(int(lock_last()), int(LockTap::swapped));
+    CHECK_EQ(int(engine.rel_all()), 0);
+    CHECK_EQ(int(engine.len_all()), 0);
+    CHECK_EQ(int(engine.pattern().feel), 9);
+    post(Cmd::set_pattern_feel, 0, 0, 0);
+    pump();
+}
+
+TEST(lockstore_live_state_compares_rel_all_and_len_all) {
+    static LiveState a;
+    static LiveState b;
+    CHECK(live_state_same(a, b));
+    b.rel_all = 2;
+    CHECK(!live_state_same(a, b));
+    b.rel_all = 0;
+    b.len_all = -2;
+    CHECK(!live_state_same(a, b));
+}

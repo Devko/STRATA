@@ -48,7 +48,7 @@ pads and the performance mixer.
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
 | PROJECT | PROJECT | Banks and patterns, key and scale, the card. On the slots: **hold OK** for the pattern menu (COPY, PASTE, CLEAR, DOUBLE; OK runs, PASTE/CLEAR/DOUBLE twice). Shortcuts: FUNC+UP copies, FUNC+DOWN twice pastes, FUNC+LEFT twice clears |
 | CHAIN | PROJECT, then screen key RIGHT | The pattern chain as a list |
-| PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG) and each track's own swing of the playing pattern |
+| PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG), FEEL and each track's own swing of the playing pattern |
 | SETUP | PROJECT, screen key RIGHT three times | Record quantize; shows clock and MIDI settings |
 | PROJECTS | PROJECT, screen key RIGHT four times, or the menu's OPEN PROJECT | Open another project from the card, save this one under a new name, rename or delete one |
 | RESAMPLE | FUNC+REC ("sampling") | Record the output, or the audio input, to a file or a track |
@@ -181,8 +181,8 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | Step page | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Page: PROJECT CHAIN PATTERN SETUP PROJECTS | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | — (FUNC menu) |
 | CHAIN | Entry | Entry's pattern -/+ | Page | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8 | Add entry / remove entry (twice; empty: back) | — (FUNC menu) |
-| PATTERN | Change field -/+ | Field LEN / SWG / track 1-8 swing | Page | Bank A-H | A: LEN 1-64, B: SWG, C: track swing (PAT, 50-75) | — / back | — |
-| PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Step page | Macros A-D (push: MACRO LEARN) | Capture scene / clear macro | — (auto-fill: FUNC menu) |
+| PATTERN | Change field -/+ | Field LEN / SWG / FEEL / track 1-8 swing | Page | Bank A-H | A: LEN 1-64, B: SWG, C: track swing (PAT, 50-75), D: FEEL (OFF, DRIFT 1-6, WAVE 1-6) | — / back | — |
+| PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Step page | Macros A-D (push: MACRO LEARN; FUNC + A: REL ALL, FUNC + B: LEN ALL) | Capture scene / clear macro | — (auto-fill: FUNC menu) |
 | FUNC menu | Row | Change a setting row | — | — | A: row, B: change | Run the row / close | — |
 
 **STEP lights:** a trig is green as bright as its velocity (soft, medium, loud, accent), blinks with a condition or probability, is amber with locks; red = trigless, bright red = the playhead.
@@ -214,7 +214,12 @@ empty), up to 64 entries. CLR twice within 2 s removes the entry under the curso
 switches SONG (play the chain once and stop, `SONG END`) and LOOP. Chain edits are not undoable.
 **PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
 (END) and the chain wait for. The eight TRACK SWING fields read `PAT` (follow SWG) or 50-75%: C
-sets the one under `>`, or the selected track's when `>` is on LEN or SWG.
+sets the one under `>`, or the selected track's when `>` is on LEN or SWG. FEEL (D, or its row)
+drifts the timing over the swing: DRIFT 1-6 each track on its own random curve, WAVE 1-6 the
+whole groove along one four-bar curve; the number is the most a step moves, in 96ths of a beat.
+**REL ALL / LEN ALL:** in PERFORM, FUNC + turn A moves every track's release (DEC, and REL on
+the ASR page) by the same count (`REL ALL -12`, -64..+64); FUNC + turn B scales every sequenced
+note's length (`LEN ALL 71%`, 25-400%). 0 is rest and a detent; not saved; a LOCK holds both.
 **MACRO LEARN:** in PERFORM push a macro's knob (A-D): EDIT opens with `LEARN B n/4`; **turn** any EDIT knob (any page, the LFO's included, any track) to where the macro's top should be; OK, CLR or HOME ends it (`B: 3 PARAMS`) and the knobs snap back, so the macro at 0 is the old sound and at 127 the one you dialled. A push takes a parameter the macro holds off it; a fifth knob says `FULL`. An EDIT knob on a parameter a turned-up macro holds says `HELD BY MACRO x`.
 **PERFORM:** macros are set by MACRO LEARN (above); the STEP keys are steps, as in GRID;
 FUNC+STEP 5-7 the master kill EQ's LOW, MID or HI (`A EQ LOW`). OK's whole capture also stores the
@@ -253,7 +258,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | --- | --- | --- |
 | Top line | `A01 3.2 130.0 > 24%` | Live bank+slot, bar.beat, tempo, `>` playing / `.` stopped, audio load |
 | Under it | a 1 px line | How far the pattern is through its pass |
-| Line 2 | `K:L FX4 S40 M:AB LP` | Live strip: what is off rest (kills, perf effect, morph %, macros, looper); empty at rest |
+| Line 2 | `K:L FX4 S40 M:AB RL- LP` | Live strip: what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, looper); empty at rest |
 | Line 2 | `EXT MIDI` `EXT SYNC` `CLOCK REFUSED` | Outside clock source; a transport call was refused (when the strip is empty) |
 | Right edge | 2 px column | Master meter: level, held peak dot, top pixel = limiter |
 | Bottom line | `TRK3 MAX23.5 SMPLTREK` / `TRK3 DROP 2` | Tracks sounding, the highest audio load since PLAY (held; PLAY starts it again), device; DROP = edits lost to a full command ring |
@@ -264,8 +269,9 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | GRID cells | dot / cut corner / teeth / outline | Locks / top-left condition, top-right probability / ratchet / trigless |
 | PROJECT | `BANK A   END CHAIN` | Shown bank, queue mode, chain running |
 | CHAIN | `CHAIN 3/64 ON SONG`, `>02 A05 X2 M3 PLAY` | Entries used, chain on/off, plays once (SONG) or loops; cursor, entry, pattern, repeats, mute state recalled at its start, playing now |
-| PATTERN | `>LEN 16 STEPS`, `SWG 54%`, `3 PAT`, `>5 66%` | Master length; swing; a track following SWG or with its own (`>` = field VALUE changes) |
-| EDIT LFO | `NOW CUT 87`, `LFO OFF: SET DEP+DST` | The destination's value right now; DEP or DST is zero |
+| PATTERN | `>LEN 16 STEPS`, `SWG 54%`, `FEEL DRIFT 3`, `3 PAT`, `>5 66%` | Master length; swing; FEEL; a track following SWG or with its own (`>` = field VALUE changes) |
+| EDIT LFO | `NOW CUT 87`, `NOW CUT 87 ONE-SHOT`, `LFO OFF: SET DEP+DST` | The destination's value right now, and TRIG unless FREE; DEP or DST is zero |
+| EDIT LFO | `LFO TRIG RETRIG` | Push B: FREE, RETRIG, ONE-SHOT |
 | EDIT ARP | `UP 1/16 X2 75%`, `ARP OFF: TURN MOD` | Mode, rate, octaves, gate; the arp is off |
 | EDIT ASR | `HOLDS: PAD OR LEN`, `SUS 0: ONE-SHOT`, `NOT ON THIS MACHINE` | Notes hold (SUS up); notes are one-shots; a machine with no ASR page |
 | EDIT OSC | `OS2: DET 1-63 SYN 64+`, `WRP BENDS  DET 2 OSCS`, `NOT ON THIS MACHINE`, `FIN NUDGES RAT` | What OS2's two halves do; the WAVE pair's WRP and DET; a machine with no OSC page; FM4's FIN |
@@ -274,7 +280,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | Any | `STREAM LATE` | The card fell behind a streamed file; the gap played as silence |
 | PROJECT | `UNSAVED`, `NO CARD` | RAM differs from the card; no usable card |
 | KIT | `>03 KIT`, `EMPTY`, `UNREADABLE`, `...` | Cursor and slot: holds a kit, nothing, a damaged file, not read yet; the cursor's kit below as two lines of four machines |
-| PERFORM | `A1 12P`, `>A`, `3P` | Scene slot and its parameter count; selected macro; macro targets |
+| PERFORM | `A1 12P`, `>A`, `3P`, `REL -12 LEN 71%` | Scene slot and its parameter count; selected macro; macro targets; REL ALL and LEN ALL away from rest |
 | PERFORM | `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n` | Mutation, track, amount; fill, auto-fill, repeat (`-` pitched down), throw; bar count (`NRPT`: note repeat on, `FRZ`: delay frozen) |
 | MIXER | `T1 M`, `ON`/`--`, `PEAK` | Track muted; machine present; master peak |
 | MIXER EQ | `0`, `-20`, `+12`, `KILL` | Band flat, cut, boosted; killed by its switch or a knob at the bottom |
@@ -289,7 +295,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 four-operator FM.
 
 **EDIT pages:** SRC source · FLTR filter (the insert chain's; on the VA and WAVE machines the voice's own) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ASR held notes and OSC oscillators (VA, WAVE, FM4 and GRAIN machines).
-**LFO page:** WAV shape SIN TRI RMP (rising) SAW (falling) SQR S+H · RAT rate, `0.06`-`32` Hz free on the lower half, `8B` (bars) to `1/32` synced on the upper (`.` dotted, `T` triplet) · DEP depth, 127 = about 64 either side · DST the parameter it moves, or OFF. Lockable, scene- and macro-able like any parameter.
+**LFO page:** WAV shape SIN TRI RMP (rising) SAW (falling) SQR S+H · RAT rate, `0.06`-`32` Hz free on the lower half, `8B` (bars) to `1/32` synced on the upper (`.` dotted, `T` triplet) · DEP depth, 127 = about 64 either side (about 3 octaves on a cutoff, never under ~100 Hz) · DST the parameter it moves, or OFF. Lockable, scene- and macro-able like any parameter. **Push B = TRIG:** FREE, RETRIG (each note restarts it), ONE-SHOT (each note runs one cycle: TRI attack-decay, SAW decay, RMP rise and hold, SQR gate, S+H per note). On VA and WAVE an LFO on TUN glides.
 **ASR page (VA and WAVE machines; FM4's is below):** ATK attack `3MS`-`5.0S` · SUS sustain `0%` (one-shot: DEC is the length) to `100%` · REL release `60MS`-`8.0S` · FSU filter sustain (0 = the sweep closes, up = stays open). SUS up: a note holds while the pad or key is held, or for the step's LEN (MONO counts LEN only then). Pad: SUS 70%, ATK 400MS, REL 2.0S, chord step LEN 16 STP. REC records how long a held note was held as its step's LEN.
 **OSC page (VA MONO, VA POLY):** WAV `SAW` (0-31), `SQR` (32) to `P08` (127, a thin pulse) · OS2 `OFF` (0), `D0`-`D60` a detuned second saw in cents (1-63: chorus to Reese), `S+0`-`S+24` a pulse synced to OSC 1 (64-127: the sync sweep) · SUB the sub an octave down (0 = off) · DRV drive into the filter, thicker and dirtier, not louder. RES (SRC) self-oscillates near the top.
 

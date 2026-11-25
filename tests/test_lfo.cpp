@@ -4,7 +4,11 @@
 #include "check.hpp"
 #include "fakehost.hpp"
 
+#include <cstring>
+
 #include "lfo.hpp"
+#include "project.hpp"
+#include "va.hpp"
 #include "perform.hpp"
 #include "track.hpp"
 
@@ -263,8 +267,10 @@ TEST(lfo_on_a_cutoff_stops_at_the_floor) {
     for (int i = 0; i < 60; i++) {
         pump();
         const int v = engine.sounding(kTrack).v[cut];
-        CHECK(v == 127 || v == int(kLfoInsertCutoffFloor));
-        high = high || v == 127;
+        // Full depth on a cutoff is about three octaves either side (39 counts of FLTR CUT),
+        // not 64 counts; and down it stops at the floor (64 - 39 = 25 is under it).
+        CHECK(v == 64 + int(kLfoInsertCutoffSpan) || v == int(kLfoInsertCutoffFloor));
+        high = high || v == 64 + int(kLfoInsertCutoffSpan);
         low = low || v == int(kLfoInsertCutoffFloor);
     }
     CHECK(high && low);
@@ -449,4 +455,297 @@ TEST(lfo_an_lfo_that_is_off_is_bit_exact) {
     for (int t = 0; t < kTracks; t++) CHECK(!primed->lfo_on(t));
     CHECK_EQ(differing, 0);
     CHECK(peak > 0.1f);                              // and it really played
+}
+
+// --- TRIG: FREE, RETRIG, ONE-SHOT (dsp/lfo.hpp, "TRIG") ----------------------------------------
+
+TEST(lfo_trig_bytes_names_and_a_damaged_byte_runs_free) {
+    CHECK(lfo_trig(0) == LfoTrig::free);
+    CHECK(lfo_trig(1) == LfoTrig::retrig);
+    CHECK(lfo_trig(2) == LfoTrig::one_shot);
+    CHECK(lfo_trig(3) == LfoTrig::free);
+    CHECK(lfo_trig(255) == LfoTrig::free);
+    CHECK(std::strcmp(lfo_trig_name(LfoTrig::free), "FREE") == 0);
+    CHECK(std::strcmp(lfo_trig_name(LfoTrig::retrig), "RETRIG") == 0);
+    CHECK(std::strcmp(lfo_trig_name(LfoTrig::one_shot), "ONE-SHOT") == 0);
+    // The kit's numbers are the enum's (app/engine.cpp asserts it too).
+    CHECK_EQ(int(kLfoTrigOneShot), int(LfoTrig::one_shot));
+}
+
+TEST(lfo_one_shot_shapes_are_envelopes_that_start_and_end_at_the_knob) {
+    using W = LfoWave;
+    // SIN: one wobble, 0 at both ends.
+    CHECK_EQ(TrackLfo::one_shot_value(W::sine, 0.0f, 0.0f), 0.0f);
+    CHECK_NEAR(TrackLfo::one_shot_value(W::sine, 0.25f, 0.0f), 1.0f, 1e-3f);
+    CHECK_NEAR(TrackLfo::one_shot_value(W::sine, 0.75f, 0.0f), -1.0f, 1e-3f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::sine, 1.0f, 0.0f), 0.0f);
+    // TRI: attack to the top half way, decay back.
+    CHECK_EQ(TrackLfo::one_shot_value(W::triangle, 0.0f, 0.0f), 0.0f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::triangle, 0.25f, 0.0f), 0.5f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::triangle, 0.5f, 0.0f), 1.0f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::triangle, 0.75f, 0.0f), 0.5f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::triangle, 1.0f, 0.0f), 0.0f);
+    // RMP rises and holds; SAW is a decay from the top.
+    CHECK_EQ(TrackLfo::one_shot_value(W::ramp, 0.0f, 0.0f), 0.0f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::ramp, 0.5f, 0.0f), 0.5f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::ramp, 1.0f, 0.0f), 1.0f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::saw, 0.0f, 0.0f), 1.0f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::saw, 0.5f, 0.0f), 0.5f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::saw, 1.0f, 0.0f), 0.0f);
+    // SQR: a gate for the first half.
+    CHECK_EQ(TrackLfo::one_shot_value(W::square, 0.49f, 0.0f), 1.0f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::square, 0.5f, 0.0f), 0.0f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::square, 1.0f, 0.0f), 0.0f);
+    // S+H: its value, the whole cycle and after.
+    CHECK_EQ(TrackLfo::one_shot_value(W::sample_hold, 0.3f, -0.4f), -0.4f);
+    CHECK_EQ(TrackLfo::one_shot_value(W::sample_hold, 1.0f, -0.4f), -0.4f);
+}
+
+TEST(lfo_one_shot_waits_for_a_note_runs_one_cycle_and_stops) {
+    TrackLfo lfo;
+    lfo.init(7);
+    CHECK_EQ(lfo.one_shot(LfoWave::saw, 0.3f), 0.0f);     // no note yet: at rest
+    CHECK_EQ(lfo.one_shot(LfoWave::ramp, 0.3f), 0.0f);    // RMP too, before its first rise
+    lfo.restart();
+    CHECK_EQ(lfo.one_shot(LfoWave::saw, 0.0f), 1.0f);
+    CHECK_EQ(lfo.one_shot(LfoWave::saw, 0.25f), 0.75f);
+    CHECK(!lfo.one_shot_done());
+    CHECK_EQ(lfo.one_shot(LfoWave::saw, 0.9f), 0.0f);     // past the end: stopped, at rest
+    CHECK(lfo.one_shot_done());
+    CHECK_EQ(lfo.one_shot(LfoWave::saw, 0.25f), 0.0f);    // and it stays there
+    CHECK_EQ(lfo.one_shot(LfoWave::ramp, 0.25f), 1.0f);   // a finished rise holds the top
+    // Each note draws a new S+H value and keeps it.
+    lfo.restart();
+    const float first = lfo.one_shot(LfoWave::sample_hold, 0.0f);
+    CHECK_EQ(lfo.one_shot(LfoWave::sample_hold, 2.0f), first);
+    lfo.restart();
+    CHECK(lfo.one_shot(LfoWave::sample_hold, 0.0f) != first);
+    lfo.rest();
+    CHECK_EQ(lfo.one_shot(LfoWave::saw, 0.1f), 0.0f);
+}
+
+TEST(lfo_restart_goes_back_to_phase_zero_and_draws_a_new_sample) {
+    TrackLfo lfo;
+    lfo.init(11);
+    lfo.advance(LfoWave::saw, 0.4f);
+    CHECK_NEAR(lfo.phase(), 0.4f, 1e-6f);
+    lfo.restart();
+    CHECK_EQ(lfo.phase(), 0.0f);
+    CHECK_EQ(lfo.advance(LfoWave::saw, 0.0f), 1.0f);      // SAW starts at its top
+    const float held = lfo.advance(LfoWave::sample_hold, 0.0f);
+    lfo.restart();
+    CHECK(lfo.advance(LfoWave::sample_hold, 0.0f) != held);
+}
+
+namespace {
+
+void trig_mode(uint8_t mode) {
+    post(Cmd::set_lfo_trig, kTrack, 0, mode);
+    pump();
+}
+
+void note() { post(Cmd::trigger_note, kTrack, 0, 60, 100); }
+
+}  // namespace
+
+TEST(lfo_retrig_restarts_the_cycle_on_every_note_and_free_does_not) {
+    Engine &engine = fresh();
+    lfo(LfoWave::saw, 28, 127, kDest);               // 1 Hz, falling from the top
+    pump(200);
+    const int free_before = sounding();
+    CHECK(free_before < 120);                        // part of a cycle in
+    note();
+    pump();
+    CHECK(sounding() <= free_before);                // FREE: the note moved nothing
+
+    trig_mode(kLfoTrigRetrig);
+    CHECK_EQ(int(engine.project().kit.tracks[kTrack].lfo_trig), int(kLfoTrigRetrig));
+    pump(100);
+    CHECK(sounding() < 120);
+    note();
+    pump();
+    CHECK_EQ(int(sounding()), 127);                  // back to the top on the note's block
+    pump(40);
+    const int later = sounding();
+    CHECK(later < 127 && later > 100);               // and falling again from there
+    note();
+    pump();
+    CHECK_EQ(int(sounding()), 127);
+
+    trig_mode(kLfoTrigFree);
+    lfo(LfoWave::saw, 28, 0, kDest);
+}
+
+TEST(lfo_one_shot_is_an_envelope_on_each_note) {
+    Engine &engine = fresh();
+    trig_mode(kLfoTrigOneShot);
+    lfo(LfoWave::saw, 63, 127, kDest);               // 32 Hz: one cycle is 31 ms
+    pump(10);
+    CHECK(engine.lfo_on(kTrack));
+    CHECK_EQ(int(sounding()), 64);                   // waiting for a note, at the knob
+    note();
+    pump();
+    CHECK_EQ(int(sounding()), 127);                  // the note: DEP up
+    int last = 127;
+    const int cycle_blocks = int(float(ENAGA_SAMPLE_RATE) / (32.0f * float(kBlk))) + 2;
+    for (int i = 0; i < cycle_blocks; i++) {
+        pump();
+        CHECK(int(sounding()) <= last);              // decaying, never rising
+        last = sounding();
+    }
+    CHECK_EQ(int(sounding()), 64);                   // and back at the knob
+    pump(50);
+    CHECK_EQ(int(sounding()), 64);                   // where it stays until the next note
+    note();
+    pump();
+    CHECK_EQ(int(sounding()), 127);
+
+    // TRI is an attack and a decay: up to DEP half way, back to the knob.
+    set(kLfoWave, lfo_wave_byte(LfoWave::triangle));
+    note();
+    pump();
+    CHECK_EQ(int(sounding()), 64);
+    int top = 0;
+    for (int i = 0; i < cycle_blocks; i++) {
+        pump();
+        if (int(sounding()) > top) top = sounding();
+    }
+    CHECK(top >= 120);
+    CHECK_EQ(int(sounding()), 64);
+
+    trig_mode(kLfoTrigFree);
+    lfo(LfoWave::saw, 63, 0, kDest);
+}
+
+TEST(lfo_on_tune_glides_on_a_synth_and_steps_the_byte_elsewhere) {
+    Engine &engine = fresh();
+    constexpr int kVa = 5;                           // VA MONO in the rig's kit
+    CHECK_EQ(int(engine.machine_id(kVa)), int(MachineId::va_mono));
+    post(Cmd::set_param, kVa, 0, uint8_t(kLfoWave), lfo_wave_byte(LfoWave::sine));
+    post(Cmd::set_param, kVa, 0, uint8_t(kLfoRate), 20);
+    post(Cmd::set_param, kVa, 0, uint8_t(kLfoDepth), 100);
+    post(Cmd::set_param, kVa, 0, uint8_t(kLfoDest), lfo_dest_byte(0));
+    pump(40);
+    CHECK(engine.lfo_on(kVa));
+    // The byte stays on the knob; the machine gets the offset as a float.
+    CHECK_EQ(int(engine.sounding(kVa).v[0]), 64);
+    const float mod = engine.lfo_pitch_mod(kVa);
+    CHECK(mod != 0.0f);
+    CHECK_EQ(mod, lfo_pitch_semis(engine.lfo_value(kVa), 100));
+    const auto *va = static_cast<const VaMono *>(engine.machine(kVa));
+    CHECK_EQ(va->settings().pitch_mod, mod);
+    // What the screen shows is the byte it would have been.
+    CHECK_EQ(int(engine.lfo_shown(kVa)), int(lfo_apply(64, engine.lfo_value(kVa), 100)));
+
+    // Off: the machine is handed 0.
+    post(Cmd::set_param, kVa, 0, uint8_t(kLfoDepth), 0);
+    pump(2);
+    CHECK_EQ(engine.lfo_pitch_mod(kVa), 0.0f);
+    CHECK_EQ(va->settings().pitch_mod, 0.0f);
+    post(Cmd::set_param, kVa, 0, uint8_t(kLfoDest), 0);
+    pump();
+
+    // A drum's TUN is still the byte.
+    lfo(LfoWave::square, 63, 127, 0);
+    pump(30);
+    CHECK(engine.sounding(kTrack).v[0] == 127 || engine.sounding(kTrack).v[0] == 0);
+    CHECK_EQ(engine.lfo_pitch_mod(kTrack), 0.0f);
+    lfo(LfoWave::square, 63, 0, 0);
+}
+
+TEST(lfo_pitch_semis_is_the_byte_offset_unrounded) {
+    // DEP 127 at full swing: 64 counts of TUN, 24 semitones.
+    CHECK_NEAR(lfo_pitch_semis(1.0f, 127), 24.0f, 1e-4f);
+    CHECK_NEAR(lfo_pitch_semis(-0.5f, 127), -12.0f, 1e-4f);
+    CHECK_EQ(lfo_pitch_semis(0.7f, 0), 0.0f);
+    // Where the byte would round to a whole count, the float does not.
+    CHECK_EQ(int(lfo_apply(64, 0.01f, 127)), 65);
+    CHECK_NEAR(lfo_pitch_semis(0.01f, 127), 0.24f, 1e-4f);
+}
+
+TEST(lfo_a_cutoff_swings_about_three_octaves_and_other_bytes_64_counts) {
+    const int fltr_cut = page_first(Page::fltr) + 1;
+    const int src_cut = page_first(Page::src) + 2;
+    CHECK_EQ(lfo_span(fltr_cut, false, true), kLfoInsertCutoffSpan);
+    CHECK_EQ(lfo_span(src_cut, true, false), kLfoVaCutoffSpan);
+    CHECK_EQ(lfo_span(fltr_cut, true, false), kLfoSpan);   // TON on a synth
+    CHECK_EQ(lfo_span(src_cut, false, true), kLfoSpan);    // a drum's third byte
+    CHECK_EQ(lfo_span(fltr_cut, false, false), kLfoSpan);  // MID
+    CHECK_EQ(int(lfo_apply(64, 1.0f, 127, 0, kLfoInsertCutoffSpan)), 103);
+    CHECK_EQ(int(lfo_apply(64, 1.0f, 127, 0, kLfoVaCutoffSpan)), 109);
+    // 39 counts of FLTR's 9.8138 octaves, and 45 of the VAs' 8.4214: about three each.
+    CHECK_NEAR(kLfoInsertCutoffSpan * 9.8138f / 127.0f, 3.0f, 0.05f);
+    CHECK_NEAR(kLfoVaCutoffSpan * 8.4214f / 127.0f, 3.0f, 0.05f);
+    // The default span is the old arithmetic, bit for bit.
+    for (int d = 0; d < 128; d += 9) {
+        for (float v = -1.0f; v <= 1.0f; v += 0.0625f) {
+            const float old = v * float(d) * (64.0f / 127.0f);
+            const int rounded = old >= 0.0f ? int(old + 0.5f) : -int(-old + 0.5f);
+            const int sum = 64 + rounded;
+            const int want = sum < 0 ? 0 : (sum > 127 ? 127 : sum);
+            CHECK_EQ(int(lfo_apply(64, v, uint8_t(d))), want);
+        }
+    }
+    CHECK_EQ(lfo_cutoff_param(true, false), src_cut);
+    CHECK_EQ(lfo_cutoff_param(false, true), fltr_cut);
+    CHECK_EQ(lfo_cutoff_param(false, false), -1);
+}
+
+// --- the floor for the morph and the macros (D9's leftover) -----------------------------------
+
+TEST(lfo_floor_a_morph_or_macro_stops_a_cutoff_at_about_100_hz_but_the_knob_does_not) {
+    Engine &engine = fresh();
+    constexpr int kKick = 0;
+    const int cut = page_first(Page::fltr) + 1;
+    // Scene 4 holds the cutoff shut; the kit is open.
+    post(Cmd::set_param, kKick, 0, uint8_t(cut), 0);
+    post(Cmd::scene_capture, kKick, 0, 3, 1);
+    post(Cmd::set_param, kKick, 0, uint8_t(cut), 100);
+    post(Cmd::scene_select, 0, 0, 0, 5);             // A: an empty scene, the kit
+    post(Cmd::scene_select, 0, 0, 1, 3);
+    Command morph;
+    morph.cmd = Cmd::set_morph;
+    morph.u = kMorphScale;
+    strata::test::engine().commands().post(morph);
+    pump(2);
+    CHECK_EQ(int(engine.performed(kKick, cut)), int(kLfoInsertCutoffFloor));
+    // Half way, above the floor: the plain morph.
+    morph.u = kMorphScale / 2;
+    strata::test::engine().commands().post(morph);
+    pump(2);
+    CHECK(int(engine.performed(kKick, cut)) > int(kLfoInsertCutoffFloor));
+    // The knob itself under the floor: the morph can take it no lower than the knob, and the
+    // knob still closes the filter.
+    post(Cmd::set_param, kKick, 0, uint8_t(cut), 10);
+    morph.u = kMorphScale;
+    strata::test::engine().commands().post(morph);
+    pump(2);
+    CHECK_EQ(int(engine.performed(kKick, cut)), 10);
+    CHECK_EQ(int(kit_value(kKick, cut)), 10);
+    morph.u = 0;
+    strata::test::engine().commands().post(morph);
+    post(Cmd::scene_erase, 0, 0, 3);
+    post(Cmd::scene_select, 0, 0, 0, 0);
+    post(Cmd::scene_select, 0, 0, 1, 1);
+    pump(2);
+
+    // A macro sweeping a VA's CUT (SRC's third byte) down to 0 stops at its floor.
+    constexpr int kVa = 5;
+    const int va_cut = page_first(Page::src) + 2;
+    post(Cmd::set_param, kVa, 0, uint8_t(va_cut), 90);
+    Command assign;
+    assign.cmd = Cmd::macro_assign;
+    assign.track = kVa;
+    assign.a = 0;
+    assign.b = uint8_t(va_cut);
+    assign.c = 0;
+    assign.d = 0;
+    strata::test::engine().commands().post(assign);
+    post(Cmd::set_macro, 0, 0, 0, 127);
+    pump(2);
+    CHECK_EQ(int(engine.performed(kVa, va_cut)), int(kLfoVaCutoffFloor));
+    post(Cmd::set_macro, 0, 0, 0, 0);
+    post(Cmd::macro_clear, 0, 0, 0);
+    pump(2);
+    CHECK_EQ(int(engine.performed(kVa, va_cut)), 90);
 }

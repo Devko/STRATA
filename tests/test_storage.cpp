@@ -494,6 +494,7 @@ const Expect kTable[] = {
     {Cmd::set_stream, kDirtyKit, "set_stream"},
     {Cmd::stream_attach, 0u, "stream_attach"},
     {Cmd::set_slice_mode, kDirtyKit, "set_slice_mode"},
+    {Cmd::set_lfo_trig, kDirtyKit, "set_lfo_trig"},
 
     {Cmd::set_param, kDirtyKit, "set_param"},
     // The mixer fader, which `kit_from_params` copies into `KitTrack::level`.
@@ -587,6 +588,11 @@ const Expect kTable[] = {
     // a pattern, the sound bytes and faders, and the send, master and mute bytes back.
     {Cmd::lock_store, 0u, "lock_store"},
     {Cmd::lock_tap, kDirtyBank | kDirtyKit | kDirtyProject, "lock_tap"},
+
+    // FEEL is a pattern setting, saved in the bank like swing (core/serialize.hpp, section 5).
+    {Cmd::set_pattern_feel, kDirtyBank, "set_pattern_feel"},
+    // REL ALL and LEN ALL are where the hands are, like a macro's position: no file.
+    {Cmd::set_move_all, 0u, "set_move_all"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:
@@ -778,8 +784,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     // card protocol: a file that came out a different size means the two have drifted apart.
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 402);
     CHECK_EQ(project_bytes(), 402u);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1309);
-    CHECK_EQ(kit_bytes(), 1309u);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1329);
+    CHECK_EQ(kit_bytes(), 1329u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 5108);
     CHECK_EQ(perform_bytes(), 5108u);
     for (int b = 0; b < kBanks; b++) {
@@ -1067,7 +1073,7 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     CHECK(pump_until_idle());
     CHECK(storage().last_error() == nullptr);
     keep_pristine(kit);
-    CHECK_EQ(g_pristine_bytes, 1309u);
+    CHECK_EQ(g_pristine_bytes, 1329u);
 
     // A sanity pass first: the pristine file loads.
     CHECK(reload_now());
@@ -1118,7 +1124,7 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     // A damaged section OFFSET, with the checksum made to agree, is refused the same way -- so
     // the structure checks are not reachable only through a header field.
     restore_pristine(kit);
-    g_scratch[kHeaderBytes + 4] = 0xFFu;     // the first section's offset, out of the payload
+    g_scratch[kHeaderBytes + 5] = 0xFFu;     // the first section's offset, out of the payload
     refresh_crc();
     store(kit, g_pristine_bytes);
     CHECK(reload_now());
@@ -1652,7 +1658,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 402);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1309);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1329);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 5108);
 
     // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.

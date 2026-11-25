@@ -64,6 +64,12 @@ void append_number(char *&out, uint32_t value) {
     while (n) *out++ = digits[--n];
 }
 
+// A signed amount with its sign, "+12", "-6" or "0" (REL ALL).
+void append_signed(char *&out, int value) {
+    if (value != 0) *out++ = value < 0 ? '-' : '+';
+    append_number(out, uint32_t(value < 0 ? -value : value));
+}
+
 void append_tenths(char *&out, uint32_t tenths) {
     append_number(out, tenths / 10);
     *out++ = '.';
@@ -671,6 +677,33 @@ public:
                 const bool on = !slices_auto(selected_);
                 post(Cmd::set_slice_mode, uint8_t(selected_), 0, on ? kSliceAuto : kSliceEqual);
                 notice(on ? "SLICES AUTO" : "SLICES EVEN");
+                return;
+            }
+        }
+
+        // LFO TRIG: on the LFO page, push RAT's knob for FREE, RETRIG, ONE-SHOT and round again
+        // (dsp/lfo.hpp, "TRIG"). A kit setting, like SLC AUTO, and without FUNC for the same
+        // reason; a held STEP took its push above.
+        if ((mode_ == Mode::edit || mode_ == Mode::grid || mode_ == Mode::keys) && !shift_ &&
+            !step_page_ && param_page_ == int(Page::lfo) &&
+            (key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||
+             key == ENAGA_KEY_PUSH_D)) {
+            const int encoder = key == ENAGA_KEY_PUSH_A   ? 0
+                                : key == ENAGA_KEY_PUSH_B ? 1
+                                : key == ENAGA_KEY_PUSH_C ? 2
+                                                          : 3;
+            if (edit_index(encoder) == kLfoRate) {
+                if (!down) return;
+                const uint8_t next = uint8_t((int(lfo_trig_of(selected_)) + 1) % kLfoTrigs);
+                post(Cmd::set_lfo_trig, uint8_t(selected_), 0, next);
+                char *out = notice_buffer_;
+                append(out, "LFO TRIG ");
+                append(out, lfo_trig_name(LfoTrig(next)));
+                *out = 0;
+                notice(notice_buffer_);
+                // Logged too: the emulator can push a knob but not read the screen
+                // (tests/scenario_lfo.sh).
+                enaga::log(notice_buffer_);
                 return;
             }
         }
@@ -1744,6 +1777,17 @@ public:
         // which run B, A, C, D. See docs/ENAGA_API.md -- confusing the two silently swaps A
         // and B, and nothing catches it.
 
+        // FUNC + turn A / B in PERFORM: REL ALL and LEN ALL (core/moveall.hpp), the Moves layer's
+        // two global controls beside the macros. Before the macros, which FUNC + turn only
+        // duplicated. 0 is a detent and rest: the programmed sound to the bit.
+        if (mode_ == Mode::perform && shift_ && (encoder == 0 || encoder == 1)) {
+            int8_t &amount = encoder == 0 ? rel_all_ : len_all_;
+            amount = all_turn(amount, delta);
+            post(Cmd::set_move_all, 0, 0, uint8_t(encoder), uint8_t(amount));
+            move_all_notice(encoder);
+            return;
+        }
+
         // A to D are the four macros in PERFORM mode, which is what they are for.
         if (mode_ == Mode::perform && encoder >= 0 && encoder < kMacros) {
             const int next = int(macro_position_[encoder]) + delta * 2;
@@ -1848,6 +1892,9 @@ public:
             if (encoder == 0 || encoder == 1) {
                 pattern_field_ = encoder;
                 pattern_field_delta(encoder, delta);
+            } else if (encoder == 3) {
+                pattern_field_ = kPatternFieldFeel;
+                pattern_field_delta(kPatternFieldFeel, delta);
             } else if (encoder == 2) {
                 if (pattern_field_ < kPatternFieldTrackSwing) {
                     pattern_field_ = kPatternFieldTrackSwing + selected_;
@@ -3410,6 +3457,10 @@ public:
         }
         *p = 0;
         if (p - part > 2) add(part);
+        // REL ALL and LEN ALL away from rest, and which way: RL- shorter tails, LN+ longer
+        // notes. Two letters, so they cannot be read as the repeat rate's R1/16.
+        if (engine_.rel_all() != 0) add(engine_.rel_all() < 0 ? "RL-" : "RL+");
+        if (engine_.len_all() != 0) add(engine_.len_all() < 0 ? "LN-" : "LN+");
         if (engine_.status().looper_state.load(std::memory_order_relaxed) != 0) add("LP");
         *out = 0;
         return out != line;
@@ -3849,7 +3900,13 @@ public:
                 append(out, "NOW ");
                 append(out, track_param_name(dest));
                 *out++ = ' ';
-                append_padded(out, engine_.sounding(selected_).v[dest], 3);
+                append_padded(out, engine_.lfo_shown(selected_), 3);
+                // TRIG, when it is not FREE: "NOW CUT 064 ONE-SHOT" is 20 characters.
+                const LfoTrig trig = lfo_trig_of(selected_);
+                if (trig != LfoTrig::free) {
+                    *out++ = ' ';
+                    append(out, lfo_trig_name(trig));
+                }
             } else {
                 append(out, "LFO OFF: SET DEP+DST");
             }
@@ -4285,6 +4342,11 @@ public:
         const int y0 = y - 1 < kPictureTop ? kPictureTop : (y + 1 > bottom ? bottom - 2 : y - 1);
         canvas.rect(x0, y0, 3, 3, 15);
         canvas.pixel(x0 + 1, y0 + 1, 0);
+    }
+
+    // LFO TRIG on this track: the kit's byte, which only the audio side writes, by command.
+    LfoTrig lfo_trig_of(int track) const {
+        return lfo_trig(engine_.project().kit.tracks[track].lfo_trig);
     }
 
     // SLC AUTO on this track: the kit's byte, which only the audio side writes, by command.
@@ -6081,6 +6143,8 @@ public:
             // The knobs the UI shadows, where the jump left them.
             morph_ = engine_.morph();
             for (int m = 0; m < kMacros; m++) macro_position_[m] = engine_.macro_position(m);
+            rel_all_ = engine_.rel_all();
+            len_all_ = engine_.len_all();
             // The mixer to rest over FX GLIDE (a lock holds no effect); a loop plays on.
             if (perf_target_fx() != PerfFx::none) perf_ride_to(perf_target_fx(), 0, false);
         }
@@ -7195,6 +7259,22 @@ public:
         *out = 0;
     }
 
+    // What a turn of REL ALL or LEN ALL says: `REL ALL -12` (counts on every release byte) or
+    // `LEN ALL 71%` (of each note's programmed length); at rest `REL ALL 0`, `LEN ALL 100%`.
+    void move_all_notice(int which) {
+        char *out = notice_buffer_;
+        if (which == 0) {
+            append(out, "REL ALL ");
+            append_signed(out, rel_all_);
+        } else {
+            append(out, "LEN ALL ");
+            append_number(out, uint32_t(len_all_percent(len_all_)));
+            *out++ = '%';
+        }
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
     // What MACRO LEARN shows while it waits: the macro, its count, and what to do.
     void learn_notice() {
         if (macro_learn_ < 0) return;
@@ -7349,8 +7429,19 @@ public:
             }
         }
 
-        // The gesture that is not otherwise discoverable.
-        canvas.text(0, 78, "STEP ASSIGNS TO MACRO", 7);
+        // REL ALL and LEN ALL where they are, or the gesture while both are at rest.
+        if (engine_.rel_all() != 0 || engine_.len_all() != 0) {
+            out = line;
+            append(out, "REL ");
+            append_signed(out, engine_.rel_all());
+            append(out, " LEN ");
+            append_number(out, uint32_t(len_all_percent(engine_.len_all())));
+            *out++ = '%';
+            *out = 0;
+            canvas.text(0, 78, line, 12);
+        } else {
+            canvas.text(0, 78, "FUNC+A/B REL/LEN ALL", 7);
+        }
         canvas.text(0, 87, "AUTOFILL: FUNC MENU", 7);
 
         // What MUTATE will do, and to which track.
@@ -7906,7 +7997,8 @@ public:
     // --- PROJECT's PATTERN page: the master length and the swing ----------
 
     // The fields, in the order LEFT and RIGHT walk them: LEN, SWG, then each track's own swing.
-    static constexpr int kPatternFieldTrackSwing = 2;
+    static constexpr int kPatternFieldFeel = 2;
+    static constexpr int kPatternFieldTrackSwing = 3;
     static constexpr int kPatternFields = kPatternFieldTrackSwing + kTracks;
 
     void pattern_field_delta(int field, int delta) {
@@ -7918,6 +8010,23 @@ public:
             mark(GestureKind::length, 0, 0);
             post(Cmd::set_pattern_swing, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
             notice("SWING");
+        } else if (field == kPatternFieldFeel) {
+            // FEEL (core/timing.hpp): OFF, DRIFT 1-6, WAVE 1-6 along one line, a pattern setting
+            // like SWG, so one gesture is one undo level.
+            mark(GestureKind::length, 0, 0);
+            post(Cmd::set_pattern_feel, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
+            // Where it lands, worked out from the byte the screen has: the engine applies the
+            // same delta to the same byte. Logged, for the emulator, which cannot read the page.
+            const uint8_t feel = feel_step(engine_.pattern().feel, delta);
+            char *out = notice_buffer_;
+            append(out, "FEEL ");
+            append(out, feel_mode_name(feel));
+            if (feel_depth(feel) != 0) {
+                *out++ = ' ';
+                append_number(out, uint32_t(feel_depth(feel)));
+            }
+            *out = 0;
+            notice_logged(notice_buffer_);
         } else if (field < kPatternFields) {
             // A track's own swing (docs/SPEC.md, "an optional per-track override"). PAT, then
             // 50 to 75; the engine walks the delta (core/pattern.hpp, `track_swing_step`). One
@@ -7969,7 +8078,7 @@ public:
         append_number(out, uint32_t(pattern.master_length));
         append(out, " STEPS");
         *out = 0;
-        canvas.text(0, 32, line, pattern_field_ == 0 ? 15 : 10);
+        canvas.text(0, 29, line, pattern_field_ == 0 ? 15 : 10);
 
         out = line;
         *out++ = pattern_field_ == 1 ? '>' : ' ';
@@ -7977,10 +8086,23 @@ public:
         append_number(out, uint32_t(pattern.swing));
         *out++ = '%';
         *out = 0;
-        canvas.text(0, 42, line, pattern_field_ == 1 ? 15 : 10);
+        canvas.text(0, 38, line, pattern_field_ == 1 ? 15 : 10);
+
+        // FEEL: the drift over the swing, OFF or its mode and depth in ticks.
+        out = line;
+        *out++ = pattern_field_ == kPatternFieldFeel ? '>' : ' ';
+        append(out, "FEEL ");
+        append(out, feel_mode_name(pattern.feel));
+        if (feel_depth(pattern.feel) != 0) {
+            *out++ = ' ';
+            append_number(out, uint32_t(feel_depth(pattern.feel)));
+        }
+        *out = 0;
+        canvas.text(0, 47, line,
+                    pattern_field_ == kPatternFieldFeel ? 15 : (pattern.feel == 0 ? 8 : 10));
 
         // Each track's own swing, two to a row: PAT follows SWG above, a number overrides it.
-        canvas.text(0, 56, "TRACK SWING", 8);
+        canvas.text(0, 57, "TRACK SWING", 8);
         for (int t = 0; t < kTracks; t++) {
             const int field = kPatternFieldTrackSwing + t;
             const uint8_t swing = pattern.tracks[t].swing;
@@ -8000,7 +8122,7 @@ public:
         }
 
         canvas.text(0, 103, "LEFT RIGHT PICK", 7);
-        canvas.text(0, 112, "UP DOWN VALUE A B C", 7);
+        canvas.text(0, 112, "UP DOWN VALUE A-D", 7);
     }
 
     // --- PROJECT's SETUP page: the clock, MIDI and the record quantize ----
@@ -8406,6 +8528,10 @@ private:
     int pressure_pad_ = -1;
     uint8_t pressure_sent_ = 0;
     uint8_t macro_position_[kMacros] = {};
+    // REL ALL and LEN ALL as the knobs left them (core/moveall.hpp); posted absolute, like a
+    // macro, and read back from the engine after a LOCK jump.
+    int8_t rel_all_ = 0;
+    int8_t len_all_ = 0;
     uint16_t morph_ = 0;
     bool repeat_held_ = false;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
@@ -8440,7 +8566,7 @@ private:
     ProjectPage project_page_ = ProjectPage::slots;
     bool project_setup() const { return project_page_ == ProjectPage::setup; }
     int chain_cursor_ = 0;         // the CHAIN page's entry
-    int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG, 2-9 track swings
+    int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG, 2 FEEL, 3-10 swings
     static const char *project_page_name(ProjectPage page) {
         switch (page) {
             case ProjectPage::slots:   return "PROJECT";

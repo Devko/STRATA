@@ -375,9 +375,11 @@ TEST(the_format_constants_are_the_documented_ones) {
     CHECK_EQ(int(kTracksSectionBytes), 8 * (3 + 64 * 12));
     CHECK_EQ(int(kSectionPlayModes), 4);
     CHECK_EQ(int(kPlayModesSectionBytes), 8);
-    // 16 header + 48 table + 12 pattern header + 6168 tracks + 8 play modes + 2048 locks.
-    CHECK_EQ(int(kPatternMaxBytes), 8300);
-    CHECK_EQ(int(kPatternFixedBytes), 8300 - 2048);
+    CHECK_EQ(int(kSectionFeel), 5);
+    CHECK_EQ(int(kFeelSectionBytes), 1);
+    // 16 header + 60 table + 12 pattern header + 6168 tracks + 8 play modes + 1 FEEL + 2048 locks.
+    CHECK_EQ(int(kPatternMaxBytes), 8313);
+    CHECK_EQ(int(kPatternFixedBytes), 8313 - 2048);
 }
 
 TEST(a_written_pattern_starts_with_the_documented_header) {
@@ -396,7 +398,7 @@ TEST(a_written_pattern_starts_with_the_documented_header) {
     CHECK_EQ(peek_u32(g_buffer, kCrcOffset),
              crc32(g_buffer + kHeaderBytes, written - kHeaderBytes));
 
-    // The section table: four sections, back to back, starting right after the table.
+    // The section table: five sections, back to back, starting right after the table.
     CHECK_EQ(int(peek_u16(g_buffer, 16)), int(kSectionPatternHeader));
     CHECK_EQ(peek_u32(g_buffer, 16 + 4), kPatternSections * kSectionEntryBytes);
     CHECK_EQ(peek_u32(g_buffer, 16 + 8), kPatternHeaderSectionBytes);
@@ -404,8 +406,10 @@ TEST(a_written_pattern_starts_with_the_documented_header) {
     CHECK_EQ(peek_u32(g_buffer, 28 + 8), kTracksSectionBytes);
     CHECK_EQ(int(peek_u16(g_buffer, 40)), int(kSectionPlayModes));
     CHECK_EQ(peek_u32(g_buffer, 40 + 8), kPlayModesSectionBytes);
-    CHECK_EQ(int(peek_u16(g_buffer, 52)), int(kSectionLocks));
-    CHECK_EQ(peek_u32(g_buffer, 52 + 8), 0u);      // an empty pattern has no locks
+    CHECK_EQ(int(peek_u16(g_buffer, 52)), int(kSectionFeel));
+    CHECK_EQ(peek_u32(g_buffer, 52 + 8), kFeelSectionBytes);
+    CHECK_EQ(int(peek_u16(g_buffer, 64)), int(kSectionLocks));
+    CHECK_EQ(peek_u32(g_buffer, 64 + 8), 0u);      // an empty pattern has no locks
 
     // An empty pattern is the fixed part and nothing more.
     CHECK_EQ(written, kPatternFixedBytes);
@@ -798,7 +802,7 @@ TEST(a_damaged_section_table_is_refused) {
     // A section that claims more bytes than the payload holds: the last one, the locks.
     CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
              int(SerializeResult::ok));
-    poke_u32(g_buffer, 52 + 8, 1);
+    poke_u32(g_buffer, 64 + 8, 1);
     refresh_crc(g_buffer);
     CHECK_EQ(int(pattern_read(g_loaded, g_buffer, written)), int(SerializeResult::malformed));
 
@@ -1096,6 +1100,53 @@ TEST(a_pattern_without_the_play_mode_section_loads_every_track_forward) {
         CHECK_EQ(int(g_loaded.tracks[t].length), int(g_source.tracks[t].length));
     }
     CHECK_EQ(int(g_loaded.locks_used), int(pattern_locks_reachable(g_source)));
+}
+
+// --- FEEL (section 5) ------------------------------------------------------
+
+TEST(every_feel_survives_a_round_trip_in_its_own_section) {
+    for (int feel = 0; feel <= int(kFeelMax); feel++) {
+        make_busy_pattern(g_source);
+        g_source.feel = uint8_t(feel);
+        uint32_t written = 0;
+        CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
+                 int(SerializeResult::ok));
+        CHECK_EQ(written, pattern_bytes(g_source));
+        CHECK_EQ(int(pattern_read(g_loaded, g_buffer, written)), int(SerializeResult::ok));
+        CHECK_EQ(int(g_loaded.feel), feel);
+        const uint32_t at = section_at(g_buffer, kSectionFeel);
+        CHECK(at != 0u);
+        CHECK_EQ(int(g_buffer[at]), feel);
+    }
+}
+
+// A pattern from before FEEL: no section 5. It plays straight, and the rest is intact.
+TEST(a_pattern_without_the_feel_section_loads_with_feel_off) {
+    make_busy_pattern(g_source);
+    g_source.feel = 9;
+    uint32_t written = 0;
+    CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
+             int(SerializeResult::ok));
+    poke_u16(g_buffer, entry_of(g_buffer, kSectionFeel), 998);
+    refresh_crc(g_buffer);
+    g_loaded.feel = 5;
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.feel), 0);
+    CHECK_EQ(int(g_loaded.swing), int(g_source.swing));
+    CHECK_EQ(int(g_loaded.locks_used), int(pattern_locks_reachable(g_source)));
+}
+
+TEST(an_unknown_feel_loads_as_off_and_a_short_feel_section_is_malformed) {
+    uint32_t size = write_busy();
+    g_buffer[section_at(g_buffer, kSectionFeel)] = uint8_t(kFeelMax + 1);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, size)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.feel), 0);
+
+    size = write_busy();
+    poke_u32(g_buffer, entry_of(g_buffer, kSectionFeel) + 8, 0u);
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, size)), int(SerializeResult::malformed));
 }
 
 TEST(an_unknown_play_mode_loads_as_forward_and_a_short_section_is_malformed) {

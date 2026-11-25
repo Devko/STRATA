@@ -195,6 +195,9 @@ struct Pattern {
     uint8_t swing = uint8_t(kSwingMin);
     uint8_t root = 0;                           // 0-11
     uint8_t scale = 0;
+    // FEEL (core/timing.hpp): 0 OFF, 1-6 DRIFT, 7-12 WAVE. It took the two bytes of padding
+    // before `seed`, so Pattern did not grow.
+    uint8_t feel = 0;
     uint32_t seed = 1;                          // probability and mutation; 0 is a bad seed
 };
 
@@ -208,6 +211,8 @@ static_assert(offsetof(Step, lock_first) == 8,
               "lock_first must sit on an even offset or the C674x reads the wrong address");
 static_assert(offsetof(Step, lock_first) % sizeof(uint16_t) == 0, "lock_first is misaligned");
 static_assert(sizeof(TrackPattern) == 4 + 12 * kStepsPerTrack, "TrackPattern grew padding");
+static_assert(offsetof(Pattern, seed) == offsetof(Pattern, feel) + 2,
+              "FEEL sits in the padding before the seed");
 
 // The data model and the tick mapping must agree about how long a track can be and how far a
 // step may be nudged, or a step would be stored that the scheduler can never fire.

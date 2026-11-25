@@ -165,6 +165,7 @@ void VaPoly::prepare(const TrackParams &params) {
     // Velocity to cutoff (D15; dsp/va.cpp has VA MONO's and the reasoning): a chord's voices
     // share it, so less than the mono, and WAVE POLY's tables carry their own brightness.
     settings_.vel_cut_semis = wave_ ? 14.0f : 18.0f;
+    settings_.pitch_mod = pitch_mod_;
 
     // Everything in the filter cache was derived from the settings that have just been replaced,
     // so it goes with them. This is the ONE thing that has to happen for a stale coefficient to
