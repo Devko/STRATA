@@ -67,6 +67,9 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
   note of three: only that one fades.
 - The upper pad between E and F: `OCT` down; the last upper pad: `OCT` up.
 - FUNC + lower pad 1: the kick mutes on the bar; again: back.
+- **Pattern copy, paste, clear (0.4.0).** PROJECT, cursor on A01, FUNC+UP: `A01 COPIED`.
+  RIGHT to A06, FUNC+DOWN: `AGAIN: PASTE TO A06`, again: `A01 PASTED TO A06`; OK plays A06,
+  the same beat. FUNC+LEFT twice on A06: `A06 CLEARED`, A06 is empty. Save, reopen: both stay.
 - **NEW is empty, LOAD DEMO (0.4.0).** FUNC+HOME, NEW PROJECT, OK, OK: GRID shows no steps,
   every pad still plays its sound, centred (headphones: kick, hats and perc all in the middle).
   FUNC+HOME, UP (`LOAD DEMO`), OK, OK: `DEMO PROJECT`, and the factory beat is back.

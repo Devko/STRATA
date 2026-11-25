@@ -195,8 +195,10 @@ public:
 
     // Every command the UI posts passes through here, so that a save knows which of the ten
     // files actually changed. `live_bank` is Status::live_bank at the moment of the post: a chain
-    // may have moved the live pattern without the UI asking.
-    void note_command(Cmd cmd, int live_bank);
+    // may have moved the live pattern without the UI asking. `target_bank`: the bank a
+    // pattern_copy or pattern_clear writes (its `track`), which need not be the live one; -1
+    // falls back to the live bank.
+    void note_command(Cmd cmd, int live_bank, int target_bank = -1);
 
     bool dirty() const;
 

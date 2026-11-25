@@ -668,6 +668,31 @@ void Engine::apply(const Command &command) {
             track_erase(live(), track);
             break;
 
+        case Cmd::pattern_copy: {
+            // About 8 KiB copied here, on the audio side, which owns pattern memory: a few
+            // microseconds, once, on a key press.
+            const int bank = int(command.track), slot = int(command.step);
+            if (!project_index_valid(bank, slot) || !project_index_valid(command.a, command.b) ||
+                (bank == int(command.a) && slot == int(command.b))) {
+                status_.bump_refused();
+                break;
+            }
+            project_.patterns[bank][slot] = project_.patterns[command.a][command.b];
+            pattern_replaced(bank, slot);
+            break;
+        }
+
+        case Cmd::pattern_clear: {
+            const int bank = int(command.track), slot = int(command.step);
+            if (!project_index_valid(bank, slot)) {
+                status_.bump_refused();
+                break;
+            }
+            pattern_init(project_.patterns[bank][slot]);
+            pattern_replaced(bank, slot);
+            break;
+        }
+
         case Cmd::pattern_erase:
             // FUNC menu, CLEAR PATTERN. Lengths, speeds and swing stay (core/editops.hpp), so
             // the scheduler's derived timing is still right and nothing needs reconfiguring.
@@ -1948,6 +1973,14 @@ void Engine::apply_perf_plan(SendSettings &sends, MasterSettings &master) const 
 }
 
 // --- pattern changes ------------------------------------------------------
+
+void Engine::pattern_replaced(int bank, int slot) {
+    if (bank != int(project_.bank) || slot != int(project_.slot)) return;
+    undo_.clear();               // the history belonged to the steps just replaced
+    scheduler_.reset(true);
+    reconfigure();
+    deferred_count_ = 0;
+}
 
 void Engine::switch_pattern(int bank, int slot) {
     if (!project_index_valid(bank, slot)) return;

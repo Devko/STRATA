@@ -73,6 +73,10 @@ enum class Cmd : uint8_t {
     range_erase,       // track, step: the first step, a: how many
     track_erase,       // track
     pattern_erase,     // every track's steps and locks; the layout and the sounds stay
+    // PROJECT's slots (backlog [2]): a whole pattern copied over another, or put back to a new
+    // project's empty one. track: the destination bank, step: its slot; copy: a, b the source.
+    pattern_copy,
+    pattern_clear,
     range_transpose,   // track, step: the first step, a: how many, b: int8 semitones
     range_nudge,       // track, step: the first step, a: how many, b: int8 ticks
 

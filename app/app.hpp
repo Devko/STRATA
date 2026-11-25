@@ -6151,17 +6151,27 @@ public:
                 }
                 return true;
 
-            // The arrows move the slot cursor. With FUNC they do nothing here: chain on/off, the
-            // sample reload, RELOAD PROJECT and NEW PROJECT are in the FUNC menu (FUNC + HOME),
-            // where they are named rather than remembered (docs/CONTROLS.md).
+            // The arrows move the slot cursor. With FUNC, on the slots, they are the pattern
+            // under the cursor (backlog [2]), as FUNC + UP / DOWN copy and paste on the editing
+            // screens: UP copies it, DOWN pastes over it, LEFT clears it. Paste and clear throw
+            // a pattern away, so each takes its key twice. Chain on/off, the sample reload,
+            // RELOAD and NEW are in the FUNC menu (docs/CONTROLS.md).
             case ENAGA_KEY_UP:
             case ENAGA_KEY_DOWN:
-                if (!shift_) move_slot_cursor(key == ENAGA_KEY_UP ? -4 : +4);
+                if (!shift_) {
+                    move_slot_cursor(key == ENAGA_KEY_UP ? -4 : +4);
+                } else if (project_page_ == ProjectPage::slots) {
+                    if (key == ENAGA_KEY_UP) slot_copy(); else slot_paste();
+                }
                 return true;
 
             case ENAGA_KEY_LEFT:
             case ENAGA_KEY_RIGHT:
-                if (!shift_) move_slot_cursor(key == ENAGA_KEY_LEFT ? -1 : +1);
+                if (!shift_) {
+                    move_slot_cursor(key == ENAGA_KEY_LEFT ? -1 : +1);
+                } else if (key == ENAGA_KEY_LEFT && project_page_ == ProjectPage::slots) {
+                    slot_clear();
+                }
                 return true;
 
             default:
@@ -6208,6 +6218,81 @@ public:
         post(Cmd::pattern_erase);
         end_gesture();
         notice("CLEARED FUNC+CLR UNDO");
+    }
+
+    // --- PROJECT's slots: copy, paste and clear a whole pattern -----------------------------
+
+    enum class SlotAction : uint8_t { none, paste, clear };
+
+    // "A03" for the slot under the cursor in the shown bank.
+    void append_slot_name(char *&out, int bank, int slot) {
+        *out++ = bank_letter(bank);
+        append_padded(out, uint32_t(slot) + 1, 2);
+    }
+
+    // The second press of the same action on the same slot within kSaveArmMs.
+    bool arm_slot_action(SlotAction action) {
+        const bool again = slot_armed_ == action && slot_armed_bank_ == shown_bank_ &&
+                           slot_armed_slot_ == slot_cursor_ &&
+                           uint32_t(last_ms_ - slot_armed_at_ms_) < kSaveArmMs;
+        slot_armed_ = again ? SlotAction::none : action;
+        slot_armed_bank_ = shown_bank_;
+        slot_armed_slot_ = slot_cursor_;
+        slot_armed_at_ms_ = last_ms_;
+        return again;
+    }
+
+    void slot_copy() {
+        clip_bank_ = shown_bank_;
+        clip_slot_ = slot_cursor_;
+        char *out = notice_buffer_;
+        append_slot_name(out, clip_bank_, clip_slot_);
+        append(out, " COPIED");
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    void slot_paste() {
+        if (clip_slot_ < 0) {
+            notice("FUNC+UP COPIES FIRST");
+            return;
+        }
+        if (clip_bank_ == shown_bank_ && clip_slot_ == slot_cursor_) {
+            notice("SAME PATTERN");
+            return;
+        }
+        char *out = notice_buffer_;
+        if (!arm_slot_action(SlotAction::paste)) {
+            append(out, "AGAIN: PASTE TO ");
+            append_slot_name(out, shown_bank_, slot_cursor_);
+        } else {
+            Command command;
+            command.cmd = Cmd::pattern_copy;
+            command.track = uint8_t(shown_bank_);
+            command.step = uint8_t(slot_cursor_);
+            command.a = uint8_t(clip_bank_);
+            command.b = uint8_t(clip_slot_);
+            post_command(command);
+            append_slot_name(out, clip_bank_, clip_slot_);
+            append(out, " PASTED TO ");
+            append_slot_name(out, shown_bank_, slot_cursor_);
+        }
+        *out = 0;
+        notice(notice_buffer_);
+    }
+
+    void slot_clear() {
+        char *out = notice_buffer_;
+        if (!arm_slot_action(SlotAction::clear)) {
+            append(out, "AGAIN: CLEAR ");
+            append_slot_name(out, shown_bank_, slot_cursor_);
+        } else {
+            post(Cmd::pattern_clear, uint8_t(shown_bank_), uint8_t(slot_cursor_));
+            append_slot_name(out, shown_bank_, slot_cursor_);
+            append(out, " CLEARED");
+        }
+        *out = 0;
+        notice(notice_buffer_);
     }
 
     // The cursor over PROJECT's sixteen slots, drawn four by four: LEFT and RIGHT step through
@@ -6743,7 +6828,8 @@ private:
         // the status rather than assumed, because a chain may have moved the live pattern without
         // the UI asking (app/storage.hpp says why the flags live on this side).
         storage_.note_command(
-            command.cmd, int(engine_.status().live_bank.load(std::memory_order_relaxed)));
+            command.cmd, int(engine_.status().live_bank.load(std::memory_order_relaxed)),
+            int(command.track));
     }
 
     // The tempo, as the engine wants it: BPM in `f` (app/commands.hpp). The engine stores it in
@@ -6941,6 +7027,12 @@ private:
     int delete_oks_ = 0;
     uint32_t delete_ok_at_ms_ = 0;
     int slot_cursor_ = 0;          // PROJECT's slot cursor, on the arrows; OK queues it
+    int clip_bank_ = 0;            // FUNC + LEFT on the slots: the pattern copied, slot -1 for none
+    int clip_slot_ = -1;
+    SlotAction slot_armed_ = SlotAction::none;   // a paste or clear waiting for its second press
+    int slot_armed_bank_ = 0;
+    int slot_armed_slot_ = 0;
+    uint32_t slot_armed_at_ms_ = 0;
     Mode menu_return_ = Mode::grid;   // the screen the FUNC menu opened over
     int menu_cursor_ = 0;             // the FUNC menu's row; SAVE when it opens
     bool shift_alone_ = false;        // FUNC down and nothing else pressed since

@@ -68,6 +68,8 @@ bool mutates_pattern(Cmd cmd) {
         case Cmd::range_nudge:
         case Cmd::track_erase:
         case Cmd::pattern_erase:
+        case Cmd::pattern_copy:      // the destination's bank (note_command's target_bank)
+        case Cmd::pattern_clear:
         case Cmd::record_hit:
         case Cmd::record_length:
         case Cmd::set_step_length:
@@ -768,9 +770,12 @@ bool Storage::open_last() {
     return false;
 }
 
-void Storage::note_command(Cmd cmd, int live_bank) {
-    if (mutates_pattern(cmd) && project_index_valid(live_bank, 0)) {
-        bank_dirty_[live_bank] = true;
+void Storage::note_command(Cmd cmd, int live_bank, int target_bank) {
+    // PROJECT's slot copy and clear write the bank under the cursor, not the live one.
+    const bool slot_edit = cmd == Cmd::pattern_copy || cmd == Cmd::pattern_clear;
+    const int bank = slot_edit && target_bank >= 0 ? target_bank : live_bank;
+    if (mutates_pattern(cmd) && project_index_valid(bank, 0)) {
+        bank_dirty_[bank] = true;
     }
     if (mutates_kit(cmd)) kit_dirty_ = true;
     if (mutates_project(cmd)) project_dirty_ = true;

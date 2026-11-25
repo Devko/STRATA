@@ -644,6 +644,56 @@ TEST(ui_a_lower_pad_selects_its_track_and_everything_else_follows) {
     CHECK_EQ(UiProbe::selected(app), 2);
 }
 
+TEST(ui_project_slots_copy_paste_and_clear_a_pattern) {
+    Strata &app = fresh();
+    Project &project = app_engine().project_for_load();
+    // A trig on A01 (the playing pattern), placed as a tap would.
+    step_down(0);
+    step_up(0);
+    pump(2);
+    CHECK(project.patterns[0][0].tracks[0].steps[0].flags & kStepTrig);
+    CHECK(!(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig));
+
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_CLR);                              // the slots page
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+    for (int i = 0; i < 16; i++) key(ENAGA_KEY_LEFT);  // the cursor on A01
+    shift_key(ENAGA_KEY_DOWN);                       // nothing copied yet
+    CHECK_EQ(UiProbe::notice(app), "FUNC+UP COPIES FIRST");
+    shift_key(ENAGA_KEY_UP);
+    CHECK_EQ(UiProbe::notice(app), "A01 COPIED");
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);                            // A03
+    shift_key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN: PASTE TO A03");
+    pump(2);
+    CHECK(!(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig));   // armed only
+    shift_key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::notice(app), "A01 PASTED TO A03");
+    pump(2);
+    CHECK(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig);
+    CHECK(project.patterns[0][0].tracks[0].steps[0].flags & kStepTrig);      // the source stays
+
+    // FUNC + LEFT twice clears it; once only arms.
+    shift_key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::notice(app), "AGAIN: CLEAR A03");
+    pump(2);
+    CHECK(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig);
+    shift_key(ENAGA_KEY_LEFT);
+    CHECK_EQ(UiProbe::notice(app), "A03 CLEARED");
+    pump(2);
+    CHECK(!(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig));
+
+    // Clearing the playing pattern empties what plays.
+    for (int i = 0; i < 16; i++) key(ENAGA_KEY_LEFT);
+    shift_key(ENAGA_KEY_LEFT);
+    shift_key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK(!trig_at(0, 0));
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
 TEST(ui_func_len_held_repeats_until_a_key_comes_up) {
     Strata &app = fresh();
     pump(2);
@@ -6493,8 +6543,6 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         // lists. PERFORM's auto-fill and PROJECT's chain and sample reload moved to the menu.
         {s_perform, true, "UP", "auto-fill is in the FUNC menu"},
         {s_perform, true, "DOWN", "ditto"},
-        {s_project, true, "UP", "chain and sample reload are in the FUNC menu"},
-        {s_project, true, "DOWN", "ditto"},
         {s_chain, true, "UP", "CHAIN on / off is in the FUNC menu"},
         {s_chain, true, "DOWN", "ditto"},
         {s_pattern, true, "UP", "ditto"}, {s_pattern, true, "DOWN", "ditto"},

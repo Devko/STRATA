@@ -147,7 +147,7 @@ Printed labels (above), and the moves made while playing:
 | Chord | Does |
 | --- | --- |
 | FUNC + CLR / OK | undo / redo |
-| FUNC + UP / DOWN | copy / paste (editing screens). Card lists: read again / store here (KIT save, PROJECTS save as) |
+| FUNC + UP / DOWN | copy / paste (editing screens; on PROJECT's slots a whole pattern, the paste twice). Card lists: read again / store here (KIT save, PROJECTS save as). FUNC + LEFT twice on PROJECT's slots clears the pattern under the cursor |
 | FUNC + lower pad | mute that track on the next bar (at once while stopped). Several pads before the bar all land; the same pad twice takes it back |
 | FUNC + FILL / REPEAT / THROW | note repeat on/off / pitched-down repeat / reverb throw |
 | FUNC + MUTATE (hold) | delay freeze |
