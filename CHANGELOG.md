@@ -127,6 +127,10 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Changed
 
+- **The performance mixer goes back to rest faster.** A button that sends an effect or the
+  loop's mix to 0 (tap VALUE, push VALUE + CLR, a new slot over the old one, letting go of a
+  momentary push, leaving a loop, a LOCK jump) now rides out over at most a 1/16 at the tempo
+  instead of the whole FX GLIDE; rides in keep FX GLIDE's length. OFF still cuts.
 - **An LFO on TUN glides on VA and WAVE.** The pitch moves smoothly instead of in TUN's 0.375
   semitone steps, and a held note follows it (vibrato on a pad). Other machines step as before.
 - **Cutoff movement stops at about 100 Hz everywhere (D9).** A scene morph or a macro that takes

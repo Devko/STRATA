@@ -9199,6 +9199,8 @@ void value_tap(Strata &app) {
 
 // FX GLIDE's 1 BEAT at the clock's tempo, in ms.
 uint32_t beat_ms() { return perf_glide_ms(PerfGlide::beat, enaga::clock::state().tempo); }
+// And the ride back to rest under it: a 1/16.
+uint32_t release_ms() { return perf_release_ms(PerfGlide::beat, enaga::clock::state().tempo); }
 
 Pattern g_before_jump;                               // ~8 KiB: file scope, never a local
 
@@ -9242,7 +9244,7 @@ TEST(ui_the_menu_fx_glide_row_walks_off_sixteenth_beat_bar) {
     UiProbe::set_glide(app, PerfGlide::off);
 }
 
-TEST(ui_a_tap_on_value_rides_the_effect_out_over_a_beat_and_func_tap_cuts) {
+TEST(ui_a_tap_on_value_rides_the_effect_out_over_a_sixteenth_and_func_tap_cuts) {
     Strata &app = fresh();
     UiProbe::set_glide(app, PerfGlide::beat);
     value_step(app, 3);                             // ECHO RISER
@@ -9254,10 +9256,11 @@ TEST(ui_a_tap_on_value_rides_the_effect_out_over_a_beat_and_func_tap_cuts) {
     pump(2);
     CHECK(std::strcmp(UiProbe::notice(app), "ECHO RISER 0") == 0);
     CHECK(app_engine().perf_amount() > 90);         // still up: riding, not cut
-    g_ms += beat_ms() / 2;
+    CHECK(release_ms() < beat_ms() / 2);            // but back to rest well inside the beat
+    g_ms += release_ms() / 2;
     pump(2);
     CHECK(app_engine().perf_amount() > 40 && app_engine().perf_amount() < 60);
-    g_ms += beat_ms() / 2 + 10;
+    g_ms += release_ms() / 2 + 10;
     pump(2);
     CHECK_EQ(int(app_engine().perf_amount()), 0);
     CHECK(app_engine().perf_fx() == PerfFx::echo_riser);   // still picked, at rest
@@ -9285,7 +9288,7 @@ TEST(ui_a_slot_change_rides_the_old_effect_out_before_the_new_one_comes_in) {
     CHECK(UiProbe::perf_picked(app) == PerfFx::pump);
     CHECK(app_engine().perf_fx() == PerfFx::crush); // the old one still riding out
     CHECK(app_engine().perf_amount() > 90);
-    g_ms += beat_ms() + 10;
+    g_ms += release_ms() + 10;                      // out over the 1/16 release
     pump(2);
     CHECK(app_engine().perf_fx() == PerfFx::pump);
     CHECK_EQ(int(app_engine().perf_amount()), 0);
@@ -9338,7 +9341,7 @@ TEST(ui_hold_value_and_a_step_pushes_its_effect_in_while_held) {
     step_up(5);                                      // let go: it rides out, still picked
     pump(2);
     CHECK(app_engine().perf_amount() > 100);
-    g_ms += beat_ms() + 10;
+    g_ms += release_ms() + 10;                       // in over a beat, out over a 1/16
     pump(2);
     CHECK_EQ(int(app_engine().perf_amount()), 0);
     CHECK(UiProbe::perf_picked(app) == PerfFx::reverb_wash);

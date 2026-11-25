@@ -156,6 +156,12 @@ uint32_t perf_glide_ms(PerfGlide glide, float bpm) {
     return uint32_t(60000.0f * beats / tempo + 0.5f);
 }
 
+uint32_t perf_release_ms(PerfGlide glide, float bpm) {
+    const uint32_t full = perf_glide_ms(glide, bpm);
+    const uint32_t sixteenth = perf_glide_ms(PerfGlide::sixteenth, bpm);
+    return full < sixteenth ? full : sixteenth;
+}
+
 namespace {
 
 uint8_t lerp_amount(uint8_t from, uint8_t to, uint32_t at, uint32_t length) {

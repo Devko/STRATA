@@ -139,7 +139,7 @@ FM4 and GRAIN machines.
 | Delay freeze (performance mixer slot 5, ECHO FREEZE; FUNC + hold MUTATE until #145) | v0.1.0 | ○ (13g) | |
 | **Tap VALUE to reset**: the effect's amount, the loop's mix or the morph back to 0, riding over FX GLIDE; FUNC + tap: a cut | #121, #124, #149 | ○ (W20, 13o) | A hold of 0.5 s or more resets nothing; never the tempo |
 | **Performance mixer on VALUE**: push VALUE + STEP picks one of 14 effects (sweeps, risers, echo freeze, wash, mute bus, tape stop, bass kill, pump, crush, noise, gate, build) or the morph (13), VALUE is its amount; hold the STEP to push an effect in | #116, #145, #149 | ○ (W20, W20b, 13o) | One effect at a time. Not saved. CPU host-estimated only (about 2 points worst case with the looper) |
-| **FX GLIDE** (FUNC menu): the performance mixer's button jumps ride over OFF, 1/16, 1 BEAT or 1 BAR | #149 | ○ (W20c) | Not saved |
+| **FX GLIDE** (FUNC menu): the performance mixer's button jumps ride over OFF, 1/16, 1 BEAT or 1 BAR; back to rest in at most a 1/16 | #149, #157 | ○ (W20c, W31) | Not saved |
 | **Master looper** (VALUE + STEP 16): 1-8 bars of the mix from the bar line, VALUE crossfades live/loop, effects go over it; STEP 16 again leaves it and keeps the loop | #116, #120, #139 | ○ (W20, 13o) | Shares RESAMPLE's 30 s buffer: no RESAMPLE or FREEZE while a loop is held. No overdub yet. Not saved |
 
 ## FX and mixer

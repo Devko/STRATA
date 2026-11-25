@@ -6169,14 +6169,17 @@ public:
 
     // --- FX GLIDE (core/perffx.hpp) --------------------------------------------------------
     //
-    // A button's jump rides to its target over the FUNC menu's FX GLIDE, a beat by default;
-    // `hard` (FUNC held) cuts as before. `perf_fx_` / `perf_amount_` and `loop_mix_` stay what
+    // A button's jump rides to its target over the FUNC menu's FX GLIDE, a beat by default,
+    // and back to rest (amount 0) over at most a 1/16 (perf_release_ms); `hard` (FUNC held)
+    // cuts as before. `perf_fx_` / `perf_amount_` and `loop_mix_` stay what
     // the engine has NOW, so the lights and the strip show the ride; `perf_ride_` holds where it
     // is going. Turning VALUE takes over from wherever a ride has got to.
 
-    uint32_t glide_ms(bool hard) const {
+    uint32_t glide_ms(bool hard, uint8_t to_amount) const {
         if (hard) return 0;
-        return perf_glide_ms(perf_glide_, enaga::clock::state().tempo);
+        const float tempo = enaga::clock::state().tempo;
+        return to_amount == 0 ? perf_release_ms(perf_glide_, tempo)
+                              : perf_glide_ms(perf_glide_, tempo);
     }
 
     void perf_ride_to(PerfFx fx, uint8_t amount, bool hard) {
@@ -6186,7 +6189,7 @@ public:
         ride.to_fx = fx;
         ride.to_amount = amount;
         // From 0 to 0 (a slot picked over nothing) there is nothing to ride: set at once.
-        ride.length_ms = perf_amount_ == 0 && amount == 0 ? 0u : glide_ms(hard);
+        ride.length_ms = perf_amount_ == 0 && amount == 0 ? 0u : glide_ms(hard, amount);
         perf_riding_ = false;
         if (ride.length_ms == 0) {
             if (fx != perf_fx_ || amount != perf_amount_) perf_set(fx, amount);
@@ -6222,7 +6225,7 @@ public:
 
     void loop_ride_to(uint8_t mix, bool hard) {
         loop_riding_ = false;
-        const uint32_t length = glide_ms(hard);
+        const uint32_t length = glide_ms(hard, mix);
         if (length == 0 || loop_mix_ == mix) {
             loop_mix_ = mix;
             post(Cmd::looper, 0, 0, 0, loop_mix_);
