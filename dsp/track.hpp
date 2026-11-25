@@ -195,6 +195,16 @@ public:
     // out the rest. Machines that use all of SRC and AMP return 8.
     virtual int used_params() const { return 8; }
 
+    // The amplitude envelope of the note most worth showing, for the dot EDIT's AMP and ASR
+    // pictures ride on their curve: its stage (enaga::dsp::Envelope::Stage as a byte, 0 idle) and
+    // level, 0-1 of the peak. Audio context, read by the engine every few blocks. False when the
+    // machine does not say, which is every machine but SAMPLE, GRAIN and the MONO synths.
+    virtual bool envelope_now(uint8_t &stage, float &level) const {
+        (void)stage;
+        (void)level;
+        return false;
+    }
+
     // Three-letter names for the 16 parameter slots, for the encoder labels. Index 0-15; a
     // machine returns "---" for a slot it does not use. The font has upper case and digits only.
     virtual const char *param_name(int index) const = 0;

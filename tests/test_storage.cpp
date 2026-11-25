@@ -3308,6 +3308,12 @@ TEST(storage_a_sample_the_pool_has_no_room_for_streams_and_the_rest_play) {
     // in the pool, the rest from the card, as every long file always did.
     CHECK(storage().streaming(int(fit)));
     CHECK_EQ(storage().loading_track(), -1);
+    // Its picture is the head's, on the whole file's scale: the first few columns only.
+    CHECK(storage().has_overview(int(fit)));
+    const int head_columns = int(uint64_t(2u * 48000u) * kWaveColumns / frames);
+    const int filled = int(storage().overview(int(fit)).filled);
+    CHECK(filled >= head_columns && filled <= head_columns + 1);
+    CHECK(filled < kWaveColumns);
 
     // NEW names no file for any track, so every track goes through the swap's "no file" branch:
     // the sample is taken away, the memory given back, and the loader ends idle.
@@ -3761,6 +3767,21 @@ TEST(storage_a_file_bigger_than_the_staging_buffer_loads_whole_in_chunks) {
             wrong += pcm[2 * f + 1] != int16_t(-big_value(f)) ? 1u : 0u;
         }
         CHECK_EQ(wrong, 0u);
+        // Its picture for the screen was made from the same frames as they landed, chunk by
+        // chunk (core/overview.hpp): the same as one made from the finished PCM in one go.
+        static WaveOverview expected;
+        OverviewBuilder builder;
+        builder.begin(expected, kFrames);
+        builder.feed(pcm, 0, kFrames, 2);
+        builder.finish(kFrames);
+        CHECK(storage().has_overview(kLoopTrack));
+        const WaveOverview &made = storage().overview(kLoopTrack);
+        int differ = 0;
+        for (int c = 0; c < kWaveColumns; c++) {
+            differ += made.lo[c] != expected.lo[c] || made.hi[c] != expected.hi[c] ? 1 : 0;
+        }
+        CHECK_EQ(differ, 0);
+        CHECK_EQ(int(made.filled), kWaveColumns);
     }
     // The file is closed again: all eight handles are free.
     for (int i = 0; i < int(ENAGA_FILES_OPEN); i++) {
@@ -3782,8 +3803,13 @@ TEST(storage_a_long_file_shorter_than_its_header_says_plays_what_is_there) {
     CHECK(storage().last_error() == nullptr);
     const Sampler *loop = static_cast<const Sampler *>(engine().machine(kLoopTrack));
     CHECK_EQ(uint32_t(loop->sample_frames()), kFrames);
+    // The picture covers what plays, not what the header promised.
+    CHECK(storage().has_overview(kLoopTrack));
+    CHECK_EQ(int(storage().overview(kLoopTrack).filled), kWaveColumns);
     storage().request_new();
     CHECK(settle_long());
+    // And NEW, which names no file, takes the picture with the sample.
+    CHECK(!storage().has_overview(kLoopTrack));
 }
 
 TEST(storage_a_long_file_at_another_rate_is_resampled_or_streamed_past_the_source_buffer) {

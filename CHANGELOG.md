@@ -8,6 +8,11 @@ the project file format or the controls.
 
 ### Added
 
+- **Waveforms and envelopes in EDIT.** SAMPLE's SRC page draws the sample under the knobs, with
+  its START..END window bright, the slices dotted and a moving playhead per voice; GRAIN's draws
+  the sample with a bracket at POS and a tick for each grain in the air. AMP, ASR and the synths'
+  FLTR draw the envelope their knobs shape, with the knob letters on its handles. The picture of
+  a sample is made once while it loads (250 bytes a track), so drawing costs nothing.
 - **Play modes per track (P1).** The FUNC menu's new TRACK PLAY row, under TRACK SPEED, sets how
   the selected track walks its steps: FWD, REV, PING, or RND1-RND16 (a random step, or a random
   block of 2-16 steps, in each place). The pattern itself never changes, so FWD gives it back at

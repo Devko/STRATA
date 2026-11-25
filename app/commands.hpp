@@ -26,6 +26,8 @@
 #include <atomic>
 #include <cstdint>
 
+#include "overview.hpp"
+
 namespace strata {
 
 // What a command does. Serialized nowhere, so these may be renumbered freely.
@@ -513,6 +515,47 @@ struct Status {
     std::atomic<uint16_t> stream_want[8] = {};
     std::atomic<uint32_t> stream_late{0};
 
+    // Where a SAMPLE or GRAIN track is in its sample, for EDIT's waveform (core/overview.hpp,
+    // WaveView): the window or the grain bracket, the slice starts, and up to eight playheads or
+    // grains with a brightness each, all in the overview's columns. Written every
+    // kWaveEveryBlocks blocks by the audio side for each track playing either machine; the
+    // screen reads the selected track's. A read torn between two blocks draws one frame with a
+    // playhead from one and a window from the other, which nobody can see.
+    struct WaveStatus {
+        std::atomic<uint8_t> lo{WaveView::kNone};
+        std::atomic<uint8_t> hi{WaveView::kNone};
+        std::atomic<uint32_t> cuts[4] = {};
+        std::atomic<uint8_t> mark[WaveView::kMarks] = {};
+        std::atomic<uint8_t> glow[WaveView::kMarks] = {};
+
+        // Audio context only: one writer.
+        void publish(const WaveView &view) {
+            lo.store(view.lo, std::memory_order_relaxed);
+            hi.store(view.hi, std::memory_order_relaxed);
+            for (int i = 0; i < 4; i++) cuts[i].store(view.cuts[i], std::memory_order_relaxed);
+            for (int i = 0; i < WaveView::kMarks; i++) {
+                mark[i].store(view.mark[i], std::memory_order_relaxed);
+                glow[i].store(view.glow[i], std::memory_order_relaxed);
+            }
+        }
+        WaveView read() const {
+            WaveView view;
+            view.lo = lo.load(std::memory_order_relaxed);
+            view.hi = hi.load(std::memory_order_relaxed);
+            for (int i = 0; i < 4; i++) view.cuts[i] = cuts[i].load(std::memory_order_relaxed);
+            for (int i = 0; i < WaveView::kMarks; i++) {
+                view.mark[i] = mark[i].load(std::memory_order_relaxed);
+                view.glow[i] = glow[i].load(std::memory_order_relaxed);
+            }
+            return view;
+        }
+    };
+    WaveStatus wave[8];
+    // And each track's amplitude envelope, for the dot on EDIT's AMP and ASR curve
+    // (Machine::envelope_now): the stage (0 idle, 1 attack, 2 decay, 3 sustain, 4 release) and
+    // the level, 0-255. Written with `wave`, for every track whose machine says.
+    std::atomic<uint8_t> env_stage[8] = {};
+    std::atomic<uint8_t> env_level[8] = {};
     // LOCK (Cmd::lock_store, lock_tap). `lock_state`: bit 0 the playing pattern has a lock, bit 1 the live set
     // differs from it (the screen's L+), bit 2 the next tap swaps back. `lock_event` is bumped
     // once per store or tap the audio side applied, with `lock_last` saying what it did: a
