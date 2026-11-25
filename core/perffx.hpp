@@ -108,6 +108,43 @@ constexpr bool perf_fx_is_control(PerfFx fx) {
     return fx == PerfFx::looper || fx == PerfFx::morph;
 }
 
+// --- FX GLIDE: a button's jump rides instead of cutting ----------------------------------
+//
+// The engine smooths every depth over about 11 ms (dsp/masterfx.cpp): click-free, but a cut.
+// A jump that comes from a BUTTON (a tap on VALUE, push VALUE + CLR, a slot change, leaving
+// the looper, a LOCK jump) rides there over a musical length instead, the FUNC menu's FX GLIDE.
+// Turning VALUE is already a ride the hand makes, so it never glides. FUNC held makes any of
+// them a hard cut again, for a drop.
+
+enum class PerfGlide : uint8_t { off = 0, sixteenth, beat, bar, count };
+constexpr PerfGlide kPerfGlideDefault = PerfGlide::beat;
+
+// "OFF", "1/16", "1 BEAT", "1 BAR".
+const char *perf_glide_name(PerfGlide glide);
+
+// The glide's length in ms at `bpm` (clamped to 20-300). 0 for OFF.
+uint32_t perf_glide_ms(PerfGlide glide, float bpm);
+
+// One ride, from the effect and amount the engine has now to a target. Rides run in the UI
+// (it owns the amount, as it owns the morph), which posts each new value as it comes.
+struct PerfRide {
+    PerfFx from_fx = PerfFx::none;
+    uint8_t from_amount = 0;
+    PerfFx to_fx = PerfFx::none;
+    uint8_t to_amount = 0;
+    uint32_t length_ms = 0;
+};
+
+// Where a ride is `elapsed_ms` in. The rule, so a slot change never jumps:
+//   - to amount 0 (a let-go, or a new slot picked at 0): the old effect rides down over the
+//     whole length, and the new slot is set, at 0, only at the end;
+//   - from amount 0: the new effect is up at once and rides up from 0;
+//   - the same effect: straight from one amount to the other;
+//   - two effects, both up (a slot walk keeping the amount): the old rides out over the first
+//     half and the new rides in over the second -- a crossfade with one effect at a time.
+// At or past the length (and for a length of 0) it is the target exactly.
+void perf_ride_at(const PerfRide &ride, uint32_t elapsed_ms, PerfFx &fx, uint8_t &amount);
+
 // The amount the tape stop starts at: under it it is not held, so a VALUE turned back down lets
 // go before it reaches 0.
 constexpr uint8_t kPerfHoldThreshold = 16;
