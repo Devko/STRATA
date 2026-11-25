@@ -587,7 +587,9 @@ slices either way.
 a line at each end, the rest dim, a dotted line at each slice (even or AUTO), and a column
 running through it for each voice that plays. A track with no file shows the placeholder it plays
 and says `NO FILE`. A streamed file shows the part that is in memory, then a dotted line. The
-AMP page draws the envelope ATK and DEC make, with the letters A and B on its corners.
+AMP page draws the envelope ATK and DEC make, with the letters A and B on its corners and a
+hollow square riding it while a note plays. The sample browser (SAMPLES) shows the waveform of
+what the track plays above its `NOW` line.
 
 <p><img src="screens/edit_wave.png" width="256" alt="EDIT, SAMPLE's SRC page: the waveform"> <img src="screens/edit_wave_amp.png" width="256" alt="EDIT, SAMPLE's AMP page: the envelope"></p>
 

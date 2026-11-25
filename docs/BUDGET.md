@@ -1805,6 +1805,20 @@ full-scale constant hammered every block now peaks at about 3.2 into the insert 
 and the arithmetic ceiling is 8. Real material at LVL 127 peaks well under 1
 (`/mnt/project-files/grain-renders`).
 
+### EDIT's waveforms and envelopes (2026-11-25, emulator, cl6x)
+
+The audio side's share is `Engine::publish_waves`: every fourth block, for each SAMPLE and GRAIN
+track, a memoized prepare (nothing recomputed unless a byte moved), a WaveView of a few float
+multiplies (window, up to 16 slice starts, 4 voices or 8 grains) and about 20 byte stores, plus
+one virtual call per track for the envelope dot. All 31 scenarios pass with cl6x on the branch,
+worst 30.33% (ambient, as on main); the new `scenario_pictures` walks every picture page at
+25.49%. The overview is made in the main context while a file loads, one add and two compares a
+frame beside the conversion, and `draw()` touches at most 124 columns.
+
+Memory, cl6x image against main at `595ae0d`: payload 1,068,928 -> 1,104,992 bytes (+36,064,
+the drawing code), bss 1,562,472 -> 1,565,120 (+2,648: eight 250-byte overviews and the
+placeholder's in Storage, `Status::wave` and the envelope bytes). No heap.
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |

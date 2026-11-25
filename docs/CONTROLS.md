@@ -307,7 +307,12 @@ and the picture draws the lock.
 On an envelope, a segment's width follows its **knob**, not its time: every time curve is
 exponential in its knob, so this is a log-time drawing, and 2 ms and 5 s share the width. A
 handle that a knob **on this page** moves is a bright square with the knob's letter by it, as
-CyDrums draws them; a handle moved from another page has no letter.
+CyDrums draws them; a handle moved from another page has no letter. On AMP and ASR a **hollow
+square rides the curve** where the track's last note is (SAMPLE's loudest voice, GRAIN's cloud,
+VA MONO and WAVE MONO; the POLY machines, FM4 and the drums draw no dot).
+
+SAMPLES (the sample browser) lists seven rows and draws what the track plays under them, from the
+same picture, over the `NOW` line.
 
 A SAMPLE or GRAIN track with no file plays the placeholder, and its picture is the placeholder's,
 with `NO FILE` (or `LOADING` while its file loads) over it.
@@ -317,7 +322,8 @@ as it writes the PCM into the pool (`core/overview.hpp`: the lowest and highest 
 124 columns, 250 bytes a track), in the slices it already works in, beside the slice-point
 finder. The audio side publishes where each SAMPLE and GRAIN track is, in the same columns, every
 fourth block (`Status::wave`: the window, the slice starts, up to eight playheads or grains with
-a brightness each). An envelope is drawn from the knobs alone.
+a brightness each, and the amplitude envelope's stage and level for the dot). An envelope is
+drawn from the knobs alone.
 
 ## FUNC help
 
