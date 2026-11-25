@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W36, about 99 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W37, about 102 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -423,6 +423,14 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   stack (up and right). Turn A through the tables: the stack changes shape. `____`
 - Lower pad 8, FUNC + EDIT to GRAIN, EDIT, SRC: the grains drift as sparks with tails over the
   sample while the beat plays. `____`
+
+**W37. MIXER's spectrum, vectorscope and fader meters (3 min).** Beat playing, A01.
+- MIXER: beside each fader a thin meter jumping with its track. `____`
+- Screen keys right to MST: under the four bars, bars of the spectrum dancing with the beat (the
+  kick at the left, the hats at the right) with dots that hang at the top, and a small box at the
+  right with a trace (a vertical line for a mono sound, wider for stereo). `____`
+- On to EQ, kill LOW (push A): the left of the spectrum drops. Stop: both go blank. `____`
+- SETUP's `DRW` with MST up while playing: `____ MS`. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
