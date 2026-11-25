@@ -208,6 +208,11 @@
     void draw_mixer_fields(enaga::Canvas &canvas) {
         char line[40];
         char *out = line;
+        // MST and EQ are the mockup's master page (app/ui_live.hpp).
+        if (kMixerPages[mixer_bank_].master) {
+            draw_master_page(canvas);
+            return;
+        }
 
         append(out, "MIXER ");
         append(out, kMixerPages[mixer_bank_].name);
@@ -346,15 +351,18 @@
 
     // By the parameter's own page rather than the page on screen, so a macro assignment or the
     // LFO's destination can name a parameter from any page.
-    const char *track_param_name(int index) const {
+    const char *track_param_name(int index) const { return track_param_name_on(selected_, index); }
+
+    // The same for any track: a macro's target names its parameter on its own track's machine.
+    const char *track_param_name_on(int track, int index) const {
         if (index < 0 || index >= kTrackParams) return "---";
         if (index >= kOscFirst) return osc_param_name(index - kOscFirst);
         if (index >= kAsrFirst) {
-            if (!has_asr(selected_)) return "---";
+            if (!has_asr(track)) return "---";
             // FM4's fourth ASR knob holds the index envelope, not a filter's: ISU. GRAIN has no
             // filter envelope, so it has no fourth.
-            if (index == kAsrFirst + 3 && machine_is_fm(engine_.machine_id(selected_))) return "ISU";
-            if (index == kAsrFirst + 3 && machine_is_grain(engine_.machine_id(selected_))) return "---";
+            if (index == kAsrFirst + 3 && machine_is_fm(engine_.machine_id(track))) return "ISU";
+            if (index == kAsrFirst + 3 && machine_is_grain(engine_.machine_id(track))) return "---";
             return kAsrNames[index - kAsrFirst];
         }
         if (index >= kArpFirst) return arp_param_name(index - kArpFirst);
@@ -362,11 +370,11 @@
         const int page = index / kParamsPerPage;
         // A VA's or WAVE's slots 4-7 are FDE and TON, its own names (D8); the FX page is the
         // chain's everywhere.
-        const bool voice_filter = machine_has_voice_filter(engine_.machine_id(selected_));
+        const bool voice_filter = machine_has_voice_filter(engine_.machine_id(track));
         if (page == int(Page::fx) || (page == int(Page::fltr) && !voice_filter)) {
             return InsertChain::param_name(index);
         }
-        const Machine *machine = engine_.machine(selected_);
+        const Machine *machine = engine_.machine(track);
         return machine ? machine->param_name(index) : "---";
     }
 

@@ -39,7 +39,8 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | Shared budget of 12 VA POLY voices across all tracks; quietest voice choked with a 64-frame fade | v0.1.0 | ○ ("The shared VA POLY voice budget") | 12 is provisional until U1/U2 on the unit |
 | Every screen fits Enaga's 5x7 font (layout test over every screen) | v0.1.0 | ◐ (overlaps seen at first boot, fixed in PR #7) | |
 | **Screen frame**: top line with bar.beat, progress line, live strip of what is off rest, master meter with held peak and limiter light | #144 | ○ (W26) | The meter is 2 px wide; nothing may draw past x 124 |
-| **Live screens 6**: MIXER MST/EQ spectrum (24 bands, peak dots) and vectorscope; live meters beside the faders | this PR | ○ (W41) | draw() 1.21 ms on MST (emulator, cl6x) |
+| **Screens rebuilt to the mockups**: frame (badges, toasts, tabs), PERFORM, GRID, EDIT (graph rows 50-117, filter response, LFO trail, WAVE LIVE, GRAIN cloud), MIXER master (spectrum, vectorscope, CMP/LIM bars) | #171 | ○ (W42) | draw() 1.71 ms on PERFORM, 1.20 ms on MST (emulator, cl6x). Knob values stay in the 5x7 font; no LUFS (the page shows the peak) |
+| **Live screens 6**: MIXER MST/EQ spectrum (24 bands, peak dots) and vectorscope; live meters beside the faders | #170 | ○ (W41) | draw() 1.21 ms on MST (emulator, cl6x) |
 | **Live screens 5**: WAVE's SRC page draws the table as a waterfall (POS brightest); GRAIN's grains spark with a fading trail | #164 | ○ (W40) | |
 | **Live screens 4**: the LFO page's shape with the phase riding it and an output strip; envelope fills lit as a note travels | #163 | ○ (W35) | |
 | **Live screens 3**: GRID trigs glow and fade; PERFORM macro gauges over a scope, eight track meters (while running) | #162 | ○ (W34) | draw() 1.34 ms a frame on PERFORM (emulator, cl6x) |

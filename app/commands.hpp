@@ -491,6 +491,8 @@ struct Status {
     // block in forty still sees every hit. `limit_seen` is bumped on each block whose peak
     // reached full scale (the limiter working): the UI compares, a wrap is harmless.
     std::atomic<uint16_t> meter_milli{0};
+    // The glue compressor's gain, thousandths (1000 = no reduction), for MIXER's master page.
+    std::atomic<uint16_t> comp_gain_milli{1000};
     std::atomic<uint8_t> limit_seen{0};
     // Where the playing pattern is: ticks into its current pass, and the pass's length in ticks
     // (master length x 24). For the top line's bar.beat and the progress line under it.
@@ -628,6 +630,9 @@ struct Status {
     std::atomic<uint8_t> heard_pos[8] = {};
     std::atomic<uint8_t> heard_sus[8] = {};
     std::atomic<uint8_t> lfo_shown[8] = {};
+    // The insert filter's CUT, RES and MOD bytes as heard (FLTR slots 5-7), for the drawn
+    // response on a drum's or SAMPLE's FLTR page (app/ui_live.hpp).
+    std::atomic<uint8_t> heard_filter[8][3] = {};
     // Each MOD slot's destination as heard (the byte the slots and the LFO left), kNotHeard for
     // a slot that is off: the dot on EDIT's bar (app/ui_modslots.hpp).
     std::atomic<uint8_t> mod_heard[8][2] = {};
