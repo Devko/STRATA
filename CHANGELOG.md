@@ -6,6 +6,16 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Added
+
+- **Play modes per track (P1).** The FUNC menu's new TRACK PLAY row, under TRACK SPEED, sets how
+  the selected track walks its steps: FWD, REV, PING, or RND1-RND16 (a random step, or a random
+  block of 2-16 steps, in each place). The pattern itself never changes, so FWD gives it back at
+  once. Swing stays on the grid; micro-timing, conditions, probability, ratchets and locks go with
+  their step. The random order is seeded from the pattern, so it repeats after a STOP or a reload.
+  Stored per track in each pattern; older projects load with every track FWD, and older builds
+  open new projects and play them forward.
+
 ### Changed
 
 - **One filter on the synth machines (D8).** On VA MONO, VA POLY, WAVE MONO and WAVE POLY the FLTR

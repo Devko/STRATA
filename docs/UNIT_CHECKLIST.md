@@ -96,6 +96,13 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
 - **FUNC + pad mutes (0.4.0).** Playing, within one bar: FUNC + lower pads 1, 3 and 5. **All
   three** mute on the bar line (before, only the last one did). Stopped: FUNC + pad 2 mutes at
   once (`T2 MUTE`), PLAY: the snare stays muted.
+- **Play modes (Phase 5, P1).** PLAY A01, lower pad 3 (hats). FUNC+HOME, DOWN to `TRACK PLAY`
+  (under TRACK SPEED): `T3 FWD`. RIGHT: `T3 PLAY REV`, the hats run backwards and the STEP light
+  walks right to left. RIGHT: PING (forward one bar, back the next). RIGHT to `RND1`: the hats
+  scramble but stay on the grid and in the swing; `RND4` (two more): whole beats swap places.
+  STOP, PLAY: the same RND bars come back in the same order (seeded). FUNC+CLR: back one mode.
+  FILL still plays FILL steps, ratchets still roll. LEFT down to `FWD`: the pattern is exactly as
+  written. Save, reopen: the mode stays. Sounds musical in a jam? `____`
 - Plays like a keyboard? `____`
 
 **9. CPU guard under load (#83, 2 min).** Still in KEYS, LONG and HALL still on, beat playing.
