@@ -67,6 +67,9 @@ Everything starts on A01 GROOVE, the factory beat a fresh start plays. Items 1-1
   note of three: only that one fades.
 - The upper pad between E and F: `OCT` down; the last upper pad: `OCT` up.
 - FUNC + lower pad 1: the kick mutes on the bar; again: back.
+- **Macro learn by turning (Phase 2).** PERFORM, push B: EDIT opens, `LEARN B 0/4 TURN KNOBS`.
+  Turn CUT down and RES up, then OK: `B: 2 PARAMS`, and the sound is back as it was. In
+  PERFORM turn B up: it goes to the sound you dialled. STEP keys in PERFORM assign nothing.
 - **Pattern menu (0.4.0).** PROJECT, cursor on a 16-step pattern, hold OK: `PATTERN A01` and
   the list COPY PASTE CLEAR DOUBLE. DOWN to DOUBLE, OK, OK: `A01 DOUBLED`, GRID shows 32 steps,
   the second half a copy of the first. A short OK tap still queues the slot. CLR closes the list.
