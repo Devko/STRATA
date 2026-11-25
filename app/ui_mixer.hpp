@@ -649,6 +649,8 @@
         uint8_t base = 0;
         uint8_t heard = 0;
         bool locked = false;
+        uint8_t range = 0;       // the held step's random range on it: 0 none, else the width
+        bool slides = false;     // the held step's lock on it slides
     };
 
     ShownParam shown_param(int index) const {
@@ -658,6 +660,10 @@
         if (held_step_ >= 0 && index >= 0 && index < kTrackParams) {
             shown.locked = pattern_get_lock(engine_.pattern(), selected_, held_step_,
                                             uint8_t(index), shown.heard);
+            shown.range = pattern_get_range(engine_.pattern(), selected_, held_step_,
+                                            uint8_t(index));
+            shown.slides = shown.locked && pattern_get_slide(engine_.pattern(), selected_,
+                                                             held_step_, uint8_t(index));
         }
         return shown;
     }
@@ -670,6 +676,14 @@
                                const ShownParam &shown, uint8_t grey) {
         const int bar = int(shown.heard) * width / 127;
         canvas.rect(x, y, bar < 1 ? 1 : bar, height, grey);
+        // A random range: a dim line under the bar over the values the step can land on.
+        if (shown.range != 0) {
+            const int low = int(shown.heard) - int(shown.range);
+            const int high = int(shown.heard) + int(shown.range);
+            const int from = x + (low < 0 ? 0 : low) * (width - 1) / 127;
+            const int to = x + (high > 127 ? 127 : high) * (width - 1) / 127;
+            canvas.rect(from, y + height, to - from + 1, 1, 7);
+        }
         if (!shown.locked || shown.heard == shown.base) return;
         const int tick = x + int(shown.base) * (width - 1) / 127;
         canvas.pixel(tick, y - 1, 15);
@@ -704,9 +718,15 @@
         if (shown.locked) {
             *p++ = '>';
             append_param_value(p, lock_readout_index_, shown.heard);
-        } else {
+        } else if (shown.range == 0) {
             append(p, " KIT");
         }
+        // The random range as R and its width, a slide as '/' (the font has no tilde).
+        if (shown.range != 0) {
+            append(p, " R");
+            append_number(p, shown.range);
+        }
+        if (shown.slides) *p++ = '/';
         *p = 0;
         char line[kLineChars + 1];
         char *out = line;

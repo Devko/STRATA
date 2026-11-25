@@ -356,11 +356,18 @@
         // 2. A held STEP key: lock this page's parameter on that step. The single most
         //    important gesture in the whole app (docs/SPEC.md, "Step editing") -- and the
         //    reason the step's release has to know the key was used as a modifier.
+        //    With FUNC it is the parameter's RANDOM RANGE on the step instead (Phase 5): each
+        //    pass the step plays the lock, or the kit value, moved by a draw within the width.
         if (held_step_ >= 0) {
             held_used_ = true;
             const int index = edit_index(encoder);
             mark(GestureKind::lock, selected_, held_step_);
-            post_param_lock(held_step_, index, delta);
+            if (shift_) {
+                post_delta(Cmd::lock_range_delta, selected_, held_step_, uint8_t(index),
+                           delta * param_click(index));
+            } else {
+                post_param_lock(held_step_, index, delta);
+            }
             show_lock_readout(index);
             return;
         }

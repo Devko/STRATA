@@ -78,8 +78,8 @@
         // FUNC + push D was the held tape stop until 2026-11-25 (backlog D5): one home per job,
         // and the tape stop's is the mixer's slot 8. The chord says where it went rather than
         // falling through to a page's push, which would do something nobody meant. Not while a
-        // STEP is held: then FUNC + push D clears that step's D lock, as FUNC + push A-C clear
-        // theirs -- every push with a step held is the step's.
+        // STEP is held: then FUNC + push D toggles the slide of that step's D lock, as FUNC +
+        // push A-C do theirs -- every push with a step held is the step's.
         if (key == ENAGA_KEY_PUSH_D && shift_ && held_step_ < 0) {
             if (down) notice_logged("TAPE STOP: SLOT 8");
             return;
@@ -98,6 +98,20 @@
                                                           : 3;
             const int index = edit_index(encoder);
             held_used_ = true;
+            // With FUNC: the parameter's SLIDE on the step (Phase 5), toggled. It glides from the
+            // step's lock to what the next step that plays holds. The screen reads the pattern a
+            // block late, so the notice says what the toggle is about to make it.
+            if (shift_) {
+                const bool slides = pattern_get_slide(engine_.pattern(), selected_, held_step_,
+                                                      uint8_t(index));
+                mark(GestureKind::field, selected_, held_step_);
+                post(Cmd::lock_slide, uint8_t(selected_), uint8_t(held_step_), uint8_t(index));
+                end_gesture();
+                show_lock_readout(index);
+                notice(slides ? "SLIDE OFF" : "SLIDE ON");
+                return;
+            }
+            // The whole parameter goes: its value, its slide and its random range.
             mark(GestureKind::erase, selected_, held_step_);
             post(Cmd::clear_lock, uint8_t(selected_), uint8_t(held_step_), uint8_t(index));
             end_gesture();

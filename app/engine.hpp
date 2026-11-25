@@ -590,6 +590,27 @@ private:
     uint32_t locked_[kTracks] = {};
     static_assert(kTrackParams <= 32, "locked_ holds one bit per parameter");
 
+    // Parameter slide (core/pattern.hpp, kLockSlide): a slid lock's parameter gliding from the
+    // step's value to what the next step that plays holds, over the time until that step.
+    // Started by `fire` on a step's first hit, moved once a block by `run_slides`, ended by the
+    // next step's `fire` (which rebuilds the track) or when the glide arrives. The parameter is
+    // in `locked_` for as long as its step plays, so the per-block copy leaves the glide alone.
+    struct ParamSlide {
+        uint8_t param = 0;
+        uint8_t from = 0;
+        uint8_t to = 0;
+        float position = 0.0f;   // 0 .. 1 of the way
+        float step = 0.0f;       // added per frame: 1 / the glide's frames, at control rate
+    };
+    ParamSlide slides_[kTracks][kLocksPerStep] = {};
+    uint8_t slide_count_[kTracks] = {};
+    void run_slides(uint32_t frames);
+    void clear_slides() {
+        for (int t = 0; t < kTracks; t++) slide_count_[t] = 0;
+    }
+    // The slides a step starts (fire, on its first hit): `event` carries where they glide to.
+    void start_slides(int track, const StepEvent &event);
+
     // The LFOs (dsp/lfo.hpp). `lfo_bytes_` is what `lfo_settings_` was made from, so the
     // settings are rebuilt only when a byte moves; `modulated_` is `effective_` with the
     // destination moved, valid while `modulating_` says so.

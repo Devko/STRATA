@@ -480,6 +480,7 @@ void Engine::apply(const Command &command) {
             // did nothing and a pad played the dead step's value. The per-block copy in
             // process() puts the performed values back in this same block.
             for (int t = 0; t < kTracks; t++) locked_[t] = 0;
+            clear_slides();
             break;
 
         case Cmd::set_tempo:
@@ -540,8 +541,42 @@ void Engine::apply(const Command &command) {
         }
 
         case Cmd::clear_lock:
-            pattern_clear_lock(live(), track, step, command.a);
+            // The whole parameter: its value, its slide and its random range (hold STEP + push).
+            pattern_clear_param(live(), track, step, command.a);
             break;
+
+        case Cmd::lock_range_delta: {
+            if (command.a >= kTrackParams) break;
+            const int width =
+                int(pattern_get_range(live(), track, step, command.a)) + int(int8_t(command.b));
+            const uint8_t wanted = uint8_t(width < 0 ? 0 : (width > 127 ? 127 : width));
+            if (!pattern_set_range(live(), track, step, command.a, wanted)) {
+                pattern_compact_locks(live());   // as lock_delta: abandoned slots first
+                if (!pattern_set_range(live(), track, step, command.a, wanted)) {
+                    status_.bump_refused();
+                }
+            }
+            break;
+        }
+
+        case Cmd::lock_slide: {
+            if (command.a >= kTrackParams) break;
+            const uint8_t param = command.a;
+            uint8_t value = 0;
+            if (!pattern_get_lock(live(), track, step, param, value)) {
+                // Nothing to glide from yet: lock the kit value, which is what the step plays.
+                if (!pattern_set_lock(live(), track, step, param, params_[track].v[param])) {
+                    pattern_compact_locks(live());
+                    if (!pattern_set_lock(live(), track, step, param, params_[track].v[param])) {
+                        status_.bump_refused();
+                        break;
+                    }
+                }
+            }
+            pattern_set_slide(live(), track, step, param,
+                              !pattern_get_slide(live(), track, step, param));
+            break;
+        }
 
         case Cmd::set_track_length: {
             const int wanted = command.c == kDeltaFlag
@@ -1021,6 +1056,7 @@ void Engine::apply(const Command &command) {
             song_over_ = false;
             // The lock mask of a step of a pattern that no longer exists (Cmd::stop says why).
             for (int t = 0; t < kTracks; t++) locked_[t] = 0;
+            clear_slides();
             reconfigure();
             // The sends and the master, which arrived with the file as fourteen bytes. Without
             // this the mixer would keep running the PREVIOUS project's delay and reverb while
@@ -2116,6 +2152,7 @@ void Engine::switch_pattern(int bank, int slot) {
     // was resolved against a pattern that is no longer playing.
     scheduler_.reset(true);
     reconfigure();
+    clear_slides();
 
     // Ratchet hits still waiting belong to a step of the pattern just left. Fired later, they
     // would read THIS pattern's locks and chord at that step index (`fire` reads the live
@@ -2628,6 +2665,61 @@ void Engine::arp_held_changed(int track) {
     run.countdown = float(r) * samples_per_tick_;
 }
 
+void Engine::start_slides(int track, const StepEvent &event) {
+    slide_count_[track] = 0;
+    if (event.glide_frames == 0u) return;
+    const Pattern &pattern = live();
+    const LockView locks = pattern_step_locks(pattern, track, int(event.step));
+    // One reciprocal per step at control rate; the per-block move is a multiply.
+    const float step = enaga::dsp::reciprocal(float(event.glide_frames));
+    uint8_t release[2];
+    const int releases = rel_all_ != 0 ? machine_release_params(machine_id_[track], release) : 0;
+    for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
+        if (!lock_slides(lock->param)) continue;
+        const uint8_t param = lock_param(lock->param);
+        if (param >= kTrackParams || slide_count_[track] >= kLocksPerStep) continue;
+        // What the step glided to will play: its lock and range, or the sound it starts from.
+        uint8_t to = lock_resolve(pattern, track, int(event.glide_step), event.glide_loop,
+                                  int(param), performed_[track][param]);
+        // REL ALL moves a locked release (fire, above), so the target's too.
+        uint8_t ignored = 0;
+        for (int i = 0; i < releases; i++) {
+            if (release[i] == param &&
+                pattern_get_lock(pattern, track, int(event.glide_step), param, ignored)) {
+                to = rel_all_byte(to, rel_all_);
+            }
+        }
+        const uint8_t from = effective_[track].v[param];
+        if (to == from) continue;
+        ParamSlide &slide = slides_[track][slide_count_[track]++];
+        slide.param = param;
+        slide.from = from;
+        slide.to = to;
+        slide.position = 0.0f;
+        slide.step = step;
+    }
+}
+
+void Engine::run_slides(uint32_t frames) {
+    for (int t = 0; t < kTracks; t++) {
+        const int count = slide_count_[t];
+        if (count == 0) continue;
+        int keep = 0;
+        for (int i = 0; i < count; i++) {
+            ParamSlide slide = slides_[t][i];
+            // Only while the step still has it locked: a stop or a pattern change unmasks it.
+            if ((locked_[t] >> slide.param & 1u) == 0u) continue;
+            slide.position += float(frames) * slide.step;
+            const bool arrived = slide.position >= 1.0f;
+            const float at = arrived ? 1.0f : slide.position;
+            const float value = float(slide.from) + (float(slide.to) - float(slide.from)) * at;
+            effective_[t].v[slide.param] = uint8_t(value + 0.5f);
+            if (!arrived) slides_[t][keep++] = slide;
+        }
+        slide_count_[t] = uint8_t(keep);
+    }
+}
+
 void Engine::deliver_deferred(uint32_t frames) {
     // Oldest first, and compacted in one pass: an event that fires is removed and the rest keep
     // their order, so a ratchet's hits stay in the order the scheduler produced them.
@@ -2661,11 +2753,31 @@ void Engine::fire(const StepEvent &event) {
     const LockView locks = pattern_step_locks(live(), track, int(event.step));
     int applied = 0;
     uint32_t locked = 0;
+    // The values first, then the random ranges over them (core/pattern.hpp's lock byte): a range
+    // spreads the step's lock, or the sound the step starts from when it has none. The slide bit
+    // is read by start_slides below.
+    uint32_t ranged = 0;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
-        if (lock->param >= kTrackParams || applied >= kMaxLocksApplied) continue;
-        effective_[track].v[lock->param] = lock->value;
-        locked = locked | (1u << lock->param);
+        const uint8_t param = lock_param(lock->param);
+        if (param >= kTrackParams || applied >= kMaxLocksApplied) continue;
         applied++;
+        if (lock_is_range(lock->param)) {
+            ranged = ranged | (1u << param);
+            continue;
+        }
+        effective_[track].v[param] = lock->value;
+        locked = locked | (1u << param);
+    }
+    if (ranged != 0u) {
+        const uint32_t seed = live().seed;
+        for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
+            const uint8_t param = lock_param(lock->param);
+            if (!lock_is_range(lock->param) || param >= kTrackParams) continue;
+            effective_[track].v[param] =
+                lock_spread(effective_[track].v[param], lock->value, seed, track,
+                            int(event.step), event.loop, int(param));
+        }
+        locked = locked | ranged;
     }
     // Which parameters this step has locked, so the performance layer leaves them alone until
     // the next step. A lock always wins over a morph.
@@ -2680,6 +2792,10 @@ void Engine::fire(const StepEvent &event) {
             effective_[track].v[release[i]] = rel_all_byte(effective_[track].v[release[i]], rel_all_);
         }
     }
+
+    // Parameter slide: the first hit of a step (re)starts its track's glides; a ratchet's later
+    // hits leave them running, so a slid step glides across its own ratchet.
+    if (event.ratchet_index == 0) start_slides(track, event);
 
     if (!event.trigless && machines_[track] != nullptr && !muted_[track]) {
         // This prepare is REDUNDANT today, and kept on purpose. It used to be justified as
@@ -3004,6 +3120,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
             effective_[t].v[p] = performed_[t][p];
         }
     }
+
+    // Parameter slides, over the step's locks they glide from.
+    run_slides(frames);
 
     // The LFOs, last, over everything: the kit, the morph, the macros and the step's locks all
     // decide where the destination sits, and the LFO moves it about there (dsp/lfo.hpp).
