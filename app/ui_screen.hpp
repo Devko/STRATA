@@ -492,7 +492,11 @@
                 const int x = kGridX + i * kGridPitch;           // step 16 ends at x 118
                 if (trig || on_head) {
                     canvas.rect(x, y + 1, 5, 6, grey);
-                    if (trig) draw_step_glyph(canvas, x, y + 1, s);
+                    if (trig) {
+                        draw_step_glyph(canvas, x, y + 1, s,
+                                        s.lock_count > 0 &&
+                                            step_param_lock_count(engine_.pattern(), t, step) > 0);
+                    }
                 } else if ((s.flags & kStepTrigless) != 0) {
                     draw_trigless_cell(canvas, x, y + 1);
                 } else {
@@ -559,10 +563,12 @@
     //
     // Four marks that never overlap, so any mix of them reads. Cheap: the fields are already in
     // the step the cell was drawn from, and each mark is one or two pixels.
-    static void draw_step_glyph(enaga::Canvas &canvas, int x, int y, const Step &s) {
+    // `locked`: the step has parameter locks -- not only a chord's extra notes, which are locks
+    // in the pool but are notes on the screen.
+    static void draw_step_glyph(enaga::Canvas &canvas, int x, int y, const Step &s, bool locked) {
         if (condition_kind(s.condition) != Condition::NONE) canvas.pixel(x, y, 0);
         if (s.probability < 100) canvas.pixel(x + 4, y, 0);
-        if (s.lock_count > 0) canvas.rect(x + 2, y + 2, 1, 2, 0);
+        if (locked) canvas.rect(x + 2, y + 2, 1, 2, 0);
         if (ratchet_count(s.ratchet) > 1) {
             canvas.pixel(x + 1, y + 5, 0);
             canvas.pixel(x + 3, y + 5, 0);
@@ -707,6 +713,16 @@
             char text[kStepFieldTextMax];
             step_field_text(step, StepField(field), text, int(sizeof text));
             canvas.text(44, y, text, 15);
+            // NOTE is the step's own note; the notes played in beside it (core/stepnotes.hpp)
+            // are counted after it, "+2", so a chord step reads as one.
+            if (StepField(field) == StepField::note) {
+                uint8_t extras[kStepExtraNotes];
+                const int more = step_extra_notes(engine_.pattern(), selected_, page_step_, extras);
+                if (more > 0) {
+                    char plus[4] = {'+', char('0' + more), 0, 0};
+                    canvas.text(80, y, plus, 11);
+                }
+            }
         }
 
         // The lane: the page of sixteen this step is on.
@@ -754,9 +770,12 @@
         } else {
             append(out, "OFF");
         }
-        if (step.lock_count) {
+        // The locks that are parameters: a chord's extra notes are locks too, and are counted
+        // on the NOTE line instead.
+        const int locks = step_param_lock_count(engine_.pattern(), selected_, page_step_);
+        if (locks > 0) {
             append(out, "  LOCKS ");
-            append_number(out, step.lock_count);
+            append_number(out, uint32_t(locks));
         }
         *out = 0;
         paint::small_text(px, 0, 105, line, 11);

@@ -5,6 +5,7 @@
 #include "check.hpp"
 
 #include "chord.hpp"
+#include "editops.hpp"
 #include "pattern.hpp"
 #include "scale.hpp"
 #include "stepnotes.hpp"
@@ -119,4 +120,17 @@ TEST(stepnotes_a_folded_merge_folds_each_extra_into_the_key) {
     CHECK_EQ(count, 2);
     CHECK_EQ(int(notes[1]), int(scale_fold(64, 0, minor)));
     CHECK(notes[1] != 64 || scale_fold(64, 0, minor) == 64);
+}
+
+TEST(stepnotes_a_transpose_moves_the_whole_chord) {
+    Pattern &p = blank();
+    p.tracks[6].steps[3].note = 60;
+    step_add_note(p, 6, 3, 64);
+    step_add_note(p, 6, 3, 67);
+    range_transpose(p, 6, 0, 8, 5);
+    CHECK_EQ(int(p.tracks[6].steps[3].note), 65);
+    uint8_t extras[kStepExtraNotes];
+    CHECK_EQ(step_extra_notes(p, 6, 3, extras), 2);
+    CHECK_EQ(int(extras[0]), 69);
+    CHECK_EQ(int(extras[1]), 72);
 }

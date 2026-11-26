@@ -694,8 +694,11 @@ void Engine::apply(const Command &command) {
 
         case Cmd::step_field_delta:
             if (command.a < uint8_t(StepField::count)) {
-                step_field_apply(live().tracks[track].steps[step], StepField(command.a),
-                                 int(int8_t(command.b)));
+                Step &s = live().tracks[track].steps[step];
+                const int was = int(s.note);
+                step_field_apply(s, StepField(command.a), int(int8_t(command.b)));
+                // NOTE moves a chord played into the step with it (core/stepnotes.hpp).
+                step_shift_extra_notes(live(), track, step, int(s.note) - was);
             }
             break;
 

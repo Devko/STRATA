@@ -577,7 +577,9 @@
             const Step &s = pattern.tracks[selected_].steps[step];
             const bool trig = (s.flags & kStepTrig) != 0;
             const bool trigless = (s.flags & kStepTrigless) != 0;
-            const bool has_locks = s.lock_count > 0;
+            // Parameter locks: a chord's extra notes are locks in the pool, not on the keys.
+            const bool has_locks =
+                s.lock_count > 0 && step_param_lock_count(pattern, selected_, step) > 0;
             const bool conditional = s.probability < 100 || condition_kind(s.condition) != Condition::NONE;
 
             uint8_t green = 0, red = 0;

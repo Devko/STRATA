@@ -40,6 +40,7 @@
 #include "spectrum.hpp"     // the output's spectrum for MIXER's master pages
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "sounds.hpp"       // SOUNDS: the factory sounds for one track
+#include "stepnotes.hpp"    // a chord step's extra notes: counted on the step page, not as locks
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
 #include "tuning.hpp"       // TUN and PIT as notes: the NOTE view
 

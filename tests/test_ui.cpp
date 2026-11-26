@@ -678,7 +678,9 @@ TEST(ui_a_lower_pad_selects_its_track_and_everything_else_follows) {
     const int param = encoder_param(0);
     app.on_encoder(0, +6);
     pump();
-    CHECK_EQ(int(app_engine().params(2).v[param]), 70);
+    // knob_result, not 70: the page left open decides whether A is TUN, where a click is a
+    // semitone (this failed alone and in some shard orders).
+    CHECK_EQ(int(app_engine().params(2).v[param]), knob_result(2, param, 64, 6));
     CHECK_EQ(int(app_engine().params(0).v[param]), 64);
 
     // An upper pad is not a track at all: the performance row is fixed in every mode.
@@ -11203,4 +11205,31 @@ TEST(polyrec_a_new_take_does_not_join_the_last_one) {
     CHECK_EQ(polyrec_notes(at, notes), 1);
     CHECK_EQ(int(notes[0]), 62);
     polyrec_stop();
+}
+
+TEST(polyrec_a_note_edit_moves_the_chord_and_the_step_shows_it) {
+    // NOTE turned on a chord step moves every note by the same semitones, and the step page
+    // counts the extras after the note rather than as locks.
+    fresh();
+    Project &incoming = app_engine().project_for_load();
+    Step &s = incoming.live().tracks[kPolyTrack].steps[2];
+    s.flags = kStepTrig;
+    s.note = 60;
+    step_add_note(incoming.live(), kPolyTrack, 2, 64);
+    step_add_note(incoming.live(), kPolyTrack, 2, 67);
+    pump(2);
+    Command command;
+    command.cmd = Cmd::step_field_delta;
+    command.track = uint8_t(kPolyTrack);
+    command.step = 2;
+    command.a = uint8_t(StepField::note);
+    command.b = uint8_t(int8_t(-2));
+    app_engine().commands().post(command);
+    pump(2);
+    uint8_t notes[kStepMaxNotes];
+    CHECK_EQ(polyrec_notes(2, notes), 3);
+    CHECK_EQ(int(notes[0]), 58);
+    CHECK_EQ(int(notes[1]), 62);
+    CHECK_EQ(int(notes[2]), 65);
+    CHECK_EQ(step_param_lock_count(app_engine().pattern(), kPolyTrack, 2), 0);
 }
