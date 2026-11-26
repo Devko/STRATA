@@ -557,6 +557,16 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - CLICK OFF, COUNT-IN `2 BAR`, REC, PLAY: eight clicks even with CLICK off, then the beat. STOP
   during the clicks: silence, and the next PLAY without REC starts at once. `____`
 
+**W48. Chords recorded note for note (4 min).** Blank pattern, T7 (VA POLY), KEYS, PLAY, REC.
+- Hold three pads of a chord at once on one step: it plays back as all three. Hold STEP on it:
+  `NOTE C4 +2`, and no `LOCKS` on the line. `____`
+- Next pass, play one other note on that step: the chord is gone, the new note alone (REPLACE).
+  `____`
+- FUNC+HOME, REC MODE to `ADD`: the edit line reads `REC+`. Play one note a pass on one step for
+  three passes: it builds up to a three-note chord. A MIDI keyboard on channel 7 does the same.
+  `____`
+- Hold the chord's STEP and turn VALUE: the whole chord moves. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

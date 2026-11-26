@@ -13,8 +13,8 @@
     // over. The cursor always starts on SAVE, so FUNC + HOME, OK saves.
 
     enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
-                                    speed, play, chain, song, autofill, quantize, click, count_in,
-                                    glide, freeze, loop_len, demo, count };
+                                    speed, play, chain, song, autofill, quantize, rec_mode, click,
+                                    count_in, glide, freeze, loop_len, demo, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 9;
 
@@ -34,6 +34,7 @@
             case MenuItem::song:     return "CHAIN END";
             case MenuItem::autofill: return "AUTO-FILL";
             case MenuItem::quantize: return "QUANTIZE";
+            case MenuItem::rec_mode: return "REC MODE";
             case MenuItem::click:    return "CLICK";
             case MenuItem::count_in: return "COUNT-IN";
             case MenuItem::freeze:   return "FREEZE";
@@ -70,6 +71,9 @@
                 break;
             case MenuItem::quantize:
                 append_number(out, uint32_t(quantize()));
+                break;
+            case MenuItem::rec_mode:
+                append(out, rec_add() ? "ADD" : "REPLACE");
                 break;
             case MenuItem::freeze: {
                 // The selected track: frozen, recording its loop, or how many bars OK records.
@@ -645,6 +649,15 @@
                 if (wrap && quantize() >= 100) post_delta(Cmd::set_quantize, 0, 0, 0, -100);
                 else post_delta(Cmd::set_quantize, 0, 0, 0, delta * 5);
                 break;
+            case MenuItem::rec_mode: {
+                // Two values, so any step is a toggle. What a note recorded onto a chord
+                // track's step that already plays does: REPLACE takes the step over on the
+                // first note of a pass, ADD adds to its notes (core/stepnotes.hpp).
+                const bool add = !rec_add();
+                post(Cmd::set_rec_mode, 0, 0, add ? 1 : 0);
+                notice_logged(add ? "REC ADDS NOTES" : "REC REPLACES");
+                break;
+            }
             case MenuItem::freeze: {
                 // The length, 1, 2, 4 or 8 bars, as RESAMPLE's; it wraps like AUTO-FILL.
                 const int next = (freeze_bars_index_ + delta + kTakeBarChoices) % kTakeBarChoices;

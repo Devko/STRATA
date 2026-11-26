@@ -236,7 +236,9 @@ constexpr Text kKeysLights = {"KEYS LIGHTS:", {
     "SUS UP ON A VA:",
     "A HELD PAD HOLDS",
     "REC  HOLD BECOMES LEN",
-    nullptr, nullptr, nullptr,
+    "POLY CHORDS ALL KEPT",
+    "MENU REC MODE: ADD",
+    nullptr,
 }};
 
 constexpr Text kPerform = {"PERFORM:", {
