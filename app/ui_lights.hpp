@@ -89,7 +89,10 @@
     // core/, where it is host-tested -- this function only gathers the inputs.
     // `held`: the note has a key-up still to come (a piano pad, a STEP key in KEYS, a MIDI note),
     // so its length is measured. A performance pad hit has none and keeps the step's LEN.
-    void record_note(int track, uint8_t note, uint8_t velocity, bool held = true) {
+    // `roll`: a ratchet byte for the step, a held NOTE RPT pad's roll (0 for a plain hit). Its
+    // pad's release gives the roll its LEN, on any machine.
+    void record_note(int track, uint8_t note, uint8_t velocity, bool held = true,
+                     uint8_t roll = 0) {
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;          // nothing to record onto
@@ -131,6 +134,7 @@
         command.a = note;
         command.b = velocity;
         command.c = uint8_t(landing.micro);
+        command.e = roll;
         // On a chord track several notes can share a step (core/stepnotes.hpp). The first on a
         // step this pass replaces what it held, unless REC MODE is ADD; any after it join.
         command.d = uint8_t(RecWrite::note);
@@ -148,7 +152,7 @@
         // machine that holds a note -- a drum ignores LEN, and a tap there would rewrite the
         // step's LEN for nothing. The stamp is `now`, not `hit`: the pad latency is the same at
         // both ends, so the hold is the difference of the raw stamps.
-        if (!held || engine_.machine_id(track) < uint8_t(MachineId::sample)) return;
+        if (!held || (roll == 0 && engine_.machine_id(track) < uint8_t(MachineId::sample))) return;
         RecHold *slot = nullptr;
         for (RecHold &h : rec_holds_) {
             if (h.track == track && h.note == note) slot = &h;   // the same note again: replace

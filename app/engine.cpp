@@ -872,6 +872,9 @@ void Engine::apply(const Command &command) {
             s.velocity = velocity;
             s.micro = int8_t(command.c);
             if (!length_valid(s.length)) s.length = 8;
+            // A note repeat recorded (CyDrums P3): the roll, at its rate, for the LEN its pad's
+            // release gives (Cmd::record_length). 0 leaves the step's ratchet as it was.
+            if (command.e != 0) s.ratchet = command.e;
             if (command.d != uint8_t(RecWrite::note)) {
                 // A chord track's first note of a pass on this step: what was played is what
                 // the step holds, so the notes and the chord type that were there go. (A join

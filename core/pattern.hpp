@@ -148,6 +148,15 @@ constexpr uint8_t ratchet_pack_span(uint8_t rate, RatchetRamp ramp) {
 // "1/64" .. "1/4", for the screen.
 const char *ratchet_rate_name(uint8_t rate);
 
+// The rate whose spacing is `ticks`, or kRatchetRates when none is: a recorded note repeat
+// (CyDrums P3) becomes a roll over LEN only at a rate the byte can hold. 1/4T (64 ticks) has none.
+constexpr uint8_t ratchet_rate_for_ticks(int ticks) {
+    for (int r = 0; r < kRatchetRates; r++) {
+        if (int(kRatchetRateTicks[r]) == ticks) return uint8_t(r);
+    }
+    return uint8_t(kRatchetRates);
+}
+
 // --- swing ----------------------------------------------------------------
 
 // Swing is a percentage and core/timing.hpp bounds it at 50 (straight) to 75. A track's own

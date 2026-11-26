@@ -696,6 +696,7 @@ private:
     PerfGlide perf_glide_ = kPerfGlideDefault;
     // The FUNC menu's CLICK and COUNT-IN (dsp/click.hpp). Not saved, as FX GLIDE is not. The
     // count-in is used by a PLAY from stop with REC on, under the internal clock.
+    uint8_t roll_note_[kTracks] = {};           // a NOTE RPT pad's note, for its recorded LEN
     bool click_on_ = false;
     uint8_t count_in_bars_ = 0;
     uint8_t count_in_shown_ = 0;                // the beat the count-in notice last said
