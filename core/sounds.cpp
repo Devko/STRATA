@@ -38,7 +38,7 @@ constexpr SoundPreset kKickPresets[] = {
     {"SOFT", {55, 40, 50, 10}, FLAT, {70, 20, 0, 127}, NO_ASR, NO_OSC},
     // Rumble techno: a long, dark, dirty body with the drive up, for a reverb to smear into
     // the rumble under the next kick.
-    {"RUMBLE", {55, 50, 70, 40}, {70, 127, 20, 0}, {112, 20, 80, 96}, NO_ASR, NO_OSC},
+    {"RUMBLE", {55, 50, 70, 40}, {70, 127, 20, 0}, {112, 20, 80, 56}, NO_ASR, NO_OSC},
     // Tight: a fast, clicky modern techno kick that leaves room for the bass between hits.
     {"TIGHT", {55, 85, 35, 100}, {20, 127, 20, 0}, {40, 75, 20, 118}, NO_ASR, NO_OSC},
     // Ambient: a slow, deep drop, no click, the longest tail. A boom on the one, not a groove.
@@ -66,7 +66,7 @@ constexpr SoundPreset kSnarePresets[] = {
     // A tight snare: tuned up a little, more drum than noise, short. Busy grooves.
     {"TIGHT", {70, 60, 80, 0}, FLAT, {25, 28, 30, 104}, NO_ASR, NO_OSC},
     // A noise wash: all noise, a bright band, a long tail. Ambient hits and risers' ends.
-    {"NOISE", {64, 127, 90, 0}, FLAT, {90, 28, 0, 80}, NO_ASR, NO_OSC},
+    {"NOISE", {64, 127, 90, 0}, FLAT, {90, 28, 0, 58}, NO_ASR, NO_OSC},
     // A dark clap: tuned down, the band low, a little drive. Deep and dub techno.
     {"DARK", {50, 100, 30, 64}, {40, 127, 20, 0}, {54, 40, 40, 96}, NO_ASR, NO_OSC},
 };
@@ -122,7 +122,7 @@ constexpr SoundPreset kPercPresets[] = {
     // A zap: the full pitch sweep falling fast. The laser in electro and minimal.
     {"ZAP", {90, 29, 50, 40}, FLAT, {40, 127, 30, 84}, NO_ASR, NO_OSC},
     // A dub tom: low, tuned (ratio 2), a long body with a slow fall. Under a delay send.
-    {"DUBTOM", {24, 29, 20, 50}, FLAT, {110, 50, 80, 84}, NO_ASR, NO_OSC},
+    {"DUBTOM", {24, 29, 20, 50}, FLAT, {110, 50, 80, 64}, NO_ASR, NO_OSC},
     // A chime: high, a ratio past 4 swept into a glassy partial, ringing for seconds while the
     // index fades. Ambient sparkle.
     {"CHIME", {110, 70, 50, 120}, FLAT, {127, 0, 10, 60}, NO_ASR, NO_OSC},
@@ -170,7 +170,7 @@ constexpr SoundPreset kMonoPresets[] = {
     {"DRONE", {64, 40, 60, 50}, VOICE, {80, 40, 20, 74}, {40, 110, 80, 64}, {0, 40, 60, 0}},
     // A dub bass: the 24 dB filter nearly closed, a soft sweep, the sub strong, held for its
     // LEN. Round and deep under a dub chord.
-    {"DUBBAS", {64, 30, 34, 20}, VOICE, {90, 30, 0, 110}, {0, 100, 30, 0}, {0, 0, 110, 0}},
+    {"DUBBAS", {64, 30, 34, 20}, VOICE, {90, 30, 0, 88}, {0, 100, 30, 0}, {0, 0, 110, 0}},
     // A rubber bass: a square, short, resonant, a quick sweep. The offbeat techno bass.
     {"RUBBER", {64, 40, 40, 80}, VOICE, {38, 80, 0, 112}, NO_ASR, {32, 0, 60, 30}},
 };
@@ -196,11 +196,11 @@ constexpr SoundPreset kPolyPresets[] = {
     {"BRASS", {64, 40, 56, 30}, VOICE, {70, 50, 50, 57}, {40, 100, 40, 60}, {0, 20, 0, 30}},
     // The dub chord: like STAB but darker, longer and more resonant, OSC 2 a little apart.
     // Put the delay send up and filter it.
-    {"DUBCHD", {64, 70, 60, 50}, VOICE, {80, 50, 30, 88}, NO_ASR, {0, 20, 40, 0}},
+    {"DUBCHD", {64, 70, 60, 50}, VOICE, {80, 50, 30, 70}, NO_ASR, {0, 20, 40, 0}},
     // A warm pad: the 24 dB filter low, a slow swell and a long release, two saws a voice.
-    {"WARM", {64, 40, 46, 20}, VOICE, {100, 30, 70, 60}, {100, 100, 100, 30}, {0, 35, 20, 0}},
+    {"WARM", {64, 40, 52, 20}, VOICE, {100, 30, 70, 64}, {70, 100, 100, 30}, {0, 35, 20, 0}},
     // A swell: a slow attack with the filter opening over it (ENV up, a long DEC). Ambient.
-    {"SWELL", {64, 70, 50, 40}, VOICE, {110, 90, 60, 58}, {110, 110, 100, 0}, {0, 45, 0, 0}},
+    {"SWELL", {64, 70, 54, 40}, VOICE, {110, 90, 60, 64}, {95, 110, 100, 0}, {0, 45, 0, 0}},
     // A hoover-ish rave chord: two wide saws, driven, a little resonance, held.
     {"HOOVER", {64, 64, 80, 40}, VOICE, {60, 60, 40, 70}, {10, 100, 40, 60}, {0, 60, 0, 60}},
     // An organ: a square with the sub, the filter open, held while the key is. Chords.
