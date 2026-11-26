@@ -6,6 +6,15 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+## [0.4.0] - {{RELEASE_DATE}}
+
+An early beta: everything merged since 0.3.1 (#137 to #177), and the first release for **Enaga
+0.3.0** firmware, which updating from 0.3.1 now needs (see Requires). The features below have not
+been through the unit walkthrough (docs/UNIT_CHECKLIST.md) yet. Release notes:
+[docs/release/v0.4.0.md](docs/release/v0.4.0.md). Projects and kits from 0.1.0 to 0.3.1 open in
+0.4.0; their VA and WAVE tracks load their insert filter as the nearest TON, and some gestures
+moved (see Gestures that moved).
+
 ### Requires
 
 - **Enaga 0.3.0 firmware.** STRATA is now built against Enaga v0.3.0, whose host table has one
@@ -280,6 +289,17 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 ### Removed
 
 - The performance mixer's flanger (its DSP and 8 KiB ring), with slot 13.
+
+### Known limits
+
+- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} Nothing added since 0.3.1 is
+  checked on the unit yet. Every other load figure comes from the emulator, which models no caches.
+- **Enaga 0.3.0 exactly.** Enaga's loader checks only the ABI number, which 0.2.0 and 0.3.0 share,
+  so 0.4.0 on the 0.2.0 firmware loads and then misbehaves.
+- WAVE POLY and FM4 share the **12 POLY voices** with VA POLY and that budget is provisional; the
+  performance mixer, the looper, LOCK and LIVE RND are not saved; the looper borrows RESAMPLE's
+  buffer; streamed samples play forward only; FREEZE is not saved; MIDI clock, SYNC and USB MIDI
+  are lightly tested.
 
 ## [0.3.1] - 2026-11-23
 

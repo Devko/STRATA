@@ -23,10 +23,10 @@ on the unit.
 
 ---
 
-## Where it stands (2026-11-25)
+## Where it stands (2026-11-26)
 
-STRATA runs on the unit and has had four releases (v0.1.0 to v0.3.1, on Enaga 0.2.0); `main`
-is on Enaga 0.3.0, which the unit now runs. The milestones below are
+STRATA runs on the unit and has had five releases: v0.1.0 to v0.3.1 on Enaga 0.2.0, and v0.4.0
+on Enaga 0.3.0, which the unit now runs. The milestones below are
 code-complete; their load and feel exit criteria still wait for the unit's readings, which
 `docs/UNIT_CHECKLIST.md` collects. The milestone figures are from the emulator unless they say
 otherwise.
@@ -45,7 +45,8 @@ otherwise.
 | v0.1 | **released** 2026-11-22 | [v0.1.0](https://github.com/Devko/STRATA/releases/tag/v0.1.0), a pre-release, after the first evening on the unit: under 30% on the default beat, 84.3% MAX in heavy play, no dropouts |
 | v0.2 | **released** 2026-11-23 | [v0.2.0](https://github.com/Devko/STRATA/releases/tag/v0.2.0), an early beta: PRs #83-#111. Its new features are not yet checked on the unit |
 | v0.3 | **released** 2026-11-23 | [v0.3.0](https://github.com/Devko/STRATA/releases/tag/v0.3.0) (the performance mixer and looper, the VA OSC page, WAVE, FM4, the stock SmplTrek folders) and [v0.3.1](https://github.com/Devko/STRATA/releases/tag/v0.3.1) (the GRAIN rework). v0.3.1 boots and plays on the unit |
-| after v0.3.1 | on `main` | The backlog's Phases 1-5 so far: Enaga 0.3.0, LOCK, macro learn by turning, the screen frame, locks and waveforms on screen, one synth filter, play modes, step stutter (CHANGELOG, Unreleased) |
+| v0.4 | **released** 2026-11-26 | [v0.4.0](https://github.com/Devko/STRATA/releases/tag/v0.4.0), an early beta for Enaga 0.3.0, PRs #137-#177: the backlog's Phases 1-5 so far (LOCK, macro learn by turning, MOD slots, LFO TRIG, play modes, step stutter, LIVE RND, sample audition, one synth filter) and every screen redrawn. The zip no longer carries Enaga. Not yet checked on the unit |
+| after v0.4.0 | on `main` | CHANGELOG, Unreleased |
 
 ## What comes next
 
