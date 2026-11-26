@@ -20,6 +20,9 @@ Publishing is one command, `tools/publish_release.sh`, and it refuses rather tha
       and say the zip does not include it. If the Enaga version changed since the last release,
       they say so, since updating then needs step 1 of docs/INSTALL.md again. (v0.1.0 to v0.3.1
       bundled Enaga 0.2.0's `SmplTrek.bin`; their notes describe that and stay as published.)
+- [ ] The notes' install section starts with the card builder,
+      [strata.einblick.dev](https://strata.einblick.dev), as the easy way, before the steps by
+      hand.
 - [ ] If the `APP.ENA` was built with cl6x: read the licence text in
       `~/ti/ti-cgt-c6000_8.5.0.LTS` (a `LICENSE`, `*manifest*` or `license` directory) for a
       condition on distributing the compiler's **output**, and record what it says in
@@ -67,6 +70,11 @@ What it does, refusing at the first thing that is wrong:
 - [ ] Merge the release PR.
 - [ ] Update the README's "Status" section (current release and date) and, if the release changes
       the install steps or the Enaga version, the README's "Try it" and `docs/INSTALL.md`.
+- [ ] Check that [strata.einblick.dev](https://strata.einblick.dev) offers the release (within
+      ten minutes). Nothing to deploy: the card builder reads releases from GitHub, and the
+      Enaga version from a comment the script adds to the release body,
+      `<!-- strata-card: {"enaga":"X.Y.Z"} -->`. A release made by hand needs that line too
+      ([web/README.md](../../web/README.md)).
 - [ ] Optional, and worth it: download the zip from the release page, unzip it onto a freshly
       formatted card, install, and play A01.
 

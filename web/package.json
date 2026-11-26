@@ -1,0 +1,9 @@
+{
+  "name": "strata-card-builder",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "serve": "node tools/serve.mjs"
+  }
+}

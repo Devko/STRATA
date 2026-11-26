@@ -45,6 +45,10 @@ STRATA has not run on either.
 
 INSTALLING
 ----------
+Easiest: https://strata.einblick.dev builds one card zip with this release and the
+Enaga firmware it needs, both fetched from their official releases. Copy it to the
+card's root and do step 4 below. Or by hand:
+
 Two downloads: Enaga {ENAGA} (the firmware) from Enaga's release page, and this zip
 (the STRATA app). Step 1 is needed once per Enaga version.
 
