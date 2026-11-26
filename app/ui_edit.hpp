@@ -140,7 +140,7 @@
                         machine_is_fm(id)     ? "FIN NUDGES RAT"
                         : machine_is_wave(id) ? "WRP BENDS  DET 2 OSCS"
                         : machine_is_grain(id) ? "PSP: DET 1-63 OCT 64+"
-                        : has_asr(selected_) ? "OS2: DET 1-63 SYN 64+"
+                        : machine_reads_osc(id) ? "OS2: DET 1-63 SYN 64+"
                                              : "NOT ON THIS MACHINE",
                         7);
             return;
@@ -219,7 +219,8 @@
             // Whether the note envelope holds, and if not what decides its length.
             const bool sustains = kit.v[kAsrFirst + 1] > 0;
             append(out, sustains          ? "HOLDS: PAD OR LEN"
-                        : machine_is_grain(id) ? "SUS 0: DEC DECIDES"
+                        : machine_is_grain(id) || id == uint8_t(MachineId::sample)
+                            ? "SUS 0: DEC DECIDES"
                                                : "SUS 0: ONE-SHOT");
         } else if (picture == EditPicture::filter) {
             // FDE at 0 is tied to DEC, which the envelope then draws from.
@@ -362,12 +363,20 @@
         constexpr int kAtk = kAsrFirst, kSus = kAsrFirst + 1, kRel = kAsrFirst + 2;
         constexpr int kFsu = kAsrFirst + 3;
         if (id == uint8_t(MachineId::sample)) {
-            // ATK DEC on AMP; DEC at the top holds (dsp/sample.cpp).
+            // ATK DEC on AMP; DEC at the top holds (dsp/sample.cpp). SUS and REL on ASR, as
+            // GRAIN's: SUS up holds the note while gated, then REL.
             e.atk = heard(8);
             e.dec = heard(9);
-            e.hold = e.dec >= 127;
             e.atk_param = 8;
             e.dec_param = 9;
+            e.sus = heard(kSus);
+            e.holds = e.sus > 0;
+            e.hold = e.dec >= 127 && !e.holds;
+            if (e.holds) {
+                e.rel = heard(kRel);
+                e.sus_param = kSus;
+                e.rel_param = kRel;
+            }
             return e;
         }
         if (!has_asr(selected_)) {

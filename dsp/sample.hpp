@@ -62,6 +62,9 @@
 
 namespace strata {
 
+// REL on the ASR page: 30 ms at 0 (the old fixed declick) to 8 s (dsp/sample.cpp).
+float sample_release_seconds(uint8_t value);
+
 class Sampler final : public Machine {
 public:
     void init(float sample_rate) override;
@@ -195,6 +198,8 @@ private:
         int wait = 0;           // frames until `next` starts
         bool pending = false;
         bool release_on_start = false;   // released before its frame: let go once it starts
+        int32_t gate = -1;      // frames of the step's LEN left with SUS up, -1 for none
+        bool one_shot = false;  // no LEN and no key-up to come: with SUS up it lets go at once
         Trig next{};
 
         // An Envelope with sustain 0 parks in the `sustain` stage rather than reaching `idle`
@@ -210,6 +215,7 @@ private:
 
     void recompute_window();
     void start(Voice &voice);
+    void open_gate(Voice &voice, const Trig &trig);
     void silence(Voice &voice);
     void render_voice(Voice &voice, float *out, int n);
     void run(Voice &voice, float *out, int n);
@@ -256,6 +262,7 @@ private:
     bool auto_ = false;
     int cuts_ = 0;
     int32_t cut_[kSlicesMax + 1] = {};
+    bool sustains_ = false;        // SUS up (the ASR page): a note holds while gated
     bool loop_ = false;            // PLY
     bool reverse_ = false;
     float out_gain_ = 0.25f;       // LVL

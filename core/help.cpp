@@ -492,12 +492,17 @@ constexpr const char *kFmOscWords[4] = {"PAIR DETUNE", "RATIO FINE", "INDEX KEYT
                                         "CARRIER RATIO"};
 // GRAIN's: the cloud's envelope, and the scan and pitch spray (dsp/grain.hpp).
 constexpr const char *kGrainAsrWords[4] = {"ATTACK", "SUSTAIN", "RELEASE", ""};
+// SAMPLE's: SUS and REL only, its attack being AMP's (dsp/sample.cpp).
+constexpr const char *kSampleAsrWords[4] = {"", "SUSTAIN", "RELEASE", ""};
 constexpr const char *kGrainOscWords[4] = {"SCAN SPEED", "PITCH SPRAY", "", ""};
 
 const char *const kEditPageNames[kHelpEditPages] = {"SRC", "FLTR", "AMP", "FX",
                                                     "LFO", "ARP", "ASR", "OSC"};
 
-bool is_va(uint8_t machine) { return machine_reads_asr(machine); }
+// Does the machine read EDIT's page 6 (ASR) or 7 (OSC)?
+bool reads_page(uint8_t machine, int page) {
+    return page == 6 ? machine_reads_asr(machine) : machine_reads_osc(machine);
+}
 
 const char *osc_words(uint8_t machine, int slot) {
     if (!machine_reads_osc(machine)) return "";
@@ -556,8 +561,8 @@ void knob_row(const HelpPlace &place, int slot, char row[kHelpChars + 1]) {
 void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelpChars + 1],
                int &count) {
     const int page = place.page < kHelpEditPages ? place.page : 0;
-    if (page >= 6 && !is_va(place.machine)) {
-        add_row(rows, count, page == 6 ? "ASR: VA WAVE FM GRN" : "OSC: VA WAVE FM GRN");
+    if (page >= 6 && !reads_page(place.machine, page)) {
+        add_row(rows, count, page == 6 ? "ASR: SYNTHS GRN SMP" : "OSC: VA WAVE FM GRN");
         return;
     }
     for (int slot = 0; slot < 4; slot++) knob_row(place, slot, rows[count++]);
@@ -585,8 +590,10 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
             break;
         case 5: add_row(rows, count, "MOD OFF  NO ARP"); break;
         case 6:
-            add_row(rows, count, machine_is_grain(place.machine) ? "SUS 0  DEC DECIDES"
-                                                                 : "SUS 0  ONE-SHOT");
+            add_row(rows, count,
+                    machine_is_grain(place.machine) || place.machine == uint8_t(MachineId::sample)
+                        ? "SUS 0  DEC DECIDES"
+                        : "SUS 0  ONE-SHOT");
             add_row(rows, count, "SUS UP  PAD/LEN HOLDS");
             break;
         case 7:
@@ -618,7 +625,7 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
     }
     if (page == 0 && machine_is_grain(place.machine)) add_row(rows, count, "BRACKET POS  TICK GRN");
     const bool curve = (page == 2 && place.machine != uint8_t(MachineId::midi)) ||
-                       (page == 6 && is_va(place.machine)) ||
+                       (page == 6 && machine_reads_asr(place.machine)) ||
                        (page == 1 && machine_has_voice_filter(place.machine));
     if (curve) add_row(rows, count, "CURVE  LETTER = KNOB");
 }
@@ -762,10 +769,11 @@ const char *help_param_words(uint8_t machine, int index) {
         case 4: return kLfoWords[slot];
         case 5: return kArpWords[slot];
         case 6:
-            if (!is_va(machine)) return "";
-            return machine_is_fm(machine)      ? kFmAsrWords[slot]
-                   : machine_is_grain(machine) ? kGrainAsrWords[slot]
-                                               : kAsrWords[slot];
+            if (!machine_reads_asr(machine)) return "";
+            return machine_is_fm(machine)                    ? kFmAsrWords[slot]
+                   : machine_is_grain(machine)               ? kGrainAsrWords[slot]
+                   : machine == uint8_t(MachineId::sample)   ? kSampleAsrWords[slot]
+                                                             : kAsrWords[slot];
         default: return osc_words(machine, slot);
     }
 }

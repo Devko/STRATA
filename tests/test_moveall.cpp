@@ -71,7 +71,7 @@ TEST(release_params_are_dec_and_where_the_machine_reads_asr_rel) {
     }
     uint8_t params[2] = {};
     CHECK_EQ(machine_release_params(uint8_t(MachineId::count), params), 0);
-    CHECK_EQ(machine_release_params(uint8_t(MachineId::sample), params), 1);
+    CHECK_EQ(machine_release_params(uint8_t(MachineId::sample), params), 2);   // DEC, and REL
     CHECK_EQ(int(params[0]), 9);
     CHECK_EQ(machine_release_params(uint8_t(MachineId::grain), params), 2);
     CHECK_EQ(int(params[0]), 10);

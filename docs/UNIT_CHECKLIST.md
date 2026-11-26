@@ -189,7 +189,7 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
   own knob page did **not** change.
 - Let go of FUNC: GRID is back. Hold again: page 1 again.
 - EDIT on track 2 (snare): `EDIT SRC SNR`, `B SNP SNAPPY`. Screen key RIGHT to ASR (without FUNC),
-  hold FUNC: `ASR: VA WAVE FM GRN`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
+  hold FUNC: `ASR: SYNTHS GRN SMP`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
 - MIXER DUCK: `A SRC SOURCE TRACK`. PERFORM: `PUSH A-D   LEARN`. Push A (LEARN), hold FUNC:
   `MACRO LEARN:`; CLR ends it. KEYS: `LOWER PADS WHITE KEYS`. PROJECTS: `PUSH B     RENAME`.
 - Every page legible, nothing cut off or overlapping? Anything missing you looked for? `____`
@@ -1145,6 +1145,26 @@ so this is the first time it is heard. Play A01 GROOVE.
       and is recorded with its length.
 - [ ] Save, power cycle: the ASR settings come back. Open a project saved before tonight: every
       VA sounds as it did (ASR reads all 0).
+
+## 13k2. SAMPLE holds notes: SUS and REL on its ASR page (2026-11-26) (4 min)
+
+New: SAMPLE reads the ASR page's SUS and REL (its attack stays ATK on AMP, so A and D read `---`).
+SUS 0 is the machine as it was; SUS up holds a note for the step's LEN or while a pad is held,
+then fades over REL. The emulator only walks to the page (`tests/scenario_asr.sh`).
+
+- [ ] Track 8 (SMP), EDIT, screen key RIGHT six times: `ASR`, with `---` on A and D, SUS and REL on
+      B and C reading `0%` and `30MS`, and `SUS 0: DEC DECIDES` below. Hold FUNC: `B SUS SUSTAIN`,
+      `C REL RELEASE`.
+- [ ] **Old sound kept.** With SUS and REL at 0 the loop track sounds exactly as before.
+- [ ] **A sample pad.** Load a sustained sample (a chord or a drone), AMP: PLY to forward loop,
+      DEC at the top. ASR: SUS up, REL to about `2.0S`. A step with LEN `16 STP`: the sample holds
+      for the bar and fades into the next. Line reads `HOLDS: PAD OR LEN`. No click at the end.
+- [ ] **KEYS** on track 8: hold a pad for five seconds: it holds; let go: it fades over REL.
+      A quick tap on the track pad (EDIT) rings one step, then fades.
+- [ ] **DEC with SUS.** DEC to about a third: the note falls to the SUS level and stays there while
+      held. SUS back to 0: it decays away as before.
+- [ ] Save, power cycle: SUS and REL come back. Switch track 8 to another machine and back to
+      SAMPLE: SUS and REL are 0 again.
 
 ## 13l. The sidechain duck, editable (5 min)
 

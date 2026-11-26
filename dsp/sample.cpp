@@ -74,8 +74,12 @@ constexpr float kStepMin = 1.0f / 64.0f;
 constexpr float kStepMax = 32.0f;
 
 // A release so STOP-once leaves something to hear. Short, because a sampler's tail is the
-// sample's own: this is a declick, not an effect.
+// sample's own: this is a declick, not an effect. It is REL at 0 (the ASR page); REL up runs on
+// to 8 s, the VAs' top, so a held sample can fade like a pad.
 constexpr float kReleaseS = 0.03f;
+constexpr float kReleaseOctaves = 8.0589f;   // log2(8 / 0.03): REL, 30 ms to 8 s
+// LEN's longest gate, as the VAs and GRAIN: a held LEN rings across a pattern's end.
+constexpr uint32_t kGateMax = 14400000u;
 
 // 1/n for the slice count, as a table: dividing window_len by the slice count is the one place
 // this machine would otherwise need a divide, and float or not it is not worth a run of Newton
@@ -166,6 +170,18 @@ void mix_ramp(float *out, const float *in, int n, float gain, float step) {
 //           AMP have 8 slots between them and both of these are a switch, not a sweep. Looping
 //           repeats the window (or the slice), which is what makes a loop track a loop track.
 //  11  LVL  output level, square law, 0-1. Square gives usable control over the quiet end.
+// ASR -- SUS and REL only (2026-11-26): the attack has always been ATK on AMP, so the page's ATK
+// and fourth knob are not this machine's. Both at 0 are the machine as it was, bit for bit.
+//  25  SUS  sustain, 0 to 1. 0 leaves DEC in charge: the note decays to silence, or holds to the
+//           sample's end with DEC at the top, whatever the step's LEN. Above 0 the note holds at
+//           SUS (at the peak with DEC at the top) while a KEYS pad is held or the step's LEN
+//           lasts, then fades over REL: a looped sample becomes a pad. As GRAIN's (dsp/grain.cpp).
+//  26  REL  release, 30 ms at 0 (the old fixed declick) to 8 s exponential: what STOP, a key-up
+//           or LEN's end leaves.
+
+float sample_release_seconds(uint8_t value) {
+    return kReleaseS * exp2(kReleaseOctaves * float(value) * (1.0f / 127.0f));
+}
 
 void Sampler::init(float sample_rate) {
     rate_ = sample_rate > 1.0f ? sample_rate : 48000.0f;
@@ -199,8 +215,13 @@ void Sampler::prepare(const TrackParams &params) {
     const float decay = 0.005f * exp2(11.6f * params.unit(9));      // 5 ms to ~16 s
     // The times above are already times-to-1%, which is what EnvelopeShape::make wants
     // (docs/ENAGA_API.md, "Gotchas"): there is no reference tau here to multiply by ln(100).
-    const float sustain = params.get(9) >= 127 ? 1.0f : 0.0f;       // DEC at the top = hold
-    amp_shape_ = EnvelopeShape::make(attack, decay, sustain, kReleaseS, rate_);
+    // DEC at the top holds; SUS up (the ASR page) holds at SUS while gated. Both ASR bytes at 0
+    // give exactly the old shape: sustain 0 or 1, the 30 ms release.
+    const uint8_t sus = params.get(Page::asr, 1);
+    sustains_ = sus > 0;
+    const float sustain = params.get(9) >= 127 ? 1.0f : params.unit(Page::asr, 1);
+    amp_shape_ = EnvelopeShape::make(attack, decay, sustain,
+                                     sample_release_seconds(params.get(Page::asr, 2)), rate_);
 
     const int zone = int(params.get(10)) >> 5;    // four zones of 32: a shift, not a divide
     loop_ = (zone & 1) != 0;
@@ -399,6 +420,8 @@ void Sampler::release_all() {
     // step to zero. A pending trig still starts -- it was scheduled before the stop.
     for (Voice &v : voices_) {
         if (v.playing) v.amp.gate_off();
+        v.gate = -1;
+        v.one_shot = false;
     }
 }
 
@@ -409,6 +432,7 @@ void Sampler::release(uint8_t note) {
         if (v.next.note != note) continue;
         if (v.pending) v.release_on_start = true;
         else if (v.playing) v.amp.gate_off();
+        v.gate = -1;
     }
 }
 
@@ -477,10 +501,7 @@ void Sampler::start(Voice &v) {
         v.level = clamp(velocity * (t.accent ? 1.25f : 1.0f), 0.0f, 1.0f);
         v.amp.gate_on(true);
         v.playing = true;
-        if (v.release_on_start) {
-            v.amp.gate_off();
-            v.release_on_start = false;
-        }
+        open_gate(v, t);
         return;
     }
 
@@ -533,14 +554,29 @@ void Sampler::start(Voice &v) {
     v.level = clamp(velocity * (t.accent ? 1.25f : 1.0f), 0.0f, 1.0f);
     v.amp.gate_on(true);
     v.playing = true;
+    open_gate(v, t);
+}
+
+// This note's LEN, counted from now, only with SUS up: at SUS 0 DEC ends the note, or the sample
+// does, as it always has. A note with neither a LEN nor a key-up to come is a one-shot, which with
+// SUS up must let go by itself (render_voice) or it would hold for ever.
+void Sampler::open_gate(Voice &v, const Trig &t) {
+    v.gate = sustains_ && t.gate_frames > 0
+                 ? int32_t(t.gate_frames > kGateMax ? kGateMax : t.gate_frames)
+                 : -1;
+    v.one_shot = v.gate < 0 && !t.held;
     if (v.release_on_start) {
         v.amp.gate_off();
         v.release_on_start = false;
+        v.gate = -1;
+        v.one_shot = false;
     }
 }
 
 void Sampler::silence(Voice &v) {
     v.amp.kill();
+    v.gate = -1;
+    v.one_shot = false;
     v.playing = false;
     v.fade = 0;
     v.gain = 1.0f;
@@ -553,11 +589,25 @@ void Sampler::render_voice(Voice &v, float *out, int n) {
             start(v);      // sample-accurate: the note begins on trig.frame
             continue;
         }
+        // A one-shot with SUS up: nothing will end it, so it lets go now (as GRAIN and the VAs),
+        // and SUS raised under a sounding one-shot does too.
+        if (v.playing && v.one_shot && sustains_) {
+            v.amp.gate_off();
+            v.one_shot = false;
+        }
         int k = n - i;
         if (v.pending && v.wait < k) k = v.wait;
         if (v.fade > 0 && v.fade < k) k = v.fade;
+        if (v.gate > 0 && v.gate < k) k = int(v.gate);   // and at LEN's end: released on its frame
         run(v, out + i, k);
         if (v.pending) v.wait -= k;
+        if (v.gate > 0) {
+            v.gate -= k;
+            if (v.gate <= 0) {
+                v.amp.gate_off();                         // LEN is over: into REL, no click
+                v.gate = -1;
+            }
+        }
         if (v.fade > 0) {
             v.fade -= k;
             if (v.fade == 0) silence(v);   // faded to zero: drop whatever was sounding

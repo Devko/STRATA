@@ -358,6 +358,8 @@ bool machine_defaults_apply(uint8_t machine, uint8_t *params) {
         // and DEC agree with the browser's pick (kSamplePickResets; tests/test_sounds.cpp).
         static constexpr uint8_t kSample[12] = {64, 0, 127, 0, 0, 127, 0, 0, 0, 127, 0, 100};
         for (int p = 0; p < 12; p++) params[p] = kSample[p];
+        // And the ASR page it reads, SUS 0 and REL 0: the one-shot it always was.
+        for (int p = 0; p < 4; p++) params[kSoundAsrFirst + p] = 0;
         return true;
     }
     const SoundPreset *s = sound_preset(machine, 0);
@@ -365,7 +367,9 @@ bool machine_defaults_apply(uint8_t machine, uint8_t *params) {
     for (int p = 0; p < 12; p++) params[p] = value_of(*s, p);
     if (machine_reads_asr(machine)) {
         for (int p = 0; p < 4; p++) params[kSoundAsrFirst + p] = s->asr[p];
-        for (int p = 0; p < 4; p++) params[kSoundOscFirst + p] = s->osc[p];
+        if (machine_reads_osc(machine)) {
+            for (int p = 0; p < 4; p++) params[kSoundOscFirst + p] = s->osc[p];
+        }
     }
     return true;
 }

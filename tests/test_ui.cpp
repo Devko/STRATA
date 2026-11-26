@@ -4735,6 +4735,37 @@ TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
     key(ENAGA_KEY_F4);
 }
 
+TEST(ui_asr_on_sample_shows_sus_and_rel_only) {
+    // SAMPLE reads SUS and REL (2026-11-26); its attack is ATK on AMP, so A and D are not its own.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);
+    for (int i = 0; i < 7; i++) key(ENAGA_KEY_DOWN);  // track 8: SAMPLE in the default kit
+    CHECK_EQ(int(app_engine().machine_id(7)), int(MachineId::sample));
+    while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
+    check_layout(app, "EDIT ASR, SAMPLE");
+    CHECK(!screen_has(app, "NOT ON THIS MACHINE"));
+    CHECK(screen_has(app, "SUS"));
+    CHECK(screen_has(app, "REL"));
+    CHECK(!screen_has(app, "ATK"));
+    CHECK(!screen_has(app, "FSU"));
+    CHECK(screen_has(app, "30MS"));                   // REL 0: the old declick
+    CHECK(screen_has(app, "SUS 0: DEC DECIDES"));
+    app.on_encoder(1, +100);
+    pump();
+    CHECK(app_engine().params(7).v[kAsrFirst + 1] > 0);
+    CHECK(screen_has(app, "HOLDS: PAD OR LEN"));
+    post_cmd_track_param(7, uint8_t(kAsrFirst + 2), 127);
+    pump();
+    CHECK(screen_has(app, "8.0S"));
+    check_layout(app, "EDIT ASR, SAMPLE held");
+
+    for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(7, uint8_t(kAsrFirst + i), 0);
+    pump();
+    for (int i = 0; i < 7; i++) key(ENAGA_KEY_UP);
+    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_osc_is_edits_eighth_page_and_names_its_waves_and_modes) {
     Strata &app = fresh();
     key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
