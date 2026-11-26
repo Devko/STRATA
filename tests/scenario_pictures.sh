@@ -97,7 +97,7 @@ check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_re
 # the walk's tail is what is left to check. The pages before it drew too, or the app would not
 # have got this far without a fault.
 screens = [line for line in log if line.startswith("scr ")]
-check("scr EDIT ASR" in screens, "the walk reached ASR", f"screens={screens}")
+check("scr EDIT ENV" in screens, "the walk reached ASR", f"screens={screens}")
 check(bool(screens) and screens[-1] == "scr EDIT FLTR", "and ended on the synth's FLTR",
       f"screens={screens}")
 check(any(line.startswith("mch 8 GRN") for line in log) or len(log) == 16,

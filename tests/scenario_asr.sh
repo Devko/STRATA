@@ -87,8 +87,8 @@ check("strata ready" in log or (len(log) == 16 and any(l.startswith("scr ") for 
 check("run int" in log, "the transport started", f"log={log}")
 check("scr EDIT SRC" in screens, "EDIT opened on SRC", f"screens={screens}")
 check("scr EDIT ARP" in screens, "five selection presses passed the ARP page", f"screens={screens}")
-check("scr EDIT ASR" in screens, "a sixth reached the ASR page", f"screens={screens}")
-check(screens and screens[-1] == "scr EDIT ASR",
+check("scr EDIT ENV" in screens, "a sixth reached the ASR page", f"screens={screens}")
+check(screens and screens[-1] == "scr EDIT ENV",
       "seven DOWN presses (past track 7, VA POLY, to track 8, SAMPLE: SUS and REL since "
       "2026-11-26) stayed on ASR", f"screens={screens}")
 
