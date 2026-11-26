@@ -1,16 +1,18 @@
 {
   "schema": 1,
-  "about": "Which Enaga firmware each STRATA release needs, and the SHA-256 of every zip the card builder may fetch. The builder and its proxy accept only the files listed here. Add a STRATA release with docs/release/RELEASING.md; the hashes are of the zips as published on GitHub.",
+  "about": "Which Enaga firmware each STRATA release needs, and the SHA-256 of every file the card builder may fetch (license_sha256: Enaga's LICENSE at that tag). The builder and its proxy accept only the files listed here. Add a STRATA release with docs/release/RELEASING.md; the hashes are of the zips as published on GitHub.",
   "enaga": {
     "0.3.0": {
       "tag": "v0.3.0",
       "asset": "enaga-v0.3.0-smpltrek.zip",
-      "sha256": "5ab5c822b282f5b7543b9706c9ebf3df8387c43c32694edf7027a85177934070"
+      "sha256": "5ab5c822b282f5b7543b9706c9ebf3df8387c43c32694edf7027a85177934070",
+      "license_sha256": "e7818a256b39b342d399082d9c905eaf4aa602f983706a59363e4e54cc3f1c21"
     },
     "0.2.0": {
       "tag": "v0.2.0",
       "asset": "enaga-v0.2.0-smpltrek.zip",
-      "sha256": "658a14ac11b9595641d62287b9aa367ad1ae8ac7f3c5a404373d48edce54071a"
+      "sha256": "658a14ac11b9595641d62287b9aa367ad1ae8ac7f3c5a404373d48edce54071a",
+      "license_sha256": "e7818a256b39b342d399082d9c905eaf4aa602f983706a59363e4e54cc3f1c21"
     }
   },
   "strata": [

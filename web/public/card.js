@@ -15,14 +15,24 @@ export function assetId(kind, version) {
   return `${kind}-${version}`;
 }
 
-// Every downloadable file the manifest allows, by id: { repo, tag, asset, sha256 }.
+function download(repo, tag, asset) {
+  return `https://github.com/${repo}/releases/download/${tag}/${asset}`;
+}
+
+// Every file the manifest allows, by id: { url, name, sha256 }. Release zips come from the
+// release's downloads, Enaga's licence from the repository at the release's tag.
 export function allowedAssets(manifest) {
   const out = {};
   for (const [version, e] of Object.entries(manifest.enaga)) {
-    out[assetId("enaga", version)] = { repo: REPOS.enaga, tag: e.tag, asset: e.asset, sha256: e.sha256 };
+    out[assetId("enaga", version)] = { url: download(REPOS.enaga, e.tag, e.asset), name: e.asset, sha256: e.sha256 };
+    out[assetId("enaga", version) + "-license"] = {
+      url: `https://raw.githubusercontent.com/${REPOS.enaga}/${e.tag}/LICENSE`,
+      name: "LICENSE",
+      sha256: e.license_sha256,
+    };
   }
   for (const s of manifest.strata) {
-    out[assetId("strata", s.version)] = { repo: REPOS.strata, tag: s.tag, asset: s.asset, sha256: s.sha256 };
+    out[assetId("strata", s.version)] = { url: download(REPOS.strata, s.tag, s.asset), name: s.asset, sha256: s.sha256 };
   }
   return out;
 }
@@ -70,6 +80,9 @@ export async function buildCard({ manifest, strataVersion, includeFirmware, fetc
   const licence = await find(sEntries, (e) => e.name.endsWith("/LICENSE.txt"), "LICENSE.txt").read();
   const notices = await find(sEntries, (e) => e.name.endsWith("/THIRD_PARTY_NOTICES.md"), "THIRD_PARTY_NOTICES.md").read();
 
+  onStep(`Downloading Enaga ${strata.enaga}'s licence from ${REPOS.enaga}`);
+  const enagaLicence = await verified(fetchAsset, assetId("enaga", strata.enaga) + "-license", enaga.license_sha256, `Enaga ${strata.enaga}'s LICENSE`);
+
   let firmware = null;
   if (includeFirmware) {
     onStep(`Downloading Enaga ${strata.enaga} from ${REPOS.enaga}`);
@@ -83,6 +96,7 @@ export async function buildCard({ manifest, strataVersion, includeFirmware, fetc
   if (firmware) files.push({ name: "SmplTrek.bin", data: firmware });
   files.push({ name: CARD_APP, data: app });
   files.push({ name: "STRATA-README.txt", data: enc.encode(readme(strata, enaga, includeFirmware)) });
+  files.push({ name: "ENAGA-LICENSE.txt", data: enagaLicence });
   files.push({ name: "STRATA-LICENSES.txt", data: enc.encode(licences(dec.decode(licence), dec.decode(notices))) });
 
   const name = includeFirmware
@@ -107,7 +121,7 @@ export function readme(strata, enaga, includeFirmware) {
     "----------------",
     "Installing third-party firmware is at your own risk. Neither Enaga nor STRATA is made,",
     "supported or endorsed by Sonicware, and installing them may affect your warranty. Both are",
-    "provided as is, without warranty of any kind (see STRATA-LICENSES.txt).",
+    "provided as is, without warranty of any kind (see ENAGA-LICENSE.txt and STRATA-LICENSES.txt).",
     "",
     "BEFORE YOU INSTALL",
     "------------------",
@@ -127,7 +141,9 @@ export function readme(strata, enaga, includeFirmware) {
   lines.push(
     `  ${CARD_APP}    the STRATA ${v} app (from STRATA's release, unchanged)`,
     "  STRATA-README.txt            this file",
-    "  STRATA-LICENSES.txt          STRATA's licence and every third-party notice, Enaga's included",
+    "  ENAGA-LICENSE.txt            Enaga's licence (MIT), from its repository at that release",
+    "  STRATA-LICENSES.txt          STRATA's licence and every third-party notice (Enaga, and the",
+    "                               FatFs and TinyUSB code inside SmplTrek.bin)",
     "",
     "INSTALLING",
     "----------",

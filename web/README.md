@@ -18,6 +18,7 @@ It runs on Cloudflare Pages, with one Pages Function.
   SmplTrek.bin                 Enaga's firmware, unchanged (left out for "STRATA only")
   ENAGA/APPS/STRATA/APP.ENA    the STRATA app, unchanged
   STRATA-README.txt            install steps for this pair
+  ENAGA-LICENSE.txt            Enaga's LICENSE from its repository at the release tag
   STRATA-LICENSES.txt          STRATA's LICENSE.txt and THIRD_PARTY_NOTICES.md (Enaga's MIT
                                notice, FatFs, TinyUSB)
   ```
@@ -32,7 +33,8 @@ It runs on Cloudflare Pages, with one Pages Function.
 
 Enaga is MIT; its firmware also contains FatFs (1-clause BSD-style) and TinyUSB (MIT). MIT
 permits redistribution, including of the binary, if the notice goes with it, so passing the
-official file through is fine, and the zip carries every notice in `STRATA-LICENSES.txt`.
+official file through is fine, and the zip carries Enaga's licence as `ENAGA-LICENSE.txt` and every
+notice in `STRATA-LICENSES.txt`.
 STRATA's own releases still do not bundle Enaga (decided 2026-11-25): the user's browser fetches
 it from Enaga's release at the moment they ask, so users always get the authors' file, checked
 against a pinned hash.

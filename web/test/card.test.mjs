@@ -52,15 +52,16 @@ async function fixture({ badSums = false } = {}) {
     { name: "STRATA-v9.0.0/SHA256SUMS.txt", data: enc.encode(`${appSha}  SD-CARD/ENAGA/APPS/STRATA/APP.ENA\n`) },
   ]);
   const enagaZip = deflatedZip([{ name: "SmplTrek.bin", data: bin }]);
+  const enagaLicence = enc.encode("MIT License\n\nCopyright (c) 2026 seawaffle\n");
   const manifest = {
     schema: 1,
-    enaga: { "9.1.0": { tag: "v9.1.0", asset: "enaga-v9.1.0-smpltrek.zip", sha256: await sha256Hex(enagaZip) } },
+    enaga: { "9.1.0": { tag: "v9.1.0", asset: "enaga-v9.1.0-smpltrek.zip", sha256: await sha256Hex(enagaZip), license_sha256: await sha256Hex(enagaLicence) } },
     strata: [{ version: "9.0.0", tag: "v9.0.0", date: "2030-01-01", asset: "STRATA-v9.0.0-smpltrek.zip", sha256: await sha256Hex(strataZip), enaga: "9.1.0" }],
   };
-  const blobs = { "strata-9.0.0": strataZip, "enaga-9.1.0": enagaZip };
+  const blobs = { "strata-9.0.0": strataZip, "enaga-9.1.0": enagaZip, "enaga-9.1.0-license": enagaLicence };
   const fetched = [];
   const fetchAsset = async (id) => { fetched.push(id); return blobs[id]; };
-  return { app, bin, manifest, blobs, fetchAsset, fetched };
+  return { app, bin, enagaLicence, manifest, blobs, fetchAsset, fetched };
 }
 
 test("writeZip output reads back, stored, with correct CRCs", async () => {
@@ -93,16 +94,17 @@ test("a full card has firmware, app, readme and licences at the card root", asyn
   assert.equal(card.name, "STRATA-v9.0.0-enaga-v9.1.0-sdcard.zip");
   const entries = readZip(card.zip);
   assert.deepEqual(entries.map((e) => e.name),
-    ["SmplTrek.bin", "ENAGA/APPS/STRATA/APP.ENA", "STRATA-README.txt", "STRATA-LICENSES.txt"]);
+    ["SmplTrek.bin", "ENAGA/APPS/STRATA/APP.ENA", "STRATA-README.txt", "ENAGA-LICENSE.txt", "STRATA-LICENSES.txt"]);
   assert.deepEqual(await entries[0].read(), fx.bin);
   assert.deepEqual(await entries[1].read(), fx.app);
   const readme = dec.decode(await entries[2].read());
   assert.match(readme, /SYSTEM UPDATE/);
   assert.match(readme, /Enaga 9\.1\.0/);
-  const lic = dec.decode(await entries[3].read());
+  assert.deepEqual(await entries[3].read(), fx.enagaLicence);
+  const lic = dec.decode(await entries[4].read());
   assert.match(lic, /MIT License \(STRATA\)/);
   assert.match(lic, /MIT License \(Enaga\)/);
-  assert.deepEqual(fx.fetched, ["strata-9.0.0", "enaga-9.1.0"]);
+  assert.deepEqual(fx.fetched, ["strata-9.0.0", "enaga-9.1.0-license", "enaga-9.1.0"]);
 });
 
 test("an app-only card has no firmware and does not download Enaga", async () => {
@@ -110,11 +112,20 @@ test("an app-only card has no firmware and does not download Enaga", async () =>
   const card = await buildCard({ manifest: fx.manifest, strataVersion: "9.0.0", includeFirmware: false, fetchAsset: fx.fetchAsset });
   const names = readZip(card.zip).map((e) => e.name);
   assert.ok(!names.includes("SmplTrek.bin"));
+  assert.ok(names.includes("ENAGA-LICENSE.txt"), "APP.ENA carries Enaga code too, so the licence ships either way");
   assert.equal(card.name, "STRATA-v9.0.0-app-only-sdcard.zip");
-  assert.deepEqual(fx.fetched, ["strata-9.0.0"]);
+  assert.deepEqual(fx.fetched, ["strata-9.0.0", "enaga-9.1.0-license"]);
   const readme = dec.decode(await readZip(card.zip).find((e) => e.name === "STRATA-README.txt").read());
   assert.doesNotMatch(readme, /This installs Enaga/);
   assert.match(readme, /must already run Enaga 9\.1\.0/);
+});
+
+test("an Enaga licence that does not match compat.json is refused", async () => {
+  const fx = await fixture();
+  fx.manifest.enaga["9.1.0"].license_sha256 = "0".repeat(64);
+  await assert.rejects(
+    buildCard({ manifest: fx.manifest, strataVersion: "9.0.0", includeFirmware: false, fetchAsset: fx.fetchAsset }),
+    /LICENSE: the download does not match/);
 });
 
 test("a download that does not match compat.json's SHA-256 is refused", async () => {
@@ -152,6 +163,7 @@ test("compat.json: every STRATA release names a listed Enaga, newest first, no d
     assert.equal(e.tag, `v${v}`);
     assert.equal(e.asset, `enaga-v${v}-smpltrek.zip`);
     assert.match(e.sha256, /^[0-9a-f]{64}$/);
+    assert.match(e.license_sha256, /^[0-9a-f]{64}$/);
   }
 });
 
@@ -177,6 +189,7 @@ test("the proxy serves only listed files", async () => {
   const ids = Object.keys(allowedAssets(manifestFile));
   assert.ok(ids.includes(assetId("strata", manifestFile.strata[0].version)));
   assert.ok(ids.includes(assetId("enaga", manifestFile.strata[0].enaga)));
+  assert.ok(ids.includes(assetId("enaga", manifestFile.strata[0].enaga) + "-license"));
 });
 
 test("the proxy fetches the official GitHub download URL and streams it", async () => {
@@ -188,6 +201,11 @@ test("the proxy fetches the official GitHub download URL and streams it", async 
     assert.equal(r.status, 200);
     assert.equal(asked, "https://github.com/seawaffle/enaga/releases/download/v0.3.0/enaga-v0.3.0-smpltrek.zip");
     assert.deepEqual([...new Uint8Array(await r.arrayBuffer())], [1, 2, 3]);
+    await onRequestGet({ params: { id: "enaga-0.3.0-license" } });
+    assert.equal(asked, "https://raw.githubusercontent.com/seawaffle/enaga/v0.3.0/LICENSE");
+    globalThis.fetch = async () => new Response("MIT", { headers: { "content-length": "99", "content-encoding": "gzip" } });
+    const gz = await onRequestGet({ params: { id: "enaga-0.3.0-license" } });
+    assert.equal(gz.headers.get("content-length"), null, "an encoded length must not reach the browser");
     globalThis.fetch = async () => new Response("nope", { status: 404 });
     assert.equal((await onRequestGet({ params: { id: "strata-0.4.0" } })).status, 502);
   } finally {

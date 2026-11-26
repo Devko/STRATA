@@ -51,7 +51,7 @@ async function build() {
     }
     const includeFirmware = document.querySelector('input[name="fw"]:checked').value === "full";
     const card = await buildCard({ manifest, strataVersion: select.value, includeFirmware, fetchAsset, onStep: (t) => say(t) });
-    say("Both downloads match their published SHA-256. Ready.", "ok");
+    say("Every download matches its published SHA-256. Ready.", "ok");
     lastUrl = URL.createObjectURL(new Blob([card.zip], { type: "application/zip" }));
     const save = $("save");
     save.href = lastUrl;
