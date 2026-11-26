@@ -817,8 +817,8 @@ FBK costs a little more CPU than FBK 0.
 
 MID makes no sound of its own. It is for a track whose sound is an outboard synth, a drum
 machine or a modular: the track's notes go to MIDI OUT and STRATA spends no voice and no CPU on
-them. Give the track a channel first (MACHINE, encoder **B**); MACHINE shows `B: MIDI OUT OFF`
-brightly on a MID track that has none, because then it does nothing at all.
+them. Give the track a channel first (MACHINE, encoder **B**); MACHINE shows `MIDI OUT OFF` lit
+at the top right on a MID track that has none, because then it does nothing at all.
 
 | Page | A | B | C | D |
 | --- | --- | --- | --- | --- |

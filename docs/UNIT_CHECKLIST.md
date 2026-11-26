@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W43, about 130 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W44, about 133 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -512,6 +512,15 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   shows the track's lane with step 1 bracketed. SETUP's `DRW ____ MS` with MST up while
   playing. `____`
 
+**W44. PROJECT's slots and MACHINE as pictures (3 min).** Beat playing, A01.
+- PROJECT: eight blocks A-H at the top, A's letter lit; A01's cell white, the slots holding a
+  pattern grey. Under them A's sixteen tiles show their steps, and a playhead runs across A01's.
+  Move the cursor to A02 and press OK: its cell and underline blink until it plays. The pad-row
+  keys: the lit letter and the tiles follow the shown bank. `____`
+- FUNC+EDIT: the kit's eight pictures along the top, T1's framed; the twelve machines as
+  pictures, KCK's lit, and two lines on what KCK is. DOWN walks the machine and the lines follow.
+  SETUP's `DRW ____ MS` after a while on MACHINE. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
@@ -693,8 +702,8 @@ The beat can keep playing. One look per screen; note any overlap or illegible te
 - [ ] GRID: four encoder slots at the bottom, name over value, the fourth fully on screen; the
       track line (`T1 ... L16 X1`) ends inside the screen.
 - [ ] EDIT: rows read like `A CUT 064` with a bar; hint `FUNC+EDIT: MACHINE` is legible.
-- [ ] MACHINE (FUNC+EDIT): the twelve machines read as columns of three, with `B: MIDI OUT`
-      below, no overlaps.
+- [ ] MACHINE (FUNC+EDIT): the twelve machines read as columns of three, with `B MIDI OUT`
+      at the top right, no overlaps.
 - [ ] MIXER: screen keys walk TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+, REV, REV+,
       ROUTE, MST, EQ; every page draws.
 - [ ] PERFORM (FUNC+MIXER): macro gauges stop above the hint lines; selected macro shows `>A`.
@@ -799,7 +808,7 @@ so a fault here may be Enaga's (see "Expect to find Enaga bugs"). **Unplug USB f
 release, `192f03f`). Synth or monitor on channel `____`.
 
 - [ ] Track 6 (bass), FUNC+EDIT: the page shows the machines in columns of three and
-      `B: MIDI OUT OFF`. Turn B to your synth's channel: `B: MIDI OUT CH n`. The bass line plays on
+      `B MIDI OUT OFF`. Turn B to your synth's channel: `B MIDI OUT CH n`. The bass line plays on
       the synth **and** on STRATA, note for note. Each note ends (no hanging notes); long LEN steps
       hold longer on the synth.
 - [ ] UP/DOWN to `MID`: STRATA's bass stops, the synth keeps playing it. LOAD drops (one track

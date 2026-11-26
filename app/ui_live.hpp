@@ -238,6 +238,16 @@
                 if (engine_.delay_frozen()) x = draw_tab(canvas, x, "FRZ", false);
                 if (note_repeat_mode_) x = draw_tab(canvas, x, "NRPT", false);
                 break;
+            case Mode::project: {
+                // The slots, CHAIN, PATTERN, SETUP and PROJECTS, as the screen keys walk them.
+                static const char *const names[] = {"SLOT", "CHAIN", "PAT", "SETUP", "PROJS"};
+                static_assert(int(sizeof(names) / sizeof(names[0])) == int(ProjectPage::count),
+                              "a tab for every PROJECT page");
+                for (int p = 0; p < int(ProjectPage::count); p++) {
+                    x = draw_tab(canvas, x, names[p], p == int(project_page_));
+                }
+                break;
+            }
             default:
                 x = draw_tab(canvas, x, mode_name(mode_), true);
                 break;

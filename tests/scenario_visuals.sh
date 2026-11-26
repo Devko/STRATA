@@ -16,9 +16,14 @@
 # Run 2, MIXER's MST page:
 #   PLAY, F7, SELECT_RIGHT x10 -> MST: the spectrum's FFT and the vectorscope every frame, where
 #                                it stays for the logged average
+# Run 3, PROJECT's slots:
+#   PLAY, F3                  -> the 128-pattern map (a bank read a frame) and the sixteen tiles'
+#                                steps (four read a frame, the playing one every frame)
+# Run 4, MACHINE:
+#   PLAY, FUNC + F8           -> the kit's and the twelve machines' pictures
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F1 = 19 FUNC, F7 = 21 MIXER (FUNC +
-# F7 PERFORM), F8 = 28 EDIT, SELECT_RIGHT = 9; encoders 0-3 are A-D. The first press comes late:
+# F7 PERFORM), F8 = 28 EDIT (FUNC + F8 MACHINE), F3 = 20 PROJECT, SELECT_RIGHT = 9; encoders 0-3 are A-D. The first press comes late:
 # the panel link is not streaming in the first ~200 M cycles. Run 1's EDIT comes at 2.7 G cycles
 # (about 7.3 s), after the logged average; 3.7 G is about 10 s.
 set -euo pipefail
@@ -48,6 +53,8 @@ STAGE="$ENAGA_BUILD/stage/STRATA"
 mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_visuals.log"
 LOG2="$ENAGA_BUILD/scenario_visuals_mst.log"
+LOG3="$ENAGA_BUILD/scenario_visuals_project.log"
+LOG4="$ENAGA_BUILD/scenario_visuals_machine.log"
 
 run() {   # log, then emulate.py's arguments
     local log="$1"; shift
@@ -58,7 +65,7 @@ run() {   # log, then emulate.py's arguments
     }
 }
 
-echo "running the emulator twice for $CYCLES cycles: the live screens and draw()'s cost ..."
+echo "running the emulator four times for $CYCLES cycles: the live screens and draw()'s cost ..."
 run "$LOG" \
     --key 22@300000000 \
     --key 19@700000000 --key 21@705000000 \
@@ -71,9 +78,11 @@ run "$LOG2" \
     --key 9@750000000 --key 9@790000000 --key 9@830000000 --key 9@870000000 \
     --key 9@910000000 --key 9@950000000 --key 9@990000000 --key 9@1030000000 \
     --key 9@1070000000 --key 9@1110000000
+run "$LOG3"     --key 22@300000000     --key 20@700000000
+run "$LOG4"     --key 22@300000000     --key 19@700000000 --key 28@705000000
 
 rc=0
-python3 - "$LOG" "$LOG2" <<'PY' || rc=$?
+python3 - "$LOG" "$LOG2" "$LOG3" "$LOG4" <<'PY' || rc=$?
 import json, re, sys
 
 CYCLES_PER_BLOCK = 496_000
@@ -124,13 +133,19 @@ def one(path, where, must_reach, must_end):
 
 p1, d1 = one(sys.argv[1], "run 1: PERFORM, then the LFO page", "scr PERFORM", "scr EDIT LFO")
 p2, d2 = one(sys.argv[2], "run 2: MIXER MST", "scr MIXER MST", "scr MIXER MST")
+p3, d3 = one(sys.argv[3], "run 3: PROJECT", "scr PROJECT", "scr PROJECT")
+p4, d4 = one(sys.argv[4], "run 4: MACHINE", "scr MACHINE", "scr MACHINE")
 
 print()
-print(f"emulator peak load: {max(p1, p2):.2f}%  (the higher of the two runs)")
+print(f"emulator peak load: {max(p1, p2, p3, p4):.2f}%  (the highest of the four runs)")
 if d1 is not None:
     print(f"draw(): {d1:.2f} ms a frame on PERFORM, averaged over 64 frames")
 if d2 is not None:
     print(f"draw(): {d2:.2f} ms a frame on MIXER MST, averaged over 64 frames")
+if d3 is not None:
+    print(f"draw(): {d3:.2f} ms a frame on PROJECT, averaged over 64 frames")
+if d4 is not None:
+    print(f"draw(): {d4:.2f} ms a frame on MACHINE, averaged over 64 frames")
 
 sys.exit(1 if failures else 0)
 PY

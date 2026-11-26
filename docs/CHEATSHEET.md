@@ -273,7 +273,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | Step page | `TRIG` `TRIGLESS` `OFF`, `LOCKS n` | What the step is and how many locks it holds |
 | Hold STEP | `S5 CUT 64>90` / `S5 CUT 64 KIT` | The step's lock against the kit value; bars show the lock, a hollow tick the kit value |
 | GRID cells | dot / cut corner / teeth / outline | Locks / top-left condition, top-right probability / ratchet / trigless |
-| PROJECT | `BANK A   END CHAIN` | Shown bank, queue mode, chain running |
+| PROJECT | `Q END CHAIN`, `BANK A 5/16`, the map A-H | Queue mode, chain running; the shown bank and how many of its slots hold a pattern; every bank's slots (grey: used, white: playing, blinking: queued) |
 | CHAIN | `CHAIN 3/64 ON SONG`, `>02 A05 X2 M3 PLAY` | Entries used, chain on/off, plays once (SONG) or loops; cursor, entry, pattern, repeats, mute state recalled at its start, playing now |
 | PATTERN | `>LEN 16 STEPS`, `SWG 54%`, `FEEL DRIFT 3`, `3 PAT`, `>5 66%` | Master length; swing; FEEL; a track following SWG or with its own (`>` = field VALUE changes) |
 | EDIT LFO | `NOW CUT 87`, `NOW CUT 87 ONE-SHOT`, `LFO OFF: SET DEP+DST` | The destination's value right now, and TRIG unless FREE; DEP or DST is zero |

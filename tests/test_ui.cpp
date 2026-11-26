@@ -6405,6 +6405,48 @@ TEST(ui_machine_encoder_b_sets_the_tracks_midi_out_channel) {
     key(ENAGA_KEY_F4);
 }
 
+// PROJECT's slots draw every bank's patterns as a map and the shown bank's as their steps
+// (docs/SCREENS.md, "PROJECT"): a pattern written in another bank lights its map cell within the
+// eight frames the map takes to go round, and a trig lights its track's row in its tile.
+TEST(ui_project_slots_map_every_bank_and_draw_each_patterns_steps) {
+    Strata &app = fresh();
+    Project &project = app_engine().project_for_load();
+    Pattern &far = project.patterns[7][15];                  // H16
+    for (int t = 0; t < kTracks; t++) {
+        for (int i = 0; i < kStepsPerTrack; i++) far.tracks[t].steps[i].flags = 0;
+    }
+    const auto px = [](int x, int y) { return int(g_pixels[y * enaga::Canvas::width + x]); };
+    const auto frames = [&app](int n) {
+        for (int i = 0; i < n; i++) (void)screen_has(app, "");
+    };
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_CLR);                                      // the slots page
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+    frames(10);
+    const int cell_x = 7 * 15 + 1 + 3 * 3;                   // bank H's block, slot 16's cell
+    const int cell_y = 46 + 3 * 3;
+    CHECK_EQ(px(cell_x, cell_y), 2);                         // empty: dim
+
+    far.tracks[2].steps[4].flags |= kStepTrig;
+    frames(10);
+    CHECK_EQ(px(cell_x, cell_y), 7);                         // holds a pattern: grey
+
+    // Bank H shown: H16's tile draws track 3's trig in its step's column.
+    for (int i = 0; i < 8 && UiProbe::shown_bank(app) != 7; i++) key(ENAGA_KEY_OCTAVE_LEFT);
+    CHECK_EQ(UiProbe::shown_bank(app), 7);
+    frames(1);
+    const int length = int(far.tracks[2].length);
+    const int column = length > 16 ? (4 * 16) / length : 4;
+    CHECK_EQ(px(3 * 30 + 12 + column, 61 + 3 * 14 + 3 + 2), 8);
+    CHECK_EQ(px(3 * 30 + 12 + column, 61 + 3 * 14 + 3 + 1), 0);   // track 2 has none there
+    CHECK(screen_has(app, "BANK H"));
+    check_layout(app, "PROJECT, bank H");
+
+    far.tracks[2].steps[4].flags = 0;
+    for (int i = 0; i < 8 && UiProbe::shown_bank(app) != 0; i++) key(ENAGA_KEY_OCTAVE_RIGHT);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_layout_machine_with_mid_and_every_midi_out_state) {
     Strata &app = fresh();
     shift_key(ENAGA_KEY_F8);
@@ -6421,6 +6463,9 @@ TEST(ui_layout_machine_with_mid_and_every_midi_out_state) {
         pump(2);
         check_layout(app, "MACHINE, each machine lit");
     }
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::kick));
+    pump(2);
+    CHECK(screen_has(app, "KICK: SINE, PITCH SWEEP, CLICK"));   // what the track's is for
     key(ENAGA_KEY_F4);
 }
 
