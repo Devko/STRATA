@@ -40,6 +40,7 @@
 #include "spectrum.hpp"     // the output's spectrum for MIXER's master pages
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "sounds.hpp"       // SOUNDS: the factory sounds for one track
+#include "arppresets.hpp"   // ARPS: the factory arps for one track
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
 #include "tuning.hpp"       // TUN and PIT as notes: the NOTE view
 
@@ -857,6 +858,7 @@ private:
     int sound_cursor_ = 0;                      // SOUNDS: 0 is AS WAS, then the presets
     int sound_track_ = -1;                      // the track whose sound the engine remembers
     Mode sounds_return_ = Mode::edit;           // where CLR goes back to
+    bool sounds_arps_ = false;                  // the list is ARPS (core/arppresets.hpp)
     KitAction kit_armed_ = KitAction::none;     // KIT: OK or F1 + DOWN pressed once
     uint32_t kit_armed_at_ms_ = 0;
     static constexpr uint32_t kSaveArmMs = 2000;

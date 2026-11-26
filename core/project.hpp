@@ -35,6 +35,7 @@
 // `enaga::files`.
 #pragma once
 
+#include "arp.hpp"         // KitArp, the arp's kit settings
 #include "midiout.hpp"     // kMidiOutOff and kMidiChannels: ProjectSettings::midi_out's domain
 #include "modslot.hpp"     // KitModSlot
 #include "pattern.hpp"
@@ -342,6 +343,10 @@ struct KitTrack {
     // The two mod slots (core/modslot.hpp): a source, a destination and a depth each, learnt on
     // the LFO page. Kit settings for the same reason as TRIG; KIT.BIN's optional section 10.
     KitModSlot mod[kModSlots];
+    // The arp's kit settings (core/arp.hpp): VAR, RHYTHM, ACCENT and RATCHET, pushed round on the
+    // ARP page or set by an ARPS preset. Not parameters, for TRIG's reason; KIT.BIN's optional
+    // section 12.
+    KitArp arp;
 };
 
 // LFO TRIG's values, as KIT.BIN stores them: PERMANENT. dsp/lfo.hpp's LfoTrig mirrors them and
@@ -584,6 +589,10 @@ constexpr uint16_t kSectionKitLfoTrig = 9;
 // The mod slots, 3 bytes a slot, two slots a track (KitTrack::mod). Optional on read: a KIT.BIN
 // from before them loads every slot OFF, which changes no sound.
 constexpr uint16_t kSectionKitMod = 10;
+// Number 11 is taken by the choke groups (PR #181).
+// The arp's kit settings, 4 bytes a track (KitTrack::arp: VAR RHYTHM ACCENT RATCHET). Optional
+// on read: a KIT.BIN from before it loads every arp with all four 0, the arp as it always played.
+constexpr uint16_t kSectionKitArpExt = 12;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

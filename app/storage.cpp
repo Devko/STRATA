@@ -116,6 +116,9 @@ bool mutates_kit(Cmd cmd) {
         case Cmd::set_machine:
         // A factory sound writes a track's parameters, as a knob does.
         case Cmd::sound_preset:
+        // And an arp preset and the arp's settings, the ARP page's bytes and kit fields.
+        case Cmd::arp_preset:
+        case Cmd::set_arp_ext:
         case Cmd::set_track_level:
         case Cmd::set_slice_mode:
         case Cmd::set_lfo_trig:

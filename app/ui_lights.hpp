@@ -535,7 +535,7 @@
                 char line[24];
                 char *out = line;
                 append(out, "scr ");
-                append(out, mode_name(mode_));
+                append(out, screen_mode_name());
                 if (mode_ == Mode::mixer) {
                     *out++ = ' ';
                     append(out, kMixerPages[mixer_bank_].name);

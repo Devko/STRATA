@@ -43,7 +43,7 @@ using namespace strata;
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
 // ambient modes: nine bytes on the end of the mixer section.
 constexpr uint32_t kProjectFileBytes = 402;
-constexpr uint32_t kKitFileBytes = 1389;   // 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
+constexpr uint32_t kKitFileBytes = 1433;   // 1389 before the arp settings (12 + 32), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -1386,8 +1386,16 @@ uint32_t fresh_kit_file() {
 
 // g_kit_file as a build from before the duck wrote it: the OSC page's section and then the
 // duck's, the last two, dropped.
-// g_kit_file as a build from before the mod slots wrote it: their section, the last, dropped.
+// g_kit_file as a build from before the arp's settings wrote it: their section, the last, dropped.
+void drop_arp_ext_section() {
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1389u);
+    for (uint32_t i = 0; i < 1389u; i++) g_kit_file[i] = g_kit_alt[i];
+}
+
+// g_kit_file as a build from before the mod slots wrote it: their section and the arp's
+// settings dropped.
 void drop_mod_section() {
+    drop_arp_ext_section();
     CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1329u);
     for (uint32_t i = 0; i < 1329u; i++) g_kit_file[i] = g_kit_alt[i];
 }
@@ -1490,7 +1498,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 10);    // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout, LFO TRIG, the mod slots
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 11);    // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout, LFO TRIG, the mod slots, the arp settings
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -2514,6 +2522,64 @@ TEST(kit_lfo_trig_round_trips_and_an_older_file_runs_every_lfo_free) {
 
     g_kit_source.tracks[1].lfo_trig = kLfoTrigFree;
     g_kit_source.tracks[6].lfo_trig = kLfoTrigFree;
+}
+
+TEST(kit_arp_settings_round_trip_and_an_older_file_plays_every_arp_as_before) {
+    fresh_kit_file();
+    g_kit_source.tracks[5].arp = {uint8_t(ArpVar::thumb), 5, 7, 3};
+    g_kit_source.tracks[6].arp = {0, 9, 0, 6};
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(written, kKitFileBytes);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int f = 0; f < kArpExtFields; f++) {
+            CHECK_EQ(int(arp_ext_get(g_kit_loaded.tracks[t].arp, f)),
+                     int(arp_ext_get(g_kit_source.tracks[t].arp, f)));
+        }
+    }
+    // Byte by byte: four a track, VAR RHYTHM ACCENT RATCHET.
+    const uint32_t at = section_at(g_kit_file, kSectionKitArpExt);
+    CHECK_EQ(int(g_kit_file[at + 5 * 4 + 0]), int(ArpVar::thumb));
+    CHECK_EQ(int(g_kit_file[at + 5 * 4 + 1]), 5);
+    CHECK_EQ(int(g_kit_file[at + 6 * 4 + 3]), 6);
+
+    // A value past its table is damage and reads as 0; the rest of the track stands.
+    g_kit_file[at + 5 * 4 + 1] = 99;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_kit_loaded.tracks[5].arp.rhythm), 0);
+    CHECK_EQ(int(g_kit_loaded.tracks[5].arp.var), int(ArpVar::thumb));
+    CHECK_EQ(int(g_kit_loaded.tracks[5].arp.ratchet), 3);
+
+    // A KIT.BIN from before them loads every arp with all four 0 -- even into a kit that had
+    // some -- and everything else as it was.
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    drop_arp_ext_section();
+    g_kit_loaded.tracks[2].arp = {1, 1, 1, 1};
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, 1389u)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int f = 0; f < kArpExtFields; f++) CHECK_EQ(int(arp_ext_get(g_kit_loaded.tracks[t].arp, f)), 0);
+        for (int p = 0; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+        for (int s = 0; s < kModSlots; s++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].mod[s].source), int(g_kit_source.tracks[t].mod[s].source));
+        }
+    }
+
+    // Present but short is damage, not an old file.
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    const uint32_t entry = section_entry_at(g_kit_file, kSectionKitArpExt);
+    poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
+    refresh_crc(g_kit_file);
+    CHECK(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes) != SerializeResult::ok);
+
+    g_kit_source.tracks[5].arp = KitArp{};
+    g_kit_source.tracks[6].arp = KitArp{};
 }
 
 TEST(kit_mod_slots_round_trip_and_an_older_file_loads_every_slot_off) {
