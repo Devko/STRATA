@@ -149,6 +149,14 @@ enum class Cmd : uint8_t {
     set_stream,        // track
     stream_attach,     // track, a|b: Status::stream_want's value it answers
 
+    // The metronome (dsp/click.hpp): a: 0 OFF, 1 ON. Not saved.
+    set_click,         // a: on
+    // A count-in for the next START: a: bars, 0 none. Posted BEFORE enaga::clock::start(), so
+    // the audio side has it when the first tick comes; posted again with 0 if the start was
+    // refused. The first a x 384 ticks then only click, and everything else runs as if the
+    // clock had started when they end (Engine::count_in_end_).
+    count_in,          // a: bars
+
     // --- kit and sound ---
     set_param,         // track, a: param index, b: value; or c = 1: b is an int8 delta
     set_track_level,   // track, f: level; or c = 1: f is a delta, the result clamped to 1.5
@@ -483,6 +491,12 @@ using Commands = CommandRing<256>;
 // pair below is correct without an RMW.
 struct Status {
     std::atomic<uint32_t> tick{0};             // the clock's position, for the playhead
+    // COUNT-IN (Engine::count_in_end_): the beats still to click before the pattern starts, 0
+    // when none is running. While it is, `tick` stays 0 and nothing records.
+    std::atomic<uint8_t> count_in_beats{0};
+    // Ticks the pattern's position is behind the clock's: the count-in's length once it has
+    // run, 0 without one. The recorder subtracts it from the clock it stamps a hit with.
+    std::atomic<uint32_t> count_in_ticks{0};
     std::atomic<uint32_t> blocks{0};           // audio blocks processed, for liveness
     std::atomic<uint8_t> playhead[8] = {};     // per-track step, for the grid
     std::atomic<uint8_t> triggered[8] = {};    // bumped on each trig, for the pad LEDs

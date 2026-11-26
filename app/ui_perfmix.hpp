@@ -13,8 +13,8 @@
     // over. The cursor always starts on SAVE, so FUNC + HOME, OK saves.
 
     enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
-                                    speed, play, chain, song, autofill, quantize, glide, freeze,
-                                    loop_len, demo, count };
+                                    speed, play, chain, song, autofill, quantize, click, count_in,
+                                    glide, freeze, loop_len, demo, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 9;
 
@@ -34,6 +34,8 @@
             case MenuItem::song:     return "CHAIN END";
             case MenuItem::autofill: return "AUTO-FILL";
             case MenuItem::quantize: return "QUANTIZE";
+            case MenuItem::click:    return "CLICK";
+            case MenuItem::count_in: return "COUNT-IN";
             case MenuItem::freeze:   return "FREEZE";
             case MenuItem::loop_len: return "LOOP LEN";
             case MenuItem::glide:    return "FX GLIDE";
@@ -90,6 +92,17 @@
                 // How many bars push VALUE + STEP 16 records (dsp/looper.hpp).
                 append_number(out, uint32_t(kTakeBars[loop_bars_index_]));
                 append(out, " BAR");
+                break;
+            case MenuItem::click:
+                append(out, click_on_ ? "ON" : "OFF");
+                break;
+            case MenuItem::count_in:
+                if (count_in_bars_ == 0) {
+                    append(out, "OFF");
+                } else {
+                    append_number(out, uint32_t(count_in_bars_));
+                    append(out, " BAR");
+                }
                 break;
             case MenuItem::glide:
                 // How long a button's jump in the performance mixer rides (core/perffx.hpp).
@@ -653,6 +666,28 @@
                 append(out, " BAR");
                 *out = 0;
                 notice(notice_buffer_);
+                break;
+            }
+            case MenuItem::click: {
+                // A switch: either arrow, B or OK flips it.
+                click_on_ = !click_on_;
+                post(Cmd::set_click, 0, 0, click_on_ ? 1 : 0);
+                notice_logged(click_on_ ? "CLICK ON" : "CLICK OFF");
+                break;
+            }
+            case MenuItem::count_in: {
+                // OFF, 1 BAR, 2 BAR; it wraps like AUTO-FILL. Used by the next PLAY with REC on.
+                count_in_bars_ = uint8_t((int(count_in_bars_) + delta + 3) % 3);
+                char *out = notice_buffer_;
+                append(out, "COUNT-IN ");
+                if (count_in_bars_ == 0) {
+                    append(out, "OFF");
+                } else {
+                    append_number(out, uint32_t(count_in_bars_));
+                    append(out, " BAR");
+                }
+                *out = 0;
+                notice_logged(notice_buffer_);
                 break;
             }
             case MenuItem::glide: {

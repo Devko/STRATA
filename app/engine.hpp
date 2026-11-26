@@ -53,6 +53,7 @@
 #include "stepedit.hpp"
 #include "streamfifo.hpp"  // a streamed sample's read-ahead, per track
 #include "audition.hpp"    // the sample browser's audition (push A in SAMPLES)
+#include "click.hpp"       // the metronome and the count-in
 #include "track.hpp"
 #include "chord.hpp"     // a POLY step's chord byte, expanded in fire()
 #include "undo.hpp"
@@ -708,6 +709,22 @@ private:
         mod_velocity_[track] = velocity;
         choke_group(track, frame);
     }
+
+    // --- the metronome and the count-in (dsp/click.hpp, CyDrums S6) ---
+    //
+    // The click is fired from the clock's own ticks, on every beat (96 ticks) and higher on a
+    // bar's first (384), so it lands on the beat's frame as a step does. A count-in is the same
+    // click with the rest of the engine held back: the clock starts at once (Enaga's transport is
+    // the user's, and starting it later from the UI would be late by up to a frame), and the first
+    // count_in_end_ ticks only click. After them every tick reaches the sequencer, the rolls, the
+    // stutter and the arps less count_in_end_, so the pattern starts on step 1 exactly as from a
+    // plain START. A STOP or a restart ends it. With CLOCK OUT on, an outboard box hears START at
+    // the count-in's beginning: it runs the count-in's bars ahead (docs/CONTROLS.md says so).
+    void metronome_tick(uint32_t tick, uint32_t frame);
+    Click click_;
+    bool click_on_ = false;
+    uint32_t count_in_end_ = 0;     // ticks: the count-in's length, 0 for none
+    bool was_running_ = false;      // the transport at the last block, to see a STOP
 
     // --- choke groups (KitTrack::choke, CyDrums S4) ---
     //
