@@ -53,6 +53,7 @@
 #include "stepedit.hpp"
 #include "streamfifo.hpp"  // a streamed sample's read-ahead, per track
 #include "audition.hpp"    // the sample browser's audition (push A in SAMPLES)
+#include "click.hpp"       // the metronome and the count-in
 #include "track.hpp"
 #include "chord.hpp"     // a POLY step's chord byte, expanded in fire()
 #include "undo.hpp"
@@ -716,11 +717,71 @@ private:
 
     // Every note-on a track's machine takes -- a step, a chord, an arp or roll hit, a pad or a
     // key -- goes through here: the screen's trig light, and LFO TRIG's restart.
-    void note_started(int track, uint8_t velocity) {
+    void note_started(int track, uint8_t velocity, uint32_t frame) {
         status_.bump_triggered(track);
         lfo_restart_[track] = true;
         mod_velocity_[track] = velocity;
+        choke_group(track, frame);
     }
+
+    // --- the metronome and the count-in (dsp/click.hpp, CyDrums S6) ---
+    //
+    // The click is fired from the clock's own ticks, on every beat (96 ticks) and higher on a
+    // bar's first (384), so it lands on the beat's frame as a step does. A count-in is the same
+    // click with the rest of the engine held back: the clock starts at once (Enaga's transport is
+    // the user's, and starting it later from the UI would be late by up to a frame), and the first
+    // count_in_end_ ticks only click. After them every tick reaches the sequencer, the rolls, the
+    // stutter and the arps less count_in_end_, so the pattern starts on step 1 exactly as from a
+    // plain START. A STOP or a restart ends it. With CLOCK OUT on, an outboard box hears START at
+    // the count-in's beginning: it runs the count-in's bars ahead (docs/CONTROLS.md says so).
+    void metronome_tick(uint32_t tick, uint32_t frame);
+    Click click_;
+    bool click_on_ = false;
+    uint32_t count_in_end_ = 0;     // ticks: the count-in's length, 0 for none
+    bool was_running_ = false;      // the transport at the last block, to see a STOP
+
+    // --- choke groups (KitTrack::choke, CyDrums S4) ---
+    //
+    // A note on a track in a group cuts every other track of that group: a 64-frame fade from the
+    // note's own frame over the cut track's block (strata_choke_fade, after its machine renders),
+    // then kill_all. It is a fade over the TRACK's output, not a voice's, so every machine
+    // chokes alike, and the hat's own closed-to-open pair (rewire_machines) stays as it was.
+    //
+    // A block is rendered whole, so a track cannot be faded before a frame and not after it. Two
+    // rules follow, both in choke_group: a note on the cut track at or after the choke's frame,
+    // in the same block, keeps the track sounding (no fade; the new note retriggers the machine
+    // anyway), and two tracks of a group starting on the same frame both sound. A choke still
+    // fading when its track starts a note again is over at once.
+    static constexpr uint32_t kNoChokeFrame = 0xFFFFFFFFu;
+    static constexpr int kChokeFadeFrames = 64;
+    void choke_group(int track, uint32_t frame) {
+        // This track's own note ends any choke on it that lands at or before the note.
+        if (choke_at_[track] != kNoChokeFrame && frame >= choke_at_[track]) {
+            choke_at_[track] = kNoChokeFrame;
+            choke_gain_[track] = 1.0f;
+        }
+        if (note_frame_[track] == kNoChokeFrame || frame > note_frame_[track]) {
+            note_frame_[track] = frame;
+        }
+        const uint8_t group = project_.kit.tracks[track].choke;
+        if (group == 0) return;
+        for (int u = 0; u < kTracks; u++) {
+            if (u == track || project_.kit.tracks[u].choke != group) continue;
+            // Its own note at or after this one, in this block: it plays (above).
+            if (note_frame_[u] != kNoChokeFrame && note_frame_[u] >= frame) continue;
+            // A fade already running from an earlier block (0) or landing sooner stands.
+            if (choke_at_[u] != kNoChokeFrame && choke_at_[u] <= frame) continue;
+            choke_at_[u] = frame;
+        }
+    }
+    // The fade over track `t`'s rendered block, and the cut once it reaches 0 (engine.cpp).
+    void run_choke(int t, float *mono, uint32_t frames);
+    uint32_t choke_at_[kTracks] = {kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame,
+                                   kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame};
+    float choke_gain_[kTracks] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+    // The latest frame each track started a note on in this block; kNoChokeFrame for none.
+    uint32_t note_frame_[kTracks] = {kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame,
+                                     kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame};
 
     ChainMix mix_[kTracks] = {};
     bool muted_[kTracks] = {};

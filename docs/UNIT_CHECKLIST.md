@@ -4,7 +4,7 @@ Start with **the smoke test** (S1-S20, one hour): boot, the screen, load, and th
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W45, about 137 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W48, about 147 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -621,6 +621,35 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   (GRID twice): hold three pads of a chord, `HELD C4 E4 G4` and `C MAJ` lit; turn A, its gauge
   moves. MENU, SETUP, PROJECTS: no second line repeating the name. SETUP's `DRW ____ MS` after a
   while on KITS. `____`
+
+**W46. Choke groups (3 min).** Beat playing, A01, the open hat on T4 sounding long.
+- MIXER, TRK 1-4. Push C: `T3 CHOKE GROUP 1`, `C1` under T3's machine. Push D: `T4 CHOKE GROUP 1`.
+  Now T3 and T4 cut each other both ways: the open hat stops dead (no click) on every closed hat,
+  and a closed hat stops when the open one hits. Steps on the same 16th both sound. `____`
+- Put T6 (the bass) in group 1 too (TRK 5-8, push B): every hat now cuts the bass and the bass
+  cuts the hats. Listen for clicks at the cut: there should be none. Push B four more times: back
+  to `T6 CHOKE OFF`, the bass rings over the hats again. `____`
+- Save the project, load another and back: T3 and T4 still say `C1`. `____`
+
+**W47. CLICK and COUNT-IN (3 min).** Beat stopped, A01.
+- FUNC + HOME, UP six times: CLICK. OK: `CLICK ON`. PLAY: a click on every beat over the beat, the
+  first of each bar higher. It sits on the kick, not before or after it. RESAMPLE a bar: the take
+  has no click in it. `____`
+- STOP. In the menu, DOWN to COUNT-IN, OK: `COUNT-IN 1 BAR`. CLR. REC on, PLAY: four clicks
+  (`COUNT-IN 4` .. `1`), then the beat starts on step 1 on the next beat. Hit pads during the
+  clicks: nothing is recorded. Hit them after: they land where played. `____`
+- CLICK OFF, COUNT-IN `2 BAR`, REC, PLAY: eight clicks even with CLICK off, then the beat. STOP
+  during the clicks: silence, and the next PLAY without REC starts at once. `____`
+
+**W48. Chords recorded note for note (4 min).** Blank pattern, T7 (VA POLY), KEYS, PLAY, REC.
+- Hold three pads of a chord at once on one step: it plays back as all three. Hold STEP on it:
+  `NOTE C4 +2`, and no `LOCKS` on the line. `____`
+- Next pass, play one other note on that step: the chord is gone, the new note alone (REPLACE).
+  `____`
+- FUNC+HOME, REC MODE to `ADD`: the edit line reads `REC+`. Play one note a pass on one step for
+  three passes: it builds up to a three-note chord. A MIDI keyboard on channel 7 does the same.
+  `____`
+- Hold the chord's STEP and turn VALUE: the whole chord moves. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
@@ -1878,7 +1907,7 @@ project and never needs a restart."*
 - [ ] PROJECT opens the PROJECT screen. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
 - [ ] FUNC+HOME, OK saves (the menu opens on SAVE). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (402 bytes),
-      `KIT.BIN` (1,389 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
+      `KIT.BIN` (1,409 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
       save writes every file (the sizes tests/test_storage.cpp pins).
       After that first save only dirty banks are written; the card cannot show it, since all
       eight exist from then on, so tests/test_storage.cpp checks which files each save touches.

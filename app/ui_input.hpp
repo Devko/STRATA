@@ -283,6 +283,19 @@
             }
         }
 
+        // Choke groups (S4): push A-D on MIXER's TRK 1-4 or TRK 5-8 steps that strip's track
+        // through OFF, 1, 2, 3, 4. A note on a track cuts the others of its group.
+        // (The push keys are numbered B A C D, so the slot is spelt out.)
+        if ((key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||
+             key == ENAGA_KEY_PUSH_D) &&
+            mode_ == Mode::mixer && mixer_bank_ < kMixerTrackPages && !shift_) {
+            const int slot = key == ENAGA_KEY_PUSH_A ? 0
+                             : key == ENAGA_KEY_PUSH_B ? 1
+                             : key == ENAGA_KEY_PUSH_C ? 2 : 3;
+            if (down) step_choke(mixer_bank_ * 4 + slot);
+            return;
+        }
+
         // The ambient modes: push A on DLY+ or REV+ throws that send's mode, CLAS to LONG or
         // ROOM to HALL and back. A switch is a push as much as a turn, and a push is what the
         // emulator can press (tests/scenario_ambient.sh).
@@ -502,7 +515,15 @@
                     notice("RESTART");
                     break;
                 }
-                clock_refused_ = !enaga::clock::start();
+                {
+                    // COUNT-IN: a PLAY from stop with REC on clicks its bars first. Posted BEFORE
+                    // the start, so the audio side has it for the first tick; taken back if the
+                    // clock refused (an outside source starts it, and then there is none).
+                    const bool count = rec_ && count_in_bars_ != 0 && !enaga::clock::running();
+                    if (count) post(Cmd::count_in, 0, 0, count_in_bars_);
+                    clock_refused_ = !enaga::clock::start();
+                    if (count && clock_refused_) post(Cmd::count_in, 0, 0, 0);
+                }
                 stop_armed_ = false;
                 post(Cmd::play);                       // for the audio side's trace only
                 break;
@@ -558,6 +579,7 @@
                     break;
                 }
                 rec_ = !rec_;
+                if (rec_) clear_rec_passes();
                 // A whole recording pass is one undo level, so the gesture ends when recording
                 // does -- and the next pass must not coalesce into the last one.
                 end_gesture();

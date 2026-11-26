@@ -19,7 +19,9 @@
 //         0   2  tempo, centi-BPM
 //         2   1  root note
 //         3   1  scale
-//         4   1  reserved: was a project swing nothing read. Written as 50, ignored on read
+//         4   1  REC MODE: 1 is ADD, anything else REPLACE. It was a project swing nothing
+//                read, written as 50 by every build before 2026-11-26 -- so an older file is
+//                REPLACE, and an older build reading this one ignores the byte as it always did
 //         5   1  live-record quantize, 0..100
 //         6   8  the 8 stored mute states, one bit per track
 //        14   1  sample budget, MiB
@@ -39,8 +41,8 @@
 //         1  64  each chain entry's mute recall: 0 none, 1-8 that stored mute state
 //     midi (id 6), 8 bytes: each track's MIDI OUT channel, 0 off or 1-16
 //
-// KIT.BIN, ten sections: the tracks (1,076 bytes alone), then the optional LFO, arp, SLC AUTO,
-// ASR, duck, OSC, filter-layout, LFO TRIG and mod-slot sections, each of which an older file may
+// KIT.BIN, eleven sections: the tracks (1,076 bytes alone), then the optional LFO, arp, SLC AUTO,
+// ASR, duck, OSC, filter-layout, LFO TRIG, mod-slot and choke sections, each of which an older file may
 // lack.
 //
 //     tracks (id 1), 8 x 131 bytes
@@ -65,6 +67,7 @@
 //         0   1  source, 0 OFF .. 5 RND
 //         1   1  destination, a track parameter index
 //         2   1  depth, -127..127 as a two's-complement byte
+//     choke (id 11), 8 x 1 byte: KitTrack::choke, 0 none or a group 1-4
 //
 // BANK_x.BIN, one section holding 16 patterns, each one `pattern_write`'s own container back to
 // back. The patterns are the section's bytes, so the bank's CRC covers them as well as its own
@@ -124,6 +127,8 @@ namespace {
 // The minimum is 1 and not 0 because a budget of zero cannot hold a single sample, and a
 // project that silently refuses every sample load is the least diagnosable failure there is.
 // No UI offers 0, so a 0 in a file is a damaged byte.
+// PROJECT.BIN settings byte 4: REC MODE ADD. Not 50, which every older build wrote there.
+constexpr uint8_t kRecModeAddByte = 1;
 constexpr uint8_t kBudgetMibMin = 1;
 constexpr uint8_t kBudgetMibMax = 64;
 
@@ -349,10 +354,11 @@ static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
-constexpr uint32_t kKitSections = 10;
-// The second to tenth, the LFO, the arp, SLC AUTO, the ASR page, the duck, the OSC page, the
-// filter layout, LFO TRIG and the mod slots, are optional on read: see kSectionKitLfo.
-constexpr uint32_t kKitOptionalSections = 9;
+constexpr uint32_t kKitSections = 11;
+// The second to eleventh, the LFO, the arp, SLC AUTO, the ASR page, the duck, the OSC page, the
+// filter layout, LFO TRIG, the mod slots and the choke groups, are optional on read: see
+// kSectionKitLfo.
+constexpr uint32_t kKitOptionalSections = 10;
 constexpr uint32_t kKitTrackBytes =
     uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
@@ -377,7 +383,9 @@ constexpr uint32_t kKitLfoTrigOffset = kKitFilterOffset + kKitFilterBytes;
 constexpr uint32_t kKitModSlotBytes = 3;
 constexpr uint32_t kKitModBytes = kKitModSlotBytes * uint32_t(kModSlots) * uint32_t(kTracks);
 constexpr uint32_t kKitModOffset = kKitLfoTrigOffset + kKitLfoTrigBytes;
-constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitModOffset + kKitModBytes;
+constexpr uint32_t kKitChokeBytes = uint32_t(kTracks);
+constexpr uint32_t kKitChokeOffset = kKitModOffset + kKitModBytes;
+constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitChokeOffset + kKitChokeBytes;
 static_assert(kKitSoundParams == 16, "KIT.BIN's track section has carried 16 parameters since M4");
 
 // --- BANK_x.BIN sizes -----------------------------------------------------
@@ -484,7 +492,8 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     w.u16(s.tempo_centi_bpm);
     w.u8(s.root);
     w.u8(s.scale);
-    w.u8(uint8_t(kSwingMin));   // the reserved byte: a legal swing, for builds that still read it
+    // REC MODE in the old swing's byte: 50 (a legal swing, what it always held) for REPLACE.
+    w.u8(s.rec_add ? kRecModeAddByte : uint8_t(kSwingMin));
     w.u8(s.quantize);
     for (uint32_t i = 0; i < sizeof(s.mute_states); i++) w.u8(s.mute_states[i]);
     w.u8(s.sample_budget_mib);
@@ -586,7 +595,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     const uint16_t tempo = r.u16();
     const uint8_t root = r.u8();
     const uint8_t scale = r.u8();
-    (void)r.u8();                // reserved (the old project swing)
+    const uint8_t rec_mode = r.u8();   // REC MODE, in the old project swing's byte
     const uint8_t quantize = r.u8();
     uint8_t mutes[sizeof(ProjectSettings::mute_states)] = {};
     for (uint32_t i = 0; i < sizeof(mutes); i++) mutes[i] = r.u8();
@@ -606,6 +615,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // default.
     s.scale = scale;
     s.quantize = clamp_u8(quantize, 0, 100);
+    s.rec_add = rec_mode == kRecModeAddByte;
     // Every bit pattern is a legal set of mute states for 8 tracks, so these are taken as they
     // come.
     for (uint32_t i = 0; i < sizeof(mutes); i++) s.mute_states[i] = mutes[i];
@@ -742,6 +752,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
         {kSectionKitFilter, kKitFilterOffset, kKitFilterBytes},
         {kSectionKitLfoTrig, kKitLfoTrigOffset, kKitLfoTrigBytes},
         {kSectionKitMod, kKitModOffset, kKitModBytes},
+        {kSectionKitChoke, kKitChokeOffset, kKitChokeBytes},
     };
 
     Writer w(buffer, capacity);
@@ -782,6 +793,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
             w.u8(uint8_t(slot.depth));
         }
     }
+    for (int t = 0; t < kTracks; t++) w.u8(choke_group_sanitized(kit.tracks[t].choke));
 
     if (!w.ok() || w.size() != kKitTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kKitTotalBytes, written);
@@ -796,7 +808,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     const uint16_t wanted[kKitSections] = {kSectionKitTracks, kSectionKitLfo, kSectionKitArp,
                                            kSectionKitSlices, kSectionKitAsr, kSectionKitDuck,
                                            kSectionKitOsc, kSectionKitFilter, kSectionKitLfoTrig,
-                                           kSectionKitMod};
+                                           kSectionKitMod, kSectionKitChoke};
     uint32_t offset[kKitSections] = {};
     uint32_t length[kKitSections] = {};
     const SerializeResult found = find_sections(buffer, size, kKitVersion, wanted, kKitSections,
@@ -813,6 +825,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (offset[7] != 0 && length[7] < kKitFilterBytes) return refuse(SerializeResult::malformed);
     if (offset[8] != 0 && length[8] < kKitLfoTrigBytes) return refuse(SerializeResult::malformed);
     if (offset[9] != 0 && length[9] < kKitModBytes) return refuse(SerializeResult::malformed);
+    if (offset[10] != 0 && length[10] < kKitChokeBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -948,6 +961,15 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
                 kit.tracks[t].mod[s] = mod_slot_sanitized(source, dest, depth);
             }
         }
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // The choke groups. Absent is a kit from before them: no track in a group, set explicitly as
+    // TRIG is. A byte past the last group is damage and reads as none.
+    for (int t = 0; t < kTracks; t++) kit.tracks[t].choke = 0;
+    if (offset[10] != 0) {
+        if (!r.seek(kHeaderBytes + offset[10])) return refuse(SerializeResult::malformed);
+        for (int t = 0; t < kTracks; t++) kit.tracks[t].choke = choke_group_sanitized(r.u8());
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
     return SerializeResult::ok;

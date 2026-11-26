@@ -1055,6 +1055,30 @@ pad, key or MIDI note comes up, its step gets the nearest LEN (from `1/16` of a 
 so a drum hit keeps one step. Let go after REC is off, or with the transport stopped, and the step
 keeps the length it had.
 
+**Chords are recorded note for note** on VA POLY, WAVE POLY, FM4 and MID. Every note you play
+into one step in a pass is kept: the step's note (the first one) plus up to five more, six in all,
+which is VA POLY's voices. The step page shows them as `NOTE C4 +2`. They share the step's
+velocity (the loudest), its micro-timing and its LEN (the last key up). They play folded into the
+key as the rest of a POLY chord does; MID sends them as written unless the step has a chord type.
+A seventh note is refused. The extra notes are kept in the step's locks, so a chord of six leaves
+two parameter locks free on that step.
+
+What a later pass does is **REC MODE** in the FUNC menu (after QUANTIZE): **REPLACE**, the
+default, lets the first note of a new pass take the step over, its old notes and chord type gone,
+and the notes played with it join it; **ADD** adds every note to what the step holds, so a chord
+can be built up one pass at a time. The edit line says `REC+` under ADD. Transposing a range,
+MUTATE's note moves and turning NOTE move the whole chord. VA MONO, WAVE MONO, SAMPLE, GRAIN and
+the drums keep one note a step: the last one played.
+
+**CLICK and COUNT-IN** (FUNC menu). CLICK `ON` clicks every beat while the transport runs, a
+higher click on each bar's first beat. COUNT-IN `1 BAR` or `2 BAR` makes a PLAY from stop with REC
+on click that many bars first (the notice counts `COUNT-IN 4` .. `1`), whether CLICK is on or not;
+the pattern then starts on step 1 on the next beat, and nothing is recorded during the clicks.
+STOP ends a count-in. The click goes straight to the output: it is never recorded, resampled,
+looped or repeated. Neither setting is saved. Under an outside clock there is no count-in (STRATA
+does not start the transport then), and with CLOCK OUT on an outboard box starts when the count-in
+does, so it runs that many bars ahead.
+
 ### MIDI in
 
 MIDI IN (the DIN jack, or USB MIDI) plays STRATA like the pads:
@@ -1409,6 +1433,23 @@ The duck is part of the **kit**: it is saved with the project and in the kit lib
 recall brings its duck. A project or kit from before it was editable opens with the duck it
 always had (track 1, 35%, 3/40/120 ms). Its settings are not p-lockable and not in scenes or
 macros.
+
+### Choke groups
+
+A **choke group** makes tracks cut each other, the way an open hi-hat stops when the closed one
+is hit. On MIXER's **TRK 1-4** and **TRK 5-8** pages, **push A-D** steps that strip's track
+through `OFF`, group 1, 2, 3, 4 and back to `OFF`; the notice says which (`T4 CHOKE GROUP 1`) and
+the strip shows `C1`-`C4` under its machine.
+
+Any track can be in a group, a synth or a sample as much as a drum. A note on a track cuts every
+other track of its group with a fade of about 1.3 ms, so there is no click. It works both ways:
+in a group of an open and a closed hat, each cuts the other. Two tracks of a group that start on
+the same 16th both sound. Only the track's own sound is cut: the echoes and reverb it already
+sent ring on.
+
+The groups are part of the **kit**: saved with the project and in the kit library. A project or
+kit from before them opens with no track in a group. The HAT machine's own closed-to-open cut on
+tracks 3 and 4 is separate and still works without a group.
 
 ### Ambient delay and reverb: LONG and HALL
 

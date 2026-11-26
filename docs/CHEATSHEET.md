@@ -38,7 +38,7 @@ pads and the performance mixer.
 | --- | --- | --- |
 | GRID | HOME (from anywhere) | All 8 tracks; STEP keys edit the selected track |
 | KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys steps, on the selected track |
-| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, track play, chain, song, auto-fill, quantize, FX glide, freeze, loop length, load demo |
+| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, track play, chain, song, auto-fill, quantize, REC MODE, FX glide, freeze, loop length, load demo |
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE, FM4 and GRAIN machines ENV and OSC |
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
@@ -199,11 +199,12 @@ reload, RELOAD PROJECT, NEW PROJECT and LOAD DEMO are in the FUNC menu (FUNC+HOM
 three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN
 FOR NEW, OK AGAIN FOR DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
 **FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, CLEAR
-PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, TRACK PLAY, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, FX GLIDE, FREEZE, LOOP
+PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, TRACK PLAY, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, REC MODE, CLICK, COUNT-IN, FX GLIDE, FREEZE, LOOP
 LEN, LOAD DEMO. It always opens on SAVE, and the list wraps: UP once is LOAD DEMO, twice LOOP LEN, three times FREEZE, four times FX GLIDE. UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
 setting row (OK steps it too), CLR or FUNC+HOME close it. FREEZE: the selected track plays a 1-8
-bar loop of itself from RAM and stops computing; OK again unfreezes.
+bar loop of itself from RAM and stops computing; OK again unfreezes. CLICK: a click on every beat (ON/OFF). COUNT-IN: OFF, 1 BAR, 2 BAR clicked
+before a PLAY from stop with REC on (`COUNT-IN 4` .. `1`); internal clock only; neither saved.
 **PROJECTS:** UP/DOWN or A move, LEFT/RIGHT page by 8. OK twice within 2 s opens the project
 under the cursor (AGAIN TO OPEN; it throws away unsaved work and stops the transport).
 FUNC+DOWN (or the menu's SAVE AS) is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the character, OK saves
@@ -271,7 +272,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | Bottom line | `SRC FLTR AMP ...`, `DROP 2`, `GUARD1` | The screen's pages as tabs, the one showing lit (the screen keys turn them); at the right DROP = edits lost to a full command ring, GUARD = the CPU guard shedding voices |
 | SETUP | `TRACKS 3  MAX 27.0%`, `DRW 0.89MS` | Tracks sounding, the highest audio load since PLAY (held; PLAY starts it again), what a frame costs to draw |
 | GRID | `T1 MUTE PG1 L16 X1` | Track, muted, step page, length, speed |
-| GRID edit line | `REC Q50 SEL 1-8 FULL 2 U3/R1` | Recording + quantize, selection, refused edits (lock pool full), undo/redo depth |
+| GRID edit line | `REC Q50 SEL 1-8 FULL 2 U3/R1` | Recording + quantize (`REC+` under REC MODE ADD), selection, refused edits (lock pool full, a seventh note on a step), undo/redo depth |
 | Step page | `TRIG` `TRIGLESS` `OFF`, `LOCKS n` | What the step is and how many locks it holds |
 | Hold STEP | `S5 CUT 64>90` / `S5 CUT 64 KIT` | The step's lock against the kit value; bars show the lock, a hollow tick the kit value |
 | GRID cells | dot / cut corner / teeth / outline | Locks / top-left condition, top-right probability / ratchet / trigless |
@@ -343,7 +344,8 @@ ACNT accent · SLID slide · CHRD chord.
 condition result), NEI / NOT NEI (the track to the left's), 1ST / NOT 1ST (first pass after a pattern change).
 **Chords:** 1 NOTE, MIN, MAJ, SUS2, SUS4, DIM, MIN7, DOM7, MAJ7, MIN9, MIN11, 5TH, OCT, 5TH OCT; `/n` = inversion n.
 
-**MIXER pages:** TRK 1-4, TRK 5-8 (levels) · DCK 1-4, DCK 5-8: each track's sidechain duck depth,
+**MIXER pages:** TRK 1-4, TRK 5-8 (levels; push A-D steps the track's choke group OFF, 1-4, shown
+as `C1`-`C4` under the strip: a note cuts the other tracks of its group) · DCK 1-4, DCK 5-8: each track's sidechain duck depth,
 OFF-100% (SRC: the source, never ducked) · DUCK: SRC source track, ATK attack 1-50 ms, HLD hold
 0-500 ms, REL release 10-1000 ms (saved in the kit) · DLY: TIM time (1/32 ... 1/1, T triplet, D dotted),
 FBK feedback, TON tone, LVL · DLY+: TYP CLAS/LONG (push A flips it), MUL X1-X8 (LONG: time x MUL,

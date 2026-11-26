@@ -58,6 +58,28 @@
         notice(names[slot]);
     }
 
+    // A track's choke group, one step on: OFF, 1-4, then OFF again. A STEP, not the next group:
+    // the group lives in the kit on the audio side, so a UI that computed its own would read the
+    // same stale byte for two fast pushes. The notice says what one step from the kit makes.
+    void step_choke(int track) {
+        if (track < 0 || track >= kTracks) return;
+        const uint8_t now = engine_.project().kit.tracks[track].choke;
+        const uint8_t next = uint8_t(now >= kChokeGroups ? 0 : now + 1);
+        post(Cmd::set_choke, uint8_t(track), 0, 0, 0, 1);
+        char *out = notice_buffer_;
+        append(out, "T");
+        append_number(out, uint32_t(track + 1));
+        if (next == 0) {
+            append(out, " CHOKE OFF");
+        } else {
+            append(out, " CHOKE GROUP ");
+            append_number(out, uint32_t(next));
+        }
+        *out = 0;
+        notice(notice_buffer_);
+        enaga::log(notice_buffer_);
+    }
+
     // Throw one kill switch. The notice says what it will be once the audio side has applied it,
     // which is the opposite of what the project says now.
     void toggle_kill(int band) {

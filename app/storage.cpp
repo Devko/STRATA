@@ -120,6 +120,7 @@ bool mutates_kit(Cmd cmd) {
         case Cmd::set_slice_mode:
         case Cmd::set_lfo_trig:
         case Cmd::set_mod_slot:
+        case Cmd::set_choke:
         case Cmd::set_duck:
         case Cmd::clear_sample:
         case Cmd::set_sample:
@@ -160,6 +161,8 @@ bool mutates_project(Cmd cmd) {
         // The live-record quantize amount, which has a field in PROJECT.BIN and until now was
         // kept only in `app/` -- settable, saved nowhere.
         case Cmd::set_quantize:
+        // REC MODE, in the same section.
+        case Cmd::set_rec_mode:
         // Each track's MIDI OUT channel, PROJECT.BIN's fifth section.
         case Cmd::set_midi_out:
         // A LOCK tap puts the send and master bytes and the live mutes back.

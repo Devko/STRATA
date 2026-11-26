@@ -3,9 +3,11 @@
 #include "arp.hpp"       // the arpeggiator's notes; the engine schedules them
 #include "factory.hpp"
 #include "liverand.hpp"    // LIVE RND: the unit held to its range
+#include "chainloops.h"    // strata_choke_fade, a choke group's fade
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
 #include "sounds.hpp"      // Cmd::sound_preset: the factory sounds
+#include "stepnotes.hpp"   // a step's played-in extra notes, as locks
 #include "tuning.hpp"      // a knob click in NOTE view: tune_step
 
 #include <enaga/app.hpp>
@@ -33,6 +35,17 @@ constexpr uint8_t kMidiDefaultLength = 8;
 // A MIDI data byte, 0-127. (Not core/clamp.hpp's clamp_u8, which takes its limits.)
 uint8_t clamp_7bit(int value) {
     return uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value));
+}
+
+// The notes a step plays, `notes[0..count)`, with its extra notes (core/stepnotes.hpp) merged
+// in: ascending, none doubled, at most `max`. Most steps have none, and then this is one walk
+// of the step's lock run.
+int with_extra_notes(const Pattern &pattern, int track, int step, uint8_t *notes, int count,
+                     uint8_t key, int scale, bool fold, int max) {
+    uint8_t extras[kStepExtraNotes];
+    const int extra = step_extra_notes(pattern, track, step, extras);
+    if (extra == 0) return count;
+    return notes_merge(notes, count, extras, extra, key, scale, fold, max);
 }
 
 // A level for Status in thousandths, saturating at what a uint16_t holds (the meters' unit).
@@ -74,6 +87,7 @@ bool Engine::init(float sample_rate) {
     // Every allocation in the signal path happens here and nowhere else. The machines are
     // initialised below, where the pool is: every track owns one of every machine.
     mixer_.init(rate_);
+    click_.init(rate_);
 
     // Beat repeat's 2-bar ring, 2.93 MiB, here with every other buffer in the signal path.
     if (!repeat_.init(rate_)) return false;
@@ -561,6 +575,14 @@ bool Engine::apply_sound(const Command &command, int track, int) {
             break;
         }
 
+        case Cmd::set_choke: {
+            const uint8_t now = project_.kit.tracks[track].choke;
+            const uint8_t next = now >= kChokeGroups ? uint8_t(0) : uint8_t(now + 1);
+            project_.kit.tracks[track].choke =
+                command.c == 1 ? next : choke_group_sanitized(command.a);
+            break;
+        }
+
         case Cmd::set_pressure:
             mod_pressure_[track] = float(command.a > 127 ? 127 : command.a) * (1.0f / 127.0f);
             break;
@@ -693,8 +715,11 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
 
         case Cmd::step_field_delta:
             if (command.a < uint8_t(StepField::count)) {
-                step_field_apply(live().tracks[track].steps[step], StepField(command.a),
-                                 int(int8_t(command.b)));
+                Step &s = live().tracks[track].steps[step];
+                const int was = int(s.note);
+                step_field_apply(s, StepField(command.a), int(int8_t(command.b)));
+                // NOTE moves a chord played into the step with it (core/stepnotes.hpp).
+                step_shift_extra_notes(live(), track, step, int(s.note) - was);
             }
             break;
 
@@ -742,13 +767,43 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
         case Cmd::record_hit: {
             // The step and the micro-timing were resolved in the main context by core/record,
             // from the clock state at the moment the hit arrived. Nothing here re-decides them.
+            // `d` is how the note meets what the step holds (RecWrite, app/commands.hpp).
             Step &s = live().tracks[track].steps[step];
+            const uint8_t note = clamp_7bit(command.a);
+            const uint8_t velocity =
+                uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
+            const bool on = (s.flags & kStepTrig) != 0;
+            if (command.d == uint8_t(RecWrite::join) && on) {
+                // Another note of a chord on a step that already plays: it joins, and the
+                // step's note, LEN and micro stay. The loudest note sets the velocity, and the
+                // same note again is played again, so its velocity is the new one.
+                NoteAdd added = step_add_note(live(), track, step, note);
+                if (added == NoteAdd::full && s.lock_count < kLocksPerStep) {
+                    pattern_compact_locks(live());     // abandoned slots, as lock_delta does
+                    added = step_add_note(live(), track, step, note);
+                }
+                if (added == NoteAdd::full) {
+                    status_.bump_refused();            // six notes, or no lock slot left
+                    break;
+                }
+                s.velocity = added == NoteAdd::present
+                                 ? velocity
+                                 : (velocity > s.velocity ? velocity : s.velocity);
+                break;
+            }
             const int flags = (int(s.flags) | int(kStepTrig)) & ~int(kStepTrigless);
             s.flags = uint8_t(flags);
-            s.note = clamp_7bit(command.a);
-            s.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
+            s.note = note;
+            s.velocity = velocity;
             s.micro = int8_t(command.c);
             if (!length_valid(s.length)) s.length = 8;
+            if (command.d != uint8_t(RecWrite::note)) {
+                // A chord track's first note of a pass on this step: what was played is what
+                // the step holds, so the notes and the chord type that were there go. (A join
+                // onto a step that was off lands here too, and starts the chord.)
+                step_clear_extra_notes(live(), track, step);
+                s.chord = 0;
+            }
             // The step's locks are deliberately left alone. Overdubbing onto a programmed part
             // should keep the sound it was programmed with; a hit replaces the note, not the
             // step's whole character.
@@ -758,8 +813,10 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
         case Cmd::record_length: {
             // The key that recorded this step came up. Only if the step still holds that note:
             // a later hit landing on the same step has replaced it, and its own key decides.
+            // On a chord any of its notes counts, and the last key up gives the chord its LEN.
             Step &s = live().tracks[track].steps[step];
-            if ((s.flags & kStepTrig) != 0 && s.note == command.a && length_valid(command.b)) {
+            if ((s.flags & kStepTrig) != 0 && step_has_note(live(), track, step, command.a) &&
+                length_valid(command.b)) {
                 s.length = command.b;
             }
             break;
@@ -1072,7 +1129,7 @@ bool Engine::apply_notes(const Command &command, int track, int) {
                 }
                 // A pad on a POLY track counts against the shared budget like a step does.
                 if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
-                note_started(track, trig.velocity);
+                note_started(track, trig.velocity, 0);
                 // And to MIDI OUT. A key or a MIDI IN note (c = 1) is held until its release; a
                 // pad has none, so it lasts one step, as a step with no gate does.
                 send_midi_notes(track, &trig.note, 1, trig.velocity, 0,
@@ -1574,7 +1631,20 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
             break;
         }
 
+        case Cmd::set_click:
+            click_on_ = command.a != 0;
+            if (!click_on_ && count_in_end_ == 0) click_.stop();
+            break;
+
+        case Cmd::count_in:
+            // Posted just before the START it is for, so the clock may already read running
+            // here: it is not asked. The UI posts it only from stop (app/ui_input.hpp, F5).
+            count_in_end_ = uint32_t(command.a > 2 ? 2 : command.a) * kTicksPerBar;
+            break;
+
         case Cmd::restart:
+            // A restart is a jump to the pattern's start, not another count-in.
+            count_in_end_ = 0;
             // The position is the clock's, and it was moved to 0 by the main context. What is
             // left is everything measured from it: the pattern starts again at tick 0 with a
             // fresh pass count, ratchet hits still waiting would land after the jump, and the bar
@@ -1810,6 +1880,10 @@ bool Engine::apply_project(const Command &command, int, int) {
                 project_.settings.scene_a = scene_a_;
                 project_.settings.scene_b = scene_b_;
             }
+            break;
+
+        case Cmd::set_rec_mode:
+            project_.settings.rec_add = command.a != 0;
             break;
 
         case Cmd::set_quantize: {
@@ -2656,7 +2730,7 @@ void Engine::roll_fire(int track, uint32_t frame) {
     trig.frame = frame;
     trig.gate_frames = roll_gate_frames();
     if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
-    note_started(track, trig.velocity);
+    note_started(track, trig.velocity, frame);
     send_midi_notes(track, &trig.note, 1, trig.velocity, frame, midi_gate(track, trig.gate_frames));
 }
 
@@ -2756,7 +2830,7 @@ void Engine::arp_hit(int track, ArpRun &run, uint32_t frame) {
     const float gate = spacing * float(run.gate_percent) * 0.01f;
     trig.gate_frames = gate < 1.0f ? 1u : uint32_t(gate);
     if (make_room_for_poly_voice(track, note)) machines_[track]->trigger(trig);
-    note_started(track, trig.velocity);   // each hit lights the track, as a step does
+    note_started(track, trig.velocity, frame);   // each hit lights the track, as a step does
     // Each hit to MIDI OUT too, with its own gate; a MID track's CCs go ahead of the note.
     if (machine_id_[track] == uint8_t(MachineId::midi)) send_midi_ccs(track);
     send_midi_notes(track, &trig.note, 1, trig.accent ? uint8_t(127) : trig.velocity, frame,
@@ -3051,12 +3125,18 @@ void Engine::fire(const StepEvent &event) {
             if (polys_[track] != nullptr) {
                 count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
                                      PolyMachine::kVoices);
-            } else if (machine_id_[track] == uint8_t(MachineId::midi) &&
-                       (packed & kChordTypeMask) != uint8_t(ChordType::none)) {
+                count = with_extra_notes(folding, track, event.step, input, count, key_root_now,
+                                         key_scale_now, true, PolyMachine::kVoices);
+            } else if (machine_id_[track] == uint8_t(MachineId::midi)) {
                 // MID sends a chord step as its chord (below), so its arp runs through the
                 // chord too, rather than repeating the root alone.
-                count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
-                                     kChordMaxNotes);
+                const bool chord = (packed & kChordTypeMask) != uint8_t(ChordType::none);
+                if (chord) {
+                    count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
+                                         kChordMaxNotes);
+                }
+                count = with_extra_notes(folding, track, event.step, input, count, key_root_now,
+                                         key_scale_now, chord, kChordMaxNotes);
             }
             ArpRun &run = seq_arp_[track];
             run.mode = arp.mode;
@@ -3100,8 +3180,12 @@ void Engine::fire(const StepEvent &event) {
             // `event.note` and not `note`: `chord_expand` folds the root itself, so handing it
             // an already-folded note would be a second fold -- harmless, since folding a note
             // that is in the scale returns it, but it would hide which side owns the rule.
-            const int voiced = chord_expand(event.note, packed, key_root_now, key_scale_now,
-                                            notes, PolyMachine::kVoices);
+            int voiced = chord_expand(event.note, packed, key_root_now, key_scale_now, notes,
+                                      PolyMachine::kVoices);
+            // And the notes that were played into the step beside its own (core/stepnotes.hpp),
+            // folded like the rest of the chord, within the same six voices.
+            voiced = with_extra_notes(folding, track, event.step, notes, voiced, key_root_now,
+                                      key_scale_now, true, PolyMachine::kVoices);
             for (int i = 0; i < voiced; i++) {
                 trig.note = notes[i];
                 // The budget across every POLY track (kPolyVoiceBudget, engine.hpp).
@@ -3121,10 +3205,14 @@ void Engine::fire(const StepEvent &event) {
             uint8_t notes[kChordMaxNotes];
             int count = 1;
             notes[0] = note;
-            if ((packed & kChordTypeMask) != uint8_t(ChordType::none)) {
+            const bool chord = (packed & kChordTypeMask) != uint8_t(ChordType::none);
+            if (chord) {
                 count = chord_expand(event.note, packed, key_root_now, key_scale_now, notes,
                                      kChordMaxNotes);
             }
+            // Played-in extra notes: folded with a chord type, as written without one.
+            count = with_extra_notes(folding, track, event.step, notes, count, key_root_now,
+                                     key_scale_now, chord, kChordMaxNotes);
             send_midi_notes(track, notes, count, midi_velocity, trig.frame, midi_gate_frames);
         } else {
             if (!frozen_[track].on()) machines_[track]->trigger(trig);
@@ -3134,10 +3222,39 @@ void Engine::fire(const StepEvent &event) {
         // Once per step, not once per note: a chord is one trig as far as the screen is
         // concerned, and eight LEDs flashing six times would be a worse display, not a better
         // one.
-        note_started(track, trig.velocity);
+        note_started(track, trig.velocity, event.frame);
 
         if (track == duck_source_) mixer_.trigger_duck(event.frame);
     }
+}
+
+// A choke group's cut (choke_group in engine.hpp): the fade from where the choke landed, or from
+// the block's start when it carries on from the last block, then kill_all once it reaches 0.
+void Engine::run_choke(int t, float *mono, uint32_t frames) {
+    const uint32_t from = choke_at_[t] < frames ? choke_at_[t] : frames;
+    const float gain = strata_choke_fade(mono + from, int(frames - from), choke_gain_[t],
+                                         1.0f / float(kChokeFadeFrames));
+    if (gain > 0.0f) {
+        choke_gain_[t] = gain;
+        choke_at_[t] = 0;              // carries on from the next block's first frame
+        return;
+    }
+    machines_[t]->kill_all();
+    choke_at_[t] = kNoChokeFrame;
+    choke_gain_[t] = 1.0f;
+}
+
+// The metronome (engine.hpp): on every beat while CLICK is on, and on every beat of a count-in
+// whether it is or not. A bar's first beat is the higher click. Two modulos a tick, and only
+// while it clicks: control rate, as roll_tick's one (this chip divides integers in software).
+// The tick is the clock's own, and a count-in is whole bars, so the bars line up either way.
+void Engine::metronome_tick(uint32_t tick, uint32_t frame) {
+    const bool counting = tick < count_in_end_;
+    if (!click_on_ && !counting) return;
+    const uint32_t beat_ticks = uint32_t(enaga::clock::ppqn);
+    if (tick % beat_ticks != 0u) return;
+    const bool bar = tick % kTicksPerBar == 0u;
+    click_.trigger(frame, bar);
 }
 
 // --- the LFOs -------------------------------------------------------------
@@ -3308,6 +3425,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         return;
     }
 
+    // No track has started a note in this block yet (choke_group).
+    for (int t = 0; t < kTracks; t++) note_frame_[t] = kNoChokeFrame;
+
     apply_commands();
 
     // The CPU guard, before any trig: a lowered budget must be in force for this block's notes.
@@ -3325,7 +3445,17 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // Re-derive only when the tempo actually moves: this is a float divide, which the C674x does
     // in hardware, but there is no reason to do it every block. (Integer division is the one to
     // avoid here -- this chip has no integer divide instruction at all.)
-    const enaga::clock::State clock_now = enaga::clock::state();
+    enaga::clock::State clock_now = enaga::clock::state();
+    // A STOP ends a count-in, whether it ran out or not: the next START is a plain one unless the
+    // UI arms another (Cmd::count_in).
+    if (was_running_ && !clock_now.running) {
+        count_in_end_ = 0;
+        click_.stop();
+    }
+    was_running_ = clock_now.running != 0;
+    // Everything below that follows the beat (the LFOs' sync, the master effects' phase) follows
+    // the pattern's position, which a count-in puts behind the clock's.
+    clock_now.position = clock_now.position > count_in_end_ ? clock_now.position - count_in_end_ : 0u;
     if (clock_now.tempo != tempo_) {
         tempo_ = clock_now.tempo;
         const float bpm = tempo_ > 1.0f ? tempo_ : 1.0f;
@@ -3350,13 +3480,19 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // Enaga's clock reports the ticks falling in this block, each with the frame it lands on.
     // That frame is what makes a step start on an exact sample.
+    //
+    // A count-in's ticks only click; after it, every tick is counted from its end, so the
+    // pattern starts at tick 0 as from a plain START (metronome_tick in engine.hpp).
     enaga::clock::Tick ticks[16];
     const uint32_t tick_count = enaga::clock::ticks(ticks, 16);
     for (uint32_t i = 0; i < tick_count; i++) {
-        resolve_tick(ticks[i].tick, ticks[i].frame);
-        roll_tick(ticks[i].tick, ticks[i].frame);
-        stutter_tick(ticks[i].tick, ticks[i].frame);
-        arp_tick(ticks[i].tick, ticks[i].frame);
+        metronome_tick(ticks[i].tick, ticks[i].frame);
+        if (ticks[i].tick < count_in_end_) continue;
+        const uint32_t tick = ticks[i].tick - count_in_end_;
+        resolve_tick(tick, ticks[i].frame);
+        roll_tick(tick, ticks[i].frame);
+        stutter_tick(tick, ticks[i].frame);
+        arp_tick(tick, ticks[i].frame);
     }
 
     // What the performance layer produced, into the values the machines read -- except where the
@@ -3427,6 +3563,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
                 frozen_[t].skip(int(frames));
                 continue;
             }
+            // A frozen track plays its loop, which no choke cuts.
+            choke_at_[t] = kNoChokeFrame;
+            choke_gain_[t] = 1.0f;
             prepare_chain(t);
             float *mono = mixer_.scratch();
             enaga_clear(mono, int(frames));
@@ -3438,7 +3577,16 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
             continue;
         }
 
-        if (machine == nullptr || muted_[t] || !machine->active()) continue;
+        if (machine == nullptr || muted_[t] || !machine->active()) {
+            // A choke on a track with nothing to render: nothing to fade, so it is over. A muted
+            // track's voices are cut all the same, or they would sound again on unmute.
+            if (choke_at_[t] != kNoChokeFrame) {
+                if (machine != nullptr) machine->kill_all();
+                choke_at_[t] = kNoChokeFrame;
+                choke_gain_[t] = 1.0f;
+            }
+            continue;
+        }
 
         // From effective_, not params_: this is where a parameter lock has to be honoured, for
         // every block of the step rather than only the one that triggered it.
@@ -3449,6 +3597,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         float *mono = mixer_.scratch();
         enaga_clear(mono, int(frames));
         machine->render_add(mono, int(frames));
+        if (choke_at_[t] != kNoChokeFrame) run_choke(t, mono, frames);
         track_peak[t] = strata_master_peak(mono, mono, int(frames));
         // A freeze records the machine alone, before the chain it will go on running through.
         if (t == tapped && capture_prechain_) {
@@ -3542,6 +3691,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
             status_.audition_frame.store(audition_.position(), std::memory_order_relaxed);
         }
     }
+    // The metronome, beside the audition: for the player, never recorded (dsp/click.hpp).
+    if (click_.active()) click_.render_add(out, int(frames));
 
     status_.resample_state.store(capture_.done()        ? 3u
                                  : capture_.recording() ? 2u
@@ -3563,7 +3714,16 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // Publish for the UI. Relaxed stores of single words: the UI only ever wants the newest.
     const enaga::clock::State clock = enaga::clock::state();
-    status_.tick.store(clock.position, std::memory_order_relaxed);
+    // The pattern's position: the clock's less a count-in, and 0 while one is still clicking.
+    const bool counting = clock.running && clock.position < count_in_end_;
+    status_.tick.store(clock.position > count_in_end_ ? clock.position - count_in_end_ : 0u,
+                       std::memory_order_relaxed);
+    status_.count_in_beats.store(
+        counting ? uint8_t(float(count_in_end_ - clock.position) *
+                               (1.0f / float(enaga::clock::ppqn)) + 0.999f)
+                 : uint8_t(0),
+        std::memory_order_relaxed);
+    status_.count_in_ticks.store(count_in_end_, std::memory_order_relaxed);
     status_.running.store(clock.running ? 1u : 0u, std::memory_order_relaxed);
     status_.bump_blocks();
     waves_.audio_block();   // a WAVE slot taken out two blocks ago is no longer being read
