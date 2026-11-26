@@ -338,7 +338,7 @@ MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 fo
 lower darker, higher thinner), and FLTR is the synth's own filter. Velocity opens the synths' filter. FX = LOF lo-fi, PAN pan, SNA send A (delay), SNB send B (reverb).
 
 **Step fields:** NOTE · VEL velocity · LEN length (`1/16 STP` ... `64 STP`) · MICR micro-timing (±) ·
-PROB probability % · COND condition · RTCH ratchet count · RAMP ratchet ramp (FLAT UP DOWN) ·
+PROB probability % · COND condition · RTCH ratchet count 1-8, then ROLL/64 ... ROLL/4: a roll at that rate for the step's LEN · RAMP ratchet ramp (FLAT UP DOWN) ·
 ACNT accent · SLID slide · CHRD chord.
 **Conditions:** NONE, `a:b` (play on pass a of every b), FILL / NOT FILL, PRE / NOT PRE (this track's last
 condition result), NEI / NOT NEI (the track to the left's), 1ST / NOT 1ST (first pass after a pattern change).

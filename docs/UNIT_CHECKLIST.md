@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W47, about 143 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W48, about 146 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -556,6 +556,14 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   clicks: nothing is recorded. Hit them after: they land where played. `____`
 - CLICK OFF, COUNT-IN `2 BAR`, REC, PLAY: eight clicks even with CLICK off, then the beat. STOP
   during the clicks: silence, and the next PLAY without REC starts at once. `____`
+
+**W48. Ratchets over LEN (3 min).** Beat playing, A01, T1.
+- Hold STEP 1 + OK: the step page. Turn C: LEN `16 STP`. Screen key right, turn C past 8: `ROLL/64`,
+  `ROLL/48`, `ROLL/32`. The kick rolls in 32nds across the whole bar, every pass. The GRID cell
+  shows the ratchet's two teeth, the step page's lane a cut at every hit. `____`
+- Turn D (RAMP) to UP: the roll swells from soft to full over the bar. DOWN: it fades. `____`
+- Put a plain trig on step 9: the roll stops there and step 9 plays once. Turn RTCH back below
+  ROLL/64: an ordinary 8-hit ratchet in one step. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

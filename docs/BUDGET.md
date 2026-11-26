@@ -53,6 +53,14 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### Ratchets over LEN (2026-11-26, emulator)
+
+A roll's hits are notes like any other; the engine walks the running rolls once a tick
+(`Engine::span_tick`, eight compares while none runs). `scenario_ratchetspan` sets the default
+beat's kick to ROLL/32 over a bar, 32 kick hits a bar instead of 4: **29.77% cl6x, 50.25%
+GCC-only**, against 26.57% / 47.14-47.55% for the beat as it is. The cost is the kick's own,
+retriggered eight times as often; the cl6x worst case is unchanged (ambient).
+
 ### CLICK and COUNT-IN (S6, 2026-11-26, emulator)
 
 The metronome (dsp/click.hpp, clickloops.ti.c) is a recursive sine under a decaying envelope,
