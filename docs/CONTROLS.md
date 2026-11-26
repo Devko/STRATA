@@ -531,6 +531,15 @@ fourth block (`Status::wave`: the window, the slice starts, up to eight playhead
 a brightness each, and the amplitude envelope's stage and level for the dot). An envelope is
 drawn from the knobs alone.
 
+## Choke groups (push A-D on MIXER's TRK pages)
+
+CyDrums S4, 2026-11-26. On MIXER's TRK 1-4 and TRK 5-8, a plain push of A-D steps that strip's
+track through OFF, 1, 2, 3, 4, OFF (`T7 CHOKE GROUP 1`, `T7 CHOKE OFF`); the strip shows `C1`-`C4`
+under its machine. The pushes were free on those pages (FUNC + push A-C stays the kill switches
+everywhere). The step is counted on the audio side (`Cmd::set_choke` c = 1), so fast pushes are
+not lost. A note on a track in a group cuts the group's other tracks (`Engine::choke_group`);
+a kit setting, KIT.BIN section 11.
+
 ## FUNC help
 
 FUNC held for 0.6 s with nothing else pressed shows help for **the screen that is up**

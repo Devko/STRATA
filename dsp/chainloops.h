@@ -33,6 +33,12 @@ void strata_chain_lofi(float *mono, int n, uint32_t increment, float levels, flo
  * for all eight tracks. */
 void strata_chain_duck(float *mono, const float *duck, int n, float depth);
 
+/* A choke group's fade (Engine::choke_group), in place over a track's block from where the
+ * choke lands: `gain` steps down by `step` BEFORE each sample and stops at 0, so the voices it
+ * cut go quiet over 1 / step frames instead of clicking. Returns the gain the next block starts
+ * from; 0 means the fade is over. Runs only while a choke is fading. */
+float strata_choke_fade(float *mono, int n, float gain, float step);
+
 #ifdef __cplusplus
 }
 #endif

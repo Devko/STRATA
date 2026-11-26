@@ -8,6 +8,10 @@ the project file format or the controls.
 
 ### Added
 
+- **Choke groups** for any track: push A-D on MIXER's TRK 1-4 / TRK 5-8 pages puts that track in
+  group 1-4 (`C1`-`C4` under its strip), and a note on a track cuts the other tracks of its group
+  with a short fade. Saved in the kit; older kits open with no groups (#181).
+
 - **Chords recorded note for note.** On VA POLY, WAVE POLY, FM4 and MID, every note played into
   one step while recording is kept: the step's note plus up to five more, stored as locks 32-36
   in the pattern's pool, so no file change and an older build plays the step's own note. Until

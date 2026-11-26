@@ -343,7 +343,8 @@ ACNT accent · SLID slide · CHRD chord.
 condition result), NEI / NOT NEI (the track to the left's), 1ST / NOT 1ST (first pass after a pattern change).
 **Chords:** 1 NOTE, MIN, MAJ, SUS2, SUS4, DIM, MIN7, DOM7, MAJ7, MIN9, MIN11, 5TH, OCT, 5TH OCT; `/n` = inversion n.
 
-**MIXER pages:** TRK 1-4, TRK 5-8 (levels) · DCK 1-4, DCK 5-8: each track's sidechain duck depth,
+**MIXER pages:** TRK 1-4, TRK 5-8 (levels; push A-D steps the track's choke group OFF, 1-4, shown
+as `C1`-`C4` under the strip: a note cuts the other tracks of its group) · DCK 1-4, DCK 5-8: each track's sidechain duck depth,
 OFF-100% (SRC: the source, never ducked) · DUCK: SRC source track, ATK attack 1-50 ms, HLD hold
 0-500 ms, REL release 10-1000 ms (saved in the kit) · DLY: TIM time (1/32 ... 1/1, T triplet, D dotted),
 FBK feedback, TON tone, LVL · DLY+: TYP CLAS/LONG (push A flips it), MUL X1-X8 (LONG: time x MUL,

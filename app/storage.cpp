@@ -120,6 +120,7 @@ bool mutates_kit(Cmd cmd) {
         case Cmd::set_slice_mode:
         case Cmd::set_lfo_trig:
         case Cmd::set_mod_slot:
+        case Cmd::set_choke:
         case Cmd::set_duck:
         case Cmd::clear_sample:
         case Cmd::set_sample:

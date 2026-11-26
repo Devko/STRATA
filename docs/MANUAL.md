@@ -1425,6 +1425,23 @@ recall brings its duck. A project or kit from before it was editable opens with 
 always had (track 1, 35%, 3/40/120 ms). Its settings are not p-lockable and not in scenes or
 macros.
 
+### Choke groups
+
+A **choke group** makes tracks cut each other, the way an open hi-hat stops when the closed one
+is hit. On MIXER's **TRK 1-4** and **TRK 5-8** pages, **push A-D** steps that strip's track
+through `OFF`, group 1, 2, 3, 4 and back to `OFF`; the notice says which (`T4 CHOKE GROUP 1`) and
+the strip shows `C1`-`C4` under its machine.
+
+Any track can be in a group, a synth or a sample as much as a drum. A note on a track cuts every
+other track of its group with a fade of about 1.3 ms, so there is no click. It works both ways:
+in a group of an open and a closed hat, each cuts the other. Two tracks of a group that start on
+the same 16th both sound. Only the track's own sound is cut: the echoes and reverb it already
+sent ring on.
+
+The groups are part of the **kit**: saved with the project and in the kit library. A project or
+kit from before them opens with no track in a group. The HAT machine's own closed-to-open cut on
+tracks 3 and 4 is separate and still works without a group.
+
 ### Ambient delay and reverb: LONG and HALL
 
 <p><img src="screens/mixer.png" width="256" alt="MIXER: the faders of tracks 1-4"> <img src="screens/mixer_dly.png" width="256" alt="MIXER's DLY page"></p>
