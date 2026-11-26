@@ -45,26 +45,42 @@ STRATA has not run on either.
 
 INSTALLING
 ----------
-1. Install Enaga {ENAGA}, from Enaga's own release:
+Two downloads: Enaga {ENAGA} (the firmware) from Enaga's release page, and this zip
+(the STRATA app). Step 1 is needed once per Enaga version.
 
-     {ENAGA_URL}
+STEP 1: INSTALL ENAGA {ENAGA}
+Skip it only if the unit already runs Enaga {ENAGA}: the Enaga menu (F1 + POWER) shows
+its version at the top. STRATA 0.3.1 and earlier ran on Enaga 0.2.0, so an update from
+them needs this step.
 
-   Download the SmplTrek zip there and follow Enaga's install steps: copy its
-   SmplTrek.bin to the ROOT of the SD card, hold HOME (F4) while switching on to reach
-   BOOT MODE, and choose SYSTEM UPDATE. Already on Enaga {ENAGA}? Skip this step.
+  1. Open Enaga's release page:
 
-2. Copy STRATA to the card, keeping the folders:
+       {ENAGA_URL}
 
-     /ENAGA/APPS/STRATA/APP.ENA
+     and download enaga-v{ENAGA}-smpltrek.zip (not the lofi12xt or cydrums zip).
+  2. Unzip it. It holds one file, SmplTrek.bin.
+  3. Copy SmplTrek.bin to the ROOT of the SD card, keeping its name.
+  4. Hold HOME (F4) while switching on to reach BOOT MODE, and choose SYSTEM UPDATE.
+     Let it finish.
 
-3. Switch on. Enaga starts the last app that ran, or the only one installed.
-   F1 + POWER opens the Enaga menu, which lists the apps and switches between them.
-   In STRATA, hold FUNC to see what every key does, and FUNC + HOME then OK saves.
+STEP 2: COPY STRATA
+  5. Copy SD-CARD/ENAGA/APPS/STRATA/APP.ENA from this zip to the card, at exactly:
+
+       /ENAGA/APPS/STRATA/APP.ENA
+
+     Make the folders if they are missing (or copy the zip's whole SD-CARD/ENAGA folder
+     to the card's root). When updating, replace the old APP.ENA. Once Enaga runs, its
+     menu's USB DRIVE page puts the card on a computer over USB.
+
+STEP 3: PLAY
+  6. Switch on. Enaga starts the last app that ran, or the only one installed.
+     F1 + POWER opens the Enaga menu, which lists the apps and switches between them.
+     In STRATA, hold FUNC to see what every key does, and FUNC + HOME then OK saves.
 
 A first start opens the factory project: five patterns in bank A (A01 GROOVE, A02 GROOVE+,
 A03 BREAK, A04 PEAK, A05 PAD) at 130 BPM in C minor. Press PLAY.
 
-Projects are saved on the card under /ENAGA/DATA/STRATA/.
+Projects are saved on the card under /ENAGA/DATA/STRATA/, and stay there when you update.
 
 
 GOING BACK
