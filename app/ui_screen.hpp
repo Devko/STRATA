@@ -13,6 +13,8 @@
         char *out = line;
 
         canvas.clear();
+        // Every frame on every screen, so a picture that plays a note through knows when it came.
+        update_track_triggers();
         // Every frame on every screen, so the ring never fills while a scope is not up.
         scope_history_.drain(engine_.scope());
         if (echo_ != Echo::none && notice_ == echo_buffer_) refresh_echo();
@@ -55,7 +57,7 @@
         }
         append(out, running ? " >" : "");
         *out = 0;
-        paint::small_text(px, 44, 2, line, 10);
+        paint::small_text(px, 45, 2, line, 10);       // four clear of a three-character bar.beat
         out = line;
         append_number(out, (enaga::audio_load() + 5u) / 10u);
         *out++ = '%';

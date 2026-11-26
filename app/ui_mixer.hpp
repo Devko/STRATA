@@ -58,77 +58,6 @@
         notice(names[slot]);
     }
 
-    void draw_duck(enaga::Canvas &canvas) {
-        char line[40];
-        char *out = line;
-        const Kit &kit = engine_.project().kit;
-        const int source = kit.duck.source < kTracks ? int(kit.duck.source) : 0;
-
-        append(out, "MIXER ");
-        append(out, kMixerPages[mixer_bank_].name);
-        *out = 0;
-        canvas.text(0, 20, line, 14);
-
-        if (mixer_bank_ < kMixerDuckPage) {
-            for (int slot = 0; slot < 4; slot++) {
-                const int track = (mixer_bank_ - kMixerDuckDepthPage) * 4 + slot;
-                const int x = slot * 32;
-                const uint8_t depth = kit.tracks[track].duck;
-                out = line;
-                append(out, "T");
-                append_number(out, uint32_t(track + 1));
-                *out = 0;
-                canvas.text(x, 46, line, 13);
-
-                // The source never ducks under itself, whatever its own depth says.
-                out = line;
-                if (track == source) {
-                    append(out, "SRC");
-                } else if (depth == 0) {
-                    append(out, "OFF");
-                } else {
-                    append_number(out, depth);
-                    append(out, "%");
-                }
-                *out = 0;
-                canvas.text(x, 60, line, track == source ? 10 : 15);
-
-                const int bar = track == source ? 0 : int(depth) * 28 / int(kDuckDepthMax);
-                canvas.rect(x + 2, 76, 28, 6, 3);
-                if (bar > 0) canvas.rect(x + 2, 76, bar, 6, 12);
-            }
-            out = line;
-            append(out, "DUCKS UNDER T");
-            append_number(out, uint32_t(source + 1));
-            *out = 0;
-            canvas.text(0, 98, line, 10);
-        } else {
-            static const char *const names[4] = {"SRC", "ATK", "HLD", "REL"};
-            const uint32_t values[4] = {
-                uint32_t(source + 1), kit.duck.attack_ms,
-                uint32_t(kit.duck.hold) * uint32_t(kDuckTimeStepMs),
-                uint32_t(kit.duck.release) * uint32_t(kDuckTimeStepMs)};
-            const int bars[4] = {source * 28 / (kTracks - 1),
-                                 int(kit.duck.attack_ms) * 28 / int(kDuckAttackMax),
-                                 int(kit.duck.hold) * 28 / int(kDuckHoldMax),
-                                 int(kit.duck.release) * 28 / int(kDuckReleaseMax)};
-            for (int slot = 0; slot < 4; slot++) {
-                const int x = slot * 32;
-                canvas.text(x, 46, names[slot], 13);
-                out = line;
-                if (slot == 0) append(out, "T");
-                append_number(out, values[slot]);
-                *out = 0;
-                canvas.text(x, 60, line, 15);
-                canvas.rect(x + 2, 76, 28, 6, 3);
-                if (bars[slot] > 0) canvas.rect(x + 2, 76, bars[slot], 6, 12);
-            }
-            canvas.text(0, 98, "TIMES IN MS", 10);
-        }
-
-        draw_master_peak(canvas);
-    }
-
     // Throw one kill switch. The notice says what it will be once the audio side has applied it,
     // which is the opposite of what the project says now.
     void toggle_kill(int band) {
@@ -205,137 +134,7 @@
         append_number(out, byte);
     }
 
-    void draw_mixer_fields(enaga::Canvas &canvas) {
-        char line[40];
-        char *out = line;
-        // MST and EQ are the mockup's master page (app/ui_live.hpp).
-        if (kMixerPages[mixer_bank_].master) {
-            draw_master_page(canvas);
-            return;
-        }
-
-        append(out, "MIXER ");
-        append(out, kMixerPages[mixer_bank_].name);
-        *out = 0;
-        canvas.text(0, 20, line, 14);
-
-        for (int slot = 0; slot < 4; slot++) {
-            const int8_t field = kMixerPages[mixer_bank_].field[slot];
-            const int x = slot * 32;
-            if (field < 0) {
-                canvas.text(x, 46, "---", 4);
-                continue;
-            }
-            out = line;
-            append(out, kMixerPages[mixer_bank_].master ? master_field_name(uint8_t(field))
-                                                        : send_field_name(uint8_t(field)));
-            *out = 0;
-            canvas.text(x, 46, line, 13);
-
-            out = line;
-            append_mixer_value(out, mixer_bank_, slot);
-            *out = 0;
-            canvas.text(x, 60, line, 15);
-
-            // A bar, so a page of numbers still reads at a glance.
-            const int bar = int(mixer_byte(mixer_bank_, slot)) * 28 / 127;
-            canvas.rect(x + 2, 76, 28, 6, 3);
-            if (bar > 0) canvas.rect(x + 2, 76, bar, 6, 12);
-        }
-
-        // MST and EQ: what the master is putting out, while the beat plays (app/ui_live.hpp).
-        if (kMixerPages[mixer_bank_].master) {
-            draw_master_live(canvas, enaga::clock::state().running != 0);
-        }
-
-        // What the delay is actually doing, in milliseconds, which is the one thing a division
-        // does not tell you -- and the number that says whether the tempo-sync is working.
-        // On the LONG page too: there it is the division times the multiplier, up to 12 s.
-        if (mixer_bank_ == kMixerDelayPage || mixer_bank_ == kMixerLongPage) {
-            out = line;
-            append(out, "TIME ");
-            append_number(out,
-                          uint32_t(effective_delay_seconds(engine_.sends()) * 1000.0f + 0.5f));
-            append(out, " MS");
-            *out = 0;
-            canvas.text(0, 98, line, 10);
-        }
-
-        draw_master_peak(canvas);
-    }
-
-    void draw_master_peak(enaga::Canvas &canvas) {
-        char line[40];
-        char *out = line;
-        const int peak_milli =
-            int(engine_.status().peak_milli.load(std::memory_order_relaxed));
-        append(out, "PEAK ");
-        append_tenths(out, uint32_t(peak_milli));
-        *out = 0;
-        canvas.text(0, 110, line, 11);
-        const int peak_bar = peak_milli * 60 / 1000;
-        canvas.rect(60, 112, peak_bar > 60 ? 60 : (peak_bar < 1 ? 1 : peak_bar), 4,
-                    peak_milli >= 1000 ? 15 : 8);
-    }
-
-    void draw_mixer(enaga::Canvas &canvas) {
-        if (mixer_bank_ >= kMixerDelayPage) {
-            draw_mixer_fields(canvas);
-            return;
-        }
-        if (mixer_bank_ >= kMixerDuckDepthPage) {
-            draw_duck(canvas);
-            return;
-        }
-        char line[40];
-        char *out = line;
-        const bool running = enaga::clock::state().running != 0;
-
-        out = line;
-        append(out, "MIXER TRK ");
-        append_number(out, uint32_t(mixer_bank_ * 4 + 1));
-        *out++ = '-';
-        append_number(out, uint32_t(mixer_bank_ * 4 + 4));
-        *out = 0;
-        canvas.text(0, 20, line, 14);
-
-        for (int slot = 0; slot < 4; slot++) {
-            const int track = mixer_bank_ * 4 + slot;
-            if (track >= kTracks) break;
-
-            const int x = slot * 32;
-            const float level = engine_.level(track);
-            const int bar = int(level * 40.0f);
-
-            out = line;
-            append(out, "T");
-            append_number(out, uint32_t(track + 1));
-            if (muted_[track]) append(out, " M");
-            *out = 0;
-            canvas.text(x, 34, line, muted_[track] ? 6 : 13);
-
-            // A vertical fader per track, filled to its level.
-            canvas.rect(x + 2, 46, 10, 48, 3);
-            const int filled = bar > 48 ? 48 : (bar < 0 ? 0 : bar);
-            if (filled > 0) {
-                canvas.rect(x + 2, 46 + (48 - filled), 10, filled, muted_[track] ? 5 : 12);
-            }
-            // What the track is playing, beside its fader (app/ui_live.hpp).
-            draw_fader_meter(canvas, track, x + 12, running);
-
-            // The machine driving it, so the mixer says what it is mixing.
-            const Machine *machine = engine_.machine(track);
-            canvas.text(x + 14, 46, machine ? "ON" : "--", machine ? 10 : 4);
-
-            out = line;
-            append_padded(out, uint32_t(level * 100.0f + 0.5f), 3);
-            *out = 0;
-            canvas.text(x, 98, line, 11);
-        }
-
-        // The master peak, as one bar: the only number that says whether it is clipping.
-        draw_master_peak(canvas);
-    }
+    // MIXER's screen is app/ui_mixview.hpp.
 
     // --- shared pieces ----------------------------------------------------
 
@@ -717,7 +516,7 @@
     // says what changed: "S5 CUT 64>90", the kit value and then the lock, read live from the
     // pattern so the second number follows the knob. "S5 CUT 64 KIT" once the lock is gone.
     // False when there is nothing to say, and the caller draws its usual line.
-    bool draw_lock_readout(enaga::Canvas &canvas, int y) const {
+    bool draw_lock_readout(enaga::Canvas &canvas, int y, int grey = 15) const {
         if (held_step_ < 0 || lock_readout_index_ < 0 || lock_readout_step_ != held_step_ ||
             lock_readout_track_ != selected_) {
             return false;
@@ -748,6 +547,6 @@
         char *out = line;
         append_shown(out, part, kLineChars);
         *out = 0;
-        canvas.text(0, y, line, 15);
+        canvas.text(0, y, line, uint8_t(grey));
         return true;
     }

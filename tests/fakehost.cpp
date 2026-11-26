@@ -1,6 +1,8 @@
 // The fake Enaga host. tests/fakehost.hpp says why it exists and what it guarantees.
 #include "fakehost.hpp"
 
+#include "paint.hpp"
+
 #include <cstring>
 #include <new>
 
@@ -48,6 +50,7 @@ void FakeHost::install() {
     abi_.ms = t_ms;
     abi_.fatal = t_fatal;
     abi_.text = t_text;
+    strata::paint::small_text_hook = record_small;
     abi_.audio_load = t_audio_load;
     abi_.audio_load_peak = t_audio_load_peak;
     abi_.led = t_led;
@@ -386,6 +389,14 @@ void FakeHost::t_fatal(const char *reason) {
 }
 
 void FakeHost::t_text(uint8_t *, int x, int y, const char *text, uint8_t grey) {
+    record_text(x, y, text, grey, false);
+}
+
+void FakeHost::record_small(int x, int y, const char *text, int grey) {
+    record_text(x, y, text, uint8_t(grey), true);
+}
+
+void FakeHost::record_text(int x, int y, const char *text, uint8_t grey, bool small) {
     FakeHost &h = the();
     if (h.text_count_ >= kTextDraws) {
         h.text_dropped_++;
@@ -395,6 +406,7 @@ void FakeHost::t_text(uint8_t *, int x, int y, const char *text, uint8_t grey) {
     draw.x = x;
     draw.y = y;
     draw.grey = grey;
+    draw.small = small;
     draw.length = 0;
     while (text != nullptr && text[draw.length] != '\0') {
         if (draw.length < int(sizeof draw.text) - 1) draw.text[draw.length] = text[draw.length];

@@ -3112,8 +3112,9 @@ TEST(ui_perform_shows_track_levels_while_playing_and_the_hint_when_stopped) {
     key(ENAGA_KEY_F4);
 }
 
-// MIXER (app/ui_live.hpp): while the beat plays, the MST page draws the output's spectrum and a
-// vectorscope under its bars, and the fader page a live meter beside each fader; stopped, none.
+// MIXER (app/ui_mixview.hpp): while the beat plays, the MST page draws the output's spectrum
+// across the top and the vectorscope under it, and the desk a live meter in each strip; stopped,
+// the spectrum and the meters sit at rest.
 TEST(ui_mixer_master_page_shows_the_spectrum_while_playing) {
     Strata &app = fresh();
     FakeHost &host = FakeHost::the();
@@ -3127,7 +3128,15 @@ TEST(ui_mixer_master_page_shows_the_spectrum_while_playing) {
     };
     mixer_page(app, kMixerEqPage - 1);                     // MST
     app.draw(canvas);
-    CHECK_EQ(lit_in(0, 123, 86, 107), 0);                  // stopped: nothing there
+    CHECK_EQ(lit_in(0, 119, 26, 57), 0);                   // stopped: no bands
+    const auto trace = [] {                                // the vectorscope's bright points
+        int n = 0;
+        for (int y = 72; y <= 110; y++) {
+            for (int x = 2; x <= 40; x++) n += g_pixels[y * enaga::Canvas::width + x] >= 10;
+        }
+        return n;
+    };
+    CHECK_EQ(trace(), 0);
 
     toggle_trig_0_0();
     pump(2);
@@ -3135,18 +3144,18 @@ TEST(ui_mixer_master_page_shows_the_spectrum_while_playing) {
     host.deliver_tick(0, 0);
     pump(6);
     for (int i = 0; i < 3; i++) app.draw(canvas);
-    CHECK(lit_in(0, 95, 86, 107) >= 10);                   // the kick's bands
-    CHECK(lit_in(101, 122, 86, 107) >= 3);                 // the vectorscope's trace
+    CHECK(lit_in(0, 119, 26, 57) >= 10);                   // the kick's bands
+    CHECK(trace() >= 3);                                   // the vectorscope's trace
 
     mixer_page(app, 0);                                    // the faders
     app.draw(canvas);
-    CHECK(lit_in(12, 12, 46, 93) >= 4);                    // track 1's live meter
-    CHECK_EQ(lit_in(44, 44, 46, 93), 0);                   // track 2 is silent
+    CHECK(lit_in(3, 3, 36, 97) >= 4);                      // track 1's live meter
+    CHECK_EQ(lit_in(18, 18, 36, 97), 0);                   // track 2 is silent
 
     host.set_running(false);
     pump(2);
     app.draw(canvas);
-    CHECK_EQ(lit_in(12, 12, 46, 93), 0);
+    CHECK_EQ(lit_in(3, 3, 36, 97), 0);
     toggle_trig_0_0();
     pump(2);
     key(ENAGA_KEY_F4);
@@ -3311,7 +3320,7 @@ TEST(ui_the_ambient_pages_switch_the_modes_and_reach_every_knob) {
     app.on_encoder(1, +3);
     pump(2);
     CHECK_NEAR(effective_delay_seconds(engine.sends()), 4.0f * 0.75f * 60.0f / 130.0f, 1e-4);
-    CHECK(screen_has(app, "TIME 1385 MS"));
+    CHECK(screen_has(app, "1385MS"));
 
     const float wow = engine.sends().delay_wow;
     app.on_encoder(2, +4);
@@ -3675,7 +3684,27 @@ struct Box {
     int x0, y0, x1, y1;    // inclusive
 };
 
+// The small font (app/paint.hpp): 3 x 5, four pixels a character.
+constexpr char kSmallChars[] = " !#'()*+,-./0123456789:=<>?[]_%ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+constexpr int kSmallAdvance = 4;
+constexpr int kSmallGlyphW = 3;
+constexpr int kSmallGlyphH = 5;
+// Two small labels on one line: two blank pixels at the least (a letter's own gap is one). GRID's
+// knob slots set a name and its value two apart, told apart by their greys.
+constexpr int kSmallMinGap = 2;
+
+bool in_small_font(char c) {
+    for (const char *p = kSmallChars; *p; p++) {
+        if (*p == c) return true;
+    }
+    return false;
+}
+
 Box box_of(const FakeHost::TextDraw &d) {
+    if (d.small) {
+        return Box{d.x, d.y, d.x + kSmallAdvance * d.length - (kSmallAdvance - kSmallGlyphW) - 1,
+                   d.y + kSmallGlyphH - 1};
+    }
     return Box{d.x, d.y, d.x + kAdvance * d.length - (kAdvance - kGlyphW) - 1, d.y + kGlyphH - 1};
 }
 
@@ -3709,12 +3738,15 @@ int layout_faults(Strata &app, const char *where) {
         const Box b = box_of(d);
 
         for (int c = 0; c < d.length && c < int(sizeof d.text) - 1; c++) {
-            if (!in_font(d.text[c])) {
+            if (!(d.small ? in_small_font(d.text[c]) : in_font(d.text[c]))) {
                 report(d, "a character the font does not have (draws as ?)");
                 break;
             }
         }
-        if (b.x0 < 0 || b.y0 < 0 || b.x1 >= enaga::Canvas::width || b.y1 >= enaga::Canvas::height) {
+        // Small labels stop short of the frame's meter (x 126-127); Enaga's text may use the
+        // whole line, as it always has.
+        const int right = d.small ? 125 : enaga::Canvas::width - 1;
+        if (b.x0 < 0 || b.y0 < 0 || b.x1 > right || b.y1 >= enaga::Canvas::height) {
             report(d, "runs off the screen");
         }
 
@@ -3733,7 +3765,7 @@ int layout_faults(Strata &app, const char *where) {
                 // ("3 PRM3 PRM4 PRM" on PERFORM). So the blank between them must be at least
                 // kMinGap pixels, which is clearly wider than the gap between letters.
                 const int gap = b.x0 > o.x1 ? b.x0 - o.x1 - 1 : o.x0 - b.x1 - 1;
-                if (gap < kMinGap) {
+                if (gap < (d.small && other.small ? kSmallMinGap : kMinGap)) {
                     char what[96];
                     std::snprintf(what, sizeof what, "runs into \"%s\" at (%d, %d), %d px apart",
                                   other.text, other.x, other.y, gap);
@@ -3742,6 +3774,9 @@ int layout_faults(Strata &app, const char *where) {
             }
         }
 
+        // A small label sits on a picture by design (a letter on a curve, a scale under a
+        // spectrum); only Enaga's text is held to whole boxes.
+        if (d.small) continue;
         int lit = 0, area = 0;
         for (int y = b.y0 < 0 ? 0 : b.y0; y <= b.y1 && y < enaga::Canvas::height; y++) {
             for (int x = b.x0 < 0 ? 0 : b.x0; x <= b.x1 && x < enaga::Canvas::width; x++) {
@@ -4742,7 +4777,7 @@ TEST(ui_osc_is_edits_eighth_page_and_names_its_waves_and_modes) {
     CHECK_EQ(int(Page::osc), kEditPages - 1);
     check_layout(app, "EDIT OSC, a drum");
     CHECK(screen_has(app, "NOT ON THIS MACHINE"));
-    CHECK(!screen_has(app, "WAV"));
+    CHECK(!screen_has(app, "A WAV"));                 // no knob of the VA's
 
     // Track 6, VA MONO in the default kit: the four names and what each value means.
     for (int i = 0; i < 5; i++) key(ENAGA_KEY_DOWN);
@@ -7576,6 +7611,7 @@ void write_shot(const char *folder, const char *name, int settle = 1600) {
     if (txt == nullptr) return;
     for (int i = 0; i < host.text_count(); i++) {
         const FakeHost::TextDraw &d = host.text_draw(i);
+        if (d.small) continue;                     // already in the pixels
         std::fprintf(txt, "%d %d %d %s\n", d.x, d.y, int(d.grey), d.text);
     }
     std::fclose(txt);
@@ -7652,6 +7688,71 @@ void back_to_a_kick() {
 }
 
 }  // namespace
+
+// Every EDIT page of every track and every MIXER page, playing and stopped, for comparing the
+// screens with the drafts (tools/visuals_mockup.py) while they are redrawn. Off unless
+// STRATA_REDESIGN_SHOTS names a folder; writes the same NAME.pgm / NAME.txt as ui_screenshots.
+TEST(ui_redesign_shots) {
+    const char *folder = std::getenv("STRATA_REDESIGN_SHOTS");
+    if (folder == nullptr || folder[0] == 0) return;
+    FakeHost &host = FakeHost::the();
+    host.reset();
+    host.set_device(ENAGA_DEVICE_SMPLTREK);
+    host.set_audio_load(200);
+    Strata &app = the_app();
+    CHECK(app.init());
+    app.on_card(true);
+    char name[64];
+    for (int pass = 0; pass < 2; pass++) {
+        key(ENAGA_KEY_F4);
+        if (pass == 0) { key(ENAGA_KEY_F5); play_blocks(1700); }
+        for (int t = 0; t < kTracks; t++) {
+            key(ENAGA_KEY_F4);
+            app.on_pad_press(2 * t, 100);
+            app.on_pad_release(2 * t);
+            key(ENAGA_KEY_F8);
+            for (int i = 0; i < 8 && UiProbe::param_page(app) != 0; i++) key(ENAGA_KEY_SELECT_LEFT);
+            for (int page = 0; page < 8; page++) {
+                std::snprintf(name, sizeof name, "%s_t%d_p%d", pass == 0 ? "run" : "stop", t + 1, page);
+                write_shot(folder, name, 37);
+                key(ENAGA_KEY_SELECT_RIGHT);
+            }
+        }
+        if (pass == 0) {
+            // The machines the default beat has none of, and a running LFO.
+            post_track(Cmd::set_machine, 5, uint8_t(MachineId::fm));
+            post_track(Cmd::set_machine, 6, uint8_t(MachineId::wave_mono));
+            post_track(Cmd::set_machine, 7, uint8_t(MachineId::grain));
+            post_cmd_track_param(4, uint8_t(kLfoDepth), 90);
+            post_cmd_track_param(4, uint8_t(kLfoDest), 30);
+            post_cmd_track_param(4, uint8_t(kLfoRate), 100);
+            pump(4);
+            play_blocks(800);
+            for (int t = 4; t < kTracks; t++) {
+                key(ENAGA_KEY_F4);
+                app.on_pad_press(2 * t, 100);
+                app.on_pad_release(2 * t);
+                key(ENAGA_KEY_F8);
+                for (int i = 0; i < 8 && UiProbe::param_page(app) != 0; i++) key(ENAGA_KEY_SELECT_LEFT);
+                for (int page = 0; page < 8; page++) {
+                    std::snprintf(name, sizeof name, "mach_t%d_p%d", t + 1, page);
+                    write_shot(folder, name, 37);
+                    key(ENAGA_KEY_SELECT_RIGHT);
+                }
+            }
+        }
+        mixer_page(app, 0);
+        for (int page = 0; page < kMixerPageCount; page++) {
+            mixer_page(app, page);
+            std::snprintf(name, sizeof name, "%s_mix_%d", pass == 0 ? "run" : "stop", page);
+            write_shot(folder, name, 37);
+        }
+        key(ENAGA_KEY_F4);
+        std::snprintf(name, sizeof name, "%s_grid", pass == 0 ? "run" : "stop");
+        write_shot(folder, name, 37);
+        if (pass == 0) { key(ENAGA_KEY_F6); key(ENAGA_KEY_F6); play_blocks(400); }
+    }
+}
 
 TEST(ui_screenshots) {
     const char *folder = std::getenv("STRATA_SHOTS");
@@ -8186,7 +8287,7 @@ TEST(ui_the_duck_pages_set_each_tracks_depth_the_source_and_the_times) {
     CHECK_EQ(int(kit.tracks[6].duck), depth + 5);
     CHECK(app_storage().dirty());
     CHECK(std::strcmp(UiProbe::notice(app), "T7 DUCK DEPTH") == 0);
-    CHECK(screen_has(app, "MIXER DCK 5-8"));
+    CHECK(screen_has(app, "DCK 5-8"));                   // the page's tab
     app.on_encoder(2, -5);
     pump(2);
     CHECK_EQ(int(kit.tracks[6].duck), depth);
@@ -8202,11 +8303,17 @@ TEST(ui_the_duck_pages_set_each_tracks_depth_the_source_and_the_times) {
     CHECK_EQ(engine.duck_source(), source + 1);
     CHECK_EQ(int(kit.duck.release), release - 2);
     CHECK(std::strcmp(UiProbe::notice(app), "DUCK RELEASE") == 0);
-    CHECK(screen_has(app, "TIMES IN MS"));
-
-    // Back on DCK 1-4 the new source says so instead of a depth.
-    mixer_page(app, kMixerDuckDepthPage);
     CHECK(screen_has(app, "DUCKS UNDER T2"));
+
+    // Back on DCK 1-4 the new source's strip says so instead of a depth.
+    mixer_page(app, kMixerDuckDepthPage);
+    draw_now();
+    bool source_strip = false;
+    for (int i = 0; i < FakeHost::the().text_count(); i++) {
+        const FakeHost::TextDraw &t = FakeHost::the().text_draw(i);
+        source_strip = source_strip || (std::strcmp(t.text, "SRC") == 0 && t.x == 16);
+    }
+    CHECK(source_strip);
     app.on_encoder(1, +1);
     pump(2);
     CHECK(std::strcmp(UiProbe::notice(app), "T2 IS THE SOURCE") == 0);
@@ -9228,12 +9335,12 @@ TEST(ui_wave_sample_draws_its_window_slices_and_playhead) {
 
     draw_now();
     check_layout(app, "EDIT SRC, SAMPLE with a file");
-    // The window's start is a full-height bright column.
-    for (int y = 50; y < 118; y++) CHECK_EQ(int(pixel_at(view.lo, y)), 15);
+    // The window's start is a full-height bright column (app/ui_editview.hpp, rows 31-93).
+    for (int y = 31; y <= 93; y++) CHECK_EQ(int(pixel_at(view.lo, y)), 15);
     // The sample inside the window is drawn brighter than before it: a hit starts at column 0
     // (dim, outside) and the second near STA, so look one column on from each.
-    CHECK_EQ(int(pixel_at(1, 84)), 3);
-    CHECK_EQ(int(pixel_at(view.lo + 1, 84)), 9);
+    CHECK_EQ(int(pixel_at(1, 62)), 4);
+    CHECK_EQ(int(pixel_at(view.lo + 1, 62)), 9);
     // A slice tick is dotted: every other row.
     int tick = -1;
     for (int x = view.lo + 1; x < kWaveColumns && tick < 0; x++) {
@@ -9241,8 +9348,8 @@ TEST(ui_wave_sample_draws_its_window_slices_and_playhead) {
     }
     CHECK(tick > 0);
     if (tick > 0) {
-        CHECK_EQ(int(pixel_at(tick, 50)), 12);
-        CHECK(pixel_at(tick, 51) != 12);
+        CHECK_EQ(int(pixel_at(tick, 31)), 8);
+        CHECK(pixel_at(tick, 32) != 8);
     }
     CHECK(!screen_has(app, "NO FILE"));
 
@@ -9261,8 +9368,8 @@ TEST(ui_wave_sample_draws_its_window_slices_and_playhead) {
     CHECK(later.mark[0] > playing.mark[0]);
     draw_now();
     if (later.mark[0] < kWaveColumns) {
-        CHECK(pixel_at(later.mark[0], 50) > 0);
-        CHECK(pixel_at(later.mark[0], 117) > 0);
+        CHECK(pixel_at(later.mark[0], 31) > 0);
+        CHECK(pixel_at(later.mark[0], 93) > 0);
     }
     back_to_a_kick();
 }
@@ -9277,7 +9384,7 @@ TEST(ui_wave_sample_with_no_file_draws_the_placeholder_and_says_so) {
     draw_now();
     CHECK(screen_has(app, "NO FILE"));
     int lit = 0;
-    for (int x = 0; x < kWaveColumns; x++) lit += pixel_at(x, 104) != 0 ? 1 : 0;
+    for (int x = 0; x < kWaveColumns; x++) lit += pixel_at(x, 70) != 0 ? 1 : 0;
     CHECK(lit > 10);
     check_layout(app, "EDIT SRC, SAMPLE with no file");
     back_to_a_kick();
@@ -9326,8 +9433,8 @@ TEST(ui_wave_grain_draws_its_bracket_and_the_grains_in_the_air) {
     check_layout(app, "EDIT SRC, GRAIN with a file");
     CHECK(screen_has(app, "OK: SOUNDS"));
     draw_now();
-    CHECK_EQ(int(pixel_at(view.lo, 50)), 13);       // the bracket's corners
-    CHECK_EQ(int(pixel_at(view.lo, 85)), 13);      // the sample's rows end at 85 on GRAIN
+    CHECK_EQ(int(pixel_at(view.lo, 23)), 15);       // the bracket, top and bottom
+    CHECK_EQ(int(pixel_at(view.lo, 69)), 15);
     back_to_a_kick();
 }
 
@@ -9342,19 +9449,19 @@ TEST(ui_envelope_on_amp_follows_the_knobs_and_letters_its_handles) {
     CHECK(screen_has(app, "OK: PICK SAMPLE"));
     check_layout(app, "EDIT AMP, SAMPLE");
     draw_now();
-    CHECK(pixel_at(0, 50) != 0);                    // the peak, at the top at once
+    CHECK(pixel_at(2, 34) != 0);                    // the peak, at the top at once
     int letters = 0;
     for (int i = 0; i < FakeHost::the().text_count(); i++) {
         const FakeHost::TextDraw &d = FakeHost::the().text_draw(i);
-        if (d.y >= 50 && d.y < 118 && d.length == 1) letters++;
+        if (d.y >= 26 && d.y < 102 && d.length == 1) letters++;
     }
     CHECK_EQ(letters, 2);
     // A longer decay reaches further right: the curve leaves the floor later.
     const auto reach = [] {
         int last = 0;
         for (int x = 0; x < kWaveColumns; x++) {
-            for (int y = 50; y < 117; y++) {
-                if (pixel_at(x, y) == 13) last = x;
+            for (int y = 34; y < 100; y++) {
+                if (pixel_at(x, y) >= 8 && pixel_at(x, y) < 15) last = x;
             }
         }
         return last;
@@ -9367,49 +9474,58 @@ TEST(ui_envelope_on_amp_follows_the_knobs_and_letters_its_handles) {
     back_to_a_kick();
 }
 
-TEST(ui_envelope_on_a_synths_fltr_is_the_filters_with_env_as_its_height) {
+// A synth's FLTR (app/ui_editview.hpp): the response at CUT with a line and knob A's letter at the
+// cutoff, and with ENV up a dim second curve where the filter envelope opens it to.
+TEST(ui_a_synths_fltr_draws_its_response_and_where_env_opens_it) {
     Strata &app = fresh();
     post_track(Cmd::set_machine, 0, uint8_t(MachineId::va_mono));
     pump(4);
     key(ENAGA_KEY_F4);
     key(ENAGA_KEY_F8);
     edit_page_to(Page::fltr);
-    // The curve is grey 13 and a lettered handle on it 15.
-    const auto top_row = [](int grey) {
-        for (int y = 50; y < 118; y++) {
-            for (int x = 0; x < kWaveColumns; x++) {
-                if (pixel_at(x, y) >= grey) return y;
-            }
+    // The cutoff line: the one column of grey 6 running the picture's height.
+    const auto cut_column = [] {
+        for (int x = 0; x < 120; x++) {
+            int n = 0;
+            for (int y = 30; y < 90; y++) n += pixel_at(x, y) == 6 ? 1 : 0;
+            if (n >= 20) return x;
         }
-        return 118;
+        return -1;
     };
-    post_cmd_track_param(0, 9, 0);                  // ENV 0: a static filter, a flat line
+    const auto right_of = [](int x0) {
+        int n = 0;
+        for (int y = 26; y < 96; y++) {
+            for (int x = x0; x < 120; x++) n += pixel_at(x, y) >= 4 && pixel_at(x, y) <= 6 ? 1 : 0;
+        }
+        return n;
+    };
+    post_cmd_track_param(0, 9, 0);                  // ENV 0: no sweep
+    post_cmd_track_param(0, 2, 40);                 // CUT low
     pump(4);
     draw_now();
-    int curve_top = 118;
-    for (int y = 50; y < 118 && curve_top == 118; y++) {
-        for (int x = 0; x < kWaveColumns; x++) curve_top = pixel_at(x, y) == 13 ? y : curve_top;
-    }
-    CHECK_EQ(curve_top, 117);
-    post_cmd_track_param(0, 9, 127);                // ENV full: the sweep to the top
+    const int low = cut_column();
+    CHECK(low > 0);
+    const int still = right_of(low + 4);
+    post_cmd_track_param(0, 9, 127);                // ENV full: the open curve, dim, to the right
     pump(4);
     draw_now();
-    CHECK_EQ(top_row(13), 50);
+    CHECK(right_of(low + 4) > still + 20);
     check_layout(app, "EDIT FLTR, VA MONO");
-    // FDE 0 is tied to DEC, and the line says so.
+    post_cmd_track_param(0, 2, 90);                 // CUT up: the line moves right
+    pump(4);
+    draw_now();
+    CHECK(cut_column() > low + 10);
+    // FDE 0 is tied to DEC, and the hint says so.
     post_cmd_track_param(0, kSlotFdec, 0);
     pump(4);
     CHECK(screen_has(app, "FDE 0: 0.55 X DEC"));
-    // ENV is knob C on this page, FDE knob D: both lettered.
-    bool c = false, d = false;
+    // CUT is knob A on this page: its letter at the line.
+    bool a = false;
     for (int i = 0; i < FakeHost::the().text_count(); i++) {
         const FakeHost::TextDraw &t = FakeHost::the().text_draw(i);
-        if (t.y < 50) continue;
-        c = c || std::strcmp(t.text, "C") == 0;
-        d = d || std::strcmp(t.text, "D") == 0;
+        a = a || (t.y >= 26 && t.y < 102 && std::strcmp(t.text, "A") == 0);
     }
-    CHECK(c);
-    CHECK(d);
+    CHECK(a);
     back_to_a_kick();
 }
 
@@ -9428,7 +9544,7 @@ TEST(ui_envelope_on_asr_holds_when_sus_is_up) {
     CHECK(screen_has(app, "HOLDS: PAD OR LEN"));
     draw_now();
     int plateau = 0;
-    for (int x = 0; x < kWaveColumns; x++) plateau += pixel_at(x, 83) == 13 ? 1 : 0;
+    for (int x = 0; x < kWaveColumns; x++) plateau += pixel_at(x, 67) >= 9 ? 1 : 0;
     CHECK(plateau >= 15);
     check_layout(app, "EDIT ASR, VA POLY holding");
     // A drum has no ASR: the page says so and draws nothing.
@@ -9488,7 +9604,7 @@ TEST(ui_wave_src_draws_the_table_as_a_waterfall) {
     check_layout(app, "EDIT SRC, WAVE MONO, the waterfall");
     const auto count = [](int grey) {
         int n = 0;
-        for (int y = 50; y < 118; y++) {
+        for (int y = 24; y < 102; y++) {
             for (int x = 0; x < 124; x++) n += pixel_at(x, y) >= grey;
         }
         return n;
@@ -9498,7 +9614,7 @@ TEST(ui_wave_src_draws_the_table_as_a_waterfall) {
     // POS to the back: the brightest frame moves up and right.
     const auto bright_x = [] {
         int sum = 0, n = 0;
-        for (int y = 50; y < 100; y++) {                    // the stack, not LIVE
+        for (int y = 24; y < 86; y++) {                     // the stack, not LIVE
             for (int x = 0; x < 124; x++) {
                 if (pixel_at(x, y) >= 10) { sum += x; n++; }
             }
@@ -9516,8 +9632,8 @@ TEST(ui_wave_src_draws_the_table_as_a_waterfall) {
     key(ENAGA_KEY_F4);
 }
 
-// EDIT's LFO page (app/ui_live.hpp): off, the hint at y 50 and no picture; on, the NOW line moves
-// up to y 87 over the shape with a dot riding it and a strip of what the LFO put out.
+// EDIT's LFO page (app/ui_editview.hpp): off, the shape dim with no dot and the hint; on, a dot
+// riding the shape in its box, and the strip beside it filling with what the LFO put out.
 TEST(ui_the_lfo_page_draws_its_shape_with_the_phase_riding_it) {
     Strata &app = fresh();
     key(ENAGA_KEY_F4);
@@ -9525,11 +9641,15 @@ TEST(ui_the_lfo_page_draws_its_shape_with_the_phase_riding_it) {
     edit_page_to(Page::lfo);
     draw_now();
     CHECK(screen_has(app, "LFO OFF: SET DEP+DST"));
-    int lit = 0;
-    for (int y = 50; y < 118; y++) {
-        for (int x = 0; x < 124; x++) lit += pixel_at(x, y) != 0;
-    }
-    CHECK_EQ(lit, 0);
+    const auto count = [](int x0, int x1, int at_least) {
+        int n = 0;
+        for (int y = 29; y < 88; y++) {
+            for (int x = x0; x <= x1; x++) n += pixel_at(x, y) >= at_least;
+        }
+        return n;
+    };
+    CHECK_EQ(count(1, 77, 15), 0);                         // no dot
+    CHECK(count(1, 77, 3) >= 60);                          // but the shape
 
     post_cmd_track_param(0, kLfoWave, lfo_wave_byte(LfoWave::triangle));
     post_cmd_track_param(0, kLfoRate, 40);
@@ -9541,23 +9661,8 @@ TEST(ui_the_lfo_page_draws_its_shape_with_the_phase_riding_it) {
         pump(40);
         draw_now();
     }
-    bool now_at_41 = false;
-    for (int i = 0; i < FakeHost::the().text_count(); i++) {
-        const FakeHost::TextDraw &d = FakeHost::the().text_draw(i);
-        if (std::strncmp(d.text, "NOW ", 4) == 0) now_at_41 = d.y == 41;
-    }
-    CHECK(now_at_41);
-    int dot = 0, shape = 0, strip = 0;
-    for (int y = 50; y < 118; y++) {
-        for (int x = 0; x < 80; x++) {
-            dot += pixel_at(x, y) == 15;
-            shape += pixel_at(x, y) >= 4;
-        }
-        for (int x = 84; x < 124; x++) strip += pixel_at(x, y) >= 6;
-    }
-    CHECK(dot >= 1);
-    CHECK(shape >= 60);
-    CHECK(strip >= 25);
+    CHECK(count(1, 77, 15) >= 1);                          // the dot
+    CHECK(count(83, 118, 6) >= 25);                        // the strip
     check_layout(app, "EDIT LFO, running");
 
     post_cmd_track_param(0, kLfoDepth, 0);
