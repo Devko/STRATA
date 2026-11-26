@@ -15,8 +15,8 @@ another, small labels end by x 125, two small labels on a line keep 2 blank pixe
 
 - **Drawn from what the audio side publishes** (`Status`, the scope ring) or from settings. Nothing
   in draw() walks a pattern's memory beyond the page on screen, a sample, or a file. PROJECT's
-  slots are the one exception, and spread it out: five patterns' steps and one bank's "holds a
-  pattern" bits a frame, into a cache (below).
+  slots are the one exception: the shown bank's sixteen and one other bank's "holds a pattern"
+  bits a frame, into a cache (below).
 - **Stopped, a screen holds still and still looks right**: pictures are drawn from their knobs;
   analysers (spectrum, scope, meters) sit at rest; nothing moves on a timer of its own. Moving
   parts come from the audio side (an LFO's phase, a grain, a note's envelope) or from the running
@@ -107,9 +107,10 @@ Pictures by page and machine:
 | 61-115 | the shown bank's sixteen tiles, 29 x 13, 30 and 14 apart: the number (a lit badge when it plays) and the pattern's steps as 16 columns by 8 track rows (a 64-step track folds four steps a column); the playing one brighter with a playhead column (the selected track's step) while running; a queued one's underline blinking; the cursor a white frame; an empty slot dotted with `--` |
 | 121 | tabs: SLOT CHAIN PAT SETUP PROJS |
 
-A pattern is a few KiB, so the map and the tiles draw from a cache (`refresh_slot_cache`): the
-shown bank's tiles are read four a frame and the playing one every frame, the shown bank whole
-when it changes, and every other bank's bits one bank a frame: 400 ms for the whole map.
+The map and the tiles draw from a cache (`refresh_slot_cache`): the shown bank's sixteen are
+read every frame, the other banks' "holds a pattern" bits one bank a frame (400 ms for all seven),
+and every bank in the first frame the screen is up after another, so a screen nobody touches
+holds still.
 
 ## MACHINE (app/ui_pickview.hpp)
 

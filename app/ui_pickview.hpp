@@ -34,45 +34,52 @@
         }
     }
 
-    // The cache the map and the tiles draw from. A pattern is a few KiB, so reading all 128 a
-    // frame would cost more than the rest of the screen: the shown bank's tiles are read four a
-    // frame (and the playing one every frame), the other banks' "holds a pattern" bits one bank
-    // a frame. A whole refresh takes 8 frames, 400 ms.
-    void refresh_slot_cache(int live_bank, int live_slot) {
-        const Project &project = engine_.project();
-        if (thumb_bank_ != shown_bank_) {
-            thumb_bank_ = shown_bank_;
-            for (int s = 0; s < kPatternsPerBank; s++) {
-                pattern_columns(project.patterns[shown_bank_][s], slot_thumb_[s]);
-            }
-        } else {
-            for (int k = 0; k < 4; k++) {
-                thumb_next_ = (thumb_next_ + 1) % kPatternsPerBank;
-                pattern_columns(project.patterns[shown_bank_][thumb_next_], slot_thumb_[thumb_next_]);
-            }
-            if (live_bank == shown_bank_) {
-                pattern_columns(project.patterns[live_bank][live_slot], slot_thumb_[live_slot]);
+    // Does the pattern hold a trig (or a trigless lock) on any track? Stops at the first.
+    static bool pattern_used(const Pattern &pattern) {
+        for (int t = 0; t < kTracks; t++) {
+            const TrackPattern &track = pattern.tracks[t];
+            const int length = track.length > kStepsPerTrack ? kStepsPerTrack : int(track.length);
+            for (int i = 0; i < length; i++) {
+                if (track.steps[i].flags & (kStepTrig | kStepTrigless)) return true;
             }
         }
+        return false;
+    }
+
+    static uint16_t bank_bits(const Project &project, int bank) {
+        uint16_t bits = 0;
+        for (int s = 0; s < kPatternsPerBank; s++) {
+            if (pattern_used(project.patterns[bank][s])) bits = uint16_t(bits | (1u << s));
+        }
+        return bits;
+    }
+
+    // The cache the map and the tiles draw from. The shown bank's sixteen are read whole every
+    // frame (they are what the tiles draw). The other banks' "holds a pattern" bits are read one
+    // bank a frame, 400 ms for all seven, and all of them in the first frame the screen is up
+    // after another: a map that changed while something else was on screen is right at once,
+    // and a screen nobody touches holds still (tests/test_ui.cpp's input audit).
+    void refresh_slot_cache() {
+        const Project &project = engine_.project();
+        const bool entered = slots_frame_ + 1u != draw_frame_;
+        slots_frame_ = draw_frame_;
         uint16_t used = 0;
         for (int s = 0; s < kPatternsPerBank; s++) {
+            pattern_columns(project.patterns[shown_bank_][s], slot_thumb_[s]);
             uint8_t any = 0;
             for (int c = 0; c < 16; c++) any |= slot_thumb_[s][c];
             if (any) used = uint16_t(used | (1u << s));
         }
         bank_used_[shown_bank_] = used;
-
+        if (entered) {
+            for (int b = 0; b < kBanks; b++) {
+                if (b != shown_bank_) bank_used_[b] = bank_bits(project, b);
+            }
+            return;
+        }
         used_next_ = (used_next_ + 1) % kBanks;
         if (used_next_ == shown_bank_) used_next_ = (used_next_ + 1) % kBanks;
-        uint16_t bits = 0;
-        uint8_t columns[16];
-        for (int s = 0; s < kPatternsPerBank; s++) {
-            pattern_columns(project.patterns[used_next_][s], columns);
-            uint8_t any = 0;
-            for (int c = 0; c < 16; c++) any |= columns[c];
-            if (any) bits = uint16_t(bits | (1u << s));
-        }
-        bank_used_[used_next_] = bits;
+        bank_used_[used_next_] = bank_bits(project, used_next_);
     }
 
     // What the queue blinks on: eighth notes of the running clock, so a stopped screen holds
@@ -95,7 +102,7 @@
         const int queued_bank = int(queue.bank);
         const int queued_slot = int(queue.slot);
         const bool blink = queue_blink_on();
-        refresh_slot_cache(live_bank, live_slot);
+        refresh_slot_cache();
 
         // The caption: the project at the left; at the right what the card side is doing, what
         // went wrong last, or UNSAVED. An unsaved project that looked saved is the worst outcome
