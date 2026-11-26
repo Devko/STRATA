@@ -228,7 +228,7 @@ int arp_cycle(const uint8_t *notes, int count, const ArpSettings &settings, uint
 
     // Up through the octaves.
     uint8_t up[kArpMaxInput * kArpMaxOctaves];
-    uint8_t walk[kArpMaxWalk];
+    uint8_t walk[kArpMaxWalk] = {};    // zeroed: GCC -O1 cannot see that the walk is never empty
     int length = 0;
     const int octaves = settings.octaves < 1 ? 1
                         : (settings.octaves > kArpMaxOctaves ? kArpMaxOctaves : settings.octaves);
