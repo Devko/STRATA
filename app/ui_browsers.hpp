@@ -69,70 +69,7 @@
         }
     }
 
-    void draw_machine(enaga::Canvas &canvas) {
-        char line[40];
-        char *out = line;
-        append(out, "MACHINE T");
-        append_number(out, uint32_t(selected_) + 1);
-        append(out, "  ");
-        append(out, machine_name(engine_.machine_id(selected_)));
-        *out = 0;
-        paint::small_text(canvas.data(), 0, 19, line, 15);
-
-        // All eight tracks at once, because the question anyone in this mode is asking is "what
-        // is this kit", not "what is this track". Four to a line: eight names are 31 characters.
-        for (int half = 0; half < 2; half++) {
-            out = line;
-            append_number(out, uint32_t(half * 4 + 1));
-            *out++ = '-';
-            append_number(out, uint32_t(half * 4 + 4));
-            for (int t = half * 4; t < half * 4 + 4; t++) {
-                *out++ = ' ';
-                append(out, machine_name(engine_.machine_id(t)));
-            }
-            *out = 0;
-            canvas.text(0, 30 + half * 9, line, 10);
-        }
-
-        // The machines as a list, the selected track's lit: UP and DOWN (or A) walk it, which is
-        // the cursor the arrows move everywhere else. Columns of three, read down: three rows is
-        // all there is room for above MIDI OUT, so the columns narrowed to five when the WAVE
-        // pair made eleven machines (fifteen fit).
-        static_assert(int(MachineId::count) <= 15, "the MACHINE list holds five columns of three");
-        const int current = int(engine_.machine_id(selected_));
-        for (int m = 0; m < int(MachineId::count); m++) {
-            const int x = (m / 3) * 25;
-            const int y = 50 + (m % 3) * 12;
-            const bool on = m == current;
-            canvas.rect(x + 1, y, 23, 11, on ? 10 : 2);
-            canvas.text(x + 3, y + 2, machine_name(uint8_t(m)), on ? 0 : 11);
-        }
-
-        // The track's MIDI OUT channel, on encoder B: OFF, or the channel its notes are sent on
-        // (core/midiout.hpp). Shown for every machine because every machine can send; on MID it
-        // is the whole point, so a MID track with it OFF says so louder.
-        const uint8_t channel = engine_.midi_out(selected_);
-        out = line;
-        append(out, "B: MIDI OUT ");
-        if (channel == kMidiOutOff) {
-            append(out, "OFF");
-        } else {
-            append(out, "CH ");
-            append_number(out, uint32_t(channel));
-        }
-        *out = 0;
-        const bool silent = channel == kMidiOutOff &&
-                            engine_.machine_id(selected_) == uint8_t(MachineId::midi);
-        canvas.text(0, 89, line, silent ? 15 : 12);
-
-        canvas.text(0, 103,
-                    plays_files(selected_)
-                        ? "OK: PICK SAMPLE"
-                        : (sound_preset_count(engine_.machine_id(selected_)) > 0 ? "OK: SOUNDS"
-                                                                                 : "ARROWS: MACHINE"),
-                    7);
-        paint::small_text(canvas.data(), 0, 113, "FUNC+EDIT AGAIN: KITS", 10);
-    }
+    // MACHINE is drawn in app/ui_pickview.hpp.
 
     // --- SOUNDS: the factory sounds (OK on a drum, synth or GRAIN track) ---
     //
