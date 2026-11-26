@@ -67,6 +67,12 @@ What it does, refusing at the first thing that is wrong:
 - [ ] Merge the release PR.
 - [ ] Update the README's "Status" section (current release and date) and, if the release changes
       the install steps or the Enaga version, the README's "Try it" and `docs/INSTALL.md`.
+- [ ] Add the release to the card builder: a new first entry in `web/public/compat.json` with
+      its version, date, the zip's SHA-256 (the `.sha256` file on the release page) and the Enaga
+      version it needs. A new Enaga version also needs its own entry under `"enaga"`, with the
+      SHA-256 of `enaga-vX.Y.Z-smpltrek.zip` as downloaded from Enaga's release.
+      `cd web && npm test` checks the list. The site redeploys when that reaches `main`
+      ([web/README.md](../../web/README.md)).
 - [ ] Optional, and worth it: download the zip from the release page, unzip it onto a freshly
       formatted card, install, and play A01.
 
