@@ -694,6 +694,11 @@ private:
     uint8_t perf_amount_ = 0;
     // FX GLIDE (the FUNC menu row) and its rides: the effect's, and the loop mix's.
     PerfGlide perf_glide_ = kPerfGlideDefault;
+    // The FUNC menu's CLICK and COUNT-IN (dsp/click.hpp). Not saved, as FX GLIDE is not. The
+    // count-in is used by a PLAY from stop with REC on, under the internal clock.
+    bool click_on_ = false;
+    uint8_t count_in_bars_ = 0;
+    uint8_t count_in_shown_ = 0;                // the beat the count-in notice last said
     PerfRide perf_ride_{};
     bool perf_riding_ = false;
     uint32_t perf_ride_ms_ = 0;

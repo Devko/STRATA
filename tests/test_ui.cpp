@@ -276,8 +276,8 @@ void open_keys() {
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuPlay, kMenuChain, kMenuSong,
-                     kMenuAutofill, kMenuQuantize, kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo,
-                     kMenuRowCount };
+                     kMenuAutofill, kMenuQuantize, kMenuClick, kMenuCountIn, kMenuGlide, kMenuFreeze,
+                     kMenuLoopLen, kMenuDemo, kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
 void menu_to(int row) {
@@ -8588,6 +8588,110 @@ TEST(ui_the_duck_pages_set_each_tracks_depth_the_source_and_the_times) {
     pump(2);
     CHECK_EQ(int(kit.duck.source), source);
     CHECK_EQ(int(kit.duck.release), release);
+}
+
+TEST(ui_click_and_count_in_rows_and_play_with_rec_counts_in) {
+    // The FUNC menu's CLICK flips, COUNT-IN walks OFF 1 BAR 2 BAR; PLAY from stop with REC on
+    // arms the count-in before it starts the clock, and without REC it does not.
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    FakeHost::the().set_running(false);
+    menu_to(kMenuClick);
+    CHECK(screen_has(app, "CLICK"));
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "CLICK ON") == 0);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN 1 BAR") == 0);
+    key(ENAGA_KEY_RIGHT);
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN 2 BAR") == 0);
+    key(ENAGA_KEY_RIGHT);
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN OFF") == 0);
+    key(ENAGA_KEY_OK);                         // OK steps on and round: 1 BAR
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN 1 BAR") == 0);
+    key(ENAGA_KEY_CLR);
+
+    // PLAY without REC: a plain start.
+    key(ENAGA_KEY_F5);
+    pump(2);
+    CHECK(FakeHost::the().running());
+    CHECK_EQ(int(engine.status().count_in_ticks.load()), 0);
+    key(ENAGA_KEY_F6);
+    pump(2);
+
+    // With REC: one bar of count-in, and the notice counts it down.
+    if (!UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    key(ENAGA_KEY_F5);
+    pump(2);
+    CHECK(FakeHost::the().running());
+    CHECK_EQ(int(engine.status().count_in_ticks.load()), int(kTicksPerBar));
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    app.update(1000);
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN 4") == 0);
+
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F6);
+    pump(2);
+    if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    menu_to(kMenuCountIn);
+    key(ENAGA_KEY_LEFT);                       // from 1 BAR back to OFF
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN OFF") == 0);
+    key(ENAGA_KEY_CLR);
+    menu_run(kMenuClick);
+    CHECK(std::strcmp(UiProbe::notice(app), "CLICK OFF") == 0);
+    key(ENAGA_KEY_CLR);
+}
+
+TEST(ui_push_on_the_fader_pages_steps_a_tracks_choke_group) {
+    // Choke groups (S4): push A-D on TRK 1-4 / TRK 5-8 steps that strip's track through OFF,
+    // 1, 2, 3, 4 and round; the desk shows the group under the machine.
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    const Kit &kit = engine.project().kit;
+    for (uint8_t t = 0; t < kTracks; t++) strata::test::post(Cmd::set_choke, t, 0, 0);
+    pump(2);
+
+    mixer_page(app, 1);                                  // TRK 5-8: C is track 7
+    key(ENAGA_KEY_PUSH_C);
+    pump(2);
+    CHECK_EQ(int(kit.tracks[6].choke), 1);
+    CHECK(app_storage().dirty());
+    CHECK(std::strcmp(UiProbe::notice(app), "T7 CHOKE GROUP 1") == 0);
+    CHECK(screen_has(app, "C1"));
+    for (int i = 0; i < 3; i++) {
+        key(ENAGA_KEY_PUSH_C);
+        pump(2);
+    }
+    CHECK_EQ(int(kit.tracks[6].choke), 4);
+    CHECK(screen_has(app, "C4"));
+    key(ENAGA_KEY_PUSH_C);
+    pump(2);
+    CHECK_EQ(int(kit.tracks[6].choke), 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "T7 CHOKE OFF") == 0);
+    CHECK(!screen_has(app, "C4"));
+
+    // The push keys are numbered B A C D: each push lands on its own strip, and the steps are
+    // counted on the audio side (Cmd::set_choke c = 1), so nothing is lost between pumps.
+    mixer_page(app, 0);
+    key(ENAGA_KEY_PUSH_A);
+    key(ENAGA_KEY_PUSH_B);
+    key(ENAGA_KEY_PUSH_B);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.tracks[0].choke), 1);
+    CHECK_EQ(int(kit.tracks[1].choke), 2);   // two fast pushes are two steps
+    CHECK_EQ(int(kit.tracks[3].choke), 1);
+    CHECK_EQ(int(kit.tracks[2].choke), 0);
+
+    // Not on the other MIXER pages: the duck's depth pages keep their pushes.
+    mixer_page(app, kMixerDuckDepthPage);
+    key(ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(kit.tracks[0].choke), 1);
+
+    for (uint8_t t = 0; t < kTracks; t++) strata::test::post(Cmd::set_choke, t, 0, 0);
+    pump(2);
 }
 
 // --- the STEP lights show velocity (Roland, 2026-11-23) -------------------------------------

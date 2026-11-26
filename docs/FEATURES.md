@@ -127,8 +127,8 @@ FM4 and GRAIN machines.
 | Cutoff floor (~100 Hz) for LFO, morph and macros; LFO depth on a cutoff about +-3 octaves | D9 | ○ (W30) | The knob and locks still close a filter fully |
 | **Two MOD slots per track**: LFO, ENV (the LFO's shape once per note), VEL, PRS (pad pressure), RND (per note) to any sound, ENV or OSC parameter, signed depth; learnt by push C / D on the LFO page and a turn | #168 | ○ (W38) | A kit setting, not lockable; not on LFO or ARP knobs; on MID the slots reach the CCs |
 | Per-track arpeggiator: UP, DN, U/D, ORD, RND, 1/4-1/32T, 1-4 octaves, gate | v0.1.0 | ○ (13h) | On POLY it uses the shared voice budget |
-| **Arp VAR, RHYTHM, ACCENT, RATCHET** (push A-D on the ARP page): CONV DIVG THUMB PINKY; 11 rest patterns (rests hold the note); 7 accent patterns and CYC; ratchets 2-4 on fixed slots or by chance | this PR | ○ (W47) | Kit settings (KIT.BIN section 12), not lockable or scene-able |
-| **ARPS**: OK on the ARP page loads one of 14 factory arps (all eight settings) into one track, AS WAS puts it back | this PR | ○ (W47) | Any machine |
+| **Arp VAR, RHYTHM, ACCENT, RATCHET** (push A-D on the ARP page): CONV DIVG THUMB PINKY; 11 rest patterns (rests hold the note); 7 accent patterns and CYC; ratchets 2-4 on fixed slots or by chance | #184 | ○ (W48) | Kit settings (KIT.BIN section 12), not lockable or scene-able |
+| **ARPS**: OK on the ARP page loads one of 14 factory arps (all eight settings) into one track, AS WAS puts it back | #184 | ○ (W48) | Any machine |
 | Banks A-H x 16 patterns, queued changes (END, 16, 32, NOW) | v0.1.0 | ◐ (3b) | |
 | Chain of up to 64 entries, repeats X1-X16 | v0.1.0 | ○ (3b, 12) | |
 | **Song mode**: per-entry mute recall, SONG plays once and stops | v0.1.0 | ○ (13i) | |
@@ -167,6 +167,8 @@ FM4 and GRAIN machines.
 | --- | --- | --- | --- |
 | Insert chain per track: drive, filter (LP/BP/HP 12/24), lo-fi, amp, duck, pan, level | v0.1.0 | ◐ | Off stages cost nothing |
 | **Sidechain duck**, editable: depth per track, source track, attack/hold/release | v0.1.0, editable since #89 | ○ (13l) | MIXER pages DCK 1-4, DCK 5-8, DUCK. Saved in the kit (KIT.BIN section 6; older kits open with the v0.1.0 duck: track 1, 35%, 3/40/120 ms). Not p-lockable, not in scenes or macros: a lock slot would change the pattern and scene file layouts |
+| **CLICK and COUNT-IN**: a metronome, and 1 or 2 bars clicked before a PLAY with REC on (CyDrums S6) | #182 | ○ (W47) | FUNC menu rows. STRATA's own click (Enaga has none), 1 kHz / 1.6 kHz on a bar, after RESAMPLE's tap, so never recorded. A count-in starts the clock at once and holds the sequencer, rolls, stutter and arps for its bars. Internal clock only. Not saved |
+| **Choke groups** 1-4 for any track: a note cuts the other tracks of its group (CyDrums S4) | #181 | ○ (W46) | Push A-D on MIXER's TRK pages; `C1`-`C4` on the strip. A 64-frame fade on the track's output, then its voices are cut. Two notes of a group on the same frame both sound (a block renders whole). Saved in the kit (KIT.BIN section 11; older kits have no groups) |
 | Send A: tempo-synced ping-pong delay | v0.1.0 | ◐ (13c / U4) | |
 | Send A **LONG** mode: up to 12 s, wow, diffusion, low cut, true freeze | v0.1.0 | ○ (13j) | ~2x the send's CPU while it rings; load host-estimated only (E11 owed) |
 | Send B: reverb | v0.1.0 | ◐ | |
@@ -220,7 +222,7 @@ FM4 and GRAIN machines.
 | Damaged files refused, never crash | v0.1.0 | ○ (M4) | Card pulled mid-save not tried on the unit |
 | Factory (demo) project: 130 BPM C minor kit, A01-A05, chain, 3 scenes, 3 macros, 8 mute states; a first start and LOAD DEMO | v0.1.0 | ✔ A01 plays; ◐ the rest (3b) | Track 8 plays a placeholder until given a sample |
 | Factory pattern A05 PAD: held VA POLY chords from the ENV page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
-| Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 116 ready-made sounds (KCK 10, SNR 10, HAT 11, PRC 12, MNO 14, PLY 12, WMN 12, WPL 12, FM4 12, GRN 11) into one track, AS WAS puts it back | #102, #118, #122, #126, #134, this PR | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
+| Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 116 ready-made sounds (KCK 10, SNR 10, HAT 11, PRC 12, MNO 14, PLY 12, WMN 12, WPL 12, FM4 12, GRN 11) into one track, AS WAS puts it back | #102, #118, #122, #126, #134, #184 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
 
 ---
 

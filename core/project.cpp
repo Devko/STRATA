@@ -39,9 +39,9 @@
 //         1  64  each chain entry's mute recall: 0 none, 1-8 that stored mute state
 //     midi (id 6), 8 bytes: each track's MIDI OUT channel, 0 off or 1-16
 //
-// KIT.BIN, eleven sections: the tracks (1,076 bytes alone), then the optional LFO, arp, SLC AUTO,
-// ASR, duck, OSC, filter-layout, LFO TRIG, mod-slot and arp-setting sections, each of which an
-// older file may lack.
+// KIT.BIN, twelve sections: the tracks (1,076 bytes alone), then the optional LFO, arp, SLC AUTO,
+// ASR, duck, OSC, filter-layout, LFO TRIG, mod-slot, choke and arp-setting sections, each of
+// which an older file may lack.
 //
 //     tracks (id 1), 8 x 131 bytes
 //         0  16  the 16 parameters, 0..127
@@ -65,6 +65,7 @@
 //         0   1  source, 0 OFF .. 5 RND
 //         1   1  destination, a track parameter index
 //         2   1  depth, -127..127 as a two's-complement byte
+//     choke (id 11), 8 x 1 byte: KitTrack::choke, 0 none or a group 1-4
 //     arp ext (id 12), 8 x 4 bytes: KitTrack::arp, VAR RHYTHM ACCENT RATCHET (core/arp.hpp)
 //
 // BANK_x.BIN, one section holding 16 patterns, each one `pattern_write`'s own container back to
@@ -350,11 +351,12 @@ static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
-constexpr uint32_t kKitSections = 11;
+constexpr uint32_t kKitSections = 12;
 // The second to eleventh, the LFO, the arp, SLC AUTO, the ASR page, the duck, the OSC page, the
-// filter layout, LFO TRIG, the mod slots and the arp's settings, are optional on read: see
+// filter layout, LFO TRIG, the mod slots, the choke groups and the arp's settings, are optional
+// on read: see
 // kSectionKitLfo.
-constexpr uint32_t kKitOptionalSections = 10;
+constexpr uint32_t kKitOptionalSections = 11;
 constexpr uint32_t kKitTrackBytes =
     uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
@@ -379,8 +381,10 @@ constexpr uint32_t kKitLfoTrigOffset = kKitFilterOffset + kKitFilterBytes;
 constexpr uint32_t kKitModSlotBytes = 3;
 constexpr uint32_t kKitModBytes = kKitModSlotBytes * uint32_t(kModSlots) * uint32_t(kTracks);
 constexpr uint32_t kKitModOffset = kKitLfoTrigOffset + kKitLfoTrigBytes;
+constexpr uint32_t kKitChokeBytes = uint32_t(kTracks);
+constexpr uint32_t kKitChokeOffset = kKitModOffset + kKitModBytes;
 constexpr uint32_t kKitArpExtBytes = uint32_t(kArpExtFields) * uint32_t(kTracks);
-constexpr uint32_t kKitArpExtOffset = kKitModOffset + kKitModBytes;
+constexpr uint32_t kKitArpExtOffset = kKitChokeOffset + kKitChokeBytes;
 constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitArpExtOffset + kKitArpExtBytes;
 static_assert(kKitSoundParams == 16, "KIT.BIN's track section has carried 16 parameters since M4");
 
@@ -746,6 +750,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
         {kSectionKitFilter, kKitFilterOffset, kKitFilterBytes},
         {kSectionKitLfoTrig, kKitLfoTrigOffset, kKitLfoTrigBytes},
         {kSectionKitMod, kKitModOffset, kKitModBytes},
+        {kSectionKitChoke, kKitChokeOffset, kKitChokeBytes},
         {kSectionKitArpExt, kKitArpExtOffset, kKitArpExtBytes},
     };
 
@@ -787,6 +792,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
             w.u8(uint8_t(slot.depth));
         }
     }
+    for (int t = 0; t < kTracks; t++) w.u8(choke_group_sanitized(kit.tracks[t].choke));
     for (int t = 0; t < kTracks; t++) {
         for (int f = 0; f < kArpExtFields; f++) w.u8(arp_ext_get(kit.tracks[t].arp, f));
     }
@@ -804,7 +810,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     const uint16_t wanted[kKitSections] = {kSectionKitTracks, kSectionKitLfo, kSectionKitArp,
                                            kSectionKitSlices, kSectionKitAsr, kSectionKitDuck,
                                            kSectionKitOsc, kSectionKitFilter, kSectionKitLfoTrig,
-                                           kSectionKitMod, kSectionKitArpExt};
+                                           kSectionKitMod, kSectionKitChoke, kSectionKitArpExt};
     uint32_t offset[kKitSections] = {};
     uint32_t length[kKitSections] = {};
     const SerializeResult found = find_sections(buffer, size, kKitVersion, wanted, kKitSections,
@@ -821,7 +827,8 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (offset[7] != 0 && length[7] < kKitFilterBytes) return refuse(SerializeResult::malformed);
     if (offset[8] != 0 && length[8] < kKitLfoTrigBytes) return refuse(SerializeResult::malformed);
     if (offset[9] != 0 && length[9] < kKitModBytes) return refuse(SerializeResult::malformed);
-    if (offset[10] != 0 && length[10] < kKitArpExtBytes) return refuse(SerializeResult::malformed);
+    if (offset[10] != 0 && length[10] < kKitChokeBytes) return refuse(SerializeResult::malformed);
+    if (offset[11] != 0 && length[11] < kKitArpExtBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -960,11 +967,20 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
 
+    // The choke groups. Absent is a kit from before them: no track in a group, set explicitly as
+    // TRIG is. A byte past the last group is damage and reads as none.
+    for (int t = 0; t < kTracks; t++) kit.tracks[t].choke = 0;
+    if (offset[10] != 0) {
+        if (!r.seek(kHeaderBytes + offset[10])) return refuse(SerializeResult::malformed);
+        for (int t = 0; t < kTracks; t++) kit.tracks[t].choke = choke_group_sanitized(r.u8());
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
     // The arp's settings. Absent is a kit from before them: all four 0 on every track, the arp
     // as it played before. A value past its table is damage and reads as 0.
     for (int t = 0; t < kTracks; t++) kit.tracks[t].arp = KitArp{};
-    if (offset[10] != 0) {
-        if (!r.seek(kHeaderBytes + offset[10])) return refuse(SerializeResult::malformed);
+    if (offset[11] != 0) {
+        if (!r.seek(kHeaderBytes + offset[11])) return refuse(SerializeResult::malformed);
         for (int t = 0; t < kTracks; t++) {
             KitArp arp;
             for (int f = 0; f < kArpExtFields; f++) arp_ext_set(arp, f, r.u8());

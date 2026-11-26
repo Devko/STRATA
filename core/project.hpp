@@ -343,11 +343,21 @@ struct KitTrack {
     // The two mod slots (core/modslot.hpp): a source, a destination and a depth each, learnt on
     // the LFO page. Kit settings for the same reason as TRIG; KIT.BIN's optional section 10.
     KitModSlot mod[kModSlots];
+    // CHOKE (S4): 0 none, or a group 1-kChokeGroups. A note on this track cuts every other
+    // track of the same group with a 64-frame fade (Engine::choke_group). A kit setting, not a
+    // parameter, for TRIG's reason; KIT.BIN's optional section 11.
+    uint8_t choke = 0;
     // The arp's kit settings (core/arp.hpp): VAR, RHYTHM, ACCENT and RATCHET, pushed round on the
     // ARP page or set by an ARPS preset. Not parameters, for TRIG's reason; KIT.BIN's optional
     // section 12.
     KitArp arp;
 };
+
+// Choke groups (KitTrack::choke): 1-4, 0 none. A byte past the last group reads as none.
+constexpr uint8_t kChokeGroups = 4;
+constexpr uint8_t choke_group_sanitized(uint8_t group) {
+    return group <= kChokeGroups ? group : uint8_t(0);
+}
 
 // LFO TRIG's values, as KIT.BIN stores them: PERMANENT. dsp/lfo.hpp's LfoTrig mirrors them and
 // app/ asserts the two agree. Anything else reads as FREE.
@@ -589,7 +599,9 @@ constexpr uint16_t kSectionKitLfoTrig = 9;
 // The mod slots, 3 bytes a slot, two slots a track (KitTrack::mod). Optional on read: a KIT.BIN
 // from before them loads every slot OFF, which changes no sound.
 constexpr uint16_t kSectionKitMod = 10;
-// Number 11 is taken by the choke groups (PR #181).
+// The choke groups, one byte per track (KitTrack::choke). Optional on read: a KIT.BIN from before
+// them loads every track in no group, which is how every track played before.
+constexpr uint16_t kSectionKitChoke = 11;
 // The arp's kit settings, 4 bytes a track (KitTrack::arp: VAR RHYTHM ACCENT RATCHET). Optional
 // on read: a KIT.BIN from before it loads every arp with all four 0, the arp as it always played.
 constexpr uint16_t kSectionKitArpExt = 12;

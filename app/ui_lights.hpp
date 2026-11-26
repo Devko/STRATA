@@ -93,9 +93,13 @@
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;          // nothing to record onto
+        // A count-in is the player's lead-in, not the pattern: nothing records until it ends.
+        const Status &status = engine_.status();
+        const uint32_t lead = status.count_in_ticks.load(std::memory_order_relaxed);
+        if (clock.position < lead) return;
 
         Stamp now;
-        now.tick = clock.position;
+        now.tick = clock.position - lead;    // the pattern's position, as the scheduler's
         now.fraction = clock.fraction;
         const Stamp hit = stamp_back(now, kPadLatencyMs, clock.tempo);
 
@@ -167,8 +171,9 @@
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;
+        const uint32_t lead = engine_.status().count_in_ticks.load(std::memory_order_relaxed);
         Stamp up;
-        up.tick = clock.position;
+        up.tick = clock.position > lead ? clock.position - lead : 0u;
         up.fraction = clock.fraction;
 
         const TrackPattern &source = engine_.pattern().tracks[track];
@@ -222,6 +227,20 @@
         last_ms_ = ms;
 
         service_slot_menu();
+
+        // A count-in says its beats as it clicks them (`COUNT-IN 4` .. `1`), logged for
+        // tests/scenario_click.sh.
+        const uint8_t counting = engine_.status().count_in_beats.load(std::memory_order_relaxed);
+        if (counting != count_in_shown_) {
+            count_in_shown_ = counting;
+            if (counting != 0) {
+                char *out = notice_buffer_;
+                append(out, "COUNT-IN ");
+                append_number(out, uint32_t(counting));
+                *out = 0;
+                notice_logged(notice_buffer_);
+            }
+        }
 
         // A LEN key held with FUNC repeats. Late passes catch up one step at a time, never in
         // a burst: a 900 ms stall in a save is one step, not eighteen.

@@ -149,6 +149,14 @@ enum class Cmd : uint8_t {
     set_stream,        // track
     stream_attach,     // track, a|b: Status::stream_want's value it answers
 
+    // The metronome (dsp/click.hpp): a: 0 OFF, 1 ON. Not saved.
+    set_click,         // a: on
+    // A count-in for the next START: a: bars, 0 none. Posted BEFORE enaga::clock::start(), so
+    // the audio side has it when the first tick comes; posted again with 0 if the start was
+    // refused. The first a x 384 ticks then only click, and everything else runs as if the
+    // clock had started when they end (Engine::count_in_end_).
+    count_in,          // a: bars
+
     // --- kit and sound ---
     set_param,         // track, a: param index, b: value; or c = 1: b is an int8 delta
     set_track_level,   // track, f: level; or c = 1: f is a delta, the result clamped to 1.5
@@ -161,6 +169,10 @@ enum class Cmd : uint8_t {
     // (kModSrcOff..kModSrcRnd), c: the destination parameter, d: the depth as an int8. Sanitized as a
     // file's slot is, so a bad one lands OFF.
     set_mod_slot,      // track, a: slot, b: source, c: dest, d: int8 depth
+    // A track's choke group (KitTrack::choke): a: 0 none or 1-4; or c = 1: one step on, OFF 1 2
+    // 3 4 OFF, decided on the audio side so two fast pushes are two steps. A note on the track
+    // cuts the others of its group (Engine::choke_group).
+    set_choke,         // track, a: group; or c = 1: step
     // A track pad's pressure, for a mod slot on PRS: a: 0-127, 0 when the pad is let go. Played,
     // not stored.
     set_pressure,      // track, a: pressure
@@ -488,6 +500,12 @@ using Commands = CommandRing<256>;
 // pair below is correct without an RMW.
 struct Status {
     std::atomic<uint32_t> tick{0};             // the clock's position, for the playhead
+    // COUNT-IN (Engine::count_in_end_): the beats still to click before the pattern starts, 0
+    // when none is running. While it is, `tick` stays 0 and nothing records.
+    std::atomic<uint8_t> count_in_beats{0};
+    // Ticks the pattern's position is behind the clock's: the count-in's length once it has
+    // run, 0 without one. The recorder subtracts it from the clock it stamps a hit with.
+    std::atomic<uint32_t> count_in_ticks{0};
     std::atomic<uint32_t> blocks{0};           // audio blocks processed, for liveness
     std::atomic<uint8_t> playhead[8] = {};     // per-track step, for the grid
     std::atomic<uint8_t> triggered[8] = {};    // bumped on each trig, for the pad LEDs

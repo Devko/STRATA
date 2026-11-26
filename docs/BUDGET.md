@@ -53,6 +53,25 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### CLICK and COUNT-IN (S6, 2026-11-26, emulator)
+
+The metronome (dsp/click.hpp, clickloops.ti.c) is a recursive sine under a decaying envelope,
+about 30 ms a beat, added to the output; nothing runs between clicks but one flag test a block.
+`scenario_click` turns CLICK on, counts one bar in with REC on and plays the default beat with
+the click: **25.82% cl6x, 47.64% GCC-only** (the beat alone: 25.90% / 43.20% in `scenario_m3`,
+47.14-47.55% GCC-only in the default-beat scenarios). All 43 scenarios pass with cl6x; worst
+**32.29%** (`scenario_ambient`, as before it).
+
+### Choke groups (S4, 2026-11-26, emulator)
+
+A choke costs one 64-frame gain ramp on the cut track's block (`strata_choke_fade`,
+dsp/chainloops.ti.c) and then frees its voices; nothing runs while no choke fades but one compare
+a track a block. `scenario_choke` puts the default beat's two hats in one group, so they cut
+each other all through the run: **26.57% cl6x** (the same peak as `scenario_m1` and the other
+default-beat scenarios), **47.55% GCC-only** (the beat alone read 47.14-47.19% on 2026-11-25).
+All 42 scenarios pass with cl6x; worst **32.26%** (`scenario_ambient`; 31.82-32.20% on `main`,
+within the half point a peak moves between runs), `scenario_m3` 25.90% cl6x, 43.20% GCC-only.
+
 ### Sample audition (2026-11-25, emulator)
 
 Push A in SAMPLES streams a WAV to the output (dsp/audition.hpp). All 41 scenarios pass with

@@ -86,7 +86,7 @@ Pictures by page and machine:
 
 | Page | Picture |
 | --- | --- |
-| TRK 1-4, TRK 5-8 | the desk: eight strips 15 px apart. The page's four with their knob's letter lit at y 19, the others' numbers dim; pan as a tick (rows 27-29); SNA and SNB as two thin bars (31, 33); the meter (x+1..x+5, rows 36-97, top 36 dB, peak held a second); the fader's slot (x+10) and cap at the level (0-1.2); the level (y 102) and the machine (y 110); a muted strip dim with a hollow cap |
+| TRK 1-4, TRK 5-8 | the desk: eight strips 15 px apart. The page's four with their knob's letter lit at y 19, the others' numbers dim; pan as a tick (rows 27-29); SNA and SNB as two thin bars (31, 33); the meter (x+1..x+5, rows 36-97, top 36 dB, peak held a second); the fader's slot (x+10) and cap at the level (0-1.2); the level (y 102) and the machine (y 110); the choke group as `C1`-`C4` (y 119) when the track is in one; a muted strip dim with a hollow cap |
 | DCK 1-4, DCK 5-8 | the desk with each track's duck depth hanging from the top, lit as far as the duck pulls now (the source's trigs through ATK, HLD and REL); the source's strip says `SRC` and flashes on its trigs |
 | DUCK | knob line; the gain over time (0 dB at the top, the floor at the bottom) through ATK, HLD and REL, the letters on its corners, a dot riding it after each source trig; `DUCKS UNDER Tn` |
 | DLY, DLY+ | one hit and its echoes over 2 s (8 s LONG), each as tall as FBK leaves it, wider as TON darkens, alternating up and down with ping-pong, wobbling with WOW, smeared with DIF; a head sweeping in time with the transport; the time in ms |

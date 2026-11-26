@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W47, about 147 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W48, about 153 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -538,8 +538,26 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   moves. MENU, SETUP, PROJECTS: no second line repeating the name. SETUP's `DRW ____ MS` after a
   while on KITS. `____`
 
-**W47. Arp depth, ARPS and the new sounds (10 min).** Beat playing, A05 PAD (W46 is the choke
-groups' if PR #181 is in; otherwise skip the number).
+**W46. Choke groups (3 min).** Beat playing, A01, the open hat on T4 sounding long.
+- MIXER, TRK 1-4. Push C: `T3 CHOKE GROUP 1`, `C1` under T3's machine. Push D: `T4 CHOKE GROUP 1`.
+  Now T3 and T4 cut each other both ways: the open hat stops dead (no click) on every closed hat,
+  and a closed hat stops when the open one hits. Steps on the same 16th both sound. `____`
+- Put T6 (the bass) in group 1 too (TRK 5-8, push B): every hat now cuts the bass and the bass
+  cuts the hats. Listen for clicks at the cut: there should be none. Push B four more times: back
+  to `T6 CHOKE OFF`, the bass rings over the hats again. `____`
+- Save the project, load another and back: T3 and T4 still say `C1`. `____`
+
+**W47. CLICK and COUNT-IN (3 min).** Beat stopped, A01.
+- FUNC + HOME, UP six times: CLICK. OK: `CLICK ON`. PLAY: a click on every beat over the beat, the
+  first of each bar higher. It sits on the kick, not before or after it. RESAMPLE a bar: the take
+  has no click in it. `____`
+- STOP. In the menu, DOWN to COUNT-IN, OK: `COUNT-IN 1 BAR`. CLR. REC on, PLAY: four clicks
+  (`COUNT-IN 4` .. `1`), then the beat starts on step 1 on the next beat. Hit pads during the
+  clicks: nothing is recorded. Hit them after: they land where played. `____`
+- CLICK OFF, COUNT-IN `2 BAR`, REC, PLAY: eight clicks even with CLICK off, then the beat. STOP
+  during the clicks: silence, and the next PLAY without REC starts at once. `____`
+
+**W48. Arp depth, ARPS and the new sounds (10 min).** Beat playing, A05 PAD.
 - T7 (CHORD), EDIT, screen keys to ARP. Hold the step at the bar's start and clear its locks
   (push each knob) or play on: OK opens ARPS, `INTO T7 ARP ONLY`, fourteen rows. OK on TRANCE:
   each bar's chord is walked up two octaves at 1/16, accented on the beat. `____`
@@ -1815,7 +1833,7 @@ project and never needs a restart."*
 - [ ] PROJECT opens the PROJECT screen. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
 - [ ] FUNC+HOME, OK saves (the menu opens on SAVE). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (402 bytes),
-      `KIT.BIN` (1,433 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
+      `KIT.BIN` (1,453 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
       save writes every file (the sizes tests/test_storage.cpp pins).
       After that first save only dirty banks are written; the card cannot show it, since all
       eight exist from then on, so tests/test_storage.cpp checks which files each save touches.
