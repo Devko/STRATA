@@ -165,6 +165,7 @@ FM4 and GRAIN machines.
 | --- | --- | --- | --- |
 | Insert chain per track: drive, filter (LP/BP/HP 12/24), lo-fi, amp, duck, pan, level | v0.1.0 | ◐ | Off stages cost nothing |
 | **Sidechain duck**, editable: depth per track, source track, attack/hold/release | v0.1.0, editable since #89 | ○ (13l) | MIXER pages DCK 1-4, DCK 5-8, DUCK. Saved in the kit (KIT.BIN section 6; older kits open with the v0.1.0 duck: track 1, 35%, 3/40/120 ms). Not p-lockable, not in scenes or macros: a lock slot would change the pattern and scene file layouts |
+| **Choke groups** 1-4 for any track: a note cuts the other tracks of its group (CyDrums S4) | #181 | ○ (W46) | Push A-D on MIXER's TRK pages; `C1`-`C4` on the strip. A 64-frame fade on the track's output, then its voices are cut. Two notes of a group on the same frame both sound (a block renders whole). Saved in the kit (KIT.BIN section 11; older kits have no groups) |
 | Send A: tempo-synced ping-pong delay | v0.1.0 | ◐ (13c / U4) | |
 | Send A **LONG** mode: up to 12 s, wow, diffusion, low cut, true freeze | v0.1.0 | ○ (13j) | ~2x the send's CPU while it rings; load host-estimated only (E11 owed) |
 | Send B: reverb | v0.1.0 | ◐ | |

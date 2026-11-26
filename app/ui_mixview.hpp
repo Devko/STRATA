@@ -175,6 +175,12 @@
             paint::small_text(px, x + 1, 110, machine_name(engine_.machine_id(t)),
                               muted ? 3 : (t == selected_ ? 15 : 8));
             if (muted) canvas.rect(x + 1, 116, 11, 1, 6);
+            // The choke group under the machine on the fader pages (push A-D steps it).
+            const uint8_t choke = kit.tracks[t].choke;
+            if (!duck && choke != 0) {
+                const char group[3] = {'C', char('0' + choke), 0};
+                paint::small_text(px, x + 1, 119, group, active ? 12 : 6);
+            }
         }
     }
 

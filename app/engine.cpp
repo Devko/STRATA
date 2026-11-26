@@ -3,6 +3,7 @@
 #include "arp.hpp"       // the arpeggiator's notes; the engine schedules them
 #include "factory.hpp"
 #include "liverand.hpp"    // LIVE RND: the unit held to its range
+#include "chainloops.h"    // strata_choke_fade, a choke group's fade
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
 #include "sounds.hpp"      // Cmd::sound_preset: the factory sounds
@@ -1346,6 +1347,14 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_choke: {
+            const uint8_t now = project_.kit.tracks[track].choke;
+            const uint8_t next = now >= kChokeGroups ? uint8_t(0) : uint8_t(now + 1);
+            project_.kit.tracks[track].choke =
+                command.c == 1 ? next : choke_group_sanitized(command.a);
+            break;
+        }
+
         case Cmd::set_pressure:
             mod_pressure_[track] = float(command.a > 127 ? 127 : command.a) * (1.0f / 127.0f);
             break;
@@ -1651,7 +1660,7 @@ void Engine::apply(const Command &command) {
                 }
                 // A pad on a POLY track counts against the shared budget like a step does.
                 if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
-                note_started(track, trig.velocity);
+                note_started(track, trig.velocity, 0);
                 // And to MIDI OUT. A key or a MIDI IN note (c = 1) is held until its release; a
                 // pad has none, so it lasts one step, as a step with no gate does.
                 send_midi_notes(track, &trig.note, 1, trig.velocity, 0,
@@ -2543,7 +2552,7 @@ void Engine::roll_fire(int track, uint32_t frame) {
     trig.frame = frame;
     trig.gate_frames = roll_gate_frames();
     if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
-    note_started(track, trig.velocity);
+    note_started(track, trig.velocity, frame);
     send_midi_notes(track, &trig.note, 1, trig.velocity, frame, midi_gate(track, trig.gate_frames));
 }
 
@@ -2643,7 +2652,7 @@ void Engine::arp_hit(int track, ArpRun &run, uint32_t frame) {
     const float gate = spacing * float(run.gate_percent) * 0.01f;
     trig.gate_frames = gate < 1.0f ? 1u : uint32_t(gate);
     if (make_room_for_poly_voice(track, note)) machines_[track]->trigger(trig);
-    note_started(track, trig.velocity);   // each hit lights the track, as a step does
+    note_started(track, trig.velocity, frame);   // each hit lights the track, as a step does
     // Each hit to MIDI OUT too, with its own gate; a MID track's CCs go ahead of the note.
     if (machine_id_[track] == uint8_t(MachineId::midi)) send_midi_ccs(track);
     send_midi_notes(track, &trig.note, 1, trig.accent ? uint8_t(127) : trig.velocity, frame,
@@ -3021,10 +3030,26 @@ void Engine::fire(const StepEvent &event) {
         // Once per step, not once per note: a chord is one trig as far as the screen is
         // concerned, and eight LEDs flashing six times would be a worse display, not a better
         // one.
-        note_started(track, trig.velocity);
+        note_started(track, trig.velocity, event.frame);
 
         if (track == duck_source_) mixer_.trigger_duck(event.frame);
     }
+}
+
+// A choke group's cut (choke_group in engine.hpp): the fade from where the choke landed, or from
+// the block's start when it carries on from the last block, then kill_all once it reaches 0.
+void Engine::run_choke(int t, float *mono, uint32_t frames) {
+    const uint32_t from = choke_at_[t] < frames ? choke_at_[t] : frames;
+    const float gain = strata_choke_fade(mono + from, int(frames - from), choke_gain_[t],
+                                         1.0f / float(kChokeFadeFrames));
+    if (gain > 0.0f) {
+        choke_gain_[t] = gain;
+        choke_at_[t] = 0;              // carries on from the next block's first frame
+        return;
+    }
+    machines_[t]->kill_all();
+    choke_at_[t] = kNoChokeFrame;
+    choke_gain_[t] = 1.0f;
 }
 
 // --- the LFOs -------------------------------------------------------------
@@ -3195,6 +3220,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         return;
     }
 
+    // No track has started a note in this block yet (choke_group).
+    for (int t = 0; t < kTracks; t++) note_frame_[t] = kNoChokeFrame;
+
     apply_commands();
 
     // The CPU guard, before any trig: a lowered budget must be in force for this block's notes.
@@ -3314,6 +3342,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
                 frozen_[t].skip(int(frames));
                 continue;
             }
+            // A frozen track plays its loop, which no choke cuts.
+            choke_at_[t] = kNoChokeFrame;
+            choke_gain_[t] = 1.0f;
             prepare_chain(t);
             float *mono = mixer_.scratch();
             enaga_clear(mono, int(frames));
@@ -3325,7 +3356,16 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
             continue;
         }
 
-        if (machine == nullptr || muted_[t] || !machine->active()) continue;
+        if (machine == nullptr || muted_[t] || !machine->active()) {
+            // A choke on a track with nothing to render: nothing to fade, so it is over. A muted
+            // track's voices are cut all the same, or they would sound again on unmute.
+            if (choke_at_[t] != kNoChokeFrame) {
+                if (machine != nullptr) machine->kill_all();
+                choke_at_[t] = kNoChokeFrame;
+                choke_gain_[t] = 1.0f;
+            }
+            continue;
+        }
 
         // From effective_, not params_: this is where a parameter lock has to be honoured, for
         // every block of the step rather than only the one that triggered it.
@@ -3336,6 +3376,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         float *mono = mixer_.scratch();
         enaga_clear(mono, int(frames));
         machine->render_add(mono, int(frames));
+        if (choke_at_[t] != kNoChokeFrame) run_choke(t, mono, frames);
         track_peak[t] = strata_master_peak(mono, mono, int(frames));
         // A freeze records the machine alone, before the chain it will go on running through.
         if (t == tapped && capture_prechain_) {

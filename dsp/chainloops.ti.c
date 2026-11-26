@@ -38,3 +38,13 @@ void strata_chain_duck(float *restrict mono, const float *restrict duck, int n, 
     int i;
     for (i = 0; i < n; i++) mono[i] *= 1.0f - depth * duck[i];
 }
+
+float strata_choke_fade(float *restrict mono, int n, float gain, float step) {
+    int i;
+    for (i = 0; i < n; i++) {
+        gain = gain - step;
+        gain = gain > 0.0f ? gain : 0.0f;
+        mono[i] *= gain;
+    }
+    return gain;
+}

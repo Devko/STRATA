@@ -161,6 +161,10 @@ enum class Cmd : uint8_t {
     // (kModSrcOff..kModSrcRnd), c: the destination parameter, d: the depth as an int8. Sanitized as a
     // file's slot is, so a bad one lands OFF.
     set_mod_slot,      // track, a: slot, b: source, c: dest, d: int8 depth
+    // A track's choke group (KitTrack::choke): a: 0 none or 1-4; or c = 1: one step on, OFF 1 2
+    // 3 4 OFF, decided on the audio side so two fast pushes are two steps. A note on the track
+    // cuts the others of its group (Engine::choke_group).
+    set_choke,         // track, a: group; or c = 1: step
     // A track pad's pressure, for a mod slot on PRS: a: 0-127, 0 when the pad is let go. Played,
     // not stored.
     set_pressure,      // track, a: pressure

@@ -283,6 +283,19 @@
             }
         }
 
+        // Choke groups (S4): push A-D on MIXER's TRK 1-4 or TRK 5-8 steps that strip's track
+        // through OFF, 1, 2, 3, 4. A note on a track cuts the others of its group.
+        // (The push keys are numbered B A C D, so the slot is spelt out.)
+        if ((key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||
+             key == ENAGA_KEY_PUSH_D) &&
+            mode_ == Mode::mixer && mixer_bank_ < kMixerTrackPages && !shift_) {
+            const int slot = key == ENAGA_KEY_PUSH_A ? 0
+                             : key == ENAGA_KEY_PUSH_B ? 1
+                             : key == ENAGA_KEY_PUSH_C ? 2 : 3;
+            if (down) step_choke(mixer_bank_ * 4 + slot);
+            return;
+        }
+
         // The ambient modes: push A on DLY+ or REV+ throws that send's mode, CLAS to LONG or
         // ROOM to HALL and back. A switch is a push as much as a turn, and a push is what the
         // emulator can press (tests/scenario_ambient.sh).

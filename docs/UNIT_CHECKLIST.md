@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W45, about 137 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W46, about 140 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -537,6 +537,15 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   (GRID twice): hold three pads of a chord, `HELD C4 E4 G4` and `C MAJ` lit; turn A, its gauge
   moves. MENU, SETUP, PROJECTS: no second line repeating the name. SETUP's `DRW ____ MS` after a
   while on KITS. `____`
+
+**W46. Choke groups (3 min).** Beat playing, A01, the open hat on T4 sounding long.
+- MIXER, TRK 1-4. Push C: `T3 CHOKE GROUP 1`, `C1` under T3's machine. Push D: `T4 CHOKE GROUP 1`.
+  Now T3 and T4 cut each other both ways: the open hat stops dead (no click) on every closed hat,
+  and a closed hat stops when the open one hits. Steps on the same 16th both sound. `____`
+- Put T6 (the bass) in group 1 too (TRK 5-8, push B): every hat now cuts the bass and the bass
+  cuts the hats. Listen for clicks at the cut: there should be none. Push B four more times: back
+  to `T6 CHOKE OFF`, the bass rings over the hats again. `____`
+- Save the project, load another and back: T3 and T4 still say `C1`. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
@@ -1794,7 +1803,7 @@ project and never needs a restart."*
 - [ ] PROJECT opens the PROJECT screen. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
 - [ ] FUNC+HOME, OK saves (the menu opens on SAVE). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (402 bytes),
-      `KIT.BIN` (1,389 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
+      `KIT.BIN` (1,409 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
       save writes every file (the sizes tests/test_storage.cpp pins).
       After that first save only dirty banks are written; the card cannot show it, since all
       eight exist from then on, so tests/test_storage.cpp checks which files each save touches.
