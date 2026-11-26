@@ -37,7 +37,7 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
    `scenario_wave.sh` and `scenario_fm.sh`, never run), then E13 (the VA rework), E14 (WAVE's cost
    per voice and its boot time) and E15 (FM4's cost per voice) from `docs/BUDGET.md`, with cl6x and with `ENAGA_TI_CGT=none`. BUDGET has only
    host estimates for both so far.
-2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, W1-W45, on a
+2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, W1-W47, on a
    build from `main` with cl6x and Enaga 0.3.0 firmware. It covers everything since v0.1.0, from
    the CPU guard to LOCK, step stutter, play modes, the MOD slots, sample audition and the
    redrawn screens (#171-#176).
@@ -123,6 +123,18 @@ own rate with Catmull-Rom, after every effect and the RESAMPLE tap, at a fixed -
 holds its place rather than skipping. `scenario_audition` is the one scenario that checks the
 captured output (the emulator keeps only the run's last 0.68 s, hence its short run). UNIT_CHECKLIST
 W36 walks it; the level against a real mix is the open question.
+
+Arp depth and ARPS, for whoever touches them next (core/arp.hpp has the design):
+- **VAR, RHYTHM, ACCENT and RATCHET are not parameters**, for TRIG's reason: four table indices a
+  track in `KitTrack::arp`, KIT.BIN's optional section 12 (11 is the choke groups', PR #181), set
+  by `Cmd::set_arp_ext` (push A-D on the ARP page) or whole by `Cmd::arp_preset` (ARPS, OK on the
+  ARP page; core/arppresets.hpp). The tables' indices are on disk: new entries go on the end.
+- **A rest does not advance the note** (`ArpRun::slot` counts the grid, `hit` the notes).
+- **Ratchet repeats are frame countdowns** (`Engine::arp_ratchets`, after the deferred step hits
+  and before the block's ticks, running or stopped), clamped so no two hits of a track land in
+  one block: the one-pending-trig contract `dispatch` relies on.
+- A kit-library recall brings the arp settings. It still does not bring LFO TRIG or the mod
+  slots (it never did): worth a look.
 
 LFO, for whoever touches it next (dsp/lfo.hpp has the detail):
 - **TRIG is not a parameter.** All 32 bytes a track has are spoken for and `locked_` is a 32-bit

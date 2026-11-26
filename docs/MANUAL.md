@@ -220,6 +220,34 @@ The four settings are parameters like any other: hold a STEP and turn MOD to arp
 step, or store two scenes with different arps. A new track's arp is off, and so is every track
 in a project saved before the arp existed.
 
+**Push the knobs** for four more choices that shape the run. Each push steps once round its list
+and back to OFF, and the page's bottom line says what is set (`RHY E5/16  ACC CYC`):
+
+- **Push A, VAR**: reshapes MOD's order. CONV plays the outside notes first and closes in, DIVG
+  starts in the middle and opens out, THUMB puts the lowest note between every two others (C E C
+  G), PINKY the highest after each (C G E G).
+- **Push B, RHYTHM**: which hits of RAT's grid sound. ALL, or a pattern with rests: `X-`, `XX-`,
+  `XXX-`, `X-XX`, `332` (the tresillo), `E5/8`, `E5/16`, `E7/16`, `E9/16` (hits spread evenly),
+  `-X` (offbeats only) and `X--`. A rest does not use a note up, so a three-slot rhythm over a
+  four-note run turns the melody against the bar on every pass.
+- **Push C, ACCENT**: which hits are accented, as a step's ACC accents a note (127 to MIDI):
+  `X-`, `X--`, `X---`, `X----`, `332`, `--X-`, or CYC, the first note of every run.
+- **Push D, RATCHET**: which hits repeat inside their own slot: `2:4` (the last of every four
+  twice), `2:8`, `3:8`, `4:16` (a roll into the bar), `2ALL`, and RND2 and RND3 (a quarter of the
+  hits, by chance, the same on every pass).
+
+The picture draws all of it: rests as a dot on the floor, accents taller and brighter, a
+ratcheted slot split into its repeats. These four are the track's kit settings, like the LFO's
+TRIG: saved with the kit, not lockable and not in scenes.
+
+**OK on the ARP page opens ARPS**, fourteen ready-made arps that set all eight at once, on any
+machine. It works as SOUNDS does (below): UP/DOWN to move, OK loads with the beat playing, AS WAS
+puts back the arp the track had, CLR goes back. TRANCE, ROLLER (U/D with a gallop), ACID (the
+3-3-2 accent), BLEEP (random, Euclidean, the odd ratchet), DUB (held 1/8 on the tresillo), OFFBT
+(offbeat 8ths: one note on a bass track is the offbeat bass), THUMB, PINKY, CONVRG (triplets
+closing in), RATCHT, FILL (a roll at the end of each bar), EUCLID, AMBNT (slow quarters over four
+octaves) and DRIFT (sparse random triplets).
+
 ### Held notes: the ENV page
 
 <p><img src="screens/edit_env.png" width="256" alt="EDIT, the ENV page on VA POLY"></p>
@@ -906,18 +934,18 @@ first entry of each list is the factory kit's own sound.
 
 | Machine | Sounds |
 | --- | --- |
-| KCK | 909 (the factory kick), 808 (long boom), DEEP (rounder, darker), PUNCH (short, hard, driven), DIST (industrial, distorted), SOFT (dub, no click) |
-| SNR | CLAP (the factory clap), 909SN, 808SN, CLAP4 (four bursts, wide), RIMSN (a snare rim tick), DIRTY (noisy, driven) |
-| HAT | CLOSED, OPEN (the factory pair), TIGHT, 808HH (pure squares), SHAKE (a shaker), RIDE (long, clangy), TRASH (noisy, metallic) |
-| PRC | RIM (the factory rim), TOM, COWBEL, BELL, BLIP, CONGA, METAL |
-| MNO | ROLL (the factory bass), ACID (squelching 303 line), ACIDSQ (the same on a square), FAT (detuned saws, sub and drive), REESE (wide detuned band-pass), SUB (deep, near-sine), PLUCK, GROWL (band-pass mid bass), GLIDE (portamento), SYNC (sync lead), LEAD (square lead with glide), DRONE (SUS up: holds each note for its LEN) |
-| PLY | STAB (the factory stab), PAD (A05's pad), STRING, KEYS, RAVE (best with 5TH OCT chords), PLUCK, BRASS |
-| WMN | SWEEP, RESO (a resonant sweep), GROWL, FORMNT (formant), DIGI (digital), VOWEL, WARP, FMBASS (FM bass) |
-| WPL | PAD, EPIANO (electric piano), BELL, MALLET, PLUCK, CHOIR, PWMPAD (a PWM pad) |
-| FM4 | EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD, GLASS |
-| GRN | CLOUD (where to start), PAD (swells, holds for LEN), FREEZE (one moment held), SHIMMR (a third of the grains an octave up), DRIFT (a slow scan), STRTCH (half speed, own pitch), STUTTR (gapped plucked grains), CHOPS (short percussive grains for POS locks) |
+| KCK | 909 (the factory kick), 808 (long boom), DEEP (rounder, darker), PUNCH (short, hard, driven), DIST (industrial, distorted), SOFT (dub, no click), RUMBLE (long, dark, dirty: for rumble techno), TIGHT (short, clicky), BOOM (ambient: slow drop, longest tail), HARD (hard techno, fully driven) |
+| SNR | CLAP (the factory clap), 909SN, 808SN, CLAP4 (four bursts, wide), RIMSN (a snare rim tick), DIRTY (noisy, driven), SHORT (a tight clap), TIGHT (a short snare), NOISE (a long noise wash), DARK (a dark, driven clap) |
+| HAT | CLOSED, OPEN (the factory pair), TIGHT, 808HH (pure squares), SHAKE (a shaker), RIDE (long, clangy), TRASH (noisy, metallic), DARK (a dark closed hat), TICK (shortest), SIZZLE (long, bright, noisy), SHIMMR (a ringing metallic cymbal) |
+| PRC | RIM (the factory rim), TOM, COWBEL, BELL, BLIP, CONGA, METAL, CLAVE, ZAP (a falling laser), DUBTOM (low, long, for the delay), CHIME (glassy, ringing), KNOCK (a metallic tick) |
+| MNO | ROLL (the factory bass), ACID (squelching 303 line), ACIDSQ (the same on a square), FAT (detuned saws, sub and drive), REESE (wide detuned band-pass), SUB (deep, near-sine), PLUCK, GROWL (band-pass mid bass), GLIDE (portamento), SYNC (sync lead), LEAD (square lead with glide), DRONE (SUS up: holds each note for its LEN), DUBBAS (dub bass: closed, deep, held), RUBBER (the offbeat techno bass) |
+| PLY | STAB (the factory stab), PAD (A05's pad), STRING, KEYS, RAVE (best with 5TH OCT chords), PLUCK, BRASS, DUBCHD (darker, longer dub chord), WARM (a warm pad), SWELL (opens as it swells), HOOVER (wide driven rave chord), ORGAN |
+| WMN | SWEEP, RESO (a resonant sweep), GROWL, FORMNT (formant), DIGI (digital), VOWEL, WARP, FMBASS (FM bass), ACIDWV (acid on a wavetable), HARMBS (harmonics bass), FOLD (fold lead), TINE (a bell pluck) |
+| WPL | PAD, EPIANO (electric piano), BELL, MALLET, PLUCK, CHOIR, PWMPAD (a PWM pad), GLASS (a crystalline pad), DIGPAD (digital pad), RESOPD (a resonant pad), STAB (a warm dub stab), VOXSTB (a vowel stab) |
+| FM4 | EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD, GLASS, BLIP (the bleep), CHIME (1:14, ringing), DUBSTB (a dub stab), DRONE (held, slow index) |
+| GRN | CLOUD (where to start), PAD (swells, holds for LEN), FREEZE (one moment held), SHIMMR (a third of the grains an octave up), DRIFT (a slow scan), STRTCH (half speed, own pitch), STUTTR (gapped plucked grains), CHOPS (short percussive grains for POS locks), HAZE (a dense wide wash), GLITCH (sparse sprayed plucks), TAPE (a worn slow scan) |
 
-The MNO list is longer than the screen: it scrolls as the cursor moves. PAD, STRING, KEYS, BRASS,
+Most lists are longer than the screen: they scroll as the cursor moves. PAD, STRING, KEYS, BRASS,
 FAT, REESE, ACID, SYNC, LEAD and DRONE sustain (the ENV page's SUS is up), so their notes last as long as
 each step's LEN: give the steps long LENs, or hear PAD on A05. A loaded sound is a change to the
 kit like turning knobs: it is saved with the project, and FUNC+CLR does not undo it (AS WAS does).

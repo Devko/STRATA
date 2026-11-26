@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W45, about 137 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W47, about 147 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -537,6 +537,27 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   (GRID twice): hold three pads of a chord, `HELD C4 E4 G4` and `C MAJ` lit; turn A, its gauge
   moves. MENU, SETUP, PROJECTS: no second line repeating the name. SETUP's `DRW ____ MS` after a
   while on KITS. `____`
+
+**W47. Arp depth, ARPS and the new sounds (10 min).** Beat playing, A05 PAD (W46 is the choke
+groups' if PR #181 is in; otherwise skip the number).
+- T7 (CHORD), EDIT, screen keys to ARP. Hold the step at the bar's start and clear its locks
+  (push each knob) or play on: OK opens ARPS, `INTO T7 ARP ONLY`, fourteen rows. OK on TRANCE:
+  each bar's chord is walked up two octaves at 1/16, accented on the beat. `____`
+- Walk the list with OK on each: ROLLER (two and a rest, the melody turning against the bar),
+  ACID (skipped 16ths, a 3-3-2 accent), BLEEP (random, now and then a double), DUB (held 1/8s on
+  the tresillo), CONVRG (triplets closing in), FILL (a four-hit roll at the end of each bar),
+  AMBNT (slow quarters over four octaves), DRIFT. `NOW` follows the loaded one. AS WAS: the
+  chord plays as it did. CLR: back on the ARP page. `____`
+- On the ARP page with MOD on, push A, B, C and D: `ARP VAR CONV`, `ARP RHY X-`, `ARP ACC X-`,
+  `ARP RTC 2:4`; the picture shows dots for rests, tall notes for accents, a split slot for the
+  ratchet, and the info line `VAR CONV  RHY X-  ...`. Each is heard at once. Push each round to
+  OFF again. `____`
+- Ratchets at the fastest: RAT 1/32T, RATCHET 4:16, tempo 180: every repeat is heard, none
+  doubled into one (`____` MAX on SETUP). `____`
+- T6 (BASS), ARP OFFBT on one held KEYS pad: offbeat 8ths in time. `____`
+- New sounds: T1 SOUNDS RUMBLE, TIGHT, BOOM, HARD; T6 DUBBAS, RUBBER; T7 DUBCHD, WARM, SWELL; and
+  on an FM4 track BLIP and DRONE: each sits near the part it replaces, nothing much louder. `____`
+- Save, power cycle: the arp's settings and the loaded arp come back. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
