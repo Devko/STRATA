@@ -544,6 +544,7 @@ public:
 
 #include "ui_project.hpp"
 #include "ui_pickview.hpp"
+#include "ui_listview.hpp"
 
 private:
     void post(Cmd cmd, uint8_t track = 0, uint8_t step = 0, uint8_t a = 0, uint8_t b = 0,
@@ -984,6 +985,16 @@ private:
     // bits and which bank is read next.
     uint8_t slot_thumb_[kPatternsPerBank][16] = {};
     int thumb_bank_ = -1;
+    // RESAMPLE (app/ui_listview.hpp): the source's level over the last 120 frames, rolling, and
+    // the take as it was recorded, a column a 120th of it, in rows of the picture's half height.
+    uint8_t level_history_[120] = {};
+    uint8_t take_wave_[120] = {};
+    int take_wave_cols_ = 0;
+    uint8_t take_seen_state_ = 0;
+    uint32_t history_level_ = 0;       // the reading the history last rolled on
+    // CHAIN: the cursor entry's pattern as PROJECT's tiles draw one, and which pattern it is.
+    uint8_t chain_thumb_[16] = {};
+    int chain_thumb_key_ = -1;
     int thumb_next_ = 0;
     uint16_t bank_used_[kBanks] = {};
     int used_next_ = 0;

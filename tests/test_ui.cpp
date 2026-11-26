@@ -7858,6 +7858,165 @@ TEST(ui_redesign_shots) {
     }
 }
 
+// The screens redrawn after #175 (app/ui_listview.hpp) with something on them: a take being
+// recorded, a file heard, the chain playing, kits stored, notes held, tracks swung. Off unless
+// STRATA_OLDLOOK_SHOTS names a folder; writes the same NAME.pgm / NAME.txt as ui_screenshots.
+namespace {
+
+// `frames` screen frames 50 ms apart (37 blocks), drawn, so a screen that keeps a history from
+// frame to frame (RESAMPLE's) has one; then one more written as `name`.
+void shot_after_frames(const char *folder, const char *name, int frames) {
+    for (int i = 0; i < frames; i++) {
+        play_blocks(37);
+        draw_now();
+    }
+    write_shot(folder, name, 1);
+}
+
+}  // namespace
+
+TEST(ui_oldlook_shots) {
+    const char *folder = std::getenv("STRATA_OLDLOOK_SHOTS");
+    if (folder == nullptr || folder[0] == 0) return;
+    FakeHost &host = FakeHost::the();
+    host.reset();
+    host.set_device(ENAGA_DEVICE_SMPLTREK);
+    host.set_audio_load(200);
+    Strata &app = the_app();
+    CHECK(app.init());
+    app.on_card(true);
+    seed_sample_card();
+    card_break("/SAMPLES/BREAK.WAV");
+
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_F5);                                  // the default beat, playing
+    play_blocks(900);
+
+    // RESAMPLE from the master: before, while recording, after.
+    shift_key(ENAGA_KEY_F2);
+    UiProbe::set_take_source(app, 0);
+    shot_after_frames(folder, "res_idle", 60);
+    key(ENAGA_KEY_UP);                                  // 2 BAR
+    key(ENAGA_KEY_OK);
+    shot_after_frames(folder, "res_armed", 2);
+    for (int i = 0; i < 400 && app_engine().status().resample_state.load() != 2u; i++) {
+        play_blocks(37);
+        draw_now();
+    }
+    shot_after_frames(folder, "res_rec", 40);
+    for (int i = 0; i < 400 && app_engine().status().resample_state.load() != 0u; i++) {
+        play_blocks(37);
+        draw_now();
+    }
+    shot_after_frames(folder, "res_done", 4);
+    key(ENAGA_KEY_CLR);
+
+    // SAMPLES on track 8 (the default beat's SAMPLE track): the list, then a file heard.
+    key(ENAGA_KEY_F4);
+    app.on_pad_press(14, 100);
+    app.on_pad_release(14);
+    key(ENAGA_KEY_F8);
+    key(ENAGA_KEY_OK);
+    for (int i = 0; i < 400 && app_storage().browsing(); i++) pump();
+    write_shot(folder, "smp_list");
+    const int brk = app_storage().browse_list().find("BREAK.WAV");
+    for (int i = 0; i < 10 && UiProbe::sample_cursor(app) < brk; i++) key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_PUSH_A);
+    for (int i = 0; i < 400 && !app_storage().audition_sounding(); i++) pump();
+    write_shot(folder, "smp_hear", 300);
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_CLR);
+
+    // SOUNDS on track 1, the kick: on the one playing, then on another.
+    key(ENAGA_KEY_F4);
+    app.on_pad_press(0, 100);
+    app.on_pad_release(0);
+    key(ENAGA_KEY_F8);
+    key(ENAGA_KEY_OK);
+    write_shot(folder, "snd_now");
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);
+    write_shot(folder, "snd_other");
+    key(ENAGA_KEY_CLR);
+
+    // CHAIN, the chain playing; one entry recalling a mute state.
+    key(ENAGA_KEY_F3);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_LEFT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    {
+        Command command;
+        command.cmd = Cmd::chain_edit;
+        command.step = 2;
+        command.a = uint8_t(ChainEdit::mutes_delta);
+        command.b = 2;
+        app_engine().commands().post(command);
+    }
+    post_cmd(Cmd::set_chain, 1);
+    play_blocks(2400);
+    write_shot(folder, "chain_play", 1);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);
+    write_shot(folder, "chain_cursor");
+
+    // PATTERN: three tracks with their own swing, the cursor on track 4's.
+    key(ENAGA_KEY_SELECT_RIGHT);
+    post_cmd(Cmd::set_chain, 0);
+    pump(4);
+    post_track(Cmd::set_track_swing, 1, 62);
+    post_track(Cmd::set_track_swing, 3, 70);
+    post_track(Cmd::set_track_swing, 6, 56);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_RIGHT);
+    write_shot(folder, "pat");
+    key(ENAGA_KEY_SELECT_RIGHT);
+    write_shot(folder, "setup");
+    key(ENAGA_KEY_SELECT_RIGHT);
+    for (int i = 0; i < 400 && app_storage().browsing(); i++) pump();
+    write_shot(folder, "projs");
+
+    // KITS: the factory kit in slots 1 and 4, another kit in slot 2.
+    shift_key(ENAGA_KEY_F8);
+    shift_key(ENAGA_KEY_F8);
+    pump_until_idle();
+    shift_key(ENAGA_KEY_DOWN);
+    pump_until_idle();
+    for (int i = 0; i < 3; i++) key(ENAGA_KEY_DOWN);
+    shift_key(ENAGA_KEY_DOWN);
+    pump_until_idle();
+    post_track(Cmd::set_machine, 4, uint8_t(MachineId::fm));
+    post_track(Cmd::set_machine, 5, uint8_t(MachineId::wave_poly));
+    post_track(Cmd::set_machine, 6, uint8_t(MachineId::grain));
+    pump(4);
+    for (int i = 0; i < 2; i++) key(ENAGA_KEY_UP);
+    shift_key(ENAGA_KEY_DOWN);
+    pump_until_idle();
+    key(ENAGA_KEY_UP);
+    write_shot(folder, "kits", 2100);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);
+    write_shot(folder, "kits_empty");
+
+    // KEYS with a chord held.
+    open_keys();
+    app.on_pad_press(0, 100);                           // C
+    app.on_pad_press(4, 100);                           // E
+    app.on_pad_press(8, 100);                           // G
+    write_shot(folder, "keys", 40);
+    app.on_pad_release(0);
+    app.on_pad_release(4);
+    app.on_pad_release(8);
+
+    shift_key(ENAGA_KEY_F4);
+    write_shot(folder, "menu");
+    key(ENAGA_KEY_CLR);
+    app.on_key(ENAGA_KEY_F1, true);
+    write_shot(folder, "help", 800);
+    app.on_key(ENAGA_KEY_F1, false);
+
+    key(ENAGA_KEY_F6);
+    host.set_device(0);
+    host.set_audio_load(0);
+}
+
 TEST(ui_screenshots) {
     const char *folder = std::getenv("STRATA_SHOTS");
     if (folder == nullptr || folder[0] == '\0') return;
@@ -9783,12 +9942,14 @@ TEST(ui_samples_the_browser_shows_the_waveform_of_what_the_track_plays) {
     for (int i = 0; i < 400 && app_storage().browsing(); i++) pump();
     CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
     draw_now();
+    // The preview under the list: the file's picture about y 95, the window bright.
     int lit = 0;
-    for (int y = 93; y < 102; y++) {
-        for (int x = 0; x < kWaveColumns; x++) lit += pixel_at(x, y) == 6 ? 1 : 0;
+    for (int y = 85; y < 106; y++) {
+        for (int x = 0; x < kWaveColumns; x++) lit += pixel_at(x, y) == 10 || pixel_at(x, y) == 4 ? 1 : 0;
     }
     CHECK(lit > 100);
-    check_layout(app, "SAMPLES with the waveform strip");
+    CHECK(screen_has(app, "BREAK.WAV"));
+    check_layout(app, "SAMPLES with the waveform preview");
     key(ENAGA_KEY_CLR);
     back_to_a_kick();
 }

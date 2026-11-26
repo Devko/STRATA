@@ -155,7 +155,7 @@
                 // A page, as in SAMPLES: eight rows up or down, held at the ends.
                 if (!shift_) {
                     move_sound_cursor_to(sound_cursor_ +
-                                         (key == ENAGA_KEY_LEFT ? -kSampleRows : kSampleRows));
+                                         (key == ENAGA_KEY_LEFT ? -kSoundRows : kSoundRows));
                 }
                 return true;
             case ENAGA_KEY_OCTAVE_LEFT:                 // no steps behind this list
@@ -164,45 +164,6 @@
             default:
                 return false;
         }
-    }
-
-    void draw_sounds(enaga::Canvas &canvas) {
-        const uint8_t machine = engine_.machine_id(selected_);
-        char line[40];
-        char *out = line;
-        append(out, "SOUNDS T");
-        append_number(out, uint32_t(selected_) + 1);
-        append(out, " ");
-        append(out, machine_name(machine));
-        *out = 0;
-        paint::small_text(canvas.data(), 0, 19, line, 15);
-        canvas.text(0, 27, "INTO THIS TRACK ONLY", 10);
-
-        // The VAs' lists are longer than the screen: it scrolls to keep the cursor on it.
-        const int rows = sound_rows();
-        const int first = sound_cursor_ >= kSampleRows ? sound_cursor_ - kSampleRows + 1 : 0;
-        for (int row = first; row < rows && row < first + kSampleRows; row++) {
-            out = line;
-            const bool on = row == sound_cursor_;
-            *out++ = on ? '>' : ' ';
-            if (row == 0) {
-                append(out, "AS WAS");
-            } else {
-                const SoundPreset *s = sound_preset(machine, row - 1);
-                append(out, s->name);
-                if (sound_preset_matches(machine, row - 1, engine_.params(selected_).v)) {
-                    int length = 0;
-                    while (s->name[length] != '\0') length++;
-                    for (int pad = kSoundNameChars - length; pad > 0; pad--) *out++ = ' ';
-                    append(out, "  NOW");
-                }
-            }
-            *out = 0;
-            list_row(canvas, 0, 37 + (row - first) * 8, line, on, 9);
-        }
-        if (rows == 1) canvas.text(0, 45, "NO SOUNDS HERE", 9);
-
-        paint::small_text(canvas.data(), 0, 113, "OK LOAD  CLR BACK", 10);
     }
 
     // --- SAMPLES: the sample browser (OK on a SAMPLE or GRAIN track) -------
@@ -222,8 +183,8 @@
     // folder or leaving SAMPLES stops it.
 
     static constexpr int kSampleRows = 8;
-    // SAMPLES shows one fewer: the waveform of what the track plays sits under the list.
-    static constexpr int kSampleListRows = 7;
+    // SAMPLES shows six: the preview of what is heard or played sits under the list.
+    static constexpr int kSampleListRows = 6;
 
     static bool is_file_machine(uint8_t id) {
         return id == uint8_t(MachineId::sample) || id == uint8_t(MachineId::grain);
@@ -456,101 +417,6 @@
             default:
                 return false;
         }
-    }
-
-    void draw_samples(enaga::Canvas &canvas) {
-        settle_sample_cursor();
-        const SampleList &list = storage_.browse_list();
-        char line[40];
-        char *out = line;
-        append(out, "SAMPLES T");
-        append_number(out, uint32_t(selected_) + 1);
-        append(out, " ");
-        append(out, machine_name(engine_.machine_id(selected_)));
-        *out = 0;
-        paint::small_text(canvas.data(), 0, 19, line, 15);
-
-        // Where we are, or what is happening: the folder's tail, since its end is the part that
-        // tells two folders apart.
-        out = line;
-        const char *busy = storage_.busy_text();
-        if (storage_.browsing()) {
-            append(out, "READING FOLDER");
-        } else if (storage_.browse_error() != nullptr) {
-            append_shown(out, storage_.browse_error(), kLineChars);
-        } else if (busy != nullptr && storage_.loading_track() == selected_) {
-            append(out, busy);
-        } else if (storage_.auditioning()) {
-            // What is heard, in whole seconds: `HEARING 3/12S`, or `OPENING` until it sounds.
-            if (storage_.audition_sounding()) {
-                append(out, "HEARING ");
-                append_number(out, storage_.audition_elapsed());
-                *out++ = '/';
-                append_number(out, storage_.audition_seconds());
-                *out++ = 'S';
-            } else {
-                append(out, "OPENING");
-            }
-        } else if (list.at_root()) {
-            append(out, "CARD");
-        } else {
-            const char *folder = list.folder();
-            int n = 0;
-            while (folder[n] != '\0') n++;
-            append_shown(out, n > kLineChars ? folder + (n - kLineChars) : folder, kLineChars);
-        }
-        *out = 0;
-        canvas.text(0, 27, line, 10);
-
-        const int count = list.count();
-        const int first = (sample_cursor_ / kSampleListRows) * kSampleListRows;
-        if (count == 0 && !storage_.browsing()) {
-            canvas.text(0, 37, list.skipped() > 0 ? "NOTHING THAT FITS" : "NO WAV FILES HERE", 9);
-        }
-        for (int i = 0; i < kSampleListRows && first + i < count; i++) {
-            const int at = first + i;
-            out = line;
-            *out++ = at == sample_cursor_ ? '>' : ' ';
-            // A folder ends in '/', which the font has; a long name is cut to the line.
-            const bool folder = list.is_folder(at);
-            append_shown(out, list.name(at), kLineChars - 2);
-            if (folder) *out++ = '/';
-            *out = 0;
-            list_row(canvas, 0, 37 + i * 8, line, at == sample_cursor_, (folder ? 11 : 9));
-            // The entry being heard: a line under its name, as long as the part already heard.
-            if (at == audition_row_ && storage_.audition_sounding()) {
-                const uint32_t total = storage_.audition_frames();
-                const uint32_t now = engine_.status().audition_frame.load(std::memory_order_relaxed);
-                const int width = total == 0u ? 0 : int(uint64_t(now > total ? total : now) * 122u / total);
-                canvas.rect(6, 37 + i * 8 + 7, width < 1 ? 1 : width, 1, 13);
-            }
-        }
-
-        // What the track plays now, as a strip of its waveform (rows 93-101), then by name.
-        draw_overview_strip(canvas, storage_.overview(selected_), 93, 9);
-
-        // What the track plays now, and where in the list we are.
-        out = line;
-        const char *current = engine_.project().kit.tracks[selected_].sample;
-        append(out, "NOW ");
-        append_shown(out, current[0] != '\0' ? SampleList::name_of(current) : "LOOP", kLineChars - 4);
-        *out = 0;
-        canvas.text(0, 103, line, 11);
-
-        out = line;
-        if (count > 0) {
-            append_number(out, uint32_t(sample_cursor_ + 1));
-            *out++ = '/';
-            append_number(out, uint32_t(count));
-            if (list.skipped() > 0) {
-                append(out, " +");
-                append_number(out, uint32_t(list.skipped()));
-            }
-            append(out, " ");
-        }
-        append(out, storage_.auditioning() ? "A STOP OK LOAD" : "A HEAR OK LOAD");
-        *out = 0;
-        paint::small_text(canvas.data(), 0, 113, line, 10);
     }
 
     // --- PROJECT's PROJECTS page: open another project, save under a new name ----
@@ -807,53 +673,63 @@
         const SampleList &list = storage_.browse_list();
         char line[40];
         char *out = line;
-        paint::small_text(canvas.data(), 0, 19, "PROJECTS", 15);
-
-        out = line;
-        const char *busy = storage_.busy_text();
-        if (delete_armed_ >= 0) {
-            append(out, delete_oks_ > 0 ? "OK AGAIN: DELETE" : "DELETE? OK TWICE");
-        } else if (storage_.browsing()) {
-            append(out, "READING CARD");
-        } else if (storage_.browse_error() != nullptr) {
-            append_shown(out, storage_.browse_error(), kLineChars);
-        } else if (busy != nullptr) {
-            append(out, busy);
-        } else {
-            append(out, "NOW ");
-            append_shown(out, storage_.project_name(), kLineChars - 4);
-        }
-        *out = 0;
-        canvas.text(0, 27, line, 10);
-
+        // The caption (the tab says PROJS): the open project, or what the card is doing; where
+        // the cursor is in the list at the right.
+        uint8_t *px = canvas.data();
         const int count = list.count();
-        const int first = (project_cursor_ / kSampleRows) * kSampleRows;
-        if (count == 0 && !storage_.browsing()) canvas.text(0, 37, "NO PROJECTS YET", 9);
-        for (int i = 0; i < kSampleRows && first + i < count; i++) {
-            const int at = first + i;
-            out = line;
-            *out++ = at == project_cursor_ ? '>' : ' ';
-            append_shown(out, list.name(at), kLineChars - 1);
-            *out = 0;
-            const bool open = SampleList::same_name(list.name(at), storage_.project_name());
-            canvas.text(0, 37 + i * 8, line,
-                        at == project_cursor_ ? 15 : (open ? 12 : (list.is_folder(at) ? 10 : 5)));
-        }
-
-        // SAVE AS (FUNC+DOWN) is in the FUNC menu as well; the knobs' two jobs are only here.
-        canvas.text(0, 103, delete_armed_ >= 0    ? "CLR KEEPS IT"
-                            : storage_.dirty()    ? "UNSAVED  B REN C DEL"
-                                                  : "PUSH B REN  C DELETE", 7);
         out = line;
         if (count > 0) {
             append_number(out, uint32_t(project_cursor_ + 1));
             *out++ = '/';
             append_number(out, uint32_t(count));
-            append(out, "  ");
         }
-        append(out, "OK OPEN CLR BACK");
         *out = 0;
-        paint::small_text(canvas.data(), 0, 113, line, 10);
+        const int room = caption_right(px, line, 10);
+        out = line;
+        const char *busy = storage_.busy_text();
+        const int chars = (room + 1) / paint::kSmallAdvance;
+        const bool asking = delete_armed_ >= 0;
+        if (asking) {
+            append(out, delete_oks_ > 0 ? "OK AGAIN: DELETE" : "DELETE? OK TWICE");
+        } else if (storage_.browsing()) {
+            append(out, "READING CARD");
+        } else if (storage_.browse_error() != nullptr) {
+            append_shown(out, storage_.browse_error(), chars);
+        } else if (busy != nullptr) {
+            append_shown(out, busy, chars);
+        } else {
+            append(out, "NOW ");
+            append_shown(out, storage_.project_name(), chars - 4);
+            if (storage_.dirty() && int(out - line) + 8 <= chars) append(out, " UNSAVED");
+        }
+        *out = 0;
+        if (asking) {
+            paint::small_badge(px, 1, 18, line);
+        } else {
+            paint::small_text(px, 0, 18, line, 13);
+        }
+
+        const int first = (project_cursor_ / kSampleRows) * kSampleRows;
+        if (count == 0 && !storage_.browsing()) canvas.text(0, 26, "NO PROJECTS YET", 9);
+        for (int i = 0; i < kSampleRows && first + i < count; i++) {
+            const int at = first + i;
+            out = line;
+            *out++ = at == project_cursor_ ? '>' : ' ';
+            append_shown(out, list.name(at), kLineChars - 6);
+            *out = 0;
+            const int y = 26 + i * 9;
+            const bool open = SampleList::same_name(list.name(at), storage_.project_name());
+            list_row(canvas, 0, y, line, at == project_cursor_, open ? 12 : (list.is_folder(at) ? 10 : 5));
+            // The open one says so at the row's right.
+            if (open) {
+                paint::small_text(px, 123 - paint::small_width("OPEN"), y + 1, "OPEN",
+                                  at == project_cursor_ ? 0 : 9);
+            }
+        }
+
+        // SAVE AS (FUNC+DOWN) is in the FUNC menu as well; the knobs' two jobs are only here.
+        paint::small_text(px, 0, 105, asking ? "CLR KEEPS IT" : "PUSH B RENAME  C DELETE", 10);
+        paint::small_text(px, 0, 113, "OK OPEN  CLR BACK", 10);
     }
 
     // --- KIT: the kit library (FUNC+EDIT twice) ---------------------------
@@ -864,61 +740,6 @@
     // and is not undoable -- and CLR goes back to MACHINE. F1 + DOWN puts the kit down into the
     // slot, the same direction it pastes in every editing mode; over a kit already there it
     // takes a second press. F1 + UP reads the card again.
-
-    void draw_kit(enaga::Canvas &canvas) {
-        char line[40];
-        char *out = line;
-        const int first = (kit_cursor_ / 8) * 8;
-        append(out, "KITS ");
-        append_padded(out, uint32_t(first + 1), 2);
-        *out++ = '-';
-        append_padded(out, uint32_t(first + 8), 2);
-        append(out, storage_.card_usable() ? "    OK LOAD" : "  NO CARD");
-        *out = 0;
-        paint::small_text(canvas.data(), 0, 19, line, 15);
-
-        // What the card is doing, what went wrong, or what the keys do.
-        out = line;
-        const char *busy = storage_.busy_text();
-        if (busy != nullptr) {
-            append(out, busy);
-        } else if (storage_.last_error() != nullptr) {
-            append_shown(out, storage_.last_error(), kLineChars);
-        } else {
-            append(out, "FUNC+DOWN: SAVE HERE");
-        }
-        *out = 0;
-        canvas.text(0, 27, line, busy != nullptr ? 12 : 9);
-
-        for (int i = 0; i < 8; i++) {
-            const int slot = first + i;
-            const Storage::KitSlot &info = storage_.kit_slot(slot);
-            out = line;
-            *out++ = slot == kit_cursor_ ? '>' : ' ';
-            append_padded(out, uint32_t(slot + 1), 2);
-            *out++ = ' ';
-            append(out, kit_state_name(info.state));
-            *out = 0;
-            list_row(canvas, 0, 37 + i * 8, line, slot == kit_cursor_, 9);
-        }
-
-        // The slot under the cursor, as MACHINE draws the kit in play: two lines of four.
-        const Storage::KitSlot &info = storage_.kit_slot(kit_cursor_);
-        if (info.state == Storage::SlotState::used) {
-            for (int half = 0; half < 2; half++) {
-                out = line;
-                append_number(out, uint32_t(half * 4 + 1));
-                *out++ = '-';
-                append_number(out, uint32_t(half * 4 + 4));
-                for (int t = half * 4; t < half * 4 + 4; t++) {
-                    *out++ = ' ';
-                    append(out, machine_name(info.machines[t]));
-                }
-                *out = 0;
-                canvas.text(0, 103 + half * 9, line, 11);
-            }
-        }
-    }
 
     static const char *kit_state_name(Storage::SlotState state) {
         switch (state) {

@@ -430,7 +430,9 @@
         char rows[kHelpRows][kHelpChars + 1];
         const int pages = help_page_count(place);
         const int count = help_page(place, help_page_, title, rows);
-        canvas.text(0, 9, title, 15);
+        // The title as the frame's toast is drawn: a lit band, the name of the help page.
+        canvas.rect(0, kFrameStripY - 1, 124, 9, 15);
+        canvas.text(1, kFrameStripY, title, 0);
         for (int r = 0; r < count; r++) {
             int length = 0;
             while (rows[r][length] != 0) length++;
@@ -444,7 +446,7 @@
         *out++ = '/';
         append_number(out, uint32_t(pages));
         *out = 0;
-        canvas.text(0, 108, line, 7);
+        paint::small_text(canvas.data(), 0, 113, line, 8);
     }
 
     // --- GRID: all eight tracks at a glance ------------------------------

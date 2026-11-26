@@ -461,85 +461,6 @@
         }
     }
 
-    // The chain as a strip: each entry a block as wide as its repeats, the cursor's outlined and
-    // the playing one lit with how far through its repeats the chain is.
-    void draw_chain_timeline(enaga::Canvas &canvas, int length) {
-        if (length == 0) return;
-        const Project &project = engine_.project();
-        const ChainPlayer &player = engine_.chain();
-        int total = 0;
-        for (int i = 0; i < length; i++) total += project.chain[i].repeats;
-        if (total <= 0) return;
-        constexpr int kY = 92, kW = 120;
-        int x = 0;
-        for (int i = 0; i < length; i++) {
-            const int w0 = x;
-            const int sum_after = [&] { int t = 0; for (int k = 0; k <= i; k++) t += project.chain[k].repeats; return t; }();
-            x = sum_after * kW / total;
-            const int w = x - w0 - 1 < 1 ? 1 : x - w0 - 1;
-            const bool playing = player.active && !player.orphaned && int(player.entry) == i;
-            canvas.rect(w0, kY, w, 6, uint8_t(playing ? 13 : 5));
-            if (i == chain_cursor_) {
-                canvas.rect(w0, kY - 2, w, 1, 15);
-                canvas.rect(w0, kY + 7, w, 1, 15);
-            }
-        }
-    }
-
-    void draw_chain(enaga::Canvas &canvas) {
-        char line[40];
-        char *out = line;
-        const Project &project = engine_.project();
-        const int length = chain_length(project);
-        const ChainPlayer &player = engine_.chain();
-
-        append(out, "CHAIN ");
-        append_number(out, uint32_t(length));
-        append(out, "/64");
-        append(out, player.active ? " ON" : " OFF");
-        append(out, project.settings.chain_song ? " SONG" : " LOOP");
-        *out = 0;
-        paint::small_text(canvas.data(), 0, 19, line, 15);
-
-        if (length == 0) {
-            canvas.text(0, 40, "EMPTY", 11);
-            canvas.text(0, 52, "OK ADDS THE PLAYING", 9);
-            canvas.text(0, 61, "PATTERN. STEP KEYS", 9);
-            canvas.text(0, 70, "ADD FROM THIS BANK", 9);
-        } else {
-            // Six rows, scrolled so the cursor stays on screen; the song's shape under them.
-            constexpr int kRows = 6;
-            int first = chain_cursor_ - kRows / 2;
-            if (first > length - kRows) first = length - kRows;
-            if (first < 0) first = 0;
-            for (int row = 0; row < kRows && first + row < length; row++) {
-                const int i = first + row;
-                const ChainEntry &entry = project.chain[i];
-                out = line;
-                *out++ = i == chain_cursor_ ? '>' : ' ';
-                append_padded(out, uint32_t(i) + 1, 2);
-                *out++ = ' ';
-                *out++ = bank_letter(int(entry.bank));
-                append_padded(out, uint32_t(entry.slot) + 1, 2);
-                append(out, " X");
-                append_number(out, uint32_t(entry.repeats));
-                if (entry.mutes != 0) {
-                    append(out, " M");
-                    append_number(out, uint32_t(entry.mutes));
-                }
-                if (player.active && !player.orphaned && int(player.entry) == i) {
-                    append(out, " PLAY");
-                }
-                *out = 0;
-                list_row(canvas, 0, 30 + row * 10, line, i == chain_cursor_, 10);
-            }
-        }
-
-        draw_chain_timeline(canvas, length);
-        paint::small_text(canvas.data(), 0, 105, "OK ADD  CLR X2 REMOVE", 10);
-        paint::small_text(canvas.data(), 0, 113, "A:REPEATS B:MUTES", 10);
-    }
-
     // --- PROJECT's PATTERN page: the master length and the swing ----------
 
     // The fields, in the order LEFT and RIGHT walk them: LEN, SWG, then each track's own swing.
@@ -606,71 +527,6 @@
         }
     }
 
-    void draw_pattern_page(enaga::Canvas &canvas) {
-        char line[40];
-        char *out = line;
-        const Status &status = engine_.status();
-        const Pattern &pattern = engine_.pattern();
-
-        append(out, "PATTERN ");
-        *out++ = bank_letter(int(status.live_bank.load(std::memory_order_relaxed)));
-        append_padded(out, uint32_t(status.live_slot.load(std::memory_order_relaxed)) + 1, 2);
-        *out = 0;
-        paint::small_text(canvas.data(), 0, 19, line, 15);
-
-        out = line;
-        *out++ = pattern_field_ == 0 ? '>' : ' ';
-        append(out, "LEN ");
-        append_number(out, uint32_t(pattern.master_length));
-        append(out, " STEPS");
-        *out = 0;
-        list_row(canvas, 0, 29, line, pattern_field_ == 0, 10);
-
-        out = line;
-        *out++ = pattern_field_ == 1 ? '>' : ' ';
-        append(out, "SWG ");
-        append_number(out, uint32_t(pattern.swing));
-        *out++ = '%';
-        *out = 0;
-        list_row(canvas, 0, 38, line, pattern_field_ == 1, 10);
-
-        // FEEL: the drift over the swing, OFF or its mode and depth in ticks.
-        out = line;
-        *out++ = pattern_field_ == kPatternFieldFeel ? '>' : ' ';
-        append(out, "FEEL ");
-        append(out, feel_mode_name(pattern.feel));
-        if (feel_depth(pattern.feel) != 0) {
-            *out++ = ' ';
-            append_number(out, uint32_t(feel_depth(pattern.feel)));
-        }
-        *out = 0;
-        canvas.text(0, 47, line,
-                    pattern_field_ == kPatternFieldFeel ? 15 : (pattern.feel == 0 ? 8 : 10));
-
-        // Each track's own swing, two to a row: PAT follows SWG above, a number overrides it.
-        canvas.text(0, 57, "TRACK SWING", 8);
-        for (int t = 0; t < kTracks; t++) {
-            const int field = kPatternFieldTrackSwing + t;
-            const uint8_t swing = pattern.tracks[t].swing;
-            out = line;
-            *out++ = pattern_field_ == field ? '>' : ' ';
-            append_number(out, uint32_t(t + 1));
-            *out++ = ' ';
-            if (swing == kSwingInherit) {
-                append(out, "PAT");
-            } else {
-                append_number(out, uint32_t(swing));
-                *out++ = '%';
-            }
-            *out = 0;
-            canvas.text((t & 1) * 60, 66 + (t >> 1) * 9, line,
-                        pattern_field_ == field ? 15 : (swing == kSwingInherit ? 8 : 12));
-        }
-
-        paint::small_text(canvas.data(), 0, 105, "LEFT RIGHT PICK", 10);
-        paint::small_text(canvas.data(), 0, 113, "UP DOWN VALUE A-D", 10);
-    }
-
     // --- PROJECT's SETUP page: the clock, MIDI and the record quantize ----
 
     static const char *clock_source_name(int source) {
@@ -687,14 +543,15 @@
         char *out = line;
         const enaga::clock::State clock = enaga::clock::state();
 
-        paint::small_text(canvas.data(), 0, 19, "SETUP", 15);
-        // What a frame costs to draw, averaged (count_draw_time): "DRW 0.85MS" ends at x 123.
+        // The caption: the device at the left (the tab says SETUP), and what a frame costs to
+        // draw, averaged (count_draw_time), at the right.
+        paint::small_text(canvas.data(), 0, 18, device_name(enaga::system::device()), 13);
         out = line;
         append(out, "DRW ");
         append_hundredths(out, draw_hundredths_);
         append(out, "MS");
         *out = 0;
-        canvas.text(64, 20, line, 7);
+        canvas.text(64, 18, line, 7);   // Enaga's font: the input audit masks it as a live reading
 
         // CLOCK SRC, read from the clock itself rather than from anything STRATA remembers: it
         // is the user's setting and it can change under us at any moment.
@@ -741,7 +598,6 @@
         *out++ = '%';
         *out = 0;
         canvas.text(0, 86, line, 9);
-        paint::small_text(canvas.data(), 24, 19, device_name(enaga::system::device()), 8);
 
         // And where the three settings above are changed, because they are not changed here.
         // CLOCK OUT and SYNC OUT are in the same menu and Enaga exposes no way to read them,

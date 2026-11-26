@@ -16,7 +16,7 @@
                                     speed, play, chain, song, autofill, quantize, glide, freeze,
                                     loop_len, demo, count };
     static constexpr int kMenuItems = int(MenuItem::count);
-    static constexpr int kMenuRows = 8;
+    static constexpr int kMenuRows = 9;
 
     static const char *menu_item_name(MenuItem item) {
         switch (item) {
@@ -762,7 +762,7 @@
     void draw_menu(enaga::Canvas &canvas) {
         char line[40];
         char value[24];
-        paint::small_text(canvas.data(), 0, 19, "FUNC MENU", 15);
+        // No caption: the tab says MENU, and the rows start where it was.
         int first = menu_cursor_ - kMenuRows / 2;
         if (first > kMenuItems - kMenuRows) first = kMenuItems - kMenuRows;
         if (first < 0) first = 0;
@@ -773,7 +773,7 @@
             *out++ = here ? '>' : ' ';
             append(out, menu_item_name(MenuItem(i)));
             *out = 0;
-            const int y = 29 + row * 9;
+            const int y = 20 + row * 9;
             list_row(canvas, 0, y, line, here, 9);
             menu_item_value(MenuItem(i), value);
             int length = 0;
@@ -927,97 +927,6 @@
         enaga::log(line);
     }
 
-    void draw_resample(enaga::Canvas &canvas) {
-        char line[40];
-        char *out = line;
-        const uint8_t state = engine_.status().resample_state.load(std::memory_order_relaxed);
-
-        append(out, "RESAMPLE ");
-        append_number(out, uint32_t(kTakeBars[take_bars_index_]));
-        append(out, state == 1u ? " BAR  WAIT" : " BAR");
-        *out = 0;
-        paint::small_text(canvas.data(), 0, 19, line, 15);
-
-        out = line;
-        if (take_offer_ >= 0 && state == 0u) {
-            append(out, "PUT ON TRK ");
-            append_number(out, uint32_t(take_offer_) + 1);
-            append(out, " ");
-            append(out, plays_files(take_offer_) ? machine_name(engine_.machine_id(take_offer_))
-                                                 : "-");
-        } else if (resample_track_ < 0) {
-            append(out, "TO FILE");
-        } else {
-            append(out, "TO TRK ");
-            append_number(out, uint32_t(resample_track_) + 1);
-        }
-        *out = 0;
-        canvas.text(0, 28, line, 10);
-
-        // What the take is doing, from the two words the audio side publishes. A bar at 130 BPM
-        // is 88,615 frames, so a percentage is the only figure that fits and the only one anyone
-        // reads while recording.
-        out = line;
-        const uint32_t frames = engine_.status().resample_frames.load(std::memory_order_relaxed);
-        switch (state) {
-            case 1u: append(out, "ARMED"); break;
-            case 2u: {
-                append(out, "REC ");
-                const uint32_t bar_frames =
-                    uint32_t(float(kTakeBars[take_bars_index_]) * float(kTicksPerBar) * 230.77f);
-                const uint32_t percent = bar_frames == 0u ? 0u : frames * 100u / bar_frames;
-                append_number(out, percent > 100u ? 100u : percent);
-                *out++ = '%';
-                break;
-            }
-            case 3u: append(out, "WRITING"); break;
-            default:
-                append(out, take_offer_ >= 0 ? "OK PUTS  CLR KEEPS" : "OK ARMS  CLR CANCELS");
-                break;
-        }
-        *out = 0;
-        canvas.text(0, 40, line, state == 2u ? 15 : 10);
-
-        if (engine_.status().resample_clamped.load(std::memory_order_relaxed) != 0u) {
-            canvas.text(0, 50, "SHORTENED TO 30S", 10);
-        } else if (storage_.last_take_name()[0] != 0) {
-            out = line;
-            append(out, "LAST ");
-            append_shown(out, storage_.last_take_name(), kLineChars - 5);
-            *out = 0;
-            canvas.text(0, 50, line, 10);
-        }
-
-        // Where the take comes from, and for an input its level and a meter to set it by.
-        const TakeSource &source = kTakeSources[take_source_];
-        out = line;
-        append(out, "FROM ");
-        append(out, source.name);
-        if (source.input >= 0) {
-            append(out, " ");
-            append(out, kInputLevelNames[take_level_]);
-        }
-        *out = 0;
-        canvas.text(0, 62, line, 12);
-        if (source.input >= 0) {
-            const uint32_t peak = engine_.status().input_peak.load(std::memory_order_relaxed);
-            canvas.text(0, 72, peak >= 990u ? "CLIP" : "IN", peak >= 990u ? 15 : 9);
-            const int bar = int(peak > 1000u ? 1000u : peak) * 96 / 1000;
-            canvas.rect(28, 73, 96, 5, 2);
-            if (bar > 0) canvas.rect(28, 73, bar, 5, peak >= 990u ? 15 : 10);
-            if (input_result_ != 0) {
-                canvas.text(0, 82, "INPUT REFUSED", 15);
-            } else if (source.input == ENAGA_INPUT_MIC && !enaga::system::headphones()) {
-                // Enaga keeps the built-in mic silent without headphones, against feedback.
-                canvas.text(0, 82, "MIC NEEDS HEADPHONES", 10);
-            }
-        }
-
-        paint::small_text(canvas.data(), 0, 97, "B: FROM  C: LEVEL", 10);
-        paint::small_text(canvas.data(), 0, 105, "UP DOWN OR A: BARS", 10);
-        paint::small_text(canvas.data(), 0, 113, "LEFT RIGHT: WHERE TO", 10);
-    }
-
     // Route the input as the screen says. Enaga answers 0, -1 for a source or level it does not
     // know, -2 when the codec did not answer; the screen keeps the refusal until the next try.
     // The input is quiet for about 10 ms around the change, which is why this runs on a turn of
@@ -1030,60 +939,3 @@
         notice(input_result_ == 0 ? kTakeSources[take_source_].name : "INPUT REFUSED");
     }
 
-    void draw_keys(enaga::Canvas &canvas) {
-        char line[40];
-        char *out = line;
-        const uint8_t root = engine_.key_root();
-        const int scale = int(engine_.key_scale());
-
-        out = line;
-        append(out, "KEYS T");
-        append_number(out, uint32_t(selected_) + 1);
-        append(out, " ");                    // one space: "KEYS T1 C# MIXOLYDIAN" is exactly 21
-        append(out, note_name(root));
-        *out++ = ' ';
-        append(out, scale_name(scale));
-        *out = 0;
-        paint::small_text(canvas.data(), 0, 19, line, 15);
-
-        out = line;
-        append(out, "OCT ");
-        append_number(out, uint32_t(keys_octave_ + 3));
-        append(out, "   ");
-        append_number(out, uint32_t(scale_size(scale)));
-        append(out, " PER OCTAVE");
-        *out = 0;
-        canvas.text(0, 27, line, 11);
-
-        // The pads as the keyboard they are, in the current octave: the upper row's black keys
-        // between the lower row's white ones, the two octave pads as - and +. The root
-        // brightest and the scale's other notes bright, as the pads light, and a held pad
-        // filled. The STEP keys are steps here (D12), so the screen says which sixteen.
-        for (int pad = 0; pad < kPianoPads; pad++) {
-            const bool upper = (pad & 1) != 0;
-            const int x = (pad / 2) * 16 + (upper ? 8 : 0);
-            const int y = upper ? 40 : 58;
-            const int note = pad_note(pad);
-            out = line;
-            if (note < 0) {
-                append(out, kPianoSemitone[pad] == kPadOctaveDown ? "-" : "+");
-            } else {
-                append(out, note_name(uint8_t(note)));
-            }
-            *out = 0;
-            const bool at_root = note >= 0 && note % 12 == root;
-            const bool in_scale =
-                note >= 0 && scale_fold(uint8_t(note), root, scale) == uint8_t(note);
-            const bool held = pad_held_note_[pad] >= 0;
-            canvas.rect(x + 1, y, 14, 14, held ? 12 : (at_root ? 6 : (in_scale ? 3 : 1)));
-            canvas.text(x + 3, y + 4, line, held ? 0 : (in_scale ? 15 : 8));
-        }
-
-        out = line;
-        append(out, "STEP KEYS ");
-        append_number(out, uint32_t(page_ * 16 + 1));
-        *out++ = '-';
-        append_number(out, uint32_t(page_ * 16 + 16));
-        *out = 0;
-        canvas.text(0, 80, line, 11);
-    }

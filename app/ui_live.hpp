@@ -119,7 +119,7 @@
     static constexpr int kGaugeSpan = 192;                 // 270 degrees
 
     static void draw_gauge(enaga::Canvas &canvas, int cx, int cy, int r, int value, int knob,
-                           bool live) {
+                           bool live, bool digits = true) {
         uint8_t *px = canvas.data();
         paint::arc(px, cx, cy, r, kGaugeStart, kGaugeSpan, 3);
         const int span = value * kGaugeSpan / 127;
@@ -133,11 +133,12 @@
             paint::dot(px, cx + ((r + 2) * paint::cos_q12(at) >> 12),
                        cy + ((r + 2) * paint::sin_q12(at) >> 12), 15);
         }
-        char digits[12];                                   // append_padded's widest
-        char *out = digits;
+        if (!digits) return;
+        char text[12];                                     // append_padded's widest
+        char *out = text;
         append_padded(out, uint32_t(value), 3);
         *out = 0;
-        paint::small_text(px, cx - 5, cy + r / 2 + 1, digits, live ? 15 : 6);
+        paint::small_text(px, cx - 5, cy + r / 2 + 1, text, live ? 15 : 6);
     }
 
     // --- every track's level as a column ------------------------------------------------------
