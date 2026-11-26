@@ -12,6 +12,15 @@ the project file format or the controls.
   builds one SD card zip with STRATA and the Enaga firmware it needs, both fetched in your
   browser from their official releases and checked against their SHA-256. Source in `web/`
   (#180).
+- **A one-hour smoke test** (S1-S20) at the top of `docs/UNIT_CHECKLIST.md`: boot, the small
+  font on the OLED, load on A01 and A04, LOCK, the MOD slots, one RESAMPLE take and a save that
+  survives a power cycle, before the two-hour walkthrough.
+
+### Changed
+
+- Internal: the engine's command handling is split into twelve handlers, one per family of
+  commands, with no change in behaviour; the host tests no longer depend on the order they run in,
+  and `tools/test_shuffle.sh` runs them in shuffled orders to keep it so.
 
 ## [0.4.0] - {{RELEASE_DATE}}
 
