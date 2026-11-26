@@ -274,3 +274,21 @@ TEST(arpkit_a_preset_writes_the_arp_whole_and_as_was_puts_it_back) {
     CHECK_EQ(int(notes[1]), 60);                       // two octaves up from C3
     release(one, 1);
 }
+
+TEST(arpkit_a_recalled_kit_brings_its_arp_settings) {
+    // The kit library's recall (Cmd::kit_recall from the inbox) brings the ARP bytes as
+    // parameters; the settings that shape them come with them, or a recalled arp would play
+    // with the last kit's rhythm.
+    start();
+    set_ext(1, 4);
+    Kit &inbox = eng().kit_for_recall();
+    inbox = eng().project().kit;
+    inbox.tracks[0].arp = {uint8_t(ArpVar::pinky), 9, 2, 0};
+    post(Cmd::kit_recall, 0, 0, 1);
+    pump();
+    const KitArp &now = eng().project().kit.tracks[0].arp;
+    CHECK_EQ(int(now.var), int(ArpVar::pinky));
+    CHECK_EQ(int(now.rhythm), 9);
+    CHECK_EQ(int(now.accent), 2);
+    fresh();
+}

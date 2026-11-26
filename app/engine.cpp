@@ -1021,6 +1021,8 @@ void Engine::apply(const Command &command) {
                     to.machine = from.machine;
                     to.level = from.level;
                     to.duck = from.duck;
+                    // The arp's kit settings go with the ARP bytes they shape.
+                    to.arp = from.arp;
                 }
                 project_.kit.duck = kit_inbox_.duck;
             }
