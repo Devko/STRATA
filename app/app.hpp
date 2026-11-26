@@ -40,6 +40,7 @@
 #include "spectrum.hpp"     // the output's spectrum for MIXER's master pages
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "sounds.hpp"       // SOUNDS: the factory sounds for one track
+#include "stepnotes.hpp"    // a chord step's extra notes: counted on the step page, not as locks
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
 #include "tuning.hpp"       // TUN and PIT as notes: the NOTE view
 
@@ -899,6 +900,18 @@ private:
     static constexpr int kRecHolds = 16;
     RecHold rec_holds_[kRecHolds] = {};
     int rec_hold_next_ = 0;
+    // On a chord track, the pass each step was last recorded in, plus 1 (0: not this take).
+    // A note landing on a step already recorded in its own pass is another note of the chord
+    // being played and joins it; the first one of a new pass replaces under REC MODE REPLACE.
+    // Cleared when REC goes on and when the transport starts, because the pass count starts
+    // again at 0 and an old mark would read as this pass. 2 KiB.
+    uint32_t rec_pass_[kTracks][kStepsPerTrack] = {};
+    void clear_rec_passes() {
+        for (auto &track : rec_pass_) {
+            for (uint32_t &pass : track) pass = 0;
+        }
+    }
+    bool rec_add() const { return engine_.project().settings.rec_add; }
     // CC 16-31 are the track's sixteen parameters: the "General Purpose" 16-19 and the
     // undefined 20-31, which no common controller sends by default for anything else.
     static constexpr int kMidiInFirstParamCc = 16;

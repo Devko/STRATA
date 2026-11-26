@@ -5,6 +5,7 @@
 #include "apprig.hpp"
 #include "check.hpp"
 #include "fakehost.hpp"
+#include "stepnotes.hpp"
 
 using namespace strata;
 using strata::test::FakeHost;
@@ -124,6 +125,59 @@ TEST(midi_out_va_poly_sends_the_whole_chord) {
     raw_step(6, 0).chord = uint8_t(ChordType::minor);
     play_step0();
     CHECK_EQ(ons(2), 3);
+}
+
+// A step's played-in extra notes (core/stepnotes.hpp) play with it: on VA POLY folded into the
+// key with the rest of the chord, on MID as written when the step has no chord type.
+TEST(midi_out_va_poly_plays_a_steps_extra_notes) {
+    start(6, 2, uint8_t(MachineId::va_poly));
+    put_trig(6, 0);
+    raw_step(6, 0).note = 60;
+    Pattern &live = eng().project_for_load().live();
+    CHECK(step_add_note(live, 6, 0, 63) == NoteAdd::added);   // in C minor: kept as it is
+    CHECK(step_add_note(live, 6, 0, 67) == NoteAdd::added);
+    play_step0();
+    CHECK_EQ(ons(2), 3);
+    CHECK_EQ(ons(2, 60), 1);
+    CHECK_EQ(ons(2, 63), 1);
+    CHECK_EQ(ons(2, 67), 1);
+    pump(200);
+    CHECK_EQ(offs(2), 3);
+}
+
+TEST(midi_out_extra_notes_add_to_a_chord_type_within_six_voices) {
+    // C MIN (C Eb G) plus a played Bb and D: five notes. Plus three more: six, the top dropped.
+    start(6, 2, uint8_t(MachineId::va_poly));
+    put_trig(6, 0);
+    raw_step(6, 0).note = 60;
+    raw_step(6, 0).chord = uint8_t(ChordType::minor);
+    Pattern &live = eng().project_for_load().live();
+    step_add_note(live, 6, 0, 70);
+    step_add_note(live, 6, 0, 74);
+    step_add_note(live, 6, 0, 63);                            // already in the chord: one note
+    play_step0();
+    CHECK_EQ(ons(2), 5);
+    CHECK_EQ(ons(2, 63), 1);
+    pump(200);
+
+    host().clear_midi();
+    step_add_note(live, 6, 0, 77);
+    step_add_note(live, 6, 0, 79);
+    host().deliver_tick(uint32_t(eng().pattern().tracks[6].length) * 24u, 0);
+    pump();
+    CHECK_EQ(ons(2), 6);
+    CHECK_EQ(ons(2, 79), 0);                                  // the highest falls off
+}
+
+TEST(midi_out_mid_sends_extra_notes_as_written) {
+    start(3, 4, kMid);
+    put_trig(3, 0);
+    raw_step(3, 0).note = 60;
+    Pattern &live = eng().project_for_load().live();
+    step_add_note(live, 3, 0, 61);                            // C#, outside C minor
+    play_step0();
+    CHECK_EQ(ons(4), 2);
+    CHECK_EQ(ons(4, 61), 1);
 }
 
 TEST(midi_out_muting_the_track_ends_its_notes_at_once) {
@@ -445,4 +499,25 @@ TEST(midi_out_an_lfo_on_mid_sends_its_cc_at_a_capped_rate) {
     post(Cmd::set_param, 0, 0, uint8_t(kLfoDepth), 0);
     pump(2);
     CHECK_EQ(int(host().midi_sent(host().midi_count() - 1).b), int(eng().params(0).v[0]));
+}
+
+TEST(midi_out_va_poly_arpeggiates_a_steps_extra_notes) {
+    start(6, 2, uint8_t(MachineId::va_poly));
+    put_trig(6, 0);
+    raw_step(6, 0).note = 60;
+    Pattern &live = eng().project_for_load().live();
+    step_add_note(live, 6, 0, 63);
+    step_add_note(live, 6, 0, 67);
+    set_arp(6, 1, 6);                                         // UP, 1/32T: ticks 0, 8 and 16
+    host().clear_midi();
+    host().set_running(true);
+    for (uint32_t tick = 0; tick < 20; tick++) {
+        host().deliver_tick(tick, 0);
+        pump();
+    }
+    host().set_running(false);
+    pump(400);
+    CHECK_EQ(ons(2, 60), 1);
+    CHECK_EQ(ons(2, 63), 1);
+    CHECK_EQ(ons(2, 67), 1);
 }

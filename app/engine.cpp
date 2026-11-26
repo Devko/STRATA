@@ -7,6 +7,7 @@
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
 #include "sounds.hpp"      // Cmd::sound_preset: the factory sounds
+#include "stepnotes.hpp"   // a step's played-in extra notes, as locks
 #include "tuning.hpp"      // a knob click in NOTE view: tune_step
 
 #include <enaga/app.hpp>
@@ -34,6 +35,17 @@ constexpr uint8_t kMidiDefaultLength = 8;
 // A MIDI data byte, 0-127. (Not core/clamp.hpp's clamp_u8, which takes its limits.)
 uint8_t clamp_7bit(int value) {
     return uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value));
+}
+
+// The notes a step plays, `notes[0..count)`, with its extra notes (core/stepnotes.hpp) merged
+// in: ascending, none doubled, at most `max`. Most steps have none, and then this is one walk
+// of the step's lock run.
+int with_extra_notes(const Pattern &pattern, int track, int step, uint8_t *notes, int count,
+                     uint8_t key, int scale, bool fold, int max) {
+    uint8_t extras[kStepExtraNotes];
+    const int extra = step_extra_notes(pattern, track, step, extras);
+    if (extra == 0) return count;
+    return notes_merge(notes, count, extras, extra, key, scale, fold, max);
 }
 
 // A level for Status in thousandths, saturating at what a uint16_t holds (the meters' unit).
@@ -685,8 +697,11 @@ void Engine::apply(const Command &command) {
 
         case Cmd::step_field_delta:
             if (command.a < uint8_t(StepField::count)) {
-                step_field_apply(live().tracks[track].steps[step], StepField(command.a),
-                                 int(int8_t(command.b)));
+                Step &s = live().tracks[track].steps[step];
+                const int was = int(s.note);
+                step_field_apply(s, StepField(command.a), int(int8_t(command.b)));
+                // NOTE moves a chord played into the step with it (core/stepnotes.hpp).
+                step_shift_extra_notes(live(), track, step, int(s.note) - was);
             }
             break;
 
@@ -827,13 +842,43 @@ void Engine::apply(const Command &command) {
         case Cmd::record_hit: {
             // The step and the micro-timing were resolved in the main context by core/record,
             // from the clock state at the moment the hit arrived. Nothing here re-decides them.
+            // `d` is how the note meets what the step holds (RecWrite, app/commands.hpp).
             Step &s = live().tracks[track].steps[step];
+            const uint8_t note = clamp_7bit(command.a);
+            const uint8_t velocity =
+                uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
+            const bool on = (s.flags & kStepTrig) != 0;
+            if (command.d == uint8_t(RecWrite::join) && on) {
+                // Another note of a chord on a step that already plays: it joins, and the
+                // step's note, LEN and micro stay. The loudest note sets the velocity, and the
+                // same note again is played again, so its velocity is the new one.
+                NoteAdd added = step_add_note(live(), track, step, note);
+                if (added == NoteAdd::full && s.lock_count < kLocksPerStep) {
+                    pattern_compact_locks(live());     // abandoned slots, as lock_delta does
+                    added = step_add_note(live(), track, step, note);
+                }
+                if (added == NoteAdd::full) {
+                    status_.bump_refused();            // six notes, or no lock slot left
+                    break;
+                }
+                s.velocity = added == NoteAdd::present
+                                 ? velocity
+                                 : (velocity > s.velocity ? velocity : s.velocity);
+                break;
+            }
             const int flags = (int(s.flags) | int(kStepTrig)) & ~int(kStepTrigless);
             s.flags = uint8_t(flags);
-            s.note = clamp_7bit(command.a);
-            s.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
+            s.note = note;
+            s.velocity = velocity;
             s.micro = int8_t(command.c);
             if (!length_valid(s.length)) s.length = 8;
+            if (command.d != uint8_t(RecWrite::note)) {
+                // A chord track's first note of a pass on this step: what was played is what
+                // the step holds, so the notes and the chord type that were there go. (A join
+                // onto a step that was off lands here too, and starts the chord.)
+                step_clear_extra_notes(live(), track, step);
+                s.chord = 0;
+            }
             // The step's locks are deliberately left alone. Overdubbing onto a programmed part
             // should keep the sound it was programmed with; a hit replaces the note, not the
             // step's whole character.
@@ -843,8 +888,10 @@ void Engine::apply(const Command &command) {
         case Cmd::record_length: {
             // The key that recorded this step came up. Only if the step still holds that note:
             // a later hit landing on the same step has replaced it, and its own key decides.
+            // On a chord any of its notes counts, and the last key up gives the chord its LEN.
             Step &s = live().tracks[track].steps[step];
-            if ((s.flags & kStepTrig) != 0 && s.note == command.a && length_valid(command.b)) {
+            if ((s.flags & kStepTrig) != 0 && step_has_note(live(), track, step, command.a) &&
+                length_valid(command.b)) {
                 s.length = command.b;
             }
             break;
@@ -1908,6 +1955,10 @@ void Engine::apply(const Command &command) {
             project_.settings.quantize = uint8_t(next < 0 ? 0 : (next > 100 ? 100 : next));
             break;
         }
+
+        case Cmd::set_rec_mode:
+            project_.settings.rec_add = command.a != 0;
+            break;
 
         case Cmd::set_machine: {
             if (command.a >= uint8_t(MachineId::count)) {
@@ -3016,12 +3067,18 @@ void Engine::fire(const StepEvent &event) {
             if (polys_[track] != nullptr) {
                 count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
                                      PolyMachine::kVoices);
-            } else if (machine_id_[track] == uint8_t(MachineId::midi) &&
-                       (packed & kChordTypeMask) != uint8_t(ChordType::none)) {
+                count = with_extra_notes(folding, track, event.step, input, count, key_root_now,
+                                         key_scale_now, true, PolyMachine::kVoices);
+            } else if (machine_id_[track] == uint8_t(MachineId::midi)) {
                 // MID sends a chord step as its chord (below), so its arp runs through the
                 // chord too, rather than repeating the root alone.
-                count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
-                                     kChordMaxNotes);
+                const bool chord = (packed & kChordTypeMask) != uint8_t(ChordType::none);
+                if (chord) {
+                    count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
+                                         kChordMaxNotes);
+                }
+                count = with_extra_notes(folding, track, event.step, input, count, key_root_now,
+                                         key_scale_now, chord, kChordMaxNotes);
             }
             ArpRun &run = seq_arp_[track];
             run.mode = arp.mode;
@@ -3065,8 +3122,12 @@ void Engine::fire(const StepEvent &event) {
             // `event.note` and not `note`: `chord_expand` folds the root itself, so handing it
             // an already-folded note would be a second fold -- harmless, since folding a note
             // that is in the scale returns it, but it would hide which side owns the rule.
-            const int voiced = chord_expand(event.note, packed, key_root_now, key_scale_now,
-                                            notes, PolyMachine::kVoices);
+            int voiced = chord_expand(event.note, packed, key_root_now, key_scale_now, notes,
+                                      PolyMachine::kVoices);
+            // And the notes that were played into the step beside its own (core/stepnotes.hpp),
+            // folded like the rest of the chord, within the same six voices.
+            voiced = with_extra_notes(folding, track, event.step, notes, voiced, key_root_now,
+                                      key_scale_now, true, PolyMachine::kVoices);
             for (int i = 0; i < voiced; i++) {
                 trig.note = notes[i];
                 // The budget across every POLY track (kPolyVoiceBudget, engine.hpp).
@@ -3086,10 +3147,14 @@ void Engine::fire(const StepEvent &event) {
             uint8_t notes[kChordMaxNotes];
             int count = 1;
             notes[0] = note;
-            if ((packed & kChordTypeMask) != uint8_t(ChordType::none)) {
+            const bool chord = (packed & kChordTypeMask) != uint8_t(ChordType::none);
+            if (chord) {
                 count = chord_expand(event.note, packed, key_root_now, key_scale_now, notes,
                                      kChordMaxNotes);
             }
+            // Played-in extra notes: folded with a chord type, as written without one.
+            count = with_extra_notes(folding, track, event.step, notes, count, key_root_now,
+                                     key_scale_now, chord, kChordMaxNotes);
             send_midi_notes(track, notes, count, midi_velocity, trig.frame, midi_gate_frames);
         } else {
             if (!frozen_[track].on()) machines_[track]->trigger(trig);

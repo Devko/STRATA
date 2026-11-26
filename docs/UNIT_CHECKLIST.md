@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W48, about 146 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W49, about 149 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -557,7 +557,17 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - CLICK OFF, COUNT-IN `2 BAR`, REC, PLAY: eight clicks even with CLICK off, then the beat. STOP
   during the clicks: silence, and the next PLAY without REC starts at once. `____`
 
-**W48. Ratchets over LEN (3 min).** Beat playing, A01, T1.
+**W48. Chords recorded note for note (4 min).** Blank pattern, T7 (VA POLY), KEYS, PLAY, REC.
+- Hold three pads of a chord at once on one step: it plays back as all three. Hold STEP on it:
+  `NOTE C4 +2`, and no `LOCKS` on the line. `____`
+- Next pass, play one other note on that step: the chord is gone, the new note alone (REPLACE).
+  `____`
+- FUNC+HOME, REC MODE to `ADD`: the edit line reads `REC+`. Play one note a pass on one step for
+  three passes: it builds up to a three-note chord. A MIDI keyboard on channel 7 does the same.
+  `____`
+- Hold the chord's STEP and turn VALUE: the whole chord moves. `____`
+
+**W49. Ratchets over LEN (3 min).** Beat playing, A01, T1.
 - Hold STEP 1 + OK: the step page. Turn C: LEN `16 STP`. Screen key right, turn C past 8: `ROLL/64`,
   `ROLL/48`, `ROLL/32`. The kick rolls in 32nds across the whole bar, every pass. The GRID cell
   shows the ratchet's two teeth, the step page's lane a cut at every hit. `____`

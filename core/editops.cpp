@@ -26,6 +26,7 @@
 #include "editops.hpp"
 
 #include "clamp.hpp"
+#include "stepnotes.hpp"
 
 namespace strata {
 
@@ -210,6 +211,8 @@ void range_transpose(Pattern &pattern, int track, int first, int count, int semi
         // against, and an untrigged step keeps the note it was left with, so transposing only
         // the trigs would make half the range come back wrong when those steps are turned on.
         step.note = uint8_t(clamp_int(int(step.note) + by, 0, 127));
+        // And the chord played into it (core/stepnotes.hpp): the chord moves as one.
+        step_shift_extra_notes(pattern, track, first + i, by);
     }
 }
 

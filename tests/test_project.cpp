@@ -1047,9 +1047,12 @@ TEST(project_the_root_note_and_the_quantize_amount_are_clamped) {
     CHECK_EQ(int(g_loaded.settings.quantize), 100);
 }
 
-TEST(project_the_old_swing_byte_is_written_as_50_and_ignored_on_read) {
-    // The project swing is gone (nothing read it); its byte stays so old files still line up.
+TEST(project_the_old_swing_byte_is_rec_mode_and_50_is_replace) {
+    // The project swing is gone (nothing read it); its byte is REC MODE now. Every older build
+    // wrote 50 there, so 50 -- and every byte but 1 -- reads as REPLACE, and REPLACE still
+    // writes 50, so an older build reading the file sees what it always did.
     const uint32_t at = fresh_project_file();
+    CHECK(!g_source.settings.rec_add);
     CHECK_EQ(int(g_project[at + 4]), int(kSwingMin));
 
     for (int value = 0; value < 256; value++) {
@@ -1060,7 +1063,19 @@ TEST(project_the_old_swing_byte_is_written_as_50_and_ignored_on_read) {
         if (g_loaded.settings.quantize != g_source.settings.quantize) {
             CHECK_EQ(int(g_loaded.settings.quantize), int(g_source.settings.quantize));
         }
+        CHECK_EQ(int(g_loaded.settings.rec_add), value == 1 ? 1 : 0);
     }
+}
+
+TEST(project_rec_mode_add_round_trips) {
+    project_init(g_source);
+    g_source.settings.rec_add = true;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, kProjectFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK(g_loaded.settings.rec_add);
+    g_source.settings.rec_add = false;
 }
 
 TEST(project_the_sample_budget_is_clamped_to_one_through_sixtyfour_mib) {
