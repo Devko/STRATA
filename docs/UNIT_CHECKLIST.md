@@ -18,7 +18,7 @@ The 2026-11-22 controls tour and the v0.1.0 release steps are in
 
 # The walkthrough (2026-11-25)
 
-Build from `main` at PR #151 or later, with cl6x. **The unit needs Enaga 0.3.0 firmware**
+Build from `main` at PR #176 or later, with cl6x. **The unit needs Enaga 0.3.0 firmware**
 (`SmplTrek.bin` from Enaga's v0.3.0 release, installed with HOME held at power-on, SYSTEM UPDATE):
 a build from `main` is linked against 0.3.0's host table. Build: `________`
 
@@ -27,7 +27,8 @@ Everything starts on A01 GROOVE, the demo beat a first start plays. Items W1-W16
 is never overwritten.
 
 **W1. CPU guard, quiet (#83, 2 min).** Start STRATA, PLAY, let A01 run 60 s.
-- The bottom line shows `TRK.. MAX.. SMPLTREK` and **never** `GUARD1`-`GUARD4`.
+- PROJECT's SETUP page shows `TRACKS .. MAX ..`, and the right end of the tabs **never** shows
+  `GUARD1`-`GUARD4`.
 - MAX after 60 s: `________ %`
 
 **W2. Velocity on the STEP lights (#93, 1 min).** Stop the beat (STOP), HOME, lower pad 6 (bass).
@@ -46,7 +47,7 @@ is never overwritten.
   Back to `C-4`. Is NOTE view the right default? `____`
 
 **W4. The editable duck (#89, 2 min).** PLAY. MIXER, screen key RIGHT until `MIXER DCK 1-4`.
-- DCK 1-4: T1 `SRC`, T2-T4 `35%`, bottom line `DUCKS UNDER T1`. RIGHT: DCK 5-8, all `35%`.
+- DCK 1-4: T1 `SRC`, T2-T4 `35%`, the DUCK page says `DUCKS UNDER T1`. RIGHT: DCK 5-8, all `35%`.
   RIGHT: `MIXER DUCK`: `SRC T1`, `ATK 3`, `HLD 40`, `REL 120`. Nothing overlaps.
 - DCK 5-8: T6 (bass) and T7 (chord) to `100%`: they pump hard on every kick, no click. To `OFF`:
   no pumping. Back to `35%`.
@@ -57,14 +58,14 @@ is never overwritten.
 - RIGHT to REV+: push A: `REV HALL`. D (SHM) about half.
 - STOP, PLAY (MAX restarts), 60 s: **MAX `________ %`** (against W1's). Leave both on for W14.
 
-**W6. ASR: a pad on track 7 (#90, 2 min).** Lower pad 7, EDIT, screen key RIGHT six times: `ASR`.
+**W6. ENV: a pad on track 7 (#90, 2 min).** Lower pad 7, EDIT, screen key RIGHT six times: `ENV`.
 - The page reads `3MS 0% 60MS 0%` and `SUS 0: ONE-SHOT`; the eight page boxes fit, and the
   envelope is drawn under the rows. The stab sounds as it always did.
 - B (SUS) to about `70%`, A (ATK) about `400MS`, C (REL) about `2.0S`: line `HOLDS: PAD OR LEN`.
   Hold STEP 4 + OK, C (LEN) to `16 STP`, OK: the chord swells in, holds the bar and fades into the
   next. No click at either end.
 
-**W7. The track pad holds (#94, 30 s).** Still on ASR, hold lower pad 7 for five seconds.
+**W7. The track pad holds (#94, 30 s).** Still on ENV, hold lower pad 7 for five seconds.
 - The note holds at the SUS level while the pad is down and fades over REL when let go.
 
 **W8. KEYS: the pads are a piano, the STEP keys are steps (#85, D12, 3 min).** HOME twice
@@ -105,7 +106,7 @@ quickly: `KEYS`, on track 7.
 
 **W11. Step stutter and the rate (#151, 3 min).** PLAY A01 on GRID.
 - Hold REPEAT, then hold STEP 1: `STUTTER 1 1/16`, the whole kit hammers step 1, the beat repeat
-  stops; line 2 shows `ST1 R1/16`. Still holding, RIGHT twice: `STUTTER 1/32`, faster; LEFT back.
+  stops; the live strip shows `ST1 R1/16`. Still holding, RIGHT twice: `STUTTER 1/32`, faster; LEFT back.
 - Hold STEP 5 too: the stutter jumps to the backbeat; let STEP 5 go: back to step 1. Let go of
   STEP 1: `STUTTER OFF`, and the beat comes back **in time**, as if it had played on. No trig
   toggled.
@@ -147,7 +148,7 @@ beat playing.
 - If `GUARD` appears: the chords get thinner with no crackle, and after you let go it counts down
   one level a second and disappears. If it never appears, that is fine; MAX is the reading.
 - With `GUARD` up (if it came), STOP twice: it disappears at once.
-- Then tidy up: EDIT ASR on track 7, SUS back to `0%`. MIXER DLY+ and REV+: push A on each:
+- Then tidy up: EDIT ENV on track 7, SUS back to `0%`. MIXER DLY+ and REV+: push A on each:
   `DLY CLASSIC`, `REV ROOM`.
 
 **W15. A capture does not kill the knobs (#101, 1 min).** PLAY, PERFORM, VALUE fully down.
@@ -181,14 +182,14 @@ beat playing.
   no gap. LEN very short (under 2 s): loops with no `STREAM LATE`.
 
 **W19. Help for the screen you are on (#107, 3 min).** Hold FUNC alone on each screen below
-for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above the bottom line.
+for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
 - GRID on the kick: `GRID SRC KCK`, then `A TUN TUNE` ... `D CLK CLICK`, `PUSH A     NOTE VIEW`.
 - Still holding FUNC, tap the screen key RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
   `HOLD STEP + PAD:`, `RANGE AND TRACK:`, `STEP LIGHTS:`, `FUNC + KEY:`, `FUNC + KNOB OR PAD:`,
   `UPPER PADS`, `VALUE FX MIXER:`, `VALUE FX STEPS:`, and round to page 1. LEFT goes back. GRID's
   own knob page did **not** change.
 - Let go of FUNC: GRID is back. Hold again: page 1 again.
-- EDIT on track 2 (snare): `EDIT SRC SNR`, `B SNP SNAPPY`. Screen key RIGHT to ASR (without FUNC),
+- EDIT on track 2 (snare): `EDIT SRC SNR`, `B SNP SNAPPY`. Screen key RIGHT to ENV (without FUNC),
   hold FUNC: `ASR: SYNTHS GRN SMP`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
 - MIXER DUCK: `A SRC SOURCE TRACK`. PERFORM: `PUSH A-D   LEARN`. Push A (LEARN), hold FUNC:
   `MACRO LEARN:`; CLR ends it. KEYS: `LOWER PADS WHITE KEYS`. PROJECTS: `PUSH B     RENAME`.
@@ -230,7 +231,7 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
   the morph bar is where you left it, and VALUE carries on from there.
 
 **W20c. LOCK and FX GLIDE (#149, 5 min).** A01 playing.
-- Hold FUNC + MUTATE for half a second: `LOCK A01 STORED`, line 2 ends with `L`, the MUTATE pad
+- Hold FUNC + MUTATE for half a second: `LOCK A01 STORED`, the top line shows `L`, the MUTATE pad
   half bright. Tap a few steps on track 1, turn the bass's CUT, mute the hats (FUNC + pad 3), turn
   a macro: within a moment the mark reads `L+`.
 - Tap FUNC + MUTATE: `BACK TO LOCK A01`, at once and in time: the steps, the bass's cutoff, the
@@ -253,7 +254,7 @@ for a second; it shows that screen's help, with `SCREEN KEYS: PAGE 1/n` above th
 **W21. Samples from the SmplTrek's own folders (#117, 2 min).** Needs a card the stock firmware
 has used, with at least one WAV in `SmplTrek/Pool/Audio` (copy one there on a PC if it is empty).
 - Track 8, EDIT, OK, then CLR until the top: `SAMPLES/ POOL/ SMPLTREK/ RECORD/`, nothing cut off.
-- OK on `POOL/`: the second line ends in `POOL/AUDIO`, and the pool's WAVs are listed. OK on one:
+- OK on `POOL/`: the caption ends in `POOL/AUDIO`, and the pool's WAVs are listed. OK on one:
   it loads and plays, as from `/SAMPLES`.
 - CLR three times: `/SMPLTREK/POOL`, `/SMPLTREK`, then the top with the cursor on `SMPLTREK/`.
 - OK on `SMPLTREK/`, then `PROJECT/`, a stock project, `AUDIO/`: its samples are listed and load.
@@ -297,7 +298,7 @@ has used, with at least one WAV in `SmplTrek/Pool/Audio` (copy one there on a PC
 - OK (SOUNDS): EPIANO (bright strike, mellow ring), BELL (inharmonic, long), BRASS (swells, holds
   for LEN), ORGAN, GLASS. Each usable without a knob, at a sensible level against the kick? `____`
 - EDIT, SRC: A reads `A1`-`A8`, B reads `0.5` ... `14`; C (IDX) brightens smoothly, no zipper.
-  ASR shows `ISU` in D. OSC: `DET FIN BRT CAR`, the hint `FIN NUDGES RAT`.
+  ENV shows `ISU` in D. OSC: `DET FIN BRT CAR`.
 - 30 s with FM4 on track 7 playing PAD: **MAX `____ %`** (against W1's). Then FUNC+HOME,
   RELOAD PROJECT puts the beat back.
 
@@ -311,7 +312,7 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   bursts), DRIFT (wanders through the file), STRTCH (the file at half speed, same pitch), STUTTR
   and CHOPS (gapped, plucked). Each usable without a knob? `____` POS stays where you put it.
 - PIT in NOTE view, twelve clicks up: `C-5`, an exact octave (no beating against PIT 64).
-- ASR and OSC pages: `ATK SUS REL ---` with `SUS 0: DEC DECIDES`; `SCN PSP --- ---` with
+- ENV and OSC pages: `ATK SUS REL ---` with `SUS 0: DEC DECIDES`; `SCN PSP --- ---` with
   `PSP: DET 1-63 OCT 64+`. SCN up from `OFF`: the cloud moves through the file, faster as it rises.
 - SHIMMR on track 8 for 30 s: **MAX `____ %`** (against W1's; E16). Then FUNC+HOME, RELOAD
   PROJECT puts the beat back.
@@ -321,7 +322,7 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   thin line under it fills left to right once per pass, empty again on STOP. `____`
 - The right edge's column moves with the beat, a bright dot hangs at the top of each hit for
   about a second; turn the master up until it limits: the column's top pixel lights. `____`
-- PERFORM: move the morph, a macro, push VALUE + STEP 4 (an effect), throw a kill: line 2
+- PERFORM: move the morph, a macro, push VALUE + STEP 4 (an effect), throw a kill: the live strip
   shows `S..`, `M:A`, `FX4`, `K:L`; each goes away as it comes back to rest. `____`
 - Step through every screen (HOME, EDIT, MIXER, PROJECT, KEYS, FUNC menu, SOUNDS): nothing of
   the screen's own runs into the meter column or the strip. Screen updates smoothly with all 8
@@ -343,7 +344,7 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   about 4: dotted lines at the slices; push D (SLC AUTO): they jump to the hits. `____`
 - The loop playing: a bright column runs through the window in time, one per voice. `____`
 - AMP: the envelope's corner moves with A (ATK) and B (DEC), letters A and B on it. Track 7
-  (chord) ASR, then FLTR: SUS lifts the plateau, ENV lifts the filter curve. `____`
+  (chord) ENV, then FLTR: SUS lifts the plateau, ENV lifts the filter curve. `____`
 - MACHINE: track 8 to GRN, back to EDIT SRC: a bracket at POS, ticks flickering inside it as
   grains come and go, brighter when louder. Turn A (POS) and B (SIZ): the bracket follows. `____`
 - Screen still smooth at 20 fps with all eight tracks playing and a 30 s file loaded? Keys never
@@ -357,7 +358,7 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   back. Back to `OFF`: dead on the grid again.
 - PERFORM: the line under the macros reads `FUNC+A/B REL/LEN ALL`. FUNC + turn A left:
   `REL ALL -2` .. `-40`, every track's tail shortens together, kick, hats and the chord's
-  release; line 2 shows `RL-`. Turn it back quickly: it stops on `REL ALL 0` and the kit sounds
+  release; the live strip shows `RL-`. Turn it back quickly: it stops on `REL ALL 0` and the kit sounds
   exactly as before. Right: everything rings longer.
 - FUNC + turn B: `LEN ALL 50%`, the bass and chord notes halve; `200%`, they hold twice as long;
   the drums do not change. Away from rest the line reads `REL -12 LEN 71%`.
@@ -385,7 +386,7 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   out within a 1/16. Same with VALUE + CLR. Short enough, and still click-free? `____`
 
 **W32. The kill EQ learnt by turning; the pad-row keys go round (#156, 3 min).** Beat playing, A01.
-- PERFORM, push A: `LEARN A 0/4`. MIXER, screen keys to the EQ page: line 2 still says
+- PERFORM, push A: `LEARN A 0/4`. MIXER, screen keys to the EQ page: the toast still says
   `LEARN A`. Turn LOW down to `KILL`: the lows go. OK: `A: 1 PARAM`, and the lows are back
   (LOW `0`). PERFORM: turn A up over a bar: the lows fade to nothing; A back to 0, they return. `____`
 - Push A again, MIXER EQ page, push A: `A EQ LOW OFF 0/4`, no kill. Push B: `KILL MID` as
@@ -419,7 +420,7 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 
 **W36. LIVE RND in PERFORM (4 min).** Beat playing, A01.
 - PERFORM (FUNC + MIXER). FUNC + turn D one click at a time: `LIVE RND1 8 TRK` .. `RND16`, and
-  it stops there; the line under the macros reads `LIVE RND16 FUNC+D` and line 2 `RN16`. RND 1:
+  it stops there; the line under the macros reads `LIVE RND16 FUNC+D` and the live strip `RN16`. RND 1:
   every part scatters; RND 4: the beats of each bar trade places, still on the grid. Musical at
   which units, for techno and for ambient? `____`
 - Lower pad 1 (kick), FUNC + push D: `T1 RND OUT 7 TRK`, the kick goes straight while the rest
@@ -443,8 +444,8 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 
 **W38. Two MOD slots per track (5 min).** Beat playing, A01.
 - HOME, lower pad 6 (bass, MNO), EDIT, LFO page: the last line says `PUSH C D: MOD SLOTS`. Push
-  C: line 2 `MOD1 LFO: TURN A KNOB`; push C twice more: `MOD1 VEL: TURN A KNOB`. Screen keys to
-  SRC, turn CUT up by about 40: line 2 `MOD1 VEL>CUT +40`. OK: `M1 VEL>CUT +40`, and CUT is back
+  C: a toast `MOD1 LFO: TURN A KNOB`; push C twice more: `MOD1 VEL: TURN A KNOB`. Screen keys to
+  SRC, turn CUT up by about 40: the toast `MOD1 VEL>CUT +40`. OK: `M1 VEL>CUT +40`, and CUT is back
   where it was. Play pad 6 soft and hard: hard notes are brighter. `____`
 - On SRC, CUT's bar has a dim line under it from the knob up 40, and a bright dot on it that
   jumps with each note. The LFO page lists `M1 VEL>CUT +40` and `M2 OFF`. `____`
@@ -461,7 +462,7 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
 **W39. Hear a sample before loading it (4 min).** Put a few WAVs in `/SAMPLES` first: a short
 hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - Lower pad 8 (SAMPLE), EDIT, OK: SAMPLES. DOWN to the hit, **push A**: `HEARING`, and the hit
-  plays at once, whole. The line under the title says `HEARING 0/0S`, then the folder again. The
+  plays at once, whole. A toast says `HEARING 0/0S`, then the folder again. The
   `NOW` line and the track did not change. `____`
 - DOWN to the 44.1 kHz loop, push A: it plays in tune and at its tempo, a line growing under its
   name. While it plays press DOWN: the next file plays instead, no click, no gap worth a note.
@@ -496,7 +497,7 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   track columns. GRID: the playhead's column lit, trigs flashing. EDIT AMP / FLT / LFO / OSC on a
   WAVE track / SRC on GRAIN: big graphs. MIXER, screen keys to MST: a big spectrum, the
   vectorscope, CMP and LIM bars. Readable at arm's length? `____`
-- SETUP: `TRK MAX ... SMPLTREK` and `DRW ____ MS` with PERFORM up while playing. `____`
+- SETUP: `TRACKS .. MAX ..` and `DRW ____ MS` with PERFORM up while playing. `____`
 
 **W43. EDIT and MIXER as the drafts (6 min).** Beat playing, A01.
 - EDIT on T1: one line of small knobs at the top, D at the bottom, a big picture: SRC the kick's

@@ -34,15 +34,15 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | Runs as an Enaga app on the SmplTrek (Enaga 0.3.0 since #139; 0.2.0 for v0.1.0-v0.3.1; ABI 0, BOOT 1.0.17) | v0.1.0 | ✔ booted 2026-11-22; v0.3.1 runs on the unit (2026-11-24); a #139 build boots on 0.3.0 (2026-11-25) | Loader checks only the ABI number: a build for one Enaga release may load on another and misbehave. Lofi-12 XT / CyDrums untried |
 | Everything on the SD card under `/ENAGA/DATA/STRATA/`; never writes the SPI flash | v0.1.0 | ○ (13) | |
 | Audio load on the top line | v0.1.0 | ✔ about 0–26% on the default beat | Flickers every block |
-| Held MAX readout on the bottom line (since PLAY) | v0.1.0 | ✔ top line under 30% default beat; MAX 84.3% in heavy play | Clean A01 and A04 MAX figures (60 s each) still to record |
+| Held MAX readout (since PLAY), on SETUP since #171 (the bottom line before) | v0.1.0 | ✔ top line under 30% default beat; MAX 84.3% in heavy play | Clean A01 and A04 MAX figures (60 s each) still to record |
 | **CPU guard**: sheds POLY voices (2 a level) and thins GRAIN under load, `GUARD1-4` on screen | #83 | ○ ("The CPU guard") | Thresholds (70% avg / 90% block / 55% fall) are provisional; nothing in the emulator reaches them |
 | Shared budget of 12 VA POLY voices across all tracks; quietest voice choked with a 64-frame fade | v0.1.0 | ○ ("The shared VA POLY voice budget") | 12 is provisional until U1/U2 on the unit |
 | Every screen fits Enaga's 5x7 font (layout test over every screen) | v0.1.0 | ◐ (overlaps seen at first boot, fixed in PR #7) | |
 | **Screen frame**: top line with bar.beat, progress line, live strip of what is off rest, master meter with held peak and limiter light | #144 | ○ (W26) | The meter is 2 px wide; nothing may draw past x 124 |
-| **RESAMPLE, SAMPLES, SOUNDS, CHAIN, KITS, KEYS and PATTERN redrawn** (docs/SCREENS.md): RESAMPLE's meter, live take and length bar; the browsers' previews; CHAIN as blocks on a lane; KITS' machine pictures; KEYS' held chord and knob gauges; PATTERN's swing bars; no caption repeats a screen's name | this PR | ○ (W45) | draw() see docs/BUDGET.md "The screen" |
-| **PROJECT's slots and MACHINE redrawn to the drafts** (docs/SCREENS.md): a map of all 128 patterns (empty, used, playing, queued) and each of the shown bank's sixteen drawn as its steps; MACHINE's kit as pictures, every machine a picture of its sound, what it is for and what it costs | this PR | ○ (W44) | draw() 1.28 ms PROJECT, 2.50 ms MACHINE (emulator, cl6x) |
+| **RESAMPLE, SAMPLES, SOUNDS, CHAIN, KITS, KEYS and PATTERN redrawn** (docs/SCREENS.md): RESAMPLE's meter, live take and length bar; the browsers' previews; CHAIN as blocks on a lane; KITS' machine pictures; KEYS' held chord and knob gauges; PATTERN's swing bars; no caption repeats a screen's name | #176 | ○ (W45) | draw() see docs/BUDGET.md "The screen" |
+| **PROJECT's slots and MACHINE redrawn to the drafts** (docs/SCREENS.md): a map of all 128 patterns (empty, used, playing, queued) and each of the shown bank's sixteen drawn as its steps; MACHINE's kit as pictures, every machine a picture of its sound, what it is for and what it costs | #175 | ○ (W44) | draw() 1.28 ms PROJECT, 2.50 ms MACHINE (emulator, cl6x) |
 | **EDIT and MIXER redrawn to the drafts** (docs/SCREENS.md): EDIT's knob line and a picture on every page of every machine; MIXER's eight-strip desk, duck, DLY, REV, ROUTE, MST with LUFS, EQ curve; lists with a lit cursor, the step page's lane, CHAIN's strip | #174 | ○ (W43) | draw() see docs/BUDGET.md "The screen"; GRID and PERFORM unchanged |
-| **Screens rebuilt to the mockups**: frame (badges, toasts, tabs), PERFORM, GRID, EDIT (graph rows 50-117, filter response, LFO trail, WAVE LIVE, GRAIN cloud), MIXER master (spectrum, vectorscope, CMP/LIM bars) | #171 | ○ (W42) | draw() 1.71 ms on PERFORM, 1.20 ms on MST (emulator, cl6x). Knob values stay in the 5x7 font; no LUFS (the page shows the peak) |
+| **Screens rebuilt to the mockups**: frame (badges, toasts, tabs), PERFORM, GRID, EDIT (graph rows 50-117, filter response, LFO trail, WAVE LIVE, GRAIN cloud), MIXER master (spectrum, vectorscope, CMP/LIM bars) | #171 | ○ (W42) | draw() 1.71 ms on PERFORM, 1.20 ms on MST (emulator, cl6x). Knob values in the small font and LUFS on MST came with #174 |
 | **Live screens 6**: MIXER MST/EQ spectrum (24 bands, peak dots) and vectorscope; live meters beside the faders | #170 | ○ (W41) | draw() 1.21 ms on MST (emulator, cl6x) |
 | **Live screens 5**: WAVE's SRC page draws the table as a waterfall (POS brightest); GRAIN's grains spark with a fading trail | #164 | ○ (W40) | |
 | **Live screens 4**: the LFO page's shape with the phase riding it and an output strip; envelope fills lit as a note travels | #163 | ○ (W35) | |
@@ -50,7 +50,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | **Live screens 2**: audio taps for the screens: each track's level, each LFO's phase, the output into a ring for scopes and spectra (`core/scope.hpp`) | #161 | - | About +0.3 points of load, fixed |
 | **Live screens 1**: the meter in decibels and segments, beat and bar marks on the progress line, draw time on SETUP; the drawing kit (`app/paint.hpp`: AA lines, arcs, dots, afterglow, 3 x 5 font) | #160 | ○ (W33) | Is the 3 x 5 font readable on the OLED? `paint::kSmallLabels` |
 | **Locks on screen**: heard value + kit tick on GRID and EDIT bars, `S5 CUT 64>90`, GRID cell marks (locks, condition, probability, ratchet, trigless) | #146 | ○ (W27) | |
-| **Waveforms and envelopes in EDIT**: SAMPLE and GRAIN draw the sample with window, slices and playheads or grains; AMP, ASR and the synths' FLTR draw the envelope | #150 | ○ (W28) | The picture is made at load (250 bytes a track); a streamed file shows its resident head |
+| **Waveforms and envelopes in EDIT**: SAMPLE and GRAIN draw the sample with window, slices and playheads or grains; AMP and ENV draw the envelope (FLTR the filter's curve since #171) | #150 | ○ (W28) | The picture is made at load (250 bytes a track); a streamed file shows its resident head |
 
 ## Controls and UI
 
@@ -71,7 +71,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 ## Engines (machines)
 
 Eight tracks, any machine on any track (MACHINE, FUNC+EDIT). Each track: 16 parameters on four
-pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages, and ASR and OSC pages on the VA, WAVE,
+pages (SRC, FLTR, AMP, FX), plus LFO and ARP pages, and ENV and OSC pages on the VA, WAVE,
 FM4 and GRAIN machines.
 
 | Feature | Since | Unit | Known limits / notes |
@@ -84,11 +84,12 @@ FM4 and GRAIN machines.
 | SAMPLE **SLC AUTO**: slices at up to 15 detected hits | v0.1.0 | ○ (15c2) | Hit points are found at load, not editable |
 | A file picked on a SMP track plays whole from its start (STA 0, LEN 127, one slice, DEC 127) | #133 | ○ | Only a pick; a project or kit load keeps its saved values |
 | Switching a track's machine loads that machine's default sound (a switch to GRN loads CLOUD) | #133 | ○ | |
+| **SAMPLE holds notes**: SUS and REL on the ENV page (SUS up holds a sample, a looped one becomes a pad, for LEN or a held pad; REL 30 ms-8 s) | #173 | ○ (13k2) | ATK stays on AMP, so ENV's A and D read `---` on SAMPLE |
 | GRAIN: up to 8 grains in one voice | v0.1.0 | ○ (8, 8b / U3) | Most expensive machine; outside the POLY budget (thinned by the CPU guard); no tempo sync of its own |
-| **GRAIN rework**: +6 dB, PIT in whole semitones, SIZ 8-680 ms, ASR page (ATK SUS REL: pads that hold for LEN), OSC page (SCN scan/time-stretch, PSP detune or octave shimmer), values in units, 8 SOUNDS (OK in EDIT), a switch to GRN loads CLOUD | #134 | ○ (W25) | SCN is free-running, not tempo-locked; older projects' GRN tracks play 6 dB louder with slightly different SIZ and PIT snapped to the nearest semitone |
-| VA MONO: saw or pulse, OSC 2 (detune or sync), sub, noise, drive, own filter and envelope, accent, slide, glide | v0.1.0 | ✔ default beat bass | At SUS 0 (default) DEC is the note's length and LEN is not heard; see the ASR row |
-| VA POLY: up to 6 notes, 13 chord types with inversions, DET | v0.1.0 | ✔ default beat chord | At SUS 0 LEN only shortens a note; see the ASR row. No stereo spread or unison 2 (in SPEC) |
-| **Held notes on the VAs: ASR page** (ATK SUS REL FSU, seventh EDIT page); with SUS up a note holds while the key is held or for its step's LEN (up to 64 steps) | #90 | ○ (13k) | Held voices count against the 12-voice POLY budget for as long as they hold; MONO counts LEN only once SUS is up |
+| **GRAIN rework**: +6 dB, PIT in whole semitones, SIZ 8-680 ms, ENV page (ATK SUS REL: pads that hold for LEN), OSC page (SCN scan/time-stretch, PSP detune or octave shimmer), values in units, 8 SOUNDS (OK in EDIT), a switch to GRN loads CLOUD | #134 | ○ (W25) | SCN is free-running, not tempo-locked; older projects' GRN tracks play 6 dB louder with slightly different SIZ and PIT snapped to the nearest semitone |
+| VA MONO: saw or pulse, OSC 2 (detune or sync), sub, noise, drive, own filter and envelope, accent, slide, glide | v0.1.0 | ✔ default beat bass | At SUS 0 (default) DEC is the note's length and LEN is not heard; see the ENV row |
+| VA POLY: up to 6 notes, 13 chord types with inversions, DET | v0.1.0 | ✔ default beat chord | At SUS 0 LEN only shortens a note; see the ENV row. No stereo spread or unison 2 (in SPEC) |
+| **Held notes on the VAs: ENV page** (ATK SUS REL FSU, seventh EDIT page; named ASR until #174); with SUS up a note holds while the key is held or for its step's LEN (up to 64 steps) | #90 | ○ (13k) | Held voices count against the 12-voice POLY budget for as long as they hold; MONO counts LEN only once SUS is up |
 | **VA sound rework: OSC page** (WAV OS2 SUB DRV, eighth EDIT page): saw or pulse width, a detuned or hard-synced OSC 2, sub level, drive into the filter; RES self-oscillates near the top, LP24 squelches like LP12 | #118 | ○ (13p, W22) | Older projects lose the old fixed synced pulse (load `SAW OFF 102 000`). No key tracking to the filter |
 | **One filter on the synths (D8)**: on the VA and WAVE machines FLTR is the voice's own filter (CUT RES ENV FDE; FDE its own decay, or 0.55 x DEC at 0), the insert filter one TON knob; **velocity opens the filter (D15)**; **cutoff floor (D9)**: a swept cutoff stops at about 100 Hz | #139, #147 | ○ (13q, 13e) | Older projects' insert filter on these tracks loads as the nearest TON, without its drive and resonance |
 | **WAVE MONO and WAVE POLY**: the VA voice with a wavetable (16 built-in tables of 16 frames: TBL POS, MOT envelope to position, WRP phase bend, DET second reader), 8 + 7 factory sounds | #122 | ○ (W23) | CPU per voice is a host estimate until the emulator and the unit measure it (BUDGET "WAVE"); a table is built when a track first sounds it (8 slots, 1.25 MiB; the sub plays alone for a moment). No user tables from the card yet, though the slots leave room for them |
@@ -123,7 +124,7 @@ FM4 and GRAIN machines.
 | Per-track LFO: 6 shapes, free 0.06-32 Hz or synced 8 bars-1/32, any of the 16 params; lockable, scene-able, macro-able | v0.1.0 | ○ (13e) | Steps at about 750 Hz; on VA and WAVE an LFO on TUN glides instead (S3) |
 | LFO TRIG: FREE, RETRIG, ONE-SHOT (push RAT); ONE-SHOT shapes are envelopes | S2 | ○ (W30) | A kit setting, not lockable; no new shapes (see the PR) |
 | Cutoff floor (~100 Hz) for LFO, morph and macros; LFO depth on a cutoff about +-3 octaves | D9 | ○ (W30) | The knob and locks still close a filter fully |
-| **Two MOD slots per track**: LFO, ENV (the LFO's shape once per note), VEL, PRS (pad pressure), RND (per note) to any sound, ASR or OSC parameter, signed depth; learnt by push C / D on the LFO page and a turn | #168 | ○ (W38) | A kit setting, not lockable; not on LFO or ARP knobs; on MID the slots reach the CCs |
+| **Two MOD slots per track**: LFO, ENV (the LFO's shape once per note), VEL, PRS (pad pressure), RND (per note) to any sound, ENV or OSC parameter, signed depth; learnt by push C / D on the LFO page and a turn | #168 | ○ (W38) | A kit setting, not lockable; not on LFO or ARP knobs; on MID the slots reach the CCs |
 | Per-track arpeggiator: UP, DN, U/D, ORD, RND, 1/4-1/32T, 1-4 octaves, gate | v0.1.0 | ○ (13h) | On POLY it uses the shared voice budget |
 | Banks A-H x 16 patterns, queued changes (END, 16, 32, NOW) | v0.1.0 | ◐ (3b) | |
 | Chain of up to 64 entries, repeats X1-X16 | v0.1.0 | ○ (3b, 12) | |
@@ -215,7 +216,7 @@ FM4 and GRAIN machines.
 | Kit library: 16 kits on the card, recall while playing, store | v0.1.0 | ○ (15) | Recall is not undoable |
 | Damaged files refused, never crash | v0.1.0 | ○ (M4) | Card pulled mid-save not tried on the unit |
 | Factory (demo) project: 130 BPM C minor kit, A01-A05, chain, 3 scenes, 3 macros, 8 mute states; a first start and LOAD DEMO | v0.1.0 | ✔ A01 plays; ◐ the rest (3b) | Track 8 plays a placeholder until given a sample |
-| Factory pattern A05 PAD: held VA POLY chords from the ASR page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
+| Factory pattern A05 PAD: held VA POLY chords from the ENV page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
 | Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 76 ready-made sounds (KCK 6, SNR 6, HAT 7, PRC 7, MNO 12, PLY 7, WMN 8, WPL 7, FM4 8, GRN 8) into one track, AS WAS puts it back | #102, #118, #122, #126, #134 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
 
 ---

@@ -1,4 +1,4 @@
-# Handoff — 2026-11-25
+# Handoff — 2026-11-26
 
 **Read this first, then `CLAUDE.md`, then `docs/SPEC.md` and `docs/PLAN.md`.** The platform review
 the spec was corrected against is `docs/archive/REVIEW.md`: history, but its decisions stand.
@@ -20,7 +20,7 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
 | | |
 | --- | --- |
-| `make -C host test` | **1,870 tests, 3,665,834 checks, 0 failures** on `main` at PR #151: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
+| `make -C host test` | **3,861,238 checks, 0 failures** on `main` at PR #176: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image (cl6x, 2026-11-25, sample audition merged onto #168): payload 1,224,160 bytes, bss 1,605,248 (with the live screens, bounce to track, step stutter, EDIT's pictures, LOCK and play modes); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
 | `tools/scenarios.sh` | **41 scenarios**, run on Roland's PC only. Live visuals part 5 (WAVE's waterfall, GRAIN's sparks; `scenario_wave` ends on WAVE POLY's SRC page) passed all 36 of its day with cl6x before this merge; merged onto #169, all 41 pass with cl6x (worst 32.20%, ambient). Part 6 (MIXER's spectrum, vectorscope, fader meters; `scenario_visuals` runs twice, the second on MST) passed all 41 with cl6x (31.82%), and so did the screens rebuilt to the mockups on top of it (figures in docs/BUDGET.md). `tools/emulator_frames.py` records the real screen frame by frame. **All 41 pass with cl6x with sample audition (#169) merged onto MOD slots (#168)** (2026-11-25; `scenario_audition` new, the first to check the captured output: a 44.1 kHz tone streamed from the card is heard whole, in tune, at -6 dB; worst 31.82%, ambient, as on main). `scenario_modslots` (MOD slots) learns slot 1 by push C, `--turn` and OK; all 40 pass with cl6x on `main` after #167 (worst 31.82%, ambient). All 39 pass with cl6x with random lock ranges and parameter slide (#167, `scenario_locks` new) merged onto LIVE RND (#166); worst 31.69%, ambient. `scenario_liverand` (LIVE RND, #166) drives FUNC + turn D and FUNC + push D: a `--turn` 2 M cycles after a FUNC `--key` lands inside the key's 20 M-cycle press (26.99% cl6x, 46.07% GCC-only, run alone; the full set was not rerun with it). All 37 before it pass with cl6x with the review fixes after #163 (`scenario_moveall` new; worst 31.59%, ambient, within the half point a peak moves between runs). All 36 pass with cl6x with live visuals part 1 (`scenario_visuals` new: draw() 0.57 ms a frame on GRID; worst 30.93%, ambient), and with part 2's audio taps (worst **31.16%**, ambient; GCC-only 56.48%), and with part 3's GRID and PERFORM views (`scenario_visuals` logs draw() on PERFORM: 1.34 ms), and with part 4's LFO picture (`scenario_visuals` walks on to EDIT's LFO page and turns DEP and DST with `--turn`). All 35 pass with cl6x with LFO TRIG, TUN glide and the cutoff floor merged onto #152 (`scenario_lfo` now pushes TRIG; worst 30.93%, ambient). **All 35 pass with cl6x with REL ALL, LEN ALL and FEEL merged onto `main` after #154** (2026-11-25; worst 30.75%, ambient; 34 passed on `main` after #153 at 30.55%). Added on 2026-11-25, each with the PR that brought it: `scenario_stepkeys` (D12), `scenario_plock`, `scenario_slots`, `scenario_glide`, `scenario_playmode`, `scenario_pictures`, `scenario_bounce` (the only run of a take through Enaga's real file layer), `scenario_feel` (FEEL walked on the PATTERN page). `scenario_moveall` turns REL ALL and LEN ALL with `--turn` (the review PR after #163). The pad gestures (stutter, LOCK, D6) have none: the emulator cannot press pads. The worst case moved from 30.16% to 30.75% over the day. GCC-only figures for that day's work are not taken |
@@ -37,9 +37,10 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
    `scenario_wave.sh` and `scenario_fm.sh`, never run), then E13 (the VA rework), E14 (WAVE's cost
    per voice and its boot time) and E15 (FM4's cost per voice) from `docs/BUDGET.md`, with cl6x and with `ENAGA_TI_CGT=none`. BUDGET has only
    host estimates for both so far.
-2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, items 1-28, on a
+2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, W1-W45, on a
    build from `main` with cl6x and Enaga 0.3.0 firmware. It covers everything since v0.1.0, from
-   the CPU guard to today's LOCK, step stutter, play modes, screen frame and EDIT's pictures.
+   the CPU guard to LOCK, step stutter, play modes, the MOD slots, sample audition and the
+   redrawn screens (#171-#176).
 3. **Write the readings down where they belong**: unit rows in `docs/BUDGET.md`, ticks in the
    reference half of `docs/UNIT_CHECKLIST.md`, the Unit column of `docs/FEATURES.md`, and anything
    odd as an issue or a thread.
@@ -55,9 +56,9 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
    external MIDI clock.
 
 **The UI class is split over files** (2026-11-25): `app/app.hpp` holds the helpers, `init`, the
-private helpers and all the state, and includes twelve `app/ui_*.hpp` fragments inside the class body
-(input, gestures, lights, screen, edit, editview, mixer, mixview, browsers, perfmix, perform,
-project). What each screen draws, row by row, is docs/SCREENS.md. They are not
+private helpers and all the state, and includes sixteen `app/ui_*.hpp` fragments inside the class
+body (input, gestures, lights, live, screen, edit, editview, listview, pickview, modslots, mixer,
+mixview, browsers, perfmix, perform, project). What each screen draws, row by row, is docs/SCREENS.md. They are not
 headers of their own. `tools/audit_commands.sh` reads all of them.
 
 **Controls.** docs/CONTROLS.md is the reference the key handlers follow; change a gesture there

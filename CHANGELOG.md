@@ -20,6 +20,10 @@ the project file format or the controls.
 
 ### Added
 
+- **SAMPLE holds notes.** SAMPLE reads SUS and REL on the ENV page, as the synths do: with SUS
+  up a sample holds for the step's LEN or while its pad is held (a looped sample becomes a pad), and
+  REL sets its tail from the old 30 ms declick up to 8 s. ATK stays on AMP. At SUS and REL 0 a
+  track sounds exactly as before.
 - **Hear a sample before you load it.** In the sample browser (SAMPLES), **push A** plays the
   file under the cursor, whole and from its start, straight to the output at about -6 dB; push A
   again stops it. While one plays, UP/DOWN (or turning A) hears the next file the cursor lands
@@ -202,6 +206,9 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Changed
 
+- **The docs' screenshots are frames of the device build running in the emulator** (cl6x),
+  redrawn by `tools/emulator_screens.sh`; the user manual, cheatsheet and walkthrough follow the
+  redrawn screens (the ENV page, toasts, the live strip, tabs, MAX on SETUP).
 - **The last text-list screens are drawn too.** RESAMPLE has a level meter in segments, draws the
   take column by column while it records and shows its length as a bar of its bars. SAMPLES keeps
   six rows and shows the file being heard as a tape under a playhead (its time and rate), or the
@@ -222,7 +229,7 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 - **EDIT and MIXER look like the drafts.** EDIT's four knobs are one line in the small font at the
   top (D at the bottom), and the picture takes the screen on every page of every machine: a drum's
   SRC draws the hit its knobs make and lights it as it plays; FLT draws the filter's curve over the
-  live spectrum, and on a synth sweeps it after each note; AMP and ASR the envelope with a dot
+  live spectrum, and on a synth sweeps it after each note; AMP and ENV the envelope with a dot
   riding it; LFO its shape, its output strip and where its destination is; WAVE the waterfall;
   GRAIN the sample, the grains' window and the cloud; FX the lo-fi, the pan and the sends; ARP the
   run; OSC the oscillators, FM's algorithm and ratios. The bottom line says what moves the page's

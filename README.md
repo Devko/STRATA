@@ -34,7 +34,7 @@ can keep evolving without stopping.
 
 ![STRATA's screens: GRID, the step page, EDIT, MIXER, PERFORM, KEYS, MACHINE, KIT and PROJECT](docs/screens/overview.png)
 
-<sub>The factory project playing, drawn by the app's own screen code in Enaga's font.</sub>
+<sub>The factory project playing: frames of the device build running in the emulator.</sub>
 
 ## Try it
 
