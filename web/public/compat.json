@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "about": "Which Enaga firmware each STRATA release needs, and the SHA-256 of every zip the card builder may fetch. The builder and its proxy accept only the files listed here. Add a STRATA release with docs/release/RELEASING.md; the hashes are of the zips as published on GitHub.",
+  "enaga": {
+    "0.3.0": {
+      "tag": "v0.3.0",
+      "asset": "enaga-v0.3.0-smpltrek.zip",
+      "sha256": "5ab5c822b282f5b7543b9706c9ebf3df8387c43c32694edf7027a85177934070"
+    },
+    "0.2.0": {
+      "tag": "v0.2.0",
+      "asset": "enaga-v0.2.0-smpltrek.zip",
+      "sha256": "658a14ac11b9595641d62287b9aa367ad1ae8ac7f3c5a404373d48edce54071a"
+    }
+  },
+  "strata": [
+    {
+      "version": "0.4.0",
+      "tag": "v0.4.0",
+      "date": "2026-11-26",
+      "asset": "STRATA-v0.4.0-smpltrek.zip",
+      "sha256": "f962ed0a22f69450003401b03118ec1de0dffd152f4e0b908109f35b92cd4722",
+      "enaga": "0.3.0"
+    },
+    {
+      "version": "0.3.1",
+      "tag": "v0.3.1",
+      "date": "2026-11-23",
+      "asset": "STRATA-v0.3.1-smpltrek.zip",
+      "sha256": "918a3ce411c28645a73422bed8108490789b72f86c868c8a936f93b728e6e303",
+      "enaga": "0.2.0"
+    },
+    {
+      "version": "0.3.0",
+      "tag": "v0.3.0",
+      "date": "2026-11-23",
+      "asset": "STRATA-v0.3.0-smpltrek.zip",
+      "sha256": "42a402f44b557961fc3e8c6e22b6bbd896975e7b4bac94d19c44acee2a138277",
+      "enaga": "0.2.0"
+    },
+    {
+      "version": "0.2.0",
+      "tag": "v0.2.0",
+      "date": "2026-11-23",
+      "asset": "STRATA-v0.2.0-smpltrek.zip",
+      "sha256": "52db1b215cf28d4e03d16d9fd8bd4319102cedf75e7f2ea9b5d17d214ac23e86",
+      "enaga": "0.2.0"
+    },
+    {
+      "version": "0.1.0",
+      "tag": "v0.1.0",
+      "date": "2026-11-22",
+      "asset": "STRATA-v0.1.0-smpltrek.zip",
+      "sha256": "70797ff758a36c9aadcdbdacaa66baff6e0b02ef3aaecc06911e95966b00fa01",
+      "enaga": "0.2.0"
+    }
+  ]
+}
