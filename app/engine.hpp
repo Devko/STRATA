@@ -368,6 +368,20 @@ public:
 private:
     void apply_commands();
     void apply(const Command &command);
+    // apply() checks the track and step, then hands the command to its family. Each
+    // returns false for a command not its own. In app/engine.cpp, in this order.
+    bool apply_sound(const Command &command, int track, int step);
+    bool apply_step_edit(const Command &command, int track, int step);
+    bool apply_perform(const Command &command, int track, int step);
+    bool apply_notes(const Command &command, int track, int step);
+    bool apply_mixer(const Command &command, int track, int step);
+    bool apply_track_timing(const Command &command, int track, int step);
+    bool apply_bulk_edit(const Command &command, int track, int step);
+    bool apply_transport(const Command &command, int track, int step);
+    bool apply_arrangement(const Command &command, int track, int step);
+    bool apply_project(const Command &command, int track, int step);
+    bool apply_samples(const Command &command, int track, int step);
+    bool apply_capture(const Command &command, int track, int step);
     void reconfigure();
 
     // Make `bank`/`slot` the live pattern. Clears the undo history (it belonged to the pattern
