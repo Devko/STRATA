@@ -44,10 +44,10 @@ echo "running the emulator for $CYCLES cycles: play, EDIT to OSC on track 1, the
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 28@360000000 \
-    --key 9@400000000 --key 9@430000000 --key 9@460000000 --key 9@490000000 \
-    --key 9@520000000 --key 9@550000000 --key 9@580000000 \
-    --key 25@600000000 --key 25@640000000 --key 25@680000000 --key 25@720000000 \
-    --key 25@760000000 --key 25@800000000 \
+    --key 25@400000000 --key 25@430000000 --key 25@460000000 --key 25@490000000 \
+    --key 25@520000000 --key 25@550000000 \
+    --key 9@600000000 --key 9@640000000 --key 9@680000000 --key 9@720000000 \
+    --key 9@760000000 --key 9@800000000 --key 9@840000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
@@ -90,7 +90,7 @@ check("scr EDIT ARP" in screens, "five selection presses passed the ARP page", f
 check("scr EDIT ENV" in screens, "a sixth reached the ASR page", f"screens={screens}")
 check("scr EDIT OSC" in screens, "a seventh reached the OSC page", f"screens={screens}")
 check(screens and screens[-1] == "scr EDIT OSC",
-      "six DOWN presses (to track 7, VA POLY) stayed on OSC", f"screens={screens}")
+      "on track 7, VA POLY (the DOWN presses first: a drum's OSC is stepped over)", f"screens={screens}")
 
 blocks = report.get("audio_blocks", 0)
 check(blocks > 1000, "audio ran throughout", f"blocks={blocks}")
