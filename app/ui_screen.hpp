@@ -638,36 +638,45 @@
 
     // --- the step page: one step's own fields ------------------------------
 
+    // The step's own fields (docs/SCREENS.md, "STEP"): which track and step in the caption line,
+    // the field pages as three bars, the page's four fields as letter, name and value, and under
+    // them the track's lane as GRID draws it, this step bracketed, its note drawn on the lane as
+    // long as LEN makes it and shifted by MICR, as bright as VEL and dimmer under PROB, with
+    // RTCH's hits as ticks along it.
     void draw_step_page(enaga::Canvas &canvas) {
         char line[40];
         char *out = line;
-        const Step &step = engine_.pattern().tracks[selected_].steps[page_step_];
+        uint8_t *px = canvas.data();
+        const TrackPattern &track = engine_.pattern().tracks[selected_];
+        const Step &step = track.steps[page_step_];
 
         out = line;
         append(out, "STEP ");
         append_number(out, uint32_t(page_step_ + 1));
         append(out, "  TRK ");
         append_number(out, uint32_t(selected_ + 1));
+        append(out, "  ");
+        append(out, machine_name(engine_.machine_id(selected_)));
         *out = 0;
-        canvas.text(0, 20, line, 14);
+        paint::small_text(px, 0, 18, line, 15);
 
         // Which of the field pages is showing. Same language as EDIT's parameter pages.
         for (int p = 0; p < kFieldPages; p++) {
-            canvas.rect(p * 32 + 2, 32, 28, 3, p == field_page_ ? 14 : 4);
+            canvas.rect(p * 32 + 2, 26, 28, 2, p == field_page_ ? 14 : 4);
         }
 
-        // Four fields, each a name and a value. No bars here: a condition or a note name is not
-        // a quantity, and a bar under "NOT PRE" would only suggest it was one.
+        // Four fields, each a letter, a name and a value. No bars: a condition or a note name is
+        // not a quantity.
         for (int slot = 0; slot < 4; slot++) {
             const int field = field_page_ * 4 + slot;
-            const int y = 42 + slot * 14;
+            const int y = 32 + slot * 11;
+            const char letter[2] = {char('A' + slot), 0};
+            paint::small_text(px, 0, y + 1, letter, 6);
             if (field >= kStepFields) {
-                canvas.text(0, y, "---", 4);
+                canvas.text(8, y, "---", 4);
                 continue;
             }
-
-            canvas.text(0, y, step_field_name(StepField(field)), 13);
-
+            canvas.text(8, y, step_field_name(StepField(field)), 11);
             // Sized from core/stepedit.hpp rather than guessed: the longest label is 8
             // characters and this is the one place a wrong guess would be a stack smash the
             // host build never sees.
@@ -676,8 +685,43 @@
             canvas.text(44, y, text, 15);
         }
 
-        // What the step actually is, under the fields: a step that is off says so, because
-        // every field above it is then inert.
+        // The lane: the page of sixteen this step is on.
+        const int first = page_step_ / 16 * 16;
+        constexpr int kLaneY = 84, kPitch = 7, kX0 = 9;
+        for (int i = 0; i < 16; i++) {
+            const Step &s = track.steps[first + i];
+            const int x = kX0 + i * kPitch;
+            if ((s.flags & kStepTrig) != 0) {
+                canvas.rect(x, kLaneY, 5, 6, (s.flags & kStepAccent) ? 15 : 9);
+            } else if ((s.flags & kStepTrigless) != 0) {
+                draw_trigless_cell(canvas, x, kLaneY);
+            } else {
+                canvas.rect(x + 2, kLaneY + 2, 1, 2, i % 4 == 0 ? 5 : 3);
+            }
+        }
+        const int at = kX0 + (page_step_ - first) * kPitch;
+        canvas.rect(at - 2, kLaneY - 2, 9, 1, 15);
+        canvas.rect(at - 2, kLaneY + 7, 9, 1, 15);
+        canvas.rect(at - 2, kLaneY - 2, 1, 10, 15);
+        canvas.rect(at + 6, kLaneY - 2, 1, 10, 15);
+        const char number[4] = {char('1' + selected_), 0, 0, 0};
+        paint::small_text(px, 2, kLaneY + 1, number, 15);
+        // Its note over the lane: LEN long (a step is seven pixels), MICR's share of a step off
+        // the grid, VEL's brightness, PROB's dimming, RTCH's hits.
+        if ((step.flags & kStepTrig) != 0) {
+            const int len = int(length_sixteenths(step.length)) * kPitch / 16;
+            const int shift = int(step.micro) * kPitch / 24;
+            const int x0 = at + shift;
+            const int w = len < 1 ? 1 : (x0 + len > 124 ? 124 - x0 : len);
+            int grey = 4 + int(step.velocity) * 11 / 127;
+            if (step.probability < 100) grey = grey * (50 + int(step.probability) / 2) / 100;
+            canvas.rect(x0, kLaneY - 7, w, 3, uint8_t(grey));
+            const int hits = ratchet_count(step.ratchet);
+            for (int h = 1; h < hits && w > 2; h++) canvas.rect(x0 + w * h / hits, kLaneY - 8, 1, 5, 0);
+        }
+
+        // What the step actually is: a step that is off says so, because every field above it is
+        // then inert.
         out = line;
         if (step.flags & kStepTrig) {
             append(out, "TRIG");
@@ -691,7 +735,6 @@
             append_number(out, step.lock_count);
         }
         *out = 0;
-        canvas.text(0, 100, line, 11);
-
-        canvas.text(0, 112, "A    B    C    D", 7);
+        paint::small_text(px, 0, 105, line, 11);
+        paint::small_text(px, 0, 113, "A-D: FIELDS  SCREEN KEYS: PAGE", 6);
     }

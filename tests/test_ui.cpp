@@ -7750,6 +7750,19 @@ TEST(ui_redesign_shots) {
         key(ENAGA_KEY_F4);
         std::snprintf(name, sizeof name, "%s_grid", pass == 0 ? "run" : "stop");
         write_shot(folder, name, 37);
+        for (int sc = 0; sc < s_count; sc++) {
+            enter(app, sc);
+            std::snprintf(name, sizeof name, "%s_scr_%s", pass == 0 ? "run" : "stop", screen_name(sc));
+            write_shot(folder, name, 37);
+            key(ENAGA_KEY_CLR);
+            key(ENAGA_KEY_F4);
+        }
+        step_down(0);
+        key(ENAGA_KEY_OK);
+        step_up(0);
+        std::snprintf(name, sizeof name, "%s_scr_STEPPAGE", pass == 0 ? "run" : "stop");
+        write_shot(folder, name, 37);
+        key(ENAGA_KEY_F4);
         if (pass == 0) { key(ENAGA_KEY_F6); key(ENAGA_KEY_F6); play_blocks(400); }
     }
 }

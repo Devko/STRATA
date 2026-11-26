@@ -175,6 +175,18 @@
     // showing lit (a white tab, black letters), at y 121-127. EDIT's eight pages, three of
     // MIXER's twelve around the one showing, GRID's pattern pages, PERFORM with what is live
     // beside it (it has no pages), and every other screen its own name.
+    // A list's row, as the drafts mark a choice: the cursor's row a lit bar with its text dark,
+    // the others plain at `grey`. The bar runs to the meter's edge, so a value drawn at the
+    // right of the row sits on it too.
+    static void list_row(enaga::Canvas &canvas, int x, int y, const char *text, bool cursor, int grey) {
+        if (cursor) {
+            canvas.rect(0, y - 1, 126, 9, 15);
+            canvas.text(x, y, text, 0);
+        } else {
+            canvas.text(x, y, text, uint8_t(grey));
+        }
+    }
+
     int draw_tab(enaga::Canvas &canvas, int x, const char *text, bool on) {
         const int w = paint::small_width(text);
         if (on) canvas.rect(x, 121, w + 4, 7, 15);

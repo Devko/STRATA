@@ -762,7 +762,7 @@
     void draw_menu(enaga::Canvas &canvas) {
         char line[40];
         char value[24];
-        canvas.text(0, 18, "FUNC MENU", 14);
+        paint::small_text(canvas.data(), 0, 18, "FUNC MENU", 15);
         int first = menu_cursor_ - kMenuRows / 2;
         if (first > kMenuItems - kMenuRows) first = kMenuItems - kMenuRows;
         if (first < 0) first = 0;
@@ -774,14 +774,14 @@
             append(out, menu_item_name(MenuItem(i)));
             *out = 0;
             const int y = 29 + row * 9;
-            canvas.text(0, y, line, here ? 15 : 9);
+            list_row(canvas, 0, y, line, here, 9);
             menu_item_value(MenuItem(i), value);
             int length = 0;
             while (value[length] != '\0') length++;
-            if (length > 0) canvas.text(kFrameMeterX - length * 6, y, value, here ? 15 : 9);
+            if (length > 0) canvas.text(kFrameMeterX - length * 6, y, value, here ? 0 : 9);   // on the row's bar
         }
-        canvas.text(0, 103, "OK: RUN   CLR: BACK", 7);
-        canvas.text(0, 111, "LEFT/RIGHT: CHANGE", 7);
+        paint::small_text(canvas.data(), 0, 105, "OK: RUN   CLR: BACK", 6);
+        paint::small_text(canvas.data(), 0, 113, "LEFT/RIGHT: CHANGE", 6);
     }
 
     void open_kits() {
@@ -936,7 +936,7 @@
         append_number(out, uint32_t(kTakeBars[take_bars_index_]));
         append(out, state == 1u ? " BAR  WAIT" : " BAR");
         *out = 0;
-        canvas.text(0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 18, line, 15);
 
         out = line;
         if (take_offer_ >= 0 && state == 0u) {
@@ -1013,9 +1013,9 @@
             }
         }
 
-        canvas.text(0, 94, "B: FROM  C: LEVEL", 7);
-        canvas.text(0, 103, "UP DOWN OR A: BARS", 7);
-        canvas.text(0, 112, "LEFT RIGHT: WHERE TO", 7);
+        paint::small_text(canvas.data(), 0, 97, "B: FROM  C: LEVEL", 6);
+        paint::small_text(canvas.data(), 0, 105, "UP DOWN OR A: BARS", 6);
+        paint::small_text(canvas.data(), 0, 113, "LEFT RIGHT: WHERE TO", 6);
     }
 
     // Route the input as the screen says. Enaga answers 0, -1 for a source or level it does not
@@ -1044,7 +1044,7 @@
         *out++ = ' ';
         append(out, scale_name(scale));
         *out = 0;
-        canvas.text(0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 18, line, 15);
 
         out = line;
         append(out, "OCT ");
