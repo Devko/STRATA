@@ -10,7 +10,7 @@ the project file format or the controls.
 
 - **Choke groups** for any track: push A-D on MIXER's TRK 1-4 / TRK 5-8 pages puts that track in
   group 1-4 (`C1`-`C4` under its strip), and a note on a track cuts the other tracks of its group
-  with a short fade. Saved in the kit; older kits open with no groups.
+  with a short fade. Saved in the kit; older kits open with no groups (#181).
 
 - **The card builder**, [strata.einblick.dev](https://strata.einblick.dev): pick a release and it
   builds one SD card zip with STRATA and the Enaga firmware it needs, both fetched in your
