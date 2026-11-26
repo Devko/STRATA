@@ -422,8 +422,10 @@ constexpr Text kMenu = {"FUNC MENU:", {
 
 // The MIXER's pages, in app/app.hpp's kMixerPages order (its static_assert holds the count).
 constexpr Text kMixer[kHelpMixerPages] = {
-    {"MIXER TRK 1-4:", {"A-D  TRACK 1-4 LEVEL", nullptr}},
-    {"MIXER TRK 5-8:", {"A-D  TRACK 5-8 LEVEL", nullptr}},
+    {"MIXER TRK 1-4:", {"A-D  TRACK 1-4 LEVEL", "PUSH  CHOKE GROUP", "OFF 1-4: A NOTE CUTS",
+                        "ITS GROUP", nullptr}},
+    {"MIXER TRK 5-8:", {"A-D  TRACK 5-8 LEVEL", "PUSH  CHOKE GROUP", "OFF 1-4: A NOTE CUTS",
+                        "ITS GROUP", nullptr}},
     {"MIXER DCK 1-4:", {"A-D  DUCK DEPTH 1-4", "OFF TO 100%", "THE SOURCE NEVER",
                         "DUCKS  SET ON DUCK", nullptr}},
     {"MIXER DCK 5-8:", {"A-D  DUCK DEPTH 5-8", "OFF TO 100%", "THE SOURCE NEVER",
