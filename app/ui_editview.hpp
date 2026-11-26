@@ -49,7 +49,14 @@
             case EditView::fm:       draw_fm_view(canvas); break;
             case EditView::ratios:   draw_ratio_view(canvas); break;
             case EditView::scan:     draw_scan_view(canvas); break;
-            case EditView::envelope: draw_env_view(canvas, envelope_for(page == Page::fltr ? EditPicture::filter : EditPicture::amp), page != Page::fltr); break;
+            case EditView::envelope: {
+                // ENV (the ASR page) draws the whole envelope: the amplitude's, DEC included, and
+                // on a synth with its own filter the filter's under it, FDE included.
+                const EnvelopePicture filter = envelope_for(EditPicture::filter);
+                const bool both = page == Page::asr && machine_has_voice_filter(id);
+                draw_env_view(canvas, envelope_for(EditPicture::amp), true, both ? &filter : nullptr);
+                break;
+            }
             case EditView::chain_filter: draw_chain_filter_view(canvas); break;
             case EditView::voice_filter: draw_voice_filter_view(canvas); break;
             case EditView::lfo:      draw_lfo_view(canvas); break;
@@ -454,10 +461,11 @@
     // move. While the track's note sounds, the part it has travelled is bright with its fill, and a
     // dot rides the curve (Status::env_stage, env_level). Widths go by the knob: every time here is
     // exponential in its knob, so this is a log-time drawing (2 ms and 5 s share the width).
-    void draw_env_view(enaga::Canvas &canvas, const EnvelopePicture &e, bool ride) {
-        uint8_t *px = canvas.data();
-        const int top = kPicTop + 8;              // room for the letters over the peak
-        const int bottom = kPicBottom - 1;
+    // The columns where an envelope's segments end, and its curve, column by column: `curve` the
+    // level 0-1 a column, `xs_q`/`ys_q` the points in Q4. Returns how many columns.
+    struct EnvShape { int xa, xd, xs, xr; float settle; };
+    static int envelope_curve(const EnvelopePicture &e, int top, int bottom, float *curve,
+                              int16_t *xs_q, int16_t *ys_q, EnvShape &shape) {
         const int span = bottom - top;
         // A note that holds has four segments to share the width; one that does not, two, so a
         // drum's decay is not squeezed into the left third.
@@ -468,13 +476,7 @@
         const int xr = xs + (e.holds ? 2 + e.rel * 36 / 127 : 0);
         const float settle = e.hold ? 1.0f : (e.holds ? float(e.sus) * (1.0f / 127.0f) : 0.0f);
         const float peak = float(e.peak) * (1.0f / 127.0f);
-
-        picture_grid(px, top, bottom, 8);
-        for (int q = 1; q <= 3; q++) paint::dotted_h(px, 0, 119, bottom - span * q / 4, 4, 2);
-
-        float curve[kWaveColumns] = {};
-        int16_t xs_q[kWaveColumns];
-        int16_t ys_q[kWaveColumns];
+        shape = EnvShape{xa, xd, xs, xr, settle};
         int n = 0;
         for (int x = 0; x <= xr && x < kWaveColumns; x++) {
             float level;
@@ -490,10 +492,39 @@
             }
             curve[x] = level;
             const int y = bottom - int(level * peak * float(span) + 0.5f);
-            for (int fy = y + 2; fy < bottom; fy += 2) paint::plot_max(px, x, fy, 2);
             xs_q[n] = int16_t(paint::q4(x));
             ys_q[n] = int16_t(paint::q4(y));
             n++;
+        }
+        return n;
+    }
+
+    void draw_env_view(enaga::Canvas &canvas, const EnvelopePicture &e, bool ride,
+                       const EnvelopePicture *ghost = nullptr) {
+        uint8_t *px = canvas.data();
+        const int top = kPicTop + 8;              // room for the letters over the peak
+        const int bottom = kPicBottom - 1;
+        const int span = bottom - top;
+        picture_grid(px, top, bottom, 8);
+        for (int q = 1; q <= 3; q++) paint::dotted_h(px, 0, 119, bottom - span * q / 4, 4, 2);
+
+        float curve[kWaveColumns] = {};
+        int16_t xs_q[kWaveColumns];
+        int16_t ys_q[kWaveColumns];
+        EnvShape shape;
+        if (ghost != nullptr) {
+            // The filter's envelope under the amplitude's, dim, with its own letters.
+            const int gn = envelope_curve(*ghost, top, bottom, curve, xs_q, ys_q, shape);
+            paint::polyline(px, xs_q, ys_q, gn, 5);
+            paint::small_text(px, 120 - paint::small_width("AMP FLT"), kPicTop, "AMP", 9);
+            paint::small_text(px, 120 - paint::small_width("FLT"), kPicTop, "FLT", 5);
+        }
+        const int n = envelope_curve(e, top, bottom, curve, xs_q, ys_q, shape);
+        const int xa = shape.xa, xd = shape.xd, xs = shape.xs, xr = shape.xr;
+        const float settle = shape.settle;
+        const float peak = float(e.peak) * (1.0f / 127.0f);
+        for (int i = 0; i < n; i++) {
+            for (int fy = (ys_q[i] >> 4) + 2; fy < bottom; fy += 2) paint::plot_max(px, i, fy, 2);
         }
         paint::polyline(px, xs_q, ys_q, n, 9);
 
@@ -828,26 +859,28 @@
                         (kWaveFrames - 1) * 16 / 127;                       // in 1/16 frames
         const int mip = kWaveMipLevels - 1;
         const int length = wave_mip_length(mip);
-        constexpr int kPoints = 40;
-        for (int f = kWaveFrames - 1; f >= 0; f--) {
-            const int16_t *samples = waves.frame(table, f, mip);
-            const int ox = paint::q4(6) + f * 54;                // 3.4 px a frame to the right
-            const int oy = paint::q4(74) - f * 42;               // and 2.6 up
-            int16_t xs[kPoints];
-            int16_t ys[kPoints];
-            for (int i = 0; i < kPoints; i++) {
-                const int v = samples[i * length / kPoints];
-                xs[i] = int16_t(ox + i * 26);                    // 1.6 px a point
-                ys[i] = int16_t(oy - v * 11 * paint::kSub / 32768);
-                const int x = xs[i] >> 4;
-                const int floor = (oy >> 4) + 12;
-                for (int y = (ys[i] >> 4) + 1; y <= floor; y++) {
-                    paint::plot(px, x, y, 0);
-                    paint::plot(px, x + 1, y, 0);
-                }
-            }
+        // The stack's shape depends on the table alone; only which frame is bright follows POS.
+        // So the stack is drawn once a table into wf_cover_ (each pixel's anti-aliased grey at
+        // full brightness) and wf_frame_ (which frame drew it), and each frame only shades it:
+        // drawing all sixteen every frame cost 5.5 ms on the emulator, over the 5 ms limit.
+        if (wf_table_ != table) build_waterfall(px, waves, table, mip, length);
+        static constexpr uint8_t kGreys[3] = {15, 8, 4};
+        uint8_t shade[3][16];
+        for (int k = 0; k < 3; k++) {
+            for (int c = 0; c < 16; c++) shade[k][c] = uint8_t((c * kGreys[k] + 7) / 15);
+        }
+        uint8_t level[kWaveFrames];
+        for (int f = 0; f < kWaveFrames; f++) {
             const int d = f * 16 - pos < 0 ? pos - f * 16 : f * 16 - pos;
-            paint::polyline(px, xs, ys, kPoints, d < 8 ? 15 : (d < 24 ? 8 : 4));
+            level[f] = uint8_t(d < 8 ? 0 : (d < 24 ? 1 : 2));
+        }
+        for (int y = 0; y < kWfRows; y++) {
+            uint8_t *row = px + (kWfTop + y) * paint::kWidth;
+            const uint8_t *cover = wf_cover_ + y * kWfCols;
+            const uint8_t *frame = wf_frame_ + y * kWfCols;
+            for (int x = 0; x < kWfCols; x++) {
+                if (cover[x] != 0) row[x] = shade[level[frame[x]]][cover[x]];
+            }
         }
         canvas.rect(0, 87, 120, 1, 3);
         paint::small_text(px, 0, 90, "LIVE", 6);
@@ -865,6 +898,56 @@
             ly[i] = int16_t(paint::q4(95) - v * 5 * paint::kSub / 32768);
         }
         paint::polyline(px, lx, ly, 64, 13);
+    }
+
+    // The waterfall's stack for `table`, drawn back to front into the canvas's rows kWfTop.. (which
+    // the caller then overwrites) and taken into wf_cover_ / wf_frame_.
+    static constexpr int kWfTop = 23, kWfRows = 66, kWfCols = 124;
+    void build_waterfall(uint8_t *px, const WaveLibrary &waves, int table, int mip, int length) {
+        constexpr int kPoints = 40;
+        for (int i = 0; i < kWfRows * kWfCols; i++) { wf_cover_[i] = 0; wf_frame_[i] = 0; }
+        for (int f = kWaveFrames - 1; f >= 0; f--) {
+            for (int y = 0; y < kWfRows; y++) {
+                for (int x = 0; x < kWfCols; x++) px[(kWfTop + y) * paint::kWidth + x] = 0;
+            }
+            const int16_t *samples = waves.frame(table, f, mip);
+            const int ox = paint::q4(6) + f * 54;                // 3.4 px a frame to the right
+            const int oy = paint::q4(74) - f * 42;               // and 2.6 up
+            int16_t xs[kPoints];
+            int16_t ys[kPoints];
+            int16_t top[kWfCols + 1];
+            for (int x = 0; x <= kWfCols; x++) top[x] = 127;
+            for (int i = 0; i < kPoints; i++) {
+                const int v = samples[i * length / kPoints];
+                xs[i] = int16_t(ox + i * 26);                    // 1.6 px a point
+                ys[i] = int16_t(oy - v * 11 * paint::kSub / 32768);
+                const int x = xs[i] >> 4;
+                const int y = (ys[i] >> 4) + 1;
+                if (x < kWfCols && y < top[x]) top[x] = int16_t(y);
+                if (x + 1 < kWfCols && y < top[x + 1]) top[x + 1] = int16_t(y);
+            }
+            paint::polyline(px, xs, ys, kPoints, 15);
+            // Hidden lines: under this frame's curve, to its floor, what is behind goes.
+            const int floor = (oy >> 4) + 12;
+            for (int x = 0; x < kWfCols; x++) {
+                if (top[x] == 127) continue;
+                for (int y = top[x] < kWfTop ? kWfTop : top[x]; y <= floor && y < kWfTop + kWfRows; y++) {
+                    wf_cover_[(y - kWfTop) * kWfCols + x] = 0;
+                }
+            }
+            for (int y = 0; y < kWfRows; y++) {
+                for (int x = 0; x < kWfCols; x++) {
+                    const uint8_t g = px[(kWfTop + y) * paint::kWidth + x];
+                    if (g == 0) continue;
+                    wf_cover_[y * kWfCols + x] = g;
+                    wf_frame_[y * kWfCols + x] = uint8_t(f);
+                }
+            }
+        }
+        for (int y = 0; y < kWfRows; y++) {
+            for (int x = 0; x < kWfCols; x++) px[(kWfTop + y) * paint::kWidth + x] = 0;
+        }
+        wf_table_ = table;
     }
 
     // --- GRAIN's SRC page: the sample, the window the grains start in, and the cloud ----------

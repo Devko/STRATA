@@ -495,7 +495,7 @@ constexpr const char *kGrainAsrWords[4] = {"ATTACK", "SUSTAIN", "RELEASE", ""};
 constexpr const char *kGrainOscWords[4] = {"SCAN SPEED", "PITCH SPRAY", "", ""};
 
 const char *const kEditPageNames[kHelpEditPages] = {"SRC", "FLTR", "AMP", "FX",
-                                                    "LFO", "ARP", "ASR", "OSC"};
+                                                    "LFO", "ARP", "ENV", "OSC"};
 
 bool is_va(uint8_t machine) { return machine_reads_asr(machine); }
 

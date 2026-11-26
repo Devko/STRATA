@@ -202,6 +202,23 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Changed
 
+- **EDIT and MIXER look like the drafts.** EDIT's four knobs are one line in the small font at the
+  top (D at the bottom), and the picture takes the screen on every page of every machine: a drum's
+  SRC draws the hit its knobs make and lights it as it plays; FLT draws the filter's curve over the
+  live spectrum, and on a synth sweeps it after each note; AMP and ASR the envelope with a dot
+  riding it; LFO its shape, its output strip and where its destination is; WAVE the waterfall;
+  GRAIN the sample, the grains' window and the cloud; FX the lo-fi, the pan and the sends; ARP the
+  run; OSC the oscillators, FM's algorithm and ratios. The bottom line says what moves the page's
+  knobs (`LFO>CUT 40`), else its hint. MIXER's track pages are an eight-strip desk (meters with a
+  held peak, faders, pan, sends; the four the knobs turn lettered), the duck pages dip with their
+  source, DLY draws the echoes, REV the tail, ROUTE the routing, MST the draft's master page with a
+  momentary LUFS reading, and EQ the kill EQ's curve. The lists keep their rows in the big font with
+  the cursor's row lit; the step page draws the track's lane with the step's note on it, and CHAIN
+  the song as a strip. docs/SCREENS.md has every screen's rows.
+- **The ASR page is ENV and draws the whole envelope**: the amplitude's with DEC in it, and on the
+  VA and WAVE machines the filter's under it with FDE. Same knobs (ATK SUS REL FSU).
+- **GRAIN's AMP page has DEC on knob A**, as every other machine has: A DEC, B PIT, C SHP, D LVL.
+  Only the knobs moved; kits load as they did.
 - **REL ALL and LEN ALL are tested on the DSP** (`scenario_moveall`): the emulator turns encoders
   since Enaga 0.3.0. Each click's amount is logged, as the other notices the scenarios read are.
 - **Code quality round (no change in sound or controls).** One set of integer clamps in core/,

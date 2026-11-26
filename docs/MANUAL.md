@@ -79,7 +79,7 @@ A machine is one of eleven sound engines, plus **MID**, which plays an outboard 
 instead (section 3). Any track can host any machine (MACHINE mode, `FUNC+EDIT`). The default kit
 uses eight of them, one per track (WAVE MONO and WAVE POLY are there to switch to).
 **Switching a track to another machine loads that machine's default sound**: its SRC, FLTR and
-AMP pages (and ASR and OSC where it has them) become the first entry of its SOUNDS list, and a
+AMP pages (and ENV and OSC where it has them) become the first entry of its SOUNDS list, and a
 SMP track plays a sample whole from its start. The FX page (lo-fi, pan, sends), the LFO and the
 arpeggiator stay as they were, and so does a MID track's page.
 
@@ -96,7 +96,7 @@ arpeggiator stay as they were, and so does a MID track's page.
 
 Every track has **16 parameters on four pages** of four, one parameter per encoder A-D, then a
 fifth and a sixth page for its LFO and its arpeggiator (below). The VA, WAVE and FM4 machines add a
-seventh and an eighth, ASR and OSC.
+seventh and an eighth, ENV and OSC.
 
 - **SRC** and **AMP** belong to the machine and change meaning with it (section 3).
 - **FLTR** and **FX** belong to the insert chain: FLTR = DRV drive, CUT cutoff, RES resonance,
@@ -180,7 +180,7 @@ Ended with no knob turned, a slot that is already set keeps its knob and depth a
 source, so a push or two and OK changes only the source. Walk the source to **OFF** and press OK
 to clear the slot (`M1 OFF`). Ended with nothing set, it says `NO KNOB: M1 STAYS OFF`.
 
-A slot can move the 16 sound parameters and, on the machines that have them, ASR and OSC. Not
+A slot can move the 16 sound parameters and, on the machines that have them, ENV and OSC. Not
 the LFO's own knobs or the arp's (`MOD: NOT LFO OR ARP`). The two slots and the LFO add up. On a
 cutoff a slot stops at the same ~100 Hz floor as the LFO, and on VA and WAVE a slot on TUN bends
 the voices smoothly, as the LFO does.
@@ -219,9 +219,9 @@ The four settings are parameters like any other: hold a STEP and turn MOD to arp
 step, or store two scenes with different arps. A new track's arp is off, and so is every track
 in a project saved before the arp existed.
 
-### Held notes: the ASR page
+### Held notes: the ENV page
 
-<p><img src="screens/edit_asr.png" width="256" alt="EDIT, the ASR page on VA POLY"></p>
+<p><img src="screens/edit_asr.png" width="256" alt="EDIT, the ENV page on VA POLY"></p>
 
 On the VA, WAVE and FM4 machines a seventh EDIT page, **ASR**, after ARP, decides how a note is
 held. With it, the POLY machines play pads and long chords, and the MONO ones long bass notes and
@@ -241,11 +241,11 @@ drones:
 The line under the knobs says `SUS 0: ONE-SHOT` or `HOLDS: PAD OR LEN`. On any other machine the
 page shows `NOT ON THIS MACHINE`.
 
-A scene captured with SCENE stores the ASR page too, like every other knob. So if a note still
+A scene captured with SCENE stores the ENV page too, like every other knob. So if a note still
 fades with SUS up, look at the morph: a scene stored at SUS 0 pulls SUS down as VALUE moves
 towards it. Capture the scene again, or clear its ASR knobs.
 
-**A pad in three moves:** on the PLY track, ASR page: SUS to about 70%, ATK to about `400MS`, REL
+**A pad in three moves:** on the PLY track, ENV page: SUS to about 70%, ATK to about `400MS`, REL
 to about `2.0S`. Then on the step page give a chord step a LEN of `16 STP`: it holds for the whole
 bar and fades into the next. Or queue **A05 PAD** to hear one ready-made.
 
@@ -439,7 +439,7 @@ FUNC menu's LOAD DEMO brings back (a NEW PROJECT starts empty). It takes about f
 | A02 | GROOVE+ | The same beat developing: a kick pickup every fourth bar, a hat roll, a clap on FILL, a 12-step perc line and a 7-step loop against the 16 |
 | A03 | BREAK | Kick and bass out; long dub chords, a perc ticking at 35% probability |
 | A04 | PEAK | Everything up: ratcheted hats, an acid bass line, a rave stab, kick and clap rolls on FILL |
-| A05 | PAD | Held chords over a quiet beat: Cm9, Abmaj7, Ebmaj7 and Gm7, a bar each, swelling in and ringing into the next. The sound of the [ASR page](#held-notes-the-asr-page) |
+| A05 | PAD | Held chords over a quiet beat: Cm9, Abmaj7, Ebmaj7 and Gm7, a bar each, swelling in and ringing into the next. The sound of the [ENV page](#held-notes-the-asr-page) |
 
 It also ships a chain (GROOVE x2, GROOVE+ x2, BREAK, PEAK x2, GROOVE+, about two minutes) that
 starts **off**, eight mute states, and scenes 2-4: **DUB** (chord, rim, loop and clap pushed into
@@ -678,7 +678,7 @@ grains in the air, `HOLD`, a share in `%`.
 | Page | A | B | C | D |
 | --- | --- | --- | --- | --- |
 | SRC | **POS** position in the sample | **SIZ** grain size, 8-680 ms | **DEN** grains in the air, X0.3-X8.0: under X1 leaves gaps (a stutter), X2 and up is a smooth cloud | **SPR** spray, 0-500 ms: chorus, cloud, wash |
-| AMP | **PIT** ±24 whole semitones | **SHP** grain shape: smooth to plucked | **DEC** 5 ms-15 s; 127 = `HOLD` | **LVL** |
+| AMP | **DEC** 5 ms-15 s; 127 = `HOLD` | **PIT** ±24 whole semitones | **SHP** grain shape: smooth to plucked | **LVL** |
 | ASR | **ATK** attack, 0 (none) to 5 s | **SUS** sustain: 0 leaves DEC in charge; up holds the cloud while a KEYS pad or the step's LEN lasts | **REL** release, 180 ms-10 s | |
 | OSC | **SCN** scan: the read head moves from POS while the note sounds, `OFF` to 200% of real time (100% at 90) | **PSP** pitch spray: 1-63 detunes each grain by up to a semitone (`D25`), 64-127 sends up to half the grains an octave up (`OCT25`, a shimmer) | | |
 
@@ -711,7 +711,7 @@ with accent, slide and glide.
 | OSC | **WAV** saw, square, pulse | **OS2** off, 1-63 detune, 64-127 sync | **SUB** sub level | **DRV** drive |
 
 With SUS at 0 (the default) DEC is the note's length. Turn SUS up for long, held notes: see
-[Held notes: the ASR page](#held-notes-the-asr-page).
+[Held notes: the ENV page](#held-notes-the-asr-page).
 
 FLTR is the voice's own filter, the only one on the track (TON on SRC is a tone knob after
 it). ENV 0 is a static dub bass; ENV and RES up is the acid squelch; RES at the top
@@ -742,8 +742,8 @@ each with inversions `/n`).
 | ASR | **ATK** attack | **SUS** sustain: 0 = one-shot | **REL** release | **FSU** filter sustain |
 | OSC | **WAV** | **OS2** as MNO | **SUB** | **DRV** |
 
-For pads, turn SUS up on the ASR page: a chord then holds for its step's LEN, or for as long as you
-hold the keys ([Held notes: the ASR page](#held-notes-the-asr-page)).
+For pads, turn SUS up on the ENV page: a chord then holds for its step's LEN, or for as long as you
+hold the keys ([Held notes: the ENV page](#held-notes-the-asr-page)).
 
 Every note is a sustaining voice and costs CPU while it rings. All VA POLY, WAVE POLY and FM4 tracks
 together share a budget of **12 voices**; past it, the quietest note is faded out quickly to make room. A longer
@@ -755,7 +755,7 @@ The VA voice with a **wavetable** where its two oscillators were: 16 tables of 1
 built into STRATA (no files needed), from PolyWerk's recipes. A table is computed the first
 time a track plays it, which takes a moment: until then you hear only the sub. POS moves smoothly through a
 table's frames; MOT lets the filter envelope move it, so a note's timbre changes as it plays.
-Everything else is the VA's: the sub, the 24 dB filter with its envelope, the ASR page, accent,
+Everything else is the VA's: the sub, the 24 dB filter with its envelope, the ENV page, accent,
 slide and glide on WMN, chords and the shared 12-voice budget on WPL.
 
 | Page | A | B | C | D |
@@ -892,7 +892,7 @@ trying sounds never loses yours. LEFT/RIGHT or the screen keys move to the next 
 its own AS WAS. CLR goes back.
 
 A factory sound sets the machine's SRC and AMP pages, the insert chain's FLTR page (drive and
-filter) and, on the VA, WAVE, FM4 and GRAIN machines, the ASR and OSC pages. It leaves the FX page (lo-fi, pan and both sends), the LFO,
+filter) and, on the VA, WAVE, FM4 and GRAIN machines, the ENV and OSC pages. It leaves the FX page (lo-fi, pan and both sends), the LFO,
 the ARP, the fader, HAT's choke group and GRAIN's POS and PIT alone, so the track keeps its place in the mix and a cloud keeps
 reading the part of the sample you chose. The
 first entry of each list is the factory kit's own sound.
@@ -911,7 +911,7 @@ first entry of each list is the factory kit's own sound.
 | GRN | CLOUD (where to start), PAD (swells, holds for LEN), FREEZE (one moment held), SHIMMR (a third of the grains an octave up), DRIFT (a slow scan), STRTCH (half speed, own pitch), STUTTR (gapped plucked grains), CHOPS (short percussive grains for POS locks) |
 
 The MNO list is longer than the screen: it scrolls as the cursor moves. PAD, STRING, KEYS, BRASS,
-FAT, REESE, ACID, SYNC, LEAD and DRONE sustain (the ASR page's SUS is up), so their notes last as long as
+FAT, REESE, ACID, SYNC, LEAD and DRONE sustain (the ENV page's SUS is up), so their notes last as long as
 each step's LEN: give the steps long LENs, or hear PAD on A05. A loaded sound is a change to the
 kit like turning knobs: it is saved with the project, and FUNC+CLR does not undo it (AS WAS does).
 
@@ -933,7 +933,7 @@ The step page's fields:
 | --- | --- | --- |
 | NOTE | 0-127 | The note (also: hold STEP + turn VALUE) |
 | VEL | 1-127 | Velocity |
-| LEN | 1/16 step ... 64 STP | Note length: how long a POLY machine holds, a MONO one too once SUS is up (the ASR page), and the MIDI note-off |
+| LEN | 1/16 step ... 64 STP | Note length: how long a POLY machine holds, a MONO one too once SUS is up (the ENV page), and the MIDI note-off |
 | MICR | ±11 ticks | Micro-timing: 24 ticks is one 16th |
 | PROB | 0-100% | Chance the step plays |
 | COND | see below | Trig condition |
@@ -1163,7 +1163,7 @@ LEN ALL**. Each starts at rest, where the sound is exactly what you programmed, 
 always stops on rest for one click (a detent), so you can find it without looking.
 
 - **REL ALL** shortens or lengthens every track's tail at once, by the same amount on each one's
-  own release: DEC on the AMP page of every machine, and REL on the ASR page where the machine has
+  own release: DEC on the AMP page of every machine, and REL on the ENV page where the machine has
   one (the VAs, WAVE, FM4, GRAIN). Each track keeps its own length relative to the others: turn
   it down and the whole kit goes tight and dry, up and it all rings. A step's lock on DEC moves
   with it. `REL ALL -12`.

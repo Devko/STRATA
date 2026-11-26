@@ -42,6 +42,7 @@
 #include <enaga/wav.hpp>
 
 #include <cstdlib>
+#include <chrono>
 #include <cstring>
 
 using strata::test::FakeHost;
@@ -8215,11 +8216,11 @@ TEST(ui_grain_pit_is_on_amp_and_switches_there) {
     Strata &app = fresh();
     tune_track_in_edit(MachineId::grain, Page::amp, 64);
     CHECK(screen_has(app, "C-4"));
-    app.on_encoder(0, -12);
+    app.on_encoder(1, -12);                            // PIT is knob B: DEC is first on AMP
     pump(2);
     CHECK_EQ(int(tune_note(uint8_t(MachineId::grain), app_engine().params(0).v[8])), 48);
     check_layout(app, "EDIT AMP, GRN, PIT as a note");
-    key(ENAGA_KEY_PUSH_A);
+    key(ENAGA_KEY_PUSH_B);
     CHECK(!UiProbe::tune_notes(app));
     // On SRC, A is POS: no switch.
     key(ENAGA_KEY_SELECT_LEFT);
@@ -8229,7 +8230,7 @@ TEST(ui_grain_pit_is_on_amp_and_switches_there) {
     CHECK(!UiProbe::tune_notes(app));
     key(ENAGA_KEY_SELECT_RIGHT);
     key(ENAGA_KEY_SELECT_RIGHT);
-    key(ENAGA_KEY_PUSH_A);
+    key(ENAGA_KEY_PUSH_B);
     CHECK(UiProbe::tune_notes(app));
 }
 
@@ -10664,4 +10665,30 @@ TEST(ui_mod_slot_prs_hears_the_tracks_pad_and_lets_go) {
     app.on_pad_release(2);
     pump(2);
     post_cmd_track_mod_off(0);
+}
+
+// Off unless STRATA_DRAW_BENCH is set: how long draw() takes on a few EDIT screens on the host, to
+// find what is heavy before measuring on the emulator.
+TEST(ui_draw_bench) {
+    if (std::getenv("STRATA_DRAW_BENCH") == nullptr) return;
+    Strata &app = fresh();
+    enaga::Canvas canvas(g_pixels);
+    const auto bench = [&](const char *name) {
+        const auto t0 = std::chrono::steady_clock::now();
+        for (int i = 0; i < 2000; i++) app.draw(canvas);
+        const auto t1 = std::chrono::steady_clock::now();
+        std::printf("  %-12s %.1f us a draw\n", name,
+                    std::chrono::duration<double, std::micro>(t1 - t0).count() / 2000.0);
+    };
+    key(ENAGA_KEY_F8);
+    edit_page_to(Page::src);
+    bench("kick SRC");
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::wave_mono));
+    pump(4);
+    for (int i = 0; i < 4000 && !app_engine().waves().resident(0); i++) { app.update(uint32_t(i)); pump(); }
+    bench("wave SRC");
+    key(ENAGA_KEY_F4);
+    bench("grid");
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
 }

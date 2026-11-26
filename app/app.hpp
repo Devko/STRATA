@@ -440,7 +440,7 @@ const char *page_name(Page page) {
         case Page::fx:   return "FX";
         case Page::lfo:  return "LFO";
         case Page::arp:  return "ARP";
-        case Page::asr:  return "ASR";
+        case Page::asr:  return "ENV";      // the whole envelope (Roland, 2026-11-26)
         case Page::osc:  return "OSC";
         default:         return "?";
     }
@@ -943,6 +943,11 @@ private:
     uint32_t edit_trig_ms_[kTracks] = {};
     bool edit_trig_live_[kTracks] = {};
     uint32_t edit_trig_checked_ms_ = 0;
+    // WAVE's waterfall, drawn once a table (app/ui_editview.hpp, build_waterfall): each pixel's
+    // grey at full brightness and the frame that drew it, and the table they are of.
+    uint8_t wf_cover_[66 * 124] = {};
+    uint8_t wf_frame_[66 * 124] = {};
+    int wf_table_ = -1;
     uint8_t flt_band_rows_[spectrum::kBands] = {};
     // MIXER's master pages: the FFT's scratch, each band's shown rows, its peak dot and how long
     // the dot holds, and the vectorscope's afterglow.
