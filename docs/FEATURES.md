@@ -120,7 +120,7 @@ FM4 and GRAIN machines.
 | **Hold STEP + upper pad edits the step (D6)**: FILL condition, REPEAT ratchet, MUTE A:B, MUTATE probability, THROW a delay (FUNC: reverb) send lock; FILL + STEP writes a FILL trig | #140, #142, #153 | ○ (W9) | SCENE A/B still perform with a STEP held |
 | 16 levels of undo and redo | v0.1.0 | ○ (6) | Chain edits and kit recalls are not undoable |
 | Live recording (pads, KEYS, MIDI) with latency correction and QUANTIZE 0-100%; **held length recorded as LEN** (#90) | v0.1.0 | ○ (M3, 13k) | Note-repeat rolls are not recorded |
-| **Chords recorded note for note** on VA POLY, WAVE POLY, FM4 and MID: up to six notes a step (its note plus five extra-note locks), REC MODE REPLACE / ADD in the FUNC menu | #183 | ○ (W47) | Notes of one step share its velocity, LEN and micro-timing; each extra note takes one of the step's eight lock slots |
+| **Chords recorded note for note** on VA POLY, WAVE POLY, FM4 and MID: up to six notes a step (its note plus five extra-note locks), REC MODE REPLACE / ADD in the FUNC menu | #183 | ○ (W48) | Notes of one step share its velocity, LEN and micro-timing; each extra note takes one of the step's eight lock slots |
 | Motion recording of knob moves as locks | v0.1.0 | ○ (M3) | MIDI CCs are not motion-recorded |
 | **KEYS on the pads: two rows as a piano**, velocity, held, octave pads; the STEP keys are steps there (D12, #142; until then they played the scale) | #85 | ○ (W8) | |
 | Per-track LFO: 6 shapes, free 0.06-32 Hz or synced 8 bars-1/32, any of the 16 params; lockable, scene-able, macro-able | v0.1.0 | ○ (13e) | Steps at about 750 Hz; on VA and WAVE an LFO on TUN glides instead (S3) |

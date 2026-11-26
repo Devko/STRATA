@@ -547,7 +547,7 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   to `T6 CHOKE OFF`, the bass rings over the hats again. `____`
 - Save the project, load another and back: T3 and T4 still say `C1`. `____`
 
-**W47. Chords recorded note for note (4 min).** Blank pattern, T7 (VA POLY), KEYS, PLAY, REC.
+**W48. Chords recorded note for note (4 min).** Blank pattern, T7 (VA POLY), KEYS, PLAY, REC.
 - Hold three pads of a chord at once on one step: it plays back as all three. Hold STEP on it:
   `NOTE C4 +2`, and no `LOCKS` on the line. `____`
 - Next pass, play one other note on that step: the chord is gone, the new note alone (REPLACE).
