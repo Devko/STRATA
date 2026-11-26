@@ -313,6 +313,8 @@ public:
     uint32_t audition_elapsed() const;
     // Its length in file frames (Status::audition_frame counts the same), 0 before it is known.
     uint32_t audition_frames() const { return audition_total_; }
+    // Its rate in Hz, 0 before it is known.
+    uint32_t audition_rate() const { return audition_rate_; }
     // Why the last audition did not play (NOT A WAV, NOT FOUND ...), once: it reads and clears.
     const char *take_audition_error() {
         const char *e = audition_error_;

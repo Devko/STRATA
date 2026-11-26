@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W44, about 133 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W45, about 137 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -520,6 +520,22 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - FUNC+EDIT: the kit's eight pictures along the top, T1's framed; the twelve machines as
   pictures, KCK's lit, and two lines on what KCK is. DOWN walks the machine and the lines follow.
   SETUP's `DRW ____ MS` after a while on MACHINE. `____`
+
+**W45. The last list screens as pictures (4 min).** Beat playing, A01.
+- FUNC+REC: RESAMPLE. The segments move with the beat, the dB at their right; the dim history
+  rolls. DOWN for 2 BAR, OK: `ARMED` blinks, then `REC` lit and the take draws itself left to
+  right, the bar under it filling; after it the take stays grey with `LAST ...`. `____`
+- T8, EDIT, OK: SAMPLES, six rows and T8's file under them with its length and rate. Push A on a
+  file: `HEAR`, its name and seconds, a tape filling under a head. `____`
+- T1, EDIT, OK: SOUNDS. Walk the list: the bars change with each preset, ticks where the kick
+  differs now. `____`
+- PROJECT, screen keys to CHAIN, FUNC+STOP: the entries as blocks, a playhead crossing the playing
+  one; UP/DOWN move the bright frame and the steps under it. PATTERN: turn a track's swing with
+  UP/DOWN, its bar grows. `____`
+- FUNC+EDIT twice: KITS, each stored kit as eight small pictures, the cursor's row as names. KEYS
+  (GRID twice): hold three pads of a chord, `HELD C4 E4 G4` and `C MAJ` lit; turn A, its gauge
+  moves. MENU, SETUP, PROJECTS: no second line repeating the name. SETUP's `DRW ____ MS` after a
+  while on KITS. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

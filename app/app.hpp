@@ -544,6 +544,7 @@ public:
 
 #include "ui_project.hpp"
 #include "ui_pickview.hpp"
+#include "ui_listview.hpp"
 
 private:
     void post(Cmd cmd, uint8_t track = 0, uint8_t step = 0, uint8_t a = 0, uint8_t b = 0,
@@ -983,6 +984,21 @@ private:
     // track bits; every bank's "holds a pattern" bits and which bank is read next; the frames
     // drawn and the last one the slots drew, so entering the screen reads every bank.
     uint8_t slot_thumb_[kPatternsPerBank][16] = {};
+    // RESAMPLE (app/ui_listview.hpp): the source's level over the last 120 frames, rolling, and
+    // the take as it was recorded, a column a 120th of it, in rows of the picture's half height.
+    uint8_t level_history_[120] = {};
+    uint8_t take_wave_[120] = {};
+    int take_wave_cols_ = 0;
+    uint8_t take_seen_state_ = 0;
+    uint32_t history_level_ = 0;       // the reading the history last rolled on
+    // KITS: each machine's picture drawn once (build_kit_icons), and the strip it is drawn in.
+    static constexpr int kIconStripRows = 24;
+    uint8_t icon_strip_[128 * kIconStripRows] = {};
+    uint8_t kit_icons_[int(MachineId::count)][14 * 8] = {};
+    bool kit_icons_built_ = false;
+    // CHAIN: the cursor entry's pattern as PROJECT's tiles draw one, and which pattern it is.
+    uint8_t chain_thumb_[16] = {};
+    int chain_thumb_key_ = -1;
     uint16_t bank_used_[kBanks] = {};
     int used_next_ = 0;
     uint32_t draw_frame_ = 0;

@@ -21,6 +21,10 @@
 #                                steps (four read a frame, the playing one every frame)
 # Run 4, MACHINE:
 #   PLAY, FUNC + F8           -> the kit's and the twelve machines' pictures
+# Run 5, KITS with four kits stored (the most pictures any screen draws, 8 a slot):
+#   PLAY, FUNC + F8 twice     -> KITS, on slot 1
+#   FUNC + DOWN, DOWN x3 more -> the default kit saved into slots 1-4, all before the 3.2 s
+#                                window the logged average is taken over begins
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F1 = 19 FUNC, F7 = 21 MIXER (FUNC +
 # F7 PERFORM), F8 = 28 EDIT (FUNC + F8 MACHINE), F3 = 20 PROJECT, SELECT_RIGHT = 9; encoders 0-3 are A-D. The first press comes late:
@@ -55,6 +59,7 @@ LOG="$ENAGA_BUILD/scenario_visuals.log"
 LOG2="$ENAGA_BUILD/scenario_visuals_mst.log"
 LOG3="$ENAGA_BUILD/scenario_visuals_project.log"
 LOG4="$ENAGA_BUILD/scenario_visuals_machine.log"
+LOG5="$ENAGA_BUILD/scenario_visuals_kits.log"
 
 run() {   # log, then emulate.py's arguments
     local log="$1"; shift
@@ -65,7 +70,7 @@ run() {   # log, then emulate.py's arguments
     }
 }
 
-echo "running the emulator four times for $CYCLES cycles: the live screens and draw()'s cost ..."
+echo "running the emulator five times for $CYCLES cycles: the live screens and draw()'s cost ..."
 run "$LOG" \
     --key 22@300000000 \
     --key 19@700000000 --key 21@705000000 \
@@ -80,9 +85,10 @@ run "$LOG2" \
     --key 9@1070000000 --key 9@1110000000
 run "$LOG3"     --key 22@300000000     --key 20@700000000
 run "$LOG4"     --key 22@300000000     --key 19@700000000 --key 28@705000000
+run "$LOG5"     --key 22@300000000     --key 19@400000000 --key 28@405000000     --key 19@480000000 --key 28@485000000     --key 19@600000000 --key 25@605000000     --key 25@680000000 --key 19@740000000 --key 25@745000000     --key 25@820000000 --key 19@880000000 --key 25@885000000     --key 25@960000000 --key 19@1020000000 --key 25@1025000000
 
 rc=0
-python3 - "$LOG" "$LOG2" "$LOG3" "$LOG4" <<'PY' || rc=$?
+python3 - "$LOG" "$LOG2" "$LOG3" "$LOG4" "$LOG5" <<'PY' || rc=$?
 import json, re, sys
 
 CYCLES_PER_BLOCK = 496_000
@@ -135,9 +141,10 @@ p1, d1 = one(sys.argv[1], "run 1: PERFORM, then the LFO page", "scr PERFORM", "s
 p2, d2 = one(sys.argv[2], "run 2: MIXER MST", "scr MIXER MST", "scr MIXER MST")
 p3, d3 = one(sys.argv[3], "run 3: PROJECT", "scr PROJECT", "scr PROJECT")
 p4, d4 = one(sys.argv[4], "run 4: MACHINE", "scr MACHINE", "scr MACHINE")
+p5, d5 = one(sys.argv[5], "run 5: KITS, four kits stored", "scr KIT", "scr KIT")
 
 print()
-print(f"emulator peak load: {max(p1, p2, p3, p4):.2f}%  (the highest of the four runs)")
+print(f"emulator peak load: {max(p1, p2, p3, p4, p5):.2f}%  (the highest of the five runs)")
 if d1 is not None:
     print(f"draw(): {d1:.2f} ms a frame on PERFORM, averaged over 64 frames")
 if d2 is not None:
@@ -146,6 +153,8 @@ if d3 is not None:
     print(f"draw(): {d3:.2f} ms a frame on PROJECT, averaged over 64 frames")
 if d4 is not None:
     print(f"draw(): {d4:.2f} ms a frame on MACHINE, averaged over 64 frames")
+if d5 is not None:
+    print(f"draw(): {d5:.2f} ms a frame on KITS, averaged over 64 frames")
 
 sys.exit(1 if failures else 0)
 PY
