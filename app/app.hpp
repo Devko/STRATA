@@ -981,10 +981,9 @@ private:
     uint32_t loud_seen_ = 0;
     int loud_tenths_ = -999;
     // PROJECT's slots (app/ui_pickview.hpp): the shown bank's patterns as sixteen columns of
-    // track bits, the bank they are of, which tile is read next; every bank's "holds a pattern"
-    // bits and which bank is read next.
+    // track bits; every bank's "holds a pattern" bits and which bank is read next; the frames
+    // drawn and the last one the slots drew, so entering the screen reads every bank.
     uint8_t slot_thumb_[kPatternsPerBank][16] = {};
-    int thumb_bank_ = -1;
     // RESAMPLE (app/ui_listview.hpp): the source's level over the last 120 frames, rolling, and
     // the take as it was recorded, a column a 120th of it, in rows of the picture's half height.
     uint8_t level_history_[120] = {};
@@ -1000,9 +999,10 @@ private:
     // CHAIN: the cursor entry's pattern as PROJECT's tiles draw one, and which pattern it is.
     uint8_t chain_thumb_[16] = {};
     int chain_thumb_key_ = -1;
-    int thumb_next_ = 0;
     uint16_t bank_used_[kBanks] = {};
     int used_next_ = 0;
+    uint32_t draw_frame_ = 0;
+    uint32_t slots_frame_ = 0;
     // draw()'s own cost (count_draw_time): the window's sum, its frames, the last average.
     uint32_t draw_ms_sum_ = 0;
     uint32_t draw_count_ = 0;

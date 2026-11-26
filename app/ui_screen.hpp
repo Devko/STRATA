@@ -13,6 +13,7 @@
         char *out = line;
 
         canvas.clear();
+        draw_frame_++;
         // Every frame on every screen, so a picture that plays a note through knows when it came.
         update_track_triggers();
         // Every frame on every screen, so the ring never fills while a scope is not up.
