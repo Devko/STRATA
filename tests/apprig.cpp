@@ -178,6 +178,11 @@ Engine &fresh() {
     // the load buffer and tell the audio side. `request_new` would do the same and also rename.
     Project &incoming = g_engine.project_for_load();
     project_init(incoming);
+    // The scenes and the macros are not in `Project`: they load into their own sets beside it
+    // (Engine::scenes_for_load), so `project_init` leaves them as the last test left them. A
+    // scene captured by one test went on moving the next test's sound whenever its morph was off
+    // rest -- found by running the suite in a shuffled order. Blank, as Storage's NEW makes them.
+    perform_init(g_engine.scenes_for_load(), g_engine.macros_for_load());
 
     // And a kit that can make a sound. `project_init` zeroes the kit, so LVL is 0 on every track
     // and the whole instrument is silent -- correct for a blank project and useless as a
@@ -230,11 +235,9 @@ Engine &fresh() {
     // bytes existed nothing put them back at all, and a test that lengthened the reverb handed
     // the next test a 10-second tail that `settle()` cannot wait out inside its block limit.
 
-    // The scene SLOTS are deliberately not reset. `Cmd::scene_select` refuses a scene index
-    // outside 0..kScenes-1, so there is no "unassign" to post -- and none is needed: the scenes
-    // themselves come back empty with the re-initialised project, and core/perform.hpp's rule is
-    // that an empty scene behaves as the kit. Posting an out-of-range index would only bump the
-    // refusal counter, which a test may be about to read.
+    // The scene SLOTS need nothing here: `Cmd::project_loaded` puts A and B back from the blank
+    // project's settings, and the scenes themselves were blanked with `perform_init` above, so
+    // core/perform.hpp's rule that an empty scene behaves as the kit holds.
     for (int t = 0; t < kTracks; t++) {
         post(Cmd::set_throw, uint8_t(t));                   // a = 0: off
         post(Cmd::set_mute, uint8_t(t), 0, 0);              // unmuted, immediately
