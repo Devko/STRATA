@@ -6,6 +6,13 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Added
+
+- **The card builder**, [strata.einblick.dev](https://strata.einblick.dev): pick a release and it
+  builds one SD card zip with STRATA and the Enaga firmware it needs, both fetched in your
+  browser from their official releases and checked against their SHA-256. Source in `web/`
+  (#180).
+
 ## [0.4.0] - {{RELEASE_DATE}}
 
 An early beta: everything merged since 0.3.1 (#137 to #177), and the first release for **Enaga

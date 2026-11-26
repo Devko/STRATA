@@ -13,13 +13,35 @@ SmplTrek. Installing it takes two downloads from two places:
 | **Enaga 0.3.0**, the firmware | [Enaga's v0.3.0 release](https://github.com/seawaffle/enaga/releases/tag/v0.3.0): `enaga-v0.3.0-smpltrek.zip` | `SmplTrek.bin` |
 | **STRATA**, the app | [STRATA's releases](https://github.com/Devko/STRATA/releases): `STRATA-v0.4.0-smpltrek.zip` | `SD-CARD/ENAGA/APPS/STRATA/APP.ENA`, a README.txt with these steps, the changelog and the licences |
 
-**Shortcut:** [strata.einblick.dev](https://strata.einblick.dev) does both downloads in your
-browser, from the two official releases, and hands you one zip for the card in matching versions
-(source in [web/](../web/README.md)). The steps below say what it does by hand.
-
 The STRATA zip does not carry Enaga's firmware: you get that from its authors, not from a copy
 of ours. (v0.1.0 to v0.3.1 did include Enaga 0.2.0's `SmplTrek.bin`.) Releases are
 pre-releases until 1.0. To build `APP.ENA` yourself, see [BUILDING.md](BUILDING.md).
+
+## The easy way: the card builder
+
+[**strata.einblick.dev**](https://strata.einblick.dev) does both downloads for you. Pick a STRATA
+release and it offers only the Enaga version that release needs; your browser then fetches the
+two zips from their official GitHub releases, checks each against its published SHA-256, and
+saves one zip laid out for the card:
+
+```text
+SmplTrek.bin                 Enaga's firmware, unchanged (left out with "STRATA only")
+ENAGA/APPS/STRATA/APP.ENA    the STRATA app, unchanged
+STRATA-README.txt            these steps, for that pair of versions
+ENAGA-LICENSE.txt            Enaga's licence
+STRATA-LICENSES.txt          STRATA's licence and every third-party notice
+```
+
+1. Do the [safety checks](#before-you-install) below first.
+2. Copy everything in the zip to the **root** of the SD card. If the card already has an
+   `ENAGA` folder, merge it and replace the old `APP.ENA`.
+3. Hold **HOME (F4)** while switching on, choose **SYSTEM UPDATE**, and let it finish. This
+   installs Enaga.
+4. Switch on, and carry on at [step 3](#step-3-switch-on-and-play) below.
+
+For an update on the same Enaga version (see the table below), choose **STRATA only**: the zip
+then has no firmware, and step 3 is skipped. Nothing is uploaded and nothing is kept on the site;
+its source is [web/](../web/README.md). The steps below do the same by hand.
 
 ## Before you install
 

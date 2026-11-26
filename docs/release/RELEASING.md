@@ -20,6 +20,9 @@ Publishing is one command, `tools/publish_release.sh`, and it refuses rather tha
       and say the zip does not include it. If the Enaga version changed since the last release,
       they say so, since updating then needs step 1 of docs/INSTALL.md again. (v0.1.0 to v0.3.1
       bundled Enaga 0.2.0's `SmplTrek.bin`; their notes describe that and stay as published.)
+- [ ] The notes' install section starts with the card builder,
+      [strata.einblick.dev](https://strata.einblick.dev), as the easy way, before the steps by
+      hand.
 - [ ] If the `APP.ENA` was built with cl6x: read the licence text in
       `~/ti/ti-cgt-c6000_8.5.0.LTS` (a `LICENSE`, `*manifest*` or `license` directory) for a
       condition on distributing the compiler's **output**, and record what it says in

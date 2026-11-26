@@ -408,7 +408,9 @@ or VA track lists ready-made sounds for its machine and loads one into that trac
 
 ### On the card
 
-Everything STRATA keeps is on the SD card, never in the unit's flash:
+Everything STRATA keeps is on the SD card, never in the unit's flash. (To put STRATA on a card
+in the first place, [strata.einblick.dev](https://strata.einblick.dev) builds the card zip for
+you; [INSTALL.md](INSTALL.md) has the steps.)
 
 ```text
 /ENAGA/APPS/STRATA/APP.ENA                     the app
