@@ -8,6 +8,10 @@ the project file format or the controls.
 
 ### Added
 
+- **CLICK and COUNT-IN** in the FUNC menu: a metronome on every beat (higher on a bar's
+  first), and a count-in of 1 or 2 bars before a PLAY with REC on, so a take starts on step 1
+  after the clicks. Neither is recorded nor saved; under an outside clock there is no count-in.
+
 - **Choke groups** for any track: push A-D on MIXER's TRK 1-4 / TRK 5-8 pages puts that track in
   group 1-4 (`C1`-`C4` under its strip), and a note on a track cuts the other tracks of its group
   with a short fade. Saved in the kit; older kits open with no groups (#181).

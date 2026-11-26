@@ -115,6 +115,15 @@ MOD slots, for whoever touches them next (core/modslot.hpp has the rules):
   `--key` landing while a `--turn` is still clicking was not seen by the app in one run; leave a
   turn of 20 detents about 300 M cycles before the next key.
 
+**CLICK and COUNT-IN** (CyDrums S6, docs/CONTROLS.md "CLICK and COUNT-IN"): dsp/click.hpp is a
+recursive-sine click (loop in dsp/clickloops.ti.c) mixed after RESAMPLE's tap, beside the
+audition. `Engine::metronome_tick` fires it from the clock's own ticks. A count-in is
+`Cmd::count_in`, posted BEFORE `enaga::clock::start()` (and taken back if the start is refused):
+the clock starts at once and `count_in_end_` ticks are subtracted from every tick the sequencer,
+the rolls, the stutter and the arps see, from `Status::tick` and from the recorder's stamps
+(`Status::count_in_ticks`). A STOP (seen as running going false) or a restart ends it. Host tests
+in tests/test_click.cpp and test_ui; `scenario_click`; UNIT_CHECKLIST W47.
+
 **Choke groups** (CyDrums S4, docs/CONTROLS.md "Choke groups"): `KitTrack::choke`, KIT.BIN's
 optional section 11. `Engine::note_started` now takes the note's frame and calls `choke_group`,
 which marks the other tracks of the group; after each such track renders, `run_choke` fades its
