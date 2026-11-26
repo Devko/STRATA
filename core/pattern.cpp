@@ -109,6 +109,12 @@ void pattern_init(Pattern &pattern) {
     pattern.seed = 1;
 }
 
+const char *ratchet_rate_name(uint8_t rate) {
+    constexpr const char *kNames[kRatchetRates] = {"1/64", "1/48", "1/32", "1/16T",
+                                                   "1/16", "1/8T", "1/8",  "1/4"};
+    return kNames[rate & 0x07u];
+}
+
 void step_sanitize(Step &step) {
     step.flags = uint8_t(step.flags & kStepFlagMask);
     step.note = uint8_t(step.note & 0x7Fu);
@@ -127,7 +133,9 @@ void step_sanitize(Step &step) {
     const RatchetRamp ramp = uint8_t(ratchet_ramp(step.ratchet)) > uint8_t(RatchetRamp::down)
                                  ? RatchetRamp::none
                                  : ratchet_ramp(step.ratchet);
-    step.ratchet = ratchet_pack(hits, ramp);
+    // A spanning step keeps its flag and its rate (any of the eight); bit 3 of a rate is cleared.
+    step.ratchet = ratchet_spans(step.ratchet) ? ratchet_pack_span(ratchet_rate(step.ratchet), ramp)
+                                               : ratchet_pack(hits, ramp);
 
     if (step.lock_count > kLocksPerStep) {
         step.lock_count = 0;
