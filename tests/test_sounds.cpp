@@ -225,7 +225,8 @@ namespace {
 // the machines that read them. Everything machine_defaults_apply must leave no stale byte in.
 bool reads_for_sound(uint8_t machine, int p) {
     if (p < 12) return true;
-    return machine_reads_asr(machine) && p >= kSoundAsrFirst && p < kSoundOscFirst + 4;
+    if (p >= kSoundAsrFirst && p < kSoundAsrFirst + 4) return machine_reads_asr(machine);
+    return machine_reads_osc(machine) && p >= kSoundOscFirst && p < kSoundOscFirst + 4;
 }
 
 }  // namespace

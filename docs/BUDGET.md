@@ -1286,6 +1286,15 @@ full-scale constant hammered every block now peaks at about 3.2 into the insert 
 and the arithmetic ceiling is 8. Real material at LVL 127 peaks well under 1
 (`/mnt/project-files/grain-renders`).
 
+### SAMPLE's SUS and REL (2026-11-26, host only)
+
+Nothing in `dsp/sampleloops.ti.c` changed. SUS and REL only change the shape `Envelope::render`
+already runs; per voice there is one more compare and, with SUS up, a LEN countdown per slice.
+What does change is how long a voice can live: with SUS up a looped sample holds for its LEN
+instead of ending at its decay, but SAMPLE's four voices already allowed a held loop (DEC at the
+top), so the worst case is the one SAMPLE always had. Emulator figures (`scenario_asr`, cl6x and
+GCC-only) owed on Roland's PC; they should match `scenario_factory` to within noise.
+
 ### EDIT's waveforms and envelopes (2026-11-25, emulator, cl6x)
 
 The audio side's share is `Engine::publish_waves`: every fourth block, for each SAMPLE and GRAIN

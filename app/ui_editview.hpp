@@ -386,14 +386,15 @@
                 } else {
                     const bool sustains = kit.v[kAsrFirst + 1] > 0;
                     append(out, sustains ? "HOLDS: PAD OR LEN"
-                                         : (machine_is_grain(id) ? "SUS 0: DEC DECIDES" : "SUS 0: ONE-SHOT"));
+                                         : (machine_is_grain(id) || id == uint8_t(MachineId::sample)
+                                                ? "SUS 0: DEC DECIDES" : "SUS 0: ONE-SHOT"));
                 }
                 break;
             case Page::osc:
                 append(out, machine_is_fm(id)     ? "FIN NUDGES RAT"
                             : machine_is_wave(id) ? "WRP BENDS  DET 2 OSCS"
                             : machine_is_grain(id) ? "PSP: DET 1-63 OCT 64+"
-                            : has_asr(selected_) ? "OS2: DET 1-63 SYN 64+"
+                            : machine_reads_osc(id) ? "OS2: DET 1-63 SYN 64+"
                                                  : "NOT ON THIS MACHINE");
                 break;
         }

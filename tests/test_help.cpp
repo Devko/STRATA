@@ -157,7 +157,9 @@ TEST(help_starts_on_the_screens_own_page) {
     CHECK(!first_page_has(place_of(HelpScreen::grid, 0, int(MachineId::sample)), "SLC AUTO"));
     // ASR: what SUS does on a VA, and that it is a VA page elsewhere.
     CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::va_poly)), "SUS 0  ONE-SHOT"));
-    CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::kick)), "ASR: VA WAVE FM GRN"));
+    CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::kick)), "ASR: SYNTHS GRN SMP"));
+    CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::sample)), "SUS 0  DEC DECIDES"));
+    CHECK(first_page_has(place_of(HelpScreen::edit, 7, int(MachineId::sample)), "OSC: VA WAVE FM GRN"));
     CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::grain)), "SUS 0  DEC DECIDES"));
     CHECK(first_page_has(place_of(HelpScreen::edit, 7, int(MachineId::grain)), "PSP 1-63 DET 64+ OCT"));
     // GRID: A-D are the EDIT page's, the screen keys turn it.

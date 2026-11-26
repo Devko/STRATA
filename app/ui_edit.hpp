@@ -78,12 +78,20 @@
         constexpr int kAtk = kAsrFirst, kSus = kAsrFirst + 1, kRel = kAsrFirst + 2;
         constexpr int kFsu = kAsrFirst + 3;
         if (id == uint8_t(MachineId::sample)) {
-            // ATK DEC on AMP; DEC at the top holds (dsp/sample.cpp).
+            // ATK DEC on AMP; DEC at the top holds (dsp/sample.cpp). SUS and REL on ASR, as
+            // GRAIN's: SUS up holds the note while gated, then REL.
             e.atk = heard(8);
             e.dec = heard(9);
-            e.hold = e.dec >= 127;
             e.atk_param = 8;
             e.dec_param = 9;
+            e.sus = heard(kSus);
+            e.holds = e.sus > 0;
+            e.hold = e.dec >= 127 && !e.holds;
+            if (e.holds) {
+                e.rel = heard(kRel);
+                e.sus_param = kSus;
+                e.rel_param = kRel;
+            }
             return e;
         }
         if (!has_asr(selected_)) {

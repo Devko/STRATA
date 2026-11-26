@@ -157,9 +157,9 @@
         if (index < 0 || index >= kTrackParams) return "---";
         if (index >= kOscFirst) return osc_param_name(index - kOscFirst);
         if (index >= kAsrFirst) {
-            if (!has_asr(track)) return "---";
+            if (!machine_reads_asr_slot(engine_.machine_id(track), index - kAsrFirst)) return "---";
             // FM4's fourth ASR knob holds the index envelope, not a filter's: ISU. GRAIN has no
-            // filter envelope, so it has no fourth.
+            // filter envelope, so it has no fourth; SAMPLE reads SUS and REL alone.
             if (index == kAsrFirst + 3 && machine_is_fm(engine_.machine_id(track))) return "ISU";
             if (index == kAsrFirst + 3 && machine_is_grain(engine_.machine_id(track))) return "---";
             return kAsrNames[index - kAsrFirst];
@@ -340,6 +340,17 @@
         if (machine_is_wave(engine_.machine_id(selected_)) && append_wave_value(out, index, value)) return;
         if (machine_is_fm(engine_.machine_id(selected_)) && append_fm_value(out, index, value)) return;
         if (machine_is_grain(engine_.machine_id(selected_)) && append_grain_value(out, index, value)) return;
+        if (engine_.machine_id(selected_) == uint8_t(MachineId::sample)) {
+            // SAMPLE's ASR page: SUS and REL alone, REL on its own curve (dsp/sample.cpp).
+            if (index == kAsrFirst + 0 || index == kAsrFirst + 3) {
+                append(out, "---");
+                return;
+            }
+            if (index == kAsrFirst + 2) {
+                append_seconds(out, sample_release_seconds(value));
+                return;
+            }
+        }
         switch (index) {
             case kLfoWave:
                 append(out, lfo_wave_name(lfo_wave(value)));
