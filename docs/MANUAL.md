@@ -1055,6 +1055,15 @@ pad, key or MIDI note comes up, its step gets the nearest LEN (from `1/16` of a 
 so a drum hit keeps one step. Let go after REC is off, or with the transport stopped, and the step
 keeps the length it had.
 
+**CLICK and COUNT-IN** (FUNC menu). CLICK `ON` clicks every beat while the transport runs, a
+higher click on each bar's first beat. COUNT-IN `1 BAR` or `2 BAR` makes a PLAY from stop with REC
+on click that many bars first (the notice counts `COUNT-IN 4` .. `1`), whether CLICK is on or not;
+the pattern then starts on step 1 on the next beat, and nothing is recorded during the clicks.
+STOP ends a count-in. The click goes straight to the output: it is never recorded, resampled,
+looped or repeated. Neither setting is saved. Under an outside clock there is no count-in (STRATA
+does not start the transport then), and with CLOCK OUT on an outboard box starts when the count-in
+does, so it runs that many bars ahead.
+
 ### MIDI in
 
 MIDI IN (the DIN jack, or USB MIDI) plays STRATA like the pads:
