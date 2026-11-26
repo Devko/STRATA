@@ -180,17 +180,17 @@
     // right of the row sits on it too.
     static void list_row(enaga::Canvas &canvas, int x, int y, const char *text, bool cursor, int grey) {
         if (cursor) {
-            canvas.rect(0, y - 1, 126, 9, 15);
+            canvas.rect(0, y - 1, 126, 8, 15);       // a row clear of the next line's text
             canvas.text(x, y, text, 0);
         } else {
             canvas.text(x, y, text, uint8_t(grey));
         }
     }
 
-    int draw_tab(enaga::Canvas &canvas, int x, const char *text, bool on) {
+    int draw_tab(enaga::Canvas &canvas, int x, const char *text, bool on, int grey = 8) {
         const int w = paint::small_width(text);
         if (on) canvas.rect(x, 121, w + 4, 7, 15);
-        paint::small_text(canvas.data(), x + 2, 122, text, on ? 0 : 6);
+        paint::small_text(canvas.data(), x + 2, 122, text, on ? 0 : grey);
         return x + w + 4;                  // eight of EDIT's pages end inside the meter's edge
     }
 
@@ -217,8 +217,9 @@
             case Mode::edit:
                 for (int p = 0; p < kEditPages; p++) {
                     const Page page = Page(p);
+                    // A page this machine does not have is drawn faint: the keys step over it.
                     x = draw_tab(canvas, x, page == Page::fltr ? "FLT" : page_name(page),
-                                 p == param_page_);
+                                 p == param_page_, page_live(p) ? 8 : 3);
                 }
                 break;
             case Mode::mixer: {
@@ -248,19 +249,9 @@
     // The four parameters encoders A-D turn on GRID, in the small font as name and value
     // ("TUN" dim, "G-1+" bright), the heard value with a lock's hollow tick on a bar under each (the same
     // ShownParam and draw_value_bar as EDIT), four slots of 31 pixels at `y`.
+    // EDIT's knob line (app/ui_editview.hpp), two knobs a row: A and B at `y`, C and D under
+    // them, so "TUN G-1+" never runs into the next name. A held step's lock lights its value.
     void draw_small_slots(enaga::Canvas &canvas, int y) {
-        char line[24];
-        for (int slot = 0; slot < 4; slot++) {
-            const int index = edit_index(slot);
-            const ShownParam shown = shown_param(index);
-            char *out = line;
-            append(out, param_name_for(index));
-            *out = 0;
-            paint::small_text(canvas.data(), slot * 31, y, line, 7);
-            out = line;
-            append_param_value(out, index, shown.heard);
-            *out = 0;
-            paint::small_text(canvas.data(), slot * 31 + 13, y, line, 15);
-            draw_value_bar(canvas, slot * 31, y + 7, 28, 2, shown, 8);
-        }
+        draw_knob_line(canvas, y, 0x3u);
+        draw_knob_line(canvas, y + 7, 0xCu);
     }

@@ -625,6 +625,17 @@ private:
     void notice(const char *text) {
         notice_ = text;
         notice_at_ms_ = last_ms_;
+        notice_screen_ = screen_key();
+    }
+
+    // Which screen and page is up, as one number: a notice's toast belongs to the screen it was
+    // said on, and a screen change takes it away (the review: RESAMPLE's band over PROJECT).
+    uint32_t screen_key() const {
+        uint32_t page = 0;
+        if (mode_ == Mode::edit) page = uint32_t(param_page_);
+        else if (mode_ == Mode::mixer) page = uint32_t(mixer_bank_);
+        else if (mode_ == Mode::project) page = uint32_t(project_page_);
+        return uint32_t(mode_) * 1000u + page + (step_page_ ? 500u : 0u);
     }
 
     // A notice the emulator's scenarios look for in the log, since they cannot read the screen.
@@ -916,6 +927,7 @@ private:
 
     const char *notice_ = nullptr;
     uint32_t notice_at_ms_ = 0;
+    uint32_t notice_screen_ = 0;    // screen_key() when the notice was said
     static constexpr uint32_t kWaveSliceMs = 2;   // the WAVE build's share of a pass (update)
     int waves_logged_ = 0;        // tables built, as last logged (update)
     uint32_t last_ms_ = 0;
@@ -934,8 +946,9 @@ private:
     // EDIT's LFO page: the last 40 frames of the LFO's output, and how many have arrived.
     uint8_t lfo_strip_[40] = {};
     uint32_t lfo_strip_at_ = 0;
+    uint32_t lfo_strip_ms_ = 0;      // when the strip last took a sample
     // GRAIN's SRC page: the cloud's afterglow (app/ui_editview.hpp, kCloudRows rows).
-    paint::Glow<124, 24> grain_glow_;
+    paint::Glow<124, 26> grain_glow_;
     // EDIT's pictures that play a note through (app/ui_editview.hpp): each track's trigger count
     // as last seen, when it last moved, and whether it has since the app started; FLTR's spectrum
     // behind the curve, each band's shown rows.

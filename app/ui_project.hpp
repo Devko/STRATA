@@ -290,7 +290,7 @@
         append(out, "PATTERN ");
         append_slot_name(out, shown_bank_, slot_cursor_);
         *out = 0;
-        paint::small_text(canvas.data(), 0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 19, line, 15);
         for (int row = 0; row < kSlotMenuRows; row++) {
             const bool here = row == slot_menu_cursor_;
             out = line;
@@ -303,7 +303,7 @@
             *out = 0;
             list_row(canvas, 0, 29 + row * 9, line, here, 9);
         }
-        paint::small_text(canvas.data(), 0, 105, "OK: RUN   CLR: BACK", 6);
+        paint::small_text(canvas.data(), 0, 105, "OK: RUN   CLR: BACK", 10);
     }
 
     // The cursor over PROJECT's sixteen slots, drawn four by four: LEFT and RIGHT step through
@@ -499,7 +499,7 @@
         append(out, player.active ? " ON" : " OFF");
         append(out, project.settings.chain_song ? " SONG" : " LOOP");
         *out = 0;
-        paint::small_text(canvas.data(), 0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 19, line, 15);
 
         if (length == 0) {
             canvas.text(0, 40, "EMPTY", 11);
@@ -536,8 +536,8 @@
         }
 
         draw_chain_timeline(canvas, length);
-        paint::small_text(canvas.data(), 0, 105, "OK ADD  CLR X2 REMOVE", 6);
-        paint::small_text(canvas.data(), 0, 113, "A:REPEATS B:MUTES", 6);
+        paint::small_text(canvas.data(), 0, 105, "OK ADD  CLR X2 REMOVE", 10);
+        paint::small_text(canvas.data(), 0, 113, "A:REPEATS B:MUTES", 10);
     }
 
     // --- PROJECT's PATTERN page: the master length and the swing ----------
@@ -616,7 +616,7 @@
         *out++ = bank_letter(int(status.live_bank.load(std::memory_order_relaxed)));
         append_padded(out, uint32_t(status.live_slot.load(std::memory_order_relaxed)) + 1, 2);
         *out = 0;
-        paint::small_text(canvas.data(), 0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 19, line, 15);
 
         out = line;
         *out++ = pattern_field_ == 0 ? '>' : ' ';
@@ -667,8 +667,8 @@
                         pattern_field_ == field ? 15 : (swing == kSwingInherit ? 8 : 12));
         }
 
-        paint::small_text(canvas.data(), 0, 105, "LEFT RIGHT PICK", 6);
-        paint::small_text(canvas.data(), 0, 113, "UP DOWN VALUE A-D", 6);
+        paint::small_text(canvas.data(), 0, 105, "LEFT RIGHT PICK", 10);
+        paint::small_text(canvas.data(), 0, 113, "UP DOWN VALUE A-D", 10);
     }
 
     // --- PROJECT's SETUP page: the clock, MIDI and the record quantize ----
@@ -687,7 +687,7 @@
         char *out = line;
         const enaga::clock::State clock = enaga::clock::state();
 
-        paint::small_text(canvas.data(), 0, 18, "SETUP", 15);
+        paint::small_text(canvas.data(), 0, 19, "SETUP", 15);
         // What a frame costs to draw, averaged (count_draw_time): "DRW 0.85MS" ends at x 123.
         out = line;
         append(out, "DRW ");
@@ -734,22 +734,22 @@
         // What the frame's bottom line said before the tabs took it: the tracks sounding, the
         // held CPU maximum (since the last PLAY) and the device.
         out = line;
-        append(out, "TRK");
+        append(out, "TRACKS ");
         append_number(out, engine_.status().voices.load(std::memory_order_relaxed));
-        append(out, " MAX");
+        append(out, "  MAX ");
         append_tenths(out, cpu_max_);
-        append(out, " ");
-        append(out, device_name(enaga::system::device()));
+        *out++ = '%';
         *out = 0;
         canvas.text(0, 86, line, 9);
+        paint::small_text(canvas.data(), 24, 19, device_name(enaga::system::device()), 8);
 
         // And where the three settings above are changed, because they are not changed here.
         // CLOCK OUT and SYNC OUT are in the same menu and Enaga exposes no way to read them,
         // so they are named rather than shown with a state this screen would be guessing at.
         // No commas: the font has none, and each drew as '?'.
-        paint::small_text(canvas.data(), 0, 97, "CLK SRC/OUT SYNC OUT", 6);
-        paint::small_text(canvas.data(), 0, 105, "MIDI CH: SET IN", 6);
-        paint::small_text(canvas.data(), 0, 113, "FUNC+POWER > SETTINGS", 6);
+        paint::small_text(canvas.data(), 0, 97, "CLK SRC/OUT SYNC OUT", 10);
+        paint::small_text(canvas.data(), 0, 105, "MIDI CH: SET IN", 10);
+        paint::small_text(canvas.data(), 0, 113, "FUNC+POWER > SETTINGS", 10);
     }
 
     void draw_project(enaga::Canvas &canvas) {
@@ -788,7 +788,7 @@
         append_shown(out, storage_.project_name(), usable ? kLineChars : kLineChars - 8);
         if (!usable) append(out, " NO CARD");
         *out = 0;
-        paint::small_text(canvas.data(), 0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 19, line, 15);
 
         // What the card side is doing, or what went wrong last. Both matter: a load that failed
         // silently is the least diagnosable thing a sampler can do.

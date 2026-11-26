@@ -15,7 +15,7 @@
 // transport; stopped, a page is drawn from its knobs alone and holds still, so a picture never
 // passes for an answer to an input (tests/test_ui.cpp, the control audit).
 
-    static constexpr int kKnobY = 18;
+    static constexpr int kKnobY = 19;             // a row clear of a toast (rows 9-17)
     static constexpr int kPicTop = 26;
     static constexpr int kPicBottom = 101;
     static constexpr int kPicRight = 123;
@@ -76,8 +76,8 @@
             if (w > 0 && kPicRight - w >= end + 5) paint::small_text(px, kPicRight - w + 1, kFootY, state, 8);
         }
         char line[48];
-        if (!edit_mod_text(line)) edit_hint_text(line);
-        if (line[0] != 0) paint::small_text(px, 0, kFoot2Y, line, 6);
+        edit_info_text(line);
+        if (line[0] != 0) paint::small_text(px, 0, kFoot2Y, line, 10);
     }
 
     // --- which picture ------------------------------------------------------------------------
@@ -175,7 +175,7 @@
     void draw_knob_text(uint8_t *px, int x, int y, const KnobText &k) {
         if (k.empty && k.letter > 0 && k.text[0] == 'D') return;     // the footer's D: nothing
         if (k.empty) {
-            paint::small_text(px, x, y, k.text, 4);
+            paint::small_text(px, x, y, k.text, 8);
             return;
         }
         paint::small_text(px, x, y, k.text, 15);
@@ -183,10 +183,10 @@
         int n = 0;
         for (; n < k.letter && n < 7; n++) part[n] = k.text[n];
         part[n] = 0;
-        paint::small_glyphs(px, x, y, part, 6);
+        paint::small_glyphs(px, x, y, part, 9);
         for (n = 0; n < k.name && n < 7; n++) part[n] = k.text[k.letter + n];
         part[n] = 0;
-        paint::small_glyphs(px, x + k.letter * paint::kSmallAdvance, y, part, 10);
+        paint::small_glyphs(px, x + k.letter * paint::kSmallAdvance, y, part, 12);
         if (k.marked) {
             const int vx = x + (k.letter + k.name + 1) * paint::kSmallAdvance;
             const int vw = paint::small_width(k.text + k.letter + k.name + 1);
@@ -198,31 +198,33 @@
     }
 
     // The knobs in `mask` (bit 0 A ... bit 3 D) on one line at `y`. Returns the x after the last.
-    // Three blank columns between two entries at the least (a letter's own gap makes it four);
-    // past the meter's edge the longest entry, then all of them, lose the letter's space.
+    // At the drafts' x 0, 42, 84 when they fit; else packed from the left four pixels apart; else
+    // the longest, then all, lose the letter's space. Nothing reaches the meter's column.
     int draw_knob_line(enaga::Canvas &canvas, int y, unsigned mask, int x0 = 0) {
         uint8_t *px = canvas.data();
         KnobText k[4];
         int xs[4] = {};
         int end = 0;
         int longest = -1;
-        for (int pass = 0; pass < 3; pass++) {
+        for (int pass = 0; pass < 4; pass++) {
             end = 0;
             int at = 0;
             for (int slot = 0; slot < 4; slot++) {
                 if (((mask >> slot) & 1u) == 0) continue;
-                k[slot] = knob_text(slot, pass == 2 || (pass == 1 && slot == longest));
-                const int nominal = x0 + at * kKnobPitch;
-                xs[slot] = end > 0 && nominal < end + 4 ? end + 4 : nominal;
+                k[slot] = knob_text(slot, pass == 3 || (pass == 2 && slot == longest));
+                const int nominal = pass == 0 ? x0 + at * kKnobPitch : x0;
+                xs[slot] = end > 0 && nominal < end + 5 ? end + 5 : nominal;
                 end = xs[slot] + paint::small_width(k[slot].text);
                 at++;
             }
-            if (end <= kPicRight + 2) break;
-            int most = -1;
-            for (int slot = 0; slot < 4; slot++) {
-                if (((mask >> slot) & 1u) == 0) continue;
-                const int w = paint::small_width(k[slot].text);
-                if (w > most) { most = w; longest = slot; }
+            if (end <= kPicRight) break;
+            if (pass == 1) {
+                int most = -1;
+                for (int slot = 0; slot < 4; slot++) {
+                    if (((mask >> slot) & 1u) == 0) continue;
+                    const int w = paint::small_width(k[slot].text);
+                    if (w > most) { most = w; longest = slot; }
+                }
             }
         }
         for (int slot = 0; slot < 4; slot++) {
@@ -252,7 +254,7 @@
         const TrackParams &kit = engine_.params(selected_);
         switch (Page(param_page_)) {
             case Page::lfo:
-                append(out, "TRIG ");
+                append(out, kit.v[kLfoRate] >= kLfoSyncFirst ? "SYNC  TRIG " : "TRIG ");
                 append(out, lfo_trig_name(lfo_trig_of(selected_)));
                 break;
             case Page::arp:
@@ -322,81 +324,142 @@
         return out != line;
     }
 
-    // The page's hint, the line it had before the drafts: what a push does here, or why nothing
-    // does.
-    void edit_hint_text(char *line) const {
+    // The drafts' info line under the footer (`ENV>CUT +32  LFO>CUT 20`, `LOOP.WAV 2.41S 44.1K`,
+    // `SYNC ON  TRIG FREE`): what moves the page's knobs first, then what the page itself
+    // states, each part left out whole if it does not fit. How the keys work is FUNC help's.
+    static constexpr int kInfoChars = 30;
+
+    void edit_info_text(char *line) {
         char *out = line;
+        const auto add = [&](const char *part) {
+            int n = 0;
+            while (part[n] != 0) n++;
+            const int used = int(out - line);
+            if (n == 0 || used + (used ? 2 : 0) + n > kInfoChars) return;
+            if (used) { *out++ = ' '; *out++ = ' '; }
+            append(out, part);
+        };
+        char mods[48];
+        if (edit_mod_text(mods)) add(mods);
         const uint8_t id = engine_.machine_id(selected_);
         const TrackParams &kit = engine_.params(selected_);
+        char part[32];
+        char *p = part;
         switch (Page(param_page_)) {
             case Page::src:
-                if (id == uint8_t(MachineId::sample)) {
-                    if (!slices_auto(selected_)) {
-                        append(out, "PUSH SLC: AUTO SLICE");
-                    } else {
+                if (id == uint8_t(MachineId::sample) || machine_is_grain(id)) {
+                    file_line(part);
+                    add(part);
+                    if (id == uint8_t(MachineId::sample) && slices_auto(selected_)) {
+                        p = part;
                         const uint8_t hits = engine_.status().slice_points[selected_].load(std::memory_order_relaxed);
-                        append(out, "SLC AUTO: ");
-                        if (hits == 0) append(out, "NO HITS");
-                        else { append_number(out, hits); append(out, hits == 1 ? " HIT" : " HITS"); }
+                        append(p, "SLC AUTO: ");
+                        if (hits == 0) append(p, "NO HITS");
+                        else { append_number(p, hits); append(p, hits == 1 ? " HIT" : " HITS"); }
+                        *p = 0;
+                        add(part);
+                    } else if (id == uint8_t(MachineId::sample)) {
+                        add("PUSH SLC: AUTO SLICE");
                     }
-                } else if (machine_is_grain(id)) {
-                    append(out, "OK: SOUNDS");
-                } else if (id == uint8_t(MachineId::midi)) {
-                    append(out, "MIDI OUT: NOTES AND CCS");
-                } else {
-                    append(out, "FUNC+EDIT: MACHINE");
+                } else if (machine_is_wave(id) && kit.v[10] != 64) {
+                    // MOT on AMP moves POS with each note: the draft's MOT+.
+                    append(p, "MOT>POS ");
+                    append_param_value(p, 10, kit.v[10]);
+                    *p = 0;
+                    add(part);
                 }
                 break;
             case Page::fltr:
                 if (machine_has_voice_filter(id)) {
-                    append(out, kit.v[kSlotFdec] == 0 ? "FDE 0: 0.55 X DEC" : "TON ON SRC: CHAIN FILTER");
-                } else {
-                    append(out, "FUNC+EDIT: MACHINE");
+                    p = part;
+                    append(p, "ENV>CUT +");
+                    append_number(p, uint32_t(kit.v[9]) * 66u / 127u);
+                    *p = 0;
+                    add(part);
+                    if (kit.v[kSlotFdec] == 0) add("FDE 0: 0.55 X DEC");
+                    add("VEL>CUT");
                 }
                 break;
             case Page::amp:
-                if (id == uint8_t(MachineId::sample)) append(out, "OK: PICK SAMPLE");
-                else if (machine_is_grain(id)) append(out, "OK: SOUNDS");
-                else append(out, "FUNC+EDIT: MACHINE");
+            case Page::asr:
+                if (Page(param_page_) == Page::asr && !has_asr(selected_)) {
+                    add("NOT ON THIS MACHINE");
+                } else if (has_asr(selected_)) {
+                    const bool sustains = kit.v[kAsrFirst + 1] > 0;
+                    add(sustains ? "HOLDS: PAD OR LEN"
+                                 : (machine_is_grain(id) || id == uint8_t(MachineId::sample)
+                                        ? "SUS 0: DEC DECIDES" : "SUS 0: ONE-SHOT"));
+                }
                 break;
-            case Page::fx:
-                append(out, "SNA DELAY  SNB REVERB");
+            case Page::fx: {
+                // Where the sends go, and how long each is.
+                p = part;
+                append(p, "DLY ");
+                append_number(p, uint32_t(effective_delay_seconds(engine_.sends()) * 1000.0f + 0.5f));
+                append(p, "MS");
+                *p = 0;
+                add(part);
+                p = part;
+                append(p, "REV ");
+                append_tenths(p, uint32_t(engine_.sends().reverb_decay_s * 10.0f + 0.5f));
+                append(p, "S");
+                *p = 0;
+                add(part);
                 break;
+            }
             case Page::lfo: {
-                // The page the MOD slots are set from lists them both, or says how.
+                // The MOD slots this page sets, or how to set one (SYNC is on the line above).
                 const bool any = mod_slot_of(selected_, 0).on() || mod_slot_of(selected_, 1).on();
                 if (!any) {
-                    append(out, "PUSH C D: MOD SLOTS");
+                    add("PUSH C D: MOD SLOTS");
                     break;
                 }
                 for (int s = 0; s < kModSlots; s++) {
                     const KitModSlot &slot = mod_slot_of(selected_, s);
-                    if (s > 0) append(out, "  ");
-                    append_mod_slot(out, s, slot.on() ? slot.source : kModSrcOff, slot.dest,
+                    p = part;
+                    append_mod_slot(p, s, slot.on() ? slot.source : kModSrcOff, slot.dest,
                                     slot.on() ? slot.depth : 0);
+                    *p = 0;
+                    add(part);
                 }
                 break;
             }
             case Page::arp:
-                if (arp_mode_index(kit.v[kArpFirst]) == 0) append(out, "ARP OFF: TURN MOD");
-                break;
-            case Page::asr:
-                if (!has_asr(selected_)) {
-                    append(out, "NOT ON THIS MACHINE");
-                } else {
-                    const bool sustains = kit.v[kAsrFirst + 1] > 0;
-                    append(out, sustains ? "HOLDS: PAD OR LEN"
-                                         : (machine_is_grain(id) || id == uint8_t(MachineId::sample)
-                                                ? "SUS 0: DEC DECIDES" : "SUS 0: ONE-SHOT"));
-                }
+                if (arp_mode_index(kit.v[kArpFirst]) == 0) add("ARP OFF: TURN MOD");
                 break;
             case Page::osc:
-                append(out, machine_is_fm(id)     ? "FIN NUDGES RAT"
-                            : machine_is_wave(id) ? "WRP BENDS  DET 2 OSCS"
-                            : machine_is_grain(id) ? "PSP: DET 1-63 OCT 64+"
-                            : machine_reads_osc(id) ? "OS2: DET 1-63 SYN 64+"
-                                                 : "NOT ON THIS MACHINE");
+                if (!machine_reads_osc(id)) add("NOT ON THIS MACHINE");
                 break;
+        }
+        *out = 0;
+    }
+
+    // The track's file as the drafts write it: "LOOP.WAV 2.41S 44.1K", the name cut to fit.
+    void file_line(char *text) const {
+        char *out = text;
+        const char *path = engine_.project().kit.tracks[selected_].sample;
+        if (path[0] == 0 || !storage_.has_overview(selected_)) {
+            append(out, storage_.loading_track() == selected_ ? "LOADING" : "NO FILE");
+            *out = 0;
+            return;
+        }
+        const char *name = path;
+        for (const char *c = path; *c != 0; c++) {
+            if (*c == '/') name = c + 1;
+        }
+        int n = 0;
+        while (name[n] != 0 && n < 12) *out++ = name[n++];
+        const uint32_t ms = storage_.file_ms(selected_);
+        *out++ = ' ';
+        append_number(out, ms / 1000u);
+        *out++ = '.';
+        append_padded(out, ms % 1000u / 10u, 2);
+        *out++ = 'S';
+        const uint32_t rate = storage_.file_rate(selected_);
+        if (rate > 0) {
+            *out++ = ' ';
+            append_tenths(out, (rate + 50u) / 100u);
+            *out++ = 'K';
         }
         *out = 0;
     }
@@ -518,7 +581,7 @@
             const int gn = envelope_curve(*ghost, top, bottom, curve, xs_q, ys_q, shape);
             paint::polyline(px, xs_q, ys_q, gn, 5);
             paint::small_text(px, 120 - paint::small_width("AMP FLT"), kPicTop, "AMP", 9);
-            paint::small_text(px, 120 - paint::small_width("FLT"), kPicTop, "FLT", 5);
+            paint::small_text(px, 120 - paint::small_width("FLT"), kPicTop, "FLT", 8);
         }
         const int n = envelope_curve(e, top, bottom, curve, xs_q, ys_q, shape);
         const int xa = shape.xa, xd = shape.xd, xs = shape.xs, xr = shape.xr;
@@ -548,26 +611,34 @@
             {xa, top_y, e.atk_param}, {xa, top_y, e.peak_param}, {xd, sus_y, e.dec_param},
             {(xd + xs) / 2, sus_y, e.sus_param}, {xr, bottom, e.rel_param},
         };
-        int placed[5];
+        // Above its point; on another letter, above that one; then to the right.
+        int placed_x[5];
+        int placed_y[5];
         int count = 0;
         for (const Handle &h : handles) {
             const char letter = knob_letter(h.param);
             if (letter == 0) continue;
-            int lx = h.x - 1 < 1 ? 1 : h.x - 1;
-            bool clash = true;
-            for (int tries = 0; tries < 6 && clash; tries++) {
-                clash = false;
+            int lx = h.x - 1 < 1 ? 1 : (h.x - 1 > 117 ? 117 : h.x - 1);
+            int ly = h.y - 9 < kPicTop + 1 ? kPicTop + 1 : h.y - 9;
+            const auto clashes = [&] {
                 for (int i = 0; i < count; i++) {
-                    if (lx < placed[i] + 9 && placed[i] < lx + 9) clash = true;
+                    if (lx < placed_x[i] + 9 && placed_x[i] < lx + 9 && ly < placed_y[i] + 9 &&
+                        placed_y[i] < ly + 9) {
+                        return true;
+                    }
                 }
-                if (clash) lx += 9;
+                return false;
+            };
+            for (int tries = 0; tries < 8 && clashes(); tries++) {
+                if (ly - 9 >= kPicTop + 1) ly -= 9;
+                else lx += 9;
             }
-            if (clash || lx > 117) continue;
+            if (clashes() || lx > 117) continue;
             const char text[2] = {letter, 0};
-            int ly = h.y - 9;
-            if (ly < kPicTop + 1) ly = kPicTop + 1;
             paint::small_badge(px, lx, ly, text);
-            placed[count++] = lx;
+            placed_x[count] = lx;
+            placed_y[count] = ly;
+            count++;
         }
         canvas.rect(0, bottom, 120, 1, 6);
     }
@@ -671,9 +742,9 @@
         paint::dotted_v(px, f100, kRespTop, kRespBottom, 4, 2);
         paint::dotted_v(px, f1k, kRespTop, kRespBottom, 4, 2);
         paint::dotted_v(px, f10k, kRespTop, kRespBottom, 4, 2);
-        paint::small_text(px, f100 - 5, kRespBottom + 2, "100", 5);
-        paint::small_text(px, f1k - 3, kRespBottom + 2, "1K", 5);
-        paint::small_text(px, f10k - 5, kRespBottom + 2, "10K", 5);
+        paint::small_text(px, f100 - 5, kRespBottom + 2, "100", 8);
+        paint::small_text(px, f1k - 3, kRespBottom + 2, "1K", 8);
+        paint::small_text(px, f10k - 5, kRespBottom + 2, "10K", 8);
         const bool running = enaga::clock::state().running != 0;
         if (running) {
             uint16_t milli[spectrum::kBands];
@@ -825,9 +896,16 @@
             }
             paint::dotted_v(px, xs[k] >> 4, kLfoMid - kLfoAmp - 3, kLfoMid + kLfoAmp + 4, 6, 2);
             paint::dot(px, xs[k] >> 4, ys[k] >> 4, 15);
+            // A sample every 50 ms of time, not every frame drawn: the strip is two seconds
+            // however often the screen gets drawn (the review saw a short stub).
             const int v = lfo_shape_q12(wave, phase);
-            lfo_strip_[lfo_strip_at_ % uint32_t(kLfoStrip)] = uint8_t((v + 4096) * 254 / 8192);
-            lfo_strip_at_++;
+            uint32_t due = (last_ms_ - lfo_strip_ms_) / 50u;
+            if (lfo_strip_at_ == 0) due = 1;
+            if (due > 0) lfo_strip_ms_ = last_ms_;
+            for (uint32_t k = 0; k < due && k < 8u; k++) {
+                lfo_strip_[lfo_strip_at_ % uint32_t(kLfoStrip)] = uint8_t((v + 4096) * 254 / 8192);
+                lfo_strip_at_++;
+            }
             int prev = -1;
             for (int i = 0; i < 36 && uint32_t(i) < lfo_strip_at_; i++) {
                 const uint8_t s = lfo_strip_[(lfo_strip_at_ - 1u - uint32_t(i)) % uint32_t(kLfoStrip)];
@@ -839,7 +917,7 @@
         } else {
             lfo_strip_at_ = 0;
         }
-        paint::small_text(px, 84, top + rows + 2, "OUT", 6);
+        paint::small_text(px, 84, top + rows + 2, "OUT", 8);
 
         // Where the destination is: the bar lit to what it sounds at, a mark at its knob. Off,
         // what turns it on.
@@ -912,7 +990,7 @@
             }
         }
         canvas.rect(0, 87, 120, 1, 3);
-        paint::small_text(px, 0, 90, "LIVE", 6);
+        paint::small_text(px, 0, 90, "LIVE", 8);
         // While the track sounds the LIVE frame runs like a scope (its phase moves on with the
         // time) and the frame POS plays flares with the track's level.
         const uint32_t heard_level = status.track_milli[selected_].load(std::memory_order_relaxed);
@@ -989,7 +1067,7 @@
     // As the draft: the file's overview with the bracket bright and the rest dim, each grain in
     // the air a tick at its read position above and below the waveform, and under it the cloud:
     // each grain a spark that rises as it fades, with an afterglow.
-    static constexpr int kGrainMid = 46, kGrainAmp = 20, kCloudTop = 78, kCloudRows = 24;
+    static constexpr int kGrainMid = 44, kGrainAmp = 18, kCloudTop = 76, kCloudRows = 26;
 
     void draw_grain_view(enaga::Canvas &canvas) {
         uint8_t *px = canvas.data();
@@ -1005,6 +1083,12 @@
             canvas.rect(a, y0, b - a, 1, 15);
             canvas.rect(a, y0 + h - 1, b - a, 1, 15);
         }
+        // The cloud, as the draft: three pitch lanes (+12, 0, -12), each grain a spark on one, by
+        // PSP: an octave spray sends grains up and down an octave, a detune keeps them near the
+        // note. It drifts right and rises as it fades, with an afterglow.
+        const int psp = live_value(kOscFirst + 1);
+        const bool octaves = psp >= 64;
+        const int jitter = psp < 64 ? psp * 4 / 63 : 0;
         grain_glow_.fade(184);
         int alive = 0;
         for (int i = 0; i < WaveView::kMarks; i++) {
@@ -1013,21 +1097,29 @@
             const int g = view.glow[i] > 15 ? 15 : view.glow[i];
             paint::plot_max(px, view.mark[i], kGrainMid - kGrainAmp - 1, g);
             paint::plot_max(px, view.mark[i], kGrainMid + kGrainAmp + 1, g);
-            const int y = 8 + (i * 7) % 14 - (15 - g) / 3;          // rising as it fades, as drawn
-            grain_glow_.plot(view.mark[i], y, g);
+            const int lane = octaves ? (i % 3) * 10 + 2 : 12 + ((i * 5) % 3 - 1) * jitter;
+            const int y = lane + 2 - (15 - g) / 4;
+            const int x = view.mark[i] + (15 - g) / 2;
+            grain_glow_.plot(x, y, g);
         }
-        canvas.rect(0, kCloudTop - 6, 120, 1, 2);
+        canvas.rect(0, kCloudTop - 8, 120, 1, 2);
         char line[16];
         char *out = line;
         append(out, "GRAINS ");
         append_number(out, uint32_t(alive));
         append(out, "/8");
         *out = 0;
-        paint::small_text(px, 0, kCloudTop - 4, line, 6);
+        paint::small_text(px, 0, kCloudTop - 6, line, 9);
+        for (int lane = 0; lane < 3; lane++) {
+            paint::dotted_h(px, 0, 104, kCloudTop + 2 + lane * 10, lane == 1 ? 4 : 3, 4);
+        }
+        paint::small_text(px, 108, kCloudTop, "+12", 8);
+        paint::small_text(px, 112, kCloudTop + 10, "0", 8);
+        paint::small_text(px, 108, kCloudTop + 20, "-12", 8);
         for (int y = 0; y < kCloudRows; y++) {
-            for (int x = 0; x < 120; x++) {
+            for (int x = 0; x < 106; x++) {
                 const int v = grain_glow_.level[y * 124 + x];
-                if (v > 10) paint::dot(px, x, kCloudTop + y, v);
+                if (v > 4) paint::dot(px, x, kCloudTop + y, v);
                 else if (v > 1) paint::plot_max(px, x, kCloudTop + y, v);
             }
         }
@@ -1229,7 +1321,7 @@
         append_number(out, uint32_t(window * 1000.0f + 0.5f));
         append(out, "MS");
         *out = 0;
-        paint::small_text(px, 120 - paint::small_width(text), kMid + kAmp + 3, text, 5);
+        paint::small_text(px, 120 - paint::small_width(text), kMid + kAmp + 3, text, 8);
     }
 
     // --- a synth's oscillators: VA's SRC and OSC pages, WAVE's OSC page ------------------------
@@ -1381,7 +1473,7 @@
             bus_hi = l.x[op] + 5 > bus_hi ? l.x[op] + 5 : bus_hi;
         }
         canvas.rect(bus_lo, l.y[0] + 13, bus_hi - bus_lo + 1, 1, 8);
-        paint::small_text(px, bus_lo, l.y[0] + 15, "OUT", 6);
+        paint::small_text(px, bus_lo, l.y[0] + 15, "OUT", 8);
         for (int op = 0; op < 4; op++) {
             const bool carrier = ((l.carriers >> op) & 1u) != 0;
             const int glow = carrier ? 12 : 4 + int(now * 11.0f);
@@ -1429,7 +1521,7 @@
         for (int h = 0; h <= 8; h++) {
             canvas.rect(x_of(float(h)), kBase + 1, 1, 2, 5);
             const char n[2] = {char('0' + h), 0};
-            paint::small_text(px, x_of(float(h)) - 1, kBase + 4, n, 5);
+            paint::small_text(px, x_of(float(h)) - 1, kBase + 4, n, 8);
         }
         canvas.rect(0, kBase, 120, 1, 6);
         static constexpr float kCar[5] = {1.0f, 0.5f, 2.0f, 3.0f, 4.0f};
@@ -1500,7 +1592,7 @@
             const int y = kFanY + lane * spread * (x - kFanX) / (2 * (119 - kFanX));
             paint::dot(px, x, y, view.glow[i] > 15 ? 15 : view.glow[i]);
         }
-        paint::small_text(px, 0, kFanY - 9, "PITCH", 5);
+        paint::small_text(px, 0, kFanY - 9, "PITCH", 8);
         draw_no_file(canvas, kMid);
     }
 
@@ -1561,8 +1653,8 @@
                 paint::plot_max(px, dx + (3 * paint::cos_q12(k) >> 12), dy + (3 * paint::sin_q12(k) >> 12), 4 + lit);
             }
         }
-        paint::small_text(px, kCx - kR - 6, kCy - 4, "L", 5);
-        paint::small_text(px, kCx + kR + 4, kCy - 4, "R", 5);
+        paint::small_text(px, kCx - kR - 6, kCy - 4, "L", 8);
+        paint::small_text(px, kCx + kR + 4, kCy - 4, "R", 8);
 
         // The sends.
         constexpr int kTop = 66, kRows = 30;
@@ -1574,7 +1666,7 @@
             const int rows = sends[s] * kRows / 127;
             if (rows > 0) canvas.rect(x + 2, kTop + 1 + kRows - rows, 9, rows, 9);
             if (rows > 0 && lit > 0) canvas.rect(x + 2, kTop + 1 + kRows - rows, 9, rows * lit / 8 > 0 ? (rows * lit / 8 < rows ? rows * lit / 8 : rows) : 1, 15);
-            paint::small_text(px, x + 1, kTop + kRows + 4, kNames[s], 6);
+            paint::small_text(px, x + 1, kTop + kRows + 4, kNames[s], 8);
         }
     }
 
@@ -1642,7 +1734,7 @@
             // A page this machine does not have: its name, and which machines do.
             const bool asr = Page(param_page_) == Page::asr;
             canvas.text(44, 52, asr ? "NO ASR" : "NO OSC", 6);
-            paint::small_text(px, 18, 66, "ON VA, WAVE, FM4, GRAIN", 5);
+            paint::small_text(px, 18, 66, "ON VA, WAVE, FM4, GRAIN", 8);
             return;
         }
         for (int slot = 0; slot < 4; slot++) {
@@ -1650,7 +1742,7 @@
             const ShownParam shown = shown_param(index);
             const int y = 32 + slot * 16;
             const char letter[2] = {char('A' + slot), 0};
-            paint::small_text(px, 0, y, letter, 6);
+            paint::small_text(px, 0, y, letter, 8);
             const bool empty = index < 0 || param_name_for(index)[0] == '-';
             canvas.rect(8, y + 1, 112, 3, 2);
             if (!empty && shown.heard > 0) canvas.rect(8, y + 1, shown.heard * 112 / 127, 3, shown.locked ? 15 : 11);

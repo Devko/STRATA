@@ -65,8 +65,12 @@
         paint::small_text(px, 80, 2, line, 6);
         if (lock_mark() != nullptr) paint::small_text(px, 96, 2, lock_mark(), 15);
         out = line;
-        *out++ = 'T';
-        append_number(out, uint32_t(selected_) + 1);
+        if (mode_ == Mode::mixer && kMixerPages[mixer_bank_].master && !func_help_showing()) {
+            append(out, "MST");                  // the master's pages, as the draft badges them
+        } else {
+            *out++ = 'T';
+            append_number(out, uint32_t(selected_) + 1);
+        }
         *out = 0;
         canvas.rect(106, 0, 20, 8, 15);
         canvas.text(108, 0, line, 0);
@@ -83,7 +87,8 @@
         };
         if (func_help_showing()) {
             // The help's title takes this line (draw_func_help).
-        } else if ((step_page_ || mode_ != Mode::grid) && notice_showing()) {
+        } else if ((step_page_ || mode_ != Mode::grid) && notice_showing() &&
+                   notice_screen_ == screen_key()) {
             // What just happened. GRID shows it in its edit-state line; every other screen had
             // nowhere for it, so a gesture there (F1 + F3's "again to save", an octave, a scene
             // captured) answered with nothing at all.
@@ -506,7 +511,8 @@
         // was 22 characters, and the speed ran off the right edge.
         append(out, "T");
         append_number(out, uint32_t(selected_ + 1));
-        append(out, muted_[selected_] ? " MUTE" : "     ");
+        *out++ = ' ';
+        append(out, machine_name(engine_.machine_id(selected_)));
         append(out, " PG");
         append_number(out, uint32_t(page_ + 1));
         append(out, " L");
@@ -514,19 +520,29 @@
         append(out, " X");
         append(out, speed_name(Speed(track.speed)));
         *out = 0;
-        // In the small font under the grid, as the mockup has it, with the track's machine.
+        // In the small font under the grid, as the draft has it: the track, its machine, its
+        // layout and how many steps it plays on this page.
         {
-            char info[48];
+            char info[64];
             char *o = info;
             append(o, line);
-            append(o, "  ");
-            append(o, machine_name(engine_.machine_id(selected_)));
+            if (muted_[selected_]) append(o, " MUTE");          // 24 at the most: fits
+            int active = 0;
+            for (int i = 0; i < 16; i++) {
+                active += (track.steps[page_ * 16 + i].flags & kStepTrig) != 0 ? 1 : 0;
+            }
+            char part[16];
+            char *p = part;
+            append(p, " STEPS ");
+            append_number(p, uint32_t(active));
+            *p = 0;
+            if (int(o - info) + int(p - part) <= 31) append(o, part);
             *o = 0;
-            paint::small_text(px, 0, 92, info, 10);
+            paint::small_text(px, 0, 92, info, 12);
         }
 
-        draw_edit_state(canvas, 100);
-        draw_small_slots(canvas, 109);
+        draw_edit_state(canvas, 98);
+        draw_small_slots(canvas, 106);
     }
 
     // What a trig carries, cut dark into its 5 x 6 cell (docs/CONTROLS.md, "Locks on screen"):
@@ -622,16 +638,21 @@
             *p = 0;
             append_if_fits(out, line, part);
         }
-        p = part;
-        append(p, "U");
-        append_number(p, status.undo_depth.load(std::memory_order_relaxed));
+        // Undo last, and only when there is something to undo or redo: at rest the line is
+        // empty (the review: a bare "U0" there said nothing).
+        const uint8_t undo = status.undo_depth.load(std::memory_order_relaxed);
         const uint8_t redo = status.redo_depth.load(std::memory_order_relaxed);
-        if (redo) {
-            append(p, "/R");
-            append_number(p, redo);
+        if (undo || redo) {
+            p = part;
+            append(p, "U");
+            append_number(p, undo);
+            if (redo) {
+                append(p, "/R");
+                append_number(p, redo);
+            }
+            *p = 0;
+            append_if_fits(out, line, part);
         }
-        *p = 0;
-        append_if_fits(out, line, part);
         *out = 0;
         canvas.text(0, y, line, rec_ ? 15 : 9);
     }
@@ -658,7 +679,7 @@
         append(out, "  ");
         append(out, machine_name(engine_.machine_id(selected_)));
         *out = 0;
-        paint::small_text(px, 0, 18, line, 15);
+        paint::small_text(px, 0, 19, line, 15);
 
         // Which of the field pages is showing. Same language as EDIT's parameter pages.
         for (int p = 0; p < kFieldPages; p++) {

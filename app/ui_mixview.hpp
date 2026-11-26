@@ -18,9 +18,11 @@
 
         draw_knob_line(canvas, kKnobY, 0x7u);
         if (mixer_bank_ == kMixerDuckPage) draw_duck_view(canvas);
-        else if (mixer_bank_ == kMixerDelayPage || mixer_bank_ == kMixerLongPage) draw_echo_view(canvas);
+        else if (mixer_bank_ == kMixerDelayPage || mixer_bank_ == kMixerLongPage) draw_echo_view(canvas, mixer_bank_ == kMixerLongPage);
         else if (mixer_bank_ == kMixerEqPage) draw_eq_view(canvas);
-        else if (kMixerPages[mixer_bank_].name[0] == 'R' && kMixerPages[mixer_bank_].name[1] == 'E') draw_reverb_view(canvas);
+        else if (kMixerPages[mixer_bank_].name[0] == 'R' && kMixerPages[mixer_bank_].name[1] == 'E') {
+            draw_reverb_view(canvas, kMixerPages[mixer_bank_].name[3] == '+');
+        }
         else draw_route_view(canvas);
         const int end = draw_knob_line(canvas, kFootY, 0x8u);
         char line[32];
@@ -28,7 +30,7 @@
         const int w = paint::small_width(line);
         if (w > 0 && kPicRight - w >= end + 5) paint::small_text(canvas.data(), kPicRight - w + 1, kFootY, line, 8);
         mixer_hint_text(line);
-        if (line[0] != 0) paint::small_text(canvas.data(), 0, kFoot2Y, line, 6);
+        if (line[0] != 0) paint::small_text(canvas.data(), 0, kFoot2Y, line, 10);
     }
 
     // A MIXER knob's name and value for the knob line (knob_text in app/ui_editview.hpp).
@@ -63,10 +65,7 @@
 
     void mixer_state_text(char *line) {
         char *out = line;
-        if (mixer_bank_ == kMixerDelayPage || mixer_bank_ == kMixerLongPage) {
-            append_number(out, uint32_t(effective_delay_seconds(engine_.sends()) * 1000.0f + 0.5f));
-            append(out, "MS");
-        } else if (mixer_bank_ == kMixerDuckPage) {
+        if (mixer_bank_ == kMixerDuckPage) {
             append(out, "DUCKS UNDER T");
             append_number(out, uint32_t(engine_.project().kit.duck.source) + 1u);
         }
@@ -111,10 +110,10 @@
             char text[12];
             if (active) {
                 const char letter[2] = {char('A' + t % 4), 0};
-                paint::small_badge(px, x + 5, 19, letter);
+                paint::small_badge(px, x + 5, 20, letter);
             } else {
                 const char n[2] = {char('1' + t), 0};
-                paint::small_text(px, x + 5, 19, n, 4);
+                paint::small_text(px, x + 5, 20, n, 7);
             }
             const TrackParams &p = engine_.params(t);
             const int fx = page_first(Page::fx);
@@ -237,13 +236,13 @@
         if (xh - xa > 8) paint::small_badge(px, xh - 2, kBottom - 8, letters[1]);
         if (xr < 116 && xr - xh > 8) paint::small_badge(px, xr - 2, kTop + 2, letters[2]);
         canvas.rect(0, kBottom + 1, 120, 1, 6);
-        paint::small_text(px, 0, kBottom + 4, "0", 5);
+        paint::small_text(px, 0, kBottom + 4, "0", 8);
         char text[12];
         char *o = text;
         append_number(o, uint32_t(span + 0.5f));
         append(o, "MS");
         *o = 0;
-        paint::small_text(px, 120 - paint::small_width(text), kBottom + 4, text, 5);
+        paint::small_text(px, 120 - paint::small_width(text), kBottom + 4, text, 8);
     }
 
     // --- DLY and DLY+: the echoes ----------------------------------------------------------
@@ -252,10 +251,30 @@
     // feedback leaves it, softer as TON darkens; ping-pong alternates them up and down; WOW wobbles
     // them and DIF smears each into a cluster. While the beat plays, a head sweeps the time in step
     // with the transport and lights the echoes it passes.
-    void draw_echo_view(enaga::Canvas &canvas) {
+    void draw_echo_view(enaga::Canvas &canvas, bool plus) {
         uint8_t *px = canvas.data();
         const SendSettings &s = engine_.sends();
-        constexpr int kMid = 64, kAmp = 30;
+        // DLY+ is the LONG delay's page: the tape's wobble (WOW) over the echoes, and all of it
+        // dim while the classic delay is the one playing (push A switches).
+        const bool dim = plus && !s.delay_long;
+        const int kMid = plus ? 70 : 64, kAmp = plus ? 24 : 30;
+        char time[16];
+        char *t_out = time;
+        append_number(t_out, uint32_t(effective_delay_seconds(s) * 1000.0f + 0.5f));
+        append(t_out, "MS");
+        *t_out = 0;
+        paint::small_text(px, 0, 27, time, 12);
+        if (plus) {
+            const bool running_now = enaga::clock::state().running != 0;
+            int16_t wx[56], wy[56];
+            for (int i = 0; i < 56; i++) {
+                const int ph = (i * 13 + (running_now ? int(last_ms_ / 12u) : 0)) & 255;
+                wx[i] = int16_t(paint::q4(36) + i * 24);
+                wy[i] = int16_t(paint::q4(31) - int(s.delay_wow * 4.0f * float(paint::sin_q12(ph)) / 4096.0f * 16.0f));
+            }
+            paint::polyline(px, wx, wy, 56, dim ? 4 : 10);
+            paint::small_text(px, 30, 29, "W", dim ? 4 : 8);
+        }
         const float delay = effective_delay_seconds(s);
         const float window = s.delay_long ? 8.0f : 2.0f;
         const auto x_of = [&](float sec) { return 2 + int(sec * 116.0f / window); };
@@ -282,7 +301,7 @@
             const int rows = int(amp * float(kAmp));
             const bool up = !s.delay_ping_pong || k % 2 == 0;
             const bool passed = head >= 0.0f && t <= head;
-            const int grey = k == 0 ? 15 : (passed ? 15 : 9);
+            const int grey = dim ? (k == 0 ? 6 : 4) : (k == 0 ? 15 : (passed ? 15 : 9));
             const int spread = s.delay_long ? int(s.delay_diffusion * 4.0f) : 0;
             for (int d = -spread; d <= spread; d++) {
                 const int r = rows * (spread + 1 - (d < 0 ? -d : d)) / (spread + 1);
@@ -297,12 +316,12 @@
         }
         if (head >= 0.0f) canvas.rect(x_of(head), kMid - kAmp - 2, 1, 2 * kAmp + 5, 6);
         if (s.delay_ping_pong) {
-            paint::small_text(px, 113, kMid - kAmp, "L", 5);
-            paint::small_text(px, 113, kMid + kAmp - 4, "R", 5);
+            paint::small_text(px, 113, kMid - kAmp, "L", 8);
+            paint::small_text(px, 113, kMid + kAmp - 4, "R", 8);
         }
         canvas.rect(0, kMid + kAmp + 3, 120, 1, 6);
-        paint::small_text(px, 0, kMid + kAmp + 5, "0", 5);
-        paint::small_text(px, 104, kMid + kAmp + 5, s.delay_long ? "8S" : "2S", 5);
+        paint::small_text(px, 0, kMid + kAmp + 5, "0", 8);
+        paint::small_text(px, 104, kMid + kAmp + 5, s.delay_long ? "8S" : "2S", 8);
         paint::small_text(px, 48, kMid + kAmp + 5, s.delay_long ? "LONG" : "CLASSIC", 7);
     }
 
@@ -312,9 +331,20 @@
     // 30 s both read): early reflections as spikes spaced by SIZ, then the dense tail falling over
     // DEC, its later part smoother as DMP darkens it, HALL's sweep wobbling it, and the shimmer's
     // octave-up sparks above it. While the beat plays the tail's grain moves.
-    void draw_reverb_view(enaga::Canvas &canvas) {
+    void draw_reverb_view(enaga::Canvas &canvas, bool plus) {
         uint8_t *px = canvas.data();
         const SendSettings &s = engine_.sends();
+        // REV+ is the HALL's page: the room as a box as big as SIZ makes it, wobbling with MOD,
+        // over the tail; all of it dim while the classic room plays (push A switches).
+        const bool dim = plus && !s.reverb_hall;
+        if (plus) {
+            const bool running_now = enaga::clock::state().running != 0;
+            const int wob = running_now ? int(s.reverb_mod * 2.0f * float(paint::sin_q12(int(last_ms_ / 16u) & 255)) / 4096.0f) : 0;
+            const int w = 14 + int(s.reverb_size * 22.0f) + wob;
+            const int h = 8 + int(s.reverb_size * 8.0f);
+            frame_rect(px, 112 - w, 34, w, h, dim ? 4 : 11);
+            paint::small_text(px, 112 - w + 2, 36, "SIZ", dim ? 4 : 8);
+        }
         constexpr int kBottom = 96, kTall = 62;
         const bool running = enaga::clock::state().running != 0;
         uint32_t seed = 0x1234567u + (running ? last_ms_ / 50u : 0u);
@@ -331,7 +361,7 @@
             float wob = 1.0f;
             if (s.reverb_hall) wob += s.reverb_mod * 0.25f * float(paint::sin_q12((x * 9 + int(running ? last_ms_ / 20u : 0u)) & 255)) / 4096.0f;
             const int rows = int(env * float(kTall) * (0.45f + 0.55f * grain) * wob);
-            if (rows > 0) canvas.rect(x, kBottom - rows, 1, rows, uint8_t(x < 20 ? 12 : 8));
+            if (rows > 0) canvas.rect(x, kBottom - rows, 1, rows, uint8_t(dim ? 4 : (x < 20 ? 12 : 8)));
         }
         // Early reflections.
         const float size = s.reverb_hall ? s.reverb_size : 1.0f;
@@ -350,9 +380,9 @@
             }
         }
         canvas.rect(0, kBottom + 1, 120, 1, 6);
-        paint::small_text(px, 0, kBottom + 3, "10MS", 5);
-        paint::small_text(px, 52, kBottom + 3, "1S", 5);
-        paint::small_text(px, 100, kBottom + 3, "30S", 5);
+        paint::small_text(px, 0, kBottom + 3, "10MS", 8);
+        paint::small_text(px, 52, kBottom + 3, "1S", 8);
+        paint::small_text(px, 100, kBottom + 3, "30S", 8);
         paint::small_text(px, 120 - paint::small_width(s.reverb_hall ? "HALL" : "ROOM"), kBottom - kTall, s.reverb_hall ? "HALL" : "ROOM", 9);
     }
 
@@ -393,7 +423,7 @@
                 const int x = dly.x + 26 + k * 4;
                 canvas.rect(x, dly.y - 4 + (k % 2) * 4, 3, 1, 10);
             }
-            paint::small_text(px, dly.x + 26, dly.y - 10, "L R", 6);
+            paint::small_text(px, dly.x + 26, dly.y - 10, "L R", 8);
         }
         if (s.delay_long) {                                            // the LONG delay's low cut
             char text[12];
@@ -415,7 +445,7 @@
         uint8_t *px = canvas.data();
         const bool running = enaga::clock::state().running != 0;
         draw_knob_line(canvas, kKnobY, 0x7u);
-        constexpr int kTop = 26, kRows = 34, kBottom = kTop + kRows;
+        constexpr int kTop = 26, kRows = 38, kBottom = kTop + kRows;
         if (running) {
             uint16_t milli[spectrum::kBands];
             spectrum::analyse(scope_history_, spectrum_work_, milli);
@@ -438,12 +468,12 @@
             canvas.rect(x, kBottom - 1 - band_peak_[b], 4, 1, band_peak_[b] > 0 ? 15 : 3);
         }
         canvas.rect(0, kBottom + 1, 120, 1, 4);
-        paint::small_text(px, 8, kBottom + 3, "100", 5);
-        paint::small_text(px, 50, kBottom + 3, "1K", 5);
-        paint::small_text(px, 98, kBottom + 3, "10K", 5);
+        paint::small_text(px, 8, kBottom + 3, "100", 8);
+        paint::small_text(px, 50, kBottom + 3, "1K", 8);
+        paint::small_text(px, 98, kBottom + 3, "10K", 8);
 
-        // The vectorscope, 42 x 42 at (0, 70).
-        constexpr int kVx = 0, kVy = 70;
+        // The vectorscope, 42 x 42 at (0, 72).
+        constexpr int kVx = 0, kVy = 72;
         frame_rect(px, kVx, kVy, 42, 42, 3);
         paint::dotted_v(px, kVx + 21, kVy + 1, kVy + 41, 4, 3);
         paint::dotted_h(px, kVx + 1, kVx + 41, kVy + 21, 4, 3);
@@ -459,35 +489,35 @@
             master_glow_.plot(20, 20, 9);
         }
         master_glow_.blit(px, kVx + 1, kVy + 1);
-        paint::small_text(px, kVx + 1, kVy + 44, "M/S", 5);
+        paint::small_text(px, kVx + 1, kVy + 43, "M/S", 8);
 
         // The compressor's reduction and the limiter, falling from the top.
         const uint32_t gain = engine_.status().comp_gain_milli.load(std::memory_order_relaxed);
         const int gr_tenths = -paint::level_db_q8(gain) * 10 / 256;                  // 0..600
         const int cmp = running ? (gr_tenths * 38 / 60 > 38 ? 38 : gr_tenths * 38 / 60) : 0;   // 6 dB fills
-        canvas.rect(50, 72, 8, 38, 2);
-        if (cmp > 0) canvas.rect(50, 72, 8, cmp, 13);
-        canvas.rect(68, 72, 8, 38, 2);
-        if (running && limit_lit_) canvas.rect(68, 72, 8, 15, 13);
-        paint::small_text(px, 48, 113, "CMP", 8);
-        paint::small_text(px, 66, 113, "LIM", 8);
+        canvas.rect(50, 74, 8, 38, 2);
+        if (cmp > 0) canvas.rect(50, 74, 8, cmp, 13);
+        canvas.rect(68, 74, 8, 38, 2);
+        if (running && limit_lit_) canvas.rect(68, 74, 8, 15, 13);
+        paint::small_text(px, 48, 115, "CMP", 8);
+        paint::small_text(px, 66, 115, "LIM", 8);
 
         char line[16];
         char *out = line;
-        paint::small_text(px, 88, 72, "GR", 6);
+        paint::small_text(px, 88, 74, "GR", 8);
         if (running && gr_tenths > 0) *out++ = '-';
         append_tenths(out, uint32_t(running ? gr_tenths : 0));
         *out = 0;
-        paint::small_text(px, 88, 79, line, 15);
-        paint::small_text(px, 88, 89, "LUFS", 6);
+        paint::small_text(px, 88, 81, line, 15);
+        paint::small_text(px, 88, 91, "LUFS", 8);
         out = line;
         const int lufs = running ? mixer_loudness() : -999;
         if (lufs <= -600) append(out, "---");
         else { *out++ = '-'; append_tenths(out, uint32_t(-lufs)); }
         *out = 0;
-        paint::small_text(px, 88, 96, line, 15);
+        paint::small_text(px, 88, 98, line, 15);
         if (!running) loudness_reset();
-        draw_knob_line(canvas, 106, 0x8u, 88);
+        draw_knob_line(canvas, 108, 0x8u, 88);
     }
 
     // The output's momentary loudness (ITU-R BS.1770: K-weighted, both channels, 400 ms), in

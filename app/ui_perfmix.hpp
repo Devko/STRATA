@@ -762,7 +762,7 @@
     void draw_menu(enaga::Canvas &canvas) {
         char line[40];
         char value[24];
-        paint::small_text(canvas.data(), 0, 18, "FUNC MENU", 15);
+        paint::small_text(canvas.data(), 0, 19, "FUNC MENU", 15);
         int first = menu_cursor_ - kMenuRows / 2;
         if (first > kMenuItems - kMenuRows) first = kMenuItems - kMenuRows;
         if (first < 0) first = 0;
@@ -780,8 +780,8 @@
             while (value[length] != '\0') length++;
             if (length > 0) canvas.text(kFrameMeterX - length * 6, y, value, here ? 0 : 9);   // on the row's bar
         }
-        paint::small_text(canvas.data(), 0, 105, "OK: RUN   CLR: BACK", 6);
-        paint::small_text(canvas.data(), 0, 113, "LEFT/RIGHT: CHANGE", 6);
+        paint::small_text(canvas.data(), 0, 105, "OK: RUN   CLR: BACK", 10);
+        paint::small_text(canvas.data(), 0, 113, "LEFT/RIGHT: CHANGE", 10);
     }
 
     void open_kits() {
@@ -936,7 +936,7 @@
         append_number(out, uint32_t(kTakeBars[take_bars_index_]));
         append(out, state == 1u ? " BAR  WAIT" : " BAR");
         *out = 0;
-        paint::small_text(canvas.data(), 0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 19, line, 15);
 
         out = line;
         if (take_offer_ >= 0 && state == 0u) {
@@ -1013,9 +1013,9 @@
             }
         }
 
-        paint::small_text(canvas.data(), 0, 97, "B: FROM  C: LEVEL", 6);
-        paint::small_text(canvas.data(), 0, 105, "UP DOWN OR A: BARS", 6);
-        paint::small_text(canvas.data(), 0, 113, "LEFT RIGHT: WHERE TO", 6);
+        paint::small_text(canvas.data(), 0, 97, "B: FROM  C: LEVEL", 10);
+        paint::small_text(canvas.data(), 0, 105, "UP DOWN OR A: BARS", 10);
+        paint::small_text(canvas.data(), 0, 113, "LEFT RIGHT: WHERE TO", 10);
     }
 
     // Route the input as the screen says. Enaga answers 0, -1 for a source or level it does not
@@ -1044,7 +1044,7 @@
         *out++ = ' ';
         append(out, scale_name(scale));
         *out = 0;
-        paint::small_text(canvas.data(), 0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 19, line, 15);
 
         out = line;
         append(out, "OCT ");

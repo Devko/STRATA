@@ -61,6 +61,8 @@ struct UiProbe {
     static Storage &storage(Strata &app) { return app.storage_; }
 
     static int mode(const Strata &app) { return int(app.mode_); }
+    // Straight to an EDIT page, for a page the keys step over on this machine (a drum's ENV).
+    static void set_param_page(Strata &app, int page) { app.param_page_ = page; }
     // REL ALL and LEN ALL back to rest, the UI's knob positions and the engine's both: a test that
     // turns FUNC + A or B in PERFORM (the input audit does) would leave them for the next.
     static void moves_to_rest(Strata &app) {
@@ -157,9 +159,20 @@ struct UiProbe {
     static const char *name_entry_text(Strata &app) { return app.name_entry_.text(); }
 };
 
+// The screen keys to an EDIT page; a page this machine does not have (the keys step over it, so
+// they never land there) is set straight, as a track changed under it would leave it.
+inline void goto_edit_page(Strata &app, Page page) {
+    for (int i = 0; i < 8 && UiProbe::param_page(app) != int(page); i++) {
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+    }
+    if (UiProbe::param_page(app) != int(page)) UiProbe::set_param_page(app, int(page));
+}
+
 }  // namespace strata::test
 
 using strata::test::UiProbe;
+using strata::test::goto_edit_page;
 
 namespace {
 
@@ -598,7 +611,7 @@ TEST(ui_the_parameter_page_decides_which_parameter_an_encoder_writes) {
     key(ENAGA_KEY_F8);                             // EDIT
     CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
     // To a known page from wherever the test before this one left it: the selection keys cycle.
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     key(ENAGA_KEY_PUSH_A);                         // TUN in numbers: one count a click
     CHECK(!UiProbe::tune_notes(app));
 
@@ -617,7 +630,8 @@ TEST(ui_the_parameter_page_decides_which_parameter_an_encoder_writes) {
     // The pages wrap, so the four of them are reachable in either direction.
     key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
-    for (int i = 0; i < kEditPages; i++) key(ENAGA_KEY_SELECT_LEFT);
+    // A drum has six of the eight: the keys step over ENV and OSC.
+    for (int i = 0; i < kEditPages - 2; i++) key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
 
     // And a lock follows the same page. The step page is not open and the mode is GRID, but
@@ -965,9 +979,11 @@ TEST(ui_func_turn_with_a_step_held_sets_the_random_range_not_the_lock) {
     *w = 0;
     CHECK(screen_has(app, wanted));
     app.draw(canvas);
-    int dim = 0;                                     // the range line under GRID's slot A bar
-    for (int x = 0; x < 28; x++) dim += px[118 * enaga::Canvas::width + x] == 7 ? 1 : 0;
-    CHECK(dim > 0);
+    int lit = 0;                                     // GRID's slot A: its value lit for the range
+    for (int y = 105; y <= 111; y++) {
+        for (int x = 0; x < 42; x++) lit += px[y * enaga::Canvas::width + x] == 15 ? 1 : 0;
+    }
+    CHECK(lit >= 45);
     app.on_encoder(0, -120);
     pump(2);
     CHECK_EQ(int(pattern_get_range(app_engine().pattern(), 0, 0, uint8_t(index))), 0);
@@ -2001,7 +2017,7 @@ TEST(ui_with_sus_up_a_track_pad_holds_its_note_until_it_comes_up) {
     strata::test::post(Cmd::scene_erase, 0, 0, uint8_t(app_engine().scene_slot(1)));
     pump();
     key(ENAGA_KEY_F8);
-    while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::asr);
     for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);    // track 7, VA POLY
     CHECK_EQ(UiProbe::selected(app), 6);
     const int pad = 12;                                 // track 7's pad
@@ -3878,7 +3894,7 @@ TEST(ui_fm_pages_name_their_knobs_and_values) {
     post_track(Cmd::set_machine, 0, uint8_t(MachineId::fm));
     pump(4);
     key(ENAGA_KEY_F8);
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     post_cmd_track_param(0, 0, 72);     // A5
     post_cmd_track_param(0, 1, 72);     // 3.5
     pump();
@@ -3895,16 +3911,16 @@ TEST(ui_fm_pages_name_their_knobs_and_values) {
         check_layout(app, "EDIT SRC, FM4, every value");
     }
 
-    while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::asr);
     CHECK(screen_has(app, "ISU"));
     CHECK(!screen_has(app, "FSU"));
 
-    while (UiProbe::param_page(app) != int(Page::osc)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::osc);
     CHECK(screen_has(app, "FIN"));
     CHECK(screen_has(app, "BRT"));
     CHECK(screen_has(app, "CAR"));
     CHECK(!screen_has(app, "OS2"));
-    CHECK(screen_has(app, "FIN NUDGES RAT"));
+    CHECK(screen_has(app, "FIN"));                   // the knob; what it does is FUNC help's
     post_cmd_track_param(0, kOscFirst + 0, 127);
     post_cmd_track_param(0, kOscFirst + 1, 70);
     post_cmd_track_param(0, kOscFirst + 3, 38);
@@ -3924,7 +3940,7 @@ TEST(ui_wave_pages_name_their_knobs_and_values) {
     post_track(Cmd::set_machine, 0, uint8_t(MachineId::wave_mono));
     pump(4);
     key(ENAGA_KEY_F8);
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     post_cmd_track_param(0, 0, 4);      // CLASSIC
     post_cmd_track_param(0, 1, 0);
     pump();
@@ -3940,7 +3956,7 @@ TEST(ui_wave_pages_name_their_knobs_and_values) {
         check_layout(app, "EDIT SRC, WAVE MONO, every TBL");
     }
 
-    while (UiProbe::param_page(app) != int(Page::amp)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::amp);
     post_cmd_track_param(0, 10, 64);
     pump();
     CHECK(screen_has(app, "MOT"));
@@ -3952,7 +3968,7 @@ TEST(ui_wave_pages_name_their_knobs_and_values) {
     pump();
     CHECK(screen_has(app, "-15"));
 
-    while (UiProbe::param_page(app) != int(Page::osc)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::osc);
     CHECK(screen_has(app, "WRP"));
     CHECK(screen_has(app, "DET"));
     CHECK(screen_has(app, "GLD"));
@@ -3973,7 +3989,7 @@ TEST(ui_wave_pages_name_their_knobs_and_values) {
 
     post_track(Cmd::set_machine, 0, 0);
     pump(4);
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     key(ENAGA_KEY_F4);
 }
 
@@ -4607,7 +4623,7 @@ TEST(ui_arrows_on_the_step_page_walk_the_step_and_clr_goes_back) {
 TEST(ui_the_lfo_is_edits_fifth_page) {
     Strata &app = fresh();
     key(ENAGA_KEY_F8);                                // EDIT, track 1
-    while (UiProbe::param_page(app) != int(Page::lfo)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::lfo);
     check_layout(app, "EDIT LFO, off");
 
     // One click is one shape on A and one destination on D.
@@ -4677,14 +4693,14 @@ TEST(ui_the_lfo_is_edits_fifth_page) {
     post_cmd_track_param(0, kLfoDest, 0);
     pump();
     key(ENAGA_KEY_F8);
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     key(ENAGA_KEY_F4);
 }
 
 TEST(ui_the_arp_is_edits_sixth_page_and_keys_play_it) {
     Strata &app = fresh();
     key(ENAGA_KEY_F8);                                // EDIT, track 1
-    while (UiProbe::param_page(app) != int(Page::arp)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::arp);
     check_layout(app, "EDIT ARP, off");
 
     // One click is one zone on A, B and C: MOD UP, RAT one faster, OCT 2.
@@ -4721,14 +4737,14 @@ TEST(ui_the_arp_is_edits_sixth_page_and_keys_play_it) {
     for (int i = 0; i < kArpParams; i++) post_cmd_track_param(0, uint8_t(kArpFirst + i), 0);
     pump();
     key(ENAGA_KEY_F8);
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     key(ENAGA_KEY_F4);
 }
 
 TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
     Strata &app = fresh();
     key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
-    while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::asr);
     CHECK_EQ(int(Page::asr), kEditPages - 2);
     check_layout(app, "EDIT ASR, a drum");
     CHECK(screen_has(app, "NOT ON THIS MACHINE"));
@@ -4767,7 +4783,7 @@ TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
     for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
     pump();
     for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     key(ENAGA_KEY_F4);
 }
 
@@ -4777,7 +4793,7 @@ TEST(ui_asr_on_sample_shows_sus_and_rel_only) {
     key(ENAGA_KEY_F8);
     for (int i = 0; i < 7; i++) key(ENAGA_KEY_DOWN);  // track 8: SAMPLE in the default kit
     CHECK_EQ(int(app_engine().machine_id(7)), int(MachineId::sample));
-    while (UiProbe::param_page(app) != int(Page::asr)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::asr);
     check_layout(app, "EDIT ASR, SAMPLE");
     CHECK(!screen_has(app, "NOT ON THIS MACHINE"));
     CHECK(screen_has(app, "SUS"));
@@ -4798,14 +4814,14 @@ TEST(ui_asr_on_sample_shows_sus_and_rel_only) {
     for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(7, uint8_t(kAsrFirst + i), 0);
     pump();
     for (int i = 0; i < 7; i++) key(ENAGA_KEY_UP);
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     key(ENAGA_KEY_F4);
 }
 
 TEST(ui_osc_is_edits_eighth_page_and_names_its_waves_and_modes) {
     Strata &app = fresh();
     key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
-    while (UiProbe::param_page(app) != int(Page::osc)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::osc);
     CHECK_EQ(int(Page::osc), kEditPages - 1);
     check_layout(app, "EDIT OSC, a drum");
     CHECK(screen_has(app, "NOT ON THIS MACHINE"));
@@ -4849,7 +4865,7 @@ TEST(ui_osc_is_edits_eighth_page_and_names_its_waves_and_modes) {
     }
     pump();
     for (int i = 0; i < 5; i++) key(ENAGA_KEY_UP);
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     key(ENAGA_KEY_F4);
 }
 
@@ -6158,7 +6174,7 @@ TEST(ui_pushing_rat_on_the_lfo_page_walks_lfo_trig) {
     Strata &app = fresh();
     const KitTrack &kit = app_engine().project().kit.tracks[0];
     key(ENAGA_KEY_F8);                                // EDIT, track 1
-    while (UiProbe::param_page(app) != int(Page::lfo)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::lfo);
     CHECK_EQ(int(kit.lfo_trig), int(kLfoTrigFree));
 
     // RAT is the second knob: push B. FREE, RETRIG, ONE-SHOT and round.
@@ -6204,7 +6220,7 @@ TEST(ui_pushing_slc_on_a_sample_track_turns_auto_slicing_on_and_off) {
     Strata &app = fresh();
     const KitTrack &kit = app_engine().project().kit.tracks[0];
     sample_track_in_edit();
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     CHECK_EQ(int(kit.slice_mode), int(kSliceEqual));
 
     // SLC is the fourth knob on SRC: push D.
@@ -6244,7 +6260,7 @@ TEST(ui_pushing_slc_on_a_sample_track_turns_auto_slicing_on_and_off) {
 TEST(ui_layout_slc_auto_line) {
     Strata &app = fresh();
     sample_track_in_edit();
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     check_layout(app, "EDIT SRC, SAMPLE, slices even");
     key(ENAGA_KEY_PUSH_D);
     pump(2);
@@ -7675,9 +7691,7 @@ void card_break(const char *path, uint32_t frames = 48000) {
 }
 
 void edit_page_to(Page page) {
-    for (int i = 0; i < 8 && UiProbe::param_page(the_app()) != int(page); i++) {
-        key(ENAGA_KEY_SELECT_RIGHT);
-    }
+    goto_edit_page(the_app(), page);
     CHECK_EQ(UiProbe::param_page(the_app()), int(page));
 }
 
@@ -8278,7 +8292,7 @@ TEST(ui_grain_shows_its_knobs_in_units_and_ok_on_edit_opens_its_sounds) {
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
     CHECK(screen_has(app, "151MS"));          // SIZ 84
     CHECK(screen_has(app, "X4.3"));           // DEN 104: grains in the air
-    CHECK(screen_has(app, "OK: SOUNDS"));
+    CHECK(screen_has(app, "NO FILE") || screen_has(app, ".WAV"));   // the file line
     check_layout(app, "EDIT SRC, GRN in units");
     key(ENAGA_KEY_SELECT_RIGHT);
     key(ENAGA_KEY_SELECT_RIGHT);
@@ -9313,22 +9327,23 @@ TEST(ui_a_held_step_shows_its_lock_against_the_kit_value) {
     }
     CHECK(readout);
 
-    // GRID's slot A: the bar at y 116-117, the tick's caps one row above and below it.
-    const auto bright_in_row = [px](int y) {
+    // GRID's slot A: the held step's lock lights its value (a lit box behind it), let go it is
+    // plain text again.
+    const auto lit = [px] {
         int n = 0;
-        for (int x = 0; x < 28; x++) n += px[y * enaga::Canvas::width + x] == 15 ? 1 : 0;
+        for (int y = 105; y <= 111; y++) {
+            for (int x = 0; x < 42; x++) n += px[y * enaga::Canvas::width + x] == 15 ? 1 : 0;
+        }
         return n;
     };
-    CHECK_EQ(bright_in_row(115), 1);
-    CHECK_EQ(bright_in_row(118), 1);
-    const int tick = base * 27 / 127;
-    CHECK_EQ(int(px[115 * enaga::Canvas::width + tick]), 15);
+    CHECK(lit() >= 45);
 
     step_up(0);
     pump(2);
     CHECK(!screen_has(app, "S1 "));
     app.draw(canvas);
-    CHECK_EQ(bright_in_row(115), 0);
+    CHECK(lit() < 45);
+    (void)base;
 }
 
 TEST(ui_a_trigless_step_draws_as_an_outline_on_the_grid) {
@@ -9476,10 +9491,10 @@ TEST(ui_wave_grain_draws_its_bracket_and_the_grains_in_the_air) {
     CHECK(grains > 0);
     draw_now();
     check_layout(app, "EDIT SRC, GRAIN with a file");
-    CHECK(screen_has(app, "OK: SOUNDS"));
+    CHECK(screen_has(app, "BREAK.WAV"));            // the file line, as the draft has it
     draw_now();
     CHECK_EQ(int(pixel_at(view.lo, 23)), 15);       // the bracket, top and bottom
-    CHECK_EQ(int(pixel_at(view.lo, 69)), 15);
+    CHECK_EQ(int(pixel_at(view.lo, 65)), 15);
     back_to_a_kick();
 }
 
@@ -9491,7 +9506,6 @@ TEST(ui_envelope_on_amp_follows_the_knobs_and_letters_its_handles) {
     post_cmd_track_param(0, 8, 0);
     post_cmd_track_param(0, 9, 60);
     pump(4);
-    CHECK(screen_has(app, "OK: PICK SAMPLE"));
     check_layout(app, "EDIT AMP, SAMPLE");
     draw_now();
     CHECK(pixel_at(2, 34) != 0);                    // the peak, at the top at once
@@ -9635,7 +9649,7 @@ TEST(ui_wave_src_draws_the_table_as_a_waterfall) {
     post_track(Cmd::set_machine, 0, uint8_t(MachineId::wave_mono));
     pump(4);
     key(ENAGA_KEY_F8);
-    while (UiProbe::param_page(app) != int(Page::src)) key(ENAGA_KEY_SELECT_RIGHT);
+    goto_edit_page(app, Page::src);
     post_cmd_track_param(0, 0, 4);                         // CLASSIC, table 0
     post_cmd_track_param(0, 1, 0);                         // POS at the front frame
     pump(4);

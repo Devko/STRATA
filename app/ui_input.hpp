@@ -1035,7 +1035,11 @@
             case Mode::edit:
                 // GRID and KEYS turn A-D on the current EDIT page, so their screen pages are
                 // EDIT's: SRC .. ASR. One page set for the knobs wherever they are.
-                param_page_ = (param_page_ + delta + kEditPages) % kEditPages; // SRC .. ASR
+                // Pages this machine does not have (a drum's ENV and OSC) are stepped over.
+                for (int tries = 0; tries < kEditPages; tries++) {
+                    param_page_ = (param_page_ + delta + kEditPages) % kEditPages;
+                    if (page_live(param_page_)) break;
+                }
                 if (mode_ != Mode::edit) notice(page_name(Page(param_page_)));
                 break;
             case Mode::mixer:
