@@ -6,11 +6,11 @@ This file holds what exists nowhere else in the repo: the state in one table, th
 order, and the knowledge that lives in no code comment, commit message or other document. When a
 fact here becomes stale, fix it here or delete it; do not append a history.
 
-**STRATA runs on the unit and has four releases.** v0.1.0 (2026-11-22), v0.2.0, v0.3.0 and
-v0.3.1 (2026-11-23, early betas, all for Enaga 0.2.0) are on GitHub; v0.3.1 boots and plays on
-the unit (2026-11-24). `main` is on Enaga 0.3.0 since #139, and a build from it boots on the
-unit's 0.3.0 firmware (2026-11-25). Nothing from 0.3.x on has been measured or walked through
-there yet. On the unit the default beat loads under 30%, and a long, heavy session peaked at
+**STRATA runs on the unit and has five releases.** v0.1.0 (2026-11-22), v0.2.0, v0.3.0 and
+v0.3.1 (2026-11-23, early betas for Enaga 0.2.0) and v0.4.0 (2026-11-26, the first for Enaga
+0.3.0, and the first zip without Enaga's firmware) are on GitHub; v0.3.1 boots and plays on the
+unit (2026-11-24), and a build from `main` after #139 boots on the unit's 0.3.0 firmware
+(2026-11-25). Nothing from 0.3.x on has been measured or walked through there yet. On the unit the default beat loads under 30%, and a long, heavy session peaked at
 84.3% MAX with no dropouts. Almost everything added since the first evening has been heard by
 nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
