@@ -10943,3 +10943,158 @@ TEST(ui_draw_bench) {
     post_track(Cmd::set_machine, 0, 0);
     pump(4);
 }
+
+// --- live recording on a POLY track: what several notes on one step become -------------------
+//
+// A Step holds ONE note and a chord byte (core/pattern.hpp, core/chord.hpp): there is no room
+// for a free set of notes. These pin what REC does when several notes land on one step of VA
+// POLY (track 7), played as a chord or over a step that already has notes. MIDI IN is the way
+// in because channel 7 is track 7 whatever is selected; KEYS and the pads post the same
+// `record_note`.
+
+namespace {
+
+constexpr int kPolyTrack = 6;
+
+// REC on and the transport running at `tick`, on a blank project.
+Strata &polyrec_start(uint32_t tick) {
+    Strata &app = fresh();
+    CHECK_EQ(int(app_engine().machine_id(kPolyTrack)), int(MachineId::va_poly));
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    host.set_position(tick);
+    key(ENAGA_KEY_F2);
+    CHECK(UiProbe::rec(app));
+    pump(2);
+    return app;
+}
+
+void polyrec_stop() {
+    key(ENAGA_KEY_F2);
+    FakeHost::the().set_running(false);
+    pump(2);
+}
+
+void polyrec_on(Strata &app, uint8_t note, uint8_t velocity) {
+    app.on_midi(midi(uint8_t(0x90 | kPolyTrack), note, velocity));
+    pump(2);
+}
+
+void polyrec_off(Strata &app, uint8_t note) {
+    app.on_midi(midi(uint8_t(0x80 | kPolyTrack), note, 0));
+    pump(2);
+}
+
+int polyrec_trigs() {
+    int count = 0;
+    for (int s = 0; s < kStepsPerTrack; s++) count += trig_at(kPolyTrack, s) ? 1 : 0;
+    return count;
+}
+
+int polyrec_only_step() {
+    int where = -1;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(kPolyTrack, s)) where = s;
+    }
+    return where;
+}
+
+}  // namespace
+
+TEST(polyrec_a_chord_played_onto_an_empty_step_records_only_its_last_note) {
+    // C E G at the same moment: three record_hits on one step, each replacing the last. The step
+    // ends up one note, the LAST one played, with no chord -- the chord heard while playing is
+    // not what plays back.
+    Strata &app = polyrec_start(96);
+    polyrec_on(app, 60, 100);
+    polyrec_on(app, 64, 90);
+    polyrec_on(app, 67, 80);
+    CHECK_EQ(polyrec_trigs(), 1);
+    const int at = polyrec_only_step();
+    CHECK(at >= 0);
+    CHECK_EQ(int(step_of(kPolyTrack, at).note), 67);
+    CHECK_EQ(int(step_of(kPolyTrack, at).velocity), 80);
+    CHECK_EQ(int(step_of(kPolyTrack, at).chord), 0);
+
+    // The order decides the note: G E C keeps C.
+    polyrec_on(app, 67, 80);
+    polyrec_on(app, 64, 90);
+    polyrec_on(app, 60, 100);
+    CHECK_EQ(polyrec_trigs(), 1);
+    CHECK_EQ(int(step_of(kPolyTrack, at).note), 60);
+    polyrec_off(app, 60);
+    polyrec_off(app, 64);
+    polyrec_off(app, 67);
+    polyrec_stop();
+}
+
+TEST(polyrec_a_note_recorded_over_a_chord_step_keeps_the_old_chord_on_the_new_root) {
+    // The step holds A MIN7 (note 57, chord MIN7). One note, D, recorded over it: the note is
+    // replaced and the chord byte is kept, so the step now plays D MIN7 -- four notes, from one
+    // key that sounded one note while it was played.
+    fresh();
+    Project &incoming = app_engine().project_for_load();
+    Step &s = incoming.live().tracks[kPolyTrack].steps[4];
+    s.flags = kStepTrig;
+    s.note = 57;
+    s.chord = chord_pack(ChordType::min7, 0);
+    pump(2);
+
+    Strata &app = the_app();
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    host.set_position(96);                       // step 4
+    key(ENAGA_KEY_F2);
+    pump(2);
+    polyrec_on(app, 62, 100);
+    CHECK_EQ(polyrec_trigs(), 1);
+    CHECK(trig_at(kPolyTrack, 4));
+    CHECK_EQ(int(step_of(kPolyTrack, 4).note), 62);
+    CHECK_EQ(int(step_of(kPolyTrack, 4).chord), int(chord_pack(ChordType::min7, 0)));
+    polyrec_off(app, 62);
+    polyrec_stop();
+}
+
+TEST(polyrec_a_different_pitch_on_a_later_pass_replaces_and_the_same_pitch_rewrites) {
+    // Overdub is replace: a second pass's note on a step with a note takes its place, whatever
+    // its pitch. The same pitch again keeps the note and takes the new velocity.
+    Strata &app = polyrec_start(96);
+    polyrec_on(app, 60, 100);
+    polyrec_off(app, 60);
+    const int at = polyrec_only_step();
+    CHECK(at >= 0);
+
+    // The next pass, same step (a track's length in steps, 24 ticks each).
+    const uint32_t loop = uint32_t(app_engine().pattern().tracks[kPolyTrack].length) * 24u;
+    FakeHost::the().set_position(96 + loop);
+    pump(2);
+    polyrec_on(app, 65, 70);
+    polyrec_off(app, 65);
+    CHECK_EQ(polyrec_trigs(), 1);
+    CHECK_EQ(int(step_of(kPolyTrack, at).note), 65);
+    CHECK_EQ(int(step_of(kPolyTrack, at).velocity), 70);
+
+    polyrec_on(app, 65, 40);
+    polyrec_off(app, 65);
+    CHECK_EQ(int(step_of(kPolyTrack, at).note), 65);
+    CHECK_EQ(int(step_of(kPolyTrack, at).velocity), 40);
+    polyrec_stop();
+}
+
+TEST(polyrec_only_the_note_the_step_kept_gives_it_a_length) {
+    // C held four steps, E one: the step keeps E (played last), so E's key-up is the one that
+    // sets LEN and C's longer hold is dropped.
+    Strata &app = polyrec_start(96);
+    FakeHost &host = FakeHost::the();
+    polyrec_on(app, 60, 100);
+    polyrec_on(app, 64, 100);
+    const int at = polyrec_only_step();
+    CHECK(at >= 0);
+    host.set_position(96 + 24);
+    polyrec_off(app, 64);
+    CHECK_EQ(int(step_of(kPolyTrack, at).length), 8);    // one step
+    host.set_position(96 + 4 * 24);
+    polyrec_off(app, 60);
+    CHECK_EQ(int(step_of(kPolyTrack, at).length), 8);    // C is not the step's note
+    polyrec_stop();
+}
