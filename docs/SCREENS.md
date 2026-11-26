@@ -14,7 +14,9 @@ another, small labels end by x 125, two small labels on a line keep 2 blank pixe
 ## Rules every screen keeps
 
 - **Drawn from what the audio side publishes** (`Status`, the scope ring) or from settings. Nothing
-  in draw() walks a pattern's memory beyond the page on screen, a sample, or a file.
+  in draw() walks a pattern's memory beyond the page on screen, a sample, or a file. PROJECT's
+  slots are the one exception, and spread it out: five patterns' steps and one bank's "holds a
+  pattern" bits a frame, into a cache (below).
 - **Stopped, a screen holds still and still looks right**: pictures are drawn from their knobs;
   analysers (spectrum, scope, meters) sit at rest; nothing moves on a timer of its own. Moving
   parts come from the audio side (an LFO's phase, a grain, a note's envelope) or from the running
@@ -93,10 +95,42 @@ Pictures by page and machine:
 | MST | the draft: knob line (DJ CMP LIM); the spectrum, 24 bands of 5 px (4 lit) in rows 26-59, every other row, bright at the top, peaks held 12 frames; 100 / 1K / 10K at y 63; the vectorscope 42 x 42 at (0, 70), mid up and side across, afterglow; CMP's reduction and LIM falling from the top of two bars (x 50, 68; rows 72-109); GR and LUFS (momentary, K-weighted, 400 ms, from the scope history at 24 kHz) at x 88; LVL at (88, 106) |
 | EQ | FLT's frame with the kill EQ's curve (a shelf under 250 Hz, a bell, a shelf over 2.5 kHz; KILL 30 dB down), A B C on it, a lit `KILL` over a thrown band |
 
+## PROJECT's slots (app/ui_pickview.hpp)
+
+| Rows | What |
+| --- | --- |
+| 18 | the project's name; at the right what the card side is doing (`SAVING 40%`), NO CARD, the last error, or `UNSAVED` |
+| 25 | `KEY` and the key (`C# MIXOLYDIAN`); at the right `Q` and the queue mode, and `CHAIN` while it plays |
+| 32 | `SMP`, a mark a track (full: loaded; hollow: streamed; a dash: loading; a cross: failed; a dot: none) and the pool (`9/64M`); at the right `BANK A 5/16`, the shown bank and how many of its slots hold a pattern |
+| 39 | the eight banks' letters, each over its block, the shown one lit, a bank holding nothing dim |
+| 46-56 | the map: each bank a block of 4 x 4 cells (2 x 2 px, 3 apart) laid out as the tiles below. Dim (2): empty; grey (7, 9 in the shown bank): holds a pattern; white: playing; blinking with the clock's eighths: queued |
+| 61-115 | the shown bank's sixteen tiles, 29 x 13, 30 and 14 apart: the number (a lit badge when it plays) and the pattern's steps as 16 columns by 8 track rows (a 64-step track folds four steps a column); the playing one brighter with a playhead column (the selected track's step) while running; a queued one's underline blinking; the cursor a white frame; an empty slot dotted with `--` |
+| 121 | tabs: SLOT CHAIN PAT SETUP PROJS |
+
+A pattern is a few KiB, so the map and the tiles draw from a cache (`refresh_slot_cache`): the
+shown bank's tiles are read four a frame and the playing one every frame, the shown bank whole
+when it changes, and every other bank's bits one bank a frame: 400 ms for the whole map.
+
+## MACHINE (app/ui_pickview.hpp)
+
+| Rows | What |
+| --- | --- |
+| 18 | `MACHINE T1`; at the right `B` and MIDI OUT (`OFF`, `CH 10`), lit when a MID track sends nowhere |
+| 24-38 | the kit: a cell a track (15 px), its machine's picture (12 x 6) and name; the selected track framed, its name a badge |
+| 42-94 | the twelve machines, 29 x 17 tiles in columns of three as the arrows walk them: a picture of the sound (25 x 8) over the name; the track's framed with its name lit |
+| 98, 105 | what the track's machine is (`KICK: SINE, PITCH SWEEP, CLICK`) and what it costs (`DRUM, 2 VOICES, LIGHT ON CPU`, `6 VOICES OF THE SHARED 12`) |
+| 113 | OK's action (`OK: SOUNDS`, `OK: PICK SAMPLE`); `FUNC+EDIT: KITS` at the right |
+
+The pictures (`machine_icon`): KCK a sine sweeping down and dying; SNR a short tone and a burst of
+noise; HAT a closed and an open tick of noise; PRC an FM ring; SMP bars of a recording; GRN a cloud
+of grains; MNO a saw; PLY three saws stacked; MID a five-pin socket; WMN and WPL frames of a table
+turning from sine to square (four for WPL); FM4 four operators, the last with its feedback loop.
+They are drawn from their shapes and do not move.
+
 ## The other screens
 
 Lists (KIT, SOUNDS, SAMPLES, PROJECTS, MENU, the slot menu, CHAIN, PATTERN) and the setting screens
-(SETUP, RESAMPLE, KEYS, MACHINE, PROJECT, name entry) keep their rows in Enaga's font, which
+(SETUP, RESAMPLE, KEYS, PROJECT's other pages, name entry) keep their rows in Enaga's font, which
 reads at arm's length, in the drafts' language around them: the caption in the small font at
 y 18, the cursor's row a lit bar with its text dark (`list_row`), hints in the small font at
 y 97, 105 and 113. CHAIN draws the song as a strip (y 92): each entry as wide as its repeats, the

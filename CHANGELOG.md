@@ -202,6 +202,15 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Changed
 
+- **The pattern and machine screens are pictures.** PROJECT's slots show all 128 patterns as a
+  map, a block of 4 x 4 per bank: which hold a pattern, which plays and which is queued (it blinks),
+  in every bank at once. Under it the shown bank's sixteen are drawn as their steps, eight track
+  rows by sixteen columns, the playing one with its playhead. The key, the queue mode, the sample
+  pool and how many of the bank's slots are used sit in two small lines at the top, and the page
+  tabs (SLOT CHAIN PAT SETUP PROJS) at the bottom. MACHINE (FUNC+EDIT) draws the kit as eight
+  pictures, every machine as a picture of its sound (the kick's falling sine, the hats' noise, the
+  saws, the wavetable's frames, FM4's operators), and says what the track's machine is for and what
+  it costs in voices and CPU.
 - **EDIT and MIXER look like the drafts.** EDIT's four knobs are one line in the small font at the
   top (D at the bottom), and the picture takes the screen on every page of every machine: a drum's
   SRC draws the hit its knobs make and lights it as it plays; FLT draws the filter's curve over the

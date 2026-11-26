@@ -120,9 +120,12 @@ draw() now times itself over 64 frames (app/ui_screen.hpp, `count_draw_time`): S
 | the same, drawn once a table into a cover map and shaded each frame (`build_waterfall`) | **1.35 ms** | emulator, cl6x, no caches |
 | EDIT ENV on VA MONO: the amplitude's envelope and the filter's under it | **1.09 ms** | emulator, cl6x, no caches |
 | MIXER desk (eight strips) / REV's tail / EQ's curve over the spectrum | **0.32 / 0.78 / 1.39 ms** | emulator, cl6x, no caches |
+| PROJECT's slots: the 128-pattern map (a bank read a frame), sixteen tiles of steps (five read a frame) | **1.28 ms** | emulator, cl6x, no caches |
+| MACHINE: the kit's eight pictures and the twelve machines' | **2.50 ms** | emulator, cl6x, no caches |
 
 `scenario_visuals` runs the emulator twice from part 6 on, once ending on PERFORM and the LFO page
-and once on MST, because the draw log comes once a run.
+and once on MST, because the draw log comes once a run; four times since the PROJECT and MACHINE
+redesign, which added a run ending on each.
 
 Part 3 is draw-side only: all 36 scenarios pass with cl6x, `ambient` read 31.54% against
 31.16% for part 2 in an earlier run of the same session, the usual +-0.5 of where the peak
