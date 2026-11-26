@@ -13,8 +13,9 @@ SmplTrek. Installing it takes two downloads from two places:
 | **Enaga 0.3.0**, the firmware | [Enaga's v0.3.0 release](https://github.com/seawaffle/enaga/releases/tag/v0.3.0): `enaga-v0.3.0-smpltrek.zip` | `SmplTrek.bin` |
 | **STRATA**, the app | [STRATA's releases](https://github.com/Devko/STRATA/releases): `STRATA-v0.4.0-smpltrek.zip` | `SD-CARD/ENAGA/APPS/STRATA/APP.ENA`, a README.txt with these steps, the changelog and the licences |
 
-The card builder in [web/](../web/README.md) does both downloads in your browser and hands you
-one zip for the card, in matching versions. (Its address goes here once it is deployed.)
+**Shortcut:** [strata.einblick.dev](https://strata.einblick.dev) does both downloads in your
+browser, from the two official releases, and hands you one zip for the card in matching versions
+(source in [web/](../web/README.md)). The steps below say what it does by hand.
 
 The STRATA zip does not carry Enaga's firmware: you get that from its authors, not from a copy
 of ours. (v0.1.0 to v0.3.1 did include Enaga 0.2.0's `SmplTrek.bin`.) Releases are
