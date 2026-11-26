@@ -1386,8 +1386,16 @@ uint32_t fresh_kit_file() {
 
 // g_kit_file as a build from before the duck wrote it: the OSC page's section and then the
 // duck's, the last two, dropped.
-// g_kit_file as a build from before the choke groups wrote it: their section, the last, dropped.
+// g_kit_file as a build from before the arp's settings wrote it: their section, the last, dropped.
+void drop_arp_ext_section() {
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1409u);
+    for (uint32_t i = 0; i < 1409u; i++) g_kit_file[i] = g_kit_alt[i];
+}
+
+// g_kit_file as a build from before the choke groups wrote it: their section and the arp
+// settings' dropped.
 void drop_choke_section() {
+    drop_arp_ext_section();
     CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1389u);
     for (uint32_t i = 0; i < 1389u; i++) g_kit_file[i] = g_kit_alt[i];
 }
@@ -2559,7 +2567,7 @@ TEST(kit_arp_settings_round_trip_and_an_older_file_plays_every_arp_as_before) {
              int(SerializeResult::ok));
     drop_arp_ext_section();
     g_kit_loaded.tracks[2].arp = {1, 1, 1, 1};
-    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, 1389u)), int(SerializeResult::ok));
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, 1409u)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
         for (int f = 0; f < kArpExtFields; f++) CHECK_EQ(int(arp_ext_get(g_kit_loaded.tracks[t].arp, f)), 0);
         for (int p = 0; p < kKitParams; p++) {
