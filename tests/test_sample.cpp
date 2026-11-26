@@ -1181,6 +1181,104 @@ TEST(sample_release_lets_go_of_one_note_and_leaves_the_others) {
     CHECK(peak(g_out + 40 * kBlk, 40 * kBlk) > 0.3f);
 }
 
+// --- the ASR page: SUS and REL (2026-11-26) --------------------------------
+
+namespace {
+
+// A looped constant sample, so the level the envelope leaves is the only thing that moves.
+TrackParams looped(uint8_t sus, uint8_t rel, uint8_t dec = 127) {
+    TrackParams p = plain();
+    p.set(9, dec);
+    p.set(10, 32);                   // PLY: forward loop
+    p.set(kAsrFirst + 1, sus);
+    p.set(kAsrFirst + 2, rel);
+    return p;
+}
+
+Trig gated(uint32_t frames, bool held = false) {
+    Trig t = hit();
+    t.gate_frames = frames;
+    t.held = held;
+    return t;
+}
+
+int play(Sampler &s, const TrackParams &p, const Trig &t, float *out, int blocks) {
+    s.init(kRate);
+    s.set_sample(g_mono, uint32_t(kSrcFrames), 1, kRate);
+    s.prepare(p);
+    s.trigger(t);
+    clear(out, kCapture);
+    return render_blocks(s, p, out, blocks);
+}
+
+}  // namespace
+
+TEST(sample_asr_at_zero_is_the_machine_as_it_was) {
+    // SUS 0 and REL 0: a LEN changes nothing (DEC decides, here holding to the loop's end), and
+    // the page's ATK and fourth knob are not this machine's, so they change nothing either.
+    fill_const(g_mono, kSrcFrames, 1, 16384);
+    Sampler a, b;
+    play(a, looped(0, 0), hit(), g_out, 200);
+    TrackParams other = looped(0, 0);
+    other.set(kAsrFirst + 0, 99);
+    other.set(kAsrFirst + 3, 99);
+    play(b, other, gated(10 * kBlk), g_other, 200);
+    bool same = true;
+    for (int i = 0; i < 200 * kBlk; i++) same = same && g_out[i] == g_other[i];
+    CHECK(same);
+    CHECK(b.active());
+    CHECK(peak(g_other + 190 * kBlk, 10 * kBlk) > 0.4f);
+}
+
+TEST(sample_sus_up_holds_for_len_then_fades_over_rel) {
+    fill_const(g_mono, kSrcFrames, 1, 16384);
+    Sampler s;
+    play(s, looped(127, 0), gated(20 * kBlk), g_out, 120);
+    CHECK(peak(g_out + 15 * kBlk, kBlk) > 0.45f);    // held at the peak through LEN
+    CHECK(peak(g_out + 100 * kBlk, 20 * kBlk) < 1e-3f);   // then 30 ms of REL, and gone
+    clear(g_out, kCapture);
+    render_blocks(s, looped(127, 0), g_out, 4);
+    CHECK(!s.active());
+
+    // REL up: the same note is still sounding well after LEN.
+    Sampler slow;
+    play(slow, looped(127, 100), gated(20 * kBlk), g_other, 120);
+    CHECK(peak(g_other + 100 * kBlk, 20 * kBlk) > 0.1f);
+    CHECK(slow.active());
+}
+
+TEST(sample_sus_is_the_level_dec_falls_to) {
+    fill_const(g_mono, kSrcFrames, 1, 16384);
+    Sampler half, none;
+    // DEC 20 is a few tens of milliseconds, so by half a second it has landed.
+    play(half, looped(64, 0, 20), gated(kCapture), g_out, 400);
+    play(none, looped(0, 0, 20), gated(kCapture), g_other, 400);
+    const float held = peak(g_out + 380 * kBlk, 20 * kBlk);
+    CHECK(held > 0.2f && held < 0.3f);                 // 0.5 of the sample's 0.5
+    CHECK(peak(g_other + 380 * kBlk, 20 * kBlk) < 1e-3f);   // SUS 0: decayed away
+}
+
+TEST(sample_sus_up_holds_a_key_until_it_comes_up_and_lets_a_one_shot_go) {
+    fill_const(g_mono, kSrcFrames, 1, 16384);
+    Sampler key;
+    play(key, looped(127, 0), gated(0, true), g_out, 200);
+    CHECK(peak(g_out + 190 * kBlk, 10 * kBlk) > 0.45f);    // no LEN: the key holds it
+    key.release(Sampler::kRootNote);
+    clear(g_out, kCapture);
+    render_blocks(key, looped(127, 0), g_out, 80);
+    CHECK(!key.active());
+
+    // Neither a LEN nor a key-up to come: with SUS up nothing would end it, so it lets go.
+    Sampler loose;
+    play(loose, looped(127, 0), hit(), g_other, 80);
+    CHECK(!loose.active());
+}
+
+TEST(sample_release_curve_starts_at_the_old_declick) {
+    CHECK(sample_release_seconds(0) == 0.03f);
+    CHECK(sample_release_seconds(127) > 7.9f && sample_release_seconds(127) < 8.1f);
+}
+
 TEST(sample_a_note_released_before_its_frame_does_not_hang) {
     // Pressed and released inside one 1.3 ms block, which a 6 ms key scan never delivers: the
     // point is only that the voice is let go rather than left holding.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ASR emulator scenario: EDIT's seventh page, the VA machines' note envelope (ATK SUS REL FSU),
-# draws on the C674x with the real font, on a drum track ("NOT ON THIS MACHINE") and on VA POLY
-# (the four names and their times), and the beat keeps playing inside the load target.
+# draws on the C674x with the real font, on a drum track ("NOT ON THIS MACHINE"), on VA POLY
+# (the four names and their times) and on SAMPLE (SUS and REL), and the beat keeps playing inside
+# the load target.
 #
 # This scenario presses keys only (the emulator turns encoders since Enaga 0.3.0, but cannot
 # hold a sustaining chord on pads; docs/HANDOFF.md, section 2), so it does not raise SUS: what a sustaining chord COSTS is measured separately, by the temporary factory edit
@@ -39,14 +40,14 @@ STAGE="$ENAGA_BUILD/stage/STRATA"
 mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_asr.log"
 
-echo "running the emulator for $CYCLES cycles: play, EDIT to ASR on track 1, then on track 7 ..."
+echo "running the emulator for $CYCLES cycles: play, EDIT to ASR on track 1, then on tracks 7 and 8 ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 28@360000000 \
     --key 9@400000000 --key 9@430000000 --key 9@460000000 --key 9@490000000 \
     --key 9@520000000 --key 9@550000000 \
     --key 25@600000000 --key 25@640000000 --key 25@680000000 --key 25@720000000 \
-    --key 25@760000000 --key 25@800000000 \
+    --key 25@760000000 --key 25@800000000 --key 25@840000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
@@ -79,7 +80,7 @@ screens = [line for line in log if line.startswith("scr ")]
 check(report.get("app_status") == "APP RUNNING", "app is running",
       f'status={report.get("app_status")!r}')
 check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_reason")!r}')
-# Enaga's emulator keeps the last 16 log lines, and the six DOWN presses log a grid line each, so
+# Enaga's emulator keeps the last 16 log lines, and the seven DOWN presses log a grid line each, so
 # "strata ready" can scroll out. A drawn screen comes only after init(), so it proves the same thing.
 check("strata ready" in log or (len(log) == 16 and any(l.startswith("scr ") for l in log)),
       "init() ran to completion")
@@ -88,7 +89,8 @@ check("scr EDIT SRC" in screens, "EDIT opened on SRC", f"screens={screens}")
 check("scr EDIT ARP" in screens, "five selection presses passed the ARP page", f"screens={screens}")
 check("scr EDIT ASR" in screens, "a sixth reached the ASR page", f"screens={screens}")
 check(screens and screens[-1] == "scr EDIT ASR",
-      "six DOWN presses (to track 7, VA POLY) stayed on ASR", f"screens={screens}")
+      "seven DOWN presses (past track 7, VA POLY, to track 8, SAMPLE: SUS and REL since "
+      "2026-11-26) stayed on ASR", f"screens={screens}")
 
 blocks = report.get("audio_blocks", 0)
 check(blocks > 1000, "audio ran throughout", f"blocks={blocks}")

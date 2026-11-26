@@ -164,20 +164,28 @@ inline constexpr ParamReset kSamplePickResets[] = {
 inline constexpr int kSamplePickResetCount =
     int(sizeof kSamplePickResets / sizeof kSamplePickResets[0]);
 
-// Does this machine read the ASR page (ATK SUS REL FSU) and the OSC page? The VAs, the WAVE
-// pair, which share the VA voice, FM4, which reads both with its own meanings (FSU is its
-// index sustain; the OSC page is DET FIN BRT CAR), and GRAIN (ATK SUS REL, then SCN PSP on the
-// OSC page; dsp/grain.hpp). Everything that shows or saves those pages asks here, so a
-// machine that starts reading them is one line.
+// Does this machine read the ASR page (ATK SUS REL FSU)? The VAs, the WAVE pair, which share the
+// VA voice, FM4, which reads it with its own fourth knob (FSU is its index sustain), GRAIN (ATK
+// SUS REL) and SAMPLE, which reads SUS and REL only: its attack has always been on AMP, so the
+// page's ATK and fourth knob are not its own (dsp/sample.cpp). Everything that shows or saves
+// the page asks here, so a machine that starts reading it is one line.
 constexpr bool machine_reads_asr(uint8_t id) {
     return id == uint8_t(MachineId::va_mono) || id == uint8_t(MachineId::va_poly) ||
            id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly) ||
-           id == uint8_t(MachineId::fm) || id == uint8_t(MachineId::grain);
+           id == uint8_t(MachineId::fm) || id == uint8_t(MachineId::grain) ||
+           id == uint8_t(MachineId::sample);
 }
 
 // GRAIN: the granular player, whose ASR and OSC pages mean something of their own.
 constexpr bool machine_is_grain(uint8_t id) { return id == uint8_t(MachineId::grain); }
-constexpr bool machine_reads_osc(uint8_t id) { return machine_reads_asr(id); }
+// And the OSC page: the synths and GRAIN (SCN PSP), not SAMPLE.
+constexpr bool machine_reads_osc(uint8_t id) {
+    return machine_reads_asr(id) && id != uint8_t(MachineId::sample);
+}
+// SAMPLE's ASR page is SUS and REL alone: ATK is AMP's, and there is no fourth.
+constexpr bool machine_reads_asr_slot(uint8_t id, int slot) {
+    return machine_reads_asr(id) && (id != uint8_t(MachineId::sample) || slot == 1 || slot == 2);
+}
 
 // The WAVE pair: the VA voice with a wavetable where its oscillators were.
 constexpr bool machine_is_wave(uint8_t id) {
