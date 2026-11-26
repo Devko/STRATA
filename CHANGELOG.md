@@ -19,7 +19,7 @@ the project file format or the controls.
   QUANTIZE, says what a later pass does: **REPLACE** (the default: the first note of a pass on a
   step takes it over, chord type and all) or **ADD** (notes join the step's chord). The step
   page shows `NOTE C4 +2`; transpose, mutate and NOTE move the whole chord; the last key up of a
-  chord sets its LEN. Saved in PROJECT.BIN's old swing byte. Mono and drum tracks are unchanged.
+  chord sets its LEN. Saved in PROJECT.BIN's old swing byte. Mono and drum tracks are unchanged (#183).
 - **The card builder**, [strata.einblick.dev](https://strata.einblick.dev): pick a release and it
   builds one SD card zip with STRATA and the Enaga firmware it needs, both fetched in your
   browser from their official releases and checked against their SHA-256. Source in `web/`
