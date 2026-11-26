@@ -21,7 +21,10 @@ tools/render.sh              # render the output to a WAV offline
   where a GCC build would crawl.
 - The live web panel runs at about 0.4× real time, so its sound breaks up. Use `tools/render.sh`
   to hear it properly.
-- `tools/screenshots.sh` draws every screen with the app's own screen code into `docs/screens/`.
+- `tools/emulator_screens.sh` redraws `docs/screens/` from the device build running in the
+  emulator: it walks every screen with keys and knobs and keeps the frames the docs show (MUTATE
+  and SCENE need pads, which the emulator lacks, so those two come from the host draw).
+  `tools/screenshots.sh` is the quicker host-only route: the same screen code on the host build.
 
 ## Checks
 

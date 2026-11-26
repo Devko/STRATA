@@ -50,8 +50,8 @@ Right: the FUNC menu (FUNC+HOME), which always opens on SAVE.</sub>
 
 <sub>The factory project playing. Top: GRID, the step page, EDIT. Middle: MIXER, PERFORM (with the
 factory macros B, C and D), KEYS. Bottom: MACHINE, the KIT browser, PROJECT. Every screenshot in
-this manual is drawn by the app's own screen code on the host build, in Enaga's font
-(`tools/screenshots.sh`), so it shows what the build shows.</sub>
+this manual is a frame of the device build running in the emulator (`tools/emulator_screens.sh`),
+so it shows what the unit shows; MUTATE and SCENE, which need pads, are the host build's draw.</sub>
 
 ---
 
@@ -73,7 +73,7 @@ also walk the tracks in GRID, EDIT and KEYS.
 
 <p><img src="screens/edit.png" width="256" alt="EDIT, the kick's SRC page"> <img src="screens/edit_fltr.png" width="256" alt="EDIT, the FLTR page"></p>
 
-<sub>EDIT on the kick: the machine's SRC page and the insert chain's FLTR page. The bars above the knobs are the EDIT pages; the screen keys turn them.</sub>
+<sub>EDIT on the kick: the machine's SRC page and the insert chain's FLTR page. The tabs along the bottom are the EDIT pages, the one showing lit; the screen keys turn them. A, B and C sit on the knob line at the top, D in the footer under the picture.</sub>
 
 A machine is one of eleven sound engines, plus **MID**, which plays an outboard synth over MIDI
 instead (section 3). Any track can host any machine (MACHINE mode, `FUNC+EDIT`). The default kit
@@ -141,8 +141,8 @@ is one wobble and S+H picks a new value for each note and keeps it. RAT is its l
 over the rate (`2.0` Hz is half a second); synced, the note length. A synced LFO in RETRIG or
 ONE-SHOT counts from the note, not from the bar.
 
-The line under the knobs shows where the destination is right now (`NOW CUT 87`), with `RETRIG`
-or `ONE-SHOT` after it, or `LFO OFF: SET DEP+DST` until both are up. A new track's LFO is off and
+The footer says `TRIG FREE`, `TRIG RETRIG` or `TRIG ONE-SHOT` at its right (`SYNC` before it
+on a synced rate), and the picture says `LFO OFF: SET DEP+DST` until both are up. A new track's LFO is off and
 FREE, and so is every track in a project saved before it existed.
 
 The four LFO settings are parameters like any other: hold a STEP and turn one to lock it on that
@@ -168,10 +168,10 @@ Every track has **two mod slots**. A slot is a source that moves one parameter b
 - **RND**: a random value for each note, either side of the knob, held for the note.
 
 **You set a slot by learning it**, the way MACRO LEARN works. On the LFO page **push C** (DEP's
-knob) for slot 1 or **push D** (DST's) for slot 2. Line 2 says `MOD1 LFO: TURN A KNOB`. Push the
+knob) for slot 1 or **push D** (DST's) for slot 2. A toast says `MOD1 LFO: TURN A KNOB`. Push the
 same knob again to walk the source: LFO, ENV, VEL, PRS, RND, OFF. Then go to any page of the same
 track with the screen keys and **turn the knob you want moved**, as far as you want the source to
-take it: line 2 follows (`MOD1 VEL>CUT +40`). **OK** or **CLR** ends it (leaving EDIT does too):
+take it: the toast follows (`MOD1 VEL>CUT +40`). **OK** or **CLR** ends it (leaving EDIT does too):
 the knob goes back to where it was and the slot keeps the difference as its depth, so the knob
 is the sound at rest and the source moves it from there. Turn down for a negative depth: loud
 notes then close the filter instead of opening it. Pushing C or D from GRID or KEYS opens EDIT.
@@ -204,7 +204,8 @@ note into a run of notes:
 - **C, OCT**: how many octaves the run climbs, `X1` to `X4`.
 - **D, GAT**: how long each note is, from `50%` of the spacing (staccato) to `99%` (legato).
 
-The line under the knobs reads the whole setting (`UP 1/16 X2 75%`), or `ARP OFF: TURN MOD`.
+The picture draws the run's notes; the footer's right says how many octaves it climbs (`X2 OCT`),
+and the page says `ARP OFF: TURN MOD` while the arp is off.
 
 **On the sequencer**, a step on a track whose arp is on plays its note as a run for the step's
 length: set a step's length to 4 steps and a 1/16 arp plays four notes. On the PLY track the run
@@ -221,9 +222,9 @@ in a project saved before the arp existed.
 
 ### Held notes: the ENV page
 
-<p><img src="screens/edit_asr.png" width="256" alt="EDIT, the ENV page on VA POLY"></p>
+<p><img src="screens/edit_env.png" width="256" alt="EDIT, the ENV page on VA POLY"></p>
 
-On the VA, WAVE and FM4 machines a seventh EDIT page, **ASR**, after ARP, decides how a note is
+On the VA, WAVE and FM4 machines a seventh EDIT page, **ENV**, after ARP, decides how a note is
 held. With it, the POLY machines play pads and long chords, and the MONO ones long bass notes and
 drones:
 
@@ -238,12 +239,13 @@ drones:
   acid shape; turned up, the filter stays open while the note holds, so a long pad does not go
   dull.
 
-The line under the knobs says `SUS 0: ONE-SHOT` or `HOLDS: PAD OR LEN`. On any other machine the
-page shows `NOT ON THIS MACHINE`.
+The page draws the whole note: the amplitude envelope and, dimmer, the filter's (`AMP FLT`).
+The footer says `SUS 0: ONE-SHOT` or `HOLDS: PAD OR LEN`. On any other machine the page shows
+`NOT ON THIS MACHINE`.
 
 A scene captured with SCENE stores the ENV page too, like every other knob. So if a note still
 fades with SUS up, look at the morph: a scene stored at SUS 0 pulls SUS down as VALUE moves
-towards it. Capture the scene again, or clear its ASR knobs.
+towards it. Capture the scene again, or clear its ENV knobs.
 
 **A pad in three moves:** on the PLY track, ENV page: SUS to about 70%, ATK to about `400MS`, REL
 to about `2.0S`. Then on the step page give a chord step a LEN of `16 STP`: it holds for the whole
@@ -269,7 +271,7 @@ which sounds exactly as it did.
 
 <p><img src="screens/edit_osc.png" width="256" alt="EDIT, the OSC page on VA POLY"></p>
 
-On **VA MONO** and **VA POLY** an eighth EDIT page, **OSC**, after ASR, picks what goes into the
+On **VA MONO** and **VA POLY** an eighth EDIT page, **OSC**, after ENV, picks what goes into the
 filter (WAVE and FM4 have their own OSC pages, described with them in section 3):
 
 - **A, WAV**: OSC 1's wave. `SAW` from 0 to 31; at 32 a square (`SQR`), hollow and woody;
@@ -286,8 +288,8 @@ filter (WAVE and FM4 have their own OSC pages, described with them in section 3)
   more after it, so the sound gets thicker and dirtier rather than louder. With RES up, a gritty
   squelch.
 
-The line under the knobs says `OS2: DET 1-63 SYN 64+`. On any other machine the page shows
-`NOT ON THIS MACHINE`. Like every page, the four lock, scene and macro.
+The page draws one cycle of the mix that goes into the filter, and says what is in it
+(`SAW + SUB DRIVEN`). On any other machine it shows `NOT ON THIS MACHINE`. Like every page, the four lock, scene and macro.
 
 **RES** on SRC runs over the whole knob: each turn adds about the same amount of peak, and from
 about 120 the filter whistles by itself at a steady level (self-oscillation; tune it with CUT).
@@ -451,7 +453,8 @@ short blips until you give it a sample (section 6).
 ### 1. Play it
 
 Press **PLAY**. A01 starts; the top line reads `A01 1.1 130.0 > 20%` (pattern, bar.beat, tempo, `>`
-playing, audio load), a thin line under it runs across the pattern, and the column at the right
+playing, audio load) with the selected track's badge at the right, a thin line under it runs
+across the pattern, the tabs along the bottom are the screen's pages, and the column at the right
 edge is the master level. Turn **VALUE** to change the tempo; push and turn VALUE for swing. **STOP** stops
 and lets tails ring; STOP again cuts them.
 
@@ -459,7 +462,7 @@ and lets tails ring; STOP again cuts them.
 
 <p><img src="screens/grid.png" width="256" alt="GRID: eight tracks, the selected one highlighted"></p>
 
-<sub>GRID: one row per track, the playhead on the top row; under it the selected track (`T1`), its step page, length and speed, and the four knobs of the current EDIT page.</sub>
+<sub>GRID: one row per track with its number and level, the playhead's column lit; under it the selected track (`T1`), its step page, length and speed, and the four knobs of the current EDIT page.</sub>
 
 Press **HOME** for GRID: all eight tracks as rows, the selected one highlighted. Tap lower pad 2
 to select the clap. Its steps show on the STEP LEDs; tap **STEP 8** to add a clap, tap it again to
@@ -643,6 +646,7 @@ Plays a sample from RAM, whole or in slices. Four voices.
 | --- | --- | --- | --- | --- |
 | SRC | **PIT** ±24 semitones (unity at 64) | **STA** start | **LEN** length of what is left after STA (127 = to the end) | **SLC** slices, 1-16 |
 | AMP | **ATK** attack (0 = none) | **DEC** decay, 5 ms-16 s; 127 = hold | **PLY** forward, forward loop, reverse, reverse loop (four zones of 32) | **LVL** |
+| ENV | `---` (ATK is on AMP) | **SUS** sustain: 0 leaves DEC in charge; up holds the sample (a looped one becomes a pad) for the step's LEN or while its pad is held | **REL** release, 30 ms (a declick) to 8 s | `---` |
 
 With **SLC 1** the sample is one-shot and the trig note transposes it. With **SLC 2-16** the
 window is cut into equal slices and the **note picks the slice**: C4 (60) is slice 1, C#4 slice
@@ -653,13 +657,13 @@ slices. Loop modes repeat the window or the slice.
 not, so its slices start before or after the hit they were meant to hold. Push **D** (the SLC
 knob) on the SRC page to turn **AUTO** on: SLC then cuts at the hits STRATA found in the sample
 when it loaded, instead of evenly. SLC still sets how many slices: at SLC 8 the window is cut at
-its 7 strongest hits, in order. The line under the knobs says `SLC AUTO: 12 HITS` (up to 15 are
+its 7 strongest hits, in order. The footer says `SLC AUTO: 12 HITS` (up to 15 are
 found per sample), and with fewer hits inside the STA/LEN window there are fewer slices. With no
 hit in the window (`NO HITS`, or a window between two hits), it cuts evenly. Push D
 again for even slices (`SLICES EVEN`). AUTO is saved with the kit. A streamed file has no
 slices either way.
 
-**The waveform.** The SRC page draws the sample under the knobs: the STA..LEN window bright with
+**The waveform.** The SRC page draws the sample across the screen: the STA..LEN window bright with
 a line at each end, the rest dim, a dotted line at each slice (even or AUTO), and a column
 running through it for each voice that plays. A track with no file shows the placeholder it plays
 and says `NO FILE`. A streamed file shows the part that is in memory, then a dotted line. The
@@ -679,7 +683,7 @@ grains in the air, `HOLD`, a share in `%`.
 | --- | --- | --- | --- | --- |
 | SRC | **POS** position in the sample | **SIZ** grain size, 8-680 ms | **DEN** grains in the air, X0.3-X8.0: under X1 leaves gaps (a stutter), X2 and up is a smooth cloud | **SPR** spray, 0-500 ms: chorus, cloud, wash |
 | AMP | **DEC** 5 ms-15 s; 127 = `HOLD` | **PIT** ±24 whole semitones | **SHP** grain shape: smooth to plucked | **LVL** |
-| ASR | **ATK** attack, 0 (none) to 5 s | **SUS** sustain: 0 leaves DEC in charge; up holds the cloud while a KEYS pad or the step's LEN lasts | **REL** release, 180 ms-10 s | |
+| ENV | **ATK** attack, 0 (none) to 5 s | **SUS** sustain: 0 leaves DEC in charge; up holds the cloud while a KEYS pad or the step's LEN lasts | **REL** release, 180 ms-10 s | |
 | OSC | **SCN** scan: the read head moves from POS while the note sounds, `OFF` to 200% of real time (100% at 90) | **PSP** pitch spray: 1-63 detunes each grain by up to a semitone (`D25`), 64-127 sends up to half the grains an octave up (`OCT25`, a shimmer) | | |
 
 **Where to start:** press **OK** in EDIT for the GRN SOUNDS list (below), or switch a track to GRN,
@@ -692,7 +696,7 @@ motion record a sweep of POS. The trig note transposes, so a cloud plays chromat
 
 **The cloud on screen.** The SRC page draws the sample with a bracket where the next grain
 starts (POS, moving with SCN, as wide as one grain) and a tick for every grain in the air, as
-bright as that grain is loud. AMP and ASR draw the cloud's envelope.
+bright as that grain is loud. AMP and ENV draw the cloud's envelope.
 
 <p><img src="screens/edit_grain.png" width="256" alt="EDIT, GRAIN's SRC page: the grains"></p>
 
@@ -707,7 +711,7 @@ with accent, slide and glide.
 | SRC | **TUN** ±24 semitones | **MOD** voice filter: 0-63 LP24, 64-95 LP12, 96-111 BP12, 112-127 HP12 | **TON** tone: 64 flat, lower darker, higher thinner | |
 | FLTR | **CUT** cutoff, 35 Hz-12 kHz | **RES** resonance | **ENV** filter envelope amount, up to +66 semitones | **FDE** filter decay: 0 follows DEC (0.55 x DEC), 1-127 its own, 15 ms-2.4 s |
 | AMP | **DEC** decay, 15 ms-2.4 s | | **GLD** glide, 0-0.5 s | **LVL** |
-| ASR | **ATK** attack | **SUS** sustain: 0 = one-shot | **REL** release | **FSU** filter sustain |
+| ENV | **ATK** attack | **SUS** sustain: 0 = one-shot | **REL** release | **FSU** filter sustain |
 | OSC | **WAV** saw, square, pulse | **OS2** off, 1-63 detune, 64-127 sync | **SUB** sub level | **DRV** drive |
 
 With SUS at 0 (the default) DEC is the note's length. Turn SUS up for long, held notes: see
@@ -722,9 +726,10 @@ the note louder, opens the filter further and brings the noise (and, with OS2 in
 glides into the next note. The OSC page is described in
 [The oscillators and drive](#the-oscillators-and-drive-the-osc-page).
 
-FLTR, AMP and ASR draw their envelopes under the knobs: on FLTR the filter's, as high as ENV
-takes it, with C (ENV) and D (FDE) on its corners; on AMP and ASR the note's. A segment's width
-follows its knob, so a long and a short decay both fit the screen.
+FLTR draws the filter: its response at CUT and RES (`LP24`, `LP12` at the right) over the
+spectrum of what the track plays, with the footer's `ENV>CUT +37` saying how far ENV opens it.
+AMP draws the note's envelope, ENV the whole note with the filter's envelope beside it. A
+segment's width follows its knob, so a long and a short decay both fit the screen.
 
 <p><img src="screens/edit_vfltr.png" width="256" alt="EDIT, VA MONO's FLTR page: the filter envelope"></p>
 
@@ -739,7 +744,7 @@ each with inversions `/n`).
 | SRC | **TUN** | **MOD** as MNO | **TON** as MNO | |
 | FLTR | **CUT** | **RES** | **ENV** | **FDE** as MNO |
 | AMP | **DEC** with SUS at 0, the chord's length: short stab or long ring | | **DET** voice detune, up to a quarter semitone | **LVL** |
-| ASR | **ATK** attack | **SUS** sustain: 0 = one-shot | **REL** release | **FSU** filter sustain |
+| ENV | **ATK** attack | **SUS** sustain: 0 = one-shot | **REL** release | **FSU** filter sustain |
 | OSC | **WAV** | **OS2** as MNO | **SUB** | **DRV** |
 
 For pads, turn SUS up on the ENV page: a chord then holds for its step's LEN, or for as long as you
@@ -763,7 +768,7 @@ slide and glide on WMN, chords and the shared 12-voice budget on WPL.
 | SRC | **TBL** the table, eight counts each (shown by name) | **POS** position, frame 0-15 | **TON** as MNO | |
 | FLTR | **CUT** cutoff, LP24 | **RES** resonance | **ENV** filter envelope amount | **FDE** as MNO |
 | AMP | **DEC** as MNO | | **MOT** envelope to position: 64 off, up to +15 or -15 frames | **LVL** |
-| ASR | **ATK** | **SUS** | **REL** | **FSU** as MNO |
+| ENV | **ATK** | **SUS** | **REL** | **FSU** as MNO |
 | OSC | **WRP** bends the cycle (0 = none; high notes bend less, to stay clean) | **DET** a second, detuned copy: OFF, up to 60 cents | **SUB** sub level | WMN: **GLD** glide; WPL: **DRV** drive |
 
 The tables, from TBL 0 up:
@@ -804,7 +809,7 @@ and mellows as it rings (**IEN** says how much).
 | --- | --- | --- | --- | --- |
 | SRC | **ALG** algorithm `A1`-`A8` | **RAT** modulator ratio: 0.5 1 2 3 3.5 4 7 14 | **IDX** FM index (brightness) | **FBK** operator 4 feeding back on itself: a saw-like buzz, to noise |
 | AMP | **DEC** decay, 15 ms to 8 s | **IEN** how much of IDX the index envelope moves (0 = a fixed timbre) | **VEL** velocity to index: harder is brighter | **LVL** |
-| ASR | **ATK** | **SUS** (0 = one-shot) | **REL** | **ISU** index sustain: where the brightness settles while held |
+| ENV | **ATK** | **SUS** (0 = one-shot) | **REL** | **ISU** index sustain: where the brightness settles while held |
 | OSC | **DET** second pair sharp: `OFF`, up to `D25` cents | **FIN** fine ratio, ±0.5 around RAT (`0` at 64) | **BRT** keytrack: high notes get less index, so they stay sweet | **CAR** carrier ratio: 1, 0.5, 2, 3, 4 |
 
 The algorithms: `A1` one stack 4>3>2>1 (the brightest), `A2` 3 and 4 into 2 into 1, `A3` 3>2>1
@@ -958,7 +963,7 @@ reload.
 FILL, NOT FILL and none; MUTE through 1:2, 2:2, 1:4, 4:4 and none; REPEAT the ratchet through 2, 3,
 4 and off; MUTATE the probability through 75, 50, 25 and 100%. THROW locks the step's delay send
 at full, and again takes the lock off (FUNC + THROW: the reverb send): a throw written into the
-pattern, saved and undone like any lock. The bottom line says where it landed (`STEP 5 PROB 50%`,
+pattern, saved and undone like any lock. A toast says where it landed (`STEP 5 PROB 50%`,
 `STEP 5 DLY FULL`). The order is the rule: STEP first edits the step, pad first performs
 (FILL held, then a STEP, writes a FILL trig). The step page still has every value.
 
@@ -1131,7 +1136,7 @@ filter while it closes a send.
 | D | DRIVE | Kick (track 1) DEC and DRV up, closed and open hat DEC longer |
 
 **Setting one up: learn by turning.** In PERFORM, **push** the macro's knob (A-D). EDIT opens
-with `LEARN B 0/4 TURN KNOBS` on the second line. Now **turn** any knob on any EDIT page (the
+with `LEARN B 0/4 TURN KNOBS` in a toast. Now **turn** any knob on any EDIT page (the
 LFO's included), on any track (the screen keys turn pages, UP/DOWN or a lower pad the track), to
 where the top of the macro should be: the screen counts what it has learnt (`B T6 CUT 1/4`), up
 to four parameters. **OK**, **CLR** or **HOME** ends it, as does any screen but EDIT and MIXER: `B: 2 PARAMS`,
@@ -1172,7 +1177,7 @@ always stops on rest for one click (a detent), so you can find it without lookin
   drum hit, an arpeggio, a held key) is untouched; REL ALL is the drums' control.
 
 While either is away from rest, PERFORM's line under the macros shows both (`REL -12 LEN 71%`)
-and line 2 says `RL-` / `RL+` and `LN-` / `LN+`. Neither is saved or undone, like a macro's position;
+and the live strip under the top line says `RL-` / `RL+` and `LN-` / `LN+`. Neither is saved or undone, like a macro's position;
 a LOCK holds them, so a jump puts them back where they were.
 
 ### LIVE RND: shuffle the beat from PERFORM
@@ -1194,7 +1199,7 @@ comes back with it. The shuffle is seeded from the pattern, so the same pattern 
 way every time you play it.
 
 While it is on, PERFORM's line under the macros reads `LIVE RND4 FUNC+D` (or ends `R4` beside
-REL ALL and LEN ALL), the track meters mark the armed tracks with a dot, and line 2 says `RN4`.
+REL ALL and LEN ALL), the track meters mark the armed tracks with a dot, and the live strip says `RN4`.
 LIVE RND is not saved or undone; a LOCK holds the unit and which tracks are in, so a jump brings
 back the shuffle you stored, and the swap-back the one you had. A hit recorded while it is on goes
 on the step that was sounding.
@@ -1272,7 +1277,7 @@ length. The old chord FUNC + hold push D now only says where the move went (`TAP
 ### LOCK: store a moment, jump back to it
 
 Found something you like and about to wreck it? **Hold FUNC + MUTATE for half a second**: the
-playing pattern gets a lock (`LOCK A01 STORED`), and line 2 ends with `L`. Now change anything:
+playing pattern gets a lock (`LOCK A01 STORED`), and the top line shows `L`. Now change anything:
 tap steps, MUTATE, turn knobs, mute tracks, morph. As soon as anything the lock holds differs,
 the mark reads `L+`.
 
@@ -1388,8 +1393,8 @@ default the source is track 1 (the kick) and every other track ducks 35%.
 It has three MIXER pages, right after the faders:
 
 - **DCK 1-4** and **DCK 5-8**: knobs A-D are how far each track ducks, `OFF` (0) to `100%`. The
-  source track shows `SRC`: a track never ducks under itself. The bottom line says which track
-  they duck under.
+  source track shows `SRC`: a track never ducks under itself. The DUCK page says which track
+  they duck under (`DUCKS UNDER T1`).
 - **DUCK**: **SRC** (A) the source track, T1-T8. **ATK** (B) how fast the dip comes in, 1-50 ms.
   **HLD** (C) how long it stays down, 0-500 ms. **REL** (D) how long it takes to come back,
   10 ms to 1 s. Times are in milliseconds.
@@ -1407,14 +1412,14 @@ macros.
 
 <p><img src="screens/mixer.png" width="256" alt="MIXER: the faders of tracks 1-4"> <img src="screens/mixer_dly.png" width="256" alt="MIXER's DLY page"></p>
 
-<sub>MIXER's first page, the faders, and the DLY page. The screen keys walk all twelve: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+, REV, REV+, ROUTE, MST, EQ.</sub>
+<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all twelve: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+, REV, REV+, ROUTE, MST, EQ.</sub>
 
 Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
 send, `DLY+` after `DLY` and `REV+` after `REV`. **Push A** on either page (or turn A) flips the
 mode; the old mode's echoes ring out underneath, so a switch never clicks.
 
 - **LONG delay** (`DLY+`, A: `CLAS` / `LONG`). The echo time is DLY's division times **MUL**
-  (B: `X1` to `X8`), up to **12 s**: `1/1 X4` is four bars. The bottom line shows the time in
+  (B: `X1` to `X8`), up to **12 s**: `1/1 X4` is four bars. The page shows the time in
   milliseconds. **WOW** (C) is a slow tape wobble on the repeats; **DIF** (D) smears each repeat
   a little more than the last, so echoes turn into a wash after a few passes. The first echo is
   always clean and on the beat. FBK, TON, LVL and PNG work as in the classic mode, and ROUTE's
@@ -1520,7 +1525,7 @@ change on screen always means a key or knob did something.
   eight meters shows each track's level, a muted track dim.
 - **EDIT's LFO page**: while the LFO runs, one cycle of its shape with a dot riding it at the
   LFO's phase, and beside it a strip of what the LFO put out over the last two seconds.
-- **EDIT's envelopes** (AMP, ASR, FLTR): a dim fill under the curve, lit under the part the
+- **EDIT's envelopes** (AMP, ENV): a dim fill under the curve, lit under the part the
   playing note has travelled.
 
 SETUP shows what a frame of the screen costs to draw (`DRW 0.85MS`); docs/CONTROLS.md, "The
@@ -1647,7 +1652,7 @@ browser opens in the folder of the file the track plays, with the cursor on it, 
 
 - UP/DOWN (or A) move the cursor, LEFT/RIGHT or the screen keys turn a page of eight.
 - **OK on a file loads it into the track at once**, with the beat playing, and the cursor stays
-  put: press DOWN and OK again to try the next one. The line under the title says `READING`,
+  put: press DOWN and OK again to try the next one. A toast says `READING`,
   `CONVERTING` and so on while it loads, and the `NOW` line shows the file the track plays.
 - **On a SMP track a picked file plays whole, from its start**: the pick sets STA 0, LEN 127,
   SLC 1 and DEC 127 (hold). PIT, ATK, PLY and LVL stay as they were. Turn SLC up afterwards to
@@ -1657,7 +1662,7 @@ browser opens in the folder of the file the track plays, with the cursor on it, 
   start, straight to the output at about -6 dB, without loading it: the track and the kit stay
   as they were. Push A again to stop. While a file is heard, UP/DOWN (or turning A, or a page)
   hears the next file the cursor lands on, so you can listen down a folder and press OK on the
-  one you want. The line under the title says `HEARING 3/12S` (seconds heard of the file's
+  one you want. A toast says `HEARING 3/12S` (seconds heard of the file's
   length, `OPENING` for the moment before it sounds), and a line under the file's name grows as
   it plays. It works with the beat playing or stopped; it is streamed from the card, so a long
   stem starts as quickly as a short hit, plays at its own rate and takes no sample memory. It is
@@ -1723,9 +1728,8 @@ names one.
 ### The audio load: LOAD and MAX
 
 The top line's last figure, `23%`, is how much of each audio block the DSP used: the **load**.
-It changes every block, so it flickers. Builds with the held **MAX** readout show
-`MAX23.5` on the bottom line: the highest block since PLAY was last pressed, so press PLAY to
-start a fresh reading.
+It changes every block, so it flickers. PROJECT's SETUP page holds **MAX** (`MAX 27.0%`): the
+highest block since PLAY was last pressed, so press PLAY to start a fresh reading.
 
 STRATA is designed to stay under 60% in its worst case. On the unit the default beat reads
 under 30%, and long, heavy play has peaked at 84% without a dropout. If the load climbs or the
@@ -1734,8 +1738,8 @@ sound crackles:
 - **VA POLY, WAVE POLY and FM4** are the biggest cost: every chord note is a sustaining voice. Use shorter DEC, fewer
   notes per chord (MIN rather than MIN11), or fewer POLY tracks. All POLY tracks share 12 voices.
 - **GRAIN** with high DEN is eight grains at once; lower DEN or use SAMPLE.
-- **The CPU guard** steps in on its own when the load stays high: the bottom line shows
-  `GUARD1` to `GUARD4`, POLY chords get thinner (two voices fewer a step, the quietest fading
+- **The CPU guard** steps in on its own when the load stays high: the tabs' line shows
+  `GUARD1` to `GUARD4` at its right, POLY chords get thinner (two voices fewer a step, the quietest fading
   out first) and GRAIN clouds get sparser. It steps back down one level a second once the load
   falls, and a second STOP clears it. Seeing `GUARD` often means the pattern asks for more than
   the box has: use the tips above.
@@ -1773,7 +1777,7 @@ The clock source is a unit setting, not STRATA's: **FUNC+POWER** opens the Enaga
 SRC (INTERNAL, MIDI, SYNC), CLOCK/SYNC OUT and MIDI CH. PROJECT's SETUP page (PROJECT, screen
 key RIGHT three times) shows them.
 
-Under MIDI or SYNC, line 2 shows `EXT MIDI` or `EXT SYNC`, and STRATA **follows**: PLAY, STOP,
+Under MIDI or SYNC, the top line shows `MIDI` or `SYNC` where the tempo was, and STRATA **follows**: PLAY, STOP,
 FUNC+PLAY, FUNC+STOP and the tempo knob are refused with `EXT CLOCK` while the outside clock
 runs. Start and stop from the master instead; STRATA follows, and still autosaves on its stop.
 `CLOCK REFUSED` means the last transport request was refused. Reloading a project or starting a
@@ -1785,8 +1789,8 @@ new one needs the transport stopped, so stop the master first.
 | --- | --- |
 | `LOADING` on PLAY | A project is still loading; PLAY works when it finishes |
 | `FULL n` on GRID | n locks refused because the pattern's 1,024-lock pool is full |
-| `DROP n` on the bottom line | n edits were lost because they came faster than the audio side applies them |
-| `GUARD n` on the bottom line | The CPU guard is shedding POLY voices and GRAIN grains to keep the load under the limit (see "The audio load") |
+| `DROP n` at the right of the tabs | n edits were lost because they came faster than the audio side applies them |
+| `GUARD n` at the right of the tabs | The CPU guard is shedding POLY voices and GRAIN grains to keep the load under the limit (see "The audio load") |
 | `UNREADABLE` in KIT | That kit file is damaged |
 | `PATTERN LOST` or another reason on PROJECT after a load | The card held a damaged file; STRATA refuses damaged files rather than crashing |
 

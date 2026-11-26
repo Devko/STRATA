@@ -20,6 +20,7 @@
 | [BUILDING.md](BUILDING.md) | Building, testing, CI and the source layout |
 | [../CLAUDE.md](../CLAUDE.md) | The rules every change follows |
 | [CONTROLS.md](CONTROLS.md) | The controls concept: why each button does what it does |
+| [SCREENS.md](SCREENS.md) | Every screen's pixel spec: rows, columns and what each part is drawn from |
 | [SPEC.md](SPEC.md) | The design: sound architecture, sequencer, panel mapping, data model |
 | [PLAN.md](PLAN.md) | The build order and milestones |
 | [BUDGET.md](BUDGET.md) | Measured CPU and memory figures |

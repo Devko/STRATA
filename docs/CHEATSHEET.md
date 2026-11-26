@@ -26,7 +26,7 @@ every mode, and FUNC + a function key is the label printed under it.
 
 The Lofi-12 XT and CyDrums print other names on the function block; this sheet uses the SmplTrek's.
 The F-key labels are from Enaga's `docs/hardware.md`, taken from the original firmware's test page.
-The on-screen hints use the same names (`FUNC+EDIT: MACHINE`). Each function key's second
+The on-screen hints use the same names (`FUNC+EDIT: KITS`). Each function key's second
 printed label (REC "sampling", PROJECT "pool", HOME "system" ...) is what FUNC + that key does.
 Hold FUNC alone for a moment for help on the screen that is up: its knobs and gestures first,
 then (screen keys while FUNC is held) FUNC + each function key, FUNC + a knob or pad, the upper
@@ -57,8 +57,9 @@ pads and the performance mixer.
 
 ## Screens
 
-Drawn by the app's own screen code on the host build, on the factory project
-(`tools/screenshots.sh` redraws them). The cheatsheet's "The screen" table below explains what
+Frames of the device build (cl6x) running in the emulator, the factory project playing
+(`tools/emulator_screens.sh` redraws them; MUTATE and SCENE are the host build's draw, as the
+emulator has no pads). The cheatsheet's "The screen" table below explains what
 each line means.
 
 <table>
@@ -110,7 +111,7 @@ screen when pressed.
 | Upper 3 MUTE (TRK 3) | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B (TRK 4/5) | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
 | Upper 6 THROW (TRK 6) | Delay throw while held | FUNC: reverb throw |
-| Upper 7 MUTATE (TRK 7) | Mutates the selected track (type and amount set in PERFORM): `MUTATE T1 VELOCITY`, then `OK KEEPS CLR REVERTS` with the pad bright until OK keeps it or CLR reverts it. Any other edit also keeps it. `T1 NOTHING TO MUTATE`: nothing changed (empty track, amount 0). VELOCITY, the default, is subtle on drums; ROT or DENSITY show on the grid | FUNC, held 0.5 s: **LOCK** the playing pattern (`LOCK A01 STORED`). FUNC, tapped: jump to its lock at once (`BACK TO LOCK A01`), again to swap back (`SWAPPED BACK A01`). Pattern, sound, faders, sends, master, mutes, morph and macro positions; not the machines, samples, tempo or mixer. RAM only. Line 2 ends `L`, or `L+` once changed |
+| Upper 7 MUTATE (TRK 7) | Mutates the selected track (type and amount set in PERFORM): `MUTATE T1 VELOCITY`, then `OK KEEPS CLR REVERTS` with the pad bright until OK keeps it or CLR reverts it. Any other edit also keeps it. `T1 NOTHING TO MUTATE`: nothing changed (empty track, amount 0). VELOCITY, the default, is subtle on drums; ROT or DENSITY show on the grid | FUNC, held 0.5 s: **LOCK** the playing pattern (`LOCK A01 STORED`). FUNC, tapped: jump to its lock at once (`BACK TO LOCK A01`), again to swap back (`SWAPPED BACK A01`). Pattern, sound, faders, sends, master, mutes, morph and macro positions; not the machines, samples, tempo or mixer. RAM only. The top line shows `L`, or `L+` once changed |
 
 OK and CLR answer a mutation in any mode but PROJECT, KIT, SAMPLES and RESAMPLE, and not while
 a STEP, a range or a scene pad is held: there they keep their own jobs.
@@ -262,12 +263,13 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 
 | Where | Example | Meaning |
 | --- | --- | --- |
-| Top line | `A01 3.2 130.0 > 24%` | Live bank+slot, bar.beat, tempo, `>` playing / `.` stopped, audio load |
+| Top line | `A01 3.2 130.0 > 24%  L  T1` | Live bank+slot (lit), bar.beat, tempo (`MIDI` / `SYNC` under an outside clock), `>` playing / `.` stopped, audio load, `L` / `L+` a LOCK, the selected track (lit) |
 | Under it | a 1 px line | How far the pattern is through its pass |
-| Line 2 | `K:L FX4 S40 M:AB RL- RN4 LP` | Live strip: what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, LIVE RND, looper); empty at rest |
-| Line 2 | `EXT MIDI` `EXT SYNC` `CLOCK REFUSED` | Outside clock source; a transport call was refused (when the strip is empty) |
+| Under it | `K:L FX4 S40 M:AB RL- RN4 LP` | Live strip, small: what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, LIVE RND, looper); not drawn at rest |
+| Under it | a lit toast: `LOCK A01 STORED`, `SCENE A: STEP PICKS`, `CLOCK REFUSED` | A notice, LEARN, a scene or the MUTATE verdict, for a moment over the screen |
 | Right edge | 2 px column | Master meter: level, held peak dot, top pixel = limiter |
-| Bottom line | `TRK3 MAX23.5 SMPLTREK` / `TRK3 DROP 2` | Tracks sounding, the highest audio load since PLAY (held; PLAY starts it again), device; DROP = edits lost to a full command ring |
+| Bottom line | `SRC FLTR AMP ...`, `DROP 2`, `GUARD1` | The screen's pages as tabs, the one showing lit (the screen keys turn them); at the right DROP = edits lost to a full command ring, GUARD = the CPU guard shedding voices |
+| SETUP | `TRACKS 3  MAX 27.0%`, `DRW 0.89MS` | Tracks sounding, the highest audio load since PLAY (held; PLAY starts it again), what a frame costs to draw |
 | GRID | `T1 MUTE PG1 L16 X1` | Track, muted, step page, length, speed |
 | GRID edit line | `REC Q50 SEL 1-8 FULL 2 U3/R1` | Recording + quantize, selection, refused edits (lock pool full), undo/redo depth |
 | Step page | `TRIG` `TRIGLESS` `OFF`, `LOCKS n` | What the step is and how many locks it holds |
@@ -276,14 +278,15 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | PROJECT | `Q END CHAIN`, `BANK A 5/16`, the map A-H | Queue mode, chain running; the shown bank and how many of its slots hold a pattern; every bank's slots (grey: used, white: playing, blinking: queued) |
 | CHAIN | `CHAIN 3/64 ON SONG`, `>02 A05 X2 M3 PLAY` | Entries used, chain on/off, plays once (SONG) or loops; cursor, entry, pattern, repeats, mute state recalled at its start, playing now |
 | PATTERN | `>LEN 16 STEPS`, `SWG 54%`, `FEEL DRIFT 3`, `3 PAT`, `>5 66%` | Master length; swing; FEEL; a track following SWG or with its own (`>` = field VALUE changes) |
-| EDIT LFO | `NOW CUT 87`, `NOW CUT 87 ONE-SHOT`, `LFO OFF: SET DEP+DST` | The destination's value right now, and TRIG unless FREE; DEP or DST is zero |
-| EDIT LFO | `LFO TRIG RETRIG` | Push B: FREE, RETRIG, ONE-SHOT |
+| EDIT | `A TUN G-1+  B FMA 072  C FMD 056`, `D CLK 072` | The knob line at the top (A-C) and the footer (D); a held step's lock lights its value |
+| EDIT | `LFO>CUT 40`, `VEL>RES +20`, `ENV>CUT +37` | The footer's second line: what moves the page's knobs (the LFO, a MOD slot, the filter envelope) |
+| EDIT LFO | `TRIG FREE`, `SYNC  TRIG ONE-SHOT`, `LFO OFF: SET DEP+DST` | TRIG (push B: FREE, RETRIG, ONE-SHOT), SYNC on a synced rate; DEP or DST is zero |
 | EDIT LFO | `MOD1 LFO: TURN A KNOB`, `MOD1 VEL>CUT +40` | Push C / D: learning MOD slot 1 / 2; push again for the next source, turn a knob for the depth, OK or CLR ends |
 | EDIT LFO | `M1 VEL>CUT +40`, `M2 OFF` | The two MOD slots, in place of the picture; after a learn, what it set |
 | EDIT | `NO KNOB: M1 STAYS OFF`, `MOD: NOT LFO OR ARP` | A learn ended with no knob turned; an LFO or ARP knob turned while learning |
-| EDIT ARP | `UP 1/16 X2 75%`, `ARP OFF: TURN MOD` | Mode, rate, octaves, gate; the arp is off |
+| EDIT ARP | `X2 OCT`, `ARP OFF: TURN MOD` | How many octaves the run climbs; the arp is off |
 | EDIT ENV | `HOLDS: PAD OR LEN`, `SUS 0: ONE-SHOT`, `NOT ON THIS MACHINE` | Notes hold (SUS up); notes are one-shots; a machine with no ENV page |
-| EDIT OSC | `OS2: DET 1-63 SYN 64+`, `WRP BENDS  DET 2 OSCS`, `NOT ON THIS MACHINE`, `FIN NUDGES RAT` | What OS2's two halves do; the WAVE pair's WRP and DET; a machine with no OSC page; FM4's FIN |
+| EDIT OSC | `SAW + SUB DRIVEN`, `NOT ON THIS MACHINE` | What goes into the VA's filter; a machine with no OSC page |
 | PROJECT slots | `05>`, bright box | Queued slot; live slot (bright), has trigs (mid), empty (dark) |
 | PROJECT | `SMP OS.X- 12/64M` | Per track sample: O ready, S streamed from the card, . loading, X failed, - none; MiB used/budget |
 | Any | `STREAM LATE` | The card fell behind a streamed file; the gap played as silence |
@@ -291,7 +294,8 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | KIT | `>03 KIT`, `EMPTY`, `UNREADABLE`, `...` | Cursor and slot: holds a kit, nothing, a damaged file, not read yet; the cursor's kit below as two lines of four machines |
 | PERFORM | `A1 12P`, `>A`, `3P`, `REL -12 LEN 71%`, `LIVE RND4 FUNC+D` | Scene slot and its parameter count; selected macro; macro targets; REL ALL, LEN ALL and LIVE RND away from rest |
 | PERFORM | `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n` | Mutation, track, amount; fill, auto-fill, repeat (`-` pitched down), throw; bar count (`NRPT`: note repeat on, `FRZ`: delay frozen) |
-| MIXER | `T1 M`, `ON`/`--`, `PEAK` | Track muted; machine present; master peak |
+| MIXER | `100`, `KCK`, `SRC 35` | A fader's level and its track (a muted one dim); on DCK, how far a track ducks (`SRC`: the duck's source) |
+| MIXER MST | `GR -0.5`, `LUFS -15.6`, `CMP` `LIM` | The compressor's gain reduction, the loudness, the compressor and limiter as bars |
 | MIXER EQ | `0`, `-20`, `+12`, `KILL` | Band flat, cut, boosted; killed by its switch or a knob at the bottom |
 | SAMPLES | `/SAMPLES/KICKS`, `>K1.WAV`, `LOOPS/`, `NOW K1.WAV`, `3/40 +2` | Folder (or `READING FOLDER`, `NOT FOUND`, `NO CARD`, the load's progress); cursor; a folder; the track's file; position, count, entries left out |
 | RESAMPLE | `TO FILE`, `ARMED`, `REC 40%`, `WRITING`, `LAST name` | Destination and take state |
@@ -303,14 +307,14 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 **Machines:** KCK kick · SNR snare · HAT hat · PRC 2-op FM percussion · SMP sampler · GRN granular ·
 MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 four-operator FM.
 
-**EDIT pages:** SRC source · FLTR filter (the insert chain's; on the VA and WAVE machines the voice's own) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ASR held notes and OSC oscillators (VA, WAVE, FM4 and GRAIN machines).
+**EDIT pages:** SRC source · FLTR filter (the insert chain's; on the VA and WAVE machines the voice's own) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ENV held notes and OSC oscillators (VA, WAVE, FM4 and GRAIN machines).
 **LFO page:** WAV shape SIN TRI RMP (rising) SAW (falling) SQR S+H · RAT rate, `0.06`-`32` Hz free on the lower half, `8B` (bars) to `1/32` synced on the upper (`.` dotted, `T` triplet) · DEP depth, 127 = about 64 either side (about 3 octaves on a cutoff, never under ~100 Hz) · DST the parameter it moves, or OFF. Lockable, scene- and macro-able like any parameter. **Push B = TRIG:** FREE, RETRIG (each note restarts it), ONE-SHOT (each note runs one cycle: TRI attack-decay, SAW decay, RMP rise and hold, SQR gate, S+H per note). On VA and WAVE an LFO on TUN glides. **Push C / D = MOD slot 1 / 2:** push again for the source (LFO, ENV = the LFO's shape once per note, VEL, PRS = pad pressure, RND = random per note, OFF), turn any knob of the track for the depth, OK. A dim line under a bar is a slot's range.
 **ENV page (VA and WAVE machines; FM4's is below):** ATK attack `3MS`-`5.0S` · SUS sustain `0%` (one-shot: DEC is the length) to `100%` · REL release `60MS`-`8.0S` · FSU filter sustain (0 = the sweep closes, up = stays open). SUS up: a note holds while the pad or key is held, or for the step's LEN (MONO counts LEN only then). Pad: SUS 70%, ATK 400MS, REL 2.0S, chord step LEN 16 STP. REC records how long a held note was held as its step's LEN.
 **OSC page (VA MONO, VA POLY):** WAV `SAW` (0-31), `SQR` (32) to `P08` (127, a thin pulse) · OS2 `OFF` (0), `D0`-`D60` a detuned second saw in cents (1-63: chorus to Reese), `S+0`-`S+24` a pulse synced to OSC 1 (64-127: the sync sweep) · SUB the sub an octave down (0 = off) · DRV drive into the filter, thicker and dirtier, not louder. RES (SRC) self-oscillates near the top.
 
 **OSC page (WAVE MONO, WAVE POLY):** WRP phase bend, 0 none · DET `OFF` or `D1`-`D60`, a second detuned reader in cents · SUB · WMN: GLD glide; WPL: DRV drive.
 
-**FM4 pages:** ASR = ATK SUS REL ISU (index sustain). OSC = DET `OFF`/`D1`-`D25` the second pair sharp · FIN fine ratio, `0` at 64 · BRT index keytrack · CAR carrier ratio 1 0.5 2 3 4.
+**FM4 pages:** ENV = ATK SUS REL ISU (index sustain). OSC = DET `OFF`/`D1`-`D25` the second pair sharp · FIN fine ratio, `0` at 64 · BRT index keytrack · CAR carrier ratio 1 0.5 2 3 4.
 
 **ARP page:** MOD OFF UP DN U/D ORD RND · RAT `1/4` to `1/32T` · OCT `X1`-`X4` · GAT note length, `50%`-`99%` of the spacing. On, a step plays a run for its length (PLY: through its chord); in KEYS, held keys are arpeggiated. Lockable and scene-able.
 

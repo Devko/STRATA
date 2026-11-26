@@ -210,7 +210,7 @@ lot, and jump back in one tap; tap again to compare with where you were.
 - **The kit is shared by every pattern (R2)**: jumping to A01's lock puts A01's sound back for
   every pattern. The steps are per pattern; the sound comes from whichever lock you jumped to.
 - **A MUTATE waiting for OK or CLR is discarded** by a jump or swap: its pattern is gone.
-- On screen, at the right end of line 2: `L` while the playing pattern has a lock, `L+` once
+- On screen, in the top line: `L` while the playing pattern has a lock, `L+` once
   anything it holds has changed (the font has no `*`). The MUTATE pad glows half bright while
   the playing pattern has a lock.
 
@@ -223,7 +223,7 @@ changed meaning; C and D with FUNC still turn their macros.
 
 | Control | Moves | Range | Says |
 | --- | --- | --- | --- |
-| REL ALL, FUNC + A | Every track's release bytes by the same count: AMP's DEC on every machine, and ASR's REL on the machines that read it. A step's lock on them too | -64 .. +64 counts | `REL ALL -12` |
+| REL ALL, FUNC + A | Every track's release bytes by the same count: AMP's DEC on every machine, and ENV's REL on the machines that read it. A step's lock on them too | -64 .. +64 counts | `REL ALL -12` |
 | LEN ALL, FUNC + B | Every sequenced note's gate, x 2^(n / 32) | 25% .. 400% | `LEN ALL 71%` |
 
 - **Rest is 0, and 0 is a detent**: a turn that would cross it stops on it. At rest the sound is
@@ -322,7 +322,7 @@ echo and noise), 16 LOOPER. Until 2026-11-25 slot 7 was STUTTER (the REPEAT pad 
 ## Hold STEP + an upper pad: edit the step (D6)
 
 **STEP first edits, pad first performs** (2026-11-25). With a STEP held, five of the upper pads
-step one field of that step round a short cycle instead of performing, and the bottom line says
+step one field of that step round a short cycle instead of performing, and a toast says
 where it landed (`STEP 5 PROB 50%`). The STEP's release then toggles nothing. A value outside
 the cycle (set on the step page) goes to the cycle's first. Not with FUNC (the pad chords stay; FUNC + THROW is the reverb lock)
 and not in KEYS, where the upper pads are the piano. `core/stepedit.hpp` has the cycles.
@@ -486,12 +486,13 @@ eight locks of the one held step per slot. Nothing walks the lock pool.
 
 ## Waveforms and envelopes
 
-EDIT draws a picture under its four rows, rows 96-117 and x 0-123, on the pages where one says
-more than numbers (Phase 3 item 4: CyDrums ideas V2, V3, V5). The page's one line of words moves
-to y 87, over the picture: SLC on SAMPLE, `OK: SOUNDS` on GRAIN, `OK: PICK SAMPLE` or
-`FUNC+EDIT: MACHINE`, what SUS does on ASR, `FDE 0: 0.55 X DEC` when the filter's decay is tied.
-While a STEP is held and a knob turned, the lock line (`S5 CUT 64>90`) takes that line instead,
-and the picture draws the lock.
+Every EDIT page is a knob line at the top (A-C), a picture that takes the screen, and a footer
+(D, the page's state at the right, and under it what moves the page's knobs or the page's own
+line: `LFO>CUT 40`, `SLC AUTO: 12 HITS`, `HOLDS: PAD OR LEN`, `FDE 0: 0.55 X DEC`). How the
+keys work is FUNC help's, not the footer's. While a STEP is held and a knob turned, the lock line
+(`S5 CUT 64>90`) lights over the footer and the picture draws the lock. docs/SCREENS.md has the
+rows and columns; this table says what each picture shows (Phase 3 item 4, CyDrums ideas V2, V3,
+V5, then the redesign in #171 and #174).
 
 | Page | Machine | Picture |
 | --- | --- | --- |
@@ -499,14 +500,14 @@ and the picture draws the lock.
 | SRC | GRAIN | The sample, all bright; a bracket where the next grain starts (POS plus SCN's travel, one grain's span wide); a tick for each grain in the air, as bright as its window times the cloud's envelope, so the cloud breathes; and each grain a soft spark at a height of its own, leaving a fading trail |
 | SRC | WAVE MONO, WAVE POLY | The table as a waterfall: its sixteen frames stacked back to front, up and to the right, each hiding what is behind it, the frame POS plays brightest and its neighbours brighter than the rest. `BUILDING` while the table is still being made |
 | AMP | every machine but MID | The amplitude envelope: ATK and DEC on SAMPLE (DEC at the top holds), DEC alone on the drums, ATK DEC SUS REL on the synths, FM4 and GRAIN |
-| ASR | VA, WAVE, FM4, GRAIN | The same envelope |
-| FLTR | VA and WAVE | The filter's: ATK, FDE (or 0.55 x DEC while FDE is 0), FSU, REL, and ENV as its height |
-| LFO | every machine, while the LFO runs (DEP and DST set) | One cycle of the shape (x 0-79) with a dot riding it at the LFO's phase and a dotted line through it; beside it a strip of the last two seconds of output, newest at the right. The `NOW CUT 064` line sits over it at y 87. Off, the page keeps `LFO OFF: SET DEP+DST` at y 96 and draws nothing |
+| ENV | VA, WAVE, FM4, GRAIN, SAMPLE | The whole note: the amplitude envelope, and on the synths the filter's beside it (`AMP FLT`) |
+| FLTR | every machine but MID | The filter's response at CUT and RES (the mode at the right) over the spectrum of what the track plays; on VA and WAVE the voice's own filter, with `ENV>CUT` in the footer |
+| LFO | every machine, while the LFO runs (DEP and DST set) | One cycle of the shape (x 0-79) with a dot riding it at the LFO's phase and a dotted line through it; beside it a strip of the last two seconds of output, newest at the right. TRIG (and SYNC) at the footer's right. Off, the page says `LFO OFF: SET DEP+DST` and the dot rests |
 
 On an envelope, a segment's width follows its **knob**, not its time: every time curve is
 exponential in its knob, so this is a log-time drawing, and 2 ms and 5 s share the width. A
 handle that a knob **on this page** moves is a bright square with the knob's letter by it, as
-CyDrums draws them; a handle moved from another page has no letter. On AMP and ASR a **hollow
+CyDrums draws them; a handle moved from another page has no letter. On AMP and ENV a **hollow
 square rides the curve** where the track's last note is (SAMPLE's loudest voice, GRAIN's cloud,
 VA MONO and WAVE MONO; the POLY machines, FM4 and the drums draw no dot). Under every envelope a
 dim fill; under the part the note has already travelled, a brighter one.
@@ -516,7 +517,7 @@ same picture, over the `NOW` line. **Push A hears the file under the cursor** wi
 (dsp/audition.hpp): streamed whole from its start, straight to the output, after every effect.
 Push A again stops it; while one plays, UP/DOWN, turning A and the pages hear the file the cursor
 lands on; OK, CLR, another folder or leaving SAMPLES stops it. A one-pixel line under the heard
-file's name grows as it plays, and line 2 reads `HEARING 3/12S` (`OPENING` until it sounds).
+file's name grows as it plays, and a toast reads `HEARING 3/12S` (`OPENING` until it sounds).
 
 A SAMPLE or GRAIN track with no file plays the placeholder, and its picture is the placeholder's,
 with `NO FILE` (or `LOADING` while its file loads) over it.
@@ -536,8 +537,8 @@ FUNC held for 0.6 s with nothing else pressed shows help for **the screen that i
 AMOUNT` on a kick's SRC, `A SRC SOURCE TRACK` on MIXER DUCK), and the gestures that work there
 (the step page, the hold-and-press LEN, MACRO LEARN, NOTE view, SLC AUTO, rename and delete,
 KEYS on the pads ...). While FUNC is still held, **the screen keys (or LEFT/RIGHT) turn the help's
-pages**, as they turn every screen's pages; the line above the bottom line says
-`PAGE 1/10` (`SCREEN KEYS: PAGE 1/n` under ten pages). The last five pages are the same everywhere: FUNC + each function key,
+pages**, as they turn every screen's pages; the help's last line says
+`PAGE 1/11`. The last five pages are the same everywhere: FUNC + each function key,
 FUNC + a knob or pad, the upper pads, and the performance mixer's gestures and slots
 (`VALUE FX MIXER:`, `VALUE FX STEPS:`). Every hold starts on the screen's own page.
 
@@ -550,7 +551,7 @@ The screens and their pages, from `core/help.cpp`:
 | Screen | Its own pages |
 | --- | --- |
 | GRID | A-D (the EDIT page they turn), steps, range and track (CLEAR PATTERN), STEP lights |
-| EDIT | its page's knobs on this machine (with NOTE view, SLC AUTO, ASR notes), EDIT keys and MACRO LEARN, steps, range and track |
+| EDIT | its page's knobs on this machine (with NOTE view, SLC AUTO, ENV notes), EDIT keys and MACRO LEARN, steps, range and track |
 | EDIT in MACRO LEARN | what a push does now, then the page's knobs |
 | KEYS | the pads as a piano, the page's knobs, the pad lights |
 | Step page | the three field pages, what each field is |
