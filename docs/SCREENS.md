@@ -66,7 +66,7 @@ Pictures by page and machine:
 | --- | --- | --- |
 | SRC | KICK SNARE HAT PERC | one hit worked out from the knobs (pitch sweep, tone and noise, clap bursts, metal, FM index), min/max columns about y 62 (amp 30), the envelope dotted round it, the length in ms; after a trig the played part lights in real time |
 | SRC | SAMPLE | the overview about y 62 (amp 28), START..END bright (9) and the rest dim (4), the window's ends full height with STA's and LEN's letters, slices dotted (8), each voice a column and a dot |
-| SRC | GRAIN | the draft: overview about y 46 (amp 20), the bracket lit (15) with each grain's tick on its edges; `GRAINS n/8` at y 74; the cloud rows 78-101, each grain a spark sinking as it fades, afterglow 184/256 a frame |
+| SRC | GRAIN | the draft: overview about y 46 (amp 20), the bracket lit (15) with each grain's tick on its edges; `GRAINS n/8` at y 74; the cloud rows 78-101, each grain a spark rising as it fades, afterglow 184/256 a frame |
 | SRC | WAVE | the draft's waterfall: 16 frames from (6, 74), 3.4 px right and 2.6 up a frame, 40 points 1.6 px apart, amp 11, POS's frame 15, its neighbours 8, the rest 4, hidden lines blacked; LIVE at y 87-101 |
 | SRC, OSC | VA MONO, VA POLY, WAVE (OSC) | two cycles across, y 62, amp 28: the first oscillator, the second (detuned, drifting while the beat plays, or synced), the sub, dim; their sum through the drive bright |
 | SRC | FM4 | the algorithm's boxes and wires (op 4's feedback a loop), carriers on the OUT bus; two cycles of the carrier at IDX and RAT, the index falling after each note |

@@ -578,7 +578,26 @@
         const Status &status = engine_.status();
         const uint8_t stage = status.env_stage[selected_].load(std::memory_order_relaxed);
         const float level = float(status.env_level[selected_].load(std::memory_order_relaxed)) * (1.0f / 255.0f);
-        if (stage == 0 || level < 0.004f) return 0;
+        if (stage == 0 || level < 0.004f) {
+            // The drums publish no envelope stage: ride the curve on the time since the track's
+            // last trig instead, over the decay the knob makes (dsp/kick.cpp, snare.cpp, hat.cpp,
+            // perc.cpp: their time constants, five of them to silence).
+            const MachineId m = MachineId(engine_.machine_id(selected_));
+            if (stage != 0 || !(m == MachineId::kick || m == MachineId::snare || m == MachineId::hat ||
+                                m == MachineId::perc)) {
+                return 0;
+            }
+            namespace ed = enaga::dsp;
+            const float u = float(e.dec) * (1.0f / 127.0f);
+            const float tau = m == MachineId::kick    ? 0.02f * ed::exp2(5.0f * u * u)
+                              : m == MachineId::snare ? 0.015f * ed::exp2(6.0f * u)
+                              : m == MachineId::hat   ? 0.007f * ed::exp2(7.0f * u)
+                                                      : 0.004f * ed::exp2(7.23f * u);
+            const int age = ms_since_trigger(uint32_t(tau * 5000.0f) + 20u);
+            if (age < 0) return 0;
+            const float t = float(age) * 0.001f / (tau * 5.0f);
+            return t >= 1.0f ? 0 : xa + int(float(xd - xa) * t);
+        }
         const auto falling = [&](int from, int to) {
             for (int i = from; i <= to && i < kWaveColumns; i++) {
                 if (curve[i] <= level) return i;
@@ -875,6 +894,15 @@
             const int d = f * 16 - pos < 0 ? pos - f * 16 : f * 16 - pos;
             level[f] = uint8_t(d < 8 ? 0 : (d < 24 ? 1 : 2));
         }
+        // The frames either side of POS flare with the track's level while it sounds.
+        const uint32_t loud = status.track_milli[selected_].load(std::memory_order_relaxed);
+        if (loud > 0 && enaga::clock::state().running != 0) {
+            const int flare = paint::level_rows(loud, 3, 30);            // 0..3 frames out
+            for (int f = 0; f < kWaveFrames; f++) {
+                const int d = f * 16 - pos < 0 ? pos - f * 16 : f * 16 - pos;
+                if (d < 8 + flare * 16 && level[f] > 0) level[f]--;
+            }
+        }
         for (int y = 0; y < kWfRows; y++) {
             uint8_t *row = px + (kWfTop + y) * paint::kWidth;
             const uint8_t *cover = wf_cover_ + y * kWfCols;
@@ -885,6 +913,11 @@
         }
         canvas.rect(0, 87, 120, 1, 3);
         paint::small_text(px, 0, 90, "LIVE", 6);
+        // While the track sounds the LIVE frame runs like a scope (its phase moves on with the
+        // time) and the frame POS plays flares with the track's level.
+        const uint32_t heard_level = status.track_milli[selected_].load(std::memory_order_relaxed);
+        const bool sounding = heard_level > 0 && enaga::clock::state().running != 0;
+        const int scroll = sounding ? int(last_ms_ / 8u % 64u) : 0;
         const int f0 = pos / 16;
         const int f1 = f0 + 1 < kWaveFrames ? f0 + 1 : f0;
         const int mix = pos % 16;
@@ -893,7 +926,7 @@
         int16_t lx[64];
         int16_t ly[64];
         for (int i = 0; i < 64; i++) {
-            const int at = i * length / 64;
+            const int at = ((i + scroll) & 63) * length / 64;
             const int v = (int(a[at]) * (16 - mix) + int(b[at]) * mix) / 16;
             lx[i] = int16_t(paint::q4(20) + i * 99 * paint::kSub / 63);
             ly[i] = int16_t(paint::q4(95) - v * 5 * paint::kSub / 32768);
@@ -955,7 +988,7 @@
     //
     // As the draft: the file's overview with the bracket bright and the rest dim, each grain in
     // the air a tick at its read position above and below the waveform, and under it the cloud:
-    // each grain a spark that sinks as it fades, with an afterglow.
+    // each grain a spark that rises as it fades, with an afterglow.
     static constexpr int kGrainMid = 46, kGrainAmp = 20, kCloudTop = 78, kCloudRows = 24;
 
     void draw_grain_view(enaga::Canvas &canvas) {
@@ -980,7 +1013,7 @@
             const int g = view.glow[i] > 15 ? 15 : view.glow[i];
             paint::plot_max(px, view.mark[i], kGrainMid - kGrainAmp - 1, g);
             paint::plot_max(px, view.mark[i], kGrainMid + kGrainAmp + 1, g);
-            const int y = 2 + (i * 7) % 16 + (15 - g) / 3;
+            const int y = 8 + (i * 7) % 14 - (15 - g) / 3;          // rising as it fades, as drawn
             grain_glow_.plot(view.mark[i], y, g);
         }
         canvas.rect(0, kCloudTop - 6, 120, 1, 2);
