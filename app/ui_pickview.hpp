@@ -305,8 +305,8 @@
     static void machine_icon(uint8_t *px, uint8_t id, int x, int y, int w, int h, int grey) {
         const int half_q4 = (h * paint::kSub) / 2 - paint::kSub / 2;   // the amplitude, Q4
         const int mid_q4 = y * paint::kSub + (h * paint::kSub) / 2 - paint::kSub / 2;
-        int16_t xs[32];
-        int16_t ys[32];
+        int16_t xs[32] = {};
+        int16_t ys[32] = {};
         const int n = w < 32 ? w : 32;
         uint32_t seed = 0x9E3779B9u * (id + 1u);
         const auto noise = [&seed](int range) {      // -range .. range, a fixed sequence
