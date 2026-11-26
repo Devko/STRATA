@@ -143,6 +143,100 @@ struct UiProbe {
         app.perf_release_lets_go_ = false;
         app.lock_press_ = false;
     }
+    // Every cursor, page, setting and armed second press of the UI back to what a fresh start
+    // has (app/app.hpp's initialisers), for `fresh()`. A test that left PROJECT on its PATTERN
+    // page, the pattern field on a swing, the slot cursor on A06 or the take on track 1 handed it
+    // to whichever test ran next: invisible in the suite's own order, a few dozen failures in a
+    // shuffled one. The modes and held keys are put back by `fresh()`'s own key presses, and the
+    // engine's side of the macros, morph, repeat and take by its posts.
+    static void view_to_defaults(Strata &app) {
+        app.shown_bank_ = 0;
+        app.queue_mode_ = QueueMode::end_of_pattern;
+        app.echo_ = Echo::none;
+        app.notice_ = nullptr;
+        app.mutate_track_ = 0;
+        app.freeze_bars_index_ = 0;
+        app.loop_bars_index_ = 2;
+        app.perf_picked_ = PerfFx::none;
+        app.perf_fx_ = PerfFx::none;
+        app.perf_amount_ = 0;
+        app.loop_mix_ = 0;
+        app.perf_step_keys_ = 0;
+        app.value_alone_ = false;
+        app.len_repeat_key_ = -1;
+        app.rolling_pads_ = 0;
+        app.mutation_pending_ = false;
+        app.step_edit_pads_ = 0;
+        for (int i = 0; i < kPianoPads; i++) app.pad_held_note_[i] = -1;
+        app.macro_learn_ = -1;
+        app.learn_ended_ = false;
+        app.scene_holding_ = -1;
+        app.macro_selected_ = 0;
+        app.take_bars_index_ = 0;
+        app.resample_track_ = -1;
+        app.take_offer_ = -1;
+        app.take_from_track_ = -1;
+        app.take_source_ = 0;
+        app.take_level_ = ENAGA_INPUT_NORMAL;
+        app.input_applied_ = false;
+        app.pressure_pad_ = -1;
+        app.pressure_sent_ = 0;
+        for (int m = 0; m < kMacros; m++) app.macro_position_[m] = 0;
+        app.morph_ = 0;
+        app.repeat_held_ = false;
+        app.repeat_length_ = RepeatLength::sixteenth;
+        app.repeat_audio_ = false;
+        app.repeat_pitch_ = false;
+        app.stutter_keys_ = 0;
+        app.stutter_raw_ = -1;
+        app.stutter_step_ = 0;
+        app.stutter_tracks_ = 0xFF;
+        app.auto_fill_ = AutoFill::off;
+        app.mutation_ = Mutation::velocity;
+        app.mutate_amount_ = 50;
+        app.mutate_variant_ = 1;
+        app.keys_octave_ = 0;
+        app.euclid_hits_ = 4;
+        app.euclid_steps_ = 16;
+        app.euclid_rotation_ = 0;
+        app.param_page_ = int(Page::src);
+        app.mixer_bank_ = 0;
+        app.project_page_ = Strata::ProjectPage::slots;
+        app.chain_cursor_ = 0;
+        app.pattern_field_ = 0;
+        app.project_cursor_ = 0;
+        app.project_seek_ = false;
+        app.projects_reread_ = false;
+        app.open_armed_ = -1;
+        app.projects_op_reread_ = false;
+        app.delete_armed_ = -1;
+        app.delete_oks_ = 0;
+        app.slot_cursor_ = 0;
+        app.slot_menu_ = false;
+        app.slot_menu_cursor_ = 0;
+        app.slot_ok_held_ = false;
+        app.clip_bank_ = 0;
+        app.clip_slot_ = -1;
+        app.slot_armed_ = Strata::SlotAction::none;
+        app.menu_return_ = Mode::grid;
+        app.menu_cursor_ = 0;
+        app.help_page_ = 0;
+        app.chain_remove_armed_ = -1;
+        app.card_armed_ = Strata::CardAction::none;
+        app.kit_cursor_ = 0;
+        app.sample_cursor_ = 0;
+        app.sample_seek_ = false;
+        app.samples_return_ = Mode::edit;
+        app.audition_row_ = -1;
+        app.sound_cursor_ = 0;
+        app.sound_track_ = -1;
+        app.sounds_return_ = Mode::edit;
+        app.kit_armed_ = Strata::KitAction::none;
+        app.stop_armed_ = false;
+        app.field_page_ = 0;
+        for (int t = 0; t < kTracks; t++) app.muted_[t] = false;
+        app.cpu_max_ = 0;              // MAX holds since the last PLAY, which may be tests ago
+    }
     static bool perf_riding(const Strata &app) { return app.perf_riding_; }
     static uint16_t morph_knob(const Strata &app) { return app.morph_; }
     static const char *lock_mark(const Strata &app) { return app.lock_mark(); }
@@ -241,6 +335,17 @@ bool pump_until_idle(int limit = 4000) {
 void post_cmd(Cmd cmd, uint8_t a = 0, uint8_t b = 0, uint8_t c = 0) {
     Command command;
     command.cmd = cmd;
+    command.a = a;
+    command.b = b;
+    command.c = c;
+    app_engine().commands().post(command);
+}
+
+// One addressed to a track, which `post_cmd`'s bytes do not carry.
+void post_cmd_track(Cmd cmd, int track, uint8_t a = 0, uint8_t b = 0, uint8_t c = 0) {
+    Command command;
+    command.cmd = cmd;
+    command.track = uint8_t(track);
     command.a = a;
     command.b = b;
     command.c = c;
@@ -371,6 +476,7 @@ Strata &fresh() {
     app.on_key(ENAGA_KEY_F1, false);
     app.on_key(ENAGA_KEY_PUSH_VALUE, false);
     app.on_pad_release(1);                 // FILL
+    app.on_pad_release(5);                 // MUTE: a test may end with it down (it toggles on press)
     app.on_pad_release(3);                 // REPEAT
     app.on_pad_release(7);                 // scene A
     app.on_pad_release(9);                 // scene B
@@ -413,6 +519,9 @@ Strata &fresh() {
     step_up(0);                            // ...and its release toggles a trig, wiped below
     app.on_pad_press(0, 100);              // track 1 selected
     app.on_pad_release(0);
+    // Then every cursor, page and setting of the UI, which the presses above do not reach
+    // (UiProbe::view_to_defaults says why).
+    UiProbe::view_to_defaults(app);
 
     // Drain what those presses posted BEFORE the project is replaced. The other order looks the
     // same and is not: the commands are applied to `project_.live()`, which is the memory
@@ -429,9 +538,60 @@ Strata &fresh() {
         for (int i = 0; i < kKitSoundParams; i++) incoming.kit.tracks[t].params[i] = 64;
         incoming.kit.tracks[t].params[kLvl] = 127;
     }
+    // The scenes and macros load beside the project, not in it, so `project_init` leaves them as
+    // the last test left them (tests/apprig.cpp's `fresh()` says what that broke). Back to the
+    // factory set `Engine::init` starts with, which is what these tests were written against: a
+    // turn of macro B names what it drives.
+    app_engine().scenes_for_load() = strata::test::factory_scenes();
+    app_engine().macros_for_load() = strata::test::factory_macros();
     post_cmd(Cmd::project_loaded);
-    post_cmd(Cmd::stop, 0, 0, 1);          // the app's own second STOP press: cut the tails
+    // The engine's performance layer and transport, as tests/apprig.cpp's `fresh()` resets them:
+    // none of it is in the project, and view_to_defaults() above put the UI's copies to rest.
+    post_cmd(Cmd::restart);
+    post_cmd(Cmd::resample_cancel);
+    post_cmd(Cmd::resample_release);
+    for (int m = 0; m < kMacros; m++) post_cmd(Cmd::set_macro, uint8_t(m), 0);      // at rest
+    post_cmd_morph(0);
+    post_cmd(Cmd::set_auto_fill);
+    post_cmd(Cmd::set_repeat, uint8_t(RepeatLength::sixteenth));   // let go
+    post_cmd(Cmd::step_stutter);
+    for (int t = 0; t < kTracks; t++) {
+        post_cmd_track(Cmd::set_throw, t);
+        post_cmd_track(Cmd::set_mute, t);
+        post_cmd_track(Cmd::note_repeat, t);
+    }
+    // The app's own second STOP press: cut the tails. The flag is `a` (app/commands.hpp), which
+    // is post_cmd's first byte. This posted `c = 1` -- the mistake tests/apprig.cpp's `fresh()`
+    // describes and fixed for itself -- and so asked for an ordinary STOP, a release.
+    post_cmd(Cmd::stop, 1);
     pump(4);
+    // And the track meters down. A meter falls a little each block from its last peak
+    // (Engine::process, kMeterFall), so a note the test before played on a pad still lit that
+    // track's strip in MIXER a dozen blocks into the next test, which only a shuffled order
+    // showed. Nothing is sounding now, so this costs no blocks at all unless a meter is up.
+    for (int i = 0; i < 4000; i++) {
+        bool any = false;
+        for (int t = 0; t < kTracks; t++) {
+            any = any || app_engine().status().track_milli[t].load(std::memory_order_relaxed) != 0;
+        }
+        if (!any) break;
+        pump();
+    }
+
+    // A card error the test before left ("CARD FULL" from a page of SAVE AS) is kept by Storage
+    // until the next save or load begins, as it should be on the unit; here it failed the next
+    // test's `last_error() == nullptr`. A save clears it, as tests/apprig.cpp's `fresh()` does,
+    // and the card is wiped again so the test starts from an empty one.
+    if (app_storage().last_error() != nullptr) {
+        app_storage().request_save();
+        pump_until_idle(2000);
+        host.reset();
+        app.on_card(false);
+        app.on_card(true);
+        pump(4);
+        g_ms += 2000;                      // and its "CARD IN" faded, as the start's one is
+        pump();
+    }
 
     CHECK_EQ(UiProbe::held_step(app), -1);        // the reset above really did clear them
     CHECK_EQ(UiProbe::range_first(app), -1);
@@ -674,10 +834,12 @@ TEST(ui_a_lower_pad_selects_its_track_and_everything_else_follows) {
     CHECK(!trig_at(0, 5));
 
     // So does an encoder.
+    // knob_result: on EDIT's first page encoder A is the machine's TUN, a semitone a click. The
+    // plain 64 + 6 held only while a test before this one had left another page open.
     const int param = encoder_param(0);
     app.on_encoder(0, +6);
     pump();
-    CHECK_EQ(int(app_engine().params(2).v[param]), 70);
+    CHECK_EQ(int(app_engine().params(2).v[param]), knob_result(2, param, 64, 6));
     CHECK_EQ(int(app_engine().params(0).v[param]), 64);
 
     // An upper pad is not a track at all: the performance row is fixed in every mode.
@@ -2483,15 +2645,21 @@ TEST(ui_the_resample_gesture_records_and_writes_through_the_panel_alone) {
     CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 1);
 
     host.deliver_tick(384, 0);                           // a bar line starts it
+    // By the name Storage gives it: the take counter lives in the settings and goes on from the
+    // last take any test wrote, so STRATA_1 held only in the suite's own order. `fresh()` emptied
+    // the card, so a name whose file is on it is this take's.
     bool written = false;
+    char path[64] = {};
     for (int i = 0; i < 4000 && !written; i++) {
         if (i % 8 == 0) host.deliver_tick(uint32_t(384 + i), 0);
         pump();
-        written = host.has_file("/RECORD/STRATA_1.WAV");
+        std::strcpy(path, "/RECORD/");
+        std::strcat(path, app_storage().last_take_name());
+        written = app_storage().last_take_name()[0] != 0 && host.has_file(path);
     }
     CHECK(written);
     CHECK(app_storage().last_error() == nullptr);
-    CHECK_EQ(app_storage().last_take_name(), "STRATA_1.WAV");   // and the screen can say so
+    CHECK(std::strncmp(app_storage().last_take_name(), "STRATA_", 7) == 0);   // the screen says it
 }
 
 TEST(ui_ok_in_resample_while_a_take_is_written_keeps_the_take_where_it_was_going) {
@@ -7174,7 +7342,7 @@ void enter(Strata &app, int s) {
 // every notice from getting here faded, the track-select note's tail cut (MIXER's PEAK falls
 // with it), and the card read KIT starts with finished.
 void settle_screen(int s) {
-    post_cmd(Cmd::stop, 0, 0, 1);
+    post_cmd(Cmd::stop, 1);                // a = 1 cuts (it was c = 1, a release: see fresh())
     pump(2);
     // KIT reads its sixteen slots from the card a pass at a time, and says READING KITS until
     // all sixteen are in, not only the eight on its first page.
@@ -7344,6 +7512,8 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_projects, false, "A+", "ditto"},
         {s_projects, true, "A+", "ditto"},
         {s_project, false, "UP", "the slot cursor is on the top row"},
+        {s_project, false, "LEFT", "and on A01, the first slot"},
+        {s_perform, false, "VALUE-", "the morph is at rest, all the way to A"},
         {s_pattern, false, "LEFT", "the cursor is on the first field"},
         {s_chain, false, "UP", "an empty chain has no entry to move to"},
         {s_chain, false, "DOWN", "an empty chain has no entry to move to"},
