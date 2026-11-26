@@ -38,7 +38,7 @@ pads and the performance mixer.
 | --- | --- | --- |
 | GRID | HOME (from anywhere) | All 8 tracks; STEP keys edit the selected track |
 | KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys steps, on the selected track |
-| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, track play, chain, song, auto-fill, quantize, FX glide, freeze, loop length, load demo |
+| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, track play, chain, song, auto-fill, quantize, REC MODE, FX glide, freeze, loop length, load demo |
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE, FM4 and GRAIN machines ENV and OSC |
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
@@ -199,7 +199,7 @@ reload, RELOAD PROJECT, NEW PROJECT and LOAD DEMO are in the FUNC menu (FUNC+HOM
 three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN
 FOR NEW, OK AGAIN FOR DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
 **FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, CLEAR
-PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, TRACK PLAY, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, FX GLIDE, FREEZE, LOOP
+PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, TRACK PLAY, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, REC MODE, FX GLIDE, FREEZE, LOOP
 LEN, LOAD DEMO. It always opens on SAVE, and the list wraps: UP once is LOAD DEMO, twice LOOP LEN, three times FREEZE, four times FX GLIDE. UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
 setting row (OK steps it too), CLR or FUNC+HOME close it. FREEZE: the selected track plays a 1-8
@@ -271,7 +271,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | Bottom line | `SRC FLTR AMP ...`, `DROP 2`, `GUARD1` | The screen's pages as tabs, the one showing lit (the screen keys turn them); at the right DROP = edits lost to a full command ring, GUARD = the CPU guard shedding voices |
 | SETUP | `TRACKS 3  MAX 27.0%`, `DRW 0.89MS` | Tracks sounding, the highest audio load since PLAY (held; PLAY starts it again), what a frame costs to draw |
 | GRID | `T1 MUTE PG1 L16 X1` | Track, muted, step page, length, speed |
-| GRID edit line | `REC Q50 SEL 1-8 FULL 2 U3/R1` | Recording + quantize, selection, refused edits (lock pool full), undo/redo depth |
+| GRID edit line | `REC Q50 SEL 1-8 FULL 2 U3/R1` | Recording + quantize (`REC+` under REC MODE ADD), selection, refused edits (lock pool full, a seventh note on a step), undo/redo depth |
 | Step page | `TRIG` `TRIGLESS` `OFF`, `LOCKS n` | What the step is and how many locks it holds |
 | Hold STEP | `S5 CUT 64>90` / `S5 CUT 64 KIT` | The step's lock against the kit value; bars show the lock, a hollow tick the kit value |
 | GRID cells | dot / cut corner / teeth / outline | Locks / top-left condition, top-right probability / ratchet / trigless |

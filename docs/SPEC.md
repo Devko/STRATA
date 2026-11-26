@@ -176,6 +176,7 @@ STRATA does not implement a clock and does not own the tempo. Enaga's `<enaga/cl
 
 - Step entry: tap STEP to toggle a trig; hold STEP and turn an encoder to lock that parameter.
 - Live recording: REC + PLAY records pad hits with velocity. Each hit is stamped with the audio clock's sample position minus the measured pad latency (about 4-8 ms), then quantized by a 0-100% amount. **[rev]** Incoming MIDI notes go through the same stamping, because `on_midi` is main context and carries no timestamp of its own.
+- **[rev]** (2026-11-26, Roland) Chords: on a track whose machine plays several notes (VA POLY, WAVE POLY, FM4, MID), every note recorded onto one step is kept, the step's note plus up to five extra notes stored as locks with param ids 32-36 (`core/stepnotes.hpp`); no file change, and an older build skips them. REC MODE (FUNC menu, PROJECT.BIN settings byte 4, which was the unused project swing: 1 is ADD, 50 as every older build wrote it is REPLACE) decides a later pass: REPLACE lets its first note take the step over, ADD adds to it. Other machines keep one note a step.
 - Motion recording: encoder moves during live recording write locks on the steps they pass.
 
 **MIDI in and out [rev]**

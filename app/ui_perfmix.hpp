@@ -642,7 +642,7 @@
                 // first note of a pass, ADD adds to its notes (core/stepnotes.hpp).
                 const bool add = !rec_add();
                 post(Cmd::set_rec_mode, 0, 0, add ? 1 : 0);
-                notice(add ? "REC ADDS NOTES" : "REC REPLACES");
+                notice_logged(add ? "REC ADDS NOTES" : "REC REPLACES");
                 break;
             }
             case MenuItem::freeze: {

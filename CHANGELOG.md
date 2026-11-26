@@ -8,6 +8,14 @@ the project file format or the controls.
 
 ### Added
 
+- **Chords recorded note for note.** On VA POLY, WAVE POLY, FM4 and MID, every note played into
+  one step while recording is kept: the step's note plus up to five more, stored as locks 32-36
+  in the pattern's pool, so no file change and an older build plays the step's own note. Until
+  now only the last key pressed was kept. A new **REC MODE** row in the FUNC menu, after
+  QUANTIZE, says what a later pass does: **REPLACE** (the default: the first note of a pass on a
+  step takes it over, chord type and all) or **ADD** (notes join the step's chord). The step
+  page shows `NOTE C4 +2`; transpose, mutate and NOTE move the whole chord; the last key up of a
+  chord sets its LEN. Saved in PROJECT.BIN's old swing byte. Mono and drum tracks are unchanged.
 - **The card builder**, [strata.einblick.dev](https://strata.einblick.dev): pick a release and it
   builds one SD card zip with STRATA and the Enaga firmware it needs, both fetched in your
   browser from their official releases and checked against their SHA-256. Source in `web/`
