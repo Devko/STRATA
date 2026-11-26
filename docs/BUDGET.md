@@ -112,6 +112,14 @@ draw() now times itself over 64 frames (app/ui_screen.hpp, `count_draw_time`): S
 | MIXER MST with the beat playing: a 256-point FFT, 24 bands, the vectorscope (part 6) | **1.21 ms** | emulator, cl6x, no caches |
 | PERFORM rebuilt to the mockup: gauges, 35-row scope, tall columns, the new frame | **1.71 ms** | emulator, cl6x, no caches |
 | MIXER MST rebuilt: the big spectrum, vectorscope, CMP and LIM | **1.20 ms** | emulator, cl6x, no caches |
+| EDIT SRC on the kick, drawn to the drafts: the hit worked out from the knobs (480 samples, exp2 and sine) | **1.14 ms** | emulator, cl6x, no caches |
+| EDIT FLT on VA MONO: two response curves, the sweep, the spectrum's FFT behind | **2.18 ms** | emulator, cl6x, no caches |
+| EDIT LFO running: shape, trail, strip | **1.23 ms** | emulator, cl6x, no caches |
+| EDIT SRC on GRAIN: overview, bracket, the cloud's afterglow | **0.98 ms** | emulator, cl6x, no caches |
+| EDIT SRC on WAVE MONO: the waterfall drawn whole every frame | 6.81 ms, then 5.46 | emulator, cl6x: over the 5 ms limit |
+| the same, drawn once a table into a cover map and shaded each frame (`build_waterfall`) | **1.35 ms** | emulator, cl6x, no caches |
+| EDIT ENV on VA MONO: the amplitude's envelope and the filter's under it | **1.09 ms** | emulator, cl6x, no caches |
+| MIXER desk (eight strips) / REV's tail / EQ's curve over the spectrum | **0.32 / 0.78 / 1.39 ms** | emulator, cl6x, no caches |
 
 `scenario_visuals` runs the emulator twice from part 6 on, once ending on PERFORM and the LFO page
 and once on MST, because the draw log comes once a run.

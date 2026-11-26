@@ -2071,6 +2071,7 @@ void Storage::step_sample_convert() {
             return;
         }
         overview_builder_.begin(overviews_[track], out_frames_);
+        note_file_info(track, out_frames_, uint32_t(ENAGA_SAMPLE_RATE), format_.rate);
     }
 
     const int channels = int(format_.channels);
@@ -2246,6 +2247,8 @@ void Storage::step_sample_chunk() {
         // A stream's picture is on the whole file's scale, so its playhead lines up; only the
         // head is read now, so only the head is drawn (OverviewBuilder::finish_head).
         overview_builder_.begin(overviews_[track], streaming_ ? stream_total_ : out_frames_);
+        note_file_info(track, streaming_ ? stream_total_ : out_frames_,
+                       streaming_ ? format_.rate : uint32_t(ENAGA_SAMPLE_RATE), format_.rate);
     }
 
     const int channels = int(format_.channels);

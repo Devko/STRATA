@@ -412,6 +412,17 @@ public:
         return track >= 0 && track < kTracks && overviews_[track].ready;
     }
 
+    // What EDIT's file line says about the track's file (the drafts' "LOOP.WAV 2.41S 44.1K"): its
+    // length in ms as the track plays it and the file's own rate, 0 when nothing is loaded.
+    uint32_t file_ms(int track) const { return has_overview(track) ? file_ms_[track] : 0u; }
+    uint32_t file_rate(int track) const { return has_overview(track) ? file_rate_[track] : 0u; }
+    void note_file_info(int track, uint32_t frames, uint32_t frames_rate, uint32_t file_rate) {
+        if (track < 0 || track >= kTracks || frames_rate == 0) return;
+        // 32-bit only (a 64-bit divide drags libgcc's unwinder into the link, see progress()).
+        file_ms_[track] = frames / frames_rate * 1000u + frames % frames_rate * 1000u / frames_rate;
+        file_rate_[track] = file_rate;
+    }
+
     // True while a PROJECT load is in flight -- the job that rewrites pattern memory a pass at a
     // time. The transport must not be started under one: the audio side would play a pattern
     // half of which belongs to the project being replaced. A SAMPLE load is deliberately NOT
@@ -638,6 +649,8 @@ private:
     bool audition_want_ = false;         // audition_next_ is asked for and not yet begun
     char audition_next_[kSamplePathBytes] = {};
     char audition_path_[kSamplePathBytes] = {};
+    uint32_t file_ms_[kTracks] = {};
+    uint32_t file_rate_[kTracks] = {};
     enaga::files::File audition_file_;
     bool audition_read_in_flight_ = false;   // a read owns audition_head_ until its callback
     bool audition_read_done_ = false;

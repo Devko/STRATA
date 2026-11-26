@@ -473,6 +473,12 @@
         // One click is one shape or one destination on the LFO's WAV and DST (dsp/lfo.hpp,
         // `lfo_click`), and one count everywhere else.
         const int index = edit_index(encoder);
+        // A knob with nothing on it on this machine (a drum's ENV and OSC, an empty slot) moves
+        // nothing and says so, rather than writing a byte no machine reads.
+        if (knob_dead(index)) {
+            notice("NOTHING ON THIS KNOB");
+            return;
+        }
         // In NOTE view a click on TUN or PIT is a semitone (core/tuning.hpp, `tune_step`).
         post(Cmd::set_param, uint8_t(selected_), 0, uint8_t(index),
              clamp_delta(shows_note(index) ? delta : delta * param_click(index)),
@@ -495,6 +501,19 @@
         }
     }
 
+    // A parameter this machine does not have: it shows as "---".
+    bool knob_dead(int index) const {
+        return index < 0 || param_name_for(index)[0] == '-';
+    }
+
+    // An EDIT page with something on it for this machine: one of its four knobs is live.
+    bool page_live(int page) const {
+        for (int knob = 0; knob < 4; knob++) {
+            if (!knob_dead(edit_slot(engine_.machine_id(selected_), page, knob))) return true;
+        }
+        return false;
+    }
+
     // The macro, turned up from 0, that has `param` of `track` among its targets, or -1.
     int macro_holding(int track, int param) const {
         for (int m = 0; m < kMacros; m++) {
@@ -512,6 +531,10 @@
     // PIT in NOTE view. The audio side starts from the step's lock, or the kit value if it has
     // none, either way.
     void post_param_lock(int step, int index, int delta) {
+        if (knob_dead(index)) {                 // no lock on a knob with nothing on it
+            notice("NOTHING ON THIS KNOB");
+            return;
+        }
         Command command;
         command.cmd = Cmd::lock_delta;
         command.track = uint8_t(selected_);

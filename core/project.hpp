@@ -232,6 +232,10 @@ constexpr float kToneHpOctaves = 6.2288f;
 // page from LFO on, is page x 4 + knob.
 constexpr int edit_slot(uint8_t machine, int page, int knob) {
     constexpr int8_t kVoiceFilter[3][4] = {{0, 1, 5, 6}, {2, 3, 9, 4}, {8, 7, 10, 11}};
+    // GRAIN's AMP shows DEC first, as every other machine does (Roland, 2026-11-26): knob A turns
+    // slot 10, B and C PIT and SHP. Only where the knobs are; the bytes stay where KIT.BIN has them.
+    constexpr int8_t kGrainAmp[4] = {10, 8, 9, 11};
+    if (machine_is_grain(machine) && page == 2 && knob >= 0 && knob <= 3) return kGrainAmp[knob];
     if (!machine_has_voice_filter(machine) || page < 0 || page > 2 || knob < 0 || knob > 3) {
         return page * 4 + knob;
     }

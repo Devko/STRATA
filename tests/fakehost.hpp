@@ -188,13 +188,16 @@ public:
     // Every `Canvas::text` call since the last `clear_text()`, in order. The real host draws the
     // string with Enaga's 5 x 7 font; this one only records it, so a test can check where text
     // lands (tests/test_ui.cpp's layout checks) without a copy of the font's bitmaps.
+    // The small labels app/paint.hpp draws into the pixels are recorded too, marked `small`
+    // (3 x 5, four pixels a character), through paint::small_text_hook.
     struct TextDraw {
         int x, y;
         uint8_t grey;
+        bool small;
         int length;                            // the whole string's, even past `text`'s room
         char text[48];
     };
-    static constexpr int kTextDraws = 64;
+    static constexpr int kTextDraws = 160;
     void clear_text() { text_count_ = 0; text_dropped_ = 0; }
     int text_count() const { return text_count_; }
     int text_dropped() const { return text_dropped_; }   // calls past kTextDraws
@@ -292,6 +295,8 @@ private:
     static uint32_t t_ms();
     static void t_fatal(const char *reason);
     static void t_text(uint8_t *canvas, int x, int y, const char *text, uint8_t grey);
+    static void record_text(int x, int y, const char *text, uint8_t grey, bool small);
+    static void record_small(int x, int y, const char *text, int grey);
     static uint32_t t_audio_load();
     static uint32_t t_audio_load_peak();
     static void t_led(uint32_t led, uint32_t red, uint32_t green, uint32_t blue);

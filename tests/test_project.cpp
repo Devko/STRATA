@@ -2787,7 +2787,8 @@ TEST(kit_an_older_kit_maps_its_insert_filter_onto_ton_on_the_synth_machines) {
 }
 
 TEST(edit_pages_put_a_synth_filter_on_fltr_and_cover_every_slot_once) {
-    // CUT RES ENV FDE on FLTR for the four synth machines; page x 4 + knob for everyone else.
+    // CUT RES ENV FDE on FLTR for the four synth machines, DEC first on GRAIN's AMP; page x 4 +
+    // knob for everyone else.
     for (int m = 0; m < kMachines; m++) {
         const uint8_t id = uint8_t(m);
         int seen[12] = {};
@@ -2797,7 +2798,9 @@ TEST(edit_pages_put_a_synth_filter_on_fltr_and_cover_every_slot_once) {
                 CHECK(slot >= 0 && slot < 12);
                 seen[slot]++;
                 CHECK_EQ(edit_page_of(id, slot), page);
-                if (!machine_has_voice_filter(id)) CHECK_EQ(slot, page * 4 + knob);
+                if (!machine_has_voice_filter(id) && !(machine_is_grain(id) && page == 2)) {
+                    CHECK_EQ(slot, page * 4 + knob);
+                }
             }
         }
         for (int slot = 0; slot < 12; slot++) CHECK_EQ(seen[slot], 1);
@@ -2812,5 +2815,11 @@ TEST(edit_pages_put_a_synth_filter_on_fltr_and_cover_every_slot_once) {
     CHECK_EQ(edit_slot(va, 0, 2), kSlotTone);    // TON on SRC
     CHECK_EQ(edit_slot(va, 2, 0), 8);            // DEC stays AMP's first
     CHECK_EQ(edit_slot(va, 2, 3), 11);           // and LVL its last
+    const uint8_t grain = uint8_t(MachineId::grain);
+    CHECK_EQ(edit_slot(grain, 2, 0), 10);        // GRAIN's DEC first on AMP, as the others'
+    CHECK_EQ(edit_slot(grain, 2, 1), 8);         // then PIT
+    CHECK_EQ(edit_slot(grain, 2, 2), 9);         // SHP
+    CHECK_EQ(edit_slot(grain, 2, 3), 11);        // LVL
+    CHECK_EQ(edit_page_of(grain, 10), 2);
     CHECK(!machine_has_voice_filter(uint8_t(MachineId::fm)));
 }

@@ -497,7 +497,7 @@ constexpr const char *kSampleAsrWords[4] = {"", "SUSTAIN", "RELEASE", ""};
 constexpr const char *kGrainOscWords[4] = {"SCAN SPEED", "PITCH SPRAY", "", ""};
 
 const char *const kEditPageNames[kHelpEditPages] = {"SRC", "FLTR", "AMP", "FX",
-                                                    "LFO", "ARP", "ASR", "OSC"};
+                                                    "LFO", "ARP", "ENV", "OSC"};
 
 // Does the machine read EDIT's page 6 (ASR) or 7 (OSC)?
 bool reads_page(uint8_t machine, int page) {

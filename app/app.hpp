@@ -440,7 +440,7 @@ const char *page_name(Page page) {
         case Page::fx:   return "FX";
         case Page::lfo:  return "LFO";
         case Page::arp:  return "ARP";
-        case Page::asr:  return "ASR";
+        case Page::asr:  return "ENV";      // the whole envelope (Roland, 2026-11-26)
         case Page::osc:  return "OSC";
         default:         return "?";
     }
@@ -527,8 +527,10 @@ public:
 #include "ui_screen.hpp"
 
 #include "ui_edit.hpp"
+#include "ui_editview.hpp"
 
 #include "ui_mixer.hpp"
+#include "ui_mixview.hpp"
 
 #include "ui_browsers.hpp"
 
@@ -623,6 +625,17 @@ private:
     void notice(const char *text) {
         notice_ = text;
         notice_at_ms_ = last_ms_;
+        notice_screen_ = screen_key();
+    }
+
+    // Which screen and page is up, as one number: a notice's toast belongs to the screen it was
+    // said on, and a screen change takes it away (the review: RESAMPLE's band over PROJECT).
+    uint32_t screen_key() const {
+        uint32_t page = 0;
+        if (mode_ == Mode::edit) page = uint32_t(param_page_);
+        else if (mode_ == Mode::mixer) page = uint32_t(mixer_bank_);
+        else if (mode_ == Mode::project) page = uint32_t(project_page_);
+        return uint32_t(mode_) * 1000u + page + (step_page_ ? 500u : 0u);
     }
 
     // A notice the emulator's scenarios look for in the log, since they cannot read the screen.
@@ -914,6 +927,7 @@ private:
 
     const char *notice_ = nullptr;
     uint32_t notice_at_ms_ = 0;
+    uint32_t notice_screen_ = 0;    // screen_key() when the notice was said
     static constexpr uint32_t kWaveSliceMs = 2;   // the WAVE build's share of a pass (update)
     int waves_logged_ = 0;        // tables built, as last logged (update)
     uint32_t last_ms_ = 0;
@@ -932,15 +946,38 @@ private:
     // EDIT's LFO page: the last 40 frames of the LFO's output, and how many have arrived.
     uint8_t lfo_strip_[40] = {};
     uint32_t lfo_strip_at_ = 0;
-    // GRAIN's SRC page: the sparks' afterglow, the middle 13 rows of the picture.
-    paint::Glow<124, 30> grain_glow_;
+    uint32_t lfo_strip_ms_ = 0;      // when the strip last took a sample
+    // GRAIN's SRC page: the cloud's afterglow (app/ui_editview.hpp, kCloudRows rows).
+    paint::Glow<124, 26> grain_glow_;
+    // EDIT's pictures that play a note through (app/ui_editview.hpp): each track's trigger count
+    // as last seen, when it last moved, and whether it has since the app started; FLTR's spectrum
+    // behind the curve, each band's shown rows.
+    uint8_t edit_trig_seen_[kTracks] = {};
+    uint32_t edit_trig_ms_[kTracks] = {};
+    bool edit_trig_live_[kTracks] = {};
+    uint32_t edit_trig_checked_ms_ = 0;
+    // WAVE's waterfall, drawn once a table (app/ui_editview.hpp, build_waterfall): each pixel's
+    // grey at full brightness and the frame that drew it, and the table they are of.
+    uint8_t wf_cover_[66 * 124] = {};
+    uint8_t wf_frame_[66 * 124] = {};
+    int wf_table_ = -1;
+    uint8_t flt_band_rows_[spectrum::kBands] = {};
     // MIXER's master pages: the FFT's scratch, each band's shown rows, its peak dot and how long
     // the dot holds, and the vectorscope's afterglow.
     spectrum::Work spectrum_work_;
     uint8_t band_rows_[spectrum::kBands] = {};
     uint8_t band_peak_[spectrum::kBands] = {};
     uint8_t band_hold_[spectrum::kBands] = {};
-    paint::Glow<22, 22> vector_glow_;
+    // MIXER (app/ui_mixview.hpp): the desk's held peaks and when each was taken, MST's
+    // vectorscope afterglow, and the loudness meter's state (K filters, mean square, the
+    // history's count last read, the last reading in tenths).
+    uint8_t desk_hold_[kTracks] = {};
+    uint32_t desk_hold_ms_[kTracks] = {};
+    paint::Glow<40, 40> master_glow_;
+    float loud_z_[2][4] = {};
+    float loud_ms_ = 0.0f;
+    uint32_t loud_seen_ = 0;
+    int loud_tenths_ = -999;
     // draw()'s own cost (count_draw_time): the window's sum, its frames, the last average.
     uint32_t draw_ms_sum_ = 0;
     uint32_t draw_count_ = 0;

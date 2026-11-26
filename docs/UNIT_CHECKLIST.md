@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W42, about 124 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W43, about 130 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -497,6 +497,20 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   WAVE track / SRC on GRAIN: big graphs. MIXER, screen keys to MST: a big spectrum, the
   vectorscope, CMP and LIM bars. Readable at arm's length? `____`
 - SETUP: `TRK MAX ... SMPLTREK` and `DRW ____ MS` with PERFORM up while playing. `____`
+
+**W43. EDIT and MIXER as the drafts (6 min).** Beat playing, A01.
+- EDIT on T1: one line of small knobs at the top, D at the bottom, a big picture: SRC the kick's
+  waveform lighting up left to right on each hit; FLT a filter curve over a moving spectrum; AMP an
+  envelope with a dot riding it; LFO a box with a dot on the shape (turn DEP and DST up). Readable
+  at arm's length? `____`
+- T6 (VA): FLT's curve jumps up on each note and falls back; OSC two saws and the sub. `____`
+- MIXER: eight strips with meters, A-D over the four the knobs turn; screen keys on through DCK
+  (bars dip with the kick), DLY (echoes), REV (a tail), ROUTE, MST (spectrum, scope, CMP/LIM, GR
+  and LUFS), EQ (a curve; push A kills LOW). Stop: the meters and spectrum rest, the pictures stay.
+  `____`
+- KITS, SOUNDS, the FUNC menu: the cursor's row is a white bar. Hold STEP 1 + OK: the step page
+  shows the track's lane with step 1 bracketed. SETUP's `DRW ____ MS` with MST up while
+  playing. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

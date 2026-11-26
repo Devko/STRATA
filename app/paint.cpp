@@ -161,7 +161,23 @@ void arc(uint8_t *px, int cx, int cy, int r, int start, int span, int grey, int 
     }
 }
 
+SmallTextHook small_text_hook = nullptr;
+
 int small_text(uint8_t *px, int x, int y, const char *text, int grey) {
+    if (small_text_hook != nullptr) small_text_hook(x, y, text, grey);
+    return small_glyphs(px, x, y, text, grey);
+}
+
+int small_badge(uint8_t *px, int x, int y, const char *text) {
+    const int w = small_width(text);
+    for (int j = -1; j <= kSmallHeight; j++) {
+        for (int i = -1; i <= w; i++) plot(px, x + i, y + j, 15);
+    }
+    small_text(px, x, y, text, 0);
+    return x + w + 2;
+}
+
+int small_glyphs(uint8_t *px, int x, int y, const char *text, int grey) {
     for (; *text != '\0'; text++) {
         const uint16_t bits = small_glyph(*text);
         for (int i = 0; i < 15; i++) {

@@ -1,0 +1,108 @@
+# The screens: pixel spec
+
+What every STRATA screen draws, where, and from what. The drafts are `tools/visuals_mockup.py`
+(PERFORM, GRID, AMP, FLT, LFO, WAVE OSC, GRAIN SRC, MASTER); this file turns them into rows and
+columns and says how the screens the drafts never drew follow them. Change a screen here first,
+then in the code, then in `tests/test_ui.cpp`.
+
+The screen is 128 x 128, 16 greys, drawn at most every 50 ms (Enaga's main loop). Two fonts:
+Enaga's 5 x 7 (`canvas.text`, 6 px a character) and STRATA's 3 x 5 (`paint::small_text`, 4 px a
+character). Both are held to the screen by the layout test (`layout_faults`): no string crosses
+another, small labels end by x 125, two small labels on a line keep 2 blank pixels, Enaga's text
+4.
+
+## Rules every screen keeps
+
+- **Drawn from what the audio side publishes** (`Status`, the scope ring) or from settings. Nothing
+  in draw() walks a pattern's memory beyond the page on screen, a sample, or a file.
+- **Stopped, a screen holds still and still looks right**: pictures are drawn from their knobs;
+  analysers (spectrum, scope, meters) sit at rest; nothing moves on a timer of its own. Moving
+  parts come from the audio side (an LFO's phase, a grain, a note's envelope) or from the running
+  transport. The control audit (`ui_audit_every_input_in_every_screen_shows_it_did_something`)
+  fails a screen that moves with no input.
+- **A picture that plays a note through** (a drum's hit, the filter's sweep, the duck's dip)
+  starts from the moment the UI saw the track's trigger count move (`update_track_triggers`,
+  every frame on every screen). A count that moved while nothing was drawn for 200 ms is an old
+  note and is not played through.
+- **draw() stays under 5 ms** on the emulator with cl6x (`scenario_visuals`), figures in
+  `docs/BUDGET.md`.
+
+## The frame (every screen; unchanged since #171)
+
+| Rows | What |
+| --- | --- |
+| 0-8 | the live pattern as a lit badge (0-20), bar.beat (24, 5x7), tempo or MIDI/SYNC and `>` (45, small), load % (80, small), LOCK mark (96), the track badge (106-125) |
+| 8 | progress: the pass lit from the left, beats and bars marked ahead |
+| 9-17 | a toast (notice, LEARN, the MUTATE verdict) lit over whatever is there; else the live strip (small, y 11) only while something is off rest |
+| 18-117 | the screen |
+| 121-127 | the tabs: the screen's pages in the small font, the one showing lit; DROP / GUARD at the right |
+| x 126-127, rows 10-117 | the master meter |
+
+## Displaced information: where it went
+
+| Was | Now |
+| --- | --- |
+| The screen's title line (`MIXER DCK 5-8`, `SETUP`) | the lit tab; lists keep a caption in the small font at y 18 |
+| Knob values as two rows of 5x7 text with bars under them | EDIT's knob line (small, y 18) and footer (y 105); a held step's lock lit on its value |
+| MOD slots' range marks under the bars | the footer's second line names what moves the page's knobs (`LFO>CUT 40`, `VEL>RES +20`); the LFO page lists both slots there |
+| `FUNC+EDIT: MACHINE` and the other hints | the footer's second line (y 113), when nothing moves the page's knobs |
+| MIXER's PEAK line | the frame's meter (and its limiter light); MST shows GR and LUFS |
+| Notices, scenes, MUT, LEARN | toasts in the frame (agreed 2026-11-25) |
+| TRK, MAX, device | SETUP (agreed 2026-11-25) |
+
+## EDIT (app/ui_editview.hpp)
+
+| Rows | What |
+| --- | --- |
+| 18-22 | the knob line: `A ATK 004  B DEC 048  C SUS 057` at x 0, 42, 84, letter dim (6), name grey (10), value bright (15); a lock or range on the held step lights the value. Moved right only as far as the one before needs (3 blank px), then the longest loses its letter's space |
+| 26-101 | the picture (below) |
+| 105 | knob D at x 0; the page's state at the right (`TRIG FREE`, `AUTO 5`, `X2 OCT`) |
+| 113 | what modulates the page's knobs, or the page's hint |
+| 103-111 | holding a STEP and turning: the lock readout, 5x7, dark on a lit bar |
+
+Pictures by page and machine:
+
+| Page | Machines | Picture |
+| --- | --- | --- |
+| SRC | KICK SNARE HAT PERC | one hit worked out from the knobs (pitch sweep, tone and noise, clap bursts, metal, FM index), min/max columns about y 62 (amp 30), the envelope dotted round it, the length in ms; after a trig the played part lights in real time |
+| SRC | SAMPLE | the overview about y 62 (amp 28), START..END bright (9) and the rest dim (4), the window's ends full height with STA's and LEN's letters, slices dotted (8), each voice a column and a dot |
+| SRC | GRAIN | the draft: overview about y 46 (amp 20), the bracket lit (15) with each grain's tick on its edges; `GRAINS n/8` at y 74; the cloud rows 78-101, each grain a spark rising as it fades, afterglow 184/256 a frame |
+| SRC | WAVE | the draft's waterfall: 16 frames from (6, 74), 3.4 px right and 2.6 up a frame, 40 points 1.6 px apart, amp 11, POS's frame 15, its neighbours 8, the rest 4, hidden lines blacked; LIVE at y 87-101 |
+| SRC, OSC | VA MONO, VA POLY, WAVE (OSC) | two cycles across, y 62, amp 28: the first oscillator, the second (detuned, drifting while the beat plays, or synced), the sub, dim; their sum through the drive bright |
+| SRC | FM4 | the algorithm's boxes and wires (op 4's feedback a loop), carriers on the OUT bus; two cycles of the carrier at IDX and RAT, the index falling after each note |
+| FLT | drums, SAMPLE, GRAIN | the draft's filter: 30 Hz-12 kHz across (x 1-119), 0 dB at y 48, 1.1 rows a dB, rows 26-96, guides at 100 / 1K / 10K with labels at y 98; the output's spectrum behind (grey 3, every other column, falling a fifth a frame); the curve (15) with a fill (2); the cutoff line (6) with knob B's letter; the mode at the top right |
+| FLT | VA, WAVE | the same frame at the synth's own CUT, RES and mode (SRC's MOD); a dim curve where ENV opens it; after each note the bright curve sweeps back down over FDE |
+| AMP, ASR | all with an envelope | the draft's envelope: rows 34-100, dotted guides every 8 px and at quarters, the curve (9) with a fill (2), the letters lit over the points they move; while the note sounds its travelled part bright (15, fill 4) with a dot at its head |
+| FX | all | a sine and what LOF makes of it (rows 30-56); the pan field as an arc with the track's dot (centre 36, 96); SNA and SNB as two columns into DLY and REV, their tops lit while the track sounds |
+| LFO | all | the draft: the shape's box (0-77, rows 28-88) with the dot riding it and a fading trail, the output strip (82-119), `OUT`; the destination bar (rows 93-97) lit to what it sounds at with a mark at its knob; off, `LFO OFF: SET DEP+DST` there |
+| ARP | all | sixteen notes of the run over a three-note chord through OCT octaves, each GAT long; while the beat plays the one it is on lit |
+| OSC | FM4 | harmonics 0-8 across, CAR tall and bright, MOD at RAT + FIN, the detuned pair, the sidebands the index makes |
+| OSC | GRAIN | the file small with SCN's travel as an arrow; PSP's spray as a fan with the grains on it |
+| ASR, OSC | a machine without them | `NO ASR` / `NO OSC` and which machines have them |
+
+## MIXER (app/ui_mixview.hpp)
+
+| Page | Picture |
+| --- | --- |
+| TRK 1-4, TRK 5-8 | the desk: eight strips 15 px apart. The page's four with their knob's letter lit at y 19, the others' numbers dim; pan as a tick (rows 27-29); SNA and SNB as two thin bars (31, 33); the meter (x+1..x+5, rows 36-97, top 36 dB, peak held a second); the fader's slot (x+10) and cap at the level (0-1.2); the level (y 102) and the machine (y 110); a muted strip dim with a hollow cap |
+| DCK 1-4, DCK 5-8 | the desk with each track's duck depth hanging from the top, lit as far as the duck pulls now (the source's trigs through ATK, HLD and REL); the source's strip says `SRC` and flashes on its trigs |
+| DUCK | knob line; the gain over time (0 dB at the top, the floor at the bottom) through ATK, HLD and REL, the letters on its corners, a dot riding it after each source trig; `DUCKS UNDER Tn` |
+| DLY, DLY+ | one hit and its echoes over 2 s (8 s LONG), each as tall as FBK leaves it, wider as TON darkens, alternating up and down with ping-pong, wobbling with WOW, smeared with DIF; a head sweeping in time with the transport; the time in ms |
+| REV, REV+ | the tail over a log time axis (10 ms-30 s): early reflections spaced by SIZ, the dense tail falling over DEC, smoother as DMP darkens it, wobbling with MOD, the shimmer's sparks; ROOM or HALL |
+| ROUTE | TRK into DLY and REV, both into OUT; D>R's wire as bright as it sends; ping-pong's L R; LONG's low cut; dots running along the wires while the beat plays |
+| MST | the draft: knob line (DJ CMP LIM); the spectrum, 24 bands of 5 px (4 lit) in rows 26-59, every other row, bright at the top, peaks held 12 frames; 100 / 1K / 10K at y 63; the vectorscope 42 x 42 at (0, 70), mid up and side across, afterglow; CMP's reduction and LIM falling from the top of two bars (x 50, 68; rows 72-109); GR and LUFS (momentary, K-weighted, 400 ms, from the scope history at 24 kHz) at x 88; LVL at (88, 106) |
+| EQ | FLT's frame with the kill EQ's curve (a shelf under 250 Hz, a bell, a shelf over 2.5 kHz; KILL 30 dB down), A B C on it, a lit `KILL` over a thrown band |
+
+## The other screens
+
+Lists (KIT, SOUNDS, SAMPLES, PROJECTS, MENU, the slot menu, CHAIN, PATTERN) and the setting screens
+(SETUP, RESAMPLE, KEYS, MACHINE, PROJECT, name entry) keep their rows in Enaga's font, which
+reads at arm's length, in the drafts' language around them: the caption in the small font at
+y 18, the cursor's row a lit bar with its text dark (`list_row`), hints in the small font at
+y 97, 105 and 113. CHAIN draws the song as a strip (y 92): each entry as wide as its repeats, the
+cursor's outlined, the playing one lit. The step page draws the track's lane (y 84) with the
+step bracketed and its note on it: LEN long, MICR off the grid, as bright as VEL, dimmer under
+PROB, RTCH's hits as notches.
+
+GRID and PERFORM are as #171 left them (Roland, 2026-11-26: "the sequencer is already good",
+"performance also looks good").

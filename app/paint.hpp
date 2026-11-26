@@ -68,6 +68,20 @@ constexpr int kSmallHeight = 5;
 int small_text(uint8_t *px, int x, int y, const char *text, int grey);
 int small_width(const char *text);
 
+// The same glyphs, not reported to the hook: recolouring part of a string small_text drew (a
+// knob's letter dimmer than its value), so the string is found and checked once, whole.
+int small_glyphs(uint8_t *px, int x, int y, const char *text, int grey);
+
+// Tests only: when set, every small_text string is reported with where it was drawn, so the host
+// tests find and lay out the small labels as they do Enaga's text (tests/test_ui.cpp,
+// layout_faults). Null on the unit, where it costs one compare a string.
+using SmallTextHook = void (*)(int x, int y, const char *text, int grey);
+extern SmallTextHook small_text_hook;
+
+// A lit badge in the small font: a grey-15 box one pixel round the text, the text black. The
+// drafts' knob letters on a curve ("A" over the attack's peak). Returns the x after the box.
+int small_badge(uint8_t *px, int x, int y, const char *text);
+
 // A level to decibels for meters: `milli` is thousandths of full scale (Status::meter_milli),
 // the answer is dB in Q8 (256 = 1 dB), 0 at full scale and above, -60 dB (-15360) at and below
 // the floor. A table of 61 thresholds and one divide; no log.

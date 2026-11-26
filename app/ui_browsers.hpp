@@ -77,7 +77,7 @@
         append(out, "  ");
         append(out, machine_name(engine_.machine_id(selected_)));
         *out = 0;
-        canvas.text(0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 19, line, 15);
 
         // All eight tracks at once, because the question anyone in this mode is asking is "what
         // is this kit", not "what is this track". Four to a line: eight names are 31 characters.
@@ -131,7 +131,7 @@
                         : (sound_preset_count(engine_.machine_id(selected_)) > 0 ? "OK: SOUNDS"
                                                                                  : "ARROWS: MACHINE"),
                     7);
-        canvas.text(0, 112, "FUNC+EDIT AGAIN: KITS", 7);
+        paint::small_text(canvas.data(), 0, 113, "FUNC+EDIT AGAIN: KITS", 10);
     }
 
     // --- SOUNDS: the factory sounds (OK on a drum, synth or GRAIN track) ---
@@ -238,7 +238,7 @@
         append(out, " ");
         append(out, machine_name(machine));
         *out = 0;
-        canvas.text(0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 19, line, 15);
         canvas.text(0, 27, "INTO THIS TRACK ONLY", 10);
 
         // The VAs' lists are longer than the screen: it scrolls to keep the cursor on it.
@@ -261,11 +261,11 @@
                 }
             }
             *out = 0;
-            canvas.text(0, 37 + (row - first) * 8, line, on ? 15 : 9);
+            list_row(canvas, 0, 37 + (row - first) * 8, line, on, 9);
         }
         if (rows == 1) canvas.text(0, 45, "NO SOUNDS HERE", 9);
 
-        canvas.text(0, 112, "OK LOAD  CLR BACK", 7);
+        paint::small_text(canvas.data(), 0, 113, "OK LOAD  CLR BACK", 10);
     }
 
     // --- SAMPLES: the sample browser (OK on a SAMPLE or GRAIN track) -------
@@ -531,7 +531,7 @@
         append(out, " ");
         append(out, machine_name(engine_.machine_id(selected_)));
         *out = 0;
-        canvas.text(0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 19, line, 15);
 
         // Where we are, or what is happening: the folder's tail, since its end is the part that
         // tells two folders apart.
@@ -579,7 +579,7 @@
             append_shown(out, list.name(at), kLineChars - 2);
             if (folder) *out++ = '/';
             *out = 0;
-            canvas.text(0, 37 + i * 8, line, at == sample_cursor_ ? 15 : (folder ? 11 : 9));
+            list_row(canvas, 0, 37 + i * 8, line, at == sample_cursor_, (folder ? 11 : 9));
             // The entry being heard: a line under its name, as long as the part already heard.
             if (at == audition_row_ && storage_.audition_sounding()) {
                 const uint32_t total = storage_.audition_frames();
@@ -613,7 +613,7 @@
         }
         append(out, storage_.auditioning() ? "A STOP OK LOAD" : "A HEAR OK LOAD");
         *out = 0;
-        canvas.text(0, 112, line, 7);
+        paint::small_text(canvas.data(), 0, 113, line, 10);
     }
 
     // --- PROJECT's PROJECTS page: open another project, save under a new name ----
@@ -844,7 +844,7 @@
         constexpr int kChars = enaga::ui::TextEntry::max_chars;
         constexpr int kX = (128 - kChars * 6) / 2;
         const bool rename = entry_for_ == EntryFor::rename;
-        canvas.text(0, 18, rename ? "RENAME" : "SAVE AS", 15);
+        paint::small_text(canvas.data(), 0, 19, rename ? "RENAME" : "SAVE AS", 15);
         if (rename) {
             char line[40];
             char *out = line;
@@ -857,9 +857,9 @@
         for (int i = 0; i < kChars; i++) {
             canvas.rect(kX + i * 6, 57, 5, 1, i == name_entry_.cursor() ? 15 : 4);
         }
-        canvas.text(0, 84, "A / LEFT RIGHT: MOVE", 6);
-        canvas.text(0, 94, "B / VALUE: CHARACTER", 6);
-        canvas.text(0, 104, rename ? "OK: RENAME CLR: BACK" : "OK: SAVE  CLR: CANCEL", 6);
+        paint::small_text(canvas.data(), 0, 89, "A / LEFT RIGHT: MOVE", 10);
+        paint::small_text(canvas.data(), 0, 97, "B / VALUE: CHARACTER", 10);
+        paint::small_text(canvas.data(), 0, 105, rename ? "OK: RENAME CLR: BACK" : "OK: SAVE  CLR: CANCEL", 10);
     }
 
     void draw_projects(enaga::Canvas &canvas) {
@@ -870,7 +870,7 @@
         const SampleList &list = storage_.browse_list();
         char line[40];
         char *out = line;
-        canvas.text(0, 18, "PROJECTS", 15);
+        paint::small_text(canvas.data(), 0, 19, "PROJECTS", 15);
 
         out = line;
         const char *busy = storage_.busy_text();
@@ -916,7 +916,7 @@
         }
         append(out, "OK OPEN CLR BACK");
         *out = 0;
-        canvas.text(0, 112, line, 7);
+        paint::small_text(canvas.data(), 0, 113, line, 10);
     }
 
     // --- KIT: the kit library (FUNC+EDIT twice) ---------------------------
@@ -938,7 +938,7 @@
         append_padded(out, uint32_t(first + 8), 2);
         append(out, storage_.card_usable() ? "    OK LOAD" : "  NO CARD");
         *out = 0;
-        canvas.text(0, 18, line, 15);
+        paint::small_text(canvas.data(), 0, 19, line, 15);
 
         // What the card is doing, what went wrong, or what the keys do.
         out = line;
@@ -962,7 +962,7 @@
             *out++ = ' ';
             append(out, kit_state_name(info.state));
             *out = 0;
-            canvas.text(0, 37 + i * 8, line, slot == kit_cursor_ ? 15 : 9);
+            list_row(canvas, 0, 37 + i * 8, line, slot == kit_cursor_, 9);
         }
 
         // The slot under the cursor, as MACHINE draws the kit in play: two lines of four.
