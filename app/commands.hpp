@@ -92,7 +92,8 @@ enum class Cmd : uint8_t {
 
     // A live-recorded hit, already resolved to a step and a micro-timing value by core/record in
     // the main context -- where the clock state that stamped it was read.
-    record_hit,        // track, step, a: note, b: velocity, c: int8 micro
+    // d: a RecWrite, how the note meets the notes the step already has.
+    record_hit,        // track, step, a: note, b: velocity, c: int8 micro, d: RecWrite
     // And how long that note was held, when its key comes up: core/record's held_length_index,
     // stored as the step's LEN if the step still holds that note.
     record_length,     // track, step, a: note, b: length index
@@ -253,6 +254,9 @@ enum class Cmd : uint8_t {
     // setting with a field in PROJECT.BIN, so the engine keeps it and `app/` reads it back
     // rather than holding a second copy that a save could not see.
     set_quantize,      // b: int8 delta, clamped to 0-100
+    // REC MODE, the same kind of PROJECT setting: what a note recorded onto a chord track's
+    // step does to the notes it has (ProjectSettings::rec_add).
+    set_rec_mode,      // a: 0 REPLACE, 1 ADD
 
     // F1 + F5 (docs/SPEC.md): every track back to its step 1 from the next tick, without
     // touching the voices. The main context has already located the clock to 0; this resets
@@ -380,6 +384,16 @@ enum class DuckField : uint8_t { depth, source, attack, hold, release, count };
 // ignores the entry.
 enum class ChainEdit : uint8_t {
     set = 0, insert, remove, pattern_delta, repeats_delta, mutes_delta, song
+};
+
+// How a recorded hit meets the step it lands on (Cmd::record_hit's `d`). The UI decides, because
+// it is the side that knows which pass a hit belongs to and what REC MODE is.
+enum class RecWrite : uint8_t {
+    note = 0,      // a track that plays one note: the hit replaces the step's note
+    replace = 1,   // a chord track, the first note on this step this pass (REC MODE REPLACE):
+                   // the step becomes that one note, its extras and chord type gone
+    join = 2,      // a chord track, a note that adds to the step's chord: another note of a
+                   // chord played this pass, or any note under REC MODE ADD
 };
 
 struct Command {

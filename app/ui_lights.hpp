@@ -127,6 +127,15 @@
         command.a = note;
         command.b = velocity;
         command.c = uint8_t(landing.micro);
+        // On a chord track several notes can share a step (core/stepnotes.hpp). The first on a
+        // step this pass replaces what it held, unless REC MODE is ADD; any after it join.
+        command.d = uint8_t(RecWrite::note);
+        if (records_chords(track)) {
+            uint32_t &pass = rec_pass_[track][landing.step];
+            const bool again = pass == landing.loop + 1u;
+            command.d = uint8_t(again || rec_add() ? RecWrite::join : RecWrite::replace);
+            pass = landing.loop + 1u;
+        }
         post_command(command);
 
         if (landing.clamped) notice("OFF GRID");   // it could not be stored where it was played
@@ -152,6 +161,14 @@
         slot->note = note;
         slot->step = landing.step;
         slot->down = now;
+    }
+
+    // The machines whose steps play several notes: the POLY three, and MID, which sends a
+    // chord to the synth it drives. Only these gather a chord played into one step.
+    bool records_chords(int track) const {
+        const uint8_t id = engine_.machine_id(track);
+        return id == uint8_t(MachineId::va_poly) || id == uint8_t(MachineId::wave_poly) ||
+               id == uint8_t(MachineId::fm) || id == uint8_t(MachineId::midi);
     }
 
     // A recorded note's key came up: its hold, quantized to the note-length table
@@ -192,7 +209,10 @@
         // transport. A STOP that F6 made arrives here too; releasing twice is harmless. The next
         // F6 press is then the one that cuts the tails.
         (void)position;
-        if (what == ENAGA_TRANSPORT_START || what == ENAGA_TRANSPORT_LOCATE) stop_armed_ = false;
+        if (what == ENAGA_TRANSPORT_START || what == ENAGA_TRANSPORT_LOCATE) {
+            stop_armed_ = false;
+            clear_rec_passes();          // the pass count starts again: old marks would match
+        }
         if (what == ENAGA_TRANSPORT_STOP) {
             post(Cmd::stop, 0, 0, 0);
             stop_armed_ = true;

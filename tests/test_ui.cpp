@@ -35,6 +35,7 @@
 #include "apprig.hpp"
 #include "check.hpp"
 #include "fakehost.hpp"
+#include "stepnotes.hpp"
 
 #include <enaga/abi.h>
 #include <enaga/clock.hpp>
@@ -276,7 +277,7 @@ void open_keys() {
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuPlay, kMenuChain, kMenuSong,
-                     kMenuAutofill, kMenuQuantize, kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo,
+                     kMenuAutofill, kMenuQuantize, kMenuRecMode, kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo,
                      kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
@@ -10944,17 +10945,18 @@ TEST(ui_draw_bench) {
     pump(4);
 }
 
-// --- live recording on a POLY track: what several notes on one step become -------------------
+// --- live recording on a chord track: what several notes on one step become -------------------
 //
-// A Step holds ONE note and a chord byte (core/pattern.hpp, core/chord.hpp): there is no room
-// for a free set of notes. These pin what REC does when several notes land on one step of VA
-// POLY (track 7), played as a chord or over a step that already has notes. MIDI IN is the way
-// in because channel 7 is track 7 whatever is selected; KEYS and the pads post the same
-// `record_note`.
+// A Step holds one note and a chord byte; the other notes played into it are locks 32-36
+// (core/stepnotes.hpp). These pin what REC does when several notes land on one step of VA POLY
+// (track 7): played as a chord, or over a step that already has notes, under REC MODE REPLACE
+// and ADD. MIDI IN is the way in because channel 7 is track 7 whatever is selected; KEYS and the
+// pads post the same `record_note`.
 
 namespace {
 
 constexpr int kPolyTrack = 6;
+constexpr int kMonoTrack = 5;
 
 // REC on and the transport running at `tick`, on a blank project.
 Strata &polyrec_start(uint32_t tick) {
@@ -10972,72 +10974,99 @@ Strata &polyrec_start(uint32_t tick) {
 void polyrec_stop() {
     key(ENAGA_KEY_F2);
     FakeHost::the().set_running(false);
+    if (app_engine().project().settings.rec_add) post_cmd(Cmd::set_rec_mode, 0, 0, 0);
     pump(2);
 }
 
-void polyrec_on(Strata &app, uint8_t note, uint8_t velocity) {
-    app.on_midi(midi(uint8_t(0x90 | kPolyTrack), note, velocity));
+void polyrec_on(Strata &app, uint8_t note, uint8_t velocity, int track = kPolyTrack) {
+    app.on_midi(midi(uint8_t(0x90 | track), note, velocity));
     pump(2);
 }
 
-void polyrec_off(Strata &app, uint8_t note) {
-    app.on_midi(midi(uint8_t(0x80 | kPolyTrack), note, 0));
+void polyrec_off(Strata &app, uint8_t note, int track = kPolyTrack) {
+    app.on_midi(midi(uint8_t(0x80 | track), note, 0));
     pump(2);
 }
 
-int polyrec_trigs() {
+int polyrec_trigs(int track = kPolyTrack) {
     int count = 0;
-    for (int s = 0; s < kStepsPerTrack; s++) count += trig_at(kPolyTrack, s) ? 1 : 0;
+    for (int s = 0; s < kStepsPerTrack; s++) count += trig_at(track, s) ? 1 : 0;
     return count;
 }
 
-int polyrec_only_step() {
+int polyrec_only_step(int track = kPolyTrack) {
     int where = -1;
     for (int s = 0; s < kStepsPerTrack; s++) {
-        if (trig_at(kPolyTrack, s)) where = s;
+        if (trig_at(track, s)) where = s;
     }
     return where;
 }
 
+// The step's notes, root first and then the extras in the order they were added.
+int polyrec_notes(int step, uint8_t *out, int track = kPolyTrack) {
+    out[0] = step_of(track, step).note;
+    return 1 + step_extra_notes(app_engine().pattern(), track, step, out + 1);
+}
+
+uint32_t polyrec_loop_ticks() {
+    return uint32_t(app_engine().pattern().tracks[kPolyTrack].length) * 24u;
+}
+
 }  // namespace
 
-TEST(polyrec_a_chord_played_onto_an_empty_step_records_only_its_last_note) {
-    // C E G at the same moment: three record_hits on one step, each replacing the last. The step
-    // ends up one note, the LAST one played, with no chord -- the chord heard while playing is
-    // not what plays back.
+TEST(polyrec_a_chord_played_onto_an_empty_step_records_every_note) {
+    // C E G at the same moment: one step holding all three -- C its note, E and G its extras --
+    // at the loudest velocity. The order played does not lose a note.
     Strata &app = polyrec_start(96);
-    polyrec_on(app, 60, 100);
-    polyrec_on(app, 64, 90);
-    polyrec_on(app, 67, 80);
+    polyrec_on(app, 60, 80);
+    polyrec_on(app, 64, 100);
+    polyrec_on(app, 67, 90);
     CHECK_EQ(polyrec_trigs(), 1);
     const int at = polyrec_only_step();
     CHECK(at >= 0);
-    CHECK_EQ(int(step_of(kPolyTrack, at).note), 67);
-    CHECK_EQ(int(step_of(kPolyTrack, at).velocity), 80);
+    uint8_t notes[kStepMaxNotes];
+    CHECK_EQ(polyrec_notes(at, notes), 3);
+    CHECK_EQ(int(notes[0]), 60);
+    CHECK_EQ(int(notes[1]), 64);
+    CHECK_EQ(int(notes[2]), 67);
+    CHECK_EQ(int(step_of(kPolyTrack, at).velocity), 100);
     CHECK_EQ(int(step_of(kPolyTrack, at).chord), 0);
+    CHECK_EQ(step_param_lock_count(app_engine().pattern(), kPolyTrack, at), 0);
 
-    // The order decides the note: G E C keeps C.
-    polyrec_on(app, 67, 80);
-    polyrec_on(app, 64, 90);
-    polyrec_on(app, 60, 100);
-    CHECK_EQ(polyrec_trigs(), 1);
-    CHECK_EQ(int(step_of(kPolyTrack, at).note), 60);
+    // The same note again in the same pass adds nothing.
+    polyrec_on(app, 64, 50);
+    CHECK_EQ(polyrec_notes(at, notes), 3);
     polyrec_off(app, 60);
     polyrec_off(app, 64);
     polyrec_off(app, 67);
     polyrec_stop();
 }
 
-TEST(polyrec_a_note_recorded_over_a_chord_step_keeps_the_old_chord_on_the_new_root) {
-    // The step holds A MIN7 (note 57, chord MIN7). One note, D, recorded over it: the note is
-    // replaced and the chord byte is kept, so the step now plays D MIN7 -- four notes, from one
-    // key that sounded one note while it was played.
+TEST(polyrec_a_seventh_note_on_one_step_is_refused) {
+    Strata &app = polyrec_start(96);
+    const uint8_t chord[] = {48, 52, 55, 59, 62, 65, 69};
+    for (uint8_t n : chord) polyrec_on(app, n, 100);
+    const int at = polyrec_only_step();
+    CHECK(at >= 0);
+    uint8_t notes[kStepMaxNotes];
+    CHECK_EQ(polyrec_notes(at, notes), kStepMaxNotes);
+    CHECK(!step_has_note(app_engine().pattern(), kPolyTrack, at, 69));
+    for (uint8_t n : chord) polyrec_off(app, n);
+    polyrec_stop();
+}
+
+TEST(polyrec_replace_a_note_over_a_chord_step_becomes_that_one_note) {
+    // The step holds A MIN7 (note 57, chord MIN7) with an extra and a parameter lock. One D
+    // recorded over it under REPLACE: the step is D alone, its chord type and extra gone, and
+    // its parameter lock kept -- a hit replaces the notes, not the step's sound.
     fresh();
     Project &incoming = app_engine().project_for_load();
     Step &s = incoming.live().tracks[kPolyTrack].steps[4];
     s.flags = kStepTrig;
     s.note = 57;
     s.chord = chord_pack(ChordType::min7, 0);
+    CHECK(step_add_note(incoming.live(), kPolyTrack, 4, 76) == NoteAdd::added);
+    CHECK(pattern_set_lock(incoming.live(), kPolyTrack, 4, 3, 99));
     pump(2);
 
     Strata &app = the_app();
@@ -11049,41 +11078,84 @@ TEST(polyrec_a_note_recorded_over_a_chord_step_keeps_the_old_chord_on_the_new_ro
     polyrec_on(app, 62, 100);
     CHECK_EQ(polyrec_trigs(), 1);
     CHECK(trig_at(kPolyTrack, 4));
-    CHECK_EQ(int(step_of(kPolyTrack, 4).note), 62);
-    CHECK_EQ(int(step_of(kPolyTrack, 4).chord), int(chord_pack(ChordType::min7, 0)));
+    uint8_t notes[kStepMaxNotes];
+    CHECK_EQ(polyrec_notes(4, notes), 1);
+    CHECK_EQ(int(notes[0]), 62);
+    CHECK_EQ(int(step_of(kPolyTrack, 4).chord), 0);
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(app_engine().pattern(), kPolyTrack, 4, 3, value));
+    CHECK_EQ(int(value), 99);
     polyrec_off(app, 62);
     polyrec_stop();
 }
 
-TEST(polyrec_a_different_pitch_on_a_later_pass_replaces_and_the_same_pitch_rewrites) {
-    // Overdub is replace: a second pass's note on a step with a note takes its place, whatever
-    // its pitch. The same pitch again keeps the note and takes the new velocity.
+TEST(polyrec_replace_a_later_pass_takes_the_step_over_whatever_its_pitch) {
+    // REPLACE: the first note of a new pass on a step clears what the last pass left, and the
+    // notes played with it in that pass join it.
     Strata &app = polyrec_start(96);
     polyrec_on(app, 60, 100);
+    polyrec_on(app, 64, 100);
     polyrec_off(app, 60);
+    polyrec_off(app, 64);
     const int at = polyrec_only_step();
     CHECK(at >= 0);
 
-    // The next pass, same step (a track's length in steps, 24 ticks each).
-    const uint32_t loop = uint32_t(app_engine().pattern().tracks[kPolyTrack].length) * 24u;
-    FakeHost::the().set_position(96 + loop);
+    FakeHost::the().set_position(96 + polyrec_loop_ticks());   // the next pass, same step
     pump(2);
     polyrec_on(app, 65, 70);
+    polyrec_on(app, 69, 60);
     polyrec_off(app, 65);
+    polyrec_off(app, 69);
     CHECK_EQ(polyrec_trigs(), 1);
-    CHECK_EQ(int(step_of(kPolyTrack, at).note), 65);
+    uint8_t notes[kStepMaxNotes];
+    CHECK_EQ(polyrec_notes(at, notes), 2);
+    CHECK_EQ(int(notes[0]), 65);
+    CHECK_EQ(int(notes[1]), 69);
     CHECK_EQ(int(step_of(kPolyTrack, at).velocity), 70);
 
+    // The same pitch again in the same pass: still the two notes, at its new velocity.
     polyrec_on(app, 65, 40);
     polyrec_off(app, 65);
-    CHECK_EQ(int(step_of(kPolyTrack, at).note), 65);
+    CHECK_EQ(polyrec_notes(at, notes), 2);
     CHECK_EQ(int(step_of(kPolyTrack, at).velocity), 40);
     polyrec_stop();
 }
 
-TEST(polyrec_only_the_note_the_step_kept_gives_it_a_length) {
-    // C held four steps, E one: the step keeps E (played last), so E's key-up is the one that
-    // sets LEN and C's longer hold is dropped.
+TEST(polyrec_add_a_later_pass_adds_its_notes_to_the_step) {
+    // ADD: nothing a pass played is taken away. C on the first pass, E on the second, G on the
+    // third: one step, three notes, at the loudest velocity.
+    Strata &app = polyrec_start(96);
+    menu_toggle(kMenuRecMode);
+    pump(2);
+    CHECK(app_engine().project().settings.rec_add);
+    polyrec_on(app, 60, 100);
+    polyrec_off(app, 60);
+    const int at = polyrec_only_step();
+    CHECK(at >= 0);
+    for (int pass = 1; pass <= 2; pass++) {
+        FakeHost::the().set_position(96 + uint32_t(pass) * polyrec_loop_ticks());
+        pump(2);
+        const uint8_t note = pass == 1 ? 64 : 67;
+        polyrec_on(app, note, 90);
+        polyrec_off(app, note);
+    }
+    uint8_t notes[kStepMaxNotes];
+    CHECK_EQ(polyrec_notes(at, notes), 3);
+    CHECK_EQ(int(notes[0]), 60);
+    CHECK_EQ(int(notes[1]), 64);
+    CHECK_EQ(int(notes[2]), 67);
+    CHECK_EQ(int(step_of(kPolyTrack, at).velocity), 100);
+
+    // And back to REPLACE from the menu.
+    menu_toggle(kMenuRecMode);
+    pump(2);
+    CHECK(!app_engine().project().settings.rec_add);
+    polyrec_stop();
+}
+
+TEST(polyrec_the_last_key_up_of_a_chord_gives_it_its_length) {
+    // C held four steps, E one: every note of the chord is the step's, so each key-up sets
+    // LEN in turn and the last one up -- C's four steps -- is what the chord keeps.
     Strata &app = polyrec_start(96);
     FakeHost &host = FakeHost::the();
     polyrec_on(app, 60, 100);
@@ -11095,6 +11167,40 @@ TEST(polyrec_only_the_note_the_step_kept_gives_it_a_length) {
     CHECK_EQ(int(step_of(kPolyTrack, at).length), 8);    // one step
     host.set_position(96 + 4 * 24);
     polyrec_off(app, 60);
-    CHECK_EQ(int(step_of(kPolyTrack, at).length), 8);    // C is not the step's note
+    CHECK_EQ(int(step_of(kPolyTrack, at).length), 12);   // four steps
+    polyrec_stop();
+}
+
+TEST(polyrec_a_mono_track_keeps_one_note_a_step) {
+    // VA MONO plays one note, so a chord played into it is what it always was: the last note.
+    Strata &app = polyrec_start(96);
+    CHECK_EQ(int(app_engine().machine_id(kMonoTrack)), int(MachineId::va_mono));
+    polyrec_on(app, 48, 100, kMonoTrack);
+    polyrec_on(app, 52, 100, kMonoTrack);
+    const int at = polyrec_only_step(kMonoTrack);
+    CHECK(at >= 0);
+    uint8_t notes[kStepMaxNotes];
+    CHECK_EQ(polyrec_notes(at, notes, kMonoTrack), 1);
+    CHECK_EQ(int(notes[0]), 52);
+    polyrec_off(app, 48, kMonoTrack);
+    polyrec_off(app, 52, kMonoTrack);
+    polyrec_stop();
+}
+
+TEST(polyrec_a_new_take_does_not_join_the_last_one) {
+    // REC off and on again, transport restarted at the same place: the pass count starts again
+    // at 0, so the step is replaced, not joined, by the new take's first note.
+    Strata &app = polyrec_start(96);
+    polyrec_on(app, 60, 100);
+    polyrec_off(app, 60);
+    const int at = polyrec_only_step();
+    key(ENAGA_KEY_F2);                                   // REC off
+    key(ENAGA_KEY_F2);                                   // and on: a new take
+    pump(2);
+    polyrec_on(app, 62, 100);
+    polyrec_off(app, 62);
+    uint8_t notes[kStepMaxNotes];
+    CHECK_EQ(polyrec_notes(at, notes), 1);
+    CHECK_EQ(int(notes[0]), 62);
     polyrec_stop();
 }

@@ -518,6 +518,7 @@ const Expect kTable[] = {
     // The live-record quantize amount. PROJECT.BIN has had a field for it since M4 and nothing
     // wrote it: the value lived in `app/` alone and went back to 100 on every restart.
     {Cmd::set_quantize, kDirtyProject, "set_quantize"},
+    {Cmd::set_rec_mode, kDirtyProject, "set_rec_mode"},
     {Cmd::restart, 0u, "restart"},
     // The chain's entries are PROJECT.BIN's second section.
     {Cmd::chain_edit, kDirtyProject, "chain_edit"},

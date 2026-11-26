@@ -614,7 +614,7 @@
         out = line;
         if (rec_) {
             p = part;
-            append(p, "REC Q");
+            append(p, rec_add() ? "REC+ Q" : "REC Q");   // REC+: REC MODE ADD
             append_number(p, uint32_t(quantize()));
             append(p, " ");
             *p = 0;
