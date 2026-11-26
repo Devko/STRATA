@@ -43,6 +43,7 @@ export function releaseUrl(repo, tag) {
 
 async function verified(fetchAsset, id, expected, label) {
   const bytes = await fetchAsset(id);
+  if (expected === undefined) return bytes; // only Enaga's LICENSE of an unpinned release
   const got = await sha256Hex(bytes);
   if (got !== expected) {
     throw new Error(`${label}: the download does not match its published SHA-256 (got ${got.slice(0, 12)}..., expected ${expected.slice(0, 12)}...)`);
@@ -82,6 +83,7 @@ export async function buildCard({ manifest, strataVersion, includeFirmware, fetc
 
   onStep(`Downloading Enaga ${strata.enaga}'s licence from ${REPOS.enaga}`);
   const enagaLicence = await verified(fetchAsset, assetId("enaga", strata.enaga) + "-license", enaga.license_sha256, `Enaga ${strata.enaga}'s LICENSE`);
+  if (!dec.decode(enagaLicence.subarray(0, 200)).includes("License")) throw new Error(`Enaga ${strata.enaga}'s LICENSE does not look like a licence`);
 
   let firmware = null;
   if (includeFirmware) {

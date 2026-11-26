@@ -74,7 +74,9 @@ async function build() {
 
 async function init() {
   try {
-    const r = await fetch("compat.json", { cache: "no-cache" });
+    // The live list from GitHub; the pinned list in compat.json if the site's API is not there.
+    let r = await fetch("api/releases").catch(() => null);
+    if (!r || !r.ok) r = await fetch("compat.json", { cache: "no-cache" });
     manifest = await r.json();
   } catch (err) {
     select.replaceChildren(new Option("Could not load the release list"));

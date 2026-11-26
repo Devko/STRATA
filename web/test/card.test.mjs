@@ -8,6 +8,29 @@ import { readFileSync } from "node:fs";
 import { readZip, writeZip, crc32, sha256Hex } from "../public/zip.js";
 import { buildCard, allowedAssets, assetId } from "../public/card.js";
 import { onRequestGet } from "../functions/api/asset/[id].js";
+import { liveManifest, enagaFromBody, clearCache } from "../lib/releases.js";
+
+// No test reaches the network: GitHub's API answers from `api` here, or fails.
+let api = null;
+const realFetch = globalThis.fetch;
+function withFetch(fn) {
+  return async () => {
+    clearCache();
+    try { await fn(); } finally { globalThis.fetch = realFetch; api = null; clearCache(); }
+  };
+}
+function mockGitHub(downloads = () => new Response("not mocked", { status: 599 })) {
+  const asked = [];
+  globalThis.fetch = async (url) => {
+    asked.push(url);
+    if (url.startsWith("https://api.github.com/")) {
+      const body = api?.[url.replace("https://api.github.com", "")];
+      return body === undefined ? new Response("{}", { status: 403 }) : new Response(JSON.stringify(body));
+    }
+    return downloads(url);
+  };
+  return asked;
+}
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -181,7 +204,8 @@ test("compat.json: the newest STRATA release needs the Enaga that STRATA pins", 
   assert.equal(manifestFile.strata[0].enaga, `${m[1]}.${m[2]}.${m[3]}`);
 });
 
-test("the proxy serves only listed files", async () => {
+test("the proxy serves only listed files", withFetch(async () => {
+  mockGitHub();
   const r = await onRequestGet({ params: { id: "evil" } });
   assert.equal(r.status, 404);
   const proto = await onRequestGet({ params: { id: "__proto__" } });
@@ -190,25 +214,93 @@ test("the proxy serves only listed files", async () => {
   assert.ok(ids.includes(assetId("strata", manifestFile.strata[0].version)));
   assert.ok(ids.includes(assetId("enaga", manifestFile.strata[0].enaga)));
   assert.ok(ids.includes(assetId("enaga", manifestFile.strata[0].enaga) + "-license"));
-});
+}));
 
-test("the proxy fetches the official GitHub download URL and streams it", async () => {
-  const real = globalThis.fetch;
+test("the proxy fetches the official GitHub download URL and streams it", withFetch(async () => {
   let asked = null;
-  globalThis.fetch = async (url) => { asked = url; return new Response(new Uint8Array([1, 2, 3]), { headers: { "content-length": "3" } }); };
-  try {
+  const respond = (r) => mockGitHub((url) => { asked = url; return r(); });
+  respond(() => new Response(new Uint8Array([1, 2, 3]), { headers: { "content-length": "3" } }));
+  {
     const r = await onRequestGet({ params: { id: "enaga-0.3.0" } });
     assert.equal(r.status, 200);
     assert.equal(asked, "https://github.com/seawaffle/enaga/releases/download/v0.3.0/enaga-v0.3.0-smpltrek.zip");
     assert.deepEqual([...new Uint8Array(await r.arrayBuffer())], [1, 2, 3]);
     await onRequestGet({ params: { id: "enaga-0.3.0-license" } });
     assert.equal(asked, "https://raw.githubusercontent.com/seawaffle/enaga/v0.3.0/LICENSE");
-    globalThis.fetch = async () => new Response("MIT", { headers: { "content-length": "99", "content-encoding": "gzip" } });
+    respond(() => new Response("MIT", { headers: { "content-length": "99", "content-encoding": "gzip" } }));
     const gz = await onRequestGet({ params: { id: "enaga-0.3.0-license" } });
     assert.equal(gz.headers.get("content-length"), null, "an encoded length must not reach the browser");
-    globalThis.fetch = async () => new Response("nope", { status: 404 });
+    respond(() => new Response("nope", { status: 404 }));
     assert.equal((await onRequestGet({ params: { id: "strata-0.4.0" } })).status, 502);
-  } finally {
-    globalThis.fetch = real;
   }
+}));
+
+const sha = (c) => c.repeat(64);
+function release(version, { body = "", digest = sha("a"), draft = false, asset = `STRATA-v${version}-smpltrek.zip` } = {}) {
+  return { tag_name: `v${version}`, draft, body, published_at: "2027-01-02T03:04:05Z",
+    assets: [{ name: asset, digest: digest && `sha256:${digest}` }, { name: `${asset}.sha256`, digest: `sha256:${sha("f")}` }] };
+}
+
+test("enagaFromBody reads the release body's marker, and only a version", () => {
+  assert.equal(enagaFromBody('notes\n<!-- strata-card: {"enaga":"0.4.1"} -->\n'), "0.4.1");
+  assert.equal(enagaFromBody("no marker"), null);
+  assert.equal(enagaFromBody('<!-- strata-card: {"enaga":"../evil"} -->'), null);
+  assert.equal(enagaFromBody("<!-- strata-card: {broken} -->"), null);
 });
+
+test("a new release appears from GitHub with its digest and its marked Enaga", withFetch(async () => {
+  api = {
+    "/repos/Devko/STRATA/releases?per_page=100": [
+      release("0.5.0", { body: '<!-- strata-card: {"enaga":"0.4.0"} -->', digest: sha("b") }),
+      release("0.4.0", { digest: manifestFile.strata[0].sha256 }),
+      release("0.3.9", { body: "no marker, not pinned" }),
+      release("0.3.8", { body: '<!-- strata-card: {"enaga":"0.3.0"} -->', draft: true }),
+      release("0.3.7", { body: '<!-- strata-card: {"enaga":"0.3.0"} -->', digest: null }),
+    ],
+    "/repos/seawaffle/enaga/releases/tags/v0.4.0": { draft: false, assets: [{ name: "enaga-v0.4.0-smpltrek.zip", digest: `sha256:${sha("c")}` }] },
+  };
+  mockGitHub();
+  const m = await liveManifest();
+  assert.equal(m.source, "github");
+  assert.deepEqual(m.strata.map((s) => s.version), ["0.5.0", "0.4.0"]);
+  assert.deepEqual(m.strata[0], { version: "0.5.0", tag: "v0.5.0", date: "2027-01-02", asset: "STRATA-v0.5.0-smpltrek.zip", sha256: sha("b"), enaga: "0.4.0" });
+  assert.equal(m.strata[1].enaga, "0.3.0", "pinned releases keep their pinned Enaga");
+  assert.deepEqual(m.enaga["0.4.0"], { tag: "v0.4.0", asset: "enaga-v0.4.0-smpltrek.zip", sha256: sha("c") });
+  assert.deepEqual(m.enaga["0.3.0"], manifestFile.enaga["0.3.0"]);
+  const ids = Object.keys(allowedAssets(m));
+  assert.ok(ids.includes("strata-0.5.0") && ids.includes("enaga-0.4.0") && ids.includes("enaga-0.4.0-license"));
+}));
+
+test("a pinned release whose GitHub digest changed is not offered", withFetch(async () => {
+  api = { "/repos/Devko/STRATA/releases?per_page=100": [release("0.4.0", { digest: sha("d") }), release("0.3.1", { digest: manifestFile.strata[1].sha256 })] };
+  mockGitHub();
+  assert.deepEqual((await liveManifest()).strata.map((s) => s.version), ["0.3.1"]);
+}));
+
+test("a release whose Enaga cannot be found is not offered", withFetch(async () => {
+  api = { "/repos/Devko/STRATA/releases?per_page=100": [release("0.5.0", { body: '<!-- strata-card: {"enaga":"9.9.9"} -->' }), release("0.4.0", { digest: manifestFile.strata[0].sha256 })] };
+  mockGitHub();
+  assert.deepEqual((await liveManifest()).strata.map((s) => s.version), ["0.4.0"]);
+}));
+
+test("without GitHub's API the pinned list is served", withFetch(async () => {
+  mockGitHub();
+  const m = await liveManifest();
+  assert.equal(m.source, "pinned");
+  assert.deepEqual(m.strata, manifestFile.strata);
+}));
+
+test("GitHub's answer is cached, so the API is asked once", withFetch(async () => {
+  api = { "/repos/Devko/STRATA/releases?per_page=100": [release("0.4.0", { digest: manifestFile.strata[0].sha256 })] };
+  const asked = mockGitHub();
+  await liveManifest();
+  await liveManifest();
+  assert.equal(asked.filter((u) => u.includes("/repos/Devko/STRATA/releases")).length, 1);
+}));
+
+test("a GITHUB_TOKEN, if the site has one, goes to GitHub's API only", withFetch(async () => {
+  const seen = [];
+  globalThis.fetch = async (url, init) => { seen.push([url, init?.headers?.authorization]); return new Response("[]"); };
+  await liveManifest({ GITHUB_TOKEN: "t0ken" });
+  assert.deepEqual(seen, [["https://api.github.com/repos/Devko/STRATA/releases?per_page=100", "Bearer t0ken"]]);
+}));

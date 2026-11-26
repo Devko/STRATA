@@ -2,17 +2,17 @@
 //
 // GitHub's release downloads send no CORS headers, so a page cannot fetch them itself. This
 // passes one official release file through, as it streams from GitHub: nothing is stored,
-// rewritten or cached here beyond the browser's own cache. It serves only the files listed in
-// public/compat.json, so it is not an open proxy, and the page checks every byte against the
-// SHA-256 listed there before using it.
+// rewritten or cached here beyond the browser's own cache. It serves only the files of the
+// releases that /api/releases offers (lib/releases.js), always from the two STRATA and Enaga
+// repositories, so it is not an open proxy, and the page checks every zip against its SHA-256
+// before using it.
 
-import manifest from "../../../public/compat.json" with { type: "json" };
+import { liveManifest } from "../../../lib/releases.js";
 import { allowedAssets } from "../../../public/card.js";
 
-const ALLOWED = allowedAssets(manifest);
-
-export async function onRequestGet({ params }) {
-  const a = Object.hasOwn(ALLOWED, params.id) ? ALLOWED[params.id] : null;
+export async function onRequestGet({ params, env }) {
+  const allowed = allowedAssets(await liveManifest(env ?? {}));
+  const a = Object.hasOwn(allowed, params.id) ? allowed[params.id] : null;
   if (!a) return new Response("unknown file\n", { status: 404, headers: { "content-type": "text/plain" } });
 
   const url = a.url;
