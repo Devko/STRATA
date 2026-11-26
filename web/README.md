@@ -58,21 +58,18 @@ too, if wrangler is installed.
 
 ## Deploying (Cloudflare Pages)
 
-Either connect the repository, which redeploys on every push to `main`:
-
-1. Cloudflare dashboard, **Workers & Pages**, **Create**, **Pages**, **Connect to Git**, pick
-   `Devko/STRATA`.
-2. Production branch `main`. Framework preset **None**. Build command: empty. Build output
-   directory: `public`. **Root directory: `web`**. (The function in `web/functions/` is found
-   automatically.)
-3. After the first deploy: the project's **Custom domains**, add the subdomain (for example
-   `strata.einblick.dev`). With `einblick.dev` on Cloudflare DNS the record is created for you.
-
-Or deploy from a computer with wrangler, after `npx wrangler login` once:
+The site is deployed by hand with wrangler from Roland's PC. The repository is deliberately not
+connected to Cloudflare (decided 2026-11-26), so a merge does not redeploy: deploy again after
+`compat.json` or the page changes reach `main`.
 
 ```sh
 cd web
+npx wrangler login               # once per machine, approved in the browser
 npx wrangler pages deploy        # reads wrangler.toml: project strata-card, output public/
 ```
 
-No secrets or environment variables are needed: everything it downloads is public.
+Run it from `web/` so that `functions/` is bundled with the page. The first deploy needs the
+project: `npx wrangler pages project create strata-card --production-branch main`. The custom
+domain is added once in the dashboard: Workers & Pages, `strata-card`, Custom domains (wrangler
+has no command for it). No secrets or environment variables are needed: everything the site
+downloads is public.

@@ -71,8 +71,9 @@ What it does, refusing at the first thing that is wrong:
       its version, date, the zip's SHA-256 (the `.sha256` file on the release page) and the Enaga
       version it needs. A new Enaga version also needs its own entry under `"enaga"`, with the
       SHA-256 of `enaga-vX.Y.Z-smpltrek.zip` as downloaded from Enaga's release.
-      `cd web && npm test` checks the list. The site redeploys when that reaches `main`
-      ([web/README.md](../../web/README.md)).
+      `cd web && npm test` checks the list. Once that is on `main`, deploy the site from
+      `web/` with `npx wrangler pages deploy` ([web/README.md](../../web/README.md)); it is
+      not connected to the repository, so nothing redeploys by itself.
 - [ ] Optional, and worth it: download the zip from the release page, unzip it onto a freshly
       formatted card, install, and play A01.
 
