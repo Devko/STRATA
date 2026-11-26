@@ -202,6 +202,14 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Changed
 
+- **The last text-list screens are drawn too.** RESAMPLE has a level meter in segments, draws the
+  take column by column while it records and shows its length as a bar of its bars. SAMPLES keeps
+  six rows and shows the file being heard as a tape under a playhead (its time and rate), or the
+  track's own file with its window. SOUNDS draws the preset under the cursor as twenty bars against
+  the track's knobs. CHAIN is the song as blocks on a lane with the playhead, KITS draws each slot's
+  eight machines as MACHINE's pictures, KEYS shows the held notes, the chord they make and the four
+  knobs as gauges, and PATTERN's track swing is eight bars. MENU, SETUP and PROJECTS no longer repeat
+  the screen's name under its toast; HELP's title is a lit band.
 - **The pattern and machine screens are pictures.** PROJECT's slots show all 128 patterns as a
   map, a block of 4 x 4 per bank: which hold a pattern, which plays and which is queued (it blinks),
   in every bank at once. Under it the shown bank's sixteen are drawn as their steps, eight track

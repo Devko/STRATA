@@ -127,16 +127,32 @@ of grains; MNO a saw; PLY three saws stacked; MID a five-pin socket; WMN and WPL
 turning from sine to square (four for WPL); FM4 four operators, the last with its feedback loop.
 They are drawn from their shapes and do not move.
 
-## The other screens
+## RESAMPLE, the browsers, CHAIN, KITS, KEYS, PATTERN (app/ui_listview.hpp)
 
-Lists (KIT, SOUNDS, SAMPLES, PROJECTS, MENU, the slot menu, CHAIN, PATTERN) and the setting screens
-(SETUP, RESAMPLE, KEYS, PROJECT's other pages, name entry) keep their rows in Enaga's font, which
-reads at arm's length, in the drafts' language around them: the caption in the small font at
-y 18, the cursor's row a lit bar with its text dark (`list_row`), hints in the small font at
-y 97, 105 and 113. CHAIN draws the song as a strip (y 92): each entry as wide as its repeats, the
-cursor's outlined, the playing one lit. The step page draws the track's lane (y 84) with the
-step bracketed and its note on it: LEN long, MICR off the grid, as bright as VEL, dimmer under
-PROB, RTCH's hits as notches.
+The screens that were text lists until #175. Lists keep their rows in Enaga's font, which reads at
+arm's length, with the cursor's row a lit bar (`list_row`); everything around them is the drafts'.
+No caption repeats the screen's name: the tab says it, and so does the toast on the way in.
+
+| Screen | Rows |
+| --- | --- |
+| RESAMPLE | 18 where the take goes (`TO FILE`, `TO TRK 3 SMP`, `PUT ON TRK 8 SMP`), its state at the right (`ARMED` blinking with the clock's eighths, `REC 45%` lit, `WRITING`); 25 B and the source, C and the input's level, A and the length; 31-37 the source's level as 26 segments over the top 48 dB, the dB (or CLIP lit) at the right, the scale at 40; 46-88 the take drawn as it is recorded, a column a 120th of it from the source's level (bright while recording, grey once written, a bright head), bar lines dotted; before the first take the source's last 120 frames roll by dim (only while the beat plays or the reading moves, so a silent stopped screen holds still); 92-95 the take's length as a block a bar, filled as it records; 99 the last take, SHORTENED or what is wrong with the input, the length in seconds at the right; 105 and 113 the keys |
+| SAMPLES | 18 the folder's tail (or READING, an error, the loading), the cursor's place at the right; 26-71 six entries; the preview from 76: while a file is heard, `HEAR` lit, its name, `3/12S 44.1K`, and the file as a tape of seconds (rows 88-99) lit as far as it is heard under a bright head; else the track's file: its name, length and rate, and its picture about y 95 (amp 10), START..END bright with their lines, the voices as columns |
+| SOUNDS | 18 `INTO T1 KCK ONLY`, the cursor's place at the right; 26-71 six presets; 77 the preset's name and whether it is the one playing; 81-104 its twenty knobs as bars, page by page (SRC FLT AMP ASR OSC, labels at 106), the track's own value a tick where it differs; a page the machine does not read dotted |
+| CHAIN | 18 entries and SONG or LOOP, `ON` lit while the chain plays; 24-26 the whole song as a strip, each entry as long as its passes; 31-60 the lane: each entry a block as long as its passes (6 + steps/4 px a pass, 15-120), its pattern, `X2` and `M3` in it, the passes dotted, the cursor's framed bright, the playing one filled as far as it has got with the playhead; the song's end a double bar; 66 the cursor's entry (number lit, pattern and repeats in Enaga's font); 77-91 its pattern's steps (read once when the cursor moves onto it) and the mute state it recalls as eight boxes (hollow: muted); 105 and 113 the keys |
+| KITS | 18 the page of slots, what the card is doing at the right; eight slots 11 px apart from 25: the number and the kit's eight machines as MACHINE's pictures (drawn once into a cache, `build_kit_icons`); the cursor's row lit with the machines' names; an empty slot a dotted line (the cursor's says how to save there); 113 the keys |
+| KEYS | 18 the key and scale, OCT at the right; 25-54 the pads as a keyboard (held pads white); 61 the held notes, lowest first, and the chord they make lit at the right (`C MAJ`, `A MIN7`); 72 the EDIT page A-D turn here; 77-110 its four knobs as gauges, name under, value under that; 113 which sixteen steps the STEP keys are |
+| PATTERN | 18 the live pattern; 26, 35, 44 LEN, SWG and FEEL as rows, SWG drawn at the right as a beat of sixteenths with the off-beats late; 55 `TRACK SWING`; 62-109 eight bars, 6 px a track: number, machine, a bar from 50% to the track's swing (75% at x 104), PAT ones dim at the pattern's swing, which is a dotted line down the bars; the value at the right; the cursor's row lit |
+
+MENU, SETUP and PROJECTS have no caption that names them: MENU's rows start at y 20 (nine of
+them), SETUP's caption is the device and `DRW` (Enaga's font, which the input audit masks as a
+live reading), PROJECTS' is the open project (or the delete question, lit) with the cursor's place
+at the right and `OPEN` on the open project's row. HELP's title is a lit band where the toasts go,
+its page count small at 113. The step page draws the track's lane (y 84) with the step bracketed
+and its note on it: LEN long, MICR off the grid, as bright as VEL, dimmer under PROB, RTCH's hits
+as notches.
+
+There is no boot screen of STRATA's own: Enaga's loader draws until init() returns, and the first
+frame STRATA draws is GRID.
 
 GRID and PERFORM are as #171 left them (Roland, 2026-11-26: "the sequencer is already good",
 "performance also looks good").

@@ -992,6 +992,11 @@ private:
     int take_wave_cols_ = 0;
     uint8_t take_seen_state_ = 0;
     uint32_t history_level_ = 0;       // the reading the history last rolled on
+    // KITS: each machine's picture drawn once (build_kit_icons), and the strip it is drawn in.
+    static constexpr int kIconStripRows = 24;
+    uint8_t icon_strip_[128 * kIconStripRows] = {};
+    uint8_t kit_icons_[int(MachineId::count)][14 * 8] = {};
+    bool kit_icons_built_ = false;
     // CHAIN: the cursor entry's pattern as PROJECT's tiles draw one, and which pattern it is.
     uint8_t chain_thumb_[16] = {};
     int chain_thumb_key_ = -1;

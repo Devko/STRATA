@@ -764,7 +764,38 @@
     // each its number and its eight machines as MACHINE's pictures; the cursor's row lit with the
     // machines' names; an empty slot its number and a dotted line; the keys at 113.
 
+    // KITS draws up to 64 machine pictures a frame; drawn from their shapes that would cost
+    // more than MACHINE's whole screen. They never change, so each is drawn once, at 12 x 6 in
+    // KITS' grey, into a strip off the canvas (with room for the lines' anti-aliased edges) and
+    // kept as 14 x 8 greys; KITS lays the copies down, brighter winning.
+    static constexpr int kIconW = 14, kIconH = 8;
+
+    void build_kit_icons() {
+        if (kit_icons_built_) return;
+        kit_icons_built_ = true;
+        for (int m = 0; m < int(MachineId::count); m++) {
+            for (int i = 0; i < 128 * kIconStripRows; i++) icon_strip_[i] = 0;
+            // At (1, 9) in a 24-row strip: nine rows of slack on either side of the 6, far more than
+            // any picture strays (a line's edge, a burst of noise); paint clips only to 128 rows.
+            machine_icon(icon_strip_, uint8_t(m), 1, 9, 12, 6, 10);
+            for (int y = 0; y < kIconH; y++) {
+                for (int x = 0; x < kIconW; x++) kit_icons_[m][y * kIconW + x] = icon_strip_[(y + 8) * 128 + x];
+            }
+        }
+    }
+
+    void blit_kit_icon(uint8_t *px, uint8_t machine, int x, int y) const {
+        if (machine >= uint8_t(MachineId::count)) return;
+        for (int j = 0; j < kIconH; j++) {
+            for (int i = 0; i < kIconW; i++) {
+                const uint8_t g = kit_icons_[machine][j * kIconW + i];
+                if (g != 0) paint::plot_max(px, x - 1 + i, y - 1 + j, g);
+            }
+        }
+    }
+
     void draw_kit(enaga::Canvas &canvas) {
+        build_kit_icons();
         uint8_t *px = canvas.data();
         char line[40];
         char *out = line;
@@ -807,7 +838,7 @@
                         if (here) {
                             paint::small_text(px, x, y + 3, machine_name(info.machines[t]), 0);
                         } else {
-                            machine_icon(px, info.machines[t], x, y + 2, 12, 6, 10);
+                            blit_kit_icon(px, info.machines[t], x, y + 2);
                         }
                     }
                     break;

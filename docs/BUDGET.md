@@ -122,10 +122,15 @@ draw() now times itself over 64 frames (app/ui_screen.hpp, `count_draw_time`): S
 | MIXER desk (eight strips) / REV's tail / EQ's curve over the spectrum | **0.32 / 0.78 / 1.39 ms** | emulator, cl6x, no caches |
 | PROJECT's slots: the 128-pattern map (a bank read a frame), sixteen tiles of steps (five read a frame) | **1.28 ms** | emulator, cl6x, no caches |
 | MACHINE: the kit's eight pictures and the twelve machines' | **2.50 ms** | emulator, cl6x, no caches |
+| KITS with four kits stored: 32 machine pictures, each drawn once into a cache (`build_kit_icons`) and copied | **0.73 ms** | emulator, cl6x, no caches |
 
 `scenario_visuals` runs the emulator twice from part 6 on, once ending on PERFORM and the LFO page
 and once on MST, because the draw log comes once a run; four times since the PROJECT and MACHINE
-redesign, which added a run ending on each.
+redesign, which added a run ending on each; five since the last list screens were redrawn (a run
+ending on KITS, the most pictures any of them draws). In that run, with all 41 scenarios passing
+with cl6x (worst 32.24%, ambient, as on #175's branch), PERFORM read 1.60 ms, MST 1.31, PROJECT
+1.29, MACHINE 2.42. The other redrawn screens (RESAMPLE, the browsers, CHAIN, KEYS, PATTERN) draw
+rects, small text and four gauges at most: less than KITS or PERFORM.
 
 Part 3 is draw-side only: all 36 scenarios pass with cl6x, `ambient` read 31.54% against
 31.16% for part 2 in an earlier run of the same session, the usual +-0.5 of where the peak
