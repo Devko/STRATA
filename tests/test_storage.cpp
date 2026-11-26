@@ -499,6 +499,9 @@ const Expect kTable[] = {
     {Cmd::set_lfo_trig, kDirtyKit, "set_lfo_trig"},
     {Cmd::set_mod_slot, kDirtyKit, "set_mod_slot"},
     {Cmd::set_choke, kDirtyKit, "set_choke"},
+    // The metronome and a count-in are the player's, not the project's: nothing on the card.
+    {Cmd::set_click, 0u, "set_click"},
+    {Cmd::count_in, 0u, "count_in"},
     // A pad's pressure is played, like a note: nothing on the card.
     {Cmd::set_pressure, 0u, "set_pressure"},
 

@@ -87,6 +87,7 @@ bool Engine::init(float sample_rate) {
     // Every allocation in the signal path happens here and nowhere else. The machines are
     // initialised below, where the pool is: every track owns one of every machine.
     mixer_.init(rate_);
+    click_.init(rate_);
 
     // Beat repeat's 2-bar ring, 2.93 MiB, here with every other buffer in the signal path.
     if (!repeat_.init(rate_)) return false;
@@ -931,7 +932,20 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_click:
+            click_on_ = command.a != 0;
+            if (!click_on_ && count_in_end_ == 0) click_.stop();
+            break;
+
+        case Cmd::count_in:
+            // Posted just before the START it is for, so the clock may already read running
+            // here: it is not asked. The UI posts it only from stop (app/ui_input.hpp, F5).
+            count_in_end_ = uint32_t(command.a > 2 ? 2 : command.a) * kTicksPerBar;
+            break;
+
         case Cmd::restart:
+            // A restart is a jump to the pattern's start, not another count-in.
+            count_in_end_ = 0;
             // The position is the clock's, and it was moved to 0 by the main context. What is
             // left is everything measured from it: the pattern starts again at tick 0 with a
             // fresh pass count, ratchet hits still waiting would land after the jump, and the bar
@@ -3117,6 +3131,19 @@ void Engine::run_choke(int t, float *mono, uint32_t frames) {
     choke_gain_[t] = 1.0f;
 }
 
+// The metronome (engine.hpp): on every beat while CLICK is on, and on every beat of a count-in
+// whether it is or not. A bar's first beat is the higher click. Two modulos a tick, and only
+// while it clicks: control rate, as roll_tick's one (this chip divides integers in software).
+// The tick is the clock's own, and a count-in is whole bars, so the bars line up either way.
+void Engine::metronome_tick(uint32_t tick, uint32_t frame) {
+    const bool counting = tick < count_in_end_;
+    if (!click_on_ && !counting) return;
+    const uint32_t beat_ticks = uint32_t(enaga::clock::ppqn);
+    if (tick % beat_ticks != 0u) return;
+    const bool bar = tick % kTicksPerBar == 0u;
+    click_.trigger(frame, bar);
+}
+
 // --- the LFOs -------------------------------------------------------------
 //
 // Once per block, after the locks: each track whose LFO is on gets `modulated_`, its effective
@@ -3305,7 +3332,17 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // Re-derive only when the tempo actually moves: this is a float divide, which the C674x does
     // in hardware, but there is no reason to do it every block. (Integer division is the one to
     // avoid here -- this chip has no integer divide instruction at all.)
-    const enaga::clock::State clock_now = enaga::clock::state();
+    enaga::clock::State clock_now = enaga::clock::state();
+    // A STOP ends a count-in, whether it ran out or not: the next START is a plain one unless the
+    // UI arms another (Cmd::count_in).
+    if (was_running_ && !clock_now.running) {
+        count_in_end_ = 0;
+        click_.stop();
+    }
+    was_running_ = clock_now.running != 0;
+    // Everything below that follows the beat (the LFOs' sync, the master effects' phase) follows
+    // the pattern's position, which a count-in puts behind the clock's.
+    clock_now.position = clock_now.position > count_in_end_ ? clock_now.position - count_in_end_ : 0u;
     if (clock_now.tempo != tempo_) {
         tempo_ = clock_now.tempo;
         const float bpm = tempo_ > 1.0f ? tempo_ : 1.0f;
@@ -3330,13 +3367,19 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // Enaga's clock reports the ticks falling in this block, each with the frame it lands on.
     // That frame is what makes a step start on an exact sample.
+    //
+    // A count-in's ticks only click; after it, every tick is counted from its end, so the
+    // pattern starts at tick 0 as from a plain START (metronome_tick in engine.hpp).
     enaga::clock::Tick ticks[16];
     const uint32_t tick_count = enaga::clock::ticks(ticks, 16);
     for (uint32_t i = 0; i < tick_count; i++) {
-        resolve_tick(ticks[i].tick, ticks[i].frame);
-        roll_tick(ticks[i].tick, ticks[i].frame);
-        stutter_tick(ticks[i].tick, ticks[i].frame);
-        arp_tick(ticks[i].tick, ticks[i].frame);
+        metronome_tick(ticks[i].tick, ticks[i].frame);
+        if (ticks[i].tick < count_in_end_) continue;
+        const uint32_t tick = ticks[i].tick - count_in_end_;
+        resolve_tick(tick, ticks[i].frame);
+        roll_tick(tick, ticks[i].frame);
+        stutter_tick(tick, ticks[i].frame);
+        arp_tick(tick, ticks[i].frame);
     }
 
     // What the performance layer produced, into the values the machines read -- except where the
@@ -3535,6 +3578,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
             status_.audition_frame.store(audition_.position(), std::memory_order_relaxed);
         }
     }
+    // The metronome, beside the audition: for the player, never recorded (dsp/click.hpp).
+    if (click_.active()) click_.render_add(out, int(frames));
 
     status_.resample_state.store(capture_.done()        ? 3u
                                  : capture_.recording() ? 2u
@@ -3556,7 +3601,16 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // Publish for the UI. Relaxed stores of single words: the UI only ever wants the newest.
     const enaga::clock::State clock = enaga::clock::state();
-    status_.tick.store(clock.position, std::memory_order_relaxed);
+    // The pattern's position: the clock's less a count-in, and 0 while one is still clicking.
+    const bool counting = clock.running && clock.position < count_in_end_;
+    status_.tick.store(clock.position > count_in_end_ ? clock.position - count_in_end_ : 0u,
+                       std::memory_order_relaxed);
+    status_.count_in_beats.store(
+        counting ? uint8_t(float(count_in_end_ - clock.position) *
+                               (1.0f / float(enaga::clock::ppqn)) + 0.999f)
+                 : uint8_t(0),
+        std::memory_order_relaxed);
+    status_.count_in_ticks.store(count_in_end_, std::memory_order_relaxed);
     status_.running.store(clock.running ? 1u : 0u, std::memory_order_relaxed);
     status_.bump_blocks();
     waves_.audio_block();   // a WAVE slot taken out two blocks ago is no longer being read

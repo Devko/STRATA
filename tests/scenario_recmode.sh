@@ -4,7 +4,7 @@
 #
 #   PLAY
 #   F2                       -> REC on
-#   FUNC + HOME, UP x5       -> the FUNC menu, round from SAVE to REC MODE (above FX GLIDE)
+#   FUNC + HOME, UP x7       -> the FUNC menu, round from SAVE to REC MODE (above CLICK)
 #   OK                       -> "REC ADDS NOTES", the row drawn with ADD
 #   OK                       -> "REC REPLACES"
 #   CLR                      -> back
@@ -49,10 +49,10 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 26@360000000 \
     --key 19@420000000 --key 27@425000000 \
     --key 17@480000000 --key 17@520000000 --key 17@560000000 --key 17@600000000 \
-    --key 17@640000000 \
-    --key 23@700000000 \
+    --key 17@640000000 --key 17@680000000 --key 17@720000000 \
     --key 23@780000000 \
-    --key 30@860000000 \
+    --key 23@860000000 \
+    --key 30@940000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2

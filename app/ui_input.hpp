@@ -515,7 +515,15 @@
                     notice("RESTART");
                     break;
                 }
-                clock_refused_ = !enaga::clock::start();
+                {
+                    // COUNT-IN: a PLAY from stop with REC on clicks its bars first. Posted BEFORE
+                    // the start, so the audio side has it for the first tick; taken back if the
+                    // clock refused (an outside source starts it, and then there is none).
+                    const bool count = rec_ && count_in_bars_ != 0 && !enaga::clock::running();
+                    if (count) post(Cmd::count_in, 0, 0, count_in_bars_);
+                    clock_refused_ = !enaga::clock::start();
+                    if (count && clock_refused_) post(Cmd::count_in, 0, 0, 0);
+                }
                 stop_armed_ = false;
                 post(Cmd::play);                       // for the audio side's trace only
                 break;

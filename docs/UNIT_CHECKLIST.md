@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W46, about 140 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W47, about 143 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -546,6 +546,16 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   cuts the hats. Listen for clicks at the cut: there should be none. Push B four more times: back
   to `T6 CHOKE OFF`, the bass rings over the hats again. `____`
 - Save the project, load another and back: T3 and T4 still say `C1`. `____`
+
+**W47. CLICK and COUNT-IN (3 min).** Beat stopped, A01.
+- FUNC + HOME, UP six times: CLICK. OK: `CLICK ON`. PLAY: a click on every beat over the beat, the
+  first of each bar higher. It sits on the kick, not before or after it. RESAMPLE a bar: the take
+  has no click in it. `____`
+- STOP. In the menu, DOWN to COUNT-IN, OK: `COUNT-IN 1 BAR`. CLR. REC on, PLAY: four clicks
+  (`COUNT-IN 4` .. `1`), then the beat starts on step 1 on the next beat. Hit pads during the
+  clicks: nothing is recorded. Hit them after: they land where played. `____`
+- CLICK OFF, COUNT-IN `2 BAR`, REC, PLAY: eight clicks even with CLICK off, then the beat. STOP
+  during the clicks: silence, and the next PLAY without REC starts at once. `____`
 
 **W48. Chords recorded note for note (4 min).** Blank pattern, T7 (VA POLY), KEYS, PLAY, REC.
 - Hold three pads of a chord at once on one step: it plays back as all three. Hold STEP on it:

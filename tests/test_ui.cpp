@@ -277,8 +277,8 @@ void open_keys() {
 // The FUNC menu's rows, in order (app/app.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuPlay, kMenuChain, kMenuSong,
-                     kMenuAutofill, kMenuQuantize, kMenuRecMode, kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo,
-                     kMenuRowCount };
+                     kMenuAutofill, kMenuQuantize, kMenuRecMode, kMenuClick, kMenuCountIn,
+                     kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo, kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
 void menu_to(int row) {
@@ -8591,6 +8591,59 @@ TEST(ui_the_duck_pages_set_each_tracks_depth_the_source_and_the_times) {
     pump(2);
     CHECK_EQ(int(kit.duck.source), source);
     CHECK_EQ(int(kit.duck.release), release);
+}
+
+TEST(ui_click_and_count_in_rows_and_play_with_rec_counts_in) {
+    // The FUNC menu's CLICK flips, COUNT-IN walks OFF 1 BAR 2 BAR; PLAY from stop with REC on
+    // arms the count-in before it starts the clock, and without REC it does not.
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    FakeHost::the().set_running(false);
+    menu_to(kMenuClick);
+    CHECK(screen_has(app, "CLICK"));
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "CLICK ON") == 0);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN 1 BAR") == 0);
+    key(ENAGA_KEY_RIGHT);
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN 2 BAR") == 0);
+    key(ENAGA_KEY_RIGHT);
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN OFF") == 0);
+    key(ENAGA_KEY_OK);                         // OK steps on and round: 1 BAR
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN 1 BAR") == 0);
+    key(ENAGA_KEY_CLR);
+
+    // PLAY without REC: a plain start.
+    key(ENAGA_KEY_F5);
+    pump(2);
+    CHECK(FakeHost::the().running());
+    CHECK_EQ(int(engine.status().count_in_ticks.load()), 0);
+    key(ENAGA_KEY_F6);
+    pump(2);
+
+    // With REC: one bar of count-in, and the notice counts it down.
+    if (!UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    key(ENAGA_KEY_F5);
+    pump(2);
+    CHECK(FakeHost::the().running());
+    CHECK_EQ(int(engine.status().count_in_ticks.load()), int(kTicksPerBar));
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    app.update(1000);
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN 4") == 0);
+
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F6);
+    pump(2);
+    if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    menu_to(kMenuCountIn);
+    key(ENAGA_KEY_LEFT);                       // from 1 BAR back to OFF
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN OFF") == 0);
+    key(ENAGA_KEY_CLR);
+    menu_run(kMenuClick);
+    CHECK(std::strcmp(UiProbe::notice(app), "CLICK OFF") == 0);
+    key(ENAGA_KEY_CLR);
 }
 
 TEST(ui_push_on_the_fader_pages_steps_a_tracks_choke_group) {
