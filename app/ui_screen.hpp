@@ -122,7 +122,10 @@
             draw_step_page(canvas);
         } else {
             switch (mode_) {
-                case Mode::grid:    draw_grid(canvas, running); break;
+                case Mode::grid:
+                    if (track_menu_) draw_track_menu(canvas);
+                    else draw_grid(canvas, running);
+                    break;
                 case Mode::edit:    draw_edit(canvas); break;
                 case Mode::mixer:   draw_mixer(canvas); break;
                 case Mode::project: draw_project(canvas); break;

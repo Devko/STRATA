@@ -74,6 +74,8 @@
 
         // PROJECT's slots: a held OK opens the pattern menu, which then takes its keys.
         if (on_slot_menu_key(key, down)) return;
+        // GRID: a held OK opens the track menu (GEN and EVOLVE), which then takes its keys.
+        if (on_track_menu_key(key, down)) return;
 
         // FUNC + push D was the held tape stop until 2026-11-25 (backlog D5): one home per job,
         // and the tape stop's is the mixer's slot 8. The chord says where it went rather than
@@ -1116,6 +1118,7 @@
                 // its own, all four being macros.
                 mutate_amount_ = (mutate_amount_ + delta * 10 + 110) % 110;
                 if (mutate_amount_ > 100) mutate_amount_ = 100;
+                post_evolve_config();          // EVOLVE plays the same amount
                 {
                     // Said in a toast: PERFORM's screen has no MUT line since the rebuild.
                     char *out = notice_buffer_;

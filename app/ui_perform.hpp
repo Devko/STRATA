@@ -50,6 +50,7 @@
                 mutation_ = Mutation(next < 0 ? int(Mutation::count) - 1
                                               : (next >= int(Mutation::count) ? 0 : next));
                 notice(mutation_name(mutation_));
+                post_evolve_config();          // and EVOLVE the same mutation
                 return true;
             }
 
