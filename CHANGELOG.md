@@ -99,6 +99,11 @@ the project file format or the controls.
   pass made it join the chord instead.
 - **COUNT-IN**: a downbeat played up to half a step early, before the last click ends, records
   on step 1. It was dropped.
+- **COUNT-IN**: a hit in the moment between PLAY and the first audio block no longer records
+  onto step 1 in the middle of the count-in.
+- **A held NOTE RPT pad joining a chord step** (REC MODE ADD, or a later note of the same pass)
+  makes the step roll; the roll was dropped and only the note kept.
+- **CLICK over a loud mix** is held to full scale, as the sample audition is.
 
 ## [0.4.0] - 2026-11-26
 
