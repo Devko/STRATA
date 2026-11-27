@@ -40,7 +40,7 @@ mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_clear.log"
 
 echo "running the emulator for $CYCLES cycles: PLAY, FUNC menu CLEAR PATTERN, FUNC + CLR ..."
-python3 -B "$ENAGA_ROOT/tools/emulate.py" "$STAGE" --cycles "$CYCLES" \
+python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 19@400000000 --key 27@405000000 \
     --key 25@460000000 --key 25@520000000 --key 25@580000000 \

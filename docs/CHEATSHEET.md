@@ -46,6 +46,7 @@ pads and the performance mixer.
 | SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound into that track only; AS WAS puts yours back |
 | MIXER | MIXER | Levels, the sidechain duck, delay, reverb, routing, master, kill EQ |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
+| Track menu | **Hold OK** in GRID | GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops, ORBIT or DRIFT, KEEP or HOME |
 | PROJECT | PROJECT | Banks and patterns, key and scale, the card. On the slots: **hold OK** for the pattern menu (COPY, PASTE, CLEAR, DOUBLE; OK runs, PASTE/CLEAR/DOUBLE twice). Shortcuts: FUNC+UP copies, FUNC+DOWN twice pastes, FUNC+LEFT twice clears |
 | CHAIN | PROJECT, then screen key RIGHT | The pattern chain as a list |
 | PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG), FEEL and each track's own swing of the playing pattern |
@@ -285,7 +286,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | EDIT LFO | `MOD1 LFO: TURN A KNOB`, `MOD1 VEL>CUT +40` | Push C / D: learning MOD slot 1 / 2; push again for the next source, turn a knob for the depth, OK or CLR ends |
 | EDIT LFO | `M1 VEL>CUT +40`, `M2 OFF` | The two MOD slots, in place of the picture; after a learn, what it set |
 | EDIT | `NO KNOB: M1 STAYS OFF`, `MOD: NOT LFO OR ARP` | A learn ended with no knob turned; an LFO or ARP knob turned while learning |
-| EDIT ARP | `X2 OCT`, `ARP OFF: TURN MOD` | How many octaves the run climbs; the arp is off |
+| EDIT ARP | `X2 OCT`, `ARP OFF: TURN MOD`, `ARP RHY E5/16`, `PUSH: VAR RHY ACC RTC` | How many octaves the run climbs; the arp is off; a push set RHYTHM; none of the four is set |
 | EDIT ENV | `HOLDS: PAD OR LEN`, `SUS 0: ONE-SHOT`, `NOT ON THIS MACHINE` | Notes hold (SUS up); notes are one-shots; a machine with no ENV page |
 | EDIT OSC | `SAW + SUB DRIVEN`, `NOT ON THIS MACHINE` | What goes into the VA's filter; a machine with no OSC page |
 | PROJECT slots | `05>`, bright box | Queued slot; live slot (bright), has trigs (mid), empty (dark) |
@@ -317,7 +318,7 @@ MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 fo
 
 **FM4 pages:** ENV = ATK SUS REL ISU (index sustain). OSC = DET `OFF`/`D1`-`D25` the second pair sharp · FIN fine ratio, `0` at 64 · BRT index keytrack · CAR carrier ratio 1 0.5 2 3 4.
 
-**ARP page:** MOD OFF UP DN U/D ORD RND · RAT `1/4` to `1/32T` · OCT `X1`-`X4` · GAT note length, `50%`-`99%` of the spacing. On, a step plays a run for its length (PLY: through its chord); in KEYS, held keys are arpeggiated. Lockable and scene-able.
+**ARP page:** MOD OFF UP DN U/D ORD RND · RAT `1/4` to `1/32T` · OCT `X1`-`X4` · GAT note length, `50%`-`99%` of the spacing. On, a step plays a run for its length (PLY: through its chord); in KEYS, held keys are arpeggiated. Lockable and scene-able. Push A VAR (CONV DIVG THUMB PINKY), push B RHYTHM (rests; a rest holds the note), push C ACCENT (patterns, CYC), push D RATCHET (2:4 2:8 3:8 4:16 2ALL RND2 RND3): kit settings, not lockable. OK: ARPS, 14 factory arps.
 
 | Machine | SRC (A B C D) | AMP (A B C D) |
 | --- | --- | --- |

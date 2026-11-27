@@ -345,6 +345,33 @@ TEST(step_1_pulled_before_tick_0_fires_on_tick_0_of_the_first_pass) {
     CHECK_EQ(zero_hits, 3);      // passes 0, 1 and 2
 }
 
+TEST(tick_0_fires_a_step_once_however_far_later_passes_are_pulled) {
+    // Only the first pass's step lands on tick 0 when pulled before it. A one-step track at a
+    // fast speed with micro and FEEL past its own loop also pulled pass 1's step below 0, and
+    // that landed on tick 0 too: the step fired twice there.
+    int8_t micro[kMaxSteps] = {};
+    micro[0] = int8_t(-kMicroRange);
+    Firing firings[kMaxFiringsPerTick];
+    for (int speed = 0; speed < int(Speed::count); speed++) {
+        for (int length = 1; length <= 2; length++) {
+            for (int feel = 0; feel <= int(kFeelMax); feel++) {
+                for (uint32_t seed = 0; seed < 8u; seed++) {
+                    TrackTiming timing;
+                    timing.length = uint8_t(length);
+                    timing.speed = Speed(speed);
+                    timing.swing = kSwingMin;
+                    timing.feel = uint8_t(feel);
+                    timing.feel_seed = seed * 0x9E3779B9u;
+                    const int n = steps_firing_at(0, timing, micro, firings, kMaxFiringsPerTick);
+                    int step0 = 0;
+                    for (int i = 0; i < n; i++) step0 += firings[i].step == 0 ? 1 : 0;
+                    CHECK(step0 <= 1);
+                }
+            }
+        }
+    }
+}
+
 TEST(micro_timing_is_clamped_not_wrapped) {
     int8_t micro[kMaxSteps] = {};
     micro[2] = 100;        // far outside the legal range

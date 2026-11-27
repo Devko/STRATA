@@ -3,7 +3,7 @@
 # One command, from WSL or Linux, from anywhere in the repo:
 #
 #   tools/ci_local.sh               host tests (GCC), ASan + UBSan, layout, repo checks
-#   tools/ci_local.sh --quick       GCC host tests and repo checks only (no sanitizers)
+#   tools/ci_local.sh --quick       GCC host tests, -O1 warnings and repo checks (no sanitizers)
 #   tools/ci_local.sh --scenarios   ... and then every emulator scenario (tools/scenarios.sh),
 #                                   which CI cannot run: it needs the tic6x toolchain, the
 #                                   emulator and, for cl6x figures, TI's compiler (Roland's PC)
@@ -59,6 +59,9 @@ fi
 # --- the lanes ----------------------------------------------------------------------------------
 
 lane_gcc() {
+    # -O1 warnings first (make -C host warn): CI's sanitizer build is at -O1, where GCC warns
+    # about things -O2 does not, and --quick has no sanitizer lane to find them.
+    make -C host warn -j"$jobs" ENAGA_BUILD="$OUT/gcc" CXX="$cxx" CC="$cc" &&
     make -C host build -j"$jobs" ENAGA_BUILD="$OUT/gcc" CXX="$cxx" CC="$cc" &&
     make -C host test JOBS="$jobs" TEST_TIMEOUT=120 ENAGA_BUILD="$OUT/gcc" CXX="$cxx" CC="$cc" &&
     {

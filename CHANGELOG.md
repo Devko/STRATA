@@ -8,6 +8,16 @@ the project file format or the controls.
 
 ### Added
 
+- **Note repeat is recordable**: with REC on, a held NOTE RPT pad records one step, a roll over
+  LEN at the repeat rate, its LEN from the hold (1/4T records a plain hit) (#187).
+
+- **GEN and EVOLVE**: hold OK in GRID for the track menu. **GENERATE** writes a new part on the
+  selected track: a rhythm weighted to the beat with accents and ghosts, and on a melodic track a
+  line in the pattern's key over 1-3 octaves (DENSITY, RANGE, LEAP; WHAT keeps the rhythm or the
+  notes). **EVOLVE** mutates the track on its own every 1, 2, 4 or 8 loops with PERFORM's MUTATE
+  setting: **ORBIT** varies around the part as it was, **DRIFT** lets the changes add up; KEEP and
+  HOME stop it. GEN is one undo level; EVOLVE is RAM only and needs no file change (#195).
+
 - **Ratchets over LEN**: on the step page, RTCH goes on past 8 into rolls, `ROLL/64` to `ROLL/4`:
   the step rolls at that rate for its whole LEN (1/32 over 16 steps is 32 hits), with RAMP across
   the roll for build-ups. No file change; an older build plays such a step as a one-step ratchet
@@ -33,14 +43,65 @@ the project file format or the controls.
   builds one SD card zip with STRATA and the Enaga firmware it needs, both fetched in your
   browser from their official releases and checked against their SHA-256. Source in `web/`
   (#180).
+- **Arp depth**: push A-D on the ARP page for VAR (converge, diverge, thumb and pinky pedals),
+  RHYTHM (eleven rest patterns, Euclidean ones among them; a rest holds the note, so the run turns
+  against the bar), ACCENT (seven patterns and CYC, each run's first note) and RATCHET (2-4
+  repeats on fixed slots or by chance). Kit settings in KIT.BIN's new optional section 12; an
+  older kit plays its arps as before. The ARP picture draws rests, accents and ratchets.
+- **ARPS**: OK on the ARP page opens fourteen factory arps (TRANCE, ROLLER, ACID, BLEEP, DUB,
+  OFFBT, THUMB, PINKY, CONVRG, RATCHT, FILL, EUCLID, AMBNT, DRIFT), loaded into one track with the
+  beat playing, AS WAS first.
+- **40 more factory sounds**, techno and ambient, on every machine: 116 in all (docs/MANUAL.md
+  has the table).
+- **A one-hour smoke test** (S1-S20) at the top of `docs/UNIT_CHECKLIST.md`: boot, the small
+  font on the OLED, load on A01 and A04, LOCK, the MOD slots, one RESAMPLE take and a save that
+  survives a power cycle, before the two-hour walkthrough.
 
 ### Changed
 
 - **The LONG delay costs less**: its per-sample loop now runs as passes the TI compiler can
   pipeline, the same sound to the last bit. The worst-case scenario (both sends in their ambient
   modes) drops from 32.3% to 30.2% peak load on the emulator.
+- Internal: the engine's command handling is split into twelve handlers, one per family of
+  commands, with no change in behaviour; the host tests no longer depend on the order they run in,
+  and `tools/test_shuffle.sh` runs them in shuffled orders to keep it so.
+- **The arp's RND is random on every pass** (and RATCHET's RND2 and RND3 with it): each run draws
+  a new seed. It used to play one fixed pattern for a given track and step.
+- A kit recalled from the kit library brings its arp settings with its ARP bytes.
 
-## [0.4.0] - {{RELEASE_DATE}}
+- **FM4 no longer aliases at high IDX.** The brightness cap now sees the whole operator chain:
+  in a stack the sidebands multiply, so ALG 1 at IDX 90 on middle C and above folded harsh,
+  out-of-tune tones back into the audible range, about 10 dB under the note. Now they are 45-56 dB
+  down under 5 kHz. Low notes sound as before; high notes at high IDX are somewhat less bright.
+  `make -C host probe` and `tools/sound_probe.py` measure every synth for aliasing, tuning,
+  resonance, DC and clicks.
+
+- **DRIVE no longer pushes the sound off centre.** The insert drive clips the two halves of the
+  wave differently (that is its even-harmonic grit), which also shifted a held note off zero, by
+  up to 7% of full scale. A DC blocker (an 8 Hz cut) now follows it: more headroom, no thump when
+  a driven track is muted or choked, and nothing off-centre fed into the sends. The factory kicks'
+  peaks drop from -3.2 to -3.8 dBFS; what changed is almost all below 20 Hz.
+
+### Fixed
+
+- **A card pulled while a project opens** no longer leaves half of one project and half of the
+  other filed under the new name, where the next save wrote the mix over it: the name goes
+  back, and the open runs again from its first file when the card returns. Leaving the app
+  during a load, or before the boot's load has run, no longer autosaves over the project the
+  next start opens.
+- **A kit recalled from the library** brings back its SLC AUTO, LFO TRIG, MOD slots and choke
+  group; only the knobs, machine, fader and duck came back.
+- **DOUBLE or undo on the playing pattern** moves the end of its pass too: a chain entry or a
+  song ended at the old length.
+- **Recording after a chain step or a queued pattern change** puts the note on the step that
+  was playing, not one counted from the song's start.
+- **A STEP range** ends when you change track or screen. Before, a plain CLR, copy or turn on
+  another track (or in EDIT, where `SEL` is not shown) acted on that range there.
+- **SAMPLES read again (FUNC+UP)** keeps the cursor on the list when it comes back shorter.
+- **A step pulled before tick 0** on a one- or two-step track with micro and FEEL no longer
+  fires twice there.
+
+## [0.4.0] - 2026-11-26
 
 An early beta: everything merged since 0.3.1 (#137 to #177), and the first release for **Enaga
 0.3.0** firmware, which updating from 0.3.1 now needs (see Requires). The features below have not
@@ -326,7 +387,7 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Known limits
 
-- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} Nothing added since 0.3.1 is
+- Tested on one SmplTrek, with the cl6x build. On the 0.2.0 build (2026-11-22) the load stayed under 30% on the default beat, and MAX peaked at 84.3% in long, heavy play with no clicks or dropouts; a build from main boots on Enaga 0.3.0 (2026-11-25), but 0.4.0's load is not measured on the unit yet. Nothing added since 0.3.1 is
   checked on the unit yet. Every other load figure comes from the emulator, which models no caches.
 - **Enaga 0.3.0 exactly.** Enaga's loader checks only the ABI number, which 0.2.0 and 0.3.0 share,
   so 0.4.0 on the 0.2.0 firmware loads and then misbehaves.

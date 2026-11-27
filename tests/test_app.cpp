@@ -262,7 +262,7 @@ TEST(app_the_first_save_of_a_project_writes_all_ten_files) {
     project_file(path, "PROJECT.BIN");
     CHECK_EQ(host.file_bytes(path), 402);   // core/project.cpp: 305, 12 + 65 song, 12 + 8 MIDI
     project_file(path, "KIT.BIN");
-    CHECK_EQ(host.file_bytes(path), 1409);  // 1076, the choke groups (12 + 8), the mod slots (12 + 48), LFO TRIG (12 + 8), the filter layout (12 + 1), the LFO and arp (2 x (12 + 8 x 4)), SLC AUTO (12 + 8), ASR (12 + 32), the duck (12 + 12), OSC (12 + 32)
+    CHECK_EQ(host.file_bytes(path), 1453);  // 1076, the arp settings (12 + 32), the choke groups (12 + 8), the mod slots (12 + 48), LFO TRIG (12 + 8), the filter layout (12 + 1), the LFO and arp (2 x (12 + 8 x 4)), SLC AUTO (12 + 8), ASR (12 + 32), the duck (12 + 12), OSC (12 + 32)
     project_file(path, "PERFORM.BIN");
     CHECK_EQ(host.file_bytes(path), 5108);  // 2424, the scenes' LFO (12 + 640), EQ (12 + 64), arp, ASR and OSC (12 + 640 each)
 }
@@ -642,15 +642,20 @@ TEST(app_a_resample_records_a_bar_and_writes_it_to_the_card) {
     // The take finished, the card has it, and the buffer went back to the audio side.
     CHECK_EQ(int(engine.status().resample_state.load(std::memory_order_relaxed)), 0);
     CHECK(storage().last_error() == nullptr);
-    CHECK(host.has_file("/RECORD/STRATA_1.WAV"));
+    // By the name Storage gave it rather than STRATA_1: the take counter lives in the settings and
+    // goes on from the last take any test wrote, so the number depends on the tests run before.
+    char first[64];
+    std::strcpy(first, "/RECORD/");
+    std::strcat(first, storage().last_take_name());
+    CHECK(host.has_file(first));
 
     // A real WAV: 44 bytes of header plus stereo 16-bit frames, and <enaga/wav.hpp> parses it.
-    const int32_t bytes = host.file_bytes("/RECORD/STRATA_1.WAV");
+    const int32_t bytes = host.file_bytes(first);
     CHECK(bytes > 44);
     CHECK_EQ((bytes - 44) % 4, 0);                 // whole stereo 16-bit frames
 
     static uint8_t head[64];
-    CHECK(host.read_prefix("/RECORD/STRATA_1.WAV", head, sizeof head) > 0);
+    CHECK(host.read_prefix(first, head, sizeof head) > 0);
     enaga::wav::Format format{};
     CHECK(enaga::wav::parse(head, sizeof head, format));
     CHECK_EQ(int(format.channels), 2);
@@ -664,13 +669,17 @@ TEST(app_a_resample_records_a_bar_and_writes_it_to_the_card) {
     post(Cmd::resample_arm, 0, 0, 1);
     storage().request_resample_write();
     host.deliver_tick(768, 0);                     // bar 2
+    char second[64] = {};
     for (int i = 0; i < 1500; i++) {
         if (i % 8 == 0) host.deliver_tick(uint32_t(768 + i), 0);
         pump();
-        if (host.has_file("/RECORD/STRATA_2.WAV")) break;
+        std::strcpy(second, "/RECORD/");
+        std::strcat(second, storage().last_take_name());
+        if (std::strcmp(second, first) != 0 && host.has_file(second)) break;
     }
-    CHECK(host.has_file("/RECORD/STRATA_1.WAV"));
-    CHECK(host.has_file("/RECORD/STRATA_2.WAV"));
+    CHECK(std::strcmp(second, first) != 0);
+    CHECK(host.has_file(first));
+    CHECK(host.has_file(second));
 }
 
 TEST(app_a_take_is_written_once_per_request) {

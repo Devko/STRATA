@@ -351,6 +351,10 @@ struct Rig {
 
     void setup() {
         mixer.init(kRate);
+        // Every setting back to its default, not just the ones set below: the rig is shared, and
+        // a test that switched the long delay or the hall on handed it to the next one.
+        sends = SendSettings{};
+        master = MasterSettings{};
         for (int i = 0; i < kParams; i++) params.set(i, 0);
         params.set(kPan, 64);
         params.set(kSna, 127);

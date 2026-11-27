@@ -33,6 +33,8 @@
 #include "kick.hpp"
 #include "midiout.hpp"    // MIDI note out: every note-on gets its note-off
 #include "mutate.hpp"      // Cmd::mutate
+#include "evolve.hpp"      // EVOLVE: a track mutating every few passes
+#include "generate.hpp"    // Cmd::generate
 #include "pattern.hpp"
 #include "perc.hpp"
 #include "perform.hpp"   // scenes, the morph, macros, mute states, auto-fill
@@ -195,6 +197,11 @@ public:
     uint8_t live_rnd_unit() const { return perform_.rnd_unit; }
     uint8_t live_rnd_armed() const { return perform_.rnd_armed; }
     AutoFill auto_fill() const { return auto_fill_; }
+    // EVOLVE (core/evolve.hpp): a track's period index (0 OFF) and the shared settings.
+    uint8_t evolve_period(int track) const {
+        return track >= 0 && track < kTracks ? evolve_[track].period : uint8_t(0);
+    }
+    EvolveMode evolve_mode() const { return evolve_mode_; }
     uint32_t bar() const { return bar_; }
     bool fill() const { return perform_.fill; }
     int throwing() const { return throw_bus_; }
@@ -369,6 +376,20 @@ public:
 private:
     void apply_commands();
     void apply(const Command &command);
+    // apply() checks the track and step, then hands the command to its family. Each
+    // returns false for a command not its own. In app/engine.cpp, in this order.
+    bool apply_sound(const Command &command, int track, int step);
+    bool apply_step_edit(const Command &command, int track, int step);
+    bool apply_perform(const Command &command, int track, int step);
+    bool apply_notes(const Command &command, int track, int step);
+    bool apply_mixer(const Command &command, int track, int step);
+    bool apply_track_timing(const Command &command, int track, int step);
+    bool apply_bulk_edit(const Command &command, int track, int step);
+    bool apply_transport(const Command &command, int track, int step);
+    bool apply_arrangement(const Command &command, int track, int step);
+    bool apply_project(const Command &command, int track, int step);
+    bool apply_samples(const Command &command, int track, int step);
+    bool apply_capture(const Command &command, int track, int step);
     void reconfigure();
 
     // Make `bank`/`slot` the live pattern. Clears the undo history (it belonged to the pattern
@@ -616,6 +637,10 @@ private:
     // its AS WAS row can put it back. -1 when nothing is remembered.
     TrackParams sound_back_ = {};
     int sound_back_track_ = -1;
+    // And `Cmd::arp_preset`'s: the ARP bytes and the arp's kit settings when ARPS opened.
+    uint8_t arp_back_[kArpBytes] = {};
+    KitArp arp_back_ext_ = {};
+    int arp_back_track_ = -1;
 
     // What the machines and chains are actually prepared from: the kit with the CURRENT step's
     // parameter locks written over it.
@@ -842,6 +867,20 @@ private:
     bool fill_held_ = false;
     AutoFill auto_fill_ = AutoFill::off;
 
+    // EVOLVE (core/evolve.hpp): one per track, each with its HOME and its last turn -- about
+    // 2.2 KiB a track, here so nothing is allocated. The mutation, its amount and ORBIT or DRIFT
+    // are shared, and `evolve_variant_` counts turns so each one differs.
+    Evolve evolve_[kTracks];
+    EvolveMode evolve_mode_ = EvolveMode::orbit;
+    Mutation evolve_kind_ = Mutation::velocity;
+    uint8_t evolve_amount_ = 50;
+    uint32_t evolve_variant_ = 1;
+    void evolve_passes();            // cross_boundary: a pass has ended
+    void evolve_lead();              // the last ticks before it: one turn a tick
+    static constexpr int kEvolveLeadTicks = kTracks;
+    uint8_t evolve_turned_ = 0;      // tracks that turned in this pass's lead
+    void evolve_stop_all();          // a project load or a replaced pattern: HOME is gone
+
     // Bars since the transport started, for auto-fill. Counted rather than divided: a bar is 384
     // ticks at 96 PPQN and this chip has no integer divide (core/scheduler.cpp says the same
     // about samples-per-tick).
@@ -912,28 +951,50 @@ private:
     // `fire`, ending with the step's length or at the next step -- and one for held KEYS keys,
     // which runs while any is down. Both hit on the clock's ticks while it runs; the held one
     // counts frames while it is stopped, as a note repeat does.
+    //
+    // The kit's arp settings (KitTrack::arp) shape each hit: RHYTHM rests a slot without moving
+    // the note on (`slot` counts the grid, `hit` the notes), ACCENT accents it, and RATCHET
+    // repeats its note inside the slot. A ratchet's later hits are counted down in frames
+    // (`ratchet_*`) by `arp_ratchets`, after the deferred step hits and before this block's
+    // ticks, the same way whether the transport runs or not. They are spaced at least a block
+    // apart (`arp_ratchet_hits`), which keeps the one-pending-trig contract `dispatch` relies on.
     struct ArpRun {
         bool on = false;
         ArpMode mode = ArpMode::off;
+        ArpVar var = ArpVar::off;
         uint8_t length = 0;
         uint8_t octaves = 1;
         uint8_t rate = 24;           // ticks between hits
         uint8_t gate_percent = 50;
         uint8_t velocity = 100;
         bool accent = false;
-        uint32_t hit = 0;
+        uint32_t hit = 0;            // notes played
+        uint32_t slot = 0;           // grid slots passed, rests included
         uint32_t next_tick = 0;
         uint32_t end_tick = 0xFFFFFFFFu;
         uint32_t seed = 0;
         float countdown = 0.0f;      // frames to the next hit, transport stopped (held runs)
+        uint8_t ratchet_left = 0;    // the slot's repeats still to come
+        uint8_t ratchet_note = 60;
+        uint32_t ratchet_gate = 1;   // frames
+        float ratchet_countdown = 0.0f;   // frames from the next block's start to the next repeat
+        float ratchet_spacing = 0.0f;
         uint8_t cycle[kArpMaxCycle] = {};
     };
     ArpRun seq_arp_[kTracks];
     ArpRun held_arp_[kTracks];
     uint8_t held_notes_[kTracks][kArpMaxInput] = {};
     uint8_t held_count_[kTracks] = {};
+    // Set once `arp_ratchets` has run in this block, so a hit after it counts its ratchet from
+    // the next block's start and a hit before it (a command, a deferred step) from this one's.
+    bool arp_ratchets_done_ = false;
+    uint32_t arp_runs_ = 0;      // runs started, for arp_new_seed
+    uint32_t arp_new_seed(int track, int step);
     ArpSettings arp_settings(int track) const;
     void arp_hit(int track, ArpRun &run, uint32_t frame);
+    void arp_play(int track, uint8_t note, uint8_t velocity, bool accent, uint32_t frame,
+                  uint32_t gate_frames);
+    void arp_ratchets(uint32_t frames);
     void arp_tick(uint32_t tick, uint32_t frame);
     void arp_free(uint32_t frames);
     void arp_held_changed(int track);

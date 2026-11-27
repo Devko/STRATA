@@ -77,6 +77,11 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      the slot's knob and depth with the new source, OFF clears it. Not on the LFO's or the
      arp's own knobs (`MOD: NOT LFO OR ARP`). No routing screen: the LFO page lists the two
      slots and every EDIT bar a slot moves has its range drawn under it (the font has no `~`).
+     On the ARP page the four switches are the arp's kit settings (core/arp.hpp), each pushed
+     once round its list and back to OFF (`ARP RHY E5/16`): push A (MOD) VAR, push B (RAT)
+     RHYTHM, push C (OCT) ACCENT, push D (GAT) RATCHET. Per track, the kit's, as LFO TRIG; on
+     EDIT, GRID and KEYS. OK on the ARP page opens ARPS, the factory arps, as OK on the sound
+     pages opens SOUNDS (same keys, AS WAS first).
      On PROJECTS, where only A turns, push B renames and push C deletes the project under the
      cursor (delete then asks for OK twice).
    - **VALUE is the crossfader.** Push VALUE + STEP picks what it fades: an effect, the morph
@@ -261,6 +266,38 @@ that did something changed meaning; FUNC + push D still names slot 8 on every ot
   with REL/LEN ALL away from rest; the track meters mark the armed tracks with a dot; the live
   strip adds `RN4`. The FUNC help's third PERFORM page lists both gestures.
 
+## GEN and EVOLVE (hold OK in GRID)
+
+Roland, 2026-11-27: generate a drum or melodic part, random but in the key, and let it mutate on
+its own every few loops. `core/generate.hpp`, `core/evolve.hpp`, `app/ui_trackmenu.hpp`. OK in
+GRID with nothing held did nothing, so the hold costs no gesture; a tap still does nothing.
+
+| Row | Does | Says |
+| --- | --- | --- |
+| GENERATE | OK: a new part on the selected track, one undo level (CLR in GRID, or FUNC + CLR, takes it back) | `GEN T1 BOTH` |
+| DENSITY | 0-100 in tens: about 2 hits a bar at 20, 6 at 50, 11 at 100 | |
+| RANGE | 1-3 octaves above the track's own root (melodic tracks) | |
+| LEAP | 0-100 in tens: how often the melody jumps 2-5 degrees instead of stepping | |
+| WHAT | BOTH, RHYTHM (notes kept), NOTES (rhythm kept) | |
+| EVOLVE | OFF, 1, 2, 4 or 8 loops: this track mutates on its own every that many passes | `EVOLVE T1 4 LOOPS` |
+| MODE | ORBIT (every turn starts again from HOME) or DRIFT (the changes add up), every track | |
+| MUTATION, AMOUNT | What EVOLVE plays: PERFORM's MUTATE setting and amount, the same two values | |
+| KEEP | OK: what plays becomes HOME, EVOLVE stops | `KEPT: EVOLVE OFF` |
+| HOME | OK: back to HOME (one undo level), EVOLVE stops | `HOME: EVOLVE OFF` |
+
+UP/DOWN or A pick the row, LEFT/RIGHT or B change it, OK runs (and steps a setting forward), CLR
+closes. A lower pad still selects the track, so one menu walks GEN over a kit; the menu keeps its
+row between openings.
+
+- **Drum or melodic** is the machine's: the VAs, WAVE, FM4, GRAIN, an unsliced SAMPLE and MID get
+  notes; the drums and a sliced SAMPLE get a rhythm with accents and ghosts, their notes kept.
+- **What GEN leaves**: locks, conditions, ratchets, micro-timing and probability, as Euclid does.
+- **HOME** is taken when EVOLVE goes on, in RAM only. An edit made while a track evolves (a trig,
+  a recorded note, a chord) goes into HOME at the next turn, so ORBIT never throws it away.
+- **A pattern change**: in ORBIT the pattern left goes back to HOME; every evolving track then
+  carries on from the new pattern. A load stops EVOLVE.
+- **Not saved**: the EVOLVE settings are RAM only. A save writes what plays.
+
 ## FEEL (the PATTERN page)
 
 CyDrums' P8, `core/timing.hpp`. A pattern setting like swing, so its home is the PATTERN page
@@ -356,6 +393,7 @@ repeat (a rolling lower pad) and step stutter (the sequencer). It is 1/16 at boo
 | Let go of REPEAT | Ends the stutter, STEP held or not; the STEP's release toggles nothing |
 | REPEAT + LEFT / RIGHT | **The rate**, one slower / faster: 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T, 1/32, stopping at both ends (`REPEAT 1/8T`, `STUTTER 1/32`). Heard at once by the repeat, the stutter and any roll |
 | A rolling pad + LEFT / RIGHT | The same, while NOTE RPT is on and a lower pad rolls (`ROLL 1/32`) |
+| A rolling pad, REC on, transport running | **Recorded as one step** (CyDrums P3): the press's step gets a roll over LEN at the rate in force at the press (RTCH `ROLL/16` ...), the release its LEN, on any machine. 1/4T, which a step cannot hold, records a plain hit. The rolling pad plays on live over it for that pass |
 | REPEAT + VALUE | The rate too, in the order the list names them (as before) |
 
 The step plays as written, its locks included; its condition, probability and ratchet are not

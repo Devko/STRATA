@@ -18,8 +18,11 @@ extern "C" {
 #endif
 
 /* Drive, in place: an asymmetric soft clip, `negative` driving the negative half less than
- * `positive` drives the positive one, which is where the even harmonics come from. */
-void strata_chain_drive(float *mono, int n, float positive, float negative);
+ * `positive` drives the positive one, which is where the even harmonics come from -- and then a
+ * DC blocker, because an asymmetric clip also shifts the wave off zero: by up to 7% of full
+ * scale at middle settings on a sustained note. `dc` is the blocker's state (last input, last
+ * output) and `pole` its coefficient (chain.cpp, kDcPole). */
+void strata_chain_drive(float *mono, int n, float positive, float negative, float pole, float *dc);
 
 /* Lo-fi, in place: the sample-and-hold whose clock is a 32-bit phase wrap, then the bit crush,
  * in one pass. `levels` is the number of quantisation steps and `step` its reciprocal (both
