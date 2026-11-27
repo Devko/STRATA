@@ -1,4 +1,4 @@
-# Handoff — 2026-11-26
+# Handoff — 2026-11-27
 
 **Read this first, then `CLAUDE.md`, then `docs/SPEC.md` and `docs/PLAN.md`.** The platform review
 the spec was corrected against is `docs/archive/REVIEW.md`: history, but its decisions stand.
@@ -12,7 +12,9 @@ v0.3.1 (2026-11-23, early betas for Enaga 0.2.0) and v0.4.0 (2026-11-26, the fir
 unit (2026-11-24), and a build from `main` after #139 boots on the unit's 0.3.0 firmware
 (2026-11-25). Nothing from 0.3.x on has been measured or walked through there yet. On the unit the default beat loads under 30%, and a long, heavy session peaked at
 84.3% MAX with no dropouts. Almost everything added since the first evening has been heard by
-nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
+nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass. **v0.5.0 is
+planned as the release candidate for 1.0** (Roland, 2026-11-27): `docs/PLAN.md`, "Release
+candidate", has what must land first, the feature freeze after it, and the checks.
 
 ---
 
@@ -33,11 +35,14 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
 ## What to do next, in order
 
+0. **The release candidate**, `docs/PLAN.md` "Release candidate": file format option C and the
+   HALL question first (EVOLVE saved, #196 and #197 are in), then the feature freeze. No
+   thread tags or releases on its own: the release runs from its own thread when Roland says so.
 1. **On Roland's PC: the load runs still owed.** `tools/scenarios.sh` once on `main` (it has
    `scenario_wave.sh` and `scenario_fm.sh`, never run), then E13 (the VA rework), E14 (WAVE's cost
    per voice and its boot time) and E15 (FM4's cost per voice) from `docs/BUDGET.md`, with cl6x and with `ENAGA_TI_CGT=none`. BUDGET has only
    host estimates for both so far.
-2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, W1-W51, on a
+2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, S1-S20 and then W1-W54, on a
    build from `main` with cl6x and Enaga 0.3.0 firmware. It covers everything since v0.1.0, from
    the CPU guard to LOCK, step stutter, play modes, the MOD slots, sample audition and the
    redrawn screens (#171-#176).
@@ -161,8 +166,9 @@ Arp depth and ARPS, for whoever touches them next (core/arp.hpp has the design):
 - **Ratchet repeats are frame countdowns** (`Engine::arp_ratchets`, after the deferred step hits
   and before the block's ticks, running or stopped), clamped so no two hits of a track land in
   one block: the one-pending-trig contract `dispatch` relies on.
-- A kit-library recall brings the arp settings. It still does not bring LFO TRIG or the mod
-  slots (it never did): worth a look.
+- A kit-library recall brings the arp settings, and since #188 LFO TRIG, the MOD slots, SLC
+  AUTO and the choke group too: every optional KIT.BIN section. A new kit section must be added
+  to the recall as well (`Cmd::kit_recall`).
 
 LFO, for whoever touches it next (dsp/lfo.hpp has the detail):
 - **TRIG is not a parameter.** All 32 bytes a track has are spoken for and `locked_` is a 32-bit

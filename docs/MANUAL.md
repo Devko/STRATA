@@ -240,6 +240,8 @@ The picture draws all of it: rests as a dot on the floor, accents taller and bri
 ratcheted slot split into its repeats. These four are the track's kit settings, like the LFO's
 TRIG: saved with the kit, not lockable and not in scenes.
 
+<p><img src="screens/arps.png" width="256" alt="ARPS on track 1: AS WAS, then the factory arps, and the arp under the cursor in words"></p>
+
 **OK on the ARP page opens ARPS**, fourteen ready-made arps that set all eight at once, on any
 machine. It works as SOUNDS does (below): UP/DOWN to move, OK loads with the beat playing, AS WAS
 puts back the arp the track had, CLR goes back. TRANCE, ROLLER (U/D with a gallop), ACID (the
@@ -425,6 +427,8 @@ level: OK keeps it, CLR takes it back.
 
 ### GEN and EVOLVE
 
+<p><img src="screens/trackmenu.png" width="256" alt="The track menu, held OK in GRID: GENERATE and its settings, EVOLVE, MODE, MUTATION, AMOUNT"></p>
+
 **Hold OK in GRID** for the track menu. **GENERATE** writes a new part on the selected track: on
 a drum track a rhythm, busier on the beats than between them, with accents and ghost notes; on a
 melodic track a line in the pattern's key and scale too, starting on the root. DENSITY sets how
@@ -442,7 +446,9 @@ from the part as it was saved.
 ### Kits
 
 A **kit** is the sound side of a project without the patterns: the eight machines, their 16
-parameters each, the faders, the sidechain duck and the sample paths. Besides the project's own kit there is a
+parameters each, the faders, the sidechain duck and the sample paths, and each track's settings
+that are not knobs: SLC AUTO, LFO TRIG, the two MOD slots, the choke group and the arp's VAR,
+RHYTHM, ACCENT and RATCHET. Besides the project's own kit there is a
 **kit library** of 16 slots on the card, shared by every project, so a sound you built in one
 project can be recalled in another (KIT mode, `FUNC+EDIT` twice).
 
@@ -864,6 +870,11 @@ three carriers, `A7` one pair 4>3 over two plain sines, `A8` four sines (an orga
 second drawbar). The SOUNDS list has EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD and GLASS.
 FBK costs a little more CPU than FBK 0.
 
+High notes at high IDX are held back so they stay clean: in a stack the sidebands multiply, and
+past a point they would fold back as harsh, out-of-tune tones. The cap looks at the whole chain
+of operators, so `A1` at IDX 90 is a little less bright on high notes than its number suggests,
+and low notes are not touched.
+
 ### MID: MIDI
 
 MID makes no sound of its own. It is for a track whose sound is an outboard synth, a drum
@@ -1114,6 +1125,8 @@ and the notes played with it join it; **ADD** adds every note to what the step h
 can be built up one pass at a time. The edit line says `REC+` under ADD. Transposing a range,
 MUTATE's note moves and turning NOTE move the whole chord. VA MONO, WAVE MONO, SAMPLE, GRAIN and
 the drums keep one note a step: the last one played.
+
+<p><img src="screens/menu_click.png" width="256" alt="The FUNC menu on CLICK, with REC MODE above and COUNT-IN below"></p>
 
 **CLICK and COUNT-IN** (FUNC menu). CLICK `ON` clicks every beat while the transport runs, a
 higher click on each bar's first beat. COUNT-IN `1 BAR` or `2 BAR` makes a PLAY from stop with REC
@@ -1697,7 +1710,8 @@ everything else and says `FOLDER NOT EMPTY`.
 machines. UP/DOWN, A or the STEP keys move the cursor (they never load).
 
 - **Recall:** OK, then OK again within 2 s (`OK AGAIN TO LOAD`). The transport keeps playing; only
-  tracks whose sample changed reload theirs. A recall is **not undoable**.
+  tracks whose sample changed reload theirs. Everything the kit holds comes back, MOD slots,
+  choke groups and arp settings included. A recall is **not undoable**.
 - **Store:** `FUNC+DOWN` stores the current kit; over a stored kit it needs a second press
   (`AGAIN TO OVERWRITE`).
 - `FUNC+UP` reads the card again. CLR goes back to MACHINE.
