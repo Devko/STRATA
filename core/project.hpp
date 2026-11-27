@@ -35,6 +35,7 @@
 // `enaga::files`.
 #pragma once
 
+#include "arp.hpp"         // KitArp, the arp's kit settings
 #include "midiout.hpp"     // kMidiOutOff and kMidiChannels: ProjectSettings::midi_out's domain
 #include "modslot.hpp"     // KitModSlot
 #include "pattern.hpp"
@@ -346,6 +347,10 @@ struct KitTrack {
     // track of the same group with a 64-frame fade (Engine::choke_group). A kit setting, not a
     // parameter, for TRIG's reason; KIT.BIN's optional section 11.
     uint8_t choke = 0;
+    // The arp's kit settings (core/arp.hpp): VAR, RHYTHM, ACCENT and RATCHET, pushed round on the
+    // ARP page or set by an ARPS preset. Not parameters, for TRIG's reason; KIT.BIN's optional
+    // section 12.
+    KitArp arp;
 };
 
 // Choke groups (KitTrack::choke): 1-4, 0 none. A byte past the last group reads as none.
@@ -601,6 +606,9 @@ constexpr uint16_t kSectionKitMod = 10;
 // The choke groups, one byte per track (KitTrack::choke). Optional on read: a KIT.BIN from before
 // them loads every track in no group, which is how every track played before.
 constexpr uint16_t kSectionKitChoke = 11;
+// The arp's kit settings, 4 bytes a track (KitTrack::arp: VAR RHYTHM ACCENT RATCHET). Optional
+// on read: a KIT.BIN from before it loads every arp with all four 0, the arp as it always played.
+constexpr uint16_t kSectionKitArpExt = 12;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

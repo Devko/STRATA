@@ -77,7 +77,7 @@ Pictures by page and machine:
 | AMP, ASR | all with an envelope | the draft's envelope: rows 34-100, dotted guides every 8 px and at quarters, the curve (9) with a fill (2), the letters lit over the points they move; while the note sounds its travelled part bright (15, fill 4) with a dot at its head |
 | FX | all | a sine and what LOF makes of it (rows 30-56); the pan field as an arc with the track's dot (centre 36, 96); SNA and SNB as two columns into DLY and REV, their tops lit while the track sounds |
 | LFO | all | the draft: the shape's box (0-77, rows 28-88) with the dot riding it and a fading trail, the output strip (82-119), `OUT`; the destination bar (rows 93-97) lit to what it sounds at with a mark at its knob; off, `LFO OFF: SET DEP+DST` there |
-| ARP | all | sixteen notes of the run over a three-note chord through OCT octaves, each GAT long; while the beat plays the one it is on lit |
+| ARP | all | sixteen slots of the run over a three-note chord through OCT octaves (VAR's order), each GAT long; RHYTHM's rests a dot on the floor, ACCENT's hits taller and brighter, a RATCHET slot split into its repeats; while the beat plays the slot it is on lit. The info line names the kit settings that are set |
 | OSC | FM4 | harmonics 0-8 across, CAR tall and bright, MOD at RAT + FIN, the detuned pair, the sidebands the index makes |
 | OSC | GRAIN | the file small with SCN's travel as an arrow; PSP's spray as a fan with the grains on it |
 | ASR, OSC | a machine without them | `NO ASR` / `NO OSC` and which machines have them |

@@ -548,6 +548,8 @@ Strata &fresh() {
     post_cmd(Cmd::project_loaded);
     // The engine's performance layer and transport, as tests/apprig.cpp's `fresh()` resets them:
     // none of it is in the project, and view_to_defaults() above put the UI's copies to rest.
+    // The pattern's origin (Engine::origin_) outlives a stop, as a CONTINUE needs, and goes back
+    // to 0 only on a tick before it; a restart puts it back, along with the rest below.
     post_cmd(Cmd::restart);
     post_cmd(Cmd::resample_cancel);
     post_cmd(Cmd::resample_release);
@@ -1913,6 +1915,43 @@ TEST(ui_two_held_steps_make_a_range_that_survives_until_a_fresh_single_press) {
     for (int s = 0; s < kStepsPerTrack; s++) CHECK(!trig_at(0, s));
 }
 
+TEST(ui_a_range_belongs_to_the_track_and_screen_it_was_made_on) {
+    // A range made on track 1 and left standing was what CLR erased on track 2 as well, and in
+    // EDIT, where SEL is not drawn.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    for (int s = 0; s < 8; s++) key(ENAGA_KEY_STEP1 + s);
+    pump(2);
+    step_down(2);
+    step_down(6);
+    step_up(6);
+    step_up(2);
+    CHECK_EQ(UiProbe::range_first(app), 2);
+
+    key(ENAGA_KEY_DOWN);                           // track 2
+    CHECK_EQ(UiProbe::selected(app), 1);
+    CHECK_EQ(UiProbe::range_first(app), -1);
+    key(ENAGA_KEY_UP);
+    CHECK_EQ(UiProbe::range_first(app), -1);       // and it does not come back with track 1
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "CLEARED FUNC+CLR UNDO");
+
+    for (int s = 0; s < 8; s++) key(ENAGA_KEY_STEP1 + s);
+    pump(2);
+    step_down(2);
+    step_down(6);
+    step_up(6);
+    step_up(2);
+    CHECK_EQ(UiProbe::range_first(app), 2);
+    key(ENAGA_KEY_F8);                             // EDIT
+    CHECK_EQ(UiProbe::range_first(app), -1);
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    for (int s = 0; s < kStepsPerTrack; s++) CHECK(!trig_at(0, s));
+}
+
 // --- the mode keys --------------------------------------------------------------------------
 
 TEST(ui_every_mode_key_closes_the_step_page) {
@@ -2144,6 +2183,50 @@ TEST(ui_a_keys_pad_held_while_recording_gives_the_step_its_length) {
 
     key(ENAGA_KEY_F2);
     host.set_running(false);
+}
+
+TEST(ui_a_note_repeat_held_while_recording_writes_one_roll_over_len) {
+    // CyDrums P3: NOTE RPT on, REC on, a lower pad held for a bar records ONE step: the roll at
+    // the repeat rate (1/16 by default) for the LEN the hold gives -- on a drum too, since the
+    // LEN is the roll's length here, not a note's.
+    Strata &app = fresh();
+    app.on_key(ENAGA_KEY_F1, true);                    // FUNC + FILL: NOTE RPT
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(UiProbe::note_repeat_mode(app));
+
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    host.set_position(96);                             // step 5
+    key(ENAGA_KEY_F2);                                 // REC on
+    CHECK(UiProbe::rec(app));
+
+    app.on_pad_press(4, 100);                          // track 3
+    pump(2);
+    CHECK(app_engine().rolling(2));
+    host.set_position(96 + 16 * 24);                   // a bar later
+    app.on_pad_release(4);
+    pump(2);
+    CHECK(!app_engine().rolling(2));
+
+    int where = -1;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(2, s)) where = s;
+    }
+    CHECK(where >= 0);
+    const Step &step = step_of(2, where);
+    CHECK(ratchet_spans(step.ratchet));
+    CHECK_EQ(int(ratchet_rate(step.ratchet)), int(ratchet_rate_for_ticks(24)));   // 1/16
+    CHECK_EQ(int(step.length), 16);                    // 16 steps (core/timing.hpp's table)
+
+    key(ENAGA_KEY_F2);
+    host.set_running(false);
+    app.on_key(ENAGA_KEY_F1, true);                    // NOTE RPT back off
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(!UiProbe::note_repeat_mode(app));
 }
 
 TEST(ui_a_held_keys_pad_on_a_drum_track_keeps_the_one_step_length) {
@@ -5373,6 +5456,33 @@ TEST(ui_samples_ok_does_nothing_on_a_track_that_plays_no_file) {
     key(ENAGA_KEY_F4);
 }
 
+TEST(ui_samples_a_reread_that_shortens_the_list_keeps_the_cursor_on_it) {
+    // FUNC+UP reads the folder again and keeps the cursor where it was; a list that came back
+    // shorter left it past the end: "N/count" with N over count, an empty page, and OK saying
+    // PATH TOO LONG.
+    Strata &app = fresh();
+    seed_sample_card();
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);
+    pump(4);
+    for (int i = 0; i < 10; i++) key(ENAGA_KEY_DOWN);
+    const int last = UiProbe::sample_cursor(app);
+    CHECK(last >= 2);
+    CHECK(FakeHost::the().remove_file("/SAMPLES/A_HIT.WAV"));
+    CHECK(FakeHost::the().remove_file("/SAMPLES/b loop.wav"));
+    shift_key(ENAGA_KEY_UP);
+    pump(6);
+    const int count = app_storage().browse_list().count();
+    CHECK(count >= 1);
+    CHECK(count < last + 1);
+    check_layout(app, "SAMPLES, a shorter list read again");    // the frame settles the cursor
+    CHECK_EQ(UiProbe::sample_cursor(app), count - 1);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
 TEST(ui_samples_ok_loads_the_file_into_the_track_while_playing) {
     Strata &app = fresh();
     seed_sample_card();
@@ -8328,6 +8438,7 @@ TEST(ui_screenshots) {
     app.on_pad_press(14, 100);
     app.on_pad_release(14);
     key(ENAGA_KEY_F8);
+    goto_edit_page(app, Page::src);       // OK on the ARP page, where the walk left EDIT, is ARPS
     key(ENAGA_KEY_OK);
     for (int i = 0; i < 400 && app_storage().browsing(); i++) pump();
     CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
@@ -10304,6 +10415,56 @@ TEST(ui_a_note_recorded_under_reverse_lands_on_the_step_playing_in_that_slot) {
     pump(2);
 }
 
+// A queued switch starts the new pattern at its step 1 on the boundary (Engine::origin_), and
+// the scheduler counts its steps from there. The recorder counted from the clock's zero, so a
+// note played after the switch landed `origin mod loop` ticks away from the step it was played on.
+TEST(ui_a_note_recorded_after_a_queued_switch_lands_on_the_step_that_was_playing) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    Engine &engine = app_engine();
+    post_cmd(Cmd::set_master_length, 4);           // A01: a pass of 4 steps, 96 ticks
+    {
+        Command clear;                             // A02, the one switched to: empty
+        clear.cmd = Cmd::pattern_clear;
+        clear.track = 0;
+        clear.step = 1;
+        engine.commands().post(clear);
+    }
+    pump(2);
+    open_keys();
+    host.set_running(true);
+    host.deliver_tick(0, 0);
+    pump(2);
+    host.deliver_tick(48, 0);                      // half way through A01's pass
+    pump(2);
+    post_cmd(Cmd::queue_pattern, 0, 1, uint8_t(QueueMode::end_of_pattern));
+    pump(2);
+    host.deliver_tick(96, 0);                      // the boundary: A02 from its step 1
+    pump(2);
+    CHECK_EQ(int(engine.status().live_slot.load()), 1);
+    CHECK_EQ(int(engine.status().pattern_origin.load()), 96);
+
+    host.set_position(96 + 4 * 24);                // A02's step 5, which the scheduler plays here
+    key(ENAGA_KEY_F2);                             // REC on
+    app.on_pad_press(8, 90);
+    app.on_pad_release(8);
+    pump(2);
+    key(ENAGA_KEY_F2);
+    host.set_running(false);
+    int where = -1, trigs = 0;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(0, s)) { trigs++; where = s; }
+    }
+    CHECK_EQ(trigs, 1);
+    CHECK_EQ(where, 4);                            // not 8, where the clock's zero would put it
+    // The origin outlives a stop (a CONTINUE keeps it), and the next test sets the clock's
+    // position without delivering a tick that would send it back to 0: a restart does.
+    post_cmd(Cmd::restart);
+    post_cmd(Cmd::stop, 1);
+    pump(2);
+    CHECK_EQ(int(engine.status().pattern_origin.load()), 0);
+}
+
 // The layout echo names the play mode when it is not FWD, and stays inside 21 characters.
 TEST(ui_the_length_echo_names_a_play_mode_other_than_forward) {
     Strata &app = fresh();
@@ -11217,6 +11378,109 @@ TEST(ui_draw_bench) {
     bench("grid");
     post_track(Cmd::set_machine, 0, 0);
     pump(4);
+}
+
+// --- the arp's kit settings and ARPS (core/arp.hpp, core/arppresets.hpp) ------------------------
+
+TEST(ui_arp_page_pushes_walk_var_rhythm_accent_and_ratchet) {
+    Strata &app = fresh();
+    const KitTrack &kit = app_engine().project().kit.tracks[0];
+    key(ENAGA_KEY_F8);                                // EDIT, track 1
+    goto_edit_page(app, Page::arp);
+    post_cmd_track_param(0, uint8_t(kArpFirst + 0), 32);      // UP: the info line shows them
+    pump(2);
+    CHECK(screen_has(app, "PUSH: VAR RHY ACC RTC"));
+
+    // MOD's knob is VAR, RAT's RHYTHM, OCT's ACCENT, GAT's RATCHET: each one step on.
+    key(ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(kit.arp.var), 1);
+    CHECK(std::strcmp(UiProbe::notice(app), "ARP VAR CONV") == 0);
+    CHECK(app_storage().dirty());
+    key(ENAGA_KEY_PUSH_B);
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.arp.rhythm), 1);
+    CHECK_EQ(int(kit.arp.accent), 1);
+    CHECK_EQ(int(kit.arp.ratchet), 1);
+    CHECK(std::strcmp(UiProbe::notice(app), "ARP RTC 2:4") == 0);
+    CHECK(screen_has(app, "VAR CONV"));
+    check_layout(app, "EDIT ARP, all four set");
+
+    // Round each table and back to OFF, the screen in bounds at every value.
+    const int pushes[kArpExtFields] = {ENAGA_KEY_PUSH_A, ENAGA_KEY_PUSH_B, ENAGA_KEY_PUSH_C,
+                                       ENAGA_KEY_PUSH_D};
+    for (int f = 0; f < kArpExtFields; f++) {
+        for (int v = 1; v < arp_ext_count(f); v++) {
+            key(pushes[f]);
+            pump(2);
+            check_layout(app, arp_ext_label(f));
+        }
+        CHECK_EQ(int(arp_ext_get(kit.arp, f)), 0);
+    }
+
+    // The pushes are the ARP page's: on the LFO page push B is still TRIG.
+    goto_edit_page(app, Page::lfo);
+    key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(kit.arp.rhythm), 0);
+    CHECK_EQ(int(kit.lfo_trig), int(kLfoTrigRetrig));
+    post_track(Cmd::set_lfo_trig, 0, kLfoTrigFree);
+    post_cmd_track_param(0, uint8_t(kArpFirst + 0), 0);
+    pump(2);
+    goto_edit_page(app, Page::src);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_arps_ok_on_the_arp_page_loads_an_arp_and_as_was_puts_it_back) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);
+    goto_edit_page(app, Page::arp);
+    post_cmd_track_param(0, uint8_t(kArpFirst + 0), 53);      // the track's own: DN
+    pump(2);
+    const TrackParams before = app_engine().params(0);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+    CHECK(screen_has(app, "ARPS"));
+    CHECK(screen_has(app, "INTO T1 ARP ONLY"));
+    check_layout(app, "ARPS");
+
+    // Every arp in turn: loaded into track 1's ARP bytes and settings, marked NOW, the sound
+    // left alone.
+    for (int row = 1; row <= arp_preset_count(); row++) {
+        sounds_cursor_to(row);
+        key(ENAGA_KEY_OK);
+        pump(2);
+        CHECK(arp_preset_matches(row - 1, &app_engine().params(0).v[kArpFirst],
+                                 app_engine().project().kit.tracks[0].arp));
+        for (int p = 0; p < kArpFirst; p++) CHECK_EQ(int(app_engine().params(0).v[p]), int(before.v[p]));
+        CHECK(screen_has(app, "NOW"));
+        check_layout(app, arp_preset(row - 1)->name);
+    }
+    CHECK(app_storage().dirty());
+
+    // AS WAS: the track's own arp back, settings and all.
+    sounds_cursor_to(0);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(same_params(app_engine().params(0), before));
+    for (int f = 0; f < kArpExtFields; f++) CHECK_EQ(int(arp_ext_get(app_engine().project().kit.tracks[0].arp, f)), 0);
+
+    // CLR goes back to the ARP page; OK on a sound page still opens SOUNDS.
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    CHECK_EQ(UiProbe::param_page(app), int(Page::arp));
+    goto_edit_page(app, Page::src);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+    CHECK(!screen_has(app, "ARP ONLY"));
+    key(ENAGA_KEY_CLR);
+    post_cmd_track_param(0, uint8_t(kArpFirst + 0), 0);
+    pump(2);
+    key(ENAGA_KEY_F4);
 }
 
 // --- live recording on a chord track: what several notes on one step become -------------------

@@ -630,6 +630,10 @@ private:
     // its AS WAS row can put it back. -1 when nothing is remembered.
     TrackParams sound_back_ = {};
     int sound_back_track_ = -1;
+    // And `Cmd::arp_preset`'s: the ARP bytes and the arp's kit settings when ARPS opened.
+    uint8_t arp_back_[kArpBytes] = {};
+    KitArp arp_back_ext_ = {};
+    int arp_back_track_ = -1;
 
     // What the machines and chains are actually prepared from: the kit with the CURRENT step's
     // parameter locks written over it.
@@ -926,28 +930,50 @@ private:
     // `fire`, ending with the step's length or at the next step -- and one for held KEYS keys,
     // which runs while any is down. Both hit on the clock's ticks while it runs; the held one
     // counts frames while it is stopped, as a note repeat does.
+    //
+    // The kit's arp settings (KitTrack::arp) shape each hit: RHYTHM rests a slot without moving
+    // the note on (`slot` counts the grid, `hit` the notes), ACCENT accents it, and RATCHET
+    // repeats its note inside the slot. A ratchet's later hits are counted down in frames
+    // (`ratchet_*`) by `arp_ratchets`, after the deferred step hits and before this block's
+    // ticks, the same way whether the transport runs or not. They are spaced at least a block
+    // apart (`arp_ratchet_hits`), which keeps the one-pending-trig contract `dispatch` relies on.
     struct ArpRun {
         bool on = false;
         ArpMode mode = ArpMode::off;
+        ArpVar var = ArpVar::off;
         uint8_t length = 0;
         uint8_t octaves = 1;
         uint8_t rate = 24;           // ticks between hits
         uint8_t gate_percent = 50;
         uint8_t velocity = 100;
         bool accent = false;
-        uint32_t hit = 0;
+        uint32_t hit = 0;            // notes played
+        uint32_t slot = 0;           // grid slots passed, rests included
         uint32_t next_tick = 0;
         uint32_t end_tick = 0xFFFFFFFFu;
         uint32_t seed = 0;
         float countdown = 0.0f;      // frames to the next hit, transport stopped (held runs)
+        uint8_t ratchet_left = 0;    // the slot's repeats still to come
+        uint8_t ratchet_note = 60;
+        uint32_t ratchet_gate = 1;   // frames
+        float ratchet_countdown = 0.0f;   // frames from the next block's start to the next repeat
+        float ratchet_spacing = 0.0f;
         uint8_t cycle[kArpMaxCycle] = {};
     };
     ArpRun seq_arp_[kTracks];
     ArpRun held_arp_[kTracks];
     uint8_t held_notes_[kTracks][kArpMaxInput] = {};
     uint8_t held_count_[kTracks] = {};
+    // Set once `arp_ratchets` has run in this block, so a hit after it counts its ratchet from
+    // the next block's start and a hit before it (a command, a deferred step) from this one's.
+    bool arp_ratchets_done_ = false;
+    uint32_t arp_runs_ = 0;      // runs started, for arp_new_seed
+    uint32_t arp_new_seed(int track, int step);
     ArpSettings arp_settings(int track) const;
     void arp_hit(int track, ArpRun &run, uint32_t frame);
+    void arp_play(int track, uint8_t note, uint8_t velocity, bool accent, uint32_t frame,
+                  uint32_t gate_frames);
+    void arp_ratchets(uint32_t frames);
     void arp_tick(uint32_t tick, uint32_t frame);
     void arp_free(uint32_t frames);
     void arp_held_changed(int track);

@@ -243,6 +243,35 @@
             }
         }
 
+        // The arp's kit settings (core/arp.hpp): on the ARP page, push MOD's knob for VAR, RAT's
+        // for RHYTHM, OCT's for ACCENT and GAT's for RATCHET, each round its table and back to
+        // OFF. Kit settings like LFO TRIG, and without FUNC for the same reason.
+        if ((mode_ == Mode::edit || mode_ == Mode::grid || mode_ == Mode::keys) && !shift_ &&
+            !step_page_ && param_page_ == int(Page::arp) &&
+            (key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||
+             key == ENAGA_KEY_PUSH_D)) {
+            if (!down) return;
+            const int field = key == ENAGA_KEY_PUSH_A   ? 0
+                              : key == ENAGA_KEY_PUSH_B ? 1
+                              : key == ENAGA_KEY_PUSH_C ? 2
+                                                        : 3;
+            const KitArp &now = engine_.project().kit.tracks[selected_].arp;
+            const uint8_t next =
+                uint8_t((int(arp_ext_get(now, field)) + 1) % arp_ext_count(field));
+            post(Cmd::set_arp_ext, uint8_t(selected_), 0, uint8_t(field), next);
+            char *out = notice_buffer_;
+            append(out, "ARP ");
+            append(out, arp_ext_label(field));
+            append(out, " ");
+            append(out, arp_ext_name(field, next));
+            *out = 0;
+            notice(notice_buffer_);
+            // Logged too: the emulator can push a knob but not read the screen
+            // (tests/scenario_arp.sh).
+            enaga::log(notice_buffer_);
+            return;
+        }
+
         // NOTE view: on EDIT, GRID or KEYS (wherever A-D turn the EDIT page), push the knob that
         // turns TUN (PIT on SAMPLE and GRAIN) to show it as a note, where it puts C-4, and turn
         // it a semitone a click; push again for the number and counts. One setting for every
@@ -703,6 +732,10 @@
                     notice("REDO");
                 } else if (step_page_) {
                     step_page_ = false;                // OK again closes it
+                } else if (mode_ == Mode::edit && param_page_ == int(Page::arp)) {
+                    // On the ARP page OK opens that page's list, the factory arps, on any
+                    // machine: the arp runs on every track (core/arppresets.hpp).
+                    open_sounds(true);
                 } else if (mode_ == Mode::edit && machine_is_grain(engine_.machine_id(selected_))) {
                     // GRAIN has a sample AND factory sounds, so the two screens split them: OK on
                     // EDIT opens its SOUNDS, as on every synth, and OK on MACHINE (below) the
@@ -879,8 +912,19 @@
 
     void walk_track(int delta) {
         const int next = (selected_ + delta + kTracks) % kTracks;
-        if (next != selected_) end_gesture();   // a different track is a different edit
+        if (next != selected_) {
+            end_gesture();                      // a different track is a different edit
+            drop_range();
+        }
         selected_ = next;
+    }
+
+    // A STEP range belongs to the track and the screen it was made on. Left standing, a plain CLR,
+    // a copy or a turn of A or B on another track (or in EDIT, where SEL is not drawn) acted on
+    // that track's steps in the range, unseen. A paste then lands on a held step, or on step 1.
+    void drop_range() {
+        range_first_ = range_last_ = -1;
+        len_step_ = -1;
     }
 
     void walk_machine(int delta) {
@@ -949,6 +993,7 @@
 
     void leave_mode() {
         step_page_ = false;
+        drop_range();
         slot_menu_ = false;
         slot_ok_held_ = false;
         // An audition belongs to SAMPLES (dsp/audition.hpp).
@@ -1090,6 +1135,7 @@
                 // machine change lands on whatever track this leaves selected.
                 selected_ = (selected_ + delta + kTracks) % kTracks;
                 end_gesture();
+                drop_range();
                 char *out = notice_buffer_;
                 append(out, "TRACK ");
                 append_number(out, uint32_t(selected_) + 1);
@@ -1139,6 +1185,7 @@
                 // The track, as in MACHINE, so one hand can try a sound on each of the eight.
                 selected_ = (selected_ + delta + kTracks) % kTracks;
                 end_gesture();
+                drop_range();
                 retarget_sounds();
                 break;
             case Mode::menu:                    // one page

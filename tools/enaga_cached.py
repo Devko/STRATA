@@ -18,6 +18,8 @@ modified (CLAUDE.md) -- and wraps two functions before calling the tool's main()
   firmware_build.build(out)      (emulate.py only)
       keyed by the bytes of firmware/, loader/, the tools it imports and the toolchain.
 
+For emulate it also moves the emulator's decode cache next to this one (use_local_decode_cache).
+
 A different source, header, flag, compiler or ENAGA_TI_CGT is a different key, so a hit is
 always the exact bytes a fresh build would have produced from the same inputs. The cache lives in
 $STRATA_ENAGA_CACHE (default ~/strata-build/cache), outside every per-scenario $ENAGA_BUILD, so
@@ -190,6 +192,20 @@ def wrap_firmware(firmware_build, paths):
     firmware_build.build = build
 
 
+def use_local_decode_cache():
+    """Keep the emulator's decode cache beside ours, off /mnt/d.
+
+    The emulator decodes each 4 KiB page of guest code once and keeps the result in
+    <its repo>/work/emulator/decode-cache, which for STRATA is the clone under /mnt/d. A run reads
+    a few hundred of those files, and on the 9p mount that cost about 9 s of a 30 s scenario_m3
+    (2026-11-27). The cache is keyed by the page bytes and the decoder's sources, so moving it
+    changes nothing but where the files are. SMPLTREK_DECODE_CACHE set by hand still wins.
+    """
+    root = cache_root()
+    if root is not None:
+        os.environ.setdefault("SMPLTREK_DECODE_CACHE", str(root / "emulator-decode"))
+
+
 def main(argv):
     if len(argv) < 1 or argv[0] not in ("build_app", "emulate"):
         print(__doc__, file=sys.stderr)
@@ -203,6 +219,7 @@ def main(argv):
     if tool == "emulate":
         module = importlib.import_module("emulate")
         wrap_firmware(module.firmware_build, paths)
+        use_local_decode_cache()
     sys.argv = [str(ENAGA / "tools" / f"{tool}.py"), *args]
     return module.main(args)
 

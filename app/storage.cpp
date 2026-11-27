@@ -116,6 +116,9 @@ bool mutates_kit(Cmd cmd) {
         case Cmd::set_machine:
         // A factory sound writes a track's parameters, as a knob does.
         case Cmd::sound_preset:
+        // And an arp preset and the arp's settings, the ARP page's bytes and kit fields.
+        case Cmd::arp_preset:
+        case Cmd::set_arp_ext:
         case Cmd::set_track_level:
         case Cmd::set_slice_mode:
         case Cmd::set_lfo_trig:
@@ -876,8 +879,25 @@ void Storage::on_card(bool usable) {
         if (sample_track_ >= 0) pool_.fail(sample_track_);
         sample_track_ = -1;
     }
+    // A project load cut off half way has already written its first files into RAM: the files
+    // read so far are the new project's, the rest still the old one's, and the audio side was
+    // never told (Cmd::project_loaded comes last). Left like that, the next save wrote the mix
+    // over a project -- over the one being OPENED, whose name was already in `name_`, with every
+    // file, because a card that came back is not `project_complete_`. So the load is asked for
+    // again and goes from its first file when a card returns, and an open gives the name back
+    // meanwhile, as a refused open does (finish_job). Unlike a load still only PENDING, which
+    // has touched nothing and is dropped below
+    // (storage_a_load_already_asked_for_is_cancelled_by_pulling_the_card).
+    const bool load_cut_off = job_ == Job::load;
+    const bool open_cut_off = load_cut_off && opening_;
+    if (open_cut_off) copy_name(name_, kept_name_, kNameBytes);
     job_ = Job::idle;
     save_pending_ = autosave_pending_ = load_pending_ = open_pending_ = opening_ = false;
+    if (load_cut_off) {
+        load_pending_ = true;
+        load_autosave_ = autosave_;
+        open_pending_ = open_cut_off;   // open_name_ still names it
+    }
     kit_scan_pending_ = false;
     // A rename or delete stops where it was; the order its files go in is what makes that safe.
     // A listing it had in flight still answers, and step_delete waits for that before another.
@@ -2889,6 +2909,13 @@ void Storage::save_for_shutdown() {
     // the last chance to keep the user's work. Blocking is allowed here; it is the one place in
     // this file that waits.
     if (!card_usable_) return;
+    // Nor while a project load is half done: RAM is part the project being read and part the one
+    // before (on_card says more), and both are whole on the card. An autosave of the mix would
+    // count newer than either and be what the next start opens, under the old project's name.
+    // And not before a load asked for has run, the boot's open_last above all: RAM is then the
+    // factory project (Engine::init), or one the user has just asked to throw away, and its
+    // autosave would shadow the project the card holds at the next start.
+    if (job_ == Job::load || load_pending_) return;
 
     post(Cmd::kit_store);
 

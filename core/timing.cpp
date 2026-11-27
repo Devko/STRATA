@@ -144,6 +144,7 @@ int steps_firing_at(uint32_t tick, const TrackTiming &timing, const int8_t *micr
     int32_t loop_start = loop * loop_ticks;
     int32_t grid = candidate * step_ticks;        // the slot's tick before swing, micro and FEEL
     const bool forward = timing.play == PlayMode::fwd;
+    int32_t clamped_slot = -1;                    // a first-pass slot pulled onto tick 0
 
     for (; candidate <= last_candidate; candidate++) {
         // A step pulled before tick 0 -- step 1 with negative micro-timing on the very first pass
@@ -157,8 +158,15 @@ int steps_firing_at(uint32_t tick, const TrackTiming &timing, const int8_t *micr
         const int32_t nominal =
             loop_start + slot_tick(int(step_index), plays, timing, micro) +
             (feel_ticks != 0 ? feel_offset(timing.feel, timing.feel_seed, grid) : 0);
-        const int32_t effective = nominal < 0 ? 0 : nominal;
-        if (effective == absolute) {
+        // Only the first pass's, and only once. On a track a step or two long with micro and
+        // FEEL past its own loop (1 step at 2x, micro -11, FEEL) a later pass of the same slot is
+        // pulled below 0 or onto 0 as well, and the step fired twice on tick 0, on two passes
+        // that roll conditions apart. The first pass's stand-in is the one that plays.
+        const bool pulled = nominal < 0;
+        const int32_t effective = pulled && loop == 0 ? 0 : nominal;
+        const bool again = absolute == 0 && loop != 0 && clamped_slot == step_index;
+        if (effective == absolute && !again) {
+            if (pulled) clamped_slot = step_index;
             out[found].step = plays;
             out[found].loop = uint32_t(loop);
             out[found].slot = uint8_t(step_index);

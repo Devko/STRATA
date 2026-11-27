@@ -8,6 +8,8 @@
 #include "project.hpp"
 #include "check.hpp"
 
+#include <cmath>
+
 #include <enaga/abi.h>
 #include <enaga/dsp.hpp>
 
@@ -366,6 +368,41 @@ TEST(chain_drive_is_asymmetric) {
     CHECK(high > 0.0f);
     CHECK(low < 0.0f);
     CHECK(high > -low * 1.1f);     // the positive half is driven harder: even harmonics
+}
+
+TEST(chain_drive_leaves_no_dc) {
+    // The asymmetric clip shifts a held tone off zero (about 7% of full scale at DRV 32 on a
+    // 0.5 sine). The blocker after it takes that out: the mean of the output, once it settles,
+    // is a small fraction of what the clip alone leaves.
+    TrackParams driven = neutral_params();
+    driven.set(kPan, kPanLeft);
+    driven.set(kDrv, 32);
+    ChainMix mix;
+    InsertChain chain;
+    chain.init(kRate);
+    Buses buses;
+    float mono[kFrames];
+    double sum = 0.0, raw = 0.0;
+    int counted = 0;
+    for (int b = 0; b < 1500; b++) {
+        fill_signal(Signal::sine, mono, kFrames, b, 0.5f);
+        if (b >= 500) {
+            for (int i = 0; i < kFrames; i++) {
+                const float x = mono[i] * (mono[i] < 0.0f ? 0.7f : 1.0f) * 2.0110f;
+                raw += x - x * x * x * (4.0f / 27.0f);   // the clip alone: DRV 32 is a gain of 2^(32 x 4 / 127)
+            }
+        }
+        buses.clear();
+        chain.prepare(driven, mix);
+        chain.process(mono, kFrames, buses.out());
+        if (b >= 500) {
+            for (int i = 0; i < kFrames; i++) sum += buses.l[i];
+            counted += kFrames;
+        }
+    }
+    const double mean = sum / counted, raw_mean = raw / counted;
+    CHECK(raw_mean > 0.02);                      // the clip alone is well off zero ...
+    CHECK(std::fabs(mean) < 0.05 * raw_mean);    // ... and the chain's output is not
 }
 
 // --- lo-fi -----------------------------------------------------------------------------------

@@ -424,9 +424,28 @@
                 }
                 break;
             }
-            case Page::arp:
-                if (arp_mode_index(kit.v[kArpFirst]) == 0) add("ARP OFF: TURN MOD");
+            case Page::arp: {
+                if (arp_mode_index(kit.v[kArpFirst]) == 0) {
+                    add("ARP OFF: TURN MOD");
+                    break;
+                }
+                // The kit settings that are set, each as "RHY E5/16"; or where they are.
+                const KitArp &ext = engine_.project().kit.tracks[selected_].arp;
+                bool any = false;
+                for (int f = 0; f < kArpExtFields; f++) {
+                    const uint8_t v = arp_ext_get(ext, f);
+                    if (v == 0) continue;
+                    any = true;
+                    p = part;
+                    append(p, arp_ext_label(f));
+                    *p++ = ' ';
+                    append(p, arp_ext_name(f, v));
+                    *p = 0;
+                    add(part);
+                }
+                if (!any) add("PUSH: VAR RHY ACC RTC");
                 break;
+            }
             case Page::osc:
                 if (!machine_reads_osc(id)) add("NOT ON THIS MACHINE");
                 break;
@@ -1672,37 +1691,31 @@
 
     // --- ARP: the run as a piano roll ----------------------------------------------------------
     //
-    // Sixteen notes of the run the arp would play over a three-note chord, MOD's order through
-    // OCT octaves, each as long as GAT makes it; while the beat plays, the note it is on lit.
+    // Sixteen slots of the run the arp would play over a three-note chord: core/arp.cpp's own
+    // cycle (MOD through OCT octaves, VAR's reshaping), RHYTHM's rests as a dot on the floor,
+    // ACCENT's hits taller and brighter, a RATCHET's slot split into its repeats, each note as
+    // long as GAT makes it; while the beat plays, the slot it is on lit. MOD at OFF draws UP,
+    // dim.
     void draw_arp_view(enaga::Canvas &canvas) {
         uint8_t *px = canvas.data();
         const TrackParams &kit = engine_.params(selected_);
         const uint8_t *arp = &kit.v[kArpFirst];
+        const KitArp &ext = engine_.project().kit.tracks[selected_].arp;
         const int mode = arp_mode_index(arp[0]);
         const int octaves = arp_octaves(arp[2]);
         const int gate = arp_gate_percent(arp[3]);
-        const int notes = 3 * octaves;
         constexpr int kTop = 30, kBottom = 92, kCell = 7, kX0 = 4;
-        // The run, as indexes into the chord's notes, low to high.
-        int run[24];
-        int n = 0;
-        switch (mode) {
-            case 2: for (int i = notes - 1; i >= 0; i--) run[n++] = i; break;               // DN
-            case 3:                                                                         // U/D
-                for (int i = 0; i < notes; i++) run[n++] = i;
-                for (int i = notes - 2; i > 0; i--) run[n++] = i;
-                break;
-            case 5: {                                                                       // RND
-                uint32_t seed = 0x9E3779B9u;
-                for (int i = 0; i < 16; i++) { seed = seed * 1664525u + 1013904223u; run[n++] = int(seed >> 16) % notes; }
-                break;
-            }
-            default: for (int i = 0; i < notes; i++) run[n++] = i; break;                   // UP, ORD, OFF
-        }
-        if (n == 0) { run[0] = 0; n = 1; }
+        ArpSettings settings = ArpSettings::make(arp);
+        if (mode == 0) settings.mode = ArpMode::up;
+        settings.var = ArpVar(ext.var < kArpVars ? ext.var : 0);
+        static constexpr uint8_t kChord[3] = {60, 64, 67};
+        uint8_t cycle[kArpMaxCycle];
+        const int length = arp_cycle(kChord, 3, settings, cycle);
+        const int low = 60, high = 67 + 12 * (octaves - 1);
         for (int i = 0; i < 16; i += 4) paint::dotted_v(px, kX0 + i * kCell - 1, kTop, kBottom, 3, 2);
         for (int o = 1; o < octaves; o++) {
-            paint::dotted_h(px, 0, 119, kBottom - o * 3 * (kBottom - kTop) / (notes > 1 ? notes - 1 : 1), 3, 3);
+            const int y = kBottom - 2 - (12 * o) * (kBottom - kTop - 4) / (high - low);
+            paint::dotted_h(px, 0, 119, y, 3, 3);
         }
         int current = -1;
         if (mode != 0 && enaga::clock::state().running != 0) {
@@ -1710,13 +1723,25 @@
             const uint32_t into = engine_.status().pattern_into.load(std::memory_order_relaxed);
             if (ticks > 0) current = int(into / ticks % 16u);
         }
-        const int width = (kCell - 1) * gate / 100 < 1 ? 1 : (kCell - 1) * gate / 100;
+        uint32_t hit = 0;
         for (int i = 0; i < 16; i++) {
-            const int k = run[i % n];
-            const int y = kBottom - 2 - k * (kBottom - kTop - 4) / (notes > 1 ? notes - 1 : 1);
-            const int grey = mode == 0 ? 3 : (i == current ? 15 : 9);
-            canvas.rect(kX0 + i * kCell, y, width + 1, 3, uint8_t(grey));
-            if (i == current) paint::dot(px, kX0 + i * kCell + width / 2, y + 1, 15);
+            const int x = kX0 + i * kCell;
+            if (!arp_rhythm_plays(ext.rhythm, uint32_t(i))) {
+                paint::dot(px, x + 2, kBottom - 1, uint8_t(i == current ? 15 : 5));
+                continue;
+            }
+            const uint8_t note = arp_note(cycle, length, settings.mode, hit, 0x5EEDu);
+            const bool accent = arp_accent_on(ext.accent, uint32_t(i), hit, length);
+            hit++;
+            const int y = kBottom - 2 - (int(note) - low) * (kBottom - kTop - 4) / (high - low);
+            const int grey = mode == 0 ? 3 : (i == current ? 15 : (accent ? 13 : 8));
+            const int count = arp_ratchet_count(ext.ratchet, uint32_t(i), 0x5EEDu);
+            const int each = (kCell - 1) / count;
+            const int width = each * gate / 100 < 1 ? 1 : each * gate / 100;
+            for (int r = 0; r < count; r++) {
+                canvas.rect(x + r * each, accent ? y - 1 : y, width, accent ? 4 : 3, uint8_t(grey));
+            }
+            if (i == current) paint::dot(px, x + width / 2, y + 1, 15);
         }
         canvas.rect(0, kBottom + 1, 120, 1, 6);
         paint::small_text(px, 0, kBottom + 4, mode == 0 ? "OFF" : arp_rate_name(arp[1]), mode == 0 ? 5 : 9);

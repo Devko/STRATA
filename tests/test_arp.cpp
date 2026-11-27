@@ -2,6 +2,7 @@
 #include "check.hpp"
 
 #include "arp.hpp"
+#include "arppresets.hpp"
 
 #include <cstring>
 
@@ -120,4 +121,223 @@ TEST(arp_hits_walk_the_cycle_and_random_repeats_per_seed) {
         differ += arp_note(cycle, 4, ArpMode::random, h, 1) != arp_note(cycle, 4, ArpMode::random, h, 2);
     }
     CHECK(differ > 8);
+}
+
+// --- the kit settings: VAR, RHYTHM, ACCENT, RATCHET ---------------------------------------------
+
+TEST(arp_var_off_is_the_walk_as_it_was) {
+    const uint8_t played[3] = {67, 60, 64};
+    uint8_t a[kArpMaxCycle], b[kArpMaxCycle];
+    for (int m = 1; m < int(ArpMode::count); m++) {
+        ArpSettings s = settings(ArpMode(m), 2);
+        const int n = arp_cycle(played, 3, s, a);
+        s.var = ArpVar::off;
+        CHECK_EQ(arp_cycle(played, 3, s, b), n);
+        CHECK(std::memcmp(a, b, size_t(n)) == 0);
+    }
+}
+
+TEST(arp_var_converge_and_diverge_close_in_and_open_out) {
+    const uint8_t chord[4] = {60, 64, 67, 71};
+    uint8_t out[kArpMaxCycle];
+    ArpSettings s = settings(ArpMode::up, 1);
+    s.var = ArpVar::converge;
+    CHECK_EQ(arp_cycle(chord, 4, s, out), 4);
+    CHECK_EQ(int(out[0]), 60);
+    CHECK_EQ(int(out[1]), 71);
+    CHECK_EQ(int(out[2]), 64);
+    CHECK_EQ(int(out[3]), 67);
+    // An odd count ends on the middle note.
+    CHECK_EQ(arp_cycle(chord, 3, s, out), 3);
+    CHECK_EQ(int(out[2]), 64);
+    s.var = ArpVar::diverge;
+    CHECK_EQ(arp_cycle(chord, 4, s, out), 4);
+    CHECK_EQ(int(out[0]), 67);
+    CHECK_EQ(int(out[1]), 64);
+    CHECK_EQ(int(out[2]), 71);
+    CHECK_EQ(int(out[3]), 60);
+    // On DOWN the walk starts high, so converge does too.
+    s = settings(ArpMode::down, 1);
+    s.var = ArpVar::converge;
+    arp_cycle(chord, 4, s, out);
+    CHECK_EQ(int(out[0]), 71);
+    CHECK_EQ(int(out[1]), 60);
+}
+
+TEST(arp_var_thumb_and_pinky_put_a_pedal_between_the_notes) {
+    const uint8_t chord[3] = {64, 60, 67};
+    uint8_t out[kArpMaxCycle];
+    ArpSettings s = settings(ArpMode::up, 1);
+    s.var = ArpVar::thumb;
+    CHECK_EQ(arp_cycle(chord, 3, s, out), 4);         // C E C G
+    CHECK_EQ(int(out[0]), 60);
+    CHECK_EQ(int(out[1]), 64);
+    CHECK_EQ(int(out[2]), 60);
+    CHECK_EQ(int(out[3]), 67);
+    s.var = ArpVar::pinky;
+    CHECK_EQ(arp_cycle(chord, 3, s, out), 4);         // C G E G
+    CHECK_EQ(int(out[0]), 60);
+    CHECK_EQ(int(out[1]), 67);
+    CHECK_EQ(int(out[2]), 64);
+    CHECK_EQ(int(out[3]), 67);
+    // One note on one octave is all pedal: it plays as it is, not as nothing.
+    const uint8_t one[1] = {48};
+    CHECK_EQ(arp_cycle(one, 1, s, out), 1);
+    CHECK_EQ(int(out[0]), 48);
+    // The largest walk, doubled, still fits the cycle.
+    uint8_t many[8];
+    for (int i = 0; i < 8; i++) many[i] = uint8_t(30 + i);
+    s = settings(ArpMode::up_down, 4);
+    s.var = ArpVar::thumb;
+    const int n = arp_cycle(many, 8, s, out);
+    CHECK(n > 2 * 32 && n <= kArpMaxCycle);
+}
+
+TEST(arp_rhythms_rest_on_their_slots_and_all_plays_every_one) {
+    for (uint32_t slot = 0; slot < 64; slot++) CHECK(arp_rhythm_plays(0, slot));
+    // X- : every other.
+    CHECK(arp_rhythm_plays(1, 0));
+    CHECK(!arp_rhythm_plays(1, 1));
+    CHECK(arp_rhythm_plays(1, 2));
+    // XX- : two and a rest, round again.
+    CHECK(arp_rhythm_plays(2, 3) && arp_rhythm_plays(2, 4) && !arp_rhythm_plays(2, 5));
+    // Every rhythm but ALL rests somewhere and plays somewhere, inside 16 slots.
+    for (int r = 1; r < kArpRhythms; r++) {
+        int plays = 0;
+        for (uint32_t slot = 0; slot < 48; slot++) plays += arp_rhythm_plays(uint8_t(r), slot);
+        CHECK(plays > 0 && plays < 48);
+    }
+    // The tresillo, 332: hits on 0 3 6 of eight.
+    int hits = 0;
+    for (uint32_t slot = 0; slot < 8; slot++) hits += arp_rhythm_plays(5, slot) ? 1 << slot : 0;
+    CHECK_EQ(hits, 0x49);
+    // Damage reads as ALL.
+    CHECK(arp_rhythm_plays(200, 1));
+}
+
+TEST(arp_accents_fall_on_their_slots_and_cyc_on_each_cycles_first_note) {
+    for (uint32_t slot = 0; slot < 32; slot++) CHECK(!arp_accent_on(0, slot, slot, 4));
+    CHECK(arp_accent_on(2, 0, 0, 4) && !arp_accent_on(2, 1, 1, 4) && arp_accent_on(2, 3, 3, 4));
+    // CYC: the note count, not the slot.
+    const uint8_t cyc = kArpAccents - 1;
+    CHECK(std::strcmp(arp_ext_name(2, cyc), "CYC") == 0);
+    CHECK(arp_accent_on(cyc, 7, 0, 3));
+    CHECK(!arp_accent_on(cyc, 0, 1, 3));
+    CHECK(arp_accent_on(cyc, 1, 3, 3));
+    CHECK(!arp_accent_on(cyc, 0, 0, 0));
+    CHECK(!arp_accent_on(99, 0, 0, 4));
+}
+
+TEST(arp_ratchets_land_on_their_slots_and_chance_repeats_per_seed) {
+    for (uint32_t slot = 0; slot < 32; slot++) CHECK_EQ(arp_ratchet_count(0, slot, 7), 1);
+    // 2:4 -- the last of every four.
+    CHECK_EQ(arp_ratchet_count(1, 0, 0), 1);
+    CHECK_EQ(arp_ratchet_count(1, 3, 0), 2);
+    CHECK_EQ(arp_ratchet_count(1, 7, 0), 2);
+    CHECK_EQ(arp_ratchet_count(3, 7, 0), 3);
+    CHECK_EQ(arp_ratchet_count(4, 15, 0), 4);
+    CHECK_EQ(arp_ratchet_count(4, 14, 0), 1);
+    CHECK_EQ(arp_ratchet_count(5, 9, 0), 2);
+    // Chance: about a quarter of the slots, the same for the same seed, 2 on RND2, 2 or 3 on RND3.
+    int ratcheted = 0, threes = 0;
+    for (uint32_t slot = 0; slot < 400; slot++) {
+        const int a = arp_ratchet_count(6, slot, 99);
+        CHECK_EQ(a, arp_ratchet_count(6, slot, 99));
+        CHECK(a == 1 || a == 2);
+        ratcheted += a > 1;
+        const int b = arp_ratchet_count(7, slot, 99);
+        CHECK(b >= 1 && b <= 3);
+        threes += b == 3;
+    }
+    CHECK(ratcheted > 60 && ratcheted < 140);
+    CHECK(threes > 10);
+    for (int r = 0; r < kArpRatchets; r++) {
+        for (uint32_t slot = 0; slot < 32; slot++) CHECK(arp_ratchet_count(uint8_t(r), slot, slot) <= kArpMaxRatchet);
+    }
+}
+
+TEST(arp_kit_settings_sanitize_name_and_round_trip_by_field) {
+    KitArp a;
+    a.var = 200;
+    a.rhythm = kArpRhythms;
+    a.accent = 3;
+    a.ratchet = 255;
+    const KitArp s = kit_arp_sanitized(a);
+    CHECK_EQ(int(s.var), 0);
+    CHECK_EQ(int(s.rhythm), 0);
+    CHECK_EQ(int(s.accent), 3);
+    CHECK_EQ(int(s.ratchet), 0);
+    KitArp b;
+    for (int f = 0; f < kArpExtFields; f++) {
+        CHECK(arp_ext_count(f) >= 5);
+        CHECK(std::strlen(arp_ext_label(f)) == 3);
+        for (int v = 0; v < arp_ext_count(f); v++) {
+            arp_ext_set(b, f, uint8_t(v));
+            CHECK_EQ(int(arp_ext_get(b, f)), v);
+            const char *name = arp_ext_name(f, uint8_t(v));
+            CHECK(name != nullptr && std::strlen(name) >= 1 && std::strlen(name) <= 5);
+            // Unique within the field.
+            for (int w = 0; w < v; w++) CHECK(std::strcmp(arp_ext_name(f, uint8_t(w)), name) != 0);
+        }
+        arp_ext_set(b, f, 250);
+        CHECK_EQ(int(arp_ext_get(b, f)), 0);
+        CHECK(std::strcmp(arp_ext_name(f, 250), arp_ext_name(f, 0)) == 0);
+    }
+}
+
+// --- the factory arps (core/arppresets.hpp) ------------------------------------------------------
+
+TEST(arp_presets_are_named_drawably_and_uniquely_and_each_is_an_arp) {
+    CHECK(arp_preset_count() >= 10);
+    CHECK(arp_preset_count() <= 15);                  // AS WAS and at most two screens of rows
+    CHECK(arp_preset(-1) == nullptr);
+    CHECK(arp_preset(arp_preset_count()) == nullptr);
+    for (int i = 0; i < arp_preset_count(); i++) {
+        const ArpPreset *p = arp_preset(i);
+        CHECK(p != nullptr && p->name != nullptr);
+        const int length = int(std::strlen(p->name));
+        CHECK(length >= 1 && length <= kArpPresetNameChars);
+        for (const char *c = p->name; *c; c++) CHECK((*c >= 'A' && *c <= 'Z') || (*c >= '0' && *c <= '9'));
+        for (int j = 0; j < i; j++) CHECK(std::strcmp(arp_preset(j)->name, p->name) != 0);
+        // Every preset is ON, its bytes knob bytes, its settings in their tables.
+        for (int b = 0; b < kArpBytes; b++) CHECK(p->bytes[b] <= 127);
+        CHECK(ArpSettings::make(p->bytes).on());
+        const KitArp clean = kit_arp_sanitized(p->ext);
+        for (int f = 0; f < kArpExtFields; f++) CHECK_EQ(int(arp_ext_get(clean, f)), int(arp_ext_get(p->ext, f)));
+        // In the middle of a zone: one click either way (arp_click) lands in the next one, not
+        // in this one, so a byte at a zone's very edge would make the knob feel off by one.
+        for (int b = 0; b < 3; b++) {
+            const int v = p->bytes[b];
+            const int lo = v - arp_click(b), hi = v + arp_click(b);
+            const auto zone = [b](int x) {
+                const uint8_t y = uint8_t(x < 0 ? 0 : (x > 127 ? 127 : x));
+                return b == 0 ? arp_mode_index(y) : (b == 1 ? arp_rate_index(y) : arp_octaves(y));
+            };
+            if (lo >= 0) CHECK(zone(lo) != zone(v));
+            if (hi <= 127) CHECK(zone(hi) != zone(v));
+        }
+    }
+}
+
+TEST(arp_presets_write_their_bytes_and_settings_and_match_after) {
+    for (int i = 0; i < arp_preset_count(); i++) {
+        uint8_t bytes[kArpBytes] = {1, 2, 3, 4};
+        KitArp ext = {1, 1, 1, 1};
+        CHECK(arp_preset_apply(i, bytes, ext));
+        CHECK(arp_preset_matches(i, bytes, ext));
+        for (int b = 0; b < kArpBytes; b++) CHECK_EQ(int(bytes[b]), int(arp_preset(i)->bytes[b]));
+        // Every other preset differs from it somewhere.
+        for (int j = 0; j < arp_preset_count(); j++) {
+            if (j != i) CHECK(!arp_preset_matches(j, bytes, ext));
+        }
+        // One kit setting off is not a match.
+        ext.ratchet = uint8_t((ext.ratchet + 1) % kArpRatchets);
+        CHECK(!arp_preset_matches(i, bytes, ext));
+    }
+    uint8_t bytes[kArpBytes] = {9, 9, 9, 9};
+    KitArp ext;
+    CHECK(!arp_preset_apply(99, bytes, ext));
+    CHECK_EQ(int(bytes[0]), 9);
+    CHECK(!arp_preset_apply(0, nullptr, ext));
+    CHECK(!arp_preset_matches(-1, bytes, ext));
 }
