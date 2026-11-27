@@ -34,6 +34,15 @@ the project file format or the controls.
   browser from their official releases and checked against their SHA-256. Source in `web/`
   (#180).
 
+### Changed
+
+- **FM4 no longer aliases at high IDX.** The brightness cap now sees the whole operator chain:
+  in a stack the sidebands multiply, so ALG 1 at IDX 90 on middle C and above folded harsh,
+  out-of-tune tones back into the audible range, about 10 dB under the note. Now they are 45-56 dB
+  down under 5 kHz. Low notes sound as before; high notes at high IDX are somewhat less bright.
+  `make -C host probe` and `tools/sound_probe.py` measure every synth for aliasing, tuning,
+  resonance, DC and clicks.
+
 ## [0.4.0] - {{RELEASE_DATE}}
 
 An early beta: everything merged since 0.3.1 (#137 to #177), and the first release for **Enaga
