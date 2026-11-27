@@ -762,11 +762,19 @@ void Engine::apply(const Command &command) {
             // deliberately NOT reset: an undo is an edit, not a pattern change, and restarting
             // the chain would make a conditional step somewhere else in the pattern fire
             // differently because of an edit that had nothing to do with it.
-            if (undo_.undo(live())) reconfigure();
+            // And the pass boundary: a restored pattern may carry a different master length,
+            // and the boundary derived from the old one would end a chain entry or a song at it.
+            if (undo_.undo(live())) {
+                reconfigure();
+                boundary_known_ = false;
+            }
             break;
 
         case Cmd::redo:
-            if (undo_.redo(live())) reconfigure();
+            if (undo_.redo(live())) {
+                reconfigure();
+                boundary_known_ = false;
+            }
             break;
 
         case Cmd::range_copy:
@@ -2294,6 +2302,9 @@ void Engine::pattern_replaced(int bank, int slot) {
     undo_.clear();               // the history belonged to the steps just replaced
     scheduler_.reset(true);
     reconfigure();
+    // DOUBLE changes the master length, and so may a copy: the boundary is measured again, or
+    // a chain entry ends where the pattern's old length did.
+    boundary_known_ = false;
     deferred_count_ = 0;
     span_clear();   // and the rolls of spanning ratchets
 }
@@ -3677,6 +3688,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
                  : uint8_t(0),
         std::memory_order_relaxed);
     status_.count_in_ticks.store(count_in_end_, std::memory_order_relaxed);
+    status_.pattern_origin.store(origin_, std::memory_order_relaxed);
     status_.running.store(clock.running ? 1u : 0u, std::memory_order_relaxed);
     status_.bump_blocks();
     waves_.audio_block();   // a WAVE slot taken out two blocks ago is no longer being read

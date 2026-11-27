@@ -431,6 +431,10 @@ Strata &fresh() {
         incoming.kit.tracks[t].params[kLvl] = 127;
     }
     post_cmd(Cmd::project_loaded);
+    // The pattern's origin (Engine::origin_) outlives a stop, as a CONTINUE needs, and goes back
+    // to 0 only on a tick before it. These tests set the clock's position without delivering one,
+    // and the recorder counts from the origin, so a chain or queue test left it past them.
+    post_cmd(Cmd::restart);
     post_cmd(Cmd::stop, 0, 0, 1);          // the app's own second STOP press: cut the tails
     pump(4);
 
@@ -7177,7 +7181,7 @@ void enter(Strata &app, int s) {
 // every notice from getting here faded, the track-select note's tail cut (MIXER's PEAK falls
 // with it), and the card read KIT starts with finished.
 void settle_screen(int s) {
-    post_cmd(Cmd::stop, 0, 0, 1);
+    post_cmd(Cmd::stop, 1);
     pump(2);
     // KIT reads its sixteen slots from the card a pass at a time, and says READING KITS until
     // all sixteen are in, not only the eight on its first page.
@@ -10134,6 +10138,56 @@ TEST(ui_a_note_recorded_under_reverse_lands_on_the_step_playing_in_that_slot) {
     CHECK(slot >= 0);
     post_track(Cmd::set_track_play, 0, uint8_t(PlayMode::fwd));
     pump(2);
+}
+
+// A queued switch starts the new pattern at its step 1 on the boundary (Engine::origin_), and
+// the scheduler counts its steps from there. The recorder counted from the clock's zero, so a
+// note played after the switch landed `origin mod loop` ticks away from the step it was played on.
+TEST(ui_a_note_recorded_after_a_queued_switch_lands_on_the_step_that_was_playing) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    Engine &engine = app_engine();
+    post_cmd(Cmd::set_master_length, 4);           // A01: a pass of 4 steps, 96 ticks
+    {
+        Command clear;                             // A02, the one switched to: empty
+        clear.cmd = Cmd::pattern_clear;
+        clear.track = 0;
+        clear.step = 1;
+        engine.commands().post(clear);
+    }
+    pump(2);
+    open_keys();
+    host.set_running(true);
+    host.deliver_tick(0, 0);
+    pump(2);
+    host.deliver_tick(48, 0);                      // half way through A01's pass
+    pump(2);
+    post_cmd(Cmd::queue_pattern, 0, 1, uint8_t(QueueMode::end_of_pattern));
+    pump(2);
+    host.deliver_tick(96, 0);                      // the boundary: A02 from its step 1
+    pump(2);
+    CHECK_EQ(int(engine.status().live_slot.load()), 1);
+    CHECK_EQ(int(engine.status().pattern_origin.load()), 96);
+
+    host.set_position(96 + 4 * 24);                // A02's step 5, which the scheduler plays here
+    key(ENAGA_KEY_F2);                             // REC on
+    app.on_pad_press(8, 90);
+    app.on_pad_release(8);
+    pump(2);
+    key(ENAGA_KEY_F2);
+    host.set_running(false);
+    int where = -1, trigs = 0;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(0, s)) { trigs++; where = s; }
+    }
+    CHECK_EQ(trigs, 1);
+    CHECK_EQ(where, 4);                            // not 8, where the clock's zero would put it
+    // The origin outlives a stop (a CONTINUE keeps it), and the next test sets the clock's
+    // position without delivering a tick that would send it back to 0: a restart does.
+    post_cmd(Cmd::restart);
+    post_cmd(Cmd::stop, 1);
+    pump(2);
+    CHECK_EQ(int(engine.status().pattern_origin.load()), 0);
 }
 
 // The layout echo names the play mode when it is not FWD, and stays inside 21 characters.
