@@ -129,8 +129,11 @@ void Snare::prepare(const TrackParams &params) {
     const float spread_s = 0.002f + 0.038f * params.unit(9);
     burst_frames_ = int(spread_s * rate_);
     if (burst_frames_ < 1) burst_frames_ = 1;
-    // Short enough that the bursts do not run into each other at any spread.
-    const float burst_s = clamp(spread_s * 0.35f, 0.001f, 0.012f);
+    // Each burst falls to 1% over a little more than the gap to the next, so it is still ringing
+    // when the next one strikes: the sawtooth flutter of an 808/909 clap. At 0.35x the spread the
+    // bursts were gone after a third of the gap and peaked 10-18 dB under the tail, so a clap
+    // read as a snare with a soft flam in front (the sound review, 2026-11-27).
+    const float burst_s = clamp(spread_s * 1.1f, 0.002f, 0.030f);
     burst_shape_ = EnvelopeShape::make(0.0003f, burst_s, 0.0f, 0.001f, rate_);
 
     const float level = params.unit(11);
