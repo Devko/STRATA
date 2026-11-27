@@ -403,7 +403,10 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
   ambient rig's settings, a FREE LFO's phase, the CPU MAX, a stale card error and its notice, a
   held MUTE pad, the track meters' fall, and the UI rig's STOP flag. A failing seed keeps its
   order in `$TMPDIR/strata-shuffle-SEED.txt`; replay it with `strata-tests --names FILE` and cut
-  the file in halves to find the test that leaks. Run the tool after adding tests to a rig. The
+  the file in halves to find the test that leaks. Run the tool after adding tests to a rig.
+  Known open (2026-11-27): `app_a_motion_recorded_lock_survives_the_block_copy` fails in
+  `tools/test_shuffle.sh BIN 10` (`after_lock < unlocked`); halving finds no single culprit, so it
+  takes two or more earlier tests together. The
   shards are still contiguous blocks; round robin would now work but nothing needs it.
 
 ### 8. Upstream, and moving the Enaga pin

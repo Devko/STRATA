@@ -4922,7 +4922,10 @@ TEST(storage_an_audition_stopped_fades_and_lets_the_stream_go) {
     pump_while_not([] { return !storage().auditioning(); }, 20, &reached);
     CHECK(reached);
     CHECK_EQ(host.streams_open(), 0);
-    CHECK(pump(20) == 0.0f);
+    // Silent to settle()'s 1e-6, not to an exact 0: settle() hands over a master delay and reverb
+    // still ringing below that, and after some tests (a send test, then a long load) they are
+    // still running here at about 1e-7 -- not the audition, which is gone.
+    CHECK(pump(20) < 1e-6f);
     host.remove_file("/SAMPLES/LONG.WAV");
 }
 
