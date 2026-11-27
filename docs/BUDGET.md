@@ -53,6 +53,20 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### The second review's fixes (2026-11-27, emulator)
+
+A choke that ends clears its track's insert chain once (as `silence_track` does), and the chain
+compares DRV's on/off with the last block's: control rate, nothing per sample.
+
+| Scenario | cl6x | GCC only, `main` (edbaf9f) | GCC only, with the fixes |
+| --- | --- | --- | --- |
+| `scenario_ambient` (the worst case) | 32.33% | 57.88% | 58.03% |
+| `scenario_choke` | 26.61% | 48.19% | 48.26% |
+
+Within the half point a peak moves between runs. All 46 scenarios pass with cl6x. GCC-only
+`ambient` was 56.48% on 2026-11-25; it is now within two points of 60% on `main` alone, before
+these fixes: cl6x ships, but the GCC-only margin is worth watching.
+
 ### Ratchets over LEN (2026-11-26, emulator)
 
 A roll's hits are notes like any other; the engine walks the running rolls once a tick
