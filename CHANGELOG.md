@@ -87,9 +87,13 @@ means new firmware as well as the app. The features below have not been through 
 
 ### Changed
 
-- **The LONG delay costs less**: its per-sample loop now runs as passes the TI compiler can
-  pipeline, the same sound to the last bit. The worst-case scenario (both sends in their ambient
-  modes) drops from 32.3% to 30.2% peak load on the emulator (#196).
+- **VA voices cost less**: the filter, envelope and output of every VA MONO and VA POLY voice
+  run as one loop the TI compiler can pipeline, the same sound to the last bit. About 1.5 points
+  off every pattern that plays them (the default beat 26.6% -> 25.1% on the emulator).
+- **The LONG delay and the HALL reverb cost less**: their per-sample loops now run as passes the
+  TI compiler can pipeline, the same sound to the last bit. The worst-case scenario (both sends
+  in their ambient modes) drops from 32.3% to 28.6% peak load on the emulator (#196, and this
+  PR for the HALL).
 - **FM4 no longer aliases at high IDX.** The brightness cap now sees the whole operator chain:
   in a stack the sidebands multiply, so ALG 1 at IDX 90 on middle C and above folded harsh,
   out-of-tune tones back into the audible range, about 10 dB under the note. Now they are 45-56 dB

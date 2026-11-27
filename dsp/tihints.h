@@ -20,15 +20,15 @@
 #define STRATA_TI_HINTS 0
 #endif
 
-/* The VA voice's fused back half (valoops.h, strata_va_back). OFF until its cl6x build is
- * explained: it is bit-exact on the host and with GCC, but a clean A/B on 2026-11-22 found that
- * its cl6x build drifts from the unfused path (which cl6x and GCC render identically) by enough
- * to move a voice's phase within half a second (docs/BUDGET.md, "The cl6x vectorisation pass").
- * --fp_reassoc=off changes nothing and the C674x has no FMA, so it is not rounding: cl6x
- * miscompiles it or it has undefined behaviour GCC tolerates. Worth ~1.7 points once found. tools/ti_ab.sh's `fused` variant
- * builds it. */
+/* The VA voice's fused back half (valoops.h, strata_va_back). ON since 2026-11-27. It was off from
+ * 2026-11-22, when an emulator A/B found its cl6x render "drifting" from the unfused path's. That
+ * was the same audio a few blocks apart: a cheaper callback lets the scenario's scripted keys act
+ * sooner (docs/BUDGET.md, "The HALL in passes"). Checked in the app instead, cl6x build on the
+ * emulator: the three passes on copies beside the fused loop, 16,233 slices of scenario_m3 and
+ * scenario_factory, every output sample and every filter and envelope state equal. The host test
+ * va_the_fused_back_half_is_bit_exact_against_filter_envelope_and_tail holds it there. */
 #ifndef STRATA_VA_FUSED
-#define STRATA_VA_FUSED 0
+#define STRATA_VA_FUSED 1
 #endif
 
 #if defined(__TI_COMPILER_VERSION__) && STRATA_TI_HINTS

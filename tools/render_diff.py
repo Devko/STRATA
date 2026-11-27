@@ -13,6 +13,12 @@ which is what tells a rounding difference from a broken build:
              each file's own peak in that window. A difference that stays tiny is rounding; one
              that jumps to the signal's own size means the two renders play different things.
   rms        each file's RMS over the whole render: a voice gone silent or blown up shows here.
+  shifted    when they differ, whether b is a byte-for-byte copy of a moved by whole audio blocks
+             (64 frames, up to 64 blocks either way). An emulator capture is the LAST seconds of
+             a run, and the scripted keys reach the app through its main loop: a faster audio
+             callback leaves that loop more time, so a press lands a few blocks earlier and the
+             whole run, capture included, plays that much sooner. Such a pair is the same audio,
+             not a different sound (docs/BUDGET.md, "The HALL in passes").
 """
 import math
 import struct
@@ -26,6 +32,24 @@ def load(path):
         data = w.readframes(w.getnframes())
     fmt = {2: "h", 4: "i"}[width]
     return struct.unpack(f"<{len(data) // width}{fmt}", data), channels, rate, float(2 ** (8 * width - 1))
+
+
+BLOCK = 64          # ENAGA_BLOCK_FRAMES
+MOST_BLOCKS = 64
+
+
+def block_shift(a, b, ch):
+    """The offset in samples (a multiple of a block's frames x channels) at which b equals a
+    exactly over their overlap, or None. Overlaps shorter than half the render do not count."""
+    n = min(len(a), len(b))
+    for k in range(1, MOST_BLOCKS + 1):
+        for lag in (k * BLOCK * ch, -k * BLOCK * ch):
+            if abs(lag) > n // 2:
+                continue
+            x, y = (a[lag:n], b[:n - lag]) if lag > 0 else (a[:n + lag], b[-lag:n])
+            if x == y:
+                return lag
+    return None
 
 
 def compare(pa, pb, label=None):
@@ -63,6 +87,11 @@ def compare(pa, pb, label=None):
         print(f"  first: frame {i // ch} ({i // ch / rate:.4f} s), channel {i % ch}, by {d / full:.3e}"
               f" ({d} LSB)")
     print(f"  rms: {rms[0]:.4f} vs {rms[1]:.4f}")
+    lag = block_shift(a, b, ch)
+    if lag is not None:
+        frames = abs(lag) // ch
+        print(f"  shifted: b is a {frames} frames ({frames // BLOCK} blocks) {'later' if lag > 0 else 'earlier'}"
+              f" in the music, identical over {n - abs(lag)} samples: the same audio, a different start")
     print("  window   worst diff   peak a   peak b")
     for t, d, pa_, pb_ in rows:
         print(f"  {t:6.2f}s  {d:10.3e}   {pa_:6.3f}   {pb_:6.3f}")
