@@ -89,7 +89,7 @@ means new firmware as well as the app. The features below have not been through 
 
 - **Hats and WAVE tracks cost less**: the hat's two filters and its VCA run as one loop, and WAVE
   finds its table frames without a run-time recursion; the same sound to the last bit. The
-  default beat 25.1% -> 24.5%, a WAVE POLY pattern 28.8% -> 27.2% on the emulator.
+  default beat 24.3% -> 24.1%, a WAVE POLY pattern 27.9% -> 26.6% on the emulator (Enaga 0.4.0).
 - **VA voices cost less**: the filter, envelope and output of every VA MONO and VA POLY voice
   run as one loop the TI compiler can pipeline, the same sound to the last bit. About 1.5 points
   off every pattern that plays them (the default beat 26.6% -> 25.1% on the emulator).

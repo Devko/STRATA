@@ -156,7 +156,13 @@ playing, `WaveLibrary::frame_at` (3.1%).
 | `scenario_ambient`, cl6x | 27.15% | **26.48%** |
 | `scenario_ambient` / `scenario_m3`, GCC-only | 57.30% / 42.38% | 57.08% / 42.17% |
 
-All 47 scenarios pass with cl6x; the worst is now **28.55%** (`scenario_gen`). One scenario rose:
+Again on Enaga v0.4.0 (main moved its pin meanwhile, #204), before and after on the same tree:
+`m1` 24.27% -> **24.06%**, `wave` 27.94% -> **26.62%**, `ambient` 26.28% -> **26.02%**, `gen`
+27.93% -> **27.27%**, `ratchetspan` 28.10% -> **27.45%**; GCC-only `ambient` 56.08% after. All 47
+pass with cl6x on 0.4.0, worst **27.45%** (`ratchetspan`). The hat's share is smaller there than
+on 0.3.0 (-0.2 against -0.6 points on the default beat); WAVE's lookup is the same.
+
+On v0.3.0, all 47 scenarios passed with cl6x; the worst was **28.55%** (`scenario_gen`). One scenario rose:
 `scenario_sounds` 25.63% -> 26.34%, which walks the SOUNDS list on keys. Nothing it runs got
 dearer, so it is where its peak block now falls (the timing artefact of "The HALL in passes").
 
