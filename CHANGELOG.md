@@ -34,6 +34,12 @@ the project file format or the controls.
   browser from their official releases and checked against their SHA-256. Source in `web/`
   (#180).
 
+### Changed
+
+- **The LONG delay costs less**: its per-sample loop now runs as passes the TI compiler can
+  pipeline, the same sound to the last bit. The worst-case scenario (both sends in their ambient
+  modes) drops from 32.3% to 30.2% peak load on the emulator.
+
 ## [0.4.0] - {{RELEASE_DATE}}
 
 An early beta: everything merged since 0.3.1 (#137 to #177), and the first release for **Enaga
