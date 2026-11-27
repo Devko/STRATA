@@ -44,7 +44,7 @@ enum class HelpScreen : uint8_t {
 };
 
 constexpr int kHelpEditPages = 8;      // SRC FLTR AMP FX LFO ARP ASR OSC, as app/app.hpp's kEditPages
-constexpr int kHelpMixerPages = 12;    // as app/app.hpp's kMixerPageCount
+constexpr int kHelpMixerPages = 15;    // as app/app.hpp's kMixerPageCount
 constexpr int kHelpRows = 10;          // rows under the title, above the page line
 constexpr int kHelpChars = 21;         // one line of Enaga's font on the 128-pixel screen
 

@@ -452,11 +452,15 @@ void Engine::prepare_chain(int track) {
     // a dry plan prepares exactly what it did before.
     ChainMix mix = mix_[track];
     mix.level *= perf_plan_.tracks;
+    // Send C, the chorus: a kit byte read here, at control rate, so nothing else has to copy it.
+    mix.chorus = float(chorus_send_sanitized(project_.kit.tracks[track].chorus)) *
+                 (1.0f / float(kChorusSendMax));
     // A VA or WAVE track's chain is TON alone (D8): its FLTR page is the machine's filter.
     const bool tone = machine_has_voice_filter(machine_id(track));
     if (prepare_memo_ && chain_prepared_valid_[track] && chain_prepared_tone_[track] == tone &&
         chain_prepared_mix_[track].level == mix.level &&
         chain_prepared_mix_[track].duck == mix.duck &&
+        chain_prepared_mix_[track].chorus == mix.chorus &&
         __builtin_memcmp(chain_prepared_[track].v, params.v, kParams) == 0) {
         return;
     }
@@ -620,6 +624,18 @@ bool Engine::apply_sound(const Command &command, int track, int) {
             const uint8_t next = now >= kChokeGroups ? uint8_t(0) : uint8_t(now + 1);
             project_.kit.tracks[track].choke =
                 command.c == 1 ? next : choke_group_sanitized(command.a);
+            break;
+        }
+
+        case Cmd::set_chorus: {
+            if (command.c == 1) {
+                uint8_t &send = project_.kit.tracks[track].chorus;
+                send = send == 0 ? kChorusSendToggle : uint8_t(0);
+                break;
+            }
+            const int next = int(project_.kit.tracks[track].chorus) + int(int8_t(command.b));
+            project_.kit.tracks[track].chorus =
+                uint8_t(next < 0 ? 0 : (next > int(kChorusSendMax) ? int(kChorusSendMax) : next));
             break;
         }
 
@@ -1897,6 +1913,7 @@ bool Engine::apply_project(const Command &command, int, int) {
                     to.lfo_trig = from.lfo_trig;
                     for (int s = 0; s < kModSlots; s++) to.mod[s] = from.mod[s];
                     to.choke = from.choke;
+                    to.chorus = from.chorus;
                     lfo_[t].rest();          // a new TRIG starts as Cmd::set_lfo_trig's does
                     mod_env_[t].rest();
                     // The arp's kit settings go with the ARP bytes they shape.

@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W58, about 187 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W59, about 190 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -781,6 +781,15 @@ to reach `GUARD4` here at a 40-60% top line.
   longer stand far above CLAVE and KNOCK. `____`
 - T7: FUNC+EDIT, A to FM4, OK (it starts on EPIANO). KEYS, play a few notes hard and soft: a
   bright, slightly barking strike that mellows as it rings; soft notes are rounder. `____`
+
+**W59. Chorus (3 min).** Beat playing, A01.
+- MIXER, SELECT_LEFT four times: `CHO 5-8`. Push C: `T7 CHORUS 64`, the chord track's bar stands
+  half up and the chords sound wider and gently moving. Push C again: OFF, back to the dry
+  chords. Turn C up to 127 and down: the chorus follows smoothly, no click. `____`
+- SELECT_RIGHT: `CHO`. Turn A (RAT) up: the sweeps on screen bunch up and the warble speeds up;
+  B (DEP) to 0: the chorus goes still. D (C>R) up: the chorus reaches the reverb. The top line
+  with three tracks sending reads `____ %`. `____`
+- Save, power cycle, open: the sends and the CHO knobs are as left. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

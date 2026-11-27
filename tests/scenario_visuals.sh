@@ -14,7 +14,9 @@
 #   turn C +20, D +4          -> DEP and DST up: the LFO runs, so its shape, the dot riding
 #                                it and the output strip draw
 # Run 2, MIXER's MST page:
-#   PLAY, F7, SELECT_RIGHT x10 -> MST: the spectrum's FFT and the vectorscope every frame, where
+#   PLAY, F7, SELECT_LEFT x2  -> MST, the second page from the end, going round (so a new MIXER
+#                                page in the middle does not move it): the spectrum's FFT and
+#                                the vectorscope every frame, where
 #                                it stays for the logged average
 # Run 3, PROJECT's slots:
 #   PLAY, F3                  -> the 128-pattern map (a bank read a frame) and the sixteen tiles'
@@ -27,7 +29,7 @@
 #                                window the logged average is taken over begins
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F1 = 19 FUNC, F7 = 21 MIXER (FUNC +
-# F7 PERFORM), F8 = 28 EDIT (FUNC + F8 MACHINE), F3 = 20 PROJECT, SELECT_RIGHT = 9; encoders 0-3 are A-D. The first press comes late:
+# F7 PERFORM), F8 = 28 EDIT (FUNC + F8 MACHINE), F3 = 20 PROJECT, SELECT_LEFT = 8, SELECT_RIGHT = 9; encoders 0-3 are A-D. The first press comes late:
 # the panel link is not streaming in the first ~200 M cycles. Run 1's EDIT comes at 2.7 G cycles
 # (about 7.3 s), after the logged average; 3.7 G is about 10 s.
 set -euo pipefail
@@ -80,9 +82,7 @@ run "$LOG" \
 run "$LOG2" \
     --key 22@300000000 \
     --key 21@700000000 \
-    --key 9@750000000 --key 9@790000000 --key 9@830000000 --key 9@870000000 \
-    --key 9@910000000 --key 9@950000000 --key 9@990000000 --key 9@1030000000 \
-    --key 9@1070000000 --key 9@1110000000
+    --key 8@1070000000 --key 8@1110000000
 run "$LOG3"     --key 22@300000000     --key 20@700000000
 run "$LOG4"     --key 22@300000000     --key 19@700000000 --key 28@705000000
 run "$LOG5"     --key 22@300000000     --key 19@400000000 --key 28@405000000     --key 19@480000000 --key 28@485000000     --key 19@600000000 --key 25@605000000     --key 25@680000000 --key 19@740000000 --key 25@745000000     --key 25@820000000 --key 19@880000000 --key 25@885000000     --key 25@960000000 --key 19@1020000000 --key 25@1025000000

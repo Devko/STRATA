@@ -79,6 +79,9 @@ struct UiProbe {
     static int page(const Strata &app) { return app.page_; }
     static int param_page(const Strata &app) { return app.param_page_; }
     static int mixer_bank(const Strata &app) { return app.mixer_bank_; }
+    static void mixer_knob_parts(Strata &app, int slot, char *name, char *value, bool &empty) {
+        app.mixer_knob_parts(slot, name, value, empty);
+    }
     static int shown_bank(const Strata &app) { return app.shown_bank_; }
 
     static int held_step(const Strata &app) { return app.held_step_; }
@@ -2942,8 +2945,8 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
 
     // The selection keys page through: two pages of faders, two of duck depths and the duck's
-    // own page, then DLY, DLY+, REV, REV+, ROUTE, MST and EQ.
-    CHECK_EQ(kMixerPageCount, 12);
+    // own page, then DLY, DLY+, REV, REV+, ROUTE, the chorus's three, MST and EQ.
+    CHECK_EQ(kMixerPageCount, 15);
     for (int i = 1; i < kMixerPageCount; i++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
@@ -2963,6 +2966,60 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
 void press_key(Strata &app, int code) {
     app.on_key(code, true);
     app.on_key(code, false);
+}
+
+// The chorus, send C: CHO 1-4 / 5-8 turn and push each track's send (a kit byte), CHO turns the
+// chorus itself, and the mixer runs it only while a track sends to it.
+TEST(ui_the_chorus_pages_set_each_tracks_send_and_the_chorus) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    FakeHost &host = FakeHost::the();
+    for (int t = 0; t < kTracks; t++) {
+        Command command;
+        command.cmd = Cmd::set_chorus;
+        command.track = uint8_t(t);
+        command.b = uint8_t(int8_t(-120));
+        engine.commands().post(command);
+    }
+    pump(2);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(engine.project().kit.tracks[t].chorus), 0);
+    CHECK(!engine.mixer().chorus_running());
+
+    // CHO 5-8: C is track 7, two counts a click.
+    mixer_page(app, kMixerChorusSendPage + 1);
+    CHECK(std::strcmp(kMixerPages[kMixerChorusSendPage + 1].name, "CHO 5-8") == 0);
+    app.on_encoder(2, +5);
+    pump(2);
+    CHECK_EQ(int(engine.project().kit.tracks[6].chorus), 10);
+    CHECK(std::strcmp(UiProbe::notice(app), "T7 CHORUS 10") == 0);
+    CHECK(app_storage().dirty());
+    app.on_encoder(2, -100);
+    pump(2);
+    CHECK_EQ(int(engine.project().kit.tracks[6].chorus), 0);
+
+    // A push throws it OFF to half and back, and logs it for tests/scenario_chorus.sh.
+    press_key(app, ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(engine.project().kit.tracks[4].chorus), int(kChorusSendToggle));
+    CHECK(host.logged("T5 CHORUS 64"));
+    press_key(app, ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(engine.project().kit.tracks[4].chorus), 0);
+    CHECK(host.logged("T5 CHORUS OFF"));
+
+    // CHO: the chorus's own four knobs are send bytes, at the end of the list.
+    mixer_page(app, kMixerChorusPage);
+    const int depth = int(engine.project().settings.sends[int(SendField::chorus_depth)]);
+    app.on_encoder(1, -3);
+    pump(2);
+    CHECK_EQ(int(engine.project().settings.sends[int(SendField::chorus_depth)]), depth - 6);
+    char name[8], value[12];
+    bool empty = true;
+    UiProbe::mixer_knob_parts(app, 0, name, value, empty);
+    CHECK(std::strcmp(name, "RAT") == 0);
+    CHECK(std::strcmp(value, "0.61") == 0);
+    app.on_encoder(1, +3);
+    pump(2);
 }
 
 TEST(ui_the_eq_page_knobs_move_the_bands_and_a_push_kills_one) {

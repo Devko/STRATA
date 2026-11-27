@@ -382,7 +382,19 @@ struct KitTrack {
     // ARP page or set by an ARPS preset. Not parameters, for TRIG's reason; KIT.BIN's optional
     // section 12.
     KitArp arp;
+    // How much of the track goes to the chorus, send C (dsp/buses.hpp), 0-127: 0 none, 127 all,
+    // post-fader as SNA and SNB are. A kit setting turned on MIXER's CHO 1-4 / 5-8, not a
+    // parameter, for TRIG's reason: no lock, scene or LFO moves it. KIT.BIN's optional section 14.
+    uint8_t chorus = 0;
 };
+
+// The chorus send (KitTrack::chorus): 0-127, a byte past it is damage and reads as the top.
+constexpr uint8_t kChorusSendMax = 127;
+// What a push on MIXER's CHO 1-4 / 5-8 sets a track's send to from OFF: half, a chorus you hear.
+constexpr uint8_t kChorusSendToggle = 64;
+constexpr uint8_t chorus_send_sanitized(uint8_t send) {
+    return send <= kChorusSendMax ? send : kChorusSendMax;
+}
 
 // Choke groups (KitTrack::choke): 1-4, 0 none. A byte past the last group reads as none.
 constexpr uint8_t kChokeGroups = 4;
@@ -438,9 +450,11 @@ constexpr uint16_t kTempoCentiMax = 30000;    // 300.00 BPM
 // dsp/buses.hpp's enums because core/ cannot include dsp/ -- dsp/buses.hpp reaches Enaga and
 // CLAUDE.md says core/ never does. dsp/buses.hpp static_asserts that the two agree, so the day
 // a field is added the build stops here rather than writing a short section.
-constexpr int kSendFields = 19;
+constexpr int kSendFields = 23;
 // What a PROJECT.BIN written before the ambient modes holds; the other nine follow the master's.
 constexpr int kSendFieldsV1 = 10;
+// And before the chorus (send C): the ambient modes' nine after the master's, no chorus bytes.
+constexpr int kSendFieldsV2 = 19;
 constexpr int kMasterFields = 7;
 // What a PROJECT.BIN written before the kill EQ holds: the DJ filter, compressor, limiter and
 // level. The three EQ bands were appended after them, so a short mixer section is an older file.
@@ -531,7 +545,11 @@ struct ProjectSettings {
                                   // The ambient modes: off (classic), and where their knobs
                                   // start when switched on -- X2, a little wow, half diffusion,
                                   // a 120 Hz low cut; a big hall, some sweep, no shimmer.
-                                  0, kDefaultDelayMultiplier, 57, 64, 58, 0, 96, 51, 0};
+                                  0, kDefaultDelayMultiplier, 57, 64, 58, 0, 96, 51, 0,
+                                  // The chorus (send C): a 0.6 Hz sweep, half depth, full
+                                  // return, none of it into the reverb. Nothing sounds until a
+                                  // track sends to it (KitTrack::chorus), which no track does.
+                                  69, 64, 127, 0};
     // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out, and the
     // kill EQ's three bands at their flat (bypassed) centre.
     uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64};
@@ -667,6 +685,10 @@ constexpr uint16_t kSectionKitArpExt = 12;
 // (kit_lfo_from_band). An older build reading a newer kit reads the numbers as low bands: SIN
 // and OFF mostly, which the release notes say.
 constexpr uint16_t kSectionKitLfoLayout = 13;
+// The chorus sends, one byte per track (KitTrack::chorus). Optional on read: a KIT.BIN from
+// before the chorus loads every track sending nothing to it, which is how every track played.
+// An older build ignores the section.
+constexpr uint16_t kSectionKitChorus = 14;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

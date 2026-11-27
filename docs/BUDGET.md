@@ -53,6 +53,23 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### The chorus, send C (2026-11-27, emulator)
+
+`enaga::dsp::Chorus` as a third send (dsp/buses.hpp): one mono bus, two swept lines, wet only, run
+while a track sends and 16 blocks after. `scenario_chorus` plays the default beat and pushes
+tracks 5, 7 and 8 into it at 64 on MIXER's CHO 5-8; `scenario_m7` is the same beat with no track
+sending (the chorus idle, so its cost is the difference).
+
+| | m7 (chorus idle) | chorus (3 tracks sending) | the chorus |
+| --- | --- | --- | --- |
+| cl6x | 22.84% | 23.73% | **+0.89 points** |
+| GCC only | 45.12% | 47.60% | +2.48 points |
+
+The cost is the chorus's, not the tracks': one per block whatever number of tracks send (each
+send adds one `enaga_mix` pass). Idle, nothing: `mixer_chorus_runs_only_while_fed_...` checks it
+does not run and the dry output is unchanged. All 49 scenarios pass with cl6x with it merged on
+main (2026-11-27); worst 33.99%, `genload`. Its two lines take about 8 KiB of the heap.
+
 ### The sound review's fixes (2026-11-27, emulator, Enaga v0.4.0)
 
 The clap's burst envelope, the VA accent's capped sweep (one compare where the cutoff is

@@ -9,9 +9,10 @@
 # below includes it -- the figure docs/BUDGET.md asks for ("The master kill EQ"), with cl6x and
 # with ENAGA_TI_CGT=none. Compare it with scenario_m7.sh, the same beat with the EQ bypassed.
 #
-# EQ is the twelfth MIXER page (eleven SELECT_RIGHTs) since the duck's three pages.
+# EQ is the last MIXER page, one SELECT_LEFT from TRK 1-4 going round: a page added in the middle
+# (the chorus's three) does not move it.
 #
-# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F7 = 21, SELECT_RIGHT = 9,
+# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F7 = 21, SELECT_LEFT = 8,
 # PUSH_A = 1, PUSH_B = 0, PUSH_C = 2. The first press must come LATE (tests/scenario_m1.sh).
 set -euo pipefail
 
@@ -45,17 +46,7 @@ echo "running the emulator for $CYCLES cycles: play, MIXER EQ, kill all three ba
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 21@380000000 \
-    --key 9@440000000 \
-    --key 9@480000000 \
-    --key 9@520000000 \
-    --key 9@560000000 \
-    --key 9@600000000 \
-    --key 9@640000000 \
-    --key 9@680000000 \
-    --key 9@720000000 \
-    --key 9@760000000 \
-    --key 9@800000000 \
-    --key 9@840000000 \
+    --key 8@840000000 \
     --key 1@900000000 \
     --key 0@940000000 \
     --key 2@980000000 \

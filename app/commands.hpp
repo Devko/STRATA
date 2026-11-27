@@ -175,6 +175,11 @@ enum class Cmd : uint8_t {
     // 3 4 OFF, decided on the audio side so two fast pushes are two steps. A note on the track
     // cuts the others of its group (Engine::choke_group).
     set_choke,         // track, a: group; or c = 1: step
+    // A track's chorus send (KitTrack::chorus, send C): b: an int8 encoder delta onto the 0-127
+    // byte, clamped; or c = 1: a push, OFF to kChorusSendToggle and anything else to OFF, decided
+    // on the audio side as set_choke's step is. MIXER's CHO 1-4 / 5-8. A kit setting, so a kit
+    // save keeps it.
+    set_chorus,        // track, b: int8 delta; or c = 1: toggle
     // A track pad's pressure, for a mod slot on PRS: a: 0-127, 0 when the pad is let go. Played,
     // not stored.
     set_pressure,      // track, a: pressure

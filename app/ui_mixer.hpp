@@ -33,6 +33,37 @@
         notice(master ? master_field_name(uint8_t(field)) : send_field_name(uint8_t(field)));
     }
 
+    // The chorus sends (KitTrack::chorus) on CHO 1-4 and CHO 5-8: an encoder is a track's send,
+    // one click two counts as a send knob on EDIT's FX page is, and said as "T3 CHORUS 64".
+    void edit_chorus_send(int page, int slot, int delta) {
+        if (!mixer_chorus_send_page(page) || slot < 0 || slot >= 4) return;
+        const int track = (page - kMixerChorusSendPage) * 4 + slot;
+        post_delta(Cmd::set_chorus, track, 0, 0, delta * 2);
+        const int now = int(engine_.project().kit.tracks[track].chorus) + delta * 2;
+        chorus_send_notice(track, now < 0 ? 0 : (now > int(kChorusSendMax) ? int(kChorusSendMax) : now));
+    }
+
+    void toggle_chorus_send(int track) {
+        if (track < 0 || track >= kTracks) return;
+        const bool off = engine_.project().kit.tracks[track].chorus == 0;
+        post(Cmd::set_chorus, uint8_t(track), 0, 0, 0, 1);
+        chorus_send_notice(track, off ? int(kChorusSendToggle) : 0);
+    }
+
+    // "T3 CHORUS 64", or "T3 CHORUS OFF". Logged too: the emulator cannot read the screen
+    // (tests/scenario_chorus.sh).
+    void chorus_send_notice(int track, int value) {
+        char *out = notice_buffer_;
+        append(out, "T");
+        append_number(out, uint32_t(track + 1));
+        append(out, " CHORUS ");
+        if (value == 0) append(out, "OFF");
+        else append_number(out, uint32_t(value));
+        *out = 0;
+        notice(notice_buffer_);
+        enaga::log(notice_buffer_);
+    }
+
     // The duck's pages: on DCK 1-4 and DCK 5-8 an encoder is a track's depth, on DUCK the four
     // are the source, attack, hold and release. One click is one step of each: a percent, a
     // track, a millisecond, five milliseconds.
@@ -112,6 +143,14 @@
         }
         if (!kMixerPages[page].master && field == int8_t(SendField::reverb_mode)) {
             append(out, byte >= 64 ? "HALL" : "ROOM");
+            return;
+        }
+        if (!kMixerPages[page].master && field == int8_t(SendField::chorus_rate)) {
+            // The sweep in hertz, two decimals: 0.05 to 5.00.
+            const uint32_t centi = uint32_t(send_value_from_byte(uint8_t(field), byte, 0.5f) * 100.0f + 0.5f);
+            append_number(out, centi / 100u);
+            append(out, ".");
+            append_padded(out, centi % 100u, 2);
             return;
         }
         if (!kMixerPages[page].master && field == int8_t(SendField::delay_multiplier)) {

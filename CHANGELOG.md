@@ -12,6 +12,13 @@ the project file format or the controls.
   and 1: a step every 16 ticks, six to the beat, so 24 steps make a bar. Set LEN 24 for a one-bar
   triplet hat. The arp, rolls over LEN and REPEAT already had 1/16T. No file change: a build from
   before this one plays a 3/2 track at 1x. New emulator scenario `triplets`.
+- **A chorus, the third send.** MIXER has three new pages after ROUTE: CHO 1-4 and CHO 5-8 set
+  how much of each track goes to the chorus (push a knob for OFF or half), and CHO sets its sweep
+  rate, depth, return and how much of it feeds the reverb. One stereo chorus serves every track
+  and costs nothing while no track sends to it. The sends are saved in the kit, in a new optional
+  KIT.BIN section; the four knobs at the end of PROJECT.BIN's mixer section. Older projects and
+  kits open with no track sending; an older build ignores both. MST and EQ are now three pages
+  further on (one SELECT_LEFT from TRK 1-4 still reaches EQ). New emulator scenario `chorus`.
 
 ### Fixed
 

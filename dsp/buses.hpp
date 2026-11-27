@@ -6,6 +6,10 @@
 //            feed the reverb. Times arrive in SECONDS: the app owns the tempo (CLAUDE.md), so
 //            it converts the division, not this file.
 //   Send B   a reverb with a high-pass on its input.
+//   Send C   a stereo chorus (enaga::dsp::Chorus): each side a delay of about 8 ms swept by a sine,
+//            the sides a quarter turn apart, so a mono feed comes back wide. Its return can feed
+//            the reverb. Each track's amount is a kit setting (KitTrack::chorus), not a
+//            parameter, turned on MIXER's CHO 1-4 / 5-8.
 //   Master   a one-knob DJ filter (left of centre low-pass, right high-pass, flat in the
 //            middle), a three-band kill EQ (a DJ isolator: LOW, MID and HIGH from kill to
 //            +6 dB, flat and bypassed in the middle, each with a kill switch), a glue
@@ -30,7 +34,7 @@
 // of that choice is one pass over the output at the very end, and it buys all of
 // enaga_ramp_stereo_add, Svf::process, StereoDelay and Reverb working on their natural layout.
 //
-// The two send buses are MONO (docs/PLAN.md M0.5 lists mono sends as the first cheapening):
+// The three send buses are MONO (docs/PLAN.md M0.5 lists mono sends as the first cheapening):
 // stereo sends would triple a track's bus traffic, the reverb sums its inputs to mono anyway,
 // and the delay's ping-pong makes its own stereo out of a mono feed.
 //
@@ -76,6 +80,11 @@ struct SendSettings {
     float reverb_size = 1.2f;         // HALL: line length scale, 0.35 to 1.8
     float reverb_mod = 0.4f;          // HALL: the lines' sweep, 0 to 1
     float reverb_shimmer = 0.0f;      // HALL: the tail fed back an octave up, 0 to 1
+    // Send C: the chorus.
+    float chorus_rate_hz = 0.6f;      // the sweep, 0.05 to 5 Hz
+    float chorus_depth = 0.5f;        // 0 to 1: up to +-5 ms around the 8 ms delay
+    float chorus_level = 1.0f;        // the chorus's return into the mix
+    float chorus_to_reverb = 0.0f;    // the chorus feeding the reverb
 
     bool operator==(const SendSettings &) const = default;
 };
@@ -108,6 +117,11 @@ enum class SendField : uint8_t {
     reverb_size,
     reverb_mod,
     reverb_shimmer,
+    // The chorus, send C, appended (2026-11-27), after the ambient modes' bytes in PROJECT.BIN.
+    chorus_rate,
+    chorus_depth,
+    chorus_level,
+    chorus_to_reverb,
     count
 };
 
@@ -268,7 +282,7 @@ public:
     // clears it, the machine adds into it, add_track() consumes it in place.
     float *scratch() { return scratch_; }
 
-    // Clears the dry bus and both sends and renders this block's duck curve.
+    // Clears the dry bus and the three sends and renders this block's duck curve.
     void begin_block(int frames);
     // One track's mono block through its insert chain and into the buses. Consumes `mono`.
     void add_track(int track, float *mono);
@@ -276,7 +290,7 @@ public:
     // before the duck, the fader, the pan and the sends. A silent track writes nothing there, so
     // the caller clears it first.
     void add_track_tapped(int track, float *mono, float *tap);
-    // Both sends, the master chain, and the interleaved L R L R result for audio().
+    // The three sends, the master chain, and the interleaved L R L R result for audio().
     void finish_block(float *out, int frames);
 
     // Introspection for the UI and the tests.
@@ -284,6 +298,7 @@ public:
     float peak() const { return peak_; }
     bool delay_running() const { return delay_tail_ > 0 || long_tail_ > 0; }
     bool reverb_running() const { return reverb_tail_ > 0 || hall_tail_ > 0; }
+    bool chorus_running() const { return chorus_tail_ > 0; }
     // Each mode's own, for the tests: a mode switched away from rings out its tail unfed.
     bool classic_delay_running() const { return delay_tail_ > 0; }
     bool long_delay_running() const { return long_tail_ > 0; }
@@ -321,6 +336,8 @@ private:
     enaga::dsp::Reverb reverb_;
     LongDelay long_delay_;
     HallReverb hall_;
+    enaga::dsp::Chorus chorus_;
+    float chorus_level_ = 1.0f, chorus_to_reverb_ = 0.0f;
     bool long_mode_ = false, hall_mode_ = false;
     bool freeze_on_long_ = false;    // which delay took the freeze press
     enaga::dsp::Biquad reverb_high_pass_;
@@ -363,6 +380,8 @@ private:
     int delay_tail_blocks_ = 1, reverb_tail_blocks_ = 1;
     int long_tail_ = 0, hall_tail_ = 0;
     int long_tail_blocks_ = 1, hall_tail_blocks_ = 1;
+    // The chorus holds at most 13 ms, so once unfed it runs on for kChorusTailBlocks and stops.
+    int chorus_tail_ = 0;
 
     // 1 / frames, cached: the master's gain ramp needs it and nothing may divide in a loop.
     int ramp_frames_ = 0;
@@ -373,6 +392,7 @@ private:
     float send_a_[kMaxFrames] = {};
     float send_a_right_[kMaxFrames] = {};
     float send_b_[kMaxFrames] = {};
+    float send_c_[kMaxFrames] = {};
     float wet_l_[kMaxFrames] = {};
     float wet_r_[kMaxFrames] = {};
     float duck_curve_[kMaxFrames] = {};

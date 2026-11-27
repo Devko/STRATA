@@ -967,6 +967,82 @@ TEST(mixer_reverb_produces_a_decaying_tail) {
     CHECK(late < 0.25f * early);        // and it decays
 }
 
+// Send C, the chorus: idle until a track sends to it, then wide (left and right differ), and
+// stopped again a few blocks after the feed ends.
+TEST(mixer_chorus_runs_only_while_fed_and_comes_back_wide) {
+    SendSettings sends = silent_sends();
+    sends.chorus_depth = 1.0f;
+    sends.chorus_rate_hz = 2.0f;
+    sends.chorus_level = 1.0f;
+    const MasterSettings master = transparent_master();
+    TrackParams p = neutral_params();
+    float out[2 * kFrames];
+    float mono[kFrames];
+
+    // No send: the chorus never runs, and the output is the dry track alone, bit for bit.
+    static Mixer dry;
+    dry.init(kRate);
+    ChainMix none;
+    float dry_peak = 0.0f;
+    for (int b = 0; b < 40; b++) {
+        fill_signal(Signal::sine, mono, kFrames, b, 0.5f);
+        mixer_block(dry, sends, master, p, none, mono, out);
+        CHECK(!dry.chorus_running());
+        for (int i = 0; i < kFrames; i++) {
+            CHECK_EQ(out[2 * i], out[2 * i + 1]);       // centred and nothing else: L == R
+            dry_peak = absolute(out[2 * i]) > dry_peak ? absolute(out[2 * i]) : dry_peak;
+        }
+    }
+    CHECK(dry_peak > 0.1f);
+
+    // Half the track to the chorus: it runs, and the two sides read their lines a quarter turn
+    // apart, so the output is no longer the same on both.
+    static Mixer wet;
+    wet.init(kRate);
+    ChainMix half;
+    half.chorus = 0.5f;
+    float differ = 0.0f;
+    for (int b = 0; b < 200; b++) {
+        fill_signal(Signal::sine, mono, kFrames, b, 0.5f);
+        mixer_block(wet, sends, master, p, half, mono, out);
+        CHECK(wet.chorus_running());
+        for (int i = 0; i < kFrames; i++) {
+            CHECK(is_finite(out[2 * i]) && is_finite(out[2 * i + 1]));
+            const float d = absolute(out[2 * i] - out[2 * i + 1]);
+            differ = d > differ ? d : differ;
+        }
+    }
+    CHECK(differ > 0.01f);
+
+    // Its feed gone, it rings out its 13 ms and stops; what it then adds is nothing.
+    ChainMix off;
+    for (int b = 0; b < 20; b++) mixer_block(wet, sends, master, p, off, nullptr, out);
+    CHECK(!wet.chorus_running());
+    for (int i = 0; i < 2 * kFrames; i++) CHECK_EQ(out[i], 0.0f);
+}
+
+// C>R: the chorus feeds the reverb, which then runs on a track that sends to neither A nor B.
+TEST(mixer_chorus_can_feed_the_reverb) {
+    SendSettings sends = silent_sends();
+    sends.chorus_level = 0.0f;           // the chorus is not heard directly
+    sends.chorus_to_reverb = 1.0f;
+    sends.reverb_level = 1.0f;
+    const MasterSettings master = transparent_master();
+    TrackParams p = neutral_params();
+    ChainMix mix;
+    mix.chorus = 1.0f;
+    static Mixer mixer;
+    mixer.init(kRate);
+    float out[2 * kFrames];
+    float mono[kFrames];
+    for (int b = 0; b < 20; b++) {
+        fill_signal(Signal::sine, mono, kFrames, b, 0.5f);
+        mixer_block(mixer, sends, master, p, mix, mono, out);
+    }
+    CHECK(mixer.chorus_running());
+    CHECK(mixer.reverb_running());
+}
+
 TEST(mixer_delay_can_feed_the_reverb) {
     SendSettings sends;
     sends.delay_seconds = 0.03f;       // 1440 samples
