@@ -63,3 +63,19 @@ TEST(drumloops_the_hat_back_half_is_bit_exact_against_its_three_passes) {
         level = level < 1.0f ? level + 0.05f : 0.3f;
     }
 }
+
+TEST(drumloops_the_rng_skip_leaves_the_state_noise_would) {
+    // KICK steps its noise generator with strata_rng_skip while its click path is spent, so the
+    // next hit draws the noise it always did: the state must be exactly what enaga_noise_add
+    // leaves after the same number of samples.
+    uint32_t a = 0x5F2A41C7u, b = a;
+    float scratch[64] = {};
+    const int lengths[] = {1, 64, 0, 17, 63, 2};
+    for (int round = 0; round < 50; round++) {
+        for (const int n : lengths) {
+            enaga_noise_add(&a, scratch, n, 1.0f);
+            strata_rng_skip(&b, n);
+            CHECK_EQ(a, b);
+        }
+    }
+}

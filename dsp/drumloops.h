@@ -74,6 +74,11 @@ void strata_hat_back(float *buf, const float *env, int n, enaga_svf *band,
 
 /* ---- shared ---- */
 
+/* Steps the xorshift generator *state n times without using the numbers: what enaga_noise_add
+ * would leave in *state after n samples. */
+void strata_rng_skip(uint32_t *state, int n);
+
+
 /* out += gain * in, gain walking by step each sample: the ramp a stolen voice fades out with.
  * All three machines' steal path, which is why it lives here once. */
 void strata_mix_ramp(float *out, const float *in, int n, float gain, float step);

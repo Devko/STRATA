@@ -89,6 +89,9 @@ means new firmware as well as the app. The features below have not been through 
 
 ### Changed
 
+- **KICK costs less**: its click layer stops once it has decayed under -110 dB instead of running
+  for the whole note. The output moves by at most -129 dB (inaudible; not bit-exact). The
+  default beat 24.1% -> 23.2% on the emulator.
 - **Hats and WAVE tracks cost less**: the hat's two filters and its VCA run as one loop, and WAVE
   finds its table frames without a run-time recursion; the same sound to the last bit. The
   default beat 24.3% -> 24.1%, a WAVE POLY pattern 27.9% -> 26.6% on the emulator (Enaga 0.4.0).
