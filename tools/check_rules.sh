@@ -9,6 +9,9 @@
 #      The math is <enaga/dsp.hpp>'s; the memory is taken in init().
 #   3. Every source filename is unique across core/, dsp/ and app/: build_app.py stages one
 #      flat folder. tools/build.sh refuses duplicates too, but it never runs in CI.
+#   4. Scenarios run the emulator through tools/enaga_cached.py, never Enaga's emulate.py
+#      directly: a direct call rebuilds the app and the firmware from scratch every run
+#      (scenario_clear and scenario_tune did, 243 s and 157 s of a 15-minute run, 2026-11-27).
 #
 # Only #include lines and calls are looked at, so a rule named in a comment does not trip it.
 #
@@ -42,5 +45,8 @@ report "no alloca() calls" "$hits"
 
 hits=$(sources core dsp app | xargs -n1 basename | sort | uniq -d)
 report "filenames unique across core/ dsp/ app/" "$hits"
+
+hits=$(grep -nE 'tools/emulate\.py"? ' tests/scenario_*.sh | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)
+report "scenarios emulate through tools/enaga_cached.py" "$hits"
 
 exit $fail
