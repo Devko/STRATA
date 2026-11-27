@@ -1473,6 +1473,9 @@ TEST(sample_stream_plays_exactly_what_a_whole_load_plays) {
         render_blocks(g_whole, q, g_other, 600);
 
         g_streamer.init(kRate);
+        // A late count only ever grows (the engine reads it as a difference), and init() does not
+        // clear it: a test before this one may have starved the stream. Measured from here.
+        const uint32_t late_before = g_streamer.stream_late();
         g_streamer.set_stream(g_mono, kHead, kSrcFrames, 1, kRate, &g_fifo);
         CHECK(g_streamer.streaming());
         CHECK_EQ(g_streamer.stream_frames(), uint32_t(kSrcFrames));
@@ -1483,7 +1486,7 @@ TEST(sample_stream_plays_exactly_what_a_whole_load_plays) {
         int wrong = 0;
         for (int i = 0; i < n; i++) wrong += g_out[i] != g_other[i] ? 1 : 0;
         CHECK_EQ(wrong, 0);
-        CHECK_EQ(g_streamer.stream_late(), 0u);
+        CHECK_EQ(g_streamer.stream_late(), late_before);
         CHECK(peak(g_out, n) > 0.5f);
     }
 }
@@ -1541,6 +1544,7 @@ TEST(sample_stream_len_is_an_end_point) {
     TrackParams p = plain();
     p.set(2, 64);       // LEN about half
     g_streamer.init(kRate);
+    const uint32_t late_before = g_streamer.stream_late();   // only ever grows: see above
     g_streamer.set_stream(g_mono, kHead, kTotal, 1, kRate, &g_fifo);
     g_streamer.prepare(p);
     const int32_t half = int32_t(p.unit(2) * float(kTotal) + 0.5f);
@@ -1554,7 +1558,7 @@ TEST(sample_stream_len_is_an_end_point) {
     CHECK(g_out[half - 400] > 0.2f);
     CHECK(all_zero(g_out + half + kBlk, kBlk * 4));
     CHECK(!g_streamer.active());
-    CHECK_EQ(g_streamer.stream_late(), 0u);
+    CHECK_EQ(g_streamer.stream_late(), late_before);
 
     // LEN at the top is the whole file, to the frame, however long.
     p.set(2, 127);
@@ -1573,6 +1577,7 @@ TEST(sample_stream_a_len_loop_inside_the_head_never_reopens_the_stream) {
     p.set(10, 32);      // PLY forward loop
     p.set(2, 6);        // LEN about 4.7% of 60,000: 2,835 frames, inside the head
     g_streamer.init(kRate);
+    const uint32_t late_before = g_streamer.stream_late();   // only ever grows: see above
     g_streamer.set_stream(g_mono, kHead, kTotal, 1, kRate, &g_fifo);
     g_streamer.prepare(p);
     CHECK(g_streamer.play_length() < int32_t(kHead));
@@ -1584,7 +1589,7 @@ TEST(sample_stream_a_len_loop_inside_the_head_never_reopens_the_stream) {
     CHECK(g_streamer.active());
     CHECK(g_streamer.stream_position() < uint32_t(g_streamer.play_length()));
     CHECK(peak(g_out + kBlk * 150, kBlk * 40) > 0.3f);
-    CHECK_EQ(g_streamer.stream_late(), 0u);
+    CHECK_EQ(g_streamer.stream_late(), late_before);
 }
 
 TEST(sample_stream_restarts_on_a_trigger_and_on_a_loop) {

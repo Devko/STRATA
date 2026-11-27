@@ -46,9 +46,15 @@ the project file format or the controls.
   beat playing, AS WAS first.
 - **40 more factory sounds**, techno and ambient, on every machine: 116 in all (docs/MANUAL.md
   has the table).
+- **A one-hour smoke test** (S1-S20) at the top of `docs/UNIT_CHECKLIST.md`: boot, the small
+  font on the OLED, load on A01 and A04, LOCK, the MOD slots, one RESAMPLE take and a save that
+  survives a power cycle, before the two-hour walkthrough.
 
 ### Changed
 
+- Internal: the engine's command handling is split into twelve handlers, one per family of
+  commands, with no change in behaviour; the host tests no longer depend on the order they run in,
+  and `tools/test_shuffle.sh` runs them in shuffled orders to keep it so.
 - **The arp's RND is random on every pass** (and RATCHET's RND2 and RND3 with it): each run draws
   a new seed. It used to play one fixed pattern for a given track and step.
 - A kit recalled from the kit library brings its arp settings with its ARP bytes.

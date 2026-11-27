@@ -551,6 +551,13 @@ void note() { post(Cmd::trigger_note, kTrack, 0, 60, 100); }
 TEST(lfo_retrig_restarts_the_cycle_on_every_note_and_free_does_not) {
     Engine &engine = fresh();
     lfo(LfoWave::saw, 28, 127, kDest);               // 1 Hz, falling from the top
+    // From the top of a cycle: a FREE LFO keeps its phase through a project load, so without
+    // this it starts wherever the test before left it (a synced one, on the clock's position) and
+    // "part of a cycle in" below held only in the suite's own order. A RETRIG note puts it there.
+    trig_mode(kLfoTrigRetrig);
+    note();
+    pump();
+    trig_mode(kLfoTrigFree);
     pump(200);
     const int free_before = sounding();
     CHECK(free_before < 120);                        // part of a cycle in

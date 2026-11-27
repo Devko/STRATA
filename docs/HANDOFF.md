@@ -303,8 +303,12 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
   leaves a send open never settles, because `Mixer::add_track` restarts the delay's tail.
 - A kick's block peak oscillates with its phase against the block. Compare **energy over a
   span**, never one block's peak.
-- UI mode state (`mixer_bank_` and the like) survives `fresh()` on purpose; walk to a named page
-  (`mixer_page(app, n)` in `tests/test_ui.cpp`) instead of counting key presses.
+- `tests/test_ui.cpp`'s `fresh()` puts every UI cursor, page and setting back to a fresh start
+  (`UiProbe::view_to_defaults`), the factory scenes and macros, and the engine's performance
+  layer. Still walk to a named page (`mixer_page(app, n)`) rather than count key presses, and use
+  `knob_result` for encoder A on EDIT's first page (TUN, a semitone a click).
+- `Cmd::stop` cuts with `a = 1`; `post_cmd`'s first byte is `a`. Both rigs once posted `c = 1`, a
+  plain release, and a pad note rang into the next test.
 - Thousands of commands without a pump overflow the command ring, and the drops land on the next
   test.
 
@@ -391,13 +395,16 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
   protocol is in section 6 above.
 
 - **Test order.** The host suite passes in registration order, with `--only` on any one test,
-  and as contiguous shards (`--shard K/N`, what `make -C host test JOBS=N` and CI run). It does
-  NOT pass in a random order: a shuffled run fails dozens of `ui_`, `app_`, `storage_` and
-  `ambient_` tests and once crashed, because `tests/apprig.cpp`'s `fresh()` still lets some engine
-  and app state through from one test to the next. Sharding found and fixed three such leaks
-  (the bar count and an armed take, the previous kit's sample requests, a stale project error);
-  the rest are why the shards are contiguous blocks and not round robin. Replay any order with
-  `strata-tests --names FILE` (one test name per line) to find the test that leaks.
+  as contiguous shards (`--shard K/N`, what `make -C host test JOBS=N` and CI run), and since
+  2026-11-26 in shuffled orders: 37 seeds clean with `tools/test_shuffle.sh BIN [SEEDS...]`,
+  where they had failed 28-55 checks each. What leaked, now fixed: the scenes and macros (they
+  load beside `Project`, so `project_init` left them), every UI cursor and page, the take
+  counter (tests named `STRATA_1.WAV`), the stream late counts (they only ever grow), the
+  ambient rig's settings, a FREE LFO's phase, the CPU MAX, a stale card error and its notice, a
+  held MUTE pad, the track meters' fall, and the UI rig's STOP flag. A failing seed keeps its
+  order in `$TMPDIR/strata-shuffle-SEED.txt`; replay it with `strata-tests --names FILE` and cut
+  the file in halves to find the test that leaks. Run the tool after adding tests to a rig. The
+  shards are still contiguous blocks; round robin would now work but nothing needs it.
 
 ### 8. Upstream, and moving the Enaga pin
 
