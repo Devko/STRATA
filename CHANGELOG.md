@@ -47,6 +47,11 @@ the project file format or the controls.
   song ended at the old length.
 - **Recording after a chain step or a queued pattern change** puts the note on the step that
   was playing, not one counted from the song's start.
+- **A STEP range** ends when you change track or screen. Before, a plain CLR, copy or turn on
+  another track (or in EDIT, where `SEL` is not shown) acted on that range there.
+- **SAMPLES read again (FUNC+UP)** keeps the cursor on the list when it comes back shorter.
+- **A step pulled before tick 0** on a one- or two-step track with micro and FEEL no longer
+  fires twice there.
 
 ## [0.4.0] - {{RELEASE_DATE}}
 
