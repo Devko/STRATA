@@ -157,7 +157,7 @@ constexpr float kHeadroom = 0.72f;
 // is defined as, so there is no ln(100) factor here -- contrast dsp/kick.cpp, which converts
 // published time constants and therefore has to multiply by it.
 constexpr float kAttackS = 0.0025f;            // short, but not a step: a step clicks
-constexpr float kAttackAccentS = 0.0006f;      // an accent snaps
+constexpr float kAttackAccentS = 0.0015f;      // an accent snaps, but 0.6 ms ticked on a low note
 constexpr float kReleaseS = 0.060f;            // what STOP-once leaves behind
 constexpr float kFilterAttackS = 0.0005f;      // the sweep starts at once
 constexpr float kFilterReleaseS = 0.040f;
@@ -173,6 +173,12 @@ constexpr float kFilterReleaseRatio = kFilterReleaseS / kReleaseS;
 constexpr float kAccentGain = 1.40f;           // louder, but that is the least of it
 constexpr float kAccentCutSemis = 10.0f;       // the base cutoff opens
 constexpr float kAccentEnvScale = 1.5f;        // and the sweep above it reaches further
+// But never more than this far above where the plain note's sweep is at that moment. Uncapped,
+// an acid patch (CUT 26, ENV 100) swept from 115 Hz to about 18 kHz in a few milliseconds on an
+// accent, which is heard as a tick on every accented note rather than a brighter one (the sound
+// review, 2026-11-27). Capped, the same patch peaks near 6.5 kHz. Where the plain sweep is under
+// 16 semitones, x1.5 + 10 stays inside the cap and the accent is what it always was.
+constexpr float kAccentMaxSemis = 18.0f;
 constexpr float kVelocityFloor = 0.25f;        // velocity 1 is a quarter the level, not silence
 // Velocity to cutoff (D15), per machine: semitones per unit of velocity (0-1) away from 100.
 // VA MONO the most, because velocity is how a line breathes; at 24, velocity 127 opens a bass
@@ -564,7 +570,11 @@ void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *en
         k = shared->entries[hit].k;
     } else {
         float semis = s.env_semis * fenv;
-        if (accent_) semis = semis * kAccentEnvScale + kAccentCutSemis;
+        if (accent_) {
+            const float opened = semis * kAccentEnvScale + kAccentCutSemis;
+            const float most = semis + kAccentMaxSemis;
+            semis = opened < most ? opened : most;
+        }
         semis += vel;
         const float cutoff = clamp(s.cutoff_hz * semitones(semis), 20.0f, 0.45f * s.rate);
         g = tan_pi(cutoff * s.inv_rate);

@@ -53,6 +53,18 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### The sound review's fixes (2026-11-27, emulator, Enaga v0.4.0)
+
+The clap's burst envelope, the VA accent's capped sweep (one compare where the cutoff is
+computed), new LVL bytes on 28 presets, the factory faders and FM4 EPIANO's bytes. None adds
+work per sample: `factory` is where it was before.
+
+| Scenario, peak load | cl6x | GCC-only |
+| --- | --- | --- |
+| `factory` (A01 then A04) | 23.17% (23.16% at v0.5.0) | 45.00% (45.03%) |
+| `fm` | 24.02% | 49.04% |
+| `m1` | 23.17% | 45.00% |
+
 ### GENERATE on every track, and the CPU guard that tripped on it (2026-11-27, emulator)
 
 On the unit (main after #208, Enaga 0.4.0), GENERATE run many times on all eight tracks showed

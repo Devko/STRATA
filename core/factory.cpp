@@ -89,9 +89,11 @@ void factory_kit(Kit &kit) {
     kit.tracks[kKick].params[kDrv] = 28;
 
     // CLAP: the SNARE machine in clap mode (CLP 64 = three bursts), mostly noise (SNP 100), the
-    // bursts 2 + 38 * 28/127 = 10 ms apart, which is a 909 clap's spacing. A short body, and a
-    // touch of reverb so the backbeat has a room.
-    set(kit.tracks[kClap], {64, 100, 64, 64}, {54, 28, 40, 100});
+    // bursts 2 + 38 * 28/127 = 10 ms apart, which is a 909 clap's spacing. TON 22 puts the noise
+    // band at about 2-3 kHz, where a clap's smack is (at 64 it sat at 5-10 kHz and hissed); LVL
+    // at the top makes up the 4 dB the narrower band takes. A short body, and a touch of reverb
+    // so the backbeat has a room.
+    set(kit.tracks[kClap], {64, 100, 22, 64}, {54, 28, 40, 127});
     kit.tracks[kClap].params[kSnb] = 24;
 
     // HATS (dsp/hat.cpp, the 808 six squares). TON is the band-pass: 150 Hz * 2^(6 * TON/127),
@@ -117,11 +119,9 @@ void factory_kit(Kit &kit) {
     // with some resonance (RES 56, about +8 dB of peak), and a short envelope (DEC 46: 94 ms)
     // sweeping about three octaves (ENV 72), so each note has a "wow" at its front. OSC: a saw
     // over the triangle sub (SUB 90) and a little drive (DRV 24) for the weight. Dry and centred: the bass is the one part
-    // that must stay mono. LVL at the top and the fader at 1.25: balanced by rendering
-    // (host/render.cpp), the bass sat 13 dB under the kick at 104, and wants to be 6-8 under.
+    // that must stay mono. LVL at the top; the faders are set below, with the rest of the mix.
     set(kit.tracks[kBass], {64, 40, 46, 56}, {46, 72, 18, 127});
     set_osc(kit.tracks[kBass], {0, 0, 90, 24});
-    kit.tracks[kBass].level = 1.25f;
 
     // CHORD (VA POLY): a dub stab. MOD 70 is the 12 dB low-pass, CUT 70 = 870 Hz, a short
     // decay (DEC 66: 15 ms * 2^(7.32 * 0.52) = 210 ms) with some envelope, and DET 28 to spread
@@ -137,6 +137,20 @@ void factory_kit(Kit &kit) {
     // asks for nine. ATK 0, a long DEC and forward one-shot: a slice's own transient is the
     // sound. Off to the right, with some delay so the blips answer the rim on the left.
     set(kit.tracks[kLoop], {64, 0, 127, 60}, {0, 110, 0, 100});
+
+    // The faders, balanced by rendering each track of A01 alone (host/render.cpp, the sound
+    // review of 2026-11-27). With every fader at 1.0 (BASS 1.25) the bass sat 9.5 dB and the
+    // chord 7 dB under the kick while the hats were nearly as loud as it: a kick, hiss and
+    // little between, only 14% of the mix's energy from 250 Hz to 4 kHz. Now the bass sits about
+    // 6 dB under the kick and the chord about 3 under. 1.5 is as far as a fader turns (the
+    // MIXER's ceiling), so the kick, clap and hats come down rather than the bass going further.
+    kit.tracks[kKick].level = 0.8f;
+    kit.tracks[kClap].level = 0.85f;
+    kit.tracks[kClosed].level = 0.7f;
+    kit.tracks[kOpen].level = 0.7f;
+    kit.tracks[kPerc].level = 1.2f;
+    kit.tracks[kBass].level = 1.5f;
+    kit.tracks[kChord].level = 1.25f;
     kit.tracks[kLoop].params[kPan] = 84;
     kit.tracks[kLoop].params[kSna] = 48;
     kit.tracks[kLoop].params[kSnb] = 32;
