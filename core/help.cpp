@@ -592,7 +592,12 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
             add_row(rows, count, "FREE RETRIG ONE-SHOT");
             add_row(rows, count, "PUSH C D   MOD SLOTS");
             break;
-        case 5: add_row(rows, count, "MOD OFF  NO ARP"); break;
+        case 5:
+            add_row(rows, count, "MOD OFF  NO ARP");
+            add_row(rows, count, "PUSH A VAR  B RHYTHM");
+            add_row(rows, count, "PUSH C ACC  D RATCHET");
+            add_row(rows, count, "OK         ARPS");
+            break;
         case 6:
             add_row(rows, count,
                     machine_is_grain(place.machine) || place.machine == uint8_t(MachineId::sample)

@@ -250,7 +250,7 @@
                 break;
             }
             default:
-                x = draw_tab(canvas, x, mode_name(mode_), true);
+                x = draw_tab(canvas, x, screen_mode_name(), true);
                 break;
         }
     }

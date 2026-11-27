@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W50, about 153 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W52, about 165 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -575,7 +575,33 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - Put a plain trig on step 9: the roll stops there and step 9 plays once. Turn RTCH back below
   ROLL/64: an ordinary 8-hit ratchet in one step. `____`
 
-**W50. GEN and EVOLVE (4 min).** Beat playing, A01, GRID.
+**W50. A note repeat recorded (2 min).** Beat playing, A01, T3 (a hat) with no steps.
+- FUNC+FILL (`NOTE RPT`), REC on. Hold T3's pad for about a bar, then let go: from the next pass
+  the hat rolls in 16ths for that bar, from the step you pressed on. Hold STEP on it, OK: RTCH
+  reads `ROLL/16`, LEN about `16 STP`. `____`
+- REPEAT + LEFT to 1/8, record another hold on T4: `ROLL/8`. REC off, NOTE RPT off. `____`
+
+**W51. Arp depth, ARPS and the new sounds (10 min).** Beat playing, A05 PAD.
+- T7 (CHORD), EDIT, screen keys to ARP. Hold the step at the bar's start and clear its locks
+  (push each knob) or play on: OK opens ARPS, `INTO T7 ARP ONLY`, fourteen rows. OK on TRANCE:
+  each bar's chord is walked up two octaves at 1/16, accented on the beat. `____`
+- Walk the list with OK on each: ROLLER (two and a rest, the melody turning against the bar),
+  ACID (skipped 16ths, a 3-3-2 accent), BLEEP (random, now and then a double), DUB (held 1/8s on
+  the tresillo), CONVRG (triplets closing in), FILL (a four-hit roll at the end of each bar),
+  AMBNT (slow quarters over four octaves), DRIFT. `NOW` follows the loaded one. AS WAS: the
+  chord plays as it did. CLR: back on the ARP page. `____`
+- On the ARP page with MOD on, push A, B, C and D: `ARP VAR CONV`, `ARP RHY X-`, `ARP ACC X-`,
+  `ARP RTC 2:4`; the picture shows dots for rests, tall notes for accents, a split slot for the
+  ratchet, and the info line `VAR CONV  RHY X-  ...`. Each is heard at once. Push each round to
+  OFF again. `____`
+- Ratchets at the fastest: RAT 1/32T, RATCHET 4:16, tempo 180: every repeat is heard, none
+  doubled into one (`____` MAX on SETUP). `____`
+- T6 (BASS), ARP OFFBT on one held KEYS pad: offbeat 8ths in time. `____`
+- New sounds: T1 SOUNDS RUMBLE, TIGHT, BOOM, HARD; T6 DUBBAS, RUBBER; T7 DUBCHD, WARM, SWELL; and
+  on an FM4 track BLIP and DRONE: each sits near the part it replaces, nothing much louder. `____`
+- Save, power cycle: the arp's settings and the loaded arp come back. `____`
+
+**W52. GEN and EVOLVE (4 min).** Beat playing, A01, GRID.
 - Tap OK: nothing opens. Hold OK half a second: the track menu, `>GENERATE`, footer `T1  OK: RUN`.
   OK: `GEN T1 BOTH`, a new kick part that starts on step 1. OK again: another one. Close with CLR
   and FUNC + CLR: the part before. `____`
@@ -1843,7 +1869,7 @@ project and never needs a restart."*
 - [ ] PROJECT opens the PROJECT screen. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
 - [ ] FUNC+HOME, OK saves (the menu opens on SAVE). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (402 bytes),
-      `KIT.BIN` (1,409 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
+      `KIT.BIN` (1,453 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
       save writes every file (the sizes tests/test_storage.cpp pins).
       After that first save only dirty banks are written; the card cannot show it, since all
       eight exist from then on, so tests/test_storage.cpp checks which files each save touches.

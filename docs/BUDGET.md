@@ -1295,8 +1295,13 @@ heap beyond the engine growing by 6.8 KiB.
 
 | Build | cl6x | GCC only |
 | --- | --- | --- |
-| `scenario_factory.sh`, same commit | | |
-| `scenario_fm.sh` (FM4 on the chord track) | | |
+| `scenario_factory.sh`, same commit | 26.27% | 47.62% |
+| `scenario_fm.sh` (FM4 on the chord track) | 26.27% | 50.10% |
+
+Taken 2026-11-27 with the chain-wide index cap (`fm_index_cap`); on `main` before it,
+`scenario_fm.sh` read 26.69% cl6x and 50.37% GCC-only, so the cap costs nothing measurable (a
+16-step bisection only when the note or a knob changes). The cl6x peak equals the factory beat's:
+the chord track is not where the peak lands.
 
 ### The GRAIN rework (2026-11-23, host only)
 
@@ -1361,6 +1366,19 @@ main context and posts one `perf_fx` per amount step. All 31 scenarios pass with
 branch, loads unchanged against main: default beat 24.68%, worst 30.34% (`scenario_ambient`).
 GCC-only not run for this change: nothing it adds is in a hot loop. Memory: the locks are 1.06
 MiB from the heap (128 locks, the swap-back and the compare's scratch), init 97.04 MiB of 120.
+
+### DRIVE's DC blocker (2026-11-27, emulator)
+
+The insert drive's asymmetric clip now has a first-order DC blocker (8 Hz) and a clamp behind it
+in the same loop (`strata_chain_drive`): about 4 more flops a sample, on a track with DRV up only.
+
+| Build | cl6x | GCC only |
+| --- | --- | --- |
+| `scenario_factory.sh` before (with #189's FM4 cap, which costs nothing here) | 26.27% | 47.62% |
+| `scenario_factory.sh` with the blocker | 26.32% | 47.93% |
+| `scenario_m3.sh` with the blocker | 25.60% | 43.19% |
+
+Within the half point a peak moves between runs.
 
 ### Later milestones
 

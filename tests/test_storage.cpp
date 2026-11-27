@@ -585,6 +585,8 @@ const Expect kTable[] = {
     // form writes nothing, but one row covers the command: dirtying the kit for it costs a
     // rewrite of KIT.BIN at most.
     {Cmd::sound_preset, kDirtyKit, "sound_preset"},
+    {Cmd::arp_preset, kDirtyKit, "arp_preset"},
+    {Cmd::set_arp_ext, kDirtyKit, "set_arp_ext"},
 
     // Freeze is RAM only (dsp/frozen.hpp): a loop in the pool, no file, and a reload unfreezes.
     {Cmd::freeze_set, 0u, "freeze_set"},
@@ -806,8 +808,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     // card protocol: a file that came out a different size means the two have drifted apart.
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 402);
     CHECK_EQ(project_bytes(), 402u);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1409);
-    CHECK_EQ(kit_bytes(), 1409u);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1453);
+    CHECK_EQ(kit_bytes(), 1453u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 5108);
     CHECK_EQ(perform_bytes(), 5108u);
     for (int b = 0; b < kBanks; b++) {
@@ -1095,7 +1097,7 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     CHECK(pump_until_idle());
     CHECK(storage().last_error() == nullptr);
     keep_pristine(kit);
-    CHECK_EQ(g_pristine_bytes, 1409u);
+    CHECK_EQ(g_pristine_bytes, 1453u);
 
     // A sanity pass first: the pristine file loads.
     CHECK(reload_now());
@@ -1584,6 +1586,44 @@ TEST(storage_a_load_already_asked_for_is_cancelled_by_pulling_the_card) {
     CHECK(settle());
 }
 
+TEST(storage_an_open_cut_off_by_the_card_goes_again_when_it_returns) {
+    // Not the order above: here the load has STARTED, so RAM already holds the opened project's
+    // first files and the old project's banks. That used to stay as it was under the opened
+    // project's name, and the next save (every file, since a returning card is never complete)
+    // wrote the mix over that project.
+    clean();
+    FakeHost &host = FakeHost::the();
+    post(Cmd::toggle_trig, 0, 3);
+    pump(2);
+    CHECK(storage().request_save_as("FIRST"));
+    CHECK(settle());
+    post(Cmd::track_erase, 0);
+    post(Cmd::toggle_trig, 0, 5);
+    pump(2);
+    CHECK(storage().request_save_as("OTHER"));
+    CHECK(settle());
+
+    CHECK(storage().request_open("FIRST"));
+    for (int i = 0; i < 20 && !storage().loading_project(); i++) pump();
+    CHECK(storage().loading_project());
+    pump(2);                                       // PROJECT.BIN and KIT.BIN, not the banks
+    CHECK(storage().loading_project());
+    host.set_card(false);
+    storage().on_card(false);
+    CHECK(!storage().loading_project());
+    // RAM is neither project, and it is not filed under the one it was half way into.
+    CHECK_EQ(std::strcmp(storage().project_name(), "OTHER"), 0);
+
+    host.set_card(true);
+    storage().on_card(true);
+    CHECK(settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(std::strcmp(storage().project_name(), "FIRST"), 0);
+    CHECK(engine().pattern().tracks[0].steps[3].flags != 0);
+    CHECK_EQ(int(engine().pattern().tracks[0].steps[5].flags), 0);
+    CHECK(!storage().dirty());
+}
+
 TEST(storage_a_file_call_from_the_audio_context_is_refused_not_retried) {
     // Every Enaga file call is main context; from audio() it returns ENAGA_FILE_WRONG_CONTEXT
     // (<enaga/abi.h>). Nothing in app/storage.cpp should ever reach a file call from the audio
@@ -1680,7 +1720,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 402);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1409);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1453);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 5108);
 
     // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.
@@ -1902,6 +1942,25 @@ TEST(storage_save_for_shutdown_writes_the_autosave_in_one_call) {
     const int after = host.saves();
     storage().save_for_shutdown();
     CHECK_EQ(host.saves(), after);
+}
+
+TEST(storage_save_for_shutdown_writes_nothing_over_a_load_half_done) {
+    // A stop while a project is loading: RAM is part the old project and part the new, and an
+    // autosave of that would be counted newer than both and opened by the next start.
+    clean();
+    FakeHost &host = FakeHost::the();
+    storage().request_save();
+    CHECK(settle());
+    storage().request_reload();
+    for (int i = 0; i < 20 && !storage().loading_project(); i++) pump();
+    pump(2);
+    CHECK(storage().loading_project());
+
+    const int saves_before = host.saves();
+    storage().save_for_shutdown();
+    CHECK_EQ(host.saves(), saves_before);
+    CHECK(settle());                               // and the load goes on to its end
+    CHECK(storage().last_error() == nullptr);
 }
 
 TEST(storage_save_for_shutdown_applies_the_edits_still_in_the_ring) {
@@ -3579,6 +3638,52 @@ TEST(storage_a_kit_saved_to_a_slot_comes_back_on_recall) {
     CHECK_EQ(int(engine().project().kit.tracks[1].machine), int(MachineId::grain));
     // RAM's kit is no longer the project's KIT.BIN, so a save has something to write.
     CHECK(storage().dirty());
+}
+
+TEST(storage_a_kit_recall_brings_back_slc_trig_mod_slots_and_choke) {
+    // KIT.BIN's later sections. kit_write saved them into the slot and Cmd::kit_recall copied
+    // only the parameters, machine, fader and duck back out, so they were lost on recall.
+    clean();
+    const KitTrack &track = engine().project().kit.tracks[2];
+    post(Cmd::set_slice_mode, 2, 0, kSliceAuto);
+    post(Cmd::set_lfo_trig, 2, 0, kLfoTrigOneShot);
+    post(Cmd::set_choke, 2, 0, 3);
+    {
+        Command slot;
+        slot.cmd = Cmd::set_mod_slot;
+        slot.track = 2;
+        slot.a = 1;
+        slot.b = kModSrcEnv;
+        slot.c = 0;
+        slot.d = uint8_t(int8_t(-40));
+        engine().commands().post(slot);
+    }
+    pump(2);
+    CHECK(track.mod[1].on());
+    CHECK(storage().request_kit_save(4));
+    CHECK(kit_settle());
+
+    post(Cmd::set_slice_mode, 2, 0, kSliceEqual);
+    post(Cmd::set_lfo_trig, 2, 0, kLfoTrigFree);
+    post(Cmd::set_choke, 2, 0, 0);
+    {
+        Command slot;
+        slot.cmd = Cmd::set_mod_slot;
+        slot.track = 2;
+        slot.a = 1;
+        engine().commands().post(slot);
+    }
+    pump(2);
+    CHECK(!track.mod[1].on());
+
+    CHECK(storage().request_kit_load(4));
+    CHECK(kit_settle());
+    CHECK(storage().last_error() == nullptr);
+    CHECK_EQ(int(track.slice_mode), int(kSliceAuto));
+    CHECK_EQ(int(track.lfo_trig), int(kLfoTrigOneShot));
+    CHECK_EQ(int(track.choke), 3);
+    CHECK_EQ(int(track.mod[1].source), int(kModSrcEnv));
+    CHECK_EQ(int(track.mod[1].depth), -40);
 }
 
 TEST(storage_a_kit_recall_is_heard_and_plays_through_a_running_transport) {
