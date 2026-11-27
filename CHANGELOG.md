@@ -84,6 +84,15 @@ the project file format or the controls.
 - **SAMPLES read again (FUNC+UP)** keeps the cursor on the list when it comes back shorter.
 - **A step pulled before tick 0** on a one- or two-step track with micro and FEEL no longer
   fires twice there.
+- **A choked track** no longer replays its filter's ringing and its drive's DC as a thump on its
+  next note: a choke clears the track's insert chain as every other cut does.
+- **DRV back on after a DRV lock of 0** (or a turn through 0) starts its DC blocker from rest; it
+  carried over the sample from where the drive last ran, a click at the step.
+- **REC MODE REPLACE after a pattern change**: the first note recorded onto a chord step of the
+  new pattern takes the step over. A note recorded on the same step in the old pattern's same
+  pass made it join the chord instead.
+- **COUNT-IN**: a downbeat played up to half a step early, before the last click ends, records
+  on step 1. It was dropped.
 
 ## [0.4.0] - 2026-11-26
 
