@@ -53,16 +53,12 @@ the project file format or the controls.
   a new seed. It used to play one fixed pattern for a given track and step.
 - A kit recalled from the kit library brings its arp settings with its ARP bytes.
 
-### Changed
-
 - **FM4 no longer aliases at high IDX.** The brightness cap now sees the whole operator chain:
   in a stack the sidebands multiply, so ALG 1 at IDX 90 on middle C and above folded harsh,
   out-of-tune tones back into the audible range, about 10 dB under the note. Now they are 45-56 dB
   down under 5 kHz. Low notes sound as before; high notes at high IDX are somewhat less bright.
   `make -C host probe` and `tools/sound_probe.py` measure every synth for aliasing, tuning,
   resonance, DC and clicks.
-
-### Changed
 
 - **DRIVE no longer pushes the sound off centre.** The insert drive clips the two halves of the
   wave differently (that is its even-harmonic grit), which also shifted a held note off zero, by
