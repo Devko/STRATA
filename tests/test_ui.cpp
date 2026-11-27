@@ -8272,6 +8272,7 @@ TEST(ui_screenshots) {
     app.on_pad_press(14, 100);
     app.on_pad_release(14);
     key(ENAGA_KEY_F8);
+    goto_edit_page(app, Page::src);       // OK on the ARP page, where the walk left EDIT, is ARPS
     key(ENAGA_KEY_OK);
     for (int i = 0; i < 400 && app_storage().browsing(); i++) pump();
     CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
