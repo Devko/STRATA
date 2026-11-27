@@ -33,7 +33,8 @@ PICKS = {
     "help_keys": "helpp_06", "menu": "menu", "perform": "perform_f00", "resample": "resample",
     "project": "project", "chain": "chain", "pattern": "pattern", "setup": "setup",
     "projects": "projects_saved", "kit": "kit_saved", "machine": "machine", "sounds": "sounds",
-    "samples": "samples_loaded",
+    "samples": "samples_loaded", "trackmenu": "trackmenu", "menu_click": "menu_click",
+    "arps": "arps",
     "edit": "edit_t1_p2_f00", "edit_fltr": "edit_t1_p3_f00", "edit_amp": "edit_t1_p4_f00",
     "edit_fx": "edit_t1_p5_f00", "edit_lfo": "lfo_on_f00", "edit_arp": "edit_t1_p1_f00",
     "edit_vfltr": "edit_t6_p7_f00", "edit_env": "edit_t7_p4_f00", "edit_osc": "edit_t7_p5_f00",
@@ -137,12 +138,17 @@ def walk(stage, out, part):
         emu.key(STEP1, True); go(5 * M); tap(OK); emu.key(STEP1, False); go(5 * M)
         shot("step")
         tap(HOME)
+        tap(OK, hold=250 * M); shot("trackmenu", wait=60 * M)   # hold OK 500 ms: the track menu
+        tap(CLR); go(30 * M)
         tap(HOME); go(30 * M); tap(HOME, hold=4 * M); go(2 * M); tap(HOME, hold=4 * M)
         shot("keys", wait=TOAST, burst=2)
         tap(HOME); go(30 * M)
         emu.key(FUNC, True); go(320 * M); shot("help", wait=10 * M)
         emu.key(FUNC, False); go(30 * M)
         chord(FUNC, HOME); shot("menu", wait=TOAST)
+        for _ in range(6):                                   # up from SAVE to CLICK
+            tap(UP)
+        shot("menu_click", wait=60 * M)
         tap(CLR); go(30 * M)
         chord(FUNC, MIXER); shot("perform", burst=4)
         tap(HOME)
@@ -194,7 +200,8 @@ def walk(stage, out, part):
         to_first_page()                                      # lands on track 1's LFO page
         turn(2, 40); turn(3, 6)
         shot("lfo_on", wait=300 * M, burst=4)
-        tap(HOME)
+        tap(SR); tap(OK); shot("arps", wait=TOAST)           # the ARP page, OK: ARPS
+        tap(CLR); tap(HOME)
         chord(FUNC, EDIT); chord(FUNC, EDIT); go(400 * M)
         for _ in range(3):
             chord(FUNC, DN); go(500 * M); tap(DN)

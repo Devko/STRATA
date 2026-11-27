@@ -45,11 +45,12 @@ any machine. The factory kit:
 - **SAMPLE:** one-shot or slices by note, with SLC AUTO cutting a break at its hits.
 - **GRAIN:** granular clouds from a sample, with its own envelope, a scan that time-stretches,
   and a pitch spray up to an octave shimmer.
-- **Factory sounds:** 76 ready-made sounds for the drums, the VAs, WAVE, FM4 and GRAIN, loaded
+- **Factory sounds:** 116 ready-made sounds for the drums, the VAs, WAVE, FM4 and GRAIN, loaded
   into one track at a time while the beat plays.
 - **Per track:** drive, multimode filter (LP, BP, HP, 12 or 24 dB; one TON knob on the VA and
   WAVE machines, which have a filter of their own), lo-fi, amp envelope, sidechain duck, pan,
-  level, an **LFO** (six shapes, free or synced) and an **arpeggiator**.
+  level, an **LFO** (six shapes, free or synced), two **MOD slots**, a **choke group** and an
+  **arpeggiator** with rhythms, accents, ratchets and fourteen factory arps.
 - **Sends and master:** a tempo-synced ping-pong delay with a LONG mode (up to 12 s, tape wow), a
   reverb with a HALL mode (shimmer), a DJ filter, a three-band kill EQ, a glue compressor and a
   limiter.
@@ -58,13 +59,17 @@ any machine. The factory kit:
 
 - Up to 64 steps per track, with per-track length, speed, swing (polymeter) and play mode
   (forward, reverse, ping-pong, or random steps or blocks, seeded), and micro-timing
-- Parameter locks, trig conditions, probability, ratchets, accents, slides and chords
+- Parameter locks, trig conditions, probability, ratchets and rolls over a step's length,
+  accents, slides and chords
 - Key and scale per pattern (15 scales); notes on the VA, WAVE, FM4, GRAIN and unsliced SAMPLE
   tracks fold into the scale
-- Live and motion recording, a Euclidean generator, and KEYS: both pad rows as a
+- Live and motion recording (chords note for note, note-repeat rolls, a click and a count-in),
+  a Euclidean generator, and KEYS: both pad rows as a
   pressure-sensitive keyboard, with the pattern's scale lit, while the STEP keys stay steps
 - 8 banks of 16 patterns with queued changes, a pattern menu (copy, paste, clear, double), and
   a chain that becomes a song: each entry can recall a mute state, and SONG mode stops at the end
+- **GENERATE** a drum or melodic part in the key, and **EVOLVE** it every few loops, orbiting
+  the part or drifting away from it (hold OK in GRID)
 - 16 levels of undo
 
 ## Performance

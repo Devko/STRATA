@@ -11,9 +11,9 @@ Publishing is one command, `tools/publish_release.sh`, and it refuses rather tha
 
 - [ ] The card was built from `main` as it is now (`tools/build.sh`, no `--name`) and the
       walkthrough at the top of `docs/UNIT_CHECKLIST.md` passed on it.
-- [ ] The unit ran Enaga's own release **of the pinned version** for the test (v0.3.0 since
-      2026-11-25: `enaga-v0.3.0-smpltrek.zip`,
-      <https://github.com/seawaffle/enaga/releases/tag/v0.3.0>), not a local firmware build.
+- [ ] The unit ran Enaga's own release **of the pinned version** for the test (v0.4.0 since
+      2026-11-27: `enaga-v0.4.0-smpltrek.zip`,
+      <https://github.com/seawaffle/enaga/releases/tag/v0.4.0>), not a local firmware build.
       Leave the `SmplTrek.bin` you installed from on the card: the script then checks it is
       Enaga's file, and leaves it out of the zip either way.
 - [ ] The release notes (`docs/release/vX.Y.Z.md`) name the Enaga version, link its release,
@@ -28,11 +28,25 @@ Publishing is one command, `tools/publish_release.sh`, and it refuses rather tha
       condition on distributing the compiler's **output**, and record what it says in
       `docs/BUDGET.md`, "The cl6x licence question, examined". If it attaches one, stop and ask.
       If in doubt, release a GCC-only build (`ENAGA_TI_CGT=none tools/build.sh`) instead.
-- [ ] `gh` is installed in WSL and logged in (`gh auth status`).
+- [ ] `gh` is logged in (`gh auth status`). On Roland's PC that is Windows' `gh.exe`: WSL has
+      no `gh` and no GitHub credentials, and the script uses Windows' `git.exe` and `gh.exe` on
+      its own there (below).
 
 ## Publish: one command
 
-In WSL, from a clean checkout of `main`:
+In WSL, from a clean checkout of `main`. On Roland's PC that is the release thread's own
+worktree, never `D:\DEV\STRATA` (other threads share it): from Git Bash,
+
+```sh
+git -C /d/DEV/STRATA fetch origin main
+git -C /d/DEV/STRATA worktree add --detach /d/DEV/STRATA-wt/rel-vX.Y.Z origin/main
+git -C /d/DEV/STRATA-wt/rel-vX.Y.Z submodule update --init
+```
+
+then run the script from that folder in WSL (`cd /mnt/d/DEV/STRATA-wt/rel-vX.Y.Z`) with its
+own `ENAGA_BUILD`. WSL's git cannot read a worktree made by Windows git, so when the folder's
+`.git` names a Windows path the script runs Windows' `git.exe` and `gh.exe` itself, through WSL;
+the build stays in WSL. `STRATA_GIT` and `STRATA_GH` override that. Then:
 
 ```sh
 tools/publish_release.sh v0.1.0 --build gcc --max-a01 30.1 --max-a04 41.7 --dry-run   # read it first
@@ -67,7 +81,8 @@ What it does, refusing at the first thing that is wrong:
 
 ## After
 
-- [ ] Merge the release PR.
+- [ ] Merge the release PR. A tag is never moved or released again: a fix after a release is
+      the next version.
 - [ ] Update the README's "Status" section (current release and date) and, if the release changes
       the install steps or the Enaga version, the README's "Try it" and `docs/INSTALL.md`.
 - [ ] Check that [strata.einblick.dev](https://strata.einblick.dev) offers the release (within

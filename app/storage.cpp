@@ -91,6 +91,10 @@ bool mutates_pattern(Cmd cmd) {
         // clean: an explicit save then skipped the bank file entirely and the rhythm was gone on
         // reopen. `Cmd::mutate` was remembered and `Cmd::euclid`, added later, was not.
         case Cmd::euclid:
+        // GEN writes steps as the generator above does; EVOLVE's HOME puts steps back. An
+        // EVOLVE turn is no command at all: the UI marks the bank on Status::evolve_turns.
+        case Cmd::generate:
+        case Cmd::evolve_home:
         // And these two write BOTH stores. `project_.settings` holds the key and scale for
         // PROJECT.BIN, but `Engine` also writes `live().root` and `live().scale`, which
         // core/serialize puts in the BANK file (serialize.cpp:235) and which is the copy
@@ -141,6 +145,11 @@ bool mutates_kit(Cmd cmd) {
 // pattern is live, the tempo, the mutes.
 bool mutates_project(Cmd cmd) {
     switch (cmd) {
+        // EVOLVE's periods, mode, mutation and amount are PROJECT.BIN's (core/project.hpp).
+        case Cmd::evolve_set:
+        case Cmd::evolve_config:
+        case Cmd::evolve_keep:
+        case Cmd::evolve_home:
         case Cmd::set_tempo:
         case Cmd::set_chain:
         case Cmd::chain_edit:

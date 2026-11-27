@@ -96,20 +96,10 @@
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;          // nothing to record onto
-        // A count-in is the player's lead-in, not the pattern: nothing records until it ends.
+        // A count-in is the player's lead-in, not the pattern: nothing records until it ends --
+        // except the downbeat played a little early (below).
         const Status &status = engine_.status();
-        const uint32_t lead = status.count_in_ticks.load(std::memory_order_relaxed);
-        if (clock.position < lead) return;
-
-        // The pattern's position, as the scheduler's: the clock less a count-in, less where the
-        // pattern started (a chain entry, a queued switch), which is what steps and passes count
-        // from (Engine::resolve_tick hands the scheduler `tick - origin_`).
-        const uint32_t origin = status.pattern_origin.load(std::memory_order_relaxed);
-        if (clock.position - lead < origin) return;   // a switch the audio side has not made yet
-        Stamp now;
-        now.tick = clock.position - lead - origin;
-        now.fraction = clock.fraction;
-        const Stamp hit = stamp_back(now, kPadLatencyMs, clock.tempo);
+        const uint32_t lead = count_in_lead();
 
         // The track's timing has to be resolved exactly as core/scheduler does it, including
         // swing inheritance -- if the two disagree about where a step sits, a hit played dead on
@@ -124,6 +114,27 @@
         timing.play = live_play_mode(source.play, engine_.live_rnd_unit(),
                                      engine_.live_rnd_armed(), track);
         timing.play_seed = play_seed(pattern.seed, track);
+
+        // The pattern's position, as the scheduler's: the clock less a count-in, less where the
+        // pattern started (a chain entry, a queued switch), which is what steps and passes count
+        // from (Engine::resolve_tick hands the scheduler `tick - origin_`).
+        const uint32_t origin = status.pattern_origin.load(std::memory_order_relaxed);
+        Stamp now;
+        if (clock.position < lead) {
+            // Still counting in. A hit up to half a step before the count-in's end is the one
+            // played a hair early, which is how a downbeat is as often as late: it is step 1's,
+            // as a hit in a loop's last ticks records forward onto the next pass's first step
+            // (core/record.cpp). Anything earlier belongs to the count-in.
+            const float early = float(lead - clock.position) - clock.fraction;
+            if (early > 0.5f * float(timing.step_ticks())) return;
+            now.tick = 0;
+            now.fraction = 0.0f;
+        } else {
+            if (clock.position - lead < origin) return;   // a switch the audio side has not made
+            now.tick = clock.position - lead - origin;
+            now.fraction = clock.fraction;
+        }
+        const Stamp hit = stamp_back(now, kPadLatencyMs, clock.tempo);
 
         // quantize_hit finds the time SLOT the hit belongs to; under REV, PING or RND the note
         // goes to the step that plays in that slot on that pass, so it plays back where it was
@@ -144,6 +155,7 @@
         // step this pass replaces what it held, unless REC MODE is ADD; any after it join.
         command.d = uint8_t(RecWrite::note);
         if (records_chords(track)) {
+            follow_rec_pattern(origin);
             uint32_t &pass = rec_pass_[track][landing.step];
             const bool again = pass == landing.loop + 1u;
             command.d = uint8_t(again || rec_add() ? RecWrite::join : RecWrite::replace);
@@ -200,7 +212,7 @@
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;
-        const uint32_t lead = engine_.status().count_in_ticks.load(std::memory_order_relaxed);
+        const uint32_t lead = count_in_lead();
         Stamp up;
         up.tick = clock.position > lead ? clock.position - lead : 0u;
         up.fraction = clock.fraction;
@@ -231,6 +243,7 @@
             clear_rec_passes();          // the pass count starts again: old marks would match
         }
         if (what == ENAGA_TRANSPORT_STOP) {
+            count_in_armed_ = 0;         // a STOP ends a count-in (Engine::process)
             post(Cmd::stop, 0, 0, 0);
             stop_armed_ = true;
         }
@@ -259,6 +272,29 @@
         last_ms_ = ms;
 
         service_slot_menu();
+        service_track_menu();
+
+        // EVOLVE changed a track on a pass boundary (Engine::evolve_passes): no command did it,
+        // so the bank is marked here, and the log says so for the scenarios.
+        {
+            const uint8_t turns = engine_.status().evolve_turns.load(std::memory_order_acquire);
+            if (turns != evolve_turns_seen_) {
+                evolve_turns_seen_ = turns;
+                storage_.note_command(
+                    Cmd::evolve_home,
+                    int(engine_.status().live_bank.load(std::memory_order_relaxed)));
+                enaga::log("EVOLVE TURN");
+            }
+            // A load set EVOLVE from the file: the screens' copies follow (Engine::
+            // evolve_from_settings). The mutation and amount are PERFORM's MUTATE setting too.
+            const uint8_t loaded = engine_.status().evolve_loaded.load(std::memory_order_acquire);
+            if (loaded != evolve_loaded_seen_) {
+                evolve_loaded_seen_ = loaded;
+                mutation_ = engine_.evolve_kind();
+                mutate_amount_ = engine_.evolve_amount();
+                evolve_mode_ui_ = engine_.evolve_mode();
+            }
+        }
 
         // A count-in says its beats as it clicks them (`COUNT-IN 4` .. `1`), logged for
         // tests/scenario_click.sh.

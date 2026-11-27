@@ -10,7 +10,7 @@
 // Straight to the output, after the master effects and after the RESAMPLE take's tap, as the
 // sample audition does: a click is for the player, so it is never recorded, looped, repeated or
 // ducked. Both channels, at a fixed level under full scale (kGainBeat, kGainBar), and the output
-// sum is clamped by the caller as the audition's is.
+// sum is clamped to full scale in the loop (clickloops.ti.c), as the audition's is.
 //
 // ## Cost
 //

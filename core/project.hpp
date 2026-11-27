@@ -453,6 +453,14 @@ constexpr uint8_t kDefaultDelayDivision = 64;
 // The LONG delay's default multiplier: X2, index 1 of dsp/buses.hpp's six, as a band's middle.
 constexpr uint8_t kDefaultDelayMultiplier = 32;
 
+// EVOLVE's saved mutation when a file has none: VELOCITY, core/mutate.hpp's Mutation::velocity.
+// A number here rather than the enum because core/project.hpp does not include core/mutate.hpp;
+// tests/test_project.cpp checks the two agree.
+constexpr uint8_t kEvolveKindDefault = 4;
+// The highest byte the kind may hold (Mutation::mix), and the highest period index.
+constexpr uint8_t kEvolveKindMax = 8;
+constexpr uint8_t kEvolvePeriodMax = 4;
+
 // Settings that belong to the project rather than to a pattern.
 struct ProjectSettings {
     uint16_t tempo_centi_bpm = 13000;    // 130.00 BPM; Enaga's clock takes BPM x 100
@@ -493,6 +501,16 @@ struct ProjectSettings {
     // kit because it is cabling -- which outboard synth listens where -- not a sound: recalling a
     // kit must not re-route the synths on stage.
     uint8_t midi_out[kTracks] = {};
+
+    // EVOLVE (core/evolve.hpp), saved so a set comes back evolving (Roland, 2026-11-27). Each
+    // track's period as kEvolvePeriod's index (0 OFF, then 1, 2, 4 or 8 loops), and the mode,
+    // mutation and amount every track shares. The mutation and amount are also PERFORM's MUTATE
+    // setting. HOME is not saved: a track that opens evolving takes the pattern as loaded as its
+    // HOME. Bytes with the enums' values, which core/evolve.hpp and core/mutate.hpp keep put.
+    uint8_t evolve_period[kTracks] = {};
+    uint8_t evolve_mode = 0;             // EvolveMode: 0 ORBIT, 1 DRIFT
+    uint8_t evolve_kind = kEvolveKindDefault;
+    uint8_t evolve_amount = 50;
 
     // The two send effects and the master bus, as encoder bytes rather than as the floats the
     // mixer runs on. One byte per field, in dsp/buses.hpp's `SendField` and `MasterField`
@@ -598,6 +616,10 @@ constexpr uint16_t kSectionProjectSong = 5;
 // Each track's MIDI OUT channel (core/midiout.hpp): eight bytes, 0 off or 1-16. Optional on read
 // like the ones above: an older file has every track's MIDI out off, which is what it played.
 constexpr uint16_t kSectionProjectMidi = 6;
+// EVOLVE (core/evolve.hpp): each track's period and the shared mode, mutation and amount.
+// Optional on read like the ones above: an older file has every track's EVOLVE off, ORBIT,
+// VELOCITY at 50, which is what a fresh project has.
+constexpr uint16_t kSectionProjectEvolve = 7;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;

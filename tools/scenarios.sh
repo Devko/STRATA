@@ -41,6 +41,15 @@ if [ ${#names[@]} -eq 0 ]; then
     done
 fi
 
+# Every scenario SKIPs, with exit 0, when there is no emulator: right for a session without one
+# running a single scenario, wrong here, where it read as "all scenarios pass" (a worktree with no
+# ENAGA_EMULATOR did exactly that, 2026-11-25). So the runner refuses instead.
+if [ ! -f "$ENAGA_EMULATOR/cpu.py" ]; then
+    echo "error: no emulator at $ENAGA_EMULATOR (no cpu.py), so every scenario would SKIP." >&2
+    echo "       tools/fetch_emulator.sh clones it; or set ENAGA_EMULATOR to a clone's emulator/." >&2
+    exit 2
+fi
+
 results="$(mktemp -d "${TMPDIR:-/tmp}/strata-scenarios.XXXXXX")"
 trap 'rm -rf "$results"' EXIT
 

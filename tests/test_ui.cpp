@@ -152,6 +152,7 @@ struct UiProbe {
     // engine's side of the macros, morph, repeat and take by its posts.
     static void view_to_defaults(Strata &app) {
         app.shown_bank_ = 0;
+        app.count_in_armed_ = 0;            // a count-in armed by the last test's PLAY
         app.queue_mode_ = QueueMode::end_of_pattern;
         app.echo_ = Echo::none;
         app.notice_ = nullptr;
@@ -7182,7 +7183,7 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     hold_func(app);
     CHECK(screen_has(app, "GRID SRC KCK"));
     CHECK(screen_has(app, "B FMA FM AMOUNT"));
-    CHECK(screen_has(app, "PAGE 1/11"));
+    CHECK(screen_has(app, "PAGE 1/12"));
     CHECK(!screen_has(app, "FUNC + KEY:"));
 
     // The screen keys turn the help's pages while FUNC is held, and not GRID's knob page.
@@ -7190,7 +7191,7 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     key(ENAGA_KEY_SELECT_RIGHT);
     CHECK(UiProbe::func_help(app));
     CHECK(screen_has(app, "STEPS:"));
-    CHECK(screen_has(app, "PAGE 2/11"));
+    CHECK(screen_has(app, "PAGE 2/12"));
     CHECK_EQ(UiProbe::param_page(app), knob_page);
     // LEFT goes back, and round: the last page is the performance mixer's slots, the upper pads
     // two before it.
@@ -8925,6 +8926,80 @@ TEST(ui_click_and_count_in_rows_and_play_with_rec_counts_in) {
     menu_run(kMenuClick);
     CHECK(std::strcmp(UiProbe::notice(app), "CLICK OFF") == 0);
     key(ENAGA_KEY_CLR);
+}
+
+TEST(ui_a_downbeat_played_just_before_the_count_in_ends_records_on_step_1) {
+    // A count-in is there so the player comes in on the one, and a hit on the one is as often a
+    // hair early as late. Early by less than half a step it belongs to step 1 -- a loop's last
+    // ticks already record forward onto the next pass's first step -- but the recorder dropped
+    // everything before the count-in's last tick. Earlier than half a step stays the count-in's.
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    FakeHost &host = FakeHost::the();
+    host.set_running(false);
+    menu_to(kMenuCountIn);
+    key(ENAGA_KEY_OK);                         // 1 BAR
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN 1 BAR") == 0);
+    key(ENAGA_KEY_CLR);
+    if (!UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    key(ENAGA_KEY_F5);
+    pump(2);
+    CHECK(host.running());
+    CHECK_EQ(int(engine.status().count_in_ticks.load()), int(kTicksPerBar));
+
+    // Two steps before the end: still the count-in, nothing records.
+    host.set_position(kTicksPerBar - 48);
+    app.on_midi(midi(0x90, 36, 100));
+    app.on_midi(midi(0x80, 36, 0));
+    pump(2);
+    for (int s = 0; s < kStepsPerTrack; s++) CHECK(!trig_at(0, s));
+
+    // A quarter of a step early: step 1.
+    host.set_position(kTicksPerBar - 6);
+    app.on_midi(midi(0x90, 36, 100));
+    app.on_midi(midi(0x80, 36, 0));
+    pump(2);
+    CHECK(trig_at(0, 0));
+    int trigs = 0;
+    for (int s = 0; s < kStepsPerTrack; s++) trigs += trig_at(0, s) ? 1 : 0;
+    CHECK_EQ(trigs, 1);
+
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F6);
+    pump(2);
+    if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    menu_to(kMenuCountIn);
+    key(ENAGA_KEY_LEFT);                       // back to OFF
+    key(ENAGA_KEY_CLR);
+    host.set_position(0);
+}
+
+TEST(ui_a_hit_before_the_first_block_of_a_count_in_does_not_record) {
+    // The audio side publishes the count-in's length at the end of its first block, and the
+    // recorder read 0 there until then: a pad hit straight after PLAY recorded onto step 1 in
+    // the middle of the count-in. The UI's own armed length covers that block.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_running(false);
+    menu_to(kMenuCountIn);
+    key(ENAGA_KEY_OK);                         // 1 BAR
+    key(ENAGA_KEY_CLR);
+    if (!UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    key(ENAGA_KEY_F5);                         // no block yet: count_in_ticks still 0
+    host.set_position(10);
+    app.on_midi(midi(0x90, 36, 100));
+    app.on_midi(midi(0x80, 36, 0));
+    pump(2);
+    for (int s = 0; s < kStepsPerTrack; s++) CHECK(!trig_at(0, s));
+
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F6);
+    pump(2);
+    if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    menu_to(kMenuCountIn);
+    key(ENAGA_KEY_LEFT);
+    key(ENAGA_KEY_CLR);
+    host.set_position(0);
 }
 
 TEST(ui_push_on_the_fader_pages_steps_a_tracks_choke_group) {
@@ -11727,6 +11802,43 @@ TEST(polyrec_a_mono_track_keeps_one_note_a_step) {
     polyrec_stop();
 }
 
+TEST(polyrec_a_roll_joining_a_chord_step_makes_it_roll) {
+    // A held NOTE RPT pad records a roll over LEN (#187). Onto a chord step that already plays,
+    // under REC MODE ADD or as a later note of the same pass, the note joined and the roll was
+    // dropped: the step kept its old ratchet. Joining now brings the roll too.
+    fresh();
+    {
+        Project &incoming = app_engine().project_for_load();
+        Step &s = incoming.live().tracks[kPolyTrack].steps[3];
+        s.flags = kStepTrig;
+        s.note = 60;
+        s.ratchet = ratchet_pack(1, RatchetRamp::none);
+    }
+    pump(2);
+    const uint8_t roll = ratchet_pack_span(2, RatchetRamp::none);     // ROLL/32
+    Command command;
+    command.cmd = Cmd::record_hit;
+    command.track = uint8_t(kPolyTrack);
+    command.step = 3;
+    command.a = 64;
+    command.b = 100;
+    command.d = uint8_t(RecWrite::join);
+    command.e = roll;
+    app_engine().commands().post(command);
+    pump(2);
+    CHECK(step_has_note(app_engine().pattern(), kPolyTrack, 3, 60));
+    CHECK(step_has_note(app_engine().pattern(), kPolyTrack, 3, 64));
+    CHECK_EQ(int(step_of(kPolyTrack, 3).ratchet), int(roll));
+
+    // A plain note joining (no roll) leaves the step's ratchet as it is.
+    command.a = 67;
+    command.e = 0;
+    app_engine().commands().post(command);
+    pump(2);
+    CHECK(step_has_note(app_engine().pattern(), kPolyTrack, 3, 67));
+    CHECK_EQ(int(step_of(kPolyTrack, 3).ratchet), int(roll));
+}
+
 TEST(polyrec_a_new_take_does_not_join_the_last_one) {
     // REC off and on again, transport restarted at the same place: the pass count starts again
     // at 0, so the step is replaced, not joined, by the new take's first note.
@@ -11743,6 +11855,61 @@ TEST(polyrec_a_new_take_does_not_join_the_last_one) {
     CHECK_EQ(polyrec_notes(at, notes), 1);
     CHECK_EQ(int(notes[0]), 62);
     polyrec_stop();
+}
+
+TEST(polyrec_replace_after_a_pattern_switch_takes_the_new_patterns_step_over) {
+    // The pass marks count passes from the pattern's start, and a switch starts the count again
+    // at 0. A mark left by the last pattern then read as "this pass" on the new one, so under
+    // REPLACE the first note played onto the new pattern's step 2 joined the chord it held
+    // instead of taking the step over.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    Engine &engine = app_engine();
+    {
+        Project &incoming = engine.project_for_load();
+        Pattern &a02 = incoming.patterns[0][1];
+        Step &s = a02.tracks[kPolyTrack].steps[1];
+        s.flags = kStepTrig;
+        s.note = 60;
+        CHECK(step_add_note(a02, kPolyTrack, 1, 64) == NoteAdd::added);
+        CHECK(step_add_note(a02, kPolyTrack, 1, 67) == NoteAdd::added);
+    }
+    pump(2);
+    post_cmd(Cmd::set_master_length, 4);           // A01: a pass of 4 steps, 96 ticks
+    pump(2);
+    host.set_running(true);
+    host.deliver_tick(0, 0);
+    pump(2);
+
+    host.deliver_tick(24, 0);                      // A01's step 2, its first pass
+    pump(2);
+    host.set_position(24);
+    key(ENAGA_KEY_F2);                             // REC on
+    pump(2);
+    polyrec_on(app, 50, 100);
+    polyrec_off(app, 50);
+    CHECK(trig_at(kPolyTrack, 1));
+    CHECK_EQ(int(step_of(kPolyTrack, 1).note), 50);
+
+    post_cmd(Cmd::queue_pattern, 0, 1, uint8_t(QueueMode::end_of_pattern));
+    pump(2);
+    host.deliver_tick(96, 0);                      // the boundary: A02 from its step 1
+    pump(2);
+    CHECK_EQ(int(engine.status().live_slot.load()), 1);
+    CHECK_EQ(int(engine.status().pattern_origin.load()), 96);
+
+    host.set_position(96 + 24);                    // A02's step 2, ITS first pass
+    pump(2);
+    polyrec_on(app, 55, 100);
+    polyrec_off(app, 55);
+    uint8_t notes[kStepMaxNotes];
+    CHECK_EQ(polyrec_notes(1, notes), 1);          // 55 alone, not C E G with 55 joined
+    CHECK_EQ(int(notes[0]), 55);
+
+    polyrec_stop();
+    post_cmd(Cmd::restart);
+    post_cmd(Cmd::stop, 1);
+    pump(2);
 }
 
 TEST(polyrec_a_note_edit_moves_the_chord_and_the_step_shows_it) {
@@ -11770,4 +11937,57 @@ TEST(polyrec_a_note_edit_moves_the_chord_and_the_step_shows_it) {
     CHECK_EQ(int(notes[1]), 62);
     CHECK_EQ(int(notes[2]), 65);
     CHECK_EQ(step_param_lock_count(app_engine().pattern(), kPolyTrack, 2), 0);
+}
+
+TEST(ui_hold_ok_in_grid_opens_the_track_menu_for_gen_and_evolve) {
+    // app/ui_trackmenu.hpp: a tap on OK in GRID opens nothing, a hold opens GENERATE and
+    // EVOLVE for the selected track, and leaving GRID closes it.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);                                   // GRID, a kick on track 1
+    pump(2);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!screen_has(app, "GENERATE"));
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(2);
+    CHECK(screen_has(app, ">GENERATE"));
+    CHECK(screen_has(app, "OK: RUN"));
+
+    const uint8_t depth = app_engine().status().undo_depth.load(std::memory_order_relaxed);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "GEN T1 BOTH");
+    pump(2);
+    CHECK_EQ(int(app_engine().status().undo_depth.load(std::memory_order_relaxed)), depth + 1);
+
+    for (int i = 0; i < 5; i++) key(ENAGA_KEY_DOWN);
+    CHECK(screen_has(app, ">EVOLVE"));
+    key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::notice(app), "EVOLVE T1 1 LOOP");
+    pump(2);
+    CHECK_EQ(int(app_engine().evolve_period(0)), 1);
+    CHECK(screen_has(app, "1 LOOP"));
+
+    for (int i = 0; i < 5; i++) key(ENAGA_KEY_DOWN);
+    CHECK(screen_has(app, ">HOME"));
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "HOME: EVOLVE OFF");
+    pump(2);
+    CHECK_EQ(int(app_engine().evolve_period(0)), 0);
+
+    // CLR closes it; a hold opens it again, and leaving GRID closes it too.
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(!screen_has(app, "OK: RUN"));
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(2);
+    CHECK(screen_has(app, "OK: RUN"));
+    key(ENAGA_KEY_F3);
+    pump(2);
+    key(ENAGA_KEY_F4);
+    pump(2);
+    CHECK(!screen_has(app, "OK: RUN"));
 }

@@ -33,7 +33,8 @@ case "${1:-}" in
 esac
 
 SUB="third_party/enaga"
-EMU="third_party/smpltrek-re"
+# The clone, wherever tools/env.sh found it (a worktree borrows the main checkout's).
+EMU="$(dirname "$ENAGA_EMULATOR")"
 API_PATHS=(include runtime loader tools/build_app.py tools/paths.py)
 DOCS=(CLAUDE.md docs/ENAGA_API.md THIRD_PARTY_NOTICES.md)
 bad=0
@@ -42,30 +43,30 @@ ok()   { echo "ok    $*"; }
 
 # --- Enaga -----------------------------------------------------------------
 # The index, not HEAD: a staged bump (step 1 of the procedure) is checked before it is committed.
-pin=$(git ls-files -s -- "$SUB" | awk '{print $2}')
+pin=$("$STRATA_GIT" ls-files -s -- "$SUB" | awk '{print $2}')
 if [ -z "$pin" ]; then
     echo "FAIL  no $SUB in the index" ; exit 1
 fi
-if ! git -C "$SUB" rev-parse --verify -q HEAD >/dev/null 2>&1; then
+if ! "$STRATA_GIT" -C "$SUB" rev-parse --verify -q HEAD >/dev/null 2>&1; then
     echo "FAIL  $SUB is not checked out: git submodule update --init --recursive"; exit 1
 fi
-short=$(git -C "$SUB" rev-parse --short=7 "$pin")
-have=$(git -C "$SUB" rev-parse HEAD)
+short=$("$STRATA_GIT" -C "$SUB" rev-parse --short=7 "$pin")
+have=$("$STRATA_GIT" -C "$SUB" rev-parse HEAD)
 if [ "$have" = "$pin" ]; then
     ok "enaga checked out at the pin $short"
 else
-    fail "enaga is at $(git -C "$SUB" rev-parse --short=7 HEAD), the pin is $short: git submodule update"
+    fail "enaga is at $("$STRATA_GIT" -C "$SUB" rev-parse --short=7 HEAD), the pin is $short: git submodule update"
 fi
 
-tag=$(git -C "$SUB" tag --points-at "$pin" -l 'v*' | sort -V | tail -1)
+tag=$("$STRATA_GIT" -C "$SUB" tag --points-at "$pin" -l 'v*' | sort -V | tail -1)
 if [ -z "$tag" ]; then
     # A shallow clone (CI's --depth=1 submodule) holds only the tags its clone happened to
     # follow: since Enaga v0.3.0 that is v0.3.0 alone, not the pin's v0.2.0, so "fetch the
     # tags if there are none" never fetched them (PR #137). Ask upstream which tags point at
     # the pin instead: ls-remote downloads no objects. The http.*extraheader resets drop the STRATA token that
     # actions/checkout leaves in the submodule's config, which is not for this repository.
-    url=$(git -C "$SUB" remote get-url origin)
-    if remote=$(git -C "$SUB" -c http.extraheader= -c http.https://github.com/.extraheader= \
+    url=$("$STRATA_GIT" -C "$SUB" remote get-url origin)
+    if remote=$("$STRATA_GIT" -C "$SUB" -c http.extraheader= -c http.https://github.com/.extraheader= \
             ls-remote --tags "$url" 'v*'); then
         tag=$(awk -v p="$pin" '$1 == p { t = $2; sub("^refs/tags/", "", t); sub("\\^\\{\\}$", "", t); print t }' \
             <<<"$remote" | sort -uV | tail -1)
@@ -108,27 +109,27 @@ fi
 # --- upstream --------------------------------------------------------------
 echo
 news=0
-if ! git -C "$SUB" fetch --quiet --tags origin; then
+if ! "$STRATA_GIT" -C "$SUB" fetch --quiet --tags origin; then
     echo "FAIL  could not fetch Enaga upstream"; exit 1
 fi
-head=$(git -C "$SUB" rev-parse origin/HEAD 2>/dev/null || git -C "$SUB" rev-parse origin/main)
-behind=$(git -C "$SUB" rev-list --count "$pin..$head")
-echo "enaga upstream: $(git -C "$SUB" rev-parse --short=7 "$head"), $behind commit(s) past the pin"
+head=$("$STRATA_GIT" -C "$SUB" rev-parse origin/HEAD 2>/dev/null || "$STRATA_GIT" -C "$SUB" rev-parse origin/main)
+behind=$("$STRATA_GIT" -C "$SUB" rev-list --count "$pin..$head")
+echo "enaga upstream: $("$STRATA_GIT" -C "$SUB" rev-parse --short=7 "$head"), $behind commit(s) past the pin"
 
-newer=$(git -C "$SUB" tag -l 'v*' --contains "$pin" | grep -vx -- "$tag" | sort -V)
+newer=$("$STRATA_GIT" -C "$SUB" tag -l 'v*' --contains "$pin" | grep -vx -- "$tag" | sort -V)
 if [ -n "$newer" ]; then
     news=1
     echo "newer releases:"
     printf '  %s\n' $newer
 fi
 
-touching=$(git -C "$SUB" log --format='  %h %ad %s' --date=short "$pin..$head" -- "${API_PATHS[@]}")
+touching=$("$STRATA_GIT" -C "$SUB" log --format='  %h %ad %s' --date=short "$pin..$head" -- "${API_PATHS[@]}")
 if [ -n "$touching" ]; then
     news=1
     echo "commits since the pin that touch ${API_PATHS[*]}:"
     echo "$touching"
     echo "headers changed:"
-    git -C "$SUB" diff --stat=100 "$pin" "$head" -- include | sed 's/^/  /'
+    "$STRATA_GIT" -C "$SUB" diff --stat=100 "$pin" "$head" -- include | sed 's/^/  /'
 fi
 
 if [ -d "$EMU/.git" ] && git -C "$EMU" fetch --quiet origin; then

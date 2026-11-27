@@ -190,9 +190,12 @@ test("compat.json: every STRATA release names a listed Enaga, newest first, no d
   }
 });
 
-test("compat.json: the newest STRATA release needs the Enaga that STRATA pins", () => {
+test("compat.json: the newest STRATA release needs the Enaga that STRATA pins, or an older one", () => {
   // The submodule pin (third_party/enaga) is the Enaga a build from main runs on; INSTALL.md's
   // table says the same. Read the version from Enaga's firmware/build.py, as package_release.py does.
+  // Between a pin move and the next release, main is ahead of the newest release (2026-11-27: main
+  // on Enaga 0.4.0, release 0.4.0 on Enaga 0.3.0); a release needing a NEWER Enaga than the pin is
+  // the mistake this catches.
   let build;
   try {
     build = readFileSync(new URL("../../third_party/enaga/firmware/build.py", import.meta.url), "utf8");
@@ -201,7 +204,10 @@ test("compat.json: the newest STRATA release needs the Enaga that STRATA pins", 
   }
   const m = build.match(/VERSION\s*=\s*\((\d+),\s*(\d+),\s*(\d+)\)/) ?? build.match(/VERSION\s*=\s*["'](\d+)\.(\d+)\.(\d+)["']/);
   assert.ok(m, "cannot read VERSION from Enaga's firmware/build.py");
-  assert.equal(manifestFile.strata[0].enaga, `${m[1]}.${m[2]}.${m[3]}`);
+  const key = (v) => v.split(".").map(Number).reduce((a, n) => a * 1000 + n, 0);
+  const pinned = `${m[1]}.${m[2]}.${m[3]}`;
+  const released = manifestFile.strata[0].enaga;
+  assert.ok(key(released) <= key(pinned), `the newest release needs Enaga ${released}, newer than the pin ${pinned}`);
 });
 
 test("the proxy serves only listed files", withFetch(async () => {

@@ -16,9 +16,11 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR cancels its older run. On main every merge runs to the end, so a red main
+# names the merge that made it red instead of the one that cancelled it.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   host-tests:
@@ -29,7 +31,7 @@ jobs:
     # long before this.
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
           fetch-depth: 2      # the merge commit and its base, for the docs-only check
@@ -38,11 +40,21 @@ jobs:
         id: changes
         run: tools/ci_changes.sh "${{ github.event_name }}" >> "$GITHUB_OUTPUT"
 
+      # A compiler cache across runs: most PRs touch a few files, so most objects come back from
+      # the cache instead of being rebuilt. One cache per job (the two jobs build with different
+      # flags); a PR reads main's cache and keeps its own.
+      - name: Compiler cache
+        if: steps.changes.outputs.code == 'true'
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}
+          max-size: 300M
+
       - name: Build and run the suite (shards on every core, 120 s per test)
         if: steps.changes.outputs.code == 'true'
         run: |
-          make -C host build -j"$(nproc)"
-          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=120
+          make -C host build -j"$(nproc)" CXX="ccache g++" CC="ccache gcc"
+          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=120 CXX="ccache g++" CC="ccache gcc"
 
       # The ui_layout_* tests are in the suite above; run them again by name so a broken screen
       # shows up as its own failed step instead of one line among thousands.
@@ -83,7 +95,7 @@ jobs:
       ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
           fetch-depth: 2
@@ -92,18 +104,30 @@ jobs:
         id: changes
         run: tools/ci_changes.sh "${{ github.event_name }}" >> "$GITHUB_OUTPUT"
 
+      # A compiler cache across runs: most PRs touch a few files, so most objects come back from
+      # the cache instead of being rebuilt. One cache per job (the two jobs build with different
+      # flags); a PR reads main's cache and keeps its own.
+      - name: Compiler cache
+        if: steps.changes.outputs.code == 'true'
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}
+          max-size: 300M
+
       - name: Build and run the suite under ASan and UBSan at -O1 (shards, 300 s per test)
         if: steps.changes.outputs.code == 'true'
         run: |
-          make -C host build -j"$(nproc)" SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan"
-          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=300 SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan"
+          make -C host build -j"$(nproc)" SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan" \
+              CXX="ccache g++" CC="ccache gcc"
+          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=300 SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan" \
+              CXX="ccache g++" CC="ccache gcc"
 
   checks:
     name: Repo checks
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -125,15 +149,7 @@ jobs:
       - name: Card builder (web/, zip code, compat.json, proxy allowlist)
         run: cd web && node --test test/*.test.mjs
 
-      - name: Release publishing script parses
-        run: bash -n tools/publish_release.sh
-
-      - name: Local CI and shard scripts parse
-        run: |
-          bash -n tools/ci_local.sh
-          bash -n tools/test_shards.sh
-          bash -n tools/ci_changes.sh
-          bash -n tools/scenarios.sh
-          bash -n tools/build.sh
-          bash -n tools/check_rules.sh
-          for f in tests/scenario_*.sh; do bash -n "$f"; done
+      # Most of these run only on Roland's PC (release, scenarios, device build), so this is the
+      # one place a syntax slip in them shows before someone needs them.
+      - name: Every script in tools/ and tests/ parses
+        run: tools/check_scripts.sh

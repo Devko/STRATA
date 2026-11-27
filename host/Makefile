@@ -11,6 +11,8 @@
 #                         about 2x faster, bounded by the one 6-second UI audit test
 #   make -C host list     print the test names
 #   make -C host build    build the test binary without running it
+#   make -C host warn -j8   compile everything at -O1 to catch the warnings only CI's -O1
+#                         sanitizer build sees (a stamp per file, nothing linked or run)
 #   make -C host clean
 #
 #   make -C host test SANITIZE=1 ENAGA_BUILD=/tmp/asan
@@ -82,7 +84,30 @@ DEP := $(OBJ:.o=.d)
 
 BIN := $(OUT)/strata-tests
 
-.PHONY: test list build clean render probe
+# `make -C host warn`: compile STRATA's own sources at -O1, the level CI's sanitizer job builds
+# at, and keep nothing but a stamp. GCC's -Wmaybe-uninitialized finds different things at -O1
+# and -O2, so a tree that is clean here at -O2 can still fail CI (PR #183's ui_pickview.hpp,
+# 2026-11-26: clean at -O2, an error at -O1 with or without the sanitizers). Plain -O1 catches
+# it in a third of the time a sanitizer build takes. Incremental, like the build; Enaga's own C
+# is left out, since a warning there is not ours to fix.
+WARN_OUT   := $(OUT)/warn-O1
+WARN_STAMP := $(patsubst $(ROOT)/%.cpp,$(WARN_OUT)/%.ok,$(CORE_SRC) $(DSP_SRC) $(APP_SRC) $(TEST_SRC)) \
+              $(patsubst $(ROOT)/%.c,$(WARN_OUT)/%.ok,$(DSP_C_SRC))
+
+.PHONY: test list build clean render probe warn
+warn: $(WARN_STAMP)
+	@echo "warn: $(words $(WARN_STAMP)) sources compile without warnings at -O1"
+
+$(WARN_OUT)/%.ok: $(ROOT)/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -O1 -MMD -MP -MT $@ -MF $(@:.ok=.d) -c $< -o /dev/null
+	@touch $@
+
+$(WARN_OUT)/%.ok: $(ROOT)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -O1 -MMD -MP -MT $@ -MF $(@:.ok=.d) -c $< -o /dev/null
+	@touch $@
+
 # JOBS=N runs the suite as shards on N processes (tools/test_shards.sh); without it, one process
 # in registration order, as always. TEST_TIMEOUT is the per-test watchdog in seconds for either.
 TEST_TIMEOUT ?= 0
@@ -139,4 +164,4 @@ $(PROBE_BIN): $(PROBE_OBJ)
 clean:
 	rm -rf $(OUT)
 
--include $(DEP) $(OUT)/host/render.d $(OUT)/host/probe.d
+-include $(DEP) $(OUT)/host/render.d $(OUT)/host/probe.d $(WARN_STAMP:.ok=.d)

@@ -33,6 +33,8 @@
 #include "kick.hpp"
 #include "midiout.hpp"    // MIDI note out: every note-on gets its note-off
 #include "mutate.hpp"      // Cmd::mutate
+#include "evolve.hpp"      // EVOLVE: a track mutating every few passes
+#include "generate.hpp"    // Cmd::generate
 #include "pattern.hpp"
 #include "perc.hpp"
 #include "perform.hpp"   // scenes, the morph, macros, mute states, auto-fill
@@ -195,6 +197,13 @@ public:
     uint8_t live_rnd_unit() const { return perform_.rnd_unit; }
     uint8_t live_rnd_armed() const { return perform_.rnd_armed; }
     AutoFill auto_fill() const { return auto_fill_; }
+    // EVOLVE (core/evolve.hpp): a track's period index (0 OFF) and the shared settings.
+    uint8_t evolve_period(int track) const {
+        return track >= 0 && track < kTracks ? evolve_[track].period : uint8_t(0);
+    }
+    EvolveMode evolve_mode() const { return evolve_mode_; }
+    Mutation evolve_kind() const { return evolve_kind_; }
+    int evolve_amount() const { return int(evolve_amount_); }
     uint32_t bar() const { return bar_; }
     bool fill() const { return perform_.fill; }
     int throwing() const { return throw_bus_; }
@@ -780,8 +789,9 @@ private:
             choke_at_[u] = frame;
         }
     }
-    // The fade over track `t`'s rendered block, and the cut once it reaches 0 (engine.cpp).
-    void run_choke(int t, float *mono, uint32_t frames);
+    // The fade over track `t`'s rendered block, and the cut once it reaches 0 (engine.cpp); true
+    // when the cut is done.
+    bool run_choke(int t, float *mono, uint32_t frames);
     uint32_t choke_at_[kTracks] = {kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame,
                                    kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame};
     float choke_gain_[kTracks] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
@@ -861,6 +871,22 @@ private:
     // the bar's own fill.
     bool fill_held_ = false;
     AutoFill auto_fill_ = AutoFill::off;
+
+    // EVOLVE (core/evolve.hpp): one per track, each with its HOME and its last turn -- about
+    // 2.2 KiB a track, here so nothing is allocated. The mutation, its amount and ORBIT or DRIFT
+    // are shared, and `evolve_variant_` counts turns so each one differs.
+    Evolve evolve_[kTracks];
+    EvolveMode evolve_mode_ = EvolveMode::orbit;
+    Mutation evolve_kind_ = Mutation::velocity;
+    uint8_t evolve_amount_ = 50;
+    uint32_t evolve_variant_ = 1;
+    void evolve_passes();            // cross_boundary: a pass has ended
+    void evolve_lead();              // the last ticks before it: one turn a tick
+    static constexpr int kEvolveLeadTicks = kTracks;
+    uint8_t evolve_turned_ = 0;      // tracks that turned in this pass's lead
+    void evolve_stop_all();          // a replaced pattern: HOME is gone
+    void evolve_to_settings();       // the project's saved copy, after every change
+    void evolve_from_settings();     // a load: EVOLVE as the file says
 
     // Bars since the transport started, for auto-fill. Counted rather than divided: a bar is 384
     // ticks at 96 PPQN and this chip has no integer divide (core/scheduler.cpp says the same

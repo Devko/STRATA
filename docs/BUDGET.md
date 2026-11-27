@@ -53,6 +53,148 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### Enaga v0.3.0 to v0.4.0 (2026-11-27, emulator)
+
+The same STRATA commit (main `ebc8428`) against both Enaga releases, six scenarios each, peak load:
+
+| Scenario | v0.3.0 cl6x | v0.4.0 cl6x | v0.3.0 GCC-only | v0.4.0 GCC-only |
+| --- | --- | --- | --- | --- |
+| factory | 26.61% | 25.86% | 48.26% | 47.76% |
+| ambient | 30.57% | 29.87% | 58.31% | 57.78% |
+| wave | 30.80% | **30.05%** | 54.04% | 53.15% |
+| gen | 30.20% | 29.45% | 51.01% | 49.90% |
+| ratchetspan | 30.17% | 29.63% | 51.34% | 50.35% |
+| m3 | 25.93% | 25.24% | 43.52% | 42.77% |
+
+Every figure falls by 0.5-1.1 points. Most of it is Enaga's own audio interrupt (7,027 to 2,644
+cycles a block on Enaga's emulator figures, about 0.9 points of 496,000); the held-sustain fast
+path in `enaga_envelope_render` adds a little where envelopes sit on a sustain. STRATA's code did
+not change. All 47 scenarios pass with cl6x on v0.4.0 (worst **30.05%**, `wave`; ambient 29.87%).
+The unit should show the interrupt's saving too, but only with Enaga 0.4.0 firmware installed.
+
+### The second review's fixes (2026-11-27, emulator)
+
+A choke that ends clears its track's insert chain once (as `silence_track` does), and the chain
+compares DRV's on/off with the last block's: control rate, nothing per sample.
+
+| Scenario | cl6x | GCC only, `main` (edbaf9f) | GCC only, with the fixes |
+| --- | --- | --- | --- |
+| `scenario_ambient` (the worst case) | 32.33% | 57.88% | 58.03% |
+| `scenario_choke` | 26.61% | 48.19% | 48.26% |
+
+Then the click's sum clamped to +-1 (two selects a sample, while it rings): `scenario_click`
+26.05% cl6x, 48.96% GCC-only.
+
+Within the half point a peak moves between runs. All 46 scenarios pass with cl6x. GCC-only
+`ambient` was 56.48% on 2026-11-25; it is now within two points of 60% on `main` alone, before
+these fixes: cl6x ships, but the GCC-only margin is worth watching.
+
+### Where the worst case goes, and the LONG delay in passes (2026-11-27, emulator)
+
+`tools/profile_guest.py` runs a scenario's keys on the emulator, turns on its guest PC sampler
+once the presses are done, and sums the samples by function (the app's symbols from app.elf,
+which is linked at its load address, and Enaga's). Samples are of issued packets, not cycles,
+and cover the whole CPU (draw(), the idle loop), so shares say where code runs, not exact load.
+On `scenario_ambient` (the worst case, cl6x, 400 M cycles after the presses):
+
+| Share of samples | Function |
+| --- | --- |
+| 15.0% | `strata_hall_process` (HALL reverb) |
+| 12.9% | `strata_long_delay_process` (LONG delay) |
+| 6.9% | `enaga_envelope_render` |
+| 5.9% | `reverb_chunk` (the classic reverb, ringing out) |
+| 4.8% | `strata_svf_inplace` |
+| 3.6% / 2.1% / 1.5% | `Strata::update`, `Strata::draw`, `draw_mixer` (main loop, not audio) |
+
+The two ambient kernels were the only hot audio loops cl6x did not pipeline at all
+(`tools/ti_loops.py`: "Loop contains control code", the all-passes and lines being small loops
+inside the frame loop). The LONG delay now runs a block as passes over chunks of up to 32 frames
+(dsp/ambientloops.ti.c): where to read (the glide, the wow), the reads, the feedback's filters
+and ceiling, the all-passes' and head's loads, then the stores. Every value is the same operation
+in the same order, so it is bit-exact: `ambientloops_the_long_delay_in_passes_is_bit_exact_against_the_frame_loop`
+runs the frame loop beside it (blocks of 1 to 64 frames, the delay gliding to its 16-frame floor,
+where the chunks are shortest, ping-pong, the feedback to the freeze) and compares every byte, and
+the emulator renders the cl6x build sample for sample as before. All five passes pipeline (ii 23,
+7, 13, 10, 14: about 67 cycles a frame).
+
+| | before | after |
+| --- | --- | --- |
+| `scenario_ambient`, cl6x | 32.33% | **30.19%** (-2.14) |
+| `scenario_ambient`, GCC-only | 57.20% | 57.55% |
+| `scenario_m3`, GCC-only | | 42.85% |
+
+All 45 scenarios pass with cl6x; the worst is now **30.42%** (`scenario_wave`, WAVE MONO and POLY
+on tracks 6 and 7), then `ambient` 30.19%.
+
+**The HALL, at first held back.** The same treatment of `strata_hall_process` (seven passes,
+all pipelined, about 84 cycles a frame) was bit-exact on the host and in the emulator's GCC
+build, but its cl6x build's capture of `scenario_ambient` differed from the frame loop's in
+every sample, so #196 left it out. It was not the sound:
+
+### The VA voice's fused back half, on at last (2026-11-27, emulator)
+
+`STRATA_VA_FUSED` (dsp/tihints.h) runs the VA voice's filter, amplitude envelope and output tail
+in one loop (`strata_va_back`, dsp/valoops.ti.c). It was turned off on 2026-11-22 because its cl6x
+render "drifted" from the three passes ("The cl6x vectorisation pass" below): "the size of the
+signal while each window's peak and the RMS stay identical". That is the timing artefact of
+"The HALL in passes": the same audio a few blocks apart. Checked in the app instead, cl6x build
+on the emulator, with a temporary copy of `VaVoice::run` running the three passes on copies of
+the filter and envelope states beside the fused loop: **16,233 slices** (`scenario_m3`'s default
+beat and `scenario_factory`), every output sample and every byte of both filters' and the
+envelope's state equal. The host test `va_the_fused_back_half_is_bit_exact_against_filter_envelope_and_tail`
+holds it there.
+
+| | before | fused |
+| --- | --- | --- |
+| the default beat (`m1`, `factory`, most scenarios), cl6x | 26.60% | **25.12%** (-1.48) |
+| `scenario_wave` (the worst), cl6x | 30.79% | **28.81%** (-1.98) |
+| `scenario_ambient`, cl6x | 28.60% | **27.15%** |
+| `scenario_ambient` / `scenario_m3`, GCC-only | 58.22% / 43.51% | **57.30% / 42.38%** |
+
+All 47 scenarios pass with cl6x; every one that plays a VA voice drops 1.4 to 2.0 points (FM4 and
+SOUNDS, with fewer VA voices, about 1). The worst case is now **29.20%** (`scenario_gen`).
+
+### The HALL in passes, and an emulator A/B that lies (2026-11-27, emulator)
+
+**The renders were the same audio, three blocks apart.** Searched for a shift, the cl6x capture
+of the passes equals the frame loop's byte for byte when moved by 384 samples: 192 frames, three
+64-frame blocks. The capture is the last seconds of the run, and the scenario's keys reach the
+app through its main loop. A cheaper audio callback leaves that loop more time, so a scripted
+press is acted on a few blocks earlier and the whole performance, capture included, starts that
+much sooner. The bisection above was chasing that: chunks of one frame, or a pass kept from
+pipelining, were slow enough to keep the old timing. The same artefact very probably explains
+the VA voice's fused back half ("The cl6x vectorisation pass": "the size of the signal while each
+window's peak and the RMS stay identical") and is worth re-measuring the same way.
+`tools/render_diff.py` now says so when it finds it ("shifted: b is 192 frames (3 blocks) later
+in the music"). With features that act on time since (GEN, EVOLVE), a later main does not even
+stay a clean shift, so an emulator render is no longer an oracle for a change that moves load.
+
+**What settles it instead**, and was done for this change:
+
+- a harness built the passes and the frame loop with cl6x (the package's flags), ran them in the
+  emulator core for 300 and 600 blocks of every length with an interrupt every 997 or 1,999
+  cycles (11,479 taken), and compared with the same C built for the host: identical;
+- a temporary twin in `HallReverb` ran the frame loop on a copy of the state beside the passes
+  inside the app, in `scenario_ambient` on the emulator, cl6x build: **1,569 blocks, every sample
+  equal**;
+- `ambientloops_the_hall_in_passes_is_bit_exact_against_the_frame_loop` on the host, as for the
+  LONG delay.
+
+| `scenario_ambient` | frame loop (main after #196) | passes |
+| --- | --- | --- |
+| cl6x | 30.67% | **28.60%** (-2.07) |
+| GCC-only | 58.22% | 60.63% with the passes, so GCC builds keep the frame loop |
+
+tic6x GCC does not software-pipeline, so the passes only add memory traffic there, and 60.63%
+fails the scenario's tripwire. `strata_hall_process` therefore runs `strata_hall_passes` when cl6x
+builds it (and on the host, where the tests check them) and `strata_hall_frames`, the old loop
+kept verbatim, in a GCC build of the package.
+
+A side finding of the harness: cl6x 8.5.0.LTS at `-O3` miscompiles a loop that compares floats
+through `memcpy` type-punning (`bits(a[i]) != bits(b[i])` counted half of 1,024 equal pairs as
+different, in the emulator and in the reference simulator alike): the unrolled kernel reuses one
+iteration's stack-temporary load for the next. Nothing in STRATA's `*.ti.c` does that; keep it so.
+
 ### Ratchets over LEN (2026-11-26, emulator)
 
 A roll's hits are notes like any other; the engine walks the running rolls once a tick

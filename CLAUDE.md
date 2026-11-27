@@ -5,7 +5,7 @@
   a decision they record, or one in docs/archive/REVIEW.md (the platform review the spec was
   corrected against; code comments cite it by section).
 - Target: an Enaga app on the Sonicware SmplTrek (TI C6748, 372 MHz). Enaga is pinned at
-  release v0.3.0 (4878b7c), to match the firmware on the unit. Move it only by docs/HANDOFF.md
+  release v0.4.0 (7487bbf), to match the firmware on the unit. Move it only by docs/HANDOFF.md
   "Moving the Enaga pin", and keep tools/enaga_check.sh passing. **docs/ENAGA_API.md has
   the verified signatures STRATA uses — read it first.**
   For anything not in it, read the header in third_party/enaga/include/enaga/. Never invent
@@ -30,6 +30,10 @@ MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- \
   read back wrong through the wsl.exe layer, so verify exit codes inside a script file.
 - `ls`, `cat`, `grep` and the editing tools work directly on `D:\DEV\STRATA` — only builds and
   tests need WSL.
+- Several threads share `D:\DEV\STRATA`: never switch its branch. Work in your own worktree
+  (`D:\DEV\STRATA-wt\<name>`, `git submodule update --init`, your own `ENAGA_BUILD`). From WSL,
+  `tools/env.sh` finds the main checkout's emulator and Windows' `git.exe`/`gh.exe` for it
+  (docs/HANDOFF.md, "Running commands on Roland's Windows host").
 - There is no cmake and no sudo. Do not add a dependency needing either.
 - To build a subset by hand (when the full suite is red from someone else's work in progress),
   **compile Enaga's `runtime/dsp/*.c` with `gcc -std=c11`, not `g++`** — they use `restrict`,
@@ -69,4 +73,6 @@ g++ -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -O2 \
   which is why VA POLY shares a budget of 12 voices across all tracks (Engine::kPolyVoiceBudget).
 - Never modify third_party/enaga. Enaga bugs are reported upstream with a failing case.
 - Never write the SPI flash. Never produce update files with BOOT or MCU sections.
+- Before pushing C++ changes, run `make -C host warn -j8` as well as the tests: CI builds at
+  -O1 too, where GCC reports uninitialized variables that the -O2 test build does not.
 - Small commits, one concern each, each with its test.

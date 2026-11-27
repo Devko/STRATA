@@ -112,6 +112,21 @@ TEST(click_starts_on_its_frame_decays_and_ends) {
     CHECK(energy(beat, 0, 4) > 0.0f);
 }
 
+TEST(click_over_a_loud_mix_stays_inside_full_scale) {
+    // The click goes on after the master limiter, over a mix that may sit at full scale. Its
+    // header promised the sum was clamped as the audition's is; nothing clamped it.
+    Click click;
+    click.init(48000.0f);
+    click.trigger(0, true);                     // the bar's click, the louder
+    float out[2 * 64];
+    for (int i = 0; i < 2 * 64; i++) out[i] = (i & 2) ? -0.95f : 0.95f;
+    click.render_add(out, 64);
+    for (int i = 0; i < 2 * 64; i++) {
+        CHECK(out[i] <= 1.0f);
+        CHECK(out[i] >= -1.0f);
+    }
+}
+
 TEST(click_on_every_beat_while_on_and_never_off_the_beat) {
     silent();
     FakeHost::the().set_running(true);

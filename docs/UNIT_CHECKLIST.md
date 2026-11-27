@@ -1,10 +1,11 @@
 # Unit checklist
 
-Start with **the smoke test** (S1-S20, one hour): boot, the screen, load, and the four things
+On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Enaga 0.4 checks**
+(N1-N7, 20 minutes) below. Then start with **the smoke test** (S1-S20, one hour): boot, the screen, load, and the four things
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W52, about 165 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W55, about 178 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -20,9 +21,33 @@ The 2026-11-22 controls tour and the v0.1.0 release steps are in
 
 ---
 
+# The Enaga 0.4 checks (20 min, 2026-11-27)
+
+`main` is built against Enaga v0.4.0. Install `SmplTrek.bin` from
+[Enaga's v0.4.0 release](https://github.com/seawaffle/enaga/releases/tag/v0.4.0)
+(`enaga-v0.4.0-smpltrek.zip`; HOME held at power-on, SYSTEM UPDATE), then copy a cl6x build from
+`main`. Report as `N3: MAX 27.4` or `N5 fail: 65 BPM`.
+
+- [ ] **N1.** F1 + POWER: the Enaga menu's header shows 0.4.0.
+- [ ] **N2.** Start STRATA from the app list: GRID comes up with no APP NOT RESPONDING, and
+      again after a power cycle (0.4 feeds the watchdog while a large package loads).
+- [ ] **N3.** A01 GROOVE, PLAY for two minutes: no clicks; note the top line's MAX. Enaga's own
+      share of a block fell by about 4,400 cycles, so MAX should be no higher than on 0.3.0.
+- [ ] **N4.** CLOCK SRC = MIDI, clock from a DIN source at 120 BPM: STRATA follows. Stop the
+      source, wait 20 s, start it again: the tempo reads 120 again, not a wild value.
+- [ ] **N5.** CLOCK SRC = MIDI, clock over USB MIDI from a computer (new in 0.4): STRATA follows it.
+      With DIN and USB both sending, it follows one and does not run at double speed.
+- [ ] **N6.** Save the project (FUNC + HOME, OK), power-cycle: it loads as saved. Then the Enaga
+      menu's USB DRIVE on a computer: the card's free space looks right, and a file copied there
+      reads back whole.
+- [ ] **N7.** Sample a few seconds from the input and load a long WAV from `/SAMPLES`: both as
+      before (SD access changed in 0.4).
+
+---
+
 # The smoke test (one hour, 2026-11-26)
 
-Build from `main` with cl6x, on Enaga 0.3.0 firmware (as for the walkthrough below). Have a phone
+Build from `main` with cl6x, on Enaga 0.4.0 firmware (as for the walkthrough below). Have a phone
 camera and headphones ready, and a WAV in `/SAMPLES` (`unit-test/STRATA_1.WAV` will do). Report by
 number, for example `S8: MAX 41.2` or `S4 fail: tabs unreadable`. Each item names the walkthrough
 item with the deeper checks.
@@ -102,9 +127,9 @@ This is the first take written through Enaga's file layer on the unit: every tak
 
 # The walkthrough (2026-11-25)
 
-Build from `main` at PR #176 or later, with cl6x. **The unit needs Enaga 0.3.0 firmware**
-(`SmplTrek.bin` from Enaga's v0.3.0 release, installed with HOME held at power-on, SYSTEM UPDATE):
-a build from `main` is linked against 0.3.0's host table. Build: `________`
+Build from `main` at PR #176 or later, with cl6x. **The unit needs Enaga 0.4.0 firmware**
+(`SmplTrek.bin` from Enaga's v0.4.0 release, installed with HOME held at power-on, SYSTEM UPDATE):
+a build from `main` is pinned to Enaga 0.4.0 since 2026-11-27. Build: `________`
 
 Everything starts on A01 GROOVE, the demo beat a first start plays. Items W1-W16 save nothing
 (W12's NEW PROJECT and LOAD DEMO come back to the demo); W17 saves a copy, so the DEFAULT project
@@ -685,7 +710,43 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   on an FM4 track BLIP and DRONE: each sits near the part it replaces, nothing much louder. `____`
 - Save, power cycle: the arp's settings and the loaded arp come back. `____`
 
-**W52. An older project's LFOs after the format change (4 min).** Needs a project saved by
+**W52. GEN and EVOLVE (4 min).** Beat playing, A01, GRID.
+- Tap OK: nothing opens. Hold OK half a second: the track menu, `>GENERATE`, footer `T1  OK: RUN`.
+  OK: `GEN T1 BOTH`, a new kick part that starts on step 1. OK again: another one. Close with CLR
+  and FUNC + CLR: the part before. `____`
+- Screen key down to T6 (the bass), hold OK, OK: a bass line in the key (KEY on PROJECT), starting
+  on the root. RANGE 2, LEAP 70, OK: wider and jumpier. WHAT to NOTES, OK: same rhythm, new notes. `____`
+- DOWN to EVOLVE, RIGHT twice: `EVOLVE T6 2 LOOPS`. Every second pass the line changes (the
+  MUTATION row says how: NOTES or VELOCITY are the clearest). In ORBIT it stays recognisably the
+  same line after a minute. Tap a step on T6 while it runs: the trig stays through later turns. `____`
+- MODE to DRIFT and wait a minute: it wanders off. HOME: `HOME: EVOLVE OFF`, the line from when
+  EVOLVE went on, plus the trig you tapped. Read LOAD: no higher than without EVOLVE. `____`
+
+**W53. MIX, and EVOLVE saved (3 min).** Beat playing, A01, GRID.
+- Hold OK, EVOLVE on T1 every loop, MUTATION to `MIX` (after NOTES). Each pass the kick changes a
+  different way: shifted, thinner or fuller, softer, looser. MUTATE in PERFORM now also offers MIX. `____`
+- Set T6 to 2 LOOPS and MODE DRIFT. FUNC+HOME, SAVE, power cycle: T1 and T6 still evolve, DRIFT,
+  MIX; the track menu shows them. HOME on T6: the bass as it was saved. `____`
+
+**W54. Sound fixes and the kit library (#188-#191, 6 min).** Beat playing, A01.
+- FM4 (#189): on T7, FUNC+EDIT (MACHINE), A to FM4, OK, SOUNDS BELL. EDIT SRC: ALG `A1`, IDX
+  about 90. KEYS (HOME twice), play from C5 upwards: bright, but no whistle or out-of-tune tone
+  under the note as it climbs. Low notes as bright as before. `____`
+- DRIVE (#191): T1 (kick), EDIT FLTR, DRV fully up. Mute and unmute T1 (FUNC + lower pad 1) a
+  few times on a long kick: no thump at the mute. The kick sits no lower in the mix than it
+  did. `____`
+- Arp RND (#190): T7 back to its own sound (SOUNDS, AS WAS), ARP page, MOD `RND`, RAT `1/16`:
+  every pass plays a different run, where it used to repeat one. `____`
+- Kit recall (#184, #188): put T3 and T4 in choke group 1 (W46), T6's LFO TRIG to RETRIG (push
+  B on the LFO page), a MOD slot on T6 (W38) and T7's arp RHYTHM to `X-` (push B on ARP).
+  FUNC+EDIT twice (KIT), FUNC+DOWN stores the kit in an empty slot. FUNC+HOME, NEW PROJECT, OK
+  twice. KIT, the stored kit, OK twice: `C1` on T3 and T4, RETRIG, the MOD slot and `RHY X-` all
+  back. LOAD DEMO afterwards (FUNC menu). `____`
+- Optional, a spare card only (#188): PROJECTS, open a saved project and pull the card while
+  `LOADING` shows; put it back. The project opens whole under its own name (or the old one stays
+  under its own name), never a mix of the two. `____`
+
+**W55. An older project's LFOs after the format change (4 min).** Needs a project saved by
 v0.4.0 with LFOs on (a card from the v0.4 smoke test has one; else set two up on a v0.4.0 card
 first: T1 SQR onto CUT, T7 S+H onto TUN, one step on T1 locking WAV to TRI, a scene that stores
 T7's DST).

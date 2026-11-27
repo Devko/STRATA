@@ -10,7 +10,7 @@ on the unit.
 
 | | Spec | This plan |
 | --- | --- | --- |
-| Enaga pin | `269c015` | **release `v0.3.0` (`4878b7c`)** since 2026-11-25 (`v0.2.0` before), the firmware on the unit; only release tags are pinned (`docs/HANDOFF.md`, "Moving the Enaga pin") |
+| Enaga pin | `269c015` | **release `v0.4.0` (`7487bbf`)** since 2026-11-27 (`v0.3.0` from 2026-11-25, `v0.2.0` before), the firmware on the unit; only release tags are pinned (`docs/HANDOFF.md`, "Moving the Enaga pin") |
 | Master clock | `core/clock`, 96 PPQN, 32.32 fixed point, drift tests | **Deleted.** Enaga owns it; `core/scheduler` sits on `clock::ticks()` |
 | MIDI / SYNC | M7: implement in an Enaga fork, upstream as PRs | **Already in Enaga.** M7 shrinks to verifying it on the unit |
 | External sync | deferred to M7 | **M1.** It changes transport and tempo behaviour that M1 builds |
@@ -23,7 +23,7 @@ on the unit.
 
 ---
 
-## Where it stands (2026-11-26)
+## Where it stands (2026-11-27)
 
 STRATA runs on the unit and has had five releases: v0.1.0 to v0.3.1 on Enaga 0.2.0, and v0.4.0
 on Enaga 0.3.0, which the unit now runs. The milestones below are
@@ -46,11 +46,72 @@ otherwise.
 | v0.2 | **released** 2026-11-23 | [v0.2.0](https://github.com/Devko/STRATA/releases/tag/v0.2.0), an early beta: PRs #83-#111. Its new features are not yet checked on the unit |
 | v0.3 | **released** 2026-11-23 | [v0.3.0](https://github.com/Devko/STRATA/releases/tag/v0.3.0) (the performance mixer and looper, the VA OSC page, WAVE, FM4, the stock SmplTrek folders) and [v0.3.1](https://github.com/Devko/STRATA/releases/tag/v0.3.1) (the GRAIN rework). v0.3.1 boots and plays on the unit |
 | v0.4 | **released** 2026-11-26 | [v0.4.0](https://github.com/Devko/STRATA/releases/tag/v0.4.0), an early beta for Enaga 0.3.0, PRs #137-#177: the backlog's Phases 1-5 so far (LOCK, macro learn by turning, MOD slots, LFO TRIG, play modes, step stutter, LIVE RND, sample audition, one synth filter) and every screen redrawn. The zip no longer carries Enaga. Not yet checked on the unit |
-| after v0.4.0 | on `main` | CHANGELOG, Unreleased |
+| after v0.4.0 | on `main` | PRs #180-#195: GEN and EVOLVE, chords recorded note for note, CLICK and COUNT-IN, choke groups, ratchets over LEN, recorded rolls, arp depth and ARPS, 40 more sounds, sound and review fixes (CHANGELOG, Unreleased) |
+| v0.5 | **planned**: the release candidate for 1.0 | [Release candidate](#release-candidate-v050-planned-2026-11-27) below: what lands first, the freeze, the checks |
+
+## Release candidate: v0.5.0 (planned 2026-11-27)
+
+Roland's plan (2026-11-27): **v0.5.0 is the release candidate for 1.0.** After it come fixes,
+measurements and docs, not features. It moves to Enaga 0.4.0 (Roland, 2026-11-27: firmware fixes,
+no API change), which needs the unit's firmware updated for its test. Nothing here is tagged or
+released by a docs or feature thread: the release runs from its own fresh thread when Roland
+says so, from `docs/release/RELEASING.md`, never re-releases an existing tag, and the zip carries
+no Enaga firmware.
+
+**1. Must land first.** These change files or behaviour, so they go in before the freeze:
+
+- [ ] **File format option C** (Roland, 2026-11-26; the Claude Doc "STRATA file format: room to
+      grow before 1.0"). Widen `Engine::locked_` and the other 32-bit per-parameter masks to 64
+      bits (the `ranged`/`locked` locals in `Engine::fire`, `sound_preset_writes()`, the scene
+      morph's `mask_a`/`mask_b`), and store the LFO's WAV and DST as plain indices behind a layout
+      byte in an optional section (KIT.BIN section 8's layout byte is the precedent), migrating
+      kits, scenes and locks once on load. Take the section number and lock ids from `main` at
+      the time: #183 already uses lock ids 32-36 for chord notes, #184 KIT.BIN section 12. The
+      release notes must say that a file saved by the new build plays wrong LFOs on 0.4.0 and
+      earlier.
+- [x] **EVOLVE saved** with the project (PROJECT.BIN's optional section 7), and the MIX
+      mutation (a kind picked per turn): #200, merged 2026-11-27.
+- [ ] **The performance HALL question**: HALL in pipelined passes (ambient about 28%, from 30%)
+      renders differently with cl6x in the emulator, identically with GCC. Decide whether the
+      emulator or the build is wrong (the unit can tell), and ship HALL in passes only if a
+      render on the unit matches the GCC one. Until then HALL stays as it is.
+- [x] **The open PRs**: #196 (the LONG delay in passes, bit-exact), #197 (the second review's
+      fixes) and #198 (compiled blocks for the scenarios), all merged 2026-11-27.
+
+**2. Feature freeze.** Once the items above are on `main`: no new feature, gesture or file
+change until 1.0. What may still land: fixes with a failing test first, performance work that is
+bit-exact or null-tested, docs, and tooling.
+
+**3. Checks on the RC build** (a build from `main` at the freeze, with cl6x):
+
+- [ ] `make -C host test`, the same under `SANITIZE=1`, `tools/test_shuffle.sh`,
+      `tools/audit_commands.sh` and `tools/enaga_check.sh`: all clean.
+- [ ] `tools/scenarios.sh`, every scenario with cl6x and with `ENAGA_TI_CGT=none`; the figures
+      in `docs/BUDGET.md`, worst case under 60% with cl6x.
+- [ ] `tools/emulator_screens.sh`, and a look at the contact sheet: the docs' pictures are the
+      RC's screens.
+- [ ] On the unit: the smoke test (S1-S20) first, then the walkthrough (W1-W54) or at least
+      every W item marked for this release; the unit's MAX figures in `docs/BUDGET.md`.
+- [ ] Projects and kits saved by v0.4.0 open in the RC (the factory project, a project with
+      locks, scenes and MOD slots), and a project saved by the RC opens in v0.4.0 as the release
+      notes say.
+
+**4. Docs for the RC.** The changelog's Unreleased section dated as `[0.5.0]`, with its
+"Upgrading from 0.4.0" brought up to date (option C's LFO warning); `docs/release/v0.5.0.md`;
+the release row in `docs/INSTALL.md` and the README's status; the card builder offering the new
+release.
+
+**5. From the RC to 1.0.** 1.0 is the RC with what the unit finds fixed, once:
+
+- the smoke test and the walkthrough pass on the unit, with no open bug that loses data or stops
+  the audio;
+- the provisional numbers are settled from the unit's readings: `kPolyVoiceBudget = 12`, the CPU
+  guard's thresholds, the performance mixer's worst case;
+- the file format is frozen: from 1.0 on, every build reads every 1.0 file.
 
 ## What comes next
 
-`docs/HANDOFF.md` has the next steps in order, and `docs/FEATURES.md` the state of every
+The release candidate above, then 1.0. `docs/HANDOFF.md` has the next steps in order, and `docs/FEATURES.md` the state of every
 feature.
 
 ---
