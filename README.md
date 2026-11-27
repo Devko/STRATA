@@ -17,6 +17,10 @@ trig conditions, and a performance layer built for long live sets. An
 [Try it](#try-it) · [Highlights](#highlights) · [Documentation](#documentation) ·
 [Status](#status)
 
+<img src="docs/media/strata.gif" width="420" alt="STRATA's screen while the TECHNO project plays: GRID, the track menu generating a new hat part, a PERFORM macro, the master DJ filter, the bass's filter and the ARPS list">
+
+<sub>The device build in the emulator, 28 s: GRID, GENERATE, PERFORM, MIXER, EDIT, ARPS.</sub>
+
 </div>
 
 > [!WARNING]

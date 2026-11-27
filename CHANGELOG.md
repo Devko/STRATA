@@ -84,6 +84,8 @@ means new firmware as well as the app. The features below have not been through 
 - **A one-hour smoke test** (S1-S20) at the top of `docs/UNIT_CHECKLIST.md`: boot, the small
   font on the OLED, load on A01 and A04, LOCK, the MOD slots, one RESAMPLE take and a save that
   survives a power cycle, before the two-hour walkthrough (#186).
+- **A clip at the top of the README**: 28 silent seconds of the device build in the emulator
+  playing the TECHNO project, recorded by `tools/readme_clip.py` into `docs/media/strata.gif`.
 
 ### Changed
 
