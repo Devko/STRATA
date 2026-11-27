@@ -81,12 +81,22 @@ it stays at 0; a sixth heavier (blocks to 93%) it rises on the panic rule and co
 differently, so no scenario figure moves: all 48 pass with cl6x, worst **33.90%** (`genload`;
 the rest as before, `ratchetspan` 26.34%).
 
-**The 2.4 is a finding in itself, and it is not settled.** BUDGET has carried ~1.35x for
-unit-over-emulator since first boot, from peak readings. Typical blocks on this case say ~2-2.4x
-(the emulator has no cache model, and a dense part touches more voice state per block). If it
-holds, the 60% target on emulator figures is not 60% on the unit: `genload` at 33.90% would be
-~80% there. Owed: the unit's top line and MAX on A01 and on W56, against these emulator figures
-on the same build.
+**The unit-over-emulator ratio grows with the load (Roland's readings, 2026-11-27).** Compared
+block for block, which is what the top line shows (one block's figure, sampled per frame):
+
+| same build, top line on the unit | emulator, every block (cl6x) | ratio |
+| --- | --- | --- |
+| A01: **15-28%** | median 12.4%, p90 15.9%, p99 21.2% (peak 23.8%) | **~1.2-1.8x** |
+| GEN on all tracks: **40-60%** | median 19.6%, p90 25.5%, p99 30.5% (peak 33.9%) | **~2.0-2.4x** |
+
+A01 against the emulator's PEAK (23%) looks like a match, but the top line seldom catches a peak
+block. The plain beat sits near BUDGET's old ~1.35x. Dense generated parts cost the unit more
+than the emulator shows, most likely per voice in cache and DDR traffic, which the emulator does
+not model. The 2.4 used for the guard's replay is therefore the ratio for this content, not a
+constant. Roland's own generated parts may also differ from `genload`'s, so it is an estimate.
+What it means: emulator figures understate voice-heavy content more than light beats, so
+`genload`'s 33.90% is closer to 70-80% than to 45% on the unit. Owed: MAX from SETUP on A01 and
+on W56 on the same build, to pin both ratios.
 
 ### The v0.5.0 release candidate build (2026-11-27, emulator, Enaga v0.4.0)
 
