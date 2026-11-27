@@ -395,6 +395,20 @@ the selected track's pad pushes it up while you lean on it.
 remove hits, or nudge velocity, timing, probability or notes within the scale. It is one undo
 level: OK keeps it, CLR takes it back.
 
+### GEN and EVOLVE
+
+**Hold OK in GRID** for the track menu. **GENERATE** writes a new part on the selected track: on
+a drum track a rhythm, busier on the beats than between them, with accents and ghost notes; on a
+melodic track a line in the pattern's key and scale too, starting on the root. DENSITY sets how
+busy, RANGE how many octaves the line may climb, LEAP how often it jumps, and WHAT whether to
+replace the rhythm, the notes or both. Every press is a new part and one undo level.
+
+**EVOLVE** makes the track mutate on its own, every 1, 2, 4 or 8 loops, with the mutation and
+amount PERFORM's MUTATE uses. In **ORBIT** each change starts again from the part as it was when
+EVOLVE went on (its HOME), so it varies around itself and never wanders off; in **DRIFT** the
+changes add up. **KEEP** stops it where it is, **HOME** stops it and puts the part back. What you
+edit while it runs is kept. EVOLVE is not saved; a save writes what plays.
+
 ### Kits
 
 A **kit** is the sound side of a project without the patterns: the eight machines, their 16
