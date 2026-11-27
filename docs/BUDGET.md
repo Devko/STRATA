@@ -53,6 +53,26 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### The v0.5.0 release candidate build (2026-11-27, emulator, Enaga v0.4.0)
+
+`main` at 46cc054 (#208), the code v0.5.0 is tagged on; its cl6x `APP.ENA` is 1,607,560 bytes
+(sha256 `761bba8d…`). All 47 scenarios pass with cl6x and with `ENAGA_TI_CGT=none`; the host
+suite (3,882,193 checks), the same under ASan and UBSan, `tools/test_shuffle.sh` (seeds 1-4),
+`tools/audit_commands.sh` and `tools/enaga_check.sh` are clean.
+
+| Scenario, peak load | cl6x | GCC-only |
+| --- | --- | --- |
+| `factory` (A01 then A04) | 23.16% | 45.03% |
+| `gen` | 25.25% | 47.06% |
+| `wave` | 25.71% | 49.40% |
+| `ambient` (LONG + HALL) | 25.12% | **55.06%** (the worst GCC-only) |
+| `ratchetspan` | **26.34%** (the worst) | 47.93% |
+| `grain` | 23.85% | 52.81% |
+| `audition` | 6.25% | 6.40% |
+
+Worst case 26.34% with cl6x, against the 60% target; GCC-only stays under it too (55.06%). The
+unit's MAX figures for the RC (PLAN.md, "Release candidate", step 3) are still to come.
+
 ### Enaga v0.3.0 to v0.4.0 (2026-11-27, emulator)
 
 The same STRATA commit (main `ebc8428`) against both Enaga releases, six scenarios each, peak load:
