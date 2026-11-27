@@ -83,6 +83,9 @@ Everything merged since 0.4.0 (#180 to #200). It still runs on **Enaga 0.3.0**, 
 
 ### Changed
 
+- **VA voices cost less**: the filter, envelope and output of every VA MONO and VA POLY voice
+  run as one loop the TI compiler can pipeline, the same sound to the last bit. About 1.5 points
+  off every pattern that plays them (the default beat 26.6% -> 25.1% on the emulator).
 - **The LONG delay and the HALL reverb cost less**: their per-sample loops now run as passes the
   TI compiler can pipeline, the same sound to the last bit. The worst-case scenario (both sends
   in their ambient modes) drops from 32.3% to 28.6% peak load on the emulator (#196, and this
