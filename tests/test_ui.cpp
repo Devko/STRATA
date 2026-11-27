@@ -11095,6 +11095,109 @@ TEST(ui_draw_bench) {
     pump(4);
 }
 
+// --- the arp's kit settings and ARPS (core/arp.hpp, core/arppresets.hpp) ------------------------
+
+TEST(ui_arp_page_pushes_walk_var_rhythm_accent_and_ratchet) {
+    Strata &app = fresh();
+    const KitTrack &kit = app_engine().project().kit.tracks[0];
+    key(ENAGA_KEY_F8);                                // EDIT, track 1
+    goto_edit_page(app, Page::arp);
+    post_cmd_track_param(0, uint8_t(kArpFirst + 0), 32);      // UP: the info line shows them
+    pump(2);
+    CHECK(screen_has(app, "PUSH: VAR RHY ACC RTC"));
+
+    // MOD's knob is VAR, RAT's RHYTHM, OCT's ACCENT, GAT's RATCHET: each one step on.
+    key(ENAGA_KEY_PUSH_A);
+    pump(2);
+    CHECK_EQ(int(kit.arp.var), 1);
+    CHECK(std::strcmp(UiProbe::notice(app), "ARP VAR CONV") == 0);
+    CHECK(app_storage().dirty());
+    key(ENAGA_KEY_PUSH_B);
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK_EQ(int(kit.arp.rhythm), 1);
+    CHECK_EQ(int(kit.arp.accent), 1);
+    CHECK_EQ(int(kit.arp.ratchet), 1);
+    CHECK(std::strcmp(UiProbe::notice(app), "ARP RTC 2:4") == 0);
+    CHECK(screen_has(app, "VAR CONV"));
+    check_layout(app, "EDIT ARP, all four set");
+
+    // Round each table and back to OFF, the screen in bounds at every value.
+    const int pushes[kArpExtFields] = {ENAGA_KEY_PUSH_A, ENAGA_KEY_PUSH_B, ENAGA_KEY_PUSH_C,
+                                       ENAGA_KEY_PUSH_D};
+    for (int f = 0; f < kArpExtFields; f++) {
+        for (int v = 1; v < arp_ext_count(f); v++) {
+            key(pushes[f]);
+            pump(2);
+            check_layout(app, arp_ext_label(f));
+        }
+        CHECK_EQ(int(arp_ext_get(kit.arp, f)), 0);
+    }
+
+    // The pushes are the ARP page's: on the LFO page push B is still TRIG.
+    goto_edit_page(app, Page::lfo);
+    key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(kit.arp.rhythm), 0);
+    CHECK_EQ(int(kit.lfo_trig), int(kLfoTrigRetrig));
+    post_track(Cmd::set_lfo_trig, 0, kLfoTrigFree);
+    post_cmd_track_param(0, uint8_t(kArpFirst + 0), 0);
+    pump(2);
+    goto_edit_page(app, Page::src);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_arps_ok_on_the_arp_page_loads_an_arp_and_as_was_puts_it_back) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);
+    goto_edit_page(app, Page::arp);
+    post_cmd_track_param(0, uint8_t(kArpFirst + 0), 53);      // the track's own: DN
+    pump(2);
+    const TrackParams before = app_engine().params(0);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+    CHECK(screen_has(app, "ARPS"));
+    CHECK(screen_has(app, "INTO T1 ARP ONLY"));
+    check_layout(app, "ARPS");
+
+    // Every arp in turn: loaded into track 1's ARP bytes and settings, marked NOW, the sound
+    // left alone.
+    for (int row = 1; row <= arp_preset_count(); row++) {
+        sounds_cursor_to(row);
+        key(ENAGA_KEY_OK);
+        pump(2);
+        CHECK(arp_preset_matches(row - 1, &app_engine().params(0).v[kArpFirst],
+                                 app_engine().project().kit.tracks[0].arp));
+        for (int p = 0; p < kArpFirst; p++) CHECK_EQ(int(app_engine().params(0).v[p]), int(before.v[p]));
+        CHECK(screen_has(app, "NOW"));
+        check_layout(app, arp_preset(row - 1)->name);
+    }
+    CHECK(app_storage().dirty());
+
+    // AS WAS: the track's own arp back, settings and all.
+    sounds_cursor_to(0);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(same_params(app_engine().params(0), before));
+    for (int f = 0; f < kArpExtFields; f++) CHECK_EQ(int(arp_ext_get(app_engine().project().kit.tracks[0].arp, f)), 0);
+
+    // CLR goes back to the ARP page; OK on a sound page still opens SOUNDS.
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));
+    CHECK_EQ(UiProbe::param_page(app), int(Page::arp));
+    goto_edit_page(app, Page::src);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+    CHECK(!screen_has(app, "ARP ONLY"));
+    key(ENAGA_KEY_CLR);
+    post_cmd_track_param(0, uint8_t(kArpFirst + 0), 0);
+    pump(2);
+    key(ENAGA_KEY_F4);
+}
+
 // --- live recording on a chord track: what several notes on one step become -------------------
 //
 // A Step holds one note and a chord byte; the other notes played into it are locks 32-36

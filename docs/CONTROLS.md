@@ -77,6 +77,11 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      the slot's knob and depth with the new source, OFF clears it. Not on the LFO's or the
      arp's own knobs (`MOD: NOT LFO OR ARP`). No routing screen: the LFO page lists the two
      slots and every EDIT bar a slot moves has its range drawn under it (the font has no `~`).
+     On the ARP page the four switches are the arp's kit settings (core/arp.hpp), each pushed
+     once round its list and back to OFF (`ARP RHY E5/16`): push A (MOD) VAR, push B (RAT)
+     RHYTHM, push C (OCT) ACCENT, push D (GAT) RATCHET. Per track, the kit's, as LFO TRIG; on
+     EDIT, GRID and KEYS. OK on the ARP page opens ARPS, the factory arps, as OK on the sound
+     pages opens SOUNDS (same keys, AS WAS first).
      On PROJECTS, where only A turns, push B renames and push C deletes the project under the
      cursor (delete then asks for OK twice).
    - **VALUE is the crossfader.** Push VALUE + STEP picks what it fades: an effect, the morph

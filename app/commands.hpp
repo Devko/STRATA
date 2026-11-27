@@ -317,6 +317,15 @@ enum class Cmd : uint8_t {
     // Only the bytes a preset writes are touched either way, so the mix stays the user's.
     sound_preset,
 
+    // A factory arp (core/arppresets.hpp) into one track: the ARPS list (OK on the ARP page).
+    // track, b: the preset's index, or kSoundPresetKeep / kSoundPresetBack as for sound_preset.
+    // Writes the four ARP bytes and the kit's arp settings (KitTrack::arp), nothing else.
+    arp_preset,
+
+    // One of the arp's kit settings (KitTrack::arp, core/arp.hpp): track, a: the field (0 VAR,
+    // 1 RHYTHM, 2 ACCENT, 3 RATCHET), b: its value; past the field's table reads as 0.
+    set_arp_ext,
+
     // Freeze (dsp/frozen.hpp). `freeze_set` starts track `track` playing its freeze slot: `u` the
     // byte offset into the sample region, frames in c | d << 8 | e << 16 (mono int16), `a` the
     // loop's bars. The bar it began on and where in the take that bar falls are the engine's own
