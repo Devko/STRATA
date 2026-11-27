@@ -1084,6 +1084,16 @@ void Engine::apply(const Command &command) {
                     to.machine = from.machine;
                     to.level = from.level;
                     to.duck = from.duck;
+                    // And the rest KIT.BIN holds, which each arrived in a later section and was
+                    // never added here: a kit saved with SLC AUTO, an LFO TRIG, MOD slots or a
+                    // choke group came back without them (app/storage.hpp: a kit is "exactly what
+                    // a project's KIT.BIN holds"). params_from_kit applies SLC below.
+                    to.slice_mode = from.slice_mode;
+                    to.lfo_trig = from.lfo_trig;
+                    for (int s = 0; s < kModSlots; s++) to.mod[s] = from.mod[s];
+                    to.choke = from.choke;
+                    lfo_[t].rest();          // a new TRIG starts as Cmd::set_lfo_trig's does
+                    mod_env_[t].rest();
                 }
                 project_.kit.duck = kit_inbox_.duck;
             }
