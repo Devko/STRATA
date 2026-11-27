@@ -521,6 +521,10 @@ struct Status {
     // Ticks the pattern's position is behind the clock's: the count-in's length once it has
     // run, 0 without one. The recorder subtracts it from the clock it stamps a hit with.
     std::atomic<uint32_t> count_in_ticks{0};
+    // Where the live pattern started, on that same count-in-less position (Engine::origin_): a
+    // chain entry or a queued switch starts its pattern on a boundary, and steps and passes are
+    // counted from there. The recorder subtracts it too, or a hit lands `origin mod loop` off.
+    std::atomic<uint32_t> pattern_origin{0};
     std::atomic<uint32_t> blocks{0};           // audio blocks processed, for liveness
     std::atomic<uint8_t> playhead[8] = {};     // per-track step, for the grid
     std::atomic<uint8_t> triggered[8] = {};    // bumped on each trig, for the pad LEDs

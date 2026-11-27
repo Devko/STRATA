@@ -326,7 +326,15 @@
     // Once a listing is in, the cursor goes to what we were looking for: the folder we came up
     // out of, or the file the track plays.
     void settle_sample_cursor() {
-        if (!sample_seek_ || storage_.browsing()) return;
+        if (storage_.browsing()) return;
+        if (!sample_seek_) {
+            // FUNC+UP reads the folder again and keeps the cursor; a list that came back shorter
+            // (a card swapped, a file gone) must not leave it past the end, where the screen said
+            // 9/4 over an empty page and OK said PATH TOO LONG.
+            const int count = storage_.browse_list().count();
+            if (sample_cursor_ >= count) sample_cursor_ = count > 0 ? count - 1 : 0;
+            return;
+        }
         sample_seek_ = false;
         const SampleList &list = storage_.browse_list();
         const char *want = sample_seek_name_[0] != '\0'
@@ -416,6 +424,7 @@
                         int i = 0;
                         for (; f[i] != '\0'; i++) again[i] = f[i];
                         again[i] = '\0';
+                        stop_audition();        // its row may hold another file next
                         storage_.request_browse(again);
                         sample_seek_ = false;
                         notice("READING");

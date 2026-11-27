@@ -1544,6 +1544,34 @@ TEST(engine_a_chain_advances_at_the_pass_boundary) {
     CHECK_EQ(live_slot(), 0);
 }
 
+TEST(engine_a_chain_entry_doubled_while_it_plays_lasts_its_new_length) {
+    // The pass boundary is derived once and kept (resolve_tick). DOUBLE on the live pattern
+    // changes its master length, and the boundary measured on the old length ended the entry
+    // after half of it.
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    project_init(incoming);
+    incoming.patterns[0][0].master_length = 16;     // 384 ticks a pass
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1};
+    incoming.chain[1] = ChainEntry{0, 1, 1};
+    post(Cmd::project_loaded);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    tick_at(100);                                  // the boundary is known: 384
+
+    post(Cmd::pattern_double, 0, 0);               // A01, the live one: now 32 steps
+    pump();
+    CHECK_EQ(int(engine.pattern().master_length), 32);
+    tick_at(384);
+    CHECK_EQ(live_slot(), 0);                      // half way through the doubled pass
+    tick_at(768);
+    CHECK_EQ(live_slot(), 1);
+}
+
 TEST(engine_a_chain_edited_while_it_plays_stays_on_the_entry_it_is_playing) {
     // The CHAIN page renumbers entries under a running player. Adding an entry above the playing
     // one used to move the chain onto the wrong entry, and removing the playing one skipped the

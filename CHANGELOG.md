@@ -66,6 +66,25 @@ the project file format or the controls.
   a driven track is muted or choked, and nothing off-centre fed into the sends. The factory kicks'
   peaks drop from -3.2 to -3.8 dBFS; what changed is almost all below 20 Hz.
 
+### Fixed
+
+- **A card pulled while a project opens** no longer leaves half of one project and half of the
+  other filed under the new name, where the next save wrote the mix over it: the name goes
+  back, and the open runs again from its first file when the card returns. Leaving the app
+  during a load, or before the boot's load has run, no longer autosaves over the project the
+  next start opens.
+- **A kit recalled from the library** brings back its SLC AUTO, LFO TRIG, MOD slots and choke
+  group; only the knobs, machine, fader and duck came back.
+- **DOUBLE or undo on the playing pattern** moves the end of its pass too: a chain entry or a
+  song ended at the old length.
+- **Recording after a chain step or a queued pattern change** puts the note on the step that
+  was playing, not one counted from the song's start.
+- **A STEP range** ends when you change track or screen. Before, a plain CLR, copy or turn on
+  another track (or in EDIT, where `SEL` is not shown) acted on that range there.
+- **SAMPLES read again (FUNC+UP)** keeps the cursor on the list when it comes back shorter.
+- **A step pulled before tick 0** on a one- or two-step track with micro and FEEL no longer
+  fires twice there.
+
 ## [0.4.0] - {{RELEASE_DATE}}
 
 An early beta: everything merged since 0.3.1 (#137 to #177), and the first release for **Enaga

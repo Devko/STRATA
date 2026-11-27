@@ -101,8 +101,13 @@
         const uint32_t lead = status.count_in_ticks.load(std::memory_order_relaxed);
         if (clock.position < lead) return;
 
+        // The pattern's position, as the scheduler's: the clock less a count-in, less where the
+        // pattern started (a chain entry, a queued switch), which is what steps and passes count
+        // from (Engine::resolve_tick hands the scheduler `tick - origin_`).
+        const uint32_t origin = status.pattern_origin.load(std::memory_order_relaxed);
+        if (clock.position - lead < origin) return;   // a switch the audio side has not made yet
         Stamp now;
-        now.tick = clock.position - lead;    // the pattern's position, as the scheduler's
+        now.tick = clock.position - lead - origin;
         now.fraction = clock.fraction;
         const Stamp hit = stamp_back(now, kPadLatencyMs, clock.tempo);
 
@@ -168,7 +173,10 @@
         slot->track = int8_t(track);
         slot->note = note;
         slot->step = landing.step;
+        // On the clock less the count-in, as `up` is: a chain entry or a queued switch that
+        // moves the pattern's origin while the key is held must not shorten the hold.
         slot->down = now;
+        slot->down.tick = now.tick + origin;
     }
 
     // The machines whose steps play several notes: the POLY three, and MID, which sends a

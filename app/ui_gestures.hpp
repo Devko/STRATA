@@ -596,7 +596,10 @@
             return;
         }
 
-        if (track != selected_) end_gesture();         // a different track is a different edit
+        if (track != selected_) {
+            end_gesture();                             // a different track is a different edit
+            drop_range();
+        }
         selected_ = track;
         // The root in a playable octave: the pattern's root is a pitch class (core/pattern.hpp).
         const uint8_t note = uint8_t(kPadOctaveNote + engine_.key_root());

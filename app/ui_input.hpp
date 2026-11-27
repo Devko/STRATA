@@ -912,8 +912,19 @@
 
     void walk_track(int delta) {
         const int next = (selected_ + delta + kTracks) % kTracks;
-        if (next != selected_) end_gesture();   // a different track is a different edit
+        if (next != selected_) {
+            end_gesture();                      // a different track is a different edit
+            drop_range();
+        }
         selected_ = next;
+    }
+
+    // A STEP range belongs to the track and the screen it was made on. Left standing, a plain CLR,
+    // a copy or a turn of A or B on another track (or in EDIT, where SEL is not drawn) acted on
+    // that track's steps in the range, unseen. A paste then lands on a held step, or on step 1.
+    void drop_range() {
+        range_first_ = range_last_ = -1;
+        len_step_ = -1;
     }
 
     void walk_machine(int delta) {
@@ -982,6 +993,7 @@
 
     void leave_mode() {
         step_page_ = false;
+        drop_range();
         slot_menu_ = false;
         slot_ok_held_ = false;
         // An audition belongs to SAMPLES (dsp/audition.hpp).
@@ -1123,6 +1135,7 @@
                 // machine change lands on whatever track this leaves selected.
                 selected_ = (selected_ + delta + kTracks) % kTracks;
                 end_gesture();
+                drop_range();
                 char *out = notice_buffer_;
                 append(out, "TRACK ");
                 append_number(out, uint32_t(selected_) + 1);
@@ -1172,6 +1185,7 @@
                 // The track, as in MACHINE, so one hand can try a sound on each of the eight.
                 selected_ = (selected_ + delta + kTracks) % kTracks;
                 end_gesture();
+                drop_range();
                 retarget_sounds();
                 break;
             case Mode::menu:                    // one page

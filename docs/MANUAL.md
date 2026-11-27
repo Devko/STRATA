@@ -1001,6 +1001,7 @@ pattern, saved and undone like any lock. A toast says where it landed (`STEP 5 P
 
 Hold two STEP keys to select the range between them (`SEL a-b`). Then CLR clears it, FUNC+UP
 copies it, FUNC+DOWN pastes it, encoder A transposes it and encoder B nudges its micro-timing.
+The selection lasts until a single STEP press, another track or another screen.
 With nothing held, CLR clears the whole track and FUNC+UP / FUNC+DOWN copy and paste the whole
 track. The FUNC menu's CLEAR PATTERN (OK twice) clears every track at once. Hold a STEP and press UP / DOWN to copy / paste one step. Everything goes through undo.
 
