@@ -1,4 +1,4 @@
-# Handoff — 2026-11-26
+# Handoff — 2026-11-27
 
 **Read this first, then `CLAUDE.md`, then `docs/SPEC.md` and `docs/PLAN.md`.** The platform review
 the spec was corrected against is `docs/archive/REVIEW.md`: history, but its decisions stand.
@@ -12,7 +12,9 @@ v0.3.1 (2026-11-23, early betas for Enaga 0.2.0) and v0.4.0 (2026-11-26, the fir
 unit (2026-11-24), and a build from `main` after #139 boots on the unit's 0.3.0 firmware
 (2026-11-25). Nothing from 0.3.x on has been measured or walked through there yet. On the unit the default beat loads under 30%, and a long, heavy session peaked at
 84.3% MAX with no dropouts. Almost everything added since the first evening has been heard by
-nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
+nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass. **v0.5.0 is
+planned as the release candidate for 1.0** (Roland, 2026-11-27): `docs/PLAN.md`, "Release
+candidate", has what must land first, the feature freeze after it, and the checks.
 
 ---
 
@@ -20,8 +22,8 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
 | | |
 | --- | --- |
-| `make -C host test` | **3,861,238 checks, 0 failures** on `main` at PR #176: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
-| CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
+| `make -C host test` | **3,880,300 checks, 0 failures** on `main` at PR #199 (2026-11-27): `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
+| CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, the screenshots, `tools/audit_commands.sh`, `tools/check_rules.sh`, `tools/enaga_check.sh`, `tools/check_scripts.sh` (every script in tools/ and tests/ parses) and the card builder's tests (`web/`). Both builds use ccache. A docs-only PR skips the test jobs. `tools/ci_local.sh` runs the same lanes in WSL. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image (cl6x, 2026-11-25, sample audition merged onto #168): payload 1,224,160 bytes, bss 1,605,248 (with the live screens, bounce to track, step stutter, EDIT's pictures, LOCK and play modes); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
 | `tools/scenarios.sh` | **47 scenarios**, run on Roland's PC only. **All 47 pass with cl6x with the HALL in passes** (2026-11-27; worst 30.79%, `scenario_wave`; `ambient` 30.67% -> 28.60%; an emulator render A/B of a change that moves load is not an oracle any more, docs/BUDGET.md "The HALL in passes"). **All 45 pass with cl6x with the LONG delay in passes** (2026-11-27, PR #196, before GEN and EVOLVE came in; worst 30.42%, `scenario_wave`; `ambient` 32.33% -> 30.19%, docs/BUDGET.md). `tools/profile_guest.py` gives any scenario's guest profile by function. **All 47 pass with cl6x with GEN and EVOLVE merged onto #184-#193** (2026-11-27; `scenario_gen` new, Python-driven because the track menu needs a 500 ms hold of OK and `--key` holds 54 ms; worst 32.28%, ambient). `scenario_gen` evolves all eight tracks every pass: 30.20% (29.83% before the merge), against 29.65% for the generated part alone; turning all eight on the boundary itself had peaked at 65.90%, which is why `Engine::evolve_lead` turns one track a tick. **All 45 pass with cl6x with arp depth, ARPS and the new sounds (#184) merged onto #183** (2026-11-27; `scenario_arp` new; worst 31.97%, ambient; #185 and #187 merged after that run). **All 44 pass with cl6x with ratchets over LEN** (2026-11-26; `scenario_ratchetspan` new; worst 31.91%, ambient), before #183's `scenario_recmode` came in; after the merge `ratchetspan` and `recmode` were run again and pass. `scenario_recmode` (2026-11-26, #183, chords recorded note for note) walks the FUNC menu's REC MODE row with REC on: 26.57% cl6x, run with `choke`, `factory` and `m6`, which still pass; the emulator cannot play a chord into a step, so the recording itself is host-tested (`polyrec_*`). **All 43 pass with cl6x with CLICK and COUNT-IN** (2026-11-26; `scenario_click` new; worst 32.29%, ambient). All 42 pass with cl6x with choke groups (2026-11-26; `scenario_choke` new, pushes C and D on MIXER's TRK 1-4; worst 32.26%, ambient). Live visuals part 5 (WAVE's waterfall, GRAIN's sparks; `scenario_wave` ends on WAVE POLY's SRC page) passed all 36 of its day with cl6x before this merge; merged onto #169, all 41 pass with cl6x (worst 32.20%, ambient). Part 6 (MIXER's spectrum, vectorscope, fader meters; `scenario_visuals` runs twice, the second on MST) passed all 41 with cl6x (31.82%), and so did the screens rebuilt to the mockups on top of it (figures in docs/BUDGET.md). `tools/emulator_frames.py` records the real screen frame by frame. **All 41 pass with cl6x with sample audition (#169) merged onto MOD slots (#168)** (2026-11-25; `scenario_audition` new, the first to check the captured output: a 44.1 kHz tone streamed from the card is heard whole, in tune, at -6 dB; worst 31.82%, ambient, as on main). `scenario_modslots` (MOD slots) learns slot 1 by push C, `--turn` and OK; all 40 pass with cl6x on `main` after #167 (worst 31.82%, ambient). All 39 pass with cl6x with random lock ranges and parameter slide (#167, `scenario_locks` new) merged onto LIVE RND (#166); worst 31.69%, ambient. `scenario_liverand` (LIVE RND, #166) drives FUNC + turn D and FUNC + push D: a `--turn` 2 M cycles after a FUNC `--key` lands inside the key's 20 M-cycle press (26.99% cl6x, 46.07% GCC-only, run alone; the full set was not rerun with it). All 37 before it pass with cl6x with the review fixes after #163 (`scenario_moveall` new; worst 31.59%, ambient, within the half point a peak moves between runs). All 36 pass with cl6x with live visuals part 1 (`scenario_visuals` new: draw() 0.57 ms a frame on GRID; worst 30.93%, ambient), and with part 2's audio taps (worst **31.16%**, ambient; GCC-only 56.48%), and with part 3's GRID and PERFORM views (`scenario_visuals` logs draw() on PERFORM: 1.34 ms), and with part 4's LFO picture (`scenario_visuals` walks on to EDIT's LFO page and turns DEP and DST with `--turn`). All 35 pass with cl6x with LFO TRIG, TUN glide and the cutoff floor merged onto #152 (`scenario_lfo` now pushes TRIG; worst 30.93%, ambient). **All 35 pass with cl6x with REL ALL, LEN ALL and FEEL merged onto `main` after #154** (2026-11-25; worst 30.75%, ambient; 34 passed on `main` after #153 at 30.55%). Added on 2026-11-25, each with the PR that brought it: `scenario_stepkeys` (D12), `scenario_plock`, `scenario_slots`, `scenario_glide`, `scenario_playmode`, `scenario_pictures`, `scenario_bounce` (the only run of a take through Enaga's real file layer), `scenario_feel` (FEEL walked on the PATTERN page). `scenario_moveall` turns REL ALL and LEN ALL with `--turn` (the review PR after #163). The pad gestures (stutter, LOCK, D6) have none: the emulator cannot press pads. The worst case moved from 30.16% to 30.75% over the day. GCC-only figures for that day's work are not taken |
 | unit | v0.3.1 on Enaga 0.2.0 boots and plays (2026-11-24). Load figures are from the v0.2.0-era build: under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been measured or walked through on the unit |
@@ -33,11 +35,14 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
 ## What to do next, in order
 
+0. **The release candidate**, `docs/PLAN.md` "Release candidate": file format option C and the
+   HALL question first (EVOLVE saved, #196 and #197 are in), then the feature freeze. No
+   thread tags or releases on its own: the release runs from its own thread when Roland says so.
 1. **On Roland's PC: the load runs still owed.** `tools/scenarios.sh` once on `main` (it has
    `scenario_wave.sh` and `scenario_fm.sh`, never run), then E13 (the VA rework), E14 (WAVE's cost
    per voice and its boot time) and E15 (FM4's cost per voice) from `docs/BUDGET.md`, with cl6x and with `ENAGA_TI_CGT=none`. BUDGET has only
    host estimates for both so far.
-2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, W1-W51, on a
+2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, S1-S20 and then W1-W54, on a
    build from `main` with cl6x and Enaga 0.3.0 firmware. It covers everything since v0.1.0, from
    the CPU guard to LOCK, step stutter, play modes, the MOD slots, sample audition and the
    redrawn screens (#171-#176).
@@ -161,8 +166,9 @@ Arp depth and ARPS, for whoever touches them next (core/arp.hpp has the design):
 - **Ratchet repeats are frame countdowns** (`Engine::arp_ratchets`, after the deferred step hits
   and before the block's ticks, running or stopped), clamped so no two hits of a track land in
   one block: the one-pending-trig contract `dispatch` relies on.
-- A kit-library recall brings the arp settings. It still does not bring LFO TRIG or the mod
-  slots (it never did): worth a look.
+- A kit-library recall brings the arp settings, and since #188 LFO TRIG, the MOD slots, SLC
+  AUTO and the choke group too: every optional KIT.BIN section. A new kit section must be added
+  to the recall as well (`Cmd::kit_recall`).
 
 LFO, for whoever touches it next (dsp/lfo.hpp has the detail):
 - **TRIG is not a parameter.** All 32 bytes a track has are spoken for and `locked_` is a 32-bit
@@ -448,3 +454,12 @@ The repo is on `D:` and every build runs in WSL. `CLAUDE.md` has the working for
 version is `MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- bash -c '...'`, single
 quotes, and a script file in the scratchpad for anything longer than one command. In a Linux
 container none of that applies.
+
+**Threads work in worktrees** (`D:\DEV\STRATA-wt\<name>`, each with its own `ENAGA_BUILD`), made
+by Windows git, because several threads share `D:\DEV\STRATA` and none may switch its branch. A
+new worktree needs `git submodule update --init`. WSL's git cannot read such a worktree, so
+`tools/env.sh` sets `STRATA_GIT` / `STRATA_GH` to Windows' `git.exe` / `gh.exe` there (WSL runs
+them), and `tools/enaga_check.sh` and `tools/publish_release.sh` use those; gh and the GitHub
+credentials exist only on Windows anyway. The emulator clone is untracked and lives in the main
+checkout only: `tools/env.sh` finds it from a worktree, and `tools/scenarios.sh` refuses to run
+without one rather than report every scenario's SKIP as a pass.

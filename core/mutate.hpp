@@ -51,6 +51,11 @@ enum class Mutation : uint8_t {
     micro,               // ... of their micro-timing
     probability,         // ... of their probability
     notes,               // ... of their notes, by scale degree, staying in the key
+    // One of the eight above, a different one each variant (Roland, 2026-11-27): what EVOLVE
+    // plays when every turn should surprise. The kind is drawn from the seed, the track and the
+    // variant; if it has nothing to work on (a rotation of identical steps, a density already at
+    // its end) the next kind is tried, so MIX changes something whenever any kind would.
+    mix,
     count
 };
 
@@ -161,6 +166,9 @@ int euclid_trigs(int hits, int steps, int length);
 // sequencer never plays.
 bool mutate_apply(Pattern &pattern, int track, int first, int count, Mutation kind,
                   uint32_t variant, int amount);
+
+// The kind MIX starts from for this variant, 0..7 (`Mutation::mix` excluded). Pure, for the tests.
+Mutation mutate_mix_kind(uint32_t seed, int track, uint32_t variant);
 
 // The draw a mutation uses, exposed because the tests check determinism directly and because
 // `app/` draws the same numbers to preview a mutation on screen.

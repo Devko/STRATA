@@ -30,6 +30,10 @@ MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- \
   read back wrong through the wsl.exe layer, so verify exit codes inside a script file.
 - `ls`, `cat`, `grep` and the editing tools work directly on `D:\DEV\STRATA` — only builds and
   tests need WSL.
+- Several threads share `D:\DEV\STRATA`: never switch its branch. Work in your own worktree
+  (`D:\DEV\STRATA-wt\<name>`, `git submodule update --init`, your own `ENAGA_BUILD`). From WSL,
+  `tools/env.sh` finds the main checkout's emulator and Windows' `git.exe`/`gh.exe` for it
+  (docs/HANDOFF.md, "Running commands on Roland's Windows host").
 - There is no cmake and no sudo. Do not add a dependency needing either.
 - To build a subset by hand (when the full suite is red from someone else's work in progress),
   **compile Enaga's `runtime/dsp/*.c` with `gcc -std=c11`, not `g++`** — they use `restrict`,

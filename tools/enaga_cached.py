@@ -206,6 +206,66 @@ def use_local_decode_cache():
         os.environ.setdefault("SMPLTREK_DECODE_CACHE", str(root / "emulator-decode"))
 
 
+def wrap_blocks(emulate):
+    """Compiled blocks: the emulator turns hot guest code into native code (emulator/blocks.py).
+
+    Every 50 M guest cycles, Emulation.run() stops, compiles the blocks that got hot since the
+    last round and installs them, then goes on. The libraries are kept in the cache by their
+    source, so a later run mostly loads them, and an app change recompiles only what changed.
+    Measured on the full scenario set at -j 4 with cl6x (2026-11-27): 789 s without, 663 s on
+    the first run after an app change, 305 s after that, and all 46 load figures identical.
+
+    STRATA_EMU_BLOCKS=off turns it off, to rule it out when an emulator result looks wrong. The
+    blocks folder grows by about 100 MB per app version; delete <cache>/emulator to reclaim it.
+    """
+    if os.environ.get("STRATA_EMU_BLOCKS", "on") == "off":
+        return
+    if not hasattr(emulate, "Emulation"):          # an emulator without the Emulation class
+        return
+    root = cache_root() or Path.home() / "strata-build" / "cache"
+    real_init = emulate.Emulation.__init__
+    real_run = emulate.Emulation.run
+    every = int(os.environ.get("STRATA_EMU_BLOCK_ROUND", "50000000"))
+    block_work = root / "emulator"
+
+    def init(self, *a, **k):
+        real_init(self, *a, **k)
+        self._next_round = None                    # None: this emulator has no compiled blocks
+        if hasattr(self.cpu, "blocks"):
+            self.cpu.blocks(True, heat=True)
+            self._known = set()
+            self._next_round = every
+
+    def run(self, cycles, slice_cycles=1_000_000):
+        if self._next_round is None:
+            return real_run(self, cycles, slice_cycles)
+        end = self.cpu.state()["cycles"] + cycles
+        total = 0.0
+        last = None
+        while True:
+            now = self.cpu.state()["cycles"]
+            if now >= end:
+                break
+            step = min(end, max(self._next_round, now + 1)) - now
+            last = real_run(self, step, slice_cycles)
+            total += last["host_seconds"]
+            if last["error"]:
+                break
+            if self.cpu.state()["cycles"] >= self._next_round:
+                import blocks as emu_blocks
+                sources = emu_blocks.collect(self.cpu, known=self._known)
+                if sources:
+                    emu_blocks.install(self.cpu, emu_blocks.build(block_work, sources), sources)
+                    self._known.update(sources)
+                self._next_round = self.cpu.state()["cycles"] + every
+        if last is None:
+            return real_run(self, 0, slice_cycles)
+        return {**last, "host_seconds": total}
+
+    emulate.Emulation.__init__ = init
+    emulate.Emulation.run = run
+
+
 def main(argv):
     if len(argv) < 1 or argv[0] not in ("build_app", "emulate"):
         print(__doc__, file=sys.stderr)
@@ -220,6 +280,7 @@ def main(argv):
         module = importlib.import_module("emulate")
         wrap_firmware(module.firmware_build, paths)
         use_local_decode_cache()
+        wrap_blocks(module)
     sys.argv = [str(ENAGA / "tools" / f"{tool}.py"), *args]
     return module.main(args)
 

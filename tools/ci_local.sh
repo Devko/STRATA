@@ -16,8 +16,9 @@
 #
 # The lanes run side by side and each writes a log; the summary at the end gives each lane's
 # time and result, and the tail of any log that failed. Objects go under $STRATA_CI_OUT
-# (default ~/strata-build/ci), in the WSL filesystem and not on /mnt/d, which is many times
-# slower for a compiler's small-file I/O. Builds are incremental between runs, and use ccache
+# (default $ENAGA_BUILD/ci, else ~/strata-build/ci), in the WSL filesystem and not on /mnt/d,
+# which is many times slower for a compiler's small-file I/O. Threads in their own worktrees set
+# their own ENAGA_BUILD, and so get their own objects and logs: two runs never share a folder. Builds are incremental between runs, and use ccache
 # when it is installed (`sudo apt install ccache`, optional).
 #
 # Exit status: 0 only if every lane passed.
@@ -34,12 +35,12 @@ while [ $# -gt 0 ]; do
         --quick)     quick=1; shift ;;
         --scenarios) scenarios=1; shift ;;
         --jobs)      jobs="$2"; shift 2 ;;
-        -h|--help)   sed -n '2,25p' "$0"; exit 0 ;;
+        -h|--help)   sed -n '2,24p' "$0"; exit 0 ;;
         *)           echo "error: unknown argument: $1 (try --help)" >&2; exit 2 ;;
     esac
 done
 
-OUT="${STRATA_CI_OUT:-$HOME/strata-build/ci}"
+OUT="${STRATA_CI_OUT:-${ENAGA_BUILD:-$HOME/strata-build}/ci}"
 LOGS="$OUT/logs"
 mkdir -p "$LOGS"
 rm -f "$LOGS"/*.log "$LOGS"/*.rc "$LOGS"/*.sec
@@ -97,10 +98,13 @@ lane_checks() {
     tools/enaga_check.sh || ok=1
     python3 -B tests/test_package_release.py || ok=1
     python3 -B tests/test_enaga_cached.py || ok=1
-    for f in tools/publish_release.sh tools/ci_local.sh tools/test_shards.sh tools/ci_changes.sh \
-             tools/scenarios.sh tools/build.sh tools/check_rules.sh tests/scenario_*.sh; do
-        bash -n "$f" || { echo "does not parse: $f"; ok=1; }
-    done
+    tools/check_scripts.sh || ok=1
+    # The card builder's tests, as CI runs them (Node 22 or newer; skipped without Node).
+    if command -v node > /dev/null; then
+        (cd web && node --test test/*.test.mjs) || ok=1
+    else
+        echo "card builder tests skipped: no node here (CI runs them)"
+    fi
     return $ok
 }
 

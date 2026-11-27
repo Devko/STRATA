@@ -281,7 +281,7 @@ GRID with nothing held did nothing, so the hold costs no gesture; a tap still do
 | WHAT | BOTH, RHYTHM (notes kept), NOTES (rhythm kept) | |
 | EVOLVE | OFF, 1, 2, 4 or 8 loops: this track mutates on its own every that many passes | `EVOLVE T1 4 LOOPS` |
 | MODE | ORBIT (every turn starts again from HOME) or DRIFT (the changes add up), every track | |
-| MUTATION, AMOUNT | What EVOLVE plays: PERFORM's MUTATE setting and amount, the same two values | |
+| MUTATION, AMOUNT | What EVOLVE plays: PERFORM's MUTATE setting and amount, the same two values. **MIX** (after NOTES) draws a different mutation each turn, and on the MUTATE pad each press | `MUTATION MIX` |
 | KEEP | OK: what plays becomes HOME, EVOLVE stops | `KEPT: EVOLVE OFF` |
 | HOME | OK: back to HOME (one undo level), EVOLVE stops | `HOME: EVOLVE OFF` |
 
@@ -296,7 +296,9 @@ row between openings.
   a recorded note, a chord) goes into HOME at the next turn, so ORBIT never throws it away.
 - **A pattern change**: in ORBIT the pattern left goes back to HOME; every evolving track then
   carries on from the new pattern. A load stops EVOLVE.
-- **Not saved**: the EVOLVE settings are RAM only. A save writes what plays.
+- **Saved** in the project: each track's EVOLVE, the mode, the mutation and the amount (PROJECT.BIN
+  section 7). HOME is not: a project opens evolving from the pattern as it was saved, and a save
+  writes what plays. A project from before this opens with nothing evolving.
 
 ## FEEL (the PATTERN page)
 
@@ -579,7 +581,8 @@ CyDrums S6, 2026-11-26. Enaga has no click (checked at v0.3.0), so STRATA render
 the sample audition). CLICK clicks on every beat while the transport runs. A COUNT-IN starts the
 clock at once and holds the sequencer, the rolls, the stutter and the arps for its bars, clicking
 them whether CLICK is on or not; then everything runs as from a plain START, step 1 on the beat
-after the count-in. Nothing records during it. STOP or FUNC + PLAY ends it. With CLOCK OUT on, an
+after the count-in. Nothing records during it, except a hit up to half a step before its end:
+that is the downbeat played early, and it lands on step 1. STOP or FUNC + PLAY ends it. With CLOCK OUT on, an
 outboard box hears START when the count-in begins, so it runs the count-in's bars ahead. Under an
 outside clock there is no count-in (STRATA does not start the transport).
 

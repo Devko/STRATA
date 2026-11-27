@@ -38,7 +38,7 @@ pads and the performance mixer.
 | --- | --- | --- |
 | GRID | HOME (from anywhere) | All 8 tracks; STEP keys edit the selected track |
 | KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys steps, on the selected track |
-| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, track play, chain, song, auto-fill, quantize, REC MODE, FX glide, freeze, loop length, load demo |
+| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, track play, chain, song, auto-fill, quantize, REC MODE, click, count-in, FX glide, freeze, loop length, load demo |
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE, FM4 and GRAIN machines ENV and OSC |
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
@@ -46,7 +46,7 @@ pads and the performance mixer.
 | SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound into that track only; AS WAS puts yours back |
 | MIXER | MIXER | Levels, the sidechain duck, delay, reverb, routing, master, kill EQ |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
-| Track menu | **Hold OK** in GRID | GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops, ORBIT or DRIFT, KEEP or HOME |
+| Track menu | **Hold OK** in GRID | GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops (mutation MIX: a different one each turn), ORBIT or DRIFT, KEEP or HOME; saved with the project |
 | PROJECT | PROJECT | Banks and patterns, key and scale, the card. On the slots: **hold OK** for the pattern menu (COPY, PASTE, CLEAR, DOUBLE; OK runs, PASTE/CLEAR/DOUBLE twice). Shortcuts: FUNC+UP copies, FUNC+DOWN twice pastes, FUNC+LEFT twice clears |
 | CHAIN | PROJECT, then screen key RIGHT | The pattern chain as a list |
 | PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG), FEEL and each track's own swing of the playing pattern |
@@ -237,8 +237,8 @@ wherever they are. The demo project has B ACID (bass filter), C DUB (chord and r
 (kick and hats), a NEW PROJECT none; A is left for you, and pad pressure bends it. VALUE is the A/B morph (at rest it lets go, like a macro at 0, so EDIT knobs always work); OK captures into scene A's slot (with a scene pad held: that scene, selected
 track only); scene pad + CLR erases it. Mutes, mute states and the A/B scene choice are saved with
 the project.
-**KIT:** a kit is everything KIT.BIN holds: the eight machines, their parameters, the faders and
-the sample paths. STEP 1-16 move the cursor to that slot (they never load). OK once shows OK AGAIN TO
+**KIT:** a kit is everything KIT.BIN holds: the eight machines, their parameters, the faders,
+the sample paths, and each track's SLC AUTO, LFO TRIG, MOD slots, choke group and arp settings. STEP 1-16 move the cursor to that slot (they never load). OK once shows OK AGAIN TO
 LOAD; OK again within 2 s recalls the kit, and the transport keeps playing. A recall cuts the tails
 and is not undoable, which is why it takes two presses. Tracks whose sample path changed reload
 their sample in the background; the others keep playing theirs. FUNC+DOWN saves the current kit

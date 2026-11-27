@@ -20,6 +20,7 @@
 #include "scale.hpp"
 
 #include <initializer_list>
+#include <string_view>
 
 namespace {
 
@@ -1051,4 +1052,56 @@ TEST(mutate_a_draw_reaches_both_ends_of_its_span) {
         CHECK_EQ(high, span);
     }
     CHECK_EQ(mutate_draw(1, 0, 0, Mutation::velocity, 0, 0), 0);
+}
+
+// --- MIX ------------------------------------------------------------------------------------------
+
+TEST(mutate_mix_draws_every_kind_and_never_itself) {
+    int seen[int(Mutation::mix)] = {};
+    for (uint32_t v = 0; v < 200; v++) {
+        const Mutation kind = mutate_mix_kind(0x1234u, 2, v);
+        CHECK(int(kind) < int(Mutation::mix));
+        if (int(kind) < int(Mutation::mix)) seen[int(kind)]++;
+        CHECK(mutate_mix_kind(0x1234u, 2, v) == kind);      // pure
+    }
+    for (int k = 0; k < int(Mutation::mix); k++) CHECK(seen[k] > 5);
+    CHECK(std::string_view(mutation_name(Mutation::mix)) == "MIX");
+}
+
+TEST(mutate_mix_is_the_kind_it_draws) {
+    // MIX with variant v is exactly the drawn kind with variant v, when that kind changes
+    // something: here every kind can, on a varied track with room for density both ways.
+    for (uint32_t v = 0; v < 24; v++) {
+        make_track(g_pattern, 0, 16, {0, 3, 4, 9, 12});
+        g_pattern.scale = uint8_t(Scale::minor);
+        g_pattern.seed = 77;
+        g_before = g_pattern;
+        CHECK(mutate_apply(g_pattern, 0, 0, 16, Mutation::mix, v, 100));
+        Pattern &expect = g_before;
+        CHECK(mutate_apply(expect, 0, 0, 16, mutate_mix_kind(77, 0, v), v, 100));
+        CHECK_EQ(differences(g_pattern, expect), 0);
+    }
+}
+
+TEST(mutate_mix_tries_the_next_kind_when_one_has_nothing_to_do) {
+    // A full track of identical trigs: no rotation, no density up, but velocity and the rest can.
+    make_track(g_pattern, 0, 8, {});
+    for (int i = 0; i < 8; i++) {
+        g_pattern.tracks[0].steps[i].flags = kStepTrig;
+        g_pattern.tracks[0].steps[i].note = 48;
+    }
+    for (uint32_t v = 0; v < 32; v++) {
+        snapshot(g_pattern);
+        CHECK(mutate_apply(g_pattern, 0, 0, 8, Mutation::mix, v, 100));
+        CHECK(differences(g_pattern, g_before) > 0);
+        g_pattern = g_before;
+    }
+    // At amount 0 only the rotations and densities can act, and on identical full steps none
+    // can grow; density down still can, so MIX finds it whatever it drew first.
+    for (uint32_t v = 0; v < 8; v++) {
+        snapshot(g_pattern);
+        CHECK(mutate_apply(g_pattern, 0, 0, 8, Mutation::mix, v, 0));
+        CHECK(differences(g_pattern, g_before) > 0);
+        g_pattern = g_before;
+    }
 }

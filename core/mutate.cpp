@@ -52,6 +52,7 @@ const char *mutation_name(Mutation kind) {
         case Mutation::micro:        return "MICRO";
         case Mutation::probability:  return "CHANCE";
         case Mutation::notes:        return "NOTES";
+        case Mutation::mix:          return "MIX";
         default:                     return "?";
     }
 }
@@ -145,9 +146,27 @@ bool euclid_generate(Pattern &pattern, int track, int hits, int steps, int rotat
     return changed;
 }
 
+Mutation mutate_mix_kind(uint32_t seed, int track, uint32_t variant) {
+    uint32_t h = mix32(seed ^ 0x68E31DA4u);
+    h = mix32(h ^ (uint32_t(track) * 0x85EBCA77u + 0x165667B1u));
+    h = mix32(h ^ (variant * 0xCC9E2D51u + 0x1B873593u));
+    return Mutation(uint32_t((uint64_t(h) * uint64_t(Mutation::mix)) >> 32));
+}
+
 bool mutate_apply(Pattern &pattern, int track, int first, int count, Mutation kind,
                   uint32_t variant, int amount) {
     if (track < 0 || track >= kTracks) return false;
+
+    if (kind == Mutation::mix) {
+        // A refused kind changes nothing (every case below checks before it writes), so trying
+        // the next is safe; at most the eight kinds once each.
+        const int start = int(mutate_mix_kind(pattern.seed, track, variant));
+        for (int i = 0; i < int(Mutation::mix); i++) {
+            const int at = start + i < int(Mutation::mix) ? start + i : start + i - int(Mutation::mix);
+            if (mutate_apply(pattern, track, first, count, Mutation(at), variant, amount)) return true;
+        }
+        return false;
+    }
 
     TrackPattern &t = pattern.tracks[track];
 
