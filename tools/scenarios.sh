@@ -56,9 +56,28 @@ run_one() {   # name build_dir
     echo $? > "$results/$1.rc"
     e=$(date +%s)
     echo $((e - s)) > "$results/$1.sec"
+    # Kept for the next run's order (longest_first).
+    if [ -n "$2" ]; then echo $((e - s)) > "$2/seconds"; fi
 }
 export -f run_one
 export results
+
+# The names, longest first, so the long ones (visuals, freeze, bounce) are not the last to start
+# while every other slot sits idle: in alphabetical order, visuals (5.4 min) started near the end
+# and a 12-minute run took 15 (2026-11-27). Each scenario's time is the one its last parallel run
+# took; a scenario never run before is estimated from its CYCLES line (1 s per 10 M cycles, about
+# what the emulator does here). Only the start order changes: the report keeps the names' order.
+longest_first() {
+    local name est cycles
+    for name in "$@"; do
+        est=$(cat "$ENAGA_BUILD/par/$name/seconds" 2>/dev/null || true)
+        if [ -z "$est" ]; then
+            cycles=$(grep -m1 -oE '^CYCLES=[0-9]+' "tests/scenario_$name.sh" 2>/dev/null | cut -d= -f2)
+            est=$(( ${cycles:-1000000000} / 10000000 ))
+        fi
+        printf '%s %s\n' "$est" "$name"
+    done | sort -k1,1nr | cut -d' ' -f2
+}
 
 start=$(date +%s)
 if [ "$jobs" -le 1 ] || [ ${#names[@]} -le 1 ]; then
