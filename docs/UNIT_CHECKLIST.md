@@ -764,6 +764,18 @@ to reach `GUARD4` here at a 40-60% top line.
 - Same with three or four tracks switched to VA POLY or FM4 holding chords: `GUARD` may come
   when MAX nears 90%, and it counts down within a few seconds once you mute those tracks. `____`
 
+**W57. The sound review's fixes (4 min).** FUNC+HOME, NEW PROJECT, OK twice; A01 playing.
+- The clap on 2 and 4 has a "smack" around 2 kHz with a quick flutter at its front, not a hiss.
+  The bass and the chord are clearly in the mix, about as present as the clap; the hats sit
+  behind them. `____`
+- T6 (bass): OK for SOUNDS, ACID. Accent a few of its notes (ACC in the step editor, or the ARP
+  page's push C): the accented notes are louder and brighter, with no tick at their start. `____`
+- Still on T6, step through SOUNDS with the beat playing: no preset jumps out much louder or
+  quieter than the one before (GROWL stays a little quiet). Same on T5 (PERC): CHIME and BELL no
+  longer stand far above CLAVE and KNOCK. `____`
+- T7: FUNC+EDIT, A to FM4, OK (it starts on EPIANO). KEYS, play a few notes hard and soft: a
+  bright, slightly barking strike that mellows as it rings; soft notes are rounder. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
