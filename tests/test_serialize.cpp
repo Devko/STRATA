@@ -963,7 +963,7 @@ TEST(out_of_range_step_values_are_clamped_on_load) {
     step.micro = 120;
     step.probability = 200;
     step.condition = 200;
-    step.ratchet = 0xBF;          // 15 hits, ramp 11
+    step.ratchet = 0x3F;          // 15 hits, ramp 3 (bit 7 clear: not a roll over LEN)
     g_source.tracks[0].length = 0;
     g_source.tracks[0].speed = 99;
     g_source.tracks[0].swing = 200;

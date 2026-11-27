@@ -361,6 +361,7 @@ repeat (a rolling lower pad) and step stutter (the sequencer). It is 1/16 at boo
 | Let go of REPEAT | Ends the stutter, STEP held or not; the STEP's release toggles nothing |
 | REPEAT + LEFT / RIGHT | **The rate**, one slower / faster: 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T, 1/32, stopping at both ends (`REPEAT 1/8T`, `STUTTER 1/32`). Heard at once by the repeat, the stutter and any roll |
 | A rolling pad + LEFT / RIGHT | The same, while NOTE RPT is on and a lower pad rolls (`ROLL 1/32`) |
+| A rolling pad, REC on, transport running | **Recorded as one step** (CyDrums P3): the press's step gets a roll over LEN at the rate in force at the press (RTCH `ROLL/16` ...), the release its LEN, on any machine. 1/4T, which a step cannot hold, records a plain hit. The rolling pad plays on live over it for that pass |
 | REPEAT + VALUE | The rate too, in the order the list names them (as before) |
 
 The step plays as written, its locks included; its condition, probability and ratchet are not

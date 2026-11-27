@@ -53,6 +53,13 @@ int cycle(int value, int delta, int count) {
     return (base + step + count) % count;
 }
 
+// The RTCH field's position: the count 1-8, then 9-16 for the rolls over LEN at each rate. A
+// corrupt count reads as itself, so the walk clamps it back on the first click.
+int ratchet_position(uint8_t packed) {
+    return ratchet_spans(packed) ? int(kRatchetMax) + 1 + int(ratchet_rate(packed))
+                                 : int(ratchet_count(packed));
+}
+
 // RatchetRamp has no `count` member, so the length of its walk is written here.
 constexpr int kRatchetRampPositions = 3;
 static_assert(int(RatchetRamp::down) == kRatchetRampPositions - 1,
@@ -75,7 +82,8 @@ constexpr Range kRanges[] = {
     {-kMicroRange, kMicroRange},     // micro
     {0, 100},                        // probability, per cent
     {0, kConditionPositions - 1},    // condition: a position in the walk, not a byte
-    {kRatchetMin, kRatchetMax},      // ratchet count: one hit is the unratcheted step
+    // ratchet: counts 1-8 (one hit is the unratcheted step), then the eight roll rates over LEN
+    {kRatchetMin, kRatchetMax + kRatchetRates},
     {0, kRatchetRampPositions - 1},  // ramp: cycles rather than clamps
     {0, 1},                          // accent
     {0, 1},                          // slide
@@ -324,7 +332,7 @@ int step_field_value(const Step &step, StepField field) {
         case StepField::micro:         return int(step.micro);
         case StepField::probability:   return int(step.probability);
         case StepField::condition:     return condition_position(step.condition);
-        case StepField::ratchet_count: return int(ratchet_count(step.ratchet));
+        case StepField::ratchet_count: return ratchet_position(step.ratchet);
         case StepField::ratchet_ramp:  return int(uint8_t(ratchet_ramp(step.ratchet)));
         case StepField::accent:        return flag_value(step, kStepAccent);
         case StepField::slide:         return flag_value(step, kStepSlide);
@@ -368,17 +376,22 @@ void step_field_apply(Step &step, StepField field, int delta) {
                 walk(condition_position(step.condition), delta, range.lo, range.hi));
             break;
         case StepField::ratchet_count: {
-            const int hits = walk(int(ratchet_count(step.ratchet)), delta, range.lo, range.hi);
-            // Write the low nibble alone. The ramp lives in the high one and an edit of either
-            // must leave the other byte-for-byte alone, a corrupt value included: repairing it
-            // behind the user's back would move a field they are not touching.
-            step.ratchet = uint8_t(uint8_t(step.ratchet & 0xF0u) | uint8_t(hits & 0x0F));
+            const int at = walk(ratchet_position(step.ratchet), delta, range.lo, range.hi);
+            // Write the count or the rate and the span bit alone. The ramp lives in bits 4-6 and
+            // an edit of either must leave the other byte-for-byte alone, a corrupt value
+            // included: repairing it behind the user's back would move a field they are not
+            // touching. Past 8 the walk goes on into the rolls over LEN (core/pattern.hpp).
+            const uint8_t ramp_bits = uint8_t(step.ratchet & 0x70u);
+            step.ratchet = at <= int(kRatchetMax)
+                               ? uint8_t(ramp_bits | uint8_t(at & 0x0F))
+                               : uint8_t(ramp_bits | kRatchetSpan |
+                                         uint8_t((at - int(kRatchetMax) - 1) & 0x07));
             break;
         }
         case StepField::ratchet_ramp: {
             const int ramp = cycle(int(uint8_t(ratchet_ramp(step.ratchet))), delta,
                                    kRatchetRampPositions);
-            step.ratchet = uint8_t(uint8_t(step.ratchet & 0x0Fu) | uint8_t(ramp << 4));
+            step.ratchet = uint8_t(uint8_t(step.ratchet & 0x8Fu) | uint8_t(ramp << 4));
             break;
         }
         case StepField::accent:
@@ -456,7 +469,11 @@ void step_field_text(const Step &step, StepField field, char *out, int max) {
             break;
         case StepField::ratchet_count: {
             const uint8_t hits = ratchet_count(step.ratchet);
-            if (hits < kRatchetMin || hits > kRatchetMax) {
+            if (ratchet_spans(step.ratchet)) {
+                // ROLL/32 .. ROLL/16T: the rate's name without its "1".
+                w.text("ROLL");
+                w.text(ratchet_rate_name(ratchet_rate(step.ratchet)) + 1);
+            } else if (hits < kRatchetMin || hits > kRatchetMax) {
                 w.put('?');
             } else {
                 w.number(uint32_t(hits));
@@ -557,7 +574,7 @@ int step_cycle_next(const Step &step, StepCycle cycle) {
         }
         case StepCycle::ratchet: {
             const int counts[] = {2, 3, 4, 1};
-            return next_in(counts, 4, int(ratchet_count(step.ratchet)));
+            return next_in(counts, 4, ratchet_position(step.ratchet));
         }
         case StepCycle::probability:
         default: {

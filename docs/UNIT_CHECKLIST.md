@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W50, about 157 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W51, about 161 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -567,8 +567,21 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   `____`
 - Hold the chord's STEP and turn VALUE: the whole chord moves. `____`
 
-**W50. Arp depth, ARPS and the new sounds (10 min).** Beat playing, A05 PAD (W49 is PR
-#185's longer ratchets).
+**W49. Ratchets over LEN (3 min).** Beat playing, A01, T1.
+- Hold STEP 1 + OK: the step page. Turn C: LEN `16 STP`. Screen key right, turn C past 8: `ROLL/64`,
+  `ROLL/48`, `ROLL/32`. The kick rolls in 32nds across the whole bar, every pass. The GRID cell
+  shows the ratchet's two teeth, the step page's lane a cut at every hit. `____`
+- Turn D (RAMP) to UP: the roll swells from soft to full over the bar. DOWN: it fades. `____`
+- Put a plain trig on step 9: the roll stops there and step 9 plays once. Turn RTCH back below
+  ROLL/64: an ordinary 8-hit ratchet in one step. `____`
+
+**W50. A note repeat recorded (2 min).** Beat playing, A01, T3 (a hat) with no steps.
+- FUNC+FILL (`NOTE RPT`), REC on. Hold T3's pad for about a bar, then let go: from the next pass
+  the hat rolls in 16ths for that bar, from the step you pressed on. Hold STEP on it, OK: RTCH
+  reads `ROLL/16`, LEN about `16 STP`. `____`
+- REPEAT + LEFT to 1/8, record another hold on T4: `ROLL/8`. REC off, NOTE RPT off. `____`
+
+**W51. Arp depth, ARPS and the new sounds (10 min).** Beat playing, A05 PAD.
 - T7 (CHORD), EDIT, screen keys to ARP. Hold the step at the bar's start and clear its locks
   (push each knob) or play on: OK opens ARPS, `INTO T7 ARP ONLY`, fourteen rows. OK on TRANCE:
   each bar's chord is walked up two octaves at 1/16, accented on the beat. `____`

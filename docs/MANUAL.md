@@ -972,7 +972,7 @@ The step page's fields:
 | MICR | ±11 ticks | Micro-timing: 24 ticks is one 16th |
 | PROB | 0-100% | Chance the step plays |
 | COND | see below | Trig condition |
-| RTCH | 1-8 | Ratchet: repeats within the step |
+| RTCH | 1-8, ROLL/64 ... ROLL/4 | Ratchet: 1-8 repeats within the step; turned on past 8, a roll at a rate (1/64, 1/48, 1/32, 1/16T, 1/16, 1/8T, 1/8, 1/4) for the step's whole LEN: 1/32 with LEN 16 STP is 32 hits across the bar. RAMP then runs across the whole roll, so UP is a build-up. A new trig on the track ends a roll |
 | RAMP | FLAT, UP, DOWN | Ratchet velocity ramp |
 | ACNT | on/off | Accent |
 | SLID | on/off | Slide (VA MONO) |
@@ -1285,8 +1285,11 @@ beat repeat's rate: 1/16 until you pick another with REPEAT + VALUE, or LEFT/RIG
 is rolling (`ROLL 1/32`; the arrows do nothing else until you let go). With the transport running
 the hits land on the beat grid, so a roll is always in time; stopped, it rolls from the moment you
 press. Leaning on the pad sets each hit's velocity, so pressure swells and fades the roll (macro A
-is left alone while a pad rolls). Hold two pads for two rolls. Rolls are played, not written: REC
-does not record them.
+is left alone while a pad rolls). Hold two pads for two rolls. With **REC** on and the transport
+running, a roll is recorded as ONE step: the step under the press gets a roll over LEN at the
+rate (`ROLL/16`, see RTCH on the step page), and letting go gives it its LEN, so a pad held for a
+bar plays back as a bar of 16ths. At 1/4T, which the step cannot hold as a roll, the press records
+a plain hit.
 
 ### The master kill EQ
 

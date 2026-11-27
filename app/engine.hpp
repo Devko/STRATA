@@ -962,6 +962,32 @@ private:
     void arp_free(uint32_t frames);
     void arp_held_changed(int track);
     void arp_follow(int track);
+    // Spanning ratchets (core/pattern.hpp, kRatchetSpan): the scheduler hands over a roll's first
+    // hit, and `span_start` (from `fire`) keeps the rest here, to be hit on the clock's ticks by
+    // `span_tick` at the roll's rate until its count is done. Each hit goes through `fire` as the
+    // step again, with ratchet_index 1 so it neither restarts the step's slides nor ends its own
+    // roll; its velocity is the ramp's across the whole roll and its gate half the rate, as a note
+    // repeat's. A trig on the track ends a roll (a new step's first hit), and so does anything
+    // that drops the deferred ratchet hits (span_clear beside each). Under the arp, the arp takes
+    // the step and there is no roll.
+    struct SpanRun {
+        bool on = false;
+        uint8_t rate = 0;            // ticks between hits
+        RatchetRamp ramp = RatchetRamp::none;
+        uint8_t velocity = 100;      // the step's own, which the ramp scales
+        uint16_t hit = 0;            // the next hit's index
+        uint16_t count = 1;
+        float inv_count = 1.0f;
+        uint32_t start_tick = 0;
+        uint32_t next_tick = 0;
+        StepEvent base{};
+    };
+    SpanRun span_[kTracks];
+    void span_start(int track, const StepEvent &event);
+    void span_tick(uint32_t tick, uint32_t frame);
+    void span_clear() {
+        for (int t = 0; t < kTracks; t++) span_[t].on = false;
+    }
     void roll_fire(int track, uint32_t frame);
     void roll_tick(uint32_t tick, uint32_t frame);
     void roll_free(uint32_t frames);
