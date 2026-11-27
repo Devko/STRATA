@@ -82,8 +82,8 @@ bool arp_rhythm_plays(uint8_t rhythm, uint32_t slot);
 // `length` notes, accented?
 bool arp_accent_on(uint8_t accent, uint32_t slot, uint32_t note_hit, int length);
 // How many hits slot `slot` plays: 1, or a ratchet's 2-4. The chance entries draw from a hash of
-// `seed` and `slot`, so a pattern's arp ratchets the same way every pass, as RND picks the same
-// notes.
+// `seed` and `slot`; the engine's seed is new every run, so they fall anew every pass, as RND's
+// notes do.
 int arp_ratchet_count(uint8_t ratchet, uint32_t slot, uint32_t seed);
 
 struct ArpSettings {
@@ -129,7 +129,8 @@ const char *arp_param_name(int offset);     // "MOD" "RAT" "OCT" "GAT"
 int arp_cycle(const uint8_t *notes, int count, const ArpSettings &settings, uint8_t *out);
 
 // The note of hit `hit` (0 = the first) of a cycle of `length`. RND picks from the cycle with a
-// hash of `seed` and `hit`, so a pattern's arp is the same every pass; the rest walk it in order.
+// hash of `seed` and `hit`; the engine draws a new seed for every run, so RND differs every pass.
+// The rest walk it in order.
 uint8_t arp_note(const uint8_t *cycle, int length, ArpMode mode, uint32_t hit, uint32_t seed);
 
 }  // namespace strata

@@ -292,3 +292,23 @@ TEST(arpkit_a_recalled_kit_brings_its_arp_settings) {
     CHECK_EQ(int(now.accent), 2);
     fresh();
 }
+
+TEST(arpkit_rnd_draws_new_notes_on_every_pass) {
+    // RND was seeded by the track and step, so every pass played one fixed pattern (Roland,
+    // 2026-11-27: "random is not really random"). Each run now draws anew: one step, 16 hits of
+    // RND over a three-note chord over two octaves, played on two passes, differ.
+    start();
+    set_arp(5, 3, 2);                                  // RND, 1/16, two octaves
+    const uint8_t chord[3] = {60, 64, 67};
+    uint8_t first[32], second[32];
+    for (int pass = 0; pass < 2; pass++) {
+        host().clear_midi();
+        hold_and_run(chord, 3, 24 * 16);
+        uint8_t *out = pass == 0 ? first : second;
+        CHECK_EQ(note_ons(out, nullptr, 32), 17);
+        release(chord, 3);
+    }
+    int differ = 0;
+    for (int i = 3; i < 17; i++) differ += first[i] != second[i];   // after the keys joined
+    CHECK(differ >= 4);
+}

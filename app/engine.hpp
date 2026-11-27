@@ -953,6 +953,8 @@ private:
     // Set once `arp_ratchets` has run in this block, so a hit after it counts its ratchet from
     // the next block's start and a hit before it (a command, a deferred step) from this one's.
     bool arp_ratchets_done_ = false;
+    uint32_t arp_runs_ = 0;      // runs started, for arp_new_seed
+    uint32_t arp_new_seed(int track, int step);
     ArpSettings arp_settings(int track) const;
     void arp_hit(int track, ArpRun &run, uint32_t frame);
     void arp_play(int track, uint8_t note, uint8_t velocity, bool accent, uint32_t frame,

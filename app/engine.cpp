@@ -2805,6 +2805,14 @@ constexpr float kInverseBlock = 1.0f / float(ENAGA_BLOCK_FRAMES);
 
 }  // namespace
 
+// A seed for a new run's RND notes and chance ratchets: the track and step, the clock's tick and
+// a count of runs, so no two runs draw the same, whether the transport runs or not.
+uint32_t Engine::arp_new_seed(int track, int step) {
+    arp_runs_++;
+    return (uint32_t(track) * 131u + uint32_t(step)) ^ (arp_runs_ * 0x9e3779b9u) ^
+           (tick_ * 0x85ebca6bu);
+}
+
 // One slot of the arp's grid: a rest (RHYTHM), or the next note of the cycle -- accented by
 // ACCENT or the step's own ACC on its first note -- and, on a RATCHET slot, its repeats queued
 // for `arp_ratchets`.
@@ -2966,7 +2974,7 @@ void Engine::arp_held_changed(int track) {
     run.on = true;
     run.hit = 0;
     run.slot = 0;
-    run.seed = uint32_t(track) * 131u + 7u;
+    run.seed = arp_new_seed(track, 7);
     run.accent = false;
     // The first hit now; then on the grid of the rate while running, or free while stopped.
     arp_hit(track, run, 0);
@@ -3202,8 +3210,9 @@ void Engine::fire(const StepEvent &event) {
             run.accent = event.accent;
             run.hit = 0;
             run.slot = 0;
-            // The same notes every pass: the seed is the track and the step, not the time.
-            run.seed = uint32_t(track) * 131u + uint32_t(event.step);
+            // A new draw every run: RND and the chance ratchets are random on every pass, not one
+            // fixed pattern (Roland, 2026-11-27).
+            run.seed = arp_new_seed(track, event.step);
             run.next_tick = tick_ + run.rate;
             const uint32_t gate = trig.gate_frames;
             run.end_tick = 0xFFFFFFFFu;
