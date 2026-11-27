@@ -52,6 +52,13 @@ the project file format or the controls.
 
 ### Changed
 
+- **File format: the LFO's WAV and DST are numbers** (Roland's decision C): a shape or a
+  destination is stored as its number rather than as a band of 0-127, so new shapes and
+  destinations can come later without changing what any saved project sounds like. Projects,
+  kits and patterns from earlier versions are converted on load, scenes, macros and step locks
+  included, and sound the same. **A project saved by this version and opened on an earlier one
+  plays its LFOs wrong there** (mostly a sine going nowhere). The lock and scene masks behind
+  every parameter are 64 bits now, room for a page past the 32 bytes a track has.
 - Internal: the engine's command handling is split into twelve handlers, one per family of
   commands, with no change in behaviour; the host tests no longer depend on the order they run in,
   and `tools/test_shuffle.sh` runs them in shuffled orders to keep it so.

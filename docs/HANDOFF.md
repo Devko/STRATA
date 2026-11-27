@@ -165,16 +165,20 @@ Arp depth and ARPS, for whoever touches them next (core/arp.hpp has the design):
   slots (it never did): worth a look.
 
 LFO, for whoever touches it next (dsp/lfo.hpp has the detail):
-- **TRIG is not a parameter.** All 32 bytes a track has are spoken for and `locked_` is a 32-bit
-  mask, so TRIG is `KitTrack::lfo_trig` in KIT.BIN's optional section 9, set by
-  `Cmd::set_lfo_trig` (push B on the LFO page). A 33rd parameter means widening the lock mask,
-  every scene section and the lock pool; a mod-slot feature will hit the same wall.
+- **TRIG is not a parameter.** It is `KitTrack::lfo_trig` in KIT.BIN's optional section 9, set
+  by `Cmd::set_lfo_trig` (push B on the LFO page). All 32 bytes a track has are spoken for. Since
+  format decision C (2026-11-26) the masks over them are 64 bits (`Engine::locked_`, the step's
+  lock and range masks, the scene morph's), so a 33rd parameter is a new page's optional sections
+  in KIT.BIN and PERFORM.BIN, not a rewrite. Watch the lock entry's param field: ids 32-36 are
+  already POLY's extra chord notes (#183), so a new page needs ids past them or a new lock kind.
 - **Every note goes through `Engine::note_started`** (the trig light and TRIG's restart). A new
   way to start a note must call it, not `status_.bump_triggered`.
-- **No new shapes.** WAV's six bands fill 0-127 and the byte is stored in kits, scenes and locks,
-  so a seventh shape re-reads every stored WAV byte. Adding shapes needs a migration of all
-  three (kit section 8's layout byte is the precedent) or a second byte; ONE-SHOT's envelope
-  shapes covered what S3 wanted most.
+- **WAV and DST are numbers** (format decision C, 2026-11-26): WAV 0-5, DST 0 OFF or 1-16, with
+  `kit_param_max` (core/project.hpp) the highest a knob, a lock or a random range may set. A new
+  shape is a new enum value and a bigger maximum, nothing else. Every file that stores the bytes
+  marks its layout (KIT.BIN 13, PERFORM.BIN 8, a pattern 6) and an unmarked one is converted once
+  on read with `kit_lfo_from_band`. An older build reads the numbers as low bands (SIN onto OFF,
+  mostly): the release notes must say so.
 - **TUN on VA and WAVE is a float** (`Machine::set_pitch_mod`, added where the voice caches its
   oscillator increments); every other machine and every other destination still moves the byte.
   FM4 and GRAIN could take it the same way.
