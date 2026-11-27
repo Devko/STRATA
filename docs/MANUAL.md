@@ -1521,7 +1521,7 @@ tracks 3 and 4 is separate and still works without a group.
 
 <p><img src="screens/mixer.png" width="256" alt="MIXER: the faders of tracks 1-4"> <img src="screens/mixer_dly.png" width="256" alt="MIXER's DLY page"></p>
 
-<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all fifteen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, MST, EQ.</sub>
+<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all seventeen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, WID 1-4, WID 5-8, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, MST, EQ.</sub>
 
 Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
 send, `DLY+` after `DLY` and `REV+` after `REV`. **Push A** on either page (or turn A) flips the
@@ -1543,6 +1543,33 @@ mode; the old mode's echoes ring out underneath, so a switch never clicks.
 The modes and their knobs are saved with the project; a project from before they existed opens
 with both sends classic. Both cost more CPU than the classic modes while they sound (about
 twice the send cost), and nothing once they fall silent.
+
+### Stereo width: WID
+
+The POLY machines, **VA POLY, WAVE POLY and FM4**, can play in stereo: their chords spread across
+the field, or each note doubled into a detuned pair, hard left and right, which is the wide pad
+and supersaw sound. One knob per track does both, on MIXER's **WID 1-4** and **WID 5-8** (after
+DUCK), in zones as OS2 is:
+
+- **0 (OFF)**: mono, as the track always played.
+- **1-63 (spread)**: each note of a chord gets its own place, wider as the knob rises. The first
+  note sits in the middle and the next ones go out to the left and right, so a single note stays
+  centred and a triad fans out. No extra voices, so no extra notes are lost.
+- **64-127 (unison, `UNI`)**: every note plays **two voices**, one hard left and one hard right,
+  tuned apart from 6 cents at 64 to 40 cents at 127: a slow shimmer at the bottom, a thick
+  supersaw at the top. A machine has six voices, so in unison it holds **three notes**, and each
+  note counts two against the shared budget of 12 POLY voices. A fourth note takes the place of
+  the quietest pair.
+
+**Push A-D** steps a strip through OFF, a wide spread (48) and unison (96). A strip on a track
+whose machine does not read WID shows `---` and says `POLY ONLY`; the setting stays for when the
+track gets a POLY machine. PAN still works on a wide track, as a balance, and the sends, a bounce
+and a freeze take the track's middle (a frozen wide track plays mono).
+
+WID is part of the **kit**, saved with the project and in the kit library, but not a parameter:
+FM4 has no free knob slot, so no lock, scene or LFO moves it. A project or kit from before it
+opens with every track mono. Spread costs a little (each voice is panned and the track's chain
+runs twice); unison costs the voices it adds (docs/BUDGET.md "Stereo width").
 
 ### Chorus: the third send
 

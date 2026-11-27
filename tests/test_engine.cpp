@@ -3210,6 +3210,68 @@ int poly_voices_counted() {
 // choking voice is not counted, so a later note in the same block found room that was not there
 // and the budget ended the block one voice over. The case is an ordinary one: a chord repeated
 // on its next step while a third POLY track has just choked one of its notes.
+// WID's unison (core/width.hpp): a note takes two voices, so the budget makes room for two, and
+// the shared 12 is still never exceeded however many unison tracks play.
+TEST(engine_unison_notes_count_two_voices_against_the_shared_budget) {
+    clean();
+    const uint8_t tracks[3] = {2, 3, 4};
+    uint8_t was[3];
+    for (int i = 0; i < 3; i++) {
+        was[i] = strata::test::engine().project().kit.tracks[tracks[i]].machine;
+        post(Cmd::set_machine, tracks[i], 0, uint8_t(MachineId::va_poly));
+        post(Cmd::set_param, tracks[i], 0, kDec, 127);
+        strata::test::post_delta(Cmd::set_width, tracks[i], 0, 0, 120);
+    }
+    pump();
+    CHECK_EQ(int(strata::test::engine().project().kit.tracks[2].width), 120);
+
+    // Three notes on each of two tracks: six unison pairs, the whole budget.
+    for (int i = 0; i < 2; i++) {
+        for (int n = 0; n < 3; n++) post(Cmd::trigger_note, tracks[i], 0, uint8_t(48 + 4 * n), 100);
+    }
+    pump(4);
+    CHECK_EQ(poly_voices_counted(), Engine::kPolyVoiceBudget);
+
+    // One more note on the third track takes two voices from the quietest.
+    post(Cmd::trigger_note, tracks[2], 0, 72, 100);
+    pump();
+    CHECK(poly_voices_counted() <= Engine::kPolyVoiceBudget);
+    pump(4);
+    const VaPoly *third = static_cast<const VaPoly *>(strata::test::engine().machine(tracks[2]));
+    CHECK_EQ(third->sounding_voices(), 2);
+    CHECK(poly_voices_counted() <= Engine::kPolyVoiceBudget);
+
+    // And the track is stereo: the master's two sides differ while it plays alone.
+    for (int i = 0; i < 2; i++) post(Cmd::set_machine, tracks[i], 0, was[i]);
+    pump(8);
+    const float *out = strata::test::last_block();
+    float diff = 0.0f;
+    for (int i = 0; i < 64; i++) diff += out[2 * i] - out[2 * i + 1] < 0.0f ? out[2 * i + 1] - out[2 * i] : out[2 * i] - out[2 * i + 1];
+    CHECK(diff > 0.0f);
+
+    for (int i = 0; i < 3; i++) {
+        strata::test::post_delta(Cmd::set_width, tracks[i], 0, 0, -127);
+        post(Cmd::set_machine, tracks[i], 0, was[i]);
+    }
+    pump();
+}
+
+// A push on WID steps OFF, a spread and unison, and back.
+TEST(engine_a_width_push_steps_off_spread_unison_off) {
+    clean();
+    uint8_t &w = const_cast<uint8_t &>(strata::test::engine().project().kit.tracks[6].width);
+    CHECK_EQ(int(w), 0);
+    post(Cmd::set_width, 6, 0, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(w), int(kWidthSpreadStep));
+    post(Cmd::set_width, 6, 0, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(w), int(kWidthUnisonStep));
+    post(Cmd::set_width, 6, 0, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(w), 0);
+}
+
 TEST(engine_a_note_on_a_choking_voice_counts_against_the_budget_at_once) {
     clean();
     const uint8_t tracks[3] = {2, 3, 4};

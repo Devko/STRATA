@@ -14,6 +14,7 @@
     void draw_mixer(enaga::Canvas &canvas) {
         if (mixer_bank_ < kMixerTrackPages) { draw_desk(canvas, DeskKind::faders); return; }
         if (mixer_bank_ < kMixerDuckPage) { draw_desk(canvas, DeskKind::duck); return; }
+        if (mixer_width_page(mixer_bank_)) { draw_desk(canvas, DeskKind::width); return; }
         if (mixer_chorus_send_page(mixer_bank_)) { draw_desk(canvas, DeskKind::chorus); return; }
         if (kMixerPages[mixer_bank_].master && mixer_bank_ != kMixerEqPage) { draw_master_view(canvas); return; }
 
@@ -98,7 +99,7 @@
     // plays. DeskKind::chorus: CHO 1-4 / 5-8, where it is the track's chorus send, standing up
     // from the bottom as a fader does.
     static constexpr int kDeskTop = 36, kDeskRows = 62;
-    enum class DeskKind : uint8_t { faders, duck, chorus };
+    enum class DeskKind : uint8_t { faders, duck, chorus, width };
 
     void draw_desk(enaga::Canvas &canvas, DeskKind kind) {
         uint8_t *px = canvas.data();
@@ -107,7 +108,8 @@
         const bool duck = kind == DeskKind::duck;
         const int bank = duck ? mixer_bank_ - kMixerDuckDepthPage
                               : (kind == DeskKind::chorus ? mixer_bank_ - kMixerChorusSendPage
-                                                          : mixer_bank_);
+                                 : (kind == DeskKind::width ? mixer_bank_ - kMixerWidthPage
+                                                            : mixer_bank_));
         const Kit &kit = engine_.project().kit;
         const int source = kit.duck.source < kTracks ? int(kit.duck.source) : 0;
         const float dip = duck ? duck_gain_now(source) : 0.0f;
@@ -149,7 +151,29 @@
             if (desk_hold_[t] > 1) canvas.rect(x + 1, bottom - desk_hold_[t] + 1, 5, 1, muted ? 5 : 15);
             canvas.rect(x + 1, bottom + 1, 5, 1, 3);
 
-            if (kind == DeskKind::chorus) {
+            if (kind == DeskKind::width) {
+                // The width, standing up from the bottom; unison's half above a tick at 64 lit
+                // brighter. A track whose machine does not read it shows dashes.
+                const bool poly = machine_is_poly(engine_.machine_id(t));
+                const int width = int(width_sanitized(kit.tracks[t].width));
+                const int rows = width * kDeskRows / int(kWidthMax);
+                const int zone = int(kWidthUnison) * kDeskRows / int(kWidthMax);
+                canvas.rect(x + 8, kDeskTop, 5, kDeskRows, 2);
+                canvas.rect(x + 7, bottom - zone + 1, 7, 1, 6);
+                if (poly && rows > 0) {
+                    const int low = rows < zone ? rows : zone;
+                    canvas.rect(x + 8, bottom - low + 1, 5, low, uint8_t(active ? 9 : 5));
+                    if (rows > zone) {
+                        canvas.rect(x + 8, bottom - rows + 1, 5, rows - zone, uint8_t(active ? 15 : 7));
+                    }
+                }
+                char *out = text;
+                if (!poly) append(out, "---");
+                else if (width == 0) append(out, "OFF");
+                else if (width >= int(kWidthUnison)) append(out, "UNI");
+                else append_number(out, uint32_t(width));
+                *out = 0;
+            } else if (kind == DeskKind::chorus) {
                 // The chorus send, standing up from the bottom.
                 const int send = int(chorus_send_sanitized(kit.tracks[t].chorus));
                 const int rows = send * kDeskRows / int(kChorusSendMax);

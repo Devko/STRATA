@@ -53,6 +53,26 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### Stereo width, WID (2026-11-27, emulator)
+
+A POLY track with WID up renders in stereo (core/width.hpp): each voice into its own block and out
+to both sides at its place, then the insert chain on both sides (`InsertChain::process_pair`).
+`scenario_width` plays the default beat and pushes track 7, the VA POLY chords, to unison (96);
+`--spread` stops at the spread (48). `scenario_m7` is the same beat all mono.
+
+| | m7 (mono) | spread 48 | unison 96 |
+| --- | --- | --- | --- |
+| cl6x | 22.91% | 22.91% (+0.00) | 26.10% (**+3.19**) |
+| GCC only | 44.83% | 45.70% (+0.87) | 50.73% (+5.90) |
+
+Spread is the panning and the second chain alone: under the peak's resolution with cl6x (the
+chord track's TON is flat, so its chain is the duck, the pan and the sends). Unison is the voices
+it adds: the factory chords are three notes, so six voices instead of three, about a point each
+with cl6x. Its ceiling is the shared budget: unison counts two voices a note against the 12
+(`engine_unison_notes_count_two_voices_...`), so the worst case does not grow, a busy track only
+loses notes sooner. All 50 scenarios pass with cl6x with it on top of the chorus (2026-11-27);
+worst 34.20%, `genload`.
+
 ### The chorus, send C (2026-11-27, emulator)
 
 `enaga::dsp::Chorus` as a third send (dsp/buses.hpp): one mono bus, two swept lines, wet only, run

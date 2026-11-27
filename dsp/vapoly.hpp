@@ -73,13 +73,14 @@
 // **No glide and no slide.** docs/SPEC.md and dsp/track.hpp both make them MONO-only, and a
 // chord has nothing to glide from: `trig.slide` is ignored and every note starts at its pitch.
 //
-// **No stereo spread and no unison 2.** docs/SPEC.md lists both for this machine, and both need
-// something dsp/track.hpp does not actually offer: `Machine::render_add` is mono, and the
-// comment at the top of that file promises a `render_add_stereo` for VA POLY and GRAIN that is
-// not declared in the interface. Spread is therefore implemented as a PITCH spread across the
-// voice slots (DET below) rather than a stereo one, which is the part of it that survives a
-// mono bus; stereo spread and unison both want the interface change and a voice-pool decision
-// first, and belong with whoever makes it.
+// **Stereo spread and unison 2 are WID** (2026-11-27, core/width.hpp), a kit setting the engine
+// hands every POLY machine (PolyMachine::set_width). At 1-63 each slot sits at its own place
+// (kWidthFan: slot 0 in the middle, so a lone note stays centred); at 64-127 a trig takes TWO
+// slots (`take` twice, the second never the first's), panned hard left and right and tuned
+// apart by `Slot::shift`. A wide track renders through render_add_stereo -- each voice into
+// its own block and out to both sides -- and the insert chain's process_pair. At width 0
+// nothing of it runs and the machine is bit-exact with what it was. DET's pitch spread across
+// the slots is still there and still mono, as before.
 //
 // **It sustains when SUS says so.** The ASR page (dsp/va.cpp: ATK SUS REL FSU, params 24-27) is
 // read into the shared VaSettings. At SUS 0 -- every older kit -- the voice is the one-shot it
@@ -111,6 +112,8 @@ public:
     void release(uint8_t note) override;
     void kill_all() override;
     void render_add(float *out, int frames) override;
+    // WID (core/width.hpp): each voice at its place, PolyPool's way.
+    void render_add_stereo(float *left, float *right, int frames) override;
     bool active() const override { return active_; }
     int used_params() const override { return 8; }   // all of SRC and all of AMP
     const char *param_name(int index) const override;
@@ -180,6 +183,11 @@ public:
         if (slot < 0 || slot >= kVoices) return -1;
         return slots_[slot].busy() ? slots_[slot].note : -1;
     }
+    // Where a slot's note sits (-1 ... +1) and its unison tuning in semitones (core/width.hpp).
+    float voice_pan(int slot) const { return slot >= 0 && slot < kVoices ? slots_[slot].pan : 0.0f; }
+    float voice_shift(int slot) const {
+        return slot >= 0 && slot < kVoices ? slots_[slot].shift : 0.0f;
+    }
     // A slot's pitch in note numbers, TUN and DET included.
     float voice_pitch(int slot) const {
         return slot >= 0 && slot < kVoices ? slots_[slot].voice.pitch() : 0.0f;
@@ -206,12 +214,20 @@ private:
         // docs/BUDGET.md already records. A gate is polyphonic bookkeeping, not part of a voice.
         int gate = -1;
 
+        // WID (core/width.hpp): where the note sits, -1 ... +1, and unison's tuning off the
+        // note in semitones. Set when the slot takes its trig.
+        float pan = 0.0f;
+        float shift = 0.0f;
+
         // A slot is busy from the moment it takes a trig, NOT from the frame that trig starts
         // on. That is what stops a chord arriving on one frame from stealing its own voices.
         bool busy() const { return pending || voice.sounding(); }
     };
 
-    int allocate(uint8_t note);              // which slot this trig takes, and why: see above
+    // Which slot this trig takes, and why: see above. `not_slot` is one it may not (the first
+    // voice of a unison pair), -1 none.
+    int allocate(uint8_t note, int not_slot = -1);
+    int take(const Trig &trig, int not_slot, float unison_pan, float shift);
     void start(int slot);                    // begin a slot's pending trig, on its exact frame
     void render_slot(int slot, float *out, int frames);
 
@@ -232,6 +248,8 @@ private:
     // caps a frame at 16 KiB).
     float work_[VaVoice::kControl] = {};
     float env_[VaVoice::kControl] = {};
+    // The stereo render's slice: one voice's block, then out to both sides.
+    float slice_[ENAGA_BLOCK_FRAMES] = {};
 
     // And one set of filter coefficients, shared the same way: the voices of a chord all arrive
     // at the same ones, because the voice's filter does not track the key (dsp/va.hpp). Cleared

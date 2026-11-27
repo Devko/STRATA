@@ -227,6 +227,12 @@ constexpr bool machine_is_wave(uint8_t id) {
 // FM4: four sine operators in one of eight algorithms (dsp/fm.hpp).
 constexpr bool machine_is_fm(uint8_t id) { return id == uint8_t(MachineId::fm); }
 
+// The POLY machines, which share the 12-voice budget and read WID (KitTrack::width).
+constexpr bool machine_is_poly(uint8_t id) {
+    return id == uint8_t(MachineId::va_poly) || id == uint8_t(MachineId::wave_poly) ||
+           id == uint8_t(MachineId::fm);
+}
+
 // --- one filter on the synth machines (D8) --------------------------------------------------
 //
 // The VAs and the WAVE pair have a filter of their own (CUT RES on SRC, ENV on AMP), and they
@@ -386,6 +392,15 @@ struct KitTrack {
     // post-fader as SNA and SNB are. A kit setting turned on MIXER's CHO 1-4 / 5-8, not a
     // parameter, for TRIG's reason: no lock, scene or LFO moves it. KIT.BIN's optional section 14.
     uint8_t chorus = 0;
+    // WID, the stereo width of a POLY track (VA POLY, WAVE POLY, FM4), 0-127, in zones:
+    //   0       mono, as every track played before: the machine renders one channel
+    //   1-63    the voices fanned across the stereo field, wider as it rises; a single note
+    //           stays in the middle (core/width.hpp has the fan)
+    //   64-127  unison: every note takes two voices, detuned apart (more as it rises) and
+    //           panned hard left and right
+    // A kit setting turned on MIXER's WID 1-4 / 5-8, not a parameter: FM4 has no free slot.
+    // Every other machine ignores it. KIT.BIN's optional section 15.
+    uint8_t width = 0;
 };
 
 // The chorus send (KitTrack::chorus): 0-127, a byte past it is damage and reads as the top.
@@ -395,6 +410,14 @@ constexpr uint8_t kChorusSendToggle = 64;
 constexpr uint8_t chorus_send_sanitized(uint8_t send) {
     return send <= kChorusSendMax ? send : kChorusSendMax;
 }
+
+// The stereo width (KitTrack::width): 0-127, past it is damage and reads as the top.
+constexpr uint8_t kWidthMax = 127;
+constexpr uint8_t kWidthUnison = 64;    // from here up, unison
+// Where a push on MIXER's WID 1-4 / 5-8 steps a track: OFF, a wide spread, unison, OFF.
+constexpr uint8_t kWidthSpreadStep = 48;
+constexpr uint8_t kWidthUnisonStep = 96;
+constexpr uint8_t width_sanitized(uint8_t width) { return width <= kWidthMax ? width : kWidthMax; }
 
 // Choke groups (KitTrack::choke): 1-4, 0 none. A byte past the last group reads as none.
 constexpr uint8_t kChokeGroups = 4;
@@ -689,6 +712,9 @@ constexpr uint16_t kSectionKitLfoLayout = 13;
 // before the chorus loads every track sending nothing to it, which is how every track played.
 // An older build ignores the section.
 constexpr uint16_t kSectionKitChorus = 14;
+// The stereo widths, one byte per track (KitTrack::width). Optional on read: a KIT.BIN from before
+// them loads every track mono, which is how every track played. An older build ignores it.
+constexpr uint16_t kSectionKitWidth = 15;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

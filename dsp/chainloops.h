@@ -42,6 +42,16 @@ void strata_chain_duck(float *mono, const float *duck, int n, float depth);
  * from; 0 means the fade is over. Runs only while a choke is fading. */
 float strata_choke_fade(float *mono, int n, float gain, float step);
 
+/* A stereo track's pan and level (WID, core/width.hpp): enaga_ramp_stereo_add for a PAIR in --
+ * `left` into `out_l` at the left gain, `right` into `out_r` at the right -- the gains ramping by
+ * their steps before each sample, as Enaga's does. *gain_l and *gain_r carry on. */
+void strata_ramp_pair_add(const float *left, const float *right, float *out_l, float *out_r, int n,
+                          float *gain_l, float *gain_r, float step_l, float step_r);
+
+/* The pair's middle, in place into `left`: (left + right) / 2. What a stereo track sends and
+ * what a bounce of it records: for a voice in the middle, exactly the mono track's block. */
+void strata_pair_mid(float *left, const float *right, int n);
+
 #ifdef __cplusplus
 }
 #endif

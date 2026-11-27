@@ -179,8 +179,22 @@ void VaPoly::prepare(const TrackParams &params) {
 }
 
 void VaPoly::trigger(const Trig &trig) {
-    const int pick = allocate(trig.note);
+    // Unison (core/width.hpp): two voices, flat on the left and sharp on the right, never the
+    // same slot. Outside it, one voice at its slot's place in the spread.
+    if (width_unison(width_)) {
+        const float semis = width_unison_semis(width_);
+        const int first = take(trig, -1, -1.0f, -semis);
+        take(trig, first, 1.0f, semis);
+        return;
+    }
+    take(trig, -1, 0.0f, 0.0f);
+}
+
+int VaPoly::take(const Trig &trig, int not_slot, float unison_pan, float shift) {
+    const int pick = allocate(trig.note, not_slot);
     Slot &s = slots_[pick];
+    s.pan = width_unison(width_) ? unison_pan : width_slot_pan(width_, pick);
+    s.shift = shift;
 
     // The slot is committed to the new note from here, before its frame arrives: that is what
     // makes the rest of a chord land on other voices (vapoly.hpp, "voice allocation").
@@ -198,6 +212,7 @@ void VaPoly::trigger(const Trig &trig) {
                                                                          : trig.gate_frames);
     s.pending = true;
     active_ = true;
+    return pick;
 }
 
 void VaPoly::release(uint8_t note) {
@@ -215,18 +230,18 @@ void VaPoly::release(uint8_t note) {
     }
 }
 
-int VaPoly::allocate(uint8_t note) {
+int VaPoly::allocate(uint8_t note, int not_slot) {
     // 1. The voice already sounding this note, if it has started. A repeated chord reuses its
     //    own voices; a waiting voice is not a match, so a ratchet keeps both of its hits.
     for (int i = 0; i < kVoices; i++) {
         const Slot &s = slots_[i];
-        if (!s.pending && s.note == int(note) && s.voice.sounding()) return i;
+        if (i != not_slot && !s.pending && s.note == int(note) && s.voice.sounding()) return i;
     }
 
     // 2. A free voice: nothing pending, nothing sounding. In slot order, so a single note takes
     //    slot 0 and plays in tune whatever DET says.
     for (int i = 0; i < kVoices; i++) {
-        if (!slots_[i].busy()) return i;
+        if (i != not_slot && !slots_[i].busy()) return i;
     }
 
     // 3. The quietest voice that has started, which is the one furthest through its decay. The
@@ -238,7 +253,7 @@ int VaPoly::allocate(uint8_t note) {
     float lowest = 0.0f;
     int i = steal_cursor_;
     for (int n = 0; n < kVoices; n++) {
-        if (!slots_[i].pending) {
+        if (i != not_slot && !slots_[i].pending) {
             const float level = slots_[i].voice.amp_level();
             if (pick < 0 || level < lowest) {
                 pick = i;
@@ -250,7 +265,7 @@ int VaPoly::allocate(uint8_t note) {
 
     // 4. Every voice is committed to a note that has not started: more notes on one frame than
     //    there are voices. One of them has to go, and the cursor decides which.
-    if (pick < 0) pick = steal_cursor_;
+    if (pick < 0) pick = steal_cursor_ == not_slot ? (steal_cursor_ + 1) % kVoices : steal_cursor_;
 
     steal_cursor_ = pick + 1 >= kVoices ? 0 : pick + 1;
     return pick;
@@ -325,6 +340,26 @@ void VaPoly::render_add(float *out, int frames) {
         if (!slots_[i].busy()) continue;   // an idle voice costs one envelope read and a compare
         render_slot(i, out, frames);
         busy = busy || slots_[i].busy();   // ... and it may have finished inside this block
+    }
+    active_ = busy;
+}
+
+void VaPoly::render_add_stereo(float *left, float *right, int frames) {
+    if (!active_) return;
+    filter_cache_.clear();   // as render_add, once a block
+    if (frames > int(ENAGA_BLOCK_FRAMES)) frames = int(ENAGA_BLOCK_FRAMES);
+    bool busy = false;
+    for (int i = 0; i < kVoices; i++) {
+        if (!slots_[i].busy()) continue;
+        // The voice renders the same slices it would in mono, into its own block, then out to
+        // both sides at its place: one clear and two multiply-adds a frame on top of the voice.
+        float gl, gr;
+        width_gains(slots_[i].pan, gl, gr);
+        enaga_clear(slice_, frames);
+        render_slot(i, slice_, frames);
+        enaga_mix(left, slice_, frames, gl);
+        enaga_mix(right, slice_, frames, gr);
+        busy = busy || slots_[i].busy();
     }
     active_ = busy;
 }
@@ -419,7 +454,7 @@ void VaPoly::start(int slot) {
     // It stays because "a chord note starts at its pitch" should be this file's statement, not
     // a consequence of a default in a struct a future glide knob might change.
     const float pitch =
-        clamp(float(t.note) + settings_.tune + detune_ * kDetune[slot], 0.0f, 132.0f);
+        clamp(float(t.note) + settings_.tune + detune_ * kDetune[slot] + s.shift, 0.0f, 132.0f);
     s.voice.set_note(float(t.velocity) * (1.0f / 127.0f), t.accent, false);
     s.voice.set_target(pitch);
     s.voice.set_pitch(pitch);

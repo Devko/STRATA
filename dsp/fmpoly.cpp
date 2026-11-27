@@ -20,8 +20,8 @@ void FmPoly::init(float sample_rate) {
 void FmPoly::prepare(const TrackParams &params) { settings_ = FmSettings::make(params, rate_, inv_rate_); }
 
 void FmPoly::begin(FmVoice &v, const Trig &t, int slot) {
-    (void)slot;
-    v.set_note(float(t.note), float(t.velocity) * (1.0f / 127.0f));
+    // Unison's tuning, 0 outside it (core/width.hpp).
+    v.set_note(float(t.note) + slot_shift(slot), float(t.velocity) * (1.0f / 127.0f));
     v.gate_on();
 }
 

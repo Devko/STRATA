@@ -96,7 +96,7 @@ Eight tracks, each one machine plus a fixed insert chain, feed a mixer with two 
 | SAMPLE | 4 | One-shot or slice playback from RAM: pitch, start, length, loop, reverse, 4-point interpolation |
 | GRAIN | 1 (up to 8 grains) | Granular playback, tempo-locked stretch: position, size, density, spray, pitch |
 | VA MONO | 1 | 2 oscillators with sync, sub, noise, multimode filter, 2 envelopes, accent, slide, glide. **[rev]** OSC 2 detunes or syncs (OSC page); drive |
-| VA POLY | 6 | Same voice as VA MONO; chord mode, spread, unison 2 |
+| VA POLY | 6 | Same voice as VA MONO; chord mode, spread, unison 2 **[rev]** spread and unison 2 arrived 2026-11-27 as WID, a kit setting per track on MIXER (`core/width.hpp`), for VA POLY, WAVE POLY and FM4: 1-63 pans each voice slot, 64-127 plays every note on two voices panned hard and detuned 6-40 cents. A wide track renders in stereo through a stereo insert chain (`InsertChain::process_pair`); KIT.BIN section 15 |
 | WAVE MONO **[rev]** | 1 | The VA MONO voice with a wavetable oscillator in place of the two oscillators: 16 built-in tables of 16 frames (from PolyWerk's recipes), position, envelope to position, phase warp, a detuned second reader; LP24 filter, sub, envelopes, accent, slide, glide as VA MONO. Machine id 9, `WMN`. dsp/wavetable.hpp |
 | WAVE POLY **[rev]** | 6 | The same, polyphonic like VA POLY, with chords; shares VA POLY's 12-voice budget. Machine id 10, `WPL` |
 | FM4 **[rev]** | 6 | Four sine operators in the eight 4-operator algorithms, operator 4 with feedback; an index envelope faster than the amplitude's; chords; shares VA POLY's 12-voice budget, a voice counting as one. Machine id 11, `FM4`. dsp/fm.hpp, dsp/fmpoly.hpp |

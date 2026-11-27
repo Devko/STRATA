@@ -208,6 +208,11 @@ void InsertChain::clear_state() {
     lofi_hold_ = 0.0f;
     dc_[0] = 0.0f;
     dc_[1] = 0.0f;
+    svf_r_a_.reset();
+    svf_r_b_.reset();
+    lofi_hold_r_ = 0.0f;
+    dc_r_[0] = 0.0f;
+    dc_r_[1] = 0.0f;
 }
 
 const char *InsertChain::param_name(int index) {
@@ -243,6 +248,8 @@ void InsertChain::prepare(const TrackParams &params, const ChainMix &mix, bool t
     if (drive_on_ && !was_on) {
         dc_[0] = 0.0f;
         dc_[1] = 0.0f;
+        dc_r_[0] = 0.0f;
+        dc_r_[1] = 0.0f;
     }
     if (drive_on_) {
         drive_pos_ = ed::exp2(float(drive) * (1.0f / 127.0f) * kDriveOctaves);
@@ -377,6 +384,62 @@ void InsertChain::process(float *mono, int frames, const ChainOut &out) {
     if (send_c_gain_ > 0.0f && out.send_c != nullptr) {
         enaga_mix(out.send_c, mono, frames, send_c_gain_);
     }
+}
+
+void InsertChain::process_pair(float *left, float *right, int frames, const ChainOut &out) {
+    if (frames <= 0) return;
+    if (silent()) return;
+
+    if (drive_on_) {
+        strata_chain_drive(left, frames, drive_pos_, drive_neg_, kDcPole, dc_);
+        strata_chain_drive(right, frames, drive_pos_, drive_neg_, kDcPole, dc_r_);
+    }
+    if (mode_ != FilterMode::off) {
+        if (filter_24_) {
+            strata_svf_cascade_inplace(&svf_a_.state_, &coefficients_, &svf_b_.state_,
+                                       &coefficients_, svf_output_, left, frames);
+            strata_svf_cascade_inplace(&svf_r_a_.state_, &coefficients_, &svf_r_b_.state_,
+                                       &coefficients_, svf_output_, right, frames);
+        } else {
+            strata_svf_inplace(&svf_a_.state_, &coefficients_, svf_output_, left, frames);
+            strata_svf_inplace(&svf_r_a_.state_, &coefficients_, svf_output_, right, frames);
+        }
+    }
+    if (lofi_on_) {
+        // One clock for both sides, so they hold on the same samples: the right runs from where
+        // the left started.
+        uint32_t phase_r = lofi_phase_;
+        strata_chain_lofi(left, frames, lofi_increment_, lofi_levels_, lofi_step_, kLofiCeiling,
+                          &lofi_phase_, &lofi_hold_);
+        strata_chain_lofi(right, frames, lofi_increment_, lofi_levels_, lofi_step_, kLofiCeiling,
+                          &phase_r, &lofi_hold_r_);
+    }
+    if (duck_depth_ > 0.0f && out.duck != nullptr) {
+        strata_chain_duck(left, out.duck, frames, duck_depth_);
+        strata_chain_duck(right, out.duck, frames, duck_depth_);
+    }
+
+    // PAN as a balance: the left side at the left gain, the right at the right. In the middle
+    // both are 0.707, as a mono track's.
+    if (frames != ramp_frames_) {
+        ramp_frames_ = frames;
+        inv_frames_ = ed::reciprocal(float(frames));
+    }
+    const float step_l = (target_l_ - gain_l_) * inv_frames_;
+    const float step_r = (target_r_ - gain_r_) * inv_frames_;
+    strata_ramp_pair_add(left, right, out.dry_l, out.dry_r, frames, &gain_l_, &gain_r_, step_l,
+                         step_r);
+    gain_l_ = target_l_;
+    gain_r_ = target_r_;
+
+    // The middle, for the sends and a bounce: they are mono, as every track's are.
+    strata_pair_mid(left, right, frames);
+    if (out.tap != nullptr) {
+        for (int i = 0; i < frames; i++) out.tap[i] = left[i];
+    }
+    if (send_a_gain_ > 0.0f && out.send_a != nullptr) enaga_mix(out.send_a, left, frames, send_a_gain_);
+    if (send_b_gain_ > 0.0f && out.send_b != nullptr) enaga_mix(out.send_b, left, frames, send_b_gain_);
+    if (send_c_gain_ > 0.0f && out.send_c != nullptr) enaga_mix(out.send_c, left, frames, send_c_gain_);
 }
 
 }  // namespace strata

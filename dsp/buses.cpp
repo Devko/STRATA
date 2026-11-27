@@ -665,6 +665,14 @@ void Mixer::begin_block(int frames) {
 void Mixer::add_track(int track, float *mono) { add_track_tapped(track, mono, nullptr); }
 
 void Mixer::add_track_tapped(int track, float *mono, float *tap) {
+    add_any(track, mono, nullptr, tap);
+}
+
+void Mixer::add_pair(int track, float *left, float *right, float *tap) {
+    add_any(track, left, right, tap);
+}
+
+void Mixer::add_any(int track, float *mono, float *right, float *tap) {
     if (track < 0 || track >= kTracks || frames_ <= 0) return;
     InsertChain &insert = chains_[track];
 
@@ -690,7 +698,8 @@ void Mixer::add_track_tapped(int track, float *mono, float *tap) {
     out.send_c = send_c_;
     out.duck = duck_active_ ? duck_curve_ : nullptr;
     out.tap = tap;
-    insert.process(mono, frames_, out);
+    if (right != nullptr) insert.process_pair(mono, right, frames_, out);
+    else insert.process(mono, frames_, out);
 }
 
 void Mixer::finish_block(float *out, int frames) {

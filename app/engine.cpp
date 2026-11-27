@@ -348,30 +348,42 @@ bool Engine::make_room_for_poly_voice(int track, uint8_t note) {
     PolyMachine *target = polys_[track];
     if (target == nullptr || !target->would_add_voice(note)) return true;
 
-    int used = 0;
-    for (int t = 0; t < kTracks; t++) {
-        if (polys_[t] != nullptr) used += polys_[t]->budget_voices();
-    }
-    if (used < poly_budget_) return true;
-
-    // The quietest started voice anywhere, this track included. Ties go to the lowest track,
-    // so the choice is deterministic.
-    int pick_track = -1;
-    int pick_slot = -1;
-    float quietest = 0.0f;
-    for (int t = 0; t < kTracks; t++) {
-        if (polys_[t] == nullptr) continue;
-        float level = 0.0f;
-        const int slot = polys_[t]->quietest_voice(level);
-        if (slot >= 0 && (pick_track < 0 || level < quietest)) {
-            pick_track = t;
-            pick_slot = slot;
-            quietest = level;
+    // A unison note (WID, core/width.hpp) takes two voices, so it makes room for two. The first
+    // decides whether the note plays; past it, the machine steals one of its own if it must.
+    const int need = target->voices_per_note();
+    for (int k = 0; k < need; k++) {
+        int used = 0;
+        for (int t = 0; t < kTracks; t++) {
+            if (polys_[t] != nullptr) used += polys_[t]->budget_voices();
         }
+        if (used + k < poly_budget_) continue;
+
+        // The quietest started voice anywhere, this track included. Ties go to the lowest
+        // track, so the choice is deterministic.
+        int pick_track = -1;
+        int pick_slot = -1;
+        float quietest = 0.0f;
+        for (int t = 0; t < kTracks; t++) {
+            if (polys_[t] == nullptr) continue;
+            float level = 0.0f;
+            const int slot = polys_[t]->quietest_voice(level);
+            if (slot >= 0 && (pick_track < 0 || level < quietest)) {
+                pick_track = t;
+                pick_slot = slot;
+                quietest = level;
+            }
+        }
+        // Everything counted is still waiting: drop this note, or play it with what it has.
+        if (pick_track < 0) return k > 0;
+        polys_[pick_track]->choke(pick_slot);
     }
-    if (pick_track < 0) return false;   // everything counted is still waiting: drop this note
-    polys_[pick_track]->choke(pick_slot);
     return true;
+}
+
+void Engine::sync_widths() {
+    for (int t = 0; t < kTracks; t++) {
+        if (polys_[t] != nullptr) polys_[t]->set_width(width_sanitized(project_.kit.tracks[t].width));
+    }
 }
 
 // --- the CPU guard ----------------------------------------------------------------------------
@@ -636,6 +648,20 @@ bool Engine::apply_sound(const Command &command, int track, int) {
             const int next = int(project_.kit.tracks[track].chorus) + int(int8_t(command.b));
             project_.kit.tracks[track].chorus =
                 uint8_t(next < 0 ? 0 : (next > int(kChorusSendMax) ? int(kChorusSendMax) : next));
+            break;
+        }
+
+        case Cmd::set_width: {
+            uint8_t &width = project_.kit.tracks[track].width;
+            if (command.c == 1) {
+                // A push: OFF, SPREAD at kWidthSpreadStep, UNISON at kWidthUnisonStep, OFF.
+                width = width < kWidthSpreadStep ? kWidthSpreadStep
+                                                 : (width < kWidthUnisonStep ? kWidthUnisonStep : 0);
+            } else {
+                const int next = int(width) + int(int8_t(command.b));
+                width = uint8_t(next < 0 ? 0 : (next > int(kWidthMax) ? int(kWidthMax) : next));
+            }
+            if (polys_[track] != nullptr) polys_[track]->set_width(width);
             break;
         }
 
@@ -1914,6 +1940,7 @@ bool Engine::apply_project(const Command &command, int, int) {
                     for (int s = 0; s < kModSlots; s++) to.mod[s] = from.mod[s];
                     to.choke = from.choke;
                     to.chorus = from.chorus;
+                    to.width = from.width;
                     lfo_[t].rest();          // a new TRIG starts as Cmd::set_lfo_trig's does
                     mod_env_[t].rest();
                     // The arp's kit settings go with the ARP bytes they shape.
@@ -3596,8 +3623,12 @@ void Engine::fire(const StepEvent &event) {
 // the block's start when it carries on from the last block, then kill_all once it reaches 0.
 // True when the cut is done: the caller clears the track's chain once this block has been
 // through it (Engine::process), as silence_track does for every other cut.
-bool Engine::run_choke(int t, float *mono, uint32_t frames) {
+bool Engine::run_choke(int t, float *mono, uint32_t frames, float *right) {
     const uint32_t from = choke_at_[t] < frames ? choke_at_[t] : frames;
+    if (right != nullptr) {
+        (void)strata_choke_fade(right + from, int(frames - from), choke_gain_[t],
+                                1.0f / float(kChokeFadeFrames));
+    }
     const float gain = strata_choke_fade(mono + from, int(frames - from), choke_gain_[t],
                                          1.0f / float(kChokeFadeFrames));
     if (gain > 0.0f) {
@@ -3796,7 +3827,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // No track has started a note in this block yet (choke_group).
     for (int t = 0; t < kTracks; t++) note_frame_[t] = kNoChokeFrame;
 
+    sync_widths();
     apply_commands();
+    sync_widths();          // a kit, a machine or a width that just arrived, before any trig
 
     // The CPU guard, before any trig: a lowered budget must be in force for this block's notes.
     run_cpu_guard();
@@ -3970,9 +4003,29 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
         float *mono = mixer_.scratch();
         enaga_clear(mono, int(frames));
-        machine->render_add(mono, int(frames));
-        const bool choked = choke_at_[t] != kNoChokeFrame && run_choke(t, mono, frames);
-        track_peak[t] = strata_master_peak(mono, mono, int(frames));
+        // A POLY track with a width renders in stereo (core/width.hpp): its voices each at their
+        // place, through a stereo chain. Everything after the chain is as a mono track's.
+        PolyMachine *wide = polys_[t] != nullptr && polys_[t]->stereo() ? polys_[t] : nullptr;
+        float *right = wide != nullptr ? mixer_.scratch_right() : nullptr;
+        if (wide != nullptr) {
+            enaga_clear(right, int(frames));
+            wide->render_add_stereo(mono, right, int(frames));
+        } else {
+            machine->render_add(mono, int(frames));
+        }
+        const bool choked = choke_at_[t] != kNoChokeFrame && run_choke(t, mono, frames, right);
+        track_peak[t] = strata_master_peak(mono, right != nullptr ? right : mono, int(frames));
+        if (right != nullptr) {
+            // A freeze records the machine's middle, mono, as every frozen track plays; a bounce
+            // takes the chain's middle (InsertChain::process_pair).
+            if (t == tapped && capture_prechain_) {
+                for (uint32_t i = 0; i < frames; i++) capture_tap_[i] = 0.5f * (mono[i] + right[i]);
+            }
+            mixer_.add_pair(t, mono, right, t == tapped && !capture_prechain_ ? capture_tap_ : nullptr);
+            if (choked) mixer_.chain(t).clear_state();
+            voices++;
+            continue;
+        }
         // A freeze records the machine alone, before the chain it will go on running through.
         if (t == tapped && capture_prechain_) {
             for (uint32_t i = 0; i < frames; i++) capture_tap_[i] = mono[i];

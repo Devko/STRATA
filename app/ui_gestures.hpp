@@ -406,6 +406,10 @@
                 post_command(command);
                 return;
             }
+            if (mixer_width_page(mixer_bank_)) {
+                edit_width(mixer_bank_, encoder, delta);
+                return;
+            }
             if (mixer_bank_ < kMixerDelayPage) {
                 edit_duck(mixer_bank_, encoder, delta);
                 return;

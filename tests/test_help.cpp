@@ -169,10 +169,11 @@ TEST(help_starts_on_the_screens_own_page) {
     // Each MIXER page its own knobs, the duck's included.
     CHECK(first_page_has(place_of(HelpScreen::mixer, 4, 0), "A SRC SOURCE TRACK"));
     CHECK(first_page_has(place_of(HelpScreen::mixer, 2, 0), "DUCK DEPTH 1-4"));
-    CHECK(first_page_has(place_of(HelpScreen::mixer, 14, 0), "KILL BAND"));
-    CHECK(first_page_has(place_of(HelpScreen::mixer, 10, 0), "CHORUS SEND 1-4"));
-    CHECK(first_page_has(place_of(HelpScreen::mixer, 12, 0), "D C>R INTO REVERB"));
-    CHECK(first_page_has(place_of(HelpScreen::mixer, 6, 0), "PUSH A  FLIPS TYP"));
+    CHECK(first_page_has(place_of(HelpScreen::mixer, 16, 0), "KILL BAND"));
+    CHECK(first_page_has(place_of(HelpScreen::mixer, 5, 0), "64+  UNISON 2 VOICES"));
+    CHECK(first_page_has(place_of(HelpScreen::mixer, 12, 0), "CHORUS SEND 1-4"));
+    CHECK(first_page_has(place_of(HelpScreen::mixer, 14, 0), "D C>R INTO REVERB"));
+    CHECK(first_page_has(place_of(HelpScreen::mixer, 8, 0), "PUSH A  FLIPS TYP"));
     // LEARN says what a push does now; KEYS that the pads are a piano.
     CHECK(first_page_has(place_of(HelpScreen::learn, 0, 0), "MACRO LEARN"));
     CHECK(first_page_has(place_of(HelpScreen::keys, 0, 0), "LOWER PADS WHITE KEYS"));
