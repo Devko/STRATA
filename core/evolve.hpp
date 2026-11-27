@@ -14,7 +14,9 @@
 //          itself and never loses its identity, however long it runs. The default.
 //   DRIFT  every turn mutates what is playing, so the changes add up and the part wanders off.
 //
-// KEEP makes what is playing the new HOME and stops; HOME puts it back and stops. Turning EVOLVE
+// KEEP makes what is playing the new HOME and stops; HOME puts it back and stops. The periods,
+// the mode, the mutation and the amount are saved with the project (core/project.hpp); HOME is
+// not, so a project opens evolving from the pattern as it was saved. Turning EVOLVE
 // off from the menu is a KEEP: off never changes what you hear.
 //
 // ## Editing a track that is evolving

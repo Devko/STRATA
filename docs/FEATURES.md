@@ -153,7 +153,7 @@ FM4 and GRAIN machines.
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |
-| **GEN and EVOLVE** (hold OK in GRID): a new drum or melodic part in the key (DENSITY, RANGE, LEAP, WHAT); a track mutating on its own every 1-8 loops, ORBIT or DRIFT, KEEP or HOME | #195 | ○ (W52) | EVOLVE is RAM only, not saved; the mutation and amount are PERFORM's MUTATE setting |
+| **GEN and EVOLVE** (hold OK in GRID): a new drum or melodic part in the key (DENSITY, RANGE, LEAP, WHAT); a track mutating on its own every 1-8 loops, ORBIT or DRIFT, KEEP or HOME | #195, #PR | ○ (W52, W53) | The mutation and amount are PERFORM's MUTATE setting; MIX draws one each turn. Saved in PROJECT.BIN (section 7); HOME is not |
 | Note repeat on the pads, pressure as velocity | v0.1.0 | ○ (13f) | Recorded with REC as a roll over LEN (P3, #187; not at 1/4T) |
 | Step stutter: hold REPEAT + STEP loops that step on every track (FUNC: one track) | #151 | ○ (W11) | Sequencer, not audio: sounds stay live. Host-tested; the emulator cannot press pads |
 | Roll rate on LEFT/RIGHT under REPEAT or a rolling pad, on the live strip | #151 | ○ (W11) | |

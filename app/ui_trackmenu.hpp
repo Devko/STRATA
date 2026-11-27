@@ -17,7 +17,8 @@
     //   WHAT          BOTH, RHYTHM, NOTES
     //   EVOLVE        OFF, 1, 2, 4, 8 loops: this track's (core/evolve.hpp)
     //   MODE          ORBIT or DRIFT, for every track
-    //   MUTATION      which mutation EVOLVE plays: PERFORM's MUTATE setting, shared
+    //   MUTATION      which mutation EVOLVE plays: PERFORM's MUTATE setting, shared; MIX draws
+    //                 a different one each turn
     //   AMOUNT        and how hard, also shared
     //   KEEP          OK: what plays becomes HOME, EVOLVE stops
     //   HOME          OK: back to HOME (one undo level), EVOLVE stops
@@ -120,6 +121,13 @@
             case TrackRow::kind:
                 mutation_ = Mutation(step_wrap(int(mutation_), delta, 0, int(Mutation::count) - 1));
                 post_evolve_config();
+                {
+                    char *out = notice_buffer_;
+                    append(out, "MUTATION ");
+                    append(out, mutation_name(mutation_));
+                    *out = 0;
+                    notice_logged(notice_buffer_);
+                }
                 break;
             case TrackRow::amount:
                 mutate_amount_ = walk(mutate_amount_, delta * 10, 0, 100);
