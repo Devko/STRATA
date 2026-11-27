@@ -4050,6 +4050,10 @@ void play_loop_once() {
 TEST(storage_a_file_past_the_24_bit_frame_count_streams) {
     clean();
     FakeHost &host = FakeHost::the();
+    // Both late counts only ever grow (Engine::stream_late_, Sampler::late_), and a test before
+    // this one may have starved the same track's stream on purpose: measured from here.
+    const uint32_t late_before = loop_sampler().stream_late();
+    const uint32_t status_late_before = engine().status().stream_late.load();
     make_huge("/SAMPLES/HUGE.WAV");
     kit_sample(kLoopTrack, "/SAMPLES/HUGE.WAV");
     CHECK(storage().request_sample(kLoopTrack));
@@ -4089,8 +4093,8 @@ TEST(storage_a_file_past_the_24_bit_frame_count_streams) {
     CHECK_EQ(host.last_stream_offset(), 44u + kHeadFrames * 2u);
     pump(1600);                                       // 2.1 s
     CHECK(loop.stream_position() > kHeadFrames + 4000u);
-    CHECK_EQ(loop.stream_late(), 0u);
-    CHECK_EQ(engine().status().stream_late.load(), 0u);
+    CHECK_EQ(loop.stream_late(), late_before);
+    CHECK_EQ(engine().status().stream_late.load(), status_late_before);
     CHECK(loop.active());
 
     // The swap closes it: a new project takes every sample away.
@@ -4150,6 +4154,8 @@ TEST(storage_a_stream_of_24_bit_frames_split_across_reads_arrives_whole) {
 TEST(storage_a_stream_that_falls_behind_plays_silence_then_catches_up) {
     clean();
     FakeHost &host = FakeHost::the();
+    const uint32_t late_before = loop_sampler().stream_late();          // only ever grow
+    const uint32_t status_late_before = engine().status().stream_late.load();
     make_huge("/SAMPLES/HUGE.WAV");
     kit_sample(kLoopTrack, "/SAMPLES/HUGE.WAV");
     CHECK(storage().request_sample(kLoopTrack));
@@ -4159,8 +4165,8 @@ TEST(storage_a_stream_that_falls_behind_plays_silence_then_catches_up) {
     host.set_stream_stall(true);                      // the card stops delivering
     pump(1600);                                       // past the head
     const Sampler &loop = loop_sampler();
-    CHECK(loop.stream_late() > 0u);
-    CHECK(engine().status().stream_late.load() > 0u);
+    CHECK(loop.stream_late() > late_before);
+    CHECK(engine().status().stream_late.load() > status_late_before);
     const uint32_t at = loop.stream_position();
     CHECK(at > kHeadFrames);                          // it kept time
     host.set_stream_stall(false);

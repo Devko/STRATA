@@ -1,6 +1,10 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W52, about 165 minutes): everything merged since v0.1.0,
+Start with **the smoke test** (S1-S20, one hour): boot, the screen, load, and the four things
+most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
+if an item fails, report that first.
+
+Then **the walkthrough** (W1-W52, about 165 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -13,6 +17,86 @@ them); the upper pads are FILL REPEAT MUTE SCENE A SCENE B THROW MUTATE.
 
 The 2026-11-22 controls tour and the v0.1.0 release steps are in
 [archive/UNIT_CHECKLIST_2026-11-22.md](archive/UNIT_CHECKLIST_2026-11-22.md).
+
+---
+
+# The smoke test (one hour, 2026-11-26)
+
+Build from `main` with cl6x, on Enaga 0.3.0 firmware (as for the walkthrough below). Have a phone
+camera and headphones ready, and a WAV in `/SAMPLES` (`unit-test/STRATA_1.WAV` will do). Report by
+number, for example `S8: MAX 41.2` or `S4 fail: tabs unreadable`. Each item names the walkthrough
+item with the deeper checks.
+
+**Boot (5 min)**
+
+- [ ] **S1.** Adapter in, batteries out. Start STRATA from Enaga's app list: GRID comes up on
+      A01 with no noise and no hang. Seconds from OK to GRID: `____ s`
+- [ ] **S2.** The top line reads `A01 1.1 130.0` with the load after it, and the page tabs sit at
+      the bottom. Idle load: `____ %` (W26, W42)
+
+**The screen and the small font (10 min)**
+
+- [ ] **S3.** PLAY A01. Take a photo at arm's length of each: GRID, PERFORM (FUNC + MIXER), EDIT
+      SRC on T1, MIXER's MST page (screen keys right), PROJECT. Send the five photos.
+- [ ] **S4.** The small 3 x 5 font (the tabs, EDIT's knob names, the live strip, the tempo on the
+      top line): readable at arm's length? `yes / no`, the worst place: `________`. One switch
+      (`paint::kSmallLabels`) puts every label back on Enaga's 5 x 7 font. (W43)
+- [ ] **S5.** The grey levels: GRID's dim steps, PROJECT's grey slots and PERFORM's dim scope are
+      told apart from black and from white. Any flicker or tearing while the beat plays? `____`
+- [ ] **S6.** PROJECT, screen keys to SETUP, with PERFORM shown before it while playing:
+      `DRW ____ MS` (under 5 is fine). (W33)
+
+**Load (10 min)**
+
+- [ ] **S7.** A01: STOP, PLAY (MAX restarts), 60 s. SETUP: **MAX `____ %`**. No `GUARD` at the
+      right of the tabs. (W1)
+- [ ] **S8.** A04 PEAK (PROJECT, cursor on A04, OK; it lands on the bar). STOP, PLAY, 60 s:
+      **MAX `____ %`**. Over 60 is worth a message on its own.
+- [ ] **S9.** Still A04, hold FILL for ten seconds (kick and clap rolls): no crackle, no
+      `DROP` on the tabs. MAX `____ %`. Back to A01 (PROJECT, A01, OK).
+
+**LOCK (8 min)**
+
+- [ ] **S10.** A01 playing. Hold FUNC + MUTATE for half a second: `LOCK A01 STORED`, and `L` on
+      the top line. (W20c)
+- [ ] **S11.** Tap two steps on track 1, turn the bass's CUT (lower pad 6, EDIT), mute the hats
+      (FUNC + lower pad 3): within a moment the mark reads `L+`.
+- [ ] **S12.** Tap FUNC + MUTATE: `BACK TO LOCK A01`, in time: steps, cutoff and hats all back.
+      Tap again: `SWAPPED BACK A01`. A click or stumble at either jump? `____`
+
+**MOD slots (8 min)**
+
+- [ ] **S13.** Lower pad 6 (bass), EDIT, LFO page. Push C until `MOD1 VEL: TURN A KNOB`, screen
+      keys to SRC, turn CUT up about 40, OK: `M1 VEL>CUT +40`. Hit pad 6 soft, then hard: the
+      hard notes are brighter. (W38)
+- [ ] **S14.** Push D until `MOD2 PRS`, turn RES up about 30, OK. Hold pad 6 and lean on it: the
+      resonance rises with the pressure and falls when you let go. `____`
+
+**One RESAMPLE take (8 min)**
+
+This is the first take written through Enaga's file layer on the unit: every take before
+2026-11-25 failed `DENIED` there (`docs/HANDOFF.md`).
+
+- [ ] **S15.** A01 playing. FUNC + REC (RESAMPLE), DOWN to 2 BAR, destination `TO FILE`, OK:
+      `ARMED`, then `REC` from the next bar, the take drawing itself, then the write. The screen
+      keeps moving while it writes. Seconds of writing: `____ s` (W45)
+- [ ] **S16.** `TAKE ON CARD` and `PUT ON TRK 8 ...`: OK. `T8 ...: TAKE ON`, and track 8 plays
+      the take within a second. It sounds like the mix and loops without a click? `____`
+      Take name (`LAST STRATA_n`): `________`
+
+**Save and reload (10 min)**
+
+- [ ] **S17.** Tempo to 142.0 (turn VALUE), mute track 3 (FUNC + lower pad 3). FUNC + HOME,
+      SAVE AS, name `SMOKE`, OK: `SAVING`, then `NOW SMOKE`. (W17)
+- [ ] **S18.** Power off, power on, start STRATA: `SMOKE` opens at 142.0 with track 3 muted,
+      track 8 plays the take, and the bass's LFO page lists `M1 VEL>CUT +40` and `M2 PRS>RES +30`.
+      Missing: `________`
+- [ ] **S19.** No `L` on the top line: LOCK is in RAM only, so a power cycle clears it (expected).
+      FUNC + MUTATE tapped says `NO LOCK: HOLD STORES`.
+- [ ] **S20.** Tidy up: PROJECT, screen keys to PROJECTS, open `DEFAULT` (OK twice), then cursor
+      on `SMOKE`, push C, OK, OK: gone from the list. The take stays in `/RECORD`. `____`
+
+**Done.** Reply with the numbers and the photos: `S1-S20 pass`, or the ones that did not.
 
 ---
 
