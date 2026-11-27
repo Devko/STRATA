@@ -1,5 +1,5 @@
 // The per-track insert chain: one machine's MONO block in, a stereo contribution to the mix bus
-// and two mono send amounts out.
+// and three mono send amounts out (send C, the chorus, since 2026-11-27).
 //
 // Fixed order (docs/SPEC.md, "Sound architecture"):
 //
