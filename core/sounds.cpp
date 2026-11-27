@@ -49,20 +49,21 @@ constexpr SoundPreset kKickPresets[] = {
 
 // --- SNARE: TUN SNP TON CLP / DEC SPR BDY LVL (dsp/snare.cpp) ------------
 constexpr SoundPreset kSnarePresets[] = {
-    // The factory clap: three bursts 10 ms apart, mostly noise.
-    {"CLAP", {64, 100, 64, 64}, FLAT, {54, 28, 40, 100}, NO_ASR, NO_OSC},
+    // The factory clap: three bursts 10 ms apart, mostly noise, the band down (TON 22) to where
+    // an 808/909 clap lives, about 2-3 kHz rather than 5-10.
+    {"CLAP", {64, 100, 22, 64}, FLAT, {54, 28, 40, 127}, NO_ASR, NO_OSC},
     // The 909 snare: 200 Hz (TUN 64), more drum than noise, a bright band, no clap.
     {"909SN", {64, 70, 70, 0}, FLAT, {50, 28, 40, 100}, NO_ASR, NO_OSC},
     // The 808 snare: tuned higher, less snap, a darker band, a short body.
     {"808SN", {80, 50, 56, 0}, FLAT, {40, 28, 20, 104}, NO_ASR, NO_OSC},
-    // A big clap: four bursts (CLP 100), spread to 40 ms, a longer tail.
-    {"CLAP4", {64, 110, 72, 100}, FLAT, {70, 127, 30, 100}, NO_ASR, NO_OSC},
+    // A big clap: four bursts (CLP 100) 14 ms apart, a longer tail. Wider than that is a flam.
+    {"CLAP4", {64, 110, 30, 100}, FLAT, {70, 40, 30, 100}, NO_ASR, NO_OSC},
     // A snare rim: tuned up, almost no noise, very short. A tick for a sparse groove.
     {"RIMSN", {110, 20, 90, 0}, FLAT, {10, 10, 0, 96}, NO_ASR, NO_OSC},
     // Dirty: noisy, darker, driven hard in the chain. Breaks and electro.
     {"DIRTY", {58, 90, 50, 0}, {50, 127, 20, 0}, {64, 28, 50, 70}, NO_ASR, NO_OSC},
     // A short clap: three bursts close together (SPR 15), a short tail. Tight on the 2 and 4.
-    {"SHORT", {64, 105, 75, 64}, FLAT, {30, 15, 20, 104}, NO_ASR, NO_OSC},
+    {"SHORT", {64, 105, 30, 64}, FLAT, {30, 15, 20, 127}, NO_ASR, NO_OSC},
     // A tight snare: tuned up a little, more drum than noise, short. Busy grooves.
     {"TIGHT", {70, 60, 80, 0}, FLAT, {25, 28, 30, 104}, NO_ASR, NO_OSC},
     // A noise wash: all noise, a bright band, a long tail. Ambient hits and risers' ends.

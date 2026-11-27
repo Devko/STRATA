@@ -89,9 +89,11 @@ void factory_kit(Kit &kit) {
     kit.tracks[kKick].params[kDrv] = 28;
 
     // CLAP: the SNARE machine in clap mode (CLP 64 = three bursts), mostly noise (SNP 100), the
-    // bursts 2 + 38 * 28/127 = 10 ms apart, which is a 909 clap's spacing. A short body, and a
-    // touch of reverb so the backbeat has a room.
-    set(kit.tracks[kClap], {64, 100, 64, 64}, {54, 28, 40, 100});
+    // bursts 2 + 38 * 28/127 = 10 ms apart, which is a 909 clap's spacing. TON 22 puts the noise
+    // band at about 2-3 kHz, where a clap's smack is (at 64 it sat at 5-10 kHz and hissed); LVL
+    // at the top makes up the 4 dB the narrower band takes. A short body, and a touch of reverb
+    // so the backbeat has a room.
+    set(kit.tracks[kClap], {64, 100, 22, 64}, {54, 28, 40, 127});
     kit.tracks[kClap].params[kSnb] = 24;
 
     // HATS (dsp/hat.cpp, the 808 six squares). TON is the band-pass: 150 Hz * 2^(6 * TON/127),

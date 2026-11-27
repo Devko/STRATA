@@ -899,6 +899,30 @@ TEST(snare_clap_mode_fires_several_bursts) {
     CHECK_EQ(count_bursts(g_buffer, blocks * kBlk, 128, 0.25f), 1);
 }
 
+TEST(snare_clap_bursts_are_as_loud_as_the_tail) {
+    // The factory clap's settings: three bursts about 10 ms apart, mostly noise. A clap's flutter
+    // is its bursts, so the strongest of them must reach the tail's level, not sit 10-18 dB under
+    // it as they did when each burst died after a third of the gap.
+    TrackParams p = uniform(64);
+    p.set(1, 100);   // SNP
+    p.set(2, 22);    // TON
+    p.set(3, 64);    // three bursts
+    p.set(8, 54);    // DEC
+    p.set(9, 28);    // SPR: 2 + 38 * 28/127 = 10 ms
+    p.set(11, 127);
+    Snare m;
+    m.init(kRate);
+    m.prepare(p);
+    m.trigger(hit(60, 127));
+    const int blocks = 40;
+    clear(g_buffer, blocks * kBlk);
+    render_blocks(m, p, g_buffer, blocks);
+    const int gap = int((0.002f + 0.038f * 28.0f / 127.0f) * kRate);
+    const float bursts = peak(g_buffer, 2 * gap);        // the first two bursts
+    const float tail = peak(g_buffer + 2 * gap, blocks * kBlk - 2 * gap);
+    CHECK(bursts > 0.5f * tail);                        // within 6 dB
+}
+
 TEST(snare_clap_spread_sets_how_far_apart_the_bursts_are) {
     TrackParams p = uniform(64);
     p.set(1, 127);

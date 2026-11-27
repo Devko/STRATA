@@ -15,6 +15,14 @@ the project file format or the controls.
   longer restarts the second it waits before stepping down. A single block at 90% still raises
   it at once. New emulator scenario `genload`: GENERATE at full density on all eight tracks.
 
+### Changed
+
+- **The clap sounds like a clap.** Its noise moved from 5-10 kHz down to about 2-3 kHz, and each
+  of its bursts now rings until the next one strikes instead of dying after a third of the gap,
+  so the flutter is as loud as the tail rather than 10-18 dB under it. The factory kit's CLAP and
+  the CLAP, SHORT and CLAP4 sounds have the new band; CLAP4's bursts are 14 ms apart, not 40.
+  A clap in a saved kit keeps its knobs, so it gets the livelier bursts but not the new band.
+
 ## [0.5.0] - 2026-11-27
 
 The release candidate for 1.0: everything merged since 0.4.0 (#180 to #208). From here to 1.0
