@@ -8759,6 +8759,52 @@ TEST(ui_click_and_count_in_rows_and_play_with_rec_counts_in) {
     key(ENAGA_KEY_CLR);
 }
 
+TEST(ui_a_downbeat_played_just_before_the_count_in_ends_records_on_step_1) {
+    // A count-in is there so the player comes in on the one, and a hit on the one is as often a
+    // hair early as late. Early by less than half a step it belongs to step 1 -- a loop's last
+    // ticks already record forward onto the next pass's first step -- but the recorder dropped
+    // everything before the count-in's last tick. Earlier than half a step stays the count-in's.
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    FakeHost &host = FakeHost::the();
+    host.set_running(false);
+    menu_to(kMenuCountIn);
+    key(ENAGA_KEY_OK);                         // 1 BAR
+    CHECK(std::strcmp(UiProbe::notice(app), "COUNT-IN 1 BAR") == 0);
+    key(ENAGA_KEY_CLR);
+    if (!UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    key(ENAGA_KEY_F5);
+    pump(2);
+    CHECK(host.running());
+    CHECK_EQ(int(engine.status().count_in_ticks.load()), int(kTicksPerBar));
+
+    // Two steps before the end: still the count-in, nothing records.
+    host.set_position(kTicksPerBar - 48);
+    app.on_midi(midi(0x90, 36, 100));
+    app.on_midi(midi(0x80, 36, 0));
+    pump(2);
+    for (int s = 0; s < kStepsPerTrack; s++) CHECK(!trig_at(0, s));
+
+    // A quarter of a step early: step 1.
+    host.set_position(kTicksPerBar - 6);
+    app.on_midi(midi(0x90, 36, 100));
+    app.on_midi(midi(0x80, 36, 0));
+    pump(2);
+    CHECK(trig_at(0, 0));
+    int trigs = 0;
+    for (int s = 0; s < kStepsPerTrack; s++) trigs += trig_at(0, s) ? 1 : 0;
+    CHECK_EQ(trigs, 1);
+
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F6);
+    pump(2);
+    if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    menu_to(kMenuCountIn);
+    key(ENAGA_KEY_LEFT);                       // back to OFF
+    key(ENAGA_KEY_CLR);
+    host.set_position(0);
+}
+
 TEST(ui_push_on_the_fader_pages_steps_a_tracks_choke_group) {
     // Choke groups (S4): push A-D on TRK 1-4 / TRK 5-8 steps that strip's track through OFF,
     // 1, 2, 3, 4 and round; the desk shows the group under the machine.

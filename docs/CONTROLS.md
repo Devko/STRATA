@@ -547,7 +547,8 @@ CyDrums S6, 2026-11-26. Enaga has no click (checked at v0.3.0), so STRATA render
 the sample audition). CLICK clicks on every beat while the transport runs. A COUNT-IN starts the
 clock at once and holds the sequencer, the rolls, the stutter and the arps for its bars, clicking
 them whether CLICK is on or not; then everything runs as from a plain START, step 1 on the beat
-after the count-in. Nothing records during it. STOP or FUNC + PLAY ends it. With CLOCK OUT on, an
+after the count-in. Nothing records during it, except a hit up to half a step before its end:
+that is the downbeat played early, and it lands on step 1. STOP or FUNC + PLAY ends it. With CLOCK OUT on, an
 outboard box hears START when the count-in begins, so it runs the count-in's bars ahead. Under an
 outside clock there is no count-in (STRATA does not start the transport).
 

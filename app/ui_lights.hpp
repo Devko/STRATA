@@ -96,20 +96,10 @@
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;          // nothing to record onto
-        // A count-in is the player's lead-in, not the pattern: nothing records until it ends.
+        // A count-in is the player's lead-in, not the pattern: nothing records until it ends --
+        // except the downbeat played a little early (below).
         const Status &status = engine_.status();
         const uint32_t lead = status.count_in_ticks.load(std::memory_order_relaxed);
-        if (clock.position < lead) return;
-
-        // The pattern's position, as the scheduler's: the clock less a count-in, less where the
-        // pattern started (a chain entry, a queued switch), which is what steps and passes count
-        // from (Engine::resolve_tick hands the scheduler `tick - origin_`).
-        const uint32_t origin = status.pattern_origin.load(std::memory_order_relaxed);
-        if (clock.position - lead < origin) return;   // a switch the audio side has not made yet
-        Stamp now;
-        now.tick = clock.position - lead - origin;
-        now.fraction = clock.fraction;
-        const Stamp hit = stamp_back(now, kPadLatencyMs, clock.tempo);
 
         // The track's timing has to be resolved exactly as core/scheduler does it, including
         // swing inheritance -- if the two disagree about where a step sits, a hit played dead on
@@ -124,6 +114,27 @@
         timing.play = live_play_mode(source.play, engine_.live_rnd_unit(),
                                      engine_.live_rnd_armed(), track);
         timing.play_seed = play_seed(pattern.seed, track);
+
+        // The pattern's position, as the scheduler's: the clock less a count-in, less where the
+        // pattern started (a chain entry, a queued switch), which is what steps and passes count
+        // from (Engine::resolve_tick hands the scheduler `tick - origin_`).
+        const uint32_t origin = status.pattern_origin.load(std::memory_order_relaxed);
+        Stamp now;
+        if (clock.position < lead) {
+            // Still counting in. A hit up to half a step before the count-in's end is the one
+            // played a hair early, which is how a downbeat is as often as late: it is step 1's,
+            // as a hit in a loop's last ticks records forward onto the next pass's first step
+            // (core/record.cpp). Anything earlier belongs to the count-in.
+            const float early = float(lead - clock.position) - clock.fraction;
+            if (early > 0.5f * float(timing.step_ticks())) return;
+            now.tick = 0;
+            now.fraction = 0.0f;
+        } else {
+            if (clock.position - lead < origin) return;   // a switch the audio side has not made
+            now.tick = clock.position - lead - origin;
+            now.fraction = clock.fraction;
+        }
+        const Stamp hit = stamp_back(now, kPadLatencyMs, clock.tempo);
 
         // quantize_hit finds the time SLOT the hit belongs to; under REV, PING or RND the note
         // goes to the step that plays in that slot on that pass, so it plays back where it was
