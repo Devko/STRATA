@@ -808,10 +808,10 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     // card protocol: a file that came out a different size means the two have drifted apart.
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 425);
     CHECK_EQ(project_bytes(), 425u);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1453);
-    CHECK_EQ(kit_bytes(), 1453u);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 5108);
-    CHECK_EQ(perform_bytes(), 5108u);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1466);
+    CHECK_EQ(kit_bytes(), 1466u);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 5121);
+    CHECK_EQ(perform_bytes(), 5121u);
     for (int b = 0; b < kBanks; b++) {
         char name[12];
         CHECK(bank_file_name(b, name, int(sizeof name)));
@@ -1097,7 +1097,7 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     CHECK(pump_until_idle());
     CHECK(storage().last_error() == nullptr);
     keep_pristine(kit);
-    CHECK_EQ(g_pristine_bytes, 1453u);
+    CHECK_EQ(g_pristine_bytes, 1466u);
 
     // A sanity pass first: the pristine file loads.
     CHECK(reload_now());
@@ -1720,8 +1720,8 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 425);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1453);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 5108);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1466);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 5121);
 
     // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.
     CHECK_EQ(host.saves() - saves_before, kFileN + 1);
@@ -4929,7 +4929,10 @@ TEST(storage_an_audition_stopped_fades_and_lets_the_stream_go) {
     pump_while_not([] { return !storage().auditioning(); }, 20, &reached);
     CHECK(reached);
     CHECK_EQ(host.streams_open(), 0);
-    CHECK(pump(20) == 0.0f);
+    // Silent to settle()'s 1e-6, not to an exact 0: settle() hands over a master delay and reverb
+    // still ringing below that, and after some tests (a send test, then a long load) they are
+    // still running here at about 1e-7 -- not the audition, which is gone.
+    CHECK(pump(20) < 1e-6f);
     host.remove_file("/SAMPLES/LONG.WAV");
 }
 

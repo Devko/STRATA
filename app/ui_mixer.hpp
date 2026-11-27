@@ -499,12 +499,14 @@
         bool locked = false;
         uint8_t range = 0;       // the held step's random range on it: 0 none, else the width
         bool slides = false;     // the held step's lock on it slides
+        uint8_t top = 127;       // its highest value: 127, or WAV's and DST's last number
     };
 
     ShownParam shown_param(int index) const {
         ShownParam shown;
         shown.base = engine_.params(selected_).v[index];
         shown.heard = shown.base;
+        shown.top = kit_param_max(index);
         if (held_step_ >= 0 && index >= 0 && index < kTrackParams) {
             shown.locked = pattern_get_lock(engine_.pattern(), selected_, held_step_,
                                             uint8_t(index), shown.heard);
@@ -522,18 +524,19 @@
     // reads at a glance (docs/CONTROLS.md, "Locks on screen").
     static void draw_value_bar(enaga::Canvas &canvas, int x, int y, int width, int height,
                                const ShownParam &shown, uint8_t grey) {
-        const int bar = int(shown.heard) * width / 127;
+        const int top = shown.top > 0 ? int(shown.top) : 127;
+        const int bar = int(shown.heard) * width / top;
         canvas.rect(x, y, bar < 1 ? 1 : bar, height, grey);
         // A random range: a dim line under the bar over the values the step can land on.
         if (shown.range != 0) {
             const int low = int(shown.heard) - int(shown.range);
             const int high = int(shown.heard) + int(shown.range);
-            const int from = x + (low < 0 ? 0 : low) * (width - 1) / 127;
-            const int to = x + (high > 127 ? 127 : high) * (width - 1) / 127;
+            const int from = x + (low < 0 ? 0 : low) * (width - 1) / top;
+            const int to = x + (high > top ? top : high) * (width - 1) / top;
             canvas.rect(from, y + height, to - from + 1, 1, 7);
         }
         if (!shown.locked || shown.heard == shown.base) return;
-        const int tick = x + int(shown.base) * (width - 1) / 127;
+        const int tick = x + int(shown.base) * (width - 1) / top;
         canvas.pixel(tick, y - 1, 15);
         canvas.pixel(tick, y + height, 15);
         canvas.rect(tick, y, 1, height, tick < x + bar ? 0 : 3);

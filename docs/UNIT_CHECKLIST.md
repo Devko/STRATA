@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W54, about 174 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W55, about 178 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -745,6 +745,15 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - Optional, a spare card only (#188): PROJECTS, open a saved project and pull the card while
   `LOADING` shows; put it back. The project opens whole under its own name (or the old one stays
   under its own name), never a mix of the two. `____`
+
+**W55. An older project's LFOs after the format change (4 min).** Needs a project saved by
+v0.4.0 with LFOs on (a card from the v0.4 smoke test has one; else set two up on a v0.4.0 card
+first: T1 SQR onto CUT, T7 S+H onto TUN, one step on T1 locking WAV to TRI, a scene that stores
+T7's DST).
+- Open it on this build: both LFOs play exactly as on v0.4.0, the locked step's TRI included, and
+  EDIT's LFO page names SQR, S+H, CUT, TUN. `____`
+- Turn WAV past S+H: it stops there; one click back is SQR. Same for DST at the last parameter. `____`
+- Save, power cycle, open again: unchanged. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

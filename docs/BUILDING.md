@@ -25,6 +25,9 @@ tools/render.sh              # render the output to a WAV offline
   emulator: it walks every screen with keys and knobs and keeps the frames the docs show (MUTATE
   and SCENE need pads, which the emulator lacks, so those two come from the host draw).
   `tools/screenshots.sh` is the quicker host-only route: the same screen code on the host build.
+- `tools/readme_clip.py` records the README's clip (`docs/media/strata.gif`) the same way: the
+  TECHNO showcase project playing, a scripted walk on a timeline, one frame every 50 ms, then a
+  GIF in the screenshots' look. Its docstring has the two commands.
 
 ## Checks
 

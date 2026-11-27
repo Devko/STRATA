@@ -345,6 +345,10 @@ constexpr uint16_t kSectionPerformSceneAsr = 6;
 // the four values, then a byte whose low four bits say which are stored -- the HIGH half of the
 // fourth mask byte. OPTIONAL on read.
 constexpr uint16_t kSectionPerformSceneOsc = 7;
+// The LFO layout, one byte, as KIT.BIN's section 13 (core/project.hpp, kLfoLayoutNumbers): the
+// scenes' and the macros' WAV and DST bytes are numbers. Optional on read: a file without it holds
+// the old bands, converted once (kit_lfo_from_band).
+constexpr uint16_t kSectionPerformLfoLayout = 8;
 
 // Loading is value-tolerant but structure-strict, exactly as the other three file types are: a
 // macro naming a track that does not exist is dropped, while a bad magic, an unknown version, a

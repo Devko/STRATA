@@ -237,6 +237,7 @@ struct UiProbe {
         app.stop_armed_ = false;
         app.field_page_ = 0;
         for (int t = 0; t < kTracks; t++) app.muted_[t] = false;
+        app.click_on_ = false;         // the metronome (fresh() posts the engine's off)
         app.cpu_max_ = 0;              // MAX holds since the last PLAY, which may be tests ago
     }
     static bool perf_riding(const Strata &app) { return app.perf_riding_; }
@@ -559,6 +560,7 @@ Strata &fresh() {
     post_cmd(Cmd::set_auto_fill);
     post_cmd(Cmd::set_repeat, uint8_t(RepeatLength::sixteenth));   // let go
     post_cmd(Cmd::step_stutter);
+    post_cmd(Cmd::set_click, 0);                                // metronome off (engine state)
     for (int t = 0; t < kTracks; t++) {
         post_cmd_track(Cmd::set_throw, t);
         post_cmd_track(Cmd::set_mute, t);

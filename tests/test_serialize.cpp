@@ -14,6 +14,7 @@
 
 #include "pattern.hpp"
 #include "serialize.hpp"
+#include "project.hpp"   // the LFO layout and kit_lfo_from_band
 
 #include <initializer_list>
 
@@ -378,8 +379,8 @@ TEST(the_format_constants_are_the_documented_ones) {
     CHECK_EQ(int(kSectionFeel), 5);
     CHECK_EQ(int(kFeelSectionBytes), 1);
     // 16 header + 60 table + 12 pattern header + 6168 tracks + 8 play modes + 1 FEEL + 2048 locks.
-    CHECK_EQ(int(kPatternMaxBytes), 8313);
-    CHECK_EQ(int(kPatternFixedBytes), 8313 - 2048);
+    CHECK_EQ(int(kPatternMaxBytes), 8326);
+    CHECK_EQ(int(kPatternFixedBytes), 8326 - 2048);
 }
 
 TEST(a_written_pattern_starts_with_the_documented_header) {
@@ -398,7 +399,7 @@ TEST(a_written_pattern_starts_with_the_documented_header) {
     CHECK_EQ(peek_u32(g_buffer, kCrcOffset),
              crc32(g_buffer + kHeaderBytes, written - kHeaderBytes));
 
-    // The section table: five sections, back to back, starting right after the table.
+    // The section table: six sections, back to back, starting right after the table.
     CHECK_EQ(int(peek_u16(g_buffer, 16)), int(kSectionPatternHeader));
     CHECK_EQ(peek_u32(g_buffer, 16 + 4), kPatternSections * kSectionEntryBytes);
     CHECK_EQ(peek_u32(g_buffer, 16 + 8), kPatternHeaderSectionBytes);
@@ -408,8 +409,10 @@ TEST(a_written_pattern_starts_with_the_documented_header) {
     CHECK_EQ(peek_u32(g_buffer, 40 + 8), kPlayModesSectionBytes);
     CHECK_EQ(int(peek_u16(g_buffer, 52)), int(kSectionFeel));
     CHECK_EQ(peek_u32(g_buffer, 52 + 8), kFeelSectionBytes);
-    CHECK_EQ(int(peek_u16(g_buffer, 64)), int(kSectionLocks));
-    CHECK_EQ(peek_u32(g_buffer, 64 + 8), 0u);      // an empty pattern has no locks
+    CHECK_EQ(int(peek_u16(g_buffer, 64)), int(kSectionPatternLfoLayout));
+    CHECK_EQ(peek_u32(g_buffer, 64 + 8), kLfoLayoutSectionBytes);
+    CHECK_EQ(int(peek_u16(g_buffer, 76)), int(kSectionLocks));
+    CHECK_EQ(peek_u32(g_buffer, 76 + 8), 0u);      // an empty pattern has no locks
 
     // An empty pattern is the fixed part and nothing more.
     CHECK_EQ(written, kPatternFixedBytes);
@@ -476,6 +479,50 @@ TEST(a_full_pattern_survives_a_round_trip_field_by_field) {
         }
     }
     CHECK(ab_steps > 0);
+}
+
+TEST(a_pattern_from_before_numbers_converts_its_wav_and_dst_locks_once) {
+    // Format decision C: a pattern marks its LFO layout (section 6). Without the mark, a lock on
+    // WAV or DST holds a band, and a random range on them a width in band counts: both load as
+    // numbers. Locks on anything else are untouched.
+    pattern_init(g_source);
+    CHECK(pattern_set_lock(g_source, 0, 2, uint8_t(kKitLfoWaveIndex), 3));
+    CHECK(pattern_set_lock(g_source, 0, 2, uint8_t(kKitLfoDestIndex), 12));
+    CHECK(pattern_set_range(g_source, 1, 5, uint8_t(kKitLfoWaveIndex), 2));
+    CHECK(pattern_set_lock(g_source, 1, 5, 4, 90));
+    uint32_t written = 0;
+    CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
+             int(SerializeResult::ok));
+    const uint32_t layout = section_at(g_buffer, kSectionPatternLfoLayout);
+    CHECK(layout != 0u);
+    CHECK_EQ(int(g_buffer[layout]), int(kLfoLayoutNumbers));
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, written)), int(SerializeResult::ok));
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(g_loaded, 0, 2, uint8_t(kKitLfoWaveIndex), value));
+    CHECK_EQ(int(value), 3);
+    CHECK(pattern_get_lock(g_loaded, 0, 2, uint8_t(kKitLfoDestIndex), value));
+    CHECK_EQ(int(value), 12);
+    CHECK_EQ(int(pattern_get_range(g_loaded, 1, 5, uint8_t(kKitLfoWaveIndex))), 2);
+
+    // As an older build wrote it: SAW's band (64), DST 11's band (90), a width of 22 (about one
+    // shape), and the mark 0.
+    pattern_init(g_source);
+    CHECK(pattern_set_lock(g_source, 0, 2, uint8_t(kKitLfoWaveIndex), 64));
+    CHECK(pattern_set_lock(g_source, 0, 2, uint8_t(kKitLfoDestIndex), 90));
+    CHECK(pattern_set_range(g_source, 1, 5, uint8_t(kKitLfoWaveIndex), 22));
+    CHECK(pattern_set_lock(g_source, 1, 5, 4, 90));
+    CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
+             int(SerializeResult::ok));
+    g_buffer[section_at(g_buffer, kSectionPatternLfoLayout)] = 0;
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(pattern_read(g_loaded, g_buffer, written)), int(SerializeResult::ok));
+    CHECK(pattern_get_lock(g_loaded, 0, 2, uint8_t(kKitLfoWaveIndex), value));
+    CHECK_EQ(int(value), 3);                                   // SAW
+    CHECK(pattern_get_lock(g_loaded, 0, 2, uint8_t(kKitLfoDestIndex), value));
+    CHECK_EQ(int(value), 11);                                  // (90 x 17) >> 7
+    CHECK_EQ(int(pattern_get_range(g_loaded, 1, 5, uint8_t(kKitLfoWaveIndex))), 2);  // 22 -> 2
+    CHECK(pattern_get_lock(g_loaded, 1, 5, 4, value));
+    CHECK_EQ(int(value), 90);                                  // not WAV or DST: as it was
 }
 
 TEST(a_lock_value_past_127_in_a_file_loads_as_127) {
@@ -823,7 +870,7 @@ TEST(a_damaged_section_table_is_refused) {
     // A section that claims more bytes than the payload holds: the last one, the locks.
     CHECK_EQ(int(pattern_write(g_source, g_buffer, kBufferBytes, &written)),
              int(SerializeResult::ok));
-    poke_u32(g_buffer, 64 + 8, 1);
+    poke_u32(g_buffer, 76 + 8, 1);
     refresh_crc(g_buffer);
     CHECK_EQ(int(pattern_read(g_loaded, g_buffer, written)), int(SerializeResult::malformed));
 

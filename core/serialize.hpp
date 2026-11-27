@@ -142,6 +142,10 @@ constexpr uint16_t kSectionPlayModes = 4;
 // One byte, the pattern's FEEL (core/timing.hpp). Optional on read in the same way: absent is a
 // pattern from before FEEL, and plays straight.
 constexpr uint16_t kSectionFeel = 5;
+// One byte, the LFO layout of the pattern's locks (core/project.hpp, kLfoLayoutNumbers): a WAV or
+// DST lock holds a number. Optional on read: absent is a pattern whose WAV and DST locks hold the
+// old bands, converted once (kit_lfo_from_band), random ranges on them with them.
+constexpr uint16_t kSectionPatternLfoLayout = 6;
 
 enum class SerializeResult : uint8_t {
     ok = 0,
@@ -159,10 +163,11 @@ const char *serialize_result_name(SerializeResult result);
 
 // --- pattern round trip ---------------------------------------------------
 
-constexpr uint32_t kPatternSections = 5;      // written; a reader needs only the first three
+constexpr uint32_t kPatternSections = 6;      // written; a reader needs only the first three
 constexpr uint32_t kPatternHeaderSectionBytes = 12;
 constexpr uint32_t kPlayModesSectionBytes = uint32_t(kTracks);
 constexpr uint32_t kFeelSectionBytes = 1;
+constexpr uint32_t kLfoLayoutSectionBytes = 1;
 
 // On-disk sizes, stated separately from the structs. They agree with sizeof today and the
 // asserts below say so, but the file format is not allowed to follow a struct that changes.
@@ -175,10 +180,10 @@ constexpr uint32_t kTrackBytes = 3 + uint32_t(kStepsPerTrack) * kStepBytes;
 constexpr uint32_t kTracksSectionBytes = kTrackBytes * uint32_t(kTracks);
 constexpr uint32_t kPatternFixedBytes =
     kHeaderBytes + kPatternSections * kSectionEntryBytes + kPatternHeaderSectionBytes +
-    kTracksSectionBytes + kPlayModesSectionBytes + kFeelSectionBytes;
+    kTracksSectionBytes + kPlayModesSectionBytes + kFeelSectionBytes + kLfoLayoutSectionBytes;
 
 // The most a pattern can ever take: size a static buffer with this and `pattern_write` can
-// never refuse it. 8,313 bytes as the format stands.
+// never refuse it. 8,326 bytes as the format stands.
 constexpr uint32_t kPatternMaxBytes = kPatternFixedBytes + uint32_t(kLockPool) * kLockBytes;
 
 // Exactly what `pattern_write` will produce for this pattern. Smaller than kPatternMaxBytes by

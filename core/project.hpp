@@ -69,6 +69,37 @@ constexpr int kKitAsrEnd = kKitArpEnd + kKitAsrParams;
 constexpr int kKitOscParams = 4;
 constexpr int kKitParams = kKitAsrEnd + kKitOscParams;
 
+// --- the LFO's WAV and DST bytes: numbers, not bands (format decision C, 2026-11-26) ----------
+//
+// WAV is the shape's number, 0-5 (dsp/lfo.hpp's LfoWave), and DST is 0 for OFF or 1-16 for a
+// sound parameter. Until this they were bands of 0-127 (six and seventeen), so a seventh shape or
+// a destination past the sound page would have moved every band edge and re-read every stored
+// byte as something else. A file written before this marks no layout and is converted once on
+// read (`kit_lfo_from_band`): in the kit, the scenes, the macros and the steps' locks.
+constexpr int kKitLfoWaveIndex = kKitSoundParams + 0;
+constexpr int kKitLfoDestIndex = kKitSoundParams + 3;
+constexpr int kKitLfoWaves = 6;                              // static_asserted in dsp/lfo.hpp
+constexpr uint8_t kKitLfoWaveMax = uint8_t(kKitLfoWaves - 1);
+constexpr uint8_t kKitLfoDestMax = uint8_t(kKitSoundParams);  // OFF, then the 16
+// The marker byte the layout sections hold: 1 = WAV and DST are numbers.
+constexpr uint8_t kLfoLayoutNumbers = 1;
+
+// The highest value a parameter byte may hold: 127 for all but WAV and DST. Knobs, locks,
+// random ranges and LIVE RND clamp to it, so a knob does not wind past the last shape.
+constexpr uint8_t kit_param_max(int index) {
+    return index == kKitLfoWaveIndex ? kKitLfoWaveMax
+                                     : (index == kKitLfoDestIndex ? kKitLfoDestMax : uint8_t(127));
+}
+
+// A byte of the old band layout as the number it meant: WAV in six bands, DST in seventeen; any
+// other parameter unchanged. Integer multiply-shift, as dsp/lfo.hpp decoded the bands.
+constexpr uint8_t kit_lfo_from_band(int index, uint8_t byte) {
+    const int b = byte > 127 ? 127 : int(byte);
+    return index == kKitLfoWaveIndex   ? uint8_t((b * kKitLfoWaves) >> 7)
+           : index == kKitLfoDestIndex ? uint8_t((b * (kKitSoundParams + 1)) >> 7)
+                                       : byte;
+}
+
 // What a kit from before the OSC page loads as: a saw, OSC 2 off, the sub at 102 (the 0.4 it was
 // fixed at) and no drive -- the old voice without its fixed synced-pulse bite, which the OSC
 // page's SYN zone now does properly (dsp/va.cpp).
@@ -631,6 +662,11 @@ constexpr uint16_t kSectionKitChoke = 11;
 // The arp's kit settings, 4 bytes a track (KitTrack::arp: VAR RHYTHM ACCENT RATCHET). Optional
 // on read: a KIT.BIN from before it loads every arp with all four 0, the arp as it always played.
 constexpr uint16_t kSectionKitArpExt = 12;
+// The LFO layout, one byte: kLfoLayoutNumbers when WAV and DST are numbers (format decision C).
+// Optional on read: a KIT.BIN without it holds the old bands, which load converted
+// (kit_lfo_from_band). An older build reading a newer kit reads the numbers as low bands: SIN
+// and OFF mostly, which the release notes say.
+constexpr uint16_t kSectionKitLfoLayout = 13;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;
