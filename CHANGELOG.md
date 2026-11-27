@@ -6,10 +6,29 @@ the project file format or the controls.
 
 ## [Unreleased]
 
-### Added
+Everything merged since 0.4.0 (#180 to #195). It still runs on **Enaga 0.3.0**, so updating from
+0.4.0 is the app only. The features below have not been through the unit walkthrough yet.
 
-- **Note repeat is recordable**: with REC on, a held NOTE RPT pad records one step, a roll over
-  LEN at the repeat rate, its LEN from the hold (1/4T records a plain hit) (#187).
+### Upgrading from 0.4.0
+
+- **Firmware:** none. Keep Enaga 0.3.0 and replace `/ENAGA/APPS/STRATA/APP.ENA` (the card
+  builder's "STRATA only").
+- **Your projects and kits open as they are** and sound as before, with three exceptions: FM4 at
+  high IDX on high notes is a little less bright (it no longer aliases), a track with DRIVE up
+  loses a DC offset it should never have had (the factory kicks peak about 0.6 dB lower), and
+  the arp's RND, with RATCHET's RND2 and RND3, draws new notes on every pass instead of repeating
+  one fixed pattern.
+- **Nothing in the file format was taken away.** New settings went where older builds do not
+  look: choke groups and the arp's VAR, RHYTHM, ACCENT and RATCHET in two new optional KIT.BIN
+  sections (11 and 12), REC MODE in PROJECT.BIN's unused swing byte, a recorded chord's extra
+  notes in the step's locks, a roll over LEN in the ratchet byte.
+- **Opening this build's projects in 0.4.0** works and loses only the new settings: no choke
+  groups, the arps without VAR, RHYTHM, ACCENT and RATCHET, a recorded chord as its first note,
+  and a roll over LEN as a one-step ratchet.
+- **No gesture moved.** Everything 0.4.0 did, it still does the same way. Holding OK in GRID,
+  which did nothing, now opens the track menu (GEN and EVOLVE); a tap still does nothing.
+
+### Added
 
 - **GEN and EVOLVE**: hold OK in GRID for the track menu. **GENERATE** writes a new part on the
   selected track: a rhythm weighted to the beat with accents and ghosts, and on a melodic track a
@@ -17,20 +36,6 @@ the project file format or the controls.
   notes). **EVOLVE** mutates the track on its own every 1, 2, 4 or 8 loops with PERFORM's MUTATE
   setting: **ORBIT** varies around the part as it was, **DRIFT** lets the changes add up; KEEP and
   HOME stop it. GEN is one undo level; EVOLVE is RAM only and needs no file change (#195).
-
-- **Ratchets over LEN**: on the step page, RTCH goes on past 8 into rolls, `ROLL/64` to `ROLL/4`:
-  the step rolls at that rate for its whole LEN (1/32 over 16 steps is 32 hits), with RAMP across
-  the roll for build-ups. No file change; an older build plays such a step as a one-step ratchet
-  (#185).
-
-- **CLICK and COUNT-IN** in the FUNC menu: a metronome on every beat (higher on a bar's
-  first), and a count-in of 1 or 2 bars before a PLAY with REC on, so a take starts on step 1
-  after the clicks. Neither is recorded nor saved; under an outside clock there is no count-in (#182).
-
-- **Choke groups** for any track: push A-D on MIXER's TRK 1-4 / TRK 5-8 pages puts that track in
-  group 1-4 (`C1`-`C4` under its strip), and a note on a track cuts the other tracks of its group
-  with a short fade. Saved in the kit; older kits open with no groups (#181).
-
 - **Chords recorded note for note.** On VA POLY, WAVE POLY, FM4 and MID, every note played into
   one step while recording is kept: the step's note plus up to five more, stored as locks 32-36
   in the pattern's pool, so no file change and an older build plays the step's own note. Until
@@ -38,46 +43,60 @@ the project file format or the controls.
   QUANTIZE, says what a later pass does: **REPLACE** (the default: the first note of a pass on a
   step takes it over, chord type and all) or **ADD** (notes join the step's chord). The step
   page shows `NOTE C4 +2`; transpose, mutate and NOTE move the whole chord; the last key up of a
-  chord sets its LEN. Saved in PROJECT.BIN's old swing byte. Mono and drum tracks are unchanged (#183).
-- **The card builder**, [strata.einblick.dev](https://strata.einblick.dev): pick a release and it
-  builds one SD card zip with STRATA and the Enaga firmware it needs, both fetched in your
-  browser from their official releases and checked against their SHA-256. Source in `web/`
-  (#180).
+  chord sets its LEN. Saved in PROJECT.BIN's old swing byte. Mono and drum tracks are unchanged
+  (#183).
+- **CLICK and COUNT-IN** in the FUNC menu: a metronome on every beat (higher on a bar's
+  first), and a count-in of 1 or 2 bars before a PLAY with REC on, so a take starts on step 1
+  after the clicks. Neither is recorded nor saved; under an outside clock there is no count-in
+  (#182).
+- **Choke groups** for any track: push A-D on MIXER's TRK 1-4 / TRK 5-8 pages puts that track in
+  group 1-4 (`C1`-`C4` under its strip), and a note on a track cuts the other tracks of its group
+  with a short fade. Saved in the kit; older kits open with no groups (#181).
+- **Ratchets over LEN**: on the step page, RTCH goes on past 8 into rolls, `ROLL/64` to `ROLL/4`:
+  the step rolls at that rate for its whole LEN (1/32 over 16 steps is 32 hits), with RAMP across
+  the roll for build-ups. No file change; an older build plays such a step as a one-step ratchet
+  (#185).
+- **Note repeat is recordable**: with REC on, a held NOTE RPT pad records one step, a roll over
+  LEN at the repeat rate, its LEN from the hold (1/4T records a plain hit) (#187).
 - **Arp depth**: push A-D on the ARP page for VAR (converge, diverge, thumb and pinky pedals),
   RHYTHM (eleven rest patterns, Euclidean ones among them; a rest holds the note, so the run turns
   against the bar), ACCENT (seven patterns and CYC, each run's first note) and RATCHET (2-4
   repeats on fixed slots or by chance). Kit settings in KIT.BIN's new optional section 12; an
-  older kit plays its arps as before. The ARP picture draws rests, accents and ratchets.
+  older kit plays its arps as before. The ARP picture draws rests, accents and ratchets (#184).
 - **ARPS**: OK on the ARP page opens fourteen factory arps (TRANCE, ROLLER, ACID, BLEEP, DUB,
   OFFBT, THUMB, PINKY, CONVRG, RATCHT, FILL, EUCLID, AMBNT, DRIFT), loaded into one track with the
-  beat playing, AS WAS first.
+  beat playing, AS WAS first (#184).
 - **40 more factory sounds**, techno and ambient, on every machine: 116 in all (docs/MANUAL.md
-  has the table).
+  has the table) (#184).
+- **The card builder**, [strata.einblick.dev](https://strata.einblick.dev): pick a release and it
+  builds one SD card zip with STRATA and the Enaga firmware it needs, both fetched in your
+  browser from their official releases and checked against their SHA-256. Source in `web/`
+  (#180).
 - **A one-hour smoke test** (S1-S20) at the top of `docs/UNIT_CHECKLIST.md`: boot, the small
   font on the OLED, load on A01 and A04, LOCK, the MOD slots, one RESAMPLE take and a save that
-  survives a power cycle, before the two-hour walkthrough.
+  survives a power cycle, before the two-hour walkthrough (#186).
 
 ### Changed
-
-- Internal: the engine's command handling is split into twelve handlers, one per family of
-  commands, with no change in behaviour; the host tests no longer depend on the order they run in,
-  and `tools/test_shuffle.sh` runs them in shuffled orders to keep it so.
-- **The arp's RND is random on every pass** (and RATCHET's RND2 and RND3 with it): each run draws
-  a new seed. It used to play one fixed pattern for a given track and step.
-- A kit recalled from the kit library brings its arp settings with its ARP bytes.
 
 - **FM4 no longer aliases at high IDX.** The brightness cap now sees the whole operator chain:
   in a stack the sidebands multiply, so ALG 1 at IDX 90 on middle C and above folded harsh,
   out-of-tune tones back into the audible range, about 10 dB under the note. Now they are 45-56 dB
   down under 5 kHz. Low notes sound as before; high notes at high IDX are somewhat less bright.
   `make -C host probe` and `tools/sound_probe.py` measure every synth for aliasing, tuning,
-  resonance, DC and clicks.
-
+  resonance, DC and clicks (#189).
 - **DRIVE no longer pushes the sound off centre.** The insert drive clips the two halves of the
   wave differently (that is its even-harmonic grit), which also shifted a held note off zero, by
   up to 7% of full scale. A DC blocker (an 8 Hz cut) now follows it: more headroom, no thump when
   a driven track is muted or choked, and nothing off-centre fed into the sends. The factory kicks'
-  peaks drop from -3.2 to -3.8 dBFS; what changed is almost all below 20 Hz.
+  peaks drop from -3.2 to -3.8 dBFS; what changed is almost all below 20 Hz (#191).
+- **The arp's RND is random on every pass** (and RATCHET's RND2 and RND3 with it): each run draws
+  a new seed. It used to play one fixed pattern for a given track and step (#190).
+- Internal: the engine's command handling is split into twelve handlers, one per family of
+  commands, with no change in behaviour; the host tests no longer depend on the order they run in,
+  and `tools/test_shuffle.sh` runs them in shuffled orders to keep it so (#186).
+- Internal: the emulator scenarios take 638 s instead of 918 s (a build cache, a decode cache,
+  the longest first); `make -C host warn` compiles everything at -O1, where CI's sanitizer build
+  finds warnings, and CI caches its compiles (#192, #194).
 
 ### Fixed
 
@@ -85,18 +104,21 @@ the project file format or the controls.
   other filed under the new name, where the next save wrote the mix over it: the name goes
   back, and the open runs again from its first file when the card returns. Leaving the app
   during a load, or before the boot's load has run, no longer autosaves over the project the
-  next start opens.
-- **A kit recalled from the library** brings back its SLC AUTO, LFO TRIG, MOD slots and choke
-  group; only the knobs, machine, fader and duck came back.
+  next start opens (#188).
+- **A kit recalled from the library** brings back its SLC AUTO, LFO TRIG, MOD slots, choke
+  group and arp settings; only the knobs, machine, fader and duck came back (#184, #188).
 - **DOUBLE or undo on the playing pattern** moves the end of its pass too: a chain entry or a
-  song ended at the old length.
+  song ended at the old length (#188).
 - **Recording after a chain step or a queued pattern change** puts the note on the step that
-  was playing, not one counted from the song's start.
+  was playing, not one counted from the song's start (#188).
 - **A STEP range** ends when you change track or screen. Before, a plain CLR, copy or turn on
-  another track (or in EDIT, where `SEL` is not shown) acted on that range there.
-- **SAMPLES read again (FUNC+UP)** keeps the cursor on the list when it comes back shorter.
+  another track (or in EDIT, where `SEL` is not shown) acted on that range there (#188).
+- **SAMPLES read again (FUNC+UP)** keeps the cursor on the list when it comes back shorter
+  (#188).
 - **A step pulled before tick 0** on a one- or two-step track with micro and FEEL no longer
-  fires twice there.
+  fires twice there (#188).
+- **The UI tests' screenshot walk** opens SAMPLES from EDIT's SRC page again; CI had been red
+  since #184 (#193).
 
 ## [0.4.0] - 2026-11-26
 
