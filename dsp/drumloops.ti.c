@@ -154,6 +154,23 @@ void strata_hat_vca(float *restrict buf, const float *restrict env, int n, float
     }
 }
 
+void strata_hat_back(float *restrict buf, const float *restrict env, int n, enaga_svf *band,
+                     const enaga_svf_coefficients *band_c, enaga_svf *high,
+                     const enaga_svf_coefficients *high_c, float trigger_level) {
+    const enaga_svf_coefficients kb = *band_c, kh = *high_c;
+    enaga_svf tb = *band, th = *high;
+    float low, mid, top;
+    int i;
+    for (i = 0; i < n; i++) {
+        enaga_svf_step(&tb, &kb, buf[i], &low, &mid, &top);
+        const float x = mid * env[i] * trigger_level;
+        enaga_svf_step(&th, &kh, enaga_soft_clip(x > 0.0f ? 4.0f * x : 0.1f * x), &low, &mid, &top);
+        buf[i] = top;
+    }
+    *band = tb;
+    *high = th;
+}
+
 /* ---- shared ---- */
 
 void strata_mix_ramp(float *restrict out, const float *restrict in, int n, float gain,

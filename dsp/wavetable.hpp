@@ -47,6 +47,20 @@ constexpr int wave_mip_offset(int k) {
 }
 constexpr int kWaveFrameStride =
     wave_mip_offset(kWaveMipLevels - 1) + wave_mip_length(kWaveMipLevels - 1) + 1;
+
+// wave_mip_offset for every level, worked out by the compiler: frame_at() runs per slice per
+// voice, and a run-time call of the recursion above compiled to a loop with calls in it (about
+// 3% of the guest profile with WAVE POLY playing, 2026-11-27).
+struct WaveMipOffsets {
+    int at[kWaveMipLevels];
+};
+constexpr WaveMipOffsets make_wave_mip_offsets() {
+    WaveMipOffsets o{};
+    for (int k = 0; k < kWaveMipLevels; k++) o.at[k] = wave_mip_offset(k);
+    return o;
+}
+inline constexpr WaveMipOffsets kWaveMipOffsets = make_wave_mip_offsets();
+static_assert(kWaveMipOffsets.at[kWaveMipLevels - 1] == wave_mip_offset(kWaveMipLevels - 1));
 static_assert(kWaveFrameStride == 5130, "mip layout changed: update the header comment");
 
 constexpr uint32_t kWaveLibraryBytes =

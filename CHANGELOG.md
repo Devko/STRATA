@@ -89,6 +89,9 @@ means new firmware as well as the app. The features below have not been through 
 
 ### Changed
 
+- **Hats and WAVE tracks cost less**: the hat's two filters and its VCA run as one loop, and WAVE
+  finds its table frames without a run-time recursion; the same sound to the last bit. The
+  default beat 24.3% -> 24.1%, a WAVE POLY pattern 27.9% -> 26.6% on the emulator (Enaga 0.4.0).
 - **File format: the LFO's WAV and DST are numbers** (Roland's decision C): a shape or a
   destination is stored as its number rather than as a band of 0-127, so new shapes and
   destinations can come later without changing what any saved project sounds like. Projects,
