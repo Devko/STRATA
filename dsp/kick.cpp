@@ -41,6 +41,7 @@
 namespace strata {
 namespace {
 
+using enaga::dsp::Envelope;
 using enaga::dsp::EnvelopeShape;
 using enaga::dsp::Svf;
 using enaga::dsp::SvfCoefficients;
@@ -55,6 +56,10 @@ constexpr float kClickHz = 5000.0f;
 constexpr float kClickK = 0.5f;
 // The reference's transient envelope time constant.
 constexpr float kTransientTau = 0.005f;
+// Below this the transient envelope stops the click path (Kick::run): what the click and its
+// noise would still add is under 3e-6 of full scale per unit of CLK, -110 dB, under the last
+// bit of a 16-bit file. About 64 ms after the hit at tau = 5 ms; the body rings on far longer.
+constexpr float kTransientFloor = 3.0e-6f;
 // ln(100): EnvelopeShape::make wants the time to reach 1% of the target, where the reference
 // gives time constants. One is ln(100) of the other, and the per-sample coefficient comes out
 // the same as Plaits' 1 / (tau * rate).
@@ -292,8 +297,18 @@ void Kick::run(Voice &v, float *out, int n) {
     // The transient: a 1 ms gate, slewed, high-passed and band-limited, plus attack noise. Both
     // ride the transient envelope. The gate and the slew are one pass, which keeps the state
     // out of a second loop.
-    v.transient.render(transient_env_, n, transient_shape_);
-    if (click_level_ > 0.0f) {
+    // Once the transient has decayed under kTransientFloor (it only falls after its attack), the
+    // click path would add nothing audible for the rest of the note: skip it, and the
+    // envelope with it, until the next hit resets both (start() gates the transient on from
+    // zero). The shared noise generator still steps n times, so later hits on either voice draw
+    // the same noise they would have. Not bit-exact: the skipped tail was under -110 dB.
+    const bool transient_spent = v.transient.stage() != Envelope::attack &&
+                                 v.transient.level() < kTransientFloor;
+    if (transient_spent) {
+        v.gate = v.gate > n ? v.gate - n : 0;
+        if (click_level_ > 0.0f) strata_rng_skip(rng_.state(), n);
+    } else if (click_level_ > 0.0f) {
+        v.transient.render(transient_env_, n, transient_shape_);
         const int gate = v.gate < n ? v.gate : n;
         v.gate -= gate;
         strata_kick_click(click_, n, gate, &v.slew, &v.click_hp);
@@ -307,6 +322,7 @@ void Kick::run(Voice &v, float *out, int n) {
         enaga_add(click_, noise_, n);
         enaga_mix_product(body_, click_, transient_env_, n, click_level_ * v.trigger_level);
     } else {
+        v.transient.render(transient_env_, n, transient_shape_);
         v.gate = 0;
     }
 

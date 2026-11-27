@@ -173,6 +173,18 @@ void strata_hat_back(float *restrict buf, const float *restrict env, int n, enag
 
 /* ---- shared ---- */
 
+void strata_rng_skip(uint32_t *state, int n) {
+    uint32_t x = *state;
+    int i;
+    for (i = 0; i < n; i++) {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+    }
+    *state = x;
+}
+
+
 void strata_mix_ramp(float *restrict out, const float *restrict in, int n, float gain,
                      float step) {
     int i;

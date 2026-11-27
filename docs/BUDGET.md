@@ -131,6 +131,30 @@ all pipelined, about 84 cycles a frame) was bit-exact on the host and in the emu
 build, but its cl6x build's capture of `scenario_ambient` differed from the frame loop's in
 every sample, so #196 left it out. It was not the sound:
 
+### KICK's click path stops when its transient is spent (2026-11-27, emulator, Enaga v0.4.0)
+
+The first change in this file that is not bit-exact, on Roland's go-ahead. KICK's click (a 1 ms
+gate, slew, high-pass, a 5 kHz SVF, two one-poles of noise) rides the transient envelope, tau
+5 ms, but ran for the whole note ("Optimization review", finding 4). Now, once the transient is
+past its attack and under `kTransientFloor` (3e-6, -110 dB per unit of CLK, about 64 ms after
+the hit), the click path and the transient envelope are skipped until the next hit, which gates
+the transient on from zero as before. The shared noise generator still steps the same number of
+times (`strata_rng_skip`, held to `enaga_noise_add` by `drumloops_the_rng_skip_leaves_the_state_noise_would`),
+so every later hit draws the noise it always did.
+
+What it changes, measured: 16 s of the default beat rendered through the emulator (cl6x,
+`tools/render.sh --bits 32`) before and after differ in 10% of samples by at most **3.4e-7 of
+full scale (-129 dB)**, with the same RMS and no time shift; the golden renders pass unchanged.
+
+| | before | after |
+| --- | --- | --- |
+| the default beat and most scenarios, cl6x | 24.06% | **23.16%** (-0.90) |
+| `scenario_ratchetspan` (the worst), cl6x | 27.45% | **26.34%** |
+| `scenario_wave` / `scenario_ambient`, cl6x | 26.62% / 26.02% | **25.71% / 25.12%** |
+| `scenario_ambient`, GCC-only | 56.08% | **55.06%** |
+
+All 47 scenarios pass with cl6x; worst **26.34%** (`ratchetspan`).
+
 ### The hat's back half fused, and WAVE's frame lookup (2026-11-27, emulator)
 
 A fresh `tools/profile_guest.py` on the default beat and `scenario_wave` after #203: the largest
