@@ -207,6 +207,16 @@ enum class Cmd : uint8_t {
     // level first and CLR is the undo that already exists.
     mutate,            // track, step: the first step, a: Mutation, b: amount 0-100, c: how many
 
+    // GEN (core/generate.hpp): a new part for the track, one undo level like `mutate`. The
+    // engine decides drum or melodic from the track's machine. `u` is the variant.
+    generate,          // track, a: density 0-100, b: range 1-3, c: leap 0-100, d: GenWhat
+
+    // EVOLVE (core/evolve.hpp): RAM only, no undo level. `evolve_set` with a: 0 is a KEEP.
+    evolve_set,        // track, a: period index 0-4
+    evolve_config,     // a: EvolveMode, b: Mutation, c: amount 0-100 -- for every track
+    evolve_keep,       // track: what plays becomes HOME, and it stops
+    evolve_home,       // track: back to HOME, and it stops
+
     // Scenes. A capture takes the CURRENT kit, which is why it happens on this side: `params_`
     // is what the machines read and the UI only has a block-old copy of it.
     scene_capture,     // a: scene, b: 0 = every track, 1 = `track` only
@@ -565,6 +575,10 @@ struct Status {
     // says NOTHING TO MUTATE instead of naming a mutation that never happened -- on the unit that
     // looked exactly like a pad that does nothing. A wrap is harmless: the UI compares.
     std::atomic<uint8_t> mutate_unchanged{0};
+    // Bumped by the audio side each time EVOLVE changed a track on a pass boundary: the card
+    // side has to mark the bank dirty for a pattern edit no command made, and the scenario log
+    // says EVOLVE. A wrap is harmless: the UI compares.
+    std::atomic<uint8_t> evolve_turns{0};
 
     // M4. Per track, bumped by the audio side when it stops reading that track's sample. The
     // loader watches for the change before it releases the memory and loads over it -- the
@@ -740,6 +754,12 @@ struct Status {
         lock_last.store(last, std::memory_order_relaxed);
         lock_event.store(uint8_t(lock_event.load(std::memory_order_relaxed) + 1),
                          std::memory_order_release);
+    }
+
+    // Audio context only, one writer, as bump_song_end.
+    void bump_evolve_turns() {
+        evolve_turns.store(uint8_t(evolve_turns.load(std::memory_order_relaxed) + 1),
+                           std::memory_order_release);
     }
 
     // Audio context only, one writer, as bump_song_end.

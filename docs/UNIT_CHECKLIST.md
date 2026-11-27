@@ -4,7 +4,7 @@ Start with **the smoke test** (S1-S20, one hour): boot, the screen, load, and th
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W51, about 161 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W52, about 165 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -684,6 +684,18 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - New sounds: T1 SOUNDS RUMBLE, TIGHT, BOOM, HARD; T6 DUBBAS, RUBBER; T7 DUBCHD, WARM, SWELL; and
   on an FM4 track BLIP and DRONE: each sits near the part it replaces, nothing much louder. `____`
 - Save, power cycle: the arp's settings and the loaded arp come back. `____`
+
+**W52. GEN and EVOLVE (4 min).** Beat playing, A01, GRID.
+- Tap OK: nothing opens. Hold OK half a second: the track menu, `>GENERATE`, footer `T1  OK: RUN`.
+  OK: `GEN T1 BOTH`, a new kick part that starts on step 1. OK again: another one. Close with CLR
+  and FUNC + CLR: the part before. `____`
+- Screen key down to T6 (the bass), hold OK, OK: a bass line in the key (KEY on PROJECT), starting
+  on the root. RANGE 2, LEAP 70, OK: wider and jumpier. WHAT to NOTES, OK: same rhythm, new notes. `____`
+- DOWN to EVOLVE, RIGHT twice: `EVOLVE T6 2 LOOPS`. Every second pass the line changes (the
+  MUTATION row says how: NOTES or VELOCITY are the clearest). In ORBIT it stays recognisably the
+  same line after a minute. Tap a step on T6 while it runs: the trig stays through later turns. `____`
+- MODE to DRIFT and wait a minute: it wanders off. HOME: `HOME: EVOLVE OFF`, the line from when
+  EVOLVE went on, plus the trig you tapped. Read LOAD: no higher than without EVOLVE. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
