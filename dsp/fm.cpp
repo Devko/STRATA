@@ -79,6 +79,56 @@ const float *fm_sine_table() {
     return table;
 }
 
+namespace {
+
+// How far up a carrier's sidebands may reach by Carson's estimate, as a fraction of the rate.
+// Above 0.5 they fold back down as inharmonic tones -- FM's aliasing, which was loud: the stack
+// (ALG 1) at IDX 90 on middle C had a folded tone 12 dB under the loudest harmonic, and 9 dB
+// on C6, with the old per-pair cap. Carson's rule is pessimistic through a chain (the far
+// sidebands it counts are weak), so the limit is set by measurement (tools/sound_probe.py),
+// not at 0.5: at 1.0 the strongest fold under 5 kHz is 45-56 dB down, about the VA oscillators'
+// own floor, and middle C keeps 20x of its 23x brightness; at 0.625 it was -93 dB but only 9x
+// bright, and at 1.5 -28 dB.
+constexpr float kBandLimit = 1.0f;
+
+// The highest frequency each carrier reaches at index `turns` (fm_index_cap). Carson's rule
+// for a sine is (I + 1) fm; the `min(I, 1)` makes the +1 fade in from I = 0, where a link with
+// no index adds nothing.
+float fm_band(const Algorithm &a, const float f[4], float b4, float turns) {
+    const float rad = 6.2831853f * turns;
+    const float q = rad + (rad < 1.0f ? rad : 1.0f);
+    const float b3 = f[2] + a.m34 * q * b4;
+    const float b2 = f[1] + q * (a.m23 * b3 + a.m24 * b4);
+    const float b1 = f[0] + q * (a.m12 * b2 + a.m13 * b3 + a.m14 * b4);
+    float top = b1;
+    top = a.c2 > 0.0f && b2 > top ? b2 : top;
+    top = a.c3 > 0.0f && b3 > top ? b3 : top;
+    top = a.c4 > 0.0f && b4 > top ? b4 : top;
+    return top;
+}
+
+}  // namespace
+
+float fm_index_cap(int algorithm, const float f[4], float feedback, float limit) {
+    const Algorithm &a = kAlgorithms[algorithm < 0 ? 0 : algorithm % kFmAlgorithms];
+    // Op 4's own band with its feedback, which is self-modulation of index FBK.
+    const float fb_rad = 6.2831853f * feedback;
+    const float b4 = f[3] * (1.0f + fb_rad + (fb_rad < 1.0f ? fb_rad : 1.0f));
+    // A modulator past Nyquist cannot be played at all (its increment is clamped, so it would
+    // sound at the wrong frequency): no index. RAT 14 on a high note is the case.
+    const bool mod2 = a.m12 > 0.0f, mod3 = a.m13 + a.m23 > 0.0f, mod4 = a.m14 + a.m24 + a.m34 > 0.0f;
+    if ((mod2 && f[1] >= 0.45f) || (mod3 && f[2] >= 0.45f) || (mod4 && f[3] >= 0.45f)) return 0.0f;
+    if (fm_band(a, f, b4, kIndexMaxTurns) <= limit) return kIndexMaxTurns;
+    if (fm_band(a, f, b4, 0.0f) >= limit) return 0.0f;
+    float lo = 0.0f, hi = kIndexMaxTurns;
+    for (int i = 0; i < 16; i++) {
+        const float mid = 0.5f * (lo + hi);
+        if (fm_band(a, f, b4, mid) <= limit) lo = mid;
+        else hi = mid;
+    }
+    return lo;
+}
+
 int fm_algorithm(uint8_t value) { return zone(value, kFmAlgorithms); }
 float fm_ratio(uint8_t value) { return kRatios[zone(value, kFmRatios)]; }
 float fm_fine(uint8_t value) { return float(int(value) - 64) * (1.0f / 128.0f); }
@@ -188,14 +238,25 @@ void FmVoice::run(const FmSettings &s, float *out, int n, float *env) {
     index *= (1.0f - s.velocity_index) + s.velocity_index * velocity_;
     // BRT: the index falls with the key above middle C, so high notes do not turn to glass.
     index *= exp2(-s.keytrack * clamp((note_ - 60.0f) * (1.0f / 12.0f), 0.0f, 6.0f));
-    float target[3];
-    for (int m = 0; m < 3; m++) {
-        // An index whose sidebands would fold past Nyquist is capped: Carson's rule, the band
-        // of an FM pair is about 2 (I + 1) fm, with I in radians.
-        const float fm = base * s.ratio[m + 1];
-        const float cap = fm > 1e-6f ? (0.45f * reciprocal(fm) - 1.0f) * 0.159155f : kIndexMaxTurns;
-        target[m] = clamp(index, 0.0f, cap > 0.0f ? cap : 0.0f);
+    // An index whose sidebands would fold past Nyquist is capped, for the whole chain at once
+    // (fm_index_cap): every link carries the same index, so one cap holds the algorithm's
+    // balance and only lowers its brightness. Recomputed when the note or a knob moves.
+    if (note_ != cap_note_ || s.algorithm != cap_algorithm_ || s.feedback != cap_feedback_ ||
+        s.inv_rate != cap_inv_rate_ || s.ratio[0] != cap_ratio_[0] ||
+        s.ratio[1] != cap_ratio_[1] || s.ratio[2] != cap_ratio_[2] || s.ratio[3] != cap_ratio_[3]) {
+        cap_note_ = note_;
+        cap_algorithm_ = s.algorithm;
+        cap_feedback_ = s.feedback;
+        cap_inv_rate_ = s.inv_rate;
+        float f[4];
+        for (int op = 0; op < 4; op++) {
+            cap_ratio_[op] = s.ratio[op];
+            f[op] = base * s.ratio[op];
+        }
+        cap_ = fm_index_cap(s.algorithm, f, s.feedback, kBandLimit);
     }
+    float target[3];
+    for (int m = 0; m < 3; m++) target[m] = clamp(index, 0.0f, cap_);
     if (fresh_) {
         for (int m = 0; m < 3; m++) index_[m] = target[m];
         fb_ = s.feedback;

@@ -170,3 +170,68 @@ TEST(fm_high_notes_at_full_index_stay_bounded) {
     for (float x : out) CHECK(std::isfinite(x) && std::fabs(x) <= 0.51f);
     CHECK(v.last_index(2) <= 0.01f);   // capped: a 14:1 modulator on C8 is far past Nyquist
 }
+
+// --- the band limit for the whole chain (fm_index_cap) --------------------------------------
+
+TEST(fm_index_cap_leaves_low_notes_and_additive_alone) {
+    const float low[4] = {65.4f / kRate, 65.4f / kRate, 65.4f / kRate, 65.4f / kRate};
+    // A pair (ALG 5) at IDX 127 on C2 is far inside the band: no cap. (The four-deep stack is
+    // not: its bands multiply, so even C2 is capped a little.)
+    CHECK(fm_index_cap(4, low, 0.0f, 1.0f) == 2.0f);
+    CHECK(fm_index_cap(0, low, 0.0f, 1.0f) < 2.0f);
+    // ALG 8 has no links, so no index can fold anything.
+    const float high[4] = {0.2f, 0.2f, 0.2f, 0.2f};
+    CHECK(fm_index_cap(7, high, 0.0f, 1.0f) == 2.0f);
+    // A carrier already past the limit takes no index at all.
+    const float past[4] = {1.2f, 0.01f, 0.01f, 0.01f};
+    CHECK(fm_index_cap(0, past, 0.0f, 1.0f) == 0.0f);
+}
+
+TEST(fm_index_cap_sees_the_stack_a_pair_cap_misses) {
+    // Middle C, every ratio 1. A pair (ALG 5) may take more index than the four-deep stack
+    // (ALG 1), whose bands multiply; the old cap treated both as a pair.
+    const float f = 261.63f / kRate;
+    const float c4[4] = {f, f, f, f};
+    const float stack = fm_index_cap(0, c4, 0.0f, 1.0f);
+    const float pair = fm_index_cap(4, c4, 0.0f, 1.0f);
+    CHECK(stack < pair);
+    CHECK(stack > 0.1f);   // still a bright FM, not a sine
+    // And it falls with the note.
+    const float c5[4] = {2 * f, 2 * f, 2 * f, 2 * f};
+    CHECK(fm_index_cap(0, c5, 0.0f, 1.0f) < stack);
+    // Feedback widens op 4, so it lowers the cap of a stack it feeds.
+    CHECK(fm_index_cap(0, c4, 0.2f, 1.0f) < stack);
+}
+
+TEST(fm_stack_at_high_index_does_not_fold_tones_under_5k) {
+    // ALG 1 at IDX 90 on A4, held: before the chain-wide cap a folded tone stood 9 dB under the
+    // loudest harmonic. A4 is 44 cycles in 4,800 frames, so every harmonic lands on a bin of a
+    // 4,800-point DFT (10 Hz apart) and anything on another bin under 5 kHz is a fold.
+    TrackParams p = fm_params();
+    p.set(1, 20);    // RAT 1
+    p.set(2, 90);
+    p.set(kAsrFirst + 1, 127);   // SUS: hold
+    p.set(kOscFirst + 1, 64);    // FIN 0 (a zeroed byte is -0.5)
+    const FmSettings s = FmSettings::make(p, kRate, 1.0f / kRate);
+    FmVoice v;
+    v.reset();
+    v.set_note(69.0f, 1.0f);
+    v.gate_on();
+    static float out[9600];
+    render(v, s, out, 9600);
+    const float *x = out + 4800;
+    double harm = 0.0, fold = 0.0;
+    for (int bin = 1; bin <= 500; bin++) {
+        double re = 0.0, im = 0.0;
+        for (int i = 0; i < 4800; i++) {
+            const double w = 2.0 * M_PI * bin * i / 4800.0;
+            re += x[i] * std::cos(w);
+            im += x[i] * std::sin(w);
+        }
+        const double e = re * re + im * im;
+        if (bin % 44 == 0) harm = e > harm ? e : harm;
+        else fold = e > fold ? e : fold;
+    }
+    CHECK(harm > 0.0);
+    CHECK(10.0 * std::log10(fold / harm) < -40.0);
+}
