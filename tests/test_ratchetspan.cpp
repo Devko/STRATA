@@ -87,6 +87,40 @@ TEST(span_the_byte_packs_and_reads_back) {
     CHECK_EQ(std::strcmp(ratchet_rate_name(7), "1/4"), 0);
 }
 
+TEST(span_a_note_repeat_rate_maps_onto_a_roll_rate) {
+    // The repeat rates in ticks (dsp/repeat.hpp): 1/4 1/8 1/16 1/32, 1/4T 1/8T 1/16T.
+    CHECK_EQ(int(ratchet_rate_for_ticks(96)), 7);
+    CHECK_EQ(int(ratchet_rate_for_ticks(48)), int(k8));
+    CHECK_EQ(int(ratchet_rate_for_ticks(24)), int(k16));
+    CHECK_EQ(int(ratchet_rate_for_ticks(12)), int(k32));
+    CHECK_EQ(int(ratchet_rate_for_ticks(32)), 5);      // 1/8T
+    CHECK_EQ(int(ratchet_rate_for_ticks(16)), 3);      // 1/16T
+    CHECK_EQ(int(ratchet_rate_for_ticks(64)), kRatchetRates);   // 1/4T: none, a plain hit
+    CHECK_EQ(int(ratchet_rate_for_ticks(0)), kRatchetRates);
+}
+
+TEST(span_a_recorded_hit_can_carry_a_roll) {
+    // Cmd::record_hit's e: the roll byte a recorded note repeat puts on the step; 0 leaves the
+    // step's ratchet alone.
+    Engine &engine = fresh();
+    Step &s = kick_step(engine, 3);
+    s.ratchet = ratchet_pack(3, RatchetRamp::none);
+    Command command;
+    command.cmd = Cmd::record_hit;
+    command.track = kKick;
+    command.step = 3;
+    command.a = 36;
+    command.b = 100;
+    engine.commands().post(command);
+    pump();
+    CHECK_EQ(s.ratchet, ratchet_pack(3, RatchetRamp::none));
+    command.e = ratchet_pack_span(k32, RatchetRamp::none);
+    engine.commands().post(command);
+    pump();
+    CHECK_EQ(s.ratchet, ratchet_pack_span(k32, RatchetRamp::none));
+    CHECK((s.flags & kStepTrig) != 0);
+}
+
 TEST(span_sanitize_keeps_a_roll_and_clears_what_it_cannot_hold) {
     Step step{};
     step.ratchet = 0xDF;            // span, ramp 5, rate nibble 15

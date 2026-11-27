@@ -8,6 +8,9 @@ the project file format or the controls.
 
 ### Added
 
+- **Note repeat is recordable**: with REC on, a held NOTE RPT pad records one step, a roll over
+  LEN at the repeat rate, its LEN from the hold (1/4T records a plain hit) (#187).
+
 - **Ratchets over LEN**: on the step page, RTCH goes on past 8 into rolls, `ROLL/64` to `ROLL/4`:
   the step rolls at that rate for its whole LEN (1/32 over 16 steps is 32 hits), with RAMP across
   the roll for build-ups. No file change; an older build plays such a step as a one-step ratchet
@@ -33,6 +36,22 @@ the project file format or the controls.
   builds one SD card zip with STRATA and the Enaga firmware it needs, both fetched in your
   browser from their official releases and checked against their SHA-256. Source in `web/`
   (#180).
+- **Arp depth**: push A-D on the ARP page for VAR (converge, diverge, thumb and pinky pedals),
+  RHYTHM (eleven rest patterns, Euclidean ones among them; a rest holds the note, so the run turns
+  against the bar), ACCENT (seven patterns and CYC, each run's first note) and RATCHET (2-4
+  repeats on fixed slots or by chance). Kit settings in KIT.BIN's new optional section 12; an
+  older kit plays its arps as before. The ARP picture draws rests, accents and ratchets.
+- **ARPS**: OK on the ARP page opens fourteen factory arps (TRANCE, ROLLER, ACID, BLEEP, DUB,
+  OFFBT, THUMB, PINKY, CONVRG, RATCHT, FILL, EUCLID, AMBNT, DRIFT), loaded into one track with the
+  beat playing, AS WAS first.
+- **40 more factory sounds**, techno and ambient, on every machine: 116 in all (docs/MANUAL.md
+  has the table).
+
+### Changed
+
+- **The arp's RND is random on every pass** (and RATCHET's RND2 and RND3 with it): each run draws
+  a new seed. It used to play one fixed pattern for a given track and step.
+- A kit recalled from the kit library brings its arp settings with its ARP bytes.
 
 ### Fixed
 

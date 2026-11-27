@@ -585,6 +585,8 @@ const Expect kTable[] = {
     // form writes nothing, but one row covers the command: dirtying the kit for it costs a
     // rewrite of KIT.BIN at most.
     {Cmd::sound_preset, kDirtyKit, "sound_preset"},
+    {Cmd::arp_preset, kDirtyKit, "arp_preset"},
+    {Cmd::set_arp_ext, kDirtyKit, "set_arp_ext"},
 
     // Freeze is RAM only (dsp/frozen.hpp): a loop in the pool, no file, and a reload unfreezes.
     {Cmd::freeze_set, 0u, "freeze_set"},
@@ -799,8 +801,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     // card protocol: a file that came out a different size means the two have drifted apart.
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 402);
     CHECK_EQ(project_bytes(), 402u);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1409);
-    CHECK_EQ(kit_bytes(), 1409u);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1453);
+    CHECK_EQ(kit_bytes(), 1453u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 5108);
     CHECK_EQ(perform_bytes(), 5108u);
     for (int b = 0; b < kBanks; b++) {
@@ -1088,7 +1090,7 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     CHECK(pump_until_idle());
     CHECK(storage().last_error() == nullptr);
     keep_pristine(kit);
-    CHECK_EQ(g_pristine_bytes, 1409u);
+    CHECK_EQ(g_pristine_bytes, 1453u);
 
     // A sanity pass first: the pristine file loads.
     CHECK(reload_now());
@@ -1711,7 +1713,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 402);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1409);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1453);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 5108);
 
     // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.
