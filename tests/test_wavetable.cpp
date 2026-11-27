@@ -283,3 +283,16 @@ TEST(wavetable_slots_keep_wanted_tables_and_reuse_the_least_recently_wanted) {
     CHECK(!none.step());
     CHECK(!none.ready());
 }
+
+TEST(wave_the_mip_offset_table_is_the_layout) {
+    // frame_at() reads kWaveMipOffsets (worked out at compile time) instead of calling the
+    // recursion at run time: the two must agree at every level, and the levels must not overlap.
+    for (int k = 0; k < kWaveMipLevels; k++) {
+        CHECK_EQ(kWaveMipOffsets.at[k], wave_mip_offset(k));
+        if (k > 0) CHECK_EQ(kWaveMipOffsets.at[k], kWaveMipOffsets.at[k - 1] + wave_mip_length(k - 1) + 1);
+    }
+    const WaveLibrary &lib = library();
+    for (int k = 0; k < kWaveMipLevels; k++) {
+        CHECK(lib.frame(0, 3, k) == lib.frame(0, 3, 0) + kWaveMipOffsets.at[k]);
+    }
+}

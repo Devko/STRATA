@@ -835,7 +835,7 @@ const int16_t *WaveLibrary::frame_at(int slot, int frame, int mip) const {
     slot = clampi(slot, 0, slots_ - 1);
     frame = clampi(frame, 0, kWaveFrames - 1);
     mip = clampi(mip, 0, kWaveMipLevels - 1);
-    return data_ + (slot * kWaveFrames + frame) * kWaveFrameStride + wave_mip_offset(mip);
+    return data_ + (slot * kWaveFrames + frame) * kWaveFrameStride + kWaveMipOffsets.at[mip];
 }
 
 float WaveLibrary::scale_at(int slot, int frame) const {
@@ -845,7 +845,7 @@ float WaveLibrary::scale_at(int slot, int frame) const {
 const int16_t *WaveLibrary::frame(int table, int frame, int mip) const {
     static const int16_t silent[kWaveFrameStride] = {};
     const int slot = slot_of(table);
-    if (slot < 0) return silent + wave_mip_offset(clampi(mip, 0, kWaveMipLevels - 1));
+    if (slot < 0) return silent + kWaveMipOffsets.at[clampi(mip, 0, kWaveMipLevels - 1)];
     return frame_at(slot, frame, mip);
 }
 
