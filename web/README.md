@@ -38,10 +38,15 @@ Functions.
   `raw.githubusercontent.com`) and stores nothing. It answers only for the releases that
   `/api/releases` offers, always from the two repositories, so it is not an open proxy, and the
   hash check in the browser means it could not slip in other bytes either.
-- GitHub's API allows 60 unauthenticated calls an hour per IP, and Cloudflare's IPs are shared.
-  The ten-minute cache keeps the site far below that; should it still hit the limit, the page
-  falls back to `compat.json`. A read-only `GITHUB_TOKEN` set as a Pages secret
-  (`npx wrangler pages secret put GITHUB_TOKEN`) lifts the limit, but nothing needs one.
+- GitHub's API allows 60 unauthenticated calls an hour per IP, and the IPs a Pages Function
+  calls out from are shared with every other Cloudflare site, so that budget is often spent
+  before this site asks: on 2026-11-27 GitHub answered 403 and the site offered only
+  `compat.json`, without the new 0.5.0. Answers are cached for ten minutes, the last good answer
+  is kept for a week (Cloudflare's cache, per data centre) and served when GitHub refuses, and
+  only then does the page fall back to `compat.json`. A read-only `GITHUB_TOKEN` set as a Pages
+  secret (`npx wrangler pages secret put GITHUB_TOKEN`, a fine-grained token with no
+  permissions beyond public repositories) gives the site its own 5000 calls an hour and is the
+  real fix; it takes effect with the next deploy.
 
 ### Licence
 
@@ -55,9 +60,10 @@ against its hash.
 
 ## Adding a release
 
-Nothing to do here: a release published with `tools/publish_release.sh` carries the marker and
-appears within ten minutes, with no deploy. A release made by hand needs the marker line in its
-body. `compat.json` changes only to pin something on purpose; `npm test` checks it.
+A release published with `tools/publish_release.sh` carries the marker and appears within ten
+minutes, with no deploy, whenever GitHub's API answers. A release made by hand needs the marker
+line in its body. Pin each release in `compat.json` as well, and deploy, so that it is offered
+even when GitHub refuses the site; `npm test` checks the file.
 
 ## Running it locally
 
