@@ -115,8 +115,10 @@ jobs:
       - name: Build and run the suite under ASan and UBSan at -O1 (shards, 300 s per test)
         if: steps.changes.outputs.code == 'true'
         run: |
-          make -C host build -j"$(nproc)" SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan"               CXX="ccache g++" CC="ccache gcc"
-          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=300 SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan"               CXX="ccache g++" CC="ccache gcc"
+          make -C host build -j"$(nproc)" SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan" \
+              CXX="ccache g++" CC="ccache gcc"
+          make -C host test JOBS="$(nproc)" TEST_TIMEOUT=300 SANITIZE=1 ENAGA_BUILD="$RUNNER_TEMP/asan" \
+              CXX="ccache g++" CC="ccache gcc"
 
   checks:
     name: Repo checks
@@ -145,15 +147,7 @@ jobs:
       - name: Card builder (web/, zip code, compat.json, proxy allowlist)
         run: cd web && node --test test/*.test.mjs
 
-      - name: Release publishing script parses
-        run: bash -n tools/publish_release.sh
-
-      - name: Local CI and shard scripts parse
-        run: |
-          bash -n tools/ci_local.sh
-          bash -n tools/test_shards.sh
-          bash -n tools/ci_changes.sh
-          bash -n tools/scenarios.sh
-          bash -n tools/build.sh
-          bash -n tools/check_rules.sh
-          for f in tests/scenario_*.sh; do bash -n "$f"; done
+      # Most of these run only on Roland's PC (release, scenarios, device build), so this is the
+      # one place a syntax slip in them shows before someone needs them.
+      - name: Every script in tools/ and tests/ parses
+        run: tools/check_scripts.sh
