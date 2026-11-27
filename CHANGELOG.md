@@ -83,6 +83,9 @@ Everything merged since 0.4.0 (#180 to #200). It still runs on **Enaga 0.3.0**, 
 
 ### Changed
 
+- **Hats and WAVE tracks cost less**: the hat's two filters and its VCA run as one loop, and WAVE
+  finds its table frames without a run-time recursion; the same sound to the last bit. The
+  default beat 25.1% -> 24.5%, a WAVE POLY pattern 28.8% -> 27.2% on the emulator.
 - **VA voices cost less**: the filter, envelope and output of every VA MONO and VA POLY voice
   run as one loop the TI compiler can pipeline, the same sound to the last bit. About 1.5 points
   off every pattern that plays them (the default beat 26.6% -> 25.1% on the emulator).

@@ -112,6 +112,35 @@ all pipelined, about 84 cycles a frame) was bit-exact on the host and in the emu
 build, but its cl6x build's capture of `scenario_ambient` differed from the frame loop's in
 every sample, so #196 left it out. It was not the sound:
 
+### The hat's back half fused, and WAVE's frame lookup (2026-11-27, emulator)
+
+A fresh `tools/profile_guest.py` on the default beat and `scenario_wave` after #203: the largest
+shares left are Enaga's own (`enaga_envelope_render` 6.8%, the classic reverb's `reverb_chunk` up
+to 6.7%, which STRATA may not change), then `strata_svf_inplace` (5.5-6.6%) and, with WAVE POLY
+playing, `WaveLibrary::frame_at` (3.1%).
+
+- **HAT** ran its band-pass, its VCA and its high-pass as three passes, two of them bound by a
+  21-cycle filter recurrence. `strata_hat_back` (dsp/drumloops.ti.c) runs the three in one loop,
+  where the two recurrences overlap: 21 cycles a sample instead of about 46 (`tools/ti_loops.py`).
+  The envelope renders first, as it never heard the signal. Bit-exact:
+  `drumloops_the_hat_back_half_is_bit_exact_against_its_three_passes` on the host, and the same
+  comparison built by cl6x and run in the emulator core (40 rounds of seven lengths, 0 differing
+  samples, the host's checksum).
+- **WAVE**: `frame_at()` added `wave_mip_offset(mip)`, a constexpr recursion that a run-time
+  argument compiled to a loop with calls, per slice per reader. It reads a table the compiler
+  fills now (`kWaveMipOffsets`, dsp/wavetable.hpp): integers, so nothing can move.
+
+| | before (#203) | after |
+| --- | --- | --- |
+| the default beat and most scenarios, cl6x | 25.12% | **24.49%** (-0.63) |
+| `scenario_wave`, cl6x | 28.81% | **27.16%** (-1.65) |
+| `scenario_ambient`, cl6x | 27.15% | **26.48%** |
+| `scenario_ambient` / `scenario_m3`, GCC-only | 57.30% / 42.38% | 57.08% / 42.17% |
+
+All 47 scenarios pass with cl6x; the worst is now **28.55%** (`scenario_gen`). One scenario rose:
+`scenario_sounds` 25.63% -> 26.34%, which walks the SOUNDS list on keys. Nothing it runs got
+dearer, so it is where its peak block now falls (the timing artefact of "The HALL in passes").
+
 ### The VA voice's fused back half, on at last (2026-11-27, emulator)
 
 `STRATA_VA_FUSED` (dsp/tihints.h) runs the VA voice's filter, amplitude envelope and output tail

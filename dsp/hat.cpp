@@ -287,14 +287,12 @@ void Hat::run(Voice &v, float *out, int n) {
     strata_hat_squares(mix_, n, v.phase, step, sample_hold_step, &v.sample_hold_phase,
                        &v.sample_hold, rng_.state(), noisiness_);
 
-    strata_svf_inplace(&v.band.state_, &band_, Svf::band_pass, mix_, n);
-
-    // The VCA: the envelope times the trigger level, then asymmetric and soft clipped, which is
-    // where the trigger level turns into brightness rather than only level.
+    // The band-pass, then the VCA -- the envelope times the trigger level, then asymmetric and
+    // soft clipped, which is where the trigger level turns into brightness rather than only
+    // level -- then the high-pass, in one cl6x-built loop (strata_hat_back): the two filters'
+    // recurrences overlap there. The envelope does not hear the signal, so it renders first.
     v.amp.render(env_, n, v.choked ? choke_shape_ : amp_shape_);
-    strata_hat_vca(mix_, env_, n, v.trigger_level);
-
-    strata_svf_inplace(&v.high.state_, &high_, Svf::high_pass, mix_, n);
+    strata_hat_back(mix_, env_, n, &v.band.state_, &band_, &v.high.state_, &high_, v.trigger_level);
 
     if (v.fade > 0) {
         strata_mix_ramp(out, mix_, n, out_gain_ * v.gain, -out_gain_ * kFadeStep);

@@ -19,6 +19,8 @@
 
 #include <stdint.h>
 
+#include <enaga/dsp.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -57,6 +59,18 @@ void strata_hat_squares(float *out, int n, uint32_t *phase, const uint32_t *step
 /* The VCA, in place: the envelope times the trigger level, then asymmetric (x4 positive, x0.1
  * negative) through the soft clip. */
 void strata_hat_vca(float *buf, const float *env, int n, float trigger_level);
+
+/* The hat's back half in ONE loop: the band-pass, the VCA (strata_hat_vca) and the high-pass, as
+ *
+ *     strata_svf_inplace(band, band_c, ENAGA_SVF_BAND, buf, n)
+ *     strata_hat_vca(buf, env, n, trigger_level)
+ *     strata_svf_inplace(high, high_c, ENAGA_SVF_HIGH, buf, n)
+ *
+ * ran it as three passes. Each filter's state is a recurrence of about 21 cycles a sample on
+ * cl6x, and two of them in one loop overlap. Same steps, same order: bit-exact (test_drums.cpp). */
+void strata_hat_back(float *buf, const float *env, int n, enaga_svf *band,
+                     const enaga_svf_coefficients *band_c, enaga_svf *high,
+                     const enaga_svf_coefficients *high_c, float trigger_level);
 
 /* ---- shared ---- */
 
