@@ -16,7 +16,7 @@ the project file format or the controls.
   line in the pattern's key over 1-3 octaves (DENSITY, RANGE, LEAP; WHAT keeps the rhythm or the
   notes). **EVOLVE** mutates the track on its own every 1, 2, 4 or 8 loops with PERFORM's MUTATE
   setting: **ORBIT** varies around the part as it was, **DRIFT** lets the changes add up; KEEP and
-  HOME stop it. GEN is one undo level; EVOLVE is RAM only and needs no file change (#PR).
+  HOME stop it. GEN is one undo level; EVOLVE is RAM only and needs no file change (#195).
 
 - **Ratchets over LEN**: on the step page, RTCH goes on past 8 into rolls, `ROLL/64` to `ROLL/4`:
   the step rolls at that rate for its whole LEN (1/32 over 16 steps is 32 hits), with RAMP across
