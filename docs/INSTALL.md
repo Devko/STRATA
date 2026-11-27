@@ -120,9 +120,14 @@ The [user manual](MANUAL.md) starts with a first-beat tutorial, and the
 - **From STRATA 0.3.1 or earlier to 0.4.0:** the Enaga version changes (0.2.0 to 0.3.0), so do
   step 1, then step 2.
 - **Between releases on the same Enaga version** (see the table above): step 2 only.
+- **From 0.4.0 to a build from `main`:** step 2 only; it runs on Enaga 0.3.0 too. The
+  changelog's "Upgrading from 0.4.0" (under Unreleased) says what sounds different and what an
+  older build drops from a project saved by the newer one.
 
 Your projects stay on the card. Before 1.0 a release may change the project format; the
-[changelog](../CHANGELOG.md) says when older projects play differently.
+[changelog](../CHANGELOG.md) says when older projects play differently. Keep a copy of
+`/ENAGA/DATA/STRATA/` on your computer before an update, so you can go back to the older build
+with your projects as they were.
 
 ## Where STRATA keeps its files
 

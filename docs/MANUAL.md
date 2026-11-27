@@ -440,7 +440,9 @@ edit while it runs is kept. EVOLVE is not saved; a save writes what plays.
 ### Kits
 
 A **kit** is the sound side of a project without the patterns: the eight machines, their 16
-parameters each, the faders, the sidechain duck and the sample paths. Besides the project's own kit there is a
+parameters each, the faders, the sidechain duck and the sample paths, and each track's settings
+that are not knobs: SLC AUTO, LFO TRIG, the two MOD slots, the choke group and the arp's VAR,
+RHYTHM, ACCENT and RATCHET. Besides the project's own kit there is a
 **kit library** of 16 slots on the card, shared by every project, so a sound you built in one
 project can be recalled in another (KIT mode, `FUNC+EDIT` twice).
 
@@ -861,6 +863,11 @@ with 4 into 1, `A4` 4>3>1 with 2 into 1, `A5` two pairs 2>1 and 4>3 (the e-piano
 three carriers, `A7` one pair 4>3 over two plain sines, `A8` four sines (an organ: RAT sets the
 second drawbar). The SOUNDS list has EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD and GLASS.
 FBK costs a little more CPU than FBK 0.
+
+High notes at high IDX are held back so they stay clean: in a stack the sidebands multiply, and
+past a point they would fold back as harsh, out-of-tune tones. The cap looks at the whole chain
+of operators, so `A1` at IDX 90 is a little less bright on high notes than its number suggests,
+and low notes are not touched.
 
 ### MID: MIDI
 
@@ -1694,7 +1701,8 @@ everything else and says `FOLDER NOT EMPTY`.
 machines. UP/DOWN, A or the STEP keys move the cursor (they never load).
 
 - **Recall:** OK, then OK again within 2 s (`OK AGAIN TO LOAD`). The transport keeps playing; only
-  tracks whose sample changed reload theirs. A recall is **not undoable**.
+  tracks whose sample changed reload theirs. Everything the kit holds comes back, MOD slots,
+  choke groups and arp settings included. A recall is **not undoable**.
 - **Store:** `FUNC+DOWN` stores the current kit; over a stored kit it needs a second press
   (`AGAIN TO OVERWRITE`).
 - `FUNC+UP` reads the card again. CLR goes back to MACHINE.

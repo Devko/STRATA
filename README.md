@@ -66,11 +66,16 @@ the SPI flash. [docs/INSTALL.md](docs/INSTALL.md) has every step, switching apps
 
 - **Eleven machines on eight tracks, any machine on any track:** KICK, SNARE, HAT, PERC, SAMPLE,
   GRAIN, VA MONO, VA POLY, WAVE MONO, WAVE POLY and FM4, plus MID for an outboard synth.
-  76 factory sounds load into one track at a time while the beat plays.
+  116 factory sounds load into one track at a time while the beat plays, and any two to eight
+  tracks can choke each other.
 - **A sequencer built for techno:** up to 64 steps per track with their own length, speed,
   swing and play mode (forward, reverse, ping-pong, random), parameter locks, trig conditions,
-  ratchets, accents, slides, chords, micro-timing, a Euclidean generator, live and motion
-  recording, and 16 levels of undo.
+  ratchets and rolls over a step's length, accents, slides, chords, micro-timing, a Euclidean
+  generator, live and motion recording (chords note for note, note-repeat rolls, a click and a
+  count-in), and 16 levels of undo.
+- **Parts that write and move themselves:** GENERATE writes a drum or melodic part in the key,
+  and EVOLVE mutates it every few loops, orbiting the part or drifting away from it. The
+  arpeggiator has rhythms, accents, ratchets and fourteen factory arps.
 - **KEYS:** both lower pad rows become a pressure-sensitive keyboard with the pattern's scale lit.
 - **Performance:** fill, beat and note repeat, step stutter, mutes, scenes with an A/B morph,
   macros you learn by turning knobs, throws, seeded mutation you keep or revert, LOCK (store the
@@ -107,8 +112,11 @@ The full tour, with the factory kit and every effect, is in
 ## Status
 
 **[v0.4.0](https://github.com/Devko/STRATA/releases/tag/v0.4.0)** (2026-11-26) is the current
-release, an early beta for **Enaga 0.3.0**. Builds from `main` boot on the unit's 0.3.0 firmware, but
-nothing new in it has been walked through or measured on the hardware yet. On an earlier build the
+release, an early beta for **Enaga 0.3.0**. `main` has everything since (GEN and EVOLVE, chord
+recording, choke groups, arp depth and more; [CHANGELOG.md](CHANGELOG.md), "Unreleased") on the
+same firmware, and is heading for a release candidate for 1.0 ([docs/PLAN.md](docs/PLAN.md),
+"Release candidate"). Builds from `main` boot on the unit's 0.3.0 firmware, but nothing new in
+them has been walked through or measured on the hardware yet. On an earlier build the
 default beat loaded the CPU under 30%, and long, heavy play peaked at 84.3% with no dropouts. Most
 of the [unit checklist](docs/UNIT_CHECKLIST.md) is still to be run on the hardware.
 [CHANGELOG.md](CHANGELOG.md) lists what changed in each release.
