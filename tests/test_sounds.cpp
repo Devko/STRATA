@@ -12,7 +12,9 @@
 #include "perform.hpp"
 #include "project.hpp"
 #include "sounds.hpp"
+#include "perc.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -323,4 +325,60 @@ TEST(sounds_a_switch_to_grain_loads_cloud_from_the_start_of_the_sample_at_its_pi
     CHECK_EQ(int(params[8]), 64);
     CHECK(sound_preset_matches(uint8_t(MachineId::grain), 0, params));
     CHECK_EQ(std::strcmp(sound_preset(uint8_t(MachineId::grain), 0)->name, "CLOUD"), 0);
+}
+
+// --- levels ---------------------------------------------------------------
+
+namespace {
+
+// One hit of a PERC preset through the machine alone, its energy over the first 400 ms in dB:
+// the window a listener judges a hit's loudness by. Note 60, velocity 100, the preset's own
+// SRC and AMP bytes; the insert chain is not involved, and PERC's presets leave it flat.
+float perc_hit_db(const SoundPreset &s) {
+    static float buffer[19200];
+    TrackParams p{};
+    for (int i = 0; i < 4; i++) {
+        p.set(i, s.src[i]);
+        p.set(8 + i, s.amp[i]);
+    }
+    Perc m;
+    m.init(48000.0f);
+    m.prepare(p);
+    Trig t;
+    t.note = 60;
+    t.velocity = 100;
+    m.trigger(t);
+    for (float &x : buffer) x = 0.0f;
+    for (int b = 0; b < 19200 / 64; b++) {
+        m.prepare(p);
+        m.render_add(buffer + b * 64, 64);
+    }
+    double sum = 0.0;
+    for (float x : buffer) sum += double(x) * double(x);
+    return float(10.0 * std::log10(sum + 1e-20));
+}
+
+}  // namespace
+
+TEST(sounds_ringing_and_short_perc_presets_land_within_a_few_db) {
+    // Before the rebalance (2026-11-27) the ringing presets (BELL, CHIME, METAL) were about 10 dB
+    // louder over a hit than the short ones (CLAVE, KNOCK, BLIP, ZAP): flipping through the list
+    // jumped in level more than it changed in sound. LVL now evens them out. Toms and congas are
+    // left out: plain energy counts their low end far louder than an ear does.
+    const uint8_t perc = uint8_t(MachineId::perc);
+    static const char *const kCompared[] = {"BELL", "CHIME", "METAL", "CLAVE", "KNOCK", "BLIP", "ZAP"};
+    float lo = 1e9f, hi = -1e9f;
+    int found = 0;
+    for (int i = 0; i < sound_preset_count(perc); i++) {
+        const SoundPreset &s = *sound_preset(perc, i);
+        bool compared = false;
+        for (const char *name : kCompared) compared = compared || std::strcmp(s.name, name) == 0;
+        if (!compared) continue;
+        found++;
+        const float db = perc_hit_db(s);
+        lo = db < lo ? db : lo;
+        hi = db > hi ? db : hi;
+    }
+    CHECK_EQ(found, 7);
+    CHECK(hi - lo < 4.5f);
 }

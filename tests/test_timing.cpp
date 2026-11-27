@@ -80,6 +80,7 @@ TEST(the_grid_is_exact_at_96_ppqn) {
     CHECK_EQ(ticks_per_step(Speed::x1_2), 48);
     CHECK_EQ(ticks_per_step(Speed::x1_4), 96);
     CHECK_EQ(ticks_per_step(Speed::x1_8), 192);
+    CHECK_EQ(ticks_per_step(Speed::x3_2), 16);   // a 16th-note triplet: 6 to the beat
 }
 
 TEST(speed_values_are_stable) {
@@ -90,6 +91,7 @@ TEST(speed_values_are_stable) {
     CHECK_EQ(int(Speed::x1_2), 3);
     CHECK_EQ(int(Speed::x1_4), 4);
     CHECK_EQ(int(Speed::x1_8), 5);
+    CHECK_EQ(int(Speed::x3_2), 6);
 }
 
 TEST(zeroed_memory_means_normal_speed) {
@@ -106,8 +108,9 @@ TEST(zeroed_memory_means_normal_speed) {
 TEST(speed_display_order_is_the_spec_order) {
     // The UI walks fastest to slowest, which is not the enum's numbering.
     CHECK_EQ(int(kSpeedDisplayOrder[0]), int(Speed::x2));
-    CHECK_EQ(int(kSpeedDisplayOrder[1]), int(Speed::x1));
-    CHECK_EQ(int(kSpeedDisplayOrder[5]), int(Speed::x1_8));
+    CHECK_EQ(int(kSpeedDisplayOrder[1]), int(Speed::x3_2));
+    CHECK_EQ(int(kSpeedDisplayOrder[2]), int(Speed::x1));
+    CHECK_EQ(int(kSpeedDisplayOrder[6]), int(Speed::x1_8));
 
     // Every speed appears exactly once, so the encoder can reach them all.
     int seen[int(Speed::count)] = {};
@@ -118,6 +121,30 @@ TEST(speed_display_order_is_the_spec_order) {
     for (int i = 1; i < int(Speed::count); i++) {
         CHECK(ticks_per_step(kSpeedDisplayOrder[i]) > ticks_per_step(kSpeedDisplayOrder[i - 1]));
     }
+}
+
+TEST(triplet_speed_puts_24_steps_in_a_bar_on_the_triplet_grid) {
+    // 3/2: a step every 16 ticks, so 24 straight steps are exactly one 4/4 bar, every sixth
+    // step lands on a beat and every third on an eighth, as 16th-note triplets do.
+    TrackTiming timing;
+    timing.speed = Speed::x3_2;
+    timing.length = 24;
+    CHECK_EQ(timing.loop_ticks(), int(kTicksPerBar));
+    CHECK_EQ(std::strcmp(speed_name(Speed::x3_2), "3/2"), 0);
+    int fired = 0;
+    for (uint32_t tick = 0; tick < kTicksPerBar; tick++) {
+        Firing firings[kMaxFiringsPerTick];
+        const int n = steps_firing_at(tick, timing, nullptr, firings, kMaxFiringsPerTick);
+        for (int i = 0; i < n; i++) {
+            CHECK_EQ(int(tick), int(firings[i].step) * 16);
+            if (firings[i].step % 6 == 0) CHECK_EQ(int(tick % 96), 0);
+            if (firings[i].step % 3 == 0) CHECK_EQ(int(tick % 48), 0);
+            fired++;
+        }
+    }
+    CHECK_EQ(fired, 24);
+    // Swing still shifts the track's own odd steps: 75% is half a 16-tick step.
+    CHECK_EQ(swing_offset(1, kSwingMax, timing.step_ticks()), 8);
 }
 
 // --- the note-length table ------------------------------------------------

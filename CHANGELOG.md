@@ -8,6 +8,10 @@ the project file format or the controls.
 
 ### Added
 
+- **16th-note triplets as a track speed.** TRACK SPEED (FUNC menu) has a new **3/2** between 2
+  and 1: a step every 16 ticks, six to the beat, so 24 steps make a bar. Set LEN 24 for a one-bar
+  triplet hat. The arp, rolls over LEN and REPEAT already had 1/16T. No file change: a build from
+  before this one plays a 3/2 track at 1x. New emulator scenario `triplets`.
 - **Stereo width on the POLY machines.** VA POLY, WAVE POLY and FM4 can spread their chords
   across the stereo field or play each note in unison: two voices panned hard left and right,
   detuned 6 to 40 cents apart. One knob per track on two new MIXER pages, WID 1-4 and WID 5-8
@@ -31,6 +35,31 @@ the project file format or the controls.
   each step's burst of note starts to its top; it now averages over 85 ms, and one busy block no
   longer restarts the second it waits before stepping down. A single block at 90% still raises
   it at once. New emulator scenario `genload`: GENERATE at full density on all eight tracks.
+
+### Changed
+
+- **The clap sounds like a clap.** Its noise moved from 5-10 kHz down to about 2-3 kHz, and each
+  of its bursts now rings until the next one strikes instead of dying after a third of the gap,
+  so the flutter is as loud as the tail rather than 10-18 dB under it. The factory kit's CLAP and
+  the CLAP, SHORT and CLAP4 sounds have the new band; CLAP4's bursts are 14 ms apart, not 40.
+  A clap in a saved kit keeps its knobs, so it gets the livelier bursts but not the new band.
+- **The factory kit is rebalanced.** The bass sat 9.5 dB and the chord 7 dB under the kick while
+  the hats were nearly as loud as it. New faders: KICK 0.8, CLAP 0.85, both hats 0.7, PERC 1.2,
+  BASS 1.5, CHORD 1.25. The bass now sits about 6 dB under the kick and the chord about 3, and
+  the share of the mix between 250 Hz and 4 kHz goes from 14% to 22%. A new project starts
+  with these; a saved project keeps its own faders.
+- **Flipping through SOUNDS no longer jumps in level.** Within one machine the presets were up
+  to 14 dB apart (VA MONO LEAD 12 dB louder than GROWL, PERC CHIME 10 dB louder than CLAVE).
+  28 presets have a new LVL, which brings most machines to within 3-6 dB. VA MONO GROWL, WAVE
+  MONO RESO and GRAIN STUTTR, CHOPS and GLITCH stay quieter: their LVL was already at the top.
+- **Accented notes on VA MONO, VA POLY and the WAVE machines no longer tick.** An accent opened
+  the filter by half as much again plus 10 semitones, which on a wide, resonant patch such as
+  ACID swept it to about 18 kHz for a few milliseconds. It now opens at most 18 semitones past
+  the plain note (ACID's accent peaks near 6.5 kHz), and its attack is 1.5 ms instead of 0.6.
+  Accents on patches with a modest ENV sound as before.
+- **FM4 EPIANO has a strike.** It was a mellow, organ-like tone with almost nothing above 1 kHz
+  even in its attack; now it is bright as it is struck, barks when hit hard, and mellows as it
+  rings (IDX 95, IEN 127, VEL 120, FBK 10). It is also what a track switched to FM4 starts with.
 
 ## [0.5.0] - 2026-11-27
 

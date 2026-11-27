@@ -5,6 +5,12 @@
 // knobs that make it that. Levels are balanced against the factory kit (host/render.cpp), so a
 // preset loaded into the default beat lands near the part it replaces.
 //
+// And within a machine (the sound review, 2026-11-27): every preset alone on a phrase that suits
+// it, its loudest 400 ms measured (LUFS), and LVL moved to bring it within about 1.5 dB of its
+// machine's middle. Flipping through a list had jumped 8-14 dB. A few cannot get there on LVL,
+// which is already at the top: VA MONO GROWL, WAVE MONO RESO and the three sparse GRAIN presets
+// (STUTTR, CHOPS, GLITCH) stay quieter.
+//
 // The pitched drums stay on the factory kit's tuning (KICK TUN 55 is G1, the fifth of C), so a
 // preset does not knock a kick out of the key the factory patterns are written in.
 #include "sounds.hpp"
@@ -49,20 +55,21 @@ constexpr SoundPreset kKickPresets[] = {
 
 // --- SNARE: TUN SNP TON CLP / DEC SPR BDY LVL (dsp/snare.cpp) ------------
 constexpr SoundPreset kSnarePresets[] = {
-    // The factory clap: three bursts 10 ms apart, mostly noise.
-    {"CLAP", {64, 100, 64, 64}, FLAT, {54, 28, 40, 100}, NO_ASR, NO_OSC},
+    // The factory clap: three bursts 10 ms apart, mostly noise, the band down (TON 22) to where
+    // an 808/909 clap lives, about 2-3 kHz rather than 5-10.
+    {"CLAP", {64, 100, 22, 64}, FLAT, {54, 28, 40, 127}, NO_ASR, NO_OSC},
     // The 909 snare: 200 Hz (TUN 64), more drum than noise, a bright band, no clap.
     {"909SN", {64, 70, 70, 0}, FLAT, {50, 28, 40, 100}, NO_ASR, NO_OSC},
     // The 808 snare: tuned higher, less snap, a darker band, a short body.
     {"808SN", {80, 50, 56, 0}, FLAT, {40, 28, 20, 104}, NO_ASR, NO_OSC},
-    // A big clap: four bursts (CLP 100), spread to 40 ms, a longer tail.
-    {"CLAP4", {64, 110, 72, 100}, FLAT, {70, 127, 30, 100}, NO_ASR, NO_OSC},
+    // A big clap: four bursts (CLP 100) 14 ms apart, a longer tail. Wider than that is a flam.
+    {"CLAP4", {64, 110, 30, 100}, FLAT, {70, 40, 30, 100}, NO_ASR, NO_OSC},
     // A snare rim: tuned up, almost no noise, very short. A tick for a sparse groove.
     {"RIMSN", {110, 20, 90, 0}, FLAT, {10, 10, 0, 96}, NO_ASR, NO_OSC},
     // Dirty: noisy, darker, driven hard in the chain. Breaks and electro.
     {"DIRTY", {58, 90, 50, 0}, {50, 127, 20, 0}, {64, 28, 50, 70}, NO_ASR, NO_OSC},
     // A short clap: three bursts close together (SPR 15), a short tail. Tight on the 2 and 4.
-    {"SHORT", {64, 105, 75, 64}, FLAT, {30, 15, 20, 104}, NO_ASR, NO_OSC},
+    {"SHORT", {64, 105, 30, 64}, FLAT, {30, 15, 20, 127}, NO_ASR, NO_OSC},
     // A tight snare: tuned up a little, more drum than noise, short. Busy grooves.
     {"TIGHT", {70, 60, 80, 0}, FLAT, {25, 28, 30, 104}, NO_ASR, NO_OSC},
     // A noise wash: all noise, a bright band, a long tail. Ambient hits and risers' ends.
@@ -110,24 +117,24 @@ constexpr SoundPreset kPercPresets[] = {
     // A cowbell: about 800 Hz, ratio sqrt(2) (metallic), the index held, no sweep.
     {"COWBEL", {80, 17, 60, 90}, FLAT, {50, 0, 10, 96}, NO_ASR, NO_OSC},
     // A bell: high, ratio 3.5, a bright index that rings (IDD 110) over a long decay.
-    {"BELL", {100, 53, 80, 110}, FLAT, {110, 0, 10, 62}, NO_ASR, NO_OSC},
+    {"BELL", {100, 53, 80, 110}, FLAT, {110, 0, 10, 50}, NO_ASR, NO_OSC},
     // A blip: high and pure (IDX low), very short: the bleep in bleep techno.
-    {"BLIP", {108, 9, 20, 30}, FLAT, {20, 10, 20, 92}, NO_ASR, NO_OSC},
+    {"BLIP", {108, 9, 20, 30}, FLAT, {20, 10, 20, 107}, NO_ASR, NO_OSC},
     // A conga: 160 Hz, ratio 1, a short boing on a medium body.
     {"CONGA", {40, 9, 40, 30}, FLAT, {60, 50, 40, 84}, NO_ASR, NO_OSC},
     // Metal: a ratio swept past 4 (inharmonic clang), a heavy index. Industrial hits.
-    {"METAL", {70, 90, 110, 70}, FLAT, {70, 20, 30, 86}, NO_ASR, NO_OSC},
+    {"METAL", {70, 90, 110, 70}, FLAT, {70, 20, 30, 70}, NO_ASR, NO_OSC},
     // A clave: high, ratio 1, a short wooden knock.
-    {"CLAVE", {96, 9, 30, 20}, FLAT, {18, 0, 10, 96}, NO_ASR, NO_OSC},
+    {"CLAVE", {96, 9, 30, 20}, FLAT, {18, 0, 10, 116}, NO_ASR, NO_OSC},
     // A zap: the full pitch sweep falling fast. The laser in electro and minimal.
-    {"ZAP", {90, 29, 50, 40}, FLAT, {40, 127, 30, 84}, NO_ASR, NO_OSC},
+    {"ZAP", {90, 29, 50, 40}, FLAT, {40, 127, 30, 96}, NO_ASR, NO_OSC},
     // A dub tom: low, tuned (ratio 2), a long body with a slow fall. Under a delay send.
     {"DUBTOM", {24, 29, 20, 50}, FLAT, {110, 50, 80, 64}, NO_ASR, NO_OSC},
     // A chime: high, a ratio past 4 swept into a glassy partial, ringing for seconds while the
     // index fades. Ambient sparkle.
-    {"CHIME", {110, 70, 50, 120}, FLAT, {127, 0, 10, 60}, NO_ASR, NO_OSC},
+    {"CHIME", {110, 70, 50, 120}, FLAT, {127, 0, 10, 47}, NO_ASR, NO_OSC},
     // A knock: sqrt(2), a heavy index gone in a few ms, very short. A metallic tick.
-    {"KNOCK", {50, 17, 90, 10}, FLAT, {16, 20, 10, 100}, NO_ASR, NO_OSC},
+    {"KNOCK", {50, 17, 90, 10}, FLAT, {16, 20, 10, 119}, NO_ASR, NO_OSC},
 };
 
 // --- VA MONO: TUN MOD CUT RES / DEC ENV GLD LVL, ASR, OSC (dsp/va.cpp) ----
@@ -142,9 +149,9 @@ constexpr SoundPreset kMonoPresets[] = {
     // Acid: the 303 move. Closed (CUT 26, 145 Hz), resonance high, the envelope wide, driven.
     // SUS holds each note for its LEN, so DEC is only the filter's sweep: accent and slide do
     // the rest. A raw saw, no sub.
-    {"ACID", {64, 20, 26, 100}, VOICE, {44, 100, 0, 90}, {0, 100, 8, 0}, {0, 0, 0, 48}},
+    {"ACID", {64, 20, 26, 100}, VOICE, {44, 100, 0, 77}, {0, 100, 8, 0}, {0, 0, 0, 48}},
     // The same line on a square: hollower, rubberier.
-    {"ACIDSQ", {64, 20, 30, 98}, VOICE, {44, 96, 0, 80}, {0, 100, 8, 0}, {40, 0, 0, 40}},
+    {"ACIDSQ", {64, 20, 30, 98}, VOICE, {44, 96, 0, 71}, {0, 100, 8, 0}, {40, 0, 0, 40}},
     // A thick bass: two saws 14 cents apart, the sub at the top, driven into a 24 dB filter.
     // Holds for its LEN.
     {"FAT", {64, 30, 42, 36}, VOICE, {70, 40, 0, 101}, {0, 100, 24, 24}, {0, 30, 110, 72}},
@@ -153,7 +160,7 @@ constexpr SoundPreset kMonoPresets[] = {
     // A sub: 12 dB at 100 Hz, the triangle sub at full and little else. Weight under a busy kit.
     {"SUB", {64, 70, 22, 0}, VOICE, {90, 10, 0, 112}, NO_ASR, {0, 0, 127, 0}},
     // A pluck: a 33% pulse, brighter, short, a fast sweep with some bite. Lines and arps.
-    {"PLUCK", {64, 40, 52, 64}, VOICE, {30, 90, 0, 118}, NO_ASR, {64, 0, 0, 20}},
+    {"PLUCK", {64, 40, 52, 64}, VOICE, {30, 90, 0, 127}, NO_ASR, {64, 0, 0, 20}},
     // A growl: the band-pass, nasal and hollow, driven in the voice. It was driven in the chain
     // too until D8 gave the synths one filter and no chain drive; LVL went to the top to make up
     // part of the level that took (about 9 dB at peak; it is still the quieter for it). Mid bass.
@@ -162,9 +169,9 @@ constexpr SoundPreset kMonoPresets[] = {
     {"GLIDE", {64, 40, 56, 50}, VOICE, {60, 70, 64, 122}, NO_ASR, {0, 0, 80, 16}},
     // A sync lead: OSC 2 synced an octave and a bit above (S+14), held, a little glide. Play it
     // an octave or two up.
-    {"SYNC", {64, 70, 88, 30}, VOICE, {80, 40, 30, 98}, {0, 110, 40, 80}, {0, 100, 0, 40}},
+    {"SYNC", {64, 70, 88, 30}, VOICE, {80, 40, 30, 80}, {0, 110, 40, 80}, {0, 100, 0, 40}},
     // A lead: a square with a slight detune, 12 dB, resonance and glide. Melodies.
-    {"LEAD", {64, 70, 78, 60}, VOICE, {70, 46, 36, 82}, {0, 115, 40, 90}, {40, 22, 0, 30}},
+    {"LEAD", {64, 70, 78, 60}, VOICE, {70, 46, 36, 62}, {0, 115, 40, 90}, {40, 22, 0, 30}},
     // A drone: SUS up, so each note holds for its LEN; a slow attack and a long tail, the
     // filter held half open (FSU), two saws beating slowly. Long notes, one or two a bar.
     {"DRONE", {64, 40, 60, 50}, VOICE, {80, 40, 20, 74}, {40, 110, 80, 64}, {0, 40, 60, 0}},
@@ -172,7 +179,7 @@ constexpr SoundPreset kMonoPresets[] = {
     // LEN. Round and deep under a dub chord.
     {"DUBBAS", {64, 30, 34, 20}, VOICE, {90, 30, 0, 88}, {0, 100, 30, 0}, {0, 0, 110, 0}},
     // A rubber bass: a square, short, resonant, a quick sweep. The offbeat techno bass.
-    {"RUBBER", {64, 40, 40, 80}, VOICE, {38, 80, 0, 112}, NO_ASR, {32, 0, 60, 30}},
+    {"RUBBER", {64, 40, 40, 80}, VOICE, {38, 80, 0, 123}, NO_ASR, {32, 0, 60, 30}},
 };
 
 // --- VA POLY: TUN MOD CUT RES / DEC ENV DET LVL, ASR, OSC (dsp/vapoly.cpp) ----
@@ -191,7 +198,7 @@ constexpr SoundPreset kPolyPresets[] = {
     // The rave stab: two saws a voice, open, a short decay, resonance, driven. 5TH OCT chords.
     {"RAVE", {64, 64, 90, 56}, VOICE, {50, 70, 60, 88}, NO_ASR, {0, 45, 0, 50}},
     // A poly pluck: a 33% pulse, the 24 dB filter, a fast deep sweep. Arps and chord riffs.
-    {"PLUCK", {64, 40, 50, 64}, VOICE, {40, 80, 30, 71}, NO_ASR, {64, 0, 0, 16}},
+    {"PLUCK", {64, 40, 50, 64}, VOICE, {40, 80, 30, 88}, NO_ASR, {64, 0, 0, 16}},
     // Brass: a swell on two saws, the 24 dB filter opening with it and holding (FSU).
     {"BRASS", {64, 40, 56, 30}, VOICE, {70, 50, 50, 57}, {40, 100, 40, 60}, {0, 20, 0, 30}},
     // The dub chord: like STAB but darker, longer and more resonant, OSC 2 a little apart.
@@ -204,7 +211,7 @@ constexpr SoundPreset kPolyPresets[] = {
     // A hoover-ish rave chord: two wide saws, driven, a little resonance, held.
     {"HOOVER", {64, 64, 80, 40}, VOICE, {60, 60, 40, 70}, {10, 100, 40, 60}, {0, 60, 0, 60}},
     // An organ: a square with the sub, the filter open, held while the key is. Chords.
-    {"ORGAN", {64, 70, 90, 10}, VOICE, {64, 0, 30, 60}, {0, 127, 20, 64}, {40, 0, 80, 0}},
+    {"ORGAN", {64, 70, 90, 10}, VOICE, {64, 0, 30, 47}, {0, 127, 20, 64}, {40, 0, 80, 0}},
 };
 
 // --- WAVE MONO: TBL POS CUT RES / DEC ENV MOT LVL, ASR, OSC WRP DET SUB GLD (dsp/va.cpp) ----
@@ -219,23 +226,23 @@ constexpr SoundPreset kWaveMonoPresets[] = {
     // A resonant sweep with no filter in it: the RESO SAW table's peak moves with the envelope.
     {"RESO", {36, 10, 100, 0}, VOICE, {60, 10, 120, 127}, NO_ASR, {0, 0, 80, 0}},
     // A growl bass: the GROWL table half way, held, the envelope pulling it into the snarl.
-    {"GROWL", {100, 40, 60, 50}, VOICE, {70, 50, 100, 110}, {0, 100, 20, 0}, {0, 0, 70, 0}},
+    {"GROWL", {100, 40, 60, 50}, VOICE, {70, 50, 100, 98}, {0, 100, 20, 0}, {0, 0, 70, 0}},
     // A talking lead: FORMANT, two readers a little apart, a touch of glide.
-    {"FORMNT", {28, 64, 80, 20}, VOICE, {60, 30, 90, 110}, {0, 100, 20, 40}, {0, 30, 40, 30}},
+    {"FORMNT", {28, 64, 80, 20}, VOICE, {60, 30, 90, 127}, {0, 100, 20, 40}, {0, 30, 40, 30}},
     // Early digital: the stepping DIGITAL spectra, short and bright. Bleeps and arps.
     {"DIGI", {84, 30, 110, 30}, VOICE, {56, 40, 100, 127}, NO_ASR, {0, 0, 0, 0}},
     // A vowel lead: VOWELS opening from "oo" as the envelope rises, glide on every note.
-    {"VOWEL", {92, 20, 90, 20}, VOICE, {80, 20, 120, 100}, {0, 110, 30, 60}, {0, 40, 0, 40}},
+    {"VOWEL", {92, 20, 90, 20}, VOICE, {80, 20, 120, 82}, {0, 110, 30, 60}, {0, 40, 0, 40}},
     // A bent bass: PHASE DIST with WRP bending the cycle as well. CZ-style.
     {"WARP", {60, 40, 70, 50}, VOICE, {60, 60, 90, 127}, NO_ASR, {60, 0, 80, 0}},
     // An FM bass: the FM RATIO table, the sub under it.
     {"FMBASS", {68, 50, 70, 30}, VOICE, {60, 50, 40, 127}, NO_ASR, {0, 0, 100, 0}},
     // Acid on a wavetable: the SYNC table, resonant and closed, held, the envelope wide.
-    {"ACIDWV", {20, 30, 30, 100}, VOICE, {44, 100, 64, 100}, {0, 100, 8, 0}, {0, 0, 0, 0}},
+    {"ACIDWV", {20, 30, 30, 100}, VOICE, {44, 100, 64, 71}, {0, 100, 8, 0}, {0, 0, 0, 0}},
     // A harmonic bass: HARMONICS, the envelope adding partials, the sub under it.
     {"HARMBS", {44, 20, 60, 30}, VOICE, {60, 40, 90, 120}, NO_ASR, {0, 20, 100, 0}},
     // A fold lead: the FOLD table pushed by the envelope, held, a little glide.
-    {"FOLD", {52, 30, 90, 30}, VOICE, {70, 40, 110, 110}, {0, 100, 30, 0}, {30, 30, 0, 30}},
+    {"FOLD", {52, 30, 90, 30}, VOICE, {70, 40, 110, 82}, {0, 100, 30, 0}, {30, 30, 0, 30}},
     // A tine: FM TINE from its sine, short, bright: a bell pluck for lines.
     {"TINE", {76, 10, 110, 10}, VOICE, {70, 20, 100, 110}, NO_ASR, {0, 0, 0, 0}},
 };
@@ -246,19 +253,19 @@ constexpr SoundPreset kWavePolyPresets[] = {
     // A pad on HARMONICS: a slow swell, two readers beating, the envelope brightening it.
     {"PAD", {44, 30, 80, 20}, VOICE, {96, 30, 90, 70}, {85, 89, 91, 40}, {0, 60, 0, 0}},
     // An electric piano: E-PIANO barking as it is struck and mellowing as it holds.
-    {"EPIANO", {108, 20, 100, 10}, VOICE, {90, 20, 90, 70}, {0, 70, 60, 64}, {0, 20, 0, 0}},
+    {"EPIANO", {108, 20, 100, 10}, VOICE, {90, 20, 90, 63}, {0, 70, 60, 64}, {0, 20, 0, 0}},
     // A bell: FM TINE from its sine, the tine rising on the strike and ringing away.
     {"BELL", {76, 0, 110, 10}, VOICE, {110, 20, 110, 62}, NO_ASR, {0, 30, 0, 0}},
     // Mallets: the MALLET table at marimba, struck brighter. Chords and patterns.
-    {"MALLET", {124, 30, 110, 10}, VOICE, {80, 20, 100, 70}, NO_ASR, {0, 0, 0, 0}},
+    {"MALLET", {124, 30, 110, 10}, VOICE, {80, 20, 100, 79}, NO_ASR, {0, 0, 0, 0}},
     // A pluck: PLUCK from its bright end to its dull one as the envelope falls.
-    {"PLUCK", {116, 127, 100, 20}, VOICE, {70, 20, 0, 100}, NO_ASR, {0, 0, 0, 0}},
+    {"PLUCK", {116, 127, 100, 20}, VOICE, {70, 20, 0, 110}, NO_ASR, {0, 0, 0, 0}},
     // A choir: VOWELS held, two readers, a slow swell.
     {"CHOIR", {92, 50, 80, 10}, VOICE, {100, 20, 80, 64}, {90, 100, 96, 50}, {0, 50, 0, 0}},
     // A PWM pad: the PWM table's widths, two readers, held.
     {"PWMPAD", {12, 40, 80, 20}, VOICE, {96, 30, 100, 66}, {80, 95, 90, 50}, {0, 40, 0, 0}},
     // Glass: FM TINE held, two readers, a slow swell: a crystalline ambient pad.
-    {"GLASS", {76, 60, 100, 10}, VOICE, {110, 20, 80, 62}, {60, 90, 100, 30}, {0, 40, 0, 0}},
+    {"GLASS", {76, 60, 100, 10}, VOICE, {110, 20, 80, 52}, {60, 90, 100, 30}, {0, 40, 0, 0}},
     // A digital pad: the stepping DIGITAL spectra, held, the envelope moving through them.
     {"DIGPAD", {84, 40, 70, 20}, VOICE, {100, 30, 100, 64}, {90, 100, 100, 40}, {0, 50, 0, 0}},
     // A resonant pad: RESO SAW's moving peak, held, a long slow sweep.
@@ -275,12 +282,15 @@ constexpr SoundPreset kWavePolyPresets[] = {
 // IDX is square law. FIN 64 is the ratio as RAT says it; CAR 13 is a carrier at 1, 38 at 0.5.
 // The insert filter stays open: FM's brightness is its index. Held presets keep LVL down.
 constexpr SoundPreset kFmPresets[] = {
-    // An electric piano: two pairs at 1:1, the strike brighter than the ring, a hair of detune.
-    {"EPIANO", {72, 24, 50, 0}, FLAT, {100, 100, 90, 80}, NO_ASR, {30, 64, 60, 13}},
+    // An electric piano: two pairs at 1:1, a hair of detune, the strike bright and the ring mellow.
+    // The index (95) and IEN at the top put the brightness in the strike, VEL makes a hard hit
+    // bark, and a touch of feedback adds edge. At IDX 50 it had almost nothing above 1 kHz even
+    // in its attack, an organ more than a piano (the sound review, 2026-11-27).
+    {"EPIANO", {72, 24, 95, 10}, FLAT, {96, 127, 120, 80}, NO_ASR, {30, 64, 60, 13}},
     // A bell: 1:3.5, inharmonic, ringing for seconds while the index falls away.
     {"BELL", {72, 72, 60, 0}, FLAT, {115, 110, 60, 72}, NO_ASR, {40, 64, 30, 13}},
     // A bass: the full stack with feedback, short and growling, the index snapping shut.
-    {"BASS", {8, 24, 70, 40}, FLAT, {60, 110, 70, 110}, NO_ASR, {0, 64, 0, 13}},
+    {"BASS", {8, 24, 70, 40}, FLAT, {60, 110, 70, 127}, NO_ASR, {0, 64, 0, 13}},
     // Brass: a slow index rise to a held, half-open tone. Chords.
     {"BRASS", {40, 24, 55, 30}, FLAT, {80, 90, 60, 72}, {40, 100, 30, 80}, {20, 64, 40, 13}},
     // An organ: four sines at 1 and 2, detuned into a chorus, held.
@@ -325,15 +335,15 @@ constexpr SoundPreset kGrainPresets[] = {
     {"STRTCH", {0, 90, 96, 3}, FLAT, {64, 0, 127, 112}, {0, 0, 0, 0}, {62, 0, 0, 0}},
     // A stutter: plucked 90 ms grains with gaps between them, half a second long. Put it on
     // every step and lock POS.
-    {"STUTTR", {0, 70, 20, 0}, FLAT, {64, 90, 74, 116}, NO_ASR, NO_OSC},
+    {"STUTTR", {0, 70, 20, 0}, FLAT, {64, 90, 74, 127}, NO_ASR, NO_OSC},
     // Chops: short percussive 60 ms grains fading over a third of a second, for rhythmic slicing
     // with POS locks.
-    {"CHOPS", {0, 56, 40, 2}, FLAT, {64, 127, 66, 116}, NO_ASR, NO_OSC},
+    {"CHOPS", {0, 56, 40, 2}, FLAT, {64, 127, 66, 127}, NO_ASR, NO_OSC},
     // A haze: dense, long grains sprayed wide with a little detune, a slow swell and fade.
     // Turns any sample into a wash.
     {"HAZE", {0, 104, 120, 90}, FLAT, {64, 0, 127, 112}, {90, 120, 110, 0}, {10, 40, 0, 0}},
     // A glitch: short grains, sparse, sprayed far and plucked. Lock POS and DEN per step.
-    {"GLITCH", {0, 40, 60, 100}, FLAT, {64, 60, 70, 110}, NO_ASR, NO_OSC},
+    {"GLITCH", {0, 40, 60, 100}, FLAT, {64, 60, 70, 127}, NO_ASR, NO_OSC},
     // Tape: a slow scan a little under real time, long grains, held. A worn loop.
     {"TAPE", {0, 96, 104, 10}, FLAT, {64, 0, 127, 112}, {20, 0, 60, 0}, {80, 10, 0, 0}},
 };

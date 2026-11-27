@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W59, about 190 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W60, about 194 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -764,7 +764,25 @@ to reach `GUARD4` here at a 40-60% top line.
 - Same with three or four tracks switched to VA POLY or FM4 holding chords: `GUARD` may come
   when MAX nears 90%, and it counts down within a few seconds once you mute those tracks. `____`
 
-**W58. Chorus (3 min).** Beat playing, A01.
+**W57. Triplet speed (2 min).** Beat playing, A01, GRID, track 3 (the closed hat) selected.
+- FUNC + HOME, TRACK SPEED, LEFT once: `T3 LEN 16 X3/2`. The hat runs faster than the kick, a
+  little off the bar. FUNC + pad-row keys to LEN 24: now it comes round on every bar, in
+  triplets against the straight kick. `____`
+- LEFT again is 2, RIGHT twice is 1; CLR undoes one step at a time. Save, open: 3/2 is kept. `____`
+
+**W58. The sound review's fixes (4 min).** FUNC+HOME, NEW PROJECT, OK twice; A01 playing.
+- The clap on 2 and 4 has a "smack" around 2 kHz with a quick flutter at its front, not a hiss.
+  The bass and the chord are clearly in the mix, about as present as the clap; the hats sit
+  behind them. `____`
+- T6 (bass): OK for SOUNDS, ACID. Accent a few of its notes (ACC in the step editor, or the ARP
+  page's push C): the accented notes are louder and brighter, with no tick at their start. `____`
+- Still on T6, step through SOUNDS with the beat playing: no preset jumps out much louder or
+  quieter than the one before (GROWL stays a little quiet). Same on T5 (PERC): CHIME and BELL no
+  longer stand far above CLAVE and KNOCK. `____`
+- T7: FUNC+EDIT, A to FM4, OK (it starts on EPIANO). KEYS, play a few notes hard and soft: a
+  bright, slightly barking strike that mellows as it rings; soft notes are rounder. `____`
+
+**W59. Chorus (3 min).** Beat playing, A01.
 - MIXER, SELECT_LEFT four times: `CHO 5-8`. Push C: `T7 CHORUS 64`, the chord track's bar stands
   half up and the chords sound wider and gently moving. Push C again: OFF, back to the dry
   chords. Turn C up to 127 and down: the chorus follows smoothly, no click. `____`
@@ -773,7 +791,7 @@ to reach `GUARD4` here at a 40-60% top line.
   with three tracks sending reads `____ %`. `____`
 - Save, power cycle, open: the sends and the CHO knobs are as left. `____`
 
-**W59. Stereo width (4 min).** Beat playing, A01, headphones on.
+**W60. Stereo width (4 min).** Beat playing, A01, headphones on.
 - MIXER, SELECT_RIGHT six times: `WID 5-8`. Push C (track 7, the chords): `T7 WIDTH 48`. The
   chord's notes now come from the middle, the left and the right. Push C again: `T7 UNISON 96`,
   every note wide and thick, a slow beating between the sides. Push again: OFF, mono. `____`
