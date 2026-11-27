@@ -1295,8 +1295,13 @@ heap beyond the engine growing by 6.8 KiB.
 
 | Build | cl6x | GCC only |
 | --- | --- | --- |
-| `scenario_factory.sh`, same commit | | |
-| `scenario_fm.sh` (FM4 on the chord track) | | |
+| `scenario_factory.sh`, same commit | 26.27% | 47.62% |
+| `scenario_fm.sh` (FM4 on the chord track) | 26.27% | 50.10% |
+
+Taken 2026-11-27 with the chain-wide index cap (`fm_index_cap`); on `main` before it,
+`scenario_fm.sh` read 26.69% cl6x and 50.37% GCC-only, so the cap costs nothing measurable (a
+16-step bisection only when the note or a knob changes). The cl6x peak equals the factory beat's:
+the chord track is not where the peak lands.
 
 ### The GRAIN rework (2026-11-23, host only)
 

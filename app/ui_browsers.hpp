@@ -81,13 +81,16 @@
     // never lose the one you had. The selection keys walk the track, as in MACHINE; a new track
     // is remembered afresh. NOW marks the preset the track matches as it is.
 
-    void open_sounds() {
+    // ARPS is the same list over core/arppresets.hpp, opened by OK on the ARP page: the same
+    // keys, AS WAS first, NOW on the arp the track has; `sounds_arps_` says which it is.
+    void open_sounds(bool arps = false) {
         sounds_return_ = mode_;
+        sounds_arps_ = arps;
         mode_ = Mode::sounds;
         leave_mode();
         sound_track_ = -1;
         retarget_sounds();
-        notice("SOUNDS");
+        notice(arps ? "ARPS" : "SOUNDS");
     }
 
     // The list belongs to the selected track: remember its sound and put the cursor on the
@@ -95,8 +98,18 @@
     void retarget_sounds() {
         if (sound_track_ == selected_) return;
         sound_track_ = selected_;
-        post(Cmd::sound_preset, uint8_t(selected_), 0, 0, kSoundPresetKeep);
         sound_cursor_ = 0;
+        if (sounds_arps_) {
+            post(Cmd::arp_preset, uint8_t(selected_), 0, 0, kSoundPresetKeep);
+            for (int i = 0; i < arp_preset_count(); i++) {
+                if (arp_preset_now(i)) {
+                    sound_cursor_ = i + 1;
+                    break;
+                }
+            }
+            return;
+        }
+        post(Cmd::sound_preset, uint8_t(selected_), 0, 0, kSoundPresetKeep);
         const uint8_t machine = engine_.machine_id(selected_);
         for (int i = 0; i < sound_preset_count(machine); i++) {
             if (sound_preset_matches(machine, i, engine_.params(selected_).v)) {
@@ -106,7 +119,20 @@
         }
     }
 
-    int sound_rows() const { return 1 + sound_preset_count(engine_.machine_id(selected_)); }
+    // Is arp preset `index` what the selected track has now?
+    bool arp_preset_now(int index) const {
+        return arp_preset_matches(index, &engine_.params(selected_).v[kArpFirst],
+                                  engine_.project().kit.tracks[selected_].arp);
+    }
+
+    int sound_rows() const {
+        return 1 + (sounds_arps_ ? arp_preset_count() : sound_preset_count(engine_.machine_id(selected_)));
+    }
+
+    // The screen's name: SOUNDS, or ARPS for the arp list.
+    const char *screen_mode_name() const {
+        return mode_ == Mode::sounds && sounds_arps_ ? "ARPS" : mode_name(mode_);
+    }
 
     void move_sound_cursor_to(int row) {
         const int last = sound_rows() - 1;
@@ -119,6 +145,21 @@
         switch (key) {
             case ENAGA_KEY_OK: {
                 if (shift_) return false;               // F1 + OK is redo, as everywhere
+                if (sounds_arps_) {
+                    const char *name = sound_cursor_ == 0 ? "AS WAS" : arp_preset(sound_cursor_ - 1)->name;
+                    post(Cmd::arp_preset, uint8_t(selected_), 0, 0,
+                         sound_cursor_ == 0 ? kSoundPresetBack : uint8_t(sound_cursor_ - 1));
+                    notice(name);
+                    // Logged too: the emulator can press OK but not read the screen
+                    // (tests/scenario_arp.sh).
+                    char line[16];
+                    char *out = line;
+                    append(out, "arp ");
+                    append(out, name);
+                    *out = 0;
+                    enaga::log(line);
+                    return true;
+                }
                 const uint8_t machine = engine_.machine_id(selected_);
                 if (sound_preset_count(machine) == 0) {
                     notice("NO SOUNDS HERE");
@@ -142,6 +183,7 @@
             case ENAGA_KEY_CLR:
                 if (shift_) return false;               // F1 + CLR is undo
                 mode_ = sounds_return_;
+                sounds_arps_ = false;
                 leave_mode();
                 notice(mode_name(mode_));
                 return true;

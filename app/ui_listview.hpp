@@ -454,6 +454,10 @@
     static constexpr int kSoundRows = 6;
 
     void draw_sounds(enaga::Canvas &canvas) {
+        if (sounds_arps_) {
+            draw_arps(canvas);
+            return;
+        }
         uint8_t *px = canvas.data();
         const uint8_t machine = engine_.machine_id(selected_);
         char line[40];
@@ -500,6 +504,77 @@
             canvas.text(0, 34, "NO SOUNDS HERE", 9);
         } else {
             draw_sound_bars(canvas, machine, sound_cursor_ == 0 ? nullptr : sound_preset(machine, sound_cursor_ - 1));
+        }
+        paint::small_text(px, 0, 113, "OK LOAD  CLR BACK", 10);
+    }
+
+    // ARPS: the same rows over the factory arps (core/arppresets.hpp), and under them the arp
+    // under the cursor in words: MOD RAT OCT GAT on one line, the kit settings on the next.
+    void draw_arps(enaga::Canvas &canvas) {
+        uint8_t *px = canvas.data();
+        char line[40];
+        char *out = line;
+        const int rows = sound_rows();
+        out = line;
+        append_number(out, uint32_t(sound_cursor_ + 1));
+        *out++ = '/';
+        append_number(out, uint32_t(rows));
+        *out = 0;
+        caption_right(px, line, 10);
+        out = line;
+        append(out, "INTO T");
+        append_number(out, uint32_t(selected_) + 1);
+        append(out, " ARP ONLY");
+        *out = 0;
+        paint::small_text(px, 0, 18, line, 13);
+
+        const int first = sound_cursor_ >= kSoundRows ? sound_cursor_ - kSoundRows + 1 : 0;
+        for (int row = first; row < rows && row < first + kSoundRows; row++) {
+            out = line;
+            const bool on = row == sound_cursor_;
+            *out++ = on ? '>' : ' ';
+            if (row == 0) {
+                append(out, "AS WAS");
+            } else {
+                const ArpPreset *a = arp_preset(row - 1);
+                append(out, a->name);
+                if (arp_preset_now(row - 1)) {
+                    int length = 0;
+                    while (a->name[length] != '\0') length++;
+                    for (int pad = kArpPresetNameChars - length; pad > 0; pad--) *out++ = ' ';
+                    append(out, "  NOW");
+                }
+            }
+            *out = 0;
+            list_row(canvas, 0, 26 + (row - first) * 8, line, on, 9);
+        }
+
+        // The cursor's arp, or the track's own for AS WAS.
+        const ArpPreset *a = sound_cursor_ == 0 ? nullptr : arp_preset(sound_cursor_ - 1);
+        const uint8_t *bytes = a != nullptr ? a->bytes : &engine_.params(selected_).v[kArpFirst];
+        const KitArp ext = a != nullptr ? a->ext : engine_.project().kit.tracks[selected_].arp;
+        paint::small_text(px, 0, 77, a != nullptr ? a->name : "AS WAS", 15);
+        const char *note = a == nullptr ? "THE ARP BEFORE" : (arp_preset_now(sound_cursor_ - 1) ? "PLAYING NOW" : "");
+        paint::small_text(px, 125 - paint::small_width(note), 77, note, 7);
+        out = line;
+        append(out, arp_mode_name(bytes[0]));
+        append(out, " ");
+        append(out, arp_rate_name(bytes[1]));
+        append(out, " X");
+        append_number(out, uint32_t(arp_octaves(bytes[2])));
+        append(out, " GAT ");
+        append_number(out, uint32_t(arp_gate_percent(bytes[3])));
+        *out = 0;
+        paint::small_text(px, 0, 87, line, 11);
+        for (int f = 0; f < kArpExtFields; f++) {
+            const int x = (f % 2) * 64;
+            const int y = 96 + (f / 2) * 8;
+            out = line;
+            append(out, arp_ext_label(f));
+            append(out, " ");
+            append(out, arp_ext_name(f, arp_ext_get(ext, f)));
+            *out = 0;
+            paint::small_text(px, x, y, line, arp_ext_get(ext, f) == 0 ? 6 : 11);
         }
         paint::small_text(px, 0, 113, "OK LOAD  CLR BACK", 10);
     }
