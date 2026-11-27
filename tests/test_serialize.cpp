@@ -94,13 +94,13 @@ uint16_t make_busy_pattern(Pattern &pattern) {
     pattern.scale = 3;
     pattern.seed = 0xDEADBEEFu;
 
-    const Speed speeds[] = {Speed::x2, Speed::x1,   Speed::x3_4,
-                            Speed::x1_2, Speed::x1_4, Speed::x1_8};
+    const Speed speeds[] = {Speed::x2,   Speed::x1,   Speed::x3_4, Speed::x1_2,
+                            Speed::x1_4, Speed::x1_8, Speed::x3_2};
 
     for (int t = 0; t < kTracks; t++) {
         TrackPattern &track = pattern.tracks[t];
         track.length = uint8_t(1 + t * 9);
-        track.speed = uint8_t(speeds[t % 6]);
+        track.speed = uint8_t(speeds[t % 7]);
         track.swing = t == 0 ? kSwingInherit : uint8_t(kSwingMin + t * 3);
 
         for (int i = 0; i < kStepsPerTrack; i++) {

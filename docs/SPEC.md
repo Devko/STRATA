@@ -146,7 +146,7 @@ STRATA does not implement a clock and does not own the tempo. Enaga's `<enaga/cl
 **Pattern structure**
 
 - 8 banks × 16 patterns = 128 patterns per project.
-- Per-track length 1-64 steps (polymeter) and per-track speed: 2×, 1×, 3/4×, 1/2×, 1/4×, 1/8×. A master length resets all tracks.
+- Per-track length 1-64 steps (polymeter) and per-track speed: 2×, 1×, 3/4×, 1/2×, 1/4×, 1/8×, and **[rev]** 3/2× (16th-note triplets, 16 ticks a step; `Speed::x3_2` = 6, shown between 2× and 1×; an older build loads it as 1×). A master length resets all tracks.
 - **[rev] Per-track play mode** (backlog P1, 2026-11-25): FWD, REV, PING, RND1, RND2, RND4, RND8, RND16, the FUNC menu's TRACK PLAY row. It picks which step sounds in each time slot and never rewrites the pattern. Swing stays on the slot; micro-timing, condition, probability, ratchet and locks travel with the step; PRE/NEI chain in sounding order. RND n plays a random whole block of n steps in each block's place, drawn from the pattern seed, track, block and pass (`core/timing.hpp`, `play_step`). Stored in an optional pattern section (4); absent means FWD.
 - 16 steps per page, 4 pages for 64 steps.
 
