@@ -112,6 +112,29 @@ all pipelined, about 84 cycles a frame) was bit-exact on the host and in the emu
 build, but its cl6x build's capture of `scenario_ambient` differed from the frame loop's in
 every sample, so #196 left it out. It was not the sound:
 
+### The VA voice's fused back half, on at last (2026-11-27, emulator)
+
+`STRATA_VA_FUSED` (dsp/tihints.h) runs the VA voice's filter, amplitude envelope and output tail
+in one loop (`strata_va_back`, dsp/valoops.ti.c). It was turned off on 2026-11-22 because its cl6x
+render "drifted" from the three passes ("The cl6x vectorisation pass" below): "the size of the
+signal while each window's peak and the RMS stay identical". That is the timing artefact of
+"The HALL in passes": the same audio a few blocks apart. Checked in the app instead, cl6x build
+on the emulator, with a temporary copy of `VaVoice::run` running the three passes on copies of
+the filter and envelope states beside the fused loop: **16,233 slices** (`scenario_m3`'s default
+beat and `scenario_factory`), every output sample and every byte of both filters' and the
+envelope's state equal. The host test `va_the_fused_back_half_is_bit_exact_against_filter_envelope_and_tail`
+holds it there.
+
+| | before | fused |
+| --- | --- | --- |
+| the default beat (`m1`, `factory`, most scenarios), cl6x | 26.60% | **25.12%** (-1.48) |
+| `scenario_wave` (the worst), cl6x | 30.79% | **28.81%** (-1.98) |
+| `scenario_ambient`, cl6x | 28.60% | **27.15%** |
+| `scenario_ambient` / `scenario_m3`, GCC-only | 58.22% / 43.51% | **57.30% / 42.38%** |
+
+All 47 scenarios pass with cl6x; every one that plays a VA voice drops 1.4 to 2.0 points (FM4 and
+SOUNDS, with fewer VA voices, about 1). The worst case is now **29.20%** (`scenario_gen`).
+
 ### The HALL in passes, and an emulator A/B that lies (2026-11-27, emulator)
 
 **The renders were the same audio, three blocks apart.** Searched for a shift, the cl6x capture
