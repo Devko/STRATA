@@ -69,4 +69,6 @@ g++ -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra -Werror -O2 \
   which is why VA POLY shares a budget of 12 voices across all tracks (Engine::kPolyVoiceBudget).
 - Never modify third_party/enaga. Enaga bugs are reported upstream with a failing case.
 - Never write the SPI flash. Never produce update files with BOOT or MCU sections.
+- Before pushing C++ changes, run `make -C host warn -j8` as well as the tests: CI builds at
+  -O1 too, where GCC reports uninitialized variables that the -O2 test build does not.
 - Small commits, one concern each, each with its test.
