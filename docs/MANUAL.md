@@ -1116,7 +1116,8 @@ the drums keep one note a step: the last one played.
 **CLICK and COUNT-IN** (FUNC menu). CLICK `ON` clicks every beat while the transport runs, a
 higher click on each bar's first beat. COUNT-IN `1 BAR` or `2 BAR` makes a PLAY from stop with REC
 on click that many bars first (the notice counts `COUNT-IN 4` .. `1`), whether CLICK is on or not;
-the pattern then starts on step 1 on the next beat, and nothing is recorded during the clicks.
+the pattern then starts on step 1 on the next beat, and nothing is recorded during the clicks
+(a hit up to half a step before the last click ends is the downbeat played early: step 1).
 STOP ends a count-in. The click goes straight to the output: it is never recorded, resampled,
 looped or repeated. Neither setting is saved. Under an outside clock there is no count-in (STRATA
 does not start the transport then), and with CLOCK OUT on an outboard box starts when the count-in

@@ -235,7 +235,15 @@ void InsertChain::prepare(const TrackParams &params, const ChainMix &mix, bool t
 
     // --- drive: 0 is a true bypass, not unity gain through the clip -------------------------
     const uint8_t drive = tone ? uint8_t(0) : params.get(fltr + 0);
+    const bool was_on = drive_on_;
     drive_on_ = drive != 0;
+    // Back on after a bypass (a DRV lock of 0 on one step and not the next): the DC blocker's
+    // state is from wherever the drive last ran, and carried over it would subtract that old
+    // sample from this block's first -- a click. It starts from rest, as a drive from cold does.
+    if (drive_on_ && !was_on) {
+        dc_[0] = 0.0f;
+        dc_[1] = 0.0f;
+    }
     if (drive_on_) {
         drive_pos_ = ed::exp2(float(drive) * (1.0f / 127.0f) * kDriveOctaves);
         drive_neg_ = drive_pos_ * kDriveAsymmetry;

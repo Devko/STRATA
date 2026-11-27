@@ -134,6 +134,48 @@ TEST(choke_two_tracks_of_a_group_on_the_same_frame_both_sound) {
     CHECK(sounding(engine, kMono));
 }
 
+TEST(choke_a_cut_track_keeps_no_stored_energy_for_its_next_note) {
+    // A choke ends in kill_all, and a track whose machine has gone idle is not rendered, so its
+    // insert chain stood still with the filter's ringing and the drive's DC blocker mid-swing in
+    // it -- and played that out as a transient on the track's next note, the stored transient
+    // Engine::silence_track was written to clear. A cut by a choke is a cut like any other.
+    // Measured here as a kick at LVL 0 after the choke: nothing should come out.
+    constexpr uint8_t kDrv = 4, kCut = 5, kRes = 6, kFilterMod = 7, kLvl = 11;
+    constexpr uint8_t kSendA = 14, kSendB = 15;
+    Engine &engine = stopped();
+    for (uint8_t t = 0; t < kTracks; t++) {
+        post(Cmd::set_param, t, 0, kSendA, 0);
+        post(Cmd::set_param, t, 0, kSendB, 0);
+    }
+    post(Cmd::set_choke, kKick, 0, 1);
+    post(Cmd::set_choke, kSnare, 0, 1);
+    post(Cmd::set_param, kKick, 0, kDrv, 127);
+    post(Cmd::set_param, kKick, 0, kFilterMod, 40);    // LP24
+    post(Cmd::set_param, kKick, 0, kCut, 40);
+    post(Cmd::set_param, kKick, 0, kRes, 127);
+    pump();
+    hit(kKick);
+    pump(4);
+    CHECK(sounding(engine, kKick));
+    hit(kSnare);                                      // chokes the kick
+    pump(2);
+    CHECK(!sounding(engine, kKick));
+    post(Cmd::set_mute, kSnare, 0, 1, 0);             // and the snare out of the way
+    post(Cmd::set_param, kKick, 0, kLvl, 0);
+    pump(2);
+
+    hit(kKick);
+    float total = 0.0f;
+    for (int b = 0; b < 4; b++) {
+        pump();
+        const float *block = strata::test::last_block();
+        for (int i = 0; i < strata::test::kRigStereo; i++) total += block[i] * block[i];
+    }
+    CHECK_NEAR(total, 0.0f, 1e-6f);
+    post(Cmd::set_mute, kSnare, 0, 0, 0);
+    pump();
+}
+
 TEST(choke_the_command_keeps_the_group_in_range) {
     Engine &engine = stopped();
     post(Cmd::set_choke, kSnare, 0, 4);

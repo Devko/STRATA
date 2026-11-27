@@ -785,8 +785,9 @@ private:
             choke_at_[u] = frame;
         }
     }
-    // The fade over track `t`'s rendered block, and the cut once it reaches 0 (engine.cpp).
-    void run_choke(int t, float *mono, uint32_t frames);
+    // The fade over track `t`'s rendered block, and the cut once it reaches 0 (engine.cpp); true
+    // when the cut is done.
+    bool run_choke(int t, float *mono, uint32_t frames);
     uint32_t choke_at_[kTracks] = {kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame,
                                    kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame};
     float choke_gain_[kTracks] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};

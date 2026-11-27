@@ -53,6 +53,23 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### The second review's fixes (2026-11-27, emulator)
+
+A choke that ends clears its track's insert chain once (as `silence_track` does), and the chain
+compares DRV's on/off with the last block's: control rate, nothing per sample.
+
+| Scenario | cl6x | GCC only, `main` (edbaf9f) | GCC only, with the fixes |
+| --- | --- | --- | --- |
+| `scenario_ambient` (the worst case) | 32.33% | 57.88% | 58.03% |
+| `scenario_choke` | 26.61% | 48.19% | 48.26% |
+
+Then the click's sum clamped to +-1 (two selects a sample, while it rings): `scenario_click`
+26.05% cl6x, 48.96% GCC-only.
+
+Within the half point a peak moves between runs. All 46 scenarios pass with cl6x. GCC-only
+`ambient` was 56.48% on 2026-11-25; it is now within two points of 60% on `main` alone, before
+these fixes: cl6x ships, but the GCC-only margin is worth watching.
+
 ### Where the worst case goes, and the LONG delay in passes (2026-11-27, emulator)
 
 `tools/profile_guest.py` runs a scenario's keys on the emulator, turns on its guest PC sampler

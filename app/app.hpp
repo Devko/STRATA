@@ -702,6 +702,14 @@ private:
     bool click_on_ = false;
     uint8_t count_in_bars_ = 0;
     uint8_t count_in_shown_ = 0;                // the beat the count-in notice last said
+    // A count-in's length in ticks as this side armed it at PLAY. The audio side publishes its own
+    // (Status::count_in_ticks) only at the end of its next block, and a hit in between read 0
+    // there and recorded during the count-in. The published figure wins once it is there.
+    uint32_t count_in_armed_ = 0;
+    uint32_t count_in_lead() const {
+        const uint32_t published = engine_.status().count_in_ticks.load(std::memory_order_relaxed);
+        return published != 0 ? published : count_in_armed_;
+    }
     PerfRide perf_ride_{};
     bool perf_riding_ = false;
     uint32_t perf_ride_ms_ = 0;
@@ -926,6 +934,22 @@ private:
         for (auto &track : rec_pass_) {
             for (uint32_t &pass : track) pass = 0;
         }
+    }
+    // And when the pattern playing changes -- a chain entry, a queued or NOW switch -- for the
+    // same reason: the pass count is the new pattern's, from 0 at its origin, and a mark the last
+    // pattern left on a step would read as this pass and join instead of replace. The origin and
+    // the live pattern the marks were made against (Status), checked by every chord hit.
+    uint32_t rec_pass_origin_ = 0;
+    uint16_t rec_pass_pattern_ = 0;
+    void follow_rec_pattern(uint32_t origin) {
+        const Status &status = engine_.status();
+        const uint16_t pattern =
+            uint16_t(uint16_t(status.live_bank.load(std::memory_order_relaxed)) << 8 |
+                     status.live_slot.load(std::memory_order_relaxed));
+        if (origin == rec_pass_origin_ && pattern == rec_pass_pattern_) return;
+        clear_rec_passes();
+        rec_pass_origin_ = origin;
+        rec_pass_pattern_ = pattern;
     }
     bool rec_add() const { return engine_.project().settings.rec_add; }
     // CC 16-31 are the track's sixteen parameters: the "General Purpose" 16-19 and the

@@ -405,6 +405,45 @@ TEST(chain_drive_leaves_no_dc) {
     CHECK(std::fabs(mean) < 0.05 * raw_mean);    // ... and the chain's output is not
 }
 
+TEST(chain_drive_coming_back_on_starts_its_dc_blocker_afresh) {
+    // A DRV lock of 0 on one step and not the next turns the drive off and on mid-note. The
+    // blocker's state stood still while it was off, so the step back on subtracted the clipped
+    // sample from where the drive last ran -- a step at the block's first sample, decaying over
+    // tens of milliseconds: a click. Coming back on must sound as the drive does from cold.
+    TrackParams driven = neutral_params();
+    driven.set(kPan, kPanLeft);
+    driven.set(kDrv, 64);
+    TrackParams clean = driven;
+    clean.set(kDrv, 0);
+    ChainMix mix;
+    InsertChain toggled, cold;
+    toggled.init(kRate);
+    cold.init(kRate);
+    Buses a, b;
+    float mono_a[kFrames], mono_b[kFrames];
+    for (int block = 0; block < 40; block++) {
+        // `toggled`: drive on, then off for the last ten blocks; `cold`: never on.
+        fill_signal(Signal::sine, mono_a, kFrames, block, 0.5f);
+        fill_signal(Signal::sine, mono_b, kFrames, block, 0.5f);
+        a.clear();
+        b.clear();
+        toggled.prepare(block < 30 ? driven : clean, mix);
+        cold.prepare(clean, mix);
+        toggled.process(mono_a, kFrames, a.out());
+        cold.process(mono_b, kFrames, b.out());
+    }
+    // Both on now, over the same signal: the same block, sample for sample.
+    fill_signal(Signal::sine, mono_a, kFrames, 40, 0.5f);
+    fill_signal(Signal::sine, mono_b, kFrames, 40, 0.5f);
+    a.clear();
+    b.clear();
+    toggled.prepare(driven, mix);
+    cold.prepare(driven, mix);
+    toggled.process(mono_a, kFrames, a.out());
+    cold.process(mono_b, kFrames, b.out());
+    for (int i = 0; i < kFrames; i++) CHECK_NEAR(a.l[i], b.l[i], 1e-6f);
+}
+
 // --- lo-fi -----------------------------------------------------------------------------------
 
 TEST(chain_lofi_off_is_bit_identical) {
