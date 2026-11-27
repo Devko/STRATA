@@ -826,6 +826,9 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
                 s.velocity = added == NoteAdd::present
                                  ? velocity
                                  : (velocity > s.velocity ? velocity : s.velocity);
+                // A held NOTE RPT pad joining the chord makes the step roll, as it does on a
+                // step it takes over (below): the roll is what was played.
+                if (command.e != 0) s.ratchet = command.e;
                 break;
             }
             const int flags = (int(s.flags) | int(kStepTrig)) & ~int(kStepTrigless);

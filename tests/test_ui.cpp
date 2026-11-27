@@ -11800,6 +11800,43 @@ TEST(polyrec_a_mono_track_keeps_one_note_a_step) {
     polyrec_stop();
 }
 
+TEST(polyrec_a_roll_joining_a_chord_step_makes_it_roll) {
+    // A held NOTE RPT pad records a roll over LEN (#187). Onto a chord step that already plays,
+    // under REC MODE ADD or as a later note of the same pass, the note joined and the roll was
+    // dropped: the step kept its old ratchet. Joining now brings the roll too.
+    fresh();
+    {
+        Project &incoming = app_engine().project_for_load();
+        Step &s = incoming.live().tracks[kPolyTrack].steps[3];
+        s.flags = kStepTrig;
+        s.note = 60;
+        s.ratchet = ratchet_pack(1, RatchetRamp::none);
+    }
+    pump(2);
+    const uint8_t roll = ratchet_pack_span(2, RatchetRamp::none);     // ROLL/32
+    Command command;
+    command.cmd = Cmd::record_hit;
+    command.track = uint8_t(kPolyTrack);
+    command.step = 3;
+    command.a = 64;
+    command.b = 100;
+    command.d = uint8_t(RecWrite::join);
+    command.e = roll;
+    app_engine().commands().post(command);
+    pump(2);
+    CHECK(step_has_note(app_engine().pattern(), kPolyTrack, 3, 60));
+    CHECK(step_has_note(app_engine().pattern(), kPolyTrack, 3, 64));
+    CHECK_EQ(int(step_of(kPolyTrack, 3).ratchet), int(roll));
+
+    // A plain note joining (no roll) leaves the step's ratchet as it is.
+    command.a = 67;
+    command.e = 0;
+    app_engine().commands().post(command);
+    pump(2);
+    CHECK(step_has_note(app_engine().pattern(), kPolyTrack, 3, 67));
+    CHECK_EQ(int(step_of(kPolyTrack, 3).ratchet), int(roll));
+}
+
 TEST(polyrec_a_new_take_does_not_join_the_last_one) {
     // REC off and on again, transport restarted at the same place: the pass count starts again
     // at 0, so the step is replaced, not joined, by the new take's first note.
