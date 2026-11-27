@@ -10,7 +10,7 @@ on the unit.
 
 | | Spec | This plan |
 | --- | --- | --- |
-| Enaga pin | `269c015` | **release `v0.3.0` (`4878b7c`)** since 2026-11-25 (`v0.2.0` before), the firmware on the unit; only release tags are pinned (`docs/HANDOFF.md`, "Moving the Enaga pin") |
+| Enaga pin | `269c015` | **release `v0.4.0` (`7487bbf`)** since 2026-11-27 (`v0.3.0` from 2026-11-25, `v0.2.0` before), the firmware on the unit; only release tags are pinned (`docs/HANDOFF.md`, "Moving the Enaga pin") |
 | Master clock | `core/clock`, 96 PPQN, 32.32 fixed point, drift tests | **Deleted.** Enaga owns it; `core/scheduler` sits on `clock::ticks()` |
 | MIDI / SYNC | M7: implement in an Enaga fork, upstream as PRs | **Already in Enaga.** M7 shrinks to verifying it on the unit |
 | External sync | deferred to M7 | **M1.** It changes transport and tempo behaviour that M1 builds |
@@ -52,7 +52,8 @@ otherwise.
 ## Release candidate: v0.5.0 (planned 2026-11-27)
 
 Roland's plan (2026-11-27): **v0.5.0 is the release candidate for 1.0.** After it come fixes,
-measurements and docs, not features. It stays on Enaga 0.3.0. Nothing here is tagged or
+measurements and docs, not features. It moves to Enaga 0.4.0 (Roland, 2026-11-27: firmware fixes,
+no API change), which needs the unit's firmware updated for its test. Nothing here is tagged or
 released by a docs or feature thread: the release runs from its own fresh thread when Roland
 says so, from `docs/release/RELEASING.md`, never re-releases an existing tag, and the zip carries
 no Enaga firmware.

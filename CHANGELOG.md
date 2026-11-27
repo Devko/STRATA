@@ -6,13 +6,17 @@ the project file format or the controls.
 
 ## [Unreleased]
 
-Everything merged since 0.4.0 (#180 to #200). It still runs on **Enaga 0.3.0**, so updating from
-0.4.0 is the app only. The features below have not been through the unit walkthrough yet.
+Everything merged since 0.4.0 (#180 onwards). It runs on **Enaga 0.4.0**, so updating from 0.4.0
+means new firmware as well as the app. The features below have not been through the unit walkthrough yet.
 
 ### Upgrading from 0.4.0
 
-- **Firmware:** none. Keep Enaga 0.3.0 and replace `/ENAGA/APPS/STRATA/APP.ENA` (the card
-  builder's "STRATA only").
+- **Firmware: Enaga 0.4.0.** Install `SmplTrek.bin` from
+  [Enaga's v0.4.0 release](https://github.com/seawaffle/enaga/releases/tag/v0.4.0), then replace
+  `/ENAGA/APPS/STRATA/APP.ENA` (the card builder fetches the matching Enaga). 0.4.0 follows MIDI
+  clock over USB MIDI too, keeps the right tempo after a long pause in the clock, spends less of
+  each audio block on itself, writes FAT32's free-space record correctly and reads and writes the
+  card faster. Nothing in STRATA's controls changes with it.
 - **Your projects and kits open as they are** and sound as before, with three exceptions: FM4 at
   high IDX on high notes is a little less bright (it no longer aliases), a track with DRIVE up
   loses a DC offset it should never have had (the factory kicks peak about 0.6 dB lower), and

@@ -53,6 +53,25 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### Enaga v0.3.0 to v0.4.0 (2026-11-27, emulator)
+
+The same STRATA commit (main `ebc8428`) against both Enaga releases, six scenarios each, peak load:
+
+| Scenario | v0.3.0 cl6x | v0.4.0 cl6x | v0.3.0 GCC-only | v0.4.0 GCC-only |
+| --- | --- | --- | --- | --- |
+| factory | 26.61% | 25.86% | 48.26% | 47.76% |
+| ambient | 30.57% | 29.87% | 58.31% | 57.78% |
+| wave | 30.80% | **30.05%** | 54.04% | 53.15% |
+| gen | 30.20% | 29.45% | 51.01% | 49.90% |
+| ratchetspan | 30.17% | 29.63% | 51.34% | 50.35% |
+| m3 | 25.93% | 25.24% | 43.52% | 42.77% |
+
+Every figure falls by 0.5-1.1 points. Most of it is Enaga's own audio interrupt (7,027 to 2,644
+cycles a block on Enaga's emulator figures, about 0.9 points of 496,000); the held-sustain fast
+path in `enaga_envelope_render` adds a little where envelopes sit on a sustain. STRATA's code did
+not change. All 47 scenarios pass with cl6x on v0.4.0 (worst **30.05%**, `wave`; ambient 29.87%).
+The unit should show the interrupt's saving too, but only with Enaga 0.4.0 firmware installed.
+
 ### The second review's fixes (2026-11-27, emulator)
 
 A choke that ends clears its track's insert chain once (as `silence_track` does), and the chain

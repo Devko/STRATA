@@ -61,12 +61,13 @@ not run on either.
 ## Which Enaga goes with which STRATA
 
 Each STRATA release is built against one Enaga release, and the firmware on the unit must match
-it **exactly**. Enaga's loader checks only an ABI number, which 0.2.0 and 0.3.0 share, so a
+it **exactly**. Enaga's loader checks only an ABI number, which 0.2.0, 0.3.0 and 0.4.0 share, so a
 mismatch starts and then misbehaves.
 
 | STRATA | Enaga firmware |
 | --- | --- |
-| v0.4.0 (the current release), and a build from `main` | [v0.3.0](https://github.com/seawaffle/enaga/releases/tag/v0.3.0) |
+| a build from `main` (since 2026-11-27) | [v0.4.0](https://github.com/seawaffle/enaga/releases/tag/v0.4.0) |
+| v0.4.0 (the current release) | [v0.3.0](https://github.com/seawaffle/enaga/releases/tag/v0.3.0) |
 | v0.1.0 to v0.3.1 | [v0.2.0](https://github.com/seawaffle/enaga/releases/tag/v0.2.0) |
 
 ## Step 1: install Enaga 0.3.0
@@ -84,6 +85,9 @@ its version at the top.
 
 Enaga's own [README, "Installing"](https://github.com/seawaffle/enaga#installing) has the same
 steps.
+
+A build from `main` needs **Enaga 0.4.0** instead: the same steps with `enaga-v0.4.0-smpltrek.zip`
+from [Enaga's v0.4.0 release](https://github.com/seawaffle/enaga/releases/tag/v0.4.0).
 
 ## Step 2: copy STRATA to the card
 
@@ -120,7 +124,8 @@ The [user manual](MANUAL.md) starts with a first-beat tutorial, and the
 - **From STRATA 0.3.1 or earlier to 0.4.0:** the Enaga version changes (0.2.0 to 0.3.0), so do
   step 1, then step 2.
 - **Between releases on the same Enaga version** (see the table above): step 2 only.
-- **From 0.4.0 to a build from `main`:** step 2 only; it runs on Enaga 0.3.0 too. The
+- **From 0.4.0 to a build from `main`:** the Enaga version changes (0.3.0 to 0.4.0), so step 1
+  with Enaga 0.4.0, then step 2. The
   changelog's "Upgrading from 0.4.0" (under Unreleased) says what sounds different and what an
   older build drops from a project saved by the newer one.
 
