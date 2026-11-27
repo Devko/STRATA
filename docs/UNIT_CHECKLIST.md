@@ -1,6 +1,7 @@
 # Unit checklist
 
-Start with **the smoke test** (S1-S20, one hour): boot, the screen, load, and the four things
+On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Enaga 0.4 checks**
+(N1-N7, 20 minutes) below. Then start with **the smoke test** (S1-S20, one hour): boot, the screen, load, and the four things
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
@@ -20,9 +21,33 @@ The 2026-11-22 controls tour and the v0.1.0 release steps are in
 
 ---
 
+# The Enaga 0.4 checks (20 min, 2026-11-27)
+
+`main` is built against Enaga v0.4.0. Install `SmplTrek.bin` from
+[Enaga's v0.4.0 release](https://github.com/seawaffle/enaga/releases/tag/v0.4.0)
+(`enaga-v0.4.0-smpltrek.zip`; HOME held at power-on, SYSTEM UPDATE), then copy a cl6x build from
+`main`. Report as `N3: MAX 27.4` or `N5 fail: 65 BPM`.
+
+- [ ] **N1.** F1 + POWER: the Enaga menu's header shows 0.4.0.
+- [ ] **N2.** Start STRATA from the app list: GRID comes up with no APP NOT RESPONDING, and
+      again after a power cycle (0.4 feeds the watchdog while a large package loads).
+- [ ] **N3.** A01 GROOVE, PLAY for two minutes: no clicks; note the top line's MAX. Enaga's own
+      share of a block fell by about 4,400 cycles, so MAX should be no higher than on 0.3.0.
+- [ ] **N4.** CLOCK SRC = MIDI, clock from a DIN source at 120 BPM: STRATA follows. Stop the
+      source, wait 20 s, start it again: the tempo reads 120 again, not a wild value.
+- [ ] **N5.** CLOCK SRC = MIDI, clock over USB MIDI from a computer (new in 0.4): STRATA follows it.
+      With DIN and USB both sending, it follows one and does not run at double speed.
+- [ ] **N6.** Save the project (FUNC + HOME, OK), power-cycle: it loads as saved. Then the Enaga
+      menu's USB DRIVE on a computer: the card's free space looks right, and a file copied there
+      reads back whole.
+- [ ] **N7.** Sample a few seconds from the input and load a long WAV from `/SAMPLES`: both as
+      before (SD access changed in 0.4).
+
+---
+
 # The smoke test (one hour, 2026-11-26)
 
-Build from `main` with cl6x, on Enaga 0.3.0 firmware (as for the walkthrough below). Have a phone
+Build from `main` with cl6x, on Enaga 0.4.0 firmware (as for the walkthrough below). Have a phone
 camera and headphones ready, and a WAV in `/SAMPLES` (`unit-test/STRATA_1.WAV` will do). Report by
 number, for example `S8: MAX 41.2` or `S4 fail: tabs unreadable`. Each item names the walkthrough
 item with the deeper checks.
@@ -102,9 +127,9 @@ This is the first take written through Enaga's file layer on the unit: every tak
 
 # The walkthrough (2026-11-25)
 
-Build from `main` at PR #176 or later, with cl6x. **The unit needs Enaga 0.3.0 firmware**
-(`SmplTrek.bin` from Enaga's v0.3.0 release, installed with HOME held at power-on, SYSTEM UPDATE):
-a build from `main` is linked against 0.3.0's host table. Build: `________`
+Build from `main` at PR #176 or later, with cl6x. **The unit needs Enaga 0.4.0 firmware**
+(`SmplTrek.bin` from Enaga's v0.4.0 release, installed with HOME held at power-on, SYSTEM UPDATE):
+a build from `main` is pinned to Enaga 0.4.0 since 2026-11-27. Build: `________`
 
 Everything starts on A01 GROOVE, the demo beat a first start plays. Items W1-W16 save nothing
 (W12's NEW PROJECT and LOAD DEMO come back to the demo); W17 saves a copy, so the DEFAULT project
