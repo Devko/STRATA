@@ -327,6 +327,18 @@
             return;
         }
 
+        // The chorus sends: push A-D on CHO 1-4 or CHO 5-8 throws that strip's send between OFF
+        // and half (64), and from any other amount back to OFF; turning sets it anywhere.
+        if ((key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||
+             key == ENAGA_KEY_PUSH_D) &&
+            mode_ == Mode::mixer && mixer_chorus_send_page(mixer_bank_) && !shift_) {
+            const int slot = key == ENAGA_KEY_PUSH_A ? 0
+                             : key == ENAGA_KEY_PUSH_B ? 1
+                             : key == ENAGA_KEY_PUSH_C ? 2 : 3;
+            if (down) toggle_chorus_send((mixer_bank_ - kMixerChorusSendPage) * 4 + slot);
+            return;
+        }
+
         // The ambient modes: push A on DLY+ or REV+ throws that send's mode, CLAS to LONG or
         // ROOM to HALL and back. A switch is a push as much as a turn, and a push is what the
         // emulator can press (tests/scenario_ambient.sh).

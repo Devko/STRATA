@@ -92,6 +92,8 @@ Pictures by page and machine:
 | DLY, DLY+ | one hit and its echoes over 2 s (8 s LONG), each as tall as FBK leaves it, wider as TON darkens, alternating up and down with ping-pong, wobbling with WOW, smeared with DIF; a head sweeping in time with the transport; the time in ms |
 | REV, REV+ | the tail over a log time axis (10 ms-30 s): early reflections spaced by SIZ, the dense tail falling over DEC, smoother as DMP darkens it, wobbling with MOD, the shimmer's sparks; ROOM or HALL |
 | ROUTE | TRK into DLY and REV, both into OUT; D>R's wire as bright as it sends; ping-pong's L R; LONG's low cut; dots running along the wires while the beat plays |
+| CHO 1-4, CHO 5-8 | the desk with each track's chorus send standing up from the bottom of its strip, `OFF` or the amount under it |
+| CHO | knob line; the two sweeps over two seconds, L bright and R dim a quarter turn apart, as deep as DEP and as many as RAT turns, running while the beat plays; C>R as a bar beside `REV`; `TRACKS SEND ON CHO 1-4 5-8` |
 | MST | the draft: knob line (DJ CMP LIM); the spectrum, 24 bands of 5 px (4 lit) in rows 26-59, every other row, bright at the top, peaks held 12 frames; 100 / 1K / 10K at y 63; the vectorscope 42 x 42 at (0, 70), mid up and side across, afterglow; CMP's reduction and LIM falling from the top of two bars (x 50, 68; rows 72-109); GR and LUFS (momentary, K-weighted, 400 ms, from the scope history at 24 kHz) at x 88; LVL at (88, 106) |
 | EQ | FLT's frame with the kill EQ's curve (a shelf under 250 Hz, a bell, a shelf over 2.5 kHz; KILL 30 dB down), A B C on it, a lit `KILL` over a thrown band |
 

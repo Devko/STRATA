@@ -1517,7 +1517,7 @@ tracks 3 and 4 is separate and still works without a group.
 
 <p><img src="screens/mixer.png" width="256" alt="MIXER: the faders of tracks 1-4"> <img src="screens/mixer_dly.png" width="256" alt="MIXER's DLY page"></p>
 
-<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all twelve: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+, REV, REV+, ROUTE, MST, EQ.</sub>
+<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all fifteen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, MST, EQ.</sub>
 
 Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
 send, `DLY+` after `DLY` and `REV+` after `REV`. **Push A** on either page (or turn A) flips the
@@ -1539,6 +1539,27 @@ mode; the old mode's echoes ring out underneath, so a switch never clicks.
 The modes and their knobs are saved with the project; a project from before they existed opens
 with both sends classic. Both cost more CPU than the classic modes while they sound (about
 twice the send cost), and nothing once they fall silent.
+
+### Chorus: the third send
+
+A stereo chorus for keys, pads and anything that should sound wider. It is a **send**, like the
+delay and the reverb: each track sends as much of itself as you like, and the chorus adds a
+widened, gently detuned copy back to the mix beside the dry track. One chorus serves all eight
+tracks, so it costs the same whether one track uses it or eight, and nothing at all while no
+track sends to it.
+
+- **CHO 1-4** and **CHO 5-8** (MIXER, after ROUTE): A-D are each track's chorus send, OFF to 127,
+  shown as a bar standing up from the bottom of its strip. **Push A-D** throws a strip between
+  OFF and half (64), the quick way to try it on a track. A strip says `T7 CHORUS 64` as it moves.
+- **CHO**: **RAT** (A) the sweep's speed, 0.05 to 5 Hz (slow is a lush ensemble, fast a warble);
+  **DEP** (B) how far the sweep swings, up to 5 ms either side of 8 ms; **LVL** (C) the chorus's
+  return; **C>R** (D) how much of the chorus goes on into the reverb. The page draws the two
+  sweeps, left and right a quarter turn apart, which is what makes a mono track come back wide.
+
+The send is post-fader, as SNA and SNB are. Unlike them it is a kit setting rather than a
+parameter, because every track's 32 parameter slots are taken: a lock, a scene or the LFO does not
+move it. The sends are saved with the kit (and in the kit library), the chorus's four knobs with
+the project. A project or kit from before the chorus opens with no track sending to it.
 
 ### Freeze
 

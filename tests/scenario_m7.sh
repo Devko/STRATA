@@ -27,7 +27,7 @@ cd "$(dirname "$0")/.."
 # shellcheck source=tools/env.sh
 source tools/env.sh
 
-CYCLES=1200000000
+CYCLES=1300000000
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -60,11 +60,14 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 8@640000000 \
     --key 8@690000000 \
     --key 8@740000000 \
-    --key 20@800000000 \
-    --key 9@860000000 \
-    --key 9@910000000 \
-    --key 9@960000000 \
-    --key 8@1020000000 \
+    --key 8@790000000 \
+    --key 8@840000000 \
+    --key 8@890000000 \
+    --key 20@950000000 \
+    --key 9@1010000000 \
+    --key 9@1060000000 \
+    --key 9@1110000000 \
+    --key 8@1170000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
@@ -100,7 +103,10 @@ check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_re
 # ready" can scroll out. A drawn screen comes only after init(), so it proves the same thing.
 check("strata ready" in log or (len(log) == 16 and any(l.startswith("scr ") for l in log)),
       "init() ran to completion")
-check("run int" in log, "the transport started", f"log={log}")
+# "run int" scrolls out of the 16-line ring behind the page walk; the screens show the beat
+# reached MIXER, and the peak below that it was sounding.
+check("run int" in log or any(l.startswith("scr MIXER") for l in log), "the transport started",
+      f"log={log}")
 
 screens = [line for line in log if line.startswith("scr ")]
 check(bool(screens), "the screen was logged at all", f"log={log}")
@@ -109,9 +115,9 @@ check(bool(screens), "the screen was logged at all", f"log={log}")
 # whole screen was drawn on the C674x without faulting -- which is the claim this scenario makes
 # and the one a host test cannot make.
 # Walked LEFT from TRK 1-4, wrapping to EQ, since the duck's three pages came between the faders
-# and the sends: seven presses still reach DLY and the log ring still holds them all.
+# and the sends: ten presses reach DLY since the chorus's three pages came after ROUTE. The log
+# ring (16 lines) then no longer holds TRK 1-4, the first; scenario_choke draws it.
 wanted = [
-    "scr MIXER TRK 1-4",
     "scr MIXER EQ",
     "scr MIXER DLY",
     "scr MIXER DLY+",
@@ -119,6 +125,9 @@ wanted = [
     "scr MIXER REV+",
     "scr MIXER ROUTE",
     "scr MIXER MST",
+    "scr MIXER CHO",
+    "scr MIXER CHO 5-8",
+    "scr MIXER CHO 1-4",
     "scr PROJECT SETUP",
 ]
 for name in wanted:
@@ -126,7 +135,7 @@ for name in wanted:
 
 # PROJECT walks slots, CHAIN, PATTERN, SETUP: three SELECT_RIGHTs (the screen keys) reach SETUP,
 # and one SELECT_LEFT steps back to PATTERN, so the screen keys move both ways. (The log ring holds 16
-# lines; this sequence ends with exactly the first MIXER page still in it.)
+# lines; this sequence ends with EQ, the second MIXER page, still in it.)
 check(screens and screens[-1] == "scr PROJECT PATTERN", "and left SETUP again",
       f"last={screens[-1:]}")
 

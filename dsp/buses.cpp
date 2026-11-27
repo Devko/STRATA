@@ -34,6 +34,12 @@
 namespace strata {
 namespace {
 
+// The chorus's sweep range, and how many blocks it runs on unfed: its lines hold at most 13 ms
+// (8 ms plus 5 ms of depth), which is 10 blocks of 64 at 48 kHz; 16 leaves room.
+constexpr float kChorusRateLowHz = 0.05f;
+constexpr float kChorusRateHighHz = 5.0f;
+constexpr int kChorusTailBlocks = 16;
+
 float clamp_to(float value, float low, float high) {
     const float lowered = value < low ? low : value;
     return lowered > high ? high : lowered;
@@ -110,6 +116,18 @@ bool send_field_set(SendSettings &settings, uint8_t field, float value) {
         case SendField::reverb_shimmer:
             settings.reverb_shimmer = clamp_to(value, 0.0f, 1.0f);
             return true;
+        case SendField::chorus_rate:
+            settings.chorus_rate_hz = clamp_to(value, kChorusRateLowHz, kChorusRateHighHz);
+            return true;
+        case SendField::chorus_depth:
+            settings.chorus_depth = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        case SendField::chorus_level:
+            settings.chorus_level = clamp_to(value, 0.0f, 1.0f);
+            return true;
+        case SendField::chorus_to_reverb:
+            settings.chorus_to_reverb = clamp_to(value, 0.0f, 1.0f);
+            return true;
         default:
             return false;
     }
@@ -136,6 +154,10 @@ float send_field_get(const SendSettings &settings, uint8_t field) {
         case SendField::reverb_size:         return settings.reverb_size;
         case SendField::reverb_mod:          return settings.reverb_mod;
         case SendField::reverb_shimmer:      return settings.reverb_shimmer;
+        case SendField::chorus_rate:         return settings.chorus_rate_hz;
+        case SendField::chorus_depth:        return settings.chorus_depth;
+        case SendField::chorus_level:        return settings.chorus_level;
+        case SendField::chorus_to_reverb:    return settings.chorus_to_reverb;
         default:                             return 0.0f;
     }
 }
@@ -143,7 +165,8 @@ float send_field_get(const SendSettings &settings, uint8_t field) {
 const char *send_field_name(uint8_t field) {
     static const char *const names[] = {"TIM", "FBK", "TON", "PNG", "LVL", "D>R", "DEC",
                                         "DMP", "HPF", "LVL", "TYP", "MUL", "WOW", "DIF",
-                                        "LCT", "TYP", "SIZ", "MOD", "SHM"};
+                                        "LCT", "TYP", "SIZ", "MOD", "SHM", "RAT", "DEP",
+                                        "LVL", "C>R"};
     static_assert(sizeof(names) / sizeof(names[0]) == std::size_t(SendField::count),
                   "a send field without a name");
     return field < uint8_t(SendField::count) ? names[field] : "---";
@@ -355,6 +378,11 @@ float send_value_from_byte(uint8_t field, uint8_t byte, float beat_seconds) {
         case SendField::reverb_size:     return byte_exponential(byte, 0.35f, 2.3626f);
         case SendField::reverb_mod:      return byte_unit(byte);
         case SendField::reverb_shimmer:  return byte_unit(byte);
+        // 0.05 Hz to 5 Hz: log2(100) octaves, so the slow ensemble end has room.
+        case SendField::chorus_rate:     return byte_exponential(byte, kChorusRateLowHz, 6.6439f);
+        case SendField::chorus_depth:    return byte_unit(byte);
+        case SendField::chorus_level:    return byte_unit(byte);
+        case SendField::chorus_to_reverb: return byte_unit(byte);
         default:                         return 0.0f;
     }
 }
@@ -458,6 +486,8 @@ void Mixer::init(float sample_rate) {
     // The ambient modes' own lines (dsp/ambient.hpp): 4.4 MiB for 12 s of stereo, 0.55 MiB of hall.
     long_delay_.init(sample_rate);
     hall_.init(sample_rate);
+    // The chorus's two lines: about 17 ms each, 2 x 1024 floats.
+    chorus_.init(sample_rate);
 
     duck_.init(sample_rate);
     for (int t = 0; t < kTracks; t++) chains_[t].init(sample_rate);
@@ -486,6 +516,7 @@ void Mixer::init(float sample_rate) {
     reverb_tail_ = 0;
     long_tail_ = 0;
     hall_tail_ = 0;
+    chorus_tail_ = 0;
 
     prepare(SendSettings{}, MasterSettings{});
 }
@@ -528,6 +559,12 @@ void Mixer::resolve_sends(const SendSettings &sends) {
     hall_mode_ = sends.reverb_hall;
     hall_.set(sends.reverb_decay_s, sends.reverb_damping, sends.reverb_size, sends.reverb_mod,
               sends.reverb_shimmer, hall_tail_ == 0);
+
+    // --- send C: the chorus --------------------------------------------------------------------
+    chorus_.set(ed::clamp(sends.chorus_rate_hz, kChorusRateLowHz, kChorusRateHighHz),
+                ed::clamp(sends.chorus_depth, 0.0f, 1.0f));
+    chorus_level_ = ed::clamp(sends.chorus_level, 0.0f, 1.0f);
+    chorus_to_reverb_ = ed::clamp(sends.chorus_to_reverb, 0.0f, 1.0f);
 
     // --- send B: the reverb and the high-pass on its input -----------------------------------
     reverb_.set(sends.reverb_decay_s, sends.reverb_damping);
@@ -620,6 +657,7 @@ void Mixer::begin_block(int frames) {
     enaga_clear(mix_r_, frames_);
     enaga_clear(send_a_, frames_);
     enaga_clear(send_b_, frames_);
+    enaga_clear(send_c_, frames_);
     // One duck envelope for the whole mixer; false means idle, and then no chain touches it.
     duck_active_ = duck_.render(duck_curve_, frames_);
 }
@@ -642,12 +680,14 @@ void Mixer::add_track_tapped(int track, float *mono, float *tap) {
         if (hall_mode_) hall_tail_ = hall_tail_blocks_;
         else reverb_tail_ = reverb_tail_blocks_;
     }
+    if (insert.send_c_gain() > 0.0f) chorus_tail_ = kChorusTailBlocks;
 
     ChainOut out;
     out.dry_l = mix_l_;
     out.dry_r = mix_r_;
     out.send_a = send_a_;
     out.send_b = send_b_;
+    out.send_c = send_c_;
     out.duck = duck_active_ ? duck_curve_ : nullptr;
     out.tap = tap;
     insert.process(mono, frames_, out);
@@ -714,6 +754,29 @@ void Mixer::finish_block(float *out, int frames) {
             else reverb_tail_ = reverb_tail_blocks_;
         } else {
             long_delay_.process(feed, mix_l_, mix_r_, n, delay_level_);
+        }
+    }
+
+    // --- send C: the chorus -------------------------------------------------------------------
+    // Wet only, as the other sends are: the track's dry sound is already on the bus, and the two
+    // together are the chorus. Run while fed and for a few blocks after, until its lines (13 ms at
+    // the most) have emptied; idle, it costs nothing. One mono feed into both lines -- they read
+    // a quarter turn apart, which is the width.
+    if (n > 0 && chorus_tail_ > 0) {
+        chorus_tail_--;
+        if (chorus_to_reverb_ > 0.0f) {
+            enaga_clear(wet_l_, n);
+            enaga_clear(wet_r_, n);
+            chorus_.process(send_c_, send_c_, wet_l_, wet_r_, n, 1.0f);
+            enaga_mix(mix_l_, wet_l_, n, chorus_level_);
+            enaga_mix(mix_r_, wet_r_, n, chorus_level_);
+            const float into_reverb = chorus_to_reverb_ * 0.5f;
+            enaga_mix(send_b_, wet_l_, n, into_reverb);
+            enaga_mix(send_b_, wet_r_, n, into_reverb);
+            if (hall_mode_) hall_tail_ = hall_tail_blocks_;
+            else reverb_tail_ = reverb_tail_blocks_;
+        } else {
+            chorus_.process(send_c_, send_c_, mix_l_, mix_r_, n, chorus_level_);
         }
     }
 

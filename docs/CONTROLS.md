@@ -620,7 +620,7 @@ The screens and their pages, from `core/help.cpp`:
 | EDIT in MACRO LEARN | what a push does now, then the page's knobs |
 | KEYS | the pads as a piano, the page's knobs, the pad lights |
 | Step page | the three field pages, what each field is |
-| MIXER | the page that is up (TRK, DCK, DUCK, DLY, DLY+, REV, REV+, ROUTE, MST, EQ) |
+| MIXER | the page that is up (TRK, DCK, DUCK, DLY, DLY+, REV, REV+, ROUTE, CHO, MST, EQ) |
 | PERFORM | macros, LEARN, scenes, morph, mutate |
 | PROJECT, CHAIN, PATTERN, SETUP | one page each |
 | PROJECTS | open, rename, delete, save as; typing a name |

@@ -410,6 +410,10 @@
                 edit_duck(mixer_bank_, encoder, delta);
                 return;
             }
+            if (mixer_chorus_send_page(mixer_bank_)) {
+                edit_chorus_send(mixer_bank_, encoder, delta);
+                return;
+            }
             // LEARN takes the kill EQ's bands here (D11): before the delta is posted, so the
             // touch keeps the band's value from before the turn.
             if (macro_learn_ >= 0 && mixer_bank_ == kMixerEqPage && encoder < kMasterBands) {

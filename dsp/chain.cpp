@@ -226,7 +226,7 @@ const char *InsertChain::param_name(int index) {
 
 bool InsertChain::silent() const {
     return target_l_ == 0.0f && target_r_ == 0.0f && gain_l_ == 0.0f && gain_r_ == 0.0f &&
-           send_a_gain_ == 0.0f && send_b_gain_ == 0.0f;
+           send_a_gain_ == 0.0f && send_b_gain_ == 0.0f && send_c_gain_ == 0.0f;
 }
 
 void InsertChain::prepare(const TrackParams &params, const ChainMix &mix, bool tone) {
@@ -314,6 +314,7 @@ void InsertChain::prepare(const TrackParams &params, const ChainMix &mix, bool t
     target_r_ = pan_r * level;
     send_a_gain_ = level * params.unit(fx + 2);   // post-fader: the fader is in the send gain
     send_b_gain_ = level * params.unit(fx + 3);
+    send_c_gain_ = level * ed::clamp(mix.chorus, 0.0f, 1.0f);   // a kit setting, not a parameter
 }
 
 void InsertChain::process(float *mono, int frames, const ChainOut &out) {
@@ -372,6 +373,9 @@ void InsertChain::process(float *mono, int frames, const ChainOut &out) {
     }
     if (send_b_gain_ > 0.0f && out.send_b != nullptr) {
         enaga_mix(out.send_b, mono, frames, send_b_gain_);
+    }
+    if (send_c_gain_ > 0.0f && out.send_c != nullptr) {
+        enaga_mix(out.send_c, mono, frames, send_c_gain_);
     }
 }
 

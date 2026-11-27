@@ -12,14 +12,16 @@
 // carries its knob's letter.
 
     void draw_mixer(enaga::Canvas &canvas) {
-        if (mixer_bank_ < kMixerTrackPages) { draw_desk(canvas, false); return; }
-        if (mixer_bank_ < kMixerDuckPage) { draw_desk(canvas, true); return; }
+        if (mixer_bank_ < kMixerTrackPages) { draw_desk(canvas, DeskKind::faders); return; }
+        if (mixer_bank_ < kMixerDuckPage) { draw_desk(canvas, DeskKind::duck); return; }
+        if (mixer_chorus_send_page(mixer_bank_)) { draw_desk(canvas, DeskKind::chorus); return; }
         if (kMixerPages[mixer_bank_].master && mixer_bank_ != kMixerEqPage) { draw_master_view(canvas); return; }
 
         draw_knob_line(canvas, kKnobY, 0x7u);
         if (mixer_bank_ == kMixerDuckPage) draw_duck_view(canvas);
         else if (mixer_bank_ == kMixerDelayPage || mixer_bank_ == kMixerLongPage) draw_echo_view(canvas, mixer_bank_ == kMixerLongPage);
         else if (mixer_bank_ == kMixerEqPage) draw_eq_view(canvas);
+        else if (mixer_bank_ == kMixerChorusPage) draw_chorus_view(canvas);
         else if (kMixerPages[mixer_bank_].name[0] == 'R' && kMixerPages[mixer_bank_].name[1] == 'E') {
             draw_reverb_view(canvas, kMixerPages[mixer_bank_].name[3] == '+');
         }
@@ -78,6 +80,7 @@
         if (mixer_bank_ == kMixerEqPage) append(out, "PUSH A B C: KILL");
         else if (mixer_bank_ == kMixerLongPage && !sends.delay_long) append(out, "PUSH A: LONG DELAY");
         else if (mixer_bank_ == kMixerDuckPage) append(out, "TRACKS DUCK ON DCK 1-4 5-8");
+        else if (mixer_bank_ == kMixerChorusPage) append(out, "TRACKS SEND ON CHO 1-4 5-8");
         else if (kMixerPages[mixer_bank_].name[0] == 'R' && kMixerPages[mixer_bank_].name[3] == '+' && !sends.reverb_hall) {
             append(out, "PUSH A: HALL");
         }
@@ -90,15 +93,21 @@
     // others' numbers dim), the pan as a tick on a short line, the two sends as two thin bars,
     // then the meter (Status::track_milli, the top 36 dB, a peak held a second) beside the fader's
     // slot and its cap at the level, and under them the level and the machine. A muted track's
-    // strip is dim and its cap hollow. `duck`: DCK 1-4 / 5-8, where each strip's bar is how far
-    // the track ducks, hanging from the top, and dips with the source while the beat plays.
+    // strip is dim and its cap hollow. DeskKind::duck: DCK 1-4 / 5-8, where each strip's bar is
+    // how far the track ducks, hanging from the top, and dips with the source while the beat
+    // plays. DeskKind::chorus: CHO 1-4 / 5-8, where it is the track's chorus send, standing up
+    // from the bottom as a fader does.
     static constexpr int kDeskTop = 36, kDeskRows = 62;
+    enum class DeskKind : uint8_t { faders, duck, chorus };
 
-    void draw_desk(enaga::Canvas &canvas, bool duck) {
+    void draw_desk(enaga::Canvas &canvas, DeskKind kind) {
         uint8_t *px = canvas.data();
         const Status &status = engine_.status();
         const bool running = enaga::clock::state().running != 0;
-        const int bank = duck ? mixer_bank_ - kMixerDuckDepthPage : mixer_bank_;
+        const bool duck = kind == DeskKind::duck;
+        const int bank = duck ? mixer_bank_ - kMixerDuckDepthPage
+                              : (kind == DeskKind::chorus ? mixer_bank_ - kMixerChorusSendPage
+                                                          : mixer_bank_);
         const Kit &kit = engine_.project().kit;
         const int source = kit.duck.source < kTracks ? int(kit.duck.source) : 0;
         const float dip = duck ? duck_gain_now(source) : 0.0f;
@@ -140,7 +149,17 @@
             if (desk_hold_[t] > 1) canvas.rect(x + 1, bottom - desk_hold_[t] + 1, 5, 1, muted ? 5 : 15);
             canvas.rect(x + 1, bottom + 1, 5, 1, 3);
 
-            if (!duck) {
+            if (kind == DeskKind::chorus) {
+                // The chorus send, standing up from the bottom.
+                const int send = int(chorus_send_sanitized(kit.tracks[t].chorus));
+                const int rows = send * kDeskRows / int(kChorusSendMax);
+                canvas.rect(x + 8, kDeskTop, 5, kDeskRows, 2);
+                if (rows > 0) canvas.rect(x + 8, bottom - rows + 1, 5, rows, uint8_t(active ? 12 : 6));
+                char *out = text;
+                if (send == 0) append(out, "OFF");
+                else append_number(out, uint32_t(send));
+                *out = 0;
+            } else if (!duck) {
                 // The fader: its slot and the cap at the level (0-1.2 over the rows).
                 const float gain = engine_.level(t);
                 int at = int(gain * float(kDeskRows - 4) / 1.2f);
@@ -177,7 +196,7 @@
             if (muted) canvas.rect(x + 1, 116, 11, 1, 6);
             // The choke group under the machine on the fader pages (push A-D steps it).
             const uint8_t choke = kit.tracks[t].choke;
-            if (!duck && choke != 0) {
+            if (kind == DeskKind::faders && choke != 0) {
                 const char group[3] = {'C', char('0' + choke), 0};
                 paint::small_text(px, x + 1, 119, group, active ? 12 : 6);
             }
@@ -390,6 +409,45 @@
         paint::small_text(px, 52, kBottom + 3, "1S", 8);
         paint::small_text(px, 100, kBottom + 3, "30S", 8);
         paint::small_text(px, 120 - paint::small_width(s.reverb_hall ? "HALL" : "ROOM"), kBottom - kTall, s.reverb_hall ? "HALL" : "ROOM", 9);
+    }
+
+    // --- CHO: the chorus's two sweeps ----------------------------------------------------------
+    //
+    // The delay each side reads at, across about two seconds: two sines a quarter turn apart, as
+    // deep as DEP swings them and as many as RAT turns in that time, L above the centre line's
+    // dotted 8 ms and R a shade dimmer. While the beat plays they run. Under them, how much of
+    // the chorus goes into the reverb (C>R) as a bar.
+    void draw_chorus_view(enaga::Canvas &canvas) {
+        uint8_t *px = canvas.data();
+        const SendSettings &s = engine_.sends();
+        constexpr int kMid = 62, kAmp = 26;
+        constexpr float kWindowS = 2.0f;
+        const bool running = enaga::clock::state().running != 0;
+        picture_grid(px, kMid - kAmp - 4, kMid + kAmp + 4, 8);
+        paint::dotted_h(px, 0, 119, kMid, 3, 3);
+        // Turns of the sweep per pixel; and where it is now, in 256ths of a turn.
+        const float turns_per_px = s.chorus_rate_hz * kWindowS * (1.0f / 120.0f);
+        const int now = running ? int(float(last_ms_) * 0.001f * s.chorus_rate_hz * 256.0f) : 0;
+        const float depth = s.chorus_depth * float(kAmp);
+        for (int side = 0; side < 2; side++) {
+            int16_t xs[61], ys[61];
+            for (int i = 0; i <= 60; i++) {
+                const int x = i * 2;
+                const int phase = (int(float(x) * turns_per_px * 256.0f) + now + side * 64) & 255;
+                xs[i] = int16_t(paint::q4(x));
+                ys[i] = int16_t(paint::q4(kMid) - int(depth * float(paint::sin_q12(phase)) / 4096.0f * 16.0f));
+            }
+            paint::polyline(px, xs, ys, 61, side == 0 ? 14 : 9);
+        }
+        paint::small_text(px, 113, kMid - kAmp, "L", 14);
+        paint::small_text(px, 113, kMid + kAmp - 4, "R", 9);
+        canvas.rect(0, kMid + kAmp + 6, 120, 1, 6);
+        paint::small_text(px, 0, kMid + kAmp + 8, "8MS", 8);
+        // C>R: the chorus into the reverb.
+        const int into = int(s.chorus_to_reverb * 40.0f + 0.5f);
+        canvas.rect(78, kMid + kAmp + 9, 40, 2, 3);
+        if (into > 0) canvas.rect(78, kMid + kAmp + 9, into, 2, 11);
+        paint::small_text(px, 62, kMid + kAmp + 8, "REV", 8);
     }
 
     // --- ROUTE: where the sends go -------------------------------------------------------------

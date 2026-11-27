@@ -170,6 +170,12 @@ constexpr MixerPage kMixerPages[] = {
                      int8_t(SendField::reverb_mod), int8_t(SendField::reverb_shimmer)}},
     {"ROUTE", false, {int8_t(SendField::delay_ping_pong), int8_t(SendField::delay_to_reverb),
                       int8_t(SendField::delay_low_cut_hz), -1}},
+    // The chorus, send C: how much of each track goes to it, four at a time (kit bytes, handled
+    // on their own like the duck's depths), then the chorus itself.
+    {"CHO 1-4", false, {-1, -1, -1, -1}},
+    {"CHO 5-8", false, {-1, -1, -1, -1}},
+    {"CHO", false, {int8_t(SendField::chorus_rate), int8_t(SendField::chorus_depth),
+                    int8_t(SendField::chorus_level), int8_t(SendField::chorus_to_reverb)}},
     {"MST", true, {int8_t(MasterField::dj), int8_t(MasterField::compressor),
                    int8_t(MasterField::limit), int8_t(MasterField::level)}},
     // The kill EQ, next to the master it sits in. Push A, B or C to throw that band's kill
@@ -201,6 +207,18 @@ static_assert(kMixerPages[kMixerDelayPage].field[0] == int8_t(SendField::delay_s
 static_assert(kMixerPages[kMixerLongPage].field[0] == int8_t(SendField::delay_mode) &&
                   kMixerPages[kMixerHallPage].field[0] == int8_t(SendField::reverb_mode),
               "the ambient pages moved: push A would throw the wrong switch");
+
+// The chorus's pages: two of sends, then the chorus. After ROUTE, so the pages the scenarios
+// count to (MST, EQ) are three further on than they were.
+constexpr int kMixerChorusSendPage = kMixerHallPage + 2;
+constexpr int kMixerChorusPage = kMixerChorusSendPage + 2;
+static_assert(kMixerPages[kMixerChorusSendPage].name[0] == 'C' &&
+                  kMixerPages[kMixerChorusSendPage].name[4] == '1' &&
+                  kMixerPages[kMixerChorusPage].field[0] == int8_t(SendField::chorus_rate),
+              "the chorus's pages moved");
+constexpr bool mixer_chorus_send_page(int page) {
+    return page == kMixerChorusSendPage || page == kMixerChorusSendPage + 1;
+}
 
 static_assert(kMixerPages[kMixerEqPage].master &&
                   kMixerPages[kMixerEqPage].field[0] == int8_t(MasterField::eq_low),

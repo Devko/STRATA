@@ -85,6 +85,7 @@ private:
 struct ChainMix {
     float level = 1.0f;   // 0 silences the track (and its sends: the sends are post-fader)
     float duck = 0.0f;    // 0 bypasses the duck for this track, 1 ducks it fully
+    float chorus = 0.0f;  // send C, the chorus: 0 none, 1 all (KitTrack::chorus), post-fader
 };
 
 // Where one chain adds its block. The mixer clears these, hands the same set to all eight
@@ -94,6 +95,7 @@ struct ChainOut {
     float *dry_r = nullptr;
     float *send_a = nullptr;     // send A, mono (delay)
     float *send_b = nullptr;     // send B, mono (reverb)
+    float *send_c = nullptr;     // send C, mono (chorus)
     const float *duck = nullptr; // this block's duck amount, or nullptr while the duck is idle
     // A bounce's tap (RESAMPLE from a track): the track after drive, filter and lo-fi, before the
     // duck, the fader, the pan and the sends -- the track's own sound, which a sample of it should
@@ -138,6 +140,7 @@ public:
     bool lofi_on() const { return lofi_on_; }
     float send_a_gain() const { return send_a_gain_; }
     float send_b_gain() const { return send_b_gain_; }
+    float send_c_gain() const { return send_c_gain_; }
     // True when the chain would add nothing anywhere, so process() returns immediately.
     bool silent() const;
 
@@ -169,7 +172,7 @@ private:
     // pan, level and the sends
     float target_l_ = 0.0f, target_r_ = 0.0f;   // pan x level, this block's destination
     float gain_l_ = 0.0f, gain_r_ = 0.0f;       // where the ramp is now
-    float send_a_gain_ = 0.0f, send_b_gain_ = 0.0f;
+    float send_a_gain_ = 0.0f, send_b_gain_ = 0.0f, send_c_gain_ = 0.0f;
 
     // 1 / frames, cached: a block's gain ramp needs it and nothing may divide in a loop.
     int ramp_frames_ = 0;
