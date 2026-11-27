@@ -15,7 +15,7 @@ the project file format or the controls.
   longer restarts the second it waits before stepping down. A single block at 90% still raises
   it at once. New emulator scenario `genload`: GENERATE at full density on all eight tracks.
 
-## [0.5.0] - {{RELEASE_DATE}}
+## [0.5.0] - 2026-11-27
 
 The release candidate for 1.0: everything merged since 0.4.0 (#180 to #208). From here to 1.0
 come fixes, measurements and docs, not features. It is the first release for **Enaga 0.4.0**, so
@@ -190,7 +190,7 @@ Release notes: [docs/release/v0.5.0.md](docs/release/v0.5.0.md).
 
 ### Known limits
 
-- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} Nothing added since 0.4.0 is
+- Tested on one SmplTrek, with the cl6x build. On the 0.2.0 build (2026-11-22) the load stayed under 30% on the default beat, and MAX peaked at 84.3% in long, heavy play with no clicks or dropouts; builds from main run on the unit (2026-11-27), but 0.5.0's load is not measured on the unit yet. Nothing added since 0.4.0 is
   checked on the unit yet, and the release candidate's unit test (the smoke test and the
   walkthrough) is what decides 1.0. Every other load figure comes from the emulator, which
   models no caches.
