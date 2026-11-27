@@ -85,10 +85,11 @@ bit-exact or null-tested, docs, and tooling.
 
 **3. Checks on the RC build** (a build from `main` at the freeze, with cl6x):
 
-- [ ] `make -C host test`, the same under `SANITIZE=1`, `tools/test_shuffle.sh`,
+- [x] `make -C host test`, the same under `SANITIZE=1`, `tools/test_shuffle.sh`,
       `tools/audit_commands.sh` and `tools/enaga_check.sh`: all clean.
-- [ ] `tools/scenarios.sh`, every scenario with cl6x and with `ENAGA_TI_CGT=none`; the figures
-      in `docs/BUDGET.md`, worst case under 60% with cl6x.
+- [x] `tools/scenarios.sh`, every scenario with cl6x and with `ENAGA_TI_CGT=none`; the figures
+      in `docs/BUDGET.md`, worst case under 60% with cl6x. (Both 2026-11-27 on 46cc054: all 47
+      pass, worst 26.34% cl6x, 55.06% GCC-only.)
 - [ ] `tools/emulator_screens.sh`, and a look at the contact sheet: the docs' pictures are the
       RC's screens.
 - [ ] On the unit: the smoke test (S1-S20) first, then the walkthrough (W1-W54) or at least
