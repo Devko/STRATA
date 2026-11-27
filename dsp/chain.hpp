@@ -147,6 +147,7 @@ private:
     // drive
     bool drive_on_ = false;
     float drive_pos_ = 1.0f, drive_neg_ = 1.0f;
+    float dc_[2] = {0.0f, 0.0f};   // the DC blocker after the clip: last input, last output
 
     // filter
     FilterMode mode_ = FilterMode::off;

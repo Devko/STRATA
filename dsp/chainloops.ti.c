@@ -7,14 +7,24 @@
 
 #include <enaga/dsp/math.h>
 
-void strata_chain_drive(float *restrict mono, int n, float positive, float negative) {
+void strata_chain_drive(float *restrict mono, int n, float positive, float negative, float pole,
+                        float *dc) {
+    float x1 = dc[0], y1 = dc[1];
     int i;
     for (i = 0; i < n; i++) {
         const float x = mono[i];
         /* One select picks the half's gain, so there is no branch; the cubic inside
          * enaga_soft_clip is the whole cost, and the output cannot leave +-1. */
-        mono[i] = enaga_soft_clip(x * (x < 0.0f ? negative : positive));
+        const float c = enaga_soft_clip(x * (x < 0.0f ? negative : positive));
+        /* The DC blocker: y = c - c' + pole y', a zero at DC and a pole just inside it. Taking
+         * the offset out lets a fully clipped wave tilt a little past +-1, so the stage's bound
+         * is kept by a clamp on the way out; the state keeps the unclamped value. */
+        y1 = c - x1 + pole * y1;
+        x1 = c;
+        mono[i] = enaga_clamp(y1, -1.0f, 1.0f);
     }
+    dc[0] = x1;
+    dc[1] = y1;
 }
 
 void strata_chain_lofi(float *restrict mono, int n, uint32_t increment, float levels, float step,
