@@ -344,7 +344,7 @@ The **project** is everything: the 128 patterns, the kit (each track's machine, 
 level and sample), the tempo, the sends and master, the chain, scenes, macros and mute states.
 One project is open at a time.
 
-Each track has its own **length** (1-64 steps) and **speed** (2x, 1x, 3/4, 1/2, 1/4, 1/8), so
+Each track has its own **length** (1-64 steps) and **speed** (2x, 3/2, 1x, 3/4, 1/2, 1/4, 1/8), so
 tracks can run against each other (polymeter). The pattern's **master length** decides when a
 queued pattern change lands and when the chain moves on.
 
@@ -1037,7 +1037,11 @@ track. The FUNC menu's CLEAR PATTERN (OK twice) clears every track at once. Hold
 <p><img src="screens/pattern.png" width="256" alt="PROJECT's PATTERN page"></p>
 
 - `FUNC + pad-row keys`: the selected track's length, 1-64 steps.
-- The FUNC menu's TRACK SPEED row: its speed, 2x, 1x, 3/4, 1/2, 1/4, 1/8 (LEFT/RIGHT).
+- The FUNC menu's TRACK SPEED row: its speed, 2x, 3/2, 1x, 3/4, 1/2, 1/4, 1/8 (LEFT/RIGHT).
+  **3/2 is 16th-note triplets**: a step every 16 ticks, six to the beat, so a bar is 24 steps.
+  Give the track LEN 24 for a one-bar triplet hat, or leave it at 16 for a part that drifts
+  against the beat and comes round every two thirds of a bar. 3/4 is the eighth-note triplet.
+  Swing still pushes the track's odd steps, on its own 16-tick grid.
 - The FUNC menu's TRACK PLAY row, under it: the order the track plays its steps in, without
   changing them. **FWD** as written; **REV** backwards; **PING** forward one pass and backward
   the next (the two end steps sound twice at the turn, so a 16-step track still turns every

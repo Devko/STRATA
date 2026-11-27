@@ -764,6 +764,12 @@ to reach `GUARD4` here at a 40-60% top line.
 - Same with three or four tracks switched to VA POLY or FM4 holding chords: `GUARD` may come
   when MAX nears 90%, and it counts down within a few seconds once you mute those tracks. `____`
 
+**W57. Triplet speed (2 min).** Beat playing, A01, GRID, track 3 (the closed hat) selected.
+- FUNC + HOME, TRACK SPEED, LEFT once: `T3 LEN 16 X3/2`. The hat runs faster than the kick, a
+  little off the bar. FUNC + pad-row keys to LEN 24: now it comes round on every bar, in
+  triplets against the straight kick. `____`
+- LEFT again is 2, RIGHT twice is 1; CLR undoes one step at a time. Save, open: 3/2 is kept. `____`
+
 **W58. Chorus (3 min).** Beat playing, A01.
 - MIXER, SELECT_LEFT four times: `CHO 5-8`. Push C: `T7 CHORUS 64`, the chord track's bar stands
   half up and the chords sound wider and gently moving. Push C again: OFF, back to the dry

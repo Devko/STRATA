@@ -356,7 +356,7 @@ D>R delay into reverb, LCT the LONG delay's low cut · CHO 1-4, CHO 5-8: each tr
 LOW (below 250 Hz), MID, HI (above 2.5 kHz), each flat at centre, KILL at the bottom, +6 dB at the top.
 
 **Lists:** queue modes END (end of pattern), 16, 32 (steps), NOW · repeat 1/4 1/8 1/16 1/32 1/4T
-1/8T 1/16T · auto-fill OFF 4 8 16 (bars) · mutations ROT LEFT, ROT RIGHT, DENSITY +, DENSITY -,
+1/8T 1/16T · track speed 2, 3/2 (16th triplets), 1, 3/4, 1/2, 1/4, 1/8 · auto-fill OFF 4 8 16 (bars) · mutations ROT LEFT, ROT RIGHT, DENSITY +, DENSITY -,
 VELOCITY, MICRO, CHANCE, NOTES · scales CHROMATIC MINOR MAJOR DORIAN PHRYGIAN LYDIAN MIXOLYDIAN
 LOCRIAN, HARM MINOR, MEL MINOR, MINOR PENT, MAJOR PENT, BLUES, WHOLE TONE, DIMINISHED · notes use
 sharps (C# not Db).
