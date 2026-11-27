@@ -90,6 +90,13 @@ typedef struct {
 void strata_hall_process(strata_hall *h, const strata_hall_block *b, const float *in,
                          float *out_l, float *out_r, int n);
 
+/* The two ways strata_hall_process runs, bit-identical (ambientloops.ti.c): passes over chunks,
+ * which cl6x pipelines, and the frame loop, which GCC builds run. Both kept for the tests. */
+void strata_hall_passes(strata_hall *h, const strata_hall_block *b, const float *in,
+                        float *out_l, float *out_r, int n);
+void strata_hall_frames(strata_hall *h, const strata_hall_block *b, const float *in,
+                        float *out_l, float *out_r, int n);
+
 #ifdef __cplusplus
 }
 #endif

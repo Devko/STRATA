@@ -1,21 +1,17 @@
 /* The ambient send modes, per sample (ambientloops.h). Built by cl6x when it is installed, else
  * GCC. Nothing here branches or divides.
  *
- * The LONG delay runs a block as PASSES over chunks of frames rather than as one loop over
- * frames. cl6x software-pipelines only an innermost, branch-free loop of moderate size; the frame
- * loop it used to be (with the all-passes as a loop of four inside) was not pipelined at all, and
- * with the HALL's it was the dearest function in the worst-case scenario (docs/BUDGET.md, "The
- * LONG delay in passes"). Every value is computed by the same operations in the same order as the
- * frame loop did, so the passes are bit-exact: tests/test_ambientloops.cpp runs the frame loop
+ * Both effects run a block as PASSES over chunks of frames rather than as one loop over frames.
+ * cl6x software-pipelines only an innermost, branch-free loop of moderate size; the frame loops
+ * these used to be (with the all-passes and the lines as small loops inside) were not pipelined
+ * at all, and were the two dearest functions in the worst-case scenario (docs/BUDGET.md, "Where
+ * the worst case goes"). Every value is computed by the same operations in the same order as the
+ * frame loops did, so the passes are bit-exact: tests/test_ambientloops.cpp runs the frame loops
  * beside them and compares every output and every byte of state, and the emulator renders the
- * cl6x build identically. What makes the split legal is that no pass reads a ring slot that a
- * later pass of the same chunk writes (the comment above the function shows it from the shortest
- * read). Loads and stores of a ring are kept in different passes, so cl6x need not assume a store
- * feeds the next frame's load.
- *
- * The HALL is still the frame loop, unpipelined. The same treatment is bit-exact on the host and
- * with GCC on the emulator, but its cl6x build renders differently there; until that is explained
- * (cl6x or the emulator's model of its hardware loops) it stays as it was. */
+ * cl6x build identically. What makes a split legal is that no pass reads a ring slot that a later
+ * pass of the same chunk writes (each function's comment shows it from its shortest read). Loads
+ * and stores of a ring are kept in different passes, so cl6x need not assume a store feeds the
+ * next frame's load. */
 #include "ambientloops.h"
 
 /* --- the LONG delay ------------------------------------------------------------------------ */
@@ -231,10 +227,217 @@ void strata_long_delay_process(strata_long_delay *restrict d,
 #define HALL_MASK (STRATA_HALL_RING - 1)
 #define HALL_DIFFUSER_MASK (STRATA_HALL_DIFFUSER_RING - 1)
 #define SHIMMER_MASK (STRATA_SHIMMER_RING - 1)
+#define HALL_CHUNK 32
 
-void strata_hall_process(strata_hall *restrict h, const strata_hall_block *restrict b,
-                         const float *restrict in, float *restrict out_l, float *restrict out_r,
-                         int n) {
+/* The lines are read at least 63 frames back (each length is held at 64 or more, ambient.cpp,
+ * and the modulation only adds), the input all-passes 241 or more (kHallDiffuse), so a chunk of
+ * 32 never reads its own writes there. The shimmer is read 2 frames back or more, so its pass
+ * comes after the pass that writes the chunk's frames into its ring, as the frame loop wrote
+ * each frame before reading. */
+
+/* One line read at its gliding, modulated length, damped and scaled by its loss. */
+#define HALL_LINE(j, sweep)                                                                       \
+    do {                                                                                          \
+        const float *restrict ring = lines + (j) * STRATA_HALL_RING;                             \
+        const float l = length##j + mod * (1.0f + (sweep));                                       \
+        const int whole = (int)l;                                                                 \
+        const float frac = l - (float)whole;                                                      \
+        const int a = (wi - whole) & HALL_MASK;                                                   \
+        const int bb = (a - 1) & HALL_MASK;                                                       \
+        const float y = ring[a] + (ring[bb] - ring[a]) * frac;                                    \
+        damp##j += damping * (y - damp##j);                                                       \
+        r##j[i] = damp##j * gain##j;                                                              \
+        length##j += step##j;                                                                     \
+    } while (0)
+
+void strata_hall_passes(strata_hall *restrict h, const strata_hall_block *restrict b,
+                        const float *restrict in, float *restrict out_l, float *restrict out_r,
+                        int n) {
+    float *restrict lines = h->lines;
+    float *restrict diffuse = h->diffuse;
+    float *restrict shimmer = h->shimmer;
+    int w = h->write;
+    float s = h->lfo_s, c = h->lfo_c;
+    float phase = h->shimmer_phase, shimmer_out = h->shimmer_out;
+    const float g = b->diffusion, damping = b->damping, mod = b->mod, level = b->level;
+    const float rc = b->rot_c, rs = b->rot_s, shimmer_amount = b->shimmer;
+    const float inv_window = 1.0f / STRATA_SHIMMER_WINDOW;   /* a constant: no division at run time */
+    float damp0 = h->damp[0], damp1 = h->damp[1], damp2 = h->damp[2], damp3 = h->damp[3];
+    float damp4 = h->damp[4], damp5 = h->damp[5], damp6 = h->damp[6], damp7 = h->damp[7];
+    float length0 = h->length[0], length1 = h->length[1], length2 = h->length[2];
+    float length3 = h->length[3], length4 = h->length[4], length5 = h->length[5];
+    float length6 = h->length[6], length7 = h->length[7];
+    const float gain0 = b->gain[0], gain1 = b->gain[1], gain2 = b->gain[2], gain3 = b->gain[3];
+    const float gain4 = b->gain[4], gain5 = b->gain[5], gain6 = b->gain[6], gain7 = b->gain[7];
+    const float step0 = b->length_step[0], step1 = b->length_step[1];
+    const float step2 = b->length_step[2], step3 = b->length_step[3];
+    const float step4 = b->length_step[4], step5 = b->length_step[5];
+    const float step6 = b->length_step[6], step7 = b->length_step[7];
+    const int len0 = b->diffuse_len[0], len1 = b->diffuse_len[1];
+    const int len2 = b->diffuse_len[2], len3 = b->diffuse_len[3];
+    float *restrict ring0 = diffuse + 0 * STRATA_HALL_DIFFUSER_RING;
+    float *restrict ring1 = diffuse + 1 * STRATA_HALL_DIFFUSER_RING;
+    float *restrict ring2 = diffuse + 2 * STRATA_HALL_DIFFUSER_RING;
+    float *restrict ring3 = diffuse + 3 * STRATA_HALL_DIFFUSER_RING;
+    float sn[HALL_CHUNK], cs[HALL_CHUNK];
+    float r0[HALL_CHUNK], r1[HALL_CHUNK], r2[HALL_CHUNK], r3[HALL_CHUNK];
+    float r4[HALL_CHUNK], r5[HALL_CHUNK], r6[HALL_CHUNK], r7[HALL_CHUNK];
+    float shifted[HALL_CHUNK + 1];
+    float z0[HALL_CHUNK], z1[HALL_CHUNK], z2[HALL_CHUNK], z3[HALL_CHUNK];
+    int base, m, i, wi;
+
+    for (base = 0; base < n; base += m) {
+        m = n - base < HALL_CHUNK ? n - base : HALL_CHUNK;
+
+        /* The modulator: one phasor, its sine and cosine and their negatives over the lines. */
+        for (i = 0; i < m; i++) {
+            const float s1 = s * rc + c * rs;
+            const float c1 = c * rc - s * rs;
+            s = s1;
+            c = c1;
+            sn[i] = s;
+            cs[i] = c;
+        }
+
+        /* Read each line at its (gliding, modulated) length, damp it, and take its loss. Four
+         * lines a pass: their damping recurrences overlap. Loads only. */
+        for (i = 0; i < m; i++) {
+            wi = (w + i) & HALL_MASK;
+            HALL_LINE(0, sn[i]);
+            HALL_LINE(1, cs[i]);
+            HALL_LINE(2, -sn[i]);
+            HALL_LINE(3, -cs[i]);
+        }
+        for (i = 0; i < m; i++) {
+            wi = (w + i) & HALL_MASK;
+            HALL_LINE(4, sn[i]);
+            HALL_LINE(5, cs[i]);
+            HALL_LINE(6, -sn[i]);
+            HALL_LINE(7, -cs[i]);
+        }
+
+        /* Out: the even lines left, the odd right, before they mix; the eight-point Hadamard,
+         * normalised, as three butterfly stages, back into r; and the tail into the shimmer's
+         * ring. Stores only. */
+        for (i = 0; i < m; i++) {
+            const float wet_l = (r0[i] + r2[i] + r4[i] + r6[i]) * 0.5f;
+            const float wet_r = (r1[i] + r3[i] + r5[i] + r7[i]) * 0.5f;
+            out_l[base + i] += level * wet_l;
+            out_r[base + i] += level * wet_r;
+
+            const float t0 = r0[i] + r1[i], t1 = r0[i] - r1[i];
+            const float t2 = r2[i] + r3[i], t3 = r2[i] - r3[i];
+            const float t4 = r4[i] + r5[i], t5 = r4[i] - r5[i];
+            const float t6 = r6[i] + r7[i], t7 = r6[i] - r7[i];
+            const float u0 = t0 + t2, u1 = t1 + t3, u2 = t0 - t2, u3 = t1 - t3;
+            const float u4 = t4 + t6, u5 = t5 + t7, u6 = t4 - t6, u7 = t5 - t7;
+            const float norm = 0.35355339f;
+            r0[i] = (u0 + u4) * norm;
+            r1[i] = (u1 + u5) * norm;
+            r2[i] = (u2 + u6) * norm;
+            r3[i] = (u3 + u7) * norm;
+            r4[i] = (u0 - u4) * norm;
+            r5[i] = (u1 - u5) * norm;
+            r6[i] = (u2 - u6) * norm;
+            r7[i] = (u3 - u7) * norm;
+
+            shimmer[(w + i) & SHIMMER_MASK] = (wet_l + wet_r) * 0.5f;
+        }
+
+        /* The shimmer: the tail an octave up, as two grains a half turn apart whose read heads
+         * move at twice the write speed, each faded by a triangle so the two always sum to one.
+         * shifted[i] is what goes into frame i: the last frame's shifter output. Loads only. */
+        shifted[0] = shimmer_out;
+        for (i = 0; i < m; i++) {
+            wi = w + i;
+            float p2 = phase + 0.5f;
+            p2 = p2 >= 1.0f ? p2 - 1.0f : p2;
+            const float d1 = 2.0f + STRATA_SHIMMER_WINDOW * (1.0f - phase);
+            const float d2 = 2.0f + STRATA_SHIMMER_WINDOW * (1.0f - p2);
+            const int w1 = (int)d1, w2 = (int)d2;
+            const float f1 = d1 - (float)w1, f2 = d2 - (float)w2;
+            const int a1 = (wi - w1) & SHIMMER_MASK, b1 = (a1 - 1) & SHIMMER_MASK;
+            const int a2 = (wi - w2) & SHIMMER_MASK, b2 = (a2 - 1) & SHIMMER_MASK;
+            const float y1 = shimmer[a1] + (shimmer[b1] - shimmer[a1]) * f1;
+            const float y2 = shimmer[a2] + (shimmer[b2] - shimmer[a2]) * f2;
+            const float e1 = 2.0f * phase - 1.0f, e2 = 2.0f * p2 - 1.0f;
+            const float g1 = 1.0f - (e1 < 0.0f ? -e1 : e1);
+            const float g2 = 1.0f - (e2 < 0.0f ? -e2 : e2);
+            const float out = g1 * y1 + g2 * y2;
+            shifted[i + 1] = out > 1.0f ? 1.0f : (out < -1.0f ? -1.0f : out);
+            phase += inv_window;
+            phase = phase >= 1.0f ? phase - 1.0f : phase;
+        }
+        shimmer_out = shifted[m];
+
+        /* What the input all-passes will read, from slots no store in this chunk touches. */
+        for (i = 0; i < m; i++) {
+            wi = w + i;
+            z0[i] = ring0[(wi - len0) & HALL_DIFFUSER_MASK];
+            z1[i] = ring1[(wi - len1) & HALL_DIFFUSER_MASK];
+            z2[i] = ring2[(wi - len2) & HALL_DIFFUSER_MASK];
+            z3[i] = ring3[(wi - len3) & HALL_DIFFUSER_MASK];
+        }
+
+        /* The input, with the shifted tail of the last frame, through four all-passes, then back
+         * into the lines with the Hadamard's mix, alternating sign so the lines start apart
+         * (m - x is m + (-1) * x exactly). Stores only. */
+        for (i = 0; i < m; i++) {
+            const int di = (w + i) & HALL_DIFFUSER_MASK;
+            wi = (w + i) & HALL_MASK;
+            float x = in[base + i] + shimmer_amount * shifted[i], v;
+            v = x - g * z0[i];
+            ring0[di] = v;
+            x = g * v + z0[i];
+            v = x - g * z1[i];
+            ring1[di] = v;
+            x = g * v + z1[i];
+            v = x - g * z2[i];
+            ring2[di] = v;
+            x = g * v + z2[i];
+            v = x - g * z3[i];
+            ring3[di] = v;
+            x = g * v + z3[i];
+            lines[0 * STRATA_HALL_RING + wi] = r0[i] + x;
+            lines[1 * STRATA_HALL_RING + wi] = r1[i] - x;
+            lines[2 * STRATA_HALL_RING + wi] = r2[i] + x;
+            lines[3 * STRATA_HALL_RING + wi] = r3[i] - x;
+            lines[4 * STRATA_HALL_RING + wi] = r4[i] + x;
+            lines[5 * STRATA_HALL_RING + wi] = r5[i] - x;
+            lines[6 * STRATA_HALL_RING + wi] = r6[i] + x;
+            lines[7 * STRATA_HALL_RING + wi] = r7[i] - x;
+        }
+        w = (w + m) & HALL_MASK;
+    }
+
+    h->damp[0] = damp0;
+    h->damp[1] = damp1;
+    h->damp[2] = damp2;
+    h->damp[3] = damp3;
+    h->damp[4] = damp4;
+    h->damp[5] = damp5;
+    h->damp[6] = damp6;
+    h->damp[7] = damp7;
+    h->length[0] = length0;
+    h->length[1] = length1;
+    h->length[2] = length2;
+    h->length[3] = length3;
+    h->length[4] = length4;
+    h->length[5] = length5;
+    h->length[6] = length6;
+    h->length[7] = length7;
+    h->write = w;
+    h->lfo_s = s;
+    h->lfo_c = c;
+    h->shimmer_phase = phase;
+    h->shimmer_out = shimmer_out;
+}
+
+/* The frame loop the passes replaced, verbatim: what tests/test_ambientloops.cpp holds them to,
+ * and what a GCC build of the package runs (below). */
+void strata_hall_frames(strata_hall *restrict h, const strata_hall_block *restrict b,
+                        const float *restrict in, float *restrict out_l, float *restrict out_r,
+                        int n) {
     float *restrict lines = h->lines;
     float *restrict diffuse = h->diffuse;
     float *restrict shimmer = h->shimmer;
@@ -337,4 +540,15 @@ void strata_hall_process(strata_hall *restrict h, const strata_hall_block *restr
     h->lfo_c = c;
     h->shimmer_phase = phase;
     h->shimmer_out = shimmer_out;
+}
+
+/* cl6x and the host get the passes; tic6x GCC, which does not software-pipeline, gets the frame
+ * loop: the passes only add memory traffic there (scenario_ambient 58.2% -> 60.6% GCC-only). */
+void strata_hall_process(strata_hall *h, const strata_hall_block *b, const float *in,
+                         float *out_l, float *out_r, int n) {
+#if defined(__TI_COMPILER_VERSION__) || !defined(__TMS320C6X__)
+    strata_hall_passes(h, b, in, out_l, out_r, n);
+#else
+    strata_hall_frames(h, b, in, out_l, out_r, n);
+#endif
 }
