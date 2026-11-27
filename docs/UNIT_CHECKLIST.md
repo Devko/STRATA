@@ -4,7 +4,7 @@ Start with **the smoke test** (S1-S20, one hour): boot, the screen, load, and th
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W52, about 165 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W53, about 170 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -696,6 +696,24 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   same line after a minute. Tap a step on T6 while it runs: the trig stays through later turns. `____`
 - MODE to DRIFT and wait a minute: it wanders off. HOME: `HOME: EVOLVE OFF`, the line from when
   EVOLVE went on, plus the trig you tapped. Read LOAD: no higher than without EVOLVE. `____`
+
+**W53. Sound fixes and the kit library (#188-#191, 6 min).** Beat playing, A01.
+- FM4 (#189): on T7, FUNC+EDIT (MACHINE), A to FM4, OK, SOUNDS BELL. EDIT SRC: ALG `A1`, IDX
+  about 90. KEYS (HOME twice), play from C5 upwards: bright, but no whistle or out-of-tune tone
+  under the note as it climbs. Low notes as bright as before. `____`
+- DRIVE (#191): T1 (kick), EDIT FLTR, DRV fully up. Mute and unmute T1 (FUNC + lower pad 1) a
+  few times on a long kick: no thump at the mute. The kick sits no lower in the mix than it
+  did. `____`
+- Arp RND (#190): T7 back to its own sound (SOUNDS, AS WAS), ARP page, MOD `RND`, RAT `1/16`:
+  every pass plays a different run, where it used to repeat one. `____`
+- Kit recall (#184, #188): put T3 and T4 in choke group 1 (W46), T6's LFO TRIG to RETRIG (push
+  B on the LFO page), a MOD slot on T6 (W38) and T7's arp RHYTHM to `X-` (push B on ARP).
+  FUNC+EDIT twice (KIT), FUNC+DOWN stores the kit in an empty slot. FUNC+HOME, NEW PROJECT, OK
+  twice. KIT, the stored kit, OK twice: `C1` on T3 and T4, RETRIG, the MOD slot and `RHY X-` all
+  back. LOAD DEMO afterwards (FUNC menu). `____`
+- Optional, a spare card only (#188): PROJECTS, open a saved project and pull the card while
+  `LOADING` shows; put it back. The project opens whole under its own name (or the old one stays
+  under its own name), never a mix of the two. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
