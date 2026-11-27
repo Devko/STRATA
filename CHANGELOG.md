@@ -31,6 +31,11 @@ the project file format or the controls.
   to 14 dB apart (VA MONO LEAD 12 dB louder than GROWL, PERC CHIME 10 dB louder than CLAVE).
   28 presets have a new LVL, which brings most machines to within 3-6 dB. VA MONO GROWL, WAVE
   MONO RESO and GRAIN STUTTR, CHOPS and GLITCH stay quieter: their LVL was already at the top.
+- **Accented notes on VA MONO, VA POLY and the WAVE machines no longer tick.** An accent opened
+  the filter by half as much again plus 10 semitones, which on a wide, resonant patch such as
+  ACID swept it to about 18 kHz for a few milliseconds. It now opens at most 18 semitones past
+  the plain note (ACID's accent peaks near 6.5 kHz), and its attack is 1.5 ms instead of 0.6.
+  Accents on patches with a modest ENV sound as before.
 
 ## [0.5.0] - 2026-11-27
 

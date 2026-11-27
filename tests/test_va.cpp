@@ -667,6 +667,42 @@ TEST(va_accent_changes_more_than_volume) {
     CHECK(share_accent > share_plain);
 }
 
+TEST(va_accent_does_not_chirp_on_an_acid_patch) {
+    // The ACID sound: closed, resonant, the envelope wide. An accent used to multiply the sweep
+    // by 1.5 and add 10 semitones on top, taking the cutoff to ~18 kHz for a few milliseconds:
+    // a broadband tick. What is above ~5 kHz in the first 20 ms of an accented note must stay
+    // more than 23 dB under its peak (uncapped it was 20.5 dB under, capped it is 26.6).
+    TrackParams p = patch();
+    p.set(kMod, kLp24);
+    p.set(kCut, 26);
+    p.set(kRes, 100);
+    p.set(kEnv, 100);
+    p.set(kDec, 44);
+    p.set(kOscFirst + 2, 0);     // a raw saw, no sub
+    p.set(kOscFirst + 3, 48);    // ACID's drive
+    VaMono va;
+    va.init(kRate);
+    va.prepare(p);
+    va.trigger(hit(36, 100, true));
+    const int blocks = blocks_for(0.1f);
+    clear(g_a, blocks * kBlk);
+    render(va, p, g_a, blocks);
+    // A two-pole high-pass near 6 kHz: x less a one-pole low-pass, twice.
+    const float a = 0.55f;
+    float lp1 = 0.0f, lp2 = 0.0f, hf = 0.0f;
+    const int head = int(0.02f * kRate);
+    for (int i = 0; i < head; i++) {
+        lp1 += a * (g_a[i] - lp1);
+        const float h1 = g_a[i] - lp1;
+        lp2 += a * (h1 - lp2);
+        const float h2 = h1 - lp2;
+        const float m = h2 < 0.0f ? -h2 : h2;
+        hf = m > hf ? m : hf;
+    }
+    CHECK(peak(g_a, blocks * kBlk) > 0.05f);
+    CHECK(hf < 0.07f * peak(g_a, blocks * kBlk));    // it was 0.094 uncapped, now 0.047
+}
+
 // --- FDE and velocity to cutoff (D8, D15) ----------------------------------------------------
 
 TEST(va_fde_0_keeps_the_old_tie_and_above_it_the_sweep_has_its_own_time) {
