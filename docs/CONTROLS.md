@@ -151,7 +151,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | CLEAR PATTERN | OK twice within 2 s: every track's trigs and locks gone, one undo level (FUNC + CLR) | |
 | KITS | the kit browser | |
 | RELOAD SAMPLE | load the selected track's sample again | |
-| TRACK SPEED | | selected track's speed, 2 to 1/8 |
+| TRACK SPEED | | selected track's speed: 2, 3/2 (16th-note triplets), 1, 3/4, 1/2, 1/4, 1/8 (`T1 LEN 16 X3/2`) |
 | TRACK PLAY | | selected track's play mode: FWD, REV, PING, RND1, RND2, RND4, RND8, RND16 (`T3 PLAY RND4`). Which step sounds in each slot; the pattern is not changed. One undo level a change |
 | CHAIN | | ON / OFF |
 | CHAIN END | | SONG (play once) / LOOP |

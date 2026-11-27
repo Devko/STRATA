@@ -6897,6 +6897,26 @@ TEST(ui_layout_a_frozen_track_says_so_on_edit_and_in_the_menu) {
     key(ENAGA_KEY_F4);
 }
 
+// 16th-note triplets: TRACK SPEED one step faster than 1 is 3/2, a step every 16 ticks, and each
+// press logs its speed for tests/scenario_triplets.sh.
+TEST(ui_track_speed_reaches_the_triplet_speed_between_2_and_1) {
+    fresh();
+    FakeHost &host = FakeHost::the();
+    const Pattern &pattern = app_engine().pattern();
+    CHECK_EQ(int(pattern.tracks[0].speed), int(Speed::x1));
+    menu_to(kMenuSpeed);
+    key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].speed), int(Speed::x3_2));
+    CHECK(host.logged("T1 SPEED 3/2"));
+    key(ENAGA_KEY_LEFT);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].speed), int(Speed::x2));
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK_EQ(int(pattern.tracks[0].speed), int(Speed::x3_2));
+}
+
 TEST(ui_the_menu_setting_rows_change_with_left_right_b_and_ok) {
     Strata &app = fresh();
     const Pattern &pattern = app_engine().pattern();

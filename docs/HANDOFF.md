@@ -43,7 +43,7 @@ the release candidate for 1.0** (Roland, 2026-11-27), and `main` is in feature f
    `scenario_wave.sh` and `scenario_fm.sh`, never run), then E13 (the VA rework), E14 (WAVE's cost
    per voice and its boot time) and E15 (FM4's cost per voice) from `docs/BUDGET.md`, with cl6x and with `ENAGA_TI_CGT=none`. BUDGET has only
    host estimates for both so far.
-2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, S1-S20 and then W1-W56, on a
+2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, S1-S20 and then W1-W57, on a
    build from `main` with cl6x and Enaga 0.4.0 firmware. It covers everything since v0.1.0, from
    the CPU guard to LOCK, step stutter, play modes, the MOD slots, sample audition and the
    redrawn screens (#171-#176).
