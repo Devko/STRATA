@@ -22,6 +22,11 @@ the project file format or the controls.
   so the flutter is as loud as the tail rather than 10-18 dB under it. The factory kit's CLAP and
   the CLAP, SHORT and CLAP4 sounds have the new band; CLAP4's bursts are 14 ms apart, not 40.
   A clap in a saved kit keeps its knobs, so it gets the livelier bursts but not the new band.
+- **The factory kit is rebalanced.** The bass sat 9.5 dB and the chord 7 dB under the kick while
+  the hats were nearly as loud as it. New faders: KICK 0.8, CLAP 0.85, both hats 0.7, PERC 1.2,
+  BASS 1.5, CHORD 1.25. The bass now sits about 6 dB under the kick and the chord about 3, and
+  the share of the mix between 250 Hz and 4 kHz goes from 14% to 22%. A new project starts
+  with these; a saved project keeps its own faders.
 
 ## [0.5.0] - 2026-11-27
 
