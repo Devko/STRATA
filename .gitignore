@@ -22,3 +22,9 @@ desktop.ini
 # Python bytecode (tools/*.py, tests/*.py run without -B)
 __pycache__/
 *.pyc
+
+# Cloudflare's wrangler, run by hand from Roland's PC to deploy web/ (web/README.md): its login
+# state and caches stay local. The repository is deliberately not connected to Cloudflare.
+.cloudflare/
+.wrangler/
+node_modules/

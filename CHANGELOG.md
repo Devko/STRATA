@@ -105,6 +105,10 @@ Everything merged since 0.4.0 (#180 to #200). It still runs on **Enaga 0.3.0**, 
 - Internal: the emulator scenarios take 638 s instead of 918 s (a build cache, a decode cache,
   the longest first); `make -C host warn` compiles everything at -O1, where CI's sanitizer build
   finds warnings, and CI caches its compiles (#192, #194).
+- Internal: in a thread's worktree the scenarios find the main checkout's emulator, and the
+  runner refuses to run without one instead of counting skips as passes; the release script
+  and the Enaga pin check work there through Windows' git and gh; CI parses every script in
+  tools/ and tests/ (#201).
 
 ### Fixed
 
