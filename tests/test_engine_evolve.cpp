@@ -81,11 +81,12 @@ TEST(engine_evolve_turns_on_the_pass_boundary) {
     CHECK_EQ(int(eng().evolve_period(0)), 1);
     const uint8_t before = turns();
     const int home = velocity_sum(0);
-    FakeHost::the().deliver_tick(95, 0);
+    // The turn lands in the pass's last kEvolveLeadTicks (8) ticks, not before them.
+    FakeHost::the().deliver_tick(87, 0);
     pump();
     CHECK_EQ(turns(), before);
     CHECK_EQ(velocity_sum(0), home);
-    FakeHost::the().deliver_tick(96, 0);
+    FakeHost::the().deliver_tick(88, 0);
     pump();
     CHECK_EQ(int(turns()), int(uint8_t(before + 1)));
     CHECK(velocity_sum(0) != home);
@@ -142,4 +143,36 @@ TEST(engine_evolve_orbit_leaves_a_pattern_home_and_follows_to_the_next) {
     int sum = 0;
     for (int i = 0; i < 4; i++) sum += first.tracks[0].steps[i].velocity;
     CHECK_EQ(sum, home);
+}
+
+TEST(engine_evolve_turns_eight_tracks_one_a_tick) {
+    // Eight tracks due on the same pass turn on eight different ticks before the boundary, so no
+    // audio block carries more than one turn; the boundary then counts nothing twice.
+    fresh();
+    for (int t = 0; t < kTracks; t++) {
+        for (int s = 0; s < 4; s++) put_trig(t, s);
+    }
+    post(Cmd::set_master_length, 0, 0, 4);
+    post(Cmd::evolve_config, 0, 0, uint8_t(EvolveMode::orbit), uint8_t(Mutation::velocity), 100);
+    for (int t = 0; t < kTracks; t++) post(Cmd::evolve_set, uint8_t(t), 0, 1);
+    pump();
+    FakeHost::the().set_running(true);
+    FakeHost::the().deliver_tick(0, 0);
+    pump();
+    uint8_t last = turns();
+    for (uint32_t tick = 88; tick < 96; tick++) {
+        FakeHost::the().deliver_tick(tick, 0);
+        pump();
+        CHECK_EQ(int(turns()), int(uint8_t(last + 1)));   // one track this tick
+        last = turns();
+    }
+    FakeHost::the().deliver_tick(96, 0);
+    pump();
+    CHECK_EQ(turns(), last);                               // all turned already
+    // And the next pass turns them all again.
+    for (uint32_t tick = 97; tick < 192; tick++) {
+        FakeHost::the().deliver_tick(tick, 0);
+        pump();
+    }
+    CHECK_EQ(int(turns()), int(uint8_t(last + 8)));
 }

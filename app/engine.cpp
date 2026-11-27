@@ -2370,6 +2370,7 @@ void Engine::switch_pattern(int bank, int slot) {
     boundary_known_ = false;
 
     for (int t = 0; t < kTracks; t++) evolve_set(evolve_[t], live(), t, int(periods[t]));
+    evolve_turned_ = 0;
 }
 
 // A bar started. The only thing that waits for one is a mute change armed for it.
@@ -2469,22 +2470,49 @@ void Engine::cross_boundary(uint32_t boundary) {
     if (chain_.played == 0) chain_entry_started();
 }
 
-// A pass of the pattern has ended: each evolving track counts it, and turns on its period.
+// The last kEvolveLeadTicks ticks of a pass: one evolving track whose turn it is turns now.
+//
+// Spread out because a turn is not free. Eight tracks turning on the boundary itself, all in one
+// audio block, took scenario_gen's peak from 29.6% to 65.9% (cl6x); one track a tick puts at most
+// one turn in a block at any tempo this clock runs (a tick is 2 ms at 300 BPM, a block 1.33 ms).
+// Turning a few ticks early changes nothing anyone hears: the pass's last step was resolved
+// before the window opens unless the track runs faster than 3x, and then it is that step's
+// variation a tick sooner.
+void Engine::evolve_lead() {
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t bit = uint8_t(1u << t);
+        if ((evolve_turned_ & bit) != 0 || !evolve_due(evolve_[t])) continue;
+        evolve_turned_ = uint8_t(evolve_turned_ | bit);
+        if (evolve_turn(evolve_[t], live(), t, evolve_mode_, evolve_kind_, int(evolve_amount_),
+                        evolve_variant_++)) {
+            status_.bump_evolve_turns();
+        }
+        return;
+    }
+}
+
+// A pass of the pattern has ended. A track that turned in the lead has counted it; one that was
+// due and did not get there (a transport that jumped past the window) turns now; the rest count.
 void Engine::evolve_passes() {
     bool turned = false;
     for (int t = 0; t < kTracks; t++) {
-        if (!evolve_[t].on()) continue;
-        if (evolve_pass(evolve_[t], live(), t, evolve_mode_, evolve_kind_, int(evolve_amount_),
-                        evolve_variant_)) {
+        if (!evolve_[t].on() || (evolve_turned_ >> t & 1u) != 0) continue;
+        if (!evolve_due(evolve_[t])) {
+            evolve_count(evolve_[t]);
+            continue;
+        }
+        if (evolve_turn(evolve_[t], live(), t, evolve_mode_, evolve_kind_, int(evolve_amount_),
+                        evolve_variant_++)) {
             turned = true;
         }
-        evolve_variant_++;
     }
+    evolve_turned_ = 0;
     if (turned) status_.bump_evolve_turns();
 }
 
 void Engine::evolve_stop_all() {
     for (int t = 0; t < kTracks; t++) evolve_keep(evolve_[t]);
+    evolve_turned_ = 0;
 }
 
 // A chain entry has just started: its mute recall, if it has one, now (song mode).
@@ -2563,6 +2591,11 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
         const uint32_t crossed = next_boundary_;
         next_boundary_ = origin_ + ((tick - origin_) / loop + 1) * loop;
         cross_boundary(crossed);
+    }
+    // EVOLVE's turns, in the last ticks before the boundary (evolve_lead says why).
+    if (boundary_known_ && next_boundary_ > tick &&
+        next_boundary_ - tick <= uint32_t(kEvolveLeadTicks)) {
+        evolve_lead();
     }
 
     // Bars, for auto-fill and for anything armed to land on one. Counted rather than divided

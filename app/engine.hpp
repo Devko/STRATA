@@ -858,6 +858,9 @@ private:
     uint8_t evolve_amount_ = 50;
     uint32_t evolve_variant_ = 1;
     void evolve_passes();            // cross_boundary: a pass has ended
+    void evolve_lead();              // the last ticks before it: one turn a tick
+    static constexpr int kEvolveLeadTicks = kTracks;
+    uint8_t evolve_turned_ = 0;      // tracks that turned in this pass's lead
     void evolve_stop_all();          // a project load or a replaced pattern: HOME is gone
 
     // Bars since the transport started, for auto-fill. Counted rather than divided: a bar is 384

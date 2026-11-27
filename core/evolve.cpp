@@ -13,13 +13,17 @@ bool steps_identical(const Step &a, const Step &b) {
            a.lock_first == b.lock_first && a.lock_count == b.lock_count && a.chord == b.chord;
 }
 
-// The step's extra notes by id, kNoExtra where it has none with that id.
+// The step's extra notes by id, kNoExtra where it has none with that id. One pass over the
+// step's own locks, and none at all for a step without locks -- most of them: a turn reads all 64
+// steps of a track three times, and five lookups a step made one evolving track cost about four
+// points of load in the block its turn landed in (scenario_gen), eight tracks thirty.
 void read_extras(const Pattern &pattern, int track, int step, uint8_t *out) {
-    for (int i = 0; i < kStepExtraNotes; i++) {
-        uint8_t value = 0;
-        out[i] = pattern_get_lock(pattern, track, step, uint8_t(kLockNoteFirst + i), value)
-                     ? uint8_t(value & 0x7Fu)
-                     : kNoExtra;
+    for (int i = 0; i < kStepExtraNotes; i++) out[i] = kNoExtra;
+    if (pattern.tracks[track].steps[step].lock_count == 0) return;
+    for (const Lock &lock : pattern_step_locks(pattern, track, step)) {
+        if (lock_is_note(lock.param)) {
+            out[lock.param - kLockNoteFirst] = uint8_t(lock.value & 0x7Fu);
+        }
     }
 }
 
@@ -120,11 +124,27 @@ void evolve_set(Evolve &evolve, const Pattern &pattern, int track, int period) {
     evolve.period = uint8_t(index);
 }
 
+bool evolve_due(const Evolve &evolve) {
+    return evolve.on() && evolve.passes + 1 >= kEvolvePeriod[evolve.period];
+}
+
+void evolve_count(Evolve &evolve) {
+    if (evolve.on() && evolve.passes < 255) evolve.passes++;
+}
+
 bool evolve_pass(Evolve &evolve, Pattern &pattern, int track, EvolveMode mode, Mutation kind,
                  int amount, uint32_t variant) {
     if (!evolve.on() || track < 0 || track >= kTracks) return false;
-    evolve.passes++;
-    if (evolve.passes < kEvolvePeriod[evolve.period]) return false;
+    if (!evolve_due(evolve)) {
+        evolve_count(evolve);
+        return false;
+    }
+    return evolve_turn(evolve, pattern, track, mode, kind, amount, variant);
+}
+
+bool evolve_turn(Evolve &evolve, Pattern &pattern, int track, EvolveMode mode, Mutation kind,
+                 int amount, uint32_t variant) {
+    if (!evolve.on() || track < 0 || track >= kTracks) return false;
     evolve.passes = 0;
 
     merge_edits(evolve, pattern, track);

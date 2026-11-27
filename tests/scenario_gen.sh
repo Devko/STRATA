@@ -9,9 +9,9 @@
 #   hold OK (700 ms)        -> "TRACK T1"
 #   OK on GENERATE          -> "GEN T1 BOTH", and the pattern is written (g... u1)
 #   DOWN x5, RIGHT          -> "EVOLVE T1 1 LOOP"
+#   7 x (CLR, DOWN, hold OK, RIGHT) -> "EVOLVE T8 1 LOOP": all eight evolving, the worst case
 #   four passes             -> "EVOLVE TURN" at least three times
-#   DOWN x5, OK on HOME     -> "HOME: EVOLVE OFF"
-#   two more passes         -> no more turns
+#   DOWN x5, OK on HOME     -> "HOME: EVOLVE OFF" (T8)
 #   CLR                     -> "GRID"
 #
 # Keys (third_party/enaga/include/enaga/abi.h): PLAY 22, OK 23, CLR 30, DOWN 25, RIGHT 18.
@@ -120,6 +120,15 @@ for _ in range(5):
 tap(RIGHT)
 evolve = index("EVOLVE T1 1 LOOP", gen)
 check(evolve > gen, "RIGHT on EVOLVE set every loop", f"log={log[-12:]}")
+# The worst case: every track evolving, every pass. The emulator has no pads, so for each track:
+# CLR, DOWN in GRID (the next track), hold OK again (the menu keeps its row), RIGHT.
+for _ in range(7):
+    tap(CLR)
+    tap(DOWN)
+    emu.key(OK, True); go(700 * MS); emu.key(OK, False); go(14 * M)
+    tap(RIGHT)
+eighth = index("EVOLVE T8 1 LOOP", evolve)
+check(eighth > evolve, "EVOLVE went on for all eight tracks", f"log={log[-12:]}")
 
 go(4 * PASS)
 turns = [i for i in range(evolve + 1, len(log)) if log[i] == "EVOLVE TURN"]
@@ -128,14 +137,8 @@ check(len(turns) >= 3, "EVOLVE turned once a pass", f"turns={len(turns)}")
 for _ in range(5):
     tap(DOWN)
 tap(OK)
-home = index("HOME: EVOLVE OFF", evolve)
-check(home > evolve, "OK on HOME went back and stopped", f"log={log[-12:]}")
-after_home = len([i for i in range(home + 1, len(log)) if log[i] == "EVOLVE TURN"])
-go(2 * PASS)
-later = len([i for i in range(home + 1, len(log)) if log[i] == "EVOLVE TURN"])
-# HOME itself reports one change; after it nothing turns.
-check(later == after_home and after_home <= 1, "no turn after HOME",
-      f"at home={after_home} later={later}")
+home = index("HOME: EVOLVE OFF", eighth)
+check(home > eighth, "OK on HOME took T8 back and stopped it", f"log={log[-12:]}")
 
 tap(CLR)
 check(index("GRID", home) > home, "CLR closed the menu", f"log={log[-8:]}")

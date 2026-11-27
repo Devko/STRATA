@@ -281,7 +281,8 @@ GRID with nothing held did nothing, so the hold costs no gesture; a tap still do
 | HOME | OK: back to HOME (one undo level), EVOLVE stops | `HOME: EVOLVE OFF` |
 
 UP/DOWN or A pick the row, LEFT/RIGHT or B change it, OK runs (and steps a setting forward), CLR
-closes. The selection keys still change the track, so one menu walks GEN over a kit.
+closes. A lower pad still selects the track, so one menu walks GEN over a kit; the menu keeps its
+row between openings.
 
 - **Drum or melodic** is the machine's: the VAs, WAVE, FM4, GRAIN, an unsliced SAMPLE and MID get
   notes; the drums and a sliced SAMPLE get a rhythm with accents and ghosts, their notes kept.

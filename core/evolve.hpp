@@ -85,6 +85,15 @@ void evolve_set(Evolve &evolve, const Pattern &pattern, int track, int period);
 bool evolve_pass(Evolve &evolve, Pattern &pattern, int track, EvolveMode mode, Mutation kind,
                  int amount, uint32_t variant);
 
+// The two halves of evolve_pass, for a caller that turns a track a little BEFORE the pass ends
+// (Engine spreads the turns of eight tracks over the last ticks of a pass, one a tick, so they
+// never land in one audio block). `evolve_due`: will the pass now ending be a turn? `evolve_turn`:
+// turn now, and count this pass as the turn's. `evolve_count`: a pass ended without a turn.
+bool evolve_due(const Evolve &evolve);
+bool evolve_turn(Evolve &evolve, Pattern &pattern, int track, EvolveMode mode, Mutation kind,
+                 int amount, uint32_t variant);
+void evolve_count(Evolve &evolve);
+
 // KEEP: what plays stays and becomes HOME, and EVOLVE stops.
 void evolve_keep(Evolve &evolve);
 

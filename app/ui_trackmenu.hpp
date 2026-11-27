@@ -7,8 +7,8 @@
     // tap does what OK in GRID always did, which is nothing, so the hold costs no gesture.
     //
     // UP/DOWN or A pick a row, LEFT/RIGHT or B change it, OK runs an action row (and steps a
-    // setting row forward, wrapping), CLR closes. The selection keys still change the track, so
-    // one menu walks GEN over a whole kit.
+    // setting row forward, wrapping), CLR closes. A lower pad still selects the track, so one menu
+    // walks GEN over a whole kit; the menu keeps its row between openings.
     //
     //   GENERATE      OK: a new part, one undo level (core/generate.hpp)
     //   DENSITY       0-100 in tens
