@@ -51,13 +51,15 @@ enum class Speed : uint8_t {
     x1_2 = 3,     // 48 ticks
     x1_4 = 4,     // 96 ticks: one quarter note
     x1_8 = 5,     // 192 ticks
-    count = 6
+    x3_2 = 6,     // 16 ticks: one 16th-note triplet, 24 steps to the bar. A build from before
+                  // it loads the byte as x1 (core/serialize.cpp clamps an unknown speed)
+    count = 7
 };
 
 // The order the spec lists for the UI: fastest to slowest. The encoder walks this, not the
 // enum's own numbering.
 constexpr Speed kSpeedDisplayOrder[int(Speed::count)] = {
-    Speed::x2, Speed::x1, Speed::x3_4, Speed::x1_2, Speed::x1_4, Speed::x1_8
+    Speed::x2, Speed::x3_2, Speed::x1, Speed::x3_4, Speed::x1_2, Speed::x1_4, Speed::x1_8
 };
 
 // Three-letter labels for the screen, indexed by the enum value (the font is upper case only).
@@ -69,6 +71,7 @@ constexpr const char *speed_name(Speed speed) {
         case Speed::x1_2: return "1/2";
         case Speed::x1_4: return "1/4";
         case Speed::x1_8: return "1/8";
+        case Speed::x3_2: return "3/2";
         default:          return "?";
     }
 }
@@ -82,6 +85,7 @@ constexpr int ticks_per_step(Speed speed) {
         case Speed::x1_2: return kTicksPerSixteenth * 2;        // 48
         case Speed::x1_4: return kTicksPerSixteenth * 4;        // 96
         case Speed::x1_8: return kTicksPerSixteenth * 8;        // 192
+        case Speed::x3_2: return kTicksPerSixteenth * 2 / 3;    // 16: a 16th-note triplet
         default:          return kTicksPerSixteenth;
     }
 }

@@ -6,6 +6,13 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Added
+
+- **16th-note triplets as a track speed.** TRACK SPEED (FUNC menu) has a new **3/2** between 2
+  and 1: a step every 16 ticks, six to the beat, so 24 steps make a bar. Set LEN 24 for a one-bar
+  triplet hat. The arp, rolls over LEN and REPEAT already had 1/16T. No file change: a build from
+  before this one plays a 3/2 track at 1x. New emulator scenario `triplets`.
+
 ### Fixed
 
 - **The CPU guard no longer thins chords that were never in danger.** With generated parts on
