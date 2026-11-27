@@ -83,9 +83,10 @@ Everything merged since 0.4.0 (#180 to #200). It still runs on **Enaga 0.3.0**, 
 
 ### Changed
 
-- **The LONG delay costs less**: its per-sample loop now runs as passes the TI compiler can
-  pipeline, the same sound to the last bit. The worst-case scenario (both sends in their ambient
-  modes) drops from 32.3% to 30.2% peak load on the emulator (#196).
+- **The LONG delay and the HALL reverb cost less**: their per-sample loops now run as passes the
+  TI compiler can pipeline, the same sound to the last bit. The worst-case scenario (both sends
+  in their ambient modes) drops from 32.3% to 28.6% peak load on the emulator (#196, and this
+  PR for the HALL).
 - **FM4 no longer aliases at high IDX.** The brightness cap now sees the whole operator chain:
   in a stack the sidebands multiply, so ALG 1 at IDX 90 on middle C and above folded harsh,
   out-of-tune tones back into the audible range, about 10 dB under the note. Now they are 45-56 dB

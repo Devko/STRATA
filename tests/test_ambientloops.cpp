@@ -1,13 +1,15 @@
-// dsp/ambientloops.ti.c: the LONG delay in passes over chunks, against the frame loop it
-// replaced, byte for byte.
+// dsp/ambientloops.ti.c: the LONG delay and the HALL reverb in passes over chunks, against the
+// frame loops they replaced, byte for byte.
 //
-// The passes exist for cl6x's sake (it pipelines only an innermost loop, and the frame loop with
-// the all-passes as a loop inside was not pipelined at all), and they must not change a single
-// sample to get there. The frame loop is kept here verbatim as the reference. The test runs both
-// from the same state through blocks of every length from 1 to 64 with the parameters moving --
-// the delay gliding down to its 16-frame floor (where the passes' chunks are shortest) and back,
-// ping-pong on and off, the feedback ramping to the freeze and back, the wow moving -- and
-// compares every output and every byte of the rings and of the state.
+// The passes exist for cl6x's sake (it pipelines only an innermost loop, and the frame loops with
+// small loops inside were not pipelined at all), and they must not change a single sample to get
+// there. The LONG delay's frame loop is kept here verbatim as its reference; the HALL's stays in
+// the source as strata_hall_frames, because a GCC build of the package runs it. Each test runs
+// both from the same state through blocks of every length from 1 to 64 with the parameters
+// moving -- the delay gliding down to its 16-frame floor (where its chunks are shortest) and back,
+// ping-pong on and off, the feedback ramping to the freeze; the hall's lines gliding and sitting
+// at their 64-frame floor, the shimmer and the modulation on -- and compares every output and
+// every byte of the rings and of the state.
 #include "check.hpp"
 
 #include <cstdint>
@@ -18,7 +20,7 @@
 
 namespace {
 
-// --- the frame loops, as they were (2026-11-26, a079b9f) -----------------------------------
+// --- the LONG delay's frame loop, as it was (2026-11-26, a079b9f); the HALL's is in the source ---
 
 #define LONG_MASK (STRATA_LONG_DIFFUSER_RING - 1)
 
@@ -144,6 +146,13 @@ float noise(uint32_t &s) { return float(int32_t(next(s))) * (1.0f / 2147483648.0
 bool same(const void *a, const void *b, std::size_t bytes) { return std::memcmp(a, b, bytes) == 0; }
 
 // The scalar part of a state: everything but the ring pointers, which differ by construction.
+bool same_scalars(strata_hall a, strata_hall b) {
+    a.lines = b.lines = nullptr;
+    a.diffuse = b.diffuse = nullptr;
+    a.shimmer = b.shimmer = nullptr;
+    return same(&a, &b, sizeof a);
+}
+
 bool same_scalars(strata_long_delay a, strata_long_delay b) {
     a.left = b.left = nullptr;
     a.right = b.right = nullptr;
@@ -154,6 +163,10 @@ bool same_scalars(strata_long_delay a, strata_long_delay b) {
 constexpr int kLongSize = 9000;
 constexpr int kLongDiffuse = 2 * STRATA_LONG_DIFFUSERS * STRATA_LONG_DIFFUSER_RING;
 float long_rings[2][2 * kLongSize + kLongDiffuse];
+
+constexpr int kHallLines = STRATA_HALL_LINES * STRATA_HALL_RING;
+constexpr int kHallDiffuse = STRATA_HALL_DIFFUSERS * STRATA_HALL_DIFFUSER_RING;
+float hall_rings[2][kHallLines + kHallDiffuse + STRATA_SHIMMER_RING];
 
 }  // namespace
 
@@ -220,4 +233,63 @@ TEST(ambientloops_the_long_delay_in_passes_is_bit_exact_against_the_frame_loop) 
     CHECK(same(long_rings[0], long_rings[1], sizeof long_rings[0]));
     CHECK(frames > 2 * kLongSize);   // the heads went round the rings twice
     CHECK(shortest <= 16);           // and the delay glided all the way down to its floor
+}
+
+TEST(ambientloops_the_hall_in_passes_is_bit_exact_against_the_frame_loop) {
+    uint32_t seed = 0x13579BDFu;
+    for (float &x : hall_rings[0]) x = 0.25f * noise(seed);
+    std::memcpy(hall_rings[1], hall_rings[0], sizeof hall_rings[0]);
+
+    strata_hall h[2];
+    const float lengths[STRATA_HALL_LINES] = {2903.0f, 64.0f, 4093.0f, 4723.0f,
+                                              64.25f, 1201.5f, 333.0f, 7001.0f};
+    for (int k = 0; k < 2; k++) {
+        h[k] = strata_hall{};
+        h[k].lines = hall_rings[k];
+        h[k].diffuse = hall_rings[k] + kHallLines;
+        h[k].shimmer = hall_rings[k] + kHallLines + kHallDiffuse;
+        h[k].write = 16350;           // near the end: every ring wraps in the run
+        h[k].lfo_s = 0.0f;
+        h[k].lfo_c = 1.0f;
+        h[k].shimmer_phase = 0.3f;
+        h[k].shimmer_out = 0.1f;
+        for (int j = 0; j < STRATA_HALL_LINES; j++) {
+            h[k].length[j] = lengths[j];
+            h[k].damp[j] = 0.01f * float(j);
+        }
+    }
+    strata_hall_block b{};
+    const int diffuse[STRATA_HALL_DIFFUSERS] = {241, 347, 461, 587};
+    for (int j = 0; j < STRATA_HALL_DIFFUSERS; j++) b.diffuse_len[j] = diffuse[j];
+    for (int j = 0; j < STRATA_HALL_LINES; j++) b.gain[j] = 0.95f - 0.02f * float(j);
+    b.damping = 0.6f;
+    b.mod = 40.0f;
+    b.rot_c = 0.99999f;
+    b.rot_s = 0.0044721f;
+    b.diffusion = 0.65f;
+    b.shimmer = 0.4f;
+    b.level = 0.9f;
+
+    float in[64], out[2][2][64] = {};
+    for (int block = 0; block < 700; block++) {
+        const int n = 1 + (block * 7) % 64;
+        // The lines glide: the short ones sit at the 64-frame floor, the long ones swing.
+        for (int j = 0; j < STRATA_HALL_LINES; j++) {
+            const bool floor = lengths[j] < 100.0f;
+            b.length_step[j] = floor ? 0.0f : ((block / 40) % 2 == 0 ? 0.25f : -0.25f);
+        }
+        b.mod = (block / 90) % 2 == 0 ? 40.0f : 0.0f;
+        for (int i = 0; i < n; i++) in[i] = noise(seed);
+        for (int k = 0; k < 2; k++) {
+            for (int i = 0; i < n; i++) out[k][0][i] = out[k][1][i] = -0.5f;
+        }
+        strata_hall_frames(&h[0], &b, in, out[0][0], out[0][1], n);
+        strata_hall_passes(&h[1], &b, in, out[1][0], out[1][1], n);
+        if (!same(out[0], out[1], sizeof out[0]) || !same_scalars(h[0], h[1])) {
+            std::printf("hall block %d n %d out %d state %d\n", block, n, int(same(out[0], out[1], sizeof out[0])), int(same_scalars(h[0], h[1])));
+            CHECK(false);
+            return;
+        }
+    }
+    CHECK(same(hall_rings[0], hall_rings[1], sizeof hall_rings[0]));
 }
