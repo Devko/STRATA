@@ -77,6 +77,11 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      the slot's knob and depth with the new source, OFF clears it. Not on the LFO's or the
      arp's own knobs (`MOD: NOT LFO OR ARP`). No routing screen: the LFO page lists the two
      slots and every EDIT bar a slot moves has its range drawn under it (the font has no `~`).
+     On the ARP page the four switches are the arp's kit settings (core/arp.hpp), each pushed
+     once round its list and back to OFF (`ARP RHY E5/16`): push A (MOD) VAR, push B (RAT)
+     RHYTHM, push C (OCT) ACCENT, push D (GAT) RATCHET. Per track, the kit's, as LFO TRIG; on
+     EDIT, GRID and KEYS. OK on the ARP page opens ARPS, the factory arps, as OK on the sound
+     pages opens SOUNDS (same keys, AS WAS first).
      On PROJECTS, where only A turns, push B renames and push C deletes the project under the
      cursor (delete then asks for OK twice).
    - **VALUE is the crossfader.** Push VALUE + STEP picks what it fades: an effect, the morph
@@ -152,6 +157,9 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | CHAIN END | | SONG (play once) / LOOP |
 | AUTO-FILL | | OFF 4 8 16 bars |
 | QUANTIZE | | record quantize, by 5 |
+| REC MODE | | `REPLACE` (default) / `ADD`: what a note recorded onto a chord track's step does. REPLACE: the first note of a pass on a step takes it over (its notes and chord type go), the rest of that pass's notes join it. ADD: every note joins the step's notes. Saved with the project |
+| CLICK | | the metronome, `ON` / `OFF`: a click on every beat while the transport runs, higher on a bar's first. Not saved |
+| COUNT-IN | | `OFF`, `1 BAR`, `2 BAR`: a PLAY from stop with REC on clicks that many bars first (`COUNT-IN 4` .. `1`), then the pattern starts on step 1. Internal clock only. Not saved |
 | FX GLIDE | | how long a button's jump in the performance mixer rides: `OFF`, `1/16`, `1 BEAT` (default), `1 BAR`, at the tempo. Not saved |
 | FREEZE | freeze the selected track (its loop from the next bar line), or unfreeze it | `T3 1 BAR` (1 2 4 8), `T3 WAIT` / `REC` while recording, `T3 ON` frozen |
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
@@ -353,6 +361,7 @@ repeat (a rolling lower pad) and step stutter (the sequencer). It is 1/16 at boo
 | Let go of REPEAT | Ends the stutter, STEP held or not; the STEP's release toggles nothing |
 | REPEAT + LEFT / RIGHT | **The rate**, one slower / faster: 1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T, 1/32, stopping at both ends (`REPEAT 1/8T`, `STUTTER 1/32`). Heard at once by the repeat, the stutter and any roll |
 | A rolling pad + LEFT / RIGHT | The same, while NOTE RPT is on and a lower pad rolls (`ROLL 1/32`) |
+| A rolling pad, REC on, transport running | **Recorded as one step** (CyDrums P3): the press's step gets a roll over LEN at the rate in force at the press (RTCH `ROLL/16` ...), the release its LEN, on any machine. 1/4T, which a step cannot hold, records a plain hit. The rolling pad plays on live over it for that pass |
 | REPEAT + VALUE | The rate too, in the order the list names them (as before) |
 
 The step plays as written, its locks included; its condition, probability and ratchet are not
@@ -529,6 +538,27 @@ finder. The audio side publishes where each SAMPLE and GRAIN track is, in the sa
 fourth block (`Status::wave`: the window, the slice starts, up to eight playheads or grains with
 a brightness each, and the amplitude envelope's stage and level for the dot). An envelope is
 drawn from the knobs alone.
+
+## CLICK and COUNT-IN (the FUNC menu)
+
+CyDrums S6, 2026-11-26. Enaga has no click (checked at v0.3.0), so STRATA renders one
+(dsp/click.hpp): a 30 ms decaying sine, 1 kHz on a beat and 1.6 kHz on a bar's first, about
+-13 / -10 dB, straight to the output after RESAMPLE's tap (never recorded, looped or repeated, as
+the sample audition). CLICK clicks on every beat while the transport runs. A COUNT-IN starts the
+clock at once and holds the sequencer, the rolls, the stutter and the arps for its bars, clicking
+them whether CLICK is on or not; then everything runs as from a plain START, step 1 on the beat
+after the count-in. Nothing records during it. STOP or FUNC + PLAY ends it. With CLOCK OUT on, an
+outboard box hears START when the count-in begins, so it runs the count-in's bars ahead. Under an
+outside clock there is no count-in (STRATA does not start the transport).
+
+## Choke groups (push A-D on MIXER's TRK pages)
+
+CyDrums S4, 2026-11-26. On MIXER's TRK 1-4 and TRK 5-8, a plain push of A-D steps that strip's
+track through OFF, 1, 2, 3, 4, OFF (`T7 CHOKE GROUP 1`, `T7 CHOKE OFF`); the strip shows `C1`-`C4`
+under its machine. The pushes were free on those pages (FUNC + push A-C stays the kill switches
+everywhere). The step is counted on the audio side (`Cmd::set_choke` c = 1), so fast pushes are
+not lost. A note on a track in a group cuts the group's other tracks (`Engine::choke_group`);
+a kit setting, KIT.BIN section 11.
 
 ## FUNC help
 

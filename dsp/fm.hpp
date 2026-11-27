@@ -45,6 +45,14 @@ float fm_detune_cents(uint8_t value);     // DET: 0..25 cents
 // and FmVoice::reset call it, so the fill never lands in the audio callback.
 const float *fm_sine_table();
 
+// The largest index, in turns, that keeps every carrier's sidebands under `limit` (a fraction
+// of the sample rate) for this algorithm, these operator frequencies (`f`, fractions of the
+// rate) and op 4's feedback (turns). Carson's rule taken through the chain: an operator's band
+// reaches its own frequency plus (I + 1) times the band of each operator modulating it, so in a
+// stack the bands multiply, which a cap per pair does not see. Control rate, and only when the
+// note or the settings change (FmVoice caches it): a bisection of 16 steps.
+float fm_index_cap(int algorithm, const float f[4], float feedback, float limit);
+
 struct FmSettings {
     // Reads SRC 0-3, AMP 8-11, the ASR page and the OSC page. Control rate, once per block.
     static FmSettings make(const TrackParams &params, float rate, float inv_rate);
@@ -107,6 +115,14 @@ private:
     float velocity_ = 1.0f;
     float index_[3] = {};     // where each modulator's index ramp ended
     float fb_ = 0.0f;
+    // fm_index_cap for the note and settings it was computed for: recomputed only when one of
+    // them moves, which is a note start or a knob turn, not every slice.
+    float cap_ = 0.0f;
+    float cap_note_ = -1.0f;
+    float cap_ratio_[4] = {};
+    float cap_feedback_ = -1.0f;
+    float cap_inv_rate_ = 0.0f;
+    int cap_algorithm_ = -1;
     bool fresh_ = true;       // the first slice of a note: no ramp from the last note's index
     int choke_left_ = 0;
     float choke_step_ = 0.0f;

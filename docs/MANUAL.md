@@ -210,7 +210,7 @@ and the page says `ARP OFF: TURN MOD` while the arp is off.
 **On the sequencer**, a step on a track whose arp is on plays its note as a run for the step's
 length: set a step's length to 4 steps and a 1/16 arp plays four notes. On the PLY track the run
 walks the step's chord, one note at a time. The track's next step starts a new run. RND plays the
-same notes on every pass of the pattern, so a random arp is still a part you can keep.
+new notes on every pass of the pattern.
 
 **In KEYS**, hold pads and the arp plays them, adding each pad you press to the run and dropping
 each one you let go; it stops when the last key comes up. With the transport running the notes
@@ -219,6 +219,34 @@ land on the beat; stopped, the run starts the moment you press. A pad hit plays 
 The four settings are parameters like any other: hold a STEP and turn MOD to arpeggiate just that
 step, or store two scenes with different arps. A new track's arp is off, and so is every track
 in a project saved before the arp existed.
+
+**Push the knobs** for four more choices that shape the run. Each push steps once round its list
+and back to OFF, and the page's bottom line says what is set (`RHY E5/16  ACC CYC`):
+
+- **Push A, VAR**: reshapes MOD's order. CONV plays the outside notes first and closes in, DIVG
+  starts in the middle and opens out, THUMB puts the lowest note between every two others (C E C
+  G), PINKY the highest after each (C G E G).
+- **Push B, RHYTHM**: which hits of RAT's grid sound. ALL, or a pattern with rests: `X-`, `XX-`,
+  `XXX-`, `X-XX`, `332` (the tresillo), `E5/8`, `E5/16`, `E7/16`, `E9/16` (hits spread evenly),
+  `-X` (offbeats only) and `X--`. A rest does not use a note up, so a three-slot rhythm over a
+  four-note run turns the melody against the bar on every pass.
+- **Push C, ACCENT**: which hits are accented, as a step's ACC accents a note (127 to MIDI):
+  `X-`, `X--`, `X---`, `X----`, `332`, `--X-`, or CYC, the first note of every run.
+- **Push D, RATCHET**: which hits repeat inside their own slot: `2:4` (the last of every four
+  twice), `2:8`, `3:8`, `4:16` (a roll into the bar), `2ALL`, and RND2 and RND3 (a quarter of the
+  hits, by chance, drawn anew on every pass).
+
+The picture draws all of it: rests as a dot on the floor, accents taller and brighter, a
+ratcheted slot split into its repeats. These four are the track's kit settings, like the LFO's
+TRIG: saved with the kit, not lockable and not in scenes.
+
+**OK on the ARP page opens ARPS**, fourteen ready-made arps that set all eight at once, on any
+machine. It works as SOUNDS does (below): UP/DOWN to move, OK loads with the beat playing, AS WAS
+puts back the arp the track had, CLR goes back. TRANCE, ROLLER (U/D with a gallop), ACID (the
+3-3-2 accent), BLEEP (random, Euclidean, the odd ratchet), DUB (held 1/8 on the tresillo), OFFBT
+(offbeat 8ths: one note on a bass track is the offbeat bass), THUMB, PINKY, CONVRG (triplets
+closing in), RATCHT, FILL (a roll at the end of each bar), EUCLID, AMBNT (slow quarters over four
+octaves) and DRIFT (sparse random triplets).
 
 ### Held notes: the ENV page
 
@@ -408,7 +436,9 @@ or VA track lists ready-made sounds for its machine and loads one into that trac
 
 ### On the card
 
-Everything STRATA keeps is on the SD card, never in the unit's flash:
+Everything STRATA keeps is on the SD card, never in the unit's flash. (To put STRATA on a card
+in the first place, [strata.einblick.dev](https://strata.einblick.dev) builds the card zip for
+you; [INSTALL.md](INSTALL.md) has the steps.)
 
 ```text
 /ENAGA/APPS/STRATA/APP.ENA                     the app
@@ -904,18 +934,18 @@ first entry of each list is the factory kit's own sound.
 
 | Machine | Sounds |
 | --- | --- |
-| KCK | 909 (the factory kick), 808 (long boom), DEEP (rounder, darker), PUNCH (short, hard, driven), DIST (industrial, distorted), SOFT (dub, no click) |
-| SNR | CLAP (the factory clap), 909SN, 808SN, CLAP4 (four bursts, wide), RIMSN (a snare rim tick), DIRTY (noisy, driven) |
-| HAT | CLOSED, OPEN (the factory pair), TIGHT, 808HH (pure squares), SHAKE (a shaker), RIDE (long, clangy), TRASH (noisy, metallic) |
-| PRC | RIM (the factory rim), TOM, COWBEL, BELL, BLIP, CONGA, METAL |
-| MNO | ROLL (the factory bass), ACID (squelching 303 line), ACIDSQ (the same on a square), FAT (detuned saws, sub and drive), REESE (wide detuned band-pass), SUB (deep, near-sine), PLUCK, GROWL (band-pass mid bass), GLIDE (portamento), SYNC (sync lead), LEAD (square lead with glide), DRONE (SUS up: holds each note for its LEN) |
-| PLY | STAB (the factory stab), PAD (A05's pad), STRING, KEYS, RAVE (best with 5TH OCT chords), PLUCK, BRASS |
-| WMN | SWEEP, RESO (a resonant sweep), GROWL, FORMNT (formant), DIGI (digital), VOWEL, WARP, FMBASS (FM bass) |
-| WPL | PAD, EPIANO (electric piano), BELL, MALLET, PLUCK, CHOIR, PWMPAD (a PWM pad) |
-| FM4 | EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD, GLASS |
-| GRN | CLOUD (where to start), PAD (swells, holds for LEN), FREEZE (one moment held), SHIMMR (a third of the grains an octave up), DRIFT (a slow scan), STRTCH (half speed, own pitch), STUTTR (gapped plucked grains), CHOPS (short percussive grains for POS locks) |
+| KCK | 909 (the factory kick), 808 (long boom), DEEP (rounder, darker), PUNCH (short, hard, driven), DIST (industrial, distorted), SOFT (dub, no click), RUMBLE (long, dark, dirty: for rumble techno), TIGHT (short, clicky), BOOM (ambient: slow drop, longest tail), HARD (hard techno, fully driven) |
+| SNR | CLAP (the factory clap), 909SN, 808SN, CLAP4 (four bursts, wide), RIMSN (a snare rim tick), DIRTY (noisy, driven), SHORT (a tight clap), TIGHT (a short snare), NOISE (a long noise wash), DARK (a dark, driven clap) |
+| HAT | CLOSED, OPEN (the factory pair), TIGHT, 808HH (pure squares), SHAKE (a shaker), RIDE (long, clangy), TRASH (noisy, metallic), DARK (a dark closed hat), TICK (shortest), SIZZLE (long, bright, noisy), SHIMMR (a ringing metallic cymbal) |
+| PRC | RIM (the factory rim), TOM, COWBEL, BELL, BLIP, CONGA, METAL, CLAVE, ZAP (a falling laser), DUBTOM (low, long, for the delay), CHIME (glassy, ringing), KNOCK (a metallic tick) |
+| MNO | ROLL (the factory bass), ACID (squelching 303 line), ACIDSQ (the same on a square), FAT (detuned saws, sub and drive), REESE (wide detuned band-pass), SUB (deep, near-sine), PLUCK, GROWL (band-pass mid bass), GLIDE (portamento), SYNC (sync lead), LEAD (square lead with glide), DRONE (SUS up: holds each note for its LEN), DUBBAS (dub bass: closed, deep, held), RUBBER (the offbeat techno bass) |
+| PLY | STAB (the factory stab), PAD (A05's pad), STRING, KEYS, RAVE (best with 5TH OCT chords), PLUCK, BRASS, DUBCHD (darker, longer dub chord), WARM (a warm pad), SWELL (opens as it swells), HOOVER (wide driven rave chord), ORGAN |
+| WMN | SWEEP, RESO (a resonant sweep), GROWL, FORMNT (formant), DIGI (digital), VOWEL, WARP, FMBASS (FM bass), ACIDWV (acid on a wavetable), HARMBS (harmonics bass), FOLD (fold lead), TINE (a bell pluck) |
+| WPL | PAD, EPIANO (electric piano), BELL, MALLET, PLUCK, CHOIR, PWMPAD (a PWM pad), GLASS (a crystalline pad), DIGPAD (digital pad), RESOPD (a resonant pad), STAB (a warm dub stab), VOXSTB (a vowel stab) |
+| FM4 | EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD, GLASS, BLIP (the bleep), CHIME (1:14, ringing), DUBSTB (a dub stab), DRONE (held, slow index) |
+| GRN | CLOUD (where to start), PAD (swells, holds for LEN), FREEZE (one moment held), SHIMMR (a third of the grains an octave up), DRIFT (a slow scan), STRTCH (half speed, own pitch), STUTTR (gapped plucked grains), CHOPS (short percussive grains for POS locks), HAZE (a dense wide wash), GLITCH (sparse sprayed plucks), TAPE (a worn slow scan) |
 
-The MNO list is longer than the screen: it scrolls as the cursor moves. PAD, STRING, KEYS, BRASS,
+Most lists are longer than the screen: they scroll as the cursor moves. PAD, STRING, KEYS, BRASS,
 FAT, REESE, ACID, SYNC, LEAD and DRONE sustain (the ENV page's SUS is up), so their notes last as long as
 each step's LEN: give the steps long LENs, or hear PAD on A05. A loaded sound is a change to the
 kit like turning knobs: it is saved with the project, and FUNC+CLR does not undo it (AS WAS does).
@@ -942,7 +972,7 @@ The step page's fields:
 | MICR | ±11 ticks | Micro-timing: 24 ticks is one 16th |
 | PROB | 0-100% | Chance the step plays |
 | COND | see below | Trig condition |
-| RTCH | 1-8 | Ratchet: repeats within the step |
+| RTCH | 1-8, ROLL/64 ... ROLL/4 | Ratchet: 1-8 repeats within the step; turned on past 8, a roll at a rate (1/64, 1/48, 1/32, 1/16T, 1/16, 1/8T, 1/8, 1/4) for the step's whole LEN: 1/32 with LEN 16 STP is 32 hits across the bar. RAMP then runs across the whole roll, so UP is a build-up. A new trig on the track ends a roll |
 | RAMP | FLAT, UP, DOWN | Ratchet velocity ramp |
 | ACNT | on/off | Accent |
 | SLID | on/off | Slide (VA MONO) |
@@ -971,6 +1001,7 @@ pattern, saved and undone like any lock. A toast says where it landed (`STEP 5 P
 
 Hold two STEP keys to select the range between them (`SEL a-b`). Then CLR clears it, FUNC+UP
 copies it, FUNC+DOWN pastes it, encoder A transposes it and encoder B nudges its micro-timing.
+The selection lasts until a single STEP press, another track or another screen.
 With nothing held, CLR clears the whole track and FUNC+UP / FUNC+DOWN copy and paste the whole
 track. The FUNC menu's CLEAR PATTERN (OK twice) clears every track at once. Hold a STEP and press UP / DOWN to copy / paste one step. Everything goes through undo.
 
@@ -1052,6 +1083,30 @@ pad, key or MIDI note comes up, its step gets the nearest LEN (from `1/16` of a 
 `64 STP`), so with SUS up a held chord plays back as long as you played it. A drum ignores LEN,
 so a drum hit keeps one step. Let go after REC is off, or with the transport stopped, and the step
 keeps the length it had.
+
+**Chords are recorded note for note** on VA POLY, WAVE POLY, FM4 and MID. Every note you play
+into one step in a pass is kept: the step's note (the first one) plus up to five more, six in all,
+which is VA POLY's voices. The step page shows them as `NOTE C4 +2`. They share the step's
+velocity (the loudest), its micro-timing and its LEN (the last key up). They play folded into the
+key as the rest of a POLY chord does; MID sends them as written unless the step has a chord type.
+A seventh note is refused. The extra notes are kept in the step's locks, so a chord of six leaves
+two parameter locks free on that step.
+
+What a later pass does is **REC MODE** in the FUNC menu (after QUANTIZE): **REPLACE**, the
+default, lets the first note of a new pass take the step over, its old notes and chord type gone,
+and the notes played with it join it; **ADD** adds every note to what the step holds, so a chord
+can be built up one pass at a time. The edit line says `REC+` under ADD. Transposing a range,
+MUTATE's note moves and turning NOTE move the whole chord. VA MONO, WAVE MONO, SAMPLE, GRAIN and
+the drums keep one note a step: the last one played.
+
+**CLICK and COUNT-IN** (FUNC menu). CLICK `ON` clicks every beat while the transport runs, a
+higher click on each bar's first beat. COUNT-IN `1 BAR` or `2 BAR` makes a PLAY from stop with REC
+on click that many bars first (the notice counts `COUNT-IN 4` .. `1`), whether CLICK is on or not;
+the pattern then starts on step 1 on the next beat, and nothing is recorded during the clicks.
+STOP ends a count-in. The click goes straight to the output: it is never recorded, resampled,
+looped or repeated. Neither setting is saved. Under an outside clock there is no count-in (STRATA
+does not start the transport then), and with CLOCK OUT on an outboard box starts when the count-in
+does, so it runs that many bars ahead.
 
 ### MIDI in
 
@@ -1231,8 +1286,11 @@ beat repeat's rate: 1/16 until you pick another with REPEAT + VALUE, or LEFT/RIG
 is rolling (`ROLL 1/32`; the arrows do nothing else until you let go). With the transport running
 the hits land on the beat grid, so a roll is always in time; stopped, it rolls from the moment you
 press. Leaning on the pad sets each hit's velocity, so pressure swells and fades the roll (macro A
-is left alone while a pad rolls). Hold two pads for two rolls. Rolls are played, not written: REC
-does not record them.
+is left alone while a pad rolls). Hold two pads for two rolls. With **REC** on and the transport
+running, a roll is recorded as ONE step: the step under the press gets a roll over LEN at the
+rate (`ROLL/16`, see RTCH on the step page), and letting go gives it its LEN, so a pad held for a
+bar plays back as a bar of 16ths. At 1/4T, which the step cannot hold as a roll, the press records
+a plain hit.
 
 ### The master kill EQ
 
@@ -1407,6 +1465,23 @@ The duck is part of the **kit**: it is saved with the project and in the kit lib
 recall brings its duck. A project or kit from before it was editable opens with the duck it
 always had (track 1, 35%, 3/40/120 ms). Its settings are not p-lockable and not in scenes or
 macros.
+
+### Choke groups
+
+A **choke group** makes tracks cut each other, the way an open hi-hat stops when the closed one
+is hit. On MIXER's **TRK 1-4** and **TRK 5-8** pages, **push A-D** steps that strip's track
+through `OFF`, group 1, 2, 3, 4 and back to `OFF`; the notice says which (`T4 CHOKE GROUP 1`) and
+the strip shows `C1`-`C4` under its machine.
+
+Any track can be in a group, a synth or a sample as much as a drum. A note on a track cuts every
+other track of its group with a fade of about 1.3 ms, so there is no click. It works both ways:
+in a group of an open and a closed hat, each cuts the other. Two tracks of a group that start on
+the same 16th both sound. Only the track's own sound is cut: the echoes and reverb it already
+sent ring on.
+
+The groups are part of the **kit**: saved with the project and in the kit library. A project or
+kit from before them opens with no track in a group. The HAT machine's own closed-to-open cut on
+tracks 3 and 4 is separate and still works without a group.
 
 ### Ambient delay and reverb: LONG and HALL
 

@@ -1,0 +1,6 @@
+# Cloudflare Pages project for the card builder. Only used by `wrangler pages deploy` and
+# `wrangler pages dev`; a Pages project connected to the GitHub repo reads its settings from the
+# dashboard instead (root directory web, output directory public, no build command).
+name = "strata-card"
+pages_build_output_dir = "public"
+compatibility_date = "2026-11-01"

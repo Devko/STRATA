@@ -23,7 +23,7 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 | `make -C host test` | **3,861,238 checks, 0 failures** on `main` at PR #176: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1 (`make -C host test SANITIZE=1`), the layout check, `tools/audit_commands.sh` and `tools/enaga_check.sh`. A docs-only PR skips the test jobs. `enaga-upstream.yml` runs `enaga_check.sh --upstream` weekly and opens an issue when upstream has moved. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image (cl6x, 2026-11-25, sample audition merged onto #168): payload 1,224,160 bytes, bss 1,605,248 (with the live screens, bounce to track, step stutter, EDIT's pictures, LOCK and play modes); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | **41 scenarios**, run on Roland's PC only. Live visuals part 5 (WAVE's waterfall, GRAIN's sparks; `scenario_wave` ends on WAVE POLY's SRC page) passed all 36 of its day with cl6x before this merge; merged onto #169, all 41 pass with cl6x (worst 32.20%, ambient). Part 6 (MIXER's spectrum, vectorscope, fader meters; `scenario_visuals` runs twice, the second on MST) passed all 41 with cl6x (31.82%), and so did the screens rebuilt to the mockups on top of it (figures in docs/BUDGET.md). `tools/emulator_frames.py` records the real screen frame by frame. **All 41 pass with cl6x with sample audition (#169) merged onto MOD slots (#168)** (2026-11-25; `scenario_audition` new, the first to check the captured output: a 44.1 kHz tone streamed from the card is heard whole, in tune, at -6 dB; worst 31.82%, ambient, as on main). `scenario_modslots` (MOD slots) learns slot 1 by push C, `--turn` and OK; all 40 pass with cl6x on `main` after #167 (worst 31.82%, ambient). All 39 pass with cl6x with random lock ranges and parameter slide (#167, `scenario_locks` new) merged onto LIVE RND (#166); worst 31.69%, ambient. `scenario_liverand` (LIVE RND, #166) drives FUNC + turn D and FUNC + push D: a `--turn` 2 M cycles after a FUNC `--key` lands inside the key's 20 M-cycle press (26.99% cl6x, 46.07% GCC-only, run alone; the full set was not rerun with it). All 37 before it pass with cl6x with the review fixes after #163 (`scenario_moveall` new; worst 31.59%, ambient, within the half point a peak moves between runs). All 36 pass with cl6x with live visuals part 1 (`scenario_visuals` new: draw() 0.57 ms a frame on GRID; worst 30.93%, ambient), and with part 2's audio taps (worst **31.16%**, ambient; GCC-only 56.48%), and with part 3's GRID and PERFORM views (`scenario_visuals` logs draw() on PERFORM: 1.34 ms), and with part 4's LFO picture (`scenario_visuals` walks on to EDIT's LFO page and turns DEP and DST with `--turn`). All 35 pass with cl6x with LFO TRIG, TUN glide and the cutoff floor merged onto #152 (`scenario_lfo` now pushes TRIG; worst 30.93%, ambient). **All 35 pass with cl6x with REL ALL, LEN ALL and FEEL merged onto `main` after #154** (2026-11-25; worst 30.75%, ambient; 34 passed on `main` after #153 at 30.55%). Added on 2026-11-25, each with the PR that brought it: `scenario_stepkeys` (D12), `scenario_plock`, `scenario_slots`, `scenario_glide`, `scenario_playmode`, `scenario_pictures`, `scenario_bounce` (the only run of a take through Enaga's real file layer), `scenario_feel` (FEEL walked on the PATTERN page). `scenario_moveall` turns REL ALL and LEN ALL with `--turn` (the review PR after #163). The pad gestures (stutter, LOCK, D6) have none: the emulator cannot press pads. The worst case moved from 30.16% to 30.75% over the day. GCC-only figures for that day's work are not taken |
+| `tools/scenarios.sh` | **46 scenarios**, run on Roland's PC only. **All 45 pass with cl6x with arp depth, ARPS and the new sounds (#184) merged onto #183** (2026-11-27; `scenario_arp` new; worst 31.97%, ambient; #185 and #187 merged after that run). **All 44 pass with cl6x with ratchets over LEN** (2026-11-26; `scenario_ratchetspan` new; worst 31.91%, ambient), before #183's `scenario_recmode` came in; after the merge `ratchetspan` and `recmode` were run again and pass. `scenario_recmode` (2026-11-26, #183, chords recorded note for note) walks the FUNC menu's REC MODE row with REC on: 26.57% cl6x, run with `choke`, `factory` and `m6`, which still pass; the emulator cannot play a chord into a step, so the recording itself is host-tested (`polyrec_*`). **All 43 pass with cl6x with CLICK and COUNT-IN** (2026-11-26; `scenario_click` new; worst 32.29%, ambient). All 42 pass with cl6x with choke groups (2026-11-26; `scenario_choke` new, pushes C and D on MIXER's TRK 1-4; worst 32.26%, ambient). Live visuals part 5 (WAVE's waterfall, GRAIN's sparks; `scenario_wave` ends on WAVE POLY's SRC page) passed all 36 of its day with cl6x before this merge; merged onto #169, all 41 pass with cl6x (worst 32.20%, ambient). Part 6 (MIXER's spectrum, vectorscope, fader meters; `scenario_visuals` runs twice, the second on MST) passed all 41 with cl6x (31.82%), and so did the screens rebuilt to the mockups on top of it (figures in docs/BUDGET.md). `tools/emulator_frames.py` records the real screen frame by frame. **All 41 pass with cl6x with sample audition (#169) merged onto MOD slots (#168)** (2026-11-25; `scenario_audition` new, the first to check the captured output: a 44.1 kHz tone streamed from the card is heard whole, in tune, at -6 dB; worst 31.82%, ambient, as on main). `scenario_modslots` (MOD slots) learns slot 1 by push C, `--turn` and OK; all 40 pass with cl6x on `main` after #167 (worst 31.82%, ambient). All 39 pass with cl6x with random lock ranges and parameter slide (#167, `scenario_locks` new) merged onto LIVE RND (#166); worst 31.69%, ambient. `scenario_liverand` (LIVE RND, #166) drives FUNC + turn D and FUNC + push D: a `--turn` 2 M cycles after a FUNC `--key` lands inside the key's 20 M-cycle press (26.99% cl6x, 46.07% GCC-only, run alone; the full set was not rerun with it). All 37 before it pass with cl6x with the review fixes after #163 (`scenario_moveall` new; worst 31.59%, ambient, within the half point a peak moves between runs). All 36 pass with cl6x with live visuals part 1 (`scenario_visuals` new: draw() 0.57 ms a frame on GRID; worst 30.93%, ambient), and with part 2's audio taps (worst **31.16%**, ambient; GCC-only 56.48%), and with part 3's GRID and PERFORM views (`scenario_visuals` logs draw() on PERFORM: 1.34 ms), and with part 4's LFO picture (`scenario_visuals` walks on to EDIT's LFO page and turns DEP and DST with `--turn`). All 35 pass with cl6x with LFO TRIG, TUN glide and the cutoff floor merged onto #152 (`scenario_lfo` now pushes TRIG; worst 30.93%, ambient). **All 35 pass with cl6x with REL ALL, LEN ALL and FEEL merged onto `main` after #154** (2026-11-25; worst 30.75%, ambient; 34 passed on `main` after #153 at 30.55%). Added on 2026-11-25, each with the PR that brought it: `scenario_stepkeys` (D12), `scenario_plock`, `scenario_slots`, `scenario_glide`, `scenario_playmode`, `scenario_pictures`, `scenario_bounce` (the only run of a take through Enaga's real file layer), `scenario_feel` (FEEL walked on the PATTERN page). `scenario_moveall` turns REL ALL and LEN ALL with `--turn` (the review PR after #163). The pad gestures (stutter, LOCK, D6) have none: the emulator cannot press pads. The worst case moved from 30.16% to 30.75% over the day. GCC-only figures for that day's work are not taken |
 | unit | v0.3.1 on Enaga 0.2.0 boots and plays (2026-11-24). Load figures are from the v0.2.0-era build: under 30% on the default beat, 84.3% MAX in heavy play. Nothing after #111 has been measured or walked through on the unit |
 | memory | init takes **97.32 MiB of a 120 MiB heap** (LOCK's 1.06 MiB and the audition's 0.28 MiB included): 22.68 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -37,7 +37,7 @@ nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass.
    `scenario_wave.sh` and `scenario_fm.sh`, never run), then E13 (the VA rework), E14 (WAVE's cost
    per voice and its boot time) and E15 (FM4's cost per voice) from `docs/BUDGET.md`, with cl6x and with `ENAGA_TI_CGT=none`. BUDGET has only
    host estimates for both so far.
-2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, W1-W45, on a
+2. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`, W1-W51, on a
    build from `main` with cl6x and Enaga 0.3.0 firmware. It covers everything since v0.1.0, from
    the CPU guard to LOCK, step stutter, play modes, the MOD slots, sample audition and the
    redrawn screens (#171-#176).
@@ -115,6 +115,34 @@ MOD slots, for whoever touches them next (core/modslot.hpp has the rules):
   `--key` landing while a `--turn` is still clicking was not seen by the app in one run; leave a
   turn of 20 detents about 300 M cycles before the next key.
 
+**CLICK and COUNT-IN** (CyDrums S6, docs/CONTROLS.md "CLICK and COUNT-IN"): dsp/click.hpp is a
+recursive-sine click (loop in dsp/clickloops.ti.c) mixed after RESAMPLE's tap, beside the
+audition. `Engine::metronome_tick` fires it from the clock's own ticks. A count-in is
+`Cmd::count_in`, posted BEFORE `enaga::clock::start()` (and taken back if the start is refused):
+the clock starts at once and `count_in_end_` ticks are subtracted from every tick the sequencer,
+the rolls, the stutter and the arps see, from `Status::tick` and from the recorder's stamps
+(`Status::count_in_ticks`). A STOP (seen as running going false) or a restart ends it. Host tests
+in tests/test_click.cpp and test_ui; `scenario_click`; UNIT_CHECKLIST W47.
+
+**Ratchets over LEN** (Roland's RATE + span flag, 2026-11-26; core/pattern.hpp kRatchetSpan): bit 7
+of `Step::ratchet` makes the low nibble a rate (kRatchetRateTicks) and the ramp bits 4-6 run
+across the roll. The scheduler emits the first hit with `StepEvent::span_ticks/span_hits`;
+`Engine::span_start` (from `fire`) keeps the run and `span_tick` hits it on the clock's ticks,
+each hit through `fire` with ratchet_index 1. Every place that drops deferred ratchet hits also
+calls `span_clear`. The step editor's RTCH walks 1-8 and then the eight rates. Recording a note
+repeat as a roll (P3) is meant to write exactly this byte. tests/test_ratchetspan.cpp,
+`scenario_ratchetspan`, UNIT_CHECKLIST W49.
+
+**Choke groups** (CyDrums S4, docs/CONTROLS.md "Choke groups"): `KitTrack::choke`, KIT.BIN's
+optional section 11. `Engine::note_started` now takes the note's frame and calls `choke_group`,
+which marks the other tracks of the group; after each such track renders, `run_choke` fades its
+whole output from that frame over 64 frames (`strata_choke_fade` in dsp/chainloops.ti.c, the fade
+carrying into the next block) and then `kill_all`. It is a fade on the TRACK, not a voice, so
+every machine chokes alike, and a block renders whole: a note on the cut track at or after the
+choke's frame in the same block cancels the choke, and two tracks of a group on one frame both
+sound. The HAT machine's own track 3 to 4 pair (`rewire_machines`) is untouched. Host tests in
+tests/test_choke.cpp; UNIT_CHECKLIST W46.
+
 **Sample audition** (backlog Phase 5, "sample audition in the browser"): push A in SAMPLES
 streams the file under the cursor to the output (dsp/audition.hpp; app/storage.hpp "sample
 audition" has the protocol). It is a fifth Enaga stream with its own 256 KiB ring, beside the job
@@ -123,6 +151,18 @@ own rate with Catmull-Rom, after every effect and the RESAMPLE tap, at a fixed -
 holds its place rather than skipping. `scenario_audition` is the one scenario that checks the
 captured output (the emulator keeps only the run's last 0.68 s, hence its short run). UNIT_CHECKLIST
 W36 walks it; the level against a real mix is the open question.
+
+Arp depth and ARPS, for whoever touches them next (core/arp.hpp has the design):
+- **VAR, RHYTHM, ACCENT and RATCHET are not parameters**, for TRIG's reason: four table indices a
+  track in `KitTrack::arp`, KIT.BIN's optional section 12 (11 is the choke groups', PR #181), set
+  by `Cmd::set_arp_ext` (push A-D on the ARP page) or whole by `Cmd::arp_preset` (ARPS, OK on the
+  ARP page; core/arppresets.hpp). The tables' indices are on disk: new entries go on the end.
+- **A rest does not advance the note** (`ArpRun::slot` counts the grid, `hit` the notes).
+- **Ratchet repeats are frame countdowns** (`Engine::arp_ratchets`, after the deferred step hits
+  and before the block's ticks, running or stopped), clamped so no two hits of a track land in
+  one block: the one-pending-trig contract `dispatch` relies on.
+- A kit-library recall brings the arp settings. It still does not bring LFO TRIG or the mod
+  slots (it never did): worth a look.
 
 LFO, for whoever touches it next (dsp/lfo.hpp has the detail):
 - **TRIG is not a parameter.** All 32 bytes a track has are spoken for and `locked_` is a 32-bit
@@ -163,7 +203,7 @@ scheduled events and fires `stutter_event` on the roll's grid, while `Scheduler:
 running, so the release lands in time. It is all tracks by default, FUNC + STEP the selected one
 (the backlog proposed the opposite; Roland may want it flipped). The first STEP turns the audio
 beat repeat off for the rest of that REPEAT hold. Not built: a two-STEP loop (two steps held
-alternate) and recording a roll as RTCH. Host-tested only: the emulator cannot press pads.
+alternate). A NOTE RPT roll IS recorded now (P3): `record_note(..., roll)` puts a span ratchet byte in `Cmd::record_hit`'s `e` and the pad's release gives LEN through the RecHold path, on any machine. Host-tested only: the emulator cannot press pads.
 
 Random lock ranges and parameter slide (Phase 5, CyDrums; docs/CONTROLS.md "Random ranges and
 slides"), for whoever touches them next: both live in the lock's param byte (bit 6 range, bit 7

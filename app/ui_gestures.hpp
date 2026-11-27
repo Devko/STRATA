@@ -596,17 +596,26 @@
             return;
         }
 
-        if (track != selected_) end_gesture();         // a different track is a different edit
+        if (track != selected_) {
+            end_gesture();                             // a different track is a different edit
+            drop_range();
+        }
         selected_ = track;
         // The root in a playable octave: the pattern's root is a pitch class (core/pattern.hpp).
         const uint8_t note = uint8_t(kPadOctaveNote + engine_.key_root());
 
-        // NOTE RPT: the pad rolls for as long as it is held, and is not recorded -- a roll is a
-        // performance over the pattern, like beat repeat, not a string of steps to write.
+        // NOTE RPT: the pad rolls for as long as it is held. With REC on it is recorded as ONE
+        // step, a roll over LEN at the repeat rate (CyDrums P3): the press is the step, the
+        // release its LEN. A rate the step byte cannot hold (1/4T) records the plain hit.
         if (note_repeat_mode_) {
             rolling_pads_ = uint16_t(rolling_pads_ | (1u << track));
             roll_velocity_[track] = uint8_t(velocity < 1 ? 1 : velocity);
+            roll_note_[track] = note;
             post(Cmd::note_repeat, uint8_t(track), 0, note, roll_velocity_[track], 1);
+            const uint8_t rate = ratchet_rate_for_ticks(repeat_length_ticks(repeat_length_));
+            const uint8_t roll = rate < kRatchetRates ? ratchet_pack_span(rate, RatchetRamp::none)
+                                                      : uint8_t(0);
+            record_note(track, note, roll_velocity_[track], roll != 0, roll);
             return;
         }
 
@@ -649,6 +658,7 @@
         if (track >= 0 && track < kTracks && (rolling_pads_ >> track & 1u) != 0) {
             rolling_pads_ = uint16_t(rolling_pads_ & ~(1u << track));
             post(Cmd::note_repeat, uint8_t(track), 0, 0, 0, 0);
+            record_note_up(track, roll_note_[track]);   // a recorded roll's LEN
             return;
         }
 
@@ -809,7 +819,8 @@
         post_delta(Cmd::step_field_delta, selected_, held_step_, uint8_t(field), delta);
 
         char value[kStepFieldTextMax];
-        if (field == StepField::ratchet_count && ratchet_count(shown.ratchet) == 1) {
+        if (field == StepField::ratchet_count && !ratchet_spans(shown.ratchet) &&
+            ratchet_count(shown.ratchet) == 1) {
             value[0] = 'O'; value[1] = 'F'; value[2] = 'F'; value[3] = 0;
         } else {
             step_field_text(shown, field, value, int(sizeof value));

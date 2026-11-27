@@ -3,9 +3,12 @@
 #include "arp.hpp"       // the arpeggiator's notes; the engine schedules them
 #include "factory.hpp"
 #include "liverand.hpp"    // LIVE RND: the unit held to its range
+#include "chainloops.h"    // strata_choke_fade, a choke group's fade
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
 #include "sounds.hpp"      // Cmd::sound_preset: the factory sounds
+#include "arppresets.hpp"  // Cmd::arp_preset: the factory arps
+#include "stepnotes.hpp"   // a step's played-in extra notes, as locks
 #include "tuning.hpp"      // a knob click in NOTE view: tune_step
 
 #include <enaga/app.hpp>
@@ -33,6 +36,17 @@ constexpr uint8_t kMidiDefaultLength = 8;
 // A MIDI data byte, 0-127. (Not core/clamp.hpp's clamp_u8, which takes its limits.)
 uint8_t clamp_7bit(int value) {
     return uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value));
+}
+
+// The notes a step plays, `notes[0..count)`, with its extra notes (core/stepnotes.hpp) merged
+// in: ascending, none doubled, at most `max`. Most steps have none, and then this is one walk
+// of the step's lock run.
+int with_extra_notes(const Pattern &pattern, int track, int step, uint8_t *notes, int count,
+                     uint8_t key, int scale, bool fold, int max) {
+    uint8_t extras[kStepExtraNotes];
+    const int extra = step_extra_notes(pattern, track, step, extras);
+    if (extra == 0) return count;
+    return notes_merge(notes, count, extras, extra, key, scale, fold, max);
 }
 
 // A level for Status in thousandths, saturating at what a uint16_t holds (the meters' unit).
@@ -74,6 +88,7 @@ bool Engine::init(float sample_rate) {
     // Every allocation in the signal path happens here and nowhere else. The machines are
     // initialised below, where the pool is: every track owns one of every machine.
     mixer_.init(rate_);
+    click_.init(rate_);
 
     // Beat repeat's 2-bar ring, 2.93 MiB, here with every other buffer in the signal path.
     if (!repeat_.init(rate_)) return false;
@@ -503,6 +518,7 @@ void Engine::apply(const Command &command) {
             // notes, not tails: a soft stop releases what is sounding, and a hit landing four
             // blocks later would be a note after the transport stopped.
             deferred_count_ = 0;
+            span_clear();   // and the rolls of spanning ratchets
             scheduler_.reset(true);
             // And a sequenced arp, whose step is gone. A held KEYS arp keeps going.
             for (int t = 0; t < kTracks; t++) seq_arp_[t].on = false;
@@ -682,8 +698,11 @@ void Engine::apply(const Command &command) {
 
         case Cmd::step_field_delta:
             if (command.a < uint8_t(StepField::count)) {
-                step_field_apply(live().tracks[track].steps[step], StepField(command.a),
-                                 int(int8_t(command.b)));
+                Step &s = live().tracks[track].steps[step];
+                const int was = int(s.note);
+                step_field_apply(s, StepField(command.a), int(int8_t(command.b)));
+                // NOTE moves a chord played into the step with it (core/stepnotes.hpp).
+                step_shift_extra_notes(live(), track, step, int(s.note) - was);
             }
             break;
 
@@ -744,11 +763,19 @@ void Engine::apply(const Command &command) {
             // deliberately NOT reset: an undo is an edit, not a pattern change, and restarting
             // the chain would make a conditional step somewhere else in the pattern fire
             // differently because of an edit that had nothing to do with it.
-            if (undo_.undo(live())) reconfigure();
+            // And the pass boundary: a restored pattern may carry a different master length,
+            // and the boundary derived from the old one would end a chain entry or a song at it.
+            if (undo_.undo(live())) {
+                reconfigure();
+                boundary_known_ = false;
+            }
             break;
 
         case Cmd::redo:
-            if (undo_.redo(live())) reconfigure();
+            if (undo_.redo(live())) {
+                reconfigure();
+                boundary_known_ = false;
+            }
             break;
 
         case Cmd::range_copy:
@@ -824,13 +851,46 @@ void Engine::apply(const Command &command) {
         case Cmd::record_hit: {
             // The step and the micro-timing were resolved in the main context by core/record,
             // from the clock state at the moment the hit arrived. Nothing here re-decides them.
+            // `d` is how the note meets what the step holds (RecWrite, app/commands.hpp).
             Step &s = live().tracks[track].steps[step];
+            const uint8_t note = clamp_7bit(command.a);
+            const uint8_t velocity =
+                uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
+            const bool on = (s.flags & kStepTrig) != 0;
+            if (command.d == uint8_t(RecWrite::join) && on) {
+                // Another note of a chord on a step that already plays: it joins, and the
+                // step's note, LEN and micro stay. The loudest note sets the velocity, and the
+                // same note again is played again, so its velocity is the new one.
+                NoteAdd added = step_add_note(live(), track, step, note);
+                if (added == NoteAdd::full && s.lock_count < kLocksPerStep) {
+                    pattern_compact_locks(live());     // abandoned slots, as lock_delta does
+                    added = step_add_note(live(), track, step, note);
+                }
+                if (added == NoteAdd::full) {
+                    status_.bump_refused();            // six notes, or no lock slot left
+                    break;
+                }
+                s.velocity = added == NoteAdd::present
+                                 ? velocity
+                                 : (velocity > s.velocity ? velocity : s.velocity);
+                break;
+            }
             const int flags = (int(s.flags) | int(kStepTrig)) & ~int(kStepTrigless);
             s.flags = uint8_t(flags);
-            s.note = clamp_7bit(command.a);
-            s.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
+            s.note = note;
+            s.velocity = velocity;
             s.micro = int8_t(command.c);
             if (!length_valid(s.length)) s.length = 8;
+            // A note repeat recorded (CyDrums P3): the roll, at its rate, for the LEN its pad's
+            // release gives (Cmd::record_length). 0 leaves the step's ratchet as it was.
+            if (command.e != 0) s.ratchet = command.e;
+            if (command.d != uint8_t(RecWrite::note)) {
+                // A chord track's first note of a pass on this step: what was played is what
+                // the step holds, so the notes and the chord type that were there go. (A join
+                // onto a step that was off lands here too, and starts the chord.)
+                step_clear_extra_notes(live(), track, step);
+                s.chord = 0;
+            }
             // The step's locks are deliberately left alone. Overdubbing onto a programmed part
             // should keep the sound it was programmed with; a hit replaces the note, not the
             // step's whole character.
@@ -840,8 +900,10 @@ void Engine::apply(const Command &command) {
         case Cmd::record_length: {
             // The key that recorded this step came up. Only if the step still holds that note:
             // a later hit landing on the same step has replaced it, and its own key decides.
+            // On a chord any of its notes counts, and the last key up gives the chord its LEN.
             Step &s = live().tracks[track].steps[step];
-            if ((s.flags & kStepTrig) != 0 && s.note == command.a && length_valid(command.b)) {
+            if ((s.flags & kStepTrig) != 0 && step_has_note(live(), track, step, command.a) &&
+                length_valid(command.b)) {
                 s.length = command.b;
             }
             break;
@@ -883,12 +945,26 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::set_click:
+            click_on_ = command.a != 0;
+            if (!click_on_ && count_in_end_ == 0) click_.stop();
+            break;
+
+        case Cmd::count_in:
+            // Posted just before the START it is for, so the clock may already read running
+            // here: it is not asked. The UI posts it only from stop (app/ui_input.hpp, F5).
+            count_in_end_ = uint32_t(command.a > 2 ? 2 : command.a) * kTicksPerBar;
+            break;
+
         case Cmd::restart:
+            // A restart is a jump to the pattern's start, not another count-in.
+            count_in_end_ = 0;
             // The position is the clock's, and it was moved to 0 by the main context. What is
             // left is everything measured from it: the pattern starts again at tick 0 with a
             // fresh pass count, ratchet hits still waiting would land after the jump, and the bar
             // count resyncs on the next tick. The voices ring on: this is a restart, not a stop.
             deferred_count_ = 0;
+            span_clear();   // and the rolls of spanning ratchets
             scheduler_.reset(true);
             // And a sequenced arp, whose step is gone. A held KEYS arp keeps going.
             for (int t = 0; t < kTracks; t++) seq_arp_[t].on = false;
@@ -1020,6 +1096,18 @@ void Engine::apply(const Command &command) {
                     to.machine = from.machine;
                     to.level = from.level;
                     to.duck = from.duck;
+                    // And the rest KIT.BIN holds, which each arrived in a later section and was
+                    // never added here: a kit saved with SLC AUTO, an LFO TRIG, MOD slots or a
+                    // choke group came back without them (app/storage.hpp: a kit is "exactly what
+                    // a project's KIT.BIN holds"). params_from_kit applies SLC below.
+                    to.slice_mode = from.slice_mode;
+                    to.lfo_trig = from.lfo_trig;
+                    for (int s = 0; s < kModSlots; s++) to.mod[s] = from.mod[s];
+                    to.choke = from.choke;
+                    lfo_[t].rest();          // a new TRIG starts as Cmd::set_lfo_trig's does
+                    mod_env_[t].rest();
+                    // The arp's kit settings go with the ARP bytes they shape.
+                    to.arp = from.arp;
                 }
                 project_.kit.duck = kit_inbox_.duck;
             }
@@ -1074,6 +1162,7 @@ void Engine::apply(const Command &command) {
                 project_.settings.chain_enabled = false;
             }
             deferred_count_ = 0;                 // hits of a pattern that no longer exists
+            span_clear();   // and the rolls of spanning ratchets
             scheduler_.reset(true);
             // And both arps: the step is gone, and so is the kit whose ARP page the held run
             // followed. Keys still down play plainly until they come up.
@@ -1330,6 +1419,42 @@ void Engine::apply(const Command &command) {
             break;
         }
 
+        case Cmd::arp_preset: {
+            // core/arppresets.hpp, as sound_preset: the four ARP bytes into the kit and, where no
+            // lock holds them, effective_; the kit's arp settings beside them.
+            uint8_t *bytes = &params_[track].v[kArpFirst];
+            KitArp &ext = project_.kit.tracks[track].arp;
+            if (command.b == kSoundPresetKeep) {
+                for (int i = 0; i < kArpBytes; i++) arp_back_[i] = bytes[i];
+                arp_back_ext_ = ext;
+                arp_back_track_ = track;
+                break;
+            }
+            if (command.b == kSoundPresetBack) {
+                if (arp_back_track_ != track) {
+                    status_.bump_refused();
+                    break;
+                }
+                for (int i = 0; i < kArpBytes; i++) bytes[i] = arp_back_[i];
+                ext = arp_back_ext_;
+            } else if (!arp_preset_apply(command.b, bytes, ext)) {
+                status_.bump_refused();
+                break;
+            }
+            const uint32_t locked = locked_[track];
+            for (int p = kArpFirst; p < kArpFirst + kArpBytes; p++) {
+                if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
+            }
+            perform_dirty_ = true;
+            break;
+        }
+
+        case Cmd::set_arp_ext:
+            // A held run picks a new VAR up at its next tick (arp_follow); RHYTHM, ACCENT and
+            // RATCHET are read hit by hit.
+            arp_ext_set(project_.kit.tracks[track].arp, command.a, command.b);
+            break;
+
         case Cmd::set_lfo_trig: {
             // LFO TRIG (KitTrack::lfo_trig): the next note starts the cycle; a change to FREE
             // carries on from wherever the cycle is.
@@ -1343,6 +1468,14 @@ void Engine::apply(const Command &command) {
             if (command.a >= kModSlots) break;
             project_.kit.tracks[track].mod[command.a] =
                 mod_slot_sanitized(command.b, command.c, command.d);
+            break;
+        }
+
+        case Cmd::set_choke: {
+            const uint8_t now = project_.kit.tracks[track].choke;
+            const uint8_t next = now >= kChokeGroups ? uint8_t(0) : uint8_t(now + 1);
+            project_.kit.tracks[track].choke =
+                command.c == 1 ? next : choke_group_sanitized(command.a);
             break;
         }
 
@@ -1651,7 +1784,7 @@ void Engine::apply(const Command &command) {
                 }
                 // A pad on a POLY track counts against the shared budget like a step does.
                 if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
-                note_started(track, trig.velocity);
+                note_started(track, trig.velocity, 0);
                 // And to MIDI OUT. A key or a MIDI IN note (c = 1) is held until its release; a
                 // pad has none, so it lasts one step, as a step with no gate does.
                 send_midi_notes(track, &trig.note, 1, trig.velocity, 0,
@@ -1882,6 +2015,10 @@ void Engine::apply(const Command &command) {
             project_.settings.quantize = uint8_t(next < 0 ? 0 : (next > 100 ? 100 : next));
             break;
         }
+
+        case Cmd::set_rec_mode:
+            project_.settings.rec_add = command.a != 0;
+            break;
 
         case Cmd::set_machine: {
             if (command.a >= uint8_t(MachineId::count)) {
@@ -2207,7 +2344,11 @@ void Engine::pattern_replaced(int bank, int slot) {
     undo_.clear();               // the history belonged to the steps just replaced
     scheduler_.reset(true);
     reconfigure();
+    // DOUBLE changes the master length, and so may a copy: the boundary is measured again, or
+    // a chain entry ends where the pattern's old length did.
+    boundary_known_ = false;
     deferred_count_ = 0;
+    span_clear();   // and the rolls of spanning ratchets
 }
 
 void Engine::switch_pattern(int bank, int slot) {
@@ -2234,6 +2375,7 @@ void Engine::switch_pattern(int bank, int slot) {
     // would read THIS pattern's locks and chord at that step index (`fire` reads the live
     // pattern), which is a hit of neither pattern.
     deferred_count_ = 0;
+    span_clear();   // and the rolls of spanning ratchets
 
     // The new pattern's master length makes the old boundary meaningless, and deriving the new
     // one needs a tick, which only resolve_tick has.
@@ -2315,6 +2457,7 @@ void Engine::cross_boundary(uint32_t boundary) {
             seq_arp_[t].on = false;
         }
         deferred_count_ = 0;
+        span_clear();   // and the rolls of spanning ratchets
         status_.bump_song_end();
         return;
     }
@@ -2521,6 +2664,48 @@ void Engine::dispatch(const StepEvent &event, uint32_t frames) {
     held.frame -= frames;
 }
 
+// --- spanning ratchets ----------------------------------------------------
+
+void Engine::span_start(int track, const StepEvent &event) {
+    SpanRun &run = span_[track];
+    run.on = false;
+    if (event.span_ticks == 0 || event.span_hits < 2) return;
+    if (arp_settings(track).on()) return;           // the arp takes the step
+    run.rate = event.span_ticks;
+    run.ramp = RatchetRamp(event.span_ramp);
+    run.velocity = live().tracks[track].steps[event.step].velocity;
+    run.hit = 1;
+    run.count = event.span_hits;
+    run.inv_count = 1.0f / float(event.span_hits);  // once a roll, not a hit
+    run.start_tick = tick_;
+    run.next_tick = tick_ + run.rate;
+    run.base = event;
+    run.base.ratchet_index = 1;
+    run.on = true;
+}
+
+// On every tick: each roll whose next hit is due fires it on the tick's frame. A track that is
+// stuttering keeps counting silently, as its steps do.
+void Engine::span_tick(uint32_t tick, uint32_t frame) {
+    const uint32_t silenced = stutter_step_ >= 0 ? uint32_t(stutter_tracks_) : 0u;
+    for (int t = 0; t < kTracks; t++) {
+        SpanRun &run = span_[t];
+        if (!run.on) continue;
+        if (tick < run.start_tick) {                // the transport went back: the roll is gone
+            run.on = false;
+            continue;
+        }
+        if (tick < run.next_tick) continue;
+        StepEvent hit = run.base;
+        hit.frame = frame;
+        hit.velocity = span_velocity(run.velocity, run.hit, run.count, run.inv_count, run.ramp);
+        run.next_tick += run.rate;
+        run.hit++;
+        if (run.hit >= run.count) run.on = false;
+        if ((silenced >> t & 1u) == 0) fire(hit);
+    }
+}
+
 // --- note repeat ---------------------------------------------------------
 
 float Engine::roll_period_frames() const {
@@ -2543,7 +2728,7 @@ void Engine::roll_fire(int track, uint32_t frame) {
     trig.frame = frame;
     trig.gate_frames = roll_gate_frames();
     if (make_room_for_poly_voice(track, trig.note)) machines_[track]->trigger(trig);
-    note_started(track, trig.velocity);
+    note_started(track, trig.velocity, frame);
     send_midi_notes(track, &trig.note, 1, trig.velocity, frame, midi_gate(track, trig.gate_frames));
 }
 
@@ -2626,28 +2811,103 @@ void Engine::stutter_free(uint32_t frames) {
 // --- the arpeggiator ------------------------------------------------------
 
 ArpSettings Engine::arp_settings(int track) const {
-    return ArpSettings::make(&effective_[track].v[kArpFirst]);
+    ArpSettings s = ArpSettings::make(&effective_[track].v[kArpFirst]);
+    s.var = ArpVar(project_.kit.tracks[track].arp.var < kArpVars ? project_.kit.tracks[track].arp.var
+                                                                  : 0);
+    return s;
 }
 
+namespace {
+
+// 1/n for a ratchet's n hits: a multiply, not a divide, at control rate.
+constexpr float kInverseCount[kArpMaxRatchet + 1] = {1.0f, 1.0f, 0.5f, 1.0f / 3.0f, 0.25f};
+// A block's length as a reciprocal: how many blocks a spacing holds.
+constexpr float kInverseBlock = 1.0f / float(ENAGA_BLOCK_FRAMES);
+
+}  // namespace
+
+// A seed for a new run's RND notes and chance ratchets: the track and step, the clock's tick and
+// a count of runs, so no two runs draw the same, whether the transport runs or not.
+uint32_t Engine::arp_new_seed(int track, int step) {
+    arp_runs_++;
+    return (uint32_t(track) * 131u + uint32_t(step)) ^ (arp_runs_ * 0x9e3779b9u) ^
+           (tick_ * 0x85ebca6bu);
+}
+
+// One slot of the arp's grid: a rest (RHYTHM), or the next note of the cycle -- accented by
+// ACCENT or the step's own ACC on its first note -- and, on a RATCHET slot, its repeats queued
+// for `arp_ratchets`.
 void Engine::arp_hit(int track, ArpRun &run, uint32_t frame) {
-    const uint8_t note = arp_note(run.cycle, run.length, run.mode, run.hit, run.seed);
+    const KitArp &ext = project_.kit.tracks[track].arp;
+    const uint32_t slot = run.slot++;
+    run.ratchet_left = 0;                 // a new slot ends the last one's repeats
+    if (!arp_rhythm_plays(ext.rhythm, slot)) return;
+    const uint32_t note_hit = run.hit;
+    const uint8_t note = arp_note(run.cycle, run.length, run.mode, note_hit, run.seed);
     run.hit++;
+    const bool accent =
+        (run.accent && note_hit == 0) || arp_accent_on(ext.accent, slot, note_hit, run.length);
+    // The hit's spacing, shared by its ratchet; its gate GATE's share of that. Float multiplies
+    // at control rate.
+    const float spacing = float(run.rate) * samples_per_tick_;
+    int count = arp_ratchet_count(ext.ratchet, slot, run.seed);
+    // Never two hits of one track in a block (the one-pending-trig contract): fewer repeats when
+    // the slot is too short for them, as a 1/32T at a fast tempo is.
+    const int fits = int(spacing * kInverseBlock);
+    if (count > fits) count = fits < 1 ? 1 : fits;
+    const float each = spacing * kInverseCount[count];
+    const float gate = each * float(run.gate_percent) * 0.01f;
+    const uint32_t gate_frames = gate < 1.0f ? 1u : uint32_t(gate);
+    arp_play(track, note, run.velocity, accent, frame, gate_frames);
+    if (count > 1) {
+        run.ratchet_left = uint8_t(count - 1);
+        run.ratchet_note = note;
+        run.ratchet_gate = gate_frames;
+        run.ratchet_spacing = each;
+        // From the start of the block `arp_ratchets` will count it down in next.
+        run.ratchet_countdown =
+            float(frame) + each - (arp_ratchets_done_ ? float(block_frames_) : 0.0f);
+    }
+}
+
+// One note of an arp, a slot's or a ratchet's: to the machine and MIDI OUT.
+void Engine::arp_play(int track, uint8_t note, uint8_t velocity, bool accent, uint32_t frame,
+                      uint32_t gate_frames) {
     if (machines_[track] == nullptr || muted_[track]) return;
     Trig trig;
     trig.note = note;
-    trig.velocity = run.velocity;
-    trig.accent = run.accent && run.hit == 1;     // the step's accent, on its first hit
+    trig.velocity = velocity;
+    trig.accent = accent;
     trig.frame = frame;
-    // The hit's gate: GATE's share of the spacing. One float multiply at control rate.
-    const float spacing = float(run.rate) * samples_per_tick_;
-    const float gate = spacing * float(run.gate_percent) * 0.01f;
-    trig.gate_frames = gate < 1.0f ? 1u : uint32_t(gate);
+    trig.gate_frames = gate_frames;
     if (make_room_for_poly_voice(track, note)) machines_[track]->trigger(trig);
-    note_started(track, trig.velocity);   // each hit lights the track, as a step does
+    note_started(track, trig.velocity, frame);   // each hit lights the track, as a step does
     // Each hit to MIDI OUT too, with its own gate; a MID track's CCs go ahead of the note.
     if (machine_id_[track] == uint8_t(MachineId::midi)) send_midi_ccs(track);
-    send_midi_notes(track, &trig.note, 1, trig.accent ? uint8_t(127) : trig.velocity, frame,
-                    trig.gate_frames);
+    send_midi_notes(track, &trig.note, 1, accent ? uint8_t(127) : velocity, frame, gate_frames);
+}
+
+// The repeats of ratcheted slots that land in this block. A run that ended (its step's length,
+// a stop, OFF) takes its repeats with it.
+void Engine::arp_ratchets(uint32_t frames) {
+    for (int t = 0; t < kTracks; t++) {
+        ArpRun *runs[2] = {&seq_arp_[t], &held_arp_[t]};
+        for (ArpRun *run : runs) {
+            if (run->ratchet_left == 0) continue;
+            if (!run->on) {
+                run->ratchet_left = 0;
+                continue;
+            }
+            if (run->ratchet_countdown < float(frames)) {
+                const float at = run->ratchet_countdown < 0.0f ? 0.0f : run->ratchet_countdown;
+                arp_play(t, run->ratchet_note, run->velocity, false, uint32_t(at), run->ratchet_gate);
+                run->ratchet_left--;
+                run->ratchet_countdown += run->ratchet_spacing;
+            }
+            run->ratchet_countdown -= float(frames);
+        }
+    }
+    arp_ratchets_done_ = true;
 }
 
 void Engine::arp_tick(uint32_t tick, uint32_t frame) {
@@ -2706,9 +2966,10 @@ void Engine::arp_follow(int track) {
     }
     run.rate = arp.rate_ticks;
     run.gate_percent = arp.gate_percent;
-    if (arp.mode != run.mode || arp.octaves != run.octaves) {
+    if (arp.mode != run.mode || arp.octaves != run.octaves || arp.var != run.var) {
         run.mode = arp.mode;
         run.octaves = arp.octaves;
+        run.var = arp.var;
         run.length = uint8_t(arp_cycle(held_notes_[track], held_count_[track], arp, run.cycle));
         if (run.length == 0) run.on = false;
     }
@@ -2726,13 +2987,15 @@ void Engine::arp_held_changed(int track) {
     }
     run.mode = arp.mode;
     run.octaves = arp.octaves;
+    run.var = arp.var;
     run.rate = arp.rate_ticks;
     run.gate_percent = arp.gate_percent;
     run.end_tick = 0xFFFFFFFFu;
     if (run.on) return;
     run.on = true;
     run.hit = 0;
-    run.seed = uint32_t(track) * 131u + 7u;
+    run.slot = 0;
+    run.seed = arp_new_seed(track, 7);
     run.accent = false;
     // The first hit now; then on the grid of the rate while running, or free while stopped.
     arp_hit(track, run, 0);
@@ -2872,6 +3135,8 @@ void Engine::fire(const StepEvent &event) {
     // Parameter slide: the first hit of a step (re)starts its track's glides; a ratchet's later
     // hits leave them running, so a slid step glides across its own ratchet.
     if (event.ratchet_index == 0) start_slides(track, event);
+    // A trig ends the track's running roll, and a spanning step starts its own.
+    if (!event.trigless && event.ratchet_index == 0) span_start(track, event);
 
     if (!event.trigless && machines_[track] != nullptr && !muted_[track]) {
         // This prepare is REDUNDANT today, and kept on purpose. It used to be justified as
@@ -2921,6 +3186,11 @@ void Engine::fire(const StepEvent &event) {
         trig.frame = event.frame;
         // LEN ALL (core/moveall.hpp) on the step's gate; 0 and "no gate" come back unchanged.
         trig.gate_frames = len_all_frames(gate_frames_for(track, event.length_index), len_all_);
+        // A roll's hit lasts half its rate, as a note repeat's does: LEN is the whole roll's.
+        if (event.span_ticks != 0) {
+            const float half = 0.5f * float(event.span_ticks) * samples_per_tick_;
+            trig.gate_frames = half < 1.0f ? 1u : uint32_t(half);
+        }
 
         // MIDI out's copy of the trig. An accent is the top velocity, the nearest thing MIDI
         // has, and a step with no gate lasts a step, because a note-on needs a note-off.
@@ -2938,23 +3208,32 @@ void Engine::fire(const StepEvent &event) {
             if (polys_[track] != nullptr) {
                 count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
                                      PolyMachine::kVoices);
-            } else if (machine_id_[track] == uint8_t(MachineId::midi) &&
-                       (packed & kChordTypeMask) != uint8_t(ChordType::none)) {
+                count = with_extra_notes(folding, track, event.step, input, count, key_root_now,
+                                         key_scale_now, true, PolyMachine::kVoices);
+            } else if (machine_id_[track] == uint8_t(MachineId::midi)) {
                 // MID sends a chord step as its chord (below), so its arp runs through the
                 // chord too, rather than repeating the root alone.
-                count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
-                                     kChordMaxNotes);
+                const bool chord = (packed & kChordTypeMask) != uint8_t(ChordType::none);
+                if (chord) {
+                    count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
+                                         kChordMaxNotes);
+                }
+                count = with_extra_notes(folding, track, event.step, input, count, key_root_now,
+                                         key_scale_now, chord, kChordMaxNotes);
             }
             ArpRun &run = seq_arp_[track];
             run.mode = arp.mode;
+            run.var = arp.var;
             run.rate = arp.rate_ticks;
             run.gate_percent = arp.gate_percent;
             run.length = uint8_t(arp_cycle(input, count, arp, run.cycle));
             run.velocity = event.velocity;
             run.accent = event.accent;
             run.hit = 0;
-            // The same notes every pass: the seed is the track and the step, not the time.
-            run.seed = uint32_t(track) * 131u + uint32_t(event.step);
+            run.slot = 0;
+            // A new draw every run: RND and the chance ratchets are random on every pass, not one
+            // fixed pattern (Roland, 2026-11-27).
+            run.seed = arp_new_seed(track, event.step);
             run.next_tick = tick_ + run.rate;
             const uint32_t gate = trig.gate_frames;
             run.end_tick = 0xFFFFFFFFu;
@@ -2987,8 +3266,12 @@ void Engine::fire(const StepEvent &event) {
             // `event.note` and not `note`: `chord_expand` folds the root itself, so handing it
             // an already-folded note would be a second fold -- harmless, since folding a note
             // that is in the scale returns it, but it would hide which side owns the rule.
-            const int voiced = chord_expand(event.note, packed, key_root_now, key_scale_now,
-                                            notes, PolyMachine::kVoices);
+            int voiced = chord_expand(event.note, packed, key_root_now, key_scale_now, notes,
+                                      PolyMachine::kVoices);
+            // And the notes that were played into the step beside its own (core/stepnotes.hpp),
+            // folded like the rest of the chord, within the same six voices.
+            voiced = with_extra_notes(folding, track, event.step, notes, voiced, key_root_now,
+                                      key_scale_now, true, PolyMachine::kVoices);
             for (int i = 0; i < voiced; i++) {
                 trig.note = notes[i];
                 // The budget across every POLY track (kPolyVoiceBudget, engine.hpp).
@@ -3008,10 +3291,14 @@ void Engine::fire(const StepEvent &event) {
             uint8_t notes[kChordMaxNotes];
             int count = 1;
             notes[0] = note;
-            if ((packed & kChordTypeMask) != uint8_t(ChordType::none)) {
+            const bool chord = (packed & kChordTypeMask) != uint8_t(ChordType::none);
+            if (chord) {
                 count = chord_expand(event.note, packed, key_root_now, key_scale_now, notes,
                                      kChordMaxNotes);
             }
+            // Played-in extra notes: folded with a chord type, as written without one.
+            count = with_extra_notes(folding, track, event.step, notes, count, key_root_now,
+                                     key_scale_now, chord, kChordMaxNotes);
             send_midi_notes(track, notes, count, midi_velocity, trig.frame, midi_gate_frames);
         } else {
             if (!frozen_[track].on()) machines_[track]->trigger(trig);
@@ -3021,10 +3308,39 @@ void Engine::fire(const StepEvent &event) {
         // Once per step, not once per note: a chord is one trig as far as the screen is
         // concerned, and eight LEDs flashing six times would be a worse display, not a better
         // one.
-        note_started(track, trig.velocity);
+        note_started(track, trig.velocity, event.frame);
 
         if (track == duck_source_) mixer_.trigger_duck(event.frame);
     }
+}
+
+// A choke group's cut (choke_group in engine.hpp): the fade from where the choke landed, or from
+// the block's start when it carries on from the last block, then kill_all once it reaches 0.
+void Engine::run_choke(int t, float *mono, uint32_t frames) {
+    const uint32_t from = choke_at_[t] < frames ? choke_at_[t] : frames;
+    const float gain = strata_choke_fade(mono + from, int(frames - from), choke_gain_[t],
+                                         1.0f / float(kChokeFadeFrames));
+    if (gain > 0.0f) {
+        choke_gain_[t] = gain;
+        choke_at_[t] = 0;              // carries on from the next block's first frame
+        return;
+    }
+    machines_[t]->kill_all();
+    choke_at_[t] = kNoChokeFrame;
+    choke_gain_[t] = 1.0f;
+}
+
+// The metronome (engine.hpp): on every beat while CLICK is on, and on every beat of a count-in
+// whether it is or not. A bar's first beat is the higher click. Two modulos a tick, and only
+// while it clicks: control rate, as roll_tick's one (this chip divides integers in software).
+// The tick is the clock's own, and a count-in is whole bars, so the bars line up either way.
+void Engine::metronome_tick(uint32_t tick, uint32_t frame) {
+    const bool counting = tick < count_in_end_;
+    if (!click_on_ && !counting) return;
+    const uint32_t beat_ticks = uint32_t(enaga::clock::ppqn);
+    if (tick % beat_ticks != 0u) return;
+    const bool bar = tick % kTicksPerBar == 0u;
+    click_.trigger(frame, bar);
 }
 
 // --- the LFOs -------------------------------------------------------------
@@ -3195,6 +3511,10 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         return;
     }
 
+    arp_ratchets_done_ = false;          // see arp_ratchets, below
+    // No track has started a note in this block yet (choke_group).
+    for (int t = 0; t < kTracks; t++) note_frame_[t] = kNoChokeFrame;
+
     apply_commands();
 
     // The CPU guard, before any trig: a lowered budget must be in force for this block's notes.
@@ -3212,7 +3532,17 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // Re-derive only when the tempo actually moves: this is a float divide, which the C674x does
     // in hardware, but there is no reason to do it every block. (Integer division is the one to
     // avoid here -- this chip has no integer divide instruction at all.)
-    const enaga::clock::State clock_now = enaga::clock::state();
+    enaga::clock::State clock_now = enaga::clock::state();
+    // A STOP ends a count-in, whether it ran out or not: the next START is a plain one unless the
+    // UI arms another (Cmd::count_in).
+    if (was_running_ && !clock_now.running) {
+        count_in_end_ = 0;
+        click_.stop();
+    }
+    was_running_ = clock_now.running != 0;
+    // Everything below that follows the beat (the LFOs' sync, the master effects' phase) follows
+    // the pattern's position, which a count-in puts behind the clock's.
+    clock_now.position = clock_now.position > count_in_end_ ? clock_now.position - count_in_end_ : 0u;
     if (clock_now.tempo != tempo_) {
         tempo_ = clock_now.tempo;
         const float bpm = tempo_ > 1.0f ? tempo_ : 1.0f;
@@ -3228,6 +3558,10 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // and a machine's voice allocation sees triggers in the order they arrive.
     deliver_deferred(frames);
 
+    // The arps' ratchet repeats due in this block. A hit before this line (a command, a deferred
+    // step) counted its repeats from this block's start; one after it counts from the next's.
+    arp_ratchets(frames);
+
     // Note repeat and held arps with the transport stopped: no ticks arrive, so they count frames.
     if (!enaga::clock::running()) {
         roll_free(frames);
@@ -3237,13 +3571,20 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // Enaga's clock reports the ticks falling in this block, each with the frame it lands on.
     // That frame is what makes a step start on an exact sample.
+    //
+    // A count-in's ticks only click; after it, every tick is counted from its end, so the
+    // pattern starts at tick 0 as from a plain START (metronome_tick in engine.hpp).
     enaga::clock::Tick ticks[16];
     const uint32_t tick_count = enaga::clock::ticks(ticks, 16);
     for (uint32_t i = 0; i < tick_count; i++) {
-        resolve_tick(ticks[i].tick, ticks[i].frame);
-        roll_tick(ticks[i].tick, ticks[i].frame);
-        stutter_tick(ticks[i].tick, ticks[i].frame);
-        arp_tick(ticks[i].tick, ticks[i].frame);
+        metronome_tick(ticks[i].tick, ticks[i].frame);
+        if (ticks[i].tick < count_in_end_) continue;
+        const uint32_t tick = ticks[i].tick - count_in_end_;
+        resolve_tick(tick, ticks[i].frame);
+        span_tick(tick, ticks[i].frame);
+        roll_tick(tick, ticks[i].frame);
+        stutter_tick(tick, ticks[i].frame);
+        arp_tick(tick, ticks[i].frame);
     }
 
     // What the performance layer produced, into the values the machines read -- except where the
@@ -3314,6 +3655,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
                 frozen_[t].skip(int(frames));
                 continue;
             }
+            // A frozen track plays its loop, which no choke cuts.
+            choke_at_[t] = kNoChokeFrame;
+            choke_gain_[t] = 1.0f;
             prepare_chain(t);
             float *mono = mixer_.scratch();
             enaga_clear(mono, int(frames));
@@ -3325,7 +3669,16 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
             continue;
         }
 
-        if (machine == nullptr || muted_[t] || !machine->active()) continue;
+        if (machine == nullptr || muted_[t] || !machine->active()) {
+            // A choke on a track with nothing to render: nothing to fade, so it is over. A muted
+            // track's voices are cut all the same, or they would sound again on unmute.
+            if (choke_at_[t] != kNoChokeFrame) {
+                if (machine != nullptr) machine->kill_all();
+                choke_at_[t] = kNoChokeFrame;
+                choke_gain_[t] = 1.0f;
+            }
+            continue;
+        }
 
         // From effective_, not params_: this is where a parameter lock has to be honoured, for
         // every block of the step rather than only the one that triggered it.
@@ -3336,6 +3689,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         float *mono = mixer_.scratch();
         enaga_clear(mono, int(frames));
         machine->render_add(mono, int(frames));
+        if (choke_at_[t] != kNoChokeFrame) run_choke(t, mono, frames);
         track_peak[t] = strata_master_peak(mono, mono, int(frames));
         // A freeze records the machine alone, before the chain it will go on running through.
         if (t == tapped && capture_prechain_) {
@@ -3429,6 +3783,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
             status_.audition_frame.store(audition_.position(), std::memory_order_relaxed);
         }
     }
+    // The metronome, beside the audition: for the player, never recorded (dsp/click.hpp).
+    if (click_.active()) click_.render_add(out, int(frames));
 
     status_.resample_state.store(capture_.done()        ? 3u
                                  : capture_.recording() ? 2u
@@ -3450,7 +3806,17 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // Publish for the UI. Relaxed stores of single words: the UI only ever wants the newest.
     const enaga::clock::State clock = enaga::clock::state();
-    status_.tick.store(clock.position, std::memory_order_relaxed);
+    // The pattern's position: the clock's less a count-in, and 0 while one is still clicking.
+    const bool counting = clock.running && clock.position < count_in_end_;
+    status_.tick.store(clock.position > count_in_end_ ? clock.position - count_in_end_ : 0u,
+                       std::memory_order_relaxed);
+    status_.count_in_beats.store(
+        counting ? uint8_t(float(count_in_end_ - clock.position) *
+                               (1.0f / float(enaga::clock::ppqn)) + 0.999f)
+                 : uint8_t(0),
+        std::memory_order_relaxed);
+    status_.count_in_ticks.store(count_in_end_, std::memory_order_relaxed);
+    status_.pattern_origin.store(origin_, std::memory_order_relaxed);
     status_.running.store(clock.running ? 1u : 0u, std::memory_order_relaxed);
     status_.bump_blocks();
     waves_.audio_block();   // a WAVE slot taken out two blocks ago is no longer being read
@@ -3702,6 +4068,7 @@ void Engine::capture_live(LiveState &state) const {
 void Engine::apply_live(const LiveState &state) {
     __builtin_memcpy(&live(), &state.pattern, sizeof state.pattern);
     deferred_count_ = 0;                 // ratchet hits of the steps just replaced
+    span_clear();   // and the rolls of spanning ratchets
     for (int t = 0; t < kTracks; t++) {
         __builtin_memcpy(params_[t].v, state.params[t], kKitParams);
         const uint32_t locked = locked_[t];

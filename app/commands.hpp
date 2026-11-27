@@ -92,7 +92,9 @@ enum class Cmd : uint8_t {
 
     // A live-recorded hit, already resolved to a step and a micro-timing value by core/record in
     // the main context -- where the clock state that stamped it was read.
-    record_hit,        // track, step, a: note, b: velocity, c: int8 micro
+    // d: a RecWrite, how the note meets the notes the step already has.
+    // e: 0, or a ratchet byte to put on the step (a recorded note repeat: a roll over LEN).
+    record_hit,        // track, step, a: note, b: velocity, c: int8 micro, d: RecWrite, e: roll
     // And how long that note was held, when its key comes up: core/record's held_length_index,
     // stored as the step's LEN if the step still holds that note.
     record_length,     // track, step, a: note, b: length index
@@ -149,6 +151,14 @@ enum class Cmd : uint8_t {
     set_stream,        // track
     stream_attach,     // track, a|b: Status::stream_want's value it answers
 
+    // The metronome (dsp/click.hpp): a: 0 OFF, 1 ON. Not saved.
+    set_click,         // a: on
+    // A count-in for the next START: a: bars, 0 none. Posted BEFORE enaga::clock::start(), so
+    // the audio side has it when the first tick comes; posted again with 0 if the start was
+    // refused. The first a x 384 ticks then only click, and everything else runs as if the
+    // clock had started when they end (Engine::count_in_end_).
+    count_in,          // a: bars
+
     // --- kit and sound ---
     set_param,         // track, a: param index, b: value; or c = 1: b is an int8 delta
     set_track_level,   // track, f: level; or c = 1: f is a delta, the result clamped to 1.5
@@ -161,6 +171,10 @@ enum class Cmd : uint8_t {
     // (kModSrcOff..kModSrcRnd), c: the destination parameter, d: the depth as an int8. Sanitized as a
     // file's slot is, so a bad one lands OFF.
     set_mod_slot,      // track, a: slot, b: source, c: dest, d: int8 depth
+    // A track's choke group (KitTrack::choke): a: 0 none or 1-4; or c = 1: one step on, OFF 1 2
+    // 3 4 OFF, decided on the audio side so two fast pushes are two steps. A note on the track
+    // cuts the others of its group (Engine::choke_group).
+    set_choke,         // track, a: group; or c = 1: step
     // A track pad's pressure, for a mod slot on PRS: a: 0-127, 0 when the pad is let go. Played,
     // not stored.
     set_pressure,      // track, a: pressure
@@ -253,6 +267,9 @@ enum class Cmd : uint8_t {
     // setting with a field in PROJECT.BIN, so the engine keeps it and `app/` reads it back
     // rather than holding a second copy that a save could not see.
     set_quantize,      // b: int8 delta, clamped to 0-100
+    // REC MODE, the same kind of PROJECT setting: what a note recorded onto a chord track's
+    // step does to the notes it has (ProjectSettings::rec_add).
+    set_rec_mode,      // a: 0 REPLACE, 1 ADD
 
     // F1 + F5 (docs/SPEC.md): every track back to its step 1 from the next tick, without
     // touching the voices. The main context has already located the clock to 0; this resets
@@ -299,6 +316,15 @@ enum class Cmd : uint8_t {
     // sound as it is (the list opening); b = kSoundPresetBack puts that back (its AS WAS row).
     // Only the bytes a preset writes are touched either way, so the mix stays the user's.
     sound_preset,
+
+    // A factory arp (core/arppresets.hpp) into one track: the ARPS list (OK on the ARP page).
+    // track, b: the preset's index, or kSoundPresetKeep / kSoundPresetBack as for sound_preset.
+    // Writes the four ARP bytes and the kit's arp settings (KitTrack::arp), nothing else.
+    arp_preset,
+
+    // One of the arp's kit settings (KitTrack::arp, core/arp.hpp): track, a: the field (0 VAR,
+    // 1 RHYTHM, 2 ACCENT, 3 RATCHET), b: its value; past the field's table reads as 0.
+    set_arp_ext,
 
     // Freeze (dsp/frozen.hpp). `freeze_set` starts track `track` playing its freeze slot: `u` the
     // byte offset into the sample region, frames in c | d << 8 | e << 16 (mono int16), `a` the
@@ -380,6 +406,16 @@ enum class DuckField : uint8_t { depth, source, attack, hold, release, count };
 // ignores the entry.
 enum class ChainEdit : uint8_t {
     set = 0, insert, remove, pattern_delta, repeats_delta, mutes_delta, song
+};
+
+// How a recorded hit meets the step it lands on (Cmd::record_hit's `d`). The UI decides, because
+// it is the side that knows which pass a hit belongs to and what REC MODE is.
+enum class RecWrite : uint8_t {
+    note = 0,      // a track that plays one note: the hit replaces the step's note
+    replace = 1,   // a chord track, the first note on this step this pass (REC MODE REPLACE):
+                   // the step becomes that one note, its extras and chord type gone
+    join = 2,      // a chord track, a note that adds to the step's chord: another note of a
+                   // chord played this pass, or any note under REC MODE ADD
 };
 
 struct Command {
@@ -479,6 +515,16 @@ using Commands = CommandRing<256>;
 // pair below is correct without an RMW.
 struct Status {
     std::atomic<uint32_t> tick{0};             // the clock's position, for the playhead
+    // COUNT-IN (Engine::count_in_end_): the beats still to click before the pattern starts, 0
+    // when none is running. While it is, `tick` stays 0 and nothing records.
+    std::atomic<uint8_t> count_in_beats{0};
+    // Ticks the pattern's position is behind the clock's: the count-in's length once it has
+    // run, 0 without one. The recorder subtracts it from the clock it stamps a hit with.
+    std::atomic<uint32_t> count_in_ticks{0};
+    // Where the live pattern started, on that same count-in-less position (Engine::origin_): a
+    // chain entry or a queued switch starts its pattern on a boundary, and steps and passes are
+    // counted from there. The recorder subtracts it too, or a hit lands `origin mod loop` off.
+    std::atomic<uint32_t> pattern_origin{0};
     std::atomic<uint32_t> blocks{0};           // audio blocks processed, for liveness
     std::atomic<uint8_t> playhead[8] = {};     // per-track step, for the grid
     std::atomic<uint8_t> triggered[8] = {};    // bumped on each trig, for the pad LEDs

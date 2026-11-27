@@ -89,13 +89,25 @@
     // core/, where it is host-tested -- this function only gathers the inputs.
     // `held`: the note has a key-up still to come (a piano pad, a STEP key in KEYS, a MIDI note),
     // so its length is measured. A performance pad hit has none and keeps the step's LEN.
-    void record_note(int track, uint8_t note, uint8_t velocity, bool held = true) {
+    // `roll`: a ratchet byte for the step, a held NOTE RPT pad's roll (0 for a plain hit). Its
+    // pad's release gives the roll its LEN, on any machine.
+    void record_note(int track, uint8_t note, uint8_t velocity, bool held = true,
+                     uint8_t roll = 0) {
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;          // nothing to record onto
+        // A count-in is the player's lead-in, not the pattern: nothing records until it ends.
+        const Status &status = engine_.status();
+        const uint32_t lead = status.count_in_ticks.load(std::memory_order_relaxed);
+        if (clock.position < lead) return;
 
+        // The pattern's position, as the scheduler's: the clock less a count-in, less where the
+        // pattern started (a chain entry, a queued switch), which is what steps and passes count
+        // from (Engine::resolve_tick hands the scheduler `tick - origin_`).
+        const uint32_t origin = status.pattern_origin.load(std::memory_order_relaxed);
+        if (clock.position - lead < origin) return;   // a switch the audio side has not made yet
         Stamp now;
-        now.tick = clock.position;
+        now.tick = clock.position - lead - origin;
         now.fraction = clock.fraction;
         const Stamp hit = stamp_back(now, kPadLatencyMs, clock.tempo);
 
@@ -127,6 +139,16 @@
         command.a = note;
         command.b = velocity;
         command.c = uint8_t(landing.micro);
+        command.e = roll;
+        // On a chord track several notes can share a step (core/stepnotes.hpp). The first on a
+        // step this pass replaces what it held, unless REC MODE is ADD; any after it join.
+        command.d = uint8_t(RecWrite::note);
+        if (records_chords(track)) {
+            uint32_t &pass = rec_pass_[track][landing.step];
+            const bool again = pass == landing.loop + 1u;
+            command.d = uint8_t(again || rec_add() ? RecWrite::join : RecWrite::replace);
+            pass = landing.loop + 1u;
+        }
         post_command(command);
 
         if (landing.clamped) notice("OFF GRID");   // it could not be stored where it was played
@@ -135,7 +157,7 @@
         // machine that holds a note -- a drum ignores LEN, and a tap there would rewrite the
         // step's LEN for nothing. The stamp is `now`, not `hit`: the pad latency is the same at
         // both ends, so the hold is the difference of the raw stamps.
-        if (!held || engine_.machine_id(track) < uint8_t(MachineId::sample)) return;
+        if (!held || (roll == 0 && engine_.machine_id(track) < uint8_t(MachineId::sample))) return;
         RecHold *slot = nullptr;
         for (RecHold &h : rec_holds_) {
             if (h.track == track && h.note == note) slot = &h;   // the same note again: replace
@@ -151,7 +173,18 @@
         slot->track = int8_t(track);
         slot->note = note;
         slot->step = landing.step;
+        // On the clock less the count-in, as `up` is: a chain entry or a queued switch that
+        // moves the pattern's origin while the key is held must not shorten the hold.
         slot->down = now;
+        slot->down.tick = now.tick + origin;
+    }
+
+    // The machines whose steps play several notes: the POLY three, and MID, which sends a
+    // chord to the synth it drives. Only these gather a chord played into one step.
+    bool records_chords(int track) const {
+        const uint8_t id = engine_.machine_id(track);
+        return id == uint8_t(MachineId::va_poly) || id == uint8_t(MachineId::wave_poly) ||
+               id == uint8_t(MachineId::fm) || id == uint8_t(MachineId::midi);
     }
 
     // A recorded note's key came up: its hold, quantized to the note-length table
@@ -167,8 +200,9 @@
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;
+        const uint32_t lead = engine_.status().count_in_ticks.load(std::memory_order_relaxed);
         Stamp up;
-        up.tick = clock.position;
+        up.tick = clock.position > lead ? clock.position - lead : 0u;
         up.fraction = clock.fraction;
 
         const TrackPattern &source = engine_.pattern().tracks[track];
@@ -192,7 +226,10 @@
         // transport. A STOP that F6 made arrives here too; releasing twice is harmless. The next
         // F6 press is then the one that cuts the tails.
         (void)position;
-        if (what == ENAGA_TRANSPORT_START || what == ENAGA_TRANSPORT_LOCATE) stop_armed_ = false;
+        if (what == ENAGA_TRANSPORT_START || what == ENAGA_TRANSPORT_LOCATE) {
+            stop_armed_ = false;
+            clear_rec_passes();          // the pass count starts again: old marks would match
+        }
         if (what == ENAGA_TRANSPORT_STOP) {
             post(Cmd::stop, 0, 0, 0);
             stop_armed_ = true;
@@ -222,6 +259,20 @@
         last_ms_ = ms;
 
         service_slot_menu();
+
+        // A count-in says its beats as it clicks them (`COUNT-IN 4` .. `1`), logged for
+        // tests/scenario_click.sh.
+        const uint8_t counting = engine_.status().count_in_beats.load(std::memory_order_relaxed);
+        if (counting != count_in_shown_) {
+            count_in_shown_ = counting;
+            if (counting != 0) {
+                char *out = notice_buffer_;
+                append(out, "COUNT-IN ");
+                append_number(out, uint32_t(counting));
+                *out = 0;
+                notice_logged(notice_buffer_);
+            }
+        }
 
         // A LEN key held with FUNC repeats. Late passes catch up one step at a time, never in
         // a burst: a 900 ms stall in a save is one step, not eighteen.
@@ -535,7 +586,7 @@
                 char line[24];
                 char *out = line;
                 append(out, "scr ");
-                append(out, mode_name(mode_));
+                append(out, screen_mode_name());
                 if (mode_ == Mode::mixer) {
                     *out++ = ' ';
                     append(out, kMixerPages[mixer_bank_].name);
@@ -557,7 +608,9 @@
             const Step &s = pattern.tracks[selected_].steps[step];
             const bool trig = (s.flags & kStepTrig) != 0;
             const bool trigless = (s.flags & kStepTrigless) != 0;
-            const bool has_locks = s.lock_count > 0;
+            // Parameter locks: a chord's extra notes are locks in the pool, not on the keys.
+            const bool has_locks =
+                s.lock_count > 0 && step_param_lock_count(pattern, selected_, step) > 0;
             const bool conditional = s.probability < 100 || condition_kind(s.condition) != Condition::NONE;
 
             uint8_t green = 0, red = 0;

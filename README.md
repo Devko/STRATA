@@ -38,7 +38,13 @@ can keep evolving without stopping.
 
 ## Try it
 
-STRATA needs two downloads: **Enaga 0.3.0**, the firmware, from Enaga's own release, and the
+**The easy way: [strata.einblick.dev](https://strata.einblick.dev).** Pick a release, and your
+browser fetches STRATA and the Enaga firmware it needs from their official GitHub releases,
+checks both, and hands you one zip: copy everything in it to the root of the SD card, hold
+**HOME** while switching on, choose **SYSTEM UPDATE**, and switch on again. For an update on the
+same Enaga version, tick "STRATA only".
+
+**By hand:** STRATA needs two downloads: **Enaga 0.3.0**, the firmware, from Enaga's own release, and the
 **STRATA zip**, which holds only the app.
 
 1. **Install Enaga 0.3.0** (once). Download `enaga-v0.3.0-smpltrek.zip` from

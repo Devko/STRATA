@@ -35,6 +35,7 @@
 // `enaga::files`.
 #pragma once
 
+#include "arp.hpp"         // KitArp, the arp's kit settings
 #include "midiout.hpp"     // kMidiOutOff and kMidiChannels: ProjectSettings::midi_out's domain
 #include "modslot.hpp"     // KitModSlot
 #include "pattern.hpp"
@@ -342,7 +343,21 @@ struct KitTrack {
     // The two mod slots (core/modslot.hpp): a source, a destination and a depth each, learnt on
     // the LFO page. Kit settings for the same reason as TRIG; KIT.BIN's optional section 10.
     KitModSlot mod[kModSlots];
+    // CHOKE (S4): 0 none, or a group 1-kChokeGroups. A note on this track cuts every other
+    // track of the same group with a 64-frame fade (Engine::choke_group). A kit setting, not a
+    // parameter, for TRIG's reason; KIT.BIN's optional section 11.
+    uint8_t choke = 0;
+    // The arp's kit settings (core/arp.hpp): VAR, RHYTHM, ACCENT and RATCHET, pushed round on the
+    // ARP page or set by an ARPS preset. Not parameters, for TRIG's reason; KIT.BIN's optional
+    // section 12.
+    KitArp arp;
 };
+
+// Choke groups (KitTrack::choke): 1-4, 0 none. A byte past the last group reads as none.
+constexpr uint8_t kChokeGroups = 4;
+constexpr uint8_t choke_group_sanitized(uint8_t group) {
+    return group <= kChokeGroups ? group : uint8_t(0);
+}
 
 // LFO TRIG's values, as KIT.BIN stores them: PERMANENT. dsp/lfo.hpp's LfoTrig mirrors them and
 // app/ asserts the two agree. Anything else reads as FREE.
@@ -416,6 +431,10 @@ struct ProjectSettings {
     // ever used the PATTERN's (core/pattern.hpp), so the field is gone and its byte in
     // PROJECT.BIN is reserved (core/project.cpp).
     uint8_t quantize = 100;              // the live-record quantize amount, 0-100
+    // REC MODE, what a recorded note does to a step of a chord track that already plays:
+    // false REPLACE (the first note of a pass takes the step over), true ADD (it joins the
+    // step's notes). core/stepnotes.hpp holds the notes.
+    bool rec_add = false;
     uint8_t mute_states[8] = {};         // 8 stored mute states, one bit per track
 
     // docs/SPEC.md: 64 MiB by default since 2026-11-23 (it was 32, raisable per project to 64).
@@ -584,6 +603,12 @@ constexpr uint16_t kSectionKitLfoTrig = 9;
 // The mod slots, 3 bytes a slot, two slots a track (KitTrack::mod). Optional on read: a KIT.BIN
 // from before them loads every slot OFF, which changes no sound.
 constexpr uint16_t kSectionKitMod = 10;
+// The choke groups, one byte per track (KitTrack::choke). Optional on read: a KIT.BIN from before
+// them loads every track in no group, which is how every track played before.
+constexpr uint16_t kSectionKitChoke = 11;
+// The arp's kit settings, 4 bytes a track (KitTrack::arp: VAR RHYTHM ACCENT RATCHET). Optional
+// on read: a KIT.BIN from before it loads every arp with all four 0, the arp as it always played.
+constexpr uint16_t kSectionKitArpExt = 12;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

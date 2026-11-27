@@ -492,7 +492,11 @@
                 const int x = kGridX + i * kGridPitch;           // step 16 ends at x 118
                 if (trig || on_head) {
                     canvas.rect(x, y + 1, 5, 6, grey);
-                    if (trig) draw_step_glyph(canvas, x, y + 1, s);
+                    if (trig) {
+                        draw_step_glyph(canvas, x, y + 1, s,
+                                        s.lock_count > 0 &&
+                                            step_param_lock_count(engine_.pattern(), t, step) > 0);
+                    }
                 } else if ((s.flags & kStepTrigless) != 0) {
                     draw_trigless_cell(canvas, x, y + 1);
                 } else {
@@ -553,17 +557,20 @@
     //     C . . . P      C  a condition (FILL, A:B, PRE ...): the top-left corner is cut
     //     . . . . .      P  a probability under 100%: the top-right corner is cut
     //     . . L . .      L  parameter locks: a dot in the middle, two pixels tall
-    //     . . L . .      R  a ratchet of two hits or more: two teeth cut in the bottom edge
+    //     . . L . .      R  a ratchet of two hits or more, or a roll over LEN: two teeth cut in
+    //                           the bottom edge
     //     . . . . .
     //     . R . R .
     //
     // Four marks that never overlap, so any mix of them reads. Cheap: the fields are already in
     // the step the cell was drawn from, and each mark is one or two pixels.
-    static void draw_step_glyph(enaga::Canvas &canvas, int x, int y, const Step &s) {
+    // `locked`: the step has parameter locks -- not only a chord's extra notes, which are locks
+    // in the pool but are notes on the screen.
+    static void draw_step_glyph(enaga::Canvas &canvas, int x, int y, const Step &s, bool locked) {
         if (condition_kind(s.condition) != Condition::NONE) canvas.pixel(x, y, 0);
         if (s.probability < 100) canvas.pixel(x + 4, y, 0);
-        if (s.lock_count > 0) canvas.rect(x + 2, y + 2, 1, 2, 0);
-        if (ratchet_count(s.ratchet) > 1) {
+        if (locked) canvas.rect(x + 2, y + 2, 1, 2, 0);
+        if (ratchet_count(s.ratchet) > 1 || ratchet_spans(s.ratchet)) {
             canvas.pixel(x + 1, y + 5, 0);
             canvas.pixel(x + 3, y + 5, 0);
         }
@@ -614,7 +621,7 @@
         out = line;
         if (rec_) {
             p = part;
-            append(p, "REC Q");
+            append(p, rec_add() ? "REC+ Q" : "REC Q");   // REC+: REC MODE ADD
             append_number(p, uint32_t(quantize()));
             append(p, " ");
             *p = 0;
@@ -707,6 +714,16 @@
             char text[kStepFieldTextMax];
             step_field_text(step, StepField(field), text, int(sizeof text));
             canvas.text(44, y, text, 15);
+            // NOTE is the step's own note; the notes played in beside it (core/stepnotes.hpp)
+            // are counted after it, "+2", so a chord step reads as one.
+            if (StepField(field) == StepField::note) {
+                uint8_t extras[kStepExtraNotes];
+                const int more = step_extra_notes(engine_.pattern(), selected_, page_step_, extras);
+                if (more > 0) {
+                    char plus[4] = {'+', char('0' + more), 0, 0};
+                    canvas.text(80, y, plus, 11);
+                }
+            }
         }
 
         // The lane: the page of sixteen this step is on.
@@ -740,8 +757,20 @@
             int grey = 4 + int(step.velocity) * 11 / 127;
             if (step.probability < 100) grey = grey * (50 + int(step.probability) / 2) / 100;
             canvas.rect(x0, kLaneY - 7, w, 3, uint8_t(grey));
-            const int hits = ratchet_count(step.ratchet);
-            for (int h = 1; h < hits && w > 2; h++) canvas.rect(x0 + w * h / hits, kLaneY - 8, 1, 5, 0);
+            if (ratchet_spans(step.ratchet)) {
+                // A roll over LEN: a cut at every hit, at the rate (a step is kPitch pixels and
+                // 24 ticks at 1x). Rolls faster than two pixels a hit show as every other pixel.
+                const int rate = int(kRatchetRateTicks[ratchet_rate(step.ratchet)]);
+                const int gap = rate * kPitch / 24 < 2 ? 2 : rate * kPitch / 24;
+                for (int x = x0 + gap; x < x0 + w && w > 2; x += gap) {
+                    canvas.rect(x, kLaneY - 8, 1, 5, 0);
+                }
+            } else {
+                const int hits = ratchet_count(step.ratchet);
+                for (int h = 1; h < hits && w > 2; h++) {
+                    canvas.rect(x0 + w * h / hits, kLaneY - 8, 1, 5, 0);
+                }
+            }
         }
 
         // What the step actually is: a step that is off says so, because every field above it is
@@ -754,9 +783,12 @@
         } else {
             append(out, "OFF");
         }
-        if (step.lock_count) {
+        // The locks that are parameters: a chord's extra notes are locks too, and are counted
+        // on the NOTE line instead.
+        const int locks = step_param_lock_count(engine_.pattern(), selected_, page_step_);
+        if (locks > 0) {
             append(out, "  LOCKS ");
-            append_number(out, step.lock_count);
+            append_number(out, uint32_t(locks));
         }
         *out = 0;
         paint::small_text(px, 0, 105, line, 11);

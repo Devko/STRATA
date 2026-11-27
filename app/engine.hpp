@@ -53,6 +53,7 @@
 #include "stepedit.hpp"
 #include "streamfifo.hpp"  // a streamed sample's read-ahead, per track
 #include "audition.hpp"    // the sample browser's audition (push A in SAMPLES)
+#include "click.hpp"       // the metronome and the count-in
 #include "track.hpp"
 #include "chord.hpp"     // a POLY step's chord byte, expanded in fire()
 #include "undo.hpp"
@@ -615,6 +616,10 @@ private:
     // its AS WAS row can put it back. -1 when nothing is remembered.
     TrackParams sound_back_ = {};
     int sound_back_track_ = -1;
+    // And `Cmd::arp_preset`'s: the ARP bytes and the arp's kit settings when ARPS opened.
+    uint8_t arp_back_[kArpBytes] = {};
+    KitArp arp_back_ext_ = {};
+    int arp_back_track_ = -1;
 
     // What the machines and chains are actually prepared from: the kit with the CURRENT step's
     // parameter locks written over it.
@@ -702,11 +707,71 @@ private:
 
     // Every note-on a track's machine takes -- a step, a chord, an arp or roll hit, a pad or a
     // key -- goes through here: the screen's trig light, and LFO TRIG's restart.
-    void note_started(int track, uint8_t velocity) {
+    void note_started(int track, uint8_t velocity, uint32_t frame) {
         status_.bump_triggered(track);
         lfo_restart_[track] = true;
         mod_velocity_[track] = velocity;
+        choke_group(track, frame);
     }
+
+    // --- the metronome and the count-in (dsp/click.hpp, CyDrums S6) ---
+    //
+    // The click is fired from the clock's own ticks, on every beat (96 ticks) and higher on a
+    // bar's first (384), so it lands on the beat's frame as a step does. A count-in is the same
+    // click with the rest of the engine held back: the clock starts at once (Enaga's transport is
+    // the user's, and starting it later from the UI would be late by up to a frame), and the first
+    // count_in_end_ ticks only click. After them every tick reaches the sequencer, the rolls, the
+    // stutter and the arps less count_in_end_, so the pattern starts on step 1 exactly as from a
+    // plain START. A STOP or a restart ends it. With CLOCK OUT on, an outboard box hears START at
+    // the count-in's beginning: it runs the count-in's bars ahead (docs/CONTROLS.md says so).
+    void metronome_tick(uint32_t tick, uint32_t frame);
+    Click click_;
+    bool click_on_ = false;
+    uint32_t count_in_end_ = 0;     // ticks: the count-in's length, 0 for none
+    bool was_running_ = false;      // the transport at the last block, to see a STOP
+
+    // --- choke groups (KitTrack::choke, CyDrums S4) ---
+    //
+    // A note on a track in a group cuts every other track of that group: a 64-frame fade from the
+    // note's own frame over the cut track's block (strata_choke_fade, after its machine renders),
+    // then kill_all. It is a fade over the TRACK's output, not a voice's, so every machine
+    // chokes alike, and the hat's own closed-to-open pair (rewire_machines) stays as it was.
+    //
+    // A block is rendered whole, so a track cannot be faded before a frame and not after it. Two
+    // rules follow, both in choke_group: a note on the cut track at or after the choke's frame,
+    // in the same block, keeps the track sounding (no fade; the new note retriggers the machine
+    // anyway), and two tracks of a group starting on the same frame both sound. A choke still
+    // fading when its track starts a note again is over at once.
+    static constexpr uint32_t kNoChokeFrame = 0xFFFFFFFFu;
+    static constexpr int kChokeFadeFrames = 64;
+    void choke_group(int track, uint32_t frame) {
+        // This track's own note ends any choke on it that lands at or before the note.
+        if (choke_at_[track] != kNoChokeFrame && frame >= choke_at_[track]) {
+            choke_at_[track] = kNoChokeFrame;
+            choke_gain_[track] = 1.0f;
+        }
+        if (note_frame_[track] == kNoChokeFrame || frame > note_frame_[track]) {
+            note_frame_[track] = frame;
+        }
+        const uint8_t group = project_.kit.tracks[track].choke;
+        if (group == 0) return;
+        for (int u = 0; u < kTracks; u++) {
+            if (u == track || project_.kit.tracks[u].choke != group) continue;
+            // Its own note at or after this one, in this block: it plays (above).
+            if (note_frame_[u] != kNoChokeFrame && note_frame_[u] >= frame) continue;
+            // A fade already running from an earlier block (0) or landing sooner stands.
+            if (choke_at_[u] != kNoChokeFrame && choke_at_[u] <= frame) continue;
+            choke_at_[u] = frame;
+        }
+    }
+    // The fade over track `t`'s rendered block, and the cut once it reaches 0 (engine.cpp).
+    void run_choke(int t, float *mono, uint32_t frames);
+    uint32_t choke_at_[kTracks] = {kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame,
+                                   kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame};
+    float choke_gain_[kTracks] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+    // The latest frame each track started a note on in this block; kNoChokeFrame for none.
+    uint32_t note_frame_[kTracks] = {kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame,
+                                     kNoChokeFrame, kNoChokeFrame, kNoChokeFrame, kNoChokeFrame};
 
     ChainMix mix_[kTracks] = {};
     bool muted_[kTracks] = {};
@@ -851,32 +916,80 @@ private:
     // `fire`, ending with the step's length or at the next step -- and one for held KEYS keys,
     // which runs while any is down. Both hit on the clock's ticks while it runs; the held one
     // counts frames while it is stopped, as a note repeat does.
+    //
+    // The kit's arp settings (KitTrack::arp) shape each hit: RHYTHM rests a slot without moving
+    // the note on (`slot` counts the grid, `hit` the notes), ACCENT accents it, and RATCHET
+    // repeats its note inside the slot. A ratchet's later hits are counted down in frames
+    // (`ratchet_*`) by `arp_ratchets`, after the deferred step hits and before this block's
+    // ticks, the same way whether the transport runs or not. They are spaced at least a block
+    // apart (`arp_ratchet_hits`), which keeps the one-pending-trig contract `dispatch` relies on.
     struct ArpRun {
         bool on = false;
         ArpMode mode = ArpMode::off;
+        ArpVar var = ArpVar::off;
         uint8_t length = 0;
         uint8_t octaves = 1;
         uint8_t rate = 24;           // ticks between hits
         uint8_t gate_percent = 50;
         uint8_t velocity = 100;
         bool accent = false;
-        uint32_t hit = 0;
+        uint32_t hit = 0;            // notes played
+        uint32_t slot = 0;           // grid slots passed, rests included
         uint32_t next_tick = 0;
         uint32_t end_tick = 0xFFFFFFFFu;
         uint32_t seed = 0;
         float countdown = 0.0f;      // frames to the next hit, transport stopped (held runs)
+        uint8_t ratchet_left = 0;    // the slot's repeats still to come
+        uint8_t ratchet_note = 60;
+        uint32_t ratchet_gate = 1;   // frames
+        float ratchet_countdown = 0.0f;   // frames from the next block's start to the next repeat
+        float ratchet_spacing = 0.0f;
         uint8_t cycle[kArpMaxCycle] = {};
     };
     ArpRun seq_arp_[kTracks];
     ArpRun held_arp_[kTracks];
     uint8_t held_notes_[kTracks][kArpMaxInput] = {};
     uint8_t held_count_[kTracks] = {};
+    // Set once `arp_ratchets` has run in this block, so a hit after it counts its ratchet from
+    // the next block's start and a hit before it (a command, a deferred step) from this one's.
+    bool arp_ratchets_done_ = false;
+    uint32_t arp_runs_ = 0;      // runs started, for arp_new_seed
+    uint32_t arp_new_seed(int track, int step);
     ArpSettings arp_settings(int track) const;
     void arp_hit(int track, ArpRun &run, uint32_t frame);
+    void arp_play(int track, uint8_t note, uint8_t velocity, bool accent, uint32_t frame,
+                  uint32_t gate_frames);
+    void arp_ratchets(uint32_t frames);
     void arp_tick(uint32_t tick, uint32_t frame);
     void arp_free(uint32_t frames);
     void arp_held_changed(int track);
     void arp_follow(int track);
+    // Spanning ratchets (core/pattern.hpp, kRatchetSpan): the scheduler hands over a roll's first
+    // hit, and `span_start` (from `fire`) keeps the rest here, to be hit on the clock's ticks by
+    // `span_tick` at the roll's rate until its count is done. Each hit goes through `fire` as the
+    // step again, with ratchet_index 1 so it neither restarts the step's slides nor ends its own
+    // roll; its velocity is the ramp's across the whole roll and its gate half the rate, as a note
+    // repeat's. A trig on the track ends a roll (a new step's first hit), and so does anything
+    // that drops the deferred ratchet hits (span_clear beside each). Under the arp, the arp takes
+    // the step and there is no roll.
+    struct SpanRun {
+        bool on = false;
+        uint8_t rate = 0;            // ticks between hits
+        RatchetRamp ramp = RatchetRamp::none;
+        uint8_t velocity = 100;      // the step's own, which the ramp scales
+        uint16_t hit = 0;            // the next hit's index
+        uint16_t count = 1;
+        float inv_count = 1.0f;
+        uint32_t start_tick = 0;
+        uint32_t next_tick = 0;
+        StepEvent base{};
+    };
+    SpanRun span_[kTracks];
+    void span_start(int track, const StepEvent &event);
+    void span_tick(uint32_t tick, uint32_t frame);
+    void span_clear() {
+        for (int t = 0; t < kTracks; t++) span_[t].on = false;
+    }
     void roll_fire(int track, uint32_t frame);
     void roll_tick(uint32_t tick, uint32_t frame);
     void roll_free(uint32_t frames);

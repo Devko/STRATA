@@ -184,6 +184,8 @@ ZIP="build/release/STRATA-$TAG-smpltrek.zip"
 ZIP_SHA=$(cut -d' ' -f1 "$ZIP.sha256")
 BODY="build/release/$TAG-notes.md"
 sed '1,/^---$/d' "$NOTES" | sed "s/{{ZIP_SHA256}}/$ZIP_SHA/g" > "$BODY"
+# The card builder (web/, strata.einblick.dev) reads which Enaga this release needs from here.
+printf '\n<!-- strata-card: {"enaga":"%s"} -->\n' "$ENAGA_VERSION" >> "$BODY"
 LEFT=$(grep -oE '\{\{[A-Z_0-9]+\}\}|TODO\(release\)' "$BODY" CHANGELOG.md | sort -u || true)
 [ -z "$LEFT" ] || die "still unfilled: $LEFT"
 

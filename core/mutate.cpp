@@ -3,6 +3,7 @@
 
 #include "clamp.hpp"
 #include "scale.hpp"
+#include "stepnotes.hpp"
 
 namespace strata {
 namespace {
@@ -281,6 +282,9 @@ bool mutate_apply(Pattern &pattern, int track, int first, int count, Mutation ki
                         const uint8_t was = step.note;
                         step.note = scale_step(step.note, pattern.root, int(pattern.scale), draw);
                         if (step.note != was) changed = true;
+                        // A chord played into the step moves with its note, by the same
+                        // semitones; playback folds each note into the key (core/stepnotes.hpp).
+                        step_shift_extra_notes(pattern, track, i, int(step.note) - int(was));
                         break;
                     }
                 }

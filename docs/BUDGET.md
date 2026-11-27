@@ -53,6 +53,33 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### Ratchets over LEN (2026-11-26, emulator)
+
+A roll's hits are notes like any other; the engine walks the running rolls once a tick
+(`Engine::span_tick`, eight compares while none runs). `scenario_ratchetspan` sets the default
+beat's kick to ROLL/32 over a bar, 32 kick hits a bar instead of 4: **29.77% cl6x, 50.25%
+GCC-only**, against 26.57% / 47.14-47.55% for the beat as it is. The cost is the kick's own,
+retriggered eight times as often; the cl6x worst case is unchanged (ambient).
+
+### CLICK and COUNT-IN (S6, 2026-11-26, emulator)
+
+The metronome (dsp/click.hpp, clickloops.ti.c) is a recursive sine under a decaying envelope,
+about 30 ms a beat, added to the output; nothing runs between clicks but one flag test a block.
+`scenario_click` turns CLICK on, counts one bar in with REC on and plays the default beat with
+the click: **25.82% cl6x, 47.64% GCC-only** (the beat alone: 25.90% / 43.20% in `scenario_m3`,
+47.14-47.55% GCC-only in the default-beat scenarios). All 43 scenarios pass with cl6x; worst
+**32.29%** (`scenario_ambient`, as before it).
+
+### Choke groups (S4, 2026-11-26, emulator)
+
+A choke costs one 64-frame gain ramp on the cut track's block (`strata_choke_fade`,
+dsp/chainloops.ti.c) and then frees its voices; nothing runs while no choke fades but one compare
+a track a block. `scenario_choke` puts the default beat's two hats in one group, so they cut
+each other all through the run: **26.57% cl6x** (the same peak as `scenario_m1` and the other
+default-beat scenarios), **47.55% GCC-only** (the beat alone read 47.14-47.19% on 2026-11-25).
+All 42 scenarios pass with cl6x; worst **32.26%** (`scenario_ambient`; 31.82-32.20% on `main`,
+within the half point a peak moves between runs), `scenario_m3` 25.90% cl6x, 43.20% GCC-only.
+
 ### Sample audition (2026-11-25, emulator)
 
 Push A in SAMPLES streams a WAV to the output (dsp/audition.hpp). All 41 scenarios pass with
@@ -1268,8 +1295,13 @@ heap beyond the engine growing by 6.8 KiB.
 
 | Build | cl6x | GCC only |
 | --- | --- | --- |
-| `scenario_factory.sh`, same commit | | |
-| `scenario_fm.sh` (FM4 on the chord track) | | |
+| `scenario_factory.sh`, same commit | 26.27% | 47.62% |
+| `scenario_fm.sh` (FM4 on the chord track) | 26.27% | 50.10% |
+
+Taken 2026-11-27 with the chain-wide index cap (`fm_index_cap`); on `main` before it,
+`scenario_fm.sh` read 26.69% cl6x and 50.37% GCC-only, so the cap costs nothing measurable (a
+16-step bisection only when the note or a knob changes). The cl6x peak equals the factory beat's:
+the chord track is not where the peak lands.
 
 ### The GRAIN rework (2026-11-23, host only)
 
@@ -1334,6 +1366,19 @@ main context and posts one `perf_fx` per amount step. All 31 scenarios pass with
 branch, loads unchanged against main: default beat 24.68%, worst 30.34% (`scenario_ambient`).
 GCC-only not run for this change: nothing it adds is in a hot loop. Memory: the locks are 1.06
 MiB from the heap (128 locks, the swap-back and the compare's scratch), init 97.04 MiB of 120.
+
+### DRIVE's DC blocker (2026-11-27, emulator)
+
+The insert drive's asymmetric clip now has a first-order DC blocker (8 Hz) and a clamp behind it
+in the same loop (`strata_chain_drive`): about 4 more flops a sample, on a track with DRV up only.
+
+| Build | cl6x | GCC only |
+| --- | --- | --- |
+| `scenario_factory.sh` before (with #189's FM4 cap, which costs nothing here) | 26.27% | 47.62% |
+| `scenario_factory.sh` with the blocker | 26.32% | 47.93% |
+| `scenario_m3.sh` with the blocker | 25.60% | 43.19% |
+
+Within the half point a peak moves between runs.
 
 ### Later milestones
 

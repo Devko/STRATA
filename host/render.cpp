@@ -16,6 +16,8 @@
 #include "factory.hpp"
 #include "fakehost.hpp"
 #include "sounds.hpp"
+#include "arppresets.hpp"
+#include "pattern.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -235,6 +237,42 @@ int main(int argc, char **argv) {
         }
         Project &q = g_engine.project_for_load();
         for (int i = 0; i < kKitParams; i++) q.kit.tracks[t].params[i] = saved[i];
+        post(Cmd::kit_recall, 0, 0, 0);
+    }
+
+    // Every factory arp (core/arppresets.hpp) over A05's chords, in the whole mix: the CHORD
+    // track's pad locks taken off and its sound VA POLY's PLUCK, so each bar's chord is walked
+    // by the arp for the bar. Four bars and one of tail each: OUTDIR/ARPS_<NAME>.wav. The
+    // pattern and the track are put back after.
+    {
+        constexpr int kChordTrack = 6;
+        Project &p = g_engine.project_for_load();
+        static Pattern saved_pattern;
+        saved_pattern = p.patterns[0][kFactoryPadSlot];
+        const KitTrack saved_track = p.kit.tracks[kChordTrack];
+        Pattern &pad = p.patterns[0][kFactoryPadSlot];
+        for (int step = 0; step < kStepsPerTrack; step++) pattern_clear_step_locks(pad, kChordTrack, step);
+        const uint8_t poly = uint8_t(MachineId::va_poly);
+        for (int i = 0; i < sound_preset_count(poly); i++) {
+            if (std::strcmp(sound_preset(poly, i)->name, "PLUCK") == 0) {
+                sound_preset_apply(poly, i, p.kit.tracks[kChordTrack].params);
+            }
+        }
+        for (int i = 0; i < arp_preset_count(); i++) {
+            Project &q = g_engine.project_for_load();
+            arp_preset_apply(i, &q.kit.tracks[kChordTrack].params[kKitLfoEnd], q.kit.tracks[kChordTrack].arp);
+            post(Cmd::kit_recall, 0, 0, 0);
+            int frames = 0;
+            const Stats s = render(kFactoryPadSlot, 4, -1, &frames);
+            const char *name = arp_preset(i)->name;
+            std::snprintf(path, sizeof path, "%s/ARPS_%s.wav", dir, name);
+            write_wav(path, frames);
+            std::printf("ARP %-6s peak %6.1f dBFS  rms %6.1f dBFS\n", name, db(s.peak), db(s.rms));
+            check_balance(name, s);
+        }
+        Project &q = g_engine.project_for_load();
+        q.patterns[0][kFactoryPadSlot] = saved_pattern;
+        q.kit.tracks[kChordTrack] = saved_track;
         post(Cmd::kit_recall, 0, 0, 0);
     }
     return g_off_centre == 0 ? 0 : 1;

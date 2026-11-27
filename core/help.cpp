@@ -236,7 +236,9 @@ constexpr Text kKeysLights = {"KEYS LIGHTS:", {
     "SUS UP ON A VA:",
     "A HELD PAD HOLDS",
     "REC  HOLD BECOMES LEN",
-    nullptr, nullptr, nullptr,
+    "POLY CHORDS ALL KEPT",
+    "MENU REC MODE: ADD",
+    nullptr,
 }};
 
 constexpr Text kPerform = {"PERFORM:", {
@@ -422,8 +424,10 @@ constexpr Text kMenu = {"FUNC MENU:", {
 
 // The MIXER's pages, in app/app.hpp's kMixerPages order (its static_assert holds the count).
 constexpr Text kMixer[kHelpMixerPages] = {
-    {"MIXER TRK 1-4:", {"A-D  TRACK 1-4 LEVEL", nullptr}},
-    {"MIXER TRK 5-8:", {"A-D  TRACK 5-8 LEVEL", nullptr}},
+    {"MIXER TRK 1-4:", {"A-D  TRACK 1-4 LEVEL", "PUSH  CHOKE GROUP", "OFF 1-4: A NOTE CUTS",
+                        "ITS GROUP", nullptr}},
+    {"MIXER TRK 5-8:", {"A-D  TRACK 5-8 LEVEL", "PUSH  CHOKE GROUP", "OFF 1-4: A NOTE CUTS",
+                        "ITS GROUP", nullptr}},
     {"MIXER DCK 1-4:", {"A-D  DUCK DEPTH 1-4", "OFF TO 100%", "THE SOURCE NEVER",
                         "DUCKS  SET ON DUCK", nullptr}},
     {"MIXER DCK 5-8:", {"A-D  DUCK DEPTH 5-8", "OFF TO 100%", "THE SOURCE NEVER",
@@ -588,7 +592,12 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
             add_row(rows, count, "FREE RETRIG ONE-SHOT");
             add_row(rows, count, "PUSH C D   MOD SLOTS");
             break;
-        case 5: add_row(rows, count, "MOD OFF  NO ARP"); break;
+        case 5:
+            add_row(rows, count, "MOD OFF  NO ARP");
+            add_row(rows, count, "PUSH A VAR  B RHYTHM");
+            add_row(rows, count, "PUSH C ACC  D RATCHET");
+            add_row(rows, count, "OK         ARPS");
+            break;
         case 6:
             add_row(rows, count,
                     machine_is_grain(place.machine) || place.machine == uint8_t(MachineId::sample)

@@ -82,7 +82,7 @@ DEP := $(OBJ:.o=.d)
 
 BIN := $(OUT)/strata-tests
 
-.PHONY: test list build clean render
+.PHONY: test list build clean render probe
 # JOBS=N runs the suite as shards on N processes (tools/test_shards.sh); without it, one process
 # in registration order, as always. TEST_TIMEOUT is the per-test watchdog in seconds for either.
 TEST_TIMEOUT ?= 0
@@ -123,7 +123,20 @@ $(RENDER_BIN): $(RENDER_OBJ)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(RENDER_OBJ) -o $@
 
+# The sound probe (host/probe.cpp): each synth alone in the cases where synthesis goes wrong,
+# to $(OUT)/probe as float WAVs; tools/sound_probe.py measures them.
+PROBE_OBJ := $(filter-out $(OUT)/tests/%,$(OBJ)) $(OUT)/tests/fakehost.o $(OUT)/host/probe.o
+PROBE_BIN := $(OUT)/strata-probe
+
+probe: $(PROBE_BIN)
+	@mkdir -p $(OUT)/probe
+	@$(PROBE_BIN) $(OUT)/probe
+
+$(PROBE_BIN): $(PROBE_OBJ)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(PROBE_OBJ) -o $@
+
 clean:
 	rm -rf $(OUT)
 
--include $(DEP) $(OUT)/host/render.d
+-include $(DEP) $(OUT)/host/render.d $(OUT)/host/probe.d

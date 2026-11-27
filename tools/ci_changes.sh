@@ -24,13 +24,15 @@ if ! files=$(git diff --name-only HEAD^1 HEAD 2>/dev/null) || [ -z "$files" ]; t
     exit 0
 fi
 
-# Documentation: Markdown anywhere, and docs/ (which holds only prose and images today). A file
+# Documentation: Markdown anywhere, and docs/ (which holds only prose and images today), and web/. A file
 # under tests/, tools/, core/, dsp/, app/, host/ or .github/ always counts as code, even a .md.
 code=false
 while IFS= read -r f; do
     case "$f" in
         tests/*|tools/*|core/*|dsp/*|app/*|host/*|.github/*|third_party/*) code=true ;;
         docs/*|*.md|LICENSE) ;;
+        # The card builder site: no C++ in it, and the Repo checks job always tests it.
+        web/*) ;;
         *) code=true ;;
     esac
 done <<< "$files"

@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W45, about 137 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W51, about 161 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -537,6 +537,69 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   (GRID twice): hold three pads of a chord, `HELD C4 E4 G4` and `C MAJ` lit; turn A, its gauge
   moves. MENU, SETUP, PROJECTS: no second line repeating the name. SETUP's `DRW ____ MS` after a
   while on KITS. `____`
+
+**W46. Choke groups (3 min).** Beat playing, A01, the open hat on T4 sounding long.
+- MIXER, TRK 1-4. Push C: `T3 CHOKE GROUP 1`, `C1` under T3's machine. Push D: `T4 CHOKE GROUP 1`.
+  Now T3 and T4 cut each other both ways: the open hat stops dead (no click) on every closed hat,
+  and a closed hat stops when the open one hits. Steps on the same 16th both sound. `____`
+- Put T6 (the bass) in group 1 too (TRK 5-8, push B): every hat now cuts the bass and the bass
+  cuts the hats. Listen for clicks at the cut: there should be none. Push B four more times: back
+  to `T6 CHOKE OFF`, the bass rings over the hats again. `____`
+- Save the project, load another and back: T3 and T4 still say `C1`. `____`
+
+**W47. CLICK and COUNT-IN (3 min).** Beat stopped, A01.
+- FUNC + HOME, UP six times: CLICK. OK: `CLICK ON`. PLAY: a click on every beat over the beat, the
+  first of each bar higher. It sits on the kick, not before or after it. RESAMPLE a bar: the take
+  has no click in it. `____`
+- STOP. In the menu, DOWN to COUNT-IN, OK: `COUNT-IN 1 BAR`. CLR. REC on, PLAY: four clicks
+  (`COUNT-IN 4` .. `1`), then the beat starts on step 1 on the next beat. Hit pads during the
+  clicks: nothing is recorded. Hit them after: they land where played. `____`
+- CLICK OFF, COUNT-IN `2 BAR`, REC, PLAY: eight clicks even with CLICK off, then the beat. STOP
+  during the clicks: silence, and the next PLAY without REC starts at once. `____`
+
+**W48. Chords recorded note for note (4 min).** Blank pattern, T7 (VA POLY), KEYS, PLAY, REC.
+- Hold three pads of a chord at once on one step: it plays back as all three. Hold STEP on it:
+  `NOTE C4 +2`, and no `LOCKS` on the line. `____`
+- Next pass, play one other note on that step: the chord is gone, the new note alone (REPLACE).
+  `____`
+- FUNC+HOME, REC MODE to `ADD`: the edit line reads `REC+`. Play one note a pass on one step for
+  three passes: it builds up to a three-note chord. A MIDI keyboard on channel 7 does the same.
+  `____`
+- Hold the chord's STEP and turn VALUE: the whole chord moves. `____`
+
+**W49. Ratchets over LEN (3 min).** Beat playing, A01, T1.
+- Hold STEP 1 + OK: the step page. Turn C: LEN `16 STP`. Screen key right, turn C past 8: `ROLL/64`,
+  `ROLL/48`, `ROLL/32`. The kick rolls in 32nds across the whole bar, every pass. The GRID cell
+  shows the ratchet's two teeth, the step page's lane a cut at every hit. `____`
+- Turn D (RAMP) to UP: the roll swells from soft to full over the bar. DOWN: it fades. `____`
+- Put a plain trig on step 9: the roll stops there and step 9 plays once. Turn RTCH back below
+  ROLL/64: an ordinary 8-hit ratchet in one step. `____`
+
+**W50. A note repeat recorded (2 min).** Beat playing, A01, T3 (a hat) with no steps.
+- FUNC+FILL (`NOTE RPT`), REC on. Hold T3's pad for about a bar, then let go: from the next pass
+  the hat rolls in 16ths for that bar, from the step you pressed on. Hold STEP on it, OK: RTCH
+  reads `ROLL/16`, LEN about `16 STP`. `____`
+- REPEAT + LEFT to 1/8, record another hold on T4: `ROLL/8`. REC off, NOTE RPT off. `____`
+
+**W51. Arp depth, ARPS and the new sounds (10 min).** Beat playing, A05 PAD.
+- T7 (CHORD), EDIT, screen keys to ARP. Hold the step at the bar's start and clear its locks
+  (push each knob) or play on: OK opens ARPS, `INTO T7 ARP ONLY`, fourteen rows. OK on TRANCE:
+  each bar's chord is walked up two octaves at 1/16, accented on the beat. `____`
+- Walk the list with OK on each: ROLLER (two and a rest, the melody turning against the bar),
+  ACID (skipped 16ths, a 3-3-2 accent), BLEEP (random, now and then a double), DUB (held 1/8s on
+  the tresillo), CONVRG (triplets closing in), FILL (a four-hit roll at the end of each bar),
+  AMBNT (slow quarters over four octaves), DRIFT. `NOW` follows the loaded one. AS WAS: the
+  chord plays as it did. CLR: back on the ARP page. `____`
+- On the ARP page with MOD on, push A, B, C and D: `ARP VAR CONV`, `ARP RHY X-`, `ARP ACC X-`,
+  `ARP RTC 2:4`; the picture shows dots for rests, tall notes for accents, a split slot for the
+  ratchet, and the info line `VAR CONV  RHY X-  ...`. Each is heard at once. Push each round to
+  OFF again. `____`
+- Ratchets at the fastest: RAT 1/32T, RATCHET 4:16, tempo 180: every repeat is heard, none
+  doubled into one (`____` MAX on SETUP). `____`
+- T6 (BASS), ARP OFFBT on one held KEYS pad: offbeat 8ths in time. `____`
+- New sounds: T1 SOUNDS RUMBLE, TIGHT, BOOM, HARD; T6 DUBBAS, RUBBER; T7 DUBCHD, WARM, SWELL; and
+  on an FM4 track BLIP and DRONE: each sits near the part it replaces, nothing much louder. `____`
+- Save, power cycle: the arp's settings and the loaded arp come back. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
@@ -1794,7 +1857,7 @@ project and never needs a restart."*
 - [ ] PROJECT opens the PROJECT screen. The bank grid shows A, the live pattern is boxed, and the top line's
       pattern now follows the chain rather than reading `A01` for ever.
 - [ ] FUNC+HOME, OK saves (the menu opens on SAVE). `/ENAGA/DATA/STRATA/PROJECTS/<NAME>/` holds `PROJECT.BIN` (402 bytes),
-      `KIT.BIN` (1,389 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
+      `KIT.BIN` (1,453 bytes), `PERFORM.BIN` (5,108 bytes) and all eight `BANK_A.BIN` .. `BANK_H.BIN`: a project's first
       save writes every file (the sizes tests/test_storage.cpp pins).
       After that first save only dirty banks are written; the card cannot show it, since all
       eight exist from then on, so tests/test_storage.cpp checks which files each save touches.

@@ -18,8 +18,11 @@ extern "C" {
 #endif
 
 /* Drive, in place: an asymmetric soft clip, `negative` driving the negative half less than
- * `positive` drives the positive one, which is where the even harmonics come from. */
-void strata_chain_drive(float *mono, int n, float positive, float negative);
+ * `positive` drives the positive one, which is where the even harmonics come from -- and then a
+ * DC blocker, because an asymmetric clip also shifts the wave off zero: by up to 7% of full
+ * scale at middle settings on a sustained note. `dc` is the blocker's state (last input, last
+ * output) and `pole` its coefficient (chain.cpp, kDcPole). */
+void strata_chain_drive(float *mono, int n, float positive, float negative, float pole, float *dc);
 
 /* Lo-fi, in place: the sample-and-hold whose clock is a 32-bit phase wrap, then the bit crush,
  * in one pass. `levels` is the number of quantisation steps and `step` its reciprocal (both
@@ -32,6 +35,12 @@ void strata_chain_lofi(float *mono, int n, uint32_t increment, float levels, flo
  * depth. One multiply-add a sample, which is the point of the mixer rendering the envelope once
  * for all eight tracks. */
 void strata_chain_duck(float *mono, const float *duck, int n, float depth);
+
+/* A choke group's fade (Engine::choke_group), in place over a track's block from where the
+ * choke lands: `gain` steps down by `step` BEFORE each sample and stops at 0, so the voices it
+ * cut go quiet over 1 / step frames instead of clicking. Returns the gain the next block starts
+ * from; 0 means the fade is over. Runs only while a choke is fading. */
+float strata_choke_fade(float *mono, int n, float gain, float step);
 
 #ifdef __cplusplus
 }
