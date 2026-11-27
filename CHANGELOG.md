@@ -34,6 +34,14 @@ the project file format or the controls.
   browser from their official releases and checked against their SHA-256. Source in `web/`
   (#180).
 
+### Changed
+
+- **DRIVE no longer pushes the sound off centre.** The insert drive clips the two halves of the
+  wave differently (that is its even-harmonic grit), which also shifted a held note off zero, by
+  up to 7% of full scale. A DC blocker (an 8 Hz cut) now follows it: more headroom, no thump when
+  a driven track is muted or choked, and nothing off-centre fed into the sends. The factory kicks'
+  peaks drop from -3.2 to -3.8 dBFS; what changed is almost all below 20 Hz.
+
 ## [0.4.0] - {{RELEASE_DATE}}
 
 An early beta: everything merged since 0.3.1 (#137 to #177), and the first release for **Enaga
