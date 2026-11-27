@@ -11623,6 +11623,61 @@ TEST(polyrec_a_new_take_does_not_join_the_last_one) {
     polyrec_stop();
 }
 
+TEST(polyrec_replace_after_a_pattern_switch_takes_the_new_patterns_step_over) {
+    // The pass marks count passes from the pattern's start, and a switch starts the count again
+    // at 0. A mark left by the last pattern then read as "this pass" on the new one, so under
+    // REPLACE the first note played onto the new pattern's step 2 joined the chord it held
+    // instead of taking the step over.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    Engine &engine = app_engine();
+    {
+        Project &incoming = engine.project_for_load();
+        Pattern &a02 = incoming.patterns[0][1];
+        Step &s = a02.tracks[kPolyTrack].steps[1];
+        s.flags = kStepTrig;
+        s.note = 60;
+        CHECK(step_add_note(a02, kPolyTrack, 1, 64) == NoteAdd::added);
+        CHECK(step_add_note(a02, kPolyTrack, 1, 67) == NoteAdd::added);
+    }
+    pump(2);
+    post_cmd(Cmd::set_master_length, 4);           // A01: a pass of 4 steps, 96 ticks
+    pump(2);
+    host.set_running(true);
+    host.deliver_tick(0, 0);
+    pump(2);
+
+    host.deliver_tick(24, 0);                      // A01's step 2, its first pass
+    pump(2);
+    host.set_position(24);
+    key(ENAGA_KEY_F2);                             // REC on
+    pump(2);
+    polyrec_on(app, 50, 100);
+    polyrec_off(app, 50);
+    CHECK(trig_at(kPolyTrack, 1));
+    CHECK_EQ(int(step_of(kPolyTrack, 1).note), 50);
+
+    post_cmd(Cmd::queue_pattern, 0, 1, uint8_t(QueueMode::end_of_pattern));
+    pump(2);
+    host.deliver_tick(96, 0);                      // the boundary: A02 from its step 1
+    pump(2);
+    CHECK_EQ(int(engine.status().live_slot.load()), 1);
+    CHECK_EQ(int(engine.status().pattern_origin.load()), 96);
+
+    host.set_position(96 + 24);                    // A02's step 2, ITS first pass
+    pump(2);
+    polyrec_on(app, 55, 100);
+    polyrec_off(app, 55);
+    uint8_t notes[kStepMaxNotes];
+    CHECK_EQ(polyrec_notes(1, notes), 1);          // 55 alone, not C E G with 55 joined
+    CHECK_EQ(int(notes[0]), 55);
+
+    polyrec_stop();
+    post_cmd(Cmd::restart);
+    post_cmd(Cmd::stop, 1);
+    pump(2);
+}
+
 TEST(polyrec_a_note_edit_moves_the_chord_and_the_step_shows_it) {
     // NOTE turned on a chord step moves every note by the same semitones, and the step page
     // counts the extras after the note rather than as locks.

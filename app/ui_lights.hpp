@@ -155,6 +155,7 @@
         // step this pass replaces what it held, unless REC MODE is ADD; any after it join.
         command.d = uint8_t(RecWrite::note);
         if (records_chords(track)) {
+            follow_rec_pattern(origin);
             uint32_t &pass = rec_pass_[track][landing.step];
             const bool again = pass == landing.loop + 1u;
             command.d = uint8_t(again || rec_add() ? RecWrite::join : RecWrite::replace);

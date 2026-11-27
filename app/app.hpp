@@ -914,6 +914,22 @@ private:
             for (uint32_t &pass : track) pass = 0;
         }
     }
+    // And when the pattern playing changes -- a chain entry, a queued or NOW switch -- for the
+    // same reason: the pass count is the new pattern's, from 0 at its origin, and a mark the last
+    // pattern left on a step would read as this pass and join instead of replace. The origin and
+    // the live pattern the marks were made against (Status), checked by every chord hit.
+    uint32_t rec_pass_origin_ = 0;
+    uint16_t rec_pass_pattern_ = 0;
+    void follow_rec_pattern(uint32_t origin) {
+        const Status &status = engine_.status();
+        const uint16_t pattern =
+            uint16_t(uint16_t(status.live_bank.load(std::memory_order_relaxed)) << 8 |
+                     status.live_slot.load(std::memory_order_relaxed));
+        if (origin == rec_pass_origin_ && pattern == rec_pass_pattern_) return;
+        clear_rec_passes();
+        rec_pass_origin_ = origin;
+        rec_pass_pattern_ = pattern;
+    }
     bool rec_add() const { return engine_.project().settings.rec_add; }
     // CC 16-31 are the track's sixteen parameters: the "General Purpose" 16-19 and the
     // undefined 20-31, which no common controller sends by default for anything else.
