@@ -58,6 +58,10 @@ namespace {
 // output cannot leave +-1 whatever the input is.
 constexpr float kDriveAsymmetry = 0.7f;
 constexpr float kDriveOctaves = 4.0f;       // +24 dB at DRV = 127
+// The DC blocker after it (chainloops.h): a corner of 8 Hz, 1 - 2 pi 8 / 48,000. Low enough to
+// leave a kick's 40-50 Hz alone (-0.1 dB, a few degrees), high enough that a held note's offset
+// is gone in a few tens of milliseconds. The rate is the platform's, fixed.
+constexpr float kDcPole = 0.998953f;
 
 // Cutoff: 20 Hz to 18 kHz. log2(18000 / 20) = 9.8138.
 constexpr float kCutoffLowHz = 20.0f;
@@ -202,6 +206,8 @@ void InsertChain::clear_state() {
     svf_b_.reset();
     lofi_phase_ = 0xFFFFFFFFu;     // so the first sample of a block is taken, not a stale hold
     lofi_hold_ = 0.0f;
+    dc_[0] = 0.0f;
+    dc_[1] = 0.0f;
 }
 
 const char *InsertChain::param_name(int index) {
@@ -307,7 +313,7 @@ void InsertChain::process(float *mono, int frames, const ChainOut &out) {
     if (silent()) return;      // a muted track costs one compare, not a block
 
     // --- drive: an asymmetric soft clip ------------------------------------------------------
-    if (drive_on_) strata_chain_drive(mono, frames, drive_pos_, drive_neg_);
+    if (drive_on_) strata_chain_drive(mono, frames, drive_pos_, drive_neg_, kDcPole, dc_);
 
     // --- filter: 24 dB is a cascade, two poles for about the price of one --------------------
     if (mode_ != FilterMode::off) {
