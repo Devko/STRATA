@@ -43,7 +43,7 @@ using namespace strata;
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
 // ambient modes: nine bytes on the end of the mixer section.
 constexpr uint32_t kProjectFileBytes = 402;
-constexpr uint32_t kKitFileBytes = 1453;   // 1409 before the arp settings (12 + 32), 1389 before the choke groups (12 + 8), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
+constexpr uint32_t kKitFileBytes = 1466;   // 1453 before the LFO layout (12 + 1), 1409 before the arp settings (12 + 32), 1389 before the choke groups (12 + 8), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -191,7 +191,8 @@ void fill_kit(Kit &kit) {
     for (int t = 0; t < kTracks; t++) {
         KitTrack &track = kit.tracks[t];
         for (int p = 0; p < kKitParams; p++) {
-            track.params[p] = uint8_t((t * 16 + p * 7) % 128);
+            // Within each parameter's range: WAV and DST hold numbers (core/project.hpp).
+            track.params[p] = uint8_t((t * 16 + p * 7) % (int(kit_param_max(p)) + 1));
         }
         track.machine = uint8_t(t % kMachines);
         // Thousandths, so the fader survives the format exactly: project.cpp stores it as
@@ -1401,8 +1402,18 @@ uint32_t fresh_kit_file() {
 
 // g_kit_file as a build from before the duck wrote it: the OSC page's section and then the
 // duck's, the last two, dropped.
-// g_kit_file as a build from before the arp's settings wrote it: their section, the last, dropped.
+// g_kit_file as a build from before WAV and DST were numbers (format decision C) wrote it: the
+// LFO layout's section, the last, dropped. Its WAV and DST then load as the bands they would have
+// been (lfo_migrated()).
+void drop_lfo_layout_section() {
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1453u);
+    for (uint32_t i = 0; i < 1453u; i++) g_kit_file[i] = g_kit_alt[i];
+}
+
+// g_kit_file as a build from before the arp's settings wrote it: their section and the LFO
+// layout's dropped.
 void drop_arp_ext_section() {
+    drop_lfo_layout_section();
     CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1409u);
     for (uint32_t i = 0; i < 1409u; i++) g_kit_file[i] = g_kit_alt[i];
 }
@@ -1444,7 +1455,7 @@ int migrated(int t, int p) {
     uint8_t params[kKitParams];
     for (int i = 0; i < kKitParams; i++) params[i] = g_kit_source.tracks[t].params[i];
     if (machine_has_voice_filter(g_kit_source.tracks[t].machine)) kit_track_to_voice_filter(params);
-    return int(params[p]);
+    return int(kit_lfo_from_band(p, params[p]));      // and no LFO layout: WAV and DST were bands
 }
 
 void drop_duck_section() {
@@ -1452,6 +1463,10 @@ void drop_duck_section() {
     CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1252u);
     CHECK_EQ(drop_last_section(g_kit_alt, g_kit_file), 1228u);
 }
+
+// What g_kit_source's parameter p of track t loads as from a file without the LFO layout (format
+// decision C): itself, but WAV and DST read as the bands they would have been.
+int old_lfo(int t, int p) { return int(kit_lfo_from_band(p, g_kit_source.tracks[t].params[p])); }
 
 // What a parameter loads as when its section is absent: 0, except the OSC page's, which loads
 // the legacy voice (core/project.hpp, kKitOscLegacy).
@@ -1521,7 +1536,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 12);    // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout, LFO TRIG, the mod slots, the choke groups, the arp settings
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 13);    // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout, LFO TRIG, the mod slots, the choke groups, the arp settings, the LFO layout
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -1539,6 +1554,53 @@ TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
     for (int p = 0; p < kKitSoundParams; p++) CHECK_EQ(int(g_kit_loaded.tracks[0].params[p]), 127);
+}
+
+TEST(kit_wav_and_dst_are_numbers_and_a_kit_with_bands_converts_once) {
+    // Format decision C: KIT.BIN marks its LFO layout (section 13). A kit without the mark, or
+    // with an older value in it, holds WAV and DST as the old bands, and they load as the numbers
+    // they meant; every other byte as it was.
+    fresh_kit_file();
+    const uint32_t layout = section_at(g_kit_file, kSectionKitLfoLayout);
+    CHECK(layout != 0u);
+    CHECK_EQ(int(g_kit_file[layout]), int(kLfoLayoutNumbers));
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_kit_loaded.tracks[t].params[kKitLfoWaveIndex]),
+                 int(g_kit_source.tracks[t].params[kKitLfoWaveIndex]));
+        CHECK_EQ(int(g_kit_loaded.tracks[t].params[kKitLfoDestIndex]),
+                 int(g_kit_source.tracks[t].params[kKitLfoDestIndex]));
+    }
+
+    // The older layout: band bytes in the LFO section, the mark 0. Track 2 SQR (band 86) onto
+    // DST 6 (band 46); track 4 S+H at the very top (127) onto OFF (7).
+    const uint32_t lfo = section_at(g_kit_file, kSectionKitLfo);
+    g_kit_file[lfo + 4 * 2 + 0] = 86;
+    g_kit_file[lfo + 4 * 2 + 3] = 46;
+    g_kit_file[lfo + 4 * 4 + 0] = 127;
+    g_kit_file[lfo + 4 * 4 + 3] = 7;
+    g_kit_file[layout] = 0;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_kit_loaded.tracks[2].params[kKitLfoWaveIndex]), 4);     // SQR
+    CHECK_EQ(int(g_kit_loaded.tracks[2].params[kKitLfoDestIndex]), 6);
+    CHECK_EQ(int(g_kit_loaded.tracks[4].params[kKitLfoWaveIndex]), 5);     // S+H
+    CHECK_EQ(int(g_kit_loaded.tracks[4].params[kKitLfoDestIndex]), 0);     // OFF
+    // RAT and DEP are not bands and come back as they were.
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitSoundParams + 1; p < kKitSoundParams + 3; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+    }
+
+    // A number past the last in a new kit is damage, read as the last.
+    fresh_kit_file();
+    g_kit_file[lfo + 0] = 9;
+    g_kit_file[lfo + 3] = 40;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_kit_loaded.tracks[0].params[kKitLfoWaveIndex]), int(kKitLfoWaveMax));
+    CHECK_EQ(int(g_kit_loaded.tracks[0].params[kKitLfoDestIndex]), int(kKitLfoDestMax));
 }
 
 TEST(kit_the_lfo_and_arp_bytes_round_trip_and_are_clamped_on_the_way_in) {
@@ -1573,7 +1635,7 @@ TEST(kit_the_lfo_and_arp_bytes_round_trip_and_are_clamped_on_the_way_in) {
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
         for (int p = kKitSoundParams; p < kKitParams; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 127);
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(kit_param_max(p)));
         }
     }
 }
@@ -1598,7 +1660,7 @@ TEST(kit_a_file_from_before_the_lfo_loads_with_every_lfo_and_arp_off) {
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, lfo_size)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
         for (int p = kKitSoundParams; p < kKitLfoEnd; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), old_lfo(t, p));
         }
         for (int p = kKitLfoEnd; p < kKitParams; p++) {
             CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), absent_param(p));
@@ -2493,7 +2555,7 @@ TEST(kit_slc_auto_round_trips_and_an_older_file_slices_equally) {
     for (int t = 0; t < kTracks; t++) {
         CHECK_EQ(int(g_kit_loaded.tracks[t].slice_mode), 0);
         for (int p = kKitSoundParams; p < kKitArpEnd; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), old_lfo(t, p));
         }
     }
     g_kit_source.tracks[2].slice_mode = kSliceEqual;
@@ -2531,7 +2593,7 @@ TEST(kit_lfo_trig_round_trips_and_an_older_file_runs_every_lfo_free) {
     for (int t = 0; t < kTracks; t++) {
         CHECK_EQ(int(g_kit_loaded.tracks[t].lfo_trig), int(kLfoTrigFree));
         for (int p = 0; p < kKitParams; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), old_lfo(t, p));
         }
     }
 
@@ -2586,7 +2648,7 @@ TEST(kit_arp_settings_round_trip_and_an_older_file_plays_every_arp_as_before) {
     for (int t = 0; t < kTracks; t++) {
         for (int f = 0; f < kArpExtFields; f++) CHECK_EQ(int(arp_ext_get(g_kit_loaded.tracks[t].arp, f)), 0);
         for (int p = 0; p < kKitParams; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), old_lfo(t, p));
         }
         for (int s = 0; s < kModSlots; s++) {
             CHECK_EQ(int(g_kit_loaded.tracks[t].mod[s].source), int(g_kit_source.tracks[t].mod[s].source));
@@ -2656,7 +2718,7 @@ TEST(kit_mod_slots_round_trip_and_an_older_file_loads_every_slot_off) {
             CHECK(!g_kit_loaded.tracks[t].mod[s].on());
         }
         for (int p = 0; p < kKitParams; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), old_lfo(t, p));
         }
         CHECK_EQ(int(g_kit_loaded.tracks[t].lfo_trig), int(g_kit_source.tracks[t].lfo_trig));
     }
@@ -2717,7 +2779,7 @@ TEST(kit_choke_groups_round_trip_and_an_older_file_has_none) {
         CHECK_EQ(int(g_kit_loaded.tracks[t].choke), 0);
         CHECK_EQ(int(g_kit_loaded.tracks[t].lfo_trig), int(g_kit_source.tracks[t].lfo_trig));
         for (int p = 0; p < kKitParams; p++) {
-            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), old_lfo(t, p));
         }
     }
 

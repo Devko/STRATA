@@ -22,7 +22,7 @@ namespace {
 using namespace strata;
 
 constexpr uint32_t kSlack = 64;
-constexpr uint32_t kPerformFileBytes = 5108;   // 2424, then the scenes' LFO (12 + 640), EQ (12 + 64), arp (12 + 640), ASR (12 + 640) and OSC (12 + 640)
+constexpr uint32_t kPerformFileBytes = 5121;   // 2424, then the LFO layout (12 + 1) at the end; the scenes' LFO (12 + 640), EQ (12 + 64), arp (12 + 640), ASR (12 + 640) and OSC (12 + 640)
 
 uint8_t g_buffer[kPerformFileBytes + kSlack];
 uint8_t g_alternate[kPerformFileBytes + kSlack];
@@ -772,7 +772,9 @@ void fill_performance() {
         for (int t = 0; t < kTracks; t++) {
             for (int p = 0; p < kKitParams; p++) {
                 if (((t + p + s) % 3) != 0) continue;
-                scene_set(g_scenes.scenes[s], t, p, uint8_t((s * 7 + t * 5 + p * 3) % 128));
+                // Within each parameter's range: WAV and DST hold numbers (core/project.hpp).
+                scene_set(g_scenes.scenes[s], t, p,
+                          uint8_t((s * 7 + t * 5 + p * 3) % (int(kit_param_max(p)) + 1)));
             }
         }
     }
@@ -783,8 +785,9 @@ void fill_performance() {
             target.enabled = 1;
             target.track = uint8_t((m * 2 + i) % kTracks);
             target.param = uint8_t((m * 3 + i * 5) % kKitParams);
-            target.low = uint8_t((m * 11 + i) % 128);
-            target.high = uint8_t((120 - m * 9 - i) % 128);
+            const int top = int(kit_param_max(target.param)) + 1;      // WAV, DST: numbers
+            target.low = uint8_t((m * 11 + i) % top);
+            target.high = uint8_t((120 - m * 9 - i) % top);
         }
     }
 }
@@ -858,11 +861,11 @@ TEST(perform_the_header_says_strata_and_the_version) {
     const uint32_t written = write_performance();
     CHECK_EQ(int(g_buffer[0]), int(kMagic0));
     CHECK_EQ(int(peek_u16(g_buffer, kVersionOffset)), int(kPerformVersion));
-    CHECK_EQ(int(peek_u16(g_buffer, 6)), 7);          // scenes, macros, the scenes' LFO, EQ, arp, ASR, OSC
+    CHECK_EQ(int(peek_u16(g_buffer, 6)), 8);          // scenes, macros, the scenes' LFO, EQ, arp, ASR, OSC, the LFO layout
     CHECK_EQ(peek_u32(g_buffer, 8), written - kHeaderBytes);
     CHECK_EQ(peek_u32(g_buffer, kCrcOffset),
              crc32(g_buffer + kHeaderBytes, written - kHeaderBytes));
-    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 7 * kSectionEntryBytes);
+    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 8 * kSectionEntryBytes);
     CHECK(section_at(g_buffer, kSectionPerformMacros) >
           section_at(g_buffer, kSectionPerformScenes));
     CHECK(section_at(g_buffer, kSectionPerformSceneLfo) >
@@ -1110,8 +1113,8 @@ TEST(perform_a_payload_declared_one_byte_past_the_file_is_truncated) {
 TEST(perform_a_section_one_byte_longer_than_the_payload_or_a_short_macro_table_is_malformed) {
     fill_performance();
     const uint32_t size = write_performance();
-    // The LAST section, the scenes' OSC, so one byte more runs past the payload.
-    const uint32_t last = section_entry_at(g_buffer, kSectionPerformSceneOsc);
+    // The LAST section, the LFO layout, so one byte more runs past the payload.
+    const uint32_t last = section_entry_at(g_buffer, kSectionPerformLfoLayout);
     const uint32_t last_len = peek_u32(g_buffer, last + 8);
     poke_u32(g_buffer, last + 8, last_len + 1);
     refresh_crc(g_buffer);
@@ -1314,11 +1317,52 @@ TEST(perform_a_master_macro_target_drives_the_eq_and_no_track) {
     CHECK_EQ(int(g_out[2][5]), 127);
 }
 
+TEST(perform_scenes_and_macros_on_wav_or_dst_convert_from_bands_once) {
+    // Format decision C: PERFORM.BIN marks its LFO layout (section 8). Without the mark, a scene's
+    // WAV and DST and a macro's range on them are the old bands, loaded as the numbers they meant.
+    fill_performance();
+    Scene &scene = g_scenes.scenes[3];
+    scene_set(scene, 1, kKitLfoWaveIndex, 2);                 // RMP
+    scene_set(scene, 1, kKitLfoDestIndex, 9);
+    for (int i = 0; i < kMacroTargets; i++) g_macros.macros[2].targets[i] = MacroTarget{};
+    MacroTarget &target = g_macros.macros[2].targets[0];
+    target.enabled = 1;
+    target.track = 3;
+    target.param = uint8_t(kKitLfoWaveIndex);
+    target.low = 1;
+    target.high = 5;
+    uint32_t size = write_performance();
+    const uint32_t layout = section_at(g_buffer, kSectionPerformLfoLayout);
+    CHECK(layout != 0u);
+    CHECK_EQ(int(g_buffer[layout]), int(kLfoLayoutNumbers));
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded_scenes.scenes[3].values[1][kKitLfoWaveIndex]), 2);
+    CHECK_EQ(int(g_loaded_scenes.scenes[3].values[1][kKitLfoDestIndex]), 9);
+    CHECK_EQ(int(g_loaded_macros.macros[2].targets[0].low), 1);
+    CHECK_EQ(int(g_loaded_macros.macros[2].targets[0].high), 5);
+
+    // The same file as an older build wrote it: band bytes, the mark 0.
+    scene_set(scene, 1, kKitLfoWaveIndex, 43);                // RMP's band
+    scene_set(scene, 1, kKitLfoDestIndex, 68);                // DST 9's band
+    target.low = 22;                                          // TRI's band
+    target.high = 127;                                        // the top: S+H
+    size = write_performance();
+    g_buffer[section_at(g_buffer, kSectionPerformLfoLayout)] = 0;
+    refresh_crc(g_buffer);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded_scenes.scenes[3].values[1][kKitLfoWaveIndex]), 2);
+    CHECK_EQ(int(g_loaded_scenes.scenes[3].values[1][kKitLfoDestIndex]), 9);
+    CHECK_EQ(int(g_loaded_macros.macros[2].targets[0].low), 1);
+    CHECK_EQ(int(g_loaded_macros.macros[2].targets[0].high), 5);
+}
+
 TEST(perform_scenes_keep_their_lfo_bytes_through_a_save) {
     fill_performance();
     Scene &scene = g_scenes.scenes[5];
-    scene_set(scene, 2, kKitSoundParams + 0, 44);
-    scene_set(scene, 2, kKitSoundParams + 3, 90);
+    scene_set(scene, 2, kKitSoundParams + 0, 4);         // WAV: SQR
+    scene_set(scene, 2, kKitSoundParams + 3, 11);        // DST: the 11th sound parameter
     scene_clear(scene, 2, kKitSoundParams + 1);
     scene_clear(scene, 2, kKitSoundParams + 2);
     const uint32_t size = write_performance();
@@ -1329,8 +1373,8 @@ TEST(perform_scenes_keep_their_lfo_bytes_through_a_save) {
     CHECK(!scene_has(loaded, 2, kKitSoundParams + 1));
     CHECK(!scene_has(loaded, 2, kKitSoundParams + 2));
     CHECK(scene_has(loaded, 2, kKitSoundParams + 3));
-    CHECK_EQ(int(loaded.values[2][kKitSoundParams + 0]), 44);
-    CHECK_EQ(int(loaded.values[2][kKitSoundParams + 3]), 90);
+    CHECK_EQ(int(loaded.values[2][kKitSoundParams + 0]), 4);
+    CHECK_EQ(int(loaded.values[2][kKitSoundParams + 3]), 11);
     for (int s = 0; s < kScenes; s++) {
         CHECK_EQ(scene_count(g_loaded_scenes.scenes[s]), scene_count(g_scenes.scenes[s]));
     }
@@ -1352,11 +1396,11 @@ TEST(perform_a_file_from_before_the_lfo_loads_with_no_scene_storing_one) {
     fill_performance();
     for (int t = 0; t < kTracks; t++) scene_set(g_scenes.scenes[0], t, kKitSoundParams, 77);
     const uint32_t size = write_performance();
-    // Before the LFO there was no scenes' EQ, arp, ASR or OSC section either: drop all five, last
-    // first.
-    const uint32_t sizes[5] = {4456u, 3804u, 3152u, 3076u, 2424u};
+    // Before the LFO there was no scenes' EQ, arp, ASR or OSC section, nor the LFO layout: drop
+    // all six, last first.
+    const uint32_t sizes[6] = {5108u, 4456u, 3804u, 3152u, 3076u, 2424u};
     uint32_t old_size = size;
-    for (int k = 0; k < 5; k++) {
+    for (int k = 0; k < 6; k++) {
         old_size = drop_last_section(g_buffer, g_alternate);
         CHECK_EQ(old_size, sizes[k]);
         for (uint32_t i = 0; i < old_size; i++) g_buffer[i] = g_alternate[i];
@@ -1427,7 +1471,9 @@ TEST(perform_scenes_keep_their_arp_bytes_and_an_older_file_stores_none) {
     }
 
     // The file the LFO and kill EQ builds wrote: everything but the arp (and the ASR and OSC
-    // pages after it) comes back.
+    // pages after it, and the LFO layout last of all) comes back.
+    drop_last_section(g_buffer, g_alternate);
+    for (uint32_t i = 0; i < 5108u; i++) g_buffer[i] = g_alternate[i];
     drop_last_section(g_buffer, g_alternate);
     for (uint32_t i = 0; i < 4456u; i++) g_buffer[i] = g_alternate[i];
     drop_last_section(g_buffer, g_alternate);
@@ -1497,7 +1543,10 @@ TEST(perform_scenes_keep_their_osc_bytes_beside_asr_and_an_older_file_stores_non
         CHECK_EQ(scene_count(g_loaded_scenes.scenes[s]), scene_count(g_scenes.scenes[s]));
     }
 
-    // A file from before the OSC page: ASR comes back, no scene stores an OSC byte.
+    // A file from before the OSC page (and the LFO layout after it): ASR comes back, no scene
+    // stores an OSC byte.
+    drop_last_section(g_buffer, g_alternate);
+    for (uint32_t i = 0; i < 5108u; i++) g_buffer[i] = g_alternate[i];
     const uint32_t old_size = drop_last_section(g_buffer, g_alternate);
     CHECK_EQ(old_size, 4456u);
     for (int s = 0; s < kScenes; s++) scene_set(g_loaded_scenes.scenes[s], 1, kKitAsrEnd, 9);

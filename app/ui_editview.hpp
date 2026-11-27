@@ -1770,6 +1770,6 @@
             paint::small_text(px, 0, y, letter, 8);
             const bool empty = index < 0 || param_name_for(index)[0] == '-';
             canvas.rect(8, y + 1, 112, 3, 2);
-            if (!empty && shown.heard > 0) canvas.rect(8, y + 1, shown.heard * 112 / 127, 3, shown.locked ? 15 : 11);
+            if (!empty && shown.heard > 0) canvas.rect(8, y + 1, shown.heard * 112 / shown.top, 3, shown.locked ? 15 : 11);
         }
     }

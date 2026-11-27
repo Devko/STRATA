@@ -112,10 +112,10 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PERFORM.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kPerformSections = 7;
-// The last five, the scenes' LFO bytes, their master EQ, their arp bytes, their ASR bytes and
-// their OSC bytes, may each be absent (an older file).
-constexpr uint32_t kPerformOptionalSections = 5;
+constexpr uint32_t kPerformSections = 8;
+// The last six, the scenes' LFO bytes, their master EQ, their arp bytes, their ASR bytes, their
+// OSC bytes and the LFO layout, may each be absent (an older file).
+constexpr uint32_t kPerformOptionalSections = 6;
 constexpr uint32_t kSceneTrackBytes = uint32_t(kKitSoundParams) + 2; // values, then the bitmask
 constexpr uint32_t kSceneBytes = kSceneTrackBytes * uint32_t(kTracks);
 constexpr uint32_t kScenesBytes = kSceneBytes * uint32_t(kScenes);
@@ -149,7 +149,9 @@ constexpr uint32_t kSceneOscTrackBytes = uint32_t(kKitOscParams) + 1;
 constexpr uint32_t kSceneOscBytes =
     kSceneOscTrackBytes * uint32_t(kTracks) * uint32_t(kScenes);
 constexpr uint32_t kSceneOscOffset = kSceneAsrOffset + kSceneAsrBytes;
-constexpr uint32_t kPerformTotalBytes = kHeaderBytes + kSceneOscOffset + kSceneOscBytes;
+constexpr uint32_t kPerformLfoLayoutBytes = 1;
+constexpr uint32_t kPerformLfoLayoutOffset = kSceneOscOffset + kSceneOscBytes;
+constexpr uint32_t kPerformTotalBytes = kHeaderBytes + kPerformLfoLayoutOffset + kPerformLfoLayoutBytes;
 constexpr uint8_t kLfoStoredMask = uint8_t((1u << kKitLfoParams) - 1u);
 constexpr uint8_t kAsrStoredMask = uint8_t((1u << kKitAsrParams) - 1u);
 constexpr uint8_t kOscStoredMask = uint8_t((1u << kKitOscParams) - 1u);
@@ -469,6 +471,7 @@ SerializeResult perform_write(const SceneSet &scenes, const MacroSet &macros, ui
         {kSectionPerformSceneArp, kSceneArpOffset, kSceneArpBytes},
         {kSectionPerformSceneAsr, kSceneAsrOffset, kSceneAsrBytes},
         {kSectionPerformSceneOsc, kSceneOscOffset, kSceneOscBytes},
+        {kSectionPerformLfoLayout, kPerformLfoLayoutOffset, kPerformLfoLayoutBytes},
     };
 
     Writer w(buffer, capacity);
@@ -534,6 +537,7 @@ SerializeResult perform_write(const SceneSet &scenes, const MacroSet &macros, ui
             w.u8(uint8_t(scene.stored[t][3] >> kKitAsrParams));
         }
     }
+    w.u8(kLfoLayoutNumbers);
 
     if (!w.ok() || w.size() != kPerformTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kPerformTotalBytes, written);
@@ -552,7 +556,7 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
     const uint16_t wanted[kPerformSections] = {kSectionPerformScenes, kSectionPerformMacros,
                                                kSectionPerformSceneLfo, kSectionPerformSceneMaster,
                                                kSectionPerformSceneArp, kSectionPerformSceneAsr,
-                                               kSectionPerformSceneOsc};
+                                               kSectionPerformSceneOsc, kSectionPerformLfoLayout};
     uint32_t offset[kPerformSections] = {};
     uint32_t length[kPerformSections] = {};
     const SerializeResult found = find_sections(buffer, size, kPerformVersion, wanted,
@@ -567,6 +571,7 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
     if (offset[4] != 0 && length[4] < kSceneArpBytes) return refuse(SerializeResult::malformed);
     if (offset[5] != 0 && length[5] < kSceneAsrBytes) return refuse(SerializeResult::malformed);
     if (offset[6] != 0 && length[6] < kSceneOscBytes) return refuse(SerializeResult::malformed);
+    if (offset[7] != 0 && length[7] < kPerformLfoLayoutBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -730,6 +735,36 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
             }
         }
         if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // The LFO layout (format decision C). Absent is a file whose scenes and macros hold WAV and
+    // DST as the old bands: each becomes the number it meant, and past the last is the last.
+    uint8_t lfo_layout = 0;
+    if (offset[7] != 0) {
+        if (!r.seek(kHeaderBytes + offset[7])) return refuse(SerializeResult::malformed);
+        lfo_layout = r.u8();
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+    const bool bands = lfo_layout < kLfoLayoutNumbers;
+    const auto number = [bands](int index, uint8_t byte) {
+        const uint8_t n = bands ? kit_lfo_from_band(index, byte) : byte;
+        const uint8_t top = kit_param_max(index);
+        return n > top ? top : n;
+    };
+    for (int s = 0; s < kScenes; s++) {
+        for (int t = 0; t < kTracks; t++) {
+            uint8_t *values = scenes.scenes[s].values[t];
+            values[kKitLfoWaveIndex] = number(kKitLfoWaveIndex, values[kKitLfoWaveIndex]);
+            values[kKitLfoDestIndex] = number(kKitLfoDestIndex, values[kKitLfoDestIndex]);
+        }
+    }
+    for (int m = 0; m < kMacros; m++) {
+        for (int i = 0; i < kMacroTargets; i++) {
+            MacroTarget &target = macros.macros[m].targets[i];
+            if (target.enabled == 0 || target.track >= uint8_t(kTracks)) continue;
+            target.low = number(int(target.param), target.low);
+            target.high = number(int(target.param), target.high);
+        }
     }
 
     return SerializeResult::ok;

@@ -511,6 +511,9 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                     const int next = int(params_[track].v[command.a]) + int(int8_t(command.b));
                     value = uint8_t(next < 0 ? 0 : (next > 127 ? 127 : next));
                 }
+                // WAV and DST stop at their last shape and destination (core/project.hpp).
+                const uint8_t top = kit_param_max(command.a);
+                value = value > top ? top : value;
                 params_[track].v[command.a] = clamp_7bit(value);
                 // `performed_` is built FROM `params_`, and the per-block copy in process()
                 // writes it over every unlocked parameter of `effective_`. So a kit change that
@@ -769,9 +772,11 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
             // currently hearing rather than from zero.
             uint8_t base = params_[track].v[param];
             pattern_get_lock(live(), track, step, param, base);
-            const uint8_t value = command.c == kSemitoneFlag && tune_param(machine_id_[track]) == param
+            uint8_t value = command.c == kSemitoneFlag && tune_param(machine_id_[track]) == param
                                       ? tune_step(machine_id_[track], base, int(int8_t(command.b)))
                                       : clamp_7bit(int(base) + int(int8_t(command.b)));
+            const uint8_t top = kit_param_max(param);
+            if (value > top) value = top;          // WAV and DST stop at their last one
 
             if (!pattern_set_lock(live(), track, step, param, value)) {
                 // "Full" usually means slots abandoned by relocation rather than 1,024 real
