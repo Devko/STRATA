@@ -6,6 +6,15 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The CPU guard no longer thins chords that were never in danger.** With generated parts on
+  every track the unit read 40-60% and showed `GUARD1`-`GUARD4`, shedding POLY voices and grains
+  with no block anywhere near an overrun. The guard averaged the load over 11 ms, which follows
+  each step's burst of note starts to its top; it now averages over 85 ms, and one busy block no
+  longer restarts the second it waits before stepping down. A single block at 90% still raises
+  it at once. New emulator scenario `genload`: GENERATE at full density on all eight tracks.
+
 ## [0.5.0] - {{RELEASE_DATE}}
 
 The release candidate for 1.0: everything merged since 0.4.0 (#180 to #208). From here to 1.0

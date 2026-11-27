@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W55, about 178 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W56, about 181 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -754,6 +754,15 @@ T7's DST).
   EDIT's LFO page names SQR, S+H, CUT, TUN. `____`
 - Turn WAV past S+H: it stops there; one click back is SQR. Same for DST at the last parameter. `____`
 - Save, power cycle, open again: unchanged. `____`
+
+**W56. GENERATE everywhere and the CPU guard (3 min).** Beat playing, A01, GRID. The guard used
+to reach `GUARD4` here at a 40-60% top line.
+- Hold OK for the track menu: DENSITY 100, RANGE 3 OCT, LEAP 100. OK on GENERATE three times; then
+  for each of T2-T8 (pad to select, hold OK, OK three times). Let it play a minute. The top line
+  reads `____`-`____ %`; `GUARD` does not appear, or if it does, only for a moment while MAX
+  passes 90%: MAX `____ %`, highest `GUARD` `____`. No click, no crackle. `____`
+- Same with three or four tracks switched to VA POLY or FM4 holding chords: `GUARD` may come
+  when MAX nears 90%, and it counts down within a few seconds once you mute those tracks. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
@@ -2686,8 +2695,9 @@ while every counted voice is still waiting for its frame are dropped. Twelve is 
 
 When the block's load runs high, STRATA sheds the costliest sustaining work instead of letting
 the next chord overrun (`core/cpuguard.hpp`). It rises a level when the load averaged over about
-11 ms reaches 70%, or at once on one block at 90%; it falls a level after each full second under
-55%. Each level takes two voices off the shared VA POLY budget (12, 10, 8, 6, 4) and shrinks
+85 ms reaches 70%, or at once on one block at 90%; it falls a level after a second's worth of
+blocks under 55% (each block over 55% takes one back; 11 ms and a strict second in a row until
+2026-11-27, which tripped on generated parts at 40-60%, W56). Each level takes two voices off the shared VA POLY budget (12, 10, 8, 6, 4) and shrinks
 every GRAIN cloud's pool (8, 6, 4, 3, 2 grains). Shed POLY voices fade over 1.3 ms, quietest
 first; GRAIN skips new grains rather than cutting old ones. While it is up, the bottom line shows
 `GUARD1`-`GUARD4` where the device name was. A second STOP (cut the tails) resets it. The

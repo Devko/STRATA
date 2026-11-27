@@ -18,16 +18,29 @@
 // ## How it decides
 //
 // One block's cost jumps with where the step trigs land, so a level on one block's figure would
-// flap. The guard keeps a short running average (a one-pole over about 8 blocks, 11 ms) and:
+// flap. The guard keeps a running average (a one-pole over about 64 blocks, 85 ms) and:
 //
 //  - RISES one level when the average reaches kHigh, at most once per kSettleBlocks (100 ms),
 //    because what it sheds takes time to go quiet -- a choke is a 64-frame fade but a grain
 //    lives out its window -- and rising again before the first step has landed overshoots.
 //  - RISES at once on a single block at kPanic or more (at most once per kPanicSettle blocks):
 //    one block that close to 100% is one chord from an overrun.
-//  - FALLS one level after kFallBlocks (1 s) in a row with the average under kLow. Slow on
+//  - FALLS one level after kFallBlocks (1 s) of blocks with the average under kLow. Slow on
 //    purpose: a level that drops the moment the load does would let the same chord straight
-//    back in, and the user would hear the voice count pump.
+//    back in, and the user would hear the voice count pump. A block over kLow takes one block
+//    back off the count rather than starting the second again.
+//
+// Why 64 blocks and not 8 (2026-11-27). The first version averaged over 8 blocks (11 ms) and
+// restarted the cool count on any block over kLow. On the unit, GENERATE on every track showed a
+// load of 40-60% on the top line and the guard climbed to GUARD4 and stayed there. The emulator
+// says why: a dense part lifts the load in PLATEAUS that follow the steps -- each note start holds
+// the block cost up for some 40 blocks, then it falls back -- and an 11 ms average simply follows
+// a plateau to its top. Replayed at the unit's speed (about 2.4x the emulator for these
+// figures), the plateaus reach 73-86% while the mean is 48% and no block comes near an overrun;
+// the old average crossed 70% on them and the reset cool count could not get a whole second under
+// 55% between steps, so every voice the guard took away was taken for nothing. Over 85 ms the
+// average reads the load the beat actually holds, and kPanic still answers the single block that
+// is a real risk. tests/test_cpuguard.cpp replays that trace.
 //
 // Integer arithmetic only, no division (the C674x has no integer divide): the average is held
 // in Q8 and moved by a shift.
@@ -51,7 +64,7 @@ public:
     static constexpr uint32_t kSettleBlocks = 75;    // 100 ms between ordinary rises
     static constexpr uint32_t kPanicSettle = 8;      // 11 ms between rises on a panic block
     static constexpr uint32_t kFallBlocks = 750;     // 1 s cool before each step down
-    static constexpr int kAverageShift = 3;          // one-pole over ~8 blocks
+    static constexpr int kAverageShift = 6;          // one-pole over ~64 blocks (85 ms)
 
     // One block's load, per mille; returns the level to apply to the next one.
     int update(uint32_t load_per_mille);
@@ -76,7 +89,7 @@ public:
 private:
     uint32_t average_q8_ = 0;   // per mille, x256
     uint32_t since_change_ = 0; // blocks since the level last moved, saturating
-    uint32_t cool_ = 0;         // blocks in a row with the average under kLow
+    uint32_t cool_ = 0;         // blocks under kLow, less one for each block over it
     int level_ = 0;
 };
 
