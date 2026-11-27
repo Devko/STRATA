@@ -36,7 +36,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | Everything on the SD card under `/ENAGA/DATA/STRATA/`; never writes the SPI flash | v0.1.0 | ○ (13) | |
 | Audio load on the top line | v0.1.0 | ✔ about 0–26% on the default beat | Flickers every block |
 | Held MAX readout (since PLAY), on SETUP since #171 (the bottom line before) | v0.1.0 | ✔ top line under 30% default beat; MAX 84.3% in heavy play | Clean A01 and A04 MAX figures (60 s each) still to record |
-| **CPU guard**: sheds POLY voices (2 a level) and thins GRAIN under load, `GUARD1-4` on screen | #83 | ○ ("The CPU guard") | Thresholds (70% avg / 90% block / 55% fall) are provisional; nothing in the emulator reaches them |
+| **CPU guard**: sheds POLY voices (2 a level) and thins GRAIN under load, `GUARD1-4` on screen | #83 | ○ ("The CPU guard") | Thresholds (70% avg over 85 ms / 90% block / 55% fall) are provisional; nothing in the emulator reaches them; a 2 s trace of GEN on all tracks, scaled to the unit, is replayed by the host test (W56) |
 | Shared budget of 12 VA POLY voices across all tracks; quietest voice choked with a 64-frame fade | v0.1.0 | ○ ("The shared VA POLY voice budget") | 12 is provisional until U1/U2 on the unit |
 | Every screen fits Enaga's 5x7 font (layout test over every screen) | v0.1.0 | ◐ (overlaps seen at first boot, fixed in PR #7) | |
 | **Screen frame**: top line with bar.beat, progress line, live strip of what is off rest, master meter with held peak and limiter light | #144 | ○ (W26) | The meter is 2 px wide; nothing may draw past x 124 |

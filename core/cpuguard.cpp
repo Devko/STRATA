@@ -6,7 +6,7 @@ int CpuGuard::update(uint32_t load) {
     // A figure past the whole block is an overrun already; clamp so the average cannot wrap.
     if (load > 2000u) load = 2000u;
 
-    // average += (load - average) / 8, in Q8 and without a divide. Unsigned, so the two
+    // average += (load - average) / 64, in Q8 and without a divide. Unsigned, so the two
     // directions are written out rather than letting a negative difference wrap.
     const uint32_t target = load << 8;
     if (target >= average_q8_) {
@@ -33,8 +33,8 @@ int CpuGuard::update(uint32_t load) {
             since_change_ = 0;
             cool_ = 0;
         }
-    } else {
-        cool_ = 0;
+    } else if (cool_ > 0) {
+        cool_--;            // a hot block takes one back; it does not start the second again
     }
     return level_;
 }

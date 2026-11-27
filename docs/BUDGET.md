@@ -53,6 +53,41 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### GENERATE on every track, and the CPU guard that tripped on it (2026-11-27, emulator)
+
+On the unit (main after #208, Enaga 0.4.0), GENERATE run many times on all eight tracks showed
+**40-60% on the top line and `GUARD1`-`GUARD4`**. New `scenario_genload` reproduces the case:
+the default kit, DENSITY 100, RANGE 3 OCT, LEAP 100, three presses on each track, then every
+block's `audio_cycles_last` read for 3 s.
+
+| | cl6x | GCC-only |
+| --- | --- | --- |
+| the factory beat, mean of every block | 12.7% | |
+| after GEN on all eight, **mean** of every block | **20.3%** | 42.3% |
+| after GEN on all eight, p99 block | 30.5% | 61.0% |
+| `scenario_genload` peak | **33.90%** (the new worst scenario) | 63.88% |
+
+The notes cost what they cost (Roland: not a reason to change GENERATE). What was wrong is the
+guard. A dense part lifts the load in **plateaus** that follow the steps: each step's note
+starts hold the block cost up for ~40 blocks, then it falls back. The guard averaged over 8
+blocks (11 ms), which follows a plateau to its top. Scaling the cl6x trace by **2.4**, the factor
+that turns the emulator's 15-25% p10-p90 into the unit's 40-60%, gives a mean of 48% and
+plateaus of 73-86% with no block near an overrun; replayed through the old guard it rose to
+GUARD4 and stayed there 90% of the time (the cool count restarted on any block over 55%, and the
+plateaus never left it a clean second). The guard now averages over 64 blocks (85 ms) and a
+block over kLow takes one block off the cool count instead of restarting it. On the same trace
+it stays at 0; a sixth heavier (blocks to 93%) it rises on the panic rule and comes back down.
+`tests/test_cpuguard.cpp` replays 2 s of the trace both ways. At level 0 nothing renders
+differently, so no scenario figure moves: all 48 pass with cl6x, worst **33.90%** (`genload`;
+the rest as before, `ratchetspan` 26.34%).
+
+**The 2.4 is a finding in itself, and it is not settled.** BUDGET has carried ~1.35x for
+unit-over-emulator since first boot, from peak readings. Typical blocks on this case say ~2-2.4x
+(the emulator has no cache model, and a dense part touches more voice state per block). If it
+holds, the 60% target on emulator figures is not 60% on the unit: `genload` at 33.90% would be
+~80% there. Owed: the unit's top line and MAX on A01 and on W56, against these emulator figures
+on the same build.
+
 ### Enaga v0.3.0 to v0.4.0 (2026-11-27, emulator)
 
 The same STRATA commit (main `ebc8428`) against both Enaga releases, six scenarios each, peak load:
@@ -1206,9 +1241,9 @@ held, freeze held, two streamed stems -- and E3 on the PC first.
 
 The 84.3% MAX above has no ceiling behind it: more chords or a denser cloud would take a block
 past 100%. `core/cpuguard.hpp` is the ceiling. Each audio block reads `enaga::audio_load()` (the
-previous block's cost) and keeps an ~11 ms average; at 70% average, or one block at 90%, it rises
-a level (at most one per 100 ms, or per 11 ms on a 90% block), and after each full second under
-55% it falls one. A level takes two voices off the shared POLY budget (12, 10, 8, 6, 4; ~2.2
+previous block's cost) and keeps an ~85 ms average (~11 ms until 2026-11-27, see "GENERATE on
+every track"); at 70% average, or one block at 90%, it rises a level (at most one per 100 ms, or
+per 11 ms on a 90% block), and after a second's worth of blocks under 55% it falls one. A level takes two voices off the shared POLY budget (12, 10, 8, 6, 4; ~2.2
 points each with cl6x) and shrinks every GRAIN pool (8, 6, 4, 3, 2 grains; a full cloud is +9.2
 points GCC-only). Level 4 therefore frees about 17 points of POLY and most of each dense GRAIN
 track. Shed POLY voices take the existing 64-frame choke, quietest first, one a block; GRAIN skips

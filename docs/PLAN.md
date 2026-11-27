@@ -90,7 +90,7 @@ bit-exact or null-tested, docs, and tooling.
       in `docs/BUDGET.md`, worst case under 60% with cl6x.
 - [ ] `tools/emulator_screens.sh`, and a look at the contact sheet: the docs' pictures are the
       RC's screens.
-- [ ] On the unit: the smoke test (S1-S20) first, then the walkthrough (W1-W54) or at least
+- [ ] On the unit: the smoke test (S1-S20) first, then the walkthrough (W1-W56) or at least
       every W item marked for this release; the unit's MAX figures in `docs/BUDGET.md`.
 - [ ] Projects and kits saved by v0.4.0 open in the RC (the factory project, a project with
       locks, scenes and MOD slots), and a project saved by the RC opens in v0.4.0 as the release
