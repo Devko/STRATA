@@ -189,7 +189,7 @@
             switch (key) {
                 case ENAGA_KEY_CLR:
                     track_menu_ = false;
-                    notice("GRID");
+                    notice_logged("GRID");
                     break;
                 case ENAGA_KEY_UP:
                 case ENAGA_KEY_DOWN:
