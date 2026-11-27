@@ -161,7 +161,7 @@ STRATA does not implement a clock and does not own the tempo. Enaga's `<enaga/cl
 | Micro-timing | ±11 ticks | 24 ticks per 16th at 96 PPQN. Finer placement is available in samples through the tick's `.frame` offset if live-recorded hits need it **[rev]** |
 | Probability | 0-100% |  |
 | Condition | see below | **[rev]** `A:B` has nowhere to live: this table gives `condition` one byte, but `A:B` with B = 2-8 is 35 combinations on top of 10 condition kinds, and 4 bits of kind plus 6 bits of pair do not fit in 8. The byte is therefore **partitioned**, not enumerated: 0-9 are the condition kinds, 16-50 are the 35 `(A,B)` pairs, everything else is invalid and reads back as `NONE`. The alternative was growing `Step` past 12 bytes |
-| Ratchet | 1-8 hits | With a velocity ramp up or down |
+| Ratchet | 1-8 hits, or a roll over LEN | With a velocity ramp up or down. **[rev]** A roll at a rate (1/64 to 1/4) for the step's whole LEN, the ramp across all of it (2026-11-26, Roland: RATE + span flag; `core/pattern.hpp` kRatchetSpan) |
 | Accent, slide | flags | Slide on MONO tracks only |
 | Parameter locks | up to 8 per step | From a shared pool of 1,024 per pattern |
 
@@ -348,7 +348,7 @@ struct Step {                 // 12 bytes
     int8_t   micro;           // -11..+11 ticks
     uint8_t  probability;     // 0..100
     uint8_t  condition;       // enum: NONE, A_B, FILL, NOT_FILL, PRE, ...
-    uint8_t  ratchet;         // count 1-8 (low nibble), ramp (high nibble)
+    uint8_t  ratchet;         // count 1-8 (low nibble), ramp (bits 4-6); bit 7: a roll over LEN, the low nibble its rate
     uint16_t lock_first;      // index into Pattern::locks, 0xFFFF = none
     uint8_t  lock_count;      // 0..8
     uint8_t  chord;           // POLY: type and inversion

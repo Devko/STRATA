@@ -557,7 +557,8 @@
     //     C . . . P      C  a condition (FILL, A:B, PRE ...): the top-left corner is cut
     //     . . . . .      P  a probability under 100%: the top-right corner is cut
     //     . . L . .      L  parameter locks: a dot in the middle, two pixels tall
-    //     . . L . .      R  a ratchet of two hits or more: two teeth cut in the bottom edge
+    //     . . L . .      R  a ratchet of two hits or more, or a roll over LEN: two teeth cut in
+    //                           the bottom edge
     //     . . . . .
     //     . R . R .
     //
@@ -569,7 +570,7 @@
         if (condition_kind(s.condition) != Condition::NONE) canvas.pixel(x, y, 0);
         if (s.probability < 100) canvas.pixel(x + 4, y, 0);
         if (locked) canvas.rect(x + 2, y + 2, 1, 2, 0);
-        if (ratchet_count(s.ratchet) > 1) {
+        if (ratchet_count(s.ratchet) > 1 || ratchet_spans(s.ratchet)) {
             canvas.pixel(x + 1, y + 5, 0);
             canvas.pixel(x + 3, y + 5, 0);
         }
@@ -756,8 +757,20 @@
             int grey = 4 + int(step.velocity) * 11 / 127;
             if (step.probability < 100) grey = grey * (50 + int(step.probability) / 2) / 100;
             canvas.rect(x0, kLaneY - 7, w, 3, uint8_t(grey));
-            const int hits = ratchet_count(step.ratchet);
-            for (int h = 1; h < hits && w > 2; h++) canvas.rect(x0 + w * h / hits, kLaneY - 8, 1, 5, 0);
+            if (ratchet_spans(step.ratchet)) {
+                // A roll over LEN: a cut at every hit, at the rate (a step is kPitch pixels and
+                // 24 ticks at 1x). Rolls faster than two pixels a hit show as every other pixel.
+                const int rate = int(kRatchetRateTicks[ratchet_rate(step.ratchet)]);
+                const int gap = rate * kPitch / 24 < 2 ? 2 : rate * kPitch / 24;
+                for (int x = x0 + gap; x < x0 + w && w > 2; x += gap) {
+                    canvas.rect(x, kLaneY - 8, 1, 5, 0);
+                }
+            } else {
+                const int hits = ratchet_count(step.ratchet);
+                for (int h = 1; h < hits && w > 2; h++) {
+                    canvas.rect(x0 + w * h / hits, kLaneY - 8, 1, 5, 0);
+                }
+            }
         }
 
         // What the step actually is: a step that is off says so, because every field above it is

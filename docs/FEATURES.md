@@ -117,6 +117,7 @@ FM4 and GRAIN machines.
 | Euclidean fill (FUNC + A/B/C in GRID) | v0.1.0 | ○ (M3) | |
 | Copy/paste a step, a range or a track; range transpose and nudge | v0.1.0 | ○ (M3) | |
 | **Pattern menu** (hold OK on a PROJECT slot): COPY, PASTE, CLEAR, DOUBLE; FUNC + UP / DOWN / LEFT on the slots | #140 | ○ (W12) | DOUBLE stops at 64 steps |
+| **Ratchets over LEN**: RTCH past 8 is a roll at a rate (1/64 to 1/4) for the step's whole LEN, its RAMP across the roll | #185 | ○ (W49) | Roland's RATE + span flag (2026-11-26): bit 7 of the ratchet byte, no file change; an older build plays such a step as a one-step ratchet. A new trig on the track, STOP, a restart or a pattern change ends a roll. Under the arp, the arp takes the step |
 | **Hold STEP + upper pad edits the step (D6)**: FILL condition, REPEAT ratchet, MUTE A:B, MUTATE probability, THROW a delay (FUNC: reverb) send lock; FILL + STEP writes a FILL trig | #140, #142, #153 | ○ (W9) | SCENE A/B still perform with a STEP held |
 | 16 levels of undo and redo | v0.1.0 | ○ (6) | Chain edits and kit recalls are not undoable |
 | Live recording (pads, KEYS, MIDI) with latency correction and QUANTIZE 0-100%; **held length recorded as LEN** (#90) | v0.1.0 | ○ (M3, 13k) | Note-repeat rolls are not recorded |

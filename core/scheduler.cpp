@@ -246,6 +246,37 @@ uint8_t ratchet_velocity(uint8_t velocity, uint8_t index, uint8_t count, Ratchet
     return clamp_wide_u8(div_round_small(numerator, hits), 1, 127);
 }
 
+uint16_t span_hit_count(uint8_t length_index, int step_ticks, uint8_t rate) {
+    // 1 / the rate's ticks, so the count is a multiply.
+    constexpr float kInvRateTicks[kRatchetRates] = {
+        1.0f / 6.0f,  1.0f / 8.0f,  1.0f / 12.0f, 1.0f / 16.0f,
+        1.0f / 24.0f, 1.0f / 32.0f, 1.0f / 48.0f, 1.0f / 96.0f,
+    };
+    const uint32_t ticks = uint32_t(length_sixteenths(length_index)) *
+                           uint32_t(step_ticks < 1 ? 1 : step_ticks) >> 4;
+    // A whole number of hits: the small bias keeps an exact quotient (96 / 12) from flooring to
+    // one less, and is far below the next one up.
+    const float hits = float(ticks) * kInvRateTicks[rate & 0x07u] + 0.001f;
+    if (hits < 1.0f) return 1;
+    return hits > 65535.0f ? uint16_t(65535) : uint16_t(hits);
+}
+
+uint8_t span_velocity(uint8_t velocity, uint32_t index, uint32_t count, float inv_count,
+                      RatchetRamp ramp) {
+    const uint32_t hits = count < 1u ? 1u : count;
+    const uint32_t hit = index >= hits ? hits - 1u : index;
+    const float full = float(clamp_wide_u8(velocity, 1, 127));
+    float scaled;
+    switch (ramp) {
+        case RatchetRamp::up:   scaled = full * float(hit + 1u) * inv_count; break;
+        case RatchetRamp::down: scaled = full * float(hits - hit) * inv_count; break;
+        case RatchetRamp::none:
+        default:                return uint8_t(full);
+    }
+    const float rounded = scaled + 0.5f;
+    return clamp_wide_u8(rounded > 0.0f ? uint32_t(rounded) : 0u, 1, 127);
+}
+
 uint32_t ratchet_frame(uint32_t index, uint32_t count, float step_samples) {
     const uint32_t hits = count < kRatchetMin ? uint32_t(kRatchetMin)
                                               : (count > kRatchetMax ? uint32_t(kRatchetMax)
@@ -441,6 +472,7 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                 event.frame = frame;
                 event.ratchet_index = 0;
                 event.ratchet_count = 1;
+                event.span_ticks = 0;
                 event.loop = firing.loop;
                 event.glide_step = glide.step;
                 event.glide_loop = glide.loop;
@@ -448,7 +480,34 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                 continue;
             }
 
-            // 4. ratchet.
+            // 4. ratchet. A spanning one is its first hit here; the engine rolls the rest.
+            if (ratchet_spans(step.ratchet)) {
+                if (written >= limit) continue;
+                const RatchetRamp ramp = ratchet_shape(step.ratchet);
+                const uint16_t hits = span_hit_count(step.length, state.timing.step_ticks(),
+                                                     ratchet_rate(step.ratchet));
+                StepEvent &event = out[written++];
+                event.track = uint8_t(t);
+                event.step = firing.step;
+                event.note = note;
+                event.velocity = span_velocity(step.velocity, 0, hits,
+                                               1.0f / float(hits), ramp);
+                event.length_index = step.length;
+                event.accent = accent;
+                event.slide = slide;
+                event.trigless = false;
+                event.frame = frame;
+                event.ratchet_index = 0;
+                event.ratchet_count = 1;
+                event.span_ticks = kRatchetRateTicks[ratchet_rate(step.ratchet)];
+                event.span_hits = hits;
+                event.span_ramp = uint8_t(ramp);
+                event.loop = firing.loop;
+                event.glide_step = glide.step;
+                event.glide_loop = glide.loop;
+                event.glide_frames = glide.frames;
+                continue;
+            }
             const uint8_t hits = ratchet_hits(step.ratchet);
             const RatchetRamp ramp = ratchet_shape(step.ratchet);
             for (uint8_t hit = 0; hit < hits; hit++) {
@@ -465,6 +524,7 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                 event.frame = frame + ratchet_frame(hit, hits, state.step_samples);
                 event.ratchet_index = hit;
                 event.ratchet_count = hits;
+                event.span_ticks = 0;
                 event.loop = firing.loop;
                 event.glide_step = glide.step;
                 event.glide_loop = glide.loop;
@@ -501,6 +561,7 @@ bool stutter_event(const Pattern &pattern, int track, int step, uint32_t frame, 
     out.frame = frame;
     out.ratchet_index = 0;
     out.ratchet_count = 1;
+    out.span_ticks = 0;   // a stutter is one hit, as a ratchet of any kind is
     // A stutter plays one moment over and over: its random ranges draw once, and nothing slides.
     out.loop = 0;
     out.glide_step = 0;

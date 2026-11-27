@@ -581,7 +581,7 @@ TEST(sanitize_forces_every_field_into_range) {
     step.micro = 100;
     step.probability = 250;
     step.condition = 200;
-    step.ratchet = 0xF0;    // 0 hits, ramp 15
+    step.ratchet = 0x70;    // 0 hits, ramp 7 (bit 7 clear: not a roll over LEN)
     step.lock_count = 30;
     step.lock_first = 5;
 

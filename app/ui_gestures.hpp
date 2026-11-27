@@ -809,7 +809,8 @@
         post_delta(Cmd::step_field_delta, selected_, held_step_, uint8_t(field), delta);
 
         char value[kStepFieldTextMax];
-        if (field == StepField::ratchet_count && ratchet_count(shown.ratchet) == 1) {
+        if (field == StepField::ratchet_count && !ratchet_spans(shown.ratchet) &&
+            ratchet_count(shown.ratchet) == 1) {
             value[0] = 'O'; value[1] = 'F'; value[2] = 'F'; value[3] = 0;
         } else {
             step_field_text(shown, field, value, int(sizeof value));

@@ -90,6 +90,8 @@ bool field_in_range(const Step &step, StepField field) {
         case StepField::probability: return step.probability <= 100;
         case StepField::condition:   return condition_valid(step.condition);
         case StepField::ratchet_count: {
+            // A roll over LEN holds a rate 0-7 (bit 3 clear); otherwise a count 1-8.
+            if (ratchet_spans(step.ratchet)) return (step.ratchet & 0x08u) == 0;
             const uint8_t hits = ratchet_count(step.ratchet);
             return hits >= kRatchetMin && hits <= kRatchetMax;
         }
@@ -278,7 +280,8 @@ TEST(the_documented_ranges_are_the_ends_of_the_walk) {
         {StepField::micro, -kMicroRange, kMicroRange},
         {StepField::probability, 0, 100},
         {StepField::condition, 0, kConditionPositions - 1},
-        {StepField::ratchet_count, kRatchetMin, kRatchetMax},
+        // counts 1-8, then the eight rolls over LEN
+        {StepField::ratchet_count, kRatchetMin, kRatchetMax + kRatchetRates},
         {StepField::accent, 0, 1},
         {StepField::slide, 0, 1},
         {StepField::chord, 0, kChordWalkPositions - 1},
@@ -592,10 +595,10 @@ TEST(the_ratchet_count_and_ramp_share_a_byte_without_disturbing_each_other) {
     // A corrupt high nibble is preserved too: an edit must not quietly move a field the user is
     // not touching, even to repair it. step_sanitize() is where repairs belong.
     Step step{};
-    step.ratchet = 0xF9u;                                    // ramp nibble 15, count 9
+    step.ratchet = 0x79u;                                    // ramp bits 7, count 9
     step_field_apply(step, StepField::ratchet_count, -1);
     CHECK_EQ(ratchet_count(step.ratchet), 8);                // 9 clamps down into range
-    CHECK_EQ(uint8_t(step.ratchet >> 4), 15);                // the ramp nibble is untouched
+    CHECK_EQ(uint8_t(step.ratchet >> 4), 7);                 // the ramp bits are untouched
 }
 
 TEST(the_ratchet_count_clamps_and_the_ramp_cycles) {
@@ -603,10 +606,21 @@ TEST(the_ratchet_count_clamps_and_the_ramp_cycles) {
     step.ratchet = ratchet_pack(kRatchetMin, RatchetRamp::none);
     step_field_apply(step, StepField::ratchet_count, -1);
     CHECK_EQ(ratchet_count(step.ratchet), kRatchetMin);      // 1 hit is the unratcheted step
-    step_field_apply(step, StepField::ratchet_count, 1000);
-    CHECK_EQ(ratchet_count(step.ratchet), kRatchetMax);
+    // Past 8 hits the walk goes on into the rolls over LEN, 1/64 first, and ends on 1/4.
+    step.ratchet = ratchet_pack(kRatchetMax, RatchetRamp::up);
     step_field_apply(step, StepField::ratchet_count, 1);
+    CHECK(ratchet_spans(step.ratchet));
+    CHECK_EQ(ratchet_rate(step.ratchet), 0);
+    CHECK_EQ(int(ratchet_ramp(step.ratchet)), int(RatchetRamp::up));
+    step_field_apply(step, StepField::ratchet_count, -1);
+    CHECK(!ratchet_spans(step.ratchet));
     CHECK_EQ(ratchet_count(step.ratchet), kRatchetMax);
+    step_field_apply(step, StepField::ratchet_count, 1000);
+    CHECK(ratchet_spans(step.ratchet));
+    CHECK_EQ(ratchet_rate(step.ratchet), kRatchetRates - 1);
+    step_field_apply(step, StepField::ratchet_count, 1);
+    CHECK_EQ(ratchet_rate(step.ratchet), kRatchetRates - 1);
+    CHECK_EQ(int(ratchet_ramp(step.ratchet)), int(RatchetRamp::up));
 
     // Three settings with no natural ends, so this one really does wrap.
     step.ratchet = ratchet_pack(4, RatchetRamp::none);
@@ -868,7 +882,7 @@ TEST(step_field_text_reads_the_values_the_header_documents) {
     step.ratchet = 0x00;                               // count 0 is not a ratchet
     step_field_text(step, StepField::ratchet_count, buf, max);
     CHECK(std::strcmp(buf, "?") == 0);
-    step.ratchet = 0x91;                               // nor is ramp nibble 9 a ramp
+    step.ratchet = 0x31;                               // nor is ramp 3 a ramp
     step_field_text(step, StepField::ratchet_ramp, buf, max);
     CHECK(std::strcmp(buf, "?") == 0);
 
