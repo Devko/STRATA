@@ -8,8 +8,9 @@
 # --unit-load replaces the two MAX figures with a sentence of your own, for when the clean A01
 # and A04 readings were not taken. It goes into the notes as written, so end it with a full stop.
 #
-# Run it in WSL, from a clean checkout of main, after the walkthrough in docs/UNIT_CHECKLIST.md
-# passed and Roland said go. It refuses at the first thing that is not right and changes nothing
+# Run it in WSL, from a clean checkout of main (on Roland's PC: the release thread's own
+# worktree, never D:\DEV\STRATA), after the walkthrough in docs/UNIT_CHECKLIST.md passed and
+# Roland said go. It refuses at the first thing that is not right and changes nothing
 # until every check has passed:
 #
 #   0. a cl6x build needs --ti-licence-read (docs/release/RELEASING.md);
@@ -32,11 +33,24 @@
 # --dry-run does 0-4 and stops: it shows the release body and leaves the tree as it was.
 # --draft creates the GitHub release as a draft instead, to look at before pressing Publish.
 #
-# Needs: git, python3, gh (logged in, `gh auth status`), and the device toolchain for check 3.
+# Needs: git, python3, gh (logged in, `gh auth status`), and the device toolchain for check 2.
+#
+# On Roland's PC the worktree is made by Windows git, which WSL's git cannot read, and gh and the
+# GitHub credentials exist only on Windows. So in a worktree whose .git names a Windows path, the
+# script runs Windows' own git.exe and gh.exe (WSL runs Windows programs from /mnt/c), and builds
+# with WSL as before. STRATA_GIT and STRATA_GH override the choice.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
+
+# git and gh: Windows' own in a Windows-made worktree seen from WSL (see the header).
+GIT=git GH=gh
+if [ -f .git ] && grep -qE '^gitdir: [A-Za-z]:/' .git && grep -qi microsoft /proc/version 2>/dev/null; then
+    GIT=git.exe GH=gh.exe
+fi
+GIT="${STRATA_GIT:-$GIT}"
+GH="${STRATA_GH:-$GH}"
 
 die() { echo "publish_release: $*" >&2; exit 1; }
 say() { echo "== $*"; }
@@ -92,19 +106,21 @@ NOTES="docs/release/$TAG.md"
 
 # --- 1. the repository ---------------------------------------------------------------------
 say "1. repository"
-[ -z "$(git status --porcelain --untracked-files=no)" ] || die "the tree has uncommitted changes"
-git fetch -q origin main --tags
-[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
+[ -z "$("$GIT" status --porcelain --untracked-files=no)" ] || die "the tree has uncommitted changes"
+"$GIT" fetch -q origin main --tags
+[ "$("$GIT" rev-parse HEAD)" = "$("$GIT" rev-parse origin/main)" ] \
     || die "HEAD is not origin/main: check out main and pull, then rebuild the card from it"
-git rev-parse -q --verify "refs/tags/$TAG" >/dev/null && die "tag $TAG exists already"
-git ls-remote --exit-code --tags origin "$TAG" >/dev/null 2>&1 && die "tag $TAG exists on GitHub already"
+"$GIT" rev-parse -q --verify "refs/tags/$TAG" >/dev/null && die "tag $TAG exists already"
+"$GIT" ls-remote --exit-code --tags origin "$TAG" >/dev/null 2>&1 && die "tag $TAG exists on GitHub already"
 HAVE_GH=0
-if command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
+if command -v "$GH" >/dev/null && "$GH" auth status >/dev/null 2>&1; then
     HAVE_GH=1
-    gh release view "$TAG" >/dev/null 2>&1 && die "a GitHub release $TAG exists already"
+    "$GH" release view "$TAG" >/dev/null 2>&1 && die "a GitHub release $TAG exists already"
 fi
-[ "$DRY" -eq 1 ] || [ "$HAVE_GH" -eq 1 ] || die "gh is missing or not logged in (gh auth login)"
-echo "main at $(git rev-parse --short HEAD), $TAG is free"
+[ "$DRY" -eq 1 ] || [ "$HAVE_GH" -eq 1 ] || die "$GH is missing or not logged in ($GH auth login)"
+# Where to come back to after step 5: the branch or the commit the worktree is on now.
+ORIG=$("$GIT" symbolic-ref -q --short HEAD || "$GIT" rev-parse HEAD)
+echo "main at $("$GIT" rev-parse --short HEAD), $TAG is free"
 
 # --- 2. the app is a build of HEAD -------------------------------------------------------------
 say "2. the card's APP.ENA is a $BUILD_LABEL build of HEAD"
@@ -124,7 +140,8 @@ fi
 # --- 3. Enaga's release, which the zip links instead of shipping -------------------------------
 ENAGA_VERSION=$(python3 -B -c 'import sys; sys.path.insert(0, "tools"); import package_release as p; print(".".join(map(str, p.pinned_firmware_version())))')
 say "3. Enaga's v$ENAGA_VERSION release is up (the zip links it, and does not carry firmware)"
-WORK=$(mktemp -d)
+mkdir -p build
+WORK=$(mktemp -d build/publish.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 if [ "$SKIP_ENAGA" -eq 1 ]; then
     echo "SKIPPED (--skip-enaga-check)"
@@ -132,7 +149,7 @@ elif [ "$HAVE_GH" -ne 1 ]; then
     die "checking Enaga's release needs gh (or --skip-enaga-check after opening
     https://github.com/seawaffle/enaga/releases/tag/v$ENAGA_VERSION by hand)"
 else
-    gh release download "v$ENAGA_VERSION" --repo seawaffle/enaga --dir "$WORK/enaga" \
+    "$GH" release download "v$ENAGA_VERSION" --repo seawaffle/enaga --dir "$WORK/enaga" \
         --pattern "enaga-v$ENAGA_VERSION-smpltrek.zip" >/dev/null \
         || die "Enaga's v$ENAGA_VERSION release has no enaga-v$ENAGA_VERSION-smpltrek.zip: the README.txt
     would send users to a release they cannot install from"
@@ -162,7 +179,7 @@ fi
 # --- 4. fill the notes, test, package ----------------------------------------------------------
 say "4. notes, tests, zip"
 FILES=(CHANGELOG.md "$NOTES")
-restore() { git checkout -q -- "${FILES[@]}"; rm -rf "$WORK"; }
+restore() { "$GIT" checkout -q -- "${FILES[@]}"; rm -rf "$WORK"; }
 trap restore EXIT
 fill() {   # fill <file> KEY=VALUE ...: replace {{KEY}} with VALUE
     python3 -B - "$@" <<'PY'
@@ -200,27 +217,29 @@ fi
 # --- 5. commit, tag, push, release ------------------------------------------------------------
 say "5. publish"
 BRANCH="release/$TAG"
-git checkout -q -b "$BRANCH"
-git add "${FILES[@]}"
-git commit -q -m "release: $TAG
+"$GIT" checkout -q -b "$BRANCH"
+"$GIT" add "${FILES[@]}"
+"$GIT" commit -q -m "release: $TAG
 
 The changelog dated $DATE and the notes filled from the unit test: $BUILD_LABEL build,
 $UNIT_LOAD Zip sha256 $ZIP_SHA."
 trap 'rm -rf "$WORK"' EXIT          # the filled notes are committed now
-git tag -a "$TAG" -m "STRATA $VERSION"
-git push -q origin "$BRANCH" "$TAG"
+"$GIT" tag -a "$TAG" -m "STRATA $VERSION"
+"$GIT" push -q origin "$BRANCH" "$TAG"
 
 FLAGS=(--prerelease)
 [ "$DRAFT" -eq 1 ] && FLAGS+=(--draft)
-gh release create "$TAG" "$ZIP" "$ZIP.sha256" --verify-tag --title "STRATA $VERSION" \
+"$GH" release create "$TAG" "$ZIP" "$ZIP.sha256" --verify-tag --title "STRATA $VERSION" \
     --notes-file "$BODY" "${FLAGS[@]}"
-gh pr create --base main --head "$BRANCH" --title "release: $TAG, the dated changelog" \
-    --body "The release commit that $TAG points at: CHANGELOG.md dated and the release notes filled from the unit test. Merge it so main has them. Then update README.md's install section, which still says there is no prebuilt release." || true
-git checkout -q main
+"$GH" pr create --base main --head "$BRANCH" --title "release: $TAG, the dated changelog" \
+    --body "The release commit that $TAG points at: CHANGELOG.md dated and the release notes filled from the unit test. Merge it so main has them, then follow docs/release/RELEASING.md, \"After\"." || true
+# Back where it started: main itself is usually checked out in another worktree, where a
+# checkout of it here would fail.
+"$GIT" checkout -q "$ORIG"
 
 if [ "$DRAFT" -eq 1 ]; then
     say "DRAFT release $TAG created: open it on GitHub and press Publish"
 else
     say "PUBLISHED $TAG"
 fi
-gh release view "$TAG" --json url -q .url
+"$GH" release view "$TAG" --json url -q .url
