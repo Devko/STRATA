@@ -7,14 +7,18 @@
 // stores them, a step can lock them, a scene stores and morphs them and a macro can drive them,
 // all through the code that already does that for the 16 sound parameters. What each byte means:
 //
-//     16  WAV  the shape: SIN TRI RMP SAW SQR S+H, six bands of the 0-127 byte. RMP rises and
+//     16  WAV  the shape: SIN TRI RMP SAW SQR S+H, the numbers 0-5. RMP rises and
 //              SAW falls, which is what stands in for a signed depth: an inverted sine or
 //              triangle is the same wave half a cycle on, so only the ramp needs both.
 //     17  RAT  the rate. 0-63 run FREE, 0.0625 Hz to 32 Hz, an octave every 7 counts; 64-127
 //              are SYNCED to the clock, sixteen note lengths from 8 bars to a 1/32, four counts
 //              each. One knob rather than a switch and a knob because a page has four encoders.
 //     18  DEP  how far: 127 swings the destination about 64 counts either side of its value.
-//     19  DST  which parameter: OFF, then the 16 sound parameters (1-16), seventeen bands.
+//     19  DST  which parameter: 0 OFF, then the 16 sound parameters (1-16).
+//
+// WAV and DST were bands of the 0-127 byte until format decision C (2026-11-26): a new shape
+// would have moved every band edge. core/project.hpp has the numbers, the per-parameter maximum
+// the knobs clamp to, and the conversion an older file goes through once on read.
 //
 // **Zeroed bytes are OFF** (DST 0, DEP 0), so a kit or a scene written before the LFO existed
 // sounds exactly as it did, and a track with its LFO off costs one compare a block. That is what
@@ -57,6 +61,7 @@
 // transport is stopped the engine keeps counting at the tempo, so a synced LFO keeps moving.
 #pragma once
 
+#include "project.hpp"   // kKitLfoWaves, kit_param_max: the WAV and DST numbers
 #include "track.hpp"
 
 #include <enaga/dsp.hpp>
@@ -88,27 +93,28 @@ const char *lfo_trig_name(LfoTrig trig);       // "FREE" "RETRIG" "ONE-SHOT"
 constexpr uint8_t kLfoSyncFirst = 64;
 constexpr int kLfoSyncDivisions = 16;
 
-// The bands, as integer arithmetic (no divide): WAV in six, DST in seventeen.
+static_assert(kLfoWaves == kKitLfoWaves, "core/project.hpp counts the shapes too");
+static_assert(kLfoWave == kKitLfoWaveIndex && kLfoDest == kKitLfoDestIndex,
+              "core/project.hpp and dsp/track.hpp place WAV and DST differently");
+static_assert(kParams == kKitSoundParams, "DST names the sound parameters");
+
+// The bytes as numbers. A byte past the last (a damaged file, a value from before the knobs
+// clamped) reads as the last shape or destination rather than as nonsense.
 constexpr LfoWave lfo_wave(uint8_t byte) {
-    return LfoWave((int(byte > 127 ? 127 : byte) * kLfoWaves) >> 7);
+    return LfoWave(byte > kKitLfoWaveMax ? kKitLfoWaveMax : byte);
 }
 // -1 for OFF, else the sound parameter 0-15.
 constexpr int lfo_dest(uint8_t byte) {
-    return ((int(byte > 127 ? 127 : byte) * (kParams + 1)) >> 7) - 1;
+    return int(byte > kKitLfoDestMax ? kKitLfoDestMax : byte) - 1;
 }
-// The smallest byte in a band, which is what a test or the factory writes to pick it.
-constexpr uint8_t lfo_wave_byte(LfoWave wave) {
-    return uint8_t((int(wave) * 128 + kLfoWaves - 1) / kLfoWaves);
-}
+// The byte that picks a shape or a destination, which is what a test or the factory writes.
+constexpr uint8_t lfo_wave_byte(LfoWave wave) { return uint8_t(wave); }
 constexpr uint8_t lfo_dest_byte(int param) {
-    return param < 0 ? uint8_t(0) : uint8_t(((param + 1) * 128 + kParams) / (kParams + 1));
+    return param < 0 ? uint8_t(0) : uint8_t(param + 1);
 }
 
-// How many encoder clicks one band is worth, so one click on WAV or DST is one shape or one
-// destination rather than a seventh of one. app/ scales a click by this.
-constexpr int lfo_click(int index) {
-    return index == kLfoWave ? 22 : (index == kLfoDest ? 8 : 1);
-}
+// Encoder counts per click: one now that WAV and DST are numbers (they were bands of 22 and 8).
+constexpr int lfo_click(int) { return 1; }
 
 // One synced cycle in clock ticks (96 PPQN), longest first; 0 for a free-running byte.
 uint32_t lfo_sync_ticks(uint8_t rate);

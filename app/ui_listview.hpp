@@ -1068,7 +1068,7 @@
                 continue;
             }
             const ShownParam shown = shown_param(index);
-            draw_gauge(canvas, cx, 87, 9, shown.heard, -1, true, false);
+            draw_gauge(canvas, cx, 87, 9, shown.heard * 127 / shown.top, -1, true, false);
             out = text;
             append_param_value(out, index, shown.heard);
             *out = 0;

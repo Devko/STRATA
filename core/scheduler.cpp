@@ -49,6 +49,7 @@
 
 #include "clamp.hpp"
 #include "liverand.hpp"
+#include "project.hpp"    // kit_param_max
 
 namespace strata {
 
@@ -173,7 +174,8 @@ uint8_t lock_spread(uint8_t base, uint8_t width, uint32_t seed, int track, int s
     const uint32_t w = width > 127u ? 127u : width;
     const int32_t offset = int32_t((uint64_t(h) * (2u * w + 1u)) >> 32) - int32_t(w);
     const int32_t value = int32_t(base) + offset;
-    return uint8_t(value < 0 ? 0 : (value > 127 ? 127 : value));
+    const int32_t top = int32_t(kit_param_max(param));   // WAV and DST: their last number
+    return uint8_t(value < 0 ? 0 : (value > top ? top : value));
 }
 
 uint8_t lock_resolve(const Pattern &pattern, int track, int step, uint32_t loop, int param,

@@ -221,13 +221,18 @@ Engine &fresh() {
     // macros, so a macro left ASSIGNED and at full position by an earlier test overrides the
     // kit -- and a test that then sets a kit parameter and listens finds its knob does nothing.
     // That cost real time to find: it looked like the per-block-copy bug coming back.
-    for (int m = 0; m < kMacros; m++) post(Cmd::macro_clear, 0, 0, uint8_t(m));
+    for (int m = 0; m < kMacros; m++) {
+        post(Cmd::macro_clear, 0, 0, uint8_t(m));
+        post(Cmd::set_macro, 0, 0, uint8_t(m), 0);       // and its knob at rest: clear keeps it
+    }
     post(Cmd::set_morph);
     post(Cmd::set_auto_fill);
     post(Cmd::set_move_all, 0, 0, 0, 0);                    // REL ALL to rest
     post(Cmd::set_move_all, 0, 0, 1, 0);                    // LEN ALL to rest
     post(Cmd::set_live_rnd, 0, 0, 0, kLiveRndAllTracks);    // LIVE RND off, every track armed
     post(Cmd::step_stutter);                                // b = 0: let go
+    post(Cmd::set_click, 0, 0, 0);                         // the metronome off: it is the
+                                                            // engine's, not the project's
 
     // The SEND and MASTER settings come back with `Cmd::project_loaded` above, because
     // `project_init` reset the fourteen bytes they are derived from and the engine re-derives

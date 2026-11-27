@@ -671,8 +671,10 @@ private:
     // layer skips them, so a lock always wins over a morph -- which is what docs/archive/REVIEW.md's
     // "base kit values only" means from the other side. Set by `fire` and therefore lasting
     // exactly as long as the step does.
-    uint32_t locked_[kTracks] = {};
-    static_assert(kTrackParams <= 32, "locked_ holds one bit per parameter");
+    // 64 bits (format decision C, 2026-11-26): room for a parameter page past the 32 bytes a
+    // track has now without touching every user of the mask again.
+    uint64_t locked_[kTracks] = {};
+    static_assert(kTrackParams <= 64, "locked_ holds one bit per parameter");
 
     // Parameter slide (core/pattern.hpp, kLockSlide): a slid lock's parameter gliding from the
     // step's value to what the next step that plays holds, over the time until that step.

@@ -511,6 +511,9 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                     const int next = int(params_[track].v[command.a]) + int(int8_t(command.b));
                     value = uint8_t(next < 0 ? 0 : (next > 127 ? 127 : next));
                 }
+                // WAV and DST stop at their last shape and destination (core/project.hpp).
+                const uint8_t top = kit_param_max(command.a);
+                value = value > top ? top : value;
                 params_[track].v[command.a] = clamp_7bit(value);
                 // `performed_` is built FROM `params_`, and the per-block copy in process()
                 // writes it over every unlocked parameter of `effective_`. So a kit change that
@@ -551,7 +554,7 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                 status_.bump_refused();
                 break;
             }
-            const uint32_t locked = locked_[track];
+            const uint64_t locked = locked_[track];
             for (int p = 0; p < kTrackParams; p++) {
                 // A lock on the current step still wins until the next step, as for a knob.
                 if ((locked >> p & 1u) == 0) effective_[track].v[p] = bytes[p];
@@ -582,7 +585,7 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                 status_.bump_refused();
                 break;
             }
-            const uint32_t locked = locked_[track];
+            const uint64_t locked = locked_[track];
             for (int p = kArpFirst; p < kArpFirst + kArpBytes; p++) {
                 if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
             }
@@ -658,7 +661,7 @@ bool Engine::apply_sound(const Command &command, int track, int) {
             // half way into the file, sliced, and fade early. The mix, LFO and ARP stay. A lock on
             // the current step still wins until the next step, as for a knob or a preset.
             if (machine_defaults_apply(command.a, params_[track].v)) {
-                const uint32_t locked = locked_[track];
+                const uint64_t locked = locked_[track];
                 for (int p = 0; p < kTrackParams; p++) {
                     if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
                 }
@@ -769,9 +772,11 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
             // currently hearing rather than from zero.
             uint8_t base = params_[track].v[param];
             pattern_get_lock(live(), track, step, param, base);
-            const uint8_t value = command.c == kSemitoneFlag && tune_param(machine_id_[track]) == param
+            uint8_t value = command.c == kSemitoneFlag && tune_param(machine_id_[track]) == param
                                       ? tune_step(machine_id_[track], base, int(int8_t(command.b)))
                                       : clamp_7bit(int(base) + int(int8_t(command.b)));
+            const uint8_t top = kit_param_max(param);
+            if (value > top) value = top;          // WAV and DST stop at their last one
 
             if (!pattern_set_lock(live(), track, step, param, value)) {
                 // "Full" usually means slots abandoned by relocation rather than 1,024 real
@@ -796,7 +801,7 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
                 // parameter this mask does not claim -- undoes the line above before a sample is
                 // rendered, leaving exactly the silence the comment says it prevents. fire()
                 // rebuilds the mask for the next step, so this only has to hold until then.
-                locked_[track] = locked_[track] | (1u << param);
+                locked_[track] = locked_[track] | (uint64_t(1) << param);
             }
             break;
         }
@@ -3347,21 +3352,21 @@ void Engine::fire(const StepEvent &event) {
 
     const LockView locks = pattern_step_locks(live(), track, int(event.step));
     int applied = 0;
-    uint32_t locked = 0;
+    uint64_t locked = 0;
     // The values first, then the random ranges over them (core/pattern.hpp's lock byte): a range
     // spreads the step's lock, or the sound the step starts from when it has none. The slide bit
     // is read by start_slides below.
-    uint32_t ranged = 0;
+    uint64_t ranged = 0;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
         const uint8_t param = lock_param(lock->param);
         if (param >= kTrackParams || applied >= kMaxLocksApplied) continue;
         applied++;
         if (lock_is_range(lock->param)) {
-            ranged = ranged | (1u << param);
+            ranged = ranged | (uint64_t(1) << param);
             continue;
         }
         effective_[track].v[param] = lock->value;
-        locked = locked | (1u << param);
+        locked = locked | (uint64_t(1) << param);
     }
     if (ranged != 0u) {
         const uint32_t seed = live().seed;
@@ -3850,7 +3855,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // current step has a lock, which always wins. Without this a morph would only be heard at
     // the next trig, and sweeping VALUE between steps would do nothing at all.
     for (int t = 0; t < kTracks; t++) {
-        const uint32_t locked = locked_[t];
+        const uint64_t locked = locked_[t];
         // Most steps lock nothing: then it is one 32-byte copy, not 32 tested bytes.
         if (locked == 0u) {
             __builtin_memcpy(effective_[t].v, performed_[t], sizeof performed_[t]);
@@ -4336,7 +4341,7 @@ void Engine::apply_live(const LiveState &state) {
     span_clear();   // and the rolls of spanning ratchets
     for (int t = 0; t < kTracks; t++) {
         __builtin_memcpy(params_[t].v, state.params[t], kKitParams);
-        const uint32_t locked = locked_[t];
+        const uint64_t locked = locked_[t];
         for (int p = 0; p < kTrackParams; p++) {
             // A p-lock on the step playing now still wins until the next step, as for a knob.
             if ((locked >> p & 1u) == 0) effective_[t].v[p] = params_[t].v[p];

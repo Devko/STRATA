@@ -87,6 +87,19 @@ means new firmware as well as the app. The features below have not been through 
 
 ### Changed
 
+- **File format: the LFO's WAV and DST are numbers** (Roland's decision C): a shape or a
+  destination is stored as its number rather than as a band of 0-127, so new shapes and
+  destinations can come later without changing what any saved project sounds like. Projects,
+  kits and patterns from earlier versions are converted on load, scenes, macros and step locks
+  included, and sound the same. **A project saved by this version and opened on an earlier one
+  plays its LFOs wrong there** (mostly a sine going nowhere). The lock and scene masks behind
+  every parameter are 64 bits now, room for a page past the 32 bytes a track has.
+- Internal: the engine's command handling is split into twelve handlers, one per family of
+  commands, with no change in behaviour; the host tests no longer depend on the order they run in,
+  and `tools/test_shuffle.sh` runs them in shuffled orders to keep it so.
+- **The arp's RND is random on every pass** (and RATCHET's RND2 and RND3 with it): each run draws
+  a new seed. It used to play one fixed pattern for a given track and step.
+- A kit recalled from the kit library brings its arp settings with its ARP bytes.
 - **VA voices cost less**: the filter, envelope and output of every VA MONO and VA POLY voice
   run as one loop the TI compiler can pipeline, the same sound to the last bit. About 1.5 points
   off every pattern that plays them (the default beat 26.6% -> 25.1% on the emulator).

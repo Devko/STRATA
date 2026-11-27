@@ -41,37 +41,57 @@ uint8_t sounding() { return strata::test::engine().sounding(kTrack).v[kDest]; }
 
 // --- the bytes ------------------------------------------------------------
 
-TEST(lfo_wave_and_dest_bands_cover_the_byte_and_one_click_is_one_band) {
-    int last = -1;
-    for (int b = 0; b < 128; b++) {
-        const int w = int(lfo_wave(uint8_t(b)));
-        CHECK(w >= last && w <= last + 1);
-        last = w;
-    }
-    CHECK_EQ(last, kLfoWaves - 1);
+TEST(lfo_wave_and_dest_are_numbers_and_one_click_is_one_of_them) {
+    // Format decision C (2026-11-26): WAV is the shape's number and DST 0 for OFF or 1-16, not
+    // bands of the 0-127 byte, so a seventh shape would not move the meaning of any stored byte.
     for (int w = 0; w < kLfoWaves; w++) {
-        CHECK_EQ(int(lfo_wave(lfo_wave_byte(LfoWave(w)))), w);
-        if (w > 0) CHECK_EQ(int(lfo_wave(uint8_t(lfo_wave_byte(LfoWave(w)) - 1))), w - 1);
-        // From a band's start, one click (lfo_click) is the next band.
-        const int next = int(lfo_wave_byte(LfoWave(w))) + lfo_click(kLfoWave);
-        CHECK_EQ(int(lfo_wave(uint8_t(next > 127 ? 127 : next))),
-                 w + 1 < kLfoWaves ? w + 1 : kLfoWaves - 1);
+        CHECK_EQ(int(lfo_wave_byte(LfoWave(w))), w);
+        CHECK_EQ(int(lfo_wave(uint8_t(w))), w);
     }
+    // Past the last is the last, whatever put it there.
+    CHECK_EQ(int(lfo_wave(uint8_t(kLfoWaves))), kLfoWaves - 1);
+    CHECK_EQ(int(lfo_wave(127)), kLfoWaves - 1);
+    CHECK_EQ(int(lfo_wave(255)), kLfoWaves - 1);
 
     CHECK_EQ(lfo_dest(0), -1);                       // zero is OFF
-    CHECK_EQ(lfo_dest(127), kParams - 1);
     for (int p = -1; p < kParams; p++) {
+        CHECK_EQ(int(lfo_dest_byte(p)), p + 1);
         CHECK_EQ(lfo_dest(lfo_dest_byte(p)), p);
-        const int next = int(lfo_dest_byte(p)) + lfo_click(kLfoDest);
-        CHECK_EQ(lfo_dest(uint8_t(next > 127 ? 127 : next)), p + 1 < kParams ? p + 1 : kParams - 1);
     }
-    // Eight clicks from 0 walk every destination: a click is one band, never two.
-    for (int k = 0; k <= kParams; k++) {
-        const int byte = k * lfo_click(kLfoDest);
-        CHECK_EQ(lfo_dest(uint8_t(byte > 127 ? 127 : byte)), k - 1);
-    }
+    CHECK_EQ(lfo_dest(uint8_t(kParams + 1)), kParams - 1);
+    CHECK_EQ(lfo_dest(127), kParams - 1);
+
+    // One click is one shape, one destination, one count: the same everywhere now.
+    CHECK_EQ(lfo_click(kLfoWave), 1);
     CHECK_EQ(lfo_click(kLfoRate), 1);
     CHECK_EQ(lfo_click(kLfoDepth), 1);
+    CHECK_EQ(lfo_click(kLfoDest), 1);
+
+    // And the highest value a knob may set (core/project.hpp): the last shape and destination.
+    CHECK_EQ(int(kit_param_max(kLfoWave)), kLfoWaves - 1);
+    CHECK_EQ(int(kit_param_max(kLfoDest)), kParams);
+    CHECK_EQ(int(kit_param_max(kLfoRate)), 127);
+    CHECK_EQ(int(kit_param_max(kLfoDepth)), 127);
+    CHECK_EQ(int(kit_param_max(0)), 127);
+}
+
+TEST(lfo_an_old_band_byte_reads_as_the_shape_or_destination_it_meant) {
+    // What a file from before decision C holds, converted once on read (kit_lfo_from_band): the
+    // bands' old decoding, kept here so every stored byte keeps its sound.
+    for (int b = 0; b < 128; b++) {
+        CHECK_EQ(int(kit_lfo_from_band(kLfoWave, uint8_t(b))), (b * kLfoWaves) >> 7);
+        CHECK_EQ(int(kit_lfo_from_band(kLfoDest, uint8_t(b))), (b * (kParams + 1)) >> 7);
+        CHECK_EQ(int(kit_lfo_from_band(kLfoRate, uint8_t(b))), b);      // not WAV or DST: as is
+    }
+    // The bytes the old factory and tests wrote to pick each one: a band's first byte.
+    for (int w = 0; w < kLfoWaves; w++) {
+        const uint8_t old = uint8_t((w * 128 + kLfoWaves - 1) / kLfoWaves);
+        CHECK_EQ(int(kit_lfo_from_band(kLfoWave, old)), w);
+    }
+    for (int p = -1; p < kParams; p++) {
+        const uint8_t old = p < 0 ? uint8_t(0) : uint8_t(((p + 1) * 128 + kParams) / (kParams + 1));
+        CHECK_EQ(int(kit_lfo_from_band(kLfoDest, old)), p + 1);
+    }
 }
 
 TEST(lfo_rate_runs_free_below_64_and_synced_above) {
@@ -757,4 +777,33 @@ TEST(lfo_floor_a_morph_or_macro_stops_a_cutoff_at_about_100_hz_but_the_knob_does
     post(Cmd::macro_clear, 0, 0, 0);
     pump(2);
     CHECK_EQ(int(engine.performed(kVa, va_cut)), 90);
+}
+
+TEST(lfo_a_knob_or_a_lock_on_wav_or_dst_stops_at_the_last_one) {
+    // Numbers (format decision C): turning WAV past S+H or DST past the 16th parameter stays
+    // there, so turning back is one click and not a hundred.
+    Engine &engine = fresh();
+    post(Cmd::set_param, kTrack, 0, uint8_t(kLfoWave), 0);
+    post(Cmd::set_param, kTrack, 0, uint8_t(kLfoWave), uint8_t(int8_t(40)), kDeltaFlag);
+    post(Cmd::set_param, kTrack, 0, uint8_t(kLfoDest), uint8_t(int8_t(100)), kDeltaFlag);
+    pump();
+    CHECK_EQ(int(engine.params(kTrack).v[kLfoWave]), kLfoWaves - 1);
+    CHECK_EQ(int(engine.params(kTrack).v[kLfoDest]), kParams);
+    post(Cmd::set_param, kTrack, 0, uint8_t(kLfoWave), uint8_t(int8_t(-1)), kDeltaFlag);
+    pump();
+    CHECK_EQ(int(engine.params(kTrack).v[kLfoWave]), kLfoWaves - 2);   // one click back
+    // An absolute value past the last is the last too.
+    post(Cmd::set_param, kTrack, 0, uint8_t(kLfoDest), 90);
+    pump();
+    CHECK_EQ(int(engine.params(kTrack).v[kLfoDest]), kParams);
+
+    // A lock turned on a step, the same.
+    post(Cmd::lock_delta, kTrack, 3, uint8_t(kLfoWave), uint8_t(int8_t(60)));
+    pump();
+    uint8_t locked = 0;
+    CHECK(pattern_get_lock(engine.pattern(), kTrack, 3, uint8_t(kLfoWave), locked));
+    CHECK_EQ(int(locked), kLfoWaves - 1);
+    post(Cmd::set_param, kTrack, 0, uint8_t(kLfoWave), 0);
+    post(Cmd::set_param, kTrack, 0, uint8_t(kLfoDest), 0);
+    pump();
 }

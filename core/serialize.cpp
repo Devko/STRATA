@@ -11,6 +11,7 @@
 //   3. A refused load leaves an empty pattern, never a half-filled one. docs/SPEC.md: an
 //      unknown version or a bad CRC "never crashes the app".
 #include "serialize.hpp"
+#include "project.hpp"   // the LFO layout: kit_lfo_from_band, kit_param_max
 
 #include "clamp.hpp"
 
@@ -163,7 +164,8 @@ constexpr uint32_t kHeaderSectionOffset = kTableBytes;
 constexpr uint32_t kTracksSectionOffset = kHeaderSectionOffset + kPatternHeaderSectionBytes;
 constexpr uint32_t kPlayModesSectionOffset = kTracksSectionOffset + kTracksSectionBytes;
 constexpr uint32_t kFeelSectionOffset = kPlayModesSectionOffset + kPlayModesSectionBytes;
-constexpr uint32_t kLocksSectionOffset = kFeelSectionOffset + kFeelSectionBytes;
+constexpr uint32_t kLfoLayoutSectionOffset = kFeelSectionOffset + kFeelSectionBytes;
+constexpr uint32_t kLocksSectionOffset = kLfoLayoutSectionOffset + kLfoLayoutSectionBytes;
 static_assert(kHeaderBytes + kLocksSectionOffset == kPatternFixedBytes,
               "the fixed part of a pattern file is not the sum of its sections");
 
@@ -231,6 +233,11 @@ SerializeResult pattern_write(const Pattern &pattern, uint8_t *buffer, uint32_t 
     w.u32(kFeelSectionOffset);
     w.u32(kFeelSectionBytes);
 
+    w.u16(kSectionPatternLfoLayout);
+    w.u16(0);
+    w.u32(kLfoLayoutSectionOffset);
+    w.u32(kLfoLayoutSectionBytes);
+
     w.u16(kSectionLocks);
     w.u16(0);
     w.u32(kLocksSectionOffset);
@@ -275,6 +282,7 @@ SerializeResult pattern_write(const Pattern &pattern, uint8_t *buffer, uint32_t 
     // The play modes, between the tracks and the variable-length lock pool.
     for (int t = 0; t < kTracks; t++) w.u8(pattern.tracks[t].play);
     w.u8(pattern.feel);
+    w.u8(kLfoLayoutNumbers);
 
     // Pass two: the pool itself, in the same order.
     running = 0;
@@ -338,12 +346,12 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
 
     // The three sections a pattern needs, then the optional play modes and FEEL; ids this build
     // does not know are skipped, which is what the offsets in the table are for.
-    constexpr int kWanted = 5;
+    constexpr int kWanted = 6;
     const uint16_t wanted[kWanted] = {kSectionPatternHeader, kSectionTracks, kSectionLocks,
-                                      kSectionPlayModes, kSectionFeel};
-    uint32_t offset[kWanted] = {0, 0, 0, 0, 0};
-    uint32_t length[kWanted] = {0, 0, 0, 0, 0};
-    bool found[kWanted] = {false, false, false, false, false};
+                                      kSectionPlayModes, kSectionFeel, kSectionPatternLfoLayout};
+    uint32_t offset[kWanted] = {0, 0, 0, 0, 0, 0};
+    uint32_t length[kWanted] = {0, 0, 0, 0, 0, 0};
+    bool found[kWanted] = {false, false, false, false, false, false};
 
     for (uint32_t i = 0; i < sections; i++) {
         if (!r.seek(kHeaderBytes + i * kSectionEntryBytes)) {
@@ -374,6 +382,7 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
     // Present but short is damage, not an old file: a writer that declared it declared 8 bytes.
     if (found[3] && length[3] < kPlayModesSectionBytes) return refuse(SerializeResult::malformed);
     if (found[4] && length[4] < kFeelSectionBytes) return refuse(SerializeResult::malformed);
+    if (found[5] && length[5] < kLfoLayoutSectionBytes) return refuse(SerializeResult::malformed);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
 
     const uint8_t tracks = r.u8();
@@ -477,6 +486,32 @@ SerializeResult pattern_read(Pattern &pattern, const uint8_t *buffer, uint32_t s
         const uint8_t feel = r.u8();
         if (!r.ok()) return refuse(SerializeResult::truncated);
         pattern.feel = feel <= kFeelMax ? feel : uint8_t(0);
+    }
+
+    // The LFO layout (format decision C). Absent is a pattern whose WAV and DST locks hold the old
+    // bands: a value lock becomes the number it meant, and a random range's width the nearest
+    // whole number of shapes or destinations at or above it (a width of 22, about one shape, is
+    // 1). Past the last is the last either way.
+    uint8_t lfo_layout = 0;
+    if (found[5]) {
+        if (!r.seek(kHeaderBytes + offset[5])) return refuse(SerializeResult::malformed);
+        lfo_layout = r.u8();
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+    for (uint16_t i = 0; i < lock_total; i++) {
+        Lock &lock = pattern.locks[i];
+        const int param = int(lock_param(lock.param));
+        if (param != kKitLfoWaveIndex && param != kKitLfoDestIndex) continue;
+        const int top = int(kit_param_max(param));
+        if (lfo_layout < kLfoLayoutNumbers) {
+            if (lock_is_range(lock.param)) {
+                const int bands = top + 1;
+                lock.value = uint8_t((int(lock.value) * bands + 127) >> 7);
+            } else {
+                lock.value = kit_lfo_from_band(param, lock.value);
+            }
+        }
+        if (!lock_is_range(lock.param) && lock.value > top) lock.value = uint8_t(top);
     }
 
     if (consumed != nullptr) *consumed = kHeaderBytes + payload;

@@ -297,7 +297,8 @@ TEST(sounds_switching_a_track_loads_the_new_machines_defaults) {
     post(Cmd::set_machine, 5, 0, uint8_t(MachineId::sample));
     pump(2);
     uint8_t want[kKitParams];
-    for (int p = 0; p < kKitParams; p++) want[p] = 37;
+    // 37 where the parameter goes that high: WAV and DST stop at their last number.
+    for (int p = 0; p < kKitParams; p++) want[p] = kit_param_max(p) < 37 ? kit_param_max(p) : 37;
     CHECK(machine_defaults_apply(uint8_t(MachineId::sample), want));
     for (int p = 0; p < kTrackParams; p++) {
         CHECK_EQ(int(e.params(5).v[p]), int(want[p]));

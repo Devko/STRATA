@@ -358,12 +358,13 @@ static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
-constexpr uint32_t kKitSections = 12;
+constexpr uint32_t kKitSections = 13;
 // The second to eleventh, the LFO, the arp, SLC AUTO, the ASR page, the duck, the OSC page, the
-// filter layout, LFO TRIG, the mod slots, the choke groups and the arp's settings, are optional
+// filter layout, LFO TRIG, the mod slots, the choke groups, the arp's settings and the LFO layout,
+// are optional
 // on read: see
 // kSectionKitLfo.
-constexpr uint32_t kKitOptionalSections = 11;
+constexpr uint32_t kKitOptionalSections = 12;
 constexpr uint32_t kKitTrackBytes =
     uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
@@ -392,7 +393,9 @@ constexpr uint32_t kKitChokeBytes = uint32_t(kTracks);
 constexpr uint32_t kKitChokeOffset = kKitModOffset + kKitModBytes;
 constexpr uint32_t kKitArpExtBytes = uint32_t(kArpExtFields) * uint32_t(kTracks);
 constexpr uint32_t kKitArpExtOffset = kKitChokeOffset + kKitChokeBytes;
-constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitArpExtOffset + kKitArpExtBytes;
+constexpr uint32_t kKitLfoLayoutBytes = 1;
+constexpr uint32_t kKitLfoLayoutOffset = kKitArpExtOffset + kKitArpExtBytes;
+constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitLfoLayoutOffset + kKitLfoLayoutBytes;
 static_assert(kKitSoundParams == 16, "KIT.BIN's track section has carried 16 parameters since M4");
 
 // --- BANK_x.BIN sizes -----------------------------------------------------
@@ -795,6 +798,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
         {kSectionKitMod, kKitModOffset, kKitModBytes},
         {kSectionKitChoke, kKitChokeOffset, kKitChokeBytes},
         {kSectionKitArpExt, kKitArpExtOffset, kKitArpExtBytes},
+        {kSectionKitLfoLayout, kKitLfoLayoutOffset, kKitLfoLayoutBytes},
     };
 
     Writer w(buffer, capacity);
@@ -839,6 +843,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
     for (int t = 0; t < kTracks; t++) {
         for (int f = 0; f < kArpExtFields; f++) w.u8(arp_ext_get(kit.tracks[t].arp, f));
     }
+    w.u8(kLfoLayoutNumbers);
 
     if (!w.ok() || w.size() != kKitTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kKitTotalBytes, written);
@@ -853,7 +858,8 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     const uint16_t wanted[kKitSections] = {kSectionKitTracks, kSectionKitLfo, kSectionKitArp,
                                            kSectionKitSlices, kSectionKitAsr, kSectionKitDuck,
                                            kSectionKitOsc, kSectionKitFilter, kSectionKitLfoTrig,
-                                           kSectionKitMod, kSectionKitChoke, kSectionKitArpExt};
+                                           kSectionKitMod, kSectionKitChoke, kSectionKitArpExt,
+                                           kSectionKitLfoLayout};
     uint32_t offset[kKitSections] = {};
     uint32_t length[kKitSections] = {};
     const SerializeResult found = find_sections(buffer, size, kKitVersion, wanted, kKitSections,
@@ -872,6 +878,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (offset[9] != 0 && length[9] < kKitModBytes) return refuse(SerializeResult::malformed);
     if (offset[10] != 0 && length[10] < kKitChokeBytes) return refuse(SerializeResult::malformed);
     if (offset[11] != 0 && length[11] < kKitArpExtBytes) return refuse(SerializeResult::malformed);
+    if (offset[12] != 0 && length[12] < kKitLfoLayoutBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -1030,6 +1037,26 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
             kit.tracks[t].arp = arp;
         }
         if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // The LFO layout (format decision C). Absent, or an older value, is a kit whose WAV and DST
+    // are the old bands: each becomes the number it meant. A kit with no LFO section has them 0,
+    // which is SIN and OFF either way.
+    uint8_t lfo_layout = 0;
+    if (offset[12] != 0) {
+        if (!r.seek(kHeaderBytes + offset[12])) return refuse(SerializeResult::malformed);
+        lfo_layout = r.u8();
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+    for (int t = 0; t < kTracks; t++) {
+        uint8_t *params = kit.tracks[t].params;
+        if (lfo_layout < kLfoLayoutNumbers) {
+            params[kKitLfoWaveIndex] = kit_lfo_from_band(kKitLfoWaveIndex, params[kKitLfoWaveIndex]);
+            params[kKitLfoDestIndex] = kit_lfo_from_band(kKitLfoDestIndex, params[kKitLfoDestIndex]);
+        }
+        // And past the last one is damage, read as the last.
+        if (params[kKitLfoWaveIndex] > kKitLfoWaveMax) params[kKitLfoWaveIndex] = kKitLfoWaveMax;
+        if (params[kKitLfoDestIndex] > kKitLfoDestMax) params[kKitLfoDestIndex] = kKitLfoDestMax;
     }
     return SerializeResult::ok;
 }
