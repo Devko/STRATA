@@ -27,6 +27,10 @@ the project file format or the controls.
   BASS 1.5, CHORD 1.25. The bass now sits about 6 dB under the kick and the chord about 3, and
   the share of the mix between 250 Hz and 4 kHz goes from 14% to 22%. A new project starts
   with these; a saved project keeps its own faders.
+- **Flipping through SOUNDS no longer jumps in level.** Within one machine the presets were up
+  to 14 dB apart (VA MONO LEAD 12 dB louder than GROWL, PERC CHIME 10 dB louder than CLAVE).
+  28 presets have a new LVL, which brings most machines to within 3-6 dB. VA MONO GROWL, WAVE
+  MONO RESO and GRAIN STUTTR, CHOPS and GLITCH stay quieter: their LVL was already at the top.
 
 ## [0.5.0] - 2026-11-27
 
