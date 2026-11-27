@@ -1757,6 +1757,43 @@ TEST(ui_two_held_steps_make_a_range_that_survives_until_a_fresh_single_press) {
     for (int s = 0; s < kStepsPerTrack; s++) CHECK(!trig_at(0, s));
 }
 
+TEST(ui_a_range_belongs_to_the_track_and_screen_it_was_made_on) {
+    // A range made on track 1 and left standing was what CLR erased on track 2 as well, and in
+    // EDIT, where SEL is not drawn.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    for (int s = 0; s < 8; s++) key(ENAGA_KEY_STEP1 + s);
+    pump(2);
+    step_down(2);
+    step_down(6);
+    step_up(6);
+    step_up(2);
+    CHECK_EQ(UiProbe::range_first(app), 2);
+
+    key(ENAGA_KEY_DOWN);                           // track 2
+    CHECK_EQ(UiProbe::selected(app), 1);
+    CHECK_EQ(UiProbe::range_first(app), -1);
+    key(ENAGA_KEY_UP);
+    CHECK_EQ(UiProbe::range_first(app), -1);       // and it does not come back with track 1
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "CLEARED FUNC+CLR UNDO");
+
+    for (int s = 0; s < 8; s++) key(ENAGA_KEY_STEP1 + s);
+    pump(2);
+    step_down(2);
+    step_down(6);
+    step_up(6);
+    step_up(2);
+    CHECK_EQ(UiProbe::range_first(app), 2);
+    key(ENAGA_KEY_F8);                             // EDIT
+    CHECK_EQ(UiProbe::range_first(app), -1);
+    key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    for (int s = 0; s < kStepsPerTrack; s++) CHECK(!trig_at(0, s));
+}
+
 // --- the mode keys --------------------------------------------------------------------------
 
 TEST(ui_every_mode_key_closes_the_step_page) {
@@ -5208,6 +5245,33 @@ TEST(ui_samples_ok_does_nothing_on_a_track_that_plays_no_file) {
     CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
     post_track(Cmd::set_machine, 0, 0);
     pump(4);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_samples_a_reread_that_shortens_the_list_keeps_the_cursor_on_it) {
+    // FUNC+UP reads the folder again and keeps the cursor where it was; a list that came back
+    // shorter left it past the end: "N/count" with N over count, an empty page, and OK saying
+    // PATH TOO LONG.
+    Strata &app = fresh();
+    seed_sample_card();
+    sample_track_in_edit();
+    key(ENAGA_KEY_OK);
+    pump(4);
+    for (int i = 0; i < 10; i++) key(ENAGA_KEY_DOWN);
+    const int last = UiProbe::sample_cursor(app);
+    CHECK(last >= 2);
+    CHECK(FakeHost::the().remove_file("/SAMPLES/A_HIT.WAV"));
+    CHECK(FakeHost::the().remove_file("/SAMPLES/b loop.wav"));
+    shift_key(ENAGA_KEY_UP);
+    pump(6);
+    const int count = app_storage().browse_list().count();
+    CHECK(count >= 1);
+    CHECK(count < last + 1);
+    check_layout(app, "SAMPLES, a shorter list read again");    // the frame settles the cursor
+    CHECK_EQ(UiProbe::sample_cursor(app), count - 1);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    key(ENAGA_KEY_CLR);
     key(ENAGA_KEY_F4);
 }
 
