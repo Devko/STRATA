@@ -152,6 +152,7 @@ struct UiProbe {
     // engine's side of the macros, morph, repeat and take by its posts.
     static void view_to_defaults(Strata &app) {
         app.shown_bank_ = 0;
+        app.count_in_armed_ = 0;            // a count-in armed by the last test's PLAY
         app.queue_mode_ = QueueMode::end_of_pattern;
         app.echo_ = Echo::none;
         app.notice_ = nullptr;
@@ -8967,6 +8968,34 @@ TEST(ui_a_downbeat_played_just_before_the_count_in_ends_records_on_step_1) {
     if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
     menu_to(kMenuCountIn);
     key(ENAGA_KEY_LEFT);                       // back to OFF
+    key(ENAGA_KEY_CLR);
+    host.set_position(0);
+}
+
+TEST(ui_a_hit_before_the_first_block_of_a_count_in_does_not_record) {
+    // The audio side publishes the count-in's length at the end of its first block, and the
+    // recorder read 0 there until then: a pad hit straight after PLAY recorded onto step 1 in
+    // the middle of the count-in. The UI's own armed length covers that block.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_running(false);
+    menu_to(kMenuCountIn);
+    key(ENAGA_KEY_OK);                         // 1 BAR
+    key(ENAGA_KEY_CLR);
+    if (!UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    key(ENAGA_KEY_F5);                         // no block yet: count_in_ticks still 0
+    host.set_position(10);
+    app.on_midi(midi(0x90, 36, 100));
+    app.on_midi(midi(0x80, 36, 0));
+    pump(2);
+    for (int s = 0; s < kStepsPerTrack; s++) CHECK(!trig_at(0, s));
+
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F6);
+    pump(2);
+    if (UiProbe::rec(app)) key(ENAGA_KEY_F2);
+    menu_to(kMenuCountIn);
+    key(ENAGA_KEY_LEFT);
     key(ENAGA_KEY_CLR);
     host.set_position(0);
 }

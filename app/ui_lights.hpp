@@ -99,7 +99,7 @@
         // A count-in is the player's lead-in, not the pattern: nothing records until it ends --
         // except the downbeat played a little early (below).
         const Status &status = engine_.status();
-        const uint32_t lead = status.count_in_ticks.load(std::memory_order_relaxed);
+        const uint32_t lead = count_in_lead();
 
         // The track's timing has to be resolved exactly as core/scheduler does it, including
         // swing inheritance -- if the two disagree about where a step sits, a hit played dead on
@@ -212,7 +212,7 @@
         if (!rec_) return;
         const enaga::clock::State clock = enaga::clock::state();
         if (!clock.running) return;
-        const uint32_t lead = engine_.status().count_in_ticks.load(std::memory_order_relaxed);
+        const uint32_t lead = count_in_lead();
         Stamp up;
         up.tick = clock.position > lead ? clock.position - lead : 0u;
         up.fraction = clock.fraction;
@@ -243,6 +243,7 @@
             clear_rec_passes();          // the pass count starts again: old marks would match
         }
         if (what == ENAGA_TRANSPORT_STOP) {
+            count_in_armed_ = 0;         // a STOP ends a count-in (Engine::process)
             post(Cmd::stop, 0, 0, 0);
             stop_armed_ = true;
         }

@@ -701,6 +701,14 @@ private:
     bool click_on_ = false;
     uint8_t count_in_bars_ = 0;
     uint8_t count_in_shown_ = 0;                // the beat the count-in notice last said
+    // A count-in's length in ticks as this side armed it at PLAY. The audio side publishes its own
+    // (Status::count_in_ticks) only at the end of its next block, and a hit in between read 0
+    // there and recorded during the count-in. The published figure wins once it is there.
+    uint32_t count_in_armed_ = 0;
+    uint32_t count_in_lead() const {
+        const uint32_t published = engine_.status().count_in_ticks.load(std::memory_order_relaxed);
+        return published != 0 ? published : count_in_armed_;
+    }
     PerfRide perf_ride_{};
     bool perf_riding_ = false;
     uint32_t perf_ride_ms_ = 0;

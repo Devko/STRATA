@@ -540,6 +540,7 @@
                         break;
                     }
                     stop_armed_ = false;
+                    count_in_armed_ = 0;                // a restart ends any count-in
                     post(Cmd::restart);
                     notice("RESTART");
                     break;
@@ -552,6 +553,11 @@
                     if (count) post(Cmd::count_in, 0, 0, count_in_bars_);
                     clock_refused_ = !enaga::clock::start();
                     if (count && clock_refused_) post(Cmd::count_in, 0, 0, 0);
+                    // The recorder's lead until the audio side publishes its own (count_in_lead).
+                    count_in_armed_ = count && !clock_refused_
+                                          ? uint32_t(count_in_bars_ > 2 ? 2 : count_in_bars_) *
+                                                kTicksPerBar
+                                          : 0u;
                 }
                 stop_armed_ = false;
                 post(Cmd::play);                       // for the audio side's trace only
