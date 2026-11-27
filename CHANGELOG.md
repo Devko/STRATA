@@ -6,8 +6,14 @@ the project file format or the controls.
 
 ## [Unreleased]
 
-Everything merged since 0.4.0 (#180 onwards). It runs on **Enaga 0.4.0**, so updating from 0.4.0
-means new firmware as well as the app. The features below have not been through the unit walkthrough yet.
+## [0.5.0] - {{RELEASE_DATE}}
+
+The release candidate for 1.0: everything merged since 0.4.0 (#180 to #208). From here to 1.0
+come fixes, measurements and docs, not features. It is the first release for **Enaga 0.4.0**, so
+updating from 0.4.0 means new firmware as well as the app, and the first whose files 0.4.0 cannot
+fully read: a project saved by 0.5.0 plays its LFOs wrong on 0.4.0 (see Upgrading from 0.4.0).
+The features below have not been through the unit walkthrough (docs/UNIT_CHECKLIST.md) yet.
+Release notes: [docs/release/v0.5.0.md](docs/release/v0.5.0.md).
 
 ### Upgrading from 0.4.0
 
@@ -22,14 +28,19 @@ means new firmware as well as the app. The features below have not been through 
   loses a DC offset it should never have had (the factory kicks peak about 0.6 dB lower), and
   the arp's RND, with RATCHET's RND2 and RND3, draws new notes on every pass instead of repeating
   one fixed pattern. A choked or DRV-locked track no longer thumps or clicks (#197).
-- **Nothing in the file format was taken away.** New settings went where older builds do not
-  look: choke groups and the arp's VAR, RHYTHM, ACCENT and RATCHET in two new optional KIT.BIN
-  sections (11 and 12), REC MODE in PROJECT.BIN's unused swing byte, a recorded chord's extra
-  notes in the step's locks, a roll over LEN in the ratchet byte, EVOLVE in a new optional
-  PROJECT.BIN section (7).
-- **Opening this build's projects in 0.4.0** works and loses only the new settings: no choke
-  groups, the arps without VAR, RHYTHM, ACCENT and RATCHET, a recorded chord as its first note,
-  a roll over LEN as a one-step ratchet, and nothing evolving.
+- **Older projects are converted once, on load.** The LFO's WAV and DST are now stored as
+  numbers (format decision C, #205): projects, kits and patterns from 0.4.0 and earlier,
+  their scenes, macros and step locks included, are converted when they open and sound the same.
+  New settings went where older builds do not look: choke groups and the arp's VAR, RHYTHM,
+  ACCENT and RATCHET in two new optional KIT.BIN sections (11 and 12), REC MODE in PROJECT.BIN's
+  unused swing byte, a recorded chord's extra notes in the step's locks, a roll over LEN in the
+  ratchet byte, EVOLVE in a new optional PROJECT.BIN section (7).
+- **A project saved by 0.5.0 plays its LFOs wrong on 0.4.0** and earlier: they read the new
+  numbers as the old bands, so a shape or a destination comes out different (mostly a sine
+  going nowhere). Keep a copy of any project you may want to open in 0.4.0 again before you save
+  it in 0.5.0. Apart from the LFOs, 0.4.0 opens 0.5.0's projects and loses only the new settings:
+  no choke groups, the arps without VAR, RHYTHM, ACCENT and RATCHET, a recorded chord as its
+  first note, a roll over LEN as a one-step ratchet, and nothing evolving.
 - **No gesture moved.** Everything 0.4.0 did, it still does the same way. Holding OK in GRID,
   which did nothing, now opens the track menu (GEN and EVOLVE); a tap still does nothing.
 
@@ -85,36 +96,29 @@ means new firmware as well as the app. The features below have not been through 
   font on the OLED, load on A01 and A04, LOCK, the MOD slots, one RESAMPLE take and a save that
   survives a power cycle, before the two-hour walkthrough (#186).
 - **A clip at the top of the README**: 28 silent seconds of the device build in the emulator
-  playing the TECHNO project, recorded by `tools/readme_clip.py` into `docs/media/strata.gif`.
+  playing the TECHNO project, recorded by `tools/readme_clip.py` into `docs/media/strata.gif` (#207).
 
 ### Changed
 
 - **KICK costs less**: its click layer stops once it has decayed under -110 dB instead of running
   for the whole note. The output moves by at most -129 dB (inaudible; not bit-exact). The
-  default beat 24.1% -> 23.2% on the emulator.
+  default beat 24.1% -> 23.2% on the emulator (#208).
 - **Hats and WAVE tracks cost less**: the hat's two filters and its VCA run as one loop, and WAVE
   finds its table frames without a run-time recursion; the same sound to the last bit. The
-  default beat 24.3% -> 24.1%, a WAVE POLY pattern 27.9% -> 26.6% on the emulator (Enaga 0.4.0).
-- **File format: the LFO's WAV and DST are numbers** (Roland's decision C): a shape or a
+  default beat 24.3% -> 24.1%, a WAVE POLY pattern 27.9% -> 26.6% on the emulator (Enaga 0.4.0) (#206).
+- **File format: the LFO's WAV and DST are numbers** (format decision C): a shape or a
   destination is stored as its number rather than as a band of 0-127, so new shapes and
   destinations can come later without changing what any saved project sounds like. Projects,
   kits and patterns from earlier versions are converted on load, scenes, macros and step locks
   included, and sound the same. **A project saved by this version and opened on an earlier one
   plays its LFOs wrong there** (mostly a sine going nowhere). The lock and scene masks behind
-  every parameter are 64 bits now, room for a page past the 32 bytes a track has.
-- Internal: the engine's command handling is split into twelve handlers, one per family of
-  commands, with no change in behaviour; the host tests no longer depend on the order they run in,
-  and `tools/test_shuffle.sh` runs them in shuffled orders to keep it so.
-- **The arp's RND is random on every pass** (and RATCHET's RND2 and RND3 with it): each run draws
-  a new seed. It used to play one fixed pattern for a given track and step.
-- A kit recalled from the kit library brings its arp settings with its ARP bytes.
+  every parameter are 64 bits now, room for a page past the 32 bytes a track has (#205).
 - **VA voices cost less**: the filter, envelope and output of every VA MONO and VA POLY voice
   run as one loop the TI compiler can pipeline, the same sound to the last bit. About 1.5 points
-  off every pattern that plays them (the default beat 26.6% -> 25.1% on the emulator).
+  off every pattern that plays them (the default beat 26.6% -> 25.1% on the emulator) (#203).
 - **The LONG delay and the HALL reverb cost less**: their per-sample loops now run as passes the
   TI compiler can pipeline, the same sound to the last bit. The worst-case scenario (both sends
-  in their ambient modes) drops from 32.3% to 28.6% peak load on the emulator (#196, and this
-  PR for the HALL).
+  in their ambient modes) drops from 32.3% to 28.6% peak load on the emulator (#196, #202).
 - **FM4 no longer aliases at high IDX.** The brightness cap now sees the whole operator chain:
   in a stack the sidebands multiply, so ALG 1 at IDX 90 on middle C and above folded harsh,
   out-of-tune tones back into the audible range, about 10 dB under the note. Now they are 45-56 dB
@@ -174,6 +178,21 @@ means new firmware as well as the app. The features below have not been through 
 - **A held NOTE RPT pad joining a chord step** (REC MODE ADD, or a later note of the same pass)
   makes the step roll; the roll was dropped and only the note kept (#197).
 - **CLICK over a loud mix** is held to full scale, as the sample audition is (#197).
+
+### Known limits
+
+- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} Nothing added since 0.4.0 is
+  checked on the unit yet, and the release candidate's unit test (the smoke test and the
+  walkthrough) is what decides 1.0. Every other load figure comes from the emulator, which
+  models no caches.
+- **Enaga 0.4.0 exactly.** Enaga's loader checks only the ABI number, which 0.2.0, 0.3.0 and
+  0.4.0 share, so 0.5.0 on older firmware loads and may misbehave.
+- **Projects saved by 0.5.0 play their LFOs wrong on 0.4.0** and earlier (see Upgrading from
+  0.4.0). From 1.0 on, every build reads every 1.0 file.
+- The 12 POLY voices shared by VA POLY, WAVE POLY and FM4 and the CPU guard's thresholds are
+  provisional until the unit's readings; the performance mixer, the looper, LOCK and LIVE RND
+  are not saved; the looper borrows RESAMPLE's buffer; streamed samples play forward only;
+  FREEZE is not saved; MIDI clock, SYNC and USB MIDI are lightly tested.
 
 ## [0.4.0] - 2026-11-26
 

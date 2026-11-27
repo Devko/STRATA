@@ -54,8 +54,8 @@ Two downloads: Enaga {ENAGA} (the firmware) from Enaga's release page, and this 
 
 STEP 1: INSTALL ENAGA {ENAGA}
 Skip it only if the unit already runs Enaga {ENAGA}: the Enaga menu (F1 + POWER) shows
-its version at the top. STRATA 0.3.1 and earlier ran on Enaga 0.2.0, so an update from
-them needs this step.
+its version at the top. STRATA 0.4.0 and earlier ran on older Enaga versions, so an
+update from them needs this step.
 
   1. Open Enaga's release page:
 
