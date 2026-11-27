@@ -3316,18 +3316,21 @@ void Engine::fire(const StepEvent &event) {
 
 // A choke group's cut (choke_group in engine.hpp): the fade from where the choke landed, or from
 // the block's start when it carries on from the last block, then kill_all once it reaches 0.
-void Engine::run_choke(int t, float *mono, uint32_t frames) {
+// True when the cut is done: the caller clears the track's chain once this block has been
+// through it (Engine::process), as silence_track does for every other cut.
+bool Engine::run_choke(int t, float *mono, uint32_t frames) {
     const uint32_t from = choke_at_[t] < frames ? choke_at_[t] : frames;
     const float gain = strata_choke_fade(mono + from, int(frames - from), choke_gain_[t],
                                          1.0f / float(kChokeFadeFrames));
     if (gain > 0.0f) {
         choke_gain_[t] = gain;
         choke_at_[t] = 0;              // carries on from the next block's first frame
-        return;
+        return false;
     }
     machines_[t]->kill_all();
     choke_at_[t] = kNoChokeFrame;
     choke_gain_[t] = 1.0f;
+    return true;
 }
 
 // The metronome (engine.hpp): on every beat while CLICK is on, and on every beat of a count-in
@@ -3674,6 +3677,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
             // track's voices are cut all the same, or they would sound again on unmute.
             if (choke_at_[t] != kNoChokeFrame) {
                 if (machine != nullptr) machine->kill_all();
+                mixer_.chain(t).clear_state();   // nothing stored for the next note (run_choke)
                 choke_at_[t] = kNoChokeFrame;
                 choke_gain_[t] = 1.0f;
             }
@@ -3689,7 +3693,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         float *mono = mixer_.scratch();
         enaga_clear(mono, int(frames));
         machine->render_add(mono, int(frames));
-        if (choke_at_[t] != kNoChokeFrame) run_choke(t, mono, frames);
+        const bool choked = choke_at_[t] != kNoChokeFrame && run_choke(t, mono, frames);
         track_peak[t] = strata_master_peak(mono, mono, int(frames));
         // A freeze records the machine alone, before the chain it will go on running through.
         if (t == tapped && capture_prechain_) {
@@ -3697,6 +3701,11 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         }
         if (t == tapped && !capture_prechain_) mixer_.add_track_tapped(t, mono, capture_tap_);
         else mixer_.add_track(t, mono);
+        // A choke that ended in this block cut the machine dead, and a track whose machine is
+        // idle is not rendered: its chain would hold the filter's ringing and the DC blocker's
+        // swing and play them on the next note. Cleared AFTER the block went through it, so the
+        // fade itself is filtered as it was played.
+        if (choked) mixer_.chain(t).clear_state();
         voices++;
     }
 
