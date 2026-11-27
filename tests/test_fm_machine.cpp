@@ -15,6 +15,7 @@
 #include "vapoly.hpp"
 
 #include <cmath>
+#include <string_view>
 
 using namespace strata;
 
@@ -273,4 +274,38 @@ TEST(fm_machine_every_factory_preset_sounds_and_sits_near_va_poly) {
         CHECK(level > va_mean * 0.7);
         CHECK(level < va_mean * 1.4);
     }
+}
+
+TEST(fm_machine_epiano_strikes_bright_and_mellows) {
+    // An electric piano's character is its strike: bright for the first few tens of ms, then
+    // mellowing as the note rings. FM4 EPIANO had almost nothing above 1 kHz even in its attack
+    // (the sound review, 2026-11-27). Brightness here is the energy of the first difference over
+    // the energy, which grows with the square of frequency.
+    const uint8_t id = uint8_t(MachineId::fm);
+    const SoundPreset *ep = nullptr;
+    for (int i = 0; i < sound_preset_count(id); i++) {
+        if (std::string_view(sound_preset(id, i)->name) == "EPIANO") ep = sound_preset(id, i);
+    }
+    CHECK(ep != nullptr);
+    if (ep == nullptr) return;
+    const TrackParams p = preset_params(*ep);
+    FmPoly &fm = fresh(p);
+    Trig t = hit(60, false);
+    t.velocity = 100;
+    fm.trigger(t);
+    render(fm, p, g_out, kLen);
+    auto brightness = [](const float *x, int n) {
+        double e = 0.0, d = 0.0;
+        for (int i = 1; i < n; i++) {
+            e += double(x[i]) * x[i];
+            d += double(x[i] - x[i - 1]) * (x[i] - x[i - 1]);
+        }
+        return d / (e + 1e-30);
+    };
+    const int w = int(0.03f * kRate);
+    const double strike = brightness(g_out, w);
+    const double ring = brightness(g_out + int(0.3f * kRate), w);
+    // Before: 0.0051 against 0.0014, a strike only 3.6x the ring. Now 0.020 against 0.0014.
+    CHECK(strike > 8.0 * ring);
+    CHECK(strike > 0.01);
 }

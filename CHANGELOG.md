@@ -36,6 +36,9 @@ the project file format or the controls.
   ACID swept it to about 18 kHz for a few milliseconds. It now opens at most 18 semitones past
   the plain note (ACID's accent peaks near 6.5 kHz), and its attack is 1.5 ms instead of 0.6.
   Accents on patches with a modest ENV sound as before.
+- **FM4 EPIANO has a strike.** It was a mellow, organ-like tone with almost nothing above 1 kHz
+  even in its attack; now it is bright as it is struck, barks when hit hard, and mellows as it
+  rings (IDX 95, IEN 127, VEL 120, FBK 10). It is also what a track switched to FM4 starts with.
 
 ## [0.5.0] - 2026-11-27
 

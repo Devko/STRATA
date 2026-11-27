@@ -282,8 +282,11 @@ constexpr SoundPreset kWavePolyPresets[] = {
 // IDX is square law. FIN 64 is the ratio as RAT says it; CAR 13 is a carrier at 1, 38 at 0.5.
 // The insert filter stays open: FM's brightness is its index. Held presets keep LVL down.
 constexpr SoundPreset kFmPresets[] = {
-    // An electric piano: two pairs at 1:1, the strike brighter than the ring, a hair of detune.
-    {"EPIANO", {72, 24, 50, 0}, FLAT, {100, 100, 90, 80}, NO_ASR, {30, 64, 60, 13}},
+    // An electric piano: two pairs at 1:1, a hair of detune, the strike bright and the ring mellow.
+    // The index (95) and IEN at the top put the brightness in the strike, VEL makes a hard hit
+    // bark, and a touch of feedback adds edge. At IDX 50 it had almost nothing above 1 kHz even
+    // in its attack, an organ more than a piano (the sound review, 2026-11-27).
+    {"EPIANO", {72, 24, 95, 10}, FLAT, {96, 127, 120, 80}, NO_ASR, {30, 64, 60, 13}},
     // A bell: 1:3.5, inharmonic, ringing for seconds while the index falls away.
     {"BELL", {72, 72, 60, 0}, FLAT, {115, 110, 60, 72}, NO_ASR, {40, 64, 30, 13}},
     // A bass: the full stack with feedback, short and growling, the index snapping shut.
