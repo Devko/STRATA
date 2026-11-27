@@ -610,6 +610,13 @@ const Expect kTable[] = {
     // An audition is heard, not kept: the track and the project are untouched.
     {Cmd::audition_start, 0u, "audition_start"},
     {Cmd::audition_stop, 0u, "audition_stop"},
+    // GEN writes steps, and HOME puts them back: the bank. EVOLVE's settings are RAM only
+    // (core/evolve.hpp), and KEEP changes nothing that plays.
+    {Cmd::generate, kDirtyBank, "generate"},
+    {Cmd::evolve_set, 0u, "evolve_set"},
+    {Cmd::evolve_config, 0u, "evolve_config"},
+    {Cmd::evolve_keep, 0u, "evolve_keep"},
+    {Cmd::evolve_home, kDirtyBank, "evolve_home"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:

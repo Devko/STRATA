@@ -545,6 +545,7 @@ public:
 #include "ui_live.hpp"
 
 #include "ui_project.hpp"
+#include "ui_trackmenu.hpp"
 #include "ui_pickview.hpp"
 #include "ui_listview.hpp"
 
@@ -840,6 +841,18 @@ private:
     int slot_menu_cursor_ = 0;
     bool slot_ok_held_ = false;    // OK down on a slot: a tap queues, a hold opens the menu
     uint32_t slot_ok_down_ms_ = 0;
+    // The track menu (hold OK in GRID, app/ui_trackmenu.hpp): GEN's knobs and EVOLVE.
+    bool track_menu_ = false;
+    int track_menu_cursor_ = 0;
+    bool track_ok_held_ = false;
+    uint32_t track_ok_down_ms_ = 0;
+    int gen_density_ = 50;
+    int gen_range_ = 1;
+    int gen_leap_ = 30;
+    int gen_what_ = 0;                          // GenWhat
+    uint32_t gen_variant_ = 1;
+    EvolveMode evolve_mode_ui_ = EvolveMode::orbit;
+    uint8_t evolve_turns_seen_ = 0;             // Status::evolve_turns as last noticed
     int clip_bank_ = 0;            // COPY on the slots: the pattern copied, slot -1 for none
     int clip_slot_ = -1;
     SlotAction slot_armed_ = SlotAction::none;   // a paste or clear waiting for its second press

@@ -7180,7 +7180,7 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     hold_func(app);
     CHECK(screen_has(app, "GRID SRC KCK"));
     CHECK(screen_has(app, "B FMA FM AMOUNT"));
-    CHECK(screen_has(app, "PAGE 1/11"));
+    CHECK(screen_has(app, "PAGE 1/12"));
     CHECK(!screen_has(app, "FUNC + KEY:"));
 
     // The screen keys turn the help's pages while FUNC is held, and not GRID's knob page.
@@ -7188,7 +7188,7 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     key(ENAGA_KEY_SELECT_RIGHT);
     CHECK(UiProbe::func_help(app));
     CHECK(screen_has(app, "STEPS:"));
-    CHECK(screen_has(app, "PAGE 2/11"));
+    CHECK(screen_has(app, "PAGE 2/12"));
     CHECK_EQ(UiProbe::param_page(app), knob_page);
     // LEFT goes back, and round: the last page is the performance mixer's slots, the upper pads
     // two before it.
@@ -11768,4 +11768,57 @@ TEST(polyrec_a_note_edit_moves_the_chord_and_the_step_shows_it) {
     CHECK_EQ(int(notes[1]), 62);
     CHECK_EQ(int(notes[2]), 65);
     CHECK_EQ(step_param_lock_count(app_engine().pattern(), kPolyTrack, 2), 0);
+}
+
+TEST(ui_hold_ok_in_grid_opens_the_track_menu_for_gen_and_evolve) {
+    // app/ui_trackmenu.hpp: a tap on OK in GRID opens nothing, a hold opens GENERATE and
+    // EVOLVE for the selected track, and leaving GRID closes it.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);                                   // GRID, a kick on track 1
+    pump(2);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!screen_has(app, "GENERATE"));
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(2);
+    CHECK(screen_has(app, ">GENERATE"));
+    CHECK(screen_has(app, "OK: RUN"));
+
+    const uint8_t depth = app_engine().status().undo_depth.load(std::memory_order_relaxed);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "GEN T1 BOTH");
+    pump(2);
+    CHECK_EQ(int(app_engine().status().undo_depth.load(std::memory_order_relaxed)), depth + 1);
+
+    for (int i = 0; i < 5; i++) key(ENAGA_KEY_DOWN);
+    CHECK(screen_has(app, ">EVOLVE"));
+    key(ENAGA_KEY_RIGHT);
+    CHECK_EQ(UiProbe::notice(app), "EVOLVE T1 1 LOOP");
+    pump(2);
+    CHECK_EQ(int(app_engine().evolve_period(0)), 1);
+    CHECK(screen_has(app, "1 LOOP"));
+
+    for (int i = 0; i < 5; i++) key(ENAGA_KEY_DOWN);
+    CHECK(screen_has(app, ">HOME"));
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "HOME: EVOLVE OFF");
+    pump(2);
+    CHECK_EQ(int(app_engine().evolve_period(0)), 0);
+
+    // CLR closes it; a hold opens it again, and leaving GRID closes it too.
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK(!screen_has(app, "OK: RUN"));
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(2);
+    CHECK(screen_has(app, "OK: RUN"));
+    key(ENAGA_KEY_F3);
+    pump(2);
+    key(ENAGA_KEY_F4);
+    pump(2);
+    CHECK(!screen_has(app, "OK: RUN"));
 }

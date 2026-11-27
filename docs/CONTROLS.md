@@ -266,6 +266,38 @@ that did something changed meaning; FUNC + push D still names slot 8 on every ot
   with REL/LEN ALL away from rest; the track meters mark the armed tracks with a dot; the live
   strip adds `RN4`. The FUNC help's third PERFORM page lists both gestures.
 
+## GEN and EVOLVE (hold OK in GRID)
+
+Roland, 2026-11-27: generate a drum or melodic part, random but in the key, and let it mutate on
+its own every few loops. `core/generate.hpp`, `core/evolve.hpp`, `app/ui_trackmenu.hpp`. OK in
+GRID with nothing held did nothing, so the hold costs no gesture; a tap still does nothing.
+
+| Row | Does | Says |
+| --- | --- | --- |
+| GENERATE | OK: a new part on the selected track, one undo level (CLR in GRID, or FUNC + CLR, takes it back) | `GEN T1 BOTH` |
+| DENSITY | 0-100 in tens: about 2 hits a bar at 20, 6 at 50, 11 at 100 | |
+| RANGE | 1-3 octaves above the track's own root (melodic tracks) | |
+| LEAP | 0-100 in tens: how often the melody jumps 2-5 degrees instead of stepping | |
+| WHAT | BOTH, RHYTHM (notes kept), NOTES (rhythm kept) | |
+| EVOLVE | OFF, 1, 2, 4 or 8 loops: this track mutates on its own every that many passes | `EVOLVE T1 4 LOOPS` |
+| MODE | ORBIT (every turn starts again from HOME) or DRIFT (the changes add up), every track | |
+| MUTATION, AMOUNT | What EVOLVE plays: PERFORM's MUTATE setting and amount, the same two values | |
+| KEEP | OK: what plays becomes HOME, EVOLVE stops | `KEPT: EVOLVE OFF` |
+| HOME | OK: back to HOME (one undo level), EVOLVE stops | `HOME: EVOLVE OFF` |
+
+UP/DOWN or A pick the row, LEFT/RIGHT or B change it, OK runs (and steps a setting forward), CLR
+closes. A lower pad still selects the track, so one menu walks GEN over a kit; the menu keeps its
+row between openings.
+
+- **Drum or melodic** is the machine's: the VAs, WAVE, FM4, GRAIN, an unsliced SAMPLE and MID get
+  notes; the drums and a sliced SAMPLE get a rhythm with accents and ghosts, their notes kept.
+- **What GEN leaves**: locks, conditions, ratchets, micro-timing and probability, as Euclid does.
+- **HOME** is taken when EVOLVE goes on, in RAM only. An edit made while a track evolves (a trig,
+  a recorded note, a chord) goes into HOME at the next turn, so ORBIT never throws it away.
+- **A pattern change**: in ORBIT the pattern left goes back to HOME; every evolving track then
+  carries on from the new pattern. A load stops EVOLVE.
+- **Not saved**: the EVOLVE settings are RAM only. A save writes what plays.
+
 ## FEEL (the PATTERN page)
 
 CyDrums' P8, `core/timing.hpp`. A pattern setting like swing, so its home is the PATTERN page

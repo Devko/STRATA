@@ -647,6 +647,20 @@ void edit_title(const char *screen, const HelpPlace &place, char title[kHelpChar
 
 // The screen's own pages, before the five shared ones. Indexed from 0; returns false past
 // the last, so help_page_count can count them with the same code that writes them.
+// GRID's track menu (app/ui_trackmenu.hpp): GEN and EVOLVE.
+constexpr Text kTrackMenu = {"HOLD OK: TRACK MENU", {
+    "GENERATE  NEW PART",
+    "DENS RANGE LEAP WHAT",
+    "EVOLVE  MUTATE EVERY",
+    "  1 2 4 8 LOOPS",
+    "ORBIT  AROUND HOME",
+    "DRIFT  WANDERS OFF",
+    "KEEP  PLAYING = HOME",
+    "HOME  BACK AND STOP",
+    "UP/DN A ROW  LR B SET",
+    "OK RUN  CLR CLOSE",
+}};
+
 bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
               char rows[kHelpRows][kHelpChars + 1], int &count) {
     const Text *list[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
@@ -660,6 +674,7 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
             list[listed++] = &kStepPads;
             list[listed++] = &kPadFirst;
             list[listed++] = &kRange;
+            list[listed++] = &kTrackMenu;
             list[listed++] = &kLights;
             break;
         case HelpScreen::edit:

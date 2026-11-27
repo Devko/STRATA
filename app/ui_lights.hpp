@@ -259,6 +259,20 @@
         last_ms_ = ms;
 
         service_slot_menu();
+        service_track_menu();
+
+        // EVOLVE changed a track on a pass boundary (Engine::evolve_passes): no command did it,
+        // so the bank is marked here, and the log says so for the scenarios.
+        {
+            const uint8_t turns = engine_.status().evolve_turns.load(std::memory_order_acquire);
+            if (turns != evolve_turns_seen_) {
+                evolve_turns_seen_ = turns;
+                storage_.note_command(
+                    Cmd::evolve_home,
+                    int(engine_.status().live_bank.load(std::memory_order_relaxed)));
+                enaga::log("EVOLVE TURN");
+            }
+        }
 
         // A count-in says its beats as it clicks them (`COUNT-IN 4` .. `1`), logged for
         // tests/scenario_click.sh.
