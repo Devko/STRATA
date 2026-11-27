@@ -54,6 +54,12 @@ struct StepEvent {
     uint32_t frame = 0;          // frame within the audio block: sample accuracy
     uint8_t ratchet_index = 0;   // 0 for the first hit of a step, then 1, 2, ...
     uint8_t ratchet_count = 1;   // how many hits this step produces in total
+    // A spanning ratchet (core/pattern.hpp, kRatchetSpan): the roll's rate in ticks and its hits
+    // over the step's LEN. Only its first hit is an event; the engine runs the rest on the clock
+    // (Engine::span_tick). 0 ticks: not a roll.
+    uint8_t span_ticks = 0;
+    uint16_t span_hits = 1;
+    uint8_t span_ramp = 0;       // RatchetRamp, across the whole roll
     // The pass the step plays in: what a random lock range draws from (lock_spread).
     uint32_t loop = 0;
     // Parameter slide. Filled only when one of the step's locks slides (kLockSlide): the next
@@ -201,6 +207,17 @@ uint8_t lock_resolve(const Pattern &pattern, int track, int step, uint32_t loop,
 // The velocity of hit `index` of `count`, given the step's velocity and ramp direction.
 // Always returns 1-127.
 uint8_t ratchet_velocity(uint8_t velocity, uint8_t index, uint8_t count, RatchetRamp ramp);
+
+// How many hits a spanning ratchet makes: its LEN (`length_index`, on a track whose step is
+// `step_ticks` ticks) over its rate, at least 1. One float multiply, no divide.
+uint16_t span_hit_count(uint8_t length_index, int step_ticks, uint8_t rate);
+
+// The velocity of hit `index` of a roll of `count` hits under `ramp`, as ratchet_velocity does it
+// for a step: UP ends on the step's velocity, DOWN starts on it. `inv_count` is 1 / count, which
+// the caller works out once per roll: the hits come at control rate, but they need not divide.
+// Always 1-127.
+uint8_t span_velocity(uint8_t velocity, uint32_t index, uint32_t count, float inv_count,
+                      RatchetRamp ramp);
 
 // The frame offset of ratchet hit `index` of `count` within a step of `step_samples` samples.
 // Hits are spread evenly, the first on the step itself.

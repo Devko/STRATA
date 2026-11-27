@@ -944,7 +944,7 @@ The step page's fields:
 | MICR | ±11 ticks | Micro-timing: 24 ticks is one 16th |
 | PROB | 0-100% | Chance the step plays |
 | COND | see below | Trig condition |
-| RTCH | 1-8 | Ratchet: repeats within the step |
+| RTCH | 1-8, ROLL/64 ... ROLL/4 | Ratchet: 1-8 repeats within the step; turned on past 8, a roll at a rate (1/64, 1/48, 1/32, 1/16T, 1/16, 1/8T, 1/8, 1/4) for the step's whole LEN: 1/32 with LEN 16 STP is 32 hits across the bar. RAMP then runs across the whole roll, so UP is a build-up. A new trig on the track ends a roll |
 | RAMP | FLAT, UP, DOWN | Ratchet velocity ramp |
 | ACNT | on/off | Accent |
 | SLID | on/off | Slide (VA MONO) |

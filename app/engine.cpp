@@ -1556,6 +1556,7 @@ bool Engine::apply_transport(const Command &command, int, int) {
             // notes, not tails: a soft stop releases what is sounding, and a hit landing four
             // blocks later would be a note after the transport stopped.
             deferred_count_ = 0;
+            span_clear();   // and the rolls of spanning ratchets
             scheduler_.reset(true);
             // And a sequenced arp, whose step is gone. A held KEYS arp keeps going.
             for (int t = 0; t < kTracks; t++) seq_arp_[t].on = false;
@@ -1650,6 +1651,7 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
             // fresh pass count, ratchet hits still waiting would land after the jump, and the bar
             // count resyncs on the next tick. The voices ring on: this is a restart, not a stop.
             deferred_count_ = 0;
+            span_clear();   // and the rolls of spanning ratchets
             scheduler_.reset(true);
             // And a sequenced arp, whose step is gone. A held KEYS arp keeps going.
             for (int t = 0; t < kTracks; t++) seq_arp_[t].on = false;
@@ -1845,6 +1847,7 @@ bool Engine::apply_project(const Command &command, int, int) {
                 project_.settings.chain_enabled = false;
             }
             deferred_count_ = 0;                 // hits of a pattern that no longer exists
+            span_clear();   // and the rolls of spanning ratchets
             scheduler_.reset(true);
             // And both arps: the step is gone, and so is the kit whose ARP page the held run
             // followed. Keys still down play plainly until they come up.
@@ -2395,6 +2398,7 @@ void Engine::pattern_replaced(int bank, int slot) {
     scheduler_.reset(true);
     reconfigure();
     deferred_count_ = 0;
+    span_clear();   // and the rolls of spanning ratchets
 }
 
 void Engine::switch_pattern(int bank, int slot) {
@@ -2421,6 +2425,7 @@ void Engine::switch_pattern(int bank, int slot) {
     // would read THIS pattern's locks and chord at that step index (`fire` reads the live
     // pattern), which is a hit of neither pattern.
     deferred_count_ = 0;
+    span_clear();   // and the rolls of spanning ratchets
 
     // The new pattern's master length makes the old boundary meaningless, and deriving the new
     // one needs a tick, which only resolve_tick has.
@@ -2502,6 +2507,7 @@ void Engine::cross_boundary(uint32_t boundary) {
             seq_arp_[t].on = false;
         }
         deferred_count_ = 0;
+        span_clear();   // and the rolls of spanning ratchets
         status_.bump_song_end();
         return;
     }
@@ -2706,6 +2712,48 @@ void Engine::dispatch(const StepEvent &event, uint32_t frames) {
     StepEvent &held = deferred_[deferred_count_++];
     held = event;
     held.frame -= frames;
+}
+
+// --- spanning ratchets ----------------------------------------------------
+
+void Engine::span_start(int track, const StepEvent &event) {
+    SpanRun &run = span_[track];
+    run.on = false;
+    if (event.span_ticks == 0 || event.span_hits < 2) return;
+    if (arp_settings(track).on()) return;           // the arp takes the step
+    run.rate = event.span_ticks;
+    run.ramp = RatchetRamp(event.span_ramp);
+    run.velocity = live().tracks[track].steps[event.step].velocity;
+    run.hit = 1;
+    run.count = event.span_hits;
+    run.inv_count = 1.0f / float(event.span_hits);  // once a roll, not a hit
+    run.start_tick = tick_;
+    run.next_tick = tick_ + run.rate;
+    run.base = event;
+    run.base.ratchet_index = 1;
+    run.on = true;
+}
+
+// On every tick: each roll whose next hit is due fires it on the tick's frame. A track that is
+// stuttering keeps counting silently, as its steps do.
+void Engine::span_tick(uint32_t tick, uint32_t frame) {
+    const uint32_t silenced = stutter_step_ >= 0 ? uint32_t(stutter_tracks_) : 0u;
+    for (int t = 0; t < kTracks; t++) {
+        SpanRun &run = span_[t];
+        if (!run.on) continue;
+        if (tick < run.start_tick) {                // the transport went back: the roll is gone
+            run.on = false;
+            continue;
+        }
+        if (tick < run.next_tick) continue;
+        StepEvent hit = run.base;
+        hit.frame = frame;
+        hit.velocity = span_velocity(run.velocity, run.hit, run.count, run.inv_count, run.ramp);
+        run.next_tick += run.rate;
+        run.hit++;
+        if (run.hit >= run.count) run.on = false;
+        if ((silenced >> t & 1u) == 0) fire(hit);
+    }
 }
 
 // --- note repeat ---------------------------------------------------------
@@ -3059,6 +3107,8 @@ void Engine::fire(const StepEvent &event) {
     // Parameter slide: the first hit of a step (re)starts its track's glides; a ratchet's later
     // hits leave them running, so a slid step glides across its own ratchet.
     if (event.ratchet_index == 0) start_slides(track, event);
+    // A trig ends the track's running roll, and a spanning step starts its own.
+    if (!event.trigless && event.ratchet_index == 0) span_start(track, event);
 
     if (!event.trigless && machines_[track] != nullptr && !muted_[track]) {
         // This prepare is REDUNDANT today, and kept on purpose. It used to be justified as
@@ -3108,6 +3158,11 @@ void Engine::fire(const StepEvent &event) {
         trig.frame = event.frame;
         // LEN ALL (core/moveall.hpp) on the step's gate; 0 and "no gate" come back unchanged.
         trig.gate_frames = len_all_frames(gate_frames_for(track, event.length_index), len_all_);
+        // A roll's hit lasts half its rate, as a note repeat's does: LEN is the whole roll's.
+        if (event.span_ticks != 0) {
+            const float half = 0.5f * float(event.span_ticks) * samples_per_tick_;
+            trig.gate_frames = half < 1.0f ? 1u : uint32_t(half);
+        }
 
         // MIDI out's copy of the trig. An accent is the top velocity, the nearest thing MIDI
         // has, and a step with no gate lasts a step, because a note-on needs a note-off.
@@ -3490,6 +3545,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         if (ticks[i].tick < count_in_end_) continue;
         const uint32_t tick = ticks[i].tick - count_in_end_;
         resolve_tick(tick, ticks[i].frame);
+        span_tick(tick, ticks[i].frame);
         roll_tick(tick, ticks[i].frame);
         stutter_tick(tick, ticks[i].frame);
         arp_tick(tick, ticks[i].frame);
@@ -3975,6 +4031,7 @@ void Engine::capture_live(LiveState &state) const {
 void Engine::apply_live(const LiveState &state) {
     __builtin_memcpy(&live(), &state.pattern, sizeof state.pattern);
     deferred_count_ = 0;                 // ratchet hits of the steps just replaced
+    span_clear();   // and the rolls of spanning ratchets
     for (int t = 0; t < kTracks; t++) {
         __builtin_memcpy(params_[t].v, state.params[t], kKitParams);
         const uint32_t locked = locked_[t];

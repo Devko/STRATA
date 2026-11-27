@@ -8,6 +8,11 @@ the project file format or the controls.
 
 ### Added
 
+- **Ratchets over LEN**: on the step page, RTCH goes on past 8 into rolls, `ROLL/64` to `ROLL/4`:
+  the step rolls at that rate for its whole LEN (1/32 over 16 steps is 32 hits), with RAMP across
+  the roll for build-ups. No file change; an older build plays such a step as a one-step ratchet
+  (#185).
+
 - **CLICK and COUNT-IN** in the FUNC menu: a metronome on every beat (higher on a bar's
   first), and a count-in of 1 or 2 bars before a PLAY with REC on, so a take starts on step 1
   after the clicks. Neither is recorded nor saved; under an outside clock there is no count-in (#182).

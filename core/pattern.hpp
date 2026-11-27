@@ -116,10 +116,37 @@ constexpr uint8_t kRatchetMin = 1;
 constexpr uint8_t kRatchetMax = 8;
 
 constexpr uint8_t ratchet_pack(uint8_t count, RatchetRamp ramp) {
-    return uint8_t((count & 0x0Fu) | uint8_t(uint8_t(ramp) << 4));
+    return uint8_t((count & 0x0Fu) | uint8_t((uint8_t(ramp) & 0x07u) << 4));
 }
+// The low nibble as it is stored: a count, or on a spanning step (below) its rate.
 constexpr uint8_t ratchet_count(uint8_t packed) { return uint8_t(packed & 0x0Fu); }
-constexpr RatchetRamp ratchet_ramp(uint8_t packed) { return RatchetRamp(packed >> 4); }
+// Bits 4-6: bit 7 is the span flag.
+constexpr RatchetRamp ratchet_ramp(uint8_t packed) { return RatchetRamp((packed >> 4) & 0x07u); }
+
+// --- ratchets that span the step's LEN (CyDrums, Roland's choice 2026-11-26) -------------------
+//
+// Bit 7 of Step::ratchet makes the step ROLL: it hits at a rate for its whole LEN, not a count
+// inside one step. The low nibble is then the rate, an index into kRatchetRateTicks (bit 3 is
+// kept 0), and the ramp in bits 4-6 runs across the whole roll, so UP over a bar is a build-up.
+// 1/32 with LEN 16 steps is 32 hits. The rates are note values, so a track at 2x rolls at the
+// same speed with half as many hits over its shorter LEN.
+//
+// No file change: the byte was always written as it is. A build from before reads a ramp of 8 or
+// more, which it plays flat, and a count of the rate's index clamped to 1-8: one step's ratchet.
+// The engine runs the roll on the clock's ticks (Engine::span_tick); a new trig on the track, a
+// stop, a restart or a pattern change ends it.
+constexpr uint8_t kRatchetSpan = 0x80u;
+constexpr int kRatchetRates = 8;
+// 1/64, 1/48, 1/32, 1/16T, 1/16, 1/8T, 1/8, 1/4, in 96 PPQN ticks.
+constexpr uint8_t kRatchetRateTicks[kRatchetRates] = {6, 8, 12, 16, 24, 32, 48, 96};
+
+constexpr bool ratchet_spans(uint8_t packed) { return (packed & kRatchetSpan) != 0; }
+constexpr uint8_t ratchet_rate(uint8_t packed) { return uint8_t(packed & 0x07u); }
+constexpr uint8_t ratchet_pack_span(uint8_t rate, RatchetRamp ramp) {
+    return uint8_t(kRatchetSpan | uint8_t((uint8_t(ramp) & 0x07u) << 4) | (rate & 0x07u));
+}
+// "1/64" .. "1/4", for the screen.
+const char *ratchet_rate_name(uint8_t rate);
 
 // --- swing ----------------------------------------------------------------
 
