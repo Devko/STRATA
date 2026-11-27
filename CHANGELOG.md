@@ -9,7 +9,7 @@ the project file format or the controls.
 ### Added
 
 - **Note repeat is recordable**: with REC on, a held NOTE RPT pad records one step, a roll over
-  LEN at the repeat rate, its LEN from the hold (1/4T records a plain hit).
+  LEN at the repeat rate, its LEN from the hold (1/4T records a plain hit) (#187).
 
 - **Ratchets over LEN**: on the step page, RTCH goes on past 8 into rolls, `ROLL/64` to `ROLL/4`:
   the step rolls at that rate for its whole LEN (1/32 over 16 steps is 32 hits), with RAMP across

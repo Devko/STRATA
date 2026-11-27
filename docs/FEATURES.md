@@ -120,7 +120,7 @@ FM4 and GRAIN machines.
 | **Ratchets over LEN**: RTCH past 8 is a roll at a rate (1/64 to 1/4) for the step's whole LEN, its RAMP across the roll | #185 | ○ (W49) | Roland's RATE + span flag (2026-11-26): bit 7 of the ratchet byte, no file change; an older build plays such a step as a one-step ratchet. A new trig on the track, STOP, a restart or a pattern change ends a roll. Under the arp, the arp takes the step |
 | **Hold STEP + upper pad edits the step (D6)**: FILL condition, REPEAT ratchet, MUTE A:B, MUTATE probability, THROW a delay (FUNC: reverb) send lock; FILL + STEP writes a FILL trig | #140, #142, #153 | ○ (W9) | SCENE A/B still perform with a STEP held |
 | 16 levels of undo and redo | v0.1.0 | ○ (6) | Chain edits and kit recalls are not undoable |
-| Live recording (pads, KEYS, MIDI) with latency correction and QUANTIZE 0-100%; **held length recorded as LEN** (#90) | v0.1.0 | ○ (M3, 13k) | A held NOTE RPT pad records one step: a roll over LEN at the rate (P3) |
+| Live recording (pads, KEYS, MIDI) with latency correction and QUANTIZE 0-100%; **held length recorded as LEN** (#90) | v0.1.0 | ○ (M3, 13k) | A held NOTE RPT pad records one step: a roll over LEN at the rate (P3, #187) |
 | **Chords recorded note for note** on VA POLY, WAVE POLY, FM4 and MID: up to six notes a step (its note plus five extra-note locks), REC MODE REPLACE / ADD in the FUNC menu | #183 | ○ (W48) | Notes of one step share its velocity, LEN and micro-timing; each extra note takes one of the step's eight lock slots |
 | Motion recording of knob moves as locks | v0.1.0 | ○ (M3) | MIDI CCs are not motion-recorded |
 | **KEYS on the pads: two rows as a piano**, velocity, held, octave pads; the STEP keys are steps there (D12, #142; until then they played the scale) | #85 | ○ (W8) | |
@@ -151,7 +151,7 @@ FM4 and GRAIN machines.
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |
-| Note repeat on the pads, pressure as velocity | v0.1.0 | ○ (13f) | Recorded with REC as a roll over LEN (P3; not at 1/4T) |
+| Note repeat on the pads, pressure as velocity | v0.1.0 | ○ (13f) | Recorded with REC as a roll over LEN (P3, #187; not at 1/4T) |
 | Step stutter: hold REPEAT + STEP loops that step on every track (FUNC: one track) | #151 | ○ (W11) | Sequencer, not audio: sounds stay live. Host-tested; the emulator cannot press pads |
 | Roll rate on LEFT/RIGHT under REPEAT or a rolling pad, on the live strip | #151 | ○ (W11) | |
 | Tape stop (performance mixer slot 8; FUNC + hold push D until #145) | v0.1.0 | ○ (13g) | |
