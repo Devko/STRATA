@@ -64,6 +64,14 @@ def build(out=OUT):
     return {"elf": out / "enaga.elf", "symbols": {"_start": 1}, "images": {"smpltrek": out / "enaga.elf"}}
 """
 
+BLOCKS_PY = """
+INSTALLS = []
+def collect(cpu, known=()):
+    return {} if 1 in known else {1: "block"}
+def build(work, sources): return {"work": str(work)}
+def install(cpu, built, sources): INSTALLS.append(cpu.cycles)
+"""
+
 EMULATE_PY = """
 import importlib.util, json, sys
 from pathlib import Path
@@ -72,7 +80,22 @@ sys.path.insert(0, str(HERE))
 import build_app, paths
 _spec = importlib.util.spec_from_file_location("enaga_firmware_build", HERE.parent / "firmware" / "build.py")
 firmware_build = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(firmware_build)
+class Cpu:
+    def __init__(self): self.cycles, self.on = 0, False
+    def state(self): return {"cycles": self.cycles}
+    def blocks(self, on, heat=False): self.on = on
+class Emulation:
+    def __init__(self): self.cpu, self.calls = Cpu(), 0
+    def run(self, cycles, slice_cycles=1_000_000):
+        self.cpu.cycles += cycles; self.calls += 1
+        return {"host_seconds": 1.0, "error": None, "cycles": self.cpu.cycles}
 def main(argv=None):
+    if argv[0] == "--blocks":
+        import blocks
+        e = Emulation(); r = e.run(120_000_000)
+        print(json.dumps({"on": e.cpu.on, "calls": e.calls, "seconds": r["host_seconds"],
+                          "cycles": e.cpu.cycles, "installs": blocks.INSTALLS}))
+        return 0
     fw = firmware_build.build()
     app = build_app.build(Path(argv[0]), paths.BUILD / "apps" / "X", "STRATA")
     print(json.dumps({"fw_elf": Path(fw["elf"]).read_bytes().decode(), "pkg": app["package"].decode(),
@@ -94,6 +117,7 @@ def main():
         enaga = t / "enaga"
         for rel, text in {"tools/paths.py": PATHS_PY, "tools/build_app.py": BUILD_APP_PY,
                           "tools/emulate.py": EMULATE_PY, "tools/sysimage.py": "",
+                          "tools/blocks.py": BLOCKS_PY,
                           "firmware/build.py": FIRMWARE_PY, "firmware/kernel/a.c": "int a;",
                           "loader/loader.c": "", "include/enaga/app.hpp": "// v1",
                           "runtime/runtime.cpp": ""}.items():
@@ -168,6 +192,17 @@ def main():
         check(fw == 1, "the firmware is built once for two build folders")
         check(r1.stdout == r2.stdout and '"fw_elf": "FW"' in r2.stdout and
               '"elf_exists": true' in r2.stdout, "a cached firmware result points at real files")
+
+        # emulate with compiled blocks: run() stops every 50 M cycles to compile and install what
+        # got hot, then goes on; the caller sees one run of the cycles it asked for.
+        import json
+        on = json.loads(run("emulate", "--blocks").stdout)
+        check(on["on"] and on["cycles"] == 120_000_000 and on["calls"] == 3 and on["seconds"] == 3.0,
+              "compiled blocks: one run() is split into rounds and adds up")
+        check(on["installs"] == [50_000_000], "compiled blocks: new hot code is installed once")
+        off = json.loads(run("emulate", "--blocks", STRATA_EMU_BLOCKS="off").stdout)
+        check(not off["on"] and off["calls"] == 1 and off["installs"] == [],
+              "STRATA_EMU_BLOCKS=off leaves the emulator alone")
 
     print(f"{'all pass' if not failures else str(len(failures)) + ' failed'}")
     return 1 if failures else 0
