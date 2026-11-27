@@ -210,7 +210,7 @@ and the page says `ARP OFF: TURN MOD` while the arp is off.
 **On the sequencer**, a step on a track whose arp is on plays its note as a run for the step's
 length: set a step's length to 4 steps and a 1/16 arp plays four notes. On the PLY track the run
 walks the step's chord, one note at a time. The track's next step starts a new run. RND plays the
-same notes on every pass of the pattern, so a random arp is still a part you can keep.
+new notes on every pass of the pattern.
 
 **In KEYS**, hold pads and the arp plays them, adding each pad you press to the run and dropping
 each one you let go; it stops when the last key comes up. With the transport running the notes
@@ -234,7 +234,7 @@ and back to OFF, and the page's bottom line says what is set (`RHY E5/16  ACC CY
   `X-`, `X--`, `X---`, `X----`, `332`, `--X-`, or CYC, the first note of every run.
 - **Push D, RATCHET**: which hits repeat inside their own slot: `2:4` (the last of every four
   twice), `2:8`, `3:8`, `4:16` (a roll into the bar), `2ALL`, and RND2 and RND3 (a quarter of the
-  hits, by chance, the same on every pass).
+  hits, by chance, drawn anew on every pass).
 
 The picture draws all of it: rests as a dot on the floor, accents taller and brighter, a
 ratcheted slot split into its repeats. These four are the track's kit settings, like the LFO's

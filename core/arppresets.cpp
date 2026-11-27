@@ -52,7 +52,7 @@ constexpr ArpPreset kPresets[] = {
     // Slow bells on an FM or WAVE POLY pad, under a long reverb.
     {"AMBNT", {32, 9, 112, 127}, {2, 0, 0, 0}},
     // A drift: random 1/8 triplets over three octaves, five in sixteen, held. Sparse and never
-    // the same twice in a bar, the same every pass.
+    // the same twice, a new draw every pass.
     {"DRIFT", {117, 46, 80, 127}, {0, 7, 0, 0}},
 };
 

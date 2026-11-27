@@ -49,6 +49,8 @@ the project file format or the controls.
 
 ### Changed
 
+- **The arp's RND is random on every pass** (and RATCHET's RND2 and RND3 with it): each run draws
+  a new seed. It used to play one fixed pattern for a given track and step.
 - A kit recalled from the kit library brings its arp settings with its ARP bytes.
 
 ## [0.4.0] - {{RELEASE_DATE}}
