@@ -10,8 +10,9 @@ and how sure we are of it. Update a row when its status changes.
   [v0.2.0](https://github.com/Devko/STRATA/releases/tag/v0.2.0); `#116` ... `#129` = released in
   [v0.3.0](https://github.com/Devko/STRATA/releases/tag/v0.3.0); `#133` ... `#134` = released in
   [v0.3.1](https://github.com/Devko/STRATA/releases/tag/v0.3.1); `#139` ... `#178` = released in
-  [v0.4.0](https://github.com/Devko/STRATA/releases/tag/v0.4.0); `#179` and later = on `main`,
-  not released yet; `WIP` = being built, not on `main`.
+  [v0.4.0](https://github.com/Devko/STRATA/releases/tag/v0.4.0); `#179` ... `#209` = released in
+  [v0.5.0](https://github.com/Devko/STRATA/releases/tag/v0.5.0), the release candidate for 1.0;
+  `#210` and later = on `main`, not released yet; `WIP` = being built, not on `main`.
 - **Unit:** what the SmplTrek itself has confirmed.
   - **✔** confirmed on the unit (recorded in BUDGET.md or ticked in UNIT_CHECKLIST.md).
   - **◐** used on the unit in the free-play session of 2026-11-22 (controls-remap build, cl6x,

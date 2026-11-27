@@ -11,7 +11,7 @@ trig conditions, and a performance layer built for long live sets. An
 [![CI](https://github.com/Devko/STRATA/actions/workflows/ci.yml/badge.svg)](https://github.com/Devko/STRATA/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Devko/STRATA?include_prereleases&label=release)](https://github.com/Devko/STRATA/releases)
 ![Platform](https://img.shields.io/badge/platform-SmplTrek-informational)
-![Runs on](https://img.shields.io/badge/runs%20on-Enaga%20v0.3.0-blueviolet)
+![Runs on](https://img.shields.io/badge/runs%20on-Enaga%20v0.4.0-blueviolet)
 ![Licence](https://img.shields.io/badge/licence-MIT-green)
 
 [Try it](#try-it) · [Highlights](#highlights) · [Documentation](#documentation) ·
@@ -48,20 +48,20 @@ checks both, and hands you one zip: copy everything in it to the root of the SD 
 **HOME** while switching on, choose **SYSTEM UPDATE**, and switch on again. For an update on the
 same Enaga version, tick "STRATA only".
 
-**By hand:** STRATA needs two downloads: **Enaga 0.3.0**, the firmware, from Enaga's own release, and the
+**By hand:** STRATA needs two downloads: **Enaga 0.4.0**, the firmware, from Enaga's own release, and the
 **STRATA zip**, which holds only the app.
 
-1. **Install Enaga 0.3.0** (once). Download `enaga-v0.3.0-smpltrek.zip` from
-   [Enaga's v0.3.0 release](https://github.com/seawaffle/enaga/releases/tag/v0.3.0), copy the
+1. **Install Enaga 0.4.0** (once). Download `enaga-v0.4.0-smpltrek.zip` from
+   [Enaga's v0.4.0 release](https://github.com/seawaffle/enaga/releases/tag/v0.4.0), copy the
    `SmplTrek.bin` inside it to the root of the SD card, hold **HOME** while switching on, and
    choose **SYSTEM UPDATE**.
-2. **Download STRATA**: `STRATA-v0.4.0-smpltrek.zip` from
+2. **Download STRATA**: `STRATA-v0.5.0-smpltrek.zip` from
    [Releases](https://github.com/Devko/STRATA/releases).
 3. **Copy the app** `SD-CARD/ENAGA/APPS/STRATA/APP.ENA` to `/ENAGA/APPS/STRATA/APP.ENA` on the
    card, and switch on. The factory project plays on PLAY.
 
 Read the [safety checks](docs/INSTALL.md#before-you-install) before step 1. Updating from
-STRATA 0.3.1 or earlier needs step 1 too (they ran on Enaga 0.2.0); after that, an update is
+STRATA 0.4.0 or earlier needs step 1 too (they ran on older Enaga versions); after that, an update is
 step 3 only while the Enaga version stays the same, and your projects stay on the card. An
 official SmplTrek update restores the unit completely, because neither Enaga nor STRATA writes
 the SPI flash. [docs/INSTALL.md](docs/INSTALL.md) has every step, switching apps and going back.
@@ -115,12 +115,12 @@ The full tour, with the factory kit and every effect, is in
 
 ## Status
 
-**[v0.4.0](https://github.com/Devko/STRATA/releases/tag/v0.4.0)** (2026-11-26) is the current
-release, an early beta for **Enaga 0.3.0**. `main` has everything since (GEN and EVOLVE, chord
-recording, choke groups, arp depth and more; [CHANGELOG.md](CHANGELOG.md), "Unreleased") on the
-same firmware, and is heading for a release candidate for 1.0 ([docs/PLAN.md](docs/PLAN.md),
-"Release candidate"). Builds from `main` boot on the unit's 0.3.0 firmware, but nothing new in
-them has been walked through or measured on the hardware yet. On an earlier build the
+**[v0.5.0](https://github.com/Devko/STRATA/releases/tag/v0.5.0)** is the current
+release and the **release candidate for 1.0**, for **Enaga 0.4.0**: GEN and EVOLVE, chord
+recording, choke groups, arp depth and more since 0.4.0. Until 1.0, only fixes, measurements and
+docs land ([docs/PLAN.md](docs/PLAN.md), "Release candidate"); 1.0 is this build with what the
+unit test finds fixed. Nothing new in it has been walked through or measured on the hardware
+yet. On an earlier build the
 default beat loaded the CPU under 30%, and long, heavy play peaked at 84.3% with no dropouts. Most
 of the [unit checklist](docs/UNIT_CHECKLIST.md) is still to be run on the hardware.
 [CHANGELOG.md](CHANGELOG.md) lists what changed in each release.
