@@ -145,6 +145,11 @@ bool mutates_kit(Cmd cmd) {
 // pattern is live, the tempo, the mutes.
 bool mutates_project(Cmd cmd) {
     switch (cmd) {
+        // EVOLVE's periods, mode, mutation and amount are PROJECT.BIN's (core/project.hpp).
+        case Cmd::evolve_set:
+        case Cmd::evolve_config:
+        case Cmd::evolve_keep:
+        case Cmd::evolve_home:
         case Cmd::set_tempo:
         case Cmd::set_chain:
         case Cmd::chain_edit:

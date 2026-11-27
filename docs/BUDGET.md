@@ -53,6 +53,72 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### The second review's fixes (2026-11-27, emulator)
+
+A choke that ends clears its track's insert chain once (as `silence_track` does), and the chain
+compares DRV's on/off with the last block's: control rate, nothing per sample.
+
+| Scenario | cl6x | GCC only, `main` (edbaf9f) | GCC only, with the fixes |
+| --- | --- | --- | --- |
+| `scenario_ambient` (the worst case) | 32.33% | 57.88% | 58.03% |
+| `scenario_choke` | 26.61% | 48.19% | 48.26% |
+
+Then the click's sum clamped to +-1 (two selects a sample, while it rings): `scenario_click`
+26.05% cl6x, 48.96% GCC-only.
+
+Within the half point a peak moves between runs. All 46 scenarios pass with cl6x. GCC-only
+`ambient` was 56.48% on 2026-11-25; it is now within two points of 60% on `main` alone, before
+these fixes: cl6x ships, but the GCC-only margin is worth watching.
+
+### Where the worst case goes, and the LONG delay in passes (2026-11-27, emulator)
+
+`tools/profile_guest.py` runs a scenario's keys on the emulator, turns on its guest PC sampler
+once the presses are done, and sums the samples by function (the app's symbols from app.elf,
+which is linked at its load address, and Enaga's). Samples are of issued packets, not cycles,
+and cover the whole CPU (draw(), the idle loop), so shares say where code runs, not exact load.
+On `scenario_ambient` (the worst case, cl6x, 400 M cycles after the presses):
+
+| Share of samples | Function |
+| --- | --- |
+| 15.0% | `strata_hall_process` (HALL reverb) |
+| 12.9% | `strata_long_delay_process` (LONG delay) |
+| 6.9% | `enaga_envelope_render` |
+| 5.9% | `reverb_chunk` (the classic reverb, ringing out) |
+| 4.8% | `strata_svf_inplace` |
+| 3.6% / 2.1% / 1.5% | `Strata::update`, `Strata::draw`, `draw_mixer` (main loop, not audio) |
+
+The two ambient kernels were the only hot audio loops cl6x did not pipeline at all
+(`tools/ti_loops.py`: "Loop contains control code", the all-passes and lines being small loops
+inside the frame loop). The LONG delay now runs a block as passes over chunks of up to 32 frames
+(dsp/ambientloops.ti.c): where to read (the glide, the wow), the reads, the feedback's filters
+and ceiling, the all-passes' and head's loads, then the stores. Every value is the same operation
+in the same order, so it is bit-exact: `ambientloops_the_long_delay_in_passes_is_bit_exact_against_the_frame_loop`
+runs the frame loop beside it (blocks of 1 to 64 frames, the delay gliding to its 16-frame floor,
+where the chunks are shortest, ping-pong, the feedback to the freeze) and compares every byte, and
+the emulator renders the cl6x build sample for sample as before. All five passes pipeline (ii 23,
+7, 13, 10, 14: about 67 cycles a frame).
+
+| | before | after |
+| --- | --- | --- |
+| `scenario_ambient`, cl6x | 32.33% | **30.19%** (-2.14) |
+| `scenario_ambient`, GCC-only | 57.20% | 57.55% |
+| `scenario_m3`, GCC-only | | 42.85% |
+
+All 45 scenarios pass with cl6x; the worst is now **30.42%** (`scenario_wave`, WAVE MONO and POLY
+on tracks 6 and 7), then `ambient` 30.19%.
+
+**The HALL, held back.** The same treatment of `strata_hall_process` (seven passes, all
+pipelined, about 84 cycles a frame) takes `ambient` to **28.20%** with both kernels in passes, and is bit-exact on
+the host and in the emulator's GCC build. Its cl6x build, though, renders differently from the
+frame loop (every sample of the capture, worst 1.49 of full scale, RMS 0.1380 against 0.1393),
+where the LONG delay's renders identically. Bisected: chunks of one frame render identically, and
+so does the full change with only the last pass (the all-passes and the writes back into the
+lines) kept from pipelining by an `asm(" NOP")`; splitting that pass in two does not help, and
+the emulator's general instruction path renders the same as its lean one. So either cl6x's
+pipelined (SPLOOP) code for that pass is wrong or the emulator's model of it is: the same
+question as the VA voice's fused back half ("The cl6x vectorisation pass"). Until the unit or a
+cl6x-built harness run against the host says which, the HALL stays the frame loop.
+
 ### Ratchets over LEN (2026-11-26, emulator)
 
 A roll's hits are notes like any other; the engine walks the running rolls once a tick

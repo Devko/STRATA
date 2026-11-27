@@ -68,14 +68,14 @@ no Enaga firmware.
       the time: #183 already uses lock ids 32-36 for chord notes, #184 KIT.BIN section 12. The
       release notes must say that a file saved by the new build plays wrong LFOs on 0.4.0 and
       earlier.
-- [ ] **EVOLVE saved** with the project (its own optional section, after option C), and the
-      MIX mutation (a kind picked per turn). In progress.
+- [x] **EVOLVE saved** with the project (PROJECT.BIN's optional section 7), and the MIX
+      mutation (a kind picked per turn): #200, merged 2026-11-27.
 - [ ] **The performance HALL question**: HALL in pipelined passes (ambient about 28%, from 30%)
       renders differently with cl6x in the emulator, identically with GCC. Decide whether the
       emulator or the build is wrong (the unit can tell), and ship HALL in passes only if a
       render on the unit matches the GCC one. Until then HALL stays as it is.
-- [ ] **The open PRs**: #196 (the LONG delay in passes, bit-exact) and #197 (the second review's
-      four fixes). #198 (compiled blocks for the scenarios) is tooling and may land after the freeze.
+- [x] **The open PRs**: #196 (the LONG delay in passes, bit-exact), #197 (the second review's
+      fixes) and #198 (compiled blocks for the scenarios), all merged 2026-11-27.
 
 **2. Feature freeze.** Once the items above are on `main`: no new feature, gesture or file
 change until 1.0. What may still land: fixes with a failing test first, performance work that is
@@ -89,7 +89,7 @@ bit-exact or null-tested, docs, and tooling.
       in `docs/BUDGET.md`, worst case under 60% with cl6x.
 - [ ] `tools/emulator_screens.sh`, and a look at the contact sheet: the docs' pictures are the
       RC's screens.
-- [ ] On the unit: the smoke test (S1-S20) first, then the walkthrough (W1-W53) or at least
+- [ ] On the unit: the smoke test (S1-S20) first, then the walkthrough (W1-W54) or at least
       every W item marked for this release; the unit's MAX figures in `docs/BUDGET.md`.
 - [ ] Projects and kits saved by v0.4.0 open in the RC (the factory project, a project with
       locks, scenes and MOD slots), and a project saved by the RC opens in v0.4.0 as the release

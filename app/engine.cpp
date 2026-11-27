@@ -826,6 +826,9 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
                 s.velocity = added == NoteAdd::present
                                  ? velocity
                                  : (velocity > s.velocity ? velocity : s.velocity);
+                // A held NOTE RPT pad joining the chord makes the step roll, as it does on a
+                // step it takes over (below): the roll is what was played.
+                if (command.e != 0) s.ratchet = command.e;
                 break;
             }
             const int flags = (int(s.flags) | int(kStepTrig)) & ~int(kStepTrigless);
@@ -930,6 +933,7 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
         // --- EVOLVE (core/evolve.hpp) ---
         case Cmd::evolve_set:
             evolve_set(evolve_[track], live(), track, int(command.a));
+            evolve_to_settings();
             break;
 
         case Cmd::evolve_config:
@@ -938,14 +942,17 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             evolve_kind_ = command.b < uint8_t(Mutation::count) ? Mutation(command.b)
                                                                : Mutation::velocity;
             evolve_amount_ = command.c > 100 ? uint8_t(100) : command.c;
+            evolve_to_settings();
             break;
 
         case Cmd::evolve_keep:
             evolve_keep(evolve_[track]);
+            evolve_to_settings();
             break;
 
         case Cmd::evolve_home:
             if (evolve_home(evolve_[track], live(), track)) status_.bump_evolve_turns();
+            evolve_to_settings();
             break;
 
         case Cmd::scene_capture:
@@ -1933,8 +1940,9 @@ bool Engine::apply_project(const Command &command, int, int) {
             undo_.clear();
             // Locks are RAM only and belong to the project they were taken in.
             locks_.clear();
-            // So is EVOLVE's HOME.
-            evolve_stop_all();
+            // So is EVOLVE's HOME: each track the file says evolves takes the pattern as loaded
+            // as its HOME, with the file's mode, mutation and amount.
+            evolve_from_settings();
             queue_clear(queue_);
             chain_.active = false;
             // A project saved with its chain running reopens with it running. The flag was
@@ -2689,6 +2697,33 @@ void Engine::evolve_passes() {
 void Engine::evolve_stop_all() {
     for (int t = 0; t < kTracks; t++) evolve_keep(evolve_[t]);
     evolve_turned_ = 0;
+    evolve_to_settings();
+}
+
+// The project's copy, which is what PROJECT.BIN saves (core/project.hpp). Written whenever the
+// engine's own state changes, as `midi_out` is.
+void Engine::evolve_to_settings() {
+    ProjectSettings &s = project_.settings;
+    for (int t = 0; t < kTracks; t++) s.evolve_period[t] = evolve_[t].period;
+    s.evolve_mode = uint8_t(evolve_mode_);
+    s.evolve_kind = uint8_t(evolve_kind_);
+    s.evolve_amount = evolve_amount_;
+}
+
+// A project has just loaded: EVOLVE as its file says, HOME being the pattern as loaded.
+void Engine::evolve_from_settings() {
+    const ProjectSettings &s = project_.settings;
+    evolve_mode_ = s.evolve_mode < uint8_t(EvolveMode::count) ? EvolveMode(s.evolve_mode)
+                                                             : EvolveMode::orbit;
+    evolve_kind_ = s.evolve_kind < uint8_t(Mutation::count) ? Mutation(s.evolve_kind)
+                                                           : Mutation::velocity;
+    evolve_amount_ = s.evolve_amount > 100 ? uint8_t(100) : s.evolve_amount;
+    evolve_turned_ = 0;
+    for (int t = 0; t < kTracks; t++) {
+        evolve_keep(evolve_[t]);
+        evolve_set(evolve_[t], live(), t, int(s.evolve_period[t]));
+    }
+    status_.bump_evolve_loaded();
 }
 
 // A chain entry has just started: its mute recall, if it has one, now (song mode).
@@ -3537,18 +3572,21 @@ void Engine::fire(const StepEvent &event) {
 
 // A choke group's cut (choke_group in engine.hpp): the fade from where the choke landed, or from
 // the block's start when it carries on from the last block, then kill_all once it reaches 0.
-void Engine::run_choke(int t, float *mono, uint32_t frames) {
+// True when the cut is done: the caller clears the track's chain once this block has been
+// through it (Engine::process), as silence_track does for every other cut.
+bool Engine::run_choke(int t, float *mono, uint32_t frames) {
     const uint32_t from = choke_at_[t] < frames ? choke_at_[t] : frames;
     const float gain = strata_choke_fade(mono + from, int(frames - from), choke_gain_[t],
                                          1.0f / float(kChokeFadeFrames));
     if (gain > 0.0f) {
         choke_gain_[t] = gain;
         choke_at_[t] = 0;              // carries on from the next block's first frame
-        return;
+        return false;
     }
     machines_[t]->kill_all();
     choke_at_[t] = kNoChokeFrame;
     choke_gain_[t] = 1.0f;
+    return true;
 }
 
 // The metronome (engine.hpp): on every beat while CLICK is on, and on every beat of a count-in
@@ -3895,6 +3933,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
             // track's voices are cut all the same, or they would sound again on unmute.
             if (choke_at_[t] != kNoChokeFrame) {
                 if (machine != nullptr) machine->kill_all();
+                mixer_.chain(t).clear_state();   // nothing stored for the next note (run_choke)
                 choke_at_[t] = kNoChokeFrame;
                 choke_gain_[t] = 1.0f;
             }
@@ -3910,7 +3949,7 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         float *mono = mixer_.scratch();
         enaga_clear(mono, int(frames));
         machine->render_add(mono, int(frames));
-        if (choke_at_[t] != kNoChokeFrame) run_choke(t, mono, frames);
+        const bool choked = choke_at_[t] != kNoChokeFrame && run_choke(t, mono, frames);
         track_peak[t] = strata_master_peak(mono, mono, int(frames));
         // A freeze records the machine alone, before the chain it will go on running through.
         if (t == tapped && capture_prechain_) {
@@ -3918,6 +3957,11 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         }
         if (t == tapped && !capture_prechain_) mixer_.add_track_tapped(t, mono, capture_tap_);
         else mixer_.add_track(t, mono);
+        // A choke that ended in this block cut the machine dead, and a track whose machine is
+        // idle is not rendered: its chain would hold the filter's ringing and the DC blocker's
+        // swing and play them on the next note. Cleared AFTER the block went through it, so the
+        // fade itself is filtered as it was played.
+        if (choked) mixer_.chain(t).clear_state();
         voices++;
     }
 

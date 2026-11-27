@@ -9,6 +9,7 @@
 #   hold OK (700 ms)        -> "TRACK T1"
 #   OK on GENERATE          -> "GEN T1 BOTH", and the pattern is written (g... u1)
 #   DOWN x5, RIGHT          -> "EVOLVE T1 1 LOOP"
+#   DOWN x2, RIGHT x4, UP x2 -> "MUTATION MIX"
 #   7 x (CLR, DOWN, hold OK, RIGHT) -> "EVOLVE T8 1 LOOP": all eight evolving, the worst case
 #   four passes             -> "EVOLVE TURN" at least three times
 #   DOWN x5, OK on HOME     -> "HOME: EVOLVE OFF" (T8)
@@ -53,7 +54,7 @@ enaga_cached.wrap_firmware(emulate.firmware_build, paths)
 M = 1_000_000
 MS = emulate.MS
 CYCLES_PER_BLOCK = 496_000
-PLAY, OK, CLR, DOWN, RIGHT = 22, 23, 30, 25, 18
+PLAY, OK, CLR, DOWN, RIGHT, UP = 22, 23, 30, 25, 18, 17
 
 emu = emulate.Emulation(sys.argv[1])
 seen = 0
@@ -119,6 +120,13 @@ for _ in range(5):
     tap(DOWN)
 tap(RIGHT)
 evolve = index("EVOLVE T1 1 LOOP", gen)
+# MUTATION two rows down: VELOCITY + 4 is MIX, a different kind each turn. Back up to EVOLVE.
+tap(DOWN); tap(DOWN)
+for _ in range(4):
+    tap(RIGHT)
+mix = index("MUTATION MIX", evolve)
+check(mix > evolve, "RIGHT on MUTATION reached MIX", f"log={log[-12:]}")
+tap(UP); tap(UP)
 check(evolve > gen, "RIGHT on EVOLVE set every loop", f"log={log[-12:]}")
 # The worst case: every track evolving, every pass. The emulator has no pads, so for each track:
 # CLR, DOWN in GRID (the next track), hold OK again (the menu keeps its row), RIGHT.

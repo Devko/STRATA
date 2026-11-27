@@ -6,7 +6,7 @@ the project file format or the controls.
 
 ## [Unreleased]
 
-Everything merged since 0.4.0 (#180 to #195). It still runs on **Enaga 0.3.0**, so updating from
+Everything merged since 0.4.0 (#180 to #200). It still runs on **Enaga 0.3.0**, so updating from
 0.4.0 is the app only. The features below have not been through the unit walkthrough yet.
 
 ### Upgrading from 0.4.0
@@ -17,25 +17,30 @@ Everything merged since 0.4.0 (#180 to #195). It still runs on **Enaga 0.3.0**, 
   high IDX on high notes is a little less bright (it no longer aliases), a track with DRIVE up
   loses a DC offset it should never have had (the factory kicks peak about 0.6 dB lower), and
   the arp's RND, with RATCHET's RND2 and RND3, draws new notes on every pass instead of repeating
-  one fixed pattern.
+  one fixed pattern. A choked or DRV-locked track no longer thumps or clicks (#197).
 - **Nothing in the file format was taken away.** New settings went where older builds do not
   look: choke groups and the arp's VAR, RHYTHM, ACCENT and RATCHET in two new optional KIT.BIN
   sections (11 and 12), REC MODE in PROJECT.BIN's unused swing byte, a recorded chord's extra
-  notes in the step's locks, a roll over LEN in the ratchet byte.
+  notes in the step's locks, a roll over LEN in the ratchet byte, EVOLVE in a new optional
+  PROJECT.BIN section (7).
 - **Opening this build's projects in 0.4.0** works and loses only the new settings: no choke
   groups, the arps without VAR, RHYTHM, ACCENT and RATCHET, a recorded chord as its first note,
-  and a roll over LEN as a one-step ratchet.
+  a roll over LEN as a one-step ratchet, and nothing evolving.
 - **No gesture moved.** Everything 0.4.0 did, it still does the same way. Holding OK in GRID,
   which did nothing, now opens the track menu (GEN and EVOLVE); a tap still does nothing.
 
 ### Added
 
+- **MIX, and EVOLVE is saved**: MIX, after NOTES in the MUTATE setting, draws a different
+  mutation each EVOLVE turn (and each MUTATE press). A project now saves each track's EVOLVE, the
+  mode, the mutation and the amount, in PROJECT.BIN's new optional section 7, and opens evolving
+  from the pattern as saved; an older project opens with nothing evolving (#200).
 - **GEN and EVOLVE**: hold OK in GRID for the track menu. **GENERATE** writes a new part on the
   selected track: a rhythm weighted to the beat with accents and ghosts, and on a melodic track a
   line in the pattern's key over 1-3 octaves (DENSITY, RANGE, LEAP; WHAT keeps the rhythm or the
   notes). **EVOLVE** mutates the track on its own every 1, 2, 4 or 8 loops with PERFORM's MUTATE
   setting: **ORBIT** varies around the part as it was, **DRIFT** lets the changes add up; KEEP and
-  HOME stop it. GEN is one undo level; EVOLVE is RAM only and needs no file change (#195).
+  HOME stop it. GEN is one undo level (#195); since #200 a project saves its EVOLVE settings.
 - **Chords recorded note for note.** On VA POLY, WAVE POLY, FM4 and MID, every note played into
   one step while recording is kept: the step's note plus up to five more, stored as locks 32-36
   in the pattern's pool, so no file change and an older build plays the step's own note. Until
@@ -78,6 +83,9 @@ Everything merged since 0.4.0 (#180 to #195). It still runs on **Enaga 0.3.0**, 
 
 ### Changed
 
+- **The LONG delay costs less**: its per-sample loop now runs as passes the TI compiler can
+  pipeline, the same sound to the last bit. The worst-case scenario (both sends in their ambient
+  modes) drops from 32.3% to 30.2% peak load on the emulator (#196).
 - **FM4 no longer aliases at high IDX.** The brightness cap now sees the whole operator chain:
   in a stack the sidebands multiply, so ALG 1 at IDX 90 on middle C and above folded harsh,
   out-of-tune tones back into the audible range, about 10 dB under the note. Now they are 45-56 dB
@@ -119,6 +127,20 @@ Everything merged since 0.4.0 (#180 to #195). It still runs on **Enaga 0.3.0**, 
   fires twice there (#188).
 - **The UI tests' screenshot walk** opens SAMPLES from EDIT's SRC page again; CI had been red
   since #184 (#193).
+- **A choked track** no longer replays its filter's ringing and its drive's DC as a thump on its
+  next note: a choke clears the track's insert chain as every other cut does (#197).
+- **DRV back on after a DRV lock of 0** (or a turn through 0) starts its DC blocker from rest; it
+  carried over the sample from where the drive last ran, a click at the step (#197).
+- **REC MODE REPLACE after a pattern change**: the first note recorded onto a chord step of the
+  new pattern takes the step over. A note recorded on the same step in the old pattern's same
+  pass made it join the chord instead (#197).
+- **COUNT-IN**: a downbeat played up to half a step early, before the last click ends, records
+  on step 1. It was dropped (#197).
+- **COUNT-IN**: a hit in the moment between PLAY and the first audio block no longer records
+  onto step 1 in the middle of the count-in (#197).
+- **A held NOTE RPT pad joining a chord step** (REC MODE ADD, or a later note of the same pass)
+  makes the step roll; the roll was dropped and only the note kept (#197).
+- **CLICK over a loud mix** is held to full scale, as the sample audition is (#197).
 
 ## [0.4.0] - 2026-11-26
 
