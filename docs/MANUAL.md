@@ -1257,8 +1257,11 @@ beat repeat's rate: 1/16 until you pick another with REPEAT + VALUE, or LEFT/RIG
 is rolling (`ROLL 1/32`; the arrows do nothing else until you let go). With the transport running
 the hits land on the beat grid, so a roll is always in time; stopped, it rolls from the moment you
 press. Leaning on the pad sets each hit's velocity, so pressure swells and fades the roll (macro A
-is left alone while a pad rolls). Hold two pads for two rolls. Rolls are played, not written: REC
-does not record them.
+is left alone while a pad rolls). Hold two pads for two rolls. With **REC** on and the transport
+running, a roll is recorded as ONE step: the step under the press gets a roll over LEN at the
+rate (`ROLL/16`, see RTCH on the step page), and letting go gives it its LEN, so a pad held for a
+bar plays back as a bar of 16ths. At 1/4T, which the step cannot hold as a roll, the press records
+a plain hit.
 
 ### The master kill EQ
 

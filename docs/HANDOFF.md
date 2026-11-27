@@ -191,7 +191,7 @@ scheduled events and fires `stutter_event` on the roll's grid, while `Scheduler:
 running, so the release lands in time. It is all tracks by default, FUNC + STEP the selected one
 (the backlog proposed the opposite; Roland may want it flipped). The first STEP turns the audio
 beat repeat off for the rest of that REPEAT hold. Not built: a two-STEP loop (two steps held
-alternate) and recording a roll as RTCH. Host-tested only: the emulator cannot press pads.
+alternate). A NOTE RPT roll IS recorded now (P3): `record_note(..., roll)` puts a span ratchet byte in `Cmd::record_hit`'s `e` and the pad's release gives LEN through the RecHold path, on any machine. Host-tested only: the emulator cannot press pads.
 
 Random lock ranges and parameter slide (Phase 5, CyDrums; docs/CONTROLS.md "Random ranges and
 slides"), for whoever touches them next: both live in the lock's param byte (bit 6 range, bit 7

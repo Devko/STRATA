@@ -1986,6 +1986,50 @@ TEST(ui_a_keys_pad_held_while_recording_gives_the_step_its_length) {
     host.set_running(false);
 }
 
+TEST(ui_a_note_repeat_held_while_recording_writes_one_roll_over_len) {
+    // CyDrums P3: NOTE RPT on, REC on, a lower pad held for a bar records ONE step: the roll at
+    // the repeat rate (1/16 by default) for the LEN the hold gives -- on a drum too, since the
+    // LEN is the roll's length here, not a note's.
+    Strata &app = fresh();
+    app.on_key(ENAGA_KEY_F1, true);                    // FUNC + FILL: NOTE RPT
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(UiProbe::note_repeat_mode(app));
+
+    FakeHost &host = FakeHost::the();
+    host.set_running(true);
+    host.set_position(96);                             // step 5
+    key(ENAGA_KEY_F2);                                 // REC on
+    CHECK(UiProbe::rec(app));
+
+    app.on_pad_press(4, 100);                          // track 3
+    pump(2);
+    CHECK(app_engine().rolling(2));
+    host.set_position(96 + 16 * 24);                   // a bar later
+    app.on_pad_release(4);
+    pump(2);
+    CHECK(!app_engine().rolling(2));
+
+    int where = -1;
+    for (int s = 0; s < kStepsPerTrack; s++) {
+        if (trig_at(2, s)) where = s;
+    }
+    CHECK(where >= 0);
+    const Step &step = step_of(2, where);
+    CHECK(ratchet_spans(step.ratchet));
+    CHECK_EQ(int(ratchet_rate(step.ratchet)), int(ratchet_rate_for_ticks(24)));   // 1/16
+    CHECK_EQ(int(step.length), 16);                    // 16 steps (core/timing.hpp's table)
+
+    key(ENAGA_KEY_F2);
+    host.set_running(false);
+    app.on_key(ENAGA_KEY_F1, true);                    // NOTE RPT back off
+    app.on_pad_press(1, 100);
+    app.on_pad_release(1);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(!UiProbe::note_repeat_mode(app));
+}
+
 TEST(ui_a_held_keys_pad_on_a_drum_track_keeps_the_one_step_length) {
     Strata &app = fresh();
     open_keys();
