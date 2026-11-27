@@ -9,6 +9,21 @@ STRATA_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export STRATA_ROOT
 export ENAGA_ROOT="$STRATA_ROOT/third_party/enaga"
 
+# The git and gh that can work on this checkout. On Roland's PC each thread has a worktree made
+# by Windows git, whose .git names a Windows path (gitdir: D:/...): WSL's git cannot read it, and
+# gh and the GitHub credentials exist only on Windows. From WSL, the scripts that need git
+# (tools/enaga_check.sh, tools/publish_release.sh) then run Windows' own git.exe and gh.exe,
+# which WSL starts like any program. Set STRATA_GIT / STRATA_GH to choose yourself.
+if [ -z "${STRATA_GIT:-}" ]; then
+    STRATA_GIT=git STRATA_GH=gh
+    if [ -f "$STRATA_ROOT/.git" ] && grep -qE '^gitdir: [A-Za-z]:/' "$STRATA_ROOT/.git" &&
+       grep -qi microsoft /proc/version 2>/dev/null; then
+        STRATA_GIT=git.exe STRATA_GH=gh.exe
+    fi
+fi
+: "${STRATA_GH:=gh}"
+export STRATA_GIT STRATA_GH
+
 # The cross toolchain lives in the WSL filesystem, not in the repo: a GCC build
 # does enough small-file I/O that building it on /mnt/d takes many times longer.
 # Built by tools/build_toolchain.sh.

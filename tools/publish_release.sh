@@ -44,13 +44,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 
-# git and gh: Windows' own in a Windows-made worktree seen from WSL (see the header).
-GIT=git GH=gh
-if [ -f .git ] && grep -qE '^gitdir: [A-Za-z]:/' .git && grep -qi microsoft /proc/version 2>/dev/null; then
-    GIT=git.exe GH=gh.exe
-fi
-GIT="${STRATA_GIT:-$GIT}"
-GH="${STRATA_GH:-$GH}"
+# git and gh: Windows' own in a Windows-made worktree seen from WSL (tools/env.sh).
+# shellcheck source=tools/env.sh
+source tools/env.sh
+GIT="$STRATA_GIT"
+GH="$STRATA_GH"
 
 die() { echo "publish_release: $*" >&2; exit 1; }
 say() { echo "== $*"; }

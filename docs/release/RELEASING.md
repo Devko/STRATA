@@ -46,8 +46,7 @@ git -C /d/DEV/STRATA-wt/rel-vX.Y.Z submodule update --init
 then run the script from that folder in WSL (`cd /mnt/d/DEV/STRATA-wt/rel-vX.Y.Z`) with its
 own `ENAGA_BUILD`. WSL's git cannot read a worktree made by Windows git, so when the folder's
 `.git` names a Windows path the script runs Windows' `git.exe` and `gh.exe` itself, through WSL;
-the build stays in WSL. `STRATA_GIT` and `STRATA_GH` override that.
-Then:
+the build stays in WSL. `STRATA_GIT` and `STRATA_GH` override that. Then:
 
 ```sh
 tools/publish_release.sh v0.1.0 --build gcc --max-a01 30.1 --max-a04 41.7 --dry-run   # read it first
