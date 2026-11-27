@@ -240,6 +240,8 @@ The picture draws all of it: rests as a dot on the floor, accents taller and bri
 ratcheted slot split into its repeats. These four are the track's kit settings, like the LFO's
 TRIG: saved with the kit, not lockable and not in scenes.
 
+<p><img src="screens/arps.png" width="256" alt="ARPS on track 1: AS WAS, then the factory arps, and the arp under the cursor in words"></p>
+
 **OK on the ARP page opens ARPS**, fourteen ready-made arps that set all eight at once, on any
 machine. It works as SOUNDS does (below): UP/DOWN to move, OK loads with the beat playing, AS WAS
 puts back the arp the track had, CLR goes back. TRANCE, ROLLER (U/D with a gallop), ACID (the
@@ -424,6 +426,8 @@ remove hits, or nudge velocity, timing, probability or notes within the scale. I
 level: OK keeps it, CLR takes it back.
 
 ### GEN and EVOLVE
+
+<p><img src="screens/trackmenu.png" width="256" alt="The track menu, held OK in GRID: GENERATE and its settings, EVOLVE, MODE, MUTATION, AMOUNT"></p>
 
 **Hold OK in GRID** for the track menu. **GENERATE** writes a new part on the selected track: on
 a drum track a rhythm, busier on the beats than between them, with accents and ghost notes; on a
@@ -1119,6 +1123,8 @@ and the notes played with it join it; **ADD** adds every note to what the step h
 can be built up one pass at a time. The edit line says `REC+` under ADD. Transposing a range,
 MUTATE's note moves and turning NOTE move the whole chord. VA MONO, WAVE MONO, SAMPLE, GRAIN and
 the drums keep one note a step: the last one played.
+
+<p><img src="screens/menu_click.png" width="256" alt="The FUNC menu on CLICK, with REC MODE above and COUNT-IN below"></p>
 
 **CLICK and COUNT-IN** (FUNC menu). CLICK `ON` clicks every beat while the transport runs, a
 higher click on each bar's first beat. COUNT-IN `1 BAR` or `2 BAR` makes a PLAY from stop with REC
