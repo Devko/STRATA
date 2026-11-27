@@ -17,7 +17,7 @@ of it.
 ## Enaga
 
 The app platform STRATA runs on. Vendored as a git submodule at `third_party/enaga`, pinned at
-release `v0.3.0` (commit `4878b7c`), and **never modified** (`CLAUDE.md`). Its headers and its DSP library are
+release `v0.4.0` (commit `7487bbf`), and **never modified** (`CLAUDE.md`). Its headers and its DSP library are
 compiled into a released `APP.ENA`, so a release distributes Enaga's code as well as STRATA's.
 
 <https://github.com/seawaffle/enaga>

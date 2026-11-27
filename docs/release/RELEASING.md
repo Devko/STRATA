@@ -11,9 +11,9 @@ Publishing is one command, `tools/publish_release.sh`, and it refuses rather tha
 
 - [ ] The card was built from `main` as it is now (`tools/build.sh`, no `--name`) and the
       walkthrough at the top of `docs/UNIT_CHECKLIST.md` passed on it.
-- [ ] The unit ran Enaga's own release **of the pinned version** for the test (v0.3.0 since
-      2026-11-25: `enaga-v0.3.0-smpltrek.zip`,
-      <https://github.com/seawaffle/enaga/releases/tag/v0.3.0>), not a local firmware build.
+- [ ] The unit ran Enaga's own release **of the pinned version** for the test (v0.4.0 since
+      2026-11-27: `enaga-v0.4.0-smpltrek.zip`,
+      <https://github.com/seawaffle/enaga/releases/tag/v0.4.0>), not a local firmware build.
       Leave the `SmplTrek.bin` you installed from on the card: the script then checks it is
       Enaga's file, and leaves it out of the zip either way.
 - [ ] The release notes (`docs/release/vX.Y.Z.md`) name the Enaga version, link its release,

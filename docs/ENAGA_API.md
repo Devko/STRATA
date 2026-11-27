@@ -1,12 +1,19 @@
 # Enaga API cheat sheet
 
 **Every signature here was read out of the headers at the pinned commit `1b41111` and compiled,
-and re-checked against release `v0.2.0` (`3da7f89`) and release `v0.3.0` (`4878b7c`), the current
-pin.** Between them, nothing STRATA uses changed: `midi.hpp` gained comments, `abi.h` an optional
+and re-checked against release `v0.2.0` (`3da7f89`), release `v0.3.0` (`4878b7c`) and release
+`v0.4.0` (`7487bbf`), the current pin.** Between them, nothing STRATA uses changed: `midi.hpp` gained comments, `abi.h` an optional
 package icon flag (v0.2.0), `ENAGA_INPUT_USB` and a `battery` entry appended to `enaga_host_t`
 (v0.3.0, `enaga::system::battery()`), and `<enaga/string.h>` is new. `<enaga/ui.hpp>` (much larger
 in v0.3.0) and `<enaga/bytes.hpp>` are not used by STRATA. `ENAGA_ABI_VERSION` is still 0, but the
-host table grew: an app built at v0.3.0 needs v0.3.0 firmware on the unit.
+host table grew: an app built at v0.3.0 needs v0.3.0 firmware on the unit. v0.4.0 changes no
+signature here and leaves `enaga_host_t` as it was (comments only; `ENAGA_ABI_VERSION` still 0).
+It adds headers STRATA does not use (`<cmath>`/`<math.h>`, `enaga::dsp::sqrt`/`sin`/`tanh` and
+more, `DcBlocker`, `dynamics.hpp`, `sample.hpp`, `voices.hpp`, `sequencer.hpp`, `music.hpp`,
+`queue.hpp`, `wav::Writer`, `testing.hpp`). Behaviour that moved: `Settings::save()` returns
+`load()`'s error after a load that failed, instead of overwriting the file; `midi_send` refuses
+data that does not start with a status byte; `Envelope::render` fills a held sustain without
+stepping (same values, faster). The pin still has to match the unit's firmware.
 Nothing is from memory. If something you need is missing, read the header — do not guess a name,
 because the plausible guesses are mostly wrong (`Oscillator::set`, `SvfCoefficients::set`,
 `Envelope::gate`, `--version` on cl6x: all invented, all wrong).
