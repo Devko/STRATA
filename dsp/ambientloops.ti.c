@@ -1,11 +1,32 @@
 /* The ambient send modes, per sample (ambientloops.h). Built by cl6x when it is installed, else
- * GCC. Nothing here branches or divides. */
+ * GCC. Nothing here branches or divides.
+ *
+ * The LONG delay runs a block as PASSES over chunks of frames rather than as one loop over
+ * frames. cl6x software-pipelines only an innermost, branch-free loop of moderate size; the frame
+ * loop it used to be (with the all-passes as a loop of four inside) was not pipelined at all, and
+ * with the HALL's it was the dearest function in the worst-case scenario (docs/BUDGET.md, "The
+ * LONG delay in passes"). Every value is computed by the same operations in the same order as the
+ * frame loop did, so the passes are bit-exact: tests/test_ambientloops.cpp runs the frame loop
+ * beside them and compares every output and every byte of state, and the emulator renders the
+ * cl6x build identically. What makes the split legal is that no pass reads a ring slot that a
+ * later pass of the same chunk writes (the comment above the function shows it from the shortest
+ * read). Loads and stores of a ring are kept in different passes, so cl6x need not assume a store
+ * feeds the next frame's load.
+ *
+ * The HALL is still the frame loop, unpipelined. The same treatment is bit-exact on the host and
+ * with GCC on the emulator, but its cl6x build renders differently there; until that is explained
+ * (cl6x or the emulator's model of its hardware loops) it stays as it was. */
 #include "ambientloops.h"
 
 /* --- the LONG delay ------------------------------------------------------------------------ */
 
 #define LONG_MASK (STRATA_LONG_DIFFUSER_RING - 1)
+#define LONG_CHUNK 32
 
+/* The main rings are read at least min(delay_whole, target) - 1 >= 15 frames back: the glide
+ * moves the delay by one frame at most and never past its target. A chunk is never longer than
+ * that. The all-passes are read 241 frames back or more (ambient.cpp, kLongDiffuse); the feed goes
+ * STRATA_LONG_AHEAD frames ahead, past the longest read. */
 void strata_long_delay_process(strata_long_delay *restrict d,
                                const strata_long_delay_block *restrict b,
                                const float *restrict in, float *restrict out_l,
@@ -23,99 +44,174 @@ void strata_long_delay_process(strata_long_delay *restrict d,
     const float g = b->diffusion, lp = b->low_pass, hp = b->high_pass, level = b->level;
     const float rc = b->rot_c, rs = b->rot_s, glide = b->glide;
     const float pp = (float)b->ping_pong, straight = 1.0f - pp;
+    const float feedback_step = b->feedback_step, input_step = b->input_step;
+    const float wow_step = b->wow_step;
     const int target = b->target;
-    int i, k;
+    const int l0 = b->diffuse_len[0], l1 = b->diffuse_len[1];
+    const int l2 = b->diffuse_len[2], l3 = b->diffuse_len[3];
+    const int r0 = b->diffuse_len[4], r1 = b->diffuse_len[5];
+    const int r2 = b->diffuse_len[6], r3 = b->diffuse_len[7];
+    float *restrict ring_l0 = diffuse + 0 * STRATA_LONG_DIFFUSER_RING;
+    float *restrict ring_l1 = diffuse + 1 * STRATA_LONG_DIFFUSER_RING;
+    float *restrict ring_l2 = diffuse + 2 * STRATA_LONG_DIFFUSER_RING;
+    float *restrict ring_l3 = diffuse + 3 * STRATA_LONG_DIFFUSER_RING;
+    float *restrict ring_r0 = diffuse + 4 * STRATA_LONG_DIFFUSER_RING;
+    float *restrict ring_r1 = diffuse + 5 * STRATA_LONG_DIFFUSER_RING;
+    float *restrict ring_r2 = diffuse + 6 * STRATA_LONG_DIFFUSER_RING;
+    float *restrict ring_r3 = diffuse + 7 * STRATA_LONG_DIFFUSER_RING;
+    const int reach = (whole < target ? whole : target) - 1;
+    const int chunk = reach < 1 ? 1 : (reach < LONG_CHUNK ? reach : LONG_CHUNK);
+    float yl[LONG_CHUNK], yr[LONG_CHUNK], xl[LONG_CHUNK], xr[LONG_CHUNK];
+    float head_l[LONG_CHUNK], head_r[LONG_CHUNK], fl[LONG_CHUNK], fr[LONG_CHUNK];
+    int tap_l[LONG_CHUNK], tap_r[LONG_CHUNK];
+    float zl0[LONG_CHUNK], zl1[LONG_CHUNK], zl2[LONG_CHUNK], zl3[LONG_CHUNK];
+    float zr0[LONG_CHUNK], zr1[LONG_CHUNK], zr2[LONG_CHUNK], zr3[LONG_CHUNK];
+    int base, m, i, wi;
 
-    for (i = 0; i < n; i++) {
-        /* The glide: at most `glide` frames a frame toward the target, as a tape speeding up or
-         * slowing down, carried between the whole and fractional parts. */
-        const float gap = (float)(target - whole) - frac;
-        const float move = gap > glide ? glide : (gap < -glide ? -glide : gap);
-        frac += move;
-        whole += frac >= 1.0f ? 1 : (frac < 0.0f ? -1 : 0);
-        frac += frac >= 1.0f ? -1.0f : (frac < 0.0f ? 1.0f : 0.0f);
+    for (base = 0; base < n; base += m) {
+        m = n - base < chunk ? n - base : chunk;
 
-        /* The wow, always a positive offset so the read never comes nearer than the glide's. */
-        const float s1 = s * rc + c * rs;
-        const float c1 = c * rc - s * rs;
-        s = s1;
-        c = c1;
-        const float off_l = frac + wow * (1.0f + s);
-        const float off_r = frac + wow * (1.0f + c);
-        const int wl = (int)off_l, wr = (int)off_r;
-        const float fl = off_l - (float)wl, fr = off_r - (float)wr;
+        /* Where to read: the glide and the wow. */
+        wi = w;
+        for (i = 0; i < m; i++) {
+            /* The glide: at most `glide` frames a frame toward the target, as a tape speeding up
+             * or slowing down, carried between the whole and fractional parts. */
+            const float gap = (float)(target - whole) - frac;
+            /* (Flat selects, not nested ones: the same values, and cl6x pipelines them.) */
+            const float floor_move = gap < -glide ? -glide : gap;
+            frac += gap > glide ? glide : floor_move;
+            const int up = frac >= 1.0f, down = frac < 0.0f;   /* never both */
+            const float carry = down ? 1.0f : 0.0f;
+            whole += up - down;
+            frac += up ? -1.0f : carry;
 
-        /* Two interpolated reads, `whole + wl` and one more frames ago. */
-        int al = w - whole - wl;
-        al = al < 0 ? al + size : al;
-        int bl = al - 1;
-        bl = bl < 0 ? bl + size : bl;
-        int ar = w - whole - wr;
-        ar = ar < 0 ? ar + size : ar;
-        int br = ar - 1;
-        br = br < 0 ? br + size : br;
-        const float yl = left[al] + (left[bl] - left[al]) * fl;
-        const float yr = right[ar] + (right[br] - right[ar]) * fr;
+            /* The wow, always a positive offset so the read never comes nearer than the glide's. */
+            const float s1 = s * rc + c * rs;
+            const float c1 = c * rc - s * rs;
+            s = s1;
+            c = c1;
+            const float off_l = frac + wow * (1.0f + s);
+            const float off_r = frac + wow * (1.0f + c);
+            const int wl = (int)off_l, wr = (int)off_r;
+            fl[i] = off_l - (float)wl;
+            fr[i] = off_r - (float)wr;
 
-        out_l[i] += level * yl;
-        out_r[i] += level * yr;
+            /* Where the two interpolated reads are, `whole + wl` and one more frames ago. */
+            int al = wi - whole - wl;
+            al = al < 0 ? al + size : al;
+            int ar = wi - whole - wr;
+            ar = ar < 0 ? ar + size : ar;
+            tap_l[i] = al;
+            tap_r[i] = ar;
 
-        /* The feedback: straight back, or crossed for ping-pong; then low cut and tone. */
-        float xl = straight * yl + pp * yr;
-        float xr = straight * yr + pp * yl;
-        hp_l += hp * (xl - hp_l);
-        hp_r += hp * (xr - hp_r);
-        xl -= hp_l;
-        xr -= hp_r;
-        lp_l += lp * (xl - lp_l);
-        lp_r += lp * (xr - lp_r);
-        xl = lp_l;
-        xr = lp_r;
+            wow += wow_step;
+            wow = wow < 0.0f ? 0.0f : wow;
+            wi++;
+            wi = wi >= size ? 0 : wi;
+        }
 
-        /* A soft ceiling on what goes round: x - x^5 / 195, flat at +-2.5 -> +-2. A quintic
-         * rather than a cubic so a held loop at ordinary levels loses nothing to it (0.03% a pass
-         * at 0.5), while a feedback of 1 (the freeze) still cannot grow without bound. */
-        xl = xl > 2.5f ? 2.5f : (xl < -2.5f ? -2.5f : xl);
-        xr = xr > 2.5f ? 2.5f : (xr < -2.5f ? -2.5f : xr);
-        const float xl2 = xl * xl, xr2 = xr * xr;
-        xl = feedback * (xl - 0.00512f * xl2 * xl2 * xl);
-        xr = feedback * (xr - 0.00512f * xr2 * xr2 * xr);
+        /* The reads themselves. Loads only. */
+        for (i = 0; i < m; i++) {
+            const int al = tap_l[i], ar = tap_r[i];
+            int bl = al - 1;
+            bl = bl < 0 ? bl + size : bl;
+            int br = ar - 1;
+            br = br < 0 ? br + size : br;
+            const float ya = left[al] + (left[bl] - left[al]) * fl[i];
+            const float yb = right[ar] + (right[br] - right[ar]) * fr[i];
+            yl[i] = ya;
+            yr[i] = yb;
+            out_l[base + i] += level * ya;
+            out_r[base + i] += level * yb;
+        }
+
+        /* The feedback: straight back, or crossed for ping-pong; then low cut and tone, and a
+         * soft ceiling on what goes round: x - x^5 / 195, flat at +-2.5 -> +-2. A quintic rather
+         * than a cubic so a held loop at ordinary levels loses nothing to it (0.03% a pass at
+         * 0.5), while a feedback of 1 (the freeze) still cannot grow without bound. */
+        for (i = 0; i < m; i++) {
+            float a = straight * yl[i] + pp * yr[i];
+            float e = straight * yr[i] + pp * yl[i];
+            hp_l += hp * (a - hp_l);
+            hp_r += hp * (e - hp_r);
+            a -= hp_l;
+            e -= hp_r;
+            lp_l += lp * (a - lp_l);
+            lp_r += lp * (e - lp_r);
+            a = lp_l;
+            e = lp_r;
+            a = a > 2.5f ? 2.5f : (a < -2.5f ? -2.5f : a);
+            e = e > 2.5f ? 2.5f : (e < -2.5f ? -2.5f : e);
+            const float a2 = a * a, e2 = e * e;
+            xl[i] = feedback * (a - 0.00512f * a2 * a2 * a);
+            xr[i] = feedback * (e - 0.00512f * e2 * e2 * e);
+            feedback += feedback_step;
+        }
+
+        /* What the all-passes and the head will read, from slots no store in this chunk touches. */
+        wi = w;
+        for (i = 0; i < m; i++) {
+            const int di = (dw + i) & LONG_MASK;
+            zl0[i] = ring_l0[(di - l0) & LONG_MASK];
+            zl1[i] = ring_l1[(di - l1) & LONG_MASK];
+            zl2[i] = ring_l2[(di - l2) & LONG_MASK];
+            zl3[i] = ring_l3[(di - l3) & LONG_MASK];
+            zr0[i] = ring_r0[(di - r0) & LONG_MASK];
+            zr1[i] = ring_r1[(di - r1) & LONG_MASK];
+            zr2[i] = ring_r2[(di - r2) & LONG_MASK];
+            zr3[i] = ring_r3[(di - r3) & LONG_MASK];
+            head_l[i] = left[wi];
+            head_r[i] = right[wi];
+            wi++;
+            wi = wi >= size ? 0 : wi;
+        }
 
         /* Diffusion: four all-passes a side on what goes round, which smear each pass a little
          * more into a wash. Their delay is part of the period, so the read is shortened by it
-         * (ambient.cpp). */
-        for (k = 0; k < STRATA_LONG_DIFFUSERS; k++) {
-            float *restrict ring_l = diffuse + k * STRATA_LONG_DIFFUSER_RING;
-            float *restrict ring_r = diffuse + (k + STRATA_LONG_DIFFUSERS) * STRATA_LONG_DIFFUSER_RING;
-            const float zl = ring_l[(dw - b->diffuse_len[k]) & LONG_MASK];
-            const float zr = ring_r[(dw - b->diffuse_len[k + STRATA_LONG_DIFFUSERS]) & LONG_MASK];
-            const float vl = xl - g * zl;
-            const float vr = xr - g * zr;
-            ring_l[dw] = vl;
-            ring_r[dw] = vr;
-            xl = g * vl + zl;
-            xr = g * vr + zr;
-        }
-
-        /* The feed does not go through the all-passes, so the first echo is clean. It is
+         * (ambient.cpp). The feed does not go through them, so the first echo is clean: it is
          * written the all-passes' delay AHEAD of the write head instead, which puts it on the
-         * period too; that slot is past the longest read (ambient.cpp keeps it so), and this is
-         * its first write of the lap, so it is assigned, and the loop's own frame added later. */
-        const float feed = in[i] * input;
-        int ahead = w + STRATA_LONG_AHEAD;
-        ahead = ahead >= size ? ahead - size : ahead;
-        left[w] += xl;
-        right[w] += xr;
-        left[ahead] = feed;
-        right[ahead] = straight * feed;
+         * period too; that slot is past the longest read, and this is its first write of the
+         * lap, so it is assigned, and the loop's own frame added later. Stores only. */
+        for (i = 0; i < m; i++) {
+            const int di = (dw + i) & LONG_MASK;
+            float a = xl[i], e = xr[i], v, u;
+            v = a - g * zl0[i];
+            u = e - g * zr0[i];
+            ring_l0[di] = v;
+            ring_r0[di] = u;
+            a = g * v + zl0[i];
+            e = g * u + zr0[i];
+            v = a - g * zl1[i];
+            u = e - g * zr1[i];
+            ring_l1[di] = v;
+            ring_r1[di] = u;
+            a = g * v + zl1[i];
+            e = g * u + zr1[i];
+            v = a - g * zl2[i];
+            u = e - g * zr2[i];
+            ring_l2[di] = v;
+            ring_r2[di] = u;
+            a = g * v + zl2[i];
+            e = g * u + zr2[i];
+            v = a - g * zl3[i];
+            u = e - g * zr3[i];
+            ring_l3[di] = v;
+            ring_r3[di] = u;
+            a = g * v + zl3[i];
+            e = g * u + zr3[i];
 
-        w++;
-        w = w >= size ? 0 : w;
-        dw = (dw + 1) & LONG_MASK;
-        feedback += b->feedback_step;
-        input += b->input_step;
-        wow += b->wow_step;
-        wow = wow < 0.0f ? 0.0f : wow;
+            const float feed = in[base + i] * input;
+            int ahead = w + STRATA_LONG_AHEAD;
+            ahead = ahead >= size ? ahead - size : ahead;
+            left[w] = head_l[i] + a;
+            right[w] = head_r[i] + e;
+            left[ahead] = feed;
+            right[ahead] = straight * feed;
+            input += input_step;
+            w++;
+            w = w >= size ? 0 : w;
+        }
+        dw = (dw + m) & LONG_MASK;
     }
 
     d->write = w;

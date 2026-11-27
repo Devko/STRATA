@@ -59,6 +59,9 @@ the project file format or the controls.
 
 ### Changed
 
+- **The LONG delay costs less**: its per-sample loop now runs as passes the TI compiler can
+  pipeline, the same sound to the last bit. The worst-case scenario (both sends in their ambient
+  modes) drops from 32.3% to 30.2% peak load on the emulator.
 - Internal: the engine's command handling is split into twelve handlers, one per family of
   commands, with no change in behaviour; the host tests no longer depend on the order they run in,
   and `tools/test_shuffle.sh` runs them in shuffled orders to keep it so.
