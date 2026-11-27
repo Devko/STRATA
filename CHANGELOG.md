@@ -85,7 +85,7 @@ the project file format or the controls.
 - **A step pulled before tick 0** on a one- or two-step track with micro and FEEL no longer
   fires twice there.
 
-## [0.4.0] - {{RELEASE_DATE}}
+## [0.4.0] - 2026-11-26
 
 An early beta: everything merged since 0.3.1 (#137 to #177), and the first release for **Enaga
 0.3.0** firmware, which updating from 0.3.1 now needs (see Requires). The features below have not
@@ -371,7 +371,7 @@ One home per job (backlog D1, D2, D5). Old projects open unchanged: no file hold
 
 ### Known limits
 
-- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} Nothing added since 0.3.1 is
+- Tested on one SmplTrek, with the cl6x build. On the 0.2.0 build (2026-11-22) the load stayed under 30% on the default beat, and MAX peaked at 84.3% in long, heavy play with no clicks or dropouts; a build from main boots on Enaga 0.3.0 (2026-11-25), but 0.4.0's load is not measured on the unit yet. Nothing added since 0.3.1 is
   checked on the unit yet. Every other load figure comes from the emulator, which models no caches.
 - **Enaga 0.3.0 exactly.** Enaga's loader checks only the ABI number, which 0.2.0 and 0.3.0 share,
   so 0.4.0 on the 0.2.0 firmware loads and then misbehaves.
