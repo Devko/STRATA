@@ -853,6 +853,7 @@ private:
     uint32_t gen_variant_ = 1;
     EvolveMode evolve_mode_ui_ = EvolveMode::orbit;
     uint8_t evolve_turns_seen_ = 0;             // Status::evolve_turns as last noticed
+    uint8_t evolve_loaded_seen_ = 0;            // Status::evolve_loaded as last noticed
     int clip_bank_ = 0;            // COPY on the slots: the pattern copied, slot -1 for none
     int clip_slot_ = -1;
     SlotAction slot_armed_ = SlotAction::none;   // a paste or clear waiting for its second press

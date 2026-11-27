@@ -610,13 +610,13 @@ const Expect kTable[] = {
     // An audition is heard, not kept: the track and the project are untouched.
     {Cmd::audition_start, 0u, "audition_start"},
     {Cmd::audition_stop, 0u, "audition_stop"},
-    // GEN writes steps, and HOME puts them back: the bank. EVOLVE's settings are RAM only
-    // (core/evolve.hpp), and KEEP changes nothing that plays.
+    // GEN writes steps, and HOME puts them back: the bank. EVOLVE's settings are PROJECT.BIN's
+    // (core/project.hpp), and HOME stops EVOLVE too.
     {Cmd::generate, kDirtyBank, "generate"},
-    {Cmd::evolve_set, 0u, "evolve_set"},
-    {Cmd::evolve_config, 0u, "evolve_config"},
-    {Cmd::evolve_keep, 0u, "evolve_keep"},
-    {Cmd::evolve_home, kDirtyBank, "evolve_home"},
+    {Cmd::evolve_set, kDirtyProject, "evolve_set"},
+    {Cmd::evolve_config, kDirtyProject, "evolve_config"},
+    {Cmd::evolve_keep, kDirtyProject, "evolve_keep"},
+    {Cmd::evolve_home, kDirtyBank | kDirtyProject, "evolve_home"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:
@@ -806,8 +806,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
 
     // The sizes tests/test_project.cpp pins from the serializer, reached here through the real
     // card protocol: a file that came out a different size means the two have drifted apart.
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 402);
-    CHECK_EQ(project_bytes(), 402u);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 425);
+    CHECK_EQ(project_bytes(), 425u);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1453);
     CHECK_EQ(kit_bytes(), 1453u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 5108);
@@ -1719,7 +1719,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         }
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 402);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 425);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1453);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 5108);
 

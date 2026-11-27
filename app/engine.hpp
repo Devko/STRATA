@@ -202,6 +202,8 @@ public:
         return track >= 0 && track < kTracks ? evolve_[track].period : uint8_t(0);
     }
     EvolveMode evolve_mode() const { return evolve_mode_; }
+    Mutation evolve_kind() const { return evolve_kind_; }
+    int evolve_amount() const { return int(evolve_amount_); }
     uint32_t bar() const { return bar_; }
     bool fill() const { return perform_.fill; }
     int throwing() const { return throw_bus_; }
@@ -879,7 +881,9 @@ private:
     void evolve_lead();              // the last ticks before it: one turn a tick
     static constexpr int kEvolveLeadTicks = kTracks;
     uint8_t evolve_turned_ = 0;      // tracks that turned in this pass's lead
-    void evolve_stop_all();          // a project load or a replaced pattern: HOME is gone
+    void evolve_stop_all();          // a replaced pattern: HOME is gone
+    void evolve_to_settings();       // the project's saved copy, after every change
+    void evolve_from_settings();     // a load: EVOLVE as the file says
 
     // Bars since the transport started, for auto-fill. Counted rather than divided: a bar is 384
     // ticks at 96 PPQN and this chip has no integer divide (core/scheduler.cpp says the same

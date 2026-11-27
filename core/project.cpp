@@ -310,7 +310,7 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PROJECT.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kProjectSections = 6;
+constexpr uint32_t kProjectSections = 7;
 constexpr uint32_t kProjectSettingsBytes = 19;
 constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
 // The sends, the master bytes and the kill switches. The section GREW when the kill EQ came
@@ -336,13 +336,16 @@ constexpr uint32_t kProjectSongBytes = 1 + uint32_t(kChainEntries);
 constexpr uint32_t kProjectSongOffset = kProjectLiveOffset + kProjectLiveBytes;
 constexpr uint32_t kProjectMidiBytes = uint32_t(kTracks);   // MIDI OUT channel per track
 constexpr uint32_t kProjectMidiOffset = kProjectSongOffset + kProjectSongBytes;
-constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectMidiOffset + kProjectMidiBytes;
+// EVOLVE: each track's period, then mode, mutation and amount.
+constexpr uint32_t kProjectEvolveBytes = uint32_t(kTracks) + 3;
+constexpr uint32_t kProjectEvolveOffset = kProjectMidiOffset + kProjectMidiBytes;
+constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectEvolveOffset + kProjectEvolveBytes;
 
-// How many of `wanted` at the END of the list a reader may do without. Four: the mixer, the
-// live, the song and the MIDI sections, none of which existed when the format was first written,
-// so a PROJECT.BIN from before them has two to five sections and must still load
+// How many of `wanted` at the END of the list a reader may do without. Five: the mixer, the
+// live, the song, the MIDI and the EVOLVE sections, none of which existed when the format was
+// first written, so a PROJECT.BIN from before them has two to six sections and must still load
 // (core/project.hpp).
-constexpr uint32_t kProjectOptionalSections = 4;
+constexpr uint32_t kProjectOptionalSections = 5;
 
 static_assert(sizeof(ProjectSettings::mute_states) == 8,
               "the settings section is 19 bytes on the strength of 8 mute states");
@@ -483,6 +486,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
         {kSectionProjectLive, kProjectLiveOffset, kProjectLiveBytes},
         {kSectionProjectSong, kProjectSongOffset, kProjectSongBytes},
         {kSectionProjectMidi, kProjectMidiOffset, kProjectMidiBytes},
+        {kSectionProjectEvolve, kProjectEvolveOffset, kProjectEvolveBytes},
     };
 
     Writer w(buffer, capacity);
@@ -528,6 +532,10 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     w.u8(s.chain_song ? 1 : 0);
     for (int i = 0; i < kChainEntries; i++) w.u8(project.chain[i].mutes);
     for (int t = 0; t < kTracks; t++) w.u8(s.midi_out[t]);
+    for (int t = 0; t < kTracks; t++) w.u8(s.evolve_period[t]);
+    w.u8(s.evolve_mode);
+    w.u8(s.evolve_kind);
+    w.u8(s.evolve_amount);
 
     if (!w.ok() || w.size() != kProjectTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kProjectTotalBytes, written);
@@ -566,10 +574,12 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         return why;
     };
 
-    // The four optional sections (mixer, live, song, MIDI) come LAST: kProjectOptionalSections.
+    // The five optional sections (mixer, live, song, MIDI, EVOLVE) come LAST:
+    // kProjectOptionalSections.
     const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain,
                                                kSectionProjectMixer, kSectionProjectLive,
-                                               kSectionProjectSong, kSectionProjectMidi};
+                                               kSectionProjectSong, kSectionProjectMidi,
+                                               kSectionProjectEvolve};
     uint32_t offset[kProjectSections] = {};
     uint32_t length[kProjectSections] = {};
     const SerializeResult found =
@@ -590,6 +600,9 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         return refuse(SerializeResult::malformed);
     }
     if (offset[5] != 0 && length[5] < kProjectMidiBytes) {
+        return refuse(SerializeResult::malformed);
+    }
+    if (offset[6] != 0 && length[6] < kProjectEvolveBytes) {
         return refuse(SerializeResult::malformed);
     }
 
@@ -722,6 +735,30 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
             s.midi_out[t] = channel <= kMidiChannels ? channel : kMidiOutOff;
         }
         if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // EVOLVE: absent is an older file, where nothing evolved. A byte out of its range is damage
+    // and takes the default rather than some period or mutation nobody chose.
+    {
+        const ProjectSettings defaults;
+        for (int t = 0; t < kTracks; t++) s.evolve_period[t] = 0;
+        s.evolve_mode = defaults.evolve_mode;
+        s.evolve_kind = defaults.evolve_kind;
+        s.evolve_amount = defaults.evolve_amount;
+        if (offset[6] != 0) {
+            if (!r.seek(kHeaderBytes + offset[6])) return refuse(SerializeResult::malformed);
+            for (int t = 0; t < kTracks; t++) {
+                const uint8_t period = r.u8();
+                s.evolve_period[t] = period <= kEvolvePeriodMax ? period : 0;
+            }
+            const uint8_t mode = r.u8();
+            const uint8_t kind = r.u8();
+            const uint8_t amount = r.u8();
+            if (!r.ok()) return refuse(SerializeResult::truncated);
+            s.evolve_mode = mode <= 1 ? mode : defaults.evolve_mode;
+            s.evolve_kind = kind <= kEvolveKindMax ? kind : defaults.evolve_kind;
+            s.evolve_amount = amount <= 100 ? amount : defaults.evolve_amount;
+        }
     }
 
     // The live pattern. Not a user setting but project state: docs/SPEC.md reopens the last
