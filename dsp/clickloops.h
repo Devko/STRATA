@@ -1,7 +1,8 @@
 /* The metronome click's per-sample loop, as plain C for TI's cl6x (clickloops.ti.c).
  *
  * A recursive sine (y[n] = coef y[n-1] - y[n-2]) under an exponential envelope, added to both
- * channels of an interleaved stereo block. dsp/click.hpp says when it runs: about 30 ms a beat,
+ * channels of an interleaved stereo block, each sum held to +-1. dsp/click.hpp says when it
+ * runs: about 30 ms a beat,
  * nothing in between. Nothing branches, nothing divides, nothing allocates. */
 #ifndef STRATA_CLICKLOOPS_H
 #define STRATA_CLICKLOOPS_H
