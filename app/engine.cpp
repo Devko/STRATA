@@ -1128,6 +1128,8 @@ void Engine::apply(const Command &command) {
             undo_.clear();
             // Locks are RAM only and belong to the project they were taken in.
             locks_.clear();
+            // So is EVOLVE's HOME.
+            evolve_stop_all();
             queue_clear(queue_);
             chain_.active = false;
             // A project saved with its chain running reopens with it running. The flag was
@@ -1517,6 +1519,42 @@ void Engine::apply(const Command &command) {
             }
             break;
         }
+
+        case Cmd::generate: {
+            // Drum or melodic from the machine, as the sequencer folds: a SAMPLE track counts as
+            // melodic while unsliced, and MID does too (its notes go to an instrument in the key).
+            const bool melodic =
+                machine_folds_note(machine_id_[track], pool_[track].sampler.slices()) ||
+                machine_id_[track] == uint8_t(MachineId::midi);
+            const GenSettings settings = GenSettings::make(int(command.a), int(command.b),
+                                                           int(command.c), int(command.d));
+            if (!generate_track(live(), track, melodic, settings, command.u)) {
+                status_.bump_refused();
+                status_.bump_mutate_unchanged();
+            }
+            break;
+        }
+
+        // --- EVOLVE (core/evolve.hpp) ---
+        case Cmd::evolve_set:
+            evolve_set(evolve_[track], live(), track, int(command.a));
+            break;
+
+        case Cmd::evolve_config:
+            evolve_mode_ = command.a < uint8_t(EvolveMode::count) ? EvolveMode(command.a)
+                                                                 : EvolveMode::orbit;
+            evolve_kind_ = command.b < uint8_t(Mutation::count) ? Mutation(command.b)
+                                                               : Mutation::velocity;
+            evolve_amount_ = command.c > 100 ? uint8_t(100) : command.c;
+            break;
+
+        case Cmd::evolve_keep:
+            evolve_keep(evolve_[track]);
+            break;
+
+        case Cmd::evolve_home:
+            if (evolve_home(evolve_[track], live(), track)) status_.bump_evolve_turns();
+            break;
 
         case Cmd::scene_capture:
             if (command.a < kScenes) {
@@ -2282,6 +2320,7 @@ void Engine::apply_perf_plan(SendSettings &sends, MasterSettings &master) const 
 void Engine::pattern_replaced(int bank, int slot) {
     if (bank != int(project_.bank) || slot != int(project_.slot)) return;
     undo_.clear();               // the history belonged to the steps just replaced
+    evolve_stop_all();           // and HOME to the steps before them
     scheduler_.reset(true);
     reconfigure();
     deferred_count_ = 0;
@@ -2291,6 +2330,18 @@ void Engine::pattern_replaced(int bank, int slot) {
 void Engine::switch_pattern(int bank, int slot) {
     if (!project_index_valid(bank, slot)) return;
     if (bank == int(project_.bank) && slot == int(project_.slot)) return;
+
+    // EVOLVE: in ORBIT the pattern being left goes back to HOME, so leaving it never leaves it
+    // changed; DRIFT leaves it where it wandered. Either way every evolving track then re-homes
+    // on the pattern arriving and carries on.
+    uint8_t periods[kTracks];
+    for (int t = 0; t < kTracks; t++) {
+        periods[t] = evolve_[t].period;
+        if (evolve_[t].on() && evolve_mode_ == EvolveMode::orbit) {
+            evolve_home(evolve_[t], live(), t);
+        }
+        evolve_keep(evolve_[t]);
+    }
 
     project_.bank = uint8_t(bank);
     project_.slot = uint8_t(slot);
@@ -2317,6 +2368,8 @@ void Engine::switch_pattern(int bank, int slot) {
     // The new pattern's master length makes the old boundary meaningless, and deriving the new
     // one needs a tick, which only resolve_tick has.
     boundary_known_ = false;
+
+    for (int t = 0; t < kTracks; t++) evolve_set(evolve_[t], live(), t, int(periods[t]));
 }
 
 // A bar started. The only thing that waits for one is a mute change armed for it.
@@ -2375,6 +2428,10 @@ void Engine::on_bar() {
 }
 
 void Engine::cross_boundary(uint32_t boundary) {
+    // EVOLVE first, on the pattern that just finished a pass: a chain that moves on below
+    // re-homes every evolving track on the next pattern (switch_pattern).
+    evolve_passes();
+
     if (!chain_.active) return;
 
     // Song mode: the last pass of the last entry has ended. The song goes back to entry 1 for
@@ -2410,6 +2467,24 @@ void Engine::cross_boundary(uint32_t boundary) {
     }
     // A new entry (or a one-entry chain's next pass of it) recalls its mutes on the boundary.
     if (chain_.played == 0) chain_entry_started();
+}
+
+// A pass of the pattern has ended: each evolving track counts it, and turns on its period.
+void Engine::evolve_passes() {
+    bool turned = false;
+    for (int t = 0; t < kTracks; t++) {
+        if (!evolve_[t].on()) continue;
+        if (evolve_pass(evolve_[t], live(), t, evolve_mode_, evolve_kind_, int(evolve_amount_),
+                        evolve_variant_)) {
+            turned = true;
+        }
+        evolve_variant_++;
+    }
+    if (turned) status_.bump_evolve_turns();
+}
+
+void Engine::evolve_stop_all() {
+    for (int t = 0; t < kTracks; t++) evolve_keep(evolve_[t]);
 }
 
 // A chain entry has just started: its mute recall, if it has one, now (song mode).
