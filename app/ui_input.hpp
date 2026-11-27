@@ -608,6 +608,7 @@
                     break;
                 }
                 rec_ = !rec_;
+                if (rec_) clear_rec_passes();
                 // A whole recording pass is one undo level, so the gesture ends when recording
                 // does -- and the next pass must not coalesce into the last one.
                 end_gesture();

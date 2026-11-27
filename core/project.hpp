@@ -431,6 +431,10 @@ struct ProjectSettings {
     // ever used the PATTERN's (core/pattern.hpp), so the field is gone and its byte in
     // PROJECT.BIN is reserved (core/project.cpp).
     uint8_t quantize = 100;              // the live-record quantize amount, 0-100
+    // REC MODE, what a recorded note does to a step of a chord track that already plays:
+    // false REPLACE (the first note of a pass takes the step over), true ADD (it joins the
+    // step's notes). core/stepnotes.hpp holds the notes.
+    bool rec_add = false;
     uint8_t mute_states[8] = {};         // 8 stored mute states, one bit per track
 
     // docs/SPEC.md: 64 MiB by default since 2026-11-23 (it was 32, raisable per project to 64).

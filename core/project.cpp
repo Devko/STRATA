@@ -19,7 +19,9 @@
 //         0   2  tempo, centi-BPM
 //         2   1  root note
 //         3   1  scale
-//         4   1  reserved: was a project swing nothing read. Written as 50, ignored on read
+//         4   1  REC MODE: 1 is ADD, anything else REPLACE. It was a project swing nothing
+//                read, written as 50 by every build before 2026-11-26 -- so an older file is
+//                REPLACE, and an older build reading this one ignores the byte as it always did
 //         5   1  live-record quantize, 0..100
 //         6   8  the 8 stored mute states, one bit per track
 //        14   1  sample budget, MiB
@@ -126,6 +128,8 @@ namespace {
 // The minimum is 1 and not 0 because a budget of zero cannot hold a single sample, and a
 // project that silently refuses every sample load is the least diagnosable failure there is.
 // No UI offers 0, so a 0 in a file is a damaged byte.
+// PROJECT.BIN settings byte 4: REC MODE ADD. Not 50, which every older build wrote there.
+constexpr uint8_t kRecModeAddByte = 1;
 constexpr uint8_t kBudgetMibMin = 1;
 constexpr uint8_t kBudgetMibMax = 64;
 
@@ -492,7 +496,8 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     w.u16(s.tempo_centi_bpm);
     w.u8(s.root);
     w.u8(s.scale);
-    w.u8(uint8_t(kSwingMin));   // the reserved byte: a legal swing, for builds that still read it
+    // REC MODE in the old swing's byte: 50 (a legal swing, what it always held) for REPLACE.
+    w.u8(s.rec_add ? kRecModeAddByte : uint8_t(kSwingMin));
     w.u8(s.quantize);
     for (uint32_t i = 0; i < sizeof(s.mute_states); i++) w.u8(s.mute_states[i]);
     w.u8(s.sample_budget_mib);
@@ -594,7 +599,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     const uint16_t tempo = r.u16();
     const uint8_t root = r.u8();
     const uint8_t scale = r.u8();
-    (void)r.u8();                // reserved (the old project swing)
+    const uint8_t rec_mode = r.u8();   // REC MODE, in the old project swing's byte
     const uint8_t quantize = r.u8();
     uint8_t mutes[sizeof(ProjectSettings::mute_states)] = {};
     for (uint32_t i = 0; i < sizeof(mutes); i++) mutes[i] = r.u8();
@@ -614,6 +619,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // default.
     s.scale = scale;
     s.quantize = clamp_u8(quantize, 0, 100);
+    s.rec_add = rec_mode == kRecModeAddByte;
     // Every bit pattern is a legal set of mute states for 8 tracks, so these are taken as they
     // come.
     for (uint32_t i = 0; i < sizeof(mutes); i++) s.mute_states[i] = mutes[i];

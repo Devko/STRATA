@@ -1,6 +1,6 @@
 # Unit checklist
 
-The first part is **the walkthrough** (W1-W48, about 153 minutes): everything merged since v0.1.0,
+The first part is **the walkthrough** (W1-W50, about 157 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -557,7 +557,18 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - CLICK OFF, COUNT-IN `2 BAR`, REC, PLAY: eight clicks even with CLICK off, then the beat. STOP
   during the clicks: silence, and the next PLAY without REC starts at once. `____`
 
-**W48. Arp depth, ARPS and the new sounds (10 min).** Beat playing, A05 PAD.
+**W48. Chords recorded note for note (4 min).** Blank pattern, T7 (VA POLY), KEYS, PLAY, REC.
+- Hold three pads of a chord at once on one step: it plays back as all three. Hold STEP on it:
+  `NOTE C4 +2`, and no `LOCKS` on the line. `____`
+- Next pass, play one other note on that step: the chord is gone, the new note alone (REPLACE).
+  `____`
+- FUNC+HOME, REC MODE to `ADD`: the edit line reads `REC+`. Play one note a pass on one step for
+  three passes: it builds up to a three-note chord. A MIDI keyboard on channel 7 does the same.
+  `____`
+- Hold the chord's STEP and turn VALUE: the whole chord moves. `____`
+
+**W50. Arp depth, ARPS and the new sounds (10 min).** Beat playing, A05 PAD (W49 is PR
+#185's longer ratchets).
 - T7 (CHORD), EDIT, screen keys to ARP. Hold the step at the bar's start and clear its locks
   (push each knob) or play on: OK opens ARPS, `INTO T7 ARP ONLY`, fourteen rows. OK on TRANCE:
   each bar's chord is walked up two octaves at 1/16, accented on the beat. `____`

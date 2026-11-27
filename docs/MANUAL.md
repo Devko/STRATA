@@ -1083,6 +1083,21 @@ pad, key or MIDI note comes up, its step gets the nearest LEN (from `1/16` of a 
 so a drum hit keeps one step. Let go after REC is off, or with the transport stopped, and the step
 keeps the length it had.
 
+**Chords are recorded note for note** on VA POLY, WAVE POLY, FM4 and MID. Every note you play
+into one step in a pass is kept: the step's note (the first one) plus up to five more, six in all,
+which is VA POLY's voices. The step page shows them as `NOTE C4 +2`. They share the step's
+velocity (the loudest), its micro-timing and its LEN (the last key up). They play folded into the
+key as the rest of a POLY chord does; MID sends them as written unless the step has a chord type.
+A seventh note is refused. The extra notes are kept in the step's locks, so a chord of six leaves
+two parameter locks free on that step.
+
+What a later pass does is **REC MODE** in the FUNC menu (after QUANTIZE): **REPLACE**, the
+default, lets the first note of a new pass take the step over, its old notes and chord type gone,
+and the notes played with it join it; **ADD** adds every note to what the step holds, so a chord
+can be built up one pass at a time. The edit line says `REC+` under ADD. Transposing a range,
+MUTATE's note moves and turning NOTE move the whole chord. VA MONO, WAVE MONO, SAMPLE, GRAIN and
+the drums keep one note a step: the last one played.
+
 **CLICK and COUNT-IN** (FUNC menu). CLICK `ON` clicks every beat while the transport runs, a
 higher click on each bar's first beat. COUNT-IN `1 BAR` or `2 BAR` makes a PLAY from stop with REC
 on click that many bars first (the notice counts `COUNT-IN 4` .. `1`), whether CLICK is on or not;
